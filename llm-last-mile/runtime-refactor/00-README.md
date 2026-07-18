@@ -219,6 +219,17 @@ private-home/dependency bootstrap, after which the process returns without enter
 This correction adds no user-facing feature, inventory row, seam promotion, world-deps production
 ownership, cleanup authority, or R2-2/R2-3/R2-4/R3 work.
 
+A second preimplementation sequencing correction narrows trace binding without changing the R2-1
+file allowlist. `set_global_trace_context` remains the neutral, set-once registration primitive with
+its existing signature and behavior. R2-1 may add only an explicit product-bound `TraceContext`
+posture carrying `A/trace.jsonl` and policy Git directory A after IH/current-principal validation,
+plus an explicit-directory policy hash lookup. Existing physical-shim, replay, platform, test, and
+other compatibility callers retain a named `LegacyAmbientCompatibility` posture that is explicitly
+not contract-correct and cannot satisfy R2-1 shell proof. PI-117 remains shell/common additive work;
+PI-118 and the already-frozen replay/platform migration own removal of that compatibility posture
+and the final global unbound-initialization rule in R2-3. No caller-identity table, setter semantic
+change, trace lifecycle change, physical-shim edit, replay edit, or new capability is authorized.
+
 The canonical **A1.1d-5R1 Case A** decision corrects only the Linux security contract: V1 requires
 **no effective other-principal authority**, not unprovable physical ACL-xattr absence. A descriptor-
 bound `ENODATA` result means only that the kernel returned no ACL data; it is accepted under the

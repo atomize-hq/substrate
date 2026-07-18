@@ -399,17 +399,24 @@ or Windows account+SID and then construct the shared IH. They do not define a sh
 hash codec, ambient identity fallback, or second prefix precedence rule.
 
 Trace output and policy-commit metadata are projections of that same decision, not another home
-selector. After IH construction and current-principal binding, a normal shell or physical-shim
-entry installs the existing process-global `TraceContext` with the explicit trace target
-`A/trace.jsonl` and policy Git directory A before any manager, policy, span, or execution logger
-runs. The trace library never reads `SHIM_TRACE_LOG` or `dirs::home_dir()` to construct those
-normal-product paths. A later `init_trace(None)` may only reuse an already-bound output; if no
-explicit target was bound, it fails rather than selecting a default. `get_policy_git_hash` receives
-the bound A directory and returns no commit when its metadata is absent or invalid; it never retries
-under an account default or B. An explicitly constructed diagnostic/test trace context may receive
-a named trace path, is labeled non-product evidence, and has no implicit policy directory. Existing
-trace rotation/retention behavior is byte-frozen: R2 changes the authoritative target carrier, not
-trace lifecycle semantics.
+selector. After IH construction and current-principal binding, the R2-1 shell entry constructs an
+explicit product-bound `TraceContext` posture carrying exact `A/trace.jsonl` and policy Git
+directory A before any shell manager, policy, span, or execution logger runs. That closed posture
+cannot read `SUBSTRATE_HOME`, `$HOME`, `SHIM_TRACE_LOG`, CWD, or `dirs::home_dir()` to choose either
+path; `init_trace(None)` initializes or reuses its already-bound A target, and a later explicit path
+must match A. The additive explicit policy lookup reads only the supplied A directory, returns no
+commit for missing/unreadable/invalid Git metadata, and never retries under an account default, B,
+the repository, or CWD.
+
+The shared `set_global_trace_context` signature and set-once/global-registration behavior remain
+unchanged and neutral: the setter does not validate IH, select A, infer a path, or distinguish shell
+from physical shim. Pre-existing callers that cannot yet construct IH retain the exact starting
+behavior under a named `LegacyAmbientCompatibility` posture. That posture is temporary,
+non-promotable, and forbidden on every migrated R2-1 shell product path; it cannot satisfy shell A/B
+proof. R2-3 owns physical-shim explicit binding, already-frozen replay/platform caller migration,
+compatibility-posture removal, and the final global rule that unbound `init_trace(None)` fails. No
+caller-identity side table is permitted. Existing trace serialization, writer, flush,
+rotation/retention, rename, span, replay, policy, and environment-hash behavior is byte-frozen.
 
 Lima and WSL are separate authority domains. One `PlatformBootstrapMappingV1` binds the host-context
 commitment to an exact platform instance, then independently resolves the platform-native home and

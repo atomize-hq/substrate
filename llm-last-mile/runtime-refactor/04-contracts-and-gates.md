@@ -911,19 +911,28 @@ not prefix authority. A normal selected-context doctor derives `A/trace.jsonl`, 
 configuration/dependency state, the prefix-scoped macOS host socket, and the applicable platform
 mapping without `dirs::home_dir()`/`$HOME` fallback.
 
-The same rule applies to live trace production, not only doctor output. The normal shell and
-physical-shim public entries first construct/principal-bind IH, then install the existing global
-`TraceContext` with two immutable explicit projections: trace output `A/trace.jsonl` and policy Git
-directory A. This context is a carrier, never an IH constructor or prefix side table. The first
-normal initialization supplies the exact trace path; later `init_trace(None)` calls may only reuse
-the already-open/bound output and otherwise error. `get_policy_git_hash` accepts the context's
-explicit A directory; missing `.git`, unreadable metadata, or a failed `git rev-parse` produces no
-commit and never retries from `dirs::home_dir()`, `$HOME`, B, or `/tmp`. The trace crate itself does
-not read `SHIM_TRACE_LOG`; an explicitly constructed diagnostic/test context may receive that named
-path from its public diagnostic harness, is labeled `diagnostic_override`, and cannot satisfy a
-normal-product gate. Policy mode/content, span/replay schema, environment hashing, writer flush,
-rotation, retention, rename, and removal bodies do not change in R2. PI-117 owns the common carrier
-and shell binding in R2-1; PI-118 owns only the physical-shim binding/reuse calls in R2-3.
+The same rule applies to live trace production, not only doctor output, but migration is staged.
+R2-1 adds a closed explicit product-bound `TraceContext` posture equivalent to
+`ExplicitProduct { trace_output: A/trace.jsonl, policy_git_directory: A }`. Only after shell IH and
+current-principal validation may the shell construct/register it. Both paths are immutable explicit
+inputs: the posture cannot read `SUBSTRATE_HOME`, `$HOME`, `SHIM_TRACE_LOG`, CWD, or
+`dirs::home_dir()` to choose them. Its `init_trace(None)` initializes or reuses the already-bound A
+target; an explicit path must equal the bound target. Additive `get_policy_git_hash_at(A)` reads
+only A and returns no commit for missing `.git`, unreadable/invalid metadata, or failed
+`git rev-parse`, with no retry under B, ambient home, repository root, CWD, or `/tmp`.
+
+`set_global_trace_context` remains a neutral registration primitive with its exact existing
+signature and set-once/global-registration semantics. It gains no IH validation, path selection,
+caller discrimination, or rejection of existing default callers. Pre-existing unmigrated callers
+retain their byte- and behavior-equivalent starting operation under the named temporary posture
+`LegacyAmbientCompatibility`. That posture is not `ContractCorrectAndProven`, cannot satisfy R2-1
+shell trace proof, and is unreachable from migrated shell product paths. No side table or inferred
+caller identity is allowed in the trace crate. R2-3 owns physical-shim explicit binding under
+PI-118, the already-frozen replay/platform caller migration, compatibility removal/unreachability,
+and the final global rule that unbound `init_trace(None)` fails. R2-1 may claim only shell A output,
+shell A policy lookup, shell repeated-A reuse, shell A/B zero access, and unchanged explicitly
+unpromoted compatibility callers. Policy mode/content, span/replay schema, environment hashing,
+writer flush, rotation, retention, rename, and removal bodies do not change in R2.
 
 ##### R3-exclusive lifecycle authority
 
