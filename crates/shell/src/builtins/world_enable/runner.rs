@@ -3,6 +3,8 @@ use crate::execution::env_sh_path;
 #[cfg(target_os = "linux")]
 use crate::execution::socket_activation;
 use crate::WorldEnableArgs;
+#[cfg(unix)]
+use anyhow::Context;
 use anyhow::{bail, Result};
 use std::env;
 use std::path::{Path, PathBuf};
@@ -218,11 +220,17 @@ pub fn run_enable(
     } else {
         args.timeout
     };
+    #[cfg(unix)]
+    let install_context_carrier = install_context
+        .encode()
+        .context("failed to encode authenticated install bootstrap context")?;
     run_helper_script(
         &script_path,
         args,
         &substrate_home,
         &log_path,
+        #[cfg(unix)]
+        &install_context_carrier,
         socket_override.as_deref(),
     )?;
 
@@ -403,11 +411,17 @@ fn run_enable_with_provision_deps(
     } else {
         args.timeout
     };
+    #[cfg(unix)]
+    let install_context_carrier = install_context
+        .encode()
+        .context("failed to encode authenticated install bootstrap context")?;
     run_helper_script(
         &script_path,
         args,
         &substrate_home,
         &log_path,
+        #[cfg(unix)]
+        &install_context_carrier,
         socket_override.as_deref(),
     )?;
 
