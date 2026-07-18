@@ -580,8 +580,13 @@ validated typed IH
   │    → Unix account+UID database round-trip
   │    → account home/.codex
   ├─ host shell doctor → optional host diagnostic projection
-  └─ Health / shim doctor
-       → collect_report_for_context
+  ├─ Health
+  │    → health.rs
+  │    → crate-private shim_doctor::collect_report_for_context name exposure
+  │    → existing report::collect_report_for_context
+  └─ direct Unix shim doctor
+       → unchanged shim_doctor::run_doctor
+       → existing report::collect_report_for_context
        → build_report
        → gather_world_deps_section
        → collect_doctor_snapshot_v1
@@ -610,11 +615,25 @@ only when typed IH is explicitly supplied. Old JSON without
 the fields remains valid, and world enforcement, Landlock, netfilter, filesystem strategy, policy,
 health, and service behavior remain unchanged.
 
-For shell/shim doctor, `gather_world_deps_section` is transport only and
+For shell/shim doctor, `shim_doctor/mod.rs` performs name visibility only: on Unix it exposes the
+existing `report::collect_report_for_context` with crate-private visibility so sibling `health.rs`
+can continue the typed route. It does not make the report module public, add a wrapper or resolver,
+or alter either collector. `gather_world_deps_section` is transport only and
 `collect_doctor_snapshot_v1` receives typed IH or exact A-derived paths. Unix `collect_report` is
 the explicitly named compatibility path: it may retain its checked-projection behavior unchanged,
-but cannot satisfy R2-2 product proof. Physical-shim/replay compatibility migration remains R2-3.
-No diagnostic reconstructs a default home or changes dependency/result classification.
+but cannot be selected by typed Health or satisfy R2-2 product proof. Physical-shim/replay
+compatibility migration remains R2-3. No diagnostic reconstructs a default home or changes
+dependency/result classification.
+
+For this exact Route A closure, GitNexus reported CRITICAL aggregate breadth in both directions:
+the initial unstaged view attributed 33 changed symbols to the preserved nine-file WIP, while the
+reverse committed view attributed 11; both found the same 18 existing Route A processes and the
+same Builtin, Execution, Invocation, and Platform modules. This is comparison-direction/hunk
+attribution variance only. Authorization is confined to explicit typed-IH forwarding through the
+Host/Health/Config/Policy arms and named consumers plus the Unix crate-private name exposure. It
+does not authorize semantic changes in graph-detected line-shift/test-colocation symbols, a new
+execution family, environment or global authority, physical-shim migration, product capability,
+output, repair, cleanup, rollback, or lifecycle behavior.
 
 ##### Hidden installer bootstrap action
 
