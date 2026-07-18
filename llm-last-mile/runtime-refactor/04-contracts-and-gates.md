@@ -531,6 +531,16 @@ remain checked projections and cannot recover a missing typed argument. No other
 `ShellConfig` mode, constructor/validator, process-global, or side-table behavior participates in
 this chain.
 
+`run_enable`, including its existing provision-deps branch, derives A directly from that typed IH
+and supplies explicit A to `update_manager_env_exports`. The manager-environment helper cannot use
+environment state to select or recover A; its existing config read, world-enabled update, rendering,
+output, and error semantics remain unchanged. Non-enable world actions receive no new behavior, and
+`run_sync_after_provisioning` remains textually and semantically unchanged. The bounded GitNexus
+CRITICAL aggregate for this exact six-file carrier closure and the helper's separate HIGH result
+authorize only this argument/signature propagation across existing process families; neither result
+authorizes a new process family, capability, fallback, cleanup, deletion, rollback, migration,
+convergence, R2-3, or R3 behavior.
+
 ##### Hidden installer bootstrap action
 
 `--install-bootstrap-home-v1` is a hidden internal action, not a public user feature. It is accepted
