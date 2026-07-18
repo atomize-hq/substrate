@@ -488,7 +488,13 @@ bootstrap_private_substrate_home() {
     fatal "Substrate bootstrap binary not found at ${substrate_bin}."
   fi
 
-  if ! env \
+  local bootstrap_rc=0
+  local restore_xtrace=0
+  if [[ $- == *x* ]]; then
+    set +x
+    restore_xtrace=1
+  fi
+  env \
     "SUBSTRATE_HOME=${PREFIX}" \
     "SUBSTRATE_ROOT=${PREFIX}" \
     "SUBSTRATE_INSTALL_HOST_CONTEXT_COMMITMENT=${INSTALL_BOOTSTRAP_COMMITMENT}" \
@@ -497,7 +503,11 @@ bootstrap_private_substrate_home() {
     "SUBSTRATE_INSTALL_BOOTSTRAP_CONTEXT_V1=${INSTALL_BOOTSTRAP_CONTEXT_V1}" \
     "${substrate_bin}" \
       --install-bootstrap-context-v1 "${INSTALL_BOOTSTRAP_CONTEXT_V1}" \
-      --install-bootstrap-home-v1 >/dev/null; then
+      --install-bootstrap-home-v1 >/dev/null || bootstrap_rc=$?
+  if [[ "${restore_xtrace}" -eq 1 ]]; then
+    set -x
+  fi
+  if [[ "${bootstrap_rc}" -ne 0 ]]; then
     fatal "Private SUBSTRATE_HOME bootstrap rejected ${PREFIX}; no existing root was repaired."
   fi
 }
@@ -2603,9 +2613,21 @@ run_world_checks() {
   fi
 
   log "Running substrate world doctor..."
+  local check_rc=0
+  local restore_xtrace=0
+  if [[ $- == *x* ]]; then
+    set +x
+    restore_xtrace=1
+  fi
   if ! "${substrate_bin}" \
     --install-bootstrap-context-v1 "${INSTALL_BOOTSTRAP_CONTEXT_V1}" \
     world doctor --json | jq '.'; then
+    check_rc=1
+  fi
+  if [[ "${restore_xtrace}" -eq 1 ]]; then
+    set -x
+  fi
+  if [[ "${check_rc}" -ne 0 ]]; then
     warn "World doctor reported issues. Review output above."
   fi
 }
@@ -2618,6 +2640,12 @@ print_world_deps_summary() {
   fi
 
   log "World dependency status (in world):"
+  local check_rc=0
+  local restore_xtrace=0
+  if [[ $- == *x* ]]; then
+    set +x
+    restore_xtrace=1
+  fi
   if ! "${substrate_bin}" \
     --install-bootstrap-context-v1 "${INSTALL_BOOTSTRAP_CONTEXT_V1}" \
     world deps current list applied --json | jq -r '
@@ -2628,6 +2656,12 @@ print_world_deps_summary() {
       | "- \(.name): kind=\(.kind) enabled=\(.enabled // false) world=\(.world // "unknown")\(if .remediation then " remediation=\(.remediation)" else "" end)"
     end
   '; then
+    check_rc=1
+  fi
+  if [[ "${restore_xtrace}" -eq 1 ]]; then
+    set -x
+  fi
+  if [[ "${check_rc}" -ne 0 ]]; then
     warn "world deps check failed; run 'substrate world deps current list applied --json' for details."
   fi
 }
@@ -2636,9 +2670,23 @@ rollback_agent_runtime_world_deps_enable() {
   local substrate_bin="$1"
   local deps_item="$2"
 
+  local rollback_rc=0
+  local restore_xtrace=0
+  if [[ $- == *x* ]]; then
+    set +x
+    restore_xtrace=1
+  fi
   if "${substrate_bin}" \
     --install-bootstrap-context-v1 "${INSTALL_BOOTSTRAP_CONTEXT_V1}" \
     world deps global remove "${deps_item}"; then
+    rollback_rc=0
+  else
+    rollback_rc=$?
+  fi
+  if [[ "${restore_xtrace}" -eq 1 ]]; then
+    set -x
+  fi
+  if [[ "${rollback_rc}" -eq 0 ]]; then
     warn "Rolled back world deps global enable for '${deps_item}' after sync failure."
     return 0
   fi
@@ -2668,12 +2716,20 @@ sync_world_deps() {
     log "Syncing world dependencies via 'substrate world deps current sync'..."
   fi
   local rc=0
+  local restore_xtrace=0
+  if [[ $- == *x* ]]; then
+    set +x
+    restore_xtrace=1
+  fi
   if "${substrate_bin}" \
     --install-bootstrap-context-v1 "${INSTALL_BOOTSTRAP_CONTEXT_V1}" \
     world deps current sync; then
     rc=0
   else
     rc=$?
+  fi
+  if [[ "${restore_xtrace}" -eq 1 ]]; then
+    set -x
   fi
   if [[ "${rc}" -ne 0 ]]; then
     if [[ -n "${PROVISION_AGENT_RUNTIME}" ]]; then
@@ -2726,9 +2782,17 @@ provision_agent_runtime_world_deps() {
 
   log "Enabling agent runtime '${PROVISION_AGENT_RUNTIME}' globally via world deps item '${deps_item}'. The installer will run 'substrate world deps current sync' immediately after this step."
   local add_output
+  local restore_xtrace=0
+  if [[ $- == *x* ]]; then
+    set +x
+    restore_xtrace=1
+  fi
   add_output="$("${substrate_bin}" \
     --install-bootstrap-context-v1 "${INSTALL_BOOTSTRAP_CONTEXT_V1}" \
     world deps global add --json "${deps_item}")"
+  if [[ "${restore_xtrace}" -eq 1 ]]; then
+    set -x
+  fi
   if grep -Fq "\"${deps_item}\"" <<<"${add_output}"; then
     PROVISION_AGENT_RUNTIME_ADDED_BY_INSTALLER=1
   else
