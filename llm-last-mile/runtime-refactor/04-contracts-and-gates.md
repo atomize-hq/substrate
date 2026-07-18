@@ -531,15 +531,40 @@ remain checked projections and cannot recover a missing typed argument. No other
 `ShellConfig` mode, constructor/validator, process-global, or side-table behavior participates in
 this chain.
 
+PI-071 owns the following process-crossing continuation and no authority reconstruction:
+
+```text
+same-process typed IH
+  → canonical authenticated carrier encoding
+  → explicit child argv
+  → child-mode discrimination
+  → carrier authentication
+  → current-principal/sudo-origin binding
+  → declared path equality
+  → checked environment projection
+  → leaf dispatch
+```
+
+`run_enable` and its existing provision-deps path are the only callers; `run_helper_script`
+transports the exact encoding and retains normalized `--home` only as a required matching
+projection. The helper neither interprets nor logs authority. Carrier-option argv presence is the
+sole internal-child discriminator in `world-enable.sh`: missing, malformed, duplicate, tampered,
+reordered, forged-principal, or conflicting carrier/home input fails before bootstrap or child
+action and cannot fall through to public mode. Environment-only carrier/H/R, ambient `HOME`, CWD,
+root home, and generated records cannot select A. Carrier bytes are absent from normal output,
+errors, traces, and logs; existing child ordering, stdout/stderr, exit propagation, dependency and
+runtime actions, and platform behavior remain unchanged.
+
 `run_enable`, including its existing provision-deps branch, derives A directly from that typed IH
 and supplies explicit A to `update_manager_env_exports`. The manager-environment helper cannot use
 environment state to select or recover A; its existing config read, world-enabled update, rendering,
 output, and error semantics remain unchanged. Non-enable world actions receive no new behavior, and
 `run_sync_after_provisioning` remains textually and semantically unchanged. The bounded GitNexus
-CRITICAL aggregate for this exact six-file carrier closure and the helper's separate HIGH result
-authorize only this argument/signature propagation across existing process families; neither result
-authorizes a new process family, capability, fallback, cleanup, deletion, rollback, migration,
-convergence, R2-3, or R3 behavior.
+CRITICAL aggregate for the exact six-file carrier closure, the manager-environment HIGH limited to
+explicit-A transport, and the `run_helper_script` HIGH limited to exact carrier-argv transport
+authorize only their named argument/signature propagation across existing process families. None
+of these results authorizes a new process family, capability, fallback, cleanup, deletion,
+rollback, migration, convergence, R2-3, or R3 behavior.
 
 ##### Hidden installer bootstrap action
 
