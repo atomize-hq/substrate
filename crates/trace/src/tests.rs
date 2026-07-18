@@ -1,9 +1,11 @@
 use super::*;
 use crate::context::TraceContext;
 use crate::span::SpanBuilder;
-use crate::util::hash_env_vars;
+use crate::util::{get_policy_git_hash_at, hash_env_vars};
 use chrono::Utc;
 use serde_json::Value;
+use std::path::Path;
+use std::process::Command;
 use std::sync::{Arc, Barrier};
 use tempfile::TempDir;
 
@@ -12,6 +14,39 @@ fn new_trace_context() -> TraceContext {
 }
 
 static ENV_LOCK: std::sync::Mutex<()> = std::sync::Mutex::new(());
+
+fn initialize_test_git_repository(path: &Path) -> String {
+    std::fs::create_dir_all(path).unwrap();
+    let run = |args: &[&str]| {
+        let output = Command::new("git")
+            .arg("-C")
+            .arg(path)
+            .args(args)
+            .output()
+            .unwrap();
+        assert!(
+            output.status.success(),
+            "git {:?} failed: {}",
+            args,
+            String::from_utf8_lossy(&output.stderr)
+        );
+        output
+    };
+    run(&["init", "--quiet"]);
+    run(&["config", "user.name", "Substrate Trace Test"]);
+    run(&["config", "user.email", "trace-test@substrate.invalid"]);
+    std::fs::write(
+        path.join("policy.yaml"),
+        format!("mode: observe\nrepository: {}\n", path.display()),
+    )
+    .unwrap();
+    run(&["add", "policy.yaml"]);
+    run(&["commit", "--quiet", "-m", "test policy"]);
+    String::from_utf8(run(&["rev-parse", "HEAD"]).stdout)
+        .unwrap()
+        .trim()
+        .to_string()
+}
 
 #[test]
 fn test_span_creation() {
@@ -43,6 +78,136 @@ fn test_trace_initialization() {
     let result = ctx.init_trace(Some(trace_path.clone()));
     assert!(result.is_ok());
     assert!(trace_path.exists());
+}
+
+#[test]
+fn legacy_ambient_compatibility_remains_the_default_posture() {
+    let _guard = ENV_LOCK
+        .lock()
+        .unwrap_or_else(|poisoned| poisoned.into_inner());
+    let previous = std::env::var_os("SHIM_TRACE_LOG");
+    let tmp = TempDir::new().unwrap();
+    let ambient_trace = tmp.path().join("legacy-ambient").join("trace.jsonl");
+    std::env::set_var("SHIM_TRACE_LOG", &ambient_trace);
+
+    let context = TraceContext::default();
+    context.init_trace(None).unwrap();
+    assert!(ambient_trace.is_file());
+
+    match previous {
+        Some(value) => std::env::set_var("SHIM_TRACE_LOG", value),
+        None => std::env::remove_var("SHIM_TRACE_LOG"),
+    }
+}
+
+#[test]
+fn explicit_product_trace_uses_bound_prefix_and_rejects_conflicts() {
+    let _guard = ENV_LOCK
+        .lock()
+        .unwrap_or_else(|poisoned| poisoned.into_inner());
+    let previous = std::env::var_os("SHIM_TRACE_LOG");
+    let tmp = TempDir::new().unwrap();
+    let prefix_a = tmp.path().join("selected-a");
+    let prefix_b = tmp.path().join("ambient-b");
+    std::env::set_var("SHIM_TRACE_LOG", prefix_b.join("trace.jsonl"));
+
+    let context = TraceContext::explicit_product(&prefix_a).unwrap();
+    context.init_trace(None).unwrap();
+    context
+        .append_to_trace(&serde_json::json!({"event_type": "r2_1_explicit_product"}))
+        .unwrap();
+
+    assert!(prefix_a.join("trace.jsonl").is_file());
+    assert!(!prefix_b.exists());
+    context.init_trace(None).unwrap();
+    context
+        .init_trace(Some(prefix_a.join("trace.jsonl")))
+        .unwrap();
+    let error = context
+        .init_trace(Some(prefix_b.join("trace.jsonl")))
+        .unwrap_err();
+    assert!(error
+        .to_string()
+        .contains("conflicts with bound product trace"));
+    assert!(!prefix_b.exists());
+
+    match previous {
+        Some(value) => std::env::set_var("SHIM_TRACE_LOG", value),
+        None => std::env::remove_var("SHIM_TRACE_LOG"),
+    }
+}
+
+#[test]
+fn explicit_product_rejects_relative_or_parent_traversing_prefixes() {
+    assert!(TraceContext::explicit_product(Path::new("/")).is_err());
+    assert!(TraceContext::explicit_product(Path::new("relative-prefix")).is_err());
+    assert!(TraceContext::explicit_product(Path::new("/tmp/selected/../other")).is_err());
+    assert!(TraceContext::explicit_product(Path::new("/tmp/./selected")).is_err());
+    assert!(TraceContext::explicit_product(Path::new("/tmp//selected")).is_err());
+}
+
+#[test]
+fn explicit_product_policy_git_reads_only_bound_prefix() {
+    let _guard = ENV_LOCK
+        .lock()
+        .unwrap_or_else(|poisoned| poisoned.into_inner());
+    let previous_home = std::env::var_os("HOME");
+    let tmp = TempDir::new().unwrap();
+    let prefix_a = tmp.path().join("selected-a");
+    let prefix_b = tmp.path().join("ambient-b");
+    let commit_a = initialize_test_git_repository(&prefix_a);
+    let commit_b = initialize_test_git_repository(&prefix_b);
+    assert_ne!(commit_a, commit_b);
+    std::env::set_var("HOME", &prefix_b);
+
+    let context = TraceContext::explicit_product(&prefix_a).unwrap();
+    let replay = context
+        .build_replay_context(None, ExecutionOrigin::Host)
+        .unwrap();
+    assert_eq!(replay.policy_commit.as_deref(), Some(commit_a.as_str()));
+    assert_ne!(replay.policy_commit.as_deref(), Some(commit_b.as_str()));
+
+    let missing = tmp.path().join("selected-without-git");
+    std::fs::create_dir_all(&missing).unwrap();
+    assert_eq!(get_policy_git_hash_at(&missing).unwrap(), None);
+    let missing_context = TraceContext::explicit_product(&missing).unwrap();
+    assert_eq!(
+        missing_context
+            .build_replay_context(None, ExecutionOrigin::Host)
+            .unwrap()
+            .policy_commit,
+        None
+    );
+
+    match previous_home {
+        Some(value) => std::env::set_var("HOME", value),
+        None => std::env::remove_var("HOME"),
+    }
+}
+
+#[cfg(unix)]
+#[test]
+fn explicit_policy_git_rejects_symlink_to_ambient_repository() {
+    use std::os::unix::fs::symlink;
+
+    let tmp = TempDir::new().unwrap();
+    let prefix_a = tmp.path().join("selected-a");
+    let prefix_b = tmp.path().join("ambient-b");
+    std::fs::create_dir_all(&prefix_a).unwrap();
+    initialize_test_git_repository(&prefix_b);
+    symlink(prefix_b.join(".git"), prefix_a.join(".git")).unwrap();
+
+    assert_eq!(get_policy_git_hash_at(&prefix_a).unwrap(), None);
+
+    let prefix_with_nested_escape = tmp.path().join("selected-with-nested-escape");
+    let git_dir = prefix_with_nested_escape.join(".git");
+    std::fs::create_dir_all(&git_dir).unwrap();
+    std::fs::write(git_dir.join("HEAD"), "ref: refs/heads/master\n").unwrap();
+    symlink(prefix_b.join(".git/refs"), git_dir.join("refs")).unwrap();
+    assert_eq!(
+        get_policy_git_hash_at(&prefix_with_nested_escape).unwrap(),
+        None
+    );
 }
 
 #[test]

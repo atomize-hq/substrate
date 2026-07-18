@@ -1,12 +1,12 @@
 use crate::output::TraceOutput;
 use crate::span::{ExecutionOrigin, ReplayContext, Span, SpanBuilder, TransportMeta};
-use crate::util::{get_policy_git_hash, get_umask, hash_env_vars};
+use crate::util::{get_policy_git_hash, get_policy_git_hash_at, get_umask, hash_env_vars};
 use anyhow::{anyhow, Result};
 use parking_lot::{RwLock, RwLockWriteGuard};
 use std::env;
 use std::fs::{self, File};
 use std::io::{BufRead, BufReader, Write};
-use std::path::PathBuf;
+use std::path::{Component, Path, PathBuf};
 use std::sync::{Arc, OnceLock};
 use tracing::debug;
 
@@ -43,6 +43,16 @@ const WORLD_IMAGE_VERSION: &str = env!("CARGO_PKG_VERSION");
 pub struct TraceContext {
     output: Arc<RwLock<Option<TraceOutput>>>,
     policy_id: Arc<RwLock<String>>,
+    binding: TraceContextBindingV1,
+}
+
+#[derive(Clone)]
+enum TraceContextBindingV1 {
+    LegacyAmbientCompatibility,
+    ExplicitProduct {
+        trace_output: PathBuf,
+        policy_git_directory: PathBuf,
+    },
 }
 
 impl Default for TraceContext {
@@ -50,6 +60,7 @@ impl Default for TraceContext {
         Self {
             output: Arc::new(RwLock::new(None)),
             policy_id: Arc::new(RwLock::new("default".to_string())),
+            binding: TraceContextBindingV1::LegacyAmbientCompatibility,
         }
     }
 }
@@ -59,17 +70,60 @@ impl TraceContext {
         Self::default()
     }
 
+    pub fn explicit_product(selected_host_prefix: &Path) -> Result<Self> {
+        let normalized = selected_host_prefix.components().collect::<PathBuf>();
+        if selected_host_prefix == Path::new("/")
+            || !selected_host_prefix.is_absolute()
+            || normalized.as_os_str() != selected_host_prefix.as_os_str()
+            || selected_host_prefix
+                .components()
+                .any(|component| matches!(component, Component::CurDir | Component::ParentDir))
+        {
+            return Err(anyhow!(
+                "explicit product trace prefix must be absolute and normalized"
+            ));
+        }
+        let policy_git_directory = selected_host_prefix.to_path_buf();
+        let trace_output = policy_git_directory.join("trace.jsonl");
+        Ok(Self {
+            output: Arc::new(RwLock::new(None)),
+            policy_id: Arc::new(RwLock::new("default".to_string())),
+            binding: TraceContextBindingV1::ExplicitProduct {
+                trace_output,
+                policy_git_directory,
+            },
+        })
+    }
+
     pub fn init_trace(&self, path: Option<PathBuf>) -> Result<()> {
-        let trace_path = path.unwrap_or_else(|| {
-            env::var("SHIM_TRACE_LOG")
-                .map(PathBuf::from)
-                .unwrap_or_else(|_| {
-                    dirs::home_dir()
-                        .unwrap_or_else(|| PathBuf::from("/tmp"))
-                        .join(".substrate")
-                        .join("trace.jsonl")
-                })
-        });
+        let trace_path = match &self.binding {
+            TraceContextBindingV1::LegacyAmbientCompatibility => path.unwrap_or_else(|| {
+                env::var("SHIM_TRACE_LOG")
+                    .map(PathBuf::from)
+                    .unwrap_or_else(|_| {
+                        dirs::home_dir()
+                            .unwrap_or_else(|| PathBuf::from("/tmp"))
+                            .join(".substrate")
+                            .join("trace.jsonl")
+                    })
+            }),
+            TraceContextBindingV1::ExplicitProduct { trace_output, .. } => {
+                if path.as_ref().is_some_and(|path| path != trace_output) {
+                    return Err(anyhow!(
+                        "explicit trace path conflicts with bound product trace"
+                    ));
+                }
+                if let Some(existing) = self.output.read().as_ref() {
+                    if existing.path == *trace_output {
+                        return Ok(());
+                    }
+                    return Err(anyhow!(
+                        "initialized trace output conflicts with bound product trace"
+                    ));
+                }
+                trace_output.clone()
+            }
+        };
 
         if let Some(parent) = trace_path.parent() {
             std::fs::create_dir_all(parent)?;
@@ -160,7 +214,13 @@ impl TraceContext {
             locale: env::var("LANG").ok(),
             cwd: env::current_dir()?.to_string_lossy().to_string(),
             policy_id: self.policy_id(),
-            policy_commit: get_policy_git_hash()?,
+            policy_commit: match &self.binding {
+                TraceContextBindingV1::LegacyAmbientCompatibility => get_policy_git_hash()?,
+                TraceContextBindingV1::ExplicitProduct {
+                    policy_git_directory,
+                    ..
+                } => get_policy_git_hash_at(policy_git_directory)?,
+            },
             world_image_version: WORLD_IMAGE_VERSION.to_string(),
             hostname: env::var("HOSTNAME").ok(),
             user: recorded_user,

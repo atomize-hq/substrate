@@ -15,6 +15,21 @@ use std::{
 use substrate_common::WorldRootMode;
 use tempfile::tempdir;
 
+fn bind_test_install_context(
+    prefix: &Path,
+) -> transport_api_types::InstallBootstrapContextCarrierV1 {
+    let context = crate::execution::install_bootstrap::construct_unix_install_bootstrap_context(
+        Some(prefix),
+        std::ffi::OsStr::new("substrate"),
+        &std::env::current_exe().unwrap(),
+        None,
+        Path::new("/"),
+    )
+    .unwrap();
+    crate::execution::install_bootstrap::install_bootstrap_projections(&context).unwrap();
+    context
+}
+
 fn canonicalize_or(path: &Path) -> PathBuf {
     path.canonicalize().unwrap_or_else(|_| path.to_path_buf())
 }
@@ -134,7 +149,9 @@ fn world_flag_overrides_disabled_config_and_env() {
     env::set_current_dir(&home).unwrap();
 
     let cli = Cli::parse_from(["substrate", "--world"]);
-    let config = ShellConfig::from_cli(cli).expect("parse config with world override");
+    let install_context = bind_test_install_context(&substrate_home);
+    let config =
+        ShellConfig::from_cli(cli, &install_context).expect("parse config with world override");
     assert!(!config.no_world);
     assert_eq!(env::var("SUBSTRATE_WORLD").unwrap(), "enabled");
     assert_eq!(env::var("SUBSTRATE_WORLD_ENABLED").unwrap(), "1");
@@ -185,7 +202,9 @@ fn world_flag_honors_directory_world_root_settings() {
     env::set_current_dir(&workdir).unwrap();
 
     let cli = Cli::parse_from(["substrate", "--world"]);
-    let config = ShellConfig::from_cli(cli).expect("parse config with directory world root");
+    let install_context = bind_test_install_context(&substrate_home);
+    let config = ShellConfig::from_cli(cli, &install_context)
+        .expect("parse config with directory world root");
     assert!(!config.no_world);
     assert_eq!(config.world_root.mode, WorldRootMode::Custom);
     assert_eq!(
@@ -255,7 +274,9 @@ fn anchor_flags_override_configs_and_export_anchor_env() {
         &cli_anchor_path,
         "--caged",
     ]);
-    let config = ShellConfig::from_cli(cli).expect("parse config with anchor flags");
+    let install_context = bind_test_install_context(&substrate_home);
+    let config =
+        ShellConfig::from_cli(cli, &install_context).expect("parse config with anchor flags");
 
     assert_eq!(config.world_root.mode, WorldRootMode::Custom);
     assert_eq!(
@@ -313,7 +334,9 @@ fn no_world_flag_disables_world_and_sets_root_exports() {
         "follow-cwd",
         "--uncaged",
     ]);
-    let config = ShellConfig::from_cli(cli).expect("parse config with no-world flag");
+    let install_context = bind_test_install_context(&substrate_home);
+    let config =
+        ShellConfig::from_cli(cli, &install_context).expect("parse config with no-world flag");
     assert!(config.no_world);
     assert_eq!(config.world_root.mode, WorldRootMode::FollowCwd);
     let expected_workdir = fs::canonicalize(&workdir).unwrap_or_else(|_| workdir.clone());

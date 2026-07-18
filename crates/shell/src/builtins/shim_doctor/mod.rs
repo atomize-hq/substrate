@@ -8,9 +8,16 @@ pub use report::{ShimDoctorReport, WorldDepsDoctorStatus, WorldDoctorStatus};
 
 use anyhow::Result;
 use serde_json::to_string_pretty;
+use transport_api_types::InstallBootstrapContextCarrierV1;
 
-pub fn run_doctor(json_mode: bool, cli_no_world: bool, cli_force_world: bool) -> Result<()> {
-    let report = collect_report(cli_no_world, cli_force_world)?;
+pub fn run_doctor(
+    json_mode: bool,
+    cli_no_world: bool,
+    cli_force_world: bool,
+    install_context: &InstallBootstrapContextCarrierV1,
+) -> Result<()> {
+    let report =
+        report::collect_report_for_context(cli_no_world, cli_force_world, install_context)?;
     if json_mode {
         println!("{}", to_string_pretty(&report)?);
     } else {
@@ -19,6 +26,10 @@ pub fn run_doctor(json_mode: bool, cli_no_world: bool, cli_force_world: bool) ->
     Ok(())
 }
 
-pub fn run_repair(manager: &str, auto_confirm: bool) -> Result<RepairOutcome> {
-    repair::run_repair(manager, auto_confirm)
+pub fn run_repair(
+    manager: &str,
+    auto_confirm: bool,
+    install_context: &InstallBootstrapContextCarrierV1,
+) -> Result<RepairOutcome> {
+    repair::run_repair(manager, auto_confirm, install_context)
 }

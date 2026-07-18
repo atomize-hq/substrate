@@ -2,11 +2,23 @@
 
 mod common;
 
-use common::{binary_path, ensure_substrate_built, shared_tmpdir, temp_dir};
+use common::{binary_path, ensure_substrate_built, shared_tmpdir};
 use serde_json::Value as JsonValue;
 use std::fs;
+use std::os::unix::fs::PermissionsExt;
 use std::path::PathBuf;
 use std::process::Command;
+use tempfile::{Builder, TempDir};
+
+fn private_temp_dir(prefix: &str) -> TempDir {
+    let safe_parent = std::env::var_os("XDG_RUNTIME_DIR")
+        .map(PathBuf::from)
+        .unwrap_or_else(|| PathBuf::from(format!("/run/user/{}", unsafe { libc::geteuid() })));
+    Builder::new()
+        .prefix(prefix)
+        .tempdir_in(safe_parent)
+        .expect("allocate secure installer environment test root")
+}
 
 fn repo_root() -> PathBuf {
     PathBuf::from(env!("CARGO_MANIFEST_DIR"))
@@ -102,12 +114,14 @@ fn macos_dev_install_does_not_force_skip_guest_build_during_lima_warm() {
 #[test]
 fn config_current_show_is_not_affected_without_override_inputs() {
     ensure_substrate_built();
-    let temp = temp_dir("substrate-wcu4-clean-env-");
+    let temp = private_temp_dir("substrate-wcu4-clean-env-");
     let home = temp.path().join("home");
     let substrate_home = temp.path().join("substrate-home");
     let cwd = temp.path().join("cwd");
     fs::create_dir_all(&home).expect("create HOME");
     fs::create_dir_all(&substrate_home).expect("create SUBSTRATE_HOME");
+    fs::set_permissions(&substrate_home, fs::Permissions::from_mode(0o700))
+        .expect("secure explicit install prefix");
     fs::create_dir_all(&cwd).expect("create cwd");
 
     fs::write(
@@ -125,6 +139,8 @@ fn config_current_show_is_not_affected_without_override_inputs() {
         .env("USERPROFILE", &home)
         .env("SUBSTRATE_HOME", &substrate_home)
         .current_dir(&cwd)
+        .arg("--install-prefix")
+        .arg(&substrate_home)
         .arg("--no-world")
         .args(["config", "current", "show", "--json"])
         .output()

@@ -8,6 +8,7 @@ use std::path::Path;
 use std::{ffi::CString, mem::MaybeUninit};
 
 use substrate_common::paths as substrate_paths;
+use transport_api_types::{InstallBootstrapContextCarrierV1, PlatformPrincipalV1};
 
 #[derive(Debug, Clone)]
 pub(crate) struct HomeBootstrapError {
@@ -84,6 +85,7 @@ impl HomeBootstrapError {
     }
 
     #[cfg(unix)]
+    #[allow(dead_code)]
     fn ambiguous_private_home_owner(path: &Path) -> Self {
         Self::denied(format!(
             "substrate: unsupported SUBSTRATE_HOME '{}': cannot determine the intended per-user owner while running with effective uid 0; found owner-ambiguous. Set the supported explicit user input or run as the intended user; no home was created or modified.",
@@ -184,6 +186,7 @@ echo "Edit this script and the corresponding package YAML to install a real tool
 exit 1
 "#;
 
+#[allow(dead_code)]
 pub(crate) fn ensure_substrate_home_deps_scaffold() -> Result<(), HomeBootstrapError> {
     let substrate_home = substrate_paths::substrate_home().map_err(|err| {
         HomeBootstrapError::io(format!(
@@ -197,6 +200,40 @@ pub(crate) fn ensure_substrate_home_deps_scaffold() -> Result<(), HomeBootstrapE
     };
     #[cfg(not(unix))]
     let owner = BootstrapOwner;
+    ensure_substrate_home_deps_scaffold_at(&substrate_home, owner)
+}
+
+#[cfg(unix)]
+pub(crate) fn ensure_substrate_home_deps_scaffold_for_context(
+    carrier: &InstallBootstrapContextCarrierV1,
+) -> Result<(), HomeBootstrapError> {
+    super::install_bootstrap::bind_unix_install_bootstrap_context(carrier).map_err(|_| {
+        HomeBootstrapError::denied(
+            "substrate: install bootstrap context does not match the current Unix principal",
+        )
+    })?;
+    let PlatformPrincipalV1::Unix { uid, .. } = &carrier.context.intended_host_principal else {
+        return Err(HomeBootstrapError::denied(
+            "substrate: install bootstrap context has the wrong principal kind",
+        ));
+    };
+    ensure_substrate_home_deps_scaffold_at(
+        Path::new(&carrier.context.host_substrate_home),
+        BootstrapOwner {
+            uid: libc::uid_t::try_from(*uid).map_err(|_| {
+                HomeBootstrapError::denied(
+                    "substrate: install bootstrap context has an unsupported Unix UID",
+                )
+            })?,
+        },
+    )
+}
+
+fn ensure_substrate_home_deps_scaffold_at(
+    substrate_home: &Path,
+    owner: BootstrapOwner,
+) -> Result<(), HomeBootstrapError> {
+    let substrate_home = substrate_home.to_path_buf();
     #[cfg(unix)]
     let trusted_home =
         crate::execution::agent_runtime::host_session_authority::trusted_fs::ensure_private_substrate_home(
@@ -324,6 +361,7 @@ struct BootstrapOwner {
 }
 
 #[cfg(unix)]
+#[allow(dead_code)]
 fn resolve_intended_owner_uid(path: &Path) -> Result<libc::uid_t, HomeBootstrapError> {
     // SAFETY: geteuid has no preconditions.
     let effective_uid = unsafe { libc::geteuid() };
@@ -365,6 +403,7 @@ fn resolve_intended_owner_uid(path: &Path) -> Result<libc::uid_t, HomeBootstrapE
 }
 
 #[cfg(unix)]
+#[allow(dead_code)]
 fn select_intended_owner_name(
     explicit: Option<std::ffi::OsString>,
     sudo_user: Option<std::ffi::OsString>,

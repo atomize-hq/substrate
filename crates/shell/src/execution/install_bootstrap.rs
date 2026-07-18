@@ -56,7 +56,9 @@ pub(crate) fn decode_and_bind_unix_install_bootstrap_context(
             return Err(anyhow!("declared install prefix does not match carrier"));
         }
     }
-    validate_install_bootstrap_projections(&carrier, encoded, |key| std::env::var_os(key))?;
+    reject_conflicting_install_bootstrap_projections(&carrier, encoded, |key| {
+        std::env::var_os(key)
+    })?;
     Ok(carrier)
 }
 
@@ -152,6 +154,24 @@ where
     Ok(())
 }
 
+pub(crate) fn reject_conflicting_install_bootstrap_projections<F>(
+    carrier: &InstallBootstrapContextCarrierV1,
+    encoded: &str,
+    mut lookup: F,
+) -> Result<()>
+where
+    F: FnMut(&str) -> Option<OsString>,
+{
+    for (key, expected) in expected_install_bootstrap_projections(carrier, encoded)? {
+        if lookup(key).is_some_and(|actual| actual != expected) {
+            return Err(anyhow!(
+                "install bootstrap environment projection is conflicting"
+            ));
+        }
+    }
+    Ok(())
+}
+
 pub(crate) fn install_bootstrap_projections(
     carrier: &InstallBootstrapContextCarrierV1,
 ) -> Result<String> {
@@ -161,6 +181,17 @@ pub(crate) fn install_bootstrap_projections(
         std::env::set_var(key, value);
     }
     Ok(encoded)
+}
+
+pub(crate) fn checked_install_bootstrap_context_from_projections(
+) -> Result<InstallBootstrapContextCarrierV1> {
+    let encoded = std::env::var(INSTALL_BOOTSTRAP_CONTEXT_ENV)
+        .context("checked install bootstrap projection is missing")?;
+    let carrier = InstallBootstrapContextCarrierV1::decode(&encoded)
+        .context("checked install bootstrap projection is invalid")?;
+    bind_unix_install_bootstrap_context(&carrier)?;
+    validate_install_bootstrap_projections(&carrier, &encoded, |key| std::env::var_os(key))?;
+    Ok(carrier)
 }
 
 fn lookup_unix_account_by_uid(uid: u32) -> Result<(String, PathBuf)> {

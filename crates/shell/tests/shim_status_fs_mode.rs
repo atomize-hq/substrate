@@ -6,8 +6,37 @@ use assert_cmd::Command;
 use serde_json::{json, Value};
 use std::fs;
 use std::os::unix::fs::PermissionsExt;
-use std::path::Path;
-use support::{substrate_command_for_home, ShellEnvFixture};
+use std::path::{Path, PathBuf};
+use tempfile::{Builder, TempDir};
+
+struct ShellEnvFixture {
+    _temp: TempDir,
+    home: PathBuf,
+}
+
+impl ShellEnvFixture {
+    fn new() -> Self {
+        let safe_parent = std::env::var_os("XDG_RUNTIME_DIR")
+            .map(PathBuf::from)
+            .unwrap_or_else(|| PathBuf::from(format!("/run/user/{}", unsafe { libc::geteuid() })));
+        let temp = Builder::new()
+            .prefix("substrate-status-r2-")
+            .tempdir_in(safe_parent)
+            .expect("allocate secure shim status fixture root");
+        let home = temp.path().join("home");
+        let prefix = home.join(".substrate");
+        fs::create_dir_all(prefix.join("shims")).expect("create shim status prefix");
+        fs::set_permissions(&home, fs::Permissions::from_mode(0o700))
+            .expect("secure shim status home");
+        fs::set_permissions(&prefix, fs::Permissions::from_mode(0o700))
+            .expect("secure shim status prefix");
+        Self { _temp: temp, home }
+    }
+
+    fn home(&self) -> &Path {
+        &self.home
+    }
+}
 
 fn seed_shims(home: &Path) {
     let shims_dir = home.join(".substrate").join("shims");
@@ -48,8 +77,25 @@ world_fs:
 }
 
 fn base_command(fixture: &ShellEnvFixture) -> Command {
-    let mut cmd = substrate_command_for_home(fixture);
-    cmd.current_dir(fixture.home());
+    let prefix = fixture.home().join(".substrate");
+    let mut cmd = support::get_substrate_binary();
+    cmd.env("HOME", fixture.home())
+        .env("USERPROFILE", fixture.home())
+        .env("SHELL", "/bin/bash")
+        .env("SUBSTRATE_HOME", &prefix)
+        .env("SUBSTRATE_ROOT", &prefix)
+        .env("SUBSTRATE_OVERRIDE_WORLD", "enabled")
+        .env_remove("SUBSTRATE_WORLD")
+        .env_remove("SUBSTRATE_WORLD_ENABLED")
+        .env_remove("SUBSTRATE_NO_SHIMS")
+        .env_remove("SUBSTRATE_SHIM_PATH")
+        .env_remove("SUBSTRATE_SHIM_ORIGINAL_PATH")
+        .env_remove("SUBSTRATE_SHIM_DEPLOY_DIR")
+        .env_remove("SHIM_ORIGINAL_PATH")
+        .env_remove("PATH_BEFORE_SUBSTRATE_SHIM")
+        .current_dir(fixture.home())
+        .arg("--install-prefix")
+        .arg(prefix);
     cmd
 }
 
