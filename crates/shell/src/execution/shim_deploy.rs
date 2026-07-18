@@ -7,6 +7,7 @@ use std::path::{Path, PathBuf};
 use std::time::{Duration, SystemTime};
 use substrate_common::paths;
 use tempfile::Builder;
+use transport_api_types::InstallBootstrapContextCarrierV1;
 
 use crate::lock::ProcessLock;
 
@@ -42,6 +43,18 @@ impl ShimDeployer {
             shims_dir: paths::shims_dir()?,
             version_file: paths::version_file()?,
             lock_file: paths::lock_file()?,
+            skip_deployment: skip,
+        })
+    }
+
+    pub fn with_context(context: &InstallBootstrapContextCarrierV1, skip: bool) -> Result<Self> {
+        crate::execution::install_bootstrap::bind_unix_install_bootstrap_context(context)?;
+        let prefix = PathBuf::from(&context.context.selected_host_prefix);
+        let shims_dir = prefix.join("shims");
+        Ok(Self {
+            version_file: shims_dir.join(".version"),
+            shims_dir,
+            lock_file: prefix.join(".substrate.lock"),
             skip_deployment: skip,
         })
     }

@@ -14,6 +14,7 @@ use std::process::Command;
 #[cfg(target_os = "linux")]
 use std::process::{Output, Stdio};
 use tempfile::{Builder, TempDir};
+use transport_api_types::{InstallBootstrapContextCarrierV1, InstallBootstrapContextV1};
 
 fn private_temp_dir(prefix: &str) -> TempDir {
     let safe_parent = std::env::var_os("XDG_RUNTIME_DIR")
@@ -27,9 +28,56 @@ fn private_temp_dir(prefix: &str) -> TempDir {
         .expect("allocate private-home test root")
 }
 
-fn assert_version_with_umask(home: &Path, substrate_home: &Path, umask: &str) {
+fn install_bootstrap_context(substrate_home: &Path) -> (String, String, String, String) {
+    let uid = unsafe { libc::geteuid() };
+    let account_output = Command::new("id")
+        .args(["-nu", &uid.to_string()])
+        .output()
+        .expect("resolve current Unix account");
+    assert!(account_output.status.success());
+    let account = String::from_utf8(account_output.stdout)
+        .expect("account is UTF-8")
+        .trim()
+        .to_string();
+    let context = InstallBootstrapContextV1::new_unix(
+        substrate_home.to_str().expect("selected home is UTF-8"),
+        &account,
+        uid,
+    )
+    .expect("construct install bootstrap context");
+    let carrier = InstallBootstrapContextCarrierV1::from_context(context)
+        .expect("commit install bootstrap context");
+    (
+        carrier.encode().expect("encode install bootstrap context"),
+        carrier.host_context_commitment,
+        account,
+        uid.to_string(),
+    )
+}
+
+fn install_bootstrap_driver(home: &Path, substrate_home: &Path) -> assert_cmd::Command {
+    let (carrier, commitment, account, uid) = install_bootstrap_context(substrate_home);
+    let mut command = substrate_shell_driver();
+    command
+        .env("HOME", home)
+        .env("USERPROFILE", home)
+        .env("SUBSTRATE_HOME", substrate_home)
+        .env("SUBSTRATE_ROOT", substrate_home)
+        .env("SUBSTRATE_INSTALL_HOST_CONTEXT_COMMITMENT", commitment)
+        .env("SUBSTRATE_INSTALL_PRIMARY_USER", account)
+        .env("SUBSTRATE_INSTALL_PRIMARY_UID", uid)
+        .env("SUBSTRATE_INSTALL_BOOTSTRAP_CONTEXT_V1", &carrier)
+        .current_dir(home)
+        .arg("--install-bootstrap-context-v1")
+        .arg(carrier)
+        .arg("--install-bootstrap-home-v1");
+    command
+}
+
+fn assert_install_bootstrap_with_umask(home: &Path, substrate_home: &Path, umask: &str) {
     support::ensure_substrate_built();
     let binary = support::binary_path();
+    let (carrier, commitment, account, uid) = install_bootstrap_context(substrate_home);
     Command::new("bash")
         .args([
             "-c",
@@ -38,10 +86,17 @@ fn assert_version_with_umask(home: &Path, substrate_home: &Path, umask: &str) {
             umask,
         ])
         .arg(binary)
-        .arg("--version")
+        .arg("--install-bootstrap-context-v1")
+        .arg(&carrier)
+        .arg("--install-bootstrap-home-v1")
         .env("HOME", home)
         .env("USERPROFILE", home)
         .env("SUBSTRATE_HOME", substrate_home)
+        .env("SUBSTRATE_ROOT", substrate_home)
+        .env("SUBSTRATE_INSTALL_HOST_CONTEXT_COMMITMENT", commitment)
+        .env("SUBSTRATE_INSTALL_PRIMARY_USER", account)
+        .env("SUBSTRATE_INSTALL_PRIMARY_UID", uid)
+        .env("SUBSTRATE_INSTALL_BOOTSTRAP_CONTEXT_V1", carrier)
         .current_dir(home)
         .assert()
         .success();
@@ -99,19 +154,14 @@ fn run_lima_private_home_fallback(program: &str, target: &Path) -> Output {
 }
 
 #[test]
-fn test_bootstrap_scaffolds_deps_on_version() {
+fn test_install_bootstrap_action_scaffolds_deps() {
     let tmp = private_temp_dir("substrate-wdh3-");
     let home = tmp.path().join("home");
     fs::create_dir_all(&home).expect("create HOME");
 
     let substrate_home = home.join(".substrate");
 
-    substrate_shell_driver()
-        .env("HOME", &home)
-        .env("USERPROFILE", &home)
-        .env("SUBSTRATE_HOME", &substrate_home)
-        .current_dir(&home)
-        .arg("--version")
+    install_bootstrap_driver(&home, &substrate_home)
         .assert()
         .success();
 
@@ -130,6 +180,45 @@ fn test_bootstrap_scaffolds_deps_on_version() {
 }
 
 #[test]
+fn test_version_is_non_mutating() {
+    let tmp = private_temp_dir("substrate-wdh3-version-");
+    let home = tmp.path().join("home");
+    fs::create_dir_all(&home).expect("create HOME");
+    fs::set_permissions(&home, fs::Permissions::from_mode(0o700)).expect("secure HOME");
+    let substrate_home = home.join(".substrate");
+
+    substrate_shell_driver()
+        .env("HOME", &home)
+        .env("USERPROFILE", &home)
+        .env("SUBSTRATE_HOME", &substrate_home)
+        .env("SUBSTRATE_ROOT", &substrate_home)
+        .current_dir(&home)
+        .arg("--version")
+        .assert()
+        .success()
+        .stdout(predicates::str::contains("substrate"));
+
+    assert!(!substrate_home.exists());
+    for relative in [
+        "deps",
+        "manager_env.sh",
+        "manager_init.sh",
+        "manager_hooks.yaml",
+        "shims",
+        "trace.jsonl",
+        "env.sh",
+        "dev-shim-env.sh",
+        "config.yaml",
+        "version.json",
+    ] {
+        assert!(
+            !substrate_home.join(relative).exists(),
+            "version created {relative}"
+        );
+    }
+}
+
+#[test]
 fn test_bootstrap_is_idempotent_and_does_not_overwrite() {
     let tmp = private_temp_dir("substrate-wdh3-");
     let home = tmp.path().join("home");
@@ -137,12 +226,7 @@ fn test_bootstrap_is_idempotent_and_does_not_overwrite() {
 
     let substrate_home = home.join(".substrate");
 
-    substrate_shell_driver()
-        .env("HOME", &home)
-        .env("USERPROFILE", &home)
-        .env("SUBSTRATE_HOME", &substrate_home)
-        .current_dir(&home)
-        .arg("--version")
+    install_bootstrap_driver(&home, &substrate_home)
         .assert()
         .success();
 
@@ -152,12 +236,7 @@ fn test_bootstrap_is_idempotent_and_does_not_overwrite() {
     let custom = "user-modified README\n";
     fs::write(&readme, custom).expect("overwrite README in fixture");
 
-    substrate_shell_driver()
-        .env("HOME", &home)
-        .env("USERPROFILE", &home)
-        .env("SUBSTRATE_HOME", &substrate_home)
-        .current_dir(&home)
-        .arg("--version")
+    install_bootstrap_driver(&home, &substrate_home)
         .assert()
         .success();
 
@@ -178,12 +257,7 @@ fn test_bootstrap_wrong_type_fails_with_exit_1() {
         .expect("secure SUBSTRATE_HOME fixture");
     fs::write(deps_root.join("packages"), "not a directory\n").expect("seed wrong type");
 
-    substrate_shell_driver()
-        .env("HOME", &home)
-        .env("USERPROFILE", &home)
-        .env("SUBSTRATE_HOME", &substrate_home)
-        .current_dir(&home)
-        .arg("--version")
+    install_bootstrap_driver(&home, &substrate_home)
         .assert()
         .code(1)
         .stderr(predicates::str::contains("deps/packages"))
@@ -199,7 +273,7 @@ fn test_bootstrap_creation_is_exact_0700_across_umasks() {
         fs::set_permissions(&home, fs::Permissions::from_mode(0o700)).expect("secure HOME");
         let substrate_home = home.join(".substrate");
 
-        assert_version_with_umask(&home, &substrate_home, umask);
+        assert_install_bootstrap_with_umask(&home, &substrate_home, umask);
 
         let metadata = fs::symlink_metadata(&substrate_home).expect("stat SUBSTRATE_HOME");
         assert_eq!(metadata.mode() & 0o7777, 0o700, "umask {umask}");
@@ -317,12 +391,7 @@ fn test_existing_invalid_home_modes_fail_without_mutation_or_authority_state() {
         fs::set_permissions(&substrate_home, fs::Permissions::from_mode(mode))
             .expect("set invalid mode");
 
-        substrate_shell_driver()
-            .env("HOME", &home)
-            .env("USERPROFILE", &home)
-            .env("SUBSTRATE_HOME", &substrate_home)
-            .current_dir(&home)
-            .arg("--version")
+        install_bootstrap_driver(&home, &substrate_home)
             .assert()
             .code(5)
             .stderr(predicates::str::contains("wrong-mode"));
@@ -348,12 +417,7 @@ fn test_existing_symlink_home_fails_without_touching_target() {
     fs::set_permissions(&target, fs::Permissions::from_mode(0o700)).expect("secure target");
     std::os::unix::fs::symlink(&target, &substrate_home).expect("create home symlink");
 
-    substrate_shell_driver()
-        .env("HOME", &home)
-        .env("USERPROFILE", &home)
-        .env("SUBSTRATE_HOME", &substrate_home)
-        .current_dir(&home)
-        .arg("--version")
+    install_bootstrap_driver(&home, &substrate_home)
         .assert()
         .code(5)
         .stderr(predicates::str::contains("symlink"));
@@ -371,12 +435,7 @@ fn test_existing_non_directory_home_fails_without_authority_state() {
     fs::set_permissions(&home, fs::Permissions::from_mode(0o700)).expect("secure HOME");
     fs::write(&substrate_home, b"not a directory\n").expect("create wrong-type home");
 
-    substrate_shell_driver()
-        .env("HOME", &home)
-        .env("USERPROFILE", &home)
-        .env("SUBSTRATE_HOME", &substrate_home)
-        .current_dir(&home)
-        .arg("--version")
+    install_bootstrap_driver(&home, &substrate_home)
         .assert()
         .code(5)
         .stderr(predicates::str::contains("wrong-type"));
@@ -403,12 +462,7 @@ fn test_existing_masked_named_acl_fails_without_descendant_writes() {
         .assert()
         .success();
 
-    substrate_shell_driver()
-        .env("HOME", &home)
-        .env("USERPROFILE", &home)
-        .env("SUBSTRATE_HOME", &substrate_home)
-        .current_dir(&home)
-        .arg("--version")
+    install_bootstrap_driver(&home, &substrate_home)
         .assert()
         .code(5)
         .stderr(predicates::str::contains("foreign-acl"));
@@ -434,12 +488,7 @@ fn test_existing_default_acl_fails_without_descendant_writes() {
         .assert()
         .success();
 
-    substrate_shell_driver()
-        .env("HOME", &home)
-        .env("USERPROFILE", &home)
-        .env("SUBSTRATE_HOME", &substrate_home)
-        .current_dir(&home)
-        .arg("--version")
+    install_bootstrap_driver(&home, &substrate_home)
         .assert()
         .code(5)
         .stderr(predicates::str::contains("foreign-acl"));

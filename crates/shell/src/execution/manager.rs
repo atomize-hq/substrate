@@ -1,29 +1,39 @@
+use super::install_bootstrap::{
+    bind_unix_install_bootstrap_context, unix_account_home_for_principal,
+};
 use super::manager_init;
 use super::ShellConfig;
-use anyhow::Result;
+use anyhow::{Context, Result};
 use chrono::Utc;
 use serde_json::json;
 use std::{
     env,
-    ffi::OsStr,
-    fs,
     path::{Path, PathBuf},
     process::Command,
 };
 use substrate_common::{log_schema, Platform};
 use substrate_trace::append_to_trace;
 use tracing::warn;
+use transport_api_types::{InstallBootstrapContextCarrierV1, PlatformPrincipalV1};
 
 pub(crate) fn configure_manager_init(
     config: &ShellConfig,
+    install_context: &InstallBootstrapContextCarrierV1,
 ) -> Option<manager_init::ManagerInitResult> {
-    let overlay = config
-        .manager_init_path
-        .parent()
-        .map(|dir| dir.join("manager_hooks.local.yaml"));
+    if let Err(err) = bind_unix_install_bootstrap_context(install_context) {
+        warn!(
+            target = "substrate::shell",
+            error = %err,
+            "manager init rejected invalid install bootstrap context"
+        );
+        return None;
+    }
+
+    let prefix = PathBuf::from(&install_context.context.selected_host_prefix);
+    let overlay = Some(prefix.join("manager_hooks.local.yaml"));
 
     let manifest_paths = manager_init::ManifestPaths {
-        base: manager_manifest_base_path(),
+        base: manager_manifest_base_path(install_context),
         overlay,
     };
 
@@ -75,43 +85,10 @@ pub(crate) fn configure_manager_init(
     }
 }
 
-pub(crate) fn manager_manifest_base_path() -> PathBuf {
-    if let Ok(override_path) = env::var("SUBSTRATE_MANAGER_MANIFEST") {
-        return PathBuf::from(override_path);
-    }
-
-    if let Some(path) = installed_manager_manifest_base_path() {
-        return canonicalize_or(&path);
-    }
-
-    let crate_dir = PathBuf::from(env!("CARGO_MANIFEST_DIR"));
-    crate_dir
-        .parent()
-        .and_then(|dir| dir.parent())
-        .map(|root| root.join("config").join("manager_hooks.yaml"))
-        .unwrap_or_else(|| PathBuf::from("config/manager_hooks.yaml"))
-}
-
-fn canonicalize_or(path: &Path) -> PathBuf {
-    fs::canonicalize(path).unwrap_or_else(|_| path.to_path_buf())
-}
-
-fn installed_manager_manifest_base_path() -> Option<PathBuf> {
-    let exe_path = env::current_exe().ok()?;
-    let canonical = canonicalize_or(&exe_path);
-
-    let bin_dir = canonical.parent()?;
-    if bin_dir.file_name() != Some(OsStr::new("bin")) {
-        return None;
-    }
-
-    let version_dir = bin_dir.parent()?;
-    let versions_dir = version_dir.parent()?;
-    if versions_dir.file_name() != Some(OsStr::new("versions")) {
-        return None;
-    }
-
-    Some(version_dir.join("config").join("manager_hooks.yaml"))
+pub(crate) fn manager_manifest_base_path(
+    install_context: &InstallBootstrapContextCarrierV1,
+) -> PathBuf {
+    PathBuf::from(&install_context.context.selected_host_prefix).join("manager_hooks.yaml")
 }
 
 pub(crate) fn current_platform() -> Platform {
@@ -161,10 +138,9 @@ if [[ -n "${SUBSTRATE_MANAGER_ENV_ACTIVE:-}" ]]; then
 fi
 export SUBSTRATE_MANAGER_ENV_ACTIVE=1
 
-substrate_home="${SUBSTRATE_HOME:-}"
-if [[ -z "${substrate_home}" ]]; then
-    substrate_home="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
-fi
+substrate_home="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+export SUBSTRATE_HOME="$substrate_home"
+export SUBSTRATE_ROOT="$substrate_home"
 
 substrate_env="${substrate_home}/env.sh"
 if [[ -f "$substrate_env" ]]; then
@@ -184,19 +160,52 @@ if [[ -n "$substrate_original" && -f "$substrate_original" ]]; then
     source "$substrate_original"
 fi
 
-legacy_bashenv="${HOME}/.substrate_bashenv"
+legacy_bashenv="${substrate_account_home}/.substrate_bashenv"
 if [[ -f "$legacy_bashenv" ]]; then
     # shellcheck disable=SC1090
     source "$legacy_bashenv"
 fi
 "#;
 
-pub(crate) fn write_manager_env_script_at(path: &Path) -> Result<()> {
-    manager_init::write_snippet(path, MANAGER_ENV_SCRIPT)
+fn shell_single_quote(value: &str) -> String {
+    format!("'{}'", value.replace('\'', "'\"'\"'"))
 }
 
-pub(crate) fn write_manager_env_script(config: &ShellConfig) -> Result<()> {
-    write_manager_env_script_at(&config.manager_env_path)
+fn render_manager_env_script(install_context: &InstallBootstrapContextCarrierV1) -> Result<String> {
+    bind_unix_install_bootstrap_context(install_context)?;
+    let encoded = install_context
+        .encode()
+        .context("failed to encode manager install bootstrap context")?;
+    let account_home =
+        unix_account_home_for_principal(&install_context.context.intended_host_principal)?;
+    let PlatformPrincipalV1::Unix { account, uid } =
+        &install_context.context.intended_host_principal
+    else {
+        anyhow::bail!("manager environment requires a Unix principal");
+    };
+    Ok(format!(
+        "export SUBSTRATE_INSTALL_HOST_CONTEXT_COMMITMENT={}\nexport SUBSTRATE_INSTALL_PRIMARY_USER={}\nexport SUBSTRATE_INSTALL_PRIMARY_UID={}\nexport SUBSTRATE_INSTALL_BOOTSTRAP_CONTEXT_V1={}\nsubstrate_account_home={}\n{}",
+        shell_single_quote(&install_context.host_context_commitment),
+        shell_single_quote(account),
+        shell_single_quote(&uid.to_string()),
+        shell_single_quote(&encoded),
+        shell_single_quote(&account_home.display().to_string()),
+        MANAGER_ENV_SCRIPT
+    ))
+}
+
+pub(crate) fn write_manager_env_script_at(
+    path: &Path,
+    install_context: &InstallBootstrapContextCarrierV1,
+) -> Result<()> {
+    manager_init::write_snippet(path, &render_manager_env_script(install_context)?)
+}
+
+pub(crate) fn write_manager_env_script(
+    config: &ShellConfig,
+    install_context: &InstallBootstrapContextCarrierV1,
+) -> Result<()> {
+    write_manager_env_script_at(&config.manager_env_path, install_context)
 }
 
 pub(crate) trait CommandEnvAdapter {
@@ -284,6 +293,7 @@ mod tests {
     use substrate_common::WorldRootMode;
     use substrate_trace::init_trace;
     use tempfile::{tempdir, TempDir};
+    use transport_api_types::{InstallBootstrapContextCarrierV1, InstallBootstrapContextV1};
     use uuid::Uuid;
 
     fn test_shell_config(temp: &TempDir) -> ShellConfig {
@@ -335,6 +345,18 @@ mod tests {
         path
     }
 
+    fn test_install_context(temp: &TempDir) -> InstallBootstrapContextCarrierV1 {
+        let (principal, _) =
+            crate::execution::install_bootstrap::current_unix_principal_and_home().unwrap();
+        let PlatformPrincipalV1::Unix { account, uid } = principal else {
+            panic!("expected Unix principal");
+        };
+        let context =
+            InstallBootstrapContextV1::new_unix(temp.path().to_str().unwrap(), &account, uid)
+                .unwrap();
+        InstallBootstrapContextCarrierV1::from_context(context).unwrap()
+    }
+
     fn set_env(key: &str, value: &str) -> Option<String> {
         let previous = env::var(key).ok();
         env::set_var(key, value);
@@ -375,15 +397,12 @@ mod tests {
             "version: 2\nmanagers:\n  - name: Demo\n    priority: 5\n    detect:\n      files: ['{}']\n    init:\n      shell: |\n        export DEMO=1\n",
             detect_path.display()
         );
-        let manifest_path = write_manifest(&temp, "manager_hooks.yaml", &manifest_contents);
-        let previous_manifest = set_env(
-            "SUBSTRATE_MANAGER_MANIFEST",
-            &manifest_path.display().to_string(),
-        );
+        write_manifest(&temp, "manager_hooks.yaml", &manifest_contents);
         let previous_init = env::var("SUBSTRATE_MANAGER_INIT").ok();
 
         let config = test_shell_config(&temp);
-        let result = configure_manager_init(&config).expect("manager init result");
+        let context = test_install_context(&temp);
+        let result = configure_manager_init(&config, &context).expect("manager init result");
         assert_eq!(result.states.len(), 1);
         assert!(result.states[0].detected);
         let snippet = fs::read_to_string(&config.manager_init_path).unwrap();
@@ -394,7 +413,6 @@ mod tests {
             config.manager_init_path.display().to_string()
         );
 
-        restore_env("SUBSTRATE_MANAGER_MANIFEST", previous_manifest);
         restore_env("SUBSTRATE_MANAGER_INIT", previous_init);
     }
 
@@ -406,7 +424,7 @@ mod tests {
             "version: 2\nmanagers:\n  - name: Demo\n    detect:\n      files: ['{}']\n    init:\n      shell: |\n        export BASE=1\n",
             temp.path().join("missing").display()
         );
-        let manifest_path = write_manifest(&temp, "manager_hooks.yaml", &manifest_contents);
+        write_manifest(&temp, "manager_hooks.yaml", &manifest_contents);
         let overlay_path = temp.path().join("manager_hooks.local.yaml");
         let overlay_contents = r#"version: 2
 managers:
@@ -419,19 +437,16 @@ managers:
 "#;
         fs::write(&overlay_path, overlay_contents).unwrap();
 
-        let previous_manifest = set_env(
-            "SUBSTRATE_MANAGER_MANIFEST",
-            &manifest_path.display().to_string(),
-        );
         let previous_init = env::var("SUBSTRATE_MANAGER_INIT").ok();
 
         let config = test_shell_config(&temp);
-        let result = configure_manager_init(&config).expect("overlay manager init result");
+        let context = test_install_context(&temp);
+        let result =
+            configure_manager_init(&config, &context).expect("overlay manager init result");
         assert_eq!(result.states[0].reason.as_deref(), Some("script"));
         let snippet = fs::read_to_string(&config.manager_init_path).unwrap();
         assert!(snippet.contains("OVERLAY=1"));
 
-        restore_env("SUBSTRATE_MANAGER_MANIFEST", previous_manifest);
         restore_env("SUBSTRATE_MANAGER_INIT", previous_init);
     }
 
@@ -440,12 +455,17 @@ managers:
     fn manager_env_script_sources_manager_and_legacy_snippets() {
         let temp = tempdir().unwrap();
         let config = test_shell_config(&temp);
-        write_manager_env_script(&config).expect("write manager env");
+        let context = test_install_context(&temp);
+        write_manager_env_script(&config, &context).expect("write manager env");
         let script = fs::read_to_string(&config.manager_env_path).unwrap();
         assert!(script.contains("env.sh"));
         assert!(script.contains("manager_init.sh"));
         assert!(script.contains("SUBSTRATE_ORIGINAL_BASH_ENV"));
         assert!(script.contains(".substrate_bashenv"));
+        assert!(script.contains(&context.host_context_commitment));
+        assert!(script.contains("SUBSTRATE_INSTALL_BOOTSTRAP_CONTEXT_V1"));
+        assert!(!script.contains("${SUBSTRATE_HOME:-}"));
+        assert!(!script.contains("${HOME}"));
     }
 
     #[test]
@@ -471,8 +491,10 @@ managers:
             "SUBSTRATE_MANAGER_MANIFEST",
             &override_path.display().to_string(),
         );
-        let resolved = manager_manifest_base_path();
-        assert_eq!(resolved, override_path);
+        let context = test_install_context(&temp);
+        let resolved = manager_manifest_base_path(&context);
+        assert_eq!(resolved, temp.path().join("manager_hooks.yaml"));
+        assert_ne!(resolved, override_path);
         restore_env("SUBSTRATE_MANAGER_MANIFEST", previous);
     }
 }

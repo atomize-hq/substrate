@@ -8,6 +8,7 @@ use std::path::Path;
 use std::{ffi::CString, mem::MaybeUninit};
 
 use substrate_common::paths as substrate_paths;
+use transport_api_types::{InstallBootstrapContextCarrierV1, PlatformPrincipalV1};
 
 #[derive(Debug, Clone)]
 pub(crate) struct HomeBootstrapError {
@@ -197,6 +198,40 @@ pub(crate) fn ensure_substrate_home_deps_scaffold() -> Result<(), HomeBootstrapE
     };
     #[cfg(not(unix))]
     let owner = BootstrapOwner;
+    ensure_substrate_home_deps_scaffold_at(&substrate_home, owner)
+}
+
+#[cfg(unix)]
+pub(crate) fn ensure_substrate_home_deps_scaffold_for_context(
+    carrier: &InstallBootstrapContextCarrierV1,
+) -> Result<(), HomeBootstrapError> {
+    super::install_bootstrap::bind_unix_install_bootstrap_context(carrier).map_err(|_| {
+        HomeBootstrapError::denied(
+            "substrate: install bootstrap context does not match the current Unix principal",
+        )
+    })?;
+    let PlatformPrincipalV1::Unix { uid, .. } = &carrier.context.intended_host_principal else {
+        return Err(HomeBootstrapError::denied(
+            "substrate: install bootstrap context has the wrong principal kind",
+        ));
+    };
+    ensure_substrate_home_deps_scaffold_at(
+        Path::new(&carrier.context.host_substrate_home),
+        BootstrapOwner {
+            uid: libc::uid_t::try_from(*uid).map_err(|_| {
+                HomeBootstrapError::denied(
+                    "substrate: install bootstrap context has an unsupported Unix UID",
+                )
+            })?,
+        },
+    )
+}
+
+fn ensure_substrate_home_deps_scaffold_at(
+    substrate_home: &Path,
+    owner: BootstrapOwner,
+) -> Result<(), HomeBootstrapError> {
+    let substrate_home = substrate_home.to_path_buf();
     #[cfg(unix)]
     let trusted_home =
         crate::execution::agent_runtime::host_session_authority::trusted_fs::ensure_private_substrate_home(

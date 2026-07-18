@@ -1,4 +1,5 @@
 use super::report::{build_manifest_paths, legacy_bashenv_path, manifest_spec_map};
+use crate::execution::install_bootstrap::bind_unix_install_bootstrap_context;
 use anyhow::{anyhow, Context, Result};
 use chrono::Utc;
 use serde_json::json;
@@ -8,8 +9,9 @@ use std::{
     path::Path,
 };
 use substrate_common::{log_schema, manager_manifest::ManagerManifest};
-use substrate_trace::{append_to_trace, init_trace, set_global_trace_context, TraceContext};
+use substrate_trace::append_to_trace;
 use tempfile::NamedTempFile;
+use transport_api_types::InstallBootstrapContextCarrierV1;
 use tracing::warn;
 use uuid::Uuid;
 
@@ -35,8 +37,13 @@ pub enum RepairOutcome {
     },
 }
 
-pub(crate) fn run_repair(manager: &str, auto_confirm: bool) -> Result<RepairOutcome> {
-    let (manifest_info, _) = build_manifest_paths()?;
+pub(crate) fn run_repair(
+    manager: &str,
+    auto_confirm: bool,
+    install_context: &InstallBootstrapContextCarrierV1,
+) -> Result<RepairOutcome> {
+    bind_unix_install_bootstrap_context(install_context)?;
+    let (manifest_info, _) = build_manifest_paths(install_context)?;
     let manifest = ManagerManifest::load(&manifest_info.base, manifest_info.overlay.as_deref())?;
     let spec_map = manifest_spec_map(manifest);
     let Some(spec) = spec_map
@@ -63,7 +70,7 @@ pub(crate) fn run_repair(manager: &str, auto_confirm: bool) -> Result<RepairOutc
             )
         })?;
 
-    let bashenv_path = legacy_bashenv_path()?;
+    let bashenv_path = legacy_bashenv_path(install_context)?;
     if !prompt_for_repair(auto_confirm, &spec.name, &bashenv_path, &snippet)? {
         return Ok(RepairOutcome::Skipped {
             manager: spec.name.clone(),
@@ -208,8 +215,7 @@ fn log_repair_event(manager: &str, bashenv_path: &Path, backup_path: Option<&Pat
         "backup_path": backup_path.map(|p| p.display().to_string()),
         "snippet_length": block.lines().count()
     });
-    let _ = set_global_trace_context(TraceContext::default());
-    if let Err(err) = init_trace(None).and_then(|_| append_to_trace(&entry)) {
+    if let Err(err) = append_to_trace(&entry) {
         warn!(
             target = "substrate::shell",
             manager = manager,

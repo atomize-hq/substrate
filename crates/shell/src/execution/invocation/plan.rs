@@ -23,6 +23,7 @@ use std::sync::{Mutex, OnceLock};
 use substrate_broker::{set_global_broker, BrokerHandle};
 use substrate_common::{dedupe_path, paths as substrate_paths, WorldRootMode};
 use substrate_trace::{init_trace, set_global_trace_context, TraceContext};
+use transport_api_types::InstallBootstrapContextCarrierV1;
 use uuid::Uuid;
 
 #[derive(Debug, Clone)]
@@ -63,16 +64,26 @@ pub struct ShellConfig {
 }
 
 impl ShellConfig {
-    pub fn from_args() -> Result<Self> {
-        Self::from_cli(Cli::parse())
+    pub fn from_args(install_context: &InstallBootstrapContextCarrierV1) -> Result<Self> {
+        Self::from_cli(Cli::parse(), install_context)
     }
 
-    pub fn from_cli(cli: Cli) -> Result<Self> {
+    pub fn from_cli(cli: Cli, install_context: &InstallBootstrapContextCarrierV1) -> Result<Self> {
         #[cfg(test)]
         let _env_lock = FROM_CLI_ENV_LOCK
             .get_or_init(|| Mutex::new(()))
             .lock()
             .expect("env mutex poisoned");
+
+        let encoded_context = install_context.encode()?;
+        crate::execution::install_bootstrap::validate_install_bootstrap_projections(
+            install_context,
+            &encoded_context,
+            |key| env::var_os(key),
+        )?;
+        let substrate_home = PathBuf::from(&install_context.context.selected_host_prefix);
+        let shims_dir = substrate_home.join("shims");
+        let version_file = shims_dir.join(".version");
 
         // macOS-only: apply CLI overrides to environment for platform detection precedence
         #[cfg(target_os = "macos")]
@@ -99,7 +110,7 @@ impl ShellConfig {
 
         // Handle --shim-deploy flag
         if cli.shim_deploy {
-            let deployer = ShimDeployer::with_skip(false)?;
+            let deployer = ShimDeployer::with_context(install_context, false)?;
             match deployer.ensure_deployed() {
                 Ok(DeploymentStatus::Deployed) => {
                     println!("✓ Shims deployed successfully");
@@ -126,7 +137,6 @@ impl ShellConfig {
 
         // Handle --shim-remove flag
         if cli.shim_remove {
-            let shims_dir = substrate_common::paths::shims_dir()?;
             if shims_dir.exists() {
                 std::fs::remove_dir_all(&shims_dir)?;
                 println!("✓ Removed shims from {shims_dir:?}");
@@ -143,7 +153,7 @@ impl ShellConfig {
                     "status": "disabled",
                     "deployed": false,
                     "version": serde_json::Value::Null,
-                    "location": substrate_common::paths::shims_dir().ok(),
+                    "location": shims_dir,
                     "commands_total": serde_json::Value::Null,
                     "commands_present": serde_json::Value::Null,
                     "missing": [],
@@ -156,9 +166,6 @@ impl ShellConfig {
                 println!("{}", serde_json::to_string_pretty(&out)?);
                 std::process::exit(0);
             }
-
-            let shims_dir = substrate_common::paths::shims_dir()?;
-            let version_file = substrate_common::paths::version_file()?;
 
             if !shims_dir.exists() {
                 let out = json!({
@@ -275,9 +282,6 @@ impl ShellConfig {
                 println!("Status: Skipped");
                 std::process::exit(0);
             }
-
-            let shims_dir = substrate_common::paths::shims_dir()?;
-            let version_file = substrate_common::paths::version_file()?;
 
             if !shims_dir.exists() {
                 println!("Shims: Not deployed");
@@ -508,7 +512,7 @@ impl ShellConfig {
                     std::process::exit(code);
                 }
                 SubCommands::Shim(shim_cmd) => {
-                    handle_shim_command(shim_cmd, &cli);
+                    handle_shim_command(shim_cmd, &cli, install_context);
                 }
                 SubCommands::Health(health_cmd) => {
                     handle_health_command(health_cmd, &cli)?;
@@ -537,20 +541,13 @@ impl ShellConfig {
 
         let session_id = env::var("SHIM_SESSION_ID").unwrap_or_else(|_| Uuid::now_v7().to_string());
 
-        let home = env::var("HOME")
-            .or_else(|_| env::var("USERPROFILE")) // Windows support
-            .context("HOME/USERPROFILE not set")?;
-
-        let substrate_home = substrate_paths::substrate_home()?;
-        let trace_log_file = env::var("SHIM_TRACE_LOG")
-            .map(PathBuf::from)
-            .unwrap_or_else(|_| substrate_home.join("trace.jsonl"));
+        let trace_log_file = substrate_home.join("trace.jsonl");
 
         let original_path = env::var("SHIM_ORIGINAL_PATH")
             .or_else(|_| env::var("PATH"))
             .context("No PATH found")?;
 
-        let shim_dir = substrate_common::paths::shims_dir()?;
+        let shim_dir = shims_dir;
         let config_path = substrate_paths::config_file()?;
         if !config_path.exists() {
             eprintln!(
@@ -578,7 +575,7 @@ impl ShellConfig {
         update_world_env(final_no_world);
         let manager_init_path = substrate_home.join("manager_init.sh");
         let manager_env_path = substrate_home.join("manager_env.sh");
-        let bash_preexec_path = PathBuf::from(&home).join(".substrate_preexec");
+        let bash_preexec_path = substrate_home.join(".substrate_preexec");
         let host_bash_env = env::var("BASH_ENV").ok();
 
         let skip_shims_flag = cli.shim_skip || env::var("SUBSTRATE_NO_SHIMS").is_ok();

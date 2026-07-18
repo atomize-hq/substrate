@@ -1,4 +1,33 @@
 use substrate_shell::scripts::{write_bash_preexec_script, BASH_PREEXEC_SCRIPT};
+use transport_api_types::{
+    InstallBootstrapContextCarrierV1, InstallBootstrapContextV1, PlatformPrincipalV1,
+};
+
+fn current_install_context(prefix: &std::path::Path) -> InstallBootstrapContextCarrierV1 {
+    let output = std::process::Command::new("id")
+        .args(["-u"])
+        .output()
+        .unwrap();
+    assert!(output.status.success());
+    let uid = String::from_utf8(output.stdout)
+        .unwrap()
+        .trim()
+        .parse::<u32>()
+        .unwrap();
+    let output = std::process::Command::new("id")
+        .args(["-nu", &uid.to_string()])
+        .output()
+        .unwrap();
+    assert!(output.status.success());
+    let account = String::from_utf8(output.stdout).unwrap().trim().to_string();
+    let principal = PlatformPrincipalV1::Unix { account, uid };
+    let PlatformPrincipalV1::Unix { account, uid } = principal else {
+        unreachable!();
+    };
+    let context =
+        InstallBootstrapContextV1::new_unix(prefix.to_str().unwrap(), &account, uid).unwrap();
+    InstallBootstrapContextCarrierV1::from_context(context).unwrap()
+}
 
 #[test]
 fn bash_preexec_script_contains_hooks() {
@@ -10,10 +39,15 @@ fn bash_preexec_script_contains_hooks() {
 #[test]
 fn write_bash_preexec_script_writes_constant() {
     let dir = tempfile::tempdir().unwrap();
-    let path = dir.path().join("preexec.sh");
+    let path = dir.path().join(".substrate_preexec");
+    let context = current_install_context(dir.path());
 
-    write_bash_preexec_script(&path).unwrap();
+    write_bash_preexec_script(&path, &context).unwrap();
 
     let written = std::fs::read_to_string(&path).unwrap();
-    assert_eq!(written, BASH_PREEXEC_SCRIPT);
+    assert!(written.ends_with(BASH_PREEXEC_SCRIPT));
+    assert!(written.contains(&context.host_context_commitment));
+    assert!(written.contains("SUBSTRATE_INSTALL_BOOTSTRAP_CONTEXT_V1"));
+    assert!(!written.contains("$HOME/.substrate"));
+    assert!(!written.contains("~/.bashrc"));
 }

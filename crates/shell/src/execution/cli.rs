@@ -59,6 +59,25 @@ pub struct Cli {
     #[arg(long = "shell", value_name = "PATH")]
     pub shell: Option<String>,
 
+    /// Select the installed Substrate prefix for this invocation.
+    #[arg(long = "install-prefix", value_name = "PATH", global = true)]
+    pub install_prefix: Option<PathBuf>,
+
+    #[arg(
+        long = "install-bootstrap-context-v1",
+        value_name = "CARRIER",
+        global = true,
+        hide = true
+    )]
+    pub install_bootstrap_context_v1: Option<String>,
+
+    #[arg(
+        long = "install-bootstrap-home-v1",
+        requires = "install_bootstrap_context_v1",
+        hide = true
+    )]
+    pub install_bootstrap_home_v1: bool,
+
     /// Output version information as JSON
     #[arg(long = "version-json", conflicts_with_all = &["command", "script"])]
     pub version_json: bool,
@@ -148,6 +167,22 @@ pub struct Cli {
     /// Graph commands (ingest/status/what-changed)
     #[command(subcommand)]
     pub sub: Option<SubCommands>,
+}
+
+pub(crate) fn print_version_json() -> anyhow::Result<()> {
+    let version_info = serde_json::json!({
+        "version": env!("CARGO_PKG_VERSION"),
+        "build": std::env::var("SHIM_BUILD").unwrap_or_else(|_| "unknown".to_string()),
+        "rust_version": option_env!("SHIM_RUSTC_VERSION").unwrap_or("unknown"),
+        "features": {
+            "pty": cfg!(unix),
+            "windows": cfg!(windows),
+        },
+        "platform": std::env::consts::OS,
+        "arch": std::env::consts::ARCH,
+    });
+    println!("{}", serde_json::to_string_pretty(&version_info)?);
+    Ok(())
 }
 
 #[derive(Subcommand, Debug)]
