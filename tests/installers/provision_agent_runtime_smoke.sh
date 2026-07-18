@@ -22,6 +22,15 @@ assert_contains() {
   fi
 }
 
+assert_not_contains() {
+  local haystack="$1"
+  local needle="$2"
+  local context="$3"
+  if [[ "${haystack}" == *"${needle}"* ]]; then
+    fatal "${context}: unexpectedly found sensitive value"
+  fi
+}
+
 assert_file_contains() {
   local file="$1"
   local needle="$2"
@@ -229,6 +238,7 @@ run_dev_rollback_remediation_scenario() {
 
   local stub="${work_root}/substrate"
   local stub_log="${work_root}/substrate.log"
+  local carrier_record="${work_root}/carrier"
   write_stub_substrate "${stub}"
   : >"${stub_log}"
 
@@ -246,12 +256,19 @@ run_dev_rollback_remediation_scenario() {
     PREFIX="${work_root}/prefix"
     BIN_DIR="${work_root}/bin"
     mkdir -p "${BIN_DIR}"
+    resolve_install_bootstrap_context 1 "${PREFIX}" "" 0
+    printf '%s' "${INSTALL_BOOTSTRAP_CONTEXT_V1}" > "${carrier_record}"
+    set -x
     provision_agent_runtime_with_sync "${stub}"
   )"
   local status=$?
   set -e
 
   [[ "${status}" -eq 7 ]] || fatal "dev rollback scenario should exit 7, got ${status}"
+  local carrier
+  carrier="$(<"${carrier_record}")"
+  assert_not_contains "${output}" "${carrier}" "dev runtime inherited xtrace must redact the carrier"
+  assert_contains "${output}" "provision_agent_runtime_with_sync" "dev runtime inherited xtrace should remain active outside carrier expansions"
   assert_contains "${output}" "the dev installer removed the global enable" "dev rollback remediation"
   assert_contains "${output}" "Re-run the dev install with '--provision-agent-runtime codex' to re-add 'codex-runtime' and retry the sync." "dev rollback remediation"
   assert_file_contains "${stub_log}" "world deps global remove codex-runtime" "dev rollback should remove the newly-added enable"

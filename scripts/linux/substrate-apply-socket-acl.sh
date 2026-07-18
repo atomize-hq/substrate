@@ -1,24 +1,30 @@
 #!/usr/bin/env bash
 set -u
 
-mode="socket"
-case "${1:-}" in
-  --socket)
+if [[ $# -ne 3 ]]; then
+  printf 'substrate-apply-acl-bridge: rejected noncanonical ACL tuple\n' >&2
+  exit 2
+fi
+
+case "$1:$2:$3" in
+  --socket:/run/substrate.sock:substrate)
     mode="socket"
-    shift
+    target="/run/substrate.sock"
     ;;
-  --directory-traverse)
+  --directory-traverse:/var/lib/substrate:substrate)
     mode="directory-traverse"
-    shift
+    target="/var/lib/substrate"
     ;;
-  --tree-readonly)
+  --tree-readonly:/var/lib/substrate/world-deps:substrate)
     mode="tree-readonly"
-    shift
+    target="/var/lib/substrate/world-deps"
+    ;;
+  *)
+    printf 'substrate-apply-acl-bridge: rejected noncanonical ACL tuple\n' >&2
+    exit 2
     ;;
 esac
-
-target="${1:-/run/substrate.sock}"
-group="${2:-substrate}"
+group="substrate"
 tag="substrate-apply-acl-bridge"
 
 log_warn() {
