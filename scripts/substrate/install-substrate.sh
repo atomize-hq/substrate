@@ -1,4 +1,9 @@
 #!/usr/bin/env bash
+RELEASE_INSTALL_INHERITED_XTRACE=0
+if [[ $- == *x* ]]; then
+  RELEASE_INSTALL_INHERITED_XTRACE=1
+  set +x
+fi
 set -euo pipefail
 
 if [[ -z "${INSTALLER_NAME:-}" ]]; then
@@ -11,6 +16,7 @@ readonly DEFAULT_FALLBACK_VERSION="0.2.2"
 readonly LATEST_RELEASE_API="${SUBSTRATE_INSTALL_LATEST_API:-https://api.github.com/repos/atomize-hq/substrate/releases/latest}"
 readonly DEFAULT_PREFIX=""
 readonly DEFAULT_BASE_URL="https://github.com/atomize-hq/substrate/releases/download"
+readonly PRIVILEGED_TOOL_PATH="/usr/local/sbin:/usr/local/bin:/usr/sbin:/usr/bin:/sbin:/bin"
 
 VERSION_RAW=""
 VERSION=""
@@ -23,6 +29,7 @@ INSTALL_BOOTSTRAP_COMMITMENT=""
 INSTALL_BOOTSTRAP_ACCOUNT=""
 INSTALL_BOOTSTRAP_UID=""
 INSTALL_BOOTSTRAP_ACCOUNT_HOME=""
+HELP_REQUESTED=0
 NO_WORLD=0
 NO_SHIMS=0
 DRY_RUN=0
@@ -847,15 +854,78 @@ initialize_sudo() {
 }
 
 run_with_sudo() {
+  local trace_was_active=0
+  if [[ $- == *x* ]]; then
+    trace_was_active=1
+    set +x
+  fi
+  if [[ -z "${PREFIX}" \
+      || "${SUBSTRATE_HOME:-}" != "${PREFIX}" \
+      || "${SUBSTRATE_ROOT:-}" != "${PREFIX}" \
+      || "${SUBSTRATE_INSTALL_HOST_CONTEXT_COMMITMENT:-}" != "${INSTALL_BOOTSTRAP_COMMITMENT}" \
+      || "${SUBSTRATE_INSTALL_PRIMARY_USER:-}" != "${INSTALL_BOOTSTRAP_ACCOUNT}" \
+      || "${SUBSTRATE_INSTALL_PRIMARY_UID:-}" != "${INSTALL_BOOTSTRAP_UID}" \
+      || "${SUBSTRATE_INSTALL_BOOTSTRAP_CONTEXT_V1:-}" != "${INSTALL_BOOTSTRAP_CONTEXT_V1}" ]]; then
+    if [[ "${trace_was_active}" -eq 1 ]]; then
+      set -x
+    fi
+    fatal "Install bootstrap context projection changed before privileged tool dispatch."
+  fi
   initialize_sudo
 
+  local tool="$1"
+  shift
+  local tool_path=""
+  if [[ "${tool}" == */* ]]; then
+    if [[ "${tool}" != "/usr/libexec/substrate/substrate-apply-socket-acl" ]]; then
+      if [[ "${trace_was_active}" -eq 1 ]]; then
+        set -x
+      fi
+      fatal "Unsupported absolute privileged tool path: ${tool}"
+    fi
+    tool_path="${tool}"
+  else
+    tool_path="$(PATH="${PRIVILEGED_TOOL_PATH}" type -P -- "${tool}" 2>/dev/null || true)"
+  fi
+  if [[ -z "${tool_path}" ]]; then
+    if [[ "${trace_was_active}" -eq 1 ]]; then
+      set -x
+    fi
+    fatal "Unable to resolve privileged tool: ${tool}"
+  fi
+  local env_path=""
+  env_path="$(PATH="${PRIVILEGED_TOOL_PATH}" type -P -- env 2>/dev/null || true)"
+  if [[ -z "${env_path}" ]]; then
+    if [[ "${trace_was_active}" -eq 1 ]]; then
+      set -x
+    fi
+    fatal "Unable to resolve privileged environment scrubber: env"
+  fi
+  local -a scrubbed_command=(
+    "${env_path}" -i
+    "PATH=${PRIVILEGED_TOOL_PATH}"
+    "HOME=/root"
+    "USER=root"
+    "LOGNAME=root"
+    "${tool_path}"
+    "$@"
+  )
+  if [[ "${trace_was_active}" -eq 1 ]]; then
+    set -x
+  fi
+
   if [[ ${#SUDO_CMD[@]} -eq 0 ]]; then
-    run_cmd "$@"
+    run_cmd "${scrubbed_command[@]}"
     return $?
   fi
 
-  if "${SUDO_CMD[@]}" -n true >/dev/null 2>&1; then
-    run_cmd "${SUDO_CMD[@]}" -n "$@"
+  local true_path
+  true_path="$(PATH="${PRIVILEGED_TOOL_PATH}" type -P -- true 2>/dev/null || true)"
+  if [[ -z "${true_path}" ]]; then
+    fatal "Unable to resolve privileged sudo probe tool: true"
+  fi
+  if "${SUDO_CMD[@]}" -n -- "${env_path}" -i "PATH=${PRIVILEGED_TOOL_PATH}" "${true_path}" >/dev/null 2>&1; then
+    run_cmd "${SUDO_CMD[@]}" -n -- "${scrubbed_command[@]}"
     return $?
   fi
 
@@ -863,7 +933,7 @@ run_with_sudo() {
     fatal "This installer requires interactive sudo for '$*', but no TTY is available. Re-run from a terminal or pre-authenticate with 'sudo -v'."
   fi
 
-  run_cmd "${SUDO_CMD[@]}" "$@"
+  run_cmd "${SUDO_CMD[@]}" -- "${scrubbed_command[@]}"
 }
 
 reset_os_release_input_state() {
@@ -1375,26 +1445,26 @@ install_packages() {
         return
       fi
       if [[ ${APT_UPDATED} -eq 0 ]]; then
-        run_cmd "${SUDO_CMD[@]}" apt-get update
+        run_with_sudo apt-get update
         APT_UPDATED=1
       fi
-      run_cmd "${SUDO_CMD[@]}" apt-get install -y "${packages[@]}"
+      run_with_sudo apt-get install -y "${packages[@]}"
       ;;
     dnf)
       log "Installing packages: ${packages[*]}"
-      run_cmd "${SUDO_CMD[@]}" dnf install -y "${packages[@]}"
+      run_with_sudo dnf install -y "${packages[@]}"
       ;;
     yum)
       log "Installing packages: ${packages[*]}"
-      run_cmd "${SUDO_CMD[@]}" yum install -y "${packages[@]}"
+      run_with_sudo yum install -y "${packages[@]}"
       ;;
     pacman)
       log "Installing packages: ${packages[*]}"
-      run_cmd "${SUDO_CMD[@]}" pacman -Sy --noconfirm --needed "${packages[@]}"
+      run_with_sudo pacman -Sy --noconfirm --needed "${packages[@]}"
       ;;
     zypper)
       log "Installing packages: ${packages[*]}"
-      run_cmd "${SUDO_CMD[@]}" zypper --non-interactive install "${packages[@]}"
+      run_with_sudo zypper --non-interactive install "${packages[@]}"
       ;;
     *)
       fatal "Unsupported package manager. Install required commands manually and re-run."
@@ -1663,8 +1733,8 @@ parse_args() {
         shift 2
         ;;
       -h|--help)
-        print_usage
-        exit 0
+        HELP_REQUESTED=1
+        shift
         ;;
       *)
         fatal "Unknown option: $1"
@@ -1833,6 +1903,11 @@ write_manager_env_script() {
   local env_dir
   env_dir="$(dirname "${MANAGER_ENV_PATH}")"
   mkdir -p "${env_dir}"
+  local restore_xtrace=0
+  if [[ $- == *x* ]]; then
+    set +x
+    restore_xtrace=1
+  fi
   local today
   today="$(date -u +"%Y-%m-%dT%H:%M:%SZ")"
   local substrate_home_literal commitment_literal account_literal uid_literal carrier_literal legacy_literal
@@ -1922,6 +1997,9 @@ fi
 EOF
   mv "${MANAGER_ENV_PATH}.tmp" "${MANAGER_ENV_PATH}"
   chmod 0644 "${MANAGER_ENV_PATH}" || true
+  if [[ "${restore_xtrace}" -eq 1 ]]; then
+    set -x
+  fi
 }
 
 write_env_sh_script() {
@@ -1939,6 +2017,11 @@ write_env_sh_script() {
   local env_dir
   env_dir="$(dirname "${ENV_SH_PATH}")"
   mkdir -p "${env_dir}"
+  local restore_xtrace=0
+  if [[ $- == *x* ]]; then
+    set +x
+    restore_xtrace=1
+  fi
 
   local substrate_home_literal commitment_literal account_literal uid_literal carrier_literal anchor_mode_literal anchor_path_literal policy_mode_literal world_literal
   substrate_home_literal="$(printf '%q' "${PREFIX}")"
@@ -1966,6 +2049,9 @@ export SUBSTRATE_POLICY_MODE=${policy_mode_literal}
 EOF
   mv "${ENV_SH_PATH}.tmp" "${ENV_SH_PATH}"
   chmod 0644 "${ENV_SH_PATH}" || true
+  if [[ "${restore_xtrace}" -eq 1 ]]; then
+    set -x
+  fi
 }
 
 write_install_config() {
@@ -2368,9 +2454,23 @@ deploy_shims() {
   fi
 
   log "Deploying shims..."
-  run_cmd "${substrate_bin}" \
+  local restore_xtrace=0
+  local deploy_status=0
+  if [[ $- == *x* ]]; then
+    set +x
+    restore_xtrace=1
+  fi
+  if run_cmd "${substrate_bin}" \
     --install-bootstrap-context-v1 "${INSTALL_BOOTSTRAP_CONTEXT_V1}" \
-    --shim-deploy
+    --shim-deploy; then
+    deploy_status=0
+  else
+    deploy_status=$?
+  fi
+  if [[ "${restore_xtrace}" -eq 1 ]]; then
+    set -x
+  fi
+  return "${deploy_status}"
 }
 
 harden_shim_symlinks() {
@@ -2454,6 +2554,24 @@ provision_macos_world() {
   log "Verified Linux world-service + substrate-gateway installation inside Lima (copy/build path logged above)."
 }
 
+systemd_escape_unit_value() {
+  python3 - "$1" <<'PY'
+import sys
+
+raw = sys.argv[1].encode("utf-8")
+safe = b"ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789/._:-"
+out = []
+for byte in raw:
+    if byte == 0x25:
+        out.append("%%")
+    elif byte in safe:
+        out.append(chr(byte))
+    else:
+        out.append(f"\\x{byte:02x}")
+print("".join(out))
+PY
+}
+
 provision_linux_world() {
   local version_dir="$1"
 
@@ -2464,6 +2582,7 @@ provision_linux_world() {
 
   local world_service=""
   local gateway_binary=""
+  local acl_helper="${version_dir}/scripts/linux/substrate-apply-socket-acl.sh"
   if [[ -x "${version_dir}/bin/world-service" ]]; then
     world_service="${version_dir}/bin/world-service"
   elif [[ -x "${version_dir}/bin/linux/world-service" ]]; then
@@ -2494,6 +2613,10 @@ provision_linux_world() {
     fi
   fi
 
+  if [[ "${DRY_RUN}" -eq 0 && ! -f "${acl_helper}" ]]; then
+    fatal "Linux ACL helper missing from release bundle at ${acl_helper}."
+  fi
+
   log "Installing Linux world agent systemd service and substrate-gateway binary..."
 
   local service_path="/etc/systemd/system/substrate-world-service.service"
@@ -2501,6 +2624,7 @@ provision_linux_world() {
   if [[ "${DRY_RUN}" -eq 1 ]]; then
     printf '[%s][dry-run] sudo install -Dm0755 %s /usr/local/bin/substrate-world-service\n' "${INSTALLER_NAME}" "${world_service}" >&2
     printf '[%s][dry-run] sudo install -Dm0755 %s /usr/local/bin/substrate-gateway\n' "${INSTALLER_NAME}" "${gateway_binary}" >&2
+    printf '[%s][dry-run] sudo install -Dm0755 %s /usr/libexec/substrate/substrate-apply-socket-acl\n' "${INSTALLER_NAME}" "${acl_helper}" >&2
     printf '[%s][dry-run] sudo install -d -m0750 -o root -g substrate /run/substrate && sudo install -d -m0750 /var/lib/substrate\n' "${INSTALLER_NAME}" >&2
     printf '[%s][dry-run] Write systemd unit to %s\n' "${INSTALLER_NAME}" "${service_path}" >&2
     printf '[%s][dry-run] sudo systemctl daemon-reload && sudo systemctl enable --now substrate-world-service\n' "${INSTALLER_NAME}" >&2
@@ -2509,21 +2633,31 @@ provision_linux_world() {
 
   run_with_sudo install -Dm0755 "${world_service}" /usr/local/bin/substrate-world-service
   run_with_sudo install -Dm0755 "${gateway_binary}" /usr/local/bin/substrate-gateway
+  run_with_sudo install -Dm0755 "${acl_helper}" /usr/libexec/substrate/substrate-apply-socket-acl
   run_with_sudo install -d -m0750 -o root -g substrate /run/substrate
   run_with_sudo install -d -m0750 /var/lib/substrate
-
-  local home_path
-  if [[ -n "${HOME}" ]]; then
-    home_path="$(cd "${HOME}" && pwd)"
-  else
-    home_path="/home"
-  fi
+  run_with_sudo install -d -m0750 -o root -g substrate /var/lib/substrate/world-deps
+  run_with_sudo install -d -m0750 -o root -g substrate /var/lib/substrate/world-deps/bin
 
   local unit_file
   unit_file="${TMPDIR}/substrate-world-service.service"
   local netfilter_env_line=""
   if [[ "${ENABLE_WORLD_NETFILTER}" -eq 1 ]]; then
     netfilter_env_line="Environment=WORLD_NETFILTER_ENABLE=1"
+  fi
+  local systemd_home systemd_commitment systemd_account systemd_uid systemd_carrier
+  systemd_home="$(systemd_escape_unit_value "${PREFIX}")"
+  systemd_commitment="$(systemd_escape_unit_value "${INSTALL_BOOTSTRAP_COMMITMENT}")"
+  systemd_account="$(systemd_escape_unit_value "${INSTALL_BOOTSTRAP_ACCOUNT}")"
+  systemd_uid="$(systemd_escape_unit_value "${INSTALL_BOOTSTRAP_UID}")"
+  local restore_xtrace=0
+  if [[ $- == *x* ]]; then
+    set +x
+    restore_xtrace=1
+  fi
+  systemd_carrier="$(systemd_escape_unit_value "${INSTALL_BOOTSTRAP_CONTEXT_V1}")"
+  if [[ "${restore_xtrace}" -eq 1 ]]; then
+    set -x
   fi
   cat > "${unit_file}" <<UNIT
 [Unit]
@@ -2539,7 +2673,12 @@ RestartSec=5
 Environment=RUST_LOG=info
 Environment=SUBSTRATE_AGENT_TCP_PORT=61337
 Environment=SUBSTRATE_WORLD_SOCKET=/run/substrate.sock
-Environment=SUBSTRATE_HOME=${PREFIX}
+Environment="SUBSTRATE_HOME=${systemd_home}"
+Environment="SUBSTRATE_ROOT=${systemd_home}"
+Environment="SUBSTRATE_INSTALL_HOST_CONTEXT_COMMITMENT=${systemd_commitment}"
+Environment="SUBSTRATE_INSTALL_PRIMARY_USER=${systemd_account}"
+Environment="SUBSTRATE_INSTALL_PRIMARY_UID=${systemd_uid}"
+Environment="SUBSTRATE_INSTALL_BOOTSTRAP_CONTEXT_V1=${systemd_carrier}"
 ${netfilter_env_line}
 Group=substrate
 UMask=0027
@@ -2553,7 +2692,7 @@ StandardError=journal
 NoNewPrivileges=yes
 ProtectSystem=strict
 ProtectHome=read-only
-ReadWritePaths=${home_path} /var/lib/substrate /run /run/substrate /sys/fs/cgroup /tmp
+ReadWritePaths="${systemd_home}" /var/lib/substrate /run /run/substrate /sys/fs/cgroup /tmp
 CapabilityBoundingSet=CAP_NET_ADMIN CAP_NET_BIND_SERVICE CAP_SYS_ADMIN CAP_SYS_CHROOT CAP_DAC_OVERRIDE CAP_CHOWN CAP_SYS_PTRACE
 AmbientCapabilities=CAP_NET_ADMIN CAP_NET_BIND_SERVICE CAP_SYS_ADMIN CAP_SYS_CHROOT CAP_DAC_OVERRIDE CAP_CHOWN CAP_SYS_PTRACE
 
@@ -2581,8 +2720,16 @@ Service=substrate-world-service.service
 WantedBy=sockets.target
 UNIT
 
+  local socket_dropin
+  socket_dropin="${TMPDIR}/20-substrate-group-acl.conf"
+  cat > "${socket_dropin}" <<'UNIT'
+[Socket]
+ExecStartPost=-/usr/libexec/substrate/substrate-apply-socket-acl --socket /run/substrate.sock substrate
+UNIT
+
   run_with_sudo install -Dm0644 "${unit_file}" "${service_path}"
   run_with_sudo install -Dm0644 "${socket_unit}" /etc/systemd/system/substrate-world-service.socket
+  run_with_sudo install -Dm0644 "${socket_dropin}" /etc/systemd/system/substrate-world-service.socket.d/20-substrate-group-acl.conf
   local legacy_world_unit_prefix="substrate-world"
   local legacy_service="${legacy_world_unit_prefix}-agent.service"
   local legacy_socket="${legacy_world_unit_prefix}-agent.socket"
@@ -2594,8 +2741,13 @@ UNIT
   run_with_sudo systemctl enable --now substrate-world-service.socket
   run_with_sudo systemctl stop substrate-world-service.service substrate-world-service.socket || true
   run_with_sudo install -d -m0750 -o root -g substrate /run/substrate
+  run_with_sudo install -d -m0750 -o root -g substrate /var/lib/substrate/world-deps
+  run_with_sudo install -d -m0750 -o root -g substrate /var/lib/substrate/world-deps/bin
   run_with_sudo rm -f /run/substrate.sock
   run_with_sudo systemctl start substrate-world-service.socket
+  run_with_sudo /usr/libexec/substrate/substrate-apply-socket-acl --socket /run/substrate.sock substrate || true
+  run_with_sudo /usr/libexec/substrate/substrate-apply-socket-acl --directory-traverse /var/lib/substrate substrate || true
+  run_with_sudo /usr/libexec/substrate/substrate-apply-socket-acl --tree-readonly /var/lib/substrate/world-deps substrate || true
   run_with_sudo systemctl start substrate-world-service.service
   run_with_sudo systemctl status substrate-world-service.socket --no-pager --lines=10 || true
   run_with_sudo systemctl status substrate-world-service.service --no-pager --lines=10 || true
@@ -3084,11 +3236,25 @@ install_linux() {
 main() {
   sanitize_env_path
   parse_args "$@"
+  if [[ "${HELP_REQUESTED}" -eq 1 && "${INSTALL_BOOTSTRAP_CONTEXT_DECLARED}" -eq 0 ]]; then
+    if [[ "${RELEASE_INSTALL_INHERITED_XTRACE}" -eq 1 ]]; then
+      set -x
+    fi
+    print_usage
+    return 0
+  fi
   resolve_install_bootstrap_context \
     "${PREFIX_DECLARED}" \
     "${PREFIX}" \
     "${INSTALL_BOOTSTRAP_CONTEXT_V1}" \
     "${INSTALL_BOOTSTRAP_CONTEXT_DECLARED}"
+  if [[ "${RELEASE_INSTALL_INHERITED_XTRACE}" -eq 1 ]]; then
+    set -x
+  fi
+  if [[ "${HELP_REQUESTED}" -eq 1 ]]; then
+    print_usage
+    return 0
+  fi
   validate_agent_runtime_provision_request
   normalize_prefix
   initialize_metadata_paths
