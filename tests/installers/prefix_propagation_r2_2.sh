@@ -219,6 +219,38 @@ set -e
 [[ "${release_malformed_help_status}" -ne 0 ]] \
   || fail "release malformed internal carrier fell through to public help"
 
+for uninstall_order in carrier-first help-first; do
+  uninstall_help_args=(--prefix "${SELECTED_A}")
+  if [[ "${uninstall_order}" == "carrier-first" ]]; then
+    uninstall_help_args+=(--install-bootstrap-context-v1 "${INSTALL_WRAPPER_CARRIER}" --help)
+  else
+    uninstall_help_args+=(--help --install-bootstrap-context-v1 "${INSTALL_WRAPPER_CARRIER}")
+  fi
+  set +e
+  HOME="${AMBIENT_B}" bash -x "${UNINSTALL_CHILD}" "${uninstall_help_args[@]}" \
+    >"${release_entry_stdout}" 2>"${release_entry_stderr}"
+  uninstall_help_status=$?
+  set -e
+  [[ "${uninstall_help_status}" -eq 0 ]] \
+    || fail "validated uninstall internal help failed (${uninstall_order})"
+  if grep -Fq -- "${INSTALL_WRAPPER_CARRIER}" "${release_entry_stdout}" "${release_entry_stderr}"; then
+    fail "uninstall internal help disclosed the carrier (${uninstall_order})"
+  fi
+  grep -Fq -- "Usage:" "${release_entry_stdout}" \
+    || fail "validated uninstall internal help did not print usage (${uninstall_order})"
+
+  malformed_help_args=(--prefix "${SELECTED_A}")
+  if [[ "${uninstall_order}" == "carrier-first" ]]; then
+    malformed_help_args+=(--install-bootstrap-context-v1 "not!base64" --help)
+  else
+    malformed_help_args+=(--help --install-bootstrap-context-v1 "not!base64")
+  fi
+  if HOME="${AMBIENT_B}" "${UNINSTALL_CHILD}" "${malformed_help_args[@]}" \
+    >"${release_entry_stdout}" 2>"${release_entry_stderr}"; then
+    fail "uninstall malformed carrier fell through to public help (${uninstall_order})"
+  fi
+done
+
 run_wrapper_capture() {
   local wrapper="$1"
   local child_name="$2"
@@ -259,6 +291,25 @@ INSTALL_WRAPPER_CAPTURE="${WORK_ROOT}/install-wrapper-capture"
 UNINSTALL_WRAPPER_CAPTURE="${WORK_ROOT}/uninstall-wrapper-capture"
 run_wrapper_capture "${INSTALL_WRAPPER}" install-substrate.sh "${INSTALL_WRAPPER_CAPTURE}"
 run_wrapper_capture "${UNINSTALL_WRAPPER}" uninstall-substrate.sh "${UNINSTALL_WRAPPER_CAPTURE}"
+for wrapper_kind in install uninstall; do
+  if [[ "${wrapper_kind}" == "install" ]]; then
+    fixture_dir="${WORK_ROOT}/wrapper-install-substrate.sh"
+  else
+    fixture_dir="${WORK_ROOT}/wrapper-uninstall-substrate.sh"
+  fi
+  wrapper_trace="${WORK_ROOT}/${wrapper_kind}-wrapper.trace"
+  HOME="${AMBIENT_B}" \
+    SUBSTRATE_HOME="${AMBIENT_B}" \
+    SUBSTRATE_ROOT="${AMBIENT_B}" \
+    WRAPPER_CAPTURE="${WORK_ROOT}/${wrapper_kind}-wrapper-xtrace-capture" \
+    bash -x "${fixture_dir}/wrapper.sh" --prefix "${SELECTED_A}///" \
+      >"${WORK_ROOT}/${wrapper_kind}-wrapper.stdout" 2>"${wrapper_trace}"
+  if grep -Fq -- "${INSTALL_WRAPPER_CARRIER}" "${wrapper_trace}"; then
+    fail "${wrapper_kind} wrapper disclosed the carrier under inherited xtrace"
+  fi
+  grep -Eq '^\+ (stop_loader|printf)' "${wrapper_trace}" \
+    || fail "${wrapper_kind} wrapper did not restore inherited xtrace after child delegation"
+done
 mapfile -t install_capture < "${INSTALL_WRAPPER_CAPTURE}"
 mapfile -t uninstall_capture < "${UNINSTALL_WRAPPER_CAPTURE}"
 for capture_name in install_capture uninstall_capture; do
