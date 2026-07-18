@@ -517,6 +517,9 @@ impl ShellConfig {
                     std::process::exit(0);
                 }
                 SubCommands::World(world_cmd) => {
+                    #[cfg(unix)]
+                    handle_world_command(world_cmd, &cli, install_context)?;
+                    #[cfg(not(unix))]
                     handle_world_command(world_cmd, &cli)?;
                     std::process::exit(0);
                 }
