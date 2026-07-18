@@ -148,9 +148,11 @@ All eleven implementation decisions remain recorded exactly as
 
 Current active phase is `none` and active packet is `none` because the master sequence ends at
 R8-IMPLEMENT. **NO NEXT ELIGIBLE PHASE IS DEFINED IN THIS CONTROL PACK.** No executable Prompt 1
-selector exists; do not recycle R8-IMPLEMENT or invent a successor phase. This docs-only terminal
-transition candidate assigns that terminal target state but does not yet record its own commit hash or
-independent review result, does not claim this candidate is `CLEAN`, and starts no further phase work.
+selector exists; do not recycle R8-IMPLEMENT or invent a successor phase. Terminal transition commit `65eac5ab2ecf354a731d127014f91da5c87e6e8d` received fresh independent
+built-in `default` `CLEAN` with no findings, so the terminal R8 transition and R8-IMPLEMENT exit gate
+are review-clean. This Markdown-only review receipt records that already-reviewed terminal transition;
+the receipt assigns itself no commit hash or review result, claims no `CLEAN` result for itself, remains
+pending its own fresh independent review, and starts no further phase work.
 
 ## R6-C.0A — Closure-Audit Authority Remediation
 
@@ -240,8 +242,11 @@ R8-IMPLEMENT are `COMPLETE`; five-doc receipt `549160ebc1d93b26fdbe8203d748dfb1a
 fresh independent built-in `default` `CLEAN`; all `57` implementation checkboxes/tasks are complete;
 `CTX-R8-01..06` are `PROVEN`; and the final wall passes Sentinel `233` / workspace `2,657` with `0`
 failed and `2` ignored. Active phase is `none` and active packet is `none`. **NO NEXT ELIGIBLE PHASE
-IS DEFINED IN THIS CONTROL PACK.** This transition candidate records no hash or independent review
-result for itself and starts no further phase work.
+IS DEFINED IN THIS CONTROL PACK.** Terminal transition commit
+`65eac5ab2ecf354a731d127014f91da5c87e6e8d` received fresh independent built-in `default` `CLEAN`
+with no findings, so the terminal R8 transition and R8-IMPLEMENT exit gate are review-clean. This
+review receipt assigns itself no hash or review result, remains pending its own fresh independent
+review, and starts no work.
 
 The R8 implementation must preserve:
 

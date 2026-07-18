@@ -48,9 +48,11 @@ All eleven implementation decisions remain recorded exactly as
 
 Current active phase is `none` and active packet is `none` because the master sequence ends at
 R8-IMPLEMENT. **NO NEXT ELIGIBLE PHASE IS DEFINED IN THIS CONTROL PACK.** No executable Prompt 1
-selector exists; do not recycle R8-IMPLEMENT or invent a successor phase. This docs-only terminal
-transition candidate assigns that terminal target state but does not yet record its own commit hash or
-independent review result, does not claim this candidate is `CLEAN`, and starts no further phase work.
+selector exists; do not recycle R8-IMPLEMENT or invent a successor phase. Terminal transition commit `65eac5ab2ecf354a731d127014f91da5c87e6e8d` received fresh independent
+built-in `default` `CLEAN` with no findings, so the terminal R8 transition and R8-IMPLEMENT exit gate
+are review-clean. This Markdown-only review receipt records that already-reviewed terminal transition;
+the receipt assigns itself no commit hash or review result, claims no `CLEAN` result for itself, remains
+pending its own fresh independent review, and starts no further phase work.
 
 ## How To Resolve Truth
 
@@ -73,7 +75,7 @@ implementation begins until the authority stack is corrected explicitly.
 |---|---|---|---|
 | R6 | **CLOSED — R6-CLOSE / CTX-R6-17 COMPLETE / ACTIVE PACKET NONE** | `docs/specs/r6/FINDINGS-r6-scorer-context-cutover-closure.md` | Preserve the terminal table and green proof receipt. Do not reopen an ordinary R6 scorer without a new failing witness. |
 | R7 | **IMPLEMENTATION-READY / R7-PROMOTE AND R7-0..R7-6 COMPLETE / R7 CLOSED / `CTX-R7-06` PROVEN** | `docs/specs/r7/MAP.md` and the R7 SPEC/PLAN/TASKS | Preserve the closed R7 analyzer/delegation contract as `CTX-R8-01` evidence. R8-SPEC and R8-IMPLEMENT are complete; no phase is active. |
-| R8 — Sentinel Interpretation Consolidation / Integration | **R8-SPEC COMPLETE / R8-IMPLEMENT COMPLETE / R8 FAMILY TERMINALLY COMPLETE / ACTIVE PHASE NONE / ACTIVE PACKET NONE / `CTX-R8-01..06` PROVEN / ALL `57` IMPLEMENTATION CHECKBOXES COMPLETE / R8-6 RECEIPT `549160ebc` FRESH INDEPENDENT BUILT-IN `default` `CLEAN` / TERMINAL TRANSITION CANDIDATE REVIEW PENDING** | Root landing-order R8 section and the R8 MAP/SPEC/PLAN/TASKS family | Preserve the complete implementation/proof series, all eleven decisions, receipt `549160ebc`, and final wall Sentinel `233` / workspace `2,657` passed, `0` failed, `2` ignored. **NO NEXT ELIGIBLE PHASE IS DEFINED IN THIS CONTROL PACK.** No executable Prompt 1 selector exists. This transition candidate assigns terminal state but has no recorded hash or review result of its own and starts no further phase work. |
+| R8 — Sentinel Interpretation Consolidation / Integration | **R8-SPEC COMPLETE / R8-IMPLEMENT COMPLETE / R8 FAMILY TERMINALLY COMPLETE / ACTIVE PHASE NONE / ACTIVE PACKET NONE / `CTX-R8-01..06` PROVEN / ALL `57` IMPLEMENTATION CHECKBOXES COMPLETE / R8-6 RECEIPT `549160ebc` FRESH INDEPENDENT BUILT-IN `default` `CLEAN` / TERMINAL TRANSITION COMMIT `65eac5ab` FRESH INDEPENDENT BUILT-IN `default` `CLEAN` / R8-IMPLEMENT EXIT GATE REVIEW-CLEAN / CURRENT REVIEW RECEIPT PENDING ITS OWN FRESH INDEPENDENT REVIEW** | Root landing-order R8 section and the R8 MAP/SPEC/PLAN/TASKS family | Preserve the complete implementation/proof series, all eleven decisions, receipt `549160ebc`, and final wall Sentinel `233` / workspace `2,657` passed, `0` failed, `2` ignored. **NO NEXT ELIGIBLE PHASE IS DEFINED IN THIS CONTROL PACK.** No executable Prompt 1 selector exists. Terminal transition commit `65eac5ab2ecf354a731d127014f91da5c87e6e8d` received fresh independent built-in `default` `CLEAN` with no findings, so the terminal R8 transition and R8-IMPLEMENT exit gate are review-clean. This review receipt assigns itself no hash or review result, remains pending its own fresh independent review, and starts no work. |
 
 ## R6 Authority
 
@@ -188,9 +190,11 @@ All eleven implementation decisions remain recorded exactly as
 
 Current active phase is `none` and active packet is `none` because the master sequence ends at
 R8-IMPLEMENT. **NO NEXT ELIGIBLE PHASE IS DEFINED IN THIS CONTROL PACK.** No executable Prompt 1
-selector exists; do not recycle R8-IMPLEMENT or invent a successor phase. This docs-only terminal
-transition candidate assigns that terminal target state but does not yet record its own commit hash or
-independent review result, does not claim this candidate is `CLEAN`, and starts no further phase work.
+selector exists; do not recycle R8-IMPLEMENT or invent a successor phase. Terminal transition commit `65eac5ab2ecf354a731d127014f91da5c87e6e8d` received fresh independent
+built-in `default` `CLEAN` with no findings, so the terminal R8 transition and R8-IMPLEMENT exit gate
+are review-clean. This Markdown-only review receipt records that already-reviewed terminal transition;
+the receipt assigns itself no commit hash or review result, claims no `CLEAN` result for itself, remains
+pending its own fresh independent review, and starts no further phase work.
 
 Current R7 authority surfaces:
 
@@ -291,9 +295,11 @@ All eleven implementation decisions remain recorded exactly as
 
 Current active phase is `none` and active packet is `none` because the master sequence ends at
 R8-IMPLEMENT. **NO NEXT ELIGIBLE PHASE IS DEFINED IN THIS CONTROL PACK.** No executable Prompt 1
-selector exists; do not recycle R8-IMPLEMENT or invent a successor phase. This docs-only terminal
-transition candidate assigns that terminal target state but does not yet record its own commit hash or
-independent review result, does not claim this candidate is `CLEAN`, and starts no further phase work.
+selector exists; do not recycle R8-IMPLEMENT or invent a successor phase. Terminal transition commit `65eac5ab2ecf354a731d127014f91da5c87e6e8d` received fresh independent
+built-in `default` `CLEAN` with no findings, so the terminal R8 transition and R8-IMPLEMENT exit gate
+are review-clean. This Markdown-only review receipt records that already-reviewed terminal transition;
+the receipt assigns itself no commit hash or review result, claims no `CLEAN` result for itself, remains
+pending its own fresh independent review, and starts no further phase work.
 
 ## R8 Authority
 

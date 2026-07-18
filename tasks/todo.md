@@ -44,9 +44,11 @@ All eleven implementation decisions remain recorded exactly as
 
 Current active phase is `none` and active packet is `none` because the master sequence ends at
 R8-IMPLEMENT. **NO NEXT ELIGIBLE PHASE IS DEFINED IN THIS CONTROL PACK.** No executable Prompt 1
-selector exists; do not recycle R8-IMPLEMENT or invent a successor phase. This docs-only terminal
-transition candidate assigns that terminal target state but does not yet record its own commit hash or
-independent review result, does not claim this candidate is `CLEAN`, and starts no further phase work.
+selector exists; do not recycle R8-IMPLEMENT or invent a successor phase. Terminal transition commit `65eac5ab2ecf354a731d127014f91da5c87e6e8d` received fresh independent
+built-in `default` `CLEAN` with no findings, so the terminal R8 transition and R8-IMPLEMENT exit gate
+are review-clean. This Markdown-only review receipt records that already-reviewed terminal transition;
+the receipt assigns itself no commit hash or review result, claims no `CLEAN` result for itself, remains
+pending its own fresh independent review, and starts no further phase work.
 
 - [x] Correct the claim that R6 is closed for sequencing.
 - [x] Inventory every scoring module and classify context applicability.
@@ -287,10 +289,13 @@ independent review result, does not claim this candidate is `CLEAN`, and starts 
   `549160ebc1d93b26fdbe8203d748dfb1a64787ef`; fresh independent built-in `default` review returned
   `CLEAN` with no findings. `CTX-R8-01..06` are `PROVEN`; final wall Sentinel `233` / workspace
   `2,657` passed with `0` failed and `2` ignored.
-- [ ] Fresh independent review of this terminal transition candidate. R8-IMPLEMENT and the R8 family
-  are terminally complete with active phase `none` and active packet `none`, but this candidate has no
-  recorded hash or review result of its own and starts no further phase work. **NO NEXT ELIGIBLE PHASE
-  IS DEFINED IN THIS CONTROL PACK.**
+- [x] Fresh independent review of terminal transition commit
+  `65eac5ab2ecf354a731d127014f91da5c87e6e8d`; the fresh built-in `default` reviewer returned `CLEAN`
+  with no findings, so the terminal R8 transition and R8-IMPLEMENT exit gate are review-clean.
+- [ ] Fresh independent review of this Markdown-only review receipt. R8-IMPLEMENT and the R8 family
+  remain terminally complete with active phase `none` and active packet `none`; this receipt has no
+  recorded hash or review result of its own, remains pending its own fresh independent review, and starts
+  no further phase work. **NO NEXT ELIGIBLE PHASE IS DEFINED IN THIS CONTROL PACK.**
 
 The R7 task ledger is authoritative under `docs/specs/r7/`. Its implementation content is ready and
 `R7-0` is complete after `R7-0.1` and `R7-0.2` each received fresh independent `REVIEW CLEAN`.
@@ -370,6 +375,8 @@ All eleven implementation decisions remain recorded exactly as
 
 Current active phase is `none` and active packet is `none` because the master sequence ends at
 R8-IMPLEMENT. **NO NEXT ELIGIBLE PHASE IS DEFINED IN THIS CONTROL PACK.** No executable Prompt 1
-selector exists; do not recycle R8-IMPLEMENT or invent a successor phase. This docs-only terminal
-transition candidate assigns that terminal target state but does not yet record its own commit hash or
-independent review result, does not claim this candidate is `CLEAN`, and starts no further phase work.
+selector exists; do not recycle R8-IMPLEMENT or invent a successor phase. Terminal transition commit `65eac5ab2ecf354a731d127014f91da5c87e6e8d` received fresh independent
+built-in `default` `CLEAN` with no findings, so the terminal R8 transition and R8-IMPLEMENT exit gate
+are review-clean. This Markdown-only review receipt records that already-reviewed terminal transition;
+the receipt assigns itself no commit hash or review result, claims no `CLEAN` result for itself, remains
+pending its own fresh independent review, and starts no further phase work.

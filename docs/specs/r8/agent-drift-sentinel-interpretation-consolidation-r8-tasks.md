@@ -5,7 +5,8 @@ Canonical path:
 
 Status: **R8-IMPLEMENT COMPLETE / R8 FAMILY TERMINALLY COMPLETE / R8-6 RECEIPT `549160ebc` FRESH
 INDEPENDENT BUILT-IN `default` `CLEAN` / ALL `57` IMPLEMENTATION CHECKBOXES COMPLETE / TERMINAL
-TRANSITION CANDIDATE INDEPENDENT REVIEW PENDING**.
+TRANSITION COMMIT `65eac5ab` FRESH INDEPENDENT BUILT-IN `default` `CLEAN` / R8-IMPLEMENT EXIT GATE
+REVIEW-CLEAN / CURRENT REVIEW RECEIPT PENDING ITS OWN FRESH INDEPENDENT REVIEW**.
 
 R8-SPEC and R8-IMPLEMENT are `COMPLETE`; the R8 family is terminally complete. R8-1
 `ec2c5da7d`, R8-2 `08e0d0e2a` + `5669e1f6e` + `911dd49b`, R8-3 `963a8202f`, R8-5.1
@@ -36,9 +37,11 @@ are `PROVEN`, and all `57` R8 implementation checkboxes/tasks are complete. Reco
 
 Current active phase is `none` and active packet is `none` because the master sequence ends at
 R8-IMPLEMENT. **NO NEXT ELIGIBLE PHASE IS DEFINED IN THIS CONTROL PACK.** No executable Prompt 1
-selector exists; do not recycle R8-IMPLEMENT or invent a successor phase. This docs-only terminal
-transition candidate assigns that terminal target state but does not yet record its own commit hash or
-independent review result, does not claim this candidate is `CLEAN`, and starts no further phase work.
+selector exists; do not recycle R8-IMPLEMENT or invent a successor phase. Terminal transition commit `65eac5ab2ecf354a731d127014f91da5c87e6e8d` received fresh independent
+built-in `default` `CLEAN` with no findings, so the terminal R8 transition and R8-IMPLEMENT exit gate
+are review-clean. This Markdown-only review receipt records that already-reviewed terminal transition;
+the receipt assigns itself no commit hash or review result, claims no `CLEAN` result for itself, remains
+pending its own fresh independent review, and starts no further phase work.
 
 ## R8-IMPLEMENT Evidence Receipt
 
@@ -50,8 +53,11 @@ independent review result, does not claim this candidate is `CLEAN`, and starts 
   `CLEAN` with no findings.
 - All `57` R8 implementation checkboxes/tasks are complete; R8-IMPLEMENT and the terminal R8 family
   are complete with active phase `none` and active packet `none`.
-- The separate terminal mirror/phase-transition candidate assigns that state but remains pending its
-  own independent review, claims no `CLEAN` result for itself, and starts no further phase work.
+- Terminal transition commit `65eac5ab2ecf354a731d127014f91da5c87e6e8d` received fresh independent
+  built-in `default` `CLEAN` with no findings, so the terminal R8 transition and R8-IMPLEMENT exit gate
+  are review-clean.
+- This separate review receipt assigns itself no commit hash or review result, remains pending its own
+  fresh independent review, and starts no further phase work.
 
 ## Recorded Packet-Local Decisions
 
@@ -701,8 +707,9 @@ logic.
 
 **Status:** complete; the exact five-doc canonical receipt
 `549160ebc1d93b26fdbe8203d748dfb1a64787ef` received fresh independent built-in `default` `CLEAN`
-with no findings. The separate terminal transition candidate remains pending its own independent
-review and claims no result for itself.
+with no findings. Terminal transition commit `65eac5ab2ecf354a731d127014f91da5c87e6e8d` also received
+fresh independent built-in `default` `CLEAN` with no findings. The separate review receipt remains
+pending its own fresh independent review and claims no result for itself.
 
 **Entry/index receipt:** the worktree entered clean at
 `ad63401902e1a5eb2e86b72ab6eb2cdd78048d8e`; GitNexus reported indexed commit/current commit
@@ -805,7 +812,10 @@ full family proven before the receipt itself is fresh-review-clean.
 
 **Review gate:** satisfied — fresh independent built-in `default` review of exact receipt
 `549160ebc1d93b26fdbe8203d748dfb1a64787ef` returned `CLEAN` with no findings. This authorizes the
-separate docs-only terminal mirror/phase-transition candidate; it does not review that candidate.
+separate docs-only terminal mirror/phase-transition commit. That transition landed at
+`65eac5ab2ecf354a731d127014f91da5c87e6e8d` and received its own fresh independent built-in
+`default` `CLEAN` review with no findings; this current review receipt remains pending its own fresh
+independent review.
 
 ## Final Wall
 
@@ -840,10 +850,13 @@ separate docs-only terminal mirror/phase-transition candidate; it does not revie
 - [x] Full Sentinel and workspace wall pass with current counts.
 - [x] R8-6 canonical receipt `549160ebc` fresh independent built-in `default` `CLEAN`.
 - [x] `CTX-R8-01..06` reconciled as `PROVEN` from review-clean packet/receipt proof.
-- [ ] Fresh independent review of this terminal mirror/phase-transition candidate; until then the
-  candidate records no hash or review result for itself and starts no further phase work.
+- [x] Fresh independent review of terminal mirror/phase-transition commit
+  `65eac5ab2ecf354a731d127014f91da5c87e6e8d`; the fresh built-in `default` reviewer returned `CLEAN`
+  with no findings, so the terminal R8 transition and R8-IMPLEMENT exit gate are review-clean.
+- [ ] Fresh independent review of this Markdown-only review receipt; until then the receipt records no
+  hash or review result for itself and starts no further phase work.
 
 All `57` implementation checkboxes/tasks and the R8-6 receipt-review gate are complete. R8-IMPLEMENT
 and the terminal R8 family are complete with active phase `none` and active packet `none`. **NO NEXT
 ELIGIBLE PHASE IS DEFINED IN THIS CONTROL PACK.** The remaining unchecked item is review of this
-docs-only terminal transition candidate, not implementation or a successor-phase task.
+Markdown-only review receipt, not implementation, the terminal transition, or a successor-phase task.
