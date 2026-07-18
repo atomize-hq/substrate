@@ -513,7 +513,12 @@ impl ShellConfig {
                     std::process::exit(0);
                 }
                 SubCommands::Host(host_cmd) => {
-                    handle_host_command(host_cmd, &cli)?;
+                    handle_host_command(
+                        host_cmd,
+                        &cli,
+                        #[cfg(unix)]
+                        install_context,
+                    )?;
                     std::process::exit(0);
                 }
                 SubCommands::World(world_cmd) => {
@@ -524,11 +529,21 @@ impl ShellConfig {
                     std::process::exit(0);
                 }
                 SubCommands::Config(config_cmd) => {
-                    let code = handle_config_command(config_cmd, &cli);
+                    let code = handle_config_command(
+                        config_cmd,
+                        &cli,
+                        #[cfg(unix)]
+                        install_context,
+                    );
                     std::process::exit(code);
                 }
                 SubCommands::Policy(policy_cmd) => {
-                    let code = handle_policy_command(policy_cmd, &cli);
+                    let code = handle_policy_command(
+                        policy_cmd,
+                        &cli,
+                        #[cfg(unix)]
+                        install_context,
+                    );
                     std::process::exit(code);
                 }
                 SubCommands::Workspace(workspace_cmd) => {
@@ -550,7 +565,12 @@ impl ShellConfig {
                     handle_shim_command(shim_cmd, &cli);
                 }
                 SubCommands::Health(health_cmd) => {
-                    handle_health_command(health_cmd, &cli)?;
+                    handle_health_command(
+                        health_cmd,
+                        &cli,
+                        #[cfg(unix)]
+                        install_context,
+                    )?;
                     std::process::exit(0);
                 }
             }
