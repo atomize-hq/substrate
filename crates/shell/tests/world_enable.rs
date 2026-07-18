@@ -4,12 +4,13 @@
 mod common;
 
 use assert_cmd::Command;
-use common::{shared_tmpdir, substrate_shell_driver, temp_dir};
+use common::{shared_tmpdir, substrate_shell_driver};
 use serde_yaml::Value as YamlValue;
 use std::fs;
 use std::os::unix::fs::{symlink, FileTypeExt, PermissionsExt};
 use std::path::{Path, PathBuf};
 use tempfile::{Builder, TempDir};
+use transport_api_types::{InstallBootstrapContextCarrierV1, InstallBootstrapContextV1};
 
 const HELPER_SCRIPT: &str = r#"#!/usr/bin/env bash
 set -euo pipefail
@@ -61,6 +62,60 @@ fi
 exit "$exit_code"
 "#;
 
+fn current_install_context(prefix: &Path) -> (String, String, String, String) {
+    let uid = unsafe { libc::geteuid() };
+    let account_output = std::process::Command::new("id")
+        .args(["-nu", &uid.to_string()])
+        .output()
+        .expect("resolve current Unix account");
+    assert!(account_output.status.success());
+    let account = String::from_utf8(account_output.stdout)
+        .expect("Unix account is UTF-8")
+        .trim()
+        .to_string();
+    let context = InstallBootstrapContextV1::new_unix(
+        prefix.to_str().expect("install prefix is UTF-8"),
+        &account,
+        uid,
+    )
+    .expect("construct install bootstrap context");
+    let carrier = InstallBootstrapContextCarrierV1::from_context(context)
+        .expect("commit install bootstrap context");
+    (
+        carrier.encode().expect("encode install bootstrap context"),
+        carrier.host_context_commitment,
+        account,
+        uid.to_string(),
+    )
+}
+
+fn project_install_context_environment(cmd: &mut Command, prefix: &Path) -> String {
+    let (carrier, commitment, account, uid) = current_install_context(prefix);
+    cmd.env("SUBSTRATE_HOME", prefix)
+        .env("SUBSTRATE_ROOT", prefix)
+        .env("SUBSTRATE_INSTALL_HOST_CONTEXT_COMMITMENT", commitment)
+        .env("SUBSTRATE_INSTALL_PRIMARY_USER", account)
+        .env("SUBSTRATE_INSTALL_PRIMARY_UID", uid)
+        .env("SUBSTRATE_INSTALL_BOOTSTRAP_CONTEXT_V1", &carrier);
+    carrier
+}
+
+fn add_internal_install_context(cmd: &mut Command, prefix: &Path) {
+    let carrier = project_install_context_environment(cmd, prefix);
+    cmd.arg("--install-bootstrap-context-v1").arg(carrier);
+}
+
+fn install_runtime_scripts_at(prefix: &Path) {
+    let helper_path = prefix.join("scripts/substrate/world-enable.sh");
+    fs::create_dir_all(helper_path.parent().expect("helper parent")).expect("create helper parent");
+    fs::write(&helper_path, HELPER_SCRIPT).expect("write world-enable helper");
+    let mut perms = fs::metadata(&helper_path)
+        .expect("helper metadata")
+        .permissions();
+    perms.set_mode(0o755);
+    fs::set_permissions(&helper_path, perms).expect("chmod world-enable helper");
+}
+
 struct WorldEnableFixture {
     _temp: TempDir,
     _socket_temp: TempDir,
@@ -75,7 +130,12 @@ struct WorldEnableFixture {
 
 impl WorldEnableFixture {
     fn new() -> Self {
-        let temp = temp_dir("substrate-world-enable-");
+        let fixture_root = fs::canonicalize(shared_tmpdir())
+            .expect("canonicalize secured world-enable fixture root");
+        let temp = Builder::new()
+            .prefix("substrate-world-enable-")
+            .tempdir_in(fixture_root)
+            .expect("failed to allocate secured world-enable fixture");
         let home = temp.path().join("home");
         let legacy_prefix = temp.path().join("legacy-prefix");
         let substrate_home = temp.path().join("substrate-home");
@@ -448,6 +508,179 @@ fn world_enable_dry_run_skips_all_mutations() {
         "dry run should not create env.sh"
     );
     assert!(fixture.log_contents().is_none(), "helper should not run");
+}
+
+#[test]
+fn world_enable_nested_home_selects_context_before_dispatch_under_ambient_b() {
+    let fixture = WorldEnableFixture::new();
+    fixture.install_prefix_runtime_scripts();
+
+    let mut cmd = fixture.command_skip_doctor_without_override();
+    project_install_context_environment(&mut cmd, &fixture.legacy_prefix);
+    let assert = cmd.arg("--dry-run").assert().success();
+    let stdout = String::from_utf8_lossy(&assert.get_output().stdout);
+
+    assert!(
+        stdout.contains(&fixture.substrate_home.display().to_string()),
+        "dry-run should use nested --home as A: {stdout}"
+    );
+    assert!(
+        !stdout.contains(&fixture.legacy_prefix.display().to_string()),
+        "ambient B must not retarget nested --home A: {stdout}"
+    );
+    assert!(!fixture.legacy_prefix.join("deps").exists());
+    assert!(!fixture.legacy_prefix.join("config.yaml").exists());
+}
+
+#[test]
+fn world_enable_global_install_prefix_reaches_runner_without_nested_home() {
+    let fixture = WorldEnableFixture::new();
+    fixture.install_prefix_runtime_scripts();
+
+    let mut cmd = substrate_shell_driver();
+    cmd.arg("--install-prefix")
+        .arg(&fixture.substrate_home)
+        .arg("world")
+        .arg("enable")
+        .arg("--dry-run")
+        .env("TMPDIR", shared_tmpdir())
+        .env("HOME", &fixture.home)
+        .env("USERPROFILE", &fixture.home)
+        .env("SUBSTRATE_WORLD_SOCKET", &fixture.socket_path);
+
+    let assert = cmd.assert().success();
+    let stdout = String::from_utf8_lossy(&assert.get_output().stdout);
+    assert!(
+        stdout.contains(&fixture.substrate_home.display().to_string()),
+        "global --install-prefix should reach world enable: {stdout}"
+    );
+}
+
+#[test]
+fn world_enable_equal_global_and_nested_selectors_join_one_context() {
+    let fixture = WorldEnableFixture::new();
+    fixture.install_prefix_runtime_scripts();
+
+    let mut cmd = fixture.command_skip_doctor_without_override();
+    let assert = cmd
+        .arg("--install-prefix")
+        .arg(format!("{}/", fixture.substrate_home.display()))
+        .arg("--dry-run")
+        .assert()
+        .success();
+    let stdout = String::from_utf8_lossy(&assert.get_output().stdout);
+    assert!(stdout.contains(&fixture.substrate_home.display().to_string()));
+}
+
+#[test]
+fn world_enable_conflicting_public_selectors_fail_before_mutation() {
+    let fixture = WorldEnableFixture::new();
+    fixture.install_prefix_runtime_scripts();
+    install_runtime_scripts_at(&fixture.legacy_prefix);
+
+    let mut cmd = fixture.command_skip_doctor_without_override();
+    let output = cmd
+        .arg("--install-prefix")
+        .arg(&fixture.legacy_prefix)
+        .arg("--dry-run")
+        .output()
+        .expect("run world enable with conflicting selectors");
+
+    assert_eq!(output.status.code(), Some(2), "{output:?}");
+    assert!(!fixture.substrate_home.join("deps").exists());
+    assert!(!fixture.legacy_prefix.join("deps").exists());
+    assert!(!fixture.config_exists());
+    assert!(!fixture.env_sh_exists());
+    assert!(fixture.log_contents().is_none());
+}
+
+#[test]
+fn world_enable_internal_carrier_and_matching_selector_reach_runner() {
+    let fixture = WorldEnableFixture::new();
+    fixture.install_prefix_runtime_scripts();
+
+    let mut cmd = fixture.command_skip_doctor_without_override();
+    add_internal_install_context(&mut cmd, &fixture.substrate_home);
+    cmd.arg("--dry-run").assert().success();
+}
+
+#[test]
+fn world_enable_internal_carrier_conflict_fails_before_mutation() {
+    let fixture = WorldEnableFixture::new();
+    fixture.install_prefix_runtime_scripts();
+    install_runtime_scripts_at(&fixture.legacy_prefix);
+
+    let mut cmd = substrate_shell_driver();
+    cmd.arg("world")
+        .arg("enable")
+        .arg("--home")
+        .arg(&fixture.legacy_prefix)
+        .arg("--dry-run")
+        .env("TMPDIR", shared_tmpdir())
+        .env("HOME", &fixture.home)
+        .env("USERPROFILE", &fixture.home);
+    add_internal_install_context(&mut cmd, &fixture.substrate_home);
+
+    let output = cmd
+        .output()
+        .expect("run world enable with conflicting internal selector");
+    assert_eq!(output.status.code(), Some(2), "{output:?}");
+    assert!(!fixture.substrate_home.join("deps").exists());
+    assert!(!fixture.legacy_prefix.join("deps").exists());
+    assert!(!fixture.config_exists());
+    assert!(!fixture.env_sh_exists());
+    assert!(fixture.log_contents().is_none());
+}
+
+#[test]
+fn world_enable_environment_only_context_cannot_replace_typed_authority() {
+    let fixture = WorldEnableFixture::new();
+    fixture.install_prefix_runtime_scripts();
+
+    let mut cmd = substrate_shell_driver();
+    cmd.arg("world")
+        .arg("enable")
+        .arg("--dry-run")
+        .env("TMPDIR", shared_tmpdir())
+        .env("HOME", &fixture.home)
+        .env("USERPROFILE", &fixture.home);
+    project_install_context_environment(&mut cmd, &fixture.substrate_home);
+
+    let output = cmd
+        .output()
+        .expect("run repository binary with environment-only context");
+    assert_eq!(output.status.code(), Some(2), "{output:?}");
+    assert!(!fixture.substrate_home.join("deps").exists());
+    assert!(!fixture.config_exists());
+    assert!(!fixture.env_sh_exists());
+}
+
+#[test]
+fn non_world_config_branch_reaches_shell_config_without_mutation() {
+    let fixture = WorldEnableFixture::new();
+    let sentinel = fixture.substrate_home.join("sentinel");
+    fs::write(&sentinel, "unchanged\n").expect("write non-world sentinel");
+
+    let assert = substrate_shell_driver()
+        .arg("--install-prefix")
+        .arg(&fixture.substrate_home)
+        .arg("config")
+        .arg("current")
+        .arg("show")
+        .arg("--json")
+        .env("TMPDIR", shared_tmpdir())
+        .env("HOME", &fixture.home)
+        .env("USERPROFILE", &fixture.home)
+        .env("SUBSTRATE_HOME", &fixture.substrate_home)
+        .env("SUBSTRATE_ROOT", &fixture.substrate_home)
+        .assert()
+        .success();
+
+    serde_json::from_slice::<serde_json::Value>(&assert.get_output().stdout)
+        .expect("config current show should emit JSON");
+    assert_eq!(fs::read_to_string(sentinel).unwrap(), "unchanged\n");
+    assert!(!fixture.config_exists());
+    assert!(!fixture.env_sh_exists());
 }
 
 #[test]
