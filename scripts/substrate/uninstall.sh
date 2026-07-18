@@ -1,4 +1,9 @@
 #!/usr/bin/env bash
+UNINSTALL_WRAPPER_INHERITED_XTRACE=0
+if [[ $- == *x* ]]; then
+  UNINSTALL_WRAPPER_INHERITED_XTRACE=1
+  set +x
+fi
 set -euo pipefail
 
 SCRIPT_SOURCE="${BASH_SOURCE[0]:-}"
@@ -309,8 +314,18 @@ cleanup() {
 trap cleanup EXIT
 
 if [[ "${HELP_REQUESTED}" -eq 1 ]]; then
-  "${UPSTREAM_UNINSTALL}" "$@"
-  exit $?
+  if "${UPSTREAM_UNINSTALL}" "$@"; then
+    if [[ "${UNINSTALL_WRAPPER_INHERITED_XTRACE}" -eq 1 ]]; then
+      set -x
+    fi
+    exit 0
+  else
+    upstream_status=$?
+    if [[ "${UNINSTALL_WRAPPER_INHERITED_XTRACE}" -eq 1 ]]; then
+      set -x
+    fi
+    exit "${upstream_status}"
+  fi
 fi
 
 UPSTREAM_ARGS=("$@")
@@ -330,9 +345,15 @@ if [[ -f "${LOADER_DIR}/bash_loading_animations.sh" ]]; then
 fi
 
 if "${UPSTREAM_UNINSTALL}" "${UPSTREAM_ARGS[@]}" >"${TMP_LOG}" 2>&1; then
+  if [[ "${UNINSTALL_WRAPPER_INHERITED_XTRACE}" -eq 1 ]]; then
+    set -x
+  fi
   stop_loader
   printf "\033[32mSubstrate uninstall complete!\033[0m\n"
 else
+  if [[ "${UNINSTALL_WRAPPER_INHERITED_XTRACE}" -eq 1 ]]; then
+    set -x
+  fi
   stop_loader
   printf "\033[31mSubstrate uninstall failed.\033[0m See %s for details.\n" "${TMP_LOG}" >&2
   cat "${TMP_LOG}" >&2
