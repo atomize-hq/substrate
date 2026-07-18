@@ -496,7 +496,7 @@ Authority is fixed as follows:
 |---|---|---|---|
 | Public install/uninstall entry | Declared normalized prefix, or the principal-derived default when no parameter exists; principal is OS-resolved once | In-memory `InstallBootstrapContextV1` and commitment | Outer context carrier/env, `$HOME`, `$USERPROFILE`, CWD, outer `SUBSTRATE_HOME`/`SUBSTRATE_ROOT` |
 | Dual-mode installer/uninstaller script | With internal carrier argv: validate child mode, carrier, and current-principal binding and forbid construction. Without it: public mode constructs from declared prefix/default; direct Unix uninstall gains a declared `--prefix` | Exactly one mode and one context | Treating an outer carrier as public authority or falling from invalid child mode into public mode |
-| Installed `substrate world enable` entry | Declared normalized `--home` when present; otherwise A self-derived from a verified installed-product invocation witness under the exact release/dev/Windows rules below; a direct repository binary without such a witness and without `--home` fails before mutation | In-memory `InstallBootstrapContextV1` and commitment matching any installed projection | Environment/home/profile/CWD, generated record contents, or a different executable ancestor |
+| Installed `substrate world enable` entry | Before dispatch, reconcile declared normalized global `--install-prefix` and nested `world enable --home`: either one selects A, equal normalized values select A once, and unequal values fail before context construction or mutation; with neither, A is self-derived only from a verified installed-product invocation witness under the exact release/dev/Windows rules below, so a direct repository binary without a selector or witness fails before mutation | In-memory `InstallBootstrapContextV1` and commitment matching any installed projection; an internal argv carrier remains authoritative after strict validation and every declared selector must match it | Environment/home/profile/CWD, generated record contents, runner-local state, or a different executable ancestor |
 | Standalone `substrate` shim/status/doctor/world/deps/config/policy/gateway entry | Declared normalized global `--install-prefix`; otherwise A self-derived from a verified installed-product invocation witness below; if neither works, fail before mutation | In-memory context supplied to the selected leaf | Ambient home/root/profile, generated record contents, or silently accepting a direct dev/repo binary without an installed witness |
 | Physical `substrate-shim` command entry | A self-derived from the unique no-follow-validated invocation witness at `A/shims/<command>` under the exact pathname/PATH rules below; current host principal; exact default platform selector where platform telemetry is requested | Recomputed `IH`; any inherited carrier/commitment/PM must match; verified factory projection | PATH order/precedence, home/profile/carrier selecting A, an ambient instance/pipe override, or a contextless backend factory |
 | Direct Lima/WSL/forwarder/pipe helper | Declared normalized host prefix or principal-derived host default constructs `IH`; declared instance, fixed Lima V1 transport target or declared/default Windows pipe, and OS-resolved host platform-control root construct `PM`, except the bounded pre-PM Lima Stage 1 below | Both carriers after PM exists; internal-child mode validates and never reconstructs; child `HOME`/`LIMA_HOME` and Windows projection paths are exact overwritten projections | Platform selector without host context, guest/default home, ambient `HOME`/`LIMA_HOME`/`LOCALAPPDATA`/pipe env, or falling from bad child mode into public mode |
@@ -513,10 +513,15 @@ Authority is fixed as follows:
 At a public entry, an outer `SUBSTRATE_INSTALL_BOOTSTRAP_CONTEXT_V1` is ignored as authority. It is
 accepted only when the process was explicitly invoked as an internal child by argv, validates
 against the argv carrier, and passes the current-principal binding below. A declared public
-`--prefix`, `--home`, or `-Prefix` always wins by fixing
-the context; a conflicting outer home/root/context is a negative diagnostic input, not a competing
-precedence branch. An outer override may be used only by an explicitly named diagnostic test and
-cannot satisfy normal product proof.
+`--prefix`, `--home`, `--install-prefix`, or `-Prefix` fixes the context; a conflicting outer
+home/root/context is a negative diagnostic input, not a competing precedence branch. For world
+enable, global `--install-prefix` and nested `--home` are peer public selectors: the
+pre-dispatch shell route normalizes both, joins equal values into one selection, and rejects a
+collision before context construction, projection, bootstrap, or mutation. The same collision rule
+applies when either selector accompanies an internal argv carrier: the carrier remains authoritative
+only after strict decode, commitment, and current-principal validation, and the normalized declared
+selector must match it. An outer override may be used only by an explicitly named diagnostic test
+and cannot satisfy normal product proof.
 
 ##### Hidden installer bootstrap action
 
