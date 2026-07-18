@@ -23,7 +23,7 @@ use std::env;
 use std::fs;
 use std::io::{self, IsTerminal};
 #[cfg(unix)]
-use std::path::Path;
+use std::path::{Path, PathBuf};
 // (avoid unused: import Read/Write locally where needed)
 use std::sync::atomic::{AtomicBool, AtomicI32, Ordering};
 use std::sync::Arc;
@@ -304,10 +304,69 @@ pub fn run_shell_with_cli(cli: Cli) -> Result<i32> {
     }
 
     #[cfg(unix)]
+    let declared_install_prefix = {
+        let nested_world_enable_home = match &cli.sub {
+            Some(SubCommands::World(WorldCmd {
+                action: WorldAction::Enable(args),
+            })) => args.home.as_deref(),
+            _ => None,
+        };
+        let normalize_selector = |path: &Path| {
+            path.to_str()
+                .ok_or(())
+                .and_then(|raw| {
+                    transport_api_types::normalize_unix_install_bootstrap_path(raw).map_err(|_| ())
+                })
+                .map(PathBuf::from)
+        };
+
+        match (cli.install_prefix.as_deref(), nested_world_enable_home) {
+            (Some(global), Some(nested)) => {
+                let global = match normalize_selector(global) {
+                    Ok(prefix) => prefix,
+                    Err(()) => {
+                        eprintln!("substrate: invalid --install-prefix selector");
+                        return Ok(2);
+                    }
+                };
+                let nested = match normalize_selector(nested) {
+                    Ok(prefix) => prefix,
+                    Err(()) => {
+                        eprintln!("substrate: invalid world enable --home selector");
+                        return Ok(2);
+                    }
+                };
+                if global != nested {
+                    eprintln!(
+                        "substrate: --install-prefix and world enable --home must select the same installation prefix"
+                    );
+                    return Ok(2);
+                }
+                Some(global)
+            }
+            (Some(global), None) => match normalize_selector(global) {
+                Ok(prefix) => Some(prefix),
+                Err(()) => {
+                    eprintln!("substrate: invalid --install-prefix selector");
+                    return Ok(2);
+                }
+            },
+            (None, Some(nested)) => match normalize_selector(nested) {
+                Ok(prefix) => Some(prefix),
+                Err(()) => {
+                    eprintln!("substrate: invalid world enable --home selector");
+                    return Ok(2);
+                }
+            },
+            (None, None) => None,
+        }
+    };
+
+    #[cfg(unix)]
     let install_context = if let Some(encoded) = cli.install_bootstrap_context_v1.as_deref() {
         match super::install_bootstrap::decode_and_bind_unix_install_bootstrap_context(
             encoded,
-            cli.install_prefix.as_deref(),
+            declared_install_prefix.as_deref(),
         ) {
             Ok(context) => context,
             Err(_) => {
@@ -320,7 +379,7 @@ pub fn run_shell_with_cli(cli: Cli) -> Result<i32> {
         let running_executable = env::current_exe()?;
         let cwd = env::current_dir()?;
         match super::install_bootstrap::construct_unix_install_bootstrap_context(
-            cli.install_prefix.as_deref(),
+            declared_install_prefix.as_deref(),
             &argv0,
             &running_executable,
             env::var_os("PATH").as_deref(),

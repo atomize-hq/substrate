@@ -6,6 +6,8 @@ use anyhow::Result;
 use std::env;
 use std::path::PathBuf;
 use substrate_broker::world_fs_policy;
+#[cfg(unix)]
+use transport_api_types::InstallBootstrapContextCarrierV1;
 
 #[cfg(target_os = "linux")]
 mod linux;
@@ -164,7 +166,11 @@ pub(crate) fn update_world_env(no_world: bool) {
     env::remove_var("SUBSTRATE_WORLD_REQUIRE_WORLD");
 }
 
-pub(crate) fn handle_world_command(cmd: &WorldCmd, cli: &Cli) -> Result<()> {
+pub(crate) fn handle_world_command(
+    cmd: &WorldCmd,
+    cli: &Cli,
+    #[cfg(unix)] install_context: &InstallBootstrapContextCarrierV1,
+) -> Result<()> {
     match &cmd.action {
         WorldAction::Doctor { json } => {
             let launch_cwd = env::current_dir().unwrap_or_else(|_| PathBuf::from("."));
@@ -208,6 +214,9 @@ pub(crate) fn handle_world_command(cmd: &WorldCmd, cli: &Cli) -> Result<()> {
             std::process::exit(code);
         }
         WorldAction::Enable(opts) => {
+            #[cfg(unix)]
+            commands::world_enable::run_enable(opts, install_context)?;
+            #[cfg(not(unix))]
             commands::world_enable::run_enable(opts)?;
         }
         WorldAction::Deps(opts) => {
