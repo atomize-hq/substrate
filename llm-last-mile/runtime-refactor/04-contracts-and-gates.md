@@ -523,6 +523,14 @@ only after strict decode, commitment, and current-principal validation, and the 
 selector must match it. An outer override may be used only by an explicitly named diagnostic test
 and cannot satisfy normal product proof.
 
+For PI-027 the same-process carrier chain is exactly `run_shell_with_cli` →
+`ShellConfig::from_cli` → `handle_world_command` → `run_enable`. Every hop receives typed IH by
+explicit argument. `ShellConfig::from_cli` already possesses that authoritative context and may
+only forward it from the existing Unix `SubCommands::World` branch; H/R/carrier environment values
+remain checked projections and cannot recover a missing typed argument. No other subcommand branch,
+`ShellConfig` mode, constructor/validator, process-global, or side-table behavior participates in
+this chain.
+
 ##### Hidden installer bootstrap action
 
 `--install-bootstrap-home-v1` is a hidden internal action, not a public user feature. It is accepted
