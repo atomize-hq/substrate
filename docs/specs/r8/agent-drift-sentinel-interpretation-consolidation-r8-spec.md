@@ -1,25 +1,24 @@
 # R8 Spec: Agent Drift Sentinel Interpretation Consolidation
 
-Status: **R8-IMPLEMENT ACTIVE / R8-1 THROUGH R8-5.2 LANDED AND FRESH INDEPENDENT BUILT-IN
-`default` `CLEAN` / R8-6 CANONICAL RECEIPT LANDED CANDIDATE / FRESH INDEPENDENT REVIEW PENDING /
-NO PHASE TRANSITION OR R8 FAMILY-COMPLETE CLAIM**.
+Status: **R8-IMPLEMENT COMPLETE / R8 FAMILY TERMINALLY COMPLETE / R8-6 RECEIPT `549160ebc` FRESH
+INDEPENDENT BUILT-IN `default` `CLEAN` / `CTX-R8-01..06` PROVEN / TERMINAL TRANSITION CANDIDATE
+INDEPENDENT REVIEW PENDING**.
 
-R8-SPEC and the R8-SPEC -> R8-IMPLEMENT transition/entry gate remain review-clean. R8-1
+R8-SPEC and R8-IMPLEMENT are `COMPLETE`; the R8 family is terminally complete. R8-1
 `ec2c5da7d`, R8-2 `08e0d0e2a` + `5669e1f6e` + `911dd49b`, R8-3 `963a8202f`, R8-5.1
 `8ef705d8a`, and R8-5.2 `2616c4651` + `bc64fe962` + `cb1a276b7` + `813e1db17` + `ad6340190`
 each received fresh independent built-in `default` `CLEAN` with no actionable findings. The exact
-R8-4 implementation/review-fix series is
+R8-4 implementation/review-fix series
 `f3d19687a` + `4027e2e82` + `ae5b45408` + `ba7979b4f` + `348b34038` + `246b2fb72` +
 `888553555` + `c7bf1dcff` + `3fdbf4bd5` + `87963d46d` + `4227ae920` + `b05c7843d` +
 `c39126c1b` + `3cc2a8aba` + `49a1e7dc8` + `4552b89f6` + `910597cb7` + `c172e252a` +
-`293bbf708` + `0692cd1bc` + `00111d66a`; fresh independent review of the full chronological
-series returned `CLEAN` with no actionable findings at `00111d66a`.
+`293bbf708` + `0692cd1bc` + `00111d66a` received fresh independent built-in `default` `CLEAN` with
+no actionable findings. Five-doc R8-6 receipt `549160ebc1d93b26fdbe8203d748dfb1a64787ef`
+received fresh independent built-in `default` `CLEAN` with no findings.
 
-At implementation HEAD `ad6340190`, the exact R8-6 wall is green: Sentinel passes `233 / 233`,
-workspace tests pass `2,657` with zero failures and `2` ignored, and every required static/source
-lock is satisfied. The five-doc R8-6 receipt is a landed candidate pending fresh independent
-built-in `default` review; it claims no result for its own review and starts no transition.
-Recorded decisions are
+At implementation HEAD `ad6340190`, the exact final wall is green: Sentinel tests pass `233` with
+zero failures, and workspace tests pass `2,657` with zero failures and `2` ignored. `CTX-R8-01..06`
+are `PROVEN`, and all `57` R8 implementation checkboxes/tasks are complete. Recorded decisions are
 `R8-2-HIGH-IMPACT-REPLAY-LOADER-01: A`,
 `R8-3-HIGH-IMPACT-LIVE-COMPATIBILITY-01: A`,
 `R8-3-HIGH-IMPACT-LIVE-RUNTIME-01: A`,
@@ -31,6 +30,12 @@ Recorded decisions are
 `R8-4-HIGH-IMPACT-CENTRAL-PROJECTION-01: A`,
 `R8-4-HIGH-IMPACT-COMPATIBILITY-INPUT-01: A`, and
 `R8-4-CRITICAL-ZERO-EVIDENCE-LIMIT-01: A`.
+
+Current active phase is `none` and active packet is `none` because the master sequence ends at
+R8-IMPLEMENT. **NO NEXT ELIGIBLE PHASE IS DEFINED IN THIS CONTROL PACK.** No executable Prompt 1
+selector exists; do not recycle R8-IMPLEMENT or invent a successor phase. This docs-only terminal
+transition candidate assigns that terminal target state but does not yet record its own commit hash or
+independent review result, does not claim this candidate is `CLEAN`, and starts no further phase work.
 
 ## Objective
 
@@ -453,10 +458,10 @@ grouped-stop zero-limit contract; both parity surfaces are locked by review-clea
 | `CTX-R8-05` | Recorded `R8-4-PRESENTATION-DELEGATION-PRESENCE-01: B` authorizes the unchanged public shape plus dev-only parser cost. It requires exactly one direct field use and one literal-v0.8 predicate in `CheckpointPresentation::render_console_block`, zero elsewhere, and accepts the localized compatibility/presentation coupling and parity cost because unchanged public shapes erase internal presence before later rendering. AST/call-path tests prove exhaustive syntax/ownership policy, exact allowed owner-set equality `{ReplayReport::to_console_text, cli::run_live, adjudication::shape_request}`, and exact raw direct `render_console_block` call-expression count `4` — two replay, one live, and one adjudication — with any fifth call failing even within an allowed owner. Separate behavior tests prove facade/core output, all three consumer paths, and unchanged `operator_summary` bytes/full adjudication requests. `adjudication.rs` remains read-only; policy, request-shaping logic, and decision semantics stay unchanged. |
 | `CTX-R8-06` | Failure produces no scheduler decision, presentation, adjudication, operator sink emission, `record_delivery`, persisted cursor/delivery, or checkpoint acceptance; pre-observe transport bookkeeping is permitted; success preserves existing scheduler/adjudication outputs, real-session closure, delivery order, and per-session cursor behavior. |
 
-`CTX-R8-01` remains `PROVEN` / preserved, and the R8-IMPLEMENT entry meaning of `CTX-R8-02`
-remains `PROVEN` / `SATISFIED` by the review-clean authority family through `806e53740`.
-`CTX-R8-03..06` now have review-clean implementation/proof series plus a green R8-6 wall and are
-recorded as `PROVEN — RECEIPT REVIEW PENDING`. The final R8-6 receipt-review cell of `CTX-R8-02`,
-the current receipt's own review result, R8 family completion, and any phase transition remain
-pending. A separate authorized docs-only packet must handle wider mirrors and phase status after
-this exact receipt is fresh-review-clean.
+`CTX-R8-01..06` are `PROVEN`. The review-clean authority family through `806e53740`, the
+review-clean implementation/proof series, the green R8-6 wall, and fresh independent built-in
+`default` `CLEAN` review of five-doc receipt `549160ebc1d93b26fdbe8203d748dfb1a64787ef` satisfy the
+R8-IMPLEMENT exit gate. R8-SPEC and R8-IMPLEMENT are complete; the R8 family is terminally complete
+with active phase `none` and active packet `none`. The separate docs-only terminal transition
+candidate assigns this state but has no recorded hash or independent review result for itself and
+starts no further phase work. **NO NEXT ELIGIBLE PHASE IS DEFINED IN THIS CONTROL PACK.**

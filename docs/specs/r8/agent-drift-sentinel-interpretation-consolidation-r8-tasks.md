@@ -3,25 +3,25 @@
 Canonical path:
 `docs/specs/r8/agent-drift-sentinel-interpretation-consolidation-r8-tasks.md`
 
-Status: **R8-IMPLEMENT ACTIVE / R8-1 THROUGH R8-5.2 LANDED AND FRESH INDEPENDENT BUILT-IN
-`default` `CLEAN` / R8-6 CANONICAL RECEIPT LANDED CANDIDATE / FRESH INDEPENDENT REVIEW PENDING /
-NO PHASE TRANSITION OR R8 FAMILY-COMPLETE CLAIM**.
+Status: **R8-IMPLEMENT COMPLETE / R8 FAMILY TERMINALLY COMPLETE / R8-6 RECEIPT `549160ebc` FRESH
+INDEPENDENT BUILT-IN `default` `CLEAN` / ALL `57` IMPLEMENTATION CHECKBOXES COMPLETE / TERMINAL
+TRANSITION CANDIDATE INDEPENDENT REVIEW PENDING**.
 
-R8-SPEC and the R8-IMPLEMENT entry gate remain review-clean. R8-1 `ec2c5da7d`, R8-2
-`08e0d0e2a` + `5669e1f6e` + `911dd49b`, R8-3 `963a8202f`, R8-5.1 `8ef705d8a`, and R8-5.2
-`2616c4651` + `bc64fe962` + `cb1a276b7` + `813e1db17` + `ad6340190` each received fresh
-independent built-in `default` `CLEAN` with no actionable findings. The exact chronological R8-4
-implementation/review-fix series is
+R8-SPEC and R8-IMPLEMENT are `COMPLETE`; the R8 family is terminally complete. R8-1
+`ec2c5da7d`, R8-2 `08e0d0e2a` + `5669e1f6e` + `911dd49b`, R8-3 `963a8202f`, R8-5.1
+`8ef705d8a`, and R8-5.2 `2616c4651` + `bc64fe962` + `cb1a276b7` + `813e1db17` + `ad6340190`
+each received fresh independent built-in `default` `CLEAN` with no actionable findings. The exact
+R8-4 implementation/review-fix series
 `f3d19687a` + `4027e2e82` + `ae5b45408` + `ba7979b4f` + `348b34038` + `246b2fb72` +
 `888553555` + `c7bf1dcff` + `3fdbf4bd5` + `87963d46d` + `4227ae920` + `b05c7843d` +
 `c39126c1b` + `3cc2a8aba` + `49a1e7dc8` + `4552b89f6` + `910597cb7` + `c172e252a` +
-`293bbf708` + `0692cd1bc` + `00111d66a`; fresh independent review returned `CLEAN` with no
-actionable findings at `00111d66a`.
+`293bbf708` + `0692cd1bc` + `00111d66a` received fresh independent built-in `default` `CLEAN` with
+no actionable findings. Five-doc R8-6 receipt `549160ebc1d93b26fdbe8203d748dfb1a64787ef`
+received fresh independent built-in `default` `CLEAN` with no findings.
 
-At implementation HEAD `ad6340190`, the exact final wall is green with Sentinel `233 / 233` and
-workspace `2,657` passed / `2` ignored / zero failed. The exact five-doc R8-6 receipt is the landed
-candidate pending fresh independent built-in `default` review and has no review result of its own.
-Recorded decisions are
+At implementation HEAD `ad6340190`, the exact final wall is green: Sentinel tests pass `233` with
+zero failures, and workspace tests pass `2,657` with zero failures and `2` ignored. `CTX-R8-01..06`
+are `PROVEN`, and all `57` R8 implementation checkboxes/tasks are complete. Recorded decisions are
 `R8-2-HIGH-IMPACT-REPLAY-LOADER-01: A`,
 `R8-3-HIGH-IMPACT-LIVE-COMPATIBILITY-01: A`,
 `R8-3-HIGH-IMPACT-LIVE-RUNTIME-01: A`,
@@ -34,18 +34,24 @@ Recorded decisions are
 `R8-4-HIGH-IMPACT-COMPATIBILITY-INPUT-01: A`, and
 `R8-4-CRITICAL-ZERO-EVIDENCE-LIMIT-01: A`.
 
+Current active phase is `none` and active packet is `none` because the master sequence ends at
+R8-IMPLEMENT. **NO NEXT ELIGIBLE PHASE IS DEFINED IN THIS CONTROL PACK.** No executable Prompt 1
+selector exists; do not recycle R8-IMPLEMENT or invent a successor phase. This docs-only terminal
+transition candidate assigns that terminal target state but does not yet record its own commit hash or
+independent review result, does not claim this candidate is `CLEAN`, and starts no further phase work.
+
 ## R8-IMPLEMENT Evidence Receipt
 
 - The complete R8 MAP/SPEC/PLAN/TASKS family through `806e53740` is landed and received fresh independent built-in
   `default` `CLEAN` with no findings.
-- `CTX-R8-01` remains `PROVEN` / preserved; the entry meaning of `CTX-R8-02` remains `PROVEN` /
-  `SATISFIED`.
-- `CTX-R8-03..06` have review-clean implementation/proof series plus the green final wall and are
-  `PROVEN — RECEIPT REVIEW PENDING`.
-- R8-1 through R8-5.2 are landed and fresh-review-clean. R8-6 is the active receipt gate: its wall
-  is green and its landed five-doc candidate awaits fresh independent review.
-- The final R8-6 receipt-review cell of `CTX-R8-02`, receipt `CLEAN`, family completion, wider
-  mirror reconciliation, and phase transition remain pending.
+- `CTX-R8-01..06` are `PROVEN`.
+- R8-1 through R8-5.2 are landed and fresh-review-clean. Five-doc R8-6 receipt
+  `549160ebc1d93b26fdbe8203d748dfb1a64787ef` received fresh independent built-in `default`
+  `CLEAN` with no findings.
+- All `57` R8 implementation checkboxes/tasks are complete; R8-IMPLEMENT and the terminal R8 family
+  are complete with active phase `none` and active packet `none`.
+- The separate terminal mirror/phase-transition candidate assigns that state but remains pending its
+  own independent review, claims no `CLEAN` result for itself, and starts no further phase work.
 
 ## Recorded Packet-Local Decisions
 
@@ -693,9 +699,10 @@ logic.
 
 ## R8-6 — Final Family Wall And Canonical Status Receipt
 
-**Status:** final wall green; the exact five-doc canonical receipt is a landed candidate pending
-fresh independent built-in `default` review. It assigns itself no `CLEAN`, family completion, or
-phase transition result.
+**Status:** complete; the exact five-doc canonical receipt
+`549160ebc1d93b26fdbe8203d748dfb1a64787ef` received fresh independent built-in `default` `CLEAN`
+with no findings. The separate terminal transition candidate remains pending its own independent
+review and claims no result for itself.
 
 **Entry/index receipt:** the worktree entered clean at
 `ad63401902e1a5eb2e86b72ab6eb2cdd78048d8e`; GitNexus reported indexed commit/current commit
@@ -708,8 +715,8 @@ family and control ledger, and keep phase transition/mirror reconciliation separ
 **Dependencies:** All implementation/proof packets landed and fresh-review-clean.
 
 **Gate mapping:** `CTX-R8-01` final unchanged-analyzer evidence; `CTX-R8-02` final family review
-evidence only after receipt review; `CTX-R8-03` final shared-seam wall; `CTX-R8-04` final matrix wall;
-`CTX-R8-05` final ownership/static wall; `CTX-R8-06` final protected-boundary wall.
+evidence satisfied by receipt `549160ebc`; `CTX-R8-03` final shared-seam wall; `CTX-R8-04` final
+matrix wall; `CTX-R8-05` final ownership/static wall; `CTX-R8-06` final protected-boundary wall.
 
 **Exact manifest (5 docs only):**
 
@@ -796,8 +803,9 @@ full family proven before the receipt itself is fresh-review-clean.
 
 **Atomic commit:** `docs: record R8 implementation proof wall`.
 
-**Review gate:** fresh built-in `default` review of the exact R8-6 receipt must be `CLEAN`. Only then
-may a separate docs-only mirror/phase transition packet be proposed.
+**Review gate:** satisfied — fresh independent built-in `default` review of exact receipt
+`549160ebc1d93b26fdbe8203d748dfb1a64787ef` returned `CLEAN` with no findings. This authorizes the
+separate docs-only terminal mirror/phase-transition candidate; it does not review that candidate.
 
 ## Final Wall
 
@@ -830,10 +838,12 @@ may a separate docs-only mirror/phase transition packet be proposed.
   operator sink emission, `record_delivery`, persisted cursor/delivery, or checkpoint acceptance;
   existing pre-observe monitor-closure/pending-poll/emission-ordinal bookkeeping is permitted.
 - [x] Full Sentinel and workspace wall pass with current counts.
-- [ ] R8-6 canonical receipt fresh-review-clean.
-- [x] `CTX-R8-01..06` status reconciled without assigning a review result to this receipt.
-- [ ] Separate mirror/phase transition reviewed before any R8 completion or next-phase claim.
+- [x] R8-6 canonical receipt `549160ebc` fresh independent built-in `default` `CLEAN`.
+- [x] `CTX-R8-01..06` reconciled as `PROVEN` from review-clean packet/receipt proof.
+- [ ] Fresh independent review of this terminal mirror/phase-transition candidate; until then the
+  candidate records no hash or review result for itself and starts no further phase work.
 
-Checked boxes record review-clean R8-1..R8-5.2 evidence and the green current wall. The R8-6
-canonical receipt itself remains pending fresh independent review; separate mirror/phase transition
-work remains unstarted. No family-complete or next-phase claim is made.
+All `57` implementation checkboxes/tasks and the R8-6 receipt-review gate are complete. R8-IMPLEMENT
+and the terminal R8 family are complete with active phase `none` and active packet `none`. **NO NEXT
+ELIGIBLE PHASE IS DEFINED IN THIS CONTROL PACK.** The remaining unchecked item is review of this
+docs-only terminal transition candidate, not implementation or a successor-phase task.

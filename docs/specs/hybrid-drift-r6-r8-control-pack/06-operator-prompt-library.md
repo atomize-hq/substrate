@@ -235,7 +235,7 @@ Finish with reviewed commits, required findings and resolutions, exact verificat
 and whether the phase closeout gate is now eligible.
 ```
 
-## Prompt 5 — Close One Phase And Activate The Next Gate
+## Prompt 5 — Close One Phase And Activate The Next Gate Or Terminal State
 
 Use when the work appears complete but phase status and the next entry gate have not been reconciled.
 
@@ -256,8 +256,10 @@ and terminal disposition.
 
 If the exit gate is proven:
 1. update canonical status documents, task ledgers, this pack, and the proof ledger consistently;
-2. mark the current phase COMPLETE and the next phase ACTIVE when its entry gate is proven, or keep
-   it BLOCKED and record the exact unmet entry gate;
+2. mark the current phase COMPLETE and, when a successor row exists, mark that next phase ACTIVE
+   when its entry gate is proven or keep it BLOCKED with the exact unmet gate; when the master
+   sequence has no successor row, record active phase `none`, active packet `none`, and terminal
+   sequence completion without inventing a phase;
 3. update the verified commit reference without overstating behavior;
 4. commit the transition atomically;
 5. dispatch a fresh built-in default reviewer over the transition diff; and
@@ -267,8 +269,9 @@ If the gate is not proven, do not edit status to simulate closure. If missing wo
 ordered and unambiguous, return a filled Prompt 1 or Prompt 2 for that work; do not ask me to decide.
 Use DECISION REQUIRED only when repository authority cannot determine the needed behavior or scope.
 
-Finish with the gate verdict, transition commit/review result if any, and a filled Prompt 1 for the
-next eligible phase. Do not start that phase.
+Finish with the gate verdict and transition commit/review result if any. When a successor row exists,
+include a filled Prompt 1 for that next eligible phase without starting it. When none exists, state
+`NO NEXT ELIGIBLE PHASE IS DEFINED IN THIS CONTROL PACK` and emit no executable Prompt 1 selector.
 ```
 
 ## Prompt 6 — Apply A Decision Or External Unblock And Resume
@@ -301,7 +304,7 @@ Finish with where the resolution was recorded, resumed work and commits, verific
 result, current phase status, and the next eligible interaction.
 ```
 
-## Current Phase Invocation
+## Terminal Control-Pack Status — No Executable Invocation
 
 R6 is `CLOSED`. `R6-REPLAY`, `R6-CLOSE`, and `CTX-R6-17` are complete with active packet `none`.
 The 2026-07-15 close receipt reconfirms exact `CTX-R6-01`, exact `CTX-R6-02`, renamed sticky, and
@@ -380,27 +383,43 @@ otherwise MEDIUM/LOW; no additional HIGH/CRITICAL symbol was edited. R7-6.1, R7-
 checkpoint items are complete, and `CTX-R7-06` is `PROVEN`. Checkpoint-doc receipt/review-fix series
 `0e5150945` + `e634ef324` + `8e39c109e` received fresh independent built-in `default` `CLEAN`,
 satisfying the R7-6 exit gate; R7-6 is complete and R7 is closed with a stable analyzer contract.
-R8-SPEC is `COMPLETE`. The complete R8 authority-family authoring/review-fix series
-`698c766f9` + `f5865fb7` + `95529809` + `0ed3d8f04` + `cfcf65507` + `2b9565fb9` +
-`b04207fb6` + `b9ce44c6f` + `904c93d0d` + `67c81c6ff` + `24e649de6` + `099f4ec2c` +
-`806e53740` is landed and received fresh independent built-in `default` `CLEAN` with no findings.
-The narrow phase-transition commit `c66ea29ea52276f9b47fba94d351db5dcd62c883` also received fresh
-independent built-in `default` `CLEAN` with no findings, so the R8-SPEC -> R8-IMPLEMENT phase
-transition and R8-IMPLEMENT entry gate are review-clean. `CTX-R8-01` is `PROVEN`, and `CTX-R8-02`
-is `PROVEN` / `SATISFIED`. R8-IMPLEMENT is the sole `ACTIVE` phase at `ENTRY ONLY` with active
-packet `none`; its entry gate is satisfied by the review-clean R8 MAP/SPEC/PLAN/TASKS and
-review-clean phase transition, but all `57` R8 implementation checkboxes remain unchecked and
-unstarted, and no R8 source or test work has begun. `CTX-R8-03` is `OPEN` / current at entry;
-`CTX-R8-04` through `CTX-R8-06` remain `BLOCKED` / `UNPROVEN` in dependency order. The four future
-HIGH symbol-decision gates `R8-2-HIGH-IMPACT-REPLAY-LOADER-01`,
-`R8-3-HIGH-IMPACT-LIVE-COMPATIBILITY-01`, `R8-3-HIGH-IMPACT-LIVE-RUNTIME-01`, and
-`R8-4-HIGH-IMPACT-EXPLICIT-STATE-01`, plus unresolved
-`R8-4-PRESENTATION-DELEGATION-PRESENCE-01`, remain pending packet-local prerequisites; they
-authorize no edits and do not invalidate R8-IMPLEMENT entry. Prompt 1 selectors
-`PHASE_ID: R8-IMPLEMENT` / `ACTIVE_PACKET: none` are prepared and eligible but `UNINVOKED`. This
-narrow Markdown-only receipt commit records the already-reviewed transition commit; the receipt assigns
-itself no commit hash or review result, does not claim to be clean, must be independently reviewed
-next, and starts no implementation.
+R8-SPEC and R8-IMPLEMENT are `COMPLETE`; the R8 family is terminally complete. The complete R8
+authority-family authoring/review-fix series `698c766f9` + `f5865fb7` + `95529809` + `0ed3d8f04` +
+`cfcf65507` + `2b9565fb9` + `b04207fb6` + `b9ce44c6f` + `904c93d0d` + `67c81c6ff` +
+`24e649de6` + `099f4ec2c` + `806e53740` received fresh independent built-in `default` `CLEAN` with
+no findings. Entry-transition commit `c66ea29ea52276f9b47fba94d351db5dcd62c883` also received fresh
+independent built-in `default` `CLEAN` with no findings. R8-1 `ec2c5da7d`, R8-2 `08e0d0e2a` +
+`5669e1f6e` + `911dd49b`, R8-3 `963a8202f`, R8-5.1 `8ef705d8a`, and R8-5.2 `2616c4651` +
+`bc64fe962` + `cb1a276b7` + `813e1db17` + `ad6340190` each received fresh independent built-in
+`default` `CLEAN` with no actionable findings. The exact R8-4 implementation/review-fix series
+`f3d19687a` + `4027e2e82` + `ae5b45408` + `ba7979b4f` + `348b34038` + `246b2fb72` +
+`888553555` + `c7bf1dcff` + `3fdbf4bd5` + `87963d46d` + `4227ae920` + `b05c7843d` +
+`c39126c1b` + `3cc2a8aba` + `49a1e7dc8` + `4552b89f6` + `910597cb7` + `c172e252a` +
+`293bbf708` + `0692cd1bc` + `00111d66a` received fresh independent built-in `default` `CLEAN` with
+no actionable findings. Five-doc R8-6 receipt `549160ebc1d93b26fdbe8203d748dfb1a64787ef` received
+fresh independent built-in `default` `CLEAN` with no findings. At implementation HEAD `ad6340190`,
+the exact final wall is Sentinel `233` passed / `0` failed and workspace `2,657` passed / `0` failed /
+`2` ignored. `CTX-R8-01..06` are `PROVEN`, and all `57` R8 implementation checkboxes/tasks are
+complete.
+
+All eleven implementation decisions remain recorded exactly as
+`R8-2-HIGH-IMPACT-REPLAY-LOADER-01: A`,
+`R8-3-HIGH-IMPACT-LIVE-COMPATIBILITY-01: A`,
+`R8-3-HIGH-IMPACT-LIVE-RUNTIME-01: A`,
+`R8-4-HIGH-IMPACT-EXPLICIT-STATE-01: A`,
+`R8-4-PRESENTATION-DELEGATION-PRESENCE-01: B`,
+`R8-4-HIGH-IMPACT-HISTORICAL-EVIDENCE-01: A`,
+`R8-4-HIGH-IMPACT-EVIDENCE-LINES-01: A`,
+`R8-4-COMPATIBILITY-PROJECTION-MANIFEST-01: A`,
+`R8-4-HIGH-IMPACT-CENTRAL-PROJECTION-01: A`,
+`R8-4-HIGH-IMPACT-COMPATIBILITY-INPUT-01: A`, and
+`R8-4-CRITICAL-ZERO-EVIDENCE-LIMIT-01: A`.
+
+Current active phase is `none` and active packet is `none` because the master sequence ends at
+R8-IMPLEMENT. **NO NEXT ELIGIBLE PHASE IS DEFINED IN THIS CONTROL PACK.** No executable Prompt 1
+selector exists; do not recycle R8-IMPLEMENT or invent a successor phase. This docs-only terminal
+transition candidate assigns that terminal target state but does not yet record its own commit hash or
+independent review result, does not claim this candidate is `CLEAN`, and starts no further phase work.
 
 Historical resolved Task `.2B` decision report:
 

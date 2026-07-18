@@ -4,29 +4,46 @@ Canonical path:
 `docs/specs/r7/agent-drift-analyzer-delegated-session-support-r7-tasks.md`
 
 Status: **IMPLEMENTATION-READY / R7-PROMOTE AND R7-0..R7-6 COMPLETE / R7 CLOSED / `CTX-R7-06`
-PROVEN / R8-SPEC COMPLETE / R8-IMPLEMENT SOLE ACTIVE PHASE AT ENTRY ONLY / ACTIVE PACKET NONE**
+PROVEN / R8-SPEC AND R8-IMPLEMENT COMPLETE / R8 FAMILY TERMINALLY COMPLETE / ACTIVE PHASE NONE /
+ACTIVE PACKET NONE**
 
-R8-SPEC is `COMPLETE`. The complete R8 authority-family authoring/review-fix series
-`698c766f9` + `f5865fb7` + `95529809` + `0ed3d8f04` + `cfcf65507` + `2b9565fb9` +
-`b04207fb6` + `b9ce44c6f` + `904c93d0d` + `67c81c6ff` + `24e649de6` + `099f4ec2c` +
-`806e53740` is landed and received fresh independent built-in `default` `CLEAN` with no findings.
-The narrow phase-transition commit `c66ea29ea52276f9b47fba94d351db5dcd62c883` also received fresh
-independent built-in `default` `CLEAN` with no findings, so the R8-SPEC -> R8-IMPLEMENT phase
-transition and R8-IMPLEMENT entry gate are review-clean. `CTX-R8-01` is `PROVEN`, and `CTX-R8-02`
-is `PROVEN` / `SATISFIED`. R8-IMPLEMENT is the sole `ACTIVE` phase at `ENTRY ONLY` with active
-packet `none`; its entry gate is satisfied by the review-clean R8 MAP/SPEC/PLAN/TASKS and
-review-clean phase transition, but all `57` R8 implementation checkboxes remain unchecked and
-unstarted, and no R8 source or test work has begun. `CTX-R8-03` is `OPEN` / current at entry;
-`CTX-R8-04` through `CTX-R8-06` remain `BLOCKED` / `UNPROVEN` in dependency order. The four future
-HIGH symbol-decision gates `R8-2-HIGH-IMPACT-REPLAY-LOADER-01`,
-`R8-3-HIGH-IMPACT-LIVE-COMPATIBILITY-01`, `R8-3-HIGH-IMPACT-LIVE-RUNTIME-01`, and
-`R8-4-HIGH-IMPACT-EXPLICIT-STATE-01`, plus unresolved
-`R8-4-PRESENTATION-DELEGATION-PRESENCE-01`, remain pending packet-local prerequisites; they
-authorize no edits and do not invalidate R8-IMPLEMENT entry. Prompt 1 selectors
-`PHASE_ID: R8-IMPLEMENT` / `ACTIVE_PACKET: none` are prepared and eligible but `UNINVOKED`. This
-narrow Markdown-only receipt commit records the already-reviewed transition commit; the receipt assigns
-itself no commit hash or review result, does not claim to be clean, must be independently reviewed
-next, and starts no implementation.
+R8-SPEC and R8-IMPLEMENT are `COMPLETE`; the R8 family is terminally complete. The complete R8
+authority-family authoring/review-fix series `698c766f9` + `f5865fb7` + `95529809` + `0ed3d8f04` +
+`cfcf65507` + `2b9565fb9` + `b04207fb6` + `b9ce44c6f` + `904c93d0d` + `67c81c6ff` +
+`24e649de6` + `099f4ec2c` + `806e53740` received fresh independent built-in `default` `CLEAN` with
+no findings. Entry-transition commit `c66ea29ea52276f9b47fba94d351db5dcd62c883` also received fresh
+independent built-in `default` `CLEAN` with no findings. R8-1 `ec2c5da7d`, R8-2 `08e0d0e2a` +
+`5669e1f6e` + `911dd49b`, R8-3 `963a8202f`, R8-5.1 `8ef705d8a`, and R8-5.2 `2616c4651` +
+`bc64fe962` + `cb1a276b7` + `813e1db17` + `ad6340190` each received fresh independent built-in
+`default` `CLEAN` with no actionable findings. The exact R8-4 implementation/review-fix series
+`f3d19687a` + `4027e2e82` + `ae5b45408` + `ba7979b4f` + `348b34038` + `246b2fb72` +
+`888553555` + `c7bf1dcff` + `3fdbf4bd5` + `87963d46d` + `4227ae920` + `b05c7843d` +
+`c39126c1b` + `3cc2a8aba` + `49a1e7dc8` + `4552b89f6` + `910597cb7` + `c172e252a` +
+`293bbf708` + `0692cd1bc` + `00111d66a` received fresh independent built-in `default` `CLEAN` with
+no actionable findings. Five-doc R8-6 receipt `549160ebc1d93b26fdbe8203d748dfb1a64787ef` received
+fresh independent built-in `default` `CLEAN` with no findings. At implementation HEAD `ad6340190`,
+the exact final wall is Sentinel `233` passed / `0` failed and workspace `2,657` passed / `0` failed /
+`2` ignored. `CTX-R8-01..06` are `PROVEN`, and all `57` R8 implementation checkboxes/tasks are
+complete.
+
+All eleven implementation decisions remain recorded exactly as
+`R8-2-HIGH-IMPACT-REPLAY-LOADER-01: A`,
+`R8-3-HIGH-IMPACT-LIVE-COMPATIBILITY-01: A`,
+`R8-3-HIGH-IMPACT-LIVE-RUNTIME-01: A`,
+`R8-4-HIGH-IMPACT-EXPLICIT-STATE-01: A`,
+`R8-4-PRESENTATION-DELEGATION-PRESENCE-01: B`,
+`R8-4-HIGH-IMPACT-HISTORICAL-EVIDENCE-01: A`,
+`R8-4-HIGH-IMPACT-EVIDENCE-LINES-01: A`,
+`R8-4-COMPATIBILITY-PROJECTION-MANIFEST-01: A`,
+`R8-4-HIGH-IMPACT-CENTRAL-PROJECTION-01: A`,
+`R8-4-HIGH-IMPACT-COMPATIBILITY-INPUT-01: A`, and
+`R8-4-CRITICAL-ZERO-EVIDENCE-LIMIT-01: A`.
+
+Current active phase is `none` and active packet is `none` because the master sequence ends at
+R8-IMPLEMENT. **NO NEXT ELIGIBLE PHASE IS DEFINED IN THIS CONTROL PACK.** No executable Prompt 1
+selector exists; do not recycle R8-IMPLEMENT or invent a successor phase. This docs-only terminal
+transition candidate assigns that terminal target state but does not yet record its own commit hash or
+independent review result, does not claim this candidate is `CLEAN`, and starts no further phase work.
 
 Promotion series `455d0ed90` + `876ac55de` completed the content/gate audit and received fresh
 independent built-in `default` `REVIEW CLEAN`, so `R7-PROMOTE` is complete. Transition series
@@ -79,27 +96,43 @@ otherwise MEDIUM/LOW; no additional HIGH/CRITICAL symbol was edited. R7-6.1, R7-
 checkpoint items are complete, and `CTX-R7-06` is `PROVEN`. Checkpoint-doc receipt/review-fix series
 `0e5150945` + `e634ef324` + `8e39c109e` received fresh independent built-in `default` `CLEAN`,
 satisfying the R7-6 exit gate; R7-6 is complete and R7 is closed with a stable analyzer contract.
-R8-SPEC is `COMPLETE`. The complete R8 authority-family authoring/review-fix series
-`698c766f9` + `f5865fb7` + `95529809` + `0ed3d8f04` + `cfcf65507` + `2b9565fb9` +
-`b04207fb6` + `b9ce44c6f` + `904c93d0d` + `67c81c6ff` + `24e649de6` + `099f4ec2c` +
-`806e53740` is landed and received fresh independent built-in `default` `CLEAN` with no findings.
-The narrow phase-transition commit `c66ea29ea52276f9b47fba94d351db5dcd62c883` also received fresh
-independent built-in `default` `CLEAN` with no findings, so the R8-SPEC -> R8-IMPLEMENT phase
-transition and R8-IMPLEMENT entry gate are review-clean. `CTX-R8-01` is `PROVEN`, and `CTX-R8-02`
-is `PROVEN` / `SATISFIED`. R8-IMPLEMENT is the sole `ACTIVE` phase at `ENTRY ONLY` with active
-packet `none`; its entry gate is satisfied by the review-clean R8 MAP/SPEC/PLAN/TASKS and
-review-clean phase transition, but all `57` R8 implementation checkboxes remain unchecked and
-unstarted, and no R8 source or test work has begun. `CTX-R8-03` is `OPEN` / current at entry;
-`CTX-R8-04` through `CTX-R8-06` remain `BLOCKED` / `UNPROVEN` in dependency order. The four future
-HIGH symbol-decision gates `R8-2-HIGH-IMPACT-REPLAY-LOADER-01`,
-`R8-3-HIGH-IMPACT-LIVE-COMPATIBILITY-01`, `R8-3-HIGH-IMPACT-LIVE-RUNTIME-01`, and
-`R8-4-HIGH-IMPACT-EXPLICIT-STATE-01`, plus unresolved
-`R8-4-PRESENTATION-DELEGATION-PRESENCE-01`, remain pending packet-local prerequisites; they
-authorize no edits and do not invalidate R8-IMPLEMENT entry. Prompt 1 selectors
-`PHASE_ID: R8-IMPLEMENT` / `ACTIVE_PACKET: none` are prepared and eligible but `UNINVOKED`. This
-narrow Markdown-only receipt commit records the already-reviewed transition commit; the receipt assigns
-itself no commit hash or review result, does not claim to be clean, must be independently reviewed
-next, and starts no implementation.
+R8-SPEC and R8-IMPLEMENT are `COMPLETE`; the R8 family is terminally complete. The complete R8
+authority-family authoring/review-fix series `698c766f9` + `f5865fb7` + `95529809` + `0ed3d8f04` +
+`cfcf65507` + `2b9565fb9` + `b04207fb6` + `b9ce44c6f` + `904c93d0d` + `67c81c6ff` +
+`24e649de6` + `099f4ec2c` + `806e53740` received fresh independent built-in `default` `CLEAN` with
+no findings. Entry-transition commit `c66ea29ea52276f9b47fba94d351db5dcd62c883` also received fresh
+independent built-in `default` `CLEAN` with no findings. R8-1 `ec2c5da7d`, R8-2 `08e0d0e2a` +
+`5669e1f6e` + `911dd49b`, R8-3 `963a8202f`, R8-5.1 `8ef705d8a`, and R8-5.2 `2616c4651` +
+`bc64fe962` + `cb1a276b7` + `813e1db17` + `ad6340190` each received fresh independent built-in
+`default` `CLEAN` with no actionable findings. The exact R8-4 implementation/review-fix series
+`f3d19687a` + `4027e2e82` + `ae5b45408` + `ba7979b4f` + `348b34038` + `246b2fb72` +
+`888553555` + `c7bf1dcff` + `3fdbf4bd5` + `87963d46d` + `4227ae920` + `b05c7843d` +
+`c39126c1b` + `3cc2a8aba` + `49a1e7dc8` + `4552b89f6` + `910597cb7` + `c172e252a` +
+`293bbf708` + `0692cd1bc` + `00111d66a` received fresh independent built-in `default` `CLEAN` with
+no actionable findings. Five-doc R8-6 receipt `549160ebc1d93b26fdbe8203d748dfb1a64787ef` received
+fresh independent built-in `default` `CLEAN` with no findings. At implementation HEAD `ad6340190`,
+the exact final wall is Sentinel `233` passed / `0` failed and workspace `2,657` passed / `0` failed /
+`2` ignored. `CTX-R8-01..06` are `PROVEN`, and all `57` R8 implementation checkboxes/tasks are
+complete.
+
+All eleven implementation decisions remain recorded exactly as
+`R8-2-HIGH-IMPACT-REPLAY-LOADER-01: A`,
+`R8-3-HIGH-IMPACT-LIVE-COMPATIBILITY-01: A`,
+`R8-3-HIGH-IMPACT-LIVE-RUNTIME-01: A`,
+`R8-4-HIGH-IMPACT-EXPLICIT-STATE-01: A`,
+`R8-4-PRESENTATION-DELEGATION-PRESENCE-01: B`,
+`R8-4-HIGH-IMPACT-HISTORICAL-EVIDENCE-01: A`,
+`R8-4-HIGH-IMPACT-EVIDENCE-LINES-01: A`,
+`R8-4-COMPATIBILITY-PROJECTION-MANIFEST-01: A`,
+`R8-4-HIGH-IMPACT-CENTRAL-PROJECTION-01: A`,
+`R8-4-HIGH-IMPACT-COMPATIBILITY-INPUT-01: A`, and
+`R8-4-CRITICAL-ZERO-EVIDENCE-LIMIT-01: A`.
+
+Current active phase is `none` and active packet is `none` because the master sequence ends at
+R8-IMPLEMENT. **NO NEXT ELIGIBLE PHASE IS DEFINED IN THIS CONTROL PACK.** No executable Prompt 1
+selector exists; do not recycle R8-IMPLEMENT or invent a successor phase. This docs-only terminal
+transition candidate assigns that terminal target state but does not yet record its own commit hash or
+independent review result, does not claim this candidate is `CLEAN`, and starts no further phase work.
 
 ## R7-PROMOTE: Implementation-Readiness Audit
 
@@ -250,27 +283,43 @@ otherwise MEDIUM/LOW; no additional HIGH/CRITICAL symbol was edited. R7-6.1, R7-
 checkpoint items are complete, and `CTX-R7-06` is `PROVEN`. Checkpoint-doc receipt/review-fix series
 `0e5150945` + `e634ef324` + `8e39c109e` received fresh independent built-in `default` `CLEAN`,
 satisfying the R7-6 exit gate; R7-6 is complete and R7 is closed with a stable analyzer contract.
-R8-SPEC is `COMPLETE`. The complete R8 authority-family authoring/review-fix series
-`698c766f9` + `f5865fb7` + `95529809` + `0ed3d8f04` + `cfcf65507` + `2b9565fb9` +
-`b04207fb6` + `b9ce44c6f` + `904c93d0d` + `67c81c6ff` + `24e649de6` + `099f4ec2c` +
-`806e53740` is landed and received fresh independent built-in `default` `CLEAN` with no findings.
-The narrow phase-transition commit `c66ea29ea52276f9b47fba94d351db5dcd62c883` also received fresh
-independent built-in `default` `CLEAN` with no findings, so the R8-SPEC -> R8-IMPLEMENT phase
-transition and R8-IMPLEMENT entry gate are review-clean. `CTX-R8-01` is `PROVEN`, and `CTX-R8-02`
-is `PROVEN` / `SATISFIED`. R8-IMPLEMENT is the sole `ACTIVE` phase at `ENTRY ONLY` with active
-packet `none`; its entry gate is satisfied by the review-clean R8 MAP/SPEC/PLAN/TASKS and
-review-clean phase transition, but all `57` R8 implementation checkboxes remain unchecked and
-unstarted, and no R8 source or test work has begun. `CTX-R8-03` is `OPEN` / current at entry;
-`CTX-R8-04` through `CTX-R8-06` remain `BLOCKED` / `UNPROVEN` in dependency order. The four future
-HIGH symbol-decision gates `R8-2-HIGH-IMPACT-REPLAY-LOADER-01`,
-`R8-3-HIGH-IMPACT-LIVE-COMPATIBILITY-01`, `R8-3-HIGH-IMPACT-LIVE-RUNTIME-01`, and
-`R8-4-HIGH-IMPACT-EXPLICIT-STATE-01`, plus unresolved
-`R8-4-PRESENTATION-DELEGATION-PRESENCE-01`, remain pending packet-local prerequisites; they
-authorize no edits and do not invalidate R8-IMPLEMENT entry. Prompt 1 selectors
-`PHASE_ID: R8-IMPLEMENT` / `ACTIVE_PACKET: none` are prepared and eligible but `UNINVOKED`. This
-narrow Markdown-only receipt commit records the already-reviewed transition commit; the receipt assigns
-itself no commit hash or review result, does not claim to be clean, must be independently reviewed
-next, and starts no implementation.
+R8-SPEC and R8-IMPLEMENT are `COMPLETE`; the R8 family is terminally complete. The complete R8
+authority-family authoring/review-fix series `698c766f9` + `f5865fb7` + `95529809` + `0ed3d8f04` +
+`cfcf65507` + `2b9565fb9` + `b04207fb6` + `b9ce44c6f` + `904c93d0d` + `67c81c6ff` +
+`24e649de6` + `099f4ec2c` + `806e53740` received fresh independent built-in `default` `CLEAN` with
+no findings. Entry-transition commit `c66ea29ea52276f9b47fba94d351db5dcd62c883` also received fresh
+independent built-in `default` `CLEAN` with no findings. R8-1 `ec2c5da7d`, R8-2 `08e0d0e2a` +
+`5669e1f6e` + `911dd49b`, R8-3 `963a8202f`, R8-5.1 `8ef705d8a`, and R8-5.2 `2616c4651` +
+`bc64fe962` + `cb1a276b7` + `813e1db17` + `ad6340190` each received fresh independent built-in
+`default` `CLEAN` with no actionable findings. The exact R8-4 implementation/review-fix series
+`f3d19687a` + `4027e2e82` + `ae5b45408` + `ba7979b4f` + `348b34038` + `246b2fb72` +
+`888553555` + `c7bf1dcff` + `3fdbf4bd5` + `87963d46d` + `4227ae920` + `b05c7843d` +
+`c39126c1b` + `3cc2a8aba` + `49a1e7dc8` + `4552b89f6` + `910597cb7` + `c172e252a` +
+`293bbf708` + `0692cd1bc` + `00111d66a` received fresh independent built-in `default` `CLEAN` with
+no actionable findings. Five-doc R8-6 receipt `549160ebc1d93b26fdbe8203d748dfb1a64787ef` received
+fresh independent built-in `default` `CLEAN` with no findings. At implementation HEAD `ad6340190`,
+the exact final wall is Sentinel `233` passed / `0` failed and workspace `2,657` passed / `0` failed /
+`2` ignored. `CTX-R8-01..06` are `PROVEN`, and all `57` R8 implementation checkboxes/tasks are
+complete.
+
+All eleven implementation decisions remain recorded exactly as
+`R8-2-HIGH-IMPACT-REPLAY-LOADER-01: A`,
+`R8-3-HIGH-IMPACT-LIVE-COMPATIBILITY-01: A`,
+`R8-3-HIGH-IMPACT-LIVE-RUNTIME-01: A`,
+`R8-4-HIGH-IMPACT-EXPLICIT-STATE-01: A`,
+`R8-4-PRESENTATION-DELEGATION-PRESENCE-01: B`,
+`R8-4-HIGH-IMPACT-HISTORICAL-EVIDENCE-01: A`,
+`R8-4-HIGH-IMPACT-EVIDENCE-LINES-01: A`,
+`R8-4-COMPATIBILITY-PROJECTION-MANIFEST-01: A`,
+`R8-4-HIGH-IMPACT-CENTRAL-PROJECTION-01: A`,
+`R8-4-HIGH-IMPACT-COMPATIBILITY-INPUT-01: A`, and
+`R8-4-CRITICAL-ZERO-EVIDENCE-LIMIT-01: A`.
+
+Current active phase is `none` and active packet is `none` because the master sequence ends at
+R8-IMPLEMENT. **NO NEXT ELIGIBLE PHASE IS DEFINED IN THIS CONTROL PACK.** No executable Prompt 1
+selector exists; do not recycle R8-IMPLEMENT or invent a successor phase. This docs-only terminal
+transition candidate assigns that terminal target state but does not yet record its own commit hash or
+independent review result, does not claim this candidate is `CLEAN`, and starts no further phase work.
 
 ## R7-2: Analyzer Link Graph And Checkpoint v0.8
 
@@ -364,27 +413,43 @@ otherwise MEDIUM/LOW; no additional HIGH/CRITICAL symbol was edited. R7-6.1, R7-
 checkpoint items are complete, and `CTX-R7-06` is `PROVEN`. Checkpoint-doc receipt/review-fix series
 `0e5150945` + `e634ef324` + `8e39c109e` received fresh independent built-in `default` `CLEAN`,
 satisfying the R7-6 exit gate; R7-6 is complete and R7 is closed with a stable analyzer contract.
-R8-SPEC is `COMPLETE`. The complete R8 authority-family authoring/review-fix series
-`698c766f9` + `f5865fb7` + `95529809` + `0ed3d8f04` + `cfcf65507` + `2b9565fb9` +
-`b04207fb6` + `b9ce44c6f` + `904c93d0d` + `67c81c6ff` + `24e649de6` + `099f4ec2c` +
-`806e53740` is landed and received fresh independent built-in `default` `CLEAN` with no findings.
-The narrow phase-transition commit `c66ea29ea52276f9b47fba94d351db5dcd62c883` also received fresh
-independent built-in `default` `CLEAN` with no findings, so the R8-SPEC -> R8-IMPLEMENT phase
-transition and R8-IMPLEMENT entry gate are review-clean. `CTX-R8-01` is `PROVEN`, and `CTX-R8-02`
-is `PROVEN` / `SATISFIED`. R8-IMPLEMENT is the sole `ACTIVE` phase at `ENTRY ONLY` with active
-packet `none`; its entry gate is satisfied by the review-clean R8 MAP/SPEC/PLAN/TASKS and
-review-clean phase transition, but all `57` R8 implementation checkboxes remain unchecked and
-unstarted, and no R8 source or test work has begun. `CTX-R8-03` is `OPEN` / current at entry;
-`CTX-R8-04` through `CTX-R8-06` remain `BLOCKED` / `UNPROVEN` in dependency order. The four future
-HIGH symbol-decision gates `R8-2-HIGH-IMPACT-REPLAY-LOADER-01`,
-`R8-3-HIGH-IMPACT-LIVE-COMPATIBILITY-01`, `R8-3-HIGH-IMPACT-LIVE-RUNTIME-01`, and
-`R8-4-HIGH-IMPACT-EXPLICIT-STATE-01`, plus unresolved
-`R8-4-PRESENTATION-DELEGATION-PRESENCE-01`, remain pending packet-local prerequisites; they
-authorize no edits and do not invalidate R8-IMPLEMENT entry. Prompt 1 selectors
-`PHASE_ID: R8-IMPLEMENT` / `ACTIVE_PACKET: none` are prepared and eligible but `UNINVOKED`. This
-narrow Markdown-only receipt commit records the already-reviewed transition commit; the receipt assigns
-itself no commit hash or review result, does not claim to be clean, must be independently reviewed
-next, and starts no implementation.
+R8-SPEC and R8-IMPLEMENT are `COMPLETE`; the R8 family is terminally complete. The complete R8
+authority-family authoring/review-fix series `698c766f9` + `f5865fb7` + `95529809` + `0ed3d8f04` +
+`cfcf65507` + `2b9565fb9` + `b04207fb6` + `b9ce44c6f` + `904c93d0d` + `67c81c6ff` +
+`24e649de6` + `099f4ec2c` + `806e53740` received fresh independent built-in `default` `CLEAN` with
+no findings. Entry-transition commit `c66ea29ea52276f9b47fba94d351db5dcd62c883` also received fresh
+independent built-in `default` `CLEAN` with no findings. R8-1 `ec2c5da7d`, R8-2 `08e0d0e2a` +
+`5669e1f6e` + `911dd49b`, R8-3 `963a8202f`, R8-5.1 `8ef705d8a`, and R8-5.2 `2616c4651` +
+`bc64fe962` + `cb1a276b7` + `813e1db17` + `ad6340190` each received fresh independent built-in
+`default` `CLEAN` with no actionable findings. The exact R8-4 implementation/review-fix series
+`f3d19687a` + `4027e2e82` + `ae5b45408` + `ba7979b4f` + `348b34038` + `246b2fb72` +
+`888553555` + `c7bf1dcff` + `3fdbf4bd5` + `87963d46d` + `4227ae920` + `b05c7843d` +
+`c39126c1b` + `3cc2a8aba` + `49a1e7dc8` + `4552b89f6` + `910597cb7` + `c172e252a` +
+`293bbf708` + `0692cd1bc` + `00111d66a` received fresh independent built-in `default` `CLEAN` with
+no actionable findings. Five-doc R8-6 receipt `549160ebc1d93b26fdbe8203d748dfb1a64787ef` received
+fresh independent built-in `default` `CLEAN` with no findings. At implementation HEAD `ad6340190`,
+the exact final wall is Sentinel `233` passed / `0` failed and workspace `2,657` passed / `0` failed /
+`2` ignored. `CTX-R8-01..06` are `PROVEN`, and all `57` R8 implementation checkboxes/tasks are
+complete.
+
+All eleven implementation decisions remain recorded exactly as
+`R8-2-HIGH-IMPACT-REPLAY-LOADER-01: A`,
+`R8-3-HIGH-IMPACT-LIVE-COMPATIBILITY-01: A`,
+`R8-3-HIGH-IMPACT-LIVE-RUNTIME-01: A`,
+`R8-4-HIGH-IMPACT-EXPLICIT-STATE-01: A`,
+`R8-4-PRESENTATION-DELEGATION-PRESENCE-01: B`,
+`R8-4-HIGH-IMPACT-HISTORICAL-EVIDENCE-01: A`,
+`R8-4-HIGH-IMPACT-EVIDENCE-LINES-01: A`,
+`R8-4-COMPATIBILITY-PROJECTION-MANIFEST-01: A`,
+`R8-4-HIGH-IMPACT-CENTRAL-PROJECTION-01: A`,
+`R8-4-HIGH-IMPACT-COMPATIBILITY-INPUT-01: A`, and
+`R8-4-CRITICAL-ZERO-EVIDENCE-LIMIT-01: A`.
+
+Current active phase is `none` and active packet is `none` because the master sequence ends at
+R8-IMPLEMENT. **NO NEXT ELIGIBLE PHASE IS DEFINED IN THIS CONTROL PACK.** No executable Prompt 1
+selector exists; do not recycle R8-IMPLEMENT or invent a successor phase. This docs-only terminal
+transition candidate assigns that terminal target state but does not yet record its own commit hash or
+independent review result, does not claim this candidate is `CLEAN`, and starts no further phase work.
 
 ## R7-3: Separate Parent And Child Progress
 
@@ -520,27 +585,43 @@ otherwise MEDIUM/LOW; no additional HIGH/CRITICAL symbol was edited. R7-6.1, R7-
 checkpoint items are complete, and `CTX-R7-06` is `PROVEN`. Checkpoint-doc receipt/review-fix series
 `0e5150945` + `e634ef324` + `8e39c109e` received fresh independent built-in `default` `CLEAN`,
 satisfying the R7-6 exit gate; R7-6 is complete and R7 is closed with a stable analyzer contract.
-R8-SPEC is `COMPLETE`. The complete R8 authority-family authoring/review-fix series
-`698c766f9` + `f5865fb7` + `95529809` + `0ed3d8f04` + `cfcf65507` + `2b9565fb9` +
-`b04207fb6` + `b9ce44c6f` + `904c93d0d` + `67c81c6ff` + `24e649de6` + `099f4ec2c` +
-`806e53740` is landed and received fresh independent built-in `default` `CLEAN` with no findings.
-The narrow phase-transition commit `c66ea29ea52276f9b47fba94d351db5dcd62c883` also received fresh
-independent built-in `default` `CLEAN` with no findings, so the R8-SPEC -> R8-IMPLEMENT phase
-transition and R8-IMPLEMENT entry gate are review-clean. `CTX-R8-01` is `PROVEN`, and `CTX-R8-02`
-is `PROVEN` / `SATISFIED`. R8-IMPLEMENT is the sole `ACTIVE` phase at `ENTRY ONLY` with active
-packet `none`; its entry gate is satisfied by the review-clean R8 MAP/SPEC/PLAN/TASKS and
-review-clean phase transition, but all `57` R8 implementation checkboxes remain unchecked and
-unstarted, and no R8 source or test work has begun. `CTX-R8-03` is `OPEN` / current at entry;
-`CTX-R8-04` through `CTX-R8-06` remain `BLOCKED` / `UNPROVEN` in dependency order. The four future
-HIGH symbol-decision gates `R8-2-HIGH-IMPACT-REPLAY-LOADER-01`,
-`R8-3-HIGH-IMPACT-LIVE-COMPATIBILITY-01`, `R8-3-HIGH-IMPACT-LIVE-RUNTIME-01`, and
-`R8-4-HIGH-IMPACT-EXPLICIT-STATE-01`, plus unresolved
-`R8-4-PRESENTATION-DELEGATION-PRESENCE-01`, remain pending packet-local prerequisites; they
-authorize no edits and do not invalidate R8-IMPLEMENT entry. Prompt 1 selectors
-`PHASE_ID: R8-IMPLEMENT` / `ACTIVE_PACKET: none` are prepared and eligible but `UNINVOKED`. This
-narrow Markdown-only receipt commit records the already-reviewed transition commit; the receipt assigns
-itself no commit hash or review result, does not claim to be clean, must be independently reviewed
-next, and starts no implementation.
+R8-SPEC and R8-IMPLEMENT are `COMPLETE`; the R8 family is terminally complete. The complete R8
+authority-family authoring/review-fix series `698c766f9` + `f5865fb7` + `95529809` + `0ed3d8f04` +
+`cfcf65507` + `2b9565fb9` + `b04207fb6` + `b9ce44c6f` + `904c93d0d` + `67c81c6ff` +
+`24e649de6` + `099f4ec2c` + `806e53740` received fresh independent built-in `default` `CLEAN` with
+no findings. Entry-transition commit `c66ea29ea52276f9b47fba94d351db5dcd62c883` also received fresh
+independent built-in `default` `CLEAN` with no findings. R8-1 `ec2c5da7d`, R8-2 `08e0d0e2a` +
+`5669e1f6e` + `911dd49b`, R8-3 `963a8202f`, R8-5.1 `8ef705d8a`, and R8-5.2 `2616c4651` +
+`bc64fe962` + `cb1a276b7` + `813e1db17` + `ad6340190` each received fresh independent built-in
+`default` `CLEAN` with no actionable findings. The exact R8-4 implementation/review-fix series
+`f3d19687a` + `4027e2e82` + `ae5b45408` + `ba7979b4f` + `348b34038` + `246b2fb72` +
+`888553555` + `c7bf1dcff` + `3fdbf4bd5` + `87963d46d` + `4227ae920` + `b05c7843d` +
+`c39126c1b` + `3cc2a8aba` + `49a1e7dc8` + `4552b89f6` + `910597cb7` + `c172e252a` +
+`293bbf708` + `0692cd1bc` + `00111d66a` received fresh independent built-in `default` `CLEAN` with
+no actionable findings. Five-doc R8-6 receipt `549160ebc1d93b26fdbe8203d748dfb1a64787ef` received
+fresh independent built-in `default` `CLEAN` with no findings. At implementation HEAD `ad6340190`,
+the exact final wall is Sentinel `233` passed / `0` failed and workspace `2,657` passed / `0` failed /
+`2` ignored. `CTX-R8-01..06` are `PROVEN`, and all `57` R8 implementation checkboxes/tasks are
+complete.
+
+All eleven implementation decisions remain recorded exactly as
+`R8-2-HIGH-IMPACT-REPLAY-LOADER-01: A`,
+`R8-3-HIGH-IMPACT-LIVE-COMPATIBILITY-01: A`,
+`R8-3-HIGH-IMPACT-LIVE-RUNTIME-01: A`,
+`R8-4-HIGH-IMPACT-EXPLICIT-STATE-01: A`,
+`R8-4-PRESENTATION-DELEGATION-PRESENCE-01: B`,
+`R8-4-HIGH-IMPACT-HISTORICAL-EVIDENCE-01: A`,
+`R8-4-HIGH-IMPACT-EVIDENCE-LINES-01: A`,
+`R8-4-COMPATIBILITY-PROJECTION-MANIFEST-01: A`,
+`R8-4-HIGH-IMPACT-CENTRAL-PROJECTION-01: A`,
+`R8-4-HIGH-IMPACT-COMPATIBILITY-INPUT-01: A`, and
+`R8-4-CRITICAL-ZERO-EVIDENCE-LIMIT-01: A`.
+
+Current active phase is `none` and active packet is `none` because the master sequence ends at
+R8-IMPLEMENT. **NO NEXT ELIGIBLE PHASE IS DEFINED IN THIS CONTROL PACK.** No executable Prompt 1
+selector exists; do not recycle R8-IMPLEMENT or invent a successor phase. This docs-only terminal
+transition candidate assigns that terminal target state but does not yet record its own commit hash or
+independent review result, does not claim this candidate is `CLEAN`, and starts no further phase work.
 
 ## R7-5: Delegated Acceptance And Real-Corpus Proof
 
@@ -612,27 +693,43 @@ otherwise MEDIUM/LOW; no additional HIGH/CRITICAL symbol was edited. R7-6.1, R7-
 checkpoint items are complete, and `CTX-R7-06` is `PROVEN`. Checkpoint-doc receipt/review-fix series
 `0e5150945` + `e634ef324` + `8e39c109e` received fresh independent built-in `default` `CLEAN`,
 satisfying the R7-6 exit gate; R7-6 is complete and R7 is closed with a stable analyzer contract.
-R8-SPEC is `COMPLETE`. The complete R8 authority-family authoring/review-fix series
-`698c766f9` + `f5865fb7` + `95529809` + `0ed3d8f04` + `cfcf65507` + `2b9565fb9` +
-`b04207fb6` + `b9ce44c6f` + `904c93d0d` + `67c81c6ff` + `24e649de6` + `099f4ec2c` +
-`806e53740` is landed and received fresh independent built-in `default` `CLEAN` with no findings.
-The narrow phase-transition commit `c66ea29ea52276f9b47fba94d351db5dcd62c883` also received fresh
-independent built-in `default` `CLEAN` with no findings, so the R8-SPEC -> R8-IMPLEMENT phase
-transition and R8-IMPLEMENT entry gate are review-clean. `CTX-R8-01` is `PROVEN`, and `CTX-R8-02`
-is `PROVEN` / `SATISFIED`. R8-IMPLEMENT is the sole `ACTIVE` phase at `ENTRY ONLY` with active
-packet `none`; its entry gate is satisfied by the review-clean R8 MAP/SPEC/PLAN/TASKS and
-review-clean phase transition, but all `57` R8 implementation checkboxes remain unchecked and
-unstarted, and no R8 source or test work has begun. `CTX-R8-03` is `OPEN` / current at entry;
-`CTX-R8-04` through `CTX-R8-06` remain `BLOCKED` / `UNPROVEN` in dependency order. The four future
-HIGH symbol-decision gates `R8-2-HIGH-IMPACT-REPLAY-LOADER-01`,
-`R8-3-HIGH-IMPACT-LIVE-COMPATIBILITY-01`, `R8-3-HIGH-IMPACT-LIVE-RUNTIME-01`, and
-`R8-4-HIGH-IMPACT-EXPLICIT-STATE-01`, plus unresolved
-`R8-4-PRESENTATION-DELEGATION-PRESENCE-01`, remain pending packet-local prerequisites; they
-authorize no edits and do not invalidate R8-IMPLEMENT entry. Prompt 1 selectors
-`PHASE_ID: R8-IMPLEMENT` / `ACTIVE_PACKET: none` are prepared and eligible but `UNINVOKED`. This
-narrow Markdown-only receipt commit records the already-reviewed transition commit; the receipt assigns
-itself no commit hash or review result, does not claim to be clean, must be independently reviewed
-next, and starts no implementation.
+R8-SPEC and R8-IMPLEMENT are `COMPLETE`; the R8 family is terminally complete. The complete R8
+authority-family authoring/review-fix series `698c766f9` + `f5865fb7` + `95529809` + `0ed3d8f04` +
+`cfcf65507` + `2b9565fb9` + `b04207fb6` + `b9ce44c6f` + `904c93d0d` + `67c81c6ff` +
+`24e649de6` + `099f4ec2c` + `806e53740` received fresh independent built-in `default` `CLEAN` with
+no findings. Entry-transition commit `c66ea29ea52276f9b47fba94d351db5dcd62c883` also received fresh
+independent built-in `default` `CLEAN` with no findings. R8-1 `ec2c5da7d`, R8-2 `08e0d0e2a` +
+`5669e1f6e` + `911dd49b`, R8-3 `963a8202f`, R8-5.1 `8ef705d8a`, and R8-5.2 `2616c4651` +
+`bc64fe962` + `cb1a276b7` + `813e1db17` + `ad6340190` each received fresh independent built-in
+`default` `CLEAN` with no actionable findings. The exact R8-4 implementation/review-fix series
+`f3d19687a` + `4027e2e82` + `ae5b45408` + `ba7979b4f` + `348b34038` + `246b2fb72` +
+`888553555` + `c7bf1dcff` + `3fdbf4bd5` + `87963d46d` + `4227ae920` + `b05c7843d` +
+`c39126c1b` + `3cc2a8aba` + `49a1e7dc8` + `4552b89f6` + `910597cb7` + `c172e252a` +
+`293bbf708` + `0692cd1bc` + `00111d66a` received fresh independent built-in `default` `CLEAN` with
+no actionable findings. Five-doc R8-6 receipt `549160ebc1d93b26fdbe8203d748dfb1a64787ef` received
+fresh independent built-in `default` `CLEAN` with no findings. At implementation HEAD `ad6340190`,
+the exact final wall is Sentinel `233` passed / `0` failed and workspace `2,657` passed / `0` failed /
+`2` ignored. `CTX-R8-01..06` are `PROVEN`, and all `57` R8 implementation checkboxes/tasks are
+complete.
+
+All eleven implementation decisions remain recorded exactly as
+`R8-2-HIGH-IMPACT-REPLAY-LOADER-01: A`,
+`R8-3-HIGH-IMPACT-LIVE-COMPATIBILITY-01: A`,
+`R8-3-HIGH-IMPACT-LIVE-RUNTIME-01: A`,
+`R8-4-HIGH-IMPACT-EXPLICIT-STATE-01: A`,
+`R8-4-PRESENTATION-DELEGATION-PRESENCE-01: B`,
+`R8-4-HIGH-IMPACT-HISTORICAL-EVIDENCE-01: A`,
+`R8-4-HIGH-IMPACT-EVIDENCE-LINES-01: A`,
+`R8-4-COMPATIBILITY-PROJECTION-MANIFEST-01: A`,
+`R8-4-HIGH-IMPACT-CENTRAL-PROJECTION-01: A`,
+`R8-4-HIGH-IMPACT-COMPATIBILITY-INPUT-01: A`, and
+`R8-4-CRITICAL-ZERO-EVIDENCE-LIMIT-01: A`.
+
+Current active phase is `none` and active packet is `none` because the master sequence ends at
+R8-IMPLEMENT. **NO NEXT ELIGIBLE PHASE IS DEFINED IN THIS CONTROL PACK.** No executable Prompt 1
+selector exists; do not recycle R8-IMPLEMENT or invent a successor phase. This docs-only terminal
+transition candidate assigns that terminal target state but does not yet record its own commit hash or
+independent review result, does not claim this candidate is `CLEAN`, and starts no further phase work.
 
 ## R7-6: Minimal Sentinel Compatibility
 
@@ -682,24 +779,40 @@ compactor `39 / 39`, full analyzer `424 / 424`, full sentinel `105 / 105`, full 
 otherwise MEDIUM/LOW; no additional HIGH/CRITICAL symbol was edited. `CTX-R7-06` is `PROVEN`; the
 R7-6 exit gate is satisfied; R7-6 is complete and R7 is closed.
 
-R8-SPEC is `COMPLETE`. The complete R8 authority-family authoring/review-fix series
-`698c766f9` + `f5865fb7` + `95529809` + `0ed3d8f04` + `cfcf65507` + `2b9565fb9` +
-`b04207fb6` + `b9ce44c6f` + `904c93d0d` + `67c81c6ff` + `24e649de6` + `099f4ec2c` +
-`806e53740` is landed and received fresh independent built-in `default` `CLEAN` with no findings.
-The narrow phase-transition commit `c66ea29ea52276f9b47fba94d351db5dcd62c883` also received fresh
-independent built-in `default` `CLEAN` with no findings, so the R8-SPEC -> R8-IMPLEMENT phase
-transition and R8-IMPLEMENT entry gate are review-clean. `CTX-R8-01` is `PROVEN`, and `CTX-R8-02`
-is `PROVEN` / `SATISFIED`. R8-IMPLEMENT is the sole `ACTIVE` phase at `ENTRY ONLY` with active
-packet `none`; its entry gate is satisfied by the review-clean R8 MAP/SPEC/PLAN/TASKS and
-review-clean phase transition, but all `57` R8 implementation checkboxes remain unchecked and
-unstarted, and no R8 source or test work has begun. `CTX-R8-03` is `OPEN` / current at entry;
-`CTX-R8-04` through `CTX-R8-06` remain `BLOCKED` / `UNPROVEN` in dependency order. The four future
-HIGH symbol-decision gates `R8-2-HIGH-IMPACT-REPLAY-LOADER-01`,
-`R8-3-HIGH-IMPACT-LIVE-COMPATIBILITY-01`, `R8-3-HIGH-IMPACT-LIVE-RUNTIME-01`, and
-`R8-4-HIGH-IMPACT-EXPLICIT-STATE-01`, plus unresolved
-`R8-4-PRESENTATION-DELEGATION-PRESENCE-01`, remain pending packet-local prerequisites; they
-authorize no edits and do not invalidate R8-IMPLEMENT entry. Prompt 1 selectors
-`PHASE_ID: R8-IMPLEMENT` / `ACTIVE_PACKET: none` are prepared and eligible but `UNINVOKED`. This
-narrow Markdown-only receipt commit records the already-reviewed transition commit; the receipt assigns
-itself no commit hash or review result, does not claim to be clean, must be independently reviewed
-next, and starts no implementation.
+R8-SPEC and R8-IMPLEMENT are `COMPLETE`; the R8 family is terminally complete. The complete R8
+authority-family authoring/review-fix series `698c766f9` + `f5865fb7` + `95529809` + `0ed3d8f04` +
+`cfcf65507` + `2b9565fb9` + `b04207fb6` + `b9ce44c6f` + `904c93d0d` + `67c81c6ff` +
+`24e649de6` + `099f4ec2c` + `806e53740` received fresh independent built-in `default` `CLEAN` with
+no findings. Entry-transition commit `c66ea29ea52276f9b47fba94d351db5dcd62c883` also received fresh
+independent built-in `default` `CLEAN` with no findings. R8-1 `ec2c5da7d`, R8-2 `08e0d0e2a` +
+`5669e1f6e` + `911dd49b`, R8-3 `963a8202f`, R8-5.1 `8ef705d8a`, and R8-5.2 `2616c4651` +
+`bc64fe962` + `cb1a276b7` + `813e1db17` + `ad6340190` each received fresh independent built-in
+`default` `CLEAN` with no actionable findings. The exact R8-4 implementation/review-fix series
+`f3d19687a` + `4027e2e82` + `ae5b45408` + `ba7979b4f` + `348b34038` + `246b2fb72` +
+`888553555` + `c7bf1dcff` + `3fdbf4bd5` + `87963d46d` + `4227ae920` + `b05c7843d` +
+`c39126c1b` + `3cc2a8aba` + `49a1e7dc8` + `4552b89f6` + `910597cb7` + `c172e252a` +
+`293bbf708` + `0692cd1bc` + `00111d66a` received fresh independent built-in `default` `CLEAN` with
+no actionable findings. Five-doc R8-6 receipt `549160ebc1d93b26fdbe8203d748dfb1a64787ef` received
+fresh independent built-in `default` `CLEAN` with no findings. At implementation HEAD `ad6340190`,
+the exact final wall is Sentinel `233` passed / `0` failed and workspace `2,657` passed / `0` failed /
+`2` ignored. `CTX-R8-01..06` are `PROVEN`, and all `57` R8 implementation checkboxes/tasks are
+complete.
+
+All eleven implementation decisions remain recorded exactly as
+`R8-2-HIGH-IMPACT-REPLAY-LOADER-01: A`,
+`R8-3-HIGH-IMPACT-LIVE-COMPATIBILITY-01: A`,
+`R8-3-HIGH-IMPACT-LIVE-RUNTIME-01: A`,
+`R8-4-HIGH-IMPACT-EXPLICIT-STATE-01: A`,
+`R8-4-PRESENTATION-DELEGATION-PRESENCE-01: B`,
+`R8-4-HIGH-IMPACT-HISTORICAL-EVIDENCE-01: A`,
+`R8-4-HIGH-IMPACT-EVIDENCE-LINES-01: A`,
+`R8-4-COMPATIBILITY-PROJECTION-MANIFEST-01: A`,
+`R8-4-HIGH-IMPACT-CENTRAL-PROJECTION-01: A`,
+`R8-4-HIGH-IMPACT-COMPATIBILITY-INPUT-01: A`, and
+`R8-4-CRITICAL-ZERO-EVIDENCE-LIMIT-01: A`.
+
+Current active phase is `none` and active packet is `none` because the master sequence ends at
+R8-IMPLEMENT. **NO NEXT ELIGIBLE PHASE IS DEFINED IN THIS CONTROL PACK.** No executable Prompt 1
+selector exists; do not recycle R8-IMPLEMENT or invent a successor phase. This docs-only terminal
+transition candidate assigns that terminal target state but does not yet record its own commit hash or
+independent review result, does not claim this candidate is `CLEAN`, and starts no further phase work.
