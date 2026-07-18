@@ -59,8 +59,18 @@ set -euo pipefail
 
 log_path="${SUBSTRATE_STUB_LOG:?}"
 printf '%s\n' "$*" >>"${log_path}"
+command_args=("$@")
+expected_carrier="${SUBSTRATE_INSTALL_BOOTSTRAP_CONTEXT_V1:-}"
+if [[ -n "${expected_carrier}" ]]; then
+  [[ "${command_args[0]:-}" == "--install-bootstrap-context-v1" ]] || exit 91
+  [[ "${command_args[1]:-}" == "${expected_carrier}" ]] || exit 92
+  command_args=("${command_args[@]:2}")
+elif [[ "${command_args[0]:-}" == "--install-bootstrap-context-v1" ]]; then
+  exit 93
+fi
+command="${command_args[*]}"
 
-if [[ "$*" == "world deps global add --json codex-runtime" ]]; then
+if [[ "${command}" == "world deps global add --json codex-runtime" ]]; then
   case "${STUB_ADD_MODE:-added}" in
     added)
       printf '{"changed":["codex-runtime"]}\n'
@@ -75,15 +85,15 @@ if [[ "$*" == "world deps global add --json codex-runtime" ]]; then
   exit 0
 fi
 
-if [[ "$*" == "world deps current sync" ]]; then
+if [[ "${command}" == "world deps current sync" ]]; then
   exit "${STUB_SYNC_EXIT:-0}"
 fi
 
-if [[ "$*" == "world deps global remove codex-runtime" ]]; then
+if [[ "${command}" == "world deps global remove codex-runtime" ]]; then
   exit "${STUB_REMOVE_EXIT:-0}"
 fi
 
-if [[ "$*" == "world deps current list applied --json" ]]; then
+if [[ "${command}" == "world deps current list applied --json" ]]; then
   printf '{"items":[]}\n'
   exit 0
 fi
@@ -120,6 +130,7 @@ run_prod_install_then_sync_scenario() {
     DRY_RUN=0
     PREFIX="${work_root}/prefix"
     ORIGINAL_PATH="${PATH}"
+    resolve_install_bootstrap_context 1 "${PREFIX}" "" 0
     provision_agent_runtime_world_deps "${stub}"
     sync_world_deps "${stub}"
   )
@@ -156,6 +167,7 @@ run_prod_rollback_remediation_scenario() {
     DRY_RUN=0
     PREFIX="${work_root}/prefix"
     ORIGINAL_PATH="${PATH}"
+    resolve_install_bootstrap_context 1 "${PREFIX}" "" 0
     provision_agent_runtime_world_deps "${stub}"
     sync_world_deps "${stub}"
   )"
@@ -196,6 +208,7 @@ run_world_enable_helper_rollback_remediation_scenario() {
     DRY_RUN=0
     PREFIX="${work_root}/prefix"
     ORIGINAL_PATH="${PATH}"
+    resolve_install_bootstrap_context 1 "${PREFIX}" "" 0
     provision_agent_runtime_world_deps "${stub}"
     sync_world_deps "${stub}"
   )"
