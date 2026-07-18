@@ -4,6 +4,8 @@ mod report;
 
 pub use repair::RepairOutcome;
 pub(crate) use report::collect_report;
+#[cfg(unix)]
+pub(crate) use report::collect_report_for_context;
 pub use report::{ShimDoctorReport, WorldDepsDoctorStatus, WorldDoctorStatus};
 
 use anyhow::Result;
