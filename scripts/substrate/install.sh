@@ -1,4 +1,9 @@
 #!/usr/bin/env bash
+INSTALL_WRAPPER_INHERITED_XTRACE=0
+if [[ $- == *x* ]]; then
+  INSTALL_WRAPPER_INHERITED_XTRACE=1
+  set +x
+fi
 set -euo pipefail
 
 SCRIPT_SOURCE="${BASH_SOURCE[0]:-}"
@@ -273,8 +278,18 @@ cleanup() {
 trap cleanup EXIT
 
 if args_request_help "$@"; then
-  "${UPSTREAM_INSTALL}" "$@"
-  exit $?
+  if "${UPSTREAM_INSTALL}" "$@"; then
+    if [[ "${INSTALL_WRAPPER_INHERITED_XTRACE}" -eq 1 ]]; then
+      set -x
+    fi
+    exit 0
+  else
+    upstream_status=$?
+    if [[ "${INSTALL_WRAPPER_INHERITED_XTRACE}" -eq 1 ]]; then
+      set -x
+    fi
+    exit "${upstream_status}"
+  fi
 fi
 
 if ! resolve_public_install_bootstrap_context "${PREFIX_DECLARED}" "${PREFIX_RAW}"; then
@@ -295,12 +310,18 @@ if [[ -t 1 && -n "${BLA_braille_fill_bar[*]}" ]]; then
   LOADER_STARTED=1
 fi
 if "${UPSTREAM_INSTALL}" "${UPSTREAM_ARGS[@]}" >"${TMP_LOG}" 2>&1; then
+  if [[ "${INSTALL_WRAPPER_INHERITED_XTRACE}" -eq 1 ]]; then
+    set -x
+  fi
   stop_loader
   printf "\033[32mSubstrate install successful!\033[0m\n"
   printf "Added %s to PATH via %s.\n" "${BIN_DIR}" "${RC_TARGET}"
   printf "Open a new shell or run 'source %s' so PATH changes take effect.\n" "${RC_TARGET}"
 else
   upstream_status=$?
+  if [[ "${INSTALL_WRAPPER_INHERITED_XTRACE}" -eq 1 ]]; then
+    set -x
+  fi
   stop_loader
   echo "[substrate-install] Failed. See ${TMP_LOG} for details." >&2
   cat "${TMP_LOG}" >&2
