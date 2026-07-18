@@ -649,19 +649,79 @@ file SHA-256 fingerprints are:
 | `crates/shell/tests/config_show.rs` | `7a9819b02b507c35ef289a492cbd9c9b3e75ba462644e02914b1959b4de0f444` |
 | `crates/shell/tests/policy_discovery.rs` | `7bad42c95925c1fb8f74c277e37710c8c8d69d2e866f7d4eb4f34a65df6226d1` |
 
-GitNexus observed CRITICAL, 39 changed symbols, and the same 18 existing Route A processes, with no
-new process family or module owner. Containment is determined in this order: exact patch bytes;
-the exact eleven-file manifest and fingerprints above; the unchanged 18-process set with no new
-family; and independent semantic-diff review proving that only typed-IH forwarding through the
-Host/Health/Config/Policy arms and named consumers, the Unix crate-private context-aware exposure,
-focused test-carrier remediation, and the two runtime-neutral item-level lint annotations changed.
-The observed symbol count is diagnostic evidence after those controls. If a refreshed index changes
-only that count while every binding control remains exact, record `GitNexusAttributionDrift` and
-continue. A patch-byte/fingerprint difference, twelfth file, nineteenth process, new process family
-or module owner, or semantic expansion is an `ImpactDecisionRequired` stop. This exception is
-specific to this patch and authorizes no other HIGH/CRITICAL increment, environment/global
-authority, physical-shim migration, product capability, output, repair, cleanup, rollback, or
-lifecycle behavior.
+GitNexus observations over the identical or mechanically extended Route A bytes are diagnostic
+provenance: 33 symbols/18 process labels; 11/18 in the reverse committed comparison; 37/18; 39/18;
+and, after replay and a current-index refresh, CRITICAL with 24 attributed symbols and 31 labels.
+The incompatible raw counts and generated label sets are not stable semantic authority for this
+exact patch. Do not pin or restore a stale index.
+
+Containment is determined in this order: exact patch bytes; the exact manifest and fingerprints
+above; the exact source-level production functions and permitted tests; manual call-path mapping to
+the approved `ShellConfig::from_cli` Host/Health/Config/Policy/context-aware shim-doctor roots; no
+new source module, authority source, call path, execution-family root, side table, environment
+fallback, or lifecycle behavior; and fresh independent semantic-diff review. The exact production
+diff is limited to `ShellConfig::from_cli`, `handle_host_command`, `handle_health_command`,
+`health::run`, the crate-private shim-doctor exports, the item-level `collect_report` annotation,
+Config's handler/current-show and two explicit-bootstrap-home resolver functions, and Policy's
+handler/current-show and two explicit-bootstrap-home resolver functions. Permitted test changes are
+the mechanical Config test carrier, the two explicit-home explain tests, and the two focused
+integration tests in the manifest. No other production function changes behavior.
+
+Every fresh GitNexus result must be retained and every label mapped to one of
+`AuthorizedRouteA`, `LineOrHunkAttributionOnly`, `TestColocationOnly`, or
+`UnexpectedSemanticPath`. Count/label drift alone does not reopen the docs when the patch,
+fingerprints, source-level diff, mapping, module set, and semantic roots remain exact. Any
+`UnexpectedSemanticPath`, source edit, patch/fingerprint/manifest difference, new module or semantic
+execution root, authority source, or behavior expansion is an `ImpactDecisionRequired` stop. A
+source edit also restores ordinary pre-edit impact and fresh change-detection requirements; this
+exception does not authorize that edit. This rule is specific to this exact Route A patch and cannot
+apply to Route B–D, R2-3, another HIGH/CRITICAL increment, environment/global authority,
+physical-shim migration, product capability, output, repair, cleanup, rollback, or lifecycle
+behavior.
+
+The current refreshed 31-label attribution audit is:
+
+| Current label | Root symbol/module | Route A family | Source diff touches behavior? | Classification |
+|---|---|---|---|---|
+| `Handle_host_command → AuthorityFacadeError` | `platform::handle_host_command` | Host | Yes; typed IH selects the opened global-config root and this trace follows the new explicit-home resolver. | `AuthorizedRouteA` |
+| `Handle_host_command → New` | `platform::handle_host_command` | Host | Yes; typed IH selects the opened global-config root and this trace follows the new explicit-home resolver. | `AuthorizedRouteA` |
+| `Run → Lookup_unix_account_by_uid` | `health::run` | Health/shim-doctor | Yes; Unix Health now calls the typed context-aware collector and validates the committed principal. | `AuthorizedRouteA` |
+| `Run → As_path` | `health::run` | Health/shim-doctor | Yes at the typed collector root; the reported configuration leaf is unchanged. | `AuthorizedRouteA` |
+| `Run → WorldDisableAttribution` | `health::run` | Health/shim-doctor | Yes at the typed collector root; diagnostic classification is unchanged. | `AuthorizedRouteA` |
+| `Run → WorldDisableSource` | `health::run` | Health/shim-doctor | Yes at the typed collector root; diagnostic classification is unchanged. | `AuthorizedRouteA` |
+| `Run → As_str` | `health::run` | Health/shim-doctor | Yes at the typed collector root; the reported formatting leaf is unchanged. | `AuthorizedRouteA` |
+| `Run → Validate` | `health::run` | Health/shim-doctor | No; GitNexus joins the Unix typed Health root to the cfg-incompatible compatibility collector. | `LineOrHunkAttributionOnly` |
+| `Run → Current_dir` | `health::run` | Health/shim-doctor | No; the generated trace enters the compatibility collector before the typed collector, which typed Unix Health cannot do. | `LineOrHunkAttributionOnly` |
+| `Run → CliConfigOverrides` | `health::run` | Health/shim-doctor | No; the generated trace enters the compatibility collector before the typed collector, which typed Unix Health cannot do. | `LineOrHunkAttributionOnly` |
+| `Handle_config_command → ActionableError` | `config_cmd::handle_config_command` | Config | No; the trace is the unchanged workspace-set leaf attributed through the handler signature hunk. | `LineOrHunkAttributionOnly` |
+| `Handle_config_command → New` | `config_cmd::handle_config_command` | Config | No; the trace is the unchanged workspace-set parse-error leaf attributed through the handler signature hunk. | `LineOrHunkAttributionOnly` |
+| `Handle_config_command → Parent` | `config_cmd::handle_config_command` | Config | No; the trace is the unchanged global-init write leaf. | `LineOrHunkAttributionOnly` |
+| `Handle_config_command → Write_all` | `config_cmd::handle_config_command` | Config | No; the trace is the unchanged global-init write leaf. | `LineOrHunkAttributionOnly` |
+| `Handle_host_command → As_str` | `platform::handle_host_command` | Host | No on Unix; the trace follows the cfg-incompatible legacy resolver retained for non-Unix. | `LineOrHunkAttributionOnly` |
+| `Handle_host_command → Workspace_legacy_settings_path` | `platform::handle_host_command` | Host | No on Unix; the trace follows the cfg-incompatible legacy resolver retained for non-Unix. | `LineOrHunkAttributionOnly` |
+| `Handle_host_command → For_path` | `platform::handle_host_command` | Host | No on Unix; the trace follows the cfg-incompatible legacy resolver retained for non-Unix. | `LineOrHunkAttributionOnly` |
+| `Handle_host_command → Resolve_replace` | `platform::handle_host_command` | Host | No on Unix; the trace follows the cfg-incompatible legacy resolver retained for non-Unix. | `LineOrHunkAttributionOnly` |
+| `Handle_host_command → ConfigExplainKey` | `platform::handle_host_command` | Host | No on Unix; the trace follows the cfg-incompatible legacy resolver retained for non-Unix. | `LineOrHunkAttributionOnly` |
+| `Handle_host_command → I64ClampInfo` | `platform::handle_host_command` | Host | No on Unix; the trace follows the cfg-incompatible legacy resolver retained for non-Unix. | `LineOrHunkAttributionOnly` |
+| `Handle_host_command → ConfigExplainSource` | `platform::handle_host_command` | Host | No on Unix; the trace follows the cfg-incompatible legacy resolver retained for non-Unix. | `LineOrHunkAttributionOnly` |
+| `Handle_config_command → Exists` | `config_cmd::handle_config_command` | Config | No; the trace is the unchanged global-init existence leaf. | `LineOrHunkAttributionOnly` |
+| `Handle_config_command → Print_patch` | `config_cmd::handle_config_command` | Config | No; the trace is the unchanged global-show leaf, not current-show. | `LineOrHunkAttributionOnly` |
+| `Handle_policy_command → Parent` | `policy_cmd::handle_policy_command` | Policy | No; the trace is the unchanged workspace-init write leaf. | `LineOrHunkAttributionOnly` |
+| `Handle_policy_command → Write_all` | `policy_cmd::handle_policy_command` | Policy | No; the trace is the unchanged workspace-init write leaf. | `LineOrHunkAttributionOnly` |
+| `Handle_policy_command → As_bytes` | `policy_cmd::handle_policy_command` | Policy | No; the trace is the unchanged workspace-init hashing/write leaf. | `LineOrHunkAttributionOnly` |
+| `Handle_policy_command → Exists` | `policy_cmd::handle_policy_command` | Policy | No; the trace is the unchanged global-init existence leaf. | `LineOrHunkAttributionOnly` |
+| `Handle_policy_command → Invalidate_policy_snapshot_cache` | `policy_cmd::handle_policy_command` | Policy | No; the trace is the unchanged global-init cache invalidation leaf. | `LineOrHunkAttributionOnly` |
+| `Handle_policy_command → Print_patch` | `policy_cmd::handle_policy_command` | Policy | No; the trace is the unchanged global-show leaf, not current-show. | `LineOrHunkAttributionOnly` |
+| `Handle_policy_command → Current_dir` | `policy_cmd::handle_policy_command` | Policy | No; the trace is the unchanged workspace-show leaf, not current-show. | `LineOrHunkAttributionOnly` |
+| `Handle_host_command → As_path` | `platform::handle_host_command` | Host | No on Unix; the trace follows the cfg-incompatible legacy resolver retained for non-Unix. | `LineOrHunkAttributionOnly` |
+
+The three labels recorded in the prior 18-label output but absent after refresh are also mapped:
+
+| Historical label now absent | Root/family | Source-level account | Classification |
+|---|---|---|---|
+| `Run → Encode` | `health::run`; Health/shim-doctor | No Route A source hunk encodes a carrier; this was generated attribution breadth. | `LineOrHunkAttributionOnly` |
+| `Handle_host_command → WorldDisableAttribution` | `platform::handle_host_command`; Host | Typed IH changes selected config input; the diagnostic classification leaf remains unchanged. | `AuthorizedRouteA` |
+| `Handle_host_command → WorldDisableSource` | `platform::handle_host_command`; Host | Typed IH changes selected config input; the diagnostic classification leaf remains unchanged. | `AuthorizedRouteA` |
 
 ##### Hidden installer bootstrap action
 
