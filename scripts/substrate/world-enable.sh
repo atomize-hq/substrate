@@ -1,4 +1,7 @@
 #!/usr/bin/env bash
+if [[ $- == *x* ]]; then
+  set +x
+fi
 set -euo pipefail
 
 # shellcheck disable=SC2034
@@ -14,13 +17,22 @@ fi
 # Reuse installer helpers (log/run_cmd/provision functions)
 source "${SCRIPT_DIR}/install-substrate.sh"
 
-PREFIX="${SUBSTRATE_HOME:-${HOME}/.substrate}"
+PREFIX=""
+PREFIX_DECLARED=0
 PROFILE="release"
 DRY_RUN=0
 VERBOSE=0
 FORCE=0
 SYNC_DEPS=1
 NO_SYNC_DEPS_REQUESTED=0
+HELP_REQUESTED=0
+INTERNAL_CHILD_OPTION_PRESENT=0
+for arg in "$@"; do
+  if [[ "${arg}" == "--install-bootstrap-context-v1" ]]; then
+    INTERNAL_CHILD_OPTION_PRESENT=1
+    break
+  fi
+done
 
 usage() {
   cat <<'USAGE'
@@ -29,7 +41,7 @@ Substrate World Enable Helper
 Usage: world-enable.sh [options]
 
 Options:
-  --home <path>      Substrate home to update (default: $SUBSTRATE_HOME or ~/.substrate)
+  --home <path>      Substrate home to update (default: current account-database home/.substrate)
   --profile <name>   Provisioning profile label for logging (default: release)
   --dry-run          Show the provisioning commands without executing
   --verbose          Print verbose execution details
@@ -46,8 +58,18 @@ while [[ $# -gt 0 ]]; do
   case "$1" in
     --home)
       [[ $# -lt 2 ]] && fatal "Missing value for --home"
+      [[ "${PREFIX_DECLARED}" -eq 1 ]] && fatal "Duplicate --home"
+      [[ -z "$2" ]] && fatal "Empty value for --home"
       PREFIX="$2"
-      export SUBSTRATE_HOME="${PREFIX}"
+      PREFIX_DECLARED=1
+      shift 2
+      ;;
+    --install-bootstrap-context-v1)
+      [[ $# -lt 2 ]] && fatal "Missing value for --install-bootstrap-context-v1"
+      [[ "${INSTALL_BOOTSTRAP_CONTEXT_DECLARED}" -eq 1 ]] && fatal "Duplicate --install-bootstrap-context-v1"
+      [[ -z "$2" ]] && fatal "Empty value for --install-bootstrap-context-v1"
+      INSTALL_BOOTSTRAP_CONTEXT_V1="$2"
+      INSTALL_BOOTSTRAP_CONTEXT_DECLARED=1
       shift 2
       ;;
     --profile)
@@ -78,14 +100,35 @@ while [[ $# -gt 0 ]]; do
       shift
       ;;
     -h|--help)
-      usage
-      exit 0
+      if [[ "${INTERNAL_CHILD_OPTION_PRESENT}" -eq 0 ]]; then
+        usage
+        exit 0
+      fi
+      HELP_REQUESTED=1
+      shift
       ;;
     *)
       fatal "Unknown option: $1"
       ;;
   esac
 done
+
+if [[ "${INTERNAL_CHILD_OPTION_PRESENT}" -eq 1 && "${INSTALL_BOOTSTRAP_CONTEXT_DECLARED}" -ne 1 ]]; then
+  fatal "Missing value for --install-bootstrap-context-v1"
+fi
+if [[ "${INSTALL_BOOTSTRAP_CONTEXT_DECLARED}" -eq 1 && "${PREFIX_DECLARED}" -ne 1 ]]; then
+  fatal "Internal world-enable child requires --home"
+fi
+resolve_install_bootstrap_context \
+  "${PREFIX_DECLARED}" \
+  "${PREFIX}" \
+  "${INSTALL_BOOTSTRAP_CONTEXT_V1}" \
+  "${INSTALL_BOOTSTRAP_CONTEXT_DECLARED}"
+
+if [[ "${HELP_REQUESTED}" -eq 1 ]]; then
+  usage
+  exit 0
+fi
 
 validate_agent_runtime_provision_request
 
@@ -122,7 +165,7 @@ if [[ ${DRY_RUN} -eq 0 ]]; then
   if [[ ! -x "${substrate_bin}" ]]; then
     fatal "substrate binary not found at ${substrate_bin}. Did you install to ${PREFIX}?"
   fi
-  primary_user="$(detect_primary_user)"
+  primary_user="${INSTALL_BOOTSTRAP_ACCOUNT}"
   bootstrap_private_substrate_home "${substrate_bin}" "${primary_user}"
 fi
 
