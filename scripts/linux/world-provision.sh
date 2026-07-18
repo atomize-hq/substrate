@@ -32,7 +32,191 @@ CODEX_ACCOUNT_ID_ENV="SUBSTRATE_LLM_BACKEND_AUTH_CLI_CODEX_ACCOUNT_ID"
 CODEX_ACCESS_TOKEN_ENV="SUBSTRATE_LLM_BACKEND_AUTH_CLI_CODEX_ACCESS_TOKEN"
 GATEWAY_PROOF_ELIGIBLE=0
 GATEWAY_PROOF_AUTH_MODE=""
+INSTALL_PREFIX=""
+INSTALL_PREFIX_DECLARED=0
+INSTALL_BOOTSTRAP_CONTEXT_V1=""
+INSTALL_BOOTSTRAP_CONTEXT_DECLARED=0
+INSTALL_BOOTSTRAP_COMMITMENT=""
+INSTALL_BOOTSTRAP_ACCOUNT=""
+INSTALL_BOOTSTRAP_UID=""
+INSTALL_BOOTSTRAP_ACCOUNT_HOME=""
+readonly PRIVILEGED_TOOL_PATH="/usr/local/sbin:/usr/local/bin:/usr/sbin:/usr/bin:/sbin:/bin"
 declare -a GATEWAY_PROOF_SKIP_REASONS=()
+
+resolve_install_bootstrap_context() {
+    local declared="$1"
+    local raw_prefix="$2"
+    local supplied_carrier="$3"
+    local carrier_declared="$4"
+    local context_fd
+
+    exec {context_fd}< <(python3 - "${declared}" "${raw_prefix}" "${supplied_carrier}" "${carrier_declared}" <<'PY'
+import base64
+import hashlib
+import os
+import pwd
+import re
+import sys
+
+DOMAIN = "substrate.install_bootstrap_context"
+KEYS = (
+    "domain", "version", "selected_host_prefix", "host_substrate_home",
+    "host_substrate_root", "principal_kind", "principal_account",
+    "principal_uid", "host_context_commitment",
+)
+
+
+def fail():
+    raise ValueError("invalid install bootstrap context")
+
+
+def normalize_path(raw):
+    if not raw or raw == "/" or not raw.startswith("/") or raw.startswith("//") or "\0" in raw:
+        fail()
+    parts = []
+    for part in raw[1:].split("/"):
+        if not part:
+            continue
+        if part in (".", ".."):
+            fail()
+        parts.append(part)
+    if not parts:
+        fail()
+    return "/" + "/".join(parts)
+
+
+def b64_encode(value):
+    return base64.urlsafe_b64encode(value).rstrip(b"=")
+
+
+def b64_decode(value):
+    if not value or not re.fullmatch(rb"[A-Za-z0-9_-]+", value):
+        fail()
+    decoded = base64.urlsafe_b64decode(value + b"=" * ((-len(value)) % 4))
+    if b64_encode(decoded) != value:
+        fail()
+    return decoded.decode("utf-8")
+
+
+def current_principal():
+    uid = os.geteuid()
+    if uid == 0 or uid > 0xFFFFFFFF:
+        fail()
+    entry = pwd.getpwuid(uid)
+    if not entry.pw_name or pwd.getpwnam(entry.pw_name).pw_uid != uid:
+        fail()
+    if any(ch in entry.pw_name for ch in "\0\r\n"):
+        fail()
+    return entry, uid
+
+
+def frame(prefix, account, uid):
+    encoded_prefix = b64_encode(prefix.encode("utf-8")).decode("ascii")
+    return (
+        f"domain={DOMAIN}\nversion=1\nselected_host_prefix={encoded_prefix}\n"
+        f"host_substrate_home={encoded_prefix}\nhost_substrate_root={encoded_prefix}\n"
+        f"principal_kind=unix\nprincipal_account={b64_encode(account.encode('utf-8')).decode('ascii')}\n"
+        f"principal_uid={uid}\n"
+    ).encode("ascii")
+
+
+def decode_carrier(encoded):
+    raw_encoded = encoded.encode("ascii")
+    if not raw_encoded or not re.fullmatch(rb"[A-Za-z0-9_-]+", raw_encoded):
+        fail()
+    record = base64.urlsafe_b64decode(raw_encoded + b"=" * ((-len(raw_encoded)) % 4))
+    if b64_encode(record) != raw_encoded or not record.endswith(b"\n") or b"\r" in record or b"\0" in record:
+        fail()
+    lines = record[:-1].split(b"\n")
+    if len(lines) != len(KEYS):
+        fail()
+    values = {}
+    for expected, line in zip(KEYS, lines):
+        if line.count(b"=") != 1:
+            fail()
+        key, value = line.split(b"=", 1)
+        if key.decode("ascii") != expected:
+            fail()
+        values[expected] = value
+    if values["domain"] != DOMAIN.encode("ascii") or values["version"] != b"1" or values["principal_kind"] != b"unix":
+        fail()
+    prefix = normalize_path(b64_decode(values["selected_host_prefix"]))
+    if b64_decode(values["host_substrate_home"]) != prefix or b64_decode(values["host_substrate_root"]) != prefix:
+        fail()
+    account = b64_decode(values["principal_account"])
+    raw_uid = values["principal_uid"]
+    if not re.fullmatch(rb"0|[1-9][0-9]*", raw_uid):
+        fail()
+    uid = int(raw_uid)
+    if uid == 0 or uid > 0xFFFFFFFF:
+        fail()
+    commitment = values["host_context_commitment"].decode("ascii")
+    if not re.fullmatch(r"[0-9a-f]{64}", commitment):
+        fail()
+    expected_frame = frame(prefix, account, uid)
+    if record != expected_frame + b"host_context_commitment=" + commitment.encode("ascii") + b"\n":
+        fail()
+    if hashlib.sha256(expected_frame).hexdigest() != commitment:
+        fail()
+    return prefix, account, uid, commitment
+
+
+try:
+    declared = sys.argv[1] == "1"
+    raw_prefix = sys.argv[2]
+    supplied = sys.argv[3]
+    internal = sys.argv[4] == "1"
+    entry, current_uid = current_principal()
+    if internal:
+        prefix, account, uid, commitment = decode_carrier(supplied)
+        if account != entry.pw_name or uid != current_uid:
+            fail()
+        if declared and normalize_path(raw_prefix) != prefix:
+            fail()
+        expected = {
+            "SUBSTRATE_HOME": prefix,
+            "SUBSTRATE_ROOT": prefix,
+            "SUBSTRATE_INSTALL_HOST_CONTEXT_COMMITMENT": commitment,
+            "SUBSTRATE_INSTALL_PRIMARY_USER": account,
+            "SUBSTRATE_INSTALL_PRIMARY_UID": str(uid),
+            "SUBSTRATE_INSTALL_BOOTSTRAP_CONTEXT_V1": supplied,
+        }
+        for key, value in expected.items():
+            if key in os.environ and os.environ[key] != value:
+                fail()
+        carrier = supplied
+    else:
+        prefix = normalize_path(raw_prefix if declared else entry.pw_dir.rstrip("/") + "/.substrate")
+        account = entry.pw_name
+        uid = current_uid
+        commitment_input = frame(prefix, account, uid)
+        commitment = hashlib.sha256(commitment_input).hexdigest()
+        carrier = b64_encode(
+            commitment_input + f"host_context_commitment={commitment}\n".encode("ascii")
+        ).decode("ascii")
+    account_home = normalize_path(entry.pw_dir)
+    for value in (prefix, carrier, commitment, account, str(uid), account_home):
+        sys.stdout.buffer.write(value.encode("utf-8") + b"\0")
+except Exception:
+    print("invalid install bootstrap context", file=sys.stderr)
+    raise SystemExit(2)
+PY
+    )
+    IFS= read -r -d '' INSTALL_PREFIX <&"${context_fd}" || return 2
+    IFS= read -r -d '' INSTALL_BOOTSTRAP_CONTEXT_V1 <&"${context_fd}" || return 2
+    IFS= read -r -d '' INSTALL_BOOTSTRAP_COMMITMENT <&"${context_fd}" || return 2
+    IFS= read -r -d '' INSTALL_BOOTSTRAP_ACCOUNT <&"${context_fd}" || return 2
+    IFS= read -r -d '' INSTALL_BOOTSTRAP_UID <&"${context_fd}" || return 2
+    IFS= read -r -d '' INSTALL_BOOTSTRAP_ACCOUNT_HOME <&"${context_fd}" || return 2
+    exec {context_fd}<&-
+
+    export SUBSTRATE_HOME="${INSTALL_PREFIX}"
+    export SUBSTRATE_ROOT="${INSTALL_PREFIX}"
+    export SUBSTRATE_INSTALL_HOST_CONTEXT_COMMITMENT="${INSTALL_BOOTSTRAP_COMMITMENT}"
+    export SUBSTRATE_INSTALL_PRIMARY_USER="${INSTALL_BOOTSTRAP_ACCOUNT}"
+    export SUBSTRATE_INSTALL_PRIMARY_UID="${INSTALL_BOOTSTRAP_UID}"
+    export SUBSTRATE_INSTALL_BOOTSTRAP_CONTEXT_V1="${INSTALL_BOOTSTRAP_CONTEXT_V1}"
+}
 
 is_wsl_host() {
     grep -qi microsoft /proc/version 2>/dev/null
@@ -46,6 +230,24 @@ show_cmd() {
     printf '\n'
 }
 
+systemd_escape_unit_value() {
+    python3 - "$1" <<'PY'
+import sys
+
+raw = sys.argv[1].encode("utf-8")
+safe = b"ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789/._:-"
+out = []
+for byte in raw:
+    if byte == 0x25:
+        out.append("%%")
+    elif byte in safe:
+        out.append(chr(byte))
+    else:
+        out.append(f"\\x{byte:02x}")
+print("".join(out))
+PY
+}
+
 run_cmd() {
     if [[ ${DRY_RUN} -eq 1 ]]; then
         show_cmd "$@"
@@ -55,10 +257,31 @@ run_cmd() {
 }
 
 sudo_cmd() {
-    if [[ ${SUDO_NONINTERACTIVE} -eq 1 ]]; then
-        run_cmd sudo -n "$@"
+    local tool="$1"
+    shift
+    local tool_path=""
+    if [[ "${tool}" == */* ]]; then
+        tool_path="${tool}"
     else
-        run_cmd sudo "$@"
+        tool_path="$(command -v "${tool}" 2>/dev/null || true)"
+    fi
+    if [[ -z "${tool_path}" ]]; then
+        echo "Unable to resolve privileged tool: ${tool}" >&2
+        return 127
+    fi
+    local -a scrubbed_command=(
+        env -i
+        "PATH=${PRIVILEGED_TOOL_PATH}"
+        "HOME=/root"
+        "USER=root"
+        "LOGNAME=root"
+        "${tool_path}"
+        "$@"
+    )
+    if [[ ${SUDO_NONINTERACTIVE} -eq 1 ]]; then
+        run_cmd sudo -n "${scrubbed_command[@]}"
+    else
+        run_cmd sudo "${scrubbed_command[@]}"
     fi
 }
 
@@ -146,11 +369,15 @@ evaluate_gateway_lifecycle_proof_eligibility() {
     fi
 
     echo "==> Evaluating gateway lifecycle proof eligibility"
-    if ! config_json="$("${substrate_cli}" config current show --json)"; then
+    if ! config_json="$("${substrate_cli}" \
+        --install-bootstrap-context-v1 "${INSTALL_BOOTSTRAP_CONTEXT_V1}" \
+        config current show --json)"; then
         gateway_proof_skip_reason "Unable to read effective config via '${substrate_cli} config current show --json'."
         return 0
     fi
-    if ! policy_json="$("${substrate_cli}" policy current show --json)"; then
+    if ! policy_json="$("${substrate_cli}" \
+        --install-bootstrap-context-v1 "${INSTALL_BOOTSTRAP_CONTEXT_V1}" \
+        policy current show --json)"; then
         gateway_proof_skip_reason "Unable to read effective policy via '${substrate_cli} policy current show --json'."
         return 0
     fi
@@ -225,7 +452,8 @@ print_gateway_lifecycle_proof_skip() {
 }
 
 prepare_gateway_smoke_auth() {
-    local auth_path="${INVOKING_HOME}/.codex/auth.json"
+    local account_home="$1"
+    local auth_path="${account_home}/.codex/auth.json"
     if [[ -f "${auth_path}" ]]; then
         printf '%s\n' "present"
         return 0
@@ -239,7 +467,7 @@ prepare_gateway_smoke_auth() {
   "access_token": "header.payload.signature"
 }
 JSON
-    install -d -m0700 "${INVOKING_HOME}/.codex"
+    install -d -m0700 "${account_home}/.codex"
     install -m0600 "${tmp}" "${auth_path}"
     rm -f "${tmp}"
     printf '%s\n' "created"
@@ -262,7 +490,7 @@ run_gateway_lifecycle_proof() {
 
     echo "==> Running gateway lifecycle proof (auth: ${auth_mode})"
     if [[ "${auth_mode}" == "synthetic_auth_file" ]]; then
-        auth_state="$(prepare_gateway_smoke_auth)"
+        auth_state="$(prepare_gateway_smoke_auth "${INSTALL_BOOTSTRAP_ACCOUNT_HOME}")"
         if [[ "${auth_state}" == "created" ]]; then
             cleanup_auth=1
         fi
@@ -271,15 +499,15 @@ run_gateway_lifecycle_proof() {
     set +e
     (
         cd "${REPO_ROOT}"
-        "${substrate_cli}" world gateway sync
-        status_json="$("${substrate_cli}" world gateway status --json)"
+        "${substrate_cli}" --install-bootstrap-context-v1 "${INSTALL_BOOTSTRAP_CONTEXT_V1}" world gateway sync
+        status_json="$("${substrate_cli}" --install-bootstrap-context-v1 "${INSTALL_BOOTSTRAP_CONTEXT_V1}" world gateway status --json)"
         if [[ "${status_json}" != *'"status":"available"'* ]]; then
             echo "gateway status did not report available: ${status_json}" >&2
             exit 1
         fi
 
-        "${substrate_cli}" world gateway restart
-        status_json="$("${substrate_cli}" world gateway status --json)"
+        "${substrate_cli}" --install-bootstrap-context-v1 "${INSTALL_BOOTSTRAP_CONTEXT_V1}" world gateway restart
+        status_json="$("${substrate_cli}" --install-bootstrap-context-v1 "${INSTALL_BOOTSTRAP_CONTEXT_V1}" world gateway status --json)"
         if [[ "${status_json}" != *'"status":"available"'* ]]; then
             echo "gateway status after restart did not report available: ${status_json}" >&2
             exit 1
@@ -319,9 +547,9 @@ maybe_run_gateway_lifecycle_proof() {
 
     if [[ ${DRY_RUN} -eq 1 ]]; then
         echo "==> Gateway lifecycle proof eligible (auth: ${GATEWAY_PROOF_AUTH_MODE})"
-        show_cmd "${substrate_cli}" world gateway sync
-        show_cmd "${substrate_cli}" world gateway status --json
-        show_cmd "${substrate_cli}" world gateway restart
+        show_cmd "${substrate_cli}" --install-bootstrap-context-v1 "${INSTALL_BOOTSTRAP_CONTEXT_V1}" world gateway sync
+        show_cmd "${substrate_cli}" --install-bootstrap-context-v1 "${INSTALL_BOOTSTRAP_CONTEXT_V1}" world gateway status --json
+        show_cmd "${substrate_cli}" --install-bootstrap-context-v1 "${INSTALL_BOOTSTRAP_CONTEXT_V1}" world gateway restart
         echo "[dry-run] curl --fail --silent http://127.0.0.1:<gateway-port>/health"
         return 0
     fi
@@ -537,6 +765,7 @@ usage() {
 Usage: scripts/linux/world-provision.sh [options]
 
 Options:
+  --home <path>      Select the installed Substrate host prefix
   --profile <name>   Cargo profile to build (default: release)
   --skip-build       Assume target/<profile>/world-service already exists
   --dry-run          Print the provisioning steps without executing them
@@ -548,6 +777,32 @@ USAGE
 
 while [[ $# -gt 0 ]]; do
     case "$1" in
+        --home)
+            if [[ $# -lt 2 || -z "$2" ]]; then
+                echo "--home requires a nonempty value" >&2
+                exit 2
+            fi
+            if [[ "${INSTALL_PREFIX_DECLARED}" -eq 1 ]]; then
+                echo "duplicate --home" >&2
+                exit 2
+            fi
+            INSTALL_PREFIX="$2"
+            INSTALL_PREFIX_DECLARED=1
+            shift 2
+            ;;
+        --install-bootstrap-context-v1)
+            if [[ $# -lt 2 || -z "$2" ]]; then
+                echo "--install-bootstrap-context-v1 requires a nonempty value" >&2
+                exit 2
+            fi
+            if [[ "${INSTALL_BOOTSTRAP_CONTEXT_DECLARED}" -eq 1 ]]; then
+                echo "duplicate --install-bootstrap-context-v1" >&2
+                exit 2
+            fi
+            INSTALL_BOOTSTRAP_CONTEXT_V1="$2"
+            INSTALL_BOOTSTRAP_CONTEXT_DECLARED=1
+            shift 2
+            ;;
         --profile)
             PROFILE="$2"
             shift 2
@@ -593,7 +848,17 @@ MSG
     exit 4
 fi
 
-INVOKING_USER="$(detect_invoking_user)"
+if ! resolve_install_bootstrap_context \
+    "${INSTALL_PREFIX_DECLARED}" \
+    "${INSTALL_PREFIX}" \
+    "${INSTALL_BOOTSTRAP_CONTEXT_V1}" \
+    "${INSTALL_BOOTSTRAP_CONTEXT_DECLARED}"; then
+    echo "Unable to resolve install bootstrap context." >&2
+    exit 2
+fi
+
+INVOKING_USER="${INSTALL_BOOTSTRAP_ACCOUNT}"
+INVOKING_HOME="${INSTALL_BOOTSTRAP_ACCOUNT_HOME}"
 
 SCRIPT_DIR=$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)
 REPO_ROOT=$(cd "${SCRIPT_DIR}/../.." && pwd)
@@ -644,27 +909,31 @@ if [[ ${DRY_RUN} -eq 0 && ! -f "${ACL_HELPER_SOURCE_PATH}" ]]; then
     exit 1
 fi
 
-SUBSTRATE_HOME_FOR_AGENT="${SUBSTRATE_HOME:-}"
-if [[ -z "${SUBSTRATE_HOME_FOR_AGENT}" ]]; then
-    INVOKING_HOME="$(getent passwd "${INVOKING_USER}" 2>/dev/null | cut -d: -f6 || true)"
-    if [[ -z "${INVOKING_HOME}" ]]; then
-        INVOKING_HOME="/home/${INVOKING_USER}"
-    fi
-    SUBSTRATE_HOME_FOR_AGENT="${INVOKING_HOME}/.substrate"
-fi
-if [[ -z "${INVOKING_HOME}" ]]; then
-    INVOKING_HOME="$(dirname "${SUBSTRATE_HOME_FOR_AGENT}")"
-fi
+SUBSTRATE_HOME_FOR_AGENT="${INSTALL_PREFIX}"
 SUBSTRATE_HOME_RW_PATH="${SUBSTRATE_HOME_FOR_AGENT}"
 
 echo "==> Validating private SUBSTRATE_HOME for ${INVOKING_USER}"
 if [[ ${DRY_RUN} -eq 1 ]]; then
-    show_cmd env "SUBSTRATE_HOME=${SUBSTRATE_HOME_FOR_AGENT}" \
+    show_cmd env \
+        "SUBSTRATE_HOME=${SUBSTRATE_HOME_FOR_AGENT}" \
+        "SUBSTRATE_ROOT=${SUBSTRATE_HOME_FOR_AGENT}" \
+        "SUBSTRATE_INSTALL_HOST_CONTEXT_COMMITMENT=${INSTALL_BOOTSTRAP_COMMITMENT}" \
         "SUBSTRATE_INSTALL_PRIMARY_USER=${INVOKING_USER}" \
-        "${SUBSTRATE_CLI_BIN_PATH}" --version
-elif ! env "SUBSTRATE_HOME=${SUBSTRATE_HOME_FOR_AGENT}" \
+        "SUBSTRATE_INSTALL_PRIMARY_UID=${INSTALL_BOOTSTRAP_UID}" \
+        "SUBSTRATE_INSTALL_BOOTSTRAP_CONTEXT_V1=${INSTALL_BOOTSTRAP_CONTEXT_V1}" \
+        "${SUBSTRATE_CLI_BIN_PATH}" \
+        --install-bootstrap-context-v1 "${INSTALL_BOOTSTRAP_CONTEXT_V1}" \
+        --install-bootstrap-home-v1
+elif ! env \
+    "SUBSTRATE_HOME=${SUBSTRATE_HOME_FOR_AGENT}" \
+    "SUBSTRATE_ROOT=${SUBSTRATE_HOME_FOR_AGENT}" \
+    "SUBSTRATE_INSTALL_HOST_CONTEXT_COMMITMENT=${INSTALL_BOOTSTRAP_COMMITMENT}" \
     "SUBSTRATE_INSTALL_PRIMARY_USER=${INVOKING_USER}" \
-    "${SUBSTRATE_CLI_BIN_PATH}" --version >/dev/null; then
+    "SUBSTRATE_INSTALL_PRIMARY_UID=${INSTALL_BOOTSTRAP_UID}" \
+    "SUBSTRATE_INSTALL_BOOTSTRAP_CONTEXT_V1=${INSTALL_BOOTSTRAP_CONTEXT_V1}" \
+    "${SUBSTRATE_CLI_BIN_PATH}" \
+    --install-bootstrap-context-v1 "${INSTALL_BOOTSTRAP_CONTEXT_V1}" \
+    --install-bootstrap-home-v1 >/dev/null; then
     echo "Private SUBSTRATE_HOME bootstrap rejected ${SUBSTRATE_HOME_FOR_AGENT}; no existing root was repaired." >&2
     exit 5
 fi
@@ -681,6 +950,12 @@ if [[ "${ENABLE_WORLD_NETFILTER}" -eq 1 ]]; then
     NETFILTER_ENV_LINE="Environment=WORLD_NETFILTER_ENABLE=1"
 fi
 
+SYSTEMD_SUBSTRATE_HOME="$(systemd_escape_unit_value "${SUBSTRATE_HOME_FOR_AGENT}")"
+SYSTEMD_COMMITMENT="$(systemd_escape_unit_value "${INSTALL_BOOTSTRAP_COMMITMENT}")"
+SYSTEMD_ACCOUNT="$(systemd_escape_unit_value "${INSTALL_BOOTSTRAP_ACCOUNT}")"
+SYSTEMD_UID="$(systemd_escape_unit_value "${INSTALL_BOOTSTRAP_UID}")"
+SYSTEMD_CARRIER="$(systemd_escape_unit_value "${INSTALL_BOOTSTRAP_CONTEXT_V1}")"
+
 read -r -d '' SERVICE_UNIT_CONTENT <<UNIT || true
 [Unit]
 Description=Substrate World Service
@@ -695,7 +970,12 @@ RestartSec=5
 Environment=RUST_LOG=info
 Environment=SUBSTRATE_AGENT_TCP_PORT=61337
 Environment=SUBSTRATE_WORLD_SOCKET=/run/substrate.sock
-Environment=SUBSTRATE_HOME=${SUBSTRATE_HOME_FOR_AGENT}
+Environment="SUBSTRATE_HOME=${SYSTEMD_SUBSTRATE_HOME}"
+Environment="SUBSTRATE_ROOT=${SYSTEMD_SUBSTRATE_HOME}"
+Environment="SUBSTRATE_INSTALL_HOST_CONTEXT_COMMITMENT=${SYSTEMD_COMMITMENT}"
+Environment="SUBSTRATE_INSTALL_PRIMARY_USER=${SYSTEMD_ACCOUNT}"
+Environment="SUBSTRATE_INSTALL_PRIMARY_UID=${SYSTEMD_UID}"
+Environment="SUBSTRATE_INSTALL_BOOTSTRAP_CONTEXT_V1=${SYSTEMD_CARRIER}"
 ${NETFILTER_ENV_LINE}
 Group=substrate
 UMask=0027
@@ -709,7 +989,7 @@ StandardError=journal
 NoNewPrivileges=yes
 ProtectSystem=strict
 ProtectHome=read-only
-ReadWritePaths=${SUBSTRATE_HOME_RW_PATH} /var/lib/substrate /run /run/substrate /sys/fs/cgroup /tmp
+ReadWritePaths="${SYSTEMD_SUBSTRATE_HOME}" /var/lib/substrate /run /run/substrate /sys/fs/cgroup /tmp
 CapabilityBoundingSet=CAP_NET_ADMIN CAP_NET_BIND_SERVICE CAP_SYS_ADMIN CAP_SYS_CHROOT CAP_DAC_OVERRIDE CAP_CHOWN CAP_SYS_PTRACE
 AmbientCapabilities=CAP_NET_ADMIN CAP_NET_BIND_SERVICE CAP_SYS_ADMIN CAP_SYS_CHROOT CAP_DAC_OVERRIDE CAP_CHOWN CAP_SYS_PTRACE
 

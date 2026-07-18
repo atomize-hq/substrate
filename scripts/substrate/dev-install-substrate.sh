@@ -15,6 +15,7 @@ fatal_with_code() {
 
 readonly DISTRO_UNKNOWN_SENTINEL="<unknown>"
 readonly SUPPORTED_PKG_MANAGERS=(apt-get dnf yum pacman zypper)
+readonly PRIVILEGED_TOOL_PATH="/usr/local/sbin:/usr/local/bin:/usr/sbin:/usr/bin:/sbin:/bin"
 PROVISION_AGENT_RUNTIME_ADDED_BY_INSTALLER=0
 
 resolve_install_bootstrap_context() {
@@ -284,7 +285,9 @@ rollback_agent_runtime_after_failed_sync() {
   local runtime_path="$3"
   local original_path="${PATH}"
 
-  if PATH="${runtime_path}" SHIM_ORIGINAL_PATH="${original_path}" SUBSTRATE_ROOT="${PREFIX}" SUBSTRATE_HOME="${PREFIX}" "${substrate_bin}" world deps global remove "${deps_item}"; then
+  if PATH="${runtime_path}" SHIM_ORIGINAL_PATH="${original_path}" SUBSTRATE_ROOT="${PREFIX}" SUBSTRATE_HOME="${PREFIX}" \
+    "${substrate_bin}" --install-bootstrap-context-v1 "${INSTALL_BOOTSTRAP_CONTEXT_V1}" \
+    world deps global remove "${deps_item}"; then
     warn "Rolled back world deps global enable for '${deps_item}' after sync failure."
     return 0
   fi
@@ -313,7 +316,9 @@ provision_agent_runtime_with_sync() {
 
   log "Enabling agent runtime '${PROVISION_AGENT_RUNTIME}' globally via world deps item '${deps_item}'. The dev installer will run 'substrate world deps current sync' immediately after this step."
   local add_output
-  add_output="$(PATH="${runtime_path}" SHIM_ORIGINAL_PATH="${original_path}" SUBSTRATE_ROOT="${PREFIX}" SUBSTRATE_HOME="${PREFIX}" "${substrate_bin}" world deps global add --json "${deps_item}")"
+  add_output="$(PATH="${runtime_path}" SHIM_ORIGINAL_PATH="${original_path}" SUBSTRATE_ROOT="${PREFIX}" SUBSTRATE_HOME="${PREFIX}" \
+    "${substrate_bin}" --install-bootstrap-context-v1 "${INSTALL_BOOTSTRAP_CONTEXT_V1}" \
+    world deps global add --json "${deps_item}")"
   if grep -Fq "\"${deps_item}\"" <<<"${add_output}"; then
     PROVISION_AGENT_RUNTIME_ADDED_BY_INSTALLER=1
   else
@@ -323,7 +328,9 @@ provision_agent_runtime_with_sync() {
   log "Syncing world dependencies via 'substrate world deps current sync' for --provision-agent-runtime ${PROVISION_AGENT_RUNTIME}..."
   log "This step may download the guest runtime inside the world and can take several minutes. Current world-deps script installs return output only after the guest command exits."
   local rc=0
-  if PATH="${runtime_path}" SHIM_ORIGINAL_PATH="${original_path}" SUBSTRATE_ROOT="${PREFIX}" SUBSTRATE_HOME="${PREFIX}" "${substrate_bin}" world deps current sync; then
+  if PATH="${runtime_path}" SHIM_ORIGINAL_PATH="${original_path}" SUBSTRATE_ROOT="${PREFIX}" SUBSTRATE_HOME="${PREFIX}" \
+    "${substrate_bin}" --install-bootstrap-context-v1 "${INSTALL_BOOTSTRAP_CONTEXT_V1}" \
+    world deps current sync; then
     return
   else
     rc=$?
@@ -350,20 +357,43 @@ provision_agent_runtime_with_sync() {
 }
 
 run_privileged() {
-  if [[ ${EUID} -eq 0 ]]; then
+  local tool="$1"
+  shift
+  local tool_path=""
+  if [[ "${tool}" == */* ]]; then
+    tool_path="${tool}"
+  else
+    tool_path="$(command -v "${tool}" 2>/dev/null || true)"
+  fi
+  if [[ -z "${tool_path}" ]]; then
+    warn "Unable to resolve privileged tool: ${tool}"
+    return 127
+  fi
+  local -a scrubbed_command=(
+    env -i
+    "PATH=${PRIVILEGED_TOOL_PATH}"
+    "HOME=/root"
+    "USER=root"
+    "LOGNAME=root"
+    "${tool_path}"
     "$@"
+  )
+  if [[ ${EUID} -eq 0 ]]; then
+    "${scrubbed_command[@]}"
     return $?
   fi
   if command -v sudo >/dev/null 2>&1; then
-    if sudo -n true >/dev/null 2>&1; then
-      sudo -n "$@"
+    local true_path
+    true_path="$(command -v true)"
+    if sudo -n env -i "PATH=${PRIVILEGED_TOOL_PATH}" "${true_path}" >/dev/null 2>&1; then
+      sudo -n "${scrubbed_command[@]}"
       return $?
     fi
     if [[ ! -t 0 && ! -t 1 && ! -t 2 ]]; then
       warn "Command requires elevated privileges but no interactive sudo prompt is possible: $*"
       return 1
     fi
-    sudo "$@"
+    sudo "${scrubbed_command[@]}"
     return $?
   fi
   warn "Command requires elevated privileges but sudo is unavailable: $*"
@@ -2007,7 +2037,8 @@ if [[ "${WORLD_ENABLED}" -eq 1 && "${IS_LINUX}" -eq 1 ]]; then
   ensure_linux_runtime_libraries libseccomp
   use_noninteractive_world_provision=0
   if [[ ${EUID} -ne 0 ]] && command -v sudo >/dev/null 2>&1; then
-    if sudo -n true >/dev/null 2>&1; then
+    true_path="$(command -v true)"
+    if sudo -n env -i "PATH=${PRIVILEGED_TOOL_PATH}" "${true_path}" >/dev/null 2>&1; then
       use_noninteractive_world_provision=1
       log "Detected non-interactive sudo for world provisioning."
     else
@@ -2044,14 +2075,26 @@ if [[ "${WORLD_ENABLED}" -eq 1 && "${IS_LINUX}" -eq 1 ]]; then
 	  PROVISION_SCRIPT="${REPO_ROOT}/scripts/linux/world-provision.sh"
 	  if [[ -x "${PROVISION_SCRIPT}" ]]; then
 	    log "Provisioning Linux world-service service via ${PROVISION_SCRIPT} (sudo may prompt if needed)..."
-	    provision_args=(--profile "${PROFILE}" --skip-build)
+	    provision_args=(
+          --home "${PREFIX}"
+          --install-bootstrap-context-v1 "${INSTALL_BOOTSTRAP_CONTEXT_V1}"
+          --profile "${PROFILE}"
+          --skip-build
+        )
 	    if [[ "${ENABLE_WORLD_NETFILTER}" -eq 1 ]]; then
 	      provision_args+=(--world-netfilter)
 	    fi
 	    if [[ "${use_noninteractive_world_provision}" -eq 1 ]]; then
 	      provision_args+=(--sudo-noninteractive)
 	    fi
-	    if ! SUBSTRATE_HOME="${PREFIX}" "${PROVISION_SCRIPT}" "${provision_args[@]}"; then
+	    if ! \
+          SUBSTRATE_HOME="${PREFIX}" \
+          SUBSTRATE_ROOT="${PREFIX}" \
+          SUBSTRATE_INSTALL_HOST_CONTEXT_COMMITMENT="${INSTALL_BOOTSTRAP_COMMITMENT}" \
+          SUBSTRATE_INSTALL_PRIMARY_USER="${INSTALL_BOOTSTRAP_ACCOUNT}" \
+          SUBSTRATE_INSTALL_PRIMARY_UID="${INSTALL_BOOTSTRAP_UID}" \
+          SUBSTRATE_INSTALL_BOOTSTRAP_CONTEXT_V1="${INSTALL_BOOTSTRAP_CONTEXT_V1}" \
+          "${PROVISION_SCRIPT}" "${provision_args[@]}"; then
 	      WORLD_PROVISION_FAILED=1
 	      fail_closed_world_provisioning_for_runtime_request \
 	        "the Linux world-provision helper reported an error." \
