@@ -618,22 +618,33 @@ health, and service behavior remain unchanged.
 For shell/shim doctor, `shim_doctor/mod.rs` performs name visibility only: on Unix it exposes the
 existing `report::collect_report_for_context` with crate-private visibility so sibling `health.rs`
 can continue the typed route. It does not make the report module public, add a wrapper or resolver,
-or alter either collector. `gather_world_deps_section` is transport only and
+or alter either collector. The existing crate-private `collect_report` compatibility re-export may
+receive only an item-level Unix `unused_imports` allowance with a reason naming temporary R2-3
+compatibility ownership. The `report.rs::collect_report` function may receive only an item-level
+Unix `dead_code` allowance with the same temporary ownership. These annotations retain code only:
+they do not change visibility, signatures, bodies, cfg branches, callers, outputs, environment
+behavior, or non-Unix behavior, and no file-/module-level or other lint suppression is permitted.
+`gather_world_deps_section` is transport only and
 `collect_doctor_snapshot_v1` receives typed IH or exact A-derived paths. Unix `collect_report` is
 the explicitly named compatibility path: it may retain its checked-projection behavior unchanged,
 but cannot be selected by typed Health or satisfy R2-2 product proof. Physical-shim/replay
 compatibility migration remains R2-3. No diagnostic reconstructs a default home or changes
 dependency/result classification.
 
-For this exact Route A closure, GitNexus reported CRITICAL aggregate breadth in both directions:
-the initial unstaged view attributed 33 changed symbols to the preserved nine-file WIP, while the
-reverse committed view attributed 11; both found the same 18 existing Route A processes and the
-same Builtin, Execution, Invocation, and Platform modules. This is comparison-direction/hunk
-attribution variance only. Authorization is confined to explicit typed-IH forwarding through the
-Host/Health/Config/Policy arms and named consumers plus the Unix crate-private name exposure. It
-does not authorize semantic changes in graph-detected line-shift/test-colocation symbols, a new
-execution family, environment or global authority, physical-shim migration, product capability,
-output, repair, cleanup, rollback, or lifecycle behavior.
+For this exact Route A closure, the preserved ten-file WIP remains fixed at patch SHA-256
+`0302cce29b9c85be4eb925b17fe1e03f473d2eaffe6d5093f824056586820a4e` and its final
+detection reported CRITICAL, 37 changed symbols, and the same 18 existing Route A processes. The
+final implementation diff is exactly eleven files: that WIP plus only `shim_doctor/report.rs`, with
+only the item-level Unix `dead_code` annotation on `collect_report` added there. GitNexus may
+retain 37 symbols or mechanically attribute `collect_report` as symbol 38; in either case it must
+retain those same 18 processes, introduce no new process family, and introduce no module owner
+except the already-existing Shim_doctor module. Authorization remains confined to explicit typed-IH
+forwarding through the Host/Health/Config/Policy arms and named consumers, the Unix crate-private
+context-aware name exposure, focused test-carrier remediation/line-hunk attribution, and the two
+runtime-neutral item-level lint annotations. It does not authorize another production semantic
+change, environment/global authority, physical-shim migration, product capability, output, repair,
+cleanup, rollback, or lifecycle behavior. More than 38 symbols, eleven files, or those 18 processes
+is a new `ImpactDecisionRequired` stop.
 
 ##### Hidden installer bootstrap action
 
