@@ -7,7 +7,10 @@ use anyhow::{bail, Result};
 use std::env;
 use std::path::{Path, PathBuf};
 use std::time::Duration;
+#[cfg(not(unix))]
 use substrate_common::paths as substrate_paths;
+#[cfg(unix)]
+use transport_api_types::InstallBootstrapContextCarrierV1;
 
 use helper_script::run_helper_script;
 use log_ops::{append_log_line, initialize_log_file, print_dry_run_plan};
@@ -127,20 +130,31 @@ fn locate_dry_run_helper_script(
     locate_helper_script(substrate_home, version_dir.as_deref(), None)
 }
 
-pub fn run_enable(args: &WorldEnableArgs) -> Result<()> {
+pub fn run_enable(
+    args: &WorldEnableArgs,
+    #[cfg(unix)] install_context: &InstallBootstrapContextCarrierV1,
+) -> Result<()> {
     if args.provision_deps {
-        return run_enable_with_provision_deps(args);
+        return run_enable_with_provision_deps(
+            args,
+            #[cfg(unix)]
+            install_context,
+        );
     }
 
     if cfg!(target_os = "windows") {
         bail!("substrate world enable is not yet supported on Windows");
     }
 
-    if let Some(home) = &args.home {
-        env::set_var("SUBSTRATE_HOME", home);
-    }
-
-    let substrate_home = substrate_paths::substrate_home()?;
+    #[cfg(unix)]
+    let substrate_home = PathBuf::from(&install_context.context.selected_host_prefix);
+    #[cfg(not(unix))]
+    let substrate_home = {
+        if let Some(home) = &args.home {
+            env::set_var("SUBSTRATE_HOME", home);
+        }
+        substrate_paths::substrate_home()?
+    };
     let helper_override = env::var("SUBSTRATE_WORLD_ENABLE_SCRIPT")
         .ok()
         .map(PathBuf::from);
@@ -164,7 +178,12 @@ pub fn run_enable(args: &WorldEnableArgs) -> Result<()> {
         );
         return Ok(());
     }
-    let config_path = substrate_paths::config_file()?;
+    let config_path = substrate_home.join("config.yaml");
+    let env_sh_path = if cfg!(unix) {
+        substrate_home.join("env.sh")
+    } else {
+        env_sh_path()?
+    };
     let mut corrupt_config = false;
     let mut config = match load_install_config(&config_path) {
         Ok(cfg) => cfg,
@@ -253,7 +272,7 @@ pub fn run_enable(args: &WorldEnableArgs) -> Result<()> {
 
     config.set_world_enabled(true);
     save_install_config(&config_path, &config)?;
-    update_manager_env_exports(&env_sh_path()?, true)?;
+    update_manager_env_exports(&env_sh_path, &substrate_home, true)?;
 
     println!(
         "World provisioning complete. Config updated at {}.",
@@ -262,20 +281,27 @@ pub fn run_enable(args: &WorldEnableArgs) -> Result<()> {
     println!(
         "Provisioning log: {}\nUpdated {}.\nNext: run 'substrate world doctor --json' or start a new shell to use the world backend.",
         log_path.display(),
-        env_sh_path()?.display()
+        env_sh_path.display()
     );
 
     Ok(())
 }
 
-fn run_enable_with_provision_deps(args: &WorldEnableArgs) -> Result<()> {
+fn run_enable_with_provision_deps(
+    args: &WorldEnableArgs,
+    #[cfg(unix)] install_context: &InstallBootstrapContextCarrierV1,
+) -> Result<()> {
     ensure_supported_backend_or_exit();
 
-    if let Some(home) = &args.home {
-        env::set_var("SUBSTRATE_HOME", home);
-    }
-
-    let substrate_home = substrate_paths::substrate_home()?;
+    #[cfg(unix)]
+    let substrate_home = PathBuf::from(&install_context.context.selected_host_prefix);
+    #[cfg(not(unix))]
+    let substrate_home = {
+        if let Some(home) = &args.home {
+            env::set_var("SUBSTRATE_HOME", home);
+        }
+        substrate_paths::substrate_home()?
+    };
     let helper_override = env::var("SUBSTRATE_WORLD_ENABLE_SCRIPT")
         .ok()
         .map(PathBuf::from);
@@ -336,7 +362,12 @@ fn run_enable_with_provision_deps(args: &WorldEnableArgs) -> Result<()> {
 
         return Ok(());
     }
-    let config_path = substrate_paths::config_file()?;
+    let config_path = substrate_home.join("config.yaml");
+    let env_sh_path = if cfg!(unix) {
+        substrate_home.join("env.sh")
+    } else {
+        env_sh_path()?
+    };
     let mut corrupt_config = false;
     let mut config = match load_install_config(&config_path) {
         Ok(cfg) => cfg,
@@ -449,7 +480,7 @@ fn run_enable_with_provision_deps(args: &WorldEnableArgs) -> Result<()> {
 
     config.set_world_enabled(true);
     save_install_config(&config_path, &config)?;
-    update_manager_env_exports(&env_sh_path()?, true)?;
+    update_manager_env_exports(&env_sh_path, &substrate_home, true)?;
 
     match required_manager {
         Some(WorldManager::Apt) => provision_apt_requirements(&requirements.apt),
@@ -466,7 +497,7 @@ fn run_enable_with_provision_deps(args: &WorldEnableArgs) -> Result<()> {
     println!(
         "Provisioning log: {}\nUpdated {}.\nNext: run 'substrate world doctor --json' or start a new shell to use the world backend.",
         log_path.display(),
-        env_sh_path()?.display()
+        env_sh_path.display()
     );
 
     Ok(())
