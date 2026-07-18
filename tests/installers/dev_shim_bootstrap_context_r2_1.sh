@@ -151,5 +151,18 @@ run_bound_substrate "${WORK_ROOT}/status-removed" --no-world --shim-status-json
 
 assert_b_untouched
 [[ ! -e "${AMBIENT_B}/trace.jsonl" ]] || fail "shim lifecycle wrote trace output under B"
+
+# Contract-valid Unix prefixes may contain shell metacharacters. The generated helper must remain
+# valid Bash and self-derive that exact A instead of interpolating it into shell syntax.
+SELECTED_A="${WORK_ROOT}/selected-\"-a"
+run_helper --install "${WORK_ROOT}/quoted-install"
+[[ "${HELPER_RC}" -eq 0 ]] || fail "quoted-prefix dev-shim install failed"
+bash -n "${SELECTED_A}/dev-shim-env.sh" \
+  || fail "dev-shim helper is invalid for a contract-valid quoted prefix"
+run_helper --uninstall "${WORK_ROOT}/quoted-uninstall"
+[[ "${HELPER_RC}" -eq 0 ]] || fail "quoted-prefix dev-shim uninstall failed"
+[[ ! -e "${SELECTED_A}/dev-shim-env.sh" ]] \
+  || fail "quoted-prefix dev-shim helper survived uninstall"
+
 printf '[%s] PASS: explicit/automatic deploy, status, doctor, remove, generated, and A/B proof\n' \
   "${SCRIPT_NAME}"

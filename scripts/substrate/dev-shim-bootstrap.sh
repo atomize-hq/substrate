@@ -307,8 +307,9 @@ export SUBSTRATE_INSTALL_HOST_CONTEXT_COMMITMENT=${commitment_literal}
 export SUBSTRATE_INSTALL_PRIMARY_USER=${account_literal}
 export SUBSTRATE_INSTALL_PRIMARY_UID=${uid_literal}
 export SUBSTRATE_INSTALL_BOOTSTRAP_CONTEXT_V1=${carrier_literal}
-if [[ ":\$PATH:" != *":${SHIMS_DIR}:"* ]]; then
-  export PATH="${SHIMS_DIR}:\$PATH"
+substrate_shims="\${substrate_home%/}/shims"
+if [[ ":\$PATH:" != *":\${substrate_shims}:"* ]]; then
+  export PATH="\${substrate_shims}:\$PATH"
 fi
 ENV
   log "Wrote dev shim helper to ${ENV_FILE}"

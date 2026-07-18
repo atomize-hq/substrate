@@ -51,3 +51,26 @@ fn write_bash_preexec_script_writes_constant() {
     assert!(!written.contains("$HOME/.substrate"));
     assert!(!written.contains("~/.bashrc"));
 }
+
+#[cfg(unix)]
+#[test]
+fn write_bash_preexec_script_rejects_final_symlink_without_following_it() {
+    let selected = tempfile::tempdir().unwrap();
+    let ambient = tempfile::tempdir().unwrap();
+    let path = selected.path().join(".substrate_preexec");
+    let victim = ambient.path().join("victim");
+    std::fs::write(&victim, "ambient-b-sentinel\n").unwrap();
+    std::os::unix::fs::symlink(&victim, &path).unwrap();
+    let context = current_install_context(selected.path());
+
+    assert!(write_bash_preexec_script(&path, &context).is_err());
+
+    assert_eq!(
+        std::fs::read_to_string(&victim).unwrap(),
+        "ambient-b-sentinel\n"
+    );
+    assert!(std::fs::symlink_metadata(&path)
+        .unwrap()
+        .file_type()
+        .is_symlink());
+}

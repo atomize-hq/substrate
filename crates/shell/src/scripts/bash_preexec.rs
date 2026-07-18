@@ -1,5 +1,7 @@
 use anyhow::{Context, Result};
 use std::fs;
+use std::io::Write;
+use std::os::unix::fs::OpenOptionsExt;
 use std::path::{Path, PathBuf};
 use transport_api_types::{InstallBootstrapContextCarrierV1, PlatformPrincipalV1};
 
@@ -112,7 +114,21 @@ pub fn write_bash_preexec_script(
     if !parent_metadata.file_type().is_dir() || parent_metadata.file_type().is_symlink() {
         anyhow::bail!("Bash preexec parent is not a no-follow directory");
     }
-    fs::write(path, render_bash_preexec_script(install_context)?)
+    let rendered = render_bash_preexec_script(install_context)?;
+    let mut target = fs::OpenOptions::new()
+        .write(true)
+        .create(true)
+        .truncate(true)
+        .custom_flags(libc::O_NOFOLLOW)
+        .open(path)
+        .with_context(|| {
+            format!(
+                "failed to open no-follow Bash preexec target at {}",
+                path.display()
+            )
+        })?;
+    target
+        .write_all(rendered.as_bytes())
         .with_context(|| format!("failed to write bash preexec script at {}", path.display()))?;
     Ok(())
 }

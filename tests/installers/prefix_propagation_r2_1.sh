@@ -40,7 +40,7 @@ cleanup() {
 }
 trap cleanup EXIT
 
-SELECTED_A="${WORK_ROOT}/selected-a"
+SELECTED_A="${WORK_ROOT}/selected-\"-a"
 AMBIENT_B="${WORK_ROOT}/ambient-b"
 TOOL_CONFIG_HOME="${WORK_ROOT}/tool-config"
 mkdir "${AMBIENT_B}" "${TOOL_CONFIG_HOME}"
@@ -125,6 +125,8 @@ for required in \
   [[ -e "${SELECTED_A}/${required}" || -L "${SELECTED_A}/${required}" ]] \
     || fail "dev install omitted A-scoped projection ${required}"
 done
+bash -n "${SELECTED_A}/dev-shim-env.sh" \
+  || fail "dev-install helper is invalid for a contract-valid quoted prefix"
 cmp "${SELECTED_A}/manager_hooks.yaml" \
   "${SELECTED_A}/versions/dev/config/manager_hooks.yaml" \
   || fail "A manager base is not the selected generated manifest projection"
@@ -136,6 +138,34 @@ if grep -Eq '\$\{?HOME\}?' "${SELECTED_A}/manager_env.sh"; then
 fi
 grep -Fq "${ACCOUNT_HOME%/}/.substrate_bashenv" "${SELECTED_A}/manager_env.sh" \
   || fail "manager environment did not bind legacy Bash input to account-database home"
+
+# A normal config mutation rewrites env.sh through the shell path; it must retain the complete
+# authenticated A projection rather than collapsing back to a lone ambient home export.
+chmod 0000 "${AMBIENT_B}"
+set +e
+HOME="${AMBIENT_B}" \
+  USERPROFILE="${AMBIENT_B}" \
+  SUBSTRATE_HOME="${AMBIENT_B}" \
+  SUBSTRATE_ROOT="${AMBIENT_B}" \
+  SHIM_TRACE_LOG="${AMBIENT_B}/trace.jsonl" \
+  "${SELECTED_A}/bin/substrate" --no-world --shim-skip \
+    config global init --force >"${WORK_ROOT}/config-init.out" \
+    2>"${WORK_ROOT}/config-init.err"
+CONFIG_INIT_RC=$?
+set -e
+chmod 0700 "${AMBIENT_B}"
+[[ "${CONFIG_INIT_RC}" -eq 0 ]] || fail "A-bound config init failed with exit ${CONFIG_INIT_RC}"
+for projection in \
+  SUBSTRATE_HOME \
+  SUBSTRATE_ROOT \
+  SUBSTRATE_INSTALL_HOST_CONTEXT_COMMITMENT \
+  SUBSTRATE_INSTALL_PRIMARY_USER \
+  SUBSTRATE_INSTALL_PRIMARY_UID \
+  SUBSTRATE_INSTALL_BOOTSTRAP_CONTEXT_V1; do
+  grep -q "^export ${projection}=" "${SELECTED_A}/env.sh" \
+    || fail "config init stripped ${projection} from A/env.sh"
+done
+assert_b_untouched
 
 # Exercise normal shell generation with physical shims skipped; failure to reach a world service is
 # not privileged proof, but manager and Bash-preexec projections must already be bound to A.
