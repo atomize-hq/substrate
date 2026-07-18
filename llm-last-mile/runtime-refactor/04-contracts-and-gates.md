@@ -525,11 +525,12 @@ and cannot satisfy normal product proof.
 
 For PI-027 the same-process carrier chain is exactly `run_shell_with_cli` →
 `ShellConfig::from_cli` → `handle_world_command` → `run_enable`. Every hop receives typed IH by
-explicit argument. `ShellConfig::from_cli` already possesses that authoritative context and may
-only forward it from the existing Unix `SubCommands::World` branch; H/R/carrier environment values
-remain checked projections and cannot recover a missing typed argument. No other subcommand branch,
-`ShellConfig` mode, constructor/validator, process-global, or side-table behavior participates in
-this chain.
+explicit argument. For PI-108–PI-110 the same rule extends only through the existing Unix
+Host/Health/Config/Policy branches to their named consumers. The hidden Agent owner-helper branch
+may forward the context only to derive PI-105's immutable `PlatformPrincipalV1`; public Agent and
+all other branches remain behavior-equivalent. H/R/carrier environment values remain checked
+projections and cannot recover a missing typed argument. No `ShellConfig` mode,
+constructor/validator, process-global, or side-table behavior participates in these chains.
 
 PI-071 owns the following process-crossing continuation and no authority reconstruction:
 
@@ -565,6 +566,55 @@ explicit-A transport, and the `run_helper_script` HIGH limited to exact carrier-
 authorize only their named argument/signature propagation across existing process families. None
 of these results authorizes a new process family, capability, fallback, cleanup, deletion,
 rollback, migration, convergence, R2-3, or R3 behavior.
+
+##### Remaining R2-2 same-process carrier closure
+
+The four remaining routes are closed only by explicit arguments:
+
+```text
+validated typed IH
+  ├─ Host / Health / Config / Policy → named typed consumer
+  ├─ intended_host_principal: PlatformPrincipalV1
+  │    → REPL or hidden owner-helper runtime
+  │    → prepared member dispatch
+  │    → Unix account+UID database round-trip
+  │    → account home/.codex
+  ├─ host shell doctor → optional host diagnostic projection
+  └─ Health / shim doctor
+       → collect_report_for_context
+       → build_report
+       → gather_world_deps_section
+       → collect_doctor_snapshot_v1
+       → A-derived config/dependency paths
+```
+
+The principal projection is immutable and process/request-scoped. It is provenance-bound to the
+validated IH, travels as a separate explicit argument alongside rather than inside prepared world
+dispatch values, and is not independently authoritative or persisted into `HostSessionAuthority`,
+orchestration/session records, receipts, supervisor state, retained-worker identity, policy
+snapshots, or any other durable state, and never reconstructed from environment or process globals.
+The Codex seed resolver requires `PlatformPrincipalV1::Unix`, calls unchanged read-only
+`crates/shell/src/execution/install_bootstrap.rs::unix_account_home_for_principal` for the exact
+account and UID round-trip through the account database, and derives only that account's home plus
+`/.codex`. The terminal helper remains outside the editable allowlist and may not be duplicated. A,
+`dirs::home_dir`, `HOME`, `USERPROFILE`, root home, CWD, PID, and helper/session state are forbidden
+credential-source selectors. Policy still decides whether the projection is permitted, and no
+prompt, credential, auth payload, or secret enters logs, traces, errors, receipts, or new state.
+
+`WorldDoctorReportV1` remains a world-service/world-enforcement report with additive optional,
+defaulted, omit-when-absent host prefix and commitment fields. The in-world `doctor_world` producer
+sets them to `None` and reads no host IH, carrier, HOME, prefix, principal, or authority projection.
+Only the host shell may enrich final host-visible doctor output from typed IH, and it does so before
+either JSON serialization or text rendering; the legacy Linux fallback may populate the same fields
+only when typed IH is explicitly supplied. Old JSON without
+the fields remains valid, and world enforcement, Landlock, netfilter, filesystem strategy, policy,
+health, and service behavior remain unchanged.
+
+For shell/shim doctor, `gather_world_deps_section` is transport only and
+`collect_doctor_snapshot_v1` receives typed IH or exact A-derived paths. Unix `collect_report` is
+the explicitly named compatibility path: it may retain its checked-projection behavior unchanged,
+but cannot satisfy R2-2 product proof. Physical-shim/replay compatibility migration remains R2-3.
+No diagnostic reconstructs a default home or changes dependency/result classification.
 
 ##### Hidden installer bootstrap action
 
