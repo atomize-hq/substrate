@@ -713,6 +713,77 @@ authorization map, fresh GitNexus output, and independent semantic review are re
 file, additional semantic hunk, durable principal representation, new module or execution-family
 root, Route C/D, R2-3, capability, cleanup, or lifecycle change is not authorized.
 
+##### Route C authenticated Host/World doctor projection
+
+Route B remains complete, security-review-clean, Spawn-review-clean, cfg-review-clean, and
+semantically unchanged at commit `6cee990f0370013c8b05a5495301db7aea642cd5`. Its exact
+ordinary/binary patch from its parent is
+`28e6b9da35f96b5f93c49369cbde0eda77e9a145b54f9c412bae8e5a83871674`, and its manifest remains
+the reviewed six files. Route C starts only from preservation commit
+`41b82327e23798719ed9a0b4cae1f557fb593670`, whose parent is the exact Route B commit/tree. The
+starting diff is 182 insertions and five deletions in exactly five files. Its canonical
+`git diff --full-index --binary` SHA-256 is
+`5b436d5dfeaf6e513cbaa306de65848cbe3d5b003fa8c00589be09e54b630277`; its abbreviated-index
+ordinary/binary rendering is
+`7c5a908a6760244d9ad6922dfcf7e944cfce3c723d994e279a3aeaded7a8ffa0`. Canonical per-file
+full-index binary fingerprints are:
+
+| Route C file | SHA-256 |
+|---|---|
+| `crates/shell/src/execution/platform/linux.rs` | `d1c53712aef41e01cb44408e42735511af75b8432b8de651cf072a4d13be80a1` |
+| `crates/shell/src/execution/platform/mod.rs` | `08340fc50773063113b032422a0a63742aee50d04c8cd8b4edd6c9c4ada13f4c` |
+| `crates/shell/tests/doctor_scopes_ds0.rs` | `7f13f02e382dbbe55b53fc15a32183ab889d73a08fe8661b67169161bbe90ba7` |
+| `crates/transport-api-types/src/lib.rs` | `82e510bd76fefec4c256c93e271761b1f9ba3047a003a03329979862db631457` |
+| `crates/world-service/src/handlers.rs` | `cd24633ffd3049b4dcd30ad3da6d769302483061dcf0a2c473d4d38927bb6018` |
+
+Those bytes authorize a starting candidate, not immutable completion bytes. Within the same five
+files, review-driven remediation may correct only Route C tests or diagnostic projection while
+remaining inside this semantic envelope; every such correction establishes a new exact patch hash
+and per-file fingerprint manifest and reruns impact, focused/broad proof, differential, and fresh
+review. A sixth file or a broader authority owner requires `CrossDocumentChangeRequired`.
+
+The authority and disclosure contract is closed:
+
+1. The already-authenticated typed `InstallBootstrapContextCarrierV1` is the only source for A and
+   its commitment. `handle_host_command` and `handle_world_command` only forward that typed value;
+   `host_doctor_main` and `world_doctor_main` only project it. No second resolver, ambient recovery,
+   generated-record authority, process-global state, or side table is permitted.
+2. `WorldDoctorReportV1` host fields are optional/defaulted and omit when absent. They report
+   `selected_host_prefix` and the non-secret host-context commitment only; they cannot establish,
+   validate, replace, or mutate the authenticated context. The world-service `doctor_world`
+   producer sets them to `None` and reads no host carrier, HOME/root/prefix, principal, or authority
+   state. The legacy adapter may populate them only from explicitly supplied typed IH.
+3. Diagnostics return or log no hidden carrier bytes, credential or secret bytes, request bytes, or
+   sensitive principal material. The change cannot mutate installation, service, world, policy,
+   capabilities, filesystem/network enforcement, placement, caging, credentials, receipts,
+   supervision, retained workers, cleanup, or lifecycle/execution behavior.
+4. Every source-level process attribution must map to exactly the existing diagnostic roots
+   `handle_host_command`, `host_doctor_main`, `handle_world_command`, or `world_doctor_main`.
+   Representation/test symbols, the legacy helper, and the mechanical world-service `None`
+   producer create no new process root. Route D and R2-3 ownership remain untouched; no seam is
+   promoted.
+
+The preservation-time GitNexus result was CRITICAL with 25 attributed symbols, 32 process labels,
+and the exact five files. A pre-authorization refresh over byte-identical files reported CRITICAL
+19/32/five. Both results are retained as observed evidence. A raw count or generated-label change
+is attribution-only only when the patch/fingerprints and five-file manifest remain exact, every
+source-level label still maps to the same four roots, no module owner/execution family appears, and
+a fresh independent reviewer confirms semantic containment. An actual new call path, sixth file,
+module owner, execution family, or authority source is `ImpactDecisionRequired`; stale-index
+pinning is forbidden.
+
+Route C proof requires transport API tests; focused and full world-service library tests; installed-
+witness Host projection; World doctor typed-A JSON; conflicting ambient-B negatives; malformed or
+missing typed-context fail-closed cases where applicable; warnings-denied Clippy for touched crates;
+shell all-target compilation; workspace all-target check; formatting; and diff checks. The inherited
+disabled-world doctor failure is first reproduced at the clean replayed Route B baseline and then
+compared exactly; Route C may not fix, suppress, rename, weaken, or reinterpret it. The broad shell
+differential requires `PassToFail = 0`, `NewFail = 0`, no removed/renamed/substituted/weakened tests,
+unchanged normalized signatures for retained baseline failures, and a causal audit of every
+`FailToPass` that excludes test bypass. Completion additionally requires fresh independent
+authority/security, call-path/impact, and cross-platform/regression reviews. Route C remains
+uncommittable until all are CLEAN.
+
 `WorldDoctorReportV1` remains a world-service/world-enforcement report with additive optional,
 defaulted, omit-when-absent host prefix and commitment fields. The in-world `doctor_world` producer
 sets them to `None` and reads no host IH, carrier, HOME, prefix, principal, or authority projection.

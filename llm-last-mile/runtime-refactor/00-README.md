@@ -242,8 +242,9 @@ broker, world capability, policy, gateway, receipt, supervisor, worker, replay, 
 the contract correction is recorded by `17ea3a839345cd47a5b2409cde0d4facdde09446` and its bounded
 runtime by `4d0acff68e20d86b97fe5367b8a4617554f33ef4`. `RG-HOME-01` and `RG-INSTALL-01` remain open,
 A1.1d and A1 remain incomplete, B3.1 remains blocked, and the R2 packets/R3 remain separately
-owned; R2-1 is complete while R2-2/R2-3/R2-4/R3 remain unstarted. Static macOS/Windows inspection
-in R2-0 is not native platform proof.
+owned; R2-1 is complete and R2-2 is in progress through review-clean Route B, while Route C is the
+only authorized active increment and Route D/R2-3/R2-4/R3 remain unstarted. Static macOS/Windows
+inspection in R2-0 is not native platform proof.
 
 R2-1 implements the 19 owned rows PI-001–PI-004, PI-010–PI-011, PI-032–PI-034, PI-061–PI-063,
 PI-067, PI-082–PI-085, PI-104, and PI-117. Its shared IH framing, hidden authenticated bootstrap
@@ -251,9 +252,20 @@ action, Unix principal binding, A-over-B dev/shim/generated projection matrix, a
 explicit trace/policy binding are proven without changing the neutral trace setter, physical shim,
 replay, world-deps production, lifecycle behavior, or any later packet owner.
 
-The exact next packet is **A1.1d-5R2-2 — Unix release, sudo, Linux service, and runtime
-propagation**. It may use only its frozen allowlist and must not begin R2-3 platform/physical-shim
-mapping, R2-4 joined proof, or R3 cleanup/convergence.
+The active packet is **A1.1d-5R2-2 — Unix release, sudo, Linux service, and runtime propagation**,
+Route C only: authenticated Host/World doctor projection. Route B remains complete and unchanged at
+`6cee990f0370013c8b05a5495301db7aea642cd5`, with exact ordinary/binary patch SHA-256
+`28e6b9da35f96b5f93c49369cbde0eda77e9a145b54f9c412bae8e5a83871674` across its reviewed six
+files. Route C starts from preservation commit `41b82327e23798719ed9a0b4cae1f557fb593670`, whose parent
+is that exact Route B commit and whose full-index binary patch is
+`5b436d5dfeaf6e513cbaa306de65848cbe3d5b003fa8c00589be09e54b630277`: 182 insertions and five
+deletions across only `crates/shell/src/execution/platform/linux.rs`,
+`crates/shell/src/execution/platform/mod.rs`, `crates/shell/tests/doctor_scopes_ds0.rs`,
+`crates/transport-api-types/src/lib.rs`, and `crates/world-service/src/handlers.rs`. Those bytes are
+a starting candidate, not authority to expand scope. Route C may only project already-authenticated
+typed context through the existing Host/World doctor paths; its non-secret optional output fields
+cannot select, construct, replace, or mutate authority. It must not begin Route D, R2-3
+platform/physical-shim mapping, R2-4 joined proof, or R3 cleanup/convergence.
 
 B1/B2.1-R0 lets RetainedWorkerRuntime create the immutable retained object graph and requires
 HostSessionAuthority first to reserve the ingress idempotency key, validate the exact participant

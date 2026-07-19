@@ -433,6 +433,56 @@ cleanup, or lifecycle work is imported. GitNexus raw counts remain evidence, whi
 fingerprints, hunk map, complete manual under-resolved Spawn closure, and CLEAN reviews are the
 semantic containment boundary.
 
+### Route C authorization checkpoint
+
+Route B is preserved exactly and remains review-clean at
+`6cee990f0370013c8b05a5495301db7aea642cd5`, ordinary/binary patch SHA-256
+`28e6b9da35f96b5f93c49369cbde0eda77e9a145b54f9c412bae8e5a83871674`, with its reviewed
+six-file semantics unchanged. The seven unpushed runtime commits from published baseline
+`dab71d816f8e3a51d841c2293b646463e2d28cfc` are replay inputs only; the docs correction lands on
+that published baseline first, and each runtime commit must replay with identical ordinary/binary
+patch and file scope before Route C proof resumes.
+
+The preserved Route C candidate is commit `41b82327e23798719ed9a0b4cae1f557fb593670`, parented by
+the exact Route B tree, with canonical full-index binary SHA-256
+`5b436d5dfeaf6e513cbaa306de65848cbe3d5b003fa8c00589be09e54b630277`, 182 insertions/five
+deletions, and the exact five-file manifest/fingerprints in `04-contracts-and-gates.md`. It is
+authorized only as an authenticated, non-authoritative Host/World doctor projection. The four
+existing diagnostic roots are `handle_host_command`, `host_doctor_main`, `handle_world_command`,
+and `world_doctor_main`; no world-service, representation, helper, or test symbol becomes another
+execution root or authority owner. The preservation-time GitNexus result was CRITICAL 25 symbols/32
+labels/five files; a byte-identical refreshed index reported CRITICAL 19/32/five. Review must decide
+semantic containment from the patch, fingerprints, exact manifest, source mapping, owner/family
+set, and authority behavior—not a brittle numerical ceiling—and must explicitly confirm any
+attribution-only drift.
+
+Route C cannot establish context, recover it from ambient or generated projections, expose hidden
+carrier/credential/request/secret bytes or sensitive principal material, or mutate installation,
+service, world, policy, capability, filesystem/network enforcement, placement, caging, credential,
+receipt, supervisor, retained-worker, cleanup, lifecycle, or execution semantics. Route D and R2-3
+remain unstarted and no seam is promoted. A sixth file, actual new semantic path, new module owner
+or execution family, or broader authority owner is respectively `ImpactDecisionRequired` or
+`CrossDocumentChangeRequired`. Review remediation may stay within the exact five-file semantic
+envelope only after recording a new patch/fingerprint set and rerunning impact, proof,
+differential, and fresh reviews.
+
+The Route C regression ledger requires exact reproduction of the inherited disabled-world doctor
+failure on the clean replayed Route B baseline; transport API and world-service proof; installed-
+witness Host A and World typed-A JSON under ambient B; applicable malformed/missing-context
+fail-closed proof; warnings-denied touched-crate Clippy; shell/workspace all-target compilation;
+format/diff checks; and a broad shell differential with zero `PassToFail`, `NewFail`, removed,
+renamed, substituted, weakened, or newly ignored tests. Retained failures keep normalized
+signatures, and each `FailToPass` receives a no-bypass causal audit. Three fresh read-only review
+perspectives—authority/security, call-path/impact, and cross-platform/regression—must be CLEAN
+before one local Route C commit and its remote preservation ref. Source runtime commits remain
+unpublished until complete R2-2 closeout authorizes publication.
+
+The optional named checkpoint and cross-document verification skills are unavailable for this
+increment. Their explicit substitutes are immutable commit/tree/patch/file checkpoints at every
+phase and a six-file structure, relative-link, table, fence, gate, sequence, and stale-status
+cross-check. The security skill's missing supplemental checklist is replaced by the complete
+embedded security checklist. These substitutions do not weaken any gate.
+
 For the Route A successor clause of `R2-RUNTIME-01`, the authorized Unix-only import cfg set also
 includes the policy test module's sole `tempfile::TempDir` import; no other import or module gate is
 authorized. Health proof must combine fail-closed syscall/path interception with a complete B-tree

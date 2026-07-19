@@ -384,6 +384,20 @@ repository binary or ambiguous PATH witness still requires an explicit prefix.
 World-deps/doctor/config/policy/gateway leaves receive typed context or a checked projection, and
 host Codex paths derive from the committed Unix principal's account-database home.
 
+Route C's Host/World doctor representation is a read-only, non-authoritative projection of that
+same authenticated context. On Linux, the existing `handle_host_command` → `host_doctor_main` and
+`handle_world_command` → `world_doctor_main` paths carry typed IH to the final host-visible JSON or
+text report. Optional `WorldDoctorReportV1` host-prefix and commitment fields remain data only: old
+wire JSON may omit them, the in-world `doctor_world` producer emits them absent and reads no host
+carrier, environment, prefix, principal, or context, and only the host shell may populate them from
+typed IH. The legacy report adapter may project them only when its existing caller explicitly
+supplies typed IH. A conflicting ambient home/root or generated projection cannot replace A.
+Diagnostics never decode or disclose hidden carrier bytes, credentials, request bytes, secrets, or
+sensitive principal material, and cannot install, repair, restart, clean up, or otherwise change
+world, policy, capability, filesystem/network enforcement, placement, caging, receipt, supervisor,
+retained-worker, credential, or lifecycle state. This is not a new authority seam, module owner, or
+execution family.
+
 A physical symlink shim recovers A from an explicit invocation pathname or exactly one matching
 no-follow candidate when bare `argv[0]` requires absolute-PATH enumeration. PATH order has no
 prefix precedence; zero or multiple candidates fail closed. CWD may resolve only an explicitly
