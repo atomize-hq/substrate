@@ -6,10 +6,54 @@ mod common;
 use common::{binary_path, ensure_substrate_built, shared_tmpdir};
 use serde_json::{json, Value};
 use std::fs;
+use std::os::unix::ffi::OsStrExt;
+use std::os::unix::fs::MetadataExt;
 use std::os::unix::fs::PermissionsExt;
 use std::path::{Path, PathBuf};
 use std::process::Command;
 use tempfile::{Builder, TempDir};
+
+fn snapshot_tree(root: &Path) -> Vec<(PathBuf, u32, u32, u32, Vec<u8>)> {
+    fn walk(root: &Path, path: &Path, entries: &mut Vec<(PathBuf, u32, u32, u32, Vec<u8>)>) {
+        let metadata = fs::symlink_metadata(path).expect("snapshot tree metadata");
+        let relative = path
+            .strip_prefix(root)
+            .expect("snapshot path beneath root")
+            .to_path_buf();
+        let payload = if metadata.file_type().is_symlink() {
+            fs::read_link(path)
+                .expect("snapshot symlink target")
+                .as_os_str()
+                .as_bytes()
+                .to_vec()
+        } else if metadata.is_file() {
+            fs::read(path).expect("snapshot file contents")
+        } else {
+            Vec::new()
+        };
+        entries.push((
+            relative,
+            metadata.mode(),
+            metadata.uid(),
+            metadata.gid(),
+            payload,
+        ));
+        if metadata.is_dir() {
+            let mut children = fs::read_dir(path)
+                .expect("snapshot directory")
+                .map(|entry| entry.expect("snapshot directory entry").path())
+                .collect::<Vec<_>>();
+            children.sort();
+            for child in children {
+                walk(root, &child, entries);
+            }
+        }
+    }
+
+    let mut entries = Vec::new();
+    walk(root, root, &mut entries);
+    entries
+}
 
 struct DoctorFixture {
     _temp: TempDir,
@@ -155,14 +199,195 @@ fn compile_passwd_preload(root: &Path) -> PathBuf {
     let library = root.join("passwd_preload.so");
     fs::write(
         &source,
-        r#"#define _GNU_SOURCE
+r#"#define _GNU_SOURCE
+#include <dirent.h>
 #include <dlfcn.h>
 #include <errno.h>
+#include <fcntl.h>
 #include <pwd.h>
+#include <stdarg.h>
+#include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
+#include <sys/stat.h>
 #include <sys/types.h>
+#include <unistd.h>
 typedef int (*real_getpwuid_r_fn)(uid_t, struct passwd *, char *, size_t, struct passwd **);
+typedef char *(*real_getenv_fn)(const char *);
+static char *real_environment(const char *name) {
+    static real_getenv_fn real_fn;
+    if (real_fn == NULL) real_fn = (real_getenv_fn)dlsym(RTLD_NEXT, "getenv");
+    return real_fn(name);
+}
+static void reject_forbidden_path(const char *path) {
+    const char *prefix = real_environment("SUBSTRATE_R2_TEST_FORBIDDEN_PREFIX");
+    if (path == NULL || prefix == NULL || prefix[0] == '\0') return;
+    size_t prefix_len = strlen(prefix);
+    if (strncmp(path, prefix, prefix_len) == 0
+        && (path[prefix_len] == '\0' || path[prefix_len] == '/')) {
+        _exit(86);
+    }
+}
+#define LOAD_REAL(name) \
+    static __typeof__(&name) real_fn; \
+    if (real_fn == NULL) real_fn = (__typeof__(&name))dlsym(RTLD_NEXT, #name)
+char *getenv(const char *name) {
+    static unsigned install_context_reads;
+    if (strcmp(name, "SUBSTRATE_INSTALL_BOOTSTRAP_CONTEXT_V1") == 0) {
+        const char *hide_after_first = real_environment("SUBSTRATE_R2_TEST_HIDE_CONTEXT_AFTER_FIRST_READ");
+        if (hide_after_first != NULL && strcmp(hide_after_first, "1") == 0
+            && install_context_reads++ > 0) {
+            return NULL;
+        }
+    }
+    return real_environment(name);
+}
+int open(const char *path, int flags, ...) {
+    reject_forbidden_path(path); LOAD_REAL(open);
+    if ((flags & O_CREAT) != 0 || (flags & O_TMPFILE) == O_TMPFILE) {
+        va_list args; va_start(args, flags); mode_t mode = va_arg(args, mode_t); va_end(args);
+        return real_fn(path, flags, mode);
+    }
+    return real_fn(path, flags);
+}
+int open64(const char *path, int flags, ...) {
+    reject_forbidden_path(path); LOAD_REAL(open64);
+    if ((flags & O_CREAT) != 0 || (flags & O_TMPFILE) == O_TMPFILE) {
+        va_list args; va_start(args, flags); mode_t mode = va_arg(args, mode_t); va_end(args);
+        return real_fn(path, flags, mode);
+    }
+    return real_fn(path, flags);
+}
+int openat(int dirfd, const char *path, int flags, ...) {
+    reject_forbidden_path(path); LOAD_REAL(openat);
+    if ((flags & O_CREAT) != 0 || (flags & O_TMPFILE) == O_TMPFILE) {
+        va_list args; va_start(args, flags); mode_t mode = va_arg(args, mode_t); va_end(args);
+        return real_fn(dirfd, path, flags, mode);
+    }
+    return real_fn(dirfd, path, flags);
+}
+int openat64(int dirfd, const char *path, int flags, ...) {
+    reject_forbidden_path(path); LOAD_REAL(openat64);
+    if ((flags & O_CREAT) != 0 || (flags & O_TMPFILE) == O_TMPFILE) {
+        va_list args; va_start(args, flags); mode_t mode = va_arg(args, mode_t); va_end(args);
+        return real_fn(dirfd, path, flags, mode);
+    }
+    return real_fn(dirfd, path, flags);
+}
+FILE *fopen(const char *path, const char *mode) {
+    reject_forbidden_path(path); LOAD_REAL(fopen); return real_fn(path, mode);
+}
+FILE *fopen64(const char *path, const char *mode) {
+    reject_forbidden_path(path); LOAD_REAL(fopen64); return real_fn(path, mode);
+}
+FILE *freopen(const char *path, const char *mode, FILE *stream) {
+    reject_forbidden_path(path); LOAD_REAL(freopen); return real_fn(path, mode, stream);
+}
+int stat(const char *path, struct stat *buf) {
+    reject_forbidden_path(path); LOAD_REAL(stat); return real_fn(path, buf);
+}
+int stat64(const char *path, struct stat64 *buf) {
+    reject_forbidden_path(path); LOAD_REAL(stat64); return real_fn(path, buf);
+}
+int lstat(const char *path, struct stat *buf) {
+    reject_forbidden_path(path); LOAD_REAL(lstat); return real_fn(path, buf);
+}
+int lstat64(const char *path, struct stat64 *buf) {
+    reject_forbidden_path(path); LOAD_REAL(lstat64); return real_fn(path, buf);
+}
+int fstatat(int dirfd, const char *path, struct stat *buf, int flags) {
+    reject_forbidden_path(path); LOAD_REAL(fstatat); return real_fn(dirfd, path, buf, flags);
+}
+int fstatat64(int dirfd, const char *path, struct stat64 *buf, int flags) {
+    reject_forbidden_path(path); LOAD_REAL(fstatat64); return real_fn(dirfd, path, buf, flags);
+}
+int statx(int dirfd, const char *path, int flags, unsigned mask, struct statx *buf) {
+    reject_forbidden_path(path); LOAD_REAL(statx); return real_fn(dirfd, path, flags, mask, buf);
+}
+int access(const char *path, int mode) {
+    reject_forbidden_path(path); LOAD_REAL(access); return real_fn(path, mode);
+}
+int faccessat(int dirfd, const char *path, int mode, int flags) {
+    reject_forbidden_path(path); LOAD_REAL(faccessat); return real_fn(dirfd, path, mode, flags);
+}
+DIR *opendir(const char *path) {
+    reject_forbidden_path(path); LOAD_REAL(opendir); return real_fn(path);
+}
+char *realpath(const char *path, char *resolved) {
+    reject_forbidden_path(path); LOAD_REAL(realpath); return real_fn(path, resolved);
+}
+char *canonicalize_file_name(const char *path) {
+    reject_forbidden_path(path); LOAD_REAL(canonicalize_file_name); return real_fn(path);
+}
+int chdir(const char *path) {
+    reject_forbidden_path(path); LOAD_REAL(chdir); return real_fn(path);
+}
+int mkdir(const char *path, mode_t mode) {
+    reject_forbidden_path(path); LOAD_REAL(mkdir); return real_fn(path, mode);
+}
+int mkdirat(int dirfd, const char *path, mode_t mode) {
+    reject_forbidden_path(path); LOAD_REAL(mkdirat); return real_fn(dirfd, path, mode);
+}
+int unlink(const char *path) {
+    reject_forbidden_path(path); LOAD_REAL(unlink); return real_fn(path);
+}
+int unlinkat(int dirfd, const char *path, int flags) {
+    reject_forbidden_path(path); LOAD_REAL(unlinkat); return real_fn(dirfd, path, flags);
+}
+int remove(const char *path) {
+    reject_forbidden_path(path); LOAD_REAL(remove); return real_fn(path);
+}
+int rename(const char *old_path, const char *new_path) {
+    reject_forbidden_path(old_path); reject_forbidden_path(new_path);
+    LOAD_REAL(rename); return real_fn(old_path, new_path);
+}
+int renameat(int old_dirfd, const char *old_path, int new_dirfd, const char *new_path) {
+    reject_forbidden_path(old_path); reject_forbidden_path(new_path);
+    LOAD_REAL(renameat); return real_fn(old_dirfd, old_path, new_dirfd, new_path);
+}
+int link(const char *old_path, const char *new_path) {
+    reject_forbidden_path(old_path); reject_forbidden_path(new_path);
+    LOAD_REAL(link); return real_fn(old_path, new_path);
+}
+int linkat(int old_dirfd, const char *old_path, int new_dirfd, const char *new_path, int flags) {
+    reject_forbidden_path(old_path); reject_forbidden_path(new_path);
+    LOAD_REAL(linkat); return real_fn(old_dirfd, old_path, new_dirfd, new_path, flags);
+}
+int symlink(const char *target, const char *link_path) {
+    reject_forbidden_path(target); reject_forbidden_path(link_path);
+    LOAD_REAL(symlink); return real_fn(target, link_path);
+}
+int symlinkat(const char *target, int dirfd, const char *link_path) {
+    reject_forbidden_path(target); reject_forbidden_path(link_path);
+    LOAD_REAL(symlinkat); return real_fn(target, dirfd, link_path);
+}
+ssize_t readlink(const char *path, char *buf, size_t size) {
+    reject_forbidden_path(path); LOAD_REAL(readlink); return real_fn(path, buf, size);
+}
+ssize_t readlinkat(int dirfd, const char *path, char *buf, size_t size) {
+    reject_forbidden_path(path); LOAD_REAL(readlinkat); return real_fn(dirfd, path, buf, size);
+}
+int chmod(const char *path, mode_t mode) {
+    reject_forbidden_path(path); LOAD_REAL(chmod); return real_fn(path, mode);
+}
+int fchmodat(int dirfd, const char *path, mode_t mode, int flags) {
+    reject_forbidden_path(path); LOAD_REAL(fchmodat); return real_fn(dirfd, path, mode, flags);
+}
+int chown(const char *path, uid_t owner, gid_t group) {
+    reject_forbidden_path(path); LOAD_REAL(chown); return real_fn(path, owner, group);
+}
+int lchown(const char *path, uid_t owner, gid_t group) {
+    reject_forbidden_path(path); LOAD_REAL(lchown); return real_fn(path, owner, group);
+}
+int fchownat(int dirfd, const char *path, uid_t owner, gid_t group, int flags) {
+    reject_forbidden_path(path); LOAD_REAL(fchownat); return real_fn(dirfd, path, owner, group, flags);
+}
+int truncate(const char *path, off_t length) {
+    reject_forbidden_path(path); LOAD_REAL(truncate); return real_fn(path, length);
+}
+int utimensat(int dirfd, const char *path, const struct timespec times[2], int flags) {
+    reject_forbidden_path(path); LOAD_REAL(utimensat); return real_fn(dirfd, path, times, flags);
+}
 int getpwuid_r(uid_t uid, struct passwd *pwd, char *buf, size_t buflen, struct passwd **result) {
     const char *target_uid = getenv("SUBSTRATE_R2_TEST_UID");
     if (target_uid == NULL || uid != (uid_t)strtoul(target_uid, NULL, 10)) {
@@ -199,6 +424,113 @@ int getpwuid_r(uid_t uid, struct passwd *pwd, char *buf, size_t buflen, struct p
         String::from_utf8_lossy(&output.stderr)
     );
     library
+}
+
+#[test]
+fn health_uses_typed_context_under_conflicting_ambient() {
+    let fixture = DoctorFixture::new(
+        r#"version: 2
+managers:
+  - name: SelectedManager
+    priority: 1
+    detect:
+      script: "exit 0"
+    init:
+      shell: |
+        export SELECTED_MANAGER=1
+    repair_hint: |
+      export SELECTED_MANAGER=1
+"#,
+    );
+    let selected_home = fixture.home().to_path_buf();
+    let selected_prefix = selected_home.join(".substrate");
+    let ambient_home = selected_home
+        .parent()
+        .expect("fixture home parent")
+        .join("ambient-b");
+    let ambient_prefix = ambient_home.join(".substrate");
+    fs::create_dir_all(ambient_prefix.join("health")).expect("create conflicting ambient prefix");
+    fs::write(
+        ambient_prefix.join("manager_hooks.yaml"),
+        "this conflicting manifest must never be read\n",
+    )
+    .expect("write conflicting ambient manifest");
+    fs::write(
+        ambient_prefix.join("trace.jsonl"),
+        "this conflicting trace must never be read\n",
+    )
+    .expect("write conflicting ambient trace");
+    let ambient_before = snapshot_tree(&ambient_home);
+    let guard_probe = Command::new("/usr/bin/test")
+        .env("LD_PRELOAD", &fixture.passwd_preload)
+        .env("SUBSTRATE_R2_TEST_FORBIDDEN_PREFIX", &ambient_home)
+        .arg("-e")
+        .arg(ambient_prefix.join("manager_hooks.yaml"))
+        .status()
+        .expect("exercise conflicting-B path guard");
+    assert_eq!(
+        guard_probe.code(),
+        Some(86),
+        "path guard must fail closed before a conflicting-B metadata probe"
+    );
+
+    let output = fixture
+        .command()
+        .env("HOME", &ambient_home)
+        .env("USERPROFILE", &ambient_home)
+        .env("SUBSTRATE_HOME", &ambient_prefix)
+        .env("SUBSTRATE_ROOT", &ambient_prefix)
+        .env("SHIM_TRACE_LOG", ambient_prefix.join("trace.jsonl"))
+        .env("SUBSTRATE_R2_TEST_HIDE_CONTEXT_AFTER_FIRST_READ", "1")
+        .env("SUBSTRATE_R2_TEST_FORBIDDEN_PREFIX", &ambient_home)
+        .arg("--no-world")
+        .arg("health")
+        .arg("--json")
+        .output()
+        .expect("run health with typed A and conflicting ambient B");
+
+    assert!(
+        output.status.success(),
+        "typed health must not recover its context from the hidden compatibility projection: stdout={} stderr={}",
+        String::from_utf8_lossy(&output.stdout),
+        String::from_utf8_lossy(&output.stderr)
+    );
+    let payload: Value = serde_json::from_slice(&output.stdout).expect("valid health JSON");
+    let shim = payload.get("shim").expect("shim report missing");
+    assert_eq!(
+        shim.get("selected_host_prefix").and_then(Value::as_str),
+        selected_prefix.to_str()
+    );
+    assert_eq!(
+        shim.pointer("/manifest/base").and_then(Value::as_str),
+        selected_prefix.join("manager_hooks.yaml").to_str()
+    );
+    assert_eq!(
+        shim.get("trace_log").and_then(Value::as_str),
+        selected_prefix.join("trace.jsonl").to_str()
+    );
+    assert_eq!(
+        shim.pointer("/path/shim_dir").and_then(Value::as_str),
+        selected_prefix.join("shims").to_str()
+    );
+    assert!(
+        shim.get("states")
+            .and_then(Value::as_array)
+            .is_some_and(|states| states.iter().any(|state| {
+                state.get("name").and_then(Value::as_str) == Some("SelectedManager")
+                    && state.get("detected").and_then(Value::as_bool) == Some(true)
+            })),
+        "selected A manager state missing: {shim}"
+    );
+    assert!(
+        !String::from_utf8_lossy(&output.stdout).contains(&ambient_home.display().to_string()),
+        "health output must not report conflicting ambient B"
+    );
+    assert_eq!(
+        snapshot_tree(&ambient_home),
+        ambient_before,
+        "Health must preserve the complete conflicting B tree"
+    );
 }
 
 fn write_invalid_workspace_fixture(root: &std::path::Path) {

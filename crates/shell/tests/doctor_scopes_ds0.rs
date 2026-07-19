@@ -4,12 +4,59 @@ mod support;
 
 use serde_json::json;
 use serde_json::Value;
+use std::os::unix::ffi::OsStrExt;
+use std::os::unix::fs::MetadataExt;
+use std::os::unix::fs::PermissionsExt;
+use std::path::{Path, PathBuf};
+use std::process::Command;
 use support::{substrate_shell_driver, AgentSocket, ShellEnvFixture, SocketResponse};
 use tempfile::Builder;
 
 #[cfg(target_os = "linux")]
 const GUARD_MISSING_REASON: &str =
     "WORLD_NETFILTER_ENABLE must be set to 1/true/yes before requested network isolation can install nftables rules";
+
+fn snapshot_tree(root: &Path) -> Vec<(PathBuf, u32, u32, u32, Vec<u8>)> {
+    fn walk(root: &Path, path: &Path, entries: &mut Vec<(PathBuf, u32, u32, u32, Vec<u8>)>) {
+        let metadata = std::fs::symlink_metadata(path).expect("snapshot tree metadata");
+        let relative = path
+            .strip_prefix(root)
+            .expect("snapshot path beneath root")
+            .to_path_buf();
+        let payload = if metadata.file_type().is_symlink() {
+            std::fs::read_link(path)
+                .expect("snapshot symlink target")
+                .as_os_str()
+                .as_bytes()
+                .to_vec()
+        } else if metadata.is_file() {
+            std::fs::read(path).expect("snapshot file contents")
+        } else {
+            Vec::new()
+        };
+        entries.push((
+            relative,
+            metadata.mode(),
+            metadata.uid(),
+            metadata.gid(),
+            payload,
+        ));
+        if metadata.is_dir() {
+            let mut children = std::fs::read_dir(path)
+                .expect("snapshot directory")
+                .map(|entry| entry.expect("snapshot directory entry").path())
+                .collect::<Vec<_>>();
+            children.sort();
+            for child in children {
+                walk(root, &child, entries);
+            }
+        }
+    }
+
+    let mut entries = Vec::new();
+    walk(root, root, &mut entries);
+    entries
+}
 
 fn has_ds0_envelope(payload: &Value) -> bool {
     payload.get("schema_version").and_then(Value::as_u64) == Some(1)
@@ -28,6 +75,49 @@ fn parse_json(stdout: &[u8], label: &str) -> Value {
 
 fn stdout_string(output: &std::process::Output) -> String {
     String::from_utf8_lossy(&output.stdout).into_owned()
+}
+
+fn compile_install_projection_preload(root: &std::path::Path) -> std::path::PathBuf {
+    let source = root.join("install_projection_preload.c");
+    let library = root.join("install_projection_preload.so");
+    std::fs::write(
+        &source,
+        r#"#define _GNU_SOURCE
+#include <dlfcn.h>
+#include <stdlib.h>
+#include <string.h>
+typedef char *(*real_getenv_fn)(const char *);
+char *getenv(const char *name) {
+    static real_getenv_fn real_fn;
+    static unsigned home_reads, root_reads, context_reads;
+    if (real_fn == NULL) real_fn = (real_getenv_fn)dlsym(RTLD_NEXT, "getenv");
+    const char *hide_after_first = real_fn("SUBSTRATE_R2_TEST_HIDE_PROJECTIONS_AFTER_FIRST_READ");
+    if (hide_after_first != NULL && strcmp(hide_after_first, "1") == 0) {
+        unsigned *reads = NULL;
+        if (strcmp(name, "SUBSTRATE_HOME") == 0) reads = &home_reads;
+        else if (strcmp(name, "SUBSTRATE_ROOT") == 0) reads = &root_reads;
+        else if (strcmp(name, "SUBSTRATE_INSTALL_BOOTSTRAP_CONTEXT_V1") == 0) reads = &context_reads;
+        if (reads != NULL && (*reads)++ > 0) return NULL;
+    }
+    return real_fn(name);
+}
+"#,
+    )
+    .expect("write install-projection preload source");
+    let output = Command::new("/usr/bin/cc")
+        .args(["-shared", "-fPIC", "-O2"])
+        .arg(&source)
+        .arg("-o")
+        .arg(&library)
+        .arg("-ldl")
+        .output()
+        .expect("compile install-projection preload fixture");
+    assert!(
+        output.status.success(),
+        "install-projection preload compilation failed: {}",
+        String::from_utf8_lossy(&output.stderr)
+    );
+    library
 }
 
 fn attribution_line(stdout: &str) -> Option<&str> {
@@ -364,6 +454,147 @@ fn host_doctor_json_matches_envelope_v1_when_available() {
     }
     assert_host_doctor_envelope_v1(&payload);
     assert_disable_attribution_omitted(&payload);
+}
+
+#[test]
+fn host_doctor_uses_installed_witness_under_conflicting_ambient() {
+    support::ensure_substrate_built();
+    let safe_parent = std::env::var_os("XDG_RUNTIME_DIR")
+        .map(std::path::PathBuf::from)
+        .unwrap_or_else(|| {
+            std::path::PathBuf::from(format!("/run/user/{}", unsafe { libc::geteuid() }))
+        });
+    let fixture = Builder::new()
+        .prefix("substrate-host-witness-r2-")
+        .tempdir_in(safe_parent)
+        .expect("allocate secure Host witness fixture");
+    let projection_preload = compile_install_projection_preload(fixture.path());
+    let selected_prefix = fixture.path().join("selected-a");
+    let selected_bin = selected_prefix.join("bin");
+    std::fs::create_dir_all(&selected_bin).expect("create installed witness bin");
+    std::fs::set_permissions(&selected_prefix, std::fs::Permissions::from_mode(0o700))
+        .expect("secure installed witness prefix");
+    std::fs::set_permissions(&selected_bin, std::fs::Permissions::from_mode(0o755))
+        .expect("secure installed witness bin");
+    std::fs::write(
+        selected_prefix.join("config.yaml"),
+        "world:\n  enabled: false\n",
+    )
+    .expect("write selected Host config");
+    let installed_witness = selected_bin.join("substrate");
+    std::os::unix::fs::symlink(support::binary_path(), &installed_witness)
+        .expect("create canonical installed-product witness");
+
+    let ambient_home = fixture.path().join("ambient-b");
+    let ambient_prefix = ambient_home.join(".substrate");
+    std::fs::create_dir_all(&ambient_prefix).expect("create conflicting ambient prefix");
+    let ambient_config = ambient_prefix.join("config.yaml");
+    std::fs::write(&ambient_config, "world:\n  enabled: true\n")
+        .expect("write conflicting ambient Host config");
+    let ambient_before = snapshot_tree(&ambient_home);
+
+    let mut installed = Command::new(&installed_witness);
+    installed
+        .env("HOME", &ambient_home)
+        .env("USERPROFILE", &ambient_home)
+        .env("SUBSTRATE_HOME", &ambient_prefix)
+        .env("SUBSTRATE_ROOT", &ambient_prefix)
+        .env("PATH", "/usr/bin:/bin")
+        .env("LD_PRELOAD", &projection_preload)
+        .env("SUBSTRATE_R2_TEST_HIDE_PROJECTIONS_AFTER_FIRST_READ", "1")
+        .env_remove("SUBSTRATE_INSTALL_BOOTSTRAP_CONTEXT_V1")
+        .env_remove("SUBSTRATE_INSTALL_HOST_CONTEXT_COMMITMENT")
+        .env_remove("SUBSTRATE_INSTALL_PRIMARY_USER")
+        .env_remove("SUBSTRATE_INSTALL_PRIMARY_UID")
+        .env_remove("SUBSTRATE_OVERRIDE_WORLD")
+        .env_remove("SUBSTRATE_WORLD")
+        .env_remove("SUBSTRATE_WORLD_ENABLED")
+        .current_dir(&ambient_home)
+        .arg("host")
+        .arg("doctor")
+        .arg("--json");
+    let output = installed
+        .output()
+        .expect("run Host doctor through installed-product witness");
+    assert_ne!(
+        output.status.code(),
+        Some(2),
+        "installed Host witness must reach Host diagnostics rather than fail selector validation: stdout={} stderr={}",
+        String::from_utf8_lossy(&output.stdout),
+        String::from_utf8_lossy(&output.stderr)
+    );
+    let payload = parse_json(&output.stdout, "installed-witness host doctor --json");
+    assert_host_doctor_envelope_v1(&payload);
+    assert_eq!(
+        payload.get("world_enabled").and_then(Value::as_bool),
+        Some(false),
+        "Host must resolve selected A's disabled config instead of ambient B: {payload}"
+    );
+    assert_eq!(
+        payload
+            .pointer("/world_disable_source/layer")
+            .and_then(Value::as_str),
+        Some("global_patch"),
+        "Host must attribute the selected A config: {payload}"
+    );
+    assert_eq!(
+        snapshot_tree(&ambient_home),
+        ambient_before,
+        "Host dispatch must preserve the complete conflicting ambient B tree"
+    );
+    for relative in [
+        "deps/README.md",
+        "deps/packages/example-manual.yaml",
+        "deps/bundles/example-bundle.yaml",
+        "deps/scripts/example-install.sh",
+    ] {
+        assert!(
+            selected_prefix.join(relative).is_file(),
+            "installed Host witness must scaffold A-derived dependency artifact {relative}"
+        );
+    }
+    assert!(
+        !ambient_prefix.join("deps").exists(),
+        "installed Host witness must not scaffold dependency artifacts under B"
+    );
+
+    let mut direct = Command::new(support::binary_path());
+    direct
+        .env("HOME", &ambient_home)
+        .env("USERPROFILE", &ambient_home)
+        .env("SUBSTRATE_HOME", &ambient_prefix)
+        .env("SUBSTRATE_ROOT", &ambient_prefix)
+        .env("PATH", "/usr/bin:/bin")
+        .env_remove("SUBSTRATE_INSTALL_BOOTSTRAP_CONTEXT_V1")
+        .env_remove("SUBSTRATE_INSTALL_HOST_CONTEXT_COMMITMENT")
+        .env_remove("SUBSTRATE_INSTALL_PRIMARY_USER")
+        .env_remove("SUBSTRATE_INSTALL_PRIMARY_UID")
+        .current_dir(&ambient_home)
+        .arg("host")
+        .arg("doctor")
+        .arg("--json");
+    let direct_output = direct
+        .output()
+        .expect("run direct repository Host invocation without witness");
+    assert_eq!(
+        direct_output.status.code(),
+        Some(2),
+        "direct repository invocation without selector or witness must fail closed: stdout={} stderr={}",
+        String::from_utf8_lossy(&direct_output.stdout),
+        String::from_utf8_lossy(&direct_output.stderr)
+    );
+    assert!(direct_output.stdout.is_empty());
+    assert!(String::from_utf8_lossy(&direct_output.stderr)
+        .contains("installed-product invocation witness or --install-prefix is required"));
+    assert_eq!(
+        snapshot_tree(&ambient_home),
+        ambient_before,
+        "rejected direct invocation must preserve the complete B tree"
+    );
+    assert!(
+        !ambient_prefix.join("shims").exists(),
+        "rejected direct invocation must not scaffold ambient B"
+    );
 }
 
 #[test]
