@@ -404,6 +404,19 @@ allowlisted Codex credential projection. Completion requires exact six-file/hunk
 fresh semantic review, and no new module, execution family, authority source, schema, secret
 surface, capability, lifecycle, Route C, Route D, or R2-3 behavior.
 
+Route B's exact post-lint, pre-format candidate is preserved at ordinary/binary SHA-256
+`e9da85eb206be522645120dfee459ee79ce48793bc61161487d4b5c4d2fda243`, commit
+`07f3117aa0d2f3d57279d20fec204757bba8383a`, with the same six-file manifest. Its only permitted
+successor is repository-default `cargo fmt --all` output in `agents_cmd.rs`,
+`orchestrator_world_dispatch.rs`, `world_ops.rs`, and `async_repl.rs`; `invocation/plan.rs` and
+`routing.rs` remain byte-identical. A new candidate hash and fingerprints are recorded after
+proving every successor-only hunk is whitespace/layout, the whitespace-ignored source diff is
+empty, format check passes, and every refreshed GitNexus label remains an existing Route B root or
+formatting attribution. Raw GitNexus count drift does not authorize semantics. A seventh file,
+non-formatting hunk, changed unaffected-file fingerprint, new module/family/path, or remediation
+beyond canonical formatting stops before runtime review or commit. Fresh runtime review remains
+mandatory; this exception imports no Route C, Route D, R2-3, capability, cleanup, or lifecycle work.
+
 For the Route A successor clause of `R2-RUNTIME-01`, the authorized Unix-only import cfg set also
 includes the policy test module's sole `tempfile::TempDir` import; no other import or module gate is
 authorized. Health proof must combine fail-closed syscall/path interception with a complete B-tree

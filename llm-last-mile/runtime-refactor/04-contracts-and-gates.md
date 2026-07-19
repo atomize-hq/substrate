@@ -626,6 +626,22 @@ semantic review. Raw future symbol-count movement is diagnostic rather than auth
 seventh file, other hunk, unmappable label, new owner/family, compatibility-body change, or Route
 C/Route D/R2-3 semantic import is an `ImpactDecisionRequired` stop.
 
+The exact post-lint, pre-format Route B candidate is preserved at ordinary/binary SHA-256
+`e9da85eb206be522645120dfee459ee79ce48793bc61161487d4b5c4d2fda243`, commit
+`07f3117aa0d2f3d57279d20fec204757bba8383a`, with the same six-file manifest. A single mechanical
+successor may be produced only by repository-default `cargo fmt --all`. Relative to that candidate,
+rustfmt may change layout only in `execution/agents_cmd.rs`,
+`execution/orchestrator_world_dispatch.rs`, `execution/routing/dispatch/world_ops.rs`, and
+`repl/async_repl.rs`; `execution/invocation/plan.rs` and `execution/routing.rs` remain byte-identical.
+No identifier, expression, type, import membership, cfg, comment/string content, test, lint,
+signature, caller, or control-flow change is authorized. The successor receives a new exact patch
+hash and fingerprints only after an exact hunk audit, zero semantic diff with whitespace ignored,
+format-check proof, fresh GitNexus label-to-root mapping, and fresh independent runtime review.
+GitNexus count/label movement is formatting attribution drift only while the same six files, module
+owners, semantic Route B roots, and execution families remain fixed. Any broader change stops under
+the categories in `03-phase-slice-map.md`; this formatting exception cannot authorize Route C,
+Route D, R2-3, capability, cleanup, or lifecycle behavior.
+
 `WorldDoctorReportV1` remains a world-service/world-enforcement report with additive optional,
 defaulted, omit-when-absent host prefix and commitment fields. The in-world `doctor_world` producer
 sets them to `None` and reads no host IH, carrier, HOME, prefix, principal, or authority projection.
