@@ -551,7 +551,12 @@ impl ShellConfig {
                     std::process::exit(code);
                 }
                 SubCommands::Agent(agent_cmd) => {
-                    let code = handle_agent_command(agent_cmd, &cli);
+                    let code = handle_agent_command(
+                        agent_cmd,
+                        &cli,
+                        #[cfg(target_os = "linux")]
+                        install_context,
+                    );
                     std::process::exit(code);
                 }
                 SubCommands::Agents(agents_cmd) => {
