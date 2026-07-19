@@ -162,6 +162,8 @@ pub async fn doctor_world(
         schema_version: 2,
         ok,
         collected_at_utc,
+        selected_host_prefix: None,
+        host_context_commitment: None,
         policy_snapshot_v1_supported: service.policy_snapshot_v1_supported(),
         policy_resolution_mode: service.last_policy_resolution_mode(),
         netfilter_status: Some(WorldDoctorNetfilterStatusV1 {
@@ -528,6 +530,11 @@ mod tests {
 
         let result = doctor_world(State(service)).await.expect("doctor");
         let report = result.0;
+        assert!(report.selected_host_prefix.is_none());
+        assert!(report.host_context_commitment.is_none());
+        let value = serde_json::to_value(&report).expect("serialize world-service doctor report");
+        assert!(value.get("selected_host_prefix").is_none());
+        assert!(value.get("host_context_commitment").is_none());
         let status = report.netfilter_status.expect("netfilter status");
 
         assert!(!status.requested);

@@ -2658,6 +2658,10 @@ pub struct WorldDoctorReportV1 {
     pub schema_version: u32,
     pub ok: bool,
     pub collected_at_utc: String,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub selected_host_prefix: Option<String>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub host_context_commitment: Option<String>,
     /// Whether the connected world-service supports ingesting `PolicySnapshotV1` on execution requests.
     #[serde(default)]
     pub policy_snapshot_v1_supported: bool,
@@ -4663,6 +4667,8 @@ principal_uid=1000\n";
             schema_version: 2,
             ok: true,
             collected_at_utc: "2026-01-08T00:00:00Z".to_string(),
+            selected_host_prefix: Some("/opt/substrate".to_string()),
+            host_context_commitment: Some("a".repeat(64)),
             policy_snapshot_v1_supported: true,
             policy_resolution_mode: Some(super::PolicyResolutionModeV1::SnapshotV3),
             netfilter_status: Some(super::WorldDoctorNetfilterStatusV1 {
@@ -4697,6 +4703,8 @@ principal_uid=1000\n";
         assert_eq!(back.schema_version, report.schema_version);
         assert_eq!(back.ok, report.ok);
         assert_eq!(back.collected_at_utc, report.collected_at_utc);
+        assert_eq!(back.selected_host_prefix, report.selected_host_prefix);
+        assert_eq!(back.host_context_commitment, report.host_context_commitment);
         assert_eq!(
             back.policy_snapshot_v1_supported,
             report.policy_snapshot_v1_supported
@@ -4738,6 +4746,8 @@ principal_uid=1000\n";
             schema_version: 2,
             ok: true,
             collected_at_utc: "2026-01-08T00:00:00Z".to_string(),
+            selected_host_prefix: None,
+            host_context_commitment: None,
             policy_snapshot_v1_supported: true,
             policy_resolution_mode: Some(super::PolicyResolutionModeV1::SnapshotV3),
             netfilter_status: Some(super::WorldDoctorNetfilterStatusV1 {
@@ -4776,6 +4786,8 @@ principal_uid=1000\n";
             schema_version: 2,
             ok: true,
             collected_at_utc: "2026-01-08T00:00:00Z".to_string(),
+            selected_host_prefix: None,
+            host_context_commitment: None,
             policy_snapshot_v1_supported: true,
             policy_resolution_mode: Some(super::PolicyResolutionModeV1::SnapshotV3),
             netfilter_status: Some(super::WorldDoctorNetfilterStatusV1 {
@@ -4837,6 +4849,8 @@ principal_uid=1000\n";
         assert!(!report.policy_snapshot_v1_supported);
         assert!(report.policy_resolution_mode.is_none());
         assert!(report.netfilter_status.is_none());
+        assert!(report.selected_host_prefix.is_none());
+        assert!(report.host_context_commitment.is_none());
     }
 
     #[test]
