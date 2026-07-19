@@ -1,8 +1,12 @@
 use crate::builtins::world_deps::{self, WorldDepsDoctorSnapshotV1};
 #[cfg(unix)]
+use crate::execution::agent_runtime::host_session_authority::trusted_fs::TrustedAuthorityRoot;
+#[cfg(unix)]
+use crate::execution::agent_runtime::HostSessionAuthority;
+#[cfg(unix)]
 use crate::execution::install_bootstrap::{
     bind_unix_install_bootstrap_context, checked_install_bootstrap_context_from_projections,
-    unix_account_home_for_principal,
+    expected_install_bootstrap_projections, unix_account_home_for_principal,
 };
 use crate::execution::{
     config_model::{self, CliConfigOverrides},
@@ -22,10 +26,9 @@ use std::{
     path::{Path, PathBuf},
     process::Command,
 };
-use substrate_common::{
-    manager_manifest::{ManagerManifest, ManagerSpec},
-    paths as substrate_paths,
-};
+use substrate_common::manager_manifest::{ManagerManifest, ManagerSpec};
+#[cfg(not(unix))]
+use substrate_common::paths as substrate_paths;
 #[cfg(unix)]
 use transport_api_types::InstallBootstrapContextCarrierV1;
 
@@ -279,14 +282,28 @@ fn build_report(
     } else {
         None
     };
-    let (effective, explain) = config_model::resolve_effective_config_with_explain(
-        &cwd,
-        &CliConfigOverrides {
-            world_enabled: cli_world_enabled,
-            ..Default::default()
-        },
-        true,
-    )?;
+    let config_overrides = CliConfigOverrides {
+        world_enabled: cli_world_enabled,
+        ..Default::default()
+    };
+    #[cfg(unix)]
+    let (effective, explain) = {
+        bind_unix_install_bootstrap_context(install_context)?;
+        let root =
+            TrustedAuthorityRoot::open(Path::new(&install_context.context.selected_host_prefix))
+                .map_err(|error| anyhow!("failed to open selected config root: {error}"))?;
+        let authority = HostSessionAuthority::from_trusted_root(root)
+            .map_err(|error| anyhow!("failed to bind selected config root: {error}"))?;
+        config_model::resolve_effective_config_with_explain_for_bootstrap_home(
+            &cwd,
+            &config_overrides,
+            &authority.bootstrap_home(),
+            true,
+        )?
+    };
+    #[cfg(not(unix))]
+    let (effective, explain) =
+        config_model::resolve_effective_config_with_explain(&cwd, &config_overrides, true)?;
     let world_enabled = effective.world.enabled;
     let disable_attribution = if world_enabled {
         None
@@ -340,12 +357,20 @@ fn build_report(
         states,
         hints,
         world: Some(if world_enabled {
-            gather_world_doctor_snapshot()
+            gather_world_doctor_snapshot(
+                #[cfg(unix)]
+                install_context,
+            )
         } else {
             disabled_world_doctor_snapshot(disable_attribution.as_ref())
         }),
         world_deps: Some(if world_enabled {
-            gather_world_deps_section(cli_no_world, cli_force_world)
+            gather_world_deps_section(
+                cli_no_world,
+                cli_force_world,
+                #[cfg(unix)]
+                install_context,
+            )
         } else {
             disabled_world_deps_section()
         }),
@@ -548,8 +573,14 @@ fn disabled_world_deps_section() -> WorldDepsDoctorSection {
     }
 }
 
-fn gather_world_doctor_snapshot() -> WorldDoctorSnapshot {
-    match try_load_health_fixture("world_doctor.json") {
+fn gather_world_doctor_snapshot(
+    #[cfg(unix)] install_context: &InstallBootstrapContextCarrierV1,
+) -> WorldDoctorSnapshot {
+    match try_load_health_fixture(
+        "world_doctor.json",
+        #[cfg(unix)]
+        install_context,
+    ) {
         Ok(Some(value)) => {
             let snapshot = snapshot_from_value(value, "fixture");
             return snapshot;
@@ -571,7 +602,11 @@ fn gather_world_doctor_snapshot() -> WorldDoctorSnapshot {
         Ok(None) => {}
     }
 
-    match run_json_subcommand(&["world", "doctor", "--json"]) {
+    match run_json_subcommand(
+        &["world", "doctor", "--json"],
+        #[cfg(unix)]
+        install_context,
+    ) {
         Ok(output) => snapshot_from_command(output),
         Err(err) => WorldDoctorSnapshot {
             status: WorldDoctorStatus::NeedsAttention,
@@ -588,12 +623,20 @@ fn gather_world_doctor_snapshot() -> WorldDoctorSnapshot {
     }
 }
 
-fn gather_world_deps_section(cli_no_world: bool, cli_force_world: bool) -> WorldDepsDoctorSection {
+fn gather_world_deps_section(
+    cli_no_world: bool,
+    cli_force_world: bool,
+    #[cfg(unix)] install_context: &InstallBootstrapContextCarrierV1,
+) -> WorldDepsDoctorSection {
     if cli_no_world && !cli_force_world {
         return disabled_world_deps_section();
     }
 
-    match try_load_health_fixture("world_deps.json") {
+    match try_load_health_fixture(
+        "world_deps.json",
+        #[cfg(unix)]
+        install_context,
+    ) {
         Ok(Some(value)) => match serde_json::from_value::<WorldDepsDoctorSnapshotV1>(value.clone())
         {
             Ok(report) => {
@@ -625,7 +668,12 @@ fn gather_world_deps_section(cli_no_world: bool, cli_force_world: bool) -> World
     }
 
     let cwd = std::env::current_dir().unwrap_or_else(|_| std::path::PathBuf::from("."));
-    match world_deps::collect_doctor_snapshot_v1(&cwd, false) {
+    match world_deps::collect_doctor_snapshot_v1(
+        &cwd,
+        false,
+        #[cfg(unix)]
+        install_context,
+    ) {
         Ok(report) => WorldDepsDoctorSection {
             status: status_for_world_deps_report(&report),
             report: Some(report),
@@ -714,8 +762,16 @@ fn snapshot_from_command(output: JsonCommandOutput) -> WorldDoctorSnapshot {
     }
 }
 
-fn try_load_health_fixture(name: &str) -> Result<Option<Value>> {
-    let Some(path) = health_fixture_path(name) else {
+fn try_load_health_fixture(
+    name: &str,
+    #[cfg(unix)] install_context: &InstallBootstrapContextCarrierV1,
+) -> Result<Option<Value>> {
+    let Some(path) = health_fixture_path(
+        name,
+        #[cfg(unix)]
+        install_context,
+    )?
+    else {
         return Ok(None);
     };
     let raw = fs::read_to_string(&path)
@@ -725,13 +781,24 @@ fn try_load_health_fixture(name: &str) -> Result<Option<Value>> {
     Ok(Some(value))
 }
 
-fn health_fixture_path(name: &str) -> Option<PathBuf> {
-    let base = substrate_paths::substrate_home().ok()?;
+fn health_fixture_path(
+    name: &str,
+    #[cfg(unix)] install_context: &InstallBootstrapContextCarrierV1,
+) -> Result<Option<PathBuf>> {
+    #[cfg(unix)]
+    let base = {
+        bind_unix_install_bootstrap_context(install_context)?;
+        PathBuf::from(&install_context.context.selected_host_prefix)
+    };
+    #[cfg(not(unix))]
+    let Some(base) = substrate_paths::substrate_home().ok() else {
+        return Ok(None);
+    };
     let path = base.join("health").join(name);
     if path.exists() {
-        Some(path)
+        Ok(Some(path))
     } else {
-        None
+        Ok(None)
     }
 }
 
@@ -741,15 +808,34 @@ struct JsonCommandOutput {
     stderr: String,
 }
 
-fn run_json_subcommand(args: &[&str]) -> Result<JsonCommandOutput> {
+fn run_json_subcommand(
+    args: &[&str],
+    #[cfg(unix)] install_context: &InstallBootstrapContextCarrierV1,
+) -> Result<JsonCommandOutput> {
     let exe = env::current_exe().with_context(|| "failed to locate substrate binary")?;
-    let output = Command::new(&exe)
+    let mut command = Command::new(&exe);
+    #[cfg(unix)]
+    {
+        bind_unix_install_bootstrap_context(install_context)?;
+        let encoded = install_context
+            .encode()
+            .context("failed to encode authenticated install context")?;
+        command.arg("--install-bootstrap-context-v1").arg(&encoded);
+        for (key, value) in expected_install_bootstrap_projections(install_context, &encoded)? {
+            command.env(key, value);
+        }
+    }
+    let output = command
         .args(args)
         .output()
         .with_context(|| format!("failed to execute `{}`", args.join(" ")))?;
     if output.stdout.is_empty() {
         return Err(anyhow!("`{}` produced no JSON output", args.join(" ")));
     }
+    #[cfg(unix)]
+    let mut value: Value = serde_json::from_slice(&output.stdout)
+        .with_context(|| format!("failed to parse JSON output from `{}`", args.join(" ")))?;
+    #[cfg(not(unix))]
     let value: Value = serde_json::from_slice(&output.stdout).with_context(|| {
         format!(
             "failed to parse JSON output from `{}`: {}",
@@ -757,6 +843,14 @@ fn run_json_subcommand(args: &[&str]) -> Result<JsonCommandOutput> {
             String::from_utf8_lossy(&output.stdout)
         )
     })?;
+    #[cfg(unix)]
+    if let Some(access) = value
+        .pointer_mut("/host/world_socket/access")
+        .and_then(Value::as_object_mut)
+    {
+        access.remove("current_user");
+        access.remove("current_uid");
+    }
     let stderr = String::from_utf8_lossy(&output.stderr).trim().to_string();
     Ok(JsonCommandOutput {
         value,
@@ -768,10 +862,148 @@ fn run_json_subcommand(args: &[&str]) -> Result<JsonCommandOutput> {
 #[cfg(test)]
 mod tests {
     use super::*;
+    #[cfg(unix)]
+    use crate::execution::install_bootstrap::current_unix_principal_and_home;
+    #[cfg(unix)]
+    use serial_test::serial;
+    #[cfg(unix)]
+    use std::ffi::OsString;
+    #[cfg(unix)]
+    use std::os::unix::fs::PermissionsExt;
+    #[cfg(unix)]
+    use tempfile::Builder;
+    #[cfg(unix)]
+    use transport_api_types::InstallBootstrapContextV1;
+
+    #[cfg(unix)]
+    struct ProcessStateGuard {
+        cwd: PathBuf,
+        environment: Vec<(&'static str, Option<OsString>)>,
+    }
+
+    #[cfg(unix)]
+    impl ProcessStateGuard {
+        fn set(cwd: &Path, values: &[(&'static str, &Path)]) -> Self {
+            let previous_cwd = std::env::current_dir().expect("read test cwd");
+            let environment = values
+                .iter()
+                .map(|(key, _)| (*key, std::env::var_os(key)))
+                .collect();
+            std::env::set_current_dir(cwd).expect("set Route D test cwd");
+            for (key, value) in values {
+                std::env::set_var(key, value);
+            }
+            Self {
+                cwd: previous_cwd,
+                environment,
+            }
+        }
+    }
+
+    #[cfg(unix)]
+    impl Drop for ProcessStateGuard {
+        fn drop(&mut self) {
+            std::env::set_current_dir(&self.cwd).expect("restore test cwd");
+            for (key, value) in self.environment.drain(..) {
+                match value {
+                    Some(value) => std::env::set_var(key, value),
+                    None => std::env::remove_var(key),
+                }
+            }
+        }
+    }
+
+    #[cfg(unix)]
+    fn prepare_route_d_prefix(root: &Path, name: &str, packages: &[&str]) -> PathBuf {
+        let prefix = root.join(name);
+        fs::create_dir(&prefix).expect("create Route D report prefix");
+        fs::set_permissions(&prefix, fs::Permissions::from_mode(0o700))
+            .expect("secure Route D report prefix");
+        fs::write(
+            prefix.join("config.yaml"),
+            "world:\n  enabled: true\n  deps:\n    builtins: disabled\n    inventory_mode: merged\n    enabled: []\n",
+        )
+        .expect("write Route D report config");
+        let package_dir = prefix.join("deps/packages");
+        fs::create_dir_all(&package_dir).expect("create Route D report inventory");
+        for package in packages {
+            fs::write(
+                package_dir.join(format!("{package}.yaml")),
+                format!(
+                    "version: 1\nname: {package}\nrunnable: false\ninstall:\n  method: manual\n  manual_instructions: test only\n"
+                ),
+            )
+            .expect("write Route D report package");
+        }
+        prefix
+    }
+
+    #[cfg(unix)]
+    fn route_d_carrier(prefix: &Path) -> InstallBootstrapContextCarrierV1 {
+        let (principal, _) = current_unix_principal_and_home().expect("current Unix principal");
+        let transport_api_types::PlatformPrincipalV1::Unix { account, uid } = principal else {
+            panic!("expected Unix principal");
+        };
+        let context = InstallBootstrapContextV1::new_unix(
+            prefix.to_str().expect("UTF-8 Route D prefix"),
+            &account,
+            uid,
+        )
+        .expect("valid Route D report context");
+        InstallBootstrapContextCarrierV1::from_context(context)
+            .expect("committed Route D report context")
+    }
 
     #[test]
     fn normalize_path_trims_trailing_separators() {
         assert_eq!(normalize_path("/tmp/"), "/tmp");
         assert_eq!(normalize_path(r"C:\\bin\\"), r"C:\\bin");
+    }
+
+    #[cfg(unix)]
+    #[test]
+    #[serial]
+    fn world_deps_section_forwards_authenticated_a_under_conflicting_ambient_b() {
+        let (_, account_home) = current_unix_principal_and_home().expect("current Unix home");
+        let temp = Builder::new()
+            .prefix("substrate-route-d-report-")
+            .tempdir_in(account_home)
+            .expect("secure Route D report fixture");
+        let selected_a = prepare_route_d_prefix(temp.path(), "selected-a", &["selected-only"]);
+        let ambient_b =
+            prepare_route_d_prefix(temp.path(), "ambient-b", &["ambient-one", "ambient-two"]);
+        let ambient_health = ambient_b.join("health");
+        fs::create_dir(&ambient_health).expect("create conflicting ambient health fixtures");
+        fs::write(
+            ambient_health.join("world_deps.json"),
+            serde_json::json!({
+                "schema_version": 1,
+                "cwd": ambient_b,
+                "inventory_packages": 99,
+                "inventory_bundles": 0,
+                "inventory_mode": "merged",
+                "builtins": "disabled",
+                "enabled": [],
+                "applied": []
+            })
+            .to_string(),
+        )
+        .expect("write conflicting ambient world deps fixture");
+        let carrier = route_d_carrier(&selected_a);
+        let _state = ProcessStateGuard::set(
+            temp.path(),
+            &[
+                ("SUBSTRATE_HOME", &ambient_b),
+                ("SUBSTRATE_ROOT", &ambient_b),
+            ],
+        );
+
+        let section = gather_world_deps_section(false, true, &carrier);
+        let snapshot = section.report.expect("typed Route D report snapshot");
+
+        assert_eq!(section.source.as_deref(), Some("command"));
+        assert_eq!(snapshot.inventory_packages, 1);
+        assert_eq!(snapshot.inventory_bundles, 0);
+        assert_eq!(snapshot.builtins, "disabled");
     }
 }

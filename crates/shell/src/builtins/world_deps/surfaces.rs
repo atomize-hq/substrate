@@ -209,10 +209,16 @@ fn run_current_list(args: &WorldDepsCurrentListArgs) -> Result<()> {
     let cwd = env::current_dir().unwrap_or_else(|_| ".".into());
     let cfg = config_model::resolve_effective_config(&cwd, &Default::default())
         .context("failed to resolve effective config")?;
+    let global_deps_dir =
+        if cfg.world.deps.inventory_mode == config_model::WorldDepsInventoryMode::Merged {
+            Some(substrate_paths::substrate_home()?.join("deps"))
+        } else {
+            None
+        };
 
     match args.view {
         WorldDepsCurrentListViewArg::Available => {
-            let view = resolve_current_inventory_view(&cwd, &cfg)?;
+            let view = resolve_current_inventory_view(&cwd, &cfg, global_deps_dir.as_deref())?;
             if view.is_empty() {
                 eprintln!("substrate: note: no deps inventory items visible for this directory; add definitions under $SUBSTRATE_HOME/deps/ or <workspace_root>/.substrate/deps/");
             }
@@ -231,9 +237,11 @@ fn run_current_list(args: &WorldDepsCurrentListArgs) -> Result<()> {
             }
             Ok(())
         }
-        WorldDepsCurrentListViewArg::Enabled => run_current_list_enabled(&cwd, &cfg, args.json),
+        WorldDepsCurrentListViewArg::Enabled => {
+            run_current_list_enabled(&cwd, &cfg, global_deps_dir.as_deref(), args.json)
+        }
         WorldDepsCurrentListViewArg::Applied => {
-            run_current_list_applied(&cwd, &cfg, args.all, args.json)
+            run_current_list_applied(&cwd, &cfg, global_deps_dir.as_deref(), args.all, args.json)
         }
     }
 }
@@ -242,7 +250,13 @@ fn run_current_show(args: &WorldDepsCurrentShowArgs) -> Result<()> {
     let cwd = env::current_dir().unwrap_or_else(|_| ".".into());
     let cfg = config_model::resolve_effective_config(&cwd, &Default::default())
         .context("failed to resolve effective config")?;
-    let view = resolve_current_inventory_view(&cwd, &cfg)?;
+    let global_deps_dir =
+        if cfg.world.deps.inventory_mode == config_model::WorldDepsInventoryMode::Merged {
+            Some(substrate_paths::substrate_home()?.join("deps"))
+        } else {
+            None
+        };
+    let view = resolve_current_inventory_view(&cwd, &cfg, global_deps_dir.as_deref())?;
     let item = view.get(&args.item_name).ok_or_else(|| {
         config_model::user_error(format!("unknown deps item '{}'", args.item_name))
     })?;
@@ -343,7 +357,13 @@ fn run_current_install(args: &WorldDepsCurrentInstallArgs) -> Result<()> {
     let cwd = env::current_dir().unwrap_or_else(|_| ".".into());
     let cfg = config_model::resolve_effective_config(&cwd, &Default::default())
         .context("failed to resolve effective config")?;
-    let view = resolve_current_inventory_view(&cwd, &cfg)?;
+    let global_deps_dir =
+        if cfg.world.deps.inventory_mode == config_model::WorldDepsInventoryMode::Merged {
+            Some(substrate_paths::substrate_home()?.join("deps"))
+        } else {
+            None
+        };
+    let view = resolve_current_inventory_view(&cwd, &cfg, global_deps_dir.as_deref())?;
 
     let plan = compute_install_plan_v1(&view, &args.item_names)?;
     if args.verbose {
@@ -379,7 +399,13 @@ fn run_current_sync(args: &WorldDepsCurrentSyncArgs) -> Result<()> {
     let cwd = env::current_dir().unwrap_or_else(|_| ".".into());
     let cfg = config_model::resolve_effective_config(&cwd, &Default::default())
         .context("failed to resolve effective config")?;
-    let view = resolve_current_inventory_view(&cwd, &cfg)?;
+    let global_deps_dir =
+        if cfg.world.deps.inventory_mode == config_model::WorldDepsInventoryMode::Merged {
+            Some(substrate_paths::substrate_home()?.join("deps"))
+        } else {
+            None
+        };
+    let view = resolve_current_inventory_view(&cwd, &cfg, global_deps_dir.as_deref())?;
 
     let item_names: Vec<String> = if args.all {
         let mut out: Vec<String> = Vec::new();
@@ -2575,7 +2601,13 @@ fn run_workspace_add(args: &WorldDepsScopedMutateArgs) -> Result<()> {
     let items = dedupe_ordered(&args.item_names);
     let cfg = config_model::resolve_effective_config(&cwd, &Default::default())
         .context("failed to resolve effective config")?;
-    let view = resolve_current_inventory_view(&cwd, &cfg)?;
+    let global_deps_dir =
+        if cfg.world.deps.inventory_mode == config_model::WorldDepsInventoryMode::Merged {
+            Some(substrate_paths::substrate_home()?.join("deps"))
+        } else {
+            None
+        };
+    let view = resolve_current_inventory_view(&cwd, &cfg, global_deps_dir.as_deref())?;
 
     let unknown = items
         .iter()
@@ -2741,6 +2773,7 @@ fn run_workspace_reset(args: &WorldDepsScopedResetArgs) -> Result<()> {
 fn run_current_list_enabled(
     cwd: &std::path::Path,
     cfg: &config_model::SubstrateConfig,
+    global_deps_dir: Option<&Path>,
     json: bool,
 ) -> Result<()> {
     eprintln!("substrate: note: showing current effective enabled deps list for this directory");
@@ -2750,7 +2783,7 @@ fn run_current_list_enabled(
         eprintln!("substrate: hint: add deps with 'substrate world deps workspace add ...' (or '... global add ...') then apply with 'substrate world deps current sync'");
     }
 
-    let view = resolve_current_inventory_view(cwd, cfg)?;
+    let view = resolve_current_inventory_view(cwd, cfg, global_deps_dir)?;
     let mut unknown: Vec<String> = Vec::new();
     let mut items: Vec<InventoryListItemSummaryV1> = Vec::with_capacity(enabled.len());
     for name in enabled {
@@ -2802,11 +2835,12 @@ fn enabled_item_summary(item: &InventoryItemDefV1, name: &str) -> InventoryListI
 fn run_current_list_applied(
     cwd: &Path,
     cfg: &config_model::SubstrateConfig,
+    global_deps_dir: Option<&Path>,
     all: bool,
     json: bool,
 ) -> Result<()> {
     eprintln!("substrate: note: showing current world deps status for this directory");
-    let view = resolve_current_inventory_view(cwd, cfg)?;
+    let view = resolve_current_inventory_view(cwd, cfg, global_deps_dir)?;
     let items = compute_current_applied_items_v1(&view, &cfg.world.deps.enabled, all)?;
 
     if json {
@@ -3508,6 +3542,7 @@ fn workspace_marker_path(workspace_root: &Path) -> PathBuf {
 pub(crate) fn resolve_current_inventory_view(
     cwd: &std::path::Path,
     cfg: &config_model::SubstrateConfig,
+    global_deps_dir: Option<&Path>,
 ) -> Result<InventoryViewV1> {
     let platform = HostPlatform::current();
     let mut view = InventoryViewV1::default();
@@ -3520,11 +3555,10 @@ pub(crate) fn resolve_current_inventory_view(
     }
 
     if inventory_mode == config_model::WorldDepsInventoryMode::Merged {
-        let global_deps_dir = substrate_paths::substrate_home()?.join("deps");
-        merge_inventory_layer_v1(
-            &mut view,
-            load_inventory_dir_v1(&global_deps_dir, platform)?,
-        );
+        let global_deps_dir = global_deps_dir.ok_or_else(|| {
+            anyhow!("explicit global dependency inventory path is required in merged mode")
+        })?;
+        merge_inventory_layer_v1(&mut view, load_inventory_dir_v1(global_deps_dir, platform)?);
     }
 
     let workspace_root = crate::execution::find_workspace_root(cwd);
