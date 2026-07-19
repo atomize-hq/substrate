@@ -1114,6 +1114,14 @@ pub(crate) fn resolve_effective_policy_for_bootstrap_home(
     cwd: &Path,
     bootstrap_home: &crate::execution::agent_runtime::OpenedBootstrapHomeV1<'_>,
 ) -> Result<Policy> {
+    Ok(resolve_effective_policy_with_explain_for_bootstrap_home(cwd, bootstrap_home, false)?.0)
+}
+
+pub(crate) fn resolve_effective_policy_with_explain_for_bootstrap_home(
+    cwd: &Path,
+    bootstrap_home: &crate::execution::agent_runtime::OpenedBootstrapHomeV1<'_>,
+    explain: bool,
+) -> Result<(Policy, Option<PolicyExplainV1>)> {
     let global_path = PathBuf::from(
         &bootstrap_home
             .identity()
@@ -1128,9 +1136,8 @@ pub(crate) fn resolve_effective_policy_for_bootstrap_home(
         cwd,
         &global_path,
         global_bytes.as_deref(),
-        false,
+        explain,
     )
-    .map(|(policy, _)| policy)
     .map_err(|error| config_model::user_error(error.to_string()))
 }
 
@@ -2175,7 +2182,45 @@ fn apply_metadata_opt(
 #[cfg(test)]
 mod tests {
     use super::*;
+    #[cfg(unix)]
+    use crate::execution::agent_runtime::HostSessionAuthority;
     use crate::execution::config_model::{ConfigUpdate, UpdateOp};
+    use tempfile::TempDir;
+
+    #[cfg(unix)]
+    #[test]
+    fn explicit_bootstrap_home_explain_uses_selected_global_policy_path() {
+        let selected = std::env::var_os("XDG_RUNTIME_DIR")
+            .or_else(|| std::env::var_os("HOME"))
+            .map(tempfile::tempdir_in)
+            .transpose()
+            .expect("create selected bootstrap home")
+            .unwrap_or_else(|| TempDir::new().expect("selected bootstrap home"));
+        #[cfg(unix)]
+        {
+            use std::os::unix::fs::PermissionsExt;
+            std::fs::set_permissions(selected.path(), std::fs::Permissions::from_mode(0o700))
+                .expect("secure selected bootstrap home");
+        }
+        std::fs::write(
+            selected.path().join("policy.yaml"),
+            "id: selected-global\nname: selected-global\n",
+        )
+        .expect("write selected policy");
+        let workspace = TempDir::new().expect("workspace");
+        let authority = HostSessionAuthority::open(selected.path()).expect("open authority");
+        let (policy, explain) = resolve_effective_policy_with_explain_for_bootstrap_home(
+            workspace.path(),
+            &authority.bootstrap_home(),
+            true,
+        )
+        .expect("resolve selected policy");
+
+        assert_eq!(policy.id, "selected-global");
+        let explain =
+            serde_json::to_string(&explain.expect("explain payload")).expect("serialize explain");
+        assert!(explain.contains(&selected.path().join("policy.yaml").display().to_string()));
+    }
 
     #[test]
     fn policy_patch_accepts_world_fs_v3_keys_and_dimension_lists() {

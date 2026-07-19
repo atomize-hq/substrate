@@ -163,6 +163,20 @@ fn compile_passwd_preload(root: &Path) -> PathBuf {
 #include <string.h>
 #include <sys/types.h>
 typedef int (*real_getpwuid_r_fn)(uid_t, struct passwd *, char *, size_t, struct passwd **);
+typedef char *(*real_getenv_fn)(const char *);
+char *getenv(const char *name) {
+    static real_getenv_fn real_fn;
+    static unsigned install_context_reads;
+    if (real_fn == NULL) real_fn = (real_getenv_fn)dlsym(RTLD_NEXT, "getenv");
+    if (strcmp(name, "SUBSTRATE_INSTALL_BOOTSTRAP_CONTEXT_V1") == 0) {
+        const char *hide_after_first = real_fn("SUBSTRATE_R2_TEST_HIDE_CONTEXT_AFTER_FIRST_READ");
+        if (hide_after_first != NULL && strcmp(hide_after_first, "1") == 0
+            && install_context_reads++ > 0) {
+            return NULL;
+        }
+    }
+    return real_fn(name);
+}
 int getpwuid_r(uid_t uid, struct passwd *pwd, char *buf, size_t buflen, struct passwd **result) {
     const char *target_uid = getenv("SUBSTRATE_R2_TEST_UID");
     if (target_uid == NULL || uid != (uid_t)strtoul(target_uid, NULL, 10)) {
@@ -199,6 +213,108 @@ int getpwuid_r(uid_t uid, struct passwd *pwd, char *buf, size_t buflen, struct p
         String::from_utf8_lossy(&output.stderr)
     );
     library
+}
+
+#[test]
+fn health_uses_typed_context_under_conflicting_ambient() {
+    let fixture = DoctorFixture::new(
+        r#"version: 2
+managers:
+  - name: SelectedManager
+    priority: 1
+    detect:
+      script: "exit 0"
+    init:
+      shell: |
+        export SELECTED_MANAGER=1
+    repair_hint: |
+      export SELECTED_MANAGER=1
+"#,
+    );
+    let selected_home = fixture.home().to_path_buf();
+    let selected_prefix = selected_home.join(".substrate");
+    let ambient_home = selected_home
+        .parent()
+        .expect("fixture home parent")
+        .join("ambient-b");
+    let ambient_prefix = ambient_home.join(".substrate");
+    fs::create_dir_all(ambient_prefix.join("health")).expect("create conflicting ambient prefix");
+    fs::write(
+        ambient_prefix.join("manager_hooks.yaml"),
+        "this conflicting manifest must never be read\n",
+    )
+    .expect("write conflicting ambient manifest");
+    fs::write(
+        ambient_prefix.join("trace.jsonl"),
+        "this conflicting trace must never be read\n",
+    )
+    .expect("write conflicting ambient trace");
+    fs::set_permissions(&ambient_prefix, fs::Permissions::from_mode(0o000))
+        .expect("deny every probe beneath conflicting ambient prefix");
+
+    let output = fixture
+        .command()
+        .env("HOME", &ambient_home)
+        .env("USERPROFILE", &ambient_home)
+        .env("SUBSTRATE_HOME", &ambient_prefix)
+        .env("SUBSTRATE_ROOT", &ambient_prefix)
+        .env("SHIM_TRACE_LOG", ambient_prefix.join("trace.jsonl"))
+        .env("SUBSTRATE_R2_TEST_HIDE_CONTEXT_AFTER_FIRST_READ", "1")
+        .arg("--no-world")
+        .arg("health")
+        .arg("--json")
+        .output()
+        .expect("run health with typed A and conflicting ambient B");
+
+    fs::set_permissions(&ambient_prefix, fs::Permissions::from_mode(0o700))
+        .expect("restore conflicting ambient prefix for fixture cleanup");
+    assert!(
+        output.status.success(),
+        "typed health must not recover its context from the hidden compatibility projection: stdout={} stderr={}",
+        String::from_utf8_lossy(&output.stdout),
+        String::from_utf8_lossy(&output.stderr)
+    );
+    let payload: Value = serde_json::from_slice(&output.stdout).expect("valid health JSON");
+    let shim = payload.get("shim").expect("shim report missing");
+    assert_eq!(
+        shim.get("selected_host_prefix").and_then(Value::as_str),
+        selected_prefix.to_str()
+    );
+    assert_eq!(
+        shim.pointer("/manifest/base").and_then(Value::as_str),
+        selected_prefix.join("manager_hooks.yaml").to_str()
+    );
+    assert_eq!(
+        shim.get("trace_log").and_then(Value::as_str),
+        selected_prefix.join("trace.jsonl").to_str()
+    );
+    assert_eq!(
+        shim.pointer("/path/shim_dir").and_then(Value::as_str),
+        selected_prefix.join("shims").to_str()
+    );
+    assert!(
+        shim.get("states")
+            .and_then(Value::as_array)
+            .is_some_and(|states| states.iter().any(|state| {
+                state.get("name").and_then(Value::as_str) == Some("SelectedManager")
+                    && state.get("detected").and_then(Value::as_bool) == Some(true)
+            })),
+        "selected A manager state missing: {shim}"
+    );
+    assert!(
+        !String::from_utf8_lossy(&output.stdout).contains(&ambient_home.display().to_string()),
+        "health output must not report conflicting ambient B"
+    );
+    assert_eq!(
+        fs::read_to_string(ambient_prefix.join("manager_hooks.yaml"))
+            .expect("read unchanged conflicting manifest"),
+        "this conflicting manifest must never be read\n"
+    );
+    assert_eq!(
+        fs::read_to_string(ambient_prefix.join("trace.jsonl"))
+            .expect("read unchanged conflicting trace"),
+        "this conflicting trace must never be read\n"
+    );
 }
 
 fn write_invalid_workspace_fixture(root: &std::path::Path) {
