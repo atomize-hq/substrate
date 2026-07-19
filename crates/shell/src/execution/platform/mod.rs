@@ -210,6 +210,8 @@ pub(crate) fn handle_world_command(
                 *json,
                 effective.world.enabled,
                 world_disable_attribution.as_ref(),
+                #[cfg(target_os = "linux")]
+                install_context,
             );
             std::process::exit(code);
         }
@@ -299,6 +301,8 @@ pub(crate) fn handle_host_command(
                 *json,
                 effective.world.enabled,
                 world_disable_attribution.as_ref(),
+                #[cfg(target_os = "linux")]
+                install_context,
             );
             std::process::exit(code);
         }
