@@ -33,6 +33,8 @@ use tokio_tungstenite as tungs;
 use transport_api_client::AgentClient;
 #[cfg(not(target_os = "windows"))]
 use transport_api_types::ExecuteCancelRequestV1;
+#[cfg(any(target_os = "linux", all(test, unix)))]
+use transport_api_types::PlatformPrincipalV1;
 use transport_api_types::{
     ExecuteRequest, ExecuteStreamFrame, MemberDispatchRequestV1, MemberRuntimeBackendKindV1,
     ProcessTelemetry, ResolvedMemberRuntimeDescriptorV1, RetainedWorkerLaunchAuthorityProofV1,
@@ -47,7 +49,7 @@ use world_api::WorldBackend;
 const WORLD_PROJECT_DIR_OVERRIDE_ENV: &str = "SUBSTRATE_WORLD_PROJECT_DIR";
 const MACOS_STAGED_WORKSPACE_CURRENT: &str = "/var/lib/substrate/staged-workspace/current";
 const SUBSTRATE_PARENT_SPAN_ENV: &str = "SUBSTRATE_PARENT_SPAN_ID";
-#[cfg(any(target_os = "linux", test))]
+#[cfg(any(target_os = "linux", all(test, unix)))]
 const SUBSTRATE_INTERNAL_CODEX_AUTH_SEED_HOME_ENV: &str = "SUBSTRATE_INTERNAL_CODEX_AUTH_SEED_HOME";
 const RESERVED_WORLD_REQUEST_PROFILES: &[&str] = &["world-deps-provision", "world-deps-probe"];
 
@@ -156,38 +158,47 @@ fn ensure_world_deps_bin_on_path(env_map: &mut std::collections::HashMap<String,
     }
 }
 
-#[cfg(any(target_os = "linux", test))]
-fn resolve_host_codex_seed_home() -> Option<std::path::PathBuf> {
-    dirs::home_dir()
-        .or_else(|| std::env::var_os("HOME").map(std::path::PathBuf::from))
-        .or_else(|| std::env::var_os("USERPROFILE").map(std::path::PathBuf::from))
+#[cfg(any(target_os = "linux", all(test, unix)))]
+fn resolve_host_codex_seed_home(
+    intended_host_principal: &PlatformPrincipalV1,
+) -> anyhow::Result<std::path::PathBuf> {
+    crate::execution::install_bootstrap::unix_account_home_for_principal(intended_host_principal)
         .map(|home| home.join(".codex"))
+        .map_err(|error| {
+            anyhow::anyhow!("failed to resolve intended host principal home: {error:#}")
+        })
 }
 
-#[cfg(any(target_os = "linux", test))]
+#[cfg(any(target_os = "linux", all(test, unix)))]
 fn maybe_inject_codex_auth_seed_home_for_policy(
     env_map: &mut std::collections::HashMap<String, String>,
     backend_kind: MemberRuntimeBackendKindV1,
     backend_id: &str,
     effective_policy: &substrate_broker::Policy,
-) {
+    intended_host_principal: Option<&PlatformPrincipalV1>,
+) -> anyhow::Result<()> {
+    env_map.remove(SUBSTRATE_INTERNAL_CODEX_AUTH_SEED_HOME_ENV);
     if backend_kind != MemberRuntimeBackendKindV1::Codex {
-        return;
+        return Ok(());
     }
     if !effective_policy
         .agents_host_credentials_read_allowed_backends
         .iter()
         .any(|candidate| candidate == backend_id)
     {
-        return;
+        return Ok(());
     }
-    let Some(seed_home) = resolve_host_codex_seed_home() else {
-        return;
-    };
+    let intended_host_principal = intended_host_principal.ok_or_else(|| {
+        anyhow::anyhow!(
+            "typed intended host principal is required for allowlisted Codex credential projection"
+        )
+    })?;
+    let seed_home = resolve_host_codex_seed_home(intended_host_principal)?;
     env_map.insert(
         SUBSTRATE_INTERNAL_CODEX_AUTH_SEED_HOME_ENV.to_string(),
         seed_home.display().to_string(),
     );
+    Ok(())
 }
 
 #[cfg(target_os = "linux")]
@@ -195,6 +206,7 @@ fn maybe_inject_codex_auth_seed_home_for_member_dispatch(
     env_map: &mut std::collections::HashMap<String, String>,
     dispatch: &MemberDispatchTransportRequest,
     cwd_path: &std::path::Path,
+    intended_host_principal: Option<&PlatformPrincipalV1>,
 ) -> anyhow::Result<()> {
     let (effective_policy, _) =
         substrate_broker::resolve_effective_policy_with_explain(cwd_path, false)
@@ -204,7 +216,8 @@ fn maybe_inject_codex_auth_seed_home_for_member_dispatch(
         dispatch.backend_kind,
         &dispatch.backend_id,
         &effective_policy,
-    );
+        intended_host_principal,
+    )?;
     Ok(())
 }
 
@@ -1120,7 +1133,12 @@ pub(crate) fn build_agent_client_and_member_dispatch_request(
     String,
 )> {
     let cwd_path = std::env::current_dir().unwrap_or_else(|_| std::path::PathBuf::from("."));
-    build_agent_client_and_member_dispatch_request_impl(request, &cwd_path)
+    build_agent_client_and_member_dispatch_request_impl(
+        request,
+        &cwd_path,
+        #[cfg(target_os = "linux")]
+        None,
+    )
 }
 
 #[allow(dead_code)]
@@ -1128,13 +1146,19 @@ pub(crate) fn build_agent_client_and_member_dispatch_request_for_cwd(
     request: &MemberDispatchTransportRequest,
     cwd_path: &std::path::Path,
     acceptance_context: Option<transport_api_types::WorldWorkAcceptanceContextV1>,
+    #[cfg(target_os = "linux")] intended_host_principal: Option<&PlatformPrincipalV1>,
 ) -> anyhow::Result<(
     transport_api_client::AgentClient,
     transport_api_types::ExecuteRequest,
     String,
 )> {
     let (client, mut execute_request, agent_id) =
-        build_agent_client_and_member_dispatch_request_impl(request, cwd_path)?;
+        build_agent_client_and_member_dispatch_request_impl(
+            request,
+            cwd_path,
+            #[cfg(target_os = "linux")]
+            intended_host_principal,
+        )?;
     execute_request.acceptance_context = acceptance_context;
     execute_request
         .validate()
@@ -1236,6 +1260,7 @@ fn build_agent_client_and_request_impl(
 fn build_agent_client_and_member_dispatch_request_impl(
     dispatch: &MemberDispatchTransportRequest,
     cwd_path: &std::path::Path,
+    intended_host_principal: Option<&PlatformPrincipalV1>,
 ) -> anyhow::Result<(
     transport_api_client::AgentClient,
     transport_api_types::ExecuteRequest,
@@ -1261,7 +1286,12 @@ fn build_agent_client_and_member_dispatch_request_impl(
         &mut env_map,
     )?;
     ensure_world_deps_bin_on_path(&mut env_map);
-    maybe_inject_codex_auth_seed_home_for_member_dispatch(&mut env_map, dispatch, &cwd_path)?;
+    maybe_inject_codex_auth_seed_home_for_member_dispatch(
+        &mut env_map,
+        dispatch,
+        &cwd_path,
+        intended_host_principal,
+    )?;
     preserve_world_project_dir_override(&mut env_map, &cwd_path);
     let request = build_execute_request(ExecuteRequestInput {
         profile: current_world_request_profile(),
@@ -2343,7 +2373,7 @@ mod tests {
     use std::time::Duration;
     use substrate_common::agent_events::AgentEventKind;
     use transport_api_types::{
-        ExecuteStreamFrame, MemberRuntimeBackendKindV1, PolicySnapshotV3,
+        ExecuteStreamFrame, MemberRuntimeBackendKindV1, PlatformPrincipalV1, PolicySnapshotV3,
         PolicySnapshotWorldFsFailClosedV3, PolicySnapshotWorldFsV3, PolicySnapshotWorldFsWriteV3,
         ResolvedMemberRuntimeDescriptorV1, WorldFsMode, WorldNetworkRoutingV1,
     };
@@ -2431,16 +2461,21 @@ mod tests {
         );
     }
 
+    #[cfg(unix)]
     #[test]
     fn codex_member_dispatch_injects_internal_seed_home_when_backend_is_allowlisted() {
         let temp_dir = tempfile::tempdir().expect("temp dir");
-        let codex_home = temp_dir.path().join(".codex");
-        std::fs::create_dir_all(&codex_home).expect("create seed home");
-        let home = temp_dir.path().display().to_string();
-        let expected_seed_home = codex_home.display().to_string();
+        let ambient_home = temp_dir.path().display().to_string();
+        let (principal, account_home) =
+            crate::execution::install_bootstrap::current_unix_principal_and_home()
+                .expect("resolve current principal");
+        let expected_seed_home = account_home.join(".codex").display().to_string();
 
-        with_env_var("HOME", &home, || {
-            let mut env_map = std::collections::HashMap::<String, String>::new();
+        with_env_var("HOME", &ambient_home, || {
+            let mut env_map = std::collections::HashMap::<String, String>::from([(
+                SUBSTRATE_INTERNAL_CODEX_AUTH_SEED_HOME_ENV.to_string(),
+                "/poisoned/ambient/.codex".to_string(),
+            )]);
             let policy = substrate_broker::Policy {
                 agents_host_credentials_read_allowed_backends: vec!["cli:codex-world".to_string()],
                 ..substrate_broker::Policy::default()
@@ -2451,7 +2486,9 @@ mod tests {
                 MemberRuntimeBackendKindV1::Codex,
                 "cli:codex-world",
                 &policy,
-            );
+                Some(&principal),
+            )
+            .expect("inject account-bound Codex seed home");
 
             assert_eq!(
                 env_map
@@ -2462,12 +2499,16 @@ mod tests {
         });
     }
 
+    #[cfg(unix)]
     #[test]
     fn codex_member_dispatch_skips_internal_seed_home_when_backend_is_not_allowlisted() {
         let temp_dir = tempfile::tempdir().expect("temp dir");
         let home = temp_dir.path().display().to_string();
         with_env_var("HOME", &home, || {
-            let mut env_map = std::collections::HashMap::<String, String>::new();
+            let mut env_map = std::collections::HashMap::<String, String>::from([(
+                SUBSTRATE_INTERNAL_CODEX_AUTH_SEED_HOME_ENV.to_string(),
+                "/poisoned/ambient/.codex".to_string(),
+            )]);
             let policy = substrate_broker::Policy::default();
 
             maybe_inject_codex_auth_seed_home_for_policy(
@@ -2475,7 +2516,9 @@ mod tests {
                 MemberRuntimeBackendKindV1::Codex,
                 "cli:codex-world",
                 &policy,
-            );
+                None,
+            )
+            .expect("non-allowlisted backend does not require a principal");
 
             assert!(
                 !env_map.contains_key(SUBSTRATE_INTERNAL_CODEX_AUTH_SEED_HOME_ENV),
@@ -2484,13 +2527,17 @@ mod tests {
         });
     }
 
+    #[cfg(unix)]
     #[test]
     fn codex_member_dispatch_injects_internal_seed_home_when_backend_is_allowlisted_only_for_exact_backend(
     ) {
         let temp_dir = tempfile::tempdir().expect("temp dir");
         let home = temp_dir.path().display().to_string();
         with_env_var("HOME", &home, || {
-            let mut env_map = std::collections::HashMap::<String, String>::new();
+            let mut env_map = std::collections::HashMap::<String, String>::from([(
+                SUBSTRATE_INTERNAL_CODEX_AUTH_SEED_HOME_ENV.to_string(),
+                "/poisoned/ambient/.codex".to_string(),
+            )]);
             let policy = substrate_broker::Policy {
                 agents_host_credentials_read_allowed_backends: vec!["cli:codex-host".to_string()],
                 ..substrate_broker::Policy::default()
@@ -2501,13 +2548,108 @@ mod tests {
                 MemberRuntimeBackendKindV1::Codex,
                 "cli:codex-world",
                 &policy,
-            );
+                None,
+            )
+            .expect("different allowlisted backend does not require a principal");
 
             assert!(
                 !env_map.contains_key(SUBSTRATE_INTERNAL_CODEX_AUTH_SEED_HOME_ENV),
                 "seed home injection must stay pinned to the exact allowlisted backend"
             );
         });
+    }
+
+    #[cfg(unix)]
+    #[test]
+    fn codex_member_dispatch_rejects_allowlisted_seed_without_typed_principal() {
+        let mut env_map = std::collections::HashMap::<String, String>::from([(
+            SUBSTRATE_INTERNAL_CODEX_AUTH_SEED_HOME_ENV.to_string(),
+            "/poisoned/ambient/.codex".to_string(),
+        )]);
+        let policy = substrate_broker::Policy {
+            agents_host_credentials_read_allowed_backends: vec!["cli:codex-world".to_string()],
+            ..substrate_broker::Policy::default()
+        };
+
+        let error = maybe_inject_codex_auth_seed_home_for_policy(
+            &mut env_map,
+            MemberRuntimeBackendKindV1::Codex,
+            "cli:codex-world",
+            &policy,
+            None,
+        )
+        .expect_err("allowlisted Codex seed requires typed intended principal");
+
+        assert!(
+            error.to_string().contains("intended host principal"),
+            "unexpected missing-principal error: {error:#}"
+        );
+        assert!(!env_map.contains_key(SUBSTRATE_INTERNAL_CODEX_AUTH_SEED_HOME_ENV));
+    }
+
+    #[cfg(unix)]
+    #[test]
+    fn codex_member_dispatch_rejects_principal_that_fails_account_uid_round_trip() {
+        let (principal, _) = crate::execution::install_bootstrap::current_unix_principal_and_home()
+            .expect("resolve current principal");
+        let PlatformPrincipalV1::Unix { account, uid } = principal else {
+            panic!("current Unix principal must use the Unix variant");
+        };
+        let mismatched = PlatformPrincipalV1::Unix {
+            account,
+            uid: uid ^ 1,
+        };
+        let mut env_map = std::collections::HashMap::<String, String>::from([(
+            SUBSTRATE_INTERNAL_CODEX_AUTH_SEED_HOME_ENV.to_string(),
+            "/poisoned/ambient/.codex".to_string(),
+        )]);
+        let policy = substrate_broker::Policy {
+            agents_host_credentials_read_allowed_backends: vec!["cli:codex-world".to_string()],
+            ..substrate_broker::Policy::default()
+        };
+
+        let error = maybe_inject_codex_auth_seed_home_for_policy(
+            &mut env_map,
+            MemberRuntimeBackendKindV1::Codex,
+            "cli:codex-world",
+            &policy,
+            Some(&mismatched),
+        )
+        .expect_err("mismatched account and UID must fail closed");
+
+        assert!(
+            error.to_string().contains("round-trip")
+                || error.to_string().contains("does not exist"),
+            "unexpected mismatched-principal error: {error:#}"
+        );
+        assert!(!env_map.contains_key(SUBSTRATE_INTERNAL_CODEX_AUTH_SEED_HOME_ENV));
+    }
+
+    #[cfg(unix)]
+    #[test]
+    fn non_codex_member_dispatch_clears_poisoned_internal_seed_home() {
+        let mut env_map = std::collections::HashMap::<String, String>::from([(
+            SUBSTRATE_INTERNAL_CODEX_AUTH_SEED_HOME_ENV.to_string(),
+            "/poisoned/ambient/.codex".to_string(),
+        )]);
+        let policy = substrate_broker::Policy {
+            agents_host_credentials_read_allowed_backends: vec!["cli:codex-world".to_string()],
+            ..substrate_broker::Policy::default()
+        };
+
+        maybe_inject_codex_auth_seed_home_for_policy(
+            &mut env_map,
+            MemberRuntimeBackendKindV1::ClaudeCode,
+            "cli:claude-world",
+            &policy,
+            None,
+        )
+        .expect("non-Codex backend does not require a principal");
+
+        assert!(
+            !env_map.contains_key(SUBSTRATE_INTERNAL_CODEX_AUTH_SEED_HOME_ENV),
+            "reserved seed home must not survive a non-Codex backend"
+        );
     }
 
     #[test]
