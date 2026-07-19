@@ -1,3 +1,7 @@
+#[cfg(unix)]
+use crate::execution::agent_runtime::host_session_authority::trusted_fs::TrustedAuthorityRoot;
+#[cfg(unix)]
+use crate::execution::agent_runtime::HostSessionAuthority;
 use crate::execution::cli::{
     Cli, ConfigResetArgs, PolicyAction, PolicyCmd, PolicyCurrentAction, PolicyGlobalAction,
     PolicyGlobalCmd, PolicyInitArgs, PolicySetArgs, PolicyShowArgs, PolicyWorkspaceAction,
@@ -15,6 +19,8 @@ use std::io::Write;
 use std::path::{Path, PathBuf};
 use substrate_broker::{Policy, PolicyExplainV1, WorldFsDenyEnforcement};
 use tempfile::NamedTempFile;
+#[cfg(unix)]
+use transport_api_types::InstallBootstrapContextCarrierV1;
 
 const DEFAULT_GLOBAL_POLICY_PATCH_HEADER: &str = r#"# Substrate policy patch (sparse overrides; scope=global).
 # - This file is a YAML mapping of global-scoped policy overrides.
@@ -28,13 +34,25 @@ const DEFAULT_WORKSPACE_POLICY_PATCH_HEADER: &str = r#"# Substrate policy patch 
 # - View the effective merged policy with: `substrate policy current show --explain`
 "#;
 
-pub(crate) fn handle_policy_command(cmd: &PolicyCmd, _cli: &Cli) -> i32 {
+pub(crate) fn handle_policy_command(
+    cmd: &PolicyCmd,
+    _cli: &Cli,
+    #[cfg(unix)] install_context: &InstallBootstrapContextCarrierV1,
+) -> i32 {
     let result = match &cmd.action {
         PolicyAction::Current(cmd) => match &cmd.action {
-            PolicyCurrentAction::Show(args) => run_current_show(args),
+            PolicyCurrentAction::Show(args) => run_current_show(
+                args,
+                #[cfg(unix)]
+                install_context,
+            ),
         },
         PolicyAction::Init(args) => run_workspace_init(args),
-        PolicyAction::Show(args) => run_current_show(args),
+        PolicyAction::Show(args) => run_current_show(
+            args,
+            #[cfg(unix)]
+            install_context,
+        ),
         PolicyAction::Set(args) => run_workspace_set(args),
         PolicyAction::Global(cmd) => run_global(cmd),
         PolicyAction::Workspace(cmd) => run_workspace(cmd),
@@ -285,13 +303,30 @@ fn run_workspace_show(args: &PolicyShowArgs) -> Result<()> {
     Ok(())
 }
 
-fn run_current_show(args: &PolicyShowArgs) -> Result<()> {
+fn run_current_show(
+    args: &PolicyShowArgs,
+    #[cfg(unix)] install_context: &InstallBootstrapContextCarrierV1,
+) -> Result<()> {
     let cwd = std::env::current_dir().unwrap_or_else(|_| PathBuf::from("."));
     if !args.explain {
         eprintln!(
             "substrate: note: showing effective merged policy; use --explain to view per-key sources"
         );
     }
+    #[cfg(unix)]
+    let (policy, explain) = {
+        let root =
+            TrustedAuthorityRoot::open(Path::new(&install_context.context.selected_host_prefix))
+                .map_err(|error| anyhow!("failed to open selected policy root: {error}"))?;
+        let authority = HostSessionAuthority::from_trusted_root(root)
+            .map_err(|error| anyhow!("failed to bind selected policy root: {error}"))?;
+        policy_model::resolve_effective_policy_with_explain_for_bootstrap_home(
+            &cwd,
+            &authority.bootstrap_home(),
+            args.explain,
+        )?
+    };
+    #[cfg(not(unix))]
     let (policy, explain) =
         substrate_broker::resolve_effective_policy_with_explain(&cwd, args.explain)
             .map_err(|err| config_model::user_error(err.to_string()))?;
