@@ -12,9 +12,10 @@ use std::time::Duration;
 use substrate_broker::{detect_profile, world_fs_policy};
 use transport_api_client::AgentClient;
 use transport_api_types::{
-    ExecuteRequest, WorldDoctorLandlockV1, WorldDoctorNetfilterStatusV1, WorldDoctorReportV1,
-    WorldDoctorWorldFsStrategyKindV1, WorldDoctorWorldFsStrategyProbeResultV1,
-    WorldDoctorWorldFsStrategyProbeV1, WorldDoctorWorldFsStrategyV1, WorldFsMode,
+    ExecuteRequest, InstallBootstrapContextCarrierV1, WorldDoctorLandlockV1,
+    WorldDoctorNetfilterStatusV1, WorldDoctorReportV1, WorldDoctorWorldFsStrategyKindV1,
+    WorldDoctorWorldFsStrategyProbeResultV1, WorldDoctorWorldFsStrategyProbeV1,
+    WorldDoctorWorldFsStrategyV1, WorldFsMode,
 };
 use which::which;
 
@@ -22,6 +23,7 @@ pub(crate) fn host_doctor_main(
     json_mode: bool,
     world_enabled: bool,
     world_disable_attribution: Option<&crate::execution::config_model::DoctorDisableAttribution>,
+    install_context: &InstallBootstrapContextCarrierV1,
 ) -> i32 {
     // Helpers
     fn pass(msg: &str) {
@@ -222,6 +224,8 @@ pub(crate) fn host_doctor_main(
                 "world_fs_mode": fs_policy.mode.as_str(),
                 "world_fs_isolation": fs_policy.isolation.as_str(),
                 "world_fs_require_world": fs_policy.require_world,
+                "selected_host_prefix": install_context.context.selected_host_prefix,
+                "host_context_commitment": install_context.host_context_commitment,
                 "world_socket": socket_json,
             },
         });
@@ -232,6 +236,14 @@ pub(crate) fn host_doctor_main(
         println!("{}", serde_json::to_string_pretty(&out).unwrap());
     } else {
         println!("== substrate host doctor ==");
+        info(&format!(
+            "selected_host_prefix: {}",
+            install_context.context.selected_host_prefix
+        ));
+        info(&format!(
+            "host_context_commitment: {}",
+            install_context.host_context_commitment
+        ));
         if !world_enabled {
             if let Some(attribution) = world_disable_attribution {
                 fail(attribution.reason);
@@ -385,6 +397,7 @@ pub(crate) fn world_doctor_main(
     json_mode: bool,
     world_enabled: bool,
     world_disable_attribution: Option<&crate::execution::config_model::DoctorDisableAttribution>,
+    install_context: &InstallBootstrapContextCarrierV1,
 ) -> i32 {
     // Helpers
     fn pass(msg: &str) {
@@ -572,6 +585,8 @@ pub(crate) fn world_doctor_main(
             "world_fs_mode": fs_policy.mode.as_str(),
             "world_fs_isolation": fs_policy.isolation.as_str(),
             "world_fs_require_world": fs_policy.require_world,
+            "selected_host_prefix": install_context.context.selected_host_prefix,
+            "host_context_commitment": install_context.host_context_commitment,
             "world_socket": socket_json,
         })
     };
@@ -603,7 +618,11 @@ pub(crate) fn world_doctor_main(
                     Err(err) => {
                         let message = err.to_string();
                         if message.contains("HTTP 404") {
-                            legacy_world_doctor_report_v1_via_execute(&client).await
+                            legacy_world_doctor_report_v1_via_execute(
+                                &client,
+                                Some(install_context),
+                            )
+                            .await
                         } else {
                             Err(err)
                         }
@@ -622,7 +641,11 @@ pub(crate) fn world_doctor_main(
         match report {
             None => json!({"status": "unreachable", "ok": false}),
             Some(report) => match report {
-                Ok(report) => {
+                Ok(mut report) => {
+                    report.selected_host_prefix =
+                        Some(install_context.context.selected_host_prefix.clone());
+                    report.host_context_commitment =
+                        Some(install_context.host_context_commitment.clone());
                     let status = if report.ok { "ok" } else { "missing_prereqs" };
                     let mut value = serde_json::to_value(report).unwrap_or_else(|_| json!({}));
                     if let Some(obj) = value.as_object_mut() {
@@ -670,6 +693,14 @@ pub(crate) fn world_doctor_main(
     } else {
         println!("== substrate world doctor ==");
         println!("== Host ==");
+        info(&format!(
+            "selected_host_prefix: {}",
+            install_context.context.selected_host_prefix
+        ));
+        info(&format!(
+            "host_context_commitment: {}",
+            install_context.host_context_commitment
+        ));
 
         if !world_enabled {
             if let Some(attribution) = world_disable_attribution {
@@ -892,6 +923,7 @@ pub(crate) fn world_doctor_main(
 
 async fn legacy_world_doctor_report_v1_via_execute(
     client: &AgentClient,
+    install_context: Option<&InstallBootstrapContextCarrierV1>,
 ) -> anyhow::Result<WorldDoctorReportV1> {
     let landlock = world::landlock::detect_support();
     let cwd_path = std::path::PathBuf::from("/tmp");
@@ -970,6 +1002,10 @@ async fn legacy_world_doctor_report_v1_via_execute(
         schema_version: 2,
         ok,
         collected_at_utc: chrono::Utc::now().to_rfc3339_opts(chrono::SecondsFormat::Secs, true),
+        selected_host_prefix: install_context
+            .map(|context| context.context.selected_host_prefix.clone()),
+        host_context_commitment: install_context
+            .map(|context| context.host_context_commitment.clone()),
         policy_snapshot_v1_supported: false,
         policy_resolution_mode: None,
         netfilter_status: Some(WorldDoctorNetfilterStatusV1 {
