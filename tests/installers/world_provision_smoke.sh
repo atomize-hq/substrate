@@ -585,8 +585,11 @@ verify_synthetic_auth_account_home_cleanup() (
   source <(awk '/^while \[\[ \$# -gt 0 \]\]; do/ { exit } { print }' \
     "${REPO_ROOT}/scripts/linux/world-provision.sh")
   REPO_ROOT="$(cd "${SCRIPT_DIR}/../.." && pwd)"
+  # shellcheck disable=SC2034 # consumed by sourced gateway lifecycle helpers
   INSTALL_BOOTSTRAP_ACCOUNT_HOME="${account_home}"
+  # shellcheck disable=SC2034 # consumed by sourced gateway lifecycle helpers
   INVOKING_HOME="${account_home}"
+  # shellcheck disable=SC2034 # consumed by sourced gateway lifecycle helpers
   INSTALL_BOOTSTRAP_CONTEXT_V1="${carrier}"
   SUBSTRATE_INSTALL_BOOTSTRAP_CONTEXT_V1="${carrier}"
   export SUBSTRATE_INSTALL_BOOTSTRAP_CONTEXT_V1

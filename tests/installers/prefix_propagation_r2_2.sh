@@ -310,7 +310,9 @@ for wrapper_kind in install uninstall; do
   grep -Eq '^\+ (stop_loader|printf)' "${wrapper_trace}" \
     || fail "${wrapper_kind} wrapper did not restore inherited xtrace after child delegation"
 done
+# shellcheck disable=SC2034 # referenced dynamically through the capture nameref below
 mapfile -t install_capture < "${INSTALL_WRAPPER_CAPTURE}"
+# shellcheck disable=SC2034 # referenced dynamically through the capture nameref below
 mapfile -t uninstall_capture < "${UNINSTALL_WRAPPER_CAPTURE}"
 for capture_name in install_capture uninstall_capture; do
   declare -n capture="${capture_name}"
@@ -607,7 +609,9 @@ STUB
     || fail "release inherited xtrace did not resume for nonsensitive dispatch"
 
   : > "${release_sudo_capture}"
+  # shellcheck disable=SC2034 # consumed by sourced install_packages
   PKG_MANAGER=pacman
+  # shellcheck disable=SC2034 # consumed by sourced install_packages
   DRY_RUN=0
   PATH="${release_malicious_bin}:${PATH}" SUDO_CAPTURE="${release_sudo_capture}" \
     install_packages review-package
@@ -623,6 +627,7 @@ STUB
   release_sudo_lines_before="$(wc -l < "${release_sudo_capture}")"
   set +e
   (
+    # shellcheck disable=SC2034 # consumed by sourced run_privileged projection validation
     SUBSTRATE_ROOT="${AMBIENT_B}"
     SUDO_CAPTURE="${release_sudo_capture}" run_with_sudo \
       true --selected-prefix "${PREFIX}"
@@ -799,6 +804,7 @@ STUB
   sudo_lines_before="$(wc -l < "${sudo_capture}")"
   set +e
   (
+    # shellcheck disable=SC2034 # consumed by sourced run_privileged projection validation
     SUBSTRATE_ROOT="${AMBIENT_B}"
     PATH="${stub_bin}:${PATH}" SUDO_CAPTURE="${sudo_capture}" \
       run_privileged true --selected-prefix "${SELECTED_A}"

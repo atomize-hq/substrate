@@ -121,6 +121,7 @@ PY
   IFS= read -r -d '' INSTALL_BOOTSTRAP_COMMITMENT <&"${context_fd}" || return 2
   IFS= read -r -d '' INSTALL_BOOTSTRAP_ACCOUNT <&"${context_fd}" || return 2
   IFS= read -r -d '' INSTALL_BOOTSTRAP_UID <&"${context_fd}" || return 2
+  # shellcheck disable=SC2034 # consumed to validate the complete shared context frame
   IFS= read -r -d '' INSTALL_BOOTSTRAP_ACCOUNT_HOME <&"${context_fd}" || return 2
   exec {context_fd}<&-
 
