@@ -588,9 +588,12 @@ validated typed IH
        → unchanged shim_doctor::run_doctor
        → existing report::collect_report_for_context
        → build_report
-       → gather_world_deps_section
-       → collect_doctor_snapshot_v1
-       → A-derived config/dependency paths
+       ├─ A/health/world_doctor.json, or gather_world_doctor_snapshot
+       │    → run_json_subcommand
+       │    → existing world doctor --json child with hidden carrier + A projections
+       └─ A/health/world_deps.json, or gather_world_deps_section
+            → collect_doctor_snapshot_v1
+            → A-derived config/dependency paths
 ```
 
 The principal projection is immutable and process/request-scoped. It is provenance-bound to the
@@ -802,12 +805,33 @@ compatibility ownership. The `report.rs::collect_report` function may receive on
 Unix `dead_code` allowance with the same temporary ownership. These annotations retain code only:
 they do not change visibility, signatures, bodies, cfg branches, callers, outputs, environment
 behavior, or non-Unix behavior, and no file-/module-level or other lint suppression is permitted.
-`gather_world_deps_section` is transport only and
-`collect_doctor_snapshot_v1` receives typed IH or exact A-derived paths. Unix `collect_report` is
-the explicitly named compatibility path: it may retain its checked-projection behavior unchanged,
-but cannot be selected by typed Health or satisfy R2-2 product proof. Physical-shim/replay
-compatibility migration remains R2-3. No diagnostic reconstructs a default home or changes
-dependency/result classification.
+`gather_world_doctor_snapshot`, `gather_world_deps_section`, `try_load_health_fixture`,
+`health_fixture_path`, and `run_json_subcommand` are transport/mechanical closure only. On the typed
+Unix path both fixture names resolve beneath A, never ambient B. If no world-doctor fixture exists,
+the existing nested `world doctor --json` product CLI receives the same canonical hidden argv
+carrier and context-derived checked child projections; no contextless repository-binary invocation
+may satisfy Route D. The parent environment is not changed. The child transport never formats the
+carrier into a command string, output, error, log, trace, snapshot, or fixture, and no credential,
+request byte, non-public commitment, or sensitive principal datum is added to diagnostics.
+`collect_doctor_snapshot_v1` receives typed IH or exact A-derived paths. Selected-A fixture payload
+and source labels, report/dependency classification, command exit interpretation, and non-Unix cfg
+behavior remain unchanged.
+
+Unix `collect_report` is the explicitly named compatibility path: it retains its checked-projection
+behavior unchanged, cannot be selected by typed Health, and cannot satisfy R2-2 product proof. Its
+body, visibility, cfg, caller, output, and crate-private re-export remain frozen apart from the
+already-authorized item-level lint retention. Physical-shim, global-trace, replay, and
+platform-native compatibility migration remains R2-3. No diagnostic reconstructs a default home,
+creates a second context constructor/resolver, or changes world, policy, capability, installation,
+cleanup, service, credential, receipt, supervisor, retained-worker, or lifecycle semantics.
+
+The Route D source-closure impact observations are LOW: `gather_world_doctor_snapshot` has one
+direct/five transitive impacts, `try_load_health_fixture` two/four, `health_fixture_path` one/four,
+and `run_json_subcommand` one/three. All resolve to the existing Health/shim-doctor family. These
+counts are evidence rather than an exact ceiling; final containment is decided by the approved
+source paths and symbols, unchanged owner/family set, exact manifest/patch, mapped GitNexus output,
+and fresh read-only semantic review. A new execution family, authority owner, module, resolver,
+schema, or R2-3 behavior requires a cross-document stop.
 
 For this exact Route A closure, the immutable production baseline is fixed at patch SHA-256
 `ea4abf43043013994e698d54f21c04bba58833b3bb3247bf6d5d3b454f51b943`. Its manifest and

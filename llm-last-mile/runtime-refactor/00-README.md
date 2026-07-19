@@ -242,8 +242,8 @@ broker, world capability, policy, gateway, receipt, supervisor, worker, replay, 
 the contract correction is recorded by `17ea3a839345cd47a5b2409cde0d4facdde09446` and its bounded
 runtime by `4d0acff68e20d86b97fe5367b8a4617554f33ef4`. `RG-HOME-01` and `RG-INSTALL-01` remain open,
 A1.1d and A1 remain incomplete, B3.1 remains blocked, and the R2 packets/R3 remain separately
-owned; R2-1 is complete and R2-2 is in progress through review-clean Route B, while Route C is the
-only authorized active increment and Route D/R2-3/R2-4/R3 remain unstarted. Static macOS/Windows
+owned; R2-1 is complete and R2-2 is in progress through review-clean Routes A, B, and C, while
+Route D is the only authorized active increment and R2-3/R2-4/R3 remain unstarted. Static macOS/Windows
 inspection in R2-0 is not native platform proof.
 
 R2-1 implements the 19 owned rows PI-001–PI-004, PI-010–PI-011, PI-032–PI-034, PI-061–PI-063,
@@ -253,19 +253,36 @@ explicit trace/policy binding are proven without changing the neutral trace sett
 replay, world-deps production, lifecycle behavior, or any later packet owner.
 
 The active packet is **A1.1d-5R2-2 — Unix release, sudo, Linux service, and runtime propagation**,
-Route C only: authenticated Host/World doctor projection. Route B remains complete and unchanged at
-`6cee990f0370013c8b05a5495301db7aea642cd5`, with exact ordinary/binary patch SHA-256
+Route D only: authenticated shell/shim-doctor snapshot carrier. Route B remains complete and
+unchanged at replayed commit `223c2112208dfd0f9bb7efafdf190bc15ae20e9c`, with exact
+ordinary/binary patch SHA-256
 `28e6b9da35f96b5f93c49369cbde0eda77e9a145b54f9c412bae8e5a83871674` across its reviewed six
-files. Route C starts from preservation commit `41b82327e23798719ed9a0b4cae1f557fb593670`, whose parent
-is that exact Route B commit and whose full-index binary patch is
+files. Route C is complete at replayed commit `fe288d233b5a198e19c2afba857d02e982ef6e1b`, tree
+`1703a0e0f57c8c994a3fd59f276c0f1a28dfbb50`, and preservation branch
+`feat/preserve-a1-1d-5r2-2-route-c-final-5b436d5d`; its full-index binary patch remains
 `5b436d5dfeaf6e513cbaa306de65848cbe3d5b003fa8c00589be09e54b630277`: 182 insertions and five
 deletions across only `crates/shell/src/execution/platform/linux.rs`,
 `crates/shell/src/execution/platform/mod.rs`, `crates/shell/tests/doctor_scopes_ds0.rs`,
 `crates/transport-api-types/src/lib.rs`, and `crates/world-service/src/handlers.rs`. Those bytes are
-a starting candidate, not authority to expand scope. Route C may only project already-authenticated
-typed context through the existing Host/World doctor paths; its non-secret optional output fields
-cannot select, construct, replace, or mutate authority. It must not begin Route D, R2-3
-platform/physical-shim mapping, R2-4 joined proof, or R3 cleanup/convergence.
+a preserved completed increment, not authority to expand scope. Route C projects only
+already-authenticated typed context through the existing Host/World doctor paths; its non-secret
+optional output fields cannot select, construct, replace, or mutate authority.
+
+The Route D preimplementation source-closure audit found one incomplete allowlist boundary inside
+the existing Health/shim-doctor report family. Before the typed dependency collector, the report
+may read `world_deps.json`; its embedded world-doctor snapshot may read `world_doctor.json` or launch
+the existing `world doctor --json` child. Route D therefore carries the same authenticated typed IH
+through both branches: fixture lookup is rooted only at A, and the nested Unix child receives the
+canonical hidden argv carrier plus A-derived checked child projections. Ambient B, generated files,
+or a contextless repository binary cannot select or supplement A. The mechanical closure is limited
+to `gather_world_doctor_snapshot`, `gather_world_deps_section`, `try_load_health_fixture`,
+`health_fixture_path`, and `run_json_subcommand` in the already-allowed report file, plus their
+existing caller/signature/cfg/lint and focused test closure. It creates no resolver, schema, module
+owner, execution family, authority seam, or parent-process environment mutation. The Unix
+`collect_report` compatibility collector remains behavior-frozen until R2-3, and physical-shim,
+replay, platform-native mapping, installation, cleanup, service, world, policy, capability,
+credential, receipt, supervisor, retained-worker, and lifecycle behavior remain unchanged. Route D
+must not begin R2-2 integration closeout, R2-3, R2-4, or R3.
 
 B1/B2.1-R0 lets RetainedWorkerRuntime create the immutable retained object graph and requires
 HostSessionAuthority first to reserve the ingress idempotency key, validate the exact participant

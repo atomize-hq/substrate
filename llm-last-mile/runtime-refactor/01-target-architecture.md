@@ -398,6 +398,27 @@ world, policy, capability, filesystem/network enforcement, placement, caging, re
 retained-worker, credential, or lifecycle state. This is not a new authority seam, module owner, or
 execution family.
 
+Route D applies that same rule to the complete authenticated shell/shim-doctor snapshot carrier.
+The typed Unix report path passes one already-validated `InstallBootstrapContextV1` through
+`collect_report_for_context` and `build_report` to both its embedded world-doctor and world-deps
+branches. Health fixtures are diagnostic projections beneath `A/health` only; an ambient
+`B/health/world_doctor.json` or `B/health/world_deps.json` cannot replace, supplement, redirect, or
+appear in the A-bound report. When the embedded world-doctor branch invokes the existing product
+CLI, the child receives the same canonical hidden argv carrier and only context-derived checked
+environment projections. Those projections are child transport, never authority reconstruction,
+and the parent diagnostic remains non-mutating. A missing, malformed, tampered, wrong-principal, or
+contextless Unix witness fails closed. Carrier bytes, credentials, request bytes, commitments not
+already intended for public diagnostics, and sensitive principal data never enter report JSON,
+text, fixtures, errors, logs, traces, or snapshots.
+
+This closure changes no report schema, world-doctor meaning, fixture payload meaning, dependency
+classification, world enforcement, policy, capability, service, installation, cleanup, receipt,
+supervisor, retained-worker, credential, or lifecycle behavior. Non-Unix behavior stays on its
+existing cfg path. The Unix checked-projection `collect_report` entrypoint and its crate-private
+re-export remain temporary behavior-frozen R2-3 compatibility; Route D neither calls that path from
+typed Health nor migrates the physical shim, replay, global trace compatibility, or platform-native
+adapters.
+
 A physical symlink shim recovers A from an explicit invocation pathname or exactly one matching
 no-follow candidate when bare `argv[0]` requires absolute-PATH enumeration. PATH order has no
 prefix precedence; zero or multiple candidates fail closed. CWD may resolve only an explicitly
