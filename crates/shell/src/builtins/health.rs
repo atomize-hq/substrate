@@ -2,6 +2,8 @@ use super::shim_doctor::{self, ShimDoctorReport, WorldDepsDoctorStatus, WorldDoc
 use crate::execution::config_model::DoctorDisableSource;
 use anyhow::Result;
 use serde::Serialize;
+#[cfg(unix)]
+use transport_api_types::InstallBootstrapContextCarrierV1;
 
 #[derive(Debug, Serialize)]
 pub struct HealthReport {
@@ -32,7 +34,16 @@ pub struct HealthSummary {
     pub failures: Vec<String>,
 }
 
-pub fn run(json_mode: bool, cli_no_world: bool, cli_force_world: bool) -> Result<()> {
+pub fn run(
+    json_mode: bool,
+    cli_no_world: bool,
+    cli_force_world: bool,
+    #[cfg(unix)] install_context: &InstallBootstrapContextCarrierV1,
+) -> Result<()> {
+    #[cfg(unix)]
+    let report =
+        shim_doctor::collect_report_for_context(cli_no_world, cli_force_world, install_context)?;
+    #[cfg(not(unix))]
     let report = shim_doctor::collect_report(cli_no_world, cli_force_world)?;
     let summary = HealthSummary::from_report(&report);
     let (world_disable_reason, world_disable_source) = world_disable_attribution(&report);

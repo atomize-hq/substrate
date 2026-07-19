@@ -1,3 +1,7 @@
+#[cfg(unix)]
+use crate::execution::agent_runtime::host_session_authority::trusted_fs::TrustedAuthorityRoot;
+#[cfg(unix)]
+use crate::execution::agent_runtime::HostSessionAuthority;
 use crate::execution::cli::{
     AnchorModeArg, Cli, ConfigAction, ConfigCmd, ConfigCurrentAction, ConfigGlobalAction,
     ConfigGlobalCmd, ConfigInitArgs, ConfigResetArgs, ConfigSetArgs, ConfigShowArgs,
@@ -12,6 +16,8 @@ use std::fs;
 use std::io::Write;
 use std::path::{Path, PathBuf};
 use tempfile::NamedTempFile;
+#[cfg(unix)]
+use transport_api_types::InstallBootstrapContextCarrierV1;
 
 const DEFAULT_GLOBAL_PATCH_HEADER: &str = r#"# Substrate config patch (sparse overrides; scope=global).
 # - This file is a YAML mapping of global-scoped config overrides.
@@ -19,12 +25,26 @@ const DEFAULT_GLOBAL_PATCH_HEADER: &str = r#"# Substrate config patch (sparse ov
 # - View the effective merged config with: `substrate config current show --explain`
 "#;
 
-pub(crate) fn handle_config_command(cmd: &ConfigCmd, cli: &Cli) -> i32 {
+pub(crate) fn handle_config_command(
+    cmd: &ConfigCmd,
+    cli: &Cli,
+    #[cfg(unix)] install_context: &InstallBootstrapContextCarrierV1,
+) -> i32 {
     let result = match &cmd.action {
         ConfigAction::Current(cmd) => match &cmd.action {
-            ConfigCurrentAction::Show(args) => run_current_show(args, cli),
+            ConfigCurrentAction::Show(args) => run_current_show(
+                args,
+                cli,
+                #[cfg(unix)]
+                install_context,
+            ),
         },
-        ConfigAction::Show(args) => run_current_show(args, cli),
+        ConfigAction::Show(args) => run_current_show(
+            args,
+            cli,
+            #[cfg(unix)]
+            install_context,
+        ),
         ConfigAction::Set(args) => run_workspace_set(args, cli),
         ConfigAction::Global(cmd) => run_global(cmd),
         ConfigAction::Workspace(cmd) => match &cmd.action {
@@ -191,12 +211,31 @@ fn run_global_reset(args: &ConfigResetArgs) -> Result<()> {
     Ok(())
 }
 
-fn run_current_show(args: &ConfigShowArgs, cli: &Cli) -> Result<()> {
+fn run_current_show(
+    args: &ConfigShowArgs,
+    cli: &Cli,
+    #[cfg(unix)] install_context: &InstallBootstrapContextCarrierV1,
+) -> Result<()> {
     let cwd = std::env::current_dir().unwrap_or_else(|_| PathBuf::from("."));
     let overrides = cli_overrides(cli);
     eprintln!(
         "substrate: note: showing effective merged config; use --explain to view per-key sources"
     );
+    #[cfg(unix)]
+    let (cfg, explain) = {
+        let root =
+            TrustedAuthorityRoot::open(Path::new(&install_context.context.selected_host_prefix))
+                .map_err(|error| anyhow!("failed to open selected config root: {error}"))?;
+        let authority = HostSessionAuthority::from_trusted_root(root)
+            .map_err(|error| anyhow!("failed to bind selected config root: {error}"))?;
+        config_model::resolve_effective_config_with_explain_for_bootstrap_home(
+            &cwd,
+            &overrides,
+            &authority.bootstrap_home(),
+            args.explain,
+        )?
+    };
+    #[cfg(not(unix))]
     let (cfg, explain) =
         config_model::resolve_effective_config_with_explain(&cwd, &overrides, args.explain)?;
     if let Some(explain) = explain {
@@ -444,12 +483,37 @@ mod tests {
         workspace_yaml
     }
 
+    #[cfg(unix)]
+    fn test_install_context(temp: &TempDir) -> InstallBootstrapContextCarrierV1 {
+        let (principal, _) =
+            crate::execution::install_bootstrap::current_unix_principal_and_home().unwrap();
+        let transport_api_types::PlatformPrincipalV1::Unix { account, uid } = principal else {
+            panic!("expected Unix principal");
+        };
+        let context = transport_api_types::InstallBootstrapContextV1::new_unix(
+            temp.path().to_str().unwrap(),
+            &account,
+            uid,
+        )
+        .unwrap();
+        InstallBootstrapContextCarrierV1::from_context(context).unwrap()
+    }
+
     fn run_cli(args: &[&str]) -> i32 {
         let cli = RootCli::parse_from(args);
         let Some(SubCommands::Config(cmd)) = &cli.sub else {
             panic!("expected config command");
         };
-        handle_config_command(cmd, &cli)
+        #[cfg(unix)]
+        let install_home = TempDir::new().unwrap();
+        #[cfg(unix)]
+        let install_context = test_install_context(&install_home);
+        handle_config_command(
+            cmd,
+            &cli,
+            #[cfg(unix)]
+            &install_context,
+        )
     }
 
     #[test]
