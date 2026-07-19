@@ -390,6 +390,20 @@ The R2 regression gates are exact labels used by the inventory and packet allowl
 | **R3-LIFE-01** | R3-only candidate, rollback, manifest, managed-system cleanup, account-state restoration, crash-window, uninstall/reinstall, shim/payload/bin/cache/helper/unit/socket/platform-staging/forwarder unlink/drop/timeout/synthetic-auth cleanup, and unrelated-state preservation matrix. Referencing this gate from R2 transports a target only. |
 | **R3-WIN-01** | R3-only native Windows two-prefix cleanup matrix: no wildcard removal; exact per-prefix versus shared state; version/bin/profile replacement, timeout rollback, uninstall order, WSL/forwarder/shim cleanup, partial install, and unrelated-state preservation. |
 
+For Route B, the immutable WIP is exact patch SHA-256
+`f8f845ef6aa6688fdf60be6ed983bb119971d65895a0f38c25fc1dad7643a77f` across the six PI-105
+production files at preservation commit `a6e29a10ea3dc9cb673a22912002efb83658e7b2`. Its refreshed
+GitNexus observation is CRITICAL, 17 attributed symbols, and 25 existing process labels; every
+label maps in `03-phase-slice-map.md` to the shell-root principal extraction, hidden owner-helper
+transport, or prepared member-request/seed-resolution root, with downstream public Agent,
+policy/filesystem/network, validation, carrier, and path labels classified as unchanged
+attribution. The final candidate may add only one item-level `dead_code` annotation to the
+principal-less compatibility entrypoint, with a reason stating intentional non-use and temporary
+R2-3 ownership. That entrypoint remains uncalled by typed product routes and fail-closed before
+allowlisted Codex credential projection. Completion requires exact six-file/hunk containment,
+fresh semantic review, and no new module, execution family, authority source, schema, secret
+surface, capability, lifecycle, Route C, Route D, or R2-3 behavior.
+
 For the Route A successor clause of `R2-RUNTIME-01`, the authorized Unix-only import cfg set also
 includes the policy test module's sole `tempfile::TempDir` import; no other import or module gate is
 authorized. Health proof must combine fail-closed syscall/path interception with a complete B-tree

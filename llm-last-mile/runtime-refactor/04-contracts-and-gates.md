@@ -606,6 +606,26 @@ account and UID round-trip through the account database, and derives only that a
 credential-source selectors. Policy still decides whether the projection is permitted, and no
 prompt, credential, auth payload, or secret enters logs, traces, errors, receipts, or new state.
 
+The principal-less compatibility entrypoint
+`dispatch_run_world_task_request_with_started_task_run_id_tx` remains intentionally uncalled by the
+typed route and must fail closed before any allowlisted Codex seed injection. It may receive only an
+item-level `dead_code` allowance whose reason names principal-less compatibility, intentional
+non-use, and temporary R2-3 ownership. That annotation retains the frozen surface only; it changes
+no visibility, signature, body, cfg, caller, output, error, or runtime behavior, and no second lint
+allowance is permitted.
+
+Route B containment is patch-bound to preserved ordinary/binary SHA-256
+`f8f845ef6aa6688fdf60be6ed983bb119971d65895a0f38c25fc1dad7643a77f`, preservation commit
+`a6e29a10ea3dc9cb673a22912002efb83658e7b2`, and the exact six-file PI-105 manifest. The refreshed
+CRITICAL result attributes 17 symbols and 25 existing labels to only three semantic roots:
+`run_shell_with_cli`, `handle_agent_command`, and
+`build_agent_client_and_member_dispatch_request_impl`; the complete label-by-label mapping is in
+`03-phase-slice-map.md`. Final containment requires the same six files, the preserved production
+hunks plus only the item-level annotation, no new module or execution-family root, and fresh
+semantic review. Raw future symbol-count movement is diagnostic rather than authority, but any
+seventh file, other hunk, unmappable label, new owner/family, compatibility-body change, or Route
+C/Route D/R2-3 semantic import is an `ImpactDecisionRequired` stop.
+
 `WorldDoctorReportV1` remains a world-service/world-enforcement report with additive optional,
 defaulted, omit-when-absent host prefix and commitment fields. The in-world `doctor_world` producer
 sets them to `None` and reads no host IH, carrier, HOME, prefix, principal, or authority projection.
