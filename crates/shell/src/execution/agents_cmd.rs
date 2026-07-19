@@ -85,6 +85,8 @@ use substrate_common::{AgentEvent, PlacementExecution};
 use tokio::runtime::Builder as TokioRuntimeBuilder;
 #[cfg(target_os = "linux")]
 use transport_api_types::{SharedWorldOwnerAction, SharedWorldOwnerSpec};
+#[cfg(target_os = "linux")]
+use transport_api_types::InstallBootstrapContextCarrierV1;
 use uuid::Uuid;
 const TOOLBOX_VERSION: u32 = HOST_TOOLBOX_CONTRACT_VERSION_V1;
 #[cfg(unix)]
@@ -98,7 +100,11 @@ const TURN_DETACH_NORMALIZATION_TIMEOUT: Duration = Duration::from_secs(10);
 #[cfg(unix)]
 const TURN_DETACH_NORMALIZATION_POLL_INTERVAL: Duration = Duration::from_millis(50);
 
-pub(crate) fn handle_agent_command(cmd: &AgentCmd, cli: &Cli) -> i32 {
+pub(crate) fn handle_agent_command(
+    cmd: &AgentCmd,
+    cli: &Cli,
+    #[cfg(target_os = "linux")] install_context: &InstallBootstrapContextCarrierV1,
+) -> i32 {
     match &cmd.action {
         AgentAction::List(args) => match run_list(args, cli) {
             Ok(()) => 0,
@@ -168,7 +174,11 @@ pub(crate) fn handle_agent_command(cmd: &AgentCmd, cli: &Cli) -> i32 {
                 1
             }
         },
-        AgentAction::OwnerHelper(args) => match run_owner_helper(args) {
+        AgentAction::OwnerHelper(args) => match run_owner_helper(
+            args,
+            #[cfg(target_os = "linux")]
+            install_context,
+        ) {
             Ok(code) => code,
             Err(err) if config_model::is_user_error(&err) => {
                 eprintln!("{err}");
@@ -271,10 +281,17 @@ fn run_doctor(args: &AgentDoctorArgs, cli: &Cli) -> Result<i32> {
     Ok(exit_code)
 }
 
-fn run_owner_helper(args: &AgentOwnerHelperArgs) -> Result<i32> {
+fn run_owner_helper(
+    args: &AgentOwnerHelperArgs,
+    #[cfg(target_os = "linux")] install_context: &InstallBootstrapContextCarrierV1,
+) -> Result<i32> {
     let plan = load_hidden_owner_helper_launch_plan(&args.plan_file)?;
     remove_hidden_owner_helper_launch_plan(&args.plan_file)?;
-    crate::repl::async_repl::run_hidden_owner_helper(plan)
+    crate::repl::async_repl::run_hidden_owner_helper(
+        plan,
+        #[cfg(target_os = "linux")]
+        install_context.context.intended_host_principal.clone(),
+    )
 }
 
 const AGENT_CONTROL_STOP_WAIT_TIMEOUT: Duration = Duration::from_secs(10);
