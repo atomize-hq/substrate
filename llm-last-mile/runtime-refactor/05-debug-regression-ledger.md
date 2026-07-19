@@ -397,6 +397,25 @@ before/after snapshot. Host proof must show the expected A dependency scaffold, 
 artifact, and complete B-tree preservation across both the installed-witness dispatch and the
 direct-repository no-witness rejection. This test-only clarification supersedes the narrower import
 wording in the row without changing any production byte, Route B boundary, or R2-3 ownership.
+The final portable-parent paragraph below extends that gate's sole successor list only with the two
+named existing test setup hunks; it supersedes the row's earlier closed four-category enumeration.
+
+The final Route A test-parent remediation is bounded against preserved successor patch SHA-256
+`0a53e8b60326e21b4237392bfa99671fa8c19c0cd45eb4c573cae5140e808720` at commit
+`ad139789ef317b978e96c36ee8170dd503bff8a4`. Only
+`config_show::config_current_show_uses_declared_prefix_under_conflicting_ambient_home` and
+`policy_discovery::policy_current_show_uses_declared_prefix_under_conflicting_ambient_home` may
+replace their Linux-only `/run/user/<effective uid>` test-parent fallback. Each uses nonempty
+`XDG_RUNTIME_DIR`; otherwise it resolves the current account's nonempty home and uses `.cache` or a
+repository-established fixture subdirectory beneath that same account home. This is not a third
+source, and the command's ambient/conflicting HOME cannot select it. Each creates that parent as
+required and retains a unique `0700` selected-A root. Missing sources fail setup explicitly; `/tmp`, `/var/tmp`, `/run/user/<uid>`, CWD,
+ambient `SUBSTRATE_HOME`, and B cannot substitute. Both pre-edit impacts are LOW with zero callers,
+processes, or modules. The manifest remains exactly thirteen files because both tests are already
+present; every production fingerprint and every other test fingerprint remains fixed. The final hash
+is established after remediation, with any other hunk or a fourteenth file rejected as
+`SuccessorPatchScopeMismatch`. Native Darwin/Windows proof remains unavailable when the Apple SDK or
+MSVC tooling is missing and is recorded as unavailable rather than success or product regression.
 
 R2-0 cross-document checkpoint rules are: inventory counts and owner/packet columns must agree;
 every R2 packet has an exact production/test allowlist; R2-4 has no production allowlist; every R3

@@ -658,16 +658,34 @@ from the base only by the following test delta:
 | `policy_model.rs::tests::explicit_bootstrap_home_explain_uses_selected_global_policy_path` | Add item-level `#[cfg(unix)]` to the test, its sole test-only `HostSessionAuthority` import, and the test module's sole `tempfile::TempDir` import; preserve the name, body, assertions, fixtures, every other import, module cfg, and all production bytes. | Same cross-platform cfg/import correction for the policy test, including the warnings-denied import made unused by the item-level test gate. |
 | `crates/shell/tests/shim_health.rs` focused Route A test | Add one focused regression or bounded strengthening that selects A through typed IH while H/R/HOME name conflicting B, proves A-derived Health state, uses syscall/path interception that fails on any B operation, compares a complete B-tree snapshot before/after, preserves classification/output assertions, and cannot be satisfied by `collect_report`. | Existing Health proof did not conflict ambient B or independently exclude the compatibility collector; mode bits and selected-file assertions alone do not prove absence of metadata probes or writes elsewhere under B. |
 | `crates/shell/tests/doctor_scopes_ds0.rs` focused Host test | Add one focused regression or bounded strengthening using the canonical R2-1 installed-product invocation witness for A, no explicit selector, conflicting ambient B, A-derived Host/config output and expected dependency scaffold, absence of B dependency artifacts, complete B-tree preservation across the installed-witness dispatch, and complete B-tree preservation across the direct-repository no-witness fail-before-mutation case. | Existing Host test omitted both selector and witness and therefore never reached the changed typed-IH route; selected config bytes alone do not prove dependency routing or complete fail-before-mutation behavior. |
+| `config_show.rs::config_current_show_uses_declared_prefix_under_conflicting_ambient_home` | Replace only the `/run/user/<effective uid>` fallback used to parent its unique selected-A root: use nonempty `XDG_RUNTIME_DIR`; otherwise resolve the current account's nonempty home and use `.cache` or a repository-established fixture subdirectory beneath that same account home; create the parent as needed; keep the selected root `0700`; and fail setup explicitly if neither source exists. The account home is current-account-derived, not the command's ambient/conflicting HOME. Preserve the name, cfg, command, A/B fixtures, config bytes, assertions, output, and production route. | The existing Unix test-parent fallback is Linux-specific and fails on macOS when `XDG_RUNTIME_DIR` is absent; a portable owner-controlled parent is required without weakening conflicting-B authority proof. |
+| `policy_discovery.rs::policy_current_show_uses_declared_prefix_under_conflicting_ambient_home` | Apply the identical bounded secure-parent replacement while preserving the name, cfg, command, A/B fixtures, policy bytes, assertions, output, and production route. | The same Linux-only fallback makes the policy proof nonportable even though its Route A authority assertions are otherwise valid. |
 
-No final file, symbol, or generated process-label count is predicted. Before each existing test
-symbol is edited, run fresh upstream impact analysis. After implementation, create a deterministic
+The preserved current successor before the final test-parent correction is exact patch SHA-256
+`0a53e8b60326e21b4237392bfa99671fa8c19c0cd45eb4c573cae5140e808720` at preservation commit
+`ad139789ef317b978e96c36ee8170dd503bff8a4`, with exactly thirteen files. The two portable-parent
+tests already belong to that manifest, so the corrected candidate remains exactly thirteen files;
+all production fingerprints and all other test fingerprints remain unchanged. Its new patch hash is
+computed only after those two authorized hunks are applied. Before each existing test symbol is
+edited, run fresh upstream impact analysis; the recorded impacts for both parent-selection tests are
+LOW with zero callers, processes, or modules. After implementation, create a deterministic
 base-to-successor delta containing the new ordinary/binary patch SHA-256, exact manifest and
 fingerprints, and a hunk table mapping every successor-only line to one row above. Existing tests
 cannot be removed, renamed, substituted, ignored, or weakened; the two tests remain active on Unix,
 and only their intentional non-Unix cfg exclusion is authorized. Any changed production byte, changed
-base hunk outside the item-level cfg attributes, or successor-only hunk that does not map exactly
-to one of the four authorized delta rows is
+base hunk outside the item-level cfg attributes and the two exact portable-parent setup hunks, or
+successor-only hunk that does not map exactly to one of the six authorized delta rows is
 `SuccessorPatchScopeMismatch`.
+
+For both final parent-selection hunks, empty environment values are unavailable rather than paths.
+The allowed precedence is nonempty `XDG_RUNTIME_DIR`, then the current account's nonempty home under
+`.cache` or a repository-established fixture subdirectory beneath that same account home. The latter
+is not a third source, and the command's ambient/conflicting HOME does not select it. The test creates
+that parent if needed and creates its unique selected-A root beneath it with owner-only `0700`. It
+fails with an explicit setup error when neither source is usable. It never falls back to `/tmp`, `/var/tmp`,
+`/run/user/<uid>`, CWD, ambient `SUBSTRATE_HOME`, or B. This changes fixture placement only: explicit
+A still wins, B remains conflicting and unread, and the typed Config/Policy production route and all
+assertions remain identical.
 
 GitNexus observations over the identical or mechanically extended Route A bytes are diagnostic
 provenance: 33 symbols/18 process labels; 11/18 in the reverse committed comparison; 37/18; 39/18;
@@ -677,7 +695,7 @@ exact patch. Do not pin or restore a stale index.
 
 Base containment is determined in this order: exact patch bytes; the exact manifest and fingerprints
 above; the exact source-level production functions and permitted tests. Successor containment then
-requires byte-identical production hunks plus the deterministic four-row test delta above; manual call-path mapping to
+requires byte-identical production hunks plus the deterministic six-row test delta above; manual call-path mapping to
 the approved `ShellConfig::from_cli` Host/Health/Config/Policy/context-aware shim-doctor roots; no
 new source module, authority source, call path, execution-family root, side table, environment
 fallback, or lifecycle behavior; and fresh independent semantic-diff review. The exact production
@@ -685,14 +703,15 @@ diff is limited to `ShellConfig::from_cli`, `handle_host_command`, `handle_healt
 `health::run`, the crate-private shim-doctor exports, the item-level `collect_report` annotation,
 Config's handler/current-show and two explicit-bootstrap-home resolver functions, and Policy's
 handler/current-show and two explicit-bootstrap-home resolver functions. Permitted test changes are
-the mechanical Config test carrier, the two explicit-home explain tests, and the two focused
-integration tests in the manifest. No other production function changes behavior.
+the mechanical Config test carrier, the two explicit-home explain tests, the two focused integration
+tests, and the secure-parent setup only in the named `config_show.rs` and `policy_discovery.rs` tests
+already in the manifest. No other production function changes behavior.
 
 Every fresh GitNexus result must be retained and every label mapped to one of
 `AuthorizedRouteA`, `LineOrHunkAttributionOnly`, `TestColocationOnly`, or
 `UnexpectedSemanticPath`. Count/label drift alone does not reopen the docs when the base production
 bytes, successor test delta, fingerprints, source-level diff, mapping, module set, and semantic roots
-remain exact. The four review-remediation edits restore ordinary pre-edit impact and fresh
+remain exact. The six review-remediation edits restore ordinary pre-edit impact and fresh
 change-detection requirements but need no new raw-count ceiling. Any `UnexpectedSemanticPath`,
 production-byte difference, unclassified test difference, new module or semantic execution root,
 authority source, or behavior expansion is an `ImpactDecisionRequired` stop. This rule is specific
