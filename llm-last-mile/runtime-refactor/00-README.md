@@ -203,7 +203,10 @@ convergent. Remediation remains bounded to **A1.1d-5R1 → A1.1d-5R2 → A1.1d-5
 implemented and review-clean through `4d0acff68e20d86b97fe5367b8a4617554f33ef4`.
 **A1.1d-5R2-0 is planning-complete, and A1.1d-5R2-1 is implementation- and review-complete through
 `2653c2ef20ae2e119a444811e6fb46e86d1a6ec6`.** R2 remains sequenced as
-**R2-1 → R2-2 → R2-3 → R2-4**, followed by R3; R2-2, R2-3, R2-4, and R3 are unstarted. Until the
+**R2-1 → R2-2 Routes A–D → R2-2E → R2-2F → R2-2 integration closeout → R2-3 → R2-4**,
+followed by R3. Routes A–D are individually review-clean, but the failed integration closeout proved
+that R2-2 is incomplete and unpublished. R2-2E, R2-2F, renewed R2-2 closeout, R2-3, R2-4, and R3
+are unstarted. Until the
 remaining implementation packets are review-clean and their Linux lifecycle/product smoke passes,
 both A1.1d Linux closeout and only the Linux product-smoke portion of the B1/B2.1 joint closeout
 remain blocked. B1 receipt and B2.1 supervisor semantics did not regress, and native macOS A1.1d
@@ -242,8 +245,10 @@ broker, world capability, policy, gateway, receipt, supervisor, worker, replay, 
 the contract correction is recorded by `17ea3a839345cd47a5b2409cde0d4facdde09446` and its bounded
 runtime by `4d0acff68e20d86b97fe5367b8a4617554f33ef4`. `RG-HOME-01` and `RG-INSTALL-01` remain open,
 A1.1d and A1 remain incomplete, B3.1 remains blocked, and the R2 packets/R3 remain separately
-owned; R2-1 is complete and R2-2 is in progress through review-clean Routes A, B, and C, while
-Route D is the only authorized active increment and R2-3/R2-4/R3 remain unstarted. Static macOS/Windows
+owned; R2-1 is complete and R2-2 is in progress through review-clean Routes A, B, C, and D. The
+failed Routes A–D integration closeout is blocker evidence rather than a completed packet; R2-2E is
+the only authorized next implementation increment, and R2-2F, renewed closeout, R2-3/R2-4/R3 remain
+unstarted. Static macOS/Windows
 inspection in R2-0 is not native platform proof.
 
 R2-1 implements the 19 owned rows PI-001–PI-004, PI-010–PI-011, PI-032–PI-034, PI-061–PI-063,
@@ -252,13 +257,15 @@ action, Unix principal binding, A-over-B dev/shim/generated projection matrix, a
 explicit trace/policy binding are proven without changing the neutral trace setter, physical shim,
 replay, world-deps production, lifecycle behavior, or any later packet owner.
 
-The active packet is **A1.1d-5R2-2 — Unix release, sudo, Linux service, and runtime propagation**,
-Route D only: authenticated shell/shim-doctor snapshot carrier. Route B remains complete and
-unchanged at replayed commit `223c2112208dfd0f9bb7efafdf190bc15ae20e9c`, with exact
-ordinary/binary patch SHA-256
+The active planning packet remains **A1.1d-5R2-2 — Unix release, sudo, Linux service, and runtime
+propagation**. Routes A–D remain individually review-clean at their final replayed commits
+`9393a140717a2ffef738ecc4a33cf5c4d28b6c06`,
+`513e4b40ab06080cb497b8d240fa061618e7448e`,
+`3e95804c35f36d7f52684dad3baacebdffedbd7f`, and
+`7a3e6ee424e726e3600d39e40b64df2d02cfff73`; none is reopened by this correction. Route B retains
+exact ordinary/binary patch SHA-256
 `28e6b9da35f96b5f93c49369cbde0eda77e9a145b54f9c412bae8e5a83871674` across its reviewed six
-files. Route C is complete at replayed commit `fe288d233b5a198e19c2afba857d02e982ef6e1b`, tree
-`1703a0e0f57c8c994a3fd59f276c0f1a28dfbb50`, and preservation branch
+files. Route C remains preserved by branch
 `feat/preserve-a1-1d-5r2-2-route-c-final-5b436d5d`; its full-index binary patch remains
 `5b436d5dfeaf6e513cbaa306de65848cbe3d5b003fa8c00589be09e54b630277`: 182 insertions and five
 deletions across only `crates/shell/src/execution/platform/linux.rs`,
@@ -281,8 +288,34 @@ existing caller/signature/cfg/lint and focused test closure. It creates no resol
 owner, execution family, authority seam, or parent-process environment mutation. The Unix
 `collect_report` compatibility collector remains behavior-frozen until R2-3, and physical-shim,
 replay, platform-native mapping, installation, cleanup, service, world, policy, capability,
-credential, receipt, supervisor, retained-worker, and lifecycle behavior remain unchanged. Route D
-must not begin R2-2 integration closeout, R2-3, R2-4, or R3.
+credential, receipt, supervisor, retained-worker, and lifecycle behavior remain unchanged.
+
+The attempted integration closeout after Route D stopped without a runtime or documentation
+closeout commit. It proved three remaining authenticated-context gaps: PI-111 world-gateway
+config/effective-policy/network-policy/runtime-family projection still selected ambient state;
+PI-106/PI-107 normal current/global/workspace/runtime world-deps paths still dropped A; and doctor
+composition could label a report with A while configuration, policy, inventory, or dependency
+constituents came from ambient B. The source branch therefore remains unpublished for runtime, and
+`RG-HOME-01` plus `RG-INSTALL-01` remain open.
+
+Two bounded increments close those remaining seams. **A1.1d-5R2-2E — Authenticated world-gateway
+projection** owns PI-111 and establishes the single explicit config/policy/network projection
+path: existing explicit-bootstrap-home config and effective-policy owners remain unchanged, while
+`execution/policy_snapshot.rs` adds only the sole explicit-bootstrap-home policy-snapshot/network-
+policy entrypoint. Gateway credentials remain launch-time handoff and network allow/deny semantics
+do not change. **A1.1d-5R2-2F — Authenticated world-deps and truthful
+doctor composition** owns the unresolved PI-106/PI-107 production paths, one shared typed
+world-deps context, authenticated runtime-request construction, and constituent-coherence
+validation. Mixed A/B diagnostics fail closed or report unavailable/incoherent, never healthy
+A-bound truth. The exact sequence is **Routes A–D → R2-2E → R2-2F → renewed R2-2 integration
+closeout → R2-3 → R2-4 → R3**. E and F are logically separable but use this deterministic order so
+F can reuse E's canonical projection entrypoint without overlapping ownership. No seam is promoted,
+and this docs-only correction begins neither implementation increment. The authenticated guarantees
+are bounded to the Unix/Linux route in the reviewed allowlists. macOS, Windows, fallback, and other
+non-Unix compatibility paths remain R2-3-owned and unproven; they either report unavailable/fail
+closed before an A-bound claim or retain explicitly labeled ambient compatibility that cannot
+satisfy E/F. Non-Unix cfg proof means build/static preservation only, never authenticated product
+proof.
 
 B1/B2.1-R0 lets RetainedWorkerRuntime create the immutable retained object graph and requires
 HostSessionAuthority first to reserve the ingress idempotency key, validate the exact participant

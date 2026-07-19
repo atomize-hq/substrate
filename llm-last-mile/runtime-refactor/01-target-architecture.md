@@ -419,6 +419,62 @@ re-export remain temporary behavior-frozen R2-3 compatibility; Route D neither c
 typed Health nor migrates the physical shim, replay, global trace compatibility, or platform-native
 adapters.
 
+#### Remaining authenticated runtime projections
+
+Routes A–D are individually review-clean, but they do not exhaust the authenticated-context path.
+The failed R2-2 integration closeout found two remaining projection seams and one diagnostic
+composition invariant. They are implemented only in the deterministic order R2-2E, R2-2F, then a
+renewed Routes A–F integration closeout.
+
+R2-2E makes world-gateway projection a pure consumer of already-authenticated A. The shell world
+entry validates A before disabled/unavailable classification, then supplies it to one request-scoped
+gateway context. Configuration and effective policy use their existing explicit-bootstrap-home
+resolvers; `execution/policy_snapshot.rs` remains the sole policy-snapshot owner and adds the one
+explicit-bootstrap-home world-network entrypoint; `execution/agent_inventory.rs` reuses its existing
+bootstrap-home inventory loader. `world_gateway.rs` may combine those explicit outputs but may not
+parse or re-resolve policy. Runtime-family and Codex paths are projections of A and the committed
+Unix principal's account-database home. Environment-only invocation, malformed/tampered/mismatched
+context, and a disabled route without valid A fail before gateway mutation, forwarding, or launch.
+The contextless synthesized-unavailable constructor is removed. Linux uses the fixed canonical
+`/run/substrate.sock` on this authenticated route; ambient socket overrides cannot retarget it.
+On macOS, no authenticated typed endpoint source exists in E's closed allowlist: the authenticated
+route therefore fails before client construction or ambient `auto_select`; it cannot invent or
+accept an endpoint from environment/platform-control state. Lower Lima forwarding, known-hosts, and
+transport realization remain R2-3. Windows and other contextless gateway entries likewise fail
+before config, policy, inventory, disabled-state classification, or client selection until R2-3
+supplies authenticated platform mapping. Existing ambient macOS/Windows compatibility clients remain
+frozen and unreachable from the E route. Their cfg proof is build/static fail-closed preservation,
+not native or authenticated product proof. Existing network allow/deny meaning, request schemas,
+service behavior, and launch-time
+gateway credential handoff do not change, and no host credential file becomes durable authority.
+
+R2-2F creates one request-scoped `AuthenticatedWorldDepsContextV1` (or equivalently named typed
+value) from the already-validated install context. It holds A's trusted bootstrap home/root,
+non-secret commitment, explicit launch CWD/workspace scope, effective configuration and policy,
+global config/deps paths, and the authenticated runtime-request projection. Normal current, global,
+and workspace operations, world probes, install/sync, provision-deps, and post-provision sync receive
+that value explicitly; no environment binding, process-global side table, parallel resolver, or
+lower ambient re-entry is permitted. CWD remains an explicit workspace-scope input and never selects
+the host authority root. An additive authenticated request builder serves only world-deps and
+provision-deps and reuses R2-2E's projection convention. The existing shared ambient request
+builders are frozen for explicit R2-3 compatibility work because their impact breadth is
+HIGH/CRITICAL.
+
+On the authenticated Unix/Linux route, doctor truth is constituent-coherent: a report may identify A only when configuration, effective
+policy/world-fs policy, inventory, dependency state, world-deps runtime observations, and nested
+world-doctor output all carry matching A prefix/commitment evidence. Missing evidence, a mismatched
+fixture or child, a mixed A/B snapshot, or missing `ok` is `NeedsAttention`/unavailable or a closed
+error, never inferred healthy A. Host and World doctor receive A-derived world-fs policy rather than
+calling ambient profile/broker selectors. Collection remains read-only; no diagnostic can install,
+repair, provision, restart, or mutate state. Identity evidence is non-secret, while carrier bytes,
+prompt/request bytes, credentials, tokens, and sensitive principal material remain excluded from
+JSON, text, fixtures, errors, logs, traces, and snapshots. macOS, Windows, fallback, and other
+non-Unix world-deps/Health/doctor paths remain named R2-3 compatibility/unproven routes because F
+does not edit their platform adapters and they do not receive this authenticated context. They may
+preserve explicitly labeled ambient compatibility or report unavailable/fail closed, but cannot
+claim coherent A-bound truth or satisfy F acceptance. Non-Unix cfg coherence means build/static
+preservation and no A-bound success claim.
+
 A physical symlink shim recovers A from an explicit invocation pathname or exactly one matching
 no-follow candidate when bare `argv[0]` requires absolute-PATH enumeration. PATH order has no
 prefix precedence; zero or multiple candidates fail closed. CWD may resolve only an explicitly

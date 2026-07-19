@@ -833,6 +833,98 @@ source paths and symbols, unchanged owner/family set, exact manifest/patch, mapp
 and fresh read-only semantic review. A new execution family, authority owner, module, resolver,
 schema, or R2-3 behavior requires a cross-document stop.
 
+#### R2-2 remaining-seam source closure and contracts
+
+The failed Routes A–D integration closeout established that those four routes are individually
+review-clean but do not close every authenticated-context consumer. R2-2 stays incomplete and
+unpublished. The following table is the reviewed source-closure boundary for the only two remaining
+implementation increments; brace groups are exact symbol sets, not file wildcards.
+
+| Increment | File | Symbol | Current authority | Required carrier | Callers | Process family | Platform cfg | GitNexus risk | Inventory ID | Test | Proposed allowlist status |
+|---|---|---|---|---|---|---|---|---|---|---|---|
+| R2-2E | `crates/shell/src/execution/platform/mod.rs` | `handle_world_command` Gateway arm | typed carrier arrives but is dropped | already-authenticated A/request context | `ShellConfig::from_cli` | shell World dispatch | Unix authenticated; non-Unix fails before ambient selection | LOW; manual arm closure | PI-111 | `world_gateway.rs`; `agent_successor_contract_ahcsitc0.rs` | EDIT arm only |
+| R2-2E | `crates/shell/src/builtins/world_gateway.rs` | `GatewayLifecycleRequestContext`; `run`; `run_inner`; `run_typed_action_with_status_args`; `run_typed_action`; `call_gateway_action`; `build_gateway_request_context` | ambient config/policy/network/inventory and pre-validation disabled routing | one validated A-derived gateway context | World Gateway status/sync/restart | gateway lifecycle | all; cfg clients below | LOW; struct one direct/five total | PI-111 | colocated; `world_gateway.rs` | EDIT |
+| R2-2E | same | `validate_gateway_backend_selection`; `resolve_integrated_auth_payload`; `resolve_cli_codex_integrated_auth`; `codex_auth_state_path` | ambient inventory and `dirs`/HOME/USERPROFILE Codex home | explicit inventory plus committed-principal account home | `build_gateway_request_context` and auth helpers | gateway projection/credential handoff | Unix account leaf; cfg-coherent others | LOW | PI-111 | colocated; `agent_successor_contract_ahcsitc0.rs` | EDIT; credential content/lifecycle frozen |
+| R2-2E | same | `world_routing_disabled` | ambient toggles can bypass failed context | validated A-derived effective config before classification | two typed action functions | gateway status/action | all | LOW; two direct/four total | PI-111 | colocated; `world_gateway.rs` | EDIT only after A validation |
+| R2-2E | same | `synthesized_unavailable_response_without_context` | contextless unavailable response can bypass authentication | no contextless route | two typed action functions | gateway status/action | all | LOW; two direct/four total | PI-111 | colocated; `world_gateway.rs` | DELETE only |
+| R2-2E | same | `build_gateway_client` Linux cfg | ambient `SUBSTRATE_WORLD_SOCKET` | fixed authenticated-route `/run/substrate.sock` | `call_gateway_action` non-macOS | gateway transport selection | Linux | LOW/graph under-resolved | PI-111 | colocated; `world_gateway.rs` | EDIT Linux cfg only |
+| R2-2E | same | `build_macos_gateway_client`; `resolve_macos_gateway_client_endpoint`; `resolve_macos_host_gateway_socket`; `macos_default_world_socket_path` | ambient socket/home/VM and lower `auto_select`; endpoint helper is production-compiled dead/test support | no carrier: E fails in `call_gateway_action` before these symbols | `call_gateway_action` plus four test-only endpoint-helper callers | gateway transport selection | macOS | LOW locally; endpoint helper four test callers; lower adapter risk frozen | PI-111 | unchanged colocated cfg tests plus new pre-client rejection proof | SOURCE-CLOSURE INSPECTED, FROZEN R2-3; no edit/delete/call |
+| R2-2E | `crates/shell/src/execution/policy_snapshot.rs` | `resolve_policy_snapshot_for_bootstrap_home`; additive explicit-bootstrap-home world-network resolver | snapshot resolver is explicit; network resolver re-enters ambient config | A bootstrap home and explicit config | gateway context; later F authenticated builder | policy/network projection | all | LOW | PI-111 | colocated | REUSE plus ADD; sole owner |
+| R2-2E | `crates/shell/src/execution/agent_inventory.rs` | `resolve_gateway_backend_inventory_entry`; additive bootstrap-home gateway resolver; `load_effective_agent_inventory_for_bootstrap_home` | gateway resolver loads ambient inventory | A bootstrap home | gateway backend validation | runtime-family inventory | all | LOW | PI-111 | colocated | EDIT/ADD/REUSE |
+| R2-2F | `crates/shell/src/execution/platform/mod.rs` | `handle_world_command` Doctor/Deps arms; `handle_host_command` Doctor arm | World doctor/deps resolve ambient config/policy or drop A; Host policy remains ambient | `AuthenticatedWorldDepsContextV1`-equivalent plus A-derived doctor inputs | `ShellConfig::from_cli` | World/Host dispatch | authenticated Unix/Linux; non-Unix compatibility unproven/no A claim | LOW; manual arm closure | PI-106/PI-107 | `doctor_scopes_ds0.rs`; world-deps suites | EDIT arms only |
+| R2-2F | `crates/shell/src/execution/platform/linux.rs` | `host_doctor_main`; `world_doctor_main` | `detect_profile` plus global `world_fs_policy` | explicit A-derived world-fs policy and identity | platform handlers | Linux Host/World doctor | Linux | LOW | PI-106/PI-107 | `doctor_scopes_ds0.rs` | EDIT; observation stays read-only |
+| R2-2F | `crates/shell/src/builtins/world_deps/mod.rs` | new authenticated context/binder; `WorldDepsDoctorSnapshotV1`; `collect_doctor_snapshot_v1`; `resolve_effective_enabled_provisioning_requirements_v1` | diagnostic Unix path partly explicit; provisioning and non-Unix ambient; snapshot lacks identity | one validated A context with root/config/policy/deps/CWD/runtime projection | shim doctor; world-enable; surfaces | dependency resolution/diagnostics | Unix/Linux validation; non-Unix unavailable or explicit R2-3 ambient compatibility only | existing symbols LOW; new symbols N/A | PI-106/PI-107 | colocated; inventory/enabled/provision suites | ADD/EDIT |
+| R2-2F | `crates/shell/src/builtins/world_deps/surfaces.rs` | `run`; `run_current`; `run_global`; `run_workspace`; `run_current_list`; `run_current_show`; `run_current_install`; `run_current_sync`; `run_global_list`; `run_global_add`; `run_global_remove`; `run_global_reset`; `run_workspace_list`; `run_workspace_add`; `run_workspace_remove`; `run_workspace_reset`; `resolve_global_available_inventory_view`; `build_current_show_explain_v1` | ambient H/config/deps and lower `current_dir` | shared context; explicit workspace CWD | world dispatch and post-provision sync | normal dependency CLI | symbols compile across existing cfgs; authenticated guarantee Unix/Linux only, other adapters R2-3/unproven or fail closed | LOW per entry/action | PI-106/PI-107 | all exact world-deps suites in `03` | EDIT exact symbols |
+| R2-2F | same | `run_current_list_applied`; `compute_current_applied_items_v1`; `preflight_runtime_system_requirements_v1`; `probe_world_apt_requirements_v1`; `probe_world_pacman_requirements_v1`; `apply_install_plan_v1`; `reconcile_world_deps_bin_v1`; `apply_apt_entrypoint_wrappers_v1`; `apply_script_package_v1`; `resolve_script_body_for_package_v1`; `current_codex_runtime_target_triple_v1`; `run_world_command_output_for_deps`; `run_world_command_output_for_deps_with_profile`; `run_world_command_checked_for_deps`; `query_world_package_presence`; `query_world_package_entrypoint_presence`; `run_world_presence_check_v1`; `ensure_world_backend_available`; `run_world_command_for_deps`; `run_world_command_for_deps_at` | A inventory can feed ambient B request builder | shared context and authenticated request projection | current applied/show/install/sync and doctor | dependency runtime execution | symbols compile across existing cfgs; authenticated guarantee Unix/Linux only; profile-specific behavior frozen | LOW per symbol; frozen `resolve_current_inventory_view` HIGH | PI-106/PI-107 | applied/present/apt/dry-run/script/install suites | EDIT exact symbols; frozen reuse helper untouched |
+| R2-2F | `crates/shell/src/builtins/world_enable/runner.rs`; `runner/provision_deps.rs` | `run_enable_with_provision_deps`; `run_sync_after_provisioning`; `probe_world_manager`; `probe_requirements`; `provision_apt_requirements`; `provision_pacman_requirements`; `execute_with_profile` | A reaches runner then is dropped before probes/install/sync | same authenticated world-deps context | `run_enable` and provisioning helpers | world-enable provisioning | Unix carrier; existing non-Unix restrictions | LOW | PI-106/PI-107 | `world_enable.rs`; `world_enable_provision_deps_wdap0.rs` | EDIT |
+| R2-2F | `crates/shell/src/execution/routing/dispatch/world_ops.rs`; `routing/dispatch/prelude.rs`; `routing.rs` | one new authenticated builder/private cfg implementations and export-only re-exports | existing shared builder resolves config/policy/network/socket ambient | prevalidated F context reusing E projection | only `run_world_command_for_deps_at` and `execute_with_profile` | world execution request construction | cfg implementations | new N/A; frozen ambient builder HIGH, trace variant CRITICAL | PI-106/PI-107 | colocated world-ops plus world-deps/provision suites | ADD plus export-only; ambient builders FROZEN |
+| R2-2F | `crates/shell/src/builtins/shim_doctor/report.rs` | `gather_world_doctor_snapshot`; `gather_world_deps_section`; `status_for_world_deps_report`; `snapshot_from_value`; `snapshot_from_command`; shared identity validator | fixtures/children can omit/mismatch A; missing `ok` may become healthy | expected non-secret A prefix/commitment | `build_report` | Health/shim-doctor composition | Unix typed path; non-Unix R2-3 compatibility/unproven and cannot claim A | LOW | PI-106/PI-107; PI-108 mechanics preserved | `common.rs`; `shim_doctor.rs`; `shim_health.rs`; doctor suites | EDIT coherence only |
+
+R2-2E's binding contract is exact:
+
+1. The gateway consumes an already-authenticated `InstallBootstrapContextV1`; missing, malformed,
+   tampered, mismatched, wrong-principal, or unavailable A fails before classification or effects.
+2. Existing explicit-home config and policy resolvers select A. `policy_snapshot.rs` owns the only
+   policy snapshot and network-policy projection; duplication inside `world_gateway.rs` is forbidden.
+3. `SUBSTRATE_HOME`, `SUBSTRATE_ROOT`, CWD, account-home variables, XDG, manager projections,
+   `CODEX_HOME`, `.codex`, `config.toml`, and platform-control roots never replace A. CWD may be an
+   explicit workspace-scope input only. Runtime-native files remain projections.
+4. Network allow/deny semantics and gateway lifecycle behavior are unchanged; only selection
+   authority becomes exact. Credentials remain launch-time in-world handoff under the existing
+   contract, and no durable host credential authority is created.
+5. Linux uses the fixed socket. E has no authenticated macOS endpoint source, so macOS fails before
+   client construction or ambient forwarding; Windows/other contextless entries fail before any
+   ambient selector. Existing non-Linux clients remain frozen/unreachable from E. No
+   `world-mac-lima` edit or native macOS/Windows claim is authorized.
+6. Output may include only intended non-secret references/commitments. Carrier, prompt/request,
+   credential/token, and sensitive-principal bytes are forbidden everywhere observable.
+
+Its required tests cover custom A with conflicting B; A-only config, policy, network policy,
+inventory/runtime-family, and Codex projection; environment-only/malformed/tampered input;
+fail-before-mutation/forwarding/launch; disabled-routing validation; disclosure scans; unchanged
+network allow/deny behavior; Linux fixed socket; macOS/Windows/other fail-before-ambient selection;
+and non-Unix build/static cfg preservation without an A-bound/native proof claim.
+
+R2-2F's binding contract is exact:
+
+1. Normal current, global, workspace, runtime, provision-deps, and post-sync paths receive the one
+   shared authenticated context. A selects global config/inventory/dependency roots; explicit launch
+   CWD selects workspace scope only. No normal product path re-enters ambient resolution.
+2. The additive authenticated request builder is consumed by exactly two leaves and reuses E's
+   projection. The existing HIGH/CRITICAL ambient builders, `resolve_current_inventory_view`,
+   resolver bodies, schemas, services, lower adapters, and compatibility callers remain frozen.
+3. World-deps mutation behavior is unchanged except for selecting the correct A root. Validation
+   precedes every read that can influence mutation and every effect. Diagnostic collection remains
+   read-only.
+4. On the authenticated Unix/Linux route, doctor may identify A only when configuration,
+   policy/world-fs policy, inventory, dependency,
+   runtime observation, fixture, and child evidence all match A. Missing `ok` or identity, mixed
+   A/B, or mismatch is unavailable/incoherent with `ok=false`, never success. Rejected reports are
+   not retained as healthy payloads.
+5. macOS, Windows, fallback, and other non-Unix world-deps/Health/doctor routes remain explicit
+   R2-3 compatibility/unproven paths. They preserve labeled ambient compatibility or report
+   unavailable/fail closed, but never claim A-bound success or consume the F context.
+6. Missing/malformed/tampered/mismatched context fails closed. No carrier, credential, request,
+   prompt, token, or sensitive-principal material appears in output, errors, fixtures, logs, or
+   traces. Filesystem, network, caging, placement, service, receipt, supervisor, retained-worker,
+   and lifecycle capabilities do not change.
+
+Its required tests cover conflicting A/B for current/global/workspace/runtime; mutation and
+nonmutation; current applied/show probes; apt/pacman/runtime installs; manager probes and
+post-provision sync; direct no-witness and tamper failures before mutation; exact fixture/child
+identity; mixed-source rejection; truthful unavailable output; existing A-rooted snapshot behavior;
+explicit compatibility; disclosure scans; and non-Unix build/static preservation with no A-bound
+success claim.
+
+The binding stop conditions for both increments are: any file/symbol outside `03`'s exact allowlist;
+any new resolver or side table; any edit to a frozen HIGH/CRITICAL builder; any change to another
+shared caller, network meaning, request schema, service, lower platform adapter, capability,
+credential lifecycle, cleanup, or deletion; any mutation before validation; any mixed-authority
+healthy diagnostic; any non-Linux compatibility path presented as E/F-authenticated; or any
+privileged/native platform proof claim without evidence. Encountering
+one stops as `ImpactDecisionRequired` or `CrossDocumentChangeRequired`; it never silently widens an
+increment.
+
 For this exact Route A closure, the immutable production baseline is fixed at patch SHA-256
 `ea4abf43043013994e698d54f21c04bba58833b3bb3247bf6d5d3b454f51b943`. Its manifest and
 file SHA-256 fingerprints are:
