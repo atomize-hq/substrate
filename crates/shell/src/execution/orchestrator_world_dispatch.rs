@@ -115,7 +115,9 @@ use crate::execution::routing::{
     build_agent_client_and_pending_diff_request, MemberDispatchTransportRequest,
 };
 #[cfg(target_os = "linux")]
-use transport_api_types::{ExecuteCancelRequestV1, RetainedWorkerLaunchAuthorityProofV1};
+use transport_api_types::{
+    ExecuteCancelRequestV1, PlatformPrincipalV1, RetainedWorkerLaunchAuthorityProofV1,
+};
 
 #[cfg(target_os = "linux")]
 const CONTINUE_WORLD_WORKER_ROUTER_IDENTITY: &str = "router::continue_world_worker";
@@ -418,6 +420,26 @@ pub(crate) async fn dispatch_orchestrator_world_request(
 }
 
 #[cfg(target_os = "linux")]
+pub(crate) async fn dispatch_orchestrator_world_request_for_principal(
+    store: &AgentRuntimeStateStore,
+    request: WorldDispatchRequestV1,
+    intended_host_principal: PlatformPrincipalV1,
+) -> Result<WorldDispatchOutcomeV1> {
+    if request.action == WorldDispatchActionV1::SpawnWorldWorker {
+        let request = request.validate()?;
+        return spawn_prepared_world_worker(prepare_authority_bound_spawn_world_worker(request)?)
+            .await;
+    }
+    let prepared = prepare_orchestrator_world_dispatch(store, request)?;
+    dispatch_prepared_orchestrator_world_request_for_principal(prepared, intended_host_principal)
+        .await
+}
+
+#[cfg(target_os = "linux")]
+#[allow(
+    dead_code,
+    reason = "Principal-less compatibility is intentionally unused until R2-3 migration"
+)]
 pub(crate) async fn dispatch_run_world_task_request_with_started_task_run_id_tx(
     store: &AgentRuntimeStateStore,
     request: WorldDispatchRequestV1,
@@ -430,7 +452,29 @@ pub(crate) async fn dispatch_run_world_task_request_with_started_task_run_id_tx(
         );
     }
 
-    run_world_task_with_started_task_run_id_tx(prepared, Some(started_task_run_id_tx)).await
+    run_world_task_with_started_task_run_id_tx(prepared, None, Some(started_task_run_id_tx)).await
+}
+
+#[cfg(target_os = "linux")]
+pub(crate) async fn dispatch_run_world_task_request_with_started_task_run_id_tx_for_principal(
+    store: &AgentRuntimeStateStore,
+    request: WorldDispatchRequestV1,
+    started_task_run_id_tx: UnboundedSender<String>,
+    intended_host_principal: PlatformPrincipalV1,
+) -> Result<WorldDispatchOutcomeV1> {
+    let prepared = prepare_orchestrator_world_dispatch(store, request)?;
+    if prepared.request.action != WorldDispatchActionV1::RunWorldTask {
+        anyhow::bail!(
+            "invalid_dispatch_action: started task_run_id delivery is only available for run_world_task"
+        );
+    }
+
+    run_world_task_with_started_task_run_id_tx(
+        prepared,
+        Some(&intended_host_principal),
+        Some(started_task_run_id_tx),
+    )
+    .await
 }
 
 #[allow(dead_code)]
@@ -438,10 +482,53 @@ pub(crate) async fn dispatch_prepared_orchestrator_world_request(
     prepared: PreparedOrchestratorWorldDispatch,
 ) -> Result<WorldDispatchOutcomeV1> {
     match prepared.request.action {
-        WorldDispatchActionV1::RunWorldTask => run_world_task(prepared).await,
+        WorldDispatchActionV1::RunWorldTask => {
+            run_world_task(
+                prepared,
+                #[cfg(target_os = "linux")]
+                None,
+            )
+            .await
+        }
         WorldDispatchActionV1::SpawnWorldWorker => spawn_world_worker(prepared).await,
-        WorldDispatchActionV1::ForkWorldWorker => fork_world_worker(prepared).await,
-        WorldDispatchActionV1::ContinueWorldWorker => continue_world_worker(prepared).await,
+        WorldDispatchActionV1::ForkWorldWorker => {
+            fork_world_worker(
+                prepared,
+                #[cfg(target_os = "linux")]
+                None,
+            )
+            .await
+        }
+        WorldDispatchActionV1::ContinueWorldWorker => {
+            continue_world_worker(
+                prepared,
+                #[cfg(target_os = "linux")]
+                None,
+            )
+            .await
+        }
+        WorldDispatchActionV1::InspectWorldWorker => inspect_world_worker(prepared).await,
+        WorldDispatchActionV1::CancelWorldWork => cancel_world_work(prepared).await,
+        WorldDispatchActionV1::StopWorldWorker => stop_world_worker(prepared).await,
+    }
+}
+
+#[cfg(target_os = "linux")]
+pub(crate) async fn dispatch_prepared_orchestrator_world_request_for_principal(
+    prepared: PreparedOrchestratorWorldDispatch,
+    intended_host_principal: PlatformPrincipalV1,
+) -> Result<WorldDispatchOutcomeV1> {
+    match prepared.request.action {
+        WorldDispatchActionV1::RunWorldTask => {
+            run_world_task(prepared, Some(&intended_host_principal)).await
+        }
+        WorldDispatchActionV1::SpawnWorldWorker => spawn_world_worker(prepared).await,
+        WorldDispatchActionV1::ForkWorldWorker => {
+            fork_world_worker(prepared, Some(&intended_host_principal)).await
+        }
+        WorldDispatchActionV1::ContinueWorldWorker => {
+            continue_world_worker(prepared, Some(&intended_host_principal)).await
+        }
         WorldDispatchActionV1::InspectWorldWorker => inspect_world_worker(prepared).await,
         WorldDispatchActionV1::CancelWorldWork => cancel_world_work(prepared).await,
         WorldDispatchActionV1::StopWorldWorker => stop_world_worker(prepared).await,
@@ -450,6 +537,7 @@ pub(crate) async fn dispatch_prepared_orchestrator_world_request(
 
 async fn fork_world_worker(
     prepared: PreparedOrchestratorWorldDispatch,
+    #[cfg(target_os = "linux")] intended_host_principal: Option<&PlatformPrincipalV1>,
 ) -> Result<WorldDispatchOutcomeV1> {
     let workspace_root = PathBuf::from(&prepared.session.workspace_root);
     let context = resolve_internal_dispatch_context(&workspace_root)?;
@@ -501,6 +589,7 @@ async fn fork_world_worker(
             &transport_request,
             &prepared.request,
             None,
+            intended_host_principal,
         )
         .await?;
         let lineage = match wait_for_fork_child_durable_publication(
@@ -1042,6 +1131,7 @@ fn prepare_task_acceptance_submission(
     prepared: &PreparedOrchestratorWorldDispatch,
     workspace_root: &Path,
     descriptor: &crate::execution::agent_runtime::validator::RuntimeSelectionDescriptor,
+    intended_host_principal: Option<&PlatformPrincipalV1>,
 ) -> Result<PreparedTaskAcceptanceSubmission> {
     let resolved_policy =
         crate::execution::policy_snapshot::resolve_policy_snapshot_for_cwd(workspace_root)
@@ -1071,6 +1161,7 @@ fn prepare_task_acceptance_submission(
                         &transport_request,
                         workspace_root,
                         Some(acceptance_context.clone()),
+                        intended_host_principal,
                     )?;
                 ensure_exact_submission_policy_snapshot(&execute_request, &resolved_policy)?;
                 let member_dispatch_request =
@@ -1127,6 +1218,7 @@ fn prepare_task_acceptance_submission(
         &transport_request,
         workspace_root,
         Some(proposal.acceptance_context.clone()),
+        intended_host_principal,
     )?;
     ensure_exact_submission_policy_snapshot(&execute_request, &resolved_policy)?;
     let digest = canonical_world_work_submission_sha256(&prepared.request, &execute_request)?;
@@ -1247,13 +1339,15 @@ fn prepare_retained_acceptance_submission(
 #[cfg(target_os = "linux")]
 async fn run_world_task(
     prepared: PreparedOrchestratorWorldDispatch,
+    intended_host_principal: Option<&PlatformPrincipalV1>,
 ) -> Result<WorldDispatchOutcomeV1> {
-    run_world_task_with_started_task_run_id_tx(prepared, None).await
+    run_world_task_with_started_task_run_id_tx(prepared, intended_host_principal, None).await
 }
 
 #[cfg(target_os = "linux")]
 async fn run_world_task_with_started_task_run_id_tx(
     prepared: PreparedOrchestratorWorldDispatch,
+    intended_host_principal: Option<&PlatformPrincipalV1>,
     started_task_run_id_tx: Option<UnboundedSender<String>>,
 ) -> Result<WorldDispatchOutcomeV1> {
     let workspace_root = PathBuf::from(&prepared.b_owned_authority()?.workspace_root);
@@ -1274,8 +1368,12 @@ async fn run_world_task_with_started_task_run_id_tx(
             err.reason
         )
     })?;
-    let acceptance_submission =
-        prepare_task_acceptance_submission(&prepared, &workspace_root, &descriptor)?;
+    let acceptance_submission = prepare_task_acceptance_submission(
+        &prepared,
+        &workspace_root,
+        &descriptor,
+        intended_host_principal,
+    )?;
     let stream_result = execute_run_world_task_stream(
         &acceptance_submission.receipt_registry,
         &acceptance_submission.execution_supervisor,
@@ -1652,6 +1750,7 @@ pub(crate) async fn spawn_prepared_world_worker(
         &transport_request,
         &request,
         Some((authority, admission_plan)),
+        None,
     )
     .await?;
     let summary = summarize_spawn_world_worker_result(&receipt);
@@ -1678,6 +1777,7 @@ pub(crate) async fn spawn_prepared_world_worker(
 #[cfg(target_os = "linux")]
 async fn continue_world_worker(
     prepared: PreparedOrchestratorWorldDispatch,
+    intended_host_principal: Option<&PlatformPrincipalV1>,
 ) -> Result<WorldDispatchOutcomeV1> {
     let workspace_root = match prepared.b_owned_authority.as_ref() {
         Some(authority) => PathBuf::from(&authority.workspace_root),
@@ -1742,8 +1842,11 @@ async fn continue_world_worker(
             )?;
         }
     }
-    let fork_bootstrap =
-        continue_world_worker_fork_command_bootstrap_after_delivery(&prepared).await?;
+    let fork_bootstrap = continue_world_worker_fork_command_bootstrap_after_delivery(
+        &prepared,
+        intended_host_principal,
+    )
+    .await?;
     let summary = summarize_continue_world_worker_result(
         &submit_request,
         turn_kind,
@@ -1782,6 +1885,7 @@ async fn continue_world_worker(
 #[cfg(target_os = "linux")]
 async fn continue_world_worker_fork_command_bootstrap_after_delivery(
     prepared: &PreparedOrchestratorWorldDispatch,
+    intended_host_principal: Option<&PlatformPrincipalV1>,
 ) -> Result<Option<ContinueWorldWorkerForkBootstrapOutcome>> {
     let WorldDispatchPayloadV1::WorkerContinueForkCommand(_) = &prepared.request.payload else {
         return Ok(None);
@@ -1833,6 +1937,7 @@ async fn continue_world_worker_fork_command_bootstrap_after_delivery(
         &transport_request,
         &prepared.request,
         None,
+        intended_host_principal,
     )
     .await
     .with_context(|| {
@@ -4382,14 +4487,19 @@ async fn execute_spawn_world_worker_stream(
     request: &MemberDispatchTransportRequest,
     dispatch_request: &ValidatedWorldDispatchRequestV1,
     mut admission_runtime: Option<(HostSessionAuthority, RetainedWorkerAdmissionPlanV1)>,
+    intended_host_principal: Option<&PlatformPrincipalV1>,
 ) -> Result<SpawnWorldWorkerReceipt> {
     use http_body_util::BodyExt as _;
     use substrate_common::agent_events::AgentEventKind;
     use transport_api_types::ExecuteStreamFrame;
 
     let (client, execute_request, _agent_id) =
-        match build_agent_client_and_member_dispatch_request_for_cwd(request, workspace_root, None)
-        {
+        match build_agent_client_and_member_dispatch_request_for_cwd(
+            request,
+            workspace_root,
+            None,
+            intended_host_principal,
+        ) {
             Ok(built) => built,
             Err(error) => {
                 if let Some((authority, plan)) = admission_runtime.as_ref() {
