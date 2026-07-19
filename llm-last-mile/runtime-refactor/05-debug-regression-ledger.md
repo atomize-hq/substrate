@@ -390,6 +390,14 @@ The R2 regression gates are exact labels used by the inventory and packet allowl
 | **R3-LIFE-01** | R3-only candidate, rollback, manifest, managed-system cleanup, account-state restoration, crash-window, uninstall/reinstall, shim/payload/bin/cache/helper/unit/socket/platform-staging/forwarder unlink/drop/timeout/synthetic-auth cleanup, and unrelated-state preservation matrix. Referencing this gate from R2 transports a target only. |
 | **R3-WIN-01** | R3-only native Windows two-prefix cleanup matrix: no wildcard removal; exact per-prefix versus shared state; version/bin/profile replacement, timeout rollback, uninstall order, WSL/forwarder/shim cleanup, partial install, and unrelated-state preservation. |
 
+For the Route A successor clause of `R2-RUNTIME-01`, the authorized Unix-only import cfg set also
+includes the policy test module's sole `tempfile::TempDir` import; no other import or module gate is
+authorized. Health proof must combine fail-closed syscall/path interception with a complete B-tree
+before/after snapshot. Host proof must show the expected A dependency scaffold, no B dependency
+artifact, and complete B-tree preservation across both the installed-witness dispatch and the
+direct-repository no-witness rejection. This test-only clarification supersedes the narrower import
+wording in the row without changing any production byte, Route B boundary, or R2-3 ownership.
+
 R2-0 cross-document checkpoint rules are: inventory counts and owner/packet columns must agree;
 every R2 packet has an exact production/test allowlist; R2-4 has no production allowlist; every R3
 action above stays exclusive to R3; host and Lima/WSL paths/principals are never equated;
