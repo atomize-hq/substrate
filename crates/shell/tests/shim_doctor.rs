@@ -11,6 +11,7 @@ use std::os::unix::fs::PermissionsExt;
 use std::path::{Path, PathBuf};
 use std::process::Command;
 use tempfile::{Builder, TempDir};
+use transport_api_types::{InstallBootstrapContextCarrierV1, InstallBootstrapContextV1};
 
 struct DoctorFixture {
     _temp: TempDir,
@@ -521,6 +522,299 @@ managers:
             .is_empty(),
         "default world deps fixture should report zero applied items"
     );
+}
+
+#[test]
+fn shim_doctor_snapshot_uses_authenticated_a_under_conflicting_ambient_b() {
+    let fixture = DoctorFixture::new(detected_manager_manifest());
+    let selected_prefix = fixture.home().join(".substrate");
+    fs::write(
+        selected_prefix.join("config.yaml"),
+        "world:\n  enabled: true\n  deps:\n    builtins: disabled\n    inventory_mode: merged\n    enabled: []\n",
+    )
+    .expect("write selected Route D config");
+    fs::remove_file(fixture.health_dir.join("world_deps.json"))
+        .expect("remove selected world deps fixture so Route D collects a snapshot");
+    fs::remove_file(fixture.health_dir.join("world_doctor.json"))
+        .expect("remove selected world fixture so Route D authenticates the nested child");
+    let selected_packages = selected_prefix.join("deps/packages");
+    fs::create_dir_all(&selected_packages).expect("create selected inventory");
+    for name in [
+        "selected-one",
+        "selected-two",
+        "selected-three",
+        "selected-four",
+        "selected-five",
+    ] {
+        fs::write(
+            selected_packages.join(format!("{name}.yaml")),
+            format!(
+                "version: 1\nname: {name}\nrunnable: false\ninstall:\n  method: manual\n  manual_instructions: test only\n"
+            ),
+        )
+        .expect("write selected inventory package");
+    }
+
+    let ambient_home = fixture.home().join("ambient-home");
+    let ambient_prefix = ambient_home.join(".substrate");
+    fs::create_dir_all(ambient_prefix.join("deps/packages"))
+        .expect("create conflicting ambient inventory");
+    fs::set_permissions(&ambient_home, fs::Permissions::from_mode(0o700))
+        .expect("secure conflicting ambient home");
+    fs::set_permissions(&ambient_prefix, fs::Permissions::from_mode(0o700))
+        .expect("secure conflicting ambient prefix");
+    fs::write(
+        ambient_prefix.join("config.yaml"),
+        "world:\n  enabled: true\n  deps:\n    builtins: disabled\n    inventory_mode: merged\n    enabled: []\n",
+    )
+    .expect("write conflicting ambient config");
+    for name in ["ambient-one", "ambient-two"] {
+        fs::write(
+            ambient_prefix
+                .join("deps/packages")
+                .join(format!("{name}.yaml")),
+            format!(
+                "version: 1\nname: {name}\nrunnable: false\ninstall:\n  method: manual\n  manual_instructions: test only\n"
+            ),
+        )
+        .expect("write conflicting ambient inventory package");
+    }
+    let ambient_health = ambient_prefix.join("health");
+    fs::create_dir(&ambient_health).expect("create conflicting ambient health fixtures");
+    fs::write(
+        ambient_health.join("world_doctor.json"),
+        json!({
+            "schema_version": 1,
+            "platform": "ambient-b-fixture",
+            "ok": true,
+            "ambient_fixture_secret": "ambient-b-must-not-appear"
+        })
+        .to_string(),
+    )
+    .expect("write conflicting ambient world doctor fixture");
+    fs::write(
+        ambient_health.join("world_deps.json"),
+        json!({
+            "schema_version": 1,
+            "cwd": ambient_prefix,
+            "inventory_packages": 777,
+            "inventory_bundles": 0,
+            "inventory_mode": "merged",
+            "builtins": "disabled",
+            "enabled": [],
+            "applied": []
+        })
+        .to_string(),
+    )
+    .expect("write conflicting ambient world deps fixture");
+
+    let output = fixture
+        .command()
+        .env("HOME", &ambient_home)
+        .env("USERPROFILE", &ambient_home)
+        .env("SUBSTRATE_HOME", &ambient_prefix)
+        .env("SUBSTRATE_ROOT", &ambient_prefix)
+        .env("SHIM_TRACE_LOG", ambient_prefix.join("trace.jsonl"))
+        .arg("--world")
+        .arg("shim")
+        .arg("doctor")
+        .arg("--json")
+        .output()
+        .expect("run typed Route D shim doctor");
+
+    assert!(
+        output.status.success(),
+        "typed Route D shim doctor should succeed: stdout={} stderr={}",
+        String::from_utf8_lossy(&output.stdout),
+        String::from_utf8_lossy(&output.stderr)
+    );
+    let report: Value = serde_json::from_slice(&output.stdout).expect("Route D doctor JSON");
+    assert_eq!(
+        report["selected_host_prefix"],
+        json!(selected_prefix),
+        "typed report must identify selected A"
+    );
+    assert_eq!(report["world"]["source"], json!("command"));
+    assert!(
+        report["world"].get("error").is_none(),
+        "authenticated nested world doctor must not fail: {report}"
+    );
+    assert_eq!(
+        report["world"]["details"]["host"]["selected_host_prefix"],
+        json!(selected_prefix),
+        "nested world doctor must receive the authenticated A witness"
+    );
+    let nested_access = &report["world"]["details"]["host"]["world_socket"]["access"];
+    assert!(nested_access.get("current_user").is_none());
+    assert!(nested_access.get("current_uid").is_none());
+    assert_eq!(report["world_deps"]["source"], json!("command"));
+    assert!(
+        report["world_deps"]["report"]["inventory_packages"]
+            .as_u64()
+            .is_some_and(|count| count >= 5),
+        "typed Route D snapshot must include selected A's five packages rather than ambient B's two: {report}"
+    );
+    let rendered = String::from_utf8_lossy(&output.stdout);
+    let encoded = InstallBootstrapContextCarrierV1::from_context(
+        InstallBootstrapContextV1::new_unix(
+            selected_prefix.to_str().expect("UTF-8 selected prefix"),
+            "substrate-r2-test",
+            unsafe { libc::geteuid() },
+        )
+        .expect("valid fixture context"),
+    )
+    .expect("committed fixture context")
+    .encode()
+    .expect("encoded fixture context");
+    assert!(
+        !rendered.contains(&ambient_prefix.display().to_string()),
+        "Route D diagnostics must not disclose conflicting ambient B: {rendered}"
+    );
+    assert!(
+        !rendered.contains("substrate-r2-test"),
+        "Route D diagnostics must not disclose the authenticated principal: {rendered}"
+    );
+    assert!(
+        !rendered.contains(&encoded),
+        "Route D JSON must not disclose hidden carrier bytes: {rendered}"
+    );
+    assert!(!rendered.contains("ambient-b-fixture"));
+    assert!(!rendered.contains("ambient-b-must-not-appear"));
+
+    let human_output = fixture
+        .command()
+        .env("HOME", &ambient_home)
+        .env("USERPROFILE", &ambient_home)
+        .env("SUBSTRATE_HOME", &ambient_prefix)
+        .env("SUBSTRATE_ROOT", &ambient_prefix)
+        .env("SHIM_TRACE_LOG", ambient_prefix.join("trace.jsonl"))
+        .arg("--world")
+        .arg("shim")
+        .arg("doctor")
+        .output()
+        .expect("run typed Route D human diagnostics");
+    assert!(human_output.status.success());
+    let human_rendered = String::from_utf8_lossy(&human_output.stdout);
+    assert!(!human_rendered.contains(&ambient_prefix.display().to_string()));
+    assert!(!human_rendered.contains("substrate-r2-test"));
+    assert!(!human_rendered.contains(&encoded));
+    assert!(!human_rendered.contains("ambient-b-fixture"));
+    assert!(!human_rendered.contains("ambient-b-must-not-appear"));
+
+    let trace = fs::read_to_string(&fixture.trace).expect("read Route D trace fixture");
+    assert!(!trace.contains(&ambient_prefix.display().to_string()));
+    assert!(!trace.contains("substrate-r2-test"));
+    assert!(!trace.contains(&encoded));
+    assert!(!trace.contains("ambient-b-fixture"));
+    assert!(!trace.contains("ambient-b-must-not-appear"));
+}
+
+#[test]
+fn shim_doctor_rejects_environment_only_malformed_and_tampered_context() {
+    let fixture = DoctorFixture::new(detected_manager_manifest());
+    let selected_prefix = fixture.home().join(".substrate");
+    let uid = unsafe { libc::geteuid() };
+    let account_output = Command::new("id")
+        .args(["-nu", &uid.to_string()])
+        .output()
+        .expect("resolve current Unix account");
+    assert!(account_output.status.success());
+    let account = String::from_utf8(account_output.stdout)
+        .expect("UTF-8 Unix account")
+        .trim()
+        .to_string();
+    let context = InstallBootstrapContextV1::new_unix(
+        selected_prefix.to_str().expect("UTF-8 selected prefix"),
+        &account,
+        uid,
+    )
+    .expect("valid environment-only context");
+    let carrier = InstallBootstrapContextCarrierV1::from_context(context)
+        .expect("committed environment-only context");
+    let encoded = carrier.encode().expect("encoded environment-only context");
+
+    ensure_substrate_built();
+    let output = Command::new(binary_path())
+        .env("HOME", fixture.home())
+        .env("USERPROFILE", fixture.home())
+        .env("SUBSTRATE_HOME", &selected_prefix)
+        .env("SUBSTRATE_ROOT", &selected_prefix)
+        .env(
+            "SUBSTRATE_INSTALL_HOST_CONTEXT_COMMITMENT",
+            &carrier.host_context_commitment,
+        )
+        .env("SUBSTRATE_INSTALL_PRIMARY_USER", &account)
+        .env("SUBSTRATE_INSTALL_PRIMARY_UID", uid.to_string())
+        .env("SUBSTRATE_INSTALL_BOOTSTRAP_CONTEXT_V1", &encoded)
+        .current_dir(fixture.home())
+        .arg("shim")
+        .arg("doctor")
+        .arg("--json")
+        .output()
+        .expect("run environment-only shim doctor invocation");
+
+    assert_eq!(output.status.code(), Some(2));
+    assert!(output.stdout.is_empty());
+    let stderr = String::from_utf8_lossy(&output.stderr);
+    assert!(stderr.contains("installed-product invocation witness or --install-prefix is required"));
+    assert!(!stderr.contains(&encoded));
+    assert!(!stderr.contains(&account));
+
+    let malformed = "route-d-malformed-carrier-must-not-leak";
+    let malformed_output = Command::new(binary_path())
+        .env("HOME", fixture.home())
+        .env("USERPROFILE", fixture.home())
+        .env_remove("SUBSTRATE_INSTALL_BOOTSTRAP_CONTEXT_V1")
+        .env_remove("SUBSTRATE_INSTALL_HOST_CONTEXT_COMMITMENT")
+        .env_remove("SUBSTRATE_INSTALL_PRIMARY_USER")
+        .env_remove("SUBSTRATE_INSTALL_PRIMARY_UID")
+        .current_dir(fixture.home())
+        .arg("--install-bootstrap-context-v1")
+        .arg(malformed)
+        .arg("shim")
+        .arg("doctor")
+        .arg("--json")
+        .output()
+        .expect("run malformed Route D context invocation");
+    assert_eq!(malformed_output.status.code(), Some(2));
+    assert!(malformed_output.stdout.is_empty());
+    let malformed_stderr = String::from_utf8_lossy(&malformed_output.stderr);
+    assert!(malformed_stderr.contains("invalid install bootstrap context"));
+    assert!(!malformed_stderr.contains(malformed));
+
+    let mut conflicting_commitment = carrier.host_context_commitment.clone();
+    let replacement = if conflicting_commitment.starts_with('0') {
+        "1"
+    } else {
+        "0"
+    };
+    conflicting_commitment.replace_range(..1, replacement);
+    let tampered_output = Command::new(binary_path())
+        .env("HOME", fixture.home())
+        .env("USERPROFILE", fixture.home())
+        .env("SUBSTRATE_HOME", &selected_prefix)
+        .env("SUBSTRATE_ROOT", &selected_prefix)
+        .env(
+            "SUBSTRATE_INSTALL_HOST_CONTEXT_COMMITMENT",
+            &conflicting_commitment,
+        )
+        .env("SUBSTRATE_INSTALL_PRIMARY_USER", &account)
+        .env("SUBSTRATE_INSTALL_PRIMARY_UID", uid.to_string())
+        .env("SUBSTRATE_INSTALL_BOOTSTRAP_CONTEXT_V1", &encoded)
+        .current_dir(fixture.home())
+        .arg("--install-bootstrap-context-v1")
+        .arg(&encoded)
+        .arg("shim")
+        .arg("doctor")
+        .arg("--json")
+        .output()
+        .expect("run tampered Route D context invocation");
+    assert_eq!(tampered_output.status.code(), Some(2));
+    assert!(tampered_output.stdout.is_empty());
+    let tampered_stderr = String::from_utf8_lossy(&tampered_output.stderr);
+    assert!(tampered_stderr.contains("invalid install bootstrap context"));
+    assert!(!tampered_stderr.contains(&encoded));
+    assert!(!tampered_stderr.contains(&account));
 }
 
 #[test]
