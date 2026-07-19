@@ -1,5 +1,9 @@
 use super::cli::{Cli, HealthCmd, HostAction, HostCmd, WorldAction, WorldCmd};
 use crate::builtins as commands;
+#[cfg(unix)]
+use crate::execution::agent_runtime::host_session_authority::trusted_fs::TrustedAuthorityRoot;
+#[cfg(unix)]
+use crate::execution::agent_runtime::HostSessionAuthority;
 #[cfg(test)]
 use crate::execution::world_env_guard;
 use anyhow::Result;
@@ -234,7 +238,11 @@ pub(crate) fn handle_world_command(
     Ok(())
 }
 
-pub(crate) fn handle_host_command(cmd: &HostCmd, cli: &Cli) -> Result<()> {
+pub(crate) fn handle_host_command(
+    cmd: &HostCmd,
+    cli: &Cli,
+    #[cfg(unix)] install_context: &InstallBootstrapContextCarrierV1,
+) -> Result<()> {
     match &cmd.action {
         HostAction::Doctor { json } => {
             let launch_cwd = env::current_dir().unwrap_or_else(|_| PathBuf::from("."));
@@ -245,21 +253,42 @@ pub(crate) fn handle_host_command(cmd: &HostCmd, cli: &Cli) -> Result<()> {
             } else {
                 None
             };
-            let (effective, explain) =
-                match crate::execution::config_model::resolve_effective_config_with_explain(
-                    &launch_cwd,
-                    &crate::execution::config_model::CliConfigOverrides {
-                        world_enabled: cli_world_enabled,
-                        ..Default::default()
-                    },
-                    true,
-                ) {
-                    Ok(result) => result,
-                    Err(err) => {
-                        eprintln!("substrate host doctor: {:#}", err);
-                        std::process::exit(2);
-                    }
-                };
+            let overrides = crate::execution::config_model::CliConfigOverrides {
+                world_enabled: cli_world_enabled,
+                ..Default::default()
+            };
+            #[cfg(unix)]
+            let resolved = {
+                let root = TrustedAuthorityRoot::open(std::path::Path::new(
+                    &install_context.context.selected_host_prefix,
+                ));
+                root.map_err(|error| anyhow::anyhow!(error))
+                    .and_then(|root| {
+                        HostSessionAuthority::from_trusted_root(root)
+                            .map_err(|error| anyhow::anyhow!(error))
+                    })
+                    .and_then(|authority| {
+                        crate::execution::config_model::resolve_effective_config_with_explain_for_bootstrap_home(
+                            &launch_cwd,
+                            &overrides,
+                            &authority.bootstrap_home(),
+                            true,
+                        )
+                    })
+            };
+            #[cfg(not(unix))]
+            let resolved = crate::execution::config_model::resolve_effective_config_with_explain(
+                &launch_cwd,
+                &overrides,
+                true,
+            );
+            let (effective, explain) = match resolved {
+                Ok(result) => result,
+                Err(err) => {
+                    eprintln!("substrate host doctor: {:#}", err);
+                    std::process::exit(2);
+                }
+            };
             let world_disable_attribution =
                 resolve_doctor_world_disable_attribution(effective.world.enabled, explain.as_ref());
             env::set_var("SUBSTRATE_POLICY_MODE", effective.policy.mode.as_str());
@@ -276,8 +305,18 @@ pub(crate) fn handle_host_command(cmd: &HostCmd, cli: &Cli) -> Result<()> {
     }
 }
 
-pub(crate) fn handle_health_command(cmd: &HealthCmd, cli: &Cli) -> Result<()> {
-    commands::health::run(cmd.json, cli.no_world, cli.world)
+pub(crate) fn handle_health_command(
+    cmd: &HealthCmd,
+    cli: &Cli,
+    #[cfg(unix)] install_context: &InstallBootstrapContextCarrierV1,
+) -> Result<()> {
+    commands::health::run(
+        cmd.json,
+        cli.no_world,
+        cli.world,
+        #[cfg(unix)]
+        install_context,
+    )
 }
 
 #[cfg(test)]
