@@ -3,7 +3,16 @@ mod repair;
 mod report;
 
 pub use repair::RepairOutcome;
+#[cfg_attr(
+    unix,
+    allow(
+        unused_imports,
+        reason = "Unix checked-projection compatibility is retained until the R2-3 migration"
+    )
+)]
 pub(crate) use report::collect_report;
+#[cfg(unix)]
+pub(crate) use report::collect_report_for_context;
 pub use report::{ShimDoctorReport, WorldDepsDoctorStatus, WorldDoctorStatus};
 
 use anyhow::Result;
