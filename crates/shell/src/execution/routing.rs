@@ -572,7 +572,11 @@ pub fn run_shell_with_cli(cli: Cli) -> Result<i32> {
         ShellMode::Interactive { use_pty: _ } => {
             // World-first REPL routing is implemented in the async REPL loop.
             // The legacy synchronous REPL remains as an implementation detail but is not used.
-            async_repl::run_async_repl(&config)
+            async_repl::run_async_repl(
+                &config,
+                #[cfg(target_os = "linux")]
+                install_context.context.intended_host_principal.clone(),
+            )
         }
         ShellMode::Wrap(cmd) => run_wrap_mode(&config, cmd),
         ShellMode::Script(path) => run_script_mode(&config, path),
