@@ -7,6 +7,8 @@ use common::substrate_shell_driver;
 use serde_json::Value as JsonValue;
 use serde_yaml::Value as YamlValue;
 use std::fs;
+use std::os::unix::ffi::OsStrExt;
+use std::os::unix::fs::PermissionsExt;
 use std::path::PathBuf;
 use tempfile::{Builder, TempDir};
 
@@ -191,6 +193,109 @@ fn require_json_empty_list(value: &JsonValue, label: &str) {
         .as_array()
         .unwrap_or_else(|| panic!("{label} must be a JSON array, got: {value:?}"));
     assert!(array.is_empty(), "{label} must be empty, got: {array:?}");
+}
+
+#[test]
+fn policy_current_show_uses_declared_prefix_under_conflicting_ambient_home() {
+    let fixture = PolicyFixture::new();
+    let secure_parent = std::env::var_os("XDG_RUNTIME_DIR")
+        .map(PathBuf::from)
+        .filter(|path| !path.as_os_str().is_empty() && path.is_absolute())
+        .unwrap_or_else(|| {
+            let mut passwd = std::mem::MaybeUninit::<libc::passwd>::zeroed();
+            let mut result = std::ptr::null_mut();
+            let configured = unsafe { libc::sysconf(libc::_SC_GETPW_R_SIZE_MAX) };
+            let capacity = if configured > 0 {
+                usize::try_from(configured).unwrap_or(16 * 1024)
+            } else {
+                16 * 1024
+            }
+            .clamp(1024, 1024 * 1024);
+            let mut buffer = vec![0_u8; capacity];
+            let status = unsafe {
+                libc::getpwuid_r(
+                    libc::geteuid(),
+                    passwd.as_mut_ptr(),
+                    buffer.as_mut_ptr().cast(),
+                    buffer.len(),
+                    &mut result,
+                )
+            };
+            assert_eq!(status, 0, "resolve current account home");
+            assert!(!result.is_null(), "current account has no passwd record");
+            let passwd = unsafe { passwd.assume_init() };
+            assert!(
+                !passwd.pw_dir.is_null(),
+                "current account has no home directory"
+            );
+            let account_home = unsafe { std::ffi::CStr::from_ptr(passwd.pw_dir) }.to_bytes();
+            let account_home = PathBuf::from(std::ffi::OsStr::from_bytes(account_home));
+            assert!(
+                account_home.is_absolute(),
+                "current account home must be absolute"
+            );
+            account_home.join(".cache")
+        });
+    assert!(
+        secure_parent.is_absolute(),
+        "secure test parent must be absolute"
+    );
+    fs::create_dir_all(&secure_parent).expect("create secure test parent");
+    let selected_root = Builder::new()
+        .prefix("substrate-policy-selected-a-")
+        .tempdir_in(secure_parent)
+        .expect("allocate secure selected A root");
+    let selected_prefix = selected_root.path().join("substrate-home");
+    fs::create_dir_all(&selected_prefix).expect("create selected A prefix");
+    fs::set_permissions(&selected_prefix, fs::Permissions::from_mode(0o700))
+        .expect("secure selected A prefix");
+    let selected_policy = selected_prefix.join("policy.yaml");
+    fs::write(&selected_policy, policy_yaml_with_id("selected-a-policy"))
+        .expect("write selected A policy");
+    let ambient_home = fixture._temp.path().join("ambient-home");
+    let ambient_prefix = ambient_home.join(".substrate");
+    fs::create_dir_all(&ambient_prefix).expect("create conflicting ambient prefix");
+    fs::write(
+        ambient_prefix.join("policy.yaml"),
+        policy_yaml_with_id("ambient-b-policy"),
+    )
+    .expect("write conflicting ambient policy");
+
+    let mut cmd = fixture.command();
+    let output = cmd
+        .current_dir(&fixture.workspace_root)
+        .env("HOME", &ambient_home)
+        .env("USERPROFILE", &ambient_home)
+        .env("SUBSTRATE_HOME", &ambient_prefix)
+        .env("SUBSTRATE_ROOT", &ambient_prefix)
+        .arg("--install-prefix")
+        .arg(&selected_prefix)
+        .arg("policy")
+        .arg("current")
+        .arg("show")
+        .arg("--json")
+        .arg("--explain")
+        .output()
+        .expect("run policy current show with explicit prefix");
+
+    assert!(
+        output.status.success(),
+        "explicit-prefix policy show should succeed: {output:?}"
+    );
+    let json: JsonValue = serde_json::from_slice(&output.stdout).expect("policy JSON parse");
+    assert_eq!(
+        json.get("id").and_then(JsonValue::as_str),
+        Some("selected-a-policy")
+    );
+    let explain = String::from_utf8_lossy(&output.stderr);
+    assert!(
+        explain.contains(&selected_policy.display().to_string()),
+        "explain output must identify the selected A global layer: {explain}"
+    );
+    assert!(
+        !explain.contains(&ambient_prefix.join("policy.yaml").display().to_string()),
+        "conflicting ambient B must not appear as the global layer: {explain}"
+    );
 }
 
 #[test]
