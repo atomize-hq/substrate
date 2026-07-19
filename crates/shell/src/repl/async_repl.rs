@@ -20,6 +20,8 @@ use tokio::sync::mpsc::{self, UnboundedReceiver, UnboundedSender};
 use tokio::task;
 #[cfg(any(target_os = "linux", target_os = "macos"))]
 use transport_api_client::AgentClient;
+#[cfg(target_os = "linux")]
+use transport_api_types::PlatformPrincipalV1;
 #[cfg(any(target_os = "linux", target_os = "macos"))]
 use transport_api_types::{
     ExecuteCancelRequestV1, ExecuteStreamFrame, MemberRuntimeBackendKindV1,
@@ -129,8 +131,8 @@ use crate::execution::agent_runtime::{
 use crate::execution::config_model::AgentExecutionScope;
 #[cfg(unix)]
 use crate::execution::get_terminal_size;
-#[cfg(target_os = "linux")]
-use crate::execution::orchestrator_world_dispatch::dispatch_run_world_task_request_with_started_task_run_id_tx;
+#[cfg(any(not(target_os = "linux"), test))]
+use crate::execution::orchestrator_world_dispatch::dispatch_orchestrator_world_request;
 #[cfg(target_os = "linux")]
 use crate::execution::orchestrator_world_dispatch::prepare_authority_bound_spawn_world_worker;
 #[cfg(target_os = "linux")]
@@ -139,9 +141,13 @@ use crate::execution::orchestrator_world_dispatch::prepare_fork_world_worker_boo
 use crate::execution::orchestrator_world_dispatch::prepare_spawn_world_worker_bootstrap;
 #[cfg(target_os = "linux")]
 use crate::execution::orchestrator_world_dispatch::recover_world_work_execution_observations;
+#[cfg(target_os = "linux")]
 use crate::execution::orchestrator_world_dispatch::{
-    dispatch_orchestrator_world_request, prepare_orchestrator_world_dispatch,
-    PreparedSpawnWorldWorkerBootstrap,
+    dispatch_orchestrator_world_request_for_principal,
+    dispatch_run_world_task_request_with_started_task_run_id_tx_for_principal,
+};
+use crate::execution::orchestrator_world_dispatch::{
+    prepare_orchestrator_world_dispatch, PreparedSpawnWorldWorkerBootstrap,
 };
 use crate::execution::prompt_fulfillment::{
     PromptFulfillmentBridge, PromptFulfillmentCancelHandle,
@@ -515,7 +521,10 @@ struct ReplPreflight {
     max_pty_buffered_lines_clamp: Option<crate::execution::config_model::I64ClampInfo>,
 }
 
-pub(crate) fn run_async_repl(config: &ShellConfig) -> Result<i32> {
+pub(crate) fn run_async_repl(
+    config: &ShellConfig,
+    #[cfg(target_os = "linux")] intended_host_principal: PlatformPrincipalV1,
+) -> Result<i32> {
     let preflight = preflight_caging_required(config)?;
     write_best_effort_stdout_line(&format!("Substrate v{}", env!("CARGO_PKG_VERSION")));
     write_best_effort_stdout_line(&format!("Session ID: {}", config.session_id));
@@ -575,7 +584,11 @@ pub(crate) fn run_async_repl(config: &ShellConfig) -> Result<i32> {
             }
         };
         let mut dormant_host_launch_plan =
-            match prepare_repl_dormant_host_launch_plan(resolved_host_bootstrap) {
+            match prepare_repl_dormant_host_launch_plan(
+                resolved_host_bootstrap,
+                #[cfg(target_os = "linux")]
+                intended_host_principal,
+            ) {
                 Ok(result) => result,
                 Err(failure) => {
                     agent_printer.print(failure.message.clone());
@@ -1716,13 +1729,17 @@ struct RuntimeBootstrapFailure {
 }
 
 enum DormantHostOrchestratorLaunchPlan {
-    Resolved(ResolvedHostOrchestratorBootstrap),
+    Resolved {
+        resolved: ResolvedHostOrchestratorBootstrap,
+        #[cfg(target_os = "linux")]
+        intended_host_principal: PlatformPrincipalV1,
+    },
 }
 
 impl DormantHostOrchestratorLaunchPlan {
     fn backend_id(&self) -> &str {
         match self {
-            Self::Resolved(resolved) => resolved.descriptor.backend_id.as_str(),
+            Self::Resolved { resolved, .. } => resolved.descriptor.backend_id.as_str(),
         }
     }
 
@@ -1730,19 +1747,35 @@ impl DormantHostOrchestratorLaunchPlan {
         self,
     ) -> std::result::Result<GreenfieldHostStartProposalV1, RuntimeBootstrapFailure> {
         match self {
-            Self::Resolved(resolved) => prepare_host_orchestrator_runtime_from_resolved(resolved),
+            Self::Resolved {
+                resolved,
+                #[cfg(target_os = "linux")]
+                intended_host_principal,
+            } => {
+                let mut proposal = prepare_host_orchestrator_runtime_from_resolved(resolved)?;
+                #[cfg(target_os = "linux")]
+                {
+                    proposal.intended_host_principal = Some(intended_host_principal);
+                }
+                Ok(proposal)
+            }
         }
     }
 }
 
 fn prepare_repl_dormant_host_launch_plan(
     resolved_host_bootstrap: Option<ResolvedHostOrchestratorBootstrap>,
+    #[cfg(target_os = "linux")] intended_host_principal: PlatformPrincipalV1,
 ) -> std::result::Result<Option<DormantHostOrchestratorLaunchPlan>, RuntimeBootstrapFailure> {
     let Some(resolved) = resolved_host_bootstrap else {
         return Ok(None);
     };
 
-    Ok(Some(DormantHostOrchestratorLaunchPlan::Resolved(resolved)))
+    Ok(Some(DormantHostOrchestratorLaunchPlan::Resolved {
+        resolved,
+        #[cfg(target_os = "linux")]
+        intended_host_principal,
+    }))
 }
 
 #[derive(Clone, Debug, PartialEq, Eq)]
@@ -1789,6 +1822,8 @@ struct RuntimeOrchestrationContext {
     #[cfg(any(target_os = "linux", target_os = "macos"))]
     base_policy: Policy,
     inventory: BTreeMap<String, AgentInventoryEntryV1>,
+    #[cfg(target_os = "linux")]
+    intended_host_principal: Option<PlatformPrincipalV1>,
 }
 
 struct GreenfieldHostStartProposalV1 {
@@ -1804,6 +1839,8 @@ struct GreenfieldHostStartProposalV1 {
     #[cfg(any(target_os = "linux", target_os = "macos"))]
     base_policy: Policy,
     inventory: BTreeMap<String, AgentInventoryEntryV1>,
+    #[cfg(target_os = "linux")]
+    intended_host_principal: Option<PlatformPrincipalV1>,
 }
 
 impl RuntimeOrchestrationContext {
@@ -2739,6 +2776,8 @@ fn prepare_host_orchestrator_runtime_from_resolved(
         #[cfg(any(target_os = "linux", target_os = "macos"))]
         base_policy,
         inventory,
+        #[cfg(target_os = "linux")]
+        intended_host_principal: None,
     })
 }
 
@@ -2759,6 +2798,8 @@ fn apply_greenfield_host_start_from_authority(
         #[cfg(any(target_os = "linux", target_os = "macos"))]
         base_policy,
         inventory,
+        #[cfg(target_os = "linux")]
+        intended_host_principal,
     } = proposal;
     let execution_scope = match descriptor.execution_scope {
         AgentExecutionScope::Host => AgentExecutionScopeV1::Host,
@@ -3058,6 +3099,8 @@ fn apply_greenfield_host_start_from_authority(
             #[cfg(any(target_os = "linux", target_os = "macos"))]
             base_policy,
             inventory,
+            #[cfg(target_os = "linux")]
+            intended_host_principal,
         },
         manifest: Arc::new(Mutex::new(manifest)),
         run_id,
@@ -3345,6 +3388,7 @@ fn owner_helper_orchestration_session(
 fn prepare_hidden_owner_helper_runtime(
     config: &Arc<ShellConfig>,
     plan: &HiddenOwnerHelperLaunchPlan,
+    #[cfg(target_os = "linux")] intended_host_principal: PlatformPrincipalV1,
 ) -> std::result::Result<PreparedAgentRuntime, RuntimeBootstrapFailure> {
     let Some(resolved) = resolve_host_orchestrator_bootstrap(config)? else {
         return Err(RuntimeBootstrapFailure {
@@ -3407,6 +3451,8 @@ fn prepare_hidden_owner_helper_runtime(
             #[cfg(any(target_os = "linux", target_os = "macos"))]
             base_policy,
             inventory,
+            #[cfg(target_os = "linux")]
+            intended_host_principal: Some(intended_host_principal),
         },
         manifest: Arc::new(Mutex::new(manifest)),
         run_id: plan.participant.run_id.clone(),
@@ -4106,7 +4152,10 @@ fn persist_hidden_owner_helper_stop_failure(
     let _ = persist_runtime_snapshots(store, &orchestration_snapshot, &manifest_snapshot);
 }
 
-pub(crate) fn run_hidden_owner_helper(plan: HiddenOwnerHelperLaunchPlan) -> Result<i32> {
+pub(crate) fn run_hidden_owner_helper(
+    plan: HiddenOwnerHelperLaunchPlan,
+    #[cfg(target_os = "linux")] intended_host_principal: PlatformPrincipalV1,
+) -> Result<i32> {
     let config = Arc::new(owner_helper_shell_config(&plan)?);
     let running_child_pid = Arc::new(AtomicI32::new(0));
     setup_signal_handlers(running_child_pid)?;
@@ -4117,8 +4166,13 @@ pub(crate) fn run_hidden_owner_helper(plan: HiddenOwnerHelperLaunchPlan) -> Resu
 
     rt.block_on(async move {
         let mut telemetry = ReplSessionTelemetry::new(config.clone(), "agent_owner_helper");
-        let prepared = prepare_hidden_owner_helper_runtime(&config, &plan)
-            .map_err(|failure| anyhow!(failure.message))?;
+        let prepared = prepare_hidden_owner_helper_runtime(
+            &config,
+            &plan,
+            #[cfg(target_os = "linux")]
+            intended_host_principal,
+        )
+        .map_err(|failure| anyhow!(failure.message))?;
         let helper_startup_context = prepared.startup_context.clone();
         let initial_world_binding = match (
             plan.session.world_id.as_ref(),
@@ -6912,17 +6966,28 @@ async fn dispatch_run_world_task_request_with_binding_retry(
     request: WorldDispatchRequestV1,
     started_task_run_id_tx: UnboundedSender<String>,
 ) -> Result<WorldDispatchOutcomeV1> {
+    let intended_host_principal =
+        startup_context
+            .intended_host_principal
+            .clone()
+            .ok_or_else(|| {
+                anyhow!("typed intended host principal is unavailable for world dispatch")
+            })?;
     dispatch_run_world_task_request_with_binding_retry_using(
         startup_context,
         request,
         started_task_run_id_tx,
-        |store, request, started_task_run_id_tx| async move {
-            dispatch_run_world_task_request_with_started_task_run_id_tx(
-                &store,
-                request,
-                started_task_run_id_tx,
-            )
-            .await
+        move |store, request, started_task_run_id_tx| {
+            let intended_host_principal = intended_host_principal.clone();
+            async move {
+                dispatch_run_world_task_request_with_started_task_run_id_tx_for_principal(
+                    &store,
+                    request,
+                    started_task_run_id_tx,
+                    intended_host_principal,
+                )
+                .await
+            }
         },
     )
     .await
@@ -7076,6 +7141,21 @@ async fn handle_internal_toolbox_world_dispatch_request(
         | WorldDispatchActionV1::InspectWorldWorker
         | WorldDispatchActionV1::CancelWorldWork
         | WorldDispatchActionV1::StopWorldWorker => {
+            #[cfg(target_os = "linux")]
+            let outcome = dispatch_orchestrator_world_request_for_principal(
+                &startup_context.store,
+                request,
+                startup_context
+                    .intended_host_principal
+                    .clone()
+                    .ok_or_else(|| {
+                        anyhow!(
+                            "typed intended host principal is unavailable for world dispatch"
+                        )
+                    })?,
+            )
+            .await?;
+            #[cfg(not(target_os = "linux"))]
             let outcome =
                 dispatch_orchestrator_world_request(&startup_context.store, request).await?;
             match &outcome {
@@ -8297,6 +8377,8 @@ async fn start_remote_member_runtime_with_prepared(
         &transport_request,
         &workspace_root,
         None,
+        #[cfg(target_os = "linux")]
+        startup_context.intended_host_principal.as_ref(),
     ) {
         Ok(built) => built,
         Err(error) => {
@@ -14133,12 +14215,29 @@ mod tests {
         let resolved = resolve_host_orchestrator_bootstrap(&config)
             .expect("resolve host bootstrap should succeed")
             .expect("host runtime should be configured");
-        let plan = prepare_repl_dormant_host_launch_plan(Some(resolved))
-            .expect("world-enabled repl should keep host startup dormant");
-        let Some(DormantHostOrchestratorLaunchPlan::Resolved(resolved)) = plan else {
+        #[cfg(target_os = "linux")]
+        let intended_host_principal =
+            crate::execution::install_bootstrap::current_unix_principal_and_home()
+                .expect("resolve test principal")
+                .0;
+        let plan = prepare_repl_dormant_host_launch_plan(
+            Some(resolved),
+            #[cfg(target_os = "linux")]
+            intended_host_principal.clone(),
+        )
+        .expect("world-enabled repl should keep host startup dormant");
+        let Some(plan) = plan else {
             panic!("expected a resolved dormant host launch plan");
         };
-        assert_eq!(resolved.descriptor.backend_id, "cli:claude_code-host");
+        assert_eq!(plan.backend_id(), "cli:claude_code-host");
+        #[cfg(target_os = "linux")]
+        assert!(matches!(
+            &plan,
+            DormantHostOrchestratorLaunchPlan::Resolved {
+                intended_host_principal: carried,
+                ..
+            } if carried == &intended_host_principal
+        ));
         let sessions_dir = substrate_home.join("run/agent-hub/sessions");
         assert_eq!(
             fs::read_dir(&sessions_dir)
@@ -14148,6 +14247,18 @@ mod tests {
                 .count(),
             0,
             "world-enabled repl must not persist any orchestration session before the first targeted host turn"
+        );
+
+        let proposal = plan
+            .into_proposal()
+            .expect("first targeted host turn prepares the dormant proposal");
+        let prepared = apply_greenfield_host_start_from_authority(proposal, None)
+            .expect("first targeted host turn applies the prepared proposal");
+        #[cfg(target_os = "linux")]
+        assert_eq!(
+            prepared.startup_context.intended_host_principal.as_ref(),
+            Some(&intended_host_principal),
+            "typed intended principal must survive dormant-plan preparation and Start application"
         );
 
         std::env::remove_var("SUBSTRATE_HOME");
@@ -14180,12 +14291,32 @@ mod tests {
         let resolved = resolve_host_orchestrator_bootstrap(&config)
             .expect("resolve host bootstrap should succeed")
             .expect("host runtime should be configured");
-        let plan = prepare_repl_dormant_host_launch_plan(Some(resolved))
-            .expect("no-world repl should keep runtime startup lazy");
+        #[cfg(target_os = "linux")]
+        let intended_host_principal =
+            crate::execution::install_bootstrap::current_unix_principal_and_home()
+                .expect("resolve test principal")
+                .0;
+        let plan = prepare_repl_dormant_host_launch_plan(
+            Some(resolved),
+            #[cfg(target_os = "linux")]
+            intended_host_principal.clone(),
+        )
+        .expect("no-world repl should keep runtime startup lazy");
         assert!(
-            matches!(plan, Some(DormantHostOrchestratorLaunchPlan::Resolved(_))),
+            matches!(
+                &plan,
+                Some(DormantHostOrchestratorLaunchPlan::Resolved { .. })
+            ),
             "no-world startup should defer runtime preparation until first host launch"
         );
+        #[cfg(target_os = "linux")]
+        assert!(matches!(
+            &plan,
+            Some(DormantHostOrchestratorLaunchPlan::Resolved {
+                intended_host_principal: carried,
+                ..
+            }) if carried == &intended_host_principal
+        ));
 
         std::env::remove_var("SUBSTRATE_HOME");
     }
@@ -15387,8 +15518,27 @@ mod tests {
                 &resolved.resolved_contract,
                 Some("uaa-attach-source".to_string()),
             );
-            let prepared = prepare_hidden_owner_helper_runtime(&config, &plan)
-                .expect("prepare hidden owner-helper attach runtime should succeed");
+            #[cfg(target_os = "linux")]
+            let intended_host_principal =
+                crate::execution::install_bootstrap::current_unix_principal_and_home()
+                    .expect("resolve test principal")
+                    .0;
+            let prepared = prepare_hidden_owner_helper_runtime(
+                &config,
+                &plan,
+                #[cfg(target_os = "linux")]
+                intended_host_principal.clone(),
+            )
+            .expect("prepare hidden owner-helper attach runtime should succeed");
+            #[cfg(target_os = "linux")]
+            assert_eq!(
+                prepared
+                    .startup_context
+                    .intended_host_principal
+                    .as_ref(),
+                Some(&intended_host_principal),
+                "hidden owner-helper must retain the typed intended principal in request-scoped runtime context"
+            );
             let mut telemetry = ReplSessionTelemetry::new(config.clone(), "async-test");
             let runtime = start_host_orchestrator_runtime_with_prepared_prompt(
                 Some(prepared),
@@ -15545,8 +15695,24 @@ mod tests {
             owner_helper_shell_config(&plan)
                 .expect("owner helper attach shell config should resolve"),
         );
-        let prepared = prepare_hidden_owner_helper_runtime(&config, &plan)
-            .expect("prepare hidden owner-helper attach runtime should succeed");
+        #[cfg(target_os = "linux")]
+        let intended_host_principal =
+            crate::execution::install_bootstrap::current_unix_principal_and_home()
+                .expect("resolve test principal")
+                .0;
+        let prepared = prepare_hidden_owner_helper_runtime(
+            &config,
+            &plan,
+            #[cfg(target_os = "linux")]
+            intended_host_principal.clone(),
+        )
+        .expect("prepare hidden owner-helper attach runtime should succeed");
+        #[cfg(target_os = "linux")]
+        assert_eq!(
+            prepared.startup_context.intended_host_principal.as_ref(),
+            Some(&intended_host_principal),
+            "hidden owner-helper compatibility checks must retain the typed principal"
+        );
         let store = prepared.startup_context.store.clone();
         let mut telemetry = ReplSessionTelemetry::new(config, "async-test");
 
