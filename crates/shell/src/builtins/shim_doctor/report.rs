@@ -142,6 +142,13 @@ pub enum WorldDepsDoctorStatus {
     Unknown,
 }
 
+#[cfg_attr(
+    unix,
+    allow(
+        dead_code,
+        reason = "Unix checked-projection compatibility is retained until the R2-3 migration"
+    )
+)]
 pub(crate) fn collect_report(
     cli_no_world: bool,
     cli_force_world: bool,
