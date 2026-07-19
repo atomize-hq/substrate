@@ -417,6 +417,22 @@ non-formatting hunk, changed unaffected-file fingerprint, new module/family/path
 beyond canonical formatting stops before runtime review or commit. Fresh runtime review remains
 mandatory; this exception imports no Route C, Route D, R2-3, capability, cleanup, or lifecycle work.
 
+The formatted Route B candidate is preserved at ordinary/binary SHA-256
+`ea9cf3e582650007083812ad70e0bf3198405e73d0cde0fb8ecfbedeb49884a2`, commit
+`57e13d291abf1239aacee0020ac444ec05e11d56`, with the same six files. Security review found three
+valid R2-2 defects: an ambient reserved seed value could survive injector early returns;
+principal-aware direct/prepared Spawn dropped the typed principal before member-request
+construction; and `cfg(any(target_os = "linux", test))` exposed Unix account calls in Windows test
+builds. The only authorized successor clears the reserved key before every decision, explicitly
+passes `Some(exact principal)` through both live principal-aware Spawn routes while compatibility
+passes `None`, and narrows the account resolver/helper plus mechanically required test/import cfgs
+to Linux production or Unix tests. Poisoned-input, principal-aware direct/prepared Spawn,
+compatibility fail-closed, and static cfg regressions are mandatory. The six-file manifest is fixed;
+no durable authority/schema change, ambient recovery, policy/capability change, Route C/D, R2-3,
+cleanup, or lifecycle work is imported. GitNexus raw counts remain evidence, while the exact patch,
+fingerprints, hunk map, complete manual under-resolved Spawn closure, and CLEAN reviews are the
+semantic containment boundary.
+
 For the Route A successor clause of `R2-RUNTIME-01`, the authorized Unix-only import cfg set also
 includes the policy test module's sole `tempfile::TempDir` import; no other import or module gate is
 authorized. Health proof must combine fail-closed syscall/path interception with a complete B-tree

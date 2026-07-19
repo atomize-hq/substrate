@@ -642,6 +642,77 @@ owners, semantic Route B roots, and execution families remain fixed. Any broader
 the categories in `03-phase-slice-map.md`; this formatting exception cannot authorize Route C,
 Route D, R2-3, capability, cleanup, or lifecycle behavior.
 
+The reviewed formatted Route B candidate is preserved at ordinary/binary SHA-256
+`ea9cf3e582650007083812ad70e0bf3198405e73d0cde0fb8ecfbedeb49884a2`, commit
+`57e13d291abf1239aacee0020ac444ec05e11d56`, with the same exact six-file manifest. Its sole
+security-remediation successor preserves that manifest and may change only three contracts plus
+their focused colocated tests:
+
+1. `SUBSTRATE_INTERNAL_CODEX_AUTH_SEED_HOME` is a reserved Substrate-owned output key.
+   `maybe_inject_codex_auth_seed_home_for_policy` removes it before any backend, allowlist, or
+   principal branch and before every early return. Non-Codex, non-allowlisted, missing-principal,
+   and account/UID-resolution failure all leave the key absent. Only successful allowlisted Codex
+   resolution from the exact typed principal inserts `account-home/.codex`, overwriting poison.
+   Policy eligibility is unchanged, and no process-global environment mutation or ambient override
+   is created.
+2. Spawn keeps principal truth as a separate request-scoped argument. Compatibility direct and
+   prepared entrypoints pass `None`; principal-aware direct and prepared entrypoints pass
+   `Some(exact principal)` through `spawn_world_worker` and `spawn_prepared_world_worker` into the
+   existing `execute_spawn_world_worker_stream` parameter. `PreparedSpawnWorldWorkerBootstrap`,
+   HSA, admission, receipts, supervision, retained workers, policy snapshots, manifests, and wire
+   schemas do not acquire the projection. Compatibility remains valid without credential
+   projection and fails closed before allowlisted Codex injection when principal truth is absent.
+3. The Unix account resolver and policy helper use compile-time
+   `cfg(any(target_os = "linux", all(test, unix)))`, with only mechanically matching constant,
+   import, and test-item cfg. Linux production remains enabled; Linux/macOS Unix tests may compile
+   the helper; Windows tests do not compile Unix account calls. The Linux-only member-dispatch
+   injector and `install_bootstrap.rs` ownership remain unchanged.
+
+The bounded source/impact audit is:
+
+| Return/error path | Current poisoned-key result | Required result |
+|---|---|---|
+| non-Codex backend | preexisting reserved value survives | key absent |
+| Codex backend not exactly allowlisted | preexisting reserved value survives | key absent |
+| allowlisted Codex with no typed principal | error with preexisting value retained | error with key absent |
+| allowlisted Codex with invalid account/UID | error with preexisting value retained | error with key absent |
+| allowlisted Codex with exact typed principal | resolved value overwrites poison | exact resolved value; poison absent |
+
+| Function | Principal available? | Currently forwarded? | Required argument |
+|---|---:|---:|---|
+| `dispatch_orchestrator_world_request` direct Spawn | no | no | `None` |
+| `dispatch_orchestrator_world_request_for_principal` direct Spawn | yes | no | `Some(&intended_host_principal)` |
+| `dispatch_prepared_orchestrator_world_request` prepared Spawn | no | no | `None` |
+| `dispatch_prepared_orchestrator_world_request_for_principal` prepared Spawn | yes | no | `Some(&intended_host_principal)` |
+| Linux `spawn_world_worker` | caller-dependent | no | forward the separate option unchanged |
+| `spawn_prepared_world_worker` | caller-dependent | no | forward the separate option unchanged |
+| `execute_spawn_world_worker_stream` | option already accepted | yes for Fork/Continue-fork, `None` for Spawn | receive the exact Spawn option; body semantics unchanged |
+
+| Symbol/test surface | Linux production | Unix test | Windows test |
+|---|---:|---:|---:|
+| `resolve_host_codex_seed_home` | compiled | compiled | excluded |
+| `maybe_inject_codex_auth_seed_home_for_policy` | compiled | compiled | excluded |
+| `maybe_inject_codex_auth_seed_home_for_member_dispatch` | compiled | not newly broadened | excluded |
+| colocated Unix account/seed tests and imports | not applicable | compiled | excluded item by item |
+
+GitNexus resolves the policy injector as LOW with four direct callers, one existing
+`build_agent_client_and_member_dispatch_request_impl` process root (eleven generated labels), and
+the Dispatch module; it resolves the account-home resolver as LOW with one direct caller and the
+same process/module. It under-resolves the large Spawn functions. Manual source closure therefore
+binds every Spawn call. Compatibility/principal-aware direct dispatch first calls unchanged
+`prepare_authority_bound_spawn_world_worker`, then carries separate `None`/`Some` alongside its
+result into `spawn_prepared_world_worker`. Compatibility/principal-aware prepared dispatch reaches
+`spawn_world_worker` with `None`/`Some`; that function calls unchanged
+`prepare_spawn_world_worker_bootstrap`, whose Linux arm calls unchanged
+`prepare_authority_bound_spawn_world_worker`, then carries the separate option alongside the
+prepared result into `spawn_prepared_world_worker`. Neither preparation function receives or stores
+principal truth, and `PreparedSpawnWorldWorkerBootstrap` stays unchanged. The final hop forwards
+the option into the already-principal-aware stream function. Fork and continue-fork already use
+that final parameter and remain unchanged. A new exact successor patch, fingerprints, hunk
+authorization map, fresh GitNexus output, and independent semantic review are required. A seventh
+file, additional semantic hunk, durable principal representation, new module or execution-family
+root, Route C/D, R2-3, capability, cleanup, or lifecycle change is not authorized.
+
 `WorldDoctorReportV1` remains a world-service/world-enforcement report with additive optional,
 defaulted, omit-when-absent host prefix and commitment fields. The in-world `doctor_world` producer
 sets them to `None` and reads no host IH, carrier, HOME, prefix, principal, or authority projection.
