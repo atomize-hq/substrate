@@ -631,7 +631,7 @@ but cannot be selected by typed Health or satisfy R2-2 product proof. Physical-s
 compatibility migration remains R2-3. No diagnostic reconstructs a default home or changes
 dependency/result classification.
 
-For this exact Route A closure, the final preserved WIP is fixed at patch SHA-256
+For this exact Route A closure, the immutable production baseline is fixed at patch SHA-256
 `ea4abf43043013994e698d54f21c04bba58833b3bb3247bf6d5d3b454f51b943`. Its manifest and
 file SHA-256 fingerprints are:
 
@@ -649,14 +649,35 @@ file SHA-256 fingerprints are:
 | `crates/shell/tests/config_show.rs` | `7a9819b02b507c35ef289a492cbd9c9b3e75ba462644e02914b1959b4de0f444` |
 | `crates/shell/tests/policy_discovery.rs` | `7bad42c95925c1fb8f74c277e37710c8c8d69d2e866f7d4eb4f34a65df6226d1` |
 
+The review-remediation successor preserves every production hunk above byte-for-byte. It may differ
+from the base only by the following test delta:
+
+| File/symbol | Sole successor-only change | Review finding |
+|---|---|---|
+| `config_model.rs::tests::explicit_bootstrap_home_explain_uses_selected_global_config_path` | Add item-level `#[cfg(unix)]` to the test and its sole test-only `HostSessionAuthority` import; preserve the name, body, assertions, fixtures, every other import, module cfg, and all production bytes. | Unix-only `HostSessionAuthority::open` must not make the test fail on unsupported non-Unix authority-store implementations, and the gated import must not trigger warnings-denied unused-import failure. |
+| `policy_model.rs::tests::explicit_bootstrap_home_explain_uses_selected_global_policy_path` | Add item-level `#[cfg(unix)]` to the test and its sole test-only `HostSessionAuthority` import; preserve the name, body, assertions, fixtures, every other import, module cfg, and all production bytes. | Same cross-platform cfg/import correction for the policy test. |
+| `crates/shell/tests/shim_health.rs` focused Route A test | Add one focused regression or bounded strengthening that selects A through typed IH while H/R/HOME name conflicting B, proves A-derived Health state and zero B probing/writing, preserves classification/output assertions, and cannot be satisfied by `collect_report`. | Existing Health proof did not conflict ambient B or independently exclude the compatibility collector. |
+| `crates/shell/tests/doctor_scopes_ds0.rs` focused Host test | Add one focused regression or bounded strengthening using the canonical R2-1 installed-product invocation witness for A, no explicit selector, conflicting ambient B, A-derived Host/config/dependency assertions, and preserved direct-repository no-witness fail-before-mutation proof. | Existing Host test omitted both selector and witness and therefore never reached the changed typed-IH route. |
+
+No final file, symbol, or generated process-label count is predicted. Before each existing test
+symbol is edited, run fresh upstream impact analysis. After implementation, create a deterministic
+base-to-successor delta containing the new ordinary/binary patch SHA-256, exact manifest and
+fingerprints, and a hunk table mapping every successor-only line to one row above. Existing tests
+cannot be removed, renamed, substituted, ignored, or weakened; the two tests remain active on Unix,
+and only their intentional non-Unix cfg exclusion is authorized. Any changed production byte, changed
+base hunk outside the item-level cfg attributes, or successor-only hunk that does not map exactly
+to one of the four authorized delta rows is
+`SuccessorPatchScopeMismatch`.
+
 GitNexus observations over the identical or mechanically extended Route A bytes are diagnostic
 provenance: 33 symbols/18 process labels; 11/18 in the reverse committed comparison; 37/18; 39/18;
 and, after replay and a current-index refresh, CRITICAL with 24 attributed symbols and 31 labels.
 The incompatible raw counts and generated label sets are not stable semantic authority for this
 exact patch. Do not pin or restore a stale index.
 
-Containment is determined in this order: exact patch bytes; the exact manifest and fingerprints
-above; the exact source-level production functions and permitted tests; manual call-path mapping to
+Base containment is determined in this order: exact patch bytes; the exact manifest and fingerprints
+above; the exact source-level production functions and permitted tests. Successor containment then
+requires byte-identical production hunks plus the deterministic four-row test delta above; manual call-path mapping to
 the approved `ShellConfig::from_cli` Host/Health/Config/Policy/context-aware shim-doctor roots; no
 new source module, authority source, call path, execution-family root, side table, environment
 fallback, or lifecycle behavior; and fresh independent semantic-diff review. The exact production
@@ -669,12 +690,13 @@ integration tests in the manifest. No other production function changes behavior
 
 Every fresh GitNexus result must be retained and every label mapped to one of
 `AuthorizedRouteA`, `LineOrHunkAttributionOnly`, `TestColocationOnly`, or
-`UnexpectedSemanticPath`. Count/label drift alone does not reopen the docs when the patch,
-fingerprints, source-level diff, mapping, module set, and semantic roots remain exact. Any
-`UnexpectedSemanticPath`, source edit, patch/fingerprint/manifest difference, new module or semantic
-execution root, authority source, or behavior expansion is an `ImpactDecisionRequired` stop. A
-source edit also restores ordinary pre-edit impact and fresh change-detection requirements; this
-exception does not authorize that edit. This rule is specific to this exact Route A patch and cannot
+`UnexpectedSemanticPath`. Count/label drift alone does not reopen the docs when the base production
+bytes, successor test delta, fingerprints, source-level diff, mapping, module set, and semantic roots
+remain exact. The four review-remediation edits restore ordinary pre-edit impact and fresh
+change-detection requirements but need no new raw-count ceiling. Any `UnexpectedSemanticPath`,
+production-byte difference, unclassified test difference, new module or semantic execution root,
+authority source, or behavior expansion is an `ImpactDecisionRequired` stop. This rule is specific
+to the exact Route A base plus its bounded test-only successor and cannot
 apply to Route B–D, R2-3, another HIGH/CRITICAL increment, environment/global authority,
 physical-shim migration, product capability, output, repair, cleanup, rollback, or lifecycle
 behavior.
