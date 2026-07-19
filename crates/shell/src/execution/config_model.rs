@@ -1187,6 +1187,18 @@ pub(crate) fn resolve_effective_config_for_bootstrap_home(
     cli: &CliConfigOverrides,
     bootstrap_home: &crate::execution::agent_runtime::OpenedBootstrapHomeV1<'_>,
 ) -> Result<SubstrateConfig> {
+    Ok(
+        resolve_effective_config_with_explain_for_bootstrap_home(cwd, cli, bootstrap_home, false)?
+            .0,
+    )
+}
+
+pub(crate) fn resolve_effective_config_with_explain_for_bootstrap_home(
+    cwd: &Path,
+    cli: &CliConfigOverrides,
+    bootstrap_home: &crate::execution::agent_runtime::OpenedBootstrapHomeV1<'_>,
+    explain: bool,
+) -> Result<(SubstrateConfig, Option<ConfigExplainV1>)> {
     let global_path = PathBuf::from(
         &bootstrap_home
             .identity()
@@ -1215,16 +1227,15 @@ pub(crate) fn resolve_effective_config_for_bootstrap_home(
         workspace_ref,
         &parse_env_overrides()?,
         cli,
-        false,
+        explain,
         true,
-    )?
-    .0;
-    if resolved.llm.gateway.mode == LlmGatewayMode::HostOnly {
+    )?;
+    if resolved.0.llm.gateway.mode == LlmGatewayMode::HostOnly {
         let policy = crate::execution::policy_model::resolve_effective_policy_for_bootstrap_home(
             cwd,
             bootstrap_home,
         )?;
-        validate_config_against_policy(&resolved, &policy)?;
+        validate_config_against_policy(&resolved.0, &policy)?;
     }
     Ok(resolved)
 }
@@ -2852,10 +2863,48 @@ fn dedupe_ordered_set_in_place(items: &mut Vec<String>) {
 #[cfg(test)]
 mod tests {
     use super::*;
+    #[cfg(unix)]
+    use crate::execution::agent_runtime::HostSessionAuthority;
     use serial_test::serial;
     use std::ffi::OsString;
     use std::fs;
     use tempfile::TempDir;
+
+    #[cfg(unix)]
+    #[test]
+    fn explicit_bootstrap_home_explain_uses_selected_global_config_path() {
+        let selected = std::env::var_os("XDG_RUNTIME_DIR")
+            .or_else(|| std::env::var_os("HOME"))
+            .map(tempfile::tempdir_in)
+            .transpose()
+            .expect("create selected bootstrap home")
+            .unwrap_or_else(|| TempDir::new().expect("selected bootstrap home"));
+        #[cfg(unix)]
+        {
+            use std::os::unix::fs::PermissionsExt;
+            fs::set_permissions(selected.path(), fs::Permissions::from_mode(0o700))
+                .expect("secure selected bootstrap home");
+        }
+        fs::write(
+            selected.path().join("config.yaml"),
+            "sync:\n  auto_sync: true\n",
+        )
+        .expect("write selected config");
+        let workspace = TempDir::new().expect("workspace");
+        let authority = HostSessionAuthority::open(selected.path()).expect("open authority");
+        let (config, explain) = resolve_effective_config_with_explain_for_bootstrap_home(
+            workspace.path(),
+            &CliConfigOverrides::default(),
+            &authority.bootstrap_home(),
+            true,
+        )
+        .expect("resolve selected config");
+
+        assert!(config.sync.auto_sync);
+        let explain =
+            serde_json::to_string(&explain.expect("explain payload")).expect("serialize explain");
+        assert!(explain.contains(&selected.path().join("config.yaml").display().to_string()));
+    }
 
     struct EnvGuard {
         key: &'static str,
