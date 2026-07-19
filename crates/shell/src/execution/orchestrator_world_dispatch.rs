@@ -115,7 +115,9 @@ use crate::execution::routing::{
     build_agent_client_and_pending_diff_request, MemberDispatchTransportRequest,
 };
 #[cfg(target_os = "linux")]
-use transport_api_types::{ExecuteCancelRequestV1, RetainedWorkerLaunchAuthorityProofV1};
+use transport_api_types::{
+    ExecuteCancelRequestV1, PlatformPrincipalV1, RetainedWorkerLaunchAuthorityProofV1,
+};
 
 #[cfg(target_os = "linux")]
 const CONTINUE_WORLD_WORKER_ROUTER_IDENTITY: &str = "router::continue_world_worker";
@@ -410,14 +412,40 @@ pub(crate) async fn dispatch_orchestrator_world_request(
     #[cfg(target_os = "linux")]
     if request.action == WorldDispatchActionV1::SpawnWorldWorker {
         let request = request.validate()?;
-        return spawn_prepared_world_worker(prepare_authority_bound_spawn_world_worker(request)?)
-            .await;
+        return spawn_prepared_world_worker(
+            prepare_authority_bound_spawn_world_worker(request)?,
+            None,
+        )
+        .await;
     }
     let prepared = prepare_orchestrator_world_dispatch(store, request)?;
     dispatch_prepared_orchestrator_world_request(prepared).await
 }
 
 #[cfg(target_os = "linux")]
+pub(crate) async fn dispatch_orchestrator_world_request_for_principal(
+    store: &AgentRuntimeStateStore,
+    request: WorldDispatchRequestV1,
+    intended_host_principal: PlatformPrincipalV1,
+) -> Result<WorldDispatchOutcomeV1> {
+    if request.action == WorldDispatchActionV1::SpawnWorldWorker {
+        let request = request.validate()?;
+        return spawn_prepared_world_worker(
+            prepare_authority_bound_spawn_world_worker(request)?,
+            Some(&intended_host_principal),
+        )
+        .await;
+    }
+    let prepared = prepare_orchestrator_world_dispatch(store, request)?;
+    dispatch_prepared_orchestrator_world_request_for_principal(prepared, intended_host_principal)
+        .await
+}
+
+#[cfg(target_os = "linux")]
+#[allow(
+    dead_code,
+    reason = "Principal-less compatibility is intentionally unused until R2-3 migration"
+)]
 pub(crate) async fn dispatch_run_world_task_request_with_started_task_run_id_tx(
     store: &AgentRuntimeStateStore,
     request: WorldDispatchRequestV1,
@@ -430,7 +458,29 @@ pub(crate) async fn dispatch_run_world_task_request_with_started_task_run_id_tx(
         );
     }
 
-    run_world_task_with_started_task_run_id_tx(prepared, Some(started_task_run_id_tx)).await
+    run_world_task_with_started_task_run_id_tx(prepared, None, Some(started_task_run_id_tx)).await
+}
+
+#[cfg(target_os = "linux")]
+pub(crate) async fn dispatch_run_world_task_request_with_started_task_run_id_tx_for_principal(
+    store: &AgentRuntimeStateStore,
+    request: WorldDispatchRequestV1,
+    started_task_run_id_tx: UnboundedSender<String>,
+    intended_host_principal: PlatformPrincipalV1,
+) -> Result<WorldDispatchOutcomeV1> {
+    let prepared = prepare_orchestrator_world_dispatch(store, request)?;
+    if prepared.request.action != WorldDispatchActionV1::RunWorldTask {
+        anyhow::bail!(
+            "invalid_dispatch_action: started task_run_id delivery is only available for run_world_task"
+        );
+    }
+
+    run_world_task_with_started_task_run_id_tx(
+        prepared,
+        Some(&intended_host_principal),
+        Some(started_task_run_id_tx),
+    )
+    .await
 }
 
 #[allow(dead_code)]
@@ -438,10 +488,62 @@ pub(crate) async fn dispatch_prepared_orchestrator_world_request(
     prepared: PreparedOrchestratorWorldDispatch,
 ) -> Result<WorldDispatchOutcomeV1> {
     match prepared.request.action {
-        WorldDispatchActionV1::RunWorldTask => run_world_task(prepared).await,
-        WorldDispatchActionV1::SpawnWorldWorker => spawn_world_worker(prepared).await,
-        WorldDispatchActionV1::ForkWorldWorker => fork_world_worker(prepared).await,
-        WorldDispatchActionV1::ContinueWorldWorker => continue_world_worker(prepared).await,
+        WorldDispatchActionV1::RunWorldTask => {
+            run_world_task(
+                prepared,
+                #[cfg(target_os = "linux")]
+                None,
+            )
+            .await
+        }
+        WorldDispatchActionV1::SpawnWorldWorker => {
+            spawn_world_worker(
+                prepared,
+                #[cfg(target_os = "linux")]
+                None,
+            )
+            .await
+        }
+        WorldDispatchActionV1::ForkWorldWorker => {
+            fork_world_worker(
+                prepared,
+                #[cfg(target_os = "linux")]
+                None,
+            )
+            .await
+        }
+        WorldDispatchActionV1::ContinueWorldWorker => {
+            continue_world_worker(
+                prepared,
+                #[cfg(target_os = "linux")]
+                None,
+            )
+            .await
+        }
+        WorldDispatchActionV1::InspectWorldWorker => inspect_world_worker(prepared).await,
+        WorldDispatchActionV1::CancelWorldWork => cancel_world_work(prepared).await,
+        WorldDispatchActionV1::StopWorldWorker => stop_world_worker(prepared).await,
+    }
+}
+
+#[cfg(target_os = "linux")]
+pub(crate) async fn dispatch_prepared_orchestrator_world_request_for_principal(
+    prepared: PreparedOrchestratorWorldDispatch,
+    intended_host_principal: PlatformPrincipalV1,
+) -> Result<WorldDispatchOutcomeV1> {
+    match prepared.request.action {
+        WorldDispatchActionV1::RunWorldTask => {
+            run_world_task(prepared, Some(&intended_host_principal)).await
+        }
+        WorldDispatchActionV1::SpawnWorldWorker => {
+            spawn_world_worker(prepared, Some(&intended_host_principal)).await
+        }
+        WorldDispatchActionV1::ForkWorldWorker => {
+            fork_world_worker(prepared, Some(&intended_host_principal)).await
+        }
+        WorldDispatchActionV1::ContinueWorldWorker => {
+            continue_world_worker(prepared, Some(&intended_host_principal)).await
+        }
         WorldDispatchActionV1::InspectWorldWorker => inspect_world_worker(prepared).await,
         WorldDispatchActionV1::CancelWorldWork => cancel_world_work(prepared).await,
         WorldDispatchActionV1::StopWorldWorker => stop_world_worker(prepared).await,
@@ -450,6 +552,7 @@ pub(crate) async fn dispatch_prepared_orchestrator_world_request(
 
 async fn fork_world_worker(
     prepared: PreparedOrchestratorWorldDispatch,
+    #[cfg(target_os = "linux")] intended_host_principal: Option<&PlatformPrincipalV1>,
 ) -> Result<WorldDispatchOutcomeV1> {
     let workspace_root = PathBuf::from(&prepared.session.workspace_root);
     let context = resolve_internal_dispatch_context(&workspace_root)?;
@@ -501,6 +604,7 @@ async fn fork_world_worker(
             &transport_request,
             &prepared.request,
             None,
+            intended_host_principal,
         )
         .await?;
         let lineage = match wait_for_fork_child_durable_publication(
@@ -1042,6 +1146,7 @@ fn prepare_task_acceptance_submission(
     prepared: &PreparedOrchestratorWorldDispatch,
     workspace_root: &Path,
     descriptor: &crate::execution::agent_runtime::validator::RuntimeSelectionDescriptor,
+    intended_host_principal: Option<&PlatformPrincipalV1>,
 ) -> Result<PreparedTaskAcceptanceSubmission> {
     let resolved_policy =
         crate::execution::policy_snapshot::resolve_policy_snapshot_for_cwd(workspace_root)
@@ -1071,6 +1176,7 @@ fn prepare_task_acceptance_submission(
                         &transport_request,
                         workspace_root,
                         Some(acceptance_context.clone()),
+                        intended_host_principal,
                     )?;
                 ensure_exact_submission_policy_snapshot(&execute_request, &resolved_policy)?;
                 let member_dispatch_request =
@@ -1127,6 +1233,7 @@ fn prepare_task_acceptance_submission(
         &transport_request,
         workspace_root,
         Some(proposal.acceptance_context.clone()),
+        intended_host_principal,
     )?;
     ensure_exact_submission_policy_snapshot(&execute_request, &resolved_policy)?;
     let digest = canonical_world_work_submission_sha256(&prepared.request, &execute_request)?;
@@ -1247,13 +1354,15 @@ fn prepare_retained_acceptance_submission(
 #[cfg(target_os = "linux")]
 async fn run_world_task(
     prepared: PreparedOrchestratorWorldDispatch,
+    intended_host_principal: Option<&PlatformPrincipalV1>,
 ) -> Result<WorldDispatchOutcomeV1> {
-    run_world_task_with_started_task_run_id_tx(prepared, None).await
+    run_world_task_with_started_task_run_id_tx(prepared, intended_host_principal, None).await
 }
 
 #[cfg(target_os = "linux")]
 async fn run_world_task_with_started_task_run_id_tx(
     prepared: PreparedOrchestratorWorldDispatch,
+    intended_host_principal: Option<&PlatformPrincipalV1>,
     started_task_run_id_tx: Option<UnboundedSender<String>>,
 ) -> Result<WorldDispatchOutcomeV1> {
     let workspace_root = PathBuf::from(&prepared.b_owned_authority()?.workspace_root);
@@ -1274,8 +1383,12 @@ async fn run_world_task_with_started_task_run_id_tx(
             err.reason
         )
     })?;
-    let acceptance_submission =
-        prepare_task_acceptance_submission(&prepared, &workspace_root, &descriptor)?;
+    let acceptance_submission = prepare_task_acceptance_submission(
+        &prepared,
+        &workspace_root,
+        &descriptor,
+        intended_host_principal,
+    )?;
     let stream_result = execute_run_world_task_stream(
         &acceptance_submission.receipt_registry,
         &acceptance_submission.execution_supervisor,
@@ -1628,13 +1741,19 @@ pub(crate) fn prepare_fork_world_worker_bootstrap(
 #[cfg(target_os = "linux")]
 async fn spawn_world_worker(
     prepared: PreparedOrchestratorWorldDispatch,
+    intended_host_principal: Option<&PlatformPrincipalV1>,
 ) -> Result<WorldDispatchOutcomeV1> {
-    spawn_prepared_world_worker(prepare_spawn_world_worker_bootstrap(prepared)?).await
+    spawn_prepared_world_worker(
+        prepare_spawn_world_worker_bootstrap(prepared)?,
+        intended_host_principal,
+    )
+    .await
 }
 
 #[cfg(target_os = "linux")]
 pub(crate) async fn spawn_prepared_world_worker(
     prepared: PreparedSpawnWorldWorkerBootstrap,
+    intended_host_principal: Option<&PlatformPrincipalV1>,
 ) -> Result<WorldDispatchOutcomeV1> {
     let PreparedSpawnWorldWorkerBootstrap {
         request,
@@ -1652,6 +1771,7 @@ pub(crate) async fn spawn_prepared_world_worker(
         &transport_request,
         &request,
         Some((authority, admission_plan)),
+        intended_host_principal,
     )
     .await?;
     let summary = summarize_spawn_world_worker_result(&receipt);
@@ -1678,6 +1798,7 @@ pub(crate) async fn spawn_prepared_world_worker(
 #[cfg(target_os = "linux")]
 async fn continue_world_worker(
     prepared: PreparedOrchestratorWorldDispatch,
+    intended_host_principal: Option<&PlatformPrincipalV1>,
 ) -> Result<WorldDispatchOutcomeV1> {
     let workspace_root = match prepared.b_owned_authority.as_ref() {
         Some(authority) => PathBuf::from(&authority.workspace_root),
@@ -1742,8 +1863,11 @@ async fn continue_world_worker(
             )?;
         }
     }
-    let fork_bootstrap =
-        continue_world_worker_fork_command_bootstrap_after_delivery(&prepared).await?;
+    let fork_bootstrap = continue_world_worker_fork_command_bootstrap_after_delivery(
+        &prepared,
+        intended_host_principal,
+    )
+    .await?;
     let summary = summarize_continue_world_worker_result(
         &submit_request,
         turn_kind,
@@ -1782,6 +1906,7 @@ async fn continue_world_worker(
 #[cfg(target_os = "linux")]
 async fn continue_world_worker_fork_command_bootstrap_after_delivery(
     prepared: &PreparedOrchestratorWorldDispatch,
+    intended_host_principal: Option<&PlatformPrincipalV1>,
 ) -> Result<Option<ContinueWorldWorkerForkBootstrapOutcome>> {
     let WorldDispatchPayloadV1::WorkerContinueForkCommand(_) = &prepared.request.payload else {
         return Ok(None);
@@ -1833,6 +1958,7 @@ async fn continue_world_worker_fork_command_bootstrap_after_delivery(
         &transport_request,
         &prepared.request,
         None,
+        intended_host_principal,
     )
     .await
     .with_context(|| {
@@ -4382,14 +4508,19 @@ async fn execute_spawn_world_worker_stream(
     request: &MemberDispatchTransportRequest,
     dispatch_request: &ValidatedWorldDispatchRequestV1,
     mut admission_runtime: Option<(HostSessionAuthority, RetainedWorkerAdmissionPlanV1)>,
+    intended_host_principal: Option<&PlatformPrincipalV1>,
 ) -> Result<SpawnWorldWorkerReceipt> {
     use http_body_util::BodyExt as _;
     use substrate_common::agent_events::AgentEventKind;
     use transport_api_types::ExecuteStreamFrame;
 
     let (client, execute_request, _agent_id) =
-        match build_agent_client_and_member_dispatch_request_for_cwd(request, workspace_root, None)
-        {
+        match build_agent_client_and_member_dispatch_request_for_cwd(
+            request,
+            workspace_root,
+            None,
+            intended_host_principal,
+        ) {
             Ok(built) => built,
             Err(error) => {
                 if let Some((authority, plan)) = admission_runtime.as_ref() {
@@ -7117,6 +7248,28 @@ mod tests {
             allowed_actions,
             allowed_modes,
         );
+    }
+
+    #[cfg(target_os = "linux")]
+    fn write_allowed_world_dispatch_policy_with_host_credentials(
+        substrate_home: &Path,
+        backend_id: &str,
+        allowed_actions: &[&str],
+        allowed_modes: &[&str],
+    ) {
+        write_allowed_world_dispatch_policy(
+            substrate_home,
+            backend_id,
+            allowed_actions,
+            allowed_modes,
+        );
+        let policy_path = substrate_home.join("policy.yaml");
+        let policy = fs::read_to_string(&policy_path).expect("read world dispatch policy");
+        let host_credentials = format!(
+            "  host_credentials:\n    read:\n      allowed_backends:\n        - \"{backend_id}\"\n  world_dispatch:\n"
+        );
+        let policy = policy.replacen("  world_dispatch:\n", &host_credentials, 1);
+        fs::write(policy_path, policy).expect("write credential-enabled world dispatch policy");
     }
 
     #[cfg(target_os = "linux")]
@@ -10564,6 +10717,87 @@ mod tests {
         let _ = stream.write_all(b"0\r\n\r\n").await;
         let _ = stream.flush().await;
         let _ = stream.shutdown().await;
+    }
+
+    #[cfg(target_os = "linux")]
+    async fn capture_spawn_member_dispatch_env(
+        listener: UnixListener,
+        expected_cwd: String,
+    ) -> HashMap<String, String> {
+        while let Ok((mut stream, _addr)) = listener.accept().await {
+            let Some((header, body)) = read_http_request(&mut stream).await else {
+                continue;
+            };
+            let first_line = header.lines().next().unwrap_or("");
+            if first_line.starts_with("GET /v1/capabilities ") {
+                write_http_json(
+                    &mut stream,
+                    "200 OK",
+                    r#"{"schema_version":1,"policy_snapshot_v1_supported":true}"#,
+                )
+                .await;
+                continue;
+            }
+            if !first_line.starts_with("POST /v1/execute/stream ") {
+                write_http_json(&mut stream, "404 Not Found", r#"{"error":"not_found"}"#).await;
+                continue;
+            }
+
+            let execute_request: ExecuteRequest =
+                serde_json::from_slice(&body).expect("member dispatch execute request");
+            assert_eq!(
+                execute_request.cwd.as_deref(),
+                Some(expected_cwd.as_str()),
+                "Spawn must use the authoritative workspace root",
+            );
+            let env = execute_request.env.clone().unwrap_or_default();
+            let member_dispatch = execute_request
+                .member_dispatch
+                .expect("Spawn request includes member dispatch");
+            write_http_stream_start(&mut stream).await;
+            write_chunked_frame(
+                &mut stream,
+                &transport_api_types::ExecuteStreamFrame::Start {
+                    frame_identity: test_runtime_frame_identity(1),
+                    span_id: "spawn-principal-route".to_string(),
+                },
+            )
+            .await;
+            write_chunked_frame(
+                &mut stream,
+                &transport_api_types::ExecuteStreamFrame::Event {
+                    frame_identity: test_runtime_frame_identity(2),
+                    event: substrate_common::agent_events::AgentEvent {
+                        ts: chrono::Utc::now(),
+                        kind: AgentEventKind::Registered,
+                        data: json!({}),
+                        agent_id: execute_request.agent_id,
+                        orchestration_session_id: member_dispatch.orchestration_session_id.clone(),
+                        run_id: member_dispatch.run_id.clone(),
+                        parent_run_id: None,
+                        participant_id: Some(member_dispatch.participant_id.clone()),
+                        parent_participant_id: None,
+                        resumed_from_participant_id: None,
+                        backend_id: Some(member_dispatch.backend_id.clone()),
+                        thread_id: None,
+                        role: Some("member".to_string()),
+                        world_id: Some(member_dispatch.world_id.clone()),
+                        world_generation: Some(member_dispatch.world_generation),
+                        cmd_id: None,
+                        span_id: Some("spawn-principal-route".to_string()),
+                        event_identity: Some(test_runtime_event_identity(1)),
+                        channel: None,
+                        identity_tuple: None,
+                        placement_posture: None,
+                        project: None,
+                    },
+                },
+            )
+            .await;
+            finish_chunked_stream(&mut stream).await;
+            return env;
+        }
+        panic!("Spawn member-dispatch fixture ended before execute request");
     }
 
     #[cfg(target_os = "linux")]
@@ -22697,6 +22931,318 @@ agents:
                 "registered backend_id cli:other_world did not match requested cli:codex-world"
             ),
             "unexpected error: {err}"
+        );
+    }
+
+    #[cfg(target_os = "linux")]
+    #[tokio::test(flavor = "current_thread")]
+    #[serial]
+    async fn principal_aware_direct_spawn_projects_exact_intended_codex_home() {
+        let _env_guard = world_env_guard();
+        let _world_codex_guard = EnvVarGuard::set_path(
+            "SUBSTRATE_WORLD_DEPS_GUEST_BIN_DIR",
+            test_world_codex_runtime_bin().as_path(),
+        );
+        let substrate_home = secure_authority_tempdir();
+        let _substrate_home_guard = EnvVarGuard::set_path("SUBSTRATE_HOME", substrate_home.path());
+        write_allowed_world_dispatch_policy_with_host_credentials(
+            substrate_home.path(),
+            "cli:codex-world",
+            &["spawn_world_worker"],
+            &["retained"],
+        );
+        write_runtime_inventory_entry(
+            substrate_home.path(),
+            "codex-world",
+            AgentExecutionScope::World,
+        );
+
+        let workspace_root = tempdir().expect("workspace root tempdir");
+        activate_b_owned_dispatch_authority(
+            substrate_home.path(),
+            workspace_root.path(),
+            "sess_dispatch",
+            "orch_dispatch",
+            "cli:codex",
+            "world-17",
+            2,
+        );
+        let store = AgentRuntimeStateStore::new().expect("state store");
+        let socket_home = tempdir().expect("socket tempdir");
+        let socket_path = socket_home.path().join("principal-direct-spawn.sock");
+        let listener = UnixListener::bind(&socket_path).expect("bind world socket");
+        let server = tokio::spawn(capture_spawn_member_dispatch_env(
+            listener,
+            workspace_root.path().display().to_string(),
+        ));
+        let _socket_guard = EnvVarGuard::set_path("SUBSTRATE_WORLD_SOCKET", &socket_path);
+        let conflicting_home = tempdir().expect("conflicting HOME tempdir");
+        let _home_guard = EnvVarGuard::set_path("HOME", conflicting_home.path());
+        let _poison_guard = EnvVarGuard::set(
+            SUBSTRATE_INTERNAL_CODEX_AUTH_SEED_HOME_ENV,
+            "/poisoned/ambient/.codex",
+        );
+        let (principal, account_home) =
+            crate::execution::install_bootstrap::current_unix_principal_and_home()
+                .expect("resolve intended principal");
+
+        dispatch_orchestrator_world_request_for_principal(
+            &store,
+            WorldDispatchRequestV1 {
+                request_id: Some("req_spawn".to_string()),
+                idempotency_key: Some("idem_spawn".to_string()),
+                orchestration_session_id: Some("sess_dispatch".to_string()),
+                caller_participant_id: Some("orch_dispatch".to_string()),
+                action: WorldDispatchActionV1::SpawnWorldWorker,
+                mode: WorldDispatchModeV1::Retained,
+                target_backend_id: Some("cli:codex-world".to_string()),
+                task_run_id: None,
+                target_participant_id: None,
+                world_id: Some("world-17".to_string()),
+                world_generation: Some(2),
+                payload: WorldDispatchPayloadV1::WorkerSpawn(WorkerSpawnPayloadV1 {
+                    prompt: "open a retained worker".to_string(),
+                }),
+            },
+            principal,
+        )
+        .await
+        .unwrap_or_else(|error| panic!("principal-aware direct Spawn: {error:#}"));
+
+        let env = server.await.expect("Spawn fixture task");
+        let expected = account_home.join(".codex").display().to_string();
+        let conflicting = conflicting_home.path().join(".codex").display().to_string();
+        assert_eq!(
+            env.get(SUBSTRATE_INTERNAL_CODEX_AUTH_SEED_HOME_ENV)
+                .map(String::as_str),
+            Some(expected.as_str())
+        );
+        assert_ne!(
+            env.get(SUBSTRATE_INTERNAL_CODEX_AUTH_SEED_HOME_ENV)
+                .map(String::as_str),
+            Some("/poisoned/ambient/.codex")
+        );
+        assert_ne!(
+            env.get(SUBSTRATE_INTERNAL_CODEX_AUTH_SEED_HOME_ENV)
+                .map(String::as_str),
+            Some(conflicting.as_str())
+        );
+    }
+
+    #[cfg(target_os = "linux")]
+    #[tokio::test(flavor = "current_thread")]
+    #[serial]
+    async fn principal_aware_prepared_spawn_projects_exact_intended_codex_home() {
+        let _env_guard = world_env_guard();
+        let _world_codex_guard = EnvVarGuard::set_path(
+            "SUBSTRATE_WORLD_DEPS_GUEST_BIN_DIR",
+            test_world_codex_runtime_bin().as_path(),
+        );
+        let substrate_home = secure_authority_tempdir();
+        let _substrate_home_guard = EnvVarGuard::set_path("SUBSTRATE_HOME", substrate_home.path());
+        write_allowed_world_dispatch_policy_with_host_credentials(
+            substrate_home.path(),
+            "cli:codex-world",
+            &["spawn_world_worker"],
+            &["retained"],
+        );
+        write_runtime_inventory_entry(
+            substrate_home.path(),
+            "codex-world",
+            AgentExecutionScope::World,
+        );
+
+        let workspace_root = tempdir().expect("workspace root tempdir");
+        activate_b_owned_dispatch_authority(
+            substrate_home.path(),
+            workspace_root.path(),
+            "sess_dispatch",
+            "orch_dispatch",
+            "cli:codex",
+            "world-17",
+            2,
+        );
+        let prepared = sample_compatibility_prepared_dispatch(
+            sample_spawn_request(),
+            sample_orchestrator_participant(),
+            None,
+            0,
+        );
+        let socket_home = tempdir().expect("socket tempdir");
+        let socket_path = socket_home.path().join("principal-prepared-spawn.sock");
+        let listener = UnixListener::bind(&socket_path).expect("bind world socket");
+        let server = tokio::spawn(capture_spawn_member_dispatch_env(
+            listener,
+            workspace_root.path().display().to_string(),
+        ));
+        let _socket_guard = EnvVarGuard::set_path("SUBSTRATE_WORLD_SOCKET", &socket_path);
+        let conflicting_home = tempdir().expect("conflicting HOME tempdir");
+        let _home_guard = EnvVarGuard::set_path("HOME", conflicting_home.path());
+        let _poison_guard = EnvVarGuard::set(
+            SUBSTRATE_INTERNAL_CODEX_AUTH_SEED_HOME_ENV,
+            "/poisoned/ambient/.codex",
+        );
+        let (principal, account_home) =
+            crate::execution::install_bootstrap::current_unix_principal_and_home()
+                .expect("resolve intended principal");
+
+        dispatch_prepared_orchestrator_world_request_for_principal(prepared, principal)
+            .await
+            .expect("principal-aware prepared Spawn");
+
+        let env = server.await.expect("Spawn fixture task");
+        let expected = account_home.join(".codex").display().to_string();
+        assert_eq!(
+            env.get(SUBSTRATE_INTERNAL_CODEX_AUTH_SEED_HOME_ENV)
+                .map(String::as_str),
+            Some(expected.as_str())
+        );
+        assert_ne!(
+            env.get(SUBSTRATE_INTERNAL_CODEX_AUTH_SEED_HOME_ENV)
+                .map(String::as_str),
+            Some("/poisoned/ambient/.codex")
+        );
+    }
+
+    #[cfg(target_os = "linux")]
+    #[tokio::test(flavor = "current_thread")]
+    #[serial]
+    async fn compatibility_spawn_without_credential_projection_clears_poisoned_seed() {
+        let _env_guard = world_env_guard();
+        let _world_codex_guard = EnvVarGuard::set_path(
+            "SUBSTRATE_WORLD_DEPS_GUEST_BIN_DIR",
+            test_world_codex_runtime_bin().as_path(),
+        );
+        let substrate_home = secure_authority_tempdir();
+        let _substrate_home_guard = EnvVarGuard::set_path("SUBSTRATE_HOME", substrate_home.path());
+        write_allowed_world_dispatch_policy(
+            substrate_home.path(),
+            "cli:codex-world",
+            &["spawn_world_worker"],
+            &["retained"],
+        );
+        write_runtime_inventory_entry(
+            substrate_home.path(),
+            "codex-world",
+            AgentExecutionScope::World,
+        );
+        let workspace_root = tempdir().expect("workspace root tempdir");
+        activate_b_owned_dispatch_authority(
+            substrate_home.path(),
+            workspace_root.path(),
+            "sess_dispatch",
+            "orch_dispatch",
+            "cli:codex",
+            "world-17",
+            2,
+        );
+        let store = AgentRuntimeStateStore::new().expect("state store");
+        let socket_home = tempdir().expect("socket tempdir");
+        let socket_path = socket_home.path().join("compatibility-spawn.sock");
+        let listener = UnixListener::bind(&socket_path).expect("bind world socket");
+        let server = tokio::spawn(capture_spawn_member_dispatch_env(
+            listener,
+            workspace_root.path().display().to_string(),
+        ));
+        let _socket_guard = EnvVarGuard::set_path("SUBSTRATE_WORLD_SOCKET", &socket_path);
+        let _poison_guard = EnvVarGuard::set(
+            SUBSTRATE_INTERNAL_CODEX_AUTH_SEED_HOME_ENV,
+            "/poisoned/ambient/.codex",
+        );
+
+        dispatch_orchestrator_world_request(
+            &store,
+            WorldDispatchRequestV1 {
+                request_id: Some("req_spawn".to_string()),
+                idempotency_key: Some("idem_spawn".to_string()),
+                orchestration_session_id: Some("sess_dispatch".to_string()),
+                caller_participant_id: Some("orch_dispatch".to_string()),
+                action: WorldDispatchActionV1::SpawnWorldWorker,
+                mode: WorldDispatchModeV1::Retained,
+                target_backend_id: Some("cli:codex-world".to_string()),
+                task_run_id: None,
+                target_participant_id: None,
+                world_id: Some("world-17".to_string()),
+                world_generation: Some(2),
+                payload: WorldDispatchPayloadV1::WorkerSpawn(WorkerSpawnPayloadV1 {
+                    prompt: "open a compatibility retained worker".to_string(),
+                }),
+            },
+        )
+        .await
+        .expect("compatibility Spawn without credential projection");
+
+        let env = server.await.expect("Spawn fixture task");
+        assert!(
+            !env.contains_key(SUBSTRATE_INTERNAL_CODEX_AUTH_SEED_HOME_ENV),
+            "compatibility Spawn must clear poisoned seed without policy authorization"
+        );
+    }
+
+    #[cfg(target_os = "linux")]
+    #[tokio::test(flavor = "current_thread")]
+    #[serial]
+    async fn compatibility_spawn_with_credential_projection_fails_without_principal() {
+        let _env_guard = world_env_guard();
+        let _world_codex_guard = EnvVarGuard::set_path(
+            "SUBSTRATE_WORLD_DEPS_GUEST_BIN_DIR",
+            test_world_codex_runtime_bin().as_path(),
+        );
+        let substrate_home = secure_authority_tempdir();
+        let _substrate_home_guard = EnvVarGuard::set_path("SUBSTRATE_HOME", substrate_home.path());
+        write_allowed_world_dispatch_policy_with_host_credentials(
+            substrate_home.path(),
+            "cli:codex-world",
+            &["spawn_world_worker"],
+            &["retained"],
+        );
+        write_runtime_inventory_entry(
+            substrate_home.path(),
+            "codex-world",
+            AgentExecutionScope::World,
+        );
+        let workspace_root = tempdir().expect("workspace root tempdir");
+        activate_b_owned_dispatch_authority(
+            substrate_home.path(),
+            workspace_root.path(),
+            "sess_dispatch",
+            "orch_dispatch",
+            "cli:codex",
+            "world-17",
+            2,
+        );
+        let store = AgentRuntimeStateStore::new().expect("state store");
+        let _poison_guard = EnvVarGuard::set(
+            SUBSTRATE_INTERNAL_CODEX_AUTH_SEED_HOME_ENV,
+            "/poisoned/ambient/.codex",
+        );
+
+        let error = dispatch_orchestrator_world_request(
+            &store,
+            WorldDispatchRequestV1 {
+                request_id: Some("req_spawn".to_string()),
+                idempotency_key: Some("idem_spawn".to_string()),
+                orchestration_session_id: Some("sess_dispatch".to_string()),
+                caller_participant_id: Some("orch_dispatch".to_string()),
+                action: WorldDispatchActionV1::SpawnWorldWorker,
+                mode: WorldDispatchModeV1::Retained,
+                target_backend_id: Some("cli:codex-world".to_string()),
+                task_run_id: None,
+                target_participant_id: None,
+                world_id: Some("world-17".to_string()),
+                world_generation: Some(2),
+                payload: WorldDispatchPayloadV1::WorkerSpawn(WorkerSpawnPayloadV1 {
+                    prompt: "reject credential projection without principal".to_string(),
+                }),
+            },
+        )
+        .await
+        .expect_err("compatibility credential projection must fail closed");
+
+        assert!(
+            error.to_string().contains("retained_bootstrap_interrupted")
+                || error.to_string().contains("intended host principal"),
+            "unexpected compatibility failure: {error:#}"
         );
     }
 
