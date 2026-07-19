@@ -24,6 +24,32 @@ const GUARD_MISSING_REASON: &str =
     "WORLD_NETFILTER_ENABLE must be set to 1/true/yes before requested network isolation can install nftables rules";
 
 #[cfg(target_os = "linux")]
+fn expected_host_context(prefix: &Path) -> (String, String) {
+    let uid = unsafe { libc::geteuid() };
+    let account_output = Command::new("/usr/bin/id")
+        .args(["-nu", &uid.to_string()])
+        .output()
+        .expect("resolve current Unix account");
+    assert!(account_output.status.success());
+    let account = String::from_utf8(account_output.stdout)
+        .expect("Unix account is UTF-8")
+        .trim()
+        .to_string();
+    let context = transport_api_types::InstallBootstrapContextV1::new_unix(
+        prefix.to_str().expect("selected host prefix is UTF-8"),
+        &account,
+        uid,
+    )
+    .expect("construct expected install context");
+    let carrier = transport_api_types::InstallBootstrapContextCarrierV1::from_context(context)
+        .expect("commit expected install context");
+    (
+        carrier.context.selected_host_prefix,
+        carrier.host_context_commitment,
+    )
+}
+
+#[cfg(target_os = "linux")]
 fn snapshot_tree(root: &Path) -> Vec<(PathBuf, u32, u32, u32, Vec<u8>)> {
     fn walk(root: &Path, path: &Path, entries: &mut Vec<(PathBuf, u32, u32, u32, Vec<u8>)>) {
         let metadata = std::fs::symlink_metadata(path).expect("snapshot tree metadata");
@@ -326,6 +352,39 @@ fn default_world_doctor_report() -> Value {
 }
 
 fn run_world_doctor_json(report: Value) -> Value {
+    #[cfg(target_os = "linux")]
+    support::ensure_substrate_built();
+    #[cfg(target_os = "linux")]
+    let secure_parent = std::env::var_os("XDG_RUNTIME_DIR")
+        .filter(|value| !value.is_empty())
+        .map(PathBuf::from)
+        .or_else(|| {
+            std::env::var_os("HOME")
+                .map(PathBuf::from)
+                .map(|home| home.join(".cache"))
+        })
+        .expect("world doctor test requires XDG_RUNTIME_DIR or account HOME");
+    #[cfg(target_os = "linux")]
+    std::fs::create_dir_all(&secure_parent).expect("create secure world doctor test parent");
+    #[cfg(target_os = "linux")]
+    let fixture = Builder::new()
+        .prefix("substrate-world-doctor-r2-")
+        .tempdir_in(&secure_parent)
+        .expect("allocate secure world doctor fixture");
+    #[cfg(target_os = "linux")]
+    let selected_prefix = fixture.path().join("selected-a");
+    #[cfg(target_os = "linux")]
+    std::fs::create_dir_all(&selected_prefix).expect("create selected world doctor prefix");
+    #[cfg(target_os = "linux")]
+    std::fs::set_permissions(&selected_prefix, std::fs::Permissions::from_mode(0o700))
+        .expect("secure selected world doctor prefix");
+    #[cfg(target_os = "linux")]
+    let ambient_home = fixture.path().join("ambient-b");
+    #[cfg(target_os = "linux")]
+    let ambient_prefix = ambient_home.join(".substrate");
+    #[cfg(target_os = "linux")]
+    std::fs::create_dir_all(&ambient_prefix).expect("create conflicting world doctor prefix");
+    #[cfg(not(target_os = "linux"))]
     let fixture = ShellEnvFixture::new();
     let socket_dir = Builder::new()
         .prefix("substrate-ds0-sock-")
@@ -337,11 +396,22 @@ fn run_world_doctor_json(report: Value) -> Value {
         SocketResponse::CapabilitiesAndDoctorWorld { report },
     );
 
+    #[cfg(target_os = "linux")]
+    let mut cmd = Command::new(support::binary_path());
+    #[cfg(not(target_os = "linux"))]
     let mut cmd = support::substrate_command_for_home(&fixture);
+    #[cfg(target_os = "linux")]
+    cmd.env("HOME", &ambient_home)
+        .env("USERPROFILE", &ambient_home)
+        .env("SUBSTRATE_HOME", &ambient_prefix)
+        .env("SUBSTRATE_ROOT", &ambient_prefix)
+        .env("PATH", "/usr/bin:/bin");
     cmd.env("SUBSTRATE_WORLD", "enabled")
         .env("SUBSTRATE_WORLD_ENABLED", "1")
         .env("SUBSTRATE_SOCKET_ACTIVATION_OVERRIDE", "manual")
         .env("SUBSTRATE_WORLD_SOCKET", &socket_path);
+    #[cfg(target_os = "linux")]
+    cmd.arg("--install-prefix").arg(&selected_prefix);
     let output = cmd
         .arg("world")
         .arg("doctor")
@@ -355,11 +425,44 @@ fn run_world_doctor_json(report: Value) -> Value {
         }
     }
 
+    assert!(
+        !output.stdout.is_empty(),
+        "world doctor --json emitted no JSON: stderr={}",
+        String::from_utf8_lossy(&output.stderr)
+    );
     let payload = parse_json(&output.stdout, "world doctor --json");
     assert!(
         has_ds0_envelope(&payload),
         "world doctor should emit DS0 envelope: {payload}"
     );
+    #[cfg(target_os = "linux")]
+    {
+        let (expected_prefix, expected_commitment) = expected_host_context(&selected_prefix);
+        assert_eq!(
+            payload
+                .pointer("/host/selected_host_prefix")
+                .and_then(Value::as_str),
+            Some(expected_prefix.as_str())
+        );
+        assert_eq!(
+            payload
+                .pointer("/host/host_context_commitment")
+                .and_then(Value::as_str),
+            Some(expected_commitment.as_str())
+        );
+        assert_eq!(
+            payload
+                .pointer("/world/selected_host_prefix")
+                .and_then(Value::as_str),
+            Some(expected_prefix.as_str())
+        );
+        assert_eq!(
+            payload
+                .pointer("/world/host_context_commitment")
+                .and_then(Value::as_str),
+            Some(expected_commitment.as_str())
+        );
+    }
     payload
 }
 
@@ -535,6 +638,19 @@ fn host_doctor_uses_installed_witness_under_conflicting_ambient() {
     );
     let payload = parse_json(&output.stdout, "installed-witness host doctor --json");
     assert_host_doctor_envelope_v1(&payload);
+    let (expected_prefix, expected_commitment) = expected_host_context(&selected_prefix);
+    assert_eq!(
+        payload
+            .pointer("/host/selected_host_prefix")
+            .and_then(Value::as_str),
+        Some(expected_prefix.as_str())
+    );
+    assert_eq!(
+        payload
+            .pointer("/host/host_context_commitment")
+            .and_then(Value::as_str),
+        Some(expected_commitment.as_str())
+    );
     assert_eq!(
         payload.get("world_enabled").and_then(Value::as_bool),
         Some(false),
