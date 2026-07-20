@@ -592,8 +592,9 @@ both are frozen. The earlier HIGH result for `resolve_current_inventory_view` is
 reuse boundary. Counts are diagnostic; the exact symbol/caller/cfg tables are binding.
 
 R2-2E's PI-111 implementation/proof clause is now complete. R2-2F owns the unresolved PI-106/PI-107
-production paths. Their required order is Routes A–E -> R2-2F0 -> R2-2F -> renewed R2-2
-integration closeout -> R2-3 -> R2-4 -> R3. The renewed closeout is production-fix-free and reruns
+production paths. Their required order is Routes A–E -> F0 authorization/candidate -> R2-2F0a ->
+combined F0/F0a proof -> R2-2F -> renewed R2-2 integration closeout -> R2-3 -> R2-4 -> R3. The
+renewed closeout is production-fix-free and reruns
 the entire Routes A–F wall. `RG-HOME-01` and `RG-INSTALL-01` remain open. No privileged, macOS, or
 Windows proof is claimed, and no seam is promoted.
 
@@ -642,8 +643,8 @@ The baseline terms remain distinct:
 4. **Known post-E interference observation:** `1113 passed / 150 failed / 0 ignored`.
 
 The third value is reproducible but was not deterministic before F0; it is not yet an F comparison
-baseline. F0 closeout must add the deterministic post-F0 F baseline without deleting or rewriting
-either post-E observation.
+baseline. Combined F0/F0a closeout must add the deterministic F baseline without deleting or
+rewriting either post-E observation or the later `1118/150` versus `1119/149` F0 evidence.
 
 The Route D-to-E differential has `PassToFail=0`, `NewFail=0`,
 `FailToChangedFailure=0`, and `FailToPass=0`, with the identical 149 failure-name set. After
@@ -713,11 +714,147 @@ normalized signatures, and unchanged deliberate retained-registration loser/pare
 Routes A–E, production retained-registration, the managed secure-FD path, capabilities, policies,
 and user behavior are unaffected.
 
-R2-2F0 is the exact next authorized prerequisite and has not begun. R2-2F starts only after F0 is
-implemented, review-clean, canonically closed out, exactly replayed, and has recorded the
-deterministic post-F0 comparison baseline. The renewed R2-2 integration closeout remains after F.
+R2-2F0 is authorized but incomplete. Its exact blocked candidate is preserved, not landed, and its
+focused proof is not closeout proof. R2-2F0a is the exact next authorized prerequisite. R2-2F starts
+only after combined F0/F0a implementation is review-clean, canonically closed out, exactly replayed,
+and has recorded the deterministic comparison baseline. The renewed R2-2 integration closeout
+remains after F.
 R2-3, R2-4, and
 R3 remain unstarted; R2-2 remains incomplete; no seam is promoted.
+
+### A1.1d-5R2-2F0a — SUBSTRATE_HOME test isolation
+
+F0's exact uncommitted candidate was preserved before diagnosis and removed from the source
+worktree. Preservation ref `feat/preserve-a1-1d-5r2-2f0-blocked-candidate-69fe8c08` points to commit
+`32513cf41f98006020702f1eca8d6931bc6708ce`, parent
+`0b9f8474a414d3ed24aff9603e9ff68c37569bd5`, tree
+`fa920cc04e62d379a6f999485cf93e4b436b44ec`, ordinary patch SHA-256
+`6fce969756c371ccd6b20b5c6c35e9159100939c484f07dd7ecb1c66b573ebc0`, and full-index/binary
+patch SHA-256 `69fe8c08d47787294b7f43ddad56bddf6cfd3d2d5ce99dce539e01b539925888`.
+Its exact manifest remains `crates/shell/src/builtins/world_enable/runner/paths.rs`,
+`crates/shell/src/builtins/world_gateway.rs`, `crates/shell/src/execution/mod.rs`,
+`crates/shell/src/execution/orchestrator_world_dispatch.rs`,
+`crates/shell/src/execution/platform/macos.rs`,
+`crates/shell/src/execution/routing/dispatch/world_persistent_session.rs`, and
+`crates/shell/src/execution/routing/world.rs`. It is evidence only: no F0 runtime commit or closeout
+exists on the source branch.
+
+Focused F0 proof remains valid: the exact socket pair passed 100/100 parallel and 20/20 serial
+runs; the four-test socket-neighbor matrix passed 20/20; prior absence, non-Unicode prior value,
+panic restoration/reacquisition, nested stack restoration, concurrent exclusion/restoration, and
+the deliberate retained-registration conflicting-child parent all passed. Final broad proof did
+not close: the two exact candidate walls were `1118 passed / 150 failed` and `1119 passed / 149
+failed`. The extra failure was
+`execution::agent_runtime::tool_invocation_contract::tests::dispatch_contract_adapter_active_task_resolution_requires_supervisor_claim`,
+with normalized panic `tool_invocation_contract.rs:3554: resolve exact B-owned acceptance authority:
+open activated versioned authority layout`; it passes in isolation.
+
+Read-only same-process reduction proves the selected minimal HOME pair:
+
+1. target: `dispatch_contract_adapter_active_task_resolution_requires_supervisor_claim`;
+2. competitor: `prompt_submit_continuity_prefers_persisted_session_contract`.
+
+The canonical shell-library test binary ran both exact filters with `--test-threads=2`: target
+failure 20/20, always the same authority-layout signature. The stable same-process
+`--test-threads=1` harness controlled competitor-then-target and failed 0/10. Separate-process
+sequential competitor-then-target and target-then-competitor executions pass. Stable libtest could
+not force reverse same-process order, so this investigation claims no reverse same-process result.
+Three other unannotated mutators—the second control continuity test and both agents-command
+toolbox-status tests—each independently failed the parallel pair 20/20. Non-source transition
+tracing recorded separate thread identities and exact ordering: competitor sets its private test
+HOME; target sets a distinct owner-only test HOME; competitor removes HOME; target fails while
+opening its expected activated authority layout. Separate root device/inode identities prove this
+is not one reused directory. No product state was read, changed, or cleaned.
+
+Commit `f5a150f94d585b1f55ec0067845cd5d715773c78` first adds the selected unannotated competitor and
+its manual `with_store` HOME mutation. The target and its HOME-mutating fixture appear later at
+`83101dcbcc750e6e8fb8979bea19f1f777792188`, which is therefore the first source commit where the
+exact pair coexists and the first source-proven pair-causal commit. A same-commit execution replay
+was attempted in an isolated worktree but
+stopped before linking because the host `/tmp` tmpfs had insufficient free space; only that exact
+test-owned worktree/build tree was removed. The causal claim is source-history-proven, not presented
+as an executed first-red-commit result.
+
+The complete shell-library mutation inventory contains 435 mutating test functions across 19 files.
+Five `with_store` families account for 223 dependent tests: auto-attach 10, control 11, state-store
+183, tool-contract 12, and host-inbox 7. Two agents-command helpers account for five more. The
+remaining direct/local-guard/manual owners are shim-doctor 1, world-deps 2, manager-env 1,
+world-gateway 11, agent-inventory 6, direct state-store tests 2, direct tool-contract tests 10,
+HostSessionAuthority store tests 1, config-model 11, environment scripts 1, invocation 2,
+orchestrator dispatch 106, routing builtin tests 4, settings 8, and async REPL 41, with every test
+function counted once in the 435 total.
+All recognized direct owners are `#[serial]`; the only unannotated mutating callers are the four
+named above. Existing restoration varies: some local guards preserve exact `OsString`, others store
+UTF-8 `String`, and manual set/remove helpers are not panic-safe. `#[serial]` cannot exclude the
+four unannotated mutators.
+
+Integration occurrences are process-separated. Parent HOME mutation is confined to
+`crates/shell/tests/shim_deployment.rs` (nine serialized callers),
+`crates/shell/tests/agent_successor_contract_ahcsitc0.rs` (one caller), and
+`crates/shell/tests/support/mod.rs` (one ignored one-test binary plus one serialized caller). Other
+integration occurrences are read-only or configure spawned children with `Command::env`/
+`env_remove`. They require intentional per-binary disposition, not a cross-process lock. The
+non-Unix production `world_enable` HOME assignment remains product code and is frozen; tests must
+hold their test boundary outside it.
+
+Lock-topology source closure selects **Option A: one process-global authority-environment lock**.
+At least 88 shell-library tests depend jointly on HOME and world socket: world-gateway 5,
+agents-command 2, invocation 2, orchestrator dispatch 39, and async REPL 40. Existing helper paths
+already acquire HOME then socket in some modules and socket then HOME in others. Separate locks
+would therefore admit mixed authority snapshots and lock-order inversion. The combined guard must
+capture exact `OsString`/absence, support safe same-thread nesting with stack-order restoration,
+make poison/non-poison recovery explicit, hold through dependent async/process lifetime and cleanup,
+and restore before unlock. `#[serial]` remains supplemental only.
+
+Async cleanup source closure expands the known six locations to nine exact F0-migrated socket
+fixtures in `crates/shell/src/execution/orchestrator_world_dispatch.rs`:
+
+1. `dispatch_contract_cancel_world_work_ephemeral_routes_exact_active_task_over_execute_cancel`;
+2. `active_ephemeral_terminal_wait_allows_multiple_waiters_to_observe_same_terminal_truth`;
+3. `active_ephemeral_terminal_wait_registration_guard_releases_non_happy_path_registrations`;
+4. `active_ephemeral_terminal_truth_guard_publishes_failed_terminal_truth_on_drop_after_start`;
+5. `dispatch_contract_cancel_world_work_ephemeral_retry_reuses_shared_terminal_truth`;
+6. `dispatch_contract_cancel_world_work_ephemeral_fails_closed_when_execute_cancel_is_not_delivered`;
+7. `continue_world_worker_classifies_real_retained_member_turn_streams`;
+8. `continue_world_worker_dispatch_returns_real_typed_internal_outcome`;
+9. `dispatch_contract_fork_world_worker_rolls_back_child_when_lineage_persist_fails`.
+
+Each declares a socket-owning Tokio server before or alongside the environment guard and calls
+`server.abort()` without awaiting termination; one merely yields once. The authorized correction is
+strictly test-only: abort, await confirmed task termination/cancellation, complete and confirm
+fixture-owned socket/task cleanup, restore environment, then release the lock. Reverse declaration/
+drop order is not termination proof. The already-awaited server at the earlier compatibility test
+and unrelated aborts without a guarded socket lifecycle are source-reviewed exclusions.
+
+GitNexus reports `world_env_guard` CRITICAL at 35 direct/70 total dependents and five affected
+process groups; tool-contract `with_store` HIGH at 12 direct dependents; auto-attach/control/
+host-inbox helpers MEDIUM at 10/11/7; agents-command helpers LOW at 4/1. State-store and the nine
+large-module test symbols are graph-under-resolved, so their complete source caller/body audit is
+binding. These breadth labels authorize no production edit.
+
+The isolated documentation-worktree GitNexus refresh changed only generated symbol/relationship
+count lines in `AGENTS.md` and `CLAUDE.md`; those exact lines were restored before review and commit.
+Record: `GeneratedIndexDriftRemediated`.
+
+The exact combined test-only allowlist is the preserved seven-file F0 manifest plus the HOME-only
+shell-library files named in `03`/`04` and all three inventoried parent-mutating integration-test
+families in `crates/shell/tests/{shim_deployment.rs,agent_successor_contract_ahcsitc0.rs,support/mod.rs}`.
+No
+other integration file, production symbol, resolver, socket owner, readiness path, retained-worker
+or retained-registration validator, managed secure-FD path, capability, policy, or user behavior
+may change. F0a and the F0 cleanup correction are not implemented by this authorization.
+
+Combined closeout requires the F0 socket pair and F0a HOME pair at 100 parallel/20 serial minimum,
+a mixed HOME/socket neighbor matrix, exact prior absence/value/non-Unicode restoration, panic,
+poison/recovery, nesting, bounded subprocess inheritance, termination-before-restoration, and zero
+leak proof. Three exact final-candidate default-parallel broad walls plus one serial wall must have
+one stable inherited failure-name/signature set and no unexplained count variance. Historical
+`1114/149`, `1113/150`, `1118/150`, and `1119/149` observations remain distinct evidence and are not
+lowered, erased, or substituted for the deterministic F baseline.
+
+`TestIsolationDefectConfirmed` remains the classification. F0 is incomplete; F0a is the exact next
+authorized prerequisite; combined implementation/closeout is a later task. F, renewed R2-2
+closeout, R2-3, R2-4, and R3 remain unstarted, and no seam is promoted.
 
 For the Route A successor clause of `R2-RUNTIME-01`, the authorized Unix-only import cfg set also
 includes the policy test module's sole `tempfile::TempDir` import; no other import or module gate is
@@ -760,9 +897,9 @@ has exactly one approved edge class and one packet owner; the class totals are 1
 `PlatformMapping`, 13 `GeneratedProjectionConsumption`, 15 `DiagnosticProjection`, 22
 `R3CleanupOnly`, and four `OutOfScope`. The R2-0-era frozen DAG was historically
 R1 -> R2-0 -> R2-1 -> R2-2 -> R2-3 -> R2-4 -> R3. The corrected canonical DAG replaces the
-R2-2 outgoing edge without changing inventory ownership; F0 later inserts only a proof prerequisite:
-R1 -> R2-0 -> R2-1 -> R2-2 Routes A-E -> R2-2F0 -> R2-2F -> R2-2 integration closeout -> R2-3 ->
-R2-4 -> R3. Mechanical validation covers row-ID,
+R2-2 outgoing edge without changing inventory ownership; F0/F0a later insert only proof prerequisites:
+R1 -> R2-0 -> R2-1 -> R2-2 Routes A-E -> F0 authorization/candidate -> R2-2F0a -> combined
+F0/F0a proof -> R2-2F -> R2-2 integration closeout -> R2-3 -> R2-4 -> R3. Mechanical validation covers row-ID,
 field-count, class, owner, packet-count, table-column, fence-pair, relative-link, and allowlist-path
 checks across 43 tables/749 pipe rows, 134 fence markers, and 12 relative links, plus
 `git diff --check`, `cargo fmt --all -- --check`, and GitNexus change detection. The
@@ -1020,7 +1157,8 @@ A1.1d, A1, the B1/B2.1 joint closeout, and B3.1 remain open; no seam is promoted
 At R2-1 closeout, the historical next packet was **A1.1d-5R2-2 — Unix release, sudo, Linux service,
 and runtime propagation**. Routes A–D have since become individually review-clean, their integration
 closeout failed source closure, and R2-2E has since become review-clean. The live exact next
-authorized prerequisite is R2-2F0; R2-2F follows its canonical closeout. After F and the renewed
+authorized prerequisite is now R2-2F0a because F0 is authorized but incomplete; R2-2F follows
+combined F0/F0a canonical closeout. After F and the renewed
 closeout, rerun the complete Linux
 regression and normal product lifecycle smoke without outer overrides. That proof can unblock
 A1.1d Linux closeout and the Linux
@@ -1662,10 +1800,11 @@ B1 receipt core recovered/review-clean: **yes**. B2.1 supervisor core recovered/
 **not begun**. B3.1 dependency-ready: **no**. Seam promotions: **none**. Within the B corridor, the
 next architectural packet remains the B1/B2.1 joint production integration closeout. At the
 B1/B2.1-0 closeout, the repository's exact next packet was A1.1d-5R2-1 — Host context construction
-and Unix dev propagation; after review-clean R2-2 Routes A–E and the failed integration closeout,
-the live exact next authorized prerequisite is **A1.1d-5R2-2F0 — Deterministic world-socket test
-isolation**; **A1.1d-5R2-2F — Authenticated world-deps and truthful doctor composition** follows F0's
-canonical closeout, followed by renewed R2-2 integration closeout, R2-3, R2-4, and R3. Only the joint closeout's Linux
+and Unix dev propagation; after review-clean R2-2 Routes A–E, the failed integration closeout, and
+F0's blocked broad proof, the live exact next authorized prerequisite is **A1.1d-5R2-2F0a —
+SUBSTRATE_HOME test isolation**; **A1.1d-5R2-2F — Authenticated world-deps and truthful doctor
+composition** follows combined F0/F0a canonical closeout, followed by renewed R2-2 integration
+closeout, R2-3, R2-4, and R3. Only the joint closeout's Linux
 product-smoke portion waits for those remediations and their required smoke, and its receipt and
 supervisor semantics are not reopened.
 

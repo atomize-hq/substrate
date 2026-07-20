@@ -423,9 +423,10 @@ adapters.
 
 Routes A–D are individually review-clean, but they do not exhaust the authenticated-context path.
 The failed R2-2 integration closeout found two remaining projection seams and one diagnostic
-composition invariant. R2-2E is now implementation-, proof-, and review-complete; R2-2F0 is the
-exact next authorized test-isolation prerequisite, R2-2F follows it, and a renewed Routes A–F
-integration closeout follows F.
+composition invariant. R2-2E is now implementation-, proof-, and review-complete. R2-2F0 is
+authorized but incomplete: its exact candidate is preserved, and its focused proof is not closeout
+proof. R2-2F0a is the exact next authorized test-isolation prerequisite, R2-2F follows combined
+F0/F0a closeout, and a renewed Routes A–F integration closeout follows F.
 
 R2-2E makes world-gateway projection a pure consumer of already-authenticated A. The landed shell world
 entry validates A before disabled/unavailable classification, then supplies it to one request-scoped
@@ -458,22 +459,42 @@ regression-proven, and unchanged by E; direct-member Codex/UAA gateway adoption 
 transitional, non-promotable, and E3/D1/D3-owned. R2-2 itself remains incomplete, and no target seam
 is promoted.
 
-R2-2F0 first establishes a test-process-only isolation boundary around every unit-test mutation of
-`SUBSTRATE_WORLD_SOCKET`. The boundary acquires the existing shared reentrant environment lock,
-captures the exact prior `OsString` or absence, installs the test-owned value or absence, spans the
-complete socket/server/child lifecycle, restores during normal return or panic unwinding, and only
-then releases the lock. All unit-test mutators and stable readers participate in that same lock;
-`#[serial]` may remain but is never sufficient by itself. `parking_lot::ReentrantMutex` supports
-same-thread nesting and does not poison on panic, so nested scopes restore in stack order and a
-panicking holder cannot strand later tests. Integration tests that use `Command::env` remain
-separate-process inputs and require no cross-process lock. The only authorized source changes are
-`#[cfg(test)]` helpers or tests in `execution/mod.rs`, `execution/orchestrator_world_dispatch.rs`,
-`execution/platform/macos.rs`, `execution/routing/dispatch/world_persistent_session.rs`,
-`execution/routing/world.rs`, `builtins/world_enable/runner/paths.rs`, and the
-`builtins/world_gateway.rs` classification-test helper/call site. Production world-socket resolution,
-readiness, retained-worker behavior, retry validation, and runtime bytes remain unchanged.
+**A1.1d-5R2-2F0a — SUBSTRATE_HOME test isolation** joins R2-2F0 to establish one
+test-process-only authority-environment boundary around every
+same-process mutation of `SUBSTRATE_WORLD_SOCKET` or `SUBSTRATE_HOME`. F0's blocked candidate
+already proves its exact socket pair 100/100 in parallel and 20/20 serially, but final broad runs
+were `1118 passed / 150 failed` and `1119 passed / 149 failed`; the extra failure was
+`dispatch_contract_adapter_active_task_resolution_requires_supervisor_claim`, which passes alone.
+Non-source transition tracing proved that the unannotated
+`prompt_submit_continuity_prefers_persisted_session_contract` fixture can set its private HOME,
+the target can replace it, and the competitor can then remove the target's HOME while both overlap.
+The pair failed 20/20 in parallel. The stable same-process serial harness controlled only
+competitor-then-target and failed 0/10; separate-process sequential runs passed in both directions.
+Stable libtest could not force reverse same-process order, so no such result is claimed. Commit
+`f5a150f94d585b1f55ec0067845cd5d715773c78` first adds the exact unannotated competing mutation;
+the target and its HOME-mutating fixture arrive later at
+`83101dcbcc750e6e8fb8979bea19f1f777792188`, the first source commit where the exact pair coexists.
 
-R2-2F, when started after F0, creates one request-scoped
+The reviewed topology is one process-global authority-environment lock, not separate HOME/socket
+locks. At least 88 shell-library test functions depend jointly on HOME and socket state, and source
+closure found opposite existing acquisition orders, so separate locks would permit mixed
+authority snapshots and lock-order inversion. The shared boundary captures exact prior `OsString`
+or absence, installs the test-owned value or absence, spans all dependent async/process work and
+cleanup, restores during normal return or panic unwinding, and releases only after restoration.
+Same-thread nesting must be explicitly safe and restore in stack order; panic/poison behavior must
+be explicit and cannot strand later tests. `#[serial]` may remain but is never sufficient by
+itself. Integration-test binaries remain process-local: direct parent mutations receive an
+equivalent per-binary disposition, while child-only `Command::env` inputs need no cross-process
+lock.
+
+F0 also owns a source-closure-proven async cleanup correction in nine socket-owning tests in
+`execution/orchestrator_world_dispatch.rs`: abort the server, await confirmed task cancellation,
+finish fixture-owned socket/task cleanup, restore the environment, and release the isolation lock,
+in that order. Reverse declaration/drop order and a single scheduler yield are not proof of task
+termination. Production world-socket/HOME resolution, readiness, retained-worker behavior, retry
+validation, and runtime bytes remain unchanged.
+
+R2-2F, when started after combined F0/F0a closeout, creates one request-scoped
 `AuthenticatedWorldDepsContextV1` (or equivalently named typed
 value) from the already-validated install context. It holds A's trusted bootstrap home/root,
 non-secret commitment, explicit launch CWD/workspace scope, effective configuration and policy,
@@ -501,15 +522,17 @@ preserve explicitly labeled ambient compatibility or report unavailable/fail clo
 claim coherent A-bound truth or satisfy F acceptance. Non-Unix cfg coherence means build/static
 preservation and no A-bound success claim.
 
-F begins only after F0's closeout has been published and all runtime commits have been replayed
-exactly above it. The post-E `1114 passed / 149 failed / 0 ignored` result is genuine but
+F begins only after combined F0/F0a closeout has been published and all runtime commits have been
+replayed exactly above it. The post-E `1114 passed / 149 failed / 0 ignored` result is genuine but
 nondeterministic before F0 because the same runtime can produce `1113 passed / 150 failed / 0
-ignored` through the proven shared-socket collision. F0 must publish the deterministic post-F0 F
-comparison baseline after one serial and at least three default-parallel broad walls with an
-identical inherited failure-name/signature set. That new value remains distinct from the
+ignored` through the proven shared-socket collision. F0's candidate then exposed the separate HOME
+interference through `1118/150` versus `1119/149`; neither is closeout proof. Combined F0/F0a
+closeout must publish the deterministic F comparison baseline after one serial and at least three
+default-parallel broad walls with an identical inherited failure-name/signature set. That new value
+remains distinct from the
 **R2-2 historical starting baseline** of `1089 passed / 149 failed` and the **clean Route D
 comparison baseline** of `1101 passed / 149 failed / 0 ignored`. Routes A–E are immutable prior
-evidence for F0 and F, and renewed R2-2 integration closeout remains after F.
+evidence for F0/F0a and F, and renewed R2-2 integration closeout remains after F.
 
 A physical symlink shim recovers A from an explicit invocation pathname or exactly one matching
 no-follow candidate when bare `argv[0]` requires absolute-PATH enumeration. PATH order has no

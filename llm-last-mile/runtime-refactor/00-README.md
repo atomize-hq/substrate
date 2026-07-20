@@ -4,7 +4,7 @@
 **Scope:** planning, contracts, sequencing, and proof gates; not implementation history
 **Source directive:** [`../../substrate-runtime-refactor-directive-revised.md`](../../substrate-runtime-refactor-directive-revised.md)
 **Repo-truth snapshot:** 2026-07-17 at `6ab2a515e13946324d0aac25b144e1c3408cb2c1`; re-check live code before every slice
-**Current authorized increment:** `A1.1d-5R2-2F0 — Deterministic world-socket test isolation`; R2-2E is implementation-, proof-, and review-complete, F remains implementation-ready only after F0, and R2-2 remains incomplete.
+**Current authorized increment:** `A1.1d-5R2-2F0a — SUBSTRATE_HOME test isolation`; R2-2E is implementation-, proof-, and review-complete, F0 is authorized but incomplete with its blocked candidate preserved, F remains blocked pending combined F0/F0a proof, and R2-2 remains incomplete.
 
 ## Canonical repo location
 
@@ -209,10 +209,12 @@ convergent. Remediation remains bounded to **A1.1d-5R1 → A1.1d-5R2 → A1.1d-5
 implemented and review-clean through `4d0acff68e20d86b97fe5367b8a4617554f33ef4`.
 **A1.1d-5R2-0 is planning-complete, and A1.1d-5R2-1 is implementation- and review-complete through
 `2653c2ef20ae2e119a444811e6fb46e86d1a6ec6`.** R2 remains sequenced as
-**R2-1 → R2-2 Routes A–E → R2-2F0 → R2-2F → R2-2 integration closeout → R2-3 → R2-4**,
+**R2-1 → R2-2 Routes A–E → R2-2F0 authorization/candidate → R2-2F0a → combined F0/F0a proof → R2-2F → R2-2 integration closeout → R2-3 → R2-4**,
 followed by R3. Routes A–D are individually review-clean, but the failed integration closeout proved
 that R2-2 is incomplete and unpublished. R2-2E is now implementation-, proof-, and review-complete;
-R2-2F0 is the exact next authorized prerequisite. R2-2F, renewed R2-2 closeout, R2-3, R2-4, and R3 remain
+R2-2F0 is authorized but incomplete, its focused proof is not closeout proof, and its exact candidate
+is preserved rather than landed. R2-2F0a is the exact next authorized prerequisite. R2-2F, renewed
+R2-2 closeout, R2-3, R2-4, and R3 remain
 unstarted. Until the
 remaining implementation packets are review-clean and their Linux lifecycle/product smoke passes,
 both A1.1d Linux closeout and only the Linux product-smoke portion of the B1/B2.1 joint closeout
@@ -254,8 +256,9 @@ runtime by `4d0acff68e20d86b97fe5367b8a4617554f33ef4`. `RG-HOME-01` and `RG-INST
 A1.1d and A1 remain incomplete, B3.1 remains blocked, and the R2 packets/R3 remain separately
 owned; R2-1 is complete and R2-2 is in progress through review-clean Routes A, B, C, and D. The
 failed Routes A–D integration closeout is blocker evidence rather than a completed packet; R2-2E is
-implementation-, proof-, and review-complete, R2-2F0 is the exact next authorized test-only
-prerequisite, R2-2F follows F0, and renewed closeout, R2-3/R2-4/R3 remain unstarted. Static macOS/Windows
+implementation-, proof-, and review-complete, R2-2F0 is authorized but incomplete, and R2-2F0a is
+the exact next authorized test-only prerequisite. R2-2F follows combined F0/F0a closeout; renewed
+closeout, R2-3/R2-4/R3 remain unstarted. Static macOS/Windows
 inspection in R2-0 is not native platform proof.
 
 R2-1 implements the 19 owned rows PI-001–PI-004, PI-010–PI-011, PI-032–PI-034, PI-061–PI-063,
@@ -322,10 +325,17 @@ doctor composition** owns the unresolved PI-106/PI-107 production paths, one sha
 world-deps context, authenticated runtime-request construction, and constituent-coherence
 validation. Mixed A/B diagnostics fail closed or report unavailable/incoherent, never healthy
 A-bound truth. Before F, **A1.1d-5R2-2F0 — Deterministic world-socket test isolation** repairs the
-proven test-harness-only `SUBSTRATE_WORLD_SOCKET` collision without changing any production byte,
-socket-selection behavior, retained-registration validation, test name, assertion, capability, or
-policy. The exact sequence is **Routes A–E → R2-2F0 → R2-2F → renewed R2-2 integration
-closeout → R2-3 → R2-4 → R3**. E and F are logically separable but use this deterministic order so
+proven test-harness-only `SUBSTRATE_WORLD_SOCKET` collision, while **A1.1d-5R2-2F0a —
+SUBSTRATE_HOME test isolation** repairs the separate HOME collision exposed by F0's final broad
+wall. F0 remains incomplete: its exact seven-file candidate is preserved rather than landed, and
+its focused proof is not closeout proof. F0/F0a use one process-global authority-environment lock
+for same-process HOME/socket mutation, and socket-owning async fixtures must abort, await confirmed
+task termination, complete test-owned cleanup, restore exact prior environment state, and only then
+release that lock. Neither increment changes any production byte, socket-selection behavior,
+retained-registration validation, test name, assertion, capability, or policy. The exact sequence
+is **Routes A–E → F0 authorization/candidate → F0a → combined F0/F0a proof → R2-2F → renewed R2-2
+integration closeout → R2-3 → R2-4 → R3**. E and F are logically separable but use this
+deterministic order so
 F can reuse E's canonical projection entrypoint without overlapping ownership. No seam is promoted,
 and this docs-only correction begins no runtime increment. The authenticated guarantees
 are bounded to the Unix/Linux route in the reviewed allowlists. macOS, Windows, fallback, and other
@@ -338,10 +348,11 @@ Baseline terms are intentionally distinct. The **R2-2 historical starting baseli
 `1089 passed / 149 failed`; the **clean Route D comparison baseline** is
 `1101 passed / 149 failed / 0 ignored`; and the genuine **post-E pre-F0 success observation** is
 `1114 passed / 149 failed / 0 ignored`. That post-E result is nondeterministic before F0: the proven
-shared-socket interference can instead produce `1113 passed / 150 failed / 0 ignored`. F0 must
-establish and record the deterministic post-F0 F comparison baseline; F may not start from either
-pre-F0 count. Neither F0, F, nor renewed closeout may overwrite the historical values or erase the
-interference evidence.
+shared-socket interference can instead produce `1113 passed / 150 failed / 0 ignored`. The F0
+candidate then produced `1118/150` and `1119/149` while exposing the separate HOME interference.
+Combined F0/F0a closeout must establish and record the deterministic F comparison baseline; F may
+not start from any of these counts. Neither F0/F0a, F, nor renewed closeout may overwrite the
+historical values or erase either interference record.
 
 B1/B2.1-R0 lets RetainedWorkerRuntime create the immutable retained object graph and requires
 HostSessionAuthority first to reserve the ingress idempotency key, validate the exact participant
