@@ -350,9 +350,10 @@ service/socket/runtime paths matched the initial absent/inactive snapshot.
 `6ab2a515e13946324d0aac25b144e1c3408cb2c1` and freezes 118 live propagation edges as
 PI-001–PI-118 in `02-seam-crosswalk.md`. It changes only the existing six control-pack files,
 implements no runtime behavior, performs no privileged/platform mutation, promotes no seam, and
-claims no native macOS or Windows proof. The corrected R2 implementation order is
-R2-1 -> R2-2 Routes A-D -> R2-2E -> R2-2F -> R2-2 integration closeout -> R2-3 -> R2-4;
-R3 follows and remains unimplemented.
+claims no native macOS or Windows proof. At that planning point the corrected R2 implementation
+order was R2-1 -> R2-2 Routes A-D -> R2-2E -> R2-2F -> R2-2 integration closeout -> R2-3 -> R2-4;
+F0's later evidence-gate insertion supersedes that outgoing sequence without changing inventory
+ownership. R3 follows and remains unimplemented.
 
 Every A1.1d-5I finding has an explicit terminal owner:
 
@@ -591,7 +592,7 @@ both are frozen. The earlier HIGH result for `resolve_current_inventory_view` is
 reuse boundary. Counts are diagnostic; the exact symbol/caller/cfg tables are binding.
 
 R2-2E's PI-111 implementation/proof clause is now complete. R2-2F owns the unresolved PI-106/PI-107
-production paths. Their required order remains Routes A–D -> R2-2E -> R2-2F -> renewed R2-2
+production paths. Their required order is Routes A–E -> R2-2F0 -> R2-2F -> renewed R2-2
 integration closeout -> R2-3 -> R2-4 -> R3. The renewed closeout is production-fix-free and reruns
 the entire Routes A–F wall. `RG-HOME-01` and `RG-INSTALL-01` remain open. No privileged, macOS, or
 Windows proof is claimed, and no seam is promoted.
@@ -633,11 +634,16 @@ policy 14/14; policy snapshot/network 10/10; inventory 17/17; install-bootstrap 
 explicit `HostSessionAuthority` composition 1/1; new integration negatives 3/3; managed auth bundle
 7/7; world-service gateway runtime 32/32; gateway receiver/server 18/18.
 
-The three baseline terms remain distinct:
+The baseline terms remain distinct:
 
 1. **R2-2 historical starting baseline:** `1089 passed / 149 failed`.
 2. **Clean Route D comparison baseline:** `1101 passed / 149 failed / 0 ignored`.
-3. **Current post-E and F comparison baseline:** `1114 passed / 149 failed / 0 ignored`.
+3. **Genuine post-E pre-F0 success observation:** `1114 passed / 149 failed / 0 ignored`.
+4. **Known post-E interference observation:** `1113 passed / 150 failed / 0 ignored`.
+
+The third value is reproducible but was not deterministic before F0; it is not yet an F comparison
+baseline. F0 closeout must add the deterministic post-F0 F baseline without deleting or rewriting
+either post-E observation.
 
 The Route D-to-E differential has `PassToFail=0`, `NewFail=0`,
 `FailToChangedFailure=0`, and `FailToPass=0`, with the identical 149 failure-name set. After
@@ -665,10 +671,52 @@ non-promotable, and owned by E3/D1/D3**. Accordingly `RG-CONFIG-02`, `RG-CONFIG-
 and `RG-UAA-03` remain open and unchanged. PI-111's R2-2E clause is complete, but the full gateway
 credential/config architecture is not.
 
-R2-2F is the exact next authorized increment and has not begun. It starts only from the
-post-closeout replayed-E runtime commit/tree recorded by the dedicated replay-preservation ref and
-completion checkpoint, with Routes A–E immutable and `1114 passed / 149 failed / 0 ignored` as its
-clean comparison baseline. The renewed R2-2 integration closeout remains after F. R2-3, R2-4, and
+### A1.1d-5R2-2F0 deterministic world-socket test isolation authorization
+
+The F preflight baseline investigation is classified `TestIsolationDefectConfirmed`. The exact
+minimal pair is `continue_world_worker_classifies_real_retained_member_turn_streams` plus
+`b21_retained_production_handoff_claims_before_next_frame`: the target failed 12/20 parallel
+two-thread runs and 0/10 serial runs, while fixed serial order passed. Both fixtures mutate the
+process-global `SUBSTRATE_WORLD_SOCKET`; the first holds `world_env_guard` but is unannotated, while
+the B2.1 competitor is `#[serial]` but uses an independent local environment guard. Because
+`#[serial]` does not exclude unannotated tests, the target can observe the peer's private, restored,
+or deleted socket. The competing mutation first appears at
+`c519024bd91b6ca6e332d0b8881f7d13ded940e0`, before Routes A–E.
+
+The complete shell library-test-process inventory contains 66 mutating call sites. Sixty-one require
+migration: 49 orchestrator local-guard sites, two orchestrator manual restoration blocks, four
+macOS platform closure-helper sites, two persistent-session direct sites, two routing direct sites,
+one world-enable path manual site, and one world-gateway classification-test closure call. Four
+other world-gateway RAII sites and one async-REPL site already acquire the same shared lock and
+restore exact `OsString`/absence during unwinding. Shell integration tests only
+use child `Command::env`/`env_remove` in separate test processes and require no cross-process lock.
+Production socket readers remain frozen.
+
+F0 is authorized only for test-compiled hunks in `crates/shell/src/execution/mod.rs`,
+`crates/shell/src/execution/orchestrator_world_dispatch.rs`,
+`crates/shell/src/execution/platform/macos.rs`,
+`crates/shell/src/execution/routing/dispatch/world_persistent_session.rs`,
+`crates/shell/src/execution/routing/world.rs`, and
+`crates/shell/src/builtins/world_enable/runner/paths.rs`, plus the classification-test helper/call in
+`crates/shell/src/builtins/world_gateway.rs`. One RAII guard must acquire the existing
+reentrant lock, capture exact prior state, hold it through socket/server/helper lifecycle and
+cleanup, restore on return or panic, and release only afterward. Same-thread nesting restores in
+stack order. `parking_lot::ReentrantMutex` does not poison; panic recovery and later acquisition are
+mandatory proof. `#[serial]` alone, sleeps, retries, global single-thread forcing, assertion
+weakening, readiness changes, and production edits are forbidden.
+
+Required proof is prior-value/absence restoration, non-Unicode prior value on Unix, panic and
+non-poisoning recovery, nesting, concurrent blocking/cleanup ordering, no peer-socket observation,
+no leaks/deadlocks, at least 100 parallel and 20 serial exact-pair iterations, neighboring mutator
+combinations, three default-parallel broad walls, one serial broad wall, stable inherited names and
+normalized signatures, and unchanged deliberate retained-registration loser/parent behavior.
+Routes A–E, production retained-registration, the managed secure-FD path, capabilities, policies,
+and user behavior are unaffected.
+
+R2-2F0 is the exact next authorized prerequisite and has not begun. R2-2F starts only after F0 is
+implemented, review-clean, canonically closed out, exactly replayed, and has recorded the
+deterministic post-F0 comparison baseline. The renewed R2-2 integration closeout remains after F.
+R2-3, R2-4, and
 R3 remain unstarted; R2-2 remains incomplete; no seam is promoted.
 
 For the Route A successor clause of `R2-RUNTIME-01`, the authorized Unix-only import cfg set also
@@ -712,8 +760,8 @@ has exactly one approved edge class and one packet owner; the class totals are 1
 `PlatformMapping`, 13 `GeneratedProjectionConsumption`, 15 `DiagnosticProjection`, 22
 `R3CleanupOnly`, and four `OutOfScope`. The R2-0-era frozen DAG was historically
 R1 -> R2-0 -> R2-1 -> R2-2 -> R2-3 -> R2-4 -> R3. The corrected canonical DAG replaces the
-R2-2 outgoing edge without changing inventory ownership:
-R1 -> R2-0 -> R2-1 -> R2-2 Routes A-D -> R2-2E -> R2-2F -> R2-2 integration closeout -> R2-3 ->
+R2-2 outgoing edge without changing inventory ownership; F0 later inserts only a proof prerequisite:
+R1 -> R2-0 -> R2-1 -> R2-2 Routes A-E -> R2-2F0 -> R2-2F -> R2-2 integration closeout -> R2-3 ->
 R2-4 -> R3. Mechanical validation covers row-ID,
 field-count, class, owner, packet-count, table-column, fence-pair, relative-link, and allowlist-path
 checks across 43 tables/749 pipe rows, 134 fence markers, and 12 relative links, plus
@@ -972,7 +1020,8 @@ A1.1d, A1, the B1/B2.1 joint closeout, and B3.1 remain open; no seam is promoted
 At R2-1 closeout, the historical next packet was **A1.1d-5R2-2 — Unix release, sudo, Linux service,
 and runtime propagation**. Routes A–D have since become individually review-clean, their integration
 closeout failed source closure, and R2-2E has since become review-clean. The live exact next
-authorized increment is R2-2F. After F and the renewed closeout, rerun the complete Linux
+authorized prerequisite is R2-2F0; R2-2F follows its canonical closeout. After F and the renewed
+closeout, rerun the complete Linux
 regression and normal product lifecycle smoke without outer overrides. That proof can unblock
 A1.1d Linux closeout and the Linux
 product-smoke portion of the B1/B2.1 joint closeout. Native macOS proof remains separately required
@@ -1614,8 +1663,9 @@ B1 receipt core recovered/review-clean: **yes**. B2.1 supervisor core recovered/
 next architectural packet remains the B1/B2.1 joint production integration closeout. At the
 B1/B2.1-0 closeout, the repository's exact next packet was A1.1d-5R2-1 — Host context construction
 and Unix dev propagation; after review-clean R2-2 Routes A–E and the failed integration closeout,
-the live exact next authorized increment is **A1.1d-5R2-2F — Authenticated world-deps and truthful
-doctor composition**, followed by renewed R2-2 integration closeout, R2-3, R2-4, and R3. Only the joint closeout's Linux
+the live exact next authorized prerequisite is **A1.1d-5R2-2F0 — Deterministic world-socket test
+isolation**; **A1.1d-5R2-2F — Authenticated world-deps and truthful doctor composition** follows F0's
+canonical closeout, followed by renewed R2-2 integration closeout, R2-3, R2-4, and R3. Only the joint closeout's Linux
 product-smoke portion waits for those remediations and their required smoke, and its receipt and
 supervisor semantics are not reopened.
 

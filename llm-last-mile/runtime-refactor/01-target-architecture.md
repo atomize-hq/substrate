@@ -423,8 +423,9 @@ adapters.
 
 Routes A–D are individually review-clean, but they do not exhaust the authenticated-context path.
 The failed R2-2 integration closeout found two remaining projection seams and one diagnostic
-composition invariant. R2-2E is now implementation-, proof-, and review-complete; R2-2F is the
-exact next authorized increment, followed by a renewed Routes A–F integration closeout.
+composition invariant. R2-2E is now implementation-, proof-, and review-complete; R2-2F0 is the
+exact next authorized test-isolation prerequisite, R2-2F follows it, and a renewed Routes A–F
+integration closeout follows F.
 
 R2-2E makes world-gateway projection a pure consumer of already-authenticated A. The landed shell world
 entry validates A before disabled/unavailable classification, then supplies it to one request-scoped
@@ -457,7 +458,22 @@ regression-proven, and unchanged by E; direct-member Codex/UAA gateway adoption 
 transitional, non-promotable, and E3/D1/D3-owned. R2-2 itself remains incomplete, and no target seam
 is promoted.
 
-R2-2F, when started as the next authorized increment, creates one request-scoped
+R2-2F0 first establishes a test-process-only isolation boundary around every unit-test mutation of
+`SUBSTRATE_WORLD_SOCKET`. The boundary acquires the existing shared reentrant environment lock,
+captures the exact prior `OsString` or absence, installs the test-owned value or absence, spans the
+complete socket/server/child lifecycle, restores during normal return or panic unwinding, and only
+then releases the lock. All unit-test mutators and stable readers participate in that same lock;
+`#[serial]` may remain but is never sufficient by itself. `parking_lot::ReentrantMutex` supports
+same-thread nesting and does not poison on panic, so nested scopes restore in stack order and a
+panicking holder cannot strand later tests. Integration tests that use `Command::env` remain
+separate-process inputs and require no cross-process lock. The only authorized source changes are
+`#[cfg(test)]` helpers or tests in `execution/mod.rs`, `execution/orchestrator_world_dispatch.rs`,
+`execution/platform/macos.rs`, `execution/routing/dispatch/world_persistent_session.rs`,
+`execution/routing/world.rs`, `builtins/world_enable/runner/paths.rs`, and the
+`builtins/world_gateway.rs` classification-test helper/call site. Production world-socket resolution,
+readiness, retained-worker behavior, retry validation, and runtime bytes remain unchanged.
+
+R2-2F, when started after F0, creates one request-scoped
 `AuthenticatedWorldDepsContextV1` (or equivalently named typed
 value) from the already-validated install context. It holds A's trusted bootstrap home/root,
 non-secret commitment, explicit launch CWD/workspace scope, effective configuration and policy,
@@ -485,12 +501,15 @@ preserve explicitly labeled ambient compatibility or report unavailable/fail clo
 claim coherent A-bound truth or satisfy F acceptance. Non-Unix cfg coherence means build/static
 preservation and no A-bound success claim.
 
-F begins from the post-closeout replayed-E source head and its dedicated replay-preservation ref.
-Its clean comparison value is the **current post-E and F comparison baseline** of
-`1114 passed / 149 failed / 0 ignored`; that value is distinct from both the **R2-2 historical
-starting baseline** of `1089 passed / 149 failed` and the **clean Route D comparison baseline** of
-`1101 passed / 149 failed / 0 ignored`. Routes A–E are immutable prior evidence for F, and renewed
-R2-2 integration closeout remains after F.
+F begins only after F0's closeout has been published and all runtime commits have been replayed
+exactly above it. The post-E `1114 passed / 149 failed / 0 ignored` result is genuine but
+nondeterministic before F0 because the same runtime can produce `1113 passed / 150 failed / 0
+ignored` through the proven shared-socket collision. F0 must publish the deterministic post-F0 F
+comparison baseline after one serial and at least three default-parallel broad walls with an
+identical inherited failure-name/signature set. That new value remains distinct from the
+**R2-2 historical starting baseline** of `1089 passed / 149 failed` and the **clean Route D
+comparison baseline** of `1101 passed / 149 failed / 0 ignored`. Routes A–E are immutable prior
+evidence for F0 and F, and renewed R2-2 integration closeout remains after F.
 
 A physical symlink shim recovers A from an explicit invocation pathname or exactly one matching
 no-follow candidate when bare `argv[0]` requires absolute-PATH enumeration. PATH order has no

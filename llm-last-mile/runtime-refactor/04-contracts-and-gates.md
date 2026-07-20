@@ -833,13 +833,13 @@ source paths and symbols, unchanged owner/family set, exact manifest/patch, mapp
 and fresh read-only semantic review. A new execution family, authority owner, module, resolver,
 schema, or R2-3 behavior requires a cross-document stop.
 
-#### R2-2 source closure, E closeout, and remaining F contract
+#### R2-2 source closure, E closeout, F0 prerequisite, and remaining F contract
 
 The failed Routes A–D integration closeout established that those four routes were individually
 review-clean but did not close every authenticated-context consumer. R2-2E has since implemented and
 proved the gateway projection without changing Routes A–D; all five routes are individually
-review-clean. R2-2 stays incomplete pending F and the renewed integration closeout. The following
-table preserves E's reviewed historical source-closure boundary and freezes F's remaining boundary;
+review-clean. R2-2 stays incomplete pending F0, F, and the renewed integration closeout. The following
+table preserves E's reviewed historical source-closure boundary and freezes F0/F's remaining boundaries;
 brace groups are exact symbol sets, not file wildcards.
 
 | Increment | File | Symbol | Pre-increment authority | Required carrier | Callers | Process family | Platform cfg | GitNexus risk | Inventory ID | Test | Reviewed allowlist disposition |
@@ -853,6 +853,13 @@ brace groups are exact symbol sets, not file wildcards.
 | R2-2E | same | `build_macos_gateway_client`; `resolve_macos_gateway_client_endpoint`; `resolve_macos_host_gateway_socket`; `macos_default_world_socket_path` | ambient socket/home/VM and lower `auto_select`; endpoint helper is production-compiled dead/test support | no carrier: E fails in `call_gateway_action` before these symbols | `call_gateway_action` plus four test-only endpoint-helper callers | gateway transport selection | macOS | LOW locally; endpoint helper four test callers; lower adapter risk frozen | PI-111 | unchanged colocated cfg tests plus new pre-client rejection proof | SOURCE-CLOSURE INSPECTED, FROZEN R2-3; no edit/delete/call |
 | R2-2E | `crates/shell/src/execution/policy_snapshot.rs` | `resolve_policy_snapshot_for_bootstrap_home`; additive explicit-bootstrap-home world-network resolver | snapshot resolver is explicit; network resolver re-enters ambient config | A bootstrap home and explicit config | gateway context; later F authenticated builder | policy/network projection | all | LOW | PI-111 | colocated | REUSE plus ADD; sole owner |
 | R2-2E | `crates/shell/src/execution/agent_inventory.rs` | `resolve_gateway_backend_inventory_entry`; additive bootstrap-home gateway resolver; `load_effective_agent_inventory_for_bootstrap_home` | gateway resolver loads ambient inventory | A bootstrap home | gateway backend validation | runtime-family inventory | all | LOW | PI-111 | colocated | EDIT/ADD/REUSE |
+| R2-2F0 | `crates/shell/src/execution/mod.rs` | existing `WORLD_ENV_LOCK`/`world_env_guard`; additive `WorldSocketTestGuard` and focused tests | shared reentrant lock exists but socket mutation/restoration is decentralized | exact `OsString`/absence plus same shared lock | shell library unit tests only | test harness | `cfg(test)` | HIGH historical 35 direct/70 total; fresh 13/19 | none; proof prerequisite | colocated prior/absence/panic/recovery/nesting/concurrency | ADD test-only helper/tests; existing helper body and production exports frozen |
+| R2-2F0 | `crates/shell/src/execution/orchestrator_world_dispatch.rs` | 49 socket `EnvVarGuard::set_path` call sites and two manual restore blocks | local guards do not all acquire shared lock; manual blocks are not unwind-safe or exact non-Unicode restoration | `WorldSocketTestGuard` | named unit tests only | test harness | Linux `cfg(test)` module | graph-under-resolved; source closure binding | exact pair plus neighboring socket tests | EDIT test-only call sites; names/assertions and production symbols frozen |
+| R2-2F0 | `crates/shell/src/execution/platform/macos.rs` | four test `with_env_var` socket call sites/readers | `#[serial]` and unlocked closure restoration | shared test guard around each complete closure | macOS unit tests | test harness | macOS tests | source reviewed | existing four tests plus guard proof | EDIT test helper/calls only; production platform adapter frozen |
+| R2-2F0 | `crates/shell/src/execution/routing/dispatch/world_persistent_session.rs` | two macOS tests with direct remove/set/remove | separate standard test lock; prior socket state not restored exactly | shared test guard retained through server/client cleanup | two unit tests | test harness | macOS tests | source reviewed | existing tests | EDIT test calls only; production persistent-session code frozen |
+| R2-2F0 | `crates/shell/src/execution/routing/world.rs` | two direct socket mutations | shared lock is held, but mutation is not RAII-restored | shared test guard | two unit tests | test harness | macOS/Windows tests | source reviewed | existing tests | EDIT test calls only; production routing frozen |
+| R2-2F0 | `crates/shell/src/builtins/world_enable/runner/paths.rs` | `resolve_world_socket_path_normalizes_relative_components` manual set/restore | `#[serial]` only; restoration is not unwind-safe | shared test guard | one unit test | test harness | tests | source reviewed | existing test | EDIT test call only; production path resolver frozen |
+| R2-2F0 | `crates/shell/src/builtins/world_gateway.rs` | `classification_tests::with_env_var`; one Linux socket call | shared lock releases after panic without restoration because the closure helper restores only after normal return | shared test guard for the socket branch through the complete closure | one unit-test call; four separate RAII world-gateway calls unchanged | test harness | `cfg(test)` classification module | source reviewed | existing Linux fixed-socket test plus guard proof | EDIT test helper/call only; production gateway and four compliant RAII sites frozen |
 | R2-2F | `crates/shell/src/execution/platform/mod.rs` | `handle_world_command` Doctor/Deps arms; `handle_host_command` Doctor arm | World doctor/deps resolve ambient config/policy or drop A; Host policy remains ambient | `AuthenticatedWorldDepsContextV1`-equivalent plus A-derived doctor inputs | `ShellConfig::from_cli` | World/Host dispatch | authenticated Unix/Linux; non-Unix compatibility unproven/no A claim | LOW; manual arm closure | PI-106/PI-107 | `doctor_scopes_ds0.rs`; world-deps suites | EDIT arms only |
 | R2-2F | `crates/shell/src/execution/platform/linux.rs` | `host_doctor_main`; `world_doctor_main` | `detect_profile` plus global `world_fs_policy` | explicit A-derived world-fs policy and identity | platform handlers | Linux Host/World doctor | Linux | LOW | PI-106/PI-107 | `doctor_scopes_ds0.rs` | EDIT; observation stays read-only |
 | R2-2F | `crates/shell/src/builtins/world_deps/mod.rs` | new authenticated context/binder; `WorldDepsDoctorSnapshotV1`; `collect_doctor_snapshot_v1`; `resolve_effective_enabled_provisioning_requirements_v1` | diagnostic Unix path partly explicit; provisioning and non-Unix ambient; snapshot lacks identity | one validated A context with root/config/policy/deps/CWD/runtime projection | shim doctor; world-enable; surfaces | dependency resolution/diagnostics | Unix/Linux validation; non-Unix unavailable or explicit R2-3 ambient compatibility only | existing symbols LOW; new symbols N/A | PI-106/PI-107 | colocated; inventory/enabled/provision suites | ADD/EDIT |
@@ -908,12 +915,13 @@ evidence:
   policy snapshot/network 10/10; inventory 17/17; install-bootstrap context 8/8; explicit
   `HostSessionAuthority` composition 1/1; new integration negatives 3/3; managed auth bundle 7/7;
   world-service gateway runtime 32/32; gateway receiver/server 18/18;
-- the **clean Route D comparison baseline** is `1101 passed / 149 failed / 0 ignored`; final E is
-  the **current post-E and F comparison baseline**, `1114 passed / 149 failed / 0 ignored`.
+- the **clean Route D comparison baseline** is `1101 passed / 149 failed / 0 ignored`; final E
+  produced the genuine **post-E pre-F0 success observation**, `1114 passed / 149 failed / 0
+  ignored`.
   `PassToFail=0`, `NewFail=0`, `FailToChangedFailure=0`, and `FailToPass=0`; the 149 failure-name set
   is identical, with only the recorded nondeterministic orchestration identifiers normalizing. The
-  non-reproducible parallel retained-member-stream failure is a historical observation, neither a
-  success nor a regression;
+  same runtime can instead produce the known interference observation `1113 passed / 150 failed /
+  0 ignored`; neither pre-F0 result is an F comparison baseline;
 - final GitNexus output is semantically contained to the approved owners and existing process
   families. Its aggregate CRITICAL adjacency is diagnostic over-attribution; each exact edited
   existing symbol was LOW, and no new process family, resolver owner, schema, or capability was
@@ -933,15 +941,57 @@ owned by E3/D1/D3. `RG-CONFIG-02`, `RG-CONFIG-04`, `RG-UAA-02`, and `RG-UAA-03` 
 unchanged. E changes no user/world capability, policy meaning, credential transport, or service
 lifecycle and promotes no seam.
 
+R2-2F0's binding contract is exact:
+
+F0 is the **exact next authorized prerequisite** and is test-harness-only. Its binding diagnosis is
+`TestIsolationDefectConfirmed`: the unannotated retained-member-stream test and the `#[serial]`
+B2.1 retained-handoff test can overlap while selecting different process-global
+`SUBSTRATE_WORLD_SOCKET` values. The target failed 12/20 parallel pair runs and 0/10 serial runs;
+fixed serial order passes. The competing mutation first appears at
+`c519024bd91b6ca6e332d0b8881f7d13ded940e0`. Routes A–E,
+production retained-registration retry validation, and the managed secure-FD path are unaffected.
+
+1. One `cfg(test)` RAII guard acquires the existing `WORLD_ENV_LOCK`, captures the exact prior
+   `OsString` or absence, installs the test value or absence, and restores the exact prior state in
+   `Drop` before its reentrant lock guard can release. It spans the complete test-owned socket,
+   server/helper/child, and cleanup lifecycle. Normal return and panic unwind use the same path.
+2. `parking_lot::ReentrantMutex` is the existing lock primitive. Same-thread nested acquisition is
+   supported and must restore in stack order. The primitive does not poison; a panic releases its
+   RAII guard normally, and a later acquisition/restoration test proves no stranded lock or value.
+   Proceeding without the lock, swallowing acquisition failure, sleeps, readiness retries, or
+   global single-thread forcing is forbidden.
+3. All 66 library-test-process mutators are inventoried. Sixty-one noncompliant call sites migrate
+   in the exact seven-file table above. Four world-gateway RAII calls and one async-REPL call
+   already use `world_env_guard` with exact panic-safe restoration and remain source-reviewed unchanged.
+   Stable readers invoked by those tests stay inside the same boundary. Shell integration tests
+   only configure child `Command` environments in separate test processes; cross-process locking
+   is neither required nor authorized.
+4. Exact proof includes prior value and absence restoration, non-Unicode prior state on Unix,
+   panic restoration and later reacquisition, nested stack restoration, concurrent blocking until
+   cleanup/restoration, no competitor-socket observation, and no leaked socket/process/temp root.
+   The exact pair runs at least 100 times with `--test-threads=2` and 20 times with
+   `--test-threads=1`, with zero failures, readiness errors, or deadlocks. Neighboring mutator
+   combinations and the deliberate retained-registration conflicting-child parent also pass.
+5. Broad proof is at least three independent canonical default-parallel shell walls and one
+   canonical single-thread shell wall. Failure names and normalized signatures are identical;
+   no test is removed, renamed, substituted, weakened, ignored, or made environment-authoritative.
+   Added passing F0 tests have an explicit count delta. F0 closeout records the deterministic
+   post-F0 comparison baseline that alone authorizes F.
+6. Production `std::env` readers, world-socket resolution, readiness, retries, policies,
+   capabilities, world-service behavior, retained-worker state, and credential transport are
+   frozen. F0 does not claim general Unix process-environment safety or alter any production byte.
+   A required production change stops as `CrossDocumentChangeRequired`.
+
 R2-2F's binding contract is exact:
 
-F is the **exact next authorized increment**, but it is not active or implemented. It starts from
-the post-closeout replayed-E source commit and tree recorded by the dedicated replay-preservation
-ref and completion checkpoint: original E's exact runtime patch replayed above the published
-six-file docs correction. Routes A–E are immutable prior evidence. Its clean comparison baseline is
-the **current post-E and F comparison baseline**, `1114 passed / 149 failed / 0 ignored`, not the
-**R2-2 historical starting baseline**, `1089 passed / 149 failed`, or the **clean Route D comparison
-baseline**, `1101 passed / 149 failed / 0 ignored`. A renewed production-fix-free Routes A–F
+F is the **exact next increment after F0**, but it is not active or implemented. It starts from
+the post-F0-closeout replayed runtime commit and tree recorded by the dedicated preservation ref
+and completion checkpoint. Routes A–E and F0 are immutable prior evidence. Its clean comparison
+baseline is the deterministic post-F0 value recorded by F0 closeout, not either genuine but
+nondeterministic post-E observation (`1114 passed / 149 failed / 0 ignored` or `1113 passed / 150
+failed / 0 ignored`), the **R2-2 historical starting baseline** (`1089 passed / 149 failed`), or the
+**clean Route D comparison baseline** (`1101 passed / 149 failed / 0 ignored`). A renewed
+production-fix-free Routes A–F
 integration closeout follows F; R2-3, R2-4, and R3 remain after that and are unstarted.
 
 1. Normal current, global, workspace, runtime, provision-deps, and post-sync paths receive the one
@@ -971,11 +1021,11 @@ nonmutation; current applied/show probes; apt/pacman/runtime installs; manager p
 post-provision sync; direct no-witness and tamper failures before mutation; exact fixture/child
 identity; mixed-source rejection; truthful unavailable output; existing A-rooted snapshot behavior;
 explicit compatibility; disclosure scans; and non-Unix build/static preservation with no A-bound
-success claim. The broad comparison is against `1114 passed / 149 failed / 0 ignored` and requires
+success claim. The broad comparison is against F0's deterministic post-F0 F baseline and requires
 zero pass-to-fail, new-fail, changed-failure, removed, renamed, substituted, weakened, or newly
 ignored tests plus the identical retained 149-name failure set.
 
-The binding stop conditions for both increments are: any file/symbol outside `03`'s exact allowlist;
+The binding stop conditions for E, F0, and F are: any file/symbol outside `03`'s exact allowlist;
 any new resolver or side table; any edit to a frozen HIGH/CRITICAL builder; any change to another
 shared caller, network meaning, request schema, service, lower platform adapter, capability,
 credential lifecycle, cleanup, or deletion; any mutation before validation; any mixed-authority

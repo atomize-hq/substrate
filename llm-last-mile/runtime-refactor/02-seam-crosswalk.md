@@ -302,23 +302,35 @@ may make the later target unambiguous but may not perform, authorize, or define 
 | PI-118 | `DiagnosticProjection` | after PI-090 constructs and principal-binds IH, `run_shim` migrates from `LegacyAmbientCompatibility` to the explicit product-bound trace projection before manager, policy, span, telemetry, or execution logging. Policy/logger then reuse A and policy Git reads only A. Joined with the already-frozen PI-091 replay/platform call-site migration, R2-3 removes or makes unreachable the temporary compatibility posture and proves the final global unbound-`init_trace(None)` failure rule. The neutral setter remains a registration primitive and no caller-identity side table is permitted. Trace lifecycle bodies remain PI-117-frozen; R2 | shim `exec/mod.rs`, `exec/policy.rs`, and `logger.rs` trace binding/reuse; already-frozen replay/platform call sites under PI-091; `trace/context.rs` and `trace/util.rs` only for compatibility-posture removal/final unbound rule after all owned callers migrate; common additive representation is PI-117 | R2-SHIM-01/R2-DIAG-01; native Linux plus unchanged-to-migrated shim/replay/platform differential and static/native platform assignments | R2-3 |
 
 The remaining-seam ownership is singular: PI-111's R2-2E clause is complete and remains owned only
-by R2-2E; the unresolved production parts of PI-106 and PI-107 belong only to R2-2F. PI-108's Route D fixture/carrier mechanics remain
+by R2-2E; the unresolved production parts of PI-106 and PI-107 belong only to R2-2F. F0 owns no
+production inventory item or architecture seam: it is the bounded test-proof prerequisite described
+below. PI-108's Route D fixture/carrier mechanics remain
 review-clean, while F adds constituent identity validation without reopening those mechanics. No
 row is transferred to R2-3 because a compatibility caller exists. R2-3 retains physical-shim,
 replay/global-trace, platform-native mapping, and ambient compatibility migration; R2-4 retains
 privileged joined product proof; R3 retains deletion, rollback, replacement cleanup, recursive or
 wildcard removal, service/helper/socket cleanup, ownership manifests, account-state restoration,
-crash cleanup, and uninstall convergence. The resulting inventory DAG is Routes A–D → R2-2E →
+crash cleanup, and uninstall convergence. The resulting inventory DAG is Routes A–E → R2-2F0 →
 R2-2F → R2-2 integration closeout → R2-3 → R2-4 → R3.
 The E/F authenticated success claim is Unix/Linux-only. macOS, Windows, fallback, and other
 non-Unix compatibility paths remain explicitly unproven R2-3 ownership; build/static preservation
 or unavailable/fail-closed output is not A-bound product proof.
 
-R2-2F is the exact next authorized increment. It starts from the post-closeout replayed-E source
-head and uses `1114 passed / 149 failed / 0 ignored` as the **current post-E and F comparison
-baseline**, with Routes A–E immutable. The distinct **R2-2 historical starting baseline** remains
-`1089 passed / 149 failed`, and the distinct **clean Route D comparison baseline** remains
-`1101 passed / 149 failed / 0 ignored`. Renewed R2-2 integration closeout follows F.
+R2-2F0 is the exact next authorized prerequisite. It starts from the post-closeout replayed-E source
+head and changes only test-compiled world-socket isolation. The post-E `1114 passed / 149 failed / 0
+ignored` result is genuine but nondeterministic before F0; the same source can produce `1113 passed /
+150 failed / 0 ignored`. F0 must establish the deterministic F comparison baseline, with Routes A–E
+immutable. The distinct **R2-2 historical starting baseline** remains `1089 passed / 149 failed`, and
+the distinct **clean Route D comparison baseline** remains `1101 passed / 149 failed / 0 ignored`.
+R2-2F follows F0; renewed R2-2 integration closeout follows F.
+
+### F0 test-proof prerequisite crosswalk
+
+| Scope | Current state | Required F0 boundary | Exact source disposition | Required proof |
+|---|---|---|---|---|
+| Shell library-test process | Sixty-six test-time world-socket mutators exist. Fifty-one orchestrator call sites use a local guard or manual restoration; four macOS platform tests use an unlocked closure helper; two persistent-session and two routing tests mutate directly; one world-enable path test restores manually. Of five world-gateway calls, four use an exact RAII environment guard while one classification-test closure restores only after normal return; one async-REPL call is already compliant. | One RAII world-socket guard uses `world_env_guard`, captures exact `OsString`/absence, restores before unlock during normal return and unwinding, safely supports same-thread nesting, and relies on non-poisoning `parking_lot::ReentrantMutex` behavior. Every noncompliant mutator migrates; stable readers participate through the same lock. | Test-only hunks in `crates/shell/src/execution/mod.rs`, `crates/shell/src/execution/orchestrator_world_dispatch.rs`, `crates/shell/src/execution/platform/macos.rs`, `crates/shell/src/execution/routing/dispatch/world_persistent_session.rs`, `crates/shell/src/execution/routing/world.rs`, `crates/shell/src/builtins/world_enable/runner/paths.rs`, and the classification-test helper/call in `crates/shell/src/builtins/world_gateway.rs`. Four world-gateway RAII sites and the async-REPL site are source-reviewed and unchanged. | Exact pair 100 parallel/20 serial; prior value/absence, panic, non-poisoning recovery, nesting, blocking/cleanup, no competitor observation; neighboring parallel combinations; three default-parallel broad walls and one serial wall with stable inherited names/signatures. |
+| Shell integration-test binaries and subprocess fixtures | `Command::env`/`env_remove` configure only the spawned child; each integration source is a separate test binary. | Preserve process-local child injection. No cross-process lock or production environment change. | No integration-test migration unless later source evidence proves an in-process mutation. | Inventory validation and unchanged integration behavior. |
+| Production readers and socket resolution | Product code reads the process environment under existing compatibility contracts. | Frozen. F0 does not claim general Unix process-environment safety and does not alter production resolution or readiness. | No production symbol edit, capability change, retry, sleep, or readiness relaxation. | GitNexus containment to test dependents and byte-identical production paths. |
 
 PI-082's dedicated bootstrap action corrects only the command trigger for the already-owned
 explicit-context private-home edge. It does not add a new inventory edge or transfer world-deps
@@ -489,7 +501,7 @@ being projected into HostSessionAuthority truth. Physical ACL-xattr absence woul
 separately approved privileged platform-attestation boundary; R1 neither implies nor adds one.
 The bounded R1 implementation and reviews are clean; R2-0 planning and R2-1 implementation are
 complete, while R2-2 Routes A–D remain individually review-clean and R2-2E is implementation-,
-proof-, and review-complete. R2-2F is next; renewed closeout, R2-3/R2-4/R3 remain unstarted, and the R1 evidence does
+proof-, and review-complete. R2-2F0 is next and F follows it; renewed closeout, R2-3/R2-4/R3 remain unstarted, and the R1 evidence does
 not promote this seam, and all later lifecycle/product gates remain open.
 
 **A1.2a-WB/A1.2a-S closeout:** A1.2a-WB makes Start issuance, application/persistence, and exact
