@@ -4,6 +4,7 @@
 **Scope:** planning, contracts, sequencing, and proof gates; not implementation history
 **Source directive:** [`../../substrate-runtime-refactor-directive-revised.md`](../../substrate-runtime-refactor-directive-revised.md)
 **Repo-truth snapshot:** 2026-07-17 at `6ab2a515e13946324d0aac25b144e1c3408cb2c1`; re-check live code before every slice
+**Current authorized increment:** `A1.1d-5R2-2F — Authenticated world-deps and truthful doctor composition`; R2-2E is implementation-, proof-, and review-complete, while R2-2 remains incomplete.
 
 ## Canonical repo location
 
@@ -84,6 +85,11 @@ Keep this split explicit in every D1, D3, or E3 context capsule:
 - The managed in-world gateway auth carrier is a landed positive primitive: `world-service` creates a validated `GatewayAuthBundleV1` pipe handoff, launches `substrate-gateway` with `SUBSTRATE_LLM_AUTH_BUNDLE_FD`, scrubs raw secret env vars, and the gateway consumes and validates the bundle once.
 - Direct world Codex/member execution still uses the isolated seed-home compatibility bridge. It is not yet consistently pointed at the managed gateway with a per-worker, Substrate-owned `CODEX_HOME`/`config.toml` projection derived from accepted policy and logical config.
 - Therefore, do not rebuild or describe the secure-FD carrier as missing. Preserve it under `RG-CONFIG-03`. The unresolved adoption/projection seam is `RG-CONFIG-04`, and the complete world-Codex path remains below `ContractCorrectAndProven` until production-path smoke/e2e closes that gate.
+
+R2-2E did not change that split. The managed gateway secure-FD path is landed, regression-proven,
+and unchanged by R2-2E. Direct-member Codex/UAA gateway adoption remains unresolved transitional
+compatibility, is non-promotable, and stays owned by E3/D1/D3. `RG-CONFIG-02`, `RG-CONFIG-04`,
+`RG-UAA-02`, and `RG-UAA-03` remain open.
 
 ## Semantic status labels
 
@@ -205,8 +211,9 @@ implemented and review-clean through `4d0acff68e20d86b97fe5367b8a4617554f33ef4`.
 `2653c2ef20ae2e119a444811e6fb46e86d1a6ec6`.** R2 remains sequenced as
 **R2-1 → R2-2 Routes A–D → R2-2E → R2-2F → R2-2 integration closeout → R2-3 → R2-4**,
 followed by R3. Routes A–D are individually review-clean, but the failed integration closeout proved
-that R2-2 is incomplete and unpublished. R2-2E, R2-2F, renewed R2-2 closeout, R2-3, R2-4, and R3
-are unstarted. Until the
+that R2-2 is incomplete and unpublished. R2-2E is now implementation-, proof-, and review-complete;
+R2-2F is the exact next authorized increment. Renewed R2-2 closeout, R2-3, R2-4, and R3 remain
+unstarted. Until the
 remaining implementation packets are review-clean and their Linux lifecycle/product smoke passes,
 both A1.1d Linux closeout and only the Linux product-smoke portion of the B1/B2.1 joint closeout
 remain blocked. B1 receipt and B2.1 supervisor semantics did not regress, and native macOS A1.1d
@@ -247,8 +254,8 @@ runtime by `4d0acff68e20d86b97fe5367b8a4617554f33ef4`. `RG-HOME-01` and `RG-INST
 A1.1d and A1 remain incomplete, B3.1 remains blocked, and the R2 packets/R3 remain separately
 owned; R2-1 is complete and R2-2 is in progress through review-clean Routes A, B, C, and D. The
 failed Routes A–D integration closeout is blocker evidence rather than a completed packet; R2-2E is
-the only authorized next implementation increment, and R2-2F, renewed closeout, R2-3/R2-4/R3 remain
-unstarted. Static macOS/Windows
+implementation-, proof-, and review-complete, R2-2F is the only authorized next implementation
+increment, and renewed closeout, R2-3/R2-4/R3 remain unstarted. Static macOS/Windows
 inspection in R2-0 is not native platform proof.
 
 R2-1 implements the 19 owned rows PI-001–PI-004, PI-010–PI-011, PI-032–PI-034, PI-061–PI-063,
@@ -259,10 +266,12 @@ replay, world-deps production, lifecycle behavior, or any later packet owner.
 
 The active planning packet remains **A1.1d-5R2-2 — Unix release, sudo, Linux service, and runtime
 propagation**. Routes A–D remain individually review-clean at their final replayed commits
-`9393a140717a2ffef738ecc4a33cf5c4d28b6c06`,
-`513e4b40ab06080cb497b8d240fa061618e7448e`,
-`3e95804c35f36d7f52684dad3baacebdffedbd7f`, and
-`7a3e6ee424e726e3600d39e40b64df2d02cfff73`; none is reopened by this correction. Route B retains
+`3bf59b30e4c7348b8ff6315e3eb3658d74af2552`,
+`1b5219d5c7471f492865ab55e4efc0d1ab0cac49`,
+`0290b829ebaf222fcdc942678178a5e4545de62c`, and
+`6452d3a0650df4075c3ef720bad37920a8e5859d`; none is reopened by this correction. Their named
+preservation branches retain patch-equivalent reviewed commits, with Route D's replay preservation
+pointing at the listed commit exactly. Route B retains
 exact ordinary/binary patch SHA-256
 `28e6b9da35f96b5f93c49369cbde0eda77e9a145b54f9c412bae8e5a83871674` across its reviewed six
 files. Route C remains preserved by branch
@@ -299,23 +308,34 @@ constituents came from ambient B. The source branch therefore remains unpublishe
 `RG-HOME-01` plus `RG-INSTALL-01` remain open.
 
 Two bounded increments close those remaining seams. **A1.1d-5R2-2E — Authenticated world-gateway
-projection** owns PI-111 and establishes the single explicit config/policy/network projection
+projection** owns PI-111 and has established the single explicit config/policy/network projection
 path: existing explicit-bootstrap-home config and effective-policy owners remain unchanged, while
 `execution/policy_snapshot.rs` adds only the sole explicit-bootstrap-home policy-snapshot/network-
-policy entrypoint. Gateway credentials remain launch-time handoff and network allow/deny semantics
-do not change. **A1.1d-5R2-2F — Authenticated world-deps and truthful
+policy entrypoint. Its implementation/proof clause is complete at
+`7e8e83802885c0ece93efcaacccc26503eeb6715`, tree
+`02a1a2f6b7e4be47ed9ec38537c805ae348c96b6`, ordinary patch
+`fb7b65b02cdac46857750b64ebd5ceab651e8e99910c05240b187c3e729444ff`, and full-index binary
+patch `c712f467ac92efb0de7b524272479741ac6b318201cf45dbd994116ec0e8b862`, preserved at
+`feat/preserve-a1-1d-5r2-2e-c712f467`. Gateway credentials remain launch-time handoff and network
+allow/deny semantics do not change. **A1.1d-5R2-2F — Authenticated world-deps and truthful
 doctor composition** owns the unresolved PI-106/PI-107 production paths, one shared typed
 world-deps context, authenticated runtime-request construction, and constituent-coherence
 validation. Mixed A/B diagnostics fail closed or report unavailable/incoherent, never healthy
 A-bound truth. The exact sequence is **Routes A–D → R2-2E → R2-2F → renewed R2-2 integration
 closeout → R2-3 → R2-4 → R3**. E and F are logically separable but use this deterministic order so
 F can reuse E's canonical projection entrypoint without overlapping ownership. No seam is promoted,
-and this docs-only correction begins neither implementation increment. The authenticated guarantees
+and this docs-only correction begins no runtime increment. The authenticated guarantees
 are bounded to the Unix/Linux route in the reviewed allowlists. macOS, Windows, fallback, and other
 non-Unix compatibility paths remain R2-3-owned and unproven; they either report unavailable/fail
 closed before an A-bound claim or retain explicitly labeled ambient compatibility that cannot
 satisfy E/F. Non-Unix cfg proof means build/static preservation only, never authenticated product
 proof.
+
+Baseline terms are intentionally distinct. The **R2-2 historical starting baseline** is
+`1089 passed / 149 failed`; the **clean Route D comparison baseline** is
+`1101 passed / 149 failed / 0 ignored`; and the **current post-E and F comparison baseline** is
+`1114 passed / 149 failed / 0 ignored`. R2-2F and its proof wall compare against the third value;
+neither it nor the renewed closeout may overwrite the two historical values.
 
 B1/B2.1-R0 lets RetainedWorkerRuntime create the immutable retained object graph and requires
 HostSessionAuthority first to reserve the ingress idempotency key, validate the exact participant

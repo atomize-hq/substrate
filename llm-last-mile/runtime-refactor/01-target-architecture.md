@@ -423,10 +423,10 @@ adapters.
 
 Routes A–D are individually review-clean, but they do not exhaust the authenticated-context path.
 The failed R2-2 integration closeout found two remaining projection seams and one diagnostic
-composition invariant. They are implemented only in the deterministic order R2-2E, R2-2F, then a
-renewed Routes A–F integration closeout.
+composition invariant. R2-2E is now implementation-, proof-, and review-complete; R2-2F is the
+exact next authorized increment, followed by a renewed Routes A–F integration closeout.
 
-R2-2E makes world-gateway projection a pure consumer of already-authenticated A. The shell world
+R2-2E makes world-gateway projection a pure consumer of already-authenticated A. The landed shell world
 entry validates A before disabled/unavailable classification, then supplies it to one request-scoped
 gateway context. Configuration and effective policy use their existing explicit-bootstrap-home
 resolvers; `execution/policy_snapshot.rs` remains the sole policy-snapshot owner and adds the one
@@ -448,7 +448,17 @@ not native or authenticated product proof. Existing network allow/deny meaning, 
 service behavior, and launch-time
 gateway credential handoff do not change, and no host credential file becomes durable authority.
 
-R2-2F creates one request-scoped `AuthenticatedWorldDepsContextV1` (or equivalently named typed
+The exact landed E evidence is commit `7e8e83802885c0ece93efcaacccc26503eeb6715`, tree
+`02a1a2f6b7e4be47ed9ec38537c805ae348c96b6`, ordinary/full-index patch identities
+`fb7b65b02cdac46857750b64ebd5ceab651e8e99910c05240b187c3e729444ff` and
+`c712f467ac92efb0de7b524272479741ac6b318201cf45dbd994116ec0e8b862`. This completes only
+PI-111's R2-2E implementation/proof clause. The managed gateway secure-FD path is landed,
+regression-proven, and unchanged by E; direct-member Codex/UAA gateway adoption remains unresolved,
+transitional, non-promotable, and E3/D1/D3-owned. R2-2 itself remains incomplete, and no target seam
+is promoted.
+
+R2-2F, when started as the next authorized increment, creates one request-scoped
+`AuthenticatedWorldDepsContextV1` (or equivalently named typed
 value) from the already-validated install context. It holds A's trusted bootstrap home/root,
 non-secret commitment, explicit launch CWD/workspace scope, effective configuration and policy,
 global config/deps paths, and the authenticated runtime-request projection. Normal current, global,
@@ -474,6 +484,13 @@ does not edit their platform adapters and they do not receive this authenticated
 preserve explicitly labeled ambient compatibility or report unavailable/fail closed, but cannot
 claim coherent A-bound truth or satisfy F acceptance. Non-Unix cfg coherence means build/static
 preservation and no A-bound success claim.
+
+F begins from the post-closeout replayed-E source head and its dedicated replay-preservation ref.
+Its clean comparison value is the **current post-E and F comparison baseline** of
+`1114 passed / 149 failed / 0 ignored`; that value is distinct from both the **R2-2 historical
+starting baseline** of `1089 passed / 149 failed` and the **clean Route D comparison baseline** of
+`1101 passed / 149 failed / 0 ignored`. Routes A–E are immutable prior evidence for F, and renewed
+R2-2 integration closeout remains after F.
 
 A physical symlink shim recovers A from an explicit invocation pathname or exactly one matching
 no-follow candidate when bare `argv[0]` requires absolute-PATH enumeration. PATH order has no

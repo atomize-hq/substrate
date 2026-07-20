@@ -833,14 +833,16 @@ source paths and symbols, unchanged owner/family set, exact manifest/patch, mapp
 and fresh read-only semantic review. A new execution family, authority owner, module, resolver,
 schema, or R2-3 behavior requires a cross-document stop.
 
-#### R2-2 remaining-seam source closure and contracts
+#### R2-2 source closure, E closeout, and remaining F contract
 
-The failed Routes A–D integration closeout established that those four routes are individually
-review-clean but do not close every authenticated-context consumer. R2-2 stays incomplete and
-unpublished. The following table is the reviewed source-closure boundary for the only two remaining
-implementation increments; brace groups are exact symbol sets, not file wildcards.
+The failed Routes A–D integration closeout established that those four routes were individually
+review-clean but did not close every authenticated-context consumer. R2-2E has since implemented and
+proved the gateway projection without changing Routes A–D; all five routes are individually
+review-clean. R2-2 stays incomplete pending F and the renewed integration closeout. The following
+table preserves E's reviewed historical source-closure boundary and freezes F's remaining boundary;
+brace groups are exact symbol sets, not file wildcards.
 
-| Increment | File | Symbol | Current authority | Required carrier | Callers | Process family | Platform cfg | GitNexus risk | Inventory ID | Test | Proposed allowlist status |
+| Increment | File | Symbol | Pre-increment authority | Required carrier | Callers | Process family | Platform cfg | GitNexus risk | Inventory ID | Test | Reviewed allowlist disposition |
 |---|---|---|---|---|---|---|---|---|---|---|---|
 | R2-2E | `crates/shell/src/execution/platform/mod.rs` | `handle_world_command` Gateway arm | typed carrier arrives but is dropped | already-authenticated A/request context | `ShellConfig::from_cli` | shell World dispatch | Unix authenticated; non-Unix fails before ambient selection | LOW; manual arm closure | PI-111 | `world_gateway.rs`; `agent_successor_contract_ahcsitc0.rs` | EDIT arm only |
 | R2-2E | `crates/shell/src/builtins/world_gateway.rs` | `GatewayLifecycleRequestContext`; `run`; `run_inner`; `run_typed_action_with_status_args`; `run_typed_action`; `call_gateway_action`; `build_gateway_request_context` | ambient config/policy/network/inventory and pre-validation disabled routing | one validated A-derived gateway context | World Gateway status/sync/restart | gateway lifecycle | all; cfg clients below | LOW; struct one direct/five total | PI-111 | colocated; `world_gateway.rs` | EDIT |
@@ -885,7 +887,62 @@ fail-before-mutation/forwarding/launch; disabled-routing validation; disclosure 
 network allow/deny behavior; Linux fixed socket; macOS/Windows/other fail-before-ambient selection;
 and non-Unix build/static cfg preservation without an A-bound/native proof claim.
 
+R2-2E is now **implemented, proof-complete, review-clean, committed, and preserved** with this exact
+evidence:
+
+- commit `7e8e83802885c0ece93efcaacccc26503eeb6715`; tree
+  `02a1a2f6b7e4be47ed9ec38537c805ae348c96b6`; ordinary patch SHA-256
+  `fb7b65b02cdac46857750b64ebd5ceab651e8e99910c05240b187c3e729444ff`; full-index patch SHA-256
+  `c712f467ac92efb0de7b524272479741ac6b318201cf45dbd994116ec0e8b862`; preservation branch
+  `feat/preserve-a1-1d-5r2-2e-c712f467`;
+- exact manifest: `crates/shell/src/execution/platform/mod.rs`,
+  `crates/shell/src/builtins/world_gateway.rs`,
+  `crates/shell/src/execution/agent_inventory.rs`,
+  `crates/shell/src/execution/policy_snapshot.rs`, and `crates/shell/tests/world_gateway.rs`;
+- changed ownership is confined to the Gateway arm's authenticated binding, the existing gateway
+  request/projection call chain, additive explicit-bootstrap-home inventory and network projection,
+  and its tests. The sole deleted symbol is
+  `synthesized_unavailable_response_without_context`; canonical config/policy resolver ownership,
+  network allow/deny meaning, and Routes A–D bytes are unchanged;
+- focused results: gateway classification 13/13; config resolution 21/21; effective policy 14/14;
+  policy snapshot/network 10/10; inventory 17/17; install-bootstrap context 8/8; explicit
+  `HostSessionAuthority` composition 1/1; new integration negatives 3/3; managed auth bundle 7/7;
+  world-service gateway runtime 32/32; gateway receiver/server 18/18;
+- the **clean Route D comparison baseline** is `1101 passed / 149 failed / 0 ignored`; final E is
+  the **current post-E and F comparison baseline**, `1114 passed / 149 failed / 0 ignored`.
+  `PassToFail=0`, `NewFail=0`, `FailToChangedFailure=0`, and `FailToPass=0`; the 149 failure-name set
+  is identical, with only the recorded nondeterministic orchestration identifiers normalizing. The
+  non-reproducible parallel retained-member-stream failure is a historical observation, neither a
+  success nor a regression;
+- final GitNexus output is semantically contained to the approved owners and existing process
+  families. Its aggregate CRITICAL adjacency is diagnostic over-attribution; each exact edited
+  existing symbol was LOW, and no new process family, resolver owner, schema, or capability was
+  introduced;
+- final isolated read-only reviewers `e_final_gateway_authority`, `e_final_policy_network`,
+  `e_final_credential_boundary`, and `e_final_platform_regression_replacement` returned CLEAN. The
+  original platform reviewer is excluded because it violated the required read-only process;
+- Linux fixed-socket and regression proof is complete. macOS fails before ambient client/forwarding
+  selection, while Windows/other entries fail before ambient selection; static cfg preservation is
+  recorded, but no native macOS/Windows or privileged R2-4 product proof is claimed.
+
+PI-111's **R2-2E implementation/proof clause only** is complete. This does not close the full
+gateway credential/config architecture: the managed-gateway secure-FD producer, receiver, bundle
+schema, and lifecycle are landed, regression-proven, and unchanged by E, while direct-member
+Codex/UAA gateway adoption remains unresolved, transitional compatibility, non-promotable, and
+owned by E3/D1/D3. `RG-CONFIG-02`, `RG-CONFIG-04`, `RG-UAA-02`, and `RG-UAA-03` remain open and
+unchanged. E changes no user/world capability, policy meaning, credential transport, or service
+lifecycle and promotes no seam.
+
 R2-2F's binding contract is exact:
+
+F is the **exact next authorized increment**, but it is not active or implemented. It starts from
+the post-closeout replayed-E source commit and tree recorded by the dedicated replay-preservation
+ref and completion checkpoint: original E's exact runtime patch replayed above the published
+six-file docs correction. Routes A–E are immutable prior evidence. Its clean comparison baseline is
+the **current post-E and F comparison baseline**, `1114 passed / 149 failed / 0 ignored`, not the
+**R2-2 historical starting baseline**, `1089 passed / 149 failed`, or the **clean Route D comparison
+baseline**, `1101 passed / 149 failed / 0 ignored`. A renewed production-fix-free Routes A–F
+integration closeout follows F; R2-3, R2-4, and R3 remain after that and are unstarted.
 
 1. Normal current, global, workspace, runtime, provision-deps, and post-sync paths receive the one
    shared authenticated context. A selects global config/inventory/dependency roots; explicit launch
@@ -914,7 +971,9 @@ nonmutation; current applied/show probes; apt/pacman/runtime installs; manager p
 post-provision sync; direct no-witness and tamper failures before mutation; exact fixture/child
 identity; mixed-source rejection; truthful unavailable output; existing A-rooted snapshot behavior;
 explicit compatibility; disclosure scans; and non-Unix build/static preservation with no A-bound
-success claim.
+success claim. The broad comparison is against `1114 passed / 149 failed / 0 ignored` and requires
+zero pass-to-fail, new-fail, changed-failure, removed, renamed, substituted, weakened, or newly
+ignored tests plus the identical retained 149-name failure set.
 
 The binding stop conditions for both increments are: any file/symbol outside `03`'s exact allowlist;
 any new resolver or side table; any edit to a frozen HIGH/CRITICAL builder; any change to another

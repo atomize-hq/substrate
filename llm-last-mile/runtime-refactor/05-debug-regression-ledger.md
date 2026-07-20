@@ -528,7 +528,7 @@ phase and a six-file structure, relative-link, table, fence, gate, sequence, and
 cross-check. The security skill's missing supplemental checklist is replaced by the complete
 embedded security checklist. These substitutions do not weaken any gate.
 
-### R2-2 failed integration closeout and remaining-seam correction
+### R2-2 historical failed integration closeout and remaining-seam correction
 
 The integration attempt began from source branch
 `feat/internal-host-orchestrator-world-dispatch-bootstrap` at Route D commit
@@ -538,15 +538,17 @@ The integration attempt began from source branch
 `A1.1d-5R2-2 cross-document change required`. No integration runtime commit, closeout documentation
 commit, runtime push, seam promotion, or R2-3/R2-4/R3 implementation followed Route D.
 
-Routes A–D remain individually review-clean and preserved. Their final commits and ordinary/full-
-index binary patch SHA-256 pairs are:
+Routes A–D remain individually review-clean and preserved. Their current pre-E replay commits and
+ordinary/full-index binary patch SHA-256 pairs are below. The named preservation branches retain
+patch-equivalent reviewed commits; Route D's replay preservation points at the listed commit
+exactly.
 
-| Route | Final commit | Ordinary patch | Full-index binary patch | Preservation branch |
+| Route | Current pre-E replay commit | Ordinary patch | Full-index binary patch | Equivalent preservation branch |
 |---|---|---|---|---|
-| A | `9393a140717a2ffef738ecc4a33cf5c4d28b6c06` | `1d04e54cabc705b2070b9d104e779278b79723602c24488246b310c1fa32fe7d` | `649004caed540970b72d265c44b9f05b1c0370175bd1c83aaa1c86d8443e78b9` | `feat/preserve-a1-1d-5r2-2-route-a-successor-1d04e54c` |
-| B | `513e4b40ab06080cb497b8d240fa061618e7448e` | `28e6b9da35f96b5f93c49369cbde0eda77e9a145b54f9c412bae8e5a83871674` | `671d7f35d1d988b920863198f45cd94be0c2eb53fcd2ef9d94357e68f2d365e1` | `feat/preserve-a1-1d-5r2-2-route-b-security-reviewed-28e6b9da` |
-| C | `3e95804c35f36d7f52684dad3baacebdffedbd7f` | `7c5a908a6760244d9ad6922dfcf7e944cfce3c723d994e279a3aeaded7a8ffa0` | `5b436d5dfeaf6e513cbaa306de65848cbe3d5b003fa8c00589be09e54b630277` | `feat/preserve-a1-1d-5r2-2-route-c-final-5b436d5d` |
-| D | `7a3e6ee424e726e3600d39e40b64df2d02cfff73` | `278a679060d79dbf6c2728fda65122e9bb5b4b5d92384f8c1ea69dac57a8241b` | `7be7a562b983d42c57466818428df98e53f1e36eb38e985653ee4e5eea578f97` | `feat/preserve-a1-1d-5r2-2-route-d-final-278a6790` |
+| A | `3bf59b30e4c7348b8ff6315e3eb3658d74af2552` | `1d04e54cabc705b2070b9d104e779278b79723602c24488246b310c1fa32fe7d` | `649004caed540970b72d265c44b9f05b1c0370175bd1c83aaa1c86d8443e78b9` | `feat/preserve-a1-1d-5r2-2-route-a-successor-1d04e54c` |
+| B | `1b5219d5c7471f492865ab55e4efc0d1ab0cac49` | `28e6b9da35f96b5f93c49369cbde0eda77e9a145b54f9c412bae8e5a83871674` | `671d7f35d1d988b920863198f45cd94be0c2eb53fcd2ef9d94357e68f2d365e1` | `feat/preserve-a1-1d-5r2-2-route-b-security-reviewed-28e6b9da` |
+| C | `0290b829ebaf222fcdc942678178a5e4545de62c` | `7c5a908a6760244d9ad6922dfcf7e944cfce3c723d994e279a3aeaded7a8ffa0` | `5b436d5dfeaf6e513cbaa306de65848cbe3d5b003fa8c00589be09e54b630277` | `feat/preserve-a1-1d-5r2-2-route-c-final-5b436d5d` |
+| D | `6452d3a0650df4075c3ef720bad37920a8e5859d` | `278a679060d79dbf6c2728fda65122e9bb5b4b5d92384f8c1ea69dac57a8241b` | `7be7a562b983d42c57466818428df98e53f1e36eb38e985653ee4e5eea578f97` | `feat/preserve-a1-1d-5r2-2-route-d-replayed-6452d3a0` |
 
 The stopped tree also contained four reviewed comment-only ShellCheck remediations: eleven inserted
 `# shellcheck disable=SC2034` comments, no deletion or semantic token/command/variable/control-flow/
@@ -558,7 +560,7 @@ this correction at commit `90ff6056195207598a2d77358f5206b1d5385700` on remote b
 `tests/installers/{prefix_propagation_r2_2.sh,world_provision_smoke.sh}`. They remain renewed-closeout
 WIP and are not part of R2-2E, R2-2F, or this docs patch.
 
-The closeout blockers are exact:
+At that historical closeout, the blockers were exact:
 
 1. PI-111: `world_gateway.rs` still used ambient config, broker policy, network-policy config,
    runtime-family inventory, Codex home, routing-disable toggles, and platform client selection.
@@ -588,11 +590,86 @@ shared ambient `build_agent_client_and_request` as HIGH and its trace-metadata v
 both are frozen. The earlier HIGH result for `resolve_current_inventory_view` is likewise a frozen
 reuse boundary. Counts are diagnostic; the exact symbol/caller/cfg tables are binding.
 
-R2-2E owns PI-111. R2-2F owns the unresolved PI-106/PI-107 production paths. Their required order is
-Routes A–D -> R2-2E -> R2-2F -> renewed R2-2 integration closeout -> R2-3 -> R2-4 -> R3. The
-renewed closeout is production-fix-free and reruns the entire Routes A–F wall. `RG-HOME-01` and
-`RG-INSTALL-01` remain open. No privileged, macOS, or Windows proof is claimed, and no seam is
-promoted.
+R2-2E's PI-111 implementation/proof clause is now complete. R2-2F owns the unresolved PI-106/PI-107
+production paths. Their required order remains Routes A–D -> R2-2E -> R2-2F -> renewed R2-2
+integration closeout -> R2-3 -> R2-4 -> R3. The renewed closeout is production-fix-free and reruns
+the entire Routes A–F wall. `RG-HOME-01` and `RG-INSTALL-01` remain open. No privileged, macOS, or
+Windows proof is claimed, and no seam is promoted.
+
+### A1.1d-5R2-2E authenticated gateway closeout
+
+R2-2E is **implemented, proof-complete, review-clean, committed, and preserved**. Its exact original
+runtime identity is:
+
+| Evidence | Exact value |
+|---|---|
+| Commit | `7e8e83802885c0ece93efcaacccc26503eeb6715` |
+| Tree | `02a1a2f6b7e4be47ed9ec38537c805ae348c96b6` |
+| Ordinary patch SHA-256 | `fb7b65b02cdac46857750b64ebd5ceab651e8e99910c05240b187c3e729444ff` |
+| Full-index patch SHA-256 | `c712f467ac92efb0de7b524272479741ac6b318201cf45dbd994116ec0e8b862` |
+| Preservation branch | `feat/preserve-a1-1d-5r2-2e-c712f467` |
+| Exact manifest | `crates/shell/src/execution/platform/mod.rs`; `crates/shell/src/builtins/world_gateway.rs`; `crates/shell/src/execution/agent_inventory.rs`; `crates/shell/src/execution/policy_snapshot.rs`; `crates/shell/tests/world_gateway.rs` |
+
+The owner/symbol delta is confined to the `handle_world_command` Gateway binding; the existing
+gateway request-context, validation, action, authentication, and client-selection chain; additive
+explicit-bootstrap-home inventory and network projection; and focused tests. Only
+`synthesized_unavailable_response_without_context` was deleted. Routes A–D are patch-identical;
+frozen direct-member surfaces, the managed-gateway secure-FD producer and receiver, its bundle
+schema, and its lifecycle are blob-identical to E's parent. Canonical config/policy resolver
+ownership remains unchanged.
+
+The resulting path is `handle_world_command` -> authenticated carrier validation -> trusted A
+root/principal binding -> canonical explicit config -> canonical effective policy -> canonical
+policy snapshot/network policy -> explicit inventory -> request construction -> fixed Linux gateway
+client. Config, effective policy, network policy, inventory, and committed account-home auth
+provenance use explicit A. Ambient HOME, XDG, CWD, `SUBSTRATE_HOME`, `SUBSTRATE_ROOT`, `CODEX_HOME`,
+`.codex`, `config.toml`, world toggles, and socket overrides cannot become authority; CWD remains
+explicit workspace scope only. Linux remains fixed to `/run/substrate.sock`; network allow/deny
+meaning, credential transport, gateway lifecycle, user/world capability, and policy meaning are
+unchanged. Compatibility is not promoted.
+
+Focused proof is exact: world-gateway classification 13/13; config resolution 21/21; effective
+policy 14/14; policy snapshot/network 10/10; inventory 17/17; install-bootstrap context 8/8;
+explicit `HostSessionAuthority` composition 1/1; new integration negatives 3/3; managed auth bundle
+7/7; world-service gateway runtime 32/32; gateway receiver/server 18/18.
+
+The three baseline terms remain distinct:
+
+1. **R2-2 historical starting baseline:** `1089 passed / 149 failed`.
+2. **Clean Route D comparison baseline:** `1101 passed / 149 failed / 0 ignored`.
+3. **Current post-E and F comparison baseline:** `1114 passed / 149 failed / 0 ignored`.
+
+The Route D-to-E differential has `PassToFail=0`, `NewFail=0`,
+`FailToChangedFailure=0`, and `FailToPass=0`, with the identical 149 failure-name set. After
+normalization, only the recorded nondeterministic orchestration identifiers differ. No test was
+removed, renamed, substituted, weakened, or newly ignored. The non-reproducible parallel
+retained-member-stream failure is retained only as a historical observation; it is counted as
+neither success nor regression.
+
+GitNexus final detection is semantically contained to the approved owners and existing process
+families: aggregate CRITICAL adjacency is diagnostic over-attribution, while exact edited existing
+symbols were LOW and no new resolver owner, schema, capability, or execution-process family was
+introduced. Final isolated read-only reviews `e_final_gateway_authority`,
+`e_final_policy_network`, `e_final_credential_boundary`, and
+`e_final_platform_regression_replacement` are CLEAN. The original platform reviewer is excluded
+because it violated the required read-only process.
+
+Linux fixed-socket and regression proof is recorded. macOS fails before client construction or
+ambient forwarding; Windows/other entries fail before ambient authority selection; non-Unix static
+cfg preservation is recorded. None is a native macOS/Windows product claim, and privileged product
+proof remains R2-4-owned.
+
+The managed-gateway secure-FD path is **landed, regression-proven, and unchanged by R2-2E**.
+Direct-member Codex/UAA gateway adoption is separately **unresolved, transitional compatibility,
+non-promotable, and owned by E3/D1/D3**. Accordingly `RG-CONFIG-02`, `RG-CONFIG-04`, `RG-UAA-02`,
+and `RG-UAA-03` remain open and unchanged. PI-111's R2-2E clause is complete, but the full gateway
+credential/config architecture is not.
+
+R2-2F is the exact next authorized increment and has not begun. It starts only from the
+post-closeout replayed-E runtime commit/tree recorded by the dedicated replay-preservation ref and
+completion checkpoint, with Routes A–E immutable and `1114 passed / 149 failed / 0 ignored` as its
+clean comparison baseline. The renewed R2-2 integration closeout remains after F. R2-3, R2-4, and
+R3 remain unstarted; R2-2 remains incomplete; no seam is promoted.
 
 For the Route A successor clause of `R2-RUNTIME-01`, the authorized Unix-only import cfg set also
 includes the policy test module's sole `tempfile::TempDir` import; no other import or module gate is
@@ -875,8 +952,9 @@ new version-nonmutation test passes.
 Focused transport, IH, R1 private-home/HostSessionAuthority, installer, script, shim
 deploy/status/doctor/health, trace, replay, and A/B suites passed. `cargo check --workspace
 --all-targets`, shell all-target warnings-denied Clippy, `cargo fmt --all -- --check`, Bash syntax,
-available ShellCheck, `git diff --check`, and GitNexus detection passed. The final broad shell run is
-**1089 passed / 149 failed / 1238 total** versus inherited **1080/149/1229**: `PassToFail = 0`,
+available ShellCheck, `git diff --check`, and GitNexus detection passed. The final broad shell run,
+which became the **R2-2 historical starting baseline**, is **1089 passed / 149 failed / 1238 total**
+versus inherited **1080/149/1229**: `PassToFail = 0`,
 `NewFail = 0`, no removed/substituted test, and all 149 retained normalized failure signatures are
 byte-identical after the already-audited dynamic orchestration-ID normalization
 (`c818c4f2c4acce52ea5cb057020419bb10dd871148bafcc38112f13437aba6e9`). Windows source-only
@@ -893,8 +971,8 @@ A1.1d, A1, the B1/B2.1 joint closeout, and B3.1 remain open; no seam is promoted
 
 At R2-1 closeout, the historical next packet was **A1.1d-5R2-2 — Unix release, sudo, Linux service,
 and runtime propagation**. Routes A–D have since become individually review-clean, their integration
-closeout failed source closure, and the live next increment is R2-2E. After the remaining increments
-are independently review-clean, rerun the complete Linux
+closeout failed source closure, and R2-2E has since become review-clean. The live exact next
+authorized increment is R2-2F. After F and the renewed closeout, rerun the complete Linux
 regression and normal product lifecycle smoke without outer overrides. That proof can unblock
 A1.1d Linux closeout and the Linux
 product-smoke portion of the B1/B2.1 joint closeout. Native macOS proof remains separately required
@@ -1535,9 +1613,9 @@ B1 receipt core recovered/review-clean: **yes**. B2.1 supervisor core recovered/
 **not begun**. B3.1 dependency-ready: **no**. Seam promotions: **none**. Within the B corridor, the
 next architectural packet remains the B1/B2.1 joint production integration closeout. At the
 B1/B2.1-0 closeout, the repository's exact next packet was A1.1d-5R2-1 — Host context construction
-and Unix dev propagation; after review-clean R2-2 Routes A–D and the failed integration closeout,
-the live next increment is **A1.1d-5R2-2E — Authenticated world-gateway projection**, followed by
-R2-2F, renewed R2-2 integration closeout, R2-3, R2-4, and R3. Only the joint closeout's Linux
+and Unix dev propagation; after review-clean R2-2 Routes A–E and the failed integration closeout,
+the live exact next authorized increment is **A1.1d-5R2-2F — Authenticated world-deps and truthful
+doctor composition**, followed by renewed R2-2 integration closeout, R2-3, R2-4, and R3. Only the joint closeout's Linux
 product-smoke portion waits for those remediations and their required smoke, and its receipt and
 supervisor semantics are not reopened.
 
