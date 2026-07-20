@@ -17,6 +17,7 @@ use std::thread;
 use std::time::{Duration, Instant};
 use substrate_shell::execution::{Cli, SubCommands, WorldAction, WorldGatewayAction};
 use tempfile::TempDir;
+use transport_api_types::{InstallBootstrapContextCarrierV1, InstallBootstrapContextV1};
 
 #[path = "support/socket.rs"]
 mod socket;
@@ -26,6 +27,117 @@ use socket::{AgentSocket, SocketResponse};
 const SOCKET_REQUEST_TIMEOUT: Duration = Duration::from_secs(30);
 const REGRESSION_FLOOR_BACKEND_ID: &str = "cli:codex-host";
 const FIRST_ADDITIONAL_BACKEND_ID: &str = "api:openai";
+
+#[test]
+fn world_gateway_missing_context_rejects_before_gateway_selection() {
+    let fixture = GatewayAuthFixture::new();
+    let forbidden_socket = fixture.workspace_root.join("must-not-connect.sock");
+    let listener = UnixListener::bind(&forbidden_socket).expect("bind forbidden gateway socket");
+    let output = fixture
+        .command()
+        .env("SUBSTRATE_WORLD_SOCKET", &forbidden_socket)
+        .args(["world", "gateway", "status", "--json"])
+        .output()
+        .expect("run contextless gateway command");
+
+    assert_eq!(output.status.code(), Some(2), "{output:?}");
+    assert!(output.stdout.is_empty());
+    let stderr = String::from_utf8_lossy(&output.stderr);
+    assert!(stderr.contains("installed-product invocation witness or --install-prefix is required"));
+    assert!(!stderr.contains(&forbidden_socket.display().to_string()));
+    listener
+        .set_nonblocking(true)
+        .expect("set forbidden listener nonblocking");
+    let err = listener
+        .accept()
+        .expect_err("contextless invocation must not construct or connect a gateway client");
+    assert_eq!(err.kind(), std::io::ErrorKind::WouldBlock);
+}
+
+#[test]
+fn world_gateway_environment_only_context_is_not_authority() {
+    let fixture = GatewayAuthFixture::new();
+    let uid = unsafe { libc::geteuid() };
+    let account_output = std::process::Command::new("id")
+        .args(["-nu", &uid.to_string()])
+        .output()
+        .expect("resolve current Unix account");
+    assert!(account_output.status.success());
+    let account = String::from_utf8(account_output.stdout)
+        .expect("UTF-8 Unix account")
+        .trim()
+        .to_string();
+    let carrier = InstallBootstrapContextCarrierV1::from_context(
+        InstallBootstrapContextV1::new_unix(
+            fixture
+                .substrate_home
+                .to_str()
+                .expect("UTF-8 selected prefix"),
+            &account,
+            uid,
+        )
+        .expect("environment-only context"),
+    )
+    .expect("environment-only carrier");
+    let encoded = carrier.encode().expect("encode carrier");
+
+    let output = fixture
+        .command()
+        .env("SUBSTRATE_INSTALL_BOOTSTRAP_CONTEXT_V1", &encoded)
+        .env(
+            "SUBSTRATE_INSTALL_HOST_CONTEXT_COMMITMENT",
+            &carrier.host_context_commitment,
+        )
+        .env("SUBSTRATE_INSTALL_PRIMARY_USER", &account)
+        .env("SUBSTRATE_INSTALL_PRIMARY_UID", uid.to_string())
+        .args(["world", "gateway", "status", "--json"])
+        .output()
+        .expect("run environment-only gateway command");
+
+    assert_eq!(output.status.code(), Some(2), "{output:?}");
+    assert!(output.stdout.is_empty());
+    let stderr = String::from_utf8_lossy(&output.stderr);
+    assert!(stderr.contains("installed-product invocation witness or --install-prefix is required"));
+    assert!(!stderr.contains(&encoded));
+    assert!(!stderr.contains(&account));
+}
+
+#[test]
+fn world_gateway_malformed_hidden_context_rejects_without_client_contact_or_disclosure() {
+    let fixture = GatewayAuthFixture::new();
+    let forbidden_socket = fixture
+        .workspace_root
+        .join("malformed-must-not-connect.sock");
+    let listener = UnixListener::bind(&forbidden_socket).expect("bind forbidden gateway socket");
+    let malformed = "malformed-gateway-carrier-must-not-leak";
+    let output = fixture
+        .command()
+        .env("SUBSTRATE_WORLD_SOCKET", &forbidden_socket)
+        .args([
+            "--install-bootstrap-context-v1",
+            malformed,
+            "world",
+            "gateway",
+            "status",
+            "--json",
+        ])
+        .output()
+        .expect("run malformed gateway carrier command");
+
+    assert_eq!(output.status.code(), Some(2), "{output:?}");
+    assert!(output.stdout.is_empty());
+    let stderr = String::from_utf8_lossy(&output.stderr);
+    assert!(stderr.contains("invalid install bootstrap context"));
+    assert!(!stderr.contains(malformed));
+    assert!(!stderr.contains(&forbidden_socket.display().to_string()));
+    listener
+        .set_nonblocking(true)
+        .expect("set forbidden listener nonblocking");
+    let err = listener
+        .accept()
+        .expect_err("malformed context must reject before gateway client contact");
+    assert_eq!(err.kind(), std::io::ErrorKind::WouldBlock);
+}
 
 fn short_socket_tempdir(prefix: &str) -> TempDir {
     tempfile::Builder::new()
