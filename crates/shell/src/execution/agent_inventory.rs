@@ -701,6 +701,10 @@ fn legacy_shadowed_agent_ids_from_v2(file: &AgentFileV2) -> Vec<String> {
     ]
 }
 
+#[allow(
+    dead_code,
+    reason = "ambient gateway inventory compatibility remains frozen until R2-3"
+)]
 pub(crate) fn resolve_gateway_backend_inventory_entry(
     cwd: &Path,
     backend_id: &str,
@@ -712,6 +716,54 @@ pub(crate) fn resolve_gateway_backend_inventory_entry(
         .split_once(':')
         .expect("validated backend id should contain a colon");
     let effective_inventory = load_effective_agent_inventory(cwd, base_policy)?;
+    let entry = effective_inventory.get(backend_name).ok_or_else(|| {
+        config_model::user_error(format!(
+            "gateway backend '{}' is not present in the effective agent inventory",
+            trimmed_backend_id
+        ))
+    })?;
+
+    let derived_backend_id = entry.derived_backend_id();
+    if derived_backend_id != trimmed_backend_id || backend_kind != entry.file.config.kind.as_str() {
+        return Err(config_model::user_error(format!(
+            "gateway backend '{}' does not match effective inventory item '{}' in {}",
+            trimmed_backend_id,
+            derived_backend_id,
+            entry.path.display()
+        )));
+    }
+
+    if !entry.file.config.capabilities.llm {
+        return Err(config_model::user_error(format!(
+            "gateway backend '{}' is not llm-capable in {}",
+            trimmed_backend_id,
+            entry.path.display()
+        )));
+    }
+
+    Ok(entry.clone())
+}
+
+#[cfg_attr(
+    not(unix),
+    allow(
+        dead_code,
+        reason = "authenticated non-Unix inventory remains R2-3-owned"
+    )
+)]
+pub(crate) fn resolve_gateway_backend_inventory_entry_for_bootstrap_home(
+    cwd: &Path,
+    backend_id: &str,
+    base_policy: &Policy,
+    bootstrap_home: &crate::execution::agent_runtime::OpenedBootstrapHomeV1<'_>,
+) -> Result<AgentInventoryEntryV1> {
+    validate_backend_id(backend_id).map_err(|err| config_model::user_error(err.to_string()))?;
+    let trimmed_backend_id = backend_id.trim();
+    let (backend_kind, backend_name) = trimmed_backend_id
+        .split_once(':')
+        .expect("validated backend id should contain a colon");
+    let effective_inventory =
+        load_effective_agent_inventory_for_bootstrap_home(cwd, base_policy, bootstrap_home)?;
     let entry = effective_inventory.get(backend_name).ok_or_else(|| {
         config_model::user_error(format!(
             "gateway backend '{}' is not present in the effective agent inventory",
@@ -2294,5 +2346,71 @@ config:
             !inventory.contains_key("codex_world"),
             "single-placement version 2 truth must suppress the stale same-root legacy world sibling"
         );
+    }
+
+    #[cfg(any(target_os = "linux", target_os = "macos"))]
+    #[test]
+    #[serial_test::serial]
+    fn gateway_backend_resolution_uses_explicit_bootstrap_home_under_conflicting_ambient_home() {
+        use std::os::unix::fs::PermissionsExt;
+
+        let safe_parent = std::env::var_os("XDG_RUNTIME_DIR")
+            .map(std::path::PathBuf::from)
+            .unwrap_or_else(|| {
+                std::path::PathBuf::from(std::env::var_os("HOME").expect("tests require HOME"))
+                    .join(".cache")
+            });
+        fs::create_dir_all(&safe_parent).expect("create safe parent");
+        let parent = tempfile::tempdir_in(safe_parent).expect("private fixture parent");
+        fs::set_permissions(parent.path(), fs::Permissions::from_mode(0o700))
+            .expect("secure fixture parent");
+        let selected_home = parent.path().join("selected");
+        let agents = selected_home.join("agents");
+        fs::create_dir_all(&agents).expect("create selected agents");
+        fs::set_permissions(&selected_home, fs::Permissions::from_mode(0o700))
+            .expect("secure selected home");
+        fs::set_permissions(&agents, fs::Permissions::from_mode(0o700))
+            .expect("secure selected agents");
+        let selected_agent = agents.join("selected.yaml");
+        fs::write(
+            &selected_agent,
+            r#"version: 1
+id: selected
+config:
+  kind: cli
+  enabled: true
+  protocol: substrate.agent.session
+  execution:
+    scope: world
+  cli:
+    binary: selected
+  capabilities:
+    llm: true
+"#,
+        )
+        .expect("write selected inventory");
+        fs::set_permissions(&selected_agent, fs::Permissions::from_mode(0o600))
+            .expect("secure selected inventory");
+
+        let conflicting_home = parent.path().join("conflicting");
+        fs::create_dir(&conflicting_home).expect("create conflicting home");
+        let previous = std::env::var_os("SUBSTRATE_HOME");
+        std::env::set_var("SUBSTRATE_HOME", &conflicting_home);
+        let authority = crate::execution::agent_runtime::HostSessionAuthority::open(&selected_home)
+            .expect("open selected authority");
+        let result = super::resolve_gateway_backend_inventory_entry_for_bootstrap_home(
+            parent.path(),
+            "cli:selected",
+            &Policy::default(),
+            &authority.bootstrap_home(),
+        );
+        match previous {
+            Some(value) => std::env::set_var("SUBSTRATE_HOME", value),
+            None => std::env::remove_var("SUBSTRATE_HOME"),
+        }
+
+        let entry = result.expect("resolve selected inventory");
+        assert_eq!(entry.path, selected_agent);
+        assert_eq!(entry.derived_backend_id(), "cli:selected");
     }
 }
