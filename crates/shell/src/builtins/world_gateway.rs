@@ -1515,10 +1515,14 @@ mod classification_tests {
         resolve_cli_codex_integrated_auth, CLI_CODEX_WORLD_BACKEND, CODEX_ACCESS_TOKEN_ENV,
         CODEX_ACCOUNT_ID_ENV,
     };
-    use crate::execution::world_env_guard;
+    use crate::execution::{world_env_guard, WorldSocketTestGuard};
     use serial_test::serial;
 
     fn with_env_var<T>(key: &str, value: Option<&std::ffi::OsStr>, f: impl FnOnce() -> T) -> T {
+        if key == "SUBSTRATE_WORLD_SOCKET" {
+            let _guard = WorldSocketTestGuard::set_optional(value);
+            return f();
+        }
         let _guard = world_env_guard();
         let prev = std::env::var_os(key);
         match value {

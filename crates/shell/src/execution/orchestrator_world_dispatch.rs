@@ -6978,7 +6978,7 @@ mod tests {
     #[cfg(target_os = "linux")]
     use crate::execution::config_model::AgentCliMode;
     #[cfg(target_os = "linux")]
-    use crate::execution::world_env_guard;
+    use crate::execution::{world_env_guard, WorldSocketTestGuard};
     #[cfg(target_os = "linux")]
     use hyper014::body::{to_bytes, HttpBody};
     #[cfg(target_os = "linux")]
@@ -7050,9 +7050,14 @@ mod tests {
     }
 
     #[cfg(target_os = "linux")]
-    struct EnvVarGuard {
-        key: &'static str,
-        previous: Option<String>,
+    enum EnvVarGuard {
+        Generic {
+            key: &'static str,
+            previous: Option<String>,
+        },
+        WorldSocket {
+            _guard: WorldSocketTestGuard,
+        },
     }
 
     #[cfg(target_os = "linux")]
@@ -7060,23 +7065,30 @@ mod tests {
         fn set(key: &'static str, value: &str) -> Self {
             let previous = std::env::var(key).ok();
             std::env::set_var(key, value);
-            Self { key, previous }
+            Self::Generic { key, previous }
         }
 
         fn set_path(key: &'static str, value: &Path) -> Self {
+            if key == "SUBSTRATE_WORLD_SOCKET" {
+                return Self::WorldSocket {
+                    _guard: WorldSocketTestGuard::set(value),
+                };
+            }
             let previous = std::env::var(key).ok();
             std::env::set_var(key, value);
-            Self { key, previous }
+            Self::Generic { key, previous }
         }
     }
 
     #[cfg(target_os = "linux")]
     impl Drop for EnvVarGuard {
         fn drop(&mut self) {
-            if let Some(previous) = self.previous.as_deref() {
-                std::env::set_var(self.key, previous);
-            } else {
-                std::env::remove_var(self.key);
+            if let Self::Generic { key, previous } = self {
+                if let Some(previous) = previous.as_deref() {
+                    std::env::set_var(key, previous);
+                } else {
+                    std::env::remove_var(key);
+                }
             }
         }
     }
@@ -11638,8 +11650,7 @@ mod tests {
             }
         });
 
-        let previous_socket = std::env::var("SUBSTRATE_WORLD_SOCKET").ok();
-        std::env::set_var("SUBSTRATE_WORLD_SOCKET", &socket_path);
+        let _socket_guard = WorldSocketTestGuard::set(&socket_path);
 
         let err = match execute_continue_world_worker_stream(
             &sample_continue_submit_request(),
@@ -11666,12 +11677,6 @@ mod tests {
         );
         assert_eq!(recorded[0].span_id, "member-turn-span");
         assert_eq!(recorded[0].sig, "INT");
-
-        if let Some(previous_socket) = previous_socket {
-            std::env::set_var("SUBSTRATE_WORLD_SOCKET", previous_socket);
-        } else {
-            std::env::remove_var("SUBSTRATE_WORLD_SOCKET");
-        }
 
         server.await.expect("stub world server task");
     }
@@ -21944,8 +21949,7 @@ agents:
             }
         });
 
-        let previous_socket = std::env::var("SUBSTRATE_WORLD_SOCKET").ok();
-        std::env::set_var("SUBSTRATE_WORLD_SOCKET", &socket_path);
+        let _socket_guard = WorldSocketTestGuard::set(&socket_path);
 
         let reply = execute_continue_world_worker_stream(
             &sample_continue_submit_request_for_run(
@@ -22043,12 +22047,6 @@ agents:
             delivered.delivered,
             "expected retained bootstrap cancel delivery"
         );
-
-        if let Some(previous_socket) = previous_socket {
-            std::env::set_var("SUBSTRATE_WORLD_SOCKET", previous_socket);
-        } else {
-            std::env::remove_var("SUBSTRATE_WORLD_SOCKET");
-        }
 
         server.abort();
     }
