@@ -173,6 +173,22 @@ pub(crate) fn resolve_policy_snapshot_for_bootstrap_home(
     })
 }
 
+#[cfg_attr(
+    not(unix),
+    allow(
+        dead_code,
+        reason = "authenticated non-Unix projection remains R2-3-owned"
+    )
+)]
+pub(crate) fn resolve_world_network_policy_for_bootstrap_home(
+    cwd: &Path,
+    bootstrap_home: &crate::execution::agent_runtime::OpenedBootstrapHomeV1<'_>,
+    effective_config: &crate::execution::config_model::SubstrateConfig,
+) -> Result<ResolvedWorldNetworkPolicy> {
+    let snapshot = resolve_policy_snapshot_for_bootstrap_home(cwd, bootstrap_home)?.snapshot;
+    resolve_world_network_policy(snapshot, effective_config.world.net.filter)
+}
+
 pub(crate) fn resolve_world_network_policy_for_cwd(
     cwd: &Path,
 ) -> Result<ResolvedWorldNetworkPolicy> {
@@ -695,5 +711,31 @@ mod tests {
         assert!(resolved.snapshot.world_fs.discover.is_some());
         assert!(resolved.snapshot.world_fs.read.is_some());
         assert!(!resolved.snapshot.world_fs.write.enabled);
+    }
+
+    #[cfg(any(target_os = "linux", target_os = "macos"))]
+    #[test]
+    fn explicit_world_network_policy_uses_bootstrap_home_and_explicit_config() {
+        let (parent, authority) =
+            explicit_snapshot_fixture(b"id: selected-policy\nnet_allowed: [selected.example]\n");
+        let mut config = crate::execution::config_model::SubstrateConfig::default();
+        config.world.net.filter = true;
+
+        let resolved = resolve_world_network_policy_for_bootstrap_home(
+            parent.path(),
+            &authority.bootstrap_home(),
+            &config,
+        )
+        .expect("resolve explicit world network policy");
+
+        assert_eq!(
+            resolved.snapshot.net_allowed,
+            vec!["selected.example".to_string()]
+        );
+        assert!(resolved.isolate_network);
+        assert_eq!(
+            resolved.allowed_domains,
+            vec!["selected.example".to_string()]
+        );
     }
 }
