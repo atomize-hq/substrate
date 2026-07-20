@@ -3656,13 +3656,13 @@ fn authority_preflight_reconciles_temp_before_missing_or_unsafe_strict_component
 #[test]
 #[serial_test::serial]
 fn legacy_transaction_ignores_environment_and_cwd_after_admission() {
+    let _authority_boundary = crate::execution::AuthorityEnvTestGuard::preserve();
     let bootstrap = root();
     let unrelated = root();
     let original_cwd = std::env::current_dir().unwrap();
-    let original_home = std::env::var_os("SUBSTRATE_HOME");
     let mut transaction = begin_legacy_state_store_transaction(bootstrap.path()).unwrap();
 
-    std::env::set_var("SUBSTRATE_HOME", unrelated.path());
+    let authority_env = crate::execution::AuthorityEnvTestGuard::set_home(unrelated.path());
     std::env::set_current_dir(unrelated.path()).unwrap();
     let outcome = transaction.write_file(
         LegacyStateStoreCollectionV1::Participants,
@@ -3671,11 +3671,7 @@ fn legacy_transaction_ignores_environment_and_cwd_after_admission() {
         [0x11; 16],
     );
     std::env::set_current_dir(original_cwd).unwrap();
-    if let Some(value) = original_home {
-        std::env::set_var("SUBSTRATE_HOME", value);
-    } else {
-        std::env::remove_var("SUBSTRATE_HOME");
-    }
+    drop(authority_env);
 
     outcome.unwrap();
     transaction.finish().unwrap();

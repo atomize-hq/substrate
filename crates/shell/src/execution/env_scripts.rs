@@ -191,31 +191,37 @@ mod tests {
     };
 
     #[cfg(unix)]
-    struct ProjectionEnvGuard(Vec<(&'static str, Option<OsString>)>);
+    struct ProjectionEnvGuard {
+        previous: Vec<(&'static str, Option<OsString>)>,
+        _authority_env: crate::execution::AuthorityEnvTestGuard,
+    }
 
     #[cfg(unix)]
     impl ProjectionEnvGuard {
         fn capture() -> Self {
-            Self(
-                [
-                    "SUBSTRATE_HOME",
-                    "SUBSTRATE_ROOT",
-                    INSTALL_BOOTSTRAP_COMMITMENT_ENV,
-                    INSTALL_BOOTSTRAP_ACCOUNT_ENV,
-                    INSTALL_BOOTSTRAP_UID_ENV,
-                    INSTALL_BOOTSTRAP_CONTEXT_ENV,
-                ]
-                .into_iter()
-                .map(|key| (key, std::env::var_os(key)))
-                .collect(),
-            )
+            let authority_env = crate::execution::AuthorityEnvTestGuard::preserve();
+            let previous = [
+                "SUBSTRATE_HOME",
+                "SUBSTRATE_ROOT",
+                INSTALL_BOOTSTRAP_COMMITMENT_ENV,
+                INSTALL_BOOTSTRAP_ACCOUNT_ENV,
+                INSTALL_BOOTSTRAP_UID_ENV,
+                INSTALL_BOOTSTRAP_CONTEXT_ENV,
+            ]
+            .into_iter()
+            .map(|key| (key, std::env::var_os(key)))
+            .collect();
+            Self {
+                previous,
+                _authority_env: authority_env,
+            }
         }
     }
 
     #[cfg(unix)]
     impl Drop for ProjectionEnvGuard {
         fn drop(&mut self) {
-            for (key, value) in self.0.drain(..) {
+            for (key, value) in self.previous.drain(..) {
                 match value {
                     Some(value) => std::env::set_var(key, value),
                     None => std::env::remove_var(key),

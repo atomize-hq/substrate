@@ -3682,11 +3682,11 @@ mod tests {
     use tokio::net::UnixStream;
 
     fn with_store(test: impl FnOnce(&AgentRuntimeStateStore)) {
+        let authority_env = crate::execution::AuthorityEnvTestGuard::preserve();
         let temp = TempDir::new().expect("tempdir");
-        std::env::set_var("SUBSTRATE_HOME", temp.path());
+        authority_env.install_home(temp.path());
         let store = AgentRuntimeStateStore::new().expect("state store");
         test(&store);
-        std::env::remove_var("SUBSTRATE_HOME");
     }
 
     fn test_plan(

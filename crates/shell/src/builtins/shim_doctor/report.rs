@@ -879,11 +879,16 @@ mod tests {
     struct ProcessStateGuard {
         cwd: PathBuf,
         environment: Vec<(&'static str, Option<OsString>)>,
+        _authority_env: Option<crate::execution::AuthorityEnvTestGuard>,
     }
 
     #[cfg(unix)]
     impl ProcessStateGuard {
         fn set(cwd: &Path, values: &[(&'static str, &Path)]) -> Self {
+            let authority_env = values
+                .iter()
+                .any(|(key, _)| matches!(*key, "SUBSTRATE_HOME" | "SUBSTRATE_WORLD_SOCKET"))
+                .then(crate::execution::AuthorityEnvTestGuard::preserve);
             let previous_cwd = std::env::current_dir().expect("read test cwd");
             let environment = values
                 .iter()
@@ -896,6 +901,7 @@ mod tests {
             Self {
                 cwd: previous_cwd,
                 environment,
+                _authority_env: authority_env,
             }
         }
     }
@@ -964,6 +970,7 @@ mod tests {
     #[test]
     #[serial]
     fn world_deps_section_forwards_authenticated_a_under_conflicting_ambient_b() {
+        let _authority_env = crate::execution::AuthorityEnvTestGuard::preserve();
         let (_, account_home) = current_unix_principal_and_home().expect("current Unix home");
         let temp = Builder::new()
             .prefix("substrate-route-d-report-")
