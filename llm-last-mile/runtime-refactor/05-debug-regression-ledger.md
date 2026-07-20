@@ -592,8 +592,8 @@ both are frozen. The earlier HIGH result for `resolve_current_inventory_view` is
 reuse boundary. Counts are diagnostic; the exact symbol/caller/cfg tables are binding.
 
 R2-2E's PI-111 implementation/proof clause is now complete. R2-2F owns the unresolved PI-106/PI-107
-production paths. Their required order is Routes A–E -> F0 authorization/candidate -> R2-2F0a ->
-combined F0/F0a proof -> R2-2F -> renewed R2-2 integration closeout -> R2-3 -> R2-4 -> R3. The
+production paths. Their required order is Routes A–E -> F0/F0a implementation -> R2-2F0b ->
+combined F0/F0a/F0b canonical closeout -> R2-2F -> renewed R2-2 integration closeout -> R2-3 -> R2-4 -> R3. The
 renewed closeout is production-fix-free and reruns
 the entire Routes A–F wall. `RG-HOME-01` and `RG-INSTALL-01` remain open. No privileged, macOS, or
 Windows proof is claimed, and no seam is promoted.
@@ -643,7 +643,7 @@ The baseline terms remain distinct:
 4. **Known post-E interference observation:** `1113 passed / 150 failed / 0 ignored`.
 
 The third value is reproducible but was not deterministic before F0; it is not yet an F comparison
-baseline. Combined F0/F0a closeout must add the deterministic F baseline without deleting or
+baseline. Combined F0/F0a/F0b closeout must add the deterministic F baseline without deleting or
 rewriting either post-E observation or the later `1118/150` versus `1119/149` F0 evidence.
 
 The Route D-to-E differential has `PassToFail=0`, `NewFail=0`,
@@ -714,9 +714,10 @@ normalized signatures, and unchanged deliberate retained-registration loser/pare
 Routes A–E, production retained-registration, the managed secure-FD path, capabilities, policies,
 and user behavior are unaffected.
 
-R2-2F0 is authorized but incomplete. Its exact blocked candidate is preserved, not landed, and its
-focused proof is not closeout proof. R2-2F0a is the exact next authorized prerequisite. R2-2F starts
-only after combined F0/F0a implementation is review-clean, canonically closed out, exactly replayed,
+R2-2F0/F0a are authorized but incomplete. Their exact pre- and post-fork-remediation candidates are
+preserved, not landed, and focused proof is not closeout proof. R2-2F0b is the exact next authorized
+prerequisite. R2-2F starts only after combined F0/F0a/F0b implementation is review-clean,
+canonically closed out, exactly replayed,
 and has recorded the deterministic comparison baseline. The renewed R2-2 integration closeout
 remains after F.
 R2-3, R2-4, and
@@ -844,7 +845,7 @@ other integration file, production symbol, resolver, socket owner, readiness pat
 or retained-registration validator, managed secure-FD path, capability, policy, or user behavior
 may change. F0a and the F0 cleanup correction are not implemented by this authorization.
 
-Combined closeout requires the F0 socket pair and F0a HOME pair at 100 parallel/20 serial minimum,
+Combined F0/F0a/F0b closeout requires the F0 socket pair and F0a HOME pair at 100 parallel/20 serial minimum,
 a mixed HOME/socket neighbor matrix, exact prior absence/value/non-Unicode restoration, panic,
 poison/recovery, nesting, bounded subprocess inheritance, termination-before-restoration, and zero
 leak proof. Three exact final-candidate default-parallel broad walls plus one serial wall must have
@@ -852,9 +853,131 @@ one stable inherited failure-name/signature set and no unexplained count varianc
 `1114/149`, `1113/150`, `1118/150`, and `1119/149` observations remain distinct evidence and are not
 lowered, erased, or substituted for the deterministic F baseline.
 
-`TestIsolationDefectConfirmed` remains the classification. F0 is incomplete; F0a is the exact next
-authorized prerequisite; combined implementation/closeout is a later task. F, renewed R2-2
+`TestIsolationDefectConfirmed` remains the classification. F0/F0a are incomplete; F0b is the exact
+next authorized prerequisite; combined F0/F0a/F0b implementation/closeout is a later task. F, renewed R2-2
 closeout, R2-3, R2-4, and R3 remain unstarted, and no seam is promoted.
+
+### A1.1d-5R2-2F0b — deterministic renderer-output test isolation
+
+The post-fork-remediation F0/F0a candidate was preserved before this read-only source-closure and
+removed from the source worktree. Preservation ref
+`feat/preserve-a1-1d-5r2-2f0-f0a-post-fork-remediation-9e012c68` points locally and remotely to
+commit `07ce368cc02d5a4e80db9c1ca80efee93009d064`, exact parent
+`d52ad6de2db7f5ed7fa0ee68ff2e3fc98332021c`, tree
+`51737000a17954a605f091f00f9b0c71f38a596c`, ordinary patch SHA-256
+`5530e58a7289db4e9a62fc9934510b87add71853728a0311af2160328af3cbeb`, and full-index/binary
+patch SHA-256 `9e012c68ea33107443cd38f2051aa40aae9f0f03d5c6abb4c630d418b0d7dee`.
+Its exact 27-file manifest is
+`crates/shell/src/builtins/{shim_doctor/report.rs,world_deps/mod.rs,world_enable/runner/manager_env.rs,world_enable/runner/paths.rs,world_gateway.rs}`,
+`crates/shell/src/execution/{agent_inventory.rs,agents_cmd.rs,config_model.rs,env_scripts.rs,host_inbox_materialization.rs,invocation/tests.rs,mod.rs,orchestrator_world_dispatch.rs,platform/macos.rs,routing/builtin/tests.rs,routing/dispatch/world_persistent_session.rs,routing/world.rs,settings/tests.rs}`,
+`crates/shell/src/execution/agent_runtime/{auto_attach.rs,control.rs,host_session_authority/store_tests.rs,state_store.rs,tool_invocation_contract.rs}`,
+`crates/shell/src/repl/async_repl.rs`, and
+`crates/shell/tests/{agent_successor_contract_ahcsitc0.rs,shim_deployment.rs,support/mod.rs}`.
+The preservation commit records the per-file SHA-256 fingerprints.
+
+The original pre-remediation candidate remains preserved locally and remotely at
+`feat/preserve-a1-1d-5r2-2f0-f0a-broad-blocker-9978655e`, commit
+`78353f3383fdd80c176fe5638328c10f2805dcf0`, exact parent
+`d52ad6de2db7f5ed7fa0ee68ff2e3fc98332021c`, tree
+`55476fa63a6ac2d116758a0aad5476ffea655a3f`, ordinary patch SHA-256
+`577a34da903992d0566fa51d164410caeca98592dd486f5c1d5520e34baaa5a1`, and full-index/binary
+patch SHA-256 `9978655e0f4095880c49d863a93b8fc99fb2b769afd42554c758b3970103f710`.
+Both refs are evidence only. Neither candidate is committed to or restored on the source branch,
+and no F0b runtime implementation begins in this planning packet.
+
+The mandatory post-fork broad wall was not deterministic:
+
+| Run | Passed | Failed | Ignored | Exact distinguishing result |
+|---|---:|---:|---:|---|
+| Parallel wall 1 | 1134 | 146 | 0 | inherited failure set |
+| Parallel wall 2 | 1134 | 146 | 0 | identical to wall 1 |
+| Parallel wall 3 | 1133 | 147 | 0 | added `public_prompt_renderer_renders_bounded_structured_fallback_when_decode_fails` |
+
+The third wall invalidates canonical closeout even though the first two agree. Its complete
+captured output was
+`".[codex] task_progress: fields=alpha, beta, gamma (+1 more)\n"`. Read-only reduction proves
+that `capture_stdout_once` creates a pipe, duplicates stdout, replaces process fd 1 with `dup2`,
+runs the closure, flushes, restores fd 1, and reads the pipe. Libtest's parallel reporter writes its
+progress `.` through the same process-global descriptor during that interval. The current test
+then searches for a line beginning with `[codex]`; the reporter prefix makes the only line begin
+with `.`. `#[serial]` cannot correct this boundary because it serializes only enrolled tests,
+not libtest's reporter.
+
+The causal matrix is exact:
+
+| Control | Result | Interpretation |
+|---|---|---|
+| Forced same-process parallel | 376 passed / 124 failed across 500 | Every failure had the broad-wall name and normalized signature |
+| Isolated target | 100/100 passed | Renderer behavior itself is stable |
+| Same-process serial, identical neighbors | 100/100 passed | Removing descriptor overlap removes the failure |
+| Separate-process control | 100/100 passed | Process isolation removes shared-fd contamination |
+| Parallel pretty reporter | 99/100 passed | Reporter scheduling can enter the fd-capture interval |
+
+Candidate introduction is unnecessary: the target and capture helper are byte-identical to clean
+E. This establishes `TestIsolationDefectConfirmed`, not product regression and not random
+flakiness.
+
+Read-only source closure is complete for the renderer boundary:
+
+- private `#[cfg(unix)] PublicPromptRenderer` owns `new` and `render`;
+- exact production construction/call paths are
+  `run_hidden_owner_helper_startup_prompt_stream_with_projection` and
+  `run_public_prompt_command`; each calls `render` for normal envelopes and a failure envelope;
+- `capture_stdout_once` has exactly one caller,
+  `public_prompt_renderer_renders_bounded_structured_fallback_when_decode_fails`;
+- `capture_stderr_once` has exactly one caller,
+  `public_prompt_renderer_renders_bounded_structured_stderr_fallback_when_decode_fails`;
+- `capture_stderr_once` performs the same process-global replacement on fd 2 and therefore has
+  the same structural race even though it did not fail in the recorded wall;
+- no other raw `dup`/`dup2` capture helper exists in this renderer/test ownership boundary.
+  Unrelated raw-fd operations elsewhere are deferred evidence and do not widen F0b.
+
+Current production behavior is frozen exactly. JSON envelopes serialize to stdout and propagate
+serialization/write failure with the existing context; Accepted emits nothing; Completed emits to
+stdout; Warning and Failed emit to stderr; Event selects stderr only for the exact stderr kind and
+otherwise stdout; decoded lines and bounded structured fallback retain their exact bytes and
+newlines. Existing completed/event/warning/failure write-error suppression and all existing flush
+result treatment remain unchanged. Stream selection and locking remain lazy and ordered as today;
+an implementation must not eagerly lock both streams. Redaction and bounded fallback remain
+unchanged.
+
+GitNexus and source closure give this containment:
+
+| Symbol | GitNexus upstream impact | Source-closure disposition |
+|---|---|---|
+| `PublicPromptRenderer` | LOW; 0 direct, 0 process, 0 module | Private Unix production type; retained |
+| `PublicPromptRenderer::render` | MEDIUM; 4 direct, 39 total; one `handle_agent_command` process family; Agent_runtime direct, Execution indirect | Only existing production symbol permitted a mechanical delegation edit |
+| `PublicPromptRenderer::new` | HIGH; 19 direct, 43 total; two process labels; three modules | Generic-`new` graph over-attribution; exact source has four construction sites; signature and body frozen |
+| `capture_stdout_once` | LOW; one direct test caller; zero process | Delete after stdout test migration |
+| `capture_stderr_once` | LOW; one direct test caller; zero process | Delete after same-owner stderr test migration |
+| two exact fallback tests | LOW; zero process | Migrate only capture mechanism; names and behavioral assertions retained and strengthened to complete bytes |
+
+There is no CRITICAL impact. The proposed one-file allowlist is exact:
+`crates/shell/src/execution/agent_runtime/control.rs`. It may EDIT
+`PublicPromptRenderer::render` only for delegation; ADD a private Unix-only explicit-writer
+rendering core, private output-sink adapter, or equivalent bounded internal symbols; DELETE
+`capture_stdout_once` and `capture_stderr_once`; and EDIT only the two exact fallback tests named
+above. `PublicPromptRenderer` remains private, `PublicPromptRenderer::new` and both production
+caller bodies are frozen, and no other file, symbol, dependency, or test is authorized.
+
+The future tests provide their own in-memory stdout and stderr writers and assert the exact complete
+selected bytes and exact empty nonselected buffer. They may not strip, search around, or tolerate
+an unrelated prefix. Production `render` remains the sole entry point and delegates through the
+default real streams with byte-for-byte equivalent bytes, stream choice, order, newline, flush,
+errors, redaction, and fallback. A public API, output transport/schema, process-global output lock,
+writer registry, side table, environment-selected sink, reporter filtering/suppression, sleeps,
+retries, larger timeouts, test-thread reduction, whole-suite serialization, `#[ignore]`, test
+removal/rename/substitution, or assertion weakening is forbidden. `#[serial]` may remain
+supplemental only.
+
+F0b is test-isolation infrastructure, not a product rendering change. It changes no production
+execution, user-visible behavior, world, policy, credential, secure-FD, gateway, receipt,
+supervisor, retained-worker, placement, caging, lifecycle, or capability semantic and promotes no
+seam. F0/F0a/F0b remain incomplete until the combined implementation, focused private-buffer proof,
+three identical parallel walls, one matching serial wall, transition audit, reviews, canonical
+closeout, and exact replay are complete. F, renewed R2-2 closeout, R2-3, R2-4, and R3 remain
+unstarted. The binding sequence is Routes A–E → F0/F0a implementation → F0b → combined
+F0/F0a/F0b canonical closeout → F → renewed R2-2 integration closeout → R2-3 → R2-4 → R3.
 
 For the Route A successor clause of `R2-RUNTIME-01`, the authorized Unix-only import cfg set also
 includes the policy test module's sole `tempfile::TempDir` import; no other import or module gate is
@@ -897,9 +1020,9 @@ has exactly one approved edge class and one packet owner; the class totals are 1
 `PlatformMapping`, 13 `GeneratedProjectionConsumption`, 15 `DiagnosticProjection`, 22
 `R3CleanupOnly`, and four `OutOfScope`. The R2-0-era frozen DAG was historically
 R1 -> R2-0 -> R2-1 -> R2-2 -> R2-3 -> R2-4 -> R3. The corrected canonical DAG replaces the
-R2-2 outgoing edge without changing inventory ownership; F0/F0a later insert only proof prerequisites:
-R1 -> R2-0 -> R2-1 -> R2-2 Routes A-E -> F0 authorization/candidate -> R2-2F0a -> combined
-F0/F0a proof -> R2-2F -> R2-2 integration closeout -> R2-3 -> R2-4 -> R3. Mechanical validation covers row-ID,
+R2-2 outgoing edge without changing inventory ownership; F0/F0a/F0b later insert only proof prerequisites:
+R1 -> R2-0 -> R2-1 -> R2-2 Routes A-E -> F0/F0a implementation -> R2-2F0b -> combined
+F0/F0a/F0b canonical closeout -> R2-2F -> R2-2 integration closeout -> R2-3 -> R2-4 -> R3. Mechanical validation covers row-ID,
 field-count, class, owner, packet-count, table-column, fence-pair, relative-link, and allowlist-path
 checks across 43 tables/749 pipe rows, 134 fence markers, and 12 relative links, plus
 `git diff --check`, `cargo fmt --all -- --check`, and GitNexus change detection. The
@@ -1157,8 +1280,8 @@ A1.1d, A1, the B1/B2.1 joint closeout, and B3.1 remain open; no seam is promoted
 At R2-1 closeout, the historical next packet was **A1.1d-5R2-2 — Unix release, sudo, Linux service,
 and runtime propagation**. Routes A–D have since become individually review-clean, their integration
 closeout failed source closure, and R2-2E has since become review-clean. The live exact next
-authorized prerequisite is now R2-2F0a because F0 is authorized but incomplete; R2-2F follows
-combined F0/F0a canonical closeout. After F and the renewed
+authorized prerequisite is now R2-2F0b because F0/F0a are authorized but incomplete; R2-2F follows
+combined F0/F0a/F0b canonical closeout. After F and the renewed
 closeout, rerun the complete Linux
 regression and normal product lifecycle smoke without outer overrides. That proof can unblock
 A1.1d Linux closeout and the Linux
@@ -1801,9 +1924,9 @@ B1 receipt core recovered/review-clean: **yes**. B2.1 supervisor core recovered/
 next architectural packet remains the B1/B2.1 joint production integration closeout. At the
 B1/B2.1-0 closeout, the repository's exact next packet was A1.1d-5R2-1 — Host context construction
 and Unix dev propagation; after review-clean R2-2 Routes A–E, the failed integration closeout, and
-F0's blocked broad proof, the live exact next authorized prerequisite is **A1.1d-5R2-2F0a —
-SUBSTRATE_HOME test isolation**; **A1.1d-5R2-2F — Authenticated world-deps and truthful doctor
-composition** follows combined F0/F0a canonical closeout, followed by renewed R2-2 integration
+F0/F0a's blocked broad proof, the live exact next task is **A1.1d-5R2-2F0/F0a/F0b combined
+implementation and canonical closeout**; **A1.1d-5R2-2F — Authenticated world-deps and truthful
+doctor composition** follows combined F0/F0a/F0b canonical closeout, followed by renewed R2-2 integration
 closeout, R2-3, R2-4, and R3. Only the joint closeout's Linux
 product-smoke portion waits for those remediations and their required smoke, and its receipt and
 supervisor semantics are not reopened.

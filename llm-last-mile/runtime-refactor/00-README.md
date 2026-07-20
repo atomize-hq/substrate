@@ -4,7 +4,7 @@
 **Scope:** planning, contracts, sequencing, and proof gates; not implementation history
 **Source directive:** [`../../substrate-runtime-refactor-directive-revised.md`](../../substrate-runtime-refactor-directive-revised.md)
 **Repo-truth snapshot:** 2026-07-17 at `6ab2a515e13946324d0aac25b144e1c3408cb2c1`; re-check live code before every slice
-**Current authorized increment:** `A1.1d-5R2-2F0a — SUBSTRATE_HOME test isolation`; R2-2E is implementation-, proof-, and review-complete, F0 is authorized but incomplete with its blocked candidate preserved, F remains blocked pending combined F0/F0a proof, and R2-2 remains incomplete.
+**Current authorized increment:** `A1.1d-5R2-2F0b — deterministic renderer-output test isolation`; R2-2E is implementation-, proof-, and review-complete, F0/F0a remain incomplete with both pre- and post-fork-remediation candidates preserved, F0b is planned and authorized but incomplete and unimplemented, F remains blocked pending combined F0/F0a/F0b proof, and R2-2 remains incomplete.
 
 ## Canonical repo location
 
@@ -209,11 +209,12 @@ convergent. Remediation remains bounded to **A1.1d-5R1 → A1.1d-5R2 → A1.1d-5
 implemented and review-clean through `4d0acff68e20d86b97fe5367b8a4617554f33ef4`.
 **A1.1d-5R2-0 is planning-complete, and A1.1d-5R2-1 is implementation- and review-complete through
 `2653c2ef20ae2e119a444811e6fb46e86d1a6ec6`.** R2 remains sequenced as
-**R2-1 → R2-2 Routes A–E → R2-2F0 authorization/candidate → R2-2F0a → combined F0/F0a proof → R2-2F → R2-2 integration closeout → R2-3 → R2-4**,
+**R2-1 → R2-2 Routes A–E → R2-2F0/F0a implementation → R2-2F0b → combined F0/F0a/F0b canonical closeout → R2-2F → R2-2 integration closeout → R2-3 → R2-4**,
 followed by R3. Routes A–D are individually review-clean, but the failed integration closeout proved
 that R2-2 is incomplete and unpublished. R2-2E is now implementation-, proof-, and review-complete;
-R2-2F0 is authorized but incomplete, its focused proof is not closeout proof, and its exact candidate
-is preserved rather than landed. R2-2F0a is the exact next authorized prerequisite. R2-2F, renewed
+R2-2F0/F0a are authorized but incomplete, their focused proof is not closeout proof, and both exact
+pre- and post-fork-remediation candidates are preserved rather than landed. R2-2F0b is the exact
+next authorized prerequisite. R2-2F, renewed
 R2-2 closeout, R2-3, R2-4, and R3 remain
 unstarted. Until the
 remaining implementation packets are review-clean and their Linux lifecycle/product smoke passes,
@@ -256,8 +257,9 @@ runtime by `4d0acff68e20d86b97fe5367b8a4617554f33ef4`. `RG-HOME-01` and `RG-INST
 A1.1d and A1 remain incomplete, B3.1 remains blocked, and the R2 packets/R3 remain separately
 owned; R2-1 is complete and R2-2 is in progress through review-clean Routes A, B, C, and D. The
 failed Routes A–D integration closeout is blocker evidence rather than a completed packet; R2-2E is
-implementation-, proof-, and review-complete, R2-2F0 is authorized but incomplete, and R2-2F0a is
-the exact next authorized test-only prerequisite. R2-2F follows combined F0/F0a closeout; renewed
+implementation-, proof-, and review-complete, R2-2F0/F0a are authorized but incomplete, and
+R2-2F0b is the exact next authorized test-only prerequisite. R2-2F follows combined
+F0/F0a/F0b closeout; renewed
 closeout, R2-3/R2-4/R3 remain unstarted. Static macOS/Windows
 inspection in R2-0 is not native platform proof.
 
@@ -327,14 +329,38 @@ validation. Mixed A/B diagnostics fail closed or report unavailable/incoherent, 
 A-bound truth. Before F, **A1.1d-5R2-2F0 — Deterministic world-socket test isolation** repairs the
 proven test-harness-only `SUBSTRATE_WORLD_SOCKET` collision, while **A1.1d-5R2-2F0a —
 SUBSTRATE_HOME test isolation** repairs the separate HOME collision exposed by F0's final broad
-wall. F0 remains incomplete: its exact seven-file candidate is preserved rather than landed, and
-its focused proof is not closeout proof. F0/F0a use one process-global authority-environment lock
+wall. F0/F0a remain incomplete: their exact candidates are preserved rather than landed, and
+focused proof is not closeout proof. F0/F0a use one process-global authority-environment lock
 for same-process HOME/socket mutation, and socket-owning async fixtures must abort, await confirmed
 task termination, complete test-owned cleanup, restore exact prior environment state, and only then
 release that lock. Neither increment changes any production byte, socket-selection behavior,
-retained-registration validation, test name, assertion, capability, or policy. The exact sequence
-is **Routes A–E → F0 authorization/candidate → F0a → combined F0/F0a proof → R2-2F → renewed R2-2
-integration closeout → R2-3 → R2-4 → R3**. E and F are logically separable but use this
+retained-registration validation, test name, assertion, capability, or policy.
+
+**A1.1d-5R2-2F0b — deterministic renderer-output test isolation** is the bounded final
+test-isolation prerequisite exposed by the F0/F0a broad wall. The stdout fallback test replaces
+process fd 1 with `dup2`, so libtest's parallel reporter can write its progress byte into the
+test's private pipe. The exact captured bytes were
+`".[codex] task_progress: fields=alpha, beta, gamma (+1 more)\n"`. The forced same-process
+parallel matrix passed 376 and failed 124 of 500 runs with one normalized signature; isolated,
+same-process serial, and separate-process controls each passed 100/100, while the pretty reporter
+passed 99/100 parallel runs. Candidate introduction is unnecessary: the helper and target are
+byte-identical to clean E. This is `TestIsolationDefectConfirmed`, not a product renderer defect.
+The same-owner fd 2 helper has the identical structural race and is included in the bounded
+migration even though stdout supplied the observed failure.
+
+F0b authorizes only a private explicit-writer rendering core or equivalent private sink adapter in
+`crates/shell/src/execution/agent_runtime/control.rs`. `PublicPromptRenderer::render` remains
+the production entry point and delegates through real stdout/stderr with byte-for-byte identical
+stream choice, order, newlines, flushing, write-error treatment, redaction, and bounded fallback.
+The two exact fallback tests instead provide private in-memory writers and assert the complete exact
+bytes, including an empty nonselected stream. Raw fd replacement, a public output API,
+process-global writer lock/registry, environment-selected sink, reporter filtering, sleeps,
+retries, thread reduction, ignored tests, and assertion weakening are forbidden. No production
+caller or product behavior changes, and no seam is promoted.
+
+The exact sequence is **Routes A–E → F0/F0a implementation → F0b → combined F0/F0a/F0b canonical
+closeout → R2-2F → renewed R2-2 integration closeout → R2-3 → R2-4 → R3**. E and F are logically
+separable but use this
 deterministic order so
 F can reuse E's canonical projection entrypoint without overlapping ownership. No seam is promoted,
 and this docs-only correction begins no runtime increment. The authenticated guarantees
@@ -350,9 +376,13 @@ Baseline terms are intentionally distinct. The **R2-2 historical starting baseli
 `1114 passed / 149 failed / 0 ignored`. That post-E result is nondeterministic before F0: the proven
 shared-socket interference can instead produce `1113 passed / 150 failed / 0 ignored`. The F0
 candidate then produced `1118/150` and `1119/149` while exposing the separate HOME interference.
-Combined F0/F0a closeout must establish and record the deterministic F comparison baseline; F may
-not start from any of these counts. Neither F0/F0a, F, nor renewed closeout may overwrite the
-historical values or erase either interference record.
+The post-fork F0/F0a candidate's three exact parallel broad walls were
+`1134 passed / 146 failed / 0 ignored`, `1134 passed / 146 failed / 0 ignored`, and
+`1133 passed / 147 failed / 0 ignored`; the third wall alone added
+`public_prompt_renderer_renders_bounded_structured_fallback_when_decode_fails`. That variance
+invalidates canonical closeout. Combined F0/F0a/F0b closeout must establish and record the
+deterministic F comparison baseline; F may not start from any of these counts. Neither F0/F0a/F0b,
+F, nor renewed closeout may overwrite the historical values or erase any isolation record.
 
 B1/B2.1-R0 lets RetainedWorkerRuntime create the immutable retained object graph and requires
 HostSessionAuthority first to reserve the ingress idempotency key, validate the exact participant

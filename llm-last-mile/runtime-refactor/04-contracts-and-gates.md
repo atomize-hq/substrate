@@ -833,15 +833,15 @@ source paths and symbols, unchanged owner/family set, exact manifest/patch, mapp
 and fresh read-only semantic review. A new execution family, authority owner, module, resolver,
 schema, or R2-3 behavior requires a cross-document stop.
 
-#### R2-2 source closure, E closeout, F0/F0a prerequisites, and remaining F contract
+#### R2-2 source closure, E closeout, F0/F0a/F0b prerequisites, and remaining F contract
 
 The failed Routes A–D integration closeout established that those four routes were individually
 review-clean but did not close every authenticated-context consumer. R2-2E has since implemented and
 proved the gateway projection without changing Routes A–D; all five routes are individually
-review-clean. R2-2 stays incomplete pending combined F0/F0a, F, and the renewed integration
-closeout. F0 is authorized but incomplete, with its exact candidate preserved rather than landed;
-F0a is next. The following table preserves E's reviewed historical source-closure boundary and
-freezes F0/F0a/F's remaining boundaries;
+review-clean. R2-2 stays incomplete pending combined F0/F0a/F0b, F, and the renewed integration
+closeout. F0/F0a are authorized but incomplete, with both exact candidates preserved rather than
+landed; F0b is next. The following table preserves E's reviewed historical source-closure boundary
+and freezes F0/F0a/F0b/F's remaining boundaries;
 brace groups are exact symbol sets, not file wildcards.
 
 | Increment | File | Symbol | Pre-increment authority | Required carrier | Callers | Process family | Platform cfg | GitNexus risk | Inventory ID | Test | Reviewed allowlist disposition |
@@ -867,6 +867,7 @@ brace groups are exact symbol sets, not file wildcards.
 | R2-2F0a | `crates/shell/src/builtins/{shim_doctor/report.rs,world_deps/mod.rs,world_enable/runner/manager_env.rs,world_gateway.rs}`; `crates/shell/src/execution/{agent_inventory.rs,config_model.rs,env_scripts.rs,invocation/tests.rs,orchestrator_world_dispatch.rs,routing/builtin/tests.rs,settings/tests.rs}`; `crates/shell/src/execution/agent_runtime/host_session_authority/store_tests.rs`; `crates/shell/src/repl/async_repl.rs` | remaining direct/local-guard/manual HOME mutators in the 435-test shell-library inventory | `#[serial]` and unrelated local guards do not exclude unannotated peers; some restore `String` rather than exact `OsString` | same authority-environment guard; dependent async/process lifetime ends before restore/unlock | remaining same-process mutating tests and stable readers | test harness | test modules only | source reviewed; large modules graph-under-resolved | none | combined HOME/socket neighbor and restoration wall | EDIT test-only sites/helpers; production symbols frozen |
 | R2-2F0a | `crates/shell/tests/{shim_deployment.rs,agent_successor_contract_ahcsitc0.rs,support/mod.rs}` | parent-process HOME mutation in three independent integration source families | separate binaries; restoration is manual and not uniformly panic-safe/exact | equivalent per-binary exact-restoration boundary in every inventoried parent-mutating helper; no cross-process lock | nine serialized shim callers, one successor caller, one ignored one-test helper binary, one serialized support caller | integration test harnesses | existing cfgs | source reviewed | none | per-helper prior/absence/panic plus child inheritance | EDIT all three inventoried integration helper/call families; child-only `Command::env` files frozen |
 | R2-2F0 | `crates/shell/src/execution/orchestrator_world_dispatch.rs` | nine named socket-owning tests with `server.abort()` and no awaited termination | task cancellation may remain pending while guard restores/unlocks and temp socket/root cleanup begins; one scheduler yield is insufficient | abort → await confirmed termination → complete/confirm fixture cleanup → restore environment → unlock | nine named tests in `03`/`05` | test harness | Linux test module | test symbols graph-under-resolved; source closure exact | none | termination-before-restore and zero task/socket/root leaks | EDIT nine test bodies only; no production server/readiness lifecycle change |
+| R2-2F0b | `crates/shell/src/execution/agent_runtime/control.rs` | private Unix-only `PublicPromptRenderer::render`; ADD private explicit-writer core/adapter; DELETE `capture_stdout_once` and `capture_stderr_once`; two exact fallback tests | production render selects real stdout/stderr directly; tests replace process fd 1/2 with `dup2`, so parallel libtest reporter output can enter the private pipe | private explicit stdout/stderr writers for the core; production `render` delegates through real selected stream; tests own memory buffers | source-exact production callers `run_hidden_owner_helper_startup_prompt_stream_with_projection` and `run_public_prompt_command` remain frozen; two test callers migrate | production renderer plus test harness | Unix; helpers/tests under `cfg(test)` | `render` MEDIUM 4 direct/39 total/one process; generic-`new` HIGH is source-proven over-attribution and frozen; helpers/tests LOW | none; proof prerequisite | exact stdout/stderr bytes, stream selection, forced reporter overlap, private-buffer stress | EDIT `render` delegation and two tests; ADD private core/adapter; DELETE only two capture helpers; no caller/public API/production contract change |
 | R2-2F | `crates/shell/src/execution/platform/mod.rs` | `handle_world_command` Doctor/Deps arms; `handle_host_command` Doctor arm | World doctor/deps resolve ambient config/policy or drop A; Host policy remains ambient | `AuthenticatedWorldDepsContextV1`-equivalent plus A-derived doctor inputs | `ShellConfig::from_cli` | World/Host dispatch | authenticated Unix/Linux; non-Unix compatibility unproven/no A claim | LOW; manual arm closure | PI-106/PI-107 | `doctor_scopes_ds0.rs`; world-deps suites | EDIT arms only |
 | R2-2F | `crates/shell/src/execution/platform/linux.rs` | `host_doctor_main`; `world_doctor_main` | `detect_profile` plus global `world_fs_policy` | explicit A-derived world-fs policy and identity | platform handlers | Linux Host/World doctor | Linux | LOW | PI-106/PI-107 | `doctor_scopes_ds0.rs` | EDIT; observation stays read-only |
 | R2-2F | `crates/shell/src/builtins/world_deps/mod.rs` | new authenticated context/binder; `WorldDepsDoctorSnapshotV1`; `collect_doctor_snapshot_v1`; `resolve_effective_enabled_provisioning_requirements_v1` | diagnostic Unix path partly explicit; provisioning and non-Unix ambient; snapshot lacks identity | one validated A context with root/config/policy/deps/CWD/runtime projection | shim doctor; world-enable; surfaces | dependency resolution/diagnostics | Unix/Linux validation; non-Unix unavailable or explicit R2-3 ambient compatibility only | existing symbols LOW; new symbols N/A | PI-106/PI-107 | colocated; inventory/enabled/provision suites | ADD/EDIT |
@@ -950,14 +951,15 @@ lifecycle and promotes no seam.
 
 **A1.1d-5R2-2F0a — SUBSTRATE_HOME test isolation** joins R2-2F0 under this exact binding contract:
 
-F0 is authorized but **incomplete** and remains test-harness-only. Its exact seven-file candidate is
-preserved, not landed. Focused proof is green (socket pair 100/100 parallel and 20/20 serial;
+F0/F0a are authorized but **incomplete** and remain test-harness-only. Their exact pre- and
+post-fork-remediation candidates are preserved, not landed. Focused proof is green (socket pair 100/100 parallel and 20/20 serial;
 four-test neighbor matrix 20/20; prior absence, non-Unicode value, panic/reacquisition, nesting, and
 concurrent exclusion all pass), but its final broad runs were `1118 passed / 150 failed` and `1119
 passed / 149 failed`. The extra failure is
 `dispatch_contract_adapter_active_task_resolution_requires_supervisor_claim`, normalized as
 `resolve exact B-owned acceptance authority: open activated versioned authority layout`. It passes
-alone. F0a is therefore the **exact next authorized prerequisite**, not a waiver of F0 proof.
+alone. F0a remains an authorized part of the combined candidate, not a waiver of F0 proof; F0b is
+now the **exact next authorized prerequisite**.
 
 1. The exact HOME minimal pair is the target above plus
    `prompt_submit_continuity_prefers_persisted_session_contract`. In canonical same-process
@@ -998,25 +1000,80 @@ alone. F0a is therefore the **exact next authorized prerequisite**, not a waiver
    exclusion, bounded child inheritance, async cleanup ordering, and zero leaked task/socket/helper/
    temp-root state. The deliberate retained-registration conflicting child remains internal while
    its parent passes; retry validation is never weakened.
-7. Combined broad proof is at least three independent exact final-candidate default-parallel shell
+7. Combined F0/F0a/F0b broad proof is at least three independent exact final-candidate default-parallel shell
    walls and one canonical single-thread shell wall. Failure names and normalized signatures are
    identical; no test is removed, renamed, substituted, weakened, ignored, or made
    environment-authoritative; no unexplained count variance is accepted. Added passing tests have
-   an explicit count delta. Only combined closeout records the deterministic F comparison baseline.
+   an explicit count delta. Only combined F0/F0a/F0b closeout records the deterministic F
+   comparison baseline.
 8. Production `std::env` readers, HOME/world-socket resolution, readiness, retries, policies,
    capabilities, world-service behavior, retained-worker state, credential transport, and the
    managed secure-FD path are frozen. F0/F0a alter no production byte. A required production change
    stops as `CrossDocumentChangeRequired`.
 
+**A1.1d-5R2-2F0b — deterministic renderer-output test isolation** is bound by this exact
+test-infrastructure contract:
+
+1. Primary classification is `TestIsolationDefectConfirmed`. The exact post-fork parallel walls
+   were `1134 passed / 146 failed / 0 ignored`, `1134 passed / 146 failed / 0 ignored`, and
+   `1133 passed / 147 failed / 0 ignored`. Only wall 3 added
+   `public_prompt_renderer_renders_bounded_structured_fallback_when_decode_fails`, so canonical
+   closeout is invalid. The helper redirects process fd 1 with `dup2`; libtest's parallel reporter
+   wrote through the same descriptor. Exact captured bytes were
+   `".[codex] task_progress: fields=alpha, beta, gamma (+1 more)\n"`.
+2. Causal stress is binding: forced same-process parallel passed 376 and failed 124 of 500 with one
+   normalized signature; isolated, identical-neighbor same-process serial, and separate-process
+   controls each passed 100/100; parallel pretty reporting passed 99/100. Candidate introduction
+   is unnecessary because the capture helper and target test are byte-identical to clean E. This
+   is neither random flakiness nor a production renderer defect.
+3. Future implementation may edit only
+   `crates/shell/src/execution/agent_runtime/control.rs`. It may mechanically delegate
+   `PublicPromptRenderer::render` to a new private Unix-only explicit-writer core or equivalent
+   private sink adapter, delete `capture_stdout_once` and `capture_stderr_once`, and migrate only
+   `public_prompt_renderer_renders_bounded_structured_fallback_when_decode_fails` and
+   `public_prompt_renderer_renders_bounded_structured_stderr_fallback_when_decode_fails`. No other file or symbol
+   is authorized.
+4. `PublicPromptRenderer::render` remains the production entry point with its signature frozen.
+   `PublicPromptRenderer::new` and the bodies of
+   `run_hidden_owner_helper_startup_prompt_stream_with_projection` and
+   `run_public_prompt_command` remain frozen. Production delegates through real stdout/stderr,
+   chooses and locks only the selected stream at the same point, and preserves JSON-envelope
+   stdout, completed/normal-event stdout, warning/failure/stderr-event stderr, byte ordering,
+   newlines, flushes, serialization/write error propagation or intentional suppression, redaction,
+   and bounded fallback exactly.
+5. Tests supply distinct in-memory stdout and stderr writers and assert the complete exact bytes
+   emitted to the selected buffer plus an empty nonselected buffer. They may not strip, search
+   around, or tolerate unrelated prefixes. The same-owner stderr helper is structurally unsafe and
+   is migrated even though stdout alone appeared in the broad wall. Raw fd replacement remains
+   forbidden as the final mechanism.
+6. No public output API or transport/schema, process-global output lock, writer registry, side
+   table, environment-selected sink, eager dual-stream lock, reporter suppression, sleep, retry,
+   larger timeout, thread reduction, whole-suite serialization, ignore, removal, rename,
+   substitution, or assertion weakening may satisfy F0b. `#[serial]` may remain supplemental but
+   cannot exclude libtest reporter writes.
+7. GitNexus reports `PublicPromptRenderer::render` MEDIUM (four direct, 39 total, one
+   `handle_agent_command` process family; Agent_runtime direct and Execution indirect).
+   `PublicPromptRenderer::new` reports HIGH (19 direct, 43 total, two process labels, three
+   modules), but exact source closure proves generic-`new` over-attribution and freezes its body.
+   The renderer type, capture helpers, and tests report LOW/zero-process. No CRITICAL impact, new
+   production process family, or changed production process semantics are authorized.
+8. Required proof includes both exact tests isolated; at least 100/100 exact renderer-pair parallel
+   and 20/20 serial; forced reporter overlap; exact private stdout/stderr bytes; unchanged
+   JSON/completed/warning/failure/event selection, order, newline, flush, and error behavior; then
+   every combined F0/F0a/F0b focused, compile, lint, format, and four-wall gate. Production,
+   user-facing, world, policy, credential, secure-FD, gateway, receipt, supervisor, worker,
+   placement, caging, lifecycle, and capability behavior remains unchanged. No seam is promoted.
+
 R2-2F's binding contract is exact:
 
-F is the **exact next increment after combined F0/F0a closeout**, but it is not active or
+F is the **exact next increment after combined F0/F0a/F0b closeout**, but it is not active or
 implemented. It starts from the post-closeout replayed runtime commit and tree recorded by the
-dedicated preservation ref and completion checkpoint. Routes A–E and F0/F0a are immutable prior
+dedicated preservation ref and completion checkpoint. Routes A–E and F0/F0a/F0b are immutable prior
 evidence. Its clean comparison baseline is the deterministic value recorded by combined closeout,
 not either genuine but nondeterministic post-E observation (`1114 passed / 149 failed / 0 ignored`
 or `1113 passed / 150 failed / 0 ignored`), either F0-candidate broad result (`1118/150` or
-`1119/149`), the **R2-2 historical starting baseline** (`1089 passed / 149 failed`), or the
+`1119/149`), any post-fork candidate wall (`1134/146`, `1134/146`, or `1133/147`), the
+**R2-2 historical starting baseline** (`1089 passed / 149 failed`), or the
 **clean Route D comparison baseline** (`1101 passed / 149 failed / 0 ignored`). A renewed
 production-fix-free Routes A–F
 integration closeout follows F; R2-3, R2-4, and R3 remain after that and are unstarted.
@@ -1049,11 +1106,11 @@ post-provision sync; direct no-witness and tamper failures before mutation; exac
 identity; mixed-source rejection; truthful unavailable output; existing A-rooted snapshot behavior;
 explicit compatibility; disclosure scans; and non-Unix build/static preservation with no A-bound
 success claim. The broad comparison is against the deterministic F baseline recorded by combined
-F0/F0a closeout and requires
+F0/F0a/F0b closeout and requires
 zero pass-to-fail, new-fail, changed-failure, removed, renamed, substituted, weakened, or newly
 ignored tests plus the identical retained 149-name failure set.
 
-The binding stop conditions for E, F0, F0a, and F are: any file/symbol outside `03`'s exact allowlist;
+The binding stop conditions for E, F0, F0a, F0b, and F are: any file/symbol outside `03`'s exact allowlist;
 any new resolver or side table; any edit to a frozen HIGH/CRITICAL builder; any change to another
 shared caller, network meaning, request schema, service, lower platform adapter, capability,
 credential lifecycle, cleanup, or deletion; any mutation before validation; any mixed-authority

@@ -423,10 +423,10 @@ adapters.
 
 Routes A–D are individually review-clean, but they do not exhaust the authenticated-context path.
 The failed R2-2 integration closeout found two remaining projection seams and one diagnostic
-composition invariant. R2-2E is now implementation-, proof-, and review-complete. R2-2F0 is
-authorized but incomplete: its exact candidate is preserved, and its focused proof is not closeout
-proof. R2-2F0a is the exact next authorized test-isolation prerequisite, R2-2F follows combined
-F0/F0a closeout, and a renewed Routes A–F integration closeout follows F.
+composition invariant. R2-2E is now implementation-, proof-, and review-complete. R2-2F0/F0a are
+authorized but incomplete: both exact candidates are preserved, and focused proof is not closeout
+proof. R2-2F0b is the exact next authorized test-isolation prerequisite, R2-2F follows combined
+F0/F0a/F0b closeout, and a renewed Routes A–F integration closeout follows F.
 
 R2-2E makes world-gateway projection a pure consumer of already-authenticated A. The landed shell world
 entry validates A before disabled/unavailable classification, then supplies it to one request-scoped
@@ -494,7 +494,33 @@ in that order. Reverse declaration/drop order and a single scheduler yield are n
 termination. Production world-socket/HOME resolution, readiness, retained-worker behavior, retry
 validation, and runtime bytes remain unchanged.
 
-R2-2F, when started after combined F0/F0a closeout, creates one request-scoped
+**A1.1d-5R2-2F0b — deterministic renderer-output test isolation** removes process-global
+descriptor replacement from the two renderer fallback tests without changing the renderer's
+production contract. Source closure binds the future change to the private Unix-only
+`PublicPromptRenderer` ownership in
+`crates/shell/src/execution/agent_runtime/control.rs`. `PublicPromptRenderer::render` remains
+the production entry point; `PublicPromptRenderer::new` and the two production caller bodies,
+`run_hidden_owner_helper_startup_prompt_stream_with_projection` and
+`run_public_prompt_command`, remain frozen. A private explicit-writer core or equivalent private
+sink adapter may sit beneath `render`; the production adapter must choose and lock only the
+selected real stdout or stderr stream in the same order as today, write the same bytes and newline,
+perform the same flush, and preserve which serialization/write errors propagate or are ignored.
+No public API, output transport, registry, side table, process-global lock, environment-selected
+sink, or eager dual-stream locking is permitted.
+
+The observed stdout helper uses `dup2` on process fd 1. A parallel libtest reporter therefore
+contributed its `.` to the test pipe, producing exactly
+`".[codex] task_progress: fields=alpha, beta, gamma (+1 more)\n"`. The forced same-process
+matrix passed 376 and failed 124 of 500 runs; isolated, same-process serial, and separate-process
+controls passed 100/100, and parallel pretty reporting passed 99/100. The clean-E target/helper are
+byte-identical to the F0/F0a candidate, so candidate introduction is unnecessary. The fd 2 helper
+has the same ownership and structural race and is migrated with fd 1 even though only stdout
+appeared in the wall. Tests receive their own stdout/stderr memory writers and compare the complete
+exact selected bytes plus an empty nonselected stream. Filtering reporter bytes, partial-line
+search, sleeps, retries, serial-only correctness, thread reduction, ignore, and weaker assertions
+are outside the architecture.
+
+R2-2F, when started after combined F0/F0a/F0b closeout, creates one request-scoped
 `AuthenticatedWorldDepsContextV1` (or equivalently named typed
 value) from the already-validated install context. It holds A's trusted bootstrap home/root,
 non-secret commitment, explicit launch CWD/workspace scope, effective configuration and policy,
@@ -522,17 +548,19 @@ preserve explicitly labeled ambient compatibility or report unavailable/fail clo
 claim coherent A-bound truth or satisfy F acceptance. Non-Unix cfg coherence means build/static
 preservation and no A-bound success claim.
 
-F begins only after combined F0/F0a closeout has been published and all runtime commits have been
+F begins only after combined F0/F0a/F0b closeout has been published and all runtime commits have been
 replayed exactly above it. The post-E `1114 passed / 149 failed / 0 ignored` result is genuine but
 nondeterministic before F0 because the same runtime can produce `1113 passed / 150 failed / 0
 ignored` through the proven shared-socket collision. F0's candidate then exposed the separate HOME
-interference through `1118/150` versus `1119/149`; neither is closeout proof. Combined F0/F0a
-closeout must publish the deterministic F comparison baseline after one serial and at least three
+interference through `1118/150` versus `1119/149`; neither is closeout proof. The post-fork
+candidate then produced parallel walls `1134/146`, `1134/146`, and `1133/147`; only the third
+added the stdout renderer fallback test because raw fd capture admitted reporter output. Combined
+F0/F0a/F0b closeout must publish the deterministic F comparison baseline after one serial and at least three
 default-parallel broad walls with an identical inherited failure-name/signature set. That new value
 remains distinct from the
 **R2-2 historical starting baseline** of `1089 passed / 149 failed` and the **clean Route D
 comparison baseline** of `1101 passed / 149 failed / 0 ignored`. Routes A–E are immutable prior
-evidence for F0/F0a and F, and renewed R2-2 integration closeout remains after F.
+evidence for F0/F0a/F0b and F, and renewed R2-2 integration closeout remains after F.
 
 A physical symlink shim recovers A from an explicit invocation pathname or exactly one matching
 no-follow candidate when bare `argv[0]` requires absolute-PATH enumeration. PATH order has no
