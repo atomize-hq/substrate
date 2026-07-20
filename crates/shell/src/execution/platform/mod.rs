@@ -216,7 +216,17 @@ pub(crate) fn handle_world_command(
             std::process::exit(code);
         }
         WorldAction::Gateway(opts) => {
-            let code = commands::world_gateway::run(opts);
+            let launch_cwd = env::current_dir().map_err(|err| {
+                anyhow::anyhow!("failed to resolve explicit gateway workspace scope: {err}")
+            })?;
+            let code = commands::world_gateway::run(
+                opts,
+                cli.no_world,
+                cli.world,
+                &launch_cwd,
+                #[cfg(unix)]
+                install_context,
+            );
             std::process::exit(code);
         }
         WorldAction::Enable(opts) => {
