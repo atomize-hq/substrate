@@ -1095,6 +1095,7 @@ echo pass
     #[cfg(test)]
     mod tests {
         use super::*;
+        use crate::execution::WorldSocketTestGuard;
         use serial_test::serial;
         use std::collections::VecDeque;
 
@@ -1228,6 +1229,10 @@ echo pass
         }
 
         fn with_env_var<T>(key: &str, value: Option<&str>, f: impl FnOnce() -> T) -> T {
+            if key == "SUBSTRATE_WORLD_SOCKET" {
+                let _guard = WorldSocketTestGuard::set_optional(value.map(std::ffi::OsStr::new));
+                return f();
+            }
             let prev = std::env::var_os(key);
             match value {
                 Some(value) => std::env::set_var(key, value),

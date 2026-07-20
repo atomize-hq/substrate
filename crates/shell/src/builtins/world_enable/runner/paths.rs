@@ -140,23 +140,9 @@ fn normalize_path(path: &Path) -> PathBuf {
 #[cfg(test)]
 mod tests {
     use super::*;
+    use crate::execution::WorldSocketTestGuard;
     use serial_test::serial;
-    use std::env;
     use tempfile::tempdir;
-
-    fn set_env(key: &str, value: &Path) -> Option<std::ffi::OsString> {
-        let previous = env::var_os(key);
-        env::set_var(key, value);
-        previous
-    }
-
-    fn restore_env(key: &str, value: Option<std::ffi::OsString>) {
-        if let Some(val) = value {
-            env::set_var(key, val);
-        } else {
-            env::remove_var(key);
-        }
-    }
 
     #[test]
     fn next_log_path_is_namespaced_under_logs_dir() {
@@ -176,12 +162,10 @@ mod tests {
     fn resolve_world_socket_path_normalizes_relative_components() {
         let temp = tempdir().unwrap();
         let raw = temp.path().join("socket").join("..").join("sock");
-        let prev_socket = set_env("SUBSTRATE_WORLD_SOCKET", &raw);
+        let _socket_guard = WorldSocketTestGuard::set(&raw);
 
         let normalized = resolve_world_socket_path().unwrap();
         assert_eq!(normalized, temp.path().join("sock"));
-
-        restore_env("SUBSTRATE_WORLD_SOCKET", prev_socket);
     }
 
     #[test]

@@ -6,10 +6,15 @@ use tempfile::TempDir;
 
 struct EnvGuard {
     saved: Vec<(&'static str, Option<String>)>,
+    _authority_env: Option<crate::execution::AuthorityEnvTestGuard>,
 }
 
 impl EnvGuard {
     fn new(vars: Vec<(&'static str, Option<String>)>) -> Self {
+        let authority_env = vars
+            .iter()
+            .any(|(key, _)| matches!(*key, "SUBSTRATE_HOME" | "SUBSTRATE_WORLD_SOCKET"))
+            .then(crate::execution::AuthorityEnvTestGuard::preserve);
         let mut saved = Vec::new();
         for (key, value) in vars {
             saved.push((key, std::env::var(key).ok()));
@@ -18,7 +23,10 @@ impl EnvGuard {
                 None => std::env::remove_var(key),
             }
         }
-        Self { saved }
+        Self {
+            saved,
+            _authority_env: authority_env,
+        }
     }
 }
 
@@ -139,6 +147,7 @@ fn message_mentions_path(message: &str, path: &Path) -> bool {
 #[test]
 #[serial]
 fn resolve_world_root_defaults_to_launch_dir_project() {
+    let _authority_env = crate::execution::AuthorityEnvTestGuard::preserve();
     let temp = TempDir::new().unwrap();
     let substrate_home = setup_substrate_home(&temp);
     let _env = EnvGuard::new(vec![
@@ -163,6 +172,7 @@ fn resolve_world_root_defaults_to_launch_dir_project() {
 #[test]
 #[serial]
 fn resolve_world_root_refuses_legacy_workspace_settings_yaml() {
+    let _authority_env = crate::execution::AuthorityEnvTestGuard::preserve();
     let temp = TempDir::new().unwrap();
     let substrate_home = setup_substrate_home(&temp);
     let _env = EnvGuard::new(vec![(
@@ -199,6 +209,7 @@ fn resolve_world_root_refuses_legacy_workspace_settings_yaml() {
 #[test]
 #[serial]
 fn resolve_world_root_respects_env_when_no_configs() {
+    let _authority_env = crate::execution::AuthorityEnvTestGuard::preserve();
     let temp = TempDir::new().unwrap();
     let substrate_home = setup_substrate_home(&temp);
     let launch_dir = temp.path().join("project");
@@ -228,6 +239,7 @@ fn resolve_world_root_respects_env_when_no_configs() {
 #[test]
 #[serial]
 fn resolve_world_root_env_overrides_global_config() {
+    let _authority_env = crate::execution::AuthorityEnvTestGuard::preserve();
     let temp = TempDir::new().unwrap();
     let substrate_home = setup_substrate_home(&temp);
     let launch_dir = temp.path().join("project");
@@ -259,6 +271,7 @@ fn resolve_world_root_env_overrides_global_config() {
 #[test]
 #[serial]
 fn resolve_world_root_prefers_workspace_config_over_global_when_env_unset() {
+    let _authority_env = crate::execution::AuthorityEnvTestGuard::preserve();
     let temp = TempDir::new().unwrap();
     let substrate_home = setup_substrate_home(&temp);
 
@@ -299,6 +312,7 @@ fn resolve_world_root_prefers_workspace_config_over_global_when_env_unset() {
 #[test]
 #[serial]
 fn resolve_world_root_prefers_cli_over_all_other_sources() {
+    let _authority_env = crate::execution::AuthorityEnvTestGuard::preserve();
     let temp = TempDir::new().unwrap();
     let substrate_home = setup_substrate_home(&temp);
 
@@ -351,6 +365,7 @@ fn resolve_world_root_prefers_cli_over_all_other_sources() {
 #[test]
 #[serial]
 fn resolve_world_root_requires_anchor_path_for_custom_mode() {
+    let _authority_env = crate::execution::AuthorityEnvTestGuard::preserve();
     let temp = TempDir::new().unwrap();
     let substrate_home = setup_substrate_home(&temp);
     let _env = EnvGuard::new(vec![
@@ -374,6 +389,7 @@ fn resolve_world_root_requires_anchor_path_for_custom_mode() {
 #[test]
 #[serial]
 fn effective_root_uses_current_directory_for_follow_mode() {
+    let _authority_env = crate::execution::AuthorityEnvTestGuard::preserve();
     let temp = TempDir::new().unwrap();
     let substrate_home = setup_substrate_home(&temp);
     let _env = EnvGuard::new(vec![
