@@ -2909,19 +2909,32 @@ mod tests {
     struct EnvGuard {
         key: &'static str,
         prev: Option<OsString>,
+        _authority_env: Option<crate::execution::AuthorityEnvTestGuard>,
     }
 
     impl EnvGuard {
         fn set(key: &'static str, value: &std::path::Path) -> Self {
+            let authority_env = matches!(key, "SUBSTRATE_HOME" | "SUBSTRATE_WORLD_SOCKET")
+                .then(crate::execution::AuthorityEnvTestGuard::preserve);
             let prev = std::env::var_os(key);
             std::env::set_var(key, value);
-            Self { key, prev }
+            Self {
+                key,
+                prev,
+                _authority_env: authority_env,
+            }
         }
 
         fn set_str(key: &'static str, value: &str) -> Self {
+            let authority_env = matches!(key, "SUBSTRATE_HOME" | "SUBSTRATE_WORLD_SOCKET")
+                .then(crate::execution::AuthorityEnvTestGuard::preserve);
             let prev = std::env::var_os(key);
             std::env::set_var(key, value);
-            Self { key, prev }
+            Self {
+                key,
+                prev,
+                _authority_env: authority_env,
+            }
         }
     }
 
@@ -2998,6 +3011,7 @@ mod tests {
     #[test]
     #[serial]
     fn test_phase_a_concat_dedupe_and_replace_provenance() {
+        let _authority_env = crate::execution::AuthorityEnvTestGuard::preserve();
         let tmp = TempDir::new().unwrap();
         let substrate_home = tmp.path().join(".substrate");
         fs::create_dir_all(&substrate_home).unwrap();
@@ -3064,6 +3078,7 @@ world:
     #[test]
     #[serial]
     fn test_phase_a_explicit_empty_list_counts_as_source() {
+        let _authority_env = crate::execution::AuthorityEnvTestGuard::preserve();
         let tmp = TempDir::new().unwrap();
         let substrate_home = tmp.path().join(".substrate");
         fs::create_dir_all(&substrate_home).unwrap();
@@ -3109,6 +3124,7 @@ world:
     #[test]
     #[serial]
     fn test_phase_a_workspace_disabled_ignores_workspace_patch() {
+        let _authority_env = crate::execution::AuthorityEnvTestGuard::preserve();
         let tmp = TempDir::new().unwrap();
         let substrate_home = tmp.path().join(".substrate");
         fs::create_dir_all(&substrate_home).unwrap();
@@ -3171,6 +3187,7 @@ world:
     #[test]
     #[serial]
     fn test_diagnostics_world_enabled_prefers_cli_over_workspace_and_env() {
+        let _authority_env = crate::execution::AuthorityEnvTestGuard::preserve();
         let tmp = TempDir::new().unwrap();
         let substrate_home = tmp.path().join(".substrate");
         fs::create_dir_all(&substrate_home).unwrap();
@@ -3237,6 +3254,7 @@ world:
     #[test]
     #[serial]
     fn test_diagnostics_world_enabled_uses_env_override_without_workspace() {
+        let _authority_env = crate::execution::AuthorityEnvTestGuard::preserve();
         let tmp = TempDir::new().unwrap();
         let substrate_home = tmp.path().join(".substrate");
         fs::create_dir_all(&substrate_home).unwrap();
@@ -3268,6 +3286,7 @@ world:
     #[test]
     #[serial]
     fn test_world_disable_attribution_maps_cli_flag() {
+        let _authority_env = crate::execution::AuthorityEnvTestGuard::preserve();
         let tmp = TempDir::new().unwrap();
         let substrate_home = tmp.path().join(".substrate");
         fs::create_dir_all(&substrate_home).unwrap();
@@ -3309,6 +3328,7 @@ world:
     #[test]
     #[serial]
     fn test_world_disable_attribution_maps_override_env() {
+        let _authority_env = crate::execution::AuthorityEnvTestGuard::preserve();
         let tmp = TempDir::new().unwrap();
         let substrate_home = tmp.path().join(".substrate");
         fs::create_dir_all(&substrate_home).unwrap();
@@ -3337,6 +3357,7 @@ world:
     #[test]
     #[serial]
     fn test_world_disable_attribution_maps_workspace_patch() {
+        let _authority_env = crate::execution::AuthorityEnvTestGuard::preserve();
         let tmp = TempDir::new().unwrap();
         let substrate_home = tmp.path().join(".substrate");
         fs::create_dir_all(&substrate_home).unwrap();
@@ -3371,6 +3392,7 @@ world:
     #[test]
     #[serial]
     fn test_world_disable_attribution_maps_global_patch() {
+        let _authority_env = crate::execution::AuthorityEnvTestGuard::preserve();
         let tmp = TempDir::new().unwrap();
         let substrate_home = tmp.path().join(".substrate");
         fs::create_dir_all(&substrate_home).unwrap();
@@ -3407,6 +3429,7 @@ world:
     #[test]
     #[serial]
     fn test_world_disable_attribution_omits_enabled_cases() {
+        let _authority_env = crate::execution::AuthorityEnvTestGuard::preserve();
         let tmp = TempDir::new().unwrap();
         let substrate_home = tmp.path().join(".substrate");
         fs::create_dir_all(&substrate_home).unwrap();
@@ -3738,6 +3761,7 @@ world:
     #[test]
     #[serial]
     fn test_explain_json_bytes_are_deterministic_for_identical_inputs() {
+        let _authority_env = crate::execution::AuthorityEnvTestGuard::preserve();
         let tmp = TempDir::new().unwrap();
         let substrate_home = tmp.path().join(".substrate");
         fs::create_dir_all(&substrate_home).unwrap();

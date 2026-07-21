@@ -763,6 +763,7 @@ mod tests {
     #[test]
     #[serial]
     fn validate_member_selection_returns_descriptor_for_unique_world_member() {
+        let _authority_env = crate::execution::AuthorityEnvTestGuard::preserve();
         let _env_guard = crate::execution::world_env_guard();
         let _world_codex_guard = set_test_world_codex_runtime();
         let config = SubstrateConfig::default();
@@ -788,6 +789,7 @@ mod tests {
     #[test]
     #[serial]
     fn validate_member_selection_resolves_alias_backend_to_canonical_runtime_family() {
+        let _authority_env = crate::execution::AuthorityEnvTestGuard::preserve();
         let _env_guard = crate::execution::world_env_guard();
         let _world_codex_guard = set_test_world_codex_runtime();
         let config = SubstrateConfig::default();
@@ -813,6 +815,7 @@ mod tests {
     #[test]
     #[serial]
     fn validate_member_selection_prefers_world_alias_while_host_codex_remains_distinct() {
+        let _authority_env = crate::execution::AuthorityEnvTestGuard::preserve();
         let _env_guard = crate::execution::world_env_guard();
         let _world_codex_guard = set_test_world_codex_runtime();
         let config = SubstrateConfig::default();
@@ -964,6 +967,7 @@ mod tests {
     #[test]
     #[serial]
     fn validate_exact_backend_selection_rejects_unqualified_preplacement_backend_ids() {
+        let _authority_env = crate::execution::AuthorityEnvTestGuard::preserve();
         let _env_guard = crate::execution::world_env_guard();
         let _world_codex_guard = set_test_world_codex_runtime();
         let config = SubstrateConfig::default();
@@ -1006,6 +1010,7 @@ mod tests {
     #[test]
     #[serial]
     fn validate_exact_backend_selection_rejects_split_world_backend_ids() {
+        let _authority_env = crate::execution::AuthorityEnvTestGuard::preserve();
         let _env_guard = crate::execution::world_env_guard();
         let _world_codex_guard = set_test_world_codex_runtime();
         let config = SubstrateConfig::default();
@@ -1049,6 +1054,7 @@ mod tests {
     #[test]
     #[serial]
     fn validate_exact_backend_selection_accepts_placement_qualified_version_2_ids() {
+        let _authority_env = crate::execution::AuthorityEnvTestGuard::preserve();
         let _env_guard = crate::execution::world_env_guard();
         let _world_codex_guard = set_test_world_codex_runtime();
         let config = SubstrateConfig::default();
@@ -1244,6 +1250,7 @@ mod tests {
     #[test]
     #[serial]
     fn validate_runtime_realizability_accepts_world_scoped_codex_guest_entrypoint_contract() {
+        let _authority_env = crate::execution::AuthorityEnvTestGuard::preserve();
         let _env_guard = crate::execution::world_env_guard();
         let _world_codex_guard = set_test_world_codex_runtime();
         let config = SubstrateConfig::default();
@@ -1267,6 +1274,7 @@ mod tests {
     #[test]
     #[serial]
     fn validate_runtime_realizability_rejects_world_scoped_codex_when_guest_entrypoint_is_absent() {
+        let _authority_env = crate::execution::AuthorityEnvTestGuard::preserve();
         let _env_guard = crate::execution::world_env_guard();
         let config = SubstrateConfig::default();
         let temp = TempDir::new().expect("tempdir for absent guest entrypoint");
@@ -1306,6 +1314,7 @@ mod tests {
     #[serial]
     #[cfg(unix)]
     fn validate_runtime_realizability_distinguishes_world_scoped_codex_permission_denied() {
+        let _authority_env = crate::execution::AuthorityEnvTestGuard::preserve();
         if unsafe { libc::geteuid() } == 0 {
             return;
         }
@@ -1373,6 +1382,7 @@ mod tests {
     #[serial]
     fn validate_runtime_realizability_keeps_host_path_codex_truth_separate_from_world_codex_truth()
     {
+        let _authority_env = crate::execution::AuthorityEnvTestGuard::preserve();
         let _env_guard = crate::execution::world_env_guard();
         let config = SubstrateConfig::default();
         let temp = TempDir::new().expect("tempdir for host/world codex separation");

@@ -325,6 +325,16 @@ mod tests {
     #[test]
     #[serial_test::serial]
     fn schedule_demo_burst_emits_expected_events() {
+        if crate::execution::run_in_bounded_test_subprocess(
+            concat!(
+                module_path!(),
+                "::",
+                stringify!(schedule_demo_burst_emits_expected_events)
+            ),
+            "event_registry",
+        ) {
+            return;
+        }
         let _guard = super::acquire_event_test_guard();
         let rt = Runtime::new().expect("runtime");
         rt.block_on(async {
@@ -358,6 +368,16 @@ mod tests {
     #[test]
     #[serial_test::serial]
     fn publish_command_completion_failure_emits_task_end_with_cmd_id() {
+        if crate::execution::run_in_bounded_test_subprocess(
+            concat!(
+                module_path!(),
+                "::",
+                stringify!(publish_command_completion_failure_emits_task_end_with_cmd_id)
+            ),
+            "event_registry",
+        ) {
+            return;
+        }
         let _guard = super::acquire_event_test_guard();
         let rt = Runtime::new().expect("runtime");
         rt.block_on(async {
@@ -413,6 +433,16 @@ mod tests {
     #[test]
     #[serial_test::serial]
     fn publish_command_completion_none_emits_no_agent_event() {
+        if crate::execution::run_in_bounded_test_subprocess(
+            concat!(
+                module_path!(),
+                "::",
+                stringify!(publish_command_completion_none_emits_no_agent_event)
+            ),
+            "event_registry",
+        ) {
+            return;
+        }
         let _guard = super::acquire_event_test_guard();
         let rt = Runtime::new().expect("runtime");
         rt.block_on(async {
@@ -432,6 +462,17 @@ mod tests {
     #[test]
     #[serial_test::serial]
     fn publish_command_completion_success_emits_task_end_when_enabled() {
+        if crate::execution::run_in_bounded_test_subprocess(
+            concat!(
+                module_path!(),
+                "::",
+                stringify!(publish_command_completion_success_emits_task_end_when_enabled)
+            ),
+            "event_registry",
+        ) {
+            return;
+        }
+        let _authority_env = crate::execution::AuthorityEnvTestGuard::preserve();
         let _guard = super::acquire_event_test_guard();
         let rt = Runtime::new().expect("runtime");
         rt.block_on(async {

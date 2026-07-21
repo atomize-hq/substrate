@@ -180,11 +180,11 @@ mod tests {
     use tempfile::tempdir;
 
     fn with_store(test: impl FnOnce(&AgentRuntimeStateStore)) {
+        let authority_env = crate::execution::AuthorityEnvTestGuard::preserve();
         let temp = tempdir().expect("tempdir");
-        std::env::set_var("SUBSTRATE_HOME", temp.path());
+        authority_env.install_home(temp.path());
         let store = AgentRuntimeStateStore::new().expect("state store");
         test(&store);
-        std::env::remove_var("SUBSTRATE_HOME");
     }
 
     fn persist_session(store: &AgentRuntimeStateStore, orchestration_session_id: &str) {

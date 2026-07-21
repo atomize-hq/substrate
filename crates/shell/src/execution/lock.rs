@@ -267,21 +267,18 @@ mod tests {
         // Use a barrier to ensure proper synchronization
         let barrier = Arc::new(Barrier::new(2));
         let barrier_clone = Arc::clone(&barrier);
+        let (release_tx, release_rx) = std::sync::mpsc::channel();
 
         // Spawn thread that holds lock for a short time
         let handle = thread::spawn(move || {
             let _lock = ProcessLock::acquire(&lock_path_clone, Duration::from_millis(100)).unwrap();
             // Signal that we have the lock
             barrier_clone.wait();
-            // Hold lock for a while
-            thread::sleep(Duration::from_millis(300)); // Hold lock long enough
+            release_rx.recv().expect("release concurrent lock holder");
         });
 
         // Wait for the first thread to acquire the lock
         barrier.wait();
-
-        // Small additional delay to ensure lock is really held
-        thread::sleep(Duration::from_millis(50));
 
         // This should timeout while first thread holds the lock
         let start = std::time::Instant::now();
@@ -302,6 +299,9 @@ mod tests {
             "Should timeout within 500ms"
         );
 
+        release_tx
+            .send(())
+            .expect("release concurrent lock holder after timeout proof");
         // Wait for first thread to finish and release lock
         handle.join().unwrap();
 

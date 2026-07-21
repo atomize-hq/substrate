@@ -3,16 +3,59 @@
 mod common;
 
 use common::substrate_shell_driver;
+use parking_lot::{ReentrantMutex, ReentrantMutexGuard};
 use serde_json::{json, Value};
+use std::ffi::{OsStr, OsString};
 use std::fs;
 use std::path::{Path, PathBuf};
 use std::process::Output;
+use std::sync::OnceLock;
 use substrate_broker::Policy;
 use tempfile::{Builder, TempDir};
 
 const PURE_AGENT_PROTOCOL: &str = "substrate.agent.session";
 const TOOLBOX_UNIX_PATH_FALLBACK_THRESHOLD: usize = 100;
 const TEST_CODEX_WORLD_GUEST_ENTRYPOINT: &str = "/var/lib/substrate/world-deps/bin/codex";
+
+static AUTHORITY_ENV_LOCK: OnceLock<ReentrantMutex<()>> = OnceLock::new();
+
+struct AuthorityEnvGuard {
+    previous_home: Option<OsString>,
+    previous_world_socket: Option<OsString>,
+    _lock: ReentrantMutexGuard<'static, ()>,
+}
+
+impl AuthorityEnvGuard {
+    fn preserve() -> Self {
+        let lock = AUTHORITY_ENV_LOCK
+            .get_or_init(|| ReentrantMutex::new(()))
+            .lock();
+        let previous_home = std::env::var_os("SUBSTRATE_HOME");
+        let previous_world_socket = std::env::var_os("SUBSTRATE_WORLD_SOCKET");
+        Self {
+            previous_home,
+            previous_world_socket,
+            _lock: lock,
+        }
+    }
+
+    fn install_home(&self, value: impl AsRef<OsStr>) {
+        std::env::set_var("SUBSTRATE_HOME", value);
+    }
+}
+
+impl Drop for AuthorityEnvGuard {
+    fn drop(&mut self) {
+        match self.previous_home.as_deref() {
+            Some(value) => std::env::set_var("SUBSTRATE_HOME", value),
+            None => std::env::remove_var("SUBSTRATE_HOME"),
+        }
+        match self.previous_world_socket.as_deref() {
+            Some(value) => std::env::set_var("SUBSTRATE_WORLD_SOCKET", value),
+            None => std::env::remove_var("SUBSTRATE_WORLD_SOCKET"),
+        }
+    }
+}
 
 #[derive(Clone, Copy)]
 enum CapabilityOverride<'a> {
@@ -3796,6 +3839,7 @@ fn agent_status_json_surfaces_awaiting_attention_fields_from_parent_session_trut
 #[test]
 #[serial_test::serial]
 fn agent_status_json_derives_awaiting_attention_from_obligation_projection() {
+    let authority_env = AuthorityEnvGuard::preserve();
     let fixture = AgentSuccessorFixture::new();
     fixture.init_workspace();
     fixture.seed_inventory_for_list_and_status_contracts();
@@ -3827,20 +3871,14 @@ fn agent_status_json_derives_awaiting_attention_from_obligation_projection() {
         },
     );
 
-    let previous_substrate_home = std::env::var_os("SUBSTRATE_HOME");
-    std::env::set_var("SUBSTRATE_HOME", &fixture.substrate_home);
+    authority_env.install_home(&fixture.substrate_home);
     let persist_result =
         substrate_shell::execution::agent_dev_support::persist_runtime_alert_for_dev_support(
             "0195f8f1-7a34-7b7f-9c4d-9a7c2f5d6fbd",
             "obl_attention",
             Some("attention needed from obligation projection".to_string()),
         );
-    match previous_substrate_home {
-        Some(previous) => std::env::set_var("SUBSTRATE_HOME", previous),
-        None => std::env::remove_var("SUBSTRATE_HOME"),
-    }
     persist_result.expect("persist runtime alert obligation");
-
     let output = fixture.run(&["agent", "status", "--json"]);
     assert!(
         output.status.success(),

@@ -6126,34 +6126,16 @@ type PrivateStopTransportRetryHook =
     Arc<dyn Fn(PrivateStopTransportRetryEvent, &Path) + Send + Sync>;
 
 #[cfg(test)]
-fn private_stop_transport_retry_hook() -> &'static Mutex<Option<PrivateStopTransportRetryHook>> {
-    static HOOK: LazyLock<Mutex<Option<PrivateStopTransportRetryHook>>> =
-        LazyLock::new(|| Mutex::new(None));
-    &HOOK
+tokio::task_local! {
+    static PRIVATE_STOP_TRANSPORT_RETRY_HOOK: PrivateStopTransportRetryHook;
 }
 
 #[cfg(test)]
-struct PrivateStopTransportRetryHookGuard;
-
-#[cfg(test)]
-impl PrivateStopTransportRetryHookGuard {
-    fn install(hook: PrivateStopTransportRetryHook) -> Self {
-        private_stop_transport_retry_hook()
-            .lock()
-            .unwrap_or_else(|poisoned| poisoned.into_inner())
-            .replace(hook);
-        Self
-    }
-}
-
-#[cfg(test)]
-impl Drop for PrivateStopTransportRetryHookGuard {
-    fn drop(&mut self) {
-        private_stop_transport_retry_hook()
-            .lock()
-            .unwrap_or_else(|poisoned| poisoned.into_inner())
-            .take();
-    }
+async fn with_private_stop_transport_retry_hook<T>(
+    hook: PrivateStopTransportRetryHook,
+    future: impl std::future::Future<Output = T>,
+) -> T {
+    PRIVATE_STOP_TRANSPORT_RETRY_HOOK.scope(hook, future).await
 }
 
 #[cfg(test)]
@@ -6161,13 +6143,7 @@ fn notify_private_stop_transport_retry_event(
     transport_path: &Path,
     event: PrivateStopTransportRetryEvent,
 ) {
-    let hook = private_stop_transport_retry_hook()
-        .lock()
-        .unwrap_or_else(|poisoned| poisoned.into_inner())
-        .clone();
-    if let Some(hook) = hook {
-        hook(event, transport_path);
-    }
+    let _ = PRIVATE_STOP_TRANSPORT_RETRY_HOOK.try_with(|hook| hook(event, transport_path));
 }
 
 #[cfg(target_os = "linux")]
@@ -6978,7 +6954,11 @@ mod tests {
     #[cfg(target_os = "linux")]
     use crate::execution::config_model::AgentCliMode;
     #[cfg(target_os = "linux")]
-    use crate::execution::world_env_guard;
+    use crate::execution::{
+        world_env_guard, AuthorityEnvTestGuard, AuthorityEnvTestTempDir, WorldSocketTestGuard,
+    };
+    #[cfg(target_os = "linux")]
+    use futures::FutureExt as _;
     #[cfg(target_os = "linux")]
     use hyper014::body::{to_bytes, HttpBody};
     #[cfg(target_os = "linux")]
@@ -7050,55 +7030,75 @@ mod tests {
     }
 
     #[cfg(target_os = "linux")]
-    struct EnvVarGuard {
-        key: &'static str,
-        previous: Option<String>,
+    enum EnvVarGuard {
+        Generic {
+            key: &'static str,
+            previous: Option<std::ffi::OsString>,
+        },
+        Authority {
+            _guard: AuthorityEnvTestGuard,
+        },
     }
 
     #[cfg(target_os = "linux")]
     impl EnvVarGuard {
         fn set(key: &'static str, value: &str) -> Self {
-            let previous = std::env::var(key).ok();
+            if key == "SUBSTRATE_HOME" {
+                return Self::Authority {
+                    _guard: AuthorityEnvTestGuard::set_home(value),
+                };
+            }
+            if key == "SUBSTRATE_WORLD_SOCKET" {
+                return Self::Authority {
+                    _guard: AuthorityEnvTestGuard::set_world_socket(value),
+                };
+            }
+            let previous = std::env::var_os(key);
             std::env::set_var(key, value);
-            Self { key, previous }
+            Self::Generic { key, previous }
         }
 
         fn set_path(key: &'static str, value: &Path) -> Self {
-            let previous = std::env::var(key).ok();
+            if key == "SUBSTRATE_HOME" {
+                return Self::Authority {
+                    _guard: AuthorityEnvTestGuard::set_home(value),
+                };
+            }
+            if key == "SUBSTRATE_WORLD_SOCKET" {
+                return Self::Authority {
+                    _guard: AuthorityEnvTestGuard::set_world_socket(value),
+                };
+            }
+            let previous = std::env::var_os(key);
             std::env::set_var(key, value);
-            Self { key, previous }
+            Self::Generic { key, previous }
         }
     }
 
     #[cfg(target_os = "linux")]
     impl Drop for EnvVarGuard {
         fn drop(&mut self) {
-            if let Some(previous) = self.previous.as_deref() {
-                std::env::set_var(self.key, previous);
-            } else {
-                std::env::remove_var(self.key);
+            if let Self::Generic { key, previous } = self {
+                if let Some(previous) = previous.as_deref() {
+                    std::env::set_var(key, previous);
+                } else {
+                    std::env::remove_var(key);
+                }
             }
         }
     }
 
     #[cfg(target_os = "linux")]
     struct CurrentDirGuard {
-        original: PathBuf,
+        _process_cwd: crate::execution::ProcessCwdTestGuard,
     }
 
     #[cfg(target_os = "linux")]
     impl CurrentDirGuard {
         fn change_to(path: &Path) -> Self {
-            let original = std::env::current_dir().expect("capture current dir");
-            std::env::set_current_dir(path).expect("set current dir");
-            Self { original }
-        }
-    }
-
-    #[cfg(target_os = "linux")]
-    impl Drop for CurrentDirGuard {
-        fn drop(&mut self) {
-            let _ = std::env::set_current_dir(&self.original);
+            Self {
+                _process_cwd: crate::execution::ProcessCwdTestGuard::change_to(path),
+            }
         }
     }
 
@@ -7292,9 +7292,10 @@ mod tests {
     }
 
     #[cfg(target_os = "linux")]
-    fn secure_authority_tempdir() -> TempDir {
+    fn secure_authority_tempdir() -> AuthorityEnvTestTempDir {
         use std::os::unix::fs::PermissionsExt as _;
 
+        let authority = AuthorityEnvTestGuard::preserve();
         let safe_parent = std::env::var_os("XDG_RUNTIME_DIR")
             .map(PathBuf::from)
             .unwrap_or_else(|| {
@@ -7305,7 +7306,7 @@ mod tests {
             tempfile::tempdir_in(safe_parent).expect("create secure authority fixture directory");
         fs::set_permissions(root.path(), fs::Permissions::from_mode(0o700))
             .expect("secure authority fixture directory");
-        root
+        AuthorityEnvTestTempDir::with_authority(root, authority)
     }
 
     #[cfg(target_os = "linux")]
@@ -9885,6 +9886,7 @@ mod tests {
     #[tokio::test(flavor = "current_thread")]
     #[serial]
     async fn b21_startup_recovery_unavailable_producer_remains_nonterminal() {
+        let _authority_env = AuthorityEnvTestGuard::preserve();
         let (root, _receipt_registry, execution_supervisor, claim) =
             seed_b21_ephemeral_observation("task-run-startup-unavailable");
         let socket_home = tempdir().expect("startup unavailable socket tempdir");
@@ -9917,6 +9919,7 @@ mod tests {
     #[test]
     #[serial]
     fn b21_startup_recovery_rejects_corrupt_authority_before_activation() {
+        let _authority_env = AuthorityEnvTestGuard::preserve();
         let (root, _receipt_registry, _execution_supervisor, _authority_store_id) =
             b21_test_acceptance_stores();
         fs::remove_dir_all(root.path().join("authority-v1/keys"))
@@ -10684,6 +10687,375 @@ mod tests {
         let _ = stream.write_all(response.as_bytes()).await;
         let _ = stream.write_all(body).await;
         let _ = stream.shutdown().await;
+    }
+
+    #[cfg(target_os = "linux")]
+    async fn terminate_test_server(
+        server: tokio::task::JoinHandle<()>,
+        label: &str,
+    ) -> Result<(), String> {
+        server.abort();
+        match server.await {
+            Err(error) if error.is_cancelled() => Ok(()),
+            Ok(()) => Ok(()),
+            Err(error) => Err(format!("{label} server join failed unexpectedly: {error}")),
+        }
+    }
+
+    #[cfg(target_os = "linux")]
+    enum TestBodyOutcome<T> {
+        Completed(T),
+        Panicked(Box<dyn std::any::Any + Send>),
+        CleanupFailed(String),
+    }
+
+    #[cfg(target_os = "linux")]
+    impl<T> TestBodyOutcome<T> {
+        fn finish(self) -> T {
+            match self {
+                Self::Completed(value) => value,
+                Self::Panicked(payload) => std::panic::resume_unwind(payload),
+                Self::CleanupFailed(error) => panic!("{error}"),
+            }
+        }
+    }
+
+    #[cfg(target_os = "linux")]
+    async fn run_test_body_with_server_cleanup<T, TestFuture, Cleanup, CleanupFuture>(
+        server: tokio::task::JoinHandle<()>,
+        socket_home: TempDir,
+        socket_path: &Path,
+        label: &str,
+        test: TestFuture,
+        cleanup: Cleanup,
+    ) -> TestBodyOutcome<T>
+    where
+        TestFuture: std::future::Future<Output = T>,
+        Cleanup: FnOnce() -> CleanupFuture,
+        CleanupFuture: std::future::Future<Output = ()>,
+    {
+        let test_outcome = std::panic::AssertUnwindSafe(test).catch_unwind().await;
+        let server_outcome = terminate_test_server(server, label).await;
+        let cleanup_outcome = std::panic::AssertUnwindSafe(async { cleanup().await })
+            .catch_unwind()
+            .await;
+        drop(socket_home);
+        let fixture_outcome = (!socket_path.exists())
+            .then_some(())
+            .ok_or_else(|| format!("{label} socket fixture survived confirmed server termination"));
+
+        if let Err(error) = server_outcome {
+            return TestBodyOutcome::CleanupFailed(error);
+        }
+        if let Err(payload) = cleanup_outcome {
+            return TestBodyOutcome::Panicked(payload);
+        }
+        if let Err(error) = fixture_outcome {
+            return TestBodyOutcome::CleanupFailed(error);
+        }
+        match test_outcome {
+            Ok(value) => TestBodyOutcome::Completed(value),
+            Err(payload) => TestBodyOutcome::Panicked(payload),
+        }
+    }
+
+    #[cfg(target_os = "linux")]
+    #[derive(Clone, Default)]
+    struct TestTaskRegistry {
+        tasks: Arc<Mutex<Vec<RegisteredTestTask>>>,
+    }
+
+    #[cfg(target_os = "linux")]
+    struct RegisteredTestTask {
+        abort: tokio::task::AbortHandle,
+        monitor: tokio::task::JoinHandle<TestTaskPosture>,
+        cancellation_allowed: bool,
+    }
+
+    #[cfg(target_os = "linux")]
+    struct TestTaskHandle<T> {
+        abort: tokio::task::AbortHandle,
+        result: tokio::sync::oneshot::Receiver<Result<T, tokio::task::JoinError>>,
+    }
+
+    #[cfg(target_os = "linux")]
+    impl<T> TestTaskHandle<T> {
+        fn abort(&self) {
+            self.abort.abort();
+        }
+
+        fn is_finished(&self) -> bool {
+            self.abort.is_finished()
+        }
+    }
+
+    #[cfg(target_os = "linux")]
+    struct TestTaskAbortOnDrop {
+        abort: tokio::task::AbortHandle,
+    }
+
+    #[cfg(target_os = "linux")]
+    impl TestTaskAbortOnDrop {
+        fn new<T>(task: &TestTaskHandle<T>) -> Self {
+            Self {
+                abort: task.abort.clone(),
+            }
+        }
+    }
+
+    #[cfg(target_os = "linux")]
+    impl Drop for TestTaskAbortOnDrop {
+        fn drop(&mut self) {
+            if !self.abort.is_finished() {
+                self.abort.abort();
+            }
+        }
+    }
+
+    #[cfg(target_os = "linux")]
+    impl<T> std::future::Future for TestTaskHandle<T> {
+        type Output = Result<T, tokio::task::JoinError>;
+
+        fn poll(
+            mut self: std::pin::Pin<&mut Self>,
+            cx: &mut std::task::Context<'_>,
+        ) -> std::task::Poll<Self::Output> {
+            match std::pin::Pin::new(&mut self.result).poll(cx) {
+                std::task::Poll::Ready(Ok(result)) => std::task::Poll::Ready(result),
+                std::task::Poll::Ready(Err(_)) => {
+                    panic!("registered test task monitor dropped its result")
+                }
+                std::task::Poll::Pending => std::task::Poll::Pending,
+            }
+        }
+    }
+
+    #[cfg(target_os = "linux")]
+    #[derive(Clone, Copy, Debug, Eq, PartialEq)]
+    enum TestTaskPosture {
+        Completed,
+        Cancelled,
+        Panicked,
+    }
+
+    #[cfg(target_os = "linux")]
+    impl TestTaskRegistry {
+        fn spawn<F>(&self, future: F) -> TestTaskHandle<F::Output>
+        where
+            F: std::future::Future + Send + 'static,
+            F::Output: Send + 'static,
+        {
+            self.spawn_with_posture(future, false)
+        }
+
+        fn spawn_cancellable<F>(&self, future: F) -> TestTaskHandle<F::Output>
+        where
+            F: std::future::Future + Send + 'static,
+            F::Output: Send + 'static,
+        {
+            self.spawn_with_posture(future, true)
+        }
+
+        fn spawn_with_posture<F>(
+            &self,
+            future: F,
+            cancellation_allowed: bool,
+        ) -> TestTaskHandle<F::Output>
+        where
+            F: std::future::Future + Send + 'static,
+            F::Output: Send + 'static,
+        {
+            let task = tokio::spawn(future);
+            let abort = task.abort_handle();
+            let (result_tx, result_rx) = tokio::sync::oneshot::channel();
+            let monitor = tokio::spawn(async move {
+                let result = task.await;
+                let posture = match &result {
+                    Ok(_) => TestTaskPosture::Completed,
+                    Err(err) if err.is_cancelled() => TestTaskPosture::Cancelled,
+                    Err(_) => TestTaskPosture::Panicked,
+                };
+                let _ = result_tx.send(result);
+                posture
+            });
+            self.tasks
+                .lock()
+                .expect("test task registry mutex poisoned")
+                .push(RegisteredTestTask {
+                    abort: abort.clone(),
+                    monitor,
+                    cancellation_allowed,
+                });
+            TestTaskHandle {
+                abort,
+                result: result_rx,
+            }
+        }
+
+        async fn finish_or_abort_and_wait(&self) {
+            let tasks = std::mem::take(
+                &mut *self
+                    .tasks
+                    .lock()
+                    .expect("test task registry mutex poisoned"),
+            );
+            let mut timed_out = false;
+            let mut unexpected = Vec::new();
+            for mut task in tasks {
+                let posture = match timeout(Duration::from_secs(3), &mut task.monitor).await {
+                    Ok(posture) => posture.expect("registered test task monitor panicked"),
+                    Err(_) => {
+                        timed_out = true;
+                        task.abort.abort();
+                        task.monitor
+                            .await
+                            .expect("registered test task monitor panicked after abort")
+                    }
+                };
+                if posture == TestTaskPosture::Panicked
+                    || (posture == TestTaskPosture::Cancelled && !task.cancellation_allowed)
+                {
+                    unexpected.push(posture);
+                }
+            }
+            assert!(
+                !timed_out,
+                "registered test task required forced cancellation during cleanup"
+            );
+            assert!(
+                unexpected.is_empty(),
+                "registered test task ended with unexpected posture: {unexpected:?}"
+            );
+        }
+    }
+
+    #[cfg(target_os = "linux")]
+    #[derive(Clone)]
+    struct TestFixtureTaskOwner {
+        tasks: TestTaskRegistry,
+        close_tx: tokio::sync::watch::Sender<bool>,
+        private_stop_paths: Arc<Mutex<Vec<PathBuf>>>,
+    }
+
+    #[cfg(target_os = "linux")]
+    impl TestFixtureTaskOwner {
+        fn new() -> Self {
+            let (close_tx, _close_rx) = tokio::sync::watch::channel(false);
+            Self {
+                tasks: TestTaskRegistry::default(),
+                close_tx,
+                private_stop_paths: Arc::new(Mutex::new(Vec::new())),
+            }
+        }
+
+        fn close_receiver(&self) -> tokio::sync::watch::Receiver<bool> {
+            self.close_tx.subscribe()
+        }
+
+        fn spawn<F>(&self, future: F)
+        where
+            F: std::future::Future<Output = ()> + Send + 'static,
+        {
+            let _task = self.tasks.spawn(future);
+        }
+
+        fn spawn_cancellable<F>(&self, future: F) -> TestTaskHandle<F::Output>
+        where
+            F: std::future::Future + Send + 'static,
+            F::Output: Send + 'static,
+        {
+            self.tasks.spawn_cancellable(future)
+        }
+
+        fn spawn_with_private_stop_path<F>(&self, path: PathBuf, future: F)
+        where
+            F: std::future::Future<Output = ()> + Send + 'static,
+        {
+            self.private_stop_paths
+                .lock()
+                .expect("test fixture private stop path mutex poisoned")
+                .push(path);
+            let _task = self.tasks.spawn(future);
+        }
+
+        async fn finish(&self) {
+            self.close_tx.send_replace(true);
+            self.tasks.finish_or_abort_and_wait().await;
+            let surviving_paths = self
+                .private_stop_paths
+                .lock()
+                .expect("test fixture private stop path mutex poisoned")
+                .iter()
+                .filter(|path| path.exists())
+                .cloned()
+                .collect::<Vec<_>>();
+            assert!(
+                surviving_paths.is_empty(),
+                "private stop transports survived confirmed fixture task termination: {surviving_paths:?}"
+            );
+        }
+    }
+
+    #[cfg(target_os = "linux")]
+    async fn wait_for_test_fixture_close(receiver: &mut tokio::sync::watch::Receiver<bool>) {
+        while !*receiver.borrow() {
+            receiver
+                .changed()
+                .await
+                .expect("test fixture close owner must outlive its tasks");
+        }
+    }
+
+    #[cfg(target_os = "linux")]
+    async fn settle_test_fixture_server(
+        server: tokio::task::JoinHandle<()>,
+        label: &str,
+    ) -> Result<(), String> {
+        if !server.is_finished() {
+            server.abort();
+        }
+        match server.await {
+            Ok(()) => Ok(()),
+            Err(error) if error.is_cancelled() => Ok(()),
+            Err(error) => Err(format!("{label} server join failed unexpectedly: {error}")),
+        }
+    }
+
+    #[cfg(target_os = "linux")]
+    async fn run_test_body_with_fixture_task_cleanup<T, TestFuture>(
+        server: tokio::task::JoinHandle<()>,
+        socket_home: TempDir,
+        socket_path: &Path,
+        label: &str,
+        fixture_tasks: TestFixtureTaskOwner,
+        test: TestFuture,
+    ) -> TestBodyOutcome<T>
+    where
+        TestFuture: std::future::Future<Output = T>,
+    {
+        let test_outcome = std::panic::AssertUnwindSafe(test).catch_unwind().await;
+        let server_outcome = settle_test_fixture_server(server, label).await;
+        let cleanup_outcome = std::panic::AssertUnwindSafe(fixture_tasks.finish())
+            .catch_unwind()
+            .await;
+        drop(socket_home);
+        let fixture_outcome = (!socket_path.exists())
+            .then_some(())
+            .ok_or_else(|| format!("{label} socket fixture survived confirmed task termination"));
+
+        if let Err(error) = server_outcome {
+            return TestBodyOutcome::CleanupFailed(error);
+        }
+        if let Err(payload) = cleanup_outcome {
+            return TestBodyOutcome::Panicked(payload);
+        }
+        if let Err(error) = fixture_outcome {
+            return TestBodyOutcome::CleanupFailed(error);
+        }
+        match test_outcome {
+            Ok(value) => TestBodyOutcome::Completed(value),
+            Err(payload) => TestBodyOutcome::Panicked(payload),
+        }
     }
 
     #[cfg(target_os = "linux")]
@@ -11638,8 +12010,7 @@ mod tests {
             }
         });
 
-        let previous_socket = std::env::var("SUBSTRATE_WORLD_SOCKET").ok();
-        std::env::set_var("SUBSTRATE_WORLD_SOCKET", &socket_path);
+        let _socket_guard = WorldSocketTestGuard::set(&socket_path);
 
         let err = match execute_continue_world_worker_stream(
             &sample_continue_submit_request(),
@@ -11666,12 +12037,6 @@ mod tests {
         );
         assert_eq!(recorded[0].span_id, "member-turn-span");
         assert_eq!(recorded[0].sig, "INT");
-
-        if let Some(previous_socket) = previous_socket {
-            std::env::set_var("SUBSTRATE_WORLD_SOCKET", previous_socket);
-        } else {
-            std::env::remove_var("SUBSTRATE_WORLD_SOCKET");
-        }
 
         server.await.expect("stub world server task");
     }
@@ -11987,7 +12352,9 @@ mod tests {
         let socket_home = tempdir().expect("socket tempdir");
         let socket_path = socket_home.path().join("continue-fork-exit-boundary.sock");
         let listener = UnixListener::bind(&socket_path).expect("bind stub world socket");
+        let (release_eof_tx, release_eof_rx) = tokio::sync::oneshot::channel();
         let server = tokio::spawn(async move {
+            let mut release_eof_rx = Some(release_eof_rx);
             while let Ok((mut stream, _addr)) = listener.accept().await {
                 let Some((header, body)) = read_http_request(&mut stream).await else {
                     continue;
@@ -12030,7 +12397,10 @@ mod tests {
                         },
                     )
                     .await;
-                    tokio::time::sleep(std::time::Duration::from_secs(5)).await;
+                    let _ = release_eof_rx
+                        .take()
+                        .expect("single continue EOF release receiver")
+                        .await;
                     break;
                 }
 
@@ -12039,21 +12409,33 @@ mod tests {
         });
 
         let _socket_guard = EnvVarGuard::set_path("SUBSTRATE_WORLD_SOCKET", &socket_path);
-        let outcome = tokio::time::timeout(
-            std::time::Duration::from_millis(500),
-            execute_continue_world_worker_stream_for_turn_kind(
-                &sample_continue_submit_request(),
-                &Policy::default(),
-                ContinueWorldWorkerTurnKind::GenericContinue,
-            ),
-        )
-        .await
-        .expect("continue-fork compatibility must return at exact Exit")
-        .expect("continue-fork compatibility should preserve the terminal result");
+        let test_outcome = run_test_body_with_server_cleanup(
+            server,
+            socket_home,
+            &socket_path,
+            "continue exact terminal boundary",
+            async {
+                let outcome = tokio::time::timeout(
+                    std::time::Duration::from_millis(500),
+                    execute_continue_world_worker_stream_for_turn_kind(
+                        &sample_continue_submit_request(),
+                        &Policy::default(),
+                        ContinueWorldWorkerTurnKind::GenericContinue,
+                    ),
+                )
+                .await
+                .expect("continue-fork compatibility must return at exact Exit")
+                .expect("continue-fork compatibility should preserve the terminal result");
 
-        assert_eq!(outcome.exit_code, 0);
-        server.abort();
-        let _ = server.await;
+                assert_eq!(outcome.exit_code, 0);
+                release_eof_tx
+                    .send(())
+                    .expect("release transport EOF only after exact terminal observation");
+            },
+            || async {},
+        )
+        .await;
+        test_outcome.finish();
     }
 
     #[cfg(target_os = "linux")]
@@ -12668,8 +13050,9 @@ mod tests {
     #[serial]
     fn dispatch_contract_persist_continue_world_worker_obligation_projects_supported_events_into_canonical_state(
     ) {
-        let substrate_home = tempdir().expect("substrate home tempdir");
-        let _substrate_home_guard = EnvVarGuard::set_path("SUBSTRATE_HOME", substrate_home.path());
+        let substrate_home =
+            AuthorityEnvTestTempDir::new(tempdir().expect("substrate home tempdir"));
+        substrate_home.install_as_home();
         let workspace_root = tempdir().expect("workspace root tempdir");
         let store = AgentRuntimeStateStore::new().expect("state store");
         persist_authoritative_continue_dispatch_state(&store, workspace_root.path(), "world-17", 2);
@@ -12850,8 +13233,9 @@ mod tests {
     #[serial]
     fn dispatch_contract_persist_continue_world_worker_obligation_canonicalizes_exact_causation_ids_when_present(
     ) {
-        let substrate_home = tempdir().expect("substrate home tempdir");
-        let _substrate_home_guard = EnvVarGuard::set_path("SUBSTRATE_HOME", substrate_home.path());
+        let substrate_home =
+            AuthorityEnvTestTempDir::new(tempdir().expect("substrate home tempdir"));
+        substrate_home.install_as_home();
         let workspace_root = tempdir().expect("workspace root tempdir");
         let store = AgentRuntimeStateStore::new().expect("state store");
         persist_authoritative_continue_dispatch_state(&store, workspace_root.path(), "world-17", 2);
@@ -12909,8 +13293,9 @@ mod tests {
     #[serial]
     fn dispatch_contract_persist_continue_world_worker_obligation_keeps_ambiguous_item_ids_out_of_canonical_message_identity(
     ) {
-        let substrate_home = tempdir().expect("substrate home tempdir");
-        let _substrate_home_guard = EnvVarGuard::set_path("SUBSTRATE_HOME", substrate_home.path());
+        let substrate_home =
+            AuthorityEnvTestTempDir::new(tempdir().expect("substrate home tempdir"));
+        substrate_home.install_as_home();
         let workspace_root = tempdir().expect("workspace root tempdir");
         let store = AgentRuntimeStateStore::new().expect("state store");
         persist_authoritative_continue_dispatch_state(&store, workspace_root.path(), "world-17", 2);
@@ -12961,8 +13346,9 @@ mod tests {
     #[serial]
     fn router_owned_auto_attach_session_trigger_fails_closed_for_detached_continue_world_worker_obligations_when_router_policy_is_disabled(
     ) {
-        let substrate_home = tempdir().expect("substrate home tempdir");
-        let _substrate_home_guard = EnvVarGuard::set_path("SUBSTRATE_HOME", substrate_home.path());
+        let substrate_home =
+            AuthorityEnvTestTempDir::new(tempdir().expect("substrate home tempdir"));
+        substrate_home.install_as_home();
         let workspace_root = tempdir().expect("workspace root tempdir");
         let store = AgentRuntimeStateStore::new().expect("state store");
         persist_detached_continue_dispatch_state(&store, workspace_root.path(), "world-17", 2);
@@ -13015,8 +13401,9 @@ mod tests {
     #[test]
     #[serial]
     fn router_owned_auto_attach_discovery_trigger_discovers_other_detached_candidate_sessions() {
-        let substrate_home = tempdir().expect("substrate home tempdir");
-        let _substrate_home_guard = EnvVarGuard::set_path("SUBSTRATE_HOME", substrate_home.path());
+        let substrate_home =
+            AuthorityEnvTestTempDir::new(tempdir().expect("substrate home tempdir"));
+        substrate_home.install_as_home();
         let store = AgentRuntimeStateStore::new().expect("state store");
 
         let unrelated_workspace = tempdir().expect("unrelated workspace root tempdir");
@@ -13153,8 +13540,9 @@ mod tests {
     {
         use std::os::unix::fs::PermissionsExt;
 
-        let substrate_home = tempdir().expect("substrate home tempdir");
-        let _substrate_home_guard = EnvVarGuard::set_path("SUBSTRATE_HOME", substrate_home.path());
+        let substrate_home =
+            AuthorityEnvTestTempDir::new(tempdir().expect("substrate home tempdir"));
+        substrate_home.install_as_home();
         let workspace_root = tempdir().expect("workspace root tempdir");
         let store = AgentRuntimeStateStore::new().expect("state store");
         persist_detached_continue_dispatch_state(&store, workspace_root.path(), "world-18", 3);
@@ -13204,8 +13592,9 @@ mod tests {
     #[test]
     #[serial]
     fn build_router_owned_auto_attach_outcome_record_joins_fail_closed_router_session_details() {
-        let substrate_home = tempdir().expect("substrate home tempdir");
-        let _substrate_home_guard = EnvVarGuard::set_path("SUBSTRATE_HOME", substrate_home.path());
+        let substrate_home =
+            AuthorityEnvTestTempDir::new(tempdir().expect("substrate home tempdir"));
+        substrate_home.install_as_home();
         let workspace_root = tempdir().expect("workspace root tempdir");
         let store = AgentRuntimeStateStore::new().expect("state store");
         persist_detached_continue_dispatch_state(&store, workspace_root.path(), "world-17", 2);
@@ -13292,8 +13681,9 @@ mod tests {
     #[test]
     #[serial]
     fn build_router_owned_auto_attach_outcome_record_preserves_attached_settlement_detail() {
-        let substrate_home = tempdir().expect("substrate home tempdir");
-        let _substrate_home_guard = EnvVarGuard::set_path("SUBSTRATE_HOME", substrate_home.path());
+        let substrate_home =
+            AuthorityEnvTestTempDir::new(tempdir().expect("substrate home tempdir"));
+        substrate_home.install_as_home();
         let store = AgentRuntimeStateStore::new().expect("state store");
 
         let mut session = sample_session();
@@ -13463,8 +13853,9 @@ mod tests {
         });
 
         let _socket_guard = EnvVarGuard::set_path("SUBSTRATE_WORLD_SOCKET", &socket_path);
-        let substrate_home = tempdir().expect("substrate home tempdir");
-        let _substrate_home_guard = EnvVarGuard::set_path("SUBSTRATE_HOME", substrate_home.path());
+        let substrate_home =
+            AuthorityEnvTestTempDir::new(tempdir().expect("substrate home tempdir"));
+        substrate_home.install_as_home();
         fs::write(
             substrate_home.path().join("policy.yaml"),
             r#"id: test-global-policy
@@ -13643,8 +14034,9 @@ agents:
         });
 
         let _socket_guard = EnvVarGuard::set_path("SUBSTRATE_WORLD_SOCKET", &socket_path);
-        let substrate_home = tempdir().expect("substrate home tempdir");
-        let _substrate_home_guard = EnvVarGuard::set_path("SUBSTRATE_HOME", substrate_home.path());
+        let substrate_home =
+            AuthorityEnvTestTempDir::new(tempdir().expect("substrate home tempdir"));
+        substrate_home.install_as_home();
         fs::write(
             substrate_home.path().join("policy.yaml"),
             r#"id: test-global-policy
@@ -13836,9 +14228,9 @@ agents:
             });
 
             let _socket_guard = EnvVarGuard::set_path("SUBSTRATE_WORLD_SOCKET", &socket_path);
-            let substrate_home = tempdir().expect("substrate home tempdir");
-            let _substrate_home_guard =
-                EnvVarGuard::set_path("SUBSTRATE_HOME", substrate_home.path());
+            let substrate_home =
+                AuthorityEnvTestTempDir::new(tempdir().expect("substrate home tempdir"));
+            substrate_home.install_as_home();
             fs::write(
                 substrate_home.path().join("policy.yaml"),
                 format!(
@@ -14083,9 +14475,9 @@ agents:
             });
 
             let _socket_guard = EnvVarGuard::set_path("SUBSTRATE_WORLD_SOCKET", &socket_path);
-            let substrate_home = tempdir().expect("substrate home tempdir");
-            let _substrate_home_guard =
-                EnvVarGuard::set_path("SUBSTRATE_HOME", substrate_home.path());
+            let substrate_home =
+                AuthorityEnvTestTempDir::new(tempdir().expect("substrate home tempdir"));
+            substrate_home.install_as_home();
             fs::write(
                 substrate_home.path().join("policy.yaml"),
                 r#"id: test-global-policy
@@ -14158,8 +14550,9 @@ agents:
     #[serial]
     fn dispatch_contract_prepare_orchestrator_world_dispatch_defers_continue_target_resolution_until_after_steering(
     ) {
-        let substrate_home = tempdir().expect("substrate home tempdir");
-        let _substrate_home_guard = EnvVarGuard::set_path("SUBSTRATE_HOME", substrate_home.path());
+        let substrate_home =
+            AuthorityEnvTestTempDir::new(tempdir().expect("substrate home tempdir"));
+        substrate_home.install_as_home();
         let workspace_root = tempdir().expect("workspace root tempdir");
         let store = AgentRuntimeStateStore::new().expect("state store");
         persist_stale_continue_dispatch_state(&store, workspace_root.path(), "world-17", 2);
@@ -14182,7 +14575,8 @@ agents:
     #[test]
     #[serial]
     fn dispatch_contract_continue_target_resolution_reuses_prepared_authoritative_store() {
-        let authoritative_home = tempdir().expect("authoritative substrate home tempdir");
+        let authoritative_home =
+            AuthorityEnvTestTempDir::new(tempdir().expect("authoritative substrate home tempdir"));
         let _authoritative_home_guard =
             EnvVarGuard::set_path("SUBSTRATE_HOME", authoritative_home.path());
         let workspace_root = tempdir().expect("workspace root tempdir");
@@ -14193,7 +14587,8 @@ agents:
             prepare_orchestrator_world_dispatch(&store, sample_continue_world_dispatch_request())
                 .expect("prepare should capture authoritative caller truth");
 
-        let ambient_home = tempdir().expect("ambient substrate home tempdir");
+        let ambient_home =
+            AuthorityEnvTestTempDir::new(tempdir().expect("ambient substrate home tempdir"));
         let _ambient_home_guard = EnvVarGuard::set_path("SUBSTRATE_HOME", ambient_home.path());
 
         let resolved = resolve_continue_world_dispatch_target_for_routing(prepared)
@@ -14259,9 +14654,9 @@ agents:
         ];
 
         for case in cases {
-            let substrate_home = tempdir().expect("substrate home tempdir");
-            let _substrate_home_guard =
-                EnvVarGuard::set_path("SUBSTRATE_HOME", substrate_home.path());
+            let substrate_home =
+                AuthorityEnvTestTempDir::new(tempdir().expect("substrate home tempdir"));
+            substrate_home.install_as_home();
             write_world_dispatch_policy(
                 substrate_home.path(),
                 case.enabled,
@@ -14305,8 +14700,9 @@ agents:
     #[serial]
     async fn dispatch_contract_continue_world_worker_approval_response_denies_by_default_before_target_resolution(
     ) {
-        let substrate_home = tempdir().expect("substrate home tempdir");
-        let _substrate_home_guard = EnvVarGuard::set_path("SUBSTRATE_HOME", substrate_home.path());
+        let substrate_home =
+            AuthorityEnvTestTempDir::new(tempdir().expect("substrate home tempdir"));
+        substrate_home.install_as_home();
         write_world_dispatch_policy(
             substrate_home.path(),
             true,
@@ -14348,8 +14744,9 @@ agents:
     #[serial]
     async fn dispatch_contract_continue_world_worker_clarification_response_denies_by_default_before_target_resolution(
     ) {
-        let substrate_home = tempdir().expect("substrate home tempdir");
-        let _substrate_home_guard = EnvVarGuard::set_path("SUBSTRATE_HOME", substrate_home.path());
+        let substrate_home =
+            AuthorityEnvTestTempDir::new(tempdir().expect("substrate home tempdir"));
+        substrate_home.install_as_home();
         write_world_dispatch_policy(
             substrate_home.path(),
             true,
@@ -14391,8 +14788,9 @@ agents:
     #[serial]
     async fn dispatch_contract_continue_world_worker_control_directive_denies_by_default_before_target_resolution(
     ) {
-        let substrate_home = tempdir().expect("substrate home tempdir");
-        let _substrate_home_guard = EnvVarGuard::set_path("SUBSTRATE_HOME", substrate_home.path());
+        let substrate_home =
+            AuthorityEnvTestTempDir::new(tempdir().expect("substrate home tempdir"));
+        substrate_home.install_as_home();
         write_world_dispatch_policy(
             substrate_home.path(),
             true,
@@ -14434,8 +14832,9 @@ agents:
     #[serial]
     async fn dispatch_contract_continue_world_worker_progress_ack_denies_by_default_before_target_resolution(
     ) {
-        let substrate_home = tempdir().expect("substrate home tempdir");
-        let _substrate_home_guard = EnvVarGuard::set_path("SUBSTRATE_HOME", substrate_home.path());
+        let substrate_home =
+            AuthorityEnvTestTempDir::new(tempdir().expect("substrate home tempdir"));
+        substrate_home.install_as_home();
         write_world_dispatch_policy(
             substrate_home.path(),
             true,
@@ -14477,8 +14876,9 @@ agents:
     #[serial]
     async fn dispatch_contract_continue_world_worker_progress_ack_reaches_target_resolution_when_policy_enabled(
     ) {
-        let substrate_home = tempdir().expect("substrate home tempdir");
-        let _substrate_home_guard = EnvVarGuard::set_path("SUBSTRATE_HOME", substrate_home.path());
+        let substrate_home =
+            AuthorityEnvTestTempDir::new(tempdir().expect("substrate home tempdir"));
+        substrate_home.install_as_home();
         write_world_dispatch_policy_with_progress_acks(
             substrate_home.path(),
             true,
@@ -14539,8 +14939,9 @@ agents:
     async fn dispatch_contract_continue_world_worker_progress_ack_submits_rendered_prompt_to_exact_retained_worker(
     ) {
         let _env_guard = world_env_guard();
-        let substrate_home = tempdir().expect("substrate home tempdir");
-        let _substrate_home_guard = EnvVarGuard::set_path("SUBSTRATE_HOME", substrate_home.path());
+        let substrate_home =
+            AuthorityEnvTestTempDir::new(tempdir().expect("substrate home tempdir"));
+        substrate_home.install_as_home();
         write_world_dispatch_policy_with_progress_acks(
             substrate_home.path(),
             true,
@@ -14702,8 +15103,9 @@ agents:
     async fn dispatch_contract_continue_world_worker_progress_ack_surfaces_progress_update_without_persisting_obligation(
     ) {
         let _env_guard = world_env_guard();
-        let substrate_home = tempdir().expect("substrate home tempdir");
-        let _substrate_home_guard = EnvVarGuard::set_path("SUBSTRATE_HOME", substrate_home.path());
+        let substrate_home =
+            AuthorityEnvTestTempDir::new(tempdir().expect("substrate home tempdir"));
+        substrate_home.install_as_home();
         write_world_dispatch_policy_with_progress_acks(
             substrate_home.path(),
             true,
@@ -14848,8 +15250,9 @@ agents:
     #[serial]
     async fn dispatch_contract_continue_world_worker_fork_command_denies_by_default_before_target_resolution(
     ) {
-        let substrate_home = tempdir().expect("substrate home tempdir");
-        let _substrate_home_guard = EnvVarGuard::set_path("SUBSTRATE_HOME", substrate_home.path());
+        let substrate_home =
+            AuthorityEnvTestTempDir::new(tempdir().expect("substrate home tempdir"));
+        substrate_home.install_as_home();
         write_world_dispatch_policy(
             substrate_home.path(),
             true,
@@ -14896,8 +15299,8 @@ agents:
             "SUBSTRATE_WORLD_DEPS_GUEST_BIN_DIR",
             test_world_codex_runtime_bin().as_path(),
         );
-        let substrate_home = tempdir().expect("substrate home tempdir");
-        let _substrate_home_guard = EnvVarGuard::set_path("SUBSTRATE_HOME", substrate_home.path());
+        let substrate_home = secure_authority_tempdir();
+        substrate_home.install_as_home();
         write_world_dispatch_policy_with_fork_commands(
             substrate_home.path(),
             true,
@@ -14924,6 +15327,8 @@ agents:
         >::new()));
         let recorded_requests_for_server = recorded_requests.clone();
         let listener = UnixListener::bind(&socket_path).expect("bind stub world socket");
+        let fixture_tasks = TestFixtureTaskOwner::new();
+        let fixture_tasks_for_server = fixture_tasks.clone();
         let server = tokio::spawn(async move {
             while let Ok((mut stream, _addr)) = listener.accept().await {
                 let Some((header, body)) = read_http_request(&mut stream).await else {
@@ -15046,11 +15451,18 @@ agents:
                     let store_for_stop = store_for_server.clone();
                     let child_id = member_dispatch.participant_id.clone();
                     let session_id = member_dispatch.orchestration_session_id.clone();
-                    tokio::spawn(async move {
-                        let (stop_tx, _stop_rx) =
+                    let mut close_rx = fixture_tasks_for_server.close_receiver();
+                    fixture_tasks_for_server.spawn_with_private_stop_path(
+                        crate::execution::agent_runtime::control::private_stop_transport_path(
+                            &store_for_stop,
+                            &session_id,
+                            &child_id,
+                        ),
+                        async move {
+                            let (stop_tx, _stop_rx) =
                             crate::execution::agent_runtime::control::private_stop_request_channel(
                             );
-                        let mut stop_transport = crate::execution::agent_runtime::control::
+                            let mut stop_transport = crate::execution::agent_runtime::control::
                             register_private_stop_transport(
                                 &store_for_stop,
                                 &session_id,
@@ -15059,9 +15471,10 @@ agents:
                             )
                             .await
                             .expect("register private stop transport for continue fork success");
-                        tokio::time::sleep(Duration::from_millis(200)).await;
-                        stop_transport.close().await;
-                    });
+                            wait_for_test_fixture_close(&mut close_rx).await;
+                            stop_transport.close().await;
+                        },
+                    );
 
                     write_http_stream_start(&mut stream).await;
                     write_chunked_frame(
@@ -15119,76 +15532,85 @@ agents:
         let _socket_guard = EnvVarGuard::set_path("SUBSTRATE_WORLD_SOCKET", &socket_path);
         let ambient_cwd = tempdir().expect("ambient cwd tempdir");
         let _cwd_guard = CurrentDirGuard::change_to(ambient_cwd.path());
-        let request = sample_continue_fork_command_world_dispatch_request();
-        let expected_prompt = render_continue_world_worker_transport_prompt(
-            &request
-                .clone()
-                .validate()
-                .expect("validated fork-command request")
-                .payload,
+        let test_outcome = run_test_body_with_fixture_task_cleanup(
+            server,
+            socket_home,
+            &socket_path,
+            "continue fork rendered prompt",
+            fixture_tasks,
+            async {
+                let request = sample_continue_fork_command_world_dispatch_request();
+                let expected_prompt = render_continue_world_worker_transport_prompt(
+                    &request
+                        .clone()
+                        .validate()
+                        .expect("validated fork-command request")
+                        .payload,
+                )
+                .expect("render fork-command prompt");
+
+                let outcome = dispatch_orchestrator_world_request(&store, request)
+                    .await
+                    .expect("fork-command delivery should succeed in Packet 2");
+                let WorldDispatchOutcomeV1::ContinueWorldWorker(outcome) = outcome else {
+                    panic!("expected continue_world_worker outcome");
+                };
+                assert_eq!(outcome.thread_id.as_deref(), Some("thread-direct"));
+                assert_eq!(outcome.source_participant_id.as_deref(), Some("ash_member"));
+                let child_participant_id = outcome
+                    .child_participant_id
+                    .as_deref()
+                    .expect("continue fork-command outcome child_participant_id");
+                assert!(
+                    matches!(
+                        outcome.worker_event.as_ref().map(|event| event.event_class),
+                        None | Some(ContinueWorldWorkerEventClassV1::Reply)
+                    ),
+                    "typed fork-command delivery may surface a generic reply, but must not imply a new worker event class: {:?}",
+                    outcome.worker_event
+                );
+                assert!(
+                    outcome
+                        .summary
+                        .contains("delivered typed fork_command to retained worker ash_member"),
+                    "successful Packet 3 delivery should stay explicit about delivery truth: {}",
+                    outcome.summary
+                );
+                assert!(
+                    outcome.summary.contains("status 23"),
+                    "successful Packet 3 delivery should preserve the terminal exit status in the summary: {}",
+                    outcome.summary
+                );
+                assert!(
+                    outcome.summary.contains(child_participant_id),
+                    "Packet 3 summary must surface explicit child allocation truth: {}",
+                    outcome.summary
+                );
+                assert!(
+                    outcome
+                        .summary
+                        .contains("explicit source-to-child lineage is preserved"),
+                    "Packet 3 summary must keep explicit lineage in scope: {}",
+                    outcome.summary
+                );
+
+                let recorded = recorded_requests
+                    .lock()
+                    .expect("recorded requests mutex poisoned");
+                assert_eq!(
+                    recorded.len(),
+                    1,
+                    "typed fork command should submit exactly one retained member turn: {recorded:?}"
+                );
+                assert_eq!(recorded[0].participant_id, "ash_member");
+                assert!(
+                    recorded[0].prompt == expected_prompt,
+                    "typed fork command must render deterministically over the retained member-turn seam"
+                );
+            },
         )
-        .expect("render fork-command prompt");
-
-        let outcome = dispatch_orchestrator_world_request(&store, request)
-            .await
-            .expect("fork-command delivery should succeed in Packet 2");
-        let WorldDispatchOutcomeV1::ContinueWorldWorker(outcome) = outcome else {
-            panic!("expected continue_world_worker outcome");
-        };
-        assert_eq!(outcome.thread_id.as_deref(), Some("thread-direct"));
-        assert_eq!(outcome.source_participant_id.as_deref(), Some("ash_member"));
-        let child_participant_id = outcome
-            .child_participant_id
-            .as_deref()
-            .expect("continue fork-command outcome child_participant_id");
-        assert!(
-            matches!(
-                outcome.worker_event.as_ref().map(|event| event.event_class),
-                None | Some(ContinueWorldWorkerEventClassV1::Reply)
-            ),
-            "typed fork-command delivery may surface a generic reply, but must not imply a new worker event class: {:?}",
-            outcome.worker_event
-        );
-        assert!(
-            outcome
-                .summary
-                .contains("delivered typed fork_command to retained worker ash_member"),
-            "successful Packet 3 delivery should stay explicit about delivery truth: {}",
-            outcome.summary
-        );
-        assert!(
-            outcome.summary.contains("status 23"),
-            "successful Packet 3 delivery should preserve the terminal exit status in the summary: {}",
-            outcome.summary
-        );
-        assert!(
-            outcome.summary.contains(child_participant_id),
-            "Packet 3 summary must surface explicit child allocation truth: {}",
-            outcome.summary
-        );
-        assert!(
-            outcome
-                .summary
-                .contains("explicit source-to-child lineage is preserved"),
-            "Packet 3 summary must keep explicit lineage in scope: {}",
-            outcome.summary
-        );
-
-        server.await.expect("stub world server task");
-
-        let recorded = recorded_requests
-            .lock()
-            .expect("recorded requests mutex poisoned");
-        assert_eq!(
-            recorded.len(),
-            1,
-            "typed fork command should submit exactly one retained member turn: {recorded:?}"
-        );
-        assert_eq!(recorded[0].participant_id, "ash_member");
-        assert!(
-            recorded[0].prompt == expected_prompt,
-            "typed fork command must render deterministically over the retained member-turn seam"
-        );
+        .await;
+        test_outcome.finish();
     }
 
     #[cfg(target_os = "linux")]
@@ -15201,8 +15623,8 @@ agents:
             "SUBSTRATE_WORLD_DEPS_GUEST_BIN_DIR",
             test_world_codex_runtime_bin().as_path(),
         );
-        let substrate_home = tempdir().expect("substrate home tempdir");
-        let _substrate_home_guard = EnvVarGuard::set_path("SUBSTRATE_HOME", substrate_home.path());
+        let substrate_home = secure_authority_tempdir();
+        substrate_home.install_as_home();
         write_world_dispatch_policy_with_fork_commands(
             substrate_home.path(),
             true,
@@ -15224,8 +15646,15 @@ agents:
         let store = AgentRuntimeStateStore::new().expect("state store");
         persist_authoritative_continue_dispatch_state(&store, workspace_root.path(), "world-17", 2);
         let store_for_server = store.clone();
+        let fixture_tasks = TestFixtureTaskOwner::new();
+        let fixture_tasks_for_server = fixture_tasks.clone();
+        let dispatch_tasks = fixture_tasks.clone();
+        let (registered_response_tx, registered_response_rx) = tokio::sync::oneshot::channel();
+        let (publish_child_tx, publish_child_rx) = tokio::sync::oneshot::channel();
         let listener = UnixListener::bind(&socket_path).expect("bind stub world socket");
         let server = tokio::spawn(async move {
+            let mut registered_response_tx = Some(registered_response_tx);
+            let mut publish_child_rx = Some(publish_child_rx);
             while let Ok((mut stream, _addr)) = listener.accept().await {
                 let Some((header, body)) = read_http_request(&mut stream).await else {
                     continue;
@@ -15307,26 +15736,6 @@ agents:
                     let store_for_publication = store_for_server.clone();
                     let child_id = member_dispatch.participant_id.clone();
                     let session_id = member_dispatch.orchestration_session_id.clone();
-                    tokio::spawn(async move {
-                        tokio::time::sleep(Duration::from_secs(6)).await;
-                        store_for_publication.persist_participant(&child).expect(
-                            "persist authoritative child participant after delayed publication",
-                        );
-                        let (stop_tx, _stop_rx) =
-                            crate::execution::agent_runtime::control::private_stop_request_channel(
-                            );
-                        let mut stop_transport = crate::execution::agent_runtime::control::
-                            register_private_stop_transport(
-                                &store_for_publication,
-                                &session_id,
-                                &child_id,
-                                stop_tx,
-                            )
-                            .await
-                            .expect("register private stop transport after delayed publication");
-                        tokio::time::sleep(Duration::from_millis(200)).await;
-                        stop_transport.close().await;
-                    });
 
                     write_http_stream_start(&mut stream).await;
                     write_chunked_frame(
@@ -15375,6 +15784,43 @@ agents:
                     )
                     .await;
                     finish_chunked_stream(&mut stream).await;
+                    registered_response_tx
+                        .take()
+                        .expect("registered response publication signal")
+                        .send(())
+                        .expect("publish registered response visibility");
+                    publish_child_rx
+                        .take()
+                        .expect("child publication release receiver")
+                        .await
+                        .expect("release delayed child publication");
+                    let mut close_rx = fixture_tasks_for_server.close_receiver();
+                    fixture_tasks_for_server.spawn_with_private_stop_path(
+                        crate::execution::agent_runtime::control::private_stop_transport_path(
+                            &store_for_publication,
+                            &session_id,
+                            &child_id,
+                        ),
+                        async move {
+                        store_for_publication.persist_participant(&child).expect(
+                            "persist authoritative child participant after registered response publication",
+                        );
+                        let (stop_tx, _stop_rx) =
+                            crate::execution::agent_runtime::control::private_stop_request_channel(
+                            );
+                        let mut stop_transport = crate::execution::agent_runtime::control::
+                            register_private_stop_transport(
+                                &store_for_publication,
+                                &session_id,
+                                &child_id,
+                                stop_tx,
+                            )
+                            .await
+                            .expect("register private stop transport after delayed publication");
+                        wait_for_test_fixture_close(&mut close_rx).await;
+                        stop_transport.close().await;
+                        },
+                    );
                     break;
                 }
 
@@ -15385,51 +15831,76 @@ agents:
         let ambient_cwd = tempdir().expect("ambient cwd tempdir");
         let _cwd_guard = CurrentDirGuard::change_to(ambient_cwd.path());
 
-        let mut request = sample_continue_fork_command_world_dispatch_request();
-        request.request_id = Some("req_continue_fork_command_late_child_publication".to_string());
-        request.idempotency_key =
-            Some("idem_continue_fork_command_late_child_publication".to_string());
+        let test_outcome = run_test_body_with_fixture_task_cleanup(
+            server,
+            socket_home,
+            &socket_path,
+            "continue fork late child publication",
+            fixture_tasks,
+            async {
+                let mut request = sample_continue_fork_command_world_dispatch_request();
+                request.request_id =
+                    Some("req_continue_fork_command_late_child_publication".to_string());
+                request.idempotency_key =
+                    Some("idem_continue_fork_command_late_child_publication".to_string());
 
-        let outcome = dispatch_orchestrator_world_request(&store, request)
-            .await
-            .expect("late child publication within the retained readiness window must succeed");
-        let WorldDispatchOutcomeV1::ContinueWorldWorker(outcome) = outcome else {
-            panic!("expected continue_world_worker outcome");
-        };
+                let store_for_dispatch = store.clone();
+                let dispatch = dispatch_tasks.spawn_cancellable(async move {
+                    dispatch_orchestrator_world_request(&store_for_dispatch, request).await
+                });
+                let _dispatch_abort = TestTaskAbortOnDrop::new(&dispatch);
+                registered_response_rx
+                    .await
+                    .expect("observe registered response before child publication");
+                assert!(
+                    !dispatch.is_finished(),
+                    "fork-command dispatch must enter the absent-child wait before publication"
+                );
+                publish_child_tx
+                    .send(())
+                    .expect("release fork-command child publication");
+                let outcome = dispatch.await.expect("fork-command dispatch task").expect(
+                    "late child publication within the retained readiness window must succeed",
+                );
+                let WorldDispatchOutcomeV1::ContinueWorldWorker(outcome) = outcome else {
+                    panic!("expected continue_world_worker outcome");
+                };
 
-        assert_eq!(outcome.source_participant_id.as_deref(), Some("ash_member"));
-        let child_participant_id = outcome
-            .child_participant_id
-            .as_deref()
-            .expect("continue fork-command outcome child_participant_id");
-        assert!(
-            outcome.summary.contains(child_participant_id),
-            "Packet 3 summary must surface explicit child allocation truth: {}",
-            outcome.summary
-        );
-        assert!(
-            outcome
-                .summary
-                .contains("explicit source-to-child lineage is preserved"),
-            "Packet 3 summary must keep explicit lineage in scope: {}",
-            outcome.summary
-        );
+                assert_eq!(outcome.source_participant_id.as_deref(), Some("ash_member"));
+                let child_participant_id = outcome
+                    .child_participant_id
+                    .as_deref()
+                    .expect("continue fork-command outcome child_participant_id");
+                assert!(
+                    outcome.summary.contains(child_participant_id),
+                    "Packet 3 summary must surface explicit child allocation truth: {}",
+                    outcome.summary
+                );
+                assert!(
+                    outcome
+                        .summary
+                        .contains("explicit source-to-child lineage is preserved"),
+                    "Packet 3 summary must keep explicit lineage in scope: {}",
+                    outcome.summary
+                );
 
-        let child = store
-            .load_participant(child_participant_id)
-            .expect("load persisted fork child")
-            .expect("persisted fork child");
-        assert_eq!(child.fork_source_participant_id(), Some("ash_member"));
-        assert_eq!(
-            child.handle.parent_participant_id.as_deref(),
-            Some("ash_member")
-        );
-        assert_eq!(
-            child.handle.orchestrator_participant_id.as_deref(),
-            Some("orch_dispatch")
-        );
-
-        server.await.expect("stub world server task");
+                let child = store
+                    .load_participant(child_participant_id)
+                    .expect("load persisted fork child")
+                    .expect("persisted fork child");
+                assert_eq!(child.fork_source_participant_id(), Some("ash_member"));
+                assert_eq!(
+                    child.handle.parent_participant_id.as_deref(),
+                    Some("ash_member")
+                );
+                assert_eq!(
+                    child.handle.orchestrator_participant_id.as_deref(),
+                    Some("orch_dispatch")
+                );
+            },
+        )
+        .await;
+        test_outcome.finish();
     }
 
     #[cfg(target_os = "linux")]
@@ -15437,8 +15908,9 @@ agents:
     #[serial]
     async fn dispatch_contract_continue_world_worker_fork_command_rejects_terminal_exact_source_before_delivery(
     ) {
-        let substrate_home = tempdir().expect("substrate home tempdir");
-        let _substrate_home_guard = EnvVarGuard::set_path("SUBSTRATE_HOME", substrate_home.path());
+        let substrate_home =
+            AuthorityEnvTestTempDir::new(tempdir().expect("substrate home tempdir"));
+        substrate_home.install_as_home();
         write_world_dispatch_policy_with_fork_commands(
             substrate_home.path(),
             true,
@@ -15480,8 +15952,9 @@ agents:
     async fn dispatch_contract_continue_world_worker_fork_command_wraps_post_delivery_source_invalidation_as_bootstrap_failure(
     ) {
         let _env_guard = world_env_guard();
-        let substrate_home = tempdir().expect("substrate home tempdir");
-        let _substrate_home_guard = EnvVarGuard::set_path("SUBSTRATE_HOME", substrate_home.path());
+        let substrate_home =
+            AuthorityEnvTestTempDir::new(tempdir().expect("substrate home tempdir"));
+        substrate_home.install_as_home();
         write_world_dispatch_policy_with_fork_commands(
             substrate_home.path(),
             true,
@@ -15607,8 +16080,9 @@ agents:
             "SUBSTRATE_WORLD_DEPS_GUEST_BIN_DIR",
             test_world_codex_runtime_bin().as_path(),
         );
-        let substrate_home = tempdir().expect("substrate home tempdir");
-        let _substrate_home_guard = EnvVarGuard::set_path("SUBSTRATE_HOME", substrate_home.path());
+        let substrate_home =
+            AuthorityEnvTestTempDir::new(tempdir().expect("substrate home tempdir"));
+        substrate_home.install_as_home();
         write_world_dispatch_policy_with_fork_commands(
             substrate_home.path(),
             true,
@@ -15743,8 +16217,9 @@ agents:
     async fn dispatch_contract_continue_world_worker_fork_command_persists_live_obligation_before_bootstrap_failure(
     ) {
         let _env_guard = world_env_guard();
-        let substrate_home = tempdir().expect("substrate home tempdir");
-        let _substrate_home_guard = EnvVarGuard::set_path("SUBSTRATE_HOME", substrate_home.path());
+        let substrate_home =
+            AuthorityEnvTestTempDir::new(tempdir().expect("substrate home tempdir"));
+        substrate_home.install_as_home();
         fs::write(
             substrate_home.path().join("policy.yaml"),
             r#"id: test-global-policy
@@ -15903,8 +16378,8 @@ agents:
     #[serial]
     async fn dispatch_contract_continue_world_worker_fork_command_rejects_live_retained_worker_cap_before_delivery(
     ) {
-        let substrate_home = tempdir().expect("substrate home tempdir");
-        let _substrate_home_guard = EnvVarGuard::set_path("SUBSTRATE_HOME", substrate_home.path());
+        let substrate_home = secure_authority_tempdir();
+        substrate_home.install_as_home();
         fs::write(
             substrate_home.path().join("policy.yaml"),
             "id: test-global-policy\nname: Test Global Policy\nagents:\n  allowed_backends:\n    - \"cli:codex-world\"\n  world_dispatch:\n    enabled: true\n    allowed_backends:\n      - \"cli:codex-world\"\n    allowed_actions:\n      - \"continue_world_worker\"\n    allowed_modes:\n      - \"retained\"\n    same_session_only: true\n    same_world_binding_only: true\n    allow_capability_narrowing: false\n    max_live_retained_workers: 1\n    max_concurrent_ephemeral: 4\n    fork:\n      commands_allowed: true\n",
@@ -15917,16 +16392,35 @@ agents:
         let store = AgentRuntimeStateStore::new().expect("state store");
         persist_authoritative_continue_dispatch_state(&store, workspace_root.path(), "world-17", 2);
 
-        let err = dispatch_orchestrator_world_request(
-            &store,
-            sample_continue_fork_command_world_dispatch_request(),
-        )
-        .await
-        .expect_err("full retained worker cap must fail closed before delivery");
+        let session_id = "sess_tracker_continue_fork_cap";
+        let mut session = store
+            .load_orchestration_session("sess_dispatch")
+            .expect("load tracker fixture session")
+            .expect("tracker fixture session");
+        session.orchestration_session_id = session_id.to_string();
+        store
+            .persist_orchestration_session(&session)
+            .expect("persist unique tracker fixture session");
+        for participant_id in ["orch_dispatch", "ash_member"] {
+            let mut participant = store
+                .load_participant(participant_id)
+                .expect("load tracker fixture participant")
+                .expect("tracker fixture participant");
+            participant.handle.orchestration_session_id = session_id.to_string();
+            store
+                .persist_participant(&participant)
+                .expect("persist unique tracker fixture participant");
+        }
+        let mut request = sample_continue_fork_command_world_dispatch_request();
+        request.orchestration_session_id = Some(session_id.to_string());
+
+        let err = dispatch_orchestrator_world_request(&store, request)
+            .await
+            .expect_err("full retained worker cap must fail closed before delivery");
 
         assert_eq!(
             err.to_string(),
-            "worker_concurrency_cap_exceeded: effective policy allows at most 1 live retained workers for orchestration session sess_dispatch; authoritative live count is 1"
+            "worker_concurrency_cap_exceeded: effective policy allows at most 1 live retained workers for orchestration session sess_tracker_continue_fork_cap; authoritative live count is 1"
         );
     }
 
@@ -15936,8 +16430,9 @@ agents:
     async fn dispatch_contract_continue_world_worker_control_directive_submits_rendered_prompt_to_exact_retained_worker(
     ) {
         let _env_guard = world_env_guard();
-        let substrate_home = tempdir().expect("substrate home tempdir");
-        let _substrate_home_guard = EnvVarGuard::set_path("SUBSTRATE_HOME", substrate_home.path());
+        let substrate_home =
+            AuthorityEnvTestTempDir::new(tempdir().expect("substrate home tempdir"));
+        substrate_home.install_as_home();
         write_world_dispatch_policy_with_control_directives(
             substrate_home.path(),
             true,
@@ -16097,8 +16592,9 @@ agents:
     async fn dispatch_contract_continue_world_worker_control_directive_surfaces_control_ack_without_persisting_obligation(
     ) {
         let _env_guard = world_env_guard();
-        let substrate_home = tempdir().expect("substrate home tempdir");
-        let _substrate_home_guard = EnvVarGuard::set_path("SUBSTRATE_HOME", substrate_home.path());
+        let substrate_home =
+            AuthorityEnvTestTempDir::new(tempdir().expect("substrate home tempdir"));
+        substrate_home.install_as_home();
         write_world_dispatch_policy_with_control_directives(
             substrate_home.path(),
             true,
@@ -16243,8 +16739,9 @@ agents:
     ) {
         let _env_guard = world_env_guard();
         let _socket_activation_guard = SocketActivationOverrideGuard::set("socket_activation");
-        let substrate_home = tempdir().expect("substrate home tempdir");
-        let _substrate_home_guard = EnvVarGuard::set_path("SUBSTRATE_HOME", substrate_home.path());
+        let substrate_home =
+            AuthorityEnvTestTempDir::new(tempdir().expect("substrate home tempdir"));
+        substrate_home.install_as_home();
         write_world_dispatch_policy_with_control_directives(
             substrate_home.path(),
             true,
@@ -16298,9 +16795,9 @@ agents:
             ),
         ] {
             let _env_guard = world_env_guard();
-            let substrate_home = tempdir().expect("substrate home tempdir");
-            let _substrate_home_guard =
-                EnvVarGuard::set_path("SUBSTRATE_HOME", substrate_home.path());
+            let substrate_home =
+                AuthorityEnvTestTempDir::new(tempdir().expect("substrate home tempdir"));
+            substrate_home.install_as_home();
             write_world_dispatch_policy_with_approval_responses(
                 substrate_home.path(),
                 true,
@@ -16485,8 +16982,9 @@ agents:
     async fn dispatch_contract_continue_world_worker_approval_response_leaves_obligation_pending_when_delivery_fails(
     ) {
         let _env_guard = world_env_guard();
-        let substrate_home = tempdir().expect("substrate home tempdir");
-        let _substrate_home_guard = EnvVarGuard::set_path("SUBSTRATE_HOME", substrate_home.path());
+        let substrate_home =
+            AuthorityEnvTestTempDir::new(tempdir().expect("substrate home tempdir"));
+        substrate_home.install_as_home();
         write_world_dispatch_policy_with_approval_responses(
             substrate_home.path(),
             true,
@@ -16541,8 +17039,9 @@ agents:
     async fn dispatch_contract_continue_world_worker_clarification_response_closes_follow_up_exactly_once_after_successful_delivery(
     ) {
         let _env_guard = world_env_guard();
-        let substrate_home = tempdir().expect("substrate home tempdir");
-        let _substrate_home_guard = EnvVarGuard::set_path("SUBSTRATE_HOME", substrate_home.path());
+        let substrate_home =
+            AuthorityEnvTestTempDir::new(tempdir().expect("substrate home tempdir"));
+        substrate_home.install_as_home();
         write_world_dispatch_policy_with_clarification_responses(
             substrate_home.path(),
             true,
@@ -16751,8 +17250,9 @@ agents:
     async fn dispatch_contract_continue_world_worker_clarification_response_leaves_follow_up_pending_when_delivery_fails(
     ) {
         let _env_guard = world_env_guard();
-        let substrate_home = tempdir().expect("substrate home tempdir");
-        let _substrate_home_guard = EnvVarGuard::set_path("SUBSTRATE_HOME", substrate_home.path());
+        let substrate_home =
+            AuthorityEnvTestTempDir::new(tempdir().expect("substrate home tempdir"));
+        substrate_home.install_as_home();
         write_world_dispatch_policy_with_clarification_responses(
             substrate_home.path(),
             true,
@@ -16850,9 +17350,9 @@ agents:
         ];
 
         for case in cases {
-            let substrate_home = tempdir().expect("substrate home tempdir");
-            let _substrate_home_guard =
-                EnvVarGuard::set_path("SUBSTRATE_HOME", substrate_home.path());
+            let substrate_home =
+                AuthorityEnvTestTempDir::new(tempdir().expect("substrate home tempdir"));
+            substrate_home.install_as_home();
             write_world_dispatch_policy(
                 substrate_home.path(),
                 case.enabled,
@@ -16933,9 +17433,9 @@ agents:
         ];
 
         for case in cases {
-            let substrate_home = tempdir().expect("substrate home tempdir");
-            let _substrate_home_guard =
-                EnvVarGuard::set_path("SUBSTRATE_HOME", substrate_home.path());
+            let substrate_home =
+                AuthorityEnvTestTempDir::new(tempdir().expect("substrate home tempdir"));
+            substrate_home.install_as_home();
             write_world_dispatch_policy(
                 substrate_home.path(),
                 case.enabled,
@@ -16981,8 +17481,9 @@ agents:
     #[serial]
     async fn dispatch_contract_inspect_world_worker_returns_authoritative_snapshot_without_mutation(
     ) {
-        let substrate_home = tempdir().expect("substrate home tempdir");
-        let _substrate_home_guard = EnvVarGuard::set_path("SUBSTRATE_HOME", substrate_home.path());
+        let substrate_home =
+            AuthorityEnvTestTempDir::new(tempdir().expect("substrate home tempdir"));
+        substrate_home.install_as_home();
         write_allowed_world_dispatch_policy(
             substrate_home.path(),
             "cli:codex-world",
@@ -17066,7 +17567,7 @@ agents:
     async fn dispatch_contract_inspect_world_worker_ephemeral_returns_authoritative_snapshot_without_mutation(
     ) {
         let substrate_home = secure_authority_tempdir();
-        let _substrate_home_guard = EnvVarGuard::set_path("SUBSTRATE_HOME", substrate_home.path());
+        substrate_home.install_as_home();
         write_allowed_world_dispatch_policy(
             substrate_home.path(),
             "cli:codex-world",
@@ -17193,7 +17694,7 @@ agents:
     async fn dispatch_contract_inspect_world_worker_ephemeral_resolves_exact_session_binding_when_task_run_id_is_reused(
     ) {
         let substrate_home = secure_authority_tempdir();
-        let _substrate_home_guard = EnvVarGuard::set_path("SUBSTRATE_HOME", substrate_home.path());
+        substrate_home.install_as_home();
         write_allowed_world_dispatch_policy(
             substrate_home.path(),
             "cli:codex-world",
@@ -17269,7 +17770,7 @@ agents:
     async fn dispatch_contract_inspect_world_worker_ephemeral_fails_closed_for_unknown_task_run_id()
     {
         let substrate_home = secure_authority_tempdir();
-        let _substrate_home_guard = EnvVarGuard::set_path("SUBSTRATE_HOME", substrate_home.path());
+        substrate_home.install_as_home();
         write_allowed_world_dispatch_policy(
             substrate_home.path(),
             "cli:codex-world",
@@ -17307,7 +17808,7 @@ agents:
     #[serial]
     async fn dispatch_contract_inspect_world_worker_ephemeral_fails_closed_for_stale_linkage() {
         let substrate_home = secure_authority_tempdir();
-        let _substrate_home_guard = EnvVarGuard::set_path("SUBSTRATE_HOME", substrate_home.path());
+        substrate_home.install_as_home();
         write_allowed_world_dispatch_policy(
             substrate_home.path(),
             "cli:codex-world",
@@ -17366,7 +17867,7 @@ agents:
     #[serial]
     async fn dispatch_contract_inspect_world_worker_ephemeral_fails_closed_for_backend_mismatch() {
         let substrate_home = secure_authority_tempdir();
-        let _substrate_home_guard = EnvVarGuard::set_path("SUBSTRATE_HOME", substrate_home.path());
+        substrate_home.install_as_home();
         write_allowed_world_dispatch_policy(
             substrate_home.path(),
             "cli:codex-world",
@@ -17426,7 +17927,7 @@ agents:
     async fn dispatch_contract_inspect_world_worker_ephemeral_fails_closed_for_world_binding_mismatch(
     ) {
         let substrate_home = secure_authority_tempdir();
-        let _substrate_home_guard = EnvVarGuard::set_path("SUBSTRATE_HOME", substrate_home.path());
+        substrate_home.install_as_home();
         write_allowed_world_dispatch_policy(
             substrate_home.path(),
             "cli:codex-world",
@@ -17486,7 +17987,7 @@ agents:
     async fn dispatch_contract_inspect_world_worker_ephemeral_fails_closed_without_durable_start_cursor(
     ) {
         let substrate_home = secure_authority_tempdir();
-        let _substrate_home_guard = EnvVarGuard::set_path("SUBSTRATE_HOME", substrate_home.path());
+        substrate_home.install_as_home();
         write_allowed_world_dispatch_policy(
             substrate_home.path(),
             "cli:codex-world",
@@ -17547,8 +18048,9 @@ agents:
     #[test]
     #[serial]
     fn register_active_ephemeral_world_task_rejects_duplicate_task_run_id() {
-        let substrate_home = tempdir().expect("substrate home tempdir");
-        let _substrate_home_guard = EnvVarGuard::set_path("SUBSTRATE_HOME", substrate_home.path());
+        let substrate_home =
+            AuthorityEnvTestTempDir::new(tempdir().expect("substrate home tempdir"));
+        substrate_home.install_as_home();
         let store = AgentRuntimeStateStore::new().expect("state store");
         let _guard = store
             .register_active_ephemeral_world_task(ActiveEphemeralWorldTaskRecord {
@@ -17583,7 +18085,7 @@ agents:
     #[serial]
     async fn dispatch_contract_inspect_world_worker_ephemeral_teardown_removes_routability() {
         let substrate_home = secure_authority_tempdir();
-        let _substrate_home_guard = EnvVarGuard::set_path("SUBSTRATE_HOME", substrate_home.path());
+        substrate_home.install_as_home();
         write_allowed_world_dispatch_policy(
             substrate_home.path(),
             "cli:codex-world",
@@ -17669,7 +18171,7 @@ agents:
             test_world_codex_runtime_bin().as_path(),
         );
         let substrate_home = secure_authority_tempdir();
-        let _substrate_home_guard = EnvVarGuard::set_path("SUBSTRATE_HOME", substrate_home.path());
+        substrate_home.install_as_home();
         write_allowed_world_dispatch_policy_with_follow_up_requests(
             substrate_home.path(),
             "cli:codex-world",
@@ -17722,6 +18224,8 @@ agents:
         let socket_path = socket_home.path().join("world.sock");
         let listener = UnixListener::bind(&socket_path).expect("bind world socket");
         let (continue_seen_tx, continue_seen_rx) = tokio::sync::oneshot::channel();
+        let fixture_tasks = TestFixtureTaskOwner::new();
+        let fixture_tasks_for_server = fixture_tasks.clone();
         let server = tokio::spawn(async move {
             let mut continue_seen_tx = Some(continue_seen_tx);
             while let Ok((mut stream, _addr)) = listener.accept().await {
@@ -17786,8 +18290,9 @@ agents:
                         },
                     )
                     .await;
-                    tokio::spawn(async move {
-                        tokio::time::sleep(Duration::from_secs(10)).await;
+                    let mut close_rx = fixture_tasks_for_server.close_receiver();
+                    fixture_tasks_for_server.spawn(async move {
+                        wait_for_test_fixture_close(&mut close_rx).await;
                         drop(stream);
                     });
                     continue;
@@ -17863,6 +18368,13 @@ agents:
         });
         let _socket_guard = EnvVarGuard::set_path("SUBSTRATE_WORLD_SOCKET", &socket_path);
 
+        let test_outcome = run_test_body_with_fixture_task_cleanup(
+            server,
+            socket_home,
+            &socket_path,
+            "ordinary retained continue",
+            fixture_tasks,
+            async {
         let spawn = dispatch_orchestrator_world_request(
             &store,
             WorldDispatchRequestV1 {
@@ -17998,7 +18510,10 @@ agents:
                 .exists(),
             "ordinary Continue must not activate the legacy task registry"
         );
-        server.await.expect("join Spawn/Continue fixture server");
+            },
+        )
+        .await;
+        test_outcome.finish();
     }
 
     #[cfg(target_os = "linux")]
@@ -18006,8 +18521,8 @@ agents:
     #[serial]
     async fn dispatch_contract_cancel_world_work_returns_typed_closeout_after_authoritative_cancel()
     {
-        let substrate_home = tempdir().expect("substrate home tempdir");
-        let _substrate_home_guard = EnvVarGuard::set_path("SUBSTRATE_HOME", substrate_home.path());
+        let substrate_home = secure_authority_tempdir();
+        substrate_home.install_as_home();
         write_allowed_world_dispatch_policy(
             substrate_home.path(),
             "cli:codex-world",
@@ -18183,9 +18698,9 @@ agents:
         ];
 
         for case in cases {
-            let substrate_home = tempdir().expect("substrate home tempdir");
-            let _substrate_home_guard =
-                EnvVarGuard::set_path("SUBSTRATE_HOME", substrate_home.path());
+            let substrate_home =
+                AuthorityEnvTestTempDir::new(tempdir().expect("substrate home tempdir"));
+            substrate_home.install_as_home();
             write_world_dispatch_policy(
                 substrate_home.path(),
                 case.enabled,
@@ -18232,7 +18747,7 @@ agents:
     async fn dispatch_contract_cancel_world_work_ephemeral_routes_exact_active_task_over_execute_cancel(
     ) {
         let substrate_home = secure_authority_tempdir();
-        let _substrate_home_guard = EnvVarGuard::set_path("SUBSTRATE_HOME", substrate_home.path());
+        substrate_home.install_as_home();
         write_allowed_world_dispatch_policy(
             substrate_home.path(),
             "cli:codex-world",
@@ -18318,88 +18833,104 @@ agents:
         });
         let _socket_guard = EnvVarGuard::set_path("SUBSTRATE_WORLD_SOCKET", &socket_path);
 
-        let prepared = prepare_orchestrator_world_dispatch(
-            &store,
-            sample_ephemeral_cancel_world_dispatch_request("task-run-cancel-live"),
-        )
-        .expect("prepare active cancel dispatch request");
-        let dispatch_task = tokio::spawn(dispatch_prepared_orchestrator_world_request(prepared));
-        tokio::time::timeout(Duration::from_secs(3), cancel_seen_rx)
-            .await
-            .expect("timed out waiting for execute cancel delivery")
-            .expect("execute cancel delivery signal");
-        tokio::time::sleep(Duration::from_millis(50)).await;
-        assert!(
-            !dispatch_task.is_finished(),
-            "ephemeral cancel must wait for terminal truth before returning cancelled"
-        );
-        let terminal = b21_test_cancelled_exit_frame(
-            "rts_shell_world_dispatch_fixture",
-            "task-run-cancel-live",
-        );
-        authority
-            .execution_supervisor
-            .journal_frame(
-                &claim,
-                &terminal,
-                &terminal
-                    .canonical_ndjson_bytes()
-                    .expect("canonical cancelled terminal fixture"),
-            )
-            .expect("journal exact cancelled terminal fixture");
-        let outcome = dispatch_task
-            .await
-            .expect("dispatch join should succeed")
-            .expect("dispatch prepared active cancel request");
+        let test_tasks = TestTaskRegistry::default();
+        let tasks_for_test = test_tasks.clone();
+        let test_outcome = run_test_body_with_server_cleanup(
+            server,
+            socket_home,
+            &socket_path,
+            "ephemeral cancel route",
+            async {
+                let prepared = prepare_orchestrator_world_dispatch(
+                    &store,
+                    sample_ephemeral_cancel_world_dispatch_request("task-run-cancel-live"),
+                )
+                .expect("prepare active cancel dispatch request");
+                let dispatch_task =
+                    tasks_for_test.spawn(dispatch_prepared_orchestrator_world_request(prepared));
+                tokio::time::timeout(Duration::from_secs(3), cancel_seen_rx)
+                    .await
+                    .expect("timed out waiting for execute cancel delivery")
+                    .expect("execute cancel delivery signal");
+                assert!(
+                    !dispatch_task.is_finished(),
+                    "ephemeral cancel must wait for terminal truth before returning cancelled"
+                );
+                let terminal = b21_test_cancelled_exit_frame(
+                    "rts_shell_world_dispatch_fixture",
+                    "task-run-cancel-live",
+                );
+                authority
+                    .execution_supervisor
+                    .journal_frame(
+                        &claim,
+                        &terminal,
+                        &terminal
+                            .canonical_ndjson_bytes()
+                            .expect("canonical cancelled terminal fixture"),
+                    )
+                    .expect("journal exact cancelled terminal fixture");
+                let outcome = dispatch_task
+                    .await
+                    .expect("dispatch join should succeed")
+                    .expect("dispatch prepared active cancel request");
 
-        let WorldDispatchOutcomeV1::CancelWorldWork(outcome) = outcome else {
-            panic!("expected cancel_world_work outcome envelope");
-        };
-        assert_eq!(outcome.request_id, "req_cancel_ephemeral");
-        assert_eq!(outcome.orchestration_session_id, "sess_dispatch");
-        assert_eq!(outcome.action, WorldDispatchActionV1::CancelWorldWork);
-        assert_eq!(outcome.mode, WorldDispatchModeV1::Ephemeral);
-        assert_eq!(outcome.orchestrator_participant_id, "orch_dispatch");
-        assert_eq!(outcome.target_participant_id, "task-run-cancel-live");
-        assert_eq!(outcome.target_backend_id, "cli:codex-world");
-        assert_eq!(outcome.world_id, "world-17");
-        assert_eq!(outcome.world_generation, 2);
-        assert_eq!(outcome.state, CancelWorldWorkTerminalStateV1::Cancelled);
-        assert_eq!(outcome.closeout.participant_state, None);
-        assert_eq!(outcome.closeout.session_state, None);
-        assert!(
+                let WorldDispatchOutcomeV1::CancelWorldWork(outcome) = outcome else {
+                    panic!("expected cancel_world_work outcome envelope");
+                };
+                assert_eq!(outcome.request_id, "req_cancel_ephemeral");
+                assert_eq!(outcome.orchestration_session_id, "sess_dispatch");
+                assert_eq!(outcome.action, WorldDispatchActionV1::CancelWorldWork);
+                assert_eq!(outcome.mode, WorldDispatchModeV1::Ephemeral);
+                assert_eq!(outcome.orchestrator_participant_id, "orch_dispatch");
+                assert_eq!(outcome.target_participant_id, "task-run-cancel-live");
+                assert_eq!(outcome.target_backend_id, "cli:codex-world");
+                assert_eq!(outcome.world_id, "world-17");
+                assert_eq!(outcome.world_generation, 2);
+                assert_eq!(outcome.state, CancelWorldWorkTerminalStateV1::Cancelled);
+                assert_eq!(outcome.closeout.participant_state, None);
+                assert_eq!(outcome.closeout.session_state, None);
+                assert!(
             outcome.summary.contains("/v1/execute/cancel"),
             "ephemeral cancel summary should stay explicit about the execute-cancel seam: {}",
             outcome.summary
         );
-        assert!(
-            outcome
-                .summary
-                .contains("without reopening retained worker lifecycle state"),
-            "ephemeral cancel summary should stay explicit about non-retained closeout: {}",
-            outcome.summary
-        );
-        let adapter_outcome =
-            normalize_cancel_world_work_outcome_v1(&outcome).expect("normalize ephemeral cancel");
-        assert_eq!(
-            adapter_outcome.task_run_id.as_deref(),
-            Some("task-run-cancel-live")
-        );
-        assert_eq!(adapter_outcome.participant_id, None);
-        assert_eq!(adapter_outcome.target_backend_id, "cli:codex-world");
-        assert_eq!(
-            authority
-                .receipt_registry
-                .inspect_world_work_acceptance_by_id(
-                    &authority.authority_store_id,
-                    &acceptance.acceptance_record_id,
-                )
-                .expect("inspect immutable cancel receipt"),
-            Some(acceptance),
-            "terminal closeout must not delete immutable accepted truth"
-        );
-
-        server.abort();
+                assert!(
+                    outcome
+                        .summary
+                        .contains("without reopening retained worker lifecycle state"),
+                    "ephemeral cancel summary should stay explicit about non-retained closeout: {}",
+                    outcome.summary
+                );
+                let adapter_outcome = normalize_cancel_world_work_outcome_v1(&outcome)
+                    .expect("normalize ephemeral cancel");
+                assert_eq!(
+                    adapter_outcome.task_run_id.as_deref(),
+                    Some("task-run-cancel-live")
+                );
+                assert_eq!(adapter_outcome.participant_id, None);
+                assert_eq!(adapter_outcome.target_backend_id, "cli:codex-world");
+                assert_eq!(
+                    authority
+                        .receipt_registry
+                        .inspect_world_work_acceptance_by_id(
+                            &authority.authority_store_id,
+                            &acceptance.acceptance_record_id,
+                        )
+                        .expect("inspect immutable cancel receipt"),
+                    Some(acceptance),
+                    "terminal closeout must not delete immutable accepted truth"
+                );
+            },
+            move || async move { test_tasks.finish_or_abort_and_wait().await },
+        )
+        .await;
+        drop(_socket_guard);
+        drop(authority);
+        drop(store);
+        drop(workspace_root);
+        drop(substrate_home);
+        test_outcome.finish();
     }
 
     #[cfg(target_os = "linux")]
@@ -18408,7 +18939,7 @@ agents:
     async fn active_ephemeral_terminal_wait_allows_multiple_waiters_to_observe_same_terminal_truth()
     {
         let substrate_home = secure_authority_tempdir();
-        let _substrate_home_guard = EnvVarGuard::set_path("SUBSTRATE_HOME", substrate_home.path());
+        substrate_home.install_as_home();
         write_allowed_world_dispatch_policy(
             substrate_home.path(),
             "cli:codex-world",
@@ -18486,66 +19017,86 @@ agents:
         });
         let _socket_guard = EnvVarGuard::set_path("SUBSTRATE_WORLD_SOCKET", &socket_path);
 
-        let store_for_one = store.clone();
-        let waiter_one = tokio::spawn(async move {
-            dispatch_orchestrator_world_request(
-                &store_for_one,
-                sample_ephemeral_cancel_world_dispatch_request("task-run-shared"),
-            )
-            .await
-        });
-        let mut waiter_two_request =
-            sample_ephemeral_cancel_world_dispatch_request("task-run-shared");
-        waiter_two_request.request_id = Some("req_cancel_ephemeral_waiter_two".to_string());
-        waiter_two_request.idempotency_key = Some("idem_cancel_ephemeral_waiter_two".to_string());
-        let store_for_two = store.clone();
-        let waiter_two = tokio::spawn(async move {
-            dispatch_orchestrator_world_request(&store_for_two, waiter_two_request).await
-        });
+        let test_tasks = TestTaskRegistry::default();
+        let tasks_for_test = test_tasks.clone();
+        let test_outcome = run_test_body_with_server_cleanup(
+            server,
+            socket_home,
+            &socket_path,
+            "multiple terminal waiters",
+            async {
+                let store_for_one = store.clone();
+                let waiter_one = tasks_for_test.spawn(async move {
+                    dispatch_orchestrator_world_request(
+                        &store_for_one,
+                        sample_ephemeral_cancel_world_dispatch_request("task-run-shared"),
+                    )
+                    .await
+                });
+                let mut waiter_two_request =
+                    sample_ephemeral_cancel_world_dispatch_request("task-run-shared");
+                waiter_two_request.request_id = Some("req_cancel_ephemeral_waiter_two".to_string());
+                waiter_two_request.idempotency_key =
+                    Some("idem_cancel_ephemeral_waiter_two".to_string());
+                let store_for_two = store.clone();
+                let waiter_two = tasks_for_test.spawn(async move {
+                    dispatch_orchestrator_world_request(&store_for_two, waiter_two_request).await
+                });
 
-        cancel_seen_rx
-            .recv()
-            .await
-            .expect("first waiter reaches cancel");
-        cancel_seen_rx
-            .recv()
-            .await
-            .expect("second waiter reaches cancel");
-        assert!(!waiter_one.is_finished());
-        assert!(!waiter_two.is_finished());
-        let terminal =
-            b21_test_cancelled_exit_frame("rts_shell_world_dispatch_fixture", "task-run-shared");
-        authority
-            .execution_supervisor
-            .journal_frame(
-                &claim,
-                &terminal,
-                &terminal
-                    .canonical_ndjson_bytes()
-                    .expect("canonical multiple-waiter terminal"),
-            )
-            .expect("journal one exact terminal for both waiters");
+                cancel_seen_rx
+                    .recv()
+                    .await
+                    .expect("first waiter reaches cancel");
+                cancel_seen_rx
+                    .recv()
+                    .await
+                    .expect("second waiter reaches cancel");
+                assert!(!waiter_one.is_finished());
+                assert!(!waiter_two.is_finished());
+                let terminal = b21_test_cancelled_exit_frame(
+                    "rts_shell_world_dispatch_fixture",
+                    "task-run-shared",
+                );
+                authority
+                    .execution_supervisor
+                    .journal_frame(
+                        &claim,
+                        &terminal,
+                        &terminal
+                            .canonical_ndjson_bytes()
+                            .expect("canonical multiple-waiter terminal"),
+                    )
+                    .expect("journal one exact terminal for both waiters");
 
-        for waiter in [waiter_one, waiter_two] {
-            let WorldDispatchOutcomeV1::CancelWorldWork(outcome) = waiter
-                .await
-                .expect("waiter dispatch joins")
-                .expect("waiter observes durable terminal")
-            else {
-                panic!("expected cancel_world_work outcome")
-            };
-            assert_eq!(outcome.state, CancelWorldWorkTerminalStateV1::Cancelled);
-            assert_eq!(outcome.target_participant_id, "task-run-shared");
-        }
-        let observation = authority
-            .execution_supervisor
-            .inspect_observation_by_acceptance_id(&claim.acceptance_record_id)
-            .expect("inspect multiple-waiter observation")
-            .expect("multiple-waiter observation exists");
-        assert_eq!(observation.journal.len(), 2);
-        assert_eq!(observation.durable_frame_cursor, Some(2));
-        assert_eq!(observation.terminal.map(|value| value.exit_code), Some(130));
-        server.abort();
+                for waiter in [waiter_one, waiter_two] {
+                    let WorldDispatchOutcomeV1::CancelWorldWork(outcome) = waiter
+                        .await
+                        .expect("waiter dispatch joins")
+                        .expect("waiter observes durable terminal")
+                    else {
+                        panic!("expected cancel_world_work outcome")
+                    };
+                    assert_eq!(outcome.state, CancelWorldWorkTerminalStateV1::Cancelled);
+                    assert_eq!(outcome.target_participant_id, "task-run-shared");
+                }
+                let observation = authority
+                    .execution_supervisor
+                    .inspect_observation_by_acceptance_id(&claim.acceptance_record_id)
+                    .expect("inspect multiple-waiter observation")
+                    .expect("multiple-waiter observation exists");
+                assert_eq!(observation.journal.len(), 2);
+                assert_eq!(observation.durable_frame_cursor, Some(2));
+                assert_eq!(observation.terminal.map(|value| value.exit_code), Some(130));
+            },
+            move || async move { test_tasks.finish_or_abort_and_wait().await },
+        )
+        .await;
+        drop(_socket_guard);
+        drop(authority);
+        drop(store);
+        drop(workspace_root);
+        drop(substrate_home);
+        test_outcome.finish();
     }
 
     #[cfg(target_os = "linux")]
@@ -18554,7 +19105,7 @@ agents:
     async fn active_ephemeral_terminal_wait_registration_guard_releases_non_happy_path_registrations(
     ) {
         let substrate_home = secure_authority_tempdir();
-        let _substrate_home_guard = EnvVarGuard::set_path("SUBSTRATE_HOME", substrate_home.path());
+        substrate_home.install_as_home();
         write_allowed_world_dispatch_policy(
             substrate_home.path(),
             "cli:codex-world",
@@ -18633,45 +19184,62 @@ agents:
         });
         let _socket_guard = EnvVarGuard::set_path("SUBSTRATE_WORLD_SOCKET", &socket_path);
 
-        let store_for_dispatch = store.clone();
-        let dispatch = tokio::spawn(async move {
-            dispatch_orchestrator_world_request(
-                &store_for_dispatch,
-                sample_ephemeral_cancel_world_dispatch_request("task-run-cleanup"),
-            )
-            .await
-        });
-        timeout(Duration::from_secs(3), cancel_seen_rx)
-            .await
-            .expect("timed out waiting for real cancel waiter")
-            .expect("real cancel waiter reaches transport");
-        assert!(!dispatch.is_finished());
-        dispatch.abort();
-        assert!(dispatch
-            .await
-            .expect_err("dispatch must abort")
-            .is_cancelled());
+        let test_tasks = TestTaskRegistry::default();
+        let tasks_for_test = test_tasks.clone();
+        let test_outcome = run_test_body_with_server_cleanup(
+            server,
+            socket_home,
+            &socket_path,
+            "terminal waiter registration",
+            async {
+                let store_for_dispatch = store.clone();
+                let dispatch = tasks_for_test.spawn_cancellable(async move {
+                    dispatch_orchestrator_world_request(
+                        &store_for_dispatch,
+                        sample_ephemeral_cancel_world_dispatch_request("task-run-cleanup"),
+                    )
+                    .await
+                });
+                timeout(Duration::from_secs(3), cancel_seen_rx)
+                    .await
+                    .expect("timed out waiting for real cancel waiter")
+                    .expect("real cancel waiter reaches transport");
+                assert!(!dispatch.is_finished());
+                dispatch.abort();
+                assert!(dispatch
+                    .await
+                    .expect_err("dispatch must abort")
+                    .is_cancelled());
 
-        assert_eq!(
-            authority
-                .receipt_registry
-                .inspect_world_work_acceptance_by_id(
-                    &authority.authority_store_id,
-                    &acceptance.acceptance_record_id,
-                )
-                .expect("inspect receipt after waiter drop"),
-            Some(acceptance),
-            "dropping the real waiter must not delete acceptance"
-        );
-        let observation = authority
-            .execution_supervisor
-            .inspect_observation_by_acceptance_id(&claim.acceptance_record_id)
-            .expect("inspect observation after waiter drop")
-            .expect("observation survives waiter drop");
-        assert_eq!(observation.durable_frame_cursor, Some(1));
-        assert_eq!(observation.journal.len(), 1);
-        assert!(observation.terminal.is_none());
-        server.abort();
+                assert_eq!(
+                    authority
+                        .receipt_registry
+                        .inspect_world_work_acceptance_by_id(
+                            &authority.authority_store_id,
+                            &acceptance.acceptance_record_id,
+                        )
+                        .expect("inspect receipt after waiter drop"),
+                    Some(acceptance),
+                    "dropping the real waiter must not delete acceptance"
+                );
+                let observation = authority
+                    .execution_supervisor
+                    .inspect_observation_by_acceptance_id(&claim.acceptance_record_id)
+                    .expect("inspect observation after waiter drop")
+                    .expect("observation survives waiter drop");
+                assert_eq!(observation.durable_frame_cursor, Some(1));
+                assert_eq!(observation.journal.len(), 1);
+                assert!(observation.terminal.is_none());
+            },
+            move || async move { test_tasks.finish_or_abort_and_wait().await },
+        )
+        .await;
+        drop(_socket_guard);
+        drop(authority);
+        drop(store);
+        drop(workspace_root);
+        drop(substrate_home);
+        test_outcome.finish();
     }
 
     #[cfg(target_os = "linux")]
@@ -18685,7 +19253,7 @@ agents:
             test_world_codex_runtime_bin().as_path(),
         );
         let substrate_home = secure_authority_tempdir();
-        let _substrate_home_guard = EnvVarGuard::set_path("SUBSTRATE_HOME", substrate_home.path());
+        substrate_home.install_as_home();
         write_allowed_world_dispatch_policy(
             substrate_home.path(),
             "cli:codex-world",
@@ -18762,92 +19330,118 @@ agents:
             }
         });
         let _socket_guard = EnvVarGuard::set_path("SUBSTRATE_WORLD_SOCKET", &socket_path);
-        let (started_task_run_id_tx, mut started_task_run_id_rx) =
-            tokio::sync::mpsc::unbounded_channel();
-        let store_for_dispatch = store.clone();
-        let dispatch = tokio::spawn(async move {
-            dispatch_run_world_task_request_with_started_task_run_id_tx(
-                &store_for_dispatch,
-                WorldDispatchRequestV1 {
-                    request_id: Some("req_dispatch_guard_drop".to_string()),
-                    idempotency_key: Some("idem_dispatch_guard_drop".to_string()),
-                    orchestration_session_id: Some("sess_dispatch".to_string()),
-                    caller_participant_id: Some("orch_dispatch".to_string()),
-                    action: WorldDispatchActionV1::RunWorldTask,
-                    mode: WorldDispatchModeV1::Ephemeral,
-                    target_backend_id: Some("cli:codex-world".to_string()),
-                    task_run_id: None,
-                    target_participant_id: None,
-                    world_id: Some("world-17".to_string()),
-                    world_generation: Some(2),
-                    payload: WorldDispatchPayloadV1::Task(TaskPayloadV1 {
-                        prompt: "hold after exact Start".to_string(),
-                    }),
-                },
-                started_task_run_id_tx,
-            )
-            .await
-        });
-        timeout(Duration::from_secs(3), start_sent_rx)
-            .await
-            .expect("timed out waiting for world-service Start")
-            .expect("world-service Start sent");
-        assert_eq!(
-            timeout(Duration::from_secs(3), started_task_run_id_rx.recv())
+        let test_tasks = TestTaskRegistry::default();
+        let tasks_for_test = test_tasks.clone();
+        let test_outcome = run_test_body_with_server_cleanup(
+            server,
+            socket_home,
+            &socket_path,
+            "terminal truth guard",
+            async {
+                let (started_task_run_id_tx, mut started_task_run_id_rx) =
+                    tokio::sync::mpsc::unbounded_channel();
+                let store_for_dispatch = store.clone();
+                let dispatch = tasks_for_test.spawn_cancellable(async move {
+                    dispatch_run_world_task_request_with_started_task_run_id_tx(
+                        &store_for_dispatch,
+                        WorldDispatchRequestV1 {
+                            request_id: Some("req_dispatch_guard_drop".to_string()),
+                            idempotency_key: Some("idem_dispatch_guard_drop".to_string()),
+                            orchestration_session_id: Some("sess_dispatch".to_string()),
+                            caller_participant_id: Some("orch_dispatch".to_string()),
+                            action: WorldDispatchActionV1::RunWorldTask,
+                            mode: WorldDispatchModeV1::Ephemeral,
+                            target_backend_id: Some("cli:codex-world".to_string()),
+                            task_run_id: None,
+                            target_participant_id: None,
+                            world_id: Some("world-17".to_string()),
+                            world_generation: Some(2),
+                            payload: WorldDispatchPayloadV1::Task(TaskPayloadV1 {
+                                prompt: "hold after exact Start".to_string(),
+                            }),
+                        },
+                        started_task_run_id_tx,
+                    )
+                    .await
+                });
+                timeout(Duration::from_secs(3), start_sent_rx)
+                    .await
+                    .expect("timed out waiting for world-service Start")
+                    .expect("world-service Start sent");
+                assert_eq!(
+                    timeout(Duration::from_secs(3), started_task_run_id_rx.recv())
+                        .await
+                        .expect("timed out waiting for production Start acknowledgement")
+                        .expect("production Start task ID"),
+                    "task-run-stream-failure"
+                );
+                let resolved = timeout(Duration::from_secs(3), async {
+                    loop {
+                        if let Ok(resolved) = authority.resolve_active_ephemeral_observation(
+                            "task-run-stream-failure",
+                            "cli:codex-world",
+                        ) {
+                            break resolved;
+                        }
+                        tokio::task::yield_now().await;
+                    }
+                })
                 .await
-                .expect("timed out waiting for production Start acknowledgement")
-                .expect("production Start task ID"),
-            "task-run-stream-failure"
-        );
-        let resolved = timeout(Duration::from_secs(3), async {
-            loop {
-                if let Ok(resolved) = authority.resolve_active_ephemeral_observation(
-                    "task-run-stream-failure",
-                    "cli:codex-world",
-                ) {
-                    break resolved;
-                }
-                tokio::task::yield_now().await;
+                .expect("timed out waiting for durable acceptance and Start journal");
+
+                dispatch.abort();
+                assert!(dispatch
+                    .await
+                    .expect_err("dispatch must abort")
+                    .is_cancelled());
+                resolved
+            },
+            move || async move { test_tasks.finish_or_abort_and_wait().await },
+        )
+        .await;
+        drop(_socket_guard);
+
+        let assertion_outcome = std::panic::catch_unwind(std::panic::AssertUnwindSafe(|| {
+            if let TestBodyOutcome::Completed(resolved) = &test_outcome {
+                let acceptance = authority
+                    .receipt_registry
+                    .inspect_world_work_acceptance_by_id(
+                        &authority.authority_store_id,
+                        &resolved.acceptance_record.acceptance_record_id,
+                    )
+                    .expect("inspect receipt after RunWorldTask caller drop")
+                    .expect("accepted truth survives caller drop");
+                assert_eq!(acceptance, resolved.acceptance_record);
+                let observation = authority
+                    .execution_supervisor
+                    .inspect_observation_by_acceptance_id(&acceptance.acceptance_record_id)
+                    .expect("inspect supervisor after RunWorldTask caller drop")
+                    .expect("supervisor claim survives caller drop");
+                assert_eq!(observation.durable_frame_cursor, Some(1));
+                assert_eq!(observation.journal.len(), 1);
+                assert!(
+                    observation.terminal.is_none(),
+                    "caller/guard drop must not fabricate failed terminal truth"
+                );
+                assert!(
+                    !substrate_home
+                        .path()
+                        .join("run/agent-hub/sessions/sess_dispatch/active-ephemeral-tasks")
+                        .exists(),
+                    "accepted RunWorldTask must not register legacy active-task state"
+                );
             }
-        })
-        .await
-        .expect("timed out waiting for durable acceptance and Start journal");
-
-        dispatch.abort();
-        assert!(dispatch
-            .await
-            .expect_err("dispatch must abort")
-            .is_cancelled());
-        server.abort();
-        tokio::task::yield_now().await;
-
-        let acceptance = authority
-            .receipt_registry
-            .inspect_world_work_acceptance_by_id(
-                &authority.authority_store_id,
-                &resolved.acceptance_record.acceptance_record_id,
-            )
-            .expect("inspect receipt after RunWorldTask caller drop")
-            .expect("accepted truth survives caller drop");
-        assert_eq!(acceptance, resolved.acceptance_record);
-        let observation = authority
-            .execution_supervisor
-            .inspect_observation_by_acceptance_id(&acceptance.acceptance_record_id)
-            .expect("inspect supervisor after RunWorldTask caller drop")
-            .expect("supervisor claim survives caller drop");
-        assert_eq!(observation.durable_frame_cursor, Some(1));
-        assert_eq!(observation.journal.len(), 1);
-        assert!(
-            observation.terminal.is_none(),
-            "caller/guard drop must not fabricate failed terminal truth"
-        );
-        assert!(
-            !substrate_home
-                .path()
-                .join("run/agent-hub/sessions/sess_dispatch/active-ephemeral-tasks")
-                .exists(),
-            "accepted RunWorldTask must not register legacy active-task state"
-        );
+        }));
+        drop(authority);
+        drop(store);
+        drop(workspace_root);
+        drop(substrate_home);
+        drop(_world_codex_guard);
+        drop(_env_guard);
+        if let Err(payload) = assertion_outcome {
+            std::panic::resume_unwind(payload);
+        }
+        test_outcome.finish();
     }
 
     #[cfg(target_os = "linux")]
@@ -18855,7 +19449,7 @@ agents:
     #[serial]
     async fn dispatch_contract_cancel_world_work_ephemeral_retry_reuses_shared_terminal_truth() {
         let substrate_home = secure_authority_tempdir();
-        let _substrate_home_guard = EnvVarGuard::set_path("SUBSTRATE_HOME", substrate_home.path());
+        substrate_home.install_as_home();
         write_allowed_world_dispatch_policy(
             substrate_home.path(),
             "cli:codex-world",
@@ -18938,75 +19532,90 @@ agents:
         });
         let _socket_guard = EnvVarGuard::set_path("SUBSTRATE_WORLD_SOCKET", &socket_path);
 
-        let store_for_first = store.clone();
-        let first_cancel = tokio::spawn(async move {
-            dispatch_orchestrator_world_request(
-                &store_for_first,
-                sample_ephemeral_cancel_world_dispatch_request("task-run-cancel-shared"),
-            )
-            .await
-        });
+        let test_tasks = TestTaskRegistry::default();
+        let tasks_for_test = test_tasks.clone();
+        let test_outcome = run_test_body_with_server_cleanup(
+            server,
+            socket_home,
+            &socket_path,
+            "ephemeral cancel retry",
+            async {
+                let store_for_first = store.clone();
+                let first_cancel = tasks_for_test.spawn(async move {
+                    dispatch_orchestrator_world_request(
+                        &store_for_first,
+                        sample_ephemeral_cancel_world_dispatch_request("task-run-cancel-shared"),
+                    )
+                    .await
+                });
 
-        cancel_seen_rx
-            .recv()
-            .await
-            .expect("first cancel should reach execute-cancel");
+                cancel_seen_rx
+                    .recv()
+                    .await
+                    .expect("first cancel should reach execute-cancel");
 
-        let mut retry_request =
-            sample_ephemeral_cancel_world_dispatch_request("task-run-cancel-shared");
-        retry_request.request_id = Some("req_cancel_ephemeral_retry".to_string());
-        retry_request.idempotency_key = Some("idem_cancel_ephemeral_retry".to_string());
-        let store_for_retry = store.clone();
-        let retry_cancel = tokio::spawn(async move {
-            dispatch_orchestrator_world_request(&store_for_retry, retry_request).await
-        });
+                let mut retry_request =
+                    sample_ephemeral_cancel_world_dispatch_request("task-run-cancel-shared");
+                retry_request.request_id = Some("req_cancel_ephemeral_retry".to_string());
+                retry_request.idempotency_key = Some("idem_cancel_ephemeral_retry".to_string());
+                let store_for_retry = store.clone();
+                let retry_cancel = tasks_for_test.spawn(async move {
+                    dispatch_orchestrator_world_request(&store_for_retry, retry_request).await
+                });
 
-        cancel_seen_rx
-            .recv()
-            .await
-            .expect("retry cancel should reuse execute-cancel while the task is still live");
+                cancel_seen_rx.recv().await.expect(
+                    "retry cancel should reuse execute-cancel while the task is still live",
+                );
 
-        let terminal = b21_test_cancelled_exit_frame(
-            "rts_shell_world_dispatch_fixture",
-            "task-run-cancel-shared",
-        );
-        authority
-            .execution_supervisor
-            .journal_frame(
-                &claim,
-                &terminal,
-                &terminal
-                    .canonical_ndjson_bytes()
-                    .expect("canonical shared cancelled terminal fixture"),
-            )
-            .expect("journal exact shared cancelled terminal fixture");
+                let terminal = b21_test_cancelled_exit_frame(
+                    "rts_shell_world_dispatch_fixture",
+                    "task-run-cancel-shared",
+                );
+                authority
+                    .execution_supervisor
+                    .journal_frame(
+                        &claim,
+                        &terminal,
+                        &terminal
+                            .canonical_ndjson_bytes()
+                            .expect("canonical shared cancelled terminal fixture"),
+                    )
+                    .expect("journal exact shared cancelled terminal fixture");
 
-        for dispatch_task in [first_cancel, retry_cancel] {
-            let outcome = dispatch_task
-                .await
-                .expect("cancel dispatch join should succeed")
-                .expect("cancel dispatch should observe shared terminal truth");
-            let WorldDispatchOutcomeV1::CancelWorldWork(outcome) = outcome else {
-                panic!("expected cancel_world_work outcome envelope");
-            };
-            assert_eq!(outcome.state, CancelWorldWorkTerminalStateV1::Cancelled);
-            assert_eq!(outcome.target_participant_id, "task-run-cancel-shared");
-        }
+                for dispatch_task in [first_cancel, retry_cancel] {
+                    let outcome = dispatch_task
+                        .await
+                        .expect("cancel dispatch join should succeed")
+                        .expect("cancel dispatch should observe shared terminal truth");
+                    let WorldDispatchOutcomeV1::CancelWorldWork(outcome) = outcome else {
+                        panic!("expected cancel_world_work outcome envelope");
+                    };
+                    assert_eq!(outcome.state, CancelWorldWorkTerminalStateV1::Cancelled);
+                    assert_eq!(outcome.target_participant_id, "task-run-cancel-shared");
+                }
 
-        let observation = authority
-            .execution_supervisor
-            .inspect_observation_by_acceptance_id(&claim.acceptance_record_id)
-            .expect("inspect shared cancel observation")
-            .expect("shared cancel observation exists");
-        assert_eq!(observation.durable_frame_cursor, Some(2));
-        assert_eq!(observation.journal.len(), 2);
-        assert_eq!(
-            observation.terminal.map(|terminal| terminal.exit_code),
-            Some(130),
-            "both foreground waiters must join one exact durable terminal closeout"
-        );
-
-        server.abort();
+                let observation = authority
+                    .execution_supervisor
+                    .inspect_observation_by_acceptance_id(&claim.acceptance_record_id)
+                    .expect("inspect shared cancel observation")
+                    .expect("shared cancel observation exists");
+                assert_eq!(observation.durable_frame_cursor, Some(2));
+                assert_eq!(observation.journal.len(), 2);
+                assert_eq!(
+                    observation.terminal.map(|terminal| terminal.exit_code),
+                    Some(130),
+                    "both foreground waiters must join one exact durable terminal closeout"
+                );
+            },
+            move || async move { test_tasks.finish_or_abort_and_wait().await },
+        )
+        .await;
+        drop(_socket_guard);
+        drop(authority);
+        drop(store);
+        drop(workspace_root);
+        drop(substrate_home);
+        test_outcome.finish();
     }
 
     #[cfg(target_os = "linux")]
@@ -19015,7 +19624,7 @@ agents:
     async fn dispatch_contract_cancel_world_work_ephemeral_fails_closed_when_execute_cancel_is_not_delivered(
     ) {
         let substrate_home = secure_authority_tempdir();
-        let _substrate_home_guard = EnvVarGuard::set_path("SUBSTRATE_HOME", substrate_home.path());
+        substrate_home.install_as_home();
         write_allowed_world_dispatch_policy(
             substrate_home.path(),
             "cli:codex-world",
@@ -19092,6 +19701,13 @@ agents:
         });
         let _socket_guard = EnvVarGuard::set_path("SUBSTRATE_WORLD_SOCKET", &socket_path);
 
+        let test_outcome = run_test_body_with_server_cleanup(
+            server,
+            socket_home,
+            &socket_path,
+            "undelivered ephemeral cancel",
+            async {
+
         let err = dispatch_orchestrator_world_request(
             &store,
             sample_ephemeral_cancel_world_dispatch_request("task-run-cancel-race"),
@@ -19121,15 +19737,24 @@ agents:
         assert_eq!(observation.durable_frame_cursor, Some(1));
         assert!(observation.terminal.is_none());
 
-        server.abort();
+            },
+            || async {},
+        )
+        .await;
+        drop(_socket_guard);
+        drop(authority);
+        drop(store);
+        drop(workspace_root);
+        drop(substrate_home);
+        test_outcome.finish();
     }
 
     #[cfg(target_os = "linux")]
     #[tokio::test(flavor = "current_thread")]
     #[serial]
     async fn dispatch_contract_stop_world_worker_returns_typed_closeout_after_authoritative_stop() {
-        let substrate_home = tempdir().expect("substrate home tempdir");
-        let _substrate_home_guard = EnvVarGuard::set_path("SUBSTRATE_HOME", substrate_home.path());
+        let substrate_home = secure_authority_tempdir();
+        substrate_home.install_as_home();
         write_allowed_world_dispatch_policy(
             substrate_home.path(),
             "cli:codex-world",
@@ -19242,8 +19867,8 @@ agents:
     #[serial]
     async fn dispatch_contract_stop_world_worker_fails_closed_when_participant_reaches_stopped_without_terminal_proof(
     ) {
-        let substrate_home = tempdir().expect("substrate home tempdir");
-        let _substrate_home_guard = EnvVarGuard::set_path("SUBSTRATE_HOME", substrate_home.path());
+        let substrate_home = secure_authority_tempdir();
+        substrate_home.install_as_home();
         write_allowed_world_dispatch_policy(
             substrate_home.path(),
             "cli:codex-world",
@@ -19345,8 +19970,8 @@ agents:
     #[serial]
     async fn dispatch_contract_stop_world_worker_late_terminal_proof_does_not_retroactively_convert_earlier_failure(
     ) {
-        let substrate_home = tempdir().expect("substrate home tempdir");
-        let _substrate_home_guard = EnvVarGuard::set_path("SUBSTRATE_HOME", substrate_home.path());
+        let substrate_home = secure_authority_tempdir();
+        substrate_home.install_as_home();
         write_allowed_world_dispatch_policy(
             substrate_home.path(),
             "cli:codex-world",
@@ -19465,8 +20090,8 @@ agents:
     #[serial]
     async fn dispatch_contract_stop_world_worker_waits_for_late_private_stop_transport_publication_after_recovered_owner_path(
     ) {
-        let substrate_home = tempdir().expect("substrate home tempdir");
-        let _substrate_home_guard = EnvVarGuard::set_path("SUBSTRATE_HOME", substrate_home.path());
+        let substrate_home = secure_authority_tempdir();
+        substrate_home.install_as_home();
         write_allowed_world_dispatch_policy(
             substrate_home.path(),
             "cli:codex-world",
@@ -19478,9 +20103,12 @@ agents:
         let store = AgentRuntimeStateStore::new().expect("state store");
         persist_authoritative_continue_dispatch_state(&store, workspace_root.path(), "world-17", 2);
 
+        let (publish_transport_tx, publish_transport_rx) = tokio::sync::oneshot::channel();
         let store_for_task = store.clone();
         let stop_owner = tokio::spawn(async move {
-            tokio::time::sleep(Duration::from_millis(80)).await;
+            publish_transport_rx
+                .await
+                .expect("publish recovered transport after first pending stop attempt");
             let mut orchestrator = store_for_task
                 .load_participant("orch_dispatch")
                 .expect("load authoritative stop owner for late transport recovery")
@@ -19544,9 +20172,43 @@ agents:
         let prepared =
             prepare_orchestrator_world_dispatch(&store, sample_stop_world_dispatch_request())
                 .expect("prepare stop dispatch request");
-        let outcome = dispatch_prepared_orchestrator_world_request(prepared)
-            .await
-            .expect("dispatch prepared stop request should wait for late transport");
+        let publish_transport_tx = Arc::new(Mutex::new(Some(publish_transport_tx)));
+        let retry_events = Arc::new(Mutex::new(Vec::new()));
+        let publish_transport_for_hook = publish_transport_tx.clone();
+        let retry_events_for_hook = retry_events.clone();
+        let retry_hook = Arc::new(move |event, _path: &Path| {
+            retry_events_for_hook
+                .lock()
+                .expect("lock late stop retry events")
+                .push(event);
+            if event == PrivateStopTransportRetryEvent::RetryWaitStarted {
+                publish_transport_for_hook
+                    .lock()
+                    .expect("lock recovered transport publication signal")
+                    .take()
+                    .expect("publish recovered transport exactly once")
+                    .send(())
+                    .expect("recovered transport owner must still be waiting");
+            }
+        }) as PrivateStopTransportRetryHook;
+        let outcome = with_private_stop_transport_retry_hook(
+            retry_hook,
+            dispatch_prepared_orchestrator_world_request(prepared),
+        )
+        .await
+        .expect("dispatch prepared stop request should wait for late transport");
+        assert_eq!(
+            retry_events
+                .lock()
+                .expect("lock late stop retry event proof")
+                .as_slice(),
+            &[
+                PrivateStopTransportRetryEvent::InitialAttempt,
+                PrivateStopTransportRetryEvent::RetryWaitStarted,
+                PrivateStopTransportRetryEvent::RetryAttempt,
+            ],
+            "late transport must publish only after the first stop attempt is pending"
+        );
 
         let WorldDispatchOutcomeV1::StopWorldWorker(outcome) = outcome else {
             panic!("expected stop_world_worker outcome envelope");
@@ -19565,8 +20227,73 @@ agents:
     #[serial]
     async fn request_private_stop_after_transport_registration_for_stop_episode_retries_response_level_refusals_after_recovered_owner_path(
     ) {
-        let substrate_home = tempdir().expect("substrate home tempdir");
-        let _substrate_home_guard = EnvVarGuard::set_path("SUBSTRATE_HOME", substrate_home.path());
+        let substrate_home = secure_authority_tempdir();
+        substrate_home.install_as_home();
+
+        let left_path = substrate_home.path().join("retry-left.sock");
+        let right_path = substrate_home.path().join("retry-right.sock");
+        let left_events = Arc::new(Mutex::new(Vec::new()));
+        let right_events = Arc::new(Mutex::new(Vec::new()));
+        let left_events_for_hook = left_events.clone();
+        let right_events_for_hook = right_events.clone();
+        let left_hook = Arc::new(move |event, path: &Path| {
+            left_events_for_hook
+                .lock()
+                .expect("lock left scoped retry events")
+                .push((event, path.to_path_buf()));
+        }) as PrivateStopTransportRetryHook;
+        let right_hook = Arc::new(move |event, path: &Path| {
+            right_events_for_hook
+                .lock()
+                .expect("lock right scoped retry events")
+                .push((event, path.to_path_buf()));
+        }) as PrivateStopTransportRetryHook;
+        tokio::join!(
+            with_private_stop_transport_retry_hook(left_hook, async {
+                notify_private_stop_transport_retry_event(
+                    &left_path,
+                    PrivateStopTransportRetryEvent::InitialAttempt,
+                );
+                tokio::task::yield_now().await;
+                notify_private_stop_transport_retry_event(
+                    &left_path,
+                    PrivateStopTransportRetryEvent::RetryAttempt,
+                );
+            }),
+            with_private_stop_transport_retry_hook(right_hook, async {
+                notify_private_stop_transport_retry_event(
+                    &right_path,
+                    PrivateStopTransportRetryEvent::RetryWaitStarted,
+                );
+                tokio::task::yield_now().await;
+                notify_private_stop_transport_retry_event(
+                    &right_path,
+                    PrivateStopTransportRetryEvent::InitialAttempt,
+                );
+            }),
+        );
+        assert_eq!(
+            left_events.lock().expect("lock left scoped retry proof").as_slice(),
+            &[
+                (PrivateStopTransportRetryEvent::InitialAttempt, left_path.clone()),
+                (PrivateStopTransportRetryEvent::RetryAttempt, left_path),
+            ],
+            "overlapping left retry instrumentation must retain only its explicitly scoped callback"
+        );
+        assert_eq!(
+            right_events
+                .lock()
+                .expect("lock right scoped retry proof")
+                .as_slice(),
+            &[
+                (
+                    PrivateStopTransportRetryEvent::RetryWaitStarted,
+                    right_path.clone(),
+                ),
+                (PrivateStopTransportRetryEvent::InitialAttempt, right_path),
+            ],
+            "overlapping right retry instrumentation must retain only its explicitly scoped callback"
+        );
 
         let workspace_root = tempdir().expect("workspace root tempdir");
         let store = AgentRuntimeStateStore::new().expect("state store");
@@ -19642,12 +20369,14 @@ agents:
                 .expect("lock retry server for recovered owner surface")
                 .replace(retry_server);
         }) as PrivateStopTransportRetryHook;
-        let _retry_hook_guard = PrivateStopTransportRetryHookGuard::install(retry_hook);
 
-        let outcome = request_private_stop_after_transport_registration_for_stop_episode(
-            &store,
-            &resolved,
-            &transport_path,
+        let outcome = with_private_stop_transport_retry_hook(
+            retry_hook,
+            request_private_stop_after_transport_registration_for_stop_episode(
+                &store,
+                &resolved,
+                &transport_path,
+            ),
         )
         .await
         .expect("response-level owner_unreachable should be retried once");
@@ -19716,8 +20445,8 @@ agents:
     #[serial]
     async fn request_private_stop_after_transport_registration_for_stop_episode_returns_original_owner_unreachable_when_recovery_never_becomes_ready(
     ) {
-        let substrate_home = tempdir().expect("substrate home tempdir");
-        let _substrate_home_guard = EnvVarGuard::set_path("SUBSTRATE_HOME", substrate_home.path());
+        let substrate_home = secure_authority_tempdir();
+        substrate_home.install_as_home();
 
         let workspace_root = tempdir().expect("workspace root tempdir");
         let store = AgentRuntimeStateStore::new().expect("state store");
@@ -19773,13 +20502,15 @@ agents:
                 .expect("lock republished private stop socket")
                 .replace(listener);
         }) as PrivateStopTransportRetryHook;
-        let _retry_hook_guard = PrivateStopTransportRetryHookGuard::install(retry_hook);
 
         let started_at = Instant::now();
-        let outcome = request_private_stop_after_transport_registration_for_stop_episode(
-            &store,
-            &resolved,
-            &transport_path,
+        let outcome = with_private_stop_transport_retry_hook(
+            retry_hook,
+            request_private_stop_after_transport_registration_for_stop_episode(
+                &store,
+                &resolved,
+                &transport_path,
+            ),
         )
         .await
         .expect(
@@ -19851,8 +20582,8 @@ agents:
     #[serial]
     async fn request_private_stop_after_transport_registration_for_stop_episode_does_not_retry_response_level_protocol_error(
     ) {
-        let substrate_home = tempdir().expect("substrate home tempdir");
-        let _substrate_home_guard = EnvVarGuard::set_path("SUBSTRATE_HOME", substrate_home.path());
+        let substrate_home = secure_authority_tempdir();
+        substrate_home.install_as_home();
 
         let workspace_root = tempdir().expect("workspace root tempdir");
         let store = AgentRuntimeStateStore::new().expect("state store");
@@ -19882,12 +20613,14 @@ agents:
                 .expect("lock retry events")
                 .push((event, path.to_path_buf()));
         }) as PrivateStopTransportRetryHook;
-        let _retry_hook_guard = PrivateStopTransportRetryHookGuard::install(retry_hook);
 
-        let outcome = request_private_stop_after_transport_registration_for_stop_episode(
-            &store,
-            &resolved,
-            &transport_path,
+        let outcome = with_private_stop_transport_retry_hook(
+            retry_hook,
+            request_private_stop_after_transport_registration_for_stop_episode(
+                &store,
+                &resolved,
+                &transport_path,
+            ),
         )
         .await
         .expect("response-level protocol_error should return directly");
@@ -19918,8 +20651,8 @@ agents:
     #[serial]
     async fn request_private_stop_after_transport_registration_for_stop_episode_retries_initial_connection_refused_transport_after_already_recovered_owner_path(
     ) {
-        let substrate_home = tempdir().expect("substrate home tempdir");
-        let _substrate_home_guard = EnvVarGuard::set_path("SUBSTRATE_HOME", substrate_home.path());
+        let substrate_home = secure_authority_tempdir();
+        substrate_home.install_as_home();
 
         let workspace_root = tempdir().expect("workspace root tempdir");
         let store = AgentRuntimeStateStore::new().expect("state store");
@@ -19989,12 +20722,14 @@ agents:
                 .expect("lock retry server")
                 .replace(server);
         }) as PrivateStopTransportRetryHook;
-        let _retry_hook_guard = PrivateStopTransportRetryHookGuard::install(retry_hook);
 
-        let outcome = request_private_stop_after_transport_registration_for_stop_episode(
-            &store,
-            &resolved,
-            &transport_path,
+        let outcome = with_private_stop_transport_retry_hook(
+            retry_hook,
+            request_private_stop_after_transport_registration_for_stop_episode(
+                &store,
+                &resolved,
+                &transport_path,
+            ),
         )
         .await
         .expect("connection-refused transport should be retried once");
@@ -20043,8 +20778,8 @@ agents:
     #[serial]
     async fn dispatch_contract_stop_world_worker_persists_parked_resumable_closeout_without_private_transport(
     ) {
-        let substrate_home = tempdir().expect("substrate home tempdir");
-        let _substrate_home_guard = EnvVarGuard::set_path("SUBSTRATE_HOME", substrate_home.path());
+        let substrate_home = secure_authority_tempdir();
+        substrate_home.install_as_home();
         write_allowed_world_dispatch_policy(
             substrate_home.path(),
             "cli:codex-world",
@@ -20106,8 +20841,8 @@ agents:
     #[serial]
     async fn dispatch_contract_stop_world_worker_persists_parked_resumable_closeout_when_private_stop_socket_is_stale(
     ) {
-        let substrate_home = tempdir().expect("substrate home tempdir");
-        let _substrate_home_guard = EnvVarGuard::set_path("SUBSTRATE_HOME", substrate_home.path());
+        let substrate_home = secure_authority_tempdir();
+        substrate_home.install_as_home();
         write_allowed_world_dispatch_policy(
             substrate_home.path(),
             "cli:codex-world",
@@ -20168,8 +20903,8 @@ agents:
     #[serial]
     fn detached_stop_world_worker_closeout_availability_rejects_live_active_attached_refused_transport(
     ) {
-        let substrate_home = tempdir().expect("substrate home tempdir");
-        let _substrate_home_guard = EnvVarGuard::set_path("SUBSTRATE_HOME", substrate_home.path());
+        let substrate_home = secure_authority_tempdir();
+        substrate_home.install_as_home();
 
         let workspace_root = tempdir().expect("workspace root tempdir");
         let store = AgentRuntimeStateStore::new().expect("state store");
@@ -20215,8 +20950,8 @@ agents:
     #[serial]
     fn detached_stop_world_worker_closeout_availability_accepts_parked_refused_transport_when_target_runtime_truth_is_stale(
     ) {
-        let substrate_home = tempdir().expect("substrate home tempdir");
-        let _substrate_home_guard = EnvVarGuard::set_path("SUBSTRATE_HOME", substrate_home.path());
+        let substrate_home = secure_authority_tempdir();
+        substrate_home.install_as_home();
 
         let workspace_root = tempdir().expect("workspace root tempdir");
         let store = AgentRuntimeStateStore::new().expect("state store");
@@ -20286,8 +21021,8 @@ agents:
     #[serial]
     fn detached_stop_world_worker_closeout_availability_rechecks_fresh_session_truth_after_refused_transport(
     ) {
-        let substrate_home = tempdir().expect("substrate home tempdir");
-        let _substrate_home_guard = EnvVarGuard::set_path("SUBSTRATE_HOME", substrate_home.path());
+        let substrate_home = secure_authority_tempdir();
+        substrate_home.install_as_home();
 
         let workspace_root = tempdir().expect("workspace root tempdir");
         let store = AgentRuntimeStateStore::new().expect("state store");
@@ -20348,8 +21083,8 @@ agents:
     #[serial]
     fn detached_stop_world_worker_closeout_availability_recheck_stays_closed_for_missing_socket_not_found(
     ) {
-        let substrate_home = tempdir().expect("substrate home tempdir");
-        let _substrate_home_guard = EnvVarGuard::set_path("SUBSTRATE_HOME", substrate_home.path());
+        let substrate_home = secure_authority_tempdir();
+        substrate_home.install_as_home();
 
         let workspace_root = tempdir().expect("workspace root tempdir");
         let store = AgentRuntimeStateStore::new().expect("state store");
@@ -20397,8 +21132,8 @@ agents:
     #[serial]
     fn detached_stop_world_worker_closeout_availability_recheck_accepts_same_caller_active_attached_after_refused_transport(
     ) {
-        let substrate_home = tempdir().expect("substrate home tempdir");
-        let _substrate_home_guard = EnvVarGuard::set_path("SUBSTRATE_HOME", substrate_home.path());
+        let substrate_home = secure_authority_tempdir();
+        substrate_home.install_as_home();
 
         let workspace_root = tempdir().expect("workspace root tempdir");
         let store = AgentRuntimeStateStore::new().expect("state store");
@@ -20449,8 +21184,8 @@ agents:
     #[serial]
     fn detached_stop_world_worker_closeout_availability_recheck_accepts_parked_truth_without_sanctioned_owner(
     ) {
-        let substrate_home = tempdir().expect("substrate home tempdir");
-        let _substrate_home_guard = EnvVarGuard::set_path("SUBSTRATE_HOME", substrate_home.path());
+        let substrate_home = secure_authority_tempdir();
+        substrate_home.install_as_home();
 
         let workspace_root = tempdir().expect("workspace root tempdir");
         let store = AgentRuntimeStateStore::new().expect("state store");
@@ -20502,8 +21237,8 @@ agents:
     #[serial]
     async fn dispatch_contract_stop_world_worker_persists_detached_closeout_after_refused_transport_for_same_caller_active_attached_truth(
     ) {
-        let substrate_home = tempdir().expect("substrate home tempdir");
-        let _substrate_home_guard = EnvVarGuard::set_path("SUBSTRATE_HOME", substrate_home.path());
+        let substrate_home = secure_authority_tempdir();
+        substrate_home.install_as_home();
         write_allowed_world_dispatch_policy(
             substrate_home.path(),
             "cli:codex-world",
@@ -20534,14 +21269,16 @@ agents:
                 .expect("lock retry events")
                 .push((event, path.to_path_buf()));
         }) as PrivateStopTransportRetryHook;
-        let _retry_hook_guard = PrivateStopTransportRetryHookGuard::install(retry_hook);
 
         let prepared =
             prepare_orchestrator_world_dispatch(&store, sample_stop_world_dispatch_request())
                 .expect("prepare stop dispatch request");
-        let outcome = dispatch_prepared_orchestrator_world_request(prepared)
-            .await
-            .expect("dispatch same-caller active_attached refused stop request");
+        let outcome = with_private_stop_transport_retry_hook(
+            retry_hook,
+            dispatch_prepared_orchestrator_world_request(prepared),
+        )
+        .await
+        .expect("dispatch same-caller active_attached refused stop request");
 
         let WorldDispatchOutcomeV1::StopWorldWorker(outcome) = outcome else {
             panic!("expected stop_world_worker outcome envelope");
@@ -20602,8 +21339,8 @@ agents:
     #[serial]
     async fn dispatch_contract_stop_world_worker_persists_detached_recoverable_closeout_for_stale_active_attached_owner(
     ) {
-        let substrate_home = tempdir().expect("substrate home tempdir");
-        let _substrate_home_guard = EnvVarGuard::set_path("SUBSTRATE_HOME", substrate_home.path());
+        let substrate_home = secure_authority_tempdir();
+        substrate_home.install_as_home();
         write_allowed_world_dispatch_policy(
             substrate_home.path(),
             "cli:codex-world",
@@ -20670,8 +21407,8 @@ agents:
     #[serial]
     async fn dispatch_contract_stop_world_worker_spec64_recovery_harness_drives_the_real_refreshed_transport_failure_branch(
     ) {
-        let substrate_home = tempdir().expect("substrate home tempdir");
-        let _substrate_home_guard = EnvVarGuard::set_path("SUBSTRATE_HOME", substrate_home.path());
+        let substrate_home = secure_authority_tempdir();
+        substrate_home.install_as_home();
         write_allowed_world_dispatch_policy(
             substrate_home.path(),
             "cli:codex-world",
@@ -20770,14 +21507,16 @@ agents:
                 .expect("bind stale private stop socket for exact-target retry");
             drop(stale_listener);
         }) as PrivateStopTransportRetryHook;
-        let _retry_hook_guard = PrivateStopTransportRetryHookGuard::install(retry_hook);
 
         let prepared =
             prepare_orchestrator_world_dispatch(&store, sample_stop_world_dispatch_request())
                 .expect("prepare stop dispatch request");
-        let outcome = dispatch_prepared_orchestrator_world_request(prepared)
-            .await
-            .expect("dispatch refreshed stop recovery request");
+        let outcome = with_private_stop_transport_retry_hook(
+            retry_hook,
+            dispatch_prepared_orchestrator_world_request(prepared),
+        )
+        .await
+        .expect("dispatch refreshed stop recovery request");
 
         let WorldDispatchOutcomeV1::StopWorldWorker(outcome) = outcome else {
             panic!("expected stop_world_worker outcome envelope");
@@ -20859,8 +21598,8 @@ agents:
     #[serial]
     async fn dispatch_contract_stop_world_worker_persists_detached_closeout_after_refused_transport_when_session_parks_without_sanctioned_owner(
     ) {
-        let substrate_home = tempdir().expect("substrate home tempdir");
-        let _substrate_home_guard = EnvVarGuard::set_path("SUBSTRATE_HOME", substrate_home.path());
+        let substrate_home = secure_authority_tempdir();
+        substrate_home.install_as_home();
         write_allowed_world_dispatch_policy(
             substrate_home.path(),
             "cli:codex-world",
@@ -20916,11 +21655,13 @@ agents:
                 .persist_orchestration_session(&session)
                 .expect("persist parked-resumable session without sanctioned owner");
         }) as PrivateStopTransportRetryHook;
-        let _retry_hook_guard = PrivateStopTransportRetryHookGuard::install(retry_hook);
 
-        let outcome = dispatch_prepared_orchestrator_world_request(prepared)
-            .await
-            .expect("dispatch parked detached stop request without sanctioned owner");
+        let outcome = with_private_stop_transport_retry_hook(
+            retry_hook,
+            dispatch_prepared_orchestrator_world_request(prepared),
+        )
+        .await
+        .expect("dispatch parked detached stop request without sanctioned owner");
 
         let WorldDispatchOutcomeV1::StopWorldWorker(outcome) = outcome else {
             panic!("expected stop_world_worker outcome envelope");
@@ -20972,8 +21713,8 @@ agents:
     #[serial]
     async fn dispatch_contract_stop_world_worker_surfaces_detached_revalidation_contract_error_after_refused_transport(
     ) {
-        let substrate_home = tempdir().expect("substrate home tempdir");
-        let _substrate_home_guard = EnvVarGuard::set_path("SUBSTRATE_HOME", substrate_home.path());
+        let substrate_home = secure_authority_tempdir();
+        substrate_home.install_as_home();
         write_allowed_world_dispatch_policy(
             substrate_home.path(),
             "cli:codex-world",
@@ -21042,11 +21783,13 @@ agents:
                 .persist_participant(&participant)
                 .expect("persist invalidated retained participant");
         }) as PrivateStopTransportRetryHook;
-        let _retry_hook_guard = PrivateStopTransportRetryHookGuard::install(retry_hook);
 
-        let err = dispatch_prepared_orchestrator_world_request(prepared)
-            .await
-            .expect_err("detached exact-target contract error should surface directly");
+        let err = with_private_stop_transport_retry_hook(
+            retry_hook,
+            dispatch_prepared_orchestrator_world_request(prepared),
+        )
+        .await
+        .expect_err("detached exact-target contract error should surface directly");
 
         assert_eq!(
             err.to_string(),
@@ -21059,8 +21802,8 @@ agents:
     #[serial]
     async fn dispatch_contract_stop_world_worker_surfaces_sanctioned_refresh_contract_error_after_owner_unreachable(
     ) {
-        let substrate_home = tempdir().expect("substrate home tempdir");
-        let _substrate_home_guard = EnvVarGuard::set_path("SUBSTRATE_HOME", substrate_home.path());
+        let substrate_home = secure_authority_tempdir();
+        substrate_home.install_as_home();
         write_allowed_world_dispatch_policy(
             substrate_home.path(),
             "cli:codex-world",
@@ -21116,14 +21859,16 @@ agents:
                 .expect("bind stale private stop socket for sanctioned refresh revalidation");
             drop(stale_listener);
         }) as PrivateStopTransportRetryHook;
-        let _retry_hook_guard = PrivateStopTransportRetryHookGuard::install(retry_hook);
 
         let prepared =
             prepare_orchestrator_world_dispatch(&store, sample_stop_world_dispatch_request())
                 .expect("prepare stop dispatch request");
-        let err = dispatch_prepared_orchestrator_world_request(prepared)
-            .await
-            .expect_err("sanctioned refresh contract error should surface directly");
+        let err = with_private_stop_transport_retry_hook(
+            retry_hook,
+            dispatch_prepared_orchestrator_world_request(prepared),
+        )
+        .await
+        .expect_err("sanctioned refresh contract error should surface directly");
 
         assert_eq!(
             err.to_string(),
@@ -21159,8 +21904,8 @@ agents:
     #[serial]
     async fn dispatch_contract_stop_world_worker_prefers_private_stop_surface_for_parked_resumable_with_live_transport(
     ) {
-        let substrate_home = tempdir().expect("substrate home tempdir");
-        let _substrate_home_guard = EnvVarGuard::set_path("SUBSTRATE_HOME", substrate_home.path());
+        let substrate_home = secure_authority_tempdir();
+        substrate_home.install_as_home();
         write_allowed_world_dispatch_policy(
             substrate_home.path(),
             "cli:codex-world",
@@ -21255,8 +22000,9 @@ agents:
     #[test]
     #[serial]
     fn persist_detached_stop_world_worker_closeout_rejects_backend_drift() {
-        let substrate_home = tempdir().expect("substrate home tempdir");
-        let _substrate_home_guard = EnvVarGuard::set_path("SUBSTRATE_HOME", substrate_home.path());
+        let substrate_home =
+            AuthorityEnvTestTempDir::new(tempdir().expect("substrate home tempdir"));
+        substrate_home.install_as_home();
         let workspace_root = tempdir().expect("workspace root tempdir");
         let store = AgentRuntimeStateStore::new().expect("state store");
         persist_detached_continue_dispatch_state(&store, workspace_root.path(), "world-17", 2);
@@ -21290,8 +22036,9 @@ agents:
     #[test]
     #[serial]
     fn persist_detached_stop_world_worker_closeout_rejects_terminal_target_race() {
-        let substrate_home = tempdir().expect("substrate home tempdir");
-        let _substrate_home_guard = EnvVarGuard::set_path("SUBSTRATE_HOME", substrate_home.path());
+        let substrate_home =
+            AuthorityEnvTestTempDir::new(tempdir().expect("substrate home tempdir"));
+        substrate_home.install_as_home();
         let workspace_root = tempdir().expect("workspace root tempdir");
         let store = AgentRuntimeStateStore::new().expect("state store");
         persist_detached_continue_dispatch_state(&store, workspace_root.path(), "world-17", 2);
@@ -21328,8 +22075,9 @@ agents:
     #[serial]
     fn persist_detached_stop_world_worker_closeout_rejects_terminal_target_race_without_sanctioned_owner(
     ) {
-        let substrate_home = tempdir().expect("substrate home tempdir");
-        let _substrate_home_guard = EnvVarGuard::set_path("SUBSTRATE_HOME", substrate_home.path());
+        let substrate_home =
+            AuthorityEnvTestTempDir::new(tempdir().expect("substrate home tempdir"));
+        substrate_home.install_as_home();
         let workspace_root = tempdir().expect("workspace root tempdir");
         let store = AgentRuntimeStateStore::new().expect("state store");
         persist_authoritative_continue_dispatch_state(&store, workspace_root.path(), "world-17", 2);
@@ -21388,8 +22136,9 @@ agents:
     #[test]
     #[serial]
     fn persist_detached_stop_world_worker_closeout_rejects_stale_owner_successor_drift() {
-        let substrate_home = tempdir().expect("substrate home tempdir");
-        let _substrate_home_guard = EnvVarGuard::set_path("SUBSTRATE_HOME", substrate_home.path());
+        let substrate_home =
+            AuthorityEnvTestTempDir::new(tempdir().expect("substrate home tempdir"));
+        substrate_home.install_as_home();
         let workspace_root = tempdir().expect("workspace root tempdir");
         let store = AgentRuntimeStateStore::new().expect("state store");
         persist_stale_attached_continue_dispatch_state(
@@ -21453,8 +22202,9 @@ agents:
     #[test]
     #[serial]
     fn persist_detached_stop_world_worker_closeout_rejects_owner_rebinding_lineage_mutation() {
-        let substrate_home = tempdir().expect("substrate home tempdir");
-        let _substrate_home_guard = EnvVarGuard::set_path("SUBSTRATE_HOME", substrate_home.path());
+        let substrate_home =
+            AuthorityEnvTestTempDir::new(tempdir().expect("substrate home tempdir"));
+        substrate_home.install_as_home();
         let workspace_root = tempdir().expect("workspace root tempdir");
         let store = AgentRuntimeStateStore::new().expect("state store");
         persist_stale_attached_continue_dispatch_state(
@@ -21530,8 +22280,9 @@ agents:
     #[serial]
     fn persist_detached_stop_world_worker_closeout_rejects_owner_rebinding_world_binding_mutation()
     {
-        let substrate_home = tempdir().expect("substrate home tempdir");
-        let _substrate_home_guard = EnvVarGuard::set_path("SUBSTRATE_HOME", substrate_home.path());
+        let substrate_home =
+            AuthorityEnvTestTempDir::new(tempdir().expect("substrate home tempdir"));
+        substrate_home.install_as_home();
         let workspace_root = tempdir().expect("workspace root tempdir");
         let store = AgentRuntimeStateStore::new().expect("state store");
         persist_stale_attached_continue_dispatch_state(
@@ -21609,8 +22360,9 @@ agents:
     #[serial]
     fn persist_detached_stop_world_worker_closeout_rejects_session_only_world_binding_drift_without_sanctioned_owner(
     ) {
-        let substrate_home = tempdir().expect("substrate home tempdir");
-        let _substrate_home_guard = EnvVarGuard::set_path("SUBSTRATE_HOME", substrate_home.path());
+        let substrate_home =
+            AuthorityEnvTestTempDir::new(tempdir().expect("substrate home tempdir"));
+        substrate_home.install_as_home();
         let workspace_root = tempdir().expect("workspace root tempdir");
         let store = AgentRuntimeStateStore::new().expect("state store");
         persist_authoritative_continue_dispatch_state(&store, workspace_root.path(), "world-17", 2);
@@ -21661,8 +22413,9 @@ agents:
     #[test]
     #[serial]
     fn persist_detached_stop_world_worker_closeout_rejects_stale_owner_linkage_drift() {
-        let substrate_home = tempdir().expect("substrate home tempdir");
-        let _substrate_home_guard = EnvVarGuard::set_path("SUBSTRATE_HOME", substrate_home.path());
+        let substrate_home =
+            AuthorityEnvTestTempDir::new(tempdir().expect("substrate home tempdir"));
+        substrate_home.install_as_home();
         let workspace_root = tempdir().expect("workspace root tempdir");
         let store = AgentRuntimeStateStore::new().expect("state store");
         persist_stale_attached_continue_dispatch_state(
@@ -21716,8 +22469,8 @@ agents:
     #[serial]
     fn detached_stop_world_worker_closeout_availability_fails_closed_for_non_refused_transport_errors(
     ) {
-        let substrate_home = tempdir().expect("substrate home tempdir");
-        let _substrate_home_guard = EnvVarGuard::set_path("SUBSTRATE_HOME", substrate_home.path());
+        let substrate_home = secure_authority_tempdir();
+        substrate_home.install_as_home();
         let workspace_root = tempdir().expect("workspace root tempdir");
         let store = AgentRuntimeStateStore::new().expect("state store");
         persist_detached_continue_dispatch_state(&store, workspace_root.path(), "world-17", 2);
@@ -21756,8 +22509,8 @@ agents:
     #[serial]
     fn detached_stop_world_worker_closeout_availability_rejects_active_missing_transport_without_observed_unavailability(
     ) {
-        let substrate_home = tempdir().expect("substrate home tempdir");
-        let _substrate_home_guard = EnvVarGuard::set_path("SUBSTRATE_HOME", substrate_home.path());
+        let substrate_home = secure_authority_tempdir();
+        substrate_home.install_as_home();
         let workspace_root = tempdir().expect("workspace root tempdir");
         let store = AgentRuntimeStateStore::new().expect("state store");
         persist_authoritative_continue_dispatch_state(&store, workspace_root.path(), "world-17", 2);
@@ -21792,8 +22545,8 @@ agents:
     #[serial]
     fn detached_stop_world_worker_closeout_availability_rejects_active_missing_transport_after_not_found_error(
     ) {
-        let substrate_home = tempdir().expect("substrate home tempdir");
-        let _substrate_home_guard = EnvVarGuard::set_path("SUBSTRATE_HOME", substrate_home.path());
+        let substrate_home = secure_authority_tempdir();
+        substrate_home.install_as_home();
         let workspace_root = tempdir().expect("workspace root tempdir");
         let store = AgentRuntimeStateStore::new().expect("state store");
         persist_authoritative_continue_dispatch_state(&store, workspace_root.path(), "world-17", 2);
@@ -21823,7 +22576,7 @@ agents:
     #[cfg(target_os = "linux")]
     #[tokio::test(flavor = "multi_thread", worker_threads = 2)]
     async fn continue_world_worker_classifies_real_retained_member_turn_streams() {
-        let _env_guard = world_env_guard();
+        let _authority_env = AuthorityEnvTestGuard::preserve();
         let (_shared_root, _shared_root_guard) = override_shared_world_root_for_test();
         let service = WorldService::new().unwrap_or_else(|err| {
             panic!("continue_world_worker e2e test: service init failed: {err:#}")
@@ -21861,31 +22614,7 @@ agents:
         let Some(binding) = world.shared_binding.clone() else {
             panic!("continue_world_worker e2e test: shared world binding missing");
         };
-
-        let launch = service
-            .execute_stream(make_member_dispatch_execute_request(
-                temp.path(),
-                &runtime_path,
-                &seed_home,
-                &binding.world_id,
-                binding.world_generation,
-                "run-bootstrap",
-            ))
-            .await
-            .expect("member bootstrap should succeed");
-        let mut launch_body = launch.into_body();
-        let mut launch_buffer = Vec::new();
-        let launch_start = next_stream_frame_value(&mut launch_body, &mut launch_buffer).await;
-        let launch_span_id = frame_start_span_id(&launch_start)
-            .map(ToOwned::to_owned)
-            .unwrap_or_else(|| panic!("expected start frame, got {launch_start:?}"));
-        let registered = next_registered_frame(&mut launch_body, &mut launch_buffer).await;
-        assert_eq!(
-            frame_event(&registered)
-                .and_then(|event| event.get("participant_id"))
-                .and_then(serde_json::Value::as_str),
-            Some("ash_member")
-        );
+        let bootstrap_state = Arc::new(tokio::sync::Mutex::new(None));
 
         let socket_home = tempdir().expect("socket tempdir");
         let socket_path = socket_home.path().join("world.sock");
@@ -21944,120 +22673,196 @@ agents:
             }
         });
 
-        let previous_socket = std::env::var("SUBSTRATE_WORLD_SOCKET").ok();
-        std::env::set_var("SUBSTRATE_WORLD_SOCKET", &socket_path);
+        let _socket_guard = WorldSocketTestGuard::set(&socket_path);
 
-        let reply = execute_continue_world_worker_stream(
-            &sample_continue_submit_request_for_run(
-                "run-reply",
-                &binding.world_id,
-                binding.world_generation,
-            ),
-            &sample_world_dispatch_policy(),
+        let service_for_cleanup = service.clone();
+        let bootstrap_for_test = bootstrap_state.clone();
+        let bootstrap_for_cleanup = bootstrap_state.clone();
+        let test_outcome = run_test_body_with_server_cleanup(
+            server,
+            socket_home,
+            &socket_path,
+            "retained member stream classification",
+            async {
+                let launch = service
+                    .execute_stream(make_member_dispatch_execute_request(
+                        temp.path(),
+                        &runtime_path,
+                        &seed_home,
+                        &binding.world_id,
+                        binding.world_generation,
+                        "run-bootstrap",
+                    ))
+                    .await
+                    .expect("member bootstrap should succeed");
+                {
+                    let mut bootstrap = bootstrap_for_test.lock().await;
+                    *bootstrap = Some((launch.into_body(), Vec::new(), None::<String>));
+                }
+                {
+                    let mut bootstrap = bootstrap_for_test.lock().await;
+                    let (launch_body, launch_buffer, launch_span_id) =
+                        bootstrap.as_mut().expect("retained bootstrap stream state");
+                    let launch_start = next_stream_frame_value(launch_body, launch_buffer).await;
+                    let parsed_span_id = frame_start_span_id(&launch_start).map(ToOwned::to_owned);
+                    *launch_span_id = parsed_span_id.clone();
+                    let parsed_span_id = parsed_span_id
+                        .unwrap_or_else(|| panic!("expected start frame, got {launch_start:?}"));
+                    let registered = next_registered_frame(launch_body, launch_buffer).await;
+                    assert_eq!(
+                        frame_event(&registered)
+                            .and_then(|event| event.get("participant_id"))
+                            .and_then(serde_json::Value::as_str),
+                        Some("ash_member")
+                    );
+                    assert_eq!(launch_span_id.as_deref(), Some(parsed_span_id.as_str()));
+                }
+
+                let reply = execute_continue_world_worker_stream(
+                    &sample_continue_submit_request_for_run(
+                        "run-reply",
+                        &binding.world_id,
+                        binding.world_generation,
+                    ),
+                    &sample_world_dispatch_policy(),
+                )
+                .await
+                .expect("reply turn should succeed");
+                assert_eq!(reply.exit_code, 0);
+                assert_eq!(reply.surfaced_thread_id.as_deref(), Some("thread-real"));
+                assert_eq!(
+                    reply
+                        .surfaced_worker_event
+                        .as_ref()
+                        .map(|event| event.event_class),
+                    Some(ContinueWorldWorkerEventClassV1::Reply)
+                );
+                assert_eq!(
+                    reply
+                        .surfaced_worker_event
+                        .as_ref()
+                        .and_then(|event| event.payload.get("message"))
+                        .and_then(serde_json::Value::as_str),
+                    Some("reply from live runtime")
+                );
+
+                let progress = execute_continue_world_worker_stream(
+                    &sample_continue_submit_request_for_run(
+                        "run-progress",
+                        &binding.world_id,
+                        binding.world_generation,
+                    ),
+                    &sample_world_dispatch_policy(),
+                )
+                .await
+                .expect("progress turn should succeed");
+                assert_eq!(progress.exit_code, 0);
+                assert_eq!(progress.surfaced_thread_id.as_deref(), Some("thread-real"));
+                assert_eq!(
+                    progress
+                        .surfaced_worker_event
+                        .as_ref()
+                        .map(|event| event.event_class),
+                    Some(ContinueWorldWorkerEventClassV1::ProgressUpdate)
+                );
+                assert_eq!(
+                    progress
+                        .surfaced_worker_event
+                        .as_ref()
+                        .and_then(|event| event.payload.pointer("/uaa_event/tool/kind"))
+                        .and_then(serde_json::Value::as_str),
+                    Some("command_execution")
+                );
+
+                let failure = execute_continue_world_worker_stream(
+                    &sample_continue_submit_request_for_run(
+                        "run-failure",
+                        &binding.world_id,
+                        binding.world_generation,
+                    ),
+                    &sample_world_dispatch_policy(),
+                )
+                .await
+                .expect("failure turn should still return typed outcome");
+                assert_eq!(failure.exit_code, 1);
+                assert_eq!(failure.surfaced_thread_id.as_deref(), Some("thread-real"));
+                assert_eq!(
+                    failure
+                        .surfaced_worker_event
+                        .as_ref()
+                        .map(|event| event.event_class),
+                    Some(ContinueWorldWorkerEventClassV1::Failure)
+                );
+                assert!(
+                    failure
+                        .surfaced_worker_event
+                        .as_ref()
+                        .and_then(|event| event.payload.get("message"))
+                        .and_then(serde_json::Value::as_str)
+                        .is_some_and(|message| message.contains("codex exited non-zero")),
+                    "failure payload should preserve the runtime non-zero exit alert"
+                );
+            },
+            move || async move {
+                let mut bootstrap = bootstrap_for_cleanup.lock().await;
+                let Some((launch_body, launch_buffer, launch_span_id)) = bootstrap.as_mut() else {
+                    return;
+                };
+                if launch_span_id.is_none() {
+                    let recovered = timeout(Duration::from_secs(3), async {
+                        loop {
+                            let frame = next_stream_frame_value(launch_body, launch_buffer).await;
+                            if let Some(span_id) = frame_start_span_id(&frame).or_else(|| {
+                                frame_event(&frame)
+                                    .and_then(|event| event.get("span_id"))
+                                    .and_then(serde_json::Value::as_str)
+                            }) {
+                                break span_id.to_string();
+                            }
+                        }
+                    })
+                    .await
+                    .expect("timed out recovering retained bootstrap span for cleanup");
+                    *launch_span_id = Some(recovered);
+                }
+                let delivered = service_for_cleanup
+                    .execute_cancel(ExecuteCancelRequestV1 {
+                        span_id: launch_span_id
+                            .clone()
+                            .expect("retained bootstrap span for cleanup"),
+                        sig: "INT".to_string(),
+                    })
+                    .await
+                    .expect("bootstrap cancel should succeed during unconditional cleanup");
+                assert!(
+                    delivered.delivered,
+                    "expected retained bootstrap cancel delivery during cleanup"
+                );
+                let (launch_body, _, _) = bootstrap
+                    .take()
+                    .expect("retained bootstrap stream for cleanup");
+                drop(bootstrap);
+                timeout(Duration::from_secs(3), to_bytes(launch_body))
+                    .await
+                    .expect("timed out awaiting cancelled retained bootstrap stream")
+                    .expect("collect cancelled retained bootstrap terminal stream");
+            },
         )
-        .await
-        .expect("reply turn should succeed");
-        assert_eq!(reply.exit_code, 0);
-        assert_eq!(reply.surfaced_thread_id.as_deref(), Some("thread-real"));
-        assert_eq!(
-            reply
-                .surfaced_worker_event
-                .as_ref()
-                .map(|event| event.event_class),
-            Some(ContinueWorldWorkerEventClassV1::Reply)
-        );
-        assert_eq!(
-            reply
-                .surfaced_worker_event
-                .as_ref()
-                .and_then(|event| event.payload.get("message"))
-                .and_then(serde_json::Value::as_str),
-            Some("reply from live runtime")
-        );
-
-        let progress = execute_continue_world_worker_stream(
-            &sample_continue_submit_request_for_run(
-                "run-progress",
-                &binding.world_id,
-                binding.world_generation,
-            ),
-            &sample_world_dispatch_policy(),
-        )
-        .await
-        .expect("progress turn should succeed");
-        assert_eq!(progress.exit_code, 0);
-        assert_eq!(progress.surfaced_thread_id.as_deref(), Some("thread-real"));
-        assert_eq!(
-            progress
-                .surfaced_worker_event
-                .as_ref()
-                .map(|event| event.event_class),
-            Some(ContinueWorldWorkerEventClassV1::ProgressUpdate)
-        );
-        assert_eq!(
-            progress
-                .surfaced_worker_event
-                .as_ref()
-                .and_then(|event| event.payload.pointer("/uaa_event/tool/kind"))
-                .and_then(serde_json::Value::as_str),
-            Some("command_execution")
-        );
-
-        let failure = execute_continue_world_worker_stream(
-            &sample_continue_submit_request_for_run(
-                "run-failure",
-                &binding.world_id,
-                binding.world_generation,
-            ),
-            &sample_world_dispatch_policy(),
-        )
-        .await
-        .expect("failure turn should still return typed outcome");
-        assert_eq!(failure.exit_code, 1);
-        assert_eq!(failure.surfaced_thread_id.as_deref(), Some("thread-real"));
-        assert_eq!(
-            failure
-                .surfaced_worker_event
-                .as_ref()
-                .map(|event| event.event_class),
-            Some(ContinueWorldWorkerEventClassV1::Failure)
-        );
-        assert!(
-            failure
-                .surfaced_worker_event
-                .as_ref()
-                .and_then(|event| event.payload.get("message"))
-                .and_then(serde_json::Value::as_str)
-                .is_some_and(|message| message.contains("codex exited non-zero")),
-            "failure payload should preserve the runtime non-zero exit alert"
-        );
-
-        let delivered = service
-            .execute_cancel(ExecuteCancelRequestV1 {
-                span_id: launch_span_id,
-                sig: "INT".to_string(),
-            })
-            .await
-            .expect("bootstrap cancel should succeed");
-        assert!(
-            delivered.delivered,
-            "expected retained bootstrap cancel delivery"
-        );
-
-        if let Some(previous_socket) = previous_socket {
-            std::env::set_var("SUBSTRATE_WORLD_SOCKET", previous_socket);
-        } else {
-            std::env::remove_var("SUBSTRATE_WORLD_SOCKET");
-        }
-
-        server.abort();
+        .await;
+        drop(_socket_guard);
+        drop(service);
+        drop(temp);
+        drop(_shared_root);
+        drop(_shared_root_guard);
+        drop(_authority_env);
+        test_outcome.finish();
     }
 
     #[cfg(target_os = "linux")]
     #[tokio::test(flavor = "multi_thread", worker_threads = 2)]
     #[serial]
     async fn continue_world_worker_dispatch_returns_real_typed_internal_outcome() {
-        let _env_guard = world_env_guard();
+        let _authority_env = AuthorityEnvTestGuard::preserve();
         let (_shared_root, _shared_root_guard) = override_shared_world_root_for_test();
         let service = WorldService::new().unwrap_or_else(|err| {
             panic!("continue_world_worker dispatch test: service init failed: {err:#}")
@@ -22098,30 +22903,22 @@ agents:
             panic!("continue_world_worker dispatch test: shared world binding missing");
         };
 
-        let launch = service
-            .execute_stream(make_member_dispatch_execute_request(
-                temp.path(),
-                &runtime_path,
-                &seed_home,
-                &binding.world_id,
-                binding.world_generation,
-                "run-bootstrap",
-            ))
-            .await
-            .expect("member bootstrap should succeed");
-        let mut launch_body = launch.into_body();
-        let mut launch_buffer = Vec::new();
-        let launch_start = next_stream_frame_value(&mut launch_body, &mut launch_buffer).await;
-        let launch_span_id = frame_start_span_id(&launch_start)
-            .map(ToOwned::to_owned)
-            .unwrap_or_else(|| panic!("expected start frame, got {launch_start:?}"));
-        let registered = next_registered_frame(&mut launch_body, &mut launch_buffer).await;
-        assert_eq!(
-            frame_event(&registered)
-                .and_then(|event| event.get("participant_id"))
-                .and_then(serde_json::Value::as_str),
-            Some("ash_member")
+        let substrate_home = secure_authority_tempdir();
+        substrate_home.install_as_home();
+        write_allowed_world_dispatch_policy(
+            substrate_home.path(),
+            "cli:codex-world",
+            &["continue_world_worker"],
+            &["retained"],
         );
+        let store = AgentRuntimeStateStore::new().expect("state store");
+        persist_authoritative_continue_dispatch_state(
+            &store,
+            temp.path(),
+            &binding.world_id,
+            binding.world_generation,
+        );
+        let bootstrap_state = Arc::new(tokio::sync::Mutex::new(None));
 
         let socket_home = tempdir().expect("socket tempdir");
         let socket_path = socket_home.path().join("world.sock");
@@ -22181,69 +22978,138 @@ agents:
         });
 
         let _socket_guard = EnvVarGuard::set_path("SUBSTRATE_WORLD_SOCKET", &socket_path);
-        let substrate_home = tempdir().expect("substrate home tempdir");
-        let _substrate_home_guard = EnvVarGuard::set_path("SUBSTRATE_HOME", substrate_home.path());
-        write_allowed_world_dispatch_policy(
-            substrate_home.path(),
-            "cli:codex-world",
-            &["continue_world_worker"],
-            &["retained"],
-        );
-        let store = AgentRuntimeStateStore::new().expect("state store");
-        persist_authoritative_continue_dispatch_state(
-            &store,
-            temp.path(),
-            &binding.world_id,
-            binding.world_generation,
-        );
+        let service_for_cleanup = service.clone();
+        let bootstrap_for_test = bootstrap_state.clone();
+        let bootstrap_for_cleanup = bootstrap_state.clone();
+        let test_outcome = run_test_body_with_server_cleanup(
+            server,
+            socket_home,
+            &socket_path,
+            "typed retained continue outcome",
+            async {
+                let launch = service
+                    .execute_stream(make_member_dispatch_execute_request(
+                        temp.path(),
+                        &runtime_path,
+                        &seed_home,
+                        &binding.world_id,
+                        binding.world_generation,
+                        "run-bootstrap",
+                    ))
+                    .await
+                    .expect("member bootstrap should succeed");
+                {
+                    let mut bootstrap = bootstrap_for_test.lock().await;
+                    *bootstrap = Some((launch.into_body(), Vec::new(), None::<String>));
+                }
+                {
+                    let mut bootstrap = bootstrap_for_test.lock().await;
+                    let (launch_body, launch_buffer, launch_span_id) =
+                        bootstrap.as_mut().expect("retained bootstrap stream state");
+                    let launch_start = next_stream_frame_value(launch_body, launch_buffer).await;
+                    let parsed_span_id = frame_start_span_id(&launch_start).map(ToOwned::to_owned);
+                    *launch_span_id = parsed_span_id.clone();
+                    let parsed_span_id = parsed_span_id
+                        .unwrap_or_else(|| panic!("expected start frame, got {launch_start:?}"));
+                    let registered = next_registered_frame(launch_body, launch_buffer).await;
+                    assert_eq!(
+                        frame_event(&registered)
+                            .and_then(|event| event.get("participant_id"))
+                            .and_then(serde_json::Value::as_str),
+                        Some("ash_member")
+                    );
+                    assert_eq!(launch_span_id.as_deref(), Some(parsed_span_id.as_str()));
+                }
 
-        let reply_outcome = dispatch_real_continue_world_worker_request(
-            &store,
-            "req_continue_reply",
-            "idem_continue_reply",
-            &binding.world_id,
-            binding.world_generation,
+                let reply_outcome = dispatch_real_continue_world_worker_request(
+                    &store,
+                    "req_continue_reply",
+                    "idem_continue_reply",
+                    &binding.world_id,
+                    binding.world_generation,
+                )
+                .await;
+                assert_eq!(reply_outcome.thread_id.as_deref(), Some("thread-real"));
+
+                let outcome = dispatch_real_continue_world_worker_request(
+                    &store,
+                    "req_continue_progress",
+                    "idem_continue_progress",
+                    &binding.world_id,
+                    binding.world_generation,
+                )
+                .await;
+                assert_eq!(outcome.thread_id.as_deref(), Some("thread-real"));
+                let worker_event = outcome
+                    .worker_event
+                    .expect("continue dispatch should surface worker event");
+                assert_eq!(
+                    worker_event.event_class,
+                    ContinueWorldWorkerEventClassV1::ProgressUpdate
+                );
+                assert_eq!(
+                    worker_event
+                        .payload
+                        .pointer("/uaa_event/tool/kind")
+                        .and_then(serde_json::Value::as_str),
+                    Some("command_execution")
+                );
+            },
+            move || async move {
+                let mut bootstrap = bootstrap_for_cleanup.lock().await;
+                let Some((launch_body, launch_buffer, launch_span_id)) = bootstrap.as_mut() else {
+                    return;
+                };
+                if launch_span_id.is_none() {
+                    let recovered = timeout(Duration::from_secs(3), async {
+                        loop {
+                            let frame = next_stream_frame_value(launch_body, launch_buffer).await;
+                            if let Some(span_id) = frame_start_span_id(&frame).or_else(|| {
+                                frame_event(&frame)
+                                    .and_then(|event| event.get("span_id"))
+                                    .and_then(serde_json::Value::as_str)
+                            }) {
+                                break span_id.to_string();
+                            }
+                        }
+                    })
+                    .await
+                    .expect("timed out recovering retained bootstrap span for cleanup");
+                    *launch_span_id = Some(recovered);
+                }
+                let delivered = service_for_cleanup
+                    .execute_cancel(ExecuteCancelRequestV1 {
+                        span_id: launch_span_id
+                            .clone()
+                            .expect("retained bootstrap span for cleanup"),
+                        sig: "INT".to_string(),
+                    })
+                    .await
+                    .expect("bootstrap cancel should succeed during unconditional cleanup");
+                assert!(
+                    delivered.delivered,
+                    "expected retained bootstrap cancel delivery during cleanup"
+                );
+                let (launch_body, _, _) = bootstrap
+                    .take()
+                    .expect("retained bootstrap stream for cleanup");
+                drop(bootstrap);
+                timeout(Duration::from_secs(3), to_bytes(launch_body))
+                    .await
+                    .expect("timed out awaiting cancelled retained bootstrap stream")
+                    .expect("collect cancelled retained bootstrap terminal stream");
+            },
         )
         .await;
-        assert_eq!(reply_outcome.thread_id.as_deref(), Some("thread-real"));
-
-        let outcome = dispatch_real_continue_world_worker_request(
-            &store,
-            "req_continue_progress",
-            "idem_continue_progress",
-            &binding.world_id,
-            binding.world_generation,
-        )
-        .await;
-        assert_eq!(outcome.thread_id.as_deref(), Some("thread-real"));
-        let worker_event = outcome
-            .worker_event
-            .expect("continue dispatch should surface worker event");
-        assert_eq!(
-            worker_event.event_class,
-            ContinueWorldWorkerEventClassV1::ProgressUpdate
-        );
-        assert_eq!(
-            worker_event
-                .payload
-                .pointer("/uaa_event/tool/kind")
-                .and_then(serde_json::Value::as_str),
-            Some("command_execution")
-        );
-
-        let delivered = service
-            .execute_cancel(ExecuteCancelRequestV1 {
-                span_id: launch_span_id,
-                sig: "INT".to_string(),
-            })
-            .await
-            .expect("bootstrap cancel should succeed");
-        assert!(
-            delivered.delivered,
-            "expected retained bootstrap cancel delivery"
-        );
-
-        server.abort();
+        drop(_socket_guard);
+        drop(store);
+        drop(service);
+        drop(temp);
+        drop(_shared_root);
+        drop(_shared_root_guard);
+        drop(substrate_home);
+        drop(_authority_env);
+        test_outcome.finish();
     }
 
     #[cfg(target_os = "linux")]
@@ -22537,8 +23403,11 @@ agents:
         let mut policy = sample_world_dispatch_policy();
         policy.agents_world_dispatch_max_concurrent_ephemeral = 1;
 
+        let session_id = "sess_tracker_ephemeral_cap";
+        let mut request = sample_request();
+        request.orchestration_session_id = session_id.to_string();
         let prepared = sample_compatibility_prepared_dispatch(
-            sample_request(),
+            request,
             sample_orchestrator_participant(),
             None,
             0,
@@ -22551,7 +23420,7 @@ agents:
 
         assert_eq!(
             err.to_string(),
-            "worker_concurrency_cap_exceeded: effective policy allows at most 1 concurrent ephemeral world dispatches for orchestration session sess_dispatch"
+            "worker_concurrency_cap_exceeded: effective policy allows at most 1 concurrent ephemeral world dispatches for orchestration session sess_tracker_ephemeral_cap"
         );
     }
 
@@ -22561,8 +23430,11 @@ agents:
         let mut policy = sample_world_dispatch_policy();
         policy.agents_world_dispatch_max_live_retained_workers = 1;
 
+        let session_id = "sess_tracker_spawn_cap";
+        let mut request = sample_spawn_request();
+        request.orchestration_session_id = session_id.to_string();
         let prepared = sample_compatibility_prepared_dispatch(
-            sample_spawn_request(),
+            request,
             sample_orchestrator_participant(),
             None,
             1,
@@ -22573,7 +23445,7 @@ agents:
 
         assert_eq!(
             err.to_string(),
-            "worker_concurrency_cap_exceeded: effective policy allows at most 1 live retained workers for orchestration session sess_dispatch; authoritative live count is 1"
+            "worker_concurrency_cap_exceeded: effective policy allows at most 1 live retained workers for orchestration session sess_tracker_spawn_cap; authoritative live count is 1"
         );
     }
 
@@ -22586,8 +23458,11 @@ agents:
             .push("fork_world_worker".to_string());
         policy.agents_world_dispatch_max_live_retained_workers = 1;
 
+        let session_id = "sess_tracker_fork_cap";
+        let mut request = sample_fork_request();
+        request.orchestration_session_id = session_id.to_string();
         let prepared = sample_compatibility_prepared_dispatch(
-            sample_fork_request(),
+            request,
             sample_orchestrator_participant(),
             None,
             1,
@@ -22598,7 +23473,7 @@ agents:
 
         assert_eq!(
             err.to_string(),
-            "worker_concurrency_cap_exceeded: effective policy allows at most 1 live retained workers for orchestration session sess_dispatch; authoritative live count is 1"
+            "worker_concurrency_cap_exceeded: effective policy allows at most 1 live retained workers for orchestration session sess_tracker_fork_cap; authoritative live count is 1"
         );
     }
 
@@ -22944,7 +23819,7 @@ agents:
             test_world_codex_runtime_bin().as_path(),
         );
         let substrate_home = secure_authority_tempdir();
-        let _substrate_home_guard = EnvVarGuard::set_path("SUBSTRATE_HOME", substrate_home.path());
+        substrate_home.install_as_home();
         write_allowed_world_dispatch_policy_with_host_credentials(
             substrate_home.path(),
             "cli:codex-world",
@@ -23039,7 +23914,7 @@ agents:
             test_world_codex_runtime_bin().as_path(),
         );
         let substrate_home = secure_authority_tempdir();
-        let _substrate_home_guard = EnvVarGuard::set_path("SUBSTRATE_HOME", substrate_home.path());
+        substrate_home.install_as_home();
         write_allowed_world_dispatch_policy_with_host_credentials(
             substrate_home.path(),
             "cli:codex-world",
@@ -23114,7 +23989,7 @@ agents:
             test_world_codex_runtime_bin().as_path(),
         );
         let substrate_home = secure_authority_tempdir();
-        let _substrate_home_guard = EnvVarGuard::set_path("SUBSTRATE_HOME", substrate_home.path());
+        substrate_home.install_as_home();
         write_allowed_world_dispatch_policy(
             substrate_home.path(),
             "cli:codex-world",
@@ -23189,7 +24064,7 @@ agents:
             test_world_codex_runtime_bin().as_path(),
         );
         let substrate_home = secure_authority_tempdir();
-        let _substrate_home_guard = EnvVarGuard::set_path("SUBSTRATE_HOME", substrate_home.path());
+        substrate_home.install_as_home();
         write_allowed_world_dispatch_policy_with_host_credentials(
             substrate_home.path(),
             "cli:codex-world",
@@ -23256,8 +24131,8 @@ agents:
             "SUBSTRATE_WORLD_DEPS_GUEST_BIN_DIR",
             test_world_codex_runtime_bin().as_path(),
         );
-        let substrate_home = tempdir().expect("substrate home tempdir");
-        let _substrate_home_guard = EnvVarGuard::set_path("SUBSTRATE_HOME", substrate_home.path());
+        let substrate_home = secure_authority_tempdir();
+        substrate_home.install_as_home();
         write_allowed_world_dispatch_policy(
             substrate_home.path(),
             "cli:codex-world",
@@ -23402,8 +24277,8 @@ agents:
             "SUBSTRATE_WORLD_DEPS_GUEST_BIN_DIR",
             test_world_codex_runtime_bin().as_path(),
         );
-        let substrate_home = tempdir().expect("substrate home tempdir");
-        let _substrate_home_guard = EnvVarGuard::set_path("SUBSTRATE_HOME", substrate_home.path());
+        let substrate_home = secure_authority_tempdir();
+        substrate_home.install_as_home();
         write_allowed_world_dispatch_policy(
             substrate_home.path(),
             "cli:codex-world",
@@ -23431,6 +24306,8 @@ agents:
         let socket_path = socket_home.path().join("world.sock");
         let listener = UnixListener::bind(&socket_path).expect("bind world socket");
         let store_for_server = store.clone();
+        let fixture_tasks = TestFixtureTaskOwner::new();
+        let fixture_tasks_for_server = fixture_tasks.clone();
         let server = tokio::spawn(async move {
             let mut saw_bootstrap = false;
             while let Ok((mut stream, _addr)) = listener.accept().await {
@@ -23482,11 +24359,18 @@ agents:
                     let store_for_stop = store_for_server.clone();
                     let child_id = member_dispatch.participant_id.clone();
                     let session_id = member_dispatch.orchestration_session_id.clone();
-                    tokio::spawn(async move {
-                        let (stop_tx, _stop_rx) =
+                    let mut close_rx = fixture_tasks_for_server.close_receiver();
+                    fixture_tasks_for_server.spawn_with_private_stop_path(
+                        crate::execution::agent_runtime::control::private_stop_transport_path(
+                            &store_for_stop,
+                            &session_id,
+                            &child_id,
+                        ),
+                        async move {
+                            let (stop_tx, _stop_rx) =
                             crate::execution::agent_runtime::control::private_stop_request_channel(
                             );
-                        let mut stop_transport = crate::execution::agent_runtime::control::
+                            let mut stop_transport = crate::execution::agent_runtime::control::
                             register_private_stop_transport(
                                 &store_for_stop,
                                 &session_id,
@@ -23495,9 +24379,10 @@ agents:
                             )
                             .await
                             .expect("register private stop transport for fork success");
-                        tokio::time::sleep(Duration::from_millis(200)).await;
-                        stop_transport.close().await;
-                    });
+                            wait_for_test_fixture_close(&mut close_rx).await;
+                            stop_transport.close().await;
+                        },
+                    );
 
                     let start =
                         serde_json::to_vec(&transport_api_types::ExecuteStreamFrame::Start {
@@ -23559,56 +24444,65 @@ agents:
         let ambient_cwd = tempdir().expect("ambient cwd tempdir");
         let _cwd_guard = CurrentDirGuard::change_to(ambient_cwd.path());
 
-        let mut request = sample_fork_world_dispatch_request();
-        request.request_id = Some("req_fork_lineage".to_string());
-        request.idempotency_key = Some("idem_fork_lineage".to_string());
-        request.caller_participant_id = Some("orch_successor".to_string());
-        request.world_id = Some("world-17".to_string());
-        request.world_generation = Some(2);
+        let test_outcome = run_test_body_with_fixture_task_cleanup(
+            server,
+            socket_home,
+            &socket_path,
+            "fork typed lineage",
+            fixture_tasks,
+            async {
+                let mut request = sample_fork_world_dispatch_request();
+                request.request_id = Some("req_fork_lineage".to_string());
+                request.idempotency_key = Some("idem_fork_lineage".to_string());
+                request.caller_participant_id = Some("orch_successor".to_string());
+                request.world_id = Some("world-17".to_string());
+                request.world_generation = Some(2);
 
-        let prepared =
-            prepare_orchestrator_world_dispatch(&store, request).expect("prepare fork dispatch");
-        let outcome = dispatch_prepared_orchestrator_world_request(prepared)
-            .await
-            .expect("dispatch prepared fork request");
-        let WorldDispatchOutcomeV1::ForkWorldWorker(outcome) = outcome else {
-            panic!("expected fork_world_worker outcome envelope");
-        };
+                let prepared = prepare_orchestrator_world_dispatch(&store, request)
+                    .expect("prepare fork dispatch");
+                let outcome = dispatch_prepared_orchestrator_world_request(prepared)
+                    .await
+                    .expect("dispatch prepared fork request");
+                let WorldDispatchOutcomeV1::ForkWorldWorker(outcome) = outcome else {
+                    panic!("expected fork_world_worker outcome envelope");
+                };
 
-        assert_eq!(outcome.orchestration_session_id, "sess_dispatch");
-        assert_eq!(outcome.orchestrator_participant_id, "orch_successor");
-        assert_eq!(outcome.source_participant_id, "ash_member");
-        assert_eq!(outcome.target_backend_id, "cli:codex-world");
-        assert_eq!(outcome.world_id, "world-17");
-        assert_eq!(outcome.world_generation, 2);
-        assert!(
-            outcome.child_participant_id.starts_with("ash_"),
-            "fork child should be allocated through the retained bootstrap seam: {}",
-            outcome.child_participant_id
-        );
-        assert!(
-            outcome
-                .summary
-                .contains("explicit source-to-child lineage is preserved"),
-            "fork summary should stay explicit about lineage: {}",
-            outcome.summary
-        );
+                assert_eq!(outcome.orchestration_session_id, "sess_dispatch");
+                assert_eq!(outcome.orchestrator_participant_id, "orch_successor");
+                assert_eq!(outcome.source_participant_id, "ash_member");
+                assert_eq!(outcome.target_backend_id, "cli:codex-world");
+                assert_eq!(outcome.world_id, "world-17");
+                assert_eq!(outcome.world_generation, 2);
+                assert!(
+                    outcome.child_participant_id.starts_with("ash_"),
+                    "fork child should be allocated through the retained bootstrap seam: {}",
+                    outcome.child_participant_id
+                );
+                assert!(
+                    outcome
+                        .summary
+                        .contains("explicit source-to-child lineage is preserved"),
+                    "fork summary should stay explicit about lineage: {}",
+                    outcome.summary
+                );
 
-        let child = store
-            .load_participant(&outcome.child_participant_id)
-            .expect("load persisted fork child")
-            .expect("persisted fork child");
-        assert_eq!(
-            child.handle.orchestrator_participant_id.as_deref(),
-            Some("orch_successor")
-        );
-        assert_eq!(
-            child.handle.parent_participant_id.as_deref(),
-            Some("ash_member")
-        );
-        assert_eq!(child.fork_source_participant_id(), Some("ash_member"));
-
-        server.await.expect("stub world server task");
+                let child = store
+                    .load_participant(&outcome.child_participant_id)
+                    .expect("load persisted fork child")
+                    .expect("persisted fork child");
+                assert_eq!(
+                    child.handle.orchestrator_participant_id.as_deref(),
+                    Some("orch_successor")
+                );
+                assert_eq!(
+                    child.handle.parent_participant_id.as_deref(),
+                    Some("ash_member")
+                );
+                assert_eq!(child.fork_source_participant_id(), Some("ash_member"));
+            },
+        )
+        .await;
+        test_outcome.finish();
     }
 
     #[cfg(target_os = "linux")]
@@ -23621,8 +24515,8 @@ agents:
             "SUBSTRATE_WORLD_DEPS_GUEST_BIN_DIR",
             test_world_codex_runtime_bin().as_path(),
         );
-        let substrate_home = tempdir().expect("substrate home tempdir");
-        let _substrate_home_guard = EnvVarGuard::set_path("SUBSTRATE_HOME", substrate_home.path());
+        let substrate_home = secure_authority_tempdir();
+        substrate_home.install_as_home();
         write_allowed_world_dispatch_policy(
             substrate_home.path(),
             "cli:codex-world",
@@ -23652,6 +24546,8 @@ agents:
         let store_for_server = store.clone();
         let (child_persisted_tx, child_persisted_rx) = tokio::sync::oneshot::channel::<()>();
         let (publish_stop_tx, publish_stop_rx) = tokio::sync::oneshot::channel::<()>();
+        let fixture_tasks = TestFixtureTaskOwner::new();
+        let fixture_tasks_for_server = fixture_tasks.clone();
         let server = tokio::spawn(async move {
             let mut child_persisted_tx = Some(child_persisted_tx);
             let mut publish_stop_rx = Some(publish_stop_rx);
@@ -23695,11 +24591,6 @@ agents:
                     store_for_server
                         .persist_participant(&child)
                         .expect("persist authoritative child participant before registered event is consumed");
-                    child_persisted_tx
-                        .take()
-                        .expect("child persisted notification sender")
-                        .send(())
-                        .expect("notify test that child visibility is published");
 
                     let start =
                         serde_json::to_vec(&transport_api_types::ExecuteStreamFrame::Start {
@@ -23745,20 +24636,36 @@ agents:
                     body.extend_from_slice(&registered);
                     body.push(b'\n');
                     write_http_body(&mut stream, "200 OK", "application/x-ndjson", &body).await;
+                    child_persisted_tx
+                        .take()
+                        .expect("child response publication notification sender")
+                        .send(())
+                        .expect("notify test that child visibility and response are published");
                     let store_for_stop = store_for_server.clone();
                     let child_id = member_dispatch.participant_id.clone();
                     let session_id = member_dispatch.orchestration_session_id.clone();
                     let publish_stop_rx = publish_stop_rx
                         .take()
                         .expect("durable publication signal receiver");
-                    tokio::spawn(async move {
-                        publish_stop_rx
-                            .await
-                            .expect("signal stop transport publication");
-                        let (stop_tx, _stop_rx) =
+                    let mut close_rx = fixture_tasks_for_server.close_receiver();
+                    fixture_tasks_for_server.spawn_with_private_stop_path(
+                        crate::execution::agent_runtime::control::private_stop_transport_path(
+                            &store_for_stop,
+                            &session_id,
+                            &child_id,
+                        ),
+                        async move {
+                            let publish = tokio::select! {
+                                result = publish_stop_rx => result.is_ok(),
+                                () = wait_for_test_fixture_close(&mut close_rx) => false,
+                            };
+                            if !publish {
+                                return;
+                            }
+                            let (stop_tx, _stop_rx) =
                             crate::execution::agent_runtime::control::private_stop_request_channel(
                             );
-                        let mut stop_transport = crate::execution::agent_runtime::control::
+                            let mut stop_transport = crate::execution::agent_runtime::control::
                             register_private_stop_transport(
                                 &store_for_stop,
                                 &session_id,
@@ -23767,9 +24674,10 @@ agents:
                             )
                             .await
                             .expect("register private stop transport for durable publication");
-                        tokio::time::sleep(Duration::from_millis(200)).await;
-                        stop_transport.close().await;
-                    });
+                            wait_for_test_fixture_close(&mut close_rx).await;
+                            stop_transport.close().await;
+                        },
+                    );
                     break;
                 }
 
@@ -23780,54 +24688,63 @@ agents:
         let _socket_guard = EnvVarGuard::set_path("SUBSTRATE_WORLD_SOCKET", &socket_path);
         let ambient_cwd = tempdir().expect("ambient cwd tempdir");
         let _cwd_guard = CurrentDirGuard::change_to(ambient_cwd.path());
+        let dispatch_tasks = fixture_tasks.clone();
 
-        let mut request = sample_fork_world_dispatch_request();
-        request.request_id = Some("req_fork_lineage_delayed_child".to_string());
-        request.idempotency_key = Some("idem_fork_lineage_delayed_child".to_string());
-        request.caller_participant_id = Some("orch_successor".to_string());
-        request.world_id = Some("world-17".to_string());
-        request.world_generation = Some(2);
+        let test_outcome = run_test_body_with_fixture_task_cleanup(
+            server,
+            socket_home,
+            &socket_path,
+            "fork durable child publication",
+            fixture_tasks,
+            async {
+                let mut request = sample_fork_world_dispatch_request();
+                request.request_id = Some("req_fork_lineage_delayed_child".to_string());
+                request.idempotency_key = Some("idem_fork_lineage_delayed_child".to_string());
+                request.caller_participant_id = Some("orch_successor".to_string());
+                request.world_id = Some("world-17".to_string());
+                request.world_generation = Some(2);
 
-        let prepared =
-            prepare_orchestrator_world_dispatch(&store, request).expect("prepare fork dispatch");
-        let dispatch =
-            tokio::spawn(
-                async move { dispatch_prepared_orchestrator_world_request(prepared).await },
-            );
-        child_persisted_rx
-            .await
-            .expect("wait for durable child visibility before stop publication");
-        tokio::time::sleep(Duration::from_millis(75)).await;
-        assert!(
-            !dispatch.is_finished(),
-            "fork dispatch must not return before private stop transport publication completes",
-        );
-        publish_stop_tx
-            .send(())
-            .expect("signal private stop transport publication");
-        let outcome = dispatch
-            .await
-            .expect("dispatch join")
-            .expect("dispatch prepared fork request");
-        let WorldDispatchOutcomeV1::ForkWorldWorker(outcome) = outcome else {
-            panic!("expected fork_world_worker outcome envelope");
-        };
+                let prepared = prepare_orchestrator_world_dispatch(&store, request)
+                    .expect("prepare fork dispatch");
+                let dispatch = dispatch_tasks.spawn_cancellable(async move {
+                    dispatch_prepared_orchestrator_world_request(prepared).await
+                });
+                let _dispatch_abort = TestTaskAbortOnDrop::new(&dispatch);
+                child_persisted_rx
+                    .await
+                    .expect("wait for durable child and response visibility before stop publication");
+                assert!(
+                    !dispatch.is_finished(),
+                    "fork dispatch must not return before private stop transport publication completes",
+                );
+                publish_stop_tx
+                    .send(())
+                    .expect("signal private stop transport publication");
+                let outcome = dispatch
+                    .await
+                    .expect("dispatch join")
+                    .expect("dispatch prepared fork request");
+                let WorldDispatchOutcomeV1::ForkWorldWorker(outcome) = outcome else {
+                    panic!("expected fork_world_worker outcome envelope");
+                };
 
-        let child = store
-            .load_participant(&outcome.child_participant_id)
-            .expect("load persisted fork child")
-            .expect("persisted fork child");
-        assert_eq!(child.fork_source_participant_id(), Some("ash_member"));
-        assert_eq!(
-            child.handle.parent_participant_id.as_deref(),
-            Some("ash_member")
-        );
-        assert_eq!(
-            child.handle.orchestrator_participant_id.as_deref(),
-            Some("orch_successor")
-        );
-
-        server.await.expect("stub world server task");
+                let child = store
+                    .load_participant(&outcome.child_participant_id)
+                    .expect("load persisted fork child")
+                    .expect("persisted fork child");
+                assert_eq!(child.fork_source_participant_id(), Some("ash_member"));
+                assert_eq!(
+                    child.handle.parent_participant_id.as_deref(),
+                    Some("ash_member")
+                );
+                assert_eq!(
+                    child.handle.orchestrator_participant_id.as_deref(),
+                    Some("orch_successor")
+                );
+            },
+        )
+        .await;
+        test_outcome.finish();
     }
 
     #[cfg(target_os = "linux")]
@@ -23840,8 +24757,8 @@ agents:
             "SUBSTRATE_WORLD_DEPS_GUEST_BIN_DIR",
             test_world_codex_runtime_bin().as_path(),
         );
-        let substrate_home = tempdir().expect("substrate home tempdir");
-        let _substrate_home_guard = EnvVarGuard::set_path("SUBSTRATE_HOME", substrate_home.path());
+        let substrate_home = secure_authority_tempdir();
+        substrate_home.install_as_home();
         write_allowed_world_dispatch_policy(
             substrate_home.path(),
             "cli:codex-world",
@@ -23866,8 +24783,15 @@ agents:
         let socket_home = tempdir().expect("socket tempdir");
         let socket_path = socket_home.path().join("world-late-child-publication.sock");
         let listener = UnixListener::bind(&socket_path).expect("bind world socket");
+        let fixture_tasks = TestFixtureTaskOwner::new();
+        let fixture_tasks_for_server = fixture_tasks.clone();
+        let dispatch_tasks = fixture_tasks.clone();
+        let (registered_response_tx, registered_response_rx) = tokio::sync::oneshot::channel();
+        let (publish_child_tx, publish_child_rx) = tokio::sync::oneshot::channel();
         let store_for_server = store.clone();
         let server = tokio::spawn(async move {
+            let mut registered_response_tx = Some(registered_response_tx);
+            let mut publish_child_rx = Some(publish_child_rx);
             while let Ok((mut stream, _addr)) = listener.accept().await {
                 let Some((header, body)) = read_http_request(&mut stream).await else {
                     continue;
@@ -23940,19 +24864,35 @@ agents:
                     body.extend_from_slice(&registered);
                     body.push(b'\n');
                     write_http_body(&mut stream, "200 OK", "application/x-ndjson", &body).await;
+                    registered_response_tx
+                        .take()
+                        .expect("registered response publication signal")
+                        .send(())
+                        .expect("publish registered response visibility");
+                    publish_child_rx
+                        .take()
+                        .expect("child publication release receiver")
+                        .await
+                        .expect("release delayed child publication");
 
                     let store_for_publication = store_for_server.clone();
                     let child_id = member_dispatch.participant_id.clone();
                     let session_id = member_dispatch.orchestration_session_id.clone();
-                    tokio::spawn(async move {
-                        tokio::time::sleep(Duration::from_secs(6)).await;
-                        store_for_publication.persist_participant(&child).expect(
-                            "persist authoritative child participant after delayed publication",
-                        );
-                        let (stop_tx, _stop_rx) =
+                    let mut close_rx = fixture_tasks_for_server.close_receiver();
+                    fixture_tasks_for_server.spawn_with_private_stop_path(
+                        crate::execution::agent_runtime::control::private_stop_transport_path(
+                            &store_for_publication,
+                            &session_id,
+                            &child_id,
+                        ),
+                        async move {
+                            store_for_publication.persist_participant(&child).expect(
+                                "persist authoritative child participant after delayed publication",
+                            );
+                            let (stop_tx, _stop_rx) =
                             crate::execution::agent_runtime::control::private_stop_request_channel(
                             );
-                        let mut stop_transport = crate::execution::agent_runtime::control::
+                            let mut stop_transport = crate::execution::agent_runtime::control::
                             register_private_stop_transport(
                                 &store_for_publication,
                                 &session_id,
@@ -23961,9 +24901,10 @@ agents:
                             )
                             .await
                             .expect("register private stop transport after delayed publication");
-                        tokio::time::sleep(Duration::from_millis(200)).await;
-                        stop_transport.close().await;
-                    });
+                            wait_for_test_fixture_close(&mut close_rx).await;
+                            stop_transport.close().await;
+                        },
+                    );
                     break;
                 }
 
@@ -23975,50 +24916,73 @@ agents:
         let ambient_cwd = tempdir().expect("ambient cwd tempdir");
         let _cwd_guard = CurrentDirGuard::change_to(ambient_cwd.path());
 
-        let mut request = sample_fork_world_dispatch_request();
-        request.request_id = Some("req_fork_late_child_publication".to_string());
-        request.idempotency_key = Some("idem_fork_late_child_publication".to_string());
-        request.caller_participant_id = Some("orch_successor".to_string());
-        request.world_id = Some("world-17".to_string());
-        request.world_generation = Some(2);
+        let test_outcome = run_test_body_with_fixture_task_cleanup(
+            server,
+            socket_home,
+            &socket_path,
+            "fork late child publication",
+            fixture_tasks,
+            async {
+                let mut request = sample_fork_world_dispatch_request();
+                request.request_id = Some("req_fork_late_child_publication".to_string());
+                request.idempotency_key = Some("idem_fork_late_child_publication".to_string());
+                request.caller_participant_id = Some("orch_successor".to_string());
+                request.world_id = Some("world-17".to_string());
+                request.world_generation = Some(2);
 
-        let prepared =
-            prepare_orchestrator_world_dispatch(&store, request).expect("prepare fork dispatch");
-        let outcome = dispatch_prepared_orchestrator_world_request(prepared)
-            .await
-            .expect("late child publication within the retained readiness window must succeed");
-        let WorldDispatchOutcomeV1::ForkWorldWorker(outcome) = outcome else {
-            panic!("expected fork_world_worker outcome envelope");
-        };
+                let prepared = prepare_orchestrator_world_dispatch(&store, request)
+                    .expect("prepare fork dispatch");
+                let dispatch = dispatch_tasks.spawn_cancellable(async move {
+                    dispatch_prepared_orchestrator_world_request(prepared).await
+                });
+                let _dispatch_abort = TestTaskAbortOnDrop::new(&dispatch);
+                registered_response_rx
+                    .await
+                    .expect("observe registered response before child publication");
+                assert!(
+                    !dispatch.is_finished(),
+                    "fork dispatch must enter the absent-child wait before publication"
+                );
+                publish_child_tx
+                    .send(())
+                    .expect("release fork child publication");
+                let outcome = dispatch.await.expect("fork dispatch task").expect(
+                    "late child publication within the retained readiness window must succeed",
+                );
+                let WorldDispatchOutcomeV1::ForkWorldWorker(outcome) = outcome else {
+                    panic!("expected fork_world_worker outcome envelope");
+                };
 
-        let child = store
-            .load_participant(&outcome.child_participant_id)
-            .expect("load persisted fork child")
-            .expect("persisted fork child");
-        assert_eq!(child.fork_source_participant_id(), Some("ash_member"));
-        assert_eq!(
-            child.handle.parent_participant_id.as_deref(),
-            Some("ash_member")
-        );
-        assert_eq!(
-            child.handle.orchestrator_participant_id.as_deref(),
-            Some("orch_successor")
-        );
-
-        server.await.expect("stub world server task");
+                let child = store
+                    .load_participant(&outcome.child_participant_id)
+                    .expect("load persisted fork child")
+                    .expect("persisted fork child");
+                assert_eq!(child.fork_source_participant_id(), Some("ash_member"));
+                assert_eq!(
+                    child.handle.parent_participant_id.as_deref(),
+                    Some("ash_member")
+                );
+                assert_eq!(
+                    child.handle.orchestrator_participant_id.as_deref(),
+                    Some("orch_successor")
+                );
+            },
+        )
+        .await;
+        test_outcome.finish();
     }
 
     #[cfg(target_os = "linux")]
     #[tokio::test(flavor = "current_thread")]
     #[serial]
     async fn dispatch_contract_fork_world_worker_rolls_back_child_when_lineage_persist_fails() {
-        let _env_guard = world_env_guard();
+        let _authority_env = AuthorityEnvTestGuard::preserve();
         let _world_codex_guard = EnvVarGuard::set_path(
             "SUBSTRATE_WORLD_DEPS_GUEST_BIN_DIR",
             test_world_codex_runtime_bin().as_path(),
         );
-        let substrate_home = tempdir().expect("substrate home tempdir");
-        let _substrate_home_guard = EnvVarGuard::set_path("SUBSTRATE_HOME", substrate_home.path());
+        let substrate_home = secure_authority_tempdir();
+        substrate_home.install_as_home();
         write_allowed_world_dispatch_policy(
             substrate_home.path(),
             "cli:codex-world",
@@ -24039,7 +25003,14 @@ agents:
         let socket_path = socket_home.path().join("world.sock");
         let listener = UnixListener::bind(&socket_path).expect("bind world socket");
         let store_for_server = store.clone();
+        let test_tasks = TestTaskRegistry::default();
+        let tasks_for_server = test_tasks.clone();
+        let dispatch_tasks = test_tasks.clone();
+        let (registered_response_tx, registered_response_rx) = tokio::sync::oneshot::channel();
+        let (publish_stop_tx, publish_stop_rx) = tokio::sync::oneshot::channel();
         let server = tokio::spawn(async move {
+            let mut registered_response_tx = Some(registered_response_tx);
+            let mut publish_stop_rx = Some(publish_stop_rx);
             while let Ok((mut stream, _addr)) = listener.accept().await {
                 let Some((header, body)) = read_http_request(&mut stream).await else {
                     continue;
@@ -24145,8 +25116,18 @@ agents:
                     body.extend_from_slice(&registered);
                     body.push(b'\n');
                     write_http_body(&mut stream, "200 OK", "application/x-ndjson", &body).await;
-                    tokio::spawn(async move {
-                        tokio::time::sleep(Duration::from_millis(50)).await;
+                    registered_response_tx
+                        .take()
+                        .expect("rollback registered response publication signal")
+                        .send(())
+                        .expect("publish rollback registered response visibility");
+                    let publish_stop_rx = publish_stop_rx
+                        .take()
+                        .expect("rollback stop publication release receiver");
+                    tasks_for_server.spawn(async move {
+                        publish_stop_rx
+                            .await
+                            .expect("release rollback stop transport publication");
                         let (stop_tx, mut stop_rx) =
                             crate::execution::agent_runtime::control::private_stop_request_channel(
                             );
@@ -24195,49 +25176,79 @@ agents:
 
         let _socket_guard = EnvVarGuard::set_path("SUBSTRATE_WORLD_SOCKET", &socket_path);
 
-        let mut request = sample_fork_world_dispatch_request();
-        request.request_id = Some("req_fork_lineage_rollback".to_string());
-        request.idempotency_key = Some("idem_fork_lineage_rollback".to_string());
-        request.world_id = Some("world-17".to_string());
-        request.world_generation = Some(2);
+        let test_outcome = run_test_body_with_server_cleanup(
+            server,
+            socket_home,
+            &socket_path,
+            "fork lineage rollback",
+            async {
+                let mut request = sample_fork_world_dispatch_request();
+                request.request_id = Some("req_fork_lineage_rollback".to_string());
+                request.idempotency_key = Some("idem_fork_lineage_rollback".to_string());
+                request.world_id = Some("world-17".to_string());
+                request.world_generation = Some(2);
 
-        let prepared =
-            prepare_orchestrator_world_dispatch(&store, request).expect("prepare fork dispatch");
-        let err = dispatch_prepared_orchestrator_world_request(prepared)
-            .await
-            .expect_err("lineage mismatch must roll back the retained child");
+                let prepared = prepare_orchestrator_world_dispatch(&store, request)
+                    .expect("prepare fork dispatch");
+                let dispatch = dispatch_tasks.spawn_cancellable(async move {
+                    dispatch_prepared_orchestrator_world_request(prepared).await
+                });
+                let _dispatch_abort = TestTaskAbortOnDrop::new(&dispatch);
+                registered_response_rx
+                    .await
+                    .expect("observe rollback registered response before stop publication");
+                assert!(
+                    !dispatch.is_finished(),
+                    "lineage dispatch must wait for late stop publication after registration"
+                );
+                publish_stop_tx
+                    .send(())
+                    .expect("release rollback stop transport publication");
+                let err = dispatch
+                    .await
+                    .expect("lineage rollback dispatch task")
+                    .expect_err("lineage mismatch must roll back the retained child");
 
-        assert!(
-            err.to_string().contains("fork_lineage_persist_failed:"),
-            "expected rollback wrapper in error: {err}"
-        );
-        assert!(
-            err.to_string()
-                .contains("retained child was durably stopped"),
-            "expected durable rollback closeout in error: {err}"
-        );
-        assert!(
-            err.to_string().contains("invalid_fork_lineage:"),
-            "expected original lineage failure to be preserved: {err}"
-        );
+                assert!(
+                    err.to_string().contains("fork_lineage_persist_failed:"),
+                    "expected rollback wrapper in error: {err}"
+                );
+                assert!(
+                    err.to_string()
+                        .contains("retained child was durably stopped"),
+                    "expected durable rollback closeout in error: {err}"
+                );
+                assert!(
+                    err.to_string().contains("invalid_fork_lineage:"),
+                    "expected original lineage failure to be preserved: {err}"
+                );
 
-        let child = store
-            .list_participants()
-            .expect("list participants after rollback")
-            .into_iter()
-            .find(|participant| {
-                participant.participant_id().starts_with("ash_")
-                    && participant.participant_id() != "ash_member"
-            })
-            .expect("rolled back child participant");
-        assert_eq!(child.handle.state, AgentRuntimeSessionState::Stopped);
-        assert_eq!(
-            child.internal.termination_reason.as_deref(),
-            Some("fork lineage rollback")
-        );
-        assert_eq!(child.fork_source_participant_id(), None);
-
-        server.abort();
+                let child = store
+                    .list_participants()
+                    .expect("list participants after rollback")
+                    .into_iter()
+                    .find(|participant| {
+                        participant.participant_id().starts_with("ash_")
+                            && participant.participant_id() != "ash_member"
+                    })
+                    .expect("rolled back child participant");
+                assert_eq!(child.handle.state, AgentRuntimeSessionState::Stopped);
+                assert_eq!(
+                    child.internal.termination_reason.as_deref(),
+                    Some("fork lineage rollback")
+                );
+                assert_eq!(child.fork_source_participant_id(), None);
+            },
+            move || async move { test_tasks.finish_or_abort_and_wait().await },
+        )
+        .await;
+        drop(_socket_guard);
+        drop(store);
+        drop(workspace_root);
+        drop(substrate_home);
+        drop(_world_codex_guard);
+        drop(_authority_env);
+        test_outcome.finish();
     }
 
     #[cfg(target_os = "linux")]
@@ -24250,8 +25261,8 @@ agents:
             "SUBSTRATE_WORLD_DEPS_GUEST_BIN_DIR",
             test_world_codex_runtime_bin().as_path(),
         );
-        let substrate_home = tempdir().expect("substrate home tempdir");
-        let _substrate_home_guard = EnvVarGuard::set_path("SUBSTRATE_HOME", substrate_home.path());
+        let substrate_home = secure_authority_tempdir();
+        substrate_home.install_as_home();
         write_allowed_world_dispatch_policy(
             substrate_home.path(),
             "cli:codex-world",
@@ -24276,6 +25287,8 @@ agents:
         let socket_home = tempdir().expect("socket tempdir");
         let socket_path = socket_home.path().join("world-missing-child.sock");
         let listener = UnixListener::bind(&socket_path).expect("bind world socket");
+        let fixture_tasks = TestFixtureTaskOwner::new();
+        let fixture_tasks_for_server = fixture_tasks.clone();
         let store_for_server = store.clone();
         let server = tokio::spawn(async move {
             while let Ok((mut stream, _addr)) = listener.accept().await {
@@ -24309,7 +25322,14 @@ agents:
                     let store_for_stop = store_for_server.clone();
                     let child_id = member_dispatch.participant_id.clone();
                     let session_id = member_dispatch.orchestration_session_id.clone();
-                    tokio::spawn(async move {
+                    let mut close_rx = fixture_tasks_for_server.close_receiver();
+                    fixture_tasks_for_server.spawn_with_private_stop_path(
+                        crate::execution::agent_runtime::control::private_stop_transport_path(
+                            &store_for_stop,
+                            &session_id,
+                            &child_id,
+                        ),
+                        async move {
                         let (stop_tx, mut stop_rx) =
                             crate::execution::agent_runtime::control::private_stop_request_channel(
                             );
@@ -24322,13 +25342,13 @@ agents:
                             )
                             .await
                             .expect("register private stop transport for missing-child rollback");
-                        let request = tokio::time::timeout(
-                            FORK_CHILD_REGISTRATION_VISIBILITY_WAIT_TIMEOUT
-                                + Duration::from_secs(5),
-                            stop_rx.recv(),
-                        )
-                        .await
-                        .expect("timed out waiting for missing-child rollback stop request")
+                        let request = tokio::select! {
+                            request = stop_rx.recv() => request,
+                            () = wait_for_test_fixture_close(&mut close_rx) => {
+                                stop_transport.close().await;
+                                return;
+                            }
+                        }
                         .expect("missing-child rollback stop request");
                         let mut session = store_for_stop
                             .load_orchestration_session(&session_id)
@@ -24349,7 +25369,8 @@ agents:
                             crate::execution::agent_runtime::control::PrivateStopOutcome::Accepted,
                         );
                         stop_transport.close().await;
-                    });
+                        },
+                    );
 
                     let start =
                         serde_json::to_vec(&transport_api_types::ExecuteStreamFrame::Start {
@@ -24406,58 +25427,67 @@ agents:
         let ambient_cwd = tempdir().expect("ambient cwd tempdir");
         let _cwd_guard = CurrentDirGuard::change_to(ambient_cwd.path());
 
-        let mut request = sample_fork_world_dispatch_request();
-        request.request_id = Some("req_fork_missing_child_registration".to_string());
-        request.idempotency_key = Some("idem_fork_missing_child_registration".to_string());
-        request.caller_participant_id = Some("orch_successor".to_string());
-        request.world_id = Some("world-17".to_string());
-        request.world_generation = Some(2);
+        let test_outcome = run_test_body_with_fixture_task_cleanup(
+            server,
+            socket_home,
+            &socket_path,
+            "fork missing child registration",
+            fixture_tasks,
+            async {
+                let mut request = sample_fork_world_dispatch_request();
+                request.request_id = Some("req_fork_missing_child_registration".to_string());
+                request.idempotency_key = Some("idem_fork_missing_child_registration".to_string());
+                request.caller_participant_id = Some("orch_successor".to_string());
+                request.world_id = Some("world-17".to_string());
+                request.world_generation = Some(2);
 
-        let prepared =
-            prepare_orchestrator_world_dispatch(&store, request).expect("prepare fork dispatch");
-        let err = dispatch_prepared_orchestrator_world_request(prepared)
-            .await
-            .expect_err("missing child registration must roll back the retained child");
+                let prepared = prepare_orchestrator_world_dispatch(&store, request)
+                    .expect("prepare fork dispatch");
+                let err = dispatch_prepared_orchestrator_world_request(prepared)
+                    .await
+                    .expect_err("missing child registration must roll back the retained child");
 
-        assert!(
-            err.to_string().contains("fork_lineage_persist_failed:"),
-            "expected rollback wrapper in error: {err}"
-        );
-        assert!(
-            err.to_string().contains("missing_fork_child_registration:"),
-            "expected timeout branch in error: {err}"
-        );
-        assert!(
-            err.to_string()
-                .contains("retained child was durably stopped"),
-            "expected durable rollback closeout in error: {err}"
-        );
+                assert!(
+                    err.to_string().contains("fork_lineage_persist_failed:"),
+                    "expected rollback wrapper in error: {err}"
+                );
+                assert!(
+                    err.to_string().contains("missing_fork_child_registration:"),
+                    "expected timeout branch in error: {err}"
+                );
+                assert!(
+                    err.to_string()
+                        .contains("retained child was durably stopped"),
+                    "expected durable rollback closeout in error: {err}"
+                );
 
-        let child = store
-            .list_participants()
-            .expect("list participants after missing-child rollback")
-            .into_iter()
-            .find(|participant| {
-                participant.participant_id().starts_with("ash_")
-                    && participant.participant_id() != "ash_member"
-            })
-            .expect("rolled back child participant");
-        assert_eq!(child.handle.state, AgentRuntimeSessionState::Stopped);
-        assert_eq!(
-            child.internal.termination_reason.as_deref(),
-            Some("fork lineage rollback")
-        );
-        assert_eq!(child.fork_source_participant_id(), Some("ash_member"));
-        assert_eq!(
-            child.handle.parent_participant_id.as_deref(),
-            Some("ash_member")
-        );
-        assert_eq!(
-            child.handle.orchestrator_participant_id.as_deref(),
-            Some("orch_successor")
-        );
-
-        server.await.expect("stub world server task");
+                let child = store
+                    .list_participants()
+                    .expect("list participants after missing-child rollback")
+                    .into_iter()
+                    .find(|participant| {
+                        participant.participant_id().starts_with("ash_")
+                            && participant.participant_id() != "ash_member"
+                    })
+                    .expect("rolled back child participant");
+                assert_eq!(child.handle.state, AgentRuntimeSessionState::Stopped);
+                assert_eq!(
+                    child.internal.termination_reason.as_deref(),
+                    Some("fork lineage rollback")
+                );
+                assert_eq!(child.fork_source_participant_id(), Some("ash_member"));
+                assert_eq!(
+                    child.handle.parent_participant_id.as_deref(),
+                    Some("ash_member")
+                );
+                assert_eq!(
+                    child.handle.orchestrator_participant_id.as_deref(),
+                    Some("orch_successor")
+                );
+            },
+        )
+        .await;
+        test_outcome.finish();
     }
 
     #[cfg(target_os = "linux")]
@@ -24470,8 +25500,9 @@ agents:
             "SUBSTRATE_WORLD_DEPS_GUEST_BIN_DIR",
             test_world_codex_runtime_bin().as_path(),
         );
-        let substrate_home = tempdir().expect("substrate home tempdir");
-        let _substrate_home_guard = EnvVarGuard::set_path("SUBSTRATE_HOME", substrate_home.path());
+        let substrate_home =
+            AuthorityEnvTestTempDir::new(tempdir().expect("substrate home tempdir"));
+        substrate_home.install_as_home();
         write_allowed_world_dispatch_policy(
             substrate_home.path(),
             "cli:codex-world",
@@ -24635,51 +25666,95 @@ agents:
     }
 
     #[cfg(target_os = "linux")]
+    #[test]
+    fn fork_publication_stable_reader_waits_for_authority_home_fixture_cleanup() {
+        let (reader_contended_tx, reader_contended_rx) = std::sync::mpsc::channel();
+        let (reader_acquired_tx, reader_acquired_rx) = std::sync::mpsc::channel();
+
+        let authority_home = AuthorityEnvTestTempDir::new(
+            tempdir().expect("authority-home overlap fixture tempdir"),
+        );
+        authority_home.install_as_home();
+        let fixture_path = authority_home.path().to_path_buf();
+        let fixture_for_reader = fixture_path.clone();
+        let reader = std::thread::spawn(move || {
+            assert!(
+                AuthorityEnvTestGuard::try_preserve().is_none(),
+                "stable reader acquired while authority-home fixture was live"
+            );
+            reader_contended_tx
+                .send(())
+                .expect("publish fork-publication reader contention");
+            let _authority_env = AuthorityEnvTestGuard::preserve();
+            let store = AgentRuntimeStateStore::new().expect("stable reader state store");
+            reader_acquired_tx
+                .send(!store.handles_dir().starts_with(&fixture_for_reader))
+                .expect("publish stable reader store identity");
+        });
+
+        reader_contended_rx
+            .recv_timeout(Duration::from_secs(5))
+            .expect("fork-publication reader observed coordinator contention");
+
+        drop(authority_home);
+        assert!(
+            reader_acquired_rx
+                .recv()
+                .expect("stable reader acquired restored authority environment"),
+            "stable reader must not capture the removed competitor fixture"
+        );
+        reader.join().expect("fork-publication stable reader");
+        assert!(!fixture_path.exists());
+    }
+
+    #[cfg(target_os = "linux")]
     #[tokio::test(flavor = "current_thread")]
     async fn wait_for_fork_child_durable_publication_allows_late_child_visibility_without_extending_stop_transport_budget(
     ) {
+        let substrate_home = secure_authority_tempdir();
+        substrate_home.install_as_home();
         let store = AgentRuntimeStateStore::new().expect("state store");
         let child_id = "ash_delayed_child";
-        let store_for_publication = store.clone();
-        tokio::spawn(async move {
-            tokio::time::sleep(Duration::from_millis(80)).await;
-            let mut child = sample_member_participant();
-            child.handle.participant_id = child_id.to_string();
-            store_for_publication
-                .persist_participant(&child)
-                .expect("persist delayed child participant");
-            tokio::time::sleep(Duration::from_millis(20)).await;
-            let (stop_tx, _stop_rx) =
-                crate::execution::agent_runtime::control::private_stop_request_channel();
-            let mut stop_transport =
-                crate::execution::agent_runtime::control::register_private_stop_transport(
-                    &store_for_publication,
-                    "sess_dispatch",
-                    child_id,
-                    stop_tx,
-                )
-                .await
-                .expect("register delayed stop transport");
-            tokio::time::sleep(Duration::from_millis(20)).await;
-            stop_transport.close().await;
-        });
-
-        wait_for_fork_child_durable_publication_with_timeouts(
+        let (stop_tx, _stop_rx) =
+            crate::execution::agent_runtime::control::private_stop_request_channel();
+        let mut stop_transport =
+            crate::execution::agent_runtime::control::register_private_stop_transport(
+                &store,
+                "sess_dispatch",
+                child_id,
+                stop_tx,
+            )
+            .await
+            .expect("register stop transport before delayed child publication");
+        let wait = wait_for_fork_child_durable_publication_with_timeouts(
             &store,
             "sess_dispatch",
             child_id,
             Duration::from_millis(250),
             Duration::from_millis(40),
             Duration::from_millis(5),
-        )
-        .await
-        .expect("late child visibility within the longer child budget must succeed");
+        );
+        tokio::pin!(wait);
+        assert!(
+            futures::poll!(&mut wait).is_pending(),
+            "child-publication wait must observe the initially absent child before publication"
+        );
+        let mut child = sample_member_participant();
+        child.handle.participant_id = child_id.to_string();
+        store
+            .persist_participant(&child)
+            .expect("persist child after wait reaches its first pending state");
+        let outcome = wait.await;
+        stop_transport.close().await;
+        outcome.expect("late child visibility within the longer child budget must succeed");
     }
 
     #[cfg(target_os = "linux")]
     #[tokio::test(flavor = "current_thread")]
     async fn wait_for_fork_child_durable_publication_keeps_stop_transport_timeout_short_once_child_is_visible(
     ) {
+        let substrate_home = secure_authority_tempdir();
+        substrate_home.install_as_home();
         let store = AgentRuntimeStateStore::new().expect("state store");
         let child_id = "ash_visible_child";
         let mut child = sample_member_participant();
@@ -24689,8 +25764,10 @@ agents:
             .expect("persist visible child participant");
 
         let store_for_publication = store.clone();
+        let (_release_late_transport, wait_to_publish_late_transport) =
+            tokio::sync::oneshot::channel::<()>();
         let late_transport = tokio::spawn(async move {
-            tokio::time::sleep(Duration::from_millis(200)).await;
+            let _ = wait_to_publish_late_transport.await;
             let (stop_tx, _stop_rx) =
                 crate::execution::agent_runtime::control::private_stop_request_channel();
             let mut stop_transport =
@@ -24706,7 +25783,7 @@ agents:
             stop_transport.close().await;
         });
 
-        let err = wait_for_fork_child_durable_publication_with_timeouts(
+        let outcome = wait_for_fork_child_durable_publication_with_timeouts(
             &store,
             "sess_dispatch",
             child_id,
@@ -24714,10 +25791,19 @@ agents:
             Duration::from_millis(50),
             Duration::from_millis(5),
         )
-        .await
-        .expect_err("missing stop transport must still fail on the short stop-publication budget");
+        .await;
 
         late_transport.abort();
+        let late_transport_error = late_transport
+            .await
+            .expect_err("late stop-transport task must confirm cancellation");
+        assert!(
+            late_transport_error.is_cancelled(),
+            "late stop-transport task must be cancelled before authority restoration: {late_transport_error}"
+        );
+        let err = outcome.expect_err(
+            "missing stop transport must still fail on the short stop-publication budget",
+        );
         assert!(
             err.to_string().contains("missing_stop_transport"),
             "expected missing stop transport detail in error: {err}"
