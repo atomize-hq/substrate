@@ -1,14 +1,9 @@
 use super::cli::{Cli, HealthCmd, HostAction, HostCmd, WorldAction, WorldCmd};
 use crate::builtins as commands;
-#[cfg(unix)]
-use crate::execution::agent_runtime::host_session_authority::trusted_fs::TrustedAuthorityRoot;
-#[cfg(unix)]
-use crate::execution::agent_runtime::HostSessionAuthority;
 #[cfg(test)]
 use crate::execution::world_env_guard;
 use anyhow::Result;
 use std::env;
-use std::path::PathBuf;
 use substrate_broker::world_fs_policy;
 #[cfg(unix)]
 use transport_api_types::InstallBootstrapContextCarrierV1;
@@ -177,7 +172,13 @@ pub(crate) fn handle_world_command(
 ) -> Result<()> {
     match &cmd.action {
         WorldAction::Doctor { json } => {
-            let launch_cwd = env::current_dir().unwrap_or_else(|_| PathBuf::from("."));
+            let launch_cwd = match env::current_dir() {
+                Ok(cwd) => cwd,
+                Err(err) => {
+                    eprintln!("substrate world doctor: failed to resolve launch cwd: {err}");
+                    std::process::exit(2);
+                }
+            };
             let cli_world_enabled = if cli.world {
                 Some(true)
             } else if cli.no_world {
@@ -185,13 +186,29 @@ pub(crate) fn handle_world_command(
             } else {
                 None
             };
-            let (effective, explain) =
+            let overrides = crate::execution::config_model::CliConfigOverrides {
+                world_enabled: cli_world_enabled,
+                ..Default::default()
+            };
+            #[cfg(unix)]
+            let context = match commands::world_deps::bind_authenticated_world_deps_context_v1(
+                install_context,
+                &launch_cwd,
+                &overrides,
+            ) {
+                Ok(context) => context,
+                Err(err) => {
+                    eprintln!("substrate world doctor: {err:#}");
+                    std::process::exit(2);
+                }
+            };
+            #[cfg(unix)]
+            let (effective, explain) = (context.effective_config(), context.config_explain());
+            #[cfg(not(unix))]
+            let (effective_storage, explain_storage) =
                 match crate::execution::config_model::resolve_effective_config_with_explain(
                     &launch_cwd,
-                    &crate::execution::config_model::CliConfigOverrides {
-                        world_enabled: cli_world_enabled,
-                        ..Default::default()
-                    },
+                    &overrides,
                     true,
                 ) {
                     Ok(result) => result,
@@ -200,16 +217,18 @@ pub(crate) fn handle_world_command(
                         std::process::exit(2);
                     }
                 };
+            #[cfg(not(unix))]
+            let (effective, explain) = (&effective_storage, explain_storage.as_ref());
             let world_disable_attribution =
-                resolve_doctor_world_disable_attribution(effective.world.enabled, explain.as_ref());
+                resolve_doctor_world_disable_attribution(effective.world.enabled, explain);
             env::set_var("SUBSTRATE_POLICY_MODE", effective.policy.mode.as_str());
             crate::execution::export_runtime_config_env(&effective);
-            let _ = substrate_broker::set_global_broker(substrate_broker::BrokerHandle::new());
-            let _ = substrate_broker::detect_profile(&launch_cwd);
             let code = world_doctor_main(
                 *json,
                 effective.world.enabled,
                 world_disable_attribution.as_ref(),
+                #[cfg(target_os = "linux")]
+                &context,
                 #[cfg(target_os = "linux")]
                 install_context,
             );
@@ -236,6 +255,30 @@ pub(crate) fn handle_world_command(
             commands::world_enable::run_enable(opts)?;
         }
         WorldAction::Deps(opts) => {
+            #[cfg(unix)]
+            let code = {
+                let launch_cwd = match env::current_dir() {
+                    Ok(cwd) => cwd,
+                    Err(err) => {
+                        eprintln!("substrate world deps: failed to resolve launch cwd: {err}");
+                        std::process::exit(2);
+                    }
+                };
+                let overrides = crate::execution::config_model::CliConfigOverrides::default();
+                let context = match commands::world_deps::bind_authenticated_world_deps_context_v1(
+                    install_context,
+                    &launch_cwd,
+                    &overrides,
+                ) {
+                    Ok(context) => context,
+                    Err(err) => {
+                        eprintln!("substrate world deps: {err:#}");
+                        std::process::exit(2);
+                    }
+                };
+                commands::world_deps::run(opts, cli.no_world, cli.world, &context)
+            };
+            #[cfg(not(unix))]
             let code = commands::world_deps::run(opts, cli.no_world, cli.world);
             std::process::exit(code);
         }
@@ -257,7 +300,13 @@ pub(crate) fn handle_host_command(
 ) -> Result<()> {
     match &cmd.action {
         HostAction::Doctor { json } => {
-            let launch_cwd = env::current_dir().unwrap_or_else(|_| PathBuf::from("."));
+            let launch_cwd = match env::current_dir() {
+                Ok(cwd) => cwd,
+                Err(err) => {
+                    eprintln!("substrate host doctor: failed to resolve launch cwd: {err}");
+                    std::process::exit(2);
+                }
+            };
             let cli_world_enabled = if cli.world {
                 Some(true)
             } else if cli.no_world {
@@ -270,49 +319,44 @@ pub(crate) fn handle_host_command(
                 ..Default::default()
             };
             #[cfg(unix)]
-            let resolved = {
-                let root = TrustedAuthorityRoot::open(std::path::Path::new(
-                    &install_context.context.selected_host_prefix,
-                ));
-                root.map_err(|error| anyhow::anyhow!(error))
-                    .and_then(|root| {
-                        HostSessionAuthority::from_trusted_root(root)
-                            .map_err(|error| anyhow::anyhow!(error))
-                    })
-                    .and_then(|authority| {
-                        crate::execution::config_model::resolve_effective_config_with_explain_for_bootstrap_home(
-                            &launch_cwd,
-                            &overrides,
-                            &authority.bootstrap_home(),
-                            true,
-                        )
-                    })
-            };
-            #[cfg(not(unix))]
-            let resolved = crate::execution::config_model::resolve_effective_config_with_explain(
+            let context = match commands::world_deps::bind_authenticated_world_deps_context_v1(
+                install_context,
                 &launch_cwd,
                 &overrides,
-                true,
-            );
-            let (effective, explain) = match resolved {
-                Ok(result) => result,
+            ) {
+                Ok(context) => context,
                 Err(err) => {
-                    eprintln!("substrate host doctor: {:#}", err);
+                    eprintln!("substrate host doctor: {err:#}");
                     std::process::exit(2);
                 }
             };
+            #[cfg(not(unix))]
+            let (effective_storage, explain_storage) =
+                match crate::execution::config_model::resolve_effective_config_with_explain(
+                    &launch_cwd,
+                    &overrides,
+                    true,
+                ) {
+                    Ok(result) => result,
+                    Err(err) => {
+                        eprintln!("substrate host doctor: {:#}", err);
+                        std::process::exit(2);
+                    }
+                };
+            #[cfg(unix)]
+            let (effective, explain) = (context.effective_config(), context.config_explain());
+            #[cfg(not(unix))]
+            let (effective, explain) = (&effective_storage, explain_storage.as_ref());
             let world_disable_attribution =
-                resolve_doctor_world_disable_attribution(effective.world.enabled, explain.as_ref());
+                resolve_doctor_world_disable_attribution(effective.world.enabled, explain);
             env::set_var("SUBSTRATE_POLICY_MODE", effective.policy.mode.as_str());
             crate::execution::export_runtime_config_env(&effective);
-            let _ = substrate_broker::set_global_broker(substrate_broker::BrokerHandle::new());
-            let _ = substrate_broker::detect_profile(&launch_cwd);
             let code = host_doctor_main(
                 *json,
                 effective.world.enabled,
                 world_disable_attribution.as_ref(),
                 #[cfg(target_os = "linux")]
-                install_context,
+                &context,
             );
             std::process::exit(code);
         }

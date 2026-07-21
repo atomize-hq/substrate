@@ -301,8 +301,17 @@ fn run_enable_with_provision_deps(
 ) -> Result<()> {
     ensure_supported_backend_or_exit();
 
+    let cwd =
+        env::current_dir().context("failed to resolve explicit world-enable workspace scope")?;
     #[cfg(unix)]
-    let substrate_home = PathBuf::from(&install_context.context.selected_host_prefix);
+    let world_deps_context = crate::builtins::world_deps::bind_authenticated_world_deps_context_v1(
+        install_context,
+        &cwd,
+        &crate::execution::config_model::CliConfigOverrides::default(),
+    )?;
+
+    #[cfg(unix)]
+    let substrate_home = PathBuf::from(world_deps_context.selected_host_prefix());
     #[cfg(not(unix))]
     let substrate_home = {
         if let Some(home) = &args.home {
@@ -316,9 +325,13 @@ fn run_enable_with_provision_deps(
     let version_dir = resolve_helper_version_dir(&substrate_home, &helper_override)?;
     enforce_standard_version_dir_preflight(version_dir.as_deref(), &helper_override);
 
-    let cwd = env::current_dir().unwrap_or_else(|_| ".".into());
     let requirements =
-        crate::builtins::world_deps::resolve_effective_enabled_provisioning_requirements_v1(&cwd)?;
+        crate::builtins::world_deps::resolve_effective_enabled_provisioning_requirements_v1(
+            #[cfg(not(unix))]
+            &cwd,
+            #[cfg(unix)]
+            &world_deps_context,
+        )?;
     if !requirements.apt.is_empty() && !requirements.pacman.is_empty() {
         eprintln!(
             "substrate: `substrate world enable --provision-deps` found both apt and pacman packages in the enabled deps set; mixed-manager provisioning is unsupported and exits 4 without mutating the world."
@@ -502,7 +515,10 @@ fn run_enable_with_provision_deps(
         None => {}
         Some(WorldManager::Unsupported) => unreachable!("unsupported required manager"),
     }
-    run_sync_after_provisioning();
+    run_sync_after_provisioning(
+        #[cfg(unix)]
+        &world_deps_context,
+    );
 
     println!(
         "World provisioning complete. Config updated at {}.",
@@ -517,7 +533,9 @@ fn run_enable_with_provision_deps(
     Ok(())
 }
 
-fn run_sync_after_provisioning() {
+fn run_sync_after_provisioning(
+    #[cfg(unix)] context: &crate::builtins::world_deps::AuthenticatedWorldDepsContextV1,
+) {
     let previous_skip_apt = env::var_os("SUBSTRATE_WORLD_DEPS_SKIP_APT");
     let previous_skip_pacman = env::var_os("SUBSTRATE_WORLD_DEPS_SKIP_PACMAN");
     env::set_var("SUBSTRATE_WORLD_DEPS_SKIP_APT", "1");
@@ -534,7 +552,13 @@ fn run_sync_after_provisioning() {
             ),
         }),
     };
-    let exit_code = crate::builtins::world_deps::run(&sync_cmd, false, false);
+    let exit_code = crate::builtins::world_deps::run(
+        &sync_cmd,
+        false,
+        false,
+        #[cfg(unix)]
+        context,
+    );
 
     match previous_skip_apt {
         Some(value) => env::set_var("SUBSTRATE_WORLD_DEPS_SKIP_APT", value),

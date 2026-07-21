@@ -7,6 +7,8 @@ use super::inventory::{
     merge_inventory_layer_v1, summarize_inventory_v1, AptSpecV1, HostPlatform, InstallMethodV1,
     InventoryItemDefV1, InventoryListItemSummaryV1, InventoryViewV1, WrapperDefV1, WrapperKindV1,
 };
+#[cfg(unix)]
+use super::AuthenticatedWorldDepsContextV1;
 use crate::execution::build_agent_client_and_request;
 use crate::execution::config_model;
 use crate::execution::{
@@ -28,6 +30,7 @@ use std::error::Error as StdError;
 use std::fs;
 use std::io::Write;
 use std::path::{Path, PathBuf};
+#[cfg(not(unix))]
 use substrate_common::paths as substrate_paths;
 use tempfile::NamedTempFile;
 use tokio::runtime::Runtime;
@@ -49,8 +52,23 @@ struct ShowOutputV1 {
     item: InventoryItemDefV1,
 }
 
-pub fn run(cmd: &WorldDepsCmd, cli_no_world: bool, _cli_force_world: bool) -> i32 {
+pub fn run(
+    cmd: &WorldDepsCmd,
+    cli_no_world: bool,
+    _cli_force_world: bool,
+    #[cfg(unix)] context: &AuthenticatedWorldDepsContextV1,
+) -> i32 {
+    #[cfg(not(target_os = "linux"))]
+    let result = {
+        #[cfg(unix)]
+        let _ = context;
+        Err(anyhow!(WorldDepsBackendUnavailableError::new(
+            "authenticated world-deps execution is available on Linux only",
+        )))
+    };
+    #[cfg(target_os = "linux")]
     let result = (|| -> Result<()> {
+        context.revalidate_authority()?;
         match &cmd.action {
             WorldDepsAction::Current(current) => {
                 if cli_no_world {
@@ -75,10 +93,10 @@ pub fn run(cmd: &WorldDepsCmd, cli_no_world: bool, _cli_force_world: bool) -> i3
                         _ => {}
                     }
                 }
-                run_current(current)
+                run_current(current, context)
             }
-            WorldDepsAction::Global(global) => run_global(global),
-            WorldDepsAction::Workspace(workspace) => run_workspace(workspace),
+            WorldDepsAction::Global(global) => run_global(global, context),
+            WorldDepsAction::Workspace(workspace) => run_workspace(workspace, context),
         }
     })();
 
@@ -173,45 +191,116 @@ fn looks_like_world_deps_hardening_violation(err: &anyhow::Error) -> bool {
     false
 }
 
-pub(crate) fn run_current(cmd: &WorldDepsCurrentCmd) -> Result<()> {
+pub(crate) fn run_current(
+    cmd: &WorldDepsCurrentCmd,
+    #[cfg(unix)] context: &AuthenticatedWorldDepsContextV1,
+) -> Result<()> {
     match &cmd.action {
-        WorldDepsCurrentAction::List(args) => run_current_list(args),
-        WorldDepsCurrentAction::Show(args) => run_current_show(args),
-        WorldDepsCurrentAction::Install(args) => run_current_install(args),
-        WorldDepsCurrentAction::Sync(args) => run_current_sync(args),
+        WorldDepsCurrentAction::List(args) => run_current_list(
+            args,
+            #[cfg(unix)]
+            context,
+        ),
+        WorldDepsCurrentAction::Show(args) => run_current_show(
+            args,
+            #[cfg(unix)]
+            context,
+        ),
+        WorldDepsCurrentAction::Install(args) => run_current_install(
+            args,
+            #[cfg(unix)]
+            context,
+        ),
+        WorldDepsCurrentAction::Sync(args) => run_current_sync(
+            args,
+            #[cfg(unix)]
+            context,
+        ),
     }
 }
 
-pub(crate) fn run_global(cmd: &WorldDepsGlobalCmd) -> Result<()> {
+pub(crate) fn run_global(
+    cmd: &WorldDepsGlobalCmd,
+    #[cfg(unix)] context: &AuthenticatedWorldDepsContextV1,
+) -> Result<()> {
     match &cmd.action {
-        WorldDepsGlobalAction::List(args) => run_global_list(args),
-        WorldDepsGlobalAction::Add(args) => run_global_add(args),
-        WorldDepsGlobalAction::Remove(args) => run_global_remove(args),
-        WorldDepsGlobalAction::Reset(args) => run_global_reset(args),
+        WorldDepsGlobalAction::List(args) => run_global_list(
+            args,
+            #[cfg(unix)]
+            context,
+        ),
+        WorldDepsGlobalAction::Add(args) => run_global_add(
+            args,
+            #[cfg(unix)]
+            context,
+        ),
+        WorldDepsGlobalAction::Remove(args) => run_global_remove(
+            args,
+            #[cfg(unix)]
+            context,
+        ),
+        WorldDepsGlobalAction::Reset(args) => run_global_reset(
+            args,
+            #[cfg(unix)]
+            context,
+        ),
     }
 }
 
-pub(crate) fn run_workspace(cmd: &WorldDepsWorkspaceCmd) -> Result<()> {
+pub(crate) fn run_workspace(
+    cmd: &WorldDepsWorkspaceCmd,
+    #[cfg(unix)] context: &AuthenticatedWorldDepsContextV1,
+) -> Result<()> {
     match &cmd.action {
-        WorldDepsWorkspaceAction::List(args) => run_workspace_list(args),
-        WorldDepsWorkspaceAction::Add(args) => run_workspace_add(args),
-        WorldDepsWorkspaceAction::Remove(args) => run_workspace_remove(args),
-        WorldDepsWorkspaceAction::Reset(args) => run_workspace_reset(args),
+        WorldDepsWorkspaceAction::List(args) => run_workspace_list(
+            args,
+            #[cfg(unix)]
+            context,
+        ),
+        WorldDepsWorkspaceAction::Add(args) => run_workspace_add(
+            args,
+            #[cfg(unix)]
+            context,
+        ),
+        WorldDepsWorkspaceAction::Remove(args) => run_workspace_remove(
+            args,
+            #[cfg(unix)]
+            context,
+        ),
+        WorldDepsWorkspaceAction::Reset(args) => run_workspace_reset(
+            args,
+            #[cfg(unix)]
+            context,
+        ),
     }
 }
 
-fn run_current_list(args: &WorldDepsCurrentListArgs) -> Result<()> {
+fn run_current_list(
+    args: &WorldDepsCurrentListArgs,
+    #[cfg(unix)] context: &AuthenticatedWorldDepsContextV1,
+) -> Result<()> {
     if args.all && args.view != WorldDepsCurrentListViewArg::Applied {
         return Err(config_model::user_error(
             "--all is only valid for `substrate world deps current list applied`",
         ));
     }
+    #[cfg(unix)]
+    let (cwd, cfg) = (context.launch_cwd(), context.effective_config());
+    #[cfg(not(unix))]
     let cwd = env::current_dir().unwrap_or_else(|_| ".".into());
+    #[cfg(not(unix))]
     let cfg = config_model::resolve_effective_config(&cwd, &Default::default())
         .context("failed to resolve effective config")?;
     let global_deps_dir =
         if cfg.world.deps.inventory_mode == config_model::WorldDepsInventoryMode::Merged {
-            Some(substrate_paths::substrate_home()?.join("deps"))
+            #[cfg(unix)]
+            {
+                Some(context.global_deps_dir().to_path_buf())
+            }
+            #[cfg(not(unix))]
+            {
+                Some(substrate_paths::substrate_home()?.join("deps"))
+            }
         } else {
             None
         };
@@ -246,13 +335,27 @@ fn run_current_list(args: &WorldDepsCurrentListArgs) -> Result<()> {
     }
 }
 
-fn run_current_show(args: &WorldDepsCurrentShowArgs) -> Result<()> {
+fn run_current_show(
+    args: &WorldDepsCurrentShowArgs,
+    #[cfg(unix)] context: &AuthenticatedWorldDepsContextV1,
+) -> Result<()> {
+    #[cfg(unix)]
+    let (cwd, cfg) = (context.launch_cwd(), context.effective_config());
+    #[cfg(not(unix))]
     let cwd = env::current_dir().unwrap_or_else(|_| ".".into());
+    #[cfg(not(unix))]
     let cfg = config_model::resolve_effective_config(&cwd, &Default::default())
         .context("failed to resolve effective config")?;
     let global_deps_dir =
         if cfg.world.deps.inventory_mode == config_model::WorldDepsInventoryMode::Merged {
-            Some(substrate_paths::substrate_home()?.join("deps"))
+            #[cfg(unix)]
+            {
+                Some(context.global_deps_dir().to_path_buf())
+            }
+            #[cfg(not(unix))]
+            {
+                Some(substrate_paths::substrate_home()?.join("deps"))
+            }
         } else {
             None
         };
@@ -262,7 +365,15 @@ fn run_current_show(args: &WorldDepsCurrentShowArgs) -> Result<()> {
     })?;
 
     if args.explain {
-        let explain = build_current_show_explain_v1(&cwd, &cfg, &view, &args.item_name, &item)?;
+        let explain = build_current_show_explain_v1(
+            &cwd,
+            &cfg,
+            &view,
+            &args.item_name,
+            &item,
+            #[cfg(unix)]
+            context,
+        )?;
         if args.json {
             eprintln!("{}", serde_json::to_string(&explain)?);
         } else {
@@ -353,13 +464,27 @@ struct ManualPackagePlanV1 {
     manual_instructions: String,
 }
 
-fn run_current_install(args: &WorldDepsCurrentInstallArgs) -> Result<()> {
+fn run_current_install(
+    args: &WorldDepsCurrentInstallArgs,
+    #[cfg(unix)] context: &AuthenticatedWorldDepsContextV1,
+) -> Result<()> {
+    #[cfg(unix)]
+    let (cwd, cfg) = (context.launch_cwd(), context.effective_config());
+    #[cfg(not(unix))]
     let cwd = env::current_dir().unwrap_or_else(|_| ".".into());
+    #[cfg(not(unix))]
     let cfg = config_model::resolve_effective_config(&cwd, &Default::default())
         .context("failed to resolve effective config")?;
     let global_deps_dir =
         if cfg.world.deps.inventory_mode == config_model::WorldDepsInventoryMode::Merged {
-            Some(substrate_paths::substrate_home()?.join("deps"))
+            #[cfg(unix)]
+            {
+                Some(context.global_deps_dir().to_path_buf())
+            }
+            #[cfg(not(unix))]
+            {
+                Some(substrate_paths::substrate_home()?.join("deps"))
+            }
         } else {
             None
         };
@@ -395,13 +520,27 @@ fn run_current_install(args: &WorldDepsCurrentInstallArgs) -> Result<()> {
     Ok(())
 }
 
-fn run_current_sync(args: &WorldDepsCurrentSyncArgs) -> Result<()> {
+fn run_current_sync(
+    args: &WorldDepsCurrentSyncArgs,
+    #[cfg(unix)] context: &AuthenticatedWorldDepsContextV1,
+) -> Result<()> {
+    #[cfg(unix)]
+    let (cwd, cfg) = (context.launch_cwd(), context.effective_config());
+    #[cfg(not(unix))]
     let cwd = env::current_dir().unwrap_or_else(|_| ".".into());
+    #[cfg(not(unix))]
     let cfg = config_model::resolve_effective_config(&cwd, &Default::default())
         .context("failed to resolve effective config")?;
     let global_deps_dir =
         if cfg.world.deps.inventory_mode == config_model::WorldDepsInventoryMode::Merged {
-            Some(substrate_paths::substrate_home()?.join("deps"))
+            #[cfg(unix)]
+            {
+                Some(context.global_deps_dir().to_path_buf())
+            }
+            #[cfg(not(unix))]
+            {
+                Some(substrate_paths::substrate_home()?.join("deps"))
+            }
         } else {
             None
         };
@@ -1272,10 +1411,109 @@ fn build_world_apt_entrypoint_wrapper_command_v1(entrypoints: &[String]) -> Stri
 #[cfg(test)]
 mod tests {
     use super::*;
+    use crate::execution::install_bootstrap::current_unix_principal_and_home;
+    use serial_test::serial;
     use std::fs;
     use std::os::unix::fs::PermissionsExt;
     use std::process::Command;
-    use tempfile::TempDir;
+    use tempfile::{Builder, TempDir};
+    use transport_api_types::{InstallBootstrapContextCarrierV1, InstallBootstrapContextV1};
+
+    #[test]
+    #[serial]
+    fn authenticated_scope_mutations_select_a_and_leave_conflicting_b_unchanged() {
+        let _authority_env = crate::execution::AuthorityEnvTestGuard::preserve();
+        let (principal, account_home) =
+            current_unix_principal_and_home().expect("current Unix principal");
+        let transport_api_types::PlatformPrincipalV1::Unix { account, uid } = principal else {
+            panic!("expected Unix principal");
+        };
+        let temp = Builder::new()
+            .prefix("substrate-world-deps-scopes-")
+            .tempdir_in(account_home)
+            .expect("secure scope fixture");
+        let selected_a = temp.path().join("selected-a");
+        let ambient_b = temp.path().join("ambient-b");
+        for prefix in [&selected_a, &ambient_b] {
+            fs::create_dir(prefix).expect("create authority prefix");
+            fs::set_permissions(prefix, fs::Permissions::from_mode(0o700))
+                .expect("secure authority prefix");
+            fs::write(
+                prefix.join("config.yaml"),
+                "world:\n  deps:\n    builtins: disabled\n    inventory_mode: merged\n    enabled: []\n",
+            )
+            .expect("write config");
+        }
+        let package = |name: &str| {
+            format!(
+                "version: 1\nname: {name}\nrunnable: false\ninstall:\n  method: manual\n  manual_instructions: test only\n"
+            )
+        };
+        for (prefix, name) in [(&selected_a, "selected-only"), (&ambient_b, "ambient-only")] {
+            let path = prefix.join("deps/packages").join(format!("{name}.yaml"));
+            fs::create_dir_all(path.parent().expect("package parent")).expect("create inventory");
+            fs::write(path, package(name)).expect("write package");
+        }
+        let workspace = temp.path().join("workspace");
+        fs::create_dir_all(workspace.join(".substrate/deps/packages"))
+            .expect("create workspace inventory");
+        fs::write(
+            workspace.join(".substrate/workspace.yaml"),
+            "world:\n  deps:\n    enabled: []\n",
+        )
+        .expect("write workspace config");
+        fs::write(
+            workspace.join(".substrate/deps/packages/workspace-only.yaml"),
+            package("workspace-only"),
+        )
+        .expect("write workspace package");
+
+        let install_context = InstallBootstrapContextV1::new_unix(
+            selected_a.to_str().expect("UTF-8 selected prefix"),
+            &account,
+            uid,
+        )
+        .expect("valid install context");
+        let carrier = InstallBootstrapContextCarrierV1::from_context(install_context)
+            .expect("committed install context");
+        std::env::set_var("SUBSTRATE_HOME", &ambient_b);
+        std::env::set_var("SUBSTRATE_ROOT", &ambient_b);
+        let context = crate::builtins::world_deps::bind_authenticated_world_deps_context_v1(
+            &carrier,
+            &workspace,
+            &config_model::CliConfigOverrides::default(),
+        )
+        .expect("bind authenticated scope context");
+        let ambient_before = fs::read(ambient_b.join("config.yaml")).expect("read ambient config");
+
+        run_global_add(
+            &WorldDepsScopedMutateArgs {
+                item_names: vec!["selected-only".to_string()],
+                json: false,
+            },
+            &context,
+        )
+        .expect("mutate selected global config");
+        run_workspace_add(
+            &WorldDepsScopedMutateArgs {
+                item_names: vec!["workspace-only".to_string()],
+                json: false,
+            },
+            &context,
+        )
+        .expect("mutate explicit workspace config");
+
+        let selected_after =
+            fs::read_to_string(selected_a.join("config.yaml")).expect("read selected config");
+        let workspace_after = fs::read_to_string(workspace.join(".substrate/workspace.yaml"))
+            .expect("read workspace config");
+        assert!(selected_after.contains("selected-only"));
+        assert!(workspace_after.contains("workspace-only"));
+        assert_eq!(
+            fs::read(ambient_b.join("config.yaml")).expect("read ambient config after"),
+            ambient_before
+        );
+    }
 
     #[test]
     fn wdh1_mktemp_template_is_shell_quoted_not_literal_quotes() {
@@ -2160,10 +2398,23 @@ fn build_current_show_explain_v1(
     view: &InventoryViewV1,
     item_name: &str,
     item: &InventoryItemDefV1,
+    #[cfg(unix)] context: &AuthenticatedWorldDepsContextV1,
 ) -> Result<CurrentShowExplainV1> {
     let enabled = cfg.world.deps.enabled.iter().any(|name| name == item_name);
     let enabled_via_global_patch = {
-        let (patch, _) = config_model::read_global_config_patch_or_empty()?;
+        #[cfg(unix)]
+        let path = context.global_config_path();
+        #[cfg(not(unix))]
+        let path = &config_model::global_config_path()?;
+        let patch = match fs::read_to_string(path) {
+            Ok(raw) => config_model::parse_config_patch_yaml(path, &raw)?,
+            Err(err) if err.kind() == std::io::ErrorKind::NotFound => {
+                config_model::SubstrateConfigPatch::default()
+            }
+            Err(err) => {
+                return Err(anyhow!("failed to read {}: {err}", path.display()));
+            }
+        };
         patch
             .world
             .deps
@@ -2324,10 +2575,16 @@ fn wrapper_explain(wrapper: &WrapperDefV1) -> WrapperExplainV1 {
     }
 }
 
-fn run_global_list(args: &WorldDepsScopedListArgs) -> Result<()> {
+fn run_global_list(
+    args: &WorldDepsScopedListArgs,
+    #[cfg(unix)] context: &AuthenticatedWorldDepsContextV1,
+) -> Result<()> {
     match args.view {
         WorldDepsScopedListViewArg::Available => {
             let platform = HostPlatform::current();
+            #[cfg(unix)]
+            let deps_dir = context.global_deps_dir().to_path_buf();
+            #[cfg(not(unix))]
             let deps_dir = substrate_paths::substrate_home()?.join("deps");
             let view = load_inventory_dir_v1(&deps_dir, platform)?;
             let items = summarize_inventory_v1(&view);
@@ -2345,15 +2602,34 @@ fn run_global_list(args: &WorldDepsScopedListArgs) -> Result<()> {
             Ok(())
         }
         WorldDepsScopedListViewArg::Enabled => {
-            let (patch, _) = config_model::read_global_config_patch_or_empty()?;
+            #[cfg(unix)]
+            let path = context.global_config_path();
+            #[cfg(not(unix))]
+            let path = &config_model::global_config_path()?;
+            let patch = match fs::read_to_string(path) {
+                Ok(raw) => config_model::parse_config_patch_yaml(path, &raw)?,
+                Err(err) if err.kind() == std::io::ErrorKind::NotFound => {
+                    config_model::SubstrateConfigPatch::default()
+                }
+                Err(err) => {
+                    return Err(anyhow!("failed to read {}: {err}", path.display()));
+                }
+            };
             print_config_patch(&patch, args.json)
         }
     }
 }
 
-fn run_workspace_list(args: &WorldDepsScopedListArgs) -> Result<()> {
-    let cwd = env::current_dir().unwrap_or_else(|_| ".".into());
-    let workspace_root = crate::execution::find_workspace_root(&cwd)
+fn run_workspace_list(
+    args: &WorldDepsScopedListArgs,
+    #[cfg(unix)] context: &AuthenticatedWorldDepsContextV1,
+) -> Result<()> {
+    #[cfg(unix)]
+    let workspace_root = context.workspace_root().map(Path::to_path_buf);
+    #[cfg(not(unix))]
+    let workspace_root =
+        crate::execution::find_workspace_root(&env::current_dir().unwrap_or_else(|_| ".".into()));
+    let workspace_root = workspace_root
         .ok_or_else(|| config_model::user_error("no workspace root detected for this directory"))?;
 
     match args.view {
@@ -2409,9 +2685,15 @@ const DEFAULT_GLOBAL_WORLD_DEPS_PATCH_HEADER: &str = r#"# Substrate world deps e
 #   - `substrate world deps current list applied`
 "#;
 
-fn run_global_add(args: &WorldDepsScopedMutateArgs) -> Result<()> {
+fn run_global_add(
+    args: &WorldDepsScopedMutateArgs,
+    #[cfg(unix)] context: &AuthenticatedWorldDepsContextV1,
+) -> Result<()> {
     let items = dedupe_ordered(&args.item_names);
-    let view = resolve_global_available_inventory_view()?;
+    let view = resolve_global_available_inventory_view(
+        #[cfg(unix)]
+        context,
+    )?;
 
     let unknown = items
         .iter()
@@ -2425,9 +2707,17 @@ fn run_global_add(args: &WorldDepsScopedMutateArgs) -> Result<()> {
         )));
     }
 
+    #[cfg(unix)]
+    let path = context.global_config_path().to_path_buf();
+    #[cfg(not(unix))]
     let path = config_model::global_config_path()?;
-    let (mut patch, existed) = config_model::read_global_config_patch_or_empty()
-        .with_context(|| format!("failed to load global config patch at {}", path.display()))?;
+    let (mut patch, existed) = match fs::read_to_string(&path) {
+        Ok(raw) => (config_model::parse_config_patch_yaml(&path, &raw)?, true),
+        Err(err) if err.kind() == std::io::ErrorKind::NotFound => {
+            (config_model::SubstrateConfigPatch::default(), false)
+        }
+        Err(err) => return Err(anyhow!("failed to read {}: {err}", path.display())),
+    };
 
     let before = patch.world.deps.enabled.clone().unwrap_or_default();
     let added = items
@@ -2480,13 +2770,23 @@ fn run_global_add(args: &WorldDepsScopedMutateArgs) -> Result<()> {
     Ok(())
 }
 
-fn run_global_remove(args: &WorldDepsScopedMutateArgs) -> Result<()> {
+fn run_global_remove(
+    args: &WorldDepsScopedMutateArgs,
+    #[cfg(unix)] context: &AuthenticatedWorldDepsContextV1,
+) -> Result<()> {
     let items = dedupe_ordered(&args.item_names);
-    let cwd = env::current_dir().unwrap_or_else(|_| ".".into());
 
+    #[cfg(unix)]
+    let path = context.global_config_path().to_path_buf();
+    #[cfg(not(unix))]
     let path = config_model::global_config_path()?;
-    let (mut patch, existed) = config_model::read_global_config_patch_or_empty()
-        .with_context(|| format!("failed to load global config patch at {}", path.display()))?;
+    let (mut patch, existed) = match fs::read_to_string(&path) {
+        Ok(raw) => (config_model::parse_config_patch_yaml(&path, &raw)?, true),
+        Err(err) if err.kind() == std::io::ErrorKind::NotFound => {
+            (config_model::SubstrateConfigPatch::default(), false)
+        }
+        Err(err) => return Err(anyhow!("failed to read {}: {err}", path.display())),
+    };
 
     let before = patch.world.deps.enabled.clone().unwrap_or_default();
     let removed = items
@@ -2536,7 +2836,13 @@ fn run_global_remove(args: &WorldDepsScopedMutateArgs) -> Result<()> {
     println!("substrate: note: 'remove' only updates enabled deps; it does not uninstall. Run 'substrate world deps current sync' to apply");
 
     if !removed.is_empty() {
-        if let Some(workspace_root) = crate::execution::find_workspace_root(&cwd) {
+        #[cfg(unix)]
+        let workspace_root = context.workspace_root().map(Path::to_path_buf);
+        #[cfg(not(unix))]
+        let workspace_root = crate::execution::find_workspace_root(
+            &env::current_dir().unwrap_or_else(|_| ".".into()),
+        );
+        if let Some(workspace_root) = workspace_root {
             let ws_patch_path = workspace_marker_path(&workspace_root);
             let raw = fs::read_to_string(&ws_patch_path)
                 .with_context(|| format!("failed to read {}", ws_patch_path.display()))?;
@@ -2553,10 +2859,21 @@ fn run_global_remove(args: &WorldDepsScopedMutateArgs) -> Result<()> {
     Ok(())
 }
 
-fn run_global_reset(args: &WorldDepsScopedResetArgs) -> Result<()> {
+fn run_global_reset(
+    args: &WorldDepsScopedResetArgs,
+    #[cfg(unix)] context: &AuthenticatedWorldDepsContextV1,
+) -> Result<()> {
+    #[cfg(unix)]
+    let path = context.global_config_path().to_path_buf();
+    #[cfg(not(unix))]
     let path = config_model::global_config_path()?;
-    let (mut patch, existed) = config_model::read_global_config_patch_or_empty()
-        .with_context(|| format!("failed to load global config patch at {}", path.display()))?;
+    let (mut patch, existed) = match fs::read_to_string(&path) {
+        Ok(raw) => (config_model::parse_config_patch_yaml(&path, &raw)?, true),
+        Err(err) if err.kind() == std::io::ErrorKind::NotFound => {
+            (config_model::SubstrateConfigPatch::default(), false)
+        }
+        Err(err) => return Err(anyhow!("failed to read {}: {err}", path.display())),
+    };
 
     let changed = config_model::reset_patch_keys(&mut patch, &["world.deps.enabled".to_string()])?;
     if changed {
@@ -2593,17 +2910,37 @@ fn run_global_reset(args: &WorldDepsScopedResetArgs) -> Result<()> {
     Ok(())
 }
 
-fn run_workspace_add(args: &WorldDepsScopedMutateArgs) -> Result<()> {
+fn run_workspace_add(
+    args: &WorldDepsScopedMutateArgs,
+    #[cfg(unix)] context: &AuthenticatedWorldDepsContextV1,
+) -> Result<()> {
+    #[cfg(unix)]
+    let (cwd, cfg, workspace_root) = (
+        context.launch_cwd(),
+        context.effective_config(),
+        context.workspace_root().map(Path::to_path_buf),
+    );
+    #[cfg(not(unix))]
     let cwd = env::current_dir().unwrap_or_else(|_| ".".into());
-    let workspace_root = crate::execution::find_workspace_root(&cwd)
+    #[cfg(not(unix))]
+    let cfg = config_model::resolve_effective_config(&cwd, &Default::default())
+        .context("failed to resolve effective config")?;
+    #[cfg(not(unix))]
+    let workspace_root = crate::execution::find_workspace_root(&cwd);
+    let workspace_root = workspace_root
         .ok_or_else(|| config_model::user_error("no workspace root detected for this directory"))?;
 
     let items = dedupe_ordered(&args.item_names);
-    let cfg = config_model::resolve_effective_config(&cwd, &Default::default())
-        .context("failed to resolve effective config")?;
     let global_deps_dir =
         if cfg.world.deps.inventory_mode == config_model::WorldDepsInventoryMode::Merged {
-            Some(substrate_paths::substrate_home()?.join("deps"))
+            #[cfg(unix)]
+            {
+                Some(context.global_deps_dir().to_path_buf())
+            }
+            #[cfg(not(unix))]
+            {
+                Some(substrate_paths::substrate_home()?.join("deps"))
+            }
         } else {
             None
         };
@@ -2668,9 +3005,16 @@ fn run_workspace_add(args: &WorldDepsScopedMutateArgs) -> Result<()> {
     Ok(())
 }
 
-fn run_workspace_remove(args: &WorldDepsScopedMutateArgs) -> Result<()> {
-    let cwd = env::current_dir().unwrap_or_else(|_| ".".into());
-    let workspace_root = crate::execution::find_workspace_root(&cwd)
+fn run_workspace_remove(
+    args: &WorldDepsScopedMutateArgs,
+    #[cfg(unix)] context: &AuthenticatedWorldDepsContextV1,
+) -> Result<()> {
+    #[cfg(unix)]
+    let workspace_root = context.workspace_root().map(Path::to_path_buf);
+    #[cfg(not(unix))]
+    let workspace_root =
+        crate::execution::find_workspace_root(&env::current_dir().unwrap_or_else(|_| ".".into()));
+    let workspace_root = workspace_root
         .ok_or_else(|| config_model::user_error("no workspace root detected for this directory"))?;
 
     let items = dedupe_ordered(&args.item_names);
@@ -2722,7 +3066,19 @@ fn run_workspace_remove(args: &WorldDepsScopedMutateArgs) -> Result<()> {
     println!("substrate: note: 'remove' only updates enabled deps; it does not uninstall. Run 'substrate world deps current sync' to apply");
 
     if !removed.is_empty() {
-        let (global_patch, _) = config_model::read_global_config_patch_or_empty()?;
+        #[cfg(unix)]
+        let global_path = context.global_config_path();
+        #[cfg(not(unix))]
+        let global_path = &config_model::global_config_path()?;
+        let global_patch = match fs::read_to_string(global_path) {
+            Ok(raw) => config_model::parse_config_patch_yaml(global_path, &raw)?,
+            Err(err) if err.kind() == std::io::ErrorKind::NotFound => {
+                config_model::SubstrateConfigPatch::default()
+            }
+            Err(err) => {
+                return Err(anyhow!("failed to read {}: {err}", global_path.display()));
+            }
+        };
         let global_enabled = global_patch.world.deps.enabled.unwrap_or_default();
         for item in removed {
             if global_enabled.iter().any(|name| name == &item) {
@@ -2734,9 +3090,16 @@ fn run_workspace_remove(args: &WorldDepsScopedMutateArgs) -> Result<()> {
     Ok(())
 }
 
-fn run_workspace_reset(args: &WorldDepsScopedResetArgs) -> Result<()> {
-    let cwd = env::current_dir().unwrap_or_else(|_| ".".into());
-    let workspace_root = crate::execution::find_workspace_root(&cwd)
+fn run_workspace_reset(
+    args: &WorldDepsScopedResetArgs,
+    #[cfg(unix)] context: &AuthenticatedWorldDepsContextV1,
+) -> Result<()> {
+    #[cfg(unix)]
+    let workspace_root = context.workspace_root().map(Path::to_path_buf);
+    #[cfg(not(unix))]
+    let workspace_root =
+        crate::execution::find_workspace_root(&env::current_dir().unwrap_or_else(|_| ".".into()));
+    let workspace_root = workspace_root
         .ok_or_else(|| config_model::user_error("no workspace root detected for this directory"))?;
 
     let path = workspace_marker_path(&workspace_root);
@@ -3523,9 +3886,14 @@ fn shell_escape_item_name(name: &str) -> String {
     }
 }
 
-fn resolve_global_available_inventory_view() -> Result<InventoryViewV1> {
+fn resolve_global_available_inventory_view(
+    #[cfg(unix)] context: &AuthenticatedWorldDepsContextV1,
+) -> Result<InventoryViewV1> {
     let platform = HostPlatform::current();
     let mut view = builtin_inventory_v1(platform);
+    #[cfg(unix)]
+    let global_deps_dir = context.global_deps_dir().to_path_buf();
+    #[cfg(not(unix))]
     let global_deps_dir = substrate_paths::substrate_home()?.join("deps");
     merge_inventory_layer_v1(
         &mut view,
