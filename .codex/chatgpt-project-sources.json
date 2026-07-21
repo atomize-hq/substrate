@@ -58,7 +58,8 @@
       "crates/agent-drift-analyzer/tests/fixtures/progress_acceptance/**"
     ],
     "allowed_new_file_patterns": [
-      "docs/specs/sfr/**"
+      "crates/agent-session-compactor/src/**",
+      "crates/agent-session-compactor/tests/**"
     ],
     "max_files": 600,
     "max_bytes_per_file": 5000000,
