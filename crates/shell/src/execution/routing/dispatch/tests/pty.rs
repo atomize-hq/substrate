@@ -485,6 +485,12 @@ fn test_peel_wrappers() {
 
 #[test]
 fn test_needs_pty_ssh() {
+    if crate::execution::run_in_bounded_test_subprocess(
+        concat!(module_path!(), "::", stringify!(test_needs_pty_ssh)),
+        "broker",
+    ) {
+        return;
+    }
     with_test_mode(|| {
         // SSH without remote command needs PTY
         assert!(needs_pty("ssh host"), "ssh host should need PTY");
@@ -527,6 +533,12 @@ fn test_needs_pty_ssh() {
 
 #[test]
 fn test_needs_pty_known_tuis() {
+    if crate::execution::run_in_bounded_test_subprocess(
+        concat!(module_path!(), "::", stringify!(test_needs_pty_known_tuis)),
+        "broker",
+    ) {
+        return;
+    }
     with_test_mode(|| {
         // Known TUI editors
         assert!(needs_pty("vim"));
@@ -555,6 +567,12 @@ fn test_needs_pty_known_tuis() {
 
 #[test]
 fn test_needs_pty_shell_meta() {
+    if crate::execution::run_in_bounded_test_subprocess(
+        concat!(module_path!(), "::", stringify!(test_needs_pty_shell_meta)),
+        "broker",
+    ) {
+        return;
+    }
     with_test_mode(|| {
         // Commands with pipes don't need PTY by default
         assert!(!needs_pty("ls | grep txt"));
@@ -568,8 +586,8 @@ fn test_needs_pty_shell_meta() {
 
 #[test]
 fn test_is_force_pty_command() {
-    // Save and remove SUBSTRATE_FORCE_PTY if it exists
-    let old_force = std::env::var("SUBSTRATE_FORCE_PTY").ok();
+    let authority_env = crate::execution::AuthorityEnvTestGuard::preserve();
+    let expected_after_restore = is_force_pty_command("ls");
     std::env::remove_var("SUBSTRATE_FORCE_PTY");
 
     // :pty prefix forces PTY
@@ -587,15 +605,35 @@ fn test_is_force_pty_command() {
     assert!(is_force_pty_command("ls"));
     assert!(is_force_pty_command("echo hello"));
 
-    // Restore original state
-    match old_force {
-        Some(val) => std::env::set_var("SUBSTRATE_FORCE_PTY", val),
-        None => std::env::remove_var("SUBSTRATE_FORCE_PTY"),
-    }
+    let (started_tx, started_rx) = std::sync::mpsc::channel();
+    let (observed_tx, observed_rx) = std::sync::mpsc::channel();
+    let competitor = std::thread::spawn(move || {
+        started_tx.send(()).expect("stable reader started");
+        let _stable_reader = crate::execution::AuthorityEnvTestGuard::preserve();
+        observed_tx
+            .send(is_force_pty_command("ls"))
+            .expect("stable reader result");
+    });
+    started_rx.recv().expect("stable reader started");
+    assert!(
+        observed_rx
+            .recv_timeout(std::time::Duration::from_millis(100))
+            .is_err(),
+        "stable reader bypassed the authority-environment owner"
+    );
+    drop(authority_env);
+    assert_eq!(
+        observed_rx
+            .recv_timeout(std::time::Duration::from_secs(5))
+            .expect("stable reader after restoration"),
+        expected_after_restore
+    );
+    competitor.join().expect("stable reader thread");
 }
 
 #[test]
 fn test_is_pty_disabled() {
+    let _authority_env = crate::execution::AuthorityEnvTestGuard::preserve();
     // Test with env var not set
     env::remove_var("SUBSTRATE_DISABLE_PTY");
     assert!(!is_pty_disabled());
@@ -609,50 +647,93 @@ fn test_is_pty_disabled() {
 #[test]
 #[cfg(unix)]
 fn test_stdin_nonblock_roundtrip() {
-    // Test that O_NONBLOCK can be set and restored correctly
-    // This verifies the save/restore behavior that TerminalGuard relies on
-    use std::io;
+    use crate::execution::TestSubprocessExpectation;
     use std::os::unix::io::AsRawFd;
+    use std::process::Stdio;
 
-    unsafe {
-        let fd = io::stdin().as_raw_fd();
+    let test_name = concat!(
+        module_path!(),
+        "::",
+        stringify!(test_stdin_nonblock_roundtrip)
+    );
+    for role in ["ordinary", "panic", "abort", "timeout"] {
+        if crate::execution::is_bounded_test_subprocess_child(test_name, role) {
+            let fd = std::io::stdin().as_raw_fd();
+            let flags_before = unsafe { libc::fcntl(fd, libc::F_GETFL) };
+            assert_ne!(flags_before, -1, "get isolated stdin flags");
+            assert_eq!(
+                unsafe { libc::fcntl(fd, libc::F_SETFL, flags_before | libc::O_NONBLOCK) },
+                0,
+                "set isolated stdin nonblocking"
+            );
+            let flags_during = unsafe { libc::fcntl(fd, libc::F_GETFL) };
+            assert_ne!(flags_during, -1, "read isolated stdin flags");
+            assert_ne!(
+                flags_during & libc::O_NONBLOCK,
+                0,
+                "isolated child must exercise fd-0 mutation"
+            );
+            crate::execution::publish_test_subprocess_state_ready(test_name, role);
+            match role {
+                "ordinary" => {
+                    assert_eq!(
+                        unsafe { libc::fcntl(fd, libc::F_SETFL, flags_before) },
+                        0,
+                        "restore isolated stdin flags"
+                    );
+                    assert_eq!(
+                        unsafe { libc::fcntl(fd, libc::F_GETFL) },
+                        flags_before,
+                        "isolated stdin flags round trip"
+                    );
+                    return;
+                }
+                "panic" => panic!("intentional isolated fd-0 panic"),
+                "abort" => std::process::abort(),
+                "timeout" => loop {
+                    std::thread::park();
+                },
+                _ => unreachable!(),
+            }
+        }
+    }
 
-        // Get current flags
-        let flags_before = libc::fcntl(fd, libc::F_GETFL);
-        assert!(flags_before != -1, "Failed to get stdin flags");
-
-        // Mimic TerminalGuard behavior: set O_NONBLOCK
-        let result = libc::fcntl(fd, libc::F_SETFL, flags_before | libc::O_NONBLOCK);
-        assert!(result != -1, "Failed to set O_NONBLOCK");
-
-        // Verify O_NONBLOCK is set
-        let flags_after = libc::fcntl(fd, libc::F_GETFL);
-        assert!(
-            flags_after != -1,
-            "Failed to get flags after setting O_NONBLOCK"
+    let parent_fd = std::io::stdin().as_raw_fd();
+    let parent_flags = unsafe { libc::fcntl(parent_fd, libc::F_GETFL) };
+    assert_ne!(parent_flags, -1, "get parent stdin flags");
+    let roles = [
+        ("ordinary", TestSubprocessExpectation::Success),
+        ("panic", TestSubprocessExpectation::ExitCode(101)),
+        ("abort", TestSubprocessExpectation::Signal(libc::SIGABRT)),
+        (
+            "timeout",
+            TestSubprocessExpectation::Timeout(std::time::Duration::from_secs(1)),
+        ),
+    ];
+    for (role, expectation) in roles {
+        crate::execution::run_bounded_test_subprocess_role(
+            test_name,
+            role,
+            Stdio::null(),
+            expectation,
+            true,
         );
-        assert!(
-            flags_after & libc::O_NONBLOCK != 0,
-            "O_NONBLOCK should be set"
-        );
-
-        // Restore original flags
-        let result = libc::fcntl(fd, libc::F_SETFL, flags_before);
-        assert!(result != -1, "Failed to restore original flags");
-
-        // Verify restoration
-        let flags_restored = libc::fcntl(fd, libc::F_GETFL);
-        assert!(flags_restored != -1, "Failed to get restored flags");
         assert_eq!(
-            flags_restored & libc::O_NONBLOCK,
-            flags_before & libc::O_NONBLOCK,
-            "O_NONBLOCK state should be restored to original"
+            unsafe { libc::fcntl(parent_fd, libc::F_GETFL) },
+            parent_flags,
+            "isolated fd-0 role changed parent flags: {role}"
         );
     }
 }
 
 #[test]
 fn test_needs_pty_integration() {
+    if crate::execution::run_in_bounded_test_subprocess(
+        concat!(module_path!(), "::", stringify!(test_needs_pty_integration)),
+        "broker",
+    ) {
+        return;
+    }
     with_test_mode(|| {
         // Interactive shells need PTY
         assert!(needs_pty("bash"));
@@ -683,6 +764,16 @@ fn test_needs_pty_integration() {
 
 #[test]
 fn test_needs_pty_ssh_variations() {
+    if crate::execution::run_in_bounded_test_subprocess(
+        concat!(
+            module_path!(),
+            "::",
+            stringify!(test_needs_pty_ssh_variations)
+        ),
+        "broker",
+    ) {
+        return;
+    }
     with_test_mode(|| {
         // SSH with -T flag should not get PTY
         assert!(!needs_pty("ssh -T host 'cmd'"));
@@ -763,6 +854,12 @@ fn test_needs_pty_ssh_variations() {
 
 #[test]
 fn test_needs_pty_quoted_args() {
+    if crate::execution::run_in_bounded_test_subprocess(
+        concat!(module_path!(), "::", stringify!(test_needs_pty_quoted_args)),
+        "broker",
+    ) {
+        return;
+    }
     with_test_mode(|| {
         // Quoted filename with spaces
         assert!(needs_pty("vim 'a b.txt'"));
@@ -775,6 +872,16 @@ fn test_needs_pty_quoted_args() {
 
 #[test]
 fn test_needs_pty_pipes_redirects() {
+    if crate::execution::run_in_bounded_test_subprocess(
+        concat!(
+            module_path!(),
+            "::",
+            stringify!(test_needs_pty_pipes_redirects)
+        ),
+        "broker",
+    ) {
+        return;
+    }
     with_test_mode(|| {
         // Pipes should prevent PTY
         assert!(!needs_pty("ls | less"));
@@ -794,6 +901,12 @@ fn test_needs_pty_pipes_redirects() {
 
 #[test]
 fn test_repl_heuristic() {
+    if crate::execution::run_in_bounded_test_subprocess(
+        concat!(module_path!(), "::", stringify!(test_repl_heuristic)),
+        "broker",
+    ) {
+        return;
+    }
     with_test_mode(|| {
         // Interactive REPL (no args) should get PTY
         assert!(needs_pty("python"));
@@ -820,6 +933,12 @@ fn test_repl_heuristic() {
 
 #[test]
 fn test_debugger_pty() {
+    if crate::execution::run_in_bounded_test_subprocess(
+        concat!(module_path!(), "::", stringify!(test_debugger_pty)),
+        "broker",
+    ) {
+        return;
+    }
     with_test_mode(|| {
         // Debuggers should get PTY
         assert!(needs_pty("python -m pdb script.py"));
@@ -832,6 +951,12 @@ fn test_debugger_pty() {
 
 #[test]
 fn test_windows_exe_handling() {
+    if crate::execution::run_in_bounded_test_subprocess(
+        concat!(module_path!(), "::", stringify!(test_windows_exe_handling)),
+        "broker",
+    ) {
+        return;
+    }
     with_test_mode(|| {
         // Windows-style paths with .exe should work
         if cfg!(windows) {
@@ -844,6 +969,12 @@ fn test_windows_exe_handling() {
 
 #[test]
 fn test_container_k8s_pty() {
+    if crate::execution::run_in_bounded_test_subprocess(
+        concat!(module_path!(), "::", stringify!(test_container_k8s_pty)),
+        "broker",
+    ) {
+        return;
+    }
     with_test_mode(|| {
         // Docker/Podman commands with -it should get PTY
         assert!(needs_pty("docker run -it ubuntu bash"));
@@ -883,6 +1014,12 @@ fn test_container_k8s_pty() {
 
 #[test]
 fn test_wrapper_commands() {
+    if crate::execution::run_in_bounded_test_subprocess(
+        concat!(module_path!(), "::", stringify!(test_wrapper_commands)),
+        "broker",
+    ) {
+        return;
+    }
     with_test_mode(|| {
         // sshpass wrapper
         assert!(needs_pty("sshpass -p x ssh host"));
@@ -915,6 +1052,13 @@ fn test_wrapper_commands() {
 
 #[test]
 fn test_pipeline_last_tui() {
+    if crate::execution::run_in_bounded_test_subprocess(
+        concat!(module_path!(), "::", stringify!(test_pipeline_last_tui)),
+        "broker",
+    ) {
+        return;
+    }
+    let _authority_env = crate::execution::AuthorityEnvTestGuard::preserve();
     with_test_mode(|| {
         // This test requires SUBSTRATE_PTY_PIPELINE_LAST to be set
         let old_pipeline = std::env::var("SUBSTRATE_PTY_PIPELINE_LAST").ok();
@@ -942,6 +1086,16 @@ fn test_pipeline_last_tui() {
 
 #[test]
 fn test_ssh_spacing_edge_cases() {
+    if crate::execution::run_in_bounded_test_subprocess(
+        concat!(
+            module_path!(),
+            "::",
+            stringify!(test_ssh_spacing_edge_cases)
+        ),
+        "broker",
+    ) {
+        return;
+    }
     with_test_mode(|| {
         // SSH with spaces around = in options (OpenSSH accepts this)
         assert!(needs_pty("ssh -o RequestTTY = yes host"));
@@ -958,6 +1112,7 @@ fn test_ssh_spacing_edge_cases() {
 
 #[test]
 fn test_force_vs_disable_precedence() {
+    let _authority_env = crate::execution::AuthorityEnvTestGuard::preserve();
     // Test that force overrides disable at the execute_command level
     let old_disable = std::env::var("SUBSTRATE_DISABLE_PTY").ok();
     let old_force = std::env::var("SUBSTRATE_FORCE_PTY").ok();
@@ -989,6 +1144,12 @@ fn test_force_vs_disable_precedence() {
 
 #[test]
 fn test_git_commit_edit_flag() {
+    if crate::execution::run_in_bounded_test_subprocess(
+        concat!(module_path!(), "::", stringify!(test_git_commit_edit_flag)),
+        "broker",
+    ) {
+        return;
+    }
     with_test_mode(|| {
         // git commit -e can override -m to open editor
         assert!(needs_pty("git commit -m 'msg' -e"));

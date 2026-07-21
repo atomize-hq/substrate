@@ -5,10 +5,12 @@
 pub mod common;
 
 use assert_cmd::Command;
+use parking_lot::{ReentrantMutex, ReentrantMutexGuard};
 use std::env;
+use std::ffi::{OsStr, OsString};
 use std::fs;
 use std::path::{Path, PathBuf};
-use std::sync::{Arc, Mutex};
+use std::sync::{Arc, Mutex, OnceLock};
 use std::time::{Duration, Instant};
 use tempfile::{Builder, TempDir};
 
@@ -23,6 +25,43 @@ pub use repl_world_service::{
 };
 
 pub const PAYLOAD_MARKER: &str = "__SUBSTRATE_PAYLOAD__";
+
+static AUTHORITY_ENV_LOCK: OnceLock<ReentrantMutex<()>> = OnceLock::new();
+
+struct AuthorityEnvGuard {
+    previous_home: Option<OsString>,
+    previous_world_socket: Option<OsString>,
+    _lock: ReentrantMutexGuard<'static, ()>,
+}
+
+impl AuthorityEnvGuard {
+    fn set_home(value: impl AsRef<OsStr>) -> Self {
+        let lock = AUTHORITY_ENV_LOCK
+            .get_or_init(|| ReentrantMutex::new(()))
+            .lock();
+        let previous_home = env::var_os("SUBSTRATE_HOME");
+        let previous_world_socket = env::var_os("SUBSTRATE_WORLD_SOCKET");
+        env::set_var("SUBSTRATE_HOME", value);
+        Self {
+            previous_home,
+            previous_world_socket,
+            _lock: lock,
+        }
+    }
+}
+
+impl Drop for AuthorityEnvGuard {
+    fn drop(&mut self) {
+        match self.previous_home.as_deref() {
+            Some(value) => env::set_var("SUBSTRATE_HOME", value),
+            None => env::remove_var("SUBSTRATE_HOME"),
+        }
+        match self.previous_world_socket.as_deref() {
+            Some(value) => env::set_var("SUBSTRATE_WORLD_SOCKET", value),
+            None => env::remove_var("SUBSTRATE_WORLD_SOCKET"),
+        }
+    }
+}
 
 pub fn get_substrate_binary() -> Command {
     substrate_shell_driver()
@@ -195,17 +234,12 @@ pub fn persist_runtime_alert_for_substrate_home(
     item_id: &str,
     message: Option<String>,
 ) {
-    let previous_substrate_home = env::var_os("SUBSTRATE_HOME");
-    env::set_var("SUBSTRATE_HOME", substrate_home);
+    let _authority_env = AuthorityEnvGuard::set_home(substrate_home);
     let result =
         substrate_shell::execution::agent_dev_support::persist_runtime_alert_for_dev_support(
             orchestration_session_id,
             item_id,
             message,
         );
-    match previous_substrate_home {
-        Some(previous) => env::set_var("SUBSTRATE_HOME", previous),
-        None => env::remove_var("SUBSTRATE_HOME"),
-    }
     result.expect("persist runtime alert through authoritative state store");
 }

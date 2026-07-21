@@ -337,6 +337,16 @@ mod tests {
 
     #[test]
     fn active_guard_resets_flag_on_drop() {
+        if crate::execution::run_in_bounded_test_subprocess(
+            concat!(
+                module_path!(),
+                "::",
+                stringify!(active_guard_resets_flag_on_drop)
+            ),
+            "pty_active",
+        ) {
+            return;
+        }
         let previous = PTY_ACTIVE.swap(true, Ordering::SeqCst);
 
         {
@@ -355,6 +365,7 @@ mod tests {
     #[test]
     #[serial]
     fn terminal_size_uses_non_zero_dimensions() {
+        let _authority_env = crate::execution::AuthorityEnvTestGuard::preserve();
         let _env_guard = EnvGuard::new();
         std::env::set_var("LINES", "30");
         std::env::set_var("COLUMNS", "100");
@@ -367,7 +378,201 @@ mod tests {
 
     #[test]
     fn minimal_terminal_guard_handles_creation() {
-        let result = MinimalTerminalGuard::new();
-        assert!(result.is_ok() || result.is_err());
+        #[cfg(unix)]
+        {
+            use crate::execution::TestSubprocessExpectation;
+            use nix::sys::termios::{tcgetattr, LocalFlags};
+            use std::os::fd::{AsRawFd, BorrowedFd};
+            use std::process::Stdio;
+
+            let test_name = concat!(
+                module_path!(),
+                "::",
+                stringify!(minimal_terminal_guard_handles_creation)
+            );
+            for role in ["ordinary", "panic", "abort", "timeout"] {
+                if crate::execution::is_bounded_test_subprocess_child(test_name, role) {
+                    let stdin_fd = std::io::stdin().as_raw_fd();
+                    let stdin_fd = unsafe { BorrowedFd::borrow_raw(stdin_fd) };
+                    let termios_before = tcgetattr(stdin_fd).expect("read isolated PTY mode");
+                    let guard = MinimalTerminalGuard::new()
+                        .expect("create terminal guard over isolated PTY slave");
+                    let termios_during = tcgetattr(stdin_fd).expect("read isolated raw PTY mode");
+                    assert!(
+                        !termios_during
+                            .local_flags
+                            .intersects(LocalFlags::ECHO | LocalFlags::ICANON | LocalFlags::ISIG),
+                        "isolated terminal guard must execute the raw-mode mutation"
+                    );
+                    crate::execution::publish_test_subprocess_state_ready(test_name, role);
+                    match role {
+                        "ordinary" => {
+                            drop(guard);
+                            assert_eq!(
+                                tcgetattr(stdin_fd).expect("read restored isolated PTY mode"),
+                                termios_before,
+                                "isolated terminal guard must restore the exact PTY mode"
+                            );
+                            return;
+                        }
+                        "panic" => panic!("intentional isolated terminal-mode panic"),
+                        "abort" => std::process::abort(),
+                        "timeout" => loop {
+                            std::thread::park();
+                        },
+                        _ => unreachable!(),
+                    }
+                }
+            }
+
+            let parent_fd = std::io::stdin().as_raw_fd();
+            let parent_fd = unsafe { BorrowedFd::borrow_raw(parent_fd) };
+            let parent_mode = tcgetattr(parent_fd).ok();
+            let roles = [
+                ("ordinary", TestSubprocessExpectation::Success),
+                ("panic", TestSubprocessExpectation::ExitCode(101)),
+                ("abort", TestSubprocessExpectation::Signal(libc::SIGABRT)),
+                (
+                    "timeout",
+                    TestSubprocessExpectation::Timeout(std::time::Duration::from_secs(1)),
+                ),
+            ];
+            for (role, expectation) in roles {
+                let nix::pty::OpenptyResult { master, slave } =
+                    nix::pty::openpty(None, None).expect("open isolated PTY pair");
+                let _master = master;
+                crate::execution::run_bounded_test_subprocess_role(
+                    test_name,
+                    role,
+                    Stdio::from(std::fs::File::from(slave)),
+                    expectation,
+                    true,
+                );
+                assert_eq!(
+                    tcgetattr(parent_fd).ok(),
+                    parent_mode,
+                    "isolated terminal-mode role changed the parent terminal: {role}"
+                );
+            }
+        }
+
+        #[cfg(windows)]
+        {
+            use crate::execution::TestSubprocessExpectation;
+            use std::os::windows::io::AsRawHandle;
+            use std::process::Stdio;
+            use windows_sys::Win32::System::Console::{
+                GetConsoleMode, GetStdHandle, SetStdHandle, ENABLE_ECHO_INPUT, ENABLE_LINE_INPUT,
+                ENABLE_PROCESSED_INPUT, ENABLE_VIRTUAL_TERMINAL_INPUT, STD_INPUT_HANDLE,
+            };
+
+            let test_name = concat!(
+                module_path!(),
+                "::",
+                stringify!(minimal_terminal_guard_handles_creation)
+            );
+            for role in ["ordinary", "panic", "abort", "timeout"] {
+                if crate::execution::is_bounded_test_subprocess_child(test_name, role) {
+                    let console_input = std::fs::OpenOptions::new()
+                        .read(true)
+                        .write(true)
+                        .open("CONIN$")
+                        .expect("open isolated Windows console input");
+                    let console_input_handle = console_input.as_raw_handle();
+                    assert_ne!(
+                        unsafe { SetStdHandle(STD_INPUT_HANDLE, console_input_handle) },
+                        0,
+                        "install isolated Windows console input"
+                    );
+                    let mut mode_before = 0;
+                    assert_ne!(
+                        unsafe { GetConsoleMode(console_input_handle, &mut mode_before) },
+                        0,
+                        "read isolated Windows console mode"
+                    );
+                    let guard = MinimalTerminalGuard::new()
+                        .expect("create terminal guard over isolated Windows console");
+                    let mut mode_during = 0;
+                    assert_ne!(
+                        unsafe { GetConsoleMode(console_input_handle, &mut mode_during) },
+                        0,
+                        "read isolated raw Windows console mode"
+                    );
+                    assert_eq!(
+                        mode_during
+                            & (ENABLE_ECHO_INPUT | ENABLE_LINE_INPUT | ENABLE_PROCESSED_INPUT),
+                        0,
+                        "isolated Windows terminal guard must disable cooked input modes"
+                    );
+                    assert_ne!(
+                        mode_during & ENABLE_VIRTUAL_TERMINAL_INPUT,
+                        0,
+                        "isolated Windows terminal guard must enable virtual terminal input"
+                    );
+                    crate::execution::publish_test_subprocess_state_ready(test_name, role);
+                    match role {
+                        "ordinary" => {
+                            drop(guard);
+                            let mut mode_after = 0;
+                            assert_ne!(
+                                unsafe { GetConsoleMode(console_input_handle, &mut mode_after) },
+                                0,
+                                "read restored isolated Windows console mode"
+                            );
+                            assert_eq!(mode_after, mode_before);
+                            return;
+                        }
+                        "panic" => panic!("intentional isolated Windows terminal-mode panic"),
+                        "abort" => std::process::abort(),
+                        "timeout" => loop {
+                            std::thread::park();
+                        },
+                        _ => unreachable!(),
+                    }
+                }
+            }
+
+            let parent_stdin = unsafe { GetStdHandle(STD_INPUT_HANDLE) };
+            let mut parent_mode_before = 0;
+            let parent_has_console =
+                unsafe { GetConsoleMode(parent_stdin, &mut parent_mode_before) } != 0;
+            let roles = [
+                ("ordinary", TestSubprocessExpectation::Success),
+                ("panic", TestSubprocessExpectation::ExitCode(101)),
+                ("abort", TestSubprocessExpectation::Failure),
+                (
+                    "timeout",
+                    TestSubprocessExpectation::Timeout(std::time::Duration::from_secs(1)),
+                ),
+            ];
+            for (role, expectation) in roles {
+                crate::execution::run_bounded_test_subprocess_role(
+                    test_name,
+                    role,
+                    Stdio::null(),
+                    expectation,
+                    true,
+                );
+                if parent_has_console {
+                    let mut parent_mode_after = 0;
+                    assert_ne!(
+                        unsafe { GetConsoleMode(parent_stdin, &mut parent_mode_after) },
+                        0,
+                        "read parent Windows console mode after isolated child"
+                    );
+                    assert_eq!(
+                        parent_mode_after, parent_mode_before,
+                        "isolated Windows terminal-mode role changed the parent console: {role}"
+                    );
+                }
+            }
+            return;
+        }
+
+        #[cfg(not(any(unix, windows)))]
+        {
+            let result = MinimalTerminalGuard::new();
+            assert!(result.is_ok() || result.is_err());
+        }
     }
 }

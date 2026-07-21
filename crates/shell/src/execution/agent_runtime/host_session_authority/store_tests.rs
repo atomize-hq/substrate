@@ -3398,7 +3398,7 @@ fn conflicting_subprocess_cas_has_one_winner_and_exact_restart_join() {
 
 #[test]
 fn legacy_owned_lock_is_released_when_holder_process_exits() {
-    use std::io::{BufRead as _, Write as _};
+    use std::io::{BufRead as _, Read as _, Write as _};
 
     const CHILD_TEST: &str = "execution::agent_runtime::host_session_authority::store::tests::legacy_owned_lock_is_released_when_holder_process_exits";
     const CHILD_SENTINEL: &str = "A1_OWNED_LOCK_CHILD_HOLDING";
@@ -3406,7 +3406,10 @@ fn legacy_owned_lock_is_released_when_holder_process_exits() {
         let _guard = legacy_writer_guard(std::path::Path::new(&root_path)).unwrap();
         println!("{CHILD_SENTINEL}");
         std::io::stdout().flush().unwrap();
-        std::thread::sleep(std::time::Duration::from_secs(60));
+        let mut release = [0_u8; 1];
+        std::io::stdin()
+            .read_exact(&mut release)
+            .expect("legacy lock child release pipe");
         return;
     }
 
@@ -3414,6 +3417,7 @@ fn legacy_owned_lock_is_released_when_holder_process_exits() {
     let mut child = std::process::Command::new(std::env::current_exe().unwrap())
         .args(["--exact", CHILD_TEST, "--nocapture"])
         .env("SUBSTRATE_A1_OWNED_LOCK_CHILD_ROOT", root.path())
+        .stdin(std::process::Stdio::piped())
         .stdout(std::process::Stdio::piped())
         .spawn()
         .unwrap();
@@ -3656,26 +3660,21 @@ fn authority_preflight_reconciles_temp_before_missing_or_unsafe_strict_component
 #[test]
 #[serial_test::serial]
 fn legacy_transaction_ignores_environment_and_cwd_after_admission() {
+    let _authority_boundary = crate::execution::AuthorityEnvTestGuard::preserve();
     let bootstrap = root();
     let unrelated = root();
-    let original_cwd = std::env::current_dir().unwrap();
-    let original_home = std::env::var_os("SUBSTRATE_HOME");
     let mut transaction = begin_legacy_state_store_transaction(bootstrap.path()).unwrap();
 
-    std::env::set_var("SUBSTRATE_HOME", unrelated.path());
-    std::env::set_current_dir(unrelated.path()).unwrap();
-    let outcome = transaction.write_file(
-        LegacyStateStoreCollectionV1::Participants,
-        &["retained-root.json"],
-        br#"{"root":"retained"}"#,
-        [0x11; 16],
-    );
-    std::env::set_current_dir(original_cwd).unwrap();
-    if let Some(value) = original_home {
-        std::env::set_var("SUBSTRATE_HOME", value);
-    } else {
-        std::env::remove_var("SUBSTRATE_HOME");
-    }
+    let outcome = {
+        let _cwd = crate::execution::ProcessCwdTestGuard::change_to(unrelated.path());
+        let _authority_env = crate::execution::AuthorityEnvTestGuard::set_home(unrelated.path());
+        transaction.write_file(
+            LegacyStateStoreCollectionV1::Participants,
+            &["retained-root.json"],
+            br#"{"root":"retained"}"#,
+            [0x11; 16],
+        )
+    };
 
     outcome.unwrap();
     transaction.finish().unwrap();

@@ -506,6 +506,17 @@ mod tests {
     #[test]
     #[serial]
     fn configure_manager_init_generates_snippet_and_exports_env() {
+        if crate::execution::run_in_bounded_test_subprocess(
+            concat!(
+                module_path!(),
+                "::",
+                stringify!(configure_manager_init_generates_snippet_and_exports_env)
+            ),
+            "trace",
+        ) {
+            return;
+        }
+        let _authority_env = crate::execution::AuthorityEnvTestGuard::preserve();
         let temp = tempdir().unwrap();
         let detect_path = temp.path().join("detect-me");
         fs::write(&detect_path, "detect").unwrap();
@@ -549,6 +560,17 @@ mod tests {
     #[test]
     #[serial]
     fn configure_manager_init_honors_overlay_file() {
+        if crate::execution::run_in_bounded_test_subprocess(
+            concat!(
+                module_path!(),
+                "::",
+                stringify!(configure_manager_init_honors_overlay_file)
+            ),
+            "trace",
+        ) {
+            return;
+        }
+        let _authority_env = crate::execution::AuthorityEnvTestGuard::preserve();
         let temp = tempdir().unwrap();
         let manifest_contents = format!(
             "version: 2\nmanagers:\n  - name: Demo\n    detect:\n      files: ['{}']\n    init:\n      shell: |\n        export BASE=1\n",
@@ -597,6 +619,17 @@ managers:
     #[test]
     #[serial]
     fn manager_env_script_sources_manager_and_legacy_snippets() {
+        if crate::execution::run_in_bounded_test_subprocess(
+            concat!(
+                module_path!(),
+                "::",
+                stringify!(manager_env_script_sources_manager_and_legacy_snippets)
+            ),
+            "trace",
+        ) {
+            return;
+        }
+        let _authority_env = crate::execution::AuthorityEnvTestGuard::preserve();
         let temp = tempdir().unwrap();
         let config = test_shell_config(&temp);
         #[cfg(unix)]
@@ -621,6 +654,17 @@ managers:
 
     #[test]
     fn configure_child_shell_env_clears_inherited_manager_env_guard() {
+        if crate::execution::run_in_bounded_test_subprocess(
+            concat!(
+                module_path!(),
+                "::",
+                stringify!(configure_child_shell_env_clears_inherited_manager_env_guard)
+            ),
+            "trace",
+        ) {
+            return;
+        }
+        let _authority_env = crate::execution::AuthorityEnvTestGuard::preserve();
         let temp = tempdir().unwrap();
         let config = test_shell_config(&temp);
         let mut adapter = RecordingEnvAdapter::default();
@@ -636,6 +680,7 @@ managers:
     #[test]
     #[serial]
     fn manager_manifest_base_path_prefers_env_override() {
+        let _authority_env = crate::execution::AuthorityEnvTestGuard::preserve();
         let temp = tempdir().unwrap();
         let override_path = temp.path().join("custom.yaml");
         let previous = set_env(
