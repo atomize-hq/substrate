@@ -4,7 +4,7 @@
 **Scope:** planning, contracts, sequencing, and proof gates; not implementation history
 **Source directive:** [`../../substrate-runtime-refactor-directive-revised.md`](../../substrate-runtime-refactor-directive-revised.md)
 **Repo-truth snapshot:** 2026-07-17 at `6ab2a515e13946324d0aac25b144e1c3408cb2c1`; re-check live code before every slice
-**Current authorized increment:** `A1.1d-5R2-2F0b — deterministic renderer-output test isolation`; R2-2E is implementation-, proof-, and review-complete, F0/F0a remain incomplete with both pre- and post-fork-remediation candidates preserved, F0b is planned and authorized but incomplete and unimplemented, F remains blocked pending combined F0/F0a/F0b proof, and R2-2 remains incomplete.
+**Current authorized increment:** `A1.1d-5R2-2F0/F0a/F0b/Harness combined implementation and canonical closeout`; R2-2E is implementation-, proof-, and review-complete, F0/F0a/F0b remain planned and incomplete with both F0/F0a candidates preserved, the F0-HC audit/authorization prerequisite is complete, F remains blocked pending combined proof, and R2-2 remains incomplete.
 
 ## Canonical repo location
 
@@ -209,12 +209,13 @@ convergent. Remediation remains bounded to **A1.1d-5R1 → A1.1d-5R2 → A1.1d-5
 implemented and review-clean through `4d0acff68e20d86b97fe5367b8a4617554f33ef4`.
 **A1.1d-5R2-0 is planning-complete, and A1.1d-5R2-1 is implementation- and review-complete through
 `2653c2ef20ae2e119a444811e6fb46e86d1a6ec6`.** R2 remains sequenced as
-**R2-1 → R2-2 Routes A–E → R2-2F0/F0a implementation → R2-2F0b → combined F0/F0a/F0b canonical closeout → R2-2F → R2-2 integration closeout → R2-3 → R2-4**,
+**R2-1 → R2-2 Routes A–E → F0/F0a/F0b planned → F0-HC audit/authorization → combined F0/F0a/F0b/Harness implementation and canonical closeout → R2-2F → R2-2 integration closeout → R2-3 → R2-4**,
 followed by R3. Routes A–D are individually review-clean, but the failed integration closeout proved
 that R2-2 is incomplete and unpublished. R2-2E is now implementation-, proof-, and review-complete;
 R2-2F0/F0a are authorized but incomplete, their focused proof is not closeout proof, and both exact
-pre- and post-fork-remediation candidates are preserved rather than landed. R2-2F0b is the exact
-next authorized prerequisite. R2-2F, renewed
+pre- and post-fork-remediation candidates are preserved rather than landed. R2-2F0b remains
+planned and incomplete; F0-HC is audit-complete, and the combined F0/F0a/F0b/Harness implementation and canonical closeout is the
+exact next task. R2-2F, renewed
 R2-2 closeout, R2-3, R2-4, and R3 remain
 unstarted. Until the
 remaining implementation packets are review-clean and their Linux lifecycle/product smoke passes,
@@ -258,8 +259,8 @@ A1.1d and A1 remain incomplete, B3.1 remains blocked, and the R2 packets/R3 rema
 owned; R2-1 is complete and R2-2 is in progress through review-clean Routes A, B, C, and D. The
 failed Routes A–D integration closeout is blocker evidence rather than a completed packet; R2-2E is
 implementation-, proof-, and review-complete, R2-2F0/F0a are authorized but incomplete, and
-R2-2F0b is the exact next authorized test-only prerequisite. R2-2F follows combined
-F0/F0a/F0b closeout; renewed
+R2-2F0b remains planned and incomplete; F0-HC is audit-complete and the combined
+F0/F0a/F0b/Harness implementation and canonical closeout is next. R2-2F follows that closeout; renewed
 closeout, R2-3/R2-4/R3 remain unstarted. Static macOS/Windows
 inspection in R2-0 is not native platform proof.
 
@@ -358,8 +359,9 @@ process-global writer lock/registry, environment-selected sink, reporter filteri
 retries, thread reduction, ignored tests, and assertion weakening are forbidden. No production
 caller or product behavior changes, and no seam is promoted.
 
-The exact sequence is **Routes A–E → F0/F0a implementation → F0b → combined F0/F0a/F0b canonical
-closeout → R2-2F → renewed R2-2 integration closeout → R2-3 → R2-4 → R3**. E and F are logically
+The exact sequence is **Routes A–E → F0/F0a/F0b planned → F0-HC audit and consolidated
+authorization → combined F0/F0a/F0b/Harness implementation and canonical closeout → F → renewed R2-2
+integration closeout → R2-3 → R2-4 → R3**. E and F are logically
 separable but use this
 deterministic order so
 F can reuse E's canonical projection entrypoint without overlapping ownership. No seam is promoted,
@@ -442,3 +444,44 @@ Retained Inspect/Cancel/Stop remain on unchanged compatibility paths for B3.2/B4
 as a joint-closeout failure-to-pass transition.
 B2.2/B3.2 retain the deferred receipt-UX and broader retained-lifecycle work after A1 and the named
 A2/A3 boundaries. Similarly named event, span, or payload fields are not closure evidence.
+
+## A1.1d-5R2-2F0-HC shell-harness closure audit
+
+`A1.1d-5R2-2F0-HC` is complete as a bounded evidence and authorization prerequisite inside
+canonical slice A1. It is not a new top-level slice or product seam. The audit started from the
+published F0b documentation commit `c079aeed748120cff9b03079e996d00109a05800` (tree
+`905cf110f648188b1a2e9a0087b4ffbb4c89e168`) while the source worktree remained at replayed E
+`06c928443a93579899e5e5827b151f530e1be933` (tree
+`dfe15d93366655e9855bca40ad0607887f545637`). It changed documentation only.
+
+The complete shell-library process closure contains 38 resource rows: environment 4, fixed file
+descriptors 3, process working state 3, global hooks/subscribers 4, static registries/singletons 11,
+filesystem/sockets/ports 4, time/scheduling 3, background lifetime 3, and test-runner coordination
+3. Every row has exactly one primary disposition: 7 `UnifiedProcessStateLock`, 4
+`ExplicitDependencyInjection`, 1 `TerminationConfirmedTeardown`, 1
+`DeterministicSynchronization`, 7 `SubprocessIsolation`, 17 `ProvenConcurrencySafe`, and 1
+`SeparatelyOwnedDeferred`. The reconciled row ledger and proof are in
+[04-contracts-and-gates.md](04-contracts-and-gates.md#a11d-5r2-2f0-hc-complete-process-resource-ledger),
+and empirical transitions are in
+[05-debug-regression-ledger.md](05-debug-regression-ledger.md#a11d-5r2-2f0-hc-empirical-closure-record).
+
+The audit proves eight additional harness-interference families beyond the already-known HOME,
+world-socket, and descriptor-capture families: ambient selector versus stable reader, current
+directory versus stable path derivation, global trace-output retargeting, environment-dependent
+socket-activation cache persistence, private retry-hook replacement, dispatch-tracker fixture-key
+collision, mutable global-broker policy replacement, and active-PTY control replacement. It also
+finds a tenth abort-without-awaited-termination test and predictable
+private stop-socket paths that survive a failed test process. These findings are consolidated into
+one future harness boundary; they do not create F0c/F0d/F0e packets.
+
+The canonical sequence is now:
+
+`Routes A–E` → `F0/F0a/F0b planned` → `F0-HC audit and consolidated authorization` →
+`combined F0/F0a/F0b/Harness implementation and canonical closeout` → `F` →
+`renewed R2-2 integration closeout` → `R2-3` → `R2-4` → `R3`.
+
+F0, F0a, F0b, and their combined closeout remain incomplete. F, renewed R2-2 closeout, R2-3,
+R2-4, and R3 remain unstarted. No runtime implementation, user-facing behavior change, production
+registry, capability change, policy change, or seam promotion is authorized by F0-HC. The two
+preserved F0/F0a candidates remain evidence only; the corrected post-fork-remediation full-index
+SHA-256 is `9e012c68ea33107443cd38f2051aa40aae9f0f03d5c6abb4c630d418b0d7dee2`.

@@ -840,7 +840,8 @@ review-clean but did not close every authenticated-context consumer. R2-2E has s
 proved the gateway projection without changing Routes A–D; all five routes are individually
 review-clean. R2-2 stays incomplete pending combined F0/F0a/F0b, F, and the renewed integration
 closeout. F0/F0a are authorized but incomplete, with both exact candidates preserved rather than
-landed; F0b is next. The following table preserves E's reviewed historical source-closure boundary
+landed; F0b remains planned and incomplete, F0-HC is audit-complete, and combined F0/F0a/F0b/Harness
+implementation/closeout is next. The following table preserves E's reviewed historical source-closure boundary
 and freezes F0/F0a/F0b/F's remaining boundaries;
 brace groups are exact symbol sets, not file wildcards.
 
@@ -958,8 +959,9 @@ concurrent exclusion all pass), but its final broad runs were `1118 passed / 150
 passed / 149 failed`. The extra failure is
 `dispatch_contract_adapter_active_task_resolution_requires_supervisor_claim`, normalized as
 `resolve exact B-owned acceptance authority: open activated versioned authority layout`. It passes
-alone. F0a remains an authorized part of the combined candidate, not a waiver of F0 proof; F0b is
-now the **exact next authorized prerequisite**.
+alone. F0a remains an authorized part of the combined candidate, not a waiver of F0 proof; F0b
+remains planned and incomplete, F0-HC is audit-complete, and the combined F0/F0a/F0b/Harness
+implementation/closeout is the **exact next task**.
 
 1. The exact HOME minimal pair is the target above plus
    `prompt_submit_continuity_prefers_persisted_session_contract`. In canonical same-process
@@ -1066,7 +1068,7 @@ test-infrastructure contract:
 
 R2-2F's binding contract is exact:
 
-F is the **exact next increment after combined F0/F0a/F0b closeout**, but it is not active or
+F is the **exact next increment after combined F0/F0a/F0b/Harness implementation and canonical closeout**, but it is not active or
 implemented. It starts from the post-closeout replayed runtime commit and tree recorded by the
 dedicated preservation ref and completion checkpoint. Routes A–E and F0/F0a/F0b are immutable prior
 evidence. Its clean comparison baseline is the deterministic value recorded by combined closeout,
@@ -6149,3 +6151,170 @@ A contract is not considered landed until tests prove:
 10. B1/B2.1 production proof shows both accepted work families enter the durable supervisor without
     a legacy-writer attempt, caller/foreground drop does not erase truth, and B3.1 begins only after
     the joint closeout.
+
+## A1.1d-5R2-2F0-HC complete process-resource ledger
+
+This is the durable closure inventory for the process running `cargo test -p shell --lib`. It was
+formed by two independent methods: lexical scanning of all `crates/shell/src` test modules found
+1,303 source test functions, while the same-file helper/call parser closed 5,070 functions and
+initially recognized 1,302 tests before the independent scan restored the multiline-attribute
+`execution/lock.rs::test_concurrent_lock_attempts`; and symbol, caller, reader, and execution-flow
+inspection used refreshed GitNexus plus source closure where the graph under-resolved `cfg(test)`
+code. The first parser found 506 environment-dependent tests in 31 files; manual dynamic-key
+wrapper closure added the twelve F0a tests in four files enumerated in `02`, yielding the binding
+518-test/35-file union. The Linux test binary discovered 1,263 runnable tests. Known integration
+parent-mutators were inspected only for helper and inherited-child contracts.
+
+The environment closure found 80 exact names (some are only projected into a child):
+`ANTHROPIC_API_KEY`, `API_TOKEN`, `BASH_ENV`, `CODEX_HOME`, `COLUMNS`, `EXPORT_COMPLEX`, `HOME`,
+`LIMA_VM_NAME`, `LINES`, `OLDPWD`, `OPENAI_API_KEY`, `PATH`, `PLAIN_VALUE`, `PWD`, `SHIM_ACTIVE`,
+`SHIM_ORIGINAL_PATH`, `SHIM_PARENT_SPAN`, `SHIM_SESSION_ID`, `SHIM_TRACE_LOG`,
+`SUBSTRATE_A1_REPLACEMENT_CHILD_ROOT`, `SUBSTRATE_AGENT_TOOLBOX_ENDPOINT`,
+`SUBSTRATE_AGENT_TOOLBOX_VERSION`, `SUBSTRATE_ANCHOR_MODE`, `SUBSTRATE_ANCHOR_PATH`,
+`SUBSTRATE_CAGED`, `SUBSTRATE_COMMAND_SUCCESS_EVENTS`, `SUBSTRATE_DISABLE_PTY`,
+`SUBSTRATE_ENABLE_PREEXEC`, `SUBSTRATE_FORCE_PTY`, `SUBSTRATE_HOME`,
+`SUBSTRATE_INSTALL_BOOTSTRAP_CONTEXT_V1`, `SUBSTRATE_INSTALL_HOST_CONTEXT_COMMITMENT`,
+`SUBSTRATE_INSTALL_PRIMARY_UID`, `SUBSTRATE_INSTALL_PRIMARY_USER`,
+`SUBSTRATE_INTERNAL_CODEX_AUTH_SEED_HOME`,
+`SUBSTRATE_LIMA_VM_NAME`,
+`SUBSTRATE_LLM_BACKEND_AUTH_CLI_CODEX_ACCESS_TOKEN`,
+`SUBSTRATE_LLM_BACKEND_AUTH_CLI_CODEX_ACCOUNT_ID`, `SUBSTRATE_MANAGER_ENV`,
+`SUBSTRATE_MANAGER_ENV_ACTIVE`, `SUBSTRATE_MANAGER_INIT`, `SUBSTRATE_MANAGER_INIT_DEBUG`,
+`SUBSTRATE_MANAGER_INIT_POWERSHELL`, `SUBSTRATE_MANAGER_MANIFEST`, `SUBSTRATE_NO_SHIMS`,
+`SUBSTRATE_ORIGINAL_BASH_ENV`, `SUBSTRATE_OVERRIDE_WORLD`, `SUBSTRATE_PARENT_SPAN_ID`,
+`SUBSTRATE_POLICY_MODE`, `SUBSTRATE_PTY_PIPELINE_LAST`,
+`SUBSTRATE_R0_RETAINED_SUBPROCESS_VARIANT`, `SUBSTRATE_REPLAY_USE_WORLD`,
+`SUBSTRATE_REPLAY_VERBOSE`, `SUBSTRATE_ROOT`, `SUBSTRATE_SHELL`, `SUBSTRATE_SKIP_MANAGER_INIT`,
+`SUBSTRATE_SKIP_MANAGER_INIT_LIST`, `SUBSTRATE_SOCKET_ACTIVATION_OVERRIDE`,
+`SUBSTRATE_SYSTEMCTL_TIMEOUT_MS`, `SUBSTRATE_TEST_LOCAL_WORLD_ID`,
+`SUBSTRATE_TEST_SHARED_WORLD_METADATA_ROOT`, `SUBSTRATE_WORLD`,
+`SUBSTRATE_WORLD_DEPS_GUEST_BIN_DIR`, `SUBSTRATE_WORLD_DEPS_SKIP_APT`,
+`SUBSTRATE_WORLD_DEPS_SKIP_PACMAN`, `SUBSTRATE_WORLD_ENABLED`,
+`SUBSTRATE_WORLD_FAIL_CLOSED_ROUTING`, `SUBSTRATE_WORLD_FS_ENFORCEMENT_PLAN_B64`,
+`SUBSTRATE_WORLD_FS_ISOLATION`, `SUBSTRATE_WORLD_FS_MODE`, `SUBSTRATE_WORLD_ID`,
+`SUBSTRATE_WORLD_NET_FILTER`, `SUBSTRATE_WORLD_PROJECT_DIR`,
+`SUBSTRATE_WORLD_REQUEST_PROFILE`, `SUBSTRATE_WORLD_REQUIRE_WORLD`,
+`SUBSTRATE_WORLD_SOCKET`, `TEST_ENV_KEY`, `TEST_MODE`, `UNSET_ME`, and `USERPROFILE`.
+No test-process mutation of an XDG variable was found, so XDG readers remain in row A3.
+`SUBSTRATE_ROOT` is mutated by the four dynamic-wrapper/F0a families enumerated in `02` and belongs
+to A2. Environment values, credentials, and complete paths were not emitted by diagnostic probes.
+
+### Identity and use closure
+
+“Direct tests” counts the source-closed tests that directly use, or reach a same-file helper using,
+the resource. Counts overlap between rows and are not test totals. `All` means the single
+shell-library process; `child` means an intentionally inherited helper process.
+
+| ID | Category and exact resource | Mutating symbols | Reading symbols / helper family | Direct tests | Scope / cfg | Current guard or isolation | Known evidence / competing tests | GitNexus impact |
+|---|---|---|---|---:|---|---|---|---|
+| A1 | Environment: `HOME`, `SUBSTRATE_HOME`, `SUBSTRATE_WORLD_SOCKET` | `std::env::{set_var,remove_var}`, `EnvVarGuard`, `with_store`, `with_env_var`, manual save/restore | authority/store/socket/path resolvers; F0/F0a helper families | 456 / 20 files | All; Unix plus cfg-specific readers | reentrant `WORLD_ENV_LOCK`, local guards, `#[serial]` islands | HOME and socket races proven; 11 unannotated dependents; mixed snapshots possible | `with_test_mode` HIGH; many test symbols under-resolved |
+| A2 | Other ambient selectors, including `SUBSTRATE_ROOT`: the remaining directly or dynamically mutated names in the 80-name closure | same APIs plus `set_env`/`restore_env`, `ProcessStateGuard::set`, `EnvGuard::apply`, `ProjectionEnvGuard`, and file-local wrappers | PTY, world, shim, manager, trace, policy, profile, install and terminal-size readers | 113 / 22 files: 101 additive plus 12 already-authorized F0a | All; cfg varies | local guards and `#[serial]`; 13 additive unannotated | `SUBSTRATE_FORCE_PTY` stable-reader race proven; any concurrent ambient mutator competes | `is_force_pty_command` HIGH; production readers frozen |
+| A3 | Read-only XDG variables and other immutable ambient reads | none in shell-library tests | config/home/root readers | 0 mutators | All / cfg varies | immutable during this binary | source closure found no writer; cannot form a same-process pair | source-only; no future edit |
+| A4 | Child-only `Command::{env,env_remove,env_clear}` projections among the 80 names | command builders in test helpers | child bootstrap/probe decoders | 14 child spawners plus helper callers | child / cfg varies | per-`Command` environment | parent process is not mutated; exact child inheritance is intentional | LOW/source-closed |
+| B1 | fd 1/fd 2 replacement: `dup`, `dup2`, `pipe`, `close` in capture helpers | `capture_stdout_once`, `capture_stderr_once` | two `PublicPromptRenderer` fallback tests; libtest reporter is competing writer | 2 | All / Unix | manual descriptor save/restore | stdout contamination proven; stderr structurally identical | renderer MEDIUM; capture helpers LOW |
+| B2 | fd 0 `O_NONBLOCK` flag and terminal/console input mode | `test_stdin_nonblock_roundtrip` via `fcntl(F_SETFL)`; `minimal_terminal_guard_handles_creation` via `MinimalTerminalGuard::new` | libtest/input consumers and terminal/console state readers | 2 | All / Unix flag plus Unix/Windows terminal cfg | manual exact flag/mode restore | fixed descriptor is shared despite restoration; inherited child fd 0 would share the same open-file description | test symbols under-resolved |
+| B3 | Child/local descriptors and inherited listener descriptors | pipe/listener/child builders | same fixture owner | 103 listener-dependent; 14 child-spawn-dependent | test/child / cfg varies | OS ownership plus joined fixture | no fixed-number replacement in parent; ownership remains local | LOW/source-closed |
+| C1 | Process CWD | `set_current_dir`, `DirGuard`, direct/manual wrappers | `WorldRootSettings::effective_root`, config/workspace/root readers | 100 / 10 files | All / all platforms | `cwd_lock` in routing helpers, `#[serial]`, local guards | forced stable-reader race proven; one unannotated helper-closed test | `effective_root` HIGH, 2 direct / 1 process |
+| C2 | umask | self-spawned sentinel test child | child filesystem creation | 22 helper-closed; 1 direct | child / Unix | child saves and restores exact mode | parent umask never changes; child exits after restore | LOW/source-closed |
+| C3 | locale, timezone, process title, current-user/account overrides | none found | ordinary OS/account readers | 0 | All / cfg varies | immutable in this test process | exhaustive lexical categories found no mutator | no future impact |
+| D1 | Global trace context/output | test `set_global_trace_context` + `init_trace(Some(...))` in routing/manager helpers | `append_to_trace`, telemetry and trace writers | 13 direct helper callers | All / all platforms | reset then global initialize; no ownership guard | forced output-owner replacement proven | `TraceContext::init_trace` MEDIUM; helper graph under-resolved |
+| D2 | Private stop retry callback slot | `PrivateStopTransportRetryHookGuard::install` / Drop-clear | `request_private_stop*` hook read | 9 | All / Unix tests | mutex protects slot access, not owner lifetime | forced hook replacement proven | private/test graph under-resolved |
+| D3 | Production signal/Ctrl-C handlers, including `initialize_global_sigwinch_handler_impl` | production initialization only | runtime signal consumers and the SIGWINCH background thread | 0 test installers/callers | product process / cfg varies | production lifecycle owner | source call closure proves no shell-library unit test calls `execute_with_pty`, so this handler/thread is never installed by this binary | production PTY/signal lifecycle owner |
+| D4 | Panic hooks, tracing subscribers, global logger, allocator/runtime hooks | none found in shell-library tests | default libtest/runtime infrastructure | 0 | All | immutable/default | lexical and helper closure found no installer | no future impact |
+| E1 | Existing environment coordination topology | `WORLD_ENV_LOCK`, `world_env_guard`, file-local env mutexes | all A1/A2 writers and stable readers | 518 / 35 files | All | one partial reentrant lock plus lock islands | opposite helper order and incomplete participation; `#[serial]` insufficient | shared helper historical HIGH |
+| E2 | `AGENT_EVENT_SENDER` / `EVENT_TEST_GUARD` | `init_event_channel`, `clear_agent_event_sender`; guard accessor `acquire_event_test_guard` | `publish_agent_event`, `agent_event_sender`, and publication readers | 10 guarded tests | All | two mutexes; poison `expect`/manual clear | competing stable readers are not excluded by file-local guard | private registry, source-closed |
+| E3 | Non-keyed `REPORT_CACHE` | `refresh_socket_activation_report` | `socket_activation_report` | 1 mutating focused test | All / Linux behavior | mutex, no key or per-test reset | cache survives exact PATH/timeout restoration; proven | refresh HIGH, 3 direct / 3 process families |
+| E4 | `CONFIG_PATCH_CACHE`, `POLICY_SNAPSHOT_CACHE` | keyed cache insert/update | exact path/file-stat keyed readers | multiple temp-root tests | All | mutex and exact workspace/global path keys | different fixtures cannot alias without same exact key/stat | production-adjacent but no edit |
+| E5 | `WorldDispatchConcurrencyTracker` global maps | acquire/release test paths | cap/session lookup | 4 direct tracker tests plus fixture callers | All | mutex; key is caller session ID | forced reused-ID cap consumption proven | production tracker adjacency; private injection only |
+| E6 | `PTY_ACTIVE` atomic | `active_guard_resets_flag_on_drop` | PTY routing/load checks | 1 direct mutator | All | atomic and RAII for product work | test can overwrite a real concurrent PTY state | production readers frozen |
+| E7 | `world::SessionWorld` shared test-root override | two shell tests set/reset override | world metadata root readers | 2 | All / tests | currently held under world environment guard | safe only while unified guard participation remains complete | graph source-closed |
+| E8 | Platform `GLOBAL_CTX` / Windows `CONTEXT` non-resettable initialization | no Linux-wall test mutation | platform context readers | 0 in Linux wall | platform cfg | once-only immutable initialization | cannot change after initialization and absent from active cfg | production platform owner frozen |
+| E9 | Immutable `OnceLock` values, regexes, instance IDs, monotonic atomics | one-time initialization / atomic increments | same thread-safe primitives | many readers | All | `OnceLock`, immutable values, atomics | values do not depend on mutable env/CWD/user/policy paths | LOW/source-closed |
+| E10 | `ACTIVE_PTY` registry and Windows `WIN_PTY_INPUT_GATE` | `ActivePtyGuard::register` / Drop-clear; Windows guard toggles the input gate | `active_pty_control` and PTY control dispatch readers | 1 direct test | All; additional gate on Windows | mutex/RAII, but one process-global owner slot | forced overlap proved a second registration replaces the first test's control | `ActivePtyGuard::register` LOW, one direct caller |
+| E11 | `substrate_broker::GLOBAL_BROKER` mutable broker singleton | `with_test_mode`, `set_policy_mode`, policy initialization/reload paths | `policy_mode`, broker evaluation and selector readers | 23 exact tests | All / cfg varies | `OnceLock<BrokerHandle>` containing mutable `RwLock<PolicyBroker>`; no owner-scoped reset | forced overlap proved a stable reader observes another test's policy mutation | `set_policy_mode` LOW/under-resolved; source closure exact |
+| F1 | Predictable private stop/cancel/prompt/startup/toolbox socket paths, especially `/tmp/substrate-agent-hub-stop/sessdispatch-*.sock` | exact 62 test bodies and their test-owned short root/home/store construction in `02` | corresponding stop/cancel/prompt/startup/toolbox clients | 62 exact tests: 36 orchestrator plus 26 async-REPL | host filesystem / Unix | some TempDir roots; some path-length fallbacks to predictable `/tmp` names | stale `sessdispatch-ashmember.sock` caused `AddrInUse`; six new stale stop nodes observed | direct path plus registration-helper closure exact in `02` |
+| F2 | Unique TempDir Unix/TCP listeners | `UnixListener::bind`, `TcpListener::bind` on fixture-owned roots/port 0 | paired client/tasks | 103 helper-closed; 68 direct | fixture / cfg varies | unique temp root or kernel-assigned port; awaited owner | no cross-test alias when teardown is awaited | LOW/source-closed |
+| F3 | Fixed TCP ports and inherited service endpoints | no fixed test bind found; child endpoint projection only | test client fixtures | 0 fixed-port mutators | child/fixture | kernel port 0 or explicit unique endpoint | no competing fixed port in shell lib process | no future impact |
+| F4 | Cross-process lock files and private authority/temp roots | child/store fixture writers | exact-root store readers | 14 child spawners plus store suites | filesystem/child | exact private root, durable lock/CAS | proven safe when each test owns its root; parent ambient roots handled by A1 | store symbols production-adjacent, frozen |
+| G1 | Wall-clock sleeps used to create ordering | 19 exact direct sleep tests in seven allowlisted files | competing task/thread readiness | 19 | test runtime | elapsed sleep only | scheduler load can invert intended order | source-closed tests; exact manifest in `02` |
+| G2 | Bounded protocol timeouts/retry waits after readiness | `timeout`, retry loops, remaining helper sleeps | ready-published servers/clients | 94 timeout-dependent; remaining sleep closure | test runtime | explicit listener/state readiness plus deadline | timeout tests are safe where readiness precedes the clock | production timeout bodies frozen |
+| G3 | Paused/advanced Tokio clocks or global clock override | none found | Tokio test-local time | 0 | runtime-local | none needed | no shared/global clock manipulation | no future impact |
+| H1 | Abort without awaited termination | ten named orchestrator test servers/tasks | socket/root/env teardown | 10 | async test runtime / Unix | abort and sometimes one yield; no join | tenth case found; stale task/socket can outlive restore/unlock | test bodies under-resolved |
+| H2 | Abort followed by awaited termination | remaining abort paths | same task owner | 28 helper-closed | async test runtime | `abort`; await `JoinHandle` | cancellation completion is observed before fixture drop | source-proven safe |
+| H3 | Joined threads/children and runtime-scoped background tasks | 127 Tokio-spawn-, 48 thread-spawn-, 14 child-spawn-dependent tests | corresponding join/wait/Drop owners | overlapping aggregate | runtime/child | join/wait or runtime completion | no unjoined owner found outside H1; child death tests wait exact exit | source-proven safe |
+| I1 | `#[serial]` groups | 550 source annotations | serial_test scheduler | 550 | libtest | named/default serial groups | excludes only participating tests, not unannotated readers or reporter | test-only; no graph node |
+| I2 | Custom lock islands and order | env, CWD, event, per-helper mutexes | nested helpers | 4 lock families plus call closure | All | partial/reentrant and non-reentrant mutexes | mixed ENV/CWD order and poison semantics require one reviewed topology | helper graph under-resolved |
+| I3 | libtest reporter and thread-count assumptions | reporter writes fds; no resource mutation by tests | all 1,263 discovered Linux tests | 1,263 | All | libtest | reporter is safe until a test captures fixed fd; no test may rely on thread count | runner external; B1 owns defect |
+
+### Semantics, ownership, and primary dispositions
+
+The compact fields below are binding. “Exact” means prior value or absence is restored without
+Unicode conversion; “local” means no parent-process restoration exists because the resource is
+owned by a child/fixture. Every row has exactly one primary disposition.
+
+| ID | Restoration / panic / nesting | Async lifetime and subprocess inheritance | Potential competitors / proof | Primary disposition | Future owner packet and allowlist |
+|---|---|---|---|---|---|
+| A1 | exact `OsString`/absence; unwind-safe; stack-safe nesting or reject before mutation | retain through awaited cleanup; intentional bounded inheritance | all HOME/socket mutators and stable authority readers; proven races | `UnifiedProcessStateLock` | combined Harness; existing F0/F0a allowlists unchanged |
+| A2 | exact `OsString`/absence; same panic/poison/nesting contract | retain across dependent child construction/termination | every ambient mutator versus stable selector reader; forced pair proven | `UnifiedProcessStateLock` | combined Harness; exact test-only files in `02` |
+| A3 | no mutation/restoration | immutable read | no writer in bounded process | `ProvenConcurrencySafe` | frozen; no future allowlist |
+| A4 | `Command`-local bytes; parent unchanged | child receives explicit/inherited bounded projection and is waited | other processes cannot mutate parent | `ProvenConcurrencySafe` | frozen except already-authorized parent guard migration |
+| B1 | exact descriptor restoration is insufficient; panic could strand redirection | reporter writes concurrently; child isolation not needed | libtest reporter; stdout failure and stderr structural proof | `ExplicitDependencyInjection` | F0b; exact one-file contract unchanged |
+| B2 | exact fd flags/mode currently restored, but panic window remains | flag child owns null/pipe fd 0; mode child owns a PTY slave/console; neither inherits parent fd 0 | any stdin/terminal consumer in process; mode mutation must actually execute | `SubprocessIsolation` | Harness; exact two tests in `02` |
+| B3 | OS closes local owned handles; normal RAII/unwind | join/await before fixture drop | unique owned endpoints only | `ProvenConcurrencySafe` | frozen |
+| C1 | exact `PathBuf`; unwind-safe; stack-safe/rejected nesting | retain through dependent async/child work | all CWD mutators and stable root readers; forced race proven | `UnifiedProcessStateLock` | Harness; ten exact files in `02` |
+| C2 | child restores exact mode; child exit is final containment | parent waits child | no parent-process competitor | `ProvenConcurrencySafe` | frozen |
+| C3 | no mutation/restoration | none | no pair exists | `ProvenConcurrencySafe` | frozen |
+| D1 | global API has no owner-scoped exact restore; reset is not composable | writers can outlive helper return | routing versus manager trace owner; forced race proven | `SubprocessIsolation` | Harness; exact helper callers in `02` |
+| D2 | explicit callback lifetime replaces global install/clear; unwind-safe | callback belongs to one test server episode | nine hook installers; forced replacement proven | `ExplicitDependencyInjection` | Harness; private test sections in orchestrator file |
+| D3 | production lifecycle restoration not a test concern | product-owned signal task/thread | no `execute_with_pty` caller or installer in this unit-test binary | `SeparatelyOwnedDeferred` | production PTY/signal lifecycle; cannot perturb this wall because source closure proves it is never installed here |
+| D4 | no mutation | none | no pair exists | `ProvenConcurrencySafe` | frozen |
+| E1 | coordinator owns exact restore, panic/poison, stack nesting | same as A1/A2 | every lock island; topology defect source-proven | `UnifiedProcessStateLock` | combined Harness; `execution/mod.rs` test-only coordinator |
+| E2 | no parent restoration: bounded child exit discards its registry after owned event work ends | wait/reap child before parent test returns | channel initializers versus unguarded parent readers; child containment removes the pair | `SubprocessIsolation` | Harness; exact ten test entry points in four files in `02`; resource and production symbols frozen |
+| E3 | parent cache is intentionally non-resettable | helper process exit discards cache | mutated env test versus later report reader; persistence proven | `SubprocessIsolation` | Harness; exact socket-activation test only |
+| E4 | keyed replacement under mutex; panic-safe lock semantics | values scoped by exact path/stat key | different TempDirs cannot share key | `ProvenConcurrencySafe` | frozen |
+| E5 | no global reset; unique fixture key removes collision | task releases production guard normally | repeated literal session IDs; cap theft proven | `ExplicitDependencyInjection` | Harness; test ID constructors only |
+| E6 | atomic swap/restore is not owner-scoped | product PTY work may overlap | sole mutator versus routing readers | `SubprocessIsolation` | Harness; exact one test only |
+| E7 | exact test override restore under environment coordinator | await world fixture work before restore | two writers/readers share same lane | `UnifiedProcessStateLock` | combined Harness; existing test sites |
+| E8 | non-resettable initialization is immutable after set | platform-local | inactive cfg in Linux wall; no mutation | `ProvenConcurrencySafe` | frozen/platform owner |
+| E9 | immutable/atomic semantics; no restoration | thread-safe | no environment/path-dependent mutable payload | `ProvenConcurrencySafe` | frozen |
+| E10 | no composable exact restore for overlapping owners; RAII only clears its own current slot | bounded child owns all control/task lifetime and is awaited | two `ActivePtyGuard` owners; forced replacement proven | `SubprocessIsolation` | Harness; exact one test in `02` |
+| E11 | no owner-scoped broker reset; process exit discards the test mutation | bounded child is waited/reaped before parent returns | broker mutator versus stable `policy_mode` reader; forced pair proven | `SubprocessIsolation` | Harness; exact 23 tests in `02` |
+| F1 | fixture-owned path removed only after server termination; unwind cleanup | confirm task exit and socket unlink | predictable same path across tests/processes; stale failure proven | `ExplicitDependencyInjection` | Harness; exact 62 test bodies and test-owned root construction in two files in `02` |
+| F2 | TempDir/socket RAII after awaited owner | await/join confirmed | unique roots/port 0 | `ProvenConcurrencySafe` | frozen |
+| F3 | local endpoint ownership | child/listener waited | no fixed port found | `ProvenConcurrencySafe` | frozen |
+| F4 | exact private path/CAS semantics | wait child before root drop | distinct private roots; shared ambient roots fall under A1 | `ProvenConcurrencySafe` | frozen |
+| G1 | no state to restore; remove scheduling assumption | barrier/readiness wait completes deterministically | scheduler load; ordering intent source-classified | `DeterministicSynchronization` | Harness; exact 19 test waits in seven files |
+| G2 | no global state; deadline starts after readiness | owner awaits/join | shared load cannot change established ordering contract | `ProvenConcurrencySafe` | frozen unless a focused test is listed in G1 |
+| G3 | no override | runtime-local | none | `ProvenConcurrencySafe` | frozen |
+| H1 | teardown order is binding and unwind-safe | abort/stop → await/join → verify cleanup → restore → unlock | all ten named tests; stale socket/task evidence | `TerminationConfirmedTeardown` | combined Harness; ten exact test bodies |
+| H2 | await observes termination before Drop | confirmed | none after join | `ProvenConcurrencySafe` | frozen |
+| H3 | join/wait/runtime completion precedes return | confirmed or runtime-scoped | no owner crosses return outside H1 | `ProvenConcurrencySafe` | frozen |
+| I1 | supplemental only; no restoration authority | cannot cover reporter/unannotated work | 550 annotations versus 24 unannotated env dependents in broad closure | `UnifiedProcessStateLock` | Harness; participation migration only, no “serial and stop” |
+| I2 | ENV → CWD; restore each before reverse unlock; explicit poison/nesting | retain all held lanes through owned cleanup | existing reverse/partial acquisition; event locks remain child-local | `UnifiedProcessStateLock` | Harness; test-only coordination helpers |
+| I3 | no test-owned state | reporter lifetime equals process | reporter only conflicts with B1 descriptor capture | `ProvenConcurrencySafe` | runner frozen; no suppression/thread-count gate |
+
+Disposition totals reconcile exactly: 7 `UnifiedProcessStateLock`, 4
+`ExplicitDependencyInjection`, 1 `TerminationConfirmedTeardown`, 1
+`DeterministicSynchronization`, 7 `SubprocessIsolation`, 17 `ProvenConcurrencySafe`, and 1
+`SeparatelyOwnedDeferred` = 38. Category totals reconcile exactly: A 4 + B 3 + C 3 + D 4 + E
+11 + F 4 + G 3 + H 3 + I 3 = 38. No broad-wall-capable row is deferred.
+
+### Frozen combined implementation gate
+
+The future combined F0/F0a/F0b/Harness implementation must remain within the exact prior allowlists
+and additive file/symbol table in `02`; no new tracked file is permitted. All production callers
+and behavior are frozen except F0b's private writer delegation with byte-identical production
+output. Focused proof must cover all eleven proven interference families, exact restoration,
+non-Unicode values, panic, poison, nesting, child inheritance, unique ID/path ownership, descriptor
+bytes, confirmed async termination, and deterministic readiness. Every helper child uses a
+recursion-proof sentinel and bounded timeout, propagates nonzero/signal status, kill-then-waits and
+reaps on timeout, and reports no secret-bearing state. The B2 flag child owns a fresh null/pipe
+stdin open-file description; the mode child owns a PTY slave/console and proves the guarded
+terminal/console mutation actually ran. Neither inherits parent fd 0, and both prove the parent's
+fd-0 flags/mode unchanged after ordinary and panic/abort child outcomes. Final proof is at least three
+independent default-parallel shell-library walls and one canonical serial wall with identical
+counts, failure names, and normalized signatures. Only that later closeout may establish F's clean
+comparison baseline.
+
+F0-HC authorizes no implementation itself and marks none of F0, F0a, F0b, or combined closeout
+complete. It changes no runtime/user behavior and promotes no seam.

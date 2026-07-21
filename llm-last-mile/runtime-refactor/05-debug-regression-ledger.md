@@ -592,8 +592,9 @@ both are frozen. The earlier HIGH result for `resolve_current_inventory_view` is
 reuse boundary. Counts are diagnostic; the exact symbol/caller/cfg tables are binding.
 
 R2-2E's PI-111 implementation/proof clause is now complete. R2-2F owns the unresolved PI-106/PI-107
-production paths. Their required order is Routes A–E -> F0/F0a implementation -> R2-2F0b ->
-combined F0/F0a/F0b canonical closeout -> R2-2F -> renewed R2-2 integration closeout -> R2-3 -> R2-4 -> R3. The
+production paths. Their required order is Routes A–E -> F0/F0a/F0b planned -> F0-HC audit and
+consolidated authorization -> combined F0/F0a/F0b/Harness implementation and canonical closeout ->
+R2-2F -> renewed R2-2 integration closeout -> R2-3 -> R2-4 -> R3. The
 renewed closeout is production-fix-free and reruns
 the entire Routes A–F wall. `RG-HOME-01` and `RG-INSTALL-01` remain open. No privileged, macOS, or
 Windows proof is claimed, and no seam is promoted.
@@ -714,9 +715,9 @@ normalized signatures, and unchanged deliberate retained-registration loser/pare
 Routes A–E, production retained-registration, the managed secure-FD path, capabilities, policies,
 and user behavior are unaffected.
 
-R2-2F0/F0a are authorized but incomplete. Their exact pre- and post-fork-remediation candidates are
-preserved, not landed, and focused proof is not closeout proof. R2-2F0b is the exact next authorized
-prerequisite. R2-2F starts only after combined F0/F0a/F0b implementation is review-clean,
+R2-2F0/F0a/F0b are authorized but incomplete. The exact F0/F0a pre- and post-fork-remediation candidates are
+preserved, not landed, and focused proof is not closeout proof. F0-HC is audit-complete and the
+combined F0/F0a/F0b/Harness implementation and canonical closeout is the exact next task. R2-2F starts only after that implementation is review-clean,
 canonically closed out, exactly replayed,
 and has recorded the deterministic comparison baseline. The renewed R2-2 integration closeout
 remains after F.
@@ -853,8 +854,8 @@ one stable inherited failure-name/signature set and no unexplained count varianc
 `1114/149`, `1113/150`, `1118/150`, and `1119/149` observations remain distinct evidence and are not
 lowered, erased, or substituted for the deterministic F baseline.
 
-`TestIsolationDefectConfirmed` remains the classification. F0/F0a are incomplete; F0b is the exact
-next authorized prerequisite; combined F0/F0a/F0b implementation/closeout is a later task. F, renewed R2-2
+`TestIsolationDefectConfirmed` remains the classification. F0/F0a/F0b are incomplete; F0-HC is
+audit-complete and combined F0/F0a/F0b/Harness implementation and canonical closeout is the exact next task. F, renewed R2-2
 closeout, R2-3, R2-4, and R3 remain unstarted, and no seam is promoted.
 
 ### A1.1d-5R2-2F0b — deterministic renderer-output test isolation
@@ -866,7 +867,7 @@ commit `07ce368cc02d5a4e80db9c1ca80efee93009d064`, exact parent
 `d52ad6de2db7f5ed7fa0ee68ff2e3fc98332021c`, tree
 `51737000a17954a605f091f00f9b0c71f38a596c`, ordinary patch SHA-256
 `5530e58a7289db4e9a62fc9934510b87add71853728a0311af2160328af3cbeb`, and full-index/binary
-patch SHA-256 `9e012c68ea33107443cd38f2051aa40aae9f0f03d5c6abb4c630d418b0d7dee`.
+patch SHA-256 `9e012c68ea33107443cd38f2051aa40aae9f0f03d5c6abb4c630d418b0d7dee2`.
 Its exact 27-file manifest is
 `crates/shell/src/builtins/{shim_doctor/report.rs,world_deps/mod.rs,world_enable/runner/manager_env.rs,world_enable/runner/paths.rs,world_gateway.rs}`,
 `crates/shell/src/execution/{agent_inventory.rs,agents_cmd.rs,config_model.rs,env_scripts.rs,host_inbox_materialization.rs,invocation/tests.rs,mod.rs,orchestrator_world_dispatch.rs,platform/macos.rs,routing/builtin/tests.rs,routing/dispatch/world_persistent_session.rs,routing/world.rs,settings/tests.rs}`,
@@ -976,8 +977,9 @@ supervisor, retained-worker, placement, caging, lifecycle, or capability semanti
 seam. F0/F0a/F0b remain incomplete until the combined implementation, focused private-buffer proof,
 three identical parallel walls, one matching serial wall, transition audit, reviews, canonical
 closeout, and exact replay are complete. F, renewed R2-2 closeout, R2-3, R2-4, and R3 remain
-unstarted. The binding sequence is Routes A–E → F0/F0a implementation → F0b → combined
-F0/F0a/F0b canonical closeout → F → renewed R2-2 integration closeout → R2-3 → R2-4 → R3.
+unstarted. The binding sequence is Routes A–E → F0/F0a/F0b planned → F0-HC audit and consolidated
+authorization → combined F0/F0a/F0b/Harness implementation and canonical closeout → F → renewed R2-2
+integration closeout → R2-3 → R2-4 → R3.
 
 For the Route A successor clause of `R2-RUNTIME-01`, the authorized Unix-only import cfg set also
 includes the policy test module's sole `tempfile::TempDir` import; no other import or module gate is
@@ -1020,9 +1022,10 @@ has exactly one approved edge class and one packet owner; the class totals are 1
 `PlatformMapping`, 13 `GeneratedProjectionConsumption`, 15 `DiagnosticProjection`, 22
 `R3CleanupOnly`, and four `OutOfScope`. The R2-0-era frozen DAG was historically
 R1 -> R2-0 -> R2-1 -> R2-2 -> R2-3 -> R2-4 -> R3. The corrected canonical DAG replaces the
-R2-2 outgoing edge without changing inventory ownership; F0/F0a/F0b later insert only proof prerequisites:
-R1 -> R2-0 -> R2-1 -> R2-2 Routes A-E -> F0/F0a implementation -> R2-2F0b -> combined
-F0/F0a/F0b canonical closeout -> R2-2F -> R2-2 integration closeout -> R2-3 -> R2-4 -> R3. Mechanical validation covers row-ID,
+R2-2 outgoing edge without changing inventory ownership; F0/F0a/F0b and F0-HC insert only proof prerequisites:
+R1 -> R2-0 -> R2-1 -> R2-2 Routes A-E -> F0/F0a/F0b planned -> F0-HC audit and consolidated
+authorization -> combined F0/F0a/F0b/Harness implementation and canonical closeout -> R2-2F ->
+R2-2 integration closeout -> R2-3 -> R2-4 -> R3. Mechanical validation covers row-ID,
 field-count, class, owner, packet-count, table-column, fence-pair, relative-link, and allowlist-path
 checks across 43 tables/749 pipe rows, 134 fence markers, and 12 relative links, plus
 `git diff --check`, `cargo fmt --all -- --check`, and GitNexus change detection. The
@@ -1279,9 +1282,9 @@ A1.1d, A1, the B1/B2.1 joint closeout, and B3.1 remain open; no seam is promoted
 
 At R2-1 closeout, the historical next packet was **A1.1d-5R2-2 — Unix release, sudo, Linux service,
 and runtime propagation**. Routes A–D have since become individually review-clean, their integration
-closeout failed source closure, and R2-2E has since become review-clean. The live exact next
-authorized prerequisite is now R2-2F0b because F0/F0a are authorized but incomplete; R2-2F follows
-combined F0/F0a/F0b canonical closeout. After F and the renewed
+closeout failed source closure, and R2-2E has since become review-clean. F0/F0a/F0b are authorized
+but incomplete; F0-HC is audit-complete, and the live exact next task is the combined
+F0/F0a/F0b/Harness implementation and canonical closeout. R2-2F follows it. After F and the renewed
 closeout, rerun the complete Linux
 regression and normal product lifecycle smoke without outer overrides. That proof can unblock
 A1.1d Linux closeout and the Linux
@@ -1924,7 +1927,7 @@ B1 receipt core recovered/review-clean: **yes**. B2.1 supervisor core recovered/
 next architectural packet remains the B1/B2.1 joint production integration closeout. At the
 B1/B2.1-0 closeout, the repository's exact next packet was A1.1d-5R2-1 — Host context construction
 and Unix dev propagation; after review-clean R2-2 Routes A–E, the failed integration closeout, and
-F0/F0a's blocked broad proof, the live exact next task is **A1.1d-5R2-2F0/F0a/F0b combined
+F0/F0a's blocked broad proof and the completed F0-HC audit, the live exact next task is **A1.1d-5R2-2F0/F0a/F0b/Harness combined
 implementation and canonical closeout**; **A1.1d-5R2-2F — Authenticated world-deps and truthful
 doctor composition** follows combined F0/F0a/F0b canonical closeout, followed by renewed R2-2 integration
 closeout, R2-3, R2-4, and R3. Only the joint closeout's Linux
@@ -2052,3 +2055,99 @@ An implementation PR may mark a ledger row resolved only when:
 2. the named permanent gate passes on the real path;
 3. adjacent resolved baselines remain green; and
 4. the evidence distinguishes durable success from transport/process success.
+
+## A1.1d-5R2-2F0-HC empirical closure record
+
+### Preflight and preservation
+
+The complete Phase 0 preflight passed before audit work began:
+
+- source branch `feat/internal-host-orchestrator-world-dispatch-bootstrap`; local HEAD
+  `06c928443a93579899e5e5827b151f530e1be933`; tree
+  `dfe15d93366655e9855bca40ad0607887f545637`; upstream/remote
+  `c079aeed748120cff9b03079e996d00109a05800`; divergence 0 behind / 10 ahead; clean index,
+  worktree, and untracked set;
+- published F0b docs commit `c079aeed748120cff9b03079e996d00109a05800`, tree
+  `905cf110f648188b1a2e9a0087b4ffbb4c89e168`, subject
+  `docs: authorize deterministic renderer test isolation`;
+- replay preservation `feat/preserve-a1-1d-5r2-2e-replayed-f0b-docs-c079aeed` resolves locally and
+  remotely to `06c928443a93579899e5e5827b151f530e1be933` and therefore serves as the immutable start
+  checkpoint without a redundant branch;
+- broad candidate branch `feat/preserve-a1-1d-5r2-2f0-f0a-broad-blocker-9978655e`, commit
+  `78353f3383fdd80c176fe5638328c10f2805dcf0`, ordinary patch
+  `577a34da903992d0566fa51d164410caeca98592dd486f5c1d5520e34baaa5a1`, full-index patch
+  `9978655e0f4095880c49d863a93b8fc99fb2b769afd42554c758b3970103f710`;
+- post-fork-remediation branch
+  `feat/preserve-a1-1d-5r2-2f0-f0a-post-fork-remediation-9e012c68`, commit
+  `07ce368cc02d5a4e80db9c1ca80efee93009d064`, ordinary patch
+  `5530e58a7289db4e9a62fc9934510b87add71853728a0311af2160328af3cbeb`, corrected full-index
+  patch `9e012c68ea33107443cd38f2051aa40aae9f0f03d5c6abb4c630d418b0d7dee2`;
+- exactly ten Routes A–E runtime commits were ahead; no F subject, change, or candidate restoration
+  existed. Neither preserved candidate was checked out, restored, merged, cherry-picked, or replayed.
+
+Refreshing GitNexus changed only generated symbol/relationship/flow count lines in `AGENTS.md` and
+`CLAUDE.md`; those exact generated changes were restored before evidence collection. Recorded
+status: `GeneratedIndexDriftRemediated`.
+
+### Forced overlap matrix
+
+All F0-HC probe tests named below were temporary, uncommitted diagnostic hooks. They used barriers
+to force the precise overlap, exposed no values or secrets, and were removed exactly before the
+documentation worktree was created. “Serial” is the same-process ordered control; “separate” is a
+fresh-process control.
+
+| Pair / exact diagnostic test | Forced same-process result | Serial control | Separate-process/control result | Normalized signature and classification |
+|---|---:|---:|---:|---|
+| `SUBSTRATE_FORCE_PTY` mutator → `is_force_pty_command`; `f0hc_env_same_process_overlap_signature` | 20/20 failed | 0/20 failed | 0/20 failed | `F0HC_ENV_OVERLAP: stable reader observed concurrent SUBSTRATE_FORCE_PTY mutation`; `TestIsolationDefectConfirmed` |
+| CWD mutator → `WorldRootSettings::effective_root`; `f0hc_cwd_same_process_overlap_signature` | 20/20 failed | 0/20 failed | 0/20 failed | `F0HC_CWD_OVERLAP: stable reader observed concurrent process CWD mutation`; `TestIsolationDefectConfirmed` |
+| routing trace owner → second global trace owner; `f0hc_trace_same_process_overlap_signature` | 20/20 failed | 0/20 failed | 0/20 failed | `F0HC_TRACE_OVERLAP: first owner wrote through the second test's global trace output`; `TestIsolationDefectConfirmed` |
+| mutated PATH/timeout → `REPORT_CACHE`; `f0hc_socket_cache_persistence_signature` | 20/20 failed after exact env restore | cache-refresh control 0/20 failed | `systemctl_timeout_is_fail_fast` fresh process 0/10 failed | `F0HC_SOCKET_CACHE_PERSISTENCE: cached override survived exact environment restoration`; `TestIsolationDefectConfirmed` |
+| first private retry hook → second hook install; `f0hc_private_retry_hook_same_process_overlap_signature` | 20/20 failed | 0/20 failed | 0/20 failed | `F0HC_PRIVATE_HOOK_OVERLAP: first test's hook was replaced by a concurrent test`; `TestIsolationDefectConfirmed` |
+| repeated session fixture ID → `WorldDispatchConcurrencyTracker`; `f0hc_dispatch_tracker_same_process_overlap_signature` | 20/20 failed | 0/20 failed | 0/20 failed | `F0HC_DISPATCH_TRACKER_OVERLAP: reused fixture session ID consumed another test's cap`; `TestIsolationDefectConfirmed` |
+| global broker policy mutator → stable `policy_mode` reader; `f0hc_broker_same_process_overlap_signature` | 20/20 failed | 0/20 failed | 0/20 failed | `F0HC_BROKER_OVERLAP: stable reader observed another test's global broker policy mutation`; `TestIsolationDefectConfirmed` |
+| first `ActivePtyGuard` owner → second `ACTIVE_PTY` registration; `f0hc_active_pty_same_process_overlap_signature` | 20/20 failed | 0/20 failed | 0/20 failed | `F0HC_ACTIVE_PTY_OVERLAP: first test's active PTY control was replaced by another test`; `TestIsolationDefectConfirmed` |
+
+The matrix proves eight new interference pairs. The already-established rows remain binding: the world-socket pair failed 12/20 clean parallel
+runs and 0/10 serial runs, while the preserved candidate proof passed 100/100 parallel and 20/20
+serial; the exact HOME pair failed 20/20 forced same-process runs, 0/10 stable serial runs, and
+passed in separate processes, with three other unannotated HOME mutators independently reproducing
+20/20; stdout reporter overlap passed 376 and failed 124 of 500, while isolated, identical-neighbor
+serial, and separate-process controls passed 100/100 and pretty reporting passed 99/100. Its exact
+captured contamination was `.[codex] task_progress: fields=alpha, beta, gamma (+1 more)\n`.
+
+Static/source lifetime closure added the exact tenth no-await case
+`wait_for_fork_child_durable_publication_keeps_stop_transport_timeout_short_once_child_is_visible`.
+During the broad evidence wall, predictable private stop paths also left unowned inactive socket
+nodes, including `sessdispatch-ashmember.sock`, and a later bind reported `Address already in use`.
+This corroborates termination/path ownership; it does not authorize product socket cleanup.
+
+### Bounded clean-code broad evidence
+
+Exactly one clean-code default-parallel wall and one clean-code serial wall were run. They are
+correlation evidence, not final closeout:
+
+| Wall | Outcome | Exact/normalized failure transition |
+|---|---|---|
+| `cargo test -p shell --lib` | 1,263 discovered; `1113 passed / 150 failed / 0 ignored`; 165.43 s | Dominant exact family: tests opening a retained legacy `StateStore` or activated authority root after another test removed/replaced the ambient private HOME/root. Additional exact families included fixed private stop-path `Address already in use`, authority-layout absence, and downstream async-runtime/session cascades. One temporary-filesystem `ENOSPC` occurred after the host `/tmp` tmpfs reached 99%; this environmental capacity signature is not a product or harness semantic transition. |
+| `TMPDIR=<private disk-backed root> cargo test -p shell --lib -- --test-threads=1` | 1,263 discovered; `1202 passed / 61 failed / 0 ignored`; 388.62 s | The 89-count improvement proves a parallel-sensitive set. The retained 61 normalized into persistent authority-layout/legacy-writer-disabled-or-no-active-state failures, predictable private stop-socket collision, and their async/session cascades. Representative exact retained names were `continue_world_worker_dispatch_returns_real_typed_internal_outcome`, `detached_stop_world_worker_closeout_availability_recheck_accepts_parked_truth_without_sanctioned_owner`, and `prepare_member_runtime_startup_for_descriptor_accepts_parked_detached_orchestrator_parent`. |
+
+Those representative serial failures were also run in fresh processes with unique `TMPDIR` roots.
+They remained failures because the tests still consumed the real ambient HOME or a fixed `/tmp`
+socket contract; separate-process scheduling alone does not isolate persistent parent paths. No
+user-owned authority state was deleted or modified. The evidence therefore distinguishes two
+classes: parallel process-global overlap and persistent predictable fixture/path leakage. Neither
+class is a production concurrency or lifecycle regression, so `ProductRegressionDecisionRequired`
+was not triggered.
+
+Rows proved concurrency-safe include child-only command environments, child-contained umask,
+owned descriptors, keyed config/policy caches, immutable OnceLocks/regexes/instance values,
+unique TempDir listeners and kernel-selected ports, private-root cross-process lock/CAS tests,
+readiness-established protocol timeouts, awaited abort paths, and joined threads/children. The sole
+deferred row is production signal/Ctrl-C/SIGWINCH lifecycle, owned by the production PTY/signal
+lifecycle packet. Source call closure proves no shell-library unit test calls `execute_with_pty`,
+so `initialize_global_sigwinch_handler_impl` and its background thread are never installed in this
+binary and cannot perturb this wall.
+
+The audit did not implement a fix, did not establish a deterministic F comparison baseline, and
+did not start F. Final closure still requires the combined implementation and the focused plus
+three-parallel/one-serial deterministic proof wall frozen in `03` and `04`.

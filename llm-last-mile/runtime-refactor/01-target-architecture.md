@@ -425,8 +425,9 @@ Routes A–D are individually review-clean, but they do not exhaust the authenti
 The failed R2-2 integration closeout found two remaining projection seams and one diagnostic
 composition invariant. R2-2E is now implementation-, proof-, and review-complete. R2-2F0/F0a are
 authorized but incomplete: both exact candidates are preserved, and focused proof is not closeout
-proof. R2-2F0b is the exact next authorized test-isolation prerequisite, R2-2F follows combined
-F0/F0a/F0b closeout, and a renewed Routes A–F integration closeout follows F.
+proof. R2-2F0b remains planned and incomplete; F0-HC is audit-complete and the combined
+F0/F0a/F0b/Harness implementation and canonical closeout is the exact next task. R2-2F follows
+that closeout, and a renewed Routes A–F integration closeout follows F.
 
 R2-2E makes world-gateway projection a pure consumer of already-authenticated A. The landed shell world
 entry validates A before disabled/unavailable classification, then supplies it to one request-scoped
@@ -667,3 +668,56 @@ Every refactor PR must be able to answer:
 > Can Substrate prove exact session identity, exact applicable binding, exact applicable policy snapshot, exact applicable credential handoff, exact applicable work receipt, and durable lifecycle/obligation truth for this action regardless of ingress surface?
 
 If the answer depends on a helper still running, a socket being reachable, a terminal tool call returning, or an env variable being trusted, the target architecture has not landed.
+
+## F0-HC test-process coordination topology
+
+F0-HC changes no target production architecture. It freezes the test-only topology required before
+the planned F0/F0a/F0b implementation can establish a deterministic shell-library proof wall.
+
+The environment lane is one reentrant `cfg(test)` authority-environment coordinator shared by all
+same-process ambient environment writers and causally dependent stable readers. A guard captures
+each prior `OsString` or absence without conversion, installs the complete test snapshot, retains
+the lock across dependent async work and inherited subprocess construction, restores every key in
+reverse stack order during normal return or unwind, and only then unlocks. Poison behavior must be
+explicit and recovery must never silently admit an unguarded snapshot. Same-thread nesting is
+either stack-safe or rejected before mutation. Secret-bearing values are never rendered, logged,
+or persisted.
+
+Current-directory mutation uses a separate reentrant `cfg(test)` coordinator because paths can be
+injected for most production-adjacent work and CWD does not need to share a lock with descriptors,
+hooks, or sockets. When both lanes are needed, the only permitted order is authority environment
+then CWD. The prior `PathBuf` is restored before the CWD guard unlocks. The complete parent-process
+lock order is therefore environment → CWD; reverse acquisition is forbidden. Existing event
+registry locks remain child-local implementation details rather than a third parent-process lane.
+Existing per-file locks and `#[serial]` remain supplemental and may not be treated as process-wide
+exclusion.
+
+Other process resources do not enter a giant lock:
+
+- renderer output uses the already-authorized F0b private explicit-writer seam; raw `dup2` capture
+  of fd 1 or 2 is removed from those two tests;
+- private retry behavior, dispatch fixture identity, and private stop transport roots become
+  explicit test dependencies with no production side table;
+- global trace retargeting, the event sender registry, the non-keyed socket-activation cache,
+  `PTY_ACTIVE`, `ACTIVE_PTY` and its Windows input gate, and the mutable global broker receive bounded helper-process isolation
+  because their present APIs cannot coexist safely inside one libtest process without
+  production-adjacent redesign;
+- stdin fd flags use a helper child whose fd 0 is a fresh child-owned open-file description
+  (`Stdio::null()` or a dedicated pipe), never inherited fd 0. The terminal/console-mode case uses
+  a fresh child-owned PTY slave on Unix or child-owned console on Windows, also never inherited
+  parent fd 0, so the guarded mutation is exercised rather than skipped. Proof compares parent
+  flags/mode before and after both normal child exit and panic/abort before child restoration;
+- every helper-process protocol has a recursion-proof sentinel, bounded timeout, exact nonzero and
+  signal-result propagation, and kill-then-wait/reap on timeout; the full suite is never serialized
+  or recursively relaunched;
+- ordering sleeps become barriers, readiness channels, or explicit state publication; protocol
+  timeouts with deterministic readiness remain unchanged;
+- every owned task/server teardown follows request stop or abort → await/join confirmed
+  termination → verify fixture/socket/process cleanup → restore process state → unlock → return.
+
+This topology preserves all production readers, writers, signatures, cache behavior, signal
+installation, runtime lifecycle, renderer routing, error propagation, policies, capabilities,
+credential transport, and platform behavior byte-for-byte. A future implementation that requires
+a production global registry, changes a product caller, or cannot obey the lock order stops as
+`ProductRegressionDecisionRequired` or `CrossDocumentChangeRequired`; it is not absorbed into the
+harness packet.
