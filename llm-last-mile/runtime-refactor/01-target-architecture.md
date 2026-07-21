@@ -423,11 +423,10 @@ adapters.
 
 Routes A–D are individually review-clean, but they do not exhaust the authenticated-context path.
 The failed R2-2 integration closeout found two remaining projection seams and one diagnostic
-composition invariant. R2-2E is now implementation-, proof-, and review-complete. R2-2F0/F0a are
-authorized but incomplete: both exact candidates are preserved, and focused proof is not closeout
-proof. R2-2F0b remains planned and incomplete; F0-HC is corrected and authorized and the combined
-F0/F0a/F0b/Harness implementation and canonical closeout is the exact next task. R2-2F follows
-that closeout, and a renewed Routes A–F integration closeout follows F.
+composition invariant. R2-2E is now implementation-, proof-, and review-complete. The exact
+F0/F0a/F0b/F0-HC harness candidate is preserved and unrestored; corrected differential proof, a
+fresh containment review, and harness closeout remain. R2-2F follows that closeout, and a renewed
+Routes A–F integration closeout follows F.
 
 R2-2E makes world-gateway projection a pure consumer of already-authenticated A. The landed shell world
 entry validates A before disabled/unavailable classification, then supplies it to one request-scoped
@@ -755,4 +754,34 @@ must reconcile with every wrapper definition and every callsite, resolving liter
 array/table, loop, and parameterized names. Any unresolved dynamic name is an explicit failure;
 `Command::{env,env_remove,env_clear}` remains child-only unless the same path also invokes a parent
 mutation primitive. Every mutating test and every overlapping stable reader must map to one exact
-participation or isolation disposition before the combined harness implementation may begin.
+participation or isolation disposition whenever the preserved candidate is restored and
+revalidated.
+
+## Differential evidence authority after the final harness candidate
+
+The target proof architecture separates semantic and concurrency authority. It does not require an
+unavailable historical artifact to answer a question its retained bytes cannot answer.
+The bounded provenance result is `HistoricalParallelArtifactUnavailable`.
+
+Historical serial evidence is semantic authority because its 1,263-test inventory, failure names,
+and normalized signatures are complete. The final candidate is compared test-by-test against that
+artifact, and the binding matrix remains: 1,202 `PassToPass`, zero `PassToFail`, 45
+`FailToSameFailure`, zero `FailToChangedFailure`, 16 causally audited `FailToPass`, zero `Removed`,
+zero `RenamedOrSubstituted`, 17 authorized `NewPass`, zero `NewFail`, and zero `NewIgnored`.
+Deterministic listing at both endpoints, the exact 17 additions, and zero removed or substituted
+tests are part of the same semantic boundary.
+
+Final-candidate concurrency authority is independent: three default-parallel walls and one serial
+wall must agree exactly on 1,280 discovered, 1,235 passed, 45 failed, 0 ignored, the complete
+failure-name set, and normalized signatures. This proves that execution mode no longer changes the
+candidate's semantic result. The historical parallel aggregate of 1,263 discovered, 1,113 passed,
+150 failed, and 0 ignored is diagnostic evidence of the old interference only. Although two
+fragments of the same transcript yield the 150-name union, normalized panic output survives for
+only 37 names, so it cannot establish complete named-and-signed transitions.
+
+This split is an evidence-authority correction, not weaker architecture. `PassToFail`, `NewFail`,
+`Removed`, `RenamedOrSubstituted`, `NewIgnored`, and changed-signature gates remain zero-tolerance.
+All 16 serial `FailToPass` transitions require causal audit and all 17 `NewPass` transitions must
+remain tied to authorized tests. The preserved candidate must be restored and identity-checked,
+then receive a fresh containment review before harness closeout. Until then the harness packet is
+incomplete, F is blocked and unstarted, and no seam is promoted.

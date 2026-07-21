@@ -838,10 +838,10 @@ schema, or R2-3 behavior requires a cross-document stop.
 The failed Routes A–D integration closeout established that those four routes were individually
 review-clean but did not close every authenticated-context consumer. R2-2E has since implemented and
 proved the gateway projection without changing Routes A–D; all five routes are individually
-review-clean. R2-2 stays incomplete pending combined F0/F0a/F0b, F, and the renewed integration
-closeout. F0/F0a are authorized but incomplete, with both exact candidates preserved rather than
-landed; F0b remains planned and incomplete, F0-HC is corrected and authorized, and combined F0/F0a/F0b/Harness
-implementation/closeout is next. The following table preserves E's reviewed historical source-closure boundary
+review-clean. R2-2 stays incomplete pending harness closeout, F, and the renewed integration
+closeout. The exact F0/F0a/F0b/F0-HC implementation candidate is preserved and unrestored;
+corrected differential proof, fresh containment review, and harness closeout are next. The
+following table preserves E's reviewed historical source-closure boundary
 and freezes F0/F0a/F0b/F's remaining boundaries;
 brace groups are exact symbol sets, not file wildcards.
 
@@ -959,9 +959,9 @@ concurrent exclusion all pass), but its final broad runs were `1118 passed / 150
 passed / 149 failed`. The extra failure is
 `dispatch_contract_adapter_active_task_resolution_requires_supervisor_claim`, normalized as
 `resolve exact B-owned acceptance authority: open activated versioned authority layout`. It passes
-alone. F0a remains an authorized part of the combined candidate, not a waiver of F0 proof; F0b
-remains planned and incomplete, F0-HC is corrected and authorized, and the combined F0/F0a/F0b/Harness
-implementation/closeout is the **exact next task**.
+alone. F0a remains an authorized part of the combined candidate, not a waiver of F0 proof. The
+later exact combined candidate is preserved and unrestored; restoration, corrected differential
+proof, fresh containment review, and harness closeout are the **exact next task**.
 
 1. The exact HOME minimal pair is the target above plus
    `prompt_submit_continuity_prefers_persisted_session_contract`. In canonical same-process
@@ -1068,7 +1068,8 @@ test-infrastructure contract:
 
 R2-2F's binding contract is exact:
 
-F is the **exact next increment after combined F0/F0a/F0b/Harness implementation and canonical closeout**, but it is not active or
+F is the **exact next increment after corrected differential proof, fresh containment review, and
+harness closeout**, but it is not active or
 implemented. It starts from the post-closeout replayed runtime commit and tree recorded by the
 dedicated preservation ref and completion checkpoint. Routes A–E and F0/F0a/F0b are immutable prior
 evidence. Its clean comparison baseline is the deterministic value recorded by combined closeout,
@@ -6354,10 +6355,10 @@ Disposition totals reconcile exactly: 7 `UnifiedProcessStateLock`, 4
 
 ### Frozen combined implementation gate
 
-The future combined F0/F0a/F0b/Harness implementation must remain within the corrected consolidated
-allowlists and additive file/symbol table in `02`; no new tracked file is permitted. Before any
-runtime edit, the direct-primitive and wrapper/callsite inventories must re-run and reconcile to
-zero unclassified rows. All production callers
+The preserved combined F0/F0a/F0b/Harness implementation was required to remain within the
+corrected consolidated allowlists and additive file/symbol table in `02`; no new tracked file was
+permitted. Whenever the candidate is restored, the direct-primitive and wrapper/callsite
+inventories must re-run and reconcile to zero unclassified rows. All production callers
 and behavior are frozen except F0b's private writer delegation with byte-identical production
 output. Focused proof must cover all eleven proven interference families, exact restoration,
 non-Unicode values, panic, poison, nesting, child inheritance, unique ID/path ownership, descriptor
@@ -6371,6 +6372,53 @@ independent default-parallel shell-library walls and one canonical serial wall w
 counts, failure names, and normalized signatures. Only that later closeout may establish F's clean
 comparison baseline.
 
-F0-HC authorizes no implementation itself and marks none of F0, F0a, F0b, or combined closeout
-complete. Its environment inventory is corrected and authorized; it changes no runtime/user
-behavior and promotes no seam. F remains blocked and unstarted.
+F0-HC by itself authorized no implementation. The preserved candidate does not mark F0, F0a, F0b,
+or combined closeout complete. Its environment inventory is corrected; this docs correction
+changes no runtime/user behavior and promotes no seam. F remains blocked and unstarted.
+
+### Corrected historical differential evidence-authority contract
+
+This contract supersedes only the impossible assignment of transition-matrix authority to the
+incomplete historical parallel output. It waives no regression gate.
+The bounded provenance result is `HistoricalParallelArtifactUnavailable`.
+
+1. **Historical serial semantic authority.** The authenticated complete serial wall has 1,263
+   discovered, 1,202 passed, 61 failed, and 0 ignored tests, with complete names and normalized
+   signatures. Its exact candidate transition matrix is 1,202 `PassToPass`, zero `PassToFail`, 45
+   `FailToSameFailure`, zero `FailToChangedFailure`, 16 `FailToPass`, zero `Removed`, zero
+   `RenamedOrSubstituted`, 17 `NewPass`, zero `NewFail`, and zero `NewIgnored`. Every one of the 16
+   `FailToPass` rows requires an exact causal audit; every one of the 17 `NewPass` rows must be an
+   added authorized test. Deterministic listings at the serial baseline and candidate must prove
+   zero removed, renamed, or substituted tests.
+2. **Final concurrency authority.** Three independent default-parallel walls and one canonical
+   serial wall of the exact candidate must each report 1,280 discovered, 1,235 passed, 45 failed,
+   and 0 ignored, with identical failure-name sets and normalized signatures. Any disagreement is
+   a hard stop. This proves the repaired harness has no parallel-versus-serial semantic outcome
+   change.
+3. **Historical parallel diagnostic evidence.** The authenticated aggregate remains 1,263
+   discovered, 1,113 passed, 150 failed, and 0 ignored. Panic headers and the final-summary tail
+   from the same transcript yield all 150 names, but retained panic output is complete for only 37
+   names. Because the artifact lacks complete normalized signatures, it is diagnostic only. It
+   cannot prove a parallel
+   `PassToFail`, a historical parallel signature comparison, membership of the final failures, or
+   exactly 105 named historical failures becoming passes. Rerunning the nondeterministic historical
+   code creates a new run and cannot recover this historical artifact.
+4. **Source and inventory continuity.** Completion still requires the exact 45-file candidate
+   manifest and per-file fingerprints, deterministic endpoint listings, the exact 17 additions in
+   `02`, zero removed/renamed/substituted tests, no changed production execution flow, the exact
+   serial matrix, and final four-wall identity. The manifest SHA-256 is
+   `b9e3a44dd671409f66e2d62d48cb494ab147069a74ed71f2308e031f56372ae6`; the fingerprint aggregate
+   is `41cb1a325add4efd8198872b456c3ae0fba73f8c4943e4b59c06e2bc76d8b479`; the ordinary patch is
+   `7ab220a715f4ae3389be314da2e6b0e614fcffb7a92166f04fde999570801861`; and the full-index patch is
+   `adc1c5952e2ac4cc97881a1bf4df8e24b00d4d4ba337e692bf21965151d5c0c4`.
+
+The exact candidate is preserved at commit `86ed6f5620787121b1c2e5b033ee8d6f9ff369d3` and tree
+`f6480f3986d43bb41e5387fa1ba5b68ae53f598b` on the remote preservation branch named in `00`.
+Environment closure, renderer/injection, and lifecycle/subprocess implementation reviews are
+`CLEAN`; the old containment/differential review remains blocked only on historical parallel
+provenance and is not reused. Restoration and identity revalidation must be followed by a fresh
+containment review under this contract before harness closeout.
+
+`PassToFail=0`, `FailToChangedFailure=0`, `Removed=0`, `RenamedOrSubstituted=0`, `NewFail=0`, and
+`NewIgnored=0` remain hard requirements. No product behavior changes, no harness packet completes,
+F remains blocked and unstarted, and no seam is promoted by this docs-only correction.
