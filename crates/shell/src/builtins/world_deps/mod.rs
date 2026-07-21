@@ -15,12 +15,140 @@ use crate::execution::config_model;
 #[cfg(unix)]
 use crate::execution::install_bootstrap::bind_unix_install_bootstrap_context;
 #[cfg(unix)]
+use crate::execution::{policy_model, policy_snapshot};
+#[cfg(unix)]
 use anyhow::anyhow;
 use anyhow::Result;
 use std::path::{Path, PathBuf};
 use substrate_common::paths as substrate_paths;
 #[cfg(unix)]
 use transport_api_types::InstallBootstrapContextCarrierV1;
+
+#[cfg(unix)]
+pub(crate) struct AuthenticatedWorldDepsContextV1 {
+    authority: HostSessionAuthority,
+    selected_host_prefix: String,
+    host_context_commitment: String,
+    launch_cwd: PathBuf,
+    global_config_path: PathBuf,
+    global_deps_dir: PathBuf,
+    effective_config: config_model::SubstrateConfig,
+    effective_policy: substrate_broker::Policy,
+    runtime_network_policy: policy_snapshot::ResolvedWorldNetworkPolicy,
+    world_fs_policy: substrate_broker::WorldFsPolicy,
+}
+
+#[cfg(unix)]
+impl std::fmt::Debug for AuthenticatedWorldDepsContextV1 {
+    fn fmt(&self, formatter: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        formatter
+            .debug_struct("AuthenticatedWorldDepsContextV1")
+            .field("selected_host_prefix", &self.selected_host_prefix)
+            .field("host_context_commitment", &self.host_context_commitment)
+            .field("launch_cwd", &self.launch_cwd)
+            .finish_non_exhaustive()
+    }
+}
+
+#[cfg(unix)]
+impl AuthenticatedWorldDepsContextV1 {
+    pub(crate) fn selected_host_prefix(&self) -> &str {
+        &self.selected_host_prefix
+    }
+
+    pub(crate) fn host_context_commitment(&self) -> &str {
+        &self.host_context_commitment
+    }
+
+    pub(crate) fn launch_cwd(&self) -> &Path {
+        &self.launch_cwd
+    }
+
+    pub(crate) fn global_config_path(&self) -> &Path {
+        &self.global_config_path
+    }
+
+    pub(crate) fn global_deps_dir(&self) -> &Path {
+        &self.global_deps_dir
+    }
+
+    pub(crate) fn effective_config(&self) -> &config_model::SubstrateConfig {
+        &self.effective_config
+    }
+
+    pub(crate) fn effective_policy(&self) -> &substrate_broker::Policy {
+        &self.effective_policy
+    }
+
+    pub(crate) fn runtime_network_policy(&self) -> &policy_snapshot::ResolvedWorldNetworkPolicy {
+        &self.runtime_network_policy
+    }
+
+    pub(crate) fn world_fs_policy(&self) -> &substrate_broker::WorldFsPolicy {
+        &self.world_fs_policy
+    }
+
+    pub(crate) fn revalidate_authority(&self) -> Result<()> {
+        self.authority
+            .bootstrap_home()
+            .revalidate()
+            .map_err(|error| anyhow!("authenticated dependency root changed: {error}"))
+    }
+}
+
+#[cfg(unix)]
+pub(crate) fn bind_authenticated_world_deps_context_v1(
+    carrier: &InstallBootstrapContextCarrierV1,
+    launch_cwd: &Path,
+    cli: &config_model::CliConfigOverrides,
+) -> Result<AuthenticatedWorldDepsContextV1> {
+    bind_unix_install_bootstrap_context(carrier)?;
+    if !launch_cwd.is_absolute() {
+        return Err(anyhow!(
+            "authenticated world-deps launch cwd must be absolute"
+        ));
+    }
+
+    let root = TrustedAuthorityRoot::open(Path::new(&carrier.context.selected_host_prefix))
+        .map_err(|error| anyhow!("failed to open selected dependency root: {error}"))?;
+    let authority = HostSessionAuthority::from_trusted_root(root)
+        .map_err(|error| anyhow!("failed to bind selected dependency root: {error}"))?;
+    let bootstrap_home = authority.bootstrap_home();
+    let selected_root = PathBuf::from(
+        &bootstrap_home
+            .identity()
+            .map_err(|error| anyhow!("failed to identify selected dependency root: {error}"))?
+            .physical_path,
+    );
+    let effective_config = config_model::resolve_effective_config_with_explain_for_bootstrap_home(
+        launch_cwd,
+        cli,
+        &bootstrap_home,
+        false,
+    )?
+    .0;
+    let effective_policy =
+        policy_model::resolve_effective_policy_for_bootstrap_home(launch_cwd, &bootstrap_home)?;
+    let runtime_network_policy = policy_snapshot::resolve_world_network_policy_for_bootstrap_home(
+        launch_cwd,
+        &bootstrap_home,
+        &effective_config,
+    )?;
+    let world_fs_policy = effective_policy.world_fs_policy();
+
+    Ok(AuthenticatedWorldDepsContextV1 {
+        authority,
+        selected_host_prefix: carrier.context.selected_host_prefix.clone(),
+        host_context_commitment: carrier.host_context_commitment.clone(),
+        launch_cwd: launch_cwd.to_path_buf(),
+        global_config_path: selected_root.join("config.yaml"),
+        global_deps_dir: selected_root.join("deps"),
+        effective_config,
+        effective_policy,
+        runtime_network_policy,
+        world_fs_policy,
+    })
+}
 
 #[derive(Debug, Clone)]
 pub(crate) struct WorldDepsProvisioningRequirementsV1 {
@@ -259,6 +387,114 @@ mod tests {
         )
         .expect("write selected config");
         prefix
+    }
+
+    #[test]
+    #[serial]
+    fn authenticated_context_binds_a_projection_under_conflicting_ambient_b() {
+        let _authority_env = crate::execution::AuthorityEnvTestGuard::preserve();
+        let (_, account_home) = current_unix_principal_and_home().expect("current Unix home");
+        let temp = Builder::new()
+            .prefix("substrate-world-deps-context-")
+            .tempdir_in(account_home)
+            .expect("secure context fixture");
+        let selected_a = prepare_prefix(temp.path(), "selected-a");
+        let ambient_b = prepare_prefix(temp.path(), "ambient-b");
+        fs::write(
+            selected_a.join("policy.yaml"),
+            "id: selected-policy\nnet_allowed: [selected.example]\nworld_fs:\n  host_visible: false\n  write:\n    enabled: false\n  fail_closed:\n    routing: true\n",
+        )
+        .expect("write selected policy");
+        fs::write(
+            ambient_b.join("config.yaml"),
+            "world:\n  enabled: true\n  deps:\n    builtins: enabled\n    inventory_mode: workspace_only\n    enabled: [ambient-only]\n",
+        )
+        .expect("write ambient config");
+        fs::write(
+            ambient_b.join("policy.yaml"),
+            "id: ambient-policy\nnet_allowed: [ambient.example]\n",
+        )
+        .expect("write ambient policy");
+        let carrier = carrier_for(&selected_a);
+        let _env = EnvGuard::apply(&[
+            ("SUBSTRATE_HOME", Some(ambient_b.as_os_str())),
+            ("SUBSTRATE_ROOT", Some(ambient_b.as_os_str())),
+        ]);
+
+        let context = bind_authenticated_world_deps_context_v1(
+            &carrier,
+            temp.path(),
+            &config_model::CliConfigOverrides::default(),
+        )
+        .expect("bind authenticated world-deps context");
+
+        context
+            .revalidate_authority()
+            .expect("retained authority remains valid");
+        assert_eq!(context.selected_host_prefix(), selected_a.to_str().unwrap());
+        assert_eq!(
+            context.host_context_commitment(),
+            carrier.host_context_commitment
+        );
+        assert_eq!(context.launch_cwd(), temp.path());
+        assert_eq!(context.global_config_path(), selected_a.join("config.yaml"));
+        assert_eq!(context.global_deps_dir(), selected_a.join("deps"));
+        assert_eq!(
+            context.effective_config().world.deps.builtins,
+            config_model::WorldDepsBuiltinsMode::Disabled
+        );
+        assert_eq!(context.effective_policy().id, "selected-policy");
+        assert_eq!(
+            context.runtime_network_policy().snapshot.net_allowed,
+            vec!["selected.example".to_string()]
+        );
+        assert_eq!(
+            context.world_fs_policy(),
+            &context.effective_policy().world_fs_policy()
+        );
+    }
+
+    #[test]
+    #[serial]
+    fn authenticated_context_rejects_tampered_commitment_before_mutation() {
+        let _authority_env = crate::execution::AuthorityEnvTestGuard::preserve();
+        let (_, account_home) = current_unix_principal_and_home().expect("current Unix home");
+        let temp = Builder::new()
+            .prefix("substrate-world-deps-context-tamper-")
+            .tempdir_in(account_home)
+            .expect("secure tamper fixture");
+        let selected_a = prepare_prefix(temp.path(), "selected-a");
+        let ambient_b = prepare_prefix(temp.path(), "ambient-b");
+        fs::write(selected_a.join("config.yaml"), "world: [")
+            .expect("poison selected config ordering sentinel");
+        fs::write(selected_a.join("policy.yaml"), "id: [")
+            .expect("poison selected policy ordering sentinel");
+        let mut carrier = carrier_for(&selected_a);
+        let replacement = if carrier.host_context_commitment.starts_with('0') {
+            "1"
+        } else {
+            "0"
+        };
+        carrier
+            .host_context_commitment
+            .replace_range(..1, replacement);
+        let selected_before = snapshot_tree(&selected_a);
+        let ambient_before = snapshot_tree(&ambient_b);
+        let _env = EnvGuard::apply(&[
+            ("SUBSTRATE_HOME", Some(ambient_b.as_os_str())),
+            ("SUBSTRATE_ROOT", Some(ambient_b.as_os_str())),
+        ]);
+
+        let error = bind_authenticated_world_deps_context_v1(
+            &carrier,
+            temp.path(),
+            &config_model::CliConfigOverrides::default(),
+        )
+        .expect_err("tampered authenticated context must fail closed");
+
+        assert!(format!("{error:#}").contains("invalid install bootstrap carrier"));
+        assert_eq!(snapshot_tree(&selected_a), selected_before);
+        assert_eq!(snapshot_tree(&ambient_b), ambient_before);
     }
 
     #[test]
