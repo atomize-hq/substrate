@@ -4,7 +4,7 @@
 **Scope:** planning, contracts, sequencing, and proof gates; not implementation history
 **Source directive:** [`../../substrate-runtime-refactor-directive-revised.md`](../../substrate-runtime-refactor-directive-revised.md)
 **Repo-truth snapshot:** 2026-07-17 at `6ab2a515e13946324d0aac25b144e1c3408cb2c1`; re-check live code before every slice
-**Current authorized increment:** `A1.1d-5R2-2F0 historical differential authority correction`; the exact final harness candidate is preserved but not restored, its implementation remains incomplete pending a fresh containment review and closeout, F remains blocked and unstarted, and R2-2 remains incomplete.
+**Current authorized increment:** `A1.1d-5R2-2F — Authenticated world-deps and truthful doctor composition`; F0, F0a, F0b, and F0-HC are canonically complete, F remains unstarted, and R2-2 remains incomplete.
 
 ## Canonical repo location
 
@@ -209,14 +209,12 @@ convergent. Remediation remains bounded to **A1.1d-5R1 → A1.1d-5R2 → A1.1d-5
 implemented and review-clean through `4d0acff68e20d86b97fe5367b8a4617554f33ef4`.
 **A1.1d-5R2-0 is planning-complete, and A1.1d-5R2-1 is implementation- and review-complete through
 `2653c2ef20ae2e119a444811e6fb46e86d1a6ec6`.** R2 remains sequenced as
-**R2-1 → R2-2 Routes A–E → F0/F0a/F0b/F0-HC implementation candidate → corrected
-differential-authority gate → final containment review and harness closeout → R2-2F → renewed
+**R2-1 → R2-2 Routes A–E → F0/F0a/F0b/F0-HC complete → R2-2F → renewed
 R2-2 integration closeout → R2-3 → R2-4**,
 followed by R3. Routes A–D are individually review-clean, but the failed integration closeout proved
 that R2-2 is incomplete and unpublished. R2-2E is now implementation-, proof-, and review-complete;
-The exact combined harness candidate is now preserved and unrestored; its packet remains incomplete
-pending the corrected differential-authority gate, fresh containment review, and closeout. R2-2F,
-renewed
+The combined harness corridor is now canonically complete at runtime commit
+`770a6a9de9f537f7bc179c75421abbc3fff05b8d`. R2-2F, renewed
 R2-2 closeout, R2-3, R2-4, and R3 remain
 unstarted. Until the
 remaining implementation packets are review-clean and their Linux lifecycle/product smoke passes,
@@ -259,9 +257,9 @@ runtime by `4d0acff68e20d86b97fe5367b8a4617554f33ef4`. `RG-HOME-01` and `RG-INST
 A1.1d and A1 remain incomplete, B3.1 remains blocked, and the R2 packets/R3 remain separately
 owned; R2-1 is complete and R2-2 is in progress through review-clean Routes A, B, C, and D. The
 failed Routes A–D integration closeout is blocker evidence rather than a completed packet; R2-2E is
-implementation-, proof-, and review-complete. The exact combined harness candidate is preserved and
-unrestored; corrected differential proof, fresh containment review, and harness closeout are next.
-R2-2F follows that closeout; renewed
+implementation-, proof-, and review-complete. The combined F0/F0a/F0b/F0-HC harness corridor is
+implemented, proof-complete, review-clean, committed, and preserved. R2-2F is the exact next packet;
+renewed
 closeout, R2-3/R2-4/R3 remain unstarted. Static macOS/Windows
 inspection in R2-0 is not native platform proof.
 
@@ -331,8 +329,8 @@ validation. Mixed A/B diagnostics fail closed or report unavailable/incoherent, 
 A-bound truth. Before F, **A1.1d-5R2-2F0 — Deterministic world-socket test isolation** repairs the
 proven test-harness-only `SUBSTRATE_WORLD_SOCKET` collision, while **A1.1d-5R2-2F0a —
 SUBSTRATE_HOME test isolation** repairs the separate HOME collision exposed by F0's final broad
-wall. F0/F0a remain incomplete: their exact candidates are preserved rather than landed, and
-focused proof is not closeout proof. F0/F0a use one process-global authority-environment lock
+wall. At the authorization checkpoint F0/F0a were incomplete and focused proof was not closeout
+proof. Their completed implementation uses one process-global authority-environment lock
 for same-process HOME/socket mutation, and socket-owning async fixtures must abort, await confirmed
 task termination, complete test-owned cleanup, restore exact prior environment state, and only then
 release that lock. Neither increment changes any production byte, socket-selection behavior,
@@ -360,8 +358,7 @@ process-global writer lock/registry, environment-selected sink, reporter filteri
 retries, thread reduction, ignored tests, and assertion weakening are forbidden. No production
 caller or product behavior changes, and no seam is promoted.
 
-The exact sequence is **Routes A–E → F0/F0a/F0b/F0-HC implementation candidate → corrected
-differential-authority gate → final containment review and harness closeout → F → renewed R2-2
+The exact sequence is **Routes A–E → F0/F0a/F0b/F0-HC complete → F → renewed R2-2
 integration closeout → R2-3 → R2-4 → R3**. E and F are logically
 separable but use this
 deterministic order so
@@ -383,9 +380,10 @@ The post-fork F0/F0a candidate's three exact parallel broad walls were
 `1134 passed / 146 failed / 0 ignored`, `1134 passed / 146 failed / 0 ignored`, and
 `1133 passed / 147 failed / 0 ignored`; the third wall alone added
 `public_prompt_renderer_renders_bounded_structured_fallback_when_decode_fails`. That variance
-invalidates canonical closeout. Combined F0/F0a/F0b closeout must establish and record the
-deterministic F comparison baseline; F may not start from any of these counts. Neither F0/F0a/F0b,
-F, nor renewed closeout may overwrite the historical values or erase any isolation record.
+invalidated canonical closeout. Combined F0/F0a/F0b closeout has now established the deterministic
+F comparison baseline at `1,280 discovered / 1,235 passed / 45 failed / 0 ignored`, identically
+across three parallel walls and one serial wall. F may start only from that recorded baseline.
+Neither F nor renewed closeout may overwrite the historical values or erase any isolation record.
 
 B1/B2.1-R0 lets RetainedWorkerRuntime create the immutable retained object graph and requires
 HostSessionAuthority first to reserve the ingress idempotency key, validate the exact participant
@@ -527,8 +525,8 @@ At that checkpoint, the canonical sequence was:
 `combined F0/F0a/F0b/Harness implementation and canonical closeout` → `F` →
 `renewed R2-2 integration closeout` → `R2-3` → `R2-4` → `R3`.
 
-F0, F0a, F0b, and their combined closeout remain incomplete. F, renewed R2-2 closeout, R2-3,
-R2-4, and R3 remain unstarted. No runtime implementation, user-facing behavior change, production
+That checkpoint did not complete F0, F0a, F0b, or their combined closeout. The canonical closeout
+below now completes them. F, renewed R2-2 closeout, R2-3, R2-4, and R3 remain unstarted. No user-facing behavior change, production
 registry, capability change, policy change, or seam promotion is authorized by F0-HC. The two
 preserved F0/F0a candidates remain evidence only; the corrected post-fork-remediation full-index
 SHA-256 is `9e012c68ea33107443cd38f2051aa40aae9f0f03d5c6abb4c630d418b0d7dee2`.
@@ -571,13 +569,53 @@ aggregate is `41cb1a325add4efd8198872b456c3ae0fba73f8c4943e4b59c06e2bc76d8b479`;
 `7ab220a715f4ae3389be314da2e6b0e614fcffb7a92166f04fde999570801861`; full-index patch is
 `adc1c5952e2ac4cc97881a1bf4df8e24b00d4d4ba337e692bf21965151d5c0c4`; and its diff is 45 files,
 5,630 insertions, and 2,104 deletions. Three implementation reviews—environment closure,
-renderer/injection, and lifecycle/subprocess—are `CLEAN`. The containment/differential review is
-blocked only on the unavailable historical-parallel provenance and must be replaced by a fresh
-review under the corrected authority model after the candidate is restored and revalidated.
+renderer/injection, and lifecycle/subprocess—are `CLEAN`. Fresh reviewer
+`/root/final_containment_corrected_authority`, thread
+`019f8681-7957-7cc3-88fa-37ab3ad2fc87`, returned `CLEAN` under the corrected authority model.
 
-This documentation-only correction changes no product behavior, completes no harness packet,
-promotes no seam, and does not start F. The binding sequence is now:
+The correction itself changed no product behavior and started no runtime packet. The subsequently
+reviewed harness closeout also changes no product or user-facing behavior and promotes no seam.
+F remains unstarted. The binding sequence is now:
 
-`Routes A–E` → `F0/F0a/F0b/F0-HC implementation candidate` →
-`corrected differential-authority gate` → `final containment review and harness closeout` → `F` →
+`Routes A–E` → `F0/F0a/F0b/F0-HC complete` → `F` →
 `renewed R2-2 closeout` → `R2-3` → `R2-4` → `R3`.
+
+## F0/F0a/F0b/F0-HC canonical closeout
+
+F0, F0a, F0b, and F0-HC are complete. The reviewed runtime commit is
+`770a6a9de9f537f7bc179c75421abbc3fff05b8d`, tree
+`61fdd2e9476f1ce3e041720ce106f7c3427895be`, preserved at
+`feat/preserve-a1-1d-5r2-2-harness-review-clean-7ab220a7`. Its 45-file runtime patch is
+byte-identical to the preserved candidate: 5,630 insertions and 2,104 deletions; manifest
+`b9e3a44dd671409f66e2d62d48cb494ab147069a74ed71f2308e031f56372ae6`; per-file fingerprint
+aggregate `41cb1a325add4efd8198872b456c3ae0fba73f8c4943e4b59c06e2bc76d8b479`; ordinary patch
+`7ab220a715f4ae3389be314da2e6b0e614fcffb7a92166f04fde999570801861`; and full-index patch
+`adc1c5952e2ac4cc97881a1bf4df8e24b00d4d4ba337e692bf21965151d5c0c4`.
+
+The corrected inventory revalidated at 86 names, 74 parent-mutated, 12 child-only/read-only, 395
+primitives, 73 dynamic calls, 43 sinks, 1,005 resolved callsites, 534 parent-mutating tests across
+35 files, 38 resource rows, and zero unresolved dynamic or ownership rows. All 38 dispositions are
+implemented or retained. Focused proof covers HOME/socket overlap, stdout/stderr injection,
+XDG/account-home negative projection, environment/CWD restoration, trace/cache/hook/tracker/broker/
+ACTIVE_PTY isolation, fork publication, async termination, subprocess isolation, exact absence and
+non-Unicode restoration, panic/poison/nesting/reacquisition, and child failure propagation.
+
+Three fresh parallel walls and one fresh serial wall each discovered 1,280 tests, passed 1,235,
+failed 45, and ignored 0. Their failure-name set SHA-256 is
+`b23bb59ad12833d2c1d37c19c54933cd6bcb1c75e0dab8a70179b9881372be70`; their consistently
+normalized signature set SHA-256 is
+`33c686a6ec9f3a0a4f51e1fca976445e6804da12fbbff50312a03f0042cdfac3`.
+Historical serial semantic authority yields exactly 1,202 `PassToPass`, zero `PassToFail`, 45
+`FailToSameFailure`, zero `FailToChangedFailure`, 16 causally audited `FailToPass`, zero removed or
+renamed/substituted tests, 17 exact authorized `NewPass`, zero `NewFail`, and zero `NewIgnored`.
+
+Historical parallel evidence remains diagnostic only: `1263/1113/150/0`, all 150 names recovered,
+37 complete panic bodies, and 113 normalized signatures unavailable. No historical parallel
+transition matrix, 105-transition claim, or reconstructed signature is asserted. GitNexus reports
+45 files and 365 changed indexed symbols; its sole medium process attribution resolves to
+`AuthorityEnvTestTempDir::new` under `#[cfg(test)]`, not a production flow. The only production hunk
+is the authorized mechanical F0b writer delegation with unchanged output/error behavior. The prior
+three implementation reviewers and the fresh containment reviewer are `CLEAN`. There is no product
+or user-facing behavior change and no seam promotion. F was not started.
+
+The exact next packet is **A1.1d-5R2-2F — Authenticated world-deps and truthful doctor composition**.

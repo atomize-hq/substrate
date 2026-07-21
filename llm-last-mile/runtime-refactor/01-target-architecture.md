@@ -423,9 +423,9 @@ adapters.
 
 Routes A–D are individually review-clean, but they do not exhaust the authenticated-context path.
 The failed R2-2 integration closeout found two remaining projection seams and one diagnostic
-composition invariant. R2-2E is now implementation-, proof-, and review-complete. The exact
-F0/F0a/F0b/F0-HC harness candidate is preserved and unrestored; corrected differential proof, a
-fresh containment review, and harness closeout remain. R2-2F follows that closeout, and a renewed
+composition invariant. R2-2E is implementation-, proof-, and review-complete. F0, F0a, F0b, and
+F0-HC are now implemented, proof-complete, review-clean, committed, and preserved. R2-2F is the
+exact next packet, and a renewed
 Routes A–F integration closeout follows F.
 
 R2-2E makes world-gateway projection a pure consumer of already-authenticated A. The landed shell world
@@ -461,7 +461,7 @@ is promoted.
 
 **A1.1d-5R2-2F0a — SUBSTRATE_HOME test isolation** joins R2-2F0 to establish one
 test-process-only authority-environment boundary around every
-same-process mutation of `SUBSTRATE_WORLD_SOCKET` or `SUBSTRATE_HOME`. F0's blocked candidate
+same-process mutation of `SUBSTRATE_WORLD_SOCKET` or `SUBSTRATE_HOME`. F0's historically blocked candidate
 already proves its exact socket pair 100/100 in parallel and 20/20 serially, but final broad runs
 were `1118 passed / 150 failed` and `1119 passed / 149 failed`; the extra failure was
 `dispatch_contract_adapter_active_task_resolution_requires_supervisor_claim`, which passes alone.
@@ -548,16 +548,17 @@ preserve explicitly labeled ambient compatibility or report unavailable/fail clo
 claim coherent A-bound truth or satisfy F acceptance. Non-Unix cfg coherence means build/static
 preservation and no A-bound success claim.
 
-F begins only after combined F0/F0a/F0b closeout has been published and all runtime commits have been
-replayed exactly above it. The post-E `1114 passed / 149 failed / 0 ignored` result is genuine but
+F begins only after combined F0/F0a/F0b closeout is published and all runtime commits are replayed
+exactly above it. The closeout precondition is now satisfied; F itself remains unstarted. The post-E
+`1114 passed / 149 failed / 0 ignored` result is genuine but
 nondeterministic before F0 because the same runtime can produce `1113 passed / 150 failed / 0
 ignored` through the proven shared-socket collision. F0's candidate then exposed the separate HOME
 interference through `1118/150` versus `1119/149`; neither is closeout proof. The post-fork
-candidate then produced parallel walls `1134/146`, `1134/146`, and `1133/147`; only the third
+candidate then produced historical parallel walls `1134/146`, `1134/146`, and `1133/147`; only the third
 added the stdout renderer fallback test because raw fd capture admitted reporter output. Combined
-F0/F0a/F0b closeout must publish the deterministic F comparison baseline after one serial and at least three
-default-parallel broad walls with an identical inherited failure-name/signature set. That new value
-remains distinct from the
+F0/F0a/F0b closeout has published the deterministic F comparison baseline after one serial and
+three default-parallel broad walls: each `1280/1235/45/0`, with an identical inherited
+failure-name/signature set. That value remains distinct from the
 **R2-2 historical starting baseline** of `1089 passed / 149 failed` and the **clean Route D
 comparison baseline** of `1101 passed / 149 failed / 0 ignored`. Routes A–E are immutable prior
 evidence for F0/F0a/F0b and F, and renewed R2-2 integration closeout remains after F.
@@ -671,7 +672,7 @@ If the answer depends on a helper still running, a socket being reachable, a ter
 ## F0-HC test-process coordination topology
 
 F0-HC changes no target production architecture. Its environment-inventory correction freezes the
-test-only topology required before the planned F0/F0a/F0b implementation can establish a
+test-only topology used by the completed F0/F0a/F0b implementation to establish a
 deterministic shell-library proof wall. Immutable-source closure now proves 86 environment names:
 74 parent-process mutations and 12 child-only projections or read-only names. In addition to the
 three known XDG mutations—`XDG_CONFIG_HOME`, `XDG_DATA_HOME`, and `XDG_STATE_HOME`—the same
@@ -781,7 +782,16 @@ only 37 names, so it cannot establish complete named-and-signed transitions.
 
 This split is an evidence-authority correction, not weaker architecture. `PassToFail`, `NewFail`,
 `Removed`, `RenamedOrSubstituted`, `NewIgnored`, and changed-signature gates remain zero-tolerance.
-All 16 serial `FailToPass` transitions require causal audit and all 17 `NewPass` transitions must
-remain tied to authorized tests. The preserved candidate must be restored and identity-checked,
-then receive a fresh containment review before harness closeout. Until then the harness packet is
-incomplete, F is blocked and unstarted, and no seam is promoted.
+All 16 serial `FailToPass` transitions received causal audit and all 17 `NewPass` transitions are
+the exact authorized tests. Runtime commit `770a6a9de9f537f7bc179c75421abbc3fff05b8d`, tree
+`61fdd2e9476f1ce3e041720ce106f7c3427895be`, preserves the reviewed 45-file patch exactly. Fresh
+containment reviewer `/root/final_containment_corrected_authority`
+(`019f8681-7957-7cc3-88fa-37ab3ad2fc87`) returned `CLEAN`. The F0/F0a/F0b/F0-HC harness packet is
+complete; F remains unstarted and is the exact next architectural packet; no seam is promoted.
+
+The final GitNexus snapshot reports 45 files, 365 changed indexed symbols, and one medium process
+attribution. The attributed `new` resolves to `AuthorityEnvTestTempDir::new` under `#[cfg(test)]`,
+so no production execution flow changes. The sole production hunk is the authorized mechanical
+F0b writer delegation and preserves output/error semantics byte-for-byte. All 38 process-resource
+dispositions are implemented or retained, with no new owner, policy, capability, credential,
+gateway, receipt, supervisor, worker, placement, caging, lifecycle, or user-facing behavior.

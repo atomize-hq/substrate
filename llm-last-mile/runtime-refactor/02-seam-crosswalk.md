@@ -292,7 +292,7 @@ may make the later target unambiguous but may not perform, authorize, or define 
 | PI-108 | `DiagnosticProjection` | world/host/health/shim doctor receives typed IH and passes A-derived config/deps paths to the existing report collector: Health uses `health.rs` → the Unix crate-private `shim_doctor::collect_report_for_context` name exposure → existing `report::collect_report_for_context`, while direct Unix shim doctor keeps its unchanged `run_doctor` → `report::collect_report_for_context` path. Both continue through `build_report`; the embedded world-deps branch uses only `A/health/world_deps.json` or `gather_world_deps_section` → `collect_doctor_snapshot_v1`, and the embedded world-doctor branch uses only `A/health/world_doctor.json` or the existing `world doctor --json` child with the same canonical hidden argv carrier plus A-derived checked child projections. No diagnostic may reconstruct default H, consult a B fixture, invoke a contextless Unix child, mutate the parent environment, or disclose carrier/credential/request/sensitive-principal bytes. The context-aware module export remains name visibility only. The existing `collect_report` compatibility re-export may receive only an item-level Unix `unused_imports` allowance with a temporary R2-3 reason, and `report.rs::collect_report` may receive only an item-level Unix `dead_code` allowance with that same temporary ownership; neither annotation changes behavior or can satisfy R2-2 proof. Unix `collect_report` remains an explicitly named checked-projection compatibility caller, behavior-frozen and barred from typed Health; physical-shim/replay migration or removal remains R2-3; R2 | named platform/health handlers; `shim_doctor/mod.rs` Unix-only crate-private re-export of existing `report::collect_report_for_context` plus the existing `collect_report` re-export's item-level lint annotation only; `shim_doctor/report.rs::{collect_report` item-level lint annotation only, `collect_report_for_context,build_report,gather_world_doctor_snapshot,gather_world_deps_section,try_load_health_fixture,health_fixture_path,run_json_subcommand}` exact typed-carrier/A-fixture/child-transport and mechanical cfg/caller closure; `world_deps/mod.rs::{collect_doctor_snapshot_v1,resolve_effective_enabled_provisioning_requirements_v1}`; and `world_deps/surfaces.rs::resolve_current_inventory_view` explicit context/A intake | R2-DIAG-01; native Linux | R2-2 Route D |
 | PI-109 | `DiagnosticProjection` | installer-managed config proof receives the hidden argv carrier; root dispatch validates it and `ShellConfig::from_cli` explicitly forwards typed IH only to the Config branch, where `run_current_show` resolves the global layer through the existing opened-bootstrap-home contract with explain parity; workspace/Cli/config semantics stay frozen; R2 | `config_cmd.rs::{handle_config_command,run_current_show}` and `config_model.rs::{resolve_effective_config_for_bootstrap_home,resolve_effective_config_with_explain_for_bootstrap_home}` exact context intake/delegation only | R2-DIAG-01/R2-LINUX-01; native Linux | R2-2 |
 | PI-110 | `DiagnosticProjection` | installer-managed policy proof uses the same hidden argv carrier/typed IH; `ShellConfig::from_cli` explicitly forwards only to the Policy branch and `run_current_show` resolves the A-global layer through the existing opened-bootstrap-home contract with explain parity; workspace/policy semantics stay frozen and ambient B cannot select the global layer; R2 | `policy_cmd.rs::{handle_policy_command,run_current_show}` and `policy_model.rs::{resolve_effective_policy_for_bootstrap_home,resolve_effective_policy_with_explain_for_bootstrap_home}` exact context intake/delegation only | R2-DIAG-01/R2-LINUX-01; native Linux | R2-2 |
-| PI-111 | `ExplicitHostPropagation` | **R2-2E implementation/proof clause complete.** Routes A–D left gateway configuration, effective policy, network policy, runtime-family inventory, Codex home, disabled routing, and client selection ambient. R2-2E now validates A before status/mutation/launch, keeps existing config/effective-policy owners and `policy_snapshot.rs` as the single snapshot/network owner, removes contextless unavailable synthesis, and fixes the authenticated Linux socket to `/run/substrate.sock`. Because E has no authenticated platform-endpoint source, macOS fails before client construction/`auto_select`, and Windows/other contextless entries fail before config/policy/inventory/disabled/client selection; frozen ambient compatibility remains R2-3-owned and unreachable from E. Existing policy/network/credential semantics remain unchanged. This does not complete direct-member Codex/UAA gateway adoption or the full credential/config architecture; E3/D1/D3 and the open RG-CONFIG/RG-UAA gates retain that work. | `platform/mod.rs::handle_world_command` Gateway arm; exact R2-2E symbols in `world_gateway.rs`, `policy_snapshot.rs`, and `agent_inventory.rs`; lower platform adapters and schemas frozen | R2-RUNTIME-01/R2-DIAG-01; focused Linux plus non-Unix build/static fail-closed cfg, native platform product proof deferred | R2-2E complete; harness candidate preserved and unrestored; corrected differential proof, fresh containment review, and harness closeout next; F only afterward |
+| PI-111 | `ExplicitHostPropagation` | **R2-2E implementation/proof clause complete.** Routes A–D left gateway configuration, effective policy, network policy, runtime-family inventory, Codex home, disabled routing, and client selection ambient. R2-2E now validates A before status/mutation/launch, keeps existing config/effective-policy owners and `policy_snapshot.rs` as the single snapshot/network owner, removes contextless unavailable synthesis, and fixes the authenticated Linux socket to `/run/substrate.sock`. Because E has no authenticated platform-endpoint source, macOS fails before client construction/`auto_select`, and Windows/other contextless entries fail before config/policy/inventory/disabled/client selection; frozen ambient compatibility remains R2-3-owned and unreachable from E. Existing policy/network/credential semantics remain unchanged. This does not complete direct-member Codex/UAA gateway adoption or the full credential/config architecture; E3/D1/D3 and the open RG-CONFIG/RG-UAA gates retain that work. | `platform/mod.rs::handle_world_command` Gateway arm; exact R2-2E symbols in `world_gateway.rs`, `policy_snapshot.rs`, and `agent_inventory.rs`; lower platform adapters and schemas frozen | R2-RUNTIME-01/R2-DIAG-01; focused Linux plus non-Unix build/static fail-closed cfg, native platform product proof deferred | R2-2E and F0/F0a/F0b/F0-HC complete; F is the exact next packet and is unstarted |
 | PI-112 | `GeneratedProjectionConsumption` | `UserKnownHostsFile` is an A-relative generated helper projection carried into the verified Lima mapping; existence/content never selects A or PM; R2 | `create_ssh_uds_forwarding` known-hosts path parameter only | R2-MAP-MAC-01/R2-GEN-01; static plus assigned native macOS | R2-3 |
 | PI-113 | `R3CleanupOnly` | forwarder-child kill/wait and socket removal on handle drop are teardown/cleanup authority reserved exclusively to R3; R2 mapping edits freeze the body | `ForwardingHandle::drop` body frozen in R2 | R3-LIFE-01; native macOS | R3 |
 | PI-114 | `R3CleanupOnly` | timed-out SSH child kill/wait is current-attempt rollback reserved exclusively to R3; R2 mapping edits freeze the branch | `create_ssh_uds_forwarding` timeout-kill branch frozen in R2 | R3-LIFE-01; native macOS | R3 |
@@ -311,22 +311,20 @@ replay/global-trace, platform-native mapping, and ambient compatibility migratio
 privileged joined product proof; R3 retains deletion, rollback, replacement cleanup, recursive or
 wildcard removal, service/helper/socket cleanup, ownership manifests, account-state restoration,
 crash cleanup, and uninstall convergence. The resulting inventory DAG is Routes A–E →
-F0/F0a/F0b/F0-HC implementation candidate → corrected differential-authority gate → final
-containment review and harness closeout → F → renewed R2-2 integration closeout →
+F0/F0a/F0b/F0-HC complete → F → renewed R2-2 integration closeout →
 R2-3 → R2-4 → R3.
 The E/F authenticated success claim is Unix/Linux-only. macOS, Windows, fallback, and other
 non-Unix compatibility paths remain explicitly unproven R2-3 ownership; build/static preservation
 or unavailable/fail-closed output is not A-bound product proof.
 
-R2-2F0/F0a were authorized but incomplete at this checkpoint. Their exact candidates are preserved
+R2-2F0/F0a were authorized but incomplete at this historical checkpoint. Their exact candidates are preserved
 rather than landed; focused socket/HOME proof is green, but the post-fork candidate's three
 parallel broad walls were `1134/146`, `1134/146`, and `1133/147`. The third alone added the stdout
-renderer fallback test. A later exact combined F0/F0a/F0b/F0-HC candidate is now preserved and
-unrestored; corrected differential proof, fresh containment review, and harness closeout are the
-remaining gate. The
+renderer fallback test. The later exact combined F0/F0a/F0b/F0-HC candidate has now passed the
+corrected differential gate, fresh containment review, and canonical closeout. The
 post-E `1114 passed / 149 failed / 0 ignored` result remains genuine but nondeterministic before F0;
-the same source can produce `1113 passed / 150 failed / 0 ignored`. Combined F0/F0a/F0b proof must
-establish the deterministic F comparison baseline, with Routes A–E immutable. The distinct
+the same source can produce `1113 passed / 150 failed / 0 ignored`. Combined F0/F0a/F0b closeout
+has established the deterministic F comparison baseline, with Routes A–E immutable. The distinct
 **R2-2 historical starting baseline** remains `1089 passed / 149 failed`, and the distinct **clean
 Route D comparison baseline** remains `1101 passed / 149 failed / 0 ignored`. R2-2F follows combined
 F0/F0a/F0b closeout; renewed R2-2 integration closeout follows F.
@@ -539,8 +537,8 @@ being projected into HostSessionAuthority truth. Physical ACL-xattr absence woul
 separately approved privileged platform-attestation boundary; R1 neither implies nor adds one.
 The bounded R1 implementation and reviews are clean; R2-0 planning and R2-1 implementation are
 complete, while R2-2 Routes A–D remain individually review-clean and R2-2E is implementation-,
-proof-, and review-complete. The exact harness candidate is preserved and unrestored; corrected
-differential proof, fresh containment review, and harness closeout are next, and F follows them. Renewed closeout,
+proof-, and review-complete. F0/F0a/F0b/F0-HC are now also canonically complete; F is the exact next
+packet and remains unstarted. Renewed closeout,
 R2-3/R2-4/R3 remain unstarted, and the R1 evidence does
 not promote this seam, and all later lifecycle/product gates remain open.
 
@@ -1094,8 +1092,38 @@ The 17 and only 17 authorized `NewPass` tests are:
 - `execution/mod.rs::world_socket_test_guard_restores_prior_absence`; and
 - `execution/orchestrator_world_dispatch.rs::fork_publication_stable_reader_waits_for_authority_home_fixture_cleanup`.
 
-Deterministic endpoint listings prove zero removed and zero renamed/substituted tests. The exact
-45-file manifest and per-file fingerprints bind the candidate, while graph comparison reports no
-changed production execution flow. The candidate's four walls bind concurrency behavior, and the
-serial matrix binds semantics. No crosswalk row changes state: the harness remains incomplete
-pending fresh containment review and closeout; F remains blocked; no seam is promoted.
+Deterministic endpoint listings prove zero removed, renamed, substituted, or newly ignored tests.
+The exact 45-file candidate is committed as `770a6a9de9f537f7bc179c75421abbc3fff05b8d`
+(tree `61fdd2e9476f1ce3e041720ce106f7c3427895be`). Its manifest, per-file fingerprints,
+ordinary patch, and full-index patch SHA-256 values are respectively
+`b9e3a44dd671409f66e2d62d48cb494ab147069a74ed71f2308e031f56372ae6`,
+`41cb1a325add4efd8198872b456c3ae0fba73f8c4943e4b59c06e2bc76d8b479`,
+`7ab220a715f4ae3389be314da2e6b0e614fcffb7a92166f04fde999570801861`, and
+`adc1c5952e2ac4cc97881a1bf4df8e24b00d4d4ba337e692bf21965151d5c0c4`.
+
+The corrected validator closes 86 environment names as 74 parent-mutated plus 12 child-only or
+read-only, with 395 primitives, 73 dynamic calls, 43 sinks, 1,005 resolved callsites, 534 tests in
+35 files, 38 resource rows, and zero unresolved dynamic rows. All 38 dispositions are implemented
+or retained. Focused proof covers HOME/socket overlap, renderer isolation, negative projections,
+environment/CWD restoration, global state, fork publication, async termination, subprocess
+isolation, exact absence/non-Unicode restoration, panic/poison/nesting/reacquisition, and child
+failure propagation.
+
+Three fresh parallel walls and one serial wall each report `1280/1235/45/0`; every wall has failure
+name-set SHA-256 `b23bb59ad12833d2c1d37c19c54933cd6bcb1c75e0dab8a70179b9881372be70`
+and normalized-signature-set SHA-256
+`33c686a6ec9f3a0a4f51e1fca976445e6804da12fbbff50312a03f0042cdfac3`.
+The serial matrix is exactly `1202/0/45/0/16/0/0/17/0/0` in the contract's row order. The 16
+`FailToPass` rows resolve causally to seven detached-availability, two deterministic fork
+publication, six stop-dispatch, and one hidden-owner harness fixes. The 17 `NewPass` rows are
+exactly the authorized list above.
+
+The three prior implementation reviews—`/root/final_review_env_closure`,
+`/root/final_review_renderer_injection`, and `/root/final_review_lifecycle_subprocess`—remain CLEAN
+for these exact candidate bytes. Fresh reviewer `/root/final_containment_corrected_authority`
+(task `019f8681-7957-7cc3-88fa-37ab3ad2fc87`) returned CLEAN. GitNexus change detection attributes
+one generated MEDIUM process label to the test-only `AuthorityEnvTestTempDir::new`; source closure
+finds no changed production execution flow. The sole production hunk is the authorized mechanical
+F0b writer delegation with byte-identical output. Product and user-facing behavior do not change,
+and no seam is promoted. F0, F0a, F0b, and F0-HC are complete. F remains unstarted and the exact
+next packet is **A1.1d-5R2-2F — Authenticated world-deps and truthful doctor composition**.

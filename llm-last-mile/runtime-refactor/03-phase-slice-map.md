@@ -435,9 +435,7 @@ A1.1d-5R1
   -> A1.1d-5R2-0
   -> A1.1d-5R2-1
   -> A1.1d-5R2-2 Routes A-E
-  -> A1.1d-5R2-2F0/F0a/F0b/F0-HC implementation candidate
-  -> corrected differential-authority gate
-  -> final containment review and harness closeout
+  -> A1.1d-5R2-2F0/F0a/F0b/F0-HC complete
   -> A1.1d-5R2-2F
   -> renewed A1.1d-5R2-2 integration closeout
   -> A1.1d-5R2-3
@@ -545,7 +543,7 @@ below.
 | Independent reviews | Host/principal/sudo security; install/uninstall R2-versus-R3 lifecycle; Linux service/runtime allowlist and regression plan. All CLEAN. |
 | Platform evidence | Static and focused native Linux integration. Native non-Linux Route A proof is unavailable in this Linux environment: the Windows target lacks MSVC `lib.exe`, and the Darwin target lacks the Apple SDK header `TargetConditionals.h`. These are tooling limitations, not successful checks or product regressions. Dedicated-host privileged Linux product proof remains R2-4. No macOS/Windows product claim. |
 | Stop conditions | Any deletion/rollback ownership is required; service behavior cannot be fixed by selected-context propagation alone; a runtime/world capability or policy seam would change; allowlist is insufficient; context/principal cannot remain exact across sudo. Use the same architecture/cross-document stops as R2-1. |
-| Next packet | R2-2E is implemented, proof-complete, and review-clean. The exact F0/F0a/F0b/F0-HC implementation candidate is preserved and unrestored; Routes A–E remain immutable prior evidence. The exact next task is candidate restoration and identity revalidation, corrected differential proof, fresh containment review, and harness closeout. F remains next only after that closeout, and R2-2 remains incomplete pending F and the renewed production-fix-free integration closeout. |
+| Next packet | R2-2E and F0/F0a/F0b/F0-HC are implemented, proof-complete, review-clean, canonically closed out, replay-ready, and preserved; Routes A–E remain immutable prior evidence. **A1.1d-5R2-2F — Authenticated world-deps and truthful doctor composition** is the exact next packet and remains unstarted. R2-2 remains incomplete pending F and the renewed production-fix-free integration closeout. |
 
 Route B's refreshed exact-WIP process-label audit is closed as follows. “Root semantic; terminal
 attribution only” means the named root owns the authorized PI-105 argument/projection change while
@@ -596,26 +594,26 @@ execution-family root.
 | Impact posture | Reviewed existing symbols are LOW, including `world_routing_disabled` (two direct/four total), `GatewayLifecycleRequestContext` (one/five), and `synthesized_unavailable_response_without_context` (two/four). GitNexus under-resolves cfg-specific `build_gateway_client`; manual cfg closure is binding. A new owner, process family, request schema, lower adapter edit, network semantic change, credential lifecycle change, or platform-control fallback is `ImpactDecisionRequired`. |
 | Frozen exclusions | Config/policy resolver bodies; `install_bootstrap::unix_account_home_for_principal`; gateway request/response and network types; ambient macOS/Windows compatibility clients and all transport clients; world-service handlers; `world-mac-lima::{forwarding,transport}`; Windows/other lower adapters; policy/network meaning; credential carrier/content; gateway service lifecycle; physical shim; replay/global trace; R2-3/R2-4/R3 behavior. |
 | Stop conditions | A cannot be validated before disabled/unavailable handling; correct projection requires duplicating the policy resolver; the fixed Linux endpoint would change; macOS would construct a client/enter ambient forwarding; Windows/other contextless entries would select ambient state or claim A-bound success; any HIGH/CRITICAL existing symbol appears; any extra production file/symbol or semantic capability is required; a credential or carrier could be disclosed. Stop before edits or continue only after a new cross-document/impact decision. |
-| Exit/next | Satisfied: focused proof, warnings-denied touched-target Clippy, shell/workspace all-target checks, format/diff checks, GitNexus semantic containment, and fresh security/call-path/cfg reviews are CLEAN. Linux proof is recorded; macOS/Windows disposition is fail-before-ambient/static cfg preservation only, not native product proof, and no privileged R2-4 claim is made. PI-111's R2-2E implementation/proof clause alone is complete; the full credential/config architecture remains open at E3/D1/D3. The exact harness candidate is preserved and unrestored; corrected differential proof, fresh containment review, and harness closeout are next, and A1.1d-5R2-2F follows. |
+| Exit/next | Satisfied: focused proof, warnings-denied touched-target Clippy, shell/workspace all-target checks, format/diff checks, GitNexus semantic containment, and fresh security/call-path/cfg reviews are CLEAN. Linux proof is recorded; macOS/Windows disposition is fail-before-ambient/static cfg preservation only, not native product proof, and no privileged R2-4 claim is made. PI-111's R2-2E implementation/proof clause is complete; the full credential/config architecture remains open at E3/D1/D3. F0/F0a/F0b/F0-HC are also complete, and A1.1d-5R2-2F is the exact next unstarted packet. |
 
 ###### A1.1d-5R2-2F0 — Deterministic world-socket test isolation
 
 | Packet field | Frozen requirement |
 |---|---|
-| Status | **Authorized but incomplete; blocked candidate preserved, not landed.** `TestIsolationDefectConfirmed` remains binding. Focused socket proof is green, but broad `1118/150` versus `1119/149` exposed the distinct F0a HOME defect. F must not start until combined F0/F0a/F0b implementation is proof-complete, review-clean, canonically closed out, and replayed. |
+| Status | **Complete.** The historical `TestIsolationDefectConfirmed` classification and `1118/150` versus `1119/149` observations remain causal evidence; the exact combined implementation is proof-complete, review-clean, canonically closed out, and preserved. |
 | Minimal reproducer | `continue_world_worker_classifies_real_retained_member_turn_streams` plus `b21_retained_production_handoff_claims_before_next_frame`; target failed 12/20 with `--exact --test-threads=2`, failed 0/10 with `--exact --test-threads=1`, and fixed serial order passes. Overlap through process-global `SUBSTRATE_WORLD_SOCKET` is required. The competing mutation first appears at `c519024bd91b6ca6e332d0b8881f7d13ded940e0`. |
 | Test-process contract | Acquire the shared world-environment lock; capture exact prior `OsString` or absence; install the test-owned value or absence; retain the lock through socket use, child/server lifetime, cleanup, and restoration; restore on return and panic unwind; release only after restoration. Same-thread nesting must restore in stack order without deadlock. `parking_lot::ReentrantMutex` is non-poisoning; a panicking holder releases normally and later acquisition must be proved. `#[serial]` may remain but is never the only boundary. |
 | Complete mutation inventory | Sixty-six shell library-test mutators: 49 orchestrator local-guard call sites, two orchestrator manual blocks, four macOS platform closure-helper call sites, two persistent-session direct call sites, two routing direct call sites, one world-enable path manual block, four already-compliant world-gateway RAII calls, one noncompliant world-gateway classification-test closure call, and one already-compliant async-REPL call. Sixty-one migrate; five remain source-reviewed unchanged. Integration tests only inject child `Command` environments in separate processes and do not require migration. Production reads remain frozen. |
 | Exact implementation allowlist | Test-only hunks in `crates/shell/src/execution/mod.rs`, `crates/shell/src/execution/orchestrator_world_dispatch.rs`, `crates/shell/src/execution/platform/macos.rs`, `crates/shell/src/execution/routing/dispatch/world_persistent_session.rs`, `crates/shell/src/execution/routing/world.rs`, `crates/shell/src/builtins/world_enable/runner/paths.rs`, and the classification-test helper/call in `crates/shell/src/builtins/world_gateway.rs`. No production-compiled behavior, integration-test name/assertion, dependency, runtime resolver, readiness logic, retained-worker path, retry validator, capability, policy, or secure-FD path may change. |
 | Required focused proof | Exact prior non-Unicode-capable value and absence restoration; panic restoration; non-poisoning recovery; nested acquisition; concurrent blocking and cleanup-before-release; no competitor-socket observation; no deadlock or leaked socket/process/root; exact pair at least 100 parallel and 20 serial iterations; neighboring mutator combinations; deliberate retained-registration loser remains internal while its parent passes. |
 | Required broad proof | Combined with F0a/F0b: at least three independent exact final-candidate default-parallel shell broad walls and one canonical `--test-threads=1` wall. No recurrence of socket, HOME, or renderer-output interference; no new or changed inherited failure; no removed/renamed/substituted/weakened/newly ignored test; no unexplained count variance; and identical normalized inherited signatures. Any added passing tests define an explicit count delta and the deterministic post-F0/F0a/F0b F comparison baseline. Shell/workspace all-target checks, warnings-denied Clippy, format, diff, and GitNexus test-only containment are mandatory. |
-| Stop/next | A production change stops as `CrossDocumentChangeRequired`. The exact combined candidate is preserved and unrestored. After restoration and identity revalidation, corrected differential proof, fresh containment review, harness closeout, and exact replay, the exact next increment is A1.1d-5R2-2F. Renewed closeout, R2-3, R2-4, and R3 remain unstarted. |
+| Stop/next | The production boundary remained intact. Exact restoration, identity revalidation, corrected differential proof, fresh CLEAN containment review, canonical closeout, and runtime preservation are complete. A1.1d-5R2-2F is the exact next increment; renewed closeout, R2-3, R2-4, and R3 remain unstarted. |
 
 ###### A1.1d-5R2-2F0a — SUBSTRATE_HOME test isolation
 
 | Packet field | Frozen requirement |
 |---|---|
-| Status | **Authorized prerequisite; not implemented.** F0's broad wall established a second `TestIsolationDefectConfirmed`; F0/F0a runtime implementation is not resumed by this planning packet. |
+| Status | **Complete.** F0's broad wall established the second historical `TestIsolationDefectConfirmed`; the authorized F0a implementation, proof, review, canonical closeout, and preservation are complete. |
 | Exact minimal pair | Target `execution::agent_runtime::tool_invocation_contract::tests::dispatch_contract_adapter_active_task_resolution_requires_supervisor_claim`; competitor `execution::agent_runtime::control::tests::prompt_submit_continuity_prefers_persisted_session_contract`. Parallel same-process pair failed 20/20. The stable same-process serial run controlled competitor-then-target and failed 0/10; separate-process sequential runs passed in both directions. Stable libtest could not force reverse same-process order, so that result is not claimed. Three other unannotated HOME mutators independently reproduce 20/20 and remain in the migration inventory. Commit `f5a150f94d585b1f55ec0067845cd5d715773c78` first adds the selected competitor; `83101dcbcc750e6e8fb8979bea19f1f777792188` later adds the target and its mutating fixture and is the first source commit where the exact pair coexists. |
 | Shared resource and topology | Process-global `SUBSTRATE_HOME`. Non-source tracing proves the competitor can remove the target's private HOME during overlap. One authority-environment lock jointly protects HOME and `SUBSTRATE_WORLD_SOCKET`; 88 joint users and opposite existing acquisition orders reject separate locks. Exact `OsString`/absence, panic restoration, explicit poison/recovery, safe nesting, bounded child inheritance, and stable-reader participation are mandatory. `#[serial]` is supplemental only. |
 | Shell-library mutation closure | 435 mutating test functions across 19 files. Five `with_store` helper families cover 223 dependent tests; two `agents_cmd` helpers cover five more. All direct/local guard/manual sites are included. The four unannotated mutators are the two control continuity tests and the two agents-command toolbox-status tests. |
@@ -624,13 +622,13 @@ execution-family root.
 | Exact combined test-only allowlist | Existing F0 seven-file allowlist plus HOME-only shell-library files `crates/shell/src/builtins/{shim_doctor/report.rs,world_deps/mod.rs,world_enable/runner/manager_env.rs}`, `crates/shell/src/execution/{agent_inventory.rs,agents_cmd.rs,config_model.rs,env_scripts.rs,host_inbox_materialization.rs,invocation/tests.rs,routing/builtin/tests.rs,settings/tests.rs}`, `crates/shell/src/execution/agent_runtime/{auto_attach.rs,control.rs,state_store.rs,tool_invocation_contract.rs,host_session_authority/store_tests.rs}`, and `crates/shell/src/repl/async_repl.rs`; integration dispositions may edit only `crates/shell/tests/{shim_deployment.rs,agent_successor_contract_ahcsitc0.rs,support/mod.rs}`. Every hunk must compile only as test/harness behavior. |
 | Impact boundary | `world_env_guard` is CRITICAL at 35 direct/70 total dependents; tool-contract `with_store` is HIGH at 12 direct dependents; other reviewed helpers are MEDIUM/LOW or graph-under-resolved and require source-level dependent audit. No production execution family, resolver, socket owner, retained-registration validator, managed secure-FD path, capability, policy, or user behavior may change. |
 | Required focused/combined proof | F0 socket pair at least 100 parallel/20 serial; F0a HOME pair at least 100 parallel/20 serial; combined HOME/socket neighbor matrix; prior absence/value/non-Unicode restoration; panic, poison/recovery, nesting, exclusion, bounded subprocess inheritance, async termination/cleanup ordering, and zero leaked task/socket/helper/temp-root proof. Then three exact final-candidate parallel broad walls and one serial wall with a stable inherited failure-name/signature set and no unexplained count variance. |
-| Stop/next | Any production hunk stops as `CrossDocumentChangeRequired`. The exact combined candidate is preserved and unrestored; only after restoration, identity revalidation, corrected differential proof, fresh containment review, harness closeout, and exact replay is A1.1d-5R2-2F next. |
+| Stop/next | No unauthorized production hunk exists. Exact restoration, identity revalidation, corrected differential proof, fresh CLEAN containment review, canonical closeout, and runtime preservation are complete; A1.1d-5R2-2F is next. |
 
 ###### A1.1d-5R2-2F0b — deterministic renderer-output test isolation
 
 | Packet field | Frozen requirement |
 |---|---|
-| Status | **Planned and authorized but incomplete; not implemented.** Primary classification `TestIsolationDefectConfirmed`. This packet authorizes only the bounded future test-isolation remediation and does not resume the preserved F0/F0a candidate. |
+| Status | **Complete.** The primary historical classification is `TestIsolationDefectConfirmed`. The bounded explicit-writer remediation is implemented, proof-complete, review-clean, canonically closed out, and preserved. |
 | Exact blocker | The stdout fallback test's `capture_stdout_once` redirects process fd 1 with `dup2`; libtest's parallel reporter writes through that descriptor. Exact captured bytes: `".[codex] task_progress: fields=alpha, beta, gamma (+1 more)\n"`. The post-fork candidate walls were `1134 passed / 146 failed / 0 ignored`, `1134 passed / 146 failed / 0 ignored`, and `1133 passed / 147 failed / 0 ignored`; only wall 3 added `public_prompt_renderer_renders_bounded_structured_fallback_when_decode_fails`, invalidating closeout. |
 | Causal controls | Forced same-process parallel: 376 pass/124 fail across 500, all the exact wall signature. Isolated target: 100/100. Same-process serial with identical neighbors: 100/100. Separate-process control: 100/100. Parallel pretty reporter: 99/100. Candidate introduction is unnecessary; the helper and target are byte-identical to clean E. |
 | Exact future file/symbol allowlist | One file: `crates/shell/src/execution/agent_runtime/control.rs`. EDIT `PublicPromptRenderer::render` only for mechanical delegation. ADD private Unix-only explicit-writer core/output adapter symbols. DELETE `capture_stdout_once` and `capture_stderr_once`. EDIT only `public_prompt_renderer_renders_bounded_structured_fallback_when_decode_fails` and `public_prompt_renderer_renders_bounded_structured_stderr_fallback_when_decode_fails` to use private in-memory stdout/stderr writers and assert complete exact bytes plus an empty nonselected stream. |
@@ -639,8 +637,8 @@ execution-family root.
 | Forbidden remediation | Public writer API or transport/schema; global writer lock/registry/side table; environment-selected output; raw descriptor capture as the final mechanism; filtering/stripping/searching around reporter bytes; sleeps, retries, reporter suppression, thread reduction, whole-suite serialization, ignore, removal, rename, substitution, or assertion weakening. `#[serial]` may remain supplemental only because it cannot exclude libtest reporter writes. |
 | Impact and containment | GitNexus: `PublicPromptRenderer::render` MEDIUM, four direct graph dependents, 39 total, one `handle_agent_command` process family, Agent_runtime direct and Execution indirect; source closure resolves exactly two production callers and two tests. `PublicPromptRenderer::new` reports HIGH (19 direct/43 total, two process labels, three modules) but source closure proves generic-`new` over-attribution and its body is frozen. The renderer type, both capture helpers, and both tests are LOW/zero-process. No CRITICAL impact, new production process family, or changed production process semantics are authorized. |
 | Required focused proof | Both exact tests isolated; exact private-buffer stdout/stderr assertions; same-process renderer pair at least 100/100 parallel and 20/20 serial; forced reporter-overlap proof; unchanged JSON/completed/warning/failed/stdout-event/stderr-event selection, order, newline, flush, and error semantics. No unrelated reporter byte can enter either private writer. |
-| Required combined closeout | F0/F0a/F0b together must pass all authority-environment, async termination, renderer-isolation, shell-module, compile, Clippy, format, and diff gates, followed by three exact default-parallel broad walls and one serial wall with identical discovery/pass/fail/ignored counts, failure names, and normalized signatures. Only that closeout may establish the deterministic F comparison baseline. |
-| Stop/next | A public API, global output lock/registry, changed renderer contract/caller, nonallowlisted file/symbol, new production process family, changed production process semantics, or weaker test stops as `ArchitecturalDecisionRequired` or `CrossDocumentChangeRequired`. The exact candidate is preserved and unrestored. Restoration, identity revalidation, corrected differential proof, fresh containment review, and harness closeout are next; F remains blocked. |
+| Completed combined closeout | F0/F0a/F0b together passed all authority-environment, async termination, renderer-isolation, shell-module, compile, Clippy, format, and diff gates, followed by three exact default-parallel broad walls and one serial wall with identical discovery/pass/fail/ignored counts, failure names, and normalized signatures. That closeout establishes the deterministic F comparison baseline. |
+| Stop/next | No public API, global output lock/registry, changed renderer contract/caller, nonallowlisted file/symbol, new production process family, changed production process semantics, or weaker test was introduced. F0b is complete; F remains unstarted and is the exact next packet. |
 
 ###### A1.1d-5R2-2F — Authenticated world-deps and truthful doctor composition
 
@@ -661,10 +659,9 @@ execution-family root.
 | Exit/next | Focused proof, full affected world-deps/doctor suite, warnings-denied touched-target Clippy, shell/workspace all-target checks, format/diff checks, GitNexus detection, and fresh security/call-path/doctor-coherence reviews are CLEAN. Then run a renewed production-fix-free Routes A–F R2-2 integration closeout. R2-3 remains after that closeout. |
 
 R2-2E, R2-2F0/F0a/F0b, and R2-2F are logically separable, but the selected order is binding: E has
-established the canonical explicit config/policy/network projection; the exact harness candidate is
-preserved and unrestored; corrected differential proof, fresh containment review, and harness
-closeout are next; and F follows that closeout to reuse E's projection for authenticated
-runtime requests and then prove doctor constituent coherence. The
+established the canonical explicit config/policy/network projection; F0/F0a/F0b/F0-HC are
+canonically complete; and F is the exact next unstarted packet, reusing E's projection for
+authenticated runtime requests and then proving doctor constituent coherence. The
 renewed R2-2 closeout reruns the complete Routes A–F product wall and may not repair production code.
 Routes A–E are preserved evidence, not reopened implementation. R2-3, R2-4, R3, `RG-HOME-01`, and
 `RG-INSTALL-01` retain their existing ownership and open status; no seam is promoted.
@@ -779,10 +776,9 @@ R2/R3 proof, native macOS proof, or cross-platform closeout.
 
 The R1 contract correction and bounded runtime are review-clean through
 `4d0acff68e20d86b97fe5367b8a4617554f33ef4`; R2-0 planning and R2-1 implementation are complete.
-R2-2 Routes A–E are individually review-clean; R2-2E is implemented, proof-complete, and preserved,
-while the exact harness candidate is preserved and unrestored. Corrected differential proof, fresh
-containment review, and harness closeout are next; R2-2F, renewed R2-2 closeout, R2-3/R2-4/R3 are not
-begun. `RG-HOME-01` and
+R2-2 Routes A–E are individually review-clean; R2-2E and F0/F0a/F0b/F0-HC are implemented,
+proof-complete, review-clean, canonically closed out, and preserved. R2-2F is the exact next packet
+and remains unstarted; renewed R2-2 closeout, R2-3/R2-4/R3 are not begun. `RG-HOME-01` and
 `RG-INSTALL-01` remain open, A1.1d/A1 remain incomplete, and B3.1 remains blocked.
 Their Linux regression wall and normal product lifecycle smoke are prerequisites for A1.1d Linux
 closeout and for the Linux product-smoke portion of the B1/B2.1 joint closeout. They do not reopen
@@ -800,12 +796,11 @@ The `RG-AUTH-01` and `RG-AUTH-02` references in A1 are scoped gates, not whole-l
   compatibility audit; R1 is review-clean through `4d0acff68e20d86b97fe5367b8a4617554f33ef4`,
   R2-0 planning is complete; R2-1 is review-clean through `2653c2ef`; R2-2 Routes A–D are
   individually review-clean but their integration closeout failed source closure. R2-2E is now
-  implemented, proof-complete, review-clean, and preserved; R2-2 remains incomplete until harness
-  closeout, F, and the renewed closeout. The exact F0/F0a/F0b/F0-HC implementation candidate is
-  preserved and unrestored; candidate restoration and identity revalidation, corrected
-  differential proof, fresh containment review, and harness closeout are next. R2-2F, renewed
-  closeout, R2-3, R2-4, and R3 remain unstarted, and no A1.1d-6 exists or is implied. The exact next
-  production increment after harness closeout is **A1.1d-5R2-2F — Authenticated world-deps and
+  implemented, proof-complete, review-clean, and preserved; F0/F0a/F0b/F0-HC are implemented,
+  proof-complete, review-clean, canonically closed out, and preserved at runtime commit
+  `770a6a9de9f537f7bc179c75421abbc3fff05b8d`. R2-2 remains incomplete pending F and the renewed
+  closeout. R2-2F, renewed closeout, R2-3, R2-4, and R3 remain unstarted, and no A1.1d-6 exists or
+  is implied. The exact next production increment is **A1.1d-5R2-2F — Authenticated world-deps and
   truthful doctor composition**.
 - The public lifecycle failure is owned by A1.2/A1.3, not an A1.1d heartbeat or successor-work
   subpacket. No A1.1d-6 exists or is implied.
@@ -1139,7 +1134,7 @@ Do not promote a crosswalk row merely because its slice landed. Promote only aft
 
 | Packet field | Frozen result |
 |---|---|
-| Identity | `A1.1d-5R2-2F0-HC`; internal A1 prerequisite, documentation/evidence only; environment inventory corrected and authorized, not implemented or closed out. This is a correction to F0-HC, not F0c/F0d. |
+| Identity | `A1.1d-5R2-2F0-HC`; internal A1 harness prerequisite. This row preserves the corrected authorization contract; the authorized implementation, proof, review, and canonical closeout are now complete. This is a correction to F0-HC, not F0c/F0d. |
 | Audit process | The single process running `cargo test -p shell --lib`, its concurrently executable shell-library unit tests, same-binary helpers/readers/writers/background work, inherited child state, and shared test-support helpers. Integration parent mutation was inspected only for shared helper/inheritance contracts. |
 | Inventory | 38 rows: A environment 4; B descriptors 3; C working state 3; D hooks/subscribers 4; E registries/singletons 11; F filesystem/sockets/ports 4; G time/scheduling 3; H background lifetime 3; I runner coordination 3. The corrected lexical scan covered 1,303 source test functions; the Linux wall discovered 1,263 tests. Environment closure is exactly 86 names: 74 parent-mutated and 12 child-only/read-only. Complete call closure corrects the parent-mutating total from 518 to 534 tests across the same 35 files. A2 is 129 direct tests across 22 files, comprising 116 additive plus 13 existing-source F0a tests; 27 additive tests lack `#[serial]`. The manifest adds the XDG gateway test, the Codex-auth guard test, both macOS `update_world_env_sets_*_flags` cases, and fourteen `with_test_mode`-only PTY cases, while removing two non-mutating B1 acknowledgement false positives. Other counts remain 100 CWD-dependent tests across 10 files, 120 sleep-dependent tests, 94 timeout-dependent tests, 127 Tokio-spawn-dependent tests, 48 thread-spawn-dependent tests, 14 child-spawn-dependent tests, 103 listener-dependent tests, 38 abort-dependent tests, 22 umask-dependent tests, two fd-replacement tests, one fd-flag test, one terminal/console-mode test, and one active-PTY-registry test. |
 | Environment correction | The prior exact-name phase closed direct primitive arguments but not wrapper arguments/callsites. Corrected closure adds `XDG_CONFIG_HOME`, `XDG_DATA_HOME`, `XDG_STATE_HOME`, `SUBSTRATE_OVERRIDE_ANCHOR_MODE`, `SUBSTRATE_OVERRIDE_ANCHOR_PATH`, and `SUBSTRATE_OVERRIDE_CAGED`, and reclassifies already-listed `SUBSTRATE_SHELL` as parent-mutated through the shared routing-test helper. The gateway XDG negative-authority test is added to the migration manifest; the settings and host-replay tests were already present. The validator fails on an absent wrapper callsite, unclassified literal/constant/dynamic name, parent-as-child misclassification, or missing mutating test. |
@@ -1149,15 +1144,14 @@ Do not promote a crosswalk row merely because its slice landed. Promote only aft
 | Other mechanisms | F0b explicit writers; explicit private retry callback, dispatch ID, and transport root; bounded subprocesses for the event registry, trace retargeting, non-keyed cache, `PTY_ACTIVE`, `ACTIVE_PTY`, and the global broker; the fd-flag case receives a fresh null/pipe open-file description while the terminal-mode case receives a child-owned PTY slave/console, never inherited parent fd 0; termination-confirmed server teardown; deterministic barriers/readiness instead of ordering sleeps. Every helper child uses a recursion-proof sentinel, bounded timeout, exact exit/signal propagation, and kill-then-wait/reap on timeout. |
 | Existing authorization | The published F0 seven-file socket and F0b one-file renderer allowlists remain unchanged. The F0a 19-file HOME plus three integration-helper file boundary is unchanged, while its exact A2 test manifest is corrected from 12 to 13 by adding the named gateway XDG test. The additive source/symbol allowlist is exact in `02`. No new tracked helper file is permitted. |
 | Updated async cleanup closure | The existing nine named F0 tests remain, and `wait_for_fork_child_durable_publication_keeps_stop_transport_timeout_short_once_child_is_visible` is added. All ten are test bodies in `execution/orchestrator_world_dispatch.rs`; every `abort()` must be followed by awaited confirmed termination and fixture cleanup before process-state restoration/unlock. |
-| Evidence wall | Forced overlap and controls are binding as recorded in `05`. The one clean-code parallel evidence wall was `1113 passed / 150 failed / 0 ignored`; the one clean-code serial evidence wall was `1202 passed / 61 failed / 0 ignored`. These correlate harness interference and persistent fixture paths only; they are not green, do not close F0/F0a/F0b, and do not establish F's baseline. The same-run parallel fragments recover the 150-name union but retain complete panic output for only 37, so this evidence is diagnostic only and cannot supply complete name/signature transitions. |
-| Required implementation proof | Focused forced-overlap stress for every proven pair; exact prior/absence/non-Unicode restoration; panic/poison/nesting; stable-reader exclusion; child inheritance; exact stdout/stderr buffers; unique path/ID isolation; confirmed task/socket cleanup; deterministic readiness; then at least three independent default-parallel exact final-candidate shell walls and one canonical serial wall with identical discovery/pass/fail/ignored counts, failure names, and normalized signatures. |
+| Evidence wall | Forced overlap and controls are binding as recorded in `05`. The historical clean-code parallel wall `1113/150/0` and serial wall `1202/61/0` diagnose the pre-remediation harness only. The same-run parallel fragments recover 150 names but complete panic output for only 37; they cannot supply transitions. Final authority is three parallel walls and one serial wall, each exactly `1280 discovered / 1235 passed / 45 failed / 0 ignored`, with identical names and normalized signatures. |
+| Required implementation proof | **Satisfied.** Focused forced-overlap stress covers every proven pair; exact prior/absence/non-Unicode restoration; panic/poison/nesting; stable-reader exclusion; child inheritance; exact stdout/stderr buffers; unique path/ID isolation; confirmed task/socket cleanup; deterministic readiness; and three independent default-parallel walls plus one canonical serial wall with identical discovery/pass/fail/ignored counts, failure names, and normalized signatures. |
 | Frozen exclusions | No runtime code in F0-HC; no product global registry/side table; no production reader/cache/trace/retry/timeout/socket/PTY/lifecycle change; no reporter suppression, thread-count reduction, sleep increase, retry-until-green, ignored test, assertion weakening, or suite-wide subprocess; no installer cleanup, F, renewed R2-2 closeout, R2-3, R2-4, or R3. |
-| Status and next | `F0-HC environment inventory corrected and authorized`. This row records the pre-candidate authorization. The implementation candidate now exists and is preserved, but F0/F0a/F0b and combined closeout remain incomplete pending the corrected differential gate and a fresh final containment review. |
+| Status and next | `F0/F0a/F0b/F0-HC complete`. The corrected inventory, implementation, differential proof, four-wall concurrency proof, three prior CLEAN implementation reviews, fresh CLEAN containment review, preservation, and canonical closeout are complete. F remains unstarted and is the exact next packet. |
 
 The resulting DAG is acyclic and binding:
 
-`Routes A–E` → `F0/F0a/F0b/F0-HC implementation candidate` →
-`corrected differential-authority gate` → `final containment review and harness closeout` → `F` →
+`Routes A–E` → `F0/F0a/F0b/F0-HC complete` → `F` →
 `renewed R2-2 closeout` → `R2-3` → `R2-4` → `R3`.
 
 ## A1.1d-5R2-2F0 historical differential authority gate
@@ -1191,7 +1185,12 @@ names and normalized signatures. The historical parallel `1263/1113/150/0` aggre
 diagnostic only. It does not support a named 105-transition claim, historical parallel signatures,
 parallel `PassToFail`, or membership claims about the final 45 failures.
 
-This correction waives none of the zero gates and marks no packet complete. The candidate remains
-preserved and unrestored while this docs amendment is published. Restoration, identity
-revalidation, corrected differential proof, and a fresh containment review precede harness
-closeout. F remains blocked and unstarted; the DAG above is acyclic and no seam is promoted.
+This correction waives none of the zero gates. The exact candidate is committed as
+`770a6a9de9f537f7bc179c75421abbc3fff05b8d` with tree
+`61fdd2e9476f1ce3e041720ce106f7c3427895be`; its manifest, fingerprints, ordinary patch, and
+full-index patch remain the preserved values. All 16 `FailToPass` rows are causally audited, all 17
+`NewPass` rows are the authorized tests named in `02`, and fresh containment reviewer
+`/root/final_containment_corrected_authority` (`019f8681-7957-7cc3-88fa-37ab3ad2fc87`) returned
+CLEAN. GitNexus/source closure finds no changed production execution flow; the authorized F0b
+delegation preserves output bytes. F0/F0a/F0b/F0-HC are complete, product and user-facing behavior
+do not change, F remains unstarted, the DAG above is acyclic, and no seam is promoted.

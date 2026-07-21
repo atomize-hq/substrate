@@ -838,11 +838,10 @@ schema, or R2-3 behavior requires a cross-document stop.
 The failed Routes A–D integration closeout established that those four routes were individually
 review-clean but did not close every authenticated-context consumer. R2-2E has since implemented and
 proved the gateway projection without changing Routes A–D; all five routes are individually
-review-clean. R2-2 stays incomplete pending harness closeout, F, and the renewed integration
-closeout. The exact F0/F0a/F0b/F0-HC implementation candidate is preserved and unrestored;
-corrected differential proof, fresh containment review, and harness closeout are next. The
+review-clean. F0/F0a/F0b/F0-HC are now implemented, proof-complete, review-clean, canonically
+closed out, and preserved. R2-2 stays incomplete pending F and the renewed integration closeout. The
 following table preserves E's reviewed historical source-closure boundary
-and freezes F0/F0a/F0b/F's remaining boundaries;
+and freezes the completed F0/F0a/F0b boundaries plus F's remaining boundary;
 brace groups are exact symbol sets, not file wildcards.
 
 | Increment | File | Symbol | Pre-increment authority | Required carrier | Callers | Process family | Platform cfg | GitNexus risk | Inventory ID | Test | Reviewed allowlist disposition |
@@ -952,16 +951,16 @@ lifecycle and promotes no seam.
 
 **A1.1d-5R2-2F0a — SUBSTRATE_HOME test isolation** joins R2-2F0 under this exact binding contract:
 
-F0/F0a are authorized but **incomplete** and remain test-harness-only. Their exact pre- and
-post-fork-remediation candidates are preserved, not landed. Focused proof is green (socket pair 100/100 parallel and 20/20 serial;
+At this historical authorization checkpoint, F0/F0a were incomplete and test-harness-only. Their
+exact pre- and post-fork-remediation candidates were preserved rather than landed. Focused proof was green (socket pair 100/100 parallel and 20/20 serial;
 four-test neighbor matrix 20/20; prior absence, non-Unicode value, panic/reacquisition, nesting, and
 concurrent exclusion all pass), but its final broad runs were `1118 passed / 150 failed` and `1119
 passed / 149 failed`. The extra failure is
 `dispatch_contract_adapter_active_task_resolution_requires_supervisor_claim`, normalized as
 `resolve exact B-owned acceptance authority: open activated versioned authority layout`. It passes
 alone. F0a remains an authorized part of the combined candidate, not a waiver of F0 proof. The
-later exact combined candidate is preserved and unrestored; restoration, corrected differential
-proof, fresh containment review, and harness closeout are the **exact next task**.
+later exact combined candidate has now passed restoration, corrected differential proof, fresh
+containment review, canonical closeout, and runtime preservation.
 
 1. The exact HOME minimal pair is the target above plus
    `prompt_submit_continuity_prefers_persisted_session_contract`. In canonical same-process
@@ -1068,8 +1067,8 @@ test-infrastructure contract:
 
 R2-2F's binding contract is exact:
 
-F is the **exact next increment after corrected differential proof, fresh containment review, and
-harness closeout**, but it is not active or
+F is the **exact next increment** after the now-complete corrected differential proof, fresh
+containment review, and harness closeout, but it is not active or
 implemented. It starts from the post-closeout replayed runtime commit and tree recorded by the
 dedicated preservation ref and completion checkpoint. Routes A–E and F0/F0a/F0b are immutable prior
 evidence. Its clean comparison baseline is the deterministic value recorded by combined closeout,
@@ -6355,12 +6354,12 @@ Disposition totals reconcile exactly: 7 `UnifiedProcessStateLock`, 4
 
 ### Frozen combined implementation gate
 
-The preserved combined F0/F0a/F0b/Harness implementation was required to remain within the
+The preserved combined F0/F0a/F0b/Harness implementation remained within the
 corrected consolidated allowlists and additive file/symbol table in `02`; no new tracked file was
-permitted. Whenever the candidate is restored, the direct-primitive and wrapper/callsite
-inventories must re-run and reconcile to zero unclassified rows. All production callers
+added. The restored candidate's direct-primitive and wrapper/callsite
+inventories reconcile to zero unclassified rows. All production callers
 and behavior are frozen except F0b's private writer delegation with byte-identical production
-output. Focused proof must cover all eleven proven interference families, exact restoration,
+output. Focused proof covers all eleven proven interference families, exact restoration,
 non-Unicode values, panic, poison, nesting, child inheritance, unique ID/path ownership, descriptor
 bytes, confirmed async termination, and deterministic readiness. Every helper child uses a
 recursion-proof sentinel and bounded timeout, propagates nonzero/signal status, kill-then-waits and
@@ -6369,12 +6368,13 @@ stdin open-file description; the mode child owns a PTY slave/console and proves 
 terminal/console mutation actually ran. Neither inherits parent fd 0, and both prove the parent's
 fd-0 flags/mode unchanged after ordinary and panic/abort child outcomes. Final proof is at least three
 independent default-parallel shell-library walls and one canonical serial wall with identical
-counts, failure names, and normalized signatures. Only that later closeout may establish F's clean
-comparison baseline.
+counts, failure names, and normalized signatures. That proof is complete and establishes F's clean
+comparison baseline as `1280 discovered / 1235 passed / 45 failed / 0 ignored`.
 
-F0-HC by itself authorized no implementation. The preserved candidate does not mark F0, F0a, F0b,
-or combined closeout complete. Its environment inventory is corrected; this docs correction
-changes no runtime/user behavior and promotes no seam. F remains blocked and unstarted.
+F0-HC by itself authorized no implementation beyond its consolidated harness contract. The exact
+candidate now marks F0, F0a, F0b, F0-HC, and the combined closeout complete. Its environment
+inventory is corrected; the implementation changes no runtime/user behavior and promotes no seam.
+F remains unstarted and is the exact next packet.
 
 ### Corrected historical differential evidence-authority contract
 
@@ -6412,13 +6412,29 @@ The bounded provenance result is `HistoricalParallelArtifactUnavailable`.
    `7ab220a715f4ae3389be314da2e6b0e614fcffb7a92166f04fde999570801861`; and the full-index patch is
    `adc1c5952e2ac4cc97881a1bf4df8e24b00d4d4ba337e692bf21965151d5c0c4`.
 
-The exact candidate is preserved at commit `86ed6f5620787121b1c2e5b033ee8d6f9ff369d3` and tree
-`f6480f3986d43bb41e5387fa1ba5b68ae53f598b` on the remote preservation branch named in `00`.
-Environment closure, renderer/injection, and lifecycle/subprocess implementation reviews are
-`CLEAN`; the old containment/differential review remains blocked only on historical parallel
-provenance and is not reused. Restoration and identity revalidation must be followed by a fresh
-containment review under this contract before harness closeout.
+The original exact candidate remains preserved at commit
+`86ed6f5620787121b1c2e5b033ee8d6f9ff369d3` and tree
+`f6480f3986d43bb41e5387fa1ba5b68ae53f598b`. Its byte-identical patch is committed on the corrected
+source base as `770a6a9de9f537f7bc179c75421abbc3fff05b8d` with tree
+`61fdd2e9476f1ce3e041720ce106f7c3427895be`. Environment closure, renderer/injection, and
+lifecycle/subprocess implementation reviews are CLEAN. The old containment/differential review is
+not reused; fresh reviewer `/root/final_containment_corrected_authority`
+(`019f8681-7957-7cc3-88fa-37ab3ad2fc87`) returned CLEAN under this contract.
 
 `PassToFail=0`, `FailToChangedFailure=0`, `Removed=0`, `RenamedOrSubstituted=0`, `NewFail=0`, and
-`NewIgnored=0` remain hard requirements. No product behavior changes, no harness packet completes,
-F remains blocked and unstarted, and no seam is promoted by this docs-only correction.
+`NewIgnored=0` are satisfied hard requirements. No product behavior changes, F0/F0a/F0b/F0-HC are
+complete, F remains unstarted, and no seam is promoted.
+
+### Canonical harness gate result
+
+| Gate | Canonical result |
+|---|---|
+| Candidate identity | 45 files, 5,630 insertions, 2,104 deletions; commit `770a6a9de9f537f7bc179c75421abbc3fff05b8d`; tree `61fdd2e9476f1ce3e041720ce106f7c3427895be`; manifest `b9e3a44dd671409f66e2d62d48cb494ab147069a74ed71f2308e031f56372ae6`; fingerprints `41cb1a325add4efd8198872b456c3ae0fba73f8c4943e4b59c06e2bc76d8b479`; ordinary patch `7ab220a715f4ae3389be314da2e6b0e614fcffb7a92166f04fde999570801861`; full-index patch `adc1c5952e2ac4cc97881a1bf4df8e24b00d4d4ba337e692bf21965151d5c0c4` |
+| Corrected inventory | 86 names = 74 parent-mutated + 12 child-only/read-only; 395 primitives; 73 dynamic calls; 43 sinks; 1,005 resolved callsites; 534 tests across 35 files; 38 resource rows; zero unresolved dynamic rows; all 38 dispositions implemented or retained |
+| Focused and quality proof | All eleven interference families plus HOME/socket overlap, renderer isolation, negative projection, environment/CWD restoration, fork publication, async termination, subprocess isolation, exact absence/non-Unicode, panic/poison/nesting/reacquisition, and child status propagation; shell/workspace all-target checks, Clippy `-D warnings`, format, and diff checks pass |
+| Final concurrency authority | Three parallel walls plus one serial wall each `1280/1235/45/0`; common failure-name hash `b23bb59ad12833d2c1d37c19c54933cd6bcb1c75e0dab8a70179b9881372be70`; common normalized-signature hash `33c686a6ec9f3a0a4f51e1fca976445e6804da12fbbff50312a03f0042cdfac3` |
+| Serial semantic authority | `1202 PassToPass`; `0 PassToFail`; `45 FailToSameFailure`; `0 FailToChangedFailure`; `16 FailToPass`; `0 Removed`; `0 RenamedOrSubstituted`; `17 NewPass`; `0 NewFail`; `0 NewIgnored` |
+| Transition audit | The 16 `FailToPass` rows are causally tied to seven detached-availability, two fork-publication, six stop-dispatch, and one hidden-owner harness fixes. The 17 `NewPass` rows are exactly the authorized tests listed in `02`. |
+| Historical parallel limitation | `1263/1113/150/0` is diagnostic only; all 150 names are recovered, only 37 complete panic bodies remain, and 113 normalized signatures are unavailable. No historical parallel transition matrix or 105-transition claim exists. |
+| Containment and review | GitNexus's one MEDIUM process label resolves to test-only `AuthorityEnvTestTempDir::new`; no production flow changes. The only production hunk is authorized mechanical F0b delegation with byte-identical output. Three implementation reviews and the fresh containment review are CLEAN. |
+| Status and sequence | F0/F0a/F0b/F0-HC complete; no production or user-facing behavior change; no seam promotion; `Routes A–E → F0/F0a/F0b/F0-HC complete → F → renewed R2-2 closeout → R2-3 → R2-4 → R3`; F is unstarted. |
