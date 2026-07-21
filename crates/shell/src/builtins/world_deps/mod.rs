@@ -20,6 +20,7 @@ use crate::execution::{policy_model, policy_snapshot};
 use anyhow::anyhow;
 use anyhow::Result;
 use std::path::{Path, PathBuf};
+#[cfg(not(unix))]
 use substrate_common::paths as substrate_paths;
 #[cfg(unix)]
 use transport_api_types::InstallBootstrapContextCarrierV1;
@@ -30,12 +31,13 @@ pub(crate) struct AuthenticatedWorldDepsContextV1 {
     selected_host_prefix: String,
     host_context_commitment: String,
     launch_cwd: PathBuf,
+    workspace_root: Option<PathBuf>,
     global_config_path: PathBuf,
     global_deps_dir: PathBuf,
     effective_config: config_model::SubstrateConfig,
+    config_explain: Option<config_model::ConfigExplainV1>,
     effective_policy: substrate_broker::Policy,
     runtime_network_policy: policy_snapshot::ResolvedWorldNetworkPolicy,
-    world_fs_policy: substrate_broker::WorldFsPolicy,
 }
 
 #[cfg(unix)]
@@ -64,6 +66,10 @@ impl AuthenticatedWorldDepsContextV1 {
         &self.launch_cwd
     }
 
+    pub(crate) fn workspace_root(&self) -> Option<&Path> {
+        self.workspace_root.as_deref()
+    }
+
     pub(crate) fn global_config_path(&self) -> &Path {
         &self.global_config_path
     }
@@ -76,6 +82,10 @@ impl AuthenticatedWorldDepsContextV1 {
         &self.effective_config
     }
 
+    pub(crate) fn config_explain(&self) -> Option<&config_model::ConfigExplainV1> {
+        self.config_explain.as_ref()
+    }
+
     pub(crate) fn effective_policy(&self) -> &substrate_broker::Policy {
         &self.effective_policy
     }
@@ -84,8 +94,8 @@ impl AuthenticatedWorldDepsContextV1 {
         &self.runtime_network_policy
     }
 
-    pub(crate) fn world_fs_policy(&self) -> &substrate_broker::WorldFsPolicy {
-        &self.world_fs_policy
+    pub(crate) fn world_fs_policy(&self) -> substrate_broker::WorldFsPolicy {
+        self.effective_policy.world_fs_policy()
     }
 
     pub(crate) fn revalidate_authority(&self) -> Result<()> {
@@ -120,13 +130,13 @@ pub(crate) fn bind_authenticated_world_deps_context_v1(
             .map_err(|error| anyhow!("failed to identify selected dependency root: {error}"))?
             .physical_path,
     );
-    let effective_config = config_model::resolve_effective_config_with_explain_for_bootstrap_home(
-        launch_cwd,
-        cli,
-        &bootstrap_home,
-        false,
-    )?
-    .0;
+    let (effective_config, config_explain) =
+        config_model::resolve_effective_config_with_explain_for_bootstrap_home(
+            launch_cwd,
+            cli,
+            &bootstrap_home,
+            true,
+        )?;
     let effective_policy =
         policy_model::resolve_effective_policy_for_bootstrap_home(launch_cwd, &bootstrap_home)?;
     let runtime_network_policy = policy_snapshot::resolve_world_network_policy_for_bootstrap_home(
@@ -134,19 +144,18 @@ pub(crate) fn bind_authenticated_world_deps_context_v1(
         &bootstrap_home,
         &effective_config,
     )?;
-    let world_fs_policy = effective_policy.world_fs_policy();
-
     Ok(AuthenticatedWorldDepsContextV1 {
         authority,
         selected_host_prefix: carrier.context.selected_host_prefix.clone(),
         host_context_commitment: carrier.host_context_commitment.clone(),
         launch_cwd: launch_cwd.to_path_buf(),
+        workspace_root: crate::execution::find_workspace_root(launch_cwd),
         global_config_path: selected_root.join("config.yaml"),
         global_deps_dir: selected_root.join("deps"),
         effective_config,
+        config_explain,
         effective_policy,
         runtime_network_policy,
-        world_fs_policy,
     })
 }
 
@@ -251,12 +260,23 @@ pub(crate) fn collect_doctor_snapshot_v1(
 }
 
 pub(crate) fn resolve_effective_enabled_provisioning_requirements_v1(
-    cwd: &Path,
+    #[cfg(not(unix))] cwd: &Path,
+    #[cfg(unix)] context: &AuthenticatedWorldDepsContextV1,
 ) -> Result<WorldDepsProvisioningRequirementsV1> {
+    #[cfg(unix)]
+    let (cwd, cfg) = (context.launch_cwd(), context.effective_config());
+    #[cfg(not(unix))]
     let cfg = config_model::resolve_effective_config(cwd, &Default::default())?;
     let global_deps_dir =
         if cfg.world.deps.inventory_mode == config_model::WorldDepsInventoryMode::Merged {
-            Some(substrate_paths::substrate_home()?.join("deps"))
+            #[cfg(unix)]
+            {
+                Some(context.global_deps_dir().to_path_buf())
+            }
+            #[cfg(not(unix))]
+            {
+                Some(substrate_paths::substrate_home()?.join("deps"))
+            }
         } else {
             None
         };
@@ -398,6 +418,9 @@ mod tests {
             .prefix("substrate-world-deps-context-")
             .tempdir_in(account_home)
             .expect("secure context fixture");
+        fs::create_dir(temp.path().join(".substrate")).expect("create workspace metadata");
+        fs::write(temp.path().join(".substrate/workspace.yaml"), "")
+            .expect("write workspace marker");
         let selected_a = prepare_prefix(temp.path(), "selected-a");
         let ambient_b = prepare_prefix(temp.path(), "ambient-b");
         fs::write(
@@ -437,6 +460,7 @@ mod tests {
             carrier.host_context_commitment
         );
         assert_eq!(context.launch_cwd(), temp.path());
+        assert_eq!(context.workspace_root(), Some(temp.path()));
         assert_eq!(context.global_config_path(), selected_a.join("config.yaml"));
         assert_eq!(context.global_deps_dir(), selected_a.join("deps"));
         assert_eq!(
@@ -450,7 +474,7 @@ mod tests {
         );
         assert_eq!(
             context.world_fs_policy(),
-            &context.effective_policy().world_fs_policy()
+            context.effective_policy().world_fs_policy()
         );
     }
 

@@ -9,7 +9,6 @@ use std::os::unix::net::UnixStream;
 use std::path::{Path, PathBuf};
 use std::process::{Command, Stdio};
 use std::time::Duration;
-use substrate_broker::{detect_profile, world_fs_policy};
 use transport_api_client::AgentClient;
 use transport_api_types::{
     ExecuteRequest, InstallBootstrapContextCarrierV1, WorldDoctorLandlockV1,
@@ -23,7 +22,7 @@ pub(crate) fn host_doctor_main(
     json_mode: bool,
     world_enabled: bool,
     world_disable_attribution: Option<&crate::execution::config_model::DoctorDisableAttribution>,
-    install_context: &InstallBootstrapContextCarrierV1,
+    context: &crate::builtins::world_deps::AuthenticatedWorldDepsContextV1,
 ) -> i32 {
     // Helpers
     fn pass(msg: &str) {
@@ -109,13 +108,7 @@ pub(crate) fn host_doctor_main(
 
     let activation_report = socket_activation::socket_activation_report();
 
-    // Align doctor output with the effective workspace policy when invoked from a workspace.
-    //
-    // This mirrors the execution path, which refreshes profile/policy per-cwd before reading world_fs.
-    if let Ok(cwd) = std::env::current_dir() {
-        let _ = detect_profile(&cwd);
-    }
-    let fs_policy = world_fs_policy();
+    let fs_policy = context.world_fs_policy();
 
     let overlay_ok = overlay_present();
     let fuse_dev = fuse_dev_present();
@@ -224,8 +217,8 @@ pub(crate) fn host_doctor_main(
                 "world_fs_mode": fs_policy.mode.as_str(),
                 "world_fs_isolation": fs_policy.isolation.as_str(),
                 "world_fs_require_world": fs_policy.require_world,
-                "selected_host_prefix": install_context.context.selected_host_prefix,
-                "host_context_commitment": install_context.host_context_commitment,
+                "selected_host_prefix": context.selected_host_prefix(),
+                "host_context_commitment": context.host_context_commitment(),
                 "world_socket": socket_json,
             },
         });
@@ -238,11 +231,11 @@ pub(crate) fn host_doctor_main(
         println!("== substrate host doctor ==");
         info(&format!(
             "selected_host_prefix: {}",
-            install_context.context.selected_host_prefix
+            context.selected_host_prefix()
         ));
         info(&format!(
             "host_context_commitment: {}",
-            install_context.host_context_commitment
+            context.host_context_commitment()
         ));
         if !world_enabled {
             if let Some(attribution) = world_disable_attribution {
@@ -397,6 +390,7 @@ pub(crate) fn world_doctor_main(
     json_mode: bool,
     world_enabled: bool,
     world_disable_attribution: Option<&crate::execution::config_model::DoctorDisableAttribution>,
+    context: &crate::builtins::world_deps::AuthenticatedWorldDepsContextV1,
     install_context: &InstallBootstrapContextCarrierV1,
 ) -> i32 {
     // Helpers
@@ -482,10 +476,7 @@ pub(crate) fn world_doctor_main(
     }
 
     let activation_report = socket_activation::socket_activation_report();
-    if let Ok(cwd) = std::env::current_dir() {
-        let _ = detect_profile(&cwd);
-    }
-    let fs_policy = world_fs_policy();
+    let fs_policy = context.world_fs_policy();
 
     let overlay_ok = overlay_present();
     let fuse_dev = fuse_dev_present();
@@ -585,8 +576,8 @@ pub(crate) fn world_doctor_main(
             "world_fs_mode": fs_policy.mode.as_str(),
             "world_fs_isolation": fs_policy.isolation.as_str(),
             "world_fs_require_world": fs_policy.require_world,
-            "selected_host_prefix": install_context.context.selected_host_prefix,
-            "host_context_commitment": install_context.host_context_commitment,
+            "selected_host_prefix": context.selected_host_prefix(),
+            "host_context_commitment": context.host_context_commitment(),
             "world_socket": socket_json,
         })
     };
@@ -695,11 +686,11 @@ pub(crate) fn world_doctor_main(
         println!("== Host ==");
         info(&format!(
             "selected_host_prefix: {}",
-            install_context.context.selected_host_prefix
+            context.selected_host_prefix()
         ));
         info(&format!(
             "host_context_commitment: {}",
-            install_context.host_context_commitment
+            context.host_context_commitment()
         ));
 
         if !world_enabled {
