@@ -1095,6 +1095,7 @@ echo pass
     #[cfg(test)]
     mod tests {
         use super::*;
+        use crate::execution::WorldSocketTestGuard;
         use serial_test::serial;
         use std::collections::VecDeque;
 
@@ -1228,6 +1229,10 @@ echo pass
         }
 
         fn with_env_var<T>(key: &str, value: Option<&str>, f: impl FnOnce() -> T) -> T {
+            if key == "SUBSTRATE_WORLD_SOCKET" {
+                let _guard = WorldSocketTestGuard::set_optional(value.map(std::ffi::OsStr::new));
+                return f();
+            }
             let prev = std::env::var_os(key);
             match value {
                 Some(value) => std::env::set_var(key, value),
@@ -1244,6 +1249,7 @@ echo pass
         #[test]
         #[serial]
         fn doctor_ok_json() {
+            let _authority_env = crate::execution::AuthorityEnvTestGuard::preserve();
             let vm_json = r#"{"status":"Running"}"#;
             let temp = tempfile::tempdir().expect("tempdir");
             let home = temp.path();
@@ -1320,6 +1326,7 @@ echo pass
         #[test]
         #[serial]
         fn doctor_resolves_override_vm_name_and_reports_it() {
+            let _authority_env = crate::execution::AuthorityEnvTestGuard::preserve();
             with_env_var("LIMA_VM_NAME", Some("substrate-fallback"), || {
                 with_env_var("SUBSTRATE_LIMA_VM_NAME", Some("substrate-arch"), || {
                     assert_eq!(resolve_lima_vm_name(), "substrate-arch");
@@ -1456,6 +1463,7 @@ echo pass
         #[test]
         #[serial]
         fn world_doctor_json_uses_override_vm_name() {
+            let _authority_env = crate::execution::AuthorityEnvTestGuard::preserve();
             let vm_name = "substrate-arch";
             let vm_json = r#"{"status":"Running"}"#;
             let temp = tempfile::tempdir().expect("tempdir");
@@ -1512,6 +1520,7 @@ echo pass
         #[test]
         #[serial]
         fn host_doctor_json_uses_override_vm_name() {
+            let _authority_env = crate::execution::AuthorityEnvTestGuard::preserve();
             let vm_name = "substrate-arch";
             let vm_json = r#"{"status":"Running"}"#;
             let temp = tempfile::tempdir().expect("tempdir");
@@ -1977,6 +1986,7 @@ echo pass
         #[test]
         #[serial]
         fn world_doctor_json_reports_running_vm_with_inactive_service_as_not_provisioned() {
+            let _authority_env = crate::execution::AuthorityEnvTestGuard::preserve();
             let vm_json = r#"{"status":"Running"}"#;
             let temp = tempfile::tempdir().expect("tempdir");
             let home = temp.path();
@@ -2048,15 +2058,16 @@ echo pass
 
 #[cfg(test)]
 mod platform_tests {
-    use crate::execution::{update_world_env, world_env_guard};
+    use crate::execution::{update_world_env, AuthorityEnvTestGuard};
     use std::env;
+    use std::ffi::OsString;
 
-    fn snapshot(keys: &[&str]) -> Vec<Option<String>> {
-        keys.iter().map(|key| env::var(key).ok()).collect()
+    fn snapshot(keys: &[&str]) -> Vec<Option<OsString>> {
+        keys.iter().map(|key| env::var_os(key)).collect()
     }
 
-    fn restore(keys: &[&str], values: Vec<Option<String>>) {
-        for (key, value) in keys.iter().zip(values.into_iter()) {
+    fn restore(keys: &[&str], values: Vec<Option<OsString>>) {
+        for (key, value) in keys.iter().zip(values.into_iter()).rev() {
             match value {
                 Some(v) => env::set_var(key, v),
                 None => env::remove_var(key),
@@ -2066,8 +2077,23 @@ mod platform_tests {
 
     #[test]
     fn update_world_env_sets_enabled_flags() {
-        let _guard = world_env_guard();
-        let keys = ["SUBSTRATE_WORLD", "SUBSTRATE_WORLD_ENABLED"];
+        let _guard = AuthorityEnvTestGuard::preserve();
+        let keys = [
+            "SUBSTRATE_WORLD",
+            "SUBSTRATE_WORLD_ENABLED",
+            "SUBSTRATE_WORLD_FS_MODE",
+            "SUBSTRATE_WORLD_FS_ISOLATION",
+            "SUBSTRATE_WORLD_FAIL_CLOSED_ROUTING",
+            "SUBSTRATE_WORLD_REQUIRE_WORLD",
+        ];
+        #[cfg(unix)]
+        {
+            use std::os::unix::ffi::OsStringExt;
+            env::set_var(
+                "SUBSTRATE_WORLD_FS_MODE",
+                OsString::from_vec(b"prior-world-fs-mode-\xff".to_vec()),
+            );
+        }
         let prev = snapshot(&keys);
 
         update_world_env(false);
@@ -2075,13 +2101,21 @@ mod platform_tests {
         assert_eq!(env::var("SUBSTRATE_WORLD").unwrap(), "enabled");
         assert_eq!(env::var("SUBSTRATE_WORLD_ENABLED").unwrap(), "1");
 
-        restore(&keys, prev);
+        restore(&keys, prev.clone());
+        assert_eq!(snapshot(&keys), prev);
     }
 
     #[test]
     fn update_world_env_sets_disabled_flags() {
-        let _guard = world_env_guard();
-        let keys = ["SUBSTRATE_WORLD", "SUBSTRATE_WORLD_ENABLED"];
+        let _guard = AuthorityEnvTestGuard::preserve();
+        let keys = [
+            "SUBSTRATE_WORLD",
+            "SUBSTRATE_WORLD_ENABLED",
+            "SUBSTRATE_WORLD_FS_MODE",
+            "SUBSTRATE_WORLD_FS_ISOLATION",
+            "SUBSTRATE_WORLD_FAIL_CLOSED_ROUTING",
+            "SUBSTRATE_WORLD_REQUIRE_WORLD",
+        ];
         let prev = snapshot(&keys);
 
         update_world_env(true);
@@ -2089,6 +2123,7 @@ mod platform_tests {
         assert_eq!(env::var("SUBSTRATE_WORLD").unwrap(), "disabled");
         assert_eq!(env::var("SUBSTRATE_WORLD_ENABLED").unwrap(), "0");
 
-        restore(&keys, prev);
+        restore(&keys, prev.clone());
+        assert_eq!(snapshot(&keys), prev);
     }
 }

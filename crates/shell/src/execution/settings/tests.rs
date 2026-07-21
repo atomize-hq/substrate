@@ -5,20 +5,25 @@ use substrate_common::WorldRootMode;
 use tempfile::TempDir;
 
 struct EnvGuard {
-    saved: Vec<(&'static str, Option<String>)>,
+    saved: Vec<(&'static str, Option<std::ffi::OsString>)>,
+    _authority_env: crate::execution::AuthorityEnvTestGuard,
 }
 
 impl EnvGuard {
     fn new(vars: Vec<(&'static str, Option<String>)>) -> Self {
+        let authority_env = crate::execution::AuthorityEnvTestGuard::preserve();
         let mut saved = Vec::new();
         for (key, value) in vars {
-            saved.push((key, std::env::var(key).ok()));
+            saved.push((key, std::env::var_os(key)));
             match value {
                 Some(val) => std::env::set_var(key, val),
                 None => std::env::remove_var(key),
             }
         }
-        Self { saved }
+        Self {
+            saved,
+            _authority_env: authority_env,
+        }
     }
 }
 
@@ -34,19 +39,14 @@ impl Drop for EnvGuard {
 }
 
 struct CwdGuard {
-    original: PathBuf,
+    _process_cwd: crate::execution::ProcessCwdTestGuard,
 }
 
 impl CwdGuard {
     fn new() -> Self {
-        let original = std::env::current_dir().expect("capture cwd");
-        Self { original }
-    }
-}
-
-impl Drop for CwdGuard {
-    fn drop(&mut self) {
-        let _ = std::env::set_current_dir(&self.original);
+        Self {
+            _process_cwd: crate::execution::ProcessCwdTestGuard::preserve(),
+        }
     }
 }
 
@@ -139,6 +139,7 @@ fn message_mentions_path(message: &str, path: &Path) -> bool {
 #[test]
 #[serial]
 fn resolve_world_root_defaults_to_launch_dir_project() {
+    let _authority_env = crate::execution::AuthorityEnvTestGuard::preserve();
     let temp = TempDir::new().unwrap();
     let substrate_home = setup_substrate_home(&temp);
     let _env = EnvGuard::new(vec![
@@ -163,6 +164,7 @@ fn resolve_world_root_defaults_to_launch_dir_project() {
 #[test]
 #[serial]
 fn resolve_world_root_refuses_legacy_workspace_settings_yaml() {
+    let _authority_env = crate::execution::AuthorityEnvTestGuard::preserve();
     let temp = TempDir::new().unwrap();
     let substrate_home = setup_substrate_home(&temp);
     let _env = EnvGuard::new(vec![(
@@ -199,12 +201,21 @@ fn resolve_world_root_refuses_legacy_workspace_settings_yaml() {
 #[test]
 #[serial]
 fn resolve_world_root_respects_env_when_no_configs() {
+    let _authority_env = crate::execution::AuthorityEnvTestGuard::preserve();
     let temp = TempDir::new().unwrap();
     let substrate_home = setup_substrate_home(&temp);
     let launch_dir = temp.path().join("project");
     std::fs::create_dir_all(&launch_dir).unwrap();
     let anchor_dir = temp.path().join("env-anchor");
     std::fs::create_dir_all(&anchor_dir).unwrap();
+
+    #[cfg(unix)]
+    let prior_override_caged = {
+        use std::os::unix::ffi::OsStringExt;
+        let value = std::ffi::OsString::from_vec(b"prior-override-caged-\xff".to_vec());
+        std::env::set_var("SUBSTRATE_OVERRIDE_CAGED", &value);
+        value
+    };
 
     let _env = EnvGuard::new(vec![
         ("SUBSTRATE_HOME", Some(substrate_home.display().to_string())),
@@ -223,11 +234,19 @@ fn resolve_world_root_respects_env_when_no_configs() {
         anchor_dir.canonicalize().unwrap_or(anchor_dir)
     );
     assert!(!settings.caged);
+    drop(_env);
+
+    #[cfg(unix)]
+    assert_eq!(
+        std::env::var_os("SUBSTRATE_OVERRIDE_CAGED"),
+        Some(prior_override_caged)
+    );
 }
 
 #[test]
 #[serial]
 fn resolve_world_root_env_overrides_global_config() {
+    let _authority_env = crate::execution::AuthorityEnvTestGuard::preserve();
     let temp = TempDir::new().unwrap();
     let substrate_home = setup_substrate_home(&temp);
     let launch_dir = temp.path().join("project");
@@ -259,6 +278,7 @@ fn resolve_world_root_env_overrides_global_config() {
 #[test]
 #[serial]
 fn resolve_world_root_prefers_workspace_config_over_global_when_env_unset() {
+    let _authority_env = crate::execution::AuthorityEnvTestGuard::preserve();
     let temp = TempDir::new().unwrap();
     let substrate_home = setup_substrate_home(&temp);
 
@@ -299,6 +319,7 @@ fn resolve_world_root_prefers_workspace_config_over_global_when_env_unset() {
 #[test]
 #[serial]
 fn resolve_world_root_prefers_cli_over_all_other_sources() {
+    let _authority_env = crate::execution::AuthorityEnvTestGuard::preserve();
     let temp = TempDir::new().unwrap();
     let substrate_home = setup_substrate_home(&temp);
 
@@ -351,6 +372,7 @@ fn resolve_world_root_prefers_cli_over_all_other_sources() {
 #[test]
 #[serial]
 fn resolve_world_root_requires_anchor_path_for_custom_mode() {
+    let _authority_env = crate::execution::AuthorityEnvTestGuard::preserve();
     let temp = TempDir::new().unwrap();
     let substrate_home = setup_substrate_home(&temp);
     let _env = EnvGuard::new(vec![
@@ -374,6 +396,7 @@ fn resolve_world_root_requires_anchor_path_for_custom_mode() {
 #[test]
 #[serial]
 fn effective_root_uses_current_directory_for_follow_mode() {
+    let original_cwd = std::env::current_dir().expect("capture original cwd");
     let temp = TempDir::new().unwrap();
     let substrate_home = setup_substrate_home(&temp);
     let _env = EnvGuard::new(vec![
@@ -392,8 +415,60 @@ fn effective_root_uses_current_directory_for_follow_mode() {
         caged: true,
     };
 
-    let expected = std::fs::canonicalize(&target_cwd).unwrap_or(target_cwd);
+    let expected = std::fs::canonicalize(&target_cwd).unwrap_or_else(|_| target_cwd.clone());
     let actual = std::fs::canonicalize(settings.effective_root())
         .unwrap_or_else(|_| settings.effective_root());
     assert_eq!(actual, expected);
+
+    let nested_cwd = temp.path().join("nested");
+    std::fs::create_dir_all(&nested_cwd).unwrap();
+    {
+        let _nested = crate::execution::ProcessCwdTestGuard::change_to(&nested_cwd);
+        assert_eq!(std::env::current_dir().unwrap(), nested_cwd);
+    }
+    assert_eq!(std::env::current_dir().unwrap(), target_cwd);
+
+    let panic_cwd = temp.path().join("panic");
+    std::fs::create_dir_all(&panic_cwd).unwrap();
+    let panic_result = std::panic::catch_unwind(|| {
+        let _panic_guard = crate::execution::ProcessCwdTestGuard::change_to(&panic_cwd);
+        panic!("intentional nested CWD guard panic");
+    });
+    assert!(panic_result.is_err());
+    assert_eq!(std::env::current_dir().unwrap(), target_cwd);
+
+    let expected_after_restore = std::fs::canonicalize(&original_cwd).unwrap_or(original_cwd);
+    let (started_tx, started_rx) = std::sync::mpsc::channel();
+    let (observed_tx, observed_rx) = std::sync::mpsc::channel();
+    let competitor = std::thread::spawn(move || {
+        started_tx.send(()).expect("stable CWD reader started");
+        let _stable_reader = crate::execution::ProcessCwdTestGuard::preserve();
+        let stable_settings = WorldRootSettings {
+            mode: WorldRootMode::FollowCwd,
+            path: PathBuf::from("/should/be-ignored"),
+            caged: true,
+        };
+        observed_tx
+            .send(
+                std::fs::canonicalize(stable_settings.effective_root())
+                    .unwrap_or_else(|_| stable_settings.effective_root()),
+            )
+            .expect("stable CWD reader result");
+    });
+    started_rx.recv().expect("stable CWD reader started");
+    assert!(
+        observed_rx
+            .recv_timeout(std::time::Duration::from_millis(100))
+            .is_err(),
+        "stable CWD reader bypassed the ENV/CWD owner"
+    );
+    drop(_cwd_guard);
+    drop(_env);
+    assert_eq!(
+        observed_rx
+            .recv_timeout(std::time::Duration::from_secs(5))
+            .expect("stable CWD reader after restoration"),
+        expected_after_restore
+    );
+    competitor.join().expect("stable CWD reader thread");
 }
