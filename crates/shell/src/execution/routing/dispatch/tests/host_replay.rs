@@ -28,6 +28,17 @@ fn command_complete_spans(trace_path: &Path) -> Vec<Value> {
 
 #[test]
 fn async_repl_host_commands_record_replay_context() {
+    if crate::execution::run_in_bounded_test_subprocess(
+        concat!(
+            module_path!(),
+            "::",
+            stringify!(async_repl_host_commands_record_replay_context)
+        ),
+        "trace_broker",
+    ) {
+        return;
+    }
+    let _authority_env = crate::execution::AuthorityEnvTestGuard::preserve();
     with_test_mode(|| {
         let temp = TempDir::new().expect("tempdir");
         let mut config = test_shell_config(&temp);

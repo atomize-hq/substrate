@@ -835,6 +835,8 @@ mod imp {
     mod tests {
         use super::*;
         #[cfg(target_os = "macos")]
+        use crate::execution::WorldSocketTestGuard;
+        #[cfg(target_os = "macos")]
         use anyhow::Result;
         #[cfg(target_os = "macos")]
         use futures::{SinkExt, StreamExt};
@@ -1058,9 +1060,9 @@ mod imp {
         #[serial]
         fn macos_no_override_current_thread_start_uses_async_readiness_without_panic() {
             let _guard = test_env_lock().lock().expect("env lock");
+            let _world_socket_guard = WorldSocketTestGuard::remove();
             TEST_SYNC_READY_CALLS.store(0, Ordering::SeqCst);
             TEST_ASYNC_READY_CALLS.store(0, Ordering::SeqCst);
-            std::env::remove_var("SUBSTRATE_WORLD_SOCKET");
 
             let temp = tempdir().expect("tempdir");
             let socket_path = temp.path().join("world.sock");
@@ -1095,6 +1097,7 @@ mod imp {
 
             let temp = tempdir().expect("tempdir");
             let socket_path = temp.path().join("override.sock");
+            let _world_socket_guard = WorldSocketTestGuard::set(&socket_path);
 
             let runtime = tokio::runtime::Builder::new_current_thread()
                 .enable_all()
@@ -1103,12 +1106,10 @@ mod imp {
 
             runtime.block_on(async {
                 let server = spawn_ready_server(&socket_path).await;
-                std::env::set_var("SUBSTRATE_WORLD_SOCKET", &socket_path);
                 let client =
                     ReplPersistentSessionClient::start_with(test_start_params(), Arc::new(|_| {}))
                         .await
                         .expect("start persistent session with override");
-                std::env::remove_var("SUBSTRATE_WORLD_SOCKET");
                 client.close().await.expect("close client");
                 server.await.expect("server join").expect("server result");
             });

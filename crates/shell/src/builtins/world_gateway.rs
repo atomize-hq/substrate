@@ -1243,21 +1243,14 @@ mod tests {
     }
 
     struct CurrentDirGuard {
-        prev: PathBuf,
+        _process_cwd: crate::execution::ProcessCwdTestGuard,
     }
 
     impl CurrentDirGuard {
         fn set(path: &Path) -> Self {
-            let prev = std::env::current_dir()
-                .unwrap_or_else(|_| PathBuf::from(env!("CARGO_MANIFEST_DIR")));
-            std::env::set_current_dir(path).expect("set current dir");
-            Self { prev }
-        }
-    }
-
-    impl Drop for CurrentDirGuard {
-        fn drop(&mut self) {
-            let _ = std::env::set_current_dir(&self.prev);
+            Self {
+                _process_cwd: crate::execution::ProcessCwdTestGuard::change_to(path),
+            }
         }
     }
 
@@ -1515,32 +1508,39 @@ mod classification_tests {
         resolve_cli_codex_integrated_auth, CLI_CODEX_WORLD_BACKEND, CODEX_ACCESS_TOKEN_ENV,
         CODEX_ACCOUNT_ID_ENV,
     };
-    use crate::execution::world_env_guard;
+    use crate::execution::{AuthorityEnvTestGuard, WorldSocketTestGuard};
     use serial_test::serial;
 
     fn with_env_var<T>(key: &str, value: Option<&std::ffi::OsStr>, f: impl FnOnce() -> T) -> T {
-        let _guard = world_env_guard();
-        let prev = std::env::var_os(key);
+        if key == "SUBSTRATE_HOME" {
+            let _guard = match value {
+                Some(value) => AuthorityEnvTestGuard::set_home(value),
+                None => AuthorityEnvTestGuard::remove_home(),
+            };
+            return f();
+        }
+        if key == "SUBSTRATE_WORLD_SOCKET" {
+            let _guard = WorldSocketTestGuard::set_optional(value);
+            return f();
+        }
+        let _guard = AuthorityEnvTestGuard::preserve();
         match value {
             Some(value) => std::env::set_var(key, value),
             None => std::env::remove_var(key),
         }
-        let result = f();
-        match prev {
-            Some(value) => std::env::set_var(key, value),
-            None => std::env::remove_var(key),
-        }
-        result
+        f()
     }
 
     #[cfg(unix)]
     struct AmbientSelectionGuard {
         previous: Vec<(String, Option<std::ffi::OsString>)>,
+        _authority_env: AuthorityEnvTestGuard,
     }
 
     #[cfg(unix)]
     impl AmbientSelectionGuard {
         fn set(entries: &[(&str, Option<&std::ffi::OsStr>)]) -> Self {
+            let authority_env = AuthorityEnvTestGuard::preserve();
             let mut previous = Vec::with_capacity(entries.len());
             for (key, value) in entries {
                 previous.push(((*key).to_string(), std::env::var_os(key)));
@@ -1549,7 +1549,10 @@ mod classification_tests {
                     None => std::env::remove_var(key),
                 }
             }
-            Self { previous }
+            Self {
+                previous,
+                _authority_env: authority_env,
+            }
         }
     }
 
@@ -1566,21 +1569,16 @@ mod classification_tests {
     }
 
     #[cfg(unix)]
-    struct GatewayCurrentDirGuard(std::path::PathBuf);
+    struct GatewayCurrentDirGuard {
+        _process_cwd: crate::execution::ProcessCwdTestGuard,
+    }
 
     #[cfg(unix)]
     impl GatewayCurrentDirGuard {
         fn set(path: &std::path::Path) -> Self {
-            let previous = std::env::current_dir().expect("capture current directory");
-            std::env::set_current_dir(path).expect("set conflicting current directory");
-            Self(previous)
-        }
-    }
-
-    #[cfg(unix)]
-    impl Drop for GatewayCurrentDirGuard {
-        fn drop(&mut self) {
-            let _ = std::env::set_current_dir(&self.0);
+            Self {
+                _process_cwd: crate::execution::ProcessCwdTestGuard::change_to(path),
+            }
         }
     }
 
@@ -1603,6 +1601,7 @@ mod classification_tests {
     #[test]
     #[serial]
     fn macos_default_world_socket_path_respects_explicit_substrate_home() {
+        let _authority_env = AuthorityEnvTestGuard::preserve();
         let temp = tempfile::tempdir().expect("tempdir");
         let substrate_home = temp.path().join("isolated-substrate-home");
 
@@ -1683,6 +1682,7 @@ mod classification_tests {
     #[test]
     #[serial]
     fn authenticated_gateway_context_uses_a_for_config_policy_inventory_and_network() {
+        let _authority_env = AuthorityEnvTestGuard::preserve();
         let (fixture, carrier) = authenticated_gateway_fixture();
         let conflicting = fixture.path().join("conflicting");
         std::fs::create_dir(&conflicting).expect("conflicting home");
@@ -1731,6 +1731,7 @@ mod classification_tests {
     #[serial]
     fn authenticated_gateway_projection_ignores_named_ambient_roots_and_uses_account_db_codex_home()
     {
+        let _authority_env = AuthorityEnvTestGuard::preserve();
         let (fixture, carrier) = authenticated_gateway_fixture();
         let conflicting = fixture.path().join("conflicting");
         let ambient_codex = conflicting.join(".codex");
@@ -1806,6 +1807,7 @@ mod classification_tests {
     #[test]
     #[serial]
     fn tampered_gateway_context_rejects_before_ambient_selection() {
+        let _authority_env = AuthorityEnvTestGuard::preserve();
         let (fixture, mut carrier) = authenticated_gateway_fixture();
         let conflicting = fixture.path().join("conflicting");
         std::fs::create_dir(&conflicting).expect("conflicting home");
@@ -1838,6 +1840,7 @@ mod classification_tests {
     #[test]
     #[serial]
     fn malformed_gateway_context_rejects_before_ambient_selection() {
+        let _authority_env = AuthorityEnvTestGuard::preserve();
         let (fixture, mut carrier) = authenticated_gateway_fixture();
         carrier.host_context_commitment.replace_range(..1, "g");
         let malformed_commitment = carrier.host_context_commitment.clone();
@@ -1865,6 +1868,7 @@ mod classification_tests {
     #[test]
     #[serial]
     fn mismatched_gateway_principal_rejects_before_ambient_selection() {
+        let _authority_env = AuthorityEnvTestGuard::preserve();
         let (fixture, carrier) = authenticated_gateway_fixture();
         let transport_api_types::PlatformPrincipalV1::Unix { uid, .. } =
             &carrier.context.intended_host_principal

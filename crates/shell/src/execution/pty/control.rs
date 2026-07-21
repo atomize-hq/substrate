@@ -122,6 +122,16 @@ mod tests {
 
     #[test]
     fn active_control_dispatches_commands_and_clears_on_drop() {
+        if crate::execution::run_in_bounded_test_subprocess(
+            concat!(
+                module_path!(),
+                "::",
+                stringify!(active_control_dispatches_commands_and_clears_on_drop)
+            ),
+            "active_pty",
+        ) {
+            return;
+        }
         let (tx, rx) = mpsc::channel();
         let control = PtyControl { tx };
         let expected_size = PtySize {

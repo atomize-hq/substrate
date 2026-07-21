@@ -2369,8 +2369,7 @@ mod tests {
     use http_body_util::StreamBody;
     use serde_json::json;
     use std::convert::Infallible;
-    use std::sync::{Arc, Mutex, OnceLock};
-    use std::time::Duration;
+    use std::sync::{Arc, Mutex};
     use substrate_common::agent_events::AgentEventKind;
     use transport_api_types::{
         ExecuteStreamFrame, MemberRuntimeBackendKindV1, PlatformPrincipalV1, PolicySnapshotV3,
@@ -2379,20 +2378,9 @@ mod tests {
     };
 
     fn with_env_var<T>(key: &str, value: &str, f: impl FnOnce() -> T) -> T {
-        let _guard = test_env_lock().lock().expect("test env mutex poisoned");
-        let previous = std::env::var(key).ok();
+        let _authority_env = crate::execution::AuthorityEnvTestGuard::preserve();
         std::env::set_var(key, value);
-        let result = f();
-        match previous {
-            Some(previous) => std::env::set_var(key, previous),
-            None => std::env::remove_var(key),
-        }
-        result
-    }
-
-    fn test_env_lock() -> &'static Mutex<()> {
-        static LOCK: OnceLock<Mutex<()>> = OnceLock::new();
-        LOCK.get_or_init(|| Mutex::new(()))
+        f()
     }
 
     fn encode_stream_frame(frame: ExecuteStreamFrame) -> hyper::body::Bytes {
@@ -2654,6 +2642,7 @@ mod tests {
 
     #[test]
     fn preserve_world_project_dir_override_records_logical_root() {
+        let _authority_env = crate::execution::AuthorityEnvTestGuard::preserve();
         let _env_guard = crate::execution::world_env_guard();
         let prev_mode = std::env::var("SUBSTRATE_ANCHOR_MODE").ok();
         let prev_path = std::env::var("SUBSTRATE_ANCHOR_PATH").ok();
@@ -2694,6 +2683,7 @@ mod tests {
 
     #[test]
     fn preserve_world_project_dir_override_uses_dispatch_cwd_for_follow_cwd() {
+        let _authority_env = crate::execution::AuthorityEnvTestGuard::preserve();
         let _env_guard = crate::execution::world_env_guard();
         let prev_mode = std::env::var("SUBSTRATE_ANCHOR_MODE").ok();
         let prev_path = std::env::var("SUBSTRATE_ANCHOR_PATH").ok();
@@ -2757,6 +2747,7 @@ mod tests {
 
     #[test]
     fn current_world_request_profile_accepts_non_reserved_values() {
+        let _authority_env = crate::execution::AuthorityEnvTestGuard::preserve();
         with_env_var(
             "SUBSTRATE_WORLD_REQUEST_PROFILE",
             "wdap-smoke-profile",
@@ -2891,6 +2882,7 @@ mod tests {
 
     #[test]
     fn current_world_request_profile_rejects_reserved_world_deps_profiles() {
+        let _authority_env = crate::execution::AuthorityEnvTestGuard::preserve();
         for reserved in ["world-deps-provision", "world-deps-probe"] {
             with_env_var("SUBSTRATE_WORLD_REQUEST_PROFILE", reserved, || {
                 assert_eq!(
@@ -2925,32 +2917,57 @@ mod tests {
                 }),
             ];
 
-            let stream = stream::unfold((0usize, frames), |(idx, frames)| async move {
-                match idx {
-                    0 => Some((
-                        Ok::<_, Infallible>(hyper::body::Frame::data(frames[0].clone())),
-                        (1, frames),
-                    )),
-                    1 => {
-                        tokio::time::sleep(Duration::from_millis(250)).await;
-                        Some((
-                            Ok::<_, Infallible>(hyper::body::Frame::data(frames[1].clone())),
-                            (2, frames),
-                        ))
+            let (awaiting_exit_tx, awaiting_exit_rx) = tokio::sync::oneshot::channel();
+            let (release_exit_tx, release_exit_rx) = tokio::sync::oneshot::channel();
+            let stream = stream::unfold(
+                (
+                    0usize,
+                    frames,
+                    Some(awaiting_exit_tx),
+                    Some(release_exit_rx),
+                ),
+                |(idx, frames, mut awaiting_exit_tx, mut release_exit_rx)| async move {
+                    match idx {
+                        0 => Some((
+                            Ok::<_, Infallible>(hyper::body::Frame::data(frames[0].clone())),
+                            (1, frames, awaiting_exit_tx, release_exit_rx),
+                        )),
+                        1 => {
+                            awaiting_exit_tx
+                                .take()
+                                .expect("single stream exit-wait notification")
+                                .send(())
+                                .expect("SIGINT task must await Start processing");
+                            release_exit_rx
+                                .take()
+                                .expect("single stream Exit release receiver")
+                                .await
+                                .expect("cancel callback must release terminal frame");
+                            Some((
+                                Ok::<_, Infallible>(hyper::body::Frame::data(frames[1].clone())),
+                                (2, frames, awaiting_exit_tx, release_exit_rx),
+                            ))
+                        }
+                        _ => None,
                     }
-                    _ => None,
-                }
-            });
+                },
+            );
             let body = StreamBody::new(stream);
 
             let (sigint_tx, mut sigint_rx) = tokio::sync::mpsc::unbounded_channel();
             let cancels = Arc::new(Mutex::new(Vec::<(String, String)>::new()));
             let cancels_for_cancel = Arc::clone(&cancels);
 
-            tokio::spawn(async move {
-                tokio::time::sleep(Duration::from_millis(30)).await;
-                let _ = sigint_tx.send(());
+            let sigint_task = tokio::spawn(async move {
+                awaiting_exit_rx
+                    .await
+                    .expect("stream must request its post-Start frame");
+                sigint_tx
+                    .send(())
+                    .expect("stream SIGINT receiver must remain live");
             });
+            let release_exit_tx = Arc::new(Mutex::new(Some(release_exit_tx)));
+            let release_exit_for_cancel = Arc::clone(&release_exit_tx);
 
             let outcome = process_agent_stream_body(
                 body,
@@ -2959,14 +2976,25 @@ mod tests {
                 &mut sigint_rx,
                 move |span_id, sig| {
                     let cancels = Arc::clone(&cancels_for_cancel);
+                    let release_exit = Arc::clone(&release_exit_for_cancel);
                     async move {
                         cancels.lock().expect("cancel lock").push((span_id, sig));
+                        release_exit
+                            .lock()
+                            .expect("terminal release lock")
+                            .take()
+                            .expect("release terminal exactly once")
+                            .send(())
+                            .expect("stream must still await terminal release");
                         Ok(())
                     }
                 },
             )
             .await
             .expect("process stream");
+            sigint_task
+                .await
+                .expect("SIGINT publication task must terminate");
 
             assert_eq!(outcome.exit_code, 130);
             assert_eq!(
@@ -2979,6 +3007,16 @@ mod tests {
     #[test]
     #[serial_test::serial]
     fn emit_stream_chunk_some_emits_orchestration_scoped_agent_event() {
+        if crate::execution::run_in_bounded_test_subprocess(
+            concat!(
+                module_path!(),
+                "::",
+                stringify!(emit_stream_chunk_some_emits_orchestration_scoped_agent_event)
+            ),
+            "event_registry",
+        ) {
+            return;
+        }
         let _guard = acquire_event_test_guard();
         let mut rx = init_event_channel();
 
@@ -3002,6 +3040,16 @@ mod tests {
     #[test]
     #[serial_test::serial]
     fn emit_stream_chunk_none_emits_no_orchestration_scoped_agent_event() {
+        if crate::execution::run_in_bounded_test_subprocess(
+            concat!(
+                module_path!(),
+                "::",
+                stringify!(emit_stream_chunk_none_emits_no_orchestration_scoped_agent_event)
+            ),
+            "event_registry",
+        ) {
+            return;
+        }
         let _guard = acquire_event_test_guard();
         let mut rx = init_event_channel();
 
@@ -3017,6 +3065,16 @@ mod tests {
     #[test]
     #[serial_test::serial]
     fn process_agent_stream_body_uses_launch_owned_run_id_for_stream_rows() {
+        if crate::execution::run_in_bounded_test_subprocess(
+            concat!(
+                module_path!(),
+                "::",
+                stringify!(process_agent_stream_body_uses_launch_owned_run_id_for_stream_rows)
+            ),
+            "event_registry",
+        ) {
+            return;
+        }
         let _guard = acquire_event_test_guard();
         let rt = tokio::runtime::Runtime::new().expect("runtime");
         rt.block_on(async {

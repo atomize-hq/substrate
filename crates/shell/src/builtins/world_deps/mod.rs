@@ -150,10 +150,17 @@ mod tests {
     use tempfile::Builder;
     use transport_api_types::{InstallBootstrapContextCarrierV1, InstallBootstrapContextV1};
 
-    struct EnvGuard(Vec<(&'static str, Option<OsString>)>);
+    struct EnvGuard {
+        previous: Vec<(&'static str, Option<OsString>)>,
+        _authority_env: Option<crate::execution::AuthorityEnvTestGuard>,
+    }
 
     impl EnvGuard {
         fn apply(values: &[(&'static str, Option<&OsStr>)]) -> Self {
+            let authority_env = values
+                .iter()
+                .any(|(key, _)| matches!(*key, "SUBSTRATE_HOME" | "SUBSTRATE_WORLD_SOCKET"))
+                .then(crate::execution::AuthorityEnvTestGuard::preserve);
             let previous = values
                 .iter()
                 .map(|(key, _)| (*key, std::env::var_os(key)))
@@ -164,13 +171,16 @@ mod tests {
                     None => std::env::remove_var(key),
                 }
             }
-            Self(previous)
+            Self {
+                previous,
+                _authority_env: authority_env,
+            }
         }
     }
 
     impl Drop for EnvGuard {
         fn drop(&mut self) {
-            for (key, value) in self.0.drain(..) {
+            for (key, value) in self.previous.drain(..) {
                 match value {
                     Some(value) => std::env::set_var(key, value),
                     None => std::env::remove_var(key),
@@ -254,6 +264,7 @@ mod tests {
     #[test]
     #[serial]
     fn doctor_snapshot_uses_authenticated_a_under_conflicting_ambient_b_without_mutation() {
+        let _authority_env = crate::execution::AuthorityEnvTestGuard::preserve();
         let (_, account_home) = current_unix_principal_and_home().expect("current Unix home");
         let temp = Builder::new()
             .prefix("substrate-route-d-snapshot-")
@@ -289,6 +300,7 @@ mod tests {
     #[test]
     #[serial]
     fn doctor_snapshot_rejects_tampered_context_without_mutation_or_disclosure() {
+        let _authority_env = crate::execution::AuthorityEnvTestGuard::preserve();
         let (_, account_home) = current_unix_principal_and_home().expect("current Unix home");
         let temp = Builder::new()
             .prefix("substrate-route-d-tamper-")
