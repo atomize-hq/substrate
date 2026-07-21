@@ -42,6 +42,7 @@ mod tests {
     #[test]
     #[serial]
     fn update_manager_env_exports_writes_env_sh_format() {
+        let _authority_env = crate::execution::AuthorityEnvTestGuard::preserve();
         let temp = tempdir().unwrap();
         let home = temp.path().join("substrate-home");
         let ambient_home = temp.path().join("ambient-home");
@@ -59,13 +60,10 @@ mod tests {
         )
         .unwrap();
 
-        let previous_home = std::env::var_os("SUBSTRATE_HOME");
-        std::env::set_var("SUBSTRATE_HOME", &ambient_home);
-        let result = update_manager_env_exports(&env_sh, &home, true);
-        match previous_home {
-            Some(value) => std::env::set_var("SUBSTRATE_HOME", value),
-            None => std::env::remove_var("SUBSTRATE_HOME"),
-        }
+        let result = {
+            _authority_env.install_home(&ambient_home);
+            update_manager_env_exports(&env_sh, &home, true)
+        };
         result.unwrap();
 
         let contents = fs::read_to_string(&env_sh).unwrap();

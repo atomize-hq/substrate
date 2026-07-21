@@ -40,27 +40,31 @@ fn restore_env(key: &str, previous: Option<String>) {
 }
 
 struct CurrentDirGuard {
-    previous: PathBuf,
+    _process_cwd: crate::execution::ProcessCwdTestGuard,
 }
 
 impl CurrentDirGuard {
     fn change_to(path: &std::path::Path) -> Self {
-        let previous = std::env::current_dir().expect("capture cwd");
-        std::env::set_current_dir(path).expect("set cwd");
-        Self { previous }
-    }
-}
-
-impl Drop for CurrentDirGuard {
-    fn drop(&mut self) {
-        let _ = std::env::set_current_dir(&self.previous);
+        Self {
+            _process_cwd: crate::execution::ProcessCwdTestGuard::change_to(path),
+        }
     }
 }
 
 #[test]
 #[serial]
 fn wrap_mode_uses_cli_shell_and_shimmed_path() {
-    let _env_guard = world_env_guard();
+    if crate::execution::run_in_bounded_test_subprocess(
+        concat!(
+            module_path!(),
+            "::",
+            stringify!(wrap_mode_uses_cli_shell_and_shimmed_path)
+        ),
+        "broker",
+    ) {
+        return;
+    }
+    let _authority_env = crate::execution::AuthorityEnvTestGuard::preserve();
 
     let temp = tempdir().unwrap();
     let home = temp.path().join("home");
@@ -77,7 +81,7 @@ fn wrap_mode_uses_cli_shell_and_shimmed_path() {
     };
     let prev_home = set_env("HOME", &home_str);
     let prev_userprofile = set_env("USERPROFILE", &home_str);
-    let prev_substrate_home = set_env("SUBSTRATE_HOME", &substrate_home_str);
+    _authority_env.install_home(&substrate_home_str);
     let prev_path = set_env("PATH", path_value);
     let prev_shim_original_path = std::env::var("SHIM_ORIGINAL_PATH").ok();
     let prev_world = std::env::var("SUBSTRATE_WORLD").ok();
@@ -118,7 +122,6 @@ fn wrap_mode_uses_cli_shell_and_shimmed_path() {
     restore_env("SUBSTRATE_NO_SHIMS", prev_no_shims);
     restore_env("SHIM_ORIGINAL_PATH", prev_shim_original_path);
     restore_env("PATH", prev_path);
-    restore_env("SUBSTRATE_HOME", prev_substrate_home);
     restore_env("USERPROFILE", prev_userprofile);
     restore_env("HOME", prev_home);
 }
@@ -126,7 +129,17 @@ fn wrap_mode_uses_cli_shell_and_shimmed_path() {
 #[test]
 #[serial]
 fn skip_shims_and_no_world_disable_shimmed_path() {
-    let _env_guard = world_env_guard();
+    if crate::execution::run_in_bounded_test_subprocess(
+        concat!(
+            module_path!(),
+            "::",
+            stringify!(skip_shims_and_no_world_disable_shimmed_path)
+        ),
+        "broker",
+    ) {
+        return;
+    }
+    let _authority_env = crate::execution::AuthorityEnvTestGuard::preserve();
 
     let temp = tempdir().unwrap();
     let home = temp.path().join("home");
@@ -143,7 +156,7 @@ fn skip_shims_and_no_world_disable_shimmed_path() {
     };
     let prev_home = set_env("HOME", &home_str);
     let prev_userprofile = set_env("USERPROFILE", &home_str);
-    let prev_substrate_home = set_env("SUBSTRATE_HOME", &substrate_home_str);
+    _authority_env.install_home(&substrate_home_str);
     let prev_path = set_env("PATH", path_value);
     let prev_no_shims = set_env("SUBSTRATE_NO_SHIMS", "1");
     let prev_world = std::env::var("SUBSTRATE_WORLD").ok();
@@ -170,7 +183,6 @@ fn skip_shims_and_no_world_disable_shimmed_path() {
     restore_env("SUBSTRATE_WORLD_ENABLED", prev_world_enabled);
     restore_env("SUBSTRATE_WORLD", prev_world);
     restore_env("PATH", prev_path);
-    restore_env("SUBSTRATE_HOME", prev_substrate_home);
     restore_env("USERPROFILE", prev_userprofile);
     restore_env("HOME", prev_home);
 }

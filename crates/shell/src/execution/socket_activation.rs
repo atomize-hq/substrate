@@ -271,14 +271,22 @@ mod tests {
     #[test]
     #[serial]
     fn systemctl_timeout_is_fail_fast() {
+        if crate::execution::run_in_bounded_test_subprocess(
+            concat!(
+                module_path!(),
+                "::",
+                stringify!(systemctl_timeout_is_fail_fast)
+            ),
+            "report_cache",
+        ) {
+            return;
+        }
+        let _authority_env = crate::execution::AuthorityEnvTestGuard::preserve();
         let dir = tempfile::tempdir().expect("tempdir");
         let systemctl_path = dir.path().join("systemctl");
 
-        std::fs::write(
-            &systemctl_path,
-            "#!/usr/bin/env sh\nsleep 10\nprintf 'ActiveState=active\\n'\n",
-        )
-        .expect("write fake systemctl");
+        std::fs::write(&systemctl_path, "#!/usr/bin/env sh\nexec sleep 10\n")
+            .expect("write fake systemctl");
 
         let mut perms = std::fs::metadata(&systemctl_path)
             .expect("stat fake systemctl")

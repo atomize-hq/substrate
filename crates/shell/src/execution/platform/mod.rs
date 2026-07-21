@@ -343,6 +343,17 @@ mod tests {
     #[test]
     #[serial]
     fn world_enable_exports_policy_fs_mode() {
+        if crate::execution::run_in_bounded_test_subprocess(
+            concat!(
+                module_path!(),
+                "::",
+                stringify!(world_enable_exports_policy_fs_mode)
+            ),
+            "broker",
+        ) {
+            return;
+        }
+        let _authority_env = crate::execution::AuthorityEnvTestGuard::preserve();
         let _env_guard = crate::execution::world_env_guard();
         let _ = substrate_broker::set_global_broker(substrate_broker::BrokerHandle::new());
 

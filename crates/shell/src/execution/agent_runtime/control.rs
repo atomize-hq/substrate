@@ -3397,19 +3397,123 @@ struct PublicPromptRenderer {
 }
 
 #[cfg(unix)]
+trait PromptRenderOutput {
+    fn with_stdout<T, F>(&mut self, render: F) -> T
+    where
+        F: FnOnce(&mut dyn Write) -> T;
+
+    fn with_stderr<T, F>(&mut self, render: F) -> T
+    where
+        F: FnOnce(&mut dyn Write) -> T;
+}
+
+#[cfg(unix)]
+struct StandardPromptRenderOutput;
+
+#[cfg(unix)]
+impl PromptRenderOutput for StandardPromptRenderOutput {
+    fn with_stdout<T, F>(&mut self, render: F) -> T
+    where
+        F: FnOnce(&mut dyn Write) -> T,
+    {
+        let stdout = io::stdout();
+        let mut lock = stdout.lock();
+        render(&mut lock)
+    }
+
+    fn with_stderr<T, F>(&mut self, render: F) -> T
+    where
+        F: FnOnce(&mut dyn Write) -> T,
+    {
+        let stderr = io::stderr();
+        let mut lock = stderr.lock();
+        render(&mut lock)
+    }
+}
+
+#[cfg(all(unix, test))]
+#[derive(Default)]
+struct PromptRenderBuffer {
+    stdout: Vec<u8>,
+    stderr: Vec<u8>,
+    stdout_flushes: usize,
+    stderr_flushes: usize,
+    stdout_write_error: bool,
+    stderr_write_error: bool,
+}
+
+#[cfg(all(unix, test))]
+struct PromptRenderBufferWriter<'a> {
+    bytes: &'a mut Vec<u8>,
+    flushes: &'a mut usize,
+    fail_writes: bool,
+}
+
+#[cfg(all(unix, test))]
+impl Write for PromptRenderBufferWriter<'_> {
+    fn write(&mut self, bytes: &[u8]) -> io::Result<usize> {
+        if self.fail_writes {
+            return Err(io::Error::other("in-memory prompt writer rejected write"));
+        }
+        self.bytes.extend_from_slice(bytes);
+        Ok(bytes.len())
+    }
+
+    fn flush(&mut self) -> io::Result<()> {
+        *self.flushes += 1;
+        Ok(())
+    }
+}
+
+#[cfg(all(unix, test))]
+impl PromptRenderOutput for PromptRenderBuffer {
+    fn with_stdout<T, F>(&mut self, render: F) -> T
+    where
+        F: FnOnce(&mut dyn Write) -> T,
+    {
+        let mut writer = PromptRenderBufferWriter {
+            bytes: &mut self.stdout,
+            flushes: &mut self.stdout_flushes,
+            fail_writes: self.stdout_write_error,
+        };
+        render(&mut writer)
+    }
+
+    fn with_stderr<T, F>(&mut self, render: F) -> T
+    where
+        F: FnOnce(&mut dyn Write) -> T,
+    {
+        let mut writer = PromptRenderBufferWriter {
+            bytes: &mut self.stderr,
+            flushes: &mut self.stderr_flushes,
+            fail_writes: self.stderr_write_error,
+        };
+        render(&mut writer)
+    }
+}
+
+#[cfg(unix)]
 impl PublicPromptRenderer {
     fn new(json: bool) -> Self {
         Self { json }
     }
 
     fn render(&mut self, envelope: &PublicPromptEnvelope) -> Result<()> {
+        self.render_with_output(envelope, &mut StandardPromptRenderOutput)
+    }
+
+    fn render_with_output<O: PromptRenderOutput>(
+        &mut self,
+        envelope: &PublicPromptEnvelope,
+        output: &mut O,
+    ) -> Result<()> {
         if self.json {
-            let stdout = io::stdout();
-            let mut lock = stdout.lock();
-            writeln!(lock, "{}", serde_json::to_string(envelope)?)
-                .context("failed to render prompt envelope")?;
-            let _ = lock.flush();
-            return Ok(());
+            return output.with_stdout(|stdout| {
+                writeln!(stdout, "{}", serde_json::to_string(envelope)?)
+                    .context("failed to render prompt envelope")?;
+                let _ = stdout.flush();
+                Ok(())
+            });
         }
 
         match envelope {
@@ -3423,50 +3527,50 @@ impl PublicPromptRenderer {
                 session_posture,
                 ..
             } => {
-                let stdout = io::stdout();
-                let mut lock = stdout.lock();
-                let _ = writeln!(
-                    lock,
-                    "action={} orchestration_session_id={} backend_id={} participant_id={} turn_outcome={} session_posture={}",
-                    action.as_str(),
-                    orchestration_session_id,
-                    backend_id,
-                    participant_id.as_deref().unwrap_or("-"),
-                    turn_outcome,
-                    session_posture.as_str()
-                );
-                let _ = lock.flush();
+                output.with_stdout(|stdout| {
+                    let _ = writeln!(
+                        stdout,
+                        "action={} orchestration_session_id={} backend_id={} participant_id={} turn_outcome={} session_posture={}",
+                        action.as_str(),
+                        orchestration_session_id,
+                        backend_id,
+                        participant_id.as_deref().unwrap_or("-"),
+                        turn_outcome,
+                        session_posture.as_str()
+                    );
+                    let _ = stdout.flush();
+                });
             }
             PublicPromptEnvelope::Warning { message, .. }
             | PublicPromptEnvelope::Failed { message, .. } => {
-                let stderr = io::stderr();
-                let mut lock = stderr.lock();
-                let _ = writeln!(lock, "{message}");
-                let _ = lock.flush();
+                output.with_stderr(|stderr| {
+                    let _ = writeln!(stderr, "{message}");
+                    let _ = stderr.flush();
+                });
             }
             PublicPromptEnvelope::Event {
                 event_kind, data, ..
             } => {
                 if event_kind == "stderr" {
-                    let stderr = io::stderr();
-                    let mut lock = stderr.lock();
-                    if let Ok(event) = serde_json::from_value::<AgentEvent>(data.clone()) {
-                        let _ = writeln!(lock, "{}", format_event_line(&event));
-                    } else {
-                        let fallback = prompt_event_text(data);
-                        let fallback = if fallback.is_empty() {
-                            structured_prompt_event_fallback_text(data).unwrap_or(fallback)
+                    output.with_stderr(|stderr| {
+                        if let Ok(event) = serde_json::from_value::<AgentEvent>(data.clone()) {
+                            let _ = writeln!(stderr, "{}", format_event_line(&event));
                         } else {
-                            fallback
-                        };
-                        let _ = lock.write_all(fallback.as_bytes());
-                    }
-                    let _ = lock.flush();
+                            let fallback = prompt_event_text(data);
+                            let fallback = if fallback.is_empty() {
+                                structured_prompt_event_fallback_text(data).unwrap_or(fallback)
+                            } else {
+                                fallback
+                            };
+                            let _ = stderr.write_all(fallback.as_bytes());
+                        }
+                        let _ = stderr.flush();
+                    });
                 } else if let Ok(event) = serde_json::from_value::<AgentEvent>(data.clone()) {
-                    let stdout = io::stdout();
-                    let mut lock = stdout.lock();
-                    let _ = writeln!(lock, "{}", format_event_line(&event));
-                    let _ = lock.flush();
+                    output.with_stdout(|stdout| {
+                        let _ = writeln!(stdout, "{}", format_event_line(&event));
+                        let _ = stdout.flush();
+                    });
                 } else {
                     let fallback = prompt_event_text(data);
                     let fallback = if fallback.is_empty() {
@@ -3474,10 +3578,10 @@ impl PublicPromptRenderer {
                     } else {
                         fallback
                     };
-                    let stdout = io::stdout();
-                    let mut lock = stdout.lock();
-                    let _ = lock.write_all(fallback.as_bytes());
-                    let _ = lock.flush();
+                    output.with_stdout(|stdout| {
+                        let _ = stdout.write_all(fallback.as_bytes());
+                        let _ = stdout.flush();
+                    });
                 }
             }
         }
@@ -3646,7 +3750,8 @@ mod tests {
     #[cfg(unix)]
     use super::{
         handle_private_prompt_connection, private_prompt_request_channel,
-        structured_prompt_event_fallback_text, PublicPromptEnvelope, PublicPromptRenderer,
+        structured_prompt_event_fallback_text, PromptRenderBuffer, PublicPromptEnvelope,
+        PublicPromptRenderer,
     };
     use crate::execution::agent_runtime::orchestration_session::HostAttachContract;
     use crate::execution::agent_runtime::{
@@ -3664,29 +3769,33 @@ mod tests {
         OrchestrationObligationRecord, ORCHESTRATOR_ROLE,
     };
     use crate::execution::config_model::AgentExecutionScope;
-    #[cfg(unix)]
-    use std::fs::File;
-    #[cfg(unix)]
-    use std::io::Read;
-    #[cfg(unix)]
-    use std::io::Write;
-    #[cfg(unix)]
-    use std::os::fd::FromRawFd;
     use std::path::PathBuf;
     use std::sync::atomic::AtomicBool;
     use std::sync::{Arc, Mutex};
-    use tempfile::TempDir;
     #[cfg(unix)]
     use tokio::io::{AsyncBufReadExt, AsyncWriteExt, BufReader};
     #[cfg(unix)]
     use tokio::net::UnixStream;
 
     fn with_store(test: impl FnOnce(&AgentRuntimeStateStore)) {
-        let temp = TempDir::new().expect("tempdir");
-        std::env::set_var("SUBSTRATE_HOME", temp.path());
+        let authority_env = crate::execution::AuthorityEnvTestGuard::preserve();
+        let safe_parent = std::env::var_os("XDG_RUNTIME_DIR")
+            .map(PathBuf::from)
+            .unwrap_or_else(|| {
+                PathBuf::from(std::env::var_os("HOME").expect("tests require HOME")).join(".cache")
+            });
+        std::fs::create_dir_all(&safe_parent).expect("create control test authority parent");
+        let temp = tempfile::tempdir_in(safe_parent).expect("secure control test tempdir");
+        #[cfg(unix)]
+        {
+            use std::os::unix::fs::PermissionsExt as _;
+
+            std::fs::set_permissions(temp.path(), std::fs::Permissions::from_mode(0o700))
+                .expect("secure control test tempdir mode");
+        }
+        authority_env.install_home(temp.path());
         let store = AgentRuntimeStateStore::new().expect("state store");
         test(&store);
-        std::env::remove_var("SUBSTRATE_HOME");
     }
 
     fn test_plan(
@@ -4031,114 +4140,7 @@ mod tests {
     }
 
     #[cfg(unix)]
-    fn capture_stdout_once(test: impl FnOnce()) -> String {
-        assert_eq!(
-            std::io::stdout().flush().map(|_| 0).unwrap_or(-1),
-            0,
-            "flush stdout before capture"
-        );
-
-        let mut pipe_fds = [0; 2];
-        assert_eq!(
-            unsafe { libc::pipe(pipe_fds.as_mut_ptr()) },
-            0,
-            "create stdout capture pipe"
-        );
-        let read_fd = pipe_fds[0];
-        let write_fd = pipe_fds[1];
-        let saved_stdout = unsafe { libc::dup(libc::STDOUT_FILENO) };
-        assert!(saved_stdout >= 0, "dup stdout");
-        assert_eq!(
-            unsafe { libc::dup2(write_fd, libc::STDOUT_FILENO) },
-            libc::STDOUT_FILENO,
-            "redirect stdout to capture pipe"
-        );
-
-        let result = std::panic::catch_unwind(std::panic::AssertUnwindSafe(test));
-
-        assert_eq!(
-            std::io::stdout().flush().map(|_| 0).unwrap_or(-1),
-            0,
-            "flush stdout after capture"
-        );
-        assert_eq!(
-            unsafe { libc::dup2(saved_stdout, libc::STDOUT_FILENO) },
-            libc::STDOUT_FILENO,
-            "restore stdout after capture"
-        );
-        unsafe {
-            libc::close(saved_stdout);
-            libc::close(write_fd);
-        }
-
-        let mut output = String::new();
-        unsafe { File::from_raw_fd(read_fd) }
-            .read_to_string(&mut output)
-            .expect("read captured stdout");
-
-        if let Err(payload) = result {
-            std::panic::resume_unwind(payload);
-        }
-
-        output
-    }
-
-    #[cfg(unix)]
-    fn capture_stderr_once(test: impl FnOnce()) -> String {
-        assert_eq!(
-            std::io::stderr().flush().map(|_| 0).unwrap_or(-1),
-            0,
-            "flush stderr before capture"
-        );
-
-        let mut pipe_fds = [0; 2];
-        assert_eq!(
-            unsafe { libc::pipe(pipe_fds.as_mut_ptr()) },
-            0,
-            "create stderr capture pipe"
-        );
-        let read_fd = pipe_fds[0];
-        let write_fd = pipe_fds[1];
-        let saved_stderr = unsafe { libc::dup(libc::STDERR_FILENO) };
-        assert!(saved_stderr >= 0, "dup stderr");
-        assert_eq!(
-            unsafe { libc::dup2(write_fd, libc::STDERR_FILENO) },
-            libc::STDERR_FILENO,
-            "redirect stderr to capture pipe"
-        );
-
-        let result = std::panic::catch_unwind(std::panic::AssertUnwindSafe(test));
-
-        assert_eq!(
-            std::io::stderr().flush().map(|_| 0).unwrap_or(-1),
-            0,
-            "flush stderr after capture"
-        );
-        assert_eq!(
-            unsafe { libc::dup2(saved_stderr, libc::STDERR_FILENO) },
-            libc::STDERR_FILENO,
-            "restore stderr after capture"
-        );
-        unsafe {
-            libc::close(saved_stderr);
-            libc::close(write_fd);
-        }
-
-        let mut output = String::new();
-        unsafe { File::from_raw_fd(read_fd) }
-            .read_to_string(&mut output)
-            .expect("read captured stderr");
-
-        if let Err(payload) = result {
-            std::panic::resume_unwind(payload);
-        }
-
-        output
-    }
-
-    #[cfg(unix)]
     #[test]
-    #[serial_test::serial]
     fn public_prompt_renderer_renders_bounded_structured_fallback_when_decode_fails() {
         let envelope = PublicPromptEnvelope::Event {
             version: 1,
@@ -4157,31 +4159,87 @@ mod tests {
             }),
         };
 
-        let output = capture_stdout_once(|| {
-            let mut renderer = PublicPromptRenderer::new(false);
-            renderer
-                .render(&envelope)
-                .expect("render structured fallback");
-        });
-        let rendered_line = output
-            .lines()
-            .find(|line| line.starts_with("[codex] task_progress:"))
-            .map(|line| format!("{line}\n"))
-            .expect("captured stdout should contain bounded structured fallback line");
+        let mut output = PromptRenderBuffer::default();
+        let mut renderer = PublicPromptRenderer::new(false);
+        renderer
+            .render_with_output(&envelope, &mut output)
+            .expect("render structured fallback");
 
         assert_eq!(
-            rendered_line,
-            "[codex] task_progress: fields=alpha, beta, gamma (+1 more)\n"
+            output.stdout,
+            b"[codex] task_progress: fields=alpha, beta, gamma (+1 more)\n"
         );
+        assert_eq!(output.stderr, b"");
+        assert_eq!(output.stdout_flushes, 1);
+        assert_eq!(output.stderr_flushes, 0);
         assert!(
-            !rendered_line.contains('{') && !rendered_line.contains("queued"),
-            "fallback must stay bounded and avoid dumping raw nested payloads: {rendered_line}"
+            !output.stdout.contains(&b'{')
+                && !output
+                    .stdout
+                    .windows(b"queued".len())
+                    .any(|bytes| bytes == b"queued"),
+            "fallback must stay bounded and avoid dumping raw nested payloads: {:?}",
+            String::from_utf8_lossy(&output.stdout)
         );
+
+        let completed = PublicPromptEnvelope::Completed {
+            version: 1,
+            action: PublicPromptAction::Turn,
+            orchestration_session_id: "sess-render".to_string(),
+            backend_id: "cli:codex".to_string(),
+            participant_id: Some("ash-render".to_string()),
+            turn_outcome: "success".to_string(),
+            session_posture: PublicSessionPosture::DetachedReattachable,
+            state: "ready".to_string(),
+            warnings: Vec::new(),
+        };
+        let mut completed_output = PromptRenderBuffer::default();
+        renderer
+            .render_with_output(&completed, &mut completed_output)
+            .expect("render completed envelope");
+        assert_eq!(
+            completed_output.stdout,
+            b"action=turn orchestration_session_id=sess-render backend_id=cli:codex participant_id=ash-render turn_outcome=success session_posture=detached_reattachable\n"
+        );
+        assert_eq!(completed_output.stderr, b"");
+        assert_eq!(completed_output.stdout_flushes, 1);
+
+        let mut json_output = PromptRenderBuffer::default();
+        let mut json_renderer = PublicPromptRenderer::new(true);
+        json_renderer
+            .render_with_output(&completed, &mut json_output)
+            .expect("render JSON envelope");
+        let mut expected_json = serde_json::to_vec(&completed).expect("serialize JSON envelope");
+        expected_json.push(b'\n');
+        assert_eq!(json_output.stdout, expected_json);
+        assert_eq!(json_output.stderr, b"");
+        assert_eq!(json_output.stdout_flushes, 1);
+
+        let mut ignored_write_error = PromptRenderBuffer {
+            stdout_write_error: true,
+            ..PromptRenderBuffer::default()
+        };
+        renderer
+            .render_with_output(&envelope, &mut ignored_write_error)
+            .expect("non-JSON renderer preserves ignored write errors");
+        assert_eq!(ignored_write_error.stdout, b"");
+        assert_eq!(ignored_write_error.stdout_flushes, 1);
+
+        let mut propagated_write_error = PromptRenderBuffer {
+            stdout_write_error: true,
+            ..PromptRenderBuffer::default()
+        };
+        let json_error = json_renderer
+            .render_with_output(&completed, &mut propagated_write_error)
+            .expect_err("JSON renderer preserves propagated write errors");
+        assert!(json_error
+            .to_string()
+            .contains("failed to render prompt envelope"));
+        assert_eq!(propagated_write_error.stdout_flushes, 0);
     }
 
     #[cfg(unix)]
     #[test]
-    #[serial_test::serial]
     fn public_prompt_renderer_renders_bounded_structured_stderr_fallback_when_decode_fails() {
         let envelope = PublicPromptEnvelope::Event {
             version: 1,
@@ -4200,26 +4258,69 @@ mod tests {
             }),
         };
 
-        let output = capture_stderr_once(|| {
-            let mut renderer = PublicPromptRenderer::new(false);
-            renderer
-                .render(&envelope)
-                .expect("render structured stderr fallback");
-        });
-        let rendered_line = output
-            .lines()
-            .find(|line| line.starts_with("[codex] task_progress:"))
-            .map(|line| format!("{line}\n"))
-            .expect("captured stderr should contain bounded structured fallback line");
+        let mut output = PromptRenderBuffer::default();
+        let mut renderer = PublicPromptRenderer::new(false);
+        renderer
+            .render_with_output(&envelope, &mut output)
+            .expect("render structured stderr fallback");
 
         assert_eq!(
-            rendered_line,
-            "[codex] task_progress: fields=alpha, beta, gamma (+1 more)\n"
+            output.stderr,
+            b"[codex] task_progress: fields=alpha, beta, gamma (+1 more)\n"
         );
+        assert_eq!(output.stdout, b"");
+        assert_eq!(output.stderr_flushes, 1);
+        assert_eq!(output.stdout_flushes, 0);
         assert!(
-            !rendered_line.contains('{') && !rendered_line.contains("queued"),
-            "fallback must stay bounded and avoid dumping raw nested payloads: {rendered_line}"
+            !output.stderr.contains(&b'{')
+                && !output
+                    .stderr
+                    .windows(b"queued".len())
+                    .any(|bytes| bytes == b"queued"),
+            "fallback must stay bounded and avoid dumping raw nested payloads: {:?}",
+            String::from_utf8_lossy(&output.stderr)
         );
+
+        let mut warning_output = PromptRenderBuffer::default();
+        renderer
+            .render_with_output(
+                &PublicPromptEnvelope::Warning {
+                    version: 1,
+                    message: "warning text".to_string(),
+                },
+                &mut warning_output,
+            )
+            .expect("render warning envelope");
+        assert_eq!(warning_output.stdout, b"");
+        assert_eq!(warning_output.stderr, b"warning text\n");
+        assert_eq!(warning_output.stderr_flushes, 1);
+
+        let mut failed_output = PromptRenderBuffer::default();
+        renderer
+            .render_with_output(
+                &PublicPromptEnvelope::Failed {
+                    version: 1,
+                    terminal: true,
+                    stage: "render".to_string(),
+                    error_code: "render_failed".to_string(),
+                    message: "failure text".to_string(),
+                },
+                &mut failed_output,
+            )
+            .expect("render failed envelope");
+        assert_eq!(failed_output.stdout, b"");
+        assert_eq!(failed_output.stderr, b"failure text\n");
+        assert_eq!(failed_output.stderr_flushes, 1);
+
+        let mut ignored_stderr_error = PromptRenderBuffer {
+            stderr_write_error: true,
+            ..PromptRenderBuffer::default()
+        };
+        renderer
+            .render_with_output(&envelope, &mut ignored_stderr_error)
+            .expect("non-JSON stderr renderer preserves ignored write errors");
+        assert_eq!(ignored_stderr_error.stderr, b"");
+        assert_eq!(ignored_stderr_error.stderr_flushes, 1);
     }
 
     #[test]
@@ -4836,16 +4937,27 @@ mod tests {
                 .expect("acquire attach launch guard")
                 .expect("attach launch guard must be available");
 
-            let release_thread = std::thread::spawn(move || {
-                std::thread::sleep(std::time::Duration::from_millis(100));
+            let (waiter_contended_tx, waiter_contended_rx) = std::sync::mpsc::channel();
+            let joined = std::thread::scope(|scope| {
+                let waiter = scope.spawn(|| {
+                    assert!(
+                        super::try_acquire_hidden_owner_helper_attach_launch_guard(store, &plan)
+                            .expect("probe inflight attach launch guard")
+                            .is_none(),
+                        "waiter must observe the retained inflight attach launch before joining"
+                    );
+                    waiter_contended_tx
+                        .send(())
+                        .expect("publish inflight attach contention");
+                    super::wait_for_inflight_hidden_owner_helper_attach_launch(store, &plan)
+                        .expect("detached live owner should not satisfy attach join")
+                });
+                waiter_contended_rx
+                    .recv()
+                    .expect("waiter reached inflight attach acquisition");
                 drop(guard);
+                waiter.join().expect("attach join waiter should not panic")
             });
-
-            let joined = super::wait_for_inflight_hidden_owner_helper_attach_launch(store, &plan)
-                .expect("detached live owner should not satisfy attach join");
-            release_thread
-                .join()
-                .expect("release thread should finish cleanly");
 
             let super::HiddenOwnerHelperAttachJoinResult::RetryAsLeader = joined else {
                 panic!("detached parked owner must not satisfy attach join success");

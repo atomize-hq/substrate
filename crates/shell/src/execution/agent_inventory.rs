@@ -1911,6 +1911,7 @@ config:
     #[test]
     #[serial_test::serial]
     fn load_effective_agent_inventory_materializes_single_placement_version_2_files() {
+        let _authority_env = crate::execution::AuthorityEnvTestGuard::preserve();
         let temp = tempdir().expect("tempdir");
         let substrate_home = temp.path().join("substrate-home");
         let agents_dir = substrate_home.join("agents");
@@ -1955,13 +1956,10 @@ config:
         )
         .expect("write v2 inventory");
 
-        let previous_substrate_home = std::env::var_os("SUBSTRATE_HOME");
-        std::env::set_var("SUBSTRATE_HOME", &substrate_home);
-        let inventory_result = load_effective_agent_inventory(temp.path(), &Policy::default());
-        match previous_substrate_home {
-            Some(value) => std::env::set_var("SUBSTRATE_HOME", value),
-            None => std::env::remove_var("SUBSTRATE_HOME"),
-        }
+        let inventory_result = {
+            _authority_env.install_home(&substrate_home);
+            load_effective_agent_inventory(temp.path(), &Policy::default())
+        };
         let inventory = inventory_result
             .expect("effective inventory should materialize single-placement version 2 files");
 
@@ -1985,6 +1983,7 @@ config:
     #[test]
     #[serial_test::serial]
     fn load_effective_agent_inventory_workspace_v2_shadow_materializes_single_placement_entry() {
+        let _authority_env = crate::execution::AuthorityEnvTestGuard::preserve();
         let temp = tempdir().expect("tempdir");
         let substrate_home = temp.path().join("substrate-home");
         let global_agents_dir = substrate_home.join("agents");
@@ -2035,13 +2034,10 @@ config:
         )
         .expect("write workspace v2 inventory");
 
-        let previous_substrate_home = std::env::var_os("SUBSTRATE_HOME");
-        std::env::set_var("SUBSTRATE_HOME", &substrate_home);
-        let inventory_result = load_effective_agent_inventory(&workspace_root, &Policy::default());
-        match previous_substrate_home {
-            Some(value) => std::env::set_var("SUBSTRATE_HOME", value),
-            None => std::env::remove_var("SUBSTRATE_HOME"),
-        }
+        let inventory_result = {
+            _authority_env.install_home(&substrate_home);
+            load_effective_agent_inventory(&workspace_root, &Policy::default())
+        };
         let inventory = inventory_result
             .expect("effective inventory should materialize the workspace version 2 shadow entry");
 
@@ -2068,6 +2064,7 @@ config:
     #[serial_test::serial]
     fn load_effective_agent_inventory_workspace_host_v2_shadow_suppresses_stale_global_world_sibling(
     ) {
+        let _authority_env = crate::execution::AuthorityEnvTestGuard::preserve();
         let temp = tempdir().expect("tempdir");
         let substrate_home = temp.path().join("substrate-home");
         let global_agents_dir = substrate_home.join("agents");
@@ -2137,13 +2134,10 @@ config:
         )
         .expect("write workspace host-only v2 inventory");
 
-        let previous_substrate_home = std::env::var_os("SUBSTRATE_HOME");
-        std::env::set_var("SUBSTRATE_HOME", &substrate_home);
-        let inventory_result = load_effective_agent_inventory(&workspace_root, &Policy::default());
-        match previous_substrate_home {
-            Some(value) => std::env::set_var("SUBSTRATE_HOME", value),
-            None => std::env::remove_var("SUBSTRATE_HOME"),
-        }
+        let inventory_result = {
+            _authority_env.install_home(&substrate_home);
+            load_effective_agent_inventory(&workspace_root, &Policy::default())
+        };
         let inventory = inventory_result.expect(
             "effective inventory should materialize the workspace host-only version 2 shadow entry",
         );
@@ -2175,6 +2169,7 @@ config:
     #[serial_test::serial]
     fn load_effective_agent_inventory_workspace_host_v2_shadow_suppresses_lower_root_v2_realized_world_row(
     ) {
+        let _authority_env = crate::execution::AuthorityEnvTestGuard::preserve();
         let temp = tempdir().expect("tempdir");
         let substrate_home = temp.path().join("substrate-home");
         let global_agents_dir = substrate_home.join("agents");
@@ -2233,13 +2228,10 @@ config:
         )
         .expect("write workspace host-only v2 inventory");
 
-        let previous_substrate_home = std::env::var_os("SUBSTRATE_HOME");
-        std::env::set_var("SUBSTRATE_HOME", &substrate_home);
-        let inventory_result = load_effective_agent_inventory(&workspace_root, &Policy::default());
-        match previous_substrate_home {
-            Some(value) => std::env::set_var("SUBSTRATE_HOME", value),
-            None => std::env::remove_var("SUBSTRATE_HOME"),
-        }
+        let inventory_result = {
+            _authority_env.install_home(&substrate_home);
+            load_effective_agent_inventory(&workspace_root, &Policy::default())
+        };
         let inventory = inventory_result.expect(
             "effective inventory should materialize the workspace host-only version 2 shadow",
         );
@@ -2274,6 +2266,7 @@ config:
     #[test]
     #[serial_test::serial]
     fn load_effective_agent_inventory_same_root_v2_suppresses_stale_legacy_world_sibling() {
+        let _authority_env = crate::execution::AuthorityEnvTestGuard::preserve();
         let temp = tempdir().expect("tempdir");
         let substrate_home = temp.path().join("substrate-home");
         let agents_dir = substrate_home.join("agents");
@@ -2318,13 +2311,10 @@ config:
         )
         .expect("write stale legacy world inventory");
 
-        let previous_substrate_home = std::env::var_os("SUBSTRATE_HOME");
-        std::env::set_var("SUBSTRATE_HOME", &substrate_home);
-        let inventory_result = load_effective_agent_inventory(temp.path(), &Policy::default());
-        match previous_substrate_home {
-            Some(value) => std::env::set_var("SUBSTRATE_HOME", value),
-            None => std::env::remove_var("SUBSTRATE_HOME"),
-        }
+        let inventory_result = {
+            _authority_env.install_home(&substrate_home);
+            load_effective_agent_inventory(temp.path(), &Policy::default())
+        };
         let inventory = inventory_result.expect(
             "effective inventory should keep the realized single-placement version 2 truth",
         );
@@ -2354,6 +2344,7 @@ config:
     fn gateway_backend_resolution_uses_explicit_bootstrap_home_under_conflicting_ambient_home() {
         use std::os::unix::fs::PermissionsExt;
 
+        let _authority_env = crate::execution::AuthorityEnvTestGuard::preserve();
         let safe_parent = std::env::var_os("XDG_RUNTIME_DIR")
             .map(std::path::PathBuf::from)
             .unwrap_or_else(|| {
@@ -2394,20 +2385,18 @@ config:
 
         let conflicting_home = parent.path().join("conflicting");
         fs::create_dir(&conflicting_home).expect("create conflicting home");
-        let previous = std::env::var_os("SUBSTRATE_HOME");
-        std::env::set_var("SUBSTRATE_HOME", &conflicting_home);
-        let authority = crate::execution::agent_runtime::HostSessionAuthority::open(&selected_home)
-            .expect("open selected authority");
-        let result = super::resolve_gateway_backend_inventory_entry_for_bootstrap_home(
-            parent.path(),
-            "cli:selected",
-            &Policy::default(),
-            &authority.bootstrap_home(),
-        );
-        match previous {
-            Some(value) => std::env::set_var("SUBSTRATE_HOME", value),
-            None => std::env::remove_var("SUBSTRATE_HOME"),
-        }
+        let result = {
+            _authority_env.install_home(&conflicting_home);
+            let authority =
+                crate::execution::agent_runtime::HostSessionAuthority::open(&selected_home)
+                    .expect("open selected authority");
+            super::resolve_gateway_backend_inventory_entry_for_bootstrap_home(
+                parent.path(),
+                "cli:selected",
+                &Policy::default(),
+                &authority.bootstrap_home(),
+            )
+        };
 
         let entry = result.expect("resolve selected inventory");
         assert_eq!(entry.path, selected_agent);

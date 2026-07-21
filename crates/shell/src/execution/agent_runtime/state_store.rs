@@ -11215,6 +11215,7 @@ mod tests {
     }
 
     fn with_store(test: impl FnOnce(&AgentRuntimeStateStore)) {
+        let authority_env = crate::execution::AuthorityEnvTestGuard::preserve();
         let safe_parent = std::env::var_os("XDG_RUNTIME_DIR")
             .map(PathBuf::from)
             .unwrap_or_else(|| {
@@ -11224,7 +11225,7 @@ mod tests {
         let temp = tempfile::tempdir_in(safe_parent).expect("safe StateStore tempdir");
         fs::set_permissions(temp.path(), fs::Permissions::from_mode(0o700))
             .expect("secure StateStore test root");
-        std::env::set_var("SUBSTRATE_HOME", temp.path());
+        authority_env.install_home(temp.path());
         std::env::set_var(
             SHARED_WORLD_METADATA_ROOT_TEST_ENV,
             temp.path().join("shared-worlds"),
@@ -11232,7 +11233,6 @@ mod tests {
         let store = AgentRuntimeStateStore::new().expect("state store");
         test(&store);
         std::env::remove_var(SHARED_WORLD_METADATA_ROOT_TEST_ENV);
-        std::env::remove_var("SUBSTRATE_HOME");
     }
 
     #[cfg(any(target_os = "linux", test))]
@@ -11783,6 +11783,29 @@ mod tests {
         );
     }
 
+    #[cfg(target_os = "macos")]
+    fn macos_process_has_open_path(path: &Path) -> bool {
+        use std::ffi::CStr;
+        use std::os::unix::ffi::OsStrExt;
+
+        let expected = fs::canonicalize(path).expect("canonicalize macOS lock path");
+        for fd in 0..512 {
+            let mut buffer = [0 as libc::c_char; libc::PATH_MAX as usize];
+            // SAFETY: F_GETPATH writes at most PATH_MAX bytes into the supplied buffer for an
+            // open descriptor and does not retain the pointer.
+            let result = unsafe { libc::fcntl(fd, libc::F_GETPATH, buffer.as_mut_ptr()) };
+            if result == 0 {
+                // SAFETY: a successful F_GETPATH call returns a NUL-terminated path.
+                let opened = unsafe { CStr::from_ptr(buffer.as_ptr()) };
+                if opened.to_bytes() == expected.as_os_str().as_bytes() {
+                    return true;
+                }
+            }
+        }
+        false
+    }
+
+    #[cfg(any(target_os = "linux", target_os = "macos"))]
     #[test]
     #[serial_test::serial]
     fn preactivation_state_store_writer_uses_shared_cross_process_root_lock() {
@@ -11791,18 +11814,81 @@ mod tests {
         const CHILD_TEST: &str = "execution::agent_runtime::state_store::tests::preactivation_state_store_writer_uses_shared_cross_process_root_lock";
         const CHILD_SENTINEL: &str = "A1_LEGACY_WRITER_CHILD_EXECUTED";
         if let Some(root_path) = std::env::var_os("SUBSTRATE_A1_LEGACY_WRITER_CHILD_ROOT") {
-            std::env::set_var("SUBSTRATE_HOME", &root_path);
+            let _authority_env = crate::execution::AuthorityEnvTestGuard::set_home(&root_path);
             let store = AgentRuntimeStateStore::new().expect("child state store");
-            println!("{CHILD_SENTINEL}");
-            std::io::stdout().flush().expect("flush child sentinel");
             let participant = live_orchestrator(
                 "codex",
                 "sess_cross_process_writer",
                 "ash_cross_process_writer",
             );
-            store
-                .persist_participant(&participant)
-                .expect("child persist participant");
+
+            #[cfg(target_os = "linux")]
+            {
+                let (tid_tx, tid_rx) = std::sync::mpsc::sync_channel(1);
+                let writer = std::thread::spawn(move || {
+                    // SAFETY: gettid has no arguments and only reports the calling thread ID.
+                    let tid = unsafe { libc::syscall(libc::SYS_gettid) };
+                    tid_tx.send(tid).expect("publish legacy writer thread ID");
+                    store
+                        .persist_participant(&participant)
+                        .expect("child persist participant");
+                });
+                let tid = tid_rx.recv().expect("receive legacy writer thread ID");
+                let wchan = PathBuf::from(format!("/proc/self/task/{tid}/wchan"));
+                let mut observed_lock_wait = false;
+                for _ in 0..100_000 {
+                    assert!(
+                        !writer.is_finished(),
+                        "legacy writer completed without blocking on the shared root lock"
+                    );
+                    let state =
+                        fs::read_to_string(&wchan).expect("read legacy writer wait channel");
+                    if state.trim() == "locks_lock_inode_wait" {
+                        observed_lock_wait = true;
+                        break;
+                    }
+                    std::thread::yield_now();
+                }
+                assert!(
+                    observed_lock_wait,
+                    "legacy writer never entered the shared root lock wait"
+                );
+                println!("{CHILD_SENTINEL}");
+                std::io::stdout().flush().expect("flush child sentinel");
+                writer.join().expect("join legacy writer");
+            }
+
+            #[cfg(target_os = "macos")]
+            {
+                let writer = std::thread::spawn(move || {
+                    store
+                        .persist_participant(&participant)
+                        .expect("child persist participant");
+                });
+                let lock_path = PathBuf::from(root_path)
+                    .join("authority-v1")
+                    .join("lock")
+                    .join("root.lock");
+                let mut observed_open_lock = false;
+                for _ in 0..100_000 {
+                    assert!(
+                        !writer.is_finished(),
+                        "legacy writer completed without blocking on the shared root lock"
+                    );
+                    if macos_process_has_open_path(&lock_path) {
+                        observed_open_lock = true;
+                        break;
+                    }
+                    std::thread::yield_now();
+                }
+                assert!(
+                    observed_open_lock,
+                    "legacy writer never opened the shared root lock while it was parent-owned"
+                );
+                println!("{CHILD_SENTINEL}");
+                std::io::stdout().flush().expect("flush child sentinel");
+                writer.join().expect("join legacy writer");
+            }
             println!("writer-complete");
             return;
         }
@@ -11842,7 +11928,6 @@ mod tests {
             }
         }
         assert!(prefix.contains(CHILD_SENTINEL), "child output: {prefix}");
-        std::thread::sleep(std::time::Duration::from_millis(100));
         assert!(child.try_wait().expect("poll blocked child").is_none());
         assert!(!temp
             .path()
@@ -11876,7 +11961,7 @@ mod tests {
 
         if let Some(root_path) = std::env::var_os(CHILD_ROOT_ENV) {
             let root_path = PathBuf::from(root_path);
-            std::env::set_var("SUBSTRATE_HOME", &root_path);
+            let _authority_env = crate::execution::AuthorityEnvTestGuard::set_home(&root_path);
             let expected_root = crate::execution::agent_runtime::host_session_authority::trusted_fs::TrustedAuthorityRoot::open(&root_path)
                 .expect("open child expected trusted root")
                 .identity()

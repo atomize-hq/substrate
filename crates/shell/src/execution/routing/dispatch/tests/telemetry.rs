@@ -29,6 +29,16 @@ fn test_event_identity(event_sequence: u64) -> transport_api_types::RuntimeEvent
 #[test]
 #[serial_test::serial]
 fn consume_agent_stream_buffer_without_context_suppresses_agent_events() {
+    if crate::execution::run_in_bounded_test_subprocess(
+        concat!(
+            module_path!(),
+            "::",
+            stringify!(consume_agent_stream_buffer_without_context_suppresses_agent_events)
+        ),
+        "event_registry",
+    ) {
+        return;
+    }
     let _guard = agent_events::acquire_event_test_guard();
     let rt = Runtime::new().expect("runtime");
     rt.block_on(async {
@@ -92,6 +102,16 @@ fn consume_agent_stream_buffer_without_context_suppresses_agent_events() {
 #[test]
 #[serial_test::serial]
 fn consume_agent_stream_buffer_preserves_runtime_event_identity_unchanged() {
+    if crate::execution::run_in_bounded_test_subprocess(
+        concat!(
+            module_path!(),
+            "::",
+            stringify!(consume_agent_stream_buffer_preserves_runtime_event_identity_unchanged)
+        ),
+        "event_registry",
+    ) {
+        return;
+    }
     let _guard = agent_events::acquire_event_test_guard();
     let mut rx = init_event_channel();
     let mut event = substrate_common::agent_events::AgentEvent::message(
