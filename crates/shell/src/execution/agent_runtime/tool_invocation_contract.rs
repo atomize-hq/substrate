@@ -2361,7 +2361,6 @@ mod tests {
         assert!(!store
             .canonical_active_ephemeral_task_path("sess_packet2", "task-run-packet2")
             .exists());
-        std::env::remove_var("SUBSTRATE_HOME");
     }
 
     #[test]
@@ -2378,7 +2377,6 @@ mod tests {
         )
         .expect_err("unknown accepted task must fail closed");
         assert!(err.to_string().contains("active_task_not_found"), "{err:#}");
-        std::env::remove_var("SUBSTRATE_HOME");
     }
 
     #[test]
@@ -2397,7 +2395,6 @@ mod tests {
         )
         .expect_err("foreign caller must fail closed");
         assert!(err.to_string().contains("stale_linkage"), "{err:#}");
-        std::env::remove_var("SUBSTRATE_HOME");
     }
 
     #[test]
@@ -2415,7 +2412,6 @@ mod tests {
         )
         .expect_err("caller/backend mismatch must fail closed");
         assert!(err.to_string().contains("backend_mismatch"), "{err:#}");
-        std::env::remove_var("SUBSTRATE_HOME");
     }
 
     #[test]
@@ -2449,7 +2445,6 @@ mod tests {
             err.to_string().contains("world_binding_mismatch"),
             "{err:#}"
         );
-        std::env::remove_var("SUBSTRATE_HOME");
     }
 
     #[test]
@@ -2480,7 +2475,6 @@ mod tests {
         )
         .expect_err("stale receipt/supervisor linkage must fail closed");
         assert!(err.to_string().contains("stale_linkage"), "{err:#}");
-        std::env::remove_var("SUBSTRATE_HOME");
     }
 
     #[test]
@@ -2514,7 +2508,6 @@ mod tests {
         assert_eq!(resolved.target_backend_id, "cli:codex_world");
         assert_eq!(resolved.world_binding.world_id, "world-17");
         assert_eq!(resolved.world_binding.world_generation, 2);
-        std::env::remove_var("SUBSTRATE_HOME");
     }
 
     #[test]
@@ -2536,7 +2529,6 @@ mod tests {
                 .contains("active_task_observation_unavailable"),
             "{err:#}"
         );
-        std::env::remove_var("SUBSTRATE_HOME");
     }
 
     #[tokio::test(flavor = "current_thread")]
@@ -2613,7 +2605,6 @@ mod tests {
             Some(WorldWorkInterruptionReasonV1::ReplayUnavailable)
         );
         assert!(observation.terminal.is_none());
-        std::env::remove_var("SUBSTRATE_HOME");
     }
 
     #[test]
@@ -2688,7 +2679,6 @@ mod tests {
             err.to_string().contains("target_already_terminal"),
             "{err:#}"
         );
-        std::env::remove_var("SUBSTRATE_HOME");
     }
 
     #[test]
@@ -3292,8 +3282,9 @@ mod tests {
     }
 
     struct BOwnedActiveTaskFixture {
-        _root: TempDir,
         store: AgentRuntimeStateStore,
+        _root: TempDir,
+        _authority_env: crate::execution::AuthorityEnvTestGuard,
     }
 
     fn b_owned_active_task_fixture() -> BOwnedActiveTaskFixture {
@@ -3310,6 +3301,7 @@ mod tests {
         #[cfg(unix)]
         use std::os::unix::fs::PermissionsExt as _;
 
+        let authority_env = crate::execution::AuthorityEnvTestGuard::preserve();
         let safe_parent = std::env::var_os("XDG_RUNTIME_DIR")
             .map(PathBuf::from)
             .unwrap_or_else(|| {
@@ -3324,12 +3316,16 @@ mod tests {
         #[cfg(unix)]
         fs::set_permissions(&substrate_home, fs::Permissions::from_mode(0o700))
             .expect("secure authority home");
-        std::env::set_var("SUBSTRATE_HOME", &substrate_home);
+        authority_env.install_home(&substrate_home);
         write_b_owned_world_dispatch_policy(&substrate_home);
         activate_b_owned_tool_authority(&substrate_home, &workspace_root, caller_backend_id);
 
         let store = AgentRuntimeStateStore::new().expect("open B-owned StateStore");
-        BOwnedActiveTaskFixture { _root: root, store }
+        BOwnedActiveTaskFixture {
+            store,
+            _root: root,
+            _authority_env: authority_env,
+        }
     }
 
     fn write_b_owned_world_dispatch_policy(substrate_home: &Path) {
@@ -3830,10 +3826,10 @@ mod tests {
     }
 
     fn with_store(test: impl FnOnce(&AgentRuntimeStateStore)) {
+        let authority_env = crate::execution::AuthorityEnvTestGuard::preserve();
         let temp = TempDir::new().expect("tempdir");
-        std::env::set_var("SUBSTRATE_HOME", temp.path());
+        authority_env.install_home(temp.path());
         let store = AgentRuntimeStateStore::new().expect("state store");
         test(&store);
-        std::env::remove_var("SUBSTRATE_HOME");
     }
 }

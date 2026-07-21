@@ -58,6 +58,7 @@ fn skip_list_parser_handles_commas_and_spaces() {
 
 #[test]
 fn detect_env_matches_expected_values() {
+    let _authority_env = crate::execution::AuthorityEnvTestGuard::preserve();
     let mut env_reqs = HashMap::new();
     env_reqs.insert("TEST_ENV_KEY".to_string(), "value".to_string());
     env::set_var("TEST_ENV_KEY", "value");
@@ -97,6 +98,7 @@ fn detect_script_runs_shell_commands() {
 #[test]
 #[serial]
 fn detect_script_runs_powershell_commands() {
+    let _authority_env = crate::execution::AuthorityEnvTestGuard::preserve();
     let temp = tempdir().unwrap();
     let shell_path = temp.path().join("fake-powershell.cmd");
     fs::write(
@@ -122,6 +124,7 @@ fn detect_script_runs_powershell_commands() {
 #[test]
 #[serial]
 fn config_from_env_respects_skip_and_debug_flags() {
+    let _authority_env = crate::execution::AuthorityEnvTestGuard::preserve();
     let prev_skip = env::var("SUBSTRATE_SKIP_MANAGER_INIT").ok();
     let prev_list = env::var("SUBSTRATE_SKIP_MANAGER_INIT_LIST").ok();
     let prev_debug = env::var("SUBSTRATE_MANAGER_INIT_DEBUG").ok();

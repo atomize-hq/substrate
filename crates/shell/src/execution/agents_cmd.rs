@@ -4349,9 +4349,9 @@ mod tests {
     }
 
     fn with_state_store<T>(test: impl FnOnce(&AgentRuntimeStateStore) -> T) -> T {
-        let _world_env_guard = crate::execution::world_env_guard();
+        let authority_env = crate::execution::AuthorityEnvTestGuard::preserve();
         let temp = TempDir::new().expect("tempdir");
-        let _substrate_home_guard = EnvVarGuard::set("SUBSTRATE_HOME", temp.path());
+        authority_env.install_home(temp.path());
         let _shared_world_root_guard = EnvVarGuard::set(
             SHARED_WORLD_METADATA_ROOT_TEST_ENV,
             temp.path().join("shared-worlds").as_path(),
@@ -4359,17 +4359,16 @@ mod tests {
         let store = AgentRuntimeStateStore::new().expect("state store");
         let result = test(&store);
         std::env::remove_var(SHARED_WORLD_METADATA_ROOT_TEST_ENV);
-        std::env::remove_var("SUBSTRATE_HOME");
         result
     }
 
     fn with_state_store_and_shared_world_root<T>(
         test: impl FnOnce(&AgentRuntimeStateStore, &Path) -> T,
     ) -> T {
-        let _world_env_guard = crate::execution::world_env_guard();
+        let authority_env = crate::execution::AuthorityEnvTestGuard::preserve();
         let temp = TempDir::new().expect("tempdir");
         let shared_world_root = temp.path().join("shared-worlds");
-        let _substrate_home_guard = EnvVarGuard::set("SUBSTRATE_HOME", temp.path());
+        authority_env.install_home(temp.path());
         let _shared_world_root_guard = EnvVarGuard::set(
             SHARED_WORLD_METADATA_ROOT_TEST_ENV,
             shared_world_root.as_path(),
@@ -4377,7 +4376,6 @@ mod tests {
         let store = AgentRuntimeStateStore::new().expect("state store");
         let result = test(&store, &shared_world_root);
         std::env::remove_var(SHARED_WORLD_METADATA_ROOT_TEST_ENV);
-        std::env::remove_var("SUBSTRATE_HOME");
         result
     }
 

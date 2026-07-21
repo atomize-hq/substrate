@@ -17,6 +17,7 @@ mod linux_world_tests {
     #[test]
     #[serial]
     fn agent_probe_enables_world() {
+        let _authority_env = crate::execution::AuthorityEnvTestGuard::preserve();
         clear_env();
         let outcome = init_linux_world_with_probe(false, || Ok(()));
         assert_eq!(outcome, LinuxWorldInit::Agent);
@@ -27,6 +28,7 @@ mod linux_world_tests {
     #[test]
     #[serial]
     fn fallback_uses_local_backend_stub() {
+        let _authority_env = crate::execution::AuthorityEnvTestGuard::preserve();
         clear_env();
         env::set_var("SUBSTRATE_TEST_LOCAL_WORLD_ID", "wld_test_stub");
         let outcome = init_linux_world_with_probe(false, || Err(anyhow!("no agent")));
@@ -38,6 +40,7 @@ mod linux_world_tests {
     #[test]
     #[serial]
     fn disabled_skips_initialization() {
+        let _authority_env = crate::execution::AuthorityEnvTestGuard::preserve();
         clear_env();
         let outcome = init_linux_world_with_probe(true, || Ok(()));
         assert_eq!(outcome, LinuxWorldInit::Disabled);

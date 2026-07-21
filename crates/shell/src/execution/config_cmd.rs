@@ -459,20 +459,14 @@ mod tests {
     use tempfile::TempDir;
 
     struct CwdGuard {
-        prev: std::path::PathBuf,
+        _process_cwd: crate::execution::ProcessCwdTestGuard,
     }
 
     impl CwdGuard {
         fn set(path: &Path) -> Self {
-            let prev = std::env::current_dir().unwrap();
-            std::env::set_current_dir(path).unwrap();
-            Self { prev }
-        }
-    }
-
-    impl Drop for CwdGuard {
-        fn drop(&mut self) {
-            let _ = std::env::set_current_dir(&self.prev);
+            Self {
+                _process_cwd: crate::execution::ProcessCwdTestGuard::change_to(path),
+            }
         }
     }
 

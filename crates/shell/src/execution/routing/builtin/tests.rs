@@ -71,6 +71,17 @@ fn write_workspace_config(
 #[test]
 #[serial]
 fn export_builtin_sets_plain_pairs() {
+    if crate::execution::run_in_bounded_test_subprocess(
+        concat!(
+            module_path!(),
+            "::",
+            stringify!(export_builtin_sets_plain_pairs)
+        ),
+        "trace_broker",
+    ) {
+        return;
+    }
+    let _authority_env = crate::execution::AuthorityEnvTestGuard::preserve();
     let temp = tempdir().unwrap();
     let config = test_shell_config(&temp);
 
@@ -94,6 +105,17 @@ fn export_builtin_sets_plain_pairs() {
 #[test]
 #[serial]
 fn export_builtin_defers_when_value_needs_shell() {
+    if crate::execution::run_in_bounded_test_subprocess(
+        concat!(
+            module_path!(),
+            "::",
+            stringify!(export_builtin_defers_when_value_needs_shell)
+        ),
+        "trace_broker",
+    ) {
+        return;
+    }
+    let _authority_env = crate::execution::AuthorityEnvTestGuard::preserve();
     let temp = tempdir().unwrap();
     let config = test_shell_config(&temp);
 
@@ -107,6 +129,17 @@ fn export_builtin_defers_when_value_needs_shell() {
 #[test]
 #[serial]
 fn unset_builtin_clears_variables() {
+    if crate::execution::run_in_bounded_test_subprocess(
+        concat!(
+            module_path!(),
+            "::",
+            stringify!(unset_builtin_clears_variables)
+        ),
+        "trace_broker",
+    ) {
+        return;
+    }
+    let _authority_env = crate::execution::AuthorityEnvTestGuard::preserve();
     let temp = tempdir().unwrap();
     let config = test_shell_config(&temp);
 
@@ -121,6 +154,17 @@ fn unset_builtin_clears_variables() {
 #[test]
 #[serial]
 fn world_flag_overrides_disabled_config_and_env() {
+    if crate::execution::run_in_bounded_test_subprocess(
+        concat!(
+            module_path!(),
+            "::",
+            stringify!(world_flag_overrides_disabled_config_and_env)
+        ),
+        "trace_broker",
+    ) {
+        return;
+    }
+    let _authority_env = crate::execution::AuthorityEnvTestGuard::preserve();
     let temp = tempdir().unwrap();
     let home = temp.path().join("home");
     let substrate_home = home.join(".substrate");
@@ -135,7 +179,7 @@ fn world_flag_overrides_disabled_config_and_env() {
 
     let prev_home = set_env("HOME", &home.display().to_string());
     let prev_userprofile = set_env("USERPROFILE", &home.display().to_string());
-    let prev_substrate_home = set_env("SUBSTRATE_HOME", &substrate_home.display().to_string());
+    _authority_env.install_home(&substrate_home);
     let prev_world = set_env("SUBSTRATE_WORLD", "disabled");
     let prev_world_enabled = set_env("SUBSTRATE_WORLD_ENABLED", "0");
     let prev_caged = set_env("SUBSTRATE_CAGED", "1");
@@ -168,7 +212,6 @@ fn world_flag_overrides_disabled_config_and_env() {
     restore_env("SUBSTRATE_MANAGER_INIT", prev_manager_init);
     restore_env("SUBSTRATE_WORLD", prev_world);
     restore_env("SUBSTRATE_WORLD_ENABLED", prev_world_enabled);
-    restore_env("SUBSTRATE_HOME", prev_substrate_home);
     restore_env("USERPROFILE", prev_userprofile);
     restore_env("HOME", prev_home);
 }
@@ -176,6 +219,17 @@ fn world_flag_overrides_disabled_config_and_env() {
 #[test]
 #[serial]
 fn world_flag_honors_directory_world_root_settings() {
+    if crate::execution::run_in_bounded_test_subprocess(
+        concat!(
+            module_path!(),
+            "::",
+            stringify!(world_flag_honors_directory_world_root_settings)
+        ),
+        "trace_broker",
+    ) {
+        return;
+    }
+    let _authority_env = crate::execution::AuthorityEnvTestGuard::preserve();
     let temp = tempdir().unwrap();
     let home = temp.path().join("home");
     let substrate_home = home.join(".substrate");
@@ -194,7 +248,7 @@ fn world_flag_honors_directory_world_root_settings() {
 
     let prev_home = set_env("HOME", &home.display().to_string());
     let prev_userprofile = set_env("USERPROFILE", &home.display().to_string());
-    let prev_substrate_home = set_env("SUBSTRATE_HOME", &substrate_home.display().to_string());
+    _authority_env.install_home(&substrate_home);
     let prev_world = set_env("SUBSTRATE_WORLD", "disabled");
     let prev_world_enabled = set_env("SUBSTRATE_WORLD_ENABLED", "0");
     let prev_caged = env::var("SUBSTRATE_CAGED").ok();
@@ -239,7 +293,6 @@ fn world_flag_honors_directory_world_root_settings() {
     restore_env("SUBSTRATE_ANCHOR_PATH", prev_anchor_path);
     restore_env("SUBSTRATE_WORLD", prev_world);
     restore_env("SUBSTRATE_WORLD_ENABLED", prev_world_enabled);
-    restore_env("SUBSTRATE_HOME", prev_substrate_home);
     restore_env("USERPROFILE", prev_userprofile);
     restore_env("HOME", prev_home);
 }
@@ -247,6 +300,17 @@ fn world_flag_honors_directory_world_root_settings() {
 #[test]
 #[serial]
 fn anchor_flags_override_configs_and_export_anchor_env() {
+    if crate::execution::run_in_bounded_test_subprocess(
+        concat!(
+            module_path!(),
+            "::",
+            stringify!(anchor_flags_override_configs_and_export_anchor_env)
+        ),
+        "trace_broker",
+    ) {
+        return;
+    }
+    let _authority_env = crate::execution::AuthorityEnvTestGuard::preserve();
     let temp = tempdir().unwrap();
     let home = temp.path().join("home");
     let substrate_home = home.join(".substrate");
@@ -267,7 +331,7 @@ fn anchor_flags_override_configs_and_export_anchor_env() {
 
     let prev_home = set_env("HOME", &home.display().to_string());
     let prev_userprofile = set_env("USERPROFILE", &home.display().to_string());
-    let prev_substrate_home = set_env("SUBSTRATE_HOME", &substrate_home.display().to_string());
+    _authority_env.install_home(&substrate_home);
     let prev_anchor_mode = set_env("SUBSTRATE_ANCHOR_MODE", "follow-cwd");
     let prev_anchor_path = set_env("SUBSTRATE_ANCHOR_PATH", "/env/anchor");
     let prev_caged = set_env("SUBSTRATE_CAGED", "0");
@@ -307,7 +371,6 @@ fn anchor_flags_override_configs_and_export_anchor_env() {
     restore_env("SUBSTRATE_CAGED", prev_caged);
     restore_env("SUBSTRATE_ANCHOR_PATH", prev_anchor_path);
     restore_env("SUBSTRATE_ANCHOR_MODE", prev_anchor_mode);
-    restore_env("SUBSTRATE_HOME", prev_substrate_home);
     restore_env("USERPROFILE", prev_userprofile);
     restore_env("HOME", prev_home);
 }
@@ -315,6 +378,17 @@ fn anchor_flags_override_configs_and_export_anchor_env() {
 #[test]
 #[serial]
 fn no_world_flag_disables_world_and_sets_root_exports() {
+    if crate::execution::run_in_bounded_test_subprocess(
+        concat!(
+            module_path!(),
+            "::",
+            stringify!(no_world_flag_disables_world_and_sets_root_exports)
+        ),
+        "trace_broker",
+    ) {
+        return;
+    }
+    let _authority_env = crate::execution::AuthorityEnvTestGuard::preserve();
     let temp = tempdir().unwrap();
     let home = temp.path().join("home");
     let substrate_home = home.join(".substrate");
@@ -331,7 +405,7 @@ fn no_world_flag_disables_world_and_sets_root_exports() {
 
     let prev_home = set_env("HOME", &home.display().to_string());
     let prev_userprofile = set_env("USERPROFILE", &home.display().to_string());
-    let prev_substrate_home = set_env("SUBSTRATE_HOME", &substrate_home.display().to_string());
+    _authority_env.install_home(&substrate_home);
     let prev_world = set_env("SUBSTRATE_WORLD", "enabled");
     let prev_world_enabled = set_env("SUBSTRATE_WORLD_ENABLED", "1");
     let prev_caged = set_env("SUBSTRATE_CAGED", "1");
@@ -380,7 +454,6 @@ fn no_world_flag_disables_world_and_sets_root_exports() {
     restore_env("SUBSTRATE_ANCHOR_PATH", prev_anchor_path);
     restore_env("SUBSTRATE_WORLD", prev_world);
     restore_env("SUBSTRATE_WORLD_ENABLED", prev_world_enabled);
-    restore_env("SUBSTRATE_HOME", prev_substrate_home);
     restore_env("USERPROFILE", prev_userprofile);
     restore_env("HOME", prev_home);
 }
@@ -388,6 +461,17 @@ fn no_world_flag_disables_world_and_sets_root_exports() {
 #[test]
 #[serial]
 fn cd_bounces_when_caged_without_world() {
+    if crate::execution::run_in_bounded_test_subprocess(
+        concat!(
+            module_path!(),
+            "::",
+            stringify!(cd_bounces_when_caged_without_world)
+        ),
+        "trace_broker",
+    ) {
+        return;
+    }
+    let _authority_env = crate::execution::AuthorityEnvTestGuard::preserve();
     let temp = tempdir().unwrap();
     let root = temp.path().join("root");
     let inside = root.join("inside");
@@ -434,6 +518,17 @@ fn cd_bounces_when_caged_without_world() {
 #[test]
 #[serial]
 fn cd_bounces_when_caged_with_world_enabled() {
+    if crate::execution::run_in_bounded_test_subprocess(
+        concat!(
+            module_path!(),
+            "::",
+            stringify!(cd_bounces_when_caged_with_world_enabled)
+        ),
+        "trace_broker",
+    ) {
+        return;
+    }
+    let _authority_env = crate::execution::AuthorityEnvTestGuard::preserve();
     let temp = tempdir().unwrap();
     let root = temp.path().join("root");
     let inside = root.join("inside");
@@ -477,6 +572,17 @@ fn cd_bounces_when_caged_with_world_enabled() {
 #[serial]
 #[cfg(unix)]
 fn anchor_guard_bounces_chained_cd_when_world_disabled() {
+    if crate::execution::run_in_bounded_test_subprocess(
+        concat!(
+            module_path!(),
+            "::",
+            stringify!(anchor_guard_bounces_chained_cd_when_world_disabled)
+        ),
+        "trace_broker",
+    ) {
+        return;
+    }
+    let _authority_env = crate::execution::AuthorityEnvTestGuard::preserve();
     let temp = tempdir().unwrap();
     let root = temp.path().join("root");
     let inside = root.join("inside");
@@ -524,6 +630,17 @@ fn anchor_guard_bounces_chained_cd_when_world_disabled() {
 #[serial]
 #[cfg(unix)]
 fn anchor_guard_bounces_chained_cd_when_world_enabled() {
+    if crate::execution::run_in_bounded_test_subprocess(
+        concat!(
+            module_path!(),
+            "::",
+            stringify!(anchor_guard_bounces_chained_cd_when_world_enabled)
+        ),
+        "trace_broker",
+    ) {
+        return;
+    }
+    let _authority_env = crate::execution::AuthorityEnvTestGuard::preserve();
     let temp = tempdir().unwrap();
     let root = temp.path().join("root");
     let inside = root.join("inside");
@@ -569,6 +686,17 @@ fn anchor_guard_bounces_chained_cd_when_world_enabled() {
 #[test]
 #[serial]
 fn cd_allows_uncaged_escape_from_anchor() {
+    if crate::execution::run_in_bounded_test_subprocess(
+        concat!(
+            module_path!(),
+            "::",
+            stringify!(cd_allows_uncaged_escape_from_anchor)
+        ),
+        "trace_broker",
+    ) {
+        return;
+    }
+    let _authority_env = crate::execution::AuthorityEnvTestGuard::preserve();
     let temp = tempdir().unwrap();
     let root = temp.path().join("root");
     let inside = root.join("inside");
