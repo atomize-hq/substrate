@@ -840,7 +840,7 @@ review-clean but did not close every authenticated-context consumer. R2-2E has s
 proved the gateway projection without changing Routes A–D; all five routes are individually
 review-clean. R2-2 stays incomplete pending combined F0/F0a/F0b, F, and the renewed integration
 closeout. F0/F0a are authorized but incomplete, with both exact candidates preserved rather than
-landed; F0b remains planned and incomplete, F0-HC is audit-complete, and combined F0/F0a/F0b/Harness
+landed; F0b remains planned and incomplete, F0-HC is corrected and authorized, and combined F0/F0a/F0b/Harness
 implementation/closeout is next. The following table preserves E's reviewed historical source-closure boundary
 and freezes F0/F0a/F0b/F's remaining boundaries;
 brace groups are exact symbol sets, not file wildcards.
@@ -960,7 +960,7 @@ passed / 149 failed`. The extra failure is
 `dispatch_contract_adapter_active_task_resolution_requires_supervisor_claim`, normalized as
 `resolve exact B-owned acceptance authority: open activated versioned authority layout`. It passes
 alone. F0a remains an authorized part of the combined candidate, not a waiver of F0 proof; F0b
-remains planned and incomplete, F0-HC is audit-complete, and the combined F0/F0a/F0b/Harness
+remains planned and incomplete, F0-HC is corrected and authorized, and the combined F0/F0a/F0b/Harness
 implementation/closeout is the **exact next task**.
 
 1. The exact HOME minimal pair is the target above plus
@@ -6152,7 +6152,7 @@ A contract is not considered landed until tests prove:
     a legacy-writer attempt, caller/foreground drop does not erase truth, and B3.1 begins only after
     the joint closeout.
 
-## A1.1d-5R2-2F0-HC complete process-resource ledger
+## A1.1d-5R2-2F0-HC corrected complete process-resource ledger
 
 This is the durable closure inventory for the process running `cargo test -p shell --lib`. It was
 formed by two independent methods: lexical scanning of all `crates/shell/src` test modules found
@@ -6160,12 +6160,17 @@ formed by two independent methods: lexical scanning of all `crates/shell/src` te
 initially recognized 1,302 tests before the independent scan restored the multiline-attribute
 `execution/lock.rs::test_concurrent_lock_attempts`; and symbol, caller, reader, and execution-flow
 inspection used refreshed GitNexus plus source closure where the graph under-resolved `cfg(test)`
-code. The first parser found 506 environment-dependent tests in 31 files; manual dynamic-key
-wrapper closure added the twelve F0a tests in four files enumerated in `02`, yielding the binding
-518-test/35-file union. The Linux test binary discovered 1,263 runnable tests. Known integration
-parent-mutators were inspected only for helper and inherited-child contracts.
+code. The first parser found 506 environment-dependent tests in 31 files; the published audit then
+manually added twelve disjoint dynamic-wrapper tests to claim 518 in 35 files. Complete lexical and
+resolved-call closure instead finds 534 parent-mutating tests in the same 35 files: eighteen real
+mutators were absent, while two B1 acknowledgement tests were false positives from ambiguous
+same-file bare-name fanout. The exact additions and removals are enumerated in `02` and `05`. A2 is
+therefore 129 direct tests in 22 files—116 additive plus 13 F0a—not the earlier 113 or intermediate
+116. The Linux test binary discovered 1,263 runnable tests. Known integration parent-mutators were
+inspected only for helper and inherited-child contracts.
 
-The environment closure found 80 exact names (some are only projected into a child):
+The corrected environment closure found 86 exact names (some are only projected into a child or
+read without parent mutation):
 `ANTHROPIC_API_KEY`, `API_TOKEN`, `BASH_ENV`, `CODEX_HOME`, `COLUMNS`, `EXPORT_COMPLEX`, `HOME`,
 `LIMA_VM_NAME`, `LINES`, `OLDPWD`, `OPENAI_API_KEY`, `PATH`, `PLAIN_VALUE`, `PWD`, `SHIM_ACTIVE`,
 `SHIM_ORIGINAL_PATH`, `SHIM_PARENT_SPAN`, `SHIM_SESSION_ID`, `SHIM_TRACE_LOG`,
@@ -6181,7 +6186,9 @@ The environment closure found 80 exact names (some are only projected into a chi
 `SUBSTRATE_LLM_BACKEND_AUTH_CLI_CODEX_ACCOUNT_ID`, `SUBSTRATE_MANAGER_ENV`,
 `SUBSTRATE_MANAGER_ENV_ACTIVE`, `SUBSTRATE_MANAGER_INIT`, `SUBSTRATE_MANAGER_INIT_DEBUG`,
 `SUBSTRATE_MANAGER_INIT_POWERSHELL`, `SUBSTRATE_MANAGER_MANIFEST`, `SUBSTRATE_NO_SHIMS`,
-`SUBSTRATE_ORIGINAL_BASH_ENV`, `SUBSTRATE_OVERRIDE_WORLD`, `SUBSTRATE_PARENT_SPAN_ID`,
+`SUBSTRATE_ORIGINAL_BASH_ENV`, `SUBSTRATE_OVERRIDE_ANCHOR_MODE`,
+`SUBSTRATE_OVERRIDE_ANCHOR_PATH`, `SUBSTRATE_OVERRIDE_CAGED`, `SUBSTRATE_OVERRIDE_WORLD`,
+`SUBSTRATE_PARENT_SPAN_ID`,
 `SUBSTRATE_POLICY_MODE`, `SUBSTRATE_PTY_PIPELINE_LAST`,
 `SUBSTRATE_R0_RETAINED_SUBPROCESS_VARIANT`, `SUBSTRATE_REPLAY_USE_WORLD`,
 `SUBSTRATE_REPLAY_VERBOSE`, `SUBSTRATE_ROOT`, `SUBSTRATE_SHELL`, `SUBSTRATE_SKIP_MANAGER_INIT`,
@@ -6194,10 +6201,56 @@ The environment closure found 80 exact names (some are only projected into a chi
 `SUBSTRATE_WORLD_FS_ISOLATION`, `SUBSTRATE_WORLD_FS_MODE`, `SUBSTRATE_WORLD_ID`,
 `SUBSTRATE_WORLD_NET_FILTER`, `SUBSTRATE_WORLD_PROJECT_DIR`,
 `SUBSTRATE_WORLD_REQUEST_PROFILE`, `SUBSTRATE_WORLD_REQUIRE_WORLD`,
-`SUBSTRATE_WORLD_SOCKET`, `TEST_ENV_KEY`, `TEST_MODE`, `UNSET_ME`, and `USERPROFILE`.
-No test-process mutation of an XDG variable was found, so XDG readers remain in row A3.
-`SUBSTRATE_ROOT` is mutated by the four dynamic-wrapper/F0a families enumerated in `02` and belongs
-to A2. Environment values, credentials, and complete paths were not emitted by diagnostic probes.
+`SUBSTRATE_WORLD_SOCKET`, `TEST_ENV_KEY`, `TEST_MODE`, `UNSET_ME`, `USERPROFILE`,
+`XDG_CONFIG_HOME`, `XDG_DATA_HOME`, and `XDG_STATE_HOME`.
+
+Exactly 74 of those names are parent-mutated. The 12 names that are child-only projections or
+read-only in this bounded source are `ANTHROPIC_API_KEY`, `BASH_ENV`,
+`SUBSTRATE_A1_REPLACEMENT_CHILD_ROOT`, `SUBSTRATE_AGENT_TOOLBOX_ENDPOINT`,
+`SUBSTRATE_AGENT_TOOLBOX_VERSION`, `SUBSTRATE_ENABLE_PREEXEC`,
+`SUBSTRATE_MANAGER_ENV_ACTIVE`, `SUBSTRATE_ORIGINAL_BASH_ENV`,
+`SUBSTRATE_PARENT_SPAN_ID`, `SUBSTRATE_R0_RETAINED_SUBPROCESS_VARIANT`,
+`SUBSTRATE_WORLD_FS_ENFORCEMENT_PLAN_B64`, and `SUBSTRATE_WORLD_PROJECT_DIR`. The other 74,
+including all three XDG names and `SUBSTRATE_SHELL`, are parent mutations. `SUBSTRATE_ROOT` is mutated by the
+wrapper/F0a families enumerated in `02` and belongs to A2. Environment values, credentials, and
+complete paths were not emitted by diagnostic probes.
+
+The prior 80-name claim is withdrawn. Its test-reachability pass recognized wrapper bodies, but
+its exact-name phase scanned direct primitive arguments and did not resolve every wrapper
+argument/callsite. The manual dynamic-wrapper repair kept the two settings tests without extracting
+their `SUBSTRATE_OVERRIDE_*` arguments and omitted the gateway `AmbientSelectionGuard` call. This
+was not a child-only XDG projection and was not stale-source drift: immutable source invokes
+`std::env::{set_var,remove_var}` in the parent for all three XDG entries. The corrected audit
+reconciles 395 direct primitive invocations, including 73 dynamic-key invocations, with 43 dynamic
+mutation-sink owners, 1,005 resolved mutation callsites, and 534 exact mutating tests, and reports
+zero unclassified dynamic rows. Independent correction review rejected both the earlier 405-row
+and later 604-row evidence because they omitted cross-file or duplicate-name calls through
+`with_store`, `ProjectionEnvGuard::capture`, `install_bootstrap_projections`,
+`apply_world_root_env`, `export_runtime_config_env`, `update_world_env`, and the macOS `restore`
+family. Its prevention rule is binding: any absent
+wrapper callsite, unresolved literal/constant/table/parameterized name, silently dropped dynamic
+name, parent-as-child classification, or mutating test missing from the migration manifest fails
+the gate. Full callsite closure additionally proves `SUBSTRATE_SHELL` is mutated by
+`routing/test_utils.rs::{set_env,restore_env}` in
+`async_repl_host_commands_record_replay_context`; `crates/trace/src/span.rs::SpanBuilder::new` is
+the overlapping stable reader. Three early returns precede the manual restore, and `set_env`
+captures `Option<String>`, so current restoration is neither early-return/unwind safe nor exact for
+non-Unicode values. The test is already in the A2 116-test manifest and 35-file union. The two
+macOS platform tests restore only `SUBSTRATE_WORLD` and `SUBSTRATE_WORLD_ENABLED` as
+`String`/absence even though `update_world_env` changes six names; their future test-only helper
+must restore all six as exact `OsString`/absence under the same coordinator.
+
+The evidence validator freezes the normalized 395-call primitive manifest at SHA-256
+`df0254488f37d4f53f05c81bbbd47c05bbbe410496d465827daade80922e0f4a`, the 1,005-call resolved
+mutation manifest at `350ccd1876ecc07cced81df89b523e3d24f9674f5dc6a5e33f052d65f4489772`, and the 534-test
+manifest at `de7e2bc43c0fcab74096dc272340726c919aeb72004fd0208ab5b4dffb802f4a`. It also freezes 43
+dynamic mutation-sink owners at SHA-256
+`133e28a495e5be69016fb7f6483018cfb406b44c8ca5e2d8779fdf82ded0c66c`, source-parses fixed
+projection and local restore-key tables, and runs negative perturbation checks. The rejected
+604-row intermediate remains historical evidence only. The validator parses the canonical
+35-file, 116-additive-test, and 13-F0a-test lists, checks 129 unique source symbols, and compares
+their exact manifest hashes. A duplicate removal, changed argument, missing callsite, swapped path,
+or missing test therefore fails even when the set of environment names would remain unchanged.
 
 ### Identity and use closure
 
@@ -6208,9 +6261,9 @@ shell-library process; `child` means an intentionally inherited helper process.
 | ID | Category and exact resource | Mutating symbols | Reading symbols / helper family | Direct tests | Scope / cfg | Current guard or isolation | Known evidence / competing tests | GitNexus impact |
 |---|---|---|---|---:|---|---|---|---|
 | A1 | Environment: `HOME`, `SUBSTRATE_HOME`, `SUBSTRATE_WORLD_SOCKET` | `std::env::{set_var,remove_var}`, `EnvVarGuard`, `with_store`, `with_env_var`, manual save/restore | authority/store/socket/path resolvers; F0/F0a helper families | 456 / 20 files | All; Unix plus cfg-specific readers | reentrant `WORLD_ENV_LOCK`, local guards, `#[serial]` islands | HOME and socket races proven; 11 unannotated dependents; mixed snapshots possible | `with_test_mode` HIGH; many test symbols under-resolved |
-| A2 | Other ambient selectors, including `SUBSTRATE_ROOT`: the remaining directly or dynamically mutated names in the 80-name closure | same APIs plus `set_env`/`restore_env`, `ProcessStateGuard::set`, `EnvGuard::apply`, `ProjectionEnvGuard`, and file-local wrappers | PTY, world, shim, manager, trace, policy, profile, install and terminal-size readers | 113 / 22 files: 101 additive plus 12 already-authorized F0a | All; cfg varies | local guards and `#[serial]`; 13 additive unannotated | `SUBSTRATE_FORCE_PTY` stable-reader race proven; any concurrent ambient mutator competes | `is_force_pty_command` HIGH; production readers frozen |
-| A3 | Read-only XDG variables and other immutable ambient reads | none in shell-library tests | config/home/root readers | 0 mutators | All / cfg varies | immutable during this binary | source closure found no writer; cannot form a same-process pair | source-only; no future edit |
-| A4 | Child-only `Command::{env,env_remove,env_clear}` projections among the 80 names | command builders in test helpers | child bootstrap/probe decoders | 14 child spawners plus helper callers | child / cfg varies | per-`Command` environment | parent process is not mutated; exact child inheritance is intentional | LOW/source-closed |
+| A2 | Other ambient selectors, including `SUBSTRATE_ROOT`, `SUBSTRATE_SHELL`, the three XDG roots, and three `SUBSTRATE_OVERRIDE_*` selectors: the remaining directly or dynamically mutated names in the 86-name closure | same APIs plus `set_env`/`restore_env`, `ProcessStateGuard::set`, `EnvGuard::apply`, `ProjectionEnvGuard`, `AmbientSelectionGuard::{set,drop}`, `platform_tests::{snapshot,restore}`, and file-local wrappers | PTY, world, shim, manager, trace, policy, profile, install, terminal-size, gateway authority, settings, platform/world-policy, and `SpanBuilder::new` readers | 129 / 22 files: 116 additive plus 13 existing-source F0a | All; cfg varies | local guards and `#[serial]`; 27 additive unannotated | `SUBSTRATE_FORCE_PTY` stable-reader race proven; XDG/settings callsites, the early-return-unsafe host-replay mutation, and incomplete six-name macOS restoration now source-closed; any concurrent ambient mutator competes | `world_env_guard` CRITICAL; `EnvGuard::new` MEDIUM; macOS snapshot/restore LOW with two direct test callers and zero processes; gateway/routing test helpers LOW/under-resolved; production readers frozen |
+| A3 | The read-only subset of the 12 non-parent names in the corrected closure | none in shell-library tests | corresponding config/home/root readers | 0 mutators | All / cfg varies | immutable during this binary | source closure found no parent writer; cannot form a same-process pair | source-only; no future edit |
+| A4 | Child-only `Command::{env,env_remove,env_clear}` projections among the 12 non-parent names | command builders in test helpers | child bootstrap/probe decoders | 14 child spawners plus helper callers | child / cfg varies | per-`Command` environment | parent process is not mutated; exact child inheritance is intentional | LOW/source-closed |
 | B1 | fd 1/fd 2 replacement: `dup`, `dup2`, `pipe`, `close` in capture helpers | `capture_stdout_once`, `capture_stderr_once` | two `PublicPromptRenderer` fallback tests; libtest reporter is competing writer | 2 | All / Unix | manual descriptor save/restore | stdout contamination proven; stderr structurally identical | renderer MEDIUM; capture helpers LOW |
 | B2 | fd 0 `O_NONBLOCK` flag and terminal/console input mode | `test_stdin_nonblock_roundtrip` via `fcntl(F_SETFL)`; `minimal_terminal_guard_handles_creation` via `MinimalTerminalGuard::new` | libtest/input consumers and terminal/console state readers | 2 | All / Unix flag plus Unix/Windows terminal cfg | manual exact flag/mode restore | fixed descriptor is shared despite restoration; inherited child fd 0 would share the same open-file description | test symbols under-resolved |
 | B3 | Child/local descriptors and inherited listener descriptors | pipe/listener/child builders | same fixture owner | 103 listener-dependent; 14 child-spawn-dependent | test/child / cfg varies | OS ownership plus joined fixture | no fixed-number replacement in parent; ownership remains local | LOW/source-closed |
@@ -6221,7 +6274,7 @@ shell-library process; `child` means an intentionally inherited helper process.
 | D2 | Private stop retry callback slot | `PrivateStopTransportRetryHookGuard::install` / Drop-clear | `request_private_stop*` hook read | 9 | All / Unix tests | mutex protects slot access, not owner lifetime | forced hook replacement proven | private/test graph under-resolved |
 | D3 | Production signal/Ctrl-C handlers, including `initialize_global_sigwinch_handler_impl` | production initialization only | runtime signal consumers and the SIGWINCH background thread | 0 test installers/callers | product process / cfg varies | production lifecycle owner | source call closure proves no shell-library unit test calls `execute_with_pty`, so this handler/thread is never installed by this binary | production PTY/signal lifecycle owner |
 | D4 | Panic hooks, tracing subscribers, global logger, allocator/runtime hooks | none found in shell-library tests | default libtest/runtime infrastructure | 0 | All | immutable/default | lexical and helper closure found no installer | no future impact |
-| E1 | Existing environment coordination topology | `WORLD_ENV_LOCK`, `world_env_guard`, file-local env mutexes | all A1/A2 writers and stable readers | 518 / 35 files | All | one partial reentrant lock plus lock islands | opposite helper order and incomplete participation; `#[serial]` insufficient | shared helper historical HIGH |
+| E1 | Existing environment coordination topology | `WORLD_ENV_LOCK`, `world_env_guard`, file-local env mutexes | all A1/A2 writers and stable readers | 534 / 35 files | All | one partial reentrant lock plus lock islands | opposite helper order and incomplete participation; `#[serial]` insufficient | `world_env_guard` CRITICAL: 70 impacted, 35 direct, five processes, nine modules; future test-only boundary only |
 | E2 | `AGENT_EVENT_SENDER` / `EVENT_TEST_GUARD` | `init_event_channel`, `clear_agent_event_sender`; guard accessor `acquire_event_test_guard` | `publish_agent_event`, `agent_event_sender`, and publication readers | 10 guarded tests | All | two mutexes; poison `expect`/manual clear | competing stable readers are not excluded by file-local guard | private registry, source-closed |
 | E3 | Non-keyed `REPORT_CACHE` | `refresh_socket_activation_report` | `socket_activation_report` | 1 mutating focused test | All / Linux behavior | mutex, no key or per-test reset | cache survives exact PATH/timeout restoration; proven | refresh HIGH, 3 direct / 3 process families |
 | E4 | `CONFIG_PATCH_CACHE`, `POLICY_SNAPSHOT_CACHE` | keyed cache insert/update | exact path/file-stat keyed readers | multiple temp-root tests | All | mutex and exact workspace/global path keys | different fixtures cannot alias without same exact key/stat | production-adjacent but no edit |
@@ -6255,8 +6308,8 @@ owned by a child/fixture. Every row has exactly one primary disposition.
 | ID | Restoration / panic / nesting | Async lifetime and subprocess inheritance | Potential competitors / proof | Primary disposition | Future owner packet and allowlist |
 |---|---|---|---|---|---|
 | A1 | exact `OsString`/absence; unwind-safe; stack-safe nesting or reject before mutation | retain through awaited cleanup; intentional bounded inheritance | all HOME/socket mutators and stable authority readers; proven races | `UnifiedProcessStateLock` | combined Harness; existing F0/F0a allowlists unchanged |
-| A2 | exact `OsString`/absence; same panic/poison/nesting contract | retain across dependent child construction/termination | every ambient mutator versus stable selector reader; forced pair proven | `UnifiedProcessStateLock` | combined Harness; exact test-only files in `02` |
-| A3 | no mutation/restoration | immutable read | no writer in bounded process | `ProvenConcurrencySafe` | frozen; no future allowlist |
+| A2 | exact `OsString`/absence; same panic/poison/nesting contract | retain across dependent child construction/termination | every ambient mutator versus stable selector reader; forced pair proven; XDG/settings corrections source-closed | `UnifiedProcessStateLock` | combined Harness; exact test-only files/symbols/tests in `02`; no XDG-specific lock |
+| A3 | no mutation/restoration | immutable read | no parent writer in bounded process | `ProvenConcurrencySafe` | frozen; no future allowlist |
 | A4 | `Command`-local bytes; parent unchanged | child receives explicit/inherited bounded projection and is waited | other processes cannot mutate parent | `ProvenConcurrencySafe` | frozen except already-authorized parent guard migration |
 | B1 | exact descriptor restoration is insufficient; panic could strand redirection | reporter writes concurrently; child isolation not needed | libtest reporter; stdout failure and stderr structural proof | `ExplicitDependencyInjection` | F0b; exact one-file contract unchanged |
 | B2 | exact fd flags/mode currently restored, but panic window remains | flag child owns null/pipe fd 0; mode child owns a PTY slave/console; neither inherits parent fd 0 | any stdin/terminal consumer in process; mode mutation must actually execute | `SubprocessIsolation` | Harness; exact two tests in `02` |
@@ -6301,8 +6354,10 @@ Disposition totals reconcile exactly: 7 `UnifiedProcessStateLock`, 4
 
 ### Frozen combined implementation gate
 
-The future combined F0/F0a/F0b/Harness implementation must remain within the exact prior allowlists
-and additive file/symbol table in `02`; no new tracked file is permitted. All production callers
+The future combined F0/F0a/F0b/Harness implementation must remain within the corrected consolidated
+allowlists and additive file/symbol table in `02`; no new tracked file is permitted. Before any
+runtime edit, the direct-primitive and wrapper/callsite inventories must re-run and reconcile to
+zero unclassified rows. All production callers
 and behavior are frozen except F0b's private writer delegation with byte-identical production
 output. Focused proof must cover all eleven proven interference families, exact restoration,
 non-Unicode values, panic, poison, nesting, child inheritance, unique ID/path ownership, descriptor
@@ -6317,4 +6372,5 @@ counts, failure names, and normalized signatures. Only that later closeout may e
 comparison baseline.
 
 F0-HC authorizes no implementation itself and marks none of F0, F0a, F0b, or combined closeout
-complete. It changes no runtime/user behavior and promotes no seam.
+complete. Its environment inventory is corrected and authorized; it changes no runtime/user
+behavior and promotes no seam. F remains blocked and unstarted.

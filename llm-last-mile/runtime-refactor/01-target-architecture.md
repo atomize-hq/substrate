@@ -425,7 +425,7 @@ Routes A–D are individually review-clean, but they do not exhaust the authenti
 The failed R2-2 integration closeout found two remaining projection seams and one diagnostic
 composition invariant. R2-2E is now implementation-, proof-, and review-complete. R2-2F0/F0a are
 authorized but incomplete: both exact candidates are preserved, and focused proof is not closeout
-proof. R2-2F0b remains planned and incomplete; F0-HC is audit-complete and the combined
+proof. R2-2F0b remains planned and incomplete; F0-HC is corrected and authorized and the combined
 F0/F0a/F0b/Harness implementation and canonical closeout is the exact next task. R2-2F follows
 that closeout, and a renewed Routes A–F integration closeout follows F.
 
@@ -671,8 +671,21 @@ If the answer depends on a helper still running, a socket being reachable, a ter
 
 ## F0-HC test-process coordination topology
 
-F0-HC changes no target production architecture. It freezes the test-only topology required before
-the planned F0/F0a/F0b implementation can establish a deterministic shell-library proof wall.
+F0-HC changes no target production architecture. Its environment-inventory correction freezes the
+test-only topology required before the planned F0/F0a/F0b implementation can establish a
+deterministic shell-library proof wall. Immutable-source closure now proves 86 environment names:
+74 parent-process mutations and 12 child-only projections or read-only names. In addition to the
+three known XDG mutations—`XDG_CONFIG_HOME`, `XDG_DATA_HOME`, and `XDG_STATE_HOME`—the same
+wrapper-argument audit found `SUBSTRATE_OVERRIDE_ANCHOR_MODE`,
+`SUBSTRATE_OVERRIDE_ANCHOR_PATH`, and `SUBSTRATE_OVERRIDE_CAGED`. No XDG-specific coordinator,
+production owner, or side table is introduced. Complete parent-mutation closure is exactly 534
+tests in 35 files, correcting the prior 518-test claim; A2 is 129 direct tests, comprising 116
+additive tests plus 13 existing-source F0a tests. Stable-reader participation is an explicit
+disposition and does not turn read-only tests into parent mutators.
+
+The two same-class `platform_tests::update_world_env_sets_*_flags` omissions also use this lane.
+Their future scope is test-only exact capture/restoration of the six names changed by the
+production-frozen `update_world_env`; no platform product behavior or XDG-specific owner is added.
 
 The environment lane is one reentrant `cfg(test)` authority-environment coordinator shared by all
 same-process ambient environment writers and causally dependent stable readers. A guard captures
@@ -682,6 +695,21 @@ reverse stack order during normal return or unwind, and only then unlocks. Poiso
 explicit and recovery must never silently admit an unguarded snapshot. Same-thread nesting is
 either stack-safe or rejected before mutation. Secret-bearing values are never rendered, logged,
 or persisted.
+
+The authenticated-gateway negative-authority test deliberately installs conflicting ambient XDG
+roots while authenticated A and the account-database Codex home remain authoritative. Its existing
+assertions and exact prior-value-or-absence restoration are immutable semantics; the only future
+change is participation in the unified environment lane through its test-only
+`AmbientSelectionGuard`. The two settings tests that pass the three override names through
+`EnvGuard::new` receive the same lane. Their stable production readers—including
+`parse_env_overrides`, gateway request-context construction, and Codex auth-state path resolution—
+remain byte-frozen.
+
+The already-listed `SUBSTRATE_SHELL` is also a parent mutation: the host-replay test calls shared
+`set_env`/`restore_env`, while `SpanBuilder::new` reads it to classify the trace component. Because
+early returns bypass the manual restore and the helper captures `String` rather than `OsString`,
+its future test-only migration must provide unwind/early-return-safe exact restoration under the
+same unified lane. The stable trace reader remains byte-frozen.
 
 Current-directory mutation uses a separate reentrant `cfg(test)` coordinator because paths can be
 injected for most production-adjacent work and CWD does not need to share a lock with descriptors,
@@ -721,3 +749,10 @@ credential transport, and platform behavior byte-for-byte. A future implementati
 a production global registry, changes a product caller, or cannot obey the lock order stops as
 `ProductRegressionDecisionRequired` or `CrossDocumentChangeRequired`; it is not absorbed into the
 harness packet.
+
+Source closure is a continuing gate, not a one-time count. The direct mutation-primitive inventory
+must reconcile with every wrapper definition and every callsite, resolving literal, constant,
+array/table, loop, and parameterized names. Any unresolved dynamic name is an explicit failure;
+`Command::{env,env_remove,env_clear}` remains child-only unless the same path also invokes a parent
+mutation primitive. Every mutating test and every overlapping stable reader must map to one exact
+participation or isolation disposition before the combined harness implementation may begin.

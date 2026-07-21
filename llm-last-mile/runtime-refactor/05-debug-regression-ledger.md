@@ -592,8 +592,8 @@ both are frozen. The earlier HIGH result for `resolve_current_inventory_view` is
 reuse boundary. Counts are diagnostic; the exact symbol/caller/cfg tables are binding.
 
 R2-2E's PI-111 implementation/proof clause is now complete. R2-2F owns the unresolved PI-106/PI-107
-production paths. Their required order is Routes A–E -> F0/F0a/F0b planned -> F0-HC audit and
-consolidated authorization -> combined F0/F0a/F0b/Harness implementation and canonical closeout ->
+production paths. Their required order is Routes A–E -> F0/F0a/F0b planned -> F0-HC corrected and
+authorized -> combined F0/F0a/F0b/Harness implementation and canonical closeout ->
 R2-2F -> renewed R2-2 integration closeout -> R2-3 -> R2-4 -> R3. The
 renewed closeout is production-fix-free and reruns
 the entire Routes A–F wall. `RG-HOME-01` and `RG-INSTALL-01` remain open. No privileged, macOS, or
@@ -716,7 +716,7 @@ Routes A–E, production retained-registration, the managed secure-FD path, capa
 and user behavior are unaffected.
 
 R2-2F0/F0a/F0b are authorized but incomplete. The exact F0/F0a pre- and post-fork-remediation candidates are
-preserved, not landed, and focused proof is not closeout proof. F0-HC is audit-complete and the
+preserved, not landed, and focused proof is not closeout proof. F0-HC is corrected and authorized and the
 combined F0/F0a/F0b/Harness implementation and canonical closeout is the exact next task. R2-2F starts only after that implementation is review-clean,
 canonically closed out, exactly replayed,
 and has recorded the deterministic comparison baseline. The renewed R2-2 integration closeout
@@ -855,7 +855,7 @@ one stable inherited failure-name/signature set and no unexplained count varianc
 lowered, erased, or substituted for the deterministic F baseline.
 
 `TestIsolationDefectConfirmed` remains the classification. F0/F0a/F0b are incomplete; F0-HC is
-audit-complete and combined F0/F0a/F0b/Harness implementation and canonical closeout is the exact next task. F, renewed R2-2
+corrected and authorized and combined F0/F0a/F0b/Harness implementation and canonical closeout is the exact next task. F, renewed R2-2
 closeout, R2-3, R2-4, and R3 remain unstarted, and no seam is promoted.
 
 ### A1.1d-5R2-2F0b — deterministic renderer-output test isolation
@@ -977,8 +977,8 @@ supervisor, retained-worker, placement, caging, lifecycle, or capability semanti
 seam. F0/F0a/F0b remain incomplete until the combined implementation, focused private-buffer proof,
 three identical parallel walls, one matching serial wall, transition audit, reviews, canonical
 closeout, and exact replay are complete. F, renewed R2-2 closeout, R2-3, R2-4, and R3 remain
-unstarted. The binding sequence is Routes A–E → F0/F0a/F0b planned → F0-HC audit and consolidated
-authorization → combined F0/F0a/F0b/Harness implementation and canonical closeout → F → renewed R2-2
+unstarted. The binding sequence is Routes A–E → F0/F0a/F0b planned → F0-HC corrected and
+authorized → combined F0/F0a/F0b/Harness implementation and canonical closeout → F → renewed R2-2
 integration closeout → R2-3 → R2-4 → R3.
 
 For the Route A successor clause of `R2-RUNTIME-01`, the authorized Unix-only import cfg set also
@@ -1023,8 +1023,8 @@ has exactly one approved edge class and one packet owner; the class totals are 1
 `R3CleanupOnly`, and four `OutOfScope`. The R2-0-era frozen DAG was historically
 R1 -> R2-0 -> R2-1 -> R2-2 -> R2-3 -> R2-4 -> R3. The corrected canonical DAG replaces the
 R2-2 outgoing edge without changing inventory ownership; F0/F0a/F0b and F0-HC insert only proof prerequisites:
-R1 -> R2-0 -> R2-1 -> R2-2 Routes A-E -> F0/F0a/F0b planned -> F0-HC audit and consolidated
-authorization -> combined F0/F0a/F0b/Harness implementation and canonical closeout -> R2-2F ->
+R1 -> R2-0 -> R2-1 -> R2-2 Routes A-E -> F0/F0a/F0b planned -> F0-HC corrected and authorized ->
+combined F0/F0a/F0b/Harness implementation and canonical closeout -> R2-2F -> renewed
 R2-2 integration closeout -> R2-3 -> R2-4 -> R3. Mechanical validation covers row-ID,
 field-count, class, owner, packet-count, table-column, fence-pair, relative-link, and allowlist-path
 checks across 43 tables/749 pipe rows, 134 fence markers, and 12 relative links, plus
@@ -1283,7 +1283,7 @@ A1.1d, A1, the B1/B2.1 joint closeout, and B3.1 remain open; no seam is promoted
 At R2-1 closeout, the historical next packet was **A1.1d-5R2-2 — Unix release, sudo, Linux service,
 and runtime propagation**. Routes A–D have since become individually review-clean, their integration
 closeout failed source closure, and R2-2E has since become review-clean. F0/F0a/F0b are authorized
-but incomplete; F0-HC is audit-complete, and the live exact next task is the combined
+but incomplete; F0-HC is corrected and authorized, and the live exact next task is the combined
 F0/F0a/F0b/Harness implementation and canonical closeout. R2-2F follows it. After F and the renewed
 closeout, rerun the complete Linux
 regression and normal product lifecycle smoke without outer overrides. That proof can unblock
@@ -1927,7 +1927,7 @@ B1 receipt core recovered/review-clean: **yes**. B2.1 supervisor core recovered/
 next architectural packet remains the B1/B2.1 joint production integration closeout. At the
 B1/B2.1-0 closeout, the repository's exact next packet was A1.1d-5R2-1 — Host context construction
 and Unix dev propagation; after review-clean R2-2 Routes A–E, the failed integration closeout, and
-F0/F0a's blocked broad proof and the completed F0-HC audit, the live exact next task is **A1.1d-5R2-2F0/F0a/F0b/Harness combined
+F0/F0a's blocked broad proof and the corrected F0-HC authorization, the live exact next task is **A1.1d-5R2-2F0/F0a/F0b/Harness combined
 implementation and canonical closeout**; **A1.1d-5R2-2F — Authenticated world-deps and truthful
 doctor composition** follows combined F0/F0a/F0b canonical closeout, followed by renewed R2-2 integration
 closeout, R2-3, R2-4, and R3. Only the joint closeout's Linux
@@ -2058,9 +2058,113 @@ An implementation PR may mark a ledger row resolved only when:
 
 ## A1.1d-5R2-2F0-HC empirical closure record
 
+### Environment-inventory correction evidence
+
+The current correction began from clean source branch
+`feat/internal-host-orchestrator-world-dispatch-bootstrap` at
+`a6c4a5a52c7e33d4efcc18f70dc2b7301ab0fcca` (tree
+`17b83d26b3f9a6258d0234461543528c269338bb`), with source remote
+`9a3b54edcf1560d50b6aafda7293699fce85c719` and divergence 0 behind / 10 ahead.
+Before audit work, the exact 44-file partial harness WIP was preserved on
+`feat/preserve-a1-1d-5r2-2-harness-xdg-blocker-6d1e303f` at commit
+`8b203b6ef9bda407a1299f8208bdd0ef1a7a1997`, parent the exact source commit, tree
+`ba80d26ba2c6a69036c4eb77e212f29e908dc70a`, ordinary patch SHA-256
+`6d1e303f29b18f966cc61f710cae6bf84eed03bd890a0bce3e9f8d5c1d31b0d3`, and full-index/binary
+patch SHA-256 `ec0d1a091ad324777f4d0447fa36eece6f64d7b883e7a1b6c1562d4283248023`.
+Local/remote commit, parent, tree, 44-file manifest, and hashes matched before the source worktree
+returned clean to the immutable commit. The earlier donor remains separately preserved with
+ordinary patch `5530e58a7289db4e9a62fc9934510b87add71853728a0311af2160328af3cbeb` and
+full-index patch `9e012c68ea33107443cd38f2051aa40aae9f0f03d5c6abb4c630d418b0d7dee2`.
+
+The actionable correction classifications are `HarnessClosureIncomplete` and
+`ControlPackStateMismatch`. The prior exact-name pass found direct
+`std::env::{set_var,remove_var}` literals but did not source-close wrapper arguments. Its manual
+dynamic-wrapper repair recognized twelve tests, yet treated the settings family as a
+`SUBSTRATE_ROOT` dependency without extracting `SUBSTRATE_OVERRIDE_ANCHOR_MODE`,
+`SUBSTRATE_OVERRIDE_ANCHOR_PATH`, or `SUBSTRATE_OVERRIDE_CAGED`; it also omitted the sole
+`AmbientSelectionGuard::set` callsite and therefore `XDG_CONFIG_HOME`, `XDG_DATA_HOME`, and
+`XDG_STATE_HOME`. GitNexus's `cfg(test)` graph had no incoming edge for that guard and could not
+substitute for lexical callsite closure. Immutable source proves the XDG values are parent-process
+mutations, not `Command::env` projections. Independent correction review then rejected the first
+405-call evidence manifest because it omitted `with_store`, `ProjectionEnvGuard::capture`,
+`update_world_env`, and the macOS `restore` family; the later 604-row pass also omitted
+`install_bootstrap_projections`, `apply_world_root_env`, `export_runtime_config_env`, and four
+additional `with_store` families. These were callsite-closure defects, not new environment names.
+
+Two independent methods now reconcile: lexical/static inspection accounts for all 395 direct
+parent-mutation primitive calls, including 73 dynamic-key calls; wrapper/callsite plus GitNexus and
+source closure resolves the 86-name universe and every dependent test. Exactly 74 names are
+parent-mutated and 12 are child-only or read-only. The parent-mutating union is corrected from 518
+to 534 tests in the same 35 files. A2 is corrected from 113 to 129 direct tests: 116 additive plus
+13 existing-source F0a tests. The prior 518 was 506 same-file/literal results plus twelve disjoint
+manual rows. Corrected closure adds eighteen real mutators and removes two false positives from
+ambiguous same-file bare-name fanout. The additions are
+`authenticated_gateway_projection_ignores_named_ambient_roots_and_uses_account_db_codex_home`,
+`codex_auth_projection_errors_redact_committed_account_home`,
+`update_world_env_sets_enabled_flags`, `update_world_env_sets_disabled_flags`, and the fourteen
+`with_test_mode`-only PTY tests enumerated in `02`. The removed non-mutators are
+`b1_task_acknowledgement_rejects_nonstart_eof_mismatch_and_repetition_before_persist` and
+`b1_retained_acknowledgement_joins_exact_request_and_rejects_terminal_or_drift`;
+the two settings tests `resolve_world_root_respects_env_when_no_configs` and
+`resolve_world_root_env_overrides_global_config` were already present but now map to their exact
+three override names.
+
+GitNexus reports the newly allowlisted Codex-auth test and each of the fourteen newly closed PTY
+test symbols LOW with zero callers, zero affected processes, and zero affected modules. The shared
+`with_test_mode` helper retains the prior HIGH adjacency result. These results authorize only the
+exact test/harness boundaries in `02`; production PTY classification, broker behavior, and gateway
+auth resolution remain frozen.
+
+Full closure also reclassifies already-listed `SUBSTRATE_SHELL` as parent-mutated.
+`execution/routing/dispatch/tests/host_replay.rs::async_repl_host_commands_record_replay_context`
+passes it to `execution/routing/test_utils.rs::{set_env,restore_env}`, and
+`crates/trace/src/span.rs::SpanBuilder::new` is the overlapping stable reader. The test's three
+early returns precede manual restoration, while `set_env` captures `Option<String>`; current
+protection is therefore early-return/unwind unsafe and loses a prior non-Unicode value. The test
+and file were already in the 116-test A2 manifest and 35-file union. The future migration is exact
+`OsString`/absence RAII under `UnifiedProcessStateLock`; the trace reader remains frozen.
+
+The two macOS tests already hold `world_env_guard`, but their `snapshot`/`restore` helper captures
+only `Option<String>` and restores only `SUBSTRATE_WORLD` and `SUBSTRATE_WORLD_ENABLED` even
+though production-frozen `update_world_env` changes six names. Their exact future allowlist is
+`execution/platform/macos.rs::platform_tests::{snapshot,restore,update_world_env_sets_enabled_flags,update_world_env_sets_disabled_flags}`;
+all six prior values or absence must be restored exactly under the same coordinator. GitNexus
+reports both helpers LOW with two direct test callers and zero processes, and both tests LOW with
+zero callers/processes.
+
+The XDG negative-authority semantics are frozen: conflicting ambient XDG roots remain installed;
+authenticated A and the account-database Codex home remain authoritative; ambient XDG values gain
+no configuration, credential, or path authority; all assertions remain; and exact prior
+`OsString` values or absence are restored. The exact six corrected names and their test-only
+file/symbol/test allowlist are binding in `02`. All six belong to the existing A2/E1
+`UnifiedProcessStateLock`; no XDG-specific lock, production owner, side table, reader edit, or
+behavior change is authorized.
+
+The prevention rule is mechanical: direct primitives and wrapper definitions/callsites are
+separate inventories; literal, constant, array/table, loop, and parameterized arguments must all
+resolve; dynamic names fail if unclassified; parent mutation and child-only projection are checked
+separately; and every mutating test plus overlapping stable reader must map to an exact migration
+or isolation disposition. The deterministic validator is evidence-only outside tracked repository
+state and authorizes no seventh control-pack file.
+
+The validator binds the normalized 395-call primitive, 1,005-call resolved mutation, and 534-test
+manifests at SHA-256
+`df0254488f37d4f53f05c81bbbd47c05bbbe410496d465827daade80922e0f4a`,
+`350ccd1876ecc07cced81df89b523e3d24f9674f5dc6a5e33f052d65f4489772`, and
+`de7e2bc43c0fcab74096dc272340726c919aeb72004fd0208ab5b4dffb802f4a`, respectively. It also
+freezes the reproduced 506-test defective scanner at
+`a9fbbe89128a2cbe9c341a0ec78a9fb256840d5ef65ad78f47e9d404e20cafed` and 43 dynamic mutation-sink owners at
+`133e28a495e5be69016fb7f6483018cfb406b44c8ca5e2d8779fdf82ded0c66c`, parses fixed projection
+and local-key tables from source, and runs negative perturbation checks. The rejected 604-row
+manifest remains historical evidence, not a completeness claim. The validator parses the 35-file,
+116-test, and 13-test canonical lists; verifies all 129 named source test
+symbols exactly once; and checks the host-replay early-return, routing-helper capture, and
+`SpanBuilder::new` reader closure. Counts without exact normalized manifests are not sufficient.
+
 ### Preflight and preservation
 
-The complete Phase 0 preflight passed before audit work began:
+The earlier F0/F0a/F0b preflight remains preserved as historical evidence; the current correction
+preflight and 44-file preservation are recorded above. That earlier preflight was:
 
 - source branch `feat/internal-host-orchestrator-world-dispatch-bootstrap`; local HEAD
   `06c928443a93579899e5e5827b151f530e1be933`; tree
@@ -2151,3 +2255,9 @@ binary and cannot perturb this wall.
 The audit did not implement a fix, did not establish a deterministic F comparison baseline, and
 did not start F. Final closure still requires the combined implementation and the focused plus
 three-parallel/one-serial deterministic proof wall frozen in `03` and `04`.
+
+The environment-inventory correction likewise performs no runtime edit and marks no harness
+implementation complete. Terminal control-pack status is `F0-HC corrected and authorized`; F
+remains blocked and unstarted. The binding next task is **A1.1d-5R2-2F0/F0a/F0b/Harness combined
+implementation and canonical closeout**, followed only then by F, renewed R2-2 integration
+closeout, R2-3, R2-4, and R3.

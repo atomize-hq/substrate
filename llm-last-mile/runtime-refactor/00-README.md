@@ -4,7 +4,7 @@
 **Scope:** planning, contracts, sequencing, and proof gates; not implementation history
 **Source directive:** [`../../substrate-runtime-refactor-directive-revised.md`](../../substrate-runtime-refactor-directive-revised.md)
 **Repo-truth snapshot:** 2026-07-17 at `6ab2a515e13946324d0aac25b144e1c3408cb2c1`; re-check live code before every slice
-**Current authorized increment:** `A1.1d-5R2-2F0/F0a/F0b/Harness combined implementation and canonical closeout`; R2-2E is implementation-, proof-, and review-complete, F0/F0a/F0b remain planned and incomplete with both F0/F0a candidates preserved, the F0-HC audit/authorization prerequisite is complete, F remains blocked pending combined proof, and R2-2 remains incomplete.
+**Current authorized increment:** `A1.1d-5R2-2F0/F0a/F0b/Harness combined implementation and canonical closeout`; R2-2E is implementation-, proof-, and review-complete, F0/F0a/F0b remain planned and incomplete with both F0/F0a candidates preserved, the F0-HC environment inventory is corrected and authorized, F remains blocked pending combined proof, and R2-2 remains incomplete.
 
 ## Canonical repo location
 
@@ -209,12 +209,12 @@ convergent. Remediation remains bounded to **A1.1d-5R1 → A1.1d-5R2 → A1.1d-5
 implemented and review-clean through `4d0acff68e20d86b97fe5367b8a4617554f33ef4`.
 **A1.1d-5R2-0 is planning-complete, and A1.1d-5R2-1 is implementation- and review-complete through
 `2653c2ef20ae2e119a444811e6fb46e86d1a6ec6`.** R2 remains sequenced as
-**R2-1 → R2-2 Routes A–E → F0/F0a/F0b planned → F0-HC audit/authorization → combined F0/F0a/F0b/Harness implementation and canonical closeout → R2-2F → R2-2 integration closeout → R2-3 → R2-4**,
+**R2-1 → R2-2 Routes A–E → F0/F0a/F0b planned → F0-HC corrected and authorized → combined F0/F0a/F0b/Harness implementation and canonical closeout → R2-2F → renewed R2-2 integration closeout → R2-3 → R2-4**,
 followed by R3. Routes A–D are individually review-clean, but the failed integration closeout proved
 that R2-2 is incomplete and unpublished. R2-2E is now implementation-, proof-, and review-complete;
 R2-2F0/F0a are authorized but incomplete, their focused proof is not closeout proof, and both exact
 pre- and post-fork-remediation candidates are preserved rather than landed. R2-2F0b remains
-planned and incomplete; F0-HC is audit-complete, and the combined F0/F0a/F0b/Harness implementation and canonical closeout is the
+planned and incomplete; F0-HC is corrected and authorized, and the combined F0/F0a/F0b/Harness implementation and canonical closeout is the
 exact next task. R2-2F, renewed
 R2-2 closeout, R2-3, R2-4, and R3 remain
 unstarted. Until the
@@ -259,7 +259,7 @@ A1.1d and A1 remain incomplete, B3.1 remains blocked, and the R2 packets/R3 rema
 owned; R2-1 is complete and R2-2 is in progress through review-clean Routes A, B, C, and D. The
 failed Routes A–D integration closeout is blocker evidence rather than a completed packet; R2-2E is
 implementation-, proof-, and review-complete, R2-2F0/F0a are authorized but incomplete, and
-R2-2F0b remains planned and incomplete; F0-HC is audit-complete and the combined
+R2-2F0b remains planned and incomplete; F0-HC is corrected and authorized and the combined
 F0/F0a/F0b/Harness implementation and canonical closeout is next. R2-2F follows that closeout; renewed
 closeout, R2-3/R2-4/R3 remain unstarted. Static macOS/Windows
 inspection in R2-0 is not native platform proof.
@@ -359,8 +359,8 @@ process-global writer lock/registry, environment-selected sink, reporter filteri
 retries, thread reduction, ignored tests, and assertion weakening are forbidden. No production
 caller or product behavior changes, and no seam is promoted.
 
-The exact sequence is **Routes A–E → F0/F0a/F0b planned → F0-HC audit and consolidated
-authorization → combined F0/F0a/F0b/Harness implementation and canonical closeout → F → renewed R2-2
+The exact sequence is **Routes A–E → F0/F0a/F0b planned → F0-HC corrected and authorized →
+combined F0/F0a/F0b/Harness implementation and canonical closeout → F → renewed R2-2
 integration closeout → R2-3 → R2-4 → R3**. E and F are logically
 separable but use this
 deterministic order so
@@ -445,25 +445,71 @@ as a joint-closeout failure-to-pass transition.
 B2.2/B3.2 retain the deferred receipt-UX and broader retained-lifecycle work after A1 and the named
 A2/A3 boundaries. Similarly named event, span, or payload fields are not closure evidence.
 
-## A1.1d-5R2-2F0-HC shell-harness closure audit
+## A1.1d-5R2-2F0-HC shell-harness closure audit and environment correction
 
-`A1.1d-5R2-2F0-HC` is complete as a bounded evidence and authorization prerequisite inside
-canonical slice A1. It is not a new top-level slice or product seam. The audit started from the
-published F0b documentation commit `c079aeed748120cff9b03079e996d00109a05800` (tree
-`905cf110f648188b1a2e9a0087b4ffbb4c89e168`) while the source worktree remained at replayed E
-`06c928443a93579899e5e5827b151f530e1be933` (tree
-`dfe15d93366655e9855bca40ad0607887f545637`). It changed documentation only.
+`A1.1d-5R2-2F0-HC` is corrected and authorized as a bounded evidence prerequisite inside canonical
+slice A1. It is not a new top-level slice, micro-packet, or product seam. The correction started
+from published control-pack commit `9a3b54edcf1560d50b6aafda7293699fce85c719` (tree
+`740c19fa4099161f243220c2c25916c76485d7bf`) and audited immutable replayed-E source
+`a6c4a5a52c7e33d4efcc18f70dc2b7301ab0fcca` (tree
+`17b83d26b3f9a6258d0234461543528c269338bb`). It changes documentation and evidence only.
 
-The complete shell-library process closure contains 38 resource rows: environment 4, fixed file
+The corrected shell-library process closure contains 38 resource rows: environment 4, fixed file
 descriptors 3, process working state 3, global hooks/subscribers 4, static registries/singletons 11,
 filesystem/sockets/ports 4, time/scheduling 3, background lifetime 3, and test-runner coordination
 3. Every row has exactly one primary disposition: 7 `UnifiedProcessStateLock`, 4
 `ExplicitDependencyInjection`, 1 `TerminationConfirmedTeardown`, 1
 `DeterministicSynchronization`, 7 `SubprocessIsolation`, 17 `ProvenConcurrencySafe`, and 1
 `SeparatelyOwnedDeferred`. The reconciled row ledger and proof are in
-[04-contracts-and-gates.md](04-contracts-and-gates.md#a11d-5r2-2f0-hc-complete-process-resource-ledger),
+[04-contracts-and-gates.md](04-contracts-and-gates.md#a11d-5r2-2f0-hc-corrected-complete-process-resource-ledger),
 and empirical transitions are in
 [05-debug-regression-ledger.md](05-debug-regression-ledger.md#a11d-5r2-2f0-hc-empirical-closure-record).
+
+The environment inventory is now exactly 86 names: 74 parent-process mutations and 12 child-only
+projections or read-only names. The six names omitted by the prior 80-name ledger are
+`XDG_CONFIG_HOME`, `XDG_DATA_HOME`, `XDG_STATE_HOME`, `SUBSTRATE_OVERRIDE_ANCHOR_MODE`,
+`SUBSTRATE_OVERRIDE_ANCHOR_PATH`, and `SUBSTRATE_OVERRIDE_CAGED`. The first three are installed by
+`AmbientSelectionGuard::set` in the existing authenticated-gateway negative-authority test; the
+last three are arguments to the settings-test `EnvGuard::new`. Complete callsite closure corrects
+the dependent total from 518 to 534 parent-mutating tests in the same 35 files. A2 is corrected
+from 113 to 129 direct tests: 116 additive plus 13 existing-F0a tests.
+
+The exact test correction is not a blind sixteen-test increment. The old scanner found 506 tests
+by literal plus same-file helper traversal, then manually added twelve disjoint dynamic-wrapper
+tests to publish 518. Corrected cross-file and duplicate-wrapper closure finds eighteen real
+mutators the published union omitted and removes two false positives caused by ambiguous
+same-file bare-name fanout, yielding 534. The added set is the named XDG gateway test,
+`codex_auth_projection_errors_redact_committed_account_home`, both macOS
+`update_world_env_sets_*_flags` tests, and fourteen `with_test_mode`-only PTY tests. The removed
+non-mutators are the two `b1_*_acknowledgement_*` tests named in `05`.
+
+Full wrapper closure also corrects the classification of already-listed `SUBSTRATE_SHELL`: the
+host-replay test mutates it through shared `set_env`/`restore_env`, and `SpanBuilder::new` is an
+overlapping stable reader. That test and file were already in the 116-test/35-file A2 manifest, so
+they do not contribute to the correction delta. Its manual restoration can be bypassed by early return and is not exact
+for non-Unicode prior values; the future unified-lane migration must make restoration RAII and
+exact `OsString`/absence.
+
+Complete dynamic-sink closure also adds the two existing
+`execution/platform/macos.rs::platform_tests::update_world_env_sets_*_flags` tests to A2. They
+were absent from the defective 518-test total, although their file already belonged to the
+35-file universe, and their local `snapshot`/`restore` helper
+captures only `String`/absence and restores only `SUBSTRATE_WORLD` and
+`SUBSTRATE_WORLD_ENABLED` even though production-frozen `update_world_env` mutates six exact
+names. Their future test-only migration must snapshot and restore all six as exact
+`OsString`/absence under the existing unified environment coordinator; production
+`update_world_env` remains frozen.
+
+The prior audit resolved mutation-wrapper bodies but not every wrapper argument/callsite. Its
+manual dynamic-wrapper repair likewise retained the settings tests without extracting their three
+override-name arguments and omitted the gateway guard entirely. The correction therefore requires
+two independent inventories—direct primitives and wrapper/callsite source closure—and fails if a
+wrapper callsite, literal, constant, table entry, parameterized name, dynamic name, parent/child
+classification, or mutating test lacks an explicit inventory and migration disposition. The
+validator now freezes 43 dynamic mutation-sink owners, 1,005 resolved parent-mutation callsites,
+and the exact 534-test manifest; source-parses the projection and local-key tables; checks every
+cross-file/duplicate-name wrapper family; and runs negative perturbation checks for a missing
+callsite, new table name, or `with_store` callsite.
 
 The audit proves eight additional harness-interference families beyond the already-known HOME,
 world-socket, and descriptor-capture families: ambient selector versus stable reader, current
@@ -476,7 +522,7 @@ one future harness boundary; they do not create F0c/F0d/F0e packets.
 
 The canonical sequence is now:
 
-`Routes A–E` → `F0/F0a/F0b planned` → `F0-HC audit and consolidated authorization` →
+`Routes A–E` → `F0/F0a/F0b planned` → `F0-HC corrected and authorized` →
 `combined F0/F0a/F0b/Harness implementation and canonical closeout` → `F` →
 `renewed R2-2 integration closeout` → `R2-3` → `R2-4` → `R3`.
 
