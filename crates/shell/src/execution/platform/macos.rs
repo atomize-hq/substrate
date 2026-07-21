@@ -1095,6 +1095,7 @@ echo pass
     #[cfg(test)]
     mod tests {
         use super::*;
+        use crate::execution::WorldSocketTestGuard;
         use serial_test::serial;
         use std::collections::VecDeque;
 
@@ -1228,6 +1229,10 @@ echo pass
         }
 
         fn with_env_var<T>(key: &str, value: Option<&str>, f: impl FnOnce() -> T) -> T {
+            if key == "SUBSTRATE_WORLD_SOCKET" {
+                let _guard = WorldSocketTestGuard::set_optional(value.map(std::ffi::OsStr::new));
+                return f();
+            }
             let prev = std::env::var_os(key);
             match value {
                 Some(value) => std::env::set_var(key, value),
@@ -1244,6 +1249,7 @@ echo pass
         #[test]
         #[serial]
         fn doctor_ok_json() {
+            let _authority_env = crate::execution::AuthorityEnvTestGuard::preserve();
             let vm_json = r#"{"status":"Running"}"#;
             let temp = tempfile::tempdir().expect("tempdir");
             let home = temp.path();
@@ -1320,6 +1326,7 @@ echo pass
         #[test]
         #[serial]
         fn doctor_resolves_override_vm_name_and_reports_it() {
+            let _authority_env = crate::execution::AuthorityEnvTestGuard::preserve();
             with_env_var("LIMA_VM_NAME", Some("substrate-fallback"), || {
                 with_env_var("SUBSTRATE_LIMA_VM_NAME", Some("substrate-arch"), || {
                     assert_eq!(resolve_lima_vm_name(), "substrate-arch");
@@ -1456,6 +1463,7 @@ echo pass
         #[test]
         #[serial]
         fn world_doctor_json_uses_override_vm_name() {
+            let _authority_env = crate::execution::AuthorityEnvTestGuard::preserve();
             let vm_name = "substrate-arch";
             let vm_json = r#"{"status":"Running"}"#;
             let temp = tempfile::tempdir().expect("tempdir");
@@ -1512,6 +1520,7 @@ echo pass
         #[test]
         #[serial]
         fn host_doctor_json_uses_override_vm_name() {
+            let _authority_env = crate::execution::AuthorityEnvTestGuard::preserve();
             let vm_name = "substrate-arch";
             let vm_json = r#"{"status":"Running"}"#;
             let temp = tempfile::tempdir().expect("tempdir");
@@ -1977,6 +1986,7 @@ echo pass
         #[test]
         #[serial]
         fn world_doctor_json_reports_running_vm_with_inactive_service_as_not_provisioned() {
+            let _authority_env = crate::execution::AuthorityEnvTestGuard::preserve();
             let vm_json = r#"{"status":"Running"}"#;
             let temp = tempfile::tempdir().expect("tempdir");
             let home = temp.path();

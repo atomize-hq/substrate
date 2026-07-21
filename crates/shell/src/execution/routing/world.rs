@@ -128,6 +128,7 @@ fn init_linux_world_default(config: &ShellConfig) {
 #[cfg(all(test, any(target_os = "macos", target_os = "windows")))]
 mod tests {
     use super::bootstrap_platform_world;
+    use crate::execution::WorldSocketTestGuard;
     use std::sync::atomic::{AtomicUsize, Ordering};
     use transport_api_types::{SharedWorldOwnerAction, SharedWorldOwnerSpec};
 
@@ -135,13 +136,11 @@ mod tests {
     #[test]
     fn shared_owner_macos_allows_lima_backed_bootstrap() {
         let calls = AtomicUsize::new(0);
-        let _env_guard = crate::execution::world_env_guard();
+        let _world_socket_guard = WorldSocketTestGuard::remove();
         let request = SharedWorldOwnerSpec {
             orchestration_session_id: "orch-test".to_string(),
             action: SharedWorldOwnerAction::AttachOrCreate,
         };
-
-        std::env::remove_var("SUBSTRATE_WORLD_SOCKET");
 
         bootstrap_platform_world("routing world bootstrap test", Some(&request), || {
             calls.fetch_add(1, Ordering::SeqCst);
@@ -160,13 +159,13 @@ mod tests {
     #[test]
     fn shared_owner_macos_rejects_socket_override_before_bootstrap() {
         let calls = AtomicUsize::new(0);
-        let _env_guard = crate::execution::world_env_guard();
+        let _world_socket_guard =
+            WorldSocketTestGuard::set(std::ffi::OsStr::new("/tmp/substrate-test.sock"));
         let request = SharedWorldOwnerSpec {
             orchestration_session_id: "orch-test".to_string(),
             action: SharedWorldOwnerAction::AttachOrCreate,
         };
 
-        std::env::set_var("SUBSTRATE_WORLD_SOCKET", "/tmp/substrate-test.sock");
         let err = bootstrap_platform_world("routing world bootstrap test", Some(&request), || {
             calls.fetch_add(1, Ordering::SeqCst);
             Ok(())

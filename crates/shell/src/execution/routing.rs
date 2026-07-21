@@ -6,7 +6,7 @@ mod path_env;
 mod replay;
 mod telemetry;
 #[cfg(test)]
-mod test_utils;
+pub(crate) mod test_utils;
 mod world;
 #[cfg(any(target_os = "macos", target_os = "windows"))]
 mod world_env;

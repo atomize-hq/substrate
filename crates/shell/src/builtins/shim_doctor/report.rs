@@ -867,7 +867,6 @@ mod tests {
     #[cfg(unix)]
     use serial_test::serial;
     #[cfg(unix)]
-    use std::ffi::OsString;
     #[cfg(unix)]
     use std::os::unix::fs::PermissionsExt;
     #[cfg(unix)]
@@ -877,38 +876,18 @@ mod tests {
 
     #[cfg(unix)]
     struct ProcessStateGuard {
-        cwd: PathBuf,
-        environment: Vec<(&'static str, Option<OsString>)>,
+        _process_cwd: crate::execution::ProcessCwdTestGuard,
     }
 
     #[cfg(unix)]
     impl ProcessStateGuard {
         fn set(cwd: &Path, values: &[(&'static str, &Path)]) -> Self {
-            let previous_cwd = std::env::current_dir().expect("read test cwd");
-            let environment = values
-                .iter()
-                .map(|(key, _)| (*key, std::env::var_os(key)))
-                .collect();
-            std::env::set_current_dir(cwd).expect("set Route D test cwd");
+            let process_cwd = crate::execution::ProcessCwdTestGuard::change_to(cwd);
             for (key, value) in values {
                 std::env::set_var(key, value);
             }
             Self {
-                cwd: previous_cwd,
-                environment,
-            }
-        }
-    }
-
-    #[cfg(unix)]
-    impl Drop for ProcessStateGuard {
-        fn drop(&mut self) {
-            std::env::set_current_dir(&self.cwd).expect("restore test cwd");
-            for (key, value) in self.environment.drain(..) {
-                match value {
-                    Some(value) => std::env::set_var(key, value),
-                    None => std::env::remove_var(key),
-                }
+                _process_cwd: process_cwd,
             }
         }
     }
@@ -964,6 +943,7 @@ mod tests {
     #[test]
     #[serial]
     fn world_deps_section_forwards_authenticated_a_under_conflicting_ambient_b() {
+        let _authority_env = crate::execution::AuthorityEnvTestGuard::preserve();
         let (_, account_home) = current_unix_principal_and_home().expect("current Unix home");
         let temp = Builder::new()
             .prefix("substrate-route-d-report-")

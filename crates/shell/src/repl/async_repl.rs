@@ -12577,6 +12577,16 @@ mod tests {
     #[test]
     #[serial_test::serial]
     fn emit_world_restarted_alert_only_emits_with_orchestration_context() {
+        if crate::execution::run_in_bounded_test_subprocess(
+            concat!(
+                module_path!(),
+                "::",
+                stringify!(emit_world_restarted_alert_only_emits_with_orchestration_context)
+            ),
+            "event_registry",
+        ) {
+            return;
+        }
         let _guard = acquire_event_test_guard();
         let mut rx = init_event_channel();
 
@@ -12803,22 +12813,15 @@ mod tests {
 
     #[cfg(unix)]
     struct CurrentDirGuard {
-        original: PathBuf,
+        _process_cwd: crate::execution::ProcessCwdTestGuard,
     }
 
     #[cfg(unix)]
     impl CurrentDirGuard {
         fn change_to(path: &Path) -> Self {
-            let original = std::env::current_dir().expect("current dir should resolve");
-            std::env::set_current_dir(path).expect("set current dir");
-            Self { original }
-        }
-    }
-
-    #[cfg(unix)]
-    impl Drop for CurrentDirGuard {
-        fn drop(&mut self) {
-            let _ = std::env::set_current_dir(&self.original);
+            Self {
+                _process_cwd: crate::execution::ProcessCwdTestGuard::change_to(path),
+            }
         }
     }
 
@@ -13357,7 +13360,7 @@ mod tests {
     #[test]
     #[serial_test::serial]
     fn start_host_orchestrator_runtime_persists_participant_snapshots_across_lifecycle_states() {
-        let _world_env_guard = crate::execution::world_env_guard();
+        let _authority_env = crate::execution::AuthorityEnvTestGuard::preserve();
         let temp = private_authority_test_tempdir();
         let workspace_root = temp.path().join("workspace");
         let substrate_home = temp.path().join("substrate-home");
@@ -13369,7 +13372,7 @@ mod tests {
         let _cwd_guard = CurrentDirGuard::change_to(&workspace_root);
         let fake_codex = write_fake_codex_script_with_running_and_shutdown_delay(&temp, 1, 1);
 
-        std::env::set_var("SUBSTRATE_HOME", &substrate_home);
+        _authority_env.install_home(&substrate_home);
         fs::write(
             substrate_home.join("config.yaml"),
             "agents:\n  enabled: true\n  hub:\n    orchestrator_agent_id: codex-host\n",
@@ -13498,7 +13501,6 @@ mod tests {
             );
             assert!(!participant_id.is_empty());
         });
-        std::env::remove_var("SUBSTRATE_HOME");
     }
 
     #[cfg(unix)]
@@ -13506,7 +13508,7 @@ mod tests {
     #[serial_test::serial]
     fn start_host_orchestrator_runtime_fails_closed_when_attached_control_exits_before_stable_startup(
     ) {
-        let _world_env_guard = crate::execution::world_env_guard();
+        let _authority_env = crate::execution::AuthorityEnvTestGuard::preserve();
         let temp = private_authority_test_tempdir();
         let workspace_root = temp.path().join("workspace");
         let substrate_home = temp.path().join("substrate-home");
@@ -13515,7 +13517,7 @@ mod tests {
         let _cwd_guard = CurrentDirGuard::change_to(&workspace_root);
         let fake_codex = write_fake_codex_script(&temp, false);
 
-        std::env::set_var("SUBSTRATE_HOME", &substrate_home);
+        _authority_env.install_home(&substrate_home);
         fs::write(
             substrate_home.join("config.yaml"),
             "agents:\n  enabled: true\n  hub:\n    orchestrator_agent_id: codex-host\n",
@@ -13584,14 +13586,13 @@ mod tests {
 
             assert_applied_greenfield_start_pending(&substrate_home);
         });
-        std::env::remove_var("SUBSTRATE_HOME");
     }
 
     #[cfg(unix)]
     #[test]
     #[serial_test::serial]
     fn start_host_orchestrator_runtime_does_not_persist_live_manifest_without_session_handle() {
-        let _world_env_guard = crate::execution::world_env_guard();
+        let _authority_env = crate::execution::AuthorityEnvTestGuard::preserve();
         let temp = private_authority_test_tempdir();
         let workspace_root = temp.path().join("workspace");
         let substrate_home = temp.path().join("substrate-home");
@@ -13600,7 +13601,7 @@ mod tests {
         let _cwd_guard = CurrentDirGuard::change_to(&workspace_root);
         let fake_codex = write_fake_codex_script_without_session_handle(&temp);
 
-        std::env::set_var("SUBSTRATE_HOME", &substrate_home);
+        _authority_env.install_home(&substrate_home);
         fs::write(
             substrate_home.join("config.yaml"),
             "agents:\n  enabled: true\n  hub:\n    orchestrator_agent_id: codex-host\n",
@@ -13662,14 +13663,13 @@ mod tests {
 
             assert_applied_greenfield_start_pending(&substrate_home);
         });
-        std::env::remove_var("SUBSTRATE_HOME");
     }
 
     #[cfg(unix)]
     #[test]
     #[serial_test::serial]
     fn shutdown_host_orchestrator_runtime_waits_for_cancel_completion_before_stopping() {
-        let _world_env_guard = crate::execution::world_env_guard();
+        let _authority_env = crate::execution::AuthorityEnvTestGuard::preserve();
         let temp = private_authority_test_tempdir();
         let workspace_root = temp.path().join("workspace");
         let substrate_home = temp.path().join("substrate-home");
@@ -13678,7 +13678,7 @@ mod tests {
         let _cwd_guard = CurrentDirGuard::change_to(&workspace_root);
         let fake_codex = write_fake_codex_script_with_shutdown_delay(&temp, 1);
 
-        std::env::set_var("SUBSTRATE_HOME", &substrate_home);
+        _authority_env.install_home(&substrate_home);
         fs::write(
             substrate_home.join("config.yaml"),
             "agents:\n  enabled: true\n  hub:\n    orchestrator_agent_id: codex-host\n",
@@ -13740,14 +13740,13 @@ mod tests {
                 committed
             );
         });
-        std::env::remove_var("SUBSTRATE_HOME");
     }
 
     #[cfg(unix)]
     #[test]
     #[serial_test::serial]
     fn hidden_owner_private_stop_fails_closed_when_completion_never_resolves() {
-        let _world_env_guard = crate::execution::world_env_guard();
+        let _authority_env = crate::execution::AuthorityEnvTestGuard::preserve();
         let temp = private_authority_test_tempdir();
         let workspace_root = temp.path().join("workspace");
         let substrate_home = temp.path().join("substrate-home");
@@ -13756,7 +13755,7 @@ mod tests {
         let _cwd_guard = CurrentDirGuard::change_to(&workspace_root);
         let fake_codex = write_fake_codex_script(&temp, true);
 
-        std::env::set_var("SUBSTRATE_HOME", &substrate_home);
+        _authority_env.install_home(&substrate_home);
         fs::write(
             substrate_home.join("config.yaml"),
             "agents:\n  enabled: true\n  hub:\n    orchestrator_agent_id: codex-host\n",
@@ -13893,14 +13892,13 @@ mod tests {
                 Some("runtime_shutdown")
             );
         });
-        std::env::remove_var("SUBSTRATE_HOME");
     }
 
     #[cfg(unix)]
     #[test]
     #[serial_test::serial]
     fn greenfield_host_start_proposal_applies_exact_host_world_binding_without_legacy_placement() {
-        let _world_env_guard = crate::execution::world_env_guard();
+        let _authority_env = crate::execution::AuthorityEnvTestGuard::preserve();
         let temp = private_authority_test_tempdir();
         let workspace_root = temp.path().join("workspace");
         let substrate_home = temp.path().join("substrate-home");
@@ -13913,7 +13911,7 @@ mod tests {
         let pid_file = temp.path().join("greenfield-host.pid");
         let fake_orchestrator = write_fake_codex_script_with_pid_file(&temp, &pid_file);
 
-        let _substrate_home_guard = EnvVarGuard::set_path("SUBSTRATE_HOME", &substrate_home);
+        _authority_env.install_home(&substrate_home);
         fs::write(
             substrate_home.join("config.yaml"),
             "agents:\n  enabled: true\n  hub:\n    orchestrator_agent_id: codex-host\n",
@@ -14112,7 +14110,7 @@ mod tests {
     #[test]
     #[serial_test::serial]
     fn greenfield_host_start_proposal_applies_and_exact_joins_without_world_binding() {
-        let _world_env_guard = crate::execution::world_env_guard();
+        let _authority_env = crate::execution::AuthorityEnvTestGuard::preserve();
         let temp = private_authority_test_tempdir();
         let workspace_root = temp.path().join("workspace");
         let substrate_home = temp.path().join("substrate-home");
@@ -14126,7 +14124,7 @@ mod tests {
         let fake_member = write_fake_codex_script_with_running_and_shutdown_delay(&temp, 1, 1);
         let _world_codex_runtime_guard =
             install_test_world_scoped_codex_runtime(&temp, &fake_member);
-        let _substrate_home_guard = EnvVarGuard::set_path("SUBSTRATE_HOME", &substrate_home);
+        _authority_env.install_home(&substrate_home);
         write_runtime_inventory_with_world_member(
             &substrate_home,
             &fake_orchestrator,
@@ -14192,7 +14190,7 @@ mod tests {
     #[test]
     #[serial_test::serial]
     fn prepare_repl_dormant_host_launch_plan_keeps_world_mode_lazy_until_first_targeted_turn() {
-        let _world_env_guard = crate::execution::world_env_guard();
+        let _authority_env = crate::execution::AuthorityEnvTestGuard::preserve();
         let temp = private_authority_test_tempdir();
         let workspace_root = temp.path().join("workspace");
         let substrate_home = temp.path().join("substrate-home");
@@ -14204,7 +14202,7 @@ mod tests {
         let _world_codex_runtime_guard =
             install_test_world_scoped_codex_runtime(&temp, &fake_member);
 
-        std::env::set_var("SUBSTRATE_HOME", &substrate_home);
+        _authority_env.install_home(&substrate_home);
         write_runtime_inventory_with_world_member(
             &substrate_home,
             &fake_orchestrator,
@@ -14260,15 +14258,13 @@ mod tests {
             Some(&intended_host_principal),
             "typed intended principal must survive dormant-plan preparation and Start application"
         );
-
-        std::env::remove_var("SUBSTRATE_HOME");
     }
 
     #[cfg(unix)]
     #[test]
     #[serial_test::serial]
     fn prepare_repl_dormant_host_launch_plan_keeps_no_world_mode_lazy() {
-        let _world_env_guard = crate::execution::world_env_guard();
+        let _authority_env = crate::execution::AuthorityEnvTestGuard::preserve();
         let temp = private_authority_test_tempdir();
         let workspace_root = temp.path().join("workspace");
         let substrate_home = temp.path().join("substrate-home");
@@ -14280,7 +14276,7 @@ mod tests {
         let _world_codex_runtime_guard =
             install_test_world_scoped_codex_runtime(&temp, &fake_member);
 
-        std::env::set_var("SUBSTRATE_HOME", &substrate_home);
+        _authority_env.install_home(&substrate_home);
         write_runtime_inventory_with_world_member(
             &substrate_home,
             &fake_orchestrator,
@@ -14317,8 +14313,6 @@ mod tests {
                 ..
             }) if carried == &intended_host_principal
         ));
-
-        std::env::remove_var("SUBSTRATE_HOME");
     }
 
     #[cfg(target_os = "linux")]
@@ -14326,7 +14320,7 @@ mod tests {
     #[serial_test::serial]
     fn refresh_member_runtime_binding_from_shared_world_metadata_after_mismatch_declines_without_metadata_even_when_persisted_session_truth_differs(
     ) {
-        let _world_env_guard = crate::execution::world_env_guard();
+        let _authority_env = crate::execution::AuthorityEnvTestGuard::preserve();
         let temp = private_authority_test_tempdir();
         let workspace_root = temp.path().join("workspace");
         let substrate_home = temp.path().join("substrate-home");
@@ -14341,7 +14335,7 @@ mod tests {
         let _world_codex_runtime_guard =
             install_test_world_scoped_codex_runtime(&temp, &fake_member);
 
-        std::env::set_var("SUBSTRATE_HOME", &substrate_home);
+        _authority_env.install_home(&substrate_home);
         std::env::set_var(
             "SUBSTRATE_TEST_SHARED_WORLD_METADATA_ROOT",
             &shared_world_metadata_root,
@@ -14403,7 +14397,6 @@ mod tests {
         );
 
         std::env::remove_var("SUBSTRATE_TEST_SHARED_WORLD_METADATA_ROOT");
-        std::env::remove_var("SUBSTRATE_HOME");
     }
 
     #[cfg(target_os = "linux")]
@@ -14411,7 +14404,7 @@ mod tests {
     #[serial_test::serial]
     fn refresh_member_runtime_binding_from_shared_world_metadata_after_mismatch_fails_closed_when_metadata_is_unreadable_even_if_live_member_truth_exists(
     ) {
-        let _world_env_guard = crate::execution::world_env_guard();
+        let _authority_env = crate::execution::AuthorityEnvTestGuard::preserve();
         let temp = private_authority_test_tempdir();
         let workspace_root = temp.path().join("workspace");
         let substrate_home = temp.path().join("substrate-home");
@@ -14426,7 +14419,7 @@ mod tests {
         let _world_codex_runtime_guard =
             install_test_world_scoped_codex_runtime(&temp, &fake_member);
 
-        std::env::set_var("SUBSTRATE_HOME", &substrate_home);
+        _authority_env.install_home(&substrate_home);
         std::env::set_var(
             "SUBSTRATE_TEST_SHARED_WORLD_METADATA_ROOT",
             &shared_world_metadata_root,
@@ -14545,14 +14538,13 @@ mod tests {
         );
 
         std::env::remove_var("SUBSTRATE_TEST_SHARED_WORLD_METADATA_ROOT");
-        std::env::remove_var("SUBSTRATE_HOME");
     }
 
     #[cfg(target_os = "linux")]
     #[test]
     #[serial_test::serial]
     fn synchronize_repl_authoritative_world_binding_repairs_from_persisted_session_truth() {
-        let _world_env_guard = crate::execution::world_env_guard();
+        let _authority_env = crate::execution::AuthorityEnvTestGuard::preserve();
         let temp = private_authority_test_tempdir();
         let workspace_root = temp.path().join("workspace");
         let substrate_home = temp.path().join("substrate-home");
@@ -14565,7 +14557,7 @@ mod tests {
         let _world_codex_runtime_guard =
             install_test_world_scoped_codex_runtime(&temp, &fake_member);
 
-        std::env::set_var("SUBSTRATE_HOME", &substrate_home);
+        _authority_env.install_home(&substrate_home);
         write_runtime_inventory_with_world_member(
             &substrate_home,
             &fake_orchestrator,
@@ -14622,8 +14614,6 @@ mod tests {
             current_snapshot.world_generation,
             Some(replacement_binding.world_generation)
         );
-
-        std::env::remove_var("SUBSTRATE_HOME");
     }
 
     #[cfg(target_os = "linux")]
@@ -14631,7 +14621,7 @@ mod tests {
     #[serial_test::serial]
     fn synchronize_repl_authoritative_world_binding_prefers_shared_world_metadata_over_stale_session_truth(
     ) {
-        let _world_env_guard = crate::execution::world_env_guard();
+        let _authority_env = crate::execution::AuthorityEnvTestGuard::preserve();
         let temp = private_authority_test_tempdir();
         let workspace_root = temp.path().join("workspace");
         let substrate_home = temp.path().join("substrate-home");
@@ -14646,7 +14636,7 @@ mod tests {
         let _world_codex_runtime_guard =
             install_test_world_scoped_codex_runtime(&temp, &fake_member);
 
-        std::env::set_var("SUBSTRATE_HOME", &substrate_home);
+        _authority_env.install_home(&substrate_home);
         std::env::set_var(
             "SUBSTRATE_TEST_SHARED_WORLD_METADATA_ROOT",
             &shared_world_metadata_root,
@@ -14718,7 +14708,6 @@ mod tests {
         );
 
         std::env::remove_var("SUBSTRATE_TEST_SHARED_WORLD_METADATA_ROOT");
-        std::env::remove_var("SUBSTRATE_HOME");
     }
 
     #[cfg(target_os = "linux")]
@@ -14726,7 +14715,7 @@ mod tests {
     #[serial_test::serial]
     fn synchronize_repl_authoritative_world_binding_fails_closed_when_metadata_is_unreadable_even_if_live_member_truth_exists(
     ) {
-        let _world_env_guard = crate::execution::world_env_guard();
+        let _authority_env = crate::execution::AuthorityEnvTestGuard::preserve();
         let temp = private_authority_test_tempdir();
         let workspace_root = temp.path().join("workspace");
         let substrate_home = temp.path().join("substrate-home");
@@ -14741,7 +14730,7 @@ mod tests {
         let _world_codex_runtime_guard =
             install_test_world_scoped_codex_runtime(&temp, &fake_member);
 
-        std::env::set_var("SUBSTRATE_HOME", &substrate_home);
+        _authority_env.install_home(&substrate_home);
         std::env::set_var(
             "SUBSTRATE_TEST_SHARED_WORLD_METADATA_ROOT",
             &shared_world_metadata_root,
@@ -14856,14 +14845,13 @@ mod tests {
         );
 
         std::env::remove_var("SUBSTRATE_TEST_SHARED_WORLD_METADATA_ROOT");
-        std::env::remove_var("SUBSTRATE_HOME");
     }
 
     #[cfg(unix)]
     #[test]
     #[serial_test::serial]
     fn refresh_run_world_task_request_binding_after_mismatch_repairs_retry_request() {
-        let _world_env_guard = crate::execution::world_env_guard();
+        let _authority_env = crate::execution::AuthorityEnvTestGuard::preserve();
         let temp = private_authority_test_tempdir();
         let workspace_root = temp.path().join("workspace");
         let substrate_home = temp.path().join("substrate-home");
@@ -14878,7 +14866,7 @@ mod tests {
         let _world_codex_runtime_guard =
             install_test_world_scoped_codex_runtime(&temp, &fake_member);
 
-        std::env::set_var("SUBSTRATE_HOME", &substrate_home);
+        _authority_env.install_home(&substrate_home);
         std::env::set_var(
             "SUBSTRATE_TEST_SHARED_WORLD_METADATA_ROOT",
             &shared_world_metadata_root,
@@ -14968,7 +14956,6 @@ mod tests {
         );
 
         std::env::remove_var("SUBSTRATE_TEST_SHARED_WORLD_METADATA_ROOT");
-        std::env::remove_var("SUBSTRATE_HOME");
     }
 
     #[cfg(target_os = "linux")]
@@ -14976,7 +14963,7 @@ mod tests {
     #[serial_test::serial]
     fn dispatch_run_world_task_request_with_binding_retry_retries_once_after_exact_binding_mismatch(
     ) {
-        let _world_env_guard = crate::execution::world_env_guard();
+        let _authority_env = crate::execution::AuthorityEnvTestGuard::preserve();
         let temp = private_authority_test_tempdir();
         let workspace_root = temp.path().join("workspace");
         let substrate_home = temp.path().join("substrate-home");
@@ -14991,7 +14978,7 @@ mod tests {
         let _world_codex_runtime_guard =
             install_test_world_scoped_codex_runtime(&temp, &fake_member);
 
-        std::env::set_var("SUBSTRATE_HOME", &substrate_home);
+        _authority_env.install_home(&substrate_home);
         std::env::set_var(
             "SUBSTRATE_TEST_SHARED_WORLD_METADATA_ROOT",
             &shared_world_metadata_root,
@@ -15155,14 +15142,13 @@ mod tests {
         );
 
         std::env::remove_var("SUBSTRATE_TEST_SHARED_WORLD_METADATA_ROOT");
-        std::env::remove_var("SUBSTRATE_HOME");
     }
 
     #[cfg(target_os = "linux")]
     #[test]
     #[serial_test::serial]
     fn start_remote_member_runtime_with_binding_retry_retries_once_after_exact_binding_mismatch() {
-        let _world_env_guard = crate::execution::world_env_guard();
+        let _authority_env = crate::execution::AuthorityEnvTestGuard::preserve();
         let temp = private_authority_test_tempdir();
         let workspace_root = temp.path().join("workspace");
         let substrate_home = temp.path().join("substrate-home");
@@ -15177,7 +15163,7 @@ mod tests {
         let _world_codex_runtime_guard =
             install_test_world_scoped_codex_runtime(&temp, &fake_member);
 
-        std::env::set_var("SUBSTRATE_HOME", &substrate_home);
+        _authority_env.install_home(&substrate_home);
         std::env::set_var(
             "SUBSTRATE_TEST_SHARED_WORLD_METADATA_ROOT",
             &shared_world_metadata_root,
@@ -15320,7 +15306,6 @@ mod tests {
         );
 
         std::env::remove_var("SUBSTRATE_TEST_SHARED_WORLD_METADATA_ROOT");
-        std::env::remove_var("SUBSTRATE_HOME");
     }
 
     #[cfg(target_os = "linux")]
@@ -15347,7 +15332,7 @@ mod tests {
     #[test]
     #[serial_test::serial]
     fn start_remote_member_runtime_with_binding_retry_does_not_retry_non_exact_mismatch_error() {
-        let _world_env_guard = crate::execution::world_env_guard();
+        let _authority_env = crate::execution::AuthorityEnvTestGuard::preserve();
         let temp = private_authority_test_tempdir();
         let workspace_root = temp.path().join("workspace");
         let substrate_home = temp.path().join("substrate-home");
@@ -15360,7 +15345,7 @@ mod tests {
         let _world_codex_runtime_guard =
             install_test_world_scoped_codex_runtime(&temp, &fake_member);
 
-        std::env::set_var("SUBSTRATE_HOME", &substrate_home);
+        _authority_env.install_home(&substrate_home);
         write_runtime_inventory_with_world_member(
             &substrate_home,
             &fake_orchestrator,
@@ -15446,15 +15431,13 @@ mod tests {
             failure.message,
             r#"HTTP 400 Bad Request error: {"error":"member_dispatch.world_id mismatch"}"#
         );
-
-        std::env::remove_var("SUBSTRATE_HOME");
     }
 
     #[cfg(unix)]
     #[test]
     #[serial_test::serial]
     fn hidden_owner_helper_attach_startup_reaches_ready_attached() {
-        let _world_env_guard = crate::execution::world_env_guard();
+        let _authority_env = crate::execution::AuthorityEnvTestGuard::preserve();
         let temp = TempDir::new().expect("tempdir");
         let workspace_root = temp.path().join("workspace");
         let substrate_home = temp.path().join("substrate-home");
@@ -15463,7 +15446,7 @@ mod tests {
         let _cwd_guard = CurrentDirGuard::change_to(&workspace_root);
         let (fake_codex, stdin_capture_path) = write_fake_codex_attach_capture_script(&temp);
 
-        std::env::set_var("SUBSTRATE_HOME", &substrate_home);
+        _authority_env.install_home(&substrate_home);
         fs::write(
             substrate_home.join("config.yaml"),
             "agents:\n  enabled: true\n  hub:\n    orchestrator_agent_id: codex-host\n",
@@ -15609,14 +15592,13 @@ mod tests {
             )
             .await;
         });
-        std::env::remove_var("SUBSTRATE_HOME");
     }
 
     #[cfg(unix)]
     #[test]
     #[serial_test::serial]
     fn hidden_owner_helper_attach_startup_fails_closed_without_continuity() {
-        let _world_env_guard = crate::execution::world_env_guard();
+        let _authority_env = crate::execution::AuthorityEnvTestGuard::preserve();
         let temp = TempDir::new().expect("tempdir");
         let workspace_root = temp.path().join("workspace");
         let substrate_home = temp.path().join("substrate-home");
@@ -15625,7 +15607,7 @@ mod tests {
         let _cwd_guard = CurrentDirGuard::change_to(&workspace_root);
         let (fake_codex, stdin_capture_path) = write_fake_codex_attach_capture_script(&temp);
 
-        std::env::set_var("SUBSTRATE_HOME", &substrate_home);
+        _authority_env.install_home(&substrate_home);
         fs::write(
             substrate_home.join("config.yaml"),
             "agents:\n  enabled: true\n  hub:\n    orchestrator_agent_id: codex-host\n",
@@ -15763,15 +15745,13 @@ mod tests {
             manifest.internal.last_error_bucket.as_deref(),
             Some("bootstrap_run")
         );
-
-        std::env::remove_var("SUBSTRATE_HOME");
     }
 
     #[cfg(unix)]
     #[test]
     #[serial_test::serial]
     fn shutdown_host_orchestrator_runtime_parks_resumable_host_session_on_detach() {
-        let _world_env_guard = crate::execution::world_env_guard();
+        let _authority_env = crate::execution::AuthorityEnvTestGuard::preserve();
         let temp = private_authority_test_tempdir();
         let workspace_root = temp.path().join("workspace");
         let substrate_home = temp.path().join("substrate-home");
@@ -15781,7 +15761,7 @@ mod tests {
         let _cwd_guard = CurrentDirGuard::change_to(&workspace_root);
         let fake_codex = write_fake_codex_script_with_pid_file(&temp, &pid_file);
 
-        std::env::set_var("SUBSTRATE_HOME", &substrate_home);
+        _authority_env.install_home(&substrate_home);
         fs::write(
             substrate_home.join("config.yaml"),
             "agents:\n  enabled: true\n  hub:\n    orchestrator_agent_id: codex-host\n",
@@ -15860,14 +15840,13 @@ mod tests {
         unsafe {
             libc::kill(pid, libc::SIGTERM);
         }
-        std::env::remove_var("SUBSTRATE_HOME");
     }
 
     #[cfg(unix)]
     #[test]
     #[serial_test::serial]
     fn shutdown_host_orchestrator_runtime_fails_closed_when_detached_continuity_breaks() {
-        let _world_env_guard = crate::execution::world_env_guard();
+        let _authority_env = crate::execution::AuthorityEnvTestGuard::preserve();
         let temp = private_authority_test_tempdir();
         let workspace_root = temp.path().join("workspace");
         let substrate_home = temp.path().join("substrate-home");
@@ -15877,7 +15856,7 @@ mod tests {
         let _cwd_guard = CurrentDirGuard::change_to(&workspace_root);
         let fake_codex = write_fake_codex_script_with_pid_file(&temp, &pid_file);
 
-        std::env::set_var("SUBSTRATE_HOME", &substrate_home);
+        _authority_env.install_home(&substrate_home);
         fs::write(
             substrate_home.join("config.yaml"),
             "agents:\n  enabled: true\n  hub:\n    orchestrator_agent_id: codex-host\n",
@@ -15943,17 +15922,17 @@ mod tests {
         unsafe {
             libc::kill(pid, libc::SIGTERM);
         }
-        std::env::remove_var("SUBSTRATE_HOME");
     }
 
     #[cfg(unix)]
     #[test]
     #[serial_test::serial]
     fn can_park_host_runtime_after_detach_accepts_completed_one_turn_when_store_lags() {
+        let _authority_env = crate::execution::AuthorityEnvTestGuard::preserve();
         let temp = TempDir::new().expect("tempdir");
         let substrate_home = temp.path().join("substrate-home");
         fs::create_dir_all(&substrate_home).expect("substrate home");
-        std::env::set_var("SUBSTRATE_HOME", &substrate_home);
+        _authority_env.install_home(&substrate_home);
 
         let store = AgentRuntimeStateStore::new().expect("state store");
         let descriptor = test_runtime_selection_descriptor();
@@ -16013,15 +15992,13 @@ mod tests {
             ),
             "completed resume-one-turn handoff should park even if the persisted session row still lags behind the attached snapshot"
         );
-
-        std::env::remove_var("SUBSTRATE_HOME");
     }
 
     #[cfg(unix)]
     #[test]
     #[serial_test::serial]
     fn prepare_member_runtime_startup_for_descriptor_accepts_parked_detached_orchestrator_parent() {
-        let _world_env_guard = crate::execution::world_env_guard();
+        let _authority_env = crate::execution::AuthorityEnvTestGuard::preserve();
         let temp = private_authority_test_tempdir();
         let workspace_root = temp.path().join("workspace");
         let substrate_home = temp.path().join("substrate-home");
@@ -16034,7 +16011,7 @@ mod tests {
         let _world_codex_runtime_guard =
             install_test_world_scoped_codex_runtime(&temp, &fake_member);
 
-        std::env::set_var("SUBSTRATE_HOME", &substrate_home);
+        _authority_env.install_home(&substrate_home);
         write_runtime_inventory_with_world_member(
             &substrate_home,
             &fake_orchestrator,
@@ -16097,15 +16074,13 @@ mod tests {
                 .as_deref(),
             Some(parked_participant_id.as_str())
         );
-
-        std::env::remove_var("SUBSTRATE_HOME");
     }
 
     #[cfg(unix)]
     #[test]
     #[serial_test::serial]
     fn start_member_runtime_reuses_parent_session_and_persists_world_binding() {
-        let _world_env_guard = crate::execution::world_env_guard();
+        let _authority_env = crate::execution::AuthorityEnvTestGuard::preserve();
         let temp = private_authority_test_tempdir();
         let workspace_root = temp.path().join("workspace");
         let substrate_home = temp.path().join("substrate-home");
@@ -16117,7 +16092,7 @@ mod tests {
         let _world_codex_runtime_guard =
             install_test_world_scoped_codex_runtime(&temp, &fake_member);
 
-        std::env::set_var("SUBSTRATE_HOME", &substrate_home);
+        _authority_env.install_home(&substrate_home);
         write_runtime_inventory_with_world_member(
             &substrate_home,
             &fake_orchestrator,
@@ -16203,14 +16178,13 @@ mod tests {
             )
             .await;
         });
-        std::env::remove_var("SUBSTRATE_HOME");
     }
 
     #[cfg(unix)]
     #[test]
     #[serial_test::serial]
     fn orchestrator_world_dispatch_surface_spawns_authoritative_member_runtime() {
-        let _world_env_guard = crate::execution::world_env_guard();
+        let _authority_env = crate::execution::AuthorityEnvTestGuard::preserve();
         let temp = private_authority_test_tempdir();
         let workspace_root = temp.path().join("workspace");
         let substrate_home = temp.path().join("substrate-home");
@@ -16222,7 +16196,7 @@ mod tests {
         let _world_codex_runtime_guard =
             install_test_world_scoped_codex_runtime(&temp, &fake_member);
 
-        std::env::set_var("SUBSTRATE_HOME", &substrate_home);
+        _authority_env.install_home(&substrate_home);
         fs::write(
             substrate_home.join("config.yaml"),
             "agents:\n  enabled: true\n  hub:\n    orchestrator_agent_id: codex-host\n  toolbox:\n    enabled: true\n    bind:\n      transport: uds\n",
@@ -17422,14 +17396,13 @@ mod tests {
                 .expect("timed out joining toolbox authority world server")
                 .expect("toolbox authority world server task");
         });
-        std::env::remove_var("SUBSTRATE_HOME");
     }
 
     #[cfg(target_os = "linux")]
     #[test]
     #[serial_test::serial]
     fn orchestrator_world_dispatch_surface_routes_stop_into_durable_closeout_and_runtime_cleanup() {
-        let _world_env_guard = crate::execution::world_env_guard();
+        let _authority_env = crate::execution::AuthorityEnvTestGuard::preserve();
         let temp = private_authority_test_tempdir();
         let workspace_root = temp.path().join("workspace");
         let substrate_home = temp.path().join("substrate-home");
@@ -17441,7 +17414,7 @@ mod tests {
         let _world_codex_runtime_guard =
             install_test_world_scoped_codex_runtime(&temp, &fake_member);
 
-        std::env::set_var("SUBSTRATE_HOME", &substrate_home);
+        _authority_env.install_home(&substrate_home);
         fs::write(
             substrate_home.join("config.yaml"),
             "agents:\n  enabled: true\n  hub:\n    orchestrator_agent_id: codex-host\n  toolbox:\n    enabled: true\n    bind:\n      transport: uds\n",
@@ -17621,7 +17594,6 @@ mod tests {
             )
             .await;
         });
-        std::env::remove_var("SUBSTRATE_HOME");
     }
 
     #[cfg(target_os = "linux")]
@@ -17629,7 +17601,7 @@ mod tests {
     #[serial_test::serial]
     fn orchestrator_world_dispatch_surface_routes_valid_cancel_requests_into_typed_cancel_closeout()
     {
-        let _world_env_guard = crate::execution::world_env_guard();
+        let _authority_env = crate::execution::AuthorityEnvTestGuard::preserve();
         let temp = private_authority_test_tempdir();
         let workspace_root = temp.path().join("workspace");
         let substrate_home = temp.path().join("substrate-home");
@@ -17641,7 +17613,7 @@ mod tests {
         let _world_codex_runtime_guard =
             install_test_world_scoped_codex_runtime(&temp, &fake_member);
 
-        std::env::set_var("SUBSTRATE_HOME", &substrate_home);
+        _authority_env.install_home(&substrate_home);
         fs::write(
             substrate_home.join("config.yaml"),
             "agents:\n  enabled: true\n  hub:\n    orchestrator_agent_id: codex-host\n  toolbox:\n    enabled: true\n    bind:\n      transport: uds\n",
@@ -17806,7 +17778,6 @@ mod tests {
             )
             .await;
         });
-        std::env::remove_var("SUBSTRATE_HOME");
     }
 
     #[cfg(target_os = "linux")]
@@ -17814,7 +17785,7 @@ mod tests {
     #[serial_test::serial]
     fn orchestrator_world_dispatch_surface_validates_cancel_requests_before_packet_one_unsupported_dispatch(
     ) {
-        let _world_env_guard = crate::execution::world_env_guard();
+        let _authority_env = crate::execution::AuthorityEnvTestGuard::preserve();
         let temp = private_authority_test_tempdir();
         let workspace_root = temp.path().join("workspace");
         let substrate_home = temp.path().join("substrate-home");
@@ -17823,7 +17794,7 @@ mod tests {
         let _cwd_guard = CurrentDirGuard::change_to(&workspace_root);
         let fake_orchestrator = write_fake_codex_script(&temp, true);
 
-        std::env::set_var("SUBSTRATE_HOME", &substrate_home);
+        _authority_env.install_home(&substrate_home);
         fs::write(
             substrate_home.join("config.yaml"),
             "agents:\n  enabled: true\n  hub:\n    orchestrator_agent_id: codex-host\n  toolbox:\n    enabled: true\n    bind:\n      transport: uds\n",
@@ -17947,7 +17918,6 @@ mod tests {
             )
             .await;
         });
-        std::env::remove_var("SUBSTRATE_HOME");
     }
 
     #[cfg(target_os = "linux")]
@@ -17955,7 +17925,7 @@ mod tests {
     #[serial_test::serial]
     fn orchestrator_world_dispatch_surface_rejects_denied_cancel_requests_before_packet_one_unsupported_dispatch(
     ) {
-        let _world_env_guard = crate::execution::world_env_guard();
+        let _authority_env = crate::execution::AuthorityEnvTestGuard::preserve();
         let temp = private_authority_test_tempdir();
         let workspace_root = temp.path().join("workspace");
         let substrate_home = temp.path().join("substrate-home");
@@ -17964,7 +17934,7 @@ mod tests {
         let _cwd_guard = CurrentDirGuard::change_to(&workspace_root);
         let fake_orchestrator = write_fake_codex_script(&temp, true);
 
-        std::env::set_var("SUBSTRATE_HOME", &substrate_home);
+        _authority_env.install_home(&substrate_home);
         fs::write(
             substrate_home.join("config.yaml"),
             "agents:\n  enabled: true\n  hub:\n    orchestrator_agent_id: codex-host\n  toolbox:\n    enabled: true\n    bind:\n      transport: uds\n",
@@ -18086,7 +18056,6 @@ mod tests {
             )
             .await;
         });
-        std::env::remove_var("SUBSTRATE_HOME");
     }
 
     #[cfg(target_os = "linux")]
@@ -18094,7 +18063,7 @@ mod tests {
     #[serial_test::serial]
     fn orchestrator_world_dispatch_surface_routes_valid_fork_requests_into_packet_three_retained_bootstrap_launch(
     ) {
-        let _world_env_guard = crate::execution::world_env_guard();
+        let _authority_env = crate::execution::AuthorityEnvTestGuard::preserve();
         let temp = private_authority_test_tempdir();
         let workspace_root = temp.path().join("workspace");
         let substrate_home = temp.path().join("substrate-home");
@@ -18106,7 +18075,7 @@ mod tests {
         let _world_codex_runtime_guard =
             install_test_world_scoped_codex_runtime(&temp, &fake_member);
 
-        std::env::set_var("SUBSTRATE_HOME", &substrate_home);
+        _authority_env.install_home(&substrate_home);
         fs::write(
             substrate_home.join("config.yaml"),
             "agents:\n  enabled: true\n  hub:\n    orchestrator_agent_id: codex-host\n  toolbox:\n    enabled: true\n    bind:\n      transport: uds\n",
@@ -18320,14 +18289,13 @@ mod tests {
             )
             .await;
         });
-        std::env::remove_var("SUBSTRATE_HOME");
     }
 
     #[cfg(target_os = "linux")]
     #[test]
     #[serial_test::serial]
     fn orchestrator_world_dispatch_surface_stops_fork_child_without_eviction_of_source_runtime() {
-        let _world_env_guard = crate::execution::world_env_guard();
+        let _authority_env = crate::execution::AuthorityEnvTestGuard::preserve();
         let temp = private_authority_test_tempdir();
         let workspace_root = temp.path().join("workspace");
         let substrate_home = temp.path().join("substrate-home");
@@ -18339,7 +18307,7 @@ mod tests {
         let _world_codex_runtime_guard =
             install_test_world_scoped_codex_runtime(&temp, &fake_member);
 
-        std::env::set_var("SUBSTRATE_HOME", &substrate_home);
+        _authority_env.install_home(&substrate_home);
         fs::write(
             substrate_home.join("config.yaml"),
             "agents:\n  enabled: true\n  hub:\n    orchestrator_agent_id: codex-host\n  toolbox:\n    enabled: true\n    bind:\n      transport: uds\n",
@@ -18555,7 +18523,6 @@ mod tests {
             )
             .await;
         });
-        std::env::remove_var("SUBSTRATE_HOME");
     }
 
     #[cfg(target_os = "linux")]
@@ -18563,7 +18530,7 @@ mod tests {
     #[serial_test::serial]
     fn orchestrator_world_dispatch_surface_validates_fork_requests_before_packet_one_unsupported_dispatch(
     ) {
-        let _world_env_guard = crate::execution::world_env_guard();
+        let _authority_env = crate::execution::AuthorityEnvTestGuard::preserve();
         let temp = private_authority_test_tempdir();
         let workspace_root = temp.path().join("workspace");
         let substrate_home = temp.path().join("substrate-home");
@@ -18572,7 +18539,7 @@ mod tests {
         let _cwd_guard = CurrentDirGuard::change_to(&workspace_root);
         let fake_orchestrator = write_fake_codex_script(&temp, true);
 
-        std::env::set_var("SUBSTRATE_HOME", &substrate_home);
+        _authority_env.install_home(&substrate_home);
         fs::write(
             substrate_home.join("config.yaml"),
             "agents:\n  enabled: true\n  hub:\n    orchestrator_agent_id: codex-host\n  toolbox:\n    enabled: true\n    bind:\n      transport: uds\n",
@@ -18697,7 +18664,6 @@ mod tests {
             )
             .await;
         });
-        std::env::remove_var("SUBSTRATE_HOME");
     }
 
     #[cfg(target_os = "linux")]
@@ -18705,7 +18671,7 @@ mod tests {
     #[serial_test::serial]
     fn orchestrator_world_dispatch_surface_rejects_denied_fork_requests_before_packet_one_unsupported_dispatch(
     ) {
-        let _world_env_guard = crate::execution::world_env_guard();
+        let _authority_env = crate::execution::AuthorityEnvTestGuard::preserve();
         let temp = private_authority_test_tempdir();
         let workspace_root = temp.path().join("workspace");
         let substrate_home = temp.path().join("substrate-home");
@@ -18714,7 +18680,7 @@ mod tests {
         let _cwd_guard = CurrentDirGuard::change_to(&workspace_root);
         let fake_orchestrator = write_fake_codex_script(&temp, true);
 
-        std::env::set_var("SUBSTRATE_HOME", &substrate_home);
+        _authority_env.install_home(&substrate_home);
         fs::write(
             substrate_home.join("config.yaml"),
             "agents:\n  enabled: true\n  hub:\n    orchestrator_agent_id: codex-host\n  toolbox:\n    enabled: true\n    bind:\n      transport: uds\n",
@@ -18837,14 +18803,13 @@ mod tests {
             )
             .await;
         });
-        std::env::remove_var("SUBSTRATE_HOME");
     }
 
     #[cfg(target_os = "linux")]
     #[test]
     #[serial_test::serial]
     fn orchestrator_world_dispatch_surface_validates_stop_requests_before_packet_three_routing() {
-        let _world_env_guard = crate::execution::world_env_guard();
+        let _authority_env = crate::execution::AuthorityEnvTestGuard::preserve();
         let temp = private_authority_test_tempdir();
         let workspace_root = temp.path().join("workspace");
         let substrate_home = temp.path().join("substrate-home");
@@ -18853,7 +18818,7 @@ mod tests {
         let _cwd_guard = CurrentDirGuard::change_to(&workspace_root);
         let fake_orchestrator = write_fake_codex_script(&temp, true);
 
-        std::env::set_var("SUBSTRATE_HOME", &substrate_home);
+        _authority_env.install_home(&substrate_home);
         fs::write(
             substrate_home.join("config.yaml"),
             "agents:\n  enabled: true\n  hub:\n    orchestrator_agent_id: codex-host\n  toolbox:\n    enabled: true\n    bind:\n      transport: uds\n",
@@ -18974,14 +18939,13 @@ mod tests {
             )
             .await;
         });
-        std::env::remove_var("SUBSTRATE_HOME");
     }
 
     #[cfg(target_os = "linux")]
     #[test]
     #[serial_test::serial]
     fn orchestrator_world_dispatch_surface_validates_inspect_requests_before_dispatch_routing() {
-        let _world_env_guard = crate::execution::world_env_guard();
+        let _authority_env = crate::execution::AuthorityEnvTestGuard::preserve();
         let temp = private_authority_test_tempdir();
         let workspace_root = temp.path().join("workspace");
         let substrate_home = temp.path().join("substrate-home");
@@ -18990,7 +18954,7 @@ mod tests {
         let _cwd_guard = CurrentDirGuard::change_to(&workspace_root);
         let fake_orchestrator = write_fake_codex_script(&temp, true);
 
-        std::env::set_var("SUBSTRATE_HOME", &substrate_home);
+        _authority_env.install_home(&substrate_home);
         fs::write(
             substrate_home.join("config.yaml"),
             "agents:\n  enabled: true\n  hub:\n    orchestrator_agent_id: codex-host\n  toolbox:\n    enabled: true\n    bind:\n      transport: uds\n",
@@ -19113,14 +19077,13 @@ mod tests {
             )
             .await;
         });
-        std::env::remove_var("SUBSTRATE_HOME");
     }
 
     #[cfg(target_os = "linux")]
     #[test]
     #[serial_test::serial]
     fn orchestrator_world_dispatch_surface_routes_well_formed_inspect_into_runtime_resolution() {
-        let _world_env_guard = crate::execution::world_env_guard();
+        let _authority_env = crate::execution::AuthorityEnvTestGuard::preserve();
         let temp = private_authority_test_tempdir();
         let workspace_root = temp.path().join("workspace");
         let substrate_home = temp.path().join("substrate-home");
@@ -19129,7 +19092,7 @@ mod tests {
         let _cwd_guard = CurrentDirGuard::change_to(&workspace_root);
         let fake_orchestrator = write_fake_codex_script(&temp, true);
 
-        std::env::set_var("SUBSTRATE_HOME", &substrate_home);
+        _authority_env.install_home(&substrate_home);
         fs::write(
             substrate_home.join("config.yaml"),
             "agents:\n  enabled: true\n  hub:\n    orchestrator_agent_id: codex-host\n  toolbox:\n    enabled: true\n    bind:\n      transport: uds\n",
@@ -19248,7 +19211,6 @@ mod tests {
             )
             .await;
         });
-        std::env::remove_var("SUBSTRATE_HOME");
     }
 
     #[cfg(target_os = "linux")]
@@ -19256,7 +19218,7 @@ mod tests {
     #[serial_test::serial]
     fn orchestrator_world_dispatch_surface_round_trips_successful_inspect_without_mutating_retained_runtime_handles(
     ) {
-        let _world_env_guard = crate::execution::world_env_guard();
+        let _authority_env = crate::execution::AuthorityEnvTestGuard::preserve();
         let temp = private_authority_test_tempdir();
         let workspace_root = temp.path().join("workspace");
         let substrate_home = temp.path().join("substrate-home");
@@ -19268,7 +19230,7 @@ mod tests {
         let _world_codex_runtime_guard =
             install_test_world_scoped_codex_runtime(&temp, &fake_member);
 
-        std::env::set_var("SUBSTRATE_HOME", &substrate_home);
+        _authority_env.install_home(&substrate_home);
         fs::write(
             substrate_home.join("config.yaml"),
             "agents:\n  enabled: true\n  hub:\n    orchestrator_agent_id: codex-host\n  toolbox:\n    enabled: true\n    bind:\n      transport: uds\n",
@@ -19580,14 +19542,13 @@ mod tests {
             )
             .await;
         });
-        std::env::remove_var("SUBSTRATE_HOME");
     }
 
     #[cfg(unix)]
     #[test]
     #[serial_test::serial]
     fn prepare_member_replacement_runtime_preserves_resumed_from_lineage() {
-        let _world_env_guard = crate::execution::world_env_guard();
+        let _authority_env = crate::execution::AuthorityEnvTestGuard::preserve();
         let temp = private_authority_test_tempdir();
         let workspace_root = temp.path().join("workspace");
         let substrate_home = temp.path().join("substrate-home");
@@ -19600,7 +19561,7 @@ mod tests {
         let _world_codex_runtime_guard =
             install_test_world_scoped_codex_runtime(&temp, &fake_member);
 
-        std::env::set_var("SUBSTRATE_HOME", &substrate_home);
+        _authority_env.install_home(&substrate_home);
         write_runtime_inventory_with_world_member(
             &substrate_home,
             &fake_orchestrator,
@@ -19703,14 +19664,13 @@ mod tests {
             )
             .await;
         });
-        std::env::remove_var("SUBSTRATE_HOME");
     }
 
     #[cfg(unix)]
     #[test]
     #[serial_test::serial]
     fn build_member_dispatch_transport_request_uses_shared_contract_parity_subset() {
-        let _world_env_guard = crate::execution::world_env_guard();
+        let _authority_env = crate::execution::AuthorityEnvTestGuard::preserve();
         let temp = private_authority_test_tempdir();
         let workspace_root = temp.path().join("workspace");
         let substrate_home = temp.path().join("substrate-home");
@@ -19723,7 +19683,7 @@ mod tests {
         let _world_codex_runtime_guard =
             install_test_world_scoped_codex_runtime(&temp, &fake_member);
 
-        std::env::set_var("SUBSTRATE_HOME", &substrate_home);
+        _authority_env.install_home(&substrate_home);
         write_runtime_inventory_with_world_member(
             &substrate_home,
             &fake_orchestrator,
@@ -19773,15 +19733,13 @@ mod tests {
             request.backend_kind,
             member_runtime_backend_kind(expected_backend_kind)
         );
-
-        std::env::remove_var("SUBSTRATE_HOME");
     }
 
     #[cfg(unix)]
     #[test]
     #[serial_test::serial]
     fn retained_member_dispatch_parity_subset_prefers_pending_replacement_truth() {
-        let _world_env_guard = crate::execution::world_env_guard();
+        let _authority_env = crate::execution::AuthorityEnvTestGuard::preserve();
         let temp = private_authority_test_tempdir();
         let workspace_root = temp.path().join("workspace");
         let substrate_home = temp.path().join("substrate-home");
@@ -19794,7 +19752,7 @@ mod tests {
         let _world_codex_runtime_guard =
             install_test_world_scoped_codex_runtime(&temp, &fake_member);
 
-        std::env::set_var("SUBSTRATE_HOME", &substrate_home);
+        _authority_env.install_home(&substrate_home);
         write_runtime_inventory_with_world_member(
             &substrate_home,
             &fake_orchestrator,
@@ -19874,8 +19832,6 @@ mod tests {
             )
             .await;
         });
-
-        std::env::remove_var("SUBSTRATE_HOME");
     }
 
     #[cfg(unix)]

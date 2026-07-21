@@ -1,5 +1,5 @@
 use crate::execution::settings::WorldRootSettings;
-use crate::execution::world_env_guard;
+use crate::execution::{world_env_guard, AuthorityEnvTestGuard};
 use crate::execution::{ShellConfig, ShellMode};
 use parking_lot::{ReentrantMutex, ReentrantMutexGuard};
 use std::collections::HashMap;
@@ -68,28 +68,48 @@ pub(crate) fn restore_env(key: &str, previous: Option<String>) {
     }
 }
 
-pub(crate) struct DirGuard {
+pub(crate) struct ProcessCwdTestGuard {
     original: PathBuf,
-    _env_guard: ReentrantMutexGuard<'static, ()>,
     _lock: ReentrantMutexGuard<'static, ()>,
+    authority_env: AuthorityEnvTestGuard,
 }
 
-impl DirGuard {
-    pub(crate) fn new() -> Self {
-        let env_guard = world_env_guard();
+impl ProcessCwdTestGuard {
+    pub(crate) fn preserve() -> Self {
+        let authority_env = AuthorityEnvTestGuard::preserve();
         let lock = cwd_lock().lock();
         let original = env::current_dir().expect("capture cwd");
         Self {
             original,
-            _env_guard: env_guard,
             _lock: lock,
+            authority_env,
         }
+    }
+
+    pub(crate) fn change_to(path: impl AsRef<std::path::Path>) -> Self {
+        let guard = Self::preserve();
+        env::set_current_dir(path).expect("set cwd");
+        guard
     }
 }
 
-impl Drop for DirGuard {
+impl Drop for ProcessCwdTestGuard {
     fn drop(&mut self) {
-        let _ = env::set_current_dir(&self.original);
+        let cwd_restore = env::set_current_dir(&self.original);
+        self.authority_env.restore();
+        cwd_restore.expect("restore cwd before unlocking process state");
+    }
+}
+
+pub(crate) struct DirGuard {
+    _process_cwd: ProcessCwdTestGuard,
+}
+
+impl DirGuard {
+    pub(crate) fn new() -> Self {
+        Self {
+            _process_cwd: ProcessCwdTestGuard::preserve(),
+        }
     }
 }
 

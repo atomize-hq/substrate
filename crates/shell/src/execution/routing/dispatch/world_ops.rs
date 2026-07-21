@@ -2369,7 +2369,7 @@ mod tests {
     use http_body_util::StreamBody;
     use serde_json::json;
     use std::convert::Infallible;
-    use std::sync::{Arc, Mutex, OnceLock};
+    use std::sync::{Arc, Mutex};
     use std::time::Duration;
     use substrate_common::agent_events::AgentEventKind;
     use transport_api_types::{
@@ -2379,20 +2379,9 @@ mod tests {
     };
 
     fn with_env_var<T>(key: &str, value: &str, f: impl FnOnce() -> T) -> T {
-        let _guard = test_env_lock().lock().expect("test env mutex poisoned");
-        let previous = std::env::var(key).ok();
+        let _authority_env = crate::execution::AuthorityEnvTestGuard::preserve();
         std::env::set_var(key, value);
-        let result = f();
-        match previous {
-            Some(previous) => std::env::set_var(key, previous),
-            None => std::env::remove_var(key),
-        }
-        result
-    }
-
-    fn test_env_lock() -> &'static Mutex<()> {
-        static LOCK: OnceLock<Mutex<()>> = OnceLock::new();
-        LOCK.get_or_init(|| Mutex::new(()))
+        f()
     }
 
     fn encode_stream_frame(frame: ExecuteStreamFrame) -> hyper::body::Bytes {
@@ -2654,6 +2643,7 @@ mod tests {
 
     #[test]
     fn preserve_world_project_dir_override_records_logical_root() {
+        let _authority_env = crate::execution::AuthorityEnvTestGuard::preserve();
         let _env_guard = crate::execution::world_env_guard();
         let prev_mode = std::env::var("SUBSTRATE_ANCHOR_MODE").ok();
         let prev_path = std::env::var("SUBSTRATE_ANCHOR_PATH").ok();
@@ -2694,6 +2684,7 @@ mod tests {
 
     #[test]
     fn preserve_world_project_dir_override_uses_dispatch_cwd_for_follow_cwd() {
+        let _authority_env = crate::execution::AuthorityEnvTestGuard::preserve();
         let _env_guard = crate::execution::world_env_guard();
         let prev_mode = std::env::var("SUBSTRATE_ANCHOR_MODE").ok();
         let prev_path = std::env::var("SUBSTRATE_ANCHOR_PATH").ok();
@@ -2757,6 +2748,7 @@ mod tests {
 
     #[test]
     fn current_world_request_profile_accepts_non_reserved_values() {
+        let _authority_env = crate::execution::AuthorityEnvTestGuard::preserve();
         with_env_var(
             "SUBSTRATE_WORLD_REQUEST_PROFILE",
             "wdap-smoke-profile",
@@ -2891,6 +2883,7 @@ mod tests {
 
     #[test]
     fn current_world_request_profile_rejects_reserved_world_deps_profiles() {
+        let _authority_env = crate::execution::AuthorityEnvTestGuard::preserve();
         for reserved in ["world-deps-provision", "world-deps-probe"] {
             with_env_var("SUBSTRATE_WORLD_REQUEST_PROFILE", reserved, || {
                 assert_eq!(
@@ -2979,6 +2972,16 @@ mod tests {
     #[test]
     #[serial_test::serial]
     fn emit_stream_chunk_some_emits_orchestration_scoped_agent_event() {
+        if crate::execution::run_in_bounded_test_subprocess(
+            concat!(
+                module_path!(),
+                "::",
+                stringify!(emit_stream_chunk_some_emits_orchestration_scoped_agent_event)
+            ),
+            "event_registry",
+        ) {
+            return;
+        }
         let _guard = acquire_event_test_guard();
         let mut rx = init_event_channel();
 
@@ -3002,6 +3005,16 @@ mod tests {
     #[test]
     #[serial_test::serial]
     fn emit_stream_chunk_none_emits_no_orchestration_scoped_agent_event() {
+        if crate::execution::run_in_bounded_test_subprocess(
+            concat!(
+                module_path!(),
+                "::",
+                stringify!(emit_stream_chunk_none_emits_no_orchestration_scoped_agent_event)
+            ),
+            "event_registry",
+        ) {
+            return;
+        }
         let _guard = acquire_event_test_guard();
         let mut rx = init_event_channel();
 
@@ -3017,6 +3030,16 @@ mod tests {
     #[test]
     #[serial_test::serial]
     fn process_agent_stream_body_uses_launch_owned_run_id_for_stream_rows() {
+        if crate::execution::run_in_bounded_test_subprocess(
+            concat!(
+                module_path!(),
+                "::",
+                stringify!(process_agent_stream_body_uses_launch_owned_run_id_for_stream_rows)
+            ),
+            "event_registry",
+        ) {
+            return;
+        }
         let _guard = acquire_event_test_guard();
         let rt = tokio::runtime::Runtime::new().expect("runtime");
         rt.block_on(async {

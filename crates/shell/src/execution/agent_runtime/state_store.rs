@@ -11215,6 +11215,7 @@ mod tests {
     }
 
     fn with_store(test: impl FnOnce(&AgentRuntimeStateStore)) {
+        let authority_env = crate::execution::AuthorityEnvTestGuard::preserve();
         let safe_parent = std::env::var_os("XDG_RUNTIME_DIR")
             .map(PathBuf::from)
             .unwrap_or_else(|| {
@@ -11224,7 +11225,7 @@ mod tests {
         let temp = tempfile::tempdir_in(safe_parent).expect("safe StateStore tempdir");
         fs::set_permissions(temp.path(), fs::Permissions::from_mode(0o700))
             .expect("secure StateStore test root");
-        std::env::set_var("SUBSTRATE_HOME", temp.path());
+        authority_env.install_home(temp.path());
         std::env::set_var(
             SHARED_WORLD_METADATA_ROOT_TEST_ENV,
             temp.path().join("shared-worlds"),
@@ -11232,7 +11233,6 @@ mod tests {
         let store = AgentRuntimeStateStore::new().expect("state store");
         test(&store);
         std::env::remove_var(SHARED_WORLD_METADATA_ROOT_TEST_ENV);
-        std::env::remove_var("SUBSTRATE_HOME");
     }
 
     #[cfg(any(target_os = "linux", test))]
@@ -11791,7 +11791,7 @@ mod tests {
         const CHILD_TEST: &str = "execution::agent_runtime::state_store::tests::preactivation_state_store_writer_uses_shared_cross_process_root_lock";
         const CHILD_SENTINEL: &str = "A1_LEGACY_WRITER_CHILD_EXECUTED";
         if let Some(root_path) = std::env::var_os("SUBSTRATE_A1_LEGACY_WRITER_CHILD_ROOT") {
-            std::env::set_var("SUBSTRATE_HOME", &root_path);
+            let _authority_env = crate::execution::AuthorityEnvTestGuard::set_home(&root_path);
             let store = AgentRuntimeStateStore::new().expect("child state store");
             println!("{CHILD_SENTINEL}");
             std::io::stdout().flush().expect("flush child sentinel");
@@ -11876,7 +11876,7 @@ mod tests {
 
         if let Some(root_path) = std::env::var_os(CHILD_ROOT_ENV) {
             let root_path = PathBuf::from(root_path);
-            std::env::set_var("SUBSTRATE_HOME", &root_path);
+            let _authority_env = crate::execution::AuthorityEnvTestGuard::set_home(&root_path);
             let expected_root = crate::execution::agent_runtime::host_session_authority::trusted_fs::TrustedAuthorityRoot::open(&root_path)
                 .expect("open child expected trusted root")
                 .identity()

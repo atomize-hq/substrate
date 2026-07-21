@@ -337,6 +337,16 @@ mod tests {
 
     #[test]
     fn active_guard_resets_flag_on_drop() {
+        if crate::execution::run_in_bounded_test_subprocess(
+            concat!(
+                module_path!(),
+                "::",
+                stringify!(active_guard_resets_flag_on_drop)
+            ),
+            "pty_active",
+        ) {
+            return;
+        }
         let previous = PTY_ACTIVE.swap(true, Ordering::SeqCst);
 
         {
@@ -355,6 +365,7 @@ mod tests {
     #[test]
     #[serial]
     fn terminal_size_uses_non_zero_dimensions() {
+        let _authority_env = crate::execution::AuthorityEnvTestGuard::preserve();
         let _env_guard = EnvGuard::new();
         std::env::set_var("LINES", "30");
         std::env::set_var("COLUMNS", "100");
