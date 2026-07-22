@@ -168,6 +168,10 @@ pub(crate) struct WorldDepsProvisioningRequirementsV1 {
 #[derive(Debug, serde::Serialize, serde::Deserialize, Clone)]
 pub(crate) struct WorldDepsDoctorSnapshotV1 {
     pub schema_version: u32,
+    #[cfg(unix)]
+    pub selected_host_prefix: String,
+    #[cfg(unix)]
+    pub host_context_commitment: String,
     pub cwd: PathBuf,
     pub inventory_packages: usize,
     pub inventory_bundles: usize,
@@ -255,6 +259,10 @@ pub(crate) fn collect_doctor_snapshot_v1(
     ) {
         Ok(items) => WorldDepsDoctorSnapshotV1 {
             schema_version: 1,
+            #[cfg(unix)]
+            selected_host_prefix: install_context.context.selected_host_prefix.clone(),
+            #[cfg(unix)]
+            host_context_commitment: install_context.host_context_commitment.clone(),
             cwd: cwd.to_path_buf(),
             inventory_packages: view.packages.len(),
             inventory_bundles: view.bundles.len(),
@@ -266,6 +274,10 @@ pub(crate) fn collect_doctor_snapshot_v1(
         },
         Err(err) => WorldDepsDoctorSnapshotV1 {
             schema_version: 1,
+            #[cfg(unix)]
+            selected_host_prefix: install_context.context.selected_host_prefix.clone(),
+            #[cfg(unix)]
+            host_context_commitment: install_context.host_context_commitment.clone(),
             cwd: cwd.to_path_buf(),
             inventory_packages: view.packages.len(),
             inventory_bundles: view.bundles.len(),

@@ -7,11 +7,53 @@ use common::{binary_path, ensure_substrate_built, shared_tmpdir};
 use serde_json::{json, Value};
 use std::fs::{self, OpenOptions};
 use std::io::Write;
-use std::os::unix::fs::PermissionsExt;
+use std::os::unix::fs::{MetadataExt, PermissionsExt};
 use std::path::{Path, PathBuf};
 use std::process::Command;
 use tempfile::{Builder, TempDir};
 use transport_api_types::{InstallBootstrapContextCarrierV1, InstallBootstrapContextV1};
+
+fn snapshot_tree(root: &Path) -> Vec<(PathBuf, u32, u32, u32, Vec<u8>)> {
+    fn walk(root: &Path, path: &Path, entries: &mut Vec<(PathBuf, u32, u32, u32, Vec<u8>)>) {
+        let metadata = fs::symlink_metadata(path).expect("snapshot tree metadata");
+        let relative = path
+            .strip_prefix(root)
+            .expect("snapshot path beneath root")
+            .to_path_buf();
+        let payload = if metadata.file_type().is_symlink() {
+            fs::read_link(path)
+                .expect("snapshot symlink target")
+                .as_os_str()
+                .as_encoded_bytes()
+                .to_vec()
+        } else if metadata.is_file() {
+            fs::read(path).expect("snapshot file contents")
+        } else {
+            Vec::new()
+        };
+        entries.push((
+            relative,
+            metadata.mode(),
+            metadata.uid(),
+            metadata.gid(),
+            payload,
+        ));
+        if metadata.is_dir() {
+            let mut children = fs::read_dir(path)
+                .expect("snapshot directory")
+                .map(|entry| entry.expect("snapshot directory entry").path())
+                .collect::<Vec<_>>();
+            children.sort();
+            for child in children {
+                walk(root, &child, entries);
+            }
+        }
+    }
+
+    let mut entries = Vec::new();
+    walk(root, root, &mut entries);
+    entries
+}
 
 struct DoctorFixture {
     _temp: TempDir,
@@ -143,12 +185,52 @@ impl DoctorFixture {
         }));
     }
 
-    fn write_world_doctor_fixture(&self, value: Value) {
+    fn authenticated_identity(&self) -> (String, String) {
+        let context = InstallBootstrapContextV1::new_unix(
+            self.home
+                .join(".substrate")
+                .to_str()
+                .expect("UTF-8 doctor fixture prefix"),
+            "substrate-r2-test",
+            unsafe { libc::geteuid() },
+        )
+        .expect("valid doctor fixture context");
+        let carrier = InstallBootstrapContextCarrierV1::from_context(context)
+            .expect("committed doctor fixture context");
+        (
+            carrier.context.selected_host_prefix,
+            carrier.host_context_commitment,
+        )
+    }
+
+    fn write_world_doctor_fixture(&self, mut value: Value) {
+        let (selected_host_prefix, host_context_commitment) = self.authenticated_identity();
+        let mut joined_constituent = false;
+        for key in ["host", "world"] {
+            if let Some(constituent) = value.get_mut(key).and_then(Value::as_object_mut) {
+                constituent.insert(
+                    "selected_host_prefix".to_string(),
+                    json!(selected_host_prefix),
+                );
+                constituent.insert(
+                    "host_context_commitment".to_string(),
+                    json!(host_context_commitment),
+                );
+                joined_constituent = true;
+            }
+        }
+        if !joined_constituent {
+            value["selected_host_prefix"] = json!(selected_host_prefix);
+            value["host_context_commitment"] = json!(host_context_commitment);
+        }
         fs::write(self.health_dir.join("world_doctor.json"), value.to_string())
             .expect("write world doctor fixture");
     }
 
-    fn write_world_deps_fixture(&self, value: Value) {
+    fn write_world_deps_fixture(&self, mut value: Value) {
+        let (selected_host_prefix, host_context_commitment) = self.authenticated_identity();
+        value["selected_host_prefix"] = json!(selected_host_prefix);
+        value["host_context_commitment"] = json!(host_context_commitment);
         fs::write(self.health_dir.join("world_deps.json"), value.to_string())
             .expect("write world deps fixture");
     }
@@ -707,6 +789,177 @@ fn shim_doctor_snapshot_uses_authenticated_a_under_conflicting_ambient_b() {
     assert!(!trace.contains(&encoded));
     assert!(!trace.contains("ambient-b-fixture"));
     assert!(!trace.contains("ambient-b-must-not-appear"));
+}
+
+#[test]
+fn shim_doctor_rejects_sensitive_evidence_without_mutation_or_disclosure() {
+    const MARKERS: &[&str] = &[
+        "f5-credential-marker",
+        "f5-provider-token-marker",
+        "f5-authorization-marker",
+        "f5-api-key-marker",
+        "f5-private-key-marker",
+        "f5-prompt-marker",
+        "f5-request-marker",
+        "f5-preimage-marker",
+        "f5-bootstrap-carrier-marker",
+        "f5-shim-carrier-marker",
+        "f5-auth-bundle-marker",
+        "f5-parent-environment-marker",
+    ];
+    const ENV_NAMES: &[&str] = &[
+        "F5_CREDENTIAL",
+        "F5_PROVIDER_TOKEN",
+        "F5_AUTHORIZATION_HEADER",
+        "F5_API_KEY",
+        "F5_PRIVATE_KEY",
+        "F5_PROMPT_BYTES",
+        "F5_REQUEST_BYTES",
+        "F5_COMMITMENT_PREIMAGE",
+        "F5_BOOTSTRAP_CARRIER",
+        "F5_SHIM_CARRIER",
+        "F5_GATEWAY_AUTH_BUNDLE",
+        "F5_PARENT_ENVIRONMENT",
+    ];
+    let fixture = DoctorFixture::new(detected_manager_manifest());
+    let selected_prefix = fixture.home().join(".substrate");
+    let (selected_host_prefix, host_context_commitment) = fixture.authenticated_identity();
+    fs::write(
+        fixture.health_dir.join("world_doctor.json"),
+        json!({
+            "schema_version": 1,
+            "platform": std::env::consts::OS,
+            "ok": true,
+            "host": {
+                "ok": true,
+                "selected_host_prefix": selected_host_prefix,
+                "host_context_commitment": host_context_commitment,
+            },
+            "world": {
+                "ok": true,
+                "selected_host_prefix": selected_host_prefix,
+                "host_context_commitment": host_context_commitment,
+            },
+            "credentials": MARKERS[0],
+            "provider_token": MARKERS[1],
+            "authorization_header": MARKERS[2],
+            "api_key": MARKERS[3],
+            "private_key": MARKERS[4],
+            "prompt_bytes": MARKERS[5],
+            "request_bytes": MARKERS[6],
+            "commitment_preimage": MARKERS[7],
+            "bootstrap_carrier": MARKERS[8],
+            "shim_carrier": MARKERS[9],
+            "gateway_auth_bundle": MARKERS[10],
+            "parent_environment": MARKERS[11],
+        })
+        .to_string(),
+    )
+    .expect("write sensitive world fixture");
+    fs::write(
+        fixture.health_dir.join("world_deps.json"),
+        json!({
+            "schema_version": 1,
+            "selected_host_prefix": selected_host_prefix,
+            "host_context_commitment": host_context_commitment,
+            "cwd": fixture.home(),
+            "inventory_packages": 0,
+            "inventory_bundles": 0,
+            "inventory_mode": "merged",
+            "builtins": "disabled",
+            "enabled": [],
+            "applied": [],
+            "commitment_preimage": MARKERS[7],
+        })
+        .to_string(),
+    )
+    .expect("write sensitive dependency fixture");
+    let bootstrap_carrier = InstallBootstrapContextCarrierV1::from_context(
+        InstallBootstrapContextV1::new_unix(
+            selected_prefix
+                .to_str()
+                .expect("UTF-8 non-disclosure fixture prefix"),
+            "substrate-r2-test",
+            unsafe { libc::geteuid() },
+        )
+        .expect("valid non-disclosure fixture context"),
+    )
+    .expect("committed non-disclosure fixture context")
+    .encode()
+    .expect("encoded non-disclosure fixture context");
+    let bootstrap = fixture
+        .command()
+        .arg("--install-bootstrap-context-v1")
+        .arg(bootstrap_carrier)
+        .arg("--install-bootstrap-home-v1")
+        .output()
+        .expect("bootstrap installed-product dependency scaffold");
+    assert!(
+        bootstrap.status.success(),
+        "explicit pre-doctor bootstrap failed: {}",
+        String::from_utf8_lossy(&bootstrap.stderr)
+    );
+    let selected_before = snapshot_tree(&selected_prefix);
+
+    let mut json_command = fixture.command();
+    for (name, marker) in ENV_NAMES.iter().zip(MARKERS) {
+        json_command.env(name, marker);
+    }
+    let json_output = json_command
+        .arg("--world")
+        .arg("shim")
+        .arg("doctor")
+        .arg("--json")
+        .output()
+        .expect("run F5 non-disclosure JSON doctor");
+    assert!(json_output.status.success());
+    let payload: Value =
+        serde_json::from_slice(&json_output.stdout).expect("F5 non-disclosure JSON");
+    assert_eq!(payload["world"]["status"], json!("needs_attention"));
+    assert_eq!(payload["world"]["ok"], json!(false));
+    assert!(payload["world"].get("details").is_none());
+    assert!(payload["world"]["error"]
+        .as_str()
+        .is_some_and(|error| error.contains("rejected")));
+    assert_eq!(payload["world_deps"]["status"], json!("error"));
+    assert!(payload["world_deps"].get("report").is_none());
+    assert!(payload["world_deps"]["error"]
+        .as_str()
+        .is_some_and(|error| error.contains("rejected")));
+
+    let mut human_command = fixture.command();
+    for (name, marker) in ENV_NAMES.iter().zip(MARKERS) {
+        human_command.env(name, marker);
+    }
+    let human_output = human_command
+        .arg("--world")
+        .arg("shim")
+        .arg("doctor")
+        .output()
+        .expect("run F5 non-disclosure human doctor");
+    assert!(human_output.status.success());
+    let human = String::from_utf8_lossy(&human_output.stdout);
+    assert!(human.contains("Status: needs attention"));
+    assert!(human.contains("world doctor evidence rejected"));
+    assert!(human.contains("world deps evidence rejected"));
+
+    for output in [&json_output, &human_output] {
+        let stdout = String::from_utf8_lossy(&output.stdout);
+        let stderr = String::from_utf8_lossy(&output.stderr);
+        for marker in MARKERS {
+            assert!(!stdout.contains(marker), "stdout disclosed {marker}");
+            assert!(!stderr.contains(marker), "stderr disclosed {marker}");
+        }
+    }
+    let trace = fs::read_to_string(&fixture.trace).expect("read F5 non-disclosure trace");
+    for marker in MARKERS {
+        assert!(!trace.contains(marker), "trace disclosed {marker}");
+    }
+    assert_eq!(
+        snapshot_tree(&selected_prefix),
+        selected_before,
+        "doctor must not mutate, repair, provision, clean, or migrate selected A"
+    );
 }
 
 #[test]

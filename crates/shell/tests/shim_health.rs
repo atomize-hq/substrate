@@ -16,6 +16,7 @@ use std::os::unix::fs::PermissionsExt;
 use std::path::{Path, PathBuf};
 use std::process::Command;
 use tempfile::{Builder, TempDir};
+use transport_api_types::{InstallBootstrapContextCarrierV1, InstallBootstrapContextV1};
 
 #[cfg(target_os = "linux")]
 fn snapshot_tree(root: &Path) -> Vec<(PathBuf, u32, u32, u32, Vec<u8>)> {
@@ -184,12 +185,52 @@ impl DoctorFixture {
         }));
     }
 
-    fn write_world_doctor_fixture(&self, value: Value) {
+    fn authenticated_identity(&self) -> (String, String) {
+        let context = InstallBootstrapContextV1::new_unix(
+            self.home
+                .join(".substrate")
+                .to_str()
+                .expect("UTF-8 health fixture prefix"),
+            "substrate-r2-test",
+            unsafe { libc::geteuid() },
+        )
+        .expect("valid health fixture context");
+        let carrier = InstallBootstrapContextCarrierV1::from_context(context)
+            .expect("committed health fixture context");
+        (
+            carrier.context.selected_host_prefix,
+            carrier.host_context_commitment,
+        )
+    }
+
+    fn write_world_doctor_fixture(&self, mut value: Value) {
+        let (selected_host_prefix, host_context_commitment) = self.authenticated_identity();
+        let mut joined_constituent = false;
+        for key in ["host", "world"] {
+            if let Some(constituent) = value.get_mut(key).and_then(Value::as_object_mut) {
+                constituent.insert(
+                    "selected_host_prefix".to_string(),
+                    json!(selected_host_prefix),
+                );
+                constituent.insert(
+                    "host_context_commitment".to_string(),
+                    json!(host_context_commitment),
+                );
+                joined_constituent = true;
+            }
+        }
+        if !joined_constituent {
+            value["selected_host_prefix"] = json!(selected_host_prefix);
+            value["host_context_commitment"] = json!(host_context_commitment);
+        }
         fs::write(self.health_dir.join("world_doctor.json"), value.to_string())
             .expect("write world doctor fixture");
     }
 
-    fn write_world_deps_fixture(&self, value: Value) {
+    fn write_world_deps_fixture(&self, mut value: Value) {
+        let (selected_host_prefix, host_context_commitment) = self.authenticated_identity();
+        value["selected_host_prefix"] = json!(selected_host_prefix);
+        value["host_context_commitment"] = json!(host_context_commitment);
         fs::write(self.health_dir.join("world_deps.json"), value.to_string())
             .expect("write world deps fixture");
     }
@@ -738,6 +779,139 @@ managers:
         snapshot_tree(&ambient_home),
         ambient_before,
         "Health must preserve the complete conflicting B tree"
+    );
+}
+
+#[cfg(target_os = "linux")]
+#[test]
+fn health_and_shim_doctor_share_fail_closed_coherence_without_mutation() {
+    const MIXED_MARKER: &str = "f5-mixed-world-marker-must-not-leak";
+    const MISSING_MARKER: &str = "f5-missing-deps-marker-must-not-leak";
+    let fixture = DoctorFixture::new(
+        r#"version: 2
+managers:
+  - name: SelectedManager
+    priority: 1
+    detect:
+      script: "exit 0"
+    init:
+      shell: |
+        export SELECTED_MANAGER=1
+"#,
+    );
+    let selected_prefix = fixture.home().join(".substrate");
+    let context = InstallBootstrapContextV1::new_unix(
+        selected_prefix
+            .to_str()
+            .expect("UTF-8 health coherence prefix"),
+        "substrate-r2-test",
+        unsafe { libc::geteuid() },
+    )
+    .expect("valid health coherence context");
+    let carrier = InstallBootstrapContextCarrierV1::from_context(context)
+        .expect("committed health coherence context");
+    let encoded = carrier.encode().expect("encoded health coherence context");
+    let bootstrap = fixture
+        .command()
+        .arg("--install-bootstrap-context-v1")
+        .arg(&encoded)
+        .arg("--install-bootstrap-home-v1")
+        .output()
+        .expect("bootstrap installed-product health fixture");
+    assert!(bootstrap.status.success());
+
+    let mut conflicting_commitment = carrier.host_context_commitment.clone();
+    let replacement = if conflicting_commitment.starts_with('0') {
+        "1"
+    } else {
+        "0"
+    };
+    conflicting_commitment.replace_range(..1, replacement);
+    fs::write(
+        fixture.health_dir.join("world_doctor.json"),
+        json!({
+            "schema_version": 1,
+            "platform": std::env::consts::OS,
+            "ok": true,
+            "host": {
+                "ok": true,
+                "selected_host_prefix": carrier.context.selected_host_prefix,
+                "host_context_commitment": carrier.host_context_commitment,
+            },
+            "world": {
+                "ok": true,
+                "selected_host_prefix": MIXED_MARKER,
+                "host_context_commitment": conflicting_commitment,
+            },
+        })
+        .to_string(),
+    )
+    .expect("write mixed world evidence");
+    fs::write(
+        fixture.health_dir.join("world_deps.json"),
+        json!({
+            "schema_version": 1,
+            "cwd": MISSING_MARKER,
+            "inventory_packages": 0,
+            "inventory_bundles": 0,
+            "inventory_mode": "merged",
+            "builtins": "disabled",
+            "enabled": [],
+            "applied": [],
+        })
+        .to_string(),
+    )
+    .expect("write missing-identity dependency evidence");
+    let selected_before = snapshot_tree(&selected_prefix);
+
+    let json_output = fixture
+        .command()
+        .arg("--world")
+        .arg("health")
+        .arg("--json")
+        .output()
+        .expect("run fail-closed Health JSON");
+    assert!(json_output.status.success());
+    let payload: Value =
+        serde_json::from_slice(&json_output.stdout).expect("fail-closed Health JSON");
+    assert_eq!(payload["shim"]["world"]["status"], json!("needs_attention"));
+    assert_eq!(payload["shim"]["world"]["ok"], json!(false));
+    assert!(payload["shim"]["world"]["error"]
+        .as_str()
+        .is_some_and(|error| error.contains("incoherent")));
+    assert!(payload["shim"]["world"].get("details").is_none());
+    assert_eq!(payload["shim"]["world_deps"]["status"], json!("error"));
+    assert!(payload["shim"]["world_deps"].get("report").is_none());
+    assert!(payload["shim"]["world_deps"]["error"]
+        .as_str()
+        .is_some_and(|error| error.contains("unavailable")));
+    assert_eq!(payload["summary"]["world_ok"], json!(false));
+    assert_eq!(payload["summary"]["ok"], json!(false));
+
+    let human_output = fixture
+        .command()
+        .arg("--world")
+        .arg("health")
+        .output()
+        .expect("run fail-closed Health human output");
+    assert!(human_output.status.success());
+    let human = String::from_utf8_lossy(&human_output.stdout);
+    assert!(human.contains("World backend: needs attention"));
+    assert!(human.contains("World deps: unavailable"));
+    assert!(human.contains("Overall status: attention required"));
+
+    for output in [&json_output, &human_output] {
+        let stdout = String::from_utf8_lossy(&output.stdout);
+        let stderr = String::from_utf8_lossy(&output.stderr);
+        for marker in [MIXED_MARKER, MISSING_MARKER, encoded.as_str()] {
+            assert!(!stdout.contains(marker), "stdout disclosed {marker}");
+            assert!(!stderr.contains(marker), "stderr disclosed {marker}");
+        }
+    }
+    assert_eq!(
+        snapshot_tree(&selected_prefix),
+        selected_before,
+        "Health composition must remain read-only after installed-product bootstrap"
     );
 }
 
