@@ -16,6 +16,8 @@ use std::os::unix::fs::PermissionsExt;
 use std::path::{Path, PathBuf};
 use std::process::Command;
 use tempfile::{Builder, TempDir};
+#[cfg(target_os = "linux")]
+use transport_api_types::{InstallBootstrapContextCarrierV1, InstallBootstrapContextV1};
 
 #[cfg(target_os = "linux")]
 fn snapshot_tree(root: &Path) -> Vec<(PathBuf, u32, u32, u32, Vec<u8>)> {
@@ -190,6 +192,24 @@ impl DoctorFixture {
     }
 
     fn write_world_deps_fixture(&self, value: Value) {
+        #[cfg(target_os = "linux")]
+        let value = {
+            let mut value = value;
+            let context = InstallBootstrapContextV1::new_unix(
+                self.home
+                    .join(".substrate")
+                    .to_str()
+                    .expect("UTF-8 health fixture prefix"),
+                "substrate-r2-test",
+                unsafe { libc::geteuid() },
+            )
+            .expect("valid health fixture install context");
+            let carrier = InstallBootstrapContextCarrierV1::from_context(context)
+                .expect("committed health fixture install context");
+            value["selected_host_prefix"] = Value::String(carrier.context.selected_host_prefix);
+            value["host_context_commitment"] = Value::String(carrier.host_context_commitment);
+            value
+        };
         fs::write(self.health_dir.join("world_deps.json"), value.to_string())
             .expect("write world deps fixture");
     }
@@ -831,7 +851,16 @@ managers:
     );
     assert_eq!(summary["missing_managers"], json!(["MissingManager"]));
     assert_eq!(summary["world_ok"], json!(false));
+    #[cfg(not(target_os = "linux"))]
     assert_eq!(summary["world_deps_missing"], json!(["a"]));
+    #[cfg(target_os = "linux")]
+    {
+        assert_eq!(summary["world_deps_missing"], json!([]));
+        assert_eq!(
+            summary["world_deps_error"],
+            json!("world deps evidence incoherent")
+        );
+    }
     assert_eq!(summary["ok"], json!(false));
     #[cfg(target_os = "linux")]
     {
@@ -1171,5 +1200,131 @@ managers:
     assert!(
         stderr.contains("invalid YAML") || stderr.contains("failed to read"),
         "stderr should report the config parse failure: {stderr}"
+    );
+}
+
+#[cfg(target_os = "linux")]
+#[test]
+fn health_and_shim_doctor_share_bounded_non_mutating_world_deps_truth() {
+    let fixture = DoctorFixture::new(
+        r#"version: 2
+managers:
+  - name: SampleManager
+    priority: 1
+    detect:
+      script: "exit 0"
+    init:
+      shell: |
+        export SAMPLE_MANAGER=1
+    repair_hint: |
+      export SAMPLE_MANAGER=1
+"#,
+    );
+    fs::write(
+        fixture.health_dir.join("world_deps.json"),
+        json!({
+            "schema_version": 1,
+            "selected_host_prefix": "/ambient-b-health-private-path",
+            "host_context_commitment": "fixture-only-secret-commitment",
+            "cwd": fixture.home(),
+            "inventory_packages": 0,
+            "inventory_bundles": 0,
+            "inventory_mode": "merged",
+            "builtins": "enabled",
+            "enabled": [],
+            "applied": []
+        })
+        .to_string(),
+    )
+    .expect("write mixed health dependency evidence");
+    ensure_substrate_built();
+    let uid = unsafe { libc::geteuid() };
+    let gid = unsafe { libc::getegid() };
+    let selected_prefix = fixture.home.join(".substrate");
+    let context = InstallBootstrapContextV1::new_unix(
+        selected_prefix
+            .to_str()
+            .expect("UTF-8 health fixture prefix"),
+        "substrate-r2-test",
+        uid,
+    )
+    .expect("valid health fixture install context");
+    let carrier = InstallBootstrapContextCarrierV1::from_context(context)
+        .expect("committed health fixture install context");
+    let encoded = carrier.encode().expect("encode health fixture carrier");
+    let bootstrap = Command::new(binary_path())
+        .env("HOME", &fixture.home)
+        .env("USERPROFILE", &fixture.home)
+        .env("SUBSTRATE_HOME", &selected_prefix)
+        .env("SUBSTRATE_ROOT", &selected_prefix)
+        .env(
+            "SUBSTRATE_INSTALL_HOST_CONTEXT_COMMITMENT",
+            &carrier.host_context_commitment,
+        )
+        .env("SUBSTRATE_INSTALL_PRIMARY_USER", "substrate-r2-test")
+        .env("SUBSTRATE_INSTALL_PRIMARY_UID", uid.to_string())
+        .env("SUBSTRATE_INSTALL_BOOTSTRAP_CONTEXT_V1", &encoded)
+        .env("LD_PRELOAD", &fixture.passwd_preload)
+        .env("SUBSTRATE_R2_TEST_UID", uid.to_string())
+        .env("SUBSTRATE_R2_TEST_GID", gid.to_string())
+        .env("SUBSTRATE_R2_TEST_ACCOUNT", "substrate-r2-test")
+        .env("SUBSTRATE_R2_TEST_ACCOUNT_HOME", &fixture.home)
+        .current_dir(&fixture.home)
+        .arg("--install-bootstrap-context-v1")
+        .arg(encoded)
+        .arg("--install-bootstrap-home-v1")
+        .output()
+        .expect("initialize the explicit product-home scaffold before observation");
+    assert!(
+        bootstrap.status.success(),
+        "fixture bootstrap failed: {}",
+        String::from_utf8_lossy(&bootstrap.stderr)
+    );
+    let before = snapshot_tree(fixture.home());
+
+    let json_output = fixture
+        .command()
+        .arg("--world")
+        .arg("health")
+        .arg("--json")
+        .output()
+        .expect("run health JSON with mixed dependency evidence");
+    assert!(json_output.status.success());
+    let payload: Value = serde_json::from_slice(&json_output.stdout).expect("health JSON");
+    assert_eq!(
+        payload["summary"]["world_deps_error"],
+        json!("world deps evidence incoherent")
+    );
+    assert_eq!(payload["summary"]["world_ok"], json!(false));
+    assert_eq!(payload["summary"]["ok"], json!(false));
+    assert_eq!(payload["shim"]["world_deps"]["status"], json!("error"));
+    assert!(payload["shim"]["world_deps"].get("report").is_none());
+    assert_eq!(
+        payload["shim"]["world"]["error"],
+        json!("passive world doctor unavailable")
+    );
+
+    let human_output = fixture
+        .command()
+        .arg("--world")
+        .arg("health")
+        .output()
+        .expect("run health human with mixed dependency evidence");
+    assert!(human_output.status.success());
+    let rendered = format!(
+        "{}{}{}{}",
+        String::from_utf8_lossy(&json_output.stdout),
+        String::from_utf8_lossy(&json_output.stderr),
+        String::from_utf8_lossy(&human_output.stdout),
+        String::from_utf8_lossy(&human_output.stderr)
+    );
+    assert!(rendered.contains("World deps: unavailable (world deps evidence incoherent)"));
+    assert!(rendered.contains("Overall status: attention required"));
+    assert!(!rendered.contains("ambient-b-health-private-path"));
+    assert!(!rendered.contains("fixture-only-secret-commitment"));
+    assert_eq!(
+        snapshot_tree(fixture.home()),
+        before,
+        "doctor composition must not mutate selected A"
     );
 }
