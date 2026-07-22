@@ -4,7 +4,7 @@
 **Scope:** planning, contracts, sequencing, and proof gates; not implementation history
 **Source directive:** [`../../substrate-runtime-refactor-directive-revised.md`](../../substrate-runtime-refactor-directive-revised.md)
 **Repo-truth snapshot:** 2026-07-17 at `6ab2a515e13946324d0aac25b144e1c3408cb2c1`; re-check live code before every slice
-**Current authorized increment:** `A1.1d-5R2-2F — Authenticated world-deps and truthful doctor composition`; F1 and F2 are complete and locally committed, F3/F4 are blocked and preserved pending the readiness-boundary correction below, F remains incomplete, and R2-2 remains incomplete.
+**Current authorized increment:** `A1.1d-5R2-2F5-PD — Non-mutating nested doctor boundary`; F1–F4 are complete local runtime increments, the blocked F5 candidate is preserved but rejected, F5-PD is documentation-authorized and unimplemented, F5 remains blocked, and R2-2 remains incomplete.
 
 ## Canonical repo location
 
@@ -289,16 +289,19 @@ a preserved completed increment, not authority to expand scope. Route C projects
 already-authenticated typed context through the existing Host/World doctor paths; its non-secret
 optional output fields cannot select, construct, replace, or mutate authority.
 
-The Route D preimplementation source-closure audit found one incomplete allowlist boundary inside
-the existing Health/shim-doctor report family. Before the typed dependency collector, the report
-may read `world_deps.json`; its embedded world-doctor snapshot may read `world_doctor.json` or launch
-the existing `world doctor --json` child. Route D therefore carries the same authenticated typed IH
-through both branches: fixture lookup is rooted only at A, and the nested Unix child receives the
-canonical hidden argv carrier plus A-derived checked child projections. Ambient B, generated files,
-or a contextless repository binary cannot select or supplement A. The mechanical closure is limited
-to `gather_world_doctor_snapshot`, `gather_world_deps_section`, `try_load_health_fixture`,
+At the Route D checkpoint, the preimplementation source-closure audit found one incomplete
+allowlist boundary inside the existing Health/shim-doctor report family. Before the typed
+dependency collector, the report could read `world_deps.json`; its embedded world-doctor snapshot
+could read `world_doctor.json` or launch the existing `world doctor --json` child. Route D therefore
+carried the same authenticated typed IH through both branches: fixture lookup was rooted only at A,
+and the nested Unix child received the canonical hidden argv carrier plus A-derived checked child
+projections. The controlling F5-PD correction below removes production World Doctor fixture
+selection and changes that child to the hidden passive path; it does not change the separately
+F5-owned world-deps fixture. Ambient B, generated files, or a contextless repository binary cannot
+select or supplement A. The historical mechanical closure was limited to
+`gather_world_doctor_snapshot`, `gather_world_deps_section`, `try_load_health_fixture`,
 `health_fixture_path`, and `run_json_subcommand` in the already-allowed report file, plus their
-existing caller/signature/cfg/lint and focused test closure. It creates no resolver, schema, module
+existing caller/signature/cfg/lint and focused test closure. It created no resolver, schema, module
 owner, execution family, authority seam, or parent-process environment mutation. The Unix
 `collect_report` compatibility collector remains behavior-frozen until R2-3, and physical-shim,
 replay, platform-native mapping, installation, cleanup, service, world, policy, capability,
@@ -618,12 +621,15 @@ is the authorized mechanical F0b writer delegation with unchanged output/error b
 three implementation reviewers and the fresh containment reviewer are `CLEAN`. There is no product
 or user-facing behavior change and no seam promotion. F was not started.
 
-The exact next packet is **A1.1d-5R2-2F — Authenticated world-deps and truthful doctor composition**.
+At that historical checkpoint the exact next packet was **A1.1d-5R2-2F — Authenticated world-deps
+and truthful doctor composition**. The controlling F5-PD correction below supersedes this
+next-task statement.
 
-## A1.1d-5R2-2F readiness-boundary correction
+## A1.1d-5R2-2F historical readiness-boundary correction
 
-This section supersedes only the earlier statements that F is wholly unstarted and the earlier F
-request-builder/readiness allowlist. Historical F0/F0a/F0b/F0-HC evidence remains unchanged.
+This section records the historical F3/F4 readiness correction and superseded only the earlier
+statements that F was wholly unstarted and the earlier F request-builder/readiness allowlist.
+Historical F0/F0a/F0b/F0-HC evidence remains unchanged.
 
 | F checkpoint | Canonical status |
 |---|---|
@@ -655,7 +661,68 @@ transport for CWD, profile, policy snapshot, network policy, and filesystem mode
 policy, socket, carrier, credential, prompt, and request preimage values are excluded from the
 command environment.
 
-This correction changes no production capability or policy, promotes no seam, and authorizes no
-runtime implementation in this documentation packet. F remains incomplete. The exact next task is
-to resume **A1.1d-5R2-2F3/F4** under the explicit-readiness and exact-environment contracts; F5 and
-the final F walls may not begin.
+That correction changed no production capability or policy, promoted no seam, and authorized no
+runtime implementation in that documentation packet. At that checkpoint F remained incomplete;
+the exact next task was to resume **A1.1d-5R2-2F3/F4** under the explicit-readiness and
+exact-environment contracts, and F5/final walls could not begin.
+
+## A1.1d-5R2-2F5-PD canonical correction
+
+This latest section supersedes the live-status and next-task wording above while retaining it as
+historical readiness-boundary evidence. F3 and F4 are complete local runtime increments at the
+pre-documentation-replay commits `54a5ce663cf2724b69b0c124acf2c2758ff622dd` and
+`7802c44198625ea6849933140c390900ebe84190`. Their clean wall discovered 1,300 tests, passed 1,255,
+failed 45, and ignored 0. The retained failure-name and normalized-signature SHA-256 values are
+`b23bb59ad12833d2c1d37c19c54933cd6bcb1c75e0dab8a70179b9881372be70` and
+`33c686a6ec9f3a0a4f51e1fca976445e6804da12fbbff50312a03f0042cdfac3`. These facts complete only
+F3/F4; they do not complete F.
+
+The attempted F5 candidate proved 13 decoder tests and 17 of 18 shim-doctor integration tests, then
+stopped at the nested-child lifecycle boundary. It is preserved remotely at
+`feat/preserve-a1-f5-blocked-candidate-20260722`, commit
+`c4b93506480ae5e9708417067980e08e0e754b7a`, parent
+`7802c44198625ea6849933140c390900ebe84190`, tree
+`03bec2f517866e5213b8a0bed9ad99058c25ebc3`. Preservation is archaeology, not authorization; the
+candidate must not be restored wholesale. Its exact four-file manifest and hashes are recorded in
+`05-debug-regression-ledger.md`.
+
+The contradiction is now resolved by the bounded prerequisite
+**A1.1d-5R2-2F5-PD — Non-mutating nested doctor boundary**. The normal public
+`substrate world doctor --json` remains behaviorally unchanged and is not represented as
+side-effect-free. Only the authenticated F5 composition child receives a hidden, typed passive
+mode. That child validates the canonical hidden argv carrier and current principal before any
+projection installation, home scaffold, trace initialization, config/policy selection, platform
+resolution, readiness, socket, service, transport, world, or probe action. It then returns a
+bounded fail-closed diagnostic. No existing durable runtime-health artifact is authoritative for
+this purpose, so the initial passive result is honestly `unavailable`; it never fabricates
+coherent success.
+
+Whenever authenticated Linux composition has World enabled and reaches
+`gather_world_doctor_snapshot`, it invokes that child and no longer selects
+`A/health/world_doctor.json`. The existing World-disabled `build_report` short-circuit remains
+unchanged: it returns `disabled_world_doctor_snapshot` without a child or fixture lookup. On the
+enabled passive path World Doctor fixtures remain `cfg(test)` evidence only. Existing non-Linux
+compatibility stays behavior-frozen,
+including its legacy fixture/public-child mechanics; it is forbidden evidence for F5-PD/F5 and
+cannot claim A-bound or native proof. The Linux parent
+requires duplicate-rejecting raw JSON decode plus exact schema/exit/A identity, rejects mixed or
+secret/request-bearing payloads, discards raw child JSON and stderr, and maps only to the existing bounded unavailable/incoherent
+`NeedsAttention` representation. The hidden field lives on `WorldAction::Doctor`, leaving the
+top-level `Cli` and its `auto_sync.rs` literal unchanged. This additive Rust enum layout does not
+change normal public `world doctor --json` CLI behavior.
+
+The binding sequence is now:
+
+`Routes A–E` → `F0/F0a/F0b/F0-HC complete` → `F1/F2 complete` → `F3/F4 complete` →
+`F5-PD` → `F5` → `final F walls` → `F closeout` →
+`renewed R2-2 integration closeout` → `R2-3` → `R2-4` → `R3`.
+
+F5-PD is a prerequisite beneath F5, not a new slice and not a seam promotion. It changes no world
+execution capability, policy, network, filesystem, caging, placement, credential, service, or
+lifecycle behavior. Public World doctor compatibility is frozen. Authenticated shim/Health
+composition will no longer activate infrastructure merely to collect its nested diagnostic; when
+passive evidence is absent, user-visible composition reports unavailable rather than success or
+implicit activation. F5, the final F walls, F closeout, renewed R2-2 closeout, R2-3, R2-4, and R3
+remain unstarted.
+
+The exact next task is **Implement F5-PD, re-review it, then resume F5**.

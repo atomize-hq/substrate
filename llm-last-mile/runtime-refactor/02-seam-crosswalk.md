@@ -289,10 +289,10 @@ may make the later target unambiguous but may not perform, authorize, or define 
 | PI-105 | `ExplicitHostPropagation` | derive immutable `PlatformPrincipalV1` from validated IH at the root, carry it explicitly and process/request-scoped through normal REPL, hidden owner-helper, and direct/prepared Spawn paths alongside (not inside) prepared world-dispatch values, then require Unix account+UID database round-trip and derive only that account's `.codex`; clear the reserved seed key before every backend/policy/principal decision so denied, incompatible, and error paths cannot retain ambient poison; Unix account resolution is compiled for Linux production and Unix tests only; the projection is never persisted into HSA, session/receipt/supervisor/retained-worker authority, logs, traces, or globals; policy and credential contents stay unchanged; R2 | `routing.rs::run_shell_with_cli`; `invocation/plan.rs::ShellConfig::from_cli` exact hidden `AgentAction::OwnerHelper` hop; `agents_cmd.rs::{handle_agent_command,run_owner_helper}`; named `async_repl.rs` runtime/principal transport symbols; `orchestrator_world_dispatch.rs::{dispatch_orchestrator_world_request,dispatch_orchestrator_world_request_for_principal,dispatch_prepared_orchestrator_world_request,dispatch_prepared_orchestrator_world_request_for_principal,spawn_world_worker,spawn_prepared_world_worker,execute_spawn_world_worker_stream}` exact separate-argument transport; `world_ops.rs::{build_agent_client_and_member_dispatch_request,build_agent_client_and_member_dispatch_request_for_cwd,build_agent_client_and_member_dispatch_request_impl,resolve_host_codex_seed_home,maybe_inject_codex_auth_seed_home_for_policy,maybe_inject_codex_auth_seed_home_for_member_dispatch}`; unchanged terminal `install_bootstrap.rs::unix_account_home_for_principal` | R2-RUNTIME-01; native Linux dispatch differential plus manual large-file source closure | R2-2 |
 | PI-106 | `ExplicitHostPropagation` | Routes A–D did not close normal world-deps dispatch. R2-2F binds one `AuthenticatedWorldDepsContextV1`-equivalent from already-validated A and threads it through current/global/workspace operations, provision-deps, post-provision sync, and authenticated world requests on the reviewed Unix/Linux route. Internal child argv remains authoritative and standalone public selection remains PI-067. Non-Unix compatibility paths remain R2-3-owned/unproven and cannot claim A-bound success. | `platform/mod.rs::{handle_world_command,handle_host_command}`; `world_deps/mod.rs` shared context/snapshot/provision resolver; `world_deps/surfaces.rs` exact R2-2F list; `world_enable/runner.rs` and `runner/provision_deps.rs`; additive authenticated request builder plus export-only routing wiring | R2-RUNTIME-01/R2-DIAG-01; focused native Linux, non-Unix static/fail-closed only, privileged product proof deferred | R2-2F |
 | PI-107 | `GeneratedProjectionConsumption` | Routes A–D closed diagnostic snapshot roots but not every normal production path. R2-2F derives global dependency/config roots only from A, carries launch CWD explicitly for workspace scope, and binds every probe/install/sync request to the same context. Doctor constituents require matching non-secret A identity evidence. | `world_deps/surfaces.rs::{run,run_current,run_global,run_workspace,run_current_list,run_current_show,run_current_install,run_current_sync,run_global_list,run_global_add,run_global_remove,run_global_reset,run_workspace_list,run_workspace_add,run_workspace_remove,run_workspace_reset,resolve_global_available_inventory_view,build_current_show_explain_v1,run_current_list_applied,compute_current_applied_items_v1,preflight_runtime_system_requirements_v1,probe_world_apt_requirements_v1,probe_world_pacman_requirements_v1,apply_install_plan_v1,reconcile_world_deps_bin_v1,apply_apt_entrypoint_wrappers_v1,apply_script_package_v1,resolve_script_body_for_package_v1,current_codex_runtime_target_triple_v1,run_world_command_output_for_deps,run_world_command_output_for_deps_with_profile,run_world_command_checked_for_deps,query_world_package_presence,query_world_package_entrypoint_presence,run_world_presence_check_v1,ensure_world_backend_available,run_world_command_for_deps,run_world_command_for_deps_at}` | R2-RUNTIME-01/R2-GEN-01/R2-DIAG-01; focused native Linux | R2-2F |
-| PI-108 | `DiagnosticProjection` | world/host/health/shim doctor receives typed IH and passes A-derived config/deps paths to the existing report collector: Health uses `health.rs` → the Unix crate-private `shim_doctor::collect_report_for_context` name exposure → existing `report::collect_report_for_context`, while direct Unix shim doctor keeps its unchanged `run_doctor` → `report::collect_report_for_context` path. Both continue through `build_report`; the embedded world-deps branch uses only `A/health/world_deps.json` or `gather_world_deps_section` → `collect_doctor_snapshot_v1`, and the embedded world-doctor branch uses only `A/health/world_doctor.json` or the existing `world doctor --json` child with the same canonical hidden argv carrier plus A-derived checked child projections. No diagnostic may reconstruct default H, consult a B fixture, invoke a contextless Unix child, mutate the parent environment, or disclose carrier/credential/request/sensitive-principal bytes. The context-aware module export remains name visibility only. The existing `collect_report` compatibility re-export may receive only an item-level Unix `unused_imports` allowance with a temporary R2-3 reason, and `report.rs::collect_report` may receive only an item-level Unix `dead_code` allowance with that same temporary ownership; neither annotation changes behavior or can satisfy R2-2 proof. Unix `collect_report` remains an explicitly named checked-projection compatibility caller, behavior-frozen and barred from typed Health; physical-shim/replay migration or removal remains R2-3; R2 | named platform/health handlers; `shim_doctor/mod.rs` Unix-only crate-private re-export of existing `report::collect_report_for_context` plus the existing `collect_report` re-export's item-level lint annotation only; `shim_doctor/report.rs::{collect_report` item-level lint annotation only, `collect_report_for_context,build_report,gather_world_doctor_snapshot,gather_world_deps_section,try_load_health_fixture,health_fixture_path,run_json_subcommand}` exact typed-carrier/A-fixture/child-transport and mechanical cfg/caller closure; `world_deps/mod.rs::{collect_doctor_snapshot_v1,resolve_effective_enabled_provisioning_requirements_v1}`; and `world_deps/surfaces.rs::resolve_current_inventory_view` explicit context/A intake | R2-DIAG-01; native Linux | R2-2 Route D |
+| PI-108 | `DiagnosticProjection` | World/Host/Health/shim doctor receives typed IH and passes A-derived config/deps paths to the existing report collector. Health and direct Unix shim doctor continue through `collect_report_for_context` → `build_report`. The existing World-disabled branch returns its frozen disabled snapshot without a child or fixture lookup. The embedded world-deps branch may use only the A-rooted world-deps fixture or its existing collector. Under F5-PD, whenever the authenticated Linux World-enabled branch reaches `gather_world_doctor_snapshot`, it uses the hidden passive child; `A/health/world_doctor.json` is `cfg(test)` evidence only on that path. Existing non-Linux fixture/public-child mechanics remain frozen compatibility, cannot supply F5-PD/F5 authority or proof, and cannot claim A-bound/native truth. No authenticated Linux diagnostic reconstructs default H, consults B, invokes a contextless child, mutates the parent environment, or discloses carrier/credential/request/sensitive-principal bytes. The context-aware exposure and checked-projection compatibility collector remain behavior-frozen and R2-3-owned; R2 | named platform/health handlers; exact Route D world-deps carrier/fixture mechanics plus the exact Linux F5-PD World Doctor files/symbols below; no authenticated Linux production World Doctor fixture authority | R2-DIAG-01; native Linux | R2-2 Route D plus bounded F5-PD prerequisite |
 | PI-109 | `DiagnosticProjection` | installer-managed config proof receives the hidden argv carrier; root dispatch validates it and `ShellConfig::from_cli` explicitly forwards typed IH only to the Config branch, where `run_current_show` resolves the global layer through the existing opened-bootstrap-home contract with explain parity; workspace/Cli/config semantics stay frozen; R2 | `config_cmd.rs::{handle_config_command,run_current_show}` and `config_model.rs::{resolve_effective_config_for_bootstrap_home,resolve_effective_config_with_explain_for_bootstrap_home}` exact context intake/delegation only | R2-DIAG-01/R2-LINUX-01; native Linux | R2-2 |
 | PI-110 | `DiagnosticProjection` | installer-managed policy proof uses the same hidden argv carrier/typed IH; `ShellConfig::from_cli` explicitly forwards only to the Policy branch and `run_current_show` resolves the A-global layer through the existing opened-bootstrap-home contract with explain parity; workspace/policy semantics stay frozen and ambient B cannot select the global layer; R2 | `policy_cmd.rs::{handle_policy_command,run_current_show}` and `policy_model.rs::{resolve_effective_policy_for_bootstrap_home,resolve_effective_policy_with_explain_for_bootstrap_home}` exact context intake/delegation only | R2-DIAG-01/R2-LINUX-01; native Linux | R2-2 |
-| PI-111 | `ExplicitHostPropagation` | **R2-2E implementation/proof clause complete.** Routes A–D left gateway configuration, effective policy, network policy, runtime-family inventory, Codex home, disabled routing, and client selection ambient. R2-2E now validates A before status/mutation/launch, keeps existing config/effective-policy owners and `policy_snapshot.rs` as the single snapshot/network owner, removes contextless unavailable synthesis, and fixes the authenticated Linux socket to `/run/substrate.sock`. Because E has no authenticated platform-endpoint source, macOS fails before client construction/`auto_select`, and Windows/other contextless entries fail before config/policy/inventory/disabled/client selection; frozen ambient compatibility remains R2-3-owned and unreachable from E. Existing policy/network/credential semantics remain unchanged. This does not complete direct-member Codex/UAA gateway adoption or the full credential/config architecture; E3/D1/D3 and the open RG-CONFIG/RG-UAA gates retain that work. | `platform/mod.rs::handle_world_command` Gateway arm; exact R2-2E symbols in `world_gateway.rs`, `policy_snapshot.rs`, and `agent_inventory.rs`; lower platform adapters and schemas frozen | R2-RUNTIME-01/R2-DIAG-01; focused Linux plus non-Unix build/static fail-closed cfg, native platform product proof deferred | R2-2E and F0/F0a/F0b/F0-HC complete; F is the exact next packet and is unstarted |
+| PI-111 | `ExplicitHostPropagation` | **R2-2E implementation/proof clause complete.** Routes A–D left gateway configuration, effective policy, network policy, runtime-family inventory, Codex home, disabled routing, and client selection ambient. R2-2E now validates A before status/mutation/launch, keeps existing config/effective-policy owners and `policy_snapshot.rs` as the single snapshot/network owner, removes contextless unavailable synthesis, and fixes the authenticated Linux socket to `/run/substrate.sock`. Because E has no authenticated platform-endpoint source, macOS fails before client construction/`auto_select`, and Windows/other contextless entries fail before config/policy/inventory/disabled/client selection; frozen ambient compatibility remains R2-3-owned and unreachable from E. Existing policy/network/credential semantics remain unchanged. This does not complete direct-member Codex/UAA gateway adoption or the full credential/config architecture; E3/D1/D3 and the open RG-CONFIG/RG-UAA gates retain that work. | `platform/mod.rs::handle_world_command` Gateway arm; exact R2-2E symbols in `world_gateway.rs`, `policy_snapshot.rs`, and `agent_inventory.rs`; lower platform adapters and schemas frozen | R2-RUNTIME-01/R2-DIAG-01; focused Linux plus non-Unix build/static fail-closed cfg, native platform product proof deferred | R2-2E, F0/F0a/F0b/F0-HC, and F1–F4 complete; F5-PD is the exact next implementation packet; F5 is blocked |
 | PI-112 | `GeneratedProjectionConsumption` | `UserKnownHostsFile` is an A-relative generated helper projection carried into the verified Lima mapping; existence/content never selects A or PM; R2 | `create_ssh_uds_forwarding` known-hosts path parameter only | R2-MAP-MAC-01/R2-GEN-01; static plus assigned native macOS | R2-3 |
 | PI-113 | `R3CleanupOnly` | forwarder-child kill/wait and socket removal on handle drop are teardown/cleanup authority reserved exclusively to R3; R2 mapping edits freeze the body | `ForwardingHandle::drop` body frozen in R2 | R3-LIFE-01; native macOS | R3 |
 | PI-114 | `R3CleanupOnly` | timed-out SSH child kill/wait is current-attempt rollback reserved exclusively to R3; R2 mapping edits freeze the branch | `create_ssh_uds_forwarding` timeout-kill branch frozen in R2 | R3-LIFE-01; native macOS | R3 |
@@ -304,14 +304,15 @@ may make the later target unambiguous but may not perform, authorize, or define 
 The remaining-seam ownership is singular: PI-111's R2-2E clause is complete and remains owned only
 by R2-2E; the unresolved production parts of PI-106 and PI-107 belong only to R2-2F. F0, F0a, and F0b own
 no production inventory item or architecture seam: they are the bounded test-proof prerequisites
-described below. PI-108's Route D fixture/carrier mechanics remain
-review-clean, while F adds constituent identity validation without reopening those mechanics. No
+described below. PI-108's Route D world-deps fixture/carrier mechanics remain review-clean. F5-PD
+selectively replaces the production World Doctor fixture/public-child mechanics with the test-only
+fixture plus authenticated passive child; F later adds broader constituent identity validation. No
 row is transferred to R2-3 because a compatibility caller exists. R2-3 retains physical-shim,
 replay/global-trace, platform-native mapping, and ambient compatibility migration; R2-4 retains
 privileged joined product proof; R3 retains deletion, rollback, replacement cleanup, recursive or
 wildcard removal, service/helper/socket cleanup, ownership manifests, account-state restoration,
 crash cleanup, and uninstall convergence. The resulting inventory DAG is Routes A–E →
-F0/F0a/F0b/F0-HC complete → F → renewed R2-2 integration closeout →
+F0/F0a/F0b/F0-HC complete → F1–F4 complete → F5-PD → F5 → final F walls → F closeout → renewed R2-2 integration closeout →
 R2-3 → R2-4 → R3.
 The E/F authenticated success claim is Unix/Linux-only. macOS, Windows, fallback, and other
 non-Unix compatibility paths remain explicitly unproven R2-3 ownership; build/static preservation
@@ -537,8 +538,8 @@ being projected into HostSessionAuthority truth. Physical ACL-xattr absence woul
 separately approved privileged platform-attestation boundary; R1 neither implies nor adds one.
 The bounded R1 implementation and reviews are clean; R2-0 planning and R2-1 implementation are
 complete, while R2-2 Routes A–D remain individually review-clean and R2-2E is implementation-,
-proof-, and review-complete. F0/F0a/F0b/F0-HC are now also canonically complete; F is the exact next
-packet and remains unstarted. Renewed closeout,
+proof-, and review-complete. At that historical checkpoint F0/F0a/F0b/F0-HC were also canonically
+complete and F was the exact next packet. Renewed closeout,
 R2-3/R2-4/R3 remain unstarted, and the R1 evidence does
 not promote this seam, and all later lifecycle/product gates remain open.
 
@@ -1125,13 +1126,14 @@ for these exact candidate bytes. Fresh reviewer `/root/final_containment_correct
 one generated MEDIUM process label to the test-only `AuthorityEnvTestTempDir::new`; source closure
 finds no changed production execution flow. The sole production hunk is the authorized mechanical
 F0b writer delegation with byte-identical output. Product and user-facing behavior do not change,
-and no seam is promoted. F0, F0a, F0b, and F0-HC are complete. F remains unstarted and the exact
-next packet is **A1.1d-5R2-2F — Authenticated world-deps and truthful doctor composition**.
+and no seam is promoted. At that historical checkpoint F0, F0a, F0b, and F0-HC were complete and
+the exact next packet was **A1.1d-5R2-2F — Authenticated world-deps and truthful doctor
+composition**.
 
 ## A1.1d-5R2-2F readiness source closure
 
-The earlier F status at the historical F0 closeout is retained as history. Live closure now records
-F1/F2 complete, F3/F4 blocked and preserved, and F incomplete. The readiness correction adds no
+The earlier F status at the historical F0 closeout is retained as history. That readiness closure
+recorded F1/F2 complete, F3/F4 blocked and preserved, and F incomplete. The correction added no
 seam row and does not move lifecycle ownership.
 
 | Symbol or caller | Direct/transitive route and cfg reach | GitNexus impact | Required disposition | Ownership |
@@ -1172,3 +1174,116 @@ R2-3/R2-4/R3 lifecycle work.
 adapters are inspected dependencies but are not editable F files. No callsite signature adaptation
 is necessary. If implementation cannot preserve these rows within `world_ops.rs`, stop as
 `ArchitecturalDecisionRequired`.
+
+## F5-PD nested diagnostic seam crosswalk
+
+This latest crosswalk supersedes the prior live statement that F5 can follow F3/F4 directly.
+F3/F4 are complete; F5 is blocked until F5-PD lands. The existing public World doctor remains an
+active compatibility diagnostic. The new passive seam is private to authenticated shim/Health
+composition and branches before ordinary CLI bootstrap.
+
+This section also supersedes PI-108's Route D-era authenticated Linux World Doctor
+fixture-or-public-child clause. After F5-PD, that Linux branch uses the authenticated passive
+child whenever the frozen World-enabled composition reaches it; the existing World-disabled
+short-circuit still spawns no child and reads no fixture. `A/health/world_doctor.json` is test-only
+on the enabled path. PI-108's separate world-deps fixture and
+collector remain F5-owned. Non-Unix compatibility remains byte-frozen and is barred from proof.
+
+### Source closure
+
+| Stage and source location | Existing owner and observed behavior | F5-PD disposition |
+|---|---|---|
+| `crates/shell/src/builtins/shim_doctor/report.rs::{build_report,disabled_world_doctor_snapshot}` | `build_report` calls `gather_world_doctor_snapshot` only when World is enabled; otherwise it returns `disabled_world_doctor_snapshot` without a child or fixture lookup | Frozen compatibility owners; bodies/signatures and disabled classification remain unchanged |
+| `crates/shell/src/builtins/shim_doctor/report.rs::gather_world_doctor_snapshot` | On Linux currently selects `A/health/world_doctor.json` before constructing the nested `world doctor --json` child | EDIT only the Linux branch reached from enabled composition to remove production fixture selection and construct the authenticated hidden passive child; Linux value decoding remains reachable only from `cfg(test)` direct evidence tests; non-Linux compatibility stays unchanged |
+| `report.rs::run_json_subcommand` | Encodes the exact authenticated carrier on hidden argv, overwrites A-derived checked child projections, executes the current product binary, and currently parses raw stdout directly into `serde_json::Value`, which collapses duplicate object keys before later validation | EDIT only the Linux raw-stdout decode statement to call the additive exact-schema decoder before constructing `JsonCommandOutput`; child construction, carrier/projections, process execution, signature, exit/stderr handling, selected-access redaction, and all non-Linux code remain frozen |
+| `report.rs::{snapshot_from_command,snapshot_from_value}` | The Linux command decoder currently infers success from absent `ok`/exit 0 and retains arbitrary child details/stderr; the value decoder does the same for fixture JSON | EDIT/add cfg-specific Linux implementations to require exact passive schema, identity, exit, and redaction closure; make Linux value decoding `cfg(test)`-only and route direct evidence through the same fail-closed validator; preserve existing non-Linux signatures/bodies/behavior |
+| `crates/shell/src/execution/cli.rs::WorldAction::Doctor` | Parses the normal public World Doctor action | EDIT only this variant to add hidden bool `internal_passive_world_doctor_v1`; `Cli` itself and normal grammar/help are frozen |
+| `crates/shell/src/execution/routing.rs::run_shell_with_cli` | Decodes/binds carrier at lines 369–389, then installs projections at 401 and calls the mutating home scaffold at 421 before config/routing | EDIT one exhaustive hidden-mode check and early return after authenticated decode/bind but before projection installation; this is the earliest bounded branch |
+| `install_bootstrap.rs::decode_and_bind_unix_install_bootstrap_context` | Validates canonical carrier, commitment, current Unix principal, optional declared selector, and conflicting checked projections | Frozen authenticated compatibility owner; called unchanged |
+| `install_bootstrap.rs::install_bootstrap_projections`; `home_bootstrap.rs::ensure_substrate_home_deps_scaffold_for_context`; `ShellConfig::from_cli` | Mutate process projections, may create scaffold, initialize later config/trace/routing state | Frozen and unreachable from passive mode |
+| `execution/platform/mod.rs::handle_world_command` Doctor arm | Resolves launch CWD, binds authenticated world-deps config/policy, exports runtime env, and dispatches platform doctor | EDIT only the Doctor pattern to reject a leaked true internal bit before those actions; its ordinary false path and all public behavior are frozen |
+| `execution/platform/linux.rs::world_doctor_main` | Reads host capability/filesystem state and socket-activation report; connects via `probe_world_socket`; calls the client doctor endpoint; handles public output/errors | Frozen public compatibility owner |
+| `execution/socket_activation.rs::socket_activation_report` | Reads an ambient socket override, stats the socket, spawns `systemctl show`, and caches the report | CRITICAL compatibility owner; forbidden and unreachable from passive mode |
+| `execution/platform/linux.rs::probe_world_socket` | `UnixStream::connect` plus `/v1/capabilities`; connecting the listening socket can activate the service | Frozen; forbidden and unreachable |
+| `transport-api-client::AgentClient::doctor_world`; `world-service/src/lib.rs` route registration | Sends `GET /v1/doctor/world` to `handlers::doctor_world` | Frozen; forbidden and unreachable |
+| `world-service/src/handlers.rs::doctor_world`; `world/src/overlayfs/strategy.rs::{select_strategy,run_enumeration_probe}` | Selects/mounts overlay/FUSE state and creates, lists, removes, and cleans a probe file/overlay | Frozen active probe owner; forbidden and unreachable |
+| `execution/platform/linux.rs::legacy_world_doctor_report_v1_via_execute` | On HTTP 404 builds `/v1/execute` with `/tmp`, `mkdir`, `touch`, `ls`, `rm`, and `rmdir` probe work | Frozen execute fallback; forbidden and unreachable |
+| F5 report composition | Converts the bounded validated snapshot into the existing report/human views and later validates exact A constituent identity | F5-owned cross-constituent composition remains blocked; F5-PD changes no report or transport schema |
+
+The source path confirms the contradiction in the superseded contract: the required no-fixture
+child was the normal public World doctor, while the same contract prohibited its possible socket
+activation, endpoint, execute, and filesystem effects. Removing the child or replacing it inside
+the parent with a fabricated unavailable value would also violate the child/carrier proof. F5-PD
+keeps the real child boundary and carrier proof but selects a pre-bootstrap passive branch.
+
+Authenticated Linux production never reads `A/health/world_doctor.json` after F5-PD. Its retained
+value decoder is a test-only proof surface and cannot supply installed-product authority. The Linux
+command decoder receives
+the expected A prefix/commitment and accepts only schema 1, the compile-time platform label,
+explicit top-level/host/world `ok=false`, `world.status=unavailable`, exact duplicate A identity,
+no additional field, exit 4, and empty stderr. It then discards the raw JSON and constructs
+`WorldDoctorStatus::NeedsAttention`, `ok=false`, source `command`, exit 4, no stderr/details, and
+the exact bounded error `passive world doctor unavailable`. Missing/malformed/mixed/tampered,
+wrong-exit, stderr-bearing, or recursively secret/request-bearing input constructs the same bounded
+closed snapshot with error `passive world doctor incoherent`; it never echoes rejected bytes.
+
+The private additive `decode_passive_world_doctor_child_v1` and its three exact
+`PassiveWorldDoctor{Child,Host,World}V1` wire structs reject duplicate/unknown fields while parsing
+raw Linux child stdout. The separate private `validate_passive_world_doctor_child_v1` owns
+identity, exit, and redaction validation after that lossless gate. Its forbidden-key matching is case-insensitive and separator-insensitive for credentials,
+tokens, API/private keys, authorization, passwords, secrets, prompts, request bodies/bytes/input,
+carrier/auth-bundle bytes, parent/full environment, and commitment preimages. Selected A and its
+non-secret commitment remain the only host identity permitted in the validated child input, but
+the parent does not retain even those in the nested snapshot details. The broader F5 report owns
+the already-public top-level identity fields when F5 later resumes. Non-Linux decoder/fixture/
+public-child compatibility is unchanged, is not passive-path evidence, and cannot satisfy an
+authenticated or native proof gate.
+
+### Impact and ownership closure
+
+GitNexus was current at the audited F3/F4 head. Counts below are upstream impact observations,
+not permission to widen implementation. The frozen lifecycle rows were rerun with test edges
+included and `maxDepth=5`: `ensure_world_service_ready` returned CRITICAL, 4 direct/10 impacted
+graph nodes (4 direct/10 total impacted), four process roots, and five modules;
+`socket_activation_report` returned CRITICAL, 6 direct/12 total impacted nodes, four process roots,
+and five modules. Omitting test edges produces a narrower HIGH/four-module view; that
+is not the recorded conservative closure.
+
+| Existing symbol | Direct / total | Processes / modules | Risk | Ownership and authorization |
+|---|---:|---:|---|---|
+| `WorldAction` | 0 / 0 | 0 / 0 | LOW | Existing parser enum; one named hidden Doctor field authorized; this is an additive Rust enum-layout change, not a public CLI behavior change |
+| `run_shell_with_cli` | 1 / 2 | 0 / 1 | LOW | Existing CLI root; bounded early branch authorized; `run_shell` and `main` frozen |
+| `gather_world_doctor_snapshot` | 0 / 0 | 0 / 0 | LOW | Existing F5 composition owner; child argv edit authorized |
+| `snapshot_from_command` | 1 / 1 | 0 / 1 | LOW | Direct caller is `gather_world_doctor_snapshot`; exact passive validation and bounded construction authorized |
+| `snapshot_from_value` | 1 / 1 | 0 / 1 | LOW | Direct caller is currently `gather_world_doctor_snapshot`; Linux production call is removed and Linux decoding becomes test-only, while non-Linux compatibility is frozen |
+| `handle_world_command` | 0 / 0 | 0 / 0 | LOW | Existing public dispatch owner; only a fail-closed guard/pattern for leaked hidden mode is authorized |
+| `run_json_subcommand` | 0 / 0 | 0 / 0 | LOW | EDIT only its Linux raw-stdout parse expression to reject duplicate/unknown fields through the exact additive decoder; all transport, carrier, process, signature, stderr/exit, redaction, and non-Linux behavior is frozen |
+| `JsonCommandOutput` | 1 / 1 | 0 / 1 | LOW | Existing captured JSON/exit/stderr container; layout frozen |
+| `build_report` | 1 / 5 | 1 / 1 | LOW | Frozen caller; its enabled/disabled branch and composition remain unchanged |
+| `disabled_world_doctor_snapshot` | 1 / 6 | 1 / 2 | LOW | Frozen disabled classification; no child or fixture lookup is added |
+| `SubCommands`; `WorldCmd`; `WorldDoctorStatus` | 0 / 0 each | 0 / 0 each | LOW | Existing grammar/classification containers; matched or constructed without edit |
+| `InstallBootstrapContextCarrierV1` struct | 1 / 1 | 0 / 1 | LOW | Existing carrier representation; called/imported unchanged, bytes and validation frozen |
+| `decode_and_bind_unix_install_bootstrap_context` | 1 / 3 | 1 / 1 | LOW | Authentication owner; call unchanged, body/signature frozen |
+| `install_bootstrap_projections` | 4 / 11 | 1 / 3 | HIGH | Frozen; passive branch must precede it |
+| `ShellConfig::from_cli` | 7 / 8 | 1 / 3 | HIGH | Frozen and bypassed only by the authenticated hidden branch |
+| `WorldDoctorSnapshot` | 4 / 10 | 1 / 3 | HIGH | Existing report schema; frozen, with no field/variant/signature change |
+| `WorldDoctorReportV1` | 2 / 7 | 1 / 4 | HIGH | Existing wire schema; frozen |
+| `ensure_world_service_ready` | 4 / 10 | 4 / 5 | CRITICAL | Lifecycle owner; no edit or passive call authorized |
+| `socket_activation_report` | 6 / 12 | 4 / 5 | CRITICAL | Service-observation compatibility owner; no edit or passive call authorized |
+| `probe_world_socket` | 2 / 2 | 2 / 1 | LOW | Public Host/World doctor transport; frozen |
+| `AgentClient::doctor_world` | 3 / 16 | 1 / 2 | LOW | Linux/macOS/Windows transport owner; frozen |
+| `legacy_world_doctor_report_v1_via_execute` | 1 / 1 | 1 / 1 | LOW | Public Linux fallback; frozen |
+| `handlers::doctor_world` | 4 / 4 | 0 / 2 | LOW | World-service endpoint owner; frozen |
+| `select_strategy`; `run_enumeration_probe` | 1 / 5 each | 0 / 2 each | LOW | Overlay probe owners; frozen |
+
+Manual Rust-literal/pattern closure supplements the graph: `Cli` has one non-parser struct literal,
+`auto_sync.rs::cli_for_auto_sync`, which is why F5-PD does not edit `Cli`. The only production
+`WorldAction::Doctor` destructure is `platform/mod.rs::handle_world_command`; the Gateway-only test
+match does not construct or destructure Doctor. The hidden nested field therefore requires exactly
+that one allowlisted production pattern adaptation and no `auto_sync.rs` edit.
+
+Additive private symbols have no pre-edit graph node. They own only hidden-mode exclusivity,
+duplicate-rejecting private-wire decode, and bounded unavailable rendering; they do not own authentication, config, policy, service state,
+lifecycle, transport, or world health. No HIGH or CRITICAL edit is authorized. Encountering a need
+to edit any HIGH/CRITICAL row, add a process family/module owner, or call a frozen active row is a
+mandatory stop, regardless of passing tests.

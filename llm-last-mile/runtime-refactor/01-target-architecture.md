@@ -384,8 +384,9 @@ repository binary or ambiguous PATH witness still requires an explicit prefix.
 World-deps/doctor/config/policy/gateway leaves receive typed context or a checked projection, and
 host Codex paths derive from the committed Unix principal's account-database home.
 
-Route C's Host/World doctor representation is a read-only, non-authoritative projection of that
-same authenticated context. On Linux, the existing `handle_host_command` → `host_doctor_main` and
+Route C's Host/World doctor identity fields are a non-authoritative projection of that same
+authenticated context. The public doctor execution is not classified as read-only: on Linux, the
+existing `handle_host_command` → `host_doctor_main` and
 `handle_world_command` → `world_doctor_main` paths carry typed IH to the final host-visible JSON or
 text report. Optional `WorldDoctorReportV1` host-prefix and commitment fields remain data only: old
 wire JSON may omit them, the in-world `doctor_world` producer emits them absent and reads no host
@@ -393,21 +394,25 @@ carrier, environment, prefix, principal, or context, and only the host shell may
 typed IH. The legacy report adapter may project them only when its existing caller explicitly
 supplies typed IH. A conflicting ambient home/root or generated projection cannot replace A.
 Diagnostics never decode or disclose hidden carrier bytes, credentials, request bytes, secrets, or
-sensitive principal material, and cannot install, repair, restart, clean up, or otherwise change
-world, policy, capability, filesystem/network enforcement, placement, caging, receipt, supervisor,
-retained-worker, credential, or lifecycle state. This is not a new authority seam, module owner, or
-execution family.
+sensitive principal material. The projected identity fields cannot install, repair, restart,
+clean up, or otherwise change world, policy, capability, filesystem/network enforcement,
+placement, caging, receipt, supervisor, retained-worker, credential, or lifecycle state. The public
+Doctor compatibility path retains its existing active readiness, socket, service, endpoint, and
+probe behavior. This is not a new authority seam, module owner, or execution family.
 
-Route D applies that same rule to the complete authenticated shell/shim-doctor snapshot carrier.
+At the Route D checkpoint, the intended rule applied to the complete authenticated
+shell/shim-doctor snapshot carrier.
 The typed Unix report path passes one already-validated `InstallBootstrapContextV1` through
 `collect_report_for_context` and `build_report` to both its embedded world-doctor and world-deps
 branches. Health fixtures are diagnostic projections beneath `A/health` only; an ambient
 `B/health/world_doctor.json` or `B/health/world_deps.json` cannot replace, supplement, redirect, or
 appear in the A-bound report. When the embedded world-doctor branch invokes the existing product
 CLI, the child receives the same canonical hidden argv carrier and only context-derived checked
-environment projections. Those projections are child transport, never authority reconstruction,
-and the parent diagnostic remains non-mutating. A missing, malformed, tampered, wrong-principal, or
-contextless Unix witness fails closed. Carrier bytes, credentials, request bytes, commitments not
+environment projections. Those projections are child transport, never authority reconstruction.
+Later source closure proved that the ordinary child could activate infrastructure and probe the
+world, so the claim that the nested diagnostic was non-mutating was incorrect and is superseded by
+the controlling F5-PD section below. A missing, malformed, tampered, wrong-principal, or contextless
+Unix witness fails closed. Carrier bytes, credentials, request bytes, commitments not
 already intended for public diagnostics, and sensitive principal data never enter report JSON,
 text, fixtures, errors, logs, traces, or snapshots.
 
@@ -424,8 +429,9 @@ adapters.
 Routes A–D are individually review-clean, but they do not exhaust the authenticated-context path.
 The failed R2-2 integration closeout found two remaining projection seams and one diagnostic
 composition invariant. R2-2E is implementation-, proof-, and review-complete. F0, F0a, F0b, and
-F0-HC are now implemented, proof-complete, review-clean, committed, and preserved. R2-2F is the
-exact next packet, and a renewed
+F0-HC were then implemented, proof-complete, review-clean, committed, and preserved. R2-2F was the
+exact next packet at that checkpoint. F3/F4 are now complete and F5-PD is the exact next
+prerequisite beneath F5; a renewed
 Routes A–F integration closeout follows F.
 
 R2-2E makes world-gateway projection a pure consumer of already-authenticated A. The landed shell world
@@ -538,8 +544,11 @@ policy/world-fs policy, inventory, dependency state, world-deps runtime observat
 world-doctor output all carry matching A prefix/commitment evidence. Missing evidence, a mismatched
 fixture or child, a mixed A/B snapshot, or missing `ok` is `NeedsAttention`/unavailable or a closed
 error, never inferred healthy A. Host and World doctor receive A-derived world-fs policy rather than
-calling ambient profile/broker selectors. Collection remains read-only; no diagnostic can install,
-repair, provision, restart, or mutate state. Identity evidence is non-secret, while carrier bytes,
+calling ambient profile/broker selectors. Only the F5-PD authenticated passive child is guaranteed
+non-mutating. World-deps retains its separate F5-owned readiness/execution behavior, and the normal
+public Host/World Doctor compatibility paths retain
+their existing readiness, socket/service, endpoint, execute-fallback, and probe effects and are not
+passive. Identity evidence is non-secret, while carrier bytes,
 prompt/request bytes, credentials, tokens, and sensitive principal material remain excluded from
 JSON, text, fixtures, errors, logs, traces, and snapshots. macOS, Windows, fallback, and other
 non-Unix world-deps/Health/doctor paths remain named R2-3 compatibility/unproven routes because F
@@ -786,8 +795,9 @@ All 16 serial `FailToPass` transitions received causal audit and all 17 `NewPass
 the exact authorized tests. Runtime commit `770a6a9de9f537f7bc179c75421abbc3fff05b8d`, tree
 `61fdd2e9476f1ce3e041720ce106f7c3427895be`, preserves the reviewed 45-file patch exactly. Fresh
 containment reviewer `/root/final_containment_corrected_authority`
-(`019f8681-7957-7cc3-88fa-37ab3ad2fc87`) returned `CLEAN`. The F0/F0a/F0b/F0-HC harness packet is
-complete; F remains unstarted and is the exact next architectural packet; no seam is promoted.
+(`019f8681-7957-7cc3-88fa-37ab3ad2fc87`) returned `CLEAN`. The F0/F0a/F0b/F0-HC harness packet was
+complete at that checkpoint; F was then the exact next architectural packet and no seam was
+promoted. The later F3/F4 and F5-PD sections supersede that historical live-status statement.
 
 The final GitNexus snapshot reports 45 files, 365 changed indexed symbols, and one medium process
 attribution. The attributed `new` resolves to `AuthorityEnvTestTempDir::new` under `#[cfg(test)]`,
@@ -796,13 +806,14 @@ F0b writer delegation and preserves output/error semantics byte-for-byte. All 38
 dispositions are implemented or retained, with no new owner, policy, capability, credential,
 gateway, receipt, supervisor, worker, placement, caging, lifecycle, or user-facing behavior.
 
-## F explicit Linux readiness architecture
+## Historical F explicit Linux readiness architecture
 
 F1 (`eae02af959f0b7066015bb242ffa45fc7a01d591`) and F2
-(`d30d8cec764e2338fb48475747733091d3af22bf`) are complete local increments. F3/F4 remain
-incomplete and are preserved only as blocked evidence at
+(`d30d8cec764e2338fb48475747733091d3af22bf`) were complete local increments at that checkpoint.
+F3/F4 were then incomplete and preserved only as blocked evidence at
 `a343f0796d19d66c168c5bb2797856710cff5708`. The preservation does not authorize the candidate's
-environment or readiness behavior.
+environment or readiness behavior. F3/F4 are now complete as recorded in the controlling F5-PD
+section below; F5-PD is the sole next prerequisite beneath F5.
 
 Linux readiness remains a single-owner architecture:
 
@@ -855,3 +866,109 @@ binary discovery and spawn behavior; 50 ms readiness polling for 1,000 ms; and c
 classification/text. Linux fixed units and socket, macOS/Windows adapters, world-service,
 transport schemas, policy/capability behavior, retained workers, and all other process lifecycle
 owners remain unchanged. Any need to exceed this boundary is `ArchitecturalDecisionRequired`.
+
+## F5-PD authenticated passive diagnostic architecture
+
+The earlier Route C/Route D statement that the nested World doctor child is read-only was too
+broad. The public compatibility path may inspect service state, connect the activation socket,
+call `/v1/doctor/world`, run filesystem probes, and fall back to `/v1/execute`. Its public CLI
+behavior remains frozen; F5-PD does not make it passive and does not change its output, errors,
+readiness, platform behavior, or lifecycle semantics.
+
+F5-PD adds one internal observation mode solely for the existing F5 child-process composition:
+
+```text
+shim/Health parent
+  -> encode the already-validated InstallBootstrapContextCarrierV1 on hidden argv
+  -> exec the product CLI with hidden passive mode + world doctor --json
+  -> parse and fail-close the bounded child result
+
+child CLI
+  -> parse hidden mode and require the exact World Doctor JSON action
+  -> decode/validate carrier, commitment, declared selector, and current Unix principal
+  -> reject conflicting checked projections
+  -> branch before installing projections or entering ordinary bootstrap/routing
+  -> emit authenticated unavailable and exit with the existing diagnostic failure class
+```
+
+The branch is inside `run_shell_with_cli` immediately after
+`decode_and_bind_unix_install_bootstrap_context` succeeds and before
+`install_bootstrap_projections`. It is therefore also before home-deps scaffold creation, trace
+initialization, `ShellConfig::from_cli`, effective config/policy resolution, platform routing,
+`handle_world_command`, service readiness, `socket_activation_report`, socket connection,
+activation/start, HTTP/WebSocket transport, world construction, filesystem/capability probes, and
+the execute fallback. Environment state alone cannot select this mode, and checked environment
+projections remain consistency checks rather than authority.
+
+On Linux, whenever the existing World-enabled `build_report` branch reaches
+`gather_world_doctor_snapshot`, that function takes this authenticated child path. It no longer
+selects `A/health/world_doctor.json` before child construction. The World-disabled branch remains
+frozen and returns `disabled_world_doctor_snapshot` without spawning a child or consulting a
+fixture. The Linux value-decoder is
+retained only under `cfg(test)` for direct fixture/evidence tests; no authenticated Linux product
+invocation can select it. Existing non-Linux production retains
+its legacy fixture/public-child compatibility behavior byte-for-byte; that path is explicitly
+unproven, cannot supply F5-PD/F5 evidence or authority, and cannot claim A-bound/native truth. This
+correction is limited to the authenticated Linux nested World Doctor fixture. F5 retains ownership
+of its separately source-closed world-deps evidence/composition work.
+
+The hidden discriminator is an additive field on the existing `WorldAction::Doctor` CLI grammar,
+not on the top-level `Cli` struct. This avoids a synthetic initialization requirement in
+`auto_sync.rs`. The Rust enum layout changes only to carry the hidden internal bit; the normal
+`world doctor [--json]` grammar, help, output, errors, and dispatch remain behaviorally unchanged.
+The ordinary platform Doctor arm ignores the field only after routing has proved it false; the
+authenticated true case is intercepted before bootstrap projections.
+
+The passive child has no new lifecycle or evidence owner. It may project only the authenticated
+non-secret selected-prefix/commitment identity already intended for diagnostics and compile-time
+platform labeling. Those facts establish which A was authenticated; they do not establish service
+or world health. No existing durable runtime-health record is both authoritative and permitted,
+so the initial implementation reports `ok=false` and `world.status=unavailable`. A coherent
+success claim is forbidden until a later source-closed decision identifies an already-existing
+authoritative durable source without adding persistence, transport, or lifecycle ownership.
+
+Evidence classification is closed:
+
+| Candidate evidence | Classification | F5-PD use |
+|---|---|---|
+| Validated hidden argv `InstallBootstrapContextCarrierV1`, its current-principal check, selected prefix, and non-secret commitment | Authoritative and permitted for diagnostic identity only | Required before result construction; never health proof |
+| Compile-time target/platform label | Diagnostic-only and permitted | Bounded labeling only |
+| Fixed-socket metadata or a proven non-activating service-manager query | Diagnostic-only and semantically insufficient | Not read by the initial implementation; absence/inactivity/unprovability means unavailable |
+| Existing config, policy, inventory, dependency, trace, log, cache, socket, process, unit, or filesystem metadata | Insufficient for coherent runtime health unless separately authenticated and source-closed | No current production read; unavailable |
+| `A/health/world_doctor.json`, injected World Doctor reports, or synthetic markers on the authenticated Linux path | Test evidence only | Direct `cfg(test)` decoder tests only; unreachable from authenticated Linux production collection |
+| Existing non-Linux World Doctor fixture/public-child compatibility | Forbidden compatibility evidence for F5-PD/F5 | Behavior-frozen; no A-bound coherence or native proof |
+| HOME/XDG/CWD, `SUBSTRATE_WORLD_SOCKET`, activation overrides, ambient B, global state, compatibility resolvers, or repository-relative paths | Forbidden ambient/compatibility evidence | Never selected or consulted |
+| Public `world doctor`, readiness owners, socket connect, `/v1/doctor/world`, `/v1/execute`, active filesystem/network/capability probes, provisioning, repair, cleanup, or synchronization | Forbidden active evidence | Never reached |
+
+The existing `WorldDoctorSnapshot` and public wire types stay unchanged. At the Linux raw-stdout
+boundary, `run_json_subcommand` first decodes into exact private `#[serde(deny_unknown_fields)]`
+wire structs, so duplicate and unknown fields fail before a lossy `serde_json::Value` can collapse
+them. The parent command decoder then receives expected A identity and accepts only the exact private schema, explicit
+`ok=false`, `world.status=unavailable`, matching host/world A identity, empty stderr, and exit 4.
+It discards the raw payload after validation and constructs only bounded unavailable state. The
+Linux value decoder becomes `cfg(test)`-only and delegates to the same identity/schema/redaction
+rules for direct fixture tests; non-Linux compatibility decoding remains unchanged. A recursive
+forbidden-key scan rejects credential, token,
+authorization, password, secret, prompt, request/body/bytes/input, carrier, auth-bundle, parent or
+full environment, and commitment-preimage material without echoing it.
+
+The parent uses the existing contract-owned `NeedsAttention` fail-closed class plus a bounded
+unavailable/incoherent reason; coherent still requires exact A identity and complete constituents.
+No field is silently overloaded into success, and no transport/schema change is authorized.
+Malformed, duplicate-key, tampered, conflicting, stale, mixed A/B, secret-bearing, wrong-exit, or stderr-bearing
+child evidence is rejected as incoherent or the existing closed error class, with `ok=false` and
+without retaining the rejected payload. Missing adequate evidence is unavailable. Human and JSON
+views must express the same fail-closed outcome.
+
+Service-manager or filesystem metadata may be added to a later passive implementation only when
+source closure proves the exact read cannot activate, create, lock-promote, touch, truncate,
+migrate, repair, or rewrite anything. The passive path never connects the activation socket.
+Inactive, absent, or unprovable service state remains unavailable. No privileged broker, daemon,
+endpoint, persistence format, side table, or duplicate config/policy/platform/service/doctor owner
+is permitted.
+
+On Linux, the authenticated internal mode may return only unavailable unless the permitted evidence
+contract above is met. Non-Linux compatibility remains frozen: no native readiness or health proof
+is fabricated, and unsupported/unproven paths fail closed. Every non-Linux target rejects the hidden
+passive discriminator without altering its ordinary compatibility route. Normal public
+`substrate world doctor --json` remains unchanged on every platform.
