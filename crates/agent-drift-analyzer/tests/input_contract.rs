@@ -5,11 +5,13 @@ mod support;
 use std::fs;
 
 use agent_session_compactor::{
-    BundleManifest, CompactionKind, CompactionRow, DedupeGroup, DelegationLink,
-    DelegationLinkState, RowRef, SourceKind, UserMessageRole,
+    export_bundle, BundleManifest, ChildSessionOrigin, CompactionKind, CompactionRow, DedupeGroup,
+    DelegationLink, DelegationLinkState, ExportBundleRequest, ParentSpawnResult,
+    RolloutLinkageMetadata, RolloutRowProvenance, RowRef, SourceKind, UserMessageRole,
 };
-use camino::Utf8PathBuf;
+use camino::{Utf8Path, Utf8PathBuf};
 use support::{load_sample_bundle, BundleFixture};
+use tempfile::TempDir;
 
 #[test]
 fn input_contract_loads_manifest_rows_and_dedupe_audit() {
@@ -502,6 +504,99 @@ fn input_contract_rejects_verified_links_to_sessions_missing_from_the_bundle() {
         "session-child",
         "session-missing-parent",
     );
+}
+
+#[test]
+fn input_contract_accepts_compactor_registered_verified_metadata_only_child() {
+    let temp_dir = TempDir::new().expect("temp dir");
+    let input_dir = Utf8Path::from_path(temp_dir.path())
+        .expect("utf8 temp path")
+        .join("bundle");
+    let parent_session_id = "session-parent";
+    let child_session_id = "session-child";
+    let parent_path = Utf8PathBuf::from(format!("/tmp/{parent_session_id}/rollout.jsonl"));
+    let child_path = Utf8PathBuf::from(format!("/tmp/{child_session_id}/rollout.jsonl"));
+    let parent_row = session_row(parent_session_id, 0);
+    let archival_rows = vec![parent_row.clone()];
+    let compact_rows = vec![parent_row];
+    let linkage_metadata = vec![
+        RolloutLinkageMetadata {
+            parent_spawn_results: vec![ParentSpawnResult {
+                parent_session_id: parent_session_id.to_string(),
+                child_session_id: child_session_id.to_string(),
+                call_id: "call-spawn".to_string(),
+                spawn_call_provenance: RolloutRowProvenance {
+                    source_file: parent_path.clone(),
+                    line_number: 2,
+                    event_index: 1,
+                },
+                spawn_result_provenance: RolloutRowProvenance {
+                    source_file: parent_path.clone(),
+                    line_number: 3,
+                    event_index: 2,
+                },
+            }],
+            child_origin: None,
+        },
+        RolloutLinkageMetadata {
+            parent_spawn_results: Vec::new(),
+            child_origin: Some(ChildSessionOrigin {
+                child_session_id: child_session_id.to_string(),
+                parent_session_id: parent_session_id.to_string(),
+                depth: 1,
+                agent_nickname: None,
+                agent_role: None,
+                provenance: RolloutRowProvenance {
+                    source_file: child_path.clone(),
+                    line_number: 1,
+                    event_index: 0,
+                },
+            }),
+        },
+    ];
+
+    export_bundle(&ExportBundleRequest {
+        codex_home: Utf8Path::new("/tmp/.codex"),
+        output_dir: &input_dir,
+        generated_at: time::OffsetDateTime::UNIX_EPOCH,
+        session_ids: vec![parent_session_id.to_string(), child_session_id.to_string()],
+        source_files: vec![parent_path, child_path.clone()],
+        linkage_metadata: &linkage_metadata,
+        archival_rows: &archival_rows,
+        compact_rows: &compact_rows,
+        dedupe_groups: &[],
+    })
+    .expect("export compactor-produced sparse child bundle");
+
+    let bundle = agent_drift_analyzer::input::load_bundle(&input_dir)
+        .expect("registered metadata-only child bundle should validate");
+    let child = bundle
+        .sessions
+        .iter()
+        .find(|session| session.session_id == child_session_id)
+        .expect("metadata-only child session");
+    assert!(child.archival_rows.is_empty());
+    assert!(child.compact_rows.is_empty());
+    assert_eq!(
+        bundle.delegation_graph.by_session_id[parent_session_id]
+            .child_links
+            .first()
+            .map(|link| link.child_session_id.as_str()),
+        Some(child_session_id)
+    );
+    let child_file = bundle
+        .manifest
+        .files
+        .iter()
+        .find(|file| file.path == child_path)
+        .expect("metadata-only child file registry entry");
+    assert_eq!(child_file.session_id.as_deref(), Some(child_session_id));
+    assert!(child_file.turns.is_empty());
+    assert!(bundle
+        .archival_rows
+        .iter()
+        .chain(bundle.compact_rows.iter())
+        .all(|row| row.session_id.as_deref() != Some(child_session_id)));
 }
 
 #[test]

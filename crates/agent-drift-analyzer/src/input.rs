@@ -153,7 +153,7 @@ pub fn load_bundle(input_dir: &Utf8Path) -> Result<InputBundle, InputError> {
 
     validate_dedupe_refs(&archival_rows, &dedupe_groups)?;
 
-    let sessions = build_sessions(input_dir, &archival_rows, &compact_rows)?;
+    let sessions = build_sessions(input_dir, &file_registry, &archival_rows, &compact_rows)?;
     let delegation_graph = build_delegation_graph(&manifest, &sessions)?;
     let unscoped_archival_rows = archival_rows
         .iter()
@@ -397,6 +397,7 @@ where
 
 fn build_sessions(
     input_dir: &Utf8Path,
+    file_registry: &BTreeMap<u32, FileEntry>,
     archival_rows: &[CompactionRow],
     compact_rows: &[CompactionRow],
 ) -> Result<Vec<BundleSession>, InputError> {
@@ -416,10 +417,15 @@ fn build_sessions(
             .push(row.clone());
     }
 
-    let session_ids = archival_by_session
-        .keys()
-        .chain(compact_by_session.keys())
-        .cloned()
+    let session_ids = file_registry
+        .values()
+        .filter_map(|file| file.session_id.clone())
+        .chain(
+            archival_by_session
+                .keys()
+                .chain(compact_by_session.keys())
+                .cloned(),
+        )
         .collect::<BTreeSet<_>>();
     if session_ids.is_empty() {
         return Err(InputError::NoSessions {

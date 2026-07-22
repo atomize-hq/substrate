@@ -1561,18 +1561,18 @@ mod tests {
         ROLLING_CURRENT_REASON_PREFIX, ROLLING_PREVIOUS_REASON_PREFIX,
     };
     use crate::checkpoint::{
-        CheckpointAnalysis, CheckpointSlice, Confidence, EvidenceRef, ObjectiveClass,
-        ObjectiveEvidenceSpan, ObjectiveIntent, ObjectiveRole, ObjectiveSectionKind,
-        ObjectiveSourceKind, ObjectiveTarget, ObjectiveTargetKind, ObjectiveUnknown,
-        RequestedDeliverable, RequestedDeliverableKind, StructuredObjective, SuccessCondition,
-        TaskFrame, TurnActivityMix, TurnContext, TurnExecutionMode,
+        resolve_checkpoint_delegation, CheckpointAnalysis, CheckpointSlice, Confidence,
+        EvidenceRef, ObjectiveClass, ObjectiveEvidenceSpan, ObjectiveIntent, ObjectiveRole,
+        ObjectiveSectionKind, ObjectiveSourceKind, ObjectiveTarget, ObjectiveTargetKind,
+        ObjectiveUnknown, RequestedDeliverable, RequestedDeliverableKind, StructuredObjective,
+        SuccessCondition, TaskFrame, TurnActivityMix, TurnContext, TurnExecutionMode,
     };
     use crate::checkpoint::{ChildWorkVisibility, DelegationTopology};
     use crate::context::{
         CandidateTruthArtifact, CommandObservation, ContextPack, ObjectiveSummary, ToolObservation,
         WorkingSetPath,
     };
-    use crate::inference::DelegationInference;
+    use crate::inference::{DelegationInference, TypedDelegationInference};
     use crate::input::BundleSession;
 
     fn opaque_delegating_parent() -> DelegationInference {
@@ -1615,6 +1615,51 @@ mod tests {
                 .score
                 .flagged,
             "opaque delegated parent without a current target anchor must not fire"
+        );
+    }
+
+    #[test]
+    fn typed_opaque_parent_resolution_reaches_semantic_scorer_before_export() {
+        let anchor = structured_goal("crates/foo/anchor.rs", Confidence::High, Vec::new());
+        let current =
+            structured_goal_with_constraints(None, Confidence::High, Vec::new(), Vec::new());
+        let mut analysis = analysis_with_summary(
+            objective_summary(
+                "implement|file_or_directory|docs_specs_sfr_map_md",
+                Some(current),
+                "goal",
+            ),
+            false,
+        );
+
+        assert!(
+            score_semantic_goal_drift(&analysis, Some(&anchor))
+                .score
+                .flagged,
+            "single-agent control must retain the underlying semantic drift witness"
+        );
+
+        let typed = TypedDelegationInference {
+            topology: DelegationTopology::DelegatingParent,
+            parent_session_id: None,
+            child_session_ids: Vec::new(),
+            child_work_visibility: ChildWorkVisibility::Opaque,
+            confidence: Confidence::Low,
+            supporting_evidence: Vec::new(),
+            counter_evidence: Vec::new(),
+        };
+        analysis.delegation = resolve_checkpoint_delegation(
+            analysis.delegation.clone(),
+            Some(&typed),
+            &analysis.current.window,
+        );
+        analysis.typed_delegation = Some(typed);
+
+        assert!(
+            !score_semantic_goal_drift(&analysis, Some(&anchor))
+                .score
+                .flagged,
+            "typed opaque-parent semantics must reach scoring before checkpoint export"
         );
     }
 
@@ -3631,6 +3676,7 @@ mod tests {
                 supporting_evidence: Vec::new(),
                 counter_evidence: Vec::new(),
             },
+            typed_delegation: None,
             interval: crate::checkpoint::IntervalSlice {
                 archival_rows: Vec::new(),
                 compact_rows: Vec::new(),

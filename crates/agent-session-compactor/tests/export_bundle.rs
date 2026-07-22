@@ -6,7 +6,11 @@ use std::sync::Mutex;
 use agent_session_compactor::canonicalize::canonicalize_row_text;
 use agent_session_compactor::dedupe::{dedupe_rows_exact, DedupeGroup};
 use agent_session_compactor::export::{
-    export_bundle, BundleManifest, DedupeGroupV0_2, ExportBundleRequest, ExportRowV0_2,
+    export_bundle, BundleManifest, DedupeGroupV0_2, DelegationLinkState, ExportBundleRequest,
+    ExportRowV0_2,
+};
+use agent_session_compactor::ingest::{
+    ChildSessionOrigin, ParentSpawnResult, RolloutLinkageMetadata, RolloutRowProvenance,
 };
 use agent_session_compactor::normalize::{
     CompactionKind, CompactionRow, SourceKind, UserMessageRole,
@@ -189,6 +193,103 @@ fn export_bundle_moves_turn_ids_into_file_scoped_turn_tables() {
                 .collect::<Vec<_>>(),
             vec![Some(0), Some(1)]
         );
+    });
+}
+
+#[test]
+fn export_bundle_registers_verified_metadata_only_child_without_rows() {
+    with_export_failure(None, || {
+        let temp_dir = TempDir::new().expect("temp dir");
+        let output_dir = Utf8Path::from_path(temp_dir.path())
+            .expect("utf8 temp path")
+            .join("bundle");
+        let parent_path = Utf8PathBuf::from("/tmp/session-parent/rollout.jsonl");
+        let child_path = Utf8PathBuf::from("/tmp/session-child/rollout.jsonl");
+
+        let mut parent_row = row(
+            parent_path.as_str(),
+            1,
+            0,
+            CompactionKind::UserMessage,
+            "/goal Coordinate a verified child.",
+        );
+        parent_row.session_id = Some("session-parent".to_string());
+        let archival_rows = vec![parent_row.clone()];
+        let compact_rows = vec![parent_row];
+        let linkage_metadata = vec![
+            RolloutLinkageMetadata {
+                parent_spawn_results: vec![ParentSpawnResult {
+                    parent_session_id: "session-parent".to_string(),
+                    child_session_id: "session-child".to_string(),
+                    call_id: "call-spawn".to_string(),
+                    spawn_call_provenance: RolloutRowProvenance {
+                        source_file: parent_path.clone(),
+                        line_number: 2,
+                        event_index: 1,
+                    },
+                    spawn_result_provenance: RolloutRowProvenance {
+                        source_file: parent_path.clone(),
+                        line_number: 3,
+                        event_index: 2,
+                    },
+                }],
+                child_origin: None,
+            },
+            RolloutLinkageMetadata {
+                parent_spawn_results: Vec::new(),
+                child_origin: Some(ChildSessionOrigin {
+                    child_session_id: "session-child".to_string(),
+                    parent_session_id: "session-parent".to_string(),
+                    depth: 1,
+                    agent_nickname: None,
+                    agent_role: None,
+                    provenance: RolloutRowProvenance {
+                        source_file: child_path.clone(),
+                        line_number: 1,
+                        event_index: 0,
+                    },
+                }),
+            },
+        ];
+
+        let manifest = export_bundle(&ExportBundleRequest {
+            codex_home: Utf8Path::new("/tmp/.codex"),
+            output_dir: &output_dir,
+            generated_at: datetime!(2026-05-29 12:00:00 UTC),
+            session_ids: vec!["session-parent".to_string(), "session-child".to_string()],
+            source_files: vec![parent_path.clone(), child_path.clone()],
+            linkage_metadata: &linkage_metadata,
+            archival_rows: &archival_rows,
+            compact_rows: &compact_rows,
+            dedupe_groups: &[],
+        })
+        .expect("export sparse child bundle");
+
+        assert_eq!(manifest.delegation_links.len(), 1);
+        assert_eq!(
+            manifest.delegation_links[0].state,
+            DelegationLinkState::Verified
+        );
+        let parent_file = manifest
+            .files
+            .iter()
+            .find(|file| file.path == parent_path)
+            .expect("parent file registry entry");
+        let child_file = manifest
+            .files
+            .iter()
+            .find(|file| file.path == child_path)
+            .expect("metadata-only child file registry entry");
+        assert_eq!(parent_file.session_id.as_deref(), Some("session-parent"));
+        assert_eq!(child_file.session_id.as_deref(), Some("session-child"));
+        assert!(child_file.turns.is_empty());
+
+        for artifact in ["rows.archival.jsonl", "rows.compact.jsonl"] {
+            let rows = read_jsonl::<ExportRowV0_2>(output_dir.join(artifact));
+            assert_eq!(rows.len(), 1);
+            assert_eq!(rows[0].source_file_id, parent_file.id);
+            assert_ne!(rows[0].source_file_id, child_file.id);
+        }
     });
 }
 

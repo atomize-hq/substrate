@@ -87,7 +87,10 @@ pub fn analyze_loaded_bundle(
         let mut previous_truth_grounding_gap = None;
         let mut previous_checkpoint_scores: Option<Vec<DriftScore>> = None;
         let mut truth_grounding_provenance = TruthGroundingProvenance::default();
-        let analyses_for_session = checkpoint::checkpoint_analyses(session);
+        let analyses_for_session = checkpoint::checkpoint_analyses_with_typed_delegation(
+            session,
+            typed_delegation.as_ref(),
+        );
         let kickoff_anchor =
             checkpoint::session_kickoff_structured_goal_anchor(&analyses_for_session);
         for analysis in &analyses_for_session {
@@ -105,14 +108,11 @@ pub fn analyze_loaded_bundle(
                 .filter(|score| score.state != DriftState::Cleared)
                 .cloned();
             previous_checkpoint_scores = Some(scores.clone());
-            checkpoints.push(
-                checkpoint::build_session_checkpoint_from_analysis_with_typed_delegation(
-                    analysis,
-                    &analysis.current.task_frame,
-                    scores,
-                    typed_delegation.as_ref(),
-                ),
-            );
+            checkpoints.push(checkpoint::build_session_checkpoint_from_analysis(
+                analysis,
+                &analysis.current.task_frame,
+                scores,
+            ));
         }
         exported_checkpoints.extend(checkpoints.iter().cloned());
         analyses.push(SessionAnalysis {

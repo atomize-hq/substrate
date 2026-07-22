@@ -47,6 +47,7 @@ pub(crate) struct CheckpointAnalysis {
     pub previous: Option<CheckpointSlice>,
     pub sanctioned_replan: bool,
     pub delegation: DelegationInference,
+    pub typed_delegation: Option<TypedDelegationInference>,
     pub interval: IntervalSlice,
     pub turn_context: TurnContext,
     pub repetition: RepetitionSlice,
@@ -231,6 +232,13 @@ impl EvidenceBucket {
 }
 
 pub(crate) fn checkpoint_analyses(session: &BundleSession) -> Vec<CheckpointAnalysis> {
+    checkpoint_analyses_with_typed_delegation(session, None)
+}
+
+pub(crate) fn checkpoint_analyses_with_typed_delegation(
+    session: &BundleSession,
+    typed_delegation: Option<&TypedDelegationInference>,
+) -> Vec<CheckpointAnalysis> {
     let mut analyses = Vec::new();
     let mut previous = None;
     let prompts_observed_in_session = prompts_observed_in_session(session);
@@ -260,8 +268,10 @@ pub(crate) fn checkpoint_analyses(session: &BundleSession) -> Vec<CheckpointAnal
             }
         }
         let task_frame = infer_task_frame(&context);
-        let delegation =
+        let heuristic_delegation =
             classify_checkpoint_delegation(infer_delegation_context(&window, &context));
+        let delegation =
+            resolve_checkpoint_delegation(heuristic_delegation, typed_delegation, &window);
         let current = CheckpointSlice {
             window,
             context,
@@ -287,6 +297,7 @@ pub(crate) fn checkpoint_analyses(session: &BundleSession) -> Vec<CheckpointAnal
             previous: previous.clone(),
             sanctioned_replan,
             delegation,
+            typed_delegation: typed_delegation.cloned(),
             interval,
             turn_context,
             repetition,
@@ -298,6 +309,41 @@ pub(crate) fn checkpoint_analyses(session: &BundleSession) -> Vec<CheckpointAnal
     }
 
     analyses
+}
+
+pub(crate) fn resolve_checkpoint_delegation(
+    heuristic: DelegationInference,
+    typed: Option<&TypedDelegationInference>,
+    session: &BundleSession,
+) -> DelegationInference {
+    let Some(typed) = typed else {
+        return heuristic;
+    };
+
+    // Typed topology is session-wide authority, while scorer/progress evidence remains
+    // trajectory-local. The public checkpoint retains the complete typed evidence below.
+    let source_files = session
+        .archival_rows
+        .iter()
+        .chain(&session.compact_rows)
+        .map(|row| row.source_file.clone())
+        .collect::<BTreeSet<_>>();
+    let local_evidence = |evidence: &[EvidenceRef]| {
+        evidence
+            .iter()
+            .filter(|item| source_files.contains(&item.row.source_file))
+            .cloned()
+            .collect::<Vec<_>>()
+    };
+
+    DelegationInference {
+        topology: Some(typed.topology),
+        child_work_visibility: Some(typed.child_work_visibility),
+        confidence: Some(typed.confidence),
+        markers: heuristic.markers,
+        supporting_evidence: local_evidence(&typed.supporting_evidence),
+        counter_evidence: local_evidence(&typed.counter_evidence),
+    }
 }
 
 pub(crate) fn session_kickoff_structured_goal_anchor(
@@ -428,36 +474,6 @@ pub(crate) fn build_session_checkpoint_from_analysis(
     )
 }
 
-pub(crate) fn build_session_checkpoint_from_analysis_with_typed_delegation(
-    analysis: &CheckpointAnalysis,
-    task_frame: &TaskFrame,
-    drift_scores: Vec<DriftScore>,
-    typed_delegation: Option<&TypedDelegationInference>,
-) -> Checkpoint {
-    let mut checkpoint = build_session_checkpoint_from_analysis(analysis, task_frame, drift_scores);
-    if let Some(typed_delegation) = typed_delegation {
-        checkpoint.delegation =
-            public_typed_delegation_context(&analysis.delegation, typed_delegation);
-    }
-    checkpoint
-}
-
-fn public_typed_delegation_context(
-    heuristic: &DelegationInference,
-    typed: &TypedDelegationInference,
-) -> DelegationContext {
-    DelegationContext {
-        topology: typed.topology,
-        parent_session_id: typed.parent_session_id.clone(),
-        child_session_ids: typed.child_session_ids.clone(),
-        child_work_visibility: typed.child_work_visibility,
-        confidence: typed.confidence,
-        markers: heuristic.markers.clone(),
-        supporting_evidence: typed.supporting_evidence.clone(),
-        counter_evidence: typed.counter_evidence.clone(),
-    }
-}
-
 pub(crate) fn build_scoring_session_progress(analysis: &CheckpointAnalysis) -> SessionProgress {
     let session_archetype = build_session_archetype(analysis);
     build_session_progress(analysis, &session_archetype)
@@ -499,14 +515,15 @@ fn build_session_checkpoint_from_analysis_with_ordinal(
         structured_objective: analysis.current.context.objective.structured.clone(),
         session_archetype: Some(session_archetype),
         session_progress: Some(session_progress),
-        delegation: public_delegation_context(&analysis.delegation),
+        delegation: public_delegation_context(analysis),
         flagged: drift_scores.iter().any(|score| score.flagged),
         drift_scores,
         expected_next_step,
     }
 }
 
-fn public_delegation_context(delegation: &DelegationInference) -> DelegationContext {
+fn public_delegation_context(analysis: &CheckpointAnalysis) -> DelegationContext {
+    let delegation = &analysis.delegation;
     let topology = delegation
         .topology
         .unwrap_or_else(|| derive_delegation_topology(delegation));
@@ -517,15 +534,35 @@ fn public_delegation_context(delegation: &DelegationInference) -> DelegationCont
         derive_delegation_confidence(delegation, topology, child_work_visibility)
     });
 
+    let (parent_session_id, child_session_ids, supporting_evidence, counter_evidence) = analysis
+        .typed_delegation
+        .as_ref()
+        .map(|typed| {
+            (
+                typed.parent_session_id.clone(),
+                typed.child_session_ids.clone(),
+                typed.supporting_evidence.clone(),
+                typed.counter_evidence.clone(),
+            )
+        })
+        .unwrap_or_else(|| {
+            (
+                None,
+                Vec::new(),
+                delegation.supporting_evidence.clone(),
+                delegation.counter_evidence.clone(),
+            )
+        });
+
     DelegationContext {
         topology,
-        parent_session_id: None,
-        child_session_ids: Vec::new(),
+        parent_session_id,
+        child_session_ids,
         child_work_visibility,
         confidence,
         markers: delegation.markers.clone(),
-        supporting_evidence: delegation.supporting_evidence.clone(),
-        counter_evidence: delegation.counter_evidence.clone(),
+        supporting_evidence,
+        counter_evidence,
     }
 }
 

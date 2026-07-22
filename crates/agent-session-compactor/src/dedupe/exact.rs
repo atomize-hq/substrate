@@ -6,19 +6,18 @@ use crate::dedupe::audit::build_dedupe_group;
 use crate::dedupe::DedupeResult;
 use crate::normalize::{CompactionRow, SourceKind};
 
+type ExactDedupeKey = (
+    EvidenceScope,
+    crate::normalize::CompactionKind,
+    String,
+    Option<String>,
+    Option<crate::normalize::UserMessageRole>,
+);
+
 pub fn dedupe_rows_exact(rows: &[CompactionRow]) -> DedupeResult {
     let archival_rows = rows.to_vec();
     let mut compact_rows = Vec::new();
-    let mut first_seen: HashMap<
-        (
-            EvidenceScope,
-            crate::normalize::CompactionKind,
-            String,
-            Option<String>,
-            Option<crate::normalize::UserMessageRole>,
-        ),
-        usize,
-    > = HashMap::new();
+    let mut first_seen: HashMap<ExactDedupeKey, usize> = HashMap::new();
     let mut duplicates_by_representative: HashMap<usize, Vec<CompactionRow>> = HashMap::new();
 
     for row in rows {

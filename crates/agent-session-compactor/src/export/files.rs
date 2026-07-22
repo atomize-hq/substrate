@@ -31,7 +31,10 @@ pub fn export_bundle(request: &ExportBundleRequest) -> Result<BundleManifest, Ex
         }
     })?;
 
+    let delegation_links = delegation_links_from_metadata(request.linkage_metadata);
     let file_registry = FileRegistry::build(
+        &request.source_files,
+        &delegation_links,
         request.archival_rows,
         request.compact_rows,
         request.dedupe_groups,
@@ -47,7 +50,7 @@ pub fn export_bundle(request: &ExportBundleRequest) -> Result<BundleManifest, Ex
         dedupe_group_count: request.dedupe_groups.len(),
         session_ids: request.session_ids.clone(),
         files: file_registry.files.clone(),
-        delegation_links: delegation_links_from_metadata(request.linkage_metadata),
+        delegation_links,
     };
     let archival_rows = export_rows(request.archival_rows, &file_registry)?;
     let compact_rows = export_rows(request.compact_rows, &file_registry)?;
@@ -505,6 +508,8 @@ struct FileRegistry {
 
 impl FileRegistry {
     fn build(
+        source_files: &[Utf8PathBuf],
+        delegation_links: &[DelegationLink],
         archival_rows: &[CompactionRow],
         compact_rows: &[CompactionRow],
         dedupe_groups: &[DedupeGroup],
@@ -512,26 +517,44 @@ impl FileRegistry {
         let mut sessions_by_path: BTreeMap<Utf8PathBuf, Option<String>> = BTreeMap::new();
         let mut turns_by_path: BTreeMap<Utf8PathBuf, BTreeSet<String>> = BTreeMap::new();
         for row in archival_rows.iter().chain(compact_rows.iter()) {
-            match sessions_by_path.entry(row.source_file.clone()) {
-                std::collections::btree_map::Entry::Vacant(entry) => {
-                    entry.insert(row.session_id.clone());
-                }
-                std::collections::btree_map::Entry::Occupied(entry)
-                    if entry.get() != &row.session_id =>
-                {
-                    return Err(ExportError::ConflictingSourceFileSessionIds {
-                        path: row.source_file.clone(),
-                        left: entry.get().clone(),
-                        right: row.session_id.clone(),
-                    });
-                }
-                std::collections::btree_map::Entry::Occupied(_) => {}
-            }
+            register_source_file_session(
+                &mut sessions_by_path,
+                &row.source_file,
+                row.session_id.clone(),
+            )?;
             if let Some(turn_id) = row.turn_id.as_ref() {
                 turns_by_path
                     .entry(row.source_file.clone())
                     .or_default()
                     .insert(turn_id.clone());
+            }
+        }
+
+        // Only reciprocal direct links authorize rowless session/file registration.
+        // Incomplete or conflicting linkage remains typed manifest evidence but cannot
+        // manufacture an analyzer session.
+        let included_source_files = source_files.iter().cloned().collect::<BTreeSet<_>>();
+        for link in delegation_links
+            .iter()
+            .filter(|link| link.state == DelegationLinkState::Verified)
+        {
+            for evidence in &link.parent_evidence {
+                if included_source_files.contains(&evidence.source_file) {
+                    register_source_file_session(
+                        &mut sessions_by_path,
+                        &evidence.source_file,
+                        Some(link.parent_session_id.clone()),
+                    )?;
+                }
+            }
+            for evidence in &link.child_evidence {
+                if included_source_files.contains(&evidence.source_file) {
+                    register_source_file_session(
+                        &mut sessions_by_path,
+                        &evidence.source_file,
+                        Some(link.child_session_id.clone()),
+                    )?;
+                }
             }
         }
 
@@ -602,6 +625,27 @@ impl FileRegistry {
                 turn_id: turn_id.to_string(),
             })
     }
+}
+
+fn register_source_file_session(
+    sessions_by_path: &mut BTreeMap<Utf8PathBuf, Option<String>>,
+    path: &Utf8Path,
+    session_id: Option<String>,
+) -> Result<(), ExportError> {
+    match sessions_by_path.entry(path.to_owned()) {
+        std::collections::btree_map::Entry::Vacant(entry) => {
+            entry.insert(session_id);
+        }
+        std::collections::btree_map::Entry::Occupied(entry) if entry.get() != &session_id => {
+            return Err(ExportError::ConflictingSourceFileSessionIds {
+                path: path.to_owned(),
+                left: entry.get().clone(),
+                right: session_id,
+            });
+        }
+        std::collections::btree_map::Entry::Occupied(_) => {}
+    }
+    Ok(())
 }
 
 fn write_summary(path: &Utf8Path, manifest: &BundleManifest) -> Result<(), ExportError> {

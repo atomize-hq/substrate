@@ -1812,7 +1812,10 @@ fn prior_closeout_attempts_in_window(analysis: &CheckpointAnalysis) -> Vec<Verif
     let Some(_) = &analysis.previous else {
         return Vec::new();
     };
-    let analyses = super::checkpoint_analyses(&analysis.current.window);
+    let analyses = super::checkpoint_analyses_with_typed_delegation(
+        &analysis.current.window,
+        analysis.typed_delegation.as_ref(),
+    );
     let Some(current_index) = analyses.len().checked_sub(1) else {
         return Vec::new();
     };
@@ -1840,7 +1843,10 @@ fn prior_verification_attempts(
     let Some(_) = &analysis.previous else {
         return Vec::new();
     };
-    let analyses = super::checkpoint_analyses(&analysis.current.window);
+    let analyses = super::checkpoint_analyses_with_typed_delegation(
+        &analysis.current.window,
+        analysis.typed_delegation.as_ref(),
+    );
     let Some(current_index) = analyses.len().checked_sub(1) else {
         return Vec::new();
     };
@@ -2402,7 +2408,10 @@ fn has_parent_visible_synthesis(
 }
 
 fn previous_checkpoint_was_comparable_parent_visible(analysis: &CheckpointAnalysis) -> bool {
-    let analyses = super::checkpoint_analyses(&analysis.current.window);
+    let analyses = super::checkpoint_analyses_with_typed_delegation(
+        &analysis.current.window,
+        analysis.typed_delegation.as_ref(),
+    );
     analyses
         .iter()
         .rev()

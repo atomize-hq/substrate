@@ -6,7 +6,7 @@ use std::fs;
 
 use agent_drift_analyzer::{
     analyze_bundle, AnalyzeRequest, AnalyzeResult, ChildWorkVisibility, Confidence,
-    DelegationTopology,
+    DelegationTopology, ProgressSignalCode,
 };
 use agent_session_compactor::{
     BundleManifest, CompactionKind, CompactionRow, DelegationEvidenceRef, DelegationLink,
@@ -133,6 +133,55 @@ fn delegation_verified_plus_one_sided_direct_observation_is_partial() {
         .iter()
         .any(|evidence| evidence.reason.contains("child_only")));
     assert_typed_evidence_is_deterministic(&parent.delegation.counter_evidence);
+}
+
+#[test]
+fn typed_delegation_limits_parent_progress_before_checkpoint_export() {
+    let fixture = delegation_fixture(&[PARENT, CHILD_A]);
+    let result = analyze_with_links(
+        &fixture,
+        vec![
+            verified_link(PARENT, CHILD_A, 1, 0),
+            typed_link(
+                PARENT,
+                "session-unresolved-child",
+                None,
+                None,
+                DelegationLinkState::ParentOnly,
+                vec![delegation_evidence(PARENT, 1)],
+                Vec::new(),
+            ),
+        ],
+    );
+
+    let parent = final_checkpoint(&result, PARENT);
+    assert_eq!(
+        parent.delegation.topology,
+        DelegationTopology::DelegatingParent
+    );
+    assert_eq!(
+        parent.delegation.child_work_visibility,
+        ChildWorkVisibility::Partial
+    );
+    let progress = parent
+        .session_progress
+        .as_ref()
+        .expect("delegating-parent progress");
+    assert!(matches!(
+        progress.confidence,
+        Confidence::Low | Confidence::Medium
+    ));
+    let limiting_signal = progress
+        .signals
+        .iter()
+        .find(|signal| signal.code == ProgressSignalCode::DelegationVisibilityLimited)
+        .expect("typed delegation must limit the canonical progress analysis");
+    assert!(!limiting_signal.evidence.is_empty());
+    assert!(parent.delegation.counter_evidence.iter().any(|evidence| {
+        evidence
+            .reason
+            .contains("typed delegation observation remained non-semantic: parent_only")
+    }));
 }
 
 #[test]
