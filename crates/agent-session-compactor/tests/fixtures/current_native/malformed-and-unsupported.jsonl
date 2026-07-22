@@ -1,0 +1,4 @@
+{"timestamp":"2026-07-01T14:00:00Z","type":"session_meta","payload":{"session_id":"session-current","id":"thread-malformed","multi_agent_version":"v2"}}
+{"timestamp":"2026-07-01T14:00:01Z","type":"response_item","payload":{"type":"custom_tool_call","name":"shell_command","call_id":"call-missing-input","internal_chat_message_metadata_passthrough":{"turn_id":"turn-malformed"}}}
+{"timestamp":"2026-07-01T14:00:02Z","type":"response_item","payload":{"type":"custom_tool_call_output","name":"shell_command","call_id":"call-bad-segment","output":[{"type":"unsupported_binary","data":"sanitized"}],"internal_chat_message_metadata_passthrough":{"turn_id":"turn-malformed"}}}
+{"timestamp":"2026-07-01T14:00:03Z","type":"event_msg","payload":{"type":"future_native_event","turn_id":"turn-malformed","value":"sanitized"}}

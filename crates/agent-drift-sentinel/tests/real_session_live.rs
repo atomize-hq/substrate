@@ -3256,8 +3256,7 @@ fn real_session_live_coordinator_accepts_verified_children_and_advances_each_ses
 }
 
 #[test]
-fn real_session_live_coordinator_fails_closed_on_root_cursor_regression_after_late_verified_child_discovery(
-) {
+fn real_session_live_coordinator_preserves_root_cursor_after_late_verified_child_discovery() {
     let temp_dir = TempDir::new().expect("temp dir");
     let codex_home = Utf8Path::from_path(temp_dir.path())
         .expect("utf8 temp dir")
@@ -3293,6 +3292,14 @@ fn real_session_live_coordinator_fails_closed_on_root_cursor_regression_after_la
         .observations
         .iter()
         .all(|observation| observation.event.cursor.session_id == root_session_id));
+    let root_cursor = root_only
+        .observations
+        .iter()
+        .rev()
+        .find(|observation| observation.event.cursor.session_id == root_session_id)
+        .map(|observation| observation.event.cursor.clone())
+        .expect("root cursor");
+    assert_eq!(root_only.latest_cursor.as_ref(), Some(&root_cursor));
     drop(coordinator);
 
     fs::write(
@@ -3305,23 +3312,38 @@ fn real_session_live_coordinator_fails_closed_on_root_cursor_regression_after_la
         LiveSessionRequest {
             codex_home: Some(codex_home),
             session_id: root_session_id.to_string(),
-            state_dir,
+            state_dir: state_dir.clone(),
         },
         SchedulerPolicy::default(),
         WarningPolicy::default(),
     )
     .expect("restart coordinator while linked closure is pending");
-    let error = restarted
+    let expanded = restarted
         .poll_once()
-        .expect_err("late closure expansion must not swallow a regressed root cursor");
-    assert!(matches!(
-        error,
-        LiveSessionError::PersistedCursorAheadOfAnalyzerClosure {
-            session_id,
-            persisted_ordinal: 2,
-            current_max_ordinal: 1,
-        } if session_id == root_session_id
-    ));
+        .expect("late verified-child discovery preserves the root cursor");
+
+    assert!(expanded.reran_pipeline);
+    assert!(expanded
+        .observations
+        .iter()
+        .any(|observation| observation.event.cursor.session_id == child_session_id));
+    assert!(expanded.observations.iter().all(|observation| {
+        observation.event.cursor.session_id == child_session_id
+            || observation.event.cursor.session_id == root_session_id
+    }));
+    assert_eq!(expanded.latest_cursor.as_ref(), Some(&root_cursor));
+
+    let persisted_state = read_persisted_state(&state_dir);
+    assert_eq!(
+        persisted_state["progress"]["last_delivered_cursors"][root_session_id]["ordinal"]
+            .as_u64(),
+        Some(root_cursor.ordinal as u64)
+    );
+    assert!(
+        persisted_state["progress"]["last_delivered_cursors"][child_session_id]["ordinal"]
+            .as_u64()
+            .is_some()
+    );
 }
 
 fn linked_root_rollout(root_session_id: &str, child_session_ids: &[&str]) -> String {

@@ -8,7 +8,11 @@ use time::format_description::well_known::Rfc3339;
 use time::OffsetDateTime;
 
 use crate::canonicalize::canonicalize_row_text;
-use crate::ingest::{IngestedRolloutFile, IngestedRolloutRecord, RolloutParseFailure};
+use crate::ingest::{
+    CurrentNativeContentSegment, CurrentNativeEvent, CurrentNativeEventMessage,
+    CurrentNativeResponseItem, CurrentNativeToolOutput, CurrentNativeUnsupported,
+    IngestedRolloutEvent, IngestedRolloutFile, IngestedRolloutRecord, RolloutParseFailure,
+};
 
 pub use row::{CompactionKind, CompactionRow, SourceKind, UserMessageRole};
 
@@ -28,7 +32,7 @@ pub fn normalize_rollout_file(rollout: &IngestedRolloutFile) -> Vec<CompactionRo
     for entry in entries {
         match entry {
             NormalizationEntry::Record(record) => match &record.event {
-                RolloutEvent::SessionMeta(meta) => {
+                IngestedRolloutEvent::Legacy(RolloutEvent::SessionMeta(meta)) => {
                     if let Some(text) = meta
                         .payload
                         .base_instructions
@@ -49,7 +53,7 @@ pub fn normalize_rollout_file(rollout: &IngestedRolloutFile) -> Vec<CompactionRo
                         ));
                     }
                 }
-                RolloutEvent::EventMsg(message) => {
+                IngestedRolloutEvent::Legacy(RolloutEvent::EventMsg(message)) => {
                     if let Some(turn_id) = extract_turn_id_from_value_map(&message.payload.extra) {
                         current_turn_id = Some(turn_id.clone());
                         user_message_state.observe_turn_id(&turn_id);
@@ -64,7 +68,7 @@ pub fn normalize_rollout_file(rollout: &IngestedRolloutFile) -> Vec<CompactionRo
                         rows.push(row);
                     }
                 }
-                RolloutEvent::ResponseItem(item) => {
+                IngestedRolloutEvent::Legacy(RolloutEvent::ResponseItem(item)) => {
                     if let Some(row) = normalize_response_item(
                         rollout,
                         record,
@@ -75,7 +79,7 @@ pub fn normalize_rollout_file(rollout: &IngestedRolloutFile) -> Vec<CompactionRo
                         rows.push(row);
                     }
                 }
-                RolloutEvent::Unknown(unknown) => {
+                IngestedRolloutEvent::Legacy(RolloutEvent::Unknown(unknown)) => {
                     if let Some(turn_id) = extract_turn_id_from_value(&unknown.payload) {
                         current_turn_id = Some(turn_id.clone());
                         user_message_state.observe_turn_id(&turn_id);
@@ -88,6 +92,15 @@ pub fn normalize_rollout_file(rollout: &IngestedRolloutFile) -> Vec<CompactionRo
                         &mut user_message_state,
                     ));
                 }
+                IngestedRolloutEvent::CurrentNative(event) => rows.extend(
+                    normalize_current_native_event(
+                        rollout,
+                        record,
+                        event,
+                        &mut current_turn_id,
+                        &mut user_message_state,
+                    ),
+                ),
             },
             NormalizationEntry::ParseFailure(failure) => {
                 rows.push(build_failure_row(rollout, failure, current_turn_id.clone()));
@@ -96,6 +109,643 @@ pub fn normalize_rollout_file(rollout: &IngestedRolloutFile) -> Vec<CompactionRo
     }
 
     rows
+}
+
+fn normalize_current_native_event(
+    rollout: &IngestedRolloutFile,
+    record: &IngestedRolloutRecord,
+    event: &CurrentNativeEvent,
+    current_turn_id: &mut Option<String>,
+    user_message_state: &mut UserMessageState,
+) -> Vec<CompactionRow> {
+    match event {
+        CurrentNativeEvent::SessionMeta(meta) => meta
+            .base_instructions
+            .as_deref()
+            .and_then(non_empty)
+            .map(|text| {
+                vec![build_row(
+                    rollout,
+                    record,
+                    0,
+                    CompactionKind::SystemMessage,
+                    None,
+                    None,
+                    meta.timestamp.as_deref(),
+                    None,
+                    text.to_string(),
+                )]
+            })
+            .unwrap_or_default(),
+        CurrentNativeEvent::TurnContext(context) => {
+            observe_current_turn(
+                current_turn_id,
+                user_message_state,
+                Some(context.turn_id.as_str()),
+            );
+            user_message_state.observe_turn_context(&context.turn_id);
+            let mut rows = Vec::new();
+            if let Some(text) = context
+                .user_instructions
+                .as_deref()
+                .and_then(non_empty)
+            {
+                rows.push(build_row(
+                    rollout,
+                    record,
+                    rows.len(),
+                    CompactionKind::SystemMessage,
+                    None,
+                    Some(context.turn_id.clone()),
+                    context.timestamp.as_deref(),
+                    None,
+                    text.to_string(),
+                ));
+            }
+            rows.push(build_row(
+                rollout,
+                record,
+                rows.len(),
+                CompactionKind::Unknown,
+                None,
+                Some(context.turn_id.clone()),
+                context.timestamp.as_deref(),
+                Some("current_native:turn_context".to_string()),
+                serialize_current_record("turn_context", &context.payload),
+            ));
+            rows
+        }
+        CurrentNativeEvent::EventMessage(message) => {
+            observe_current_turn(
+                current_turn_id,
+                user_message_state,
+                message.turn_id(),
+            );
+            normalize_current_event_message(
+                rollout,
+                record,
+                message,
+                current_turn_id.clone(),
+                user_message_state,
+            )
+        }
+        CurrentNativeEvent::ResponseItem(item) => {
+            observe_current_turn(current_turn_id, user_message_state, item.turn_id());
+            normalize_current_response_item(
+                rollout,
+                record,
+                item,
+                current_turn_id.clone(),
+                user_message_state,
+            )
+        }
+        CurrentNativeEvent::Unsupported(unsupported) => vec![build_current_unsupported_row(
+            rollout,
+            record,
+            unsupported,
+            current_turn_id.clone(),
+        )],
+    }
+}
+
+fn observe_current_turn(
+    current_turn_id: &mut Option<String>,
+    user_message_state: &mut UserMessageState,
+    turn_id: Option<&str>,
+) {
+    if let Some(turn_id) = turn_id.and_then(non_empty) {
+        *current_turn_id = Some(turn_id.to_string());
+        user_message_state.observe_turn_id(turn_id);
+    }
+}
+
+fn normalize_current_event_message(
+    rollout: &IngestedRolloutFile,
+    record: &IngestedRolloutRecord,
+    message: &CurrentNativeEventMessage,
+    turn_id: Option<String>,
+    user_message_state: &mut UserMessageState,
+) -> Vec<CompactionRow> {
+    match message {
+        CurrentNativeEventMessage::AgentMessage {
+            timestamp, message, ..
+        } => vec![build_row(
+            rollout,
+            record,
+            0,
+            CompactionKind::AssistantMessage,
+            None,
+            turn_id,
+            timestamp.as_deref(),
+            None,
+            message.clone(),
+        )],
+        CurrentNativeEventMessage::UserMessage {
+            timestamp, message, ..
+        } => {
+            if user_message_state.suppress_mirrored_user_message(
+                UserMessageSource::EventMessage,
+                record.event_index,
+                turn_id.as_deref(),
+                timestamp.as_deref(),
+                message,
+            ) {
+                return Vec::new();
+            }
+            let user_message_role = Some(user_message_state.classify(turn_id.as_deref(), message));
+            user_message_state.observe_emitted_user_message(
+                UserMessageSource::EventMessage,
+                record.event_index,
+                turn_id.as_deref(),
+                timestamp.as_deref(),
+                message,
+            );
+            vec![build_row(
+                rollout,
+                record,
+                0,
+                CompactionKind::UserMessage,
+                user_message_role,
+                turn_id,
+                timestamp.as_deref(),
+                None,
+                message.clone(),
+            )]
+        }
+        CurrentNativeEventMessage::TaskStarted {
+            timestamp, payload, ..
+        } => {
+            if let Some(turn_id) = turn_id.as_deref() {
+                user_message_state.observe_task_started(turn_id);
+            } else {
+                user_message_state.observe_task_started_without_turn();
+            }
+            vec![build_row(
+                rollout,
+                record,
+                0,
+                CompactionKind::Status,
+                None,
+                turn_id,
+                timestamp.as_deref(),
+                Some("current_native:event_msg:task_started".to_string()),
+                serialize_current_record("event_msg", payload),
+            )]
+        }
+        CurrentNativeEventMessage::TaskComplete {
+            timestamp, payload, ..
+        } => {
+            if let Some(turn_id) = turn_id.as_deref() {
+                user_message_state.observe_task_complete(turn_id);
+            } else {
+                user_message_state.observe_task_complete_without_turn();
+            }
+            vec![build_row(
+                rollout,
+                record,
+                0,
+                CompactionKind::Status,
+                None,
+                turn_id,
+                timestamp.as_deref(),
+                Some("current_native:event_msg:task_complete".to_string()),
+                serialize_current_record("event_msg", payload),
+            )]
+        }
+        CurrentNativeEventMessage::PatchApplyEnd {
+            timestamp, payload, ..
+        } => vec![build_row(
+            rollout,
+            record,
+            0,
+            CompactionKind::ToolOutput,
+            None,
+            turn_id,
+            timestamp.as_deref(),
+            Some("current_native:event_msg:patch_apply_end".to_string()),
+            serialize_current_record("event_msg", payload),
+        )],
+        CurrentNativeEventMessage::WebSearchEnd {
+            timestamp, payload, ..
+        } => vec![build_row(
+            rollout,
+            record,
+            0,
+            CompactionKind::Status,
+            None,
+            turn_id,
+            timestamp.as_deref(),
+            Some("current_native:event_msg:web_search_end".to_string()),
+            serialize_current_record("event_msg", payload),
+        )],
+        CurrentNativeEventMessage::CollabAgentSpawnBegin {
+            timestamp,
+            call_id,
+            sender_thread_id,
+            prompt,
+            payload,
+            ..
+        } => vec![build_row(
+            rollout,
+            record,
+            0,
+            CompactionKind::ToolCall,
+            None,
+            turn_id,
+            timestamp.as_deref(),
+            Some(current_tool_identity(
+                "collab_agent_spawn_begin",
+                Some("spawn_agent"),
+                Some(call_id.as_str()),
+                None,
+            )),
+            if prompt.trim().is_empty() {
+                serialize_current_record("event_msg", payload)
+            } else {
+                let mut object = Map::new();
+                object.insert("prompt".to_string(), Value::String(prompt.clone()));
+                object.insert(
+                    "sender_thread_id".to_string(),
+                    Value::String(sender_thread_id.clone()),
+                );
+                Value::Object(object).to_string()
+            },
+        )],
+        CurrentNativeEventMessage::CollabAgentSpawnEnd {
+            timestamp,
+            call_id,
+            payload,
+            ..
+        } => vec![build_row(
+            rollout,
+            record,
+            0,
+            CompactionKind::ToolOutput,
+            None,
+            turn_id,
+            timestamp.as_deref(),
+            Some(current_tool_identity(
+                "collab_agent_spawn_end",
+                Some("spawn_agent"),
+                Some(call_id.as_str()),
+                None,
+            )),
+            serialize_current_record("event_msg", payload),
+        )],
+        CurrentNativeEventMessage::SubAgentActivity {
+            timestamp,
+            event_id,
+            agent_thread_id,
+            activity_kind,
+            payload,
+            ..
+        } => vec![build_row(
+            rollout,
+            record,
+            0,
+            CompactionKind::Status,
+            None,
+            turn_id,
+            timestamp.as_deref(),
+            Some(current_activity_identity(
+                event_id,
+                agent_thread_id,
+                activity_kind,
+            )),
+            serialize_current_record("event_msg", payload),
+        )],
+        CurrentNativeEventMessage::TokenCount => Vec::new(),
+        CurrentNativeEventMessage::Unsupported(unsupported) => vec![
+            build_current_unsupported_row(rollout, record, unsupported, turn_id),
+        ],
+    }
+}
+
+fn normalize_current_response_item(
+    rollout: &IngestedRolloutFile,
+    record: &IngestedRolloutRecord,
+    item: &CurrentNativeResponseItem,
+    turn_id: Option<String>,
+    user_message_state: &mut UserMessageState,
+) -> Vec<CompactionRow> {
+    match item {
+        CurrentNativeResponseItem::Message {
+            timestamp,
+            role,
+            content,
+            encrypted_content,
+            ..
+        } => {
+            let text = render_current_content(content).or_else(|| {
+                encrypted_placeholder(
+                    "encrypted_message_content",
+                    encrypted_content.as_deref(),
+                )
+            });
+            let Some(text) = text else {
+                return Vec::new();
+            };
+            let message_kind = message_role_kind(Some(role.as_str()));
+            if message_kind == CompactionKind::UserMessage
+                && user_message_state.suppress_mirrored_user_message(
+                    UserMessageSource::ResponseItem,
+                    record.event_index,
+                    turn_id.as_deref(),
+                    timestamp.as_deref(),
+                    &text,
+                )
+            {
+                return Vec::new();
+            }
+            let user_message_role = (message_kind == CompactionKind::UserMessage)
+                .then(|| user_message_state.classify(turn_id.as_deref(), &text));
+            if message_kind == CompactionKind::UserMessage {
+                user_message_state.observe_emitted_user_message(
+                    UserMessageSource::ResponseItem,
+                    record.event_index,
+                    turn_id.as_deref(),
+                    timestamp.as_deref(),
+                    &text,
+                );
+            }
+            vec![build_row(
+                rollout,
+                record,
+                0,
+                message_kind,
+                user_message_role,
+                turn_id,
+                timestamp.as_deref(),
+                None,
+                text,
+            )]
+        }
+        CurrentNativeResponseItem::AgentMessage {
+            timestamp,
+            author,
+            recipient,
+            content,
+            ..
+        } => {
+            let text = render_current_content(content)
+                .unwrap_or_else(|| "[empty_agent_message]".to_string());
+            vec![build_row(
+                rollout,
+                record,
+                0,
+                CompactionKind::AssistantMessage,
+                None,
+                turn_id,
+                timestamp.as_deref(),
+                Some(current_agent_message_identity(author, recipient, content)),
+                text,
+            )]
+        }
+        CurrentNativeResponseItem::Reasoning {
+            timestamp,
+            content,
+            encrypted_content,
+            ..
+        } => {
+            let text = render_current_content(content).or_else(|| {
+                encrypted_placeholder("encrypted_reasoning", encrypted_content.as_deref())
+            });
+            text.map(|text| {
+                vec![build_row(
+                    rollout,
+                    record,
+                    0,
+                    CompactionKind::Reasoning,
+                    None,
+                    turn_id,
+                    timestamp.as_deref(),
+                    None,
+                    text,
+                )]
+            })
+            .unwrap_or_default()
+        }
+        CurrentNativeResponseItem::ToolCall {
+            timestamp,
+            item_type,
+            name,
+            call_id,
+            input,
+            ..
+        } => vec![build_row(
+            rollout,
+            record,
+            0,
+            CompactionKind::ToolCall,
+            None,
+            turn_id,
+            timestamp.as_deref(),
+            Some(current_tool_identity(
+                item_type,
+                name.as_deref(),
+                call_id.as_deref(),
+                None,
+            )),
+            input.clone(),
+        )],
+        CurrentNativeResponseItem::ToolOutput {
+            timestamp,
+            item_type,
+            name,
+            call_id,
+            output,
+            ..
+        } => normalize_current_tool_output(
+            rollout,
+            record,
+            timestamp.as_deref(),
+            turn_id,
+            item_type,
+            name.as_deref(),
+            call_id.as_deref(),
+            output,
+        ),
+        CurrentNativeResponseItem::Unsupported(unsupported) => vec![
+            build_current_unsupported_row(rollout, record, unsupported, turn_id),
+        ],
+    }
+}
+
+#[allow(clippy::too_many_arguments)]
+fn normalize_current_tool_output(
+    rollout: &IngestedRolloutFile,
+    record: &IngestedRolloutRecord,
+    timestamp: Option<&str>,
+    turn_id: Option<String>,
+    item_type: &str,
+    name: Option<&str>,
+    call_id: Option<&str>,
+    output: &CurrentNativeToolOutput,
+) -> Vec<CompactionRow> {
+    match output {
+        CurrentNativeToolOutput::Text(text) => vec![build_row(
+            rollout,
+            record,
+            0,
+            CompactionKind::ToolOutput,
+            None,
+            turn_id,
+            timestamp,
+            Some(current_tool_identity(item_type, name, call_id, None)),
+            text.clone(),
+        )],
+        CurrentNativeToolOutput::Segments(segments) if segments.is_empty() => vec![build_row(
+            rollout,
+            record,
+            0,
+            CompactionKind::ToolOutput,
+            None,
+            turn_id,
+            timestamp,
+            Some(current_tool_identity(
+                item_type,
+                name,
+                call_id,
+                Some((0, "empty")),
+            )),
+            "[]".to_string(),
+        )],
+        CurrentNativeToolOutput::Segments(segments) => segments
+            .iter()
+            .enumerate()
+            .map(|(index, segment)| {
+                build_row(
+                    rollout,
+                    record,
+                    index,
+                    CompactionKind::ToolOutput,
+                    None,
+                    turn_id.clone(),
+                    timestamp,
+                    Some(current_tool_identity(
+                        item_type,
+                        name,
+                        call_id,
+                        Some((index, segment.segment_type())),
+                    )),
+                    segment.text_projection(),
+                )
+            })
+            .collect(),
+    }
+}
+
+fn render_current_content(content: &[CurrentNativeContentSegment]) -> Option<String> {
+    let parts = content
+        .iter()
+        .map(CurrentNativeContentSegment::text_projection)
+        .filter(|part| !part.trim().is_empty())
+        .collect::<Vec<_>>();
+    (!parts.is_empty()).then(|| parts.join("\n\n"))
+}
+
+fn current_agent_message_identity(
+    author: &str,
+    recipient: &str,
+    content: &[CurrentNativeContentSegment],
+) -> String {
+    let mut object = Map::new();
+    object.insert("author".to_string(), Value::String(author.to_string()));
+    object.insert(
+        "content_types".to_string(),
+        Value::Array(
+            content
+                .iter()
+                .map(|segment| Value::String(segment.segment_type().to_string()))
+                .collect(),
+        ),
+    );
+    object.insert(
+        "recipient".to_string(),
+        Value::String(recipient.to_string()),
+    );
+    object.insert(
+        "type".to_string(),
+        Value::String("agent_message".to_string()),
+    );
+    Value::Object(object).to_string()
+}
+
+fn current_tool_identity(
+    item_type: &str,
+    name: Option<&str>,
+    call_id: Option<&str>,
+    segment: Option<(usize, &str)>,
+) -> String {
+    let mut object = Map::new();
+    object.insert("type".to_string(), Value::String(item_type.to_string()));
+    if let Some(name) = name.and_then(non_empty) {
+        object.insert("name".to_string(), Value::String(name.to_string()));
+    }
+    if let Some(call_id) = call_id.and_then(non_empty) {
+        object.insert("call_id".to_string(), Value::String(call_id.to_string()));
+    }
+    if let Some((index, segment_type)) = segment {
+        object.insert("segment_index".to_string(), Value::from(index));
+        object.insert(
+            "segment_type".to_string(),
+            Value::String(segment_type.to_string()),
+        );
+    }
+    Value::Object(object).to_string()
+}
+
+fn current_activity_identity(event_id: &str, agent_thread_id: &str, kind: &str) -> String {
+    let mut object = Map::new();
+    object.insert(
+        "agent_thread_id".to_string(),
+        Value::String(agent_thread_id.to_string()),
+    );
+    object.insert("event_id".to_string(), Value::String(event_id.to_string()));
+    object.insert("kind".to_string(), Value::String(kind.to_string()));
+    object.insert(
+        "type".to_string(),
+        Value::String("sub_agent_activity".to_string()),
+    );
+    Value::Object(object).to_string()
+}
+
+fn build_current_unsupported_row(
+    rollout: &IngestedRolloutFile,
+    record: &IngestedRolloutRecord,
+    unsupported: &CurrentNativeUnsupported,
+    turn_id: Option<String>,
+) -> CompactionRow {
+    let identity = unsupported.item_type.as_deref().map_or_else(
+        || format!("current_native:unsupported:{}", unsupported.record_type),
+        |item_type| {
+            format!(
+                "current_native:unsupported:{}:{item_type}",
+                unsupported.record_type
+            )
+        },
+    );
+    build_row(
+        rollout,
+        record,
+        0,
+        CompactionKind::Unknown,
+        None,
+        turn_id,
+        unsupported.timestamp.as_deref(),
+        Some(identity),
+        serialize_current_record(&unsupported.record_type, &unsupported.payload),
+    )
+}
+
+fn serialize_current_record(record_type: &str, payload: &Value) -> String {
+    let mut object = Map::new();
+    object.insert("payload".to_string(), payload.clone());
+    object.insert(
+        "type".to_string(),
+        Value::String(record_type.to_string()),
+    );
+    Value::Object(object).to_string()
 }
 
 fn normalize_event_message(

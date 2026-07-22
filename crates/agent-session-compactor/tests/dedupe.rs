@@ -133,6 +133,90 @@ fn dedupe_keeps_user_rows_with_matching_text_when_roles_differ() {
     );
 }
 
+#[test]
+fn dedupe_retains_identical_payloads_across_sessions_and_turns() {
+    let first = row(
+        "/tmp/rollout-a.jsonl",
+        1,
+        0,
+        CompactionKind::AssistantMessage,
+        "same payload",
+    );
+    let mut different_turn = first.clone();
+    different_turn.source_file = Utf8PathBuf::from("/tmp/rollout-b.jsonl");
+    different_turn.turn_id = Some("turn-def".to_string());
+    different_turn.event_index = 1;
+    different_turn.line_number = 2;
+
+    let mut different_session = first.clone();
+    different_session.source_file = Utf8PathBuf::from("/tmp/rollout-c.jsonl");
+    different_session.session_id = Some("session-456".to_string());
+    different_session.event_index = 2;
+    different_session.line_number = 3;
+
+    let result = dedupe_rows_exact(&[first, different_turn, different_session]);
+
+    assert_eq!(result.archival_rows.len(), 3);
+    assert_eq!(result.compact_rows.len(), 3);
+    assert!(result.dedupe_groups.is_empty());
+}
+
+#[test]
+fn dedupe_uses_source_local_scope_when_legacy_identity_is_missing() {
+    let mut first = row(
+        "/tmp/legacy-a.jsonl",
+        1,
+        0,
+        CompactionKind::AssistantMessage,
+        "same legacy payload",
+    );
+    first.session_id = None;
+    first.turn_id = None;
+
+    let mut same_stream_duplicate = first.clone();
+    same_stream_duplicate.event_index = 1;
+    same_stream_duplicate.line_number = 2;
+
+    let mut different_stream = first.clone();
+    different_stream.source_file = Utf8PathBuf::from("/tmp/legacy-b.jsonl");
+    different_stream.event_index = 2;
+    different_stream.line_number = 1;
+
+    let result = dedupe_rows_exact(&[first, same_stream_duplicate, different_stream]);
+
+    assert_eq!(result.archival_rows.len(), 3);
+    assert_eq!(result.compact_rows.len(), 2);
+    assert_eq!(result.dedupe_groups.len(), 1);
+    assert_eq!(result.dedupe_groups[0].duplicates.len(), 1);
+    assert_eq!(
+        result.compact_rows[1].source_file,
+        Utf8PathBuf::from("/tmp/legacy-b.jsonl")
+    );
+}
+
+#[test]
+fn dedupe_uses_turn_local_scope_when_session_identity_is_missing() {
+    let mut first = row(
+        "/tmp/legacy-a.jsonl",
+        1,
+        0,
+        CompactionKind::AssistantMessage,
+        "same turn-scoped payload",
+    );
+    first.session_id = None;
+
+    let mut different_turn = first.clone();
+    different_turn.turn_id = Some("turn-def".to_string());
+    different_turn.event_index = 1;
+    different_turn.line_number = 2;
+
+    let result = dedupe_rows_exact(&[first, different_turn]);
+
+    assert_eq!(result.archival_rows.len(), 2);
+    assert_eq!(result.compact_rows.len(), 2);
+    assert!(result.dedupe_groups.is_empty());
+}
+
 fn row(
     path: &str,
     line_number: usize,

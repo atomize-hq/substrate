@@ -32,8 +32,11 @@ pub use export::{
 };
 pub use ingest::{
     extract_rollout_linkage_metadata, ingest_rollout_artifacts, ingest_rollout_file,
-    ChildSessionOrigin, IngestError, IngestedRolloutFile, IngestedRolloutRecord,
-    IngestedRolloutUnknown, ParentSpawnResult, RolloutLinkageMetadata, RolloutParseFailure,
+    ChildSessionOrigin, CurrentNativeChildOrigin, CurrentNativeContentSegment, CurrentNativeEvent,
+    CurrentNativeEventMessage, CurrentNativeResponseItem, CurrentNativeSessionMeta,
+    CurrentNativeToolOutput, CurrentNativeTurnContext, CurrentNativeUnsupported, IngestError,
+    IngestedRolloutEvent, IngestedRolloutFile, IngestedRolloutRecord, IngestedRolloutUnknown,
+    ParentSpawnResult, RolloutFormat, RolloutLinkageMetadata, RolloutParseFailure,
     RolloutRowProvenance,
 };
 pub use normalize::{

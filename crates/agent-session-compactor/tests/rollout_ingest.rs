@@ -5,6 +5,7 @@ use std::fs;
 use agent_session_compactor::discovery::DiscoveredSessionArtifact;
 use agent_session_compactor::ingest::{
     extract_rollout_linkage_metadata, ingest_rollout_artifacts, ingest_rollout_file,
+    IngestedRolloutEvent, RolloutFormat,
 };
 use agent_session_compactor::normalize::{normalize_rollout_file, CompactionKind};
 use camino::Utf8Path;
@@ -51,7 +52,7 @@ fn rollout_ingest_parses_records_and_captures_unknown_and_invalid_lines() {
         .contains("failed to parse codex rollout JSONL"));
 
     match &rollout.records[1].event {
-        RolloutEvent::ResponseItem(item) => {
+        IngestedRolloutEvent::Legacy(RolloutEvent::ResponseItem(item)) => {
             assert_eq!(item.payload.kind.as_deref(), Some("message"));
             assert_eq!(item.payload.role.as_deref(), Some("assistant"));
         }
@@ -106,12 +107,13 @@ fn rollout_ingest_coerces_current_live_session_meta_and_tool_search_shapes() {
     )
     .expect("ingest rollout");
 
+    assert_eq!(rollout.format, RolloutFormat::Legacy);
     assert_eq!(rollout.session_id.as_deref(), Some("session-live"));
     assert_eq!(rollout.records.len(), 2);
     assert!(rollout.parse_failures.is_empty());
 
     match &rollout.records[1].event {
-        RolloutEvent::ResponseItem(item) => {
+        IngestedRolloutEvent::Legacy(RolloutEvent::ResponseItem(item)) => {
             let arguments = item
                 .payload
                 .arguments
