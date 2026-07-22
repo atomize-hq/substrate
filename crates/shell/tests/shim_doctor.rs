@@ -241,6 +241,68 @@ int getpwuid_r(uid_t uid, struct passwd *pwd, char *buf, size_t buflen, struct p
     library
 }
 
+#[cfg(target_os = "linux")]
+fn compile_substrate_exec_counter_preload(root: &Path) -> PathBuf {
+    let source = root.join("substrate_exec_counter_preload.c");
+    let library = root.join("substrate_exec_counter_preload.so");
+    fs::write(
+        &source,
+        r#"#define _GNU_SOURCE
+#include <dlfcn.h>
+#include <fcntl.h>
+#include <spawn.h>
+#include <stdlib.h>
+#include <string.h>
+#include <sys/syscall.h>
+#include <sys/types.h>
+#include <unistd.h>
+static void record_target(const char *path) {
+    const char *target = getenv("SUBSTRATE_TEST_COUNTED_EXEC");
+    const char *marker = getenv("SUBSTRATE_TEST_COUNTED_EXEC_MARKER");
+    if (path == NULL || target == NULL || marker == NULL || strcmp(path, target) != 0) return;
+    int fd = (int)syscall(SYS_openat, AT_FDCWD, marker, O_WRONLY | O_CREAT | O_APPEND, 0600);
+    if (fd >= 0) { syscall(SYS_write, fd, "1", 1); syscall(SYS_close, fd); }
+}
+int execve(const char *path, char *const argv[], char *const envp[]) {
+    static int (*real_fn)(const char *, char *const[], char *const[]);
+    if (real_fn == NULL) real_fn = dlsym(RTLD_NEXT, "execve");
+    record_target(path); return real_fn(path, argv, envp);
+}
+int posix_spawn(pid_t *pid, const char *path,
+    const posix_spawn_file_actions_t *actions, const posix_spawnattr_t *attrs,
+    char *const argv[], char *const envp[]) {
+    static int (*real_fn)(pid_t *, const char *, const posix_spawn_file_actions_t *,
+        const posix_spawnattr_t *, char *const[], char *const[]);
+    if (real_fn == NULL) real_fn = dlsym(RTLD_NEXT, "posix_spawn");
+    record_target(path); return real_fn(pid, path, actions, attrs, argv, envp);
+}
+int posix_spawnp(pid_t *pid, const char *path,
+    const posix_spawn_file_actions_t *actions, const posix_spawnattr_t *attrs,
+    char *const argv[], char *const envp[]) {
+    static int (*real_fn)(pid_t *, const char *, const posix_spawn_file_actions_t *,
+        const posix_spawnattr_t *, char *const[], char *const[]);
+    if (real_fn == NULL) real_fn = dlsym(RTLD_NEXT, "posix_spawnp");
+    record_target(path); return real_fn(pid, path, actions, attrs, argv, envp);
+}
+"#,
+    )
+    .expect("write product exec counter preload source");
+    let output = Command::new("/usr/bin/cc")
+        .args(["-shared", "-fPIC", "-O2"])
+        .arg(&source)
+        .arg("-o")
+        .arg(&library)
+        .arg("-ldl")
+        .output()
+        .expect("compile product exec counter preload");
+    assert!(
+        output.status.success(),
+        "product exec counter preload compilation failed: {}",
+        String::from_utf8_lossy(&output.stderr)
+    );
+    library
+}
+
 const GUARD_MISSING_REASON: &str =
     "WORLD_NETFILTER_ENABLE must be set to 1/true/yes before requested network isolation can install nftables rules";
 
@@ -321,6 +383,25 @@ fn read_shim_doctor_json(fixture: &DoctorFixture) -> Value {
         .expect("failed to run shim doctor --json");
     assert!(output.status.success(), "shim doctor --json should succeed");
     serde_json::from_slice(&output.stdout).expect("doctor output JSON")
+}
+
+#[cfg(target_os = "linux")]
+fn assert_authenticated_passive_world_snapshot(report: &Value) {
+    let world = &report["world"];
+    assert_eq!(world["status"], json!("needs_attention"));
+    assert_eq!(world["ok"], json!(false));
+    assert_eq!(world["platform"], json!(std::env::consts::OS));
+    assert_eq!(world["source"], json!("command"));
+    assert_eq!(world["exit_code"], json!(4));
+    assert_eq!(world["error"], json!("passive world doctor unavailable"));
+    assert!(
+        world.get("stderr").is_none(),
+        "passive stderr must be discarded"
+    );
+    assert!(
+        world.get("details").is_none(),
+        "passive details must be discarded"
+    );
 }
 
 fn write_invalid_workspace_fixture(root: &std::path::Path) {
@@ -512,7 +593,10 @@ managers:
         "expected Bun hint in report"
     );
     assert_eq!(report["world"]["platform"], json!(std::env::consts::OS));
+    #[cfg(not(target_os = "linux"))]
     assert_eq!(report["world"]["ok"], json!(true));
+    #[cfg(target_os = "linux")]
+    assert_authenticated_passive_world_snapshot(&report);
     let deps_report = report["world_deps"]["report"].clone();
     assert!(deps_report.is_object(), "world deps report missing");
     assert!(
@@ -635,17 +719,24 @@ fn shim_doctor_snapshot_uses_authenticated_a_under_conflicting_ambient_b() {
         "typed report must identify selected A"
     );
     assert_eq!(report["world"]["source"], json!("command"));
+    #[cfg(target_os = "linux")]
+    assert_authenticated_passive_world_snapshot(&report);
+    #[cfg(not(target_os = "linux"))]
     assert!(
         report["world"].get("error").is_none(),
         "authenticated nested world doctor must not fail: {report}"
     );
+    #[cfg(not(target_os = "linux"))]
     assert_eq!(
         report["world"]["details"]["host"]["selected_host_prefix"],
         json!(selected_prefix),
         "nested world doctor must receive the authenticated A witness"
     );
+    #[cfg(not(target_os = "linux"))]
     let nested_access = &report["world"]["details"]["host"]["world_socket"]["access"];
+    #[cfg(not(target_os = "linux"))]
     assert!(nested_access.get("current_user").is_none());
+    #[cfg(not(target_os = "linux"))]
     assert!(nested_access.get("current_uid").is_none());
     assert_eq!(report["world_deps"]["source"], json!("command"));
     assert!(
@@ -700,6 +791,11 @@ fn shim_doctor_snapshot_uses_authenticated_a_under_conflicting_ambient_b() {
     assert!(!human_rendered.contains(&encoded));
     assert!(!human_rendered.contains("ambient-b-fixture"));
     assert!(!human_rendered.contains("ambient-b-must-not-appear"));
+    #[cfg(target_os = "linux")]
+    assert!(
+        human_rendered.contains("passive world doctor unavailable"),
+        "human output must carry the same bounded unavailable classification: {human_rendered}"
+    );
 
     let trace = fs::read_to_string(&fixture.trace).expect("read Route D trace fixture");
     assert!(!trace.contains(&ambient_prefix.display().to_string()));
@@ -1047,6 +1143,9 @@ managers:
         .get("world")
         .expect("world section missing from doctor JSON");
     assert_eq!(world.get("ok"), Some(&Value::Bool(false)));
+    #[cfg(target_os = "linux")]
+    assert_authenticated_passive_world_snapshot(&payload);
+    #[cfg(not(target_os = "linux"))]
     let detail_stderr = world
         .get("details")
         .and_then(Value::as_object)
@@ -1054,6 +1153,7 @@ managers:
         .and_then(Value::as_str)
         .unwrap_or_default()
         .to_string();
+    #[cfg(not(target_os = "linux"))]
     assert!(
         detail_stderr.contains("substrate.sock"),
         "expected socket failure details in world snapshot, got: {detail_stderr}"
@@ -1394,6 +1494,47 @@ fn shim_doctor_disabled_mode_prints_exact_contract_lines_without_error_lines() {
     );
 }
 
+#[cfg(target_os = "linux")]
+#[test]
+fn shim_doctor_disabled_composition_spawns_no_nested_product_child() {
+    let fixture = DoctorFixture::new(detected_manager_manifest());
+    fixture.write_world_doctor_fixture(json!({
+        "ok": true,
+        "secret_marker": "disabled-fixture-must-not-be-read"
+    }));
+    let counter = compile_substrate_exec_counter_preload(fixture._temp.path());
+    let marker = fixture._temp.path().join("nested-product-exec-count");
+    let product = fs::canonicalize(binary_path()).expect("canonical product test binary");
+    let preload = format!("{}:{}", counter.display(), fixture.passwd_preload.display());
+
+    let output = fixture
+        .command()
+        .env("LD_PRELOAD", preload)
+        .env("SUBSTRATE_TEST_COUNTED_EXEC", &product)
+        .env("SUBSTRATE_TEST_COUNTED_EXEC_MARKER", &marker)
+        .arg("--no-world")
+        .arg("shim")
+        .arg("doctor")
+        .arg("--json")
+        .output()
+        .expect("run disabled shim doctor with product exec counter");
+
+    assert!(
+        output.status.success(),
+        "disabled shim doctor failed: stdout={} stderr={}",
+        String::from_utf8_lossy(&output.stdout),
+        String::from_utf8_lossy(&output.stderr)
+    );
+    assert!(
+        !marker.exists(),
+        "disabled composition unexpectedly spawned the product child"
+    );
+    assert!(
+        !String::from_utf8_lossy(&output.stdout).contains("disabled-fixture-must-not-be-read"),
+        "disabled composition disclosed the ignored world fixture"
+    );
+}
+
 #[test]
 fn shim_doctor_force_world_preserves_enabled_probe_backed_statuses() {
     let fixture = DoctorFixture::new(detected_manager_manifest());
@@ -1439,6 +1580,9 @@ fn shim_doctor_force_world_preserves_enabled_probe_backed_statuses() {
     );
     assert_eq!(report["world"]["status"], json!("needs_attention"));
     assert_eq!(report["world_deps"]["status"], json!("error"));
+    #[cfg(target_os = "linux")]
+    assert_authenticated_passive_world_snapshot(&report);
+    #[cfg(not(target_os = "linux"))]
     assert!(
         report["world"].get("details").is_some(),
         "enabled mode should preserve world details: {report:?}"
@@ -1524,6 +1668,9 @@ managers:
     assert!(output.status.success(), "shim doctor --json should succeed");
 
     let report: Value = serde_json::from_slice(&output.stdout).expect("doctor output JSON");
+    #[cfg(target_os = "linux")]
+    assert_authenticated_passive_world_snapshot(&report);
+    #[cfg(not(target_os = "linux"))]
     assert_eq!(
         report["world"]["details"]["host"]["world_fs_mode"],
         json!("read_only"),
@@ -1608,18 +1755,24 @@ managers:
     assert!(output.status.success(), "shim doctor --json should succeed");
 
     let report: Value = serde_json::from_slice(&output.stdout).expect("doctor output JSON");
+    #[cfg(target_os = "linux")]
+    assert_authenticated_passive_world_snapshot(&report);
+    #[cfg(not(target_os = "linux"))]
     assert_eq!(
         report["world"]["details"]["host"]["world_socket"]["socket_path"],
         json!("/run/substrate.sock")
     );
+    #[cfg(not(target_os = "linux"))]
     assert_eq!(
         report["world"]["details"]["host"]["world_socket"]["probe_ok"],
         json!(true)
     );
+    #[cfg(not(target_os = "linux"))]
     assert_eq!(
         report["world"]["details"]["world"]["landlock"]["supported"],
         json!(true)
     );
+    #[cfg(not(target_os = "linux"))]
     assert_eq!(
         report["world"]["details"]["world"]["landlock"]["abi"],
         json!(1)
@@ -1632,6 +1785,9 @@ fn shim_doctor_json_preserves_world_netfilter_default_details() {
     write_world_doctor_netfilter_fixture(&fixture, false, false, false, None, true, "ok");
 
     let report = read_shim_doctor_json(&fixture);
+    #[cfg(target_os = "linux")]
+    assert_authenticated_passive_world_snapshot(&report);
+    #[cfg(not(target_os = "linux"))]
     assert_eq!(
         report["world"]["details"]["world"]["netfilter_status"],
         json!({
@@ -1649,6 +1805,9 @@ fn shim_doctor_json_preserves_world_netfilter_enabled_details() {
     write_world_doctor_netfilter_fixture(&fixture, true, true, true, None, true, "ok");
 
     let report = read_shim_doctor_json(&fixture);
+    #[cfg(target_os = "linux")]
+    assert_authenticated_passive_world_snapshot(&report);
+    #[cfg(not(target_os = "linux"))]
     assert_eq!(
         report["world"]["details"]["world"]["netfilter_status"],
         json!({
@@ -1674,6 +1833,9 @@ fn shim_doctor_json_preserves_world_netfilter_failure_reason_details() {
     );
 
     let report = read_shim_doctor_json(&fixture);
+    #[cfg(target_os = "linux")]
+    assert_authenticated_passive_world_snapshot(&report);
+    #[cfg(not(target_os = "linux"))]
     assert_eq!(
         report["world"]["details"]["world"]["netfilter_status"],
         json!({

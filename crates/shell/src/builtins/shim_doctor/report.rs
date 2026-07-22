@@ -16,6 +16,8 @@ use crate::execution::{
 };
 use anyhow::{anyhow, Context, Result};
 use chrono::{DateTime, Utc};
+#[cfg(target_os = "linux")]
+use serde::Deserialize;
 use serde::Serialize;
 use serde_json::Value;
 use std::{
@@ -112,6 +114,132 @@ pub struct WorldDoctorSnapshot {
     pub error: Option<String>,
     #[serde(skip_serializing_if = "Option::is_none")]
     pub details: Option<Value>,
+}
+
+#[cfg(target_os = "linux")]
+#[derive(Debug, Deserialize, Serialize)]
+#[serde(deny_unknown_fields)]
+struct PassiveWorldDoctorChildV1 {
+    schema_version: u64,
+    platform: String,
+    ok: bool,
+    host: PassiveWorldDoctorHostV1,
+    world: PassiveWorldDoctorWorldV1,
+}
+
+#[cfg(target_os = "linux")]
+#[derive(Debug, Deserialize, Serialize)]
+#[serde(deny_unknown_fields)]
+struct PassiveWorldDoctorHostV1 {
+    platform: String,
+    ok: bool,
+    selected_host_prefix: String,
+    host_context_commitment: String,
+}
+
+#[cfg(target_os = "linux")]
+#[derive(Debug, Deserialize, Serialize)]
+#[serde(deny_unknown_fields)]
+struct PassiveWorldDoctorWorldV1 {
+    status: String,
+    ok: bool,
+    selected_host_prefix: String,
+    host_context_commitment: String,
+}
+
+#[cfg(target_os = "linux")]
+fn decode_passive_world_doctor_child_v1(
+    raw: &[u8],
+    expected_prefix: &str,
+    expected_commitment: &str,
+) -> Result<PassiveWorldDoctorChildV1> {
+    let mut deserializer = serde_json::Deserializer::from_slice(raw);
+    let child = PassiveWorldDoctorChildV1::deserialize(&mut deserializer)
+        .map_err(|_| anyhow!("passive world doctor incoherent"))?;
+    deserializer
+        .end()
+        .map_err(|_| anyhow!("passive world doctor incoherent"))?;
+    if child.schema_version != 1
+        || child.platform != env::consts::OS
+        || child.ok
+        || child.host.platform != env::consts::OS
+        || child.host.ok
+        || child.host.selected_host_prefix != expected_prefix
+        || child.host.host_context_commitment != expected_commitment
+        || child.world.status != "unavailable"
+        || child.world.ok
+        || child.world.selected_host_prefix != expected_prefix
+        || child.world.host_context_commitment != expected_commitment
+    {
+        return Err(anyhow!("passive world doctor incoherent"));
+    }
+    Ok(child)
+}
+
+#[cfg(target_os = "linux")]
+fn validate_passive_world_doctor_child_v1(
+    value: &Value,
+    expected_prefix: &str,
+    expected_commitment: &str,
+) -> bool {
+    let mut pending = vec![value];
+    while let Some(current) = pending.pop() {
+        match current {
+            Value::Object(object) => {
+                for (key, nested) in object {
+                    let normalized = key
+                        .chars()
+                        .filter(|character| character.is_ascii_alphanumeric())
+                        .flat_map(char::to_lowercase)
+                        .collect::<String>();
+                    if [
+                        "credential",
+                        "token",
+                        "apikey",
+                        "privatekey",
+                        "authorization",
+                        "password",
+                        "secret",
+                        "prompt",
+                        "request",
+                        "body",
+                        "bytes",
+                        "input",
+                        "carrier",
+                        "authbundle",
+                        "parent",
+                        "fullenvironment",
+                        "fullenv",
+                        "commitmentpreimage",
+                        "preimage",
+                    ]
+                    .iter()
+                    .any(|forbidden| normalized.contains(forbidden))
+                    {
+                        return false;
+                    }
+                    pending.push(nested);
+                }
+            }
+            Value::Array(values) => pending.extend(values),
+            _ => {}
+        }
+    }
+
+    let Ok(child) = serde_json::from_value::<PassiveWorldDoctorChildV1>(value.clone()) else {
+        return false;
+    };
+    child.schema_version == 1
+        && child.platform == env::consts::OS
+        && !child.ok
+        && child.host.platform == env::consts::OS
+        && !child.host.ok
+        && child.host.selected_host_prefix == expected_prefix
+        && child.host.host_context_commitment == expected_commitment
+        && child.world.status == "unavailable"
+        && !child.world.ok
+        && child.world.selected_host_prefix == expected_prefix
+        && child.world.host_context_commitment == expected_commitment
 }
 
 #[derive(Debug, Serialize, Clone)]
@@ -573,6 +701,40 @@ fn disabled_world_deps_section() -> WorldDepsDoctorSection {
     }
 }
 
+#[cfg(target_os = "linux")]
+fn gather_world_doctor_snapshot(
+    install_context: &InstallBootstrapContextCarrierV1,
+) -> WorldDoctorSnapshot {
+    match run_json_subcommand(
+        &[
+            "world",
+            "doctor",
+            "--json",
+            "--internal-passive-world-doctor-v1",
+        ],
+        install_context,
+    ) {
+        Ok(output) => snapshot_from_command(
+            output,
+            &install_context.context.selected_host_prefix,
+            &install_context.host_context_commitment,
+        ),
+        Err(_) => WorldDoctorSnapshot {
+            status: WorldDoctorStatus::NeedsAttention,
+            ok: false,
+            platform: env::consts::OS.to_string(),
+            world_disable_reason: None,
+            world_disable_source: None,
+            source: Some("command".to_string()),
+            exit_code: Some(4),
+            stderr: None,
+            error: Some("passive world doctor incoherent".to_string()),
+            details: None,
+        },
+    }
+}
+
+#[cfg(not(target_os = "linux"))]
 fn gather_world_doctor_snapshot(
     #[cfg(unix)] install_context: &InstallBootstrapContextCarrierV1,
 ) -> WorldDoctorSnapshot {
@@ -697,6 +859,7 @@ fn status_for_world_deps_report(report: &WorldDepsDoctorSnapshotV1) -> WorldDeps
     }
 }
 
+#[cfg(not(target_os = "linux"))]
 fn snapshot_from_value(value: Value, source: &str) -> WorldDoctorSnapshot {
     let ok = value.get("ok").and_then(Value::as_bool).unwrap_or(true);
     let platform = value
@@ -722,6 +885,37 @@ fn snapshot_from_value(value: Value, source: &str) -> WorldDoctorSnapshot {
     }
 }
 
+#[cfg(all(test, target_os = "linux"))]
+fn snapshot_from_value(
+    value: Value,
+    source: &str,
+    expected_prefix: &str,
+    expected_commitment: &str,
+) -> WorldDoctorSnapshot {
+    let coherent =
+        validate_passive_world_doctor_child_v1(&value, expected_prefix, expected_commitment);
+    WorldDoctorSnapshot {
+        status: WorldDoctorStatus::NeedsAttention,
+        ok: false,
+        platform: env::consts::OS.to_string(),
+        world_disable_reason: None,
+        world_disable_source: None,
+        source: Some(source.to_string()),
+        exit_code: None,
+        stderr: None,
+        error: Some(
+            if coherent {
+                "passive world doctor unavailable"
+            } else {
+                "passive world doctor incoherent"
+            }
+            .to_string(),
+        ),
+        details: None,
+    }
+}
+
+#[cfg(not(target_os = "linux"))]
 fn snapshot_from_command(output: JsonCommandOutput) -> WorldDoctorSnapshot {
     let mut ok = output
         .value
@@ -759,6 +953,40 @@ fn snapshot_from_command(output: JsonCommandOutput) -> WorldDoctorSnapshot {
         stderr,
         error: None,
         details: Some(output.value),
+    }
+}
+
+#[cfg(target_os = "linux")]
+fn snapshot_from_command(
+    output: JsonCommandOutput,
+    expected_prefix: &str,
+    expected_commitment: &str,
+) -> WorldDoctorSnapshot {
+    let coherent = output.exit_code == Some(4)
+        && output.stderr.is_empty()
+        && validate_passive_world_doctor_child_v1(
+            &output.value,
+            expected_prefix,
+            expected_commitment,
+        );
+    WorldDoctorSnapshot {
+        status: WorldDoctorStatus::NeedsAttention,
+        ok: false,
+        platform: env::consts::OS.to_string(),
+        world_disable_reason: None,
+        world_disable_source: None,
+        source: Some("command".to_string()),
+        exit_code: Some(4),
+        stderr: None,
+        error: Some(
+            if coherent {
+                "passive world doctor unavailable"
+            } else {
+                "passive world doctor incoherent"
+            }
+            .to_string(),
+        ),
+        details: None,
     }
 }
 
@@ -832,7 +1060,14 @@ fn run_json_subcommand(
     if output.stdout.is_empty() {
         return Err(anyhow!("`{}` produced no JSON output", args.join(" ")));
     }
-    #[cfg(unix)]
+    #[cfg(target_os = "linux")]
+    let mut value: Value = serde_json::to_value(decode_passive_world_doctor_child_v1(
+        &output.stdout,
+        &install_context.context.selected_host_prefix,
+        &install_context.host_context_commitment,
+    )?)
+    .map_err(|_| anyhow!("passive world doctor incoherent"))?;
+    #[cfg(all(unix, not(target_os = "linux")))]
     let mut value: Value = serde_json::from_slice(&output.stdout)
         .with_context(|| format!("failed to parse JSON output from `{}`", args.join(" ")))?;
     #[cfg(not(unix))]
@@ -984,5 +1219,228 @@ mod tests {
         assert_eq!(snapshot.inventory_packages, 1);
         assert_eq!(snapshot.inventory_bundles, 0);
         assert_eq!(snapshot.builtins, "disabled");
+    }
+
+    #[cfg(target_os = "linux")]
+    fn passive_world_doctor_value(prefix: &str, commitment: &str) -> Value {
+        serde_json::json!({
+            "schema_version": 1,
+            "platform": env::consts::OS,
+            "ok": false,
+            "host": {
+                "platform": env::consts::OS,
+                "ok": false,
+                "selected_host_prefix": prefix,
+                "host_context_commitment": commitment
+            },
+            "world": {
+                "status": "unavailable",
+                "ok": false,
+                "selected_host_prefix": prefix,
+                "host_context_commitment": commitment
+            }
+        })
+    }
+
+    #[cfg(target_os = "linux")]
+    #[test]
+    fn passive_world_doctor_decoder_accepts_only_the_exact_private_wire_shape() {
+        let prefix = "/selected-a";
+        let commitment = "commitment-a";
+        let valid = passive_world_doctor_value(prefix, commitment).to_string();
+        let decoded = decode_passive_world_doctor_child_v1(valid.as_bytes(), prefix, commitment)
+            .expect("exact passive child should decode");
+        let value = serde_json::to_value(decoded).expect("decoded passive child to value");
+        assert!(validate_passive_world_doctor_child_v1(
+            &value, prefix, commitment
+        ));
+
+        let invalid_raw = [
+            "not-json".to_string(),
+            format!("{valid} trailing"),
+            format!("{valid}{valid}"),
+            format!(
+                r#"{{"schema_version":1,"schema_version":1,"platform":"{}","ok":false,"host":{{"platform":"{}","ok":false,"selected_host_prefix":"{prefix}","host_context_commitment":"{commitment}"}},"world":{{"status":"unavailable","ok":false,"selected_host_prefix":"{prefix}","host_context_commitment":"{commitment}"}}}}"#,
+                env::consts::OS,
+                env::consts::OS
+            ),
+            format!(
+                r#"{{"schema_version":1,"platform":"{}","ok":false,"host":{{"platform":"{}","ok":false,"selected_host_prefix":"/ambient-b","selected_host_prefix":"{prefix}","host_context_commitment":"{commitment}"}},"world":{{"status":"unavailable","ok":false,"selected_host_prefix":"{prefix}","host_context_commitment":"{commitment}"}}}}"#,
+                env::consts::OS,
+                env::consts::OS
+            ),
+            valid.replacen("\"ok\":false", "\"ok\":false,\"unknown_field\":1", 1),
+            valid.replacen("\"schema_version\":1,", "", 1),
+            valid.replacen("\"schema_version\":1", "\"schema_version\":\"1\"", 1),
+            valid.replacen("\"status\":\"unavailable\"", "\"status\":\"healthy\"", 1),
+            valid.replacen(
+                &format!("\"selected_host_prefix\":\"{prefix}\""),
+                "\"selected_host_prefix\":\"/ambient-b\"",
+                1,
+            ),
+            valid.replacen(
+                &format!("\"host_context_commitment\":\"{commitment}\""),
+                "\"host_context_commitment\":\"tampered-commitment\"",
+                1,
+            ),
+            valid.replacen(
+                "\"selected_host_prefix\"",
+                "\"Credential-Bytes\":\"credential-marker\",\"selected_host_prefix\"",
+                1,
+            ),
+        ];
+        for raw in invalid_raw {
+            let err = decode_passive_world_doctor_child_v1(raw.as_bytes(), prefix, commitment)
+                .expect_err(
+                    "malformed, duplicate, unknown, trailing, mixed, or tampered bytes must reject",
+                );
+            let rendered = err.to_string();
+            assert_eq!(rendered, "passive world doctor incoherent");
+            assert!(!rendered.contains("credential-marker"));
+            assert!(!rendered.contains("ambient-b"));
+        }
+    }
+
+    #[cfg(target_os = "linux")]
+    #[test]
+    fn passive_world_doctor_validator_rejects_semantic_and_secret_bearing_evidence() {
+        let prefix = "/selected-a";
+        let commitment = "commitment-a";
+        let valid = passive_world_doctor_value(prefix, commitment);
+        let mut invalid = Vec::new();
+
+        for pointer in [
+            "/schema_version",
+            "/platform",
+            "/ok",
+            "/host/platform",
+            "/host/ok",
+            "/host/selected_host_prefix",
+            "/host/host_context_commitment",
+            "/world/status",
+            "/world/ok",
+            "/world/selected_host_prefix",
+            "/world/host_context_commitment",
+        ] {
+            let mut missing = valid.clone();
+            let (parent, key) = pointer.rsplit_once('/').expect("object pointer");
+            let object = if parent.is_empty() {
+                missing.as_object_mut()
+            } else {
+                missing.pointer_mut(parent).and_then(Value::as_object_mut)
+            }
+            .expect("object parent");
+            object.remove(key);
+            invalid.push(missing);
+        }
+
+        let mut wrong_type = valid.clone();
+        wrong_type["ok"] = serde_json::json!("false");
+        invalid.push(wrong_type);
+        let mut invalid_status = valid.clone();
+        invalid_status["world"]["status"] = serde_json::json!("healthy");
+        invalid.push(invalid_status);
+        let mut mixed = valid.clone();
+        mixed["world"]["selected_host_prefix"] = serde_json::json!("/ambient-b");
+        invalid.push(mixed);
+        let mut tampered = valid.clone();
+        tampered["host"]["host_context_commitment"] = serde_json::json!("tampered");
+        invalid.push(tampered);
+
+        for key in [
+            "Credential_Bytes",
+            "provider-token",
+            "API.KEY",
+            "private_key",
+            "Authorization",
+            "pass-word",
+            "SECRET",
+            "prompt_material",
+            "request/body/bytes/input",
+            "bootstrap-shim-carrier",
+            "auth_bundle",
+            "parent_full_environment",
+            "commitment-preimage",
+        ] {
+            let mut secret_bearing = valid.clone();
+            secret_bearing["world"][key] = serde_json::json!("unique-secret-marker");
+            invalid.push(secret_bearing);
+        }
+
+        for value in invalid {
+            assert!(
+                !validate_passive_world_doctor_child_v1(&value, prefix, commitment),
+                "invalid passive evidence was accepted: {value}"
+            );
+            let snapshot = snapshot_from_value(value, "fixture", prefix, commitment);
+            assert_eq!(snapshot.status, WorldDoctorStatus::NeedsAttention);
+            assert!(!snapshot.ok);
+            assert_eq!(
+                snapshot.error.as_deref(),
+                Some("passive world doctor incoherent")
+            );
+            assert!(snapshot.stderr.is_none());
+            assert!(snapshot.details.is_none());
+            let rendered = serde_json::to_string(&snapshot).expect("serialize bounded snapshot");
+            assert!(!rendered.contains("unique-secret-marker"));
+            assert!(!rendered.contains("ambient-b"));
+            assert!(!rendered.contains("tampered"));
+        }
+    }
+
+    #[cfg(target_os = "linux")]
+    #[test]
+    fn passive_world_doctor_command_maps_valid_and_invalid_children_to_bounded_snapshots() {
+        let prefix = "/selected-a";
+        let commitment = "commitment-a";
+        let valid = snapshot_from_command(
+            JsonCommandOutput {
+                value: passive_world_doctor_value(prefix, commitment),
+                exit_code: Some(4),
+                stderr: String::new(),
+            },
+            prefix,
+            commitment,
+        );
+        assert_eq!(valid.status, WorldDoctorStatus::NeedsAttention);
+        assert!(!valid.ok);
+        assert_eq!(valid.platform, env::consts::OS);
+        assert_eq!(valid.source.as_deref(), Some("command"));
+        assert_eq!(valid.exit_code, Some(4));
+        assert!(valid.stderr.is_none());
+        assert!(valid.details.is_none());
+        assert_eq!(
+            valid.error.as_deref(),
+            Some("passive world doctor unavailable")
+        );
+
+        for output in [
+            JsonCommandOutput {
+                value: passive_world_doctor_value(prefix, commitment),
+                exit_code: Some(0),
+                stderr: String::new(),
+            },
+            JsonCommandOutput {
+                value: passive_world_doctor_value(prefix, commitment),
+                exit_code: Some(4),
+                stderr: "request-marker".to_string(),
+            },
+        ] {
+            let invalid = snapshot_from_command(output, prefix, commitment);
+            assert_eq!(invalid.status, WorldDoctorStatus::NeedsAttention);
+            assert!(!invalid.ok);
+            assert_eq!(invalid.platform, env::consts::OS);
+            assert_eq!(invalid.source.as_deref(), Some("command"));
+            assert_eq!(invalid.exit_code, Some(4));
+            assert!(invalid.stderr.is_none());
+            assert!(invalid.details.is_none());
+            assert_eq!(
+                invalid.error.as_deref(),
+                Some("passive world doctor incoherent")
+            );
+            assert!(!serde_json::to_string(&invalid)
+                .expect("serialize bounded snapshot")
+                .contains("request-marker"));
+        }
     }
 }

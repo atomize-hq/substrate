@@ -282,6 +282,31 @@ pub fn run_shell() -> Result<i32> {
 }
 
 pub fn run_shell_with_cli(cli: Cli) -> Result<i32> {
+    let internal_passive_world_doctor_v1 = matches!(
+        &cli.sub,
+        Some(SubCommands::World(WorldCmd {
+            action: WorldAction::Doctor {
+                internal_passive_world_doctor_v1: true,
+                ..
+            },
+        }))
+    );
+
+    #[cfg(target_os = "linux")]
+    if internal_passive_world_doctor_v1
+        && (cli.install_bootstrap_context_v1.is_none()
+            || !passive_world_doctor_action_is_exclusive(&cli))
+    {
+        eprintln!("substrate: invalid passive world doctor action");
+        return Ok(2);
+    }
+
+    #[cfg(not(target_os = "linux"))]
+    if internal_passive_world_doctor_v1 {
+        eprintln!("substrate: passive world doctor is unavailable on this platform");
+        return Ok(2);
+    }
+
     #[cfg(unix)]
     if cli.install_bootstrap_home_v1
         && (cli.install_bootstrap_context_v1.is_none()
@@ -396,6 +421,11 @@ pub fn run_shell_with_cli(cli: Cli) -> Result<i32> {
             }
         }
     };
+
+    #[cfg(target_os = "linux")]
+    if internal_passive_world_doctor_v1 {
+        return super::platform::emit_authenticated_passive_world_doctor_v1(&install_context);
+    }
 
     #[cfg(unix)]
     if super::install_bootstrap::install_bootstrap_projections(&install_context).is_err() {
@@ -627,6 +657,131 @@ fn install_bootstrap_home_action_is_exclusive(cli: &Cli) -> bool {
         && !cli.world
         && !cli.no_world
         && cli.sub.is_none()
+}
+
+#[cfg(target_os = "linux")]
+fn passive_world_doctor_action_is_exclusive(cli: &Cli) -> bool {
+    cli.command.is_none()
+        && cli.script.is_none()
+        && !cli.ci_mode
+        && !cli.no_exit_on_error
+        && !cli.use_pty
+        && cli.shell.is_none()
+        && cli.install_bootstrap_context_v1.is_some()
+        && !cli.install_bootstrap_home_v1
+        && !cli.version_json
+        && !cli.shim_status
+        && !cli.shim_status_json
+        && !cli.shim_skip
+        && !cli.shim_deploy
+        && !cli.shim_remove
+        && !cli.async_repl
+        && !cli.legacy_repl
+        && !cli.repl_host_escape
+        && cli.trace.is_none()
+        && cli.replay.is_none()
+        && !cli.replay_verbose
+        && !cli.flip_world
+        && !cli.caged
+        && !cli.uncaged
+        && cli.anchor_mode.is_none()
+        && cli.anchor_path.is_none()
+        && !cli.world
+        && !cli.no_world
+        && matches!(
+            &cli.sub,
+            Some(SubCommands::World(WorldCmd {
+                action: WorldAction::Doctor {
+                    json: true,
+                    internal_passive_world_doctor_v1: true,
+                },
+            }))
+        )
+}
+
+#[cfg(all(test, target_os = "linux"))]
+mod passive_world_doctor_tests {
+    use super::*;
+
+    fn parse(args: &[&str]) -> Cli {
+        Cli::try_parse_from(args).expect("test CLI should parse")
+    }
+
+    #[test]
+    fn passive_world_doctor_action_requires_the_exact_authenticated_json_action() {
+        let exact = parse(&[
+            "substrate",
+            "--install-bootstrap-context-v1",
+            "canonical-carrier",
+            "world",
+            "doctor",
+            "--json",
+            "--internal-passive-world-doctor-v1",
+        ]);
+        assert!(passive_world_doctor_action_is_exclusive(&exact));
+
+        let selected = parse(&[
+            "substrate",
+            "--install-prefix",
+            "/selected-a",
+            "--install-bootstrap-context-v1",
+            "canonical-carrier",
+            "world",
+            "doctor",
+            "--json",
+            "--internal-passive-world-doctor-v1",
+        ]);
+        assert!(passive_world_doctor_action_is_exclusive(&selected));
+
+        for incompatible in [
+            vec![
+                "substrate",
+                "world",
+                "doctor",
+                "--json",
+                "--internal-passive-world-doctor-v1",
+            ],
+            vec![
+                "substrate",
+                "--install-bootstrap-context-v1",
+                "canonical-carrier",
+                "world",
+                "doctor",
+                "--internal-passive-world-doctor-v1",
+            ],
+            vec![
+                "substrate",
+                "--install-bootstrap-context-v1",
+                "canonical-carrier",
+                "--world",
+                "world",
+                "doctor",
+                "--json",
+                "--internal-passive-world-doctor-v1",
+            ],
+            vec![
+                "substrate",
+                "--install-bootstrap-context-v1",
+                "canonical-carrier",
+                "--shim-skip",
+                "world",
+                "doctor",
+                "--json",
+                "--internal-passive-world-doctor-v1",
+            ],
+        ] {
+            assert!(
+                !passive_world_doctor_action_is_exclusive(&parse(&incompatible)),
+                "incompatible action was accepted: {incompatible:?}"
+            );
+        }
+    }
+
+    #[test]
+    fn ordinary_public_world_doctor_is_not_passive() {
+        let public = parse(&["substrate", "world", "doctor", "--json"]);
+        assert!(!passive_world_doctor_action_is_exclusive(&public));
+    }
 }
 
 // Helper function to setup signal handlers

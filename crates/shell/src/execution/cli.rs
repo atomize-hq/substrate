@@ -644,8 +644,9 @@ pub enum WorkspaceAction {
 mod tests {
     use super::{
         AgentAction, AgentCmd, AgentDisableCapabilityArg, AgentStartScopeArg, Cli, SubCommands,
+        WorldAction, WorldCmd,
     };
-    use clap::Parser;
+    use clap::{CommandFactory, Parser};
 
     fn parse_start_args(args: &[&str]) -> super::AgentStartArgs {
         let cli = Cli::try_parse_from(args).expect("agent start should parse");
@@ -721,6 +722,63 @@ mod tests {
         assert!(rendered.contains("llm"));
         assert!(rendered.contains("session_resume"));
         assert!(rendered.contains("event_stream"));
+    }
+
+    #[test]
+    fn world_doctor_public_and_internal_passive_selectors_parse_independently() {
+        let public = Cli::try_parse_from(["substrate", "world", "doctor", "--json"])
+            .expect("public world doctor should parse");
+        let Some(SubCommands::World(WorldCmd {
+            action:
+                WorldAction::Doctor {
+                    json,
+                    internal_passive_world_doctor_v1,
+                },
+        })) = public.sub
+        else {
+            panic!("expected public world doctor command");
+        };
+        assert!(json);
+        assert!(!internal_passive_world_doctor_v1);
+
+        let internal = Cli::try_parse_from([
+            "substrate",
+            "world",
+            "doctor",
+            "--json",
+            "--internal-passive-world-doctor-v1",
+        ])
+        .expect("internal passive world doctor should parse");
+        let Some(SubCommands::World(WorldCmd {
+            action:
+                WorldAction::Doctor {
+                    json,
+                    internal_passive_world_doctor_v1,
+                },
+        })) = internal.sub
+        else {
+            panic!("expected internal passive world doctor command");
+        };
+        assert!(json);
+        assert!(internal_passive_world_doctor_v1);
+    }
+
+    #[test]
+    fn internal_passive_world_doctor_selector_is_hidden_from_public_help() {
+        let mut command = Cli::command();
+        let world = command
+            .find_subcommand_mut("world")
+            .expect("world subcommand");
+        let doctor = world
+            .find_subcommand_mut("doctor")
+            .expect("world doctor subcommand");
+        let mut help = Vec::new();
+        doctor
+            .write_long_help(&mut help)
+            .expect("render world doctor help");
+        let help = String::from_utf8(help).expect("UTF-8 help");
+        assert!(help.contains("--json"));
+        assert!(!help.contains("internal-passive-world-doctor-v1"));
     }
 }
 
@@ -838,6 +896,8 @@ pub enum WorldAction {
         /// Output machine-readable JSON for CI
         #[arg(long)]
         json: bool,
+        #[arg(long = "internal-passive-world-doctor-v1", hide = true)]
+        internal_passive_world_doctor_v1: bool,
     },
     /// Gateway lifecycle and status commands.
     Gateway(WorldGatewayCmd),

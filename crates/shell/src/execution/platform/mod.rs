@@ -52,6 +52,31 @@ fn resolve_doctor_world_disable_attribution(
     )
 }
 
+#[cfg(target_os = "linux")]
+pub(super) fn emit_authenticated_passive_world_doctor_v1(
+    install_context: &InstallBootstrapContextCarrierV1,
+) -> Result<i32> {
+    let output = serde_json::json!({
+        "schema_version": 1,
+        "platform": env::consts::OS,
+        "ok": false,
+        "host": {
+            "platform": env::consts::OS,
+            "ok": false,
+            "selected_host_prefix": &install_context.context.selected_host_prefix,
+            "host_context_commitment": &install_context.host_context_commitment,
+        },
+        "world": {
+            "status": "unavailable",
+            "ok": false,
+            "selected_host_prefix": &install_context.context.selected_host_prefix,
+            "host_context_commitment": &install_context.host_context_commitment,
+        }
+    });
+    println!("{}", serde_json::to_string(&output)?);
+    Ok(4)
+}
+
 #[cfg(all(
     not(target_os = "linux"),
     not(target_os = "macos"),
@@ -171,7 +196,14 @@ pub(crate) fn handle_world_command(
     #[cfg(unix)] install_context: &InstallBootstrapContextCarrierV1,
 ) -> Result<()> {
     match &cmd.action {
-        WorldAction::Doctor { json } => {
+        WorldAction::Doctor {
+            json,
+            internal_passive_world_doctor_v1,
+        } => {
+            if *internal_passive_world_doctor_v1 {
+                eprintln!("substrate: invalid passive world doctor routing");
+                std::process::exit(2);
+            }
             let launch_cwd = match env::current_dir() {
                 Ok(cwd) => cwd,
                 Err(err) => {
