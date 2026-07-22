@@ -38,6 +38,9 @@ use transport_api_types::InstallBootstrapContextCarrierV1;
 use std::thread;
 // use nu_ansi_term::{Color, Style}; // Unused for now
 pub(crate) use self::world::initialize_world;
+#[cfg(target_os = "linux")]
+#[allow(unused_imports)]
+pub(crate) use dispatch::build_authenticated_world_deps_client_and_request;
 pub(crate) use dispatch::world_persistent_session::{
     ReplPersistentSessionClient, ReplSessionStartParams, ReplStdinMode,
 };

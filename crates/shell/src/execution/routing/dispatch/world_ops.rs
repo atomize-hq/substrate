@@ -52,6 +52,114 @@ const SUBSTRATE_PARENT_SPAN_ENV: &str = "SUBSTRATE_PARENT_SPAN_ID";
 #[cfg(any(target_os = "linux", all(test, unix)))]
 const SUBSTRATE_INTERNAL_CODEX_AUTH_SEED_HOME_ENV: &str = "SUBSTRATE_INTERNAL_CODEX_AUTH_SEED_HOME";
 const RESERVED_WORLD_REQUEST_PROFILES: &[&str] = &["world-deps-provision", "world-deps-probe"];
+#[cfg(target_os = "linux")]
+const AUTHENTICATED_WORLD_SOCKET: &str = "/run/substrate.sock";
+#[cfg(target_os = "linux")]
+const AUTHENTICATED_WORLD_SERVICE_BINARY: &str = "/usr/local/bin/substrate-world-service";
+#[cfg(target_os = "linux")]
+const AUTHENTICATED_WORLD_SERVICE_CWD: &str = "/var/lib/substrate";
+#[cfg(target_os = "linux")]
+const AUTHENTICATED_WORLD_SERVICE_PATH: &str =
+    "/usr/local/sbin:/usr/local/bin:/usr/sbin:/usr/bin:/sbin:/bin";
+#[cfg(target_os = "linux")]
+const WORLD_SERVICE_PROBE_IO_TIMEOUT_MS: u64 = 150;
+#[cfg(target_os = "linux")]
+const WORLD_SERVICE_ACTIVATION_POLL_MS: u64 = 100;
+#[cfg(target_os = "linux")]
+const WORLD_SERVICE_ACTIVATION_WAIT_MS: u64 = 2_000;
+#[cfg(target_os = "linux")]
+const WORLD_SERVICE_READINESS_POLL_MS: u64 = 50;
+#[cfg(target_os = "linux")]
+const WORLD_SERVICE_READINESS_WAIT_MS: u64 = 1_000;
+#[cfg(target_os = "linux")]
+type WorldServiceCandidateBins = [Option<String>; 4];
+
+#[cfg(target_os = "linux")]
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+enum WorldServiceSpawnEnvironment {
+    LegacyCompatibility,
+    InstalledLinuxProduct,
+}
+
+#[cfg(target_os = "linux")]
+#[derive(Debug, PartialEq, Eq)]
+struct WorldServiceSpawnPlan {
+    candidate_bins: WorldServiceCandidateBins,
+    environment: WorldServiceSpawnEnvironment,
+}
+
+#[cfg(target_os = "linux")]
+#[derive(Debug)]
+enum WorldServiceReadinessPosture {
+    LegacyCompatibility {
+        socket_override_active: bool,
+        candidate_bins: fn() -> WorldServiceCandidateBins,
+        activation_mode: fn() -> socket_activation::SocketActivationMode,
+    },
+    InstalledLinuxProduct,
+}
+
+#[cfg(target_os = "linux")]
+impl WorldServiceReadinessPosture {
+    fn activation_mode(&self) -> socket_activation::SocketActivationMode {
+        match self {
+            Self::LegacyCompatibility {
+                activation_mode, ..
+            } => activation_mode(),
+            Self::InstalledLinuxProduct => socket_activation::SocketActivationMode::Unknown,
+        }
+    }
+
+    fn into_spawn_plan(
+        self,
+        socket_path: &std::path::Path,
+    ) -> anyhow::Result<WorldServiceSpawnPlan> {
+        match self {
+            Self::LegacyCompatibility {
+                socket_override_active,
+                candidate_bins,
+                ..
+            } => {
+                if socket_override_active {
+                    anyhow::bail!(
+                        "world backend unavailable (SUBSTRATE_WORLD_SOCKET override): {} did not respond",
+                        socket_path.display()
+                    );
+                }
+                Ok(WorldServiceSpawnPlan {
+                    candidate_bins: candidate_bins(),
+                    environment: WorldServiceSpawnEnvironment::LegacyCompatibility,
+                })
+            }
+            Self::InstalledLinuxProduct => Ok(WorldServiceSpawnPlan {
+                candidate_bins: [
+                    Some(AUTHENTICATED_WORLD_SERVICE_BINARY.to_string()),
+                    None,
+                    None,
+                    None,
+                ],
+                environment: WorldServiceSpawnEnvironment::InstalledLinuxProduct,
+            }),
+        }
+    }
+}
+
+#[cfg(target_os = "linux")]
+fn resolve_legacy_compatibility_activation_mode() -> socket_activation::SocketActivationMode {
+    socket_activation::socket_activation_report().mode
+}
+
+#[cfg(target_os = "linux")]
+fn resolve_legacy_compatibility_candidate_bins() -> WorldServiceCandidateBins {
+    [
+        std::env::var("SUBSTRATE_WORLD_AGENT_BIN").ok(),
+        which::which("substrate-world-service")
+            .ok()
+            .map(|path| path.display().to_string()),
+        Some("target/release/world-service".to_string()),
+        Some("target/debug/world-service".to_string()),
+    ]
+}
 
 fn inject_process_trace_env(
     env_map: &mut std::collections::HashMap<String, String>,
@@ -629,28 +737,97 @@ pub(super) fn execute_world_pty_over_ws(
 
 #[cfg(target_os = "linux")]
 pub(super) fn ensure_world_service_ready() -> anyhow::Result<()> {
-    use std::path::Path;
-    use std::path::PathBuf;
-    use std::thread;
-    use std::time::{Duration, Instant};
-    const ACTIVATION_WAIT_MS: u64 = 2_000;
+    ensure_world_service_ready_with(ensure_world_service_ready_for_target)
+}
+
+#[cfg(target_os = "linux")]
+fn ensure_world_service_ready_with(
+    ready: impl FnOnce(&std::path::Path, WorldServiceReadinessPosture) -> anyhow::Result<()>,
+) -> anyhow::Result<()> {
     const DEFAULT_SOCKET_PATH: &str = "/run/substrate.sock";
 
     let socket_path = std::env::var_os("SUBSTRATE_WORLD_SOCKET")
-        .map(PathBuf::from)
-        .unwrap_or_else(|| PathBuf::from(DEFAULT_SOCKET_PATH));
-
+        .map(std::path::PathBuf::from)
+        .unwrap_or_else(|| std::path::PathBuf::from(DEFAULT_SOCKET_PATH));
     let socket_override_active = std::env::var_os("SUBSTRATE_WORLD_SOCKET")
-        .map(|p| p != std::ffi::OsStr::new(DEFAULT_SOCKET_PATH))
+        .map(|path| path != std::ffi::OsStr::new(DEFAULT_SOCKET_PATH))
         .unwrap_or(false);
+    ready(
+        &socket_path,
+        WorldServiceReadinessPosture::LegacyCompatibility {
+            socket_override_active,
+            candidate_bins: resolve_legacy_compatibility_candidate_bins,
+            activation_mode: resolve_legacy_compatibility_activation_mode,
+        },
+    )
+}
+
+#[cfg(target_os = "linux")]
+fn ensure_world_service_ready_for_target(
+    socket_path: &std::path::Path,
+    posture: WorldServiceReadinessPosture,
+) -> anyhow::Result<()> {
+    ensure_world_service_ready_for_target_with_spawn(socket_path, posture, spawn_world_service)
+}
+
+#[cfg(target_os = "linux")]
+fn world_service_command(
+    binary: &str,
+    environment: WorldServiceSpawnEnvironment,
+    installed_cwd: &std::path::Path,
+) -> std::process::Command {
+    let mut command = std::process::Command::new(binary);
+    if environment == WorldServiceSpawnEnvironment::InstalledLinuxProduct {
+        command
+            .env_clear()
+            .env("PATH", AUTHENTICATED_WORLD_SERVICE_PATH)
+            .env("SUBSTRATE_WORLD_SOCKET", AUTHENTICATED_WORLD_SOCKET)
+            .current_dir(installed_cwd);
+    }
+    command
+        .stdin(std::process::Stdio::null())
+        .stdout(std::process::Stdio::null())
+        .stderr(std::process::Stdio::null());
+    command
+}
+
+#[cfg(target_os = "linux")]
+fn spawn_world_service(plan: WorldServiceSpawnPlan) -> anyhow::Result<()> {
+    let binary = plan
+        .candidate_bins
+        .into_iter()
+        .flatten()
+        .find(|path| std::path::Path::new(path).exists())
+        .ok_or_else(|| anyhow::anyhow!("world-service binary not found"))?;
+
+    world_service_command(
+        &binary,
+        plan.environment,
+        std::path::Path::new(AUTHENTICATED_WORLD_SERVICE_CWD),
+    )
+    .spawn()
+    .map_err(|error| anyhow::anyhow!("spawn world-service: {}", error))?;
+    Ok(())
+}
+
+#[cfg(target_os = "linux")]
+fn ensure_world_service_ready_for_target_with_spawn(
+    socket_path: &std::path::Path,
+    posture: WorldServiceReadinessPosture,
+    spawn_service: impl FnOnce(WorldServiceSpawnPlan) -> anyhow::Result<()>,
+) -> anyhow::Result<()> {
+    use std::path::Path;
+    use std::thread;
+    use std::time::{Duration, Instant};
 
     // Helper: quick readiness probe via HTTP-over-UDS
     fn probe_caps(sock: &Path) -> bool {
         use std::io::{Read, Write};
         match std::os::unix::net::UnixStream::connect(sock) {
             Ok(mut s) => {
-                let _ = s.set_read_timeout(Some(std::time::Duration::from_millis(150)));
-                let _ = s.set_write_timeout(Some(std::time::Duration::from_millis(150)));
+                let timeout = std::time::Duration::from_millis(WORLD_SERVICE_PROBE_IO_TIMEOUT_MS);
+                let _ = s.set_read_timeout(Some(timeout));
+                let _ = s.set_write_timeout(Some(timeout));
                 let req = b"GET /v1/capabilities HTTP/1.1\r\nHost: localhost\r\nConnection: close\r\n\r\n";
                 if s.write_all(req).is_ok() {
                     let mut buf = [0u8; 512];
@@ -668,19 +845,22 @@ pub(super) fn ensure_world_service_ready() -> anyhow::Result<()> {
     }
 
     // Fast path: already ready
-    if probe_caps(&socket_path) {
+    if probe_caps(socket_path) {
         return Ok(());
     }
 
-    let activation_report = socket_activation::socket_activation_report();
+    let activation_mode = posture.activation_mode();
 
-    if activation_report.is_socket_activated() {
-        let deadline = Instant::now() + Duration::from_millis(ACTIVATION_WAIT_MS);
+    if matches!(
+        activation_mode,
+        socket_activation::SocketActivationMode::SocketActivation
+    ) {
+        let deadline = Instant::now() + Duration::from_millis(WORLD_SERVICE_ACTIVATION_WAIT_MS);
         while Instant::now() < deadline {
-            if probe_caps(&socket_path) {
+            if probe_caps(socket_path) {
                 return Ok(());
             }
-            thread::sleep(Duration::from_millis(100));
+            thread::sleep(Duration::from_millis(WORLD_SERVICE_ACTIVATION_POLL_MS));
         }
         anyhow::bail!(
             "world-service socket activation detected but {} did not respond. \
@@ -693,49 +873,26 @@ pub(super) fn ensure_world_service_ready() -> anyhow::Result<()> {
     // confident the socket isn't systemd-managed; if systemd probing fails, keep the
     // path intact to avoid breaking socket activation.
     if matches!(
-        activation_report.mode,
+        activation_mode,
         socket_activation::SocketActivationMode::Manual
-    ) && Path::new(&socket_path).exists()
+    ) && Path::new(socket_path).exists()
     {
-        let _ = std::fs::remove_file(&socket_path);
+        let _ = std::fs::remove_file(socket_path);
     }
 
-    if socket_override_active {
-        anyhow::bail!(
-            "world backend unavailable (SUBSTRATE_WORLD_SOCKET override): {} did not respond",
-            socket_path.display()
-        );
-    }
-
-    // Try to spawn agent
-    let candidate_bins = [
-        std::env::var("SUBSTRATE_WORLD_AGENT_BIN").ok(),
-        which::which("substrate-world-service")
-            .ok()
-            .map(|p| p.display().to_string()),
-        Some("target/release/world-service".to_string()),
-        Some("target/debug/world-service".to_string()),
-    ];
-    let bin = candidate_bins
-        .into_iter()
-        .flatten()
-        .find(|p| std::path::Path::new(p).exists())
-        .ok_or_else(|| anyhow::anyhow!("world-service binary not found"))?;
-
-    std::process::Command::new(&bin)
-        .stdin(std::process::Stdio::null())
-        .stdout(std::process::Stdio::null())
-        .stderr(std::process::Stdio::null())
-        .spawn()
-        .map_err(|e| anyhow::anyhow!("spawn world-service: {}", e))?;
+    let spawn_plan = posture.into_spawn_plan(socket_path)?;
+    spawn_service(spawn_plan)?;
 
     // Wait up to ~1s for readiness
-    let deadline = std::time::Instant::now() + std::time::Duration::from_millis(1000);
+    let deadline = std::time::Instant::now()
+        + std::time::Duration::from_millis(WORLD_SERVICE_READINESS_WAIT_MS);
     while std::time::Instant::now() < deadline {
-        if probe_caps(&socket_path) {
+        if probe_caps(socket_path) {
             return Ok(());
         }
-        std::thread::sleep(std::time::Duration::from_millis(50));
+        std::thread::sleep(std::time::Duration::from_millis(
+            WORLD_SERVICE_READINESS_POLL_MS,
+        ));
     }
     anyhow::bail!("world-service readiness probe failed")
 }
@@ -1110,6 +1267,103 @@ pub(crate) fn build_agent_client_and_request(
     String,
 )> {
     build_agent_client_and_request_with_trace_metadata(cmd, None, None)
+}
+
+#[cfg(target_os = "linux")]
+#[allow(
+    dead_code,
+    reason = "the additive authenticated F builder is consumed by the immediately following F4 increment"
+)]
+pub(crate) fn build_authenticated_world_deps_client_and_request(
+    context: &crate::builtins::world_deps::AuthenticatedWorldDepsContextV1,
+    cmd: &str,
+    cwd_override: Option<&std::path::Path>,
+    profile: &str,
+) -> anyhow::Result<(
+    transport_api_client::AgentClient,
+    transport_api_types::ExecuteRequest,
+    String,
+)> {
+    build_authenticated_world_deps_client_and_request_impl(
+        context,
+        cmd,
+        cwd_override,
+        profile,
+        ensure_world_service_ready_for_target,
+    )
+}
+
+#[cfg(target_os = "linux")]
+fn build_authenticated_world_deps_client_and_request_impl(
+    context: &crate::builtins::world_deps::AuthenticatedWorldDepsContextV1,
+    cmd: &str,
+    cwd_override: Option<&std::path::Path>,
+    profile: &str,
+    ensure_ready: impl FnOnce(&std::path::Path, WorldServiceReadinessPosture) -> anyhow::Result<()>,
+) -> anyhow::Result<(
+    transport_api_client::AgentClient,
+    transport_api_types::ExecuteRequest,
+    String,
+)> {
+    context.revalidate_authority()?;
+    if !RESERVED_WORLD_REQUEST_PROFILES.contains(&profile) {
+        return Err(anyhow::anyhow!(
+            "invalid authenticated world-deps request profile"
+        ));
+    }
+    let cwd_path = cwd_override.unwrap_or_else(|| context.launch_cwd());
+    if !cwd_path.is_absolute() {
+        return Err(anyhow::anyhow!(
+            "authenticated world-deps request cwd must be absolute"
+        ));
+    }
+    let cwd = cwd_path.to_str().ok_or_else(|| {
+        anyhow::anyhow!("authenticated world-deps request cwd must be valid UTF-8")
+    })?;
+
+    ensure_ready(
+        std::path::Path::new(AUTHENTICATED_WORLD_SOCKET),
+        WorldServiceReadinessPosture::InstalledLinuxProduct,
+    )?;
+
+    let env_map = std::collections::HashMap::from([
+        (
+            "SUBSTRATE_WORLD_DEPS_GUEST_BIN_DIR".to_string(),
+            "/var/lib/substrate/world-deps/bin".to_string(),
+        ),
+        (
+            "PATH".to_string(),
+            "/var/lib/substrate/world-deps/bin:/usr/local/sbin:/usr/local/bin:/usr/sbin:/usr/bin:/sbin:/bin"
+                .to_string(),
+        ),
+        ("HOME".to_string(), "/root".to_string()),
+        ("XDG_CONFIG_HOME".to_string(), "/root/.config".to_string()),
+        (
+            "XDG_DATA_HOME".to_string(),
+            "/root/.local/share".to_string(),
+        ),
+        (
+            "XDG_CACHE_HOME".to_string(),
+            "/root/.cache".to_string(),
+        ),
+        ("TERM".to_string(), "xterm-256color".to_string()),
+    ]);
+    let network_policy = context.runtime_network_policy();
+    let request = build_execute_request(ExecuteRequestInput {
+        profile: Some(profile.to_string()),
+        cmd: cmd.to_string(),
+        cwd: cwd.to_string(),
+        env_map,
+        agent_id: "human".to_string(),
+        policy_snapshot: network_policy.snapshot.clone(),
+        world_network: request_world_network_routing(network_policy),
+        world_fs_mode: context.effective_policy().world_fs_policy().mode,
+        member_dispatch: None,
+        acceptance_context: None,
+    });
+    request.validate().map_err(|error| anyhow::anyhow!(error))?;
+    let client = AgentClient::unix_socket(AUTHENTICATED_WORLD_SOCKET)?;
+    Ok((client, request, "human".to_string()))
 }
 
 pub(crate) fn build_agent_client_and_request_with_trace_metadata(
@@ -2353,6 +2607,18 @@ pub(super) fn emit_stream_chunk(
 
 #[cfg(all(test, any(target_os = "linux", target_os = "macos")))]
 mod tests {
+    #[cfg(target_os = "linux")]
+    use super::{
+        build_authenticated_world_deps_client_and_request_impl,
+        ensure_world_service_ready_for_target, ensure_world_service_ready_for_target_with_spawn,
+        ensure_world_service_ready_with, resolve_legacy_compatibility_candidate_bins,
+        world_service_command, WorldServiceCandidateBins, WorldServiceReadinessPosture,
+        WorldServiceSpawnEnvironment, AUTHENTICATED_WORLD_SERVICE_BINARY,
+        AUTHENTICATED_WORLD_SERVICE_CWD, AUTHENTICATED_WORLD_SERVICE_PATH,
+        AUTHENTICATED_WORLD_SOCKET, WORLD_SERVICE_ACTIVATION_POLL_MS,
+        WORLD_SERVICE_ACTIVATION_WAIT_MS, WORLD_SERVICE_PROBE_IO_TIMEOUT_MS,
+        WORLD_SERVICE_READINESS_POLL_MS, WORLD_SERVICE_READINESS_WAIT_MS,
+    };
     use super::{
         build_execute_request, build_member_dispatch_payload, current_world_request_profile,
         emit_stream_chunk, ensure_world_deps_bin_on_path, extract_process_telemetry_from_ws_exit,
@@ -2376,6 +2642,662 @@ mod tests {
         PolicySnapshotWorldFsFailClosedV3, PolicySnapshotWorldFsV3, PolicySnapshotWorldFsWriteV3,
         ResolvedMemberRuntimeDescriptorV1, WorldFsMode, WorldNetworkRoutingV1,
     };
+
+    #[cfg(target_os = "linux")]
+    struct PoisonedEnvGuard {
+        previous: Vec<(&'static str, Option<std::ffi::OsString>)>,
+    }
+
+    #[cfg(target_os = "linux")]
+    impl PoisonedEnvGuard {
+        fn apply(entries: &[(&'static str, &str)]) -> Self {
+            let previous = entries
+                .iter()
+                .map(|(key, _)| (*key, std::env::var_os(key)))
+                .collect();
+            for (key, value) in entries {
+                std::env::set_var(key, value);
+            }
+            Self { previous }
+        }
+    }
+
+    #[cfg(target_os = "linux")]
+    impl Drop for PoisonedEnvGuard {
+        fn drop(&mut self) {
+            for (key, value) in self.previous.drain(..).rev() {
+                match value {
+                    Some(value) => std::env::set_var(key, value),
+                    None => std::env::remove_var(key),
+                }
+            }
+        }
+    }
+
+    #[cfg(target_os = "linux")]
+    fn authenticated_world_deps_context_fixture() -> (
+        tempfile::TempDir,
+        std::path::PathBuf,
+        crate::builtins::world_deps::AuthenticatedWorldDepsContextV1,
+    ) {
+        use std::fs;
+        use std::os::unix::fs::PermissionsExt;
+
+        let (principal, account_home) =
+            crate::execution::install_bootstrap::current_unix_principal_and_home()
+                .expect("resolve current Unix principal");
+        let PlatformPrincipalV1::Unix { account, uid } = principal else {
+            panic!("current Linux principal must use the Unix variant");
+        };
+        let temp = tempfile::Builder::new()
+            .prefix("substrate-authenticated-f-builder-")
+            .tempdir_in(account_home)
+            .expect("create secure authenticated builder fixture");
+        let selected_prefix = temp.path().join("selected-a");
+        fs::create_dir(&selected_prefix).expect("create selected prefix");
+        fs::set_permissions(&selected_prefix, fs::Permissions::from_mode(0o700))
+            .expect("secure selected prefix");
+        fs::write(
+            selected_prefix.join("config.yaml"),
+            "world:\n  enabled: true\n  deps:\n    builtins: disabled\n    inventory_mode: merged\n    enabled: []\n",
+        )
+        .expect("write selected config");
+        fs::write(
+            selected_prefix.join("policy.yaml"),
+            "id: selected-policy\nnet_allowed: [selected.example]\nworld_fs:\n  host_visible: false\n  write:\n    enabled: false\n  fail_closed:\n    routing: true\n",
+        )
+        .expect("write selected policy");
+
+        let launch_cwd = temp.path().join("workspace");
+        fs::create_dir_all(launch_cwd.join(".substrate")).expect("create workspace metadata");
+        fs::write(launch_cwd.join(".substrate/workspace.yaml"), "")
+            .expect("write workspace marker");
+        let install_context = transport_api_types::InstallBootstrapContextV1::new_unix(
+            selected_prefix.to_str().expect("UTF-8 selected prefix"),
+            &account,
+            uid,
+        )
+        .expect("construct install context");
+        let carrier =
+            transport_api_types::InstallBootstrapContextCarrierV1::from_context(install_context)
+                .expect("commit install context");
+        let context = crate::builtins::world_deps::bind_authenticated_world_deps_context_v1(
+            &carrier,
+            &launch_cwd,
+            &crate::execution::config_model::CliConfigOverrides::default(),
+        )
+        .expect("bind authenticated world-deps context");
+        (temp, selected_prefix, context)
+    }
+
+    #[cfg(target_os = "linux")]
+    fn manual_activation_mode() -> crate::execution::socket_activation::SocketActivationMode {
+        crate::execution::socket_activation::SocketActivationMode::Manual
+    }
+
+    #[cfg(target_os = "linux")]
+    fn unknown_activation_mode() -> crate::execution::socket_activation::SocketActivationMode {
+        crate::execution::socket_activation::SocketActivationMode::Unknown
+    }
+
+    #[cfg(target_os = "linux")]
+    fn socket_activation_mode() -> crate::execution::socket_activation::SocketActivationMode {
+        crate::execution::socket_activation::SocketActivationMode::SocketActivation
+    }
+
+    #[cfg(target_os = "linux")]
+    fn empty_candidate_bins() -> WorldServiceCandidateBins {
+        std::array::from_fn(|_| None)
+    }
+
+    #[cfg(target_os = "linux")]
+    fn panic_candidate_bins() -> WorldServiceCandidateBins {
+        panic!("candidate resolution must not run")
+    }
+
+    #[cfg(target_os = "linux")]
+    fn no_legacy_binary_candidates(
+        activation_mode: fn() -> crate::execution::socket_activation::SocketActivationMode,
+    ) -> WorldServiceReadinessPosture {
+        WorldServiceReadinessPosture::LegacyCompatibility {
+            socket_override_active: false,
+            candidate_bins: empty_candidate_bins,
+            activation_mode,
+        }
+    }
+
+    #[cfg(target_os = "linux")]
+    #[test]
+    fn compatibility_readiness_preserves_ambient_socket_and_lazy_binary_order() {
+        use std::os::unix::fs::PermissionsExt;
+
+        let _authority_env = crate::execution::AuthorityEnvTestGuard::preserve();
+        let temp = tempfile::tempdir().expect("compatibility readiness fixture");
+        let path_binary = temp.path().join("substrate-world-service");
+        std::fs::write(&path_binary, "#!/bin/sh\nexit 0\n").expect("write PATH candidate");
+        std::fs::set_permissions(&path_binary, std::fs::Permissions::from_mode(0o755))
+            .expect("make PATH candidate executable");
+        let socket = temp.path().join("compatibility.sock");
+        let _poison = PoisonedEnvGuard::apply(&[
+            ("SUBSTRATE_WORLD_SOCKET", socket.to_string_lossy().as_ref()),
+            (
+                "SUBSTRATE_WORLD_AGENT_BIN",
+                "/explicit/compatibility/world-service",
+            ),
+            ("PATH", temp.path().to_string_lossy().as_ref()),
+        ]);
+
+        ensure_world_service_ready_with(|resolved_socket, posture| {
+            assert_eq!(resolved_socket, socket);
+            let WorldServiceReadinessPosture::LegacyCompatibility {
+                socket_override_active,
+                candidate_bins: resolve_candidate_bins,
+                ..
+            } = posture
+            else {
+                panic!("compatibility wrapper selected installed-product posture");
+            };
+            assert!(socket_override_active);
+            assert_eq!(
+                resolve_candidate_bins(),
+                [
+                    Some("/explicit/compatibility/world-service".to_string()),
+                    Some(path_binary.display().to_string()),
+                    Some("target/release/world-service".to_string()),
+                    Some("target/debug/world-service".to_string()),
+                ]
+            );
+            Ok(())
+        })
+        .expect("delegate resolved compatibility inputs");
+    }
+
+    #[cfg(target_os = "linux")]
+    #[test]
+    fn readiness_contract_retains_published_timeout_and_polling_values() {
+        assert_eq!(WORLD_SERVICE_PROBE_IO_TIMEOUT_MS, 150);
+        assert_eq!(WORLD_SERVICE_ACTIVATION_POLL_MS, 100);
+        assert_eq!(WORLD_SERVICE_ACTIVATION_WAIT_MS, 2_000);
+        assert_eq!(WORLD_SERVICE_READINESS_POLL_MS, 50);
+        assert_eq!(WORLD_SERVICE_READINESS_WAIT_MS, 1_000);
+    }
+
+    #[cfg(target_os = "linux")]
+    #[test]
+    fn explicit_readiness_fast_path_probes_only_the_supplied_socket() {
+        use std::io::{Read, Write};
+        use std::os::unix::net::UnixListener;
+
+        let temp = tempfile::tempdir().expect("explicit readiness fixture");
+        let socket = temp.path().join("ready.sock");
+        let listener = UnixListener::bind(&socket).expect("bind explicit readiness socket");
+        let server = std::thread::spawn(move || {
+            let (mut stream, _) = listener.accept().expect("accept readiness probe");
+            let mut request = [0_u8; 256];
+            let count = stream.read(&mut request).expect("read readiness probe");
+            assert!(String::from_utf8_lossy(&request[..count]).contains("GET /v1/capabilities"));
+            stream
+                .write_all(b"HTTP/1.1 200 OK\r\nContent-Length: 0\r\n\r\n")
+                .expect("write readiness response");
+        });
+
+        let _authority_env = crate::execution::AuthorityEnvTestGuard::preserve();
+        let _poison = PoisonedEnvGuard::apply(&[
+            ("SUBSTRATE_WORLD_SOCKET", "/poisoned/ambient/socket"),
+            ("SUBSTRATE_WORLD_AGENT_BIN", "/poisoned/ambient/binary"),
+            ("SUBSTRATE_SOCKET_ACTIVATION_OVERRIDE", "manual"),
+            ("SUBSTRATE_SYSTEMCTL_TIMEOUT_MS", "1"),
+        ]);
+
+        ensure_world_service_ready_for_target(
+            &socket,
+            WorldServiceReadinessPosture::InstalledLinuxProduct,
+        )
+        .expect("explicit socket is ready");
+        server.join().expect("join readiness server");
+    }
+
+    #[cfg(target_os = "linux")]
+    #[test]
+    fn explicit_readiness_removes_stale_socket_only_in_manual_mode() {
+        let temp = tempfile::tempdir().expect("stale readiness fixture");
+        let manual_socket = temp.path().join("manual.sock");
+        std::fs::write(&manual_socket, "stale").expect("write manual stale socket sentinel");
+        let manual_error = ensure_world_service_ready_for_target(
+            &manual_socket,
+            no_legacy_binary_candidates(manual_activation_mode),
+        )
+        .expect_err("missing compatibility binary must fail");
+        assert_eq!(manual_error.to_string(), "world-service binary not found");
+        assert!(!manual_socket.exists());
+
+        let unknown_socket = temp.path().join("unknown.sock");
+        std::fs::write(&unknown_socket, "stale").expect("write unknown stale socket sentinel");
+        let unknown_error = ensure_world_service_ready_for_target(
+            &unknown_socket,
+            no_legacy_binary_candidates(unknown_activation_mode),
+        )
+        .expect_err("missing compatibility binary must fail");
+        assert_eq!(unknown_error.to_string(), "world-service binary not found");
+        assert!(unknown_socket.exists());
+    }
+
+    #[cfg(target_os = "linux")]
+    #[test]
+    fn compatibility_readiness_rejects_socket_override_with_preserved_error() {
+        let temp = tempfile::tempdir().expect("override readiness fixture");
+        let socket = temp.path().join("override.sock");
+        let error = ensure_world_service_ready_for_target(
+            &socket,
+            WorldServiceReadinessPosture::LegacyCompatibility {
+                socket_override_active: true,
+                candidate_bins: panic_candidate_bins,
+                activation_mode: manual_activation_mode,
+            },
+        )
+        .expect_err("unresponsive compatibility override must fail");
+
+        assert_eq!(
+            error.to_string(),
+            format!(
+                "world backend unavailable (SUBSTRATE_WORLD_SOCKET override): {} did not respond",
+                socket.display()
+            )
+        );
+    }
+
+    #[cfg(target_os = "linux")]
+    #[test]
+    fn compatibility_readiness_spawns_selected_binary_and_preserves_poll_error() {
+        use std::os::unix::fs::PermissionsExt;
+
+        let _authority_env = crate::execution::AuthorityEnvTestGuard::preserve();
+        let temp = tempfile::tempdir().expect("spawn readiness fixture");
+        let socket = temp.path().join("never-ready.sock");
+        let sentinel = temp.path().join("spawned");
+        let binary = temp.path().join("world-service-sentinel");
+        std::fs::write(
+            &binary,
+            format!(
+                "#!/bin/sh\n[ \"${{SUBSTRATE_F3_LEGACY_INHERIT:-}}\" = inherited ] || exit 97\nprintf spawned > '{}'\n",
+                sentinel.display()
+            ),
+        )
+        .expect("write spawn sentinel binary");
+        std::fs::set_permissions(&binary, std::fs::Permissions::from_mode(0o755))
+            .expect("make spawn sentinel executable");
+        let _candidate_env = PoisonedEnvGuard::apply(&[
+            (
+                "SUBSTRATE_WORLD_AGENT_BIN",
+                binary.to_string_lossy().as_ref(),
+            ),
+            ("PATH", temp.path().to_string_lossy().as_ref()),
+            ("SUBSTRATE_F3_LEGACY_INHERIT", "inherited"),
+        ]);
+
+        let error = ensure_world_service_ready_for_target(
+            &socket,
+            WorldServiceReadinessPosture::LegacyCompatibility {
+                socket_override_active: false,
+                candidate_bins: resolve_legacy_compatibility_candidate_bins,
+                activation_mode: manual_activation_mode,
+            },
+        )
+        .expect_err("sentinel binary never opens the readiness socket");
+
+        assert_eq!(error.to_string(), "world-service readiness probe failed");
+        assert_eq!(
+            std::fs::read_to_string(&sentinel).expect("spawn sentinel output"),
+            "spawned"
+        );
+    }
+
+    #[cfg(target_os = "linux")]
+    #[test]
+    fn compatibility_readiness_preserves_activation_wait_and_error() {
+        let temp = tempfile::tempdir().expect("activation readiness fixture");
+        let socket = temp.path().join("activation.sock");
+        let started = std::time::Instant::now();
+
+        let error = ensure_world_service_ready_for_target(
+            &socket,
+            WorldServiceReadinessPosture::LegacyCompatibility {
+                socket_override_active: false,
+                candidate_bins: panic_candidate_bins,
+                activation_mode: socket_activation_mode,
+            },
+        )
+        .expect_err("unresponsive socket activation must fail before spawn fallback");
+
+        assert_eq!(
+            error.to_string(),
+            format!(
+                "world-service socket activation detected but {} did not respond. Run 'systemctl status substrate-world-service.socket' for details.",
+                socket.display()
+            )
+        );
+        assert!(started.elapsed() >= std::time::Duration::from_millis(1_900));
+    }
+
+    #[cfg(target_os = "linux")]
+    #[test]
+    fn installed_product_readiness_ignores_ambient_activation_and_binary_selectors() {
+        let _authority_env = crate::execution::AuthorityEnvTestGuard::preserve();
+        let temp = tempfile::tempdir().expect("installed-product readiness fixture");
+        let socket = temp.path().join("missing-installed.sock");
+        let poison_binary = temp.path().join("poison-binary");
+        let poison_sentinel = temp.path().join("poison-spawned");
+        std::fs::write(
+            &poison_binary,
+            format!(
+                "#!/bin/sh\nprintf poisoned > '{}'\n",
+                poison_sentinel.display()
+            ),
+        )
+        .expect("write poison binary");
+        let _poison = PoisonedEnvGuard::apply(&[
+            ("SUBSTRATE_WORLD_SOCKET", "/poisoned/ambient/socket"),
+            (
+                "SUBSTRATE_WORLD_AGENT_BIN",
+                poison_binary.to_string_lossy().as_ref(),
+            ),
+            ("SUBSTRATE_SOCKET_ACTIVATION_OVERRIDE", "manual"),
+            ("SUBSTRATE_SYSTEMCTL_TIMEOUT_MS", "1"),
+            ("PATH", temp.path().to_string_lossy().as_ref()),
+        ]);
+        let spawn_calls = std::cell::Cell::new(0_u8);
+
+        let error = ensure_world_service_ready_for_target_with_spawn(
+            &socket,
+            WorldServiceReadinessPosture::InstalledLinuxProduct,
+            |spawn_plan| {
+                spawn_calls.set(spawn_calls.get() + 1);
+                assert_eq!(
+                    spawn_plan.candidate_bins,
+                    [
+                        Some(AUTHENTICATED_WORLD_SERVICE_BINARY.to_string()),
+                        None,
+                        None,
+                        None,
+                    ]
+                );
+                assert_eq!(
+                    spawn_plan.environment,
+                    WorldServiceSpawnEnvironment::InstalledLinuxProduct
+                );
+                Ok(())
+            },
+        )
+        .expect_err("injected spawn does not open the readiness socket");
+
+        assert_eq!(error.to_string(), "world-service readiness probe failed");
+        assert_eq!(spawn_calls.get(), 1);
+        assert!(!poison_sentinel.exists());
+        assert_eq!(
+            WorldServiceReadinessPosture::InstalledLinuxProduct
+                .into_spawn_plan(&socket)
+                .expect("installed candidate selection")
+                .candidate_bins,
+            [
+                Some(AUTHENTICATED_WORLD_SERVICE_BINARY.to_string()),
+                None,
+                None,
+                None,
+            ]
+        );
+    }
+
+    #[cfg(target_os = "linux")]
+    #[test]
+    fn installed_product_spawn_clears_parent_environment_and_fixes_target() {
+        use std::os::unix::fs::PermissionsExt;
+
+        let _authority_env = crate::execution::AuthorityEnvTestGuard::preserve();
+        let temp = tempfile::tempdir().expect("installed spawn environment fixture");
+        let binary = temp.path().join("inspect-installed-environment");
+        let cwd_output = temp.path().join("cwd");
+        let clean_output = temp.path().join("clean");
+        std::fs::write(
+            &binary,
+            format!(
+                "#!/bin/sh\n\
+                 [ \"${{SUBSTRATE_WORLD_SOCKET:-}}\" = '{AUTHENTICATED_WORLD_SOCKET}' ] || exit 91\n\
+                 [ \"${{PATH:-}}\" = '{AUTHENTICATED_WORLD_SERVICE_PATH}' ] || exit 92\n\
+                 [ -z \"${{SUBSTRATE_WORLD_AGENT_BIN+x}}\" ] || exit 93\n\
+                 [ -z \"${{WORLD_ARBITRARY_F_POISON+x}}\" ] || exit 94\n\
+                 [ -z \"${{OPENAI_API_KEY+x}}\" ] || exit 95\n\
+                 pwd > '{}'\n\
+                 printf clean > '{}'\n",
+                cwd_output.display(),
+                clean_output.display()
+            ),
+        )
+        .expect("write installed spawn inspector");
+        std::fs::set_permissions(&binary, std::fs::Permissions::from_mode(0o755))
+            .expect("make installed spawn inspector executable");
+        let _poison = PoisonedEnvGuard::apply(&[
+            ("SUBSTRATE_WORLD_SOCKET", "/poisoned/ambient/socket"),
+            ("SUBSTRATE_WORLD_AGENT_BIN", "/poisoned/ambient/binary"),
+            ("WORLD_ARBITRARY_F_POISON", "poisoned"),
+            ("OPENAI_API_KEY", "poisoned-secret"),
+            ("PATH", "/poisoned/ambient/path"),
+        ]);
+
+        let status = world_service_command(
+            binary.to_str().expect("UTF-8 test binary"),
+            WorldServiceSpawnEnvironment::InstalledLinuxProduct,
+            temp.path(),
+        )
+        .status()
+        .expect("run installed spawn inspector");
+
+        assert!(status.success());
+        assert_eq!(
+            std::fs::read_to_string(cwd_output)
+                .expect("read installed cwd")
+                .trim(),
+            temp.path().to_str().expect("UTF-8 test cwd")
+        );
+        assert_eq!(
+            std::fs::read_to_string(clean_output).expect("read clean sentinel"),
+            "clean"
+        );
+        assert_eq!(AUTHENTICATED_WORLD_SERVICE_CWD, "/var/lib/substrate");
+    }
+
+    #[cfg(target_os = "linux")]
+    #[test]
+    fn authenticated_builder_uses_fixed_readiness_target_and_exact_generated_environment() {
+        let _authority_env = crate::execution::AuthorityEnvTestGuard::preserve();
+        let (_temp, _selected_prefix, context) = authenticated_world_deps_context_fixture();
+        let marker = "poison-marker-a1-f3-environment";
+        let _poison = PoisonedEnvGuard::apply(&[
+            ("SUBSTRATE_HOME", marker),
+            ("SUBSTRATE_ROOT", marker),
+            ("SUBSTRATE_WORLD_SOCKET", marker),
+            ("SUBSTRATE_WORLD_AGENT_BIN", marker),
+            ("SUBSTRATE_ARBITRARY_F_POISON", marker),
+            ("WORLD_ARBITRARY_F_POISON", marker),
+            ("CODEX_HOME", marker),
+            ("HOME", marker),
+            ("XDG_CONFIG_HOME", marker),
+            ("XDG_DATA_HOME", marker),
+            ("XDG_CACHE_HOME", marker),
+            ("LC_ALL", marker),
+            ("OPENAI_API_KEY", marker),
+            ("AUTHORIZATION", marker),
+            ("PRIVATE_KEY", marker),
+            ("SUBSTRATE_INSTALL_BOOTSTRAP_CONTEXT_V1", marker),
+            ("SHIM_CALL_STACK", marker),
+            ("SUBSTRATE_POLICY_MODE", marker),
+            ("SUBSTRATE_WORLD_REQUEST_PROFILE", marker),
+            ("SUBSTRATE_WORLD_DEPS_GUEST_BIN_DIR", marker),
+            ("SUBSTRATE_AGENT_ID", marker),
+        ]);
+        let mut readiness_calls = 0;
+
+        let (_, request, agent_id) = build_authenticated_world_deps_client_and_request_impl(
+            &context,
+            "printf authenticated",
+            None,
+            "world-deps-probe",
+            |socket, posture| {
+                readiness_calls += 1;
+                assert_eq!(socket, std::path::Path::new(AUTHENTICATED_WORLD_SOCKET));
+                assert!(matches!(
+                    posture,
+                    WorldServiceReadinessPosture::InstalledLinuxProduct
+                ));
+                assert_eq!(
+                    AUTHENTICATED_WORLD_SERVICE_BINARY,
+                    "/usr/local/bin/substrate-world-service"
+                );
+                Ok(())
+            },
+        )
+        .expect("build authenticated request");
+
+        assert_eq!(readiness_calls, 1);
+        assert_eq!(agent_id, "human");
+        assert_eq!(request.agent_id, "human");
+        assert_eq!(request.profile.as_deref(), Some("world-deps-probe"));
+        assert_eq!(request.cwd.as_deref(), context.launch_cwd().to_str());
+        assert_eq!(
+            serde_json::to_value(&request.policy_snapshot).expect("serialize request policy"),
+            serde_json::to_value(&context.runtime_network_policy().snapshot)
+                .expect("serialize context policy")
+        );
+        assert_eq!(
+            request.world_network,
+            Some(
+                crate::execution::policy_snapshot::request_world_network_routing(
+                    context.runtime_network_policy()
+                )
+            )
+        );
+        assert_eq!(request.world_fs_mode, Some(context.world_fs_policy().mode));
+        let expected = std::collections::HashMap::from([
+            (
+                "SUBSTRATE_WORLD_DEPS_GUEST_BIN_DIR".to_string(),
+                "/var/lib/substrate/world-deps/bin".to_string(),
+            ),
+            (
+                "PATH".to_string(),
+                "/var/lib/substrate/world-deps/bin:/usr/local/sbin:/usr/local/bin:/usr/sbin:/usr/bin:/sbin:/bin".to_string(),
+            ),
+            ("HOME".to_string(), "/root".to_string()),
+            ("XDG_CONFIG_HOME".to_string(), "/root/.config".to_string()),
+            (
+                "XDG_DATA_HOME".to_string(),
+                "/root/.local/share".to_string(),
+            ),
+            (
+                "XDG_CACHE_HOME".to_string(),
+                "/root/.cache".to_string(),
+            ),
+            ("TERM".to_string(), "xterm-256color".to_string()),
+        ]);
+        assert_eq!(request.env.as_ref(), Some(&expected));
+        assert_eq!(
+            request.env.as_ref().map(std::collections::HashMap::len),
+            Some(7)
+        );
+        let serialized = serde_json::to_string(&request).expect("serialize authenticated request");
+        assert!(!serialized.contains(marker));
+        assert!(!format!("{request:?}").contains(marker));
+    }
+
+    #[cfg(target_os = "linux")]
+    #[test]
+    fn authenticated_builder_rejects_invalid_authority_before_readiness_or_construction() {
+        use std::os::unix::fs::PermissionsExt;
+
+        let _authority_env = crate::execution::AuthorityEnvTestGuard::preserve();
+        let (temp, selected_prefix, context) = authenticated_world_deps_context_fixture();
+        let retired = temp.path().join("retired-selected-a");
+        std::fs::rename(&selected_prefix, &retired).expect("replace selected authority root");
+        std::fs::create_dir(&selected_prefix).expect("create replacement authority root");
+        std::fs::set_permissions(&selected_prefix, std::fs::Permissions::from_mode(0o700))
+            .expect("secure replacement authority root");
+        let readiness_called = std::cell::Cell::new(false);
+
+        let error = build_authenticated_world_deps_client_and_request_impl(
+            &context,
+            "true",
+            None,
+            "world-deps-probe",
+            |_, _| {
+                readiness_called.set(true);
+                Ok(())
+            },
+        )
+        .err()
+        .expect("replaced authority root must fail closed");
+
+        assert!(!readiness_called.get());
+        assert!(format!("{error:#}").contains("authenticated dependency root changed"));
+        assert!(!format!("{error:#}").contains("poison-marker"));
+    }
+
+    #[cfg(target_os = "linux")]
+    #[test]
+    fn authenticated_builder_rejects_profile_and_relative_cwd_before_readiness() {
+        use std::os::unix::ffi::OsStringExt;
+
+        let _authority_env = crate::execution::AuthorityEnvTestGuard::preserve();
+        let (_temp, _selected_prefix, context) = authenticated_world_deps_context_fixture();
+        let calls = std::cell::Cell::new(0_u8);
+
+        let profile_error = build_authenticated_world_deps_client_and_request_impl(
+            &context,
+            "true",
+            None,
+            "ambient-profile",
+            |_, _| {
+                calls.set(calls.get() + 1);
+                Ok(())
+            },
+        )
+        .err()
+        .expect("non-reserved authenticated profile must fail");
+        assert!(profile_error
+            .to_string()
+            .contains("invalid authenticated world-deps request profile"));
+        let cwd_error = build_authenticated_world_deps_client_and_request_impl(
+            &context,
+            "true",
+            Some(std::path::Path::new("relative")),
+            "world-deps-probe",
+            |_, _| {
+                calls.set(calls.get() + 1);
+                Ok(())
+            },
+        )
+        .err()
+        .expect("relative authenticated cwd must fail");
+        assert!(cwd_error
+            .to_string()
+            .contains("authenticated world-deps request cwd must be absolute"));
+        let non_utf8_cwd = std::path::PathBuf::from(std::ffi::OsString::from_vec(vec![
+            b'/', b't', b'm', b'p', b'/', 0xff,
+        ]));
+        let utf8_error = build_authenticated_world_deps_client_and_request_impl(
+            &context,
+            "true",
+            Some(&non_utf8_cwd),
+            "world-deps-probe",
+            |_, _| {
+                calls.set(calls.get() + 1);
+                Ok(())
+            },
+        )
+        .err()
+        .expect("non-UTF-8 authenticated cwd must fail");
+        assert!(utf8_error
+            .to_string()
+            .contains("authenticated world-deps request cwd must be valid UTF-8"));
+        assert_eq!(calls.get(), 0);
+    }
 
     fn with_env_var<T>(key: &str, value: &str, f: impl FnOnce() -> T) -> T {
         let _authority_env = crate::execution::AuthorityEnvTestGuard::preserve();
