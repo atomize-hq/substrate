@@ -778,10 +778,18 @@ managers:
 "#,
     );
 
+    #[cfg(not(target_os = "linux"))]
     fixture.write_world_doctor_fixture(json!({
         "platform": "fixture-linux",
         "ok": false,
         "error": "overlay missing"
+    }));
+    #[cfg(target_os = "linux")]
+    fixture.write_world_doctor_fixture(json!({
+        "platform": "fixture-linux",
+        "ok": true,
+        "credential_marker": "health-credential-must-not-leak",
+        "prompt_marker": "health-prompt-must-not-leak"
     }));
 
     fixture.write_world_deps_fixture(json!({
@@ -797,8 +805,12 @@ managers:
         ]
     }));
 
-    let output = fixture
-        .command()
+    let mut command = fixture.command();
+    #[cfg(target_os = "linux")]
+    command
+        .env("PROVIDER_TOKEN", "health-provider-token-must-not-leak")
+        .env("REQUEST_BODY", "health-request-must-not-leak");
+    let output = command
         .arg("--world")
         .arg("health")
         .arg("--json")
@@ -821,6 +833,30 @@ managers:
     assert_eq!(summary["world_ok"], json!(false));
     assert_eq!(summary["world_deps_missing"], json!(["a"]));
     assert_eq!(summary["ok"], json!(false));
+    #[cfg(target_os = "linux")]
+    {
+        let world = &payload["shim"]["world"];
+        assert_eq!(world["status"], json!("needs_attention"));
+        assert_eq!(world["ok"], json!(false));
+        assert_eq!(world["source"], json!("command"));
+        assert_eq!(world["exit_code"], json!(4));
+        assert_eq!(world["error"], json!("passive world doctor unavailable"));
+        assert!(world.get("stderr").is_none());
+        assert!(world.get("details").is_none());
+        let rendered = format!(
+            "{}{}",
+            String::from_utf8_lossy(&output.stdout),
+            String::from_utf8_lossy(&output.stderr)
+        );
+        for marker in [
+            "health-credential-must-not-leak",
+            "health-prompt-must-not-leak",
+            "health-provider-token-must-not-leak",
+            "health-request-must-not-leak",
+        ] {
+            assert!(!rendered.contains(marker), "health output leaked {marker}");
+        }
+    }
 }
 
 #[test]

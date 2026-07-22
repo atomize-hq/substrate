@@ -50,6 +50,58 @@ fn expected_host_context(prefix: &Path) -> (String, String) {
 }
 
 #[cfg(target_os = "linux")]
+fn passive_host_context(
+    prefix: &Path,
+) -> (
+    transport_api_types::InstallBootstrapContextCarrierV1,
+    String,
+) {
+    let uid = unsafe { libc::geteuid() };
+    let account_output = Command::new("/usr/bin/id")
+        .args(["-nu", &uid.to_string()])
+        .output()
+        .expect("resolve current Unix account");
+    assert!(account_output.status.success());
+    let account = String::from_utf8(account_output.stdout)
+        .expect("Unix account is UTF-8")
+        .trim()
+        .to_string();
+    let context = transport_api_types::InstallBootstrapContextV1::new_unix(
+        prefix.to_str().expect("selected host prefix is UTF-8"),
+        &account,
+        uid,
+    )
+    .expect("construct passive install context");
+    let carrier = transport_api_types::InstallBootstrapContextCarrierV1::from_context(context)
+        .expect("commit passive install context");
+    let encoded = carrier.encode().expect("encode passive install context");
+    (carrier, encoded)
+}
+
+#[cfg(target_os = "linux")]
+fn project_passive_host_context(
+    command: &mut Command,
+    carrier: &transport_api_types::InstallBootstrapContextCarrierV1,
+    encoded: &str,
+) {
+    let transport_api_types::PlatformPrincipalV1::Unix { account, uid } =
+        &carrier.context.intended_host_principal
+    else {
+        panic!("expected Unix passive principal");
+    };
+    command
+        .env("SUBSTRATE_HOME", &carrier.context.host_substrate_home)
+        .env("SUBSTRATE_ROOT", &carrier.context.host_substrate_root)
+        .env(
+            "SUBSTRATE_INSTALL_HOST_CONTEXT_COMMITMENT",
+            &carrier.host_context_commitment,
+        )
+        .env("SUBSTRATE_INSTALL_PRIMARY_USER", account)
+        .env("SUBSTRATE_INSTALL_PRIMARY_UID", uid.to_string())
+        .env("SUBSTRATE_INSTALL_BOOTSTRAP_CONTEXT_V1", encoded);
+}
+
+#[cfg(target_os = "linux")]
 fn snapshot_tree(root: &Path) -> Vec<(PathBuf, u32, u32, u32, Vec<u8>)> {
     fn walk(root: &Path, path: &Path, entries: &mut Vec<(PathBuf, u32, u32, u32, Vec<u8>)>) {
         let metadata = std::fs::symlink_metadata(path).expect("snapshot tree metadata");
@@ -464,6 +516,246 @@ fn run_world_doctor_json(report: Value) -> Value {
         );
     }
     payload
+}
+
+#[cfg(target_os = "linux")]
+#[test]
+fn authenticated_passive_world_doctor_is_exclusive_bounded_and_side_effect_free() {
+    support::ensure_substrate_built();
+    let secure_parent = std::env::var_os("XDG_RUNTIME_DIR")
+        .filter(|value| !value.is_empty())
+        .map(PathBuf::from)
+        .or_else(|| {
+            std::env::var_os("HOME")
+                .map(PathBuf::from)
+                .map(|home| home.join(".cache"))
+        })
+        .expect("passive world doctor test requires XDG_RUNTIME_DIR or account HOME");
+    std::fs::create_dir_all(&secure_parent).expect("create secure passive test parent");
+    let fixture = Builder::new()
+        .prefix("substrate-passive-world-doctor-")
+        .tempdir_in(&secure_parent)
+        .expect("allocate passive world doctor fixture");
+    let selected_a = fixture.path().join("selected-a");
+    let ambient_b = fixture.path().join("ambient-b-marker");
+    std::fs::create_dir_all(selected_a.join("health")).expect("create selected passive prefix");
+    std::fs::create_dir_all(&ambient_b).expect("create ambient B prefix");
+    std::fs::set_permissions(&selected_a, std::fs::Permissions::from_mode(0o700))
+        .expect("secure selected passive prefix");
+    std::fs::set_permissions(&ambient_b, std::fs::Permissions::from_mode(0o700))
+        .expect("secure ambient B prefix");
+    std::fs::write(
+        selected_a.join("config.yaml"),
+        "invalid: [config-policy-selection-must-not-run",
+    )
+    .expect("write poison config");
+    std::fs::write(
+        selected_a.join("health/world_doctor.json"),
+        r#"{"ok":true,"fixture_secret":"fixture-secret-marker"}"#,
+    )
+    .expect("write forbidden product fixture");
+    let poison_marker = fixture.path().join("service-process-started-marker");
+    let poison_service = fixture.path().join("poison-world-service");
+    std::fs::write(
+        &poison_service,
+        format!(
+            "#!/bin/sh\nprintf invoked > '{}'\nexit 99\n",
+            poison_marker.display()
+        ),
+    )
+    .expect("write poison service");
+    std::fs::set_permissions(&poison_service, std::fs::Permissions::from_mode(0o700))
+        .expect("make poison service executable");
+    let trace_marker = selected_a.join("passive-trace-must-not-exist.jsonl");
+    let scaffold_marker = selected_a.join("deps/.bootstrap.lock");
+
+    let socket_dir = Builder::new()
+        .prefix("substrate-passive-sock-")
+        .tempdir_in("/tmp")
+        .expect("create passive socket tempdir");
+    let socket_path = socket_dir.path().join("world-service.sock");
+    let socket = AgentSocket::start(
+        &socket_path,
+        SocketResponse::CapabilitiesAndDoctorWorld {
+            report: default_world_doctor_report(),
+        },
+    );
+    let (carrier, encoded) = passive_host_context(&selected_a);
+    let expected = json!({
+        "schema_version": 1,
+        "platform": std::env::consts::OS,
+        "ok": false,
+        "host": {
+            "platform": std::env::consts::OS,
+            "ok": false,
+            "selected_host_prefix": carrier.context.selected_host_prefix.clone(),
+            "host_context_commitment": carrier.host_context_commitment.clone()
+        },
+        "world": {
+            "status": "unavailable",
+            "ok": false,
+            "selected_host_prefix": carrier.context.selected_host_prefix.clone(),
+            "host_context_commitment": carrier.host_context_commitment.clone()
+        }
+    });
+    let before = snapshot_tree(fixture.path());
+
+    let mut command = Command::new(support::binary_path());
+    project_passive_host_context(&mut command, &carrier, &encoded);
+    let output = command
+        .current_dir(&ambient_b)
+        .env("HOME", &ambient_b)
+        .env("USERPROFILE", &ambient_b)
+        .env("XDG_CONFIG_HOME", &ambient_b)
+        .env("SUBSTRATE_CONFIG", ambient_b.join("config-marker.yaml"))
+        .env("SUBSTRATE_POLICY", ambient_b.join("policy-marker.yaml"))
+        .env("SUBSTRATE_WORLD_SOCKET", &socket_path)
+        .env("SUBSTRATE_SOCKET_ACTIVATION_OVERRIDE", "manual")
+        .env("SUBSTRATE_WORLD_AGENT_BIN", &poison_service)
+        .env("SHIM_TRACE_LOG", &trace_marker)
+        .env("PROVIDER_TOKEN", "provider-token-marker")
+        .env("OPENAI_API_KEY", "api-key-marker")
+        .env("PRIVATE_KEY", "private-key-marker")
+        .env("PROMPT_MATERIAL", "prompt-request-marker")
+        .env("REQUEST_BODY", "request-body-marker")
+        .env("BOOTSTRAP_SHIM_CARRIER", "shim-carrier-marker")
+        .env("COMMITMENT_PREIMAGE", "preimage-marker")
+        .arg("--install-bootstrap-context-v1")
+        .arg(&encoded)
+        .args([
+            "world",
+            "doctor",
+            "--json",
+            "--internal-passive-world-doctor-v1",
+        ])
+        .output()
+        .expect("run authenticated passive world doctor");
+
+    assert_eq!(output.status.code(), Some(4));
+    assert!(output.stderr.is_empty(), "passive stderr must be empty");
+    assert_eq!(
+        parse_json(&output.stdout, "authenticated passive world doctor"),
+        expected
+    );
+    let rendered = format!(
+        "{}{}",
+        String::from_utf8_lossy(&output.stdout),
+        String::from_utf8_lossy(&output.stderr)
+    );
+    for marker in [
+        "ambient-b-marker",
+        "fixture-secret-marker",
+        "provider-token-marker",
+        "api-key-marker",
+        "private-key-marker",
+        "prompt-request-marker",
+        "request-body-marker",
+        "shim-carrier-marker",
+        "preimage-marker",
+        encoded.as_str(),
+    ] {
+        assert!(!rendered.contains(marker), "passive output leaked {marker}");
+    }
+    assert_eq!(socket.connection_count(), 0, "socket must not be connected");
+    assert_eq!(
+        socket.execute_request_count(),
+        0,
+        "execute endpoint must not be called"
+    );
+    assert!(!poison_marker.exists(), "service process must not start");
+    assert!(
+        !trace_marker.exists(),
+        "passive mode must not initialize tracing"
+    );
+    assert!(
+        !scaffold_marker.exists(),
+        "passive mode must not create scaffold state"
+    );
+    assert_eq!(
+        snapshot_tree(fixture.path()),
+        before,
+        "passive mode mutated fixture state"
+    );
+
+    let mut tampered = encoded.clone().into_bytes();
+    let last = tampered.last_mut().expect("nonempty carrier");
+    *last = if *last == b'A' { b'B' } else { b'A' };
+    let tampered = String::from_utf8(tampered).expect("ASCII carrier");
+    for (label, argv_carrier, include_carrier_arg, include_json, force_world, conflict_home) in [
+        ("missing", "", false, true, false, false),
+        (
+            "environment-only",
+            encoded.as_str(),
+            false,
+            true,
+            false,
+            false,
+        ),
+        ("malformed", "malformed-carrier", true, true, false, false),
+        ("tampered", tampered.as_str(), true, true, false, false),
+        ("missing-json", encoded.as_str(), true, false, false, false),
+        ("nonexclusive", encoded.as_str(), true, true, true, false),
+        ("conflicting-b", encoded.as_str(), true, true, false, true),
+    ] {
+        let mut rejected = Command::new(support::binary_path());
+        project_passive_host_context(&mut rejected, &carrier, &encoded);
+        rejected
+            .current_dir(&ambient_b)
+            .env("HOME", &ambient_b)
+            .env("SUBSTRATE_WORLD_SOCKET", &socket_path)
+            .env("SUBSTRATE_WORLD_AGENT_BIN", &poison_service)
+            .env("PROMPT_MATERIAL", "prompt-request-marker");
+        if conflict_home {
+            rejected.env("SUBSTRATE_HOME", &ambient_b);
+        }
+        if include_carrier_arg {
+            rejected
+                .arg("--install-bootstrap-context-v1")
+                .arg(argv_carrier);
+        }
+        if force_world {
+            rejected.arg("--world");
+        }
+        rejected.args(["world", "doctor"]);
+        if include_json {
+            rejected.arg("--json");
+        }
+        let rejected = rejected
+            .arg("--internal-passive-world-doctor-v1")
+            .output()
+            .unwrap_or_else(|err| panic!("run rejected passive case {label}: {err}"));
+        assert_eq!(rejected.status.code(), Some(2), "case {label}");
+        assert!(rejected.stdout.is_empty(), "case {label} observed output");
+        let stderr = String::from_utf8_lossy(&rejected.stderr);
+        for marker in [
+            "ambient-b-marker",
+            "prompt-request-marker",
+            encoded.as_str(),
+            tampered.as_str(),
+        ] {
+            assert!(!stderr.contains(marker), "case {label} leaked {marker}");
+        }
+    }
+    assert_eq!(
+        socket.connection_count(),
+        0,
+        "rejections must not connect socket"
+    );
+    assert_eq!(
+        socket.execute_request_count(),
+        0,
+        "rejections must not execute"
+    );
+    assert!(!poison_marker.exists(), "rejections must not start service");
+    assert!(
+        !trace_marker.exists(),
+        "rejections must not initialize tracing"
+    );
+    assert_eq!(
+        snapshot_tree(fixture.path()),
+        before,
+        "rejections mutated state"
+    );
 }
 
 #[cfg(target_os = "linux")]
