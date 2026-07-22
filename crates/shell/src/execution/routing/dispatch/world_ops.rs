@@ -1112,6 +1112,200 @@ pub(crate) fn build_agent_client_and_request(
     build_agent_client_and_request_with_trace_metadata(cmd, None, None)
 }
 
+#[cfg(any(target_os = "linux", target_os = "macos"))]
+pub(crate) fn build_authenticated_world_deps_client_and_request(
+    context: &crate::builtins::world_deps::AuthenticatedWorldDepsContextV1,
+    cmd: &str,
+    cwd_override: Option<&std::path::Path>,
+    profile: &str,
+) -> anyhow::Result<(
+    transport_api_client::AgentClient,
+    transport_api_types::ExecuteRequest,
+    String,
+)> {
+    // Keep the frozen ambient compatibility entry point compiled after its exact two callers
+    // migrate. Authenticated execution never invokes or redirects through it.
+    let _frozen_ambient_builder_contract = build_agent_client_and_request;
+    build_authenticated_world_deps_client_and_request_impl(context, cmd, cwd_override, profile)
+}
+
+#[cfg(target_os = "linux")]
+fn build_authenticated_world_deps_client_and_request_impl(
+    context: &crate::builtins::world_deps::AuthenticatedWorldDepsContextV1,
+    cmd: &str,
+    cwd_override: Option<&std::path::Path>,
+    profile: &str,
+) -> anyhow::Result<(
+    transport_api_client::AgentClient,
+    transport_api_types::ExecuteRequest,
+    String,
+)> {
+    use std::collections::HashMap;
+
+    const AUTHENTICATED_WORLD_SOCKET: &str = "/run/substrate.sock";
+    const DEFAULT_WORLD_DEPS_BIN: &str = "/var/lib/substrate/world-deps/bin";
+    const BASELINE_PATH: &str =
+        "/usr/local/sbin:/usr/local/bin:/usr/sbin:/usr/bin:/sbin:/bin:/usr/games:/usr/local/games";
+
+    context.revalidate_authority()?;
+    if !RESERVED_WORLD_REQUEST_PROFILES.contains(&profile) {
+        return Err(anyhow::anyhow!(
+            "invalid authenticated world-deps request profile"
+        ));
+    }
+    let cwd_path = cwd_override.unwrap_or_else(|| context.launch_cwd());
+    if !cwd_path.is_absolute() {
+        return Err(anyhow::anyhow!(
+            "authenticated world-deps request cwd must be absolute"
+        ));
+    }
+
+    let world_deps_bin = std::env::var("SUBSTRATE_WORLD_DEPS_GUEST_BIN_DIR")
+        .ok()
+        .map(|value| value.trim().to_string())
+        .filter(|value| !value.is_empty())
+        .unwrap_or_else(|| DEFAULT_WORLD_DEPS_BIN.to_string());
+    let mut env_map = HashMap::new();
+    env_map.insert(
+        "SUBSTRATE_WORLD_DEPS_GUEST_BIN_DIR".to_string(),
+        world_deps_bin.clone(),
+    );
+    env_map.insert(
+        "PATH".to_string(),
+        format!("{}:{BASELINE_PATH}", world_deps_bin.trim_end_matches('/')),
+    );
+    env_map.insert("HOME".to_string(), "/root".to_string());
+    env_map.insert("XDG_CONFIG_HOME".to_string(), "/root/.config".to_string());
+    env_map.insert(
+        "XDG_DATA_HOME".to_string(),
+        "/root/.local/share".to_string(),
+    );
+    env_map.insert("XDG_CACHE_HOME".to_string(), "/root/.cache".to_string());
+    env_map.insert("TERM".to_string(), "xterm-256color".to_string());
+
+    for (key, value) in std::env::vars() {
+        if value.is_empty() || !(key.starts_with("SUBSTRATE_") || key.starts_with("WORLD_")) {
+            continue;
+        }
+        match key.as_str() {
+            "PATH"
+            | "HOME"
+            | "TERM"
+            | "SUBSTRATE_WORLD_DEPS_GUEST_BIN_DIR"
+            | "SUBSTRATE_INSTALL_BOOTSTRAP_CONTEXT_V1"
+            | "SUBSTRATE_INSTALL_PRIMARY_USER"
+            | "SUBSTRATE_INSTALL_PRIMARY_UID" => continue,
+            _ if key.starts_with("XDG_") => continue,
+            "SHIM_ACTIVE" | "SHIM_CALLER" | "SHIM_CALL_STACK" | "SHIM_DEPTH" => continue,
+            _ => {}
+        }
+        env_map.insert(key, value);
+    }
+    if context.effective_config().world.env.inherit_from_host {
+        for (key, value) in std::env::vars() {
+            let forward =
+                key == "LANG" || key == "TZ" || key == "NO_COLOR" || key.starts_with("LC_");
+            if forward && !value.is_empty() {
+                env_map.insert(key, value);
+            }
+        }
+        eprintln!(
+            "substrate: warning: world env is forwarding selected host env vars (world.env.inherit_from_host=true)"
+        );
+    }
+
+    env_map.insert(
+        "SUBSTRATE_HOME".to_string(),
+        context.selected_host_prefix().to_string(),
+    );
+    env_map.insert(
+        "SUBSTRATE_ROOT".to_string(),
+        context.selected_host_prefix().to_string(),
+    );
+    env_map.insert(
+        "SUBSTRATE_INSTALL_HOST_CONTEXT_COMMITMENT".to_string(),
+        context.host_context_commitment().to_string(),
+    );
+    env_map.insert(
+        "SUBSTRATE_WORLD_SOCKET".to_string(),
+        AUTHENTICATED_WORLD_SOCKET.to_string(),
+    );
+    env_map.insert(
+        "SUBSTRATE_WORLD_NET_FILTER".to_string(),
+        if context.effective_config().world.net.filter {
+            "1"
+        } else {
+            "0"
+        }
+        .to_string(),
+    );
+    env_map.insert(
+        "SUBSTRATE_POLICY_MODE".to_string(),
+        context.effective_config().policy.mode.as_str().to_string(),
+    );
+    env_map.insert(
+        "SUBSTRATE_WORLD_FS_MODE".to_string(),
+        context.world_fs_policy().mode.as_str().to_string(),
+    );
+
+    let selected_shim_dir = std::path::Path::new(context.selected_host_prefix()).join("shims");
+    if let Some(current_path) = env_map.get("PATH").cloned() {
+        let selected_shim_dir = selected_shim_dir.to_string_lossy();
+        let filtered = current_path
+            .split(':')
+            .filter(|segment| segment != &selected_shim_dir)
+            .filter(|segment| !segment.is_empty())
+            .collect::<Vec<_>>()
+            .join(":");
+        env_map.insert("PATH".to_string(), filtered);
+    }
+
+    let network_policy = context.runtime_network_policy();
+    let world_network = request_world_network_routing(network_policy);
+    let policy_snapshot = network_policy.snapshot.clone();
+    let world_fs_policy = context.effective_policy().world_fs_policy();
+    crate::execution::policy_snapshot::inject_world_fs_enforcement_plan_env(
+        &policy_snapshot,
+        &mut env_map,
+    )?;
+    ensure_world_deps_bin_on_path(&mut env_map);
+
+    let agent_id = std::env::var("SUBSTRATE_AGENT_ID").unwrap_or_else(|_| "human".to_string());
+    let request = build_execute_request(ExecuteRequestInput {
+        profile: Some(profile.to_string()),
+        cmd: cmd.to_string(),
+        cwd: cwd_path.display().to_string(),
+        env_map,
+        agent_id: agent_id.clone(),
+        policy_snapshot,
+        world_network,
+        world_fs_mode: world_fs_policy.mode,
+        member_dispatch: None,
+        acceptance_context: None,
+    });
+    request.validate().map_err(|error| anyhow::anyhow!(error))?;
+
+    let client = AgentClient::unix_socket(AUTHENTICATED_WORLD_SOCKET)?;
+    Ok((client, request, agent_id))
+}
+
+#[cfg(target_os = "macos")]
+fn build_authenticated_world_deps_client_and_request_impl(
+    context: &crate::builtins::world_deps::AuthenticatedWorldDepsContextV1,
+    cmd: &str,
+    cwd_override: Option<&std::path::Path>,
+    profile: &str,
+) -> anyhow::Result<(
+    transport_api_client::AgentClient,
+    transport_api_types::ExecuteRequest,
+    String,
+)> {
+    let _ = (context, cmd, cwd_override, profile);
+    Err(anyhow::anyhow!(
+        "authenticated world-deps requests are available on Linux only"
+    ))
+}
+
 pub(crate) fn build_agent_client_and_request_with_trace_metadata(
     cmd: &str,
     parent_span_id: Option<&str>,

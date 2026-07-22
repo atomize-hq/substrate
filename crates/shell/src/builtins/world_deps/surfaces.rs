@@ -9,7 +9,8 @@ use super::inventory::{
 };
 #[cfg(unix)]
 use super::AuthenticatedWorldDepsContextV1;
-use crate::execution::build_agent_client_and_request;
+#[cfg(unix)]
+use crate::execution::build_authenticated_world_deps_client_and_request;
 use crate::execution::config_model;
 use crate::execution::{
     WorldDepsCurrentAction, WorldDepsCurrentCmd, WorldDepsCurrentInstallArgs,
@@ -329,9 +330,15 @@ fn run_current_list(
         WorldDepsCurrentListViewArg::Enabled => {
             run_current_list_enabled(&cwd, &cfg, global_deps_dir.as_deref(), args.json)
         }
-        WorldDepsCurrentListViewArg::Applied => {
-            run_current_list_applied(&cwd, &cfg, global_deps_dir.as_deref(), args.all, args.json)
-        }
+        WorldDepsCurrentListViewArg::Applied => run_current_list_applied(
+            &cwd,
+            &cfg,
+            global_deps_dir.as_deref(),
+            args.all,
+            args.json,
+            #[cfg(unix)]
+            context,
+        ),
     }
 }
 
@@ -502,6 +509,8 @@ fn run_current_install(
         &plan.pacman_packages,
         args.dry_run,
         args.verbose,
+        #[cfg(unix)]
+        context,
     )?;
 
     if args.dry_run {
@@ -509,7 +518,13 @@ fn run_current_install(
         return Ok(());
     }
 
-    apply_install_plan_v1(&view, &plan, ApplyInstallMode::InstallOnly)?;
+    apply_install_plan_v1(
+        &view,
+        &plan,
+        ApplyInstallMode::InstallOnly,
+        #[cfg(unix)]
+        context,
+    )?;
     println!(
         "World deps applied: image(apt)={}, prefix(script)={}",
         plan.apt.len(),
@@ -568,6 +583,8 @@ fn run_current_sync(
         &plan.pacman_packages,
         args.dry_run,
         args.verbose,
+        #[cfg(unix)]
+        context,
     )?;
 
     if args.dry_run {
@@ -575,7 +592,13 @@ fn run_current_sync(
         return Ok(());
     }
 
-    apply_install_plan_v1(&view, &plan, ApplyInstallMode::SyncEnabled)?;
+    apply_install_plan_v1(
+        &view,
+        &plan,
+        ApplyInstallMode::SyncEnabled,
+        #[cfg(unix)]
+        context,
+    )?;
     println!("World deps synced");
     println!("substrate: note: applied effective enabled deps list for this directory (sources: workspace, global, defaults as applicable)");
     println!("substrate: hint: run 'substrate world deps current list applied' to verify");
@@ -766,6 +789,7 @@ fn preflight_runtime_system_requirements_v1(
     pacman_requirements: &[String],
     dry_run: bool,
     verbose: bool,
+    #[cfg(unix)] context: &AuthenticatedWorldDepsContextV1,
 ) -> Result<()> {
     if apt_requirements.is_empty() && pacman_requirements.is_empty() {
         return Ok(());
@@ -779,13 +803,21 @@ fn preflight_runtime_system_requirements_v1(
     let apt_statuses = if apt_requirements.is_empty() || runtime_apt_preflight_disabled_v1() {
         None
     } else {
-        Some(probe_world_apt_requirements_v1(apt_requirements)?)
+        Some(probe_world_apt_requirements_v1(
+            apt_requirements,
+            #[cfg(unix)]
+            context,
+        )?)
     };
     let pacman_statuses =
         if pacman_requirements.is_empty() || runtime_pacman_preflight_disabled_v1() {
             None
         } else {
-            Some(probe_world_pacman_requirements_v1(pacman_requirements)?)
+            Some(probe_world_pacman_requirements_v1(
+                pacman_requirements,
+                #[cfg(unix)]
+                context,
+            )?)
         };
 
     let apt_missing = apt_statuses
@@ -857,11 +889,14 @@ fn render_apt_requirement_v1(requirement: &AptSpecV1) -> String {
 
 fn probe_world_apt_requirements_v1(
     requirements: &[AptSpecV1],
+    #[cfg(unix)] context: &AuthenticatedWorldDepsContextV1,
 ) -> Result<Vec<AptRequirementProbeStatusV1>> {
     let out = run_world_command_output_for_deps_with_profile(
         &build_world_apt_probe_command_v1(requirements),
         Some("/tmp"),
         Some("world-deps-probe"),
+        #[cfg(unix)]
+        context,
     )
     .map_err(classify_world_backend_error)?;
 
@@ -963,11 +998,14 @@ struct PacmanRequirementProbeStatusV1 {
 
 fn probe_world_pacman_requirements_v1(
     requirements: &[String],
+    #[cfg(unix)] context: &AuthenticatedWorldDepsContextV1,
 ) -> Result<Vec<PacmanRequirementProbeStatusV1>> {
     let out = run_world_command_output_for_deps_with_profile(
         &build_world_pacman_probe_command_v1(requirements),
         Some("/tmp"),
         Some("world-deps-probe"),
+        #[cfg(unix)]
+        context,
     )
     .map_err(classify_world_backend_error)?;
 
@@ -1109,6 +1147,7 @@ fn apply_install_plan_v1(
     view: &InventoryViewV1,
     plan: &InstallPlanV1,
     mode: ApplyInstallMode,
+    #[cfg(unix)] context: &AuthenticatedWorldDepsContextV1,
 ) -> Result<()> {
     if !plan.manual_packages.is_empty() {
         eprintln!("MANUAL (blocked):");
@@ -1132,15 +1171,27 @@ fn apply_install_plan_v1(
     packages.extend(plan.script_packages.iter().cloned());
     ensure_no_entrypoint_collisions_v1(view, &packages)?;
 
-    ensure_world_backend_available()?;
+    ensure_world_backend_available(
+        #[cfg(unix)]
+        context,
+    )?;
 
     if matches!(mode, ApplyInstallMode::SyncEnabled) {
         let keep_names = collect_world_deps_bin_keep_names_v1(view, &packages)?;
-        reconcile_world_deps_bin_v1(&keep_names)
-            .context("failed to reconcile world-deps wrappers")?;
+        reconcile_world_deps_bin_v1(
+            &keep_names,
+            #[cfg(unix)]
+            context,
+        )
+        .context("failed to reconcile world-deps wrappers")?;
     }
 
-    apply_apt_entrypoint_wrappers_v1(view, &plan.apt_packages)?;
+    apply_apt_entrypoint_wrappers_v1(
+        view,
+        &plan.apt_packages,
+        #[cfg(unix)]
+        context,
+    )?;
 
     for pkg_name in &plan.script_packages {
         let pkg = view.packages.get(pkg_name).ok_or_else(|| {
@@ -1148,11 +1199,20 @@ fn apply_install_plan_v1(
                 "invalid deps inventory: referenced package '{pkg_name}' is not visible for this platform"
             ))
         })?;
-        apply_script_package_v1(pkg)
-            .with_context(|| format!("failed to apply script package '{pkg_name}'"))?;
+        apply_script_package_v1(
+            pkg,
+            #[cfg(unix)]
+            context,
+        )
+        .with_context(|| format!("failed to apply script package '{pkg_name}'"))?;
     }
 
-    let statuses = query_world_package_entrypoint_presence(view, &plan.script_packages)?;
+    let statuses = query_world_package_entrypoint_presence(
+        view,
+        &plan.script_packages,
+        #[cfg(unix)]
+        context,
+    )?;
     let mut missing = plan
         .script_packages
         .iter()
@@ -1202,9 +1262,17 @@ fn collect_world_deps_bin_keep_names_v1(
     Ok(keep)
 }
 
-fn reconcile_world_deps_bin_v1(keep_names: &[String]) -> Result<()> {
+fn reconcile_world_deps_bin_v1(
+    keep_names: &[String],
+    #[cfg(unix)] context: &AuthenticatedWorldDepsContextV1,
+) -> Result<()> {
     let cmd = build_world_deps_bin_reconcile_command_v1(keep_names);
-    run_world_command_checked_for_deps(&cmd, Some("/tmp"))?;
+    run_world_command_checked_for_deps(
+        &cmd,
+        Some("/tmp"),
+        #[cfg(unix)]
+        context,
+    )?;
     Ok(())
 }
 
@@ -1317,7 +1385,11 @@ fn ensure_no_entrypoint_collisions_v1(
     Err(anyhow!(WorldDepsSafetyViolationError::new(message)))
 }
 
-fn apply_apt_entrypoint_wrappers_v1(view: &InventoryViewV1, apt_packages: &[String]) -> Result<()> {
+fn apply_apt_entrypoint_wrappers_v1(
+    view: &InventoryViewV1,
+    apt_packages: &[String],
+    #[cfg(unix)] context: &AuthenticatedWorldDepsContextV1,
+) -> Result<()> {
     if apt_packages.is_empty() {
         return Ok(());
     }
@@ -1348,8 +1420,13 @@ fn apply_apt_entrypoint_wrappers_v1(view: &InventoryViewV1, apt_packages: &[Stri
     }
 
     let cmd = build_world_apt_entrypoint_wrapper_command_v1(&entrypoints);
-    run_world_command_checked_for_deps(&cmd, Some("/tmp"))
-        .context("failed to create apt entrypoint wrappers")?;
+    run_world_command_checked_for_deps(
+        &cmd,
+        Some("/tmp"),
+        #[cfg(unix)]
+        context,
+    )
+    .context("failed to create apt entrypoint wrappers")?;
     Ok(())
 }
 
@@ -1805,17 +1882,31 @@ struct CodexRuntimeInstallSpecV1 {
 fn run_world_command_output_for_deps(
     cmd: &str,
     cwd_override: Option<&str>,
+    #[cfg(unix)] context: &AuthenticatedWorldDepsContextV1,
 ) -> Result<WorldCommandOutputV1> {
-    run_world_command_output_for_deps_with_profile(cmd, cwd_override, None)
+    run_world_command_output_for_deps_with_profile(
+        cmd,
+        cwd_override,
+        None,
+        #[cfg(unix)]
+        context,
+    )
 }
 
 fn run_world_command_output_for_deps_with_profile(
     cmd: &str,
     cwd_override: Option<&str>,
     profile_override: Option<&str>,
+    #[cfg(unix)] context: &AuthenticatedWorldDepsContextV1,
 ) -> Result<WorldCommandOutputV1> {
-    let response = run_world_command_for_deps_at(cmd, cwd_override, profile_override)
-        .map_err(classify_world_backend_error)?;
+    let response = run_world_command_for_deps_at(
+        cmd,
+        cwd_override,
+        profile_override,
+        #[cfg(unix)]
+        context,
+    )
+    .map_err(classify_world_backend_error)?;
     let stdout = BASE64
         .decode(response.stdout_b64.as_bytes())
         .unwrap_or_default();
@@ -1837,8 +1928,15 @@ fn output_snippet_for_error(out: &WorldCommandOutputV1) -> String {
     out.stdout.trim().to_string()
 }
 
-fn apply_script_package_v1(pkg: &super::inventory::PackageDefV1) -> Result<()> {
-    let script = resolve_script_body_for_package_v1(pkg)?;
+fn apply_script_package_v1(
+    pkg: &super::inventory::PackageDefV1,
+    #[cfg(unix)] context: &AuthenticatedWorldDepsContextV1,
+) -> Result<()> {
+    let script = resolve_script_body_for_package_v1(
+        pkg,
+        #[cfg(unix)]
+        context,
+    )?;
     let wrappers = pkg
         .wrappers
         .iter()
@@ -1846,14 +1944,25 @@ fn apply_script_package_v1(pkg: &super::inventory::PackageDefV1) -> Result<()> {
         .collect::<Result<Vec<_>>>()?;
 
     let cmd = build_world_script_install_command_v1(&script, &wrappers);
-    run_world_command_checked_for_deps(&cmd, Some("/tmp"))
-        .with_context(|| format!("world install script failed for '{}'", pkg.name))?;
+    run_world_command_checked_for_deps(
+        &cmd,
+        Some("/tmp"),
+        #[cfg(unix)]
+        context,
+    )
+    .with_context(|| format!("world install script failed for '{}'", pkg.name))?;
     Ok(())
 }
 
-fn resolve_script_body_for_package_v1(pkg: &super::inventory::PackageDefV1) -> Result<String> {
+fn resolve_script_body_for_package_v1(
+    pkg: &super::inventory::PackageDefV1,
+    #[cfg(unix)] context: &AuthenticatedWorldDepsContextV1,
+) -> Result<String> {
     if pkg.name == CODEX_RUNTIME_PACKAGE_NAME {
-        let target_triple = current_codex_runtime_target_triple_v1()?;
+        let target_triple = current_codex_runtime_target_triple_v1(
+            #[cfg(unix)]
+            context,
+        )?;
         let spec = resolve_codex_runtime_install_spec_for_target_v1(target_triple)?;
         let template = pkg.install.script.as_deref().ok_or_else(|| {
             config_model::user_error(format!(
@@ -1900,9 +2009,16 @@ fn resolve_script_body_for_package_v1(pkg: &super::inventory::PackageDefV1) -> R
     )))
 }
 
-fn current_codex_runtime_target_triple_v1() -> Result<&'static str> {
-    let guest_arch = run_world_command_output_for_deps("uname -m", Some("/tmp"))
-        .context("failed to inspect guest architecture for codex runtime selection")?;
+fn current_codex_runtime_target_triple_v1(
+    #[cfg(unix)] context: &AuthenticatedWorldDepsContextV1,
+) -> Result<&'static str> {
+    let guest_arch = run_world_command_output_for_deps(
+        "uname -m",
+        Some("/tmp"),
+        #[cfg(unix)]
+        context,
+    )
+    .context("failed to inspect guest architecture for codex runtime selection")?;
     if guest_arch.exit != 0 {
         return Err(anyhow!(
             "failed to inspect guest architecture for codex runtime selection: {}",
@@ -2215,9 +2331,19 @@ fn build_world_script_install_command_v1(
     cmd
 }
 
-fn run_world_command_checked_for_deps(cmd: &str, cwd_override: Option<&str>) -> Result<()> {
-    let response = run_world_command_for_deps_at(cmd, cwd_override, None)
-        .map_err(classify_world_backend_error)?;
+fn run_world_command_checked_for_deps(
+    cmd: &str,
+    cwd_override: Option<&str>,
+    #[cfg(unix)] context: &AuthenticatedWorldDepsContextV1,
+) -> Result<()> {
+    let response = run_world_command_for_deps_at(
+        cmd,
+        cwd_override,
+        None,
+        #[cfg(unix)]
+        context,
+    )
+    .map_err(classify_world_backend_error)?;
 
     if response.exit == 0 {
         return Ok(());
@@ -2452,7 +2578,12 @@ fn build_current_show_explain_v1(
 
     let mut packages_to_check: Vec<String> = Vec::new();
     collect_required_package_names(item_name, item, view, &mut packages_to_check);
-    let package_statuses = query_world_package_presence(view, &packages_to_check)?;
+    let package_statuses = query_world_package_presence(
+        view,
+        &packages_to_check,
+        #[cfg(unix)]
+        context,
+    )?;
     let (world, remediation) =
         compute_world_status_and_remediation(item_name, item, view, &package_statuses, enabled)?;
 
@@ -3201,10 +3332,17 @@ fn run_current_list_applied(
     global_deps_dir: Option<&Path>,
     all: bool,
     json: bool,
+    #[cfg(unix)] context: &AuthenticatedWorldDepsContextV1,
 ) -> Result<()> {
     eprintln!("substrate: note: showing current world deps status for this directory");
     let view = resolve_current_inventory_view(cwd, cfg, global_deps_dir)?;
-    let items = compute_current_applied_items_v1(&view, &cfg.world.deps.enabled, all)?;
+    let items = compute_current_applied_items_v1(
+        &view,
+        &cfg.world.deps.enabled,
+        all,
+        #[cfg(unix)]
+        context,
+    )?;
 
     if json {
         let out = ListOutputV1 {
@@ -3224,6 +3362,7 @@ pub(super) fn compute_current_applied_items_v1(
     view: &InventoryViewV1,
     enabled: &[String],
     all: bool,
+    #[cfg(unix)] context: &AuthenticatedWorldDepsContextV1,
 ) -> Result<Vec<InventoryListItemSummaryV1>> {
     // For `applied`, expand enabled bundles to their packages so users can see the status of
     // concrete installables even when they only enabled a bundle.
@@ -3272,7 +3411,12 @@ pub(super) fn compute_current_applied_items_v1(
     packages_to_check.sort();
     packages_to_check.dedup();
 
-    let package_presence = query_world_package_presence(view, &packages_to_check)?;
+    let package_presence = query_world_package_presence(
+        view,
+        &packages_to_check,
+        #[cfg(unix)]
+        context,
+    )?;
 
     let mut items: Vec<InventoryListItemSummaryV1> = Vec::with_capacity(names_to_display.len());
     for name in &names_to_display {
@@ -3493,6 +3637,7 @@ struct PackageWorldCheck {
 fn query_world_package_presence(
     view: &InventoryViewV1,
     package_names: &[String],
+    #[cfg(unix)] context: &AuthenticatedWorldDepsContextV1,
 ) -> Result<HashMap<String, bool>> {
     let mut checks: Vec<PackageWorldCheck> = Vec::new();
     for name in package_names {
@@ -3519,12 +3664,20 @@ fn query_world_package_presence(
     }
 
     if checks.is_empty() {
-        ensure_world_backend_available()?;
+        ensure_world_backend_available(
+            #[cfg(unix)]
+            context,
+        )?;
         return Ok(HashMap::new());
     }
 
     let script = build_world_probe_script(&checks);
-    let response = run_world_command_for_deps(&script).map_err(classify_world_backend_error)?;
+    let response = run_world_command_for_deps(
+        &script,
+        #[cfg(unix)]
+        context,
+    )
+    .map_err(classify_world_backend_error)?;
 
     let stdout = BASE64
         .decode(response.stdout_b64.as_bytes())
@@ -3558,7 +3711,11 @@ fn query_world_package_presence(
         .collect();
     if !missing_checks.is_empty() {
         for check in missing_checks {
-            let present = run_world_presence_check_v1(&check)?;
+            let present = run_world_presence_check_v1(
+                &check,
+                #[cfg(unix)]
+                context,
+            )?;
             out.insert(check.name.clone(), present);
         }
     }
@@ -3569,6 +3726,7 @@ fn query_world_package_presence(
 fn query_world_package_entrypoint_presence(
     view: &InventoryViewV1,
     package_names: &[String],
+    #[cfg(unix)] context: &AuthenticatedWorldDepsContextV1,
 ) -> Result<HashMap<String, bool>> {
     let mut checks: Vec<PackageWorldCheck> = Vec::new();
     for name in package_names {
@@ -3586,12 +3744,20 @@ fn query_world_package_entrypoint_presence(
     }
 
     if checks.is_empty() {
-        ensure_world_backend_available()?;
+        ensure_world_backend_available(
+            #[cfg(unix)]
+            context,
+        )?;
         return Ok(HashMap::new());
     }
 
     let script = build_world_probe_script(&checks);
-    let response = run_world_command_for_deps(&script).map_err(classify_world_backend_error)?;
+    let response = run_world_command_for_deps(
+        &script,
+        #[cfg(unix)]
+        context,
+    )
+    .map_err(classify_world_backend_error)?;
 
     let stdout = BASE64
         .decode(response.stdout_b64.as_bytes())
@@ -3623,7 +3789,11 @@ fn query_world_package_entrypoint_presence(
         .collect();
     if !missing_checks.is_empty() {
         for check in missing_checks {
-            let present = run_world_presence_check_v1(&check)?;
+            let present = run_world_presence_check_v1(
+                &check,
+                #[cfg(unix)]
+                context,
+            )?;
             out.insert(check.name.clone(), present);
         }
     }
@@ -3648,7 +3818,10 @@ fn parse_world_probe_output(stdout: &str) -> HashMap<String, bool> {
     out
 }
 
-fn run_world_presence_check_v1(check: &PackageWorldCheck) -> Result<bool> {
+fn run_world_presence_check_v1(
+    check: &PackageWorldCheck,
+    #[cfg(unix)] context: &AuthenticatedWorldDepsContextV1,
+) -> Result<bool> {
     let cmd = match &check.check {
         PackageCheckKind::Probe { command } => {
             // Match the bulk probe script semantics: treat the probe string as a shell snippet.
@@ -3695,12 +3868,24 @@ fn run_world_presence_check_v1(check: &PackageWorldCheck) -> Result<bool> {
         }
     };
 
-    let response = run_world_command_for_deps(&cmd).map_err(classify_world_backend_error)?;
+    let response = run_world_command_for_deps(
+        &cmd,
+        #[cfg(unix)]
+        context,
+    )
+    .map_err(classify_world_backend_error)?;
     Ok(response.exit == 0)
 }
 
-fn ensure_world_backend_available() -> Result<()> {
-    let response = run_world_command_for_deps(":").map_err(classify_world_backend_error)?;
+fn ensure_world_backend_available(
+    #[cfg(unix)] context: &AuthenticatedWorldDepsContextV1,
+) -> Result<()> {
+    let response = run_world_command_for_deps(
+        ":",
+        #[cfg(unix)]
+        context,
+    )
+    .map_err(classify_world_backend_error)?;
     if response.exit == 0 {
         return Ok(());
     }
@@ -3774,42 +3959,52 @@ fn build_world_probe_script(checks: &[PackageWorldCheck]) -> String {
     script
 }
 
-fn run_world_command_for_deps(cmd: &str) -> Result<transport_api_types::ExecuteResponse> {
-    run_world_command_for_deps_at(cmd, None, None)
+fn run_world_command_for_deps(
+    cmd: &str,
+    #[cfg(unix)] context: &AuthenticatedWorldDepsContextV1,
+) -> Result<transport_api_types::ExecuteResponse> {
+    run_world_command_for_deps_at(
+        cmd,
+        None,
+        None,
+        #[cfg(unix)]
+        context,
+    )
 }
 
 fn run_world_command_for_deps_at(
     cmd: &str,
     cwd_override: Option<&str>,
     profile_override: Option<&str>,
+    #[cfg(unix)] context: &AuthenticatedWorldDepsContextV1,
 ) -> Result<transport_api_types::ExecuteResponse> {
-    let (client, mut request, _) = build_agent_client_and_request(cmd)?;
-    // Runtime world-deps execution uses a dedicated internal profile so read-only probes and
-    // world-deps wrapper installs can run on runners that block unprivileged user namespaces,
-    // without borrowing the operator-facing provisioning profile.
-    request.profile = Some("world-deps-probe".to_string());
-    if let Some(profile) = profile_override {
-        request.profile = Some(profile.to_string());
-    }
+    #[cfg(not(unix))]
+    return Err(anyhow!(WorldDepsBackendUnavailableError::new(
+        "authenticated world-deps requests are unavailable on this platform",
+    )));
 
-    if let Some(cwd) = cwd_override {
-        request.cwd = Some(cwd.to_string());
-    } else if cfg!(target_os = "macos") {
-        request.cwd = Some("/tmp".to_string());
-    }
+    #[cfg(unix)]
+    {
+        let profile = profile_override.unwrap_or("world-deps-probe");
+        let (client, mut request, _) = build_authenticated_world_deps_client_and_request(
+            context,
+            cmd,
+            cwd_override.map(Path::new),
+            profile,
+        )?;
+        if let Some(env) = request.env.as_mut() {
+            ensure_world_deps_bin_on_path(env);
+        }
 
-    if let Some(env) = request.env.as_mut() {
-        ensure_world_deps_bin_on_path(env);
+        let rt = Runtime::new()?;
+        let response = rt.block_on(async move {
+            client
+                .execute(request)
+                .await
+                .context("world-service /v1/execute request failed")
+        })?;
+        Ok(response)
     }
-
-    let rt = Runtime::new()?;
-    let response = rt.block_on(async move {
-        client
-            .execute(request)
-            .await
-            .context("world-service /v1/execute request failed")
-    })?;
-    Ok(response)
 }
 
 fn ensure_world_deps_bin_on_path(env: &mut HashMap<String, String>) {

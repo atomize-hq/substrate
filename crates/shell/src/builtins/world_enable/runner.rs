@@ -348,7 +348,10 @@ fn run_enable_with_provision_deps(
     };
 
     if args.dry_run {
-        let probe = match probe_world_manager() {
+        let probe = match probe_world_manager(
+            #[cfg(unix)]
+            &world_deps_context,
+        ) {
             Ok(probe) => probe,
             Err(err) => provision_deps::exit_backend_unavailable(&err),
         };
@@ -485,7 +488,10 @@ fn run_enable_with_provision_deps(
     }
 
     if let Some(required_manager) = required_manager {
-        let probe = match probe_world_manager() {
+        let probe = match probe_world_manager(
+            #[cfg(unix)]
+            &world_deps_context,
+        ) {
             Ok(probe) => probe,
             Err(err) => provision_deps::exit_backend_unavailable(&err),
         };
@@ -510,8 +516,16 @@ fn run_enable_with_provision_deps(
     update_manager_env_exports(&env_sh_path, &substrate_home, true)?;
 
     match required_manager {
-        Some(WorldManager::Apt) => provision_apt_requirements(&requirements.apt),
-        Some(WorldManager::Pacman) => provision_pacman_requirements(&requirements.pacman),
+        Some(WorldManager::Apt) => provision_apt_requirements(
+            &requirements.apt,
+            #[cfg(unix)]
+            &world_deps_context,
+        ),
+        Some(WorldManager::Pacman) => provision_pacman_requirements(
+            &requirements.pacman,
+            #[cfg(unix)]
+            &world_deps_context,
+        ),
         None => {}
         Some(WorldManager::Unsupported) => unreachable!("unsupported required manager"),
     }

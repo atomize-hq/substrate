@@ -185,28 +185,13 @@ pub(crate) fn collect_doctor_snapshot_v1(
     #[cfg(unix)] install_context: &InstallBootstrapContextCarrierV1,
 ) -> Result<WorldDepsDoctorSnapshotV1> {
     #[cfg(unix)]
-    let (cfg, global_deps_dir) = {
-        bind_unix_install_bootstrap_context(install_context)?;
-        let root =
-            TrustedAuthorityRoot::open(Path::new(&install_context.context.selected_host_prefix))
-                .map_err(|error| anyhow!("failed to open selected dependency root: {error}"))?;
-        let authority = HostSessionAuthority::from_trusted_root(root)
-            .map_err(|error| anyhow!("failed to bind selected dependency root: {error}"))?;
-        let bootstrap_home = authority.bootstrap_home();
-        let selected_root = PathBuf::from(
-            &bootstrap_home
-                .identity()
-                .map_err(|error| anyhow!("failed to identify selected dependency root: {error}"))?
-                .physical_path,
-        );
-        let (cfg, _) = config_model::resolve_effective_config_with_explain_for_bootstrap_home(
-            cwd,
-            &Default::default(),
-            &bootstrap_home,
-            false,
-        )?;
-        (cfg, Some(selected_root.join("deps")))
-    };
+    let context = bind_authenticated_world_deps_context_v1(
+        install_context,
+        cwd,
+        &config_model::CliConfigOverrides::default(),
+    )?;
+    #[cfg(unix)]
+    let (cfg, global_deps_dir) = (context.effective_config(), Some(context.global_deps_dir()));
     #[cfg(not(unix))]
     let (cfg, global_deps_dir) = {
         let cfg = config_model::resolve_effective_config(cwd, &Default::default())?;
@@ -231,7 +216,13 @@ pub(crate) fn collect_doctor_snapshot_v1(
     }
     .to_string();
 
-    let applied = match surfaces::compute_current_applied_items_v1(&view, &enabled, all) {
+    let applied = match surfaces::compute_current_applied_items_v1(
+        &view,
+        &enabled,
+        all,
+        #[cfg(unix)]
+        &context,
+    ) {
         Ok(items) => WorldDepsDoctorSnapshotV1 {
             schema_version: 1,
             cwd: cwd.to_path_buf(),
@@ -442,6 +433,14 @@ mod tests {
         let _env = EnvGuard::apply(&[
             ("SUBSTRATE_HOME", Some(ambient_b.as_os_str())),
             ("SUBSTRATE_ROOT", Some(ambient_b.as_os_str())),
+            (
+                "SUBSTRATE_INSTALL_BOOTSTRAP_CONTEXT_V1",
+                Some(OsStr::new("encoded-sensitive-carrier")),
+            ),
+            (
+                "SUBSTRATE_INSTALL_PRIMARY_USER",
+                Some(OsStr::new("sensitive-principal")),
+            ),
         ]);
 
         let context = bind_authenticated_world_deps_context_v1(
@@ -476,6 +475,44 @@ mod tests {
             context.world_fs_policy(),
             context.effective_policy().world_fs_policy()
         );
+
+        let (_, request, _) = crate::execution::build_authenticated_world_deps_client_and_request(
+            &context,
+            "true",
+            None,
+            "world-deps-probe",
+        )
+        .expect("build authenticated world-deps request");
+        assert_eq!(request.profile.as_deref(), Some("world-deps-probe"));
+        assert_eq!(request.cwd.as_deref(), temp.path().to_str());
+        assert_eq!(
+            request.policy_snapshot.net_allowed,
+            vec!["selected.example".to_string()]
+        );
+        assert_eq!(
+            request.world_fs_mode,
+            Some(context.world_fs_policy().mode.into())
+        );
+        let request_env = request.env.as_ref().expect("authenticated request env");
+        assert_eq!(
+            request_env.get("SUBSTRATE_HOME").map(String::as_str),
+            selected_a.to_str()
+        );
+        assert_eq!(
+            request_env.get("SUBSTRATE_ROOT").map(String::as_str),
+            selected_a.to_str()
+        );
+        assert_eq!(
+            request_env
+                .get("SUBSTRATE_INSTALL_HOST_CONTEXT_COMMITMENT")
+                .map(String::as_str),
+            Some(carrier.host_context_commitment.as_str())
+        );
+        assert!(!request_env.contains_key("SUBSTRATE_INSTALL_BOOTSTRAP_CONTEXT_V1"));
+        assert!(!request_env.contains_key("SUBSTRATE_INSTALL_PRIMARY_USER"));
+        assert!(!request_env.contains_key("SUBSTRATE_INSTALL_PRIMARY_UID"));
+        assert!(!format!("{request:?}").contains("encoded-sensitive-carrier"));
+        assert!(!format!("{request:?}").contains("sensitive-principal"));
     }
 
     #[test]

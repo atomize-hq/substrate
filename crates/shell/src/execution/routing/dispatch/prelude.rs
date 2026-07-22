@@ -9,6 +9,8 @@ pub(crate) use super::registry::{
 };
 #[allow(unused_imports)]
 pub(crate) use super::shim_ops::wrap_with_anchor_guard;
+#[cfg(any(target_os = "linux", target_os = "macos"))]
+pub(crate) use super::world_ops::build_authenticated_world_deps_client_and_request;
 #[cfg(target_os = "linux")]
 pub(crate) use super::world_ops::init_linux_world;
 #[allow(unused_imports)]
