@@ -2412,3 +2412,51 @@ The binding sequence is:
 
 F is unstarted. The exact next packet is **A1.1d-5R2-2F — Authenticated world-deps and truthful
 doctor composition**.
+
+## A1.1d-5R2-2F readiness-boundary evidence ledger
+
+The prior line records the historical F0 closeout state. The current checkpoint is F1/F2 complete,
+F3/F4 blocked, and F incomplete.
+
+| Evidence | Exact result |
+|---|---|
+| Source base before local F commits | `7d642606205b4f0f93e157fbde27507a7c86e655` |
+| F1 | `eae02af959f0b7066015bb242ffa45fc7a01d591`; tree `7bd7e8b5ca2d563b2991b4fea62ca4ea26266b0c`; message `feat: bind authenticated world-deps context`; ordinary patch `829b8a19c0d2deb53af0b9c2f277e7eab53b5001f41c59ebc3e7075c1a3e8b54`; full-index patch `f7c16056ce5b379848203b066bffec37ef9f6f46fdcb2753af6af4feac01886f`. |
+| F2 | `d30d8cec764e2338fb48475747733091d3af22bf`; tree `a6161c7664fa6ca1173302dd3570b5d8d7e09ecc`; message `feat: propagate authenticated world-deps scope`; ordinary patch `42f5278a6cab739c9d5b5e5ca7ee2c3a960ba8d8197e2f772192a65e391ed31b`; full-index patch `b65e3146e870ac7579e43508fb87b4c1bdc63afae96bf67473b75a7285e8bfe8`. |
+| F1/F2 preservation | `feat/preserve-a1-1d-5r2-2f-f1-f2-d30d8cec` points to exact F2. |
+| Blocked F3/F4 preservation | Branch `feat/preserve-a1-1d-5r2-2f-f3-f4-blocked-7224dd30`; commit `a343f0796d19d66c168c5bb2797856710cff5708`; parent exact F2; tree `a377daa6f41693454e38c39163cc9895bbf3e828`. |
+| Blocked manifest | `world_deps/mod.rs`; `world_deps/surfaces.rs`; `world_enable/runner.rs`; `world_enable/runner/provision_deps.rs`; `execution/routing.rs`; `execution/routing/dispatch/prelude.rs`; `execution/routing/dispatch/world_ops.rs` (all beneath `crates/shell/src/`). |
+| Blocked fingerprints | Manifest `23a1dc1566d395ae5e606ebb4bae0d7e7d4c9c3f976958d7e3c7ce8a094f0cc8`; per-file aggregate `a8399a8a0989c675b05788fb12f2f91105cfa1e15ac0dca911df918594033edd`; ordinary patch `7224dd30c04e5fcd85913bfdddb62deb497f0b3eaba416b2f689d392f47b9b0c`; full-index patch `76fb0c5c183880dca8f31576647c8e9372d1ad026e2a731b48d5ef2642ef0a22`; 613 insertions/128 deletions. |
+| Canonical harness baseline | Exact base wall: 1,280 discovered, 1,235 passed, 45 failed, 0 ignored. F1/F2 add three passing tests without changing the 45-failure set. |
+| Generated index drift | `GeneratedIndexDriftRemediated`: GitNexus refresh changed only generated `AGENTS.md`/`CLAUDE.md` count lines; both exact generated changes were restored before preservation. |
+
+### Reviewer finding and correction disposition
+
+The preserved candidate's prefix-based ambient environment copy is rejected. It can disclose
+credentials or request material and can pass authority/backend/policy selectors from B beside an
+authenticated A request. The candidate also bypasses the canonical readiness owner and therefore
+cannot provide correct Linux service activation/spawn behavior. These are security and ownership
+defects, not permission to duplicate lifecycle logic.
+
+GitNexus reported `ensure_world_service_ready` **HIGH**, with three graph-visible direct callers and
+three affected existing process groups. Manual source closure found two additional direct uses: the
+persistent-session WebSocket setup and Linux initialization's function-pointer probe. Impact on
+each existing caller label, the additive F builder, `run_world_command_for_deps_at`, and
+`execute_with_profile` was LOW with zero upstream impacts. The HIGH owner is approved only for
+private extraction plus compatibility delegation; all existing callers remain unchanged.
+
+The exact corrected disposition is:
+
+- one readiness owner in `world_ops.rs`;
+- one private explicit-target Linux core, with no copied probe/activation/stale/spawn/timeout logic;
+- unchanged no-argument compatibility entry point and callers;
+- fixed product socket and immutable installed-product service posture for authenticated F;
+- exact seven-entry generated guest environment and zero ambient forwarding;
+- authenticated failure before readiness side effects;
+- exactly two additive-builder consumers;
+- no production capability or policy change, no non-Linux change, and no seam promotion.
+
+F3/F4 must be rebuilt from clean F2 under this contract; preservation bytes are not restored or
+approved wholesale. F5 and final F walls remain unstarted. Renewed R2-2 integration closeout,
+R2-3, R2-4, and R3 remain blocked. The exact next task is **Resume A1.1d-5R2-2F3/F4 under the
+corrected readiness and environment contract**.

@@ -6438,3 +6438,92 @@ complete, F remains unstarted, and no seam is promoted.
 | Historical parallel limitation | `1263/1113/150/0` is diagnostic only; all 150 names are recovered, only 37 complete panic bodies remain, and 113 normalized signatures are unavailable. No historical parallel transition matrix or 105-transition claim exists. |
 | Containment and review | GitNexus's one MEDIUM process label resolves to test-only `AuthorityEnvTestTempDir::new`; no production flow changes. The only production hunk is authorized mechanical F0b delegation with byte-identical output. Three implementation reviews and the fresh containment review are CLEAN. |
 | Status and sequence | F0/F0a/F0b/F0-HC complete; no production or user-facing behavior change; no seam promotion; `Routes A–E → F0/F0a/F0b/F0-HC complete → F → renewed R2-2 closeout → R2-3 → R2-4 → R3`; F is unstarted. |
+
+## A1.1d-5R2-2F readiness and outbound-environment correction
+
+This contract supersedes the earlier F builder/readiness boundary. F1 and F2 are complete local
+commits; F3/F4 are incomplete, blocked, and preserved; F itself is not complete.
+
+### Exact outbound command environment
+
+The authenticated builder constructs this entire `ExecuteRequest.env` map from immutable guest
+constants. Values shown here are generated values, not forwarded parent `HOME`, XDG, PATH, or other
+environment state.
+
+| Exact name | Exact value | Classification and reason |
+|---|---|---|
+| `SUBSTRATE_WORLD_DEPS_GUEST_BIN_DIR` | `/var/lib/substrate/world-deps/bin` | Required non-secret guest runtime projection; ambient override forbidden. |
+| `PATH` | `/var/lib/substrate/world-deps/bin:/usr/local/sbin:/usr/local/bin:/usr/sbin:/usr/bin:/sbin:/bin` | Required deterministic guest command discovery; not inherited. |
+| `HOME` | `/root` | Fixed guest execution home required by the existing world command envelope; host HOME is never read or copied. |
+| `XDG_CONFIG_HOME` | `/root/.config` | Fixed guest runtime path; ambient XDG input is never read or copied. |
+| `XDG_DATA_HOME` | `/root/.local/share` | Fixed guest runtime path; ambient XDG input is never read or copied. |
+| `XDG_CACHE_HOME` | `/root/.cache` | Fixed guest runtime path; ambient XDG input is never read or copied. |
+| `TERM` | `xterm-256color` | Fixed non-secret command-runtime posture; ambient TERM is not inherited. |
+
+No other entry is allowed. Locale, timezone, and color variables are unnecessary because source
+closure found no authenticated-path requirement for them. CWD, request profile, policy snapshot,
+world-network policy, and filesystem mode remain exact structured `ExecuteRequest` fields.
+World-service already derives any internal enforcement environment from those structured fields;
+the shell must not duplicate it in the outbound command environment. No schema or side channel is
+added.
+
+### Forbidden input and forwarding table
+
+| Class | Exact examples or pattern | Required disposition |
+|---|---|---|
+| Wildcard/prefix forwarding | all ambient `SUBSTRATE_*`, all ambient `WORLD_*`, all `LC_*`, or the complete parent environment | FORBIDDEN. An allowlist must enumerate all seven names above and generate every value. |
+| Authority selectors | `SUBSTRATE_HOME`, `SUBSTRATE_ROOT`, `SUBSTRATE_WORLD_SOCKET`, `HOME`, all ambient XDG variables, `CODEX_HOME`, anchor/project/workspace selectors | FORBIDDEN. They cannot accompany A as command authority. The fixed guest values above are constants, not selectors. |
+| Service/backend selectors | `SUBSTRATE_WORLD_AGENT_BIN`, socket-activation overrides/timeouts, world backend/socket/request-profile selectors, guest-bin-dir override | FORBIDDEN in request environment and forbidden as explicit-F readiness input. |
+| Policy/config selectors | policy-mode, world network/fs/caging selectors, enforcement-plan payloads, config roots, generated manager/bootstrap selectors | FORBIDDEN. Structured authenticated request fields remain authoritative. |
+| Hidden authority carriers | bootstrap carrier, install context/home, commitment preimage, selected user/UID, shim caller/stack/depth state | FORBIDDEN. No hidden transport can reconstruct or supplement A. |
+| Secrets and credentials | any credential, session secret, API key, access key, private key, authorization value, or provider token | FORBIDDEN regardless of name or prefix. |
+| Prompt/request material | prompt text, request preimage, serialized carrier/request bytes, raw policy/config payloads | FORBIDDEN. |
+| Compatibility-only or unnecessary state | ambient locale, timezone, color, terminal, user/shell/temp/editor variables | EXCLUDED. No downstream precedence rule may be used as a security boundary. |
+
+The builder may retain an existing non-environment request metadata field only if its current
+non-authority semantics are source-proven and unchanged; that field cannot select A, readiness,
+policy, backend, or credentials. This is not permission to add a transport field.
+
+### Explicit readiness contract
+
+1. `ensure_world_service_ready()` keeps its current signature and compatibility behavior.
+2. One private Linux core receives the exact socket path plus the minimum private service posture.
+3. The core never resolves the target socket from environment, home/root state, CWD, activation
+   report path, or a global side table.
+4. Compatibility delegates with legacy socket/binary inputs and retains every existing caller.
+5. F delegates with `/run/substrate.sock` and immutable installed-product binary
+   `/usr/local/bin/substrate-world-service`; environment selection is unavailable.
+6. Probe, activation wait, stale-socket safety, spawn, readiness polling, timeouts, and error
+   classification exist only in that owner.
+7. Authenticated validation precedes readiness; readiness precedes request construction.
+8. Existing capability, policy, systemd/service, service unit, socket, lifecycle, non-Linux,
+   world-service, transport, receipt, supervisor, and retained-worker behavior is frozen.
+
+### Required future F3/F4 proof
+
+1. Under conflicting ambient `SUBSTRATE_WORLD_SOCKET`, explicit readiness probes and connects only
+   to the authenticated fixed socket; environment-only socket selection cannot affect F.
+2. Existing no-argument readiness callers retain their current behavior, including compatibility
+   override behavior.
+3. Capability probe, activation detection/wait, stale-socket handling, compatibility spawn fallback,
+   polling intervals, timeout values, and error classification/text remain equivalent.
+4. Source inspection and tests prove no readiness code is duplicated in the F builder or either
+   consumer.
+5. The serialized runtime request contains exactly the seven environment entries above, with exact
+   values, and no parent-environment entry.
+6. Poisoned authority, backend, policy, HOME/XDG, shim/bootstrap, locale, and unknown-prefix values
+   do not appear in the request or alter its target.
+7. Synthetic credential and request markers do not appear in the request environment, serialized
+   transport, errors, logs, traces, doctor output, or stored fixtures.
+8. A under conflicting B executes against A. No downstream precedence or overwrite is accepted as
+   proof.
+9. Missing, malformed, tampered, wrong-principal, or mismatched authority fails before readiness,
+   request construction, mutation, or launch.
+10. Both exact consumers use the additive builder; no third consumer is redirected.
+11. Existing world execution, network allow/deny, filesystem, caging, capability, lifecycle,
+    receipt, supervisor, and retained-worker behavior remains unchanged.
+12. Non-Linux behavior remains frozen under R2-3 ownership.
+
+Any credential/request marker crossing the boundary, any need for a transport/world-service edit,
+or any inability to preserve compatibility callers is a hard stop. Passing these tests closes only
+the corrected F3/F4 work; it does not start F5 or the final F walls and does not promote a seam.

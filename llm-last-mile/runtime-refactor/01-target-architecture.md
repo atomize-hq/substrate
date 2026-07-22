@@ -795,3 +795,63 @@ so no production execution flow changes. The sole production hunk is the authori
 F0b writer delegation and preserves output/error semantics byte-for-byte. All 38 process-resource
 dispositions are implemented or retained, with no new owner, policy, capability, credential,
 gateway, receipt, supervisor, worker, placement, caging, lifecycle, or user-facing behavior.
+
+## F explicit Linux readiness architecture
+
+F1 (`eae02af959f0b7066015bb242ffa45fc7a01d591`) and F2
+(`d30d8cec764e2338fb48475747733091d3af22bf`) are complete local increments. F3/F4 remain
+incomplete and are preserved only as blocked evidence at
+`a343f0796d19d66c168c5bb2797856710cff5708`. The preservation does not authorize the candidate's
+environment or readiness behavior.
+
+Linux readiness remains a single-owner architecture:
+
+```text
+legacy callers
+    -> ensure_world_service_ready()
+       -> derive legacy socket and legacy binary-selection inputs exactly as today
+       -> private explicit-target readiness core
+
+authenticated F builder
+    -> validate authenticated context, profile, and launch CWD
+    -> private explicit-target readiness core(
+           /run/substrate.sock,
+           immutable installed-product service posture)
+    -> construct AgentClient and exact ExecuteRequest
+```
+
+`ensure_world_service_ready()` remains the public-within-crate compatibility entry point. Its
+legacy resolution of `SUBSTRATE_WORLD_SOCKET`, socket-activation posture, binary candidate order,
+and errors is mechanically delegated without externally observable change. No existing caller is
+redirected to a new signature.
+
+The private core receives the exact target socket path. It may consume the existing activation
+report's mode as lifecycle observation, but must not consume that report's resolved path or use it
+to replace the target argument. It owns, once, the capability probe, activation wait, stale-socket
+safety, spawn fallback, readiness loop, timeouts, and error classification. It does not resolve its
+target from `SUBSTRATE_WORLD_SOCKET`, `SUBSTRATE_HOME`, `SUBSTRATE_ROOT`, `HOME`, XDG state, CWD, or
+a process-global side table.
+
+Socket path alone is insufficient to preserve spawn fallback without importing ambient binary
+selection into the authenticated path. The minimum additional private input is therefore a
+non-secret readiness service posture. Compatibility passes `LegacyCompatibility`, preserving the
+existing candidate order: `SUBSTRATE_WORLD_AGENT_BIN`, PATH discovery, then relative release/debug
+candidates. Authenticated F passes `InstalledLinuxProduct`, whose only executable is the immutable
+installer/service-unit path `/usr/local/bin/substrate-world-service`. That posture is
+request-scoped, unavailable to environment override, and used only inside the readiness owner. It
+does not alter service units, fixed socket behavior, or lifecycle ownership.
+
+The explicit F order is security-significant. Missing, malformed, tampered, wrong-principal, or
+mismatched authority fails before readiness, request construction, mutation, or launch. A valid
+context under conflicting B then reaches readiness using `/run/substrate.sock`, independent of
+ambient socket and binary selectors. Only after readiness succeeds may the builder construct the
+request consumed by `surfaces.rs::run_world_command_for_deps_at` or
+`provision_deps.rs::execute_with_profile`.
+
+Existing semantics remain frozen: the capability endpoint and probe interpretation; 150 ms probe
+I/O timeouts; socket-activation detection; 100 ms activation polling for 2,000 ms; manual-only
+stale-socket removal; unknown-mode preservation; compatibility override rejection; compatibility
+binary discovery and spawn behavior; 50 ms readiness polling for 1,000 ms; and current error
+classification/text. Linux fixed units and socket, macOS/Windows adapters, world-service,
+transport schemas, policy/capability behavior, retained workers, and all other process lifecycle
+owners remain unchanged. Any need to exceed this boundary is `ArchitecturalDecisionRequired`.

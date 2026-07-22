@@ -4,7 +4,7 @@
 **Scope:** planning, contracts, sequencing, and proof gates; not implementation history
 **Source directive:** [`../../substrate-runtime-refactor-directive-revised.md`](../../substrate-runtime-refactor-directive-revised.md)
 **Repo-truth snapshot:** 2026-07-17 at `6ab2a515e13946324d0aac25b144e1c3408cb2c1`; re-check live code before every slice
-**Current authorized increment:** `A1.1d-5R2-2F — Authenticated world-deps and truthful doctor composition`; F0, F0a, F0b, and F0-HC are canonically complete, F remains unstarted, and R2-2 remains incomplete.
+**Current authorized increment:** `A1.1d-5R2-2F — Authenticated world-deps and truthful doctor composition`; F1 and F2 are complete and locally committed, F3/F4 are blocked and preserved pending the readiness-boundary correction below, F remains incomplete, and R2-2 remains incomplete.
 
 ## Canonical repo location
 
@@ -619,3 +619,43 @@ three implementation reviewers and the fresh containment reviewer are `CLEAN`. T
 or user-facing behavior change and no seam promotion. F was not started.
 
 The exact next packet is **A1.1d-5R2-2F — Authenticated world-deps and truthful doctor composition**.
+
+## A1.1d-5R2-2F readiness-boundary correction
+
+This section supersedes only the earlier statements that F is wholly unstarted and the earlier F
+request-builder/readiness allowlist. Historical F0/F0a/F0b/F0-HC evidence remains unchanged.
+
+| F checkpoint | Canonical status |
+|---|---|
+| F1 | Complete and locally committed as `eae02af959f0b7066015bb242ffa45fc7a01d591` (`feat: bind authenticated world-deps context`), tree `7bd7e8b5ca2d563b2991b4fea62ca4ea26266b0c`. |
+| F2 | Complete and locally committed as `d30d8cec764e2338fb48475747733091d3af22bf` (`feat: propagate authenticated world-deps scope`), tree `a6161c7664fa6ca1173302dd3570b5d8d7e09ecc`. |
+| F3/F4 | Incomplete and blocked. The exact seven-file candidate is preserved at `a343f0796d19d66c168c5bb2797856710cff5708`, tree `a377daa6f41693454e38c39163cc9895bbf3e828`, on `feat/preserve-a1-1d-5r2-2f-f3-f4-blocked-7224dd30`. Its ordinary/full-index patch SHA-256 values are `7224dd30c04e5fcd85913bfdddb62deb497f0b3eaba416b2f689d392f47b9b0c` and `76fb0c5c183880dca8f31576647c8e9372d1ad026e2a731b48d5ef2642ef0a22`. Preservation is evidence, not approval. |
+| F5 and final F walls | Unstarted. Renewed R2-2 integration closeout, R2-3, R2-4, and R3 remain blocked and unstarted. |
+
+The blocking review found two coupled boundary defects. First, the candidate copied ambient
+`SUBSTRATE_*` and `WORLD_*` values into authenticated world requests, allowing authority selectors,
+credentials, tokens, configuration overrides, and conflicting B state to cross beside A. Second,
+the candidate connected directly to the fixed Linux socket without invoking the existing
+`world_ops.rs::ensure_world_service_ready` lifecycle owner. Duplicating its probe, activation,
+stale-socket, spawn, timeout, or error logic is forbidden.
+
+Future F3/F4 work may therefore add one private Linux explicit-target readiness core in
+`world_ops.rs`. The existing no-argument owner remains the compatibility entry point and every
+existing caller remains behaviorally unchanged. The authenticated F builder supplies the fixed
+product socket `/run/substrate.sock` and an immutable installed-product service posture; it never
+selects a socket or service binary from the environment, HOME/XDG state, CWD, or a global side
+table. Request construction occurs only after authenticated context validation and successful
+explicit readiness.
+
+The outbound command environment is an exact generated projection, not inherited state:
+`SUBSTRATE_WORLD_DEPS_GUEST_BIN_DIR`, `PATH`, `HOME`, `XDG_CONFIG_HOME`, `XDG_DATA_HOME`,
+`XDG_CACHE_HOME`, and `TERM`, each set to the fixed guest-runtime value specified in `04`. No
+ambient value is forwarded, including locale values. Structured request fields remain the sole
+transport for CWD, profile, policy snapshot, network policy, and filesystem mode; authority,
+policy, socket, carrier, credential, prompt, and request preimage values are excluded from the
+command environment.
+
+This correction changes no production capability or policy, promotes no seam, and authorizes no
+runtime implementation in this documentation packet. F remains incomplete. The exact next task is
+to resume **A1.1d-5R2-2F3/F4** under the explicit-readiness and exact-environment contracts; F5 and
+the final F walls may not begin.

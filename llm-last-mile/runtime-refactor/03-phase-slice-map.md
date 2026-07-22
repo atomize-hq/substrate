@@ -1194,3 +1194,51 @@ full-index patch remain the preserved values. All 16 `FailToPass` rows are causa
 CLEAN. GitNexus/source closure finds no changed production execution flow; the authorized F0b
 delegation preserves output bytes. F0/F0a/F0b/F0-HC are complete, product and user-facing behavior
 do not change, F remains unstarted, the DAG above is acyclic, and no seam is promoted.
+
+## A1.1d-5R2-2F corrected packet state and future allowlist
+
+The canonical DAG is now:
+
+```text
+Routes A-E + harness
+    -> F1 complete (authenticated context binding)
+    -> F2 complete (authenticated scope propagation)
+    -> F3/F4 blocked candidate preserved
+    -> F3/F4 readiness/environment remediation
+    -> F5
+    -> final F walls
+    -> renewed R2-2 integration closeout
+    -> R2-3 -> R2-4 -> R3
+```
+
+Only the first two F nodes are complete. The preservation commit
+`a343f0796d19d66c168c5bb2797856710cff5708` records the exact blocked candidate without promoting
+it. F5, final F walls, renewed integration closeout, R2-3, R2-4, and R3 are unstarted. This ordering
+is acyclic, and no seam is promoted.
+
+The existing F table rows labeled `Shared context`, `Exact production allowlist`, `Exact
+surfaces.rs list`, `Exact test allowlist`, and `Runtime request rule` remain the boundary for the
+incomplete F3/F4 propagation work. The `Runtime request rule` is narrowed and extended as follows:
+
+| Future file | Exact future authority | Forbidden expansion |
+|---|---|---|
+| `crates/shell/src/execution/routing/dispatch/world_ops.rs` | EDIT `ensure_world_service_ready` only as a compatibility wrapper/delegator; ADD one private Linux explicit-target core or equivalent and one private non-secret service-posture input; EDIT the additive authenticated builder/private cfg implementation; ADD exact colocated readiness/environment/security tests. | No second readiness implementation; no semantic change to existing callers, probes, activation, stale cleanup, timeouts, spawn, or errors; no ambient selection in F. |
+| `crates/shell/src/execution/routing/dispatch/prelude.rs`; `crates/shell/src/execution/routing.rs` | Export-only wiring for the additive authenticated builder. | No redirect of another caller and no lifecycle behavior. |
+| `crates/shell/src/builtins/world_deps/surfaces.rs` | `run_world_command_for_deps_at` is the sole normal world-deps consumer of the additive builder; previously authorized propagation mechanics and tests remain bounded by `Exact production allowlist`, `Exact surfaces.rs list`, and `Exact test allowlist`. | No other request-builder consumer. |
+| `crates/shell/src/builtins/world_enable/runner/provision_deps.rs` | `execute_with_profile` is the sole provision-deps consumer of the additive builder; previously authorized propagation mechanics and tests remain bounded by `Exact production allowlist` and `Exact test allowlist`. | No other request-builder consumer. |
+| `crates/shell/src/builtins/world_deps/mod.rs`; `crates/shell/src/builtins/world_enable/runner.rs` | Only the already-authorized F3/F4 propagation/coherence mechanics and exact colocated tests recorded by `Shared context`, `Exact production allowlist`, and `Exact test allowlist`. | No readiness, environment-selection, or lifecycle owner. |
+
+All other existing callers of `ensure_world_service_ready` remain source-identical unless a future
+cross-document source-closure review proves a strictly mechanical signature adaptation unavoidable
+and names that exact callsite first. The current audit found no such adaptation necessary.
+`socket_activation.rs`, macOS/Windows adapters, world-service, service/install scripts, transport
+schemas, policy/capability code, receipt/supervisor/retained-worker owners, and all other lifecycle
+owners are frozen.
+
+### Mandatory F3/F4 entry and exit gates
+
+Entry requires clean F2 plus the preserved candidate as evidence only, fresh impact on every symbol
+to be edited, and proof that invalid authority fails before any readiness side effect. Exit requires
+the complete security/readiness test wall in `04`, exact two-consumer closure, no wildcard or parent
+environment forwarding, compatibility-caller equivalence, no non-Linux behavior change, and fresh
+review. Passing focused tests does not complete F; F5 and final F walls remain separate nodes.

@@ -1127,3 +1127,48 @@ finds no changed production execution flow. The sole production hunk is the auth
 F0b writer delegation with byte-identical output. Product and user-facing behavior do not change,
 and no seam is promoted. F0, F0a, F0b, and F0-HC are complete. F remains unstarted and the exact
 next packet is **A1.1d-5R2-2F — Authenticated world-deps and truthful doctor composition**.
+
+## A1.1d-5R2-2F readiness source closure
+
+The earlier F status at the historical F0 closeout is retained as history. Live closure now records
+F1/F2 complete, F3/F4 blocked and preserved, and F incomplete. The readiness correction adds no
+seam row and does not move lifecycle ownership.
+
+| Symbol or caller | Direct/transitive route and cfg reach | GitNexus impact | Required disposition | Ownership |
+|---|---|---|---|---|
+| `world_ops.rs::ensure_world_service_ready` | Linux owner; directly reached by ordinary PTY execution, ordinary non-PTY request construction, pending-diff request construction, persistent-session WebSocket setup, and Linux initialization through a function-pointer probe. | **HIGH**; three graph-visible direct callers and three affected process groups. Source closure adds the persistent-session and function-pointer callers that reverse indexing omitted. | EDIT compatibility wrapper/delegation only; preserve signature and behavior. | Existing Linux lifecycle compatibility owner. |
+| Private explicit-target extraction site in `ensure_world_service_ready` | Same Linux module and same probe/activation/stale/spawn/readiness/error flow. | Same **HIGH** owner boundary; no new process family. | ADD one private core or equivalent; no copied logic. | F may consume; ownership remains lifecycle. |
+| `execute_world_pty_over_ws` | Ordinary world PTY dispatch. | LOW, zero upstream impacts from the caller label. | NO EDIT; remains on compatibility wrapper. | Compatibility. |
+| `build_agent_client_and_request_impl` | Ordinary non-PTY request builder used by streaming and legacy world execution. | LOW, zero upstream impacts from the caller label. | NO EDIT; remains on compatibility wrapper. | Compatibility. |
+| `build_agent_client_and_pending_diff_request_impl` | Pending-diff, workspace, recovery, and retained request paths. | LOW, zero upstream impacts from the caller label. | NO EDIT; remains on compatibility wrapper. | Compatibility/retained lifecycle. |
+| `world_persistent_session::build_ws_and_start_session_frame` | Persistent-session start, reached from REPL and agents-command clients. | LOW, zero upstream impacts from the caller label. | NO EDIT; remains on compatibility wrapper. | Retained lifecycle. |
+| `init_linux_world` | `initialize_world` -> `init_linux_world_default` -> function-pointer injection of the owner. | LOW, zero upstream impacts from the caller label. | NO EDIT; function-pointer type and behavior remain unchanged. | Linux initialization lifecycle. |
+| `build_authenticated_world_deps_client_and_request` | Additive F-only builder; private Linux implementation and non-Linux fail-closed/static adapter. | LOW, zero upstream impacts. | EDIT builder only to validate first, call explicit readiness, and construct an exact environment. | F. |
+| `surfaces.rs::run_world_command_for_deps_at` | Normal current/global/workspace/runtime world-deps leaf. | LOW, zero upstream impacts. | EDIT only as the first exact builder consumer. | F. |
+| `provision_deps.rs::execute_with_profile` | World-enable dependency probe/install leaf. | LOW, zero upstream impacts. | EDIT only as the second exact builder consumer. | F. |
+
+Graph-visible processes were the existing
+`Build_agent_client_and_request_impl -> Resolved_socket_path`,
+`Execute_world_pty_over_ws -> Resolved_socket_path`, and
+`Build_agent_client_and_pending_diff_request_impl -> Resolved_socket_path` families, including
+their capability-connect and activation-mode subflows. The owner impact returned HIGH because it
+is shared lifecycle code; the correction is authorized only after that risk is recorded and only
+for mechanical extraction/delegation. It is not authority to edit an existing caller or admit
+R2-3/R2-4/R3 lifecycle work.
+
+### Readiness semantics closed over the owner
+
+| Existing behavior | Source-closed contract |
+|---|---|
+| Socket selection | Compatibility continues to resolve ambient `SUBSTRATE_WORLD_SOCKET` or `/run/substrate.sock`. F supplies `/run/substrate.sock` directly; the private core never resolves or replaces it. |
+| Capability probe | Unix socket connect, 150 ms read/write timeouts, `GET /v1/capabilities`, and current 200-response interpretation remain unchanged. |
+| Activation | Existing fixed service/socket-unit observation and activation-mode classification remain; retry is 100 ms through the existing 2,000 ms window. The explicit core may use mode, never the report's socket path. |
+| Stale socket | Remove only in existing Manual mode; preserve in Unknown; no new cleanup authority. |
+| Override | Existing compatibility socket-override no-spawn behavior and error remain. Ambient socket override cannot select or affect F's target. |
+| Binary and spawn | Compatibility keeps environment/PATH/relative discovery order. F uses only immutable `/usr/local/bin/substrate-world-service`; spawn ownership and null stdio remain in the owner. |
+| Readiness completion | Existing 50 ms polling through 1,000 ms and current error classification/text remain. |
+
+`socket_activation.rs`, service units, installers, world-service, transport types, and non-Linux
+adapters are inspected dependencies but are not editable F files. No callsite signature adaptation
+is necessary. If implementation cannot preserve these rows within `world_ops.rs`, stop as
+`ArchitecturalDecisionRequired`.
