@@ -40,6 +40,7 @@ pub struct CurrentNativeUnsupported {
     pub record_type: String,
     pub item_type: Option<String>,
     pub timestamp: Option<String>,
+    pub turn_id: Option<String>,
     pub payload: Value,
 }
 
@@ -115,7 +116,8 @@ impl CurrentNativeEventMessage {
             Self::UserMessage { turn_id, .. }
             | Self::TaskStarted { turn_id, .. }
             | Self::TaskComplete { turn_id, .. } => Some(turn_id),
-            Self::TokenCount | Self::Unsupported(_) => None,
+            Self::TokenCount => None,
+            Self::Unsupported(unsupported) => unsupported.turn_id.as_deref(),
         }
     }
 
@@ -185,7 +187,7 @@ impl CurrentNativeResponseItem {
             | Self::Reasoning { turn_id, .. }
             | Self::ToolCall { turn_id, .. }
             | Self::ToolOutput { turn_id, .. } => turn_id.as_deref(),
-            Self::Unsupported(_) => None,
+            Self::Unsupported(unsupported) => unsupported.turn_id.as_deref(),
         }
     }
 
@@ -238,10 +240,7 @@ impl CurrentNativeContentSegment {
             Self::Text { text, .. } => text.clone(),
             Self::Image { image_url, detail } => {
                 let mut object = Map::new();
-                object.insert(
-                    "type".to_string(),
-                    Value::String("input_image".to_string()),
-                );
+                object.insert("type".to_string(), Value::String("input_image".to_string()));
                 object.insert("image_url".to_string(), Value::String(image_url.clone()));
                 if let Some(detail) = detail {
                     object.insert("detail".to_string(), Value::String(detail.clone()));
@@ -250,10 +249,7 @@ impl CurrentNativeContentSegment {
             }
             Self::Audio { audio_url } => {
                 let mut object = Map::new();
-                object.insert(
-                    "type".to_string(),
-                    Value::String("input_audio".to_string()),
-                );
+                object.insert("type".to_string(), Value::String("input_audio".to_string()));
                 object.insert("audio_url".to_string(), Value::String(audio_url.clone()));
                 Value::Object(object).to_string()
             }
@@ -289,9 +285,15 @@ pub(crate) fn current_native_marker(line: &str) -> Result<Option<bool>, String> 
     }
 }
 
-pub(crate) fn parse_current_native_line(
-    line: &str,
-) -> Result<Option<CurrentNativeEvent>, String> {
+pub(crate) fn current_native_record_turn_id(line: &str) -> Option<String> {
+    let value: Value = serde_json::from_str(line).ok()?;
+    let object = value.as_object()?;
+    let record_type = object.get("type")?.as_str()?;
+    let payload = object.get("payload")?.as_object()?;
+    current_native_payload_turn_id(record_type, payload)
+}
+
+pub(crate) fn parse_current_native_line(line: &str) -> Result<Option<CurrentNativeEvent>, String> {
     if line.trim().is_empty() {
         return Ok(None);
     }
@@ -329,12 +331,16 @@ pub(crate) fn parse_current_native_line(
             &payload_object,
             timestamp,
         )?),
-        _ => CurrentNativeEvent::Unsupported(CurrentNativeUnsupported {
-            record_type,
-            item_type: None,
-            timestamp,
-            payload,
-        }),
+        _ => {
+            let turn_id = current_native_payload_turn_id(&record_type, &payload_object);
+            CurrentNativeEvent::Unsupported(CurrentNativeUnsupported {
+                record_type,
+                item_type: None,
+                timestamp,
+                turn_id,
+                payload,
+            })
+        }
     };
     Ok(Some(event))
 }
@@ -351,11 +357,7 @@ fn parse_session_meta(
             let object = value.as_object().ok_or_else(|| {
                 "failed to parse current-native Codex rollout JSONL: session_meta.payload.base_instructions must be an object".to_string()
             })?;
-            optional_string(
-                object,
-                "text",
-                "session_meta.payload.base_instructions",
-            )?
+            optional_string(object, "text", "session_meta.payload.base_instructions")?
         }
     };
     let child_origin = parse_child_origin(payload)?;
@@ -380,9 +382,7 @@ fn parse_child_origin(
     let source = source.as_object().ok_or_else(|| {
         "failed to parse current-native Codex rollout JSONL: session_meta.payload.source must be a string or object".to_string()
     })?;
-    let subagent = source
-        .get("subagent")
-        .or_else(|| source.get("sub_agent"));
+    let subagent = source.get("subagent").or_else(|| source.get("sub_agent"));
     let Some(subagent) = subagent else {
         return Ok(None);
     };
@@ -403,11 +403,9 @@ fn parse_child_origin(
         "parent_thread_id",
         "session_meta.payload.source.subagent.thread_spawn",
     )?;
-    if let Some(top_level_parent) = optional_string(
-        payload,
-        "parent_thread_id",
-        "session_meta.payload",
-    )? {
+    if let Some(top_level_parent) =
+        optional_string(payload, "parent_thread_id", "session_meta.payload")?
+    {
         if top_level_parent != parent_thread_id {
             return Err("failed to parse current-native Codex rollout JSONL: session_meta parent_thread_id conflicts with source.subagent.thread_spawn.parent_thread_id".to_string());
         }
@@ -441,11 +439,7 @@ fn parse_turn_context(
     Ok(CurrentNativeTurnContext {
         turn_id: required_string(object, "turn_id", "turn_context.payload")?,
         timestamp,
-        user_instructions: optional_string(
-            object,
-            "user_instructions",
-            "turn_context.payload",
-        )?,
+        user_instructions: optional_string(object, "user_instructions", "turn_context.payload")?,
         payload,
     })
 }
@@ -488,29 +482,19 @@ fn parse_event_message(
             turn_id: optional_turn,
             payload,
         }),
-        "collab_agent_spawn_begin" => {
-            Ok(CurrentNativeEventMessage::CollabAgentSpawnBegin {
-                timestamp,
-                turn_id: optional_turn,
-                call_id: required_string(object, "call_id", "event_msg.payload")?,
-                sender_thread_id: required_string(
-                    object,
-                    "sender_thread_id",
-                    "event_msg.payload",
-                )?,
-                prompt: required_string_allow_empty(object, "prompt", "event_msg.payload")?,
-                payload,
-            })
-        }
+        "collab_agent_spawn_begin" => Ok(CurrentNativeEventMessage::CollabAgentSpawnBegin {
+            timestamp,
+            turn_id: optional_turn,
+            call_id: required_string(object, "call_id", "event_msg.payload")?,
+            sender_thread_id: required_string(object, "sender_thread_id", "event_msg.payload")?,
+            prompt: required_string_allow_empty(object, "prompt", "event_msg.payload")?,
+            payload,
+        }),
         "collab_agent_spawn_end" => Ok(CurrentNativeEventMessage::CollabAgentSpawnEnd {
             timestamp,
             turn_id: optional_turn,
             call_id: required_string(object, "call_id", "event_msg.payload")?,
-            sender_thread_id: required_string(
-                object,
-                "sender_thread_id",
-                "event_msg.payload",
-            )?,
+            sender_thread_id: required_string(object, "sender_thread_id", "event_msg.payload")?,
             new_thread_id: optional_string(object, "new_thread_id", "event_msg.payload")?,
             payload,
         }),
@@ -518,11 +502,7 @@ fn parse_event_message(
             timestamp,
             turn_id: optional_turn,
             event_id: required_string(object, "event_id", "event_msg.payload")?,
-            agent_thread_id: required_string(
-                object,
-                "agent_thread_id",
-                "event_msg.payload",
-            )?,
+            agent_thread_id: required_string(object, "agent_thread_id", "event_msg.payload")?,
             activity_kind: required_string(object, "kind", "event_msg.payload")?,
             payload,
         }),
@@ -532,6 +512,7 @@ fn parse_event_message(
                 record_type: "event_msg".to_string(),
                 item_type: Some(kind),
                 timestamp,
+                turn_id: optional_turn,
                 payload,
             },
         )),
@@ -599,11 +580,7 @@ fn parse_response_item(
             turn_id,
             item_type: item_type.clone(),
             name: Some(required_string(object, "name", "response_item.payload")?),
-            call_id: Some(required_string(
-                object,
-                "call_id",
-                "response_item.payload",
-            )?),
+            call_id: Some(required_string(object, "call_id", "response_item.payload")?),
             input: required_string(object, "arguments", "response_item.payload")?,
         }),
         "custom_tool_call" => Ok(CurrentNativeResponseItem::ToolCall {
@@ -611,11 +588,7 @@ fn parse_response_item(
             turn_id,
             item_type: item_type.clone(),
             name: Some(required_string(object, "name", "response_item.payload")?),
-            call_id: Some(required_string(
-                object,
-                "call_id",
-                "response_item.payload",
-            )?),
+            call_id: Some(required_string(object, "call_id", "response_item.payload")?),
             input: required_string(object, "input", "response_item.payload")?,
         }),
         "web_search_call" | "tool_search_call" => Ok(CurrentNativeResponseItem::ToolCall {
@@ -635,11 +608,7 @@ fn parse_response_item(
                 turn_id,
                 item_type: item_type.clone(),
                 name: optional_string(object, "name", "response_item.payload")?,
-                call_id: Some(required_string(
-                    object,
-                    "call_id",
-                    "response_item.payload",
-                )?),
+                call_id: Some(required_string(object, "call_id", "response_item.payload")?),
                 output: parse_tool_output(object.get("output"))?,
             })
         }
@@ -656,10 +625,35 @@ fn parse_response_item(
                 record_type: "response_item".to_string(),
                 item_type: Some(item_type),
                 timestamp,
+                turn_id,
                 payload,
             },
         )),
     }
+}
+
+fn current_native_payload_turn_id(
+    record_type: &str,
+    payload: &Map<String, Value>,
+) -> Option<String> {
+    if record_type == "response_item" {
+        let metadata_turn = payload
+            .get("internal_chat_message_metadata_passthrough")
+            .and_then(Value::as_object)
+            .and_then(|metadata| metadata.get("turn_id"))
+            .and_then(Value::as_str)
+            .and_then(non_empty)
+            .map(ToOwned::to_owned);
+        if metadata_turn.is_some() {
+            return metadata_turn;
+        }
+    }
+
+    payload
+        .get("turn_id")
+        .and_then(Value::as_str)
+        .and_then(non_empty)
+        .map(ToOwned::to_owned)
 }
 
 fn response_item_turn_id(object: &Map<String, Value>) -> Result<Option<String>, String> {
@@ -791,9 +785,7 @@ fn required_string(
     context: &str,
 ) -> Result<String, String> {
     let value = object.get(field).ok_or_else(|| {
-        format!(
-            "failed to parse current-native Codex rollout JSONL: {context}.{field} is required"
-        )
+        format!("failed to parse current-native Codex rollout JSONL: {context}.{field} is required")
     })?;
     let value = value.as_str().ok_or_else(|| {
         format!(
@@ -814,9 +806,7 @@ fn required_string_allow_empty(
     context: &str,
 ) -> Result<String, String> {
     let value = object.get(field).ok_or_else(|| {
-        format!(
-            "failed to parse current-native Codex rollout JSONL: {context}.{field} is required"
-        )
+        format!("failed to parse current-native Codex rollout JSONL: {context}.{field} is required")
     })?;
     value.as_str().map(str::to_string).ok_or_else(|| {
         format!(
@@ -847,11 +837,12 @@ fn optional_string(
     Ok(Some(value.to_string()))
 }
 
-fn required_u32(
-    object: &Map<String, Value>,
-    field: &str,
-    context: &str,
-) -> Result<u32, String> {
+fn non_empty(value: &str) -> Option<&str> {
+    let value = value.trim();
+    (!value.is_empty()).then_some(value)
+}
+
+fn required_u32(object: &Map<String, Value>, field: &str, context: &str) -> Result<u32, String> {
     let value = object
         .get(field)
         .and_then(Value::as_u64)
@@ -861,8 +852,6 @@ fn required_u32(
             )
         })?;
     u32::try_from(value).map_err(|_| {
-        format!(
-            "failed to parse current-native Codex rollout JSONL: {context}.{field} exceeds u32"
-        )
+        format!("failed to parse current-native Codex rollout JSONL: {context}.{field} exceeds u32")
     })
 }

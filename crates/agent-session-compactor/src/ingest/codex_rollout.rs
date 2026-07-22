@@ -8,8 +8,8 @@ use serde_json::Value;
 
 use crate::discovery::DiscoveredSessionArtifact;
 use crate::ingest::current_native::{
-    current_native_marker, parse_current_native_line, CurrentNativeEvent,
-    CurrentNativeEventMessage, CurrentNativeResponseItem,
+    current_native_marker, current_native_record_turn_id, parse_current_native_line,
+    CurrentNativeEvent, CurrentNativeEventMessage, CurrentNativeResponseItem,
 };
 
 /// Exact source location of a rollout record used to derive linkage metadata.
@@ -77,10 +77,7 @@ pub enum IngestError {
         source: RolloutJsonlError,
     },
     #[error("unsupported rollout format in {path}: {reason}")]
-    UnsupportedFormat {
-        path: Utf8PathBuf,
-        reason: String,
-    },
+    UnsupportedFormat { path: Utf8PathBuf, reason: String },
 }
 
 /// Explicit parser boundary selected for one rollout stream.
@@ -118,6 +115,7 @@ pub struct RolloutParseFailure {
     pub source_file: Utf8PathBuf,
     pub line_number: usize,
     pub event_index: usize,
+    pub turn_id: Option<String>,
     pub error: String,
 }
 
@@ -239,10 +237,13 @@ pub fn extract_rollout_linkage_metadata(rollout: &IngestedRolloutFile) -> Rollou
                         ..
                     },
                 )) if sender_thread_id == parent_session_id => {
-                    let spawn_call = current_spawn_call_record(
+                    let Some(spawn_call) = current_spawn_call_record(
                         spawn_calls.get(call_id).map(Vec::as_slice),
                         record,
-                    );
+                        parent_session_id,
+                    ) else {
+                        continue;
+                    };
                     parent_spawn_results.push(ParentSpawnResult {
                         parent_session_id: parent_session_id.to_string(),
                         child_session_id: child_session_id.clone(),
@@ -256,34 +257,37 @@ pub fn extract_rollout_linkage_metadata(rollout: &IngestedRolloutFile) -> Rollou
         }
     }
 
-    let child_origin = rollout.records.iter().find_map(|record| match &record.event {
-        IngestedRolloutEvent::Legacy(RolloutEvent::SessionMeta(meta)) => {
-            let child_session_id = meta.payload.id.as_ref()?;
-            let source = meta.payload.source.as_deref()?;
-            let source: ChildOriginSource = serde_json::from_str(source).ok()?;
-            let origin = source.subagent.thread_spawn;
-            Some(ChildSessionOrigin {
-                child_session_id: child_session_id.clone(),
-                parent_session_id: origin.parent_thread_id,
-                depth: origin.depth,
-                agent_nickname: origin.agent_nickname,
-                agent_role: origin.agent_role,
-                provenance: row_provenance(record),
-            })
-        }
-        IngestedRolloutEvent::CurrentNative(CurrentNativeEvent::SessionMeta(meta)) => {
-            let origin = meta.child_origin.as_ref()?;
-            Some(ChildSessionOrigin {
-                child_session_id: meta.thread_id.clone(),
-                parent_session_id: origin.parent_thread_id.clone(),
-                depth: origin.depth,
-                agent_nickname: origin.agent_nickname.clone(),
-                agent_role: origin.agent_role.clone(),
-                provenance: row_provenance(record),
-            })
-        }
-        _ => None,
-    });
+    let child_origin = rollout
+        .records
+        .iter()
+        .find_map(|record| match &record.event {
+            IngestedRolloutEvent::Legacy(RolloutEvent::SessionMeta(meta)) => {
+                let child_session_id = meta.payload.id.as_ref()?;
+                let source = meta.payload.source.as_deref()?;
+                let source: ChildOriginSource = serde_json::from_str(source).ok()?;
+                let origin = source.subagent.thread_spawn;
+                Some(ChildSessionOrigin {
+                    child_session_id: child_session_id.clone(),
+                    parent_session_id: origin.parent_thread_id,
+                    depth: origin.depth,
+                    agent_nickname: origin.agent_nickname,
+                    agent_role: origin.agent_role,
+                    provenance: row_provenance(record),
+                })
+            }
+            IngestedRolloutEvent::CurrentNative(CurrentNativeEvent::SessionMeta(meta)) => {
+                let origin = meta.child_origin.as_ref()?;
+                Some(ChildSessionOrigin {
+                    child_session_id: meta.thread_id.clone(),
+                    parent_session_id: origin.parent_thread_id.clone(),
+                    depth: origin.depth,
+                    agent_nickname: origin.agent_nickname.clone(),
+                    agent_role: origin.agent_role.clone(),
+                    provenance: row_provenance(record),
+                })
+            }
+            _ => None,
+        });
 
     RolloutLinkageMetadata {
         parent_spawn_results,
@@ -294,20 +298,20 @@ pub fn extract_rollout_linkage_metadata(rollout: &IngestedRolloutFile) -> Rollou
 fn current_spawn_call_record<'a>(
     calls: Option<&[&'a IngestedRolloutRecord]>,
     result: &'a IngestedRolloutRecord,
-) -> &'a IngestedRolloutRecord {
-    calls
-        .and_then(|calls| {
-            calls.iter().copied().find(|record| {
-                matches!(
-                    &record.event,
-                    IngestedRolloutEvent::CurrentNative(CurrentNativeEvent::EventMessage(
-                        CurrentNativeEventMessage::CollabAgentSpawnBegin { .. }
-                    ))
-                )
-            })
-        })
-        .or_else(|| calls.and_then(|calls| calls.first().copied()))
-        .unwrap_or(result)
+    parent_session_id: &str,
+) -> Option<&'a IngestedRolloutRecord> {
+    calls?.iter().rev().copied().find(|record| {
+        record.event_index < result.event_index
+            && matches!(
+                &record.event,
+                IngestedRolloutEvent::CurrentNative(CurrentNativeEvent::EventMessage(
+                    CurrentNativeEventMessage::CollabAgentSpawnBegin {
+                        sender_thread_id,
+                        ..
+                    }
+                )) if sender_thread_id == parent_session_id
+            )
+    })
 }
 
 fn extract_spawn_result_child_id(output: &str) -> Option<String> {
@@ -376,24 +380,38 @@ pub fn ingest_rollout_file(path: &Utf8Path) -> Result<IngestedRolloutFile, Inges
     }
 }
 
-fn select_rollout_format(
-    path: &Utf8Path,
-    lines: &[String],
-) -> Result<RolloutFormat, IngestError> {
-    for line in lines {
-        match current_native_marker(line) {
-            Ok(Some(true)) => return Ok(RolloutFormat::CurrentNativeV2),
-            Ok(Some(false)) => return Ok(RolloutFormat::Legacy),
-            Ok(None) => {}
+fn select_rollout_format(path: &Utf8Path, lines: &[String]) -> Result<RolloutFormat, IngestError> {
+    let mut selected = None;
+    for (line_index, line) in lines.iter().enumerate() {
+        let candidate = match current_native_marker(line) {
+            Ok(Some(true)) => Some(RolloutFormat::CurrentNativeV2),
+            Ok(Some(false)) => Some(RolloutFormat::Legacy),
+            Ok(None) => None,
             Err(reason) => {
                 return Err(IngestError::UnsupportedFormat {
                     path: path.to_owned(),
-                    reason,
+                    reason: format!("line {}: {reason}", line_index + 1),
                 });
             }
+        };
+        let Some(candidate) = candidate else {
+            continue;
+        };
+        match selected {
+            Some(existing) if existing != candidate => {
+                return Err(IngestError::UnsupportedFormat {
+                    path: path.to_owned(),
+                    reason: format!(
+                        "conflicting rollout format markers at line {}: {existing:?} then {candidate:?}",
+                        line_index + 1
+                    ),
+                });
+            }
+            Some(_) => {}
+            None => selected = Some(candidate),
         }
     }
-    Ok(RolloutFormat::Legacy)
+    Ok(selected.unwrap_or(RolloutFormat::Legacy))
 }
 
 fn ingest_legacy_lines(
@@ -438,6 +456,7 @@ fn ingest_legacy_lines(
                     source_file: path.to_owned(),
                     line_number,
                     event_index,
+                    turn_id: None,
                     error: error.to_string(),
                 });
                 event_index += 1;
@@ -487,6 +506,7 @@ fn ingest_current_native_lines(
                     source_file: path.to_owned(),
                     line_number,
                     event_index,
+                    turn_id: current_native_record_turn_id(&line),
                     error,
                 });
                 event_index += 1;

@@ -92,15 +92,15 @@ pub fn normalize_rollout_file(rollout: &IngestedRolloutFile) -> Vec<CompactionRo
                         &mut user_message_state,
                     ));
                 }
-                IngestedRolloutEvent::CurrentNative(event) => rows.extend(
-                    normalize_current_native_event(
+                IngestedRolloutEvent::CurrentNative(event) => {
+                    rows.extend(normalize_current_native_event(
                         rollout,
                         record,
                         event,
                         &mut current_turn_id,
                         &mut user_message_state,
-                    ),
-                ),
+                    ))
+                }
             },
             NormalizationEntry::ParseFailure(failure) => {
                 rows.push(build_failure_row(rollout, failure, current_turn_id.clone()));
@@ -145,11 +145,7 @@ fn normalize_current_native_event(
             );
             user_message_state.observe_turn_context(&context.turn_id);
             let mut rows = Vec::new();
-            if let Some(text) = context
-                .user_instructions
-                .as_deref()
-                .and_then(non_empty)
-            {
+            if let Some(text) = context.user_instructions.as_deref().and_then(non_empty) {
                 rows.push(build_row(
                     rollout,
                     record,
@@ -176,11 +172,7 @@ fn normalize_current_native_event(
             rows
         }
         CurrentNativeEvent::EventMessage(message) => {
-            observe_current_turn(
-                current_turn_id,
-                user_message_state,
-                message.turn_id(),
-            );
+            observe_current_turn(current_turn_id, user_message_state, message.turn_id());
             normalize_current_event_message(
                 rollout,
                 record,
@@ -199,12 +191,19 @@ fn normalize_current_native_event(
                 user_message_state,
             )
         }
-        CurrentNativeEvent::Unsupported(unsupported) => vec![build_current_unsupported_row(
-            rollout,
-            record,
-            unsupported,
-            current_turn_id.clone(),
-        )],
+        CurrentNativeEvent::Unsupported(unsupported) => {
+            observe_current_turn(
+                current_turn_id,
+                user_message_state,
+                unsupported.turn_id.as_deref(),
+            );
+            vec![build_current_unsupported_row(
+                rollout,
+                record,
+                unsupported,
+                current_turn_id.clone(),
+            )]
+        }
     }
 }
 
@@ -415,9 +414,12 @@ fn normalize_current_event_message(
             serialize_current_record("event_msg", payload),
         )],
         CurrentNativeEventMessage::TokenCount => Vec::new(),
-        CurrentNativeEventMessage::Unsupported(unsupported) => vec![
-            build_current_unsupported_row(rollout, record, unsupported, turn_id),
-        ],
+        CurrentNativeEventMessage::Unsupported(unsupported) => vec![build_current_unsupported_row(
+            rollout,
+            record,
+            unsupported,
+            turn_id,
+        )],
     }
 }
 
@@ -437,10 +439,7 @@ fn normalize_current_response_item(
             ..
         } => {
             let text = render_current_content(content).or_else(|| {
-                encrypted_placeholder(
-                    "encrypted_message_content",
-                    encrypted_content.as_deref(),
-                )
+                encrypted_placeholder("encrypted_message_content", encrypted_content.as_deref())
             });
             let Some(text) = text else {
                 return Vec::new();
@@ -565,9 +564,12 @@ fn normalize_current_response_item(
             call_id.as_deref(),
             output,
         ),
-        CurrentNativeResponseItem::Unsupported(unsupported) => vec![
-            build_current_unsupported_row(rollout, record, unsupported, turn_id),
-        ],
+        CurrentNativeResponseItem::Unsupported(unsupported) => vec![build_current_unsupported_row(
+            rollout,
+            record,
+            unsupported,
+            turn_id,
+        )],
     }
 }
 
@@ -741,10 +743,7 @@ fn build_current_unsupported_row(
 fn serialize_current_record(record_type: &str, payload: &Value) -> String {
     let mut object = Map::new();
     object.insert("payload".to_string(), payload.clone());
-    object.insert(
-        "type".to_string(),
-        Value::String(record_type.to_string()),
-    );
+    object.insert("type".to_string(), Value::String(record_type.to_string()));
     Value::Object(object).to_string()
 }
 
@@ -1068,7 +1067,7 @@ fn build_failure_row(
         source_file: failure.source_file.clone(),
         source_kind: SourceKind::CodexRolloutJsonl,
         session_id: rollout.session_id.clone(),
-        turn_id,
+        turn_id: failure.turn_id.clone().or(turn_id),
         event_index: failure.event_index,
         line_number: failure.line_number,
         row_ordinal: 0,

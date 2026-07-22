@@ -3335,8 +3335,7 @@ fn real_session_live_coordinator_preserves_root_cursor_after_late_verified_child
 
     let persisted_state = read_persisted_state(&state_dir);
     assert_eq!(
-        persisted_state["progress"]["last_delivered_cursors"][root_session_id]["ordinal"]
-            .as_u64(),
+        persisted_state["progress"]["last_delivered_cursors"][root_session_id]["ordinal"].as_u64(),
         Some(root_cursor.ordinal as u64)
     );
     assert!(
