@@ -149,6 +149,24 @@ impl DoctorFixture {
     }
 
     fn write_world_deps_fixture(&self, value: Value) {
+        #[cfg(target_os = "linux")]
+        let value = {
+            let mut value = value;
+            let context = InstallBootstrapContextV1::new_unix(
+                self.home
+                    .join(".substrate")
+                    .to_str()
+                    .expect("UTF-8 doctor fixture prefix"),
+                "substrate-r2-test",
+                unsafe { libc::geteuid() },
+            )
+            .expect("valid doctor fixture install context");
+            let carrier = InstallBootstrapContextCarrierV1::from_context(context)
+                .expect("committed doctor fixture install context");
+            value["selected_host_prefix"] = Value::String(carrier.context.selected_host_prefix);
+            value["host_context_commitment"] = Value::String(carrier.host_context_commitment);
+            value
+        };
         fs::write(self.health_dir.join("world_deps.json"), value.to_string())
             .expect("write world deps fixture");
     }
@@ -515,10 +533,22 @@ managers:
         stdout.contains("World deps"),
         "doctor output should include world deps header: {stdout}"
     );
+    #[cfg(not(target_os = "linux"))]
     assert!(
         stdout.contains("Applied: missing/blocked (1): node (missing)"),
         "doctor output should summarize missing/blocked applied deps: {stdout}"
     );
+    #[cfg(target_os = "linux")]
+    {
+        assert!(
+            stdout.contains("world deps evidence incoherent"),
+            "Linux must reject fixture-only runtime health: {stdout}"
+        );
+        assert!(
+            !stdout.contains("node (missing)"),
+            "Linux must not promote fixture-only runtime state: {stdout}"
+        );
+    }
 }
 
 #[test]
@@ -1844,5 +1874,109 @@ fn shim_doctor_json_preserves_world_netfilter_failure_reason_details() {
             "world_netfilter_enable_present": false,
             "last_failure_reason": GUARD_MISSING_REASON
         })
+    );
+}
+
+#[cfg(target_os = "linux")]
+#[test]
+fn shim_doctor_surfaces_bounded_incoherent_world_deps_truth() {
+    let fixture = DoctorFixture::new(detected_manager_manifest());
+    fs::write(
+        fixture.health_dir.join("world_deps.json"),
+        json!({
+            "schema_version": 1,
+            "selected_host_prefix": "/ambient-b-private-path-marker",
+            "host_context_commitment": "tampered-commitment-marker",
+            "cwd": fixture.home(),
+            "inventory_packages": 0,
+            "inventory_bundles": 0,
+            "inventory_mode": "merged",
+            "builtins": "enabled",
+            "enabled": [],
+            "applied": []
+        })
+        .to_string(),
+    )
+    .expect("write mixed dependency evidence");
+
+    let json_output = fixture
+        .command()
+        .arg("--world")
+        .arg("shim")
+        .arg("doctor")
+        .arg("--json")
+        .output()
+        .expect("run shim doctor JSON with mixed dependency evidence");
+    assert!(json_output.status.success());
+    let report: Value = serde_json::from_slice(&json_output.stdout).expect("doctor JSON");
+    assert_authenticated_passive_world_snapshot(&report);
+    assert_eq!(report["world_deps"]["status"], json!("error"));
+    assert!(report["world_deps"].get("report").is_none());
+    assert_eq!(
+        report["world_deps"]["error"],
+        json!("world deps evidence incoherent")
+    );
+
+    let human_output = fixture
+        .command()
+        .arg("--world")
+        .arg("shim")
+        .arg("doctor")
+        .output()
+        .expect("run shim doctor human with mixed dependency evidence");
+    assert!(human_output.status.success());
+    let rendered = format!(
+        "{}{}{}{}",
+        String::from_utf8_lossy(&json_output.stdout),
+        String::from_utf8_lossy(&json_output.stderr),
+        String::from_utf8_lossy(&human_output.stdout),
+        String::from_utf8_lossy(&human_output.stderr)
+    );
+    assert!(rendered.contains("world deps evidence incoherent"));
+    assert!(!rendered.contains("ambient-b-private-path-marker"));
+    assert!(!rendered.contains("tampered-commitment-marker"));
+}
+
+#[cfg(target_os = "linux")]
+#[test]
+fn shim_doctor_no_fixture_uses_only_passive_child_and_unavailable_deps() {
+    let fixture = DoctorFixture::new(detected_manager_manifest());
+    fs::remove_file(fixture.health_dir.join("world_deps.json"))
+        .expect("remove compatibility-only dependency fixture");
+    let counter = compile_substrate_exec_counter_preload(fixture._temp.path());
+    let marker = fixture._temp.path().join("enabled-product-exec-count");
+    let product = fs::canonicalize(binary_path()).expect("canonical product test binary");
+    let preload = format!("{}:{}", counter.display(), fixture.passwd_preload.display());
+
+    let output = fixture
+        .command()
+        .env("LD_PRELOAD", preload)
+        .env("SUBSTRATE_TEST_COUNTED_EXEC", &product)
+        .env("SUBSTRATE_TEST_COUNTED_EXEC_MARKER", &marker)
+        .arg("--world")
+        .arg("shim")
+        .arg("doctor")
+        .arg("--json")
+        .output()
+        .expect("run no-fixture shim doctor");
+    assert!(
+        output.status.success(),
+        "no-fixture shim doctor failed: stdout={} stderr={}",
+        String::from_utf8_lossy(&output.stdout),
+        String::from_utf8_lossy(&output.stderr)
+    );
+
+    let report: Value = serde_json::from_slice(&output.stdout).expect("doctor JSON");
+    assert_authenticated_passive_world_snapshot(&report);
+    assert_eq!(report["world_deps"]["status"], json!("error"));
+    assert_eq!(report["world_deps"]["source"], json!("command"));
+    assert_eq!(
+        report["world_deps"]["report"]["applied_error"],
+        json!("passive runtime health evidence unavailable")
+    );
+    assert_eq!(
+        fs::read_to_string(&marker).expect("passive child exec marker"),
+        "1",
+        "enabled composition must spawn only the one authenticated passive child"
     );
 }

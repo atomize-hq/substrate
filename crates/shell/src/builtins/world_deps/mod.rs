@@ -166,8 +166,13 @@ pub(crate) struct WorldDepsProvisioningRequirementsV1 {
 }
 
 #[derive(Debug, serde::Serialize, serde::Deserialize, Clone)]
+#[cfg_attr(target_os = "linux", serde(deny_unknown_fields))]
 pub(crate) struct WorldDepsDoctorSnapshotV1 {
     pub schema_version: u32,
+    #[cfg(target_os = "linux")]
+    pub selected_host_prefix: String,
+    #[cfg(target_os = "linux")]
+    pub host_context_commitment: String,
     pub cwd: PathBuf,
     pub inventory_packages: usize,
     pub inventory_bundles: usize,
@@ -246,13 +251,25 @@ pub(crate) fn collect_doctor_snapshot_v1(
     }
     .to_string();
 
-    let applied = match surfaces::compute_current_applied_items_v1(
-        &view,
-        &enabled,
-        all,
-        #[cfg(target_os = "linux")]
-        &context,
-    ) {
+    #[cfg(target_os = "linux")]
+    let applied = {
+        let _ = all;
+        WorldDepsDoctorSnapshotV1 {
+            schema_version: 1,
+            selected_host_prefix: install_context.context.selected_host_prefix.clone(),
+            host_context_commitment: install_context.host_context_commitment.clone(),
+            cwd: cwd.to_path_buf(),
+            inventory_packages: view.packages.len(),
+            inventory_bundles: view.bundles.len(),
+            inventory_mode,
+            builtins,
+            enabled,
+            applied: Vec::new(),
+            applied_error: Some("passive runtime health evidence unavailable".to_string()),
+        }
+    };
+    #[cfg(not(target_os = "linux"))]
+    let applied = match surfaces::compute_current_applied_items_v1(&view, &enabled, all) {
         Ok(items) => WorldDepsDoctorSnapshotV1 {
             schema_version: 1,
             cwd: cwd.to_path_buf(),
@@ -574,6 +591,19 @@ mod tests {
         assert_eq!(snapshot.inventory_bundles, 0);
         assert_eq!(snapshot.inventory_mode, "merged");
         assert_eq!(snapshot.builtins, "disabled");
+        assert!(snapshot.applied.is_empty());
+        assert_eq!(
+            snapshot.applied_error.as_deref(),
+            Some("passive runtime health evidence unavailable")
+        );
+        assert_eq!(
+            snapshot.selected_host_prefix,
+            carrier.context.selected_host_prefix
+        );
+        assert_eq!(
+            snapshot.host_context_commitment,
+            carrier.host_context_commitment
+        );
         assert_eq!(snapshot_tree(&selected_a), selected_before);
         assert_eq!(snapshot_tree(&ambient_b), ambient_before);
     }

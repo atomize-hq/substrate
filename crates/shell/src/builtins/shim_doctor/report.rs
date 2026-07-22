@@ -785,6 +785,226 @@ fn gather_world_doctor_snapshot(
     }
 }
 
+#[cfg(target_os = "linux")]
+fn gather_world_deps_section(
+    cli_no_world: bool,
+    cli_force_world: bool,
+    install_context: &InstallBootstrapContextCarrierV1,
+) -> WorldDepsDoctorSection {
+    // Keep the frozen non-Linux compatibility loader linked without using its
+    // lossy Value path for authenticated Linux dependency evidence.
+    let _non_linux_compatibility_loader = try_load_health_fixture;
+    if cli_no_world && !cli_force_world {
+        return disabled_world_deps_section();
+    }
+
+    let cwd = match env::current_dir() {
+        Ok(cwd) => cwd,
+        Err(_) => {
+            return WorldDepsDoctorSection {
+                status: WorldDepsDoctorStatus::Error,
+                report: None,
+                error: Some("world deps evidence unavailable".to_string()),
+                source: Some("command".to_string()),
+            };
+        }
+    };
+
+    let fixture_path = match health_fixture_path("world_deps.json", install_context) {
+        Ok(path) => path,
+        Err(_) => {
+            return WorldDepsDoctorSection {
+                status: WorldDepsDoctorStatus::Error,
+                report: None,
+                error: Some("world deps evidence unavailable".to_string()),
+                source: Some("fixture".to_string()),
+            };
+        }
+    };
+    if let Some(path) = fixture_path {
+        let selected_root = match fs::canonicalize(&install_context.context.selected_host_prefix) {
+            Ok(path) => path,
+            Err(_) => {
+                return WorldDepsDoctorSection {
+                    status: WorldDepsDoctorStatus::Error,
+                    report: None,
+                    error: Some("world deps evidence unavailable".to_string()),
+                    source: Some("fixture".to_string()),
+                };
+            }
+        };
+        let expected_path = selected_root.join("health/world_deps.json");
+        let canonical_path = match fs::canonicalize(&path) {
+            Ok(path) if path == expected_path => path,
+            _ => {
+                return WorldDepsDoctorSection {
+                    status: WorldDepsDoctorStatus::Error,
+                    report: None,
+                    error: Some("world deps evidence incoherent".to_string()),
+                    source: Some("fixture".to_string()),
+                };
+            }
+        };
+        let raw = match fs::read(canonical_path) {
+            Ok(raw) => raw,
+            Err(_) => {
+                return WorldDepsDoctorSection {
+                    status: WorldDepsDoctorStatus::Error,
+                    report: None,
+                    error: Some("world deps evidence unavailable".to_string()),
+                    source: Some("fixture".to_string()),
+                };
+            }
+        };
+        let mut deserializer = serde_json::Deserializer::from_slice(&raw);
+        let report = WorldDepsDoctorSnapshotV1::deserialize(&mut deserializer)
+            .and_then(|report| deserializer.end().map(|()| report));
+        let Ok(mut report) = report else {
+            return WorldDepsDoctorSection {
+                status: WorldDepsDoctorStatus::Error,
+                report: None,
+                error: Some("invalid world deps fixture: incoherent evidence".to_string()),
+                source: Some("fixture".to_string()),
+            };
+        };
+        let nested_shape_is_exact = serde_json::from_slice::<Value>(&raw)
+            .ok()
+            .and_then(|value| value.get("applied").and_then(Value::as_array).cloned())
+            .is_some_and(|items| {
+                items.iter().all(|item| {
+                    item.as_object().is_some_and(|object| {
+                        object.keys().all(|key| {
+                            matches!(
+                                key.as_str(),
+                                "kind"
+                                    | "name"
+                                    | "enabled"
+                                    | "world"
+                                    | "remediation"
+                                    | "runnable"
+                                    | "method"
+                                    | "entrypoints"
+                                    | "platforms"
+                                    | "description"
+                            )
+                        })
+                    })
+                })
+            });
+        if !nested_shape_is_exact {
+            return WorldDepsDoctorSection {
+                status: WorldDepsDoctorStatus::Error,
+                report: None,
+                error: Some("invalid world deps fixture: incoherent evidence".to_string()),
+                source: Some("fixture".to_string()),
+            };
+        }
+        if let Err(classification) =
+            status_for_world_deps_report(&mut report, &cwd, install_context, true)
+        {
+            return WorldDepsDoctorSection {
+                status: WorldDepsDoctorStatus::Error,
+                report: None,
+                error: Some(format!("world deps evidence {classification}")),
+                source: Some("fixture".to_string()),
+            };
+        }
+        return match world_deps::collect_doctor_snapshot_v1(&cwd, false, install_context) {
+            Ok(mut canonical) => {
+                match status_for_world_deps_report(&mut canonical, &cwd, install_context, false) {
+                    Ok(status) => WorldDepsDoctorSection {
+                        status,
+                        report: Some(canonical),
+                        error: None,
+                        source: Some("fixture".to_string()),
+                    },
+                    Err(classification) => WorldDepsDoctorSection {
+                        status: WorldDepsDoctorStatus::Error,
+                        report: None,
+                        error: Some(format!("world deps evidence {classification}")),
+                        source: Some("fixture".to_string()),
+                    },
+                }
+            }
+            Err(_) => WorldDepsDoctorSection {
+                status: WorldDepsDoctorStatus::Error,
+                report: None,
+                error: Some("world deps evidence unavailable".to_string()),
+                source: Some("fixture".to_string()),
+            },
+        };
+    }
+
+    match world_deps::collect_doctor_snapshot_v1(&cwd, false, install_context) {
+        Ok(mut report) => {
+            match status_for_world_deps_report(&mut report, &cwd, install_context, false) {
+                Ok(status) => WorldDepsDoctorSection {
+                    status,
+                    report: Some(report),
+                    error: None,
+                    source: Some("command".to_string()),
+                },
+                Err(classification) => WorldDepsDoctorSection {
+                    status: WorldDepsDoctorStatus::Error,
+                    report: None,
+                    error: Some(format!("world deps evidence {classification}")),
+                    source: Some("command".to_string()),
+                },
+            }
+        }
+        Err(_) => WorldDepsDoctorSection {
+            status: WorldDepsDoctorStatus::Error,
+            report: None,
+            error: Some("world deps evidence unavailable".to_string()),
+            source: Some("command".to_string()),
+        },
+    }
+}
+
+#[cfg(target_os = "linux")]
+fn status_for_world_deps_report(
+    report: &mut WorldDepsDoctorSnapshotV1,
+    expected_cwd: &Path,
+    install_context: &InstallBootstrapContextCarrierV1,
+    fixture_evidence: bool,
+) -> std::result::Result<WorldDepsDoctorStatus, &'static str> {
+    let fixture_claims_runtime_evidence =
+        fixture_evidence && (!report.enabled.is_empty() || !report.applied.is_empty());
+    if report.schema_version != 1
+        || report.selected_host_prefix != install_context.context.selected_host_prefix
+        || report.host_context_commitment != install_context.host_context_commitment
+        || report.cwd != expected_cwd
+        || !matches!(report.inventory_mode.as_str(), "merged" | "workspace_only")
+        || !matches!(report.builtins.as_str(), "enabled" | "disabled")
+        || report.enabled.iter().enumerate().any(|(index, name)| {
+            name.is_empty() || report.enabled[..index].iter().any(|prior| prior == name)
+        })
+        || report.applied.iter().enumerate().any(|(index, item)| {
+            !matches!(item.kind.as_str(), "package" | "bundle")
+                || item.name.is_empty()
+                || item.enabled.is_none()
+                || item
+                    .world
+                    .as_deref()
+                    .is_some_and(|world| !matches!(world, "present" | "missing" | "blocked"))
+                || report.applied[..index]
+                    .iter()
+                    .any(|prior| prior.kind == item.kind && prior.name == item.name)
+        })
+    {
+        return Err("incoherent");
+    }
+    if fixture_claims_runtime_evidence {
+        return Err("incoherent");
+    }
+    if report.applied_error.is_some() || report.applied.is_empty() {
+        report.applied_error = Some("passive runtime health evidence unavailable".to_string());
+        return Ok(WorldDepsDoctorStatus::Error);
+    }
+    Ok(WorldDepsDoctorStatus::Ok)
+}
+
+#[cfg(not(target_os = "linux"))]
 fn gather_world_deps_section(
     cli_no_world: bool,
     cli_force_world: bool,
@@ -829,7 +1049,7 @@ fn gather_world_deps_section(
         Ok(None) => {}
     }
 
-    let cwd = std::env::current_dir().unwrap_or_else(|_| std::path::PathBuf::from("."));
+    let cwd = env::current_dir().unwrap_or_else(|_| PathBuf::from("."));
     match world_deps::collect_doctor_snapshot_v1(
         &cwd,
         false,
@@ -851,6 +1071,7 @@ fn gather_world_deps_section(
     }
 }
 
+#[cfg(not(target_os = "linux"))]
 fn status_for_world_deps_report(report: &WorldDepsDoctorSnapshotV1) -> WorldDepsDoctorStatus {
     if report.applied_error.is_some() {
         WorldDepsDoctorStatus::Error
@@ -1219,6 +1440,211 @@ mod tests {
         assert_eq!(snapshot.inventory_packages, 1);
         assert_eq!(snapshot.inventory_bundles, 0);
         assert_eq!(snapshot.builtins, "disabled");
+    }
+
+    #[cfg(target_os = "linux")]
+    #[test]
+    #[serial]
+    fn world_deps_fixture_cannot_establish_runtime_health_or_cross_a() {
+        let _authority_env = crate::execution::AuthorityEnvTestGuard::preserve();
+        let (_, account_home) = current_unix_principal_and_home().expect("current Unix home");
+        let temp = Builder::new()
+            .prefix("substrate-f5-world-deps-")
+            .tempdir_in(account_home)
+            .expect("secure F5 dependency fixture");
+        let selected_a = prepare_route_d_prefix(temp.path(), "selected-a", &[]);
+        let health = selected_a.join("health");
+        fs::create_dir(&health).expect("create selected health fixture directory");
+        let carrier = route_d_carrier(&selected_a);
+        let _state = ProcessStateGuard::set(temp.path(), &[]);
+
+        let valid = serde_json::json!({
+            "schema_version": 1,
+            "selected_host_prefix": carrier.context.selected_host_prefix,
+            "host_context_commitment": carrier.host_context_commitment,
+            "cwd": temp.path(),
+            "inventory_packages": 777,
+            "inventory_bundles": 0,
+            "inventory_mode": "merged",
+            "builtins": "disabled",
+            "enabled": [],
+            "applied": []
+        });
+        fs::write(health.join("world_deps.json"), valid.to_string())
+            .expect("write complete exact-A dependency evidence");
+
+        let section = gather_world_deps_section(false, true, &carrier);
+        assert_eq!(section.status, WorldDepsDoctorStatus::Error);
+        assert_eq!(section.source.as_deref(), Some("fixture"));
+        assert!(section.error.is_none());
+        let report = section
+            .report
+            .expect("bounded exact-A compatibility report");
+        assert_eq!(
+            report.selected_host_prefix,
+            carrier.context.selected_host_prefix
+        );
+        assert_eq!(
+            report.host_context_commitment,
+            carrier.host_context_commitment
+        );
+        assert_eq!(
+            report.inventory_packages, 0,
+            "fixture inventory claims must not become production truth"
+        );
+        assert_eq!(
+            report.applied_error.as_deref(),
+            Some("passive runtime health evidence unavailable")
+        );
+
+        let mut invalid = Vec::new();
+        let mut missing_identity = valid.clone();
+        missing_identity
+            .as_object_mut()
+            .expect("dependency object")
+            .remove("host_context_commitment");
+        invalid.push(missing_identity.to_string());
+
+        let mut mixed_identity = valid.clone();
+        mixed_identity["selected_host_prefix"] = serde_json::json!("/ambient-b");
+        invalid.push(mixed_identity.to_string());
+
+        let mut mismatched_commitment = valid.clone();
+        mismatched_commitment["host_context_commitment"] = serde_json::json!("tampered-commitment");
+        invalid.push(mismatched_commitment.to_string());
+
+        let mut stale_scope = valid.clone();
+        stale_scope["cwd"] = serde_json::json!(selected_a);
+        invalid.push(stale_scope.to_string());
+
+        let mut unknown_secret = valid.clone();
+        unknown_secret["provider_token"] = serde_json::json!("f5-provider-token-must-not-leak");
+        invalid.push(unknown_secret.to_string());
+
+        let mut partial = valid.clone();
+        partial["enabled"] = serde_json::json!(["partial-marker"]);
+        partial["applied"] = serde_json::json!([{
+            "kind": "package",
+            "name": "partial-marker",
+            "enabled": true
+        }]);
+        invalid.push(partial.to_string());
+
+        let mut nested_unknown = valid.clone();
+        nested_unknown["enabled"] = serde_json::json!(["nested-marker"]);
+        nested_unknown["applied"] = serde_json::json!([{
+            "kind": "package",
+            "name": "nested-marker",
+            "enabled": true,
+            "world": "present",
+            "provider_token": "nested-provider-token-must-not-leak"
+        }]);
+        invalid.push(nested_unknown.to_string());
+
+        let mut known_secret = valid.clone();
+        known_secret["enabled"] = serde_json::json!(["known-secret-marker"]);
+        known_secret["applied"] = serde_json::json!([{
+            "kind": "package",
+            "name": "known-secret-marker",
+            "enabled": true,
+            "world": "present",
+            "description": "prompt-request-carrier-preimage-must-not-leak",
+            "entrypoints": ["private-host-path-must-not-leak"],
+            "platforms": ["fixture-only-secret-must-not-leak"]
+        }]);
+        invalid.push(known_secret.to_string());
+
+        invalid.push(valid.to_string().replacen(
+            "\"schema_version\":1",
+            "\"schema_version\":1,\"schema_version\":1",
+            1,
+        ));
+
+        for raw in invalid {
+            fs::write(health.join("world_deps.json"), raw)
+                .expect("write rejected dependency evidence");
+            let rejected = gather_world_deps_section(false, true, &carrier);
+            assert_eq!(rejected.status, WorldDepsDoctorStatus::Error);
+            assert!(rejected.report.is_none());
+            assert_eq!(rejected.source.as_deref(), Some("fixture"));
+            let rendered = serde_json::to_string(&rejected).expect("serialize bounded rejection");
+            for marker in [
+                "ambient-b",
+                "tampered-commitment",
+                "f5-provider-token-must-not-leak",
+                "partial-marker",
+                "nested-marker",
+                "nested-provider-token-must-not-leak",
+                "known-secret-marker",
+                "prompt-request-carrier-preimage-must-not-leak",
+                "private-host-path-must-not-leak",
+                "fixture-only-secret-must-not-leak",
+            ] {
+                assert!(!rendered.contains(marker), "rejection leaked {marker}");
+            }
+        }
+
+        let ambient_b = temp.path().join("ambient-b-world-deps.json");
+        let mut forged = valid;
+        forged["provider_token"] = serde_json::json!("symlinked-b-secret-must-not-leak");
+        fs::write(&ambient_b, forged.to_string()).expect("write forged B dependency evidence");
+        fs::remove_file(health.join("world_deps.json")).expect("remove selected fixture");
+        std::os::unix::fs::symlink(&ambient_b, health.join("world_deps.json"))
+            .expect("link selected fixture to B");
+        let rejected = gather_world_deps_section(false, true, &carrier);
+        assert_eq!(rejected.status, WorldDepsDoctorStatus::Error);
+        assert!(rejected.report.is_none());
+        let rendered = serde_json::to_string(&rejected).expect("serialize symlink rejection");
+        assert!(!rendered.contains("symlinked-b-secret-must-not-leak"));
+    }
+
+    #[cfg(target_os = "linux")]
+    #[test]
+    #[serial]
+    fn world_deps_section_drops_unavailable_application_payloads() {
+        let _authority_env = crate::execution::AuthorityEnvTestGuard::preserve();
+        let (_, account_home) = current_unix_principal_and_home().expect("current Unix home");
+        let temp = Builder::new()
+            .prefix("substrate-f5-world-deps-unavailable-")
+            .tempdir_in(account_home)
+            .expect("secure F5 unavailable fixture");
+        let selected_a = prepare_route_d_prefix(temp.path(), "selected-a", &[]);
+        let health = selected_a.join("health");
+        fs::create_dir(&health).expect("create selected health fixture directory");
+        let carrier = route_d_carrier(&selected_a);
+        let _state = ProcessStateGuard::set(temp.path(), &[]);
+        fs::write(
+            health.join("world_deps.json"),
+            serde_json::json!({
+                "schema_version": 1,
+                "selected_host_prefix": carrier.context.selected_host_prefix,
+                "host_context_commitment": carrier.host_context_commitment,
+                "cwd": temp.path(),
+                "inventory_packages": 0,
+                "inventory_bundles": 0,
+                "inventory_mode": "merged",
+                "builtins": "disabled",
+                "enabled": [],
+                "applied": [],
+                "applied_error": "credential-marker-and-private-path-must-not-leak"
+            })
+            .to_string(),
+        )
+        .expect("write unavailable dependency fixture");
+
+        let section = gather_world_deps_section(false, true, &carrier);
+        assert_eq!(section.status, WorldDepsDoctorStatus::Error);
+        assert!(section.error.is_none());
+        assert_eq!(
+            section
+                .report
+                .as_ref()
+                .and_then(|report| report.applied_error.as_deref()),
+            Some("passive runtime health evidence unavailable")
+        );
+        let rendered = serde_json::to_string(&section).expect("serialize bounded unavailable");
+        assert!(!rendered.contains("credential-marker"));
+        assert!(!rendered.contains("private-path"));
     }
 
     #[cfg(target_os = "linux")]
