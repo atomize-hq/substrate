@@ -6,14 +6,14 @@
     "transport": "chat_attachment"
   },
   "repo_review_destination": {
-    "conversation_url": "https://chatgpt.com/c/6a602dc7-f82c-83ea-9e40-532c194758aa",
-    "display_name": "SFR P1 independent review",
+    "conversation_url": "https://chatgpt.com/c/6a60bfee-b480-83ea-85c8-2c99fb72beb5",
+    "display_name": "SFR P1 fresh independent review",
     "transport": "chat_attachment"
   },
   "repo_bundle": {
     "enabled": true,
     "base_ref": "540213c84ab66cf1eacc58fbdc73281894b19095",
-    "head_ref": "2b7174b9fa7104b6a1601b524c01ce2c93b52f21",
+    "head_ref": "46dcff3866f5e061f0dbf8ccd6ea2fba73d2affc",
     "supporting_include": [],
     "exclude": [
       "docs/guidance/**"
