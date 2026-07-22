@@ -435,15 +435,16 @@ cleanup, or lifecycle work is imported. GitNexus raw counts remain evidence, whi
 fingerprints, hunk map, complete manual under-resolved Spawn closure, and CLEAN reviews are the
 semantic containment boundary.
 
-### Route C authorization checkpoint
+### Historical Route C authorization checkpoint
 
 Route B is preserved exactly and remains review-clean at
 `6cee990f0370013c8b05a5495301db7aea642cd5`, ordinary/binary patch SHA-256
 `28e6b9da35f96b5f93c49369cbde0eda77e9a145b54f9c412bae8e5a83871674`, with its reviewed
-six-file semantics unchanged. The seven unpushed runtime commits from published baseline
-`dab71d816f8e3a51d841c2293b646463e2d28cfc` are replay inputs only; the docs correction lands on
-that published baseline first, and each runtime commit must replay with identical ordinary/binary
-patch and file scope before Route C proof resumes.
+six-file semantics unchanged. At that checkpoint, the seven unpushed runtime commits from published
+baseline `dab71d816f8e3a51d841c2293b646463e2d28cfc` were replay inputs only: the docs correction had
+to land on that published baseline first, and each runtime commit had to replay with identical
+ordinary/binary patch and file scope before Route C proof resumed. That historical replay completed
+and is not renewed-closeout authority.
 
 The preserved Route C candidate is commit `41b82327e23798719ed9a0b4cae1f557fb593670`, parented by
 the exact Route B tree, with canonical full-index binary SHA-256
@@ -481,11 +482,12 @@ unpublished until complete R2-2 closeout authorizes publication.
 
 ### Historical Route D docs-first source-closure correction
 
-Route D starts from replayed Route C commit `fe288d233b5a198e19c2afba857d02e982ef6e1b`, tree
-`1703a0e0f57c8c994a3fd59f276c0f1a28dfbb50`. Routes A, B, and C are frozen. The eight unpushed
-runtime commits above published docs commit `f2131f13424906a167f58795f8eb6175cc384f14` are replay
-inputs only if this correction publishes first; every per-commit and aggregate ordinary/full-index
-binary patch identity and file manifest must remain exact after replay.
+Route D started from replayed Route C commit `fe288d233b5a198e19c2afba857d02e982ef6e1b`, tree
+`1703a0e0f57c8c994a3fd59f276c0f1a28dfbb50`. Routes A, B, and C were frozen. The eight then-unpushed
+runtime commits above published docs commit `f2131f13424906a167f58795f8eb6175cc384f14` were replay
+inputs only after that correction published first; their per-commit and aggregate ordinary/full-
+index binary patch identities and file manifests remained exact. That Route D replay completed and
+is packet-scoped historical evidence, not renewed-closeout authority.
 
 The read-only Route D audit found two ambient pre-carrier branches in the existing
 `crates/shell/src/builtins/shim_doctor/report.rs` family. `try_load_health_fixture` and
@@ -721,10 +723,9 @@ and user behavior are unaffected.
 At this authorization checkpoint, the exact combined harness candidate was preserved and
 unrestored. It has since passed identity revalidation, corrected differential proof, fresh
 containment review, canonical closeout, and runtime preservation, recording the deterministic
-comparison baseline. R2-2F is now the exact next packet; the renewed R2-2 integration closeout
-remains after F.
-R2-3, R2-4, and
-R3 remain unstarted; R2-2 remains incomplete; no seam is promoted.
+comparison baseline. At that historical checkpoint R2-2F was the next packet and renewed R2-2
+integration closeout remained after F; the completed-F ledger below supersedes that status. R2-3,
+R2-4, and R3 remained unstarted; R2-2 remained incomplete; no seam was promoted.
 
 ### A1.1d-5R2-2F0a — SUBSTRATE_HOME test isolation
 
@@ -857,9 +858,10 @@ one stable inherited failure-name/signature set and no unexplained count varianc
 lowered, erased, or substituted for the deterministic F baseline.
 
 `TestIsolationDefectConfirmed` remains the historical classification. The exact combined candidate
-has since passed restoration and identity revalidation, corrected differential proof, fresh
-containment review, canonical closeout, and runtime preservation. F, renewed R2-2 closeout, R2-3,
-R2-4, and R3 remain unstarted, and no seam is promoted.
+later passed restoration and identity revalidation, corrected differential proof, fresh containment
+review, canonical closeout, and runtime preservation. At that historical F0a checkpoint F and the
+later nodes remained unstarted and no seam was promoted; the completed-F ledger below supersedes
+that packet status.
 
 ### A1.1d-5R2-2F0b — deterministic renderer-output test isolation
 
@@ -979,9 +981,10 @@ execution, user-visible behavior, world, policy, credential, secure-FD, gateway,
 supervisor, retained-worker, placement, caging, lifecycle, or capability semantic and promotes no
 seam. F0/F0a/F0b/F0-HC are complete: the preserved candidate was restored and identity-checked,
 the corrected transition audit and fresh containment review are CLEAN, and canonical closeout and
-runtime preservation are complete. F, renewed R2-2 closeout, R2-3, R2-4, and R3 remain unstarted.
-The binding sequence is Routes A–E → F0/F0a/F0b/F0-HC complete → F → renewed R2-2 integration
-closeout → R2-3 → R2-4 → R3.
+runtime preservation are complete. At that historical F0b checkpoint F and the later nodes remained
+unstarted. The binding sequence was Routes A–E → F0/F0a/F0b/F0-HC complete → F → renewed R2-2
+integration closeout → R2-3 → R2-4 → R3. The completed-F ledger below supersedes that packet
+status.
 
 For the Route A successor clause of `R2-RUNTIME-01`, the authorized Unix-only import cfg set also
 includes the policy test module's sole `tempfile::TempDir` import; no other import or module gate is
@@ -1014,8 +1017,8 @@ R2-0 cross-document checkpoint rules are: inventory counts and owner/packet colu
 every R2 packet has an exact production/test allowlist; R2-4 has no production allowlist; every R3
 action above stays exclusive to R3; host and Lima/WSL paths/principals are never equated;
 `InstallBootstrapContextV1` commitment framing is canonical and unambiguous; and the serial graph is
-acyclic. The exact next packet after a clean R2-0 commit is **A1.1d-5R2-1 — Host context
-construction and Unix dev propagation**.
+acyclic. At that historical R2-0 checkpoint, the next packet after a clean R2-0 commit was
+**A1.1d-5R2-1 — Host context construction and Unix dev propagation**.
 
 **Frozen planning validation record:** the inventory contains exactly 118 unique, contiguous rows
 and dispositions: 19 owned by R2-1, 41 by R2-2, 35 by R2-3, one by R2-4, and 22 by R3. Each row
@@ -1284,9 +1287,9 @@ A1.1d, A1, the B1/B2.1 joint closeout, and B3.1 remain open; no seam is promoted
 
 At R2-1 closeout, the historical next packet was **A1.1d-5R2-2 — Unix release, sudo, Linux service,
 and runtime propagation**. Routes A–D have since become individually review-clean, their integration
-closeout failed source closure, and R2-2E has since become review-clean. F0/F0a/F0b/F0-HC are now
-review-clean, canonically closed out, and preserved. R2-2F is the live exact next packet. After F and the renewed
-closeout, rerun the complete Linux
+closeout failed source closure, and R2-2E has since become review-clean. F0/F0a/F0b/F0-HC were then
+review-clean, canonically closed out, and preserved. At that historical checkpoint R2-2F was the
+next packet. After F and the renewed closeout, the plan then required the complete Linux
 regression and normal product lifecycle smoke without outer overrides. That proof can unblock
 A1.1d Linux closeout and the Linux
 product-smoke portion of the B1/B2.1 joint closeout. Native macOS proof remains separately required
@@ -1928,9 +1931,10 @@ B1 receipt core recovered/review-clean: **yes**. B2.1 supervisor core recovered/
 next architectural packet remains the B1/B2.1 joint production integration closeout. At the
 B1/B2.1-0 closeout, the repository's exact next packet was A1.1d-5R2-1 — Host context construction
 and Unix dev propagation; after review-clean R2-2 Routes A–E, the failed integration closeout, and
-the completed exact harness closeout, the live exact next packet is
-**A1.1d-5R2-2F — Authenticated world-deps and truthful doctor composition**, followed by renewed R2-2 integration
-closeout, R2-3, R2-4, and R3. Only the joint closeout's Linux
+the completed exact harness closeout, the next packet at that historical checkpoint was
+**A1.1d-5R2-2F — Authenticated world-deps and truthful doctor composition**, followed by renewed R2-2
+integration closeout, R2-3, R2-4, and R3. The completed-F ledger below supersedes that next-task
+status. Only the joint closeout's Linux
 product-smoke portion waits for those remediations and their required smoke, and its receipt and
 supervisor semantics are not reopened.
 
@@ -2258,8 +2262,9 @@ wall frozen in `03` and `04` without completing harness closeout.
 
 The environment-inventory correction itself performed no runtime edit. The exact combined
 candidate has since been restored, identity-checked, review-cleaned, canonically closed out, and
-preserved. F remains unstarted and is the exact next packet, before renewed R2-2 integration
-closeout, R2-3, R2-4, and R3.
+preserved. F remained unstarted and was the next packet at that historical checkpoint, before
+renewed R2-2 integration closeout, R2-3, R2-4, and R3. The completed-F ledger below supersedes that
+next-task status.
 
 ## A1.1d-5R2-2F0 historical parallel artifact recovery and authority correction
 
@@ -2413,8 +2418,9 @@ The binding sequence is:
 `Routes A–E` → `F0/F0a/F0b/F0-HC complete` → `F` →
 `renewed R2-2 closeout` → `R2-3` → `R2-4` → `R3`.
 
-F is unstarted. The exact next packet is **A1.1d-5R2-2F — Authenticated world-deps and truthful
-doctor composition**.
+At that historical F0 closeout, F was unstarted and the next packet was **A1.1d-5R2-2F —
+Authenticated world-deps and truthful doctor composition**. The completed-F ledger below
+supersedes that next-task status.
 
 ## A1.1d-5R2-2F readiness-boundary evidence ledger
 
@@ -2460,9 +2466,10 @@ The exact corrected disposition is:
 - no production capability or policy change, no non-Linux change, and no seam promotion.
 
 F3/F4 must be rebuilt from clean F2 under this contract; preservation bytes are not restored or
-approved wholesale. F5 and final F walls remain unstarted. Renewed R2-2 integration closeout,
-R2-3, R2-4, and R3 remain blocked. The exact next task is **Resume A1.1d-5R2-2F3/F4 under the
-corrected readiness and environment contract**.
+approved wholesale. F5 and final F walls remained unstarted. Renewed R2-2 integration closeout,
+R2-3, R2-4, and R3 remained blocked. The exact next task at that historical checkpoint was
+**Resume A1.1d-5R2-2F3/F4 under the corrected readiness and environment contract**. The F5-PD and
+completed-F ledgers below supersede that next-task status.
 
 ## A1.1d-5R2-2F5-PD evidence and decision ledger
 
@@ -2733,3 +2740,17 @@ claimed, and no seam is promoted.
 The successful terminal state is `A1.1d-5R2-2FComplete`. The exact next node is
 **A1.1d-5R2-2 renewed production-fix-free integration closeout**. It remains unstarted here;
 R2-3, R2-4, and R3 remain after it.
+
+## Renewed R2-2 publication decision ledger
+
+| Decision/gate | Status | Evidence and distinction | Binding resolution / next action |
+|---|---|---|---|
+| `PublicationDecisionRequired` | Model selected; operative once the exact authority commit has local/remote preservation parity and remains an unchanged ancestor of local source HEAD | The completed F closeout required its documentation followed by exact replay, and that replay produced the current linear 17-commit range from `2f6f1f69b3519dafff01ef543e7d260da2c37700` through `e5fbd2d4441d248e137d52c44e493fb0abe158f8`. Historical Route D docs-first replay governed only its own pre-carrier correction. The renewed-closeout node named the next proof but previously selected no publication choreography. | The selected resolution is **Docs-on-top → one fast-forward publication**. Commit this authority correction locally above the unchanged range, preserve it remotely at `feat/preserve-a1-1d-5r2-2-publication-authority-20260722`, keep the source remote unchanged, then run the renewed wall in the next task. Activation is monotonic for exact descendants and does not mark R2-2 complete. |
+| Existing runtime identity | Frozen | All 17 current commits are linear, exact, locally reviewed, and preserved. They already rest on the latest F documentation. Replaying them again would create new identities without changing semantic content or proof value. | No replay, rebase, rewrite, cherry-pick, merge commit, or force push. Preserve every runtime byte and commit identity; keep blocked and preservation-only donors outside source ancestry. |
+| Renewed integration proof | Unrun; R2-2 incomplete | This documentation-authority correction runs no integration wall and supplies no integration, product-smoke, platform, capability, or seam-promotion evidence. | Run only the next packet from the exact publication-authorized state. On any failure/stop, make no runtime/test change and no source push; retain state/refs, classify the stop, and authorize future remediation docs-first. |
+| Final publication | Blocked | A closeout document must follow the already assembled range and evidence it certifies. The source remote intentionally contains documentation only because renewed closeout has not passed. | After proof-clean integration and CLEAN independent review, draft/validate/review final six-file docs to CLEAN, commit the exact reviewed bytes, and rerun final post-commit validation/reviews. Fix pre-commit documentary findings in the worktree; a post-commit documentary finding permits only an append-only six-file remediation-doc successor plus renewed docs validation/review; a proof/topology-invalidating finding reruns affected proof/review. None permits rewriting or unresolved publication. Then freshly require source old OID `2f6f1f69b3519dafff01ef543e7d260da2c37700`, bind an explicit expected-old-OID CAS/lease to that exact OID, independently prove a normal fast-forward, and require local/upstream/remote parity. The lease cannot authorize a forced update. R2-3 follows only then. |
+
+This decision does not alter any implementation status recorded above. F remains complete under its
+own packet-specific replay history; renewed R2-2 integration remains unrun; R2-2 remains
+incomplete; R2-3, R2-4, and R3 remain blocked; privileged product smoke remains unclaimed; and no
+seam is promoted.

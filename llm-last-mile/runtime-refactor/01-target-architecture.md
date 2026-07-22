@@ -410,8 +410,9 @@ appear in the A-bound report. When the embedded world-doctor branch invokes the 
 CLI, the child receives the same canonical hidden argv carrier and only context-derived checked
 environment projections. Those projections are child transport, never authority reconstruction.
 Later source closure proved that the ordinary child could activate infrastructure and probe the
-world, so the claim that the nested diagnostic was non-mutating was incorrect and is superseded by
-the controlling F5-PD section below. A missing, malformed, tampered, wrong-principal, or contextless
+world, so the claim that the nested diagnostic was non-mutating was incorrect and was superseded by
+the later historical F5-PD section, whose boundary the completed-F record retains. A missing,
+malformed, tampered, wrong-principal, or contextless
 Unix witness fails closed. Carrier bytes, credentials, request bytes, commitments not
 already intended for public diagnostics, and sensitive principal data never enter report JSON,
 text, fixtures, errors, logs, traces, or snapshots.
@@ -526,7 +527,9 @@ exact selected bytes plus an empty nonselected stream. Filtering reporter bytes,
 search, sleeps, retries, serial-only correctness, thread reduction, ignore, and weaker assertions
 are outside the architecture.
 
-R2-2F, when started after combined F0/F0a/F0b closeout, creates one request-scoped
+### Historical pre-F architecture checkpoint
+
+At that checkpoint, R2-2F was planned to start after combined F0/F0a/F0b closeout and create one request-scoped
 `AuthenticatedWorldDepsContextV1` (or equivalently named typed
 value) from the already-validated install context. It holds A's trusted bootstrap home/root,
 non-secret commitment, explicit launch CWD/workspace scope, effective configuration and policy,
@@ -557,8 +560,9 @@ preserve explicitly labeled ambient compatibility or report unavailable/fail clo
 claim coherent A-bound truth or satisfy F acceptance. Non-Unix cfg coherence means build/static
 preservation and no A-bound success claim.
 
-F begins only after combined F0/F0a/F0b closeout is published and all runtime commits are replayed
-exactly above it. The closeout precondition is now satisfied; F itself remains unstarted. The post-E
+F began only after combined F0/F0a/F0b closeout was published and all runtime commits were replayed
+exactly above it. That historical precondition was satisfied and F has since completed; the renewed
+R2-2 integration closeout remains next. The post-E
 `1114 passed / 149 failed / 0 ignored` result is genuine but
 nondeterministic before F0 because the same runtime can produce `1113 passed / 150 failed / 0
 ignored` through the proven shared-socket collision. F0's candidate then exposed the separate HOME
@@ -812,8 +816,9 @@ F1 (`eae02af959f0b7066015bb242ffa45fc7a01d591`) and F2
 (`d30d8cec764e2338fb48475747733091d3af22bf`) were complete local increments at that checkpoint.
 F3/F4 were then incomplete and preserved only as blocked evidence at
 `a343f0796d19d66c168c5bb2797856710cff5708`. The preservation does not authorize the candidate's
-environment or readiness behavior. F3/F4 are now complete as recorded in the controlling F5-PD
-section below; F5-PD is the sole next prerequisite beneath F5.
+environment or readiness behavior. F3/F4 later completed as recorded in the historical F5-PD
+section below; at that checkpoint F5-PD was the sole next prerequisite beneath F5. The completed-F
+record supersedes that status.
 
 Linux readiness remains a single-owner architecture:
 
@@ -1022,3 +1027,36 @@ worker, cleanup, rollback, or platform-native capability moves into F.
 F is therefore complete as a bounded authenticated Linux composition closure, not as native
 cross-platform proof and not as R2-2 integration closeout. The next architectural node is
 `A1.1d-5R2-2 renewed production-fix-free integration closeout`; it must not repair production code.
+
+## Renewed R2-2 attestation and publication ordering
+
+The renewed closeout publishes an attestation over an already assembled and reviewed runtime
+range; it does not construct a new runtime range. The exact 17 commits from F documentation
+closeout `2f6f1f69b3519dafff01ef543e7d260da2c37700` through local runtime HEAD
+`e5fbd2d4441d248e137d52c44e493fb0abe158f8` already sit on the latest canonical F documentation.
+F's earlier replay fulfilled F's own docs-first requirement. Historical Route D replay remains
+scoped to Route D and does not create a general rule to replay a renewed closeout.
+
+The selected architecture is **Docs-on-top → one fast-forward publication**. A local publication-
+authority documentation commit follows the unchanged runtime range; the renewed integration wall
+and independent reviews attest that exact state; then the final integration-closeout documentation
+commit follows the range and proof it certifies. This ordering keeps the evidence statement after
+its subject while preserving every existing runtime commit byte-for-byte and identity-for-identity.
+Replaying or rewriting those commits would add identity churn without architectural or evidentiary
+value. The authority state must be preserved remotely through dedicated branch
+`feat/preserve-a1-1d-5r2-2-publication-authority-20260722`, not through the source branch, before the
+renewed proof begins.
+
+This ordering changes no authority, platform, credential, policy, network, filesystem, caging,
+capability, lifecycle, receipt, supervisor, retained-worker, cleanup, rollback, secure-FD, or
+compatibility boundary. The source remote remains documentation-only until the renewed proof is
+clean. A failed or stopped wall publishes nothing and authorizes no runtime/test repair. R2-2 stays
+incomplete, non-Linux posture stays compatibility/unavailable/unproven, product smoke stays
+unclaimed, no seam is promoted, and R2-3 remains blocked. Final closeout documentation is reviewed
+before its exact bytes are committed and revalidated/re-reviewed afterward; any post-commit finding
+stops publication. A purely documentary finding may use only an append-only six-file remediation-
+doc successor followed by renewed documentation validation/review; a finding that invalidates
+proof or topology reruns the affected proof/review. Neither permits a rewrite. The eventual
+source update requires both an explicit expected-old-OID CAS/lease fixed to
+`2f6f1f69b3519dafff01ef543e7d260da2c37700` and an independent proof that the update is a normal
+fast-forward; the lease is never authority for a forced update.

@@ -809,8 +809,9 @@ they do not change visibility, signatures, bodies, cfg branches, callers, output
 behavior, or non-Unix behavior, and no file-/module-level or other lint suppression is permitted.
 `gather_world_deps_section`, `try_load_health_fixture`, `health_fixture_path`, and
 `collect_doctor_snapshot_v1` retain the Route D/F5-owned A-rooted world-deps fixture/collector
-closure. For nested World Doctor, the controlling F5-PD contract below supersedes the historical
-fixture-or-public-child behavior: whenever Linux World-enabled production reaches
+closure. For nested World Doctor, the later historical F5-PD contract, whose boundary the
+completed-F gate record retains, superseded the historical fixture-or-public-child behavior:
+whenever Linux World-enabled production reaches
 `gather_world_doctor_snapshot`, it invokes the authenticated hidden passive child, and
 `A/health/world_doctor.json` is `cfg(test)` evidence only on that path. The World-disabled
 short-circuit remains unchanged and spawns no child. Non-Linux compatibility remains
@@ -1070,8 +1071,9 @@ test-infrastructure contract:
    user-facing, world, policy, credential, secure-FD, gateway, receipt, supervisor, worker,
    placement, caging, lifecycle, and capability behavior remains unchanged. No seam is promoted.
 
-The following is the historical pre-F5-PD R2-2F binding contract; the controlling F5-PD contract
-below supersedes its immediate-next and nested-doctor side-effect statements:
+The following is the historical pre-F5-PD R2-2F binding contract; the later historical F5-PD
+contract, whose boundary the completed-F gate record retains, superseded its immediate-next and
+nested-doctor side-effect statements:
 
 At that checkpoint F was the **exact next increment** after the then-complete corrected
 differential proof, fresh containment review, and harness closeout, but it was not active or
@@ -6380,7 +6382,8 @@ comparison baseline as `1280 discovered / 1235 passed / 45 failed / 0 ignored`.
 F0-HC by itself authorized no implementation beyond its consolidated harness contract. The exact
 candidate now marks F0, F0a, F0b, F0-HC, and the combined closeout complete. Its environment
 inventory is corrected; the implementation changes no runtime/user behavior and promotes no seam.
-F remains unstarted and is the exact next packet.
+At that historical F0-HC checkpoint, F remained unstarted and was the next packet. The completed-F
+gate record below supersedes that next-task status.
 
 ### Corrected historical differential evidence-authority contract
 
@@ -6428,8 +6431,9 @@ not reused; fresh reviewer `/root/final_containment_corrected_authority`
 (`019f8681-7957-7cc3-88fa-37ab3ad2fc87`) returned CLEAN under this contract.
 
 `PassToFail=0`, `FailToChangedFailure=0`, `Removed=0`, `RenamedOrSubstituted=0`, `NewFail=0`, and
-`NewIgnored=0` are satisfied hard requirements. No product behavior changes, F0/F0a/F0b/F0-HC are
-complete, F remains unstarted, and no seam is promoted.
+`NewIgnored=0` are satisfied hard requirements. At that historical harness checkpoint no product
+behavior changed, F0/F0a/F0b/F0-HC were complete, F remained unstarted, and no seam was promoted.
+The completed-F gate record below supersedes that packet status.
 
 ### Canonical harness gate result
 
@@ -6443,7 +6447,7 @@ complete, F remains unstarted, and no seam is promoted.
 | Transition audit | The 16 `FailToPass` rows are causally tied to seven detached-availability, two fork-publication, six stop-dispatch, and one hidden-owner harness fixes. The 17 `NewPass` rows are exactly the authorized tests listed in `02`. |
 | Historical parallel limitation | `1263/1113/150/0` is diagnostic only; all 150 names are recovered, only 37 complete panic bodies remain, and 113 normalized signatures are unavailable. No historical parallel transition matrix or 105-transition claim exists. |
 | Containment and review | GitNexus's one MEDIUM process label resolves to test-only `AuthorityEnvTestTempDir::new`; no production flow changes. The only production hunk is authorized mechanical F0b delegation with byte-identical output. Three implementation reviews and the fresh containment review are CLEAN. |
-| Status and sequence | F0/F0a/F0b/F0-HC complete; no production or user-facing behavior change; no seam promotion; `Routes A–E → F0/F0a/F0b/F0-HC complete → F → renewed R2-2 closeout → R2-3 → R2-4 → R3`; F is unstarted. |
+| Historical status and sequence | F0/F0a/F0b/F0-HC complete; no production or user-facing behavior change; no seam promotion; `Routes A–E → F0/F0a/F0b/F0-HC complete → F → renewed R2-2 closeout → R2-3 → R2-4 → R3`; F was unstarted at that checkpoint. The completed-F gate record below supersedes this status. |
 
 ## A1.1d-5R2-2F readiness and outbound-environment correction
 
@@ -6534,11 +6538,12 @@ Any credential/request marker crossing the boundary, any need for a transport/wo
 or any inability to preserve compatibility callers is a hard stop. Passing these tests closes only
 the corrected F3/F4 work; it does not start F5 or the final F walls and does not promote a seam.
 
-## F5-PD non-mutating nested Doctor contract
+## Historical F5-PD non-mutating nested Doctor contract
 
-This is the controlling post-F3/F4 contract. Earlier text that calls F3/F4 incomplete or places F5
-immediately after them is historical and superseded. F3/F4 are complete; F5-PD is unimplemented;
-F5 and every later F/R2 node remain unstarted.
+This was the controlling contract at the post-F3/F4 checkpoint. Earlier text that called F3/F4
+incomplete or placed F5 immediately after them was historical and superseded there. F3/F4 were
+complete, F5-PD was unimplemented, and F5/later nodes were unstarted. The completed-F gate record
+below supersedes this historical packet status while preserving the contract's boundary decisions.
 
 ### Compatibility invariant
 
@@ -6802,3 +6807,109 @@ unchanged, and the blocked donor was neither merged, cherry-picked, nor restored
 The next gate is exactly **A1.1d-5R2-2 renewed production-fix-free integration closeout**. It is a
 new proof node, not part of this F closeout, and may not repair production code. R2-3, R2-4, R3,
 privileged product smoke, and direct-member Codex/UAA gateway adoption remain outside this gate.
+
+## Normative renewed R2-2 publication contract
+
+The selected model is **Docs-on-top → one fast-forward publication**. This section is the normative
+publication contract for the renewed production-fix-free integration closeout. It becomes
+operative once the exact commit containing it has local/remote parity at
+`feat/preserve-a1-1d-5r2-2-publication-authority-20260722` and remains an unchanged ancestor of the
+local source HEAD; before then the decision is selected but not activated. That activation is
+monotonic for exact descendants and is not lost when final or authorized append-only remediation
+documentation follows it. Neither selection nor activation marks the closeout or R2-2 complete.
+
+### Mandatory sequence
+
+1. Start from exact existing local runtime HEAD
+   `e5fbd2d4441d248e137d52c44e493fb0abe158f8` and its unchanged linear 17-commit range above F docs
+   closeout `2f6f1f69b3519dafff01ef543e7d260da2c37700`.
+2. Commit this six-file publication-authority correction locally on top of that range.
+3. Do not push that commit or any runtime commit to the source branch yet.
+4. Preserve the publication-authorized local state remotely only on dedicated branch
+   `feat/preserve-a1-1d-5r2-2-publication-authority-20260722`.
+5. Run the renewed production-fix-free integration wall from that exact state.
+6. Permit no production, test, fixture, script, schema, dependency, or generated implementation
+   changes.
+7. If any gate fails or stops, do not push the source branch.
+8. Only when integration is fully proof-clean and independent review is CLEAN, draft the final
+   six-file integration-closeout documentation on top, validate and review it to CLEAN, commit
+   exactly those reviewed bytes, and rerun final post-commit documentation validation/reviews. A
+   purely documentary post-commit finding permits only an append-only six-file remediation-doc
+   successor followed by renewed documentation validation/reviews. A proof/topology-invalidating
+   finding reruns affected proof/review. No finding authorizes rewriting or source publication
+   while unresolved.
+9. Immediately before publication, freshly read the source remote and require exact old OID
+   `2f6f1f69b3519dafff01ef543e7d260da2c37700`. Bind an explicit expected-old-OID CAS/lease to that
+   exact OID and independently prove the proposed update is a fast-forward from that OID to final
+   local HEAD. The CAS/lease is only a race guard; it never authorizes a forced or non-fast-forward
+   update. Publish the complete linear source branch exactly once. Any intervening ref change is a
+   hard stop, even when the changed ref is an ancestor of local HEAD.
+10. Require final local HEAD, upstream, and source remote to match exactly at zero ahead/zero
+    behind.
+11. Preserve every existing runtime commit byte-for-byte and identity-for-identity.
+12. Keep every preservation-only and blocked-donor commit outside source ancestry.
+
+Replay, rebase, commit rewriting, cherry-pick, merge commit, force push, and any multi-step source
+publication are forbidden. The 17 commits already sit on the latest canonical F documentation;
+F's earlier replay fulfilled its packet-specific docs-first requirement. Historical Route D's
+docs-first replay was likewise Route D-specific. Another replay would add identity churn without
+architectural, semantic, or evidentiary value. The renewed integration closeout certifies the
+already assembled range as a whole, and its final closeout document therefore follows the range it
+certifies.
+
+### Required topology
+
+Before source publication, after this authority correction:
+
+```text
+source remote: 2f6f1f69b3519dafff01ef543e7d260da2c37700 (F docs closeout)
+  ↓
+17 existing runtime commits, unchanged, ending e5fbd2d4441d248e137d52c44e493fb0abe158f8
+  ↓
+publication-authority docs commit, local source only and dedicated-preservation remote
+```
+
+The source remote remains at `2f6f1f69b3519dafff01ef543e7d260da2c37700`, the local source is
+18 commits ahead, and the source worktree/index/untracked set is clean.
+
+After a future successful closeout:
+
+```text
+source remote F docs closeout
+  ↓
+17 existing runtime commits, unchanged
+  ↓
+publication-authority docs commit
+  ↓
+renewed integration wall and reviews, with no implementation commit
+  ↓
+final integration-closeout docs commit
+  ↓
+optional append-only six-file remediation-doc successor(s), only for post-commit documentary findings
+  ↓
+one fast-forward source push; local HEAD = upstream = remote
+```
+
+The final source contains the original 17 runtime commits plus both closeout-related documentation
+commits and only any review-required append-only remediation-doc successors, with no changed commit
+identity, merge commit, or force push. The ordinary CLEAN path has exactly the two closeout-related
+documentation commits. Immediately before that single publication, the source remote must still be exact
+`2f6f1f69b3519dafff01ef543e7d260da2c37700`; an explicit expected-old-OID CAS/lease binds that OID,
+while a separate ancestry proof and server result require a normal fast-forward update. The lease
+cannot authorize a forced update, and a concurrent source-ref change must fail rather than be
+silently incorporated.
+
+### Failure and no-push posture
+
+If any renewed integration or final documentation gate fails or stops: do not modify runtime or
+tests; do not publish the source branch; retain the exact local state and preservation refs;
+classify the stop; and authorize any future remediation docs-first. A purely documentary finding
+may be corrected docs-only before the relevant commit and reviewed by a fresh replacement. A
+purely documentary post-commit finding permits only an append-only six-file remediation-doc
+successor and renewed documentation validation/review. A finding that invalidates the proof state
+or topology requires the affected proof/review to rerun from the corrected preserved state. A
+commit containing a post-commit finding is never rewritten by amend, rebase, or force push. The
+local publication-authority commit may remain preserved, but it is authority only and must not
+imply that renewed proof ran,
+R2-2 passed, product smoke passed, or any seam was promoted. R2-3 remains blocked until the
+successful one-fast-forward publication completes; R2-4 and R3 remain later.
