@@ -184,7 +184,15 @@ pub(crate) fn collect_doctor_snapshot_v1(
     all: bool,
     #[cfg(unix)] install_context: &InstallBootstrapContextCarrierV1,
 ) -> Result<WorldDepsDoctorSnapshotV1> {
-    #[cfg(unix)]
+    #[cfg(target_os = "linux")]
+    let context = bind_authenticated_world_deps_context_v1(
+        install_context,
+        cwd,
+        &config_model::CliConfigOverrides::default(),
+    )?;
+    #[cfg(target_os = "linux")]
+    let (cfg, global_deps_dir) = (context.effective_config(), Some(context.global_deps_dir()));
+    #[cfg(all(unix, not(target_os = "linux")))]
     let (cfg, global_deps_dir) = {
         bind_unix_install_bootstrap_context(install_context)?;
         let root =
@@ -218,7 +226,14 @@ pub(crate) fn collect_doctor_snapshot_v1(
             };
         (cfg, global_deps_dir)
     };
-    let view = surfaces::resolve_current_inventory_view(cwd, &cfg, global_deps_dir.as_deref())?;
+    let view = surfaces::resolve_current_inventory_view(
+        cwd,
+        &cfg,
+        #[cfg(target_os = "linux")]
+        global_deps_dir,
+        #[cfg(not(target_os = "linux"))]
+        global_deps_dir.as_deref(),
+    )?;
     let enabled = cfg.world.deps.enabled.clone();
     let inventory_mode = match cfg.world.deps.inventory_mode {
         config_model::WorldDepsInventoryMode::Merged => "merged",
@@ -231,7 +246,13 @@ pub(crate) fn collect_doctor_snapshot_v1(
     }
     .to_string();
 
-    let applied = match surfaces::compute_current_applied_items_v1(&view, &enabled, all) {
+    let applied = match surfaces::compute_current_applied_items_v1(
+        &view,
+        &enabled,
+        all,
+        #[cfg(target_os = "linux")]
+        &context,
+    ) {
         Ok(items) => WorldDepsDoctorSnapshotV1 {
             schema_version: 1,
             cwd: cwd.to_path_buf(),

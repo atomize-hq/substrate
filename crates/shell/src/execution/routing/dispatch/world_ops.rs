@@ -62,11 +62,21 @@ const AUTHENTICATED_WORLD_SERVICE_CWD: &str = "/var/lib/substrate";
 const AUTHENTICATED_WORLD_SERVICE_PATH: &str =
     "/usr/local/sbin:/usr/local/bin:/usr/sbin:/usr/bin:/sbin:/bin";
 #[cfg(target_os = "linux")]
+const AUTHENTICATED_SYSTEMCTL_BINARY: &str = "/usr/bin/systemctl";
+#[cfg(target_os = "linux")]
+const AUTHENTICATED_WORLD_SOCKET_UNIT: &str = "substrate-world-service.socket";
+#[cfg(target_os = "linux")]
+const AUTHENTICATED_WORLD_SERVICE_UNIT: &str = "substrate-world-service.service";
+#[cfg(target_os = "linux")]
 const WORLD_SERVICE_PROBE_IO_TIMEOUT_MS: u64 = 150;
 #[cfg(target_os = "linux")]
 const WORLD_SERVICE_ACTIVATION_POLL_MS: u64 = 100;
 #[cfg(target_os = "linux")]
 const WORLD_SERVICE_ACTIVATION_WAIT_MS: u64 = 2_000;
+#[cfg(target_os = "linux")]
+const WORLD_SERVICE_SYSTEMCTL_SHOW_TIMEOUT_MS: u64 = 2_000;
+#[cfg(target_os = "linux")]
+const WORLD_SERVICE_SYSTEMCTL_POLL_MS: u64 = 10;
 #[cfg(target_os = "linux")]
 const WORLD_SERVICE_READINESS_POLL_MS: u64 = 50;
 #[cfg(target_os = "linux")]
@@ -96,7 +106,9 @@ enum WorldServiceReadinessPosture {
         candidate_bins: fn() -> WorldServiceCandidateBins,
         activation_mode: fn() -> socket_activation::SocketActivationMode,
     },
-    InstalledLinuxProduct,
+    InstalledLinuxProduct {
+        activation_mode: fn() -> socket_activation::SocketActivationMode,
+    },
 }
 
 #[cfg(target_os = "linux")]
@@ -106,7 +118,7 @@ impl WorldServiceReadinessPosture {
             Self::LegacyCompatibility {
                 activation_mode, ..
             } => activation_mode(),
-            Self::InstalledLinuxProduct => socket_activation::SocketActivationMode::Unknown,
+            Self::InstalledLinuxProduct { activation_mode } => activation_mode(),
         }
     }
 
@@ -131,7 +143,7 @@ impl WorldServiceReadinessPosture {
                     environment: WorldServiceSpawnEnvironment::LegacyCompatibility,
                 })
             }
-            Self::InstalledLinuxProduct => Ok(WorldServiceSpawnPlan {
+            Self::InstalledLinuxProduct { .. } => Ok(WorldServiceSpawnPlan {
                 candidate_bins: [
                     Some(AUTHENTICATED_WORLD_SERVICE_BINARY.to_string()),
                     None,
@@ -147,6 +159,112 @@ impl WorldServiceReadinessPosture {
 #[cfg(target_os = "linux")]
 fn resolve_legacy_compatibility_activation_mode() -> socket_activation::SocketActivationMode {
     socket_activation::socket_activation_report().mode
+}
+
+#[cfg(target_os = "linux")]
+fn classify_installed_product_activation_mode(
+    socket_active_state: Option<&str>,
+    observation_failed: bool,
+    socket_exists: bool,
+) -> socket_activation::SocketActivationMode {
+    match socket_active_state {
+        Some("active" | "listening" | "running" | "activating") => {
+            socket_activation::SocketActivationMode::SocketActivation
+        }
+        Some(_) => socket_activation::SocketActivationMode::Unknown,
+        None if observation_failed && socket_exists => {
+            socket_activation::SocketActivationMode::Unknown
+        }
+        None => socket_activation::SocketActivationMode::Manual,
+    }
+}
+
+#[cfg(target_os = "linux")]
+fn terminate_installed_product_observer_child(child: &mut std::process::Child) {
+    let _ = child.kill();
+    let _ = child.wait();
+}
+
+#[cfg(target_os = "linux")]
+fn observe_installed_product_unit_active_state(unit: &'static str) -> Result<Option<String>, ()> {
+    use std::io::Read;
+    use std::time::{Duration, Instant};
+
+    let mut child = std::process::Command::new(AUTHENTICATED_SYSTEMCTL_BINARY)
+        .arg("--no-pager")
+        .arg("show")
+        .arg(unit)
+        .arg("--property=ActiveState")
+        .arg("--property=UnitFileState")
+        .arg("--property=Listen")
+        .env_clear()
+        .current_dir("/")
+        .stdin(std::process::Stdio::null())
+        .stdout(std::process::Stdio::piped())
+        .stderr(std::process::Stdio::piped())
+        .spawn()
+        .map_err(|_| ())?;
+
+    let started = Instant::now();
+    loop {
+        match child.try_wait() {
+            Ok(Some(status)) => {
+                let mut stdout = Vec::new();
+                let mut stderr = Vec::new();
+                if let Some(mut output) = child.stdout.take() {
+                    let _ = output.read_to_end(&mut stdout);
+                }
+                if let Some(mut output) = child.stderr.take() {
+                    let _ = output.read_to_end(&mut stderr);
+                }
+                if !status.success() {
+                    return if String::from_utf8_lossy(&stderr).contains("could not be found") {
+                        Ok(None)
+                    } else {
+                        Err(())
+                    };
+                }
+
+                let active_state = String::from_utf8_lossy(&stdout)
+                    .lines()
+                    .find_map(|line| line.strip_prefix("ActiveState="))
+                    .map(str::trim)
+                    .filter(|value| !value.is_empty())
+                    .unwrap_or("unknown")
+                    .to_string();
+                return Ok(Some(active_state));
+            }
+            Ok(None)
+                if started.elapsed()
+                    <= Duration::from_millis(WORLD_SERVICE_SYSTEMCTL_SHOW_TIMEOUT_MS) =>
+            {
+                std::thread::sleep(Duration::from_millis(WORLD_SERVICE_SYSTEMCTL_POLL_MS));
+            }
+            Ok(None) => {
+                terminate_installed_product_observer_child(&mut child);
+                return Err(());
+            }
+            Err(_) => {
+                terminate_installed_product_observer_child(&mut child);
+                return Err(());
+            }
+        }
+    }
+}
+
+#[cfg(target_os = "linux")]
+fn resolve_installed_product_activation_mode() -> socket_activation::SocketActivationMode {
+    let socket_unit = observe_installed_product_unit_active_state(AUTHENTICATED_WORLD_SOCKET_UNIT);
+    let service_unit =
+        observe_installed_product_unit_active_state(AUTHENTICATED_WORLD_SERVICE_UNIT);
+    let observation_failed = socket_unit.is_err() || service_unit.is_err();
+    let socket_active_state = socket_unit.ok().flatten();
+
+    classify_installed_product_activation_mode(
+        socket_active_state.as_deref(),
+        observation_failed,
+        std::path::Path::new(AUTHENTICATED_WORLD_SOCKET).exists(),
+    )
 }
 
 #[cfg(target_os = "linux")]
@@ -1259,6 +1377,13 @@ fn extract_process_telemetry_from_ws_exit(value: &serde_json::Value) -> ProcessT
     }
 }
 
+#[cfg_attr(
+    target_os = "linux",
+    allow(
+        dead_code,
+        reason = "the F-only Linux consumers use the additive authenticated builder; non-Linux compatibility consumers retain this frozen builder"
+    )
+)]
 pub(crate) fn build_agent_client_and_request(
     cmd: &str,
 ) -> anyhow::Result<(
@@ -1270,10 +1395,6 @@ pub(crate) fn build_agent_client_and_request(
 }
 
 #[cfg(target_os = "linux")]
-#[allow(
-    dead_code,
-    reason = "the additive authenticated F builder is consumed by the immediately following F4 increment"
-)]
 pub(crate) fn build_authenticated_world_deps_client_and_request(
     context: &crate::builtins::world_deps::AuthenticatedWorldDepsContextV1,
     cmd: &str,
@@ -1323,7 +1444,9 @@ fn build_authenticated_world_deps_client_and_request_impl(
 
     ensure_ready(
         std::path::Path::new(AUTHENTICATED_WORLD_SOCKET),
-        WorldServiceReadinessPosture::InstalledLinuxProduct,
+        WorldServiceReadinessPosture::InstalledLinuxProduct {
+            activation_mode: resolve_installed_product_activation_mode,
+        },
     )?;
 
     let env_map = std::collections::HashMap::from([
@@ -2610,14 +2733,18 @@ mod tests {
     #[cfg(target_os = "linux")]
     use super::{
         build_authenticated_world_deps_client_and_request_impl,
-        ensure_world_service_ready_for_target, ensure_world_service_ready_for_target_with_spawn,
-        ensure_world_service_ready_with, resolve_legacy_compatibility_candidate_bins,
+        classify_installed_product_activation_mode, ensure_world_service_ready_for_target,
+        ensure_world_service_ready_for_target_with_spawn, ensure_world_service_ready_with,
+        resolve_legacy_compatibility_candidate_bins, terminate_installed_product_observer_child,
         world_service_command, WorldServiceCandidateBins, WorldServiceReadinessPosture,
-        WorldServiceSpawnEnvironment, AUTHENTICATED_WORLD_SERVICE_BINARY,
-        AUTHENTICATED_WORLD_SERVICE_CWD, AUTHENTICATED_WORLD_SERVICE_PATH,
-        AUTHENTICATED_WORLD_SOCKET, WORLD_SERVICE_ACTIVATION_POLL_MS,
-        WORLD_SERVICE_ACTIVATION_WAIT_MS, WORLD_SERVICE_PROBE_IO_TIMEOUT_MS,
-        WORLD_SERVICE_READINESS_POLL_MS, WORLD_SERVICE_READINESS_WAIT_MS,
+        WorldServiceSpawnEnvironment, AUTHENTICATED_SYSTEMCTL_BINARY,
+        AUTHENTICATED_WORLD_SERVICE_BINARY, AUTHENTICATED_WORLD_SERVICE_CWD,
+        AUTHENTICATED_WORLD_SERVICE_PATH, AUTHENTICATED_WORLD_SERVICE_UNIT,
+        AUTHENTICATED_WORLD_SOCKET, AUTHENTICATED_WORLD_SOCKET_UNIT,
+        WORLD_SERVICE_ACTIVATION_POLL_MS, WORLD_SERVICE_ACTIVATION_WAIT_MS,
+        WORLD_SERVICE_PROBE_IO_TIMEOUT_MS, WORLD_SERVICE_READINESS_POLL_MS,
+        WORLD_SERVICE_READINESS_WAIT_MS, WORLD_SERVICE_SYSTEMCTL_POLL_MS,
+        WORLD_SERVICE_SYSTEMCTL_SHOW_TIMEOUT_MS,
     };
     use super::{
         build_execute_request, build_member_dispatch_payload, current_world_request_profile,
@@ -2746,6 +2873,11 @@ mod tests {
     }
 
     #[cfg(target_os = "linux")]
+    fn panic_activation_mode() -> crate::execution::socket_activation::SocketActivationMode {
+        panic!("activation observation must not run after a successful capability probe")
+    }
+
+    #[cfg(target_os = "linux")]
     fn empty_candidate_bins() -> WorldServiceCandidateBins {
         std::array::from_fn(|_| None)
     }
@@ -2818,6 +2950,8 @@ mod tests {
         assert_eq!(WORLD_SERVICE_PROBE_IO_TIMEOUT_MS, 150);
         assert_eq!(WORLD_SERVICE_ACTIVATION_POLL_MS, 100);
         assert_eq!(WORLD_SERVICE_ACTIVATION_WAIT_MS, 2_000);
+        assert_eq!(WORLD_SERVICE_SYSTEMCTL_POLL_MS, 10);
+        assert_eq!(WORLD_SERVICE_SYSTEMCTL_SHOW_TIMEOUT_MS, 2_000);
         assert_eq!(WORLD_SERVICE_READINESS_POLL_MS, 50);
         assert_eq!(WORLD_SERVICE_READINESS_WAIT_MS, 1_000);
     }
@@ -2851,7 +2985,9 @@ mod tests {
 
         ensure_world_service_ready_for_target(
             &socket,
-            WorldServiceReadinessPosture::InstalledLinuxProduct,
+            WorldServiceReadinessPosture::InstalledLinuxProduct {
+                activation_mode: panic_activation_mode,
+            },
         )
         .expect("explicit socket is ready");
         server.join().expect("join readiness server");
@@ -2981,6 +3117,133 @@ mod tests {
 
     #[cfg(target_os = "linux")]
     #[test]
+    fn installed_product_readiness_preserves_activation_wait_and_error() {
+        let temp = tempfile::tempdir().expect("installed activation readiness fixture");
+        let socket = temp.path().join("activation.sock");
+        let started = std::time::Instant::now();
+
+        let error = ensure_world_service_ready_for_target_with_spawn(
+            &socket,
+            WorldServiceReadinessPosture::InstalledLinuxProduct {
+                activation_mode: socket_activation_mode,
+            },
+            |_| panic!("socket-activated installed product must not use spawn fallback"),
+        )
+        .expect_err("unresponsive socket activation must fail before spawn fallback");
+
+        assert_eq!(
+            error.to_string(),
+            format!(
+                "world-service socket activation detected but {} did not respond. Run 'systemctl status substrate-world-service.socket' for details.",
+                socket.display()
+            )
+        );
+        assert!(started.elapsed() >= std::time::Duration::from_millis(1_900));
+    }
+
+    #[cfg(target_os = "linux")]
+    #[test]
+    fn installed_product_activation_classification_matches_fixed_unit_semantics() {
+        use crate::execution::socket_activation::SocketActivationMode;
+
+        for active_state in ["active", "listening", "running", "activating"] {
+            assert_eq!(
+                classify_installed_product_activation_mode(Some(active_state), false, false),
+                SocketActivationMode::SocketActivation
+            );
+        }
+        assert_eq!(
+            classify_installed_product_activation_mode(Some("inactive"), false, false),
+            SocketActivationMode::Unknown
+        );
+        assert_eq!(
+            classify_installed_product_activation_mode(None, true, true),
+            SocketActivationMode::Unknown
+        );
+        assert_eq!(
+            classify_installed_product_activation_mode(None, false, true),
+            SocketActivationMode::Manual
+        );
+        assert_eq!(
+            classify_installed_product_activation_mode(None, true, false),
+            SocketActivationMode::Manual
+        );
+    }
+
+    #[cfg(target_os = "linux")]
+    #[test]
+    fn installed_product_activation_observer_is_fixed_and_nonambient() {
+        let source = include_str!("world_ops.rs");
+        let start = source
+            .find("fn observe_installed_product_unit_active_state")
+            .expect("installed product observer definition");
+        let end = source[start..]
+            .find("fn resolve_legacy_compatibility_candidate_bins")
+            .map(|offset| start + offset)
+            .expect("observer definition boundary");
+        let observer = &source[start..end];
+
+        for required in [
+            "Command::new(AUTHENTICATED_SYSTEMCTL_BINARY)",
+            ".env_clear()",
+            ".current_dir(\"/\")",
+            "AUTHENTICATED_WORLD_SOCKET_UNIT",
+            "AUTHENTICATED_WORLD_SERVICE_UNIT",
+            "AUTHENTICATED_WORLD_SOCKET).exists()",
+        ] {
+            assert!(
+                observer.contains(required),
+                "missing fixed observer term: {required}"
+            );
+        }
+        for forbidden in [
+            "std::env",
+            "env::var",
+            "socket_activation_report",
+            "which::which",
+            "current_dir()",
+            "SUBSTRATE_SOCKET_ACTIVATION_OVERRIDE",
+            "SUBSTRATE_SYSTEMCTL_TIMEOUT_MS",
+            "SUBSTRATE_WORLD_SOCKET\"",
+        ] {
+            assert!(
+                !observer.contains(forbidden),
+                "installed product observer contains ambient term: {forbidden}"
+            );
+        }
+        assert_eq!(AUTHENTICATED_SYSTEMCTL_BINARY, "/usr/bin/systemctl");
+        assert_eq!(
+            AUTHENTICATED_WORLD_SOCKET_UNIT,
+            "substrate-world-service.socket"
+        );
+        assert_eq!(
+            AUTHENTICATED_WORLD_SERVICE_UNIT,
+            "substrate-world-service.service"
+        );
+    }
+
+    #[cfg(target_os = "linux")]
+    #[test]
+    fn installed_product_observer_cleanup_terminates_and_reaps_child() {
+        let mut child = std::process::Command::new("/usr/bin/sleep")
+            .arg("30")
+            .env_clear()
+            .spawn()
+            .expect("spawn fixed cleanup fixture");
+
+        terminate_installed_product_observer_child(&mut child);
+
+        assert!(
+            child
+                .try_wait()
+                .expect("poll reaped fixed cleanup fixture")
+                .is_some(),
+            "cleanup must terminate and reap the observer child"
+        );
+    }
+
+    #[cfg(target_os = "linux")]
+    #[test]
     fn installed_product_readiness_ignores_ambient_activation_and_binary_selectors() {
         let _authority_env = crate::execution::AuthorityEnvTestGuard::preserve();
         let temp = tempfile::tempdir().expect("installed-product readiness fixture");
@@ -3001,15 +3264,18 @@ mod tests {
                 "SUBSTRATE_WORLD_AGENT_BIN",
                 poison_binary.to_string_lossy().as_ref(),
             ),
-            ("SUBSTRATE_SOCKET_ACTIVATION_OVERRIDE", "manual"),
+            ("SUBSTRATE_SOCKET_ACTIVATION_OVERRIDE", "socket_activation"),
             ("SUBSTRATE_SYSTEMCTL_TIMEOUT_MS", "1"),
             ("PATH", temp.path().to_string_lossy().as_ref()),
         ]);
         let spawn_calls = std::cell::Cell::new(0_u8);
+        std::fs::write(&socket, "stale").expect("write installed stale socket sentinel");
 
         let error = ensure_world_service_ready_for_target_with_spawn(
             &socket,
-            WorldServiceReadinessPosture::InstalledLinuxProduct,
+            WorldServiceReadinessPosture::InstalledLinuxProduct {
+                activation_mode: manual_activation_mode,
+            },
             |spawn_plan| {
                 spawn_calls.set(spawn_calls.get() + 1);
                 assert_eq!(
@@ -3032,12 +3298,15 @@ mod tests {
 
         assert_eq!(error.to_string(), "world-service readiness probe failed");
         assert_eq!(spawn_calls.get(), 1);
+        assert!(!socket.exists());
         assert!(!poison_sentinel.exists());
         assert_eq!(
-            WorldServiceReadinessPosture::InstalledLinuxProduct
-                .into_spawn_plan(&socket)
-                .expect("installed candidate selection")
-                .candidate_bins,
+            WorldServiceReadinessPosture::InstalledLinuxProduct {
+                activation_mode: manual_activation_mode,
+            }
+            .into_spawn_plan(&socket)
+            .expect("installed candidate selection")
+            .candidate_bins,
             [
                 Some(AUTHENTICATED_WORLD_SERVICE_BINARY.to_string()),
                 None,
@@ -3146,7 +3415,7 @@ mod tests {
                 assert_eq!(socket, std::path::Path::new(AUTHENTICATED_WORLD_SOCKET));
                 assert!(matches!(
                     posture,
-                    WorldServiceReadinessPosture::InstalledLinuxProduct
+                    WorldServiceReadinessPosture::InstalledLinuxProduct { .. }
                 ));
                 assert_eq!(
                     AUTHENTICATED_WORLD_SERVICE_BINARY,
@@ -3297,6 +3566,74 @@ mod tests {
             .to_string()
             .contains("authenticated world-deps request cwd must be valid UTF-8"));
         assert_eq!(calls.get(), 0);
+    }
+
+    #[cfg(target_os = "linux")]
+    #[test]
+    fn authenticated_builder_has_exactly_two_authorized_production_consumers() {
+        fn collect_rust_sources(dir: &std::path::Path, out: &mut Vec<std::path::PathBuf>) {
+            for entry in std::fs::read_dir(dir).expect("read shell source directory") {
+                let path = entry.expect("read shell source entry").path();
+                if path.is_dir() {
+                    collect_rust_sources(&path, out);
+                } else if path.extension().and_then(std::ffi::OsStr::to_str) == Some("rs") {
+                    out.push(path);
+                }
+            }
+        }
+
+        let manifest_dir = std::path::Path::new(env!("CARGO_MANIFEST_DIR"));
+        let source_root = manifest_dir.join("src");
+        let definition_file = source_root.join("execution/routing/dispatch/world_ops.rs");
+        let mut sources = Vec::new();
+        collect_rust_sources(&source_root, &mut sources);
+        let mut consumers = Vec::new();
+        for source in sources {
+            if source == definition_file {
+                continue;
+            }
+            let body = std::fs::read_to_string(&source).expect("read Rust source");
+            let mut current_function = None::<String>;
+            for (line_index, line) in body.lines().enumerate() {
+                if let Some(fn_offset) = line.find("fn ") {
+                    let name = &line[fn_offset + 3..];
+                    if let Some(paren_offset) = name.find('(') {
+                        current_function = Some(name[..paren_offset].trim().to_string());
+                    }
+                }
+                if line.contains("build_authenticated_world_deps_client_and_request(") {
+                    consumers.push((
+                        source
+                            .strip_prefix(manifest_dir)
+                            .expect("source under manifest")
+                            .to_string_lossy()
+                            .to_string(),
+                        current_function
+                            .clone()
+                            .expect("authenticated builder call must be inside a function"),
+                        line_index + 1,
+                    ));
+                }
+            }
+        }
+        consumers.sort();
+
+        assert_eq!(
+            consumers
+                .iter()
+                .map(|(path, function, _)| (path.as_str(), function.as_str()))
+                .collect::<Vec<_>>(),
+            vec![
+                (
+                    "src/builtins/world_deps/surfaces.rs",
+                    "run_world_command_for_deps_at",
+                ),
+                (
+                    "src/builtins/world_enable/runner/provision_deps.rs",
+                    "execute_with_profile",
+                ),
+            ]
+        );
     }
 
     fn with_env_var<T>(key: &str, value: &str, f: impl FnOnce() -> T) -> T {

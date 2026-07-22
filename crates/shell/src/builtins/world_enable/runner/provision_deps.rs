@@ -1,5 +1,10 @@
 use crate::builtins::world_deps::AptSpecV1;
+#[cfg(target_os = "linux")]
+use crate::builtins::world_deps::AuthenticatedWorldDepsContextV1;
+#[cfg(not(target_os = "linux"))]
 use crate::execution::build_agent_client_and_request;
+#[cfg(target_os = "linux")]
+use crate::execution::build_authenticated_world_deps_client_and_request;
 use base64::engine::general_purpose::STANDARD as BASE64;
 use base64::Engine;
 use std::collections::HashMap;
@@ -143,8 +148,15 @@ pub(super) fn exit_probe_result_not_supported(
     std::process::exit(4);
 }
 
-pub(super) fn probe_world_manager() -> Result<WorldManagerProbe, String> {
-    let response = execute_with_profile(&build_manager_probe_command(), PROBE_PROFILE)?;
+pub(super) fn probe_world_manager(
+    #[cfg(target_os = "linux")] context: &AuthenticatedWorldDepsContextV1,
+) -> Result<WorldManagerProbe, String> {
+    let response = execute_with_profile(
+        &build_manager_probe_command(),
+        PROBE_PROFILE,
+        #[cfg(target_os = "linux")]
+        context,
+    )?;
     if response.exit != 0 {
         return Err(format!(
             "world-manager probe failed (exit={}): {}",
@@ -193,12 +205,19 @@ pub(super) fn probe_world_manager() -> Result<WorldManagerProbe, String> {
     ))
 }
 
-pub(super) fn provision_apt_requirements(requirements: &[AptSpecV1]) {
+pub(super) fn provision_apt_requirements(
+    requirements: &[AptSpecV1],
+    #[cfg(target_os = "linux")] context: &AuthenticatedWorldDepsContextV1,
+) {
     if requirements.is_empty() {
         return;
     }
 
-    let present = match probe_requirements(requirements) {
+    let present = match probe_requirements(
+        requirements,
+        #[cfg(target_os = "linux")]
+        context,
+    ) {
         Ok(present) => present,
         Err(detail) => exit_backend_unavailable(&detail),
     };
@@ -211,11 +230,15 @@ pub(super) fn provision_apt_requirements(requirements: &[AptSpecV1]) {
         return;
     }
 
-    let response =
-        match execute_with_profile(&build_install_command(&unsatisfied), PROVISION_PROFILE) {
-            Ok(response) => response,
-            Err(detail) => exit_backend_unavailable(&detail),
-        };
+    let response = match execute_with_profile(
+        &build_install_command(&unsatisfied),
+        PROVISION_PROFILE,
+        #[cfg(target_os = "linux")]
+        context,
+    ) {
+        Ok(response) => response,
+        Err(detail) => exit_backend_unavailable(&detail),
+    };
     if response.exit == 0 {
         return;
     }
@@ -235,7 +258,10 @@ pub(super) fn provision_apt_requirements(requirements: &[AptSpecV1]) {
     std::process::exit(4);
 }
 
-pub(super) fn provision_pacman_requirements(requirements: &[String]) {
+pub(super) fn provision_pacman_requirements(
+    requirements: &[String],
+    #[cfg(target_os = "linux")] context: &AuthenticatedWorldDepsContextV1,
+) {
     if requirements.is_empty() {
         return;
     }
@@ -243,6 +269,8 @@ pub(super) fn provision_pacman_requirements(requirements: &[String]) {
     let response = match execute_with_profile(
         &build_pacman_install_command(requirements),
         PROVISION_PROFILE,
+        #[cfg(target_os = "linux")]
+        context,
     ) {
         Ok(response) => response,
         Err(detail) => exit_backend_unavailable(&detail),
@@ -350,8 +378,16 @@ fn parse_probe_line(line: &str) -> Option<(&str, &str)> {
     Some((key.trim(), value.trim()))
 }
 
-fn probe_requirements(requirements: &[AptSpecV1]) -> Result<HashMap<String, bool>, String> {
-    let response = execute_with_profile(&build_apt_probe_command(requirements), PROVISION_PROFILE)?;
+fn probe_requirements(
+    requirements: &[AptSpecV1],
+    #[cfg(target_os = "linux")] context: &AuthenticatedWorldDepsContextV1,
+) -> Result<HashMap<String, bool>, String> {
+    let response = execute_with_profile(
+        &build_apt_probe_command(requirements),
+        PROVISION_PROFILE,
+        #[cfg(target_os = "linux")]
+        context,
+    )?;
     if response.exit != 0 {
         return Err(format!(
             "world-deps provisioning probe failed (exit={}): {}",
@@ -379,13 +415,23 @@ fn probe_requirements(requirements: &[AptSpecV1]) -> Result<HashMap<String, bool
 fn execute_with_profile(
     cmd: &str,
     profile: &str,
+    #[cfg(target_os = "linux")] context: &AuthenticatedWorldDepsContextV1,
 ) -> Result<transport_api_types::ExecuteResponse, String> {
-    let (client, mut request, _) =
-        build_agent_client_and_request(cmd).map_err(|err| format!("{err:#}"))?;
-    request.profile = Some(profile.to_string());
-    if cfg!(target_os = "macos") {
-        request.cwd = Some("/tmp".to_string());
-    }
+    #[cfg(target_os = "linux")]
+    let (client, request, _) =
+        build_authenticated_world_deps_client_and_request(context, cmd, None, profile)
+            .map_err(|err| format!("{err:#}"))?;
+
+    #[cfg(not(target_os = "linux"))]
+    let (client, request, _) = {
+        let (client, mut request, fs_enabled) =
+            build_agent_client_and_request(cmd).map_err(|err| format!("{err:#}"))?;
+        request.profile = Some(profile.to_string());
+        if cfg!(target_os = "macos") {
+            request.cwd = Some("/tmp".to_string());
+        }
+        (client, request, fs_enabled)
+    };
 
     let runtime = Runtime::new().map_err(|err| err.to_string())?;
     runtime.block_on(async move {
