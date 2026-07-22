@@ -6,7 +6,7 @@
     "transport": "chat_attachment"
   },
   "repo_review_destination": {
-    "conversation_url": "https://chatgpt.com/",
+    "conversation_url": "https://chatgpt.com/c/6a602a85-156c-83ea-9b3f-85a51b6431bb",
     "display_name": "SFR P1 independent review",
     "transport": "chat_attachment"
   },
