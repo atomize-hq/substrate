@@ -4,7 +4,11 @@
 **Scope:** planning, contracts, sequencing, and proof gates; not implementation history
 **Source directive:** [`../../substrate-runtime-refactor-directive-revised.md`](../../substrate-runtime-refactor-directive-revised.md)
 **Repo-truth snapshot:** 2026-07-17 at `6ab2a515e13946324d0aac25b144e1c3408cb2c1`; re-check live code before every slice
-**Current authorized increment:** `A1.1d-5R2-2F5-PD — Non-mutating nested doctor boundary`; F1–F4 are complete local runtime increments, the blocked F5 candidate is preserved but rejected, F5-PD is documentation-authorized and unimplemented, F5 remains blocked, and R2-2 remains incomplete.
+**Current authorized increment:** `A1.1d-5R2-2F` is runtime-complete, proof-complete, review-clean,
+canonically closed out, and replay-ready. The exact next node is
+`A1.1d-5R2-2 renewed production-fix-free integration closeout`. R2-2 remains incomplete until that
+separate closeout; R2-3, R2-4, R3, privileged product smoke, and direct-member Codex/UAA gateway
+adoption remain unstarted.
 
 ## Canonical repo location
 
@@ -725,4 +729,61 @@ passive evidence is absent, user-visible composition reports unavailable rather 
 implicit activation. F5, the final F walls, F closeout, renewed R2-2 closeout, R2-3, R2-4, and R3
 remain unstarted.
 
-The exact next task is **Implement F5-PD, re-review it, then resume F5**.
+The exact next task at that checkpoint was **Implement F5-PD, re-review it, then resume F5**. The
+canonical F closeout below supersedes that live-status conclusion without changing the historical
+boundary decision.
+
+## A1.1d-5R2-2F canonical closeout
+
+F1 through F5, including the inserted F5-PD passive boundary, are complete. The exact runtime proof
+sequence before this documentation closeout and its required replay is:
+
+`922e1792` F1 → `77fdcd8a` F2 → `0cd1d7af` F3 → `af2a3da6` F4 → `653a7d91` F5-PD →
+`2bb4696d` F5.
+
+F5 is commit `2bb4696d7181d974c1b02e33d82e09422cdae7de`, parent
+`653a7d91489563bc2a8e3395feeb53e159254240`, tree
+`313a8a613a6cd91e72c0cc1664f4b9842fefa305`, subject
+`fix: compose truthful authenticated doctor evidence`. It changes only
+`crates/shell/src/builtins/{shim_doctor/report.rs,world_deps/mod.rs}` and
+`crates/shell/tests/{shim_doctor.rs,shim_health.rs}`. Its ordinary patch, full-index patch, and
+stable patch ID are respectively
+`991859870123dca56f3ee080876742abb2e556f9ee0bdf62f3577fdf1ccfb189`,
+`8e2be2f2b84dc5d3cd573b9670e4d3eccc3060893f478a414d057e39b002a943`, and
+`b768cb94c51802e2440fbf1eb7f29fc0693a446b`.
+
+Authenticated Linux World-enabled composition now joins the world-deps snapshot to exact A and
+reports bounded unavailable truth because no permitted passive runtime-health evidence exists.
+Fixtures remain compatibility/test evidence, must match A when they participate, cannot establish
+runtime health, and cannot be retained as production truth. Missing evidence is unavailable;
+mixed, malformed, duplicate, unknown, tampered, partial, secret-bearing, or conflicting evidence
+is incoherent/fail-closed. The World-disabled branch remains child- and fixture-free. The
+no-fixture World branch still uses the authenticated passive child and cannot reach readiness,
+socket activation, world-service, `/v1/doctor/world`, `/v1/execute`, active probes, world creation,
+repair, provisioning, cleanup, or synchronization. Public `world doctor --json` is unchanged.
+
+The final shell-library authority is three default-parallel walls and one one-thread serial wall,
+each with 1,309 discovered, 1,264 passed, 45 failed, and 0 ignored. The inherited failure-name and
+normalized-signature SHA-256 values remain exactly
+`b23bb59ad12833d2c1d37c19c54933cd6bcb1c75e0dab8a70179b9881372be70` and
+`33c686a6ec9f3a0a4f51e1fca976445e6804da12fbbff50312a03f0042cdfac3`. Relative to clean F5-PD,
+the two new library tests are `NewPass`; the three new integration tests also pass in their exact
+suites. `PassToFail`, `NewFail`, `FailToChangedFailure`, removed, renamed/substituted, newly ignored,
+and weakened are all zero.
+
+Raw shell all-target Clippy remains truthfully non-green only because the exact inherited 20
+`clippy::needless_borrow` findings are still present in frozen code. The documented differential
+that allows only that lint passes with every other warning denied. Shell/workspace all-target
+checks, formatting, diff checks, final GitNexus containment, and three fresh whole-F reviews pass.
+Linux is the only authenticated F proof platform; non-Linux behavior remains frozen compatibility
+or unavailable/unproven. Managed secure-FD behavior, direct-member compatibility, policy, network,
+filesystem, caging, capability, lifecycle, receipt, supervisor, cleanup, and rollback ownership are
+unchanged.
+
+The binding sequence is now:
+
+`Routes A–F complete` → `renewed R2-2 production-fix-free integration closeout` → `R2-3` →
+`R2-4` → `R3`.
+
+The exact next task is **A1.1d-5R2-2 renewed production-fix-free integration closeout**. This
+closeout does not begin or satisfy that next task and promotes no seam.

@@ -1287,3 +1287,48 @@ duplicate-rejecting private-wire decode, and bounded unavailable rendering; they
 lifecycle, transport, or world health. No HIGH or CRITICAL edit is authorized. Encountering a need
 to edit any HIGH/CRITICAL row, add a process family/module owner, or call a frozen active row is a
 mandatory stop, regardless of passing tests.
+
+## A1.1d-5R2-2F completed seam crosswalk
+
+This section is the controlling status for the F rows above. It supersedes their live phrases that
+name F5-PD or F5 as the next packet; those phrases remain historical checkpoint evidence. F is
+complete, while renewed R2-2 integration closeout and every later slice remain unstarted.
+
+| Increment | Runtime proof commit before documentation replay | Exact owner/path closure | Final disposition |
+|---|---|---|---|
+| F1 | `922e1792fe886ebe871400e999858e451f8fcb01` | Sole `AuthenticatedWorldDepsContextV1` binder in `world_deps/mod.rs` | Exact A and commitment bind before world-deps reads or effects |
+| F2 | `77fdcd8a139f3b72f7994f1a1692ddb4dfbf47e4` | Current/global/workspace, world-enable, Host/World dispatch propagation | Normal dependency scopes receive one request-scoped authenticated context |
+| F3 | `0cd1d7af40347f3a149f2b84aca4d26ff1f09a3d` | Additive authenticated request builder in `world_ops.rs` plus export wiring | Exactly two authorized consumers; explicit readiness owner reused |
+| F4 | `af2a3da6d85a6ca3f3f05bedf6768e4f89fd8e30` | Runtime probe/install/sync and provision/post-sync leaves | Exact fixed target and seven-entry generated environment; zero ambient forwarding |
+| F5-PD | `653a7d91489563bc2a8e3395feeb53e159254240` | Hidden authenticated Linux passive World child and strict private decoder | No public Doctor change and no active lifecycle/probe path reachable |
+| F5 | `2bb4696d7181d974c1b02e33d82e09422cdae7de` | Linux `WorldDepsDoctorSnapshotV1`, passive collector, exact-A parent composition, and bounded tests | Missing health evidence is unavailable; mixed/malformed/fixture runtime claims are incoherent; disabled remains child-free |
+
+The final PI-106/PI-107/PI-108 F path is:
+
+`authenticated A` → `A-derived config/global inventory plus request-scoped launch-CWD/workspace`
+`inventory and world-deps scope` → `passive world-deps snapshot`
+plus `authenticated F5-PD World child` → `exact-A fail-closed composition` → existing Host/World/
+shim-doctor/Health JSON and human rendering.
+
+There is no new seam owner. Carrier identity and commitment establish provenance, not runtime
+health. A fixture cannot promote itself from compatibility evidence to product authority. No
+ambient B, environment-only selector, contextless state, public Doctor invocation, readiness,
+socket/service transport, execution endpoint, active probe, or side table participates in the
+authenticated Linux result. Rejected evidence is not retained as a healthy report.
+
+The final GitNexus comparison for F5 is LOW: four changed files, 27 mapped changed symbols
+including test/line-shift attributions, zero affected execution flows, and no new process family.
+The F5 semantic production delta is limited to the Linux cfg portions of
+`WorldDepsDoctorSnapshotV1`, `collect_doctor_snapshot_v1`, `gather_world_deps_section`, and
+`status_for_world_deps_report`. The same source hunks add mechanical
+`cfg(not(target_os = "linux"))` separation to the two existing non-Linux functions and use
+equivalent imported path qualifications; non-Linux behavior and wire output remain unchanged.
+
+The landed managed-gateway secure-FD seam remains unchanged and regression-green. Its existence
+does not close direct-member adoption: `RG-CONFIG-02`, `RG-CONFIG-04`, `RG-UAA-02`, and
+`RG-UAA-03` remain open under D1/E3/D3. `RG-HOME-01` and `RG-INSTALL-01` also remain open. F does
+not change policy/network/world-fs/caging/capability/lifecycle ownership, provide privileged smoke,
+or promote any target seam.
+
+The exact next crosswalk node is **A1.1d-5R2-2 renewed production-fix-free integration closeout**.
+It must rerun Routes A–F without a production fix. R2-3 follows only after that closeout.

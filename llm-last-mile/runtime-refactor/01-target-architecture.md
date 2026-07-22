@@ -430,8 +430,8 @@ Routes A–D are individually review-clean, but they do not exhaust the authenti
 The failed R2-2 integration closeout found two remaining projection seams and one diagnostic
 composition invariant. R2-2E is implementation-, proof-, and review-complete. F0, F0a, F0b, and
 F0-HC were then implemented, proof-complete, review-clean, committed, and preserved. R2-2F was the
-exact next packet at that checkpoint. F3/F4 are now complete and F5-PD is the exact next
-prerequisite beneath F5; a renewed
+exact next packet at that checkpoint. At the later F3/F4 checkpoint, F5-PD was the exact next
+prerequisite beneath F5; the completed-F section below supersedes that historical status. A renewed
 Routes A–F integration closeout follows F.
 
 R2-2E makes world-gateway projection a pure consumer of already-authenticated A. The landed shell world
@@ -972,3 +972,53 @@ contract above is met. Non-Linux compatibility remains frozen: no native readine
 is fabricated, and unsupported/unproven paths fail closed. Every non-Linux target rejects the hidden
 passive discriminator without altering its ordinary compatibility route. Normal public
 `substrate world doctor --json` remains unchanged on every platform.
+
+## A1.1d-5R2-2F completed diagnostic architecture
+
+The F5-PD boundary described above is implemented at `653a7d91489563bc2a8e3395feeb53e159254240`
+and remains frozen. F5 is implemented at `2bb4696d7181d974c1b02e33d82e09422cdae7de`.
+Together they close the authenticated Linux diagnostic composition path without creating a new
+runtime-health authority.
+
+The final composition has one identity owner and two deliberately different evidence classes:
+
+| Constituent | Final authority and classification |
+|---|---|
+| Authenticated carrier, selected A, current principal, and non-secret commitment | Required identity/provenance evidence; never sufficient runtime-health evidence |
+| A-derived config/global inventory plus request-scoped launch-CWD/workspace inventory used to construct the passive world-deps snapshot | Authenticated diagnostic scope joined through the shared context; missing scope is unavailable and conflicting scope is incoherent |
+| F5-PD child | Authenticated non-mutating World identity evidence; its bounded unavailable result cannot be promoted to runtime health |
+| `A/health/world_deps.json` | Compatibility/test evidence only; physical path and identity must match A, runtime claims are rejected, and the payload is never retained as production truth |
+| Missing passive runtime-health evidence | `Error`/unavailable with `ok=false`; never inferred from identity, carrier presence, config, inventory, or fixture existence |
+| Duplicate, unknown, malformed, partial, stale, mixed A/B, tampered, conflicting, or secret-bearing evidence | Incoherent/fail-closed; rejected bytes and marker values are not retained or echoed |
+| World disabled | Existing disabled snapshot, with no child, fixture, runtime observation, or mutation |
+| macOS, Windows, and other non-Linux routes | Existing compatibility or unavailable behavior; no authenticated/native F proof claim |
+
+Linux `WorldDepsDoctorSnapshotV1` carries the selected-prefix and commitment identity needed for
+the exact-A join and rejects unknown top-level fields before lossy value use. The Linux collector
+performs no applied/runtime probe: it returns an empty applied set plus the bounded reason
+`passive runtime health evidence unavailable`. The parent validates identity, commitment, CWD,
+inventory mode, builtins mode, item shape, and duplicate membership before classification. A
+fixture may prove only that a compatibility payload is well-formed and bound to A; retained output
+is recomposed from the passive A collector rather than copied from that payload.
+
+The resulting Host, World, world-deps, shim-doctor, and Health views share the same fail-closed
+truth. No surface may report success while a required constituent is unavailable or incoherent.
+The existing rendering and report envelopes are sufficient, so F adds no parallel resolver,
+side table, service endpoint, persistence format, transport schema, or lifecycle owner.
+
+The non-capability boundary is unchanged. F cannot start/restart or connect to a service or
+activation socket, call `/v1/doctor/world` or `/v1/execute`, create a world, probe runtime
+filesystem/capability state, execute a workload, install/sync/provision, mutate config/policy/
+metadata/fixtures/sockets/service state, or repair/clean/rollback. Public World Doctor remains the
+active compatibility diagnostic it was before F5-PD; only the hidden authenticated nested child is
+passive.
+
+The managed gateway's one-time secure-FD producer/receiver/bundle remains a landed, separately
+owned primitive and is unchanged. Direct world Codex/UAA adoption of that gateway remains open
+under `RG-CONFIG-02`, `RG-CONFIG-04`, `RG-UAA-02`, and `RG-UAA-03`; copied seed-home/config compatibility is not
+promoted. Likewise no policy, network, world-fs, caging, placement, receipt, supervisor, retained
+worker, cleanup, rollback, or platform-native capability moves into F.
+
+F is therefore complete as a bounded authenticated Linux composition closure, not as native
+cross-platform proof and not as R2-2 integration closeout. The next architectural node is
+`A1.1d-5R2-2 renewed production-fix-free integration closeout`; it must not repair production code.

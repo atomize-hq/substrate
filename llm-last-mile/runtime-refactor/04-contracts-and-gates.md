@@ -6739,3 +6739,66 @@ No test result waives a stop condition.
 After implementation, focused proof and three fresh isolated read-only reviews must be CLEAN before
 F5 can resume. Then the only legal sequence is `F5-PD → F5 → final F walls → F closeout → renewed
 R2-2 integration closeout`. R2-3, R2-4, and R3 remain later and unstarted.
+
+## A1.1d-5R2-2F completed gate record
+
+The required sequence above completed through F closeout. It did not enter renewed R2-2
+integration closeout. The following record is binding for the completed F boundary.
+
+### Final composition contract
+
+1. Request-scoped authenticated A is the sole identity owner. Selected prefix, non-secret
+   commitment, CWD/workspace scope, config, inventory, dependency scope, passive child, and every
+   retained diagnostic constituent must join to that exact A.
+2. Linux `collect_doctor_snapshot_v1` validates A and reads A-derived config/global inventory plus
+   request-scoped launch-CWD/workspace inventory through the shared authenticated context. It
+   performs no applied/runtime-health probe and reports the bounded unavailable reason.
+3. Linux no-fixture World-enabled composition uses the frozen F5-PD authenticated passive child.
+   Carrier identity is not runtime-health authority. Missing evidence is unavailable, never success.
+4. `A/health/world_deps.json` remains compatibility/test evidence only. Its physical canonical path,
+   identity, commitment, CWD, enums, item shape, and duplicates are checked. Runtime claims are
+   rejected, and accepted fixture bytes are not retained as production truth.
+5. Duplicate, unknown, malformed, partial, stale, mixed A/B, tampered, conflicting, or
+   secret-bearing evidence is incoherent/fail-closed. Rejected raw values are not echoed to JSON,
+   human output, errors, logs, traces, snapshots, or retained fixtures/state.
+6. World-disabled composition returns the pre-existing disabled snapshot before any child, fixture,
+   or runtime evidence selection.
+7. Coherent success still requires all contract-mandated adequate runtime evidence. Because no such
+   passive evidence exists, current Linux authenticated composition truthfully remains unavailable.
+8. Public `world doctor --json`, report/transport schemas, readiness, exact seven-entry generated
+   environment, socket/service lifecycle, world-service, execute, probes, policy/network/world-fs,
+   caging/capability, secure-FD, receipt/supervisor, cleanup/rollback, and non-Linux compatibility
+   remain frozen.
+
+### Final regression authority
+
+| Gate | Final result |
+|---|---|
+| Shell library, parallel wall 1 | 1,309 discovered; 1,264 passed; 45 failed; 0 ignored |
+| Shell library, parallel wall 2 | 1,309 discovered; 1,264 passed; 45 failed; 0 ignored |
+| Shell library, parallel wall 3 | 1,309 discovered; 1,264 passed; 45 failed; 0 ignored |
+| Shell library, serial wall | 1,309 discovered; 1,264 passed; 45 failed; 0 ignored |
+| Failure names | 45; SHA-256 `b23bb59ad12833d2c1d37c19c54933cd6bcb1c75e0dab8a70179b9881372be70` |
+| Normalized signatures | 45; SHA-256 `33c686a6ec9f3a0a4f51e1fca976445e6804da12fbbff50312a03f0042cdfac3` |
+| Clean F5-PD → F5 transition | two library `NewPass`, three focused integration `NewPass`; every adverse/removal/weakening transition zero |
+| F5 doctor/Health suites | shim-doctor 20/20; shim-health 8/8; world-enable 21/21 |
+| Auth/request/readiness/passive/policy focused library suites | 97/97 across the exact eight recorded filters |
+| Managed secure-FD regressions | common 46/46; world-service launcher 18/18; gateway receiver 18/18; bounded gateway runtime 21/21 |
+| Policy/network/capability regressions | shell policy snapshot 10/10; policy model 14/14; broker in-process 67/67 with eight frozen pre-witness shell-spawn failures; world-service routing 6/6 plus four exact authority/netfilter tests |
+| Compilation and formatting | shell all-target, workspace all-target, `cargo fmt --all -- --check`, and `git diff --check` pass |
+| Clippy | raw `-D warnings` retains exactly 20 inherited `needless_borrow` findings and no other warning; differential allows only that lint and passes |
+| GitNexus | LOW; four F5 files; 27 mapped symbols; zero affected flows; no new process family |
+
+The auxiliary full world-service unit run completed 131 tests without failure before two existing
+FUSE doctor tests stalled on environmental unmount cleanup; it was terminated and is not claimed as
+a full pass, privileged smoke, or a substitute for the bounded gates above.
+
+Fresh whole-F read-only reviews `/root/f_final_authority_security`,
+`/root/f_final_lifecycle_regression`, and `/root/f_final_source_platform` are CLEAN. F5 preservation
+is `feat/preserve-a1-f5-runtime-20260722`; review-clean complete-F preservation is
+`feat/preserve-a1-f-complete-runtime-20260722`. The F5-PD and blocked-donor preservation refs remain
+unchanged, and the blocked donor was neither merged, cherry-picked, nor restored.
+
+The next gate is exactly **A1.1d-5R2-2 renewed production-fix-free integration closeout**. It is a
+new proof node, not part of this F closeout, and may not repair production code. R2-3, R2-4, R3,
+privileged product smoke, and direct-member Codex/UAA gateway adoption remain outside this gate.

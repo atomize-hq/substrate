@@ -1344,3 +1344,82 @@ the existing fail-closed report; credential/request/carrier/preimage or unselect
 product/public-Doctor behavior regression; non-deterministic differential; or review
 infrastructure failure. No passing test waives a stop. F5 and later nodes remain unstarted until
 F5-PD implementation and fresh review are complete.
+
+## A1.1d-5R2-2F — completed phase record
+
+The F5-PD prerequisite and its fresh review completed before F5. The condition in the preceding
+sentence is therefore satisfied. This section is the controlling phase status: F1–F5 and F5-PD are
+complete; the renewed R2-2 integration closeout is the exact next unstarted node.
+
+| Phase | Commit | Tree | Ordinary patch / full-index patch | Stable patch ID |
+|---|---|---|---|---|
+| F1 | `922e1792fe886ebe871400e999858e451f8fcb01` | `b91ba4cc37785a0f62dc07917d69812d1e09ca13` | `829b8a19c0d2deb53af0b9c2f277e7eab53b5001f41c59ebc3e7075c1a3e8b54` / `f7c16056ce5b379848203b066bffec37ef9f6f46fdcb2753af6af4feac01886f` | `155df010725c49c5a5720361d97d021e57464004` |
+| F2 | `77fdcd8a139f3b72f7994f1a1692ddb4dfbf47e4` | `3f71d64a78376f7addb1cf063a8e78412ffd0a51` | `42f5278a6cab739c9d5b5e5ca7ee2c3a960ba8d8197e2f772192a65e391ed31b` / `b65e3146e870ac7579e43508fb87b4c1bdc63afae96bf67473b75a7285e8bfe8` | `0edc6a453575cffbf126514552fe6609777c6c82` |
+| F3 | `0cd1d7af40347f3a149f2b84aca4d26ff1f09a3d` | `a2b1ce4632d85c5514dccdea83279cb473960c90` | `c9ec972b7098ce8b5d633f7793678fccbb7ffebda4d2769bc3119a4791990c61` / `3db155ae7e308f50e9f9c80b74ea5ace50b2fcc6e8ffd5cf34e0c288955343d2` | `a8ad65e71975b236f082f4abeb3b0fdcd37f216e` |
+| F4 | `af2a3da6d85a6ca3f3f05bedf6768e4f89fd8e30` | `97cade96e9c6e763fcba7deb5154cf4c78ca8031` | `179e67b16316ae62683085cf17d5e4e56c30fec7c51ca12b4edeb47d78d36e65` / `3996fba97a44fc20c2e95d9395971b21172ceeca963a8d235b2ab7a57579fd2a` | `016e4edb9ecd21150a4e788ab93b7ba0dc0df4c6` |
+| F5-PD | `653a7d91489563bc2a8e3395feeb53e159254240` | `4e3457444c64bbddda7bcf19300c4e7e81082678` | `b7a5b60f8c7dbd1960b7fec4870de047c827ed611ea1d4bfba33e6a9ed22e32d` / `b6e7e4a61c24815ef24fb74660d3cbc499de256771d1857bb963b0fd5f31b03d` | `90dafa73a5887457114ad2d4073fab8980e5630e` |
+| F5 | `2bb4696d7181d974c1b02e33d82e09422cdae7de` | `313a8a613a6cd91e72c0cc1664f4b9842fefa305` | `991859870123dca56f3ee080876742abb2e556f9ee0bdf62f3577fdf1ccfb189` / `8e2be2f2b84dc5d3cd573b9670e4d3eccc3060893f478a414d057e39b002a943` | `b768cb94c51802e2440fbf1eb7f29fc0693a446b` |
+
+The exact name-only manifests and their SHA-256 values are:
+
+- F1 `583b56fbd6a174c477507f954f01258137312f7694e1a168b0b956625f06bc2e`:
+  `builtins/world_deps/mod.rs`;
+- F2 `cbd53734ce75e81a3be0d0e95ad7039ba1bab5a97724fb546cd873fe076ee024`:
+  `builtins/world_deps/{mod.rs,surfaces.rs}`, `builtins/world_enable/runner.rs`, and
+  `execution/platform/{linux.rs,mod.rs}`;
+- F3 `3e4446f23d3deec5073c9076e246ae5f73dfa3ea4faa3fe3dd0e268b6ad65ace`:
+  `execution/routing.rs` and `execution/routing/dispatch/{prelude.rs,world_ops.rs}`;
+- F4 `546d3eab0828c2064a20a425bf5a44cbc17321c1c0bba315ff31bcc4137838c1`:
+  `builtins/world_deps/{mod.rs,surfaces.rs}`, `builtins/world_enable/runner.rs`,
+  `builtins/world_enable/runner/provision_deps.rs`, `execution/routing.rs`, and
+  `execution/routing/dispatch/world_ops.rs`;
+- F5-PD `ee52b673713f6b0d654858b81bfd966f0a2768da1a73381b775490b74dc71c75`:
+  `builtins/shim_doctor/report.rs`, `execution/{cli.rs,platform/mod.rs,routing.rs}`, and
+  `tests/{doctor_scopes_ds0.rs,shim_doctor.rs,shim_health.rs}`;
+- F5 `3716e05de411351b410c31fba9b37aebf98f470a1e1170f6d6a5c35658dca883`:
+  `builtins/{shim_doctor/report.rs,world_deps/mod.rs}` and
+  `tests/{shim_doctor.rs,shim_health.rs}`.
+
+All abbreviated paths in this list are relative to `crates/shell/src/` except entries beginning
+with `tests/`, which are relative to `crates/shell/`.
+
+F5's exact production manifest is two files:
+
+- `crates/shell/src/builtins/shim_doctor/report.rs`: Linux cfg
+  `gather_world_deps_section` and `status_for_world_deps_report` composition, plus mechanical
+  `cfg(not(target_os = "linux"))` separation and equivalent path qualification on the existing
+  non-Linux definitions with behavior/wire output unchanged;
+- `crates/shell/src/builtins/world_deps/mod.rs`: Linux cfg identity fields/strict top-level decode
+  on `WorldDepsDoctorSnapshotV1` and passive `collect_doctor_snapshot_v1` behavior only.
+
+Its exact test manifest is `crates/shell/tests/{shim_doctor.rs,shim_health.rs}` plus colocated tests
+in those two production files. The five added tests are exactly two library tests
+(`world_deps_fixture_cannot_establish_runtime_health_or_cross_a` and
+`world_deps_section_drops_unavailable_application_payloads`) and three integration tests
+(`shim_doctor_surfaces_bounded_incoherent_world_deps_truth`,
+`shim_doctor_no_fixture_uses_only_passive_child_and_unavailable_deps`, and
+`health_and_shim_doctor_share_bounded_non_mutating_world_deps_truth`). Two pre-existing Linux
+assertion branches were strengthened; no test was removed, renamed, substituted, ignored, or
+weakened.
+
+The complete phase gate is satisfied:
+
+- exact A identity/commitment joins config, inventory, dependency scope, passive child, and output;
+- enabled no-fixture composition executes exactly the passive authenticated child and returns
+  bounded unavailable truth without active service/socket/transport/execute/probe behavior;
+- disabled composition remains child- and fixture-free;
+- fixture evidence is A-bound test/compatibility evidence only and cannot establish runtime health;
+- mixed, malformed, duplicate, unknown, stale, partial, tampered, conflicting, and secret-bearing
+  evidence fails closed without disclosure;
+- Host, World, world-deps, shim-doctor, and Health JSON/human surfaces agree;
+- F3/F4 readiness and exact seven-entry environment, public Doctor, managed secure-FD, policy,
+  network, filesystem, capability, lifecycle, cleanup, and platform boundaries remain frozen.
+
+Three parallel shell-library walls and one serial wall each report 1,309 discovered, 1,264 passed,
+45 failed, and 0 ignored with exact inherited name/signature hashes. Shell/workspace all-target
+checks, differential Clippy, formatting, diff checks, and GitNexus zero-flow containment pass.
+Linux proof is complete; non-Linux remains explicit compatibility/unproven and privileged product
+smoke remains R2-4-owned.
+
+`Routes A–F complete` → **`A1.1d-5R2-2 renewed production-fix-free integration closeout`** →
+`R2-3` → `R2-4` → `R3`.

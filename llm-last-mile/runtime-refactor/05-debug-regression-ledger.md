@@ -2590,6 +2590,146 @@ parent/full environment, and commitment preimages without echoing the rejected k
 and human output therefore share one existing representation without a transport/report-schema
 change.
 
-F5-PD changes documentation only at this checkpoint. Runtime implementation, F5, final F walls,
-F closeout, renewed R2-2 integration closeout, R2-3, R2-4, and R3 are unstarted. The exact next task
-is **Implement F5-PD, re-review it, then resume F5**.
+F5-PD changed documentation only at that checkpoint. Its runtime implementation and the F5 work
+that followed are recorded by the controlling closeout below.
+
+## A1.1d-5R2-2F final evidence and decision ledger
+
+### Verified source and preservation identities
+
+F5 started from clean F5-PD HEAD `653a7d91489563bc2a8e3395feeb53e159254240`, tree
+`4e3457444c64bbddda7bcf19300c4e7e81082678`, on
+`feat/internal-host-orchestrator-world-dispatch-bootstrap`. The published source remote remained
+`2de15dfba9f11d874eccfdca5438c600be1045b2`; divergence was 0 behind / 16 ahead and the worktree,
+index, and untracked set were clean. F5-PD preservation
+`feat/preserve-a1-f5pd-runtime-20260722` remained exact at that commit with ordinary/full-index/
+stable patch identities `b7a5b60f8c7dbd1960b7fec4870de047c827ed611ea1d4bfba33e6a9ed22e32d`,
+`b6e7e4a61c24815ef24fb74660d3cbc499de256771d1857bb963b0fd5f31b03d`, and
+`90dafa73a5887457114ad2d4073fab8980e5630e`.
+
+The blocked donor preservation `feat/preserve-a1-f5-blocked-candidate-20260722` remained exact at
+`c4b93506480ae5e9708417067980e08e0e754b7a`, parent
+`7802c44198625ea6849933140c390900ebe84190`, tree
+`03bec2f517866e5213b8a0bed9ad99058c25ebc3`, ordinary/full-index patches
+`81151bdad6aa9e7dd1963b7b22f1f3dad66b46399174ff26bfa33ec08859e03a` and
+`7805a28defc11866902fadaaf99d7c752800c5aab257b9c927187920bd6cf908`. It is not an ancestor of
+the source branch and was not merged, cherry-picked, reset onto the source, or restored wholesale.
+
+F5 is `2bb4696d7181d974c1b02e33d82e09422cdae7de`, parent exact F5-PD, tree
+`313a8a613a6cd91e72c0cc1664f4b9842fefa305`, complete message
+`fix: compose truthful authenticated doctor evidence`. Its ordinary patch is
+`991859870123dca56f3ee080876742abb2e556f9ee0bdf62f3577fdf1ccfb189`, full-index patch is
+`8e2be2f2b84dc5d3cd573b9670e4d3eccc3060893f478a414d057e39b002a943`, and stable patch ID is
+`b768cb94c51802e2440fbf1eb7f29fc0693a446b`. The name-only manifest hash is
+`3716e05de411351b410c31fba9b37aebf98f470a1e1170f6d6a5c35658dca883`; the complete name-status
+manifest hash recorded during commit proof is
+`69285de3d080d277cc73232173e6fb035ca898f336e818960fd036c862164c13`.
+The per-file blob SHA-256 values below are the exact fingerprints.
+
+| F5 file | Final blob SHA-256 | Insertions / deletions |
+|---|---|---:|
+| `crates/shell/src/builtins/shim_doctor/report.rs` | `f02cff00312eb847d3bce47ab1311fe6938b231d0fe7430015bc18232a1bfde1` | 427 / 1 |
+| `crates/shell/src/builtins/world_deps/mod.rs` | `e4c22293ff8aeb541a5e0115996006c6368931803dd900e86aed558fd741020b` | 37 / 7 |
+| `crates/shell/tests/shim_doctor.rs` | `d4af75efc5da8bb17427b5a006e2dc33e1762d82d929665a671ffb7d236c671a` | 134 / 0 |
+| `crates/shell/tests/shim_health.rs` | `f135c7cffd9c236f642ef119887df09ada7330c55c853cf324e14630f2ce91db` | 155 / 0 |
+
+Dedicated preservation branches `feat/preserve-a1-f5-runtime-20260722` and
+`feat/preserve-a1-f-complete-runtime-20260722` both point remotely to exact F5. The source runtime
+remained local/unpushed while preservation branches carried immutable proof.
+
+### Blocked-donor hunk disposition
+
+Every donor hunk was classified before production edits:
+
+| Donor hunk family | Final disposition |
+|---|---|
+| World-deps selected-prefix/commitment fields | Applicable only after rebasing onto F5-PD; retained under Linux cfg with strict top-level decoding |
+| Parent world-deps identity/status checks | Applicable after semantic correction; exact A/CWD/enums/duplicates are validated and absent health stays unavailable |
+| Fixture selection and direct fixture payload retention | Requires semantic correction; fixture is physical A-bound compatibility/test evidence only, runtime claims reject, retained output is recomposed |
+| Donor no-fixture public World Doctor child | Forbidden and replaced by F5-PD's authenticated passive child |
+| Donor generic `serde_json::Value`-first decoding | Forbidden; typed/duplicate-rejecting validation precedes nested generic shape inspection |
+| Donor inference of success from identity, exit, empty error, or missing runtime evidence | Forbidden; missing evidence is bounded unavailable |
+| Active public Doctor, service/socket/readiness/HTTP/execute/probe behavior | Forbidden and absent |
+| Ambient/contextless identity or fixture authority | Forbidden; request-scoped A is the sole identity owner |
+| F5-PD hidden selector, early authenticated branch, passive emitter, and strict child decoder hunks | Replaced by completed F5-PD and frozen |
+| Non-Linux compatibility, report/transport schema expansion, F3/F4 request/readiness/environment, secure-FD, policy/capability, lifecycle, cleanup, or later-packet hunks | Obsolete, outside F5, or forbidden |
+
+### Final runtime behavior and proof
+
+Linux `WorldDepsDoctorSnapshotV1` rejects unknown top-level fields and carries A's selected prefix
+and non-secret commitment. Linux `collect_doctor_snapshot_v1` validates the authenticated context,
+reads A-derived config/global inventory plus request-scoped launch-CWD/workspace inventory through
+that shared context, and deliberately does not call the applied/runtime probe. It
+returns no applied items and the bounded reason `passive runtime health evidence unavailable`.
+
+Linux `gather_world_deps_section` keeps the existing disabled early return. On the enabled route it
+accepts only the exact physical `A/health/world_deps.json` compatibility fixture, decodes it
+strictly, rejects runtime claims and mixed/malformed evidence, then discards its payload and
+recomposes from the passive A collector. Without a fixture it calls the same passive collector.
+The result is unavailable until adequate permitted runtime evidence exists; no identity field or
+fixture can fabricate coherent health. A→B fixture symlinks, raw applied errors, fixture counts,
+known-field secret markers, nested unknown fields, duplicates, partial sets, and identity/
+commitment/CWD mismatches fail closed without disclosure.
+
+The exact no-fixture shim-doctor integration proves one authenticated passive child and zero public
+Doctor, socket/service, HTTP, execute, probe, world, provisioning, repair, cleanup, or mutation
+activity. Shim-doctor and Health JSON/human views agree. The public World Doctor tests remain
+semantically unchanged. F3/F4 readiness and exact seven-entry environment are frozen.
+
+The clean F5-PD shell-library baseline was 1,307 discovered, 1,262 passed, 45 failed, 0 ignored.
+Each of three final parallel walls and the final serial wall was exactly 1,309 discovered, 1,264
+passed, 45 failed, 0 ignored. The 45 failure names and normalized signatures retained SHA-256
+`b23bb59ad12833d2c1d37c19c54933cd6bcb1c75e0dab8a70179b9881372be70` and
+`33c686a6ec9f3a0a4f51e1fca976445e6804da12fbbff50312a03f0042cdfac3` on every wall. The serial
+normalizer excludes libtest's standalone `FAILED` harness token; after that format-only exclusion
+its panic evidence is byte-identical to the parallel authority.
+
+| Transition from clean F5-PD | Count |
+|---|---:|
+| Existing pass → fail | 0 |
+| New fail | 0 |
+| Fail → changed failure | 0 |
+| Fail → pass | 0 |
+| New library pass | 2 |
+| New focused integration pass | 3 |
+| Removed | 0 |
+| Renamed or substituted | 0 |
+| Newly ignored | 0 |
+| Weakened or redirected | 0 |
+
+Focused F proof includes world-deps, current/global/workspace/runtime/provision/post-sync,
+authenticated builder, exact readiness/environment, passive child/decoder, Host/World/Health/
+shim-doctor, public Doctor compatibility, policy/network/world-fs, and managed secure-FD regression
+suites. Shell and workspace all-target checks pass. Raw shell all-target Clippy remains non-green
+only for the exact 20 inherited `needless_borrow` findings in untouched/frozen code; the documented
+differential permits only that lint and otherwise denies every warning, and passes. Formatting and
+diff checks pass.
+
+The auxiliary full world-service unit wall completed 131 tests without failure and then stalled in
+two existing FUSE doctor tests after an environmental busy-unmount diagnostic. It was terminated;
+no complete world-service wall, privileged smoke, or product capability proof is claimed from that
+run. The bounded secure-FD, request-routing, capability-gate, authority, and netfilter filters pass.
+
+GitNexus final F5 detection is LOW with four changed files, 27 mapped changed symbols, zero affected
+execution flows, and no new process/module owner. Fresh F5 increment reviewers
+`/root/f5_inc_authority_r2`, `/root/f5_inc_lifecycle_r2`, and `/root/f5_inc_scope_r2` are CLEAN.
+Fresh complete-F reviewers `/root/f_final_authority_security`,
+`/root/f_final_lifecycle_regression`, and `/root/f_final_source_platform` are CLEAN.
+After the first docs-only review findings were remediated, fresh replacement reviewers
+`/root/f_docs_arch_authority_r2`, `/root/f_docs_evidence_diff_r2`, and
+`/root/f_docs_sequence_stale_r2` returned CLEAN for architecture/authority,
+evidence/differential, and cross-document sequencing/stale-status cleanup respectively.
+
+### Final decision and next node
+
+F1–F5 and F5-PD are runtime-complete, proof-complete, review-clean, preserved, and canonically
+closed out. Linux authenticated truth is proven; macOS, Windows, and other non-Linux routes remain
+frozen compatibility/unavailable/unproven. Public Doctor, managed secure-FD, direct-member
+credential compatibility, policy, network, world-fs, caging, capability, service/lifecycle,
+receipt/supervisor, cleanup/rollback, and platform ownership are unchanged. Open RG gates remain
+open, direct-member Codex/UAA gateway adoption is not begun, privileged product smoke is not
+claimed, and no seam is promoted.
+
+The successful terminal state is `A1.1d-5R2-2FComplete`. The exact next node is
+**A1.1d-5R2-2 renewed production-fix-free integration closeout**. It remains unstarted here;
+R2-3, R2-4, and R3 remain after it.
