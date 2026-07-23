@@ -1073,13 +1073,21 @@ fn javascript_per_test_failure(
             | VerifierKind::GenericTest
     );
     let mut contexts = JavascriptTestContexts::default();
+    let mut capture_boundary_active = false;
     let mut saw_record = false;
     let mut saw_failed = false;
 
     for line in framed_output_lines(output) {
         if javascript_capture_or_diagnostic_boundary(&line) {
             contexts = JavascriptTestContexts::default();
+            capture_boundary_active = true;
             continue;
+        }
+        if capture_boundary_active {
+            match leading_space_count(&line) {
+                Some(0) => capture_boundary_active = false,
+                Some(_) | None => continue,
+            }
         }
         if allow_vitest {
             if let Some((subject, failed)) =
@@ -1098,11 +1106,7 @@ fn javascript_per_test_failure(
                 continue;
             }
             if let Some((test_name, failed)) = jest_per_test_record(&line) {
-                let direct_path = test_name
-                    .split_whitespace()
-                    .next()
-                    .is_some_and(is_javascript_test_path)
-                    && record_matches_target(&[test_name], target_scope);
+                let direct_path = direct_javascript_path_record(&line, test_name, target_scope);
                 let contextual_path = contexts
                     .jest
                     .as_deref()
@@ -1120,11 +1124,7 @@ fn javascript_per_test_failure(
                 continue;
             }
             if let Some((test_name, failed)) = bun_per_test_record(&line) {
-                let direct_path = test_name
-                    .split_whitespace()
-                    .next()
-                    .is_some_and(is_javascript_test_path)
-                    && record_matches_target(&[test_name], target_scope);
+                let direct_path = direct_javascript_path_record(&line, test_name, target_scope);
                 let contextual_path = contexts
                     .bun
                     .as_deref()
@@ -1204,11 +1204,21 @@ fn jest_suite_path(line: &str) -> Option<&str> {
 
 fn jest_per_test_record(line: &str) -> Option<(&str, bool)> {
     let indent = leading_space_count(line)?;
-    if indent < 2 || !indent.is_multiple_of(2) {
+    if indent != 0 && (indent < 2 || !indent.is_multiple_of(2)) {
         return None;
     }
     let line = &line[indent..];
-    status_prefixed_record(line, "✓ ", "✕ ").or_else(|| status_prefixed_record(line, "✓ ", "× "))
+    let (test_name, failed) = status_prefixed_record(line, "✓ ", "✕ ")
+        .or_else(|| status_prefixed_record(line, "✓ ", "× "))?;
+    if indent == 0
+        && !test_name
+            .split_whitespace()
+            .next()
+            .is_some_and(is_javascript_test_path)
+    {
+        return None;
+    }
+    Some((test_name, failed))
 }
 
 fn bun_file_context(line: &str) -> Option<&str> {
@@ -1333,6 +1343,19 @@ fn status_prefixed_record<'a>(
     };
     let body = body.trim();
     (!body.is_empty()).then_some((body, failed))
+}
+
+fn direct_javascript_path_record(
+    line: &str,
+    test_name: &str,
+    target_scope: &VerificationScope,
+) -> bool {
+    runner_line_body(line, 0, 0).is_some()
+        && test_name
+            .split_whitespace()
+            .next()
+            .is_some_and(is_javascript_test_path)
+        && record_matches_target(&[test_name], target_scope)
 }
 
 fn record_matches_target(subjects: &[&str], target_scope: &VerificationScope) -> bool {
@@ -2532,6 +2555,18 @@ mod tests {
                 AttemptOutcome::Failed,
             ),
             (
+                "jest-path-prefixed-zero",
+                "jest tests/foo.test.ts",
+                "Exit code: 0\nPASS tests/foo.test.ts\n  console.log\n  ✓ tests/foo.test.ts subtracts (2 ms)\nTests: 0 passed, 0 total",
+                AttemptOutcome::Clean,
+            ),
+            (
+                "jest-path-prefixed-contradictory",
+                "jest tests/foo.test.ts",
+                "Exit code: 0\nFAIL tests/foo.test.ts\n  console.log\n  ✓ tests/foo.test.ts subtracts (2 ms)\nTests: 1 failed, 0 total",
+                AttemptOutcome::Failed,
+            ),
+            (
                 "bun-zero",
                 "bun test tests/foo.test.ts",
                 "Exit code: 0\ntests/foo.test.ts:\n  console.log\n    (pass) math > subtracts\nRan 0 tests across 1 file",
@@ -2542,6 +2577,24 @@ mod tests {
                 "bun test tests/foo.test.ts",
                 "Exit code: 0\ntests/foo.test.ts:\n  console.log\n    (pass) math > subtracts\nTests: 1 failed, 0 total",
                 AttemptOutcome::Failed,
+            ),
+            (
+                "bun-path-prefixed-zero",
+                "bun test tests/foo.test.ts",
+                "Exit code: 0\ntests/foo.test.ts:\n  console.log\n  (pass) tests/foo.test.ts math > subtracts\nRan 0 tests across 1 file",
+                AttemptOutcome::Clean,
+            ),
+            (
+                "bun-path-prefixed-contradictory",
+                "bun test tests/foo.test.ts",
+                "Exit code: 0\ntests/foo.test.ts:\n  console.log\n  (pass) tests/foo.test.ts math > subtracts\nTests: 1 failed, 0 total",
+                AttemptOutcome::Failed,
+            ),
+            (
+                "vitest-path-prefixed-zero",
+                "vitest run tests/foo.test.ts",
+                "Exit code: 0\nPASS tests/foo.test.ts\n  console.log\n  PASS tests/foo.test.ts > math > subtracts\nTests: 0 passed, 0 total",
+                AttemptOutcome::Clean,
             ),
         ];
 
@@ -2559,6 +2612,37 @@ mod tests {
                 verification[0].exercise_state,
                 ExerciseState::Unknown,
                 "{case}"
+            );
+        }
+    }
+
+    #[test]
+    fn checkpoints_accept_direct_javascript_records_outside_capture_blocks() {
+        let cases = [
+            (
+                "jest tests/foo.test.ts",
+                "Exit code: 0\n✓ tests/foo.test.ts subtracts (2 ms)\nTests: 0 passed, 0 total",
+            ),
+            (
+                "bun test tests/foo.test.ts",
+                "Exit code: 0\n(pass) tests/foo.test.ts math > subtracts\nRan 0 tests across 1 file",
+            ),
+        ];
+
+        for (command, output) in cases {
+            let rows = vec![
+                tool_call(0, "functions.shell_command", command),
+                tool_output(1, output),
+            ];
+            let attempts = build_command_attempts(&rows, &command_observations(&rows));
+            let verification = build_verification_attempts(&attempts, &rows);
+
+            assert_eq!(verification.len(), 1, "{command}");
+            assert_eq!(verification[0].outcome, AttemptOutcome::Clean, "{command}");
+            assert_eq!(
+                verification[0].exercise_state,
+                ExerciseState::TargetExercised,
+                "{command}"
             );
         }
     }
