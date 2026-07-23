@@ -1465,19 +1465,39 @@ fn attempt_output_text(attempt: &CommandAttempt, rows: &[CompactionRow]) -> Stri
             .map(|row| row.text.as_str())
     }) {
         // Row boundaries are transport framing, not source blank lines. Preserve explicit
-        // segment newlines and add only the single line break needed when neither side has one.
-        if !output.is_empty()
-            && !segment.is_empty()
-            && !output.ends_with('\n')
-            && !output.ends_with('\r')
-            && !segment.starts_with('\n')
-            && !segment.starts_with('\r')
-        {
+        // segment newlines and add only a line break that cannot complete a whitespace-only
+        // partial line on either side of the seam.
+        if should_insert_transport_line_break(&output, segment) {
             output.push('\n');
         }
         output.push_str(segment);
     }
     output
+}
+
+fn should_insert_transport_line_break(output: &str, segment: &str) -> bool {
+    !output.is_empty()
+        && !segment.is_empty()
+        && !trailing_partial_line(output).trim().is_empty()
+        && !leading_partial_line(segment).trim().is_empty()
+}
+
+fn trailing_partial_line(text: &str) -> &str {
+    let start = text
+        .as_bytes()
+        .iter()
+        .rposition(|byte| matches!(*byte, b'\n' | b'\r'))
+        .map_or(0, |index| index + 1);
+    &text[start..]
+}
+
+fn leading_partial_line(text: &str) -> &str {
+    let end = text
+        .as_bytes()
+        .iter()
+        .position(|byte| matches!(*byte, b'\n' | b'\r'))
+        .unwrap_or(text.len());
+    &text[..end]
 }
 
 fn output_contains_compile_blocker(output: &str) -> bool {
@@ -3014,6 +3034,140 @@ mod tests {
                 ExerciseState::Unknown,
                 "{case}"
             );
+        }
+    }
+
+    #[test]
+    fn checkpoints_do_not_complete_partial_whitespace_lines_at_typed_segment_seams() {
+        #[derive(Clone, Copy)]
+        struct RunnerCase {
+            name: &'static str,
+            command: &'static str,
+            capture_prefix: &'static str,
+            per_test_record: &'static str,
+            zero_summary: &'static str,
+        }
+
+        #[derive(Clone, Copy)]
+        struct SeamCase {
+            name: &'static str,
+            first_suffix: &'static str,
+            middle_segment: Option<&'static str>,
+            second_prefix: &'static str,
+        }
+
+        let runners = [
+            RunnerCase {
+                name: "vitest",
+                command: "vitest run tests/foo.test.ts",
+                capture_prefix:
+                    "Exit code: 0\nstdout | tests/foo.test.ts > math > subtracts\ncaptured payload",
+                per_test_record: "  PASS tests/foo.test.ts > math > subtracts",
+                zero_summary: "Tests: 0 passed, 0 total",
+            },
+            RunnerCase {
+                name: "jest",
+                command: "jest tests/foo.test.ts",
+                capture_prefix: "Exit code: 0\n  console.log\ncaptured payload",
+                per_test_record: "PASS tests/foo.test.ts\n  ✓ subtracts (2 ms)",
+                zero_summary: "Tests: 0 passed, 0 total",
+            },
+            RunnerCase {
+                name: "bun",
+                command: "bun test tests/foo.test.ts",
+                capture_prefix: "Exit code: 0\n  console.log\ncaptured payload",
+                per_test_record: "tests/foo.test.ts:\n(pass) math > subtracts",
+                zero_summary: "Ran 0 tests across 1 file",
+            },
+        ];
+        let seams = [
+            SeamCase {
+                name: "whitespace-partial",
+                first_suffix: "\n ",
+                middle_segment: None,
+                second_prefix: "",
+            },
+            SeamCase {
+                name: "empty-segment-after-whitespace-partial",
+                first_suffix: "\n ",
+                middle_segment: Some(""),
+                second_prefix: "",
+            },
+            SeamCase {
+                name: "lf",
+                first_suffix: "\n",
+                middle_segment: None,
+                second_prefix: "",
+            },
+            SeamCase {
+                name: "crlf",
+                first_suffix: "\r\n",
+                middle_segment: None,
+                second_prefix: "",
+            },
+            SeamCase {
+                name: "split-crlf",
+                first_suffix: "\r",
+                middle_segment: None,
+                second_prefix: "\n",
+            },
+        ];
+
+        for runner in runners {
+            for (summary_name, summary, expected_outcome) in [
+                ("zero", runner.zero_summary, AttemptOutcome::Clean),
+                (
+                    "contradictory",
+                    "Tests: 1 failed, 0 total",
+                    AttemptOutcome::Failed,
+                ),
+            ] {
+                for seam in seams {
+                    let first_segment = format!("{}{}", runner.capture_prefix, seam.first_suffix);
+                    let final_segment = format!(
+                        "{}{}\n{}",
+                        seam.second_prefix, runner.per_test_record, summary
+                    );
+                    let mut segments = vec![first_segment];
+                    if let Some(middle_segment) = seam.middle_segment {
+                        segments.push(middle_segment.to_string());
+                    }
+                    segments.push(final_segment);
+
+                    let mut rows = vec![tool_call_for_call(
+                        0,
+                        "call-split-partial-whitespace",
+                        "functions.shell_command",
+                        runner.command,
+                    )];
+                    rows.extend(segments.iter().enumerate().map(|(index, segment)| {
+                        typed_tool_output_for_call(
+                            index + 1,
+                            "call-split-partial-whitespace",
+                            index,
+                            segment,
+                        )
+                    }));
+
+                    let attempts = build_command_attempts(&rows, &command_observations(&rows));
+                    let case = format!("{}-{summary_name}-{}", runner.name, seam.name);
+                    assert_eq!(attempts[0].output_rows.len(), segments.len(), "{case}");
+                    assert_eq!(
+                        attempt_output_text(&attempts[0], &rows),
+                        segments.concat(),
+                        "{case} must not add transport text at the typed seam"
+                    );
+
+                    let verification = build_verification_attempts(&attempts, &rows);
+                    assert_eq!(verification.len(), 1, "{case}");
+                    assert_eq!(verification[0].outcome, expected_outcome, "{case}");
+                    assert_eq!(
+                        verification[0].exercise_state,
+                        ExerciseState::Unknown,
+                        "{case}"
+                    );
+                }
+            }
         }
     }
 
