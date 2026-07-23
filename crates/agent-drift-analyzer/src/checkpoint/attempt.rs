@@ -915,6 +915,12 @@ fn framed_output_lines(output: &str) -> impl Iterator<Item = String> + '_ {
         .filter(|line| !line.trim().is_empty())
 }
 
+fn framed_output_lines_with_separators(output: &str) -> impl Iterator<Item = String> + '_ {
+    output
+        .lines()
+        .map(|line| line.trim_end().to_ascii_lowercase())
+}
+
 fn combined_summary_evidence(
     saw_summary: bool,
     saw_zero: bool,
@@ -1073,20 +1079,31 @@ fn javascript_per_test_failure(
             | VerifierKind::GenericTest
     );
     let mut contexts = JavascriptTestContexts::default();
+    // Captured payload remains opaque until a blank separator is immediately followed by
+    // a parser-owned runner structure. Arbitrary column-zero text never resumes parsing.
     let mut capture_boundary_active = false;
+    let mut capture_separator_seen = false;
     let mut saw_record = false;
     let mut saw_failed = false;
 
-    for line in framed_output_lines(output) {
+    for line in framed_output_lines_with_separators(output) {
         if javascript_capture_or_diagnostic_boundary(&line) {
             contexts = JavascriptTestContexts::default();
             capture_boundary_active = true;
+            capture_separator_seen = false;
+            continue;
+        }
+        if line.trim().is_empty() {
+            capture_separator_seen |= capture_boundary_active;
             continue;
         }
         if capture_boundary_active {
-            match leading_space_count(&line) {
-                Some(0) => capture_boundary_active = false,
-                Some(_) | None => continue,
+            if capture_separator_seen && javascript_runner_resume_structure(verifier, &line) {
+                capture_boundary_active = false;
+                capture_separator_seen = false;
+            } else {
+                capture_separator_seen = false;
+                continue;
             }
         }
         if allow_vitest {
@@ -1172,6 +1189,42 @@ struct JavascriptTestContexts {
     jest: Option<String>,
     bun: Option<String>,
     deno: Option<(String, usize)>,
+}
+
+fn javascript_runner_resume_structure(verifier: VerifierKind, line: &str) -> bool {
+    let vitest = vitest_per_test_record(line).is_some() || direct_js_bullet_record(line).is_some();
+    let jest = jest_suite_path(line).is_some()
+        || jest_per_test_record(line)
+            .is_some_and(|(test_name, _)| direct_javascript_path_subject(line, test_name));
+    let bun = bun_file_context(line).is_some()
+        || bun_per_test_record(line)
+            .is_some_and(|(test_name, _)| direct_javascript_path_subject(line, test_name));
+    let deno = deno_running_context(line).is_some();
+    let generic = runner_line_body(line, 0, 0)
+        .and_then(|body| status_prefixed_record(body, "--- pass: ", "--- fail: "))
+        .is_some_and(|(test_name, _)| {
+            test_name
+                .split_whitespace()
+                .next()
+                .is_some_and(is_javascript_test_path)
+        });
+
+    match verifier {
+        VerifierKind::Vitest => vitest,
+        VerifierKind::Jest => jest,
+        VerifierKind::BunTest => bun,
+        VerifierKind::DenoTest => deno,
+        VerifierKind::NpmTest | VerifierKind::PnpmTest => vitest || jest || bun || deno,
+        VerifierKind::GenericTest => vitest || jest || bun || deno || generic,
+        VerifierKind::CargoCheck
+        | VerifierKind::CargoTest
+        | VerifierKind::CargoClippy
+        | VerifierKind::CargoFmt
+        | VerifierKind::CargoBuild
+        | VerifierKind::Pytest
+        | VerifierKind::Replay
+        | VerifierKind::GenericBuild => false,
+    }
 }
 
 fn vitest_per_test_record(line: &str) -> Option<(&str, bool)> {
@@ -1350,12 +1403,16 @@ fn direct_javascript_path_record(
     test_name: &str,
     target_scope: &VerificationScope,
 ) -> bool {
+    direct_javascript_path_subject(line, test_name)
+        && record_matches_target(&[test_name], target_scope)
+}
+
+fn direct_javascript_path_subject(line: &str, test_name: &str) -> bool {
     runner_line_body(line, 0, 0).is_some()
         && test_name
             .split_whitespace()
             .next()
             .is_some_and(is_javascript_test_path)
-        && record_matches_target(&[test_name], target_scope)
 }
 
 fn record_matches_target(subjects: &[&str], target_scope: &VerificationScope) -> bool {
@@ -2596,6 +2653,42 @@ mod tests {
                 "Exit code: 0\nPASS tests/foo.test.ts\n  console.log\n  PASS tests/foo.test.ts > math > subtracts\nTests: 0 passed, 0 total",
                 AttemptOutcome::Clean,
             ),
+            (
+                "vitest-interposed-unindented-zero",
+                "vitest run tests/foo.test.ts",
+                "Exit code: 0\nstdout | tests/foo.test.ts > math > subtracts\ncaptured payload at column zero\n  PASS tests/foo.test.ts > math > subtracts\nTests: 0 passed, 0 total",
+                AttemptOutcome::Clean,
+            ),
+            (
+                "vitest-interposed-unindented-contradictory",
+                "vitest run tests/foo.test.ts",
+                "Exit code: 0\nstdout | tests/foo.test.ts > math > subtracts\n  captured payload\n\ncaptured payload at column zero\n  PASS tests/foo.test.ts > math > subtracts\nTests: 1 failed, 0 total",
+                AttemptOutcome::Failed,
+            ),
+            (
+                "jest-interposed-unindented-zero",
+                "jest tests/foo.test.ts",
+                "Exit code: 0\n  console.log\ncaptured payload at column zero\nPASS tests/foo.test.ts\n  ✓ subtracts (2 ms)\nTests: 0 passed, 0 total",
+                AttemptOutcome::Clean,
+            ),
+            (
+                "jest-interposed-unindented-contradictory",
+                "jest tests/foo.test.ts",
+                "Exit code: 0\n  console.log\ncaptured payload at column zero\nPASS tests/foo.test.ts\n  ✓ subtracts (2 ms)\nTests: 1 failed, 0 total",
+                AttemptOutcome::Failed,
+            ),
+            (
+                "bun-interposed-unindented-zero",
+                "bun test tests/foo.test.ts",
+                "Exit code: 0\n  console.log\ncaptured payload at column zero\n(pass) tests/foo.test.ts math > subtracts\nRan 0 tests across 1 file",
+                AttemptOutcome::Clean,
+            ),
+            (
+                "bun-interposed-unindented-contradictory",
+                "bun test tests/foo.test.ts",
+                "Exit code: 0\n  console.log\ncaptured payload at column zero\n(pass) tests/foo.test.ts math > subtracts\nTests: 1 failed, 0 total",
+                AttemptOutcome::Failed,
+            ),
         ];
 
         for (case, command, output, expected_outcome) in cases {
@@ -2626,6 +2719,41 @@ mod tests {
             (
                 "bun test tests/foo.test.ts",
                 "Exit code: 0\n(pass) tests/foo.test.ts math > subtracts\nRan 0 tests across 1 file",
+            ),
+        ];
+
+        for (command, output) in cases {
+            let rows = vec![
+                tool_call(0, "functions.shell_command", command),
+                tool_output(1, output),
+            ];
+            let attempts = build_command_attempts(&rows, &command_observations(&rows));
+            let verification = build_verification_attempts(&attempts, &rows);
+
+            assert_eq!(verification.len(), 1, "{command}");
+            assert_eq!(verification[0].outcome, AttemptOutcome::Clean, "{command}");
+            assert_eq!(
+                verification[0].exercise_state,
+                ExerciseState::TargetExercised,
+                "{command}"
+            );
+        }
+    }
+
+    #[test]
+    fn checkpoints_resume_javascript_records_after_explicit_capture_separator() {
+        let cases = [
+            (
+                "vitest run tests/foo.test.ts",
+                "Exit code: 0\nstdout | tests/foo.test.ts > math > subtracts\n  captured payload\n\n  PASS tests/foo.test.ts > math > subtracts\nTests: 0 passed, 0 total",
+            ),
+            (
+                "jest tests/foo.test.ts",
+                "Exit code: 0\n  console.log\ncaptured payload\n\nPASS tests/foo.test.ts\n  ✓ subtracts (2 ms)\nTests: 0 passed, 0 total",
+            ),
+            (
+                "bun test tests/foo.test.ts",
+                "Exit code: 0\n  console.log\ncaptured payload\n\ntests/foo.test.ts:\n(pass) math > subtracts\nRan 0 tests across 1 file",
             ),
         ];
 
