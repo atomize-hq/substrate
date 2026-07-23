@@ -2868,6 +2868,75 @@ could not compile `agent-drift-analyzer` (lib test) due to 1 previous error"#,
 }
 
 #[test]
+fn checkpoints_do_not_promote_zero_or_unknown_test_counts_to_clean_progress() {
+    let cases = [
+        (
+            "zero",
+            r#"Exit code: 0
+running 0 tests
+
+test result: ok. 0 passed; 0 failed; 0 ignored; 0 measured; 1 filtered out"#,
+        ),
+        (
+            "unknown",
+            "Exit code: 0\nFinished `test` profile [unoptimized + debuginfo] target(s) in 0.42s\ncheckpoints::captures_progress",
+        ),
+        (
+            "contradictory",
+            r#"Exit code: 0
+running 0 tests
+
+test result: ok. 1 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out"#,
+        ),
+    ];
+
+    for (case, final_output) in cases {
+        let result = analyze_custom_rows(vec![
+            prompt_row(
+                0,
+                "turn-001",
+                "/goal Troubleshoot checkpoints::captures_progress and verify the exact target.",
+            ),
+            tool_call_row(
+                1,
+                "turn-001",
+                "functions.shell_command",
+                r#"{"command":"cargo test -p agent-drift-analyzer checkpoints::captures_progress -- --exact","workdir":"/repo"}"#,
+            ),
+            tool_output_row(
+                2,
+                "turn-001",
+                r#"Exit code: 101
+running 1 test
+test checkpoints::captures_progress ... FAILED
+
+test result: FAILED. 0 passed; 1 failed; 0 ignored; 0 measured; 0 filtered out"#,
+            ),
+            tool_call_row(
+                3,
+                "turn-001",
+                "functions.shell_command",
+                r#"{"command":"cargo test -p agent-drift-analyzer checkpoints::captures_progress -- --exact","workdir":"/repo"}"#,
+            ),
+            tool_output_row(4, "turn-001", final_output),
+        ]);
+        let checkpoint = result.sessions[0].checkpoints.last().expect("checkpoint");
+        let progress = checkpoint
+            .session_progress
+            .as_ref()
+            .expect("session progress");
+
+        assert_eq!(
+            progress.status,
+            ProgressStatus::InsufficientEvidence,
+            "{case}"
+        );
+        assert_absent_progress_signal(progress, ProgressSignalCode::VerificationClean);
+        assert_absent_progress_signal(progress, ProgressSignalCode::FailureFrontierAdvanced);
+    }
+}
+
+#[test]
 fn checkpoints_mark_troubleshooting_regression_when_frontier_falls_back() {
     let result = analyze_custom_rows(vec![
         prompt_row(

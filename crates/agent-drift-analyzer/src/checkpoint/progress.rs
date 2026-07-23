@@ -633,7 +633,7 @@ fn assess_troubleshooting_tail(
     let best_clean = best_clean_attempt(prior_attempts);
     let latest_failed = latest_failed_attempt(prior_attempts);
 
-    if current.outcome == AttemptOutcome::Clean {
+    if attempt_is_clean_proof(current) {
         if let Some(previous_failed) = best_failed {
             let mut signals = vec![progress_signal(
                 ProgressSignalCode::VerificationClean,
@@ -669,6 +669,10 @@ fn assess_troubleshooting_tail(
                 Vec::new(),
             );
         }
+        return insufficient_progress(dimension, None, None);
+    }
+
+    if current.outcome == AttemptOutcome::Clean {
         return insufficient_progress(dimension, None, None);
     }
 
@@ -1118,7 +1122,7 @@ fn assess_implementation_progress(
         ));
     }
 
-    if current.outcome == AttemptOutcome::Clean {
+    if attempt_is_clean_proof(current) {
         if let Some(previous_failed) = latest_failed {
             let edit_overlap = classify_attempt_scope_edit_overlap(
                 previous_failed,
@@ -1184,6 +1188,10 @@ fn assess_implementation_progress(
                 Vec::new(),
             );
         }
+        return insufficient_progress(dimension, None, None);
+    }
+
+    if current.outcome == AttemptOutcome::Clean {
         return insufficient_progress(dimension, None, None);
     }
 
@@ -1438,7 +1446,7 @@ fn assess_closeout_progress(
         .flatten();
 
     if let Some(current) = current {
-        if current.outcome != AttemptOutcome::Clean {
+        if !attempt_is_clean_proof(current) {
             if !source_edits.is_empty() {
                 return progress_from_signals(
                     ProgressStatus::Mixed,
@@ -1452,8 +1460,7 @@ fn assess_closeout_progress(
         }
 
         let repeated_clean = prior_attempts.iter().find(|candidate| {
-            candidate.outcome == AttemptOutcome::Clean
-                && candidate.target_scope == current.target_scope
+            attempt_is_clean_proof(candidate) && candidate.target_scope == current.target_scope
         });
         let broader_clean = most_relevant_broader_clean_attempt(
             &prior_attempts,
@@ -2013,7 +2020,7 @@ fn attempts_are_comparable(left: &VerificationAttempt, right: &VerificationAttem
             DiagnosticMatchKind::Unrelated | DiagnosticMatchKind::WeakRelated
         );
     }
-    if left.outcome == AttemptOutcome::Clean || right.outcome == AttemptOutcome::Clean {
+    if attempt_is_clean_proof(left) || attempt_is_clean_proof(right) {
         return verifier_family(left.verifier) == verifier_family(right.verifier)
             && scopes_overlap(&left.target_scope, &right.target_scope);
     }
@@ -2036,7 +2043,7 @@ fn attempt_matches_target(
         return true;
     }
 
-    candidate.outcome == AttemptOutcome::Clean
+    attempt_is_clean_proof(candidate)
         && verifier_family(candidate.verifier) == verifier_family(verifier)
         && scopes_overlap(&candidate.target_scope, scope)
 }
@@ -2048,7 +2055,7 @@ fn most_relevant_broader_clean_attempt<'a>(
 ) -> Option<&'a VerificationAttempt> {
     prior_attempts
         .iter()
-        .filter(|candidate| candidate.outcome == AttemptOutcome::Clean)
+        .filter(|candidate| attempt_is_clean_proof(candidate))
         .filter(|candidate| attempt_matches_target(candidate, verifier, current_scope))
         .filter(|candidate| scope_is_narrower(current_scope, &candidate.target_scope))
         .min_by(|left, right| {
@@ -2736,7 +2743,7 @@ fn latest_failed_attempt(prior_attempts: &[VerificationAttempt]) -> Option<&Veri
 fn best_clean_attempt(prior_attempts: &[VerificationAttempt]) -> Option<&VerificationAttempt> {
     prior_attempts
         .iter()
-        .filter(|candidate| candidate.outcome == AttemptOutcome::Clean)
+        .filter(|candidate| attempt_is_clean_proof(candidate))
         .max_by(|left, right| {
             scope_cardinality(&left.target_scope)
                 .cmp(&scope_cardinality(&right.target_scope))
@@ -2794,13 +2801,18 @@ fn comparable_fail_count_frontier_cmp(
 }
 
 fn verification_attempt_preview(attempt: &VerificationAttempt) -> String {
-    if attempt.outcome == AttemptOutcome::Clean {
+    if attempt_is_clean_proof(attempt) {
         format!("clean {}", attempt.target_scope.raw)
     } else {
         best_signature(attempt)
             .map(|signature| signature.preview.clone())
             .unwrap_or_else(|| attempt.target_scope.raw.clone())
     }
+}
+
+fn attempt_is_clean_proof(attempt: &VerificationAttempt) -> bool {
+    attempt.outcome == AttemptOutcome::Clean
+        && attempt.exercise_state == ExerciseState::TargetExercised
 }
 
 fn has_direct_verifier_progress_signal(signals: &[ProgressSignal]) -> bool {
