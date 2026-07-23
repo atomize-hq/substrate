@@ -163,14 +163,24 @@ pub(crate) fn build_verification_attempts(
             let verifier = verifier_kind(attempt)?;
             let target_scope = verification_scope(attempt);
             let output = attempt_output_text(attempt, rows);
+            let execution_evidence = (attempt.role == CommandAttemptRole::Test
+                && !test_attempt_uses_nonexecuting_flags(attempt))
+            .then(|| test_execution_evidence(verifier, &output, &target_scope));
+            let outcome = verification_outcome(attempt.outcome, execution_evidence);
+            let mut diagnostic_attempt = attempt.clone();
+            diagnostic_attempt.outcome = outcome;
             Some(VerificationAttempt {
                 attempt_ordinal: attempt.ordinal,
                 command_row: attempt.command_row.clone(),
                 verifier,
-                exercise_state: exercise_state(attempt, verifier, &target_scope, &output),
-                signatures: build_diagnostic_signatures(attempt, &target_scope, &output),
+                exercise_state: exercise_state(attempt, execution_evidence, &output),
+                signatures: build_diagnostic_signatures(
+                    &diagnostic_attempt,
+                    &target_scope,
+                    &output,
+                ),
                 target_scope,
-                outcome: attempt.outcome,
+                outcome,
             })
         })
         .collect()
@@ -513,8 +523,7 @@ fn verification_scope(attempt: &CommandAttempt) -> VerificationScope {
 
 fn exercise_state(
     attempt: &CommandAttempt,
-    verifier: VerifierKind,
-    target_scope: &VerificationScope,
+    execution_evidence: Option<TestExecutionEvidence>,
     output: &str,
 ) -> ExerciseState {
     match attempt.role {
@@ -536,8 +545,7 @@ fn exercise_state(
                 };
             }
 
-            let evidence = test_execution_evidence(verifier, output, target_scope);
-            if evidence == TestExecutionEvidence::Executed {
+            if execution_evidence.is_some_and(TestExecutionEvidence::target_exercised) {
                 ExerciseState::TargetExercised
             } else if attempt.outcome == AttemptOutcome::Failed
                 && output_contains_compile_blocker(output)
@@ -553,10 +561,38 @@ fn exercise_state(
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 enum TestExecutionEvidence {
-    Executed,
+    Executed { failed: bool },
     Zero,
     Unknown,
-    Contradictory,
+    Contradictory { failed: bool },
+}
+
+impl TestExecutionEvidence {
+    fn target_exercised(self) -> bool {
+        matches!(self, Self::Executed { .. })
+    }
+
+    fn reports_failure(self) -> bool {
+        matches!(
+            self,
+            Self::Executed { failed: true } | Self::Contradictory { failed: true }
+        )
+    }
+
+    fn failed_execution(self) -> bool {
+        matches!(self, Self::Executed { failed: true })
+    }
+}
+
+fn verification_outcome(
+    command_outcome: AttemptOutcome,
+    execution_evidence: Option<TestExecutionEvidence>,
+) -> AttemptOutcome {
+    if execution_evidence.is_some_and(TestExecutionEvidence::failed_execution) {
+        AttemptOutcome::Failed
+    } else {
+        command_outcome
+    }
 }
 
 fn test_execution_evidence(
@@ -564,11 +600,7 @@ fn test_execution_evidence(
     output: &str,
     target_scope: &VerificationScope,
 ) -> TestExecutionEvidence {
-    if output_shows_per_test_execution(verifier, output, target_scope) {
-        return TestExecutionEvidence::Executed;
-    }
-
-    match verifier {
+    let summary = match verifier {
         VerifierKind::CargoTest => cargo_test_execution_evidence(output),
         VerifierKind::Pytest => pytest_execution_evidence(output),
         VerifierKind::Vitest
@@ -584,12 +616,20 @@ fn test_execution_evidence(
         | VerifierKind::CargoBuild
         | VerifierKind::Replay
         | VerifierKind::GenericBuild => TestExecutionEvidence::Unknown,
+    };
+
+    match per_test_execution_failure(verifier, output, target_scope) {
+        Some(per_test_failed) => TestExecutionEvidence::Executed {
+            failed: per_test_failed || summary.reports_failure(),
+        },
+        None => summary,
     }
 }
 
 fn generic_test_execution_evidence(output: &str) -> TestExecutionEvidence {
     let mut saw_zero = false;
     let mut saw_positive = false;
+    let mut saw_failed = false;
 
     for evidence in [
         cargo_test_execution_evidence(output),
@@ -597,28 +637,28 @@ fn generic_test_execution_evidence(output: &str) -> TestExecutionEvidence {
         javascript_test_execution_evidence(output),
     ] {
         match evidence {
-            TestExecutionEvidence::Executed => saw_positive = true,
+            TestExecutionEvidence::Executed { failed } => {
+                saw_positive = true;
+                saw_failed |= failed;
+            }
             TestExecutionEvidence::Zero => saw_zero = true,
-            TestExecutionEvidence::Contradictory => {
-                return TestExecutionEvidence::Contradictory;
+            TestExecutionEvidence::Contradictory { failed } => {
+                return TestExecutionEvidence::Contradictory {
+                    failed: saw_failed || failed,
+                };
             }
             TestExecutionEvidence::Unknown => {}
         }
     }
 
-    if saw_positive {
-        TestExecutionEvidence::Executed
-    } else if saw_zero {
-        TestExecutionEvidence::Zero
-    } else {
-        TestExecutionEvidence::Unknown
-    }
+    combined_summary_evidence(saw_zero || saw_positive, saw_zero, saw_positive, saw_failed)
 }
 
 fn cargo_test_execution_evidence(output: &str) -> TestExecutionEvidence {
     let mut pending_running = None;
     let mut saw_count = false;
     let mut executed = 0usize;
+    let mut failed = false;
 
     for line in normalized_output_lines(output) {
         if let Some(count) = cargo_running_count(&line) {
@@ -639,23 +679,27 @@ fn cargo_test_execution_evidence(output: &str) -> TestExecutionEvidence {
         saw_count = true;
         if let Some(running) = pending_running.take() {
             if running != summary.reported_total {
-                return TestExecutionEvidence::Contradictory;
+                return TestExecutionEvidence::Contradictory {
+                    failed: summary.failed,
+                };
             }
         }
         executed = executed.saturating_add(summary.executed);
+        failed |= summary.failed;
     }
 
     if let Some(running) = pending_running {
         executed = executed.saturating_add(running);
     }
 
-    execution_evidence_from_count(saw_count, executed)
+    execution_evidence_from_count(saw_count, executed, failed)
 }
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 struct CargoTestResultSummary {
     reported_total: usize,
     executed: usize,
+    failed: bool,
 }
 
 fn cargo_running_count(line: &str) -> Option<usize> {
@@ -682,6 +726,7 @@ fn cargo_test_result_summary(line: &str) -> Option<CargoTestResultSummary> {
             .saturating_add(ignored)
             .saturating_add(measured),
         executed: passed.saturating_add(failed).saturating_add(measured),
+        failed: failed > 0,
     })
 }
 
@@ -689,9 +734,10 @@ fn pytest_execution_evidence(output: &str) -> TestExecutionEvidence {
     let mut saw_summary = false;
     let mut saw_zero = false;
     let mut saw_positive = false;
+    let mut saw_failed = false;
 
     for line in normalized_output_lines(output) {
-        if line.contains("collected 0 item") {
+        if line == "collected 0 item" || line == "collected 0 items" {
             saw_summary = true;
             saw_zero = true;
             continue;
@@ -700,7 +746,7 @@ fn pytest_execution_evidence(output: &str) -> TestExecutionEvidence {
         let Some(summary) = pytest_summary_body(&line) else {
             continue;
         };
-        if summary.contains("no tests ran") {
+        if summary.starts_with("no tests ran") {
             saw_summary = true;
             saw_zero = true;
             continue;
@@ -725,12 +771,13 @@ fn pytest_execution_evidence(output: &str) -> TestExecutionEvidence {
             .sum::<usize>();
         if executed > 0 {
             saw_positive = true;
+            saw_failed |= failed.unwrap_or(0) > 0;
         } else {
             saw_zero = true;
         }
     }
 
-    combined_summary_evidence(saw_summary, saw_zero, saw_positive)
+    combined_summary_evidence(saw_summary, saw_zero, saw_positive, saw_failed)
 }
 
 fn pytest_summary_body(line: &str) -> Option<&str> {
@@ -744,33 +791,53 @@ fn pytest_summary_body(line: &str) -> Option<&str> {
 fn javascript_test_execution_evidence(output: &str) -> TestExecutionEvidence {
     let mut saw_zero = false;
     let mut saw_positive = false;
+    let mut saw_failed = false;
 
     for line in normalized_output_lines(output) {
-        let evidence = if line.contains("no test files found") || line.contains("no tests found") {
+        let evidence = if javascript_no_tests_summary(&line) {
             Some(TestExecutionEvidence::Zero)
         } else if line.starts_with("tests:") || line.starts_with("tests ") {
             javascript_count_summary(&line)
+        } else if let Some(count) = bun_ran_count(&line).or_else(|| deno_running_count(&line)) {
+            Some(execution_evidence_from_count(true, count, false))
         } else {
-            bun_ran_count(&line)
-                .or_else(|| deno_running_count(&line))
-                .or_else(|| deno_summary_count(&line))
-                .map(|count| execution_evidence_from_count(true, count))
+            deno_summary_evidence(&line)
         };
 
         match evidence {
-            Some(TestExecutionEvidence::Executed) => saw_positive = true,
+            Some(TestExecutionEvidence::Executed { failed }) => {
+                saw_positive = true;
+                saw_failed |= failed;
+            }
             Some(TestExecutionEvidence::Zero) => saw_zero = true,
-            Some(TestExecutionEvidence::Contradictory) => {
-                return TestExecutionEvidence::Contradictory;
+            Some(TestExecutionEvidence::Contradictory { failed }) => {
+                return TestExecutionEvidence::Contradictory {
+                    failed: saw_failed || failed,
+                };
             }
             Some(TestExecutionEvidence::Unknown) | None => {}
         }
     }
 
-    combined_summary_evidence(saw_zero || saw_positive, saw_zero, saw_positive)
+    combined_summary_evidence(saw_zero || saw_positive, saw_zero, saw_positive, saw_failed)
+}
+
+fn javascript_no_tests_summary(line: &str) -> bool {
+    line == "no tests found"
+        || line.starts_with("no tests found, exiting with code ")
+        || line == "no test files found"
+        || line.starts_with("no test files found, exiting with code ")
 }
 
 fn javascript_count_summary(line: &str) -> Option<TestExecutionEvidence> {
+    let passed = count_before_status(line, "passed");
+    let failed = count_before_status(line, "failed");
+    let skipped = count_before_status(line, "skipped");
+    let todo = count_before_status(line, "todo");
+    if [passed, failed, skipped, todo].iter().all(Option::is_none) {
+        return None;
+    }
+
     let total = if line.starts_with("tests:") {
         count_before_status(line, "total")?
     } else {
@@ -778,17 +845,17 @@ fn javascript_count_summary(line: &str) -> Option<TestExecutionEvidence> {
         let close = line[open + 1..].find(')')? + open + 1;
         line[open + 1..close].trim().parse::<usize>().ok()?
     };
-    let passed = count_before_status(line, "passed").unwrap_or(0);
-    let failed = count_before_status(line, "failed").unwrap_or(0);
-    let skipped = count_before_status(line, "skipped").unwrap_or(0);
-    let todo = count_before_status(line, "todo").unwrap_or(0);
+    let passed = passed.unwrap_or(0);
+    let failed = failed.unwrap_or(0);
+    let skipped = skipped.unwrap_or(0);
+    let todo = todo.unwrap_or(0);
     let executed = passed.saturating_add(failed);
     let accounted = executed.saturating_add(skipped).saturating_add(todo);
 
     if accounted > total {
-        Some(TestExecutionEvidence::Contradictory)
+        Some(TestExecutionEvidence::Contradictory { failed: failed > 0 })
     } else if executed > 0 {
-        Some(TestExecutionEvidence::Executed)
+        Some(TestExecutionEvidence::Executed { failed: failed > 0 })
     } else if total == 0 || accounted == total {
         Some(TestExecutionEvidence::Zero)
     } else {
@@ -817,11 +884,14 @@ fn deno_running_count(line: &str) -> Option<usize> {
     matches!(tokens.next(), Some("from")).then_some(count)
 }
 
-fn deno_summary_count(line: &str) -> Option<usize> {
+fn deno_summary_evidence(line: &str) -> Option<TestExecutionEvidence> {
     if !(line.starts_with("ok |") || line.starts_with("failed |")) {
         return None;
     }
-    Some(count_before_status(line, "passed")?.saturating_add(count_before_status(line, "failed")?))
+    let passed = count_before_status(line, "passed")?;
+    let failed = count_before_status(line, "failed")?;
+    let executed = passed.saturating_add(failed);
+    Some(execution_evidence_from_count(true, executed, failed > 0))
 }
 
 fn count_before_status(text: &str, status: &str) -> Option<usize> {
@@ -846,104 +916,350 @@ fn combined_summary_evidence(
     saw_summary: bool,
     saw_zero: bool,
     saw_positive: bool,
+    saw_failed: bool,
 ) -> TestExecutionEvidence {
     match (saw_summary, saw_zero, saw_positive) {
-        (_, true, true) => TestExecutionEvidence::Contradictory,
-        (_, false, true) => TestExecutionEvidence::Executed,
+        (_, true, true) => TestExecutionEvidence::Contradictory { failed: saw_failed },
+        (_, false, true) => TestExecutionEvidence::Executed { failed: saw_failed },
         (true, true, false) => TestExecutionEvidence::Zero,
         _ => TestExecutionEvidence::Unknown,
     }
 }
 
-fn execution_evidence_from_count(saw_count: bool, executed: usize) -> TestExecutionEvidence {
+fn execution_evidence_from_count(
+    saw_count: bool,
+    executed: usize,
+    failed: bool,
+) -> TestExecutionEvidence {
     if !saw_count {
         TestExecutionEvidence::Unknown
     } else if executed == 0 {
         TestExecutionEvidence::Zero
     } else {
-        TestExecutionEvidence::Executed
+        TestExecutionEvidence::Executed { failed }
     }
 }
 
-fn output_shows_per_test_execution(
+fn per_test_execution_failure(
     verifier: VerifierKind,
     output: &str,
     target_scope: &VerificationScope,
-) -> bool {
-    let requires_target_match = !(target_scope.paths.is_empty() && target_scope.tests.is_empty());
-    let mut previous_line_matched_target = false;
-    let mut javascript_target_context = false;
-
-    for line in normalized_output_lines(output) {
-        let line_matches_target = line_matches_requested_target(&line, target_scope);
-        let target_matches =
-            line_matches_target || previous_line_matched_target || javascript_target_context;
-        if line_has_explicit_per_test_execution(verifier, &line)
-            && (!requires_target_match || target_matches)
-        {
-            return true;
-        }
-
-        if verifier_is_javascript_test(verifier) && line_is_javascript_test_context_header(&line) {
-            javascript_target_context = !requires_target_match || line_matches_target;
-        }
-        previous_line_matched_target = line_matches_target;
-    }
-
-    false
-}
-
-fn line_has_explicit_per_test_execution(verifier: VerifierKind, line: &str) -> bool {
+) -> Option<bool> {
     match verifier {
-        VerifierKind::CargoTest => line.contains(" ... ok") || line.contains(" ... failed"),
-        VerifierKind::Pytest => line.contains("::") && line_has_executed_test_status(line),
+        VerifierKind::CargoTest => cargo_per_test_failure(output, target_scope),
+        VerifierKind::Pytest => pytest_per_test_failure(output, target_scope),
         VerifierKind::Vitest
         | VerifierKind::Jest
         | VerifierKind::BunTest
         | VerifierKind::DenoTest
         | VerifierKind::NpmTest
-        | VerifierKind::PnpmTest => {
-            line.contains(" ... ok")
-                || line.contains(" ... failed")
-                || line_starts_with_js_test_status(line)
-                || line.starts_with("--- pass:")
-                || line.starts_with("--- fail:")
-        }
-        VerifierKind::GenericTest => {
-            line.contains(" ... ok")
-                || line.contains(" ... failed")
-                || (line.contains("::") && line_has_executed_test_status(line))
-                || line_starts_with_js_test_status(line)
-                || line.starts_with("--- pass:")
-                || line.starts_with("--- fail:")
-        }
+        | VerifierKind::PnpmTest => javascript_per_test_failure(verifier, output, target_scope),
+        VerifierKind::GenericTest => [
+            cargo_per_test_failure(output, target_scope),
+            pytest_per_test_failure(output, target_scope),
+            javascript_per_test_failure(verifier, output, target_scope),
+        ]
+        .into_iter()
+        .flatten()
+        .reduce(|left, right| left || right),
         VerifierKind::CargoCheck
         | VerifierKind::CargoClippy
         | VerifierKind::CargoFmt
         | VerifierKind::CargoBuild
         | VerifierKind::Replay
-        | VerifierKind::GenericBuild => false,
+        | VerifierKind::GenericBuild => None,
     }
 }
 
-fn verifier_is_javascript_test(verifier: VerifierKind) -> bool {
-    matches!(
+fn cargo_per_test_failure(output: &str, target_scope: &VerificationScope) -> Option<bool> {
+    aggregate_per_test_records(output, target_scope, cargo_per_test_record)
+}
+
+fn cargo_per_test_record(line: &str) -> Option<(&str, bool)> {
+    let body = line.strip_prefix("test ")?;
+    let (test_name, status) = body.rsplit_once(" ... ")?;
+    let failed = match status.trim() {
+        "ok" => false,
+        "failed" => true,
+        _ => return None,
+    };
+    (!test_name.trim().is_empty()).then_some((test_name.trim(), failed))
+}
+
+fn pytest_per_test_failure(output: &str, target_scope: &VerificationScope) -> Option<bool> {
+    aggregate_per_test_records(output, target_scope, pytest_per_test_record)
+}
+
+fn pytest_per_test_record(line: &str) -> Option<(&str, bool)> {
+    let mut tokens = line.split_whitespace();
+    let node_id = tokens.next()?;
+    let file = node_id.split("::").next()?;
+    if !node_id.contains("::") || !file.ends_with(".py") {
+        return None;
+    }
+    let failed = match tokens.next()? {
+        "passed" | "xfailed" | "xpassed" => false,
+        "failed" => true,
+        _ => return None,
+    };
+    let trailer = tokens.collect::<Vec<_>>().join(" ");
+    (trailer.is_empty() || valid_pytest_progress_trailer(&trailer)).then_some((node_id, failed))
+}
+
+fn valid_pytest_progress_trailer(trailer: &str) -> bool {
+    trailer
+        .strip_prefix('[')
+        .and_then(|value| value.strip_suffix(']'))
+        .and_then(|value| value.trim().strip_suffix('%'))
+        .and_then(|value| value.trim().parse::<u8>().ok())
+        .is_some_and(|percent| percent <= 100)
+}
+
+fn aggregate_per_test_records(
+    output: &str,
+    target_scope: &VerificationScope,
+    parser: fn(&str) -> Option<(&str, bool)>,
+) -> Option<bool> {
+    let mut saw_record = false;
+    let mut saw_failed = false;
+    for line in normalized_output_lines(output) {
+        let Some((subject, failed)) = parser(&line) else {
+            continue;
+        };
+        if record_matches_target(&[subject], target_scope) {
+            saw_record = true;
+            saw_failed |= failed;
+        }
+    }
+    saw_record.then_some(saw_failed)
+}
+
+fn javascript_per_test_failure(
+    verifier: VerifierKind,
+    output: &str,
+    target_scope: &VerificationScope,
+) -> Option<bool> {
+    let allow_vitest = matches!(
         verifier,
         VerifierKind::Vitest
-            | VerifierKind::Jest
-            | VerifierKind::BunTest
-            | VerifierKind::DenoTest
             | VerifierKind::NpmTest
             | VerifierKind::PnpmTest
             | VerifierKind::GenericTest
-    )
+    );
+    let allow_jest = matches!(
+        verifier,
+        VerifierKind::Jest
+            | VerifierKind::NpmTest
+            | VerifierKind::PnpmTest
+            | VerifierKind::GenericTest
+    );
+    let allow_bun = matches!(
+        verifier,
+        VerifierKind::BunTest
+            | VerifierKind::NpmTest
+            | VerifierKind::PnpmTest
+            | VerifierKind::GenericTest
+    );
+    let allow_deno = matches!(
+        verifier,
+        VerifierKind::DenoTest
+            | VerifierKind::NpmTest
+            | VerifierKind::PnpmTest
+            | VerifierKind::GenericTest
+    );
+    let mut contexts = JavascriptTestContexts::default();
+    let mut saw_record = false;
+    let mut saw_failed = false;
+
+    for line in normalized_output_lines(output) {
+        if allow_vitest {
+            if let Some((subject, failed)) =
+                vitest_per_test_record(&line).or_else(|| direct_js_bullet_record(&line))
+            {
+                if record_matches_target(&[subject], target_scope) {
+                    saw_record = true;
+                    saw_failed |= failed;
+                }
+                continue;
+            }
+        }
+        if allow_jest {
+            if let Some(path) = jest_suite_path(&line) {
+                contexts.jest = Some(path.to_string());
+                continue;
+            }
+            if let Some((test_name, failed)) = status_prefixed_record(&line, "✓ ", "✕ ")
+                .or_else(|| status_prefixed_record(&line, "✓ ", "× "))
+            {
+                let direct_path = test_name
+                    .split_whitespace()
+                    .next()
+                    .is_some_and(is_javascript_test_path)
+                    && record_matches_target(&[test_name], target_scope);
+                let contextual_path = contexts
+                    .jest
+                    .as_deref()
+                    .is_some_and(|path| record_matches_target(&[path, test_name], target_scope));
+                if direct_path || contextual_path {
+                    saw_record = true;
+                    saw_failed |= failed;
+                }
+                continue;
+            }
+        }
+        if allow_bun {
+            if let Some(path) = bun_file_context(&line) {
+                contexts.bun = Some(path.to_string());
+                continue;
+            }
+            if let Some((test_name, failed)) = status_prefixed_record(&line, "(pass) ", "(fail) ") {
+                let direct_path = test_name
+                    .split_whitespace()
+                    .next()
+                    .is_some_and(is_javascript_test_path)
+                    && record_matches_target(&[test_name], target_scope);
+                let contextual_path = contexts
+                    .bun
+                    .as_deref()
+                    .is_some_and(|path| record_matches_target(&[path, test_name], target_scope));
+                if direct_path || contextual_path {
+                    saw_record = true;
+                    saw_failed |= failed;
+                }
+                continue;
+            }
+        }
+        if allow_deno {
+            if let Some((path, count)) = deno_running_context(&line) {
+                contexts.deno = Some((path.to_string(), count));
+                continue;
+            }
+            if let Some((test_name, failed)) = deno_per_test_record(&line) {
+                let contextual_path = contexts.deno.as_ref().is_some_and(|(path, count)| {
+                    *count > 0 && record_matches_target(&[path, test_name], target_scope)
+                });
+                if contextual_path {
+                    saw_record = true;
+                    saw_failed |= failed;
+                }
+                continue;
+            }
+        }
+        if verifier == VerifierKind::GenericTest {
+            if let Some((test_name, failed)) =
+                status_prefixed_record(&line, "--- pass: ", "--- fail: ")
+            {
+                if record_matches_target(&[test_name], target_scope) {
+                    saw_record = true;
+                    saw_failed |= failed;
+                }
+            }
+        }
+    }
+
+    saw_record.then_some(saw_failed)
 }
 
-fn line_is_javascript_test_context_header(line: &str) -> bool {
-    line.starts_with("fail ")
-        || line.starts_with("pass ")
-        || (line.ends_with(':') && line_looks_like_test_path(line.trim_end_matches(':')))
-        || deno_running_count(line).is_some()
+#[derive(Default)]
+struct JavascriptTestContexts {
+    jest: Option<String>,
+    bun: Option<String>,
+    deno: Option<(String, usize)>,
+}
+
+fn vitest_per_test_record(line: &str) -> Option<(&str, bool)> {
+    let (body, failed) = status_prefixed_record(line, "pass ", "fail ")?;
+    let path = body.split(" > ").next()?;
+    (body.contains(" > ") && is_javascript_test_path(path)).then_some((body, failed))
+}
+
+fn direct_js_bullet_record(line: &str) -> Option<(&str, bool)> {
+    let (body, failed) = status_prefixed_record(line, "✓ ", "✕ ")
+        .or_else(|| status_prefixed_record(line, "✓ ", "× "))?;
+    let path = body.split_whitespace().next()?;
+    is_javascript_test_path(path).then_some((body, failed))
+}
+
+fn jest_suite_path(line: &str) -> Option<&str> {
+    let body = line
+        .strip_prefix("pass ")
+        .or_else(|| line.strip_prefix("fail "))?
+        .trim_start();
+    if body.contains(" > ") {
+        return None;
+    }
+    let path = body.split_whitespace().next()?;
+    line_looks_like_test_path(path).then_some(path)
+}
+
+fn bun_file_context(line: &str) -> Option<&str> {
+    let path = line.strip_suffix(':')?.trim();
+    is_javascript_test_path(path).then_some(path)
+}
+
+fn deno_running_context(line: &str) -> Option<(&str, usize)> {
+    let mut tokens = line.split_whitespace();
+    if tokens.next()? != "running" {
+        return None;
+    }
+    let count = tokens.next()?.parse::<usize>().ok()?;
+    if !matches!(tokens.next(), Some("test") | Some("tests")) || tokens.next()? != "from" {
+        return None;
+    }
+    let path = tokens.next()?;
+    (tokens.next().is_none() && is_javascript_test_path(path)).then_some((path, count))
+}
+
+fn deno_per_test_record(line: &str) -> Option<(&str, bool)> {
+    let (test_name, status) = line.rsplit_once(" ... ")?;
+    let failed = exact_status_with_optional_duration(status)?;
+    (!test_name.trim().is_empty()).then_some((test_name.trim(), failed))
+}
+
+fn exact_status_with_optional_duration(status: &str) -> Option<bool> {
+    for (name, failed) in [("ok", false), ("failed", true)] {
+        if status == name {
+            return Some(failed);
+        }
+        let Some(duration) = status.strip_prefix(name).map(str::trim) else {
+            continue;
+        };
+        if duration
+            .strip_prefix('(')
+            .and_then(|value| value.strip_suffix(')'))
+            .is_some_and(|value| !value.trim().is_empty())
+        {
+            return Some(failed);
+        }
+    }
+    None
+}
+
+fn status_prefixed_record<'a>(
+    line: &'a str,
+    passed_prefix: &str,
+    failed_prefix: &str,
+) -> Option<(&'a str, bool)> {
+    let (body, failed) = if let Some(body) = line.strip_prefix(passed_prefix) {
+        (body, false)
+    } else if let Some(body) = line.strip_prefix(failed_prefix) {
+        (body, true)
+    } else {
+        return None;
+    };
+    let body = body.trim();
+    (!body.is_empty()).then_some((body, failed))
+}
+
+fn record_matches_target(subjects: &[&str], target_scope: &VerificationScope) -> bool {
+    (target_scope.paths.is_empty() && target_scope.tests.is_empty())
+        || subjects
+            .iter()
+            .any(|subject| line_matches_requested_target(subject, target_scope))
+}
+
+fn is_javascript_test_path(path: &str) -> bool {
+    !path.chars().any(char::is_whitespace) && line_looks_like_test_path(path)
 }
 
 fn line_looks_like_test_path(line: &str) -> bool {
@@ -1013,22 +1329,6 @@ fn line_matches_requested_target(line: &str, target_scope: &VerificationScope) -
             .paths
             .iter()
             .any(|path| line.contains(&path.to_ascii_lowercase()))
-}
-
-fn line_has_executed_test_status(line: &str) -> bool {
-    [" passed", " failed", " xfailed", " xpassed"]
-        .iter()
-        .any(|needle| line.contains(needle))
-}
-
-fn line_starts_with_js_test_status(line: &str) -> bool {
-    ["(fail)", "(pass)", "✕ ", "✓ ", "× "]
-        .iter()
-        .any(|prefix| line.starts_with(prefix))
-        || (["fail ", "pass "]
-            .iter()
-            .any(|prefix| line.starts_with(prefix))
-            && line.contains(" > "))
 }
 
 fn cargo_role(tokens: &[String]) -> Option<CommandAttemptRole> {
@@ -2061,6 +2361,89 @@ mod tests {
     }
 
     #[test]
+    fn checkpoints_reconcile_wrapper_masked_test_failures_before_clean_proof() {
+        let cases = [
+            (
+                "cargo test cargo_failed -- --exact",
+                "Exit code: 0\nrunning 1 test\n\ntest result: FAILED. 0 passed; 1 failed; 0 ignored; 0 measured; 0 filtered out",
+            ),
+            (
+                "pytest tests/checkpoints_test.py::test_pairing",
+                "Exit code: 0\n=================== test session starts ===================\ncollected 1 item\n\n=================== 1 failed in 0.01s ===================",
+            ),
+            (
+                "yarn test tests/checkpoints.test.ts",
+                "Exit code: 0\nTests: 1 failed, 1 total",
+            ),
+        ];
+
+        for (command, output) in cases {
+            let rows = vec![
+                tool_call(0, "functions.shell_command", command),
+                tool_output(1, output),
+            ];
+            let attempts = build_command_attempts(&rows, &command_observations(&rows));
+            assert_eq!(attempts[0].outcome, AttemptOutcome::Clean, "{command}");
+
+            let verification = build_verification_attempts(&attempts, &rows);
+            assert_eq!(verification.len(), 1, "{command}");
+            assert_eq!(verification[0].outcome, AttemptOutcome::Failed, "{command}");
+            assert_eq!(
+                verification[0].exercise_state,
+                ExerciseState::TargetExercised,
+                "{command}"
+            );
+        }
+    }
+
+    #[test]
+    fn checkpoints_reject_parser_lookalikes_as_per_test_execution_records() {
+        let cases = [
+            (
+                "cargo test zero_target -- --exact",
+                "Exit code: 0\nrunning 0 tests\nconst NOTE: &str = \"test zero_target ... ok\";\nlog: test zero_target ... failed\n\ntest result: ok. 0 passed; 0 failed; 0 ignored; 0 measured; 1 filtered out",
+            ),
+            (
+                "pytest tests/checkpoints_test.py::test_pairing",
+                "Exit code: 0\ncollected 0 items\nconst NOTE: &str = \"tests/checkpoints_test.py::test_pairing PASSED\";\n=================== no tests ran in 0.01s ===================",
+            ),
+            (
+                "vitest run tests/foo.test.ts",
+                "Exit code: 0\nconst NOTE = \"FAIL tests/foo.test.ts > math > subtracts\";\nTests: 0 passed, 0 total",
+            ),
+            (
+                "jest tests/foo.test.ts",
+                "Exit code: 0\nFAIL tests/foo.test.ts\nconsole.log(\"✕ subtracts (2 ms)\")\nTests: 0 passed, 0 total",
+            ),
+            (
+                "bun test tests/foo.test.ts",
+                "Exit code: 0\ntests/foo.test.ts:\nconst NOTE = \"(fail) math > subtracts\";\nRan 0 tests across 1 file",
+            ),
+            (
+                "deno test tests/foo.test.ts",
+                "Exit code: 0\nrunning 0 tests from tests/foo.test.ts\nlog: subtracts ... FAILED (1ms)",
+            ),
+        ];
+
+        for (command, output) in cases {
+            let rows = vec![
+                tool_call(0, "functions.shell_command", command),
+                tool_output(1, output),
+            ];
+            let attempts = build_command_attempts(&rows, &command_observations(&rows));
+            let verification = build_verification_attempts(&attempts, &rows);
+
+            assert_eq!(verification.len(), 1, "{command}");
+            assert_eq!(verification[0].outcome, AttemptOutcome::Clean, "{command}");
+            assert_eq!(
+                verification[0].exercise_state,
+                ExerciseState::Unknown,
+                "{command}"
+            );
+        }
+    }
+
+    #[test]
     fn checkpoints_fail_closed_on_contradictory_counts_without_per_test_evidence() {
         let contradictory = "Exit code: 0\nrunning 0 tests\n\ntest result: ok. 1 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out";
         let rows = vec![
@@ -2095,6 +2478,7 @@ mod tests {
             verification[0].exercise_state,
             ExerciseState::TargetExercised
         );
+        assert_eq!(verification[0].outcome, AttemptOutcome::Clean);
     }
 
     #[test]
@@ -2119,6 +2503,33 @@ mod tests {
             build_command_attempts(&positive_rows, &command_observations(&positive_rows));
         assert_eq!(attempts[0].output_rows.len(), 2);
         let verification = build_verification_attempts(&attempts, &positive_rows);
+        assert_eq!(
+            verification[0].exercise_state,
+            ExerciseState::TargetExercised
+        );
+
+        let masked_failure_rows = vec![
+            tool_call_for_call(
+                0,
+                "call-split-failed",
+                "functions.shell_command",
+                "cargo test split_target -- --exact",
+            ),
+            typed_tool_output_for_call(1, "call-split-failed", 0, "Exit code: 0\nrunning 1 test"),
+            typed_tool_output_for_call(
+                2,
+                "call-split-failed",
+                1,
+                "test result: FAILED. 0 passed; 1 failed; 0 ignored; 0 measured; 0 filtered out",
+            ),
+        ];
+        let attempts = build_command_attempts(
+            &masked_failure_rows,
+            &command_observations(&masked_failure_rows),
+        );
+        assert_eq!(attempts[0].output_rows.len(), 2);
+        let verification = build_verification_attempts(&attempts, &masked_failure_rows);
+        assert_eq!(verification[0].outcome, AttemptOutcome::Failed);
         assert_eq!(
             verification[0].exercise_state,
             ExerciseState::TargetExercised
@@ -2164,6 +2575,7 @@ mod tests {
         let verification = build_verification_attempts(&attempts, &rows);
 
         assert_eq!(verification.len(), 1);
+        assert_eq!(verification[0].outcome, AttemptOutcome::Failed);
         assert_eq!(
             verification[0].exercise_state,
             ExerciseState::TargetExercised
@@ -2232,6 +2644,7 @@ mod tests {
             let verification = build_verification_attempts(&attempts, &rows);
 
             assert_eq!(verification.len(), 1, "{command}");
+            assert_eq!(verification[0].outcome, AttemptOutcome::Failed, "{command}");
             assert_eq!(
                 verification[0].exercise_state,
                 ExerciseState::TargetExercised,

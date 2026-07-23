@@ -2937,6 +2937,62 @@ test result: FAILED. 0 passed; 1 failed; 0 ignored; 0 measured; 0 filtered out"#
 }
 
 #[test]
+fn checkpoints_do_not_promote_exit_zero_failed_results_to_clean_progress() {
+    let cases = [
+        (
+            "cargo",
+            r#"{"command":"cargo test -p agent-drift-analyzer checkpoints::captures_progress -- --exact","workdir":"/repo"}"#,
+            r#"Exit code: 101
+running 1 test
+
+test result: FAILED. 0 passed; 1 failed; 0 ignored; 0 measured; 0 filtered out"#,
+            r#"Exit code: 0
+running 1 test
+
+test result: FAILED. 0 passed; 1 failed; 0 ignored; 0 measured; 0 filtered out"#,
+        ),
+        (
+            "pytest",
+            r#"{"command":"pytest tests/checkpoints_test.py::test_pairing","workdir":"/repo"}"#,
+            "Exit code: 1\n=================== 1 failed in 0.01s ===================",
+            "Exit code: 0\n=================== 1 failed in 0.01s ===================",
+        ),
+        (
+            "javascript",
+            r#"{"command":"yarn test tests/checkpoints.test.ts","workdir":"/repo"}"#,
+            "Exit code: 1\nTests: 1 failed, 1 total",
+            "Exit code: 0\nTests: 1 failed, 1 total",
+        ),
+    ];
+
+    for (case, command, initial_failure, masked_failure) in cases {
+        let result = analyze_custom_rows(vec![
+            prompt_row(
+                0,
+                "turn-001",
+                "/goal Troubleshoot the failing target and verify the exact same scope.",
+            ),
+            tool_call_row(1, "turn-001", "functions.shell_command", command),
+            tool_output_row(2, "turn-001", initial_failure),
+            tool_call_row(3, "turn-001", "functions.shell_command", command),
+            tool_output_row(4, "turn-001", masked_failure),
+        ]);
+        let checkpoint = result.sessions[0].checkpoints.last().expect("checkpoint");
+        let progress = checkpoint
+            .session_progress
+            .as_ref()
+            .expect("session progress");
+
+        assert_absent_progress_signal(progress, ProgressSignalCode::VerificationClean);
+        assert_ne!(
+            (progress.status, progress.confidence),
+            (ProgressStatus::Advancing, Confidence::High),
+            "{case} wrapper-masked failure must not become high-confidence advancing"
+        );
+    }
+}
+
+#[test]
 fn checkpoints_mark_troubleshooting_regression_when_frontier_falls_back() {
     let result = analyze_custom_rows(vec![
         prompt_row(
