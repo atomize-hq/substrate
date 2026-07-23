@@ -1458,16 +1458,26 @@ fn attempt_output_text(attempt: &CommandAttempt, rows: &[CompactionRow]) -> Stri
         .map(|row| (row_key(row), row))
         .collect::<BTreeMap<_, _>>();
 
-    attempt
-        .output_rows
-        .iter()
-        .filter_map(|row| {
-            rows_by_key
-                .get(&row_ref_key(row))
-                .map(|row| row.text.as_str())
-        })
-        .collect::<Vec<_>>()
-        .join("\n")
+    let mut output = String::new();
+    for segment in attempt.output_rows.iter().filter_map(|row| {
+        rows_by_key
+            .get(&row_ref_key(row))
+            .map(|row| row.text.as_str())
+    }) {
+        // Row boundaries are transport framing, not source blank lines. Preserve explicit
+        // segment newlines and add only the single line break needed when neither side has one.
+        if !output.is_empty()
+            && !segment.is_empty()
+            && !output.ends_with('\n')
+            && !output.ends_with('\r')
+            && !segment.starts_with('\n')
+            && !segment.starts_with('\r')
+        {
+            output.push('\n');
+        }
+        output.push_str(segment);
+    }
+    output
 }
 
 fn output_contains_compile_blocker(output: &str) -> bool {
@@ -1935,8 +1945,8 @@ mod tests {
     use camino::Utf8PathBuf;
 
     use super::{
-        build_command_attempts, build_verification_attempts, AttemptOutcome, CommandAttemptRole,
-        ExerciseState, VerificationScope, VerifierKind,
+        attempt_output_text, build_command_attempts, build_verification_attempts, AttemptOutcome,
+        CommandAttemptRole, ExerciseState, VerificationScope, VerifierKind,
     };
     use crate::checkpoint::EvidenceRef;
     use crate::context::CommandObservation;
@@ -2933,6 +2943,108 @@ mod tests {
         assert_eq!(attempts[0].output_rows.len(), 2);
         let verification = build_verification_attempts(&attempts, &zero_rows);
         assert_eq!(verification[0].exercise_state, ExerciseState::Unknown);
+    }
+
+    #[test]
+    fn checkpoints_do_not_synthesize_capture_separators_at_typed_segment_seams() {
+        let cases = [
+            (
+                "vitest-zero",
+                "vitest run tests/foo.test.ts",
+                "Exit code: 0\nstdout | tests/foo.test.ts > math > subtracts\ncaptured payload\n",
+                "  PASS tests/foo.test.ts > math > subtracts\nTests: 0 passed, 0 total",
+                AttemptOutcome::Clean,
+            ),
+            (
+                "vitest-contradictory",
+                "vitest run tests/foo.test.ts",
+                "Exit code: 0\nstdout | tests/foo.test.ts > math > subtracts\ncaptured payload\n",
+                "  PASS tests/foo.test.ts > math > subtracts\nTests: 1 failed, 0 total",
+                AttemptOutcome::Failed,
+            ),
+            (
+                "jest-zero",
+                "jest tests/foo.test.ts",
+                "Exit code: 0\n  console.log\ncaptured payload\n",
+                "PASS tests/foo.test.ts\n  ✓ subtracts (2 ms)\nTests: 0 passed, 0 total",
+                AttemptOutcome::Clean,
+            ),
+            (
+                "jest-contradictory",
+                "jest tests/foo.test.ts",
+                "Exit code: 0\n  console.log\ncaptured payload\n",
+                "PASS tests/foo.test.ts\n  ✓ subtracts (2 ms)\nTests: 1 failed, 0 total",
+                AttemptOutcome::Failed,
+            ),
+            (
+                "bun-zero",
+                "bun test tests/foo.test.ts",
+                "Exit code: 0\n  console.log\ncaptured payload\n",
+                "tests/foo.test.ts:\n(pass) math > subtracts\nRan 0 tests across 1 file",
+                AttemptOutcome::Clean,
+            ),
+            (
+                "bun-contradictory",
+                "bun test tests/foo.test.ts",
+                "Exit code: 0\n  console.log\ncaptured payload\n",
+                "tests/foo.test.ts:\n(pass) math > subtracts\nTests: 1 failed, 0 total",
+                AttemptOutcome::Failed,
+            ),
+        ];
+
+        for (case, command, first_segment, second_segment, expected_outcome) in cases {
+            let rows = vec![
+                tool_call_for_call(0, "call-split-capture", "functions.shell_command", command),
+                typed_tool_output_for_call(1, "call-split-capture", 0, first_segment),
+                typed_tool_output_for_call(2, "call-split-capture", 1, second_segment),
+            ];
+            let attempts = build_command_attempts(&rows, &command_observations(&rows));
+            assert_eq!(attempts[0].output_rows.len(), 2, "{case}");
+            assert_eq!(
+                attempt_output_text(&attempts[0], &rows),
+                format!("{first_segment}{second_segment}"),
+                "{case} must preserve the source seam without manufacturing a blank line"
+            );
+
+            let verification = build_verification_attempts(&attempts, &rows);
+            assert_eq!(verification.len(), 1, "{case}");
+            assert_eq!(verification[0].outcome, expected_outcome, "{case}");
+            assert_eq!(
+                verification[0].exercise_state,
+                ExerciseState::Unknown,
+                "{case}"
+            );
+        }
+    }
+
+    #[test]
+    fn checkpoints_preserve_explicit_capture_separator_at_typed_segment_seam() {
+        let first_segment =
+            "Exit code: 0\nstdout | tests/foo.test.ts > math > subtracts\ncaptured payload\n";
+        let second_segment =
+            "\n  PASS tests/foo.test.ts > math > subtracts\nTests: 0 passed, 0 total";
+        let rows = vec![
+            tool_call_for_call(
+                0,
+                "call-split-explicit-separator",
+                "functions.shell_command",
+                "vitest run tests/foo.test.ts",
+            ),
+            typed_tool_output_for_call(1, "call-split-explicit-separator", 0, first_segment),
+            typed_tool_output_for_call(2, "call-split-explicit-separator", 1, second_segment),
+        ];
+        let attempts = build_command_attempts(&rows, &command_observations(&rows));
+        assert_eq!(
+            attempt_output_text(&attempts[0], &rows),
+            format!("{first_segment}{second_segment}")
+        );
+
+        let verification = build_verification_attempts(&attempts, &rows);
+        assert_eq!(verification[0].outcome, AttemptOutcome::Clean);
+        assert_eq!(
+            verification[0].exercise_state,
+            ExerciseState::TargetExercised
+        );
     }
 
     #[test]
