@@ -578,17 +578,13 @@ impl TestExecutionEvidence {
             Self::Executed { failed: true } | Self::Contradictory { failed: true }
         )
     }
-
-    fn failed_execution(self) -> bool {
-        matches!(self, Self::Executed { failed: true })
-    }
 }
 
 fn verification_outcome(
     command_outcome: AttemptOutcome,
     execution_evidence: Option<TestExecutionEvidence>,
 ) -> AttemptOutcome {
-    if execution_evidence.is_some_and(TestExecutionEvidence::failed_execution) {
+    if execution_evidence.is_some_and(TestExecutionEvidence::reports_failure) {
         AttemptOutcome::Failed
     } else {
         command_outcome
@@ -912,6 +908,13 @@ fn normalized_output_lines(output: &str) -> impl Iterator<Item = String> + '_ {
         .filter(|line| !line.is_empty())
 }
 
+fn framed_output_lines(output: &str) -> impl Iterator<Item = String> + '_ {
+    output
+        .lines()
+        .map(|line| line.trim_end().to_ascii_lowercase())
+        .filter(|line| !line.trim().is_empty())
+}
+
 fn combined_summary_evidence(
     saw_summary: bool,
     saw_zero: bool,
@@ -976,6 +979,7 @@ fn cargo_per_test_failure(output: &str, target_scope: &VerificationScope) -> Opt
 }
 
 fn cargo_per_test_record(line: &str) -> Option<(&str, bool)> {
+    let line = runner_line_body(line, 0, 0)?;
     let body = line.strip_prefix("test ")?;
     let (test_name, status) = body.rsplit_once(" ... ")?;
     let failed = match status.trim() {
@@ -991,6 +995,7 @@ fn pytest_per_test_failure(output: &str, target_scope: &VerificationScope) -> Op
 }
 
 fn pytest_per_test_record(line: &str) -> Option<(&str, bool)> {
+    let line = runner_line_body(line, 0, 0)?;
     let mut tokens = line.split_whitespace();
     let node_id = tokens.next()?;
     let file = node_id.split("::").next()?;
@@ -1022,7 +1027,7 @@ fn aggregate_per_test_records(
 ) -> Option<bool> {
     let mut saw_record = false;
     let mut saw_failed = false;
-    for line in normalized_output_lines(output) {
+    for line in framed_output_lines(output) {
         let Some((subject, failed)) = parser(&line) else {
             continue;
         };
@@ -1071,7 +1076,11 @@ fn javascript_per_test_failure(
     let mut saw_record = false;
     let mut saw_failed = false;
 
-    for line in normalized_output_lines(output) {
+    for line in framed_output_lines(output) {
+        if javascript_capture_or_diagnostic_boundary(&line) {
+            contexts = JavascriptTestContexts::default();
+            continue;
+        }
         if allow_vitest {
             if let Some((subject, failed)) =
                 vitest_per_test_record(&line).or_else(|| direct_js_bullet_record(&line))
@@ -1088,9 +1097,7 @@ fn javascript_per_test_failure(
                 contexts.jest = Some(path.to_string());
                 continue;
             }
-            if let Some((test_name, failed)) = status_prefixed_record(&line, "✓ ", "✕ ")
-                .or_else(|| status_prefixed_record(&line, "✓ ", "× "))
-            {
+            if let Some((test_name, failed)) = jest_per_test_record(&line) {
                 let direct_path = test_name
                     .split_whitespace()
                     .next()
@@ -1112,7 +1119,7 @@ fn javascript_per_test_failure(
                 contexts.bun = Some(path.to_string());
                 continue;
             }
-            if let Some((test_name, failed)) = status_prefixed_record(&line, "(pass) ", "(fail) ") {
+            if let Some((test_name, failed)) = bun_per_test_record(&line) {
                 let direct_path = test_name
                     .split_whitespace()
                     .next()
@@ -1146,8 +1153,8 @@ fn javascript_per_test_failure(
             }
         }
         if verifier == VerifierKind::GenericTest {
-            if let Some((test_name, failed)) =
-                status_prefixed_record(&line, "--- pass: ", "--- fail: ")
+            if let Some((test_name, failed)) = runner_line_body(&line, 0, 0)
+                .and_then(|body| status_prefixed_record(body, "--- pass: ", "--- fail: "))
             {
                 if record_matches_target(&[test_name], target_scope) {
                     saw_record = true;
@@ -1168,12 +1175,14 @@ struct JavascriptTestContexts {
 }
 
 fn vitest_per_test_record(line: &str) -> Option<(&str, bool)> {
+    let line = runner_line_body(line, 0, 2)?;
     let (body, failed) = status_prefixed_record(line, "pass ", "fail ")?;
     let path = body.split(" > ").next()?;
     (body.contains(" > ") && is_javascript_test_path(path)).then_some((body, failed))
 }
 
 fn direct_js_bullet_record(line: &str) -> Option<(&str, bool)> {
+    let line = runner_line_body(line, 0, 0)?;
     let (body, failed) = status_prefixed_record(line, "✓ ", "✕ ")
         .or_else(|| status_prefixed_record(line, "✓ ", "× "))?;
     let path = body.split_whitespace().next()?;
@@ -1181,6 +1190,7 @@ fn direct_js_bullet_record(line: &str) -> Option<(&str, bool)> {
 }
 
 fn jest_suite_path(line: &str) -> Option<&str> {
+    let line = runner_line_body(line, 0, 2)?;
     let body = line
         .strip_prefix("pass ")
         .or_else(|| line.strip_prefix("fail "))?
@@ -1192,12 +1202,28 @@ fn jest_suite_path(line: &str) -> Option<&str> {
     line_looks_like_test_path(path).then_some(path)
 }
 
+fn jest_per_test_record(line: &str) -> Option<(&str, bool)> {
+    let indent = leading_space_count(line)?;
+    if indent < 2 || !indent.is_multiple_of(2) {
+        return None;
+    }
+    let line = &line[indent..];
+    status_prefixed_record(line, "✓ ", "✕ ").or_else(|| status_prefixed_record(line, "✓ ", "× "))
+}
+
 fn bun_file_context(line: &str) -> Option<&str> {
+    let line = runner_line_body(line, 0, 0)?;
     let path = line.strip_suffix(':')?.trim();
     is_javascript_test_path(path).then_some(path)
 }
 
+fn bun_per_test_record(line: &str) -> Option<(&str, bool)> {
+    let line = runner_line_body(line, 0, 0)?;
+    status_prefixed_record(line, "(pass) ", "(fail) ")
+}
+
 fn deno_running_context(line: &str) -> Option<(&str, usize)> {
+    let line = runner_line_body(line, 0, 0)?;
     let mut tokens = line.split_whitespace();
     if tokens.next()? != "running" {
         return None;
@@ -1211,6 +1237,7 @@ fn deno_running_context(line: &str) -> Option<(&str, usize)> {
 }
 
 fn deno_per_test_record(line: &str) -> Option<(&str, bool)> {
+    let line = runner_line_body(line, 0, 0)?;
     let (test_name, status) = line.rsplit_once(" ... ")?;
     let failed = exact_status_with_optional_duration(status)?;
     (!test_name.trim().is_empty()).then_some((test_name.trim(), failed))
@@ -1233,6 +1260,63 @@ fn exact_status_with_optional_duration(status: &str) -> Option<bool> {
         }
     }
     None
+}
+
+fn javascript_capture_or_diagnostic_boundary(line: &str) -> bool {
+    let Some(indent) = leading_space_count(line) else {
+        return true;
+    };
+    let body = &line[indent..];
+    let captured_output_header = [
+        "console.log",
+        "console.error",
+        "console.warn",
+        "console.info",
+        "console.debug",
+        "captured stdout",
+        "captured stderr",
+        "stdout |",
+        "stderr |",
+    ]
+    .iter()
+    .any(|prefix| framed_prefix(body, prefix));
+    let diagnostic_header = indent > 0
+        && (body.starts_with("at ")
+            || body.starts_with("● console")
+            || body.starts_with("diagnostic:")
+            || body.starts_with("error:")
+            || body.starts_with("note:")
+            || body.starts_with("source:")
+            || body.starts_with("stack:")
+            || body.starts_with("warning:"));
+    let indented_status_payload = (indent > 2
+        && (body.starts_with("pass ") || body.starts_with("fail ")))
+        || (indent > 0 && (body.starts_with("(pass) ") || body.starts_with("(fail) ")));
+
+    captured_output_header || diagnostic_header || indented_status_payload
+}
+
+fn framed_prefix(body: &str, prefix: &str) -> bool {
+    body == prefix
+        || body.strip_prefix(prefix).is_some_and(|suffix| {
+            suffix.starts_with(' ') || suffix.starts_with(':') || suffix.starts_with('(')
+        })
+}
+
+fn runner_line_body(line: &str, min_indent: usize, max_indent: usize) -> Option<&str> {
+    let indent = leading_space_count(line)?;
+    (min_indent..=max_indent)
+        .contains(&indent)
+        .then_some(&line[indent..])
+}
+
+fn leading_space_count(line: &str) -> Option<usize> {
+    let count = line.bytes().take_while(|byte| *byte == b' ').count();
+    (!line[count..]
+        .chars()
+        .next()
+        .is_some_and(char::is_whitespace))
+    .then_some(count)
 }
 
 fn status_prefixed_record<'a>(
@@ -2392,6 +2476,89 @@ mod tests {
                 verification[0].exercise_state,
                 ExerciseState::TargetExercised,
                 "{command}"
+            );
+        }
+    }
+
+    #[test]
+    fn checkpoints_preserve_failure_polarity_for_contradictory_summaries_without_exercise() {
+        let cases = [
+            (
+                "cargo test cargo_contradictory -- --exact",
+                "Exit code: 0\nrunning 0 tests\n\ntest result: FAILED. 0 passed; 1 failed; 0 ignored; 0 measured; 0 filtered out",
+            ),
+            (
+                "pytest tests/checkpoints_test.py::test_pairing",
+                "Exit code: 0\ncollected 0 items\n\n=================== 1 failed in 0.01s ===================",
+            ),
+            (
+                "yarn test tests/checkpoints.test.ts",
+                "Exit code: 0\nTests: 1 failed, 0 total",
+            ),
+        ];
+
+        for (command, output) in cases {
+            let rows = vec![
+                tool_call(0, "functions.shell_command", command),
+                tool_output(1, output),
+            ];
+            let attempts = build_command_attempts(&rows, &command_observations(&rows));
+            assert_eq!(attempts[0].outcome, AttemptOutcome::Clean, "{command}");
+
+            let verification = build_verification_attempts(&attempts, &rows);
+            assert_eq!(verification.len(), 1, "{command}");
+            assert_eq!(verification[0].outcome, AttemptOutcome::Failed, "{command}");
+            assert_eq!(
+                verification[0].exercise_state,
+                ExerciseState::Unknown,
+                "{command}"
+            );
+        }
+    }
+
+    #[test]
+    fn checkpoints_reject_multiline_javascript_captured_output_as_per_test_execution() {
+        let cases = [
+            (
+                "jest-zero",
+                "jest tests/foo.test.ts",
+                "Exit code: 0\nPASS tests/foo.test.ts\n  console.log\n    PASS subtracts (2 ms)\n    ✓ subtracts (2 ms)\nTests: 0 passed, 0 total",
+                AttemptOutcome::Clean,
+            ),
+            (
+                "jest-contradictory",
+                "jest tests/foo.test.ts",
+                "Exit code: 0\nFAIL tests/foo.test.ts\n  console.log\n    PASS subtracts (2 ms)\n    ✓ subtracts (2 ms)\nTests: 1 failed, 0 total",
+                AttemptOutcome::Failed,
+            ),
+            (
+                "bun-zero",
+                "bun test tests/foo.test.ts",
+                "Exit code: 0\ntests/foo.test.ts:\n  console.log\n    (pass) math > subtracts\nRan 0 tests across 1 file",
+                AttemptOutcome::Clean,
+            ),
+            (
+                "bun-contradictory",
+                "bun test tests/foo.test.ts",
+                "Exit code: 0\ntests/foo.test.ts:\n  console.log\n    (pass) math > subtracts\nTests: 1 failed, 0 total",
+                AttemptOutcome::Failed,
+            ),
+        ];
+
+        for (case, command, output, expected_outcome) in cases {
+            let rows = vec![
+                tool_call(0, "functions.shell_command", command),
+                tool_output(1, output),
+            ];
+            let attempts = build_command_attempts(&rows, &command_observations(&rows));
+            let verification = build_verification_attempts(&attempts, &rows);
+
+            assert_eq!(verification.len(), 1, "{case}");
+            assert_eq!(verification[0].outcome, expected_outcome, "{case}");
+            assert_eq!(
+                verification[0].exercise_state,
+                ExerciseState::Unknown,
+                "{case}"
             );
         }
     }

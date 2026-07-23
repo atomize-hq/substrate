@@ -2963,6 +2963,30 @@ test result: FAILED. 0 passed; 1 failed; 0 ignored; 0 measured; 0 filtered out"#
             "Exit code: 1\nTests: 1 failed, 1 total",
             "Exit code: 0\nTests: 1 failed, 1 total",
         ),
+        (
+            "cargo-contradictory",
+            r#"{"command":"cargo test -p agent-drift-analyzer checkpoints::captures_progress -- --exact","workdir":"/repo"}"#,
+            r#"Exit code: 101
+running 1 test
+
+test result: FAILED. 0 passed; 1 failed; 0 ignored; 0 measured; 0 filtered out"#,
+            r#"Exit code: 0
+running 0 tests
+
+test result: FAILED. 0 passed; 1 failed; 0 ignored; 0 measured; 0 filtered out"#,
+        ),
+        (
+            "pytest-contradictory",
+            r#"{"command":"pytest tests/checkpoints_test.py::test_pairing","workdir":"/repo"}"#,
+            "Exit code: 1\n=================== 1 failed in 0.01s ===================",
+            "Exit code: 0\ncollected 0 items\n\n=================== 1 failed in 0.01s ===================",
+        ),
+        (
+            "javascript-contradictory",
+            r#"{"command":"yarn test tests/checkpoints.test.ts","workdir":"/repo"}"#,
+            "Exit code: 1\nTests: 1 failed, 1 total",
+            "Exit code: 0\nTests: 1 failed, 0 total",
+        ),
     ];
 
     for (case, command, initial_failure, masked_failure) in cases {
