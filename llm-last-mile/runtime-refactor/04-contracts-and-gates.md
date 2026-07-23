@@ -6162,7 +6162,8 @@ A contract is not considered landed until tests prove:
 
 ## A1.1d-5R2-2F0-HC corrected complete process-resource ledger
 
-This is the durable closure inventory for the process running `cargo test -p shell --lib`. It was
+This is the durable closure inventory for the process running the shell-library wall under the
+[canonical broad-wall invocation contract](#canonical-shell-library-broad-wall-invocation-contract). It was
 formed by two independent methods: lexical scanning of all `crates/shell/src` test modules found
 1,303 source test functions, while the same-file helper/call parser closed 5,070 functions and
 initially recognized 1,302 tests before the independent scan restored the multiline-attribute
@@ -6808,26 +6809,198 @@ The next gate is exactly **A1.1d-5R2-2 renewed production-fix-free integration c
 new proof node, not part of this F closeout, and may not repair production code. R2-3, R2-4, R3,
 privileged product smoke, and direct-member Codex/UAA gateway adoption remain outside this gate.
 
+## Canonical shell-library broad-wall invocation contract
+
+This is the single normative command contract for every live reference in the six-file control
+pack to a broad shell wall, parallel wall, serial wall, canonical or differential baseline wall,
+final change-detection wall, renewed closeout wall, or F/Harness wall. Historical transcripts may
+retain the command they actually ran only when they are explicitly labeled historical and
+non-normative. No other live command form may establish shell-library broad-wall authority.
+
+### Fresh private root and preflight
+
+Every broad wall creates a fresh disposable root `R`. Before the test process starts, no-follow
+descriptor validation must prove all of the following for `R` and retain enough descriptor
+identity to prove the same object remained bound through the wall:
+
+1. `R` is an absolute path to a directory, not a symlink, owned by the current user, with exact
+   mode `0700` and stable filesystem identity.
+2. No group or world write authority exists, and no access or default ACL grants effective write
+   authority to another principal. Unsupported, malformed, unreadable, or otherwise uncertain ACL
+   state fails closed.
+3. The complete ancestor chain is no-follow safe, identity-stable, and free of foreign effective
+   write authority. `R` is created beneath a trusted, non-world-writable ancestor and is never
+   beneath `/tmp`, `/var/tmp`, or another shared sticky directory.
+4. `R` is not the product's real `SUBSTRATE_HOME`, is not reused by another concurrent wall, and
+   cannot select or modify product/user authority state.
+5. Fresh `R/tmp` and `R/xdg-runtime` exist before Cargo starts. Each is a current-user-owned,
+   exact-`0700`, non-symlink directory whose descriptor identity remains stable through the wall.
+
+The exact test environment is:
+
+```text
+TMPDIR="$R/tmp"
+XDG_RUNTIME_DIR="$R/xdg-runtime"
+```
+
+Both values must be exported or prefixed on the exact Cargo invocation before the test process
+starts. Ambient `TMPDIR` or `XDG_RUNTIME_DIR` is never authority. Omission or invalidity of either
+value makes the wall ineligible; it does not establish a regression or authorize a baseline
+transition.
+
+### Canonical command forms
+
+Default-parallel shell-library wall:
+
+```bash
+TMPDIR="$R/tmp" \
+XDG_RUNTIME_DIR="$R/xdg-runtime" \
+cargo test -p shell --lib -- --nocapture
+```
+
+One-thread serial shell-library wall:
+
+```bash
+TMPDIR="$R/tmp" \
+XDG_RUNTIME_DIR="$R/xdg-runtime" \
+cargo test -p shell --lib -- --nocapture --test-threads=1
+```
+
+If a live Rust/libtest version requires a different argument order, evidence must record the exact
+verified equivalent while preserving these semantics: the same shell library target, `--nocapture`,
+default libtest parallelism for the parallel form, exactly one libtest thread for the serial form,
+and both validated private-root variables installed before process start.
+
+### Reproducible creation and cleanup template
+
+The following is a normative semantic template, not a repository script. The selected parent must
+pass the trusted-ancestor preflight before `mktemp` runs. The `require_*`, `wait_*`, `preserve_*`,
+and `remove_*` names denote mandatory harness operations backed by descriptor-based, no-follow
+validation; they are not optional comments or ambient `PATH` commands. A harness must implement
+them, retain the validated descriptors, and stop nonzero if any operation is absent, fails, or is
+uncertain.
+
+```bash
+trusted_parent="${SUBSTRATE_TEST_TRUSTED_PARENT:-$HOME}"
+
+# Before creation: validate the exact absolute trusted parent and its complete
+# ancestor chain for owner, directory type, no symlink, mode, identity, and
+# effective ACL safety. Reject shared sticky parents such as /tmp and /var/tmp.
+require_trusted_wall_parent "$trusted_parent" || exit 1
+wall_root="$(mktemp -d "${trusted_parent%/}/substrate-r2-wall.XXXXXX")" || exit 1
+[ -n "$wall_root" ] || exit 1
+
+chmod 0700 "$wall_root" || exit 1
+mkdir -m 0700 "$wall_root/tmp" "$wall_root/xdg-runtime" || exit 1
+
+# Before Cargo: no-follow open and validate exact owner, directory type, mode,
+# identity, trusted ancestor chain, and effective ACL safety for wall_root and
+# both children. Retain their identities through the wall.
+require_validated_wall_root "$wall_root" "$wall_root/tmp" "$wall_root/xdg-runtime" || exit 1
+
+if TMPDIR="$wall_root/tmp" \
+   XDG_RUNTIME_DIR="$wall_root/xdg-runtime" \
+   cargo test -p shell --lib -- --nocapture; then
+    status=0
+else
+    status=$?
+fi
+
+# Preserve the complete log, counts, failure names, normalized signatures, and
+# required provenance before cleanup. Only after Cargo and every child exit:
+# revalidate the exact wall_root path, owner, type, and retained identity, then
+# remove only that exact disposable root. Never remove a glob or parent.
+wait_for_wall_children "$wall_root" || exit 1
+preserve_wall_evidence "$wall_root" "$status" || exit 1
+remove_revalidated_wall_root "$wall_root" || exit 1
+
+exit "$status"
+```
+
+`SUBSTRATE_TEST_TRUSTED_PARENT`, when present, is test-harness placement input only. It cannot
+weaken any owner/mode/type/identity/ancestor/ACL check, cannot select product authority, and cannot
+name a shared sticky directory. `mktemp -d` without this explicit trusted template is forbidden
+because its ambient default may be `/tmp`. Cleanup occurs only after every Cargo child has
+terminated, revalidates the exact root before removal, and never recursively targets a glob or the
+trusted parent. Failure logs and hash artifacts are preserved before cleanup. Actual product and
+user state remain untouched.
+
+### Required provenance and eligibility
+
+A wall result is canonical only when its retained evidence contains:
+
+- absolute `R`, current owner UID, exact mode, directory/no-symlink proof, retained filesystem
+  identity, and the complete ancestor/ACL safety result;
+- exact `TMPDIR` and `XDG_RUNTIME_DIR` values;
+- full Cargo command, repository working directory, Rust version, and Cargo version;
+- exit status and discovered/passed/failed/ignored counts; and
+- the complete failure-name hash and normalized-signature hash.
+
+Validate this invocation provenance before comparing any result with a baseline. A failed root
+preflight, missing evidence field, changed target, omitted variable, or invalid root classifies the
+wall as ineligible. Correct the invocation, not trusted-root validation, tests, fixtures,
+production code, or the canonical baseline, then rerun the complete required wall. Only a
+provenance-valid wall may trigger `PassToFail`, `NewFail`, changed-failure, or other baseline
+classification.
+
+### Frozen baseline and command-mismatch evidence
+
+The provenance-valid canonical shell-library baseline remains:
+
+| Evidence | Canonical value |
+|---|---|
+| Counts | 1,309 discovered; 1,264 passed; 45 failed; 0 ignored |
+| Failure-name SHA-256 | `b23bb59ad12833d2c1d37c19c54933cd6bcb1c75e0dab8a70179b9881372be70` |
+| Normalized-signature SHA-256 | `33c686a6ec9f3a0a4f51e1fca976445e6804da12fbbff50312a03f0042cdfac3` |
+
+The renewed-closeout invocation that omitted the private roots is retained separately as
+ineligible evidence:
+
+| Evidence | Ineligible value |
+|---|---|
+| Command | `cargo test -p shell --lib` |
+| Counts | 1,309 discovered; 1,205 passed; 104 failed; 0 ignored |
+| Failure-name SHA-256 | `7d6564bbcfaaed1fdb784eb4610683a02e4464b362215761d728be3e7361d8e5` |
+| Normalized-signature SHA-256 | `ae67f87fbdc155575e13467506405afbd4568fc08b9058cb4159daa539549579` |
+| Additional failures | 59, all caused by `TempDir` placement beneath normal mode-`1777` `/tmp` and correct trusted-root rejection |
+| Classification | `BaselineCommandMismatchConfirmed` |
+
+The causally correct historical control used `/home/spenser/t` for both variables and restored the
+canonical counts and hashes. That path is historical evidence only and is not a canonical
+machine-specific path. Serial and isolated tests failed identically without the private `TMPDIR`;
+the exact private-root invocation restored the 45-failure wall. Runtime source and tests were
+unchanged. The 59 failures are not added to the baseline, waived, treated as product failures or
+environment drift, used to weaken trusted-root validation, or used to justify serial-only proof.
+
 ## Normative renewed R2-2 publication contract
 
 The selected model is **Docs-on-top → one fast-forward publication**. This section is the normative
 publication contract for the renewed production-fix-free integration closeout. It becomes
-operative once the exact commit containing it has local/remote parity at
-`feat/preserve-a1-1d-5r2-2-publication-authority-20260722` and remains an unchanged ancestor of the
-local source HEAD; before then the decision is selected but not activated. That activation is
-monotonic for exact descendants and is not lost when final or authorized append-only remediation
-documentation follows it. Neither selection nor activation marks the closeout or R2-2 complete.
+operative from exact publication-authority commit
+`928f94e7b4c498273b40385f7bffea9e4f949700`, whose local/remote parity at
+`feat/preserve-a1-1d-5r2-2-publication-authority-20260722` must remain unchanged. That activation is
+monotonic for exact descendants. The B1 invocation correction becomes controlling authority only
+when its exact successor commit has local/remote parity at
+`feat/preserve-a1-1d-5r2-2-broad-wall-invocation-20260722` and remains an unchanged descendant of
+`928f94e7`; it is not bound to the publication-authority branch. Neither activation marks the
+closeout or R2-2 complete, and neither is lost when final or authorized append-only remediation
+documentation follows.
 
 ### Mandatory sequence
 
-1. Start from exact existing local runtime HEAD
-   `e5fbd2d4441d248e137d52c44e493fb0abe158f8` and its unchanged linear 17-commit range above F docs
-   closeout `2f6f1f69b3519dafff01ef543e7d260da2c37700`.
-2. Commit this six-file publication-authority correction locally on top of that range.
-3. Do not push that commit or any runtime commit to the source branch yet.
-4. Preserve the publication-authorized local state remotely only on dedicated branch
+1. Preserve the exact unchanged linear 17-commit runtime range from F docs closeout
+   `2f6f1f69b3519dafff01ef543e7d260da2c37700` through
+   `e5fbd2d4441d248e137d52c44e493fb0abe158f8`.
+2. Retain publication-authority commit `928f94e7b4c498273b40385f7bffea9e4f949700`
+   unchanged above that range and preserve it at
    `feat/preserve-a1-1d-5r2-2-publication-authority-20260722`.
-5. Run the renewed production-fix-free integration wall from that exact state.
+3. Commit the six-file broad-wall invocation correction locally on top of exact
+   `928f94e7b4c498273b40385f7bffea9e4f949700` and preserve that successor at
+   `feat/preserve-a1-1d-5r2-2-broad-wall-invocation-20260722`.
+4. Do not push either documentation commit or any runtime commit to the source branch yet.
+5. Run every shell-library broad wall in the renewed production-fix-free integration wall under
+   the [canonical broad-wall invocation contract](#canonical-shell-library-broad-wall-invocation-contract)
+   from the exact B1-preserved state.
 6. Permit no production, test, fixture, script, schema, dependency, or generated implementation
    changes.
 7. If any gate fails or stops, do not push the source branch.
@@ -6866,11 +7039,13 @@ source remote: 2f6f1f69b3519dafff01ef543e7d260da2c37700 (F docs closeout)
   ↓
 17 existing runtime commits, unchanged, ending e5fbd2d4441d248e137d52c44e493fb0abe158f8
   ↓
-publication-authority docs commit, local source only and dedicated-preservation remote
+publication-authority docs commit 928f94e7, local source only and dedicated-preservation remote
+  ↓
+broad-wall invocation docs commit, local source only and dedicated-preservation remote
 ```
 
 The source remote remains at `2f6f1f69b3519dafff01ef543e7d260da2c37700`, the local source is
-18 commits ahead, and the source worktree/index/untracked set is clean.
+19 commits ahead after the B1 correction, and the source worktree/index/untracked set is clean.
 
 After a future successful closeout:
 
@@ -6881,6 +7056,8 @@ source remote F docs closeout
   ↓
 publication-authority docs commit
   ↓
+broad-wall invocation docs commit
+  ↓
 renewed integration wall and reviews, with no implementation commit
   ↓
 final integration-closeout docs commit
@@ -6890,9 +7067,10 @@ optional append-only six-file remediation-doc successor(s), only for post-commit
 one fast-forward source push; local HEAD = upstream = remote
 ```
 
-The final source contains the original 17 runtime commits plus both closeout-related documentation
+The final source contains the original 17 runtime commits plus the publication-authority,
+broad-wall invocation, and final-closeout documentation
 commits and only any review-required append-only remediation-doc successors, with no changed commit
-identity, merge commit, or force push. The ordinary CLEAN path has exactly the two closeout-related
+identity, merge commit, or force push. The ordinary CLEAN path has exactly these three closeout-related
 documentation commits. Immediately before that single publication, the source remote must still be exact
 `2f6f1f69b3519dafff01ef543e7d260da2c37700`; an explicit expected-old-OID CAS/lease binds that OID,
 while a separate ancestry proof and server result require a normal fast-forward update. The lease

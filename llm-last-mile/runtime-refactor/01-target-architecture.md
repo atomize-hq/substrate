@@ -1037,11 +1037,13 @@ closeout `2f6f1f69b3519dafff01ef543e7d260da2c37700` through local runtime HEAD
 F's earlier replay fulfilled F's own docs-first requirement. Historical Route D replay remains
 scoped to Route D and does not create a general rule to replay a renewed closeout.
 
-The selected architecture is **Docs-on-top → one fast-forward publication**. A local publication-
-authority documentation commit follows the unchanged runtime range; the renewed integration wall
-and independent reviews attest that exact state; then the final integration-closeout documentation
-commit follows the range and proof it certifies. This ordering keeps the evidence statement after
-its subject while preserving every existing runtime commit byte-for-byte and identity-for-identity.
+The selected architecture is **Docs-on-top → one fast-forward publication**. Local publication-
+authority commit `928f94e7b4c498273b40385f7bffea9e4f949700` follows the unchanged runtime range;
+the six-file broad-wall invocation correction follows that authority commit; the renewed
+integration wall and independent reviews attest the exact corrected state; then the final
+integration-closeout documentation commit follows the range and proof it certifies. This ordering
+keeps the evidence statement after its subject while preserving every existing runtime commit and
+both preceding documentation commits byte-for-byte and identity-for-identity.
 Replaying or rewriting those commits would add identity churn without architectural or evidentiary
 value. The authority state must be preserved remotely through dedicated branch
 `feat/preserve-a1-1d-5r2-2-publication-authority-20260722`, not through the source branch, before the
@@ -1060,3 +1062,29 @@ proof or topology reruns the affected proof/review. Neither permits a rewrite. T
 source update requires both an explicit expected-old-OID CAS/lease fixed to
 `2f6f1f69b3519dafff01ef543e7d260da2c37700` and an independent proof that the update is a normal
 fast-forward; the lease is never authority for a forced update.
+
+## Broad-wall evidence architecture
+
+Invocation provenance is part of the proof boundary, not ambient harness setup. Every live broad
+shell wall, parallel or serial authority wall, differential baseline wall, final change-detection
+wall, renewed closeout wall, and F/Harness wall in this document is governed by the
+[canonical shell-library broad-wall invocation contract](04-contracts-and-gates.md#canonical-shell-library-broad-wall-invocation-contract).
+The contract creates a fresh private `R`, binds exact validated `R/tmp` and `R/xdg-runtime` before
+Cargo starts, retains owner/mode/no-symlink/filesystem/ancestor/ACL identity through the wall, and
+removes only the revalidated disposable root after all children exit and evidence is preserved.
+
+This boundary preserves the existing trusted-root architecture. A mode-`1777` `/tmp` ancestor is
+supposed to fail private-root validation; the correct response is to place test-owned temporary
+roots below a trusted non-world-writable parent, never to weaken ancestor validation or fixtures.
+`SUBSTRATE_TEST_TRUSTED_PARENT` is placement input only and cannot select product authority. The
+real `SUBSTRATE_HOME` and all user/product state stay outside the disposable wall root.
+
+The omitted-root wall is therefore ineligible evidence, classified
+`BaselineCommandMismatchConfirmed`, and cannot authorize `PassToFail`, `NewFail`, baseline, or
+serial-only conclusions. The provenance-valid baseline remains `1309/1264/45/0`; the ineligible
+wall remains separately recorded as `1309/1205/104/0`, with all 59 additions caused by normal
+`/tmp` placement and correct trusted-root rejection. Runtime source and tests are unchanged.
+
+The next architectural action is the renewed production-fix-free integration closeout from the
+B1-preserved docs-on-top state using provenance-validated private roots. R2-2 remains incomplete;
+source publication, R2-3, R2-4, and R3 remain blocked in this correction.

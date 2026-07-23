@@ -1142,7 +1142,7 @@ Do not promote a crosswalk row merely because its slice landed. Promote only aft
 | Packet field | Frozen result |
 |---|---|
 | Identity | `A1.1d-5R2-2F0-HC`; internal A1 harness prerequisite. This row preserves the corrected authorization contract; the authorized implementation, proof, review, and canonical closeout are now complete. This is a correction to F0-HC, not F0c/F0d. |
-| Audit process | The single process running `cargo test -p shell --lib`, its concurrently executable shell-library unit tests, same-binary helpers/readers/writers/background work, inherited child state, and shared test-support helpers. Integration parent mutation was inspected only for shared helper/inheritance contracts. |
+| Audit process | The single process running the shell-library wall under the [canonical broad-wall invocation contract](04-contracts-and-gates.md#canonical-shell-library-broad-wall-invocation-contract), its concurrently executable shell-library unit tests, same-binary helpers/readers/writers/background work, inherited child state, and shared test-support helpers. Integration parent mutation was inspected only for shared helper/inheritance contracts. |
 | Inventory | 38 rows: A environment 4; B descriptors 3; C working state 3; D hooks/subscribers 4; E registries/singletons 11; F filesystem/sockets/ports 4; G time/scheduling 3; H background lifetime 3; I runner coordination 3. The corrected lexical scan covered 1,303 source test functions; the Linux wall discovered 1,263 tests. Environment closure is exactly 86 names: 74 parent-mutated and 12 child-only/read-only. Complete call closure corrects the parent-mutating total from 518 to 534 tests across the same 35 files. A2 is 129 direct tests across 22 files, comprising 116 additive plus 13 existing-source F0a tests; 27 additive tests lack `#[serial]`. The manifest adds the XDG gateway test, the Codex-auth guard test, both macOS `update_world_env_sets_*_flags` cases, and fourteen `with_test_mode`-only PTY cases, while removing two non-mutating B1 acknowledgement false positives. Other counts remain 100 CWD-dependent tests across 10 files, 120 sleep-dependent tests, 94 timeout-dependent tests, 127 Tokio-spawn-dependent tests, 48 thread-spawn-dependent tests, 14 child-spawn-dependent tests, 103 listener-dependent tests, 38 abort-dependent tests, 22 umask-dependent tests, two fd-replacement tests, one fd-flag test, one terminal/console-mode test, and one active-PTY-registry test. |
 | Environment correction | The prior exact-name phase closed direct primitive arguments but not wrapper arguments/callsites. Corrected closure adds `XDG_CONFIG_HOME`, `XDG_DATA_HOME`, `XDG_STATE_HOME`, `SUBSTRATE_OVERRIDE_ANCHOR_MODE`, `SUBSTRATE_OVERRIDE_ANCHOR_PATH`, and `SUBSTRATE_OVERRIDE_CAGED`, and reclassifies already-listed `SUBSTRATE_SHELL` as parent-mutated through the shared routing-test helper. The gateway XDG negative-authority test is added to the migration manifest; the settings and host-replay tests were already present. The validator fails on an absent wrapper callsite, unclassified literal/constant/dynamic name, parent-as-child misclassification, or missing mutating test. |
 | Primary dispositions | `UnifiedProcessStateLock` 7; `ExplicitDependencyInjection` 4; `TerminationConfirmedTeardown` 1; `DeterministicSynchronization` 1; `SubprocessIsolation` 7; `ProvenConcurrencySafe` 17; `SeparatelyOwnedDeferred` 1. Total 38; no row is unowned. |
@@ -1428,6 +1428,44 @@ smoke remains R2-4-owned.
 `Routes A–F complete` → **`A1.1d-5R2-2 renewed production-fix-free integration closeout`** →
 `R2-3` → `R2-4` → `R3`.
 
+## A1.1d-5R2-2-B1 broad-wall provenance phase
+
+This six-file documentation-only phase follows exact publication-authority commit
+`928f94e7b4c498273b40385f7bffea9e4f949700` and precedes the renewed integration wall. Every live
+broad shell wall, parallel/serial wall, canonical or differential baseline wall, final
+change-detection wall, renewed closeout wall, and F/Harness wall in this phase map uses the
+[canonical shell-library broad-wall invocation contract](04-contracts-and-gates.md#canonical-shell-library-broad-wall-invocation-contract).
+
+| B1 phase field | Frozen requirement |
+|---|---|
+| Defect | The renewed-closeout prompt omitted the private `TMPDIR`/`XDG_RUNTIME_DIR` provenance used by the canonical F wall. Rust `TempDir` roots fell beneath normal mode-`1777` `/tmp`, and trusted-root validation correctly rejected that ancestor. Serial and isolated controls failed identically; exact private-root parity restored the canonical wall. |
+| Classification | `BaselineCommandMismatchConfirmed`; runtime source/tests unchanged; not environment drift, test isolation, or production regression. |
+| Root/command authority | Create one fresh validated private `R` per wall; bind exact `R/tmp` and `R/xdg-runtime` before Cargo starts; preserve root/command/toolchain/result/hash provenance; clean only the revalidated disposable root after every child exits and evidence is retained. Ambient temporary-root selection is ineligible. |
+| Canonical evidence | `1309/1264/45/0`; failure names `b23bb59ad12833d2c1d37c19c54933cd6bcb1c75e0dab8a70179b9881372be70`; normalized signatures `33c686a6ec9f3a0a4f51e1fca976445e6804da12fbbff50312a03f0042cdfac3`. |
+| Ineligible evidence | `1309/1205/104/0`; failure names `7d6564bbcfaaed1fdb784eb4610683a02e4464b362215761d728be3e7361d8e5`; normalized signatures `ae67f87fbdc155575e13467506405afbd4568fc08b9058cb4159daa539549579`; 59 additions excluded from baseline authority. |
+| Allowed files | Exactly the six canonical `llm-last-mile/runtime-refactor/00`–`05` Markdown files. |
+| Forbidden work | Production, tests, fixtures, scripts, schemas, dependencies, generated files, trusted-root weakening, baseline replacement, renewed wall execution, source push, replay/rebase/rewrite/cherry-pick/merge/force push, integration-clean branch, R2-3/R2-4/R3. |
+| Preservation | Commit directly on parent `928f94e7b4c498273b40385f7bffea9e4f949700`; preserve only through `feat/preserve-a1-1d-5r2-2-broad-wall-invocation-20260722`; leave the source remote at `2f6f1f69b3519dafff01ef543e7d260da2c37700`. |
+| Exit/next | Six-file validation and three fresh isolated read-only reviews CLEAN; local source 19 ahead and clean; then stop. Exact next task: **Resume A1.1d-5R2-2 renewed production-fix-free integration closeout using provenance-validated private roots**. |
+
+The controlling DAG is:
+
+```text
+publication-authority commit 928f94e7
+  ↓
+B1 broad-wall invocation docs correction
+  ↓
+renewed production-fix-free integration wall using validated private roots
+  ↓
+fresh independent reviews
+  ↓
+final six-file integration-closeout docs
+  ↓
+one ordinary fast-forward source push
+```
+
+R2-2 remains incomplete throughout B1. No integration wall runs in this phase.
+
 ## A1.1d-5R2-2 renewed closeout publication phases
 
 The selected publication model is **Docs-on-top → one fast-forward publication**. Execute the
@@ -1435,13 +1473,14 @@ renewed closeout in exactly these phases:
 
 | Phase | Allowed work | Completion evidence | Stop boundary |
 |---|---|---|---|
-| 1. Publication-authority correction | Commit only the six canonical control-pack files on top of exact runtime HEAD `e5fbd2d4441d248e137d52c44e493fb0abe158f8`; push only dedicated preservation branch `feat/preserve-a1-1d-5r2-2-publication-authority-20260722` | Clean source worktree; source remote still `2f6f1f69b3519dafff01ef543e7d260da2c37700`; local source 18 ahead; original 17 identities unchanged | Do not run the renewed integration wall in this authority phase |
-| 2. Integration wall | Run the complete renewed production-fix-free wall from that exact preserved state | Every required integration artifact is proof-clean with zero implementation change | Any failure/stop blocks source push; classify it and authorize future remediation docs-first |
+| 1. Publication-authority correction | The six canonical control-pack files are committed as `928f94e7b4c498273b40385f7bffea9e4f949700` on exact runtime HEAD `e5fbd2d4441d248e137d52c44e493fb0abe158f8`; only dedicated preservation branch `feat/preserve-a1-1d-5r2-2-publication-authority-20260722` carries it remotely | Source remote still `2f6f1f69b3519dafff01ef543e7d260da2c37700`; local/remote preservation parity; original 17 identities unchanged | Complete; does not authorize an ambient-root integration wall |
+| 1B. Broad-wall invocation correction | Commit exactly the six canonical files on parent `928f94e7b4c498273b40385f7bffea9e4f949700`; preserve only at `feat/preserve-a1-1d-5r2-2-broad-wall-invocation-20260722` | Clean source worktree; source remote still `2f6f1f69b3519dafff01ef543e7d260da2c37700`; local source 19 ahead; runtime and publication-authority identities unchanged; private-root contract frozen | Do not run the renewed integration wall or push the source in B1 |
+| 2. Integration wall | Run the complete renewed production-fix-free wall from the exact B1-preserved state, applying the normative private-root command contract to every broad shell wall | Every required integration artifact has complete invocation provenance and is proof-clean with zero implementation change | An invalid/missing root makes the wall ineligible; any failure/stop blocks source push, is classified, and authorizes future remediation docs-first |
 | 3. Independent reviews | Fresh read-only topology/safety, architecture/evidence, and cross-document/sequence reviews of the exact proof state | All reviewers CLEAN; a purely documentary finding is remediated docs-only and re-reviewed by a fresh replacement | Any finding that invalidates proof or topology stops publication and requires the affected proof/review to rerun from a corrected preserved state; no source push on any unresolved finding |
 | 4. Final documentation | Draft the final integration-closeout update across the same six canonical files after the certified range/proof; validate/review to CLEAN; commit the exact reviewed bytes; rerun final documentation validation/reviews | Final committed docs prove the wall, keep R2-2 status truthful, and match the pre-commit reviewed bytes; any authorized remediation successor is append-only and six-file-only | Fix pre-commit documentary findings in the worktree; a post-commit documentary finding permits only an append-only remediation-doc successor plus renewed docs validation/review; a proof/topology-invalidating finding reruns affected proof/review; no rewrite or implementation/product/seam change |
-| 5. Publication | Freshly read the source remote and require exact old OID `2f6f1f69b3519dafff01ef543e7d260da2c37700`; bind an explicit expected-old-OID CAS/lease to that exact OID; independently prove the update is an ordinary fast-forward | Source contains original 17 runtime commits, the authority and final-closeout docs commits, and only any review-required append-only remediation-doc successors; local HEAD, upstream, and remote are identical at zero ahead/zero behind | The CAS/lease cannot authorize a forced/non-fast-forward update; any old-OID change, non-fast-forward, second/staged push, or identity mismatch is a hard stop |
+| 5. Publication | Freshly read the source remote and require exact old OID `2f6f1f69b3519dafff01ef543e7d260da2c37700`; bind an explicit expected-old-OID CAS/lease to that exact OID; independently prove the update is an ordinary fast-forward | Source contains original 17 runtime commits, the authority, B1 broad-wall invocation, and final-closeout docs commits, and only any review-required append-only remediation-doc successors; local HEAD, upstream, and remote are identical at zero ahead/zero behind | The CAS/lease cannot authorize a forced/non-fast-forward update; any old-OID change, non-fast-forward, second/staged push, or identity mismatch is a hard stop |
 
 F's completed replay and historical Route D docs-first replay remain scoped to their own packets.
 The renewed closeout certifies the already assembled range, so it must not replay that range.
-R2-2 remains incomplete through phases 1–4. R2-3 becomes the next node only after phase 5 succeeds;
+R2-2 remains incomplete through phases 1, 1B, and 2–4. R2-3 becomes the next node only after phase 5 succeeds;
 R2-4 and R3 remain later.

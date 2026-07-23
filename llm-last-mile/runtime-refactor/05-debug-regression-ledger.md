@@ -2745,12 +2745,94 @@ R2-3, R2-4, and R3 remain after it.
 
 | Decision/gate | Status | Evidence and distinction | Binding resolution / next action |
 |---|---|---|---|
-| `PublicationDecisionRequired` | Model selected; operative once the exact authority commit has local/remote preservation parity and remains an unchanged ancestor of local source HEAD | The completed F closeout required its documentation followed by exact replay, and that replay produced the current linear 17-commit range from `2f6f1f69b3519dafff01ef543e7d260da2c37700` through `e5fbd2d4441d248e137d52c44e493fb0abe158f8`. Historical Route D docs-first replay governed only its own pre-carrier correction. The renewed-closeout node named the next proof but previously selected no publication choreography. | The selected resolution is **Docs-on-top → one fast-forward publication**. Commit this authority correction locally above the unchanged range, preserve it remotely at `feat/preserve-a1-1d-5r2-2-publication-authority-20260722`, keep the source remote unchanged, then run the renewed wall in the next task. Activation is monotonic for exact descendants and does not mark R2-2 complete. |
+| `PublicationDecisionRequired` | Resolved and preserved at `928f94e7b4c498273b40385f7bffea9e4f949700` | The completed F closeout required its documentation followed by exact replay, and that replay produced the current linear 17-commit range from `2f6f1f69b3519dafff01ef543e7d260da2c37700` through `e5fbd2d4441d248e137d52c44e493fb0abe158f8`. Historical Route D docs-first replay governed only its own pre-carrier correction. The selected docs-on-top publication authority is preserved locally/remotely at `feat/preserve-a1-1d-5r2-2-publication-authority-20260722`. | Keep commit and range identities unchanged. The B1 six-file broad-wall invocation successor must follow exact `928f94e7`, remain off the source branch remote, and be preserved separately at `feat/preserve-a1-1d-5r2-2-broad-wall-invocation-20260722` before renewed proof. R2-2 remains incomplete. |
+| `BaselineCommandMismatchConfirmed` | B1 documentation correction active; renewed proof still unrun | The renewed-closeout prompt omitted the private-root invocation provenance. The resulting wall was ineligible and added 59 correct trusted-root rejections below normal mode-`1777` `/tmp`; runtime source and tests did not change. | Use the [canonical broad-wall invocation contract](04-contracts-and-gates.md#canonical-shell-library-broad-wall-invocation-contract), commit this six-file correction on exact `928f94e7`, preserve it remotely only on the B1 branch, and stop before the renewed integration wall. |
 | Existing runtime identity | Frozen | All 17 current commits are linear, exact, locally reviewed, and preserved. They already rest on the latest F documentation. Replaying them again would create new identities without changing semantic content or proof value. | No replay, rebase, rewrite, cherry-pick, merge commit, or force push. Preserve every runtime byte and commit identity; keep blocked and preservation-only donors outside source ancestry. |
-| Renewed integration proof | Unrun; R2-2 incomplete | This documentation-authority correction runs no integration wall and supplies no integration, product-smoke, platform, capability, or seam-promotion evidence. | Run only the next packet from the exact publication-authorized state. On any failure/stop, make no runtime/test change and no source push; retain state/refs, classify the stop, and authorize future remediation docs-first. |
+| Renewed integration proof | Unrun; R2-2 incomplete | Neither the publication-authority commit nor the B1 broad-wall correction runs an integration wall or supplies integration, product-smoke, platform, capability, or seam-promotion evidence. | Run only the next packet from the exact B1-preserved state using provenance-validated private roots. On invalid provenance or any failure/stop, make no runtime/test change and no source push; retain state/refs, classify the stop, and authorize future remediation docs-first. |
 | Final publication | Blocked | A closeout document must follow the already assembled range and evidence it certifies. The source remote intentionally contains documentation only because renewed closeout has not passed. | After proof-clean integration and CLEAN independent review, draft/validate/review final six-file docs to CLEAN, commit the exact reviewed bytes, and rerun final post-commit validation/reviews. Fix pre-commit documentary findings in the worktree; a post-commit documentary finding permits only an append-only six-file remediation-doc successor plus renewed docs validation/review; a proof/topology-invalidating finding reruns affected proof/review. None permits rewriting or unresolved publication. Then freshly require source old OID `2f6f1f69b3519dafff01ef543e7d260da2c37700`, bind an explicit expected-old-OID CAS/lease to that exact OID, independently prove a normal fast-forward, and require local/upstream/remote parity. The lease cannot authorize a forced update. R2-3 follows only then. |
 
 This decision does not alter any implementation status recorded above. F remains complete under its
 own packet-specific replay history; renewed R2-2 integration remains unrun; R2-2 remains
 incomplete; R2-3, R2-4, and R3 remain blocked; privileged product smoke remains unclaimed; and no
 seam is promoted.
+
+## A1.1d-5R2-2-B1 broad-wall invocation evidence correction
+
+Every live broad shell wall, parallel/serial authority wall, canonical or differential baseline
+wall, final change-detection wall, renewed closeout wall, and F/Harness wall in this ledger uses the
+[canonical shell-library broad-wall invocation contract](04-contracts-and-gates.md#canonical-shell-library-broad-wall-invocation-contract).
+Historical commands below are retained as exact evidence and are non-normative when they omit that
+contract.
+
+### Verified B0 evidence and causal reconstruction
+
+The immutable B0 packet is
+`/home/spenser/.gstack/projects/atomize-hq-substrate/checkpoints/20260722-a1-r2-2-b0-evidence.md`,
+SHA-256 `75a15639ccb60d4d1b8206d6fa23622d5146213ebf8409b1e78fcc6d0417d776`.
+It binds branch `feat/internal-host-orchestrator-world-dispatch-bootstrap`, HEAD
+`928f94e7b4c498273b40385f7bffea9e4f949700`, tree
+`9f0f9b2362ba878f45a30ab169a7c1e3e4569df2`, unchanged source remote
+`2f6f1f69b3519dafff01ef543e7d260da2c37700`, and runtime ordered-commit hash
+`ffe57dc349b462b318752a346e6577cff80bd15ba264720b967b888778f45700`.
+
+The failed renewed-closeout command was historically:
+
+```text
+cargo test -p shell --lib
+```
+
+It discovered 1,309 tests, passed 1,205, failed 104, ignored 0, and produced failure-name hash
+`7d6564bbcfaaed1fdb784eb4610683a02e4464b362215761d728be3e7361d8e5` plus normalized-signature
+hash `ae67f87fbdc155575e13467506405afbd4568fc08b9058cb4159daa539549579`.
+Omitting `TMPDIR` made Rust `TempDir` roots for six StateStore fixture families direct descendants
+of `/tmp`. `/tmp` had its normal root-owned mode `1777`; retained trusted-root validation walked the
+ancestor chain and correctly rejected its world-writable authority before persistent state
+mutation.
+
+The causally correct historical control was:
+
+```text
+XDG_RUNTIME_DIR=/home/spenser/t \
+TMPDIR=/home/spenser/t \
+cargo test -p shell --lib -- --nocapture
+```
+
+`/home/spenser/t` is historical evidence only and must never become the canonical machine-specific
+path. The control restored 1,309 discovered, 1,264 passed, 45 failed, and 0 ignored, with canonical
+failure-name hash `b23bb59ad12833d2c1d37c19c54933cd6bcb1c75e0dab8a70179b9881372be70`
+and normalized-signature hash
+`33c686a6ec9f3a0a4f51e1fca976445e6804da12fbbff50312a03f0042cdfac3`.
+
+All 59 additions reduce to this single root-opening cause. Exact serial and isolated tests fail
+identically without private `TMPDIR`; private-root parity makes all six families pass. Runtime
+source, tests, manifests, lockfile, toolchain, target, profile, and features are unchanged. This is
+not environment drift, process-global test isolation, or a production regression, and it provides
+no reason to change fixture behavior or trusted-root validation.
+
+### Baseline and future classification authority
+
+The terminal classification is `BaselineCommandMismatchConfirmed`. The 59 additions remain
+separate ineligible evidence. They are not added to the 45-failure baseline, waived, treated as
+product failures or environment drift, used to weaken security, or used to justify serial-only
+proof.
+
+Future wall processing validates root and command provenance before result comparison. A missing
+or invalid `TMPDIR`, missing or invalid `XDG_RUNTIME_DIR`, unsafe/sticky ancestor, incomplete
+owner/mode/no-symlink/identity/ACL proof, or incomplete command/toolchain/result/hash record makes
+the entire wall ineligible. Correct the invocation and rerun the complete required wall. Only a
+provenance-valid wall can create a `PassToFail`, `NewFail`, changed-failure, or baseline transition.
+
+The B1 correction changes exactly the six canonical Markdown files and no runtime/test artifact.
+It runs no integration wall, does not create an integration-clean branch, and leaves the source
+remote unchanged. The binding sequence remains:
+
+```text
+B1 broad-wall invocation docs correction
+  -> renewed production-fix-free integration wall using validated private roots
+  -> fresh independent reviews
+  -> final six-file integration-closeout docs
+  -> one ordinary fast-forward source push
+```
+
+R2-2 remains incomplete. The exact next task is **Resume A1.1d-5R2-2 renewed production-fix-free
+integration closeout using provenance-validated private roots**.

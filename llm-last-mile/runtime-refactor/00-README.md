@@ -796,10 +796,12 @@ review-clean.
 The source remote intentionally remains at the F documentation closeout
 `2f6f1f69b3519dafff01ef543e7d260da2c37700`. The exact existing 17-commit runtime range above it
 ends at `e5fbd2d4441d248e137d52c44e493fb0abe158f8`; it is linear, locally reviewed, preserved, and
-already replayed onto the latest canonical F documentation. The publication-authority correction
-must be committed locally on top of that unchanged range, kept off the source remote, and preserved
-remotely only through dedicated branch
-`feat/preserve-a1-1d-5r2-2-publication-authority-20260722`.
+already replayed onto the latest canonical F documentation. Publication-authority commit
+`928f94e7b4c498273b40385f7bffea9e4f949700` is already committed locally on top of that unchanged
+range, kept off the source remote, and preserved remotely through dedicated branch
+`feat/preserve-a1-1d-5r2-2-publication-authority-20260722`. The six-file broad-wall invocation
+correction follows it without rewriting either commit and is preserved separately at
+`feat/preserve-a1-1d-5r2-2-broad-wall-invocation-20260722`.
 
 The renewed closeout must run from that exact publication-authorized local state without any
 production, test, fixture, script, schema, dependency, or generated implementation change. A gate
@@ -824,3 +826,48 @@ Replaying the 17 commits again would change identities without adding architectu
 evidence. The renewed wall certifies the already assembled range as a whole, so its final closeout
 document must follow the range it certifies. No product smoke, seam promotion, R2-3, R2-4, or R3 is
 authorized by this publication decision.
+
+## Canonical broad-wall invocation authority correction
+
+Every live reference in this document to a broad shell wall, default-parallel wall, one-thread
+serial wall, canonical or differential baseline, final change-detection wall, renewed closeout
+wall, or F/Harness wall means the single
+[canonical shell-library broad-wall invocation contract](04-contracts-and-gates.md#canonical-shell-library-broad-wall-invocation-contract).
+Historical commands remain evidence of what was run and are non-normative unless they satisfy that
+contract with complete provenance.
+
+The correction freezes a fresh machine-independent private root `R` for each wall, with validated
+current-user ownership, exact `0700` mode, no-follow directory identity, safe ancestors and ACLs,
+and fresh exact-`0700` `R/tmp` and `R/xdg-runtime` children. The Cargo process must start with
+`TMPDIR="$R/tmp"` and `XDG_RUNTIME_DIR="$R/xdg-runtime"`; neither ambient value may supply
+authority. The normative section owns the exact parallel/serial commands, trusted-parent creation
+template, cleanup constraints, and required provenance fields.
+
+The frozen canonical result remains `1309/1264/45/0`, with failure-name hash
+`b23bb59ad12833d2c1d37c19c54933cd6bcb1c75e0dab8a70179b9881372be70` and normalized-signature
+hash `33c686a6ec9f3a0a4f51e1fca976445e6804da12fbbff50312a03f0042cdfac3`.
+The ambient-root invocation `cargo test -p shell --lib` produced ineligible evidence
+`1309/1205/104/0` and hashes
+`7d6564bbcfaaed1fdb784eb4610683a02e4464b362215761d728be3e7361d8e5` /
+`ae67f87fbdc155575e13467506405afbd4568fc08b9058cb4159daa539549579`.
+Its 59 additional failures are `BaselineCommandMismatchConfirmed`: normal mode-`1777` `/tmp`
+became the `TempDir` ancestor and trusted-root validation correctly rejected it. Runtime source,
+tests, fixtures, and the canonical baseline remain unchanged.
+
+The controlling sequence is:
+
+```text
+B1 broad-wall invocation docs correction
+  ↓
+renewed production-fix-free integration wall using validated private roots
+  ↓
+fresh independent reviews
+  ↓
+final six-file integration-closeout documentation
+  ↓
+one ordinary fast-forward source push
+```
+
+This B1 correction runs no integration wall. R2-2 remains incomplete, source publication remains
+blocked, and the exact next task is **Resume A1.1d-5R2-2 renewed production-fix-free integration
+closeout using provenance-validated private roots**.
