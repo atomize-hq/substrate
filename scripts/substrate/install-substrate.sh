@@ -352,6 +352,98 @@ run_cmd() {
   "$@"
 }
 
+run_cmd_with_redacted_install_bootstrap_carrier() {
+  local carrier_flag="--install-bootstrap-context-v1"
+  local placeholder="<redacted-authenticated-bootstrap-carrier-v1>"
+  local -a argv=("$@")
+  local argc="${#argv[@]}"
+  local carrier_count=0
+  local after_end_of_options=0
+  local invalid=0
+  local index
+  local argument
+  local carrier_value
+
+  for ((index = 0; index < argc; index += 1)); do
+    argument="${argv[index]}"
+    if [[ "${argument}" == "--" ]]; then
+      after_end_of_options=1
+      continue
+    fi
+    if [[ "${argument}" == "${carrier_flag}" ]]; then
+      if [[ "${after_end_of_options}" -eq 1 ]]; then
+        invalid=1
+        continue
+      fi
+      carrier_count=$((carrier_count + 1))
+      if [[ "${carrier_count}" -gt 1 || $((index + 1)) -ge argc ]]; then
+        invalid=1
+        continue
+      fi
+      carrier_value="${argv[index + 1]}"
+      if [[ -z "${carrier_value}" || "${carrier_value}" == -* ]]; then
+        invalid=1
+        continue
+      fi
+      index=$((index + 1))
+      continue
+    fi
+    if [[ "${argument}" == "${carrier_flag}="* ]]; then
+      if [[ "${after_end_of_options}" -eq 1 ]]; then
+        invalid=1
+        continue
+      fi
+      carrier_count=$((carrier_count + 1))
+      carrier_value="${argument#*=}"
+      if [[ "${carrier_count}" -gt 1 || -z "${carrier_value}" ]]; then
+        invalid=1
+      fi
+      continue
+    fi
+    if [[ "${argument}" == "${carrier_flag}"* ]]; then
+      invalid=1
+    fi
+  done
+
+  if [[ "${invalid}" -eq 1 || "${carrier_count}" -ne 1 ]]; then
+    printf '%s\n' \
+      '[install-substrate][ERROR] invalid authenticated bootstrap carrier arguments' >&2
+    return 2
+  fi
+
+  if [[ "${DRY_RUN}" -eq 1 ]]; then
+    local -a display_argv=()
+    local -a display_is_redacted=()
+    for ((index = 0; index < argc; index += 1)); do
+      argument="${argv[index]}"
+      if [[ "${argument}" == "${carrier_flag}" ]]; then
+        display_argv+=("${carrier_flag}" "${placeholder}")
+        display_is_redacted+=(0 1)
+        index=$((index + 1))
+      elif [[ "${argument}" == "${carrier_flag}="* ]]; then
+        display_argv+=("${carrier_flag}=${placeholder}")
+        display_is_redacted+=(1)
+      else
+        display_argv+=("${argument}")
+        display_is_redacted+=(0)
+      fi
+    done
+
+    printf '[%s][dry-run]' "${INSTALLER_NAME}" >&2
+    for index in "${!display_argv[@]}"; do
+      if [[ "${display_is_redacted[index]}" -eq 1 ]]; then
+        printf ' %s' "${display_argv[index]}" >&2
+      else
+        printf ' %q' "${display_argv[index]}" >&2
+      fi
+    done
+    printf '\n' >&2
+    return 0
+  fi
+
+  "$@"
+}
+
 command_exists() {
   local cmd="$1"
   if command -v "${cmd}" >/dev/null 2>&1; then
@@ -2460,7 +2552,7 @@ deploy_shims() {
     set +x
     restore_xtrace=1
   fi
-  if run_cmd "${substrate_bin}" \
+  if run_cmd_with_redacted_install_bootstrap_carrier "${substrate_bin}" \
     --install-bootstrap-context-v1 "${INSTALL_BOOTSTRAP_CONTEXT_V1}" \
     --shim-deploy; then
     deploy_status=0
