@@ -292,7 +292,7 @@ may make the later target unambiguous but may not perform, authorize, or define 
 | PI-108 | `DiagnosticProjection` | World/Host/Health/shim doctor receives typed IH and passes A-derived config/deps paths to the existing report collector. Health and direct Unix shim doctor continue through `collect_report_for_context` → `build_report`. The existing World-disabled branch returns its frozen disabled snapshot without a child or fixture lookup. The embedded world-deps branch may use only the A-rooted world-deps fixture or its existing collector. Under F5-PD, whenever the authenticated Linux World-enabled branch reaches `gather_world_doctor_snapshot`, it uses the hidden passive child; `A/health/world_doctor.json` is `cfg(test)` evidence only on that path. Existing non-Linux fixture/public-child mechanics remain frozen compatibility, cannot supply F5-PD/F5 authority or proof, and cannot claim A-bound/native truth. No authenticated Linux diagnostic reconstructs default H, consults B, invokes a contextless child, mutates the parent environment, or discloses carrier/credential/request/sensitive-principal bytes. The context-aware exposure and checked-projection compatibility collector remain behavior-frozen and R2-3-owned; R2 | named platform/health handlers; exact Route D world-deps carrier/fixture mechanics plus the exact Linux F5-PD World Doctor files/symbols below; no authenticated Linux production World Doctor fixture authority | R2-DIAG-01; native Linux | R2-2 Route D plus bounded F5-PD prerequisite |
 | PI-109 | `DiagnosticProjection` | installer-managed config proof receives the hidden argv carrier; root dispatch validates it and `ShellConfig::from_cli` explicitly forwards typed IH only to the Config branch, where `run_current_show` resolves the global layer through the existing opened-bootstrap-home contract with explain parity; workspace/Cli/config semantics stay frozen; R2 | `config_cmd.rs::{handle_config_command,run_current_show}` and `config_model.rs::{resolve_effective_config_for_bootstrap_home,resolve_effective_config_with_explain_for_bootstrap_home}` exact context intake/delegation only | R2-DIAG-01/R2-LINUX-01; native Linux | R2-2 |
 | PI-110 | `DiagnosticProjection` | installer-managed policy proof uses the same hidden argv carrier/typed IH; `ShellConfig::from_cli` explicitly forwards only to the Policy branch and `run_current_show` resolves the A-global layer through the existing opened-bootstrap-home contract with explain parity; workspace/policy semantics stay frozen and ambient B cannot select the global layer; R2 | `policy_cmd.rs::{handle_policy_command,run_current_show}` and `policy_model.rs::{resolve_effective_policy_for_bootstrap_home,resolve_effective_policy_with_explain_for_bootstrap_home}` exact context intake/delegation only | R2-DIAG-01/R2-LINUX-01; native Linux | R2-2 |
-| PI-111 | `ExplicitHostPropagation` | **R2-2E implementation/proof clause complete.** Routes A–D left gateway configuration, effective policy, network policy, runtime-family inventory, Codex home, disabled routing, and client selection ambient. R2-2E now validates A before status/mutation/launch, keeps existing config/effective-policy owners and `policy_snapshot.rs` as the single snapshot/network owner, removes contextless unavailable synthesis, and fixes the authenticated Linux socket to `/run/substrate.sock`. Because E has no authenticated platform-endpoint source, macOS fails before client construction/`auto_select`, and Windows/other contextless entries fail before config/policy/inventory/disabled/client selection; frozen ambient compatibility remains R2-3-owned and unreachable from E. Existing policy/network/credential semantics remain unchanged. This does not complete direct-member Codex/UAA gateway adoption or the full credential/config architecture; E3/D1/D3 and the open RG-CONFIG/RG-UAA gates retain that work. | `platform/mod.rs::handle_world_command` Gateway arm; exact R2-2E symbols in `world_gateway.rs`, `policy_snapshot.rs`, and `agent_inventory.rs`; lower platform adapters and schemas frozen | R2-RUNTIME-01/R2-DIAG-01; focused Linux plus non-Unix build/static fail-closed cfg, native platform product proof deferred | R2-2E and F are complete; renewed production-fix-free integration closeout is the exact next proof node; R2-3 remains blocked |
+| PI-111 | `ExplicitHostPropagation` | **R2-2E implementation/proof clause complete.** Routes A–D left gateway configuration, effective policy, network policy, runtime-family inventory, Codex home, disabled routing, and client selection ambient. R2-2E now validates A before status/mutation/launch, keeps existing config/effective-policy owners and `policy_snapshot.rs` as the single snapshot/network owner, removes contextless unavailable synthesis, and fixes the authenticated Linux socket to `/run/substrate.sock`. Because E has no authenticated platform-endpoint source, macOS fails before client construction/`auto_select`, and Windows/other contextless entries fail before config/policy/inventory/disabled/client selection; frozen ambient compatibility remains R2-3-owned and unreachable from E. Existing policy/network/credential semantics remain unchanged. This does not complete direct-member Codex/UAA gateway adoption or the full credential/config architecture; E3/D1/D3 and the open RG-CONFIG/RG-UAA gates retain that work. | `platform/mod.rs::handle_world_command` Gateway arm; exact R2-2E symbols in `world_gateway.rs`, `policy_snapshot.rs`, and `agent_inventory.rs`; lower platform adapters and schemas frozen | R2-RUNTIME-01/R2-DIAG-01; focused Linux plus non-Unix build/static fail-closed cfg, native platform product proof deferred | R2-2E and F are complete; current next proof work is remediation planning → R1 → P1 → fresh canonical baseline → renewed production-fix-free closeout; R2-3 remains blocked |
 | PI-112 | `GeneratedProjectionConsumption` | `UserKnownHostsFile` is an A-relative generated helper projection carried into the verified Lima mapping; existence/content never selects A or PM; R2 | `create_ssh_uds_forwarding` known-hosts path parameter only | R2-MAP-MAC-01/R2-GEN-01; static plus assigned native macOS | R2-3 |
 | PI-113 | `R3CleanupOnly` | forwarder-child kill/wait and socket removal on handle drop are teardown/cleanup authority reserved exclusively to R3; R2 mapping edits freeze the body | `ForwardingHandle::drop` body frozen in R2 | R3-LIFE-01; native macOS | R3 |
 | PI-114 | `R3CleanupOnly` | timed-out SSH child kill/wait is current-attempt rollback reserved exclusively to R3; R2 mapping edits freeze the branch | `create_ssh_uds_forwarding` timeout-kill branch frozen in R2 | R3-LIFE-01; native macOS | R3 |
@@ -312,8 +312,10 @@ replay/global-trace, platform-native mapping, and ambient compatibility migratio
 privileged joined product proof; R3 retains deletion, rollback, replacement cleanup, recursive or
 wildcard removal, service/helper/socket cleanup, ownership manifests, account-state restoration,
 crash cleanup, and uninstall convergence. The resulting inventory DAG is Routes A–E →
-F0/F0a/F0b/F0-HC complete → F1–F4 complete → F5-PD → F5 → final F walls → F closeout → renewed R2-2 integration closeout →
-R2-3 → R2-4 → R3.
+F0/F0a/F0b/F0-HC complete → F1–F4 complete → F5-PD → F5 → final F walls → F closeout →
+remediation-planning authority → R1 → P1 → fresh canonical baseline → renewed R2-2 integration
+closeout → final six-file closeout docs → one ordinary fast-forward publication → R2-3 → R2-4
+→ R3.
 The E/F authenticated success claim is Unix/Linux-only. macOS, Windows, fallback, and other
 non-Unix compatibility paths remain explicitly unproven R2-3 ownership; build/static preservation
 or unavailable/fail-closed output is not A-bound product proof.
@@ -1331,8 +1333,10 @@ does not close direct-member adoption: `RG-CONFIG-02`, `RG-CONFIG-04`, `RG-UAA-0
 not change policy/network/world-fs/caging/capability/lifecycle ownership, provide privileged smoke,
 or promote any target seam.
 
-The exact next crosswalk node is **A1.1d-5R2-2 renewed production-fix-free integration closeout**.
-It must rerun Routes A–F without a production fix. R2-3 follows only after that closeout.
+At the completed F checkpoint, the exact historical next crosswalk node was **A1.1d-5R2-2 renewed
+production-fix-free integration closeout**. The closeout-remediation crosswalk below supersedes
+only that next-node disposition: planning → R1 → P1 → fresh baseline now precede the renewed
+production-fix-free closeout, and final docs/publication still precede R2-3.
 
 ## Broad-wall invocation provenance crosswalk
 
@@ -1344,9 +1348,9 @@ crosswalk uses the
 
 | Evidence boundary | Current classification | Required action | Forbidden inference | Status after B1 |
 |---|---|---|---|---|
-| Shell-library broad-wall invocation provenance | Missing from the renewed-closeout prompt; runtime/tests unchanged | Create a fresh validated private `R`, bind exact `R/tmp` and `R/xdg-runtime` through `TMPDIR` and `XDG_RUNTIME_DIR` before Cargo starts, and retain the complete root/command/toolchain/result/hash provenance | Ambient `/tmp`, an invalid root, a missing variable, or incomplete provenance cannot establish product, environment-drift, isolation, baseline, or serial-only truth | Contract corrected in docs; renewed proof still unrun; no seam promotion |
+| Shell-library broad-wall invocation provenance | Missing from the first renewed-closeout prompt; runtime/tests unchanged | Create a fresh validated private `R`, bind exact `R/tmp` and `R/xdg-runtime` through `TMPDIR` and `XDG_RUNTIME_DIR` before Cargo starts, and retain the complete root/command/toolchain/result/hash provenance | Ambient `/tmp`, an invalid root, a missing variable, or incomplete provenance cannot establish product, environment-drift, isolation, baseline, or serial-only truth | Contract corrected in B1 docs; proof was then unrun; the later four matching walls are separately ineligible; no seam promotion |
 | Provenance-valid canonical baseline | `1309/1264/45/0`; names `b23bb59ad12833d2c1d37c19c54933cd6bcb1c75e0dab8a70179b9881372be70`; signatures `33c686a6ec9f3a0a4f51e1fca976445e6804da12fbbff50312a03f0042cdfac3` | Preserve as the comparison authority for the complete future wall | Do not replace, add the 59 mismatches, waive a failure, weaken trusted-root validation, or infer from totals alone | Frozen |
-| Omitted-root renewed-closeout wall | `1309/1205/104/0`; names `7d6564bbcfaaed1fdb784eb4610683a02e4464b362215761d728be3e7361d8e5`; signatures `ae67f87fbdc155575e13467506405afbd4568fc08b9058cb4159daa539549579` | Retain separately as `BaselineCommandMismatchConfirmed`; correct the invocation and rerun the complete wall in the next task | The 59 additional trusted-root rejections are not product failures, environment drift, test isolation, or baseline additions | Ineligible historical evidence only |
+| Omitted-root renewed-closeout wall | `1309/1205/104/0`; names `7d6564bbcfaaed1fdb784eb4610683a02e4464b362215761d728be3e7361d8e5`; signatures `ae67f87fbdc155575e13467506405afbd4568fc08b9058cb4159daa539549579` | Historical B1 disposition: retain separately as `BaselineCommandMismatchConfirmed`, correct the invocation, and defer rerun. Current ordering is R1 → P1 → fresh P1 baseline before a further renewed closeout | The 59 additional trusted-root rejections are not product failures, environment drift, test isolation, or baseline additions | Ineligible historical evidence only |
 
 The root contract preserves the private-home security boundary: `/tmp` is normally mode `1777`,
 so correct trusted-root validation rejects it as an ancestor. `SUBSTRATE_TEST_TRUSTED_PARENT` is
@@ -1360,14 +1364,92 @@ The selected model is **Docs-on-top → one fast-forward publication**.
 
 | Publication node | Bound inputs and outputs | Required ordering | Forbidden disposition | Gate/status |
 |---|---|---|---|---|
-| Publication-authority correction | Source remote F docs closeout `2f6f1f69b3519dafff01ef543e7d260da2c37700`; exact unchanged 17-commit runtime range ending `e5fbd2d4441d248e137d52c44e493fb0abe158f8`; publication-authority commit `928f94e7b4c498273b40385f7bffea9e4f949700` | Keep the source branch unpushed; retain exact local/remote preservation at `feat/preserve-a1-1d-5r2-2-publication-authority-20260722` | Any replay, rebase, rewrite, cherry-pick, merge commit, force push, runtime/test change, or source publication | Complete and preserved; renewed proof unrun; R2-2 incomplete |
-| B1 broad-wall invocation correction | Exact publication-authority parent `928f94e7b4c498273b40385f7bffea9e4f949700`; this six-file documentation successor; no implementation change | Commit locally on top, keep the source branch unpushed, and preserve at `feat/preserve-a1-1d-5r2-2-broad-wall-invocation-20260722` | Replaying or rewriting the authority/runtime range; running the renewed wall in B1; pushing source; changing code/tests/fixtures/scripts/schemas/dependencies/generated files | Exact next docs-on-top correction before renewed proof; R2-2 remains incomplete |
-| Renewed production-fix-free closeout | The exact B1-preserved local state, complete integration wall under the normative private-root contract, and three independent read-only reviews | Run wall, then reviews, with no implementation commit between B1 and proof | Repairing production, tests, fixtures, scripts, schemas, dependencies, or generated files; claiming product smoke or seam promotion | Failure or stop leaves source remote unchanged and requires docs-first future remediation |
+| Publication-authority correction | Source remote F docs closeout `2f6f1f69b3519dafff01ef543e7d260da2c37700`; exact unchanged 17-commit runtime range ending `e5fbd2d4441d248e137d52c44e493fb0abe158f8`; publication-authority commit `928f94e7b4c498273b40385f7bffea9e4f949700` | Keep the source branch unpushed; retain exact local/remote preservation at `feat/preserve-a1-1d-5r2-2-publication-authority-20260722` | Any replay, rebase, rewrite, cherry-pick, merge commit, force push, runtime/test change, or source publication | Complete and preserved; later renewed proof attempt ineligible; R2-2 incomplete |
+| B1 broad-wall invocation correction | Exact publication-authority parent `928f94e7b4c498273b40385f7bffea9e4f949700`; its six-file documentation successor; no implementation change | Historical completed action: committed locally on top, kept the source branch unpushed, and preserved at `feat/preserve-a1-1d-5r2-2-broad-wall-invocation-20260722` | Replaying or rewriting the authority/runtime range; treating B1 as current; pushing source; changing code/tests/fixtures/scripts/schemas/dependencies/generated files | Complete and preserved historical predecessor to this planning packet; R2-2 remains incomplete |
+| Remediation-planning authority | Exact B1 commit `f7ded83ef147b748678ba6b028eea959870a04fe`; the two source-closed blockers; exactly six reviewed control-pack files | Commit the planning bytes directly on `f7ded83`; preserve only at `feat/preserve-a1-1d-5r2-2-remediation-planning-20260723`; keep source remote unchanged | Any implementation, wall run, source push, history rewrite, or classification of the prior walls as eligible | Current packet; authorizes but does not implement R1/P1 |
+| R1 implementation/review | Reviewed planning commit; exact two-file R1 allowlist and fixed display/rejection contract | One bounded R1 commit, focused proof, then fresh authority/security review CLEAN | P1 work, broader caller/helper changes, carrier removal, weaker validation, or source push | Ordered after planning and before P1 |
+| P1 implementation/review | R1 implementation/review CLEAN; exact two-file P1 allowlist and authenticated tracked-runner contract | One bounded P1 commit, all adversarial self-tests, then fresh provenance/security review CLEAN | Product runtime/test semantics, dependencies, privileged state, fallback harness, or source push | Ordered after R1 and before any new wall |
+| Fresh canonical baseline | Reviewed P1 commit; three fresh parallel roots and one fresh serial root | Run all four walls only through P1; require independently valid provenance, canonical counts/hashes, and zero differential | Reuse of any prior wall/root, parent-only waiting, pathname-only cleanup, or implementation remediation | Evidence node, not an implementation commit |
+| Renewed production-fix-free closeout | R1/P1 implementation and reviews CLEAN plus the fresh P1 baseline; complete focused/integration wall and four independent read-only reviews | Run closeout proofs, then reviews, with no implementation/test commit during the closeout itself | Repairing production, tests, fixtures, scripts, schemas, dependencies, or generated files during closeout; claiming product smoke or seam promotion | Failure or stop leaves source remote unchanged and requires docs-first future remediation |
 | Final integration-closeout docs | Exact already assembled runtime range plus proof-clean/review-clean renewed closeout; final six-file closeout commit | Follow the range and evidence it certifies; draft/validate/review to CLEAN, commit the exact reviewed bytes, then rerun final validation/reviews | Placing closeout docs below the certified range, treating authority docs as proof, rewriting a finding, or publishing on any unresolved finding | A pre-commit documentary finding is fixed in the worktree; a post-commit documentary finding permits only an append-only six-file remediation-doc successor plus renewed docs validation/review; a proof/topology-invalidating finding reruns affected proof/review; R2-3 remains blocked |
-| Source publication | Original 17 runtime commits plus publication-authority docs, B1 broad-wall invocation docs, and final integration-closeout docs | Freshly read the source remote at exact `2f6f1f69b3519dafff01ef543e7d260da2c37700`; bind an explicit expected-old-OID CAS/lease to that exact OID; independently prove the update is an ordinary fast-forward; require final local HEAD, upstream, and remote parity | Using the CAS/lease to permit a forced/non-fast-forward update; push after a changed old OID; second/staged source push; replay, rebase, rewrite, cherry-pick, merge commit, force push; or admission of blocked/preservation-only donor ancestry | Permitted only after all renewed proof and documentation gates are clean |
+| Source publication | Original 17 runtime commits plus publication-authority docs, B1 broad-wall invocation docs, remediation-planning docs, the bounded R1 and P1 implementation commits, and final integration-closeout docs | Freshly read the source remote at exact `2f6f1f69b3519dafff01ef543e7d260da2c37700`; bind an explicit expected-old-OID CAS/lease to that exact OID; independently prove the update is an ordinary fast-forward; require final local HEAD, upstream, and remote parity | Using the CAS/lease to permit a forced/non-fast-forward update; push after a changed old OID; second/staged source push; replay, rebase, rewrite, cherry-pick, merge commit, force push; or admission of blocked/preservation-only donor ancestry | Permitted only after all remediation, renewed proof, and documentation gates are clean |
 
 The earlier F and Route D replay procedures remain packet-specific historical evidence. The 17
 runtime commits already rest on the latest F documentation, so another replay would change commit
 identity without changing the crossed seams or their proof content. Every existing runtime commit
 must remain byte- and identity-identical; preservation-only and blocked-donor commits remain
 outside source ancestry.
+
+## Closeout-remediation crosswalk
+
+The following crosswalk is the minimum authorization needed to source-close the two renewed
+closeout blockers. Status `AUTHORIZED, NOT IMPLEMENTED` is not completion evidence.
+
+| Increment | Proven defect and source route | Exact future editable surface | Required proof | Frozen boundaries | Status |
+|---|---|---|---|---|---|
+| R1 — carrier non-disclosure | `scripts/substrate/install-substrate.sh::deploy_shims` passes `--install-bootstrap-context-v1 VALUE` to generic `run_cmd`; dry-run renders `$*` verbatim and disclosed the authenticated carrier | Existing production file: add `run_cmd_with_redacted_install_bootstrap_carrier`; change only `deploy_shims`. Existing test file: add exactly `assert_shim_dry_run_carrier_non_disclosure` and its top-level invocation in `tests/installers/prefix_propagation_r2_2.sh`; existing assertion helpers are reused unchanged | Fixed-placeholder dry-run; byte-exact live argv; boundary cases for spaces, quotes, newlines, Unicode, leading dashes, reordering, end-of-options, and missing/duplicate/malformed flags; inherited xtrace non-disclosure/restoration; stdout/stderr/log/trace/generated-file sentinel scan; unchanged full dry-run and uninstall compatibility run without editing them | `run_cmd`, `run_with_sudo`, parser/carrier construction, validation, commitment, prefix selection, install/uninstall semantics, shim behavior, credentials, and tests outside the named file are frozen | AUTHORIZED, NOT IMPLEMENTED |
+| P1 — canonical provenance runner | Failed external harness waited only on Cargo, asserted descendant exit without proof, closed root descriptors, then used pathname `shutil.rmtree`; all four matching walls are ineligible | New test-harness files only: `scripts/ci/canonical_shell_wall_runner.py` and `scripts/ci/test_canonical_shell_wall_runner.py`, with the exact symbols/tests in `04-contracts-and-gates.md`; exact direct Python/V2 authenticated `host_main` controller under the installed OS/Python/Bubblewrap TCB; immutable P1-commit trailers bind independently verified bootstrap and host/Stage-A/Stage-B argv-template constants, while each invocation records its substituted actual hashes; held-FD Git/object verification; sealed `--ro-bind-data` runner projections; authenticated `stage_a_main` and `stage_b_worker_main` | Reviewed P1 OID plus commit-trailer/template/substituted-argv and TCB proof; Bubblewrap identity/nested/detached-descendant probes; held-Git-FD object-chain proof; authenticated in-memory 95-test loader; immutable repository/rustup/Cargo seeds plus separately writable Cargo runtime limited to `.package-cache`, `.package-cache-mutate`, `.global-cache`; fixed private `SOCK_SEQPACKET` worker path, matching `SO_PEERCRED`/child pidfd, close-on-exec and unchanged stdin; one explicit Stage-A-owned combined-output pipe with EOF/backpressure/bounds/hash proof and no Cargo control/evidence FD; Stage-B `--as-pid-1` worker subreaper/reap to `ECHILD`; Stage-A in-namespace deletion; retained host proof of Stage-A namespace teardown and underlying backing absence before final eligibility; then a new three-parallel/one-serial canonical baseline | No production shell/world/policy/service/lifecycle/capability/secure-FD symbol; no dependency; Linux only; no privileged daemon/service/product mutation; no mutable external invocation artifact, ambient shell, unnamed supervisor, tracked runner/test-path execution, mutable Git/object authority, host source/cache/toolchain execution, repository target authority, parent-only wait, assumed arbitrary control/evidence FD inheritance, Stage-A self-finalization, mutable local Git exclude/config authority, `pgrep -P`, sleep, one-time snapshot observation, glob, pathname-only cleanup, real product home, or Cargo/rustup selector override | AUTHORIZED, NOT IMPLEMENTED |
+
+### R1 direct-caller inventory
+
+| Direct `run_cmd` call at `f7ded83` | Value class | Disclosure disposition |
+|---|---|---|
+| `run_with_sudo`, no-sudo execution | Static current bare-tool set resolved through fixed privileged PATH, or the one permitted absolute ACL helper; account/group, package, artifact/TMP/destination path, mode/owner, unit/socket, and ACL operands | No authenticated carrier or other closed sensitive value class found; retain generic behavior |
+| `run_with_sudo`, noninteractive sudo | Fixed sudo/env wrapper around that same source-closed current tool/operand set | No authenticated carrier or other closed sensitive value class found; retain generic behavior |
+| `run_with_sudo`, interactive sudo | Fixed sudo/env wrapper around that same source-closed current tool/operand set; no-TTY error may render those original operands | No authenticated carrier or other closed sensitive value class found; retain generic behavior |
+| `deploy_shims` | authenticated bootstrap carrier plus `--shim-deploy` | Sensitive; route through the dedicated structured display boundary |
+
+The inventory also covered credentials, authorization values, commitment preimages,
+prompt/request material, private-host selectors, dry-run output, live execution, error rendering,
+xtrace, installer compatibility, and uninstaller compatibility. No second live sensitive
+`run_cmd` caller was found. `run_with_sudo` accepts any bare tool resolvable through its fixed PATH
+and forwards its operands; it is the finite current caller set—not a named bare-tool allowlist—that
+was source-closed. The no-TTY error can render those operands, but no current caller supplies the
+protected classes above; this packet does not broaden R1 to speculative callers.
+
+Existing redaction helpers were source-closed and frozen. Linux
+`world-provision.sh::show_install_context_cmd` is a `%q`-based display-only helper that redacts the
+separate carrier and environment-assignment forms, but not the accepted equals form, and it does
+not own missing/duplicate/malformed/end-of-options validation or byte-exact execution. Rust
+`crates/common::{redact_sensitive, redact_process_argv}` are heuristic logging redactors, not an
+exact Bash carrier grammar. Reusing or extending either surface would broaden the R1 allowlist.
+The dedicated installer helper instead returns exact status `2` with exact stderr
+`[install-substrate][ERROR] invalid authenticated bootstrap carrier arguments\n` for every
+structural rejection; valid live child status propagation remains unchanged.
+
+### P1 source-closure decision
+
+Repository shell/install test helpers can create fixtures but do not contain reparented
+descendants. Runtime `trusted_fs` contains useful low-level ideas but is private production
+authority. Product cgroups and service scripts require or mutate product state. The failed
+prompt-local Python/shell harness is untracked and structurally insufficient. Extending any of
+those would either leave the proof gap or exceed the no-product-change boundary, so one new
+bounded tracked test runner is the selected form.
+
+The selected unprivileged Linux mechanism was demonstrated to have the required local user,
+private-mount, and PID namespace syscalls plus direct one-entry current UID/GID mappings. It needs
+no external `unshare` program or subordinate-ID range. Therefore
+`BroadWallContainmentDecisionRequired` is not active for this authorization. If those prerequisites
+are missing at execution time, the runner fails closed as an environment/ineligible-wall result;
+it never falls back to parent-only waiting.
+
+The exact reviewed P1 commit OID binds its immutable bootstrap and three argv-template trailers
+to independently verified runner-blob constants; each runtime instantiation records separate
+actual argv hashes, and no external invocation artifact is authority. The exact topology
+is host → Stage A → Stage B. Authenticated `host_main` remains
+outside both Bubblewrap stages and retains backing/evidence authority through Stage-A process and
+namespace disappearance. `stage_a_main` receives its authenticated blob through sealed
+`--ro-bind-data`, constructs immutable repository/rustup/Cargo seeds plus a separately writable
+Cargo runtime, and launches Stage B. The seed omits the three Cargo metadata files; only their
+exact regular paths may be created or changed in the runtime. The worker connects to the fixed private
+`R/control/worker.sock` projection; Stage A accepts only peer credentials matching the retained
+Bubblewrap child pidfd, unlinks the pathname before START, and ensures Cargo inherits original
+stdin plus only one explicit Stage-A-owned stdout/stderr capture pipe and no control/evidence FD.
+Stage A drains exact bounded output through EOF after Stage-B reap. The worker's `ECHILD` record
+proves descendant emptiness. Stage A then removes all in-namespace entries under descriptors and exits; host authority alone proves
+namespace teardown, removes the exact underlying backing path, and finalizes evidence. Any other
+Cargo runtime change is ineligible.
+
+The next crosswalk transition is R1 implementation and fresh focused security review. P1,
+baseline regeneration, renewed closeout, final docs, publication, and R2-3 remain ordered behind
+that gate.

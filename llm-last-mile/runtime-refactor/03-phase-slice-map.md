@@ -1352,8 +1352,9 @@ F5-PD implementation and fresh review are complete.
 ## A1.1d-5R2-2F — completed phase record
 
 The F5-PD prerequisite and its fresh review completed before F5. The condition in the preceding
-sentence is therefore satisfied. This section is the controlling phase status: F1–F5 and F5-PD are
-complete; the renewed R2-2 integration closeout is the exact next unstarted node.
+sentence is therefore satisfied. At that completed-F checkpoint, F1–F5 and F5-PD were complete
+and the renewed R2-2 integration closeout was the exact historical next unstarted node. The
+closeout-remediation insertion below supersedes only that next-node disposition.
 
 | Phase | Commit | Tree | Ordinary patch / full-index patch | Stable patch ID |
 |---|---|---|---|---|
@@ -1425,8 +1426,9 @@ checks, differential Clippy, formatting, diff checks, and GitNexus zero-flow con
 Linux proof is complete; non-Linux remains explicit compatibility/unproven and privileged product
 smoke remains R2-4-owned.
 
-`Routes A–F complete` → **`A1.1d-5R2-2 renewed production-fix-free integration closeout`** →
-`R2-3` → `R2-4` → `R3`.
+At that completed-F checkpoint, the historical sequence was `Routes A–F complete` →
+**`A1.1d-5R2-2 renewed production-fix-free integration closeout`** → `R2-3` → `R2-4` → `R3`.
+The remediation insertion below supersedes only that next-node disposition.
 
 ## A1.1d-5R2-2-B1 broad-wall provenance phase
 
@@ -1446,9 +1448,9 @@ change-detection wall, renewed closeout wall, and F/Harness wall in this phase m
 | Allowed files | Exactly the six canonical `llm-last-mile/runtime-refactor/00`–`05` Markdown files. |
 | Forbidden work | Production, tests, fixtures, scripts, schemas, dependencies, generated files, trusted-root weakening, baseline replacement, renewed wall execution, source push, replay/rebase/rewrite/cherry-pick/merge/force push, integration-clean branch, R2-3/R2-4/R3. |
 | Preservation | Commit directly on parent `928f94e7b4c498273b40385f7bffea9e4f949700`; preserve only through `feat/preserve-a1-1d-5r2-2-broad-wall-invocation-20260722`; leave the source remote at `2f6f1f69b3519dafff01ef543e7d260da2c37700`. |
-| Exit/next | Six-file validation and three fresh isolated read-only reviews CLEAN; local source 19 ahead and clean; then stop. Exact next task: **Resume A1.1d-5R2-2 renewed production-fix-free integration closeout using provenance-validated private roots**. |
+| Historical B1 exit/next | Six-file validation and three fresh isolated read-only reviews CLEAN; local source 19 ahead and clean; then stop. The exact next task at that checkpoint was **Resume A1.1d-5R2-2 renewed production-fix-free integration closeout using provenance-validated private roots**; the remediation insertion below supersedes only that next-task disposition. |
 
-The controlling DAG is:
+The historical B1-only DAG was:
 
 ```text
 publication-authority commit 928f94e7
@@ -1464,7 +1466,8 @@ final six-file integration-closeout docs
 one ordinary fast-forward source push
 ```
 
-R2-2 remains incomplete throughout B1. No integration wall runs in this phase.
+R2-2 remained incomplete throughout B1. No integration wall ran in that phase. The current
+controlling DAG is the remediation/publication map below.
 
 ## A1.1d-5R2-2 renewed closeout publication phases
 
@@ -1475,12 +1478,48 @@ renewed closeout in exactly these phases:
 |---|---|---|---|
 | 1. Publication-authority correction | The six canonical control-pack files are committed as `928f94e7b4c498273b40385f7bffea9e4f949700` on exact runtime HEAD `e5fbd2d4441d248e137d52c44e493fb0abe158f8`; only dedicated preservation branch `feat/preserve-a1-1d-5r2-2-publication-authority-20260722` carries it remotely | Source remote still `2f6f1f69b3519dafff01ef543e7d260da2c37700`; local/remote preservation parity; original 17 identities unchanged | Complete; does not authorize an ambient-root integration wall |
 | 1B. Broad-wall invocation correction | Commit exactly the six canonical files on parent `928f94e7b4c498273b40385f7bffea9e4f949700`; preserve only at `feat/preserve-a1-1d-5r2-2-broad-wall-invocation-20260722` | Clean source worktree; source remote still `2f6f1f69b3519dafff01ef543e7d260da2c37700`; local source 19 ahead; runtime and publication-authority identities unchanged; private-root contract frozen | Do not run the renewed integration wall or push the source in B1 |
-| 2. Integration wall | Run the complete renewed production-fix-free wall from the exact B1-preserved state, applying the normative private-root command contract to every broad shell wall | Every required integration artifact has complete invocation provenance and is proof-clean with zero implementation change | An invalid/missing root makes the wall ineligible; any failure/stop blocks source push, is classified, and authorizes future remediation docs-first |
-| 3. Independent reviews | Fresh read-only topology/safety, architecture/evidence, and cross-document/sequence reviews of the exact proof state | All reviewers CLEAN; a purely documentary finding is remediated docs-only and re-reviewed by a fresh replacement | Any finding that invalidates proof or topology stops publication and requires the affected proof/review to rerun from a corrected preserved state; no source push on any unresolved finding |
+| 1C. Remediation planning | Commit/review exactly the six control-pack files on `f7ded83ef147b748678ba6b028eea959870a04fe`; preserve only the planning branch | Planning ref parity; source remote unchanged; exact R1/P1 allowlists and sequence frozen | No implementation, wall, integration-clean ref, source push, history rewrite, or stale-wall eligibility |
+| 1D. R1 implementation | One bounded two-file R1 commit, focused proof, and fresh authority/security review | Exact non-disclosure/argv/diagnostic/xtrace contract and review CLEAN | No P1 work, broader caller/helper change, weak validation, wall, or source push |
+| 1E. P1 implementation | One bounded two-file P1 commit, adversarial self-tests, and fresh provenance/security review | Authenticated runner, containment, continuous-authority deletion, and review CLEAN | No product semantic/dependency/privileged change, fallback harness, wall eligibility claim, or source push |
+| 2. Fresh baseline and integration wall | First run three parallel and one serial canonical wall through P1 with distinct roots; only after that baseline is CLEAN, run the complete renewed production-fix-free closeout | Every required baseline/integration artifact has complete P1 provenance and is proof-clean; closeout makes zero implementation/test change | Any invalid root/containment/deletion proof makes a wall ineligible; any failure/stop blocks source push, is classified, and requires docs-first future remediation |
+| 3. Independent reviews | Four fresh read-only integration reviews of the exact proof state: authority/security, lifecycle/product, inventory/source closure, and baseline/platform/publication | All four reviewers CLEAN; a purely documentary finding is remediated docs-only and re-reviewed by a fresh replacement | Any finding that invalidates proof or topology stops publication and requires the affected proof/review to rerun from a corrected preserved state; no source push on any unresolved finding |
 | 4. Final documentation | Draft the final integration-closeout update across the same six canonical files after the certified range/proof; validate/review to CLEAN; commit the exact reviewed bytes; rerun final documentation validation/reviews | Final committed docs prove the wall, keep R2-2 status truthful, and match the pre-commit reviewed bytes; any authorized remediation successor is append-only and six-file-only | Fix pre-commit documentary findings in the worktree; a post-commit documentary finding permits only an append-only remediation-doc successor plus renewed docs validation/review; a proof/topology-invalidating finding reruns affected proof/review; no rewrite or implementation/product/seam change |
-| 5. Publication | Freshly read the source remote and require exact old OID `2f6f1f69b3519dafff01ef543e7d260da2c37700`; bind an explicit expected-old-OID CAS/lease to that exact OID; independently prove the update is an ordinary fast-forward | Source contains original 17 runtime commits, the authority, B1 broad-wall invocation, and final-closeout docs commits, and only any review-required append-only remediation-doc successors; local HEAD, upstream, and remote are identical at zero ahead/zero behind | The CAS/lease cannot authorize a forced/non-fast-forward update; any old-OID change, non-fast-forward, second/staged push, or identity mismatch is a hard stop |
+| 5. Publication | Freshly read the source remote and require exact old OID `2f6f1f69b3519dafff01ef543e7d260da2c37700`; bind an explicit expected-old-OID CAS/lease to that exact OID; independently prove the update is an ordinary fast-forward | Source contains the original 17 runtime commits, authority docs, B1 docs, remediation-planning docs, bounded R1 and P1 commits, final-closeout docs, and only review-required append-only remediation-doc successors; local HEAD, upstream, and remote are identical at zero ahead/zero behind | The CAS/lease cannot authorize a forced/non-fast-forward update; any old-OID change, non-fast-forward, second/staged push, or identity mismatch is a hard stop |
 
 F's completed replay and historical Route D docs-first replay remain scoped to their own packets.
 The renewed closeout certifies the already assembled range, so it must not replay that range.
-R2-2 remains incomplete through phases 1, 1B, and 2–4. R2-3 becomes the next node only after phase 5 succeeds;
+R2-2 remains incomplete through phases 1, 1B–1E, and 2–4. R2-3 becomes the next node only after phase 5 succeeds;
 R2-4 and R3 remain later.
+
+## R2-2 remediation insertion before renewed closeout
+
+The failed renewed closeout inserts two docs-first remediation increments without changing the
+existing commit identities or the final docs-on-top/one-fast-forward publication model.
+
+| Phase | Entry state | Authorized work | Exit gate | Forbidden |
+|---|---|---|---|---|
+| RP0 — planning authority (this packet) | Clean `f7ded83ef147b748678ba6b028eea959870a04fe`; source still at `2f6f1f69b3519dafff01ef543e7d260da2c37700`; two prior blockers | Source-close R1/P1; edit/review/commit exactly six control-pack Markdown files; preserve only the planning ref | Six-file scope and cross-document checks CLEAN; three fresh read-only docs reviewers CLEAN; planning preservation parity; source remote unchanged | Implementation/tests/scripts, wall rerun, integration-clean ref, source push, history rewrite, R2-3/R2-4/R3 |
+| RP1 — R1 carrier non-disclosure | Reviewed RP0 authority | Add the exact structured redaction helper, change only `deploy_shims`, and extend only `prefix_propagation_r2_2.sh` | Focused adversarial proof CLEAN; byte-exact execution; carrier absent from every display/evidence surface; fresh authority/security review CLEAN | Carrier removal, weaker validation, generic regex redaction, `eval`, other production/test files, P1 work |
+| RP2 — P1 tracked provenance runner | R1 implementation/review CLEAN | Add the exact two Linux-only test-harness files and no dependency; bind the reviewed P1 commit trailers to its bootstrap and three argv-template constants, then record separately the substituted actual argv hashes; implement only the `04`-frozen authenticated host → Stage A → Stage B topology, sealed runner projections, fixed private peer-credential socket, Stage-B `--as-pid-1` worker, explicit Stage-A output pipe, immutable seeds plus confined writable Cargo runtime, and host-finalized teardown | All 95 runner self-tests CLEAN; exact combined-output EOF/backpressure/bounds/hash proof; worker reap-to-`ECHILD`; Stage-A private-tree absence; host proof of Stage-A namespace/backing absence; containment/deletion/security review CLEAN; no product-flow effect | Product runtime/test semantics, service or privileged state, mutable external invocation artifact, ambient/unnamed supervisor, parent-only waiting, assumed arbitrary control/evidence FD inheritance, Stage-A self-finalization, pathname-only cleanup, or wall eligibility claim before every host gate |
+| RP3 — canonical baseline | R1/P1 CLEAN | Run three parallel and one serial wall, each through P1 with a fresh validated private root | Every wall independently provenance-valid; canonical counts, hashes, and zero differential; no masked route | Reuse of old roots/results, fallback harness, implementation remediation |
+| RP4 — renewed production-fix-free closeout | Fresh RP3 baseline CLEAN | Re-run the complete focused/integration/review wall without product/test changes | All gates and four fresh integration reviewers CLEAN | Any implementation/test remediation; classification of stale walls as eligible |
+| RP5 — final docs and publication | RP4 CLEAN | Add final six-file closeout docs, validate/review, then one ordinary source fast-forward | Local/upstream/remote parity; final docs are the only commit added after the RP4-certified R1/P1 source state; R2-2 complete | Replay/rebase/merge/cherry-pick/squash/force/staged source publication |
+
+The immutable order is:
+
+```text
+f7ded83
+  -> RP0 / reviewed remediation-planning docs
+  -> RP1 / R1
+  -> RP2 / P1
+  -> RP3 / fresh canonical baseline
+  -> RP4 / renewed production-fix-free closeout
+  -> RP5 / final six-file closeout docs
+  -> one ordinary fast-forward source publication
+  -> A1.1d-5R2-3
+```
+
+Historical closeout results stay historical: the four matching walls remain ineligible and the
+NOT CLEAN/BLOCKED reviews remain findings, not passes. This planning packet stops at RP0. Its exact
+next node is **A1.1d-5R2-2-R1 — Release dry-run authenticated-carrier non-disclosure
+implementation**.

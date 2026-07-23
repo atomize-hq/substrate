@@ -4,11 +4,13 @@
 **Scope:** planning, contracts, sequencing, and proof gates; not implementation history
 **Source directive:** [`../../substrate-runtime-refactor-directive-revised.md`](../../substrate-runtime-refactor-directive-revised.md)
 **Repo-truth snapshot:** 2026-07-17 at `6ab2a515e13946324d0aac25b144e1c3408cb2c1`; re-check live code before every slice
-**Current authorized increment:** `A1.1d-5R2-2F` is runtime-complete, proof-complete, review-clean,
-canonically closed out, and exactly replayed onto its latest documentation. The exact next node is
-`A1.1d-5R2-2 renewed production-fix-free integration closeout`. R2-2 remains incomplete until that
-separate closeout; R2-3, R2-4, R3, privileged product smoke, and direct-member Codex/UAA gateway
-adoption remain unstarted.
+**Current authorized increment:** `A1.1d-5R2-2 closeout remediation planning`. R2-2F remains
+runtime-complete, proof-complete, review-clean, canonically closed out, and exactly replayed onto
+its latest documentation, but the later renewed closeout stopped on R1 carrier non-disclosure and
+P1 wall-provenance blockers. This packet authorizes those two bounded remediations docs-first; the
+exact next node is **A1.1d-5R2-2-R1 — Release dry-run authenticated-carrier non-disclosure
+implementation**. R2-2 remains incomplete. R2-3, R2-4, R3, privileged product smoke, and
+direct-member Codex/UAA gateway adoption remain unstarted.
 
 ## Canonical repo location
 
@@ -213,8 +215,10 @@ convergent. Remediation remains bounded to **A1.1d-5R1 → A1.1d-5R2 → A1.1d-5
 implemented and review-clean through `4d0acff68e20d86b97fe5367b8a4617554f33ef4`.
 **A1.1d-5R2-0 is planning-complete, A1.1d-5R2-1 is implementation- and review-complete through
 `2653c2ef20ae2e119a444811e6fb46e86d1a6ec6`, and Routes A–F are complete.** The live R2 sequence is
-**Routes A–F complete → renewed R2-2 production-fix-free integration closeout → R2-3 → R2-4**,
-followed by R3. The earlier failed integration closeout proved that R2-2 remains incomplete and
+**Routes A–F complete → remediation planning → R1 → P1 → fresh canonical baseline → renewed R2-2
+production-fix-free integration closeout → final six-file closeout docs → one ordinary
+fast-forward source publication → R2-3 → R2-4**, followed by R3. The earlier failed integration
+closeout proved that R2-2 remains incomplete and
 unpublished; the completed E, harness, and F packets do not replace the renewed closeout. R2-3,
 R2-4, and R3 remain unstarted. Until the renewed closeout and later assigned lifecycle/product
 smoke pass, both A1.1d Linux closeout and only the Linux product-smoke portion of the B1/B2.1 joint
@@ -713,7 +717,7 @@ secret/request-bearing payloads, discards raw child JSON and stderr, and maps on
 top-level `Cli` and its `auto_sync.rs` literal unchanged. This additive Rust enum layout does not
 change normal public `world doctor --json` CLI behavior.
 
-The binding sequence is now:
+At the completed Routes A–F checkpoint, the historical binding sequence was:
 
 `Routes A–E` → `F0/F0a/F0b/F0-HC complete` → `F1/F2 complete` → `F3/F4 complete` →
 `F5-PD` → `F5` → `final F walls` → `F closeout` →
@@ -778,20 +782,22 @@ or unavailable/unproven. Managed secure-FD behavior, direct-member compatibility
 filesystem, caging, capability, lifecycle, receipt, supervisor, cleanup, and rollback ownership are
 unchanged.
 
-The binding sequence is now:
+At the completed Routes A–F checkpoint, the then-binding sequence was:
 
 `Routes A–F complete` → `renewed R2-2 production-fix-free integration closeout` → `R2-3` →
 `R2-4` → `R3`.
 
-The exact next task is **A1.1d-5R2-2 renewed production-fix-free integration closeout**. This
-closeout does not begin or satisfy that next task and promotes no seam.
+At that completed Routes A–F checkpoint, the exact historical next task was **A1.1d-5R2-2
+renewed production-fix-free integration closeout**. The current remediation-planning authority
+below supersedes that historical next-task statement without rewriting its result.
 
 ## A1.1d-5R2-2 renewed closeout publication authority
 
-The selected publication model for the exact next task is **Docs-on-top → one fast-forward
-publication**. R2-2 remains incomplete, renewed integration proof remains unrun, and source
-publication remains blocked until that closeout is fully proof-clean and independently
-review-clean.
+The selected publication model for the eventual closeout remains **Docs-on-top → one
+fast-forward publication**. R2-2 remains incomplete. A renewed integration attempt ran, but its
+four matching walls are provenance-ineligible and therefore establish no eligible integration
+proof. Source publication remains blocked until R1, P1, the fresh baseline, and a further renewed
+closeout are fully proof-clean and independently review-clean.
 
 The source remote intentionally remains at the F documentation closeout
 `2f6f1f69b3519dafff01ef543e7d260da2c37700`. The exact existing 17-commit runtime range above it
@@ -803,15 +809,18 @@ range, kept off the source remote, and preserved remotely through dedicated bran
 correction follows it without rewriting either commit and is preserved separately at
 `feat/preserve-a1-1d-5r2-2-broad-wall-invocation-20260722`.
 
-The renewed closeout must run from that exact publication-authorized local state without any
-production, test, fixture, script, schema, dependency, or generated implementation change. A gate
-failure leaves the source remote unchanged and authorizes any future remediation docs-first. Only
-after every integration gate and independent review is clean may the final six-file integration-
-closeout documentation be drafted, validation- and review-cleaned, and committed with exactly the
-reviewed bytes. Final post-commit documentation validation/reviews must also be clean. A purely
-documentary post-commit finding may be corrected only by an append-only six-file remediation-doc
-successor followed by renewed documentation validation/review; a proof/topology-invalidating
-finding reruns the affected proof/review. Neither permits rewriting or publication while
+The reviewed remediation-planning commit, bounded R1 implementation/review, bounded P1
+implementation/review, and fresh P1 baseline must first extend that exact publication-authorized
+local state without rewriting it. The later renewed closeout runs from the resulting exact state
+and permits no production, test, fixture, script, schema, dependency, or generated implementation
+change within the closeout phase. A gate failure leaves the source remote unchanged and
+authorizes any future remediation docs-first. Only after every integration gate and independent
+review is clean may the final six-file integration-closeout documentation be drafted, validation-
+and review-cleaned, and committed with exactly the reviewed bytes. Final post-commit documentation
+validation/reviews must also be clean. A purely documentary post-commit finding may be corrected
+only by an append-only six-file remediation-doc successor followed by renewed documentation
+validation/review; a proof/topology-invalidating finding reruns the affected proof/review. Neither
+permits rewriting or publication while
 unresolved. Immediately before the single publication, a fresh remote read must still report the
 source at exact
 `2f6f1f69b3519dafff01ef543e7d260da2c37700`; an explicit expected-old-OID CAS/lease must bind that
@@ -854,7 +863,7 @@ Its 59 additional failures are `BaselineCommandMismatchConfirmed`: normal mode-`
 became the `TempDir` ancestor and trusted-root validation correctly rejected it. Runtime source,
 tests, fixtures, and the canonical baseline remain unchanged.
 
-The controlling sequence is:
+The historical B1-only sequence at that checkpoint was:
 
 ```text
 B1 broad-wall invocation docs correction
@@ -868,6 +877,87 @@ final six-file integration-closeout documentation
 one ordinary fast-forward source push
 ```
 
-This B1 correction runs no integration wall. R2-2 remains incomplete, source publication remains
-blocked, and the exact next task is **Resume A1.1d-5R2-2 renewed production-fix-free integration
-closeout using provenance-validated private roots**.
+This B1 correction ran no integration wall. At the B1 checkpoint, R2-2 remained incomplete,
+source publication remained blocked, and the exact historical next task was **Resume A1.1d-5R2-2
+renewed production-fix-free integration closeout using provenance-validated private roots**. The
+controlling current status follows.
+
+## A1.1d-5R2-2 closeout-remediation planning authority
+
+This section is the controlling current status after the renewed closeout stopped cleanly on two
+blockers. It does not rewrite the B1 history above and does not classify any prior wall as eligible.
+The immutable planning base is:
+
+- branch `feat/internal-host-orchestrator-world-dispatch-bootstrap`;
+- `HEAD f7ded83ef147b748678ba6b028eea959870a04fe`, parent
+  `928f94e7b4c498273b40385f7bffea9e4f949700`, tree
+  `e0836009318259e168acf3fe7837c57ec61c73fd`;
+- source remote `2f6f1f69b3519dafff01ef543e7d260da2c37700`, divergence
+  `0 behind / 19 ahead`, clean worktree/index/untracked set;
+- unchanged publication-authority preservation at
+  `feat/preserve-a1-1d-5r2-2-publication-authority-20260722` →
+  `928f94e7b4c498273b40385f7bffea9e4f949700`;
+- unchanged broad-wall invocation authority at
+  `feat/preserve-a1-1d-5r2-2-broad-wall-invocation-20260722` →
+  `f7ded83ef147b748678ba6b028eea959870a04fe`.
+
+The renewed closeout results were authority/security **NOT CLEAN**, lifecycle/product **CLEAN**,
+inventory/source **CLEAN**, and baseline/publication **BLOCKED**. R1 is a real dry-run disclosure:
+`run_cmd` renders verbatim `$*`, so `deploy_shims` exposes the authenticated bootstrap carrier and
+the sentinel reported `carrier_marker_disclosed=true`. P1 is a proof-authority failure: all four
+walls matched `1309 discovered / 1264 passed / 45 failed / 0 ignored` and the canonical hashes, but
+the harness waited only for Cargo and closed its validation descriptors before pathname deletion.
+Those four walls are evidence-ineligible. Counts and hashes cannot cure invalid provenance.
+
+This planning packet authorizes exactly two later, bounded remediation increments:
+
+1. **R1 — release dry-run authenticated-carrier non-disclosure.** Add one structured, dedicated
+   display boundary adjacent to `run_cmd`, route only `deploy_shims` through it, retain byte-exact
+   execution argv and all current carrier validation, and extend only the existing focused R2-2
+   installer proof.
+2. **P1 — canonical broad-wall provenance runner.** Add one Linux-only, standard-library,
+   test-harness runner and its self-test file. It must establish PID-namespace/subreaper
+   containment before Cargo, prove descendant emptiness, and delete each fresh root under
+   continuous no-follow descriptor authority. Eligibility additionally requires the explicit
+   immutable OS/Python/Bubblewrap TCB, exact direct Python/V2 authenticated `host_main`
+   controller, P1-commit trailers bound to the independently verified bootstrap and three
+   argv-template constants,
+   held-FD Git/object proof, sealed runner projections, private immutable
+   repository/rustup/Cargo seeds, and one separately writable Cargo runtime frozen in `04`. Stage
+   A passes no assumed control/evidence FD through Bubblewrap: its Stage B worker connects to a
+   fixed private `SOCK_SEQPACKET` path and is accepted only when `SO_PEERCRED` matches
+   Bubblewrap's retained child pidfd. Cargo inherits original stdin, a single explicit
+   stdout/stderr capture pipe drained by Stage A to exact bounded evidence, and no control or
+   evidence FD.
+   Cargo 1.89 may create or change only the three named cache/lock metadata regular files. A detached-descendant
+   probe proved Bubblewrap parent-wait/PID-1 teardown is not eligibility. Stage B therefore uses
+   `--as-pid-1`: its authenticated worker is both the status-reported application and namespace
+   adoption root, and its verified subreaper and authenticated `ECHILD` record are mandatory.
+   Stage A cleans its private
+   tree, but only retained host `host_main` can prove Stage-A namespace teardown, remove the exact
+   underlying backing path, and finalize eligibility. An ambient-shell, unnamed supervisor,
+   self-attesting Python launch, or Stage-A self-finalization is forbidden.
+
+The exact allowlists and gates are frozen in `04-contracts-and-gates.md`. No implementation or test
+change is made by this packet. It does not rerun a wall, create an integration-clean preservation
+branch, publish the source branch, or promote a product seam. The only publication allowed here is
+the reviewed six-document planning commit preserved at
+`feat/preserve-a1-1d-5r2-2-remediation-planning-20260723`; the source remote must remain unchanged.
+
+The controlling sequence is:
+
+```text
+current clean source at f7ded83
+  -> reviewed six-file remediation-planning commit
+  -> R1 implementation and focused security review
+  -> P1 tracked provenance-runner implementation and adversarial self-review
+  -> fresh canonical baseline using P1
+  -> renewed production-fix-free integration closeout
+  -> final six-file closeout docs
+  -> one ordinary fast-forward source publication
+  -> A1.1d-5R2-3
+```
+
+R2-2 remains incomplete. R2-3, R2-4, R3, A1.1d, and A1 remain blocked. The exact next node after
+this planning authorization is **A1.1d-5R2-2-R1 — Release dry-run authenticated-carrier
+non-disclosure implementation**.

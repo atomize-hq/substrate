@@ -1025,8 +1025,11 @@ promoted. Likewise no policy, network, world-fs, caging, placement, receipt, sup
 worker, cleanup, rollback, or platform-native capability moves into F.
 
 F is therefore complete as a bounded authenticated Linux composition closure, not as native
-cross-platform proof and not as R2-2 integration closeout. The next architectural node is
-`A1.1d-5R2-2 renewed production-fix-free integration closeout`; it must not repair production code.
+cross-platform proof and not as R2-2 integration closeout. At that completed-F checkpoint, the
+historical next architectural node was
+`A1.1d-5R2-2 renewed production-fix-free integration closeout`; the remediation-planning section
+below supersedes only that next-node disposition, and the later closeout still must not repair
+production code.
 
 ## Renewed R2-2 attestation and publication ordering
 
@@ -1039,11 +1042,14 @@ scoped to Route D and does not create a general rule to replay a renewed closeou
 
 The selected architecture is **Docs-on-top → one fast-forward publication**. Local publication-
 authority commit `928f94e7b4c498273b40385f7bffea9e4f949700` follows the unchanged runtime range;
-the six-file broad-wall invocation correction follows that authority commit; the renewed
-integration wall and independent reviews attest the exact corrected state; then the final
-integration-closeout documentation commit follows the range and proof it certifies. This ordering
-keeps the evidence statement after its subject while preserving every existing runtime commit and
-both preceding documentation commits byte-for-byte and identity-for-identity.
+the six-file broad-wall invocation correction follows that authority commit. The reviewed
+six-file remediation-planning commit then authorizes one bounded R1 implementation commit and
+focused security review, followed by one bounded P1 implementation commit and adversarial review.
+A fresh canonical baseline made only through P1 precedes the renewed production-fix-free
+integration wall and independent reviews; the closeout itself still creates no implementation
+commit. The final integration-closeout documentation commit follows the complete range and proof
+it certifies. This ordering keeps the evidence statement after its subject while preserving every
+existing runtime and documentation commit byte-for-byte and identity-for-identity.
 Replaying or rewriting those commits would add identity churn without architectural or evidentiary
 value. The authority state must be preserved remotely through dedicated branch
 `feat/preserve-a1-1d-5r2-2-publication-authority-20260722`, not through the source branch, before the
@@ -1085,6 +1091,175 @@ serial-only conclusions. The provenance-valid baseline remains `1309/1264/45/0`;
 wall remains separately recorded as `1309/1205/104/0`, with all 59 additions caused by normal
 `/tmp` placement and correct trusted-root rejection. Runtime source and tests are unchanged.
 
-The next architectural action is the renewed production-fix-free integration closeout from the
-B1-preserved docs-on-top state using provenance-validated private roots. R2-2 remains incomplete;
-source publication, R2-3, R2-4, and R3 remain blocked in this correction.
+At the historical B1 checkpoint, the next architectural action was the renewed
+production-fix-free integration closeout from the B1-preserved docs-on-top state using
+provenance-validated private roots. The current remediation architecture below supersedes that
+next-action statement. R2-2 remains incomplete; source publication, R2-3, R2-4, and R3 remain
+blocked.
+
+## Closeout-remediation architecture: R1 and P1
+
+This planning authority changes no product architecture. It defines two proof-preserving repair
+boundaries required before the renewed production-fix-free closeout can start again.
+
+### R1: separate execution argv from display argv
+
+The release installer currently has one generic executor, `run_cmd`, with four direct call sites:
+three inside `run_with_sudo` and one inside `deploy_shims`. Source closure found that only the
+`deploy_shims` call carries the authenticated bootstrap carrier. The source-closed
+`run_with_sudo` callers are a finite current set resolved through the fixed privileged PATH:
+`groupadd`, `usermod`, package managers, `install`, `systemctl`, `rm`, and the one permitted
+absolute ACL helper. Their operands include account/group names, packages, artifact/TMP and
+destination paths, modes/owners, unit/socket names, and ACL actions/paths/groups, but no carrier,
+credential, authorization value, commitment preimage, prompt/request material, or secret token.
+`run_with_sudo` does not itself enforce a named allowlist for bare tools; this conclusion is the
+exact current-call-site inventory. Other carrier-bearing installer routes already use dedicated
+fixed dry-run placeholders and xtrace suppression.
+
+Source closure also rejected reuse of the existing structured display helper
+`scripts/linux/world-provision.sh::show_install_context_cmd`. It uses `%q` and redacts the
+separate carrier form plus an environment assignment, but it is display-only, does not support
+the accepted equals form, does not enforce the missing/duplicate/malformed/end-of-options
+contract, and is not coupled to byte-exact execution argv. The Rust-only
+`crates/common::{redact_sensitive, redact_process_argv}` logging helpers use heuristic
+sensitive-name/value matching, and `redact_sensitive` has raw logging behavior; neither can be
+authenticated-carrier authority for this Bash installer. Importing or extending any of these
+helpers would broaden R1 beyond its exact two-file allowlist, so they remain unchanged.
+
+R1 therefore adds a dedicated `run_cmd_with_redacted_install_bootstrap_carrier` boundary and changes
+only `deploy_shims` to use it. Its architecture is two-channel:
+
+- execution keeps the original array and invokes exact `"$@"`;
+- dry-run display walks argv structurally, recognizes the production form
+  `--install-bootstrap-context-v1 VALUE` and the live Substrate CLI's accepted
+  `--install-bootstrap-context-v1=VALUE` form, replaces only the value with the fixed token
+  `<redacted-authenticated-bootstrap-carrier-v1>`, preserves the input flag form for display, and
+  boundary-safely renders only nonsensitive arguments;
+- no `eval`, reconstructed command execution, regex secret guessing, digest, prefix, suffix,
+  length, carrier fragment, or preimage is permitted;
+- a missing/empty value or duplicate sensitive flag, including mixed-form duplicates, fails closed
+  before display or execution with exact stderr
+  `[install-substrate][ERROR] invalid authenticated bootstrap carrier arguments\n` and status
+  `2`; that argument-independent result also governs protected malformed near-matches, separate
+  values beginning `-`, and protected forms or near-matches after exact `--`, before Clap or any
+  display can echo candidate bytes.
+
+The release installer parser and production call construct the separate `--flag value` form; the
+invoked Clap-based Substrate CLI also accepts `--flag=value`. R1 adds no grammar. Normal execution
+of either accepted form, argument ordering/boundaries, authenticated carrier validation,
+account/UID binding, prefix selection, shim deployment, inherited-xtrace suppression, and exact
+xtrace restoration remain unchanged. Generic `run_cmd` and all nonsensitive dry-run output remain
+compatible. A structurally valid live child retains its exact exit status; only the helper's
+structural rejections return `2`, after `deploy_shims` restores the inherited xtrace state.
+
+### P1: tracked proof runner outside product authority
+
+No tracked repository helper currently combines private-root validation, reparenting-stable
+descendant containment, log/hash preservation, and deletion under continuous descriptor
+authority. The production `trusted_fs` module, world cgroups, service lifecycle, and platform
+provisioning scripts are not reusable P1 surfaces: changing or importing them would couple a test
+proof runner to product authority and exceed this remediation.
+
+P1 therefore adds one Linux-only test-harness module,
+`scripts/ci/canonical_shell_wall_runner.py`, plus
+`scripts/ci/test_canonical_shell_wall_runner.py`. It adds no repository or Python dependency and
+uses only `/usr/bin/python3.13 -I -S -B`, a validated fixed standard-library origin set, and fixed Linux system-call
+interfaces. It does not resolve an `unshare` program or any executable through ambient `PATH`.
+The launch trust boundary is explicit: exact installed Bubblewrap 0.11.0 plus the kernel and
+root-owned pinned Python/ELF/startup closure are the immutable platform TCB. A clean nested
+unprivileged Bubblewrap probe source-closes the namespace launcher. The concrete host controller
+is exact `/usr/bin/python3.13 -I -S -B -c REVIEWED_BOOTSTRAP_V2_BYTES` plus authenticated in-memory
+`host_main`. The exact P1 implementation commit binds bootstrap length/hash and all three
+argv-template hashes in immutable commit trailers to constants in its independently verified
+runner blob; each template contains the literal `{EXPECTED_HEAD}` slot, so commit construction is
+not self-referential. The fresh reviewer records that commit OID. Every direct-array runtime
+instantiation must substitute that OID into the template's exact `{EXPECTED_HEAD}` slot, and its
+separately recorded actual argv hash must equal the hash independently recomputed over those
+instantiated NUL-terminated bytes. There is
+no external mutable authority artifact, unnamed supervisor, ambient shell, or tracked launcher
+pathname. Python does not pretend to
+authenticate code that necessarily ran before its first `-c` instruction. Reviewed V2 bytes use
+only built-in/frozen primitives and inline SHA-1/SHA-256 until later module origins are validated,
+execute retained Git by FD, independently verify the expected-commit/tree/blob object chain, and
+compile runner/self-test blobs only under synthetic names. `host_main` supplies authenticated
+runner bytes to Stage A by sealed memfd plus Bubblewrap `--ro-bind-data`. Stage A copies verified
+repository, selected rustup/toolchain, and Cargo-shim/registry inputs into private tmpfs seeds,
+then makes one separate writable Cargo-home runtime copy. Nested Stage B read-only projects the
+repository/rustup snapshots and writable-projects only that private Cargo runtime at the canonical
+Cargo-home path. The seed omits Cargo 1.89 metadata files; the runtime may create or change only
+exact regular files `.package-cache`, `.package-cache-mutate`, and `.global-cache`. Every other
+runtime write is ineligible. Canonical
+`PATH` still reaches the copied `cargo -> rustup` shim, and the verified repository
+`rust-toolchain.toml` still selects Rust 1.89. Neither mutable tracked pathname nor host
+source/cache/toolchain inode is executed by Cargo. If
+the exact Bubblewrap/TCB premise is unavailable, P1 stops as
+`BroadWallContainmentDecisionRequired`; post-start self-hashing is not a substitute.
+The layers are:
+
+1. authenticated host `host_main` retains the evidence/backing descriptors and exact Stage-A
+   pidfd/status while Stage A Bubblewrap creates a private user/mount namespace and tmpfs;
+2. authenticated `stage_a_main` constructs immutable seeds plus the writable Cargo runtime and
+   fresh current-UID `0700` root, then creates fixed mode-`0600`
+   `R/control/worker.sock` and launches exact nested Stage B Bubblewrap as a retained direct child
+   with a new PID namespace, `--die-with-parent`, JSON status FD, and one Stage-A-owned capture
+   pipe whose sole writer is explicitly duplicated to Stage-B stdout/stderr;
+3. Stage B authenticates the same runner through sealed `--ro-bind-data`; its worker connects to
+   the fixed private socket, and Stage A accepts only `SO_PEERCRED` matching Bubblewrap's reported
+   child pidfd. Both endpoints are close-on-exec, the socket pathname is absent before START,
+   Cargo inherits original stdin, only the one stdout/stderr pipe, and no control/evidence FD.
+   Stage A drains that pipe to the exact bounded log until EOF after Stage-B reap. Stage B uses
+   `--as-pid-1`, so the authenticated worker is both Bubblewrap's status-reported application and
+   the namespace adoption root; Stage A's default Bubblewrap PID 1 remains fail-safe teardown only;
+4. the worker sets/reads back `PR_SET_CHILD_SUBREAPER` before START/Cargo, waits for Cargo, then
+   waits/reaps to kernel `ECHILD`; Stage A requires that authenticated record, cleans every
+   in-namespace tree under continuous descriptors, and exits without claiming its own enclosing
+   namespace is gone;
+5. `host_main` alone proves Stage-A process/namespace teardown, removes the exact retained
+   underlying backing path under descriptor authority, and only then atomically finalizes
+   `eligible=true`.
+
+Repository cleanliness is independently bound to expected-HEAD tree modes/blob IDs, stage-zero
+index entries, and no-follow worktree bytes. Only tracked, verified `.gitignore` files may classify
+untracked output; repository-local config, `.git/info/exclude`, worktree config, and global
+excludes cannot hide source state.
+
+Cargo uses a fresh private target mounted at canonical `<repository>/target`, never the host
+repository target and without a `CARGO_TARGET_DIR` override. The exact `cargo`/`rustc` symlinks to
+the copied rustup binary, selected rustup settings, complete pinned Rust 1.89 toolchain, and
+checksum-selected registry inputs are byte-copied into immutable seeds. Only the private Cargo
+runtime copy is writable, and its post-manifest may differ from the seed solely by creating or
+changing the three named Cargo metadata regular files; no `CARGO_*`, `RUSTUP_HOME`, `PATH`, or
+`HOME` override is added. Exact
+proxy-version and contained compile probes prove the mounted resolution chain before the wall.
+
+This is grounded in the Linux contracts for
+[`PR_SET_CHILD_SUBREAPER`](https://man7.org/linux/man-pages/man2/PR_SET_CHILD_SUBREAPER.2const.html),
+[PID namespaces](https://man7.org/linux/man-pages/man7/pid_namespaces.7.html),
+[`waitid`/`waitpid`](https://man7.org/linux/man-pages/man2/waitpid.2.html),
+[`openat`/`unlinkat`](https://man7.org/linux/man-pages/man2/unlinkat.2.html), and
+[`statx`](https://man7.org/linux/man-pages/man2/statx.2.html). Reparenting, double-forking, or
+process-group changes remain inside the namespace and converge on the verified Stage-B worker,
+which runs as namespace PID 1 and sets/reads back subreaper state. Stage A's default Bubblewrap
+PID 1 remains fail-safe teardown only. A timeout or surviving descendant is an
+ineligible wall; forced namespace teardown is diagnostic cleanup only and can never turn that
+wall valid.
+
+The disposable root lives below a private namespace mount, remains distinct from the real product
+`SUBSTRATE_HOME`, and is never shared between walls. Owner, mode, type, device/inode, mount ID,
+ancestor safety, and effective access/default ACLs are checked before use and again under the same
+open descriptors. Named-user, named-group, group-class, or other-class effective write permission
+is forbidden. All deletion is no-follow and directory-FD-relative; pathname identity must still
+match before unlink, absence must be proved before descriptors close, and an unrelated sentinel
+must survive.
+
+P1 changes no shell, world, policy, capability, service, secure-FD, lifecycle, cleanup, placement,
+or product-runtime symbol. It is proof infrastructure only. Native macOS/Windows and privileged
+product proofs remain deferred to their existing owners.
+
+### Architecture status
+
+R1 is a correction to display non-disclosure, not carrier authority. P1 is an evidence-authority
+runner, not a product supervisor or lifecycle owner. Neither creates a new runtime seam, process
+family, platform adapter, credential route, or cleanup authority. The four prior broad walls remain
+ineligible, R2-2 remains incomplete, and R2-3 remains blocked. The next architectural node is the
+bounded R1 increment.

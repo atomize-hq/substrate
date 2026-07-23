@@ -2737,24 +2737,25 @@ receipt/supervisor, cleanup/rollback, and platform ownership are unchanged. Open
 open, direct-member Codex/UAA gateway adoption is not begun, privileged product smoke is not
 claimed, and no seam is promoted.
 
-The successful terminal state is `A1.1d-5R2-2FComplete`. The exact next node is
-**A1.1d-5R2-2 renewed production-fix-free integration closeout**. It remains unstarted here;
-R2-3, R2-4, and R3 remain after it.
+The successful terminal state at that checkpoint was `A1.1d-5R2-2FComplete`. Its exact historical
+next node was **A1.1d-5R2-2 renewed production-fix-free integration closeout**. The remediation
+planning ledger below supersedes only that next-node disposition; R2-3, R2-4, and R3 remain after
+the later closeout/publication sequence.
 
 ## Renewed R2-2 publication decision ledger
 
 | Decision/gate | Status | Evidence and distinction | Binding resolution / next action |
 |---|---|---|---|
 | `PublicationDecisionRequired` | Resolved and preserved at `928f94e7b4c498273b40385f7bffea9e4f949700` | The completed F closeout required its documentation followed by exact replay, and that replay produced the current linear 17-commit range from `2f6f1f69b3519dafff01ef543e7d260da2c37700` through `e5fbd2d4441d248e137d52c44e493fb0abe158f8`. Historical Route D docs-first replay governed only its own pre-carrier correction. The selected docs-on-top publication authority is preserved locally/remotely at `feat/preserve-a1-1d-5r2-2-publication-authority-20260722`. | Keep commit and range identities unchanged. The B1 six-file broad-wall invocation successor must follow exact `928f94e7`, remain off the source branch remote, and be preserved separately at `feat/preserve-a1-1d-5r2-2-broad-wall-invocation-20260722` before renewed proof. R2-2 remains incomplete. |
-| `BaselineCommandMismatchConfirmed` | B1 documentation correction active; renewed proof still unrun | The renewed-closeout prompt omitted the private-root invocation provenance. The resulting wall was ineligible and added 59 correct trusted-root rejections below normal mode-`1777` `/tmp`; runtime source and tests did not change. | Use the [canonical broad-wall invocation contract](04-contracts-and-gates.md#canonical-shell-library-broad-wall-invocation-contract), commit this six-file correction on exact `928f94e7`, preserve it remotely only on the B1 branch, and stop before the renewed integration wall. |
+| `BaselineCommandMismatchConfirmed` | Historical B1 correction complete; later renewed wall evidence ineligible | The first renewed-closeout prompt omitted the private-root invocation provenance. That wall was ineligible and added 59 correct trusted-root rejections below normal mode-`1777` `/tmp`; runtime source and tests did not change. B1 corrected that invocation contract. A later renewed attempt produced four count/hash-matching walls, but their parent-only wait and descriptor-before-delete closure made them provenance-ineligible. | Historical B1 disposition was to commit the [canonical broad-wall invocation contract](04-contracts-and-gates.md#canonical-shell-library-broad-wall-invocation-contract) on exact `928f94e7`, preserve it only on the B1 branch, and stop. Current authority continues with remediation planning → R1 → P1 → fresh P1 baseline before a further renewed closeout. |
 | Existing runtime identity | Frozen | All 17 current commits are linear, exact, locally reviewed, and preserved. They already rest on the latest F documentation. Replaying them again would create new identities without changing semantic content or proof value. | No replay, rebase, rewrite, cherry-pick, merge commit, or force push. Preserve every runtime byte and commit identity; keep blocked and preservation-only donors outside source ancestry. |
-| Renewed integration proof | Unrun; R2-2 incomplete | Neither the publication-authority commit nor the B1 broad-wall correction runs an integration wall or supplies integration, product-smoke, platform, capability, or seam-promotion evidence. | Run only the next packet from the exact B1-preserved state using provenance-validated private roots. On invalid provenance or any failure/stop, make no runtime/test change and no source push; retain state/refs, classify the stop, and authorize future remediation docs-first. |
+| Renewed integration proof | Attempted but evidence-ineligible; R2-2 incomplete | Neither the publication-authority commit nor the B1 broad-wall correction itself ran an integration wall. The later renewed attempt ran four matching walls and obtained reviews, but R1 was authority/security NOT CLEAN and P1 made every wall provenance-ineligible; it supplies no eligible integration, product-smoke, platform, capability, or seam-promotion proof. | Historical B1 resolution was to run the next packet from exact B1-preserved state. Current authority requires remediation planning → R1/review → P1/review → fresh P1 baseline before a further renewed production-fix-free closeout. On invalid provenance or any failure/stop, make no source push; retain state/refs, classify the stop, and authorize future remediation docs-first. |
 | Final publication | Blocked | A closeout document must follow the already assembled range and evidence it certifies. The source remote intentionally contains documentation only because renewed closeout has not passed. | After proof-clean integration and CLEAN independent review, draft/validate/review final six-file docs to CLEAN, commit the exact reviewed bytes, and rerun final post-commit validation/reviews. Fix pre-commit documentary findings in the worktree; a post-commit documentary finding permits only an append-only six-file remediation-doc successor plus renewed docs validation/review; a proof/topology-invalidating finding reruns affected proof/review. None permits rewriting or unresolved publication. Then freshly require source old OID `2f6f1f69b3519dafff01ef543e7d260da2c37700`, bind an explicit expected-old-OID CAS/lease to that exact OID, independently prove a normal fast-forward, and require local/upstream/remote parity. The lease cannot authorize a forced update. R2-3 follows only then. |
 
 This decision does not alter any implementation status recorded above. F remains complete under its
-own packet-specific replay history; renewed R2-2 integration remains unrun; R2-2 remains
-incomplete; R2-3, R2-4, and R3 remain blocked; privileged product smoke remains unclaimed; and no
-seam is promoted.
+own packet-specific replay history. The later renewed R2-2 attempt ran but produced no eligible
+integration proof; R2-2 remains incomplete; R2-3, R2-4, and R3 remain blocked; privileged product
+smoke remains unclaimed; and no seam is promoted.
 
 ## A1.1d-5R2-2-B1 broad-wall invocation evidence correction
 
@@ -2822,9 +2823,9 @@ owner/mode/no-symlink/identity/ACL proof, or incomplete command/toolchain/result
 the entire wall ineligible. Correct the invocation and rerun the complete required wall. Only a
 provenance-valid wall can create a `PassToFail`, `NewFail`, changed-failure, or baseline transition.
 
-The B1 correction changes exactly the six canonical Markdown files and no runtime/test artifact.
-It runs no integration wall, does not create an integration-clean branch, and leaves the source
-remote unchanged. The binding sequence remains:
+The B1 correction changed exactly the six canonical Markdown files and no runtime/test artifact.
+It ran no integration wall, did not create an integration-clean branch, and left the source
+remote unchanged. Its historical B1-only binding sequence was:
 
 ```text
 B1 broad-wall invocation docs correction
@@ -2834,5 +2835,157 @@ B1 broad-wall invocation docs correction
   -> one ordinary fast-forward source push
 ```
 
-R2-2 remains incomplete. The exact next task is **Resume A1.1d-5R2-2 renewed production-fix-free
-integration closeout using provenance-validated private roots**.
+At that B1 checkpoint, R2-2 remained incomplete and the exact historical next task was **Resume
+A1.1d-5R2-2 renewed production-fix-free integration closeout using provenance-validated private
+roots**. The current planning ledger below supersedes only that next-task disposition.
+
+## Closeout-remediation planning ledger
+
+### Immutable planning checkpoint
+
+| Field | Verified value |
+|---|---|
+| Branch | `feat/internal-host-orchestrator-world-dispatch-bootstrap` |
+| HEAD / parent / tree | `f7ded83ef147b748678ba6b028eea959870a04fe` / `928f94e7b4c498273b40385f7bffea9e4f949700` / `e0836009318259e168acf3fe7837c57ec61c73fd` |
+| Source remote / divergence | `2f6f1f69b3519dafff01ef543e7d260da2c37700`; `0 behind / 19 ahead` |
+| Repository state | worktree, index, and untracked set CLEAN |
+| Publication preservation | `feat/preserve-a1-1d-5r2-2-publication-authority-20260722` → `928f94e7b4c498273b40385f7bffea9e4f949700` |
+| Invocation preservation | `feat/preserve-a1-1d-5r2-2-broad-wall-invocation-20260722` → `f7ded83ef147b748678ba6b028eea959870a04fe` |
+| GitNexus | repository `substrate`, indexed at exact `f7ded83`; 1,442 files, 34,536 graph nodes, 70,731 graph edges, 1,564 communities, 300 execution flows |
+
+The runtime and documentation range was unchanged at checkpoint. No source checkpoint commit,
+integration-clean preservation, wall invocation, implementation/test edit, or source publication
+occurred in this planning investigation.
+
+### Renewed-closeout blocker record
+
+| Review | Verdict | Controlling evidence |
+|---|---|---|
+| Authority/security | NOT CLEAN | `deploy_shims` passes the authenticated carrier to `run_cmd`; dry-run `$*` emitted the marker and `carrier_marker_disclosed=true` |
+| Lifecycle/product | CLEAN | No separate lifecycle/product blocker found; this does not override R1/P1 |
+| Inventory/source | CLEAN | Owned production routes closed; this does not override R1/P1 |
+| Baseline/publication | BLOCKED | Harness did not prove descendant exit and released descriptor authority before deletion |
+
+The four prior walls each reported `1309 discovered / 1264 passed / 45 failed / 0 ignored`,
+failure-name hash
+`b23bb59ad12833d2c1d37c19c54933cd6bcb1c75e0dab8a70179b9881372be70`, and normalized-signature
+hash `33c686a6ec9f3a0a4f51e1fca976445e6804da12fbbff50312a03f0042cdfac3`.
+They remain **EVIDENCE-INELIGIBLE**. No baseline transition is inferred from them and no historical
+review is rewritten.
+
+### R1 source-closure evidence
+
+At the checkpointed source:
+
+| Source | Current behavior | Closure |
+|---|---|---|
+| `run_cmd` | Dry-run prints `"$*"`; live mode executes `"$@"` | Generic behavior retained; four direct calls inventoried |
+| `run_with_sudo` no-sudo call | Finite current bare-tool set resolved through fixed privileged PATH, or one permitted absolute ACL helper; account/group, package, artifact/TMP/destination path, mode/owner, unit/socket, and ACL operands | No protected value class found |
+| `run_with_sudo` `sudo -n` call | Exact sudo/env wrapper plus that current tool/operand set | No protected value class found |
+| `run_with_sudo` interactive-sudo call | Exact sudo/env wrapper plus that current tool/operand set; no-TTY error may render original operands | No protected value class found |
+| `deploy_shims` call | Carrier plus `--shim-deploy`; xtrace disabled/restored around `run_cmd` | Sole current sensitive direct caller; R1 target |
+| Other install carrier routes | Dedicated fixed dry-run placeholders and xtrace suppression | No additional live disclosure found |
+| `world-provision.sh::show_install_context_cmd` | `%q` display helper redacts the separate carrier and environment-assignment forms | Not reusable: display-only, no equals-form or structural-rejection grammar, and not coupled to exact execution; frozen |
+| `crates/common::{redact_sensitive, redact_process_argv}` | Rust logging redactors use heuristic sensitive-name/value matching; raw logging behavior exists | Not exact Bash carrier authority; frozen |
+| Uninstaller | Separate carrier handling; no `run_cmd` | Frozen and required as unchanged compatibility proof |
+
+The search covered carriers, credentials, authorization values, commitment preimages,
+prompt/request values, private host paths/selectors, dry-run/live output, failure rendering,
+xtrace, and installer/uninstaller compatibility. `run_with_sudo` has no named bare-tool allowlist;
+the static current callers above are the closed set. GitNexus could not resolve these shell
+symbols, so the exact manual call-site inventory controls. R1 may not expand beyond the one named
+production helper/caller and one focused test without new evidence and docs-first authorization.
+Every helper structural rejection has one exact argument-independent result: stderr
+`[install-substrate][ERROR] invalid authenticated bootstrap carrier arguments\n` and status `2`;
+valid child status propagation and exact post-call xtrace restoration remain unchanged.
+
+### P1 failed-harness evidence
+
+The prompt-local harness:
+
+1. used `subprocess.run` and waited only for Cargo;
+2. recorded `process_and_children_exited=true` without a descendant-authority observation;
+3. could not prove reparented or process-group-changing descendants were gone;
+4. closed root/child validation descriptors before cleanup;
+5. called pathname `shutil.rmtree` after losing continuous identity;
+6. checked pathname absence only after that unauthoritative deletion.
+
+The shell wrapper's PID namespace eventually bounded teardown, but it did not connect namespace
+emptiness to the Python worker's wall-eligibility decision. Matching output cannot repair those
+facts.
+
+### P1 source-closure and decision record
+
+Searches covered installer and test harnesses, checkpoint helpers, Rust test utilities, Python and
+shell helpers, production trusted-root utilities, process groups, cgroups, namespaces, subreapers,
+log/hash preservation, and deletion. No tracked helper met the combined contract. Reusing
+production trusted-root, cgroup, service, or provisioning code would exceed the test-only
+allowlist. The selected minimum is the two-file Linux standard-library runner in
+`04-contracts-and-gates.md`.
+
+The proof basis is:
+
+- exact installed Bubblewrap plus the pinned root-owned OS/Python startup closure are the explicit
+  immutable platform TCB; exact direct Python/V2 plus authenticated in-memory `host_main` is the
+  concrete host controller; the exact reviewed P1 commit binds bootstrap and three argv-template
+  trailers to independently verified runner-blob constants, while each runtime instantiation
+  records separate actual argv hashes, with no mutable external authority artifact; a
+  clean nested unprivileged probe supplies namespace authority, and Python does not claim to
+  preauthenticate already-executed startup bytes;
+- reviewed V2 bootstrap bytes execute retained Git by FD, independently verify the
+  expected-commit/tree/blob chain, authenticate runner/test blobs for in-memory execution, and
+  supply Stage-A/Stage-B runner bytes only by sealed memfd plus `--ro-bind-data`;
+- Stage A constructs private checksum-authenticated repository/rustup/Cargo immutable seeds and a
+  separate writable Cargo runtime; nested Stage B read-only projects repository/rustup and
+  writable-projects only the private Cargo runtime at canonical paths, so verified
+  `cargo -> rustup` plus repository `rust-toolchain.toml` still selects Rust 1.89 while preserving
+  exact Cargo argv/CWD/E0 except TMPDIR/XDG. The seed omits Cargo metadata; only exact regular
+  `.package-cache`, `.package-cache-mutate`, and `.global-cache` may be created or changed;
+  host modify/replace/restore races
+  cannot become Cargo input;
+- exact nested Bubblewrap bounds every wall process in a private PID namespace; the
+  detached-descendant probe proved default Bubblewrap parent wait/PID 1 is fail-safe teardown
+  only, so Stage B uses `--as-pid-1` and the authenticated worker itself is both the
+  status-reported application and namespace adoption root;
+- the Stage B worker connects to a fixed private `SOCK_SEQPACKET` path and is accepted only when
+  `SO_PEERCRED` matches Bubblewrap's retained child pidfd; both endpoints are close-on-exec, the
+  pathname is absent before START, Cargo retains original stdin, one exact Stage-A-owned combined
+  stdout/stderr pipe, and no control/evidence FD; Stage A drains that pipe with bounded
+  backpressure through EOF after Stage-B reap and preserves exact eligible bytes/hash; the worker
+  becomes the verified pre-Cargo child subreaper that receives reparented descendants;
+- worker reap-to-`ECHILD`, its authenticated completion record, and clean retained Bubblewrap
+  status together prove containment emptiness;
+- timeout/survivor is ineligible before scoped teardown;
+- open no-follow parent/root/child descriptors retain identity through final validation,
+  descriptor-relative unlink, and pathname-absence proof; Stage A removes all private entries but
+  never claims its own enclosing mount is gone;
+- authenticated host `host_main` retains separate backing/evidence authority, proves Stage-A
+  process/namespace teardown, removes and proves absence of the exact underlying mountpoint, and
+  alone finalizes eligibility;
+- evidence is preserved outside `R`, and unrelated sentinels survive.
+
+The future runner's own self-tests precede every product wall. Only after those tests and fresh
+P1 review are CLEAN may a new three-parallel/one-serial baseline be established.
+
+### Planning disposition
+
+This packet authorizes but does not implement R1 or P1. It does not resume closeout. After three
+fresh planning-document reviewers are CLEAN, the exact six reviewed files may be committed and
+only the dedicated planning preservation ref may be published; the source remote must remain at
+`2f6f1f69b3519dafff01ef543e7d260da2c37700`.
+
+The frozen continuation is:
+
+```text
+reviewed six-file remediation-planning commit
+  -> R1 implementation + focused security review
+  -> P1 runner implementation + adversarial self-review
+  -> fresh canonical baseline through P1
+  -> renewed production-fix-free integration closeout
+  -> final six-file closeout docs
+  -> one ordinary fast-forward source publication
+  -> A1.1d-5R2-3
+```
+
+R2-2 remains incomplete. The exact next node is **A1.1d-5R2-2-R1 — Release dry-run
+authenticated-carrier non-disclosure implementation**.
