@@ -6,7 +6,7 @@ use serde_json::Value;
 
 use crate::checkpoint::EvidenceRef;
 use crate::context::{evidence_from_row, focusable_directive_rows};
-use crate::input::extract_path_hints;
+use crate::input::{extract_path_hints, normalize_repo_path, text_contains_control_directive};
 
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]
 pub struct CandidateTruthArtifact {
@@ -47,24 +47,34 @@ pub fn collect_truth_artifacts(
     let mut artifacts = BTreeMap::<String, CandidateTruthArtifact>::new();
 
     for row in focusable_directive_rows(rows) {
-        for path in extract_path_hints(&row.text) {
-            let source = if objective.text.contains(&path) {
-                "objective_literal"
-            } else {
-                "directive_literal"
-            };
-            artifacts
-                .entry(path.clone())
-                .or_insert_with(|| CandidateTruthArtifact {
-                    path: path.clone(),
-                    source: source.to_string(),
-                    evidence: Vec::new(),
-                })
-                .evidence
-                .push(evidence_from_row(
+        for line in row.text.lines() {
+            let is_control = text_contains_control_directive(line);
+            for path in directive_path_hints(line, is_control) {
+                let source = if is_control {
+                    "control_directive_literal"
+                } else if objective.text.contains(&path) {
+                    "objective_literal"
+                } else {
+                    "directive_literal"
+                };
+                let artifact =
+                    artifacts
+                        .entry(path.clone())
+                        .or_insert_with(|| CandidateTruthArtifact {
+                            path: path.clone(),
+                            source: source.to_string(),
+                            evidence: Vec::new(),
+                        });
+                if artifact.source == "control_directive_literal"
+                    && source != "control_directive_literal"
+                {
+                    artifact.source = source.to_string();
+                }
+                artifact.evidence.push(evidence_from_row(
                     row,
                     format!("truth artifact hint: {path}"),
                 ));
+            }
         }
     }
 
@@ -90,7 +100,8 @@ pub fn collect_working_set_paths(
     }
 
     for row in focusable_directive_rows(rows) {
-        for path in extract_path_hints(&row.text) {
+        let is_control = text_contains_control_directive(&row.text);
+        for path in directive_path_hints(&row.text, is_control) {
             paths
                 .entry(path.clone())
                 .or_insert_with(|| WorkingSetPath {
@@ -118,6 +129,32 @@ pub fn collect_working_set_paths(
     }
 
     paths.into_values().collect()
+}
+
+fn directive_path_hints(text: &str, allow_absolute: bool) -> Vec<String> {
+    let mut paths = extract_path_hints(text)
+        .into_iter()
+        .filter(|path| {
+            allow_absolute || (!path.starts_with('/') && !looks_like_windows_absolute(path))
+        })
+        .collect::<BTreeSet<_>>();
+    for token in text.split_whitespace() {
+        if let Some(path) = token.strip_prefix("--path=") {
+            paths.insert(
+                path.trim_matches(|ch: char| matches!(ch, '"' | '\'' | '`'))
+                    .to_string(),
+            );
+        }
+    }
+    paths.into_iter().collect()
+}
+
+fn looks_like_windows_absolute(path: &str) -> bool {
+    let bytes = path.as_bytes();
+    bytes.len() >= 3
+        && bytes[0].is_ascii_alphabetic()
+        && bytes[1] == b':'
+        && matches!(bytes[2], b'/' | b'\\')
 }
 
 pub fn collect_tools(commands: &[CommandObservation]) -> Vec<ToolObservation> {
@@ -152,8 +189,17 @@ pub fn collect_command_observations(rows: &[CompactionRow]) -> Vec<CommandObserv
             })
             .unwrap_or(row.text.as_str())
             .to_string();
-        let family = command_family(&raw_command).unwrap_or_else(|| tool_name.clone());
-        let mut paths = extract_path_hints(&raw_command);
+        let typed_filesystem = typed_filesystem_tool(&tool_name);
+        let family = if typed_filesystem {
+            typed_filesystem_family(&tool_name).to_string()
+        } else {
+            command_family(&raw_command).unwrap_or_else(|| tool_name.clone())
+        };
+        let mut paths = if typed_filesystem {
+            typed_filesystem_paths(payload.as_ref())
+        } else {
+            extract_path_hints(&raw_command)
+        };
         if tool_name.contains("apply_patch") {
             paths.extend(extract_apply_patch_paths(&row.text));
         }
@@ -172,6 +218,62 @@ pub fn collect_command_observations(rows: &[CompactionRow]) -> Vec<CommandObserv
         });
     }
     commands
+}
+
+fn typed_filesystem_tool(tool_name: &str) -> bool {
+    matches!(
+        typed_filesystem_family(tool_name),
+        "read_file" | "write_file" | "edit_file" | "replace_file" | "create_file" | "delete_file"
+    )
+}
+
+fn typed_filesystem_family(tool_name: &str) -> &str {
+    tool_name
+        .rsplit(['.', ':'])
+        .find(|part| !part.is_empty())
+        .unwrap_or(tool_name)
+}
+
+fn typed_filesystem_paths(payload: Option<&Value>) -> Vec<String> {
+    let Some(payload) = payload else {
+        return Vec::new();
+    };
+    let workdir = payload
+        .get("workdir")
+        .or_else(|| payload.get("cwd"))
+        .and_then(Value::as_str);
+    let mut paths = BTreeSet::new();
+    for field in [
+        "path",
+        "paths",
+        "file",
+        "files",
+        "file_path",
+        "source_path",
+        "destination_path",
+        "target_path",
+        "directory",
+        "directories",
+    ] {
+        let Some(value) = payload.get(field) else {
+            continue;
+        };
+        let values = match value {
+            Value::String(path) => Some(vec![path.as_str()]),
+            Value::Array(values) => values.iter().map(Value::as_str).collect::<Option<Vec<_>>>(),
+            _ => None,
+        };
+        let Some(values) = values else {
+            return Vec::new();
+        };
+        for path in values {
+            let Some(path) = normalize_repo_path(path, workdir) else {
+                return Vec::new();
+            };
+            paths.insert(path);
+        }
+    }
+    paths.into_iter().collect()
 }
 
 fn tool_name(row: &CompactionRow) -> String {
@@ -214,12 +316,24 @@ fn extract_apply_patch_paths(text: &str) -> Vec<String> {
 fn is_read_like(family: &str) -> bool {
     matches!(
         family,
-        "cat" | "sed" | "rg" | "ls" | "find" | "head" | "tail" | "jq" | "git"
+        "cat" | "sed" | "rg" | "ls" | "find" | "head" | "tail" | "jq" | "git" | "read_file"
     )
 }
 
 fn is_write_like(family: &str) -> bool {
-    matches!(family, "apply_patch" | "mkdir" | "mv" | "cp" | "cargo")
+    matches!(
+        family,
+        "apply_patch"
+            | "mkdir"
+            | "mv"
+            | "cp"
+            | "cargo"
+            | "write_file"
+            | "edit_file"
+            | "replace_file"
+            | "create_file"
+            | "delete_file"
+    )
 }
 
 fn is_verification_like(family: &str) -> bool {

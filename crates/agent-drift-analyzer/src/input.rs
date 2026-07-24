@@ -647,6 +647,25 @@ pub(crate) fn extract_path_hints(text: &str) -> Vec<String> {
     paths.into_iter().collect()
 }
 
+pub(crate) fn text_contains_control_directive(text: &str) -> bool {
+    text.split_whitespace().any(|token| {
+        let token = token.trim_matches(|ch: char| {
+            matches!(ch, '"' | '\'' | '`' | '(' | ')' | '[' | ']' | '{' | '}')
+        });
+        let token = token
+            .split_once('=')
+            .map_or(token, |(directive, _)| directive)
+            .trim_end_matches([':', ',', ';']);
+        token.strip_prefix('/').is_some_and(|name| {
+            !name.is_empty()
+                && !name.contains(['/', '\\'])
+                && name
+                    .chars()
+                    .all(|ch| ch.is_ascii_alphanumeric() || matches!(ch, '-' | '_'))
+        })
+    })
+}
+
 fn looks_like_path(token: &str) -> bool {
     if token.is_empty() || token.starts_with("http://") || token.starts_with("https://") {
         return false;
@@ -658,6 +677,148 @@ fn looks_like_path(token: &str) -> bool {
     .iter()
     .any(|suffix| token.ends_with(suffix));
     has_separator || has_extension
+}
+
+/// Lexically normalizes a validated filesystem path to a repository-relative form.
+/// Absolute paths are accepted only when an explicit repository workdir contains them.
+pub(crate) fn normalize_repo_path(path: &str, workdir: Option<&str>) -> Option<String> {
+    let path = strip_path_location_suffix(path);
+    let ParsedPath { root, components } = parse_lexical_path(path)?;
+    let components = match root {
+        None => components,
+        Some(root) => {
+            let workdir = parse_lexical_path(workdir?)?;
+            if workdir.root.as_ref() != Some(&root)
+                || !components_start_with(&components, &workdir.components)
+            {
+                return None;
+            }
+            components[workdir.components.len()..].to_vec()
+        }
+    };
+    Some(render_repo_path(&components))
+}
+
+pub(crate) fn paths_equal(left: &str, right: &str) -> bool {
+    matches!(
+        (normalize_repo_path(left, None), normalize_repo_path(right, None)),
+        (Some(left), Some(right)) if left == right
+    )
+}
+
+/// Returns whether `path` is exactly `scope` or is beneath it on a component boundary.
+pub(crate) fn path_is_equal_or_descendant(path: &str, scope: &str) -> bool {
+    let Some(path) = normalize_repo_path(path, None) else {
+        return false;
+    };
+    let Some(scope) = normalize_repo_path(scope, None) else {
+        return false;
+    };
+    components_start_with(&path_components(&path), &path_components(&scope))
+}
+
+pub(crate) fn paths_overlap(left: &str, right: &str) -> bool {
+    path_is_equal_or_descendant(left, right) || path_is_equal_or_descendant(right, left)
+}
+
+#[derive(Debug, Clone, PartialEq, Eq)]
+struct ParsedPath {
+    root: Option<PathRoot>,
+    components: Vec<String>,
+}
+
+#[derive(Debug, Clone, PartialEq, Eq)]
+enum PathRoot {
+    Posix,
+    Drive(char),
+}
+
+fn parse_lexical_path(raw: &str) -> Option<ParsedPath> {
+    let raw = raw.trim();
+    if raw.is_empty()
+        || raw.contains(['\0', '\n', '\r'])
+        || raw.contains("://")
+        || raw.starts_with('~')
+        || raw.starts_with('$')
+        || raw.starts_with('%')
+    {
+        return None;
+    }
+
+    let normalized = raw.replace('\\', "/");
+    if normalized.starts_with("//") {
+        return None;
+    }
+    let (root, remainder) = if normalized.as_bytes().get(1) == Some(&b':') {
+        let drive = normalized.chars().next()?.to_ascii_lowercase();
+        if !drive.is_ascii_alphabetic() || normalized.as_bytes().get(2) != Some(&b'/') {
+            return None;
+        }
+        (Some(PathRoot::Drive(drive)), &normalized[3..])
+    } else if let Some(remainder) = normalized.strip_prefix('/') {
+        (Some(PathRoot::Posix), remainder)
+    } else {
+        (None, normalized.as_str())
+    };
+
+    let mut components = Vec::new();
+    for component in remainder.split('/') {
+        match component {
+            "" | "." => {}
+            ".." => {
+                components.pop()?;
+            }
+            _ if component.chars().any(|ch| {
+                ch.is_control() || matches!(ch, ':' | '*' | '?' | '|' | '<' | '>' | '"')
+            }) =>
+            {
+                return None
+            }
+            _ => components.push(component.to_string()),
+        }
+    }
+    Some(ParsedPath { root, components })
+}
+
+fn strip_path_location_suffix(path: &str) -> &str {
+    let mut end = path.len();
+    for _ in 0..2 {
+        let candidate = &path[..end];
+        let Some((base, suffix)) = candidate.rsplit_once(':') else {
+            break;
+        };
+        if base.is_empty() || !is_location_component(suffix) {
+            break;
+        }
+        end = base.len();
+    }
+    &path[..end]
+}
+
+fn is_location_component(component: &str) -> bool {
+    !component.is_empty()
+        && (component.chars().all(|ch| ch.is_ascii_digit())
+            || matches!(component, "<line>" | "<col>"))
+}
+
+fn components_start_with(path: &[String], scope: &[String]) -> bool {
+    scope.len() <= path.len() && scope.iter().zip(path).all(|(scope, path)| scope == path)
+}
+
+fn render_repo_path(components: &[String]) -> String {
+    if components.is_empty() {
+        ".".to_string()
+    } else {
+        components.join("/")
+    }
+}
+
+fn path_components(path: &str) -> Vec<String> {
+    if path == "." {
+        Vec::new()
+    } else {
+        path.split('/').map(ToOwned::to_owned).collect()
+    }
 }
 
 fn row_ref_key(row: RowRef) -> (Utf8PathBuf, usize, usize) {

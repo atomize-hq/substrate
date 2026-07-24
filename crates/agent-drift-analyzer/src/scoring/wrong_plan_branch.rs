@@ -1,17 +1,15 @@
 use crate::checkpoint::{CheckpointAnalysis, Confidence, DriftClass, DriftScore, DriftState};
+use crate::input::path_is_equal_or_descendant;
 use crate::scoring::{DriftStateHint, ScoredDrift};
 
 pub(crate) fn score_wrong_plan_branch(analysis: &CheckpointAnalysis) -> ScoredDrift {
     let context = &analysis.current.context;
-    let task_frame = &analysis.current.task_frame;
-    let mut expected = task_frame.truth_artifacts.clone();
-    expected.extend(
-        context
-            .working_set_paths
-            .iter()
-            .filter(|path| path.source != "observed_command")
-            .map(|path| path.path.clone()),
-    );
+    let mut expected = context
+        .truth_artifacts
+        .iter()
+        .filter(|artifact| artifact.source != "control_directive_literal")
+        .map(|artifact| artifact.path.clone())
+        .collect::<Vec<_>>();
     expected.sort();
     expected.dedup();
     let mut out_of_scope = Vec::new();
@@ -23,11 +21,9 @@ pub(crate) fn score_wrong_plan_branch(analysis: &CheckpointAnalysis) -> ScoredDr
             continue;
         }
         let matches_scope = command.paths.iter().all(|path| {
-            expected.iter().any(|expected_path| {
-                path == expected_path
-                    || path.starts_with(expected_path)
-                    || expected_path.starts_with(path)
-            })
+            expected
+                .iter()
+                .any(|expected_path| path_is_equal_or_descendant(path, expected_path))
         });
         if !matches_scope {
             out_of_scope.extend(command.evidence.clone());

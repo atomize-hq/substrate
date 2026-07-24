@@ -33,7 +33,12 @@ fn wrong_plan_branch_ignores_read_only_out_of_scope_exploration() {
             CompactionKind::UserMessage,
             "/goal Update crates/agent-drift-analyzer/src/lib.rs using docs/specs/agent-drift-analyzer-v0.4-spec.md.",
         ),
-        tool_row(1, "sed -n '1,120p' docs/specs/unrelated-plan.md"),
+        row(
+            1,
+            CompactionKind::SystemMessage,
+            "Authorized scope: crates/agent-drift-analyzer/src/lib.rs and docs/specs/agent-drift-analyzer-v0.4-spec.md.",
+        ),
+        tool_row(2, "sed -n '1,120p' docs/specs/unrelated-plan.md"),
     ];
     let fixture = BundleFixture::from_rows(rows.clone(), rows, Vec::new());
 
@@ -155,7 +160,7 @@ fn wrong_plan_branch_keeps_opaque_parent_orchestration_clear_without_child_actio
         row(
             2,
             CompactionKind::SystemMessage,
-            "Child session id 019ea333-3333-7333-8333-333333333333 remains in a separate rollout file.",
+            "Authorized parent scope remains docs/specs/agent-drift-analyzer-v0.4-spec.md and crates/agent-drift-analyzer/src/lib.rs. Child session id 019ea333-3333-7333-8333-333333333333 remains in a separate rollout file.",
         ),
         wait,
     ];
@@ -251,6 +256,174 @@ fn wrong_plan_branch_makes_no_claim_for_path_action_without_authority() {
 }
 
 #[test]
+fn wrong_plan_branch_control_syntax_never_establishes_path_authority() {
+    let cases = [
+        ("/goal Update src/foo and keep changes there.", true),
+        ("/goal Update /repo/src/foo and keep changes there.", true),
+        ("/review --path src/foo", true),
+        ("/review --path=src/foo", true),
+        (
+            "Continue the task; the ambiguous token /src/foo is not a typed path.",
+            false,
+        ),
+    ];
+
+    for (directive, expected_control_hint) in cases {
+        let result = analyze_rows(vec![
+            row(0, CompactionKind::UserMessage, directive),
+            typed_tool_row(
+                1,
+                "functions.write_file",
+                r#"{"path":"src/foobar.rs","workdir":"/repo"}"#,
+            ),
+        ]);
+        if expected_control_hint {
+            assert!(result.sessions[0]
+                .context
+                .truth_artifacts
+                .iter()
+                .all(|artifact| artifact.source == "control_directive_literal"));
+        } else {
+            assert!(result.sessions[0].context.truth_artifacts.is_empty());
+        }
+
+        let score = final_wrong_plan_score(&result);
+        assert_eq!(
+            (
+                score.raw_score,
+                score.confidence,
+                score.state,
+                score.flagged,
+            ),
+            (0, Confidence::Low, DriftState::Cleared, false),
+            "{directive}",
+        );
+    }
+}
+
+#[test]
+fn wrong_plan_branch_normalizes_typed_paths_and_rejects_unsafe_paths() {
+    let cases = [
+        (
+            "typed-relative",
+            "src/foo/./bar.rs",
+            "/repo",
+            vec!["src/foo/bar.rs".to_string()],
+        ),
+        (
+            "typed-absolute",
+            "/repo/src/foo/bar.rs",
+            "/repo",
+            vec!["src/foo/bar.rs".to_string()],
+        ),
+        (
+            "typed-parent-component",
+            "src/foo/tmp/../bar.rs",
+            "/repo",
+            vec!["src/foo/bar.rs".to_string()],
+        ),
+        (
+            "typed-windows-absolute",
+            r"C:\repo\src\foo\bar.rs",
+            r"C:\repo",
+            vec!["src/foo/bar.rs".to_string()],
+        ),
+        ("typed-external", "/tmp/src/foo/bar.rs", "/repo", Vec::new()),
+        (
+            "typed-windows-external",
+            r"D:\repo\src\foo\bar.rs",
+            r"C:\repo",
+            Vec::new(),
+        ),
+        (
+            "typed-traversal",
+            "../../src/foo/bar.rs",
+            "/repo",
+            Vec::new(),
+        ),
+    ];
+
+    for (case, path, workdir, expected_paths) in cases {
+        let payload = format!(r#"{{"path":{path:?},"workdir":{workdir:?}}}"#);
+        let result = analyze_rows(vec![
+            row(
+                0,
+                CompactionKind::UserMessage,
+                "Implement the requested change.",
+            ),
+            row(
+                1,
+                CompactionKind::SystemMessage,
+                "Authorized filesystem scope: src/foo.",
+            ),
+            typed_tool_row(2, "functions.write_file", &payload),
+        ]);
+        assert_eq!(
+            result.sessions[0].context.command_observations[0].paths, expected_paths,
+            "{case}",
+        );
+        let score = final_wrong_plan_score(&result);
+        assert_eq!(score.raw_score, 0, "{case}");
+        assert!(!score.flagged, "{case}");
+    }
+}
+
+#[test]
+fn wrong_plan_branch_uses_component_aware_scope_containment() {
+    let cases = [
+        ("exact", "src/foo", false),
+        ("descendant", "src/foo/bar.rs", false),
+        ("dot-and-repeated-separators", "src/./foo//bar.rs", false),
+        ("portable-separators", r"src\foo\bar.rs", false),
+        ("lexical-prefix-collision", "src/foobar.rs", true),
+        ("sibling", "src/bar.rs", true),
+    ];
+
+    for (case, path, flagged) in cases {
+        let payload = format!(r#"{{"path":{path:?},"workdir":"/repo"}}"#);
+        let result = analyze_rows(vec![
+            row(
+                0,
+                CompactionKind::UserMessage,
+                "Implement the requested change.",
+            ),
+            row(
+                1,
+                CompactionKind::SystemMessage,
+                "Authorized filesystem scope: src/foo.",
+            ),
+            typed_tool_row(2, "functions.write_file", &payload),
+        ]);
+        let score = final_wrong_plan_score(&result);
+        assert_eq!(score.flagged, flagged, "{case}");
+        assert_eq!(score.raw_score, if flagged { 60 } else { 0 }, "{case}");
+    }
+
+    let root = analyze_rows(vec![
+        row(
+            0,
+            CompactionKind::UserMessage,
+            "Implement the requested change.",
+        ),
+        row(
+            1,
+            CompactionKind::SystemMessage,
+            "Authorized filesystem scope: ./.",
+        ),
+        typed_tool_row(
+            2,
+            "functions.write_file",
+            r#"{"path":"src/anything.rs","workdir":"/repo"}"#,
+        ),
+    ]);
+    assert_eq!(
+        root.sessions[0].context.command_observations[0].paths,
+        vec!["src/anything.rs".to_string()]
+    );
+    assert!(!final_wrong_plan_score(&root).flagged);
+}
+
+#[test]
 fn wrong_plan_branch_clears_after_a_later_interval_returns_in_scope() {
     let rows = vec![
         row(
@@ -265,7 +438,7 @@ fn wrong_plan_branch_clears_after_a_later_interval_returns_in_scope() {
         ),
         tool_row(
             2,
-            "apply_patch <<'PATCH'\n*** Begin Patch\n*** Add File: /tmp/offscope-notes.md\n+rogue\n*** End Patch\nPATCH",
+            "apply_patch <<'PATCH'\n*** Begin Patch\n*** Add File: crates/agent-drift-sentinel/src/offscope_notes.rs\n+rogue\n*** End Patch\nPATCH",
         ),
         row(
             3,
@@ -335,6 +508,36 @@ fn row(event_index: usize, kind: CompactionKind, text: &str) -> CompactionRow {
         canonical_text: text.to_string(),
         text_hash_hex: format!("hash-{event_index}"),
     }
+}
+
+fn analyze_rows(rows: Vec<CompactionRow>) -> agent_drift_analyzer::AnalyzeResult {
+    let fixture = BundleFixture::from_rows(rows.clone(), rows, Vec::new());
+    agent_drift_analyzer::analyze_bundle(&AnalyzeRequest {
+        input_dir: fixture.input_dir.clone(),
+        output_dir: fixture.output_dir.clone(),
+    })
+    .expect("analyze path-semantics bundle")
+}
+
+fn final_wrong_plan_score(
+    result: &agent_drift_analyzer::AnalyzeResult,
+) -> &agent_drift_analyzer::DriftScore {
+    result.sessions[0]
+        .checkpoints
+        .last()
+        .expect("path-semantics checkpoint")
+        .drift_scores
+        .iter()
+        .find(|score| score.class == DriftClass::WrongPlanBranch)
+        .expect("wrong plan branch score")
+}
+
+fn typed_tool_row(event_index: usize, tool_name: &str, payload: &str) -> CompactionRow {
+    let mut row = row(event_index, CompactionKind::ToolCall, payload);
+    row.dedupe_identity = Some(format!(
+        r#"{{"call_id":"call-{event_index}","name":{tool_name:?},"type":"function_call"}}"#,
+    ));
+    row
 }
 
 fn tool_row(event_index: usize, command: &str) -> CompactionRow {

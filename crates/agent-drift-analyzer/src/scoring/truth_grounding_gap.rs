@@ -1,11 +1,10 @@
 use std::collections::BTreeSet;
-use std::path::Path;
 
 use crate::checkpoint::{
     CheckpointAnalysis, Confidence, DriftClass, DriftScore, DriftState, EvidenceRef,
 };
 use crate::context::CommandObservation;
-use crate::input::extract_path_hints;
+use crate::input::{extract_path_hints, paths_equal, paths_overlap};
 use crate::scoring::{DriftStateHint, ScoredDrift};
 
 const HISTORICAL_TRUTH_GROUNDING_GAP_REASON_PREFIX: &str = "historical truth-grounding gap:";
@@ -113,7 +112,7 @@ fn declared_truth_paths(analysis: &CheckpointAnalysis) -> BTreeSet<String> {
         .filter(|path| {
             extracted_paths
                 .iter()
-                .any(|extracted| Path::new(extracted) == Path::new(path))
+                .any(|extracted| paths_equal(extracted, path))
         })
         .cloned()
         .collect::<BTreeSet<_>>();
@@ -140,9 +139,7 @@ fn matching_truth_paths<'a>(
 }
 
 fn paths_share_identity(left: &str, right: &str) -> bool {
-    let left = Path::new(left);
-    let right = Path::new(right);
-    left == right || left.starts_with(right) || right.starts_with(left)
+    paths_overlap(left, right)
 }
 
 fn historical_truth_grounding_gap_evidence(previous: &DriftScore) -> Vec<EvidenceRef> {
