@@ -3111,6 +3111,30 @@ mod tests {
                 middle_segment: None,
                 second_prefix: "\n",
             },
+            SeamCase {
+                name: "incoming-leading-whitespace-lf",
+                first_suffix: "",
+                middle_segment: None,
+                second_prefix: " \n",
+            },
+            SeamCase {
+                name: "incoming-leading-whitespace-crlf",
+                first_suffix: "",
+                middle_segment: None,
+                second_prefix: " \r\n",
+            },
+            SeamCase {
+                name: "incoming-leading-whitespace-split-crlf",
+                first_suffix: "",
+                middle_segment: Some(" \r"),
+                second_prefix: "\n",
+            },
+            SeamCase {
+                name: "empty-segment-before-incoming-leading-whitespace-lf",
+                first_suffix: "",
+                middle_segment: Some(""),
+                second_prefix: " \n",
+            },
         ];
 
         for runner in runners {
