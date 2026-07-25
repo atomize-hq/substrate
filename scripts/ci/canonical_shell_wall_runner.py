@@ -14434,7 +14434,7 @@ def run_authenticated_self_tests(
             authenticated_self_test=True,
         )
         expected_ids = tuple(test_module.SELF_TEST_IDS)
-        if len(expected_ids) != 95 or len(set(expected_ids)) != 95:
+        if len(expected_ids) != 99 or len(set(expected_ids)) != 99:
             raise RunnerError(65, "invocation_authority_invalid")
         suite_class = test_module.CanonicalShellWallRunnerTests
         discovered = {

@@ -50,6 +50,7 @@ SELF_TEST_IDS = (
     "test_process_group_escape_remains_contained",
     "test_timeout_is_ineligible",
     "test_snapshot_timeout_is_ineligible",
+    "test_copy_tree_no_follow_preserves_modes_despite_umask",
     "test_rejects_root_path_replacement",
     "test_rejects_root_symlink_substitution",
     "test_rejects_child_entry_replacement",
@@ -71,6 +72,7 @@ SELF_TEST_IDS = (
     "test_stage_b_setup_timeout_signals_only_retained_bwrap_pidfd",
     "test_stage_b_timeout_before_status_starts_no_cargo_and_reaps_exact_bwrap",
     "test_stage_b_bwrap_death_before_worker_ready_is_ineligible",
+    "test_stage_a_maps_vanished_post_status_worker_to_premature_exit",
     "test_stage_a_parent_loss_before_stage_b_start_starts_no_wall",
     "test_stage_b_bwrap_loss_after_ready_before_start_is_ineligible",
     "test_stage_a_start_requires_bwrap_status_worker_pidfd_peer_credentials_and_ready",
@@ -133,6 +135,7 @@ SELF_TEST_IDS = (
     "test_summarizer_rejects_integer_duplicate_missing_and_panic_grammar",
     "test_summarizer_rejects_invalid_encoding_nul_and_overflow",
     "test_mount_source_flags_ids_propagation_and_order_are_exact",
+    "test_projected_root_ids_include_mapped_stage_identity",
     "test_cache_and_proc_mounts_unmount_before_tmpfs",
     "test_backing_mountpoint_removed_and_evidence_parent_preserved",
     "test_parallel_command_and_fresh_root",
@@ -146,17 +149,17 @@ SELF_TEST_IDS = (
 
 def _category(index: int) -> str:
     boundaries = (
-        (5, "lifecycle"),
-        (19, "root-authority"),
-        (38, "containment"),
-        (44, "cli-diagnostics"),
-        (53, "repository"),
-        (64, "invocation-tcb"),
-        (75, "snapshots-environment"),
-        (80, "evidence"),
-        (87, "summarizer"),
-        (90, "mount-lifecycle"),
-        (96, "success-output-cleanup"),
+        (6, "lifecycle"),
+        (20, "root-authority"),
+        (40, "containment"),
+        (46, "cli-diagnostics"),
+        (55, "repository"),
+        (66, "invocation-tcb"),
+        (77, "snapshots-environment"),
+        (82, "evidence"),
+        (89, "summarizer"),
+        (93, "mount-lifecycle"),
+        (99, "success-output-cleanup"),
     )
     for limit, category in boundaries:
         if index < limit:
@@ -7778,8 +7781,8 @@ class CanonicalShellWallRunnerTests(unittest.TestCase):
     def test_host_controller_bootstrap_commit_templates_and_slots_avoid_self_reference(
         self,
     ) -> None:
-        self.assertEqual(len(SELF_TEST_INVENTORY), 95)
-        self.assertEqual(len({row["id"] for row in SELF_TEST_INVENTORY}), 95)
+        self.assertEqual(len(SELF_TEST_INVENTORY), 99)
+        self.assertEqual(len({row["id"] for row in SELF_TEST_INVENTORY}), 99)
         self.assertEqual(
             tuple(row["id"] for row in SELF_TEST_INVENTORY),
             SELF_TEST_IDS,
@@ -7797,16 +7800,16 @@ class CanonicalShellWallRunnerTests(unittest.TestCase):
         self.assertEqual(
             category_counts,
             {
-                "lifecycle": 5,
+                "lifecycle": 6,
                 "root-authority": 14,
-                "containment": 19,
+                "containment": 20,
                 "cli-diagnostics": 6,
                 "repository": 9,
                 "invocation-tcb": 11,
                 "snapshots-environment": 10,
                 "evidence": 5,
                 "summarizer": 7,
-                "mount-lifecycle": 3,
+                "mount-lifecycle": 4,
                 "success-output-cleanup": 6,
             },
         )
