@@ -1516,7 +1516,7 @@ class CanonicalShellWallRunnerTests(unittest.TestCase):
         )
         self.assertLess(
             stage_a_source.index(
-                'namespace_identities = {',
+                "_capture_stage_b_worker_identity(first_status)",
                 stage_a_source.index("first_status ="),
             ),
             stage_a_source.index("endpoint = accept_authenticated_worker("),
@@ -2894,6 +2894,16 @@ class CanonicalShellWallRunnerTests(unittest.TestCase):
             identity=(0, 0, 0, 0),
             sha256="",
         )
+        launch_user_namespaces = runner.PreparedAclUserNamespaces(
+            stage_a_fd=os.open(
+                "/proc/self/ns/user",
+                os.O_RDONLY | os.O_CLOEXEC,
+            ),
+            stage_b_fd=os.open(
+                "/proc/self/ns/user",
+                os.O_RDONLY | os.O_CLOEXEC,
+            ),
+        )
         original_spawn_held = runner._spawn_held
 
         def fail_spawn_held(*_args: object, **_kwargs: object) -> object:
@@ -2906,6 +2916,7 @@ class CanonicalShellWallRunnerTests(unittest.TestCase):
             with self.assertRaises(runner.RunnerError) as stage_a_failure:
                 runner.launch_stage_a_bwrap(
                     bwrap=launch_bwrap,
+                    user_namespaces=launch_user_namespaces,
                     source=_module_source(runner),
                     authority={
                         "partial_path": "/tmp/evidence.partial",
@@ -2935,6 +2946,7 @@ class CanonicalShellWallRunnerTests(unittest.TestCase):
                 with self.assertRaises(runner.RunnerError) as stage_b_failure:
                     runner.launch_stage_b_bwrap(
                         bwrap=launch_bwrap,
+                        userns_fd=launch_user_namespaces.stage_b_fd,
                         source=_module_source(runner),
                         root="/tmp/root",
                         repository_snapshot="/tmp/repository",
@@ -2962,6 +2974,9 @@ class CanonicalShellWallRunnerTests(unittest.TestCase):
                 os.close(launch_output_write)
         finally:
             runner._spawn_held = original_spawn_held
+            runner.close_prepared_acl_user_namespaces(
+                launch_user_namespaces
+            )
             os.close(launch_bwrap_fd)
         acquired_python = runner.resolve_validated_executable(
             "/usr/bin/python3.13",
@@ -2969,6 +2984,16 @@ class CanonicalShellWallRunnerTests(unittest.TestCase):
                 "/usr/bin/python3.13"
             ]["sha256"],
             expected_uid=0,
+        )
+        acquired_user_namespaces = runner.PreparedAclUserNamespaces(
+            stage_a_fd=os.open(
+                "/proc/self/ns/user",
+                os.O_RDONLY | os.O_CLOEXEC,
+            ),
+            stage_b_fd=os.open(
+                "/proc/self/ns/user",
+                os.O_RDONLY | os.O_CLOEXEC,
+            ),
         )
         original_close = runner.os.close
         close_injection: dict[str, object] = {
@@ -2986,7 +3011,7 @@ class CanonicalShellWallRunnerTests(unittest.TestCase):
             stderr_fd: int | None = None,
         ) -> runner.SpawnedProcess:
             preserved = tuple(preserve_fds)
-            close_injection["fd"] = preserved[-1]
+            close_injection["fd"] = preserved[1]
             return original_spawn_held(
                 acquired_python.fd,
                 (
@@ -3023,6 +3048,7 @@ class CanonicalShellWallRunnerTests(unittest.TestCase):
                         identity=(0, 0, 0, 0),
                         sha256="",
                     ),
+                    user_namespaces=acquired_user_namespaces,
                     source=_module_source(runner),
                     authority={
                         "partial_path": "/tmp/evidence.partial",
@@ -3057,6 +3083,7 @@ class CanonicalShellWallRunnerTests(unittest.TestCase):
                             identity=(0, 0, 0, 0),
                             sha256="",
                         ),
+                        userns_fd=acquired_user_namespaces.stage_b_fd,
                         source=_module_source(runner),
                         root="/tmp/root",
                         repository_snapshot="/tmp/repository",
@@ -3085,6 +3112,9 @@ class CanonicalShellWallRunnerTests(unittest.TestCase):
             runner.selectors.DefaultSelector = original_default_selector
             runner.os.close = original_close
             runner._spawn_held = original_spawn_held
+            runner.close_prepared_acl_user_namespaces(
+                acquired_user_namespaces
+            )
             original_close(acquired_python.fd)
         mechanics = self.run_bounded_fixture("fd-protocol")
         self.assertEqual(
@@ -4333,7 +4363,15 @@ class CanonicalShellWallRunnerTests(unittest.TestCase):
             source.index("def stage_b_worker_main")
             : source.index("def _default_provenance")
         ]
-        self.assertIn('worker_pid = int(first_status["child-pid"])', stage_a)
+        worker_identity = source[
+            source.index("def _capture_stage_b_worker_identity")
+            : source.index("def _canonical_cargo_command")
+        ]
+        self.assertIn(
+            'worker_pid = int(first_status["child-pid"])',
+            worker_identity,
+        )
+        self.assertIn("_capture_stage_b_worker_identity(first_status)", stage_a)
         self.assertIn("expected_pid=worker_pid", stage_a)
         self.assertIn(
             'int(worker_result["pid_namespace_inode"])\n'
@@ -6566,6 +6604,16 @@ class CanonicalShellWallRunnerTests(unittest.TestCase):
             ("python", "/usr/bin/python3.13", "Python 3.13.7"),
             ("git", "/usr/bin/git", "git version 2.51.0"),
             (
+                "newuidmap",
+                "/usr/bin/newuidmap",
+                "shadow 4.18.0-1",
+            ),
+            (
+                "newgidmap",
+                "/usr/bin/newgidmap",
+                "shadow 4.18.0-1",
+            ),
+            (
                 "rustup",
                 "/home/spenser/.cargo/bin/rustup",
                 "rustup 1.28.2 (e4f3ad6f8 2025-04-28)",
@@ -6771,8 +6819,6 @@ class CanonicalShellWallRunnerTests(unittest.TestCase):
             "mount_namespace": True,
             "pid_namespace": True,
             "json_status_fd": True,
-            "uid_map": f"0 {os.getuid()} 1\n",
-            "gid_map": f"0 {os.getgid()} 1\n",
             "private_propagation": True,
             "die_with_parent": True,
             "completed": True,
@@ -6805,11 +6851,15 @@ class CanonicalShellWallRunnerTests(unittest.TestCase):
                 },
                 "stage_a": {
                     **stage_common,
+                    "uid_map": runner.CANONICAL_STAGE_A_UID_MAP,
+                    "gid_map": runner.CANONICAL_STAGE_A_GID_MAP,
                     "as_pid_1": False,
                     "builtin_pid1_fail_safe_only": True,
                 },
                 "stage_b": {
                     **stage_common,
+                    "uid_map": runner.CANONICAL_STAGE_B_UID_MAP,
+                    "gid_map": runner.CANONICAL_STAGE_B_GID_MAP,
                     "as_pid_1": True,
                     "builtin_pid1_fail_safe_only": False,
                 },
@@ -7806,7 +7856,7 @@ class CanonicalShellWallRunnerTests(unittest.TestCase):
                 "cli-diagnostics": 6,
                 "repository": 9,
                 "invocation-tcb": 11,
-                "snapshots-environment": 10,
+                "snapshots-environment": 11,
                 "evidence": 5,
                 "summarizer": 7,
                 "mount-lifecycle": 4,

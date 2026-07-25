@@ -15282,19 +15282,25 @@ def _run_bounded_fixture(
     ).encode("utf-8")
     output_fixture = (
         "import fcntl,time\n"
+        "stage_b_userns_fd=int(sys.argv[1])\n"
         "start=source.find(b'\\ndef _canonical_cargo_command(')\n"
         "end=source.find(b'\\ndef _mountinfo_for_path(',start)\n"
+        "account_start=source.find(b'\\ndef _canonical_wall_environment(',start)\n"
+        "account_end=source.find(b'\\ndef _spawn_primary_command(',account_start)\n"
         "assert start>0 and end>start\n"
+        "assert start<account_start<account_end<end\n"
         "assert source.find(b'\\ndef _canonical_cargo_command(',start+1)==-1\n"
         "assert source.find(b'\\ndef _mountinfo_for_path(',end+1)==-1\n"
+        "account_source=source[account_start:account_end]\n"
         "test_source=source[:start+1]+"
         + repr(output_worker_override)
-        + "+source[end+1:]\n"
+        + "+account_source+source[end+1:]\n"
         "base='/run/substrate-wall/backing/root'\n"
         "paths={'repository-snapshot':base+'/repository-snapshot','rustup-home-snapshot':base+'/rustup-home-snapshot','cargo-home-runtime':base+'/cargo-home-runtime','target':base+'/target','tmp':base+'/tmp','xdg-runtime':base+'/xdg-runtime','control':'/run/substrate-wall/control'}\n"
         "for path in paths.values():\n"
         " os.makedirs(path,mode=0o700,exist_ok=True);os.chmod(path,0o700)\n"
         "os.mkdir(paths['repository-snapshot']+'/target',0o700)\n"
+        "root_fd=os.open(base,os.O_RDONLY|os.O_DIRECTORY|os.O_CLOEXEC|os.O_NOFOLLOW);r._create_canonical_account_projection(root_fd,base);os.close(root_fd)\n"
         "control_fd=os.open(paths['control'],os.O_RDONLY|os.O_DIRECTORY|os.O_CLOEXEC|os.O_NOFOLLOW)\n"
         "held=r.resolve_validated_executable('/usr/bin/bwrap',r.PLATFORM_STARTUP_TCB_V1['/usr/bin/bwrap']['sha256'],expected_uid=0)\n"
         "exemptions=r._capture_inaccessible_namespace_scan_exemptions()\n"
@@ -15313,7 +15319,7 @@ def _run_bounded_fixture(
         " retained=os.dup(output_write) if hold_writer else None\n"
         " log_path=base+'/'+label+'-'+str(cap)+('-held' if hold_writer else '')+'.log';log_fd=os.open(log_path,os.O_RDWR|os.O_CREAT|os.O_EXCL|os.O_CLOEXEC,0o600)\n"
         " environment={'LANG':'C.UTF-8','LC_ALL':'C.UTF-8','TMPDIR':'/run/substrate-wall/backing/root/tmp','XDG_RUNTIME_DIR':'/run/substrate-wall/backing/root/xdg-runtime'}\n"
-        " spawned,status_fd,argv=r.launch_stage_b_bwrap(bwrap=held,source=test_source,root=paths['target'],repository_snapshot=paths['repository-snapshot'],rustup_snapshot=paths['rustup-home-snapshot'],cargo_runtime=paths['cargo-home-runtime'],control_directory=paths['control'],repository_cwd=r.REPOSITORY_CANONICAL_PATH,mode='parallel',label=label,timeout_seconds=3,expected_head='0'*40,environment=environment,output_write_fd=output_write)\n"
+        " spawned,status_fd,argv=r.launch_stage_b_bwrap(bwrap=held,userns_fd=stage_b_userns_fd,source=test_source,root=paths['target'],repository_snapshot=paths['repository-snapshot'],rustup_snapshot=paths['rustup-home-snapshot'],cargo_runtime=paths['cargo-home-runtime'],control_directory=paths['control'],repository_cwd=r.REPOSITORY_CANONICAL_PATH,mode='parallel',label=label,timeout_seconds=3,expected_head='0'*40,environment=environment,output_write_fd=output_write)\n"
         " start_time=r._process_start_time_ticks(spawned.pid);os.close(output_write)\n"
         " first_line=r._read_one_line(status_fd,deadline=time.monotonic()+3);first=r._parse_first_bwrap_record(first_line);worker=int(first['child-pid']);worker_pidfd=os.pidfd_open(worker)\n"
         " observed={'pid':os.stat('/proc/%d/ns/pid'%worker).st_ino,'mnt':os.stat('/proc/%d/ns/mnt'%worker).st_ino};reported={'pid':int(first['pid-namespace']),'mnt':int(first['mnt-namespace'])};assert observed==reported\n"
@@ -15817,10 +15823,37 @@ def _run_bounded_fixture(
         if not authenticated_source:
             raise AssertionError("authenticated runner source unavailable")
         runner_fd = create_sealed_runner_memfd(authenticated_source)
+    held = validate_platform_startup_tcb()
+    user_namespaces: PreparedAclUserNamespaces | None = None
+    if fixture == "production-output-pipe":
+        try:
+            user_namespaces = prepare_acl_user_namespaces(
+                held["/usr/bin/newuidmap"],
+                held["/usr/bin/newgidmap"],
+            )
+        except BaseException:
+            for executable in held.values():
+                os.close(executable.fd)
+            if runner_fd is not None:
+                os.close(runner_fd)
+            raise
     command = [
         "/usr/bin/bwrap",
         "--die-with-parent",
-        "--unshare-user",
+        *(
+            [
+                "--userns",
+                str(user_namespaces.stage_a_fd),
+                "--uid",
+                str(os.getuid()),
+                "--gid",
+                str(os.getgid()),
+                "--sync-fd",
+                str(user_namespaces.stage_b_fd),
+            ]
+            if user_namespaces is not None
+            else ["--unshare-user"]
+        ),
         "--unshare-pid",
         "--ro-bind",
         "/",
@@ -15893,22 +15926,41 @@ def _run_bounded_fixture(
         "-B",
         "-c",
         scripts[fixture],
+        *(
+            [str(user_namespaces.stage_b_fd)]
+            if user_namespaces is not None
+            else []
+        ),
     ]
     namespace_scan_exemptions = (
         _capture_inaccessible_namespace_scan_exemptions()
         if fixture == "production-prestatus-namespace-absence"
         else {}
     )
-    held = validate_platform_startup_tcb()
     try:
+        preserved_fds = tuple(
+            descriptor
+            for descriptor in (
+                runner_fd,
+                user_namespaces.stage_a_fd
+                if user_namespaces is not None
+                else None,
+                user_namespaces.stage_b_fd
+                if user_namespaces is not None
+                else None,
+            )
+            if descriptor is not None
+        )
         return_code, stdout, stderr = exec_held_executable(
             held["/usr/bin/bwrap"].fd,
             command,
             {"LANG": "C.UTF-8", "LC_ALL": "C.UTF-8"},
-            pass_fds=((runner_fd,) if runner_fd is not None else ()),
+            pass_fds=preserved_fds,
             timeout=timeout,
         )
     finally:
+        if user_namespaces is not None:
+            close_prepared_acl_user_namespaces(user_namespaces)
         for executable in held.values():
             os.close(executable.fd)
         if runner_fd is not None:
