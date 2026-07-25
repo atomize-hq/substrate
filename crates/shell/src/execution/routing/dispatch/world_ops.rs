@@ -3866,7 +3866,8 @@ mod tests {
 
         assert!(
             error.to_string().contains("round-trip")
-                || error.to_string().contains("does not exist"),
+                || error.to_string().contains("does not exist")
+                || error.to_string().contains("could not be resolved"),
             "unexpected mismatched-principal error: {error:#}"
         );
         assert!(!env_map.contains_key(SUBSTRATE_INTERNAL_CODEX_AUTH_SEED_HOME_ENV));

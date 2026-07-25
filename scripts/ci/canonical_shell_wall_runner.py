@@ -1,4 +1,4 @@
-# canonical-stdlib-manifest-v1: built-in:_abc,built-in:_ast,built-in:_codecs,built-in:_collections,built-in:_functools,built-in:_imp,built-in:_io,built-in:_locale,built-in:_operator,built-in:_signal,built-in:_sre,built-in:_stat,built-in:_thread,built-in:_tokenize,built-in:_typing,built-in:_warnings,built-in:_weakref,built-in:atexit,built-in:builtins,built-in:errno,built-in:itertools,built-in:marshal,built-in:posix,built-in:pwd,built-in:sys,built-in:time,file:__future__:/usr/lib/python3.13/__future__.py:981d4c398849f9ebcab72300d9c1fe288fd6d7f28957b3b3fa3a493a5836d95c,file:_bisect:/usr/lib/python3.13/lib-dynload/_bisect.cpython-313-x86_64-linux-gnu.so:d8d3531b9c7d5ee0e04e139db63af0272f4a92fdaf4900b4e1bd0c608bb5fa2f,file:_blake2:/usr/lib/python3.13/lib-dynload/_blake2.cpython-313-x86_64-linux-gnu.so:c3dc71b80e8208c0225254abeeee3e8d05db36b176248686adbca89a12503c9f,file:_bz2:/usr/lib/python3.13/lib-dynload/_bz2.cpython-313-x86_64-linux-gnu.so:c92d348070471a9d879fccbf180e026c852e255c01f622e846964278047e38da,file:_colorize:/usr/lib/python3.13/_colorize.py:83d39ba60fb9844f2de83a6e19237bb127549809e67bf8752fa67c0ddd227b2a,file:_compression:/usr/lib/python3.13/_compression.py:3ad5d60627477a60939ee44fc1bb3a05dbe8fb52f0f75039b8f5d8f1a278b981,file:_ctypes:/usr/lib/python3.13/lib-dynload/_ctypes.cpython-313-x86_64-linux-gnu.so:4c14225c4c74b0073668580e426ca76641e35bbf4aebf88fdb9265bd88cb41aa,file:_hashlib:/usr/lib/python3.13/lib-dynload/_hashlib.cpython-313-x86_64-linux-gnu.so:4925c7683054d6a3658bdf1ed91235b698177325c4cec9055073501d7269cb27,file:_heapq:/usr/lib/python3.13/lib-dynload/_heapq.cpython-313-x86_64-linux-gnu.so:f965e0de0e0db780df6736d631ee7cb626177587ae9b2d3f766d4290f5344870,file:_json:/usr/lib/python3.13/lib-dynload/_json.cpython-313-x86_64-linux-gnu.so:8fc1d600e98525b8a4130c27220e38c6595325cd866588b4bbfbc0992ca1daad,file:_lzma:/usr/lib/python3.13/lib-dynload/_lzma.cpython-313-x86_64-linux-gnu.so:b8780c3780d15631632db500ff66d78d157702e52dbe4f2776480072074d90c4,file:_opcode:/usr/lib/python3.13/lib-dynload/_opcode.cpython-313-x86_64-linux-gnu.so:ad687a00989dab055b83337c8e0902aa1f5e6cc5330dcb1808e4e3fcb3be08e9,file:_opcode_metadata:/usr/lib/python3.13/_opcode_metadata.py:9a27d5830732442110b5945ddac1668db17abb51c44882ba9d4a8536bcc0ea1c,file:_posixsubprocess:/usr/lib/python3.13/lib-dynload/_posixsubprocess.cpython-313-x86_64-linux-gnu.so:47f8639c0eace36b441c5b00a6442b81120d06f62ea225e95ff638422cf457ad,file:_random:/usr/lib/python3.13/lib-dynload/_random.cpython-313-x86_64-linux-gnu.so:4fd788699bd206e1123d6d537402f4d1d579a18e666558a370d2fbc21b42f995,file:_socket:/usr/lib/python3.13/lib-dynload/_socket.cpython-313-x86_64-linux-gnu.so:4ca21d3b244bfa432ff2bfcd7bc082278f41a9405f044eb7fa315567d794bc09,file:_struct:/usr/lib/python3.13/lib-dynload/_struct.cpython-313-x86_64-linux-gnu.so:86f8d198d7af38e532b3a7aebb51c51e0f161bb81cdf5d027504e60262904ed0,file:_weakrefset:/usr/lib/python3.13/_weakrefset.py:91895a451d06e9f521a1171b31b9b19bc9740f35af00d4fa106338ab7167c9ac,file:argparse:/usr/lib/python3.13/argparse.py:3f9d1478513251602ca62b935f9f8c8513ac8ec9508a827b29d1aedaac19ffe5,file:array:/usr/lib/python3.13/lib-dynload/array.cpython-313-x86_64-linux-gnu.so:bb919deb6ace8b0cc20aa9bdcc3a8578091a3571b534d76f734d11d58e393f41,file:ast:/usr/lib/python3.13/ast.py:7514eb7df98b1b76eab160ca2a83e6e9a9f3219a4659808cd9fd278b524ede1b,file:bisect:/usr/lib/python3.13/bisect.py:f1cf7b85fc36b5da249813fc5ab97d9464f8cc1bc817f7146206fa2713e35999,file:bz2:/usr/lib/python3.13/bz2.py:b217459e4c74ccb3da3a44b51dd335cfddcbe9d3014b3279dda1c1a7ca448c08,file:collections:/usr/lib/python3.13/collections/__init__.py:2347f647577b6c11b82fc48fa4a1744f7af1af87f15942f92b7cc4410f0a817b,file:contextlib:/usr/lib/python3.13/contextlib.py:c1e0d67b2007de11ae93cd36cf6faf38d9ab32656a832d592a49325eec579f96,file:copy:/usr/lib/python3.13/copy.py:d6b858961b91b48a4bf5a115b0420c890d677bdf058ab2323a8a75298eed47db,file:copyreg:/usr/lib/python3.13/copyreg.py:c8eda41f05c6bf95a4da4726a530409d2485ae060b8d019b3a8034389a15d3e9,file:ctypes._endian:/usr/lib/python3.13/ctypes/_endian.py:499773a028a41ee18153fedfe0a00a26efb2a650f568b9bc17e2f3a914a23468,file:ctypes:/usr/lib/python3.13/ctypes/__init__.py:f09e342b0b32f979275ca571578c8bae6776e5c4f7ea3eab0907bc59e81f55be,file:dataclasses:/usr/lib/python3.13/dataclasses.py:18b8b97f6c43ece379793745dfd505ed713a4c86bc6babdcdec593101b5f4399,file:difflib:/usr/lib/python3.13/difflib.py:0fc85357cdf45c242079be40245466b7b014b6f5f35064eec3d1b951e00d31ca,file:dis:/usr/lib/python3.13/dis.py:1852129bf55039f192d90174334fbe459d5f982cae33a04e700fe7cdb2748a51,file:encodings.aliases:/usr/lib/python3.13/encodings/aliases.py:cac92d68c7ea5bc0f05b448b9144e3bdf236d0b7d27ab66112e96d43aad15b3f,file:encodings.ascii:/usr/lib/python3.13/encodings/ascii.py:578aa1173f7cc60dad2895071287fe6182bd14787b3fbf47a6c7983dfe3675e3,file:encodings.utf_8:/usr/lib/python3.13/encodings/utf_8.py:ba0cac060269583523ca9506473a755203037c57d466a11aa89a30a5f6756f3d,file:encodings:/usr/lib/python3.13/encodings/__init__.py:78c4744d407690f321565488710b5aaf6486b5afa8d185637aa1e7633ab59cd8,file:enum:/usr/lib/python3.13/enum.py:749f34920d33edc8c929116c900bec347b3cecc45f655ec9ba07977cd53b14d9,file:fcntl:/usr/lib/python3.13/lib-dynload/fcntl.cpython-313-x86_64-linux-gnu.so:c7c503bf2700361dc25b0a4a942586340e0c786f7484006e3ddfc7c1542fa72c,file:fnmatch:/usr/lib/python3.13/fnmatch.py:95391dac2ce9f60084d65eba2f4b9d9735e28136d55b684e1fde7d6342555963,file:functools:/usr/lib/python3.13/functools.py:7aa8725afbe9b9fc47a825b4e7c0330fa374432f481d7be8202b96f56eeac9a0,file:gettext:/usr/lib/python3.13/gettext.py:69fc9d5be6762a2d8ab7aff924e34c0655a54df143f92691232ac47564aea2e3,file:hashlib:/usr/lib/python3.13/hashlib.py:f129b330e6ab878a96085843b3606acd7d157b8fe6edfa15e37fa13988cef19c,file:heapq:/usr/lib/python3.13/heapq.py:6d43277e5c76fc0f073cd388fcff852d14d068f6bb6d4886c340f8b75a1229a9,file:importlib:/usr/lib/python3.13/importlib/__init__.py:72b07de4133a7e39b2f6a7920465669aa04626f217e800779587bc0713fe002e,file:inspect:/usr/lib/python3.13/inspect.py:d5ac7f91f6906439fd57f87f1e37934e95bb40569fa0a26affa4cf618f67532a,file:json.decoder:/usr/lib/python3.13/json/decoder.py:6d95679fccf178f2af9e9eead42f8efb084c58735951dc47fce89aec11d44955,file:json.encoder:/usr/lib/python3.13/json/encoder.py:4b24ae9c0efbe73272f6a891054b2f40cc6e07c3c9957b33a2ebc8da130e671e,file:json.scanner:/usr/lib/python3.13/json/scanner.py:572958017eae8842eeddd0e3d18d3c56cc0a197348224915e1d87ce937841764,file:json:/usr/lib/python3.13/json/__init__.py:d5d41e2c29049515d295d81a6d40b4890fbec8d8482cfb401630f8ef2f77e4d5,file:keyword:/usr/lib/python3.13/keyword.py:18c2be738c04ad20ad375f6a71db34b3823c7f40b0340f5294d0e89f3c9b093b,file:linecache:/usr/lib/python3.13/linecache.py:0939f472e54b4aadbf261d3c45a92d5aafe16e749c199917df9f4e47ce4cc4da,file:locale:/usr/lib/python3.13/locale.py:ccffa53357828663c7a9d3f6817aab92dab378eaa950b460a72401d842f74365,file:lzma:/usr/lib/python3.13/lzma.py:6a923ba49b33897152a9398d2a39d08670238290c90c050b8f4d838046339db5,file:math:/usr/lib/python3.13/lib-dynload/math.cpython-313-x86_64-linux-gnu.so:dbf64fd47934b779a75d0f973bac9d0fec7343140a071f7d8f3193f9e4a083c2,file:opcode:/usr/lib/python3.13/opcode.py:aaf8e6e0291b6ff439c27ad1657d5b1d2fc738f961bee3fa4863a51e494dc843,file:operator:/usr/lib/python3.13/operator.py:c048f8a6852832d5fa750d6ae772d7658c52c3511d261cb902f7edfd262e9127,file:pprint:/usr/lib/python3.13/pprint.py:1585c8d74d7f485590db2af46680ae0a73737ca9fb66022b2bcbbc4c4925e203,file:random:/usr/lib/python3.13/random.py:39f53b25d84a27e1be0b9116d74497c9466d749660692a25a0d14687175a6db0,file:re._casefix:/usr/lib/python3.13/re/_casefix.py:1b12d9136f23db6c3f6f26053fefc15ca964b886838c7b9c1fabf8d2efc1e5c8,file:re._compiler:/usr/lib/python3.13/re/_compiler.py:83537237a82294d084d40abaa42e86149be33eef338a5ef028a7fd2fad0dafd5,file:re._constants:/usr/lib/python3.13/re/_constants.py:1dbe236d34fa934e3e7172ba9d6b0dcfab338ecf7717f370f1fd4a9d24b2ecdb,file:re._parser:/usr/lib/python3.13/re/_parser.py:c7a6c80b3b448f50684c320265a7b5efb5d0b1daf0a36fb5dee8dd83628359d7,file:re:/usr/lib/python3.13/re/__init__.py:dbe158a677c6aaacf717ea2abc23c56233453d38024aef75b7c3d93612cabb93,file:reprlib:/usr/lib/python3.13/reprlib.py:76003eea30d186a99d125decc9def6ae32c7b389d3db00f91aaf02229bf2714f,file:select:/usr/lib/python3.13/lib-dynload/select.cpython-313-x86_64-linux-gnu.so:6d9e20ecc9c5151a21c81325ff06d573bdda5e3e12f56cb1d350165c252c6571,file:selectors:/usr/lib/python3.13/selectors.py:4b8a60cfbb619d080f87dffe1578372e56e8c0ac826f043224a154cf7b77606d,file:shutil:/usr/lib/python3.13/shutil.py:ce110d23884b9bdc75f7b1654dbd2d7cf5d6762046a4cf8c316b96fd937d1e0b,file:signal:/usr/lib/python3.13/signal.py:0363c964c90ac0b3e515de5749205e6e6454051a1211058375d84d91eab6071a,file:socket:/usr/lib/python3.13/socket.py:6d5e10b5bcd75b7a6a883a1819e3b47dda3f00621e8e7db365b96782fcf59ac3,file:struct:/usr/lib/python3.13/struct.py:9c231f9497caf513a22dee8f790b07f969b0e45854a0bdd6dd84b492e08c2856,file:subprocess:/usr/lib/python3.13/subprocess.py:21ecc4c8f4fcf641974fc0d9cc28e97b07670ed1cef7e9d96769b31bb8345586,file:tempfile:/usr/lib/python3.13/tempfile.py:7149355dfc2ccbd82a9b3614c7710f2c92bc7ab06440e7f427766481638a1528,file:textwrap:/usr/lib/python3.13/textwrap.py:26836f5c17cdb4ffdeaff1a5146ed61a262aa410bdf3ad204e2bd0792f010d5e,file:threading:/usr/lib/python3.13/threading.py:733a699ab67a3ebd7eab040b1a3843bdc323cf97a69f68699bef8ac002e35c53,file:token:/usr/lib/python3.13/token.py:1d2ab814992e6afbd6f1e5323edcddd681f65f7679ad1eb87fe1357a433a5bdf,file:tokenize:/usr/lib/python3.13/tokenize.py:1369f7f9e57c722d1627333b705aabfaf943c24680920942e773fd4e1776be2e,file:traceback:/usr/lib/python3.13/traceback.py:af5a1c04c4257c2f91318a60480e52c4d906242a7e7b8c593db39d4c2464268f,file:types:/usr/lib/python3.13/types.py:74516af714d270b59d67e5ae5e60a02cb4ff32ecdd373e165ad1d780fbfd2c5d,file:typing:/usr/lib/python3.13/typing.py:b73770ed2e40b88c864efb79ed1bfd1ebdc9337ff832b3ee612ab9d7a417532e,file:unittest.case:/usr/lib/python3.13/unittest/case.py:ce2499ee6f34a9e6e24f11ae1e2f02e71a3529cca03d5488f0bdcfea8d5d8481,file:unittest.loader:/usr/lib/python3.13/unittest/loader.py:4152a83f4b7cec128d19d6d2399c839e27b81b302ce7f8af01f81c59ccef927e,file:unittest.main:/usr/lib/python3.13/unittest/main.py:c0babf6e6b04d732165d95f91af3da24c0b28abe21a241db309abc3b6223e5d7,file:unittest.result:/usr/lib/python3.13/unittest/result.py:5db286bdd3821d64150377e554d7edbdd58db7bb8b950772f977e9ec1d535617,file:unittest.runner:/usr/lib/python3.13/unittest/runner.py:76d9beb9c21d0d367a1b040a921ad43f90b7971fcc8cacfccd6f9760bedf1ce2,file:unittest.signals:/usr/lib/python3.13/unittest/signals.py:f8286e818ca56e10e03745bc056cdfd31147678f9a1dc8cb6b0fe96ef9a4362a,file:unittest.suite:/usr/lib/python3.13/unittest/suite.py:ed2da92bc9f97c53403ee2d3d12cc53b16a96e85d596ebc887b5a93458f3f6bc,file:unittest.util:/usr/lib/python3.13/unittest/util.py:fdcc640c3505d16deab9c32eae7c3f5f67c3b5e81c563dc6698fa7fcf403854d,file:unittest:/usr/lib/python3.13/unittest/__init__.py:7c22ee0c503b75aba5221e3e8189f9bf4632f85a43315ff841ec9d26a68e3551,file:warnings:/usr/lib/python3.13/warnings.py:1fc53fd4ecec5e32214116b1fe02c3ef1509ab0e57661f79d98ef3a598ec87bd,file:weakref:/usr/lib/python3.13/weakref.py:56f8d313fb74019e53eb9287400702fbce788b7fe30e097b0b6e06296f3f080c,file:zlib:/usr/lib/python3.13/lib-dynload/zlib.cpython-313-x86_64-linux-gnu.so:bad46f87701dc63a839fb83e45b0c9be1896997ce30fcebf4ee2e59bf815678e,frozen:_collections_abc,frozen:_frozen_importlib,frozen:_frozen_importlib_external,frozen:abc,frozen:codecs,frozen:collections.abc,frozen:genericpath,frozen:importlib._bootstrap,frozen:importlib._bootstrap_external,frozen:importlib.machinery,frozen:io,frozen:os,frozen:os.path,frozen:posixpath,frozen:stat,frozen:zipimport
+# canonical-stdlib-manifest-v1: built-in:_abc,built-in:_ast,built-in:_codecs,built-in:_collections,built-in:_functools,built-in:_imp,built-in:_io,built-in:_locale,built-in:_operator,built-in:_signal,built-in:_sre,built-in:_stat,built-in:_thread,built-in:_tokenize,built-in:_typing,built-in:_warnings,built-in:_weakref,built-in:atexit,built-in:builtins,built-in:errno,built-in:itertools,built-in:marshal,built-in:posix,built-in:pwd,built-in:sys,built-in:time,file:__future__:/usr/lib/python3.13/__future__.py:981d4c398849f9ebcab72300d9c1fe288fd6d7f28957b3b3fa3a493a5836d95c,file:_bisect:/usr/lib/python3.13/lib-dynload/_bisect.cpython-313-x86_64-linux-gnu.so:d8d3531b9c7d5ee0e04e139db63af0272f4a92fdaf4900b4e1bd0c608bb5fa2f,file:_blake2:/usr/lib/python3.13/lib-dynload/_blake2.cpython-313-x86_64-linux-gnu.so:c3dc71b80e8208c0225254abeeee3e8d05db36b176248686adbca89a12503c9f,file:_bz2:/usr/lib/python3.13/lib-dynload/_bz2.cpython-313-x86_64-linux-gnu.so:c92d348070471a9d879fccbf180e026c852e255c01f622e846964278047e38da,file:_colorize:/usr/lib/python3.13/_colorize.py:83d39ba60fb9844f2de83a6e19237bb127549809e67bf8752fa67c0ddd227b2a,file:_compression:/usr/lib/python3.13/_compression.py:3ad5d60627477a60939ee44fc1bb3a05dbe8fb52f0f75039b8f5d8f1a278b981,file:_ctypes:/usr/lib/python3.13/lib-dynload/_ctypes.cpython-313-x86_64-linux-gnu.so:4c14225c4c74b0073668580e426ca76641e35bbf4aebf88fdb9265bd88cb41aa,file:_hashlib:/usr/lib/python3.13/lib-dynload/_hashlib.cpython-313-x86_64-linux-gnu.so:4925c7683054d6a3658bdf1ed91235b698177325c4cec9055073501d7269cb27,file:_heapq:/usr/lib/python3.13/lib-dynload/_heapq.cpython-313-x86_64-linux-gnu.so:f965e0de0e0db780df6736d631ee7cb626177587ae9b2d3f766d4290f5344870,file:_json:/usr/lib/python3.13/lib-dynload/_json.cpython-313-x86_64-linux-gnu.so:8fc1d600e98525b8a4130c27220e38c6595325cd866588b4bbfbc0992ca1daad,file:_lzma:/usr/lib/python3.13/lib-dynload/_lzma.cpython-313-x86_64-linux-gnu.so:b8780c3780d15631632db500ff66d78d157702e52dbe4f2776480072074d90c4,file:_opcode:/usr/lib/python3.13/lib-dynload/_opcode.cpython-313-x86_64-linux-gnu.so:ad687a00989dab055b83337c8e0902aa1f5e6cc5330dcb1808e4e3fcb3be08e9,file:_opcode_metadata:/usr/lib/python3.13/_opcode_metadata.py:9a27d5830732442110b5945ddac1668db17abb51c44882ba9d4a8536bcc0ea1c,file:_posixsubprocess:/usr/lib/python3.13/lib-dynload/_posixsubprocess.cpython-313-x86_64-linux-gnu.so:47f8639c0eace36b441c5b00a6442b81120d06f62ea225e95ff638422cf457ad,file:_random:/usr/lib/python3.13/lib-dynload/_random.cpython-313-x86_64-linux-gnu.so:4fd788699bd206e1123d6d537402f4d1d579a18e666558a370d2fbc21b42f995,file:_socket:/usr/lib/python3.13/lib-dynload/_socket.cpython-313-x86_64-linux-gnu.so:4ca21d3b244bfa432ff2bfcd7bc082278f41a9405f044eb7fa315567d794bc09,file:_struct:/usr/lib/python3.13/lib-dynload/_struct.cpython-313-x86_64-linux-gnu.so:86f8d198d7af38e532b3a7aebb51c51e0f161bb81cdf5d027504e60262904ed0,file:_weakrefset:/usr/lib/python3.13/_weakrefset.py:91895a451d06e9f521a1171b31b9b19bc9740f35af00d4fa106338ab7167c9ac,file:argparse:/usr/lib/python3.13/argparse.py:3f9d1478513251602ca62b935f9f8c8513ac8ec9508a827b29d1aedaac19ffe5,file:array:/usr/lib/python3.13/lib-dynload/array.cpython-313-x86_64-linux-gnu.so:bb919deb6ace8b0cc20aa9bdcc3a8578091a3571b534d76f734d11d58e393f41,file:ast:/usr/lib/python3.13/ast.py:7514eb7df98b1b76eab160ca2a83e6e9a9f3219a4659808cd9fd278b524ede1b,file:bisect:/usr/lib/python3.13/bisect.py:f1cf7b85fc36b5da249813fc5ab97d9464f8cc1bc817f7146206fa2713e35999,file:bz2:/usr/lib/python3.13/bz2.py:b217459e4c74ccb3da3a44b51dd335cfddcbe9d3014b3279dda1c1a7ca448c08,file:collections:/usr/lib/python3.13/collections/__init__.py:2347f647577b6c11b82fc48fa4a1744f7af1af87f15942f92b7cc4410f0a817b,file:contextlib:/usr/lib/python3.13/contextlib.py:c1e0d67b2007de11ae93cd36cf6faf38d9ab32656a832d592a49325eec579f96,file:copy:/usr/lib/python3.13/copy.py:d6b858961b91b48a4bf5a115b0420c890d677bdf058ab2323a8a75298eed47db,file:copyreg:/usr/lib/python3.13/copyreg.py:c8eda41f05c6bf95a4da4726a530409d2485ae060b8d019b3a8034389a15d3e9,file:ctypes._endian:/usr/lib/python3.13/ctypes/_endian.py:499773a028a41ee18153fedfe0a00a26efb2a650f568b9bc17e2f3a914a23468,file:ctypes:/usr/lib/python3.13/ctypes/__init__.py:f09e342b0b32f979275ca571578c8bae6776e5c4f7ea3eab0907bc59e81f55be,file:dataclasses:/usr/lib/python3.13/dataclasses.py:18b8b97f6c43ece379793745dfd505ed713a4c86bc6babdcdec593101b5f4399,file:difflib:/usr/lib/python3.13/difflib.py:0fc85357cdf45c242079be40245466b7b014b6f5f35064eec3d1b951e00d31ca,file:dis:/usr/lib/python3.13/dis.py:1852129bf55039f192d90174334fbe459d5f982cae33a04e700fe7cdb2748a51,file:encodings.aliases:/usr/lib/python3.13/encodings/aliases.py:cac92d68c7ea5bc0f05b448b9144e3bdf236d0b7d27ab66112e96d43aad15b3f,file:encodings.ascii:/usr/lib/python3.13/encodings/ascii.py:578aa1173f7cc60dad2895071287fe6182bd14787b3fbf47a6c7983dfe3675e3,file:encodings.utf_8:/usr/lib/python3.13/encodings/utf_8.py:ba0cac060269583523ca9506473a755203037c57d466a11aa89a30a5f6756f3d,file:encodings:/usr/lib/python3.13/encodings/__init__.py:78c4744d407690f321565488710b5aaf6486b5afa8d185637aa1e7633ab59cd8,file:enum:/usr/lib/python3.13/enum.py:749f34920d33edc8c929116c900bec347b3cecc45f655ec9ba07977cd53b14d9,file:fcntl:/usr/lib/python3.13/lib-dynload/fcntl.cpython-313-x86_64-linux-gnu.so:c7c503bf2700361dc25b0a4a942586340e0c786f7484006e3ddfc7c1542fa72c,file:fnmatch:/usr/lib/python3.13/fnmatch.py:95391dac2ce9f60084d65eba2f4b9d9735e28136d55b684e1fde7d6342555963,file:functools:/usr/lib/python3.13/functools.py:7aa8725afbe9b9fc47a825b4e7c0330fa374432f481d7be8202b96f56eeac9a0,file:gettext:/usr/lib/python3.13/gettext.py:69fc9d5be6762a2d8ab7aff924e34c0655a54df143f92691232ac47564aea2e3,file:grp:/usr/lib/python3.13/lib-dynload/grp.cpython-313-x86_64-linux-gnu.so:59d32074eea1efae74751c22b8645de1c997080265507d36a8b24f947eee241e,file:gzip:/usr/lib/python3.13/gzip.py:dba33ac2497af37712ea23f5c3ce3ed56177262886868cbc6a6d43632c79afe9,file:hashlib:/usr/lib/python3.13/hashlib.py:f129b330e6ab878a96085843b3606acd7d157b8fe6edfa15e37fa13988cef19c,file:heapq:/usr/lib/python3.13/heapq.py:6d43277e5c76fc0f073cd388fcff852d14d068f6bb6d4886c340f8b75a1229a9,file:importlib:/usr/lib/python3.13/importlib/__init__.py:72b07de4133a7e39b2f6a7920465669aa04626f217e800779587bc0713fe002e,file:inspect:/usr/lib/python3.13/inspect.py:d5ac7f91f6906439fd57f87f1e37934e95bb40569fa0a26affa4cf618f67532a,file:json.decoder:/usr/lib/python3.13/json/decoder.py:6d95679fccf178f2af9e9eead42f8efb084c58735951dc47fce89aec11d44955,file:json.encoder:/usr/lib/python3.13/json/encoder.py:4b24ae9c0efbe73272f6a891054b2f40cc6e07c3c9957b33a2ebc8da130e671e,file:json.scanner:/usr/lib/python3.13/json/scanner.py:572958017eae8842eeddd0e3d18d3c56cc0a197348224915e1d87ce937841764,file:json:/usr/lib/python3.13/json/__init__.py:d5d41e2c29049515d295d81a6d40b4890fbec8d8482cfb401630f8ef2f77e4d5,file:keyword:/usr/lib/python3.13/keyword.py:18c2be738c04ad20ad375f6a71db34b3823c7f40b0340f5294d0e89f3c9b093b,file:linecache:/usr/lib/python3.13/linecache.py:0939f472e54b4aadbf261d3c45a92d5aafe16e749c199917df9f4e47ce4cc4da,file:locale:/usr/lib/python3.13/locale.py:ccffa53357828663c7a9d3f6817aab92dab378eaa950b460a72401d842f74365,file:lzma:/usr/lib/python3.13/lzma.py:6a923ba49b33897152a9398d2a39d08670238290c90c050b8f4d838046339db5,file:math:/usr/lib/python3.13/lib-dynload/math.cpython-313-x86_64-linux-gnu.so:dbf64fd47934b779a75d0f973bac9d0fec7343140a071f7d8f3193f9e4a083c2,file:opcode:/usr/lib/python3.13/opcode.py:aaf8e6e0291b6ff439c27ad1657d5b1d2fc738f961bee3fa4863a51e494dc843,file:operator:/usr/lib/python3.13/operator.py:c048f8a6852832d5fa750d6ae772d7658c52c3511d261cb902f7edfd262e9127,file:pprint:/usr/lib/python3.13/pprint.py:1585c8d74d7f485590db2af46680ae0a73737ca9fb66022b2bcbbc4c4925e203,file:random:/usr/lib/python3.13/random.py:39f53b25d84a27e1be0b9116d74497c9466d749660692a25a0d14687175a6db0,file:re._casefix:/usr/lib/python3.13/re/_casefix.py:1b12d9136f23db6c3f6f26053fefc15ca964b886838c7b9c1fabf8d2efc1e5c8,file:re._compiler:/usr/lib/python3.13/re/_compiler.py:83537237a82294d084d40abaa42e86149be33eef338a5ef028a7fd2fad0dafd5,file:re._constants:/usr/lib/python3.13/re/_constants.py:1dbe236d34fa934e3e7172ba9d6b0dcfab338ecf7717f370f1fd4a9d24b2ecdb,file:re._parser:/usr/lib/python3.13/re/_parser.py:c7a6c80b3b448f50684c320265a7b5efb5d0b1daf0a36fb5dee8dd83628359d7,file:re:/usr/lib/python3.13/re/__init__.py:dbe158a677c6aaacf717ea2abc23c56233453d38024aef75b7c3d93612cabb93,file:reprlib:/usr/lib/python3.13/reprlib.py:76003eea30d186a99d125decc9def6ae32c7b389d3db00f91aaf02229bf2714f,file:select:/usr/lib/python3.13/lib-dynload/select.cpython-313-x86_64-linux-gnu.so:6d9e20ecc9c5151a21c81325ff06d573bdda5e3e12f56cb1d350165c252c6571,file:selectors:/usr/lib/python3.13/selectors.py:4b8a60cfbb619d080f87dffe1578372e56e8c0ac826f043224a154cf7b77606d,file:shutil:/usr/lib/python3.13/shutil.py:ce110d23884b9bdc75f7b1654dbd2d7cf5d6762046a4cf8c316b96fd937d1e0b,file:signal:/usr/lib/python3.13/signal.py:0363c964c90ac0b3e515de5749205e6e6454051a1211058375d84d91eab6071a,file:socket:/usr/lib/python3.13/socket.py:6d5e10b5bcd75b7a6a883a1819e3b47dda3f00621e8e7db365b96782fcf59ac3,file:struct:/usr/lib/python3.13/struct.py:9c231f9497caf513a22dee8f790b07f969b0e45854a0bdd6dd84b492e08c2856,file:subprocess:/usr/lib/python3.13/subprocess.py:21ecc4c8f4fcf641974fc0d9cc28e97b07670ed1cef7e9d96769b31bb8345586,file:tarfile:/usr/lib/python3.13/tarfile.py:255ac02c3cceb482782fed8e971be7665f9a5216672debb391e460d38e6850c7,file:tempfile:/usr/lib/python3.13/tempfile.py:7149355dfc2ccbd82a9b3614c7710f2c92bc7ab06440e7f427766481638a1528,file:textwrap:/usr/lib/python3.13/textwrap.py:26836f5c17cdb4ffdeaff1a5146ed61a262aa410bdf3ad204e2bd0792f010d5e,file:threading:/usr/lib/python3.13/threading.py:733a699ab67a3ebd7eab040b1a3843bdc323cf97a69f68699bef8ac002e35c53,file:token:/usr/lib/python3.13/token.py:1d2ab814992e6afbd6f1e5323edcddd681f65f7679ad1eb87fe1357a433a5bdf,file:tokenize:/usr/lib/python3.13/tokenize.py:1369f7f9e57c722d1627333b705aabfaf943c24680920942e773fd4e1776be2e,file:traceback:/usr/lib/python3.13/traceback.py:af5a1c04c4257c2f91318a60480e52c4d906242a7e7b8c593db39d4c2464268f,file:types:/usr/lib/python3.13/types.py:74516af714d270b59d67e5ae5e60a02cb4ff32ecdd373e165ad1d780fbfd2c5d,file:typing:/usr/lib/python3.13/typing.py:b73770ed2e40b88c864efb79ed1bfd1ebdc9337ff832b3ee612ab9d7a417532e,file:unittest.case:/usr/lib/python3.13/unittest/case.py:ce2499ee6f34a9e6e24f11ae1e2f02e71a3529cca03d5488f0bdcfea8d5d8481,file:unittest.loader:/usr/lib/python3.13/unittest/loader.py:4152a83f4b7cec128d19d6d2399c839e27b81b302ce7f8af01f81c59ccef927e,file:unittest.main:/usr/lib/python3.13/unittest/main.py:c0babf6e6b04d732165d95f91af3da24c0b28abe21a241db309abc3b6223e5d7,file:unittest.result:/usr/lib/python3.13/unittest/result.py:5db286bdd3821d64150377e554d7edbdd58db7bb8b950772f977e9ec1d535617,file:unittest.runner:/usr/lib/python3.13/unittest/runner.py:76d9beb9c21d0d367a1b040a921ad43f90b7971fcc8cacfccd6f9760bedf1ce2,file:unittest.signals:/usr/lib/python3.13/unittest/signals.py:f8286e818ca56e10e03745bc056cdfd31147678f9a1dc8cb6b0fe96ef9a4362a,file:unittest.suite:/usr/lib/python3.13/unittest/suite.py:ed2da92bc9f97c53403ee2d3d12cc53b16a96e85d596ebc887b5a93458f3f6bc,file:unittest.util:/usr/lib/python3.13/unittest/util.py:fdcc640c3505d16deab9c32eae7c3f5f67c3b5e81c563dc6698fa7fcf403854d,file:unittest:/usr/lib/python3.13/unittest/__init__.py:7c22ee0c503b75aba5221e3e8189f9bf4632f85a43315ff841ec9d26a68e3551,file:warnings:/usr/lib/python3.13/warnings.py:1fc53fd4ecec5e32214116b1fe02c3ef1509ab0e57661f79d98ef3a598ec87bd,file:weakref:/usr/lib/python3.13/weakref.py:56f8d313fb74019e53eb9287400702fbce788b7fe30e097b0b6e06296f3f080c,file:zlib:/usr/lib/python3.13/lib-dynload/zlib.cpython-313-x86_64-linux-gnu.so:bad46f87701dc63a839fb83e45b0c9be1896997ce30fcebf4ee2e59bf815678e,frozen:_collections_abc,frozen:_frozen_importlib,frozen:_frozen_importlib_external,frozen:abc,frozen:codecs,frozen:collections.abc,frozen:genericpath,frozen:importlib._bootstrap,frozen:importlib._bootstrap_external,frozen:importlib.machinery,frozen:io,frozen:os,frozen:os.path,frozen:posixpath,frozen:stat,frozen:zipimport
 """Canonical Linux-only provenance runner for the shell-library broad wall.
 
 The public wall entry is deliberately not a pathname invocation.  The reviewed
@@ -13,6 +13,7 @@ import argparse
 import ctypes
 import errno
 import fcntl
+import grp
 import hashlib
 import io
 import json
@@ -26,6 +27,7 @@ import stat
 import struct
 import subprocess
 import sys
+import tarfile
 import tempfile
 import time
 import types
@@ -114,6 +116,29 @@ AUTHORIZED_CARGO_RUNTIME_MUTATIONS = (
     ".global-cache",
     ".package-cache",
     ".package-cache-mutate",
+)
+STAGE_B_XDG_RUNTIME_DIR = "/run/xdg"
+CANONICAL_ACCOUNT_NAME = "spenser"
+CANONICAL_ACCOUNT_UID = 1000
+CANONICAL_ACCOUNT_GID = 1000
+CANONICAL_ACCOUNT_HOME = "/home/spenser"
+CANONICAL_SUBID_START = 100_000
+CANONICAL_ACL_ID_COUNT = 63_055
+CANONICAL_STAGE_A_UID_MAP = (
+    "      1000       1000          1\n"
+    "      1001     100000      63055\n"
+)
+CANONICAL_STAGE_A_GID_MAP = CANONICAL_STAGE_A_UID_MAP
+CANONICAL_STAGE_B_UID_MAP = (
+    "      1000       1000          1\n"
+    "      1001       1001      63055\n"
+)
+CANONICAL_STAGE_B_GID_MAP = CANONICAL_STAGE_B_UID_MAP
+CRATES_IO_LOCK_SOURCE = "registry+https://github.com/rust-lang/crates.io-index"
+CARGO_VENDOR_CONFIG_V1 = (
+    b'[source.crates-io]\nreplace-with = "canonical-vendored-sources"\n\n'
+    b'[source.canonical-vendored-sources]\ndirectory = ".cargo/vendor"\n\n'
+    b"[net]\noffline = true\n"
 )
 STAGED_ARTIFACT_ORDER_V1 = (
     "cargo.log",
@@ -216,6 +241,12 @@ PLATFORM_STARTUP_TCB_V1 = {
         "sha256": "1a16ab6ec08c8e22b27360c1e12bfc426aa676cac113a14a42a8530baecdf060",
         "version": (b"git version 2.51.0\n", b""),
     },
+    "/usr/bin/newuidmap": {
+        "sha256": "c043fa4b6ae4a824b9e059580cb4cfb80c0c1cdf732822d10f5ca7026822ca2d",
+    },
+    "/usr/bin/newgidmap": {
+        "sha256": "1870ba766732568ad3e6e7b69f9920cbd79e2ba6fe3123a07151865a06769083",
+    },
     "/usr/lib/libcap.so.2": {
         "sha256": "925dd48b2062a4f434981ad351e433dd68167de69e1ed39a1ff2e69ca5d4ecb2",
         "symlink_target": "libcap.so.2.76",
@@ -283,6 +314,36 @@ for _name in os.listdir('/proc/self/fd'):
             raise SystemExit(65)
     else:
         _initial_fds.add(_number)
+_stage_role_hint=sys.argv[1] if len(sys.argv)>1 else None
+if _stage_role_hint in ('stage-a','stage-b-worker'):
+    _stage_extra_fds=_initial_fds-{0,1,2}
+    if len(_stage_extra_fds)!=1:
+        raise SystemExit(65)
+    _stage_userns_fd=next(iter(_stage_extra_fds))
+    _stage_userns_path='/proc/self/fd/'+str(_stage_userns_fd)
+    try:
+        _stage_userns_target=os.readlink(_stage_userns_path)
+        _stage_current_target=os.readlink('/proc/self/ns/user')
+        _stage_userns_details=os.fstat(_stage_userns_fd)
+        _stage_current_details=os.stat('/proc/self/ns/user')
+    except OSError:
+        raise SystemExit(65)
+    _stage_userns_inode_text=(
+        _stage_userns_target[6:-1]
+        if _stage_userns_target.startswith('user:[')
+        and _stage_userns_target.endswith(']')
+        else ''
+    )
+    if (
+        not _stage_userns_inode_text.isdecimal()
+        or _stage_userns_target!=_stage_current_target
+        or _stage_userns_details.st_ino!=int(_stage_userns_inode_text)
+        or (_stage_userns_details.st_dev,_stage_userns_details.st_ino)
+        !=(_stage_current_details.st_dev,_stage_current_details.st_ino)
+    ):
+        raise SystemExit(65)
+    os.close(_stage_userns_fd)
+    _initial_fds.remove(_stage_userns_fd)
 if _initial_fds!={0,1,2}:
     raise SystemExit(65)
 def _rr(x,n):
@@ -491,15 +552,20 @@ HOST_INVOCATION_ARGV_TEMPLATE_V1 = (
 BWRAP_STAGE_A_ARGV_TEMPLATE_V1 = (
     "/usr/bin/bwrap",
     "--die-with-parent",
-    "--unshare-user",
+    "--userns",
+    "{STAGE_A_USERNS_FD_DECIMAL}",
     "--unshare-pid",
     "--uid",
     "{CURRENT_UID_DECIMAL}",
     "--gid",
     "{CURRENT_GID_DECIMAL}",
+    "--sync-fd",
+    "{STAGE_B_USERNS_SYNC_FD_DECIMAL}",
     "--new-session",
     "--tmpfs",
     "/",
+    "--dir",
+    "/tmp",
     "--dir",
     "/usr",
     "--ro-bind",
@@ -563,7 +629,8 @@ BWRAP_STAGE_A_ARGV_TEMPLATE_V1 = (
 BWRAP_STAGE_B_ARGV_TEMPLATE_V1 = (
     "/usr/bin/bwrap",
     "--die-with-parent",
-    "--unshare-user",
+    "--userns",
+    "{STAGE_B_USERNS_FD_DECIMAL}",
     "--unshare-pid",
     "--as-pid-1",
     "--uid",
@@ -579,6 +646,9 @@ BWRAP_STAGE_B_ARGV_TEMPLATE_V1 = (
     "/usr",
     "/usr",
     "--symlink",
+    "usr/bin",
+    "/bin",
+    "--symlink",
     "usr/lib",
     "/lib",
     "--symlink",
@@ -588,6 +658,14 @@ BWRAP_STAGE_B_ARGV_TEMPLATE_V1 = (
     "/proc",
     "--dev",
     "/dev",
+    "--dir",
+    "/etc",
+    "--ro-bind",
+    "/run/substrate-wall/backing/root/account/passwd",
+    "/etc/passwd",
+    "--ro-bind",
+    "/run/substrate-wall/backing/root/account/group",
+    "/etc/group",
     "--dir",
     "/run",
     "--dir",
@@ -600,11 +678,17 @@ BWRAP_STAGE_B_ARGV_TEMPLATE_V1 = (
     "/run/substrate-wall/backing/root/tmp",
     "/run/substrate-wall/backing/root/tmp",
     "--bind",
+    "/run/substrate-wall/backing/root/tmp",
+    "/tmp",
+    "--bind",
     "/run/substrate-wall/backing/root/xdg-runtime",
-    "/run/substrate-wall/backing/root/xdg-runtime",
+    "/run/xdg",
     "--dir",
     "/home",
-    "--dir",
+    "--tmpfs",
+    "/home/spenser",
+    "--chmod",
+    "0700",
     "/home/spenser",
     "--dir",
     "/home/spenser/__Active_code",
@@ -2338,6 +2422,36 @@ def validate_platform_startup_tcb() -> dict[str, HeldExecutable]:
         raise
 
 
+def validate_subordinate_id_configuration() -> None:
+    expected = f"{CANONICAL_ACCOUNT_NAME}:{CANONICAL_SUBID_START}:65536"
+    for path in ("/etc/subuid", "/etc/subgid"):
+        fd = os.open(path, os.O_RDONLY | os.O_CLOEXEC | os.O_NOFOLLOW)
+        try:
+            details = os.fstat(fd)
+            named = os.stat(path, follow_symlinks=False)
+            _acl_sha256, foreign_write = read_effective_acl(fd)
+            data = os.read(fd, 4097)
+            if (
+                not stat.S_ISREG(details.st_mode)
+                or details.st_uid != 0
+                or stat.S_IMODE(details.st_mode) != 0o644
+                or details.st_nlink != 1
+                or foreign_write
+                or (details.st_dev, details.st_ino)
+                != (named.st_dev, named.st_ino)
+                or len(data) > 4096
+            ):
+                raise RunnerError(66, "environment_unavailable")
+            try:
+                lines = data.decode("ascii").splitlines()
+            except UnicodeDecodeError as error:
+                raise RunnerError(66, "environment_unavailable") from error
+            if lines.count(expected) != 1:
+                raise RunnerError(66, "environment_unavailable")
+        finally:
+            os.close(fd)
+
+
 def _acl_bytes(path_or_fd: str | int) -> bytes:
     records = bytearray()
     for name in (b"system.posix_acl_access", b"system.posix_acl_default"):
@@ -2467,9 +2581,31 @@ def _projected_expected_uids(expected_uid: int) -> set[int]:
             outside <= 0 < outside + length
             for _inside, outside, length in mappings
         )
+        root_projected_uids = {
+            inside + (0 - outside)
+            for inside, outside, length in mappings
+            if outside <= 0 < outside + length
+        }
+        current_uid = os.getuid()
+        current_uid_mapped = any(
+            inside <= current_uid < inside + length
+            for inside, _outside, length in mappings
+        )
     except (OSError, UnicodeError, ValueError) as error:
         raise RunnerError(67, "safe_parent_rejected") from error
+    if expected_uid == 0:
+        # Stage tmpfs roots can be owned by the mapped current uid while
+        # readonly host roots surface as overflowuid inside the namespace.
+        allowed.update(root_projected_uids)
+        if not root_mapped and current_uid_mapped:
+            allowed.add(current_uid)
     if not root_mapped:
+        with open("/proc/sys/kernel/overflowuid", "rt", encoding="utf-8") as handle:
+            overflow_uid = int(handle.read().strip())
+        if overflow_uid != 65_534:
+            raise RunnerError(67, "safe_parent_rejected")
+        allowed.add(overflow_uid)
+    elif expected_uid == 0 and root_projected_uids != {0}:
         with open("/proc/sys/kernel/overflowuid", "rt", encoding="utf-8") as handle:
             overflow_uid = int(handle.read().strip())
         if overflow_uid != 65_534:
@@ -2720,10 +2856,17 @@ def unlink_validated_entry_at(
     name: str,
     *,
     expected: tuple[int, int] | None = None,
+    expected_nlink_after: int = 0,
     cleanup_authority: CleanupQuiescence | ProtocolUnlinkAuthority | None = None,
 ) -> None:
     _validate_mutation_authority(cleanup_authority)
-    if not name or name in {".", ".."} or "/" in name:
+    if (
+        not name
+        or name in {".", ".."}
+        or "/" in name
+        or type(expected_nlink_after) is not int
+        or expected_nlink_after < 0
+    ):
         raise RunnerError(70, "cleanup_identity_mismatch")
     try:
         details = os.stat(name, dir_fd=parent_fd, follow_symlinks=False)
@@ -2741,7 +2884,15 @@ def unlink_validated_entry_at(
         held = os.fstat(entry_fd)
         if (
             (held.st_dev, held.st_ino) != (details.st_dev, details.st_ino)
-            or (stat.S_ISREG(details.st_mode) and details.st_nlink != 1)
+            or held.st_nlink != details.st_nlink
+            or (
+                stat.S_ISREG(details.st_mode)
+                and details.st_nlink != expected_nlink_after + 1
+            )
+            or (
+                not stat.S_ISREG(details.st_mode)
+                and expected_nlink_after != 0
+            )
         ):
             raise RunnerError(70, "cleanup_identity_mismatch")
         quarantine = _isolate_name_for_cleanup(
@@ -2764,6 +2915,7 @@ def unlink_validated_entry_at(
             entry_fd,
             (held.st_dev, held.st_ino),
             is_directory=stat.S_ISDIR(details.st_mode),
+            expected_nlink_after=expected_nlink_after,
             cleanup_authority=cleanup_authority,
         )
         for absent_name in (name, quarantine):
@@ -2885,6 +3037,7 @@ def _delete_isolated_entry(
     expected: tuple[int, int],
     *,
     is_directory: bool,
+    expected_nlink_after: int = 0,
     cleanup_authority: CleanupQuiescence | ProtocolUnlinkAuthority | None,
 ) -> None:
     _validate_mutation_authority(cleanup_authority)
@@ -2894,6 +3047,11 @@ def _delete_isolated_entry(
         (held.st_dev, held.st_ino) != expected
         or (isolated.st_dev, isolated.st_ino) != expected
         or stat.S_ISDIR(isolated.st_mode) != is_directory
+        or (
+            not is_directory
+            and isolated.st_nlink != expected_nlink_after + 1
+        )
+        or (is_directory and expected_nlink_after != 0)
     ):
         raise RunnerError(70, "cleanup_identity_mismatch")
     _validate_mutation_authority(cleanup_authority)
@@ -2902,7 +3060,10 @@ def _delete_isolated_entry(
     else:
         os.unlink(quarantine, dir_fd=parent_fd)
     after = os.fstat(held_fd)
-    if (after.st_dev, after.st_ino) != expected or after.st_nlink != 0:
+    if (
+        (after.st_dev, after.st_ino) != expected
+        or after.st_nlink != expected_nlink_after
+    ):
         raise RunnerError(70, "cleanup_identity_mismatch")
     try:
         os.stat(quarantine, dir_fd=parent_fd, follow_symlinks=False)
@@ -2964,6 +3125,30 @@ def _restore_isolated_name(
     raise RunnerError(70, "cleanup_identity_mismatch")
 
 
+def _confined_regular_hardlinks(
+    entries: Sequence[tuple[str, os.stat_result]],
+) -> frozenset[tuple[int, int]]:
+    observed: dict[tuple[int, int], int] = {}
+    expected: dict[tuple[int, int], int] = {}
+    for _name, details in entries:
+        if not stat.S_ISREG(details.st_mode):
+            continue
+        identity = (details.st_dev, details.st_ino)
+        observed[identity] = observed.get(identity, 0) + 1
+        prior = expected.setdefault(identity, details.st_nlink)
+        if prior != details.st_nlink:
+            raise RunnerError(70, "cleanup_identity_mismatch")
+    confined: set[tuple[int, int]] = set()
+    for identity, count in observed.items():
+        link_count = expected[identity]
+        if link_count == 1:
+            continue
+        if link_count < 1 or count != link_count:
+            raise RunnerError(70, "cleanup_identity_mismatch")
+        confined.add(identity)
+    return frozenset(confined)
+
+
 def _validate_tree_for_cleanup(
     directory_fd: int,
     mount_id: int,
@@ -2973,12 +3158,19 @@ def _validate_tree_for_cleanup(
         while stack:
             current = stack.pop()
             try:
-                for name in sorted(os.listdir(current), key=os.fsencode):
-                    details = os.stat(
+                entries = [
+                    (
                         name,
-                        dir_fd=current,
-                        follow_symlinks=False,
+                        os.stat(
+                            name,
+                            dir_fd=current,
+                            follow_symlinks=False,
+                        ),
                     )
+                    for name in sorted(os.listdir(current), key=os.fsencode)
+                ]
+                confined_hardlinks = _confined_regular_hardlinks(entries)
+                for name, details in entries:
                     if details.st_uid != os.getuid():
                         raise RunnerError(70, "cleanup_identity_mismatch")
                     entry_fd = os.open(
@@ -2998,6 +3190,7 @@ def _validate_tree_for_cleanup(
                             (opened.st_dev, opened.st_ino)
                             != (details.st_dev, details.st_ino)
                             or statx_identity(entry_fd)[2] != mount_id
+                            or opened.st_nlink != details.st_nlink
                         ):
                             raise RunnerError(
                                 70,
@@ -3016,7 +3209,11 @@ def _validate_tree_for_cleanup(
                             stack.append(entry_fd)
                             entry_fd = -1
                         elif stat.S_ISREG(details.st_mode):
-                            if details.st_nlink != 1:
+                            if (
+                                details.st_nlink != 1
+                                and (details.st_dev, details.st_ino)
+                                not in confined_hardlinks
+                            ):
                                 raise RunnerError(
                                     70,
                                     "cleanup_identity_mismatch",
@@ -3150,7 +3347,15 @@ def remove_tree_at(
             child_fd,
             child_identity.mount_id,
         )
-        for entry in sorted(os.listdir(child_fd), key=os.fsencode):
+        entries = [
+            (
+                entry,
+                os.stat(entry, dir_fd=child_fd, follow_symlinks=False),
+            )
+            for entry in sorted(os.listdir(child_fd), key=os.fsencode)
+        ]
+        confined_hardlinks = _confined_regular_hardlinks(entries)
+        for entry, _initial_details in entries:
             details = os.stat(entry, dir_fd=child_fd, follow_symlinks=False)
             if details.st_uid != os.getuid():
                 raise RunnerError(70, "cleanup_identity_mismatch")
@@ -3193,12 +3398,19 @@ def remove_tree_at(
                     or stat.S_ISLNK(details.st_mode)
                 ):
                     raise RunnerError(70, "cleanup_identity_mismatch")
+                expected_nlink_after = 0
                 if stat.S_ISREG(details.st_mode) and details.st_nlink != 1:
-                    raise RunnerError(70, "cleanup_identity_mismatch")
+                    if (
+                        (details.st_dev, details.st_ino)
+                        not in confined_hardlinks
+                    ):
+                        raise RunnerError(70, "cleanup_identity_mismatch")
+                    expected_nlink_after = details.st_nlink - 1
                 unlink_validated_entry_at(
                     child_fd,
                     entry,
                     expected=(details.st_dev, details.st_ino),
+                    expected_nlink_after=expected_nlink_after,
                     cleanup_authority=cleanup_authority,
                 )
         held_pair = (child_identity.dev, child_identity.ino)
@@ -3961,6 +4173,41 @@ def collect_stage_b_output(
         "diagnostic_prefix": bytes(diagnostic),
         "eof": True,
     }
+
+
+def _preserve_pre_ready_stage_b_output(
+    output_fd: int,
+    log_fd: int,
+    *,
+    deadline: float,
+    output_pipe_identity: tuple[int, int],
+    provenance: dict[str, object],
+) -> dict[str, object]:
+    if (
+        len(output_pipe_identity) != 2
+        or any(
+            type(value) is not int or value <= 0
+            for value in output_pipe_identity
+        )
+    ):
+        raise RunnerError(72, "internal_invariant_failed")
+    output = collect_stage_b_output(
+        output_fd,
+        log_fd,
+        deadline=deadline,
+    )
+    provenance["containment"].update(
+        {
+            "output_pipe_dev": output_pipe_identity[0],
+            "output_pipe_ino": output_pipe_identity[1],
+            "output_bytes_preserved": int(output["preserved_bytes"]),
+            "output_pipe_opened_before_stage_b": True,
+            "single_pipe_for_stdout_stderr": True,
+            "output_eof_after_stage_b_reap": bool(output["eof"]),
+            "output_overflow": bool(output["overflow"]),
+        }
+    )
+    return output
 
 
 def supervise_stage_b_channels(
@@ -5562,6 +5809,11 @@ def _copy_tree_no_follow(
                             os.close(next_source)
                             os.close(next_destination)
                             raise RunnerError(67, "snapshot_identity_invalid")
+                        os.fchmod(next_destination, mode)
+                        if stat.S_IMODE(os.fstat(next_destination).st_mode) != mode:
+                            os.close(next_source)
+                            os.close(next_destination)
+                            raise RunnerError(67, "snapshot_identity_invalid")
                         stack.append((next_source, next_destination))
                     elif stat.S_ISREG(details.st_mode):
                         source_file = os.open(
@@ -5602,6 +5854,9 @@ def _copy_tree_no_follow(
                                     break
                                 _write_all(destination_file, chunk)
                                 offset += len(chunk)
+                            os.fchmod(destination_file, mode)
+                            if stat.S_IMODE(os.fstat(destination_file).st_mode) != mode:
+                                raise RunnerError(67, "snapshot_identity_invalid")
                             os.fsync(destination_file)
                         finally:
                             os.close(source_file)
@@ -5829,7 +6084,168 @@ def construct_rustup_home_snapshot(
     }
 
 
-def reconstruct_locked_registry(
+def _locked_registry_packages(lock_bytes: bytes) -> dict[str, tuple[str, str]]:
+    packages: dict[str, tuple[str, str]] = {}
+    vendor_directories: set[str] = set()
+    for block in lock_bytes.split(b"[[package]]")[1:]:
+        source_matches = re.findall(
+            rb'^source = "([^"\r\n]+)"$',
+            block,
+            flags=re.MULTILINE,
+        )
+        if not source_matches:
+            continue
+        if len(source_matches) != 1:
+            raise RunnerError(67, "snapshot_identity_invalid")
+        try:
+            source = source_matches[0].decode("ascii")
+        except UnicodeDecodeError as error:
+            raise RunnerError(67, "snapshot_identity_invalid") from error
+        if source != CRATES_IO_LOCK_SOURCE:
+            raise RunnerError(67, "snapshot_identity_invalid")
+        values: dict[str, str] = {}
+        for key in ("name", "version", "checksum"):
+            matches = re.findall(
+                ('^' + key + r' = "([^"\r\n]+)"$').encode("ascii"),
+                block,
+                flags=re.MULTILINE,
+            )
+            if len(matches) != 1:
+                raise RunnerError(67, "snapshot_identity_invalid")
+            try:
+                values[key] = matches[0].decode("ascii")
+            except UnicodeDecodeError as error:
+                raise RunnerError(67, "snapshot_identity_invalid") from error
+        if (
+            not re.fullmatch(r"[A-Za-z0-9_-]+", values["name"])
+            or not re.fullmatch(r"[0-9A-Za-z.+-]+", values["version"])
+            or not re.fullmatch(r"[0-9a-f]{64}", values["checksum"])
+        ):
+            raise RunnerError(67, "snapshot_identity_invalid")
+        vendor_directory = f'{values["name"]}-{values["version"]}'
+        if values["checksum"] in packages or vendor_directory in vendor_directories:
+            raise RunnerError(67, "snapshot_identity_invalid")
+        packages[values["checksum"]] = (values["name"], values["version"])
+        vendor_directories.add(vendor_directory)
+    if not packages:
+        raise RunnerError(67, "snapshot_identity_invalid")
+    return packages
+
+
+def _extract_locked_crate_to_vendor(
+    archive_fd: int,
+    destination: str,
+    *,
+    name: str,
+    version: str,
+    checksum: str,
+    deadline: float | None,
+) -> None:
+    _check_snapshot_deadline(deadline)
+    vendor_directory = f"{name}-{version}"
+    expected_files: set[str] = set()
+    members: list[tarfile.TarInfo] = []
+    try:
+        with os.fdopen(os.dup(archive_fd), "rb") as archive_file:
+            with tarfile.open(fileobj=archive_file, mode="r:gz") as archive:
+                for member in archive.getmembers():
+                    _check_snapshot_deadline(deadline)
+                    parts = member.name.split("/")
+                    if (
+                        not parts
+                        or parts[0] != vendor_directory
+                        or any(part in {"", ".", ".."} for part in parts)
+                        or os.path.isabs(member.name)
+                        or os.path.normpath(member.name) != member.name
+                    ):
+                        raise RunnerError(67, "snapshot_identity_invalid")
+                    relative = "/".join(parts[1:])
+                    if not relative:
+                        if not member.isdir():
+                            raise RunnerError(67, "snapshot_identity_invalid")
+                    elif member.isfile():
+                        if relative in expected_files:
+                            raise RunnerError(67, "snapshot_identity_invalid")
+                        expected_files.add(relative)
+                    elif not member.isdir():
+                        raise RunnerError(67, "snapshot_identity_invalid")
+                    members.append(member)
+                if not expected_files or "Cargo.toml" not in expected_files:
+                    raise RunnerError(67, "snapshot_identity_invalid")
+                archive.extractall(
+                    path=destination,
+                    members=members,
+                    filter="data",
+                )
+    except RunnerError:
+        raise
+    except (OSError, tarfile.TarError, UnicodeError, ValueError) as error:
+        raise RunnerError(67, "snapshot_identity_invalid") from error
+    if hash_open_file(archive_fd) != checksum:
+        raise RunnerError(67, "snapshot_identity_invalid")
+    package_path = os.path.join(destination, vendor_directory)
+    observed_files: dict[str, str] = {}
+    for current, directories, files in os.walk(package_path, followlinks=False):
+        _check_snapshot_deadline(deadline)
+        for directory in directories:
+            path = os.path.join(current, directory)
+            details = os.lstat(path)
+            if not stat.S_ISDIR(details.st_mode):
+                raise RunnerError(67, "snapshot_identity_invalid")
+            os.chmod(path, 0o700)
+        for filename in files:
+            path = os.path.join(current, filename)
+            relative = os.path.relpath(path, package_path)
+            details = os.lstat(path)
+            if not stat.S_ISREG(details.st_mode) or relative not in expected_files:
+                raise RunnerError(67, "snapshot_identity_invalid")
+            fd = os.open(path, os.O_RDONLY | os.O_CLOEXEC | os.O_NOFOLLOW)
+            try:
+                opened = os.fstat(fd)
+                if (opened.st_dev, opened.st_ino) != (details.st_dev, details.st_ino):
+                    raise RunnerError(67, "snapshot_identity_invalid")
+                observed_files[relative] = hash_open_file(fd)
+            finally:
+                os.close(fd)
+            os.chmod(path, 0o700 if details.st_mode & 0o111 else 0o600)
+    if set(observed_files) != expected_files:
+        raise RunnerError(67, "snapshot_identity_invalid")
+    checksum_bytes = (
+        json.dumps(
+            {"files": observed_files, "package": checksum},
+            sort_keys=True,
+            separators=(",", ":"),
+            ensure_ascii=True,
+        )
+        + "\n"
+    ).encode("ascii")
+    package_fd = os.open(
+        package_path,
+        os.O_RDONLY | os.O_DIRECTORY | os.O_CLOEXEC | os.O_NOFOLLOW,
+    )
+    checksum_fd = -1
+    try:
+        checksum_fd = os.open(
+            ".cargo-checksum.json",
+            os.O_RDWR
+            | os.O_CREAT
+            | os.O_EXCL
+            | os.O_CLOEXEC
+            | os.O_NOFOLLOW,
+            0o600,
+            dir_fd=package_fd,
+        )
+        _write_all(checksum_fd, checksum_bytes)
+        os.fsync(checksum_fd)
+        if hash_open_file(checksum_fd) != inline_sha256(checksum_bytes):
+            raise RunnerError(67, "snapshot_identity_invalid")
+    finally:
+        if checksum_fd >= 0:
+            os.close(checksum_fd)
+        os.close(package_fd)
+
+
+def reconstruct_locked_vendor(
     repository: str | int,
     cargo_source: str | int,
     destination: str,
@@ -5884,13 +6300,7 @@ def reconstruct_locked_registry(
                 offset += len(chunk)
         finally:
             os.close(lock_fd)
-        checksum_matches = {
-            checksum.decode("ascii")
-            for checksum in re.findall(
-                rb'checksum = "([0-9a-f]{64})"',
-                bytes(lock_bytes),
-            )
-        }
+        locked_packages = _locked_registry_packages(bytes(lock_bytes))
         os.mkdir(destination, 0o700)
         destination_fd = os.open(
             destination,
@@ -5961,42 +6371,18 @@ def reconstruct_locked_registry(
                                     "snapshot_identity_invalid",
                                 )
                             digest = hash_open_file(source_fd)
-                            if digest not in checksum_matches:
+                            package = locked_packages.get(digest)
+                            if package is None:
                                 continue
-                            destination_file = os.open(
-                                filename,
-                                os.O_RDWR
-                                | os.O_CREAT
-                                | os.O_EXCL
-                                | os.O_CLOEXEC
-                                | os.O_NOFOLLOW,
-                                0o600,
-                                dir_fd=destination_fd,
+                            _extract_locked_crate_to_vendor(
+                                source_fd,
+                                destination,
+                                name=package[0],
+                                version=package[1],
+                                checksum=digest,
+                                deadline=deadline,
                             )
-                            try:
-                                offset = 0
-                                while True:
-                                    _check_snapshot_deadline(deadline)
-                                    chunk = os.pread(
-                                        source_fd,
-                                        1024 * 1024,
-                                        offset,
-                                    )
-                                    if not chunk:
-                                        break
-                                    _write_all(destination_file, chunk)
-                                    offset += len(chunk)
-                                os.fsync(destination_file)
-                                if (
-                                    hash_open_file(source_fd) != digest
-                                    or hash_open_file(destination_file) != digest
-                                ):
-                                    raise RunnerError(
-                                        67,
-                                        "snapshot_identity_invalid",
-                                    )
-                            finally:
-                                os.close(destination_file)
+                            del locked_packages[digest]
                             copied += 1
                         finally:
                             os.close(source_fd)
@@ -6007,6 +6393,8 @@ def reconstruct_locked_registry(
             while stack:
                 os.close(stack.pop())
             os.close(destination_fd)
+        if locked_packages:
+            raise RunnerError(67, "snapshot_identity_invalid")
     finally:
         os.close(cargo_fd)
         os.close(repository_fd)
@@ -6027,7 +6415,7 @@ def construct_cargo_home_seed(
     _check_snapshot_deadline(deadline)
     os.mkdir(destination, 0o700)
     bin_path = os.path.join(destination, "bin")
-    registry_path = os.path.join(destination, "registry")
+    vendor_path = os.path.join(destination, "vendor")
     os.mkdir(bin_path, 0o700)
     cargo_source_fd = os.open(
         cargo_source,
@@ -6104,15 +6492,41 @@ def construct_cargo_home_seed(
         os.close(destination_fd)
     os.symlink("rustup", os.path.join(bin_path, "cargo"))
     os.symlink("rustup", os.path.join(bin_path, "rustc"))
-    _registry_manifest, _registry_count = reconstruct_locked_registry(
-        repository_fd,
-        cargo_source_fd,
-        registry_path,
-        deadline=deadline,
+    try:
+        _vendor_manifest, _vendor_count = reconstruct_locked_vendor(
+            repository_fd,
+            cargo_source_fd,
+            vendor_path,
+            deadline=deadline,
+        )
+    finally:
+        os.close(bin_source_fd)
+        os.close(repository_fd)
+        os.close(cargo_source_fd)
+    cargo_home_fd = os.open(
+        destination,
+        os.O_RDONLY | os.O_DIRECTORY | os.O_CLOEXEC | os.O_NOFOLLOW,
     )
-    os.close(bin_source_fd)
-    os.close(repository_fd)
-    os.close(cargo_source_fd)
+    config_fd = -1
+    try:
+        config_fd = os.open(
+            "config.toml",
+            os.O_RDWR
+            | os.O_CREAT
+            | os.O_EXCL
+            | os.O_CLOEXEC
+            | os.O_NOFOLLOW,
+            0o600,
+            dir_fd=cargo_home_fd,
+        )
+        _write_all(config_fd, CARGO_VENDOR_CONFIG_V1)
+        os.fsync(config_fd)
+        if hash_open_file(config_fd) != inline_sha256(CARGO_VENDOR_CONFIG_V1):
+            raise RunnerError(67, "snapshot_identity_invalid")
+    finally:
+        if config_fd >= 0:
+            os.close(config_fd)
+        os.close(cargo_home_fd)
     manifest, directories, files, symlinks = _manifest_tree(
         destination,
         deadline=deadline,
@@ -7525,14 +7939,17 @@ def _validate_provenance_record(provenance: Mapping[str, object]) -> None:
     for stage_name in ("stage_a", "stage_b"):
         stage = mounts[stage_name]
         expected_as_pid_1 = stage_name == "stage_b"
+        expected_uid_map, expected_gid_map = (
+            (CANONICAL_STAGE_A_UID_MAP, CANONICAL_STAGE_A_GID_MAP)
+            if stage_name == "stage_a"
+            else (CANONICAL_STAGE_B_UID_MAP, CANONICAL_STAGE_B_GID_MAP)
+        )
         if stage is not None and (
             not exact_keys(stage, stage_keys)
             or not sha256(stage["argv_template_sha256"])
             or not sha256(stage["argv_sha256"])
-            or re.fullmatch(r"[0-9]+ [0-9]+ 1\n", str(stage["uid_map"]))
-            is None
-            or re.fullmatch(r"[0-9]+ [0-9]+ 1\n", str(stage["gid_map"]))
-            is None
+            or stage["uid_map"] != expected_uid_map
+            or stage["gid_map"] != expected_gid_map
             or any(
                 stage[key] is not True
                 for key in (
@@ -7629,6 +8046,7 @@ def _validate_provenance_record(provenance: Mapping[str, object]) -> None:
                 "only_authorized_metadata_changed",
                 "removed",
                 "authorized_mutable_paths",
+                "changed",
             },
         )
         or not sha256(cargo_runtime["seed_manifest_sha256"])
@@ -7639,6 +8057,14 @@ def _validate_provenance_record(provenance: Mapping[str, object]) -> None:
         )
         or cargo_runtime["authorized_mutable_paths"]
         != list(AUTHORIZED_CARGO_RUNTIME_MUTATIONS)
+        or not isinstance(cargo_runtime["changed"], list)
+        or any(
+            not isinstance(path, str)
+            or path not in AUTHORIZED_CARGO_RUNTIME_MUTATIONS
+            for path in cargo_runtime["changed"]
+        )
+        or cargo_runtime["changed"] != sorted(cargo_runtime["changed"])
+        or len(cargo_runtime["changed"]) != len(set(cargo_runtime["changed"]))
         or any(
             type(cargo_runtime[key]) is not int
             or cargo_runtime[key] < 0
@@ -8121,6 +8547,16 @@ def _validate_provenance_record(provenance: Mapping[str, object]) -> None:
                 "git",
                 "/usr/bin/git",
                 "git version 2.51.0",
+            ),
+            (
+                "newuidmap",
+                "/usr/bin/newuidmap",
+                "shadow 4.18.0-1",
+            ),
+            (
+                "newgidmap",
+                "/usr/bin/newgidmap",
+                "shadow 4.18.0-1",
             ),
             (
                 "rustup",
@@ -9634,6 +10070,361 @@ class SpawnedProcess:
     pidfd: int
 
 
+@dataclass
+class PreparedAclUserNamespaces:
+    stage_a_fd: int
+    stage_b_fd: int
+
+
+def close_prepared_acl_user_namespaces(
+    namespaces: PreparedAclUserNamespaces,
+) -> None:
+    for descriptor in (namespaces.stage_a_fd, namespaces.stage_b_fd):
+        try:
+            os.close(descriptor)
+        except OSError:
+            pass
+
+
+def _set_namespace_keeper_parent_death_signal() -> None:
+    libc = ctypes.CDLL(None, use_errno=True)
+    if libc.prctl(1, signal.SIGKILL, 0, 0, 0) != 0 or os.getppid() == 1:
+        os._exit(127)
+
+
+def _write_proc_id_map(path: str, data: bytes) -> None:
+    descriptor = os.open(path, os.O_WRONLY | os.O_CLOEXEC | os.O_NOFOLLOW)
+    try:
+        _write_all(descriptor, data)
+    finally:
+        os.close(descriptor)
+
+
+def _run_namespace_map_tool(executable_fd: int, argv: Sequence[str]) -> int:
+    pid = os.fork()
+    if pid == 0:
+        try:
+            devnull = os.open("/dev/null", os.O_RDWR | os.O_CLOEXEC)
+            os.dup2(devnull, 0)
+            os.dup2(devnull, 1)
+            os.dup2(devnull, 2)
+            if devnull > 2:
+                os.close(devnull)
+            _close_unpreserved_fds({0, 1, 2, executable_fd})
+            os.execve(
+                executable_fd,
+                list(argv),
+                {"LANG": "C.UTF-8", "LC_ALL": "C.UTF-8"},
+            )
+        except BaseException:
+            os._exit(127)
+    waited, raw_status = os.waitpid(pid, 0)
+    if waited != pid:
+        return 127
+    return _decode_wait_status(raw_status)
+
+
+def _acl_namespace_keeper_main(
+    ready_write: int,
+    mapped_read: int,
+    stage_b_pid_write: int,
+    release_read: int,
+) -> None:
+    _set_namespace_keeper_parent_death_signal()
+    _close_unpreserved_fds(
+        {0, 1, 2, ready_write, mapped_read, stage_b_pid_write, release_read}
+    )
+    os.unshare(os.CLONE_NEWUSER)
+    if os.write(ready_write, b"R") != 1:
+        os._exit(127)
+    os.close(ready_write)
+    if os.read(mapped_read, 1) != b"M":
+        os._exit(127)
+    os.close(mapped_read)
+    stage_b_ready_read, stage_b_ready_write = os.pipe2(os.O_CLOEXEC)
+    stage_b_mapped_read, stage_b_mapped_write = os.pipe2(os.O_CLOEXEC)
+    stage_b_release_read, stage_b_release_write = os.pipe2(os.O_CLOEXEC)
+    stage_b_pid = os.fork()
+    if stage_b_pid == 0:
+        try:
+            _set_namespace_keeper_parent_death_signal()
+            os.close(stage_b_ready_read)
+            os.close(stage_b_mapped_write)
+            os.close(stage_b_release_write)
+            _close_unpreserved_fds(
+                {
+                    0,
+                    1,
+                    2,
+                    stage_b_ready_write,
+                    stage_b_mapped_read,
+                    stage_b_release_read,
+                }
+            )
+            os.unshare(os.CLONE_NEWUSER)
+            if os.write(stage_b_ready_write, b"R") != 1:
+                os._exit(127)
+            os.close(stage_b_ready_write)
+            if os.read(stage_b_mapped_read, 1) != b"M":
+                os._exit(127)
+            os.close(stage_b_mapped_read)
+            if os.read(stage_b_release_read, 1) != b"X":
+                os._exit(127)
+            os.close(stage_b_release_read)
+            os._exit(0)
+        except BaseException:
+            os._exit(127)
+    os.close(stage_b_ready_write)
+    os.close(stage_b_mapped_read)
+    os.close(stage_b_release_read)
+    if os.read(stage_b_ready_read, 1) != b"R":
+        os._exit(127)
+    os.close(stage_b_ready_read)
+    _write_proc_id_map(f"/proc/{stage_b_pid}/setgroups", b"deny")
+    _write_proc_id_map(
+        f"/proc/{stage_b_pid}/uid_map",
+        CANONICAL_STAGE_B_UID_MAP.encode("ascii"),
+    )
+    _write_proc_id_map(
+        f"/proc/{stage_b_pid}/gid_map",
+        CANONICAL_STAGE_B_GID_MAP.encode("ascii"),
+    )
+    if os.write(stage_b_mapped_write, b"M") != 1:
+        os._exit(127)
+    os.close(stage_b_mapped_write)
+    if os.write(stage_b_pid_write, f"{stage_b_pid}\n".encode("ascii")) <= 0:
+        os._exit(127)
+    os.close(stage_b_pid_write)
+    if os.read(release_read, 1) != b"X":
+        os._exit(127)
+    os.close(release_read)
+    if os.write(stage_b_release_write, b"X") != 1:
+        os._exit(127)
+    os.close(stage_b_release_write)
+    waited, raw_status = os.waitpid(stage_b_pid, 0)
+    if waited != stage_b_pid or _decode_wait_status(raw_status) != 0:
+        os._exit(127)
+    os._exit(0)
+
+
+def _acl_namespace_builder_main(
+    endpoint_fd: int,
+    newuidmap_fd: int,
+    newgidmap_fd: int,
+) -> None:
+    endpoint = socket.socket(fileno=endpoint_fd)
+    _set_namespace_keeper_parent_death_signal()
+    _close_unpreserved_fds(
+        {0, 1, 2, endpoint_fd, newuidmap_fd, newgidmap_fd}
+    )
+    ready_read, ready_write = os.pipe2(os.O_CLOEXEC)
+    mapped_read, mapped_write = os.pipe2(os.O_CLOEXEC)
+    stage_b_pid_read, stage_b_pid_write = os.pipe2(os.O_CLOEXEC)
+    release_read, release_write = os.pipe2(os.O_CLOEXEC)
+    keeper_pid = os.fork()
+    if keeper_pid == 0:
+        try:
+            endpoint.close()
+            os.close(ready_read)
+            os.close(mapped_write)
+            os.close(stage_b_pid_read)
+            os.close(release_write)
+            _acl_namespace_keeper_main(
+                ready_write,
+                mapped_read,
+                stage_b_pid_write,
+                release_read,
+            )
+        finally:
+            os._exit(127)
+    os.close(ready_write)
+    os.close(mapped_read)
+    os.close(stage_b_pid_write)
+    os.close(release_read)
+    try:
+        if os.read(ready_read, 1) != b"R":
+            raise RuntimeError
+        os.close(ready_read)
+        ready_read = -1
+        uid_status = _run_namespace_map_tool(
+            newuidmap_fd,
+            (
+                "/usr/bin/newuidmap",
+                str(keeper_pid),
+                "1000",
+                "1000",
+                "1",
+                "1001",
+                str(CANONICAL_SUBID_START),
+                str(CANONICAL_ACL_ID_COUNT),
+            ),
+        )
+        gid_status = _run_namespace_map_tool(
+            newgidmap_fd,
+            (
+                "/usr/bin/newgidmap",
+                str(keeper_pid),
+                "1000",
+                "1000",
+                "1",
+                "1001",
+                str(CANONICAL_SUBID_START),
+                str(CANONICAL_ACL_ID_COUNT),
+            ),
+        )
+        if uid_status != 0 or gid_status != 0:
+            raise RuntimeError
+        if os.write(mapped_write, b"M") != 1:
+            raise RuntimeError
+        os.close(mapped_write)
+        mapped_write = -1
+        stage_b_pid_raw = os.read(stage_b_pid_read, 64)
+        os.close(stage_b_pid_read)
+        stage_b_pid_read = -1
+        if not stage_b_pid_raw.endswith(b"\n"):
+            raise RuntimeError
+        stage_b_pid = int(stage_b_pid_raw[:-1])
+        stage_a_fd = os.open(
+            f"/proc/{keeper_pid}/ns/user",
+            os.O_RDONLY | os.O_CLOEXEC,
+        )
+        stage_b_fd = os.open(
+            f"/proc/{stage_b_pid}/ns/user",
+            os.O_RDONLY | os.O_CLOEXEC,
+        )
+        try:
+            stage_a_identity = os.fstat(stage_a_fd)
+            stage_b_identity = os.fstat(stage_b_fd)
+            payload = struct.pack(
+                "!8sQQ",
+                b"P1UNSV1\0",
+                stage_a_identity.st_ino,
+                stage_b_identity.st_ino,
+            )
+            sent = endpoint.sendmsg(
+                [payload],
+                [
+                    (
+                        socket.SOL_SOCKET,
+                        socket.SCM_RIGHTS,
+                        struct.pack("ii", stage_a_fd, stage_b_fd),
+                    )
+                ],
+            )
+            if sent != len(payload):
+                raise RuntimeError
+        finally:
+            os.close(stage_a_fd)
+            os.close(stage_b_fd)
+        if os.write(release_write, b"X") != 1:
+            raise RuntimeError
+        os.close(release_write)
+        release_write = -1
+        waited, raw_status = os.waitpid(keeper_pid, 0)
+        if waited != keeper_pid or _decode_wait_status(raw_status) != 0:
+            raise RuntimeError
+        endpoint.close()
+        os._exit(0)
+    except BaseException:
+        try:
+            endpoint.send(b"P1UNSERR")
+        except OSError:
+            pass
+        try:
+            os.write(release_write, b"X")
+        except OSError:
+            pass
+        try:
+            os.kill(keeper_pid, signal.SIGKILL)
+        except ProcessLookupError:
+            pass
+        try:
+            os.waitpid(keeper_pid, 0)
+        except ChildProcessError:
+            pass
+        endpoint.close()
+        os._exit(127)
+
+
+def prepare_acl_user_namespaces(
+    newuidmap: HeldExecutable,
+    newgidmap: HeldExecutable,
+) -> PreparedAclUserNamespaces:
+    parent_endpoint, child_endpoint = socket.socketpair(
+        socket.AF_UNIX,
+        socket.SOCK_SEQPACKET | socket.SOCK_CLOEXEC,
+    )
+    helper_pid = os.fork()
+    if helper_pid == 0:
+        try:
+            parent_endpoint.close()
+            _acl_namespace_builder_main(
+                child_endpoint.detach(),
+                newuidmap.fd,
+                newgidmap.fd,
+            )
+        finally:
+            os._exit(127)
+    child_endpoint.close()
+    helper = SpawnedProcess(pid=helper_pid, pidfd=os.pidfd_open(helper_pid))
+    received_fds: list[int] = []
+    try:
+        parent_endpoint.settimeout(SETUP_TIMEOUT_SECONDS)
+        payload, ancillary, flags, _address = parent_endpoint.recvmsg(
+            24,
+            socket.CMSG_SPACE(2 * struct.calcsize("i")),
+        )
+        if flags & (socket.MSG_TRUNC | socket.MSG_CTRUNC):
+            raise RunnerError(66, "environment_unavailable")
+        for level, kind, data in ancillary:
+            if level == socket.SOL_SOCKET and kind == socket.SCM_RIGHTS:
+                if len(data) != 2 * struct.calcsize("i"):
+                    raise RunnerError(66, "environment_unavailable")
+                received_fds.extend(struct.unpack("ii", data))
+        if len(received_fds) != 2 or len(set(received_fds)) != 2:
+            raise RunnerError(66, "environment_unavailable")
+        magic, stage_a_inode, stage_b_inode = struct.unpack("!8sQQ", payload)
+        observed = tuple(os.fstat(descriptor).st_ino for descriptor in received_fds)
+        if (
+            magic != b"P1UNSV1\0"
+            or observed != (stage_a_inode, stage_b_inode)
+            or stage_a_inode == stage_b_inode
+        ):
+            raise RunnerError(66, "environment_unavailable")
+        status = _reap_exact_spawned_before_deadline(
+            helper,
+            deadline=time.monotonic() + SETUP_TIMEOUT_SECONDS,
+        )
+        if status != 0:
+            raise RunnerError(66, "environment_unavailable")
+        os.close(helper.pidfd)
+        parent_endpoint.close()
+        for descriptor in received_fds:
+            os.set_inheritable(descriptor, False)
+        return PreparedAclUserNamespaces(
+            stage_a_fd=received_fds[0],
+            stage_b_fd=received_fds[1],
+        )
+    except BaseException as error:
+        for descriptor in received_fds:
+            try:
+                os.close(descriptor)
+            except OSError:
+                pass
+        parent_endpoint.close()
+        try:
+            _terminate_exact_spawned_process(helper)
+        except BaseException:
+            pass
+        try:
+            os.close(helper.pidfd)
+        except OSError:
+            pass
+        if isinstance(error, RunnerError):
+            raise
+        raise RunnerError(66, "environment_unavailable") from error
+
+
 def _reap_exact_spawned_before_deadline(
     spawned: SpawnedProcess,
     *,
@@ -9846,6 +10637,7 @@ def _close_failed_launch_fds(descriptors: Sequence[int]) -> None:
 def launch_stage_a_bwrap(
     *,
     bwrap: HeldExecutable,
+    user_namespaces: PreparedAclUserNamespaces,
     source: bytes,
     authority: Mapping[str, object],
     repository: str,
@@ -9871,6 +10663,10 @@ def launch_stage_a_bwrap(
             "TIMEOUT_DECIMAL": str(timeout_seconds),
             "CURRENT_UID_DECIMAL": str(os.getuid()),
             "CURRENT_GID_DECIMAL": str(os.getgid()),
+            "STAGE_A_USERNS_FD_DECIMAL": str(user_namespaces.stage_a_fd),
+            "STAGE_B_USERNS_SYNC_FD_DECIMAL": str(
+                user_namespaces.stage_b_fd
+            ),
             "RUNNER_DATA_FD_DECIMAL": str(runner_fd),
             "STATUS_FD_DECIMAL": str(status_write),
             "EVIDENCE_PARTIAL": str(authority["partial_path"]),
@@ -9885,7 +10681,12 @@ def launch_stage_a_bwrap(
             bwrap.fd,
             argv,
             environment,
-            preserve_fds=(runner_fd, status_write),
+            preserve_fds=(
+                runner_fd,
+                status_write,
+                user_namespaces.stage_a_fd,
+                user_namespaces.stage_b_fd,
+            ),
         )
         descriptor = status_write
         status_write = -1
@@ -9919,6 +10720,7 @@ def launch_stage_a_bwrap(
 def launch_stage_b_bwrap(
     *,
     bwrap: HeldExecutable,
+    userns_fd: int,
     source: bytes,
     root: str,
     repository_snapshot: str,
@@ -9947,6 +10749,7 @@ def launch_stage_b_bwrap(
             "TIMEOUT_DECIMAL": str(timeout_seconds),
             "CURRENT_UID_DECIMAL": str(os.getuid()),
             "CURRENT_GID_DECIMAL": str(os.getgid()),
+            "STAGE_B_USERNS_FD_DECIMAL": str(userns_fd),
             "RUNNER_DATA_FD_DECIMAL": str(runner_fd),
             "STATUS_FD_DECIMAL": str(status_write),
             "ROOT": root,
@@ -9962,7 +10765,7 @@ def launch_stage_b_bwrap(
             bwrap.fd,
             argv,
             environment,
-            preserve_fds=(runner_fd, status_write),
+            preserve_fds=(runner_fd, status_write, userns_fd),
             stdout_fd=output_write_fd,
             stderr_fd=output_write_fd,
         )
@@ -10049,6 +10852,32 @@ def _parse_first_bwrap_record(line: bytes) -> dict[str, object]:
     return _validate_bwrap_first_record(record)
 
 
+def _capture_stage_b_worker_identity(
+    first_status: Mapping[str, object],
+) -> tuple[int, dict[str, int], int, int]:
+    worker_pid = int(first_status["child-pid"])
+    namespace_identities = {
+        "mnt-namespace": int(first_status["mnt-namespace"]),
+        "pid-namespace": int(first_status["pid-namespace"]),
+    }
+    worker_pidfd: int | None = None
+    try:
+        observed_namespace_identities = {
+            "mnt-namespace": os.stat(f"/proc/{worker_pid}/ns/mnt").st_ino,
+            "pid-namespace": os.stat(f"/proc/{worker_pid}/ns/pid").st_ino,
+        }
+        worker_start_time = _process_start_time_ticks(worker_pid)
+        worker_pidfd = os.pidfd_open(worker_pid)
+    except (FileNotFoundError, ProcessLookupError) as error:
+        if worker_pidfd is not None:
+            os.close(worker_pidfd)
+        raise RunnerError(68, "premature_stage_b_exit") from error
+    if observed_namespace_identities != namespace_identities:
+        os.close(worker_pidfd)
+        raise RunnerError(68, "namespace_setup_failed")
+    return worker_pid, namespace_identities, worker_start_time, worker_pidfd
+
+
 def _canonical_cargo_command(mode: str) -> tuple[str, ...]:
     command = (
         "/home/spenser/.cargo/bin/cargo",
@@ -10074,8 +10903,94 @@ def _canonical_wall_environment(
         raise RunnerError(67, "root_validation_failed")
     environment = dict(inherited)
     environment["TMPDIR"] = os.path.join(root, "tmp")
-    environment["XDG_RUNTIME_DIR"] = os.path.join(root, "xdg-runtime")
+    environment["XDG_RUNTIME_DIR"] = STAGE_B_XDG_RUNTIME_DIR
     return environment
+
+
+def _canonical_account_records() -> tuple[bytes, bytes]:
+    if (
+        os.getuid() != CANONICAL_ACCOUNT_UID
+        or os.getgid() != CANONICAL_ACCOUNT_GID
+    ):
+        raise RunnerError(66, "environment_unavailable")
+    passwd_record = (
+        f"{CANONICAL_ACCOUNT_NAME}:x:{CANONICAL_ACCOUNT_UID}:"
+        f"{CANONICAL_ACCOUNT_GID}::{CANONICAL_ACCOUNT_HOME}:/bin/sh\n"
+    ).encode("ascii")
+    group_record = (
+        f"{CANONICAL_ACCOUNT_NAME}:x:{CANONICAL_ACCOUNT_GID}:\n"
+    ).encode("ascii")
+    return passwd_record, group_record
+
+
+def _resolve_canonical_account() -> None:
+    try:
+        account = pwd.getpwuid(os.getuid())
+        group = grp.getgrgid(os.getgid())
+    except KeyError as error:
+        raise RunnerError(66, "environment_unavailable") from error
+    if (
+        account.pw_name != CANONICAL_ACCOUNT_NAME
+        or account.pw_uid != CANONICAL_ACCOUNT_UID
+        or account.pw_gid != CANONICAL_ACCOUNT_GID
+        or account.pw_dir != CANONICAL_ACCOUNT_HOME
+        or group.gr_name != CANONICAL_ACCOUNT_NAME
+        or group.gr_gid != CANONICAL_ACCOUNT_GID
+    ):
+        raise RunnerError(66, "environment_unavailable")
+
+
+def validate_host_account_projection() -> tuple[bytes, bytes]:
+    records = _canonical_account_records()
+    _resolve_canonical_account()
+    return records
+
+
+def _create_canonical_account_projection(root_fd: int, root_path: str) -> None:
+    passwd_record, group_record = _canonical_account_records()
+    os.mkdir("account", 0o700, dir_fd=root_fd)
+    account_path = os.path.join(root_path, "account")
+    account_fd, _account_identity = open_validated_directory(
+        account_path,
+        expected_uid=os.getuid(),
+        expected_mode=0o700,
+        validate_ancestors=False,
+    )
+    try:
+        _write_file_at(account_fd, "passwd", passwd_record, mode=0o400)
+        _write_file_at(account_fd, "group", group_record, mode=0o400)
+    finally:
+        os.close(account_fd)
+
+
+def _validate_stage_b_account_projection() -> None:
+    passwd_record, group_record = _canonical_account_records()
+    for path, expected in (
+        ("/etc/passwd", passwd_record),
+        ("/etc/group", group_record),
+    ):
+        fd = os.open(path, os.O_RDONLY | os.O_CLOEXEC | os.O_NOFOLLOW)
+        try:
+            details = os.fstat(fd)
+            named = os.stat(path, follow_symlinks=False)
+            _acl_sha256, foreign_write = read_effective_acl(fd)
+            mount_flags = os.fstatvfs(fd).f_flag
+            observed = os.pread(fd, len(expected) + 1, 0)
+            if (
+                not stat.S_ISREG(details.st_mode)
+                or details.st_uid != os.getuid()
+                or stat.S_IMODE(details.st_mode) != 0o400
+                or details.st_nlink != 1
+                or foreign_write
+                or (details.st_dev, details.st_ino)
+                != (named.st_dev, named.st_ino)
+                or observed != expected
+                or not mount_flags & os.ST_RDONLY
+            ):
+                raise RunnerError(68, "root_identity_drift")
+        finally:
+            os.close(fd)
+    _resolve_canonical_account()
 
 
 def _spawn_primary_command(
@@ -10100,6 +11015,7 @@ def _spawn_primary_command(
     pid = os.fork()
     if pid == 0:
         try:
+            os.umask(0o077)
             keep = {0, 1, 2, rustup.fd}
             os.set_inheritable(rustup.fd, False)
             _close_unpreserved_fds(keep)
@@ -10332,6 +11248,86 @@ def _open_validated_stage_a_root_parent(
         raise
 
 
+def _validate_stage_b_home_projection() -> None:
+    home_fd, home_identity = open_validated_directory(
+        CANONICAL_ACCOUNT_HOME,
+        expected_uid=os.getuid(),
+        expected_mode=0o700,
+        validate_ancestors=False,
+    )
+    try:
+        home_mount = _mountinfo_for_path(CANONICAL_ACCOUNT_HOME)
+        root_mount = _mountinfo_for_path("/")
+        home_options = home_mount["options"]
+        optional_fields = home_mount["optional_fields"]
+        assert isinstance(home_options, list)
+        assert isinstance(optional_fields, list)
+        if (
+            home_mount["fstype"] != "tmpfs"
+            or home_mount["source"] != "tmpfs"
+            or "rw" not in home_options
+            or "ro" in home_options
+            or int(home_mount["mount_id"]) != home_identity.mount_id
+            or int(home_mount["mount_id"]) == int(root_mount["mount_id"])
+            or any(
+                field.startswith(("shared:", "master:", "propagate_from:"))
+                for field in optional_fields
+            )
+        ):
+            raise RunnerError(68, "unexpected_mount")
+        if set(os.listdir(home_fd)) != {".cargo", ".rustup", "__Active_code"}:
+            raise RunnerError(68, "root_identity_drift")
+    finally:
+        os.close(home_fd)
+
+
+def _read_user_namespace_maps(pid: str | int = "self") -> tuple[str, str]:
+    with open(f"/proc/{pid}/uid_map", "rt", encoding="ascii") as handle:
+        uid_map = handle.read()
+    with open(f"/proc/{pid}/gid_map", "rt", encoding="ascii") as handle:
+        gid_map = handle.read()
+    return uid_map, gid_map
+
+
+def _validate_current_user_namespace_maps(stage: str) -> tuple[str, str]:
+    observed = _read_user_namespace_maps()
+    expected = {
+        "stage-a": (CANONICAL_STAGE_A_UID_MAP, CANONICAL_STAGE_A_GID_MAP),
+        "stage-b": (CANONICAL_STAGE_B_UID_MAP, CANONICAL_STAGE_B_GID_MAP),
+    }.get(stage)
+    if expected is None or observed != expected:
+        raise RunnerError(68, "namespace_setup_failed")
+    return observed
+
+
+def _open_synced_stage_b_user_namespace() -> int:
+    current_inode = os.stat("/proc/self/ns/user").st_ino
+    candidates: list[int] = []
+    try:
+        for entry in os.listdir("/proc/1/fd"):
+            if not entry.isdigit():
+                raise RunnerError(68, "namespace_setup_failed")
+            path = f"/proc/1/fd/{entry}"
+            try:
+                target = os.readlink(path)
+            except FileNotFoundError:
+                continue
+            match = re.fullmatch(r"user:\[([0-9]+)\]", target)
+            if match is None or int(match.group(1)) == current_inode:
+                continue
+            descriptor = os.open(path, os.O_RDONLY | os.O_CLOEXEC)
+            if os.fstat(descriptor).st_ino != int(match.group(1)):
+                os.close(descriptor)
+                raise RunnerError(68, "namespace_setup_failed")
+            candidates.append(descriptor)
+        if len(candidates) != 1:
+            raise RunnerError(68, "namespace_setup_failed")
+        return candidates.pop()
+    finally:
+        for descriptor in candidates:
+            os.close(descriptor)
+
+
 def _stage_b_projection_paths() -> tuple[tuple[str, str, bool], ...]:
     return (
         (
@@ -10349,7 +11345,7 @@ def _stage_b_projection_paths() -> tuple[tuple[str, str, bool], ...]:
         ("tmp", "/run/substrate-wall/backing/root/tmp", True),
         (
             "xdg-runtime",
-            "/run/substrate-wall/backing/root/xdg-runtime",
+            STAGE_B_XDG_RUNTIME_DIR,
             True,
         ),
         ("control", "/run/substrate-wall/control", True),
@@ -10570,12 +11566,15 @@ def _revalidate_stage_b_projection_authority(
 def stage_b_worker_main(arguments: Mapping[str, object]) -> int:
     if os.getpid() != 1 or os.getppid() != 0:
         raise RunnerError(68, "namespace_setup_failed")
+    _validate_current_user_namespace_maps("stage-b")
     if not set_child_subreaper():
         raise RunnerError(68, "subreaper_unverified")
     pid_namespace_inode = os.stat("/proc/self/ns/pid").st_ino
     projection_fds, _stage_authority, authority_file = (
         _validate_stage_b_projection_authority(arguments)
     )
+    _validate_stage_b_home_projection()
+    _validate_stage_b_account_projection()
     control_path = "/run/substrate-wall/control/worker.sock"
     endpoint = socket.socket(
         socket.AF_UNIX,
@@ -11582,10 +12581,8 @@ def stage_a_main(arguments: Mapping[str, object]) -> int:
         tmpfs_mount,
         proc_mount,
     ) = _open_validated_stage_a_root_parent(root_parent)
-    with open("/proc/self/uid_map", "rt", encoding="utf-8") as handle:
-        uid_map = handle.read()
-    with open("/proc/self/gid_map", "rt", encoding="utf-8") as handle:
-        gid_map = handle.read()
+    uid_map, gid_map = _validate_current_user_namespace_maps("stage-a")
+    stage_b_userns_fd = _open_synced_stage_b_user_namespace()
     stage_a_pid_namespace = os.stat("/proc/self/ns/pid").st_ino
     stage_a_mount_namespace = os.stat("/proc/self/ns/mnt").st_ino
     provenance["record_stage"] = "setup"
@@ -11679,7 +12676,9 @@ def stage_a_main(arguments: Mapping[str, object]) -> int:
             validate_ancestors=False,
         )
         child_records.append((role, name, child_fd, child_identity))
+    _create_canonical_account_projection(root_fd, root_path)
     snapshots = []
+    cargo_runtime: dict[str, object] | None = None
     snapshot_records: list[
         tuple[str, str, int, DirectoryIdentity]
     ] = []
@@ -11699,6 +12698,8 @@ def stage_a_main(arguments: Mapping[str, object]) -> int:
     stage_b_process_teardown_proved = False
     stage_b_namespace_teardown_proved = False
     stage_b_start_time: int | None = None
+    stage_b_uid_map: str | None = None
+    stage_b_gid_map: str | None = None
     namespace_identities: dict[str, int] | None = None
     stage_b_namespace_reference_baseline: frozenset[
         tuple[str, int]
@@ -11711,6 +12712,11 @@ def stage_a_main(arguments: Mapping[str, object]) -> int:
     cleanup_deadline: float | None = None
     cleanup_timer_armed = False
     cleanup_previous_handler: object | None = None
+
+    def persist_snapshot_setup() -> None:
+        provenance["mounts"]["snapshots"] = snapshots
+        provenance["mounts"]["cargo_home_runtime"] = cargo_runtime
+        rewrite_provenance()
 
     def mark_stage_b_reaped() -> None:
         nonlocal stage_b_reaped
@@ -11798,6 +12804,7 @@ def stage_a_main(arguments: Mapping[str, object]) -> int:
                     gitdir_fd=stage_a_gitdir_fd,
                 )
             )
+            persist_snapshot_setup()
         finally:
             os.close(stage_a_gitdir_fd)
         repository_fd, repository_identity = open_validated_directory(
@@ -11821,6 +12828,7 @@ def stage_a_main(arguments: Mapping[str, object]) -> int:
                 deadline=snapshot_deadline,
             )
         )
+        persist_snapshot_setup()
         rustup_fd, rustup_identity = open_validated_directory(
             child_paths["rustup-home-snapshot"],
             expected_uid=os.getuid(),
@@ -11843,6 +12851,7 @@ def stage_a_main(arguments: Mapping[str, object]) -> int:
                 deadline=snapshot_deadline,
             )
         )
+        persist_snapshot_setup()
         seed_fd, seed_identity = open_validated_directory(
             child_paths["cargo-home-seed"],
             expected_uid=os.getuid(),
@@ -11862,6 +12871,7 @@ def stage_a_main(arguments: Mapping[str, object]) -> int:
             child_paths["cargo-home-runtime"],
             deadline=snapshot_deadline,
         )
+        persist_snapshot_setup()
         runtime_fd, runtime_identity = open_validated_directory(
             child_paths["cargo-home-runtime"],
             expected_uid=os.getuid(),
@@ -11881,9 +12891,23 @@ def stage_a_main(arguments: Mapping[str, object]) -> int:
                 child_paths["repository-snapshot"],
                 child_paths["rustup-home-snapshot"],
                 child_paths["cargo-home-seed"],
+                child_paths["cargo-home-runtime"],
             )
         )
+        os.fchmod(runtime_fd, 0o700)
         _check_snapshot_deadline(snapshot_deadline)
+        sealed_seed_manifest = _manifest_tree(
+            child_paths["cargo-home-seed"],
+            deadline=snapshot_deadline,
+        )[0]
+        sealed_runtime_manifest = _manifest_tree(
+            child_paths["cargo-home-runtime"],
+            deadline=snapshot_deadline,
+        )[0]
+        if sealed_runtime_manifest != sealed_seed_manifest:
+            raise RunnerError(67, "snapshot_identity_invalid")
+        cargo_runtime["seed_manifest_sha256"] = sealed_seed_manifest
+        cargo_runtime["pre_manifest_sha256"] = sealed_runtime_manifest
         sealed_records = []
         for role, name, child_fd, initial_identity in snapshot_records:
             sealed_identity = _directory_identity(child_fd, child_paths[role])
@@ -11974,7 +12998,7 @@ def stage_a_main(arguments: Mapping[str, object]) -> int:
         )
         provenance["record_stage"] = "setup"
         provenance["request"]["tmpdir"] = child_paths["tmp"]
-        provenance["request"]["xdg_runtime_dir"] = child_paths["xdg-runtime"]
+        provenance["request"]["xdg_runtime_dir"] = STAGE_B_XDG_RUNTIME_DIR
         provenance["request"]["target_dir"] = child_paths["target"]
         provenance["mounts"]["snapshots"] = snapshots
         provenance["mounts"]["cargo_home_runtime"] = cargo_runtime
@@ -12000,6 +13024,7 @@ def stage_a_main(arguments: Mapping[str, object]) -> int:
         stage_b_namespace_reference_baseline = _namespace_reference_census()
         spawned, status_fd, stage_b_argv = launch_stage_b_bwrap(
             bwrap=held["/usr/bin/bwrap"],
+            userns_fd=stage_b_userns_fd,
             source=bytes(runner_source),
             root=child_paths["target"],
             repository_snapshot=child_paths["repository-snapshot"],
@@ -12030,62 +13055,101 @@ def stage_a_main(arguments: Mapping[str, object]) -> int:
         ] = stage_b_start_time
         rewrite_provenance()
         os.close(output_write)
-        first_status_line = _read_stage_b_first_status_or_teardown(
-            status_fd,
-            spawned,
-            deadline=setup_deadline,
-            mark_stage_b_reaped=mark_stage_b_reaped,
-            mark_containment_teardown_proved=(
-                mark_containment_teardown_proved
-            ),
-        )
-        first_status = _parse_first_bwrap_record(first_status_line)
-        worker_pid = int(first_status["child-pid"])
-        namespace_identities = {
-            "mnt-namespace": int(first_status["mnt-namespace"]),
-            "pid-namespace": int(first_status["pid-namespace"]),
-        }
-        observed_namespace_identities = {
-            "mnt-namespace": os.stat(f"/proc/{worker_pid}/ns/mnt").st_ino,
-            "pid-namespace": os.stat(f"/proc/{worker_pid}/ns/pid").st_ino,
-        }
-        if observed_namespace_identities != namespace_identities:
-            raise RunnerError(68, "namespace_setup_failed")
-        worker_start_time = _process_start_time_ticks(worker_pid)
-        worker_pidfd = os.pidfd_open(worker_pid)
-        provenance["namespace"].update(
-            {
-                "worker_stage_a_pid": worker_pid,
-                "worker_start_time_ticks": worker_start_time,
-                "stage_b_pid_namespace_inode": namespace_identities[
-                    "pid-namespace"
-                ],
-                "stage_b_mount_namespace_inode": namespace_identities[
-                    "mnt-namespace"
-                ],
-                "stage_b_status_received": True,
-                "worker_pidfd_opened": True,
-            }
-        )
-        rewrite_provenance()
-        endpoint = accept_authenticated_worker(
-            listener,
-            expected_pid=worker_pid,
-            deadline=setup_deadline,
-        )
-        _require_pidfds_live(spawned.pidfd, worker_pidfd)
-        listener.close()
-        remove_control_socket_at(
-            control_directory_fd,
-            "worker.sock",
-            control_socket_identity,
-        )
-        endpoint.settimeout(max(0.001, setup_deadline - time.monotonic()))
         try:
-            endpoint.sendall(START_RECORD)
-        except (TimeoutError, socket.timeout) as error:
-            raise RunnerError(68, "worker_handshake_failed") from error
-        endpoint.settimeout(None)
+            first_status_line = _read_stage_b_first_status_or_teardown(
+                status_fd,
+                spawned,
+                deadline=setup_deadline,
+                mark_stage_b_reaped=mark_stage_b_reaped,
+                mark_containment_teardown_proved=(
+                    mark_containment_teardown_proved
+                ),
+            )
+            first_status = _parse_first_bwrap_record(first_status_line)
+            provenance["namespace"]["stage_b_status_received"] = True
+            rewrite_provenance()
+            (
+                worker_pid,
+                namespace_identities,
+                worker_start_time,
+                worker_pidfd,
+            ) = _capture_stage_b_worker_identity(first_status)
+            stage_b_uid_map, stage_b_gid_map = _read_user_namespace_maps(
+                worker_pid
+            )
+            if (
+                stage_b_uid_map != CANONICAL_STAGE_B_UID_MAP
+                or stage_b_gid_map != CANONICAL_STAGE_B_GID_MAP
+            ):
+                raise RunnerError(68, "namespace_setup_failed")
+            provenance["namespace"].update(
+                {
+                    "worker_stage_a_pid": worker_pid,
+                    "worker_start_time_ticks": worker_start_time,
+                    "stage_b_pid_namespace_inode": namespace_identities[
+                        "pid-namespace"
+                    ],
+                    "stage_b_mount_namespace_inode": namespace_identities[
+                        "mnt-namespace"
+                    ],
+                    "worker_pidfd_opened": True,
+                }
+            )
+            rewrite_provenance()
+            endpoint = accept_authenticated_worker(
+                listener,
+                expected_pid=worker_pid,
+                deadline=setup_deadline,
+            )
+            _require_pidfds_live(spawned.pidfd, worker_pidfd)
+            listener.close()
+            remove_control_socket_at(
+                control_directory_fd,
+                "worker.sock",
+                control_socket_identity,
+            )
+            endpoint.settimeout(
+                max(0.001, setup_deadline - time.monotonic())
+            )
+            try:
+                endpoint.sendall(START_RECORD)
+            except (TimeoutError, socket.timeout) as error:
+                raise RunnerError(68, "worker_handshake_failed") from error
+            endpoint.settimeout(None)
+        except RunnerError as error:
+            try:
+                if error.reason == "premature_stage_b_exit":
+                    provenance["containment"][
+                        "premature_stage_b_exit"
+                    ] = True
+                elif error.reason == "stage_b_setup_timeout":
+                    provenance["containment"][
+                        "stage_b_setup_timed_out"
+                    ] = True
+                if spawned is not None and not stage_b_reaped:
+                    _terminate_exact_spawned_process(spawned)
+                    mark_stage_b_reaped()
+                if stage_b_launch_attempted and not stage_b_process_teardown_proved:
+                    _reap_owned_children_to_echild(
+                        time.monotonic() + CLEANUP_TIMEOUT_SECONDS
+                    )
+                    mark_containment_teardown_proved()
+                if stage_b_reaped:
+                    provenance["namespace"]["stage_b_exit_received"] = True
+                _preserve_pre_ready_stage_b_output(
+                    output_read,
+                    cargo_log_fd,
+                    deadline=time.monotonic() + CLEANUP_TIMEOUT_SECONDS,
+                    output_pipe_identity=(
+                        output_details.st_dev,
+                        output_details.st_ino,
+                    ),
+                    provenance=provenance,
+                )
+                rewrite_provenance()
+            except RunnerError:
+                pass
+            raise
         provenance["record_stage"] = "setup"
         provenance["request"]["launcher"][
             "stage_b_argv_sha256"
@@ -12101,8 +13165,8 @@ def stage_a_main(arguments: Mapping[str, object]) -> int:
             "json_status_fd": True,
             "as_pid_1": True,
             "builtin_pid1_fail_safe_only": False,
-            "uid_map": uid_map,
-            "gid_map": gid_map,
+            "uid_map": stage_b_uid_map,
+            "gid_map": stage_b_gid_map,
             "private_propagation": True,
             "die_with_parent": True,
             "completed": False,
@@ -12306,8 +13370,8 @@ def stage_a_main(arguments: Mapping[str, object]) -> int:
             "json_status_fd": True,
             "as_pid_1": True,
             "builtin_pid1_fail_safe_only": False,
-            "uid_map": uid_map,
-            "gid_map": gid_map,
+            "uid_map": stage_b_uid_map,
+            "gid_map": stage_b_gid_map,
             "private_propagation": True,
             "die_with_parent": True,
             "completed": True,
@@ -12805,7 +13869,12 @@ def stage_a_main(arguments: Mapping[str, object]) -> int:
                 os.close(int(artifact["fd"]))
             except OSError:
                 pass
-        for descriptor in (root_fd, root_parent_fd, evidence_fd):
+        for descriptor in (
+            stage_b_userns_fd,
+            root_fd,
+            root_parent_fd,
+            evidence_fd,
+        ):
             try:
                 os.close(descriptor)
             except OSError:
@@ -13032,14 +14101,50 @@ def validate_rustup_resolution() -> dict[str, object]:
         ):
             raise RunnerError(65, "executable_identity_invalid")
         fixed_env = {"LANG": "C.UTF-8", "LC_ALL": "C.UTF-8"}
+        rustup_version_stdout = b"rustup 1.28.2 (e4f3ad6f8 2025-04-28)\n"
+        rustup_version_stderr = (
+            b"info: This is the version for the rustup toolchain manager, not the rustc compiler.\n"
+            b"info: The currently active `rustc` version is `rustc 1.89.0 (29483883e 2025-08-04)`\n"
+        )
+        try:
+            code, stdout, stderr = exec_held_executable(
+                executables["rustup"].fd,
+                [rustup_path, "--version"],
+                fixed_env,
+            )
+        except RunnerError as error:
+            if (
+                error.reason != "environment_unavailable"
+                or str(error) != "held exec descendant survived primary"
+            ):
+                raise
+            code, stdout, stderr = exec_held_executable(
+                executables["rustup"].fd,
+                [rustup_path, "--help"],
+                fixed_env,
+            )
+            help_lines = stdout.splitlines(keepends=True)
+            if (
+                code != 0
+                or stderr
+                or len(help_lines) < 3
+                or help_lines[0] != rustup_version_stdout
+                or help_lines[1] != b"\n"
+                or help_lines[2] != b"The Rust toolchain installer\n"
+            ):
+                raise RunnerError(
+                    65,
+                    "executable_identity_invalid",
+                ) from error
+            rustup_version_stderr = b""
+        else:
+            if (
+                code != 0
+                or stdout != rustup_version_stdout
+                or stderr != rustup_version_stderr
+            ):
+                raise RunnerError(65, "executable_identity_invalid")
         probe_rows = (
-            (
-                "rustup",
-                rustup_path,
-                b"rustup 1.28.2 (e4f3ad6f8 2025-04-28)\n",
-                b"info: This is the version for the rustup toolchain manager, not the rustc compiler.\n"
-                b"info: The currently active `rustc` version is `rustc 1.89.0 (29483883e 2025-08-04)`\n",
-            ),
             (
                 "toolchain-cargo",
                 cargo_path,
@@ -13053,7 +14158,9 @@ def validate_rustup_resolution() -> dict[str, object]:
                 b"",
             ),
         )
-        versions: dict[str, str] = {}
+        versions: dict[str, str] = {
+            "rustup": rustup_version_stdout.decode("ascii").rstrip("\n")
+        }
         for role, argv_zero, expected_stdout, expected_stderr in probe_rows:
             code, stdout, stderr = exec_held_executable(
                 executables[role].fd,
@@ -13101,10 +14208,10 @@ def validate_rustup_resolution() -> dict[str, object]:
                 ][1],
                 "repo_toolchain_file_post": None,
                 "rustup_version_stdout_sha256": inline_sha256(
-                    probe_rows[0][2]
+                    rustup_version_stdout
                 ),
                 "rustup_version_stderr_sha256": inline_sha256(
-                    probe_rows[0][3]
+                    rustup_version_stderr
                 ),
                 "cargo_proxy_version_stdout_sha256": inline_sha256(
                     b"cargo 1.89.0 (c24e10642 2025-06-23)\n"
@@ -13412,6 +14519,50 @@ def _read_authenticated_staged_provenance(
     ):
         if staged_launcher.get(key) != original_launcher.get(key):
             raise RunnerError(71, "evidence_write_failed")
+    staged_namespace = staged.get("namespace")
+    original_namespace = original.get("namespace")
+    if not isinstance(staged_namespace, dict) or not isinstance(
+        original_namespace,
+        dict,
+    ):
+        raise RunnerError(71, "evidence_write_failed")
+    staged_host_fields = (
+        staged_launcher.get("stage_a_argv_sha256"),
+        staged_namespace.get("stage_a_bwrap_pid"),
+        staged_namespace.get("stage_a_bwrap_start_time_ticks"),
+        staged_namespace.get("stage_a_bwrap_pidfd_opened"),
+    )
+    original_host_fields = (
+        original_launcher.get("stage_a_argv_sha256"),
+        original_namespace.get("stage_a_bwrap_pid"),
+        original_namespace.get("stage_a_bwrap_start_time_ticks"),
+        original_namespace.get("stage_a_bwrap_pidfd_opened"),
+    )
+    default_host_fields = (None, None, None, False)
+    if staged_host_fields != default_host_fields:
+        raise RunnerError(71, "evidence_write_failed")
+    if original_host_fields != default_host_fields:
+        argv_sha256, bwrap_pid, start_time_ticks, pidfd_opened = (
+            original_host_fields
+        )
+        if (
+            not isinstance(argv_sha256, str)
+            or re.fullmatch(r"[0-9a-f]{64}", argv_sha256) is None
+            or type(bwrap_pid) is not int
+            or not 1 <= bwrap_pid <= MAX_PID
+            or type(start_time_ticks) is not int
+            or start_time_ticks <= 0
+            or pidfd_opened is not True
+        ):
+            raise RunnerError(71, "evidence_write_failed")
+        staged_launcher["stage_a_argv_sha256"] = argv_sha256
+        staged_namespace.update(
+            {
+                "stage_a_bwrap_pid": bwrap_pid,
+                "stage_a_bwrap_start_time_ticks": start_time_ticks,
+                "stage_a_bwrap_pidfd_opened": True,
+            }
+        )
     return staged
 
 
@@ -13437,7 +14588,10 @@ def host_main(arguments: Mapping[str, object]) -> int:
         raise RunnerError(65, "invocation_authority_invalid")
     _validated_gitdir_identity(REPOSITORY_CANONICAL_PATH, bootstrap_gitdir_fd)
     held = validate_platform_startup_tcb()
+    validate_host_account_projection()
+    validate_subordinate_id_configuration()
     authority: dict[str, object] | None = None
+    user_namespaces: PreparedAclUserNamespaces | None = None
     spawned: SpawnedProcess | None = None
     stage_a_reaped = False
     stage_a_pidfd_closed = False
@@ -13487,6 +14641,8 @@ def host_main(arguments: Mapping[str, object]) -> int:
             ("bubblewrap", "/usr/bin/bwrap", "bubblewrap 0.11.0"),
             ("python", "/usr/bin/python3.13", "Python 3.13.7"),
             ("git", "/usr/bin/git", "git version 2.51.0"),
+            ("newuidmap", "/usr/bin/newuidmap", "shadow 4.18.0-1"),
+            ("newgidmap", "/usr/bin/newgidmap", "shadow 4.18.0-1"),
         )
         toolchain = {
             "platform": "linux",
@@ -13608,8 +14764,13 @@ def host_main(arguments: Mapping[str, object]) -> int:
         stage_a_namespace_reference_baseline = _namespace_reference_census(
             inaccessible_exemptions=namespace_scan_exemptions,
         )
+        user_namespaces = prepare_acl_user_namespaces(
+            held["/usr/bin/newuidmap"],
+            held["/usr/bin/newgidmap"],
+        )
         spawned, status_fd, stage_a_argv = launch_stage_a_bwrap(
             bwrap=held["/usr/bin/bwrap"],
+            user_namespaces=user_namespaces,
             source=runner_source,
             authority=authority,
             repository=REPOSITORY_CANONICAL_PATH,
@@ -13621,6 +14782,8 @@ def host_main(arguments: Mapping[str, object]) -> int:
             expected_head=expected_head,
             environment=environment,
         )
+        close_prepared_acl_user_namespaces(user_namespaces)
+        user_namespaces = None
         start_time = _process_start_time_ticks(spawned.pid)
         stage_a_start_time = start_time
         provenance["request"]["launcher"]["stage_a_argv_sha256"] = inline_sha256(
@@ -13664,13 +14827,9 @@ def host_main(arguments: Mapping[str, object]) -> int:
         stage_a_reaped = True
         if stage_a_status != 0:
             raise RunnerError(68, "stage_a_liveness_failed")
-        if (
-            _reap_owned_children_to_echild(
-                time.monotonic() + CLEANUP_TIMEOUT_SECONDS
-            )
-            != 0
-        ):
-            raise RunnerError(68, "stage_a_liveness_failed")
+        _reap_owned_children_to_echild(
+            time.monotonic() + CLEANUP_TIMEOUT_SECONDS
+        )
         stage_a_process_teardown_proved = True
         if final["exit-code"] != 0:
             raise RunnerError(68, "stage_a_liveness_failed")
@@ -13724,6 +14883,7 @@ def host_main(arguments: Mapping[str, object]) -> int:
             bootstrap_gitdir_fd,
             repository_metadata_authorities,
         )
+        validate_subordinate_id_configuration()
         revalidate_cargo_search_path_absence(cargo_search_authority)
         stable_repository_keys = (
             "head",
@@ -13750,7 +14910,7 @@ def host_main(arguments: Mapping[str, object]) -> int:
         if python_runtime_post != python_runtime:
             python_runtime = python_runtime_post
         for record, (_role, path, _version) in zip(
-            toolchain["executables"][:3],
+            toolchain["executables"][: len(platform_roles)],
             platform_roles,
             strict=True,
         ):
@@ -13961,6 +15121,8 @@ def host_main(arguments: Mapping[str, object]) -> int:
             return int(provenance["runner_exit_code"])
         raise
     finally:
+        if user_namespaces is not None:
+            close_prepared_acl_user_namespaces(user_namespaces)
         if spawned is not None and not stage_a_reaped:
             _terminate_exact_spawned_process(spawned)
         if spawned is not None and not stage_a_pidfd_closed:

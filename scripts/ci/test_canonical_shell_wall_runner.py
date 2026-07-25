@@ -1,4 +1,4 @@
-# canonical-stdlib-manifest-v1: built-in:_io,built-in:_thread,built-in:posix,built-in:sys,built-in:time,file:hashlib:/usr/lib/python3.13/hashlib.py:f129b330e6ab878a96085843b3606acd7d157b8fe6edfa15e37fa13988cef19c,file:json:/usr/lib/python3.13/json/__init__.py:d5d41e2c29049515d295d81a6d40b4890fbec8d8482cfb401630f8ef2f77e4d5,file:re:/usr/lib/python3.13/re/__init__.py:dbe158a677c6aaacf717ea2abc23c56233453d38024aef75b7c3d93612cabb93,file:socket:/usr/lib/python3.13/socket.py:6d5e10b5bcd75b7a6a883a1819e3b47dda3f00621e8e7db365b96782fcf59ac3,file:struct:/usr/lib/python3.13/struct.py:9c231f9497caf513a22dee8f790b07f969b0e45854a0bdd6dd84b492e08c2856,file:subprocess:/usr/lib/python3.13/subprocess.py:21ecc4c8f4fcf641974fc0d9cc28e97b07670ed1cef7e9d96769b31bb8345586,file:tempfile:/usr/lib/python3.13/tempfile.py:7149355dfc2ccbd82a9b3614c7710f2c92bc7ab06440e7f427766481638a1528,file:unittest:/usr/lib/python3.13/unittest/__init__.py:7c22ee0c503b75aba5221e3e8189f9bf4632f85a43315ff841ec9d26a68e3551,frozen:io,frozen:os,frozen:stat
+# canonical-stdlib-manifest-v1: built-in:_io,built-in:_thread,built-in:posix,built-in:sys,built-in:time,file:grp:/usr/lib/python3.13/lib-dynload/grp.cpython-313-x86_64-linux-gnu.so:59d32074eea1efae74751c22b8645de1c997080265507d36a8b24f947eee241e,file:hashlib:/usr/lib/python3.13/hashlib.py:f129b330e6ab878a96085843b3606acd7d157b8fe6edfa15e37fa13988cef19c,file:json:/usr/lib/python3.13/json/__init__.py:d5d41e2c29049515d295d81a6d40b4890fbec8d8482cfb401630f8ef2f77e4d5,file:re:/usr/lib/python3.13/re/__init__.py:dbe158a677c6aaacf717ea2abc23c56233453d38024aef75b7c3d93612cabb93,file:socket:/usr/lib/python3.13/socket.py:6d5e10b5bcd75b7a6a883a1819e3b47dda3f00621e8e7db365b96782fcf59ac3,file:struct:/usr/lib/python3.13/struct.py:9c231f9497caf513a22dee8f790b07f969b0e45854a0bdd6dd84b492e08c2856,file:subprocess:/usr/lib/python3.13/subprocess.py:21ecc4c8f4fcf641974fc0d9cc28e97b07670ed1cef7e9d96769b31bb8345586,file:tarfile:/usr/lib/python3.13/tarfile.py:255ac02c3cceb482782fed8e971be7665f9a5216672debb391e460d38e6850c7,file:tempfile:/usr/lib/python3.13/tempfile.py:7149355dfc2ccbd82a9b3614c7710f2c92bc7ab06440e7f427766481638a1528,file:unittest:/usr/lib/python3.13/unittest/__init__.py:7c22ee0c503b75aba5221e3e8189f9bf4632f85a43315ff841ec9d26a68e3551,frozen:io,frozen:os,frozen:stat
 """Authenticated self-tests for the canonical shell-wall runner."""
 
 from __future__ import annotations
@@ -36,6 +36,7 @@ import stat
 import struct
 import subprocess
 import sys
+import tarfile
 import tempfile
 import time
 import unittest
@@ -110,7 +111,8 @@ SELF_TEST_IDS = (
     "test_self_test_loader_rejects_path_import_discovery_and_blob_mismatch",
     "test_private_rustup_toolchain_snapshot_matches_pinned_complete_manifest",
     "test_mounted_rustc_reports_private_sysroot_and_compiles_minimal_test",
-    "test_registry_snapshot_reconstructs_only_lock_checksum_selected_archives",
+    "test_vendor_snapshot_reconstructs_only_lock_checksum_selected_archives",
+    "test_constructed_cargo_home_resolves_locked_vendor_offline_without_drift",
     "test_private_snapshots_ignore_transient_source_modify_replace_and_restore",
     "test_cargo_environment_preserves_e0_with_only_tmpdir_xdg_overrides",
     "test_environment_values_and_protected_markers_are_never_serialized",
@@ -150,11 +152,11 @@ def _category(index: int) -> str:
         (44, "cli-diagnostics"),
         (53, "repository"),
         (64, "invocation-tcb"),
-        (74, "snapshots-environment"),
-        (79, "evidence"),
-        (86, "summarizer"),
-        (89, "mount-lifecycle"),
-        (95, "success-output-cleanup"),
+        (75, "snapshots-environment"),
+        (80, "evidence"),
+        (87, "summarizer"),
+        (90, "mount-lifecycle"),
+        (96, "success-output-cleanup"),
     )
     for limit, category in boundaries:
         if index < limit:
@@ -411,6 +413,21 @@ class CanonicalShellWallRunnerTests(unittest.TestCase):
     def test_reaps_reparented_descendant(self) -> None:
         result = self.run_bounded_fixture("production-reparent")
         self.assertEqual(result, {"echld": True, "pid": 1, "reaped": 2})
+        source = _module_source(runner).decode("utf-8")
+        host = source[
+            source.index("def host_main") : source.index(
+                "def _run_selftest_bootstrap"
+            )
+        ]
+        normal_reap = host.index(
+            "_reap_owned_children_to_echild(",
+            host.index("stage_a_status ="),
+        )
+        teardown_proved = host.index(
+            "stage_a_process_teardown_proved = True",
+            normal_reap,
+        )
+        self.assertNotIn("!= 0", host[normal_reap:teardown_proved])
 
     def test_process_group_escape_remains_contained(self) -> None:
         result = self.run_bounded_fixture("production-setsid")
@@ -523,6 +540,129 @@ class CanonicalShellWallRunnerTests(unittest.TestCase):
         runner._record_ineligibility(record, "snapshot_timeout", 67)
         self.assert_ineligible(record, "snapshot_timeout")
         self.assertEqual(record["runner_exit_code"], 67)
+
+    def test_copy_tree_no_follow_preserves_modes_despite_umask(self) -> None:
+        source = self.make_safe_parent()
+        os.mkdir(os.path.join(source, "bin"), 0o755)
+        os.chmod(os.path.join(source, "bin"), 0o755)
+        executable = os.path.join(source, "bin", "tool")
+        with open(executable, "xb") as handle:
+            handle.write(b"#!/bin/sh\nexit 0\n")
+        os.chmod(executable, 0o755)
+        config = os.path.join(source, "config.toml")
+        with open(config, "xb") as handle:
+            handle.write(b"[tool]\nname = \"snapshot\"\n")
+        os.chmod(config, 0o644)
+        destination = os.path.join(self.make_safe_parent(), "snapshot")
+        source_manifest = runner._manifest_tree(source)[0]
+        original_umask = os.umask(0o077)
+        try:
+            copied_manifest, _count = runner._copy_tree_no_follow(
+                source,
+                destination,
+            )
+        finally:
+            os.umask(original_umask)
+        self.assertEqual(copied_manifest, source_manifest)
+        self.assertEqual(runner._manifest_tree(destination)[0], source_manifest)
+        self.assertEqual(
+            stat.S_IMODE(
+                os.stat(
+                    os.path.join(destination, "bin"),
+                    follow_symlinks=False,
+                ).st_mode
+            ),
+            0o755,
+        )
+        self.assertEqual(
+            stat.S_IMODE(
+                os.stat(
+                    os.path.join(destination, "bin", "tool"),
+                    follow_symlinks=False,
+                ).st_mode
+            ),
+            0o755,
+        )
+        self.assertEqual(
+            stat.S_IMODE(
+                os.stat(
+                    os.path.join(destination, "config.toml"),
+                    follow_symlinks=False,
+                ).st_mode
+            ),
+            0o644,
+        )
+
+    def _assert_primary_command_uses_private_umask_without_mutating_parent(
+        self,
+    ) -> None:
+        output_path = os.path.join(self.make_safe_parent(), "child-umask")
+        program = (
+            "import os;"
+            "value=os.umask(0);"
+            f"open({output_path!r},'x',encoding='ascii').write(f'{{value:03o}}\\n')"
+        )
+        command = (
+            "/usr/bin/python3.13",
+            "-I",
+            "-S",
+            "-B",
+            "-c",
+            program,
+        )
+        executable_fd = os.open(
+            "/usr/bin/python3.13",
+            os.O_RDONLY | os.O_CLOEXEC | os.O_NOFOLLOW,
+        )
+        details = os.fstat(executable_fd)
+        executable = runner.HeldExecutable(
+            path="/usr/bin/python3.13",
+            fd=executable_fd,
+            identity=(
+                details.st_dev,
+                details.st_ino,
+                details.st_uid,
+                stat.S_IMODE(details.st_mode),
+            ),
+            sha256=runner.hash_open_file(executable_fd),
+        )
+        original_command = runner._canonical_cargo_command
+        original_stat = runner.os.stat
+        original_umask = os.umask(0o022)
+        try:
+            runner._canonical_cargo_command = lambda _mode: command
+
+            def projected_stat(
+                path: object,
+                *,
+                dir_fd: int | None = None,
+                follow_symlinks: bool = True,
+            ) -> os.stat_result:
+                if os.fspath(path) == "/home/spenser/.cargo/bin/rustup":
+                    return original_stat(
+                        "/usr/bin/python3.13",
+                        follow_symlinks=False,
+                    )
+                return original_stat(
+                    path,
+                    dir_fd=dir_fd,
+                    follow_symlinks=follow_symlinks,
+                )
+
+            runner.os.stat = projected_stat
+            pid = runner._spawn_primary_command(command, {}, executable)
+            waited, status = os.waitpid(pid, 0)
+            self.assertEqual(waited, pid)
+            self.assertEqual(os.waitstatus_to_exitcode(status), 0)
+            observed_parent_umask = os.umask(0o022)
+            self.assertEqual(observed_parent_umask, 0o022)
+        finally:
+            os.umask(original_umask)
+            runner.os.stat = original_stat
+            runner._canonical_cargo_command = original_command
+            os.close(executable_fd)
+        with open(output_path, "rt", encoding="ascii") as handle:
+            self.assertEqual(handle.read(), "077\n")
 
     def test_rejects_root_path_replacement(self) -> None:
         parent = self.make_safe_parent()
@@ -1252,6 +1392,32 @@ class CanonicalShellWallRunnerTests(unittest.TestCase):
         os.close(root_fd)
         os.close(parent_fd)
 
+        root = os.path.join(parent, "cargo-target")
+        build = os.path.join(root, "debug", "build", "crate-hash")
+        os.makedirs(build, mode=0o700)
+        first = os.path.join(build, "build_script_build-hash")
+        alias = os.path.join(build, "build-script-build")
+        with open(first, "xb") as handle:
+            handle.write(b"cargo build script")
+        os.link(first, alias)
+        parent_fd = os.open(parent, os.O_RDONLY | os.O_DIRECTORY)
+        root_fd, identity = runner.open_validated_directory(
+            root,
+            expected_uid=os.getuid(),
+            expected_mode=0o700,
+        )
+        proof = runner.remove_tree_at(
+            parent_fd,
+            "cargo-target",
+            expected=identity,
+            cleanup_authority=self.cleanup_authority,
+        )
+        self.assertFalse(os.path.exists(root))
+        self.assertTrue(proof["removed"])
+        self.assertTrue(proof["name_absence_proved"])
+        os.close(root_fd)
+        os.close(parent_fd)
+
     def test_rejects_subreaper_readback_failure(self) -> None:
         result = self.run_bounded_fixture("pid1")
         self.assertEqual(result, {"pid": 1, "subreaper": 1})
@@ -1486,6 +1652,16 @@ class CanonicalShellWallRunnerTests(unittest.TestCase):
             "first_status_line = _read_stage_b_first_status_or_teardown(",
             stage_a_source,
         )
+        self.assertLess(
+            stage_a_source.index(
+                'provenance["namespace"]["stage_b_status_received"] = True'
+            ),
+            stage_a_source.index("_capture_stage_b_worker_identity("),
+        )
+        self.assertIn(
+            "_preserve_pre_ready_stage_b_output(",
+            stage_a_source,
+        )
         runner_source = _module_source(runner).decode("utf-8")
         setup_wait = runner_source[
             runner_source.index(
@@ -1698,6 +1874,53 @@ class CanonicalShellWallRunnerTests(unittest.TestCase):
             and integrated["fixed_socket"]
             and integrated["worker_departed"]
         )
+
+    def test_stage_a_maps_vanished_post_status_worker_to_premature_exit(
+        self,
+    ) -> None:
+        exited = os.fork()
+        if exited == 0:
+            os._exit(0)
+        os.waitpid(exited, 0)
+        with self.assertRaises(runner.RunnerError) as reaped:
+            runner._capture_stage_b_worker_identity(
+                {
+                    "child-pid": exited,
+                    "mnt-namespace": 1,
+                    "pid-namespace": 1,
+                }
+            )
+        self.assertEqual(reaped.exception.reason, "premature_stage_b_exit")
+
+        release_read, release_write = os.pipe2(os.O_CLOEXEC)
+        live = os.fork()
+        if live == 0:
+            os.close(release_write)
+            os.read(release_read, 1)
+            os.close(release_read)
+            os._exit(0)
+        os.close(release_read)
+        original_pidfd_open = runner.os.pidfd_open
+        try:
+            status = {
+                "child-pid": live,
+                "mnt-namespace": os.stat(f"/proc/{live}/ns/mnt").st_ino,
+                "pid-namespace": os.stat(f"/proc/{live}/ns/pid").st_ino,
+            }
+
+            def fail_pidfd_open(pid: int) -> int:
+                if pid == live:
+                    raise ProcessLookupError()
+                return original_pidfd_open(pid)
+
+            runner.os.pidfd_open = fail_pidfd_open
+            with self.assertRaises(runner.RunnerError) as raced:
+                runner._capture_stage_b_worker_identity(status)
+            self.assertEqual(raced.exception.reason, "premature_stage_b_exit")
+        finally:
+            runner.os.pidfd_open = original_pidfd_open
+            os.close(release_write)
+            os.waitpid(live, 0)
 
     def test_stage_a_loss_before_stage_b_launch_starts_no_wall(self) -> None:
         record = runner._default_provenance(
@@ -1934,7 +2157,31 @@ class CanonicalShellWallRunnerTests(unittest.TestCase):
         self,
     ) -> None:
         stage_bootstrap = runner.STAGE_BOOTSTRAP_SOURCE
+        self.assertIn(
+            "if _stage_role_hint in ('stage-a','stage-b-worker'):",
+            stage_bootstrap,
+        )
+        self.assertIn("if len(_stage_extra_fds)!=1:", stage_bootstrap)
+        self.assertIn(
+            "_stage_userns_target=os.readlink(_stage_userns_path)",
+            stage_bootstrap,
+        )
+        self.assertIn(
+            "_stage_current_target=os.readlink('/proc/self/ns/user')",
+            stage_bootstrap,
+        )
+        self.assertIn("os.close(_stage_userns_fd)", stage_bootstrap)
         self.assertIn("if _initial_fds!={0,1,2}:", stage_bootstrap)
+        self.assertLess(
+            stage_bootstrap.index(
+                "if _stage_role_hint in ('stage-a','stage-b-worker'):"
+            ),
+            stage_bootstrap.index("if _initial_fds!={0,1,2}:"),
+        )
+        self.assertLess(
+            stage_bootstrap.index("os.close(_stage_userns_fd)"),
+            stage_bootstrap.index("if _initial_fds!={0,1,2}:"),
+        )
         self.assertLess(
             stage_bootstrap.index("if _initial_fds!={0,1,2}:"),
             stage_bootstrap.index("_path='/run/substrate-wall/runner.py'"),
@@ -4354,28 +4601,198 @@ class CanonicalShellWallRunnerTests(unittest.TestCase):
             },
         )
 
-    def test_registry_snapshot_reconstructs_only_lock_checksum_selected_archives(
+    def test_vendor_snapshot_reconstructs_only_lock_checksum_selected_archives(
         self,
     ) -> None:
         repository = self.make_safe_parent()
         cargo = self.make_safe_parent()
-        destination = os.path.join(self.make_safe_parent(), "registry")
-        archive = b"selected archive"
-        checksum = hashlib.sha256(archive).hexdigest()
-        with open(os.path.join(repository, "Cargo.lock"), "xb") as handle:
-            handle.write(f'checksum = "{checksum}"\n'.encode())
+        destination = os.path.join(self.make_safe_parent(), "vendor")
+        package = self.make_safe_parent()
+        with open(os.path.join(package, "Cargo.toml"), "xb") as handle:
+            handle.write(b'[package]\nname="selected"\nversion="1.0.0"\n')
         os.mkdir(os.path.join(cargo, "cache"), 0o700)
-        with open(os.path.join(cargo, "cache", "selected.crate"), "xb") as handle:
-            handle.write(archive)
+        selected_archive = os.path.join(cargo, "cache", "selected.crate")
+        with tarfile.open(selected_archive, "w:gz") as archive:
+            archive.add(
+                os.path.join(package, "Cargo.toml"),
+                arcname="selected-1.0.0/Cargo.toml",
+                recursive=False,
+            )
+        with open(selected_archive, "rb") as handle:
+            checksum = hashlib.sha256(handle.read()).hexdigest()
+        with open(os.path.join(repository, "Cargo.lock"), "xb") as handle:
+            handle.write(
+                (
+                    "[[package]]\n"
+                    'name = "selected"\n'
+                    'version = "1.0.0"\n'
+                    'source = "registry+https://github.com/rust-lang/'
+                    'crates.io-index"\n'
+                    f'checksum = "{checksum}"\n'
+                ).encode("ascii")
+            )
         with open(os.path.join(cargo, "cache", "other.crate"), "xb") as handle:
             handle.write(b"other")
-        _manifest, count = runner.reconstruct_locked_registry(
+        _manifest, count = runner.reconstruct_locked_vendor(
             repository,
             cargo,
             destination,
         )
         self.assertEqual(count, 1)
-        self.assertEqual(os.listdir(destination), ["selected.crate"])
+        self.assertEqual(os.listdir(destination), ["selected-1.0.0"])
+        with open(
+            os.path.join(destination, "selected-1.0.0", ".cargo-checksum.json"),
+            "rb",
+        ) as handle:
+            checksum_record = json.load(handle)
+        self.assertEqual(checksum_record["package"], checksum)
+
+    def test_constructed_cargo_home_resolves_locked_vendor_offline_without_drift(
+        self,
+    ) -> None:
+        self.assertIn(
+            "file:gzip:/usr/lib/python3.13/gzip.py:"
+            "dba33ac2497af37712ea23f5c3ce3ed56177262886868cbc6a6d43632c79afe9",
+            runner.parse_stdlib_manifest(_module_source(runner)),
+        )
+        repository = self.make_safe_parent()
+        os.mkdir(os.path.join(repository, "src"), 0o700)
+        with open(os.path.join(repository, "Cargo.toml"), "xb") as handle:
+            handle.write(
+                b'[package]\nname="fixture-root"\nversion="0.1.0"\n'
+                b'edition="2021"\n[dependencies]\nfixture-dep="=1.0.0"\n'
+            )
+        with open(os.path.join(repository, "src", "lib.rs"), "xb") as handle:
+            handle.write(b"pub fn answer() -> u32 { fixture_dep::answer() }\n")
+
+        package = self.make_safe_parent()
+        os.mkdir(os.path.join(package, "src"), 0o700)
+        with open(os.path.join(package, "Cargo.toml"), "xb") as handle:
+            handle.write(
+                b'[package]\nname="fixture-dep"\nversion="1.0.0"\n'
+                b'edition="2021"\n[lib]\npath="src/lib.rs"\n'
+            )
+        with open(os.path.join(package, "src", "lib.rs"), "xb") as handle:
+            handle.write(b"pub fn answer() -> u32 { 42 }\n")
+
+        cargo_source = self.make_safe_parent()
+        cargo_bin = os.path.join(cargo_source, "bin")
+        os.mkdir(cargo_bin, 0o700)
+        rustup_source = os.open(
+            "/home/spenser/.cargo/bin/rustup",
+            os.O_RDONLY | os.O_CLOEXEC | os.O_NOFOLLOW,
+        )
+        rustup_destination = os.open(
+            os.path.join(cargo_bin, "rustup"),
+            os.O_WRONLY | os.O_CREAT | os.O_EXCL | os.O_CLOEXEC,
+            0o755,
+        )
+        try:
+            while True:
+                chunk = os.read(rustup_source, 1024 * 1024)
+                if not chunk:
+                    break
+                runner._write_all(rustup_destination, chunk)
+            os.fsync(rustup_destination)
+        finally:
+            os.close(rustup_source)
+            os.close(rustup_destination)
+        os.symlink("rustup", os.path.join(cargo_bin, "cargo"))
+        os.symlink("rustup", os.path.join(cargo_bin, "rustc"))
+        archive_parent = os.path.join(
+            cargo_source,
+            "registry",
+            "cache",
+            "index.crates.io-1949cf8c6b5b557f",
+        )
+        os.makedirs(archive_parent, mode=0o700)
+        archive_path = os.path.join(archive_parent, "fixture-dep-1.0.0.crate")
+        with tarfile.open(archive_path, "w:gz") as archive:
+            for relative in ("Cargo.toml", "src/lib.rs"):
+                archive.add(
+                    os.path.join(package, relative),
+                    arcname=f"fixture-dep-1.0.0/{relative}",
+                    recursive=False,
+                )
+        with open(archive_path, "rb") as handle:
+            package_checksum = hashlib.sha256(handle.read()).hexdigest()
+        with open(os.path.join(repository, "Cargo.lock"), "xb") as handle:
+            handle.write(
+                (
+                    "version = 4\n\n"
+                    "[[package]]\n"
+                    'name = "fixture-dep"\n'
+                    'version = "1.0.0"\n'
+                    'source = "registry+https://github.com/rust-lang/'
+                    'crates.io-index"\n'
+                    f'checksum = "{package_checksum}"\n\n'
+                    "[[package]]\n"
+                    'name = "fixture-root"\n'
+                    'version = "0.1.0"\n'
+                    'dependencies = [\n "fixture-dep",\n]\n'
+                ).encode("ascii")
+            )
+
+        seed = os.path.join(self.make_safe_parent(), "seed")
+        runner.construct_cargo_home_seed(cargo_source, repository, seed)
+        self.assertTrue(os.path.isfile(os.path.join(seed, "config.toml")))
+        self.assertTrue(
+            os.path.isdir(os.path.join(seed, "vendor", "fixture-dep-1.0.0"))
+        )
+        self.assertFalse(os.path.exists(os.path.join(seed, "registry")))
+        fixture_home = self.make_safe_parent()
+        runtime = os.path.join(fixture_home, ".cargo")
+        runner.construct_cargo_home_runtime(seed, runtime)
+        runner.seal_snapshot_mounts((seed, runtime))
+        os.chmod(runtime, 0o700)
+        tmpdir = self.make_safe_parent()
+        xdg_runtime = self.make_safe_parent()
+        target = self.make_safe_parent()
+        environment = {
+            key: value
+            for key, value in os.environ.items()
+            if not key.startswith(("CARGO_", "RUSTUP_"))
+        }
+        environment.update(
+            {
+                "CARGO_HOME": runtime,
+                "CARGO_NET_OFFLINE": "true",
+                "CARGO_TARGET_DIR": target,
+                "HOME": fixture_home,
+                "RUSTUP_HOME": "/home/spenser/.rustup",
+                "TMPDIR": tmpdir,
+                "XDG_RUNTIME_DIR": xdg_runtime,
+            }
+        )
+        completed = subprocess.run(
+            [
+                os.path.join(runtime, "bin", "cargo"),
+                "metadata",
+                "--locked",
+                "--offline",
+                "--format-version",
+                "1",
+            ],
+            cwd=repository,
+            env=environment,
+            stdin=subprocess.DEVNULL,
+            stdout=subprocess.PIPE,
+            stderr=subprocess.PIPE,
+            timeout=30,
+            check=False,
+        )
+        self.assertEqual(completed.returncode, 0, completed.stderr.decode())
+        metadata = json.loads(completed.stdout)
+        self.assertEqual(
+            sorted(package["name"] for package in metadata["packages"]),
+            ["fixture-dep", "fixture-root"],
+        )
+        validation = runner.validate_cargo_home_runtime_writes(seed, runtime)
+        self.assertTrue(validation["only_authorized_metadata_changed"])
+        self.assertLessEqual(
+            set(validation["changed"]),
+            set(runner.AUTHORIZED_CARGO_RUNTIME_MUTATIONS),
+        )
 
     def test_private_snapshots_ignore_transient_source_modify_replace_and_restore(
         self,
@@ -4429,16 +4846,32 @@ class CanonicalShellWallRunnerTests(unittest.TestCase):
             os.close(source_parent_fd)
         repository = self.make_safe_parent()
         cargo = self.make_safe_parent()
-        destination = os.path.join(self.make_safe_parent(), "registry")
+        destination = os.path.join(self.make_safe_parent(), "vendor")
+        package = self.make_safe_parent()
+        with open(os.path.join(package, "Cargo.toml"), "xb") as handle:
+            handle.write(b'[package]\nname="selected"\nversion="1.0.0"\n')
         archive_path = os.path.join(cargo, "selected.crate")
-        original_archive = b"selected-original"
-        modified_archive = b"selected-modified"
-        self.assertEqual(len(original_archive), len(modified_archive))
+        with tarfile.open(archive_path, "w:gz") as archive:
+            archive.add(
+                os.path.join(package, "Cargo.toml"),
+                arcname="selected-1.0.0/Cargo.toml",
+                recursive=False,
+            )
+        with open(archive_path, "rb") as handle:
+            original_archive = handle.read()
+        modified_archive = bytes([original_archive[0] ^ 1]) + original_archive[1:]
         checksum = hashlib.sha256(original_archive).hexdigest()
         with open(os.path.join(repository, "Cargo.lock"), "xb") as handle:
-            handle.write(f'checksum = "{checksum}"\n'.encode("ascii"))
-        with open(archive_path, "xb") as handle:
-            handle.write(original_archive)
+            handle.write(
+                (
+                    "[[package]]\n"
+                    'name = "selected"\n'
+                    'version = "1.0.0"\n'
+                    'source = "registry+https://github.com/rust-lang/'
+                    'crates.io-index"\n'
+                    f'checksum = "{checksum}"\n'
+                ).encode("ascii")
+            )
         archive_identity = os.stat(archive_path, follow_symlinks=False)
         original_pread = runner.os.pread
         source_reads = 0
@@ -4467,7 +4900,7 @@ class CanonicalShellWallRunnerTests(unittest.TestCase):
         runner.os.pread = modify_during_copy
         try:
             with self.assertRaises(runner.RunnerError) as modified:
-                runner.reconstruct_locked_registry(
+                runner.reconstruct_locked_vendor(
                     repository,
                     cargo,
                     destination,
@@ -4494,7 +4927,13 @@ class CanonicalShellWallRunnerTests(unittest.TestCase):
         }
         updated = runner._canonical_wall_environment(original, "/root")
         self.assertEqual(updated["TMPDIR"], "/root/tmp")
-        self.assertEqual(updated["XDG_RUNTIME_DIR"], "/root/xdg-runtime")
+        self.assertEqual(updated["XDG_RUNTIME_DIR"], "/run/xdg")
+        longest_fixture_transport = os.path.join(
+            updated["XDG_RUNTIME_DIR"],
+            "sXX/h/run/agent-hub/handles/startup",
+            "ssssssssssss-pppppppppppp.startup.sock",
+        )
+        self.assertLessEqual(len(os.fsencode(longest_fixture_transport)), 100)
         self.assertEqual(
             {key: value for key, value in updated.items() if key not in {"TMPDIR", "XDG_RUNTIME_DIR"}},
             {"A": "one", "MARKER": marker},
@@ -4560,11 +4999,14 @@ class CanonicalShellWallRunnerTests(unittest.TestCase):
     def test_cargo_home_seed_runtime_confines_lock_metadata_and_is_removed(
         self,
     ) -> None:
+        self._assert_primary_command_uses_private_umask_without_mutating_parent()
         seed = self.make_safe_parent()
         with open(os.path.join(seed, "stable"), "xb") as handle:
             handle.write(b"stable")
         runtime_path = os.path.join(self.make_safe_parent(), "runtime")
         runner.construct_cargo_home_runtime(seed, runtime_path)
+        runner.seal_snapshot_mounts((seed, runtime_path))
+        os.chmod(runtime_path, 0o700)
         for name in runner.AUTHORIZED_CARGO_RUNTIME_MUTATIONS:
             with open(os.path.join(runtime_path, name), "xb") as handle:
                 handle.write(b"lock")
@@ -4787,6 +5229,75 @@ class CanonicalShellWallRunnerTests(unittest.TestCase):
         with self.assertRaises(runner.RunnerError):
             runner._validate_provenance_record(malformed_partial)
 
+        kernel_maps = runner._default_provenance(
+            invocation_id="8" * 32,
+            label="kernel-maps",
+            mode="serial",
+            timeout_seconds=1,
+            expected_head="0" * 40,
+            command=runner._canonical_cargo_command("serial"),
+            environment={},
+        )
+        for stage_name in ("stage_a", "stage_b"):
+            kernel_maps["mounts"][stage_name] = {
+                "argv_template_sha256": "0" * 64,
+                "argv_sha256": "1" * 64,
+                "as_pid_1": stage_name == "stage_b",
+                "user_namespace": True,
+                "mount_namespace": True,
+                "pid_namespace": True,
+                "json_status_fd": True,
+                "builtin_pid1_fail_safe_only": stage_name == "stage_a",
+                "uid_map": (
+                    runner.CANONICAL_STAGE_A_UID_MAP
+                    if stage_name == "stage_a"
+                    else runner.CANONICAL_STAGE_B_UID_MAP
+                ),
+                "gid_map": (
+                    runner.CANONICAL_STAGE_A_GID_MAP
+                    if stage_name == "stage_a"
+                    else runner.CANONICAL_STAGE_B_GID_MAP
+                ),
+                "private_propagation": True,
+                "die_with_parent": True,
+                "completed": False,
+                "unmounted": False,
+            }
+        runner._validate_provenance_record(kernel_maps)
+
+        malformed_map = json.loads(json.dumps(kernel_maps))
+        malformed_map["mounts"]["stage_a"]["uid_map"] = "1000 0 2\n"
+        with self.assertRaises(runner.RunnerError) as rejected:
+            runner._validate_provenance_record(malformed_map)
+        self.assertEqual(rejected.exception.reason, "evidence_write_failed")
+
+        kernel_maps["mounts"]["cargo_home_runtime"] = {
+            "seed_manifest_sha256": "0" * 64,
+            "pre_manifest_sha256": "0" * 64,
+            "post_manifest_sha256": "1" * 64,
+            "seed_entry_count": 1,
+            "pre_entry_count": 1,
+            "post_entry_count": 2,
+            "private_tmpfs": True,
+            "no_host_alias": True,
+            "stage_b_writable": True,
+            "seed_copy_equal": True,
+            "only_authorized_metadata_changed": True,
+            "removed": True,
+            "authorized_mutable_paths": list(
+                runner.AUTHORIZED_CARGO_RUNTIME_MUTATIONS
+            ),
+            "changed": list(runner.AUTHORIZED_CARGO_RUNTIME_MUTATIONS),
+        }
+        runner._validate_provenance_record(kernel_maps)
+        unauthorized = json.loads(json.dumps(kernel_maps))
+        unauthorized["mounts"]["cargo_home_runtime"]["changed"] = [
+            "registry/CACHEDIR.TAG"
+        ]
+        with self.assertRaises(runner.RunnerError) as rejected:
+            runner._validate_provenance_record(unauthorized)
+        self.assertEqual(rejected.exception.reason, "evidence_write_failed")
+
     def test_schema_encodes_preflight_setup_containment_cleanup_failures(self) -> None:
         stage_failures = (
             ("preflight", "repository_identity_mismatch", 65),
@@ -4870,6 +5381,75 @@ class CanonicalShellWallRunnerTests(unittest.TestCase):
             failure_branch.index("_read_authenticated_staged_provenance("),
         )
         self.assertIn('return int(provenance["runner_exit_code"])', host_source)
+        staged_parent = self.make_safe_parent()
+        staged_authority = runner.prepare_backing_root(
+            staged_parent,
+            "host-stage-a-fields",
+            "e" * 32,
+        )
+        staged_artifacts = runner._initialize_staged_artifact_authorities(
+            staged_authority
+        )
+        staged_record = runner._default_provenance(
+            invocation_id="e" * 32,
+            label="host-stage-a-fields",
+            mode="parallel",
+            timeout_seconds=1,
+            expected_head="0" * 40,
+            command=runner._canonical_cargo_command("parallel"),
+            environment={},
+        )
+        original_record = json.loads(json.dumps(staged_record))
+        original_record["request"]["launcher"]["stage_a_argv_sha256"] = (
+            "1" * 64
+        )
+        original_record["namespace"].update(
+            {
+                "stage_a_bwrap_pid": 123,
+                "stage_a_bwrap_start_time_ticks": 456,
+                "stage_a_bwrap_pidfd_opened": True,
+            }
+        )
+        runner._rewrite_retained_json_artifact(
+            staged_authority["partial_fd"],
+            staged_artifacts["provenance.json"],
+            staged_record,
+        )
+        merged = runner._read_authenticated_staged_provenance(
+            staged_authority,
+            original_record,
+        )
+        self.assertEqual(
+            merged["request"]["launcher"]["stage_a_argv_sha256"],
+            "1" * 64,
+        )
+        self.assertEqual(merged["namespace"]["stage_a_bwrap_pid"], 123)
+        self.assertEqual(
+            merged["namespace"]["stage_a_bwrap_start_time_ticks"],
+            456,
+        )
+        self.assertTrue(merged["namespace"]["stage_a_bwrap_pidfd_opened"])
+        conflicting = json.loads(json.dumps(staged_record))
+        conflicting["request"]["launcher"]["stage_a_argv_sha256"] = "2" * 64
+        runner._rewrite_retained_json_artifact(
+            staged_authority["partial_fd"],
+            staged_artifacts["provenance.json"],
+            conflicting,
+        )
+        with self.assertRaises(runner.RunnerError) as conflict:
+            runner._read_authenticated_staged_provenance(
+                staged_authority,
+                original_record,
+            )
+        self.assertEqual(conflict.exception.reason, "evidence_write_failed")
+        for artifact in staged_artifacts.values():
+            os.close(artifact["fd"])
+        for key in ("backing_fd", "partial_fd", "parent_fd"):
+            os.close(staged_authority[key])
+        for descriptor, _path, _identity in staged_authority[
+            "ancestor_records"
+        ]:
+            os.close(descriptor)
         with self.assertRaises(runner.RunnerError):
             runner._record_ineligibility(combined, "signal_termination", 68)
         with self.assertRaises(runner.RunnerError):
@@ -5479,21 +6059,136 @@ class CanonicalShellWallRunnerTests(unittest.TestCase):
                 1,
             )
 
+    def test_projected_root_ids_include_mapped_stage_identity(self) -> None:
+        original_open = getattr(runner, "open", None)
+        had_open = hasattr(runner, "open")
+        original_getuid = runner.os.getuid
+
+        def projected_open(path: str, *_args: object, **_kwargs: object) -> io.StringIO:
+            if path == "/proc/self/uid_map":
+                return io.StringIO(
+                    "      1000       1000          1\n"
+                    "      1001     100000       7919\n"
+                )
+            if path == "/proc/sys/kernel/overflowuid":
+                return io.StringIO("65534\n")
+            raise AssertionError(path)
+
+        runner.open = projected_open
+        runner.os.getuid = lambda: 1000
+        try:
+            self.assertEqual(
+                runner._projected_expected_uids(0),
+                {0, 1000, 65_534},
+            )
+            self.assertEqual(
+                runner._projected_expected_uids(1000),
+                {1000, 65_534},
+            )
+        finally:
+            runner.os.getuid = original_getuid
+            if had_open:
+                runner.open = original_open
+            else:
+                del runner.open
+
     def test_mount_source_flags_ids_propagation_and_order_are_exact(self) -> None:
         stage_a = runner.BWRAP_STAGE_A_ARGV_TEMPLATE_V1
         stage_b = runner.BWRAP_STAGE_B_ARGV_TEMPLATE_V1
+        self.assertEqual(
+            runner.CANONICAL_STAGE_A_UID_MAP,
+            "      1000       1000          1\n"
+            "      1001     100000      63055\n",
+        )
+        self.assertEqual(
+            runner.CANONICAL_STAGE_A_GID_MAP,
+            runner.CANONICAL_STAGE_A_UID_MAP,
+        )
+        self.assertEqual(
+            runner.CANONICAL_STAGE_B_UID_MAP,
+            "      1000       1000          1\n"
+            "      1001       1001      63055\n",
+        )
+        self.assertEqual(
+            runner.CANONICAL_STAGE_B_GID_MAP,
+            runner.CANONICAL_STAGE_B_UID_MAP,
+        )
+        self.assertEqual(
+            runner.PLATFORM_STARTUP_TCB_V1["/usr/bin/newuidmap"]["sha256"],
+            "c043fa4b6ae4a824b9e059580cb4cfb80c0c1cdf732822d10f5ca7026822ca2d",
+        )
+        self.assertEqual(
+            runner.PLATFORM_STARTUP_TCB_V1["/usr/bin/newgidmap"]["sha256"],
+            "1870ba766732568ad3e6e7b69f9920cbd79e2ba6fe3123a07151865a06769083",
+        )
+        passwd_record, group_record = runner._canonical_account_records()
+        self.assertEqual(
+            passwd_record,
+            b"spenser:x:1000:1000::/home/spenser:/bin/sh\n",
+        )
+        self.assertEqual(group_record, b"spenser:x:1000:\n")
+        self.assertEqual(
+            runner.validate_host_account_projection(),
+            (passwd_record, group_record),
+        )
+        original_getpwuid = runner.pwd.getpwuid
+        runner.pwd.getpwuid = lambda _uid: runner.types.SimpleNamespace(
+            pw_name="unexpected",
+            pw_uid=1000,
+            pw_gid=1000,
+            pw_dir="/home/spenser",
+        )
+        try:
+            with self.assertRaises(runner.RunnerError) as drift:
+                runner.validate_host_account_projection()
+            self.assertEqual(drift.exception.reason, "environment_unavailable")
+        finally:
+            runner.pwd.getpwuid = original_getpwuid
         for template in (stage_a, stage_b):
             self.assertIn("--die-with-parent", template)
-            self.assertIn("--unshare-user", template)
+            self.assertNotIn("--unshare-user", template)
             self.assertIn("--unshare-pid", template)
             self.assertIn("--proc", template)
             self.assertIn("--json-status-fd", template)
+            self.assertIn("--userns", template)
+        self.assertIn("--sync-fd", stage_a)
+        self.assertEqual(
+            stage_a[stage_a.index("--userns") : stage_a.index("--userns") + 2],
+            ("--userns", "{STAGE_A_USERNS_FD_DECIMAL}"),
+        )
+        self.assertEqual(
+            stage_a[stage_a.index("--sync-fd") : stage_a.index("--sync-fd") + 2],
+            ("--sync-fd", "{STAGE_B_USERNS_SYNC_FD_DECIMAL}"),
+        )
+        self.assertEqual(
+            stage_b[stage_b.index("--userns") : stage_b.index("--userns") + 2],
+            ("--userns", "{STAGE_B_USERNS_FD_DECIMAL}"),
+        )
         self.assertNotIn("--as-pid-1", stage_a)
         self.assertIn("--as-pid-1", stage_b)
         self.assertLess(stage_b.index("--unshare-pid"), stage_b.index("--as-pid-1"))
         self.assertEqual(
+            stage_a[stage_a.index("--tmpfs") : stage_a.index("--tmpfs") + 4],
+            ("--tmpfs", "/", "--dir", "/tmp"),
+        )
+        self.assertEqual(
             stage_b[stage_b.index("--tmpfs") : stage_b.index("--tmpfs") + 2],
             ("--tmpfs", "/"),
+        )
+        home_parent_at = stage_b.index("/home") - 1
+        self.assertEqual(
+            stage_b[home_parent_at : home_parent_at + 9],
+            (
+                "--dir",
+                "/home",
+                "--tmpfs",
+                "/home/spenser",
+                "--chmod",
+                "0700",
+                "/home/spenser",
+                "--dir",
+                "/home/spenser/__Active_code",
+            ),
         )
         self.assertEqual(
             stage_b[
@@ -5501,6 +6196,12 @@ class CanonicalShellWallRunnerTests(unittest.TestCase):
             ],
             ("--remount-ro", "/"),
         )
+        stage_b_symlink_pairs = tuple(
+            (stage_b[index + 1], stage_b[index + 2])
+            for index, value in enumerate(stage_b)
+            if value == "--symlink"
+        )
+        self.assertIn(("usr/bin", "/bin"), stage_b_symlink_pairs)
         self.assertNotIn("{BACKING_PATH}", stage_b)
         expected_writable_projections = (
             (
@@ -5508,8 +6209,12 @@ class CanonicalShellWallRunnerTests(unittest.TestCase):
                 "/run/substrate-wall/backing/root/tmp",
             ),
             (
+                "/run/substrate-wall/backing/root/tmp",
+                "/tmp",
+            ),
+            (
                 "/run/substrate-wall/backing/root/xdg-runtime",
-                "/run/substrate-wall/backing/root/xdg-runtime",
+                "/run/xdg",
             ),
             ("{CARGO_HOME_RUNTIME}", "/home/spenser/.cargo"),
             ("{ROOT}", "/home/spenser/__Active_code/substrate/target"),
@@ -5521,6 +6226,50 @@ class CanonicalShellWallRunnerTests(unittest.TestCase):
             if value == "--bind"
         )
         self.assertEqual(bind_pairs, expected_writable_projections)
+        self.assertIn("/etc", stage_b)
+        read_only_pairs = tuple(
+            (stage_b[index + 1], stage_b[index + 2])
+            for index, value in enumerate(stage_b)
+            if value == "--ro-bind"
+        )
+        self.assertIn(
+            (
+                "/run/substrate-wall/backing/root/account/passwd",
+                "/etc/passwd",
+            ),
+            read_only_pairs,
+        )
+        self.assertIn(
+            (
+                "/run/substrate-wall/backing/root/account/group",
+                "/etc/group",
+            ),
+            read_only_pairs,
+        )
+        self.assertNotIn(("/etc/passwd", "/etc/passwd"), read_only_pairs)
+        self.assertNotIn(("/etc/group", "/etc/group"), read_only_pairs)
+        self.assertFalse(
+            any(
+                source == "/home/spenser"
+                for source, _destination in bind_pairs + read_only_pairs
+            )
+        )
+        source = _module_source(runner)
+        template_source = source.split(
+            b"BWRAP_STAGE_B_ARGV_TEMPLATE_V1 = (\n",
+            1,
+        )[1].split(b")\n", 1)[0]
+        self.assertIn(b'    "/run/xdg",\n', template_source)
+        self.assertNotIn(b"STAGE_B_XDG_RUNTIME_DIR,", template_source)
+        worker_source = source[
+            source.index(b"def stage_b_worker_main") : source.index(
+                b"def _default_provenance"
+            )
+        ]
+        self.assertLess(
+            worker_source.index(b"_validate_stage_b_home_projection()"),
+            worker_source.index(b"_validate_stage_b_account_projection()"),
+        )
         self.assertIn(
             (
                 "{REPOSITORY_SNAPSHOT}",
@@ -5545,6 +6294,42 @@ class CanonicalShellWallRunnerTests(unittest.TestCase):
         self.assertIn(
             "source_records",
             runner.stage_a_main.__code__.co_varnames,
+        )
+        source = _module_source(runner).decode("utf-8")
+        stage_a_source = source[
+            source.index("def stage_a_main") : source.index(
+                "def validate_rustup_resolution"
+            )
+        ]
+        setup_steps = (
+            "construct_repository_snapshot(",
+            "construct_rustup_home_snapshot(",
+            "construct_cargo_home_seed(",
+            "construct_cargo_home_runtime(",
+            "seal_snapshot_mounts(",
+        )
+        setup_offsets = tuple(stage_a_source.index(step) for step in setup_steps)
+        self.assertEqual(setup_offsets, tuple(sorted(setup_offsets)))
+        for constructor in (
+            step for step in setup_steps if step.startswith("construct_")
+        ):
+            constructor_at = stage_a_source.index(constructor)
+            checkpoint_at = stage_a_source.index(
+                "persist_snapshot_setup()",
+                constructor_at,
+            )
+            following_steps = tuple(
+                offset for offset in setup_offsets if offset > constructor_at
+            )
+            if following_steps:
+                self.assertLess(checkpoint_at, min(following_steps))
+        seal_at = stage_a_source.index("seal_snapshot_mounts(")
+        sealed_records_at = stage_a_source.index("sealed_records = []")
+        seal_source = stage_a_source[seal_at:sealed_records_at]
+        self.assertIn('child_paths["cargo-home-runtime"]', seal_source)
+        self.assertLess(
+            seal_at,
+            stage_a_source.index("os.fchmod(runtime_fd, 0o700)"),
         )
         self.assertEqual(
             self.run_bounded_fixture("production-namespace-reference-scan"),
@@ -6060,6 +6845,7 @@ class CanonicalShellWallRunnerTests(unittest.TestCase):
                     "authorized_mutable_paths": list(
                         runner.AUTHORIZED_CARGO_RUNTIME_MUTATIONS
                     ),
+                    "changed": [],
                 },
             }
         )
@@ -6286,7 +7072,7 @@ class CanonicalShellWallRunnerTests(unittest.TestCase):
         )
         self.assertEqual(
             environment["XDG_RUNTIME_DIR"],
-            os.path.join(authority["backing_path"], "root", "xdg-runtime"),
+            "/run/xdg",
         )
         for name_key, identity_key in (
             ("backing_name", "backing_identity"),
@@ -6471,6 +7257,63 @@ class CanonicalShellWallRunnerTests(unittest.TestCase):
         self.assertTrue(resumed["eof"])
         os.close(retained_read)
         os.close(retained_log)
+        pre_ready_record = runner._default_provenance(
+            invocation_id="7" * 32,
+            label="pre-ready-output",
+            mode="parallel",
+            timeout_seconds=1,
+            expected_head="0" * 40,
+            command=runner._canonical_cargo_command("parallel"),
+            environment={},
+        )
+        pre_ready_read, pre_ready_write = os.pipe2(os.O_CLOEXEC)
+        pre_ready_log_path = os.path.join(parent, "pre-ready.log")
+        pre_ready_log = os.open(
+            pre_ready_log_path,
+            os.O_WRONLY | os.O_CREAT | os.O_EXCL | os.O_CLOEXEC,
+            0o600,
+        )
+        pre_ready_bytes = b"worker_handshake_failed\n"
+        os.write(pre_ready_write, pre_ready_bytes)
+        os.close(pre_ready_write)
+        pre_ready_identity = os.fstat(pre_ready_read)
+        pre_ready_output = runner._preserve_pre_ready_stage_b_output(
+            pre_ready_read,
+            pre_ready_log,
+            deadline=time.monotonic() + 1,
+            output_pipe_identity=(
+                pre_ready_identity.st_dev,
+                pre_ready_identity.st_ino,
+            ),
+            provenance=pre_ready_record,
+        )
+        os.close(pre_ready_read)
+        os.close(pre_ready_log)
+        with open(pre_ready_log_path, "rb") as handle:
+            self.assertEqual(handle.read(), pre_ready_bytes)
+        self.assertEqual(pre_ready_output["bytes"], len(pre_ready_bytes))
+        self.assertEqual(
+            pre_ready_record["containment"]["output_pipe_dev"],
+            pre_ready_identity.st_dev,
+        )
+        self.assertEqual(
+            pre_ready_record["containment"]["output_pipe_ino"],
+            pre_ready_identity.st_ino,
+        )
+        self.assertEqual(
+            pre_ready_record["containment"]["output_bytes_preserved"],
+            len(pre_ready_bytes),
+        )
+        self.assertTrue(
+            pre_ready_record["containment"]["output_pipe_opened_before_stage_b"]
+        )
+        self.assertTrue(
+            pre_ready_record["containment"]["single_pipe_for_stdout_stderr"]
+        )
+        self.assertTrue(
+            pre_ready_record["containment"]["output_eof_after_stage_b_reap"]
+        )
+        self.assertFalse(pre_ready_record["containment"]["output_overflow"])
         def run_supervised_case(
             case_name: str,
             *,
