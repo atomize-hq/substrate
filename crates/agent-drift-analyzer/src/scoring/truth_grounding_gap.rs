@@ -4,7 +4,7 @@ use crate::checkpoint::{
     CheckpointAnalysis, Confidence, DriftClass, DriftScore, DriftState, EvidenceRef,
 };
 use crate::context::CommandObservation;
-use crate::input::{extract_path_hints, paths_equal, paths_overlap};
+use crate::input::{extract_directive_path_hints, truth_paths_equal, truth_paths_overlap};
 use crate::scoring::{DriftStateHint, ScoredDrift};
 
 const HISTORICAL_TRUTH_GROUNDING_GAP_REASON_PREFIX: &str = "historical truth-grounding gap:";
@@ -20,9 +20,11 @@ pub(crate) fn score_truth_grounding_gap(
     provenance: &mut TruthGroundingProvenance,
 ) -> ScoredDrift {
     let truth_paths = declared_truth_paths(analysis);
-    provenance
-        .grounded_paths
-        .retain(|path| truth_paths.contains(path));
+    provenance.grounded_paths.retain(|grounded| {
+        truth_paths
+            .iter()
+            .any(|truth| truth_paths_equal(grounded, truth))
+    });
     let mut grounded_reads = Vec::<EvidenceRef>::new();
     let mut ungrounded_actions = Vec::<EvidenceRef>::new();
 
@@ -32,11 +34,11 @@ pub(crate) fn score_truth_grounding_gap(
             let grounded = if matching_paths.is_empty() {
                 truth_paths
                     .iter()
-                    .all(|path| provenance.grounded_paths.contains(path))
+                    .all(|path| path_is_grounded(provenance, path))
             } else {
                 matching_paths
                     .iter()
-                    .all(|path| provenance.grounded_paths.contains(*path))
+                    .all(|path| path_is_grounded(provenance, path))
             };
             if !grounded {
                 ungrounded_actions.extend(command.evidence.clone());
@@ -105,14 +107,14 @@ pub(crate) fn score_truth_grounding_gap(
 
 fn declared_truth_paths(analysis: &CheckpointAnalysis) -> BTreeSet<String> {
     let task_frame = &analysis.current.task_frame;
-    let extracted_paths = extract_path_hints(&task_frame.objective);
+    let extracted_paths = extract_directive_path_hints(&task_frame.objective);
     let objective_paths = task_frame
         .truth_artifacts
         .iter()
         .filter(|path| {
             extracted_paths
                 .iter()
-                .any(|extracted| paths_equal(extracted, path))
+                .any(|extracted| truth_paths_equal(extracted, path))
         })
         .cloned()
         .collect::<BTreeSet<_>>();
@@ -139,7 +141,14 @@ fn matching_truth_paths<'a>(
 }
 
 fn paths_share_identity(left: &str, right: &str) -> bool {
-    paths_overlap(left, right)
+    truth_paths_overlap(left, right)
+}
+
+fn path_is_grounded(provenance: &TruthGroundingProvenance, path: &str) -> bool {
+    provenance
+        .grounded_paths
+        .iter()
+        .any(|grounded| truth_paths_equal(grounded, path))
 }
 
 fn historical_truth_grounding_gap_evidence(previous: &DriftScore) -> Vec<EvidenceRef> {

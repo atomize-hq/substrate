@@ -630,47 +630,112 @@ pub(crate) fn parse_tool_payload(text: &str) -> Option<Value> {
 }
 
 pub(crate) fn extract_path_hints(text: &str) -> Vec<String> {
+    extract_path_hints_with_context(text, false)
+}
+
+pub(crate) fn extract_directive_path_hints(text: &str) -> Vec<String> {
+    extract_path_hints_with_context(text, true)
+}
+
+fn extract_path_hints_with_context(text: &str, directive_context: bool) -> Vec<String> {
     let mut paths = BTreeSet::new();
-    for raw_token in text.split_whitespace() {
-        let token = raw_token
-            .trim_matches(|ch: char| {
-                matches!(
-                    ch,
-                    ',' | ':' | ';' | '"' | '\'' | '(' | ')' | '[' | ']' | '{' | '}' | '`'
-                )
-            })
-            .trim_end_matches('.');
-        if looks_like_path(token) {
-            paths.insert(token.to_string());
+    let tokens = text.split_whitespace().collect::<Vec<_>>();
+    let mut index = 0;
+    while index < tokens.len() {
+        let raw_token = tokens[index];
+        let option_token = trim_path_delimiters(raw_token);
+        if directive_context && option_token == "--path" {
+            if let Some(raw_value) = tokens.get(index + 1) {
+                insert_path_candidate(&mut paths, trim_option_path_token(raw_value), true, true);
+                index += 2;
+                continue;
+            }
+        } else if directive_context {
+            if let Some(value) = option_token.strip_prefix("--path=") {
+                insert_path_candidate(&mut paths, trim_option_path_token(value), true, true);
+                index += 1;
+                continue;
+            }
         }
+        if !(directive_context && is_control_directive_token(trim_control_token(raw_token))) {
+            insert_path_candidate(
+                &mut paths,
+                trim_path_token(raw_token),
+                false,
+                directive_context,
+            );
+        }
+        index += 1;
     }
     paths.into_iter().collect()
 }
 
 pub(crate) fn text_contains_control_directive(text: &str) -> bool {
-    text.split_whitespace().any(|token| {
-        let token = token.trim_matches(|ch: char| {
-            matches!(ch, '"' | '\'' | '`' | '(' | ')' | '[' | ']' | '{' | '}')
-        });
-        let token = token
-            .split_once('=')
-            .map_or(token, |(directive, _)| directive)
-            .trim_end_matches([':', ',', ';']);
-        token.strip_prefix('/').is_some_and(|name| {
-            !name.is_empty()
-                && !name.contains(['/', '\\'])
-                && name
-                    .chars()
-                    .all(|ch| ch.is_ascii_alphanumeric() || matches!(ch, '-' | '_'))
-        })
+    text.split_whitespace()
+        .map(trim_control_token)
+        .any(is_control_directive_token)
+}
+
+fn trim_path_delimiters(token: &str) -> &str {
+    token.trim_matches(|ch: char| {
+        matches!(
+            ch,
+            ',' | ':' | ';' | '"' | '\'' | '(' | ')' | '[' | ']' | '{' | '}' | '`'
+        )
     })
 }
 
-fn looks_like_path(token: &str) -> bool {
+fn trim_path_token(token: &str) -> &str {
+    trim_path_delimiters(token).trim_end_matches('.')
+}
+
+fn trim_option_path_token(token: &str) -> &str {
+    let token = trim_path_delimiters(token);
+    if token == "." {
+        token
+    } else {
+        token.trim_end_matches('.')
+    }
+}
+
+fn trim_control_token(token: &str) -> &str {
+    let token = token.trim_matches(|ch: char| {
+        matches!(ch, '"' | '\'' | '`' | '(' | ')' | '[' | ']' | '{' | '}')
+    });
+    token
+        .split_once('=')
+        .map_or(token, |(directive, _)| directive)
+        .trim_end_matches([':', ',', ';'])
+}
+
+fn is_control_directive_token(token: &str) -> bool {
+    token.strip_prefix('/').is_some_and(|name| {
+        !name.is_empty()
+            && !name.contains(['/', '\\'])
+            && name
+                .chars()
+                .all(|ch| ch.is_ascii_alphanumeric() || matches!(ch, '-' | '_'))
+    })
+}
+
+fn insert_path_candidate(
+    paths: &mut BTreeSet<String>,
+    token: &str,
+    explicit_option: bool,
+    portable_separators: bool,
+) {
+    if !token.is_empty() && (explicit_option || looks_like_path(token, portable_separators)) {
+        paths.insert(token.to_string());
+    }
+}
+
+fn looks_like_path(token: &str, portable_separators: bool) -> bool {
     if token.is_empty() || token.starts_with("http://") || token.starts_with("https://") {
         return false;
     }
-    let has_separator = token.contains('/') || token.starts_with('.');
+    let has_separator = token.contains('/')
+        || token.starts_with('.')
+        || (portable_separators && token.contains('\\'));
     let has_extension = [
         ".md", ".rs", ".toml", ".json", ".jsonl", ".yaml", ".yml", ".sh", ".txt",
     ]
@@ -699,9 +764,19 @@ pub(crate) fn normalize_repo_path(path: &str, workdir: Option<&str>) -> Option<S
     Some(render_repo_path(&components))
 }
 
-pub(crate) fn paths_equal(left: &str, right: &str) -> bool {
+pub(crate) fn normalize_directive_path(path: &str) -> Option<String> {
+    let path = strip_path_location_suffix(path);
+    let parsed = parse_lexical_path(path)?;
+    if parsed.root.is_none() {
+        Some(render_repo_path(&parsed.components))
+    } else {
+        Some(path.to_string())
+    }
+}
+
+pub(crate) fn truth_paths_equal(left: &str, right: &str) -> bool {
     matches!(
-        (normalize_repo_path(left, None), normalize_repo_path(right, None)),
+        (parse_truth_path(left), parse_truth_path(right)),
         (Some(left), Some(right)) if left == right
     )
 }
@@ -717,8 +792,16 @@ pub(crate) fn path_is_equal_or_descendant(path: &str, scope: &str) -> bool {
     components_start_with(&path_components(&path), &path_components(&scope))
 }
 
-pub(crate) fn paths_overlap(left: &str, right: &str) -> bool {
-    path_is_equal_or_descendant(left, right) || path_is_equal_or_descendant(right, left)
+pub(crate) fn truth_paths_overlap(left: &str, right: &str) -> bool {
+    let Some(left) = parse_truth_path(left) else {
+        return false;
+    };
+    let Some(right) = parse_truth_path(right) else {
+        return false;
+    };
+    left.root == right.root
+        && (components_start_with(&left.components, &right.components)
+            || components_start_with(&right.components, &left.components))
 }
 
 #[derive(Debug, Clone, PartialEq, Eq)]
@@ -738,6 +821,7 @@ fn parse_lexical_path(raw: &str) -> Option<ParsedPath> {
     if raw.is_empty()
         || raw.contains(['\0', '\n', '\r'])
         || raw.contains("://")
+        || raw.starts_with('\\')
         || raw.starts_with('~')
         || raw.starts_with('$')
         || raw.starts_with('%')
@@ -778,6 +862,10 @@ fn parse_lexical_path(raw: &str) -> Option<ParsedPath> {
         }
     }
     Some(ParsedPath { root, components })
+}
+
+fn parse_truth_path(path: &str) -> Option<ParsedPath> {
+    parse_lexical_path(strip_path_location_suffix(path))
 }
 
 fn strip_path_location_suffix(path: &str) -> &str {
@@ -823,4 +911,51 @@ fn path_components(path: &str) -> Vec<String> {
 
 fn row_ref_key(row: RowRef) -> (Utf8PathBuf, usize, usize) {
     (row.source_file, row.event_index, row.row_ordinal)
+}
+
+#[cfg(test)]
+mod path_identity_tests {
+    use super::{truth_paths_equal, truth_paths_overlap};
+
+    #[test]
+    fn absolute_truth_path_identity_preserves_roots_and_component_boundaries() {
+        assert!(truth_paths_equal(
+            "/repo/docs/./truth.md",
+            "/repo/docs/truth.md"
+        ));
+        assert!(truth_paths_overlap("/repo/docs", "/repo/docs/truth.md"));
+        assert!(truth_paths_overlap("/repo/docs/truth.md", "/repo/docs"));
+        assert!(truth_paths_overlap("/", "/repo/docs/truth.md"));
+        assert!(!truth_paths_overlap(
+            "/repo/docs",
+            "/repo/docsmith/truth.md"
+        ));
+        assert!(!truth_paths_overlap("/repo/docs", "/other/docs/truth.md"));
+
+        assert!(truth_paths_equal(
+            r"C:\repo\docs\.\truth.md",
+            "c:/repo/docs/truth.md"
+        ));
+        assert!(truth_paths_overlap(
+            r"C:\repo\docs",
+            "c:/repo/docs/truth.md"
+        ));
+        assert!(truth_paths_overlap(
+            "c:/repo/docs/truth.md",
+            r"C:\repo\docs"
+        ));
+        assert!(truth_paths_overlap("c:/", r"C:\repo\docs\truth.md"));
+        assert!(!truth_paths_overlap(
+            r"C:\repo\docs",
+            r"D:\repo\docs\truth.md"
+        ));
+        assert!(!truth_paths_overlap(
+            "/repo/docs/truth.md",
+            r"C:\repo\docs\truth.md"
+        ));
+        assert!(!truth_paths_overlap(
+            "repo/docs/truth.md",
+            "/repo/docs/truth.md"
+        ));
+    }
 }

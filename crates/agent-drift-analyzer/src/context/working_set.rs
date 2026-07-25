@@ -6,7 +6,10 @@ use serde_json::Value;
 
 use crate::checkpoint::EvidenceRef;
 use crate::context::{evidence_from_row, focusable_directive_rows};
-use crate::input::{extract_path_hints, normalize_repo_path, text_contains_control_directive};
+use crate::input::{
+    extract_directive_path_hints, extract_path_hints, normalize_directive_path,
+    normalize_repo_path, text_contains_control_directive,
+};
 
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]
 pub struct CandidateTruthArtifact {
@@ -45,36 +48,37 @@ pub fn collect_truth_artifacts(
     objective: &super::ObjectiveSummary,
 ) -> Vec<CandidateTruthArtifact> {
     let mut artifacts = BTreeMap::<String, CandidateTruthArtifact>::new();
+    let objective_paths = directive_path_hints(&objective.text)
+        .into_iter()
+        .collect::<BTreeSet<_>>();
 
     for row in focusable_directive_rows(rows) {
-        for line in row.text.lines() {
-            let is_control = text_contains_control_directive(line);
-            for path in directive_path_hints(line, is_control) {
-                let source = if is_control {
-                    "control_directive_literal"
-                } else if objective.text.contains(&path) {
-                    "objective_literal"
-                } else {
-                    "directive_literal"
-                };
-                let artifact =
-                    artifacts
-                        .entry(path.clone())
-                        .or_insert_with(|| CandidateTruthArtifact {
-                            path: path.clone(),
-                            source: source.to_string(),
-                            evidence: Vec::new(),
-                        });
-                if artifact.source == "control_directive_literal"
-                    && source != "control_directive_literal"
-                {
-                    artifact.source = source.to_string();
-                }
-                artifact.evidence.push(evidence_from_row(
-                    row,
-                    format!("truth artifact hint: {path}"),
-                ));
+        let is_control = text_contains_control_directive(&row.text);
+        for path in directive_path_hints(&row.text) {
+            let source = if is_control {
+                "control_directive_literal"
+            } else if objective_paths.contains(&path) {
+                "objective_literal"
+            } else {
+                "directive_literal"
+            };
+            let artifact =
+                artifacts
+                    .entry(path.clone())
+                    .or_insert_with(|| CandidateTruthArtifact {
+                        path: path.clone(),
+                        source: source.to_string(),
+                        evidence: Vec::new(),
+                    });
+            if artifact.source == "control_directive_literal"
+                && source != "control_directive_literal"
+            {
+                artifact.source = source.to_string();
             }
+            artifact.evidence.push(evidence_from_row(
+                row,
+                format!("truth artifact hint: {path}"),
+            ));
         }
     }
 
@@ -100,8 +104,7 @@ pub fn collect_working_set_paths(
     }
 
     for row in focusable_directive_rows(rows) {
-        let is_control = text_contains_control_directive(&row.text);
-        for path in directive_path_hints(&row.text, is_control) {
+        for path in working_set_path_hints(&row.text) {
             paths
                 .entry(path.clone())
                 .or_insert_with(|| WorkingSetPath {
@@ -131,12 +134,22 @@ pub fn collect_working_set_paths(
     paths.into_values().collect()
 }
 
-fn directive_path_hints(text: &str, allow_absolute: bool) -> Vec<String> {
+fn directive_path_hints(text: &str) -> Vec<String> {
+    let mut paths = extract_directive_path_hints(text)
+        .into_iter()
+        .filter_map(|path| normalize_directive_path(&path))
+        .collect::<BTreeSet<_>>();
+    for path in extract_path_hints(text) {
+        if normalize_directive_path(&path).is_none() {
+            paths.insert(path);
+        }
+    }
+    paths.into_iter().collect()
+}
+
+fn working_set_path_hints(text: &str) -> Vec<String> {
     let mut paths = extract_path_hints(text)
         .into_iter()
-        .filter(|path| {
-            allow_absolute || (!path.starts_with('/') && !looks_like_windows_absolute(path))
-        })
         .collect::<BTreeSet<_>>();
     for token in text.split_whitespace() {
         if let Some(path) = token.strip_prefix("--path=") {
@@ -147,14 +160,6 @@ fn directive_path_hints(text: &str, allow_absolute: bool) -> Vec<String> {
         }
     }
     paths.into_iter().collect()
-}
-
-fn looks_like_windows_absolute(path: &str) -> bool {
-    let bytes = path.as_bytes();
-    bytes.len() >= 3
-        && bytes[0].is_ascii_alphabetic()
-        && bytes[1] == b':'
-        && matches!(bytes[2], b'/' | b'\\')
 }
 
 pub fn collect_tools(commands: &[CommandObservation]) -> Vec<ToolObservation> {

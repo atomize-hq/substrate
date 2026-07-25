@@ -1,5 +1,5 @@
 use crate::checkpoint::{CheckpointAnalysis, Confidence, DriftClass, DriftScore, DriftState};
-use crate::input::path_is_equal_or_descendant;
+use crate::input::{normalize_repo_path, path_is_equal_or_descendant};
 use crate::scoring::{DriftStateHint, ScoredDrift};
 
 pub(crate) fn score_wrong_plan_branch(analysis: &CheckpointAnalysis) -> ScoredDrift {
@@ -8,7 +8,7 @@ pub(crate) fn score_wrong_plan_branch(analysis: &CheckpointAnalysis) -> ScoredDr
         .truth_artifacts
         .iter()
         .filter(|artifact| artifact.source != "control_directive_literal")
-        .map(|artifact| artifact.path.clone())
+        .filter_map(|artifact| normalize_repo_path(&artifact.path, None))
         .collect::<Vec<_>>();
     expected.sort();
     expected.dedup();

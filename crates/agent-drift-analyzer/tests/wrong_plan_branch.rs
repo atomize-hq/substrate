@@ -258,17 +258,24 @@ fn wrong_plan_branch_makes_no_claim_for_path_action_without_authority() {
 #[test]
 fn wrong_plan_branch_control_syntax_never_establishes_path_authority() {
     let cases = [
-        ("/goal Update src/foo and keep changes there.", true),
-        ("/goal Update /repo/src/foo and keep changes there.", true),
-        ("/review --path src/foo", true),
-        ("/review --path=src/foo", true),
+        ("/goal Update src/foo and keep changes there.", true, true),
         (
-            "Continue the task; the ambiguous token /src/foo is not a typed path.",
-            false,
+            "/goal Update /repo/src/foo and keep changes there.",
+            true,
+            true,
         ),
+        ("/review\n--path src/foo", true, true),
+        ("/review\n--path=src/foo", true, true),
+        ("--path /repo/src/foo", false, true),
+        ("--path=/repo/src/foo", false, true),
+        ("--path=../outside", false, false),
+        (r"--path=C:\repo\src\foo", false, true),
+        (r"--path=\\server\share\src\foo.rs", false, false),
+        (r"--path=\repo\src\foo.rs", false, false),
+        ("Authorized filesystem scope: /repo/src/foo.", false, true),
     ];
 
-    for (directive, expected_control_hint) in cases {
+    for (directive, expected_control_hint, expected_truth_hint) in cases {
         let result = analyze_rows(vec![
             row(0, CompactionKind::UserMessage, directive),
             typed_tool_row(
@@ -277,14 +284,32 @@ fn wrong_plan_branch_control_syntax_never_establishes_path_authority() {
                 r#"{"path":"src/foobar.rs","workdir":"/repo"}"#,
             ),
         ]);
+        let context = &result.sessions[0].context;
+        assert_eq!(
+            !context.truth_artifacts.is_empty(),
+            expected_truth_hint,
+            "{directive}",
+        );
         if expected_control_hint {
-            assert!(result.sessions[0]
-                .context
-                .truth_artifacts
-                .iter()
-                .all(|artifact| artifact.source == "control_directive_literal"));
+            assert!(
+                context
+                    .truth_artifacts
+                    .iter()
+                    .all(|artifact| artifact.source == "control_directive_literal"),
+                "{directive}",
+            );
         } else {
-            assert!(result.sessions[0].context.truth_artifacts.is_empty());
+            assert!(
+                context.truth_artifacts.iter().all(|artifact| {
+                    artifact.path.starts_with('/')
+                        || artifact
+                            .path
+                            .as_bytes()
+                            .get(1)
+                            .is_some_and(|separator| *separator == b':')
+                }),
+                "{directive}",
+            );
         }
 
         let score = final_wrong_plan_score(&result);
@@ -298,6 +323,133 @@ fn wrong_plan_branch_control_syntax_never_establishes_path_authority() {
             (0, Confidence::Low, DriftState::Cleared, false),
             "{directive}",
         );
+    }
+}
+
+#[test]
+fn truth_grounding_gap_preserves_absolute_path_identity_and_provenance() {
+    let cases = [
+        (
+            "posix",
+            "/repo/docs/specs/absolute-truth.md",
+            "/repo/docs/specs/absolute-truth.md",
+        ),
+        (
+            "windows-drive",
+            r"C:\repo\docs\specs\absolute-truth.md",
+            r"C:\repo\docs\specs\absolute-truth.md",
+        ),
+    ];
+
+    for (case, truth_path, expected_truth_path) in cases {
+        let rows = vec![
+            row(
+                0,
+                CompactionKind::UserMessage,
+                &format!(
+                    "/goal Update {truth_path} using that absolute truth artifact before changing behavior."
+                ),
+            ),
+            tool_row(1, "cargo test -p agent-drift-analyzer -- --nocapture"),
+            row(
+                2,
+                CompactionKind::AssistantMessage,
+                "I need to re-ground on the spec at the absolute truth path before acting again.",
+            ),
+            tool_row(3, &format!("sed -n '1,120p' {truth_path}")),
+            row(
+                4,
+                CompactionKind::AssistantMessage,
+                "The absolute truth path is grounded; I am moving to the next checkpoint.",
+            ),
+            tool_row(
+                5,
+                &format!(
+                    "apply_patch <<'PATCH'\n*** Begin Patch\n*** Update File: {truth_path}\n*** End Patch\nPATCH"
+                ),
+            ),
+        ];
+        let result = analyze_rows(rows);
+        let checkpoints = &result.sessions[0].checkpoints;
+        assert_eq!(checkpoints.len(), 3, "{case}");
+        assert!(
+            checkpoints.iter().all(|checkpoint| checkpoint
+                .task_frame
+                .truth_artifacts
+                .iter()
+                .any(|path| path == expected_truth_path)),
+            "{case}",
+        );
+
+        let truth_scores = checkpoints
+            .iter()
+            .map(|checkpoint| {
+                checkpoint
+                    .drift_scores
+                    .iter()
+                    .find(|score| score.class == DriftClass::TruthGroundingGap)
+                    .expect("truth grounding gap score")
+            })
+            .collect::<Vec<_>>();
+        assert_eq!(
+            (
+                truth_scores[0].raw_score,
+                truth_scores[0].confidence,
+                truth_scores[0].state,
+                truth_scores[0].flagged,
+            ),
+            (80, Confidence::High, DriftState::Active, true),
+            "{case}",
+        );
+        assert_eq!(
+            (
+                truth_scores[1].raw_score,
+                truth_scores[1].confidence,
+                truth_scores[1].state,
+                truth_scores[1].flagged,
+            ),
+            (20, Confidence::Medium, DriftState::Recovered, false),
+            "{case}",
+        );
+        assert_eq!(
+            (
+                truth_scores[2].raw_score,
+                truth_scores[2].confidence,
+                truth_scores[2].state,
+                truth_scores[2].flagged,
+            ),
+            (20, Confidence::Medium, DriftState::HistoricalOnly, false),
+            "{case}",
+        );
+        assert!(
+            truth_scores[1]
+                .evidence
+                .iter()
+                .any(|evidence| evidence.reason == "command family: sed"),
+            "{case}",
+        );
+        assert!(
+            truth_scores[1].evidence.iter().any(|evidence| evidence
+                .reason
+                .starts_with("historical truth-grounding gap:")),
+            "{case}",
+        );
+        assert!(
+            truth_scores[2].evidence.iter().any(|evidence| evidence
+                .reason
+                .starts_with("historical truth-grounding gap:")),
+            "{case}",
+        );
+
+        for checkpoint in checkpoints {
+            let wrong_plan = checkpoint
+                .drift_scores
+                .iter()
+                .find(|score| score.class == DriftClass::WrongPlanBranch)
+                .expect("wrong plan branch score");
+            assert_eq!(wrong_plan.confidence, Confidence::Low, "{case}");
+            assert!(!wrong_plan.flagged, "{case}");
+        }
     }
 }
 
@@ -338,6 +490,18 @@ fn wrong_plan_branch_normalizes_typed_paths_and_rejects_unsafe_paths() {
         (
             "typed-traversal",
             "../../src/foo/bar.rs",
+            "/repo",
+            Vec::new(),
+        ),
+        (
+            "typed-unc",
+            r"\\server\share\src\foo\bar.rs",
+            r"C:\repo",
+            Vec::new(),
+        ),
+        (
+            "typed-rooted-backslash",
+            r"\repo\src\foo\bar.rs",
             "/repo",
             Vec::new(),
         ),
@@ -421,6 +585,89 @@ fn wrong_plan_branch_uses_component_aware_scope_containment() {
         vec!["src/anything.rs".to_string()]
     );
     assert!(!final_wrong_plan_score(&root).flagged);
+}
+
+#[test]
+fn wrong_plan_branch_normalizes_backslash_relative_authority_paths() {
+    let cases = [
+        ("authority-exact", r"src\foo", "src/foo", "src/foo", false),
+        (
+            "authority-descendant",
+            r"src\foo",
+            "src/foo",
+            "src/foo/bar.rs",
+            false,
+        ),
+        (
+            "authority-sibling",
+            r"src\foo",
+            "src/foo",
+            "src/bar.rs",
+            true,
+        ),
+        (
+            "authority-prefix-collision",
+            r"src\foo",
+            "src/foo",
+            "src/foobar.rs",
+            true,
+        ),
+        (
+            "authority-dot-and-repeated-separators",
+            r"src\.\foo\\",
+            "src/foo",
+            "src/foo/bar.rs",
+            false,
+        ),
+        ("authority-root", r".\.", ".", "src/anything.rs", false),
+    ];
+
+    for (case, authority, normalized_authority, action_path, flagged) in cases {
+        let payload = format!(r#"{{"path":{action_path:?},"workdir":"/repo"}}"#);
+        let result = analyze_rows(vec![
+            row(
+                0,
+                CompactionKind::UserMessage,
+                "Implement the requested change.",
+            ),
+            row(
+                1,
+                CompactionKind::SystemMessage,
+                &format!("Authorized filesystem scope: {authority}"),
+            ),
+            typed_tool_row(2, "functions.write_file", &payload),
+        ]);
+        let authoritative = result.sessions[0]
+            .context
+            .truth_artifacts
+            .iter()
+            .filter(|artifact| artifact.source != "control_directive_literal")
+            .collect::<Vec<_>>();
+        assert_eq!(authoritative.len(), 1, "{case}");
+        assert_eq!(authoritative[0].path, normalized_authority, "{case}");
+        assert!(!authoritative[0].evidence.is_empty(), "{case}");
+
+        let score = final_wrong_plan_score(&result);
+        assert_eq!(
+            (
+                score.raw_score,
+                score.confidence,
+                score.state,
+                score.flagged,
+            ),
+            (
+                if flagged { 60 } else { 0 },
+                Confidence::Medium,
+                if flagged {
+                    DriftState::Active
+                } else {
+                    DriftState::Cleared
+                },
+                flagged,
+            ),
+            "{case}",
+        );
+    }
 }
 
 #[test]
