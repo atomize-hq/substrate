@@ -256,122 +256,208 @@ fn wrong_plan_branch_makes_no_claim_for_path_action_without_authority() {
 }
 
 #[test]
-fn wrong_plan_branch_control_syntax_never_establishes_path_authority() {
+fn wrong_plan_branch_control_invocations_and_plain_absolute_paths_are_distinct() {
     let cases = [
-        ("/goal Update src/foo and keep changes there.", true, true),
         (
-            "/goal Update /repo/src/foo and keep changes there.",
-            true,
-            true,
+            "goal-chain",
+            "/goal Update src/foo and then run /spec.",
+            Vec::<&str>::new(),
+            vec!["src/foo"],
         ),
-        ("/review\n--path src/foo", true, true),
-        ("/review\n--path=src/foo", true, true),
-        ("--path /repo/src/foo", false, true),
-        ("--path=/repo/src/foo", false, true),
-        ("--path=../outside", false, false),
-        (r"--path=C:\repo\src\foo", false, true),
-        (r"--path=\\server\share\src\foo.rs", false, false),
-        (r"--path=\repo\src\foo.rs", false, false),
-        ("Authorized filesystem scope: /repo/src/foo.", false, true),
+        (
+            "control-option-continuation",
+            "/review\n--path /repo",
+            Vec::<&str>::new(),
+            vec!["/repo"],
+        ),
+        (
+            "plain-prose-posix",
+            "The trusted repository root is /repo for this task.",
+            vec!["/repo"],
+            Vec::<&str>::new(),
+        ),
+        (
+            "standalone-posix",
+            "/repo",
+            vec!["/repo"],
+            Vec::<&str>::new(),
+        ),
+        (
+            "option-positional-posix",
+            "--path /repo",
+            vec!["/repo"],
+            Vec::<&str>::new(),
+        ),
+        (
+            "option-equals-posix",
+            "--path=/repo",
+            vec!["/repo"],
+            Vec::<&str>::new(),
+        ),
     ];
 
-    for (directive, expected_control_hint, expected_truth_hint) in cases {
+    for (case, directive, expected_authority, expected_control) in cases {
+        let result = analyze_rows(vec![
+            row(0, CompactionKind::UserMessage, directive),
+            typed_tool_row(1, "functions.write_file", r#"{"path":"src/foobar.rs"}"#),
+        ]);
+        let context = &result.sessions[0].context;
+        let authority = context
+            .truth_artifacts
+            .iter()
+            .filter(|artifact| artifact.source != "control_directive_literal")
+            .map(|artifact| artifact.path.as_str())
+            .collect::<Vec<_>>();
+        let controls = context
+            .truth_artifacts
+            .iter()
+            .filter(|artifact| artifact.source == "control_directive_literal")
+            .map(|artifact| artifact.path.as_str())
+            .collect::<Vec<_>>();
+        assert_eq!(authority, expected_authority, "{case}");
+        assert_eq!(controls, expected_control, "{case}");
+
+        let score = final_wrong_plan_score(&result);
+        assert_eq!(
+            (score.raw_score, score.confidence, score.flagged),
+            (0, Confidence::Low, false),
+            "{case}",
+        );
+    }
+}
+
+#[test]
+fn wrong_plan_branch_rejects_raw_parent_components_before_authority_normalization() {
+    let cases = [
+        "Authorized scope: scope/../sibling.",
+        "Authorized scope: scope/../..",
+        "Authorized scope: scope/..",
+        "Authorized scope: scope/../../.",
+        r"Authorized scope: scope\..\sibling.",
+        "/review\n--path scope/../sibling",
+        "/review\n--path=scope/../..",
+        "/review\n--path scope/..",
+        "/review\n--path=scope\\..\\sibling",
+        "--path scope/../sibling",
+        "--path=scope/..",
+    ];
+
+    for directive in cases {
         let result = analyze_rows(vec![
             row(0, CompactionKind::UserMessage, directive),
             typed_tool_row(
                 1,
                 "functions.write_file",
-                r#"{"path":"src/foobar.rs","workdir":"/repo"}"#,
+                r#"{"path":"scope/sibling/file.rs"}"#,
             ),
         ]);
-        let context = &result.sessions[0].context;
-        assert_eq!(
-            !context.truth_artifacts.is_empty(),
-            expected_truth_hint,
+        assert!(
+            result.sessions[0].context.truth_artifacts.is_empty(),
             "{directive}",
         );
-        if expected_control_hint {
-            assert!(
-                context
-                    .truth_artifacts
-                    .iter()
-                    .all(|artifact| artifact.source == "control_directive_literal"),
-                "{directive}",
-            );
-        } else {
-            assert!(
-                context.truth_artifacts.iter().all(|artifact| {
-                    artifact.path.starts_with('/')
-                        || artifact
-                            .path
-                            .as_bytes()
-                            .get(1)
-                            .is_some_and(|separator| *separator == b':')
-                }),
-                "{directive}",
-            );
-        }
-
+        assert!(
+            result.sessions[0]
+                .context
+                .working_set_paths
+                .iter()
+                .all(|path| path.source == "observed_command"),
+            "{directive}",
+        );
         let score = final_wrong_plan_score(&result);
         assert_eq!(
-            (
-                score.raw_score,
-                score.confidence,
-                score.state,
-                score.flagged,
-            ),
-            (0, Confidence::Low, DriftState::Cleared, false),
+            (score.raw_score, score.confidence, score.flagged),
+            (0, Confidence::Low, false),
             "{directive}",
         );
     }
 }
 
 #[test]
-fn truth_grounding_gap_preserves_absolute_path_identity_and_provenance() {
+fn truth_grounding_gap_preserves_typed_absolute_identity_and_lifecycle_provenance() {
     let cases = [
         (
             "posix",
+            "/repo",
             "/repo/docs/specs/absolute-truth.md",
+            "/repo/docs/specs",
             "/repo/docs/specs/absolute-truth.md",
         ),
         (
             "windows-drive",
+            r"C:\repo",
             r"C:\repo\docs\specs\absolute-truth.md",
-            r"C:\repo\docs\specs\absolute-truth.md",
+            r"C:\repo\docs\specs",
+            "c:/repo/docs/specs/absolute-truth.md",
         ),
     ];
 
-    for (case, truth_path, expected_truth_path) in cases {
+    for (case, root, truth_path, nested_cwd, expected_truth_path) in cases {
         let rows = vec![
             row(
                 0,
                 CompactionKind::UserMessage,
                 &format!(
-                    "/goal Update {truth_path} using that absolute truth artifact before changing behavior."
+                    "/goal Update the absolute truth artifact {truth_path} only after grounding it.\nTrusted repository root: {root}."
                 ),
             ),
-            tool_row(1, "cargo test -p agent-drift-analyzer -- --nocapture"),
+            typed_tool_row(
+                1,
+                "functions.write_file",
+                &format!(r#"{{"path":{truth_path:?},"cwd":{root:?}}}"#),
+            ),
             row(
                 2,
                 CompactionKind::AssistantMessage,
-                "I need to re-ground on the spec at the absolute truth path before acting again.",
+                "I need to re-ground on the absolute truth artifact before acting again.",
             ),
-            tool_row(3, &format!("sed -n '1,120p' {truth_path}")),
+            typed_tool_row(
+                3,
+                "functions.read_file",
+                &format!(r#"{{"path":"absolute-truth.md","cwd":{nested_cwd:?}}}"#),
+            ),
             row(
                 4,
                 CompactionKind::AssistantMessage,
-                "The absolute truth path is grounded; I am moving to the next checkpoint.",
+                "The absolute truth artifact is grounded; I am moving to the next checkpoint.",
             ),
-            tool_row(
+            typed_tool_row(
                 5,
-                &format!(
-                    "apply_patch <<'PATCH'\n*** Begin Patch\n*** Update File: {truth_path}\n*** End Patch\nPATCH"
-                ),
+                "functions.edit_file",
+                &format!(r#"{{"path":"absolute-truth.md","cwd":{nested_cwd:?}}}"#),
             ),
         ];
         let result = analyze_rows(rows);
+        assert_eq!(
+            result.sessions[0]
+                .context
+                .command_observations
+                .iter()
+                .map(|command| command.paths.clone())
+                .collect::<Vec<_>>(),
+            vec![
+                vec![expected_truth_path.to_string()],
+                vec![expected_truth_path.to_string()],
+                vec![expected_truth_path.to_string()],
+            ],
+            "{case}",
+        );
+
+        let truth_artifact = result.sessions[0]
+            .context
+            .truth_artifacts
+            .iter()
+            .find(|artifact| artifact.path == expected_truth_path)
+            .expect("absolute truth artifact");
+        assert!(
+            truth_artifact.evidence.iter().any(|evidence| {
+                evidence.row.event_index == 0
+                    && evidence.reason == format!("truth artifact hint: {expected_truth_path}")
+            }),
+            "{case}",
+        );
+
         let checkpoints = &result.sessions[0].checkpoints;
-        assert_eq!(checkpoints.len(), 3, "{case}");
+        assert_eq!(checkpoints.len(), 2, "{case}");
         assert!(
             checkpoints.iter().all(|checkpoint| checkpoint
                 .task_frame
@@ -391,6 +477,15 @@ fn truth_grounding_gap_preserves_absolute_path_identity_and_provenance() {
                     .expect("truth grounding gap score")
             })
             .collect::<Vec<_>>();
+        assert!(
+            truth_scores
+                .iter()
+                .all(|score| score.evidence.iter().any(|evidence| {
+                    evidence.row.event_index == 0
+                        && evidence.reason == format!("truth artifact hint: {expected_truth_path}")
+                })),
+            "{case}",
+        );
         assert_eq!(
             (
                 truth_scores[0].raw_score,
@@ -411,31 +506,8 @@ fn truth_grounding_gap_preserves_absolute_path_identity_and_provenance() {
             (20, Confidence::Medium, DriftState::Recovered, false),
             "{case}",
         );
-        assert_eq!(
-            (
-                truth_scores[2].raw_score,
-                truth_scores[2].confidence,
-                truth_scores[2].state,
-                truth_scores[2].flagged,
-            ),
-            (20, Confidence::Medium, DriftState::HistoricalOnly, false),
-            "{case}",
-        );
-        assert!(
-            truth_scores[1]
-                .evidence
-                .iter()
-                .any(|evidence| evidence.reason == "command family: sed"),
-            "{case}",
-        );
         assert!(
             truth_scores[1].evidence.iter().any(|evidence| evidence
-                .reason
-                .starts_with("historical truth-grounding gap:")),
-            "{case}",
-        );
-        assert!(
-            truth_scores[2].evidence.iter().any(|evidence| evidence
                 .reason
                 .starts_with("historical truth-grounding gap:")),
             "{case}",
@@ -454,72 +526,151 @@ fn truth_grounding_gap_preserves_absolute_path_identity_and_provenance() {
 }
 
 #[test]
-fn wrong_plan_branch_normalizes_typed_paths_and_rejects_unsafe_paths() {
+fn wrong_plan_branch_resolves_typed_paths_only_through_trusted_roots() {
     let cases = [
         (
-            "typed-relative",
-            "src/foo/./bar.rs",
-            "/repo",
-            vec!["src/foo/bar.rs".to_string()],
+            "nested-workdir",
+            Some("/repo"),
+            "bar.rs",
+            Some(("workdir", "/repo/src/foo")),
+            vec!["/repo/src/foo/bar.rs".to_string()],
         ),
         (
-            "typed-absolute",
+            "nested-cwd",
+            Some("/repo"),
+            "bar.rs",
+            Some(("cwd", "/repo/src/foo")),
+            vec!["/repo/src/foo/bar.rs".to_string()],
+        ),
+        (
+            "absolute-in-root",
+            Some("/repo"),
             "/repo/src/foo/bar.rs",
-            "/repo",
-            vec!["src/foo/bar.rs".to_string()],
+            Some(("workdir", "/repo/src/foo")),
+            vec!["/repo/src/foo/bar.rs".to_string()],
         ),
         (
-            "typed-parent-component",
-            "src/foo/tmp/../bar.rs",
-            "/repo",
-            vec!["src/foo/bar.rs".to_string()],
+            "nested-dot-components",
+            Some("/repo"),
+            "tmp/../bar.rs",
+            Some(("workdir", "/repo/src/foo")),
+            vec!["/repo/src/foo/bar.rs".to_string()],
         ),
         (
-            "typed-windows-absolute",
-            r"C:\repo\src\foo\bar.rs",
-            r"C:\repo",
-            vec!["src/foo/bar.rs".to_string()],
+            "windows-nested-workdir",
+            Some(r"C:\repo"),
+            "bar.rs",
+            Some(("workdir", r"C:\repo\src\foo")),
+            vec!["c:/repo/src/foo/bar.rs".to_string()],
         ),
-        ("typed-external", "/tmp/src/foo/bar.rs", "/repo", Vec::new()),
         (
-            "typed-windows-external",
-            r"D:\repo\src\foo\bar.rs",
-            r"C:\repo",
+            "external-workdir-relative-path",
+            Some("/repo"),
+            "src/foo/bar.rs",
+            Some(("workdir", "/tmp")),
             Vec::new(),
         ),
         (
-            "typed-traversal",
-            "../../src/foo/bar.rs",
-            "/repo",
+            "external-matching-scope",
+            Some("/repo"),
+            "/tmp/src/foo/bar.rs",
+            Some(("workdir", "/tmp")),
+            Vec::new(),
+        ),
+        (
+            "inside-path-external-workdir",
+            Some("/repo"),
+            "/repo/src/foo/bar.rs",
+            Some(("workdir", "/tmp")),
+            Vec::new(),
+        ),
+        (
+            "mismatched-drive",
+            Some(r"C:\repo"),
+            r"D:\repo\src\foo\bar.rs",
+            Some(("workdir", r"C:\repo")),
             Vec::new(),
         ),
         (
             "typed-unc",
+            Some(r"C:\repo"),
             r"\\server\share\src\foo\bar.rs",
-            r"C:\repo",
+            Some(("workdir", r"C:\repo")),
             Vec::new(),
         ),
         (
             "typed-rooted-backslash",
+            Some("/repo"),
             r"\repo\src\foo\bar.rs",
-            "/repo",
+            Some(("workdir", "/repo")),
+            Vec::new(),
+        ),
+        (
+            "untrusted-workdir-cannot-anchor-relative-path",
+            None,
+            "src/foo/bar.rs",
+            Some(("workdir", "/repo")),
+            Vec::new(),
+        ),
+        (
+            "repo-relative-without-cwd",
+            None,
+            "src/foo/bar.rs",
+            None,
+            vec!["src/foo/bar.rs".to_string()],
+        ),
+        (
+            "traversal-escape",
+            Some("/repo"),
+            "../../../outside.rs",
+            Some(("workdir", "/repo/src/foo")),
+            Vec::new(),
+        ),
+        (
+            "path-escape-and-reenter",
+            Some("/repo"),
+            "../../../repo/secret.rs",
+            Some(("workdir", "/repo/src/foo")),
+            Vec::new(),
+        ),
+        (
+            "absolute-path-escape-and-reenter",
+            Some("/repo"),
+            "/repo/../repo/src/foo/bar.rs",
+            Some(("workdir", "/repo")),
+            Vec::new(),
+        ),
+        (
+            "workdir-escape-and-reenter",
+            Some("/repo"),
+            "bar.rs",
+            Some(("workdir", "/repo/src/../../repo/src/foo")),
             Vec::new(),
         ),
     ];
 
-    for (case, path, workdir, expected_paths) in cases {
-        let payload = format!(r#"{{"path":{path:?},"workdir":{workdir:?}}}"#);
+    for (case, trusted_root, path, cwd, expected_paths) in cases {
+        let authority = trusted_root.map_or_else(
+            || "Authorized filesystem scope: src/foo.".to_string(),
+            |root| {
+                format!("Trusted repository root: {root}. Authorized filesystem scope: src/foo.")
+            },
+        );
+        let payload = match cwd {
+            None => format!(r#"{{"path":{path:?}}}"#),
+            Some(("workdir", cwd)) => {
+                format!(r#"{{"path":{path:?},"workdir":{cwd:?}}}"#)
+            }
+            Some(("cwd", cwd)) => format!(r#"{{"path":{path:?},"cwd":{cwd:?}}}"#),
+            Some((field, _)) => panic!("unexpected typed location field: {field}"),
+        };
         let result = analyze_rows(vec![
             row(
                 0,
                 CompactionKind::UserMessage,
                 "Implement the requested change.",
             ),
-            row(
-                1,
-                CompactionKind::SystemMessage,
-                "Authorized filesystem scope: src/foo.",
-            ),
+            row(1, CompactionKind::SystemMessage, &authority),
             typed_tool_row(2, "functions.write_file", &payload),
         ]);
         assert_eq!(
@@ -529,6 +680,65 @@ fn wrong_plan_branch_normalizes_typed_paths_and_rejects_unsafe_paths() {
         let score = final_wrong_plan_score(&result);
         assert_eq!(score.raw_score, 0, "{case}");
         assert!(!score.flagged, "{case}");
+    }
+}
+
+#[test]
+fn wrong_plan_branch_projects_absolute_authority_through_its_trusted_root() {
+    let cases = [
+        (
+            "posix-descendant",
+            "/repo",
+            "/repo/src/foo",
+            "/repo/src/foo/bar.rs",
+            false,
+        ),
+        (
+            "posix-prefix-collision",
+            "/repo",
+            "/repo/src/foo",
+            "/repo/src/foobar.rs",
+            true,
+        ),
+        (
+            "windows-descendant",
+            r"C:\repo",
+            r"C:\repo\src\foo",
+            r"C:\repo\src\foo\bar.rs",
+            false,
+        ),
+        (
+            "windows-prefix-collision",
+            r"C:\repo",
+            r"C:\repo\src\foo",
+            r"C:\repo\src\foobar.rs",
+            true,
+        ),
+    ];
+
+    for (case, root, authority, path, flagged) in cases {
+        let result = analyze_rows(vec![
+            row(
+                0,
+                CompactionKind::UserMessage,
+                "Implement the requested change.",
+            ),
+            row(
+                1,
+                CompactionKind::SystemMessage,
+                &format!(
+                    "Trusted repository root: {root}. Authorized filesystem scope: {authority}."
+                ),
+            ),
+            typed_tool_row(
+                2,
+                "functions.write_file",
+                &format!(r#"{{"path":{path:?},"cwd":{root:?}}}"#),
+            ),
+        ]);
+        let score = final_wrong_plan_score(&result);
+        assert_eq!(score.flagged, flagged, "{case}");
+        assert_eq!(score.raw_score, if flagged { 60 } else { 0 }, "{case}");
     }
 }
 
@@ -554,7 +764,7 @@ fn wrong_plan_branch_uses_component_aware_scope_containment() {
             row(
                 1,
                 CompactionKind::SystemMessage,
-                "Authorized filesystem scope: src/foo.",
+                "Trusted repository root: /repo. Authorized filesystem scope: src/foo.",
             ),
             typed_tool_row(2, "functions.write_file", &payload),
         ]);
@@ -572,7 +782,7 @@ fn wrong_plan_branch_uses_component_aware_scope_containment() {
         row(
             1,
             CompactionKind::SystemMessage,
-            "Authorized filesystem scope: ./.",
+            "Trusted repository root: /repo. Authorized filesystem scope: ./.",
         ),
         typed_tool_row(
             2,
@@ -582,7 +792,7 @@ fn wrong_plan_branch_uses_component_aware_scope_containment() {
     ]);
     assert_eq!(
         root.sessions[0].context.command_observations[0].paths,
-        vec!["src/anything.rs".to_string()]
+        vec!["/repo/src/anything.rs".to_string()]
     );
     assert!(!final_wrong_plan_score(&root).flagged);
 }
@@ -633,7 +843,9 @@ fn wrong_plan_branch_normalizes_backslash_relative_authority_paths() {
             row(
                 1,
                 CompactionKind::SystemMessage,
-                &format!("Authorized filesystem scope: {authority}"),
+                &format!(
+                    "Trusted repository root: /repo. Authorized filesystem scope: {authority}"
+                ),
             ),
             typed_tool_row(2, "functions.write_file", &payload),
         ]);
@@ -641,11 +853,10 @@ fn wrong_plan_branch_normalizes_backslash_relative_authority_paths() {
             .context
             .truth_artifacts
             .iter()
-            .filter(|artifact| artifact.source != "control_directive_literal")
-            .collect::<Vec<_>>();
-        assert_eq!(authoritative.len(), 1, "{case}");
-        assert_eq!(authoritative[0].path, normalized_authority, "{case}");
-        assert!(!authoritative[0].evidence.is_empty(), "{case}");
+            .find(|artifact| artifact.path == normalized_authority)
+            .expect("normalized relative authority");
+        assert_ne!(authoritative.source, "control_directive_literal", "{case}");
+        assert!(!authoritative.evidence.is_empty(), "{case}");
 
         let score = final_wrong_plan_score(&result);
         assert_eq!(

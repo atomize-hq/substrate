@@ -7,8 +7,8 @@ use serde_json::Value;
 use crate::checkpoint::EvidenceRef;
 use crate::context::{evidence_from_row, focusable_directive_rows};
 use crate::input::{
-    extract_directive_path_hints, extract_path_hints, normalize_directive_path,
-    normalize_repo_path, text_contains_control_directive,
+    classify_directive_path_hints, extract_path_hints, normalize_typed_path,
+    trusted_repository_root,
 };
 
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]
@@ -43,41 +43,47 @@ pub struct CommandObservation {
     pub evidence: Vec<EvidenceRef>,
 }
 
+const TRUSTED_REPOSITORY_ROOT_SOURCE: &str = "trusted_repository_root";
+
 pub fn collect_truth_artifacts(
     rows: &[CompactionRow],
     objective: &super::ObjectiveSummary,
 ) -> Vec<CandidateTruthArtifact> {
     let mut artifacts = BTreeMap::<String, CandidateTruthArtifact>::new();
-    let objective_paths = directive_path_hints(&objective.text)
+    let objective_paths = classify_directive_path_hints(&objective.text)
         .into_iter()
+        .filter(|hint| !hint.control_only)
+        .map(|hint| hint.path)
         .collect::<BTreeSet<_>>();
 
     for row in focusable_directive_rows(rows) {
-        let is_control = text_contains_control_directive(&row.text);
-        for path in directive_path_hints(&row.text) {
-            let source = if is_control {
+        for hint in classify_directive_path_hints(&row.text) {
+            let source = if hint.control_only {
                 "control_directive_literal"
-            } else if objective_paths.contains(&path) {
+            } else if hint.trusted_root {
+                TRUSTED_REPOSITORY_ROOT_SOURCE
+            } else if objective_paths.contains(&hint.path) {
                 "objective_literal"
             } else {
                 "directive_literal"
             };
             let artifact =
                 artifacts
-                    .entry(path.clone())
+                    .entry(hint.path.clone())
                     .or_insert_with(|| CandidateTruthArtifact {
-                        path: path.clone(),
+                        path: hint.path.clone(),
                         source: source.to_string(),
                         evidence: Vec::new(),
                     });
-            if artifact.source == "control_directive_literal"
-                && source != "control_directive_literal"
+            if source == TRUSTED_REPOSITORY_ROOT_SOURCE
+                || (artifact.source == "control_directive_literal"
+                    && source != "control_directive_literal")
             {
                 artifact.source = source.to_string();
             }
             artifact.evidence.push(evidence_from_row(
                 row,
-                format!("truth artifact hint: {path}"),
+                format!("truth artifact hint: {}", hint.path),
             ));
         }
     }
@@ -104,16 +110,19 @@ pub fn collect_working_set_paths(
     }
 
     for row in focusable_directive_rows(rows) {
-        for path in working_set_path_hints(&row.text) {
+        for hint in classify_directive_path_hints(&row.text) {
             paths
-                .entry(path.clone())
+                .entry(hint.path.clone())
                 .or_insert_with(|| WorkingSetPath {
-                    path: path.clone(),
+                    path: hint.path.clone(),
                     source: "directive_literal".to_string(),
                     evidence: Vec::new(),
                 })
                 .evidence
-                .push(evidence_from_row(row, format!("working-set hint: {path}")));
+                .push(evidence_from_row(
+                    row,
+                    format!("working-set hint: {}", hint.path),
+                ));
         }
     }
 
@@ -134,34 +143,6 @@ pub fn collect_working_set_paths(
     paths.into_values().collect()
 }
 
-fn directive_path_hints(text: &str) -> Vec<String> {
-    let mut paths = extract_directive_path_hints(text)
-        .into_iter()
-        .filter_map(|path| normalize_directive_path(&path))
-        .collect::<BTreeSet<_>>();
-    for path in extract_path_hints(text) {
-        if normalize_directive_path(&path).is_none() {
-            paths.insert(path);
-        }
-    }
-    paths.into_iter().collect()
-}
-
-fn working_set_path_hints(text: &str) -> Vec<String> {
-    let mut paths = extract_path_hints(text)
-        .into_iter()
-        .collect::<BTreeSet<_>>();
-    for token in text.split_whitespace() {
-        if let Some(path) = token.strip_prefix("--path=") {
-            paths.insert(
-                path.trim_matches(|ch: char| matches!(ch, '"' | '\'' | '`'))
-                    .to_string(),
-            );
-        }
-    }
-    paths.into_iter().collect()
-}
-
 pub fn collect_tools(commands: &[CommandObservation]) -> Vec<ToolObservation> {
     let mut tools = BTreeMap::<String, Vec<EvidenceRef>>::new();
     for command in commands {
@@ -177,6 +158,7 @@ pub fn collect_tools(commands: &[CommandObservation]) -> Vec<ToolObservation> {
 }
 
 pub fn collect_command_observations(rows: &[CompactionRow]) -> Vec<CommandObservation> {
+    let trusted_roots = collect_trusted_repository_roots(rows);
     let mut commands = Vec::new();
     for row in rows
         .iter()
@@ -201,7 +183,7 @@ pub fn collect_command_observations(rows: &[CompactionRow]) -> Vec<CommandObserv
             command_family(&raw_command).unwrap_or_else(|| tool_name.clone())
         };
         let mut paths = if typed_filesystem {
-            typed_filesystem_paths(payload.as_ref())
+            typed_filesystem_paths(payload.as_ref(), &trusted_roots)
         } else {
             extract_path_hints(&raw_command)
         };
@@ -239,7 +221,17 @@ fn typed_filesystem_family(tool_name: &str) -> &str {
         .unwrap_or(tool_name)
 }
 
-fn typed_filesystem_paths(payload: Option<&Value>) -> Vec<String> {
+fn collect_trusted_repository_roots(rows: &[CompactionRow]) -> Vec<String> {
+    focusable_directive_rows(rows)
+        .flat_map(|row| classify_directive_path_hints(&row.text))
+        .filter(|hint| !hint.control_only && hint.trusted_root)
+        .filter_map(|hint| trusted_repository_root(&hint.path))
+        .collect::<BTreeSet<_>>()
+        .into_iter()
+        .collect()
+}
+
+fn typed_filesystem_paths(payload: Option<&Value>, trusted_roots: &[String]) -> Vec<String> {
     let Some(payload) = payload else {
         return Vec::new();
     };
@@ -272,7 +264,7 @@ fn typed_filesystem_paths(payload: Option<&Value>) -> Vec<String> {
             return Vec::new();
         };
         for path in values {
-            let Some(path) = normalize_repo_path(path, workdir) else {
+            let Some(path) = normalize_typed_path(path, workdir, trusted_roots) else {
                 return Vec::new();
             };
             paths.insert(path);

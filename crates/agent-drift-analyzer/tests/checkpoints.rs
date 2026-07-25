@@ -3919,7 +3919,7 @@ fn checkpoints_use_npx_vitest_attempts_as_checkpoint_progress_evidence() {
         progress.dimension,
         ProgressDimension::ImplementationVerificationWall
     );
-    assert_eq!(progress.status, ProgressStatus::Mixed);
+    assert_eq!(progress.status, ProgressStatus::Advancing);
     assert_progress_signal(progress, ProgressSignalCode::FailureFrontierAdvanced);
     assert!(!progress.supporting_evidence.is_empty());
 }

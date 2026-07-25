@@ -1,14 +1,27 @@
 use crate::checkpoint::{CheckpointAnalysis, Confidence, DriftClass, DriftScore, DriftState};
-use crate::input::{normalize_repo_path, path_is_equal_or_descendant};
+use crate::input::{
+    path_is_equal_or_descendant, repo_relative_path_identity, trusted_repository_root,
+};
 use crate::scoring::{DriftStateHint, ScoredDrift};
 
 pub(crate) fn score_wrong_plan_branch(analysis: &CheckpointAnalysis) -> ScoredDrift {
     let context = &analysis.current.context;
+    let trusted_roots = context
+        .truth_artifacts
+        .iter()
+        .filter(|artifact| artifact.source == "trusted_repository_root")
+        .filter_map(|artifact| trusted_repository_root(&artifact.path))
+        .collect::<Vec<_>>();
     let mut expected = context
         .truth_artifacts
         .iter()
-        .filter(|artifact| artifact.source != "control_directive_literal")
-        .filter_map(|artifact| normalize_repo_path(&artifact.path, None))
+        .filter(|artifact| {
+            !matches!(
+                artifact.source.as_str(),
+                "control_directive_literal" | "trusted_repository_root"
+            )
+        })
+        .filter_map(|artifact| repo_relative_path_identity(&artifact.path, &trusted_roots))
         .collect::<Vec<_>>();
     expected.sort();
     expected.dedup();
@@ -21,9 +34,12 @@ pub(crate) fn score_wrong_plan_branch(analysis: &CheckpointAnalysis) -> ScoredDr
             continue;
         }
         let matches_scope = command.paths.iter().all(|path| {
+            let Some(path) = repo_relative_path_identity(path, &trusted_roots) else {
+                return false;
+            };
             expected
                 .iter()
-                .any(|expected_path| path_is_equal_or_descendant(path, expected_path))
+                .any(|expected_path| path_is_equal_or_descendant(&path, expected_path))
         });
         if !matches_scope {
             out_of_scope.extend(command.evidence.clone());

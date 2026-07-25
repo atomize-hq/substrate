@@ -630,50 +630,225 @@ pub(crate) fn parse_tool_payload(text: &str) -> Option<Value> {
 }
 
 pub(crate) fn extract_path_hints(text: &str) -> Vec<String> {
-    extract_path_hints_with_context(text, false)
-}
-
-pub(crate) fn extract_directive_path_hints(text: &str) -> Vec<String> {
-    extract_path_hints_with_context(text, true)
-}
-
-fn extract_path_hints_with_context(text: &str, directive_context: bool) -> Vec<String> {
     let mut paths = BTreeSet::new();
-    let tokens = text.split_whitespace().collect::<Vec<_>>();
-    let mut index = 0;
-    while index < tokens.len() {
-        let raw_token = tokens[index];
-        let option_token = trim_path_delimiters(raw_token);
-        if directive_context && option_token == "--path" {
-            if let Some(raw_value) = tokens.get(index + 1) {
-                insert_path_candidate(&mut paths, trim_option_path_token(raw_value), true, true);
-                index += 2;
-                continue;
-            }
-        } else if directive_context {
-            if let Some(value) = option_token.strip_prefix("--path=") {
-                insert_path_candidate(&mut paths, trim_option_path_token(value), true, true);
-                index += 1;
-                continue;
-            }
+    for raw_token in text.split_whitespace() {
+        let token = trim_path_token(raw_token);
+        if looks_like_path(token, false) {
+            paths.insert(token.to_string());
         }
-        if !(directive_context && is_control_directive_token(trim_control_token(raw_token))) {
-            insert_path_candidate(
-                &mut paths,
-                trim_path_token(raw_token),
-                false,
-                directive_context,
-            );
-        }
-        index += 1;
     }
     paths.into_iter().collect()
 }
 
-pub(crate) fn text_contains_control_directive(text: &str) -> bool {
-    text.split_whitespace()
-        .map(trim_control_token)
-        .any(is_control_directive_token)
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub(crate) struct DirectivePathHint {
+    pub path: String,
+    pub control_only: bool,
+    pub trusted_root: bool,
+}
+
+/// Extracts path-shaped directive evidence with invocation-aware control classification.
+///
+/// Only a known control token at the start of a logical line opens a control invocation.
+/// Option-only continuation lines remain part of that invocation; ordinary prose containing a
+/// slash-prefixed absolute path does not. Authority candidates reject raw parent components before
+/// punctuation cleanup or lexical normalization.
+pub(crate) fn extract_directive_path_hints(text: &str) -> Vec<String> {
+    classify_directive_path_hints(text)
+        .into_iter()
+        .map(|hint| hint.path)
+        .collect()
+}
+
+pub(crate) fn classify_directive_path_hints(text: &str) -> Vec<DirectivePathHint> {
+    let mut paths = BTreeMap::<String, (bool, bool)>::new();
+    let mut control_continuation = false;
+
+    for line in text.lines() {
+        let tokens = line.split_whitespace().collect::<Vec<_>>();
+        let Some(first_index) = first_invocation_token_index(&tokens) else {
+            control_continuation = false;
+            continue;
+        };
+        let first = trim_control_token(tokens[first_index]);
+        let starts_control = is_known_control_invocation(first);
+        let continues_control = control_continuation && first.starts_with('-');
+        let control_only = starts_control || continues_control;
+        let phrase_trusted_root = trusted_repository_root_hint(line);
+
+        let mut index = first_index;
+        while index < tokens.len() {
+            let raw_token = tokens[index];
+            let option_token = trim_path_delimiters(raw_token);
+            if is_path_option(option_token) {
+                if let Some(raw_value) = tokens.get(index + 1) {
+                    insert_directive_candidate(
+                        &mut paths,
+                        raw_value,
+                        true,
+                        control_only,
+                        option_token == "--root",
+                    );
+                    index += 2;
+                    continue;
+                }
+            } else if let Some((option, raw_value)) = option_token.split_once('=') {
+                if is_path_option(option) {
+                    insert_directive_candidate(
+                        &mut paths,
+                        raw_value,
+                        true,
+                        control_only,
+                        option == "--root",
+                    );
+                    index += 1;
+                    continue;
+                }
+            }
+
+            if !(control_only && is_known_control_invocation(trim_control_token(raw_token))) {
+                insert_directive_candidate(&mut paths, raw_token, false, control_only, false);
+            }
+            index += 1;
+        }
+
+        if !control_only {
+            if let Some(root) = phrase_trusted_root {
+                paths
+                    .entry(root)
+                    .and_modify(|existing| {
+                        existing.0 = false;
+                        existing.1 = true;
+                    })
+                    .or_insert((false, true));
+            }
+        }
+
+        control_continuation = starts_control || continues_control;
+    }
+
+    paths
+        .into_iter()
+        .map(|(path, (control_only, trusted_root))| DirectivePathHint {
+            path,
+            control_only,
+            trusted_root,
+        })
+        .collect()
+}
+
+fn first_invocation_token_index(tokens: &[&str]) -> Option<usize> {
+    tokens
+        .iter()
+        .position(|token| !is_line_prefix_token(trim_path_delimiters(token)))
+}
+
+fn is_line_prefix_token(token: &str) -> bool {
+    matches!(token, "-" | "*" | "+" | ">")
+        || token
+            .strip_suffix('.')
+            .or_else(|| token.strip_suffix(')'))
+            .is_some_and(|prefix| {
+                !prefix.is_empty() && prefix.chars().all(|ch| ch.is_ascii_digit())
+            })
+}
+
+fn is_known_control_invocation(token: &str) -> bool {
+    let Some(name) = token.strip_prefix('/') else {
+        return false;
+    };
+    matches!(
+        name,
+        "goal"
+            | "review"
+            | "spec"
+            | "plan"
+            | "compact"
+            | "clear"
+            | "status"
+            | "help"
+            | "init"
+            | "new"
+            | "resume"
+            | "fork"
+            | "permissions"
+            | "model"
+            | "feedback"
+            | "logout"
+            | "mention"
+            | "apps"
+            | "skills"
+            | "plugins"
+    )
+}
+
+fn is_path_option(token: &str) -> bool {
+    matches!(
+        token,
+        "--path" | "--file" | "--dir" | "--directory" | "--scope" | "--root"
+    )
+}
+
+fn trusted_repository_root_hint(line: &str) -> Option<String> {
+    const MARKER: &str = "trusted repository root";
+
+    let lower = line.to_ascii_lowercase();
+    let suffix = &line[lower.find(MARKER)? + MARKER.len()..];
+    for raw_token in suffix.split_whitespace() {
+        if raw_path_has_parent_component(raw_token) {
+            return None;
+        }
+        let token = trim_path_token(raw_token);
+        if token.is_empty() || !looks_like_path(token, true) {
+            continue;
+        }
+        return normalize_directive_path(token).and_then(|path| trusted_repository_root(&path));
+    }
+    None
+}
+
+fn insert_directive_candidate(
+    paths: &mut BTreeMap<String, (bool, bool)>,
+    raw_token: &str,
+    explicit_option: bool,
+    control_only: bool,
+    trusted_root: bool,
+) {
+    if raw_path_has_parent_component(raw_token) {
+        return;
+    }
+    let token = if explicit_option {
+        trim_option_path_token(raw_token)
+    } else {
+        trim_path_token(raw_token)
+    };
+    if token.is_empty() || (!explicit_option && !looks_like_path(token, true)) {
+        return;
+    }
+    let Some(path) = normalize_directive_path(token) else {
+        return;
+    };
+    paths
+        .entry(path)
+        .and_modify(|existing| {
+            existing.0 &= control_only;
+            existing.1 |= trusted_root && !control_only;
+        })
+        .or_insert((control_only, trusted_root && !control_only));
+}
+
+fn raw_path_has_parent_component(raw_token: &str) -> bool {
+    let raw_value = raw_token
+        .split_once('=')
+        .map_or(raw_token, |(_, value)| value);
+    raw_value.split(['/', '\\']).any(|component| {
+        component.trim_matches(|ch: char| {
+            matches!(
+                ch,
+                ',' | ':' | ';' | '"' | '\'' | '(' | ')' | '[' | ']' | '{' | '}' | '`'
+            )
+        }) == ".."
+    })
 }
 
 fn trim_path_delimiters(token: &str) -> &str {
@@ -705,28 +880,7 @@ fn trim_control_token(token: &str) -> &str {
     token
         .split_once('=')
         .map_or(token, |(directive, _)| directive)
-        .trim_end_matches([':', ',', ';'])
-}
-
-fn is_control_directive_token(token: &str) -> bool {
-    token.strip_prefix('/').is_some_and(|name| {
-        !name.is_empty()
-            && !name.contains(['/', '\\'])
-            && name
-                .chars()
-                .all(|ch| ch.is_ascii_alphanumeric() || matches!(ch, '-' | '_'))
-    })
-}
-
-fn insert_path_candidate(
-    paths: &mut BTreeSet<String>,
-    token: &str,
-    explicit_option: bool,
-    portable_separators: bool,
-) {
-    if !token.is_empty() && (explicit_option || looks_like_path(token, portable_separators)) {
-        paths.insert(token.to_string());
-    }
+        .trim_end_matches([':', ',', ';', '.'])
 }
 
 fn looks_like_path(token: &str, portable_separators: bool) -> bool {
@@ -744,34 +898,95 @@ fn looks_like_path(token: &str, portable_separators: bool) -> bool {
     has_separator || has_extension
 }
 
-/// Lexically normalizes a validated filesystem path to a repository-relative form.
-/// Absolute paths are accepted only when an explicit repository workdir contains them.
-pub(crate) fn normalize_repo_path(path: &str, workdir: Option<&str>) -> Option<String> {
+/// Lexically normalizes a validated repository-relative filesystem path.
+///
+/// Absolute truth identity and trusted typed-path resolution use separate helpers below; a caller-
+/// supplied workdir is never treated as repository-root authority.
+pub(crate) fn normalize_repo_path(path: &str, _workdir: Option<&str>) -> Option<String> {
     let path = strip_path_location_suffix(path);
-    let ParsedPath { root, components } = parse_lexical_path(path)?;
-    let components = match root {
-        None => components,
-        Some(root) => {
-            let workdir = parse_lexical_path(workdir?)?;
-            if workdir.root.as_ref() != Some(&root)
-                || !components_start_with(&components, &workdir.components)
-            {
-                return None;
-            }
-            components[workdir.components.len()..].to_vec()
-        }
-    };
-    Some(render_repo_path(&components))
+    let parsed = parse_lexical_path(path)?;
+    parsed
+        .root
+        .is_none()
+        .then(|| render_repo_path(&parsed.components))
 }
 
 pub(crate) fn normalize_directive_path(path: &str) -> Option<String> {
-    let path = strip_path_location_suffix(path);
-    let parsed = parse_lexical_path(path)?;
-    if parsed.root.is_none() {
-        Some(render_repo_path(&parsed.components))
-    } else {
-        Some(path.to_string())
+    if raw_path_has_parent_component(path) {
+        return None;
     }
+    let parsed = parse_lexical_path(strip_path_location_suffix(path))?;
+    Some(render_truth_path(&parsed))
+}
+
+/// Returns a canonical absolute directory scope that may anchor typed cwd resolution.
+pub(crate) fn trusted_repository_root(path: &str) -> Option<String> {
+    let parsed = parse_truth_path(path)?;
+    parsed.root?;
+    Some(render_truth_path(&parsed))
+}
+
+/// Resolves one typed filesystem path without allowing the tool-provided cwd to define authority.
+///
+/// Absolute paths and explicit cwd values require a separately observed trusted repository root.
+/// A relative typed path without cwd remains a repository-relative identity. A relative path with
+/// cwd is resolved through that cwd and retains root-aware absolute identity for truth grounding.
+pub(crate) fn normalize_typed_path(
+    path: &str,
+    cwd: Option<&str>,
+    trusted_roots: &[String],
+) -> Option<String> {
+    let parsed_roots = trusted_roots
+        .iter()
+        .filter_map(|root| parse_truth_path(root))
+        .filter(|root| root.root.is_some())
+        .collect::<Vec<_>>();
+    let raw = strip_path_location_suffix(path).trim();
+
+    if path_is_lexically_relative(raw) {
+        let Some(cwd) = cwd else {
+            let parsed = parse_lexical_path(raw)?;
+            return Some(render_repo_path(&parsed.components));
+        };
+        let (cwd, trusted_root) = resolve_absolute_under_unique_root(cwd, &parsed_roots)?;
+        let resolved = resolve_relative_path(raw, &cwd, trusted_root)?;
+        return Some(render_truth_path(&resolved));
+    }
+
+    let (parsed, trusted_root) = resolve_absolute_under_unique_root(raw, &parsed_roots)?;
+    if let Some(cwd) = cwd {
+        let (_, cwd_root) = resolve_absolute_under_unique_root(cwd, &parsed_roots)?;
+        if cwd_root != trusted_root {
+            return None;
+        }
+    }
+    Some(render_truth_path(&parsed))
+}
+
+fn path_is_lexically_relative(raw: &str) -> bool {
+    if raw.starts_with('/') || raw.starts_with('\\') {
+        return false;
+    }
+    raw.as_bytes().get(1) != Some(&b':')
+}
+
+/// Projects a root-aware command path into the repository-relative identity used by
+/// WrongPlanBranch. Absolute paths project only through separately observed trusted roots.
+pub(crate) fn repo_relative_path_identity(path: &str, trusted_roots: &[String]) -> Option<String> {
+    let raw = strip_path_location_suffix(path).trim();
+    if path_is_lexically_relative(raw) {
+        let parsed = parse_lexical_path(raw)?;
+        return Some(render_repo_path(&parsed.components));
+    }
+    let parsed_roots = trusted_roots
+        .iter()
+        .filter_map(|root| parse_truth_path(root))
+        .filter(|root| root.root.is_some())
+        .collect::<Vec<_>>();
+    let (parsed, trusted_root) = resolve_absolute_under_unique_root(raw, &parsed_roots)?;
+    Some(render_repo_path(
+        &parsed.components[trusted_root.components.len()..],
+    ))
 }
 
 pub(crate) fn truth_paths_equal(left: &str, right: &str) -> bool {
@@ -810,7 +1025,7 @@ struct ParsedPath {
     components: Vec<String>,
 }
 
-#[derive(Debug, Clone, PartialEq, Eq)]
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
 enum PathRoot {
     Posix,
     Drive(char),
@@ -864,6 +1079,145 @@ fn parse_lexical_path(raw: &str) -> Option<ParsedPath> {
     Some(ParsedPath { root, components })
 }
 
+fn resolve_relative_path(
+    path: &str,
+    cwd: &ParsedPath,
+    trusted_root: &ParsedPath,
+) -> Option<ParsedPath> {
+    if cwd.root.is_none()
+        || cwd.root != trusted_root.root
+        || !components_start_with(&cwd.components, &trusted_root.components)
+    {
+        return None;
+    }
+    let raw = strip_path_location_suffix(path).trim();
+    if raw.is_empty()
+        || raw.contains(['\0', '\n', '\r'])
+        || raw.contains("://")
+        || raw.starts_with('~')
+        || raw.starts_with('$')
+        || raw.starts_with('%')
+    {
+        return None;
+    }
+    let normalized = raw.replace('\\', "/");
+    if normalized.starts_with('/')
+        || normalized.starts_with("//")
+        || normalized.as_bytes().get(1) == Some(&b':')
+    {
+        return None;
+    }
+
+    let mut components = cwd.components.clone();
+    for component in normalized.split('/') {
+        match component {
+            "" | "." => {}
+            ".." => {
+                if components.len() <= trusted_root.components.len() {
+                    return None;
+                }
+                components.pop()?;
+            }
+            _ if component.chars().any(|ch| {
+                ch.is_control() || matches!(ch, ':' | '*' | '?' | '|' | '<' | '>' | '"')
+            }) =>
+            {
+                return None
+            }
+            _ => components.push(component.to_string()),
+        }
+    }
+    Some(ParsedPath {
+        root: cwd.root,
+        components,
+    })
+}
+
+fn resolve_absolute_under_unique_root<'a>(
+    path: &str,
+    roots: &'a [ParsedPath],
+) -> Option<(ParsedPath, &'a ParsedPath)> {
+    let mut matches = roots
+        .iter()
+        .filter_map(|root| resolve_absolute_path(path, root).map(|resolved| (resolved, root)));
+    let resolved = matches.next()?;
+    matches.next().is_none().then_some(resolved)
+}
+
+fn resolve_absolute_path(path: &str, trusted_root: &ParsedPath) -> Option<ParsedPath> {
+    let raw = strip_path_location_suffix(path).trim();
+    if trusted_root.root.is_none()
+        || raw.is_empty()
+        || raw.contains(['\0', '\n', '\r'])
+        || raw.contains("://")
+        || raw.starts_with('\\')
+        || raw.starts_with('~')
+        || raw.starts_with('$')
+        || raw.starts_with('%')
+    {
+        return None;
+    }
+
+    let normalized = raw.replace('\\', "/");
+    if normalized.starts_with("//") {
+        return None;
+    }
+    let (root, remainder) = if normalized.as_bytes().get(1) == Some(&b':') {
+        let drive = normalized.chars().next()?.to_ascii_lowercase();
+        if !drive.is_ascii_alphabetic() || normalized.as_bytes().get(2) != Some(&b'/') {
+            return None;
+        }
+        (PathRoot::Drive(drive), &normalized[3..])
+    } else {
+        (PathRoot::Posix, normalized.strip_prefix('/')?)
+    };
+    if trusted_root.root != Some(root) {
+        return None;
+    }
+
+    let mut components = Vec::new();
+    for component in remainder.split('/') {
+        match component {
+            "" | "." => {}
+            ".." => {
+                if components.len() <= trusted_root.components.len() {
+                    return None;
+                }
+                components.pop()?;
+            }
+            _ if component.chars().any(|ch| {
+                ch.is_control() || matches!(ch, ':' | '*' | '?' | '|' | '<' | '>' | '"')
+            }) =>
+            {
+                return None
+            }
+            _ => {
+                if components.len() < trusted_root.components.len()
+                    && component != trusted_root.components[components.len()].as_str()
+                {
+                    return None;
+                }
+                components.push(component.to_string());
+            }
+        }
+    }
+    components_start_with(&components, &trusted_root.components).then_some(ParsedPath {
+        root: Some(root),
+        components,
+    })
+}
+
+fn render_truth_path(path: &ParsedPath) -> String {
+    let body = path.components.join("/");
+    match &path.root {
+        None => render_repo_path(&path.components),
+        Some(PathRoot::Posix) if body.is_empty() => "/".to_string(),
+        Some(PathRoot::Posix) => format!("/{body}"),
+        Some(PathRoot::Drive(drive)) if body.is_empty() => format!("{drive}:/"),
+        Some(PathRoot::Drive(drive)) => format!("{drive}:/{body}"),
+    }
+}
+
 fn parse_truth_path(path: &str) -> Option<ParsedPath> {
     parse_lexical_path(strip_path_location_suffix(path))
 }
@@ -915,7 +1269,10 @@ fn row_ref_key(row: RowRef) -> (Utf8PathBuf, usize, usize) {
 
 #[cfg(test)]
 mod path_identity_tests {
-    use super::{truth_paths_equal, truth_paths_overlap};
+    use super::{
+        classify_directive_path_hints, normalize_typed_path, repo_relative_path_identity,
+        truth_paths_equal, truth_paths_overlap,
+    };
 
     #[test]
     fn absolute_truth_path_identity_preserves_roots_and_component_boundaries() {
@@ -957,5 +1314,106 @@ mod path_identity_tests {
             "repo/docs/truth.md",
             "/repo/docs/truth.md"
         ));
+    }
+
+    #[test]
+    fn directive_authority_is_parent_safe_and_invocation_aware() {
+        let hints = |text: &str| {
+            classify_directive_path_hints(text)
+                .into_iter()
+                .map(|hint| (hint.path, hint.control_only))
+                .collect::<Vec<_>>()
+        };
+
+        assert_eq!(
+            hints("/goal update src/foo and then /spec"),
+            vec![("src/foo".to_string(), true)]
+        );
+        assert_eq!(
+            hints("Use /repo as the trusted root"),
+            vec![("/repo".to_string(), false)]
+        );
+        assert_eq!(hints("--path /repo"), vec![("/repo".to_string(), false)]);
+        assert_eq!(
+            hints("/review\n--path /repo"),
+            vec![("/repo".to_string(), true)]
+        );
+        let root_hints = classify_directive_path_hints(
+            "Trusted repository root: /repo. Authorized scope: /repo/src/foo.",
+        );
+        assert_eq!(
+            root_hints
+                .iter()
+                .filter(|hint| hint.trusted_root)
+                .map(|hint| hint.path.as_str())
+                .collect::<Vec<_>>(),
+            vec!["/repo"]
+        );
+        assert!(classify_directive_path_hints("/review\n--root /repo")
+            .iter()
+            .all(|hint| hint.control_only && !hint.trusted_root));
+        assert!(classify_directive_path_hints("--root /repo")
+            .iter()
+            .any(|hint| !hint.control_only && hint.trusted_root));
+
+        for candidate in [
+            "scope/../sibling",
+            "scope/../..",
+            "scope/..",
+            "scope/../../.",
+            r"scope\..\sibling",
+        ] {
+            assert!(hints(candidate).is_empty(), "{candidate}");
+            assert!(
+                hints(&format!("--path={candidate}")).is_empty(),
+                "{candidate}"
+            );
+            assert!(
+                hints(&format!("/review\n--path {candidate}")).is_empty(),
+                "{candidate}"
+            );
+        }
+    }
+
+    #[test]
+    fn typed_cwd_resolution_requires_a_separate_trusted_root() {
+        let roots = vec!["/repo".to_string()];
+        assert_eq!(
+            normalize_typed_path("bar.rs", Some("/repo/src/foo"), &roots),
+            Some("/repo/src/foo/bar.rs".to_string())
+        );
+        assert_eq!(
+            normalize_typed_path("../bar.rs", Some("/repo/src/foo"), &roots),
+            Some("/repo/src/bar.rs".to_string())
+        );
+        assert_eq!(
+            repo_relative_path_identity("/repo/src/foo/bar.rs", &roots),
+            Some("src/foo/bar.rs".to_string())
+        );
+        assert_eq!(
+            normalize_typed_path("src/foo.rs", Some("/tmp"), &roots),
+            None
+        );
+        assert_eq!(
+            normalize_typed_path("/tmp/src/foo.rs", Some("/tmp"), &roots),
+            None
+        );
+        assert_eq!(normalize_typed_path("src/foo.rs", Some("/repo"), &[]), None);
+        assert_eq!(
+            normalize_typed_path("../../../repo/secret.rs", Some("/repo/src/foo"), &roots,),
+            None
+        );
+        assert_eq!(
+            normalize_typed_path("/repo/../repo/src/foo.rs", Some("/repo"), &roots,),
+            None
+        );
+        assert_eq!(
+            normalize_typed_path("foo.rs", Some("/repo/src/../../repo/src"), &roots,),
+            None
+        );
+        assert_eq!(
+            normalize_typed_path(r"\repo\src\foo.rs", Some("/repo"), &roots),
+            None
+        );
     }
 }

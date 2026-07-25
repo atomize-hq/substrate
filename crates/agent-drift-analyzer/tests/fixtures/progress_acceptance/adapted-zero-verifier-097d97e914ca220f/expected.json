@@ -20,7 +20,7 @@
       "previously_clean_scope_broken",
       "verification_clean"
     ],
-    "supporting_evidence_min": 4,
+    "supporting_evidence_min": 2,
     "counter_evidence_min": 3,
     "decisive_evidence": [
       "Repeated broad planning scans keep the session on planning_convergence rather than escalating into a troubleshooting frontier claim.",
