@@ -6831,9 +6831,11 @@ def summarize_test_log(
         active_name: bytes | None = None
         active_where = b""
         active_body: list[bytes] = []
+        active_backtrace_note_seen = False
 
         def flush() -> None:
-            nonlocal active_name, active_where, active_body, signature_bytes_total
+            nonlocal active_name, active_where, active_body
+            nonlocal active_backtrace_note_seen, signature_bytes_total
             if active_name is None:
                 return
             body = b" ".join(line.rstrip(b"\n") for line in active_body)
@@ -6853,6 +6855,7 @@ def summarize_test_log(
             active_name = None
             active_where = b""
             active_body = []
+            active_backtrace_note_seen = False
 
         for line in lines:
             panic = PANIC_PATTERN.fullmatch(line)
@@ -6885,7 +6888,13 @@ def summarize_test_log(
                 ):
                     flush()
                     continue
-                if line.startswith(b"note: run with") or line.strip() == b"":
+                if line.startswith(b"note: run with"):
+                    active_backtrace_note_seen = True
+                    continue
+                if active_backtrace_note_seen and line == b"ok\n":
+                    flush()
+                    continue
+                if line.strip() == b"":
                     continue
                 active_body.append(line)
         flush()

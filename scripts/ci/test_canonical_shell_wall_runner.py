@@ -5959,6 +5959,29 @@ class CanonicalShellWallRunnerTests(unittest.TestCase):
         self.assertTrue(signatures.endswith(b"\n"))
         self.assertIn(b"aos_<id>", signatures)
         self.assertIn(b".tmp<id>", signatures)
+        note = (
+            b"note: run with `RUST_BACKTRACE=1` environment variable "
+            b"to display a backtrace\n"
+        )
+        interleaved = runner.GOLDEN_LOG.replace(note, note + b"ok\n", 1)
+        interleaved_summary, interleaved_names, interleaved_signatures = (
+            runner.summarize_test_log(interleaved, 101)
+        )
+        self.assertEqual(interleaved_summary["analysis_status"], "complete")
+        self.assertEqual(interleaved_names, runner.GOLDEN_NAMES)
+        self.assertEqual(interleaved_signatures, runner.GOLDEN_SIGNATURES)
+        panic_body_ok = runner.GOLDEN_LOG.replace(
+            b"left  aos_deadbeef\n right: .tmpABC\n",
+            b"ok\n",
+        )
+        _body_summary, _body_names, body_signatures = runner.summarize_test_log(
+            panic_body_ok,
+            101,
+        )
+        self.assertIn(
+            b"alpha::case\tcrates/shell/src/a.rs:10:2\tok\n",
+            body_signatures,
+        )
 
     def test_summarizer_last_result_and_failure_section_grammar(self) -> None:
         prefixed = (
