@@ -70,6 +70,7 @@ use chrono::{DateTime, Utc};
 use serde::Serialize;
 use std::collections::{BTreeMap, BTreeSet};
 use std::env;
+use std::ffi::OsString;
 use std::fs::File;
 use std::io::{self, BufRead, BufReader};
 use std::path::{Path, PathBuf};
@@ -128,7 +129,12 @@ pub(crate) fn handle_agent_command(
                 1
             }
         },
-        AgentAction::Doctor(args) => match run_doctor(args, cli) {
+        AgentAction::Doctor(args) => match run_doctor(
+            args,
+            cli,
+            #[cfg(target_os = "linux")]
+            install_context,
+        ) {
             Ok(code) => code,
             Err(err) if config_model::is_user_error(&err) => {
                 eprintln!("{err}");
@@ -274,8 +280,16 @@ fn run_status(args: &AgentViewArgs, cli: &Cli) -> Result<()> {
     Ok(())
 }
 
-fn run_doctor(args: &AgentDoctorArgs, cli: &Cli) -> Result<i32> {
-    let report = build_doctor_report(cli)?;
+fn run_doctor(
+    args: &AgentDoctorArgs,
+    cli: &Cli,
+    #[cfg(target_os = "linux")] install_context: &InstallBootstrapContextCarrierV1,
+) -> Result<i32> {
+    let report = build_doctor_report(
+        cli,
+        #[cfg(target_os = "linux")]
+        install_context,
+    )?;
     let exit_code = doctor_exit_code(&report);
     render_doctor_report(&report, args.json)?;
     Ok(exit_code)
@@ -3646,7 +3660,36 @@ enum RequiredWorldBoundaryState {
     Failed { reason: String, exit_code: i32 },
 }
 
-fn build_doctor_report(cli: &Cli) -> Result<DoctorReportJson<'static>> {
+fn required_world_boundary_command_argv(
+    cli: &Cli,
+    #[cfg(target_os = "linux")] install_context: &InstallBootstrapContextCarrierV1,
+) -> Result<Vec<OsString>> {
+    let mut args = Vec::new();
+    #[cfg(target_os = "linux")]
+    {
+        let encoded = install_context
+            .encode()
+            .context("failed to encode authenticated install bootstrap context")?;
+        args.push(OsString::from("--install-bootstrap-context-v1"));
+        args.push(OsString::from(encoded));
+    }
+    if cli.world {
+        args.push(OsString::from("--world"));
+    } else if cli.no_world {
+        args.push(OsString::from("--no-world"));
+    }
+    args.extend(
+        ["world", "doctor", "--json"]
+            .into_iter()
+            .map(OsString::from),
+    );
+    Ok(args)
+}
+
+fn build_doctor_report(
+    cli: &Cli,
+    #[cfg(target_os = "linux")] install_context: &InstallBootstrapContextCarrierV1,
+) -> Result<DoctorReportJson<'static>> {
     let cwd = current_dir();
     let effective_config = match resolve_effective_config(&cwd, cli) {
         Ok(config) => config,
@@ -3879,7 +3922,11 @@ fn build_doctor_report(cli: &Cli) -> Result<DoctorReportJson<'static>> {
             });
         }
 
-        match verify_required_world_boundary(cli) {
+        match verify_required_world_boundary(
+            cli,
+            #[cfg(target_os = "linux")]
+            install_context,
+        ) {
             RequiredWorldBoundaryState::Ready => {
                 checks.push(DoctorCheckJson {
                     check: "world_boundary".to_string(),
@@ -3943,7 +3990,10 @@ fn failed_doctor_report(
     }
 }
 
-fn verify_required_world_boundary(cli: &Cli) -> RequiredWorldBoundaryState {
+fn verify_required_world_boundary(
+    cli: &Cli,
+    #[cfg(target_os = "linux")] install_context: &InstallBootstrapContextCarrierV1,
+) -> RequiredWorldBoundaryState {
     let exe = match env::current_exe() {
         Ok(path) => path,
         Err(err) => {
@@ -3957,13 +4007,23 @@ fn verify_required_world_boundary(cli: &Cli) -> RequiredWorldBoundaryState {
     };
 
     let mut command = Command::new(exe);
-    if cli.world {
-        command.arg("--world");
-    } else if cli.no_world {
-        command.arg("--no-world");
-    }
+    let argv = match required_world_boundary_command_argv(
+        cli,
+        #[cfg(target_os = "linux")]
+        install_context,
+    ) {
+        Ok(argv) => argv,
+        Err(err) => {
+            return RequiredWorldBoundaryState::Failed {
+                reason: format!(
+                    "failed to prepare `substrate world doctor --json` for required world-boundary validation: {err}"
+                ),
+                exit_code: 3,
+            };
+        }
+    };
 
-    let output = match command.args(["world", "doctor", "--json"]).output() {
+    let output = match command.args(&argv).output() {
         Ok(output) => output,
         Err(err) => {
             return RequiredWorldBoundaryState::Failed {
@@ -4245,10 +4305,15 @@ mod tests {
         OrchestrationObligationRecord, OrchestrationSessionRecord, OrchestrationSessionState,
     };
     use crate::execution::config_model::{AgentCliMode, AgentExecutionScope};
+    #[cfg(target_os = "linux")]
+    use crate::execution::install_bootstrap::current_unix_principal_and_home;
+    use clap::Parser;
     use serial_test::serial;
     use std::fs;
     use std::path::PathBuf;
     use tempfile::TempDir;
+    #[cfg(target_os = "linux")]
+    use transport_api_types::InstallBootstrapContextV1;
 
     const SHARED_WORLD_METADATA_ROOT_TEST_ENV: &str = "SUBSTRATE_TEST_SHARED_WORLD_METADATA_ROOT";
 
@@ -4360,6 +4425,51 @@ mod tests {
         let result = test(&store);
         std::env::remove_var(SHARED_WORLD_METADATA_ROOT_TEST_ENV);
         result
+    }
+
+    #[cfg(target_os = "linux")]
+    fn install_context_for_test(selected_prefix: &Path) -> InstallBootstrapContextCarrierV1 {
+        let (principal, _) = current_unix_principal_and_home().expect("current Unix principal");
+        let transport_api_types::PlatformPrincipalV1::Unix { account, uid } = principal else {
+            panic!("expected Unix principal");
+        };
+        let context = InstallBootstrapContextV1::new_unix(
+            selected_prefix.to_str().expect("UTF-8 selected prefix"),
+            &account,
+            uid,
+        )
+        .expect("install bootstrap context");
+        InstallBootstrapContextCarrierV1::from_context(context).expect("install bootstrap carrier")
+    }
+
+    #[cfg(target_os = "linux")]
+    #[test]
+    fn required_world_boundary_command_argv_carries_authenticated_install_context() {
+        let temp = TempDir::new().expect("tempdir");
+        let selected_prefix = temp.path().join("selected-prefix");
+        fs::create_dir_all(&selected_prefix).expect("create selected prefix");
+        let install_context = install_context_for_test(&selected_prefix);
+        let expected = install_context.encode().expect("encode carrier");
+        let cli = Cli::try_parse_from(["substrate", "agent", "doctor", "--json"])
+            .expect("CLI should parse");
+
+        let argv = required_world_boundary_command_argv(&cli, &install_context)
+            .expect("required world-boundary argv");
+        let rendered = argv
+            .iter()
+            .map(|value| value.to_string_lossy().into_owned())
+            .collect::<Vec<_>>();
+
+        assert_eq!(
+            rendered,
+            vec![
+                "--install-bootstrap-context-v1".to_string(),
+                expected,
+                "world".to_string(),
+                "doctor".to_string(),
+                "--json".to_string(),
+            ]
+        );
     }
 
     fn with_state_store_and_shared_world_root<T>(
