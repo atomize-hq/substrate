@@ -705,6 +705,16 @@ PY
   log "Verified install config at ${config} (world_enabled=${expected_flag}; anchor_mode=project anchor_path=\"\" root_mode=project root_path=\"\" caged=true)"
 }
 
+assert_private_config_mode() {
+  local config="$1"
+  local mode
+  mode="$(stat -c '%a' "${config}")"
+  if [[ "${mode}" != "600" ]]; then
+    fatal "expected ${config} mode 600, got ${mode}"
+  fi
+  log "Verified private config mode 600 at ${config}"
+}
+
 assert_manifest_present() {
   local manifest="${PREFIX}/versions/${FAKE_VERSION}/config/manager_hooks.yaml"
   if [[ ! -f "${manifest}" ]]; then
@@ -758,6 +768,15 @@ if world_enabled != "false":
 PY
 
   log "Verified dev install config at ${config} (world.enabled=false)"
+}
+
+assert_dev_install_config_present() {
+  local prefix="$1"
+  local config="${prefix}/config.yaml"
+  if [[ ! -f "${config}" ]]; then
+    fatal "dev install config missing after install: ${config}"
+  fi
+  log "Verified dev install config exists at ${config}"
 }
 
 assert_env_sh_has_no_override_exports() {
@@ -909,6 +928,7 @@ if [[ "${SCENARIO}" == "prod" ]]; then
     install_systemctl_log="$(capture_systemctl_log install)"
     assert_config_init_hint_logged
     assert_install_config
+    assert_private_config_mode "${PREFIX}/config.yaml"
     assert_manifest_present
     run_health_smoke
   if [[ "${SCENARIO_WORLD_ENABLED}" -eq 1 ]]; then
@@ -922,6 +942,8 @@ if [[ "${SCENARIO}" == "prod" ]]; then
 elif [[ "${SCENARIO}" == "dev" ]]; then
     run_dev_install "debug" "${PREFIX}" "smoke-dev" 1
     assert_env_sh_has_no_override_exports
+    assert_dev_install_config_present "${PREFIX}"
+    assert_private_config_mode "${PREFIX}/config.yaml"
     install_systemctl_log="$(capture_systemctl_log install)"
     assert_systemctl_log "install" "${install_systemctl_log}" 1
 elif [[ "${SCENARIO}" == "dev-no-world" ]]; then
@@ -932,6 +954,7 @@ elif [[ "${SCENARIO}" == "dev-no-world" ]]; then
     PREFIX="${dev_prefix_debug}"
     assert_env_sh_has_no_override_exports
     assert_dev_install_config_disabled "${PREFIX}"
+    assert_private_config_mode "${PREFIX}/config.yaml"
     assert_dev_manifest_present "${PREFIX}" "smoke-dev-debug"
     install_systemctl_log="$(capture_systemctl_log install)"
     assert_systemctl_log_empty "install-debug" "${install_systemctl_log}"
@@ -941,6 +964,7 @@ elif [[ "${SCENARIO}" == "dev-no-world" ]]; then
     run_dev_install "debug" "${dev_prefix_debug}" "smoke-dev-debug" 0
     PREFIX="${dev_prefix_debug}"
     assert_dev_install_config_disabled "${PREFIX}"
+    assert_private_config_mode "${PREFIX}/config.yaml"
     assert_dev_manifest_present "${PREFIX}" "smoke-dev-debug"
     install_systemctl_log="$(capture_systemctl_log install)"
     assert_systemctl_log_empty "install-debug-refresh" "${install_systemctl_log}"
@@ -950,6 +974,7 @@ elif [[ "${SCENARIO}" == "dev-no-world" ]]; then
     PREFIX="${dev_prefix_release}"
     assert_env_sh_has_no_override_exports
     assert_dev_install_config_disabled "${PREFIX}"
+    assert_private_config_mode "${PREFIX}/config.yaml"
     assert_dev_manifest_present "${PREFIX}" "smoke-dev-release"
     install_systemctl_log="$(capture_systemctl_log install)"
     assert_systemctl_log_empty "install-release" "${install_systemctl_log}"

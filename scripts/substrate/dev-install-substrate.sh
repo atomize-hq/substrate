@@ -548,7 +548,7 @@ EOF
   fi
 
   mv "${INSTALL_CONFIG_PATH}.tmp" "${INSTALL_CONFIG_PATH}"
-  chmod 0644 "${INSTALL_CONFIG_PATH}" || true
+  chmod 0600 "${INSTALL_CONFIG_PATH}" || true
 }
 
 write_manager_env_script() {
