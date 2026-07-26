@@ -135,6 +135,16 @@ run_gateway_status_pre_sync() {
   return "${status_rc}"
 }
 
+stage_agent_manifest() {
+  local target_dir="$1"
+  local source_manifest="$2"
+  local target_name="$3"
+
+  mkdir -p "${target_dir}"
+  chmod 0700 "${target_dir}"
+  install -m 0600 "${source_manifest}" "${target_dir}/${target_name}"
+}
+
 preflight_world_socket_access() {
   local host_doctor_json=""
   local host_doctor_status=0
@@ -210,8 +220,7 @@ preflight_codex_world_runtime() {
 }
 
 agents_dir="${PREFIX}/agents"
-mkdir -p "${agents_dir}"
-cp "${AGENT_MANIFEST}" "${agents_dir}/codex.yaml"
+stage_agent_manifest "${agents_dir}" "${AGENT_MANIFEST}" "codex.yaml"
 log "Copied codex agent manifest into ${agents_dir}/codex.yaml"
 
 run_substrate config global set llm.routing.default_backend=cli:codex-host
