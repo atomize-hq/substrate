@@ -4,16 +4,15 @@
 **Scope:** planning, contracts, sequencing, and proof gates; not implementation history
 **Source directive:** [`../../substrate-runtime-refactor-directive-revised.md`](../../substrate-runtime-refactor-directive-revised.md)
 **Repo-truth snapshot:** 2026-07-17 at `6ab2a515e13946324d0aac25b144e1c3408cb2c1`; re-check live code before every slice
-**Current authorized increment:** `A1.1d-5R2-2 RP5 closeout documentation`. RP3 canonical baseline
-is complete. RP4 product proof is accepted clean by human disposition on exact integration
-commit/tree `8c46135c861a468dea316cf9fd7d6c6bb15bddac` /
-`5358497a8baec6f36e15aaef58415a759e64977d`; the raw persistence review remains
-`REQUEST_CHANGES` for three cache-only process-audit findings preserved as non-blocking debt
-outside RP4 product-proof scope. This exact six-file change is the bounded RP5 closeout packet.
-Source publication has not occurred in this run, and after the reviewed/committed RP5 docs the
-exact next step remains one ordinary fast-forward source publication. R2-3, R2-4, R3, privileged
-product smoke, non-Linux proof, and direct-member Codex/UAA gateway adoption remain blocked or
-unstarted.
+**Current authorized increment:** process-only bounded-review calibration before
+`A1.1d-5R2-3`. RP3, RP4, RP5, and the ordinary fast-forward source publication are complete at
+`0f1e147fb735791b44a65099a65167cbdc1803af`. The raw RP4 persistence review remains
+`REQUEST_CHANGES`; its three cache-only process-audit findings retain their historical evidence and
+are now registered as non-blocking `P3` debt in `06`. This calibration changes no product/runtime
+contract or proof result and authorizes no R2-3 implementation, old-packet rerun, or remediation of
+those findings. After this calibration is reviewed and landed, R2-3 orientation is next; R2-4, R3,
+privileged product smoke, non-Linux proof, and direct-member Codex/UAA gateway adoption remain later
+or unstarted.
 
 ## Canonical repo location
 
@@ -49,18 +48,26 @@ Unit tests, type names, persisted rows, helper functions, process liveness, sock
 | [`03-phase-slice-map.md`](03-phase-slice-map.md) | planning or executing a slice | five tracks, bounded slices, allowed areas, non-goals, exit and regression gates |
 | [`04-contracts-and-gates.md`](04-contracts-and-gates.md) | changing schemas, receipts, supervisor behavior, policy, or UAA execution | concrete V1 contracts and acceptance rules |
 | [`05-debug-regression-ledger.md`](05-debug-regression-ledger.md) | writing tests, smoke plans, or closeout evidence | resolved baselines, open debug seams, permanent regression gates |
+| [`06-review-finding-inventory.md`](06-review-finding-inventory.md) | classifying, retaining, deduplicating, or resolving non-blocking review findings | the single `P3`/`P4` review and process-debt inventory; never a `P1`/`P2` waiver |
+| [`review-control/`](review-control/) | opening, closing, or extending a review cycle | small standard-library cycle record, validator, example, and focused tests |
 
-Do not load the full historical design/debug stack by default. Start with the applicable crosswalk row, slice row, contract section, and regression row. Follow only the named must-read links. Slice A0 records its authority-leak inventory inside `02-seam-crosswalk.md`; it must not create an untracked seventh control-pack file.
+Do not load the full historical design/debug stack by default. Start with the applicable crosswalk
+row, slice row, contract section, regression row, and review contract. Follow only the named
+must-read links. Slice A0's authority-leak inventory remains inside `02-seam-crosswalk.md`; `06` is
+only the cross-slice non-blocking review-finding inventory and does not absorb A0 authority truth.
 
 ## Per-slice context assembly protocol
 
 Treat context assembly as part of every implementation and review slice. Do not hand an agent the entire directive, design family, debug history, control pack, and source tree at once.
 
-Assemble three bounded packets:
+Assemble four bounded packets:
 
 1. **Authority packet — what must be true:** the exact `03` slice row, affected `02` seam rows, applicable `01` invariants, exact `04` contract sections, and only the design sections named by the slice.
 2. **Repo-truth packet — what is true now:** the current production call path, files allowed by the slice, related types and tests, one relevant precedent when available, and fresh call-graph/impact evidence. Separate artifact existence, semantic correctness, real-path adoption, and runtime proof.
 3. **Proof packet — how completion is judged:** exact `05` gate rows, targeted tests, negative/fail-closed cases, required smoke/e2e evidence, and the classification change permitted by that evidence.
+4. **Review packet — how change is challenged without expanding scope:** the selected integrated
+   outcome, exact subject fingerprint, `04` priority rubric and cycle budget, fresh reviewer lenses,
+   cycle-record path, mechanical prechecks, and any applicable `06` inventory entries.
 
 Target fewer than 2,000 focused lines per implementation task. Historical debug documents are regression provenance, not current implementation authority. Conversation history and prior summaries are discovery hints only until revalidated against the current tree.
 
@@ -68,6 +75,7 @@ Use this capsule at slice start:
 
 ```text
 SLICE / OBJECTIVE:
+SELECTED INTEGRATED OUTCOME / COMPLETION CLAIM:
 TARGET AUTHORITY BOUNDARY:
 CURRENT PRODUCTION PATH / SEMANTIC STATUS:
 MUST-READ SECTIONS:
@@ -77,6 +85,7 @@ ALLOWED CODE AREAS / EXPLICIT NON-GOALS:
 APPLICABLE CONTRACTS / REGRESSION GATES:
 KNOWN CORRECTIONS OR CONFLICTS:
 EXIT PROOF / STOP CONDITIONS:
+REVIEW BUDGET / CYCLE RECORD:
 ```
 
 If target docs, live code, tests, or fresh runtime evidence conflict, record the conflict in `KNOWN CORRECTIONS OR CONFLICTS` and resolve it before implementation. Never silently select the source that makes the slice appear easiest or most complete.

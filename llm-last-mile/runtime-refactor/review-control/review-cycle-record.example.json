@@ -1,0 +1,50 @@
+{
+  "schema_version": 1,
+  "packet_id": "A1.1d-5R2-3-example",
+  "status": "complete",
+  "stop_reason": null,
+  "cycles": [
+    {
+      "cycle_id": "discovery-1",
+      "kind": "discovery",
+      "subject_fingerprint": "sha256:aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+      "trigger_cycle_id": null,
+      "trigger_finding_ids": [],
+      "causal_evidence_refs": [],
+      "review_refs": [
+        "evidence/discovery-review.txt"
+      ],
+      "verdict": "findings",
+      "findings": [
+        {
+          "finding_id": "R2-3-P2-001",
+          "priority": "P2"
+        },
+        {
+          "finding_id": "R2-3-P3-001",
+          "priority": "P3"
+        }
+      ]
+    },
+    {
+      "cycle_id": "closure-1",
+      "kind": "closure",
+      "subject_fingerprint": "sha256:bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb",
+      "trigger_cycle_id": "discovery-1",
+      "trigger_finding_ids": [
+        "R2-3-P2-001"
+      ],
+      "causal_evidence_refs": [],
+      "review_refs": [
+        "evidence/closure-review.txt"
+      ],
+      "verdict": "clean",
+      "findings": [
+        {
+          "finding_id": "R2-3-P4-002",
+          "priority": "P4"
+        }
+      ]
+    }
+  ]
+}

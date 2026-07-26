@@ -2981,5 +2981,30 @@ above without rewriting any raw review verdict or historical wall result.
 | Persistence review findings | Non-blocking process-audit debt outside RP4 product-proof scope | Controller pathname/hash not execution-bound; supervisor parent-directory `fsync` omitted after replace; persisted controller packet omits its post-persistence final verdict. These are cache-only orchestration/attestation issues, not Substrate product/runtime defects and not canonical wall-runner defects. | They do not invalidate the focused, authenticated, canonical-wall, differential, authority, or restoration evidence. |
 | RP5 — bounded final docs closeout | This exact six-file docs change | Preserves **Docs-on-top -> one ordinary fast-forward publication** and makes no wall rerun, no publication claim, and no parity claim. | Source publication has not occurred in this run, and the exact next step after the reviewed/committed RP5 docs remains one ordinary fast-forward source publication. |
 
-R2-3 remains blocked until that publication. R2-4 and R3 remain later. Privileged product smoke,
-non-Linux proof, direct-member adoption, and seam promotion remain unclaimed.
+That ordinary fast-forward publication subsequently completed at
+`0f1e147fb735791b44a65099a65167cbdc1803af`. R2-3 orientation is next after the process-only
+bounded-review calibration; R2-4 and R3 remain later. Privileged product smoke, non-Linux proof,
+direct-member adoption, and seam promotion remain unclaimed.
+
+## Review-process calibration
+
+RP4 exposed a process failure without exposing a product or test regression: a blanket requirement
+for four clean reviews allowed findings about agent-created cache-only orchestration to expand the
+product-proof acceptance surface. Repeated fix/review attempts then improved bespoke evidence
+tooling rather than the selected Substrate outcome. Human disposition correctly preserved the raw
+`REQUEST_CHANGES` review while accepting the independently evaluable product proof.
+
+The prospective correction is owned by the development-review contract in `04`:
+
+- `P1`/`P2` block only on demonstrated impact to the selected contract, gate, scope, or completion
+  claim;
+- one discovery cycle, one consolidated remediation, one closure cycle, and at most two directly
+  causal supplemental cycles bound automatic work;
+- `CLEAN` is terminal, mechanical-only deltas do not create review cycles, and unrelated or expanded
+  blockers stop for authority rather than widening scope; and
+- valid non-blocking review/process debt is retained in `06`, separate from this product regression
+  ledger.
+
+The three RP4 persistence findings are registered as `RR-RF-0001` through `RR-RF-0003`. Their raw
+review files, hashes, and original verdict remain unchanged. This calibration authorizes no
+controller/supervisor remediation and changes no RP3/RP4/RP5 proof result.

@@ -4,6 +4,21 @@
 
 Each slice is independently reviewable. A0 is a diagnostic inventory; every later implementation slice must move one authority boundary plus proof. A slice may read sibling context without editing sibling ownership.
 
+### Bounded review sequence
+
+Every new slice follows the development-review contract in `04`. Freeze the selected integrated
+outcome, scope, proof gates, subject-fingerprint method, and review budget before implementation.
+Run one discovery review or same-subject burst, consolidate valid `P1`/`P2` remediation, and use one
+different-fresh delta-focused closure review. Up to two supplemental causal cycles are permitted
+only for `P1`/`P2` findings directly caused or unmasked by the immediately preceding remediation
+inside unchanged authority and risk. `CLEAN` ends the loop; unrelated blockers, expansion, or budget
+exhaustion stop non-completed. Unfixed `P3`/`P4` findings go to `06` and do not create remediation or
+review cycles.
+
+The parent validates the review-cycle record after each returned cycle and runs the `--next-cycle`
+preflight before launching any closure or supplemental review. Historical packet-specific reviewer
+counts remain evidence of those packets, not an automatic requirement inherited by later slices.
+
 Hard dependency spine:
 
 ```text
@@ -1532,6 +1547,7 @@ f7ded83
 
 Historical closeout results stay historical: the four earlier matching walls remain ineligible and
 the original NOT CLEAN/BLOCKED reviews remain findings, not passes. The table above is preserved as
-historical sequencing only; the controlling current state is the RP3/RP4/RP5 disposition recorded
-in the publication-phases section above, where this exact six-file docs change is the bounded RP5
-closeout packet and source publication remains the next step after its reviewed/committed bytes.
+historical sequencing only. RP3, RP4, RP5, and the ordinary fast-forward source publication later
+completed at `0f1e147fb735791b44a65099a65167cbdc1803af`. The current process-only bounded-review
+calibration must be reviewed and landed without R2-3 implementation; R2-3 orientation is the next
+control-pack node afterward.
