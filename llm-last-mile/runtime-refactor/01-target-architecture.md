@@ -1057,17 +1057,27 @@ renewed proof begins.
 
 This ordering changes no authority, platform, credential, policy, network, filesystem, caging,
 capability, lifecycle, receipt, supervisor, retained-worker, cleanup, rollback, secure-FD, or
-compatibility boundary. The source remote remains documentation-only until the renewed proof is
-clean. A failed or stopped wall publishes nothing and authorizes no runtime/test repair. R2-2 stays
-incomplete, non-Linux posture stays compatibility/unavailable/unproven, product smoke stays
-unclaimed, no seam is promoted, and R2-3 remains blocked. Final closeout documentation is reviewed
-before its exact bytes are committed and revalidated/re-reviewed afterward; any post-commit finding
-stops publication. A purely documentary finding may use only an append-only six-file remediation-
-doc successor followed by renewed documentation validation/review; a finding that invalidates
-proof or topology reruns the affected proof/review. Neither permits a rewrite. The eventual
-source update requires both an explicit expected-old-OID CAS/lease fixed to
+compatibility boundary. The source remote remains documentation-only through this bounded RP5
+closeout packet. The preserved pre-disposition four-review-CLEAN gate is historical only. The
+controlling current state recorded below is that RP4 product proof is accepted clean by human
+disposition on the exact integration commit/tree, while the raw persistence `REQUEST_CHANGES`
+remains preserved as three cache-only orchestration/attestation findings carried as non-blocking
+process-audit debt outside RP4 product-proof scope. Publication remains unperformed and is only
+the next step after the reviewed/committed RP5 docs. A failed or stopped wall publishes nothing
+and authorizes no runtime/test repair. R2-2 stays incomplete, non-Linux posture stays
+compatibility/unavailable/unproven, product smoke stays unclaimed, no seam is promoted, and R2-3
+remains blocked. Final closeout documentation is reviewed before its exact bytes are committed and
+revalidated/re-reviewed afterward; any post-commit finding stops publication. A purely documentary
+finding may use only an append-only six-file remediation-doc successor followed by renewed
+documentation validation/review; a finding that invalidates proof or topology reruns the affected
+proof/review. Neither permits a rewrite. The eventual source update requires both an explicit
+expected-old-OID CAS/lease fixed to
 `2f6f1f69b3519dafff01ef543e7d260da2c37700` and an independent proof that the update is a normal
 fast-forward; the lease is never authority for a forced update.
+
+The docs-on-top -> one ordinary fast-forward publication model above remains controlling. Its RP0
+sequencing is historical only; the controlling current RP3/RP4/RP5 closeout status is recorded
+below.
 
 ## Broad-wall evidence architecture
 
@@ -1093,14 +1103,15 @@ wall remains separately recorded as `1309/1205/104/0`, with all 59 additions cau
 
 At the historical B1 checkpoint, the next architectural action was the renewed
 production-fix-free integration closeout from the B1-preserved docs-on-top state using
-provenance-validated private roots. The current remediation architecture below supersedes that
-next-action statement. R2-2 remains incomplete; source publication, R2-3, R2-4, and R3 remain
-blocked.
+provenance-validated private roots. The historical remediation architecture below supersedes that
+next-action statement. At that checkpoint, R2-2 product proof and source publication were still
+pending, and R2-3, R2-4, and R3 remained blocked.
 
-## Closeout-remediation architecture: R1 and P1
+## Closeout-remediation architecture: R1 and P1 (historical RP0/RP1/RP2 record)
 
-This planning authority changes no product architecture. It defines two proof-preserving repair
-boundaries required before the renewed production-fix-free closeout can start again.
+This historical planning authority changed no product architecture. It defined the two
+proof-preserving repair boundaries required before the renewed production-fix-free closeout could
+start again.
 
 ### R1: separate execution argv from display argv
 
@@ -1256,10 +1267,27 @@ P1 changes no shell, world, policy, capability, service, secure-FD, lifecycle, c
 or product-runtime symbol. It is proof infrastructure only. Native macOS/Windows and privileged
 product proofs remain deferred to their existing owners.
 
-### Architecture status
+### Historical RP0 architecture status
 
 R1 is a correction to display non-disclosure, not carrier authority. P1 is an evidence-authority
 runner, not a product supervisor or lifecycle owner. Neither creates a new runtime seam, process
 family, platform adapter, credential route, or cleanup authority. The four prior broad walls remain
-ineligible, R2-2 remains incomplete, and R2-3 remains blocked. The next architectural node is the
-bounded R1 increment.
+ineligible, R2-2 remained incomplete, and R2-3 remained blocked. The exact next architectural node
+at that checkpoint was the bounded R1 increment. The controlling current status follows.
+
+## RP3/RP4/RP5 closeout architecture status
+
+The architecture above remains unchanged. RP3 is complete with the same canonical
+`1309/1264/45/0` baseline and zero pairwise differentials. RP4 product proof is accepted clean by
+human disposition on exact integration commit/tree
+`8c46135c861a468dea316cf9fd7d6c6bb15bddac` /
+`5358497a8baec6f36e15aaef58415a759e64977d`; the raw persistence review remains
+`REQUEST_CHANGES` and is preserved as three cache-only non-blocking process-audit debt items
+outside RP4 product-proof scope. This packet claims no non-Linux proof, privileged product smoke,
+or seam promotion.
+
+This exact six-file change is the bounded RP5 closeout packet. It expands no authority boundary and
+adds no new architecture. The docs-on-top -> one ordinary fast-forward publication model remains
+controlling. Source publication has not occurred in this run; after the reviewed/committed RP5
+docs, the exact next step is that single ordinary fast-forward publication. R2-3 stays blocked
+until then; R2-4, R3, and direct-member Codex/UAA gateway adoption remain later or unclaimed.

@@ -4,13 +4,16 @@
 **Scope:** planning, contracts, sequencing, and proof gates; not implementation history
 **Source directive:** [`../../substrate-runtime-refactor-directive-revised.md`](../../substrate-runtime-refactor-directive-revised.md)
 **Repo-truth snapshot:** 2026-07-17 at `6ab2a515e13946324d0aac25b144e1c3408cb2c1`; re-check live code before every slice
-**Current authorized increment:** `A1.1d-5R2-2 closeout remediation planning`. R2-2F remains
-runtime-complete, proof-complete, review-clean, canonically closed out, and exactly replayed onto
-its latest documentation, but the later renewed closeout stopped on R1 carrier non-disclosure and
-P1 wall-provenance blockers. This packet authorizes those two bounded remediations docs-first; the
-exact next node is **A1.1d-5R2-2-R1 — Release dry-run authenticated-carrier non-disclosure
-implementation**. R2-2 remains incomplete. R2-3, R2-4, R3, privileged product smoke, and
-direct-member Codex/UAA gateway adoption remain unstarted.
+**Current authorized increment:** `A1.1d-5R2-2 RP5 closeout documentation`. RP3 canonical baseline
+is complete. RP4 product proof is accepted clean by human disposition on exact integration
+commit/tree `8c46135c861a468dea316cf9fd7d6c6bb15bddac` /
+`5358497a8baec6f36e15aaef58415a759e64977d`; the raw persistence review remains
+`REQUEST_CHANGES` for three cache-only process-audit findings preserved as non-blocking debt
+outside RP4 product-proof scope. This exact six-file change is the bounded RP5 closeout packet.
+Source publication has not occurred in this run, and after the reviewed/committed RP5 docs the
+exact next step remains one ordinary fast-forward source publication. R2-3, R2-4, R3, privileged
+product smoke, non-Linux proof, and direct-member Codex/UAA gateway adoption remain blocked or
+unstarted.
 
 ## Canonical repo location
 
@@ -791,13 +794,13 @@ At that completed Routes A–F checkpoint, the exact historical next task was **
 renewed production-fix-free integration closeout**. The current remediation-planning authority
 below supersedes that historical next-task statement without rewriting its result.
 
-## A1.1d-5R2-2 renewed closeout publication authority
+## A1.1d-5R2-2 renewed closeout publication authority (historical pre-RP4 checkpoint)
 
-The selected publication model for the eventual closeout remains **Docs-on-top → one
-fast-forward publication**. R2-2 remains incomplete. A renewed integration attempt ran, but its
-four matching walls are provenance-ineligible and therefore establish no eligible integration
-proof. Source publication remains blocked until R1, P1, the fresh baseline, and a further renewed
-closeout are fully proof-clean and independently review-clean.
+At that checkpoint, the selected publication model for the eventual closeout remained
+**Docs-on-top → one fast-forward publication**. R2-2 product proof and source publication were
+still pending. A renewed integration attempt had run, but its four matching walls were
+provenance-ineligible and therefore established no eligible integration proof. Source publication
+remained blocked until R1, P1, the fresh baseline, and a further renewed closeout were complete.
 
 The source remote intentionally remains at the F documentation closeout
 `2f6f1f69b3519dafff01ef543e7d260da2c37700`. The exact existing 17-commit runtime range above it
@@ -882,11 +885,12 @@ source publication remained blocked, and the exact historical next task was **Re
 renewed production-fix-free integration closeout using provenance-validated private roots**. The
 controlling current status follows.
 
-## A1.1d-5R2-2 closeout-remediation planning authority
+## A1.1d-5R2-2 closeout-remediation planning authority (historical RP0 checkpoint)
 
-This section is the controlling current status after the renewed closeout stopped cleanly on two
-blockers. It does not rewrite the B1 history above and does not classify any prior wall as eligible.
-The immutable planning base is:
+This section records the historical RP0 checkpoint after the renewed closeout stopped cleanly on two
+blockers. It does not rewrite the B1 history above and does not classify any prior wall as
+eligible. The controlling current status follows in the RP3/RP4/RP5 closeout section below. The
+immutable planning base is:
 
 - branch `feat/internal-host-orchestrator-world-dispatch-bootstrap`;
 - `HEAD f7ded83ef147b748678ba6b028eea959870a04fe`, parent
@@ -958,6 +962,22 @@ current clean source at f7ded83
   -> A1.1d-5R2-3
 ```
 
-R2-2 remains incomplete. R2-3, R2-4, R3, A1.1d, and A1 remain blocked. The exact next node after
-this planning authorization is **A1.1d-5R2-2-R1 — Release dry-run authenticated-carrier
-non-disclosure implementation**.
+At that RP0 checkpoint, R2-2 remained incomplete. R2-3, R2-4, R3, A1.1d, and A1 remained blocked.
+The exact planned next node after that planning authorization was **A1.1d-5R2-2-R1 — Release
+dry-run authenticated-carrier non-disclosure implementation**. The controlling current status
+follows.
+
+## A1.1d-5R2-2 RP3/RP4/RP5 closeout status
+
+This section is the controlling current status. It preserves the historical RP0 planning checkpoint
+above without rewriting it.
+
+| Packet | Current disposition |
+|---|---|
+| RP3 | Complete. The canonical baseline remains `1309 discovered / 1264 passed / 45 failed / 0 ignored`, with failure-name hash `b23bb59ad12833d2c1d37c19c54933cd6bcb1c75e0dab8a70179b9881372be70`, normalized-signature hash `33c686a6ec9f3a0a4f51e1fca976445e6804da12fbbff50312a03f0042cdfac3`, and six pairwise differentials `0`. No historical count, hash, or failure membership changes. |
+| RP4 | Product proof accepted clean by human disposition on exact integration commit/tree `8c46135c861a468dea316cf9fd7d6c6bb15bddac` / `5358497a8baec6f36e15aaef58415a759e64977d`. The focused exact PASS sentinel, authenticated runner self-test `99/99`, four distinct canonical walls, proof-process `6 launched / 6 reaped / 0 live`, and exact original/integration restoration all passed. Detailed packet and review hashes remain recorded in [05-debug-regression-ledger.md](05-debug-regression-ledger.md). |
+| Persistence review distinction | The raw review verdict remains `REQUEST_CHANGES`. Its three cache-only findings are preserved as non-blocking process-audit debt outside RP4 product-proof scope: controller pathname/hash not execution-bound; supervisor parent-directory `fsync` omitted after replace; persisted controller packet omits its post-persistence final verdict. They do not invalidate the focused, authenticated, canonical-wall, differential, authority, or restoration evidence. |
+| RP5 | This exact six-file documentation change is the bounded closeout packet. The publication model remains **Docs-on-top -> one ordinary fast-forward publication**. Source publication has not occurred in this run, no local/upstream/remote parity is claimed, and the exact next step after the reviewed/committed RP5 docs remains one ordinary fast-forward source publication. |
+
+R2-3 remains blocked until that publication. R2-4 and R3 remain later. Privileged product smoke,
+non-Linux proof, direct-member adoption, and seam promotion remain unclaimed.

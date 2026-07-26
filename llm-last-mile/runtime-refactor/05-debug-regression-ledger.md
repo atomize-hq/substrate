@@ -2746,16 +2746,17 @@ the later closeout/publication sequence.
 
 | Decision/gate | Status | Evidence and distinction | Binding resolution / next action |
 |---|---|---|---|
-| `PublicationDecisionRequired` | Resolved and preserved at `928f94e7b4c498273b40385f7bffea9e4f949700` | The completed F closeout required its documentation followed by exact replay, and that replay produced the current linear 17-commit range from `2f6f1f69b3519dafff01ef543e7d260da2c37700` through `e5fbd2d4441d248e137d52c44e493fb0abe158f8`. Historical Route D docs-first replay governed only its own pre-carrier correction. The selected docs-on-top publication authority is preserved locally/remotely at `feat/preserve-a1-1d-5r2-2-publication-authority-20260722`. | Keep commit and range identities unchanged. The B1 six-file broad-wall invocation successor must follow exact `928f94e7`, remain off the source branch remote, and be preserved separately at `feat/preserve-a1-1d-5r2-2-broad-wall-invocation-20260722` before renewed proof. R2-2 remains incomplete. |
-| `BaselineCommandMismatchConfirmed` | Historical B1 correction complete; later renewed wall evidence ineligible | The first renewed-closeout prompt omitted the private-root invocation provenance. That wall was ineligible and added 59 correct trusted-root rejections below normal mode-`1777` `/tmp`; runtime source and tests did not change. B1 corrected that invocation contract. A later renewed attempt produced four count/hash-matching walls, but their parent-only wait and descriptor-before-delete closure made them provenance-ineligible. | Historical B1 disposition was to commit the [canonical broad-wall invocation contract](04-contracts-and-gates.md#canonical-shell-library-broad-wall-invocation-contract) on exact `928f94e7`, preserve it only on the B1 branch, and stop. Current authority continues with remediation planning → R1 → P1 → fresh P1 baseline before a further renewed closeout. |
+| `PublicationDecisionRequired` | Resolved and preserved at `928f94e7b4c498273b40385f7bffea9e4f949700` | The completed F closeout required its documentation followed by exact replay, and that replay produced the current linear 17-commit range from `2f6f1f69b3519dafff01ef543e7d260da2c37700` through `e5fbd2d4441d248e137d52c44e493fb0abe158f8`. Historical Route D docs-first replay governed only its own pre-carrier correction. The selected docs-on-top publication authority is preserved locally/remotely at `feat/preserve-a1-1d-5r2-2-publication-authority-20260722`. | Keep commit and range identities unchanged. The later RP4 proof and current RP5 packet do not rewrite this preserved publication-authority checkpoint. |
+| `BaselineCommandMismatchConfirmed` | Historical B1 correction complete; later renewed wall evidence ineligible | The first renewed-closeout prompt omitted the private-root invocation provenance. That wall was ineligible and added 59 correct trusted-root rejections below normal mode-`1777` `/tmp`; runtime source and tests did not change. B1 corrected that invocation contract. A later renewed attempt produced four count/hash-matching walls, but their parent-only wait and descriptor-before-delete closure made them provenance-ineligible. | Historical B1 disposition was to commit the [canonical broad-wall invocation contract](04-contracts-and-gates.md#canonical-shell-library-broad-wall-invocation-contract) on exact `928f94e7`, preserve it only on the B1 branch, and stop. The current RP4/RP5 disposition is recorded below; no historical result is rewritten, and source publication remains next. |
 | Existing runtime identity | Frozen | All 17 current commits are linear, exact, locally reviewed, and preserved. They already rest on the latest F documentation. Replaying them again would create new identities without changing semantic content or proof value. | No replay, rebase, rewrite, cherry-pick, merge commit, or force push. Preserve every runtime byte and commit identity; keep blocked and preservation-only donors outside source ancestry. |
-| Renewed integration proof | Attempted but evidence-ineligible; R2-2 incomplete | Neither the publication-authority commit nor the B1 broad-wall correction itself ran an integration wall. The later renewed attempt ran four matching walls and obtained reviews, but R1 was authority/security NOT CLEAN and P1 made every wall provenance-ineligible; it supplies no eligible integration, product-smoke, platform, capability, or seam-promotion proof. | Historical B1 resolution was to run the next packet from exact B1-preserved state. Current authority requires remediation planning → R1/review → P1/review → fresh P1 baseline before a further renewed production-fix-free closeout. On invalid provenance or any failure/stop, make no source push; retain state/refs, classify the stop, and authorize future remediation docs-first. |
-| Final publication | Blocked | A closeout document must follow the already assembled range and evidence it certifies. The source remote intentionally contains documentation only because renewed closeout has not passed. | After proof-clean integration and CLEAN independent review, draft/validate/review final six-file docs to CLEAN, commit the exact reviewed bytes, and rerun final post-commit validation/reviews. Fix pre-commit documentary findings in the worktree; a post-commit documentary finding permits only an append-only six-file remediation-doc successor plus renewed docs validation/review; a proof/topology-invalidating finding reruns affected proof/review. None permits rewriting or unresolved publication. Then freshly require source old OID `2f6f1f69b3519dafff01ef543e7d260da2c37700`, bind an explicit expected-old-OID CAS/lease to that exact OID, independently prove a normal fast-forward, and require local/upstream/remote parity. The lease cannot authorize a forced update. R2-3 follows only then. |
+| Renewed integration proof | Historical ineligible attempt preserved; later RP4 product proof accepted clean by human disposition | Neither the publication-authority commit nor the B1 broad-wall correction itself ran an integration wall. The earlier renewed attempt ran four matching walls but was provenance-ineligible because R1 was authority/security NOT CLEAN and P1 failed the descendant/continuous-authority contract. The preserved RP4 packet later established focused exact PASS, authenticated runner self-test `99/99`, four eligible canonical walls, zero differentials, `6 launched / 6 reaped / 0 live`, and exact original/integration restoration on proofed integration commit/tree `8c46135c861a468dea316cf9fd7d6c6bb15bddac` / `5358497a8baec6f36e15aaef58415a759e64977d`. | Raw review files remain unchanged: gates/authority/sequencing `APPROVE`; persistence `REQUEST_CHANGES` preserved as three cache-only non-blocking process-audit debt items outside RP4 product-proof scope. This exact six-file RP5 docs packet preserves that distinction; source publication remains next. |
+| Final publication | Blocked pending reviewed/committed RP5 docs and the single source publication | A closeout document must follow the already assembled range and evidence it certifies. The source remote intentionally contains documentation only because source publication has not yet occurred in this run. | This exact six-file RP5 docs packet must be reviewed/committed first. After those reviewed bytes are committed, freshly require source old OID `2f6f1f69b3519dafff01ef543e7d260da2c37700`, bind an explicit expected-old-OID CAS/lease to that exact OID, independently prove a normal fast-forward, and require local/upstream/remote parity. The lease cannot authorize a forced update. No rewrite or unresolved publication is permitted. R2-3 follows only then. |
 
 This decision does not alter any implementation status recorded above. F remains complete under its
-own packet-specific replay history. The later renewed R2-2 attempt ran but produced no eligible
-integration proof; R2-2 remains incomplete; R2-3, R2-4, and R3 remain blocked; privileged product
-smoke remains unclaimed; and no seam is promoted.
+own packet-specific replay history. RP3 is complete, RP4 product proof is human-accepted clean, and
+this exact six-file change is the bounded RP5 closeout packet. Source publication has not occurred
+in this run; R2-3 remains blocked until that one ordinary fast-forward publication, R2-4 and R3
+remain later, privileged product smoke remains unclaimed, and no seam is promoted.
 
 ## A1.1d-5R2-2-B1 broad-wall invocation evidence correction
 
@@ -2839,7 +2840,7 @@ At that B1 checkpoint, R2-2 remained incomplete and the exact historical next ta
 A1.1d-5R2-2 renewed production-fix-free integration closeout using provenance-validated private
 roots**. The current planning ledger below supersedes only that next-task disposition.
 
-## Closeout-remediation planning ledger
+## Closeout-remediation planning ledger (historical RP0 checkpoint)
 
 ### Immutable planning checkpoint
 
@@ -2967,25 +2968,18 @@ The proof basis is:
 The future runner's own self-tests precede every product wall. Only after those tests and fresh
 P1 review are CLEAN may a new three-parallel/one-serial baseline be established.
 
-### Planning disposition
+## RP3/RP4/RP5 closeout ledger
 
-This packet authorizes but does not implement R1 or P1. It does not resume closeout. After three
-fresh planning-document reviewers are CLEAN, the exact six reviewed files may be committed and
-only the dedicated planning preservation ref may be published; the source remote must remain at
-`2f6f1f69b3519dafff01ef543e7d260da2c37700`.
+This section is the controlling current status. It preserves the historical RP0 planning ledger
+above without rewriting any raw review verdict or historical wall result.
 
-The frozen continuation is:
+| Packet / evidence | Current status | Preserved evidence | Binding boundary |
+|---|---|---|---|
+| RP3 — canonical baseline | Complete | Canonical baseline remains `1309 discovered / 1264 passed / 45 failed / 0 ignored`, failure-name hash `b23bb59ad12833d2c1d37c19c54933cd6bcb1c75e0dab8a70179b9881372be70`, normalized-signature hash `33c686a6ec9f3a0a4f51e1fca976445e6804da12fbbff50312a03f0042cdfac3`, and six pairwise differentials `0`. | The historical 45-failure set is unchanged. |
+| RP4 — renewed production-fix-free closeout | Product proof accepted clean by human disposition | Packet `/home/spenser/.cache/substrate-runtime-refactor/rp4-rp5-closeout-20260725T184536Z/rp4-proof-es7gs6z2/rp4-closeout-run-packet.json`; packet SHA `ea2935d04062c9e7e1327d5ecf88122513164b14fb19c7a2122c32b71b326072`; summary SHA `a51cf659647d10803004e7ad49c94ce580f9f23d5e4526608d60eb1a70789684`; supervisor result SHA `8e087dc6a4b627f61a97ade65bd4a13680113d79a9c718974671e5e91f20cee9`; supervisor launch manifest SHA `efbdd4ee8cf60aaa2b9128ca4c6844b82bb804f73dde5d53bcd8369906d173b8`; focused exact PASS sentinel; authenticated runner self-test `99/99`; four distinct canonical walls each `1309/1264/45/0`, `eligible=true`, `wall_gate=clean`, `canonical_match=true`; proof processes `6 launched / 6 reaped / 0 live`; exact original/integration restoration plus no-edit/config/branch/commit/publication guards passed; proofed integration commit/tree `8c46135c861a468dea316cf9fd7d6c6bb15bddac` / `5358497a8baec6f36e15aaef58415a759e64977d`. | No product/runtime rerun or remediation is authorized in this packet. |
+| RP4 raw review distinction | Raw verdicts preserved unchanged | `rp4-attempt8-review-gates.txt` SHA `0e482944222da337ce3f6b1b4a3d2d243e550b8091d7720282c3b08b0dc361dc` `APPROVE`; `rp4-attempt8-review-authority.txt` SHA `5ecadc8fa03c546722be0f854665e49db30520610c60670a0abaddda8df11c67` `APPROVE`; `rp4-attempt8-review-sequencing.txt` SHA `654d8e30e5a7ec22a8afe307f9dd5602a5b15e9867f6d32f9f46d9c43fa44e44` `APPROVE`; `rp4-attempt8-review-persistence.txt` SHA `4489c53ae85555c45b32485cdff1fa6ceb4af194eecf6ce2668512620d06eebe` `REQUEST_CHANGES`. | The persistence verdict is not rewritten to `APPROVE` or `CLEAN`. |
+| Persistence review findings | Non-blocking process-audit debt outside RP4 product-proof scope | Controller pathname/hash not execution-bound; supervisor parent-directory `fsync` omitted after replace; persisted controller packet omits its post-persistence final verdict. These are cache-only orchestration/attestation issues, not Substrate product/runtime defects and not canonical wall-runner defects. | They do not invalidate the focused, authenticated, canonical-wall, differential, authority, or restoration evidence. |
+| RP5 — bounded final docs closeout | This exact six-file docs change | Preserves **Docs-on-top -> one ordinary fast-forward publication** and makes no wall rerun, no publication claim, and no parity claim. | Source publication has not occurred in this run, and the exact next step after the reviewed/committed RP5 docs remains one ordinary fast-forward source publication. |
 
-```text
-reviewed six-file remediation-planning commit
-  -> R1 implementation + focused security review
-  -> P1 runner implementation + adversarial self-review
-  -> fresh canonical baseline through P1
-  -> renewed production-fix-free integration closeout
-  -> final six-file closeout docs
-  -> one ordinary fast-forward source publication
-  -> A1.1d-5R2-3
-```
-
-R2-2 remains incomplete. The exact next node is **A1.1d-5R2-2-R1 — Release dry-run
-authenticated-carrier non-disclosure implementation**.
+R2-3 remains blocked until that publication. R2-4 and R3 remain later. Privileged product smoke,
+non-Linux proof, direct-member adoption, and seam promotion remain unclaimed.

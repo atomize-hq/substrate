@@ -7028,14 +7028,15 @@ documentation follows.
 9. If any planning, remediation, baseline, closeout, or review gate fails or stops, do not push
    the source branch. Classify the stop and obtain any new implementation authority docs-first;
    never rewrite a historical result as passing.
-10. Only when integration is fully proof-clean and all four independent integration reviews are
-    CLEAN, create the integration-clean preservation required by the closeout packet, draft the
-    final six-file integration-closeout documentation on top, validate and review it to CLEAN,
-    commit exactly those reviewed bytes, and rerun final post-commit documentation
-    validation/reviews. A purely documentary post-commit finding permits only an append-only
-    six-file remediation-doc successor followed by renewed documentation validation/reviews. A
-    proof/topology-invalidating finding reruns affected proof/review. No finding authorizes
-    rewriting or source publication while unresolved.
+10. Under the preserved pre-disposition publication gate, only when integration is fully
+    proof-clean and all four independent integration reviews are CLEAN, create the
+    integration-clean preservation required by the closeout packet, draft the final six-file
+    integration-closeout documentation on top, validate and review it to CLEAN, commit exactly
+    those reviewed bytes, and rerun final post-commit documentation validation/reviews. A purely
+    documentary post-commit finding permits only an append-only six-file remediation-doc successor
+    followed by renewed documentation validation/reviews. A proof/topology-invalidating finding
+    reruns affected proof/review. No finding authorizes rewriting or source publication while
+    unresolved.
 11. Immediately before publication, freshly read the source remote and require exact old OID
     `2f6f1f69b3519dafff01ef543e7d260da2c37700`. Bind an explicit expected-old-OID CAS/lease to that
     exact OID and independently prove the proposed update is a fast-forward from that OID to final
@@ -7054,6 +7055,16 @@ docs-first replay was likewise Route D-specific. Another replay would add identi
 architectural, semantic, or evidentiary value. The renewed integration closeout certifies the
 already assembled range as a whole, and its final closeout document therefore follows the range it
 certifies.
+
+The docs-on-top -> one ordinary fast-forward publication model above remains controlling. Its RP0
+sequencing and the step-10 pre-disposition four-review-CLEAN gate are historical only. RP3 is
+complete. RP4 product proof on exact integration commit/tree
+`8c46135c861a468dea316cf9fd7d6c6bb15bddac` /
+`5358497a8baec6f36e15aaef58415a759e64977d` is accepted clean by human disposition, while the raw
+persistence review remains `REQUEST_CHANGES` for three cache-only orchestration/attestation
+findings preserved as non-blocking process-audit debt outside RP4 product-proof scope. This exact
+six-file change is the bounded RP5 closeout packet; source publication has not occurred in this
+run and remains the exact next step after the reviewed/committed RP5 docs.
 
 ### Required topology
 
@@ -7129,10 +7140,11 @@ imply that renewed proof ran,
 R2-2 passed, product smoke passed, or any seam was promoted. R2-3 remains blocked until the
 successful one-fast-forward publication completes; R2-4 and R3 remain later.
 
-## A1.1d-5R2-2 closeout-remediation contracts
+## A1.1d-5R2-2 closeout-remediation contracts (historical RP1/RP2 record)
 
-These contracts authorize future R1 and P1 increments only. This six-document packet makes no
-implementation/test change and cannot itself satisfy either contract.
+These preserved contracts record the closed source facts and gates that governed the completed
+bounded R1 and P1 increments. This exact six-document packet makes no implementation/test change
+and does not reopen those contracts.
 
 ### R1 — release dry-run authenticated-carrier non-disclosure
 
@@ -8481,14 +8493,18 @@ Mechanics tests use bounded dummy subprocesses, not the product wall. After ever
 fresh P1 security/provenance review is CLEAN, a separate baseline phase must run three parallel
 walls and one serial wall with four distinct roots. The old four walls are never inputs.
 
-### Remediation publication and sequencing gate
+### RP5 publication and sequencing gate
 
-This planning packet may commit only these six control-pack Markdown files and may publish only
-`feat/preserve-a1-1d-5r2-2-remediation-planning-20260723`. The local source branch advances by the
-one reviewed planning commit, but its configured upstream/source remote remains unchanged. The
-exact order is R1 → R1 security review → P1 → P1 adversarial review → fresh P1 baseline → renewed
-production-fix-free closeout → final six-file closeout docs → one ordinary fast-forward source
-push → R2-3.
+This exact six-file docs packet may edit only these six control-pack Markdown files. RP3 is
+complete. RP4 product proof on exact integration commit/tree
+`8c46135c861a468dea316cf9fd7d6c6bb15bddac` /
+`5358497a8baec6f36e15aaef58415a759e64977d` is accepted clean by human disposition; the raw
+persistence review remains `REQUEST_CHANGES` for three cache-only process-audit findings preserved
+as non-blocking debt outside RP4 product-proof scope. This exact six-file change is the bounded
+RP5 closeout packet.
 
-No historical result is rewritten as passing. R2-2 remains incomplete, and the exact next node is
-**A1.1d-5R2-2-R1 — Release dry-run authenticated-carrier non-disclosure implementation**.
+The docs-on-top -> one ordinary fast-forward publication model is unchanged. Source publication has
+not occurred in this run, and no local/upstream/remote parity is claimed. After the
+reviewed/committed RP5 docs, the exact next step is one ordinary fast-forward source publication.
+R2-3 remains blocked until that publication; R2-4 and R3 remain later. No historical result is
+rewritten as passing.
