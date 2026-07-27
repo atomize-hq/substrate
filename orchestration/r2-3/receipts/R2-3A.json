@@ -1,0 +1,65 @@
+{
+  "protocol": "codex.top-level-task-receipt.v1",
+  "orchestration_id": "substrate-r2-3",
+  "dispatch_nonce": "9d35f308854213e51b8de4ee28ab6d3a2f37448d3e7ddbb9d839b589ebdc2d91",
+  "increment": "R2-3A",
+  "status": "LANDED_CLEAN",
+  "increment_task": {
+    "thread_id": "019fa428-c262-7cd1-87a2-94d983a78dbe",
+    "host_id": "slingshot:env_e_6a526b2c77f48323b91bc944e1b6ed1e"
+  },
+  "expected_base": {
+    "commit": "c0d9cd4f5c60d6505429de75a2fa5a52887b9879",
+    "tree": "e715b4ce5fe6c227542e646fe53416438af44525"
+  },
+  "landed": {
+    "commit": "f2797fa84168c173e05d466e05dec8b7e85af92a",
+    "tree": "11fe4da11d67461d17e1af1534e0617b0fcc5c5a",
+    "target_ref": "refs/heads/feat/internal-host-orchestrator-world-dispatch-bootstrap",
+    "live_remote": "f2797fa84168c173e05d466e05dec8b7e85af92a"
+  },
+  "subject_fingerprint": "sha256:16f78b4422d831533f5d29681410cd65af45281c62c4fb730ddad832490e4bc7",
+  "changed_files": [
+    "crates/transport-api-types/src/lib.rs"
+  ],
+  "review": {
+    "packet_id": "A1.1d-5R2-3A",
+    "record_path": "/tmp/substrate-r2-3a-review.DeV4u2/review-cycle.json",
+    "record_sha256": "sha256:5157661b1d0fe9ff0a80dbb2aa8ad717caa66d4eb42e4cc2755e2dfe84218d02",
+    "validated": true,
+    "terminal": "CLEAN",
+    "p1": 0,
+    "p2": 0,
+    "p3_p4_disposition": "none"
+  },
+  "verification": {
+    "required_checks_passed": true,
+    "allowlist_passed": true,
+    "change_detection_passed": true,
+    "checkout_clean": true,
+    "ahead": 0,
+    "behind": 0,
+    "checks": [
+      "cargo fmt --all -- --check",
+      "cargo check -p transport-api-types",
+      "cargo test -p transport-api-types (66 passed)",
+      "cargo test -p transport-api-types --doc (11 passed)",
+      "cargo clippy -p transport-api-types --all-targets -- -D warnings",
+      "git diff --check",
+      "exact one-file and staged allowlist checks",
+      "Cargo.lock and all Cargo.toml files unchanged",
+      "no runtime or platform file changed",
+      "live target rechecked at expected base before publication",
+      "live remote equality and 0 ahead/0 behind after publication"
+    ]
+  },
+  "gitnexus": {
+    "pre_edit_impacts": "LOW; no affected execution process outside transport-api-types",
+    "change_detection": "LOW",
+    "affected_execution_flows": [],
+    "index_commit": "f2797fa84168c173e05d466e05dec8b7e85af92a"
+  },
+  "completion_claim": "R2-3A completes only the shared PlatformBootstrapMappingV1 wire-model prerequisite; it completes no consumer PI row and claims no native macOS or Windows mapping proof.",
+  "finding_disposition": "Three fresh discovery lenses returned CLEAN; no P1, P2, P3, or P4 findings and no inventory action required.",
+  "next_increment": "R2-3B"
+}
