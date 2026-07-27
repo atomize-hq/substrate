@@ -1,0 +1,77 @@
+{
+  "protocol": "codex.top-level-task-receipt.v1",
+  "orchestration_id": "substrate-r2-3",
+  "dispatch_nonce": "50e56a111930e6d2afba6e1f0c5de712b01d58251a0030e738d53743e602eaa1",
+  "increment": "R2-3C",
+  "status": "LANDED_CLEAN",
+  "increment_task": {
+    "thread_id": "019fa45b-42d2-74d1-a0d7-444615ded535",
+    "host_id": "remote-ssh-discovered:spenser-linux-codex"
+  },
+  "expected_base": {
+    "commit": "cd21bc95575b9c35a1802814b847f5d63b86e38f",
+    "tree": "a8e9cd52f2b9034896627218306a4c26a2e9bcf8"
+  },
+  "landed": {
+    "commit": "3264e21bbb3c0acc5f712af93bdc3d229bb8b9ad",
+    "tree": "80734514867ec0390ba4249878ed6cc30d597c72",
+    "target_ref": "refs/heads/feat/internal-host-orchestrator-world-dispatch-bootstrap",
+    "live_remote": "3264e21bbb3c0acc5f712af93bdc3d229bb8b9ad"
+  },
+  "changed_files": [
+    "crates/shell/Cargo.toml",
+    "crates/shell/src/execution/install_bootstrap.rs"
+  ],
+  "subject_fingerprint": "sha256:47f99ed854f60e7a489583a154fa49f872a88bd0685a1133bff4021609add40c",
+  "review": {
+    "packet_id": "A1.1d-5R2-3C",
+    "record_path": "/home/spenser/.codex/visualizations/2026/07/27/019fa45b-42d2-74d1-a0d7-444615ded535/r2-3c-review-cycle.json",
+    "record_sha256": "sha256:6741f1a179c37b28d06c36adc0db188e3b17befce5164dba6728c5bff1d94040",
+    "validated": true,
+    "terminal": "CLEAN",
+    "p1": 0,
+    "p2": 0,
+    "p3_p4_disposition": "R2-3C-P3-001 was causally dismissed as non-applicable; no valid unfixed P3/P4 remained."
+  },
+  "finding_disposition": {
+    "remediated_p2": [
+      "Rejected version-payload paths as install-prefix witnesses.",
+      "Rejected reparse points in every witness-path ancestor.",
+      "Removed FILE_SHARE_DELETE while validating held witness handles."
+    ],
+    "p3_p4": "No valid unfixed P3/P4 remained; no inventory edit was required."
+  },
+  "checks": {
+    "format": "PASS",
+    "cargo_check_locked_shell": "PASS",
+    "focused_unix_install_bootstrap_tests": "PASS: 8 unit tests plus focused integration test",
+    "cargo_test_locked_shell_install_bootstrap": "PASS",
+    "cargo_clippy_exact": "BASELINE_ONLY_FAILURE: 20 pre-existing needless_borrow diagnostics in untouched forbidden files",
+    "cargo_clippy_subject_supplement": "PASS with only the pre-existing needless_borrow lint allowed",
+    "windows_target": "x86_64-pc-windows-msvc installed; exact source and tests compile in the external focused harness; full shell cross-check stopped in ring because lib.exe is unavailable",
+    "diff_allowlist_manifest_lockfile": "PASS",
+    "unix_regression": "PASS: existing Unix functions, callers, test names, and behavior preserved",
+    "native_windows_evidence": "Not claimed; remains assigned to R2-3Z"
+  },
+  "gitnexus": {
+    "detect_changes": "HIGH due to cfg and line shifts; all 10 reported existing Unix flows inspected with no Windows consumer activation",
+    "indexed_commit": "3264e21bbb3c0acc5f712af93bdc3d229bb8b9ad",
+    "nodes": 35323,
+    "edges": 72189,
+    "flows": 300,
+    "status": "up-to-date"
+  },
+  "verification": {
+    "required_checks_passed": true,
+    "allowlist_passed": true,
+    "change_detection_passed": true,
+    "checkout_clean": true,
+    "lockfile_unchanged": true,
+    "other_manifests_unchanged": true,
+    "review_clean": true,
+    "gitnexus_checked": true,
+    "ahead": 0,
+    "behind": 0
+  },
+  "next_increment": "R2-3M1"
+}
