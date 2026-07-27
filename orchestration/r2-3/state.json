@@ -1,0 +1,56 @@
+{
+  "protocol": "codex.top-level-orchestration-state.v1",
+  "orchestration_id": "substrate-r2-3",
+  "status": "INITIALIZING",
+  "dispatch_authorized": false,
+  "remote": "origin",
+  "target_ref": "refs/heads/feat/internal-host-orchestrator-world-dispatch-bootstrap",
+  "required_ancestor": "0f1e147fb735791b44a65099a65167cbdc1803af",
+  "sequence": [
+    "R2-3A",
+    "R2-3B",
+    "R2-3C",
+    "R2-3M1",
+    "R2-3M2",
+    "R2-3M3",
+    "R2-3M4",
+    "R2-3W1",
+    "R2-3W2",
+    "R2-3W3",
+    "R2-3W4",
+    "R2-3W5",
+    "R2-3F",
+    "R2-3R",
+    "R2-3S1",
+    "R2-3S2",
+    "R2-3T",
+    "R2-3Z"
+  ],
+  "required_evidence": [
+    {
+      "evidence_id": "R2-3Z/MAC-EVIDENCE",
+      "platform": "macos",
+      "after_increment": "R2-3T",
+      "before_increment": "R2-3Z"
+    },
+    {
+      "evidence_id": "R2-3Z/WIN-EVIDENCE",
+      "platform": "windows",
+      "after_increment": "R2-3T",
+      "before_increment": "R2-3Z"
+    }
+  ],
+  "cursor": 0,
+  "expected_base": {
+    "commit": "c0d9cd4f5c60d6505429de75a2fa5a52887b9879",
+    "tree": "e715b4ce5fe6c227542e646fe53416438af44525"
+  },
+  "meta": {
+    "thread_id": null,
+    "host_id": null
+  },
+  "active_dispatch": null,
+  "active_evidence_dispatches": [],
+  "verified_evidence": [],
+  "completed": []
+}

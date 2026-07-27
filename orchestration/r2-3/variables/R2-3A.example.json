@@ -1,0 +1,20 @@
+{
+  "INCREMENT": "R2-3A",
+  "ORCHESTRATION_ID": "substrate-r2-3",
+  "DISPATCH_NONCE": "00000000000000000000000000000000",
+  "META_THREAD_ID": "BOUND_AT_META_BOOTSTRAP",
+  "META_HOST_ID": "BOUND_AT_META_BOOTSTRAP",
+  "PACKET_ID": "A1.1d-5R2-3A",
+  "NEXT_INCREMENT": "R2-3B",
+  "WORKING_DIRECTORY": "the task-assigned Codex worktree",
+  "PROTECTED_CHECKOUTS": [
+    "/home/spenser/__Active_code/substrate",
+    "/home/spenser/__Active_code/substrate-r2-3",
+    "/home/spenser/__Active_code/substrate-r2-3-meta-orchestration"
+  ],
+  "REMOTE": "origin",
+  "TARGET_REF": "refs/heads/feat/internal-host-orchestrator-world-dispatch-bootstrap",
+  "EXPECTED_BASE_COMMIT": "c0d9cd4f5c60d6505429de75a2fa5a52887b9879",
+  "EXPECTED_BASE_TREE": "e715b4ce5fe6c227542e646fe53416438af44525",
+  "REQUIRED_ANCESTOR": "0f1e147fb735791b44a65099a65167cbdc1803af"
+}
