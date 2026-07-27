@@ -733,6 +733,564 @@ forged-principal rejection; static Windows compilation plus assigned native Wind
 account/SID, no-follow file identity, and forged-principal rejection. No raw FFI, shim-local
 principal type, ambient account variable, or other feature/dependency is authorized.
 
+###### A1.1d-5R2-3 bounded docs-first subdivision
+
+R2-3 is too broad for one implementation/review subject. The binding order is:
+
+```text
+R2-3D
+  -> R2-3A -> R2-3B -> R2-3C
+  -> R2-3M1 -> R2-3M2 -> R2-3M3 -> R2-3M4
+  -> R2-3W1 -> R2-3W2 -> R2-3W3 -> R2-3W4 -> R2-3W5
+  -> R2-3F -> R2-3R -> R2-3S1 -> R2-3S2 -> R2-3T -> R2-3Z
+```
+
+This order is sequential. A later increment may be re-subdivided before implementation if its
+pre-edit impact or source-closure evidence exceeds the frozen risk ceiling; it may not absorb an
+earlier incomplete outcome. `R2-3D` alone is authorized by the current docs-first session. It
+completes only the subdivision below and does not authorize or complete `R2-3A`.
+
+The current published tip includes four frozen prerequisites after the historical R2-2 publication:
+`ebaf8941` keeps installer configuration private, `a009959b` stages gateway-smoke manifests as
+trusted files, `343844c9` preserves install context in agent doctor, and `43e528af` calibrates the
+bounded-review process. They remain prior work, not R2-3 implementation or proof. Reopening any of
+them requires a concrete contradiction against current repository truth.
+
+The parent R2-3 row above remains controlling. In the child records below, **owns** means the named
+increment is the primary implementation/proof owner for that PI row; **supports** means the
+increment supplies a prerequisite but may not claim that PI complete. PI-059 is a harness-only
+call-site update; PI-077 and PI-078 are frozen capability guards; PI-050 remains an R2-4 guardrail;
+PI-080 is already satisfied by R2-2. PI-047, PI-051, PI-053, PI-092–PI-102, and PI-113–PI-114
+remain R3-exclusive. No child may claim the parent packet complete before R2-3Z.
+
+Every child uses this same fingerprint/review method:
+
+1. freeze the pre-edit commit and exact child file/test allowlist;
+2. before its discovery fingerprint, run format or parser checks, focused tests, `git diff --check`,
+   and an allowlist/status check;
+3. hash a sorted manifest containing the pre-edit commit plus, for every exact subject path, its
+   repository-relative path, Git mode (or `NEW`), and `git hash-object --no-filters` blob ID (or
+   `MISSING`); SHA-256 of that manifest is the `subject_fingerprint`;
+4. open a new V1 review-cycle record with packet ID equal to the child ID and validate it with
+   `review-control/validate_review_cycle.py` after every returned cycle;
+5. permit one complete-subject discovery burst, one consolidated P1/P2 remediation, one
+   different-fresh closure, and at most two immediately causal supplemental cycles; demonstrated
+   P1/P2 block, valid unfixed P3/P4 are added to or deduplicated in `06`, and CLEAN is terminal; and
+6. run `gitnexus_detect_changes()` before any child commit. An unexpected production symbol,
+   execution flow, file, dependency, or generated artifact stops the child.
+
+Before editing any named existing symbol, run upstream GitNexus impact with tests included for that
+exact symbol/file disambiguation and record direct callers, affected processes/modules, and risk.
+New symbols record `N/A (new)` plus impact on the existing constructor/caller they replace or feed.
+Shell/PowerShell functions that GitNexus does not index require the same pre-edit source-caller
+closure by exact name. HIGH or CRITICAL is a warning-and-confirm checkpoint; an unreviewed
+authority root, side table, lifecycle edge, or unrelated flow is a stop. `managed_host_socket_path`,
+platform backend constructors, factory migration, shared pipe state, and forwarding boundaries are
+presumptively HIGH/CRITICAL even if an index under-reports cfg-specific callers.
+
+Across every child, the following remain frozen: host/guest path or principal equality; ambient
+home/control-root/pipe selection; backend-selected home; WSL or Lima capability enablement; base
+Lima profiles; VSock/TCP admission into V1 normal-product proof; policy/world/replay semantics not
+named by the parent row; and all R3 deletion, replacement, rollback, teardown, timeout-kill,
+wildcard, recursive, manifest, retry, and convergence authority. The exact WSL warm guard and
+`scripts/wsl/provision.sh` exit-4 body remain byte-identical. Mac forwarding activation stops before
+child launch until R3 lands PI-101/PI-113/PI-114 together. A frozen-byte change, allowlist
+expansion, false native claim, or need to guess guest identity is
+`ArchitecturalBoundaryDecisionRequired`.
+
+**R2-3D — docs-only subdivision.**
+
+- **Outcome/claim:** make the published current status truthful and freeze this exact child
+  sequence. It completes planning only.
+- **PI ownership:** owns no PI and completes no product gate.
+- **Files/symbols/tests:** only `00-README.md` current-status text and this R2-3 subdivision in
+  `03-phase-slice-map.md`; no production symbol, test, manifest, lockfile, installer, or script.
+- **Dependencies/evidence:** requires published R2-2 plus the four frozen post-publication fixes.
+  Markdown/diff/allowlist checks and GitNexus change detection are the complete D gate; no R2
+  product proof gate is claimable and native evidence is not applicable.
+- **Impact/review/stop:** no symbol impact call is required. Fingerprint exactly the two docs and
+  use review record packet ID `A1.1d-5R2-3D`. Any product/test byte, PI completion claim, edit to
+  `02`/`04`/`05`/`06` without a concrete contradiction, or authorization of R2-3A stops D.
+
+**R2-3A — shared PM wire model.**
+
+- **Outcome/claim:** add only the canonical, strict mapping/instance/transport/scope value model;
+  no runtime consumer or platform mutation. This is the narrowest correct first product increment.
+- **PI ownership:** supports PI-039–PI-041, PI-048–PI-049, PI-052, PI-054–PI-060, PI-075–PI-076,
+  PI-079, PI-081, PI-090–PI-091, PI-112, and PI-115; completes none of those consumer rows.
+- **Files:** only `crates/transport-api-types/src/lib.rs`.
+- **Existing/new symbols:** existing IH types, path normalizers, and their behavior remain
+  unchanged. Add exactly `PlatformInstanceIdentityV1`, `PlatformTransportIdentityV1`,
+  `PlatformBootstrapMappingV1`, `WindowsForwarderScopeV1`, mapping member operations
+  `new_lima`, `new_wsl`, `validate`, `encode`, and `decode`, scope member `derive`, and
+  `normalize_windows_pipe_path`. No other public symbol.
+- **Tests/proof:** colocated tests only:
+  `platform_bootstrap_mapping_lima_golden_vector_is_exact`,
+  `platform_bootstrap_mapping_wsl_golden_vector_is_exact`,
+  `platform_bootstrap_mapping_rejects_noncanonical_or_tampered_records`, and
+  `windows_forwarder_scope_and_pipe_normalization_are_canonical`; run the
+  `transport-api-types` crate tests. These are the shared type prerequisites for
+  R2-MAP-MAC-01/R2-MAP-WIN-01 and prove exact thirteen-line framing, outer unpadded base64url,
+  commitment equality, canonical re-encoding, guest/host non-equality, pipe normalization, digest,
+  and unknown/duplicate/reordered/tampered rejection.
+- **Dependencies/native:** depends only on D and the existing IH model. Static wire proof only;
+  native macOS/Windows mapping remains assigned to Z.
+- **Impact/review/stop:** impact `normalize_windows_install_bootstrap_path`, `encode_inner_field`,
+  `decode_inner_field`, `record_value`, `require_record_value`, and `is_lower_hex_digest` before
+  reuse edits; new symbols are N/A and require context on `InstallBootstrapContextCarrierV1`.
+  Packet ID `A1.1d-5R2-3A`. Any consumer/dependency/platform edit, alternate home selector, mapping
+  side table, or lifecycle authority stops A.
+
+**R2-3B — exact dependency edges.**
+
+- **Outcome/claim:** make only the closed dependency/feature edges needed by later typed consumers;
+  no runtime behavior.
+- **PI ownership:** supports PI-054, PI-060, PI-090, PI-115, and PI-116; completes no PI.
+- **Files/symbols:** only `crates/world-backend-factory/Cargo.toml`,
+  `crates/forwarder/Cargo.toml`, `crates/shim/Cargo.toml`, and `Cargo.lock`; no Rust symbol.
+  Add only the three exact `transport-api-types = { version = "0.2.8", path =
+  "../transport-api-types" }` edges, shim `nix` feature `user`, shim target-Windows
+  `windows-sys 0.52` features named by the parent, and the exact three lock dependency-list changes.
+- **Tests/proof:** no test file and no product gate. Run the parent dependency-closure gate with
+  locked metadata/build resolution and prove no package/version/checksum/target/other feature or
+  dependency-list change.
+- **Dependencies/native:** depends on A; native evidence is not applicable.
+- **Impact/review/stop:** manifest-only, so no symbol impact call; inspect consumers
+  `factory`, `PipeListener::new`, `spawn_bridge`, `ShimContext::from_current_exe`, and
+  `ManagerHintEngine::new` before asserting need. Packet ID `A1.1d-5R2-3B`. Any shell manifest or
+  unexpected lock hunk stops B.
+
+**R2-3C — shell Windows principal and installed-witness observation.**
+
+- **Outcome/claim:** provide the target-Windows OS observation needed to bind the current
+  account+SID, token Known Folder, and installed release-copy witness; no installer or world
+  consumer.
+- **PI ownership:** supports PI-042–PI-046, PI-048–PI-049, PI-052, PI-068–PI-070, PI-076,
+  PI-079, PI-081, and PI-090; completes none.
+- **Files:** only `crates/shell/Cargo.toml` and
+  `crates/shell/src/execution/install_bootstrap.rs`.
+- **Existing/new symbols:** preserve all Unix functions. Add exact Windows counterparts
+  `construct_windows_install_bootstrap_context`,
+  `decode_and_bind_windows_install_bootstrap_context`,
+  `bind_windows_install_bootstrap_context`,
+  `current_windows_principal_and_known_folder`,
+  `windows_known_folder_for_principal`,
+  `resolve_windows_install_prefix_from_invocation`, and
+  `require_same_windows_file_identity`; no raw FFI and no ambient account/folder variable.
+  The shell manifest may add only the parent-row `windows-sys` features; no lock hunk.
+- **Tests/proof:** the Windows-observation prerequisites of R2-MAP-WIN-01/R2-DIAG-01 use
+  colocated target-Windows tests for canonical account/SID and token Known Folder, release-copy
+  self-derivation under ambient B, no-follow exact file identity, forged principal, zero/multiple
+  witness, and conflicting projection rejection; static Windows compilation where available.
+  Native Windows use remains assigned to Z.
+- **Dependencies/impact/review:** depends on A. Impact every existing Unix analogue before any
+  shared-helper edit, especially `construct_unix_install_bootstrap_context`,
+  `decode_and_bind_unix_install_bootstrap_context`,
+  `bind_unix_install_bootstrap_context`, `current_unix_principal_and_home`,
+  `resolve_unix_install_prefix_from_invocation`, and `require_same_file_identity`.
+  Packet ID `A1.1d-5R2-3C`. A Unix behavior change, environment-selected principal/Known Folder,
+  routing-file edit, new dependency/version, or lock hunk stops C.
+
+**R2-3M1 — macOS helper mapping and two-stage observation.**
+
+- **Outcome/claim:** make direct macOS helpers consume IH, derive the account-database Lima control
+  root, perform only declared-instance Stage 1, and finalize/diagnose PM from an already-running
+  guest before R2 projection.
+- **PI ownership:** owns PI-039 and the macOS half of PI-081; supports PI-040–PI-041 and PI-075.
+- **Files:** only `scripts/mac/lima-warm.sh` and `scripts/mac/lima-doctor.sh`.
+- **Existing/new symbols:** edit `check_only_status`, `render_profile`, `vm_exists`, `vm_status`,
+  `create_vm`, `start_vm`, `wait_for_running`, `ensure_vm_ready`, `configure_guest`, `diagnose`,
+  `check_rendered_unit_parity`, and `run_breakglass_guest_checks`; add shell functions
+  `resolve_install_bootstrap_context_v1`, `resolve_lima_control_root_v1`,
+  `run_limactl_with_mapping_env_v1`, `observe_lima_mapping_v1`, and
+  `verify_lima_mapping_v1`. `destroy_vm`, `stage_workspace`, cleanup bodies in
+  `write_systemd_units`/`enable_socket_activation`, and all forwarding actions are frozen.
+- **Tests/proof:** R2-MAP-MAC-01/R2-DIAG-01 use
+  `tests/mac/lima_doctor_fixture.sh` plus new
+  `tests/mac/prefix_mapping_r2_3.sh`; prove public B scrubbing, internal projection mismatch
+  rejection, exact child `HOME`/`LIMA_HOME`, machine ID/account/UID/home observation, Stage order,
+  and no delete/stage/unit/socket/forwarder action.
+- **Dependencies/native:** follows A–C in the binding order but consumes only A and the existing IH
+  conventions, not Windows-only C behavior. Static/focused tests only; Z owns the native
+  pre-existing-Lima mapping-only record.
+- **Impact/review/stop:** run GitNexus/file-qualified impact where indexed for every edited function
+  and exact shell caller closure otherwise; `ensure_vm_ready` and `configure_guest` are
+  HIGH-posture. Packet ID `A1.1d-5R2-3M1`. Need for guessed guest home, delete/rebuild, base-profile
+  change, unit/socket cleanup, or forwarder launch stops M1.
+
+**R2-3M2 — macOS typed backend primitives.**
+
+- **Outcome/claim:** make Lima command, VM, socket, and backend construction consume typed
+  control-root/mapping inputs without selecting ambient state; no forwarding activation.
+- **PI ownership:** supports PI-041, PI-054–PI-056, PI-075, and PI-090–PI-091; completes no
+  cross-caller PI.
+- **Files:** only `crates/world-mac-lima/src/lib.rs`,
+  `crates/world-mac-lima/src/transport.rs`, `crates/world-mac-lima/src/limactl.rs`, and
+  `crates/world-mac-lima/src/vm.rs`.
+- **Existing/new symbols:** edit `MacLimaBackend::new`, `MacLimaBackend::new_with_vm_name`,
+  `ensure_vm_running`, `get_agent_endpoint`, `managed_host_socket_path`,
+  `managed_host_socket_path_from`, `Transport::auto_select`, `limactl::path`,
+  `limactl::command`, `LimaVM::new`, `LimaVM::status`, `LimaVM::ensure_running`,
+  `LimaVM::start`, `LimaVM::wait_for_running`, `LimaVM::exec`, `LimaVM::info`, and
+  `run_limactl`; add `MacLimaBackend::new_with_mapping`,
+  `managed_host_socket_path_for_mapping`, and `limactl::command_for_control_root`.
+  Existing diagnostic constructors may remain only explicitly labeled non-product.
+- **Tests/proof:** the backend-primitive portion of R2-MAP-MAC-01 uses colocated tests only; prove
+  A-scoped future socket, typed control root, scrubbed child environment, mapping mismatch
+  rejection, and diagnostic transport non-authority without starting forwarding.
+- **Dependencies/native:** depends on M1 and B. Static Rust proof only; Z owns native evidence.
+- **Impact/review/stop:** impact every named existing Rust symbol; treat
+  `managed_host_socket_path` and both backend constructors as CRITICAL regardless of cfg graph
+  under-reporting. Packet ID `A1.1d-5R2-3M2`. An ambient fallback, backend-selected home,
+  contextless normal constructor, or forwarding/lifecycle reachability stops M2.
+
+**R2-3M3 — macOS forwarding boundary without activation.**
+
+- **Outcome/claim:** fix the future PM-bound SSH-UDS target and A-scoped known-hosts projection,
+  remove auto-selection from the validated path, and fail before forwarding child launch with the
+  explicit R3 prerequisite.
+- **PI ownership:** owns PI-041 and PI-112; PI-101/PI-113/PI-114 remain frozen R3 rows.
+- **Files:** only `crates/world-mac-lima/src/forwarding.rs`,
+  `crates/world-mac-lima/src/transport.rs`, and `crates/world-mac-lima/src/lib.rs`.
+- **Existing/new symbols:** edit `forwarding::auto_select`, `create_ssh_uds_forwarding`,
+  `lima_home_dir`, `lima_ssh_config_path`, `Transport::auto_select`,
+  `MacLimaBackend::ensure_forwarding`, and `MacLimaBackend::get_agent_endpoint`; add
+  `lima_home_dir_for_mapping`, `lima_ssh_config_path_for_mapping`, and
+  `r3_forwarding_activation_required`. `ForwardingHandle::drop`, explicit/SSH-side unlink,
+  `StreamLocalBindUnlink`, timeout kill/wait, VSock/TCP constructors, and retry/teardown bodies are
+  byte-frozen.
+- **Tests/proof:** R2-MAP-MAC-01/R2-GEN-01 use colocated tests only; prove fixed
+  `A/sock/agent.sock` to `/run/substrate.sock`, exact `A/lima_known_hosts`, ambient
+  VSock/TCP/SSH availability non-authority, and failure before command spawn or socket mutation.
+  No current forwarding test may count as product proof.
+- **Dependencies/native:** depends on M2. Static no-forwarder proof only; Z owns native mapping and
+  macOS product transport remains pending R3.
+- **Impact/review/stop:** impact every named function and `ForwardingHandle::drop` for frozen
+  reachability; HIGH/CRITICAL is expected. Packet ID `A1.1d-5R2-3M3`. Any call to the current SSH
+  constructor from the validated path or any lifecycle-byte change stops M3.
+
+**R2-3M4 — macOS installer, unit, shell, and proof projection.**
+
+- **Outcome/claim:** carry the already-selected IH/PM through dev/release macOS call sections,
+  generated guest unit/socket projections, and host doctor/invocation surfaces without activating
+  forwarding.
+- **PI ownership:** owns PI-009, PI-022, and PI-040; supports PI-055 and PI-075, which F completes;
+  PI-059 is harness-only.
+- **Files:** only macOS call sections in
+  `scripts/substrate/dev-install-substrate.sh` and
+  `scripts/substrate/install-substrate.sh`,
+  mapping/projection-only sections in `scripts/mac/lima-warm.sh`,
+  `scripts/mac/lima/units/substrate-world-service.service.tmpl`,
+  `scripts/mac/lima/units/substrate-world-service.socket`,
+  `crates/shell/src/execution/invocation/plan.rs`,
+  `crates/shell/src/execution/platform/macos.rs`, and call-site-only
+  `crates/world-mac-lima/examples/mac_backend_smoke.rs`.
+- **Existing/new symbols:** edit `provision_macos_world`, `install_macos`, the dev macOS
+  `lima-warm.sh` call section, `write_systemd_units`, `configure_guest`,
+  `ShellConfig::from_args`, `ShellConfig::from_cli`,
+  `host_doctor_main`, `world_doctor_main`, `resolve_lima_vm_name`,
+  `selected_host_visible_transports`, `try_bootstrap_host_visible_transport`,
+  `collect_world_doctor_assessment`, and example `main`; add no new symbol. Cleanup statements
+  inside `write_systemd_units`/`configure_guest` remain byte-frozen. Unit templates may project
+  only the verified commitment/mapping/service/socket fields.
+- **Tests/proof:** R2-MAP-MAC-01/R2-GEN-01/R2-DIAG-01 use mapping/context-only cases in
+  `tests/mac/installer_parity_fixture.sh`,
+  `tests/mac/lima_doctor_fixture.sh`, `tests/mac/prefix_mapping_r2_3.sh`, colocated shell tests, and
+  example compile/call update. Prove no outer override, A/B isolation, unit/doctor commitment
+  agreement, explicit R3 prerequisite, and no lifecycle action.
+- **Dependencies/native:** depends on M1–M3. Static/focused proof only; Z owns native macOS record.
+- **Impact/review/stop:** impact every named Rust symbol and exact shell caller closure; treat
+  `ShellConfig::from_cli`, doctor transport selection, and backend construction as HIGH posture.
+  Packet ID `A1.1d-5R2-3M4`. Non-mac installer edits, forwarding activation, unit/socket cleanup, or
+  product-transport claim stops M4.
+
+**R2-3W1 — Windows installer context and child propagation.**
+
+- **Outcome/claim:** construct the same Windows IH for dev/release install and uninstall, carry it
+  through profile/shim/doctor/guarded-WSL child calls including `-NoAutoSource`, and keep deletion
+  semantics unchanged.
+- **PI ownership:** owns PI-042–PI-046 and PI-068–PI-070.
+- **Files:** only `scripts/windows/dev-install-substrate.ps1`,
+  `scripts/windows/dev-uninstall-substrate.ps1`,
+  `scripts/windows/install-substrate.ps1`, and
+  `scripts/windows/uninstall-substrate.ps1`.
+- **Existing/new symbols:** edit only prefix/context setup and existing shim/profile/doctor/WSL
+  call sections; add PowerShell functions `Resolve-InstallBootstrapContextV1`,
+  `Assert-InstallBootstrapContextV1`, and `Invoke-SubstrateWithInstallContextV1` where needed.
+  Release-copy self-derivation must bind the installed binary and current token. Every recursive,
+  wildcard, profile-removal, version/bin replacement, stop/unregister, and cleanup block is frozen.
+- **Tests/proof:** R2-MAP-WIN-01/R2-GEN-01/R2-DIAG-01 use new
+  `scripts/windows/prefix-mapping-r2-3.Tests.ps1`; prove default/custom A, ambient B, repeat
+  propagation, `-NoAutoSource`, install/uninstall selection symmetry, current account+SID, forged
+  carrier rejection, and zero B mutation. No lifecycle deletion is proof.
+- **Dependencies/native:** depends on A–C. Static PowerShell proof only; Z owns native Windows.
+- **Impact/review/stop:** exact source-caller closure for all edited top-level blocks and new
+  functions; impact the shell Windows observation symbols they invoke. Packet ID
+  `A1.1d-5R2-3W1`. A wildcard/recursive/action-predicate change, environment-selected Known Folder,
+  guard movement, or deletion claim stops W1.
+
+**R2-3W2 — Windows public helper and diagnostic mapping.**
+
+- **Outcome/claim:** select/normalize the pipe once, validate IH/PM/current token at public helper
+  boundaries, project the typed control root/scope, and preserve the WSL guard before mutation.
+- **PI ownership:** owns PI-052 and the Windows half of PI-081; owns the selection edge of PI-079
+  and supports PI-045, PI-049, PI-076, and PI-115.
+- **Files:** only `scripts/windows/start-forwarder.ps1`,
+  `scripts/windows/pipe-status.ps1`, `scripts/windows/wsl-warm.ps1`, and
+  `scripts/windows/wsl-doctor.ps1`.
+- **Existing/new symbols:** edit parameter/intake/diagnostic/child-argument sections and
+  `Get-PipeNameFromPath`, `Normalize-WSLName`, `Get-InstalledWslDistros`,
+  `Test-NamedPipe`, and `Get-ForwarderTargetInfo`; add
+  `Resolve-PlatformBootstrapMappingV1`, `Assert-PlatformBootstrapMappingV1`,
+  `Get-WindowsForwarderScopeV1`, and `Assert-CurrentWindowsPrincipalV1`.
+  `start-forwarder.ps1` timeout kill and every statement from the `wsl-warm.ps1` guard onward are
+  byte-frozen.
+- **Tests/proof:** R2-MAP-WIN-01/R2-DIAG-01 use new
+  `scripts/windows/prefix-mapping-r2-3.Tests.ps1`; prove canonical pipe, exact registered distro
+  spelling/machine ID/guest identity, token Known Folder, scope digest, A-scoped future
+  config/logs, shared PID target, ambient mismatch rejection, and exact guard bytes.
+- **Dependencies/native:** depends on W1. Static/focused only; Z owns native existing-WSL evidence.
+- **Impact/review/stop:** source-caller closure for each edited PowerShell function and impact
+  `normalize_windows_pipe_path`/`WindowsForwarderScopeV1::derive`. Shared pipe/PID state is
+  HIGH/CRITICAL posture. Packet ID `A1.1d-5R2-3W2`. Guard movement, provisioning activation,
+  timeout kill, PID removal, or deletion-manifest semantics stops W2.
+
+**R2-3W3 — Windows WSL typed backend.**
+
+- **Outcome/claim:** make the backend/paths/transport/warm interfaces consume and revalidate the
+  verified PM without environment/default reselection or enabling guarded provisioning.
+- **PI ownership:** owns PI-048 and supports PI-057, PI-076, PI-079, PI-090–PI-091, and PI-115.
+- **Files:** only `crates/world-windows-wsl/src/backend.rs`,
+  `crates/world-windows-wsl/src/lib.rs`, `crates/world-windows-wsl/src/paths.rs`,
+  `crates/world-windows-wsl/src/transport.rs`, and
+  `crates/world-windows-wsl/src/warm.rs`.
+- **Existing/new symbols:** edit `WindowsWslBackend::new`, `WindowsWslBackend::build`,
+  `agent_transport`, `build_agent_client`, `ensure_agent_ready`, `ensure_ready`,
+  `ensure_persistent_session_ready`, `WarmCmd::enabled`, `WarmCmd::run`,
+  `detect_tcp_forwarder`, `to_wsl_path`, and `to_windows_display_path`; add
+  `WindowsWslBackend::new_with_mapping`, `observe_wsl_mapping_v1`, and
+  `validate_wsl_mapping_v1`. Existing TCP mode remains diagnostic-only.
+- **Tests/proof:** the backend portion of R2-MAP-WIN-01/R2-DIAG-01 uses colocated tests and
+  `crates/world-windows-wsl/src/tests.rs`, plus mapping-only cases in
+  `scripts/windows/prefix-mapping-r2-3.Tests.ps1`; prove exact distro/guest
+  machine/principal/home/pipe/commitment and failure before warm/provision on missing or conflicting
+  PM.
+- **Dependencies/native:** depends on W2 and B. Static backend proof only; Z owns native evidence.
+- **Impact/review/stop:** impact every named Rust symbol; constructor and warm paths are
+  HIGH/CRITICAL even when cfg indexing is incomplete. Packet ID `A1.1d-5R2-3W3`. Environment
+  selection, guarded provisioning, guest-home guess, or transport redesign stops W3.
+
+**R2-3W4 — Windows forwarder internal boundary.**
+
+- **Outcome/claim:** require authenticated IH/PM and explicit A-scoped config/log paths in internal
+  forwarder mode, validate token/distro/pipe/target/commitment, and transport but never delete the
+  shared PID target.
+- **PI ownership:** owns PI-049 and the forwarder-config consumption slice of PI-079; supports
+  PI-060 and PI-115.
+- **Files:** only `scripts/windows/start-forwarder.ps1`,
+  `crates/forwarder/src/config.rs`, `crates/forwarder/src/logging.rs`,
+  `crates/forwarder/src/windows.rs`, and `crates/forwarder/src/main.rs`.
+- **Existing/new symbols:** edit `Cli`, `Cli::resolve_log_dir`, `windows::run`,
+  `ForwarderConfig::load`, `default_config_path`, `resolve_target`, `logging::init`, and both cfg
+  `main` entries; add `ForwarderConfig::load_internal` and
+  `ForwarderConfig::validate_mapping`. Internal mode has no `LOCALAPPDATA`/`USERPROFILE` or target
+  environment default. Timeout kill/PID removal/process termination remain frozen.
+- **Tests/proof:** R2-MAP-WIN-01/R2-GEN-01 use colocated forwarder tests plus
+  `scripts/windows/prefix-mapping-r2-3.Tests.ps1`; prove exact explicit config/log/PID paths,
+  token/carrier/PM equality, environment conflict rejection, and diagnostic TCP non-promotion.
+- **Dependencies/native:** depends on W2–W3 and B. Static proof only; Z owns native Windows.
+- **Impact/review/stop:** impact all named Rust symbols and source-close the PowerShell launch.
+  Shared-state and CLI default removal are HIGH posture. Packet ID `A1.1d-5R2-3W4`. Ambient
+  selection, PID deletion/ownership manifest, timeout action, or stream behavior change stops W4.
+
+**R2-3W5 — Windows pipe listener and PM-derived WSL leaf.**
+
+- **Outcome/claim:** bind the named-pipe listener to the normalized PM pipe and make the WSL bridge
+  child receive only PM-derived distro/target/commitment with overwritten target environment and
+  `WSLENV`.
+- **PI ownership:** owns PI-060 and PI-115 and completes the downstream-consumer slice of PI-079.
+- **Files:** only `crates/forwarder/src/pipe.rs`, `crates/forwarder/src/bridge.rs`, and
+  `crates/forwarder/src/wsl.rs`.
+- **Existing/new symbols:** edit `PipeListener::new`, `normalize_path`, `serve`,
+  `run_pipe_session`, `run_tcp_session`, `spawn_bridge`, and `wsl::spawn`; add no public symbol.
+  `finalize_bridge`, `bridge_copy`, `WslStream` read/write/shutdown, and wait/stream semantics are
+  frozen except exact argument plumbing required by the named callers.
+- **Tests/proof:** R2-MAP-WIN-01 uses colocated tests plus
+  `scripts/windows/prefix-mapping-r2-3.Tests.ps1`; prove commitment-bound pipe, conflict rejection,
+  exact `wsl -d` registered spelling, exact UDS target/commitment, full overwrite of inherited
+  target variables/`WSLENV`, and diagnostic TCP non-promotion.
+- **Dependencies/native:** depends on W4. Static leaf proof only; Z owns native Windows/WSL.
+- **Impact/review/stop:** impact every named Rust symbol; pipe listener and child spawn are
+  HIGH/CRITICAL posture. Packet ID `A1.1d-5R2-3W5`. Pipe reselection, inherited target authority,
+  provisioning, timeout kill, stop/unregister, or stream/wait semantic change stops W5.
+
+**R2-3F — typed factory and shell platform callers.**
+
+- **Outcome/claim:** require the explicit typed factory projection on macOS/Windows and migrate all
+  shell platform, platform-world, gateway, and doctor callers; no contextless platform factory
+  remains reachable.
+- **PI ownership:** owns PI-054–PI-058 and PI-075–PI-076; supports PI-090–PI-091.
+- **Files:** only `crates/world-backend-factory/src/lib.rs`,
+  `crates/shell/src/execution/invocation/plan.rs`,
+  `crates/shell/src/execution/platform/macos.rs`,
+  `crates/shell/src/execution/platform/windows.rs`,
+  `crates/shell/src/execution/platform_world/mod.rs`,
+  `crates/shell/src/execution/platform_world/windows.rs`, and
+  `crates/shell/src/builtins/world_gateway.rs`.
+- **Existing/new symbols:** edit every cfg `factory`, `ShellConfig::from_args`,
+  `ShellConfig::from_cli`, both platform `host_doctor_main`/`world_doctor_main`,
+  `connect_transport_stream_ws`, platform `detect`, Windows `context`, `get_backend`,
+  `build_agent_client`, `build_macos_gateway_client`, `resolve_macos_gateway_client_endpoint`,
+  `resolve_macos_host_gateway_socket`, `macos_default_world_socket_path`, and
+  `build_gateway_client`; add only the `PlatformWorldContext::bootstrap_mapping` field. Linux
+  factory behavior stays platform-independent.
+- **Tests/proof:** R2-MAP-MAC-01/R2-MAP-WIN-01/R2-DIAG-01 and the applicable unchanged
+  R2-RUNTIME-01 differential use colocated tests in the named files, mapping-only macOS/Windows
+  focused tests, and the unchanged gateway differential; prove explicit shell callers,
+  contextless platform failure before client/backend selection, Linux parity, and no
+  forwarding/provisioning action.
+- **Dependencies/native:** depends on M4 and W5. Static call-graph proof only; Z owns native runs.
+- **Impact/review/stop:** impact every named Rust symbol; factory's indexed LOW result does not
+  waive manual cfg source closure, and platform constructors remain HIGH/CRITICAL posture. Packet
+  ID `A1.1d-5R2-3F`. A missing caller, new backend authority, Linux semantic change, lifecycle
+  reachability, or gateway contract change stops F.
+
+**R2-3R — replay factory-context migration.**
+
+- **Outcome/claim:** carry explicit bootstrap/factory input through shell replay, public replay
+  config, planner, and executor only; macOS/Windows direct library world calls without it fail before
+  factory construction.
+- **PI ownership:** owns PI-091.
+- **Files:** only `crates/shell/src/execution/routing/replay.rs`,
+  `crates/replay/src/lib.rs`, `crates/replay/src/replay/mod.rs`,
+  `crates/replay/src/replay/planner.rs`, and
+  `crates/replay/src/replay/executor.rs`.
+- **Existing/new symbols:** edit `handle_replay_command`, `ReplayConfig`, `replay_span`,
+  `replay_batch`, `ExecutionState`, `execute_in_world`, `replay_sequence`,
+  `execute_with_world_backends`, and `try_world_backend`; add only
+  `ReplayConfig::platform_bootstrap_mapping` and its exact internal `ExecutionState` projection.
+  Recorded command/environment/origin/policy/timeout/strategy and agent-fallback semantics are
+  byte-behavior frozen.
+- **Tests/proof:** the factory-caller portions of
+  R2-MAP-MAC-01/R2-MAP-WIN-01/R2-SHIM-01 use `crates/replay/tests/integration.rs`,
+  `crates/replay/tests/planner_executor.rs`, and factory-context-only cases in
+  `crates/shell/tests/replay_world.rs`; prove explicit platform projection, pre-factory failure when
+  absent, Linux parity, and unchanged replay differentials.
+- **Dependencies/native:** depends on F. Static/focused replay proof; Z owns native platform
+  mapping, not replay semantic reproof.
+- **Impact/review/stop:** impact every named symbol, especially `ReplayConfig`,
+  `execute_with_world_backends`, and `try_world_backend`. Packet ID `A1.1d-5R2-3R`. Any replay
+  semantic/schema/timeout/strategy change or ambient factory fallback stops R.
+
+**R2-3S1 — physical-shim IH, manager, and factory binding.**
+
+- **Outcome/claim:** recover exactly one no-follow invocation witness for the physical shim, bind
+  the current OS principal, and use that IH for A-only manager manifests and explicit telemetry
+  factory projection before dispatch.
+- **PI ownership:** owns PI-090 and PI-116; supports PI-118.
+- **Files:** only `crates/shim/src/context.rs`, `crates/shim/src/exec/mod.rs`, and
+  `crates/shim/src/exec/logging.rs`.
+- **Existing/new symbols:** edit `ShimContext::from_current_exe`, `resolve_invoked_path`,
+  both cfg `find_candidate_in_dir`, `check_candidate`, `run_shim`,
+  `collect_world_telemetry`, `ManagerHintEngine::new`, `manifest_paths`,
+  `manifest_overlay_path`, and `repo_manifest_path`; add
+  `resolve_install_bootstrap_context_from_invocation` and
+  `current_platform_principal_v1`. PATH/CWD may resolve a unique witness but never prefix
+  precedence; repo/ambient/manifest-environment fallback is unreachable in normal product mode.
+- **Tests/proof:** R2-SHIM-01/R2-GEN-01 and the shim factory portions of
+  R2-MAP-MAC-01/R2-MAP-WIN-01 use colocated tests and
+  `crates/shim/tests/integration.rs`; prove absolute/relative/bare invocation, zero/multiple
+  candidates, exact current Unix account+UID or Windows account+SID, no-follow identity, forged
+  principal rejection, A-base/A-overlay manager hints, no repo fallback, explicit telemetry
+  mapping, and zero B access.
+- **Dependencies/native:** depends on B, C, and F. Native Unix shim proof may be recorded here;
+  native Windows mapping remains assigned to Z.
+- **Impact/review/stop:** impact all named symbols; graph LOW for `run_shim` does not waive the
+  physical process-root review. Packet ID `A1.1d-5R2-3S1`. Multiple-witness guessing, ambient/repo
+  selection, manager semantic change, recursive shim action, or lifecycle change stops S1.
+
+**R2-3S2 — physical-shim trace and policy projection.**
+
+- **Outcome/claim:** bind explicit product trace/policy inputs from the S1 IH before manager,
+  policy, telemetry, span, or execution logging and reuse that one binding throughout the physical
+  shim.
+- **PI ownership:** owns the physical-shim portion of PI-118; T remains the final compatibility
+  owner.
+- **Files:** only `crates/shim/src/exec/mod.rs`,
+  `crates/shim/src/exec/policy.rs`, `crates/shim/src/logger.rs`, and exact invocation/factory
+  projection in `crates/shim/src/exec/logging.rs`.
+- **Existing/new symbols:** edit `run_shim`, `evaluate_policy`, `start_span`,
+  `log_execution`, `write_log_entry`, and `collect_world_telemetry`; add no public symbol.
+  `evaluate_policy` and logging reuse the already-bound context and cannot initialize or select
+  ambient state.
+- **Tests/proof:** R2-SHIM-01/R2-DIAG-01 use colocated tests and
+  `crates/shim/tests/integration.rs`; prove only
+  `A/trace.jsonl`, policy Git A, repeated A reuse, conflicting-path rejection, missing-metadata
+  no-fallback, and zero B filesystem access. Rotation/retention/writer/span/policy semantics are
+  frozen.
+- **Dependencies/native:** depends on S1 and R. Native Unix physical-shim evidence may land here;
+  Z owns final cross-platform accounting.
+- **Impact/review/stop:** impact every named symbol and `TraceContext::explicit_product` as the
+  consumed boundary. Packet ID `A1.1d-5R2-3S2`. Any default trace init, environment-selected policy
+  directory, writer/rotation/retention change, or side table stops S2.
+
+**R2-3T — final trace compatibility closure.**
+
+- **Outcome/claim:** only after F/R/S1/S2 callers are migrated, remove or make unreachable
+  `LegacyAmbientCompatibility`, make global unbound `init_trace(None)` fail, and remove legacy
+  ambient policy lookup without changing the neutral setter.
+- **PI ownership:** owns final completion of PI-118.
+- **Files:** only `crates/trace/src/context.rs`, `crates/trace/src/util.rs`, and
+  `crates/trace/src/tests.rs`.
+- **Existing/new symbols:** edit `TraceContextBindingV1`, `TraceContext::default`,
+  `TraceContext::init_trace`, global `init_trace`, `get_policy_git_hash`, and exact tests;
+  `set_global_trace_context`, `TraceContext::explicit_product`,
+  `get_policy_git_hash_at`, writer/rotation/retention/span/replay bodies, and signatures remain
+  frozen. Add no public symbol.
+- **Tests/proof:** final R2-SHIM-01/R2-DIAG-01 closure uses `crates/trace/src/tests.rs`; replace the
+  legacy-default expectation with final unbound failure and retain explicit-product A/B, policy
+  Git, repeated-init, conflict, symlink, missing-metadata, writer, rotation, and retention tests.
+- **Dependencies/native:** depends on F, R, S1, and S2 plus source closure proving no owned legacy
+  caller remains. Native evidence is not independently required beyond migrated caller proof.
+- **Impact/review/stop:** impact every edited symbol and query all callers of global `init_trace`
+  and `get_policy_git_hash` before edit. Packet ID `A1.1d-5R2-3T`. Any unmigrated owned caller,
+  setter semantic change, caller-identity table, lifecycle/writer change, or unrelated trace schema
+  change stops T.
+
+**R2-3Z — integration evidence and closeout.**
+
+- **Outcome/claim:** join the completed child increments, prove the complete R2-3 parent exit gate,
+  record native assignments truthfully, and hand only R3-owned lifecycle work forward. No production
+  repair is allowed.
+- **PI ownership:** closes only after code+proof for PI-009, PI-022, PI-039–PI-046, PI-048–PI-049,
+  PI-052, PI-054–PI-058, PI-060, PI-068–PI-070, PI-075–PI-076, PI-079, PI-081, PI-090–PI-091,
+  PI-112, PI-115–PI-116, and PI-118 is present. PI-059 remains harness-only; PI-077/PI-078 remain
+  byte-frozen; PI-050/PI-080 and every R3 row retain the ownership above.
+- **Files/symbols:** no production file or symbol. Evidence transcription may touch only the six
+  existing runtime-refactor control-pack Markdown files and only to record current proof; any
+  product defect returns to its owning child under a new fingerprint/review sequence.
+- **Tests/proof:** run every focused test authorized by A–T, format/Clippy/workspace checks
+  proportionate to the touched crates, exact installer/script parser and frozen-byte checks,
+  R2-SHIM-01, R2-GEN-01, R2-DIAG-01, R2-MAP-MAC-01, R2-MAP-WIN-01, applicable
+  R2-RUNTIME-01 regression, allowlist/diff/GitNexus checks, and the parent independent review lenses.
+- **Native macOS:** supported macOS with a pre-existing Lima instance; record OS/Lima/tool versions,
+  A/B, IH commitment, account-database `~/.lima` control root, VM name/machine ID, guest
+  account/UID/home, future `A/sock/agent.sock` to `/run/substrate.sock`, ambient transport
+  availability as non-authority, and the explicit R3 prerequisite. Start no forwarder and perform
+  no socket/process lifecycle action.
+- **Native Windows:** supported Windows with a pre-existing WSL instance; record OS/WSL/tool
+  versions, A/B, account+SID, token Known Folder, exact registered distro/machine ID, guest
+  account/UID/home, normalized pipe/scope digest/shared PID root, A-scoped config/logs, and
+  PM-derived WSL argv/environment under conflicting ambient values. Perform no provisioning,
+  timeout kill, stop, PID deletion, unregister, or cleanup action. Missing runners leave the exact
+  native assignments pending; static proof never substitutes.
+- **Impact/review/stop:** no pre-edit symbol impact unless a defect is returned to an owner.
+  Fingerprint the exact closeout evidence/test subject and use packet ID `A1.1d-5R2-3Z`; require
+  fresh host-context/mapping-security, lifecycle/R2-versus-R3, and
+  allowlist/native-honesty/regression lenses under the bounded-review record. Any production fix,
+  false native claim, incomplete PI/proof, changed guard/frozen byte, open P1/P2, or R3 authority
+  leakage prevents closeout.
+
 ###### A1.1d-5R2-4 — R2 integration and closeout
 
 | Packet field | Frozen requirement |
@@ -1548,6 +2106,7 @@ f7ded83
 Historical closeout results stay historical: the four earlier matching walls remain ineligible and
 the original NOT CLEAN/BLOCKED reviews remain findings, not passes. The table above is preserved as
 historical sequencing only. RP3, RP4, RP5, and the ordinary fast-forward source publication later
-completed at `0f1e147fb735791b44a65099a65167cbdc1803af`. The current process-only bounded-review
-calibration must be reviewed and landed without R2-3 implementation; R2-3 orientation is the next
-control-pack node afterward.
+completed at `0f1e147fb735791b44a65099a65167cbdc1803af`; the process-only bounded-review
+calibration also completed. The current published tip
+`43e528af8c71c4f42a7b1238f729078f20ee3760` authorizes only the docs-first R2-3D subdivision above.
+R2-3A product code remains a separately authorized future control-pack node.

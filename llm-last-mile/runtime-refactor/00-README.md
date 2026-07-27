@@ -4,15 +4,17 @@
 **Scope:** planning, contracts, sequencing, and proof gates; not implementation history
 **Source directive:** [`../../substrate-runtime-refactor-directive-revised.md`](../../substrate-runtime-refactor-directive-revised.md)
 **Repo-truth snapshot:** 2026-07-17 at `6ab2a515e13946324d0aac25b144e1c3408cb2c1`; re-check live code before every slice
-**Current authorized increment:** process-only bounded-review calibration before
-`A1.1d-5R2-3`. RP3, RP4, RP5, and the ordinary fast-forward source publication are complete at
-`0f1e147fb735791b44a65099a65167cbdc1803af`. The raw RP4 persistence review remains
-`REQUEST_CHANGES`; its three cache-only process-audit findings retain their historical evidence and
-are now registered as non-blocking `P3` debt in `06`. This calibration changes no product/runtime
-contract or proof result and authorizes no R2-3 implementation, old-packet rerun, or remediation of
-those findings. After this calibration is reviewed and landed, R2-3 orientation is next; R2-4, R3,
-privileged product smoke, non-Linux proof, and direct-member Codex/UAA gateway adoption remain later
-or unstarted.
+**Current authorized increment:** docs-first `A1.1d-5R2-3D` subdivision only. The R2-2 remedial
+detour, RP3/RP4/RP5 publication, and bounded-review calibration are complete. Historical R2-2
+publication remains anchored at `0f1e147fb735791b44a65099a65167cbdc1803af`; the current published
+tip is `43e528af8c71c4f42a7b1238f729078f20ee3760`, including the already-landed private installer
+configuration, trusted gateway-smoke manifest staging, agent-doctor install-context propagation,
+and process-only bounded-review calibration fixes. R2-3D freezes the bounded
+`D/A/B/C/M1-M4/W1-W5/F/R/S1/S2/T/Z` execution sequence in `03` and changes no product/runtime
+contract or proof result. It authorizes no R2-3A product code, prior-packet rerun, or reopening of
+RP3/RP4/RP5 or those post-publication fixes absent a concrete contradiction. R2-4, R3, privileged
+product smoke, native non-Linux proof, and direct-member Codex/UAA gateway adoption remain later or
+unstarted.
 
 ## Canonical repo location
 
