@@ -4,15 +4,19 @@
 //! This backend provides identical policy enforcement semantics to LinuxLocal
 //! by running a Linux VM via Lima and delegating to the world-service inside.
 
-use anyhow::{Context, Result};
+use anyhow::{anyhow, Context, Result};
 use serde::Deserialize;
+use std::ffi::{CStr, CString};
+use std::os::raw::{c_char, c_int};
 use std::path::PathBuf;
 use substrate_common::FsDiff;
 use tokio::runtime::Runtime;
 use transport_api_client::AgentClient;
 use transport_api_types::{
-    ExecuteRequest, ExecuteResponse, MemberDispatchRequestV1,
-    MemberRuntimeBackendKindV1 as AgentMemberRuntimeBackendKindV1, PolicySnapshotV3,
+    normalize_unix_install_bootstrap_path, ExecuteRequest, ExecuteResponse,
+    InstallBootstrapContextCarrierV1, MemberDispatchRequestV1,
+    MemberRuntimeBackendKindV1 as AgentMemberRuntimeBackendKindV1, PlatformBootstrapMappingV1,
+    PlatformInstanceIdentityV1, PlatformPrincipalV1, PolicySnapshotV3,
     PolicySnapshotWorldFsDimensionV3, PolicySnapshotWorldFsFailClosedV3, PolicySnapshotWorldFsV3,
     PolicySnapshotWorldFsWriteV3, ResolvedMemberRuntimeDescriptorV1, WorldFsDenyEnforcementV3,
     WorldFsMode, WorldNetworkRoutingV1,
@@ -29,8 +33,8 @@ pub mod transport;
 pub mod vm;
 
 use crate::transport::{
-    managed_host_socket_path, CANONICAL_GUEST_SOCKET_PATH, COMPATIBILITY_TCP_HOST,
-    COMPATIBILITY_TCP_PORT,
+    managed_host_socket_path, managed_host_socket_path_for_mapping, CANONICAL_GUEST_SOCKET_PATH,
+    COMPATIBILITY_TCP_HOST, COMPATIBILITY_TCP_PORT,
 };
 pub use forwarding::{ForwardingHandle, ForwardingKind};
 pub use transport::Transport;
@@ -41,6 +45,8 @@ pub struct MacLimaBackend {
     vm_name: String,
     agent_socket: PathBuf,
     transport: Transport,
+    typed_host_account_home: Option<PathBuf>,
+    typed_lima_control_root: Option<PathBuf>,
     runtime: Option<Runtime>,
     forwarding: std::sync::Mutex<Option<ForwardingHandle>>,
     session_cache: std::sync::Mutex<Option<WorldHandle>>,
@@ -57,7 +63,53 @@ struct MacWorldPolicyState {
     backend_policy: Option<BackendPolicyInputV1>,
 }
 
+#[cfg(target_os = "macos")]
+#[repr(C)]
+struct PlatformPasswd {
+    pw_name: *mut c_char,
+    pw_passwd: *mut c_char,
+    pw_uid: u32,
+    pw_gid: u32,
+    pw_change: i64,
+    pw_class: *mut c_char,
+    pw_gecos: *mut c_char,
+    pw_dir: *mut c_char,
+    pw_shell: *mut c_char,
+    pw_expire: i64,
+}
+
+#[cfg(not(target_os = "macos"))]
+#[repr(C)]
+struct PlatformPasswd {
+    pw_name: *mut c_char,
+    pw_passwd: *mut c_char,
+    pw_uid: u32,
+    pw_gid: u32,
+    pw_gecos: *mut c_char,
+    pw_dir: *mut c_char,
+    pw_shell: *mut c_char,
+}
+
+unsafe extern "C" {
+    fn getpwnam_r(
+        name: *const c_char,
+        pwd: *mut PlatformPasswd,
+        buf: *mut c_char,
+        buflen: usize,
+        result: *mut *mut PlatformPasswd,
+    ) -> c_int;
+    fn getpwuid_r(
+        uid: u32,
+        pwd: *mut PlatformPasswd,
+        buf: *mut c_char,
+        buflen: usize,
+        result: *mut *mut PlatformPasswd,
+    ) -> c_int;
+    fn geteuid() -> u32;
+}
+
 impl MacLimaBackend {
+    /// Diagnostic compatibility constructor that still relies on ambient host state.
     pub fn new() -> Result<Self> {
         let vm_name = std::env::var("SUBSTRATE_LIMA_VM_NAME")
             .or_else(|_| std::env::var("LIMA_VM_NAME"))
@@ -67,22 +119,7 @@ impl MacLimaBackend {
         // Auto-select best transport
         let transport = Transport::auto_select()?;
 
-        // Create dedicated runtime
-        let runtime = Self::new_runtime()?;
-
-        Ok(Self {
-            vm_name,
-            agent_socket,
-            transport,
-            runtime: Some(runtime),
-            forwarding: std::sync::Mutex::new(None),
-            session_cache: std::sync::Mutex::new(None),
-            shared_owner_cache: std::sync::Mutex::new(std::collections::HashMap::new()),
-            shared_owner_mutex: std::sync::Mutex::new(()),
-            world_policy_state: std::sync::Mutex::new(std::collections::HashMap::new()),
-            #[cfg(test)]
-            session_setup_override: None,
-        })
+        Self::from_parts(vm_name, agent_socket, transport, None, None)
     }
 
     // Helper to drive an async future whether or not a Tokio runtime is already active.
@@ -109,10 +146,53 @@ impl MacLimaBackend {
             .context("Failed to create tokio runtime")
     }
 
+    fn from_parts(
+        vm_name: String,
+        agent_socket: PathBuf,
+        transport: Transport,
+        typed_host_account_home: Option<PathBuf>,
+        typed_lima_control_root: Option<PathBuf>,
+    ) -> Result<Self> {
+        let runtime = Self::new_runtime()?;
+
+        Ok(Self {
+            vm_name,
+            agent_socket,
+            transport,
+            typed_host_account_home,
+            typed_lima_control_root,
+            runtime: Some(runtime),
+            forwarding: std::sync::Mutex::new(None),
+            session_cache: std::sync::Mutex::new(None),
+            shared_owner_cache: std::sync::Mutex::new(std::collections::HashMap::new()),
+            shared_owner_mutex: std::sync::Mutex::new(()),
+            world_policy_state: std::sync::Mutex::new(std::collections::HashMap::new()),
+            #[cfg(test)]
+            session_setup_override: None,
+        })
+    }
+
+    /// Diagnostic compatibility constructor that still relies on ambient host state.
     pub fn new_with_vm_name(vm_name: String) -> Result<Self> {
         let mut backend = Self::new()?;
         backend.vm_name = vm_name;
         Ok(backend)
+    }
+
+    /// Typed constructor for validated Lima primitives; lifecycle remains gated on R3.
+    pub fn new_with_mapping(
+        host_carrier: InstallBootstrapContextCarrierV1,
+        mapping: PlatformBootstrapMappingV1,
+    ) -> Result<Self> {
+        let (vm_name, agent_socket, host_account_home, control_root) =
+            validate_typed_lima_backend_mapping(&host_carrier, &mapping)?;
+        Self::from_parts(
+            vm_name,
+            agent_socket,
+            Transport::UnixSocket,
+            Some(host_account_home),
+            Some(control_root),
+        )
     }
 
     #[cfg(test)]
@@ -125,6 +205,19 @@ impl MacLimaBackend {
     }
 
     fn ensure_vm_running(&self) -> Result<()> {
+        match (
+            self.typed_host_account_home.as_ref(),
+            self.typed_lima_control_root.as_ref(),
+        ) {
+            (Some(_), Some(_)) => {
+                anyhow::bail!(
+                    "typed Lima backend lifecycle remains gated on the R3 forwarding lifecycle prerequisite"
+                );
+            }
+            (None, None) => {}
+            _ => anyhow::bail!("typed Lima backend is missing command context"),
+        }
+
         tracing::debug!("Checking if Lima VM '{}' is running", self.vm_name);
 
         // Check if VM exists and is running (robust JSON check)
@@ -402,6 +495,12 @@ impl MacLimaBackend {
     }
 
     fn get_agent_endpoint(&self) -> Result<transport_api_client::Transport> {
+        if self.typed_lima_control_root.is_some() || self.typed_host_account_home.is_some() {
+            anyhow::bail!(
+                "typed Lima mapping transport remains gated on the R3 forwarding lifecycle prerequisite"
+            );
+        }
+
         let forwarding = self
             .forwarding
             .lock()
@@ -540,6 +639,193 @@ impl MacLimaBackend {
         let transport = self.get_agent_endpoint()?;
         AgentClient::new(transport)
     }
+}
+
+fn validate_typed_lima_backend_mapping(
+    host_carrier: &InstallBootstrapContextCarrierV1,
+    mapping: &PlatformBootstrapMappingV1,
+) -> Result<(String, PathBuf, PathBuf, PathBuf)> {
+    host_carrier
+        .validate()
+        .context("invalid install bootstrap context carrier")?;
+    mapping
+        .validate(host_carrier)
+        .context("invalid platform bootstrap mapping")?;
+
+    let host_account_home =
+        unix_account_home_for_install_principal(&host_carrier.context.intended_host_principal)?;
+    let expected_control_root = normalize_unix_install_bootstrap_path(
+        host_account_home
+            .join(".lima")
+            .to_str()
+            .ok_or_else(|| anyhow!("host account home is not valid UTF-8"))?,
+    )
+    .map_err(|_| anyhow!("derived Lima control root is not canonical"))?;
+    if mapping.host_platform_control_root != expected_control_root {
+        anyhow::bail!(
+            "typed Lima mapping control root does not match the install principal account home"
+        );
+    }
+    let control_root = PathBuf::from(&mapping.host_platform_control_root);
+
+    let PlatformInstanceIdentityV1::Lima {
+        vm_name,
+        guest_machine_id: _,
+    } = &mapping.platform_instance
+    else {
+        anyhow::bail!("typed Lima backend requires a Lima platform instance");
+    };
+
+    let PlatformPrincipalV1::Unix { account, uid } = &mapping.realized_principal else {
+        anyhow::bail!("typed Lima backend requires a Unix guest principal");
+    };
+    if account.is_empty() || *uid == 0 {
+        anyhow::bail!("typed Lima backend requires a canonical Unix guest principal");
+    }
+
+    let agent_socket = managed_host_socket_path_for_mapping(host_carrier, mapping)
+        .context("typed Lima mapping host socket does not match the selected host prefix")?;
+    Ok((
+        vm_name.clone(),
+        agent_socket,
+        host_account_home,
+        control_root,
+    ))
+}
+
+fn unix_account_home_for_install_principal(principal: &PlatformPrincipalV1) -> Result<PathBuf> {
+    let PlatformPrincipalV1::Unix { account, uid } = principal else {
+        anyhow::bail!("typed Lima backend requires a Unix install principal");
+    };
+    if account.is_empty() || *uid == 0 {
+        anyhow::bail!("typed Lima backend requires a canonical Unix install principal");
+    }
+
+    let (name_account, name_uid, name_home) = unix_account_record_by_name(account)?;
+    let (uid_account, uid_uid, uid_home) = unix_account_record_by_uid(*uid)?;
+    if name_uid == 0
+        || uid_uid == 0
+        || name_account != *account
+        || uid_account != *account
+        || name_uid != *uid
+        || uid_uid != *uid
+        || name_home != uid_home
+    {
+        anyhow::bail!("install principal account does not round-trip through the account database");
+    }
+
+    Ok(name_home)
+}
+
+fn unix_account_record_by_name(account: &str) -> Result<(String, u32, PathBuf)> {
+    let account_cstr =
+        CString::new(account).map_err(|_| anyhow!("install principal account is malformed"))?;
+    let mut passwd = zeroed_passwd();
+    let mut buffer = vec![0 as c_char; 16 * 1024];
+    let mut result = std::ptr::null_mut();
+    // SAFETY: getpwnam_r is called with valid pointers and writable storage.
+    let lookup_status = unsafe {
+        getpwnam_r(
+            account_cstr.as_ptr(),
+            &mut passwd,
+            buffer.as_mut_ptr(),
+            buffer.len(),
+            &mut result,
+        )
+    };
+    if lookup_status != 0 || result.is_null() {
+        anyhow::bail!("install principal account is unavailable");
+    }
+
+    normalized_unix_account_record(&passwd)
+}
+
+fn unix_account_record_by_uid(uid: u32) -> Result<(String, u32, PathBuf)> {
+    let mut passwd = zeroed_passwd();
+    let mut buffer = vec![0 as c_char; 16 * 1024];
+    let mut result = std::ptr::null_mut();
+    // SAFETY: getpwuid_r is called with valid pointers and writable storage.
+    let lookup_status = unsafe {
+        getpwuid_r(
+            uid,
+            &mut passwd,
+            buffer.as_mut_ptr(),
+            buffer.len(),
+            &mut result,
+        )
+    };
+    if lookup_status != 0 || result.is_null() {
+        anyhow::bail!("install principal account is unavailable");
+    }
+
+    normalized_unix_account_record(&passwd)
+}
+
+fn normalized_unix_account_record(passwd: &PlatformPasswd) -> Result<(String, u32, PathBuf)> {
+    if passwd.pw_name.is_null() || passwd.pw_dir.is_null() {
+        anyhow::bail!("install principal account database record is malformed");
+    }
+
+    // SAFETY: successful NSS lookups return valid NUL-terminated pointers.
+    let account = unsafe { CStr::from_ptr(passwd.pw_name) }
+        .to_str()
+        .context("install principal account is not valid UTF-8")?;
+    let home = unsafe { CStr::from_ptr(passwd.pw_dir) }
+        .to_str()
+        .context("install principal account home is not valid UTF-8")?;
+    let normalized_home = normalize_unix_install_bootstrap_path(home)
+        .map_err(|_| anyhow!("install principal account home is not canonical"))?;
+    if passwd.pw_uid == 0 || account.is_empty() {
+        anyhow::bail!("install principal account is not canonical");
+    }
+    Ok((
+        account.to_string(),
+        passwd.pw_uid,
+        PathBuf::from(normalized_home),
+    ))
+}
+
+#[cfg(target_os = "macos")]
+fn zeroed_passwd() -> PlatformPasswd {
+    PlatformPasswd {
+        pw_name: std::ptr::null_mut(),
+        pw_passwd: std::ptr::null_mut(),
+        pw_uid: 0,
+        pw_gid: 0,
+        pw_change: 0,
+        pw_class: std::ptr::null_mut(),
+        pw_gecos: std::ptr::null_mut(),
+        pw_dir: std::ptr::null_mut(),
+        pw_shell: std::ptr::null_mut(),
+        pw_expire: 0,
+    }
+}
+
+#[cfg(not(target_os = "macos"))]
+fn zeroed_passwd() -> PlatformPasswd {
+    PlatformPasswd {
+        pw_name: std::ptr::null_mut(),
+        pw_passwd: std::ptr::null_mut(),
+        pw_uid: 0,
+        pw_gid: 0,
+        pw_gecos: std::ptr::null_mut(),
+        pw_dir: std::ptr::null_mut(),
+        pw_shell: std::ptr::null_mut(),
+    }
+}
+
+#[cfg(test)]
+fn current_unix_principal_and_home() -> Result<(PlatformPrincipalV1, PathBuf)> {
+    // SAFETY: geteuid has no preconditions.
+    let uid = unsafe { geteuid() };
+    let (account, resolved_uid, home) = unix_account_record_by_uid(uid)?;
+    Ok((
+        PlatformPrincipalV1::Unix {
+            account,
+            uid: resolved_uid,
+        },
+        home,
+    ))
 }
 
 impl Default for MacLimaBackend {
@@ -767,8 +1053,12 @@ mod test_util {
 #[cfg(test)]
 mod tests {
     use super::*;
+    use std::fs;
+    use std::os::unix::fs::PermissionsExt;
+    use std::path::Path;
     use std::sync::atomic::{AtomicUsize, Ordering};
     use std::sync::Arc;
+    use transport_api_types::PlatformTransportIdentityV1;
 
     fn sample_backend_policy(
         net_allowed: &[&str],
@@ -842,6 +1132,48 @@ mod tests {
         }
     }
 
+    fn typed_host_carrier_and_mapping(
+        prefix: &str,
+    ) -> (
+        InstallBootstrapContextCarrierV1,
+        PlatformBootstrapMappingV1,
+        PathBuf,
+    ) {
+        let (principal, home) = current_unix_principal_and_home().expect("current Unix principal");
+        let PlatformPrincipalV1::Unix { account, uid } = &principal else {
+            panic!("expected Unix principal");
+        };
+        let host = InstallBootstrapContextCarrierV1::from_context(
+            transport_api_types::InstallBootstrapContextV1::new_unix(prefix, account, *uid)
+                .expect("valid host context"),
+        )
+        .expect("committed host context");
+        let mapping = PlatformBootstrapMappingV1::new_lima(
+            &host,
+            "substrate",
+            "0123456789abcdef0123456789abcdef",
+            home.join(".lima").to_str().expect("UTF-8 home path"),
+            "/home/substrate/.substrate",
+            "substrate",
+            1000,
+            &format!("{prefix}/sock/agent.sock"),
+            CANONICAL_GUEST_SOCKET_PATH,
+        )
+        .expect("valid Lima mapping");
+        (host, mapping, home)
+    }
+
+    fn write_executable(path: &Path, marker: &Path) {
+        fs::write(
+            path,
+            format!("#!/bin/sh\nprintf x >> '{}'\nexit 1\n", marker.display()),
+        )
+        .expect("write executable");
+        let mut permissions = fs::metadata(path).expect("metadata").permissions();
+        permissions.set_mode(0o755);
+        fs::set_permissions(path, permissions).expect("set permissions");
+    }
+
     #[test]
     fn test_backend_creation() {
         let _env_guard = crate::test_util::lock_env();
@@ -858,6 +1190,8 @@ mod tests {
                     .agent_socket
                     .to_string_lossy()
                     .contains(".substrate/sock"));
+                assert!(backend.typed_host_account_home.is_none());
+                assert!(backend.typed_lima_control_root.is_none());
             }
             Err(e) => {
                 println!("Expected failure when Lima not available: {}", e);
@@ -885,6 +1219,8 @@ mod tests {
 
         let backend = MacLimaBackend::new().expect("backend");
         assert_eq!(backend.vm_name, "substrate-arch-override");
+        assert!(backend.typed_host_account_home.is_none());
+        assert!(backend.typed_lima_control_root.is_none());
 
         match prev_substrate_lima_vm_name {
             Some(value) => std::env::set_var("SUBSTRATE_LIMA_VM_NAME", value),
@@ -914,6 +1250,8 @@ mod tests {
             backend.agent_socket,
             PathBuf::from("/tmp/substrate-home-only/sock/agent.sock")
         );
+        assert!(backend.typed_host_account_home.is_none());
+        assert!(backend.typed_lima_control_root.is_none());
 
         match prev_home {
             Some(value) => std::env::set_var("HOME", value),
@@ -941,6 +1279,192 @@ mod tests {
             transport,
             Transport::UnixSocket | Transport::TCP | Transport::VSock
         );
+    }
+
+    #[test]
+    fn test_new_with_mapping_uses_typed_projection_without_ambient_selection() {
+        let _env_guard = crate::test_util::lock_env();
+        let prev_home = std::env::var_os("HOME");
+        let prev_lima_home = std::env::var_os("LIMA_HOME");
+        let prev_substrate_home = std::env::var_os("SUBSTRATE_HOME");
+        let prev_path = std::env::var_os("PATH");
+        std::env::set_var("HOME", "/tmp/ambient-home-b");
+        std::env::set_var("LIMA_HOME", "/tmp/ambient-lima-b");
+        std::env::set_var("SUBSTRATE_HOME", "/tmp/ambient-substrate-b");
+        std::env::set_var("PATH", "");
+
+        let (host, mapping, home) = typed_host_carrier_and_mapping("/tmp/typed-substrate");
+        let backend = MacLimaBackend::new_with_mapping(host, mapping).expect("typed backend");
+        let expected_control_root = home.join(".lima");
+
+        assert_eq!(backend.vm_name, "substrate");
+        assert_eq!(
+            backend.agent_socket,
+            PathBuf::from("/tmp/typed-substrate/sock/agent.sock")
+        );
+        assert!(matches!(backend.transport, Transport::UnixSocket));
+        assert_eq!(
+            backend.typed_host_account_home.as_deref(),
+            Some(home.as_path())
+        );
+        assert_eq!(
+            backend.typed_lima_control_root.as_deref(),
+            Some(expected_control_root.as_path())
+        );
+        assert!(backend.forwarding.lock().unwrap().is_none());
+
+        match prev_home {
+            Some(value) => std::env::set_var("HOME", value),
+            None => std::env::remove_var("HOME"),
+        }
+        match prev_lima_home {
+            Some(value) => std::env::set_var("LIMA_HOME", value),
+            None => std::env::remove_var("LIMA_HOME"),
+        }
+        match prev_substrate_home {
+            Some(value) => std::env::set_var("SUBSTRATE_HOME", value),
+            None => std::env::remove_var("SUBSTRATE_HOME"),
+        }
+        match prev_path {
+            Some(value) => std::env::set_var("PATH", value),
+            None => std::env::remove_var("PATH"),
+        }
+    }
+
+    #[test]
+    fn test_new_with_mapping_rejects_projection_mismatches() {
+        let (host, mapping, home) = typed_host_carrier_and_mapping("/tmp/typed-substrate");
+
+        let mut wrong_commitment = mapping.clone();
+        wrong_commitment.host_context_commitment = "0".repeat(64);
+        assert!(MacLimaBackend::new_with_mapping(host.clone(), wrong_commitment).is_err());
+
+        let mut wrong_platform = mapping.clone();
+        wrong_platform.platform_instance = PlatformInstanceIdentityV1::Wsl {
+            distro_name: "Substrate-WSL".to_string(),
+            guest_machine_id: "0123456789abcdef0123456789abcdef".to_string(),
+        };
+        assert!(MacLimaBackend::new_with_mapping(host.clone(), wrong_platform).is_err());
+
+        let mut wrong_transport = mapping.clone();
+        wrong_transport.realized_transport = PlatformTransportIdentityV1::Wsl {
+            pipe_path: r"\\.\pipe\substrate-agent".to_string(),
+            guest_socket: CANONICAL_GUEST_SOCKET_PATH.to_string(),
+        };
+        assert!(MacLimaBackend::new_with_mapping(host.clone(), wrong_transport).is_err());
+
+        let mut wrong_vm_name = mapping.clone();
+        wrong_vm_name.platform_instance = PlatformInstanceIdentityV1::Lima {
+            vm_name: String::new(),
+            guest_machine_id: "0123456789abcdef0123456789abcdef".to_string(),
+        };
+        assert!(MacLimaBackend::new_with_mapping(host.clone(), wrong_vm_name).is_err());
+
+        let mut wrong_machine_id = mapping.clone();
+        wrong_machine_id.platform_instance = PlatformInstanceIdentityV1::Lima {
+            vm_name: "substrate".to_string(),
+            guest_machine_id: "NOT-A-MACHINE-ID".to_string(),
+        };
+        assert!(MacLimaBackend::new_with_mapping(host.clone(), wrong_machine_id).is_err());
+
+        let mut wrong_control_root = mapping.clone();
+        wrong_control_root.host_platform_control_root = home
+            .join("custom-lima")
+            .to_str()
+            .expect("UTF-8 path")
+            .to_string();
+        assert!(MacLimaBackend::new_with_mapping(host.clone(), wrong_control_root).is_err());
+
+        let mut wrong_parent_control_root = mapping.clone();
+        wrong_parent_control_root.host_platform_control_root = "/tmp/other/.lima".to_string();
+        assert!(MacLimaBackend::new_with_mapping(host.clone(), wrong_parent_control_root).is_err());
+
+        let mut wrong_guest_home = mapping.clone();
+        wrong_guest_home.realized_substrate_home = "relative/home".to_string();
+        assert!(MacLimaBackend::new_with_mapping(host.clone(), wrong_guest_home).is_err());
+
+        let mut wrong_guest_principal = mapping.clone();
+        wrong_guest_principal.realized_principal = PlatformPrincipalV1::Unix {
+            account: "substrate".to_string(),
+            uid: 0,
+        };
+        assert!(MacLimaBackend::new_with_mapping(host.clone(), wrong_guest_principal).is_err());
+
+        let mut wrong_host_socket = mapping.clone();
+        wrong_host_socket.realized_transport = PlatformTransportIdentityV1::Lima {
+            host_socket: "/tmp/other/sock/agent.sock".to_string(),
+            guest_socket: CANONICAL_GUEST_SOCKET_PATH.to_string(),
+        };
+        assert!(MacLimaBackend::new_with_mapping(host.clone(), wrong_host_socket).is_err());
+
+        let mut wrong_guest_socket = mapping;
+        wrong_guest_socket.realized_transport = PlatformTransportIdentityV1::Lima {
+            host_socket: "/tmp/typed-substrate/sock/agent.sock".to_string(),
+            guest_socket: "/tmp/substrate.sock".to_string(),
+        };
+        assert!(MacLimaBackend::new_with_mapping(host, wrong_guest_socket).is_err());
+    }
+
+    #[test]
+    fn test_account_database_record_parser_rejects_malformed_results() {
+        assert!(normalized_unix_account_record(&zeroed_passwd()).is_err());
+    }
+
+    #[test]
+    fn test_get_agent_endpoint_requires_r3_for_typed_mapping() {
+        let (host, mapping, _) = typed_host_carrier_and_mapping("/tmp/typed-substrate");
+        let backend = MacLimaBackend::new_with_mapping(host, mapping).expect("typed backend");
+        assert!(backend.forwarding.lock().unwrap().is_none());
+
+        let err = backend.get_agent_endpoint().unwrap_err();
+        assert!(
+            err.to_string()
+                .contains("R3 forwarding lifecycle prerequisite"),
+            "unexpected error: {err}"
+        );
+        assert!(backend.forwarding.lock().unwrap().is_none());
+    }
+
+    #[test]
+    fn test_typed_session_setup_requires_r3_before_lifecycle_or_forwarding() {
+        let _env_guard = crate::test_util::lock_env();
+        let tempdir = tempfile::tempdir().expect("tempdir");
+        let limactl_marker = tempdir.path().join("limactl.marker");
+        let ssh_marker = tempdir.path().join("ssh.marker");
+        let vsock_marker = tempdir.path().join("vsock.marker");
+        let limactl_path = tempdir.path().join("limactl");
+        let ssh_path = tempdir.path().join("ssh");
+        let vsock_path = tempdir.path().join("vsock-proxy");
+        write_executable(&limactl_path, &limactl_marker);
+        write_executable(&ssh_path, &ssh_marker);
+        write_executable(&vsock_path, &vsock_marker);
+        let prev_path = std::env::var_os("PATH");
+        let prev_limactl = std::env::var_os("SUBSTRATE_TEST_LIMACTL_PATH");
+        std::env::set_var("PATH", tempdir.path());
+        std::env::set_var("SUBSTRATE_TEST_LIMACTL_PATH", &limactl_path);
+
+        let (host, mapping, _) = typed_host_carrier_and_mapping("/tmp/typed-substrate");
+        let backend = MacLimaBackend::new_with_mapping(host, mapping).expect("typed backend");
+
+        let err = backend.ensure_agent_ready().unwrap_err();
+        assert!(
+            err.to_string()
+                .contains("R3 forwarding lifecycle prerequisite"),
+            "unexpected error: {err}"
+        );
+        assert!(backend.forwarding.lock().unwrap().is_none());
+        assert!(!limactl_marker.exists(), "typed path executed limactl");
+        assert!(!ssh_marker.exists(), "typed path executed ssh");
+        assert!(!vsock_marker.exists(), "typed path executed vsock-proxy");
+
+        match prev_path {
+            Some(value) => std::env::set_var("PATH", value),
+            None => std::env::remove_var("PATH"),
+        }
+        match prev_limactl {
+            Some(value) => std::env::set_var("SUBSTRATE_TEST_LIMACTL_PATH", value),
+            None => std::env::remove_var("SUBSTRATE_TEST_LIMACTL_PATH"),
+        }
     }
 
     #[test]

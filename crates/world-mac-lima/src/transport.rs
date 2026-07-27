@@ -1,7 +1,11 @@
 //! Transport layer selection for host-VM communication.
 
-use anyhow::Result;
+use anyhow::{anyhow, Result};
 use std::path::PathBuf;
+use transport_api_types::{
+    InstallBootstrapContextCarrierV1, PlatformBootstrapMappingV1, PlatformInstanceIdentityV1,
+    PlatformTransportIdentityV1,
+};
 
 /// Canonical guest world-service socket path inside the Lima VM.
 pub const CANONICAL_GUEST_SOCKET_PATH: &str = "/run/substrate.sock";
@@ -31,6 +35,47 @@ fn managed_host_socket_path_from(substrate_home: PathBuf) -> PathBuf {
     substrate_home
         .join(MANAGED_HOST_SOCKET_DIR)
         .join(MANAGED_HOST_SOCKET_NAME)
+}
+
+/// Managed host-side socket path derived from a validated Lima mapping.
+pub fn managed_host_socket_path_for_mapping(
+    host_carrier: &InstallBootstrapContextCarrierV1,
+    mapping: &PlatformBootstrapMappingV1,
+) -> Result<PathBuf> {
+    host_carrier.validate().map_err(anyhow::Error::from)?;
+    mapping
+        .validate(host_carrier)
+        .map_err(anyhow::Error::from)?;
+
+    let PlatformInstanceIdentityV1::Lima { .. } = &mapping.platform_instance else {
+        return Err(anyhow!("platform mapping is not Lima"));
+    };
+    let PlatformTransportIdentityV1::Lima {
+        host_socket,
+        guest_socket,
+    } = &mapping.realized_transport
+    else {
+        return Err(anyhow!("platform transport is not Lima"));
+    };
+
+    if guest_socket != CANONICAL_GUEST_SOCKET_PATH {
+        return Err(anyhow!(
+            "platform mapping guest socket does not match the canonical Lima socket"
+        ));
+    }
+
+    let expected_host_socket =
+        managed_host_socket_path_from(PathBuf::from(&host_carrier.context.selected_host_prefix));
+    let expected_host_socket = expected_host_socket
+        .to_str()
+        .ok_or_else(|| anyhow!("managed host socket path is not valid UTF-8"))?;
+    if host_socket != expected_host_socket {
+        return Err(anyhow!(
+            "platform mapping host socket does not match the selected host prefix"
+        ));
+    }
+
+    Ok(PathBuf::from(host_socket))
 }
 
 /// Host loopback endpoint retained for compatibility-only TCP reachability.
@@ -103,6 +148,32 @@ impl Default for Transport {
 #[cfg(test)]
 mod tests {
     use super::*;
+    use transport_api_types::{
+        InstallBootstrapContextCarrierV1, InstallBootstrapContextV1, PlatformBootstrapMappingV1,
+        PlatformInstanceIdentityV1, PlatformTransportIdentityV1,
+    };
+
+    fn test_host_carrier() -> InstallBootstrapContextCarrierV1 {
+        InstallBootstrapContextCarrierV1::from_context(
+            InstallBootstrapContextV1::new_unix("/opt/substrate", "alice", 1000).unwrap(),
+        )
+        .unwrap()
+    }
+
+    fn test_lima_mapping() -> PlatformBootstrapMappingV1 {
+        PlatformBootstrapMappingV1::new_lima(
+            &test_host_carrier(),
+            "substrate",
+            "0123456789abcdef0123456789abcdef",
+            "/Users/alice/.lima",
+            "/home/substrate/.substrate",
+            "substrate",
+            1000,
+            "/opt/substrate/sock/agent.sock",
+            CANONICAL_GUEST_SOCKET_PATH,
+        )
+        .unwrap()
+    }
 
     #[test]
     fn test_transport_auto_select() {
@@ -135,6 +206,54 @@ mod tests {
             managed_host_socket_path_from(substrate_home),
             PathBuf::from("/tmp/substrate-home/sock/agent.sock")
         );
+    }
+
+    #[test]
+    fn test_managed_host_socket_path_for_mapping_uses_validated_identity() {
+        let host = test_host_carrier();
+        let mapping = test_lima_mapping();
+
+        assert_eq!(
+            managed_host_socket_path_for_mapping(&host, &mapping).unwrap(),
+            PathBuf::from("/opt/substrate/sock/agent.sock")
+        );
+    }
+
+    #[test]
+    fn test_managed_host_socket_path_for_mapping_rejects_mismatches() {
+        let host = test_host_carrier();
+
+        let mut wrong_transport_kind = test_lima_mapping();
+        wrong_transport_kind.realized_transport = PlatformTransportIdentityV1::Wsl {
+            pipe_path: r"\\.\pipe\substrate-agent".to_string(),
+            guest_socket: CANONICAL_GUEST_SOCKET_PATH.to_string(),
+        };
+        assert!(managed_host_socket_path_for_mapping(&host, &wrong_transport_kind).is_err());
+
+        let mut wrong_platform_kind = test_lima_mapping();
+        wrong_platform_kind.platform_instance = PlatformInstanceIdentityV1::Wsl {
+            distro_name: "Substrate-WSL".to_string(),
+            guest_machine_id: "0123456789abcdef0123456789abcdef".to_string(),
+        };
+        assert!(managed_host_socket_path_for_mapping(&host, &wrong_platform_kind).is_err());
+
+        let mut wrong_host_socket = test_lima_mapping();
+        wrong_host_socket.realized_transport = PlatformTransportIdentityV1::Lima {
+            host_socket: "/opt/other/sock/agent.sock".to_string(),
+            guest_socket: CANONICAL_GUEST_SOCKET_PATH.to_string(),
+        };
+        assert!(managed_host_socket_path_for_mapping(&host, &wrong_host_socket).is_err());
+
+        let mut wrong_guest_socket = test_lima_mapping();
+        wrong_guest_socket.realized_transport = PlatformTransportIdentityV1::Lima {
+            host_socket: "/opt/substrate/sock/agent.sock".to_string(),
+            guest_socket: "/tmp/agent.sock".to_string(),
+        };
+        assert!(managed_host_socket_path_for_mapping(&host, &wrong_guest_socket).is_err());
+
+        let mut wrong_commitment = test_lima_mapping();
+        wrong_commitment.host_context_commitment = "0".repeat(64);
+        assert!(managed_host_socket_path_for_mapping(&host, &wrong_commitment).is_err());
     }
 
     #[test]
