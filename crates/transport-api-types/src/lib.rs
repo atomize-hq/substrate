@@ -22,6 +22,8 @@ pub use world_api::{
 };
 
 const INSTALL_BOOTSTRAP_CONTEXT_DOMAIN_V1: &str = "substrate.install_bootstrap_context";
+const PLATFORM_BOOTSTRAP_MAPPING_DOMAIN_V1: &str = "substrate.platform_bootstrap_mapping";
+const WINDOWS_FORWARDER_SCOPE_DOMAIN_V1: &str = "substrate.windows_forwarder_scope";
 
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
 #[serde(tag = "kind", rename_all = "snake_case")]
@@ -45,6 +47,108 @@ pub struct InstallBootstrapContextCarrierV1 {
     pub context: InstallBootstrapContextV1,
     pub host_context_commitment: String,
 }
+
+/// Identity observed for one concrete Lima VM or registered WSL distribution.
+///
+/// ```
+/// use transport_api_types::PlatformInstanceIdentityV1;
+///
+/// let instance = PlatformInstanceIdentityV1::Lima {
+///     vm_name: "substrate".to_string(),
+///     guest_machine_id: "0123456789abcdef0123456789abcdef".to_string(),
+/// };
+/// assert!(matches!(instance, PlatformInstanceIdentityV1::Lima { .. }));
+/// ```
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(tag = "kind", rename_all = "snake_case")]
+pub enum PlatformInstanceIdentityV1 {
+    Lima {
+        vm_name: String,
+        guest_machine_id: String,
+    },
+    Wsl {
+        distro_name: String,
+        guest_machine_id: String,
+    },
+}
+
+/// Host and guest transport endpoints observed for a platform instance.
+///
+/// ```
+/// use transport_api_types::PlatformTransportIdentityV1;
+///
+/// let transport = PlatformTransportIdentityV1::Wsl {
+///     pipe_path: r"\\.\pipe\substrate-agent".to_string(),
+///     guest_socket: "/run/substrate.sock".to_string(),
+/// };
+/// assert!(matches!(transport, PlatformTransportIdentityV1::Wsl { .. }));
+/// ```
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(tag = "kind", rename_all = "snake_case")]
+pub enum PlatformTransportIdentityV1 {
+    Lima {
+        host_socket: String,
+        guest_socket: String,
+    },
+    Wsl {
+        pipe_path: String,
+        guest_socket: String,
+    },
+}
+
+/// Canonical host-to-platform bootstrap mapping bound to one host context.
+///
+/// ```
+/// use transport_api_types::{
+///     InstallBootstrapContextCarrierV1, InstallBootstrapContextV1,
+///     PlatformBootstrapMappingV1,
+/// };
+///
+/// let host = InstallBootstrapContextCarrierV1::from_context(
+///     InstallBootstrapContextV1::new_unix("/opt/substrate", "alice", 1000)?,
+/// )?;
+/// let mapping = PlatformBootstrapMappingV1::new_lima(
+///     &host,
+///     "substrate",
+///     "0123456789abcdef0123456789abcdef",
+///     "/Users/alice/.lima",
+///     "/home/substrate/.substrate",
+///     "substrate",
+///     1000,
+///     "/opt/substrate/sock/agent.sock",
+///     "/run/substrate.sock",
+/// )?;
+/// assert_eq!(mapping.host_context_commitment, host.host_context_commitment);
+/// # Ok::<(), transport_api_types::InstallBootstrapContextErrorV1>(())
+/// ```
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(deny_unknown_fields)]
+pub struct PlatformBootstrapMappingV1 {
+    pub host_context_commitment: String,
+    pub platform_instance: PlatformInstanceIdentityV1,
+    pub host_platform_control_root: String,
+    pub realized_substrate_home: String,
+    pub realized_principal: PlatformPrincipalV1,
+    pub realized_transport: PlatformTransportIdentityV1,
+}
+
+/// Deterministic digest scoping shared Windows forwarder state.
+///
+/// ```
+/// use transport_api_types::WindowsForwarderScopeV1;
+///
+/// let scope = WindowsForwarderScopeV1::derive(
+///     "S-1-5-21-1000",
+///     "Substrate-WSL",
+///     "abcdef0123456789abcdef0123456789",
+///     r"\\.\pipe\substrate-agent",
+/// )?;
+/// assert_eq!(scope.0.len(), 64);
+/// # Ok::<(), transport_api_types::InstallBootstrapContextErrorV1>(())
+/// ```
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(transparent)]
+pub struct WindowsForwarderScopeV1(pub String);
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq, thiserror::Error)]
 pub enum InstallBootstrapContextErrorV1 {
@@ -185,6 +289,359 @@ impl InstallBootstrapContextCarrierV1 {
             .map_err(|_| InstallBootstrapContextErrorV1::InvalidCarrier)?;
         parse_install_bootstrap_record(record)
     }
+}
+
+impl PlatformBootstrapMappingV1 {
+    /// Constructs a canonical Lima mapping from already-observed values.
+    ///
+    /// ```
+    /// use transport_api_types::{
+    ///     InstallBootstrapContextCarrierV1, InstallBootstrapContextV1,
+    ///     PlatformBootstrapMappingV1,
+    /// };
+    ///
+    /// let host = InstallBootstrapContextCarrierV1::from_context(
+    ///     InstallBootstrapContextV1::new_unix("/opt/substrate", "alice", 1000)?,
+    /// )?;
+    /// let mapping = PlatformBootstrapMappingV1::new_lima(
+    ///     &host,
+    ///     "substrate",
+    ///     "0123456789abcdef0123456789abcdef",
+    ///     "/Users/alice/.lima",
+    ///     "/home/substrate/.substrate",
+    ///     "substrate",
+    ///     1000,
+    ///     "/opt/substrate/sock/agent.sock",
+    ///     "/run/substrate.sock",
+    /// )?;
+    /// assert_eq!(mapping.host_platform_control_root, "/Users/alice/.lima");
+    /// # Ok::<(), transport_api_types::InstallBootstrapContextErrorV1>(())
+    /// ```
+    #[allow(clippy::too_many_arguments)]
+    pub fn new_lima(
+        host_carrier: &InstallBootstrapContextCarrierV1,
+        vm_name: &str,
+        guest_machine_id: &str,
+        host_platform_control_root: &str,
+        realized_substrate_home: &str,
+        realized_principal_account: &str,
+        realized_principal_uid: u32,
+        transport_host: &str,
+        transport_guest_socket: &str,
+    ) -> Result<Self, InstallBootstrapContextErrorV1> {
+        host_carrier.validate()?;
+        let mapping = Self {
+            host_context_commitment: host_carrier.host_context_commitment.clone(),
+            platform_instance: PlatformInstanceIdentityV1::Lima {
+                vm_name: vm_name.to_string(),
+                guest_machine_id: guest_machine_id.to_string(),
+            },
+            host_platform_control_root: normalize_unix_install_bootstrap_path(
+                host_platform_control_root,
+            )?,
+            realized_substrate_home: normalize_unix_install_bootstrap_path(
+                realized_substrate_home,
+            )?,
+            realized_principal: PlatformPrincipalV1::Unix {
+                account: realized_principal_account.to_string(),
+                uid: realized_principal_uid,
+            },
+            realized_transport: PlatformTransportIdentityV1::Lima {
+                host_socket: normalize_unix_install_bootstrap_path(transport_host)?,
+                guest_socket: normalize_unix_install_bootstrap_path(transport_guest_socket)?,
+            },
+        };
+        mapping.validate(host_carrier)?;
+        Ok(mapping)
+    }
+
+    /// Constructs a canonical WSL mapping from already-observed values.
+    ///
+    /// ```
+    /// use transport_api_types::{
+    ///     InstallBootstrapContextCarrierV1, InstallBootstrapContextV1,
+    ///     PlatformBootstrapMappingV1,
+    /// };
+    ///
+    /// let host = InstallBootstrapContextCarrierV1::from_context(
+    ///     InstallBootstrapContextV1::new_windows(
+    ///         r"C:\Substrate",
+    ///         r"ACME\Alice",
+    ///         "S-1-5-21-1000",
+    ///     )?,
+    /// )?;
+    /// let mapping = PlatformBootstrapMappingV1::new_wsl(
+    ///     &host,
+    ///     "Substrate-WSL",
+    ///     "abcdef0123456789abcdef0123456789",
+    ///     r"C:\Users\Alice\AppData\Local\Substrate\forwarder\scope",
+    ///     "/home/substrate/.substrate",
+    ///     "substrate",
+    ///     1000,
+    ///     r"\\.\pipe\Substrate-Agent",
+    ///     "/run/substrate.sock",
+    /// )?;
+    /// assert_eq!(
+    ///     mapping.host_platform_control_root,
+    ///     r"C:\Users\Alice\AppData\Local\Substrate\forwarder\scope"
+    /// );
+    /// # Ok::<(), transport_api_types::InstallBootstrapContextErrorV1>(())
+    /// ```
+    #[allow(clippy::too_many_arguments)]
+    pub fn new_wsl(
+        host_carrier: &InstallBootstrapContextCarrierV1,
+        distro_name: &str,
+        guest_machine_id: &str,
+        host_platform_control_root: &str,
+        realized_substrate_home: &str,
+        realized_principal_account: &str,
+        realized_principal_uid: u32,
+        transport_host: &str,
+        transport_guest_socket: &str,
+    ) -> Result<Self, InstallBootstrapContextErrorV1> {
+        host_carrier.validate()?;
+        let mapping = Self {
+            host_context_commitment: host_carrier.host_context_commitment.clone(),
+            platform_instance: PlatformInstanceIdentityV1::Wsl {
+                distro_name: distro_name.to_string(),
+                guest_machine_id: guest_machine_id.to_string(),
+            },
+            host_platform_control_root: normalize_windows_install_bootstrap_path(
+                host_platform_control_root,
+            )?,
+            realized_substrate_home: normalize_unix_install_bootstrap_path(
+                realized_substrate_home,
+            )?,
+            realized_principal: PlatformPrincipalV1::Unix {
+                account: realized_principal_account.to_string(),
+                uid: realized_principal_uid,
+            },
+            realized_transport: PlatformTransportIdentityV1::Wsl {
+                pipe_path: normalize_windows_pipe_path(transport_host)?,
+                guest_socket: normalize_unix_install_bootstrap_path(transport_guest_socket)?,
+            },
+        };
+        mapping.validate(host_carrier)?;
+        Ok(mapping)
+    }
+
+    /// Validates canonical fields and their binding to the supplied host carrier.
+    ///
+    /// ```
+    /// use transport_api_types::{
+    ///     InstallBootstrapContextCarrierV1, InstallBootstrapContextV1,
+    ///     PlatformBootstrapMappingV1,
+    /// };
+    /// # let host = InstallBootstrapContextCarrierV1::from_context(
+    /// #     InstallBootstrapContextV1::new_unix("/opt/substrate", "alice", 1000)?,
+    /// # )?;
+    /// # let mapping = PlatformBootstrapMappingV1::new_lima(
+    /// #     &host, "substrate", "0123456789abcdef0123456789abcdef",
+    /// #     "/Users/alice/.lima", "/home/substrate/.substrate", "substrate", 1000,
+    /// #     "/opt/substrate/sock/agent.sock", "/run/substrate.sock",
+    /// # )?;
+    /// mapping.validate(&host)?;
+    /// # Ok::<(), transport_api_types::InstallBootstrapContextErrorV1>(())
+    /// ```
+    pub fn validate(
+        &self,
+        host_carrier: &InstallBootstrapContextCarrierV1,
+    ) -> Result<(), InstallBootstrapContextErrorV1> {
+        host_carrier.validate()?;
+        if !is_lower_hex_digest(&self.host_context_commitment) {
+            return Err(InstallBootstrapContextErrorV1::InvalidCarrier);
+        }
+        if self.host_context_commitment != host_carrier.host_context_commitment {
+            return Err(InstallBootstrapContextErrorV1::CommitmentMismatch);
+        }
+
+        let PlatformPrincipalV1::Unix { account, .. } = &self.realized_principal else {
+            return Err(InstallBootstrapContextErrorV1::InvalidPrincipal);
+        };
+        if !valid_principal_text(account) {
+            return Err(InstallBootstrapContextErrorV1::InvalidPrincipal);
+        }
+
+        match (&self.platform_instance, &self.realized_transport) {
+            (
+                PlatformInstanceIdentityV1::Lima {
+                    vm_name,
+                    guest_machine_id,
+                },
+                PlatformTransportIdentityV1::Lima {
+                    host_socket,
+                    guest_socket,
+                },
+            ) => {
+                if !valid_principal_text(vm_name)
+                    || !is_lower_hex_machine_id(guest_machine_id)
+                    || normalize_unix_install_bootstrap_path(&self.host_platform_control_root)?
+                        != self.host_platform_control_root
+                    || normalize_unix_install_bootstrap_path(&self.realized_substrate_home)?
+                        != self.realized_substrate_home
+                    || normalize_unix_install_bootstrap_path(host_socket)? != *host_socket
+                    || normalize_unix_install_bootstrap_path(guest_socket)? != *guest_socket
+                {
+                    return Err(InstallBootstrapContextErrorV1::InvalidContext);
+                }
+            }
+            (
+                PlatformInstanceIdentityV1::Wsl {
+                    distro_name,
+                    guest_machine_id,
+                },
+                PlatformTransportIdentityV1::Wsl {
+                    pipe_path,
+                    guest_socket,
+                },
+            ) => {
+                if !valid_principal_text(distro_name)
+                    || !is_lower_hex_machine_id(guest_machine_id)
+                    || normalize_windows_install_bootstrap_path(&self.host_platform_control_root)?
+                        != self.host_platform_control_root
+                    || normalize_unix_install_bootstrap_path(&self.realized_substrate_home)?
+                        != self.realized_substrate_home
+                    || normalize_windows_pipe_path(pipe_path)? != *pipe_path
+                    || normalize_unix_install_bootstrap_path(guest_socket)? != *guest_socket
+                {
+                    return Err(InstallBootstrapContextErrorV1::InvalidContext);
+                }
+            }
+            _ => return Err(InstallBootstrapContextErrorV1::InvalidContext),
+        }
+        Ok(())
+    }
+
+    /// Encodes the exact canonical thirteen-line mapping record as unpadded base64url.
+    ///
+    /// ```
+    /// # use transport_api_types::{
+    /// #     InstallBootstrapContextCarrierV1, InstallBootstrapContextV1,
+    /// #     PlatformBootstrapMappingV1,
+    /// # };
+    /// # let host = InstallBootstrapContextCarrierV1::from_context(
+    /// #     InstallBootstrapContextV1::new_unix("/opt/substrate", "alice", 1000)?,
+    /// # )?;
+    /// # let mapping = PlatformBootstrapMappingV1::new_lima(
+    /// #     &host, "substrate", "0123456789abcdef0123456789abcdef",
+    /// #     "/Users/alice/.lima", "/home/substrate/.substrate", "substrate", 1000,
+    /// #     "/opt/substrate/sock/agent.sock", "/run/substrate.sock",
+    /// # )?;
+    /// let encoded = mapping.encode(&host)?;
+    /// assert!(!encoded.contains('='));
+    /// # Ok::<(), transport_api_types::InstallBootstrapContextErrorV1>(())
+    /// ```
+    pub fn encode(
+        &self,
+        host_carrier: &InstallBootstrapContextCarrierV1,
+    ) -> Result<String, InstallBootstrapContextErrorV1> {
+        self.validate(host_carrier)?;
+        Ok(URL_SAFE_NO_PAD.encode(platform_bootstrap_mapping_record(self)?))
+    }
+
+    /// Decodes and canonically re-encodes a mapping bound to the supplied host carrier.
+    ///
+    /// ```
+    /// # use transport_api_types::{
+    /// #     InstallBootstrapContextCarrierV1, InstallBootstrapContextV1,
+    /// #     PlatformBootstrapMappingV1,
+    /// # };
+    /// # let host = InstallBootstrapContextCarrierV1::from_context(
+    /// #     InstallBootstrapContextV1::new_unix("/opt/substrate", "alice", 1000)?,
+    /// # )?;
+    /// # let mapping = PlatformBootstrapMappingV1::new_lima(
+    /// #     &host, "substrate", "0123456789abcdef0123456789abcdef",
+    /// #     "/Users/alice/.lima", "/home/substrate/.substrate", "substrate", 1000,
+    /// #     "/opt/substrate/sock/agent.sock", "/run/substrate.sock",
+    /// # )?;
+    /// # let encoded = mapping.encode(&host)?;
+    /// let decoded = PlatformBootstrapMappingV1::decode(&encoded, &host)?;
+    /// assert_eq!(decoded, mapping);
+    /// # Ok::<(), transport_api_types::InstallBootstrapContextErrorV1>(())
+    /// ```
+    pub fn decode(
+        encoded: &str,
+        host_carrier: &InstallBootstrapContextCarrierV1,
+    ) -> Result<Self, InstallBootstrapContextErrorV1> {
+        host_carrier.validate()?;
+        if !valid_unpadded_base64url(encoded) {
+            return Err(InstallBootstrapContextErrorV1::InvalidCarrier);
+        }
+        let bytes = URL_SAFE_NO_PAD
+            .decode(encoded)
+            .map_err(|_| InstallBootstrapContextErrorV1::InvalidCarrier)?;
+        if URL_SAFE_NO_PAD.encode(&bytes) != encoded {
+            return Err(InstallBootstrapContextErrorV1::InvalidCarrier);
+        }
+        let record = std::str::from_utf8(&bytes)
+            .map_err(|_| InstallBootstrapContextErrorV1::InvalidCarrier)?;
+        let mapping = parse_platform_bootstrap_mapping_record(record, host_carrier)?;
+        if mapping.encode(host_carrier)? != encoded {
+            return Err(InstallBootstrapContextErrorV1::InvalidCarrier);
+        }
+        Ok(mapping)
+    }
+}
+
+impl WindowsForwarderScopeV1 {
+    /// Derives the canonical six-line Windows forwarder scope digest.
+    ///
+    /// ```
+    /// use transport_api_types::WindowsForwarderScopeV1;
+    ///
+    /// let scope = WindowsForwarderScopeV1::derive(
+    ///     "S-1-5-21-1000",
+    ///     "Substrate-WSL",
+    ///     "abcdef0123456789abcdef0123456789",
+    ///     r"\\.\pipe\Substrate-Agent",
+    /// )?;
+    /// assert_eq!(
+    ///     scope.0,
+    ///     "3b3405b2cf309c050f4ba7acb5f43a2348babf18d6be3c426d066ed058a5e75a"
+    /// );
+    /// # Ok::<(), transport_api_types::InstallBootstrapContextErrorV1>(())
+    /// ```
+    pub fn derive(
+        windows_sid: &str,
+        distro_name: &str,
+        guest_machine_id: &str,
+        pipe_path: &str,
+    ) -> Result<Self, InstallBootstrapContextErrorV1> {
+        let digest = Sha256::digest(windows_forwarder_scope_input(
+            windows_sid,
+            distro_name,
+            guest_machine_id,
+            pipe_path,
+        )?);
+        Ok(Self(format!("{digest:x}")))
+    }
+}
+
+/// Normalizes the case-insensitive name in a canonical Windows named-pipe path.
+///
+/// ```
+/// use transport_api_types::normalize_windows_pipe_path;
+///
+/// assert_eq!(
+///     normalize_windows_pipe_path(r"\\.\pipe\Substrate-Agent")?,
+///     r"\\.\pipe\substrate-agent"
+/// );
+/// # Ok::<(), transport_api_types::InstallBootstrapContextErrorV1>(())
+/// ```
+pub fn normalize_windows_pipe_path(raw: &str) -> Result<String, InstallBootstrapContextErrorV1> {
+    let Some(name) = raw.strip_prefix(r"\\.\pipe\") else {
+        return Err(InstallBootstrapContextErrorV1::InvalidPath);
+    };
+    if name.is_empty()
+        || name.len() > 128
+        || !name.is_ascii()
+        || !name
+            .bytes()
+            .all(|byte| byte.is_ascii_alphanumeric() || matches!(byte, b'.' | b'_' | b'-'))
+    {
+        return Err(InstallBootstrapContextErrorV1::InvalidPath);
+    }
+    Ok(format!(r"\\.\pipe\{}", name.to_ascii_lowercase()))
 }
 
 pub fn normalize_unix_install_bootstrap_path(
@@ -370,6 +827,178 @@ fn decode_inner_field(value: &str) -> Result<String, InstallBootstrapContextErro
         return Err(InstallBootstrapContextErrorV1::InvalidCarrier);
     }
     String::from_utf8(decoded).map_err(|_| InstallBootstrapContextErrorV1::InvalidCarrier)
+}
+
+fn valid_unpadded_base64url(value: &str) -> bool {
+    !value.is_empty()
+        && value
+            .bytes()
+            .all(|byte| byte.is_ascii_alphanumeric() || matches!(byte, b'_' | b'-'))
+}
+
+fn platform_bootstrap_mapping_record(
+    mapping: &PlatformBootstrapMappingV1,
+) -> Result<Vec<u8>, InstallBootstrapContextErrorV1> {
+    let (platform_kind, instance_name, guest_machine_id) = match &mapping.platform_instance {
+        PlatformInstanceIdentityV1::Lima {
+            vm_name,
+            guest_machine_id,
+        } => ("lima", vm_name, guest_machine_id),
+        PlatformInstanceIdentityV1::Wsl {
+            distro_name,
+            guest_machine_id,
+        } => ("wsl", distro_name, guest_machine_id),
+    };
+    let (transport_kind, transport_host, transport_guest_socket) = match &mapping.realized_transport
+    {
+        PlatformTransportIdentityV1::Lima {
+            host_socket,
+            guest_socket,
+        } => ("lima", host_socket, guest_socket),
+        PlatformTransportIdentityV1::Wsl {
+            pipe_path,
+            guest_socket,
+        } => ("wsl", pipe_path, guest_socket),
+    };
+    let PlatformPrincipalV1::Unix { account, uid } = &mapping.realized_principal else {
+        return Err(InstallBootstrapContextErrorV1::InvalidPrincipal);
+    };
+    Ok(format!(
+        "domain={PLATFORM_BOOTSTRAP_MAPPING_DOMAIN_V1}\n\
+version=1\n\
+host_context_commitment={}\n\
+platform_kind={platform_kind}\n\
+instance_name={}\n\
+guest_machine_id={guest_machine_id}\n\
+host_platform_control_root={}\n\
+realized_substrate_home={}\n\
+realized_principal_account={}\n\
+realized_principal_uid={uid}\n\
+transport_kind={transport_kind}\n\
+transport_host={}\n\
+transport_guest_socket={}\n",
+        mapping.host_context_commitment,
+        encode_inner_field(instance_name),
+        encode_inner_field(&mapping.host_platform_control_root),
+        encode_inner_field(&mapping.realized_substrate_home),
+        encode_inner_field(account),
+        encode_inner_field(transport_host),
+        encode_inner_field(transport_guest_socket),
+    )
+    .into_bytes())
+}
+
+fn parse_platform_bootstrap_mapping_record(
+    record: &str,
+    host_carrier: &InstallBootstrapContextCarrierV1,
+) -> Result<PlatformBootstrapMappingV1, InstallBootstrapContextErrorV1> {
+    if !record.ends_with('\n') || record.contains('\r') || record.contains('\0') {
+        return Err(InstallBootstrapContextErrorV1::InvalidCarrier);
+    }
+    let lines = record.split_terminator('\n').collect::<Vec<_>>();
+    if lines.len() != 13 {
+        return Err(InstallBootstrapContextErrorV1::InvalidCarrier);
+    }
+    require_record_value(lines[0], "domain", PLATFORM_BOOTSTRAP_MAPPING_DOMAIN_V1)?;
+    require_record_value(lines[1], "version", "1")?;
+    let host_context_commitment = record_value(lines[2], "host_context_commitment")?.to_string();
+    if !is_lower_hex_digest(&host_context_commitment) {
+        return Err(InstallBootstrapContextErrorV1::InvalidCarrier);
+    }
+    if host_context_commitment != host_carrier.host_context_commitment {
+        return Err(InstallBootstrapContextErrorV1::CommitmentMismatch);
+    }
+
+    let platform_kind = record_value(lines[3], "platform_kind")?;
+    let instance_name = decode_inner_field(record_value(lines[4], "instance_name")?)?;
+    let guest_machine_id = record_value(lines[5], "guest_machine_id")?;
+    if !is_lower_hex_machine_id(guest_machine_id) {
+        return Err(InstallBootstrapContextErrorV1::InvalidCarrier);
+    }
+    let host_platform_control_root =
+        decode_inner_field(record_value(lines[6], "host_platform_control_root")?)?;
+    let realized_substrate_home =
+        decode_inner_field(record_value(lines[7], "realized_substrate_home")?)?;
+    let realized_principal_account =
+        decode_inner_field(record_value(lines[8], "realized_principal_account")?)?;
+    let realized_principal_uid =
+        parse_canonical_u32(record_value(lines[9], "realized_principal_uid")?)?;
+    let transport_kind = record_value(lines[10], "transport_kind")?;
+    let transport_host = decode_inner_field(record_value(lines[11], "transport_host")?)?;
+    let transport_guest_socket =
+        decode_inner_field(record_value(lines[12], "transport_guest_socket")?)?;
+
+    match (platform_kind, transport_kind) {
+        ("lima", "lima") => PlatformBootstrapMappingV1::new_lima(
+            host_carrier,
+            &instance_name,
+            guest_machine_id,
+            &host_platform_control_root,
+            &realized_substrate_home,
+            &realized_principal_account,
+            realized_principal_uid,
+            &transport_host,
+            &transport_guest_socket,
+        ),
+        ("wsl", "wsl") => PlatformBootstrapMappingV1::new_wsl(
+            host_carrier,
+            &instance_name,
+            guest_machine_id,
+            &host_platform_control_root,
+            &realized_substrate_home,
+            &realized_principal_account,
+            realized_principal_uid,
+            &transport_host,
+            &transport_guest_socket,
+        ),
+        _ => Err(InstallBootstrapContextErrorV1::InvalidCarrier),
+    }
+}
+
+fn parse_canonical_u32(value: &str) -> Result<u32, InstallBootstrapContextErrorV1> {
+    if value.is_empty()
+        || !value.bytes().all(|byte| byte.is_ascii_digit())
+        || (value.len() > 1 && value.starts_with('0'))
+    {
+        return Err(InstallBootstrapContextErrorV1::InvalidCarrier);
+    }
+    value
+        .parse()
+        .map_err(|_| InstallBootstrapContextErrorV1::InvalidCarrier)
+}
+
+fn is_lower_hex_machine_id(value: &str) -> bool {
+    value.len() == 32
+        && value
+            .bytes()
+            .all(|byte| byte.is_ascii_digit() || (b'a'..=b'f').contains(&byte))
+}
+
+fn windows_forwarder_scope_input(
+    windows_sid: &str,
+    distro_name: &str,
+    guest_machine_id: &str,
+    pipe_path: &str,
+) -> Result<Vec<u8>, InstallBootstrapContextErrorV1> {
+    if !valid_windows_sid(windows_sid)
+        || !valid_principal_text(distro_name)
+        || !is_lower_hex_machine_id(guest_machine_id)
+    {
+        return Err(InstallBootstrapContextErrorV1::InvalidContext);
+    }
+    let pipe_path = normalize_windows_pipe_path(pipe_path)?;
+    Ok(format!(
+        "domain={WINDOWS_FORWARDER_SCOPE_DOMAIN_V1}\n\
+version=1\n\
+windows_sid={}\n\
+distro_name={}\n\
+guest_machine_id={guest_machine_id}\n\
+pipe_path={}\n",
+        encode_inner_field(windows_sid),
+        encode_inner_field(distro_name),
+        encode_inner_field(&pipe_path),
+    )
+    .into_bytes())
 }
 
 fn parse_install_bootstrap_record(
@@ -2747,9 +3376,53 @@ principal_uid=1000\n";
     const WINDOWS_IH_COMMITMENT: &str =
         "3e1e71b325e92b16f5bfc0f3d875fd15f04a1615ac90b1439eb37afdf90a5ac7";
     const WINDOWS_IH_CARRIER: &str = "ZG9tYWluPXN1YnN0cmF0ZS5pbnN0YWxsX2Jvb3RzdHJhcF9jb250ZXh0CnZlcnNpb249MQpzZWxlY3RlZF9ob3N0X3ByZWZpeD1RenBjVlhObGNuTmNRV3hwWTJWY1FYQndSR0YwWVZ4TWIyTmhiRnhUZFdKemRISmhkR1UKaG9zdF9zdWJzdHJhdGVfaG9tZT1RenBjVlhObGNuTmNRV3hwWTJWY1FYQndSR0YwWVZ4TWIyTmhiRnhUZFdKemRISmhkR1UKaG9zdF9zdWJzdHJhdGVfcm9vdD1RenBjVlhObGNuTmNRV3hwWTJWY1FYQndSR0YwWVZ4TWIyTmhiRnhUZFdKemRISmhkR1UKcHJpbmNpcGFsX2tpbmQ9d2luZG93cwpwcmluY2lwYWxfYWNjb3VudD1RVU5OUlZ4QmJHbGpaUQpwcmluY2lwYWxfc2lkPVV5MHhMVFV0TWpFdE1UQXdNQQpob3N0X2NvbnRleHRfY29tbWl0bWVudD0zZTFlNzFiMzI1ZTkyYjE2ZjViZmMwZjNkODc1ZmQxNWYwNGExNjE1YWM5MGIxNDM5ZWIzN2FmZGY5MGE1YWM3Cg";
+    const LIMA_PM_FRAME: &str = "domain=substrate.platform_bootstrap_mapping\n\
+version=1\n\
+host_context_commitment=0320704f788ba8e9f13b2eed7af83ad3f33fc999ab80f21abc83722314c9a79d\n\
+platform_kind=lima\n\
+instance_name=c3Vic3RyYXRl\n\
+guest_machine_id=0123456789abcdef0123456789abcdef\n\
+host_platform_control_root=L1VzZXJzL2FsaWNlLy5saW1h\n\
+realized_substrate_home=L2hvbWUvc3Vic3RyYXRlLy5zdWJzdHJhdGU\n\
+realized_principal_account=c3Vic3RyYXRl\n\
+realized_principal_uid=1000\n\
+transport_kind=lima\n\
+transport_host=L29wdC9zdWJzdHJhdGUtZGV2L3NvY2svYWdlbnQuc29jaw\n\
+transport_guest_socket=L3J1bi9zdWJzdHJhdGUuc29jaw\n";
+    const LIMA_PM_CARRIER: &str = "ZG9tYWluPXN1YnN0cmF0ZS5wbGF0Zm9ybV9ib290c3RyYXBfbWFwcGluZwp2ZXJzaW9uPTEKaG9zdF9jb250ZXh0X2NvbW1pdG1lbnQ9MDMyMDcwNGY3ODhiYThlOWYxM2IyZWVkN2FmODNhZDNmMzNmYzk5OWFiODBmMjFhYmM4MzcyMjMxNGM5YTc5ZApwbGF0Zm9ybV9raW5kPWxpbWEKaW5zdGFuY2VfbmFtZT1jM1ZpYzNSeVlYUmwKZ3Vlc3RfbWFjaGluZV9pZD0wMTIzNDU2Nzg5YWJjZGVmMDEyMzQ1Njc4OWFiY2RlZgpob3N0X3BsYXRmb3JtX2NvbnRyb2xfcm9vdD1MMVZ6WlhKekwyRnNhV05sTHk1c2FXMWgKcmVhbGl6ZWRfc3Vic3RyYXRlX2hvbWU9TDJodmJXVXZjM1ZpYzNSeVlYUmxMeTV6ZFdKemRISmhkR1UKcmVhbGl6ZWRfcHJpbmNpcGFsX2FjY291bnQ9YzNWaWMzUnlZWFJsCnJlYWxpemVkX3ByaW5jaXBhbF91aWQ9MTAwMAp0cmFuc3BvcnRfa2luZD1saW1hCnRyYW5zcG9ydF9ob3N0PUwyOXdkQzl6ZFdKemRISmhkR1V0WkdWMkwzTnZZMnN2WVdkbGJuUXVjMjlqYXcKdHJhbnNwb3J0X2d1ZXN0X3NvY2tldD1MM0oxYmk5emRXSnpkSEpoZEdVdWMyOWphdwo";
+    const WSL_PM_FRAME: &str = "domain=substrate.platform_bootstrap_mapping\n\
+version=1\n\
+host_context_commitment=3e1e71b325e92b16f5bfc0f3d875fd15f04a1615ac90b1439eb37afdf90a5ac7\n\
+platform_kind=wsl\n\
+instance_name=U3Vic3RyYXRlLVdTTA\n\
+guest_machine_id=abcdef0123456789abcdef0123456789\n\
+host_platform_control_root=QzpcVXNlcnNcQWxpY2VcQXBwRGF0YVxMb2NhbFxTdWJzdHJhdGVcZm9yd2FyZGVyXHNjb3Bl\n\
+realized_substrate_home=L2hvbWUvYm9iLy5zdWJzdHJhdGU\n\
+realized_principal_account=Ym9i\n\
+realized_principal_uid=1001\n\
+transport_kind=wsl\n\
+transport_host=XFwuXHBpcGVcc3Vic3RyYXRlLWFnZW50\n\
+transport_guest_socket=L3J1bi9zdWJzdHJhdGUuc29jaw\n";
+    const WSL_PM_CARRIER: &str = "ZG9tYWluPXN1YnN0cmF0ZS5wbGF0Zm9ybV9ib290c3RyYXBfbWFwcGluZwp2ZXJzaW9uPTEKaG9zdF9jb250ZXh0X2NvbW1pdG1lbnQ9M2UxZTcxYjMyNWU5MmIxNmY1YmZjMGYzZDg3NWZkMTVmMDRhMTYxNWFjOTBiMTQzOWViMzdhZmRmOTBhNWFjNwpwbGF0Zm9ybV9raW5kPXdzbAppbnN0YW5jZV9uYW1lPVUzVmljM1J5WVhSbExWZFRUQQpndWVzdF9tYWNoaW5lX2lkPWFiY2RlZjAxMjM0NTY3ODlhYmNkZWYwMTIzNDU2Nzg5Cmhvc3RfcGxhdGZvcm1fY29udHJvbF9yb290PVF6cGNWWE5sY25OY1FXeHBZMlZjUVhCd1JHRjBZVnhNYjJOaGJGeFRkV0p6ZEhKaGRHVmNabTl5ZDJGeVpHVnlYSE5qYjNCbApyZWFsaXplZF9zdWJzdHJhdGVfaG9tZT1MMmh2YldVdlltOWlMeTV6ZFdKemRISmhkR1UKcmVhbGl6ZWRfcHJpbmNpcGFsX2FjY291bnQ9WW05aQpyZWFsaXplZF9wcmluY2lwYWxfdWlkPTEwMDEKdHJhbnNwb3J0X2tpbmQ9d3NsCnRyYW5zcG9ydF9ob3N0PVhGd3VYSEJwY0dWY2MzVmljM1J5WVhSbExXRm5aVzUwCnRyYW5zcG9ydF9ndWVzdF9zb2NrZXQ9TDNKMWJpOXpkV0p6ZEhKaGRHVXVjMjlqYXcK";
+    const WINDOWS_FORWARDER_SCOPE_FRAME: &str = "domain=substrate.windows_forwarder_scope\n\
+version=1\n\
+windows_sid=Uy0xLTUtMjEtMTAwMA\n\
+distro_name=U3Vic3RyYXRlLVdTTA\n\
+guest_machine_id=abcdef0123456789abcdef0123456789\n\
+pipe_path=XFwuXHBpcGVcc3Vic3RyYXRlLWFnZW50\n";
+    const WINDOWS_FORWARDER_SCOPE_DIGEST: &str =
+        "3b3405b2cf309c050f4ba7acb5f43a2348babf18d6be3c426d066ed058a5e75a";
 
     fn encode_ih_record(record: &str) -> String {
         URL_SAFE_NO_PAD.encode(record.as_bytes())
+    }
+
+    fn unix_ih_carrier() -> InstallBootstrapContextCarrierV1 {
+        InstallBootstrapContextCarrierV1::decode(UNIX_IH_CARRIER).unwrap()
+    }
+
+    fn windows_ih_carrier() -> InstallBootstrapContextCarrierV1 {
+        InstallBootstrapContextCarrierV1::decode(WINDOWS_IH_CARRIER).unwrap()
     }
 
     #[test]
@@ -2851,6 +3524,295 @@ principal_uid=1000\n";
         }
         assert!(InstallBootstrapContextCarrierV1::decode("not+base64").is_err());
         assert!(InstallBootstrapContextCarrierV1::decode(&format!("{UNIX_IH_CARRIER}=")).is_err());
+    }
+
+    #[test]
+    fn platform_bootstrap_mapping_lima_golden_vector_is_exact() {
+        let carrier = unix_ih_carrier();
+        let mapping = PlatformBootstrapMappingV1::new_lima(
+            &carrier,
+            "substrate",
+            "0123456789abcdef0123456789abcdef",
+            "/Users//alice/.lima/",
+            "/home/substrate/.substrate",
+            "substrate",
+            1000,
+            "/opt/substrate-dev/sock/agent.sock",
+            "/run/substrate.sock",
+        )
+        .unwrap();
+
+        assert_eq!(mapping.host_platform_control_root, "/Users/alice/.lima");
+        assert_eq!(
+            URL_SAFE_NO_PAD
+                .decode(mapping.encode(&carrier).unwrap())
+                .unwrap(),
+            LIMA_PM_FRAME.as_bytes()
+        );
+        assert_eq!(LIMA_PM_FRAME.lines().count(), 13);
+        assert!(LIMA_PM_FRAME.ends_with('\n'));
+        assert_eq!(mapping.encode(&carrier).unwrap(), LIMA_PM_CARRIER);
+        assert_eq!(
+            PlatformBootstrapMappingV1::decode(LIMA_PM_CARRIER, &carrier).unwrap(),
+            mapping
+        );
+        assert_ne!(
+            mapping.host_platform_control_root,
+            mapping.realized_substrate_home
+        );
+        assert_ne!(
+            carrier.context.intended_host_principal,
+            mapping.realized_principal
+        );
+    }
+
+    #[test]
+    fn platform_bootstrap_mapping_wsl_golden_vector_is_exact() {
+        let carrier = windows_ih_carrier();
+        let mapping = PlatformBootstrapMappingV1::new_wsl(
+            &carrier,
+            "Substrate-WSL",
+            "abcdef0123456789abcdef0123456789",
+            r"c:/Users/Alice/AppData/Local/Substrate/forwarder/scope/",
+            "/home/bob/.substrate",
+            "bob",
+            1001,
+            r"\\.\pipe\Substrate-Agent",
+            "/run/substrate.sock",
+        )
+        .unwrap();
+
+        assert_eq!(
+            mapping.host_platform_control_root,
+            r"C:\Users\Alice\AppData\Local\Substrate\forwarder\scope"
+        );
+        assert_eq!(
+            mapping.realized_transport,
+            PlatformTransportIdentityV1::Wsl {
+                pipe_path: r"\\.\pipe\substrate-agent".to_string(),
+                guest_socket: "/run/substrate.sock".to_string(),
+            }
+        );
+        assert_eq!(
+            URL_SAFE_NO_PAD
+                .decode(mapping.encode(&carrier).unwrap())
+                .unwrap(),
+            WSL_PM_FRAME.as_bytes()
+        );
+        assert_eq!(WSL_PM_FRAME.lines().count(), 13);
+        assert!(WSL_PM_FRAME.ends_with('\n'));
+        assert_eq!(mapping.encode(&carrier).unwrap(), WSL_PM_CARRIER);
+        assert_eq!(
+            PlatformBootstrapMappingV1::decode(WSL_PM_CARRIER, &carrier).unwrap(),
+            mapping
+        );
+    }
+
+    #[test]
+    fn platform_bootstrap_mapping_rejects_noncanonical_or_tampered_records() {
+        let carrier = unix_ih_carrier();
+        let canonical = LIMA_PM_FRAME;
+        let noncanonical_host_path = encode_inner_field("/Users/alice//.lima");
+        let noncanonical_guest_path = encode_inner_field("/home/substrate//.substrate");
+        let cases = [
+            canonical.replacen("version=1\n", "", 1),
+            canonical.replacen("version=1\n", "version=1\nversion=1\n", 1),
+            canonical.replacen("version=1", "unknown=1", 1),
+            canonical.replacen(
+                "version=1\nhost_context_commitment=",
+                "host_context_commitment=version=1\n",
+                1,
+            ),
+            canonical.replacen("c3Vic3RyYXRl", "***", 1),
+            canonical.replacen("c3Vic3RyYXRl", "c3Vic3RyYXRl=", 1),
+            canonical.replacen(UNIX_IH_COMMITMENT, &"0".repeat(64), 1),
+            canonical.replacen(UNIX_IH_COMMITMENT, "abc", 1),
+            canonical.replacen(UNIX_IH_COMMITMENT, &UNIX_IH_COMMITMENT.to_uppercase(), 1),
+            canonical.replacen(
+                "0123456789abcdef0123456789abcdef",
+                "0123456789ABCDEF0123456789ABCDEF",
+                1,
+            ),
+            canonical.replacen("0123456789abcdef0123456789abcdef", "0123456789abcdef", 1),
+            canonical.replacen(
+                "realized_principal_uid=1000",
+                "realized_principal_uid=01000",
+                1,
+            ),
+            canonical.replacen(
+                "realized_principal_uid=1000",
+                "realized_principal_uid=-1",
+                1,
+            ),
+            canonical.replacen(
+                "realized_principal_uid=1000",
+                "realized_principal_uid=4294967296",
+                1,
+            ),
+            canonical.replacen(
+                "host_platform_control_root=L1VzZXJzL2FsaWNlLy5saW1h",
+                &format!("host_platform_control_root={noncanonical_host_path}"),
+                1,
+            ),
+            canonical.replacen(
+                "realized_substrate_home=L2hvbWUvc3Vic3RyYXRlLy5zdWJzdHJhdGU",
+                &format!("realized_substrate_home={noncanonical_guest_path}"),
+                1,
+            ),
+            canonical.replacen("transport_kind=lima", "transport_kind=wsl", 1),
+            canonical.replacen("transport_host=", "extra=field\ntransport_host=", 1),
+            canonical.trim_end_matches('\n').to_string(),
+            canonical.replace('\n', "\r\n"),
+        ];
+
+        for record in cases {
+            assert!(
+                PlatformBootstrapMappingV1::decode(&encode_ih_record(&record), &carrier).is_err(),
+                "accepted tampered record: {record:?}"
+            );
+        }
+        assert!(
+            PlatformBootstrapMappingV1::decode(&format!("{LIMA_PM_CARRIER}="), &carrier).is_err()
+        );
+        let windows_carrier = windows_ih_carrier();
+        let noncanonical_windows_path =
+            encode_inner_field(r"C:\Users\Alice\..\Alice\AppData\Local\Substrate");
+        let noncanonical_windows_record = WSL_PM_FRAME.replacen(
+            "host_platform_control_root=QzpcVXNlcnNcQWxpY2VcQXBwRGF0YVxMb2NhbFxTdWJzdHJhdGVcZm9yd2FyZGVyXHNjb3Bl",
+            &format!("host_platform_control_root={noncanonical_windows_path}"),
+            1,
+        );
+        assert!(PlatformBootstrapMappingV1::decode(
+            &encode_ih_record(&noncanonical_windows_record),
+            &windows_carrier,
+        )
+        .is_err());
+
+        let mut mapping = PlatformBootstrapMappingV1::decode(LIMA_PM_CARRIER, &carrier).unwrap();
+        mapping.realized_transport = PlatformTransportIdentityV1::Wsl {
+            pipe_path: r"\\.\pipe\substrate-agent".to_string(),
+            guest_socket: "/run/substrate.sock".to_string(),
+        };
+        assert!(mapping.validate(&carrier).is_err());
+
+        let wrong_carrier = InstallBootstrapContextCarrierV1::from_context(
+            InstallBootstrapContextV1::new_unix("/opt/other", "alice", 1000).unwrap(),
+        )
+        .unwrap();
+        assert!(PlatformBootstrapMappingV1::decode(LIMA_PM_CARRIER, &wrong_carrier).is_err());
+    }
+
+    #[test]
+    fn windows_forwarder_scope_and_pipe_normalization_are_canonical() {
+        assert_eq!(
+            normalize_windows_pipe_path(r"\\.\pipe\Substrate-Agent").unwrap(),
+            r"\\.\pipe\substrate-agent"
+        );
+        assert_eq!(
+            WindowsForwarderScopeV1::derive(
+                "S-1-5-21-1000",
+                "Substrate-WSL",
+                "abcdef0123456789abcdef0123456789",
+                r"\\.\pipe\Substrate-Agent",
+            )
+            .unwrap()
+            .0,
+            WINDOWS_FORWARDER_SCOPE_DIGEST
+        );
+        assert_eq!(
+            windows_forwarder_scope_input(
+                "S-1-5-21-1000",
+                "Substrate-WSL",
+                "abcdef0123456789abcdef0123456789",
+                r"\\.\pipe\substrate-agent",
+            )
+            .unwrap(),
+            WINDOWS_FORWARDER_SCOPE_FRAME.as_bytes()
+        );
+        assert_eq!(
+            WindowsForwarderScopeV1::derive(
+                "S-1-5-21-1000",
+                "Substrate-WSL",
+                "abcdef0123456789abcdef0123456789",
+                r"\\.\pipe\SUBSTRATE-AGENT",
+            )
+            .unwrap()
+            .0,
+            WINDOWS_FORWARDER_SCOPE_DIGEST
+        );
+
+        for invalid in [
+            "",
+            r"\\.\pipe\",
+            r"//./pipe/substrate-agent",
+            r"\\server\pipe\substrate-agent",
+            r"\\.\PIPE\substrate-agent",
+            r"\\.\pipe\nested\name",
+            r"\\.\pipe\has space",
+            "\\\\.\\pipe\\line\nbreak",
+            r"\\.\pipe\name$",
+        ] {
+            assert!(
+                normalize_windows_pipe_path(invalid).is_err(),
+                "accepted invalid pipe: {invalid:?}"
+            );
+        }
+        assert!(normalize_windows_pipe_path(&format!(r"\\.\pipe\{}", "a".repeat(129))).is_err());
+
+        let canonical = WindowsForwarderScopeV1::derive(
+            "S-1-5-21-1000",
+            "Substrate-WSL",
+            "abcdef0123456789abcdef0123456789",
+            r"\\.\pipe\substrate-agent",
+        )
+        .unwrap();
+        for tampered in [
+            WindowsForwarderScopeV1::derive(
+                "S-1-5-21-1001",
+                "Substrate-WSL",
+                "abcdef0123456789abcdef0123456789",
+                r"\\.\pipe\substrate-agent",
+            )
+            .unwrap(),
+            WindowsForwarderScopeV1::derive(
+                "S-1-5-21-1000",
+                "Substrate-WSL-2",
+                "abcdef0123456789abcdef0123456789",
+                r"\\.\pipe\substrate-agent",
+            )
+            .unwrap(),
+            WindowsForwarderScopeV1::derive(
+                "S-1-5-21-1000",
+                "Substrate-WSL",
+                "abcdef0123456789abcdef0123456780",
+                r"\\.\pipe\substrate-agent",
+            )
+            .unwrap(),
+            WindowsForwarderScopeV1::derive(
+                "S-1-5-21-1000",
+                "Substrate-WSL",
+                "abcdef0123456789abcdef0123456789",
+                r"\\.\pipe\substrate-agent-2",
+            )
+            .unwrap(),
+        ] {
+            assert_ne!(tampered, canonical);
+        }
+
+        assert!(WindowsForwarderScopeV1::derive(
+            "s-1-5-21-1000",
+            "Substrate-WSL",
+            "abcdef0123456789abcdef0123456789",
+            r"\\.\pipe\substrate-agent",
+        )
+        .is_err());
+        assert!(WindowsForwarderScopeV1::derive(
+            "S-1-5-21-1000",
+            "Substrate-WSL",
+            "ABCDEF0123456789ABCDEF0123456789",
+            r"\\.\pipe\substrate-agent",
+        )
+        .is_err());
     }
 
     const LAITDP2_CLIENT: &str = "codex";
