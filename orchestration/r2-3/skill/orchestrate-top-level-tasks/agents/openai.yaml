@@ -1,0 +1,4 @@
+interface:
+  display_name: "Orchestrate Top-Level Tasks"
+  short_description: "Coordinate fresh Codex tasks with verified handoffs"
+  default_prompt: "Use $orchestrate-top-level-tasks to coordinate this ordered multi-session implementation."

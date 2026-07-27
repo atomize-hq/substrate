@@ -1,0 +1,44 @@
+{
+  "protocol": "codex.top-level-task-receipt.v1",
+  "orchestration_id": "example",
+  "dispatch_nonce": "00000000000000000000000000000000",
+  "increment": "EXAMPLE-1",
+  "status": "LANDED_CLEAN",
+  "increment_task": {
+    "thread_id": "example-thread",
+    "host_id": "example-host"
+  },
+  "expected_base": {
+    "commit": "0000000000000000000000000000000000000000",
+    "tree": "0000000000000000000000000000000000000000"
+  },
+  "landed": {
+    "commit": "1111111111111111111111111111111111111111",
+    "tree": "2222222222222222222222222222222222222222",
+    "target_ref": "refs/heads/example",
+    "live_remote": "1111111111111111111111111111111111111111"
+  },
+  "subject_fingerprint": "sha256:0000000000000000000000000000000000000000000000000000000000000000",
+  "changed_files": [
+    "path/to/file"
+  ],
+  "review": {
+    "packet_id": "EXAMPLE-1",
+    "record_path": "/tmp/example-review.json",
+    "record_sha256": "sha256:0000000000000000000000000000000000000000000000000000000000000000",
+    "validated": true,
+    "terminal": "CLEAN",
+    "p1": 0,
+    "p2": 0,
+    "p3_p4_disposition": "none"
+  },
+  "verification": {
+    "required_checks_passed": true,
+    "allowlist_passed": true,
+    "change_detection_passed": true,
+    "checkout_clean": true,
+    "ahead": 0,
+    "behind": 0
+  },
+  "next_increment": "EVIDENCE:EXAMPLE-2"
+}

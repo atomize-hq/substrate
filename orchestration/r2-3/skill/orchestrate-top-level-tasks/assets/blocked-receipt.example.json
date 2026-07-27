@@ -1,0 +1,21 @@
+{
+  "protocol": "codex.top-level-task-receipt.v1",
+  "orchestration_id": "example",
+  "dispatch_nonce": "00000000000000000000000000000000",
+  "increment": "EXAMPLE-1",
+  "status": "BLOCKED_PLATFORM_HANDOFF_REQUIRED",
+  "increment_task": {
+    "thread_id": "example-thread",
+    "host_id": "example-host"
+  },
+  "expected_base": {
+    "commit": "0000000000000000000000000000000000000000",
+    "tree": "0000000000000000000000000000000000000000"
+  },
+  "blocker": {
+    "summary": "Required platform project is unavailable",
+    "details": "No project matched the required path, host, project ID, repository, and OS.",
+    "required_authority": "A human must register or provide access to the required platform project.",
+    "handoff_prompt": "Use the published ref and evidence contract to continue on the required platform."
+  }
+}
