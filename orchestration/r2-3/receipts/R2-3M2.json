@@ -1,0 +1,67 @@
+{
+  "protocol": "codex.top-level-task-receipt.v1",
+  "orchestration_id": "substrate-r2-3",
+  "dispatch_nonce": "3e6f4eddbb1670f9148190565046e1be8f517fc1f89970109228bf1c7a07e7ed",
+  "increment": "R2-3M2",
+  "status": "LANDED_CLEAN",
+  "increment_task": {
+    "thread_id": "019fa58b-5cc8-7dd1-a20e-05c45f9d8018",
+    "host_id": "remote-ssh-discovered:spenser-linux-codex"
+  },
+  "expected_base": {
+    "commit": "1b182a70523a5aa3001ed8a113addaf3f28f9f2d",
+    "tree": "b76781c9aca1734a331aacb081baf2acac1fb497"
+  },
+  "landed": {
+    "commit": "8296a7fce4b377311b3cc74df1a66cdc5a44101e",
+    "tree": "e3279fe1dc606f31392116c723f104df09bc137b",
+    "target_ref": "refs/heads/feat/internal-host-orchestrator-world-dispatch-bootstrap",
+    "live_remote": "8296a7fce4b377311b3cc74df1a66cdc5a44101e"
+  },
+  "subject_fingerprint": "sha256:3005a546e3dbc628da5a1af9fb74b1c8ed4f5db9390377e21806f97909b98e29",
+  "changed_files": [
+    "crates/world-mac-lima/src/lib.rs",
+    "crates/world-mac-lima/src/limactl.rs",
+    "crates/world-mac-lima/src/transport.rs",
+    "crates/world-mac-lima/src/vm.rs"
+  ],
+  "review": {
+    "packet_id": "A1.1d-5R2-3M2",
+    "record_path": "/home/spenser/.codex/visualizations/2026/07/27/019fa58b-5cc8-7dd1-a20e-05c45f9d8018/review-A1.1d-5R2-3M2.json",
+    "record_sha256": "sha256:43a124bb5e9d576c68de5d5635892cfb1536b53da52234d7fb31cd8c2542be97",
+    "validated": true,
+    "terminal": "CLEAN",
+    "p1": 0,
+    "p2": 0,
+    "p3_p4_disposition": "none"
+  },
+  "verification": {
+    "required_checks_passed": true,
+    "allowlist_passed": true,
+    "change_detection_passed": true,
+    "checkout_clean": true,
+    "ahead": 0,
+    "behind": 0,
+    "checks": [
+      "cargo fmt --all -- --check",
+      "cargo check --locked -p world-mac-lima",
+      "cargo test --locked -p world-mac-lima",
+      "cargo clippy --locked -p world-mac-lima --all-targets -- -D warnings",
+      "cargo check --locked -p world-mac-lima --target x86_64-apple-darwin (failed: Linux host lacks Darwin-capable C toolchain/SDK; ring cc build rejected -arch/-mmacosx-version-min)",
+      "cargo test --locked -p world-mac-lima --target x86_64-apple-darwin --no-run (failed for same Darwin toolchain/SDK reason)",
+      "cargo test --manifest-path /tmp/world-mac-lima-harness.ZuyZJg/Cargo.toml (43 passed)",
+      "git diff --check",
+      "git diff --cached --check",
+      "gitnexus_detect_changes(scope=staged): changed_files=4 affected_processes=0 risk=low",
+      "gitnexus_detect_changes(scope=all): changed_files=0 affected_processes=0 risk=none"
+    ]
+  },
+  "gitnexus": {
+    "post_push": {
+      "changed_count": 0,
+      "affected_count": 0,
+      "risk_level": "none"
+    }
+  },
+  "next_increment": "R2-3M3"
+}
