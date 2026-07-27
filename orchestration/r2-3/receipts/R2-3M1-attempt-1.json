@@ -1,0 +1,35 @@
+{
+  "protocol": "codex.top-level-task-receipt.v1",
+  "orchestration_id": "substrate-r2-3",
+  "dispatch_nonce": "73258995b6becd2f85335d3684762b424e304291958b722479de64ad42c7e02b",
+  "increment": "R2-3M1",
+  "packet_id": "A1.1d-5R2-3M1",
+  "status": "BASE_DRIFT",
+  "increment_task": {
+    "thread_id": "019fa49a-4bed-7e52-a94c-dac4e2f5ec1e",
+    "host_id": "remote-ssh-discovered:spenser-linux-codex"
+  },
+  "expected_base": {
+    "commit": "3264e21bbb3c0acc5f712af93bdc3d229bb8b9ad",
+    "tree": "80734514867ec0390ba4249878ed6cc30d597c72",
+    "target_ref": "refs/heads/feat/internal-host-orchestrator-world-dispatch-bootstrap",
+    "required_ancestor": "0f1e147fb735791b44a65099a65167cbdc1803af"
+  },
+  "observed": {
+    "local_head": "c0d9cd4f5c60d6505429de75a2fa5a52887b9879",
+    "local_tree": "e715b4ce5fe6c227542e646fe53416438af44525",
+    "live_remote": "3264e21bbb3c0acc5f712af93bdc3d229bb8b9ad",
+    "live_remote_tree": "80734514867ec0390ba4249878ed6cc30d597c72",
+    "ahead": 0,
+    "behind": 3,
+    "clean_checkout": true,
+    "ancestor_verified": true,
+    "current_branch": "DETACHED_HEAD"
+  },
+  "blocker": {
+    "summary": "Task-assigned checkout is clean but not at the nonce-bound base commit/tree.",
+    "details": "I stopped before any edits, delegation, impact analysis, or implementation checks. `git fetch --no-tags origin refs/heads/feat/internal-host-orchestrator-world-dispatch-bootstrap` confirmed the live target still equals the expected base commit/tree. The assigned checkout is detached at local HEAD c0d9cd4f5c60d6505429de75a2fa5a52887b9879 with tree e715b4ce5fe6c227542e646fe53416438af44525, which is 0 ahead / 3 behind FETCH_HEAD. Because the task contract requires the exact clean base before any action, execution cannot begin in this checkout.",
+    "required_authority": "Re-dispatch R2-3M1 onto a task-assigned checkout pinned to commit 3264e21bbb3c0acc5f712af93bdc3d229bb8b9ad/tree 80734514867ec0390ba4249878ed6cc30d597c72, or explicitly replace the contract with one bound to the actual clean checkout state. Do not ask this task to reconcile, merge, rebase, reset, or otherwise mutate the checkout to recover.",
+    "handoff_prompt": "R2-3M1 restart gate: verify the task-assigned checkout itself is exactly at commit 3264e21bbb3c0acc5f712af93bdc3d229bb8b9ad with tree 80734514867ec0390ba4249878ed6cc30d597c72, detached/clean, 0 ahead/0 behind versus origin/feat/internal-host-orchestrator-world-dispatch-bootstrap, and still descended from 0f1e147fb735791b44a65099a65167cbdc1803af before any other action. If the live remote still equals 3264e21bbb3c0acc5f712af93bdc3d229bb8b9ad, create a fresh increment-task dispatch from that exact base and resend the full R2-3M1 contract with a new nonce binding. If the live remote has moved, stop again with BASE_DRIFT against the new remote truth instead of reconciling locally."
+  }
+}
