@@ -1,0 +1,47 @@
+{
+  "protocol": "codex.top-level-task-receipt.v1",
+  "orchestration_id": "substrate-r2-3",
+  "dispatch_nonce": "3b65d47ec01f0c218556d32171bc6d18de9d5345dd3fa33d30b0fb975a8e3ae8",
+  "increment": "R2-3M1",
+  "status": "LANDED_CLEAN",
+  "increment_task": {
+    "thread_id": "019fa49f-5ab6-7ea2-80a5-70130b321e51",
+    "host_id": "remote-ssh-discovered:spenser-linux-codex"
+  },
+  "expected_base": {
+    "commit": "3264e21bbb3c0acc5f712af93bdc3d229bb8b9ad",
+    "tree": "80734514867ec0390ba4249878ed6cc30d597c72"
+  },
+  "landed": {
+    "commit": "1b182a70523a5aa3001ed8a113addaf3f28f9f2d",
+    "tree": "b76781c9aca1734a331aacb081baf2acac1fb497",
+    "target_ref": "refs/heads/feat/internal-host-orchestrator-world-dispatch-bootstrap",
+    "live_remote": "1b182a70523a5aa3001ed8a113addaf3f28f9f2d"
+  },
+  "subject_fingerprint": "sha256:efe86eef46c5879a5502ffe740dc2f8ef95c49fb8dc3249367d1307d137b8655",
+  "changed_files": [
+    "scripts/mac/lima-doctor.sh",
+    "scripts/mac/lima-warm.sh",
+    "tests/mac/lima_doctor_fixture.sh",
+    "tests/mac/prefix_mapping_r2_3.sh"
+  ],
+  "review": {
+    "packet_id": "A1.1d-5R2-3M1",
+    "record_path": "/tmp/r2-3m1-review/review-cycle.json",
+    "record_sha256": "sha256:f3d3971904a6f27c44bf99eae1f47a031c8b6cf1c677e7390dfaf90d2a4b0150",
+    "validated": true,
+    "terminal": "CLEAN",
+    "p1": 0,
+    "p2": 0,
+    "p3_p4_disposition": "R2-3M1-P3-001 was fixed; the argv-exposure and help-banner advisories were causally reclassified as non-applicable; no valid unfixed P3/P4 remained."
+  },
+  "verification": {
+    "required_checks_passed": true,
+    "allowlist_passed": true,
+    "change_detection_passed": true,
+    "checkout_clean": true,
+    "ahead": 0,
+    "behind": 0
+  },
+  "next_increment": "R2-3M2"
+}
