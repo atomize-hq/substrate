@@ -9,7 +9,7 @@ while [[ -L "${SOURCE_PATH}" ]]; do
 done
 SCRIPT_DIR="$(cd "$(dirname "${SOURCE_PATH}")" && pwd)"
 CANONICAL_UNIT_SOURCE_DIR=""
-VM_NAME="${LIMA_VM_NAME:-substrate}"
+VM_NAME="${SUBSTRATE_LIMA_VM_NAME:-substrate}"
 PROFILE="${LIMA_PROFILE_PATH:-${SCRIPT_DIR}/lima/substrate.yaml}"
 PROJECT_PATH=""
 CHECK_ONLY=0
@@ -21,6 +21,26 @@ STAGED_WORKSPACE_CURRENT="${STAGED_WORKSPACE_ROOT}/current"
 STAGED_WORKSPACE_MANIFEST_NAME=".substrate-lima-stage-manifest"
 WAIT_TIMEOUT=120
 SKIP_GUEST_BUILD="${SUBSTRATE_LIMA_SKIP_GUEST_BUILD:-0}"
+HELP_REQUESTED=0
+INSTALL_PREFIX_RAW=""
+INSTALL_PREFIX_DECLARED=0
+INSTALL_BOOTSTRAP_CONTEXT_V1=""
+INSTALL_BOOTSTRAP_CONTEXT_DECLARED=0
+INSTALL_BOOTSTRAP_COMMITMENT=""
+INSTALL_BOOTSTRAP_ACCOUNT=""
+INSTALL_BOOTSTRAP_UID=""
+INSTALL_BOOTSTRAP_ACCOUNT_HOME=""
+INSTALL_CONTEXT_MODE=""
+HOST_ACCOUNT_HOME=""
+HOST_PLATFORM_CONTROL_ROOT=""
+OBSERVED_GUEST_MACHINE_ID=""
+OBSERVED_GUEST_ACCOUNT=""
+OBSERVED_GUEST_UID=""
+OBSERVED_GUEST_HOME=""
+OBSERVED_GUEST_SUBSTRATE_HOME=""
+OBSERVED_PLATFORM_MAPPING_V1=""
+OBSERVED_TRANSPORT_HOST=""
+OBSERVED_TRANSPORT_GUEST_SOCKET="/run/substrate.sock"
 
 log() {
     printf '==> %s\n' "$1"
@@ -39,7 +59,8 @@ usage() {
     cat <<'USAGE'
 Usage: scripts/mac/lima-warm.sh [options] [<project-path>]
 
-This helper is the degraded-but-supported macOS create/warm/repair wrapper.
+This helper is the degraded-but-supported macOS declared-instance Stage-1
+create/start plus matching-layout guest-projection wrapper.
 Preferred day-to-day operator path after provisioning: `substrate host doctor
 [--json]`, `substrate world doctor [--json]`, `substrate world gateway
 sync|status|restart`, `substrate world enable`, and `substrate world deps
@@ -50,6 +71,7 @@ override use.
 
 Options:
   --check-only      Report the current Lima VM status without creating or provisioning it
+  --install-prefix  Bind the helper to one host install prefix
   -h, --help        Show this help text
 
 Arguments:
@@ -63,9 +85,25 @@ while [[ $# -gt 0 ]]; do
             CHECK_ONLY=1
             shift
             ;;
+        --install-prefix)
+            [[ $# -ge 2 ]] || fatal "Missing value for --install-prefix"
+            [[ "${INSTALL_PREFIX_DECLARED}" -eq 0 ]] || fatal "Duplicate --install-prefix"
+            [[ -n "$2" ]] || fatal "Empty value for --install-prefix"
+            INSTALL_PREFIX_RAW="$2"
+            INSTALL_PREFIX_DECLARED=1
+            shift 2
+            ;;
+        --install-bootstrap-context-v1)
+            [[ $# -ge 2 ]] || fatal "Missing value for --install-bootstrap-context-v1"
+            [[ "${INSTALL_BOOTSTRAP_CONTEXT_DECLARED}" -eq 0 ]] || fatal "Duplicate --install-bootstrap-context-v1"
+            [[ -n "$2" ]] || fatal "Empty value for --install-bootstrap-context-v1"
+            INSTALL_BOOTSTRAP_CONTEXT_V1="$2"
+            INSTALL_BOOTSTRAP_CONTEXT_DECLARED=1
+            shift 2
+            ;;
         -h|--help)
-            usage
-            exit 0
+            HELP_REQUESTED=1
+            shift
             ;;
         *)
             if [[ -z "${PROJECT_PATH}" ]]; then
@@ -100,6 +138,488 @@ require_cmd() {
     fi
 }
 
+resolve_install_bootstrap_context_v1() {
+    local context_file
+    local context_err
+    local status
+
+    context_file="$(mktemp)"
+    context_err="$(mktemp)"
+    command -v python3 >/dev/null 2>&1 || fatal "python3 is required for authenticated install bootstrap context resolution."
+    if python3 - \
+        "${INSTALL_PREFIX_DECLARED}" \
+        "${INSTALL_PREFIX_RAW}" \
+        "${INSTALL_BOOTSTRAP_CONTEXT_V1}" \
+        "${INSTALL_BOOTSTRAP_CONTEXT_DECLARED}" >"${context_file}" 2>"${context_err}" <<'PY'
+import base64
+import hashlib
+import os
+import pwd
+import re
+import sys
+
+DOMAIN = "substrate.install_bootstrap_context"
+KEYS = (
+    "domain",
+    "version",
+    "selected_host_prefix",
+    "host_substrate_home",
+    "host_substrate_root",
+    "principal_kind",
+    "principal_account",
+    "principal_uid",
+    "host_context_commitment",
+)
+
+
+def fail():
+    raise ValueError("invalid install bootstrap context")
+
+
+def normalize_path(raw):
+    if not raw or raw == "/" or not raw.startswith("/") or raw.startswith("//") or "\0" in raw or "\r" in raw or "\n" in raw:
+        fail()
+    parts = []
+    for part in raw[1:].split("/"):
+        if not part:
+            continue
+        if part in (".", ".."):
+            fail()
+        parts.append(part)
+    if not parts:
+        fail()
+    return "/" + "/".join(parts)
+
+
+def b64_encode(value):
+    return base64.urlsafe_b64encode(value).rstrip(b"=")
+
+
+def b64_decode(value):
+    if not value or not re.fullmatch(rb"[A-Za-z0-9_-]+", value):
+        fail()
+    decoded = base64.urlsafe_b64decode(value + b"=" * ((-len(value)) % 4))
+    if b64_encode(decoded) != value:
+        fail()
+    return decoded.decode("utf-8")
+
+
+def current_principal():
+    uid = os.geteuid()
+    if uid == 0 or uid > 0xFFFFFFFF:
+        fail()
+    entry = pwd.getpwuid(uid)
+    if not entry.pw_name or pwd.getpwnam(entry.pw_name).pw_uid != uid:
+        fail()
+    if any(ch in entry.pw_name for ch in "\0\r\n"):
+        fail()
+    return entry, uid
+
+
+def frame(prefix, account, uid):
+    encoded_prefix = b64_encode(prefix.encode("utf-8")).decode("ascii")
+    return (
+        f"domain={DOMAIN}\nversion=1\nselected_host_prefix={encoded_prefix}\n"
+        f"host_substrate_home={encoded_prefix}\nhost_substrate_root={encoded_prefix}\n"
+        f"principal_kind=unix\nprincipal_account={b64_encode(account.encode('utf-8')).decode('ascii')}\n"
+        f"principal_uid={uid}\n"
+    ).encode("ascii")
+
+
+def decode_carrier(encoded):
+    raw_encoded = encoded.encode("ascii")
+    if not raw_encoded or not re.fullmatch(rb"[A-Za-z0-9_-]+", raw_encoded):
+        fail()
+    record = base64.urlsafe_b64decode(raw_encoded + b"=" * ((-len(raw_encoded)) % 4))
+    if b64_encode(record) != raw_encoded or not record.endswith(b"\n") or b"\r" in record or b"\0" in record:
+        fail()
+    lines = record[:-1].split(b"\n")
+    if len(lines) != len(KEYS):
+        fail()
+    values = {}
+    for expected, line in zip(KEYS, lines):
+        if line.count(b"=") != 1:
+            fail()
+        key, value = line.split(b"=", 1)
+        if key.decode("ascii") != expected:
+            fail()
+        values[expected] = value
+    if values["domain"] != DOMAIN.encode("ascii") or values["version"] != b"1" or values["principal_kind"] != b"unix":
+        fail()
+    prefix = normalize_path(b64_decode(values["selected_host_prefix"]))
+    if b64_decode(values["host_substrate_home"]) != prefix or b64_decode(values["host_substrate_root"]) != prefix:
+        fail()
+    account = b64_decode(values["principal_account"])
+    raw_uid = values["principal_uid"]
+    if not re.fullmatch(rb"0|[1-9][0-9]*", raw_uid):
+        fail()
+    uid = int(raw_uid)
+    if uid == 0 or uid > 0xFFFFFFFF:
+        fail()
+    commitment = values["host_context_commitment"].decode("ascii")
+    if not re.fullmatch(r"[0-9a-f]{64}", commitment):
+        fail()
+    expected_frame = frame(prefix, account, uid)
+    if record != expected_frame + b"host_context_commitment=" + commitment.encode("ascii") + b"\n":
+        fail()
+    if hashlib.sha256(expected_frame).hexdigest() != commitment:
+        fail()
+    return prefix, account, uid, commitment
+
+
+try:
+    declared = sys.argv[1] == "1"
+    raw_prefix = sys.argv[2]
+    supplied = sys.argv[3]
+    internal = sys.argv[4] == "1"
+    entry, current_uid = current_principal()
+    mode = "internal" if internal else "public"
+    if internal:
+        prefix, account, uid, commitment = decode_carrier(supplied)
+        if account != entry.pw_name or uid != current_uid:
+            fail()
+        if declared and normalize_path(raw_prefix) != prefix:
+            fail()
+        expected = {
+            "SUBSTRATE_HOME": prefix,
+            "SUBSTRATE_ROOT": prefix,
+            "SUBSTRATE_INSTALL_HOST_CONTEXT_COMMITMENT": commitment,
+            "SUBSTRATE_INSTALL_PRIMARY_USER": account,
+            "SUBSTRATE_INSTALL_PRIMARY_UID": str(uid),
+            "SUBSTRATE_INSTALL_BOOTSTRAP_CONTEXT_V1": supplied,
+        }
+        for key, value in expected.items():
+            if key in os.environ and os.environ[key] != value:
+                fail()
+        carrier = supplied
+    else:
+        prefix = normalize_path(raw_prefix if declared else entry.pw_dir.rstrip("/") + "/.substrate")
+        account = entry.pw_name
+        uid = current_uid
+        commitment_input = frame(prefix, account, uid)
+        commitment = hashlib.sha256(commitment_input).hexdigest()
+        carrier = b64_encode(
+            commitment_input + f"host_context_commitment={commitment}\n".encode("ascii")
+        ).decode("ascii")
+    account_home = normalize_path(entry.pw_dir)
+    for value in (mode, prefix, carrier, commitment, account, str(uid), account_home):
+        sys.stdout.buffer.write(value.encode("utf-8") + b"\0")
+except Exception:
+    print("invalid install bootstrap context", file=sys.stderr)
+    raise SystemExit(2)
+PY
+    then
+        :
+    else
+        status=$?
+        if [[ "${status}" -eq 127 ]]; then
+            rm -f "${context_file}" "${context_err}"
+            fatal "python3 is required for authenticated install bootstrap context resolution."
+        fi
+        [[ ! -s "${context_err}" ]] || cat "${context_err}" >&2
+        rm -f "${context_file}" "${context_err}"
+        exit "${status}"
+    fi
+    rm -f "${context_err}"
+    exec 3<"${context_file}"
+    IFS= read -r -d '' INSTALL_CONTEXT_MODE <&3 || fatal "Failed to read install bootstrap mode"
+    IFS= read -r -d '' INSTALL_PREFIX_RAW <&3 || fatal "Failed to read install bootstrap prefix"
+    IFS= read -r -d '' INSTALL_BOOTSTRAP_CONTEXT_V1 <&3 || fatal "Failed to read install bootstrap carrier"
+    IFS= read -r -d '' INSTALL_BOOTSTRAP_COMMITMENT <&3 || fatal "Failed to read install bootstrap commitment"
+    IFS= read -r -d '' INSTALL_BOOTSTRAP_ACCOUNT <&3 || fatal "Failed to read install bootstrap account"
+    IFS= read -r -d '' INSTALL_BOOTSTRAP_UID <&3 || fatal "Failed to read install bootstrap uid"
+    IFS= read -r -d '' INSTALL_BOOTSTRAP_ACCOUNT_HOME <&3 || fatal "Failed to read install bootstrap account home"
+    exec 3<&-
+    rm -f "${context_file}"
+
+    export SUBSTRATE_HOME="${INSTALL_PREFIX_RAW}"
+    export SUBSTRATE_ROOT="${INSTALL_PREFIX_RAW}"
+    export SUBSTRATE_INSTALL_HOST_CONTEXT_COMMITMENT="${INSTALL_BOOTSTRAP_COMMITMENT}"
+    export SUBSTRATE_INSTALL_PRIMARY_USER="${INSTALL_BOOTSTRAP_ACCOUNT}"
+    export SUBSTRATE_INSTALL_PRIMARY_UID="${INSTALL_BOOTSTRAP_UID}"
+    export SUBSTRATE_INSTALL_BOOTSTRAP_CONTEXT_V1="${INSTALL_BOOTSTRAP_CONTEXT_V1}"
+}
+
+resolve_lima_control_root_v1() {
+    local control_file
+
+    control_file="$(mktemp)"
+    python3 - \
+        "${INSTALL_CONTEXT_MODE}" \
+        "${INSTALL_BOOTSTRAP_ACCOUNT}" \
+        "${INSTALL_BOOTSTRAP_UID}" <<'PY' >"${control_file}"
+import os
+import pwd
+import sys
+
+
+def fail():
+    raise ValueError("invalid lima control root")
+
+
+def normalize_path(raw):
+    if not raw or raw == "/" or not raw.startswith("/") or raw.startswith("//") or "\0" in raw or "\r" in raw or "\n" in raw:
+        fail()
+    parts = []
+    for part in raw[1:].split("/"):
+        if not part:
+            continue
+        if part in (".", ".."):
+            fail()
+        parts.append(part)
+    if not parts:
+        fail()
+    return "/" + "/".join(parts)
+
+
+try:
+    mode = sys.argv[1]
+    account = sys.argv[2]
+    uid = int(sys.argv[3])
+    entry = pwd.getpwuid(uid)
+    if entry.pw_name != account:
+        fail()
+    if pwd.getpwnam(account).pw_uid != uid:
+        fail()
+    home = normalize_path(entry.pw_dir)
+    control_root = normalize_path(home.rstrip("/") + "/.lima")
+    for value in (home, control_root):
+        sys.stdout.buffer.write(value.encode("utf-8") + b"\0")
+except Exception:
+    print("invalid lima control root", file=sys.stderr)
+    raise SystemExit(2)
+PY
+    exec 3<"${control_file}"
+    IFS= read -r -d '' HOST_ACCOUNT_HOME <&3 || fatal "Failed to read host account home"
+    IFS= read -r -d '' HOST_PLATFORM_CONTROL_ROOT <&3 || fatal "Failed to read Lima control root"
+    exec 3<&-
+    rm -f "${control_file}"
+
+    [[ "${HOST_ACCOUNT_HOME}" == "${INSTALL_BOOTSTRAP_ACCOUNT_HOME}" ]] \
+        || fatal "Account-database home changed while resolving the Lima control root."
+
+    if [[ "${INSTALL_CONTEXT_MODE}" == "internal" ]]; then
+        if [[ -n "${HOME:-}" && "${HOME}" != "${HOST_ACCOUNT_HOME}" ]]; then
+            fatal "Internal Lima child HOME conflicts with the validated account-database home."
+        fi
+        if [[ -n "${LIMA_HOME:-}" && "${LIMA_HOME}" != "${HOST_PLATFORM_CONTROL_ROOT}" ]]; then
+            fatal "Internal Lima child LIMA_HOME conflicts with the validated Lima control root."
+        fi
+    fi
+
+    export HOME="${HOST_ACCOUNT_HOME}"
+    export LIMA_HOME="${HOST_PLATFORM_CONTROL_ROOT}"
+}
+
+run_limactl_with_mapping_env_v1() {
+    env HOME="${HOST_ACCOUNT_HOME}" LIMA_HOME="${HOST_PLATFORM_CONTROL_ROOT}" limactl "$@"
+}
+
+observe_lima_mapping_v1() {
+    local machine_id=""
+    local machine_id_again=""
+    local account=""
+    local uid=""
+    local name_entry=""
+    local uid_entry=""
+    local entry_account=""
+    local entry_uid=""
+    local entry_home=""
+
+    machine_id="$(run_limactl_with_mapping_env_v1 shell "${VM_NAME}" cat /etc/machine-id 2>/dev/null | tr -d '\r\n' || true)"
+    machine_id_again="$(run_limactl_with_mapping_env_v1 shell "${VM_NAME}" cat /etc/machine-id 2>/dev/null | tr -d '\r\n' || true)"
+    [[ -n "${machine_id}" && "${machine_id}" == "${machine_id_again}" ]] \
+        || fatal "Unable to observe a stable Lima guest machine identity."
+
+    account="$(run_limactl_with_mapping_env_v1 shell "${VM_NAME}" id -un 2>/dev/null | tr -d '\r\n' || true)"
+    uid="$(run_limactl_with_mapping_env_v1 shell "${VM_NAME}" id -u 2>/dev/null | tr -d '\r\n' || true)"
+    name_entry="$(run_limactl_with_mapping_env_v1 shell "${VM_NAME}" getent passwd "${account}" 2>/dev/null | tr -d '\r' || true)"
+    uid_entry="$(run_limactl_with_mapping_env_v1 shell "${VM_NAME}" getent passwd "${uid}" 2>/dev/null | tr -d '\r' || true)"
+    [[ -n "${account}" && -n "${uid}" && -n "${name_entry}" && "${name_entry}" == "${uid_entry}" ]] \
+        || fatal "Unable to round-trip the Lima guest account database identity."
+
+    IFS=':' read -r entry_account _ entry_uid _ _ entry_home _ <<<"${name_entry}"
+    [[ "${entry_account}" == "${account}" && "${entry_uid}" == "${uid}" && -n "${entry_home}" ]] \
+        || fatal "Lima guest identity does not round-trip through the account database."
+
+    OBSERVED_GUEST_MACHINE_ID="${machine_id}"
+    OBSERVED_GUEST_ACCOUNT="${account}"
+    OBSERVED_GUEST_UID="${uid}"
+    OBSERVED_GUEST_HOME="${entry_home}"
+    OBSERVED_GUEST_SUBSTRATE_HOME="${OBSERVED_GUEST_HOME%/}/.substrate"
+    OBSERVED_TRANSPORT_HOST="${INSTALL_PREFIX_RAW%/}/sock/agent.sock"
+    OBSERVED_TRANSPORT_GUEST_SOCKET="/run/substrate.sock"
+}
+
+verify_lima_mapping_v1() {
+    local mapping_file
+
+    mapping_file="$(mktemp)"
+    python3 - \
+        "${INSTALL_BOOTSTRAP_COMMITMENT}" \
+        "${VM_NAME}" \
+        "${OBSERVED_GUEST_MACHINE_ID}" \
+        "${HOST_PLATFORM_CONTROL_ROOT}" \
+        "${OBSERVED_GUEST_SUBSTRATE_HOME}" \
+        "${OBSERVED_GUEST_ACCOUNT}" \
+        "${OBSERVED_GUEST_UID}" \
+        "${OBSERVED_TRANSPORT_HOST}" \
+        "${OBSERVED_TRANSPORT_GUEST_SOCKET}" <<'PY' >"${mapping_file}"
+import base64
+import hashlib
+import re
+import sys
+
+DOMAIN = "substrate.platform_bootstrap_mapping"
+KEYS = (
+    "domain",
+    "version",
+    "host_context_commitment",
+    "platform_kind",
+    "instance_name",
+    "guest_machine_id",
+    "host_platform_control_root",
+    "realized_substrate_home",
+    "realized_principal_account",
+    "realized_principal_uid",
+    "transport_kind",
+    "transport_host",
+    "transport_guest_socket",
+)
+
+
+def fail():
+    raise ValueError("invalid platform bootstrap mapping")
+
+
+def normalize_path(raw):
+    if not raw or raw == "/" or not raw.startswith("/") or raw.startswith("//") or "\0" in raw or "\r" in raw or "\n" in raw:
+        fail()
+    parts = []
+    for part in raw[1:].split("/"):
+        if not part:
+            continue
+        if part in (".", ".."):
+            fail()
+        parts.append(part)
+    if not parts:
+        fail()
+    return "/" + "/".join(parts)
+
+
+def valid_text(raw):
+    return bool(raw) and all(ch not in "\0\r\n" for ch in raw)
+
+
+def b64_encode(value):
+    return base64.urlsafe_b64encode(value).rstrip(b"=").decode("ascii")
+
+
+def b64_decode(value):
+    raw = value.encode("ascii")
+    if not raw or not re.fullmatch(rb"[A-Za-z0-9_-]+", raw):
+        fail()
+    decoded = base64.urlsafe_b64decode(raw + b"=" * ((-len(raw)) % 4))
+    if base64.urlsafe_b64encode(decoded).rstrip(b"=") != raw:
+        fail()
+    return decoded.decode("utf-8")
+
+
+def record(commitment, vm_name, machine_id, control_root, realized_home, account, uid, host_socket, guest_socket):
+    if not re.fullmatch(r"[0-9a-f]{64}", commitment):
+        fail()
+    if not re.fullmatch(r"[0-9a-f]{32}", machine_id):
+        fail()
+    if not re.fullmatch(r"0|[1-9][0-9]*", uid):
+        fail()
+    if not valid_text(vm_name) or not valid_text(account):
+        fail()
+    lines = [
+        f"domain={DOMAIN}",
+        "version=1",
+        f"host_context_commitment={commitment}",
+        "platform_kind=lima",
+        f"instance_name={b64_encode(vm_name.encode('utf-8'))}",
+        f"guest_machine_id={machine_id}",
+        f"host_platform_control_root={b64_encode(normalize_path(control_root).encode('utf-8'))}",
+        f"realized_substrate_home={b64_encode(normalize_path(realized_home).encode('utf-8'))}",
+        f"realized_principal_account={b64_encode(account.encode('utf-8'))}",
+        f"realized_principal_uid={uid}",
+        "transport_kind=lima",
+        f"transport_host={b64_encode(normalize_path(host_socket).encode('utf-8'))}",
+        f"transport_guest_socket={b64_encode(normalize_path(guest_socket).encode('utf-8'))}",
+    ]
+    return ("\n".join(lines) + "\n").encode("ascii")
+
+
+def decode(encoded, expected_commitment):
+    raw = encoded.encode("ascii")
+    if not raw or not re.fullmatch(rb"[A-Za-z0-9_-]+", raw):
+        fail()
+    record_bytes = base64.urlsafe_b64decode(raw + b"=" * ((-len(raw)) % 4))
+    if base64.urlsafe_b64encode(record_bytes).rstrip(b"=") != raw or not record_bytes.endswith(b"\n"):
+        fail()
+    lines = record_bytes[:-1].split(b"\n")
+    if len(lines) != len(KEYS):
+        fail()
+    values = {}
+    for expected, line in zip(KEYS, lines):
+        if line.count(b"=") != 1:
+            fail()
+        key, value = line.split(b"=", 1)
+        if key.decode("ascii") != expected:
+            fail()
+        values[expected] = value.decode("ascii")
+    if values["domain"] != DOMAIN or values["version"] != "1":
+        fail()
+    if values["host_context_commitment"] != expected_commitment:
+        fail()
+    if values["platform_kind"] != "lima" or values["transport_kind"] != "lima":
+        fail()
+    rebuilt = record(
+        values["host_context_commitment"],
+        b64_decode(values["instance_name"]),
+        values["guest_machine_id"],
+        b64_decode(values["host_platform_control_root"]),
+        b64_decode(values["realized_substrate_home"]),
+        b64_decode(values["realized_principal_account"]),
+        values["realized_principal_uid"],
+        b64_decode(values["transport_host"]),
+        b64_decode(values["transport_guest_socket"]),
+    )
+    if rebuilt != record_bytes:
+        fail()
+    return base64.urlsafe_b64encode(rebuilt).rstrip(b"=").decode("ascii")
+
+
+try:
+    commitment, vm_name, machine_id, control_root, realized_home, account, uid, host_socket, guest_socket = sys.argv[1:]
+    raw_record = record(commitment, vm_name, machine_id, control_root, realized_home, account, uid, host_socket, guest_socket)
+    encoded = base64.urlsafe_b64encode(raw_record).rstrip(b"=").decode("ascii")
+    if decode(encoded, commitment) != encoded:
+        fail()
+    for value in (
+        encoded,
+        normalize_path(control_root),
+        normalize_path(realized_home),
+        normalize_path(host_socket),
+        normalize_path(guest_socket),
+    ):
+        sys.stdout.buffer.write(value.encode("utf-8") + b"\0")
+except Exception:
+    print("invalid platform bootstrap mapping", file=sys.stderr)
+    raise SystemExit(2)
+PY
+    exec 3<"${mapping_file}"
+    IFS= read -r -d '' OBSERVED_PLATFORM_MAPPING_V1 <&3 || fatal "Failed to read platform mapping"
+    IFS= read -r -d '' HOST_PLATFORM_CONTROL_ROOT <&3 || fatal "Failed to normalize Lima control root"
+    IFS= read -r -d '' OBSERVED_GUEST_SUBSTRATE_HOME <&3 || fatal "Failed to normalize guest substrate home"
+    IFS= read -r -d '' OBSERVED_TRANSPORT_HOST <&3 || fatal "Failed to normalize host transport path"
+    IFS= read -r -d '' OBSERVED_TRANSPORT_GUEST_SOCKET <&3 || fatal "Failed to normalize guest transport path"
+    exec 3<&-
+    rm -f "${mapping_file}"
+}
+
 check_only_status() {
     local host_os
     host_os="$(uname -s 2>/dev/null || echo "unknown")"
@@ -125,22 +645,47 @@ check_only_status() {
             echo "[check-only] ${binary} missing."
         fi
     done
+    local commitment_preview
+    commitment_preview="${INSTALL_BOOTSTRAP_COMMITMENT:0:12}..."
+    echo "[check-only] Install context commitment: ${commitment_preview}"
+    echo "[check-only] Declared VM name: ${VM_NAME}"
+    echo "[check-only] Lima control root: resolved from account database."
 
-    if limactl list "${VM_NAME}" >/dev/null 2>&1; then
+    if vm_exists; then
         local status
-        status="$(limactl list "${VM_NAME}" --json | jq -r '.status // "unknown"')"
+        status="$(vm_status)"
         echo "[check-only] Lima VM '${VM_NAME}' status: ${status}"
         if [[ "${status}" == "Running" ]]; then
-            if limactl shell "${VM_NAME}" sudo -n test -S /run/substrate.sock >/dev/null 2>&1; then
-                local ls_output
-                ls_output="$(limactl shell "${VM_NAME}" sudo ls -l /run/substrate.sock 2>/dev/null || true)"
-                echo "[check-only] Agent socket metadata:"
-                [[ -n "${ls_output}" ]] && echo "    ${ls_output}"
+            local layout
+            local machine_id_preview
+            observe_lima_mapping_v1
+            verify_lima_mapping_v1
+            [[ -n "${OBSERVED_PLATFORM_MAPPING_V1}" ]] || fatal "Verified Lima mapping record is empty."
+            layout="$(current_layout_version)"
+            machine_id_preview="${OBSERVED_GUEST_MACHINE_ID:0:12}..."
+            echo "[check-only] Observed guest machine-id prefix: ${machine_id_preview}"
+            echo "[check-only] Observed guest substrate home resolved from account database."
+            echo "[check-only] Observed transport target: selected-prefix/sock/agent.sock -> ${OBSERVED_TRANSPORT_GUEST_SOCKET}"
+            echo "[check-only] Layout sentinel: ${layout:-missing}"
+            if [[ "${layout}" != "${LAYOUT_VERSION}" ]]; then
+                echo "[check-only] Layout mismatch: R3 lifecycle reconciliation is required before guest projection."
+                echo "[check-only] Forwarding activation unavailable: R3 prerequisite unmet."
+                exit 0
+            fi
+            echo "[check-only] Forwarding activation unavailable: R3 prerequisite unmet."
+            if run_limactl_with_mapping_env_v1 shell "${VM_NAME}" sudo -n test -S /run/substrate.sock >/dev/null 2>&1; then
+                local socket_meta
+                socket_meta="$(run_limactl_with_mapping_env_v1 shell "${VM_NAME}" sudo -n stat -c '%U:%G %a' /run/substrate.sock 2>/dev/null || true)"
+                if [[ "${socket_meta}" == "root:substrate 660" ]]; then
+                    echo "[check-only] Agent socket metadata: expected ownership/mode."
+                else
+                    echo "[check-only] Agent socket metadata: unexpected ownership/mode."
+                fi
             else
                 echo "[check-only] Agent socket missing inside guest."
             fi
-            if limactl shell "${VM_NAME}" sudo -n test -f /etc/systemd/system/substrate-world-service.service >/dev/null 2>&1; then
-                if limactl shell "${VM_NAME}" sudo -n grep -q '^Environment=WORLD_NETFILTER_ENABLE=1$' /etc/systemd/system/substrate-world-service.service >/dev/null 2>&1; then
+            if run_limactl_with_mapping_env_v1 shell "${VM_NAME}" sudo -n test -f /etc/systemd/system/substrate-world-service.service >/dev/null 2>&1; then
+                if run_limactl_with_mapping_env_v1 shell "${VM_NAME}" sudo -n grep -q '^Environment=WORLD_NETFILTER_ENABLE=1$' /etc/systemd/system/substrate-world-service.service >/dev/null 2>&1; then
                     echo "[check-only] Guest systemd env includes WORLD_NETFILTER_ENABLE=1."
                 else
                     echo "[check-only] Guest systemd env does not include WORLD_NETFILTER_ENABLE=1."
@@ -148,7 +693,7 @@ check_only_status() {
             else
                 echo "[check-only] Guest systemd service file for substrate-world-service is missing."
             fi
-            if limactl shell "${VM_NAME}" sudo -n test -x /usr/local/bin/substrate-gateway >/dev/null 2>&1; then
+            if run_limactl_with_mapping_env_v1 shell "${VM_NAME}" sudo -n test -x /usr/local/bin/substrate-gateway >/dev/null 2>&1; then
                 echo "[check-only] Guest gateway binary present at /usr/local/bin/substrate-gateway."
             else
                 echo "[check-only] Guest gateway binary missing at /usr/local/bin/substrate-gateway."
@@ -187,21 +732,44 @@ render_profile() {
 }
 
 vm_exists() {
-    limactl list "${VM_NAME}" >/dev/null 2>&1
+    [[ "$(vm_status)" != "__missing__" ]]
 }
 
 vm_status() {
-    limactl list "${VM_NAME}" --json | jq -r '.status // "unknown"'
+    local list_json
+    list_json="$(run_limactl_with_mapping_env_v1 list "${VM_NAME}" --json 2>/dev/null)" \
+        || fatal "Unable to inspect Lima instances for '${VM_NAME}'."
+    printf '%s' "${list_json}" | jq -r --arg name "${VM_NAME}" '
+        if type == "array" then
+            (map(select(.name == $name)) | if length == 0 then "__missing__" else .[0].status // "unknown" end)
+        elif (.name // "") == $name then
+            .status // "unknown"
+        else
+            "__missing__"
+        end
+    ' || fatal "Unable to decode Lima status for '${VM_NAME}'."
 }
 
 create_vm() {
+    local start_err
     log "Creating Lima VM '${VM_NAME}' from ${PROFILE} ..."
-    limactl start --tty=false --name "${VM_NAME}" "${TMP_PROFILE}"
+    start_err="$(mktemp)"
+    if ! run_limactl_with_mapping_env_v1 start --tty=false --name "${VM_NAME}" "${TMP_PROFILE}" > /dev/null 2>"${start_err}"; then
+        rm -f "${start_err}"
+        fatal "Unable to create declared Lima VM '${VM_NAME}'."
+    fi
+    rm -f "${start_err}"
 }
 
 start_vm() {
+    local start_err
     log "Starting existing Lima VM '${VM_NAME}' ..."
-    limactl start "${VM_NAME}"
+    start_err="$(mktemp)"
+    if ! run_limactl_with_mapping_env_v1 start "${VM_NAME}" > /dev/null 2>"${start_err}"; then
+        rm -f "${start_err}"
+        fatal "Unable to start declared Lima VM '${VM_NAME}'."
+    fi
+    rm -f "${start_err}"
 }
 
 wait_for_running() {
@@ -209,10 +777,20 @@ wait_for_running() {
     while (( remaining > 0 )); do
         local status
         status="$(vm_status)"
-        if [[ "${status}" == "Running" ]]; then
-            log "Lima VM '${VM_NAME}' is running."
-            return
-        fi
+        case "${status}" in
+            Running)
+                log "Lima VM '${VM_NAME}' is running."
+                return
+                ;;
+            Starting)
+                ;;
+            __missing__)
+                fatal "Lima VM '${VM_NAME}' disappeared while waiting for Running state."
+                ;;
+            *)
+                fatal "Lima VM '${VM_NAME}' entered unsupported wait status '${status}' before reaching Running."
+                ;;
+        esac
         sleep 2
         remaining=$((remaining - 2))
     done
@@ -237,9 +815,12 @@ ensure_vm_ready() {
             Running)
                 log "Lima VM '${VM_NAME}' already running."
                 ;;
-            *)
+            Stopped)
                 warn "Lima VM '${VM_NAME}' status: ${status}; attempting to start."
                 start_vm
+                ;;
+            *)
+                fatal "Lima VM '${VM_NAME}' has unsupported Stage-1 status '${status}'. Expected confirmed absence, Stopped, or Running."
                 ;;
         esac
     else
@@ -247,15 +828,6 @@ ensure_vm_ready() {
     fi
 
     wait_for_running
-
-    local layout
-    layout="$(current_layout_version)"
-    if [[ "${layout}" != "${LAYOUT_VERSION}" ]]; then
-        warn "Lima VM layout (${layout:-missing}) does not match ${LAYOUT_VERSION}; rebuilding."
-        destroy_vm
-        create_vm
-        wait_for_running
-    fi
 }
 
 host_git_head() {
@@ -1087,30 +1659,42 @@ linger_guidance() {
 }
 
 configure_guest() {
+    local layout
+
+    observe_lima_mapping_v1
+    verify_lima_mapping_v1
+    [[ -n "${OBSERVED_PLATFORM_MAPPING_V1}" ]] || fatal "Verified Lima mapping record is empty."
+
+    layout="$(current_layout_version)"
+    if [[ "${layout}" != "${LAYOUT_VERSION}" ]]; then
+        fatal "Lima VM layout (${layout:-missing}) does not match ${LAYOUT_VERSION}; R3 lifecycle reconciliation is required before guest projection."
+    fi
+
     local vm_user
-    local vm_home
-    local guest_substrate_home
-    vm_user="$(limactl shell "${VM_NAME}" id -un | tr -d '\r')"
+    vm_user="${OBSERVED_GUEST_ACCOUNT}"
     if [[ -z "${vm_user}" ]]; then
         fatal "Unable to determine Lima guest user."
     fi
-    vm_home="$(limactl shell "${VM_NAME}" getent passwd "${vm_user}" | cut -d: -f6 | tr -d '\r')"
-    if [[ -z "${vm_home}" ]]; then
-        vm_home="/home/${vm_user}"
-    fi
-    guest_substrate_home="${vm_home}/.substrate"
     ensure_substrate_group "${vm_user}"
     stage_workspace "${vm_user}"
     verify_staged_workspace
     install_guest_binaries
     verify_guest_binaries
-    bootstrap_guest_private_home "${vm_user}" "${guest_substrate_home}"
-    write_systemd_units "${guest_substrate_home}"
-    enable_socket_activation "${guest_substrate_home}"
+    bootstrap_guest_private_home "${vm_user}" "${OBSERVED_GUEST_SUBSTRATE_HOME}"
+    write_systemd_units "${OBSERVED_GUEST_SUBSTRATE_HOME}"
+    enable_socket_activation "${OBSERVED_GUEST_SUBSTRATE_HOME}"
     socket_summary
     write_layout_sentinel
     linger_guidance "${vm_user}"
 }
+
+if [[ ${HELP_REQUESTED} -eq 1 ]]; then
+    usage
+    exit 0
+fi
+
+resolve_install_bootstrap_context_v1
+resolve_lima_control_root_v1
 
 if [[ ${CHECK_ONLY} -eq 1 ]]; then
     check_only_status
@@ -1124,12 +1708,12 @@ configure_guest
 cat <<EOF
 Supported operator path:
   supported: substrate host doctor [--json]; substrate world doctor [--json]; substrate world gateway sync|status|restart; substrate world enable; substrate world deps current sync for dependency reconciliation
-  degraded-but-supported: scripts/mac/lima-doctor.sh remains the routed-first wrapper for doctor proof; scripts/mac/lima-warm.sh remains the current macOS create/warm/repair and staged-workspace copy wrapper
+  degraded-but-supported: scripts/mac/lima-doctor.sh remains the routed-first wrapper for doctor proof; scripts/mac/lima-warm.sh remains the current macOS declared-instance Stage-1 create/start plus matching-layout guest-projection wrapper
   note: substrate workspace sync is not yet the frozen normal macOS same-user Lima sync/copy contract in this packet
   breakglass: raw limactl shell, plain SSH, direct guest systemctl, guest socket curl, guest journalctl, and host-side SUBSTRATE_WORLD_SOCKET override use
 EOF
 
-log "Lima world backend '${VM_NAME}' is ready. Preferred supported operations: substrate host doctor [--json]; substrate world doctor [--json]; substrate world gateway sync|status|restart; substrate world enable when provisioning is needed; substrate world deps current sync when guest dependency reconciliation is needed."
-log "This helper remains degraded-but-supported for macOS create/warm/repair and staged-workspace copy."
+log "Lima world backend '${VM_NAME}' reached the current bounded mapping prerequisites. Preferred supported operations: substrate host doctor [--json]; substrate world doctor [--json]; substrate world gateway sync|status|restart; substrate world enable when provisioning is needed; substrate world deps current sync when guest dependency reconciliation is needed."
+log "This helper remains degraded-but-supported for macOS declared-instance Stage-1 create/start plus matching-layout guest projection."
 log "Escalate to raw limactl shell, plain SSH, direct guest systemctl/journalctl, guest socket curl, or host-side SUBSTRATE_WORLD_SOCKET override use only as breakglass."
 log "Optional orchestration parity proof: scripts/mac/orchestration-smoke.sh"
