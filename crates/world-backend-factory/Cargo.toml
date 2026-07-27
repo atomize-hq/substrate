@@ -6,6 +6,7 @@ description = "Platform-aware factory returning Arc<dyn WorldBackend>"
 
 [dependencies]
 anyhow = { workspace = true }
+transport-api-types = { version = "0.2.8", path = "../transport-api-types" }
 world-api = { version = "0.1.0", path = "../world-api" }
 
 [target.'cfg(target_os = "linux")'.dependencies]

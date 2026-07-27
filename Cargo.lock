@@ -5453,6 +5453,7 @@ dependencies = [
  "tracing",
  "tracing-appender",
  "tracing-subscriber",
+ "transport-api-types",
  "uds_windows",
  "uuid",
  "windows",
@@ -5586,8 +5587,10 @@ dependencies = [
  "substrate-common",
  "substrate-trace",
  "tempfile",
+ "transport-api-types",
  "uuid",
  "which 6.0.3",
+ "windows-sys 0.52.0",
  "world",
  "world-api",
  "world-backend-factory",
@@ -7352,6 +7355,7 @@ name = "world-backend-factory"
 version = "0.1.0"
 dependencies = [
  "anyhow",
+ "transport-api-types",
  "world",
  "world-api",
  "world-mac-lima",
