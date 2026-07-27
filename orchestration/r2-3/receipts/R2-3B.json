@@ -1,0 +1,67 @@
+{
+  "protocol": "codex.top-level-task-receipt.v1",
+  "orchestration_id": "substrate-r2-3",
+  "dispatch_nonce": "1114957dde7f5a5ee57802f61396ad15f91f7be2adb8579b07cb37a1849f86c4",
+  "increment": "R2-3B",
+  "status": "LANDED_CLEAN",
+  "increment_task": {
+    "thread_id": "019fa44b-8ac9-7cc2-920b-344dfd44f5db",
+    "host_id": "remote-ssh-discovered:spenser-linux-codex"
+  },
+  "expected_base": {
+    "commit": "f2797fa84168c173e05d466e05dec8b7e85af92a",
+    "tree": "11fe4da11d67461d17e1af1534e0617b0fcc5c5a"
+  },
+  "landed": {
+    "commit": "cd21bc95575b9c35a1802814b847f5d63b86e38f",
+    "tree": "a8e9cd52f2b9034896627218306a4c26a2e9bcf8",
+    "target_ref": "refs/heads/feat/internal-host-orchestrator-world-dispatch-bootstrap",
+    "live_remote": "cd21bc95575b9c35a1802814b847f5d63b86e38f"
+  },
+  "subject_fingerprint": "sha256:4886c7f254348fe8e665555bd1d4aceb87dc9e9a272b9d94e84be10cd7ae1d8f",
+  "changed_files": [
+    "Cargo.lock",
+    "crates/forwarder/Cargo.toml",
+    "crates/shim/Cargo.toml",
+    "crates/world-backend-factory/Cargo.toml"
+  ],
+  "review": {
+    "packet_id": "A1.1d-5R2-3B",
+    "record_path": "/home/spenser/.codex/visualizations/2026/07/27/019fa44b-8ac9-7cc2-920b-344dfd44f5db/r2-3b-review-cycle.json",
+    "record_sha256": "sha256:f81f54437ef1c10d7b2f2df8e1a212f15202f3b5abb471e0a60f60b8b5aed141",
+    "validated": true,
+    "terminal": "CLEAN",
+    "p1": 0,
+    "p2": 0,
+    "p3_p4_disposition": "none; all three fresh discovery lenses reported no P3/P4"
+  },
+  "verification": {
+    "required_checks_passed": true,
+    "allowlist_passed": true,
+    "change_detection_passed": true,
+    "checkout_clean": true,
+    "ahead": 0,
+    "behind": 0,
+    "checks": [
+      "cargo metadata --locked --format-version 1",
+      "cargo check --locked -p world-backend-factory",
+      "cargo check --locked -p substrate-forwarder",
+      "cargo check --locked -p substrate-shim",
+      "cargo fmt --all -- --check",
+      "git diff --check",
+      "exact unstaged and staged four-file allowlist/status checks",
+      "semantic manifest comparison",
+      "semantic lockfile and package-set comparison",
+      "live remote equality and zero ahead/behind"
+    ],
+    "manifest_semantics": "three exact transport-api-types edges; shim nix fs/process/user; exact shim target-Windows windows-sys 0.52 six-feature set; no other manifest change",
+    "lock_semantics": "690 packages unchanged; only world-backend-factory, substrate-forwarder, and substrate-shim dependency lists changed exactly as authorized",
+    "runtime_scope": "zero Rust source, test, shell manifest, runtime/platform file, control document, or generated artifact changes",
+    "gitnexus": {
+      "precommit": "4 changed files; 0 changed symbols; 0 affected flows; low risk",
+      "published_index": "cd21bc95575b9c35a1802814b847f5d63b86e38f; up-to-date",
+      "postpublish_change_detection": "0 changed symbols; 0 affected flows; no changes detected"
+    }
+  },
+  "next_increment": "R2-3C"
+}
