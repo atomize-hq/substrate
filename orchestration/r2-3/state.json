@@ -2,7 +2,7 @@
   "protocol": "codex.top-level-orchestration-state.v1",
   "orchestration_id": "substrate-r2-3",
   "status": "READY",
-  "dispatch_authorized": false,
+  "dispatch_authorized": true,
   "remote": "origin",
   "target_ref": "refs/heads/feat/internal-host-orchestrator-world-dispatch-bootstrap",
   "required_ancestor": "0f1e147fb735791b44a65099a65167cbdc1803af",
