@@ -1,0 +1,48 @@
+{
+  "protocol": "codex.top-level-task-receipt.v1",
+  "orchestration_id": "substrate-r2-3",
+  "dispatch_nonce": "ee09a48e4a05776a483ed7bb1216e584dac34c36c76db5c8458750d920a8c1ab",
+  "increment": "R2-3W2",
+  "status": "LANDED_CLEAN",
+  "increment_task": {
+    "thread_id": "019fa943-6836-79e3-a790-1158e96cb981",
+    "host_id": "remote-control:env_e_6a3d9cd24b5483238ba55b699a98be35"
+  },
+  "expected_base": {
+    "commit": "80b839d34cadbf763991e14b5036cf9b91e8a82d",
+    "tree": "f98ccf5036328415fc2d3093f99adc1bacacb731"
+  },
+  "landed": {
+    "commit": "3970e6f1780408a752df1f54532d2ad9475bf284",
+    "tree": "83756158da904c5b5784b752c0bf1fcf0971c7bc",
+    "target_ref": "refs/heads/feat/internal-host-orchestrator-world-dispatch-bootstrap",
+    "live_remote": "3970e6f1780408a752df1f54532d2ad9475bf284"
+  },
+  "subject_fingerprint": "sha256:509c387f2d5b98ce811cc5c2c1eb6d25d0ac666e0fe1dbb464df790a51838e25",
+  "changed_files": [
+    "scripts/windows/pipe-status.ps1",
+    "scripts/windows/prefix-mapping-r2-3.Tests.ps1",
+    "scripts/windows/start-forwarder.ps1",
+    "scripts/windows/wsl-doctor.ps1",
+    "scripts/windows/wsl-warm.ps1"
+  ],
+  "review": {
+    "packet_id": "A1.1d-5R2-3W2",
+    "record_path": "C:\\Users\\spmcc\\.codex\\visualizations\\2026\\07\\28\\019fa943-6836-79e3-a790-1158e96cb981\\A1.1d-5R2-3W2-review-cycle.json",
+    "record_sha256": "sha256:7a20272cb9953a912e03ea13ca6870f8bf2c58880c459bc43458361b02bdf4cf",
+    "validated": true,
+    "terminal": "CLEAN",
+    "p1": 0,
+    "p2": 0,
+    "p3_p4_disposition": "Fresh closure review was clean with zero open P3/P4 findings; no review-finding inventory update was required."
+  },
+  "verification": {
+    "required_checks_passed": true,
+    "allowlist_passed": true,
+    "change_detection_passed": true,
+    "checkout_clean": true,
+    "ahead": 0,
+    "behind": 0
+  },
+  "next_increment": "R2-3W3"
+}
