@@ -1,0 +1,46 @@
+{
+  "protocol": "codex.top-level-task-receipt.v1",
+  "orchestration_id": "substrate-r2-3",
+  "dispatch_nonce": "1e6274c6bcfb228cb7d9204b5a026820bfefbc4e5db2330303364f6ce0ca5e33",
+  "increment": "R2-3M3",
+  "status": "LANDED_CLEAN",
+  "increment_task": {
+    "thread_id": "019fa5df-8012-7291-8923-20f7c33cf593",
+    "host_id": "remote-ssh-discovered:spenser-linux-codex"
+  },
+  "expected_base": {
+    "commit": "8296a7fce4b377311b3cc74df1a66cdc5a44101e",
+    "tree": "e3279fe1dc606f31392116c723f104df09bc137b"
+  },
+  "landed": {
+    "commit": "4325e7aa085ed1f5eeeb6535e0fc436a3663c3c2",
+    "tree": "60fa3b29df3abc6bf47e4539f52ec11230acebf9",
+    "target_ref": "refs/heads/feat/internal-host-orchestrator-world-dispatch-bootstrap",
+    "live_remote": "4325e7aa085ed1f5eeeb6535e0fc436a3663c3c2"
+  },
+  "subject_fingerprint": "sha256:7b8e47c1948f9f8e8fd278c36ce74c0bbc22926c08dc9e3d590ebedfa7df0567",
+  "changed_files": [
+    "crates/world-mac-lima/src/forwarding.rs",
+    "crates/world-mac-lima/src/lib.rs",
+    "crates/world-mac-lima/src/transport.rs"
+  ],
+  "review": {
+    "packet_id": "A1.1d-5R2-3M3",
+    "record_path": "/tmp/r2-3m3-review/record.json",
+    "record_sha256": "sha256:6e1ada9e9c79a0a53c9428fea3da586005386aad1d9d85de2a515388a65a6613",
+    "validated": true,
+    "terminal": "CLEAN",
+    "p1": 0,
+    "p2": 0,
+    "p3_p4_disposition": "R2-3M3-P4-001 was resolved during the supplemental causal cycle; no open P3/P4 findings remain."
+  },
+  "verification": {
+    "required_checks_passed": true,
+    "allowlist_passed": true,
+    "change_detection_passed": true,
+    "checkout_clean": true,
+    "ahead": 0,
+    "behind": 0
+  },
+  "next_increment": "R2-3M4"
+}
