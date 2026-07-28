@@ -1,0 +1,20 @@
+{
+  "INCREMENT": "R2-3W2",
+  "ORCHESTRATION_ID": "substrate-r2-3",
+  "DISPATCH_NONCE": "b1f0aa938ee3a510c0d24d3f44692e8cb7931c88c5f8283dd909a95ba5224c28",
+  "META_THREAD_ID": "019fa3f7-c447-7132-9126-82e2cf38bd9d",
+  "META_HOST_ID": "remote-ssh-discovered:spenser-linux-codex",
+  "PACKET_ID": "A1.1d-5R2-3W2",
+  "NEXT_INCREMENT": "R2-3W3",
+  "WORKING_DIRECTORY": "the task-assigned Codex worktree",
+  "PROTECTED_CHECKOUTS": [
+    "/home/spenser/__Active_code/substrate",
+    "/home/spenser/__Active_code/substrate-r2-3",
+    "/home/spenser/__Active_code/substrate-r2-3-meta-orchestration"
+  ],
+  "REMOTE": "origin",
+  "TARGET_REF": "refs/heads/feat/internal-host-orchestrator-world-dispatch-bootstrap",
+  "EXPECTED_BASE_COMMIT": "80b839d34cadbf763991e14b5036cf9b91e8a82d",
+  "EXPECTED_BASE_TREE": "f98ccf5036328415fc2d3093f99adc1bacacb731",
+  "REQUIRED_ANCESTOR": "0f1e147fb735791b44a65099a65167cbdc1803af"
+}
