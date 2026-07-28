@@ -1,0 +1,21 @@
+{
+  "protocol": "codex.top-level-task-receipt.v1",
+  "orchestration_id": "substrate-r2-3",
+  "dispatch_nonce": "705c0b43faea0b1e73d4596c603e9ba40653ce50e157f02c36f64fc2d5e1378b",
+  "increment": "R2-3W3",
+  "status": "BASE_DRIFT",
+  "increment_task": {
+    "thread_id": "019faa4d-2796-7e81-9446-dbce4da24927",
+    "host_id": "remote-ssh-discovered:spenser-linux-codex"
+  },
+  "expected_base": {
+    "commit": "3970e6f1780408a752df1f54532d2ad9475bf284",
+    "tree": "83756158da904c5b5784b752c0bf1fcf0971c7bc"
+  },
+  "blocker": {
+    "summary": "The assigned Linux worktree failed the pre-implementation identity barrier.",
+    "details": "The live target remained at the expected base commit and tree. The assigned worktree was clean, retained the required ancestor, and reported 0 ahead / 0 behind versus the target, but its detached HEAD was still the prior R2-3W1 commit 80b839d34cadbf763991e14b5036cf9b91e8a82d with tree f98ccf5036328415fc2d3093f99adc1bacacb731 rather than the authorized R2-3W2 commit 3970e6f1780408a752df1f54532d2ad9475bf284 with tree 83756158da904c5b5784b752c0bf1fcf0971c7bc. The task stopped before any subagent probe, implementation, checks, review, staging, or publication.",
+    "required_authority": "Create a replacement task-assigned Linux worktree explicitly from refs/heads/feat/internal-host-orchestrator-world-dispatch-bootstrap at the authorized base commit and tree.",
+    "handoff_prompt": "Redispatch R2-3W3 in a fresh Linux Codex worktree explicitly created from refs/heads/feat/internal-host-orchestrator-world-dispatch-bootstrap. Require HEAD 3970e6f1780408a752df1f54532d2ad9475bf284, tree 83756158da904c5b5784b752c0bf1fcf0971c7bc, clean status, 0/0 divergence, and ancestor 0f1e147fb735791b44a65099a65167cbdc1803af before the GPT-5.4 Extra High subagent availability probe or any implementation work. Use a fresh nonce and task identity. Do not begin R2-3W4."
+  }
+}
