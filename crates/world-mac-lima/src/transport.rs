@@ -95,7 +95,7 @@ pub enum Transport {
 }
 
 impl Transport {
-    /// Auto-select the best available transport.
+    /// Auto-select the best compatibility transport for ambient callers.
     pub fn auto_select() -> Result<Self> {
         // Try VSock first (macOS 13+ VZ guest when host tooling is available)
         if Self::vsock_available() {
@@ -254,6 +254,14 @@ mod tests {
         let mut wrong_commitment = test_lima_mapping();
         wrong_commitment.host_context_commitment = "0".repeat(64);
         assert!(managed_host_socket_path_for_mapping(&host, &wrong_commitment).is_err());
+
+        let selected_prefix_b = InstallBootstrapContextCarrierV1::from_context(
+            InstallBootstrapContextV1::new_unix("/opt/other", "alice", 1000).unwrap(),
+        )
+        .unwrap();
+        assert!(
+            managed_host_socket_path_for_mapping(&selected_prefix_b, &test_lima_mapping()).is_err()
+        );
     }
 
     #[test]

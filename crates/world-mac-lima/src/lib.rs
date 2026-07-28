@@ -361,6 +361,15 @@ impl MacLimaBackend {
     }
 
     fn ensure_forwarding(&self) -> Result<()> {
+        match (
+            self.typed_host_account_home.as_ref(),
+            self.typed_lima_control_root.as_ref(),
+        ) {
+            (Some(_), Some(_)) => return r3_forwarding_activation_required(),
+            (None, None) => {}
+            _ => anyhow::bail!("typed Lima backend is missing command context"),
+        }
+
         let mut forwarding = self
             .forwarding
             .lock()
@@ -495,10 +504,13 @@ impl MacLimaBackend {
     }
 
     fn get_agent_endpoint(&self) -> Result<transport_api_client::Transport> {
-        if self.typed_lima_control_root.is_some() || self.typed_host_account_home.is_some() {
-            anyhow::bail!(
-                "typed Lima mapping transport remains gated on the R3 forwarding lifecycle prerequisite"
-            );
+        match (
+            self.typed_host_account_home.as_ref(),
+            self.typed_lima_control_root.as_ref(),
+        ) {
+            (Some(_), Some(_)) => return r3_forwarding_activation_required(),
+            (None, None) => {}
+            _ => anyhow::bail!("typed Lima backend is missing command context"),
         }
 
         let forwarding = self
@@ -684,7 +696,7 @@ fn validate_typed_lima_backend_mapping(
     }
 
     let agent_socket = managed_host_socket_path_for_mapping(host_carrier, mapping)
-        .context("typed Lima mapping host socket does not match the selected host prefix")?;
+        .context("typed Lima mapping host socket projection did not validate")?;
     Ok((
         vm_name.clone(),
         agent_socket,
@@ -715,6 +727,12 @@ fn unix_account_home_for_install_principal(principal: &PlatformPrincipalV1) -> R
     }
 
     Ok(name_home)
+}
+
+fn r3_forwarding_activation_required<T>() -> Result<T> {
+    anyhow::bail!(
+        "typed Lima forwarding activation remains gated on the R3 forwarding lifecycle prerequisite"
+    )
 }
 
 fn unix_account_record_by_name(account: &str) -> Result<(String, u32, PathBuf)> {
@@ -1403,6 +1421,10 @@ mod tests {
             guest_socket: "/tmp/substrate.sock".to_string(),
         };
         assert!(MacLimaBackend::new_with_mapping(host, wrong_guest_socket).is_err());
+
+        let (selected_prefix_b, _, _) = typed_host_carrier_and_mapping("/tmp/other-substrate");
+        let (_, mapping_for_a, _) = typed_host_carrier_and_mapping("/tmp/typed-substrate");
+        assert!(MacLimaBackend::new_with_mapping(selected_prefix_b, mapping_for_a).is_err());
     }
 
     #[test]
@@ -1423,6 +1445,141 @@ mod tests {
             "unexpected error: {err}"
         );
         assert!(backend.forwarding.lock().unwrap().is_none());
+    }
+
+    #[test]
+    fn test_typed_forwarding_source_gate_precedes_compatibility_logic() {
+        const SOURCE: &str = include_str!("lib.rs");
+        let ensure_start = SOURCE
+            .find("fn ensure_forwarding(&self) -> Result<()> {")
+            .expect("ensure_forwarding");
+        let ensure_end = SOURCE[ensure_start..]
+            .find("\n    fn ensure_session_setup(&self) -> Result<()> {")
+            .map(|offset| ensure_start + offset)
+            .expect("ensure_forwarding end");
+        let ensure_body = &SOURCE[ensure_start..ensure_end];
+        let gate = ensure_body
+            .find("(Some(_), Some(_)) => return r3_forwarding_activation_required(),")
+            .expect("typed ensure_forwarding gate");
+        let lock = ensure_body
+            .find("let mut forwarding = self")
+            .expect("ensure_forwarding lock");
+        let auto_select = ensure_body
+            .find("let handle = forwarding::auto_select(&self.vm_name)?;")
+            .expect("compatibility auto_select");
+        assert!(
+            gate < lock,
+            "typed gate must return before lock acquisition"
+        );
+        assert!(
+            gate < auto_select,
+            "typed gate must return before compatibility auto-select"
+        );
+
+        let endpoint_start = SOURCE
+            .find("fn get_agent_endpoint(&self) -> Result<transport_api_client::Transport> {")
+            .expect("get_agent_endpoint");
+        let endpoint_end = SOURCE[endpoint_start..]
+            .find(
+                "\n    /// Convert world_api::ExecRequest to transport_api_types::ExecuteRequest.",
+            )
+            .map(|offset| endpoint_start + offset)
+            .expect("get_agent_endpoint end");
+        let endpoint_body = &SOURCE[endpoint_start..endpoint_end];
+        let endpoint_gate = endpoint_body
+            .find("(Some(_), Some(_)) => return r3_forwarding_activation_required(),")
+            .expect("typed get_agent_endpoint gate");
+        let endpoint_lock = endpoint_body
+            .find("let forwarding = self")
+            .expect("get_agent_endpoint lock");
+        assert!(
+            endpoint_gate < endpoint_lock,
+            "typed endpoint gate must return before lock acquisition"
+        );
+    }
+
+    #[test]
+    fn test_ensure_forwarding_requires_r3_before_lock_or_mutation() {
+        let _env_guard = crate::test_util::lock_env();
+        let tempdir = tempfile::tempdir().expect("tempdir");
+        let ssh_marker = tempdir.path().join("ssh.marker");
+        let vsock_marker = tempdir.path().join("vsock.marker");
+        let ambient_socket = tempdir
+            .path()
+            .join("ambient-home/.substrate/sock/agent.sock");
+        fs::create_dir_all(ambient_socket.parent().expect("ambient socket parent"))
+            .expect("ambient socket dir");
+        fs::write(&ambient_socket, "").expect("ambient socket");
+
+        let ssh_path = tempdir.path().join("ssh");
+        let vsock_path = tempdir.path().join("vsock-proxy");
+        write_executable(&ssh_path, &ssh_marker);
+        write_executable(&vsock_path, &vsock_marker);
+        let prev_home = std::env::var_os("HOME");
+        let prev_lima_home = std::env::var_os("LIMA_HOME");
+        let prev_substrate_home = std::env::var_os("SUBSTRATE_HOME");
+        let prev_path = std::env::var_os("PATH");
+        std::env::set_var("HOME", tempdir.path().join("ambient-home"));
+        std::env::set_var("LIMA_HOME", tempdir.path().join("ambient-lima"));
+        std::env::set_var("SUBSTRATE_HOME", tempdir.path().join("ambient-substrate"));
+        std::env::set_var("PATH", tempdir.path());
+
+        let typed_home = tempdir.path().join("typed-home");
+        let typed_control_root = tempdir.path().join("typed-control-root");
+        let typed_prefix = tempdir.path().join("typed-substrate");
+        assert!(!typed_prefix.exists(), "test prefix must start absent");
+        assert!(
+            !typed_control_root.exists(),
+            "typed control root must start absent"
+        );
+        let backend = MacLimaBackend::from_parts(
+            "substrate".to_string(),
+            typed_prefix.join("sock/agent.sock"),
+            Transport::UnixSocket,
+            Some(typed_home),
+            Some(typed_control_root.clone()),
+        )
+        .expect("typed backend");
+        assert!(backend.forwarding.lock().unwrap().is_none());
+
+        let err = backend.ensure_forwarding().unwrap_err();
+        assert!(
+            err.to_string()
+                .contains("R3 forwarding lifecycle prerequisite"),
+            "unexpected error: {err}"
+        );
+        assert!(backend.forwarding.lock().unwrap().is_none());
+        assert!(!ssh_marker.exists(), "typed path executed ssh");
+        assert!(!vsock_marker.exists(), "typed path executed vsock-proxy");
+        assert!(
+            !typed_prefix.exists(),
+            "typed path created or mutated the selected host prefix"
+        );
+        assert!(
+            !typed_control_root.exists(),
+            "typed path created or mutated the typed control root"
+        );
+        assert!(
+            !typed_prefix.join("sock/agent.sock").exists(),
+            "typed path created or mutated the managed socket path"
+        );
+
+        match prev_home {
+            Some(value) => std::env::set_var("HOME", value),
+            None => std::env::remove_var("HOME"),
+        }
+        match prev_lima_home {
+            Some(value) => std::env::set_var("LIMA_HOME", value),
+            None => std::env::remove_var("LIMA_HOME"),
+        }
+        match prev_substrate_home {
+            Some(value) => std::env::set_var("SUBSTRATE_HOME", value),
+            None => std::env::remove_var("SUBSTRATE_HOME"),
+        }
+        match prev_path {
+            Some(value) => std::env::set_var("PATH", value),
+            None => std::env::remove_var("PATH"),
+        }
     }
 
     #[test]

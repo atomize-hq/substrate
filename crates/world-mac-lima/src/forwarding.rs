@@ -9,6 +9,10 @@ use std::path::{Path, PathBuf};
 use std::process::{Child, Command, Stdio};
 use std::time::Duration;
 use tracing::{debug, info, warn};
+use transport_api_types::{InstallBootstrapContextCarrierV1, PlatformBootstrapMappingV1};
+
+#[cfg(test)]
+use crate::transport::managed_host_socket_path_for_mapping;
 
 /// Forwarding transport kind.
 #[derive(Debug, Clone)]
@@ -62,7 +66,7 @@ impl Drop for ForwardingHandle {
     }
 }
 
-/// Auto-select and establish forwarding.
+/// Diagnostic compatibility auto-selection for ambient forwarding.
 pub fn auto_select(vm_name: &str) -> Result<ForwardingHandle> {
     eprintln!(
         "DEBUG: Auto-selecting forwarding transport for VM '{}'",
@@ -94,7 +98,7 @@ pub fn auto_select(vm_name: &str) -> Result<ForwardingHandle> {
     if ssh_available() {
         eprintln!("DEBUG: SSH is available, attempting SSH Unix socket forwarding");
         info!("SSH is available, attempting SSH Unix socket forwarding");
-        match create_ssh_uds_forwarding(vm_name) {
+        match create_ssh_uds_forwarding(vm_name, None, None, None) {
             Ok(handle) => {
                 eprintln!("DEBUG: Successfully established SSH Unix socket forwarding");
                 info!("Successfully established SSH Unix socket forwarding");
@@ -187,10 +191,13 @@ fn create_vsock_forwarding(vm_name: &str) -> Result<ForwardingHandle> {
     })
 }
 
-fn create_ssh_uds_forwarding(vm_name: &str) -> Result<ForwardingHandle> {
-    // Create socket directory
-    let home_dir = dirs::home_dir().ok_or_else(|| anyhow::anyhow!("No home directory"))?;
-    let socket_path = managed_host_socket_path();
+fn create_ssh_uds_forwarding(
+    vm_name: &str,
+    socket_path: Option<PathBuf>,
+    ssh_config: Option<PathBuf>,
+    known_hosts_path: Option<PathBuf>,
+) -> Result<ForwardingHandle> {
+    let socket_path = socket_path.unwrap_or_else(managed_host_socket_path);
     let socket_dir = socket_path
         .parent()
         .ok_or_else(|| anyhow::anyhow!("managed host socket path missing parent"))?
@@ -214,13 +221,21 @@ fn create_ssh_uds_forwarding(vm_name: &str) -> Result<ForwardingHandle> {
         std::fs::remove_file(&socket_path)?;
     }
 
-    let ssh_config = lima_ssh_config_path(vm_name)?;
+    let ssh_config = match ssh_config {
+        Some(path) => path,
+        None => lima_ssh_config_path(vm_name)?,
+    };
     debug!("Using SSH config: {}", ssh_config.display());
 
     let ssh_config_str = ssh_config.to_string_lossy();
     let socket_forward = format!("{}:{}", socket_path.display(), CANONICAL_GUEST_SOCKET_PATH);
     let vm_host = format!("lima-{}", vm_name);
-    let known_hosts_path = home_dir.join(".substrate/lima_known_hosts");
+    let known_hosts_path = match known_hosts_path {
+        Some(path) => path,
+        None => dirs::home_dir()
+            .ok_or_else(|| anyhow::anyhow!("No home directory"))?
+            .join(".substrate/lima_known_hosts"),
+    };
 
     // Keep SSH non-interactive and fail-fast so we don't silently hang on prompts.
     //
@@ -399,6 +414,39 @@ fn create_ssh_tcp_forwarding(vm_name: &str) -> Result<ForwardingHandle> {
     })
 }
 
+#[allow(dead_code)]
+fn lima_home_dir_for_mapping(
+    host_carrier: &InstallBootstrapContextCarrierV1,
+    mapping: &PlatformBootstrapMappingV1,
+) -> Result<PathBuf> {
+    let (_, _, _, control_root) = crate::validate_typed_lima_backend_mapping(host_carrier, mapping)
+        .context("typed Lima mapping did not validate for future control-root projection")?;
+    Ok(control_root)
+}
+
+#[allow(dead_code)]
+fn lima_ssh_config_path_for_mapping(
+    host_carrier: &InstallBootstrapContextCarrierV1,
+    mapping: &PlatformBootstrapMappingV1,
+) -> Result<PathBuf> {
+    let (vm_name, _, _, control_root) =
+        crate::validate_typed_lima_backend_mapping(host_carrier, mapping)
+            .context("typed Lima mapping did not validate for future SSH-config projection")?;
+    Ok(control_root.join(vm_name).join("ssh.config"))
+}
+
+#[allow(dead_code)]
+fn lima_known_hosts_path_for_mapping(
+    host_carrier: &InstallBootstrapContextCarrierV1,
+    mapping: &PlatformBootstrapMappingV1,
+) -> Result<PathBuf> {
+    crate::validate_typed_lima_backend_mapping(host_carrier, mapping)
+        .context("typed Lima mapping did not validate for future known-hosts projection")?;
+    Ok(PathBuf::from(&host_carrier.context.selected_host_prefix).join("lima_known_hosts"))
+}
+
+/// Diagnostic compatibility helper. R2-3M3 proves the future typed control-root projection via
+/// `lima_home_dir_for_mapping`, while the live typed path remains gated on R3.
 fn lima_home_dir() -> Result<PathBuf> {
     if let Some(path) = std::env::var_os("LIMA_HOME").filter(|value| !value.is_empty()) {
         return Ok(PathBuf::from(path));
@@ -409,6 +457,8 @@ fn lima_home_dir() -> Result<PathBuf> {
         .join(".lima"))
 }
 
+/// Diagnostic compatibility helper. R2-3M3 proves the future typed SSH-config projection via
+/// `lima_ssh_config_path_for_mapping`, while the live typed path remains gated on R3.
 fn lima_ssh_config_path(vm_name: &str) -> Result<PathBuf> {
     let path = lima_home_dir()?.join(vm_name).join("ssh.config");
 
@@ -427,6 +477,39 @@ mod tests {
     use std::io::{Read as _, Write as _};
     use std::os::unix::net::UnixListener;
     use tempfile::tempdir;
+    use transport_api_types::{
+        InstallBootstrapContextCarrierV1, InstallBootstrapContextV1, PlatformBootstrapMappingV1,
+        PlatformInstanceIdentityV1, PlatformTransportIdentityV1,
+    };
+
+    fn test_host_carrier() -> InstallBootstrapContextCarrierV1 {
+        let (principal, _) =
+            crate::current_unix_principal_and_home().expect("current Unix install principal");
+        let transport_api_types::PlatformPrincipalV1::Unix { account, uid } = principal else {
+            panic!("expected Unix principal");
+        };
+        InstallBootstrapContextCarrierV1::from_context(
+            InstallBootstrapContextV1::new_unix("/opt/substrate", &account, uid).unwrap(),
+        )
+        .unwrap()
+    }
+
+    fn test_lima_mapping() -> PlatformBootstrapMappingV1 {
+        let (_, home) =
+            crate::current_unix_principal_and_home().expect("current Unix install principal");
+        PlatformBootstrapMappingV1::new_lima(
+            &test_host_carrier(),
+            "substrate",
+            "0123456789abcdef0123456789abcdef",
+            home.join(".lima").to_str().expect("UTF-8 home path"),
+            "/home/substrate/.substrate",
+            "substrate",
+            1000,
+            "/opt/substrate/sock/agent.sock",
+            CANONICAL_GUEST_SOCKET_PATH,
+        )
+        .unwrap()
+    }
 
     #[test]
     fn test_vsock_detection() {
@@ -553,7 +636,7 @@ exit 0
         };
         env::set_var("PATH", &new_path);
 
-        match create_ssh_uds_forwarding("substrate") {
+        match create_ssh_uds_forwarding("substrate", None, None, None) {
             Ok(_) => panic!("ssh uds forwarding should fail without a healthy capabilities probe"),
             Err(err) => assert!(
                 err.to_string().contains("SSH UDS forwarding failed"),
@@ -597,5 +680,214 @@ exit 0
             Some(v) => env::set_var("LIMA_HOME", v),
             None => env::remove_var("LIMA_HOME"),
         }
+    }
+
+    #[test]
+    fn typed_mapping_projections_ignore_ambient_environment() {
+        let _env_guard = crate::test_util::lock_env();
+        let temp = tempdir().expect("tempdir");
+        let ambient_home = temp.path().join("ambient-home-b");
+        let ambient_lima = temp.path().join("ambient-lima-b");
+        let ambient_substrate = temp.path().join("ambient-substrate-b");
+        let ambient_bin = temp.path().join("ambient-bin");
+        fs::create_dir_all(ambient_home.join(".substrate/sock")).expect("ambient socket dir");
+        fs::create_dir_all(ambient_lima.join("substrate")).expect("ambient lima dir");
+        fs::create_dir_all(&ambient_bin).expect("ambient bin");
+        fs::write(ambient_home.join(".substrate/sock/agent.sock"), "").expect("ambient socket");
+        fs::write(
+            ambient_lima.join("substrate/ssh.config"),
+            "Host lima-substrate\n  User ambient\n",
+        )
+        .expect("ambient ssh config");
+        for tool in ["ssh", "vsock-proxy"] {
+            let path = ambient_bin.join(tool);
+            fs::write(&path, "#!/bin/sh\nexit 0\n").expect("tool stub");
+            #[cfg(unix)]
+            {
+                use std::os::unix::fs::PermissionsExt;
+                let mut perms = fs::metadata(&path).expect("tool metadata").permissions();
+                perms.set_mode(0o755);
+                fs::set_permissions(&path, perms).expect("tool perms");
+            }
+        }
+
+        let prev_home = env::var_os("HOME");
+        let prev_lima_home = env::var_os("LIMA_HOME");
+        let prev_substrate_home = env::var_os("SUBSTRATE_HOME");
+        let prev_path = env::var_os("PATH");
+        let prev_cwd = env::current_dir().expect("cwd");
+        env::set_var("HOME", &ambient_home);
+        env::set_var("LIMA_HOME", &ambient_lima);
+        env::set_var("SUBSTRATE_HOME", &ambient_substrate);
+        env::set_var("PATH", &ambient_bin);
+        env::set_current_dir(temp.path()).expect("set cwd");
+        let _ambient_tcp =
+            std::net::TcpListener::bind((COMPATIBILITY_TCP_HOST, COMPATIBILITY_TCP_PORT)).ok();
+
+        let host = test_host_carrier();
+        let mapping = test_lima_mapping();
+        let (_, current_home) =
+            crate::current_unix_principal_and_home().expect("current Unix install principal");
+        let current_lima_home = current_home.join(".lima");
+
+        assert_eq!(
+            managed_host_socket_path_for_mapping(&host, &mapping).unwrap(),
+            PathBuf::from("/opt/substrate/sock/agent.sock")
+        );
+        assert_eq!(
+            lima_home_dir_for_mapping(&host, &mapping).unwrap(),
+            current_lima_home
+        );
+        assert_eq!(
+            lima_ssh_config_path_for_mapping(&host, &mapping).unwrap(),
+            current_home.join(".lima/substrate/ssh.config")
+        );
+        assert_eq!(
+            lima_known_hosts_path_for_mapping(&host, &mapping).unwrap(),
+            PathBuf::from("/opt/substrate/lima_known_hosts")
+        );
+        let PlatformTransportIdentityV1::Lima {
+            host_socket,
+            guest_socket,
+        } = &mapping.realized_transport
+        else {
+            panic!("expected Lima transport");
+        };
+        assert_eq!(host_socket, "/opt/substrate/sock/agent.sock");
+        assert_eq!(guest_socket, CANONICAL_GUEST_SOCKET_PATH);
+
+        env::set_current_dir(prev_cwd).expect("restore cwd");
+        match prev_home {
+            Some(v) => env::set_var("HOME", v),
+            None => env::remove_var("HOME"),
+        }
+        match prev_lima_home {
+            Some(v) => env::set_var("LIMA_HOME", v),
+            None => env::remove_var("LIMA_HOME"),
+        }
+        match prev_substrate_home {
+            Some(v) => env::set_var("SUBSTRATE_HOME", v),
+            None => env::remove_var("SUBSTRATE_HOME"),
+        }
+        match prev_path {
+            Some(v) => env::set_var("PATH", v),
+            None => env::remove_var("PATH"),
+        }
+    }
+
+    #[test]
+    fn typed_mapping_projection_helpers_reject_mismatches() {
+        let host = test_host_carrier();
+        let mapping = test_lima_mapping();
+
+        let mut wrong_commitment = mapping.clone();
+        wrong_commitment.host_context_commitment = "0".repeat(64);
+        assert!(lima_home_dir_for_mapping(&host, &wrong_commitment).is_err());
+
+        let mut wrong_platform = mapping.clone();
+        wrong_platform.platform_instance = PlatformInstanceIdentityV1::Wsl {
+            distro_name: "Substrate-WSL".to_string(),
+            guest_machine_id: "0123456789abcdef0123456789abcdef".to_string(),
+        };
+        assert!(lima_home_dir_for_mapping(&host, &wrong_platform).is_err());
+
+        let mut wrong_transport = mapping.clone();
+        wrong_transport.realized_transport = PlatformTransportIdentityV1::Wsl {
+            pipe_path: r"\\.\pipe\substrate-agent".to_string(),
+            guest_socket: CANONICAL_GUEST_SOCKET_PATH.to_string(),
+        };
+        assert!(lima_home_dir_for_mapping(&host, &wrong_transport).is_err());
+
+        let mut wrong_control_root = mapping.clone();
+        wrong_control_root.host_platform_control_root = "/Users/other/.lima".to_string();
+        assert!(lima_home_dir_for_mapping(&host, &wrong_control_root).is_err());
+
+        let mut wrong_host_socket = mapping.clone();
+        wrong_host_socket.realized_transport = PlatformTransportIdentityV1::Lima {
+            host_socket: "/opt/other/sock/agent.sock".to_string(),
+            guest_socket: CANONICAL_GUEST_SOCKET_PATH.to_string(),
+        };
+        assert!(lima_home_dir_for_mapping(&host, &wrong_host_socket).is_err());
+
+        let mut wrong_guest_socket = mapping.clone();
+        wrong_guest_socket.realized_transport = PlatformTransportIdentityV1::Lima {
+            host_socket: "/opt/substrate/sock/agent.sock".to_string(),
+            guest_socket: "/tmp/substrate.sock".to_string(),
+        };
+        assert!(lima_home_dir_for_mapping(&host, &wrong_guest_socket).is_err());
+
+        let (principal, _) =
+            crate::current_unix_principal_and_home().expect("current Unix install principal");
+        let transport_api_types::PlatformPrincipalV1::Unix { account, uid } = principal else {
+            panic!("expected Unix principal");
+        };
+        let selected_prefix_b = InstallBootstrapContextCarrierV1::from_context(
+            InstallBootstrapContextV1::new_unix("/opt/other", &account, uid).unwrap(),
+        )
+        .unwrap();
+        assert!(lima_home_dir_for_mapping(&selected_prefix_b, &mapping).is_err());
+        assert!(lima_ssh_config_path_for_mapping(&selected_prefix_b, &mapping).is_err());
+        assert!(lima_known_hosts_path_for_mapping(&selected_prefix_b, &mapping).is_err());
+    }
+
+    #[test]
+    fn r3_lifecycle_blocks_remain_frozen() {
+        const SOURCE: &str = include_str!("forwarding.rs");
+        const DROP_BLOCK: &str = r#"impl Drop for ForwardingHandle {
+    fn drop(&mut self) {
+        debug!("Dropping ForwardingHandle for {:?}", self.kind);
+
+        // Terminate child process if running
+        if let Some(mut child) = self.child.take() {
+            match child.kill() {
+                Ok(_) => {
+                    debug!("Killed forwarding process");
+                    let _ = child.wait();
+                }
+                Err(e) => {
+                    warn!("Failed to kill forwarding process: {}", e);
+                }
+            }
+        }
+
+        // Clean up sockets if needed
+        if let ForwardingKind::SshUds { ref path } = self.kind {
+            if path.exists() {
+                if let Err(e) = std::fs::remove_file(path) {
+                    warn!("Failed to remove socket file: {}", e);
+                }
+            }
+        }
+    }
+}"#;
+        const PRELAUNCH_UNLINK_BLOCK: &str = r#"    // Remove old socket if exists
+    if socket_path.exists() {
+        debug!("Removing old socket file");
+        std::fs::remove_file(&socket_path)?;
+    }"#;
+        const STREAMLOCAL_BIND_UNLINK_BLOCK: &str = r#""-o".to_string(),
+        "StreamLocalBindUnlink=yes".to_string(),"#;
+        const TIMEOUT_BLOCK: &str = r#"    match child.try_wait() {
+        Ok(None) => {
+            if let Err(err) = child.kill() {
+                warn!("Failed to kill timed out SSH forwarding process: {err}");
+            }
+            if let Err(err) = child.wait() {
+                warn!("Failed to wait on timed out SSH forwarding process: {err}");
+            }"#;
+
+        assert!(SOURCE.contains(DROP_BLOCK), "drop block changed");
+        assert!(
+            SOURCE.contains(PRELAUNCH_UNLINK_BLOCK),
+            "pre-launch unlink block changed"
+        );
+        assert!(
+            SOURCE.contains(STREAMLOCAL_BIND_UNLINK_BLOCK),
+            "StreamLocalBindUnlink block changed"
+        );
+        assert!(
+            SOURCE.contains(TIMEOUT_BLOCK),
+            "timeout kill/wait block changed"
+        );
     }
 }
