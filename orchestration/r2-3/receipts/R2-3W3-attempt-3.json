@@ -1,0 +1,21 @@
+{
+  "protocol": "codex.top-level-task-receipt.v1",
+  "orchestration_id": "substrate-r2-3",
+  "dispatch_nonce": "90718042c877775c62feeb1590f8b736cf98825d1d33444adacc1cbf81ae3d04",
+  "increment": "R2-3W3",
+  "status": "BASE_DRIFT",
+  "increment_task": {
+    "thread_id": "019faa51-d76a-7112-a1cf-a6aab6c3c335",
+    "host_id": "remote-ssh-discovered:spenser-linux-codex"
+  },
+  "expected_base": {
+    "commit": "3970e6f1780408a752df1f54532d2ad9475bf284",
+    "tree": "83756158da904c5b5784b752c0bf1fcf0971c7bc"
+  },
+  "blocker": {
+    "summary": "The explicitly named local product branch was one commit behind the live remote target.",
+    "details": "The task-assigned worktree was clean and retained the required ancestor, but it was detached at R2-3W1 commit 80b839d34cadbf763991e14b5036cf9b91e8a82d with tree f98ccf5036328415fc2d3093f99adc1bacacb731, 0 ahead / 1 behind the remote-tracking target. After fetch, the live remote remained at the authorized R2-3W2 commit 3970e6f1780408a752df1f54532d2ad9475bf284 with tree 83756158da904c5b5784b752c0bf1fcf0971c7bc. No implementation edits, checks, review, staging, or publication occurred.",
+    "required_authority": "Create a replacement task-assigned Linux worktree explicitly from the current remote-tracking ref origin/feat/internal-host-orchestrator-world-dispatch-bootstrap.",
+    "handoff_prompt": "Redispatch R2-3W3 in a fresh Linux Codex worktree created from origin/feat/internal-host-orchestrator-world-dispatch-bootstrap. Require exact HEAD 3970e6f1780408a752df1f54532d2ad9475bf284, tree 83756158da904c5b5784b752c0bf1fcf0971c7bc, clean status, 0/0 divergence, and ancestor 0f1e147fb735791b44a65099a65167cbdc1803af before the GPT-5.4 Extra High subagent availability probe or any implementation work. Use a fresh nonce and task identity. Do not begin R2-3W4."
+  }
+}
