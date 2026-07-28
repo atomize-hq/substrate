@@ -111,6 +111,8 @@ Production changes are limited to:
 - macOS call sections only in `scripts/substrate/dev-install-substrate.sh`
 - macOS call sections only in `scripts/substrate/install-substrate.sh`
 - mapping/projection-only sections in `scripts/mac/lima-warm.sh`
+- only the canonical expected-unit `envsubst` projection inside
+  `scripts/mac/lima-doctor.sh::check_rendered_unit_parity`
 - `scripts/mac/lima/units/substrate-world-service.service.tmpl`
 - `scripts/mac/lima/units/substrate-world-service.socket`
 - exact named symbols in `crates/shell/src/execution/invocation/plan.rs`
@@ -125,9 +127,10 @@ Test changes are limited to mapping/context-only cases in:
 - colocated tests in the two allowlisted Rust source files
 
 Do not edit any manifest, `Cargo.lock`, non-macOS installer section, Lima base profile, stop/smoke
-runner, `lima-doctor.sh`, world-mac-lima library source, factory/shim/replay/forwarder source,
-Windows source, control-pack document, generated analyzer file, `AGENTS.md`, or `CLAUDE.md`. If
-another file or production symbol is required, stop with `BLOCKED_SCOPE_EXPANSION`.
+runner, any other `lima-doctor.sh` statement or symbol, world-mac-lima library source,
+factory/shim/replay/forwarder source, Windows source, control-pack document, generated analyzer
+file, `AGENTS.md`, or `CLAUDE.md`. If another file or production symbol is required, stop with
+`BLOCKED_SCOPE_EXPANSION`.
 
 EXACT EXISTING SYMBOL SCOPE
 
@@ -138,6 +141,8 @@ Only these existing production symbols may be edited:
 - the dev installer's macOS `lima-warm.sh` call section
 - `write_systemd_units`
 - `configure_guest`
+- only the canonical expected-unit `envsubst` projection statements in
+  `check_rendered_unit_parity`
 - `ShellConfig::from_args`
 - `ShellConfig::from_cli`
 - `host_doctor_main`
@@ -155,6 +160,8 @@ transport selector, lifecycle seam, cleanup path, or side table.
 Every other production symbol is byte-frozen. In particular:
 
 - cleanup statements inside `write_systemd_units` and `configure_guest` are byte-frozen;
+- every `check_rendered_unit_parity` statement except the exact environment assignments on its
+  canonical service-unit `envsubst` invocation is byte-frozen;
 - instance delete/rebuild, staged-tree/temp cleanup, legacy unit/socket deletion, runtime-socket
   cleanup, forwarding socket unlink, `StreamLocalBindUnlink`, child kill/wait, handle drop,
   retry, teardown, and convergence are byte-frozen;
@@ -170,12 +177,13 @@ context for `ShellConfig::from_cli`, `host_doctor_main`, `world_doctor_main`,
 `selected_host_visible_transports`, `try_bootstrap_host_visible_transport`,
 `collect_world_doctor_assessment`, and the example `main`.
 
-For shell functions and installer call sections, perform exact caller/source closure before edit
-and record every invocation and branch that can reach them. Treat `ShellConfig::from_cli`, doctor
-transport selection, backend construction, and unit projection as HIGH posture even if cfg or
-shell indexing under-reports them. Warn before proceeding. Continue only when the scope remains
-typed IH/PM propagation and generated projection with no new authority, transport activation,
-lifecycle reachability, or non-macOS behavior.
+For shell functions and installer call sections, including `check_rendered_unit_parity`, perform
+exact caller/source closure before edit and record every invocation and branch that can reach
+them. Treat `ShellConfig::from_cli`, doctor transport selection, backend construction, and both
+sides of unit projection/parity as HIGH posture even if cfg or shell indexing under-reports them.
+Warn before proceeding. Continue only when the scope remains typed IH/PM propagation and
+generated projection with no new authority, transport activation, lifecycle reachability, or
+non-macOS behavior.
 
 AUTHORITATIVE INPUT AND PROPAGATION
 
@@ -211,6 +219,15 @@ The service and socket templates are generated projections, never selectors or a
 Their existence/content cannot select A, reconstruct PM, authorize cleanup, or activate
 forwarding. Do not add a second socket, alternate target, ambient home/control-root lookup,
 ownership manifest, or lifecycle marker.
+
+The sole authorized `lima-doctor.sh` expansion must make the canonical expected service-unit
+render receive the same already-verified values used by `write_systemd_units`:
+`INSTALL_BOOTSTRAP_COMMITMENT`, `VM_NAME`, `HOST_PLATFORM_CONTROL_ROOT`,
+`OBSERVED_TRANSPORT_HOST`, and `OBSERVED_TRANSPORT_GUEST_SOCKET`. It may add only the matching
+five environment assignments immediately around the existing service-template `envsubst` call.
+It may not alter mapping observation/verification, readiness, comparison, hashing, warnings,
+recovery hints, cleanup, lifecycle behavior, or any other doctor statement. This is parity
+projection only, not a new authority or transport source.
 
 Before and after editing, capture exact base snippets or hashes for all cleanup statements within
 `write_systemd_units` and `configure_guest`. Those bytes must remain identical. M4 may render or
@@ -268,6 +285,8 @@ Add or strengthen deterministic allowed tests covering at least:
 - malformed, duplicate, tampered, forged-principal, and mismatched prefix/commitment/instance/
   control-root/socket carriers fail before projection or action;
 - unit and socket projections use only the exact verified commitment/mapping/service/socket fields;
+- the doctor canonical expected-unit render supplies exactly the same five verified mapping fields
+  as `write_systemd_units`, without changing any other doctor behavior;
 - the service and socket templates agree with doctor output on commitment, instance, control root,
   A-scoped future host socket, and `/run/substrate.sock`;
 - conflicting ambient `HOME`, `LIMA_HOME`, `SUBSTRATE_HOME`, CWD, PATH, VM, and transport
@@ -303,8 +322,9 @@ Run:
 - `git diff --check` and staged `git diff --cached --check`;
 - exact production/test unstaged and staged allowlist/status checks;
 - confirmation that every manifest, `Cargo.lock`, non-macOS installer section, base profile,
-  stop/smoke runner, forwarding/lifecycle source, factory/shim/replay/forwarder/Windows file,
-  control document, and generated artifact is unchanged;
+  stop/smoke runner, every non-projection `lima-doctor.sh` statement,
+  forwarding/lifecycle source, factory/shim/replay/forwarder/Windows file, control document, and
+  generated artifact is unchanged;
 - exact source/call-graph proof that no typed path activates forwarding or bypasses the R3
   prerequisite;
 - exact frozen-byte comparison for the named cleanup statements and all touched files' excluded
@@ -335,8 +355,8 @@ for:
 
 1. installer boundary-carrier/IH/PM propagation, strict mismatch rejection, and ambient
    non-authority;
-2. unit/socket/doctor/invocation exact projection, explicit R3 prerequisite, and no
-   forwarding/lifecycle activation; and
+2. warm/doctor unit-parity, socket/doctor/invocation exact projection, explicit R3 prerequisite,
+   and no forwarding/lifecycle activation; and
 3. exact file/symbol/test allowlist, frozen cleanup/non-macOS behavior, static-proof honesty, and
    regression sufficiency.
 
