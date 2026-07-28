@@ -1,0 +1,21 @@
+{
+  "protocol": "codex.top-level-task-receipt.v1",
+  "orchestration_id": "substrate-r2-3",
+  "dispatch_nonce": "c73ccaae7980f72393c7a01268e55c2d3330680d774b897fe8a9b97774de7667",
+  "increment": "R2-3F",
+  "status": "BLOCKED_SCOPE_EXPANSION",
+  "increment_task": {
+    "thread_id": "019faaee-c343-7ff1-920a-cde0214b4a38",
+    "host_id": "remote-ssh-discovered:spenser-linux-codex"
+  },
+  "expected_base": {
+    "commit": "b9f975ab98a5d15fd63225366e0d32e399b7c608",
+    "tree": "4f59b0740de523708623442f564122c4722b6221"
+  },
+  "blocker": {
+    "summary": "R2-3F cannot close the typed macOS/Windows factory and shell caller surface inside its seven-file allowlist.",
+    "details": "Independent verification confirms the live product ref and task HEAD remain exactly at the expected base with 0/0 divergence, nothing was committed or pushed, and the only product edits are the seven F-allowlisted files. The remaining caller contradictions are outside that authority: crates/shell/src/execution/routing/dispatch/world_ops.rs still invokes Windows get_backend before the typed client path and contains live pw::detect call sites; crates/replay/src/replay/executor.rs and crates/shim/src/exec/logging.rs still call the contextless world_backend_factory::factory; and the macOS doctor path in the allowlisted macos.rs still depends on pw::detect mapping acquisition that probes Lima guest state and retains an ambient/default fallback posture when acquisition fails. Fresh review also found that the current macOS gateway helper tests collapse to an empty Unix endpoint when no authenticated mapping exists, so they do not honestly prove the typed endpoint contract. The current dirty worktree is /home/spenser/.codex/worktrees/f936/substrate-r2-3. It contains exactly the seven allowlisted product files plus analyzer-only AGENTS.md and CLAUDE.md churn. Required baseline and focused checks passed; shell clippy retains only the known untouched needless_borrow baseline, and macOS/Windows cross-target checks remain unavailable because the Linux host lacks the Apple and MSVC toolchains.",
+    "required_authority": "Explicitly authorize a narrowly amended F contract that adds crates/shell/src/execution/routing/dispatch/world_ops.rs for the live Windows dispatch builders and clarifies whether F may perform the existing read-only Lima guest observation needed to acquire a verified mapping for doctor. Also decide whether the contextless replay and physical-shim factory callers must remain intentionally fail-closed until their already-assigned R2-3R/R2-3S increments or are to be pulled into F; if pulled into F, explicitly add crates/replay/src/replay/executor.rs and crates/shim/src/exec/logging.rs. No lifecycle, provisioning, forwarding, gateway-policy, or deletion authority is implied.",
+    "handoff_prompt": "Resume R2-3F only in /home/spenser/.codex/worktrees/f936/substrate-r2-3 on thread 019faaee-c343-7ff1-920a-cde0214b4a38, host remote-ssh-discovered:spenser-linux-codex, and nonce c73ccaae7980f72393c7a01268e55c2d3330680d774b897fe8a9b97774de7667. Preserve the current uncommitted seven-file product diff and analyzer-only AGENTS.md/CLAUDE.md churn. Reverify that the live target is still b9f975ab98a5d15fd63225366e0d32e399b7c608 with tree 4f59b0740de523708623442f564122c4722b6221 before further work. Do not resume until the meta task sends an explicit amended scope decision covering world_ops.rs, the macOS doctor mapping-observation rule, and the disposition of replay/executor.rs plus shim/exec/logging.rs. After authority arrives, make only the amended caller changes, rerun all F checks and fresh bounded review, and publish only from a validated CLEAN receipt. Do not begin R2-3R."
+  }
+}
