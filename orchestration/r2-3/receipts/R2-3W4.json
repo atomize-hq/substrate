@@ -1,0 +1,73 @@
+{
+  "protocol": "codex.top-level-task-receipt.v1",
+  "orchestration_id": "substrate-r2-3",
+  "dispatch_nonce": "a5c9cb16b2b67800ca4f3ba15d1eec1930e77ba5896184fe088ab3a1e8ee4a24",
+  "increment": "R2-3W4",
+  "status": "LANDED_CLEAN",
+  "increment_task": {
+    "thread_id": "019faa8b-f378-7a30-b48b-339e882caf2b",
+    "host_id": "remote-ssh-discovered:spenser-linux-codex"
+  },
+  "expected_base": {
+    "commit": "657f1a9530f9c86cd2dc88d33f5704b2bf97743e",
+    "tree": "fb5933e50bfcc7dd8807ae799e4adf7d62c891e5"
+  },
+  "landed": {
+    "commit": "0c572373a7b600329a461f4e986d2524ab925598",
+    "tree": "c3e78fb5940384c565de8c39d40801c57ff031f3",
+    "target_ref": "refs/heads/feat/internal-host-orchestrator-world-dispatch-bootstrap",
+    "live_remote": "0c572373a7b600329a461f4e986d2524ab925598"
+  },
+  "subject_fingerprint": "sha256:dc97a285800b992caa85a51336dce3296f81657e05d75d5ce3468bc7c3d821f7",
+  "changed_files": [
+    "crates/forwarder/src/config.rs",
+    "crates/forwarder/src/windows.rs",
+    "scripts/windows/prefix-mapping-r2-3.Tests.ps1",
+    "scripts/windows/start-forwarder.ps1"
+  ],
+  "review": {
+    "packet_id": "A1.1d-5R2-3W4",
+    "record_path": "/tmp/substrate-r2-3w4-artifacts.nbf9r3ai/A1.1d-5R2-3W4.review-cycle.json",
+    "record_sha256": "sha256:e3ceeba7eff9ab0fed90d3b47466f0d765206e85ff0a74d3a9d249398cfd3039",
+    "validated": true,
+    "terminal": "CLEAN",
+    "p1": 0,
+    "p2": 0,
+    "p3_p4_disposition": "R2-3W4-P3-001 and R2-3W4-P4-001 were fixed in the shared PowerShell static suite. The reviewed guest re-observation suggestion was dispositioned outside the exact W4 authority-selection and mapping-proof contract. No open P1, P2, P3, or P4 finding remains."
+  },
+  "verification": {
+    "required_checks_passed": true,
+    "allowlist_passed": true,
+    "change_detection_passed": true,
+    "checkout_clean": true,
+    "ahead": 0,
+    "behind": 0
+  },
+  "checks": [
+    "cargo fmt --all -- --check",
+    "cargo check --locked -p substrate-forwarder",
+    "cargo test --locked -p substrate-forwarder -- --nocapture (0 tracked-tree tests on Linux because the production implementation is Windows-gated)",
+    "cargo clippy --locked -p substrate-forwarder --all-targets -- -D warnings",
+    "cargo test --manifest-path /tmp/substrate-forwarder-w4-harness.ErubaQ/Cargo.toml -- --nocapture (21 passed)",
+    "cargo check --locked -p substrate-forwarder --target x86_64-pc-windows-msvc",
+    "git diff --check",
+    "exact four-path and symbol-scope allowlist checks",
+    "frozen readiness, timeout kill/wait, listener/join, and ctrl-c block hashes",
+    "live target base check before publication and live commit/tree equality after publication"
+  ],
+  "limitations": [
+    "The supported PowerShell runtime was unavailable on the Linux host, so the shared PowerShell suite was checked statically but not executed; native Windows evidence remains assigned to R2-3Z.",
+    "Windows-target cargo test --no-run could not link because link.exe is unavailable on the Linux host.",
+    "The tracked Linux cargo test remains a zero-test cfg baseline and does not constitute Windows product evidence."
+  ],
+  "gitnexus": {
+    "scope": "compare",
+    "base_ref": "657f1a9530f9c86cd2dc88d33f5704b2bf97743e",
+    "changed_files": 4,
+    "changed_count": 44,
+    "affected_count": 0,
+    "risk_level": "low"
+  },
+  "completion_claim": "R2-3W4 completes PI-049 and the forwarder-config consumption slice of PI-079, and supports PI-060 and PI-115. It does not claim the named-pipe listener or WSL child leaf, later caller migration, provisioning activation, lifecycle or deletion authority, native Windows evidence, any R3 row, the R2-3 parent packet, or R2-3W5 execution.",
+  "next_increment": "R2-3W5"
+}
