@@ -338,6 +338,7 @@ pub fn infer_task_frame(context: &ContextPack) -> TaskFrame {
     let truth_artifacts = context
         .truth_artifacts
         .iter()
+        .filter(|artifact| artifact.source != "trusted_repository_root")
         .map(|artifact| artifact.path.clone())
         .collect::<Vec<_>>();
     let working_set_paths = context
@@ -427,7 +428,10 @@ fn infer_counter_evidence(context: &ContextPack, truth_artifacts: &[String]) -> 
 fn infer_confidence(context: &ContextPack, counter_evidence: &[EvidenceRef]) -> Confidence {
     let has_objective = !context.objective.text.trim().is_empty()
         && context.objective.text != "No objective row available";
-    let has_truth = !context.truth_artifacts.is_empty();
+    let has_truth = context
+        .truth_artifacts
+        .iter()
+        .any(|artifact| artifact.source != "trusted_repository_root");
     let has_working_set = !context.working_set_paths.is_empty();
     let has_commands = !context.command_observations.is_empty();
 

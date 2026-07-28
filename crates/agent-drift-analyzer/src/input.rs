@@ -644,15 +644,26 @@ pub(crate) fn extract_path_hints(text: &str) -> Vec<String> {
 pub(crate) struct DirectivePathHint {
     pub path: String,
     pub control_only: bool,
+    pub ordinary_authority: bool,
+    pub explicit_authority: bool,
     pub trusted_root: bool,
+}
+
+#[derive(Debug, Clone, Copy, Default, PartialEq, Eq)]
+struct DirectivePathState {
+    saw_control: bool,
+    saw_authority: bool,
+    saw_explicit_authority: bool,
+    trusted_root: bool,
 }
 
 /// Extracts path-shaped directive evidence with invocation-aware control classification.
 ///
-/// Only a known control token at the start of a logical line opens a control invocation.
-/// Option-only continuation lines remain part of that invocation; ordinary prose containing a
-/// slash-prefixed absolute path does not. Authority candidates reject raw parent components before
-/// punctuation cleanup or lexical normalization.
+/// A known control token at the start of a logical line opens a control invocation. The complete
+/// non-empty paragraph remains control-only, including prose continuation lines and pending option
+/// values, until a blank-line invocation boundary. Ordinary prose containing a slash-prefixed
+/// absolute path remains non-control evidence. Authority candidates reject raw parent components
+/// before punctuation cleanup or lexical normalization.
 pub(crate) fn extract_directive_path_hints(text: &str) -> Vec<String> {
     classify_directive_path_hints(text)
         .into_iter()
@@ -661,78 +672,224 @@ pub(crate) fn extract_directive_path_hints(text: &str) -> Vec<String> {
 }
 
 pub(crate) fn classify_directive_path_hints(text: &str) -> Vec<DirectivePathHint> {
-    let mut paths = BTreeMap::<String, (bool, bool)>::new();
-    let mut control_continuation = false;
+    classify_directive_path_hints_with_goal_authority(text, false)
+}
+
+pub(crate) fn classify_primary_objective_path_hints(text: &str) -> Vec<DirectivePathHint> {
+    classify_directive_path_hints_with_goal_authority(text, true)
+}
+
+fn classify_directive_path_hints_with_goal_authority(
+    text: &str,
+    primary_goal_authority: bool,
+) -> Vec<DirectivePathHint> {
+    let mut paths = BTreeMap::<String, DirectivePathState>::new();
+    let mut control_active = false;
+    let mut goal_invocation_active = false;
+    let mut goal_authority_active = false;
+    let mut pending_option_control = None;
+    let mut fenced_code = None;
+    let mut quote_state = None;
 
     for line in text.lines() {
+        if markdown_line_is_suppressed(line, &mut fenced_code) {
+            continue;
+        }
+        if line_is_summary_heading(line) {
+            break;
+        }
+        if line.trim().is_empty() {
+            control_active = false;
+            goal_invocation_active = false;
+            goal_authority_active = false;
+            pending_option_control = None;
+            continue;
+        }
+
         let tokens = line.split_whitespace().collect::<Vec<_>>();
+        let quoted_indexes = token_indexes_inside_quotes_with_state(&tokens, &mut quote_state);
         let Some(first_index) = first_invocation_token_index(&tokens) else {
-            control_continuation = false;
             continue;
         };
+        let line_is_blockquote = tokens[..first_index]
+            .iter()
+            .any(|token| trim_path_delimiters(token) == ">");
+        let line_is_quoted_region =
+            line_is_blockquote || line.starts_with("    ") || line.starts_with('\t');
         let first = trim_control_token(tokens[first_index]);
-        let starts_control = is_known_control_invocation(first);
-        let continues_control = control_continuation && first.starts_with('-');
-        let control_only = starts_control || continues_control;
-        let phrase_trusted_root = trusted_repository_root_hint(line);
+        if !quoted_indexes.contains(&first_index) && is_known_control_invocation(first) {
+            control_active = true;
+            goal_invocation_active = first == "/goal";
+            goal_authority_active = primary_goal_authority && first == "/goal";
+            pending_option_control = None;
+        }
+        let control_only = control_active && !goal_authority_active;
+        let trusted_root_value_indexes = if line_is_quoted_region {
+            BTreeSet::new()
+        } else {
+            repository_root_value_indexes(&tokens, &quoted_indexes, first_index, "trusted")
+        };
+        let untrusted_root_value_indexes = if line_is_quoted_region {
+            BTreeSet::new()
+        } else {
+            repository_root_value_indexes(&tokens, &quoted_indexes, first_index, "untrusted")
+        };
+        let explicit_authority_value_indexes = if line_is_quoted_region {
+            BTreeSet::new()
+        } else {
+            authorized_scope_value_indexes(&tokens, &quoted_indexes, first_index)
+        };
+        let primary_authority_value_indexes = primary_goal_authority.then(|| {
+            if line_is_quoted_region {
+                BTreeSet::new()
+            } else {
+                positive_authority_path_indexes(&tokens, &quoted_indexes, first_index)
+            }
+        });
 
         let mut index = first_index;
+        if let Some(pending_control) = pending_option_control {
+            let pending_token = tokens[index];
+            let pending_value = trim_path_delimiters(pending_token);
+            if !quoted_indexes.contains(&index)
+                && !pending_value.starts_with('-')
+                && !is_known_control_invocation(trim_control_token(pending_token))
+            {
+                insert_directive_candidate(
+                    &mut paths,
+                    pending_token,
+                    true,
+                    pending_control,
+                    !pending_control
+                        && primary_authority_value_indexes
+                            .as_ref()
+                            .is_none_or(|indexes| indexes.contains(&index)),
+                    false,
+                    false,
+                );
+                pending_option_control = None;
+                index += 1;
+            }
+        }
+
         while index < tokens.len() {
+            if quoted_indexes.contains(&index) {
+                index += 1;
+                continue;
+            }
+            let trusted_root_declaration = trusted_root_value_indexes.contains(&index);
+            let declared_root =
+                trusted_root_declaration || untrusted_root_value_indexes.contains(&index);
+            if declared_root {
+                if control_only && !goal_invocation_active {
+                    index += 1;
+                    continue;
+                }
+                let raw_value = tokens[index];
+                let trusted_root = (!control_only || goal_invocation_active)
+                    && trusted_root_declaration
+                    && !raw_path_has_parent_component(raw_value)
+                    && normalize_directive_path(trim_path_token(raw_value))
+                        .and_then(|path| trusted_repository_root(&path))
+                        .is_some();
+                insert_directive_candidate(
+                    &mut paths,
+                    raw_value,
+                    false,
+                    control_only,
+                    false,
+                    false,
+                    trusted_root,
+                );
+                index += 1;
+                continue;
+            }
+
             let raw_token = tokens[index];
+            if is_known_control_invocation(trim_control_token(raw_token)) {
+                index += 1;
+                continue;
+            }
             let option_token = trim_path_delimiters(raw_token);
             if is_path_option(option_token) {
                 if let Some(raw_value) = tokens.get(index + 1) {
+                    if quoted_indexes.contains(&(index + 1)) {
+                        index += 2;
+                        continue;
+                    }
+                    let ordinary_authority = !control_only
+                        && primary_authority_value_indexes
+                            .as_ref()
+                            .is_none_or(|indexes| indexes.contains(&(index + 1)));
                     insert_directive_candidate(
                         &mut paths,
                         raw_value,
                         true,
                         control_only,
-                        option_token == "--root",
+                        ordinary_authority,
+                        false,
+                        false,
                     );
                     index += 2;
                     continue;
                 }
+                pending_option_control = Some(control_only);
+                index += 1;
+                continue;
             } else if let Some((option, raw_value)) = option_token.split_once('=') {
                 if is_path_option(option) {
+                    let ordinary_authority = !control_only
+                        && primary_authority_value_indexes
+                            .as_ref()
+                            .is_none_or(|indexes| indexes.contains(&index));
                     insert_directive_candidate(
                         &mut paths,
                         raw_value,
                         true,
                         control_only,
-                        option == "--root",
+                        ordinary_authority,
+                        false,
+                        false,
                     );
                     index += 1;
                     continue;
                 }
             }
 
-            if !(control_only && is_known_control_invocation(trim_control_token(raw_token))) {
-                insert_directive_candidate(&mut paths, raw_token, false, control_only, false);
+            let explicit_authority =
+                !control_only && explicit_authority_value_indexes.contains(&index);
+            if control_only
+                && !goal_invocation_active
+                && explicit_authority_value_indexes.contains(&index)
+            {
+                index += 1;
+                continue;
             }
+            let ordinary_authority = !control_only
+                && primary_authority_value_indexes
+                    .as_ref()
+                    .is_none_or(|indexes| indexes.contains(&index));
+            insert_directive_candidate(
+                &mut paths,
+                raw_token,
+                false,
+                control_only,
+                ordinary_authority,
+                explicit_authority,
+                false,
+            );
             index += 1;
         }
-
-        if !control_only {
-            if let Some(root) = phrase_trusted_root {
-                paths
-                    .entry(root)
-                    .and_modify(|existing| {
-                        existing.0 = false;
-                        existing.1 = true;
-                    })
-                    .or_insert((false, true));
-            }
-        }
-
-        control_continuation = starts_control || continues_control;
     }
 
     paths
         .into_iter()
-        .map(|(path, (control_only, trusted_root))| DirectivePathHint {
+        .map(|(path, state)| DirectivePathHint {
             path,
-            control_only,
-            trusted_root,
+            control_only: state.saw_control && !state.saw_authority,
+            ordinary_authority: state.saw_authority,
+            explicit_authority: state.saw_explicit_authority,
+            trusted_root: state.trusted_root,
         })
         .collect()
 }
@@ -743,6 +900,13 @@ fn first_invocation_token_index(tokens: &[&str]) -> Option<usize> {
         .position(|token| !is_line_prefix_token(trim_path_delimiters(token)))
 }
 
+pub(crate) fn leading_control_invocation(line: &str) -> Option<(usize, &str)> {
+    let tokens = line.split_whitespace().collect::<Vec<_>>();
+    let first_index = first_invocation_token_index(&tokens)?;
+    let first = trim_control_token(tokens[first_index]);
+    is_known_control_invocation(first).then_some((first_index, first))
+}
+
 fn is_line_prefix_token(token: &str) -> bool {
     matches!(token, "-" | "*" | "+" | ">")
         || token
@@ -751,6 +915,133 @@ fn is_line_prefix_token(token: &str) -> bool {
             .is_some_and(|prefix| {
                 !prefix.is_empty() && prefix.chars().all(|ch| ch.is_ascii_digit())
             })
+}
+
+pub(crate) fn line_is_summary_heading(line: &str) -> bool {
+    let line = strip_summary_line_prefixes(line).to_ascii_lowercase();
+    let line = line.trim_end_matches('#').trim_end();
+    [
+        "summary",
+        "system summary",
+        "developer summary",
+        "conversation summary",
+        "session summary",
+    ]
+    .iter()
+    .any(|heading| {
+        line.strip_prefix(*heading)
+            .is_some_and(|suffix| suffix.is_empty() || suffix.starts_with(':'))
+    })
+}
+
+fn strip_summary_line_prefixes(mut line: &str) -> &str {
+    loop {
+        let trimmed = line.trim_start();
+        if let Some(rest) = trimmed.strip_prefix('#') {
+            line = rest.trim_start_matches('#').trim_start();
+            continue;
+        }
+        if let Some(rest) = trimmed
+            .strip_prefix("- ")
+            .or_else(|| trimmed.strip_prefix("* "))
+            .or_else(|| trimmed.strip_prefix("+ "))
+            .or_else(|| trimmed.strip_prefix("> "))
+        {
+            line = rest;
+            continue;
+        }
+        if let Some(separator) = trimmed.find(['.', ')']) {
+            let (prefix, rest) = trimmed.split_at(separator);
+            if !prefix.is_empty() && prefix.chars().all(|ch| ch.is_ascii_digit()) {
+                line = rest[1..].trim_start();
+                continue;
+            }
+        }
+        if let Some(rest) = trimmed
+            .strip_prefix("[ ] ")
+            .or_else(|| trimmed.strip_prefix("[x] "))
+            .or_else(|| trimmed.strip_prefix("[X] "))
+        {
+            line = rest;
+            continue;
+        }
+        return trimmed;
+    }
+}
+
+pub(crate) fn markdown_line_is_suppressed(line: &str, fence: &mut Option<(char, usize)>) -> bool {
+    let trimmed = line.trim_start();
+    let Some(delimiter) = trimmed.chars().next().filter(|ch| matches!(ch, '`' | '~')) else {
+        return fence.is_some();
+    };
+    let run_length = trimmed.chars().take_while(|ch| *ch == delimiter).count();
+    if run_length < 3 {
+        return fence.is_some();
+    }
+
+    match *fence {
+        Some((opening_delimiter, opening_length))
+            if delimiter == opening_delimiter
+                && run_length >= opening_length
+                && trimmed[run_length..].trim().is_empty() =>
+        {
+            *fence = None;
+        }
+        None => {
+            *fence = Some((delimiter, run_length));
+        }
+        Some(_) => {}
+    }
+    true
+}
+
+pub(crate) fn token_indexes_inside_quotes_with_state(
+    tokens: &[&str],
+    quote: &mut Option<char>,
+) -> BTreeSet<usize> {
+    let mut indexes = BTreeSet::new();
+    for (index, token) in tokens.iter().enumerate() {
+        let mut quoted = quote.is_some();
+        let mut escaped = false;
+        let chars = token.chars().collect::<Vec<_>>();
+        for (char_index, ch) in chars.iter().copied().enumerate() {
+            if escaped {
+                escaped = false;
+                continue;
+            }
+            if ch == '\\' && *quote != Some('\'') {
+                escaped = true;
+                continue;
+            }
+            match *quote {
+                Some(active) if ch == active => {
+                    quoted = true;
+                    *quote = None;
+                }
+                Some(_) => {
+                    quoted = true;
+                }
+                None if matches!(ch, '"' | '\'' | '`') => {
+                    let apostrophe_inside_word = ch == '\''
+                        && char_index > 0
+                        && chars[char_index - 1].is_alphanumeric()
+                        && chars
+                            .get(char_index + 1)
+                            .is_none_or(|next| next.is_alphanumeric());
+                    if apostrophe_inside_word {
+                        continue;
+                    }
+                    quoted = true;
+                    *quote = Some(ch);
+                }
+                None => {}
+            }
+        }
+        if quoted {
+            indexes.insert(index);
+        }
+    }
+    indexes
 }
 
 fn is_known_control_invocation(token: &str) -> bool {
@@ -789,29 +1080,222 @@ fn is_path_option(token: &str) -> bool {
     )
 }
 
-fn trusted_repository_root_hint(line: &str) -> Option<String> {
-    const MARKER: &str = "trusted repository root";
+fn repository_root_value_indexes(
+    tokens: &[&str],
+    quoted_indexes: &BTreeSet<usize>,
+    first_index: usize,
+    qualifier: &str,
+) -> BTreeSet<usize> {
+    (first_index..tokens.len())
+        .filter_map(|index| {
+            if quoted_indexes.contains(&index) {
+                return None;
+            }
+            let raw_qualifier = *tokens.get(index)?;
+            if raw_qualifier.starts_with(['"', '\'', '`']) {
+                return None;
+            }
+            let starts_clause = index == first_index
+                || !quoted_indexes.contains(&(index - 1))
+                    && is_known_control_invocation(trim_control_token(tokens[index - 1]))
+                || tokens[index - 1]
+                    .trim_end_matches(['"', '\'', '`', ')', ']', '}'])
+                    .ends_with(['.', ';', '!', '?']);
+            if !starts_clause {
+                return None;
+            }
+            let actual_qualifier = trim_path_delimiters(raw_qualifier);
+            let repository = trim_path_delimiters(tokens.get(index + 1)?);
+            let raw_root_label = *tokens.get(index + 2)?;
+            let root_label = raw_root_label.trim_matches(|ch| matches!(ch, '"' | '\'' | '`'));
+            let value_index = index + 3;
+            let clause_end = (value_index..tokens.len())
+                .find(|candidate| authority_clause_ends(tokens[*candidate]))
+                .unwrap_or(tokens.len().saturating_sub(1));
+            (actual_qualifier.eq_ignore_ascii_case(qualifier)
+                && repository.eq_ignore_ascii_case("repository")
+                && root_label.eq_ignore_ascii_case("root:"))
+            .then_some(value_index)
+            .filter(|value_index| *value_index < tokens.len())
+            .filter(|_| {
+                !authority_clause_has_negative_predicate(tokens, index, clause_end)
+                    && authority_clause_exclusion_cutoff(tokens, index, clause_end) > clause_end
+            })
+        })
+        .collect()
+}
 
-    let lower = line.to_ascii_lowercase();
-    let suffix = &line[lower.find(MARKER)? + MARKER.len()..];
-    for raw_token in suffix.split_whitespace() {
-        if raw_path_has_parent_component(raw_token) {
-            return None;
-        }
-        let token = trim_path_token(raw_token);
-        if token.is_empty() || !looks_like_path(token, true) {
+fn positive_authority_path_indexes(
+    tokens: &[&str],
+    quoted_indexes: &BTreeSet<usize>,
+    first_index: usize,
+) -> BTreeSet<usize> {
+    let mut indexes = BTreeSet::new();
+    let mut clause_start = first_index;
+    while clause_start < tokens.len() {
+        let clause_end = (clause_start..tokens.len())
+            .find(|candidate| authority_clause_ends(tokens[*candidate]))
+            .unwrap_or(tokens.len() - 1);
+        if authority_clause_has_negative_predicate(tokens, clause_start, clause_end) {
+            clause_start = clause_end + 1;
             continue;
         }
-        return normalize_directive_path(token).and_then(|path| trusted_repository_root(&path));
+        let cutoff = authority_clause_exclusion_cutoff(tokens, clause_start, clause_end);
+        indexes.extend((clause_start..cutoff).filter(|candidate| {
+            if quoted_indexes.contains(candidate) {
+                return false;
+            }
+            if tokens[*candidate].starts_with(['"', '\''])
+                || tokens[*candidate].ends_with(['"', '\''])
+            {
+                return false;
+            }
+            let token = trim_path_token(tokens[*candidate]);
+            looks_like_path(token, true)
+                || trim_path_delimiters(token)
+                    .split_once('=')
+                    .is_some_and(|(option, value)| {
+                        is_path_option(option) && looks_like_path(trim_path_token(value), true)
+                    })
+        }));
+        clause_start = clause_end + 1;
     }
-    None
+    indexes
+}
+
+fn authorized_scope_value_indexes(
+    tokens: &[&str],
+    quoted_indexes: &BTreeSet<usize>,
+    first_index: usize,
+) -> BTreeSet<usize> {
+    let mut value_indexes = BTreeSet::new();
+    for index in first_index..tokens.len() {
+        if quoted_indexes.contains(&index) {
+            continue;
+        }
+        let raw_authorized = tokens[index];
+        if raw_authorized.starts_with(['"', '\'', '`'])
+            || !trim_path_delimiters(raw_authorized).eq_ignore_ascii_case("authorized")
+        {
+            continue;
+        }
+        let starts_clause = index == first_index
+            || tokens[index - 1]
+                .trim_end_matches(['"', '\'', '`', ')', ']', '}'])
+                .ends_with(['.', ';', '!', '?']);
+        if !starts_clause {
+            continue;
+        }
+
+        let Some(next) = tokens.get(index + 1) else {
+            continue;
+        };
+        let next = next.trim_matches(|ch| matches!(ch, '"' | '\'' | '`'));
+        let value_start = if next.eq_ignore_ascii_case("scope:") {
+            index + 2
+        } else {
+            let Some(scope) = tokens.get(index + 2) else {
+                continue;
+            };
+            let scope = scope.trim_matches(|ch| matches!(ch, '"' | '\'' | '`'));
+            if !next.eq_ignore_ascii_case("filesystem") || !scope.eq_ignore_ascii_case("scope:") {
+                continue;
+            }
+            index + 3
+        };
+        if value_start >= tokens.len() {
+            continue;
+        }
+
+        let clause_end = (value_start..tokens.len())
+            .find(|candidate| authority_clause_ends(tokens[*candidate]))
+            .unwrap_or(tokens.len() - 1);
+        if authority_clause_has_negative_predicate(tokens, index, clause_end) {
+            continue;
+        }
+        let cutoff = authority_clause_exclusion_cutoff(tokens, value_start, clause_end);
+        value_indexes.extend(
+            (value_start..cutoff)
+                .filter(|candidate| !quoted_indexes.contains(candidate))
+                .filter(|candidate| looks_like_path(trim_path_token(tokens[*candidate]), true)),
+        );
+    }
+    value_indexes
+}
+
+fn authority_clause_ends(token: &str) -> bool {
+    token
+        .trim_end_matches(['"', '\'', '`', ')', ']', '}'])
+        .ends_with(['.', ';', '!', '?'])
+}
+
+fn normalized_authority_marker(token: &str) -> String {
+    trim_path_delimiters(token)
+        .trim_matches(|ch: char| {
+            matches!(
+                ch,
+                ',' | ':'
+                    | ';'
+                    | '.'
+                    | '!'
+                    | '?'
+                    | '"'
+                    | '\''
+                    | '('
+                    | ')'
+                    | '['
+                    | ']'
+                    | '{'
+                    | '}'
+                    | '`'
+            )
+        })
+        .to_ascii_lowercase()
+}
+
+fn authority_clause_is_negative_predicate(token: &str) -> bool {
+    matches!(
+        normalized_authority_marker(token).as_str(),
+        "not"
+            | "no"
+            | "never"
+            | "rejected"
+            | "reject"
+            | "denied"
+            | "deny"
+            | "forbidden"
+            | "prohibited"
+            | "disallowed"
+            | "excluded"
+            | "outside"
+            | "review-only"
+    )
+}
+
+fn authority_clause_is_exclusion(token: &str) -> bool {
+    matches!(
+        normalized_authority_marker(token).as_str(),
+        "without" | "except" | "excluding" | "exclude"
+    )
+}
+
+fn authority_clause_has_negative_predicate(tokens: &[&str], start: usize, end: usize) -> bool {
+    (start..=end).any(|index| authority_clause_is_negative_predicate(tokens[index]))
+}
+
+fn authority_clause_exclusion_cutoff(tokens: &[&str], start: usize, end: usize) -> usize {
+    (start..=end)
+        .find(|index| authority_clause_is_exclusion(tokens[*index]))
+        .unwrap_or(end + 1)
 }
 
 fn insert_directive_candidate(
-    paths: &mut BTreeMap<String, (bool, bool)>,
+    paths: &mut BTreeMap<String, DirectivePathState>,
     raw_token: &str,
     explicit_option: bool,
     control_only: bool,
+    ordinary_authority: bool,
+    explicit_authority: bool,
     trusted_root: bool,
 ) {
     if raw_path_has_parent_component(raw_token) {
@@ -828,27 +1312,31 @@ fn insert_directive_candidate(
     let Some(path) = normalize_directive_path(token) else {
         return;
     };
-    paths
-        .entry(path)
-        .and_modify(|existing| {
-            existing.0 &= control_only;
-            existing.1 |= trusted_root && !control_only;
-        })
-        .or_insert((control_only, trusted_root && !control_only));
+    if !control_only && !ordinary_authority && !trusted_root {
+        return;
+    }
+    let state = paths.entry(path).or_default();
+    state.saw_control |= control_only;
+    state.saw_authority |= ordinary_authority;
+    state.saw_explicit_authority |= explicit_authority;
+    state.trusted_root |= trusted_root;
 }
 
 fn raw_path_has_parent_component(raw_token: &str) -> bool {
-    let raw_value = raw_token
-        .split_once('=')
-        .map_or(raw_token, |(_, value)| value);
-    raw_value.split(['/', '\\']).any(|component| {
-        component.trim_matches(|ch: char| {
-            matches!(
-                ch,
-                ',' | ':' | ';' | '"' | '\'' | '(' | ')' | '[' | ']' | '{' | '}' | '`'
-            )
-        }) == ".."
-    })
+    let raw_value = raw_token;
+    let delimited = trim_path_delimiters(raw_value);
+    [raw_value, delimited, strip_path_location_suffix(delimited)]
+        .into_iter()
+        .any(|candidate| {
+            candidate.split(['/', '\\']).any(|component| {
+                component.trim_matches(|ch: char| {
+                    matches!(
+                        ch,
+                        ',' | ':' | ';' | '"' | '\'' | '(' | ')' | '[' | ']' | '{' | '}' | '`'
+                    )
+                }) == ".."
+            })
+        })
 }
 
 fn trim_path_delimiters(token: &str) -> &str {
@@ -898,24 +1386,15 @@ fn looks_like_path(token: &str, portable_separators: bool) -> bool {
     has_separator || has_extension
 }
 
-/// Lexically normalizes a validated repository-relative filesystem path.
-///
-/// Absolute truth identity and trusted typed-path resolution use separate helpers below; a caller-
-/// supplied workdir is never treated as repository-root authority.
-pub(crate) fn normalize_repo_path(path: &str, _workdir: Option<&str>) -> Option<String> {
-    let path = strip_path_location_suffix(path);
-    let parsed = parse_lexical_path(path)?;
-    parsed
-        .root
-        .is_none()
-        .then(|| render_repo_path(&parsed.components))
-}
-
 pub(crate) fn normalize_directive_path(path: &str) -> Option<String> {
     if raw_path_has_parent_component(path) {
         return None;
     }
-    let parsed = parse_lexical_path(strip_path_location_suffix(path))?;
+    let path = strip_path_location_suffix(path);
+    if raw_path_has_parent_component(path) {
+        return None;
+    }
+    let parsed = parse_lexical_path(path)?;
     Some(render_truth_path(&parsed))
 }
 
@@ -970,23 +1449,75 @@ fn path_is_lexically_relative(raw: &str) -> bool {
     raw.as_bytes().get(1) != Some(&b':')
 }
 
-/// Projects a root-aware command path into the repository-relative identity used by
-/// WrongPlanBranch. Absolute paths project only through separately observed trusted roots.
-pub(crate) fn repo_relative_path_identity(path: &str, trusted_roots: &[String]) -> Option<String> {
+/// Returns whether a validated directive path can establish WrongPlanBranch scope authority.
+///
+/// Relative paths remain candidates so a multi-root comparison can fail closed. Absolute paths
+/// require at least one matching trusted root; otherwise they remain truth evidence only.
+pub(crate) fn path_can_establish_wrong_plan_scope(path: &str, trusted_roots: &[String]) -> bool {
     let raw = strip_path_location_suffix(path).trim();
     if path_is_lexically_relative(raw) {
-        let parsed = parse_lexical_path(raw)?;
-        return Some(render_repo_path(&parsed.components));
+        return parse_lexical_path(raw).is_some();
     }
+
     let parsed_roots = trusted_roots
         .iter()
         .filter_map(|root| parse_truth_path(root))
         .filter(|root| root.root.is_some())
         .collect::<Vec<_>>();
+    parsed_roots
+        .iter()
+        .any(|root| resolve_absolute_path(raw, root).is_some())
+}
+
+/// Compares repository identities without flattening distinct trusted-root namespaces.
+///
+/// Relative identities are resolvable with zero or one trusted root. In a multi-root context they
+/// are ambiguous and return `None`, allowing callers to fail closed rather than authorize a path in
+/// the wrong repository merely because its relative suffix matches.
+pub(crate) fn rooted_path_is_equal_or_descendant(
+    path: &str,
+    scope: &str,
+    trusted_roots: &[String],
+) -> Option<bool> {
+    let path = namespaced_repo_path_identity(path, trusted_roots)?;
+    let scope = namespaced_repo_path_identity(scope, trusted_roots)?;
+    Some(path.root == scope.root && components_start_with(&path.components, &scope.components))
+}
+
+#[derive(Debug, Clone, PartialEq, Eq)]
+struct NamespacedRepoPath {
+    root: Option<String>,
+    components: Vec<String>,
+}
+
+fn namespaced_repo_path_identity(
+    path: &str,
+    trusted_roots: &[String],
+) -> Option<NamespacedRepoPath> {
+    let parsed_roots = trusted_roots
+        .iter()
+        .filter_map(|root| parse_truth_path(root))
+        .filter(|root| root.root.is_some())
+        .collect::<Vec<_>>();
+    let raw = strip_path_location_suffix(path).trim();
+    if path_is_lexically_relative(raw) {
+        let parsed = parse_lexical_path(raw)?;
+        let root = match parsed_roots.as_slice() {
+            [] => None,
+            [root] => Some(render_truth_path(root)),
+            _ => return None,
+        };
+        return Some(NamespacedRepoPath {
+            root,
+            components: parsed.components,
+        });
+    }
+
     let (parsed, trusted_root) = resolve_absolute_under_unique_root(raw, &parsed_roots)?;
-    Some(render_repo_path(
-        &parsed.components[trusted_root.components.len()..],
-    ))
+    Some(NamespacedRepoPath {
+        root: Some(render_truth_path(trusted_root)),
+        components: parsed.components[trusted_root.components.len()..].to_vec(),
+    })
 }
 
 pub(crate) fn truth_paths_equal(left: &str, right: &str) -> bool {
@@ -994,17 +1525,6 @@ pub(crate) fn truth_paths_equal(left: &str, right: &str) -> bool {
         (parse_truth_path(left), parse_truth_path(right)),
         (Some(left), Some(right)) if left == right
     )
-}
-
-/// Returns whether `path` is exactly `scope` or is beneath it on a component boundary.
-pub(crate) fn path_is_equal_or_descendant(path: &str, scope: &str) -> bool {
-    let Some(path) = normalize_repo_path(path, None) else {
-        return false;
-    };
-    let Some(scope) = normalize_repo_path(scope, None) else {
-        return false;
-    };
-    components_start_with(&path_components(&path), &path_components(&scope))
 }
 
 pub(crate) fn truth_paths_overlap(left: &str, right: &str) -> bool {
@@ -1255,14 +1775,6 @@ fn render_repo_path(components: &[String]) -> String {
     }
 }
 
-fn path_components(path: &str) -> Vec<String> {
-    if path == "." {
-        Vec::new()
-    } else {
-        path.split('/').map(ToOwned::to_owned).collect()
-    }
-}
-
 fn row_ref_key(row: RowRef) -> (Utf8PathBuf, usize, usize) {
     (row.source_file, row.event_index, row.row_ordinal)
 }
@@ -1270,8 +1782,8 @@ fn row_ref_key(row: RowRef) -> (Utf8PathBuf, usize, usize) {
 #[cfg(test)]
 mod path_identity_tests {
     use super::{
-        classify_directive_path_hints, normalize_typed_path, repo_relative_path_identity,
-        truth_paths_equal, truth_paths_overlap,
+        classify_directive_path_hints, classify_primary_objective_path_hints, normalize_typed_path,
+        rooted_path_is_equal_or_descendant, truth_paths_equal, truth_paths_overlap,
     };
 
     #[test]
@@ -1329,6 +1841,96 @@ mod path_identity_tests {
             hints("/goal update src/foo and then /spec"),
             vec![("src/foo".to_string(), true)]
         );
+        let primary_hints = classify_primary_objective_path_hints(
+            "/goal Implement only crates/child-target/src/lib.rs\n/review\n--path crates/review-only/src/lib.rs",
+        );
+        assert!(primary_hints.iter().any(|hint| {
+            hint.path == "crates/child-target/src/lib.rs"
+                && hint.ordinary_authority
+                && !hint.control_only
+        }));
+        assert!(primary_hints.iter().any(|hint| {
+            hint.path == "crates/review-only/src/lib.rs"
+                && !hint.ordinary_authority
+                && hint.control_only
+        }));
+        let inline_root_hints = classify_primary_objective_path_hints(
+            "/goal Keep this bounded. Trusted repository root: /repo. Authorized filesystem scope: /repo/src/foo.",
+        );
+        assert!(inline_root_hints.iter().any(|hint| {
+            hint.path == "/repo"
+                && hint.trusted_root
+                && !hint.ordinary_authority
+                && !hint.explicit_authority
+        }));
+        assert!(inline_root_hints.iter().any(|hint| {
+            hint.path == "/repo/src/foo"
+                && !hint.trusted_root
+                && hint.ordinary_authority
+                && hint.explicit_authority
+        }));
+        assert!(classify_primary_objective_path_hints(
+            "/goal Trusted repository root: src/not-a-root."
+        )
+        .iter()
+        .all(|hint| hint.path != "src/not-a-root"));
+        let explicit_scope_hints = classify_directive_path_hints(
+            "System summary mentions src/summary-only. Authorized scope: src/explicit.",
+        );
+        assert!(explicit_scope_hints.iter().any(|hint| {
+            hint.path == "src/summary-only" && hint.ordinary_authority && !hint.explicit_authority
+        }));
+        assert!(explicit_scope_hints.iter().any(|hint| {
+            hint.path == "src/explicit" && hint.ordinary_authority && hint.explicit_authority
+        }));
+        for text in [
+            r#"System summary: "Authorized scope: src/bar" was rejected; src/bar remains review-only."#,
+            "Not an authorized scope: src/bar.",
+        ] {
+            assert!(
+                classify_directive_path_hints(text)
+                    .iter()
+                    .filter(|hint| hint.path == "src/bar")
+                    .all(|hint| !hint.explicit_authority),
+                "{text}",
+            );
+        }
+        let multi_scope_hints =
+            classify_directive_path_hints("Authorized scope: src/foo and src/bar.");
+        assert!(["src/foo", "src/bar"].iter().all(|path| {
+            multi_scope_hints
+                .iter()
+                .any(|hint| hint.path == *path && hint.explicit_authority)
+        }));
+        let excluded_scope_hints =
+            classify_directive_path_hints("Authorized scope: src/foo except src/bar.");
+        assert!(excluded_scope_hints
+            .iter()
+            .any(|hint| hint.path == "src/foo" && hint.explicit_authority));
+        assert!(excluded_scope_hints
+            .iter()
+            .filter(|hint| hint.path == "src/bar")
+            .all(|hint| !hint.explicit_authority));
+        let negated_goal_hints = classify_primary_objective_path_hints(
+            "/goal Modify src/foo/lib.rs only. Do not touch src/foo/secrets.rs.",
+        );
+        assert!(negated_goal_hints
+            .iter()
+            .any(|hint| hint.path == "src/foo/lib.rs" && hint.ordinary_authority));
+        assert!(negated_goal_hints
+            .iter()
+            .all(|hint| hint.path != "src/foo/secrets.rs"));
+        for text in [
+            "Not a trusted repository root: /repo.",
+            r#"System summary: "Trusted repository root: /repo" was rejected."#,
+        ] {
+            assert!(
+                classify_directive_path_hints(text)
+                    .iter()
+                    .all(|hint| !hint.trusted_root),
+                "{text}",
+            );
+        }
         assert_eq!(
             hints("Use /repo as the trusted root"),
             vec![("/repo".to_string(), false)]
@@ -1337,6 +1939,29 @@ mod path_identity_tests {
         assert_eq!(
             hints("/review\n--path /repo"),
             vec![("/repo".to_string(), true)]
+        );
+        assert_eq!(
+            hints("/goal\nUpdate src/foo"),
+            vec![("src/foo".to_string(), true)]
+        );
+        assert_eq!(
+            hints("/review\n--path\nsrc/foo"),
+            vec![("src/foo".to_string(), true)]
+        );
+        assert_eq!(
+            hints("/review\n--path\n--verbose\nsrc/foo"),
+            vec![("src/foo".to_string(), true)]
+        );
+        assert_eq!(
+            hints("/goal\nUpdate src/foo\n\nAuthorized scope: src/bar"),
+            vec![
+                ("src/bar".to_string(), false),
+                ("src/foo".to_string(), true)
+            ]
+        );
+        assert_eq!(
+            hints("/review\n--path\n\nsrc/foo"),
+            vec![("src/foo".to_string(), false)]
         );
         let root_hints = classify_directive_path_hints(
             "Trusted repository root: /repo. Authorized scope: /repo/src/foo.",
@@ -1354,12 +1979,26 @@ mod path_identity_tests {
             .all(|hint| hint.control_only && !hint.trusted_root));
         assert!(classify_directive_path_hints("--root /repo")
             .iter()
-            .any(|hint| !hint.control_only && hint.trusted_root));
+            .all(|hint| !hint.trusted_root));
+        assert!(classify_directive_path_hints("--root src/foo")
+            .iter()
+            .all(|hint| !hint.trusted_root));
+        assert!(
+            classify_directive_path_hints("Untrusted repository root: /repo.")
+                .iter()
+                .all(|hint| !hint.trusted_root)
+        );
+        assert!(
+            classify_directive_path_hints("Trusted repository root: src/foo.")
+                .iter()
+                .all(|hint| !hint.trusted_root)
+        );
 
         for candidate in [
             "scope/../sibling",
             "scope/../..",
             "scope/..",
+            "scope/..:12",
             "scope/../../.",
             r"scope\..\sibling",
         ] {
@@ -1387,10 +2026,6 @@ mod path_identity_tests {
             Some("/repo/src/bar.rs".to_string())
         );
         assert_eq!(
-            repo_relative_path_identity("/repo/src/foo/bar.rs", &roots),
-            Some("src/foo/bar.rs".to_string())
-        );
-        assert_eq!(
             normalize_typed_path("src/foo.rs", Some("/tmp"), &roots),
             None
         );
@@ -1413,6 +2048,20 @@ mod path_identity_tests {
         );
         assert_eq!(
             normalize_typed_path(r"\repo\src\foo.rs", Some("/repo"), &roots),
+            None
+        );
+
+        let multiple_roots = vec!["/repo-a".to_string(), "/repo-b".to_string()];
+        assert_eq!(
+            rooted_path_is_equal_or_descendant(
+                "/repo-b/src/foo/bar.rs",
+                "/repo-a/src/foo",
+                &multiple_roots,
+            ),
+            Some(false)
+        );
+        assert_eq!(
+            rooted_path_is_equal_or_descendant("src/foo/bar.rs", "src/foo", &multiple_roots),
             None
         );
     }

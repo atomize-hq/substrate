@@ -8,11 +8,15 @@ use std::collections::{BTreeMap, BTreeSet};
 
 use crate::input::BundleSession;
 use crate::{
-    context::assemble_context, context::collect_command_observations, context::evidence_from_row,
+    context::assemble_context, context::collect_command_observations,
+    context::collect_command_observations_with_trusted_roots,
+    context::command_has_unresolved_paths, context::evidence_from_row,
     context::extract_verification_commands, context::focusable_directive_rows,
     context::CommandObservation, context::ContextPack, context::ObjectiveSummary,
     inference::infer_delegation_context, inference::infer_task_frame,
-    inference::DelegationInference, inference::TypedDelegationInference, scoring::DriftStateHint,
+    inference::DelegationInference, inference::TypedDelegationInference,
+    input::path_can_establish_wrong_plan_scope, input::rooted_path_is_equal_or_descendant,
+    input::trusted_repository_root, input::truth_paths_equal, scoring::DriftStateHint,
     scoring::ScoredDrift,
 };
 use agent_session_compactor::{CompactionKind, CompactionRow, RowRef, UserMessageRole};
@@ -1838,7 +1842,15 @@ fn interval_slice(previous: Option<&CheckpointSlice>, current: &CheckpointSlice)
     let interval_start = previous.map_or(0, |slice| slice.window.compact_rows.len());
     let archival_rows = current.window.archival_rows[archival_start..].to_vec();
     let compact_rows = current.window.compact_rows[interval_start..].to_vec();
-    let command_observations = collect_command_observations(&compact_rows);
+    let trusted_roots = current
+        .context
+        .truth_artifacts
+        .iter()
+        .filter(|artifact| artifact.source == "trusted_repository_root")
+        .filter_map(|artifact| trusted_repository_root(&artifact.path))
+        .collect::<Vec<_>>();
+    let command_observations =
+        collect_command_observations_with_trusted_roots(&compact_rows, &trusted_roots);
     let command_attempts = build_command_attempts(&compact_rows, &command_observations);
     let verification_attempts = build_verification_attempts(&command_attempts, &compact_rows);
 
@@ -1927,7 +1939,9 @@ fn recovery_state(
     let interval_verification_command_count = interval
         .command_observations
         .iter()
-        .filter(|command| command.verification_like)
+        .filter(|command| {
+            command.verification_like && classify_command_role(command) != CommandRole::Neutral
+        })
         .count();
     let preserves_out_of_scope = preserves_out_of_scope_thrash(current, interval);
     let failure_touches_interval =
@@ -1950,37 +1964,212 @@ fn recovery_state(
 }
 
 fn preserves_out_of_scope_thrash(current: &CheckpointSlice, interval: &IntervalSlice) -> bool {
-    let mut expected = current.task_frame.truth_artifacts.clone();
-    expected.extend(
-        current
-            .context
-            .working_set_paths
-            .iter()
-            .filter(|path| {
-                path.source != "observed_command"
-                    || path
-                        .evidence
-                        .iter()
-                        .any(|evidence| !interval_contains_evidence(interval, evidence))
-            })
-            .map(|path| path.path.clone()),
-    );
+    let trusted_roots = current
+        .context
+        .truth_artifacts
+        .iter()
+        .filter(|artifact| artifact.source == "trusted_repository_root")
+        .filter_map(|artifact| trusted_repository_root(&artifact.path))
+        .collect::<Vec<_>>();
+    let mut expected = current
+        .context
+        .truth_artifacts
+        .iter()
+        .filter(|artifact| {
+            !matches!(
+                artifact.source.as_str(),
+                "control_directive_literal" | "trusted_repository_root"
+            )
+        })
+        .filter(|artifact| path_can_establish_wrong_plan_scope(&artifact.path, &trusted_roots))
+        .map(|artifact| artifact.path.clone())
+        .collect::<Vec<_>>();
     expected.sort();
     expected.dedup();
 
     interval.command_observations.iter().any(|command| {
-        if command.paths.is_empty() || (!command.write_like && !command.verification_like) {
+        if !command.write_like && !command.verification_like {
             return false;
+        }
+        if command_has_unresolved_paths(command) {
+            return true;
+        }
+        let verification_scope = verification_path_scope(command);
+        if verification_scope.invalid
+            || verification_scope.declared
+                && (command.paths.is_empty()
+                    || verification_scope.literal_values.iter().any(|value| {
+                        !command
+                            .paths
+                            .iter()
+                            .any(|command_path| truth_paths_equal(value, command_path))
+                    }))
+        {
+            return true;
+        }
+        if command.paths.is_empty() {
+            return false;
+        }
+        if expected.is_empty() {
+            return command.write_like && !command.verification_like || verification_scope.declared;
         }
 
         !command.paths.iter().all(|path| {
             expected.iter().any(|expected_path| {
-                path == expected_path
-                    || path.starts_with(expected_path)
-                    || expected_path.starts_with(path)
+                rooted_path_is_equal_or_descendant(path, expected_path, &trusted_roots)
+                    == Some(true)
             })
         })
     })
+}
+
+#[derive(Clone, Debug, Default, PartialEq, Eq)]
+struct VerificationPathScope {
+    declared: bool,
+    invalid: bool,
+    literal_values: Vec<String>,
+}
+
+#[derive(Debug, PartialEq, Eq)]
+enum ShellToken {
+    Word(String),
+    Boundary,
+}
+
+#[derive(Debug, PartialEq, Eq)]
+struct ShellTokens {
+    tokens: Vec<ShellToken>,
+    lexically_valid: bool,
+}
+
+fn verification_path_scope(command: &CommandObservation) -> VerificationPathScope {
+    if !command.verification_like {
+        return VerificationPathScope::default();
+    }
+
+    let ShellTokens {
+        tokens,
+        lexically_valid,
+    } = shell_tokens(&command.raw_command);
+    let mut status = VerificationPathScope::default();
+    let mut after_argument_boundary = false;
+    let mut index = 0;
+    while index < tokens.len() {
+        match &tokens[index] {
+            ShellToken::Boundary => {
+                after_argument_boundary = false;
+            }
+            ShellToken::Word(token) if token == "--" => {
+                after_argument_boundary = true;
+            }
+            ShellToken::Word(token) if !after_argument_boundary => {
+                let token =
+                    token.trim_matches(|ch: char| matches!(ch, '(' | ')' | '[' | ']' | '{' | '}'));
+                if token == "--manifest-path" {
+                    status.declared = true;
+                    let value = tokens.get(index + 1);
+                    if !matches!(
+                        value,
+                        Some(ShellToken::Word(value)) if manifest_value_is_literal(value)
+                    ) {
+                        status.invalid = true;
+                    } else if let Some(ShellToken::Word(value)) = value {
+                        status.literal_values.push(value.clone());
+                        index += 1;
+                    }
+                } else if let Some(value) = token.strip_prefix("--manifest-path=") {
+                    status.declared = true;
+                    if manifest_value_is_literal(value) {
+                        status.literal_values.push(value.to_string());
+                    } else {
+                        status.invalid = true;
+                    }
+                }
+            }
+            ShellToken::Word(_) => {}
+        }
+        index += 1;
+    }
+    status.invalid |= status.declared && !lexically_valid;
+    status
+}
+
+fn manifest_value_is_literal(value: &str) -> bool {
+    !value.is_empty()
+        && !value.starts_with('-')
+        && !value.chars().any(|ch| {
+            matches!(
+                ch,
+                '$' | '`' | '*' | '?' | '[' | ']' | '<' | '>' | '{' | '}' | '~'
+            )
+        })
+}
+
+fn shell_tokens(command: &str) -> ShellTokens {
+    let mut tokens = Vec::new();
+    let mut word = String::new();
+    let mut quote = None;
+    let mut lexically_valid = true;
+    let mut chars = command.chars().peekable();
+
+    let push_word = |tokens: &mut Vec<ShellToken>, word: &mut String| {
+        if !word.is_empty() {
+            tokens.push(ShellToken::Word(std::mem::take(word)));
+        }
+    };
+
+    while let Some(ch) = chars.next() {
+        match quote {
+            Some(active) if ch == active => {
+                if active == '`' {
+                    word.push(ch);
+                }
+                quote = None;
+            }
+            Some('\'') => word.push(ch),
+            Some(_) if ch == '\\' => {
+                if let Some(escaped) = chars.next() {
+                    if escaped != '\n' {
+                        word.push(escaped);
+                    }
+                } else {
+                    lexically_valid = false;
+                }
+            }
+            Some(_) => word.push(ch),
+            None if matches!(ch, '"' | '\'' | '`') => {
+                if ch == '`' {
+                    word.push(ch);
+                }
+                quote = Some(ch);
+            }
+            None if ch == '\\' => {
+                if let Some(escaped) = chars.next() {
+                    if escaped != '\n' {
+                        word.push(escaped);
+                    }
+                } else {
+                    lexically_valid = false;
+                }
+            }
+            None if ch == '\n' || matches!(ch, ';' | '|' | '&') => {
+                push_word(&mut tokens, &mut word);
+                if !matches!(tokens.last(), Some(ShellToken::Boundary)) {
+                    tokens.push(ShellToken::Boundary);
+                }
+            }
+            None if ch.is_whitespace() => {
+                push_word(&mut tokens, &mut word);
+            }
+            None => word.push(ch),
+        }
+    }
+    push_word(&mut tokens, &mut word);
+    lexically_valid &= quote.is_none();
+    ShellTokens {
+        tokens,
+        lexically_valid,
+    }
 }
 
 fn failure_loops_touch_interval(loops: &[RepeatedFailureLoop], interval: &IntervalSlice) -> bool {
@@ -2983,7 +3172,7 @@ fn objective_candidate_pivot_priority(row: &CompactionRow) -> u8 {
     objective_candidate_is_explicit_replan_pivot(row).into()
 }
 
-fn objective_candidate_is_explicit_replan_pivot(row: &CompactionRow) -> bool {
+pub(crate) fn objective_candidate_is_explicit_replan_pivot(row: &CompactionRow) -> bool {
     if !matches!(row.kind, CompactionKind::UserMessage)
         || row.user_message_role != Some(UserMessageRole::Steer)
     {
@@ -3354,18 +3543,19 @@ fn is_failure_row(row: &CompactionRow) -> bool {
 
 #[cfg(test)]
 mod tests {
-    use crate::context::CommandObservation;
+    use crate::context::{command_has_unresolved_paths, CommandObservation};
     use agent_session_compactor::{CompactionKind, CompactionRow, SourceKind, UserMessageRole};
     use camino::Utf8PathBuf;
 
     use crate::input::BundleSession;
+    use crate::scoring::score_wrong_plan_branch;
 
     use super::{
         assign_drift_states, checkpoint_analyses, classify_command_role,
         kickoff_anchor_for_ordinal, session_kickoff_structured_goal_anchor,
-        tool_output_is_unambiguous_failure, CommandRole, Confidence, DriftClass, DriftScore,
-        DriftState, DriftStateHint, EvidenceRef, ObjectiveClass, ObjectiveIntent, ScoredDrift,
-        StructuredObjective,
+        tool_output_is_unambiguous_failure, verification_path_scope, CommandRole, Confidence,
+        DriftClass, DriftScore, DriftState, DriftStateHint, EvidenceRef, ObjectiveClass,
+        ObjectiveIntent, ScoredDrift, StructuredObjective,
     };
 
     #[test]
@@ -3387,6 +3577,570 @@ mod tests {
         ] {
             assert!(!tool_output_is_unambiguous_failure(text), "{text}");
         }
+    }
+
+    fn recovery_scope_analyses(
+        session_id: &str,
+        directive: &str,
+        historical: Option<(&str, &str)>,
+        interval_verification: &str,
+    ) -> Vec<super::CheckpointAnalysis> {
+        let mut rows = vec![row(0, CompactionKind::UserMessage, directive)];
+        let mut event_index = 1;
+        if let Some((tool_name, payload)) = historical {
+            rows.push(identified_tool_call(event_index, tool_name, payload));
+            event_index += 1;
+        }
+        for _ in 0..3 {
+            rows.push(tool_call(
+                event_index,
+                "functions.shell_command",
+                r#"{"command":"cargo test -p agent-drift-analyzer"}"#,
+            ));
+            event_index += 1;
+        }
+        rows.push(row(
+            event_index,
+            CompactionKind::UserMessage,
+            "Continue with the recovery verification interval.",
+        ));
+        event_index += 1;
+        rows.push(identified_tool_call(
+            event_index,
+            "functions.write_file",
+            r#"{"path":"src/bar/lib.rs"}"#,
+        ));
+        event_index += 1;
+        rows.push(tool_call(
+            event_index,
+            "functions.shell_command",
+            interval_verification,
+        ));
+        let session = BundleSession {
+            session_id: session_id.to_string(),
+            archival_rows: rows.clone(),
+            compact_rows: rows,
+        };
+
+        checkpoint_analyses(&session)
+    }
+
+    #[test]
+    fn recovery_rejects_empty_typed_write_paths_before_verification() {
+        let rows = vec![
+            row(
+                0,
+                CompactionKind::UserMessage,
+                "Implement the requested change.\n\nAuthorized filesystem scope: src/foo.",
+            ),
+            tool_call(
+                1,
+                "functions.shell_command",
+                r#"{"command":"cargo test -p agent-drift-analyzer"}"#,
+            ),
+            tool_call(
+                2,
+                "functions.shell_command",
+                r#"{"command":"cargo test -p agent-drift-analyzer"}"#,
+            ),
+            tool_call(
+                3,
+                "functions.shell_command",
+                r#"{"command":"cargo test -p agent-drift-analyzer"}"#,
+            ),
+            row(
+                4,
+                CompactionKind::UserMessage,
+                "Continue with the recovery verification interval.",
+            ),
+            identified_tool_call(5, "functions.write_file", r#"{"paths":[]}"#),
+            tool_call(
+                6,
+                "functions.shell_command",
+                r#"{"command":"cargo test -p agent-drift-analyzer"}"#,
+            ),
+        ];
+        let session = BundleSession {
+            session_id: "session-recovery-empty-paths".to_string(),
+            archival_rows: rows.clone(),
+            compact_rows: rows,
+        };
+
+        let analyses = checkpoint_analyses(&session);
+        assert_eq!(analyses.len(), 2);
+        let analysis = &analyses[1];
+        let write = analysis
+            .interval
+            .command_observations
+            .iter()
+            .find(|command| command.write_like && !command.verification_like)
+            .expect("empty typed write observation");
+        assert!(write.paths.is_empty());
+        assert!(command_has_unresolved_paths(write));
+        assert!(write.evidence.iter().any(|evidence| evidence
+            .reason
+            .contains("unresolved typed paths: paths=<empty>")));
+        assert_eq!(analysis.recovery.interval_verification_command_count, 1);
+        assert!(!analysis.recovery.clean_verification_interval);
+        assert!(!analysis.recovery.recovered_from_thrash);
+        assert!(analysis.recovery.active_repeated_verification);
+
+        let wrong_plan = score_wrong_plan_branch(analysis).score;
+        assert_eq!(wrong_plan.raw_score, 60);
+        assert!(wrong_plan.flagged);
+    }
+
+    #[test]
+    fn recovery_ignores_control_only_scope_beside_legitimate_authority() {
+        let analyses = recovery_scope_analyses(
+            "session-recovery-control-scope",
+            "Implement the requested change.\n\nAuthorized filesystem scope: src/foo.\n\n/review\n--path src/bar",
+            None,
+            r#"{"command":"cargo test --manifest-path src/bar/Cargo.toml"}"#,
+        );
+        assert_eq!(analyses.len(), 2);
+        let analysis = &analyses[1];
+        assert!(analysis
+            .current
+            .context
+            .truth_artifacts
+            .iter()
+            .any(|artifact| {
+                artifact.path == "src/bar" && artifact.source == "control_directive_literal"
+            }));
+        assert_eq!(analysis.recovery.interval_verification_command_count, 1);
+        assert!(!analysis.recovery.clean_verification_interval);
+        assert!(!analysis.recovery.recovered_from_thrash);
+        assert!(analysis.recovery.active_repeated_verification);
+
+        let wrong_plan = score_wrong_plan_branch(analysis).score;
+        assert_eq!(wrong_plan.raw_score, 80);
+        assert!(wrong_plan.flagged);
+    }
+
+    #[test]
+    fn recovery_ignores_historical_observed_paths_as_scope_authority() {
+        for (case, tool_name, payload, historical_wrong_plan_score) in [
+            (
+                "read-only",
+                "functions.read_file",
+                r#"{"path":"src/bar"}"#,
+                0,
+            ),
+            (
+                "rejected-write",
+                "functions.write_file",
+                r#"{"path":"src/bar"}"#,
+                60,
+            ),
+        ] {
+            let analyses = recovery_scope_analyses(
+                &format!("session-recovery-historical-{case}"),
+                "Implement the requested change.\n\nAuthorized filesystem scope: src/foo.",
+                Some((tool_name, payload)),
+                r#"{"command":"cargo test -p agent-drift-analyzer"}"#,
+            );
+            assert_eq!(analyses.len(), 2, "{case}");
+            assert_eq!(
+                score_wrong_plan_branch(&analyses[0]).score.raw_score,
+                historical_wrong_plan_score,
+                "{case}",
+            );
+            let analysis = &analyses[1];
+            let historical_path = analysis
+                .current
+                .context
+                .working_set_paths
+                .iter()
+                .find(|path| path.path == "src/bar")
+                .expect("historical observed path");
+            assert_eq!(historical_path.source, "observed_command", "{case}");
+            let verification = analysis
+                .interval
+                .command_observations
+                .iter()
+                .find(|command| command.verification_like)
+                .expect("pathless verification observation");
+            assert!(verification.paths.is_empty(), "{case}");
+            assert!(!command_has_unresolved_paths(verification), "{case}");
+            assert_eq!(
+                analysis.recovery.interval_verification_command_count, 1,
+                "{case}",
+            );
+            assert!(!analysis.recovery.clean_verification_interval, "{case}");
+            assert!(!analysis.recovery.recovered_from_thrash, "{case}");
+            assert!(analysis.recovery.active_repeated_verification, "{case}");
+
+            let wrong_plan = score_wrong_plan_branch(analysis).score;
+            assert_eq!(wrong_plan.raw_score, 60, "{case}");
+            assert!(wrong_plan.flagged, "{case}");
+        }
+    }
+
+    #[test]
+    fn recovery_requires_true_authority_for_pathful_actions() {
+        let analyses = recovery_scope_analyses(
+            "session-recovery-no-authority",
+            "Implement the requested change.\n\nTrusted repository root: /repo.\n\n/review\n--path src/bar",
+            None,
+            r#"{"command":"cargo test -p agent-drift-analyzer"}"#,
+        );
+        assert_eq!(analyses.len(), 2);
+        let analysis = &analyses[1];
+        assert!(analysis
+            .current
+            .context
+            .truth_artifacts
+            .iter()
+            .any(|artifact| {
+                artifact.path == "src/bar" && artifact.source == "control_directive_literal"
+            }));
+        assert!(analysis
+            .current
+            .context
+            .truth_artifacts
+            .iter()
+            .any(|artifact| {
+                artifact.path == "/repo" && artifact.source == "trusted_repository_root"
+            }));
+        assert!(analysis
+            .current
+            .context
+            .truth_artifacts
+            .iter()
+            .all(|artifact| matches!(
+                artifact.source.as_str(),
+                "control_directive_literal" | "trusted_repository_root"
+            )));
+        let verification = analysis
+            .interval
+            .command_observations
+            .iter()
+            .find(|command| command.verification_like)
+            .expect("pathless verification observation");
+        assert!(verification.paths.is_empty());
+        assert!(!command_has_unresolved_paths(verification));
+        assert_eq!(analysis.recovery.interval_verification_command_count, 1);
+        assert!(!analysis.recovery.clean_verification_interval);
+        assert!(!analysis.recovery.recovered_from_thrash);
+        assert!(analysis.recovery.active_repeated_verification);
+
+        let wrong_plan = score_wrong_plan_branch(analysis).score;
+        assert_eq!(wrong_plan.raw_score, 0);
+        assert_eq!(wrong_plan.confidence, Confidence::Low);
+        assert!(!wrong_plan.flagged);
+    }
+
+    #[test]
+    fn recovery_rejects_manifest_path_verification_without_authority() {
+        for (case, command, expected_paths) in [
+            (
+                "literal",
+                "cargo test --manifest-path src/bar/Cargo.toml",
+                vec!["src/bar/Cargo.toml".to_string()],
+            ),
+            (
+                "environment",
+                "cargo test --manifest-path \"$MANIFEST\"",
+                Vec::new(),
+            ),
+            ("missing", "cargo test --manifest-path", Vec::new()),
+            (
+                "shell-separator",
+                "cargo test --manifest-path; true",
+                Vec::new(),
+            ),
+            (
+                "shell-concatenation",
+                "cargo test --manifest'-path' src/bar/Cargo.toml",
+                vec!["src/bar/Cargo.toml".to_string()],
+            ),
+            (
+                "shell-backslash-escape",
+                r"cargo test --manifest\-path src/bar/Cargo.toml",
+                vec!["src/bar/Cargo.toml".to_string()],
+            ),
+            (
+                "later-shell-segment",
+                "cargo test -- --nocapture; cargo test --manifest-path src/bar/Cargo.toml",
+                vec!["src/bar/Cargo.toml".to_string()],
+            ),
+            (
+                "line-continuation",
+                "cargo test --manifest\\\n-path src/bar/Cargo.toml",
+                vec!["src/bar/Cargo.toml".to_string()],
+            ),
+        ] {
+            let rows = vec![
+                row(
+                    0,
+                    CompactionKind::UserMessage,
+                    "/goal Continue the task.\n\n/review\n--path src/bar",
+                ),
+                tool_call(
+                    1,
+                    "functions.shell_command",
+                    r#"{"command":"cargo test -p agent-drift-analyzer"}"#,
+                ),
+                tool_call(
+                    2,
+                    "functions.shell_command",
+                    r#"{"command":"cargo test -p agent-drift-analyzer"}"#,
+                ),
+                tool_call(
+                    3,
+                    "functions.shell_command",
+                    r#"{"command":"cargo test -p agent-drift-analyzer"}"#,
+                ),
+                row(
+                    4,
+                    CompactionKind::UserMessage,
+                    "Continue with the recovery verification interval.",
+                ),
+                tool_call(
+                    5,
+                    "functions.shell_command",
+                    &format!(r#"{{"command":{command:?}}}"#),
+                ),
+            ];
+            let session = BundleSession {
+                session_id: format!("session-recovery-pathful-verification-no-authority-{case}"),
+                archival_rows: rows.clone(),
+                compact_rows: rows,
+            };
+
+            let analyses = checkpoint_analyses(&session);
+            assert_eq!(analyses.len(), 2, "{case}");
+            let analysis = &analyses[1];
+            let verification = analysis
+                .interval
+                .command_observations
+                .iter()
+                .find(|command| command.verification_like)
+                .expect("manifest-path verification observation");
+            assert_eq!(verification.paths, expected_paths, "{case}");
+            assert!(!command_has_unresolved_paths(verification), "{case}");
+            assert_eq!(
+                analysis.recovery.interval_verification_command_count, 1,
+                "{case}",
+            );
+            assert!(!analysis.recovery.clean_verification_interval, "{case}");
+            assert!(!analysis.recovery.recovered_from_thrash, "{case}");
+            assert!(analysis.recovery.active_repeated_verification, "{case}");
+        }
+    }
+
+    #[test]
+    fn recovery_rejects_lexically_invalid_manifest_path_verification() {
+        for (case, command) in [
+            (
+                "unmatched-single-quote",
+                "cargo test --manifest-path 'src/foo/Cargo.toml",
+            ),
+            (
+                "unmatched-double-quote",
+                "cargo test --manifest-path \"src/foo/Cargo.toml",
+            ),
+            (
+                "unmatched-backtick",
+                "cargo test --manifest-path `src/foo/Cargo.toml",
+            ),
+            (
+                "dangling-escape",
+                "cargo test --manifest-path src/foo/Cargo.toml\\",
+            ),
+        ] {
+            let rows = vec![
+                row(
+                    0,
+                    CompactionKind::UserMessage,
+                    "Implement the requested change.\n\nAuthorized filesystem scope: src/foo.",
+                ),
+                tool_call(
+                    1,
+                    "functions.shell_command",
+                    r#"{"command":"cargo test -p agent-drift-analyzer"}"#,
+                ),
+                tool_call(
+                    2,
+                    "functions.shell_command",
+                    r#"{"command":"cargo test -p agent-drift-analyzer"}"#,
+                ),
+                tool_call(
+                    3,
+                    "functions.shell_command",
+                    r#"{"command":"cargo test -p agent-drift-analyzer"}"#,
+                ),
+                row(
+                    4,
+                    CompactionKind::UserMessage,
+                    "Continue with the recovery verification interval.",
+                ),
+                tool_call(
+                    5,
+                    "functions.shell_command",
+                    &format!(r#"{{"command":{command:?}}}"#),
+                ),
+            ];
+            let session = BundleSession {
+                session_id: format!("session-recovery-invalid-manifest-lexing-{case}"),
+                archival_rows: rows.clone(),
+                compact_rows: rows,
+            };
+
+            let analyses = checkpoint_analyses(&session);
+            assert_eq!(analyses.len(), 2, "{case}");
+            let analysis = &analyses[1];
+            let verification = analysis
+                .interval
+                .command_observations
+                .iter()
+                .find(|command| command.verification_like)
+                .expect("lexically invalid manifest-path verification");
+            let scope = verification_path_scope(verification);
+            assert!(scope.declared, "{case}");
+            assert!(scope.invalid, "{case}");
+            assert_eq!(
+                analysis.recovery.interval_verification_command_count, 1,
+                "{case}",
+            );
+            assert!(!analysis.recovery.clean_verification_interval, "{case}");
+            assert!(!analysis.recovery.recovered_from_thrash, "{case}");
+            assert!(analysis.recovery.active_repeated_verification, "{case}");
+        }
+    }
+
+    #[test]
+    fn recovery_rejects_nonliteral_manifest_beside_an_in_scope_path() {
+        for (case, command) in [
+            (
+                "environment",
+                r#"{"command":"cargo test --target-dir src/foo/target --manifest-path \"$MANIFEST\""}"#,
+            ),
+            (
+                "process-substitution",
+                r#"{"command":"cargo test --target-dir src/foo/target --manifest-path <(:) 1>&- 2>&- || true"}"#,
+            ),
+        ] {
+            let analyses = recovery_scope_analyses(
+                &format!("session-recovery-nonliteral-manifest-with-path-{case}"),
+                "Implement the requested change.\n\nAuthorized filesystem scope: src/foo.",
+                None,
+                command,
+            );
+            assert_eq!(analyses.len(), 2, "{case}");
+            let analysis = &analyses[1];
+            let verification = analysis
+                .interval
+                .command_observations
+                .iter()
+                .find(|command| command.verification_like)
+                .expect("manifest-path verification observation");
+            assert_eq!(verification.paths, vec!["src/foo/target"], "{case}");
+            assert!(!analysis.recovery.clean_verification_interval, "{case}");
+            assert!(!analysis.recovery.recovered_from_thrash, "{case}");
+            assert!(analysis.recovery.active_repeated_verification, "{case}");
+        }
+    }
+
+    #[test]
+    fn recovery_rejects_multi_root_relative_path_ambiguity() {
+        let rows = vec![
+            row(
+                0,
+                CompactionKind::UserMessage,
+                "Implement the requested change.\n\nTrusted repository root: /repo-a.\nTrusted repository root: /repo-b.\nAuthorized filesystem scope: src/foo.",
+            ),
+            identified_tool_call(
+                1,
+                "functions.write_file",
+                r#"{"path":"src/foo/bar.rs"}"#,
+            ),
+            tool_call(
+                2,
+                "functions.shell_command",
+                r#"{"command":"cargo test -p agent-drift-analyzer"}"#,
+            ),
+        ];
+        let session = BundleSession {
+            session_id: "session-recovery-multi-root".to_string(),
+            archival_rows: rows.clone(),
+            compact_rows: rows,
+        };
+
+        let analyses = checkpoint_analyses(&session);
+        assert_eq!(analyses.len(), 1);
+        let analysis = &analyses[0];
+        let write = analysis
+            .interval
+            .command_observations
+            .iter()
+            .find(|command| command.write_like && !command.verification_like)
+            .expect("ambiguous typed write observation");
+        assert_eq!(write.paths, vec!["src/foo/bar.rs".to_string()]);
+        assert!(!command_has_unresolved_paths(write));
+        assert_eq!(analysis.recovery.interval_verification_command_count, 1);
+        assert!(!analysis.recovery.clean_verification_interval);
+
+        let wrong_plan = score_wrong_plan_branch(analysis).score;
+        assert_eq!(wrong_plan.raw_score, 60);
+        assert!(wrong_plan.flagged);
+    }
+
+    #[test]
+    fn recovery_keeps_single_root_inherited_typed_action_clean() {
+        let rows = vec![
+            row(
+                0,
+                CompactionKind::UserMessage,
+                "Implement the requested change.\n\nTrusted repository root: /repo.\nAuthorized filesystem scope: src/foo.",
+            ),
+            tool_call(
+                1,
+                "functions.shell_command",
+                r#"{"command":"echo establish-root-context"}"#,
+            ),
+            row(
+                2,
+                CompactionKind::UserMessage,
+                "Continue with the inherited typed action and verification.",
+            ),
+            identified_tool_call(
+                3,
+                "functions.write_file",
+                r#"{"path":"bar.rs","cwd":"/repo/src/foo"}"#,
+            ),
+            tool_call(
+                4,
+                "functions.shell_command",
+                r#"{"command":"cargo test -p agent-drift-analyzer"}"#,
+            ),
+        ];
+        let session = BundleSession {
+            session_id: "session-recovery-single-root".to_string(),
+            archival_rows: rows.clone(),
+            compact_rows: rows,
+        };
+
+        let analyses = checkpoint_analyses(&session);
+        assert_eq!(analyses.len(), 2);
+        let analysis = &analyses[1];
+        let write = analysis
+            .interval
+            .command_observations
+            .iter()
+            .find(|command| command.write_like && !command.verification_like)
+            .expect("inherited typed write observation");
+        assert_eq!(write.paths, vec!["/repo/src/foo/bar.rs".to_string()]);
+        assert!(!command_has_unresolved_paths(write));
+        assert_eq!(analysis.recovery.interval_verification_command_count, 1);
+        assert!(analysis.recovery.clean_verification_interval);
+        assert!(!analysis.recovery.recovered_from_thrash);
+        assert!(!analysis.recovery.active_repeated_verification);
+
+        let wrong_plan = score_wrong_plan_branch(analysis).score;
+        assert_eq!(wrong_plan.raw_score, 0);
+        assert!(!wrong_plan.flagged);
     }
 
     #[test]

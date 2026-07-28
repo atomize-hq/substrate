@@ -1,6 +1,8 @@
 use crate::checkpoint::{CheckpointAnalysis, Confidence, DriftClass, DriftScore, DriftState};
+use crate::context::command_has_unresolved_paths;
 use crate::input::{
-    path_is_equal_or_descendant, repo_relative_path_identity, trusted_repository_root,
+    path_can_establish_wrong_plan_scope, rooted_path_is_equal_or_descendant,
+    trusted_repository_root,
 };
 use crate::scoring::{DriftStateHint, ScoredDrift};
 
@@ -21,25 +23,28 @@ pub(crate) fn score_wrong_plan_branch(analysis: &CheckpointAnalysis) -> ScoredDr
                 "control_directive_literal" | "trusted_repository_root"
             )
         })
-        .filter_map(|artifact| repo_relative_path_identity(&artifact.path, &trusted_roots))
+        .filter(|artifact| path_can_establish_wrong_plan_scope(&artifact.path, &trusted_roots))
+        .map(|artifact| artifact.path.clone())
         .collect::<Vec<_>>();
     expected.sort();
     expected.dedup();
     let mut out_of_scope = Vec::new();
     for command in &analysis.interval.command_observations {
-        if expected.is_empty()
-            || command.paths.is_empty()
-            || (!command.write_like && !command.verification_like)
-        {
+        if !command.write_like && !command.verification_like {
+            continue;
+        }
+        if command_has_unresolved_paths(command) {
+            out_of_scope.extend(command.evidence.clone());
+            continue;
+        }
+        if expected.is_empty() || command.paths.is_empty() {
             continue;
         }
         let matches_scope = command.paths.iter().all(|path| {
-            let Some(path) = repo_relative_path_identity(path, &trusted_roots) else {
-                return false;
-            };
-            expected
-                .iter()
-                .any(|expected_path| path_is_equal_or_descendant(&path, expected_path))
+            expected.iter().any(|expected_path| {
+                rooted_path_is_equal_or_descendant(path, expected_path, &trusted_roots)
+                    == Some(true)
+            })
         });
         if !matches_scope {
             out_of_scope.extend(command.evidence.clone());

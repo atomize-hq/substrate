@@ -2,7 +2,7 @@
 
 mod support;
 
-use agent_drift_analyzer::{AnalyzeRequest, Confidence, DriftClass, DriftState};
+use agent_drift_analyzer::{AnalyzeRequest, Confidence, DriftClass, DriftState, ObjectiveClass};
 use agent_session_compactor::{
     CompactionKind, CompactionRow, DedupeGroup, RowRef, SourceKind, UserMessageRole,
 };
@@ -261,42 +261,76 @@ fn wrong_plan_branch_control_invocations_and_plain_absolute_paths_are_distinct()
         (
             "goal-chain",
             "/goal Update src/foo and then run /spec.",
-            Vec::<&str>::new(),
             vec!["src/foo"],
+            Vec::<&str>::new(),
+            (60, Confidence::Medium, true),
         ),
         (
             "control-option-continuation",
             "/review\n--path /repo",
             Vec::<&str>::new(),
             vec!["/repo"],
+            (0, Confidence::Low, false),
+        ),
+        (
+            "goal-multiline-continuation",
+            "/goal\nUpdate src/foo",
+            vec!["src/foo"],
+            Vec::<&str>::new(),
+            (60, Confidence::Medium, true),
+        ),
+        (
+            "control-option-pending-value",
+            "/review\n--path\nsrc/foo",
+            Vec::<&str>::new(),
+            vec!["src/foo"],
+            (0, Confidence::Low, false),
         ),
         (
             "plain-prose-posix",
             "The trusted repository root is /repo for this task.",
             vec!["/repo"],
             Vec::<&str>::new(),
+            (0, Confidence::Low, false),
+        ),
+        (
+            "plain-prose-posix-occurrence-specific",
+            "The trusted repository root is /repo for this task. docs/bar.md is historical context.",
+            vec!["/repo"],
+            Vec::<&str>::new(),
+            (0, Confidence::Low, false),
         ),
         (
             "standalone-posix",
             "/repo",
             vec!["/repo"],
             Vec::<&str>::new(),
+            (0, Confidence::Low, false),
         ),
         (
             "option-positional-posix",
             "--path /repo",
             vec!["/repo"],
             Vec::<&str>::new(),
+            (0, Confidence::Low, false),
         ),
         (
             "option-equals-posix",
             "--path=/repo",
             vec!["/repo"],
             Vec::<&str>::new(),
+            (0, Confidence::Low, false),
+        ),
+        (
+            "explicit-authorized-scope",
+            "Authorized scope: src/foo.",
+            vec!["src/foo"],
+            Vec::<&str>::new(),
+            (60, Confidence::Medium, true),
         ),
     ];
 
-    for (case, directive, expected_authority, expected_control) in cases {
+    for (case, directive, expected_authority, expected_control, expected_score) in cases {
         let result = analyze_rows(vec![
             row(0, CompactionKind::UserMessage, directive),
             typed_tool_row(1, "functions.write_file", r#"{"path":"src/foobar.rs"}"#),
@@ -320,25 +354,782 @@ fn wrong_plan_branch_control_invocations_and_plain_absolute_paths_are_distinct()
         let score = final_wrong_plan_score(&result);
         assert_eq!(
             (score.raw_score, score.confidence, score.flagged),
-            (0, Confidence::Low, false),
+            expected_score,
             "{case}",
         );
     }
 }
 
 #[test]
+fn non_primary_summary_cannot_launder_control_only_scope_into_authority() {
+    let result = analyze_rows(vec![
+        row(
+            0,
+            CompactionKind::UserMessage,
+            "/goal Modify src/foo only.\n/review --path src/bar",
+        ),
+        row(
+            1,
+            CompactionKind::SystemMessage,
+            "System summary: the previous review targeted src/bar.",
+        ),
+        typed_tool_row(2, "functions.write_file", r#"{"path":"src/bar/lib.rs"}"#),
+    ]);
+    let context = &result.sessions[0].context;
+    assert!(context
+        .truth_artifacts
+        .iter()
+        .any(|artifact| { artifact.path == "src/foo" && artifact.source == "objective_literal" }));
+    assert!(context.truth_artifacts.iter().any(|artifact| {
+        artifact.path == "src/bar" && artifact.source == "control_directive_literal"
+    }));
+    assert!(!context.truth_artifacts.iter().any(|artifact| {
+        artifact.path == "src/bar"
+            && matches!(
+                artifact.source.as_str(),
+                "objective_literal" | "directive_literal"
+            )
+    }));
+
+    let score = final_wrong_plan_score(&result);
+    assert_eq!(
+        (score.raw_score, score.confidence, score.flagged),
+        (60, Confidence::Medium, true),
+    );
+}
+
+#[test]
+fn quoted_or_negated_scope_cannot_launder_control_only_authority() {
+    for summary in [
+        r#"System summary: "Authorized scope: src/bar" was rejected; src/bar remains review-only."#,
+        "Not an authorized scope: src/bar.",
+    ] {
+        let result = analyze_rows(vec![
+            row(
+                0,
+                CompactionKind::UserMessage,
+                "/goal Modify src/foo only.\n/review --path src/bar",
+            ),
+            row(1, CompactionKind::SystemMessage, summary),
+            typed_tool_row(2, "functions.write_file", r#"{"path":"src/bar/lib.rs"}"#),
+        ]);
+        assert!(result.sessions[0]
+            .context
+            .truth_artifacts
+            .iter()
+            .any(|artifact| {
+                artifact.path == "src/bar" && artifact.source == "control_directive_literal"
+            }));
+        let score = final_wrong_plan_score(&result);
+        assert_eq!(
+            (score.raw_score, score.confidence, score.flagged),
+            (60, Confidence::Medium, true),
+            "{summary}",
+        );
+    }
+}
+
+#[test]
+fn authority_directive_does_not_authorize_a_later_prohibited_path() {
+    let result = analyze_rows(vec![
+        row(
+            0,
+            CompactionKind::UserMessage,
+            "/goal Perform the bounded change.",
+        ),
+        row(
+            1,
+            CompactionKind::SystemMessage,
+            "Use src/foo only. Do not use src/bar; that path is outside the task.",
+        ),
+        typed_tool_row(2, "functions.write_file", r#"{"path":"src/bar/lib.rs"}"#),
+    ]);
+    let authority = result.sessions[0]
+        .context
+        .truth_artifacts
+        .iter()
+        .filter(|artifact| artifact.source != "control_directive_literal")
+        .map(|artifact| artifact.path.as_str())
+        .collect::<Vec<_>>();
+    assert!(authority.contains(&"src/foo"));
+    assert!(!authority.contains(&"src/bar"));
+    let score = final_wrong_plan_score(&result);
+    assert_eq!(
+        (score.raw_score, score.confidence, score.flagged),
+        (60, Confidence::Medium, true),
+    );
+}
+
+#[test]
+fn negated_replan_does_not_establish_scope_authority() {
+    let mut steer = row(
+        1,
+        CompactionKind::UserMessage,
+        "Do not replan or change scope to src/bar; continue working only in src/foo.",
+    );
+    steer.user_message_role = Some(UserMessageRole::Steer);
+    let result = analyze_rows(vec![
+        row(0, CompactionKind::UserMessage, "/goal Modify src/foo only."),
+        steer,
+        typed_tool_row(2, "functions.write_file", r#"{"path":"src/bar/lib.rs"}"#),
+    ]);
+    assert!(!result.sessions[0]
+        .context
+        .truth_artifacts
+        .iter()
+        .any(|artifact| {
+            artifact.path == "src/bar"
+                && matches!(
+                    artifact.source.as_str(),
+                    "objective_literal" | "directive_literal"
+                )
+        }));
+    let score = final_wrong_plan_score(&result);
+    assert_eq!(
+        (score.raw_score, score.confidence, score.flagged),
+        (60, Confidence::Medium, true),
+    );
+}
+
+#[test]
+fn explicit_multi_path_scope_authorizes_each_declared_path() {
+    let result = analyze_rows(vec![
+        row(
+            0,
+            CompactionKind::UserMessage,
+            "/goal Implement the requested change.",
+        ),
+        row(
+            1,
+            CompactionKind::SystemMessage,
+            "Authorized scope: src/foo and src/bar.",
+        ),
+        typed_tool_row(2, "functions.write_file", r#"{"path":"src/bar/lib.rs"}"#),
+    ]);
+    assert!(["src/foo", "src/bar"].iter().all(|path| {
+        result.sessions[0]
+            .context
+            .truth_artifacts
+            .iter()
+            .any(|artifact| artifact.path == *path && artifact.source == "directive_literal")
+    }));
+    let score = final_wrong_plan_score(&result);
+    assert_eq!(
+        (score.raw_score, score.confidence, score.flagged),
+        (0, Confidence::Medium, false),
+    );
+}
+
+#[test]
+fn primary_objective_exclusions_do_not_broaden_shared_parent_authority() {
+    let result = analyze_rows(vec![
+        row(
+            0,
+            CompactionKind::UserMessage,
+            "/goal Modify src/foo/lib.rs only. Do not touch src/foo/secrets.rs.",
+        ),
+        typed_tool_row(1, "functions.write_file", r#"{"path":"src/foo/other.rs"}"#),
+    ]);
+    let authority = result.sessions[0]
+        .context
+        .truth_artifacts
+        .iter()
+        .filter(|artifact| artifact.source != "control_directive_literal")
+        .map(|artifact| artifact.path.as_str())
+        .collect::<Vec<_>>();
+    assert_eq!(authority, vec!["src/foo/lib.rs"]);
+    let score = final_wrong_plan_score(&result);
+    assert_eq!(
+        (score.raw_score, score.confidence, score.flagged),
+        (60, Confidence::Medium, true),
+    );
+}
+
+#[test]
+fn primary_objective_does_not_synthesize_arbitrary_sibling_authority() {
+    let result = analyze_rows(vec![
+        row(
+            0,
+            CompactionKind::UserMessage,
+            "/goal Modify src/auth/login.rs and src/auth/token.rs only.",
+        ),
+        typed_tool_row(1, "functions.write_file", r#"{"path":"src/auth/admin.rs"}"#),
+    ]);
+    let authority = result.sessions[0]
+        .context
+        .truth_artifacts
+        .iter()
+        .filter(|artifact| artifact.source != "control_directive_literal")
+        .map(|artifact| artifact.path.as_str())
+        .collect::<Vec<_>>();
+    assert_eq!(authority, vec!["src/auth/login.rs", "src/auth/token.rs"]);
+    let score = final_wrong_plan_score(&result);
+    assert_eq!(
+        (score.raw_score, score.confidence, score.flagged),
+        (60, Confidence::Medium, true),
+    );
+}
+
+#[test]
+fn primary_objective_preserves_codex_goals_parent_compatibility() {
+    let result = analyze_rows(vec![
+        row(
+            0,
+            CompactionKind::UserMessage,
+            "/goal Update .codex/goals/goal-state.json and .codex/goals/next-goal-body.md.",
+        ),
+        typed_tool_row(
+            1,
+            "functions.write_file",
+            r#"{"path":".codex/goals/evidence/proof.json"}"#,
+        ),
+    ]);
+    assert!(result.sessions[0]
+        .context
+        .truth_artifacts
+        .iter()
+        .any(|artifact| {
+            artifact.path == ".codex/goals" && artifact.source == "objective_literal"
+        }));
+    let score = final_wrong_plan_score(&result);
+    assert_eq!(
+        (score.raw_score, score.confidence, score.flagged),
+        (0, Confidence::Medium, false),
+    );
+}
+
+#[test]
+fn primary_objective_authority_uses_only_the_structured_target_clause() {
+    let result = analyze_rows(vec![
+        row(
+            0,
+            CompactionKind::UserMessage,
+            r#"/goal Modify src/foo/lib.rs only. Prior review quoted "docs/bar.md" as historical context."#,
+        ),
+        typed_tool_row(1, "functions.write_file", r#"{"path":"docs/bar.md"}"#),
+    ]);
+    let authority = result.sessions[0]
+        .context
+        .truth_artifacts
+        .iter()
+        .filter(|artifact| artifact.source != "control_directive_literal")
+        .map(|artifact| artifact.path.as_str())
+        .collect::<Vec<_>>();
+    assert_eq!(authority, vec!["src/foo/lib.rs"]);
+    let score = final_wrong_plan_score(&result);
+    assert_eq!(
+        (score.raw_score, score.confidence, score.flagged),
+        (60, Confidence::Medium, true),
+    );
+}
+
+#[test]
+fn pathless_structured_objective_does_not_fallback_to_context_paths() {
+    for historical_path in ["docs/bar.md", ".codex/goals/legacy.md"] {
+        let result = analyze_rows(vec![
+            row(
+                0,
+                CompactionKind::UserMessage,
+                &format!(
+                    "/goal Refactor the agent-drift-analyzer crate. Context: Prior review mentioned {historical_path}."
+                ),
+            ),
+            typed_tool_row(
+                1,
+                "functions.write_file",
+                &format!(r#"{{"path":{historical_path:?}}}"#),
+            ),
+        ]);
+        assert!(!result.sessions[0]
+            .context
+            .truth_artifacts
+            .iter()
+            .any(|artifact| artifact.path == historical_path));
+    }
+}
+
+#[test]
+fn pathless_codex_goals_compatibility_rejects_non_goal_surfaces() {
+    for (case, objective) in [
+        (
+            "review-only",
+            "/goal Complete the bounded task.\n/review\nUpdate .codex/goals/review-a.md.\nWrite .codex/goals/review-b.md.",
+        ),
+        (
+            "historical-after-goal",
+            "/goal Complete the bounded task.\n\nHistorical transcript:\nUpdate .codex/goals/old-a.md.\nWrite .codex/goals/old-b.md.",
+        ),
+        (
+            "quoted-goal-under-review",
+            "/goal Complete the bounded task.\n/review\n\"/goal\"\nUpdate .codex/goals/quoted-a.md.\nWrite .codex/goals/quoted-b.md.",
+        ),
+    ] {
+        let result = analyze_rows(vec![
+            row(0, CompactionKind::UserMessage, objective),
+            typed_tool_row(
+                1,
+                "functions.write_file",
+                r#"{"path":".codex/goals/evidence/proof.json"}"#,
+            ),
+        ]);
+        assert!(
+            !result.sessions[0]
+                .context
+                .truth_artifacts
+                .iter()
+                .any(|artifact| {
+                    artifact.path.starts_with(".codex/goals")
+                        && artifact.source != "control_directive_literal"
+                }),
+            "{case}",
+        );
+    }
+}
+
+#[test]
+fn non_task_objective_evidence_never_establishes_action_scope() {
+    let result = analyze_rows(vec![
+        row(
+            0,
+            CompactionKind::UserMessage,
+            "Which component owns docs/bar.md in the trusted repository root?",
+        ),
+        typed_tool_row(1, "functions.write_file", r#"{"path":"docs/bar.md"}"#),
+    ]);
+    let context = &result.sessions[0].context;
+    assert_eq!(
+        context
+            .objective
+            .structured
+            .as_ref()
+            .expect("structured non-task objective")
+            .objective_class,
+        ObjectiveClass::NotTaskStatement,
+    );
+    assert_eq!(context.command_observations.len(), 1);
+    assert!(context.command_observations[0].write_like);
+    assert_eq!(context.command_observations[0].paths, vec!["docs/bar.md"]);
+    assert!(!context.truth_artifacts.iter().any(|artifact| {
+        artifact.path == "docs/bar.md"
+            && matches!(
+                artifact.source.as_str(),
+                "objective_literal" | "directive_literal"
+            )
+    }));
+    let score = final_wrong_plan_score(&result);
+    assert_eq!(
+        (
+            score.raw_score,
+            score.confidence,
+            score.state,
+            score.flagged,
+        ),
+        (0, Confidence::Low, DriftState::Cleared, false),
+    );
+}
+
+#[test]
+fn summary_only_objective_evidence_cannot_fallback_into_authority() {
+    let result = analyze_rows(vec![
+        row(
+            0,
+            CompactionKind::SystemMessage,
+            "Summary: Implement docs/bar.md only.",
+        ),
+        typed_tool_row(1, "functions.write_file", r#"{"path":"docs/bar.md"}"#),
+    ]);
+    assert!(result.sessions[0].context.truth_artifacts.is_empty());
+}
+
+#[test]
+fn negated_or_quoted_trusted_root_does_not_unlock_absolute_authority() {
+    for root_text in [
+        "Not a trusted repository root: /repo.",
+        r#"System summary: "Trusted repository root: /repo" was rejected."#,
+    ] {
+        let result = analyze_rows(vec![
+            row(
+                0,
+                CompactionKind::UserMessage,
+                "/goal Implement the requested change.",
+            ),
+            row(1, CompactionKind::SystemMessage, root_text),
+            row(
+                2,
+                CompactionKind::SystemMessage,
+                "Authorized scope: /repo/src/foo.",
+            ),
+            typed_tool_row(
+                3,
+                "functions.write_file",
+                r#"{"path":"/repo/src/foo/lib.rs","cwd":"/repo"}"#,
+            ),
+        ]);
+        assert!(!result.sessions[0]
+            .context
+            .truth_artifacts
+            .iter()
+            .any(|artifact| artifact.source == "trusted_repository_root"));
+        let score = final_wrong_plan_score(&result);
+        assert_eq!(
+            (score.raw_score, score.confidence, score.flagged),
+            (60, Confidence::Low, true),
+            "{root_text}",
+        );
+    }
+}
+
+#[test]
+fn blockquoted_authority_and_root_declarations_are_non_authoritative() {
+    let result = analyze_rows(vec![
+        row(0, CompactionKind::UserMessage, "/goal Modify src/foo only."),
+        row(
+            1,
+            CompactionKind::SystemMessage,
+            "> Authorized scope: src/bar.\n> Trusted repository root: /repo.",
+        ),
+        typed_tool_row(2, "functions.write_file", r#"{"path":"src/bar/lib.rs"}"#),
+    ]);
+    assert!(!result.sessions[0]
+        .context
+        .truth_artifacts
+        .iter()
+        .any(|artifact| {
+            artifact.path == "src/bar" || artifact.source == "trusted_repository_root"
+        }));
+    let score = final_wrong_plan_score(&result);
+    assert_eq!(
+        (score.raw_score, score.confidence, score.flagged),
+        (60, Confidence::Medium, true),
+    );
+}
+
+#[test]
+fn quoted_declarations_and_control_mentions_are_non_authoritative() {
+    for quoted_context in [
+        r#"Historical transcript: "Reference. Trusted repository root: /repo. Authorized scope: /repo/src/bar.""#,
+        r#"/review The literal "/goal" was mentioned. Trusted repository root: /repo. Authorized scope: /repo/src/bar."#,
+    ] {
+        let result = analyze_rows(vec![
+            row(0, CompactionKind::UserMessage, "/goal Modify src/foo only."),
+            row(1, CompactionKind::SystemMessage, quoted_context),
+            typed_tool_row(2, "functions.write_file", r#"{"path":"src/bar/lib.rs"}"#),
+        ]);
+        assert!(!result.sessions[0]
+            .context
+            .truth_artifacts
+            .iter()
+            .any(|artifact| {
+                artifact.path == "/repo"
+                    || artifact.path == "/repo/src/bar"
+                    || artifact.source == "trusted_repository_root"
+            }));
+    }
+}
+
+#[test]
+fn multiline_quoted_declarations_are_non_authoritative() {
+    let result = analyze_rows(vec![
+        row(0, CompactionKind::UserMessage, "/goal Modify src/foo only."),
+        row(
+            1,
+            CompactionKind::SystemMessage,
+            "Historical transcript: \"The old configuration said:\nTrusted repository root: /repo.\nAuthorized scope: /repo/src/bar.\n\"",
+        ),
+        typed_tool_row(
+            2,
+            "functions.write_file",
+            r#"{"path":"/repo/src/bar/lib.rs","cwd":"/repo"}"#,
+        ),
+    ]);
+    assert!(!result.sessions[0]
+        .context
+        .truth_artifacts
+        .iter()
+        .any(|artifact| {
+            artifact.path == "/repo"
+                || artifact.path == "/repo/src/bar"
+                || artifact.source == "trusted_repository_root"
+        }));
+}
+
+#[test]
+fn review_only_positive_clause_cannot_merge_with_later_prose_authority() {
+    let result = analyze_rows(vec![
+        row(0, CompactionKind::UserMessage, "/goal Modify src/foo only."),
+        row(
+            1,
+            CompactionKind::SystemMessage,
+            "/review\nUse src/bar.\n\nHistorical note: the review discussed src/bar.",
+        ),
+        typed_tool_row(2, "functions.write_file", r#"{"path":"src/bar/lib.rs"}"#),
+    ]);
+    assert!(!result.sessions[0]
+        .context
+        .truth_artifacts
+        .iter()
+        .any(|artifact| artifact.path == "src/bar"));
+}
+
+#[test]
+fn apostrophes_inside_words_do_not_hide_primary_authority() {
+    for objective in [
+        "/goal Don't forget to update src/foo.",
+        "/goal Update the project's src/foo module.",
+    ] {
+        let result = analyze_rows(vec![
+            row(0, CompactionKind::UserMessage, objective),
+            typed_tool_row(1, "functions.write_file", r#"{"path":"src/foo/lib.rs"}"#),
+        ]);
+        assert!(result.sessions[0]
+            .context
+            .truth_artifacts
+            .iter()
+            .any(|artifact| artifact.path == "src/foo"));
+        let score = final_wrong_plan_score(&result);
+        assert!(!score.flagged, "{objective}");
+    }
+}
+
+#[test]
+fn postpositive_negation_rejects_authority_and_root_declarations() {
+    for declaration in [
+        "Authorized scope: src/bar is prohibited.\nTrusted repository root: /repo is rejected.",
+        "Authorized scope: src/bar (prohibited).\nTrusted repository root: /repo (rejected).",
+        "Authorized scope: src/bar is excluded.\nTrusted repository root: /repo is excluded.",
+        "Use src/bar is excluded.\nTrusted repository root: /repo is excluded.",
+    ] {
+        let result = analyze_rows(vec![
+            row(0, CompactionKind::UserMessage, "/goal Modify src/foo only."),
+            row(1, CompactionKind::SystemMessage, declaration),
+            typed_tool_row(2, "functions.write_file", r#"{"path":"src/bar/lib.rs"}"#),
+        ]);
+        assert!(!result.sessions[0]
+            .context
+            .truth_artifacts
+            .iter()
+            .any(|artifact| {
+                artifact.path == "src/bar" || artifact.source == "trusted_repository_root"
+            }));
+        let score = final_wrong_plan_score(&result);
+        assert_eq!(
+            (score.raw_score, score.confidence, score.flagged),
+            (60, Confidence::Medium, true),
+            "{declaration}",
+        );
+    }
+}
+
+#[test]
+fn summary_regions_suppress_later_authority_and_preserve_prior_directives() {
+    for heading in [
+        "Summary:",
+        "System summary:",
+        "Developer summary:",
+        "Conversation summary:",
+        "Session summary:",
+    ] {
+        let authority = format!(
+            "Use src/foo.\n\n{heading}\nTrusted repository root: /repo.\nAuthorized scope: /repo/src/bar."
+        );
+        let result = analyze_rows(vec![
+            row(
+                0,
+                CompactionKind::UserMessage,
+                "/goal Implement the requested change.",
+            ),
+            row(1, CompactionKind::SystemMessage, &authority),
+            typed_tool_row(2, "functions.write_file", r#"{"path":"src/bar/lib.rs"}"#),
+        ]);
+        let artifacts = &result.sessions[0].context.truth_artifacts;
+        assert!(
+            artifacts.iter().any(|artifact| {
+                artifact.path == "src/foo" && artifact.source == "directive_literal"
+            }),
+            "{heading}",
+        );
+        assert!(
+            !artifacts.iter().any(|artifact| {
+                artifact.path == "/repo"
+                    || artifact.path == "/repo/src/bar"
+                    || artifact.source == "trusted_repository_root"
+            }),
+            "{heading}",
+        );
+        let score = final_wrong_plan_score(&result);
+        assert_eq!(score.raw_score, 60, "{heading}");
+        assert!(score.flagged, "{heading}");
+    }
+}
+
+#[test]
+fn exclusion_clauses_authorize_only_paths_before_the_exclusion() {
+    for authority_text in [
+        "Authorized scope: src/foo except src/bar.",
+        "Use src/foo excluding src/bar.",
+    ] {
+        let result = analyze_rows(vec![
+            row(
+                0,
+                CompactionKind::UserMessage,
+                "/goal Implement the requested change.",
+            ),
+            row(1, CompactionKind::SystemMessage, authority_text),
+            typed_tool_row(2, "functions.write_file", r#"{"path":"src/bar/lib.rs"}"#),
+        ]);
+        let authority = result.sessions[0]
+            .context
+            .truth_artifacts
+            .iter()
+            .filter(|artifact| artifact.source != "control_directive_literal")
+            .map(|artifact| artifact.path.as_str())
+            .collect::<Vec<_>>();
+        assert!(authority.contains(&"src/foo"), "{authority_text}");
+        assert!(!authority.contains(&"src/bar"), "{authority_text}");
+        let score = final_wrong_plan_score(&result);
+        assert_eq!(
+            (score.raw_score, score.confidence, score.flagged),
+            (60, Confidence::Medium, true),
+            "{authority_text}",
+        );
+    }
+}
+
+#[test]
+fn quoted_or_multiline_summary_directives_do_not_establish_authority() {
+    for historical_context in [
+        "System summary:\n> Use src/bar only.\nAuthorized scope: src/bar.",
+        "## System summary\nRejected historical configuration:\n```text\nTrusted repository root: /repo.\nAuthorized scope: src/bar.\n```",
+        "## Summary\nAuthorized scope: src/bar.",
+        "Historical example:\n```text\nTrusted repository root: /repo.\nAuthorized scope: src/bar.\n```",
+        "Historical example:\n````text\n~~~\nTrusted repository root: /repo.\nAuthorized scope: src/bar.\n````",
+    ] {
+        let result = analyze_rows(vec![
+            row(0, CompactionKind::UserMessage, "/goal Modify src/foo only."),
+            row(1, CompactionKind::SystemMessage, historical_context),
+            typed_tool_row(2, "functions.write_file", r#"{"path":"src/bar/lib.rs"}"#),
+        ]);
+        assert!(!result.sessions[0]
+            .context
+            .truth_artifacts
+            .iter()
+            .any(|artifact| {
+                artifact.path == "src/bar"
+                    && matches!(
+                        artifact.source.as_str(),
+                        "objective_literal" | "directive_literal"
+                    )
+                    || artifact.source == "trusted_repository_root"
+            }));
+        let score = final_wrong_plan_score(&result);
+        assert_eq!(
+            (score.raw_score, score.confidence, score.flagged),
+            (60, Confidence::Medium, true),
+            "{historical_context}",
+        );
+    }
+}
+
+#[test]
+fn multiple_positive_authority_clauses_on_one_line_are_all_applied() {
+    let result = analyze_rows(vec![
+        row(
+            0,
+            CompactionKind::UserMessage,
+            "/goal Implement the requested change.",
+        ),
+        row(
+            1,
+            CompactionKind::SystemMessage,
+            "Use src/foo. Use src/bar.",
+        ),
+        typed_tool_row(2, "functions.write_file", r#"{"path":"src/bar/lib.rs"}"#),
+    ]);
+    assert!(["src/foo", "src/bar"].iter().all(|path| {
+        result.sessions[0]
+            .context
+            .truth_artifacts
+            .iter()
+            .any(|artifact| artifact.path == *path && artifact.source == "directive_literal")
+    }));
+    let score = final_wrong_plan_score(&result);
+    assert_eq!(
+        (score.raw_score, score.confidence, score.flagged),
+        (0, Confidence::Medium, false),
+    );
+}
+
+#[test]
+fn trusted_root_declarations_are_exact_and_preserve_scope_provenance() {
+    let result = analyze_rows(vec![
+        row(
+            0,
+            CompactionKind::UserMessage,
+            "Implement the requested change.",
+        ),
+        row(
+            1,
+            CompactionKind::SystemMessage,
+            "Trusted repository root: /repo. Authorized filesystem scope: /repo.",
+        ),
+    ]);
+    let mut sources = result.sessions[0]
+        .context
+        .truth_artifacts
+        .iter()
+        .filter(|artifact| artifact.path == "/repo")
+        .map(|artifact| artifact.source.as_str())
+        .collect::<Vec<_>>();
+    sources.sort();
+    assert_eq!(
+        sources,
+        vec!["directive_literal", "trusted_repository_root"]
+    );
+
+    for text in [
+        "Untrusted repository root: /repo.",
+        "Trusted repository root: src/foo.",
+        "Trusted repository root: /repo/../repo.",
+        "Trusted repository root: /repo/../other=anchor.",
+    ] {
+        let result = analyze_rows(vec![row(0, CompactionKind::SystemMessage, text)]);
+        assert!(
+            result.sessions[0].context.truth_artifacts.is_empty(),
+            "{text}",
+        );
+    }
+
+    let relative_option = analyze_rows(vec![row(
+        0,
+        CompactionKind::SystemMessage,
+        "--root src/foo",
+    )]);
+    assert!(relative_option.sessions[0]
+        .context
+        .truth_artifacts
+        .iter()
+        .all(|artifact| artifact.source != "trusted_repository_root"));
+}
+
+#[test]
 fn wrong_plan_branch_rejects_raw_parent_components_before_authority_normalization() {
     let cases = [
         "Authorized scope: scope/../sibling.",
+        "Authorized scope: scope/../sibling=foo.",
         "Authorized scope: scope/../..",
         "Authorized scope: scope/..",
         "Authorized scope: scope/../../.",
         r"Authorized scope: scope\..\sibling.",
         "/review\n--path scope/../sibling",
+        "/review\n--path scope/../sibling=foo",
+        "/review\n--path\nscope/../sibling",
         "/review\n--path=scope/../..",
         "/review\n--path scope/..",
+        "/review\n--path scope/..:12",
         "/review\n--path=scope\\..\\sibling",
         "--path scope/../sibling",
+        "--path scope/../sibling=foo",
+        "--path=scope/../sibling=foo",
         "--path=scope/..",
     ];
 
@@ -418,12 +1209,17 @@ fn truth_grounding_gap_preserves_typed_absolute_identity_and_lifecycle_provenanc
             row(
                 4,
                 CompactionKind::AssistantMessage,
-                "The absolute truth artifact is grounded; I am moving to the next checkpoint.",
+                "I will update the now-grounded absolute truth artifact and move to the next checkpoint.",
             ),
             typed_tool_row(
                 5,
                 "functions.edit_file",
                 &format!(r#"{{"path":"absolute-truth.md","cwd":{nested_cwd:?}}}"#),
+            ),
+            row(
+                6,
+                CompactionKind::AssistantMessage,
+                "The recovery checkpoint is complete; later evidence is historical context only.",
             ),
         ];
         let result = analyze_rows(rows);
@@ -457,7 +1253,7 @@ fn truth_grounding_gap_preserves_typed_absolute_identity_and_lifecycle_provenanc
         );
 
         let checkpoints = &result.sessions[0].checkpoints;
-        assert_eq!(checkpoints.len(), 2, "{case}");
+        assert_eq!(checkpoints.len(), 3, "{case}");
         assert!(
             checkpoints.iter().all(|checkpoint| checkpoint
                 .task_frame
@@ -512,6 +1308,22 @@ fn truth_grounding_gap_preserves_typed_absolute_identity_and_lifecycle_provenanc
                 .starts_with("historical truth-grounding gap:")),
             "{case}",
         );
+        assert_eq!(
+            (
+                truth_scores[2].raw_score,
+                truth_scores[2].confidence,
+                truth_scores[2].state,
+                truth_scores[2].flagged,
+            ),
+            (20, Confidence::Medium, DriftState::HistoricalOnly, false),
+            "{case}",
+        );
+        assert!(
+            truth_scores[2].evidence.iter().any(|evidence| evidence
+                .reason
+                .starts_with("historical truth-grounding gap:")),
+            "{case}",
+        );
 
         for checkpoint in checkpoints {
             let wrong_plan = checkpoint
@@ -519,8 +1331,16 @@ fn truth_grounding_gap_preserves_typed_absolute_identity_and_lifecycle_provenanc
                 .iter()
                 .find(|score| score.class == DriftClass::WrongPlanBranch)
                 .expect("wrong plan branch score");
-            assert_eq!(wrong_plan.confidence, Confidence::Low, "{case}");
-            assert!(!wrong_plan.flagged, "{case}");
+            assert_eq!(
+                (
+                    wrong_plan.raw_score,
+                    wrong_plan.confidence,
+                    wrong_plan.state,
+                    wrong_plan.flagged,
+                ),
+                (0, Confidence::Medium, DriftState::Cleared, false),
+                "{case}",
+            );
         }
     }
 }
@@ -673,13 +1493,53 @@ fn wrong_plan_branch_resolves_typed_paths_only_through_trusted_roots() {
             row(1, CompactionKind::SystemMessage, &authority),
             typed_tool_row(2, "functions.write_file", &payload),
         ]);
+        let command = &result.sessions[0].context.command_observations[0];
+        assert_eq!(command.paths, expected_paths, "{case}");
+        let rejected = expected_paths.is_empty();
         assert_eq!(
-            result.sessions[0].context.command_observations[0].paths, expected_paths,
+            command
+                .evidence
+                .iter()
+                .any(|evidence| evidence.reason.contains("; unresolved typed paths: ")),
+            rejected,
             "{case}",
         );
         let score = final_wrong_plan_score(&result);
-        assert_eq!(score.raw_score, 0, "{case}");
-        assert!(!score.flagged, "{case}");
+        assert_eq!(score.raw_score, if rejected { 60 } else { 0 }, "{case}");
+        assert_eq!(score.flagged, rejected, "{case}");
+    }
+}
+
+#[test]
+fn wrong_plan_branch_rejects_empty_typed_path_arrays() {
+    for (case, payload, expected_unresolved) in [
+        ("paths-array", r#"{"paths":[]}"#, "paths=<empty>"),
+        ("path-array", r#"{"path":[]}"#, "path=<empty>"),
+    ] {
+        let result = analyze_rows(vec![
+            row(
+                0,
+                CompactionKind::UserMessage,
+                "Implement the requested change.",
+            ),
+            row(
+                1,
+                CompactionKind::SystemMessage,
+                "Authorized filesystem scope: src/foo.",
+            ),
+            typed_tool_row(2, "functions.write_file", payload),
+        ]);
+        let command = &result.sessions[0].context.command_observations[0];
+        assert!(command.paths.is_empty(), "{case}");
+        assert!(
+            command.evidence.iter().any(|evidence| evidence
+                .reason
+                .contains(&format!("unresolved typed paths: {expected_unresolved}"))),
+            "{case}",
+        );
+        let score = final_wrong_plan_score(&result);
+        assert_eq!(score.raw_score, 60, "{case}");
+        assert!(score.flagged, "{case}");
     }
 }
 
@@ -739,6 +1599,37 @@ fn wrong_plan_branch_projects_absolute_authority_through_its_trusted_root() {
         let score = final_wrong_plan_score(&result);
         assert_eq!(score.flagged, flagged, "{case}");
         assert_eq!(score.raw_score, if flagged { 60 } else { 0 }, "{case}");
+    }
+}
+
+#[test]
+fn wrong_plan_branch_preserves_trusted_root_namespaces() {
+    let cases = [
+        (
+            "absolute-cross-root",
+            "Trusted repository root: /repo-a.\nTrusted repository root: /repo-b.\nAuthorized filesystem scope: /repo-a/src/foo.",
+            r#"{"path":"/repo-b/src/foo/bar.rs","cwd":"/repo-b"}"#,
+        ),
+        (
+            "relative-multi-root-ambiguity",
+            "Trusted repository root: /repo-a.\nTrusted repository root: /repo-b.\nAuthorized filesystem scope: src/foo.",
+            r#"{"path":"src/foo/bar.rs"}"#,
+        ),
+    ];
+
+    for (case, authority, payload) in cases {
+        let result = analyze_rows(vec![
+            row(
+                0,
+                CompactionKind::UserMessage,
+                "Implement the requested change.",
+            ),
+            row(1, CompactionKind::SystemMessage, authority),
+            typed_tool_row(2, "functions.write_file", payload),
+        ]);
+        let score = final_wrong_plan_score(&result);
+        assert_eq!(score.raw_score, 60, "{case}");
+        assert!(score.flagged, "{case}");
     }
 }
 

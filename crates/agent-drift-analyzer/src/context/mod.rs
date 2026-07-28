@@ -15,6 +15,9 @@ pub use working_set::{
     collect_working_set_paths, CandidateTruthArtifact, CommandObservation, ToolObservation,
     WorkingSetPath,
 };
+pub(crate) use working_set::{
+    collect_command_observations_with_trusted_roots, command_has_unresolved_paths,
+};
 
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]
 pub struct ContextPack {
