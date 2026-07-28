@@ -4,6 +4,7 @@ set -euo pipefail
 SCRIPT_NAME="mac-doctor-fixture"
 REPO_ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")/../.." && pwd)"
 DOCTOR_SCRIPT="${REPO_ROOT}/scripts/mac/lima-doctor.sh"
+LIMA_WARM_SCRIPT="${REPO_ROOT}/scripts/mac/lima-warm.sh"
 CURRENT_UID="$(id -u)"
 CURRENT_ACCOUNT="$(id -un)"
 CURRENT_HOME="$(python3 - <<'PY'
@@ -310,17 +311,44 @@ record() {
 
 render_unit() {
     local kind="$1"
-    python3 - "${unit_dir}" "${guest_substrate_home}" "${kind}" <<'PY'
+    local expected_commitment="${SUBSTRATE_TEST_EXPECTED_COMMITMENT:-}"
+    local expected_control_root="${SUBSTRATE_TEST_EXPECTED_CONTROL_ROOT:-}"
+    local expected_prefix="${SUBSTRATE_TEST_EXPECTED_PREFIX:-}"
+    local expected_host_socket="${SUBSTRATE_TEST_EXPECTED_HOST_SOCKET:-${expected_prefix%/}/sock/agent.sock}"
+    local expected_guest_socket="${SUBSTRATE_TEST_EXPECTED_GUEST_SOCKET:-/run/substrate.sock}"
+    python3 - "${unit_dir}" "${guest_substrate_home}" "${kind}" "${expected_vm}" "${expected_commitment}" "${expected_control_root}" "${expected_host_socket}" "${expected_guest_socket}" <<'PY'
+import os
 import pathlib
 import sys
 
 unit_dir = pathlib.Path(sys.argv[1])
 guest_home = sys.argv[2]
 kind = sys.argv[3]
+vm_name = sys.argv[4]
+commitment = sys.argv[5]
+control_root = sys.argv[6]
+host_socket = sys.argv[7]
+guest_socket = sys.argv[8]
 if kind == "service":
     template = (unit_dir / "substrate-world-service.service.tmpl").read_text(encoding="utf-8")
-    template = template.replace("${SUBSTRATE_GUEST_HOME}", guest_home).replace("$SUBSTRATE_GUEST_HOME", guest_home)
-    template = template.replace("${WORLD_NETFILTER_ENV}", "").replace("$WORLD_NETFILTER_ENV", "")
+    substitutions = {
+        "${SUBSTRATE_GUEST_HOME}": guest_home,
+        "$SUBSTRATE_GUEST_HOME": guest_home,
+        "${WORLD_NETFILTER_ENV}": "",
+        "$WORLD_NETFILTER_ENV": "",
+        "${SUBSTRATE_INSTALL_HOST_CONTEXT_COMMITMENT}": commitment,
+        "$SUBSTRATE_INSTALL_HOST_CONTEXT_COMMITMENT": commitment,
+        "${SUBSTRATE_LIMA_INSTANCE_NAME}": vm_name,
+        "$SUBSTRATE_LIMA_INSTANCE_NAME": vm_name,
+        "${SUBSTRATE_LIMA_HOST_PLATFORM_CONTROL_ROOT}": control_root,
+        "$SUBSTRATE_LIMA_HOST_PLATFORM_CONTROL_ROOT": control_root,
+        "${SUBSTRATE_LIMA_HOST_SOCKET}": host_socket,
+        "$SUBSTRATE_LIMA_HOST_SOCKET": host_socket,
+        "${SUBSTRATE_LIMA_GUEST_SOCKET}": guest_socket,
+        "$SUBSTRATE_LIMA_GUEST_SOCKET": guest_socket,
+    }
+    for needle, value in substitutions.items():
+        template = template.replace(needle, value)
     sys.stdout.write(template)
 else:
     sys.stdout.write((unit_dir / "substrate-world-service.socket").read_text(encoding="utf-8"))
@@ -468,6 +496,75 @@ exit 98
 STUB
 }
 
+assert_doctor_expected_unit_bindings() {
+    assert_contains "SUBSTRATE_INSTALL_HOST_CONTEXT_COMMITMENT=\"\${INSTALL_BOOTSTRAP_COMMITMENT}\" \\" "${DOCTOR_SCRIPT}" "doctor expected-unit commitment binding"
+    assert_contains "SUBSTRATE_LIMA_INSTANCE_NAME=\"\${VM_NAME}\" \\" "${DOCTOR_SCRIPT}" "doctor expected-unit vm binding"
+    assert_contains "SUBSTRATE_LIMA_HOST_PLATFORM_CONTROL_ROOT=\"\${HOST_PLATFORM_CONTROL_ROOT}\" \\" "${DOCTOR_SCRIPT}" "doctor expected-unit control-root binding"
+    assert_contains "SUBSTRATE_LIMA_HOST_SOCKET=\"\${OBSERVED_TRANSPORT_HOST}\" \\" "${DOCTOR_SCRIPT}" "doctor expected-unit host-socket binding"
+    assert_contains "SUBSTRATE_LIMA_GUEST_SOCKET=\"\${OBSERVED_TRANSPORT_GUEST_SOCKET}\" \\" "${DOCTOR_SCRIPT}" "doctor expected-unit guest-socket binding"
+    assert_contains "*\\\"*|*%*|*\\\\*)" "${DOCTOR_SCRIPT}" "doctor expected-unit unsafe-character guard pattern"
+    assert_contains "warn \"Verified guest unit projection contains a systemd-unsafe character.\"" "${DOCTOR_SCRIPT}" "doctor expected-unit unsafe-character guard message"
+}
+
+assert_warm_expected_unit_bindings() {
+    assert_contains "SUBSTRATE_INSTALL_HOST_CONTEXT_COMMITMENT=\"\${INSTALL_BOOTSTRAP_COMMITMENT}\" \\" "${LIMA_WARM_SCRIPT}" "warm expected-unit commitment binding"
+    assert_contains "SUBSTRATE_LIMA_INSTANCE_NAME=\"\${VM_NAME}\" \\" "${LIMA_WARM_SCRIPT}" "warm expected-unit vm binding"
+    assert_contains "SUBSTRATE_LIMA_HOST_PLATFORM_CONTROL_ROOT=\"\${HOST_PLATFORM_CONTROL_ROOT}\" \\" "${LIMA_WARM_SCRIPT}" "warm expected-unit control-root binding"
+    assert_contains "SUBSTRATE_LIMA_HOST_SOCKET=\"\${OBSERVED_TRANSPORT_HOST}\" \\" "${LIMA_WARM_SCRIPT}" "warm expected-unit host-socket binding"
+    assert_contains "SUBSTRATE_LIMA_GUEST_SOCKET=\"\${OBSERVED_TRANSPORT_GUEST_SOCKET}\" \\" "${LIMA_WARM_SCRIPT}" "warm expected-unit guest-socket binding"
+    assert_contains "*\\\"*|*%*|*\\\\*)" "${LIMA_WARM_SCRIPT}" "warm expected-unit unsafe-character guard pattern"
+    assert_contains "fatal \"Verified guest unit projection contains a systemd-unsafe character.\"" "${LIMA_WARM_SCRIPT}" "warm expected-unit unsafe-character guard message"
+}
+
+assert_template_mapping_env_shape() {
+    local template="${REPO_ROOT}/scripts/mac/lima/units/substrate-world-service.service.tmpl"
+    local expected_count
+    assert_contains "Environment=\"SUBSTRATE_INSTALL_HOST_CONTEXT_COMMITMENT=\${SUBSTRATE_INSTALL_HOST_CONTEXT_COMMITMENT}\"" "${template}" "service template commitment env line"
+    assert_contains "Environment=\"SUBSTRATE_LIMA_INSTANCE_NAME=\${SUBSTRATE_LIMA_INSTANCE_NAME}\"" "${template}" "service template vm env line"
+    assert_contains "Environment=\"SUBSTRATE_LIMA_HOST_PLATFORM_CONTROL_ROOT=\${SUBSTRATE_LIMA_HOST_PLATFORM_CONTROL_ROOT}\"" "${template}" "service template control-root env line"
+    assert_contains "Environment=\"SUBSTRATE_LIMA_HOST_SOCKET=\${SUBSTRATE_LIMA_HOST_SOCKET}\"" "${template}" "service template host-socket env line"
+    assert_contains "Environment=\"SUBSTRATE_LIMA_GUEST_SOCKET=\${SUBSTRATE_LIMA_GUEST_SOCKET}\"" "${template}" "service template guest-socket env line"
+    expected_count="$(grep -Ec '^Environment="SUBSTRATE_(INSTALL_HOST_CONTEXT_COMMITMENT|LIMA_INSTANCE_NAME|LIMA_HOST_PLATFORM_CONTROL_ROOT|LIMA_HOST_SOCKET|LIMA_GUEST_SOCKET)=' "${template}")"
+    [[ "${expected_count}" -eq 5 ]] || fail "service template should expose exactly five quoted mapping env lines"
+}
+
+assert_space_safe_service_projection() {
+    local spaced_prefix="${WORK_ROOT}/selected prefix"
+    local rendered
+    rendered="$(python3 - "${REPO_ROOT}/scripts/mac/lima/units/substrate-world-service.service.tmpl" "${CURRENT_HOME%/}/.lima" "${spaced_prefix}" "${A_COMMITMENT}" <<'PY'
+import pathlib
+import sys
+
+template_path = pathlib.Path(sys.argv[1])
+control_root = sys.argv[2]
+prefix = sys.argv[3]
+commitment = sys.argv[4]
+template = template_path.read_text(encoding="utf-8")
+substitutions = {
+    "${SUBSTRATE_GUEST_HOME}": "/srv/doctor-home/.substrate",
+    "$SUBSTRATE_GUEST_HOME": "/srv/doctor-home/.substrate",
+    "${WORLD_NETFILTER_ENV}": "",
+    "$WORLD_NETFILTER_ENV": "",
+    "${SUBSTRATE_INSTALL_HOST_CONTEXT_COMMITMENT}": commitment,
+    "$SUBSTRATE_INSTALL_HOST_CONTEXT_COMMITMENT": commitment,
+    "${SUBSTRATE_LIMA_INSTANCE_NAME}": "substrate",
+    "$SUBSTRATE_LIMA_INSTANCE_NAME": "substrate",
+    "${SUBSTRATE_LIMA_HOST_PLATFORM_CONTROL_ROOT}": control_root,
+    "$SUBSTRATE_LIMA_HOST_PLATFORM_CONTROL_ROOT": control_root,
+    "${SUBSTRATE_LIMA_HOST_SOCKET}": f"{prefix}/sock/agent.sock",
+    "$SUBSTRATE_LIMA_HOST_SOCKET": f"{prefix}/sock/agent.sock",
+    "${SUBSTRATE_LIMA_GUEST_SOCKET}": "/run/substrate.sock",
+    "$SUBSTRATE_LIMA_GUEST_SOCKET": "/run/substrate.sock",
+}
+for needle, value in substitutions.items():
+    template = template.replace(needle, value)
+sys.stdout.write(template)
+PY
+)"
+    [[ "${rendered}" == *"Environment=\"SUBSTRATE_LIMA_HOST_SOCKET=${spaced_prefix}/sock/agent.sock\""* ]] \
+        || fail "space-safe service projection should quote the host socket assignment"
+}
+
 setup_stubs() {
     PATH="${STUB_BIN}:${HOST_PATH}"
     export PATH
@@ -588,6 +685,10 @@ run_doctor_case() {
         SUBSTRATE_TEST_GUEST_HOME="/srv/doctor-home" \
         SUBSTRATE_TEST_MACHINE_ID="17171717171717171717171717171717" \
         SUBSTRATE_TEST_LAYOUT="${layout_value}" \
+        SUBSTRATE_TEST_EXPECTED_COMMITMENT="${A_COMMITMENT}" \
+        SUBSTRATE_TEST_EXPECTED_CONTROL_ROOT="${CURRENT_HOME%/}/.lima" \
+        SUBSTRATE_TEST_EXPECTED_PREFIX="${SELECTED_A}" \
+        SUBSTRATE_TEST_EXPECTED_GUEST_SOCKET="/run/substrate.sock" \
         SUBSTRATE_MAC_DOCTOR_INCLUDE_BREAKGLASS="${breakglass}" \
         SUBSTRATE_LIMA_VM_NAME="${vm_name}" \
         LIMA_VM_NAME="ambient-vm" \
@@ -642,6 +743,10 @@ run_doctor_runtime_without_python3() {
     assert_no_lifecycle "${RUN_LOG}" "doctor runtime without python3"
 }
 
+assert_doctor_expected_unit_bindings
+assert_warm_expected_unit_bindings
+assert_template_mapping_env_shape
+assert_space_safe_service_projection
 run_doctor_help_without_python3
 run_doctor_runtime_without_python3
 run_doctor_case "healthy" "healthy" "healthy" "0" 0 "Bounded routed readiness prerequisites passed. Forwarding activation remains an R3 prerequisite."

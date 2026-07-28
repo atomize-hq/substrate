@@ -122,6 +122,8 @@ PY
 A_CONTEXT_OUTPUT="$(make_context_values "${SELECTED_A}" "${CURRENT_ACCOUNT}" "${CURRENT_UID}")"
 A_CARRIER="$(printf '%s\n' "${A_CONTEXT_OUTPUT}" | sed -n '1p')"
 A_COMMITMENT="$(printf '%s\n' "${A_CONTEXT_OUTPUT}" | sed -n '2p')"
+CUSTOM_CONTEXT_OUTPUT="$(make_context_values "${CUSTOM_A}" "${CURRENT_ACCOUNT}" "${CURRENT_UID}")"
+CUSTOM_COMMITMENT="$(printf '%s\n' "${CUSTOM_CONTEXT_OUTPUT}" | sed -n '2p')"
 TAMPERED_CARRIER="$(tamper_commitment "${A_CARRIER}")"
 REORDERED_CARRIER="$(reorder_carrier "${A_CARRIER}")"
 
@@ -395,16 +397,43 @@ marked() {
 }
 
 render_service() {
-    python3 - "${unit_dir}" "${guest_substrate_home}" <<'PY'
+    local expected_commitment="${SUBSTRATE_TEST_EXPECTED_COMMITMENT:-}"
+    local expected_control_root="${SUBSTRATE_TEST_EXPECTED_CONTROL_ROOT:-}"
+    local expected_prefix="${SUBSTRATE_TEST_EXPECTED_PREFIX:-}"
+    local expected_host_socket="${SUBSTRATE_TEST_EXPECTED_HOST_SOCKET:-${expected_prefix%/}/sock/agent.sock}"
+    local expected_guest_socket="${SUBSTRATE_TEST_EXPECTED_GUEST_SOCKET:-/run/substrate.sock}"
+    python3 - "${unit_dir}" "${guest_substrate_home}" "${expected_vm}" "${expected_commitment}" "${expected_control_root}" "${expected_host_socket}" "${expected_guest_socket}" <<'PY'
+import os
 import pathlib
 import sys
 
 unit_dir = pathlib.Path(sys.argv[1])
 guest_home = sys.argv[2]
+vm_name = sys.argv[3]
+commitment = sys.argv[4]
+control_root = sys.argv[5]
+host_socket = sys.argv[6]
+guest_socket = sys.argv[7]
 template = (unit_dir / "substrate-world-service.service.tmpl").read_text(encoding="utf-8")
 socket_unit = (unit_dir / "substrate-world-service.socket").read_text(encoding="utf-8")
-template = template.replace("${SUBSTRATE_GUEST_HOME}", guest_home).replace("$SUBSTRATE_GUEST_HOME", guest_home)
-template = template.replace("${WORLD_NETFILTER_ENV}", "").replace("$WORLD_NETFILTER_ENV", "")
+substitutions = {
+    "${SUBSTRATE_GUEST_HOME}": guest_home,
+    "$SUBSTRATE_GUEST_HOME": guest_home,
+    "${WORLD_NETFILTER_ENV}": "",
+    "$WORLD_NETFILTER_ENV": "",
+    "${SUBSTRATE_INSTALL_HOST_CONTEXT_COMMITMENT}": commitment,
+    "$SUBSTRATE_INSTALL_HOST_CONTEXT_COMMITMENT": commitment,
+    "${SUBSTRATE_LIMA_INSTANCE_NAME}": vm_name,
+    "$SUBSTRATE_LIMA_INSTANCE_NAME": vm_name,
+    "${SUBSTRATE_LIMA_HOST_PLATFORM_CONTROL_ROOT}": control_root,
+    "$SUBSTRATE_LIMA_HOST_PLATFORM_CONTROL_ROOT": control_root,
+    "${SUBSTRATE_LIMA_HOST_SOCKET}": host_socket,
+    "$SUBSTRATE_LIMA_HOST_SOCKET": host_socket,
+    "${SUBSTRATE_LIMA_GUEST_SOCKET}": guest_socket,
+    "$SUBSTRATE_LIMA_GUEST_SOCKET": guest_socket,
+}
+for needle, value in substitutions.items():
+    template = template.replace(needle, value)
 if sys.argv[0] == "service":
     sys.stdout.write(template)
 else:
@@ -414,17 +443,44 @@ PY
 
 render_unit() {
     local kind="$1"
-    python3 - "${unit_dir}" "${guest_substrate_home}" "${kind}" <<'PY'
+    local expected_commitment="${SUBSTRATE_TEST_EXPECTED_COMMITMENT:-}"
+    local expected_control_root="${SUBSTRATE_TEST_EXPECTED_CONTROL_ROOT:-}"
+    local expected_prefix="${SUBSTRATE_TEST_EXPECTED_PREFIX:-}"
+    local expected_host_socket="${SUBSTRATE_TEST_EXPECTED_HOST_SOCKET:-${expected_prefix%/}/sock/agent.sock}"
+    local expected_guest_socket="${SUBSTRATE_TEST_EXPECTED_GUEST_SOCKET:-/run/substrate.sock}"
+    python3 - "${unit_dir}" "${guest_substrate_home}" "${kind}" "${expected_vm}" "${expected_commitment}" "${expected_control_root}" "${expected_host_socket}" "${expected_guest_socket}" <<'PY'
+import os
 import pathlib
 import sys
 
 unit_dir = pathlib.Path(sys.argv[1])
 guest_home = sys.argv[2]
 kind = sys.argv[3]
+vm_name = sys.argv[4]
+commitment = sys.argv[5]
+control_root = sys.argv[6]
+host_socket = sys.argv[7]
+guest_socket = sys.argv[8]
 if kind == "service":
     template = (unit_dir / "substrate-world-service.service.tmpl").read_text(encoding="utf-8")
-    template = template.replace("${SUBSTRATE_GUEST_HOME}", guest_home).replace("$SUBSTRATE_GUEST_HOME", guest_home)
-    template = template.replace("${WORLD_NETFILTER_ENV}", "").replace("$WORLD_NETFILTER_ENV", "")
+    substitutions = {
+        "${SUBSTRATE_GUEST_HOME}": guest_home,
+        "$SUBSTRATE_GUEST_HOME": guest_home,
+        "${WORLD_NETFILTER_ENV}": "",
+        "$WORLD_NETFILTER_ENV": "",
+        "${SUBSTRATE_INSTALL_HOST_CONTEXT_COMMITMENT}": commitment,
+        "$SUBSTRATE_INSTALL_HOST_CONTEXT_COMMITMENT": commitment,
+        "${SUBSTRATE_LIMA_INSTANCE_NAME}": vm_name,
+        "$SUBSTRATE_LIMA_INSTANCE_NAME": vm_name,
+        "${SUBSTRATE_LIMA_HOST_PLATFORM_CONTROL_ROOT}": control_root,
+        "$SUBSTRATE_LIMA_HOST_PLATFORM_CONTROL_ROOT": control_root,
+        "${SUBSTRATE_LIMA_HOST_SOCKET}": host_socket,
+        "$SUBSTRATE_LIMA_HOST_SOCKET": host_socket,
+        "${SUBSTRATE_LIMA_GUEST_SOCKET}": guest_socket,
+        "$SUBSTRATE_LIMA_GUEST_SOCKET": guest_socket,
+    }
+    for needle, value in substitutions.items():
+        template = template.replace(needle, value)
     sys.stdout.write(template)
 else:
     sys.stdout.write((unit_dir / "substrate-world-service.socket").read_text(encoding="utf-8"))
@@ -809,6 +865,10 @@ run_with_env() {
         SUBSTRATE_TEST_LOG="${RUN_LOG}" \
         SUBSTRATE_TEST_STATE_DIR="${RUN_STATE_DIR}" \
         SUBSTRATE_TEST_UNIT_DIR="${REPO_ROOT}/scripts/mac/lima/units" \
+        SUBSTRATE_TEST_EXPECTED_COMMITMENT="${A_COMMITMENT}" \
+        SUBSTRATE_TEST_EXPECTED_CONTROL_ROOT="${CURRENT_HOME%/}/.lima" \
+        SUBSTRATE_TEST_EXPECTED_PREFIX="${SELECTED_A}" \
+        SUBSTRATE_TEST_EXPECTED_GUEST_SOCKET="/run/substrate.sock" \
         "$@" >"${STDOUT_PATH}" 2>"${STDERR_PATH}"
     RUN_STATUS=$?
     set -e
@@ -1083,6 +1143,275 @@ run_mapping_multiline_rejections() {
     assert_contains "invalid platform bootstrap mapping" "${STDERR_PATH}" "doctor mapping carriage-return rejection"
     assert_not_contains "/srv/cr" "${STDERR_PATH}" "doctor mapping carriage-return rejection"
     assert_no_limactl_calls "${RUN_LOG}" "doctor mapping carriage-return rejection"
+}
+
+run_projected_unit_unsafe_character_rejections() {
+    local warm_copy
+    local doctor_copy
+    local control_root
+    local host_socket
+    local guest_socket
+    local backslash_home
+    local quote_home
+    local percent_home
+
+    warm_copy="$(mktemp "${WORK_ROOT}/warm-unit-source.XXXXXX.sh")"
+    doctor_copy="$(mktemp "${WORK_ROOT}/doctor-unit-source.XXXXXX.sh")"
+    make_sourceable_script_copy "${LIMA_WARM}" "${warm_copy}"
+    make_sourceable_script_copy "${LIMA_DOCTOR}" "${doctor_copy}"
+
+    control_root="${CURRENT_HOME%/}/.lima"
+    host_socket="${SELECTED_A}/sock/agent.sock"
+    guest_socket="/run/substrate.sock"
+    backslash_home='/srv/bad\home/.substrate'
+    quote_home='/srv/bad"home/.substrate'
+    percent_home='/srv/bad%home/.substrate'
+
+    # shellcheck disable=SC2016
+    run_case warm-unit-backslash \
+        env \
+            SOURCE_REPO_ROOT="${REPO_ROOT}" \
+            SOURCE_COPY="${warm_copy}" \
+            COMMITMENT="${A_COMMITMENT}" \
+            CONTROL_ROOT="${control_root}" \
+            HOST_SOCKET="${host_socket}" \
+            GUEST_SOCKET="${guest_socket}" \
+            BAD_HOME="${backslash_home}" \
+            bash -lc '
+                set -euo pipefail
+                cd "${SOURCE_REPO_ROOT}"
+                set --
+                source "${SOURCE_COPY}"
+                CANONICAL_UNIT_SOURCE_DIR="${SOURCE_REPO_ROOT}/scripts/mac/lima/units"
+                INSTALL_BOOTSTRAP_COMMITMENT="${COMMITMENT}"
+                VM_NAME="substrate"
+                HOST_PLATFORM_CONTROL_ROOT="${CONTROL_ROOT}"
+                OBSERVED_TRANSPORT_HOST="${HOST_SOCKET}"
+                OBSERVED_TRANSPORT_GUEST_SOCKET="${GUEST_SOCKET}"
+                write_systemd_units "${BAD_HOME}"
+            '
+    [[ "${RUN_STATUS}" -ne 0 ]] || fail "warm backslash projected-unit rejection unexpectedly succeeded"
+    assert_contains "Verified guest unit projection contains a systemd-unsafe character." "${STDERR_PATH}" "warm backslash projected-unit rejection"
+    assert_no_limactl_calls "${RUN_LOG}" "warm backslash projected-unit rejection"
+
+    # shellcheck disable=SC2016
+    run_case warm-unit-quote \
+        env \
+            SOURCE_REPO_ROOT="${REPO_ROOT}" \
+            SOURCE_COPY="${warm_copy}" \
+            COMMITMENT="${A_COMMITMENT}" \
+            CONTROL_ROOT="${control_root}" \
+            HOST_SOCKET="${host_socket}" \
+            GUEST_SOCKET="${guest_socket}" \
+            BAD_HOME="${quote_home}" \
+            bash -lc '
+                set -euo pipefail
+                cd "${SOURCE_REPO_ROOT}"
+                set --
+                source "${SOURCE_COPY}"
+                CANONICAL_UNIT_SOURCE_DIR="${SOURCE_REPO_ROOT}/scripts/mac/lima/units"
+                INSTALL_BOOTSTRAP_COMMITMENT="${COMMITMENT}"
+                VM_NAME="substrate"
+                HOST_PLATFORM_CONTROL_ROOT="${CONTROL_ROOT}"
+                OBSERVED_TRANSPORT_HOST="${HOST_SOCKET}"
+                OBSERVED_TRANSPORT_GUEST_SOCKET="${GUEST_SOCKET}"
+                write_systemd_units "${BAD_HOME}"
+            '
+    [[ "${RUN_STATUS}" -ne 0 ]] || fail "warm quote projected-unit rejection unexpectedly succeeded"
+    assert_contains "Verified guest unit projection contains a systemd-unsafe character." "${STDERR_PATH}" "warm quote projected-unit rejection"
+    assert_no_limactl_calls "${RUN_LOG}" "warm quote projected-unit rejection"
+
+    # shellcheck disable=SC2016
+    run_case warm-unit-percent \
+        env \
+            SOURCE_REPO_ROOT="${REPO_ROOT}" \
+            SOURCE_COPY="${warm_copy}" \
+            COMMITMENT="${A_COMMITMENT}" \
+            CONTROL_ROOT="${control_root}" \
+            HOST_SOCKET="${host_socket}" \
+            GUEST_SOCKET="${guest_socket}" \
+            BAD_HOME="${percent_home}" \
+            bash -lc '
+                set -euo pipefail
+                cd "${SOURCE_REPO_ROOT}"
+                set --
+                source "${SOURCE_COPY}"
+                CANONICAL_UNIT_SOURCE_DIR="${SOURCE_REPO_ROOT}/scripts/mac/lima/units"
+                INSTALL_BOOTSTRAP_COMMITMENT="${COMMITMENT}"
+                VM_NAME="substrate"
+                HOST_PLATFORM_CONTROL_ROOT="${CONTROL_ROOT}"
+                OBSERVED_TRANSPORT_HOST="${HOST_SOCKET}"
+                OBSERVED_TRANSPORT_GUEST_SOCKET="${GUEST_SOCKET}"
+                write_systemd_units "${BAD_HOME}"
+            '
+    [[ "${RUN_STATUS}" -ne 0 ]] || fail "warm percent projected-unit rejection unexpectedly succeeded"
+    assert_contains "Verified guest unit projection contains a systemd-unsafe character." "${STDERR_PATH}" "warm percent projected-unit rejection"
+    assert_no_limactl_calls "${RUN_LOG}" "warm percent projected-unit rejection"
+
+    # shellcheck disable=SC2016
+    run_case doctor-unit-backslash \
+        env \
+            SOURCE_REPO_ROOT="${REPO_ROOT}" \
+            SOURCE_COPY="${doctor_copy}" \
+            CASE_LOG="${WORK_ROOT}/doctor-unit-backslash.log" \
+            COMMITMENT="${A_COMMITMENT}" \
+            CONTROL_ROOT="${control_root}" \
+            HOST_SOCKET="${host_socket}" \
+            GUEST_SOCKET="${guest_socket}" \
+            BAD_HOME="${backslash_home}" \
+            bash -lc '
+                set -euo pipefail
+                cd "${SOURCE_REPO_ROOT}"
+                set --
+                source "${SOURCE_COPY}"
+                CANONICAL_UNIT_SOURCE_DIR="${SOURCE_REPO_ROOT}/scripts/mac/lima/units"
+                INSTALL_BOOTSTRAP_COMMITMENT="${COMMITMENT}"
+                VM_NAME="substrate"
+                run_limactl_with_mapping_env_v1() {
+                    printf "%s\n" "$*" >> "${CASE_LOG}"
+                    case "$1" in
+                        list)
+                            if [[ "${3:-}" == "--json" ]]; then
+                                printf "[{\"name\":\"%s\",\"status\":\"Running\"}]\n" "$2"
+                            fi
+                            return 0
+                            ;;
+                        shell)
+                            if [[ "${3:-}" == "sudo" && "${4:-}" == "-n" && "${5:-}" == "cat" && "${6:-}" == "/etc/substrate-lima-layout" ]]; then
+                                printf "%s\n" "${LAYOUT_EXPECTED}"
+                                return 0
+                            fi
+                            ;;
+                    esac
+                    printf "unexpected doctor limactl invocation: %s\n" "$*" >&2
+                    return 97
+                }
+                observe_lima_mapping_v1() {
+                    OBSERVED_PLATFORM_MAPPING_V1="mapping"
+                    OBSERVED_GUEST_SUBSTRATE_HOME="${BAD_HOME}"
+                    OBSERVED_TRANSPORT_HOST="${HOST_SOCKET}"
+                    OBSERVED_TRANSPORT_GUEST_SOCKET="${GUEST_SOCKET}"
+                    OBSERVED_GUEST_MACHINE_ID="20202020202020202020202020202020"
+                    OBSERVED_GUEST_ACCOUNT="guest"
+                    OBSERVED_GUEST_UID="2000"
+                }
+                verify_lima_mapping_v1() { :; }
+                check_rendered_unit_parity
+            '
+    [[ "${RUN_STATUS}" -ne 0 ]] || fail "doctor backslash projected-unit rejection unexpectedly succeeded"
+    assert_contains "Verified guest unit projection contains a systemd-unsafe character." "${STDOUT_PATH}" "doctor backslash projected-unit rejection"
+    assert_not_contains "systemctl cat substrate-world-service.service" "${RUN_LOG}" "doctor backslash projected-unit rejection"
+    assert_no_lifecycle "${RUN_LOG}" "doctor backslash projected-unit rejection"
+
+    # shellcheck disable=SC2016
+    run_case doctor-unit-quote \
+        env \
+            SOURCE_REPO_ROOT="${REPO_ROOT}" \
+            SOURCE_COPY="${doctor_copy}" \
+            CASE_LOG="${WORK_ROOT}/doctor-unit-quote.log" \
+            COMMITMENT="${A_COMMITMENT}" \
+            CONTROL_ROOT="${control_root}" \
+            HOST_SOCKET="${host_socket}" \
+            GUEST_SOCKET="${guest_socket}" \
+            BAD_HOME="${quote_home}" \
+            bash -lc '
+                set -euo pipefail
+                cd "${SOURCE_REPO_ROOT}"
+                set --
+                source "${SOURCE_COPY}"
+                CANONICAL_UNIT_SOURCE_DIR="${SOURCE_REPO_ROOT}/scripts/mac/lima/units"
+                INSTALL_BOOTSTRAP_COMMITMENT="${COMMITMENT}"
+                VM_NAME="substrate"
+                run_limactl_with_mapping_env_v1() {
+                    printf "%s\n" "$*" >> "${CASE_LOG}"
+                    case "$1" in
+                        list)
+                            if [[ "${3:-}" == "--json" ]]; then
+                                printf "[{\"name\":\"%s\",\"status\":\"Running\"}]\n" "$2"
+                            fi
+                            return 0
+                            ;;
+                        shell)
+                            if [[ "${3:-}" == "sudo" && "${4:-}" == "-n" && "${5:-}" == "cat" && "${6:-}" == "/etc/substrate-lima-layout" ]]; then
+                                printf "%s\n" "${LAYOUT_EXPECTED}"
+                                return 0
+                            fi
+                            ;;
+                    esac
+                    printf "unexpected doctor limactl invocation: %s\n" "$*" >&2
+                    return 97
+                }
+                observe_lima_mapping_v1() {
+                    OBSERVED_PLATFORM_MAPPING_V1="mapping"
+                    OBSERVED_GUEST_SUBSTRATE_HOME="${BAD_HOME}"
+                    OBSERVED_TRANSPORT_HOST="${HOST_SOCKET}"
+                    OBSERVED_TRANSPORT_GUEST_SOCKET="${GUEST_SOCKET}"
+                    OBSERVED_GUEST_MACHINE_ID="21212121212121212121212121212121"
+                    OBSERVED_GUEST_ACCOUNT="guest"
+                    OBSERVED_GUEST_UID="2000"
+                }
+                verify_lima_mapping_v1() { :; }
+                check_rendered_unit_parity
+            '
+    [[ "${RUN_STATUS}" -ne 0 ]] || fail "doctor quote projected-unit rejection unexpectedly succeeded"
+    assert_contains "Verified guest unit projection contains a systemd-unsafe character." "${STDOUT_PATH}" "doctor quote projected-unit rejection"
+    assert_not_contains "systemctl cat substrate-world-service.service" "${RUN_LOG}" "doctor quote projected-unit rejection"
+    assert_no_lifecycle "${RUN_LOG}" "doctor quote projected-unit rejection"
+
+    # shellcheck disable=SC2016
+    run_case doctor-unit-percent \
+        env \
+            SOURCE_REPO_ROOT="${REPO_ROOT}" \
+            SOURCE_COPY="${doctor_copy}" \
+            CASE_LOG="${WORK_ROOT}/doctor-unit-percent.log" \
+            COMMITMENT="${A_COMMITMENT}" \
+            CONTROL_ROOT="${control_root}" \
+            HOST_SOCKET="${host_socket}" \
+            GUEST_SOCKET="${guest_socket}" \
+            BAD_HOME="${percent_home}" \
+            bash -lc '
+                set -euo pipefail
+                cd "${SOURCE_REPO_ROOT}"
+                set --
+                source "${SOURCE_COPY}"
+                CANONICAL_UNIT_SOURCE_DIR="${SOURCE_REPO_ROOT}/scripts/mac/lima/units"
+                INSTALL_BOOTSTRAP_COMMITMENT="${COMMITMENT}"
+                VM_NAME="substrate"
+                run_limactl_with_mapping_env_v1() {
+                    printf "%s\n" "$*" >> "${CASE_LOG}"
+                    case "$1" in
+                        list)
+                            if [[ "${3:-}" == "--json" ]]; then
+                                printf "[{\"name\":\"%s\",\"status\":\"Running\"}]\n" "$2"
+                            fi
+                            return 0
+                            ;;
+                        shell)
+                            if [[ "${3:-}" == "sudo" && "${4:-}" == "-n" && "${5:-}" == "cat" && "${6:-}" == "/etc/substrate-lima-layout" ]]; then
+                                printf "%s\n" "${LAYOUT_EXPECTED}"
+                                return 0
+                            fi
+                            ;;
+                    esac
+                    printf "unexpected doctor limactl invocation: %s\n" "$*" >&2
+                    return 97
+                }
+                observe_lima_mapping_v1() {
+                    OBSERVED_PLATFORM_MAPPING_V1="mapping"
+                    OBSERVED_GUEST_SUBSTRATE_HOME="${BAD_HOME}"
+                    OBSERVED_TRANSPORT_HOST="${HOST_SOCKET}"
+                    OBSERVED_TRANSPORT_GUEST_SOCKET="${GUEST_SOCKET}"
+                    OBSERVED_GUEST_MACHINE_ID="22222222222222222222222222222222"
+                    OBSERVED_GUEST_ACCOUNT="guest"
+                    OBSERVED_GUEST_UID="2000"
+                }
+                verify_lima_mapping_v1() { :; }
+                check_rendered_unit_parity
+            '
+    [[ "${RUN_STATUS}" -ne 0 ]] || fail "doctor percent projected-unit rejection unexpectedly succeeded"
+    assert_contains "Verified guest unit projection contains a systemd-unsafe character." "${STDOUT_PATH}" "doctor percent projected-unit rejection"
+    assert_not_contains "systemctl cat substrate-world-service.service" "${RUN_LOG}" "doctor percent projected-unit rejection"
+    assert_no_lifecycle "${RUN_LOG}" "doctor percent projected-unit rejection"
 }
 
 run_check_only_layout_mismatch() {
@@ -1378,6 +1707,8 @@ run_doctor_no_lifecycle() {
         LIMA_HOME="${AMBIENT_B}/.lima" \
         SUBSTRATE_FORWARDER_PORT="4545" \
         SUBSTRATE_WORLD_SOCKET="/tmp/ambient.sock" \
+        SUBSTRATE_TEST_EXPECTED_COMMITMENT="${CUSTOM_COMMITMENT}" \
+        SUBSTRATE_TEST_EXPECTED_PREFIX="${CUSTOM_A}" \
         SUBSTRATE_TEST_REQUIRE_PREFIX_BIN="1" \
         SUBSTRATE_MAC_DOCTOR_INCLUDE_BREAKGLASS="1" \
         SUBSTRATE_TEST_SCENARIO="doctor_running" \
@@ -1469,6 +1800,7 @@ run_help_without_python3
 run_runtime_without_python3
 run_multiline_prefix_rejections
 run_mapping_multiline_rejections
+run_projected_unit_unsafe_character_rejections
 run_check_only_layout_mismatch
 run_internal_matching_projection
 run_internal_conflicting_env_rejected

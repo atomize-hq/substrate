@@ -4,6 +4,14 @@ set -euo pipefail
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 REPO_ROOT="$(cd "${SCRIPT_DIR}/../.." && pwd)"
 FAKE_VERSION="${FAKE_VERSION:-0.0.1}"
+ACCOUNT_HOME="$(python3 - <<'PY'
+import os
+import pwd
+
+print(pwd.getpwuid(os.getuid()).pw_dir)
+PY
+)"
+ACCOUNT_LIMA_HOME="${ACCOUNT_HOME%/}/.lima"
 
 usage() {
   cat <<'USAGE'
@@ -13,6 +21,7 @@ Scenarios:
   prod-copy         Production installer with bundled Linux agent (copy-first path).
   prod-build        Production installer fallback when Linux agent missing (build in Lima).
   dev-build         Dev installer (host cargo stub + in-guest build path).
+  dev-call-section  Dev installer forwards the validated prefix/carrier into lima-warm.sh.
   dev-runtime-bundle  Dev installer stages the stable world-enable runtime bundle under SUBSTRATE_HOME.
   dev-runtime-bundle-self-contained  Dev installer persists Linux guest binaries into the prefix bundle on macOS.
   dev-runtime-bundle-protected-path-conflicts  Dev uninstall refuses explicit managed target conflicts with exit 5.
@@ -98,6 +107,7 @@ setup_workspace() {
   export SUBSTRATE_TEST_CARGO_LOG="${WORK_ROOT}/cargo-${label}.log"
   export SUBSTRATE_TEST_FILE_SENTINEL="ELF-STUB"
   export SUBSTRATE_TEST_CARGO_MARKER="MACHO-STUB"
+  export SUBSTRATE_INSTALL_NO_PATH=1
 }
 
 write_stub() {
@@ -146,11 +156,20 @@ STUB
 write_stub_envsubst() {
   write_stub envsubst <<'STUB'
 #!/usr/bin/env python3
-import os, sys
+import os
+import re
+import sys
+
 content = sys.stdin.read()
-project = os.environ.get("PROJECT", "")
-for token in ("${PROJECT}", "$PROJECT"):
-    content = content.replace(token, project)
+pattern = re.compile(r"\$\{([A-Za-z_][A-Za-z0-9_]*)\}|\$([A-Za-z_][A-Za-z0-9_]*)")
+
+
+def replace(match):
+    name = match.group(1) or match.group(2)
+    return os.environ.get(name, "")
+
+
+content = pattern.sub(replace, content)
 sys.stdout.write(content)
 STUB
 }
@@ -158,13 +177,49 @@ STUB
 write_stub_jq() {
   write_stub jq <<'STUB'
 #!/usr/bin/env python3
-import json, sys
-data = sys.stdin.read().strip()
+import json
+import sys
+
+args = sys.argv[1:]
+raw = sys.stdin.read()
 try:
-    obj = json.loads(data)
-    status = obj.get("status", "unknown")
+    payload = json.loads(raw or "null")
 except Exception:
-    status = "unknown"
+    payload = None
+
+if not args:
+    sys.exit(2)
+
+if args == ["."]:
+    sys.stdout.write(raw)
+    sys.exit(0)
+
+if args == ["-r"]:
+    sys.exit(2)
+
+if len(args) >= 2 and args[0] == "-r":
+    expr = args[1]
+else:
+    expr = args[0]
+
+if "(.items | length) == 0" in expr:
+    items = payload.get("items", []) if isinstance(payload, dict) else []
+    if not items:
+        sys.stdout.write("  (no enabled deps items)\n")
+        sys.exit(0)
+    for item in items:
+        name = item.get("name", "")
+        kind = item.get("kind", "")
+        enabled = item.get("enabled", False)
+        world = item.get("world", "unknown")
+        remediation = item.get("remediation")
+        line = f"- {name}: kind={kind} enabled={str(enabled).lower()} world={world}"
+        if remediation:
+            line += f" remediation={remediation}"
+        sys.stdout.write(line + "\n")
+    sys.exit(0)
+
+status = payload.get("status", "unknown") if isinstance(payload, dict) else "unknown"
 sys.stdout.write(status + "\n")
 STUB
 }
@@ -201,7 +256,7 @@ set -euo pipefail
 log="${SUBSTRATE_TEST_LIMACTL_LOG:-}"
 capture_dir="${SUBSTRATE_TEST_LIMACTL_CAPTURE_DIR:-}"
 record() {
-  [[ -n "${log}" ]] && printf '%s\n' "$*" >>"${log}"
+  [[ -n "${log}" ]] && printf 'HOME=%s\tLIMA_HOME=%s\t%s\n' "${HOME:-}" "${LIMA_HOME:-}" "$*" >>"${log}"
 }
 next_script() {
   [[ -z "${capture_dir}" ]] && { cat >/dev/null; return; }
@@ -215,6 +270,17 @@ next_script() {
   target=$(printf '%s/shell-%03d.sh' "${capture_dir}" "${idx}")
   cat >"${target}"
   record "shell-script:${target}"
+}
+next_capture_path() {
+  local basename="$1"
+  [[ -z "${capture_dir}" ]] && return 1
+  mkdir -p "${capture_dir}"
+  local counter="${capture_dir}/.counter"
+  local idx=0
+  [[ -f "${counter}" ]] && idx="$(<"${counter}")"
+  idx=$((idx + 1))
+  printf '%s\n' "${idx}" >"${counter}"
+  printf '%s/copy-%03d-%s\n' "${capture_dir}" "${idx}" "${basename}"
 }
 if [[ $# -lt 1 ]]; then
   exit 0
@@ -237,6 +303,13 @@ case "${cmd}" in
     record "copy $*"
     src="${1:-}"
     dest="${2:-}"
+    if [[ -n "${src}" && -n "${dest}" && "${src}" != *:* && "${dest}" == *:* && -f "${src}" ]]; then
+      captured_copy="$(next_capture_path "$(basename "${src}")")" || captured_copy=""
+      if [[ -n "${captured_copy}" ]]; then
+        cp "${src}" "${captured_copy}"
+        record "copy-capture:${captured_copy}"
+      fi
+    fi
     if [[ -n "${src}" && -n "${dest}" && "${src}" == *:* && "${dest}" != *:* ]]; then
       mkdir -p "$(dirname "${dest}")"
       printf '%s\n' "${SUBSTRATE_TEST_FILE_SENTINEL:-ELF-STUB}" >"${dest}"
@@ -247,8 +320,27 @@ case "${cmd}" in
     vm="${1:-substrate}"
     shift
     record "shell ${vm} $*"
+    guest_account="${SUBSTRATE_TEST_GUEST_ACCOUNT:-substrate}"
+    guest_uid="${SUBSTRATE_TEST_GUEST_UID:-2000}"
+    guest_home="${SUBSTRATE_TEST_GUEST_HOME:-/home/substrate}"
+    guest_machine_id="${SUBSTRATE_TEST_MACHINE_ID:-17171717171717171717171717171717}"
+    if [[ "$1" == "cat" && "${2:-}" == "/etc/machine-id" ]]; then
+      printf '%s\n' "${guest_machine_id}"
+      exit 0
+    fi
     if [[ "$1" == "id" && "$2" == "-un" ]]; then
-      printf 'substrate\n'
+      printf '%s\n' "${guest_account}"
+      exit 0
+    fi
+    if [[ "$1" == "id" && "$2" == "-u" ]]; then
+      printf '%s\n' "${guest_uid}"
+      exit 0
+    fi
+    if [[ "$1" == "getent" && "$2" == "passwd" ]]; then
+      query="${3:-}"
+      if [[ "${query}" == "${guest_account}" || "${query}" == "${guest_uid}" ]]; then
+        printf '%s:x:%s:%s:Substrate:%s:/bin/bash\n' "${guest_account}" "${guest_uid}" "${guest_uid}" "${guest_home}"
+      fi
       exit 0
     fi
     if [[ "$1" == "sudo" ]]; then
@@ -257,7 +349,7 @@ case "${cmd}" in
         shift
       fi
       if [[ "$1" == "cat" && "$2" == "/etc/substrate-lima-layout" ]]; then
-        printf 'socket-parity-v1\n'
+        printf 'socket-parity-v2-staged-workspace-v1\n'
         exit 0
       fi
       if [[ "$1" == "stat" ]]; then
@@ -309,7 +401,54 @@ done
 mkdir -p "target/${target}"
 write_bin() {
   local path="$1"
-  echo "${SUBSTRATE_TEST_CARGO_MARKER:-MACHO-STUB}" >"${path}"
+  cat >"${path}" <<'BIN'
+#!/usr/bin/env bash
+set -euo pipefail
+# MACHO-STUB
+if [[ "${1:-}" == "--shim-deploy" ]]; then
+  printf '[fake-substrate] shim deploy\n' >&2
+  exit 0
+fi
+if [[ "${1:-}" == "--version" ]]; then
+  printf 'fake\n'
+  exit 0
+fi
+if [[ "$*" == *"--install-bootstrap-home-v1"* ]]; then
+  exit 0
+fi
+if [[ "$*" == *"world doctor --json"* ]]; then
+  printf '{"ok":true,"host":{"ok":true},"world":{"ok":true,"status":"ok"}}\n'
+  exit 0
+fi
+if [[ "$*" == *"world deps current list applied --json"* ]]; then
+  printf '{"items":[]}\n'
+  exit 0
+fi
+if [[ "$*" == *"world deps global add --json"* ]]; then
+  deps_item="${@: -1}"
+  printf '{"items":["%s"]}\n' "${deps_item}"
+  exit 0
+fi
+if [[ "$*" == *"world deps global remove"* ]]; then
+  exit 0
+fi
+if [[ "$*" == *"world deps current sync"* ]]; then
+  sync_deps_exit_code="${SUBSTRATE_TEST_SYNC_DEPS_EXIT_CODE:-0}"
+  if [[ "${SUBSTRATE_TEST_SYNC_DEPS_EXIT_4:-0}" == "1" ]]; then
+    sync_deps_exit_code=4
+  fi
+  if [[ "${sync_deps_exit_code}" != "0" ]]; then
+    if [[ "${sync_deps_exit_code}" == "4" ]]; then
+      printf 'substrate world enable --provision-deps\n' >&2
+    else
+      printf 'sync failed\n' >&2
+    fi
+    exit "${sync_deps_exit_code}"
+  fi
+  exit 0
+fi
+exit 0
+BIN
   chmod +x "${path}"
 }
 case "$*" in
@@ -319,8 +458,11 @@ case "$*" in
     ;;
  esac
 case "$*" in
-  *"-p world-agent"*)
-    write_bin "target/${target}/world-agent"
+  *"-p world-service"*)
+    write_bin "target/${target}/world-service"
+    ;;
+  *"-p substrate-gateway"*)
+    write_bin "target/${target}/substrate-gateway"
     ;;
  esac
 STUB
@@ -343,7 +485,12 @@ prepare_release_bundle() {
   local stage="${WORK_ROOT}/release-stage"
   local artifact_dir="${WORK_ROOT}/artifacts-${label}"
   rm -rf "${stage}" "${artifact_dir}"
-  mkdir -p "${stage}/bin/linux" "${stage}/scripts/mac" "${stage}/scripts/substrate" "${stage}/config" "${artifact_dir}"
+  mkdir -p \
+    "${stage}/bin/linux" \
+    "${stage}/scripts/mac/lima/units" \
+    "${stage}/scripts/substrate" \
+    "${stage}/config" \
+    "${artifact_dir}"
   if [[ -f "${REPO_ROOT}/config/manager_hooks.yaml" ]]; then
     cp "${REPO_ROOT}/config/manager_hooks.yaml" "${stage}/config/manager_hooks.yaml"
   else
@@ -353,33 +500,96 @@ tools: []
 MANIFEST
   fi
   cp "${REPO_ROOT}/scripts/substrate/world-deps.yaml" "${stage}/scripts/substrate/world-deps.yaml"
-  cat >"${stage}/scripts/mac/lima-warm.sh" <<'LIMA'
+  cp "${REPO_ROOT}/scripts/mac/lima/units/substrate-world-service.service.tmpl" \
+    "${stage}/scripts/mac/lima/units/substrate-world-service.service.tmpl"
+  cp "${REPO_ROOT}/scripts/mac/lima/units/substrate-world-service.socket" \
+    "${stage}/scripts/mac/lima/units/substrate-world-service.socket"
+cat >"${stage}/scripts/mac/lima-warm.sh" <<'LIMA'
 #!/usr/bin/env bash
 set -euo pipefail
-VM_NAME="${LIMA_VM_NAME:-substrate}"
-PROJECT_PATH="${1:-$(pwd)}"
+VM_NAME="${SUBSTRATE_LIMA_VM_NAME:-substrate}"
 BUILD_PROFILE="${LIMA_BUILD_PROFILE:-release}"
+INSTALL_PREFIX=""
+INSTALL_BOOTSTRAP_CONTEXT_V1=""
+PROJECT_PATH=""
+while [[ $# -gt 0 ]]; do
+  case "$1" in
+    --install-prefix)
+      INSTALL_PREFIX="${2:?missing install prefix}"
+      shift 2
+      ;;
+    --install-bootstrap-context-v1)
+      INSTALL_BOOTSTRAP_CONTEXT_V1="${2:?missing install bootstrap context}"
+      shift 2
+      ;;
+    --)
+      shift
+      break
+      ;;
+    -*)
+      printf '[lima-warm-stub][ERROR] unknown arg: %s\n' "$1" >&2
+      exit 2
+      ;;
+    *)
+      PROJECT_PATH="$1"
+      shift
+      break
+      ;;
+  esac
+done
+PROJECT_PATH="${PROJECT_PATH:-${1:-$(pwd)}}"
+[[ -n "${INSTALL_PREFIX}" ]] || exit 21
+[[ -n "${INSTALL_BOOTSTRAP_CONTEXT_V1}" ]] || exit 22
+[[ "${INSTALL_PREFIX}" == "${SUBSTRATE_HOME:-}" ]] || exit 23
+[[ "${INSTALL_PREFIX}" == "${SUBSTRATE_ROOT:-}" ]] || exit 24
+[[ "${INSTALL_BOOTSTRAP_CONTEXT_V1}" == "${SUBSTRATE_INSTALL_BOOTSTRAP_CONTEXT_V1:-}" ]] || exit 25
 log() { printf '[lima-warm-stub] %s\n' "$1"; }
 host_cli="${PROJECT_PATH}/bin/linux/substrate"
-host_agent="${PROJECT_PATH}/bin/linux/world-agent"
-if [[ -f "${host_cli}" && -f "${host_agent}" ]]; then
-  log "Installing Linux CLI/agent from host bundle"
+host_world_service="${PROJECT_PATH}/bin/linux/world-service"
+host_gateway="${PROJECT_PATH}/bin/linux/substrate-gateway"
+if [[ -f "${host_cli}" && -f "${host_world_service}" && -f "${host_gateway}" ]]; then
+  log "Installing Linux CLI/world-service/gateway from host bundle"
   limactl copy "${host_cli}" "${VM_NAME}:/tmp/substrate-cli"
-  limactl copy "${host_agent}" "${VM_NAME}:/tmp/world-agent"
+  limactl copy "${host_world_service}" "${VM_NAME}:/tmp/world-service"
+  limactl copy "${host_gateway}" "${VM_NAME}:/tmp/substrate-gateway"
   limactl shell "${VM_NAME}" sudo install -Dm0755 /tmp/substrate-cli /usr/local/bin/substrate
-  limactl shell "${VM_NAME}" sudo install -Dm0755 /tmp/world-agent /usr/local/bin/substrate-world-agent
+  limactl shell "${VM_NAME}" sudo install -Dm0755 /tmp/world-service /usr/local/bin/substrate-world-service
+  limactl shell "${VM_NAME}" sudo install -Dm0755 /tmp/substrate-gateway /usr/local/bin/substrate-gateway
 else
   log "Host Linux binaries missing; building inside Lima"
   limactl shell "${VM_NAME}" env BUILD_PROFILE="${BUILD_PROFILE}" bash <<'EOF'
 set -euo pipefail
 echo "[lima-warm-stub] building substrate"
 cargo build --bin substrate
-echo "[lima-warm-stub] building world-agent"
-cargo build -p world-agent
+echo "[lima-warm-stub] building world-service"
+cargo build -p world-service
+echo "[lima-warm-stub] building substrate-gateway"
+cargo build -p substrate-gateway
 EOF
 fi
+service_template="${PROJECT_PATH}/scripts/mac/lima/units/substrate-world-service.service.tmpl"
+socket_template="${PROJECT_PATH}/scripts/mac/lima/units/substrate-world-service.socket"
+rendered_units_dir="$(mktemp -d)"
+SUBSTRATE_GUEST_HOME="/home/substrate/.substrate" \
+SUBSTRATE_INSTALL_HOST_CONTEXT_COMMITMENT="${SUBSTRATE_INSTALL_HOST_CONTEXT_COMMITMENT:-}" \
+SUBSTRATE_LIMA_INSTANCE_NAME="${VM_NAME}" \
+SUBSTRATE_LIMA_HOST_PLATFORM_CONTROL_ROOT="${LIMA_HOME:-${HOME%/}/.lima}" \
+SUBSTRATE_LIMA_HOST_SOCKET="${INSTALL_PREFIX}/sock/agent.sock" \
+SUBSTRATE_LIMA_GUEST_SOCKET="/run/substrate.sock" \
+WORLD_NETFILTER_ENV="" \
+  envsubst < "${service_template}" > "${rendered_units_dir}/substrate-world-service.service"
+envsubst < "${socket_template}" > "${rendered_units_dir}/substrate-world-service.socket"
+limactl copy "${rendered_units_dir}/substrate-world-service.service" "${VM_NAME}:/tmp/substrate-world-service.service"
+limactl copy "${rendered_units_dir}/substrate-world-service.socket" "${VM_NAME}:/tmp/substrate-world-service.socket"
+rm -rf "${rendered_units_dir}"
+limactl shell "${VM_NAME}" bash <<'EOF'
+set -euo pipefail
+sudo install -Dm0644 /tmp/substrate-world-service.service /etc/systemd/system/substrate-world-service.service
+sudo install -Dm0644 /tmp/substrate-world-service.socket /etc/systemd/system/substrate-world-service.socket
+sudo rm -f /tmp/substrate-world-service.service /tmp/substrate-world-service.socket
+EOF
 limactl shell "${VM_NAME}" sudo systemctl daemon-reload
-limactl shell "${VM_NAME}" sudo systemctl restart substrate-world-agent.service
+limactl shell "${VM_NAME}" sudo systemctl restart substrate-world-service.service
 LIMA
   chmod +x "${stage}/scripts/mac/lima-warm.sh"
   cat >"${stage}/bin/substrate" <<'BIN'
@@ -394,6 +604,14 @@ fi
   fi
   if [[ "$1" == "--version" ]]; then
     printf 'fake\n'
+    exit 0
+  fi
+  if [[ "$*" == "world doctor --json" ]]; then
+    printf '{"ok":true,"host":{"ok":true},"world":{"ok":true,"status":"ok"}}\n'
+    exit 0
+  fi
+  if [[ "$*" == "world deps current list applied --json" ]]; then
+    printf '{"items":[]}\n'
     exit 0
   fi
   if [[ "$*" == "world deps current sync" ]]; then
@@ -416,8 +634,10 @@ BIN
   printf '%s\n' "${SUBSTRATE_TEST_FILE_SENTINEL:-ELF-STUB}" >"${stage}/bin/linux/substrate"
   chmod +x "${stage}/bin/linux/substrate"
   if [[ "${include_agent}" -eq 1 ]]; then
-    printf '%s\n' "${SUBSTRATE_TEST_FILE_SENTINEL:-ELF-STUB}" >"${stage}/bin/linux/world-agent"
-    chmod +x "${stage}/bin/linux/world-agent"
+    printf '%s\n' "${SUBSTRATE_TEST_FILE_SENTINEL:-ELF-STUB}" >"${stage}/bin/linux/world-service"
+    chmod +x "${stage}/bin/linux/world-service"
+    printf '%s\n' "${SUBSTRATE_TEST_FILE_SENTINEL:-ELF-STUB}" >"${stage}/bin/linux/substrate-gateway"
+    chmod +x "${stage}/bin/linux/substrate-gateway"
   fi
   local archive="substrate-v${FAKE_VERSION}-macos_arm64.tar.gz"
   tar -C "${stage}" -czf "${artifact_dir}/${archive}" .
@@ -451,6 +671,87 @@ assert_contains_literal() {
   fi
 }
 
+authoritative_install_commitment() {
+  local prefix="$1"
+  python3 - "${prefix}" <<'PY'
+import base64
+import hashlib
+import os
+import pwd
+import sys
+
+DOMAIN = "substrate.install_bootstrap_context"
+
+
+def b64_encode(value: bytes) -> str:
+    return base64.urlsafe_b64encode(value).rstrip(b"=").decode("ascii")
+
+
+prefix = sys.argv[1]
+entry = pwd.getpwuid(os.getuid())
+uid = os.getuid()
+encoded_prefix = b64_encode(prefix.encode("utf-8"))
+frame = (
+    f"domain={DOMAIN}\nversion=1\nselected_host_prefix={encoded_prefix}\n"
+    f"host_substrate_home={encoded_prefix}\nhost_substrate_root={encoded_prefix}\n"
+    f"principal_kind=unix\nprincipal_account={b64_encode(entry.pw_name.encode('utf-8'))}\n"
+    f"principal_uid={uid}\n"
+).encode("ascii")
+print(hashlib.sha256(frame).hexdigest())
+PY
+}
+
+latest_captured_copy_path() {
+  local capture_dir="$1"
+  local basename="$2"
+  local file
+  file="$(find "${capture_dir}" -maxdepth 1 -type f -name "copy-*-$(basename "${basename}")" | LC_ALL=C sort | tail -n 1)"
+  [[ -n "${file}" ]] || fatal "expected captured copy for ${basename}"
+  printf '%s\n' "${file}"
+}
+
+assert_captured_copy_contains_literal() {
+  local capture_dir="$1"
+  local basename="$2"
+  local pattern="$3"
+  local msg="$4"
+  local file
+  file="$(latest_captured_copy_path "${capture_dir}" "${basename}")"
+  assert_contains_literal "${file}" "${pattern}" "${msg}"
+}
+
+assert_limactl_fragment_env() {
+  local log_path="$1"
+  local expected_home="$2"
+  local expected_lima_home="$3"
+  local fragment="$4"
+  local msg="$5"
+  awk -F'\t' \
+    -v home="HOME=${expected_home}" \
+    -v lima="LIMA_HOME=${expected_lima_home}" \
+    -v fragment="${fragment}" '
+    $1 == home && $2 == lima && index($3, fragment) { found = 1 }
+    END { exit(found ? 0 : 1) }
+  ' "${log_path}" || fatal "${msg}: expected HOME=${expected_home} LIMA_HOME=${expected_lima_home} for '${fragment}'"
+}
+
+assert_limactl_fragment_not_ambient() {
+  local log_path="$1"
+  local ambient_home="$2"
+  local ambient_lima_home="$3"
+  local fragment="$4"
+  local msg="$5"
+  if awk -F'\t' \
+    -v home="HOME=${ambient_home}" \
+    -v lima="LIMA_HOME=${ambient_lima_home}" \
+    -v fragment="${fragment}" '
+    $1 == home && $2 == lima && index($3, fragment) { found = 1 }
+    END { exit(found ? 0 : 1) }
+  ' "${log_path}"; then
+    fatal "${msg}: fragment '${fragment}' used ambient HOME/LIMA_HOME"
+  fi
+}
+
 run_prod_scenario() {
   local label="$1"
   local include_agent="$2"
@@ -460,31 +761,121 @@ run_prod_scenario() {
   local artifact_dir
   artifact_dir="$(prepare_release_bundle "${label}" "${include_agent}")"
   local prefix="${WORK_ROOT}/${label}-prefix"
+  local ambient_lima_home="${WORK_ROOT}/ambient-lima"
   mkdir -p "${prefix}"
+  mkdir -p "${ambient_lima_home}"
   local log="${WORK_ROOT}/${label}.log"
-  if ! "${REPO_ROOT}/scripts/substrate/install-substrate.sh" \
-    --version "${FAKE_VERSION}" \
-    --prefix "${prefix}" \
-    --artifact-dir "${artifact_dir}" \
-    --no-shims >"${log}" 2>&1; then
+  if ! env \
+    SUBSTRATE_LIMA_VM_NAME="named-vm" \
+    LIMA_VM_NAME="ambient-vm" \
+    LIMA_HOME="${ambient_lima_home}" \
+    "${REPO_ROOT}/scripts/substrate/install-substrate.sh" \
+      --version "${FAKE_VERSION}" \
+      --prefix "${prefix}" \
+      --artifact-dir "${artifact_dir}" \
+      --no-shims >"${log}" 2>&1; then
     cat "${log}" >&2 || true
     fatal "install-substrate failed for ${label}"
   fi
   local limactl_log="${SUBSTRATE_TEST_LIMACTL_LOG}"
   local capture_dir="${SUBSTRATE_TEST_LIMACTL_CAPTURE_DIR}"
   if [[ "${include_agent}" -eq 1 ]]; then
-    assert_contains "${limactl_log}" 'copy .*world-agent' "prod-copy should copy bundled agent"
+    assert_contains "${limactl_log}" 'copy .*world-service' "prod-copy should copy bundled world-service"
+    assert_contains "${limactl_log}" 'copy .*substrate-gateway' "prod-copy should copy bundled substrate-gateway"
+    assert_limactl_fragment_env \
+      "${limactl_log}" \
+      "${ACCOUNT_HOME}" \
+      "${ACCOUNT_LIMA_HOME}" \
+      "named-vm:/tmp/substrate-cli" \
+      "prod-copy should launch lima-warm with the account-database HOME/LIMA_HOME"
+    assert_limactl_fragment_not_ambient \
+      "${limactl_log}" \
+      "${HOME}" \
+      "${ambient_lima_home}" \
+      "named-vm:/tmp/substrate-cli" \
+      "prod-copy warm launch"
   fi
-  local has_build=0
-  if [[ -d "${capture_dir}" ]] && grep -R "cargo build -p world-agent" "${capture_dir}" >/dev/null 2>&1; then
-    has_build=1
+  local built_world_service=0
+  local built_gateway=0
+  if [[ -d "${capture_dir}" ]] && grep -R "cargo build -p world-service" "${capture_dir}" >/dev/null 2>&1; then
+    built_world_service=1
   fi
-  if [[ "${include_agent}" -eq 1 && "${has_build}" -eq 1 ]]; then
+  if [[ -d "${capture_dir}" ]] && grep -R "cargo build -p substrate-gateway" "${capture_dir}" >/dev/null 2>&1; then
+    built_gateway=1
+  fi
+  if [[ "${include_agent}" -eq 1 && ( "${built_world_service}" -eq 1 || "${built_gateway}" -eq 1 ) ]]; then
     fatal "prod-copy unexpectedly triggered in-guest build"
   fi
-  if [[ "${include_agent}" -eq 0 && "${has_build}" -eq 0 ]]; then
-    fatal "prod-build did not trigger in-guest build"
+  if [[ "${include_agent}" -eq 0 && ( "${built_world_service}" -eq 0 || "${built_gateway}" -eq 0 ) ]]; then
+    fatal "prod-build did not trigger the expected in-guest world-service/gateway builds"
   fi
+  if [[ "${include_agent}" -eq 0 ]]; then
+    assert_limactl_fragment_env \
+      "${limactl_log}" \
+      "${ACCOUNT_HOME}" \
+      "${ACCOUNT_LIMA_HOME}" \
+      "shell named-vm env BUILD_PROFILE=release bash" \
+      "prod-build should launch lima-warm with the account-database HOME/LIMA_HOME"
+    assert_limactl_fragment_not_ambient \
+      "${limactl_log}" \
+      "${HOME}" \
+      "${ambient_lima_home}" \
+      "shell named-vm env BUILD_PROFILE=release bash" \
+      "prod-build warm launch"
+  fi
+  assert_limactl_fragment_env \
+    "${limactl_log}" \
+    "${ACCOUNT_HOME}" \
+    "${ACCOUNT_LIMA_HOME}" \
+    "shell named-vm test -x /usr/local/bin/substrate-world-service" \
+    "${label} should verify world-service via the account-database Lima control root"
+  assert_limactl_fragment_env \
+    "${limactl_log}" \
+    "${ACCOUNT_HOME}" \
+    "${ACCOUNT_LIMA_HOME}" \
+    "shell named-vm test -x /usr/local/bin/substrate-gateway" \
+    "${label} should verify substrate-gateway via the account-database Lima control root"
+  assert_limactl_fragment_not_ambient \
+    "${limactl_log}" \
+    "${HOME}" \
+    "${ambient_lima_home}" \
+    "shell named-vm test -x /usr/local/bin/substrate-world-service" \
+    "${label}"
+  assert_limactl_fragment_not_ambient \
+    "${limactl_log}" \
+    "${HOME}" \
+    "${ambient_lima_home}" \
+    "shell named-vm test -x /usr/local/bin/substrate-gateway" \
+    "${label}"
+  assert_not_contains "${limactl_log}" "ambient-vm" \
+    "${label} should ignore ambient VM fallback during post-warm verification"
+  local expected_commitment
+  expected_commitment="$(authoritative_install_commitment "${prefix}")"
+  assert_captured_copy_contains_literal \
+    "${capture_dir}" \
+    "substrate-world-service.service" \
+    "Environment=\"SUBSTRATE_INSTALL_HOST_CONTEXT_COMMITMENT=${expected_commitment}\"" \
+    "${label} should project the verified install bootstrap commitment into the rendered guest service"
+  assert_captured_copy_contains_literal \
+    "${capture_dir}" \
+    "substrate-world-service.service" \
+    "Environment=\"SUBSTRATE_LIMA_INSTANCE_NAME=named-vm\"" \
+    "${label} should project the verified Lima instance name into the rendered guest service"
+  assert_captured_copy_contains_literal \
+    "${capture_dir}" \
+    "substrate-world-service.service" \
+    "Environment=\"SUBSTRATE_LIMA_HOST_PLATFORM_CONTROL_ROOT=${ACCOUNT_LIMA_HOME}\"" \
+    "${label} should project the authoritative Lima control root into the rendered guest service"
+  assert_captured_copy_contains_literal \
+    "${capture_dir}" \
+    "substrate-world-service.service" \
+    "Environment=\"SUBSTRATE_LIMA_HOST_SOCKET=${prefix}/sock/agent.sock\"" \
+    "${label} should project the verified host socket into the rendered guest service"
+  assert_captured_copy_contains_literal \
+    "${capture_dir}" \
+    "substrate-world-service.service" \
+    "Environment=\"SUBSTRATE_LIMA_GUEST_SOCKET=/run/substrate.sock\"" \
+    "${label} should project the canonical guest socket into the rendered guest service"
   info "Scenario ${label} complete:"
   info "  install log: ${log}"
   info "  limactl log: ${limactl_log}"
@@ -506,20 +897,111 @@ run_dev_scenario() {
   local artifact_dir
   artifact_dir="$(prepare_release_bundle "dev" 0)"
   local stage_dir="${WORK_ROOT}/release-stage"
+  local prefix="${WORK_ROOT}/${label}-prefix"
+  local carrier="fixture-carrier"
+  mkdir -p "${prefix}"
   local log="${WORK_ROOT}/${label}.log"
-  if ! "${stage_dir}/scripts/mac/lima-warm.sh" "${stage_dir}" >"${log}" 2>&1; then
+  if ! env \
+    SUBSTRATE_HOME="${prefix}" \
+    SUBSTRATE_ROOT="${prefix}" \
+    SUBSTRATE_INSTALL_BOOTSTRAP_CONTEXT_V1="${carrier}" \
+    SUBSTRATE_LIMA_VM_NAME="named-vm" \
+    LIMA_VM_NAME="ambient-vm" \
+    "${stage_dir}/scripts/mac/lima-warm.sh" \
+      --install-prefix "${prefix}" \
+      --install-bootstrap-context-v1 "${carrier}" \
+      "${stage_dir}" >"${log}" 2>&1; then
     cat "${log}" >&2 || true
     fatal "lima warm stub failed for dev scenario"
   fi
   local capture_dir="${SUBSTRATE_TEST_LIMACTL_CAPTURE_DIR}"
-  if [[ ! -d "${capture_dir}" ]] || ! grep -R "cargo build -p world-agent" "${capture_dir}" >/dev/null 2>&1; then
-    fatal "dev scenario did not trigger in-guest world-agent build"
+  if [[ ! -d "${capture_dir}" ]] || ! grep -R "cargo build -p world-service" "${capture_dir}" >/dev/null 2>&1; then
+    fatal "dev scenario did not trigger in-guest world-service build"
   fi
+  if [[ ! -d "${capture_dir}" ]] || ! grep -R "cargo build -p substrate-gateway" "${capture_dir}" >/dev/null 2>&1; then
+    fatal "dev scenario did not trigger in-guest substrate-gateway build"
+  fi
+  assert_contains "${SUBSTRATE_TEST_LIMACTL_LOG}" "shell named-vm env BUILD_PROFILE=release bash" \
+    "dev build should address the declared VM instead of any ambient fallback"
+  assert_not_contains "${SUBSTRATE_TEST_LIMACTL_LOG}" "ambient-vm" \
+    "dev build should ignore ambient VM fallback"
   info "Scenario ${label} complete:"
   info "  host build log: ${build_log}"
   info "  lima stub log: ${log}"
   info "  limactl log: ${SUBSTRATE_TEST_LIMACTL_LOG}"
   info "  capture dir: ${capture_dir}"
+}
+
+run_dev_call_section_scenario() {
+  local label="dev-call-section"
+  info "Running scenario ${label}"
+  setup_workspace "${label}"
+  install_common_stubs
+  write_stub_cargo
+
+  local dev_repo
+  dev_repo="$(prepare_dev_repo_fixture 0)"
+  local warm_log="${WORK_ROOT}/${label}-warm.log"
+  export SUBSTRATE_TEST_WARM_LOG="${warm_log}"
+  cat >"${dev_repo}/scripts/mac/lima-warm.sh" <<'SCRIPT'
+#!/usr/bin/env bash
+set -euo pipefail
+log_path="${SUBSTRATE_TEST_WARM_LOG:?}"
+printf '%s\n' "$*" >>"${log_path}"
+prefix=""
+carrier=""
+project_path=""
+while [[ $# -gt 0 ]]; do
+  case "$1" in
+    --install-prefix)
+      prefix="${2:-}"
+      shift 2
+      ;;
+    --install-bootstrap-context-v1)
+      carrier="${2:-}"
+      shift 2
+      ;;
+    -*)
+      printf '[dev-call-section-stub][ERROR] unknown arg: %s\n' "$1" >&2
+      exit 2
+      ;;
+    *)
+      project_path="$1"
+      shift
+      break
+      ;;
+  esac
+done
+[[ -n "${prefix}" ]] || exit 11
+[[ -n "${carrier}" ]] || exit 12
+[[ "${prefix}" == "${SUBSTRATE_HOME:-}" ]] || exit 13
+[[ "${prefix}" == "${SUBSTRATE_ROOT:-}" ]] || exit 14
+[[ "${carrier}" == "${SUBSTRATE_INSTALL_BOOTSTRAP_CONTEXT_V1:-}" ]] || exit 15
+[[ -n "${project_path}" ]] || exit 16
+exit 0
+SCRIPT
+  chmod +x "${dev_repo}/scripts/mac/lima-warm.sh"
+
+  local prefix="${WORK_ROOT}/${label}-prefix"
+  mkdir -p "${prefix}"
+  local log="${WORK_ROOT}/${label}.log"
+  if ! "${dev_repo}/scripts/substrate/dev-install-substrate.sh" \
+    --prefix "${prefix}" \
+    --profile release \
+    --no-shims >"${log}" 2>&1; then
+    cat "${log}" >&2 || true
+    fatal "dev-install-substrate failed for ${label}"
+  fi
+
+  assert_contains "${warm_log}" "--install-prefix ${prefix}" \
+    "dev call-section should pass the selected install prefix"
+  assert_contains "${warm_log}" "--install-bootstrap-context-v1 " \
+    "dev call-section should pass the authenticated bootstrap carrier"
+  unset SUBSTRATE_TEST_WARM_LOG
+  info "Scenario ${label} complete:"
+  info "  dev repo: ${dev_repo}"
+  info "  install log: ${log}"
+  info "  warm log: ${warm_log}"
 }
 
 prepare_dev_repo_fixture() {
@@ -558,6 +1040,11 @@ YAML
   chmod +x "${repo_dir}/scripts/mac/lima-warm.sh"
   cp "${REPO_ROOT}/scripts/mac/lima/substrate.yaml" "${repo_dir}/scripts/mac/lima/substrate.yaml"
   cp "${REPO_ROOT}/scripts/mac/lima/substrate-dev.yaml" "${repo_dir}/scripts/mac/lima/substrate-dev.yaml"
+  mkdir -p "${repo_dir}/scripts/mac/lima/units"
+  cp "${REPO_ROOT}/scripts/mac/lima/units/substrate-world-service.service.tmpl" \
+    "${repo_dir}/scripts/mac/lima/units/substrate-world-service.service.tmpl"
+  cp "${REPO_ROOT}/scripts/mac/lima/units/substrate-world-service.socket" \
+    "${repo_dir}/scripts/mac/lima/units/substrate-world-service.socket"
 
   cat >"${repo_dir}/config/manager_hooks.yaml" <<'YAML'
 version: 1
@@ -570,6 +1057,16 @@ YAML
     chmod +x "${repo_dir}/bin/linux/substrate"
     printf '%s\n' "${SUBSTRATE_TEST_FILE_SENTINEL:-ELF-STUB}" >"${repo_dir}/bin/linux/world-agent"
     chmod +x "${repo_dir}/bin/linux/world-agent"
+  else
+    cat >"${repo_dir}/Cargo.toml" <<'TOML'
+[workspace]
+members = []
+resolver = "2"
+TOML
+    cat >"${repo_dir}/Cargo.lock" <<'LOCK'
+# This file is automatically @generated by Cargo.
+version = 4
+LOCK
   fi
 
   printf '%s\n' "${repo_dir}"
@@ -943,6 +1440,9 @@ run_selected() {
     dev-build)
       run_dev_scenario
       ;;
+    dev-call-section)
+      run_dev_call_section_scenario
+      ;;
     dev-runtime-bundle)
       run_dev_runtime_bundle_scenario
       ;;
@@ -968,6 +1468,7 @@ run_selected() {
       run_prod_scenario "prod-copy" 1
       run_prod_scenario "prod-build" 0
       run_dev_scenario
+      run_dev_call_section_scenario
       run_dev_runtime_bundle_scenario
       run_dev_runtime_bundle_self_contained_scenario
       run_dev_runtime_bundle_protected_path_conflicts_scenario

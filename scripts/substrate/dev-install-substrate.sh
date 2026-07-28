@@ -2217,22 +2217,67 @@ elif [[ "${WORLD_ENABLED}" -eq 1 && "${IS_MAC}" -eq 1 ]]; then
   if [[ "${ENABLE_WORLD_NETFILTER}" -eq 1 ]]; then
     lima_warm_env+=(SUBSTRATE_WORLD_NETFILTER_ENABLE=1)
   fi
-  (cd "${REPO_ROOT}" && env "${lima_warm_env[@]}" "${LIMA_WARM}" "${REPO_ROOT}")
+  lima_home="${INSTALL_BOOTSTRAP_ACCOUNT_HOME%/}/.lima"
+  (
+    cd "${REPO_ROOT}" &&
+    env HOME="${INSTALL_BOOTSTRAP_ACCOUNT_HOME}" \
+      LIMA_HOME="${lima_home}" \
+      "${lima_warm_env[@]}" \
+      "${LIMA_WARM}" \
+      --install-prefix "${PREFIX}" \
+      --install-bootstrap-context-v1 "${INSTALL_BOOTSTRAP_CONTEXT_V1}" \
+      "${REPO_ROOT}"
+  )
 
   cache_ok=1
+  vm_name="${SUBSTRATE_LIMA_VM_NAME:-substrate}"
   # The managed host socket is backend-owned and may not exist until the first
   # routed proof bootstraps forwarding under this prefix. Keep the legacy link
   # best-effort; missing it here is no longer a provisioning failure.
-  link_prefix_lima_socket || true
-  if ! cache_linux_binary_from_lima /usr/local/bin/substrate "${BIN_DIR}/linux/substrate" "substrate CLI"; then
-    warn "Linux substrate CLI was not cached from Lima; continuing because routed diagnostics can fall back to the host CLI on macOS."
-  fi
-  if ! cache_linux_binary_from_lima /usr/local/bin/substrate-world-service "${BIN_DIR}/linux/world-service" "world-service"; then
-    cache_ok=0
-  fi
-  if ! cache_linux_binary_from_lima /usr/local/bin/substrate-gateway "${BIN_DIR}/linux/substrate-gateway" "substrate-gateway"; then
-    cache_ok=0
-  fi
+  HOME="${INSTALL_BOOTSTRAP_ACCOUNT_HOME}" link_prefix_lima_socket || true
+  copy_spec=""
+  vm_path=""
+  dest_path=""
+  label=""
+  copy_required=""
+  for copy_spec in \
+    "/usr/local/bin/substrate|${BIN_DIR}/linux/substrate|substrate CLI|optional" \
+    "/usr/local/bin/substrate-world-service|${BIN_DIR}/linux/world-service|world-service|required" \
+    "/usr/local/bin/substrate-gateway|${BIN_DIR}/linux/substrate-gateway|substrate-gateway|required"; do
+    IFS='|' read -r vm_path dest_path label copy_required <<<"${copy_spec}"
+    mkdir -p "$(dirname "${dest_path}")"
+    if [[ -e "${dest_path}" || -L "${dest_path}" ]]; then
+      if path_is_managed_bundle_entry "${dest_path}" "${PREFIX}" "${MANAGED_MAC_LINUX_BINARIES_PATH}"; then
+        rm -f "${dest_path}"
+      else
+        fatal "Refusing to overwrite unmanaged ${label} at ${dest_path}"
+      fi
+    fi
+
+    if ! env HOME="${INSTALL_BOOTSTRAP_ACCOUNT_HOME}" LIMA_HOME="${lima_home}" \
+      limactl copy "${vm_name}:${vm_path}" "${dest_path}"; then
+      if [[ "${copy_required}" == "optional" ]]; then
+        warn "Linux ${label} was not cached from Lima; continuing because routed diagnostics can fall back to the host CLI on macOS."
+      else
+        warn "Failed to copy Linux ${label} from Lima into ${dest_path}"
+        cache_ok=0
+      fi
+      continue
+    fi
+
+    chmod 0755 "${dest_path}" 2>/dev/null || true
+    if ! is_linux_elf "${dest_path}"; then
+      warn "Copied Linux ${label} at ${dest_path} is not a Linux ELF"
+      rm -f "${dest_path}"
+      if [[ "${copy_required}" == "required" ]]; then
+        cache_ok=0
+      fi
+      continue
+    fi
+
+    record_managed_prefix_linux_binary "${dest_path}"
+    log "Cached Linux ${label} into ${dest_path}"
+  done
 
   if [[ "${cache_ok}" -eq 0 ]] || ! verify_prefix_linux_bundle world-service substrate-gateway; then
     fail_closed_world_provisioning_for_runtime_request \

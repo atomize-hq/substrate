@@ -761,7 +761,29 @@ check_rendered_unit_parity() {
             ;;
     esac
 
-    SUBSTRATE_GUEST_HOME="${guest_substrate_home}" WORLD_NETFILTER_ENV="${expected_netfilter_env}" \
+    for projected_unit_value in \
+        "${guest_substrate_home}" \
+        "${INSTALL_BOOTSTRAP_COMMITMENT}" \
+        "${VM_NAME}" \
+        "${HOST_PLATFORM_CONTROL_ROOT}" \
+        "${OBSERVED_TRANSPORT_HOST}" \
+        "${OBSERVED_TRANSPORT_GUEST_SOCKET}"; do
+        case "${projected_unit_value}" in
+            *\"*|*%*|*\\*)
+                warn "Verified guest unit projection contains a systemd-unsafe character."
+                rm -rf "${parity_tmp}"
+                return 1
+                ;;
+        esac
+    done
+
+    SUBSTRATE_GUEST_HOME="${guest_substrate_home}" \
+        WORLD_NETFILTER_ENV="${expected_netfilter_env}" \
+        SUBSTRATE_INSTALL_HOST_CONTEXT_COMMITMENT="${INSTALL_BOOTSTRAP_COMMITMENT}" \
+        SUBSTRATE_LIMA_INSTANCE_NAME="${VM_NAME}" \
+        SUBSTRATE_LIMA_HOST_PLATFORM_CONTROL_ROOT="${HOST_PLATFORM_CONTROL_ROOT}" \
+        SUBSTRATE_LIMA_HOST_SOCKET="${OBSERVED_TRANSPORT_HOST}" \
+        SUBSTRATE_LIMA_GUEST_SOCKET="${OBSERVED_TRANSPORT_GUEST_SOCKET}" \
         envsubst < "${CANONICAL_UNIT_SOURCE_DIR}/substrate-world-service.service.tmpl" > "${expected_dir}/substrate-world-service.service"
     envsubst < "${CANONICAL_UNIT_SOURCE_DIR}/substrate-world-service.socket" > "${expected_dir}/substrate-world-service.socket"
 

@@ -1582,8 +1582,27 @@ write_systemd_units() {
             log "Installing canonical guest systemd units without WORLD_NETFILTER_ENABLE=1"
             ;;
     esac
+    for projected_unit_value in \
+        "${guest_substrate_home}" \
+        "${INSTALL_BOOTSTRAP_COMMITMENT}" \
+        "${VM_NAME}" \
+        "${HOST_PLATFORM_CONTROL_ROOT}" \
+        "${OBSERVED_TRANSPORT_HOST}" \
+        "${OBSERVED_TRANSPORT_GUEST_SOCKET}"; do
+        case "${projected_unit_value}" in
+            *\"*|*%*|*\\*)
+                fatal "Verified guest unit projection contains a systemd-unsafe character."
+                ;;
+        esac
+    done
     rendered_units_dir="$(mktemp -d)"
-    SUBSTRATE_GUEST_HOME="${guest_substrate_home}" WORLD_NETFILTER_ENV="${netfilter_env}" \
+    SUBSTRATE_GUEST_HOME="${guest_substrate_home}" \
+    SUBSTRATE_INSTALL_HOST_CONTEXT_COMMITMENT="${INSTALL_BOOTSTRAP_COMMITMENT}" \
+    SUBSTRATE_LIMA_INSTANCE_NAME="${VM_NAME}" \
+    SUBSTRATE_LIMA_HOST_PLATFORM_CONTROL_ROOT="${HOST_PLATFORM_CONTROL_ROOT}" \
+    SUBSTRATE_LIMA_HOST_SOCKET="${OBSERVED_TRANSPORT_HOST}" \
+    SUBSTRATE_LIMA_GUEST_SOCKET="${OBSERVED_TRANSPORT_GUEST_SOCKET}" \
+    WORLD_NETFILTER_ENV="${netfilter_env}" \
         envsubst < "${service_template}" > "${rendered_units_dir}/substrate-world-service.service"
     envsubst < "${socket_template}" > "${rendered_units_dir}/substrate-world-service.socket"
 

@@ -119,6 +119,46 @@ impl ShellConfig {
                 &encoded_context,
                 |key| env::var_os(key),
             )?;
+            #[cfg(any(target_os = "macos", test))]
+            {
+                let is_invocation_or_doctor_path = cli.command.is_some()
+                    || cli.script.is_some()
+                    || matches!(
+                        cli.sub.as_ref(),
+                        Some(SubCommands::Host(HostCmd {
+                            action: HostAction::Doctor { .. },
+                        })) | Some(SubCommands::World(WorldCmd {
+                            action: WorldAction::Doctor { .. },
+                        }))
+                    )
+                    || (cli.sub.is_none()
+                        && !cli.version_json
+                        && !cli.shim_status
+                        && !cli.shim_status_json
+                        && !cli.shim_deploy
+                        && !cli.shim_remove
+                        && cli.trace.is_none()
+                        && cli.replay.is_none());
+                let should_project_expected_install_env = is_invocation_or_doctor_path
+                    && (cfg!(target_os = "macos")
+                        || env::var_os("SUBSTRATE_TEST_FORCE_MACOS_INSTALL_BOOTSTRAP_PROJECTIONS")
+                            .is_some());
+                if should_project_expected_install_env {
+                    for (key, value) in
+                        crate::execution::install_bootstrap::expected_install_bootstrap_projections(
+                            install_context,
+                            &encoded_context,
+                        )?
+                    {
+                        env::set_var(key, value);
+                    }
+                    #[cfg(all(test, not(target_os = "macos")))]
+                    env::set_var(
+                        "SUBSTRATE_TEST_MACOS_INSTALL_BOOTSTRAP_PROJECTIONS_APPLIED",
+                        "1",
+                    );
+                }
+            }
             let substrate_home = PathBuf::from(&install_context.context.selected_host_prefix);
             let shims_dir = substrate_home.join("shims");
             let version_file = shims_dir.join(".version");
@@ -984,3 +1024,155 @@ fn print_socket_activation_summary() {
 
 #[cfg(all(not(target_os = "linux"), not(target_os = "macos")))]
 fn print_socket_activation_summary() {}
+
+#[cfg(test)]
+mod plan_tests {
+    use super::*;
+    use crate::execution::world_env_guard;
+    use crate::Cli;
+    use clap::Parser;
+    use serial_test::serial;
+    use std::fs;
+    use tempfile::tempdir;
+
+    #[cfg(unix)]
+    fn bind_test_install_context(
+        prefix: &std::path::Path,
+    ) -> transport_api_types::InstallBootstrapContextCarrierV1 {
+        let context =
+            crate::execution::install_bootstrap::construct_unix_install_bootstrap_context(
+                Some(prefix),
+                std::ffi::OsStr::new("substrate"),
+                &std::env::current_exe().unwrap(),
+                None,
+                std::path::Path::new("/"),
+            )
+            .unwrap();
+        crate::execution::install_bootstrap::install_bootstrap_projections(&context).unwrap();
+        context
+    }
+
+    fn set_env(key: &str, value: &str) -> Option<String> {
+        let _guard = world_env_guard();
+        let previous = std::env::var(key).ok();
+        std::env::set_var(key, value);
+        previous
+    }
+
+    fn restore_env(key: &str, previous: Option<String>) {
+        let _guard = world_env_guard();
+        if let Some(value) = previous {
+            std::env::set_var(key, value);
+        } else {
+            std::env::remove_var(key);
+        }
+    }
+
+    struct CurrentDirGuard {
+        _process_cwd: crate::execution::ProcessCwdTestGuard,
+    }
+
+    impl CurrentDirGuard {
+        fn change_to(path: &std::path::Path) -> Self {
+            Self {
+                _process_cwd: crate::execution::ProcessCwdTestGuard::change_to(path),
+            }
+        }
+    }
+
+    #[test]
+    #[serial]
+    fn from_cli_exercises_macos_projection_path_when_opted_in_for_tests() {
+        if crate::execution::run_in_bounded_test_subprocess(
+            concat!(
+                module_path!(),
+                "::",
+                stringify!(from_cli_exercises_macos_projection_path_when_opted_in_for_tests)
+            ),
+            "broker",
+        ) {
+            return;
+        }
+        let _authority_env = crate::execution::AuthorityEnvTestGuard::preserve();
+
+        let temp = tempdir().unwrap();
+        let home = temp.path().join("home");
+        let substrate_home = home.join(".substrate");
+        fs::create_dir_all(substrate_home.join("shims")).unwrap();
+        let _cwd_guard = CurrentDirGuard::change_to(temp.path());
+
+        let home_str = home.display().to_string();
+        let substrate_home_str = substrate_home.display().to_string();
+        let prev_home = set_env("HOME", &home_str);
+        let prev_userprofile = set_env("USERPROFILE", &home_str);
+        _authority_env.install_home(&substrate_home_str);
+        let prev_path = set_env("PATH", "/bin:/usr/bin");
+        let prev_projection_flag = set_env(
+            "SUBSTRATE_TEST_FORCE_MACOS_INSTALL_BOOTSTRAP_PROJECTIONS",
+            "1",
+        );
+        let prev_projection_applied =
+            std::env::var("SUBSTRATE_TEST_MACOS_INSTALL_BOOTSTRAP_PROJECTIONS_APPLIED").ok();
+        std::env::remove_var("SUBSTRATE_TEST_MACOS_INSTALL_BOOTSTRAP_PROJECTIONS_APPLIED");
+        let prev_shim_original_path = std::env::var("SHIM_ORIGINAL_PATH").ok();
+        let prev_world = std::env::var("SUBSTRATE_WORLD").ok();
+        let prev_world_enabled = std::env::var("SUBSTRATE_WORLD_ENABLED").ok();
+        let prev_no_shims = std::env::var("SUBSTRATE_NO_SHIMS").ok();
+        std::env::remove_var("SHIM_ORIGINAL_PATH");
+        std::env::remove_var("SUBSTRATE_WORLD");
+        std::env::remove_var("SUBSTRATE_WORLD_ENABLED");
+        std::env::remove_var("SUBSTRATE_NO_SHIMS");
+
+        let cli = Cli::parse_from(["substrate", "-c", "echo hi"]);
+        #[cfg(unix)]
+        let install_context = bind_test_install_context(&substrate_home);
+        #[cfg(unix)]
+        let encoded_context = install_context.encode().expect("encode install context");
+        #[cfg(unix)]
+        let expected_projections =
+            crate::execution::install_bootstrap::expected_install_bootstrap_projections(
+                &install_context,
+                &encoded_context,
+            )
+            .expect("expected install bootstrap projections");
+        #[cfg(unix)]
+        let config =
+            ShellConfig::from_cli(cli, &install_context).expect("config builds with opt-in");
+        #[cfg(not(unix))]
+        let config = ShellConfig::from_cli(cli).expect("config builds with opt-in");
+
+        match &config.mode {
+            ShellMode::Wrap(cmd) => assert_eq!(cmd, "echo hi"),
+            other => panic!("expected wrap mode, got {other:?}"),
+        }
+
+        assert_eq!(
+            std::env::var("SUBSTRATE_TEST_MACOS_INSTALL_BOOTSTRAP_PROJECTIONS_APPLIED").ok(),
+            Some("1".to_string())
+        );
+        #[cfg(unix)]
+        for (key, expected) in expected_projections {
+            assert_eq!(
+                std::env::var_os(key).as_deref(),
+                Some(expected.as_os_str()),
+                "{key} should remain projected after from_cli",
+            );
+        }
+
+        restore_env(
+            "SUBSTRATE_TEST_MACOS_INSTALL_BOOTSTRAP_PROJECTIONS_APPLIED",
+            prev_projection_applied,
+        );
+        restore_env(
+            "SUBSTRATE_TEST_FORCE_MACOS_INSTALL_BOOTSTRAP_PROJECTIONS",
+            prev_projection_flag,
+        );
+        restore_env("SUBSTRATE_WORLD_ENABLED", prev_world_enabled);
+        restore_env("SUBSTRATE_WORLD", prev_world);
+        restore_env("SUBSTRATE_NO_SHIMS", prev_no_shims);
+        restore_env("SHIM_ORIGINAL_PATH", prev_shim_original_path);
+        restore_env("PATH", prev_path);
+        restore_env("USERPROFILE", prev_userprofile);
+        restore_env("HOME", prev_home);
+    }
+}

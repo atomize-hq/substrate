@@ -2624,23 +2624,39 @@ provision_macos_world() {
   fi
 
   if [[ "${DRY_RUN}" -eq 1 ]]; then
-    printf '[%s][dry-run] (cd %s && %s %s)\n' "${INSTALLER_NAME}" "${release_root}" "${lima_script}" "${release_root}" >&2
+    printf '[%s][dry-run] (cd %s && %s --install-prefix %s --install-bootstrap-context-v1 <carrier> %s)\n' \
+      "${INSTALLER_NAME}" "${release_root}" "${lima_script}" "${PREFIX}" "${release_root}" >&2
     return
   fi
 
+  local lima_home="${INSTALL_BOOTSTRAP_ACCOUNT_HOME%/}/.lima"
   (
     cd "${release_root}" &&
     if [[ "${ENABLE_WORLD_NETFILTER}" -eq 1 ]]; then
-      SUBSTRATE_WORLD_NETFILTER_ENABLE=1 "${lima_script}" "${release_root}"
+      env HOME="${INSTALL_BOOTSTRAP_ACCOUNT_HOME}" \
+        LIMA_HOME="${lima_home}" \
+        SUBSTRATE_WORLD_NETFILTER_ENABLE=1 \
+        "${lima_script}" \
+        --install-prefix "${PREFIX}" \
+        --install-bootstrap-context-v1 "${INSTALL_BOOTSTRAP_CONTEXT_V1}" \
+        "${release_root}"
     else
-      "${lima_script}" "${release_root}"
+      env HOME="${INSTALL_BOOTSTRAP_ACCOUNT_HOME}" \
+        LIMA_HOME="${lima_home}" \
+        "${lima_script}" \
+        --install-prefix "${PREFIX}" \
+        --install-bootstrap-context-v1 "${INSTALL_BOOTSTRAP_CONTEXT_V1}" \
+        "${release_root}"
     fi
   )
 
-  if ! limactl shell substrate test -x /usr/local/bin/substrate-world-service >/dev/null 2>&1; then
+  local vm_name="${SUBSTRATE_LIMA_VM_NAME:-substrate}"
+  if ! env HOME="${INSTALL_BOOTSTRAP_ACCOUNT_HOME}" LIMA_HOME="${lima_home}" \
+    limactl shell "${vm_name}" test -x /usr/local/bin/substrate-world-service >/dev/null 2>&1; then
     fatal "Lima provisioning completed but /usr/local/bin/substrate-world-service is missing. Provide bin/linux/world-service in the release bundle or rerun from a source checkout so the installer can build one."
   fi
-  if ! limactl shell substrate test -x /usr/local/bin/substrate-gateway >/dev/null 2>&1; then
+  if ! env HOME="${INSTALL_BOOTSTRAP_ACCOUNT_HOME}" LIMA_HOME="${lima_home}" \
+    limactl shell "${vm_name}" test -x /usr/local/bin/substrate-gateway >/dev/null 2>&1; then
     fatal "Lima provisioning completed but /usr/local/bin/substrate-gateway is missing. Provide bin/linux/substrate-gateway in the release bundle or rerun from a source checkout so the installer can build one."
   fi
   log "Verified Linux world-service + substrate-gateway installation inside Lima (copy/build path logged above)."
