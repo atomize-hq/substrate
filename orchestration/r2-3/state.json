@@ -1,7 +1,7 @@
 {
   "protocol": "codex.top-level-orchestration-state.v1",
   "orchestration_id": "substrate-r2-3",
-  "status": "RUNNING",
+  "status": "READY",
   "dispatch_authorized": true,
   "remote": "origin",
   "target_ref": "refs/heads/feat/internal-host-orchestrator-world-dispatch-bootstrap",
@@ -40,26 +40,16 @@
       "before_increment": "R2-3Z"
     }
   ],
-  "cursor": 11,
+  "cursor": 12,
   "expected_base": {
-    "commit": "0c572373a7b600329a461f4e986d2524ab925598",
-    "tree": "c3e78fb5940384c565de8c39d40801c57ff031f3"
+    "commit": "b9f975ab98a5d15fd63225366e0d32e399b7c608",
+    "tree": "4f59b0740de523708623442f564122c4722b6221"
   },
   "meta": {
     "thread_id": "019fa3f7-c447-7132-9126-82e2cf38bd9d",
     "host_id": "remote-ssh-discovered:spenser-linux-codex"
   },
-  "active_dispatch": {
-    "increment": "R2-3W5",
-    "thread_id": "019faac3-72f0-7903-be1e-ad64ee052b9a",
-    "host_id": "remote-ssh-discovered:spenser-linux-codex",
-    "dispatch_nonce": "b91805c402b639429eefb0f2d4bc17433534e8cc3846e553fd6ebba9d19bcb2e",
-    "expected_base": {
-      "commit": "0c572373a7b600329a461f4e986d2524ab925598",
-      "tree": "c3e78fb5940384c565de8c39d40801c57ff031f3"
-    },
-    "target_ref": "refs/heads/feat/internal-host-orchestrator-world-dispatch-bootstrap"
-  },
+  "active_dispatch": null,
   "active_evidence_dispatches": [],
   "verified_evidence": [],
   "completed": [
@@ -128,6 +118,12 @@
       "commit": "0c572373a7b600329a461f4e986d2524ab925598",
       "tree": "c3e78fb5940384c565de8c39d40801c57ff031f3",
       "receipt_path": "orchestration/r2-3/receipts/R2-3W4.json"
+    },
+    {
+      "increment": "R2-3W5",
+      "commit": "b9f975ab98a5d15fd63225366e0d32e399b7c608",
+      "tree": "4f59b0740de523708623442f564122c4722b6221",
+      "receipt_path": "orchestration/r2-3/receipts/R2-3W5.json"
     }
   ]
 }

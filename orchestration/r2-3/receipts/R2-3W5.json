@@ -1,0 +1,73 @@
+{
+  "protocol": "codex.top-level-task-receipt.v1",
+  "orchestration_id": "substrate-r2-3",
+  "dispatch_nonce": "b91805c402b639429eefb0f2d4bc17433534e8cc3846e553fd6ebba9d19bcb2e",
+  "increment": "R2-3W5",
+  "status": "LANDED_CLEAN",
+  "increment_task": {
+    "thread_id": "019faac3-72f0-7903-be1e-ad64ee052b9a",
+    "host_id": "remote-ssh-discovered:spenser-linux-codex"
+  },
+  "expected_base": {
+    "commit": "0c572373a7b600329a461f4e986d2524ab925598",
+    "tree": "c3e78fb5940384c565de8c39d40801c57ff031f3"
+  },
+  "landed": {
+    "commit": "b9f975ab98a5d15fd63225366e0d32e399b7c608",
+    "tree": "4f59b0740de523708623442f564122c4722b6221",
+    "target_ref": "refs/heads/feat/internal-host-orchestrator-world-dispatch-bootstrap",
+    "live_remote": "b9f975ab98a5d15fd63225366e0d32e399b7c608"
+  },
+  "subject_fingerprint": "sha256:bd1404e886f89bf596f1bab9949ffee5d934733b259819a0268486260098d2d8",
+  "changed_files": [
+    "crates/forwarder/src/bridge.rs",
+    "crates/forwarder/src/pipe.rs",
+    "crates/forwarder/src/wsl.rs",
+    "scripts/windows/prefix-mapping-r2-3.Tests.ps1"
+  ],
+  "review": {
+    "packet_id": "A1.1d-5R2-3W5",
+    "record_path": "/tmp/review-cycle-A1.1d-5R2-3W5.json",
+    "record_sha256": "sha256:c921ed7d16ca49e096ef4b1c93bdbe644c3e882d1be08570a0eba7e76b1eab29",
+    "validated": true,
+    "terminal": "CLEAN",
+    "p1": 0,
+    "p2": 0,
+    "p3_p4_disposition": "Discovery findings R2-3W5-P2-001 and R2-3W5-P2-002 were fixed before closure. The closure cycle was CLEAN with no open P1, P2, P3, or P4 finding."
+  },
+  "verification": {
+    "required_checks_passed": true,
+    "allowlist_passed": true,
+    "change_detection_passed": true,
+    "checkout_clean": true,
+    "ahead": 0,
+    "behind": 0
+  },
+  "checks": [
+    "cargo fmt --all -- --check",
+    "cargo check --locked -p substrate-forwarder",
+    "cargo test --locked -p substrate-forwarder -- --nocapture (0 tracked-tree tests on Linux because the implementation is Windows-gated)",
+    "cargo clippy --locked -p substrate-forwarder --all-targets -- -D warnings",
+    "cargo check --locked -p substrate-forwarder --target x86_64-pc-windows-msvc",
+    "focused external harness filters in /tmp/tmp.lT2jl19iog (verified projection 4 passed, authenticated listener 1 passed, legacy listener 1 passed, path normalization 2 passed, WSL spawn projection 4 passed)",
+    "git diff --check",
+    "exact four-path and symbol-scope allowlist checks",
+    "independent base-to-landed byte equality for finalize_bridge, bridge_copy, accept_with, accept ordering, WslStream shutdown/read/write, and WslStreamBundle wait",
+    "live target base check before publication and live commit/tree equality after publication"
+  ],
+  "limitations": [
+    "The supported PowerShell runtime was unavailable on the Linux host, so W5 PowerShell assertions were checked statically but not executed; native Windows/WSL evidence remains assigned to R2-3Z.",
+    "Windows-target cargo test --no-run could not link because link.exe is unavailable on the Linux host.",
+    "The external harness intentionally stubs named-pipe duplex I/O; its required focused W5 filters pass, while a broad non-contract run includes expected stubbed I/O failures and unrelated concurrent environment-test interference."
+  ],
+  "gitnexus": {
+    "scope": "compare",
+    "base_ref": "0c572373a7b600329a461f4e986d2524ab925598",
+    "changed_files": 4,
+    "changed_count": 30,
+    "affected_count": 0,
+    "risk_level": "low"
+  },
+  "completion_claim": "R2-3W5 completes only PI-060, PI-115, and the downstream-consumer slice of PI-079. It does not claim factory/shell/shim/replay caller migration, provisioning activation, process replacement, timeout kill, stop/unregister, PID or artifact deletion, convergence, listener teardown ownership changes, native Windows/WSL evidence, any R3 row, the R2-3 parent packet, or R2-3F execution.",
+  "next_increment": "R2-3F"
+}
