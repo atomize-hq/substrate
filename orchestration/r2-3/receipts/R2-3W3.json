@@ -1,0 +1,73 @@
+{
+  "protocol": "codex.top-level-task-receipt.v1",
+  "orchestration_id": "substrate-r2-3",
+  "dispatch_nonce": "a9ab4c023e0eea6f0c6a1eb4184b8af82e9cc4537a8ac4ed551dc274fef11b3e",
+  "increment": "R2-3W3",
+  "status": "LANDED_CLEAN",
+  "increment_task": {
+    "thread_id": "019faa56-aafb-7350-a446-a5e1e20fa149",
+    "host_id": "remote-ssh-discovered:spenser-linux-codex"
+  },
+  "expected_base": {
+    "commit": "3970e6f1780408a752df1f54532d2ad9475bf284",
+    "tree": "83756158da904c5b5784b752c0bf1fcf0971c7bc"
+  },
+  "landed": {
+    "commit": "657f1a9530f9c86cd2dc88d33f5704b2bf97743e",
+    "tree": "fb5933e50bfcc7dd8807ae799e4adf7d62c891e5",
+    "target_ref": "refs/heads/feat/internal-host-orchestrator-world-dispatch-bootstrap",
+    "live_remote": "657f1a9530f9c86cd2dc88d33f5704b2bf97743e"
+  },
+  "subject_fingerprint": "sha256:1e81474721bcf244dab5ad46228144781c84fb38288d4ad94cf0132437a342cc",
+  "changed_files": [
+    "crates/world-windows-wsl/src/backend.rs",
+    "crates/world-windows-wsl/src/paths.rs",
+    "crates/world-windows-wsl/src/tests.rs",
+    "crates/world-windows-wsl/src/transport.rs",
+    "crates/world-windows-wsl/src/warm.rs",
+    "scripts/windows/prefix-mapping-r2-3.Tests.ps1"
+  ],
+  "review": {
+    "packet_id": "A1.1d-5R2-3W3",
+    "record_path": "/tmp/r2-3w3-review.zG5KRw/review-cycle.json",
+    "record_sha256": "sha256:d8c197c5ef0215f51547eee0f117af7f91fbf1609ab4d49c9a9080927ddab63c",
+    "validated": true,
+    "terminal": "CLEAN",
+    "p1": 0,
+    "p2": 0,
+    "p3_p4_disposition": "Final fresh read-only host-mapping, transport/readiness, and scope/proof lenses were clean. The warm-hint drift was dispositioned outside the exact mutable symbol scope and does not participate in authority selection or mapping proof."
+  },
+  "verification": {
+    "required_checks_passed": true,
+    "allowlist_passed": true,
+    "change_detection_passed": true,
+    "checkout_clean": true,
+    "ahead": 0,
+    "behind": 0
+  },
+  "checks": [
+    "cargo fmt --all -- --check",
+    "cargo check --locked -p world-windows-wsl",
+    "cargo test --locked -p world-windows-wsl -- --nocapture (0 tracked-tree tests on Linux because the crate is Windows-gated)",
+    "cargo clippy --locked -p world-windows-wsl --all-targets -- -D warnings",
+    "cargo test --manifest-path /tmp/world-windows-wsl-harness.1iSBUx/Cargo.toml -p world-windows-wsl -- --nocapture (18 passed)",
+    "cargo check --locked -p world-windows-wsl --target x86_64-pc-windows-msvc",
+    "git diff --check",
+    "git diff --cached --check",
+    "exact six-path and symbol-scope allowlist checks",
+    "live target base check before publication and live commit/tree equality after publication"
+  ],
+  "limitations": [
+    "The required copied-source production-graph Linux harness preserved an untouched forbidden-dependency failure because transport-api-client gates Transport::NamedPipe behind Windows cfg; the narrow supplement executed the focused proof.",
+    "Windows-target cargo test --no-run could not link because link.exe is unavailable on the Linux host.",
+    "The supported PowerShell runtime was unavailable, so the W3-only PowerShell static mode was added but not executed on this host; native Windows evidence remains assigned to R2-3Z."
+  ],
+  "gitnexus": {
+    "scope": "staged",
+    "changed_count": 0,
+    "affected_count": 0,
+    "risk_level": "none"
+  },
+  "completion_claim": "R2-3W3 completes only PI-048 and supports PI-057, PI-076, PI-079, PI-090, PI-091, and PI-115. It does not claim later caller migration, forwarder Rust intake, lifecycle authority, native Windows evidence, any R3 row, the R2-3 parent packet, or R2-3W4 execution.",
+  "next_increment": "R2-3W4"
+}
