@@ -1,0 +1,21 @@
+{
+  "protocol": "codex.top-level-task-receipt.v1",
+  "orchestration_id": "substrate-r2-3",
+  "dispatch_nonce": "37c37de1ac033d60b579fe4b4b8dc57c50344796ed9d5a20ffd5f16aad82cc52",
+  "increment": "R2-3W3",
+  "status": "BLOCKED_CONTRADICTION",
+  "increment_task": {
+    "thread_id": "019faa45-428e-77d0-b53f-647d1bf0cb4c",
+    "host_id": "remote-control:env_e_6a3d9cd24b5483238ba55b699a98be35"
+  },
+  "expected_base": {
+    "commit": "3970e6f1780408a752df1f54532d2ad9475bf284",
+    "tree": "83756158da904c5b5784b752c0bf1fcf0971c7bc"
+  },
+  "blocker": {
+    "summary": "The Windows Codex host cannot instantiate the contract-mandated GPT-5.4 Extra High subagents.",
+    "details": "The task verified the exact clean base, tree, live target, required ancestry, and 0/0 divergence, refreshed GitNexus, restored only analyzer-generated AGENTS.md/CLAUDE.md churn, and made no implementation or test changes. Its first read-only source-closure subagent dispatch used model=gpt-5.4 and reasoning_effort=xhigh and failed with: Unknown model gpt-5.4 for spawn_agent. Available models: gpt-5.6-sol, gpt-5.6-terra. Substituting an available model would violate the published contract.",
+    "required_authority": "Re-dispatch R2-3W3 on a Codex host that exposes GPT-5.4 with Extra High reasoning for subagents, or explicitly amend the contract's required subagent model.",
+    "handoff_prompt": "Re-dispatch R2-3W3 with a fresh nonce and bound task identity from exact product commit 3970e6f1780408a752df1f54532d2ad9475bf284 and tree 83756158da904c5b5784b752c0bf1fcf0971c7bc. Require a clean task-assigned worktree, live target equality, 0/0 divergence, required ancestor 0f1e147fb735791b44a65099a65167cbdc1803af, and actual GPT-5.4 Extra High subagent availability before implementation. Execute the complete published R2-3W3 contract, adjusted only for the newly assigned host's honest static-proof commands. Do not begin R2-3W4."
+  }
+}

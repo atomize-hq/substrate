@@ -1,7 +1,7 @@
 {
   "protocol": "codex.top-level-orchestration-state.v1",
   "orchestration_id": "substrate-r2-3",
-  "status": "RUNNING",
+  "status": "BLOCKED",
   "dispatch_authorized": true,
   "remote": "origin",
   "target_ref": "refs/heads/feat/internal-host-orchestrator-world-dispatch-bootstrap",
@@ -49,17 +49,7 @@
     "thread_id": "019fa3f7-c447-7132-9126-82e2cf38bd9d",
     "host_id": "remote-ssh-discovered:spenser-linux-codex"
   },
-  "active_dispatch": {
-    "increment": "R2-3W3",
-    "thread_id": "019faa45-428e-77d0-b53f-647d1bf0cb4c",
-    "host_id": "remote-control:env_e_6a3d9cd24b5483238ba55b699a98be35",
-    "dispatch_nonce": "37c37de1ac033d60b579fe4b4b8dc57c50344796ed9d5a20ffd5f16aad82cc52",
-    "expected_base": {
-      "commit": "3970e6f1780408a752df1f54532d2ad9475bf284",
-      "tree": "83756158da904c5b5784b752c0bf1fcf0971c7bc"
-    },
-    "target_ref": "refs/heads/feat/internal-host-orchestrator-world-dispatch-bootstrap"
-  },
+  "active_dispatch": null,
   "active_evidence_dispatches": [],
   "verified_evidence": [],
   "completed": [
