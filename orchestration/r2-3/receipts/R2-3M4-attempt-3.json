@@ -1,0 +1,21 @@
+{
+  "protocol": "codex.top-level-task-receipt.v1",
+  "orchestration_id": "substrate-r2-3",
+  "dispatch_nonce": "06e074065ef97155bf99e8efba635cb0668c14d0938d17b49a1f1582e5e2dbab",
+  "increment": "R2-3M4",
+  "status": "BLOCKED_SCOPE_EXPANSION",
+  "increment_task": {
+    "thread_id": "019fa637-1e41-79e2-b80b-aafe88bd8242",
+    "host_id": "remote-ssh-discovered:spenser-linux-codex"
+  },
+  "expected_base": {
+    "commit": "4325e7aa085ed1f5eeeb6535e0fc436a3663c3c2",
+    "tree": "60fa3b29df3abc6bf47e4539f52ec11230acebf9"
+  },
+  "blocker": {
+    "summary": "Quoted systemd Environment projection is backslash-unsafe and current doctor scope forbids matching guard/validation.",
+    "details": "Review independently reproduced a P2 in the amended subject: quoted systemd Environment projection for the new host fields is backslash-unsafe because scripts/mac/lima-warm.sh::write_systemd_units rejects only quote and percent, scripts/mac/lima/units/substrate-world-service.service.tmpl stores the five new host fields in quoted Environment= assignments, and scripts/mac/lima-doctor.sh::check_rendered_unit_parity renders expected raw unit text without the matching unsafe-character validation, while local systemd.syntax documentation confirms quoted items use C-style escapes and backslashes should be doubled. Current dirty allowlisted files remain exactly: crates/shell/src/execution/invocation/plan.rs, crates/shell/src/execution/platform/macos.rs, scripts/mac/lima-doctor.sh, scripts/mac/lima-warm.sh, scripts/mac/lima/units/substrate-world-service.service.tmpl, scripts/substrate/dev-install-substrate.sh, scripts/substrate/install-substrate.sh, tests/mac/installer_parity_fixture.sh, tests/mac/lima_doctor_fixture.sh, tests/mac/prefix_mapping_r2_3.sh. Current subject fingerprint remains sha256:b5f846ebde7cca97cfda763c463fccdb00a4e25ad0a001d84a8b871757f2aff8. Review terminal state is P1=0, P2=1. Verification limits are preserved, no files were staged, no commit was created, nothing was pushed or published, and the worktree HEAD and live target remain exactly at the expected base with 0/0 divergence.",
+    "required_authority": "Explicitly authorize the narrow fail-closed repair only: in scripts/mac/lima-warm.sh::write_systemd_units add backslash to the existing quote/percent unsafe-character rejection; in scripts/mac/lima-doctor.sh::check_rendered_unit_parity add the matching exact unsafe-character validation before canonical envsubst; plus only the already-allowlisted minimum companion tests. All other doctor/warm/template/lifecycle behavior remains frozen. Do not authorize or request a general escaping subsystem.",
+    "handoff_prompt": "Resume the same R2-3M4 task in worktree /home/spenser/.codex/worktrees/d5e8/substrate-r2-3 with thread 019fa637-1e41-79e2-b80b-aafe88bd8242, host remote-ssh-discovered:spenser-linux-codex, orchestration substrate-r2-3, and nonce 06e074065ef97155bf99e8efba635cb0668c14d0938d17b49a1f1582e5e2dbab. Preserve the same ten dirty allowlisted files and all current evidence, with the exact expected base and no publication history. After narrow backslash-safety authorization, make only the fail-closed warm/doctor guard changes plus minimum already-allowlisted tests, recompute the fingerprint, rerun proof, and obtain fresh review to P1=0/P2=0 before publication. Do not begin R2-3W1."
+  }
+}
