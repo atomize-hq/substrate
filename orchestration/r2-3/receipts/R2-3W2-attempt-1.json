@@ -1,0 +1,33 @@
+{
+  "protocol": "codex.top-level-task-receipt.v1",
+  "orchestration_id": "substrate-r2-3",
+  "dispatch_nonce": "b1f0aa938ee3a510c0d24d3f44692e8cb7931c88c5f8283dd909a95ba5224c28",
+  "increment": "R2-3W2",
+  "status": "BLOCKED_PLATFORM_HANDOFF_REQUIRED",
+  "increment_task": {
+    "thread_id": "019fa911-5171-7073-935a-6a082e511a45",
+    "host_id": "remote-ssh-discovered:spenser-linux-codex"
+  },
+  "expected_base": {
+    "commit": "80b839d34cadbf763991e14b5036cf9b91e8a82d",
+    "tree": "f98ccf5036328415fc2d3093f99adc1bacacb731"
+  },
+  "blocker": {
+    "summary": "R2-3W2 requires a registered Windows substrate-r2-3 project with a supported PowerShell runtime.",
+    "details": "The Linux task is terminal and unpublished. Its task worktree remains detached at the exact expected base/tree with the live product ref unchanged and 0 ahead/0 behind. Neither pwsh nor powershell is available, so the required PowerShell parser and focused test execution cannot be claimed. The preserved WIP contains exactly five authorized files at /home/spenser/.codex/worktrees/60c5/substrate-r2-3 with binary diff SHA-256 c8c8b66a1b70a0c2223a259884ed705d8fecbc1c31c6fac92f367346da759173. No Windows project for the substrate-r2-3 repository is currently registered in Codex; the registered Windows host has only handbook and contrext projects.",
+    "required_authority": "Register a Git checkout of the substrate-r2-3 repository on host remote-control:env_e_6a3d9cd24b5483238ba55b699a98be35, preferably at C:\\Users\\spmcc\\Documents\\__Project_Code\\substrate-r2-3, with PowerShell and WSL visibility available to the Codex app. Then authorize the meta orchestrator to hand off or redispatch R2-3W2 there.",
+    "handoff_prompt": "Resume only R2-3W2 for orchestration substrate-r2-3. Source task identity is thread 019fa911-5171-7073-935a-6a082e511a45 on host remote-ssh-discovered:spenser-linux-codex, bound to nonce b1f0aa938ee3a510c0d24d3f44692e8cb7931c88c5f8283dd909a95ba5224c28. Preserve the uncommitted five-file WIP from /home/spenser/.codex/worktrees/60c5/substrate-r2-3 exactly: scripts/windows/start-forwarder.ps1, scripts/windows/pipe-status.ps1, scripts/windows/wsl-warm.ps1, scripts/windows/wsl-doctor.ps1, and scripts/windows/prefix-mapping-r2-3.Tests.ps1. Its binary diff SHA-256 is c8c8b66a1b70a0c2223a259884ed705d8fecbc1c31c6fac92f367346da759173. Before any further edit, require the destination checkout and live origin/feat/internal-host-orchestrator-world-dispatch-bootstrap to equal commit 80b839d34cadbf763991e14b5036cf9b91e8a82d and tree f98ccf5036328415fc2d3093f99adc1bacacb731, with required ancestor 0f1e147fb735791b44a65099a65167cbdc1803af and 0 ahead/0 behind. Continue under the published A1.1d-5R2-3W2 contract at orchestration/r2-3/rendered/R2-3W2-prompt.md. Repair and validate the WIP with a supported PowerShell parser/runtime, run the focused scripts/windows/prefix-mapping-r2-3.Tests.ps1 suite and honest native WSL observations available on that host, prove the WSL guard and all timeout/process/PID/deletion blocks byte-identical, run bounded fresh review, persist and validate the actual V1 review-cycle JSON, and publish only after every landing gate passes. Do not mutate protected checkouts, do not activate provisioning, do not exercise forwarder lifecycle or deletion authority, and do not begin R2-3W3. Send the terminal receipt to meta thread 019fa3f7-c447-7132-9126-82e2cf38bd9d on host remote-ssh-discovered:spenser-linux-codex."
+  },
+  "preserved_worktree": {
+    "path": "/home/spenser/.codex/worktrees/60c5/substrate-r2-3",
+    "binary_diff_sha256": "sha256:c8c8b66a1b70a0c2223a259884ed705d8fecbc1c31c6fac92f367346da759173",
+    "changed_files": [
+      "scripts/windows/pipe-status.ps1",
+      "scripts/windows/prefix-mapping-r2-3.Tests.ps1",
+      "scripts/windows/start-forwarder.ps1",
+      "scripts/windows/wsl-doctor.ps1",
+      "scripts/windows/wsl-warm.ps1"
+    ],
+    "published": false
+  }
+}
