@@ -1,0 +1,53 @@
+{
+  "protocol": "codex.top-level-task-receipt.v1",
+  "orchestration_id": "substrate-r2-3",
+  "dispatch_nonce": "06e074065ef97155bf99e8efba635cb0668c14d0938d17b49a1f1582e5e2dbab",
+  "increment": "R2-3M4",
+  "status": "LANDED_CLEAN",
+  "increment_task": {
+    "thread_id": "019fa637-1e41-79e2-b80b-aafe88bd8242",
+    "host_id": "remote-ssh-discovered:spenser-linux-codex"
+  },
+  "expected_base": {
+    "commit": "4325e7aa085ed1f5eeeb6535e0fc436a3663c3c2",
+    "tree": "60fa3b29df3abc6bf47e4539f52ec11230acebf9"
+  },
+  "landed": {
+    "commit": "48216a786457a45b5f7c74e6e12a22ba13859ac7",
+    "tree": "e72bb23bf95e2b7dcc307ff83b63e08381ee5593",
+    "target_ref": "refs/heads/feat/internal-host-orchestrator-world-dispatch-bootstrap",
+    "live_remote": "48216a786457a45b5f7c74e6e12a22ba13859ac7"
+  },
+  "subject_fingerprint": "sha256:aacac1a36b1545fc81795337b3e7aa4d044314cb8126d151f0269f182a237ace",
+  "changed_files": [
+    "crates/shell/src/execution/invocation/plan.rs",
+    "crates/shell/src/execution/platform/macos.rs",
+    "scripts/mac/lima-doctor.sh",
+    "scripts/mac/lima-warm.sh",
+    "scripts/mac/lima/units/substrate-world-service.service.tmpl",
+    "scripts/substrate/dev-install-substrate.sh",
+    "scripts/substrate/install-substrate.sh",
+    "tests/mac/installer_parity_fixture.sh",
+    "tests/mac/lima_doctor_fixture.sh",
+    "tests/mac/prefix_mapping_r2_3.sh"
+  ],
+  "review": {
+    "packet_id": "A1.1d-5R2-3M4",
+    "record_path": "/tmp/r2-3m4-review.json",
+    "record_sha256": "sha256:7e4f647e00576778a78ed63d5357c5ee14b8f1ffad7ffb769ab19914921fbd66",
+    "validated": true,
+    "terminal": "CLEAN",
+    "p1": 0,
+    "p2": 0,
+    "p3_p4_disposition": "Baseline-stale runtime-bundle fixture scenarios excluded from M4 proof; Apple-target compilation unavailable on this Linux host because ring fails before crate validation; GitNexus detect_changes false-negatives in detached Codex worktrees."
+  },
+  "verification": {
+    "required_checks_passed": true,
+    "allowlist_passed": true,
+    "change_detection_passed": true,
+    "checkout_clean": true,
+    "ahead": 0,
+    "behind": 0
+  },
+  "next_increment": "R2-3W1"
+}
