@@ -1035,6 +1035,10 @@ $argumentList = @(
     $mappingState.DistroName,
     '--pipe',
     $mappingState.PipePath,
+    '--install-bootstrap-context-v1',
+    $mappingState.InstallContext.EncodedCarrier,
+    '--platform-bootstrap-mapping-v1',
+    $mappingState.PlatformBootstrapMappingV1,
     '--config',
     $mappingState.ForwarderConfigPath,
     '--log-dir',
@@ -1042,11 +1046,32 @@ $argumentList = @(
 )
 
 if ($TcpBridge) {
+    try {
+        $tcpBridgeUri = [System.Uri]("tcp://$TcpBridge")
+    } catch {
+        throw 'TcpBridge must be a loopback tcp endpoint'
+    }
+    if (
+        (-not $tcpBridgeUri.IsAbsoluteUri) -or
+        (-not $tcpBridgeUri.IsLoopback) -or
+        ($tcpBridgeUri.Port -lt 1) -or
+        ($tcpBridgeUri.Port -gt 65535)
+    ) {
+        throw 'TcpBridge must be a loopback tcp endpoint'
+    }
     Write-Info ("Enabling host TCP bridge at {0}" -f $TcpBridge)
     $argumentList += @('--tcp-bridge', $TcpBridge)
 }
 if ($AdditionalArgs.Length -gt 0) {
-    $reservedForwarderArgs = @('--distro', '--pipe', '--config', '--log-dir', '--tcp-bridge')
+    $reservedForwarderArgs = @(
+        '--distro',
+        '--pipe',
+        '--install-bootstrap-context-v1',
+        '--platform-bootstrap-mapping-v1',
+        '--config',
+        '--log-dir',
+        '--tcp-bridge'
+    )
     foreach ($arg in $AdditionalArgs) {
         if ($null -eq $arg) {
             continue

@@ -1034,6 +1034,10 @@ function Get-ForwarderLaunchProjectionTest {
             $MappingState.DistroName,
             '--pipe',
             $MappingState.PipePath,
+            '--install-bootstrap-context-v1',
+            $MappingState.InstallContext.EncodedCarrier,
+            '--platform-bootstrap-mapping-v1',
+            $MappingState.PlatformBootstrapMappingV1,
             '--config',
             $MappingState.ForwarderConfigPath,
             '--log-dir',
@@ -1042,11 +1046,32 @@ function Get-ForwarderLaunchProjectionTest {
         [void]$args.Add($arg)
     }
     if (-not [string]::IsNullOrEmpty($TcpBridge)) {
+        try {
+            $tcpBridgeUri = [System.Uri]("tcp://$TcpBridge")
+        } catch {
+            throw 'TcpBridge must be a loopback tcp endpoint'
+        }
+        if (
+            (-not $tcpBridgeUri.IsAbsoluteUri) -or
+            (-not $tcpBridgeUri.IsLoopback) -or
+            ($tcpBridgeUri.Port -lt 1) -or
+            ($tcpBridgeUri.Port -gt 65535)
+        ) {
+            throw 'TcpBridge must be a loopback tcp endpoint'
+        }
         [void]$args.Add('--tcp-bridge')
         [void]$args.Add($TcpBridge)
     }
     if ($AdditionalArgs.Length -gt 0) {
-        $reservedForwarderArgs = @('--distro', '--pipe', '--config', '--log-dir', '--tcp-bridge')
+        $reservedForwarderArgs = @(
+            '--distro',
+            '--pipe',
+            '--install-bootstrap-context-v1',
+            '--platform-bootstrap-mapping-v1',
+            '--config',
+            '--log-dir',
+            '--tcp-bridge'
+        )
         foreach ($arg in $AdditionalArgs) {
             if ($null -eq $arg) {
                 continue
@@ -1712,16 +1737,30 @@ function Test-W2ForwarderTargetAndLaunchProjection {
     } 'doctor target check should fail closed for malformed persisted config even when the pipe is healthy'
 
     $launch = Get-ForwarderLaunchProjectionTest -MappingState $mappingState -RustLog 'info' -AdditionalArgs @('--run-as-service')
-    Assert-Equal ($launch.Arguments -join '|') '--distro|Substrate-WSL|--pipe|\\.\pipe\substrate-agent|--config|C:\Users\Alice\AppData\Local\Substrate\forwarder\forwarder.toml|--log-dir|C:\Users\Alice\AppData\Local\Substrate\forwarder\logs|--run-as-service' 'forwarder child argv drifted'
+    $expectedLaunchArgs = (
+        '--distro|Substrate-WSL|--pipe|\\.\pipe\substrate-agent|--install-bootstrap-context-v1|{0}|--platform-bootstrap-mapping-v1|{1}|--config|C:\Users\Alice\AppData\Local\Substrate\forwarder\forwarder.toml|--log-dir|C:\Users\Alice\AppData\Local\Substrate\forwarder\logs|--run-as-service' -f
+        $mappingState.InstallContext.EncodedCarrier,
+        $mappingState.PlatformBootstrapMappingV1
+    )
+    Assert-Equal ($launch.Arguments -join '|') $expectedLaunchArgs 'forwarder child argv drifted'
     Assert-Throws {
         Get-ForwarderLaunchProjectionTest -MappingState $mappingState -RustLog 'info' -AdditionalArgs @('--pipe', '\\.\pipe\other')
     } 'AdditionalArgs should not override the authenticated pipe selector'
+    Assert-Throws {
+        Get-ForwarderLaunchProjectionTest -MappingState $mappingState -RustLog 'info' -AdditionalArgs @('--install-bootstrap-context-v1=forged')
+    } 'AdditionalArgs should not override the authenticated install bootstrap carrier'
+    Assert-Throws {
+        Get-ForwarderLaunchProjectionTest -MappingState $mappingState -RustLog 'info' -AdditionalArgs @('--platform-bootstrap-mapping-v1=forged')
+    } 'AdditionalArgs should not override the authenticated platform bootstrap mapping'
     Assert-Throws {
         Get-ForwarderLaunchProjectionTest -MappingState $mappingState -RustLog 'info' -AdditionalArgs @('--config=C:\Other\forwarder.toml')
     } 'AdditionalArgs should not override the authenticated config selector'
     Assert-Throws {
         Get-ForwarderLaunchProjectionTest -MappingState $mappingState -RustLog 'info' -AdditionalArgs @('--tcp-bridge=127.0.0.1:5000')
     } 'AdditionalArgs should not override the authenticated tcp bridge selector'
+    Assert-Throws {
+        Get-ForwarderLaunchProjectionTest -MappingState $mappingState -RustLog 'info' -TcpBridge '0.0.0.0:5000'
+    } 'non-loopback diagnostic tcp bridge should reject'
     $ambientTcpLaunch = Invoke-EnvironmentOverrideHarness -Overrides @{
         SUBSTRATE_FORWARDER_TCP      = '1'
         SUBSTRATE_FORWARDER_TCP_ADDR = '127.0.0.1:5000'
@@ -1969,6 +2008,10 @@ function Test-W2StaticScriptShape {
     Assert-Match $wslDoctor 'scripts/windows/start-forwarder\.ps1' 'wsl-doctor.ps1 must point forwarder remediation at start-forwarder.ps1'
     Assert-Match $startForwarder '--config' 'start-forwarder.ps1 is missing explicit --config projection'
     Assert-Match $startForwarder '--log-dir' 'start-forwarder.ps1 is missing explicit --log-dir projection'
+    Assert-Match $startForwarder '--install-bootstrap-context-v1' 'start-forwarder.ps1 is missing explicit install bootstrap carrier argv'
+    Assert-Match $startForwarder '--platform-bootstrap-mapping-v1' 'start-forwarder.ps1 is missing explicit platform bootstrap mapping argv'
+    Assert-Match $startForwarder '\[System\.Uri\]\("tcp://\$TcpBridge"\)' 'start-forwarder.ps1 must parse explicit tcp bridge endpoints before launch'
+    Assert-Match $startForwarder '\$tcpBridgeUri\.IsLoopback' 'start-forwarder.ps1 must keep diagnostic tcp bridge loopback-only'
     Assert-Match $startForwarder 'SUBSTRATE_FORWARDER_TCP\s*=\s*\$null' 'start-forwarder.ps1 must scrub ambient TCP bridge enablement for the child'
     Assert-Match $startForwarder 'SUBSTRATE_FORWARDER_TCP_ADDR\s*=\s*\$null' 'start-forwarder.ps1 must scrub ambient TCP bridge address for the child'
     Assert-Match $startForwarder 'SUBSTRATE_FORWARDER_TCP_HOST\s*=\s*\$null' 'start-forwarder.ps1 must scrub ambient TCP bridge host for the child'
@@ -1986,6 +2029,11 @@ function Test-W2StaticScriptShape {
     Assert-Match $wslDoctor '\$forwarderConfigPath = \$script:MappingState\.ForwarderConfigPath' 'wsl-doctor.ps1 must use mapping-derived config path'
     Assert-Match $wslDoctor '\$pidFile = \$script:MappingState\.SharedForwarderPidPath' 'wsl-doctor.ps1 must use mapping-derived pid path'
     Assert-Match $wslDoctor '\$logDir = \$script:MappingState\.ForwarderLogDir' 'wsl-doctor.ps1 must use mapping-derived log path'
+    Assert-Match $startForwarder "\$forwarderRelease = Join-Path \\$resolvedProject 'target/release/substrate-forwarder\\.exe'" 'start-forwarder.ps1 must still prefer the release forwarder binary'
+    Assert-Match $startForwarder "Write-Warn 'Release binary not found, using debug build'" 'start-forwarder.ps1 must still disclose debug-binary fallback'
+    Assert-Match $startForwarder "Build it with 'cargo build -p substrate-forwarder --release'" 'start-forwarder.ps1 must still disclose the release build instruction'
+    Assert-True ($startForwarder -notmatch 'SharedForwarderPidPath.*(Remove-Item|Set-Content|Out-File|WriteAllText)') 'start-forwarder.ps1 must not take ownership of the shared pid projection'
+    Assert-True ($startForwarder -notmatch 'Remove-Item[^\n]*forwarder\.pid') 'start-forwarder.ps1 must not delete the shared forwarder pid path'
     foreach ($entry in @(
             @{ Name = 'start-forwarder.ps1'; Text = $startForwarder },
             @{ Name = 'pipe-status.ps1'; Text = $pipeStatus },
