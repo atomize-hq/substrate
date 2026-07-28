@@ -1,0 +1,418 @@
+Use $orchestrate-top-level-tasks and every skill required by the increment contract.
+
+ROLE
+
+You are the fresh top-level increment orchestrator for R2-3W5. You own this increment only.
+You may use subagents for GitNexus/source analysis, bounded implementation, test/proof execution,
+and independent review. You remain responsible for scope, shared-worktree integration,
+verification, publication, and the terminal receipt.
+
+DISPATCH IDENTITY
+
+- orchestration_id: substrate-r2-3
+- dispatch_nonce: b91805c402b639429eefb0f2d4bc17433534e8cc3846e553fd6ebba9d19bcb2e
+- meta_thread_id: 019fa3f7-c447-7132-9126-82e2cf38bd9d
+- meta_host_id: remote-ssh-discovered:spenser-linux-codex
+- increment: R2-3W5
+- packet_id: A1.1d-5R2-3W5
+- next_increment: R2-3F
+
+INCREMENT-TASK IDENTITY BARRIER
+
+Do not edit, delegate, run implementation checks, or publish until the meta orchestrator sends a
+follow-up binding your own real increment-task thread ID and host ID to this dispatch nonce. Echo
+those exact IDs in every terminal receipt.
+
+REPOSITORY BOUNDARY
+
+Work only in the task-assigned checkout:
+
+the task-assigned Linux Codex worktree
+
+Never mutate these protected checkouts:
+
+- /home/spenser/__Active_code/substrate
+- /home/spenser/__Active_code/substrate-r2-3
+- /home/spenser/__Active_code/substrate-r2-3-meta-orchestration
+- C:\Users\spmcc\Documents\__Project_Code\substrate-r2-3
+
+Canonical starting state:
+
+- remote: origin
+- target ref: refs/heads/feat/internal-host-orchestrator-world-dispatch-bootstrap
+- expected base commit: 0c572373a7b600329a461f4e986d2524ab925598
+- expected base tree: c3e78fb5940384c565de8c39d40801c57ff031f3
+- required ancestor: 0f1e147fb735791b44a65099a65167cbdc1803af
+
+Before editing, fetch/query the live remote and verify the exact base, tree, ancestry, cleanliness,
+0 ahead/0 behind, and current GitNexus index. If they differ, send BASE_DRIFT or
+BLOCKED_CONTRADICTION. Do not reconcile, merge, rebase, reset, clean, or force-push.
+
+SUBAGENT ORCHESTRATION
+
+Use repository-required model/reasoning settings for every subagent. Complete required pre-edit
+impact analysis before any subagent edits an existing symbol. Give editing subagents mutually
+exclusive ownership when practical. Use fresh read-only subagents for independent review. Do not
+allow a reviewer to review implementation it authored.
+
+INCREMENT CONTRACT
+
+CURRENT AUTHORIZED INCREMENT: A1.1d-5R2-3W5
+
+Use:
+
+- using-agent-skills
+- context-engineering
+- source-driven-development
+- api-and-interface-design
+- test-driven-development
+- incremental-implementation
+- gitnexus-impact-analysis
+- security-and-hardening
+- code-review-and-quality
+- git-workflow-and-versioning
+
+This top-level task and every subagent must run on Standard/default speed, never Fast. Every
+subagent must use GPT-5.4 with Extra High reasoning. Ground Windows named-pipe, WSL process,
+PowerShell/environment, path, and Rust stream-boundary decisions in current repository truth,
+official Microsoft documentation, and the published runtime-refactor control pack. Do not reopen
+R2-2 or R2-3A through R2-3W4 without a concrete contradiction.
+
+Load only:
+
+- current status in `llm-last-mile/runtime-refactor/00-README.md`;
+- the parent A1.1d-5R2-3 row, common child-subdivision rules, and R2-3W5 section in
+  `llm-last-mile/runtime-refactor/03-phase-slice-map.md`;
+- PI-060, PI-079, and PI-115 current-state and required-action rows in
+  `llm-last-mile/runtime-refactor/02-seam-crosswalk.md`;
+- the host-context boundary-carrier, `PlatformBootstrapMappingV1` verification, Windows
+  scope/control-root, forwarder internal-boundary, named-pipe/WSL child, diagnostics, and
+  R3-exclusive lifecycle contracts in `llm-last-mile/runtime-refactor/04-contracts-and-gates.md`;
+- R2-MAP-WIN-01 and R2-DIAG-01 in
+  `llm-last-mile/runtime-refactor/05-debug-regression-ledger.md`; and
+- `06-review-finding-inventory.md` only for actual P3/P4 deduplication.
+
+SELECTED OUTCOME
+
+Bind the Windows forwarder's named-pipe listener to the exact normalized pipe already authenticated
+in the W4 `ForwarderConfig`. Carry the same verified mapping through each pipe/TCP session into
+`spawn_bridge`, then make the WSL child receive only the PM-derived registered distro, guest target,
+and host commitment. Overwrite every inherited target projection and the complete `WSLENV` carrier
+before `wsl -d`; never reselect authority from caller strings, configuration, defaults, or ambient
+environment.
+
+EXACT COMPLETION CLAIM
+
+R2-3W5 completes only PI-060, PI-115, and the downstream-consumer slice of PI-079. It does not
+migrate factory/shell/shim/replay callers, activate provisioning, alter process replacement,
+timeout kill, stop/unregister, PID/artifact deletion, convergence, listener teardown, stream/wait
+semantics, claim native Windows evidence, complete any R3 row, or complete the R2-3 parent packet.
+
+EXACT ALLOWLIST
+
+Production changes are limited to:
+
+- `crates/forwarder/src/pipe.rs`
+- `crates/forwarder/src/bridge.rs`
+- `crates/forwarder/src/wsl.rs`
+
+Test changes are limited to:
+
+- colocated `#[cfg(test)]` modules inside those three Rust files; and
+- mapping-only W5 assertions in `scripts/windows/prefix-mapping-r2-3.Tests.ps1`.
+
+Do not edit `crates/forwarder/src/config.rs`, `windows.rs`, `main.rs`, `logging.rs`, `tcp.rs`, any
+manifest, `Cargo.lock`, another crate/file, installer/uninstaller, other PowerShell script,
+Unix/macOS file, control document, generated analyzer file, `AGENTS.md`, or `CLAUDE.md`. If another
+production file, dependency, feature, or test file is required, stop with
+`BLOCKED_SCOPE_EXPANSION`.
+
+EXACT SYMBOL SCOPE
+
+Only these existing production Rust items/functions may change:
+
+- `PipeListener::new`
+- `normalize_path`
+- `PipeListener::serve`
+- `run_pipe_session`
+- `run_tcp_session`
+- `spawn_bridge`
+- `wsl::spawn`
+
+Add no public symbol. A private typed argument carrier or private test seam may be added only when
+strictly required to transport the already-verified W4 configuration through the named functions,
+must not become another authority or mapping type, and must prevent real WSL, pipe, TCP, process,
+or lifecycle action in tests. Reuse the authenticated W4 `ForwarderConfig`,
+`InstallBootstrapContextCarrierV1`, `PlatformBootstrapMappingV1`, and existing target types.
+
+Every other production symbol is byte-frozen except minimum import/signature/call plumbing required
+by the named functions. In particular, `finalize_bridge`, `bridge_copy`, `WslStream` read/write/
+shutdown, pipe/TCP accept-loop behavior, child wait behavior, task join/cancellation, Ctrl-C,
+readiness, timeout, and stream shutdown semantics are frozen. No error-order, retry, lifecycle,
+termination, or cleanup change is authorized beyond failing earlier on an unauthenticated or
+conflicting mapping projection.
+
+PRE-EDIT SOURCE CLOSURE AND IMPACT
+
+Before editing, perform exact source/caller closure across the three production files, their
+colocated/shared tests, the W4 authenticated configuration boundary, and every frozen caller/callee
+for:
+
+- all `PipeListener::new`, `serve`, pipe-forwarder, `run_pipe_session`, and `run_tcp_session`
+  call sites;
+- all pipe path normalization, prefix handling, open/listen/accept, first-instance, ACL/security
+  descriptor, and listener ownership decisions;
+- every `spawn_bridge` and `wsl::spawn` caller and every distro, target, guest socket, commitment,
+  environment, `WSLENV`, argv, executable, CWD, config, or default source;
+- every `SUBSTRATE_FORWARDER_TARGET_*`, commitment, distro, pipe, `WSLENV`,
+  `SUBSTRATE_FORWARDER_TARGET`, and related inherited environment read/write/remove;
+- every normal-product UDS versus explicitly diagnostic TCP branch;
+- every process spawn, wait, kill, stop, terminate, timeout, retry, stream read/write/shutdown,
+  cancellation, listener teardown, PID read/write/remove, or convergence boundary; and
+- all direct and indirect users of the three files' named symbols, including Windows-only cfg
+  paths GitNexus may under-index.
+
+Run file-qualified upstream GitNexus impact with tests included for every named existing symbol.
+Record direct callers, affected processes/modules, and risk. Treat the listener, session handoffs,
+bridge spawn, and WSL child spawn as HIGH/CRITICAL even when cfg indexing under-reports them. Warn
+before proceeding. Any unexpected authority source, pipe reselection, inherited target authority,
+new lifecycle reachability, or need to edit outside the allowlist stops W5.
+
+AUTHENTICATED LISTENER BOUNDARY
+
+The W4 internal entry has already decoded, canonically re-encoded, current-token-bound, and
+validated the exact IH/PM/config projection before listener construction. W5 consumes that
+verified configuration; it does not construct, infer, or repair another host context or platform
+mapping.
+
+`PipeListener::new` must receive the verified mapping/configuration needed to require:
+
+- `platform_kind=wsl` and `transport_kind=wsl`;
+- exact host commitment equality;
+- exact registered distro spelling;
+- exact normalized PM named pipe;
+- exact PM guest socket/target for normal-product UDS mode; and
+- no conflicting listener path, caller string, config value, default, or environment projection.
+
+`normalize_path` may canonicalize only the incoming PM pipe representation according to the
+existing named-pipe grammar. It may not choose a default, accept a different server/path spelling
+as a new authority, derive scope from ambient state, or weaken traversal/control-character/
+namespace rejection. The listener binds exactly the normalized PM pipe. A caller-supplied pipe is
+match-only and must reject on conflict.
+
+The first listener instance, security descriptor/ACL, accept loop, instance creation flags,
+connection ordering, listener ownership, and teardown behavior remain operational compatibility.
+W5 changes only authenticated pipe identity plumbing and failure-before-bind behavior.
+
+SESSION AND BRIDGE PROPAGATION
+
+`PipeListener::serve`, `run_pipe_session`, and `run_tcp_session` must carry the same verified W4
+configuration to `spawn_bridge` without dropping, reconstructing, or replacing its mapping.
+Normal-product pipe sessions use the PM pipe and PM UDS target. An already-existing explicit TCP
+compatibility mode remains diagnostic only after complete mapping verification; it cannot select
+the distro, pipe, commitment, guest identity/home, or normal-product target and cannot satisfy
+R2-MAP-WIN-01 proof.
+
+Session handling must fail before bridge construction when any mapping/config projection conflicts.
+No session may read environment/config/defaults to recover a missing authority. `finalize_bridge`,
+copy directions, buffering, half-close, shutdown, task join/cancellation, wait ordering, and error
+aggregation remain byte/semantics frozen except minimum exact argument plumbing.
+
+PM-DERIVED WSL CHILD
+
+`spawn_bridge` receives the verified W4 configuration and passes only these authoritative values to
+`wsl::spawn`:
+
+- the exact PM registered distro spelling for `wsl -d`;
+- the exact normal-product PM guest UDS target, or an already-validated explicitly diagnostic TCP
+  target that cannot satisfy mapping proof;
+- the exact 64-lowercase-hex host commitment; and
+- only the minimum fixed bridge-script inputs already present in the operational leaf.
+
+`wsl::spawn` must:
+
+- construct `wsl -d <exact-registered-distro> -- ...` without distro normalization, fallback, or
+  environment/config selection;
+- overwrite every `SUBSTRATE_FORWARDER_TARGET_*` and commitment variable consumed by the guest;
+- overwrite the complete `WSLENV` list so no inherited target/commitment variable or flags survive;
+- remove or replace conflicting inherited projections before process spawn;
+- preserve the exact PM UDS target for normal product;
+- keep explicitly diagnostic TCP isolated from product proof; and
+- finish validation/projection before the child process starts.
+
+Ambient `WSLENV`, target variables, `SUBSTRATE_FORWARDER_TARGET`, distro variables, config values,
+CWD, executable/repository location, guest-home guesses, or hard-coded defaults are never selection
+authority. W5 may not observe or provision a WSL distro, invent a guest mapping, move either
+fail-closed WSL guard, call unreachable provisioning, or claim Windows/WSL native product proof.
+
+LIFECYCLE AND STREAM FREEZE
+
+R3 exclusively owns process replacement, timeout kill, stop/unregister, PID deletion, artifact
+deletion, rollback, convergence, crash cleanup, and ownership manifests. W5 may transport identity
+only. It may not add or broaden kill/wait, stop, unregister, delete, cleanup, retry, timeout, or
+convergence behavior.
+
+The existing child wait and stream behavior remains operational and frozen. Preserve:
+
+- `finalize_bridge`;
+- `bridge_copy`;
+- `WslStream` read/write/shutdown;
+- child stdin/stdout/stderr wiring;
+- half-close and EOF behavior;
+- task join/cancellation/error ordering;
+- listener accept/serve ordering; and
+- every existing wait, timeout, termination, and cleanup branch.
+
+Only exact typed argument/environment plumbing through the named symbols may change those call
+sites, without changing when or how the frozen behavior executes.
+
+TEST-DRIVEN PROOF
+
+Use deterministic mocks/fakes and temporary sandboxes. Tests must never open the real product pipe,
+start WSL, mutate registry/Known Folder, touch a real distro, forwarder, PID/config/log state,
+process table, installed prefix, profile, or protected checkout. Cover at least:
+
+- exact normalized PM pipe is the only listener identity;
+- alternate server/path/default/environment/config pipe spellings reject before bind;
+- malformed, noncanonical, control-character, traversal, wrong-commitment, wrong-distro,
+  wrong-pipe, wrong-target, and wrong-platform/transport mapping rejection;
+- verified configuration survives `serve` through pipe/TCP session into `spawn_bridge`;
+- exact registered distro spelling appears in `wsl -d`;
+- normal-product target is exactly PM's `/run/substrate.sock`;
+- the exact host commitment reaches the WSL child;
+- inherited conflicting target variables, commitment, distro variables, and `WSLENV` are fully
+  overwritten and cannot retarget the child;
+- missing or partial typed configuration fails before listener bind or process spawn;
+- diagnostic TCP cannot promote itself to product mapping proof or select another authority;
+- environment/config/default/CWD/executable/repository values never recover or replace authority;
+- `finalize_bridge`, `bridge_copy`, `WslStream` read/write/shutdown, listener/accept, wait, stream,
+  task join/cancellation, timeout, kill, stop/unregister, PID/artifact deletion, and convergence
+  bytes/semantics remain unchanged; and
+- W5 tests exercise no real lifecycle action.
+
+The shared PowerShell test may add only mapping/listener/WSL-leaf W5 static assertions; it may not
+execute Windows lifecycle. Colocated Rust tests own listener/session/child projection behavior.
+
+REQUIRED VERIFICATION
+
+Run:
+
+- `cargo fmt --all -- --check`;
+- `cargo check --locked -p substrate-forwarder`;
+- `cargo test --locked -p substrate-forwarder -- --nocapture`;
+- `cargo clippy --locked -p substrate-forwarder --all-targets -- -D warnings`;
+- an external temporary harness that copies only the allowlisted W5 Rust sources and minimum
+  unchanged dependencies, removes only Windows cfg needed to expose listener/session/WSL child
+  projection on Linux, replaces pipe/process operations with deterministic fakes, and executes the
+  complete focused proof without changing tracked files;
+- honest Windows-target `cargo check`/`cargo test --no-run` attempts when the installed target and
+  cross-toolchain permit them, recording linker/toolchain unavailability rather than treating it
+  as product regression or success;
+- the narrowest supported W5-only/static mode of
+  `scripts/windows/prefix-mapping-r2-3.Tests.ps1`, plus the full shared file, only if a supported
+  PowerShell runtime is present; otherwise preserve exact unavailability and use static assertions
+  without editing production PowerShell;
+- exact source assertions proving PM supplies listener pipe, WSL distro/target/commitment, complete
+  target/`WSLENV` overwrite, ambient/default non-authority, and diagnostic TCP non-promotion;
+- exact frozen-block hashes for `finalize_bridge`, `bridge_copy`, `WslStream` read/write/shutdown,
+  listener/accept ordering, child wait/stream shutdown, and every timeout/kill/stop/delete branch;
+- `git diff --check` and staged `git diff --cached --check`;
+- exact unstaged and staged production/test allowlist and symbol containment;
+- confirmation that every manifest, lockfile, W4 boundary, other crate/script, control document,
+  and generated artifact is unchanged; and
+- `gitnexus_detect_changes()` before commit, with every reported flow inspected.
+
+Linux native cargo commands that compile out Windows code are baseline checks only and cannot
+satisfy focused W5 proof by themselves. The external harness and honest cross-target/static checks
+must cover the subject. Formal native Windows/WSL product evidence remains owned by R2-3Z and must
+not be claimed here. If an exact required command exposes only a pre-existing failure in untouched
+forbidden code, preserve it and run a narrowly scoped subject supplement without weakening the
+required command.
+
+SUBJECT FINGERPRINT
+
+After deterministic formatting/checks and before discovery review:
+
+1. record the pre-edit base commit;
+2. build a sorted manifest containing that commit plus every exact changed subject path, its Git
+   mode (or `NEW`), and `git hash-object --no-filters` blob ID (or `MISSING`);
+3. include only paths inside the exact W5 production/test allowlist; and
+4. SHA-256 the manifest and use `sha256:<digest>` as the review subject fingerprint.
+
+BOUNDED REVIEW
+
+Persist and validate one actual V1 review-cycle JSON record with packet ID `A1.1d-5R2-3W5` using
+`llm-last-mile/runtime-refactor/review-control/validate_review_cycle.py`. The record path in the
+terminal receipt must point to that exact JSON file and its SHA-256 must match. Use fresh read-only
+lenses for:
+
+1. PM commitment/pipe canonical validation, listener bind identity, conflict rejection, and
+   failure ordering before bind;
+2. session/config propagation, exact WSL distro/UDS target/commitment, complete target/`WSLENV`
+   overwrite, ambient non-authority, and diagnostic TCP isolation; and
+3. exact file/symbol/test allowlist, frozen listener/stream/wait/lifecycle semantics, test
+   non-mutation, static/native-proof honesty, and regression sufficiency.
+
+Apply the common causal bounded-review contract. P1/P2 block. Valid unfixed P3/P4 must be
+deduplicated or added to `06` only through the separately authorized inventory path. The final
+record must validate, end CLEAN, have zero open P1/P2, and completely dispose P3/P4. CLEAN is
+terminal; do not launch another review after CLEAN.
+
+LANDING GATES
+
+Before commit, require:
+
+- exact W5 production/test allowlist and symbol containment;
+- all required checks or honestly preserved pre-existing/environment limitations;
+- independently recomputable subject fingerprint;
+- validated CLEAN V1 review record with zero open P1/P2 and complete P3/P4 disposition;
+- `gitnexus_detect_changes()` with every reported flow inspected;
+- clean staged diff and no generated/analyzer churn; and
+- live target ref still equals the expected base commit/tree.
+
+Then create one Conventional Commit, normal fast-forward push `HEAD` to the target ref, verify the
+live remote equals the landed commit/tree, verify 0 ahead/0 behind, restore only analyzer-count
+churn if caused by authorized GitNexus refresh, and finish with a clean task worktree. Never force
+push.
+
+TERMINAL RECEIPT
+
+Send exactly one `codex.top-level-task-receipt.v1` message to the bound meta task as the last
+external action. For success, use `LANDED_CLEAN` and include the bound increment-task thread/host
+IDs and nonce, expected base, landed commit/tree/live ref, sorted changed paths, independently
+recomputable subject fingerprint, actual validated V1 review record path and digest, finding
+disposition, exact checks and limitations, GitNexus result, clean/0-0 publication status,
+completion/non-claim boundary, and `next_increment=R2-3F`.
+
+For failure, send the exact blocked status, evidence, required authority or platform, and a
+copy-ready handoff prompt. Do not begin, render, or dispatch R2-3F.
+
+COMMON TERMINAL CONTRACT
+
+Before publication:
+
+1. Complete every increment-specific check and proof gate.
+2. Verify the exact file/symbol/test allowlist.
+3. Run `gitnexus_detect_changes()` and inspect every affected flow.
+4. Complete and validate the bounded review sequence.
+5. Require zero open blocking findings.
+6. Fetch/query the live target again and require it still equals the expected base.
+
+When authorized by the increment contract, create one atomic commit and perform a normal
+fast-forward push of `HEAD` to refs/heads/feat/internal-host-orchestrator-world-dispatch-bootstrap. Never force-push. Verify the live remote equals the
+landed commit, refresh GitNexus, restore analyzer-only generated count changes if necessary, and
+finish clean.
+
+Send a `codex.top-level-task-receipt.v1` message to the meta task. For success, use
+`LANDED_CLEAN` and include your bound increment-task thread/host IDs, expected base, landed
+commit/tree, changed paths, subject fingerprint, validated review record and digest, finding
+disposition, checks, GitNexus result, clean status, and next increment.
+
+For failure, send the exact blocked status, evidence, required authority or platform, and a
+complete continuation/handoff prompt.
+
+The `send_message_to_thread` call is your final tool action. After it succeeds, make no more tool
+calls or repository changes. Return only the human-readable final report.
+
+Do not generate the next increment prompt and do not begin R2-3F. The meta
+orchestrator owns independent verification and subsequent dispatch.
