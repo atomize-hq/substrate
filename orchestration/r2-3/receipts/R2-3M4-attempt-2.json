@@ -1,0 +1,21 @@
+{
+  "protocol": "codex.top-level-task-receipt.v1",
+  "orchestration_id": "substrate-r2-3",
+  "dispatch_nonce": "06e074065ef97155bf99e8efba635cb0668c14d0938d17b49a1f1582e5e2dbab",
+  "increment": "R2-3M4",
+  "status": "BLOCKED_SCOPE_EXPANSION",
+  "increment_task": {
+    "thread_id": "019fa637-1e41-79e2-b80b-aafe88bd8242",
+    "host_id": "remote-ssh-discovered:spenser-linux-codex"
+  },
+  "expected_base": {
+    "commit": "4325e7aa085ed1f5eeeb6535e0fc436a3663c3c2",
+    "tree": "60fa3b29df3abc6bf47e4539f52ec11230acebf9"
+  },
+  "blocker": {
+    "summary": "M4 requires PI-040 parity over five new projected mapping fields, but scripts/mac/lima-doctor.sh remains outside the M4 production allowlist and still renders the canonical expected unit without those fields.",
+    "details": "scripts/mac/lima-warm.sh and scripts/mac/lima/units/substrate-world-service.service.tmpl add five verified mapping fields to the guest service projection: SUBSTRATE_INSTALL_HOST_CONTEXT_COMMITMENT, SUBSTRATE_LIMA_INSTANCE_NAME, SUBSTRATE_LIMA_HOST_PLATFORM_CONTROL_ROOT, SUBSTRATE_LIMA_HOST_SOCKET, and SUBSTRATE_LIMA_GUEST_SOCKET. scripts/mac/lima-doctor.sh:764 supplies only SUBSTRATE_GUEST_HOME and WORLD_NETFILTER_ENV to the canonical envsubst render. After unmasking the harness, both healthy fixtures fail on that mismatch: tests/mac/lima_doctor_fixture.sh reports '[mac-doctor-fixture][ERROR] healthy: exit 1, expected 0' and tests/mac/prefix_mapping_r2_3.sh reports '[prefix-mapping-r2-3][ERROR] doctor no-lifecycle: exit 1, expected 0'. The current worktree remains uncommitted, and nothing was staged, committed, pushed, or published.",
+    "required_authority": "Explicit authority to add scripts/mac/lima-doctor.sh to M4's production allowlist solely for canonical expected-unit rendering/parity projection, plus the minimum exact tests needed to prove that path; or an explicit contract relaxation removing PI-040 parity over the new mapping fields.",
+    "handoff_prompt": "Continue R2-3M4 only in the same worktree /home/spenser/.codex/worktrees/d5e8/substrate-r2-3 with the same identity binding and dispatch nonce: increment thread 019fa637-1e41-79e2-b80b-aafe88bd8242, host remote-ssh-discovered:spenser-linux-codex, orchestration substrate-r2-3, nonce 06e074065ef97155bf99e8efba635cb0668c14d0938d17b49a1f1582e5e2dbab. Preserve the exact base commit 4325e7aa085ed1f5eeeb6535e0fc436a3663c3c2 and tree 60fa3b29df3abc6bf47e4539f52ec11230acebf9. Preserve the seven allowlisted dirty files exactly as-is: crates/shell/src/execution/invocation/plan.rs, crates/shell/src/execution/platform/macos.rs, scripts/mac/lima-warm.sh, scripts/mac/lima/units/substrate-world-service.service.tmpl, scripts/substrate/dev-install-substrate.sh, scripts/substrate/install-substrate.sh, and tests/mac/installer_parity_fixture.sh. Preserve the two analyzer-only changes AGENTS.md and CLAUDE.md exactly as-is. Preserve the current fingerprint sha256:947c5018c7ca2b93bf7216b3cdee902f8caec341b3cbbc6d9621053d94002c49. Preserve the current evidence set: cargo fmt --all -- --check passed; bash -n on the edited shell/fixture files passed; cargo check -p shell --locked passed; tests/mac/installer_parity_fixture.sh --scenario prod-copy passed; tests/mac/installer_parity_fixture.sh --scenario prod-build passed; tests/mac/installer_parity_fixture.sh --scenario dev-call-section passed; tests/mac/lima_doctor_fixture.sh failed with '[mac-doctor-fixture][ERROR] healthy: exit 1, expected 0'; tests/mac/prefix_mapping_r2_3.sh failed with '[prefix-mapping-r2-3][ERROR] doctor no-lifecycle: exit 1, expected 0'. No publication occurred. Do not resume unless explicit authority adds scripts/mac/lima-doctor.sh to M4 solely for canonical expected-unit rendering/parity plus minimum exact tests, or explicitly relaxes PI-040 parity."
+  }
+}
