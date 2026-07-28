@@ -1,5 +1,6 @@
 use crate::config::BridgeTarget;
 use anyhow::Context;
+use std::collections::BTreeMap;
 use std::io;
 use std::pin::Pin;
 use std::process::ExitStatus;
@@ -140,6 +141,134 @@ if __name__ == "__main__":
     main()
 "#;
 
+const HOST_CONTEXT_COMMITMENT_ENV: &str = "SUBSTRATE_INSTALL_HOST_CONTEXT_COMMITMENT";
+const WSLENV_EXPORTS: &[&str] = &[
+    "SUBSTRATE_FORWARDER_TARGET_MODE",
+    "SUBSTRATE_FORWARDER_TARGET_HOST",
+    "SUBSTRATE_FORWARDER_TARGET_PORT",
+    "SUBSTRATE_FORWARDER_TARGET_ENDPOINT",
+    HOST_CONTEXT_COMMITMENT_ENV,
+    "SUBSTRATE_FORWARDER_CONNECT_TIMEOUT_S",
+    "SUBSTRATE_FORWARDER_CONNECT_DEADLINE_S",
+    "SUBSTRATE_FORWARDER_IDLE_AFTER_STDIN_CLOSE_S",
+];
+const CONNECT_TIMEOUT_ENV: &str = "SUBSTRATE_FORWARDER_CONNECT_TIMEOUT_S";
+const CONNECT_TIMEOUT_VALUE: &str = "2";
+const CONNECT_DEADLINE_ENV: &str = "SUBSTRATE_FORWARDER_CONNECT_DEADLINE_S";
+const CONNECT_DEADLINE_VALUE: &str = "10";
+const IDLE_AFTER_STDIN_CLOSE_ENV: &str = "SUBSTRATE_FORWARDER_IDLE_AFTER_STDIN_CLOSE_S";
+const IDLE_AFTER_STDIN_CLOSE_VALUE: &str = "2";
+
+#[derive(Debug, PartialEq, Eq)]
+struct SpawnSpec {
+    program: String,
+    args: Vec<String>,
+    env_remove: Vec<&'static str>,
+    env_set: BTreeMap<&'static str, String>,
+}
+
+fn trusted_wsl_program() -> anyhow::Result<String> {
+    #[cfg(test)]
+    {
+        Ok(r"C:\Windows\System32\wsl.exe".to_string())
+    }
+
+    #[cfg(not(test))]
+    {
+        unsafe extern "system" {
+            fn GetSystemDirectoryW(lpbuffer: *mut u16, usize: u32) -> u32;
+        }
+
+        let mut buffer = vec![0_u16; 32768];
+        let length = unsafe { GetSystemDirectoryW(buffer.as_mut_ptr(), buffer.len() as u32) };
+        if length == 0 || length as usize >= buffer.len() {
+            anyhow::bail!("trusted Windows system directory is unavailable");
+        }
+        let system_directory = String::from_utf16(&buffer[..length as usize])
+            .context("trusted Windows system directory is malformed")?;
+        Ok(format!(r"{}\wsl.exe", system_directory))
+    }
+}
+
+fn build_spawn_spec(
+    distro: &str,
+    target: &BridgeTarget,
+    host_context_commitment: Option<&str>,
+) -> anyhow::Result<SpawnSpec> {
+    if let Some(host_context_commitment) = host_context_commitment {
+        if host_context_commitment.len() != 64
+            || !host_context_commitment
+                .bytes()
+                .all(|byte| byte.is_ascii_digit() || (b'a'..=b'f').contains(&byte))
+        {
+            anyhow::bail!("forwarder WSL spawn requires a canonical lowercase host commitment");
+        }
+    }
+
+    let mut env_set = BTreeMap::new();
+    env_set.insert("PYTHONUNBUFFERED", "1".to_string());
+    env_set.insert(
+        "WSLENV",
+        WSLENV_EXPORTS.iter().copied().collect::<Vec<_>>().join(":"),
+    );
+    env_set.insert(CONNECT_TIMEOUT_ENV, CONNECT_TIMEOUT_VALUE.to_string());
+    env_set.insert(CONNECT_DEADLINE_ENV, CONNECT_DEADLINE_VALUE.to_string());
+    env_set.insert(
+        IDLE_AFTER_STDIN_CLOSE_ENV,
+        IDLE_AFTER_STDIN_CLOSE_VALUE.to_string(),
+    );
+    if let Some(host_context_commitment) = host_context_commitment {
+        env_set.insert(
+            HOST_CONTEXT_COMMITMENT_ENV,
+            host_context_commitment.to_string(),
+        );
+    }
+
+    match target {
+        BridgeTarget::Uds { path } => {
+            env_set.insert("SUBSTRATE_FORWARDER_TARGET_MODE", "uds".to_string());
+            env_set.insert("SUBSTRATE_FORWARDER_TARGET_ENDPOINT", path.clone());
+        }
+        BridgeTarget::Tcp { addr } => {
+            env_set.insert("SUBSTRATE_FORWARDER_TARGET_MODE", "tcp".to_string());
+            env_set.insert("SUBSTRATE_FORWARDER_TARGET_HOST", addr.ip().to_string());
+            env_set.insert("SUBSTRATE_FORWARDER_TARGET_PORT", addr.port().to_string());
+            env_set.insert("SUBSTRATE_FORWARDER_TARGET_ENDPOINT", addr.to_string());
+        }
+    }
+
+    Ok(SpawnSpec {
+        program: trusted_wsl_program()?,
+        args: vec![
+            "-d".to_string(),
+            distro.to_string(),
+            "--".to_string(),
+            "python3".to_string(),
+            "-c".to_string(),
+            BRIDGE_SCRIPT.to_string(),
+        ],
+        env_remove: vec![
+            "WSLENV",
+            "SUBSTRATE_FORWARDER_TARGET",
+            "SUBSTRATE_FORWARDER_TARGET_MODE",
+            "SUBSTRATE_FORWARDER_TARGET_HOST",
+            "SUBSTRATE_FORWARDER_TARGET_PORT",
+            "SUBSTRATE_FORWARDER_TARGET_ENDPOINT",
+            HOST_CONTEXT_COMMITMENT_ENV,
+            "SUBSTRATE_INSTALL_BOOTSTRAP_CONTEXT_V1",
+            "SUBSTRATE_FORWARDER_PIPE",
+            "SUBSTRATE_FORWARDER_TCP",
+            "SUBSTRATE_FORWARDER_TCP_ADDR",
+            "SUBSTRATE_FORWARDER_TCP_HOST",
+            "SUBSTRATE_FORWARDER_TCP_PORT",
+            CONNECT_TIMEOUT_ENV,
+            CONNECT_DEADLINE_ENV,
+            IDLE_AFTER_STDIN_CLOSE_ENV,
+        ],
+        env_set,
+    })
+}
+
 pub struct WslStream {
     stdin: ChildStdin,
     stdout: ChildStdout,
@@ -204,34 +333,21 @@ impl WslStreamBundle {
 pub async fn spawn(
     distro: &str,
     target: &BridgeTarget,
+    host_context_commitment: Option<&str>,
     session_id: u64,
     label: &str,
 ) -> anyhow::Result<WslStreamBundle> {
-    let mut cmd = Command::new("wsl");
-    cmd.arg("-d").arg(distro);
-    cmd.arg("--");
-    cmd.arg("python3");
-    cmd.arg("-c").arg(BRIDGE_SCRIPT);
-    cmd.env("PYTHONUNBUFFERED", "1");
-
-    match target {
-        BridgeTarget::Uds { path } => {
-            cmd.env("SUBSTRATE_FORWARDER_TARGET_MODE", "uds");
-            cmd.env("SUBSTRATE_FORWARDER_TARGET_ENDPOINT", path);
-        }
-        BridgeTarget::Tcp { addr } => {
-            cmd.env("SUBSTRATE_FORWARDER_TARGET_MODE", "tcp");
-            cmd.env("SUBSTRATE_FORWARDER_TARGET_HOST", addr.ip().to_string());
-            cmd.env("SUBSTRATE_FORWARDER_TARGET_PORT", addr.port().to_string());
-            cmd.env("SUBSTRATE_FORWARDER_TARGET_ENDPOINT", addr.to_string());
-        }
+    let spec = build_spawn_spec(distro, target, host_context_commitment)?;
+    let mut cmd = Command::new(&spec.program);
+    for arg in &spec.args {
+        cmd.arg(arg);
     }
-
-    // Ensure WSL receives these variables: WSLENV controls env propagation into the Linux environment
-    cmd.env(
-        "WSLENV",
-        "SUBSTRATE_FORWARDER_TARGET_MODE:SUBSTRATE_FORWARDER_TARGET_HOST:SUBSTRATE_FORWARDER_TARGET_PORT:SUBSTRATE_FORWARDER_TARGET_ENDPOINT:SUBSTRATE_FORWARDER_CONNECT_TIMEOUT_S:SUBSTRATE_FORWARDER_CONNECT_DEADLINE_S:SUBSTRATE_FORWARDER_IDLE_AFTER_STDIN_CLOSE_S",
-    );
+    for key in &spec.env_remove {
+        cmd.env_remove(key);
+    }
+    for (key, value) in &spec.env_set {
+        cmd.env(key, value);
+    }
 
     use std::process::Stdio;
     let mut child = cmd
@@ -284,4 +400,110 @@ pub async fn spawn(
         child,
         stderr_task,
     })
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use std::net::{Ipv4Addr, SocketAddr};
+
+    #[test]
+    fn spawn_spec_uses_exact_registered_distro_and_product_uds_target() {
+        let spec = build_spawn_spec(
+            "Substrate-WSL",
+            &BridgeTarget::Uds {
+                path: "/run/substrate.sock".to_string(),
+            },
+            Some("3e1e71b325e92b16f5bfc0f3d875fd15f04a1615ac90b1439eb37afdf90a5ac7"),
+        )
+        .unwrap();
+
+        assert_eq!(spec.program, r"C:\Windows\System32\wsl.exe");
+        assert_eq!(spec.args[0], "-d");
+        assert_eq!(spec.args[1], "Substrate-WSL");
+        assert_eq!(spec.args[2], "--");
+        assert_eq!(spec.env_set["SUBSTRATE_FORWARDER_TARGET_MODE"], "uds");
+        assert_eq!(
+            spec.env_set["SUBSTRATE_FORWARDER_TARGET_ENDPOINT"],
+            "/run/substrate.sock"
+        );
+        assert_eq!(
+            spec.env_set[HOST_CONTEXT_COMMITMENT_ENV],
+            "3e1e71b325e92b16f5bfc0f3d875fd15f04a1615ac90b1439eb37afdf90a5ac7"
+        );
+        assert_eq!(spec.env_set[CONNECT_TIMEOUT_ENV], CONNECT_TIMEOUT_VALUE);
+        assert_eq!(spec.env_set[CONNECT_DEADLINE_ENV], CONNECT_DEADLINE_VALUE);
+        assert_eq!(
+            spec.env_set[IDLE_AFTER_STDIN_CLOSE_ENV],
+            IDLE_AFTER_STDIN_CLOSE_VALUE
+        );
+        assert_eq!(
+            spec.env_set["WSLENV"],
+            "SUBSTRATE_FORWARDER_TARGET_MODE:SUBSTRATE_FORWARDER_TARGET_HOST:SUBSTRATE_FORWARDER_TARGET_PORT:SUBSTRATE_FORWARDER_TARGET_ENDPOINT:SUBSTRATE_INSTALL_HOST_CONTEXT_COMMITMENT:SUBSTRATE_FORWARDER_CONNECT_TIMEOUT_S:SUBSTRATE_FORWARDER_CONNECT_DEADLINE_S:SUBSTRATE_FORWARDER_IDLE_AFTER_STDIN_CLOSE_S"
+        );
+        assert!(spec.env_remove.contains(&"WSLENV"));
+        assert!(spec.env_remove.contains(&"SUBSTRATE_FORWARDER_TARGET"));
+        assert!(spec
+            .env_remove
+            .contains(&"SUBSTRATE_INSTALL_BOOTSTRAP_CONTEXT_V1"));
+        assert!(spec.env_remove.contains(&CONNECT_TIMEOUT_ENV));
+        assert!(spec.env_remove.contains(&CONNECT_DEADLINE_ENV));
+        assert!(spec.env_remove.contains(&IDLE_AFTER_STDIN_CLOSE_ENV));
+    }
+
+    #[test]
+    fn spawn_spec_replaces_inherited_target_projection_for_tcp_diagnostics() {
+        let spec = build_spawn_spec(
+            "Substrate-WSL",
+            &BridgeTarget::Tcp {
+                addr: SocketAddr::from((Ipv4Addr::LOCALHOST, 61337)),
+            },
+            Some("3e1e71b325e92b16f5bfc0f3d875fd15f04a1615ac90b1439eb37afdf90a5ac7"),
+        )
+        .unwrap();
+
+        assert_eq!(spec.env_set["SUBSTRATE_FORWARDER_TARGET_MODE"], "tcp");
+        assert_eq!(spec.env_set["SUBSTRATE_FORWARDER_TARGET_HOST"], "127.0.0.1");
+        assert_eq!(spec.env_set["SUBSTRATE_FORWARDER_TARGET_PORT"], "61337");
+        assert_eq!(
+            spec.env_set["SUBSTRATE_FORWARDER_TARGET_ENDPOINT"],
+            "127.0.0.1:61337"
+        );
+        assert!(!spec.env_set.contains_key("SUBSTRATE_FORWARDER_TARGET"));
+        assert!(spec.env_remove.contains(&"SUBSTRATE_FORWARDER_PIPE"));
+        assert!(spec.env_remove.contains(&"SUBSTRATE_FORWARDER_TCP_ADDR"));
+    }
+
+    #[test]
+    fn spawn_spec_rejects_noncanonical_host_commitment() {
+        let err = build_spawn_spec(
+            "Substrate-WSL",
+            &BridgeTarget::Uds {
+                path: "/run/substrate.sock".to_string(),
+            },
+            Some("INVALID"),
+        )
+        .unwrap_err();
+        assert!(
+            err.to_string()
+                .contains("requires a canonical lowercase host commitment"),
+            "unexpected error: {err}"
+        );
+    }
+
+    #[test]
+    fn spawn_spec_scrubs_commitment_for_legacy_forwarder_mode() {
+        let spec = build_spawn_spec(
+            "Substrate-WSL",
+            &BridgeTarget::Uds {
+                path: "/run/substrate.sock".to_string(),
+            },
+            None,
+        )
+        .unwrap();
+
+        assert!(!spec.env_set.contains_key(HOST_CONTEXT_COMMITMENT_ENV));
+        assert!(spec.env_remove.contains(&HOST_CONTEXT_COMMITMENT_ENV));
+        assert_eq!(spec.program, r"C:\Windows\System32\wsl.exe");
+    }
 }

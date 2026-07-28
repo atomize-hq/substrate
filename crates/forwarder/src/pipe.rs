@@ -1,6 +1,6 @@
 use crate::bridge;
 use crate::config::ForwarderConfig;
-use anyhow::{anyhow, bail};
+use anyhow::anyhow;
 use std::ffi::c_void;
 use std::io;
 use std::sync::atomic::{AtomicBool, Ordering};
@@ -8,6 +8,7 @@ use std::sync::Arc;
 use tokio::net::windows::named_pipe::{ClientOptions, NamedPipeServer, PipeMode, ServerOptions};
 use tokio::task::JoinSet;
 use tokio_util::sync::CancellationToken;
+use transport_api_types::normalize_windows_pipe_path;
 use windows::core::PCWSTR;
 use windows::Win32::Foundation::{LocalFree, BOOL, HLOCAL};
 use windows::Win32::Security::Authorization::{
@@ -34,8 +35,9 @@ pub struct PipeListener {
 }
 
 impl PipeListener {
-    pub fn new(path: String) -> anyhow::Result<Self> {
-        let normalized = normalize_path(path)?;
+    pub fn new(config: &ForwarderConfig) -> anyhow::Result<Self> {
+        let verified = bridge::verify_forwarder_projection(config, None)?;
+        let normalized = normalize_path(verified.pipe_path)?;
         Ok(Self {
             inner: Arc::new(PipeInner {
                 path: Arc::from(normalized),
@@ -121,25 +123,13 @@ impl PipeListener {
 }
 
 fn normalize_path(path: String) -> anyhow::Result<String> {
-    let trimmed = path.trim_start_matches('\\');
-    if !trimmed.starts_with('.') {
-        bail!(
-            "named pipe path must start with {expected} (got {path})",
+    normalize_windows_pipe_path(&path).map_err(|_| {
+        anyhow!(
+            "named pipe path must use the canonical local form {expected} (got {path})",
             expected = r"\\.\pipe\",
             path = path
-        );
-    }
-    let after_dot = &trimmed[1..];
-    let after_slash = after_dot.trim_start_matches('\\');
-    if !after_slash.starts_with("pipe\\") {
-        bail!(
-            "named pipe path must start with {expected} (got {path})",
-            expected = r"\\.\pipe\",
-            path = path
-        );
-    }
-    let rest = &after_slash["pipe\\".len()..];
-    Ok(format!(r"\\.\pipe\{}", rest))
+        )
+    })
 }
 
 fn build_security_descriptor() -> anyhow::Result<SecurityDescriptor> {
@@ -168,9 +158,9 @@ fn build_security_descriptor() -> anyhow::Result<SecurityDescriptor> {
 }
 
 pub async fn serve(config: Arc<ForwarderConfig>, cancel: CancellationToken) -> anyhow::Result<()> {
-    let listener = PipeListener::new(config.pipe_path.clone())?;
+    let listener = PipeListener::new(&config)?;
     tracing::info!(
-        pipe = %config.pipe_path,
+        pipe = %listener.inner.path,
         target_mode = config.target_mode(),
         target = %config.target(),
         "listening on named pipe"
@@ -244,22 +234,182 @@ pub async fn serve(config: Arc<ForwarderConfig>, cancel: CancellationToken) -> a
 #[cfg(test)]
 mod tests {
     use super::*;
+    use crate::bridge::{lock_test_projection_env_guard, set_test_projection_env};
+    use std::path::PathBuf;
     use tokio::io::{AsyncReadExt, AsyncWriteExt};
     use tokio::net::windows::named_pipe::ClientOptions;
+    use transport_api_types::{
+        InstallBootstrapContextCarrierV1, InstallBootstrapContextV1, PlatformBootstrapMappingV1,
+        WindowsForwarderScopeV1,
+    };
+
+    use crate::config::{
+        set_test_current_windows_host_observation, set_test_file_settings_override,
+    };
+
+    fn sample_internal_config(pipe_path: &str) -> ForwarderConfig {
+        set_test_file_settings_override(Some(None));
+        set_test_current_windows_host_observation(Some(Ok((
+            r"ACME\Alice".to_string(),
+            "S-1-5-21-1000".to_string(),
+            r"C:\Users\Alice\AppData\Local".to_string(),
+        ))));
+
+        let host_carrier = InstallBootstrapContextCarrierV1::from_context(
+            InstallBootstrapContextV1::new_windows(
+                r"C:\Users\Alice\AppData\Local\Substrate",
+                r"ACME\Alice",
+                "S-1-5-21-1000",
+            )
+            .unwrap(),
+        )
+        .unwrap();
+        let scope = WindowsForwarderScopeV1::derive(
+            "S-1-5-21-1000",
+            "Substrate-WSL",
+            "abcdef0123456789abcdef0123456789",
+            pipe_path,
+        )
+        .unwrap();
+        let mapping = PlatformBootstrapMappingV1::new_wsl(
+            &host_carrier,
+            "Substrate-WSL",
+            "abcdef0123456789abcdef0123456789",
+            &format!(
+                r"C:\Users\Alice\AppData\Local\Substrate\forwarder\{}",
+                scope.0
+            ),
+            "/home/substrate/.substrate",
+            "substrate",
+            1000,
+            pipe_path,
+            "/run/substrate.sock",
+        )
+        .unwrap();
+
+        ForwarderConfig::load_internal(
+            "Substrate-WSL".to_string(),
+            pipe_path.to_string(),
+            None,
+            PathBuf::from(r"C:\Users\Alice\AppData\Local\Substrate\forwarder\forwarder.toml"),
+            PathBuf::from(r"C:\Users\Alice\AppData\Local\Substrate\forwarder\logs"),
+            &host_carrier.encode().unwrap(),
+            &mapping.encode(&host_carrier).unwrap(),
+        )
+        .unwrap()
+    }
+
+    fn reset_test_state() {
+        set_test_current_windows_host_observation(None);
+        set_test_file_settings_override(None);
+    }
 
     #[test]
-    fn pipe_listener_rejects_invalid_path() {
-        let result = PipeListener::new("invalid".to_string());
-        assert!(result.is_err());
+    fn normalize_path_canonicalizes_windows_pipe_aliases() {
+        assert_eq!(
+            normalize_path(r"\\.\pipe\Substrate-Agent".to_string()).unwrap(),
+            r"\\.\pipe\substrate-agent"
+        );
+        assert_eq!(
+            normalize_path(r"\\.\pipe\SUBSTRATE-AGENT".to_string()).unwrap(),
+            r"\\.\pipe\substrate-agent"
+        );
+    }
+
+    #[test]
+    fn normalize_path_rejects_invalid_pipe_forms() {
+        for invalid in [
+            r"",
+            r"\\.\pipe\",
+            r"//./pipe/substrate-agent",
+            r"\\server\pipe\substrate-agent",
+            r"\\.\pipe\nested\name",
+            r"\\.\pipe\has space",
+            "\\\\.\\pipe\\line\nbreak",
+            r"\\.\pipe\name$",
+        ] {
+            let result = normalize_path(invalid.to_string());
+            assert!(result.is_err(), "invalid pipe should reject: {invalid}");
+        }
+    }
+
+    #[test]
+    fn pipe_listener_requires_authenticated_projection_before_bind() {
+        let _guard = lock_test_projection_env_guard();
+        let config = sample_internal_config(r"\\.\pipe\substrate-agent");
+        let _projection = set_test_projection_env(
+            Some(
+                &InstallBootstrapContextCarrierV1::from_context(
+                    InstallBootstrapContextV1::new_windows(
+                        r"C:\Users\Alice\AppData\Local\Substrate",
+                        r"ACME\Alice",
+                        "S-1-5-21-1000",
+                    )
+                    .unwrap(),
+                )
+                .unwrap()
+                .encode()
+                .unwrap(),
+            ),
+            Some("3e1e71b325e92b16f5bfc0f3d875fd15f04a1615ac90b1439eb37afdf90a5ac7"),
+        );
+        let listener = PipeListener::new(&config).unwrap();
+        assert_eq!(&*listener.pipe_path(), r"\\.\pipe\substrate-agent");
+
+        let _projection = set_test_projection_env(None, None);
+        let err = PipeListener::new(&config).unwrap_err();
+        assert!(
+            err.to_string()
+                .contains("requires a projected install bootstrap carrier"),
+            "unexpected error: {err}"
+        );
+
+        reset_test_state();
+    }
+
+    #[test]
+    fn pipe_listener_preserves_legacy_forwarder_startup() {
+        let _guard = lock_test_projection_env_guard();
+        set_test_file_settings_override(Some(None));
+
+        let config = ForwarderConfig::load(
+            "Substrate-WSL".to_string(),
+            r"\\.\pipe\Substrate-Agent".to_string(),
+            None,
+            None,
+        )
+        .unwrap();
+        let listener = PipeListener::new(&config).unwrap();
+        assert_eq!(&*listener.pipe_path(), r"\\.\pipe\substrate-agent");
+
+        reset_test_state();
     }
 
     #[tokio::test(flavor = "current_thread")]
     async fn pipe_listener_accepts_connection() {
+        let _guard = lock_test_projection_env_guard();
         let pipe_name = format!(
-            r"\\\\.\\pipe\\substrate-forwarder-test-{}",
+            r"\\.\pipe\substrate-forwarder-test-{}",
             uuid::Uuid::now_v7()
         );
-        let listener = PipeListener::new(pipe_name.clone()).expect("valid pipe");
+        let config = sample_internal_config(&pipe_name);
+        let _projection = set_test_projection_env(
+            Some(
+                &InstallBootstrapContextCarrierV1::from_context(
+                    InstallBootstrapContextV1::new_windows(
+                        r"C:\Users\Alice\AppData\Local\Substrate",
+                        r"ACME\Alice",
+                        "S-1-5-21-1000",
+                    )
+                    .unwrap(),
+                )
+                .unwrap()
+                .encode()
+                .unwrap(),
+            ),
+            Some("3e1e71b325e92b16f5bfc0f3d875fd15f04a1615ac90b1439eb37afdf90a5ac7"),
+        );
+        let listener = PipeListener::new(&config).expect("valid pipe");
         let client_path = listener.pipe_path();
         let pending = listener
             .create_listening_instance()
@@ -285,15 +435,34 @@ mod tests {
         assert_eq!(&buf, b"world");
 
         server_task.await.unwrap().unwrap();
+        reset_test_state();
     }
 
     #[tokio::test(flavor = "current_thread")]
     async fn pipe_listener_handles_multiple_clients() {
+        let _guard = lock_test_projection_env_guard();
         let pipe_name = format!(
-            r"\\\\.\\pipe\\substrate-forwarder-test-multi-{}",
+            r"\\.\pipe\substrate-forwarder-test-multi-{}",
             uuid::Uuid::now_v7()
         );
-        let listener = PipeListener::new(pipe_name.clone()).expect("valid pipe");
+        let config = sample_internal_config(&pipe_name);
+        let _projection = set_test_projection_env(
+            Some(
+                &InstallBootstrapContextCarrierV1::from_context(
+                    InstallBootstrapContextV1::new_windows(
+                        r"C:\Users\Alice\AppData\Local\Substrate",
+                        r"ACME\Alice",
+                        "S-1-5-21-1000",
+                    )
+                    .unwrap(),
+                )
+                .unwrap()
+                .encode()
+                .unwrap(),
+            ),
+            Some("3e1e71b325e92b16f5bfc0f3d875fd15f04a1615ac90b1439eb37afdf90a5ac7"),
+        );
+        let listener = PipeListener::new(&config).expect("valid pipe");
         let client_path = listener.pipe_path();
         let pending = listener
             .create_listening_instance()
@@ -347,5 +516,6 @@ mod tests {
         assert_eq!(&buf2, b"dos");
 
         server_task.await.unwrap().unwrap();
+        reset_test_state();
     }
 }

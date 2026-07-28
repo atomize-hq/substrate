@@ -2,7 +2,8 @@
 
 param(
     [switch]$W2Only,
-    [switch]$W3Only
+    [switch]$W3Only,
+    [switch]$W5Only
 )
 
 Set-StrictMode -Version Latest
@@ -2213,7 +2214,39 @@ function Test-W3RustStaticShape {
     Assert-True ($paths -notmatch 'std::env::var') 'paths.rs must not read ambient environment state'
 }
 
-if ($W3Only) {
+function Test-W5RustStaticShape {
+    $repoRoot = Get-RepoRoot
+    $pipe = [System.IO.File]::ReadAllText((Join-Path $repoRoot 'crates/forwarder/src/pipe.rs')).Replace("`r`n", "`n")
+    $bridge = [System.IO.File]::ReadAllText((Join-Path $repoRoot 'crates/forwarder/src/bridge.rs')).Replace("`r`n", "`n")
+    $wsl = [System.IO.File]::ReadAllText((Join-Path $repoRoot 'crates/forwarder/src/wsl.rs')).Replace("`r`n", "`n")
+
+    Assert-Match $pipe 'pub fn new\(config: &ForwarderConfig\)' 'pipe.rs must bind listener construction to the verified forwarder configuration'
+    Assert-Match $pipe 'bridge::verify_forwarder_projection\(config, None\)' 'pipe.rs must validate the authenticated projection before bind'
+    Assert-Match $pipe 'normalize_windows_pipe_path' 'pipe.rs must canonicalize named-pipe identity with the shared Windows grammar'
+    Assert-True ($pipe -notmatch 'PipeListener::new\("') 'pipe.rs must not construct listeners from raw string authority'
+
+    Assert-Match $bridge 'config\.validate_mapping\(\)' 'bridge.rs must revalidate the authenticated mapping before session handoff'
+    Assert-Match $bridge 'SUBSTRATE_INSTALL_BOOTSTRAP_CONTEXT_V1' 'bridge.rs must require the projected install bootstrap carrier'
+    Assert-Match $bridge 'SUBSTRATE_INSTALL_HOST_CONTEXT_COMMITMENT' 'bridge.rs must require the projected host commitment'
+    Assert-Match $bridge 'host_context_commitment:\s*None' 'bridge.rs must preserve the legacy/non-internal startup path when no authenticated mapping exists'
+    Assert-Match $bridge 'wsl::spawn\(\s*&verified\.distro,\s*&verified\.target,\s*verified\.host_context_commitment\.as_deref\(\),' 'bridge.rs must pass exact distro, target, and commitment into wsl::spawn'
+
+    Assert-Match $wsl 'HOST_CONTEXT_COMMITMENT_ENV' 'wsl.rs must project the host commitment into the child'
+    Assert-Match $wsl 'WSLENV_EXPORTS' 'wsl.rs must define an exact WSLENV export list'
+    Assert-Match $wsl 'GetSystemDirectoryW' 'wsl.rs must resolve wsl.exe from the trusted Windows system directory instead of PATH'
+    Assert-Match $wsl 'SUBSTRATE_FORWARDER_TARGET_MODE' 'wsl.rs must explicitly overwrite target mode'
+    Assert-Match $wsl 'SUBSTRATE_FORWARDER_TARGET_ENDPOINT' 'wsl.rs must explicitly overwrite target endpoint'
+    Assert-Match $wsl 'SUBSTRATE_FORWARDER_CONNECT_TIMEOUT_S' 'wsl.rs must pin the bridge connect timeout'
+    Assert-Match $wsl 'SUBSTRATE_FORWARDER_CONNECT_DEADLINE_S' 'wsl.rs must pin the bridge connect deadline'
+    Assert-Match $wsl 'SUBSTRATE_FORWARDER_IDLE_AFTER_STDIN_CLOSE_S' 'wsl.rs must pin the bridge stdin-idle timeout'
+    Assert-Match $wsl 'SUBSTRATE_INSTALL_BOOTSTRAP_CONTEXT_V1' 'wsl.rs must scrub the inherited bootstrap carrier from the guest launch'
+    Assert-Match $wsl 'SUBSTRATE_FORWARDER_PIPE' 'wsl.rs must scrub inherited pipe-selector projections from the guest launch'
+    Assert-Match $wsl 'build_spawn_spec' 'wsl.rs must build the WSL launch from a deterministic static spec'
+}
+
+if ($W5Only) {
+    Test-W5RustStaticShape
+} elseif ($W3Only) {
     Test-W3RustStaticShape
 } elseif ($W2Only) {
     Test-W2PipeAndScopeGoldenVectors
@@ -2238,6 +2271,7 @@ if ($W3Only) {
     Test-W2DistroFallbackAndRemediation
     Test-W2StaticScriptShape
     Test-W3RustStaticShape
+    Test-W5RustStaticShape
     Test-StaticScriptShape
     Test-FrozenBlockHashes
     Test-W2FrozenBlockHashes
