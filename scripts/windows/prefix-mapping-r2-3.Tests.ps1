@@ -1,7 +1,8 @@
 #!/usr/bin/env pwsh
 
 param(
-    [switch]$W2Only
+    [switch]$W2Only,
+    [switch]$W3Only
 )
 
 Set-StrictMode -Version Latest
@@ -2129,7 +2130,44 @@ function Test-FrozenBlockHashes {
     }
 }
 
-if ($W2Only) {
+function Test-W3RustStaticShape {
+    $repoRoot = Get-RepoRoot
+    $backend = [System.IO.File]::ReadAllText((Join-Path $repoRoot 'crates/world-windows-wsl/src/backend.rs')).Replace("`r`n", "`n")
+    $warm = [System.IO.File]::ReadAllText((Join-Path $repoRoot 'crates/world-windows-wsl/src/warm.rs')).Replace("`r`n", "`n")
+    $paths = [System.IO.File]::ReadAllText((Join-Path $repoRoot 'crates/world-windows-wsl/src/paths.rs')).Replace("`r`n", "`n")
+
+    Assert-Match $backend 'pub fn new_with_mapping' 'backend.rs is missing new_with_mapping'
+    Assert-Match $backend 'validate_wsl_mapping_v1\(&self\.host_carrier, &self\.platform_mapping\)\?;' 'backend.rs must revalidate the stored mapping before readiness'
+    Assert-Match $backend 'Transport::NamedPipe \{' 'backend.rs must use named-pipe product transport'
+    Assert-Match $backend 'normalize_windows_pipe_path' 'backend.rs must canonicalize the pipe path'
+    Assert-Match $backend 'WindowsForwarderScopeV1::derive' 'backend.rs must recompute the Windows forwarder scope'
+    Assert-Match $backend 'Command::new\("wsl\.exe"\)' 'backend.rs must perform explicit WSL observation'
+    Assert-Match $backend 'Command::new\("pwsh"\)' 'backend.rs must bind validation to the current Windows token and Known Folder'
+    Assert-Match $backend 'guest substrate home does not match the live WSL account database' 'backend.rs must reject guest-home drift'
+    Assert-True ($backend -notmatch 'DEFAULT_DISTRO') 'backend.rs still selects a default distro'
+    Assert-True ($backend -notmatch 'SUBSTRATE_WSL_DISTRO') 'backend.rs still reads ambient SUBSTRATE_WSL_DISTRO'
+    Assert-True ($backend -notmatch 'SUBSTRATE_PROJECT_PATH') 'backend.rs still reads ambient SUBSTRATE_PROJECT_PATH'
+    Assert-True ($backend -notmatch 'SUBSTRATE_FORWARDER_PIPE') 'backend.rs still selects the runtime pipe from ambient state'
+    Assert-True ($backend -notmatch 'forwarder_tcp') 'backend.rs still carries product TCP selection state'
+
+    Assert-Match $warm '-PipePath' 'warm.rs must pass the explicit pipe path'
+    Assert-Match $warm '-InstallPrefix' 'warm.rs must pass the explicit install prefix'
+    Assert-Match $warm '-InstallBootstrapContextV1' 'warm.rs must pass the explicit install bootstrap carrier'
+    Assert-Match $warm '-PlatformBootstrapMappingV1' 'warm.rs must pass the explicit platform bootstrap mapping'
+    Assert-Match $warm 'command\.env_remove\("SUBSTRATE_FORWARDER_PIPE"\)' 'warm.rs must scrub ambient pipe selection'
+    Assert-Match $warm 'command\.env_remove\("SUBSTRATE_FORWARDER_TCP"\)' 'warm.rs must scrub ambient TCP selection'
+    Assert-Match $warm 'command\.env_remove\("LOCALAPPDATA"\)' 'warm.rs must scrub LOCALAPPDATA for the child'
+    Assert-Match $warm 'command\.env_remove\("USERPROFILE"\)' 'warm.rs must scrub USERPROFILE for the child'
+    Assert-Match $warm 'command\.env_remove\("WSLENV"\)' 'warm.rs must scrub WSLENV for the child'
+
+    Assert-Match $paths '/mnt/unc/' 'paths.rs must preserve explicit UNC conversion'
+    Assert-True ($paths -notmatch 'current_dir\(') 'paths.rs must not reach for ambient current_dir'
+    Assert-True ($paths -notmatch 'std::env::var') 'paths.rs must not read ambient environment state'
+}
+
+if ($W3Only) {
+    Test-W3RustStaticShape
+} elseif ($W2Only) {
     Test-W2PipeAndScopeGoldenVectors
     Test-W2PlatformMappingGoldenVectorAndRevalidation
     Test-W2MappingAndObservationRejections
@@ -2151,6 +2189,7 @@ if ($W2Only) {
     Test-W2WarmGuardEntryFlow
     Test-W2DistroFallbackAndRemediation
     Test-W2StaticScriptShape
+    Test-W3RustStaticShape
     Test-StaticScriptShape
     Test-FrozenBlockHashes
     Test-W2FrozenBlockHashes

@@ -7,16 +7,24 @@ use substrate_common::FsDiff;
 use std::path::PathBuf;
 
 pub fn to_wsl_path(project_path: &Path, path: &Path) -> Result<String> {
-    if path.is_relative() {
-        let joined = project_path.join(path);
-        return to_wsl_path(project_path, joined.as_path());
-    }
-
     let raw = path
         .to_str()
         .ok_or_else(|| anyhow!("path is not valid UTF-8: {}", path.display()))?;
     let normalized = raw.replace('\\', "/");
-    if let Some((drive, rest)) = normalized.split_once(':') {
+    let has_windows_drive = normalized.len() >= 2
+        && normalized.as_bytes()[1] == b':'
+        && normalized.as_bytes()[0].is_ascii_alphabetic();
+    let has_windows_unc = normalized.starts_with("//");
+
+    if path.is_relative() && !has_windows_drive && !has_windows_unc {
+        let joined = project_path.join(path);
+        return to_wsl_path(project_path, joined.as_path());
+    }
+
+    if has_windows_unc {
+        let rest = normalized.trim_start_matches('/');
+        Ok(format!("/mnt/unc/{rest}"))
+    } else if let Some((drive, rest)) = normalized.split_once(':') {
         let rest = rest.trim_start_matches('/');
         Ok(format!("/mnt/{}/{}", drive.to_lowercase(), rest))
     } else {
@@ -25,6 +33,8 @@ pub fn to_wsl_path(project_path: &Path, path: &Path) -> Result<String> {
 }
 
 pub fn to_windows_display_path(path: &Path) -> Option<String> {
+    const WINDOWS_SEP: &str = "\\";
+
     let raw = path.to_str()?;
     let stripped = raw.strip_prefix("/mnt/")?;
     if let Some((prefix, rest)) = stripped.split_once('/') {
@@ -32,27 +42,21 @@ pub fn to_windows_display_path(path: &Path) -> Option<String> {
             if rest.is_empty() {
                 return None;
             }
-            let sep = std::path::MAIN_SEPARATOR.to_string();
-            let converted = rest.replace('/', sep.as_str());
+            let converted = rest.replace('/', WINDOWS_SEP);
             return Some(format!("\\\\{}", converted));
         }
 
         if prefix.len() == 1 {
             let drive = prefix.chars().next()?.to_ascii_uppercase();
-            let sep = std::path::MAIN_SEPARATOR.to_string();
-            let converted = rest.replace('/', sep.as_str());
+            let converted = rest.replace('/', WINDOWS_SEP);
             if converted.is_empty() {
-                return Some(format!("{drive}:{sep}", sep = std::path::MAIN_SEPARATOR));
+                return Some(format!("{drive}:{WINDOWS_SEP}"));
             }
-            return Some(format!(
-                "{drive}:{sep}{converted}",
-                sep = std::path::MAIN_SEPARATOR,
-                converted = converted
-            ));
+            return Some(format!("{drive}:{WINDOWS_SEP}{converted}"));
         }
     } else if stripped.len() == 1 {
         let drive = stripped.chars().next()?.to_ascii_uppercase();
-        return Some(format!("{drive}:{sep}", sep = std::path::MAIN_SEPARATOR));
+        return Some(format!("{drive}:{WINDOWS_SEP}"));
     }
 
     None
@@ -87,9 +91,11 @@ mod tests {
         let project = PathBuf::from("C:\\projects\\substrate");
         let relative = PathBuf::from("src/main.rs");
         let absolute = PathBuf::from("D:\\workspace\\logs\\shim.txt");
+        let unc = PathBuf::from("\\\\server\\share\\logs\\shim.txt");
 
         let relative_result = to_wsl_path(&project, &relative).expect("relative path resolves");
         let absolute_result = to_wsl_path(&project, &absolute).expect("absolute path resolves");
+        let unc_result = to_wsl_path(&project, &unc).expect("UNC path resolves");
 
         assert_eq!(
             relative_result,
@@ -98,6 +104,10 @@ mod tests {
         assert_eq!(
             absolute_result,
             "/mnt/d/workspace/logs/shim.txt".to_string()
+        );
+        assert_eq!(
+            unc_result,
+            "/mnt/unc/server/share/logs/shim.txt".to_string()
         );
     }
 

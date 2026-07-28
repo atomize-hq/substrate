@@ -1,11 +1,16 @@
 use anyhow::{Context, Result};
 use std::net::SocketAddr;
 
+#[allow(dead_code)]
 pub const DEFAULT_DISTRO: &str = "substrate-wsl";
+#[allow(dead_code)]
 pub const DEFAULT_AGENT_PIPE: &str = r"\\.\pipe\substrate-agent";
+#[allow(dead_code)]
 pub const DEFAULT_TCP_ADDR: &str = "127.0.0.1";
+#[allow(dead_code)]
 pub const DEFAULT_TCP_PORT: u16 = 17788;
 
+#[allow(dead_code)]
 pub fn detect_tcp_forwarder() -> Result<Option<(String, u16)>> {
     if let Ok(addr) = std::env::var("SUBSTRATE_FORWARDER_TCP_ADDR") {
         let socket: SocketAddr = addr
