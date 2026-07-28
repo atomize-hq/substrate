@@ -1,0 +1,34 @@
+{
+  "protocol": "codex.top-level-task-receipt.v1",
+  "orchestration_id": "substrate-r2-3",
+  "dispatch_nonce": "6458b88107e80e8f53a97157d7481705f523d485e829518a32feb6d0def76942",
+  "increment": "R2-3M4",
+  "status": "BASE_DRIFT",
+  "increment_task": {
+    "thread_id": "019fa630-d105-72d1-b610-a201b682e230",
+    "host_id": "remote-ssh-discovered:spenser-linux-codex"
+  },
+  "expected_base": {
+    "commit": "4325e7aa085ed1f5eeeb6535e0fc436a3663c3c2",
+    "tree": "60fa3b29df3abc6bf47e4539f52ec11230acebf9"
+  },
+  "observed_state": {
+    "worktree": "/home/spenser/.codex/worktrees/7303/substrate-r2-3",
+    "target_ref": "refs/heads/feat/internal-host-orchestrator-world-dispatch-bootstrap",
+    "head_commit": "c0d9cd4f5c60d6505429de75a2fa5a52887b9879",
+    "head_tree": "e715b4ce5fe6c227542e646fe53416438af44525",
+    "branch": "DETACHED",
+    "live_remote": "4325e7aa085ed1f5eeeb6535e0fc436a3663c3c2",
+    "ahead": 0,
+    "behind": 6,
+    "required_ancestor_present": true,
+    "checkout_clean": true,
+    "gitnexus_index": "missing: Repository not indexed. Run: gitnexus analyze"
+  },
+  "blocker": {
+    "summary": "Assigned worktree does not match the authorized starting state for R2-3M4.",
+    "details": "After fetching origin for refs/heads/feat/internal-host-orchestrator-world-dispatch-bootstrap, the live remote remained at the expected base commit 4325e7aa085ed1f5eeeb6535e0fc436a3663c3c2, but the assigned worktree was detached at c0d9cd4f5c60d6505429de75a2fa5a52887b9879 with tree e715b4ce5fe6c227542e646fe53416438af44525 and rev-list reported 0 ahead / 6 behind relative to the target remote ref. This violates the contract requirement to verify exact base, exact tree, non-drifted checkout state, and 0 ahead / 0 behind before any work. No files were edited, no tests were run, no subagents were dispatched, and no repository mutations were made. GitNexus also reported that the repository is not indexed.",
+    "required_authority": "Rebind or provision a task-assigned worktree whose checked-out state exactly matches commit 4325e7aa085ed1f5eeeb6535e0fc436a3663c3c2 and tree 60fa3b29df3abc6bf47e4539f52ec11230acebf9 on refs/heads/feat/internal-host-orchestrator-world-dispatch-bootstrap with a clean checkout, 0 ahead / 0 behind, and a current GitNexus index; alternatively issue an updated contract if the authoritative base has intentionally changed. Do not ask this increment task to reconcile, merge, rebase, reset, or clean the drifted checkout.",
+    "handoff_prompt": "Fresh increment orchestrator for R2-3M4 under substrate-r2-3. Bind a new task identity and new dispatch nonce. Verify the assigned worktree itself is exactly at commit 4325e7aa085ed1f5eeeb6535e0fc436a3663c3c2 with tree 60fa3b29df3abc6bf47e4539f52ec11230acebf9, clean and 0 ahead / 0 behind versus origin/feat/internal-host-orchestrator-world-dispatch-bootstrap, and still descended from 0f1e147fb735791b44a65099a65167cbdc1803af before any other action. If the live remote has moved, stop with BASE_DRIFT instead of reconciling locally. If it matches, continue under the published R2-3M4 contract. The prior attempt made no repository changes."
+  }
+}
