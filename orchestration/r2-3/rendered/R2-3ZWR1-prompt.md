@@ -111,6 +111,21 @@ previously mandated `cargo test --locked -p shell "windows_tests::" -- --nocaptu
 compile and run. It does not authorize suppressing the command, removing tests, changing
 production behavior, or widening into any further file.
 
+FOURTH NARROW SCOPE AMENDMENT
+
+After the eleven-file repair advanced the required filtered shell test build to its next stopping
+diagnostic, the user explicitly authorized the one additional Windows cfg/test-build surface
+identified in `orchestration/r2-3/receipts/R2-3ZWR1-attempt-5.json`:
+
+- `crates/shell/src/execution/agent_runtime/control.rs`, solely for the minimum Windows
+  test-build cfg alignment of the test-module import at line 3741 with the Unix-gated
+  `prompt_event_text` helper.
+
+The existing eleven-file unstaged WIP in the task-assigned `102c` worktree must be preserved
+exactly. This amendment does not authorize changing production control behavior, making the
+Unix-only helper callable in Windows production, removing Windows-capable tests, or widening into
+any thirteenth file.
+
 Use the available skills appropriate to source analysis, test-driven repair, GitNexus impact
 analysis, security review, code review, and git publication. This top-level task and every
 subagent must run at Standard/default speed, never Fast. Every subagent must use GPT-5.4 with
@@ -154,11 +169,12 @@ Production changes are limited to:
 - `crates/shell/src/execution/agent_runtime/host_session_authority/transition_tests.rs`
 - `crates/shell/src/execution/host_inbox_materialization.rs`
 - `crates/shell/src/execution/pty/io/types.rs`
+- `crates/shell/src/execution/agent_runtime/control.rs`
 
 Test changes are limited to:
 
 - `scripts/windows/prefix-mapping-r2-3.Tests.ps1`
-- colocated `#[cfg(test)]` modules already within the ten allowed Rust files, only
+- colocated `#[cfg(test)]` modules already within the eleven allowed Rust files, only
   when mechanically necessary to prove the named cfg/build repair.
 
 Do not edit `scripts/windows/start-forwarder.ps1`; the diagnostic proved its release-first,
@@ -166,9 +182,9 @@ debug-fallback behavior is correct. Do not edit any other shell source, test, sc
 `Cargo.lock`, control document, generated analyzer file, `AGENTS.md`, or `CLAUDE.md`.
 
 If either the successful native `cargo build --locked -p shell --lib` gate or the required
-filtered shell test build requires any additional tracked file beyond these eleven files, stop
+filtered shell test build requires any additional tracked file beyond these twelve files, stop
 with `BLOCKED_SCOPE_EXPANSION`. Report the exact next compiler diagnostic, required file and
-symbol, why the eleven-file allowlist cannot repair it, and a copy-ready continuation prompt. Do
+symbol, why the twelve-file allowlist cannot repair it, and a copy-ready continuation prompt. Do
 not silently widen the allowlist.
 
 PRE-EDIT BARRIER AND IMPACT
@@ -180,8 +196,8 @@ Before editing:
    `58462482126609ad87e59b896f5d22437461d144`, tree
    `131cb88fcd22cf739eac5c29a2d6e7d3dded43f0`, target ref
    `refs/heads/feat/internal-host-orchestrator-world-dispatch-bootstrap`, 0 ahead/0 behind, with
-   required ancestor `0f1e147fb735791b44a65099a65167cbdc1803af`. Require exactly the seven
-   previously authorized dirty unstaged paths recorded in the attempt-4 receipt and no staged,
+   required ancestor `0f1e147fb735791b44a65099a65167cbdc1803af`. Require exactly the eleven
+   previously authorized dirty unstaged paths recorded in the attempt-5 receipt and no staged,
    untracked, analyzer-only, or other tracked changes. Do not reset, clean, recreate, reconcile,
    or discard that WIP.
 2. Verify the live remote still equals that exact commit and tree.
@@ -228,6 +244,9 @@ For the Rust build defects:
   Windows-capable assertions;
 - in `pty/io/types.rs`, correct only the reported Windows console-handle test-build type mismatch
   while preserving runtime PTY behavior and Unix handle behavior;
+- in `agent_runtime/control.rs`, align only the reported test-module import with the existing
+  Unix-gated `prompt_event_text` helper; do not ungate that helper for Windows production or
+  alter control behavior;
 - preserve existing Linux and macOS code paths byte-for-byte where practical;
 - preserve Windows fail-closed behavior for unsupported world-worker operations;
 - do not make Linux-only dispatch helpers callable on Windows;
@@ -307,7 +326,7 @@ STOP CONDITIONS
 Stop with the matching blocked receipt if:
 
 - the base, tree, target ref, ancestry, cleanliness, or 0/0 gate differs;
-- a required repair lies outside the exact eleven-file allowlist;
+- a required repair lies outside the exact twelve-file allowlist;
 - the repair changes Linux/macOS behavior, weakens Windows fail-closed behavior, adds ambient
   authority, or changes a public API;
 - any platform lifecycle, process, pipe, PID, service, provisioning, cleanup, artifact, or
