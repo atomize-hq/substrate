@@ -1,0 +1,33 @@
+{
+  "protocol": "codex.top-level-evidence-receipt.v1",
+  "orchestration_id": "substrate-r2-3",
+  "dispatch_nonce": "3bd5c390682918b36fbf51ef90723e5112a534f166566bff59c159ea5a4208fb",
+  "evidence_id": "R2-3Z/WIN-EVIDENCE",
+  "status": "BLOCKED_CONTRADICTION",
+  "platform": "windows",
+  "evidence_task": {
+    "thread_id": "019fae3c-bf21-7dc2-b613-8d80d46bb23b",
+    "host_id": "remote-control:env_e_6a3d9cd24b5483238ba55b699a98be35"
+  },
+  "source": {
+    "remote": "origin",
+    "worktree_starting_ref": "origin/feat/internal-host-orchestrator-world-dispatch-bootstrap",
+    "target_ref": "refs/heads/feat/internal-host-orchestrator-world-dispatch-bootstrap",
+    "commit": "58462482126609ad87e59b896f5d22437461d144",
+    "tree": "131cb88fcd22cf739eac5c29a2d6e7d3dded43f0",
+    "required_ancestor": "0f1e147fb735791b44a65099a65167cbdc1803af",
+    "live_remote": "58462482126609ad87e59b896f5d22437461d144"
+  },
+  "blocker": {
+    "summary": "The shell supplemental proof surface is blocked by an accepted-source Windows compile break in crates/shell, while the PowerShell W2Only contradiction is tracked test drift rather than a start-forwarder product defect.",
+    "details": "Shell contradiction evidence: 'cargo build -p shell --lib' with CARGO_TARGET_DIR outside the checkout exited 101, so the package fails on Windows before any test harness is involved. The first actionable diagnostics were error[E0432] at 'crates/shell/src/repl/async_repl.rs:150' for an unconditional import of PreparedSpawnWorldWorkerBootstrap even though 'crates/shell/src/execution/orchestrator_world_dispatch.rs:1104' gates that type to linux/macos, error[E0412] at 'crates/shell/src/execution/agent_runtime/state_store.rs:3043' for an unconditional impl WorldWorkReceiptRegistry on a Windows build where the dependent world-work types are only in scope for linux/test, and error[E0433]/error[E0425] at 'crates/shell/src/execution/orchestrator_world_dispatch.rs:557-559' where fork_world_worker reaches PathBuf plus internal steering helpers that are cfg'd away on Windows. The exact tracked proof command 'cargo test -p shell \"windows_tests::\" -- --nocapture' also exited 101 and reproduced those same library-build failures before later lib-test-only Unix Permissions::from_mode errors, so the causal classification is 'accepted-source Windows build defect', not 'test-only cfg defect' and not 'overbroad evidence command'. Minimal owning increment/scope: package 'crates/shell', primarily 'crates/shell/src/repl/async_repl.rs', 'crates/shell/src/execution/agent_runtime/state_store.rs', and 'crates/shell/src/execution/orchestrator_world_dispatch.rs'.\n\nPowerShell contradiction evidence: the direct tracked command 'pwsh -NoProfile -File scripts/windows/prefix-mapping-r2-3.Tests.ps1 -W2Only' exited 1 at 'scripts/windows/prefix-mapping-r2-3.Tests.ps1:2033' with 'The variable '$forwarderRelease' cannot be retrieved because it has not been set.' PowerShell parser inspection of that line showed an ExpandableStringExpressionAst with nested variable expressions '$forwarderRelease' and '$resolvedProject'; because the assertion uses a double-quoted string, backslash does not escape variables in PowerShell, so interpolation happens under Set-StrictMode -Version Latest before Assert-Match runs. Separate literal-regex checks confirmed 'scripts/windows/start-forwarder.ps1:1007-1015' still implements release-first/debug-fallback honestly. The predecessor workaround failure is explained by the tracked assertion text itself: after literal prebinding, the pattern still expects a stray backslash before '$resolvedProject', which the product script does not contain. The causal classification is 'tracked PowerShell test drift' and specifically a 'tracked test expectation and quoting defect', not a 'start-forwarder.ps1' product defect. Minimal owning increment/scope: 'scripts/windows', primarily 'scripts/windows/prefix-mapping-r2-3.Tests.ps1'; no product repair is required in 'scripts/windows/start-forwarder.ps1'.",
+    "required_authority": "Authority to repair the accepted-source Windows compile path in crates/shell and the tracked W2Only assertion drift in scripts/windows/prefix-mapping-r2-3.Tests.ps1, then run a fresh native-Windows evidence retry on the accepted repaired source.",
+    "handoff_prompt": "Repair the Windows compile path in crates/shell starting with cfg alignment across crates/shell/src/repl/async_repl.rs, crates/shell/src/execution/agent_runtime/state_store.rs, and crates/shell/src/execution/orchestrator_world_dispatch.rs, then address any remaining Windows-only compile surfaces revealed by 'cargo build -p shell --lib'. Separately fix scripts/windows/prefix-mapping-r2-3.Tests.ps1:2033 so the W2Only assertion uses a literal regex with no expandable string interpolation and no spurious backslash before $resolvedProject. After those tracked-source repairs, rerun full native-Windows evidence on the same bound source or its accepted successor."
+  },
+  "artifact": {
+    "path": "C:/Users/spmcc/.codex/visualizations/2026/07/29/019fae3c-bf21-7dc2-b613-8d80d46bb23b/win-evidence/R2-3Z-WIN-EVIDENCE.diagnostic-2.artifact.json",
+    "sha256": "sha256:43712f986864c02f5521ad2dc2e73b6c92f3faf133f79a371624a49c32456f57"
+  },
+  "checkout_unchanged": true,
+  "prohibited_actions_confirmed": true
+}
