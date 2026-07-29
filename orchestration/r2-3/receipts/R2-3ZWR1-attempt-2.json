@@ -1,0 +1,22 @@
+{
+  "protocol": "codex.top-level-task-receipt.v1",
+  "orchestration_id": "substrate-r2-3",
+  "dispatch_nonce": "c013b5f07611ca8347b09688715f915e6a1291352d49816c8f483796b1405c32",
+  "increment": "R2-3ZWR1",
+  "status": "BASE_DRIFT",
+  "increment_task": {
+    "thread_id": "019fae87-77e4-7750-8a12-adcf7d4d2b24",
+    "host_id": "remote-control:env_e_6a3d9cd24b5483238ba55b699a98be35"
+  },
+  "expected_base": {
+    "commit": "58462482126609ad87e59b896f5d22437461d144",
+    "tree": "131cb88fcd22cf739eac5c29a2d6e7d3dded43f0"
+  },
+  "blocker": {
+    "summary": "Stopped before edits because the assigned worktree at C:\\Users\\spmcc\\.codex\\worktrees\\7b0c\\substrate-r2-3 drifted out of the required git state and is no longer a git repository.",
+    "details": "Pre-edit re-verification failed immediately. In the assigned worktree, `git rev-parse HEAD`, `git rev-parse 'HEAD^{tree}'`, `git status --short --branch`, `git rev-list --left-right --count origin/feat/internal-host-orchestrator-world-dispatch-bootstrap...HEAD`, and `git merge-base --is-ancestor 0f1e147fb735791b44a65099a65167cbdc1803af HEAD` all failed with `fatal: not a git repository (or any of the parent directories): .git`. `git ls-remote origin refs/heads/feat/internal-host-orchestrator-world-dispatch-bootstrap` failed because `origin` is not available from this path, and `npx gitnexus status` reported `Not a git repository.` Because the contract requires stopping on any base/tree/ref/cleanliness drift and forbids reconciliation or cleanup, no source was inspected further, no files were edited, staged, committed, or pushed, and no attempt was made to repair or reattach the worktree.",
+    "required_authority": "Restore the assigned worktree at C:\\Users\\spmcc\\.codex\\worktrees\\7b0c\\substrate-r2-3 to a real git worktree for the target repository, with HEAD at commit 58462482126609ad87e59b896f5d22437461d144, tree 131cb88fcd22cf739eac5c29a2d6e7d3dded43f0, required ancestor 0f1e147fb735791b44a65099a65167cbdc1803af present, remote `origin` reachable, and ahead/behind 0/0 against refs/heads/feat/internal-host-orchestrator-world-dispatch-bootstrap. No scope change is requested.",
+    "handoff_prompt": "Resume increment R2-3ZWR1 only after restoring C:\\Users\\spmcc\\.codex\\worktrees\\7b0c\\substrate-r2-3 to the substrate git worktree at commit 58462482126609ad87e59b896f5d22437461d144 / tree 131cb88fcd22cf739eac5c29a2d6e7d3dded43f0 with remote origin reachable and 0 ahead / 0 behind against refs/heads/feat/internal-host-orchestrator-world-dispatch-bootstrap. Keep the existing identity, packet A1.1d-5R2-3ZWR1, nonce c013b5f07611ca8347b09688715f915e6a1291352d49816c8f483796b1405c32, thread 019fae87-77e4-7750-8a12-adcf7d4d2b24, host remote-control:env_e_6a3d9cd24b5483238ba55b699a98be35, and the amended six-file allowlist unchanged. Re-run the pre-edit verification and proceed only if the exact base/tree/ref/ancestor/cleanliness checks all pass."
+  },
+  "next_increment": "EVIDENCE:R2-3Z"
+}
