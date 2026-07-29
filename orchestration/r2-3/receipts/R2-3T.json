@@ -1,0 +1,78 @@
+{
+  "protocol": "codex.top-level-task-receipt.v1",
+  "orchestration_id": "substrate-r2-3",
+  "dispatch_nonce": "dabfa9de2a0a2547e78778d4e86cf3a67c9e3708a9727ba5e3e1c6b772a8ffee",
+  "increment": "R2-3T",
+  "status": "LANDED_CLEAN",
+  "increment_task": {
+    "thread_id": "019facf7-bc58-7020-b744-e95a13777118",
+    "host_id": "remote-ssh-discovered:spenser-linux-codex"
+  },
+  "expected_base": {
+    "commit": "549949a20f01397e49d3819398359cea522f3a83",
+    "tree": "1b98a9a96d40a4a9e453099815e9bf11b32a4831"
+  },
+  "landed": {
+    "commit": "58462482126609ad87e59b896f5d22437461d144",
+    "tree": "131cb88fcd22cf739eac5c29a2d6e7d3dded43f0",
+    "target_ref": "refs/heads/feat/internal-host-orchestrator-world-dispatch-bootstrap",
+    "live_remote": "58462482126609ad87e59b896f5d22437461d144"
+  },
+  "subject_fingerprint": "sha256:2ad42ac2e3b54dc1892f027bf178f8b285acb0022e59dac14a2d0d14fc01c842",
+  "subject_manifest": {
+    "path": "/home/spenser/.codex/visualizations/2026/07/29/019facf7-bc58-7020-b744-e95a13777118/r2-3t-review/subject-manifest.txt",
+    "sha256": "sha256:2ad42ac2e3b54dc1892f027bf178f8b285acb0022e59dac14a2d0d14fc01c842"
+  },
+  "changed_files": [
+    "crates/trace/src/context.rs",
+    "crates/trace/src/tests.rs",
+    "crates/trace/src/util.rs"
+  ],
+  "review": {
+    "packet_id": "A1.1d-5R2-3T",
+    "record_path": "/home/spenser/.codex/visualizations/2026/07/29/019facf7-bc58-7020-b744-e95a13777118/r2-3t-review/review-cycle-record.json",
+    "record_sha256": "sha256:fd019c3b7f1bdef723b9a3c7b378c4b19b1835d3d2bddaba555ea0609c7627aa",
+    "validated": true,
+    "terminal": "CLEAN",
+    "p1": 0,
+    "p2": 0,
+    "p3_p4_disposition": "none"
+  },
+  "verification": {
+    "required_checks_passed": true,
+    "allowlist_passed": true,
+    "change_detection_passed": true,
+    "checkout_clean": true,
+    "ahead": 0,
+    "behind": 0
+  },
+  "checks": [
+    "terminal task barrier: completed and idle",
+    "live remote equals landed commit",
+    "landed tree equals reported tree",
+    "single direct commit from expected base",
+    "required ancestor present",
+    "exact three-file allowlist",
+    "subject manifest and fingerprint recomputation",
+    "review digest and review-cycle validator",
+    "exact-checkout GitNexus index current at landed commit",
+    "cargo fmt --all -- --check",
+    "cargo check --locked -p substrate-trace",
+    "cargo test --locked -p substrate-trace -- --nocapture",
+    "cargo test --locked -p substrate-trace --doc",
+    "cargo clippy --locked -p substrate-trace --all-targets -- -D warnings",
+    "git diff --check"
+  ],
+  "limitations": [
+    "Native evidence is not independently claimed here; R2-3Z owns evidence accounting and closeout."
+  ],
+  "gitnexus": {
+    "status": "current_at_landed_commit",
+    "repo_path": "/home/spenser/.codex/worktrees/7cb9/substrate-r2-3",
+    "indexed_commit": "58462482126609ad87e59b896f5d22437461d144",
+    "risk_level": "low",
+    "affected_processes": 0
+  },
+  "completion_boundary": "Completes final PI-118 compatibility closure only: removes ambient trace compatibility authority, makes global unbound init_trace fail, and removes ambient policy Git lookup without changing the neutral setter, explicit-product construction, get_policy_git_hash_at behavior, writer/rotation/retention/span/replay bodies, or any R3 lifecycle authority.",
+  "next_increment": "EVIDENCE:R2-3Z"
+}
