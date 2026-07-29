@@ -91,9 +91,61 @@ impl LiveCheckpointEvent {
             source_label,
         }
     }
+}
 
-    fn trigger_name(&self) -> &'static str {
-        trigger_name(self.trigger)
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub(crate) enum CheckedLiveCheckpointEvent<'a> {
+    CheckpointReady { checkpoint: &'a Checkpoint },
+    Synthetic { trigger: TriggerClass },
+}
+
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub(crate) enum LiveEventShapeError {
+    MissingCheckpointPayload,
+    UnexpectedCheckpointPayload {
+        trigger: TriggerClass,
+    },
+    InvalidEventCursor {
+        trigger: TriggerClass,
+        issue: CursorIdentityIssue,
+    },
+    InvalidCheckpointCursor {
+        issue: CursorIdentityIssue,
+    },
+    CheckpointCursorMismatch {
+        expected: CheckpointCursor,
+        actual: CheckpointCursor,
+    },
+    SyntheticEventBeforeCheckpoint {
+        trigger: TriggerClass,
+        actual: CheckpointCursor,
+    },
+    SyntheticCursorMismatch {
+        trigger: TriggerClass,
+        expected: CheckpointCursor,
+        actual: CheckpointCursor,
+    },
+}
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub(crate) enum CursorIdentityIssue {
+    EmptySessionId,
+    ZeroOrdinal,
+}
+
+impl CursorIdentityIssue {
+    pub(crate) fn field(self) -> &'static str {
+        match self {
+            Self::EmptySessionId => "session_id",
+            Self::ZeroOrdinal => "ordinal",
+        }
+    }
+
+    pub(crate) fn reason(self) -> &'static str {
+        match self {
+            Self::EmptySessionId => "must be a non-empty string",
+            Self::ZeroOrdinal => "must be greater than zero",
+        }
     }
 }
 
@@ -198,6 +250,23 @@ pub enum LiveInputError {
         actual_session_id: String,
         actual_ordinal: usize,
     },
+    #[error("live {trigger} event at line {line_number} has invalid {identity} {field}: {reason}")]
+    InvalidCursorIdentity {
+        line_number: usize,
+        trigger: &'static str,
+        identity: &'static str,
+        field: &'static str,
+        reason: &'static str,
+    },
+    #[error(
+        "live checkpoint fixture {path} at line {line_number} has invalid serialized {event_type} event shape: {reason}"
+    )]
+    SerializedEventShape {
+        path: Utf8PathBuf,
+        line_number: usize,
+        event_type: String,
+        reason: String,
+    },
     #[error(
         "analyzer checkpoint {checkpoint_id} is not live-compatible: missing or invalid {field} ({reason})"
     )]
@@ -272,6 +341,7 @@ pub fn load_live_fixture(path: &Utf8Path) -> Result<Vec<LiveCheckpointEvent>, Li
                 line_number,
                 source,
             })?;
+        let serialized_cursor = validate_serialized_live_event_shape(path, line_number, &value)?;
         validate_live_fixture_contract(path, line_number, &value)?;
         let record: LiveCheckpointFixtureRecord =
             serde_json::from_value(value).map_err(|source| LiveInputError::ParseFixtureLine {
@@ -279,7 +349,19 @@ pub fn load_live_fixture(path: &Utf8Path) -> Result<Vec<LiveCheckpointEvent>, Li
                 line_number,
                 source,
             })?;
-        events.push(record.into_event());
+        let event = record.into_event();
+        if let Some(actual) = serialized_cursor {
+            if actual != event.cursor {
+                return Err(LiveInputError::CheckpointCursorMismatch {
+                    line_number,
+                    expected_session_id: event.cursor.session_id.clone(),
+                    expected_ordinal: event.cursor.ordinal,
+                    actual_session_id: actual.session_id,
+                    actual_ordinal: actual.ordinal,
+                });
+            }
+        }
+        events.push(event);
     }
 
     if events.is_empty() {
@@ -309,64 +391,149 @@ pub fn validate_live_event_sequence(events: &[LiveCheckpointEvent]) -> Result<()
             }
         }
 
-        match event.trigger {
-            TriggerClass::CheckpointReady => {
-                let Some(checkpoint) = event.checkpoint.as_ref() else {
-                    return Err(LiveInputError::MissingCheckpointPayload { line_number });
-                };
-                let expected_cursor = CheckpointCursor::from(checkpoint);
-                if event.cursor != expected_cursor {
-                    return Err(LiveInputError::CheckpointCursorMismatch {
+        let checked = check_live_checkpoint_event(event, last_checkpoint_cursor.as_ref())
+            .map_err(|error| map_event_shape_error(line_number, error))?;
+
+        if matches!(checked, CheckedLiveCheckpointEvent::CheckpointReady { .. }) {
+            if let Some(previous) = last_checkpoint_cursor.as_ref() {
+                if event.cursor <= *previous {
+                    return Err(LiveInputError::OutOfOrderCheckpointCursor {
                         line_number,
-                        expected_session_id: expected_cursor.session_id,
-                        expected_ordinal: expected_cursor.ordinal,
-                        actual_session_id: event.cursor.session_id.clone(),
-                        actual_ordinal: event.cursor.ordinal,
-                    });
-                }
-                if let Some(previous) = last_checkpoint_cursor.as_ref() {
-                    if expected_cursor <= *previous {
-                        return Err(LiveInputError::OutOfOrderCheckpointCursor {
-                            line_number,
-                            previous_session_id: previous.session_id.clone(),
-                            previous_ordinal: previous.ordinal,
-                            current_session_id: expected_cursor.session_id,
-                            current_ordinal: expected_cursor.ordinal,
-                        });
-                    }
-                }
-                last_checkpoint_cursor = Some(event.cursor.clone());
-            }
-            trigger => {
-                if event.checkpoint.is_some() {
-                    return Err(LiveInputError::UnexpectedCheckpointPayload {
-                        line_number,
-                        trigger: trigger_name(trigger),
-                    });
-                }
-                let Some(expected_cursor) = last_checkpoint_cursor.as_ref() else {
-                    return Err(LiveInputError::SyntheticEventBeforeCheckpoint {
-                        line_number,
-                        trigger: event.trigger_name(),
-                    });
-                };
-                if event.cursor != *expected_cursor {
-                    return Err(LiveInputError::SyntheticCursorMismatch {
-                        line_number,
-                        trigger: event.trigger_name(),
-                        expected_session_id: expected_cursor.session_id.clone(),
-                        expected_ordinal: expected_cursor.ordinal,
-                        actual_session_id: event.cursor.session_id.clone(),
-                        actual_ordinal: event.cursor.ordinal,
+                        previous_session_id: previous.session_id.clone(),
+                        previous_ordinal: previous.ordinal,
+                        current_session_id: event.cursor.session_id.clone(),
+                        current_ordinal: event.cursor.ordinal,
                     });
                 }
             }
+            last_checkpoint_cursor = Some(event.cursor.clone());
         }
 
         last_emission_ordinal = Some(event.emission_ordinal);
     }
 
     Ok(())
+}
+
+pub(crate) fn check_live_checkpoint_event<'a>(
+    event: &'a LiveCheckpointEvent,
+    latest_cursor: Option<&CheckpointCursor>,
+) -> Result<CheckedLiveCheckpointEvent<'a>, LiveEventShapeError> {
+    match event.trigger {
+        TriggerClass::CheckpointReady => {
+            let checkpoint = event
+                .checkpoint
+                .as_ref()
+                .ok_or(LiveEventShapeError::MissingCheckpointPayload)?;
+            let expected = CheckpointCursor::from(checkpoint);
+            validate_cursor_identity(&expected)
+                .map_err(|issue| LiveEventShapeError::InvalidCheckpointCursor { issue })?;
+            validate_cursor_identity(&event.cursor).map_err(|issue| {
+                LiveEventShapeError::InvalidEventCursor {
+                    trigger: event.trigger,
+                    issue,
+                }
+            })?;
+            if event.cursor != expected {
+                return Err(LiveEventShapeError::CheckpointCursorMismatch {
+                    expected,
+                    actual: event.cursor.clone(),
+                });
+            }
+            Ok(CheckedLiveCheckpointEvent::CheckpointReady { checkpoint })
+        }
+        TriggerClass::Heartbeat | TriggerClass::RepeatedFailure | TriggerClass::ManualReview => {
+            let trigger = event.trigger;
+            if event.checkpoint.is_some() {
+                return Err(LiveEventShapeError::UnexpectedCheckpointPayload { trigger });
+            }
+            validate_cursor_identity(&event.cursor)
+                .map_err(|issue| LiveEventShapeError::InvalidEventCursor { trigger, issue })?;
+            let Some(expected) = latest_cursor else {
+                return Err(LiveEventShapeError::SyntheticEventBeforeCheckpoint {
+                    trigger,
+                    actual: event.cursor.clone(),
+                });
+            };
+            if event.cursor != *expected {
+                return Err(LiveEventShapeError::SyntheticCursorMismatch {
+                    trigger,
+                    expected: expected.clone(),
+                    actual: event.cursor.clone(),
+                });
+            }
+            Ok(CheckedLiveCheckpointEvent::Synthetic { trigger })
+        }
+    }
+}
+
+fn validate_cursor_identity(cursor: &CheckpointCursor) -> Result<(), CursorIdentityIssue> {
+    if cursor.session_id.trim().is_empty() {
+        return Err(CursorIdentityIssue::EmptySessionId);
+    }
+    if cursor.ordinal == 0 {
+        return Err(CursorIdentityIssue::ZeroOrdinal);
+    }
+    Ok(())
+}
+
+fn map_event_shape_error(line_number: usize, error: LiveEventShapeError) -> LiveInputError {
+    match error {
+        LiveEventShapeError::MissingCheckpointPayload => {
+            LiveInputError::MissingCheckpointPayload { line_number }
+        }
+        LiveEventShapeError::UnexpectedCheckpointPayload { trigger } => {
+            LiveInputError::UnexpectedCheckpointPayload {
+                line_number,
+                trigger: trigger_name(trigger),
+            }
+        }
+        LiveEventShapeError::InvalidEventCursor { trigger, issue } => {
+            LiveInputError::InvalidCursorIdentity {
+                line_number,
+                trigger: trigger_name(trigger),
+                identity: "event cursor",
+                field: issue.field(),
+                reason: issue.reason(),
+            }
+        }
+        LiveEventShapeError::InvalidCheckpointCursor { issue } => {
+            LiveInputError::InvalidCursorIdentity {
+                line_number,
+                trigger: "checkpoint_ready",
+                identity: "checkpoint cursor",
+                field: issue.field(),
+                reason: issue.reason(),
+            }
+        }
+        LiveEventShapeError::CheckpointCursorMismatch { expected, actual } => {
+            LiveInputError::CheckpointCursorMismatch {
+                line_number,
+                expected_session_id: expected.session_id,
+                expected_ordinal: expected.ordinal,
+                actual_session_id: actual.session_id,
+                actual_ordinal: actual.ordinal,
+            }
+        }
+        LiveEventShapeError::SyntheticEventBeforeCheckpoint { trigger, .. } => {
+            LiveInputError::SyntheticEventBeforeCheckpoint {
+                line_number,
+                trigger: trigger_name(trigger),
+            }
+        }
+        LiveEventShapeError::SyntheticCursorMismatch {
+            trigger,
+            expected,
+            actual,
+        } => LiveInputError::SyntheticCursorMismatch {
+            line_number,
+            trigger: trigger_name(trigger),
+            expected_session_id: expected.session_id,
+            expected_ordinal: expected.ordinal,
+            actual_session_id: actual.session_id,
+            actual_ordinal: actual.ordinal,
+        },
+    }
 }
 
 pub fn verify_live_checkpoint_compatibility(
@@ -388,6 +555,89 @@ pub(crate) fn interpret_live_checkpoint(
         previous_same_session,
     })
     .map_err(|error| map_typed_contract_error(error, source_label))
+}
+
+fn validate_serialized_live_event_shape(
+    path: &Utf8Path,
+    line_number: usize,
+    record: &Value,
+) -> Result<Option<CheckpointCursor>, LiveInputError> {
+    let Some(event_type) = record.get("event_type").and_then(Value::as_str) else {
+        return Ok(None);
+    };
+    let trigger = match event_type {
+        "checkpoint_ready" => TriggerClass::CheckpointReady,
+        "heartbeat" => TriggerClass::Heartbeat,
+        "repeated_failure" => TriggerClass::RepeatedFailure,
+        "manual_review" => TriggerClass::ManualReview,
+        _ => return Ok(None),
+    };
+
+    if let Some(serialized_trigger) = record.get("trigger") {
+        if serialized_trigger.as_str() != Some(event_type) {
+            return Err(serialized_event_shape_error(
+                path,
+                line_number,
+                event_type,
+                format!(
+                    "trigger must equal the tagged event_type {event_type:?}, found {serialized_trigger}"
+                ),
+            ));
+        }
+    }
+
+    match trigger {
+        TriggerClass::CheckpointReady => {
+            let Some(cursor) = record.get("cursor") else {
+                return Ok(None);
+            };
+            let cursor: CheckpointCursor =
+                serde_json::from_value(cursor.clone()).map_err(|source| {
+                    serialized_event_shape_error(
+                        path,
+                        line_number,
+                        event_type,
+                        format!("invalid redundant checkpoint-ready cursor: {source}"),
+                    )
+                })?;
+            validate_cursor_identity(&cursor).map_err(|issue| {
+                LiveInputError::InvalidCursorIdentity {
+                    line_number,
+                    trigger: "checkpoint_ready",
+                    identity: "event cursor",
+                    field: issue.field(),
+                    reason: issue.reason(),
+                }
+            })?;
+            Ok(Some(cursor))
+        }
+        TriggerClass::Heartbeat | TriggerClass::RepeatedFailure | TriggerClass::ManualReview => {
+            if record.get("checkpoint").is_some() {
+                Err(serialized_event_shape_error(
+                    path,
+                    line_number,
+                    event_type,
+                    "synthetic events must not include a checkpoint field".to_string(),
+                ))
+            } else {
+                Ok(None)
+            }
+        }
+    }
+}
+
+fn serialized_event_shape_error(
+    path: &Utf8Path,
+    line_number: usize,
+    event_type: &str,
+    reason: String,
+) -> LiveInputError {
+    LiveInputError::SerializedEventShape {
+        path: path.to_owned(),
+        line_number,
+        event_type: event_type.to_string(),
+        reason,
+    }
 }
 
 fn validate_live_fixture_contract(

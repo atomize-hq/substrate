@@ -4,8 +4,9 @@ use agent_drift_analyzer::Checkpoint;
 
 use crate::input::CheckpointCursor;
 use crate::live_input::{
-    interpret_live_checkpoint, LiveCheckpointCompatibility, LiveCheckpointEvent,
-    LiveCheckpointSource, LiveInputError,
+    check_live_checkpoint_event, interpret_live_checkpoint, CheckedLiveCheckpointEvent,
+    LiveCheckpointCompatibility, LiveCheckpointEvent, LiveCheckpointSource, LiveEventShapeError,
+    LiveInputError,
 };
 use crate::operator_surface::{present_interpretation, CheckpointPresentation, WarningPolicy};
 use crate::scheduler::{
@@ -34,6 +35,27 @@ pub struct LiveObservation {
 pub enum LiveRuntimeError {
     #[error(transparent)]
     Input(#[from] LiveInputError),
+    #[error(
+        "live checkpoint-ready event at emission ordinal {emission_ordinal} is missing checkpoint payload"
+    )]
+    MissingCheckpointPayload { emission_ordinal: usize },
+    #[error(
+        "live {trigger} event at emission ordinal {emission_ordinal} must not include a checkpoint payload"
+    )]
+    UnexpectedCheckpointPayload {
+        emission_ordinal: usize,
+        trigger: &'static str,
+    },
+    #[error(
+        "live {trigger} event at emission ordinal {emission_ordinal} has invalid {identity} {field}: {reason}"
+    )]
+    InvalidCursorIdentity {
+        emission_ordinal: usize,
+        trigger: &'static str,
+        identity: &'static str,
+        field: &'static str,
+        reason: &'static str,
+    },
     #[error(
         "live {trigger} event referenced cursor {actual_session_id}:{actual_ordinal} before the runtime observed a checkpoint"
     )]
@@ -100,42 +122,53 @@ impl LiveRuntime {
         &mut self,
         event: LiveCheckpointEvent,
     ) -> Result<LiveObservation, LiveRuntimeError> {
-        let (interpretation, compatibility) = if let Some(checkpoint) = event.checkpoint.as_ref() {
-            let previous_checkpoint = self
-                .latest_checkpoint_by_session
-                .get(checkpoint.session_id.as_str())
-                .cloned();
-            let interpretation = interpret_live_checkpoint(
-                checkpoint,
-                previous_checkpoint.as_ref(),
-                event.source_label.as_deref(),
-            )?;
-            let compatibility = LiveCheckpointCompatibility::from_interpretation(&interpretation);
-            ensure_cursor_matches(&event, &compatibility)?;
+        let checked = check_live_checkpoint_event(
+            &event,
+            self.latest_compatibility
+                .as_ref()
+                .map(|compatibility| &compatibility.cursor),
+        )
+        .map_err(|error| map_event_shape_error(&event, error))?;
 
-            self.previous_checkpoint = previous_checkpoint;
-            self.latest_checkpoint_by_session
-                .insert(checkpoint.session_id.clone(), checkpoint.clone());
-            self.latest_checkpoint = Some(checkpoint.clone());
-            self.latest_compatibility = Some(compatibility.clone());
-            (interpretation, compatibility)
-        } else {
-            let checkpoint = self.latest_checkpoint.as_ref().cloned().ok_or_else(|| {
-                LiveRuntimeError::MissingCheckpoint {
-                    trigger: trigger_name(event.trigger),
-                    actual_session_id: event.cursor.session_id.clone(),
-                    actual_ordinal: event.cursor.ordinal,
-                }
-            })?;
-            let previous_checkpoint = self.previous_checkpoint.clone();
-            let interpretation = interpret_live_checkpoint(
-                &checkpoint,
-                previous_checkpoint.as_ref(),
-                event.source_label.as_deref(),
-            )?;
-            let compatibility = LiveCheckpointCompatibility::from_interpretation(&interpretation);
-            ensure_cursor_matches(&event, &compatibility)?;
-            (interpretation, compatibility)
+        let (interpretation, compatibility) = match checked {
+            CheckedLiveCheckpointEvent::CheckpointReady { checkpoint } => {
+                let previous_checkpoint = self
+                    .latest_checkpoint_by_session
+                    .get(checkpoint.session_id.as_str())
+                    .cloned();
+                let interpretation = interpret_live_checkpoint(
+                    checkpoint,
+                    previous_checkpoint.as_ref(),
+                    event.source_label.as_deref(),
+                )?;
+                let compatibility =
+                    LiveCheckpointCompatibility::from_interpretation(&interpretation);
+
+                self.previous_checkpoint = previous_checkpoint;
+                self.latest_checkpoint_by_session
+                    .insert(checkpoint.session_id.clone(), checkpoint.clone());
+                self.latest_checkpoint = Some(checkpoint.clone());
+                self.latest_compatibility = Some(compatibility.clone());
+                (interpretation, compatibility)
+            }
+            CheckedLiveCheckpointEvent::Synthetic { trigger } => {
+                let checkpoint = self.latest_checkpoint.as_ref().cloned().ok_or_else(|| {
+                    LiveRuntimeError::MissingCheckpoint {
+                        trigger: trigger_name(trigger),
+                        actual_session_id: event.cursor.session_id.clone(),
+                        actual_ordinal: event.cursor.ordinal,
+                    }
+                })?;
+                let previous_checkpoint = self.previous_checkpoint.clone();
+                let interpretation = interpret_live_checkpoint(
+                    &checkpoint,
+                    previous_checkpoint.as_ref(),
+                    event.source_label.as_deref(),
+                )?;
+                let compatibility =
+                    LiveCheckpointCompatibility::from_interpretation(&interpretation);
+                (interpretation, compatibility)
+            }
         };
 
         let decision = self.scheduler.observe(
@@ -175,20 +208,68 @@ impl LiveRuntime {
     }
 }
 
-fn ensure_cursor_matches(
+fn map_event_shape_error(
     event: &LiveCheckpointEvent,
-    compatibility: &LiveCheckpointCompatibility,
-) -> Result<(), LiveRuntimeError> {
-    if compatibility.cursor == event.cursor {
-        return Ok(());
+    error: LiveEventShapeError,
+) -> LiveRuntimeError {
+    match error {
+        LiveEventShapeError::MissingCheckpointPayload => {
+            LiveRuntimeError::MissingCheckpointPayload {
+                emission_ordinal: event.emission_ordinal,
+            }
+        }
+        LiveEventShapeError::UnexpectedCheckpointPayload { trigger } => {
+            LiveRuntimeError::UnexpectedCheckpointPayload {
+                emission_ordinal: event.emission_ordinal,
+                trigger: trigger_name(trigger),
+            }
+        }
+        LiveEventShapeError::InvalidEventCursor { trigger, issue } => {
+            LiveRuntimeError::InvalidCursorIdentity {
+                emission_ordinal: event.emission_ordinal,
+                trigger: trigger_name(trigger),
+                identity: "event cursor",
+                field: issue.field(),
+                reason: issue.reason(),
+            }
+        }
+        LiveEventShapeError::InvalidCheckpointCursor { issue } => {
+            LiveRuntimeError::InvalidCursorIdentity {
+                emission_ordinal: event.emission_ordinal,
+                trigger: "checkpoint_ready",
+                identity: "checkpoint cursor",
+                field: issue.field(),
+                reason: issue.reason(),
+            }
+        }
+        LiveEventShapeError::CheckpointCursorMismatch { expected, actual } => {
+            LiveRuntimeError::CursorMismatch {
+                trigger: "checkpoint_ready",
+                expected_session_id: expected.session_id,
+                expected_ordinal: expected.ordinal,
+                actual_session_id: actual.session_id,
+                actual_ordinal: actual.ordinal,
+            }
+        }
+        LiveEventShapeError::SyntheticEventBeforeCheckpoint { trigger, actual } => {
+            LiveRuntimeError::MissingCheckpoint {
+                trigger: trigger_name(trigger),
+                actual_session_id: actual.session_id,
+                actual_ordinal: actual.ordinal,
+            }
+        }
+        LiveEventShapeError::SyntheticCursorMismatch {
+            trigger,
+            expected,
+            actual,
+        } => LiveRuntimeError::CursorMismatch {
+            trigger: trigger_name(trigger),
+            expected_session_id: expected.session_id,
+            expected_ordinal: expected.ordinal,
+            actual_session_id: actual.session_id,
+            actual_ordinal: actual.ordinal,
+        },
     }
-    Err(LiveRuntimeError::CursorMismatch {
-        trigger: trigger_name(event.trigger),
-        expected_session_id: compatibility.cursor.session_id.clone(),
-        expected_ordinal: compatibility.cursor.ordinal,
-        actual_session_id: event.cursor.session_id.clone(),
-        actual_ordinal: event.cursor.ordinal,
-    })
 }
 
 fn trigger_name(trigger: TriggerClass) -> &'static str {
