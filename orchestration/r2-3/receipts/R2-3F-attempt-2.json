@@ -1,0 +1,42 @@
+{
+  "protocol": "codex.top-level-task-receipt.v1",
+  "orchestration_id": "substrate-r2-3",
+  "dispatch_nonce": "c73ccaae7980f72393c7a01268e55c2d3330680d774b897fe8a9b97774de7667",
+  "increment": "R2-3F",
+  "status": "BLOCKED_SCOPE_EXPANSION",
+  "increment_task": {
+    "thread_id": "019faaee-c343-7ff1-920a-cde0214b4a38",
+    "host_id": "remote-ssh-discovered:spenser-linux-codex"
+  },
+  "expected_base": {
+    "commit": "b9f975ab98a5d15fd63225366e0d32e399b7c608",
+    "tree": "4f59b0740de523708623442f564122c4722b6221"
+  },
+  "subject_fingerprint": "sha256:1a7aab3e115a5ff8ac9cc281d89a4fd1181fc349b9a8eda392648949e44a666e",
+  "review": {
+    "packet_id": "A1.1d-5R2-3F",
+    "record_path": "/home/spenser/.codex/worktrees/f936/substrate-r2-3/target/r2_3f_review/review-cycle.json",
+    "record_sha256": "sha256:334c75611c1c3606f23cdf86346f00848fe303f588323adc8bacd9f1021a61ce",
+    "validated": true,
+    "terminal": "BOUNDED_STOP",
+    "p1": 1,
+    "p2": 0,
+    "p3_p4_disposition": "The accepted blocking P1 is the replay/shim silent-degradation contradiction. Windows warm/provision restoration, ambient/default Lima fallback, and UDS-only routing were rejected as contract regressions; the existing macOS gateway availability guard is not a new contradiction."
+  },
+  "changed_files": [
+    "crates/shell/src/builtins/world_gateway.rs",
+    "crates/shell/src/execution/invocation/plan.rs",
+    "crates/shell/src/execution/platform/macos.rs",
+    "crates/shell/src/execution/platform/windows.rs",
+    "crates/shell/src/execution/platform_world/mod.rs",
+    "crates/shell/src/execution/platform_world/windows.rs",
+    "crates/shell/src/execution/routing/dispatch/world_ops.rs",
+    "crates/world-backend-factory/src/lib.rs"
+  ],
+  "blocker": {
+    "summary": "The contextless factory now fails closed on macOS and Windows, but its out-of-scope replay and shim callers silently degrade instead of failing closed.",
+    "details": "Independent verification confirms the live target, task HEAD, and task tree remain exactly at the expected base with 0/0 divergence and no staged, committed, or published increment changes. In the current authorized WIP, crates/world-backend-factory/src/lib.rs returns an error from factory() on macOS and Windows without typed mapping. However, crates/replay/src/replay/executor.rs converts that error into Ok(None) and its non-Linux execution path falls through to execute_direct(), while crates/shim/src/exec/logging.rs converts the same error into empty world telemetry. These are silent degradations, not fail-closed behavior. Both caller files remain assigned to later increments and outside the amended F allowlist. The bounded review record exists, its SHA-256 matches, and the V1 review validator reports VALID.",
+    "required_authority": "Either authorize crates/replay/src/replay/executor.rs and crates/shim/src/exec/logging.rs in R2-3F solely for the minimum fail-closed caller corrections, or explicitly amend R2-3F so the zero-argument factory transition and its replay/shim fail-closed enforcement are deferred to their assigned R2-3R/R2-3S migrations. The recommended narrow choice is deferral: keep those files out of F, preserve F's typed shell-side mapping work, and require R/S to migrate their callers atomically with the factory behavior they consume.",
+    "handoff_prompt": "Resume R2-3F only in /home/spenser/.codex/worktrees/f936/substrate-r2-3 on thread 019faaee-c343-7ff1-920a-cde0214b4a38, host remote-ssh-discovered:spenser-linux-codex, and nonce c73ccaae7980f72393c7a01268e55c2d3330680d774b897fe8a9b97774de7667. Preserve the current uncommitted eight-file product diff and analyzer-only AGENTS.md/CLAUDE.md churn. Reverify that the live target remains the expected base before further work. Do not resume until the meta task sends an explicit decision either expanding F to the two later caller files or deferring the zero-argument factory transition and replay/shim fail-closed enforcement to R/S. After authority arrives, make only the authorized correction, rerun the full amended F proof set and fresh bounded review, and publish only from a validated CLEAN receipt. Do not begin R2-3R."
+  }
+}
