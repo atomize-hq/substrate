@@ -1,0 +1,23 @@
+{
+  "orchestration_id": "substrate-r2-3",
+  "dispatch_nonce": "650675c0f6e75f99d5d73538972d8fda2400cb029dd20485d87e258427f1fee3",
+  "meta_thread_id": "019fa3f7-c447-7132-9126-82e2cf38bd9d",
+  "meta_host_id": "remote-ssh-discovered:spenser-linux-codex",
+  "evidence_id": "R2-3Z/WIN-EVIDENCE",
+  "attempt": "diagnostic-1",
+  "platform": "windows",
+  "remote": "origin",
+  "target_ref": "refs/heads/feat/internal-host-orchestrator-world-dispatch-bootstrap",
+  "expected_base_commit": "58462482126609ad87e59b896f5d22437461d144",
+  "expected_base_tree": "131cb88fcd22cf739eac5c29a2d6e7d3dded43f0",
+  "required_ancestor": "0f1e147fb735791b44a65099a65167cbdc1803af",
+  "project_id": "e5022d35-561c-4fa5-a5db-2cca9aef4e63",
+  "project_path": "C:/Users/spmcc/Documents/__Project_Code/substrate-r2-3",
+  "project_host_id": "remote-control:env_e_6a3d9cd24b5483238ba55b699a98be35",
+  "model": "gpt-5.4",
+  "thinking": "xhigh",
+  "speed": "standard/default",
+  "predecessor_receipt": "orchestration/r2-3/receipts/R2-3Z-WIN-EVIDENCE-attempt-1.json",
+  "predecessor_artifact_path": "C:\\Users\\spmcc\\.codex\\visualizations\\2026\\07\\29\\019fad17-80c5-7300-946c-f6d12832a35a\\win-evidence\\R2-3Z-WIN-EVIDENCE.artifact.json",
+  "predecessor_artifact_sha256": "sha256:3c20dd509c76b604dcb1311a77369168fa7dacc24e8ccc277ae9b10c2901b0bb"
+}
