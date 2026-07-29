@@ -1,0 +1,87 @@
+{
+  "protocol": "codex.top-level-task-receipt.v1",
+  "orchestration_id": "substrate-r2-3",
+  "dispatch_nonce": "c73ccaae7980f72393c7a01268e55c2d3330680d774b897fe8a9b97774de7667",
+  "increment": "R2-3F",
+  "status": "LANDED_CLEAN",
+  "increment_task": {
+    "thread_id": "019faaee-c343-7ff1-920a-cde0214b4a38",
+    "host_id": "remote-ssh-discovered:spenser-linux-codex"
+  },
+  "expected_base": {
+    "commit": "b9f975ab98a5d15fd63225366e0d32e399b7c608",
+    "tree": "4f59b0740de523708623442f564122c4722b6221"
+  },
+  "landed": {
+    "commit": "c9bdc2c01ef995ffad806f5a64dde3ed5abf56c7",
+    "tree": "4cee38cf467c9b2fa9e23fa1793f8c25ab21f7b4",
+    "target_ref": "refs/heads/feat/internal-host-orchestrator-world-dispatch-bootstrap",
+    "live_remote": "c9bdc2c01ef995ffad806f5a64dde3ed5abf56c7"
+  },
+  "subject_fingerprint": "sha256:f44e3f0ca2aad2c2357ecedd89a706d40f2303e7c5b812ef853bbe3181f6e433",
+  "changed_files": [
+    "crates/shell/src/builtins/world_gateway.rs",
+    "crates/shell/src/execution/invocation/plan.rs",
+    "crates/shell/src/execution/platform/macos.rs",
+    "crates/shell/src/execution/platform/windows.rs",
+    "crates/shell/src/execution/platform_world/mod.rs",
+    "crates/shell/src/execution/platform_world/windows.rs",
+    "crates/shell/src/execution/routing/dispatch/world_ops.rs"
+  ],
+  "review": {
+    "packet_id": "A1.1d-5R2-3F",
+    "record_path": "/home/spenser/.codex/worktrees/f936/substrate-r2-3/target/r2_3f_review_final/review-cycle.json",
+    "record_sha256": "sha256:7078e7e58084e35c7c4a7fd0c3d8134f896df8f6ff99884abb86b37a520d0e13",
+    "validated": true,
+    "terminal": "CLEAN",
+    "p1": 0,
+    "p2": 0,
+    "p3_p4_disposition": "R2-3F-P3-001 remediated in the closure subject; no open P3/P4 findings remain."
+  },
+  "verification": {
+    "required_checks_passed": true,
+    "allowlist_passed": true,
+    "change_detection_passed": true,
+    "checkout_clean": true,
+    "ahead": 0,
+    "behind": 0
+  },
+  "checks": [
+    "cargo fmt --all : PASS",
+    "cargo fmt --all -- --check : PASS",
+    "cargo check --locked -p world-backend-factory : PASS",
+    "cargo test --locked -p world-backend-factory -- --nocapture : PASS",
+    "cargo clippy --locked -p world-backend-factory --all-targets -- -D warnings : PASS",
+    "cargo check --locked -p shell : PASS",
+    "cargo test --locked -p shell windows_live_dispatch_builders_avoid_backend_bootstrap_before_client_selection -- --nocapture : PASS",
+    "cargo test --locked -p shell windows_world_doctor_source_persists_context_before_client_selection -- --nocapture : PASS",
+    "cargo test --locked -p shell macos_world_doctor_human_output_formats_optional_guest_socket_safely -- --nocapture : PASS",
+    "cargo test --locked -p shell macos_platform_detect_source_resolves_limactl_with_repo_fallbacks -- --nocapture : PASS",
+    "cargo test --locked -p shell macos_world_doctor_source_preserves_undeclared_vm_state_and_mapping_provenance -- --nocapture : PASS",
+    "cargo test --locked -p shell linux_gateway_client_uses_fixed_service_socket_under_ambient_override -- --nocapture : PASS",
+    "cargo test --locked -p shell authenticated_gateway_projection_ignores_named_ambient_roots_and_uses_account_db_codex_home -- --nocapture : PASS",
+    "cargo test --locked -p shell from_cli_exercises_macos_projection_path_when_opted_in_for_tests -- --nocapture : PASS",
+    "cargo test --locked -p shell non_linux_gateway_clients_are_contained_before_compatibility_selection -- --nocapture : PASS",
+    "cargo test --manifest-path target/r2_3f_harness/Cargo.toml -- --nocapture : PASS (5 tests)",
+    "cargo clippy --manifest-path target/r2_3f_harness/Cargo.toml --all-targets -- -D warnings : PASS",
+    "git diff --check : PASS",
+    "git diff --cached --check : PASS",
+    "git fetch origin refs/heads/feat/internal-host-orchestrator-world-dispatch-bootstrap : PASS",
+    "git push origin HEAD:refs/heads/feat/internal-host-orchestrator-world-dispatch-bootstrap : PASS"
+  ],
+  "limitations": [
+    "cargo clippy --locked -p shell --all-targets -- -D warnings preserves only pre-existing failures in untouched forbidden files crates/shell/src/builtins/world_deps/surfaces.rs, crates/shell/src/builtins/world_deps/mod.rs, and crates/shell/src/execution/platform/mod.rs",
+    "cargo check --locked -p shell --target x86_64-apple-darwin and cargo test --locked -p shell --target x86_64-apple-darwin --no-run remain blocked by Linux host toolchain limitations in ring/cc for Apple flags",
+    "cargo check --locked -p shell --target x86_64-pc-windows-msvc and cargo test --locked -p shell --target x86_64-pc-windows-msvc --no-run remain blocked by missing MSVC lib.exe and unsupported GNU fallback"
+  ],
+  "gitnexus": {
+    "scope": "all",
+    "changed_count": 78,
+    "changed_files": 9,
+    "risk_level": "low",
+    "affected_processes": [],
+    "notes": "Pre-commit detect_changes reported nine local paths because analyzer-only AGENTS.md and CLAUDE.md were dirty at analysis time; publication staged and pushed only the seven authorized shell files, and both analyzer files were restored to landed HEAD before receipt acceptance."
+  },
+  "completion_boundary": "Completed only the final shell-side R2-3F mapping propagation over the seven authorized files, supporting PI-054 through PI-058 and PI-075 through PI-076 while deferring world-backend-factory behavior transition plus replay/shim caller migration to R2-3R and R2-3S. No claim is made for native macOS or Windows evidence, forwarding activation, provisioning, lifecycle ownership, gateway policy changes, replay migration, shim migration, or any R3 row.",
+  "next_increment": "R2-3R"
+}
