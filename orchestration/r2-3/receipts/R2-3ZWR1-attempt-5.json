@@ -1,0 +1,58 @@
+{
+  "protocol": "codex.top-level-task-receipt.v1",
+  "orchestration_id": "substrate-r2-3",
+  "dispatch_nonce": "854781991ce7038d0c81541bd4bf325930e1d83b445f77cfb0f0b9e0bd8f613b",
+  "increment": "R2-3ZWR1",
+  "status": "BLOCKED_SCOPE_EXPANSION",
+  "increment_task": {
+    "thread_id": "019faea7-97f2-79e1-9920-1fafe080ee52",
+    "host_id": "remote-control:env_e_6a3d9cd24b5483238ba55b699a98be35"
+  },
+  "expected_base": {
+    "commit": "58462482126609ad87e59b896f5d22437461d144",
+    "tree": "131cb88fcd22cf739eac5c29a2d6e7d3dded43f0",
+    "target_ref": "refs/heads/feat/internal-host-orchestrator-world-dispatch-bootstrap",
+    "required_ancestor": "0f1e147fb735791b44a65099a65167cbdc1803af",
+    "divergence": {
+      "ahead": 0,
+      "behind": 0
+    }
+  },
+  "worktree": {
+    "path": "C:\\Users\\spmcc\\.codex\\worktrees\\102c\\substrate-r2-3",
+    "dirty_unstaged_paths": [
+      "crates/shell/src/builtins/world_deps/surfaces.rs",
+      "crates/shell/src/builtins/world_enable/runner.rs",
+      "crates/shell/src/execution/agent_runtime/host_session_authority/transition_tests.rs",
+      "crates/shell/src/execution/agent_runtime/state_store.rs",
+      "crates/shell/src/execution/home_bootstrap.rs",
+      "crates/shell/src/execution/host_inbox_materialization.rs",
+      "crates/shell/src/execution/orchestrator_world_dispatch.rs",
+      "crates/shell/src/execution/platform_world/windows.rs",
+      "crates/shell/src/execution/pty/io/types.rs",
+      "crates/shell/src/repl/async_repl.rs",
+      "scripts/windows/prefix-mapping-r2-3.Tests.ps1"
+    ],
+    "staged_paths": [],
+    "committed": false,
+    "pushed": false,
+    "reviewed": false
+  },
+  "evidence": {
+    "resume_barrier": "PASS: exact base commit, tree, target ref, required ancestor, 0/0 divergence, and the seven-file resume state were verified.",
+    "cargo_build_locked_shell_lib": "PASS",
+    "powershell_parser_validation": "PASS",
+    "powershell_w2only": "PASS",
+    "cargo_fmt_check": "PASS",
+    "cargo_check_locked_shell": "PASS",
+    "filtered_test": "BLOCKED: cargo test --locked -p shell \"windows_tests::\" -- --nocapture",
+    "remaining_allowed_diagnostics": "The state_store.rs diagnostics were intentionally not addressed after the mandatory out-of-allowlist stop."
+  },
+  "blocker": {
+    "summary": "The filtered native-Windows test build requires a twelfth tracked file outside the eleven-file allowlist.",
+    "details": "The first stopping diagnostic is E0432 at crates/shell/src/execution/agent_runtime/control.rs:3741. Its test module imports super::prompt_event_text, but prompt_event_text is Unix-gated. Remaining in-allowlist state_store.rs diagnostics were intentionally left unaddressed after this stop.",
+    "required_authority": "Add only crates/shell/src/execution/agent_runtime/control.rs to authorize the minimum Windows test-build cfg alignment for prompt_event_text. No other scope expansion is requested.",
+    "handoff_prompt": "Resume R2-3ZWR1 in C:\\Users\\spmcc\\.codex\\worktrees\\102c\\substrate-r2-3 with orchestration_id substrate-r2-3, packet A1.1d-5R2-3ZWR1, nonce 854781991ce7038d0c81541bd4bf325930e1d83b445f77cfb0f0b9e0bd8f613b, task thread 019faea7-97f2-79e1-9920-1fafe080ee52, task host remote-control:env_e_6a3d9cd24b5483238ba55b699a98be35, expected base commit 58462482126609ad87e59b896f5d22437461d144, and expected tree 131cb88fcd22cf739eac5c29a2d6e7d3dded43f0. Preserve all eleven dirty unstaged files exactly; do not reset, clean, restore, rebase, recreate, stage, or discard them. Add only crates/shell/src/execution/agent_runtime/control.rs to the allowlist. Run file-qualified GitNexus upstream impact analysis before editing, apply the minimum cfg alignment for control.rs:3741 and its Unix-gated prompt_event_text helper, then address the already reported allowed-file state_store.rs diagnostics and resume the complete native proof, review, fingerprint, publication, and receipt contract. Stop on the first required thirteenth file."
+  },
+  "next_increment": "EVIDENCE:R2-3Z"
+}
