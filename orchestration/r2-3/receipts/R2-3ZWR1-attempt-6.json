@@ -1,0 +1,58 @@
+{
+  "protocol": "codex.top-level-task-receipt.v1",
+  "orchestration_id": "substrate-r2-3",
+  "dispatch_nonce": "854781991ce7038d0c81541bd4bf325930e1d83b445f77cfb0f0b9e0bd8f613b",
+  "increment": "R2-3ZWR1",
+  "packet_id": "A1.1d-5R2-3ZWR1",
+  "status": "BLOCKED_SCOPE_EXPANSION",
+  "increment_task": {
+    "thread_id": "019faea7-97f2-79e1-9920-1fafe080ee52",
+    "host_id": "remote-control:env_e_6a3d9cd24b5483238ba55b699a98be35"
+  },
+  "expected_base": {
+    "commit": "58462482126609ad87e59b896f5d22437461d144",
+    "tree": "131cb88fcd22cf739eac5c29a2d6e7d3dded43f0",
+    "target_ref": "refs/heads/feat/internal-host-orchestrator-world-dispatch-bootstrap",
+    "required_ancestor": "0f1e147fb735791b44a65099a65167cbdc1803af",
+    "ahead": 0,
+    "behind": 0
+  },
+  "worktree": {
+    "path": "C:\\Users\\spmcc\\.codex\\worktrees\\102c\\substrate-r2-3",
+    "dirty_unstaged_paths": [
+      "crates/shell/src/builtins/world_deps/surfaces.rs",
+      "crates/shell/src/builtins/world_enable/runner.rs",
+      "crates/shell/src/execution/agent_runtime/control.rs",
+      "crates/shell/src/execution/agent_runtime/host_session_authority/transition_tests.rs",
+      "crates/shell/src/execution/agent_runtime/state_store.rs",
+      "crates/shell/src/execution/home_bootstrap.rs",
+      "crates/shell/src/execution/host_inbox_materialization.rs",
+      "crates/shell/src/execution/orchestrator_world_dispatch.rs",
+      "crates/shell/src/execution/platform_world/windows.rs",
+      "crates/shell/src/execution/pty/io/types.rs",
+      "crates/shell/src/repl/async_repl.rs",
+      "scripts/windows/prefix-mapping-r2-3.Tests.ps1"
+    ],
+    "staged_paths": [],
+    "untracked_paths": [],
+    "committed": false,
+    "pushed": false,
+    "reviewed": false
+  },
+  "evidence": {
+    "resume_barrier": "PASS: exact base/tree/ref/ancestor/0/0, exact eleven-file attempt-5 dirty state, no staged, untracked, analyzer-only, or additional changes, live remote unchanged, and GitNexus current.",
+    "filtered_test_build": "PASS: cargo test --locked -p shell \"windows_tests::\" -- --nocapture compiled and ran 10 tests.",
+    "filtered_test_result": "FAIL: 8 passed and 2 failed. windows_file_identity_is_exact_and_reparse_points_reject panicked at install_bootstrap.rs:1631; windows_ancestor_reparse_alias_rejects panicked at install_bootstrap.rs:1642. Both fixture operations returned Windows OS error 1314: A required privilege is not held by the client.",
+    "prior_checks": "Native product library build, PowerShell parser validation, W2Only, cargo fmt check, and cargo check passed.",
+    "publication": "No fingerprint, bounded review, staging, commit, or push occurred.",
+    "delivery": "Cross-host receipt delivery did not complete; delivery is not claimed."
+  },
+  "blocker": {
+    "summary": "The required filtered native-Windows test compiles but requires a thirteenth-file test-fixture repair or a Windows host with symlink privilege.",
+    "details": "The first newly required out-of-allowlist file is crates/shell/src/execution/install_bootstrap.rs. Its Windows reparse and file-identity tests unwrap fixture creation at lines 1631 and 1642, but this host returns OS error 1314 because the client lacks CreateSymbolicLink privilege. The assertions were not weakened or bypassed.",
+    "required_authority": "Authorize only crates/shell/src/execution/install_bootstrap.rs for minimum capability-aware Windows test-fixture handling that preserves the reparse-point rejection assertions, or provide an equivalent native Windows proof host with CreateSymbolicLink privilege or Developer Mode. No production behavior change is requested.",
+    "handoff_prompt": "Resume R2-3ZWR1 in C:\\Users\\spmcc\\.codex\\worktrees\\102c\\substrate-r2-3 with orchestration substrate-r2-3, packet A1.1d-5R2-3ZWR1, nonce 854781991ce7038d0c81541bd4bf325930e1d83b445f77cfb0f0b9e0bd8f613b, task thread 019faea7-97f2-79e1-9920-1fafe080ee52, task host remote-control:env_e_6a3d9cd24b5483238ba55b699a98be35, expected commit/tree 58462482126609ad87e59b896f5d22437461d144 / 131cb88fcd22cf739eac5c29a2d6e7d3dded43f0, and target refs/heads/feat/internal-host-orchestrator-world-dispatch-bootstrap. Preserve all twelve dirty unstaged files exactly; do not reset, clean, restore, rebase, recreate, stage, or discard them. Add only crates/shell/src/execution/install_bootstrap.rs. Run file-qualified GitNexus upstream impact analysis before editing the two Windows test symbols. Implement minimum capability-aware fixture handling for Windows error 1314 without weakening the reparse/file-identity assertions or changing production behavior. Rerun cargo test --locked -p shell \"windows_tests::\" -- --nocapture and the complete native proof, review, fingerprint, and publication contract. Stop on the first required fourteenth file."
+  },
+  "completion_boundary": "R2-3ZWR1, R2-3Z, the parent packet, native evidence gates, and all R3 rows remain incomplete.",
+  "next_increment": "EVIDENCE:R2-3Z"
+}
