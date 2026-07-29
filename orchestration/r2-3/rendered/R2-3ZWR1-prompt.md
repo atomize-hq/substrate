@@ -76,6 +76,18 @@ identified in `orchestration/r2-3/receipts/R2-3ZWR1-attempt-1.json`. The amendme
 
 No other scope or authority changes.
 
+SECOND NARROW SCOPE AMENDMENT
+
+After the six-file native-Windows repair pass stopped cleanly with
+`BLOCKED_SCOPE_EXPANSION`, the user explicitly authorized the one additional production file
+identified in `orchestration/r2-3/receipts/R2-3ZWR1-attempt-3.json`:
+
+- `crates/shell/src/execution/home_bootstrap.rs`, solely to make the existing
+  `BootstrapOwner` construction valid when its Unix-only field is absent on Windows.
+
+The existing six-file unstaged WIP in the task-assigned `102c` worktree must be preserved. No
+other file, behavior, or authority is added.
+
 Use the available skills appropriate to source analysis, test-driven repair, GitNexus impact
 analysis, security review, code review, and git publication. This top-level task and every
 subagent must run at Standard/default speed, never Fast. Every subagent must use GPT-5.4 with
@@ -112,11 +124,12 @@ Production changes are limited to:
 - `crates/shell/src/execution/orchestrator_world_dispatch.rs`
 - `crates/shell/src/execution/platform_world/windows.rs`
 - `crates/shell/src/builtins/world_enable/runner.rs`
+- `crates/shell/src/execution/home_bootstrap.rs`
 
 Test changes are limited to:
 
 - `scripts/windows/prefix-mapping-r2-3.Tests.ps1`
-- colocated `#[cfg(test)]` modules already within the five allowed Rust production files, only
+- colocated `#[cfg(test)]` modules already within the six allowed Rust production files, only
   when mechanically necessary to prove the named cfg/build repair.
 
 Do not edit `scripts/windows/start-forwarder.ps1`; the diagnostic proved its release-first,
@@ -124,9 +137,9 @@ debug-fallback behavior is correct. Do not edit any other shell source, test, sc
 `Cargo.lock`, control document, generated analyzer file, `AGENTS.md`, or `CLAUDE.md`.
 
 If a successful native `cargo build --locked -p shell --lib` requires any additional tracked file
-beyond these six files,
+beyond these seven files,
 stop with `BLOCKED_SCOPE_EXPANSION`. Report the exact next compiler diagnostic, required file and
-symbol, why the six-file allowlist cannot repair it, and a copy-ready continuation prompt. Do not
+symbol, why the seven-file allowlist cannot repair it, and a copy-ready continuation prompt. Do not
 silently widen the allowlist.
 
 PRE-EDIT BARRIER AND IMPACT
@@ -169,6 +182,9 @@ For the Rust build defects:
   module public or adding a new public API;
 - make `anyhow::Context` available on Windows only as required by the existing `.context(...)`
   call, without changing the world-enable operation;
+- make the existing `BootstrapOwner` construction valid when its Unix-only field is absent on
+  Windows, without adding ambient identity, changing Unix ownership validation, or changing a
+  public API;
 - preserve existing Linux and macOS code paths byte-for-byte where practical;
 - preserve Windows fail-closed behavior for unsupported world-worker operations;
 - do not make Linux-only dispatch helpers callable on Windows;
@@ -249,7 +265,7 @@ STOP CONDITIONS
 Stop with the matching blocked receipt if:
 
 - the base, tree, target ref, ancestry, cleanliness, or 0/0 gate differs;
-- a required repair lies outside the exact six-file allowlist;
+- a required repair lies outside the exact seven-file allowlist;
 - the repair changes Linux/macOS behavior, weakens Windows fail-closed behavior, adds ambient
   authority, or changes a public API;
 - any platform lifecycle, process, pipe, PID, service, provisioning, cleanup, artifact, or
