@@ -1,0 +1,87 @@
+{
+  "protocol": "codex.top-level-task-receipt.v1",
+  "orchestration_id": "substrate-r2-3",
+  "dispatch_nonce": "dbfd364ed94158b486f4eabbb61b13efc802d992e969151f6c78b60a41212117",
+  "increment": "R2-3S2",
+  "status": "LANDED_CLEAN",
+  "increment_task": {
+    "thread_id": "019fac98-b54e-73b2-82bb-d9cb74c3cedb",
+    "host_id": "remote-ssh-discovered:spenser-linux-codex"
+  },
+  "expected_base": {
+    "commit": "e1c251ad41725efc780747ca01aca08f85874ac2",
+    "tree": "b6fb36e77f83d26bdb2bdfd49f090c4830b5826f"
+  },
+  "landed": {
+    "commit": "549949a20f01397e49d3819398359cea522f3a83",
+    "tree": "1b98a9a96d40a4a9e453099815e9bf11b32a4831",
+    "target_ref": "refs/heads/feat/internal-host-orchestrator-world-dispatch-bootstrap",
+    "live_remote": "549949a20f01397e49d3819398359cea522f3a83"
+  },
+  "subject_fingerprint": "sha256:1f44093a8953abe5d3312a57c87ce690f8144639fa86835b959f1bddaf93d6c0",
+  "subject_manifest": {
+    "path": "/home/spenser/.codex/visualizations/2026/07/29/019fac98-b54e-73b2-82bb-d9cb74c3cedb/r2-3s2-review/subject-manifest.txt",
+    "sha256": "sha256:25ea79373d75fa1a2f0cf51d2d7edbb47d9b3d37b373d92af5fbc45abe0c835a"
+  },
+  "changed_files": [
+    "crates/shim/src/exec/mod.rs",
+    "crates/shim/src/exec/policy.rs",
+    "crates/shim/src/logger.rs",
+    "crates/shim/tests/integration.rs"
+  ],
+  "review": {
+    "packet_id": "A1.1d-5R2-3S2",
+    "record_path": "/home/spenser/.codex/visualizations/2026/07/29/019fac98-b54e-73b2-82bb-d9cb74c3cedb/r2-3s2-review/review-cycle-record.json",
+    "record_sha256": "sha256:b0cbe94172e942b859646e38373c4fa1194498d89cab26e7001b0db76ee9f79c",
+    "validated": true,
+    "terminal": "CLEAN",
+    "p1": 0,
+    "p2": 0,
+    "p3_p4_disposition": "R2-3S2-P2-001 and R2-3S2-P3-001 were remediated before landing; closure review was CLEAN with no open P1/P2/P3/P4."
+  },
+  "verification": {
+    "required_checks_passed": true,
+    "allowlist_passed": true,
+    "change_detection_passed": true,
+    "checkout_clean": true,
+    "ahead": 0,
+    "behind": 0
+  },
+  "checks": [
+    "cargo fmt --all -- --check",
+    "cargo check --locked -p substrate-shim",
+    "cargo test --locked -p substrate-shim -- --nocapture",
+    "cargo clippy --locked -p substrate-shim --all-targets -- -D warnings",
+    "cargo check --locked -p substrate-shim --target x86_64-pc-windows-msvc",
+    "cargo test --locked -p substrate-shim --test integration test_physical_shim_honors_descendant_workspace_policy_within_selected_prefix -- --nocapture",
+    "git diff --check",
+    "git diff --cached --check",
+    "review-cycle validator",
+    "exact allowlist and staged diff inspection",
+    "final remote/base/tree/ancestor verification",
+    "post-push remote commit/tree verification",
+    "GitNexus staged change detection and all affected-flow inspection",
+    "independent landed manifest/blob/fingerprint recomputation"
+  ],
+  "limitations": [
+    "Apple cross-target checking remains unavailable on this Linux host because ring invokes macOS-only compiler flags",
+    "Static and cross-target compilation were not counted as native macOS/Windows evidence"
+  ],
+  "gitnexus": {
+    "status": "current_at_landed_commit",
+    "indexed_commit": "549949a20f01397e49d3819398359cea522f3a83",
+    "changed_files": 4,
+    "changed_symbols": 25,
+    "affected_processes": 9,
+    "risk_level": "high",
+    "inspection_result": "All nine affected Run_shim flows were inspected and remained expected step-one physical-shim entrypoint impacts."
+  },
+  "unchanged_scope_proof": [
+    "crates/shim/src/exec/logging.rs unchanged",
+    "crates/shim/src/context.rs unchanged",
+    "crates/world-backend-factory/src/lib.rs unchanged",
+    "all replay-side R files unchanged"
+  ],
+  "completion_boundary": "Completes only the physical-shim portion of PI-118 by binding and reusing the S1-authenticated explicit-product trace target and policy root before manager, policy, telemetry, span, and execution logging. R2-3T remains the sole final PI-118 compatibility owner. S1 behavior, trace writer/rotation/retention/span schema, lifecycle/forwarding/replacement/removal/deletion authority, native platform evidence, all R3 rows, and the R2-3 parent remain unclaimed.",
+  "next_increment": "R2-3T"
+}
