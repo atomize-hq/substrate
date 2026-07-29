@@ -1,0 +1,21 @@
+{
+  "protocol": "codex.top-level-task-receipt.v1",
+  "orchestration_id": "substrate-r2-3",
+  "dispatch_nonce": "9af6bbc784c80e6818b57e546d5a7747c1709f9210067227a39fc211da57dc08",
+  "increment": "R2-3R",
+  "status": "BLOCKED_SCOPE_EXPANSION",
+  "increment_task": {
+    "thread_id": "019fabac-6eaf-7af0-846c-a8c7ec02fd76",
+    "host_id": "remote-ssh-discovered:spenser-linux-codex"
+  },
+  "expected_base": {
+    "commit": "c9bdc2c01ef995ffad806f5a64dde3ed5abf56c7",
+    "tree": "4cee38cf467c9b2fa9e23fa1793f8c25ab21f7b4"
+  },
+  "blocker": {
+    "summary": "R2-3R cannot project complete explicit replay authority through the real reconstruction and shell CLI boundaries inside its exact allowlist.",
+    "details": "Independent verification confirms the live product ref and task HEAD remain at c9bdc2c01ef995ffad806f5a64dde3ed5abf56c7 with tree 4cee38cf467c9b2fa9e23fa1793f8c25ab21f7b4 and 0/0 divergence. No implementation source was changed, committed, or pushed. The production ExecutionState reconstruction literal is in crates/replay/src/state.rs, outside the R allowlist, so ReplayConfig::platform_bootstrap_mapping cannot reach the real reconstructed execution state without that file. The shell replay entry receives only the parsed Cli. Existing Cli input carries an install bootstrap carrier on Unix but carries no complete authenticated carrier-plus-PlatformBootstrapMappingV1 pair, and the contract forbids reconstructing either authority from environment, defaults, trace contents, CWD, or platform detection. Therefore one hidden replay-only encoded complete-pair argument is required in crates/shell/src/execution/cli.rs. Adding that Cli field mechanically requires initializing it to None in the sole production Cli struct literal in crates/shell/src/execution/auto_sync.rs. The existing plan.rs replay call already passes the complete Cli to handle_replay_command, so crates/shell/src/execution/invocation/plan.rs does not require modification. The task checkout contains only analyzer-generated AGENTS.md and CLAUDE.md churn and no R implementation changes.",
+    "required_authority": "Authorize the narrow R production expansion to crates/replay/src/state.rs, crates/shell/src/execution/cli.rs, and crates/shell/src/execution/auto_sync.rs. In state.rs, permit only minimum ReplayConfig authority projection into the real ExecutionState reconstruction and exact colocated tests. In cli.rs, permit only one hidden replay-only encoded complete authenticated factory-input argument plus exact parsing tests; it must carry the existing carrier-plus-mapping wrapper, create no second authority, and remain absent by default. In auto_sync.rs, permit only the mechanical None initializer required by the new Cli field. Keep crates/shell/src/execution/invocation/plan.rs and all other files frozen. Missing or invalid explicit input on macOS/Windows must still fail before factory/backend construction, and no environment/default/platform-detection reconstruction is authorized.",
+    "handoff_prompt": "Resume R2-3R in /home/spenser/.codex/worktrees/eb6a/substrate-r2-3 with thread 019fabac-6eaf-7af0-846c-a8c7ec02fd76, host remote-ssh-discovered:spenser-linux-codex, and nonce 9af6bbc784c80e6818b57e546d5a7747c1709f9210067227a39fc211da57dc08. Reverify the live target remains commit c9bdc2c01ef995ffad806f5a64dde3ed5abf56c7 and tree 4cee38cf467c9b2fa9e23fa1793f8c25ab21f7b4 before implementation. Preserve the original R contract except for the exact three-file production expansion: crates/replay/src/state.rs for the real ExecutionState reconstruction projection, crates/shell/src/execution/cli.rs for one hidden replay-only encoded complete authenticated carrier-plus-mapping input and exact tests, and crates/shell/src/execution/auto_sync.rs solely for the mechanical None initializer required by that Cli field. Do not edit invocation/plan.rs: its existing handle_replay_command call already passes Cli. Do not obtain authority from environment, defaults, trace contents, CWD, or platform detection. Restore only analyzer-generated AGENTS.md/CLAUDE.md churn before final staging, rerun the complete amended proof and bounded review, and publish only from a validated CLEAN receipt. Do not begin R2-3S1."
+  }
+}
