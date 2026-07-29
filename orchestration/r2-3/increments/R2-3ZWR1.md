@@ -29,6 +29,29 @@ identified in `orchestration/r2-3/receipts/R2-3ZWR1-attempt-3.json`:
 The existing six-file unstaged WIP in the task-assigned `102c` worktree must be preserved. No
 other file, behavior, or authority is added.
 
+THIRD NARROW SCOPE AMENDMENT
+
+After the seven-file native-Windows repair made the product library build and W2Only proof pass,
+the required filtered shell test build stopped cleanly with `BLOCKED_SCOPE_EXPANSION`. The user
+explicitly authorized the four additional Windows cfg/test-build surfaces identified in
+`orchestration/r2-3/receipts/R2-3ZWR1-attempt-4.json`:
+
+- `crates/shell/src/builtins/world_deps/surfaces.rs`, only for the reported Windows test-build
+  gating of Unix-only imports/helpers and the corresponding authenticated world-deps test
+  surface;
+- `crates/shell/src/execution/agent_runtime/host_session_authority/transition_tests.rs`, only for
+  the reported Windows test-build gating of Unix-only test support;
+- `crates/shell/src/execution/host_inbox_materialization.rs`, only for the reported Windows
+  test-build gating of Unix-only test support; and
+- `crates/shell/src/execution/pty/io/types.rs`, only for the reported Windows console-handle type
+  mismatch in the library test build.
+
+The existing seven-file unstaged WIP in the task-assigned `102c` worktree must be preserved
+exactly. This amendment authorizes only the minimum cfg/type corrections required for the
+previously mandated `cargo test --locked -p shell "windows_tests::" -- --nocapture` build to
+compile and run. It does not authorize suppressing the command, removing tests, changing
+production behavior, or widening into any further file.
+
 Use the available skills appropriate to source analysis, test-driven repair, GitNexus impact
 analysis, security review, code review, and git publication. This top-level task and every
 subagent must run at Standard/default speed, never Fast. Every subagent must use GPT-5.4 with
@@ -44,7 +67,9 @@ Repair only:
    --lib` from reaching a successful native-Windows library build; and
 2. the tracked W2Only assertion at `scripts/windows/prefix-mapping-r2-3.Tests.ps1:2033` so it uses
    a literal, honest regex without strict-mode interpolation or a spurious backslash before
-   `$resolvedProject`.
+   `$resolvedProject`; and
+3. the four explicitly authorized Windows cfg/test-build defects that prevent the required
+   filtered shell test command from compiling and reaching its `windows_tests::` bodies.
 
 Preserve the accepted R2-3A through R2-3T behavior. This increment repairs cfg/build hygiene and
 the focused regression proof only. It does not change platform mapping, transport selection,
@@ -66,40 +91,50 @@ Production changes are limited to:
 - `crates/shell/src/execution/platform_world/windows.rs`
 - `crates/shell/src/builtins/world_enable/runner.rs`
 - `crates/shell/src/execution/home_bootstrap.rs`
+- `crates/shell/src/builtins/world_deps/surfaces.rs`
+- `crates/shell/src/execution/agent_runtime/host_session_authority/transition_tests.rs`
+- `crates/shell/src/execution/host_inbox_materialization.rs`
+- `crates/shell/src/execution/pty/io/types.rs`
 
 Test changes are limited to:
 
 - `scripts/windows/prefix-mapping-r2-3.Tests.ps1`
-- colocated `#[cfg(test)]` modules already within the six allowed Rust production files, only
+- colocated `#[cfg(test)]` modules already within the ten allowed Rust files, only
   when mechanically necessary to prove the named cfg/build repair.
 
 Do not edit `scripts/windows/start-forwarder.ps1`; the diagnostic proved its release-first,
 debug-fallback behavior is correct. Do not edit any other shell source, test, script, manifest,
 `Cargo.lock`, control document, generated analyzer file, `AGENTS.md`, or `CLAUDE.md`.
 
-If a successful native `cargo build --locked -p shell --lib` requires any additional tracked file
-beyond these seven files,
-stop with `BLOCKED_SCOPE_EXPANSION`. Report the exact next compiler diagnostic, required file and
-symbol, why the seven-file allowlist cannot repair it, and a copy-ready continuation prompt. Do not
-silently widen the allowlist.
+If either the successful native `cargo build --locked -p shell --lib` gate or the required
+filtered shell test build requires any additional tracked file beyond these eleven files, stop
+with `BLOCKED_SCOPE_EXPANSION`. Report the exact next compiler diagnostic, required file and
+symbol, why the eleven-file allowlist cannot repair it, and a copy-ready continuation prompt. Do
+not silently widen the allowlist.
 
 PRE-EDIT BARRIER AND IMPACT
 
 Before editing:
 
-1. Verify the task-assigned Windows worktree is clean and exactly at commit
+1. This is an authorized same-task resume with preserved WIP. Verify the task-assigned Windows
+   worktree HEAD is exactly at commit
    `58462482126609ad87e59b896f5d22437461d144`, tree
    `131cb88fcd22cf739eac5c29a2d6e7d3dded43f0`, target ref
    `refs/heads/feat/internal-host-orchestrator-world-dispatch-bootstrap`, 0 ahead/0 behind, with
-   required ancestor `0f1e147fb735791b44a65099a65167cbdc1803af`.
+   required ancestor `0f1e147fb735791b44a65099a65167cbdc1803af`. Require exactly the seven
+   previously authorized dirty unstaged paths recorded in the attempt-4 receipt and no staged,
+   untracked, analyzer-only, or other tracked changes. Do not reset, clean, recreate, reconcile,
+   or discard that WIP.
 2. Verify the live remote still equals that exact commit and tree.
 3. Make the GitNexus index current for the exact task checkout. Restore analyzer-only
    `AGENTS.md`/`CLAUDE.md` churn before implementation.
 4. Run file-qualified upstream impact analysis, including tests, for every existing symbol that
    may be edited. Treat graph undercoverage of Windows cfg paths as undercoverage, not proof.
 5. Reproduce and record the first actionable diagnostics from:
-   - `cargo build --locked -p shell --lib`; and
-   - `pwsh -NoProfile -File scripts/windows/prefix-mapping-r2-3.Tests.ps1 -W2Only`.
+   - the already-passing `cargo build --locked -p shell --lib`;
+   - the already-passing
+     `pwsh -NoProfile -File scripts/windows/prefix-mapping-r2-3.Tests.ps1 -W2Only`; and
+   - the blocked `cargo test --locked -p shell "windows_tests::" -- --nocapture`.
 6. Inspect exact callers/cfg definitions for:
    - `PreparedSpawnWorldWorkerBootstrap`;
    - `WorldWorkReceiptRegistry`;
@@ -126,6 +161,14 @@ For the Rust build defects:
 - make the existing `BootstrapOwner` construction valid when its Unix-only field is absent on
   Windows, without adding ambient identity, changing Unix ownership validation, or changing a
   public API;
+- in `world_deps/surfaces.rs`, gate only the reported Unix-only imports, helpers, and dependent
+  test surface that cannot compile on Windows; do not weaken authenticated world-deps binding on
+  any supported platform;
+- in `host_session_authority/transition_tests.rs` and `host_inbox_materialization.rs`, gate only
+  the reported Unix-only test support that cannot compile on Windows; do not remove or bypass
+  Windows-capable assertions;
+- in `pty/io/types.rs`, correct only the reported Windows console-handle test-build type mismatch
+  while preserving runtime PTY behavior and Unix handle behavior;
 - preserve existing Linux and macOS code paths byte-for-byte where practical;
 - preserve Windows fail-closed behavior for unsupported world-worker operations;
 - do not make Linux-only dispatch helpers callable on Windows;
@@ -179,10 +222,9 @@ Run at minimum on native Windows:
 - exact unstaged/staged allowlist checks; and
 - pre-publication `gitnexus_detect_changes()` with every reported affected flow inspected.
 
-If the filtered shell test build exposes a distinct, pre-existing test-only cfg defect outside the
-allowlist after the production library build succeeds, report it honestly. It does not authorize
-editing another file or weakening the required command; use `BLOCKED_SCOPE_EXPANSION` when that
-surface is required for the increment's proof.
+If the filtered shell test build exposes a distinct cfg/test defect outside the amended allowlist,
+report it honestly. It does not authorize editing another file or weakening the required command;
+use `BLOCKED_SCOPE_EXPANSION` when that surface is required for the increment's proof.
 
 SUBJECT FINGERPRINT AND BOUNDED REVIEW
 
@@ -206,7 +248,7 @@ STOP CONDITIONS
 Stop with the matching blocked receipt if:
 
 - the base, tree, target ref, ancestry, cleanliness, or 0/0 gate differs;
-- a required repair lies outside the exact seven-file allowlist;
+- a required repair lies outside the exact eleven-file allowlist;
 - the repair changes Linux/macOS behavior, weakens Windows fail-closed behavior, adds ambient
   authority, or changes a public API;
 - any platform lifecycle, process, pipe, PID, service, provisioning, cleanup, artifact, or
