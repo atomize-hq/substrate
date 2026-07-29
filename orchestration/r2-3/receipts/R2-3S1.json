@@ -1,0 +1,84 @@
+{
+  "protocol": "codex.top-level-task-receipt.v1",
+  "orchestration_id": "substrate-r2-3",
+  "dispatch_nonce": "ba687d3224a37868c2998b826012ec0742dfe10e25d50725a835235c23a90465",
+  "increment": "R2-3S1",
+  "status": "LANDED_CLEAN",
+  "increment_task": {
+    "thread_id": "019fac4f-5d09-7d11-9a31-c895b258fc6f",
+    "host_id": "remote-ssh-discovered:spenser-linux-codex"
+  },
+  "expected_base": {
+    "commit": "cefe2a9363b565ca8c53f3364a975c8406e781c9",
+    "tree": "946dbd4f6d94b5e990c228065dfcf8e74d878e00"
+  },
+  "landed": {
+    "commit": "e1c251ad41725efc780747ca01aca08f85874ac2",
+    "tree": "b6fb36e77f83d26bdb2bdfd49f090c4830b5826f",
+    "target_ref": "refs/heads/feat/internal-host-orchestrator-world-dispatch-bootstrap",
+    "live_remote": "e1c251ad41725efc780747ca01aca08f85874ac2"
+  },
+  "subject_fingerprint": "sha256:72b69a0c907999e5013568e9c183f68df74e2469bb682d61ad2451f1c9fef13d",
+  "changed_files": [
+    "crates/shim/src/context.rs",
+    "crates/shim/src/exec/logging.rs",
+    "crates/shim/src/exec/mod.rs",
+    "crates/shim/tests/integration.rs",
+    "crates/world-backend-factory/src/lib.rs"
+  ],
+  "review": {
+    "packet_id": "A1.1d-5R2-3S1",
+    "record_path": "/home/spenser/.codex/visualizations/2026/07/29/019fac4f-5d09-7d11-9a31-c895b258fc6f/r2-3s1-review/review-cycle-record.json",
+    "record_sha256": "sha256:f51291016b279e626e5d06fab0de9ad1877ff0f19c6f56bb7e6f1bb4c0439844",
+    "validated": true,
+    "terminal": "CLEAN",
+    "p1": 0,
+    "p2": 0,
+    "p3_p4_disposition": "All four discovery findings were remediated; supplemental causal cycle 2 closed with zero open P1/P2/P3/P4."
+  },
+  "verification": {
+    "required_checks_passed": true,
+    "allowlist_passed": true,
+    "change_detection_passed": true,
+    "checkout_clean": true,
+    "ahead": 0,
+    "behind": 0
+  },
+  "checks": [
+    "cargo fmt --all -- --check",
+    "cargo check --locked -p substrate-shim",
+    "cargo test --locked -p substrate-shim -- --nocapture",
+    "cargo clippy --locked -p substrate-shim --all-targets -- -D warnings",
+    "cargo check --locked -p world-backend-factory",
+    "cargo test --locked -p world-backend-factory -- --nocapture",
+    "cargo clippy --locked -p world-backend-factory --all-targets -- -D warnings",
+    "focused substrate-shim context::tests::resolve_ tests",
+    "focused substrate-shim exec::logging::tests::manifest_paths_use_authenticated_prefix_only",
+    "focused world-backend-factory zero_arg_factory tests",
+    "targeted substrate-shim test_claude_code_hash_pinning_scenario",
+    "git diff --check",
+    "git diff --cached --check",
+    "review cycle validator",
+    "exact landed blob/fingerprint and source-caller closure"
+  ],
+  "limitations": [
+    "Windows target cargo checks passed, but target test --no-run remains unavailable on this Linux host because link.exe is absent",
+    "Apple target checks remain unavailable because this Linux host lacks a macOS-capable C toolchain",
+    "Native macOS/Windows typed-telemetry and zero-argument cutover evidence remains assigned to R2-3Z",
+    "The strengthened hash-pinning test does not claim the shell-cache-only case where the shim directory is absent from PATH"
+  ],
+  "gitnexus": {
+    "status": "current_at_landed_commit",
+    "indexed_commit": "e1c251ad41725efc780747ca01aca08f85874ac2",
+    "risk_level": "medium",
+    "affected_flows": [
+      "Run_shim -> Is_file",
+      "Run_shim -> Build_cache_key",
+      "Run_shim -> From_current_exe",
+      "Run_shim -> New"
+    ],
+    "closure_note": "Exact textual source closure found no remaining Rust caller of world_backend_factory::factory(); the shim telemetry path now calls factory_with_platform_bootstrap."
+  },
+  "completion_boundary": "Completes PI-090, PI-116, and PI-054's final no-contextless macOS/Windows factory condition. It supports but does not complete PI-118, and does not migrate physical-shim trace/policy inputs, change trace/policy semantics, activate platform lifecycle/forwarding, replace shim artifacts, claim native Windows evidence, complete any R3 row, or complete R2-3.",
+  "next_increment": "R2-3S2"
+}
