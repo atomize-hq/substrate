@@ -1,0 +1,85 @@
+{
+  "protocol": "codex.top-level-task-receipt.v1",
+  "orchestration_id": "substrate-r2-3",
+  "dispatch_nonce": "9af6bbc784c80e6818b57e546d5a7747c1709f9210067227a39fc211da57dc08",
+  "increment": "R2-3R",
+  "status": "LANDED_CLEAN",
+  "increment_task": {
+    "thread_id": "019fabac-6eaf-7af0-846c-a8c7ec02fd76",
+    "host_id": "remote-ssh-discovered:spenser-linux-codex"
+  },
+  "expected_base": {
+    "commit": "c9bdc2c01ef995ffad806f5a64dde3ed5abf56c7",
+    "tree": "4cee38cf467c9b2fa9e23fa1793f8c25ab21f7b4"
+  },
+  "landed": {
+    "commit": "cefe2a9363b565ca8c53f3364a975c8406e781c9",
+    "tree": "946dbd4f6d94b5e990c228065dfcf8e74d878e00",
+    "target_ref": "refs/heads/feat/internal-host-orchestrator-world-dispatch-bootstrap",
+    "live_remote": "cefe2a9363b565ca8c53f3364a975c8406e781c9"
+  },
+  "subject_fingerprint": "sha256:8cac249c87c339c138c0a250dd34a7b24b105fc95f8fc6986f82a8c4ebce4a6d",
+  "changed_files": [
+    "crates/replay/src/lib.rs",
+    "crates/replay/src/replay/executor.rs",
+    "crates/replay/src/replay/mod.rs",
+    "crates/replay/src/replay/planner.rs",
+    "crates/replay/src/state.rs",
+    "crates/replay/tests/integration.rs",
+    "crates/replay/tests/planner_executor.rs",
+    "crates/shell/src/execution/auto_sync.rs",
+    "crates/shell/src/execution/cli.rs",
+    "crates/shell/src/execution/routing/replay.rs",
+    "crates/world-backend-factory/src/lib.rs"
+  ],
+  "review": {
+    "packet_id": "A1.1d-5R2-3R",
+    "record_path": "/home/spenser/.codex/visualizations/2026/07/29/019fabac-6eaf-7af0-846c-a8c7ec02fd76/A1.1d-5R2-3R.review-cycle.json",
+    "record_sha256": "sha256:c5d2033802fbeb0fe81fd36c1381a0acc0abf0b0f4a80312c4fd477ff9cb5af9",
+    "validated": true,
+    "terminal": "CLEAN",
+    "p1": 0,
+    "p2": 0,
+    "p3_p4_disposition": "Discovery and closure findings were remediated in scope; the final supplemental closure was CLEAN with zero open P1/P2/P3/P4."
+  },
+  "verification": {
+    "required_checks_passed": true,
+    "allowlist_passed": true,
+    "change_detection_passed": true,
+    "checkout_clean": true,
+    "ahead": 0,
+    "behind": 0
+  },
+  "checks": [
+    "cargo fmt --all -- --check",
+    "cargo check --locked -p world-backend-factory",
+    "cargo test --locked -p world-backend-factory -- --nocapture",
+    "cargo clippy --locked -p world-backend-factory --all-targets -- -D warnings",
+    "cargo check --locked -p substrate-replay",
+    "cargo test --locked -p substrate-replay -- --nocapture",
+    "cargo clippy --locked -p substrate-replay --all-targets -- -D warnings",
+    "cargo check --locked -p shell",
+    "cargo test --locked -p shell replay_platform_bootstrap_input -- --nocapture",
+    "cargo test --locked -p shell request_carried_project_dir -- --nocapture",
+    "cargo test --locked -p shell decode_replay_platform_bootstrap_input -- --nocapture"
+  ],
+  "limitations": [
+    "cargo test --locked -p shell replay_defaults_to_recorded_host_origin -- --nocapture remains limited by the host's missing installed-product invocation witness or --install-prefix",
+    "Windows shell target checks remain limited by unavailable MSVC lib.exe on the Linux host",
+    "Apple target checks remain limited by the unavailable Apple SDK/toolchain on the Linux host",
+    "Native macOS/Windows runtime evidence remains assigned to R2-3Z"
+  ],
+  "gitnexus": {
+    "status": "current_at_landed_commit",
+    "indexed_commit": "cefe2a9363b565ca8c53f3364a975c8406e781c9",
+    "changed_files": 11,
+    "changed_symbols": 85,
+    "affected_processes": 1,
+    "risk_level": "medium",
+    "affected_flow": "Handle_replay_command -> Inherit_missing_trace_fields",
+    "closure_note": "Manual caller closure supplemented cfg-specific GitNexus undercoverage. The sole remaining zero-argument caller is crates/shim/src/exec/logging.rs::collect_world_telemetry."
+  },
+  "handoff_obligation": "R2-3S1 must migrate collect_world_telemetry to the authenticated typed factory input and, after exact source closure proves no macOS/Windows contextless consumer remains, atomically remove or fail-close the zero-argument platform factory. R2-3S1 must include crates/world-backend-factory/src/lib.rs in its exact allowlist for that final cutover.",
+  "completion_boundary": "Completes PI-091 only through the replay-side typed factory path. It does not complete PI-054's final no-contextless-factory condition, migrate physical shim/trace/manager callers, activate lifecycle/forwarding/provisioning/listeners, claim native macOS/Windows evidence, complete any R3 row, or complete R2-3.",
+  "next_increment": "R2-3S1"
+}
