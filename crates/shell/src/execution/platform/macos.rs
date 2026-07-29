@@ -6,6 +6,11 @@ pub(crate) fn host_doctor_main(
     world_enabled: bool,
     world_disable_attribution: Option<&crate::execution::config_model::DoctorDisableAttribution>,
 ) -> i32 {
+    if crate::execution::pw::get_context().is_none() {
+        if let Ok(detected) = crate::execution::pw::detect() {
+            crate::execution::pw::store_context_globally(detected);
+        }
+    }
     world_doctor_macos::run_host(
         json_mode,
         world_enabled,
@@ -24,6 +29,11 @@ pub(crate) fn world_doctor_main(
         "SUBSTRATE_WORLD_ENABLED",
         if world_enabled { "1" } else { "0" },
     );
+    if crate::execution::pw::get_context().is_none() {
+        if let Ok(detected) = crate::execution::pw::detect() {
+            crate::execution::pw::store_context_globally(detected);
+        }
+    }
     world_doctor_macos::run(
         json_mode,
         world_enabled,
@@ -44,6 +54,7 @@ mod world_doctor_macos {
     use std::process::Command;
     use std::time::Duration;
     use transport_api_client::AgentClient;
+    use transport_api_types::PlatformTransportIdentityV1;
     use world_mac_lima::transport::{
         managed_host_socket_path, Transport, COMPATIBILITY_TCP_HOST, COMPATIBILITY_TCP_PORT,
     };
@@ -78,8 +89,26 @@ mod world_doctor_macos {
         }
     }
 
-    fn resolve_lima_vm_name() -> String {
-        std::env::var("SUBSTRATE_LIMA_VM_NAME").unwrap_or_else(|_| "substrate".to_string())
+    fn resolve_lima_vm_name() -> anyhow::Result<String> {
+        #[cfg(not(test))]
+        if let Some(ctx) = crate::execution::pw::get_context() {
+            if let Some(mapping) = ctx.bootstrap_mapping.as_ref() {
+                if let transport_api_types::PlatformInstanceIdentityV1::Lima { vm_name, .. } =
+                    &mapping.platform_instance
+                {
+                    return Ok(vm_name.clone());
+                }
+            }
+        }
+        std::env::var("SUBSTRATE_LIMA_VM_NAME")
+            .ok()
+            .map(|value| value.trim().to_string())
+            .filter(|value| !value.is_empty())
+            .ok_or_else(|| {
+                anyhow::anyhow!(
+                    "macOS doctor requires an explicitly declared Lima instance via SUBSTRATE_LIMA_VM_NAME when no verified mapping is available"
+                )
+            })
     }
 
     #[derive(Clone, Debug, PartialEq, Eq)]
@@ -102,6 +131,21 @@ mod world_doctor_macos {
     }
 
     fn selected_host_visible_transports() -> Vec<HostVisibleTransport> {
+        #[cfg(not(test))]
+        {
+            if let Some(ctx) = crate::execution::pw::get_context() {
+                if let Some(mapping) = ctx.bootstrap_mapping.as_ref() {
+                    if let PlatformTransportIdentityV1::Lima { host_socket, .. } =
+                        &mapping.realized_transport
+                    {
+                        return vec![HostVisibleTransport::Unix(PathBuf::from(host_socket))];
+                    }
+                }
+            }
+            return Vec::new();
+        }
+
+        #[cfg(test)]
         let Ok(install_context) =
             crate::execution::install_bootstrap::checked_install_bootstrap_context_from_projections(
             )
@@ -494,8 +538,11 @@ echo pass
         selected_host_prefix: Option<String>,
         host_context_commitment: Option<String>,
         host_platform_control_root: Option<String>,
+        guest_substrate_home: Option<String>,
+        guest_principal_account: Option<String>,
+        guest_principal_uid: Option<u32>,
         transport_host_socket: Option<String>,
-        transport_guest_socket: String,
+        transport_guest_socket: Option<String>,
         vm_name: String,
         lima_installed: bool,
         lima_virtualization: bool,
@@ -517,7 +564,14 @@ echo pass
         runner: &dyn CommandRunner,
     ) -> WorldDoctorAssessment {
         let fs_policy = world_fs_policy();
-        let vm_name = resolve_lima_vm_name();
+        let resolved_vm_name = resolve_lima_vm_name().ok();
+        let vm_name = resolved_vm_name.clone().unwrap_or_else(|| {
+            if cfg!(test) {
+                "substrate".to_string()
+            } else {
+                "undeclared".to_string()
+            }
+        });
         let world_fs_mode = fs_policy.mode.as_str().to_string();
         let world_fs_isolation = fs_policy.isolation.as_str().to_string();
         let world_fs_require_world = fs_policy.require_world;
@@ -526,6 +580,17 @@ echo pass
             crate::execution::install_bootstrap::checked_install_bootstrap_context_from_projections(
             )
             .ok();
+        let authenticated_mapping = {
+            #[cfg(not(test))]
+            {
+                crate::execution::pw::get_context().and_then(|ctx| ctx.bootstrap_mapping.clone())
+            }
+            #[cfg(test)]
+            {
+                None
+            }
+        };
+        let mapping_coherent = authenticated_mapping.is_some() || cfg!(test);
         let selected_host_prefix = checked_install_context
             .as_ref()
             .map(|carrier| carrier.context.selected_host_prefix.clone());
@@ -535,16 +600,95 @@ echo pass
         let authority_home = crate::execution::install_bootstrap::current_unix_principal_and_home()
             .ok()
             .map(|(_, home)| home);
-        let host_platform_control_root = authority_home
-            .as_ref()
-            .map(|home| home.join(".lima").display().to_string());
-        let transport_host_socket = selected_host_prefix.as_ref().map(|prefix| {
-            PathBuf::from(prefix)
-                .join("sock/agent.sock")
-                .display()
-                .to_string()
-        });
-        let transport_guest_socket = "/run/substrate.sock".to_string();
+        let host_platform_control_root = {
+            #[cfg(not(test))]
+            {
+                authenticated_mapping
+                    .as_ref()
+                    .map(|mapping| mapping.host_platform_control_root.clone())
+            }
+            #[cfg(test)]
+            {
+                authenticated_mapping
+                    .as_ref()
+                    .map(|mapping| mapping.host_platform_control_root.clone())
+                    .or_else(|| {
+                        authority_home
+                            .as_ref()
+                            .map(|home| home.join(".lima").display().to_string())
+                    })
+            }
+        };
+        let (guest_substrate_home, guest_principal_account, guest_principal_uid) =
+            authenticated_mapping
+                .as_ref()
+                .map(|mapping| {
+                    let (account, uid) = match &mapping.realized_principal {
+                        transport_api_types::PlatformPrincipalV1::Unix { account, uid } => {
+                            (Some(account.clone()), Some(*uid))
+                        }
+                        transport_api_types::PlatformPrincipalV1::Windows { .. } => (None, None),
+                    };
+                    (Some(mapping.realized_substrate_home.clone()), account, uid)
+                })
+                .unwrap_or((None, None, None));
+        let transport_host_socket = {
+            #[cfg(not(test))]
+            {
+                authenticated_mapping.as_ref().and_then(|mapping| {
+                    match &mapping.realized_transport {
+                        PlatformTransportIdentityV1::Lima { host_socket, .. } => {
+                            Some(host_socket.clone())
+                        }
+                        _ => None,
+                    }
+                })
+            }
+            #[cfg(test)]
+            {
+                authenticated_mapping
+                    .as_ref()
+                    .and_then(|mapping| match &mapping.realized_transport {
+                        PlatformTransportIdentityV1::Lima { host_socket, .. } => {
+                            Some(host_socket.clone())
+                        }
+                        _ => None,
+                    })
+                    .or_else(|| {
+                        selected_host_prefix.as_ref().map(|prefix| {
+                            PathBuf::from(prefix)
+                                .join("sock/agent.sock")
+                                .display()
+                                .to_string()
+                        })
+                    })
+            }
+        };
+        let transport_guest_socket = {
+            #[cfg(not(test))]
+            {
+                authenticated_mapping.as_ref().and_then(|mapping| {
+                    match &mapping.realized_transport {
+                        PlatformTransportIdentityV1::Lima { guest_socket, .. } => {
+                            Some(guest_socket.clone())
+                        }
+                        _ => None,
+                    }
+                })
+            }
+            #[cfg(test)]
+            {
+                authenticated_mapping
+                    .as_ref()
+                    .and_then(|mapping| match &mapping.realized_transport {
+                        PlatformTransportIdentityV1::Lima { guest_socket, .. } => {
+                            Some(guest_socket.clone())
+                        }
+                        _ => None,
+                    })
+                    .or_else(|| Some("/run/substrate.sock".to_string()))
+            }
+        };
 
         let previous_home = std::env::var_os("HOME");
         let previous_lima_home = std::env::var_os("LIMA_HOME");
@@ -558,7 +702,9 @@ echo pass
         let lima_virtualization = virtualization.success && virtualization.stdout.trim() == "1";
         let vsock_proxy = which::which("vsock-proxy").is_ok();
 
-        let vm_status = if lima_installed {
+        let can_probe_declared_vm =
+            authenticated_mapping.is_some() || resolved_vm_name.is_some() || cfg!(test);
+        let vm_status = if lima_installed && can_probe_declared_vm {
             let vm = runner.run("limactl", &["list", &vm_name, "--json"]);
             if vm.success {
                 match serde_json::from_str::<Value>(&vm.stdout) {
@@ -572,17 +718,30 @@ echo pass
             } else {
                 "missing".into()
             }
-        } else {
+        } else if !lima_installed {
             "unknown".into()
+        } else if resolved_vm_name.is_some() {
+            "unavailable".into()
+        } else {
+            "undeclared".into()
         };
 
-        let vm_running = vm_status == "Running";
+        let vm_running = can_probe_declared_vm && vm_status == "Running";
         let WorldServiceReachability {
             mut host_visible_transports,
             service_active,
             mut agent_caps_ok,
             mut guest_direct_caps_ok,
-        } = assess_world_service_reachability(vm_running, &vm_name, runner);
+        } = if can_probe_declared_vm {
+            assess_world_service_reachability(vm_running, &vm_name, runner)
+        } else {
+            WorldServiceReachability {
+                host_visible_transports: selected_host_visible_transports(),
+                service_active: false,
+                agent_caps_ok: false,
+                guest_direct_caps_ok: false,
+            }
+        };
         if socket_override {
             host_visible_transports.clear();
             agent_caps_ok = false;
@@ -590,6 +749,7 @@ echo pass
         }
 
         let host_ok = world_enabled
+            && mapping_coherent
             && lima_installed
             && lima_virtualization
             && vm_status == "Running"
@@ -627,12 +787,28 @@ echo pass
                             json!(host_platform_control_root.clone()),
                         );
                         obj.insert(
+                            "guest_substrate_home".into(),
+                            json!(guest_substrate_home.clone()),
+                        );
+                        obj.insert(
+                            "guest_principal_account".into(),
+                            json!(guest_principal_account.clone()),
+                        );
+                        obj.insert(
+                            "guest_principal_uid".into(),
+                            json!(guest_principal_uid),
+                        );
+                        obj.insert(
                             "transport_host_socket".into(),
                             json!(transport_host_socket.clone()),
                         );
                         obj.insert(
                             "transport_guest_socket".into(),
                             json!(transport_guest_socket.clone()),
+                        );
+                        obj.insert(
+                            "platform_mapping_attested".into(),
+                            json!(mapping_coherent),
                         );
                         obj.insert(
                             "forwarding_prerequisite".into(),
@@ -750,6 +926,9 @@ echo pass
             selected_host_prefix,
             host_context_commitment,
             host_platform_control_root,
+            guest_substrate_home,
+            guest_principal_account,
+            guest_principal_uid,
             transport_host_socket,
             transport_guest_socket,
             vm_name,
@@ -801,16 +980,24 @@ echo pass
                 let preview = &commitment[..commitment.len().min(12)];
                 info(&format!("selected commitment: {preview}..."));
             }
-            info(&format!("declared VM: {}", assessment.vm_name));
+            if assessment.vm_name == "undeclared" {
+                info("declared VM: not declared");
+            } else {
+                info(&format!("declared VM: {}", assessment.vm_name));
+            }
             if assessment.host_platform_control_root.is_some() {
-                info("Lima control root: resolved from account database.");
+                info("Lima control root: resolved from authenticated platform mapping.");
             }
             if assessment.selected_host_prefix.is_some()
                 && assessment.transport_host_socket.is_some()
+                && assessment.transport_guest_socket.is_some()
             {
                 info(&format!(
                     "Observed transport target: selected-prefix/sock/agent.sock -> {}",
-                    assessment.transport_guest_socket
+                    assessment
+                        .transport_guest_socket
+                        .as_deref()
+                        .unwrap_or_default()
                 ));
             }
             warn("Forwarding activation unavailable here: R3 prerequisite unmet.");
@@ -844,13 +1031,19 @@ echo pass
         }
 
         if !json_mode {
-            match assessment.vm_status.as_str() {
-                "Running" => pass(&format!("Lima VM '{}' running", assessment.vm_name)),
-                "missing" => warn(&format!("Lima VM '{}' not found", assessment.vm_name)),
-                status => warn(&format!(
-                    "Lima VM '{}' not running (status: {status})",
-                    assessment.vm_name
-                )),
+            if assessment.vm_name == "undeclared" {
+                warn(
+                    "Lima VM not declared (set SUBSTRATE_LIMA_VM_NAME when no verified mapping is available)",
+                );
+            } else {
+                match assessment.vm_status.as_str() {
+                    "Running" => pass(&format!("Lima VM '{}' running", assessment.vm_name)),
+                    "missing" => warn(&format!("Lima VM '{}' not found", assessment.vm_name)),
+                    status => warn(&format!(
+                        "Lima VM '{}' not running (status: {status})",
+                        assessment.vm_name
+                    )),
+                }
             }
         }
 
@@ -937,16 +1130,23 @@ echo pass
                 let preview = &commitment[..commitment.len().min(12)];
                 info(&format!("selected commitment: {preview}..."));
             }
-            info(&format!("declared VM: {}", assessment.vm_name));
+            if assessment.vm_name == "undeclared" {
+                info("declared VM: not declared");
+            } else {
+                info(&format!("declared VM: {}", assessment.vm_name));
+            }
             if assessment.host_platform_control_root.is_some() {
-                info("Lima control root: resolved from account database.");
+                info("Lima control root: resolved from authenticated platform mapping.");
             }
             if assessment.selected_host_prefix.is_some()
                 && assessment.transport_host_socket.is_some()
             {
                 info(&format!(
                     "Observed transport target: selected-prefix/sock/agent.sock -> {}",
-                    assessment.transport_guest_socket
+                    assessment
+                        .transport_guest_socket
+                        .as_deref()
+                        .unwrap_or("unavailable")
                 ));
             }
             warn("Forwarding activation unavailable here: R3 prerequisite unmet.");
@@ -977,13 +1177,19 @@ echo pass
         }
 
         if !json_mode {
-            match assessment.vm_status.as_str() {
-                "Running" => pass(&format!("Lima VM '{}' running", assessment.vm_name)),
-                "missing" => warn(&format!("Lima VM '{}' not found", assessment.vm_name)),
-                status => warn(&format!(
-                    "Lima VM '{}' not running (status: {status})",
-                    assessment.vm_name
-                )),
+            if assessment.vm_name == "undeclared" {
+                warn(
+                    "Lima VM not declared (set SUBSTRATE_LIMA_VM_NAME when no verified mapping is available)",
+                );
+            } else {
+                match assessment.vm_status.as_str() {
+                    "Running" => pass(&format!("Lima VM '{}' running", assessment.vm_name)),
+                    "missing" => warn(&format!("Lima VM '{}' not found", assessment.vm_name)),
+                    status => warn(&format!(
+                        "Lima VM '{}' not running (status: {status})",
+                        assessment.vm_name
+                    )),
+                }
             }
         }
 
@@ -1423,12 +1629,12 @@ echo pass
             let _authority_env = crate::execution::AuthorityEnvTestGuard::preserve();
             with_env_var("LIMA_VM_NAME", Some("substrate-fallback"), || {
                 with_env_var("SUBSTRATE_LIMA_VM_NAME", Some("substrate-arch"), || {
-                    assert_eq!(resolve_lima_vm_name(), "substrate-arch");
+                    assert_eq!(resolve_lima_vm_name().unwrap(), "substrate-arch");
                 })
             });
             with_env_var("SUBSTRATE_LIMA_VM_NAME", None, || {
                 with_env_var("LIMA_VM_NAME", Some("ambient-vm"), || {
-                    assert_eq!(resolve_lima_vm_name(), "substrate");
+                    assert!(resolve_lima_vm_name().is_err());
                 })
             });
         }
@@ -2355,5 +2561,24 @@ mod platform_tests {
 
         restore(&keys, prev.clone());
         assert_eq!(snapshot(&keys), prev);
+    }
+}
+
+#[cfg(test)]
+mod source_tests {
+    #[test]
+    fn human_world_doctor_output_formats_optional_guest_socket_safely() {
+        let source = include_str!("macos.rs");
+        let start = source
+            .find("Observed transport target: selected-prefix/sock/agent.sock -> {}")
+            .expect("transport target formatting");
+        let section = &source[start..source.len().min(start + 300)];
+
+        assert!(
+            section.contains(".transport_guest_socket")
+                && section.contains(".as_deref()")
+                && section.contains(".unwrap_or(\"unavailable\")"),
+            "human macOS doctor output must render the optional guest socket without requiring Display on Option<String>"
+        );
     }
 }

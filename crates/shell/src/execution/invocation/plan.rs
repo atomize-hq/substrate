@@ -705,12 +705,6 @@ impl ShellConfig {
         };
 
         // Determine shell to use
-        #[cfg(target_os = "windows")]
-        {
-            use crate::execution::platform_world::windows;
-
-            let _ = windows::ensure_world_ready_with_state(final_no_world);
-        }
         let shell_path = if let Some(shell) = cli.shell {
             shell
         } else if cfg!(windows) {

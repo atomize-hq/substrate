@@ -1567,6 +1567,12 @@ fn current_world_request_profile() -> Option<String> {
 }
 
 #[cfg(target_os = "windows")]
+fn mark_windows_world_dispatch_active_without_session() {
+    std::env::set_var("SUBSTRATE_WORLD", "enabled");
+    std::env::remove_var("SUBSTRATE_WORLD_ID");
+}
+
+#[cfg(target_os = "windows")]
 fn validate_execute_response_shared_world(
     requested: Option<&transport_api_types::SharedWorldOwnerSpec>,
     response: &transport_api_types::ExecuteResponse,
@@ -2072,7 +2078,6 @@ fn build_agent_client_and_request_impl(
     String,
 )> {
     use crate::execution::platform_world::windows;
-    let backend = windows::get_backend()?;
     #[cfg(test)]
     let _env_guard = world_env_guard();
 
@@ -2080,15 +2085,7 @@ fn build_agent_client_and_request_impl(
     let cwd = windows::current_dir_wsl()?;
     let host_cwd = std::env::current_dir().unwrap_or_else(|_| std::path::PathBuf::from("."));
     let network_policy = resolve_world_network_policy_for_cwd(&host_cwd)?;
-    let spec = world_spec_for_network_policy(
-        crate::execution::settings::world_root_from_env().path,
-        world_fs_mode(),
-        &network_policy,
-    );
-    let handle = backend.ensure_session(&spec)?;
-
-    std::env::set_var("SUBSTRATE_WORLD", "enabled");
-    std::env::set_var("SUBSTRATE_WORLD_ID", &handle.id);
+    mark_windows_world_dispatch_active_without_session();
 
     let profile = current_world_request_profile();
     let (mut env_map, inherit_from_host) = build_world_env_map_for_cwd(&host_cwd)?;
@@ -2141,7 +2138,6 @@ fn build_agent_client_and_member_dispatch_request_impl(
     String,
 )> {
     use crate::execution::platform_world::windows;
-    let backend = windows::get_backend()?;
     #[cfg(test)]
     let _env_guard = world_env_guard();
 
@@ -2149,15 +2145,7 @@ fn build_agent_client_and_member_dispatch_request_impl(
     let cwd = windows::current_dir_wsl()?;
     let host_cwd = cwd_path.to_path_buf();
     let network_policy = resolve_world_network_policy_for_cwd(&host_cwd)?;
-    let spec = world_spec_for_network_policy(
-        crate::execution::settings::world_root_from_env().path,
-        world_fs_mode(),
-        &network_policy,
-    );
-    let handle = backend.ensure_session(&spec)?;
-
-    std::env::set_var("SUBSTRATE_WORLD", "enabled");
-    std::env::set_var("SUBSTRATE_WORLD_ID", &handle.id);
+    mark_windows_world_dispatch_active_without_session();
 
     let profile = current_world_request_profile();
     let (mut env_map, inherit_from_host) = build_world_env_map_for_cwd(&host_cwd)?;
@@ -2204,16 +2192,11 @@ fn build_agent_client_and_pending_diff_request_impl() -> anyhow::Result<(
     String,
 )> {
     use crate::execution::platform_world::windows;
-    let backend = windows::get_backend()?;
-    let handle = backend.ensure_session(&windows::bootstrap_world_spec())?;
-
     #[cfg(test)]
     let _env_guard = world_env_guard();
 
-    std::env::set_var("SUBSTRATE_WORLD", "enabled");
-    std::env::set_var("SUBSTRATE_WORLD_ID", &handle.id);
-
     let client = windows::build_agent_client()?;
+    mark_windows_world_dispatch_active_without_session();
     let cwd = windows::current_dir_wsl()?;
     let host_cwd = std::env::current_dir().unwrap_or_else(|_| std::path::PathBuf::from("."));
     let profile = current_world_request_profile();
@@ -4152,6 +4135,166 @@ mod tests {
                 );
             });
         }
+    }
+
+    #[test]
+    fn windows_live_dispatch_builders_avoid_backend_bootstrap_before_client_selection() {
+        let source = include_str!("world_ops.rs");
+        let windows_sections = [
+            (
+                "#[cfg(target_os = \"windows\")]\nfn build_agent_client_and_request_impl(",
+                "#[allow(dead_code)]\n#[cfg(target_os = \"windows\")]\nfn build_agent_client_and_member_dispatch_request_impl(",
+            ),
+            (
+                "#[allow(dead_code)]\n#[cfg(target_os = \"windows\")]\nfn build_agent_client_and_member_dispatch_request_impl(",
+                "#[cfg(target_os = \"windows\")]\nfn build_agent_client_and_pending_diff_request_impl()",
+            ),
+            (
+                "#[cfg(target_os = \"windows\")]\nfn build_agent_client_and_pending_diff_request_impl()",
+                "pub(crate) fn stream_non_pty_via_agent(",
+            ),
+        ];
+
+        for (start_marker, end_marker) in windows_sections {
+            let start = source.find(start_marker).expect("windows dispatch section");
+            let end = source[start..]
+                .find(end_marker)
+                .map(|offset| start + offset)
+                .expect("windows dispatch section end");
+            let section = &source[start..end];
+
+            assert!(
+                section.contains("windows::build_agent_client()?"),
+                "missing typed Windows client selection in section starting with {start_marker}"
+            );
+            assert!(
+                section.contains("mark_windows_world_dispatch_active_without_session();"),
+                "missing session-free Windows world marker in section starting with {start_marker}"
+            );
+            let client_pos = section
+                .find("windows::build_agent_client()?")
+                .expect("typed Windows client selection position");
+            let marker_pos = section
+                .find("mark_windows_world_dispatch_active_without_session();")
+                .expect("session-free Windows world marker position");
+            assert!(
+                client_pos < marker_pos,
+                "Windows live dispatch must not mark the world active before typed client selection in {start_marker}"
+            );
+            assert!(
+                !section.contains("windows::get_backend()?"),
+                "Windows live dispatch unexpectedly reintroduced backend bootstrap in {start_marker}"
+            );
+            assert!(
+                !section.contains("ensure_session("),
+                "Windows live dispatch unexpectedly reintroduced session realization in {start_marker}"
+            );
+        }
+    }
+
+    #[test]
+    fn windows_world_doctor_source_persists_context_before_client_selection() {
+        let source = include_str!("../../platform/windows.rs");
+        let start = source
+            .find("pub(crate) fn world_doctor_main(")
+            .expect("world_doctor_main");
+        let end = source[start..]
+            .find("let ok =")
+            .map(|offset| start + offset)
+            .expect("world_doctor_main summary boundary");
+        let section = &source[start..end];
+
+        let detect_pos = section
+            .find("crate::execution::pw::detect().and_then(|detected| {")
+            .expect("detect path");
+        let store_pos = section
+            .find("crate::execution::pw::store_context_globally(detected);")
+            .expect("context store");
+        let client_pos = section
+            .find("crate::execution::pw::windows::build_agent_client()?")
+            .expect("typed client build");
+
+        assert!(
+            detect_pos < store_pos && store_pos < client_pos,
+            "Windows world doctor must persist the detected context before building the typed client so host diagnostics and world doctor share one mapping"
+        );
+    }
+
+    #[test]
+    fn macos_world_doctor_human_output_formats_optional_guest_socket_safely() {
+        let source = include_str!("../../platform/macos.rs");
+        assert!(
+            source.contains(
+                "assessment\n                        .transport_guest_socket\n                        .as_deref()\n                        .unwrap_or(\"unavailable\")"
+            ),
+            "human macOS doctor output must render the optional guest socket without requiring Display on Option<String>"
+        );
+    }
+
+    #[test]
+    fn macos_platform_detect_source_resolves_limactl_with_repo_fallbacks() {
+        let source = include_str!("../../platform_world/mod.rs");
+        let start = source
+            .find("let result = (|| -> Result<(String, String, u32, String)> {")
+            .expect("macOS guest observation start");
+        let end = source[start..]
+            .find("let stdout = String::from_utf8(output.stdout)")
+            .map(|offset| start + offset)
+            .expect("macOS guest observation parse boundary");
+        let section = &source[start..end];
+
+        assert!(
+            section.contains("SUBSTRATE_TEST_LIMACTL_PATH"),
+            "macOS guest observation must honor the existing limactl test-override path"
+        );
+        assert!(
+            section.contains("/opt/homebrew/bin/limactl")
+                && section.contains("/usr/local/bin/limactl")
+                && section.contains("/opt/homebrew/sbin/limactl")
+                && section.contains("/usr/local/sbin/limactl"),
+            "macOS guest observation must preserve the established Homebrew fallback search for limactl"
+        );
+        assert!(
+            section.contains("Command::new(&limactl_path)"),
+            "macOS guest observation must launch the resolved limactl path"
+        );
+        assert!(
+            !section.contains("Command::new(\"limactl\")"),
+            "macOS guest observation must not bypass the resolved limactl path with a raw PATH-only launch"
+        );
+    }
+
+    #[test]
+    fn macos_world_doctor_source_preserves_undeclared_vm_state_and_mapping_provenance() {
+        let source = include_str!("../../platform/macos.rs");
+        assert!(
+            source.contains("\"undeclared\".to_string()"),
+            "macOS doctor must preserve the undeclared VM state instead of fabricating an unavailable VM identity"
+        );
+        assert!(
+            !source.contains("\"unavailable\".to_string()"),
+            "macOS doctor must not fabricate an unavailable VM name placeholder"
+        );
+        assert!(
+            source.contains("info(\"declared VM: not declared\");"),
+            "macOS doctor human output must report the undeclared VM state explicitly"
+        );
+        assert!(
+            source.contains(
+                "Lima VM not declared (set SUBSTRATE_LIMA_VM_NAME when no verified mapping is available)"
+            ),
+            "macOS doctor human output must explain the undeclared VM boundary"
+        );
+        assert!(
+            source.contains(
+                "info(\"Lima control root: resolved from authenticated platform mapping.\");"
+            ),
+            "macOS world doctor must report mapping-derived control-root provenance consistently"
+        );
+        assert!(
+            !source.contains("info(\"Lima control root: resolved from account database.\");"),
+            "macOS world doctor must not claim account-database control-root provenance after mapping projection"
+        );
     }
 
     #[test]
