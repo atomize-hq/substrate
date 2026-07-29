@@ -1,0 +1,22 @@
+{
+  "protocol": "codex.top-level-task-receipt.v1",
+  "orchestration_id": "substrate-r2-3",
+  "dispatch_nonce": "854781991ce7038d0c81541bd4bf325930e1d83b445f77cfb0f0b9e0bd8f613b",
+  "increment": "R2-3ZWR1",
+  "status": "BLOCKED_SCOPE_EXPANSION",
+  "increment_task": {
+    "thread_id": "019faea7-97f2-79e1-9920-1fafe080ee52",
+    "host_id": "remote-control:env_e_6a3d9cd24b5483238ba55b699a98be35"
+  },
+  "expected_base": {
+    "commit": "58462482126609ad87e59b896f5d22437461d144",
+    "tree": "131cb88fcd22cf739eac5c29a2d6e7d3dded43f0"
+  },
+  "blocker": {
+    "summary": "Base gate and remote parity passed exactly at commit 58462482126609ad87e59b896f5d22437461d144 / tree 131cb88fcd22cf739eac5c29a2d6e7d3dded43f0 with 0 ahead / 0 behind, but after the authorized six-file unstaged repair pass the next required native Windows build fix moved outside the six-file allowlist.",
+    "details": "The current worktree C:\\Users\\spmcc\\.codex\\worktrees\\102c\\substrate-r2-3 contains unstaged WIP only in the six authorized files: crates/shell/src/repl/async_repl.rs, crates/shell/src/execution/agent_runtime/state_store.rs, crates/shell/src/execution/orchestrator_world_dispatch.rs, crates/shell/src/execution/platform_world/windows.rs, crates/shell/src/builtins/world_enable/runner.rs, and scripts/windows/prefix-mapping-r2-3.Tests.ps1. No staging, commit, push, or review occurred. On the required rerun of cargo build --locked -p shell --lib, the first newly required out-of-allowlist change is crates/shell/src/execution/home_bootstrap.rs:203 with error E0423 at `let owner = BootstrapOwner;`; the struct is defined at lines 358-362 with a cfg-gated field, so successful native Windows library build now requires touching that seventh production file. The still-pending in-scope async_repl diagnostic for RetainedWorkerLaunchAuthorityProofV1 remains intentionally unaddressed after the stop because the contract required stopping at the first out-of-allowlist requirement.",
+    "required_authority": "Authorize exactly one additional tracked production file for this retry: crates/shell/src/execution/home_bootstrap.rs. No broader scope expansion is requested.",
+    "handoff_prompt": "Continue packet A1.1d-5R2-3ZWR1 in worktree C:\\Users\\spmcc\\.codex\\worktrees\\102c\\substrate-r2-3. Preserve the current identity, nonce 854781991ce7038d0c81541bd4bf325930e1d83b445f77cfb0f0b9e0bd8f613b, and exact base commit/tree 58462482126609ad87e59b896f5d22437461d144 / 131cb88fcd22cf739eac5c29a2d6e7d3dded43f0. Preserve the existing dirty unstaged WIP exactly in the six files already modified: crates/shell/src/repl/async_repl.rs, crates/shell/src/execution/agent_runtime/state_store.rs, crates/shell/src/execution/orchestrator_world_dispatch.rs, crates/shell/src/execution/platform_world/windows.rs, crates/shell/src/builtins/world_enable/runner.rs, and scripts/windows/prefix-mapping-r2-3.Tests.ps1. Expand authority only to add crates/shell/src/execution/home_bootstrap.rs, then rerun cargo build --locked -p shell --lib and address the first blocker at crates/shell/src/execution/home_bootstrap.rs:203, error E0423, `let owner = BootstrapOwner;`, while preserving the existing six-file WIP. After that, continue with the still-pending in-scope RetainedWorkerLaunchAuthorityProofV1 async_repl diagnostic only if it remains. Do not widen beyond home_bootstrap.rs without fresh authority."
+  },
+  "next_increment": "EVIDENCE:R2-3Z"
+}
