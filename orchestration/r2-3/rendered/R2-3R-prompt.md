@@ -1,0 +1,424 @@
+Use $orchestrate-top-level-tasks and every skill required by the increment contract.
+
+ROLE
+
+You are the fresh top-level increment orchestrator for R2-3R. You own this increment only.
+You may use subagents for GitNexus/source analysis, bounded implementation, test/proof execution,
+and independent review. You remain responsible for scope, shared-worktree integration,
+verification, publication, and the terminal receipt.
+
+DISPATCH IDENTITY
+
+- orchestration_id: substrate-r2-3
+- dispatch_nonce: 9af6bbc784c80e6818b57e546d5a7747c1709f9210067227a39fc211da57dc08
+- meta_thread_id: 019fa3f7-c447-7132-9126-82e2cf38bd9d
+- meta_host_id: remote-ssh-discovered:spenser-linux-codex
+- increment: R2-3R
+- packet_id: A1.1d-5R2-3R
+- next_increment: R2-3S1
+
+INCREMENT-TASK IDENTITY BARRIER
+
+Do not edit, delegate, run implementation checks, or publish until the meta orchestrator sends a
+follow-up binding your own real increment-task thread ID and host ID to this dispatch nonce. Echo
+those exact IDs in every terminal receipt.
+
+REPOSITORY BOUNDARY
+
+Work only in the task-assigned checkout:
+
+the task-assigned Linux Codex worktree
+
+Never mutate these protected checkouts:
+
+- /home/spenser/__Active_code/substrate
+- /home/spenser/__Active_code/substrate-r2-3
+- /home/spenser/__Active_code/substrate-r2-3-meta-orchestration
+- C:\Users\spmcc\Documents\__Project_Code\substrate-r2-3
+
+Canonical starting state:
+
+- remote: origin
+- target ref: refs/heads/feat/internal-host-orchestrator-world-dispatch-bootstrap
+- expected base commit: c9bdc2c01ef995ffad806f5a64dde3ed5abf56c7
+- expected base tree: 4cee38cf467c9b2fa9e23fa1793f8c25ab21f7b4
+- required ancestor: 0f1e147fb735791b44a65099a65167cbdc1803af
+
+Before editing, fetch/query the live remote and verify the exact base, tree, ancestry, cleanliness,
+0 ahead/0 behind, and current GitNexus index. If they differ, send BASE_DRIFT or
+BLOCKED_CONTRADICTION. Do not reconcile, merge, rebase, reset, clean, or force-push.
+
+SUBAGENT ORCHESTRATION
+
+Use repository-required model/reasoning settings for every subagent. Complete required pre-edit
+impact analysis before any subagent edits an existing symbol. Give editing subagents mutually
+exclusive ownership when practical. Use fresh read-only subagents for independent review. Do not
+allow a reviewer to review implementation it authored.
+
+INCREMENT CONTRACT
+
+CURRENT AUTHORIZED INCREMENT: A1.1d-5R2-3R
+
+Use:
+
+- using-agent-skills
+- context-engineering
+- source-driven-development
+- api-and-interface-design
+- test-driven-development
+- incremental-implementation
+- gitnexus-impact-analysis
+- security-and-hardening
+- code-review-and-quality
+- git-workflow-and-versioning
+
+This top-level task and every subagent must run on Standard/default speed, never Fast. Every
+subagent must use GPT-5.4 with Extra High reasoning. Ground replay/factory decisions in current
+repository truth and the published runtime-refactor control pack. Do not reopen R2-2 or R2-3A
+through R2-3F without a concrete contradiction.
+
+Load only:
+
+- current status in `llm-last-mile/runtime-refactor/00-README.md`;
+- the parent A1.1d-5R2-3 row, common child-subdivision rules, and R2-3R section in
+  `llm-last-mile/runtime-refactor/03-phase-slice-map.md`;
+- PI-091 and the supporting PI-054, PI-090, and PI-118 current-state/required-action rows in
+  `llm-last-mile/runtime-refactor/02-seam-crosswalk.md`;
+- the host-context boundary-carrier, `PlatformBootstrapMappingV1`, typed factory projection,
+  replay, and R3-exclusive lifecycle contracts in
+  `llm-last-mile/runtime-refactor/04-contracts-and-gates.md`;
+- R2-MAP-MAC-01, R2-MAP-WIN-01, R2-SHIM-01, and the unchanged replay differential portions of
+  R2-RUNTIME-01 in `llm-last-mile/runtime-refactor/05-debug-regression-ledger.md`; and
+- `06-review-finding-inventory.md` only for actual P3/P4 deduplication.
+
+SELECTED OUTCOME
+
+Carry one explicit authenticated host carrier plus its verified `PlatformBootstrapMappingV1`
+through the shell replay entry, public replay configuration, reconstructed execution state,
+planner, and executor. On macOS and Windows, a replay world request without that complete input
+must fail before platform factory/backend construction and must never silently fall through to
+direct host execution merely because bootstrap authority is absent. Preserve Linux replay,
+recorded replay state, comparison, timeout, strategy, and agent-fallback semantics.
+
+R2-3F deliberately restored the zero-argument `world_backend_factory::factory()` to its base
+behavior because the physical shim remains an unmigrated caller. R2-3R may add the minimum explicit
+typed factory entry point needed by replay, but must keep the existing zero-argument entry point
+byte/behavior identical for R2-3S1. R2-3S1 is the durable owner of the final physical-shim caller
+migration and the atomic removal/fail-closed cutover of the zero-argument macOS/Windows factory
+after source closure proves no contextless consumer remains.
+
+EXACT COMPLETION CLAIM
+
+R2-3R completes only PI-091. It adds the replay-side typed factory path and supports the later
+PI-090/PI-118 physical-shim migration. It does not complete PI-054's final no-contextless-factory
+condition, migrate physical shim/trace/manager callers, change replay semantics, activate
+forwarding/provisioning/lifecycle behavior, claim native macOS/Windows evidence, complete any R3
+row, or complete the R2-3 parent packet.
+
+EXACT ALLOWLIST
+
+Production changes are limited to:
+
+- `crates/world-backend-factory/src/lib.rs`
+- `crates/shell/src/execution/routing/replay.rs`
+- `crates/replay/src/lib.rs`
+- `crates/replay/src/replay/mod.rs`
+- `crates/replay/src/replay/planner.rs`
+- `crates/replay/src/replay/executor.rs`
+
+Test changes are limited to:
+
+- colocated `#[cfg(test)]` modules inside those six production files;
+- `crates/replay/tests/integration.rs`;
+- `crates/replay/tests/planner_executor.rs`; and
+- factory-context-only cases in `crates/shell/tests/replay_world.rs`.
+
+Do not edit `crates/shim/**`, any manifest, `Cargo.lock`, backend implementation crate, trace
+crate, shell invocation planner/caller outside `execution/routing/replay.rs`, installer, script,
+platform lifecycle/forwarder/listener code, control document, generated analyzer file,
+`AGENTS.md`, or `CLAUDE.md`. If another production/dependency/test file is required, stop with
+`BLOCKED_SCOPE_EXPANSION`.
+
+EXACT SYMBOL SCOPE
+
+Only these existing production Rust items/functions may change:
+
+- `handle_replay_command`;
+- `ReplayConfig` and `ReplayConfig::default`;
+- `replay_span`;
+- `replay_batch`;
+- `ExecutionState`;
+- `execute_in_world`;
+- `replay_sequence`;
+- `execute_with_world_backends`; and
+- `try_world_backend`.
+
+The existing cfg-specific zero-argument `factory()` definitions and their tests are inspected but
+byte-frozen. `crates/world-backend-factory/src/lib.rs` may change only through minimum imports,
+the additive mapping-aware entry point/wrapper authorized below, and its exact colocated tests.
+
+The only new public replay field authorized by the published child record is:
+
+- `ReplayConfig::platform_bootstrap_mapping`
+
+That field must represent complete replay factory authority, not a mapping detached from its
+authenticated host carrier. Use existing shared carrier/mapping types directly when possible.
+One minimum public typed factory-input wrapper and one additive mapping-aware factory function are
+authorized only if API/source closure proves they are required to transport the existing
+`InstallBootstrapContextCarrierV1` plus `PlatformBootstrapMappingV1` without ambient
+reconstruction. They must contain no selector, default, environment lookup, side table, cache,
+credential, policy, lifecycle state, or second authority. On Windows, any already-required
+explicit project path must come from the replay request's existing explicit execution/project
+path, never from ambient CWD or repository discovery.
+
+Add no other public field/type/function. Minimum private helpers inside the allowlisted files are
+permitted only for validation/projection of the same authenticated pair. Every other production
+symbol is byte-frozen except minimum import/field/signature/call plumbing required by the named
+items.
+
+PRE-EDIT SOURCE CLOSURE AND IMPACT
+
+Before editing:
+
+1. Fetch/query and verify the exact base/tree/ancestor, clean task checkout, 0/0 divergence, and a
+   current GitNexus index.
+2. Run file-qualified upstream GitNexus impact with tests for every named production symbol,
+   including `ReplayConfig`, `replay_span`, `replay_batch`, `ExecutionState`,
+   `execute_in_world`, `replay_sequence`, `execute_with_world_backends`,
+   `try_world_backend`, and every cfg factory definition.
+3. Perform exact textual caller closure for every `ReplayConfig` literal/default, every
+   `ExecutionState` construction/clone/serialization boundary, every
+   `world_backend_factory::factory()` call, and the shell replay entry.
+4. Inspect the landed typed macOS/Windows backend constructors and F mapping producers without
+   editing them. Prove the explicit factory input supplies every value they require.
+5. Inspect `crates/shim/src/exec/logging.rs::collect_world_telemetry` read-only. Record that it
+   remains the sole intentionally contextless platform factory caller assigned to R2-3S1.
+6. Inspect all replay fallback branches, especially non-Linux `execute_direct`, so absence or
+   invalidity of required platform bootstrap authority cannot be converted into successful host
+   execution.
+7. Inspect replay command/environment/origin/policy/timeout/strategy/agent fallback call paths and
+   freeze their semantics.
+
+Treat the public replay configuration, execution planner, factory boundary, and platform backend
+constructors as HIGH/CRITICAL posture even if indexing under-reports cfg-specific callers. Warn
+before editing on HIGH/CRITICAL impact. A missing caller, required manifest/dependency change,
+unreviewed public schema effect, new authority source, replay semantic change, lifecycle
+reachability, or inability to preserve the shim compatibility caller stops R.
+
+TYPED REPLAY FACTORY CONTRACT
+
+The replay factory input is one authenticated pair:
+
+- an `InstallBootstrapContextCarrierV1` that validates canonically and binds the current host
+  principal; and
+- a `PlatformBootstrapMappingV1` whose host commitment equals that carrier and whose platform,
+  instance, control root, realized guest principal/home, and transport validate canonically.
+
+The shell replay entry may use only already-authenticated typed input supplied by its entry
+boundary. It may not select A, recover a carrier, choose a VM/distro/socket/pipe, or construct a
+mapping from `HOME`, `LIMA_HOME`, `LOCALAPPDATA`, `USERPROFILE`, `SUBSTRATE_*`, recorded command
+environment, CWD, executable/repository location, trace contents, or defaults. A missing explicit
+pair on a macOS/Windows world replay fails before factory/backend construction. Linux requires no
+platform mapping and retains its platform-independent behavior.
+
+`ReplayConfig::platform_bootstrap_mapping` must:
+
+- default to absence for serialization/backward compatibility;
+- be skipped/defaulted in serialized input only as required to preserve existing config schema
+  compatibility;
+- carry the exact authenticated pair into each `replay_span` and `replay_batch` execution;
+- project unchanged into `ExecutionState`; and
+- never be populated from the reconstructed recorded environment.
+
+If the existing published field name cannot honestly carry the complete authenticated pair
+without a new wrapper, use only the minimum authorized factory-input wrapper described above.
+Do not weaken backend validation or derive the host carrier from mapping paths/commitment.
+
+The additive typed factory entry point:
+
+- validates/re-encodes the carrier and mapping before platform selection;
+- invokes the existing typed macOS/Windows backend constructor with the exact pair and any existing
+  explicit request path required on Windows;
+- has platform-independent Linux behavior equivalent to the existing factory;
+- performs no ambient/default platform selection; and
+- does not alter, remove, or fail-close the existing zero-argument `factory()` in this increment.
+
+REPLAY FAILURE AND SEMANTIC FREEZE
+
+On macOS/Windows, missing, malformed, mismatched, wrong-platform, wrong-transport, or
+wrong-commitment factory input fails before backend/session/client construction. That authority
+failure must propagate as an error; it may not return `Ok(None)`, emit a warning and continue, or
+fall through to `execute_direct`.
+
+Preserve existing behavior for:
+
+- recorded command, args, stdin, environment reconstruction, cwd, origin and origin reason;
+- policy resolution and network inputs after valid factory construction;
+- strict comparison, divergence types/severity, output limits, and warnings;
+- timeout values and timeout error behavior;
+- fresh-world selection and explicit `--no-world`/host replay;
+- Linux agent/backend/local-world fallback ordering;
+- successful backend execution and backend/session execution-error handling where authority was
+  present; and
+- batch continuation behavior for ordinary per-span execution errors.
+
+R does not turn an explicit host/no-world replay into a world replay. It changes only world replay
+factory authority on macOS/Windows.
+
+FACTORY DEFERRAL AND HANDOFF GATE
+
+The base zero-argument `world_backend_factory::factory()` and its existing tests must remain
+byte-identical. `crates/shim/src/exec/logging.rs` remains untouched and contextless during R.
+
+The terminal receipt must explicitly carry this durable successor obligation:
+
+```text
+R2-3S1 must migrate collect_world_telemetry to the authenticated typed factory input and,
+after exact source closure proves no macOS/Windows contextless consumer remains, atomically remove
+or fail-close the zero-argument platform factory. R2-3S1 must include
+crates/world-backend-factory/src/lib.rs in its exact allowlist for that final cutover.
+```
+
+If R discovers another contextless product caller beyond the already-assigned shim caller, stop;
+do not absorb it or perform the final cutover.
+
+TEST-DRIVEN PROOF
+
+Use deterministic fixtures, mocks/fakes, and temporary sandboxes. Cover at least:
+
+- exact authenticated carrier+mapping projection from `ReplayConfig` into `ExecutionState` and the
+  typed factory call;
+- config/default/serde compatibility when the optional factory input is absent;
+- macOS/Windows world replay fails before factory/backend/session construction when authority is
+  absent, malformed, noncanonical, wrong-commitment, wrong-platform, or wrong-transport;
+- those authority failures cannot reach non-Linux `execute_direct`;
+- recorded environment values and ambient platform/default variables cannot create or retarget the
+  factory input;
+- explicit host/no-world replay remains direct and unchanged;
+- Linux replay behavior, agent fallback, local world fallback, timeout, strategy recording,
+  comparison, and batch semantics remain unchanged;
+- direct replay-library callers receive the same failure ordering;
+- the existing zero-argument factory and shim caller remain byte-identical/unmodified; and
+- no test performs real VM/WSL realization, forwarding, provisioning, listener/socket/pipe
+  mutation, process replacement/kill/wait, deletion, or convergence.
+
+REQUIRED VERIFICATION
+
+Run:
+
+- `cargo fmt --all -- --check`;
+- `cargo check --locked -p world-backend-factory`;
+- `cargo test --locked -p world-backend-factory -- --nocapture`;
+- `cargo clippy --locked -p world-backend-factory --all-targets -- -D warnings`;
+- `cargo check --locked -p substrate-replay`;
+- `cargo test --locked -p substrate-replay -- --nocapture`;
+- `cargo clippy --locked -p substrate-replay --all-targets -- -D warnings`;
+- the exact replay integration/planner-executor tests and factory-context-only shell replay tests;
+- `cargo check --locked -p shell`;
+- the narrowest shell replay test filters covering the changed shell entry;
+- honest macOS/Windows target check/test-no-run attempts when supported, reporting unavailable
+  SDK/linker/toolchain as limitations rather than success or product regression;
+- external cfg-focused harnesses only when native cfg paths compile out on the Linux host, copying
+  only the allowlisted subject plus minimum unchanged dependencies and stubbing all lifecycle I/O;
+- exact source assertions for complete caller projection, pre-factory failure, no direct fallback,
+  Linux parity, zero-argument factory byte identity, and the sole deferred shim caller;
+- exact frozen hashes or semantic comparisons for replay command/environment/origin/policy/
+  timeout/strategy/agent-fallback behavior and all platform lifecycle code;
+- `git diff --check` and staged `git diff --cached --check`;
+- exact unstaged/staged file, symbol, and test allowlist checks;
+- confirmation that every manifest, lockfile, shim, backend implementation, trace, script,
+  lifecycle file, control document, and generated artifact is unchanged; and
+- `gitnexus_detect_changes()` before commit, with every reported flow inspected.
+
+Linux-native cargo commands that compile out macOS/Windows paths are baseline checks only. Static
+or harness proof must be labeled honestly. Formal native platform evidence remains owned by
+R2-3Z.
+
+SUBJECT FINGERPRINT
+
+After deterministic formatting/checks and before discovery review:
+
+1. record the pre-edit base commit;
+2. build a sorted manifest containing that commit plus every exact changed subject path, its Git
+   mode (or `NEW`), and `git hash-object --no-filters` blob ID (or `MISSING`);
+3. include only paths inside the exact R production/test allowlist; and
+4. SHA-256 the manifest and use `sha256:<digest>` as the review subject fingerprint.
+
+BOUNDED REVIEW
+
+Persist and validate one actual V1 review-cycle JSON record with packet ID `A1.1d-5R2-3R` using
+`llm-last-mile/runtime-refactor/review-control/validate_review_cycle.py`. Use fresh read-only
+lenses for:
+
+1. public replay config/state projection, canonical authenticated factory input, serde/default
+   compatibility, direct-library failure order, and no ambient reconstruction;
+2. executor/planner failure propagation, no host fallback on missing authority, Linux/replay
+   semantic parity, and no lifecycle activation; and
+3. exact file/symbol/test scope, zero-argument factory byte identity, sole deferred shim caller,
+   frozen replay behavior, GitNexus undercoverage, and static/native-proof honesty.
+
+Apply the common causal bounded-review contract: one complete-subject discovery burst, one
+consolidated P1/P2 remediation, one different-fresh closure, and at most two immediately causal
+supplemental cycles. P1/P2 block. Valid unfixed P3/P4 must be deduplicated or added to `06` only
+through the separately authorized inventory path. The final record must validate, end CLEAN, have
+zero open P1/P2, and completely dispose P3/P4. CLEAN is terminal.
+
+LANDING GATES
+
+Before commit, require:
+
+- exact R production/test/symbol containment;
+- all required checks or honestly preserved pre-existing/environment limitations;
+- independently recomputable subject fingerprint;
+- validated CLEAN V1 review record;
+- verified byte identity of the zero-argument factory and no shim change;
+- explicit durable S1 handoff obligation in the receipt;
+- `gitnexus_detect_changes()` with every reported flow inspected;
+- clean staged diff with no generated/analyzer churn; and
+- live target still equal to the expected base commit/tree.
+
+Then create one Conventional Commit, normal fast-forward push `HEAD` to the target ref, verify
+live commit/tree and 0/0 divergence, restore only analyzer-count churn caused by the authorized
+GitNexus refresh, and finish with a completely clean task worktree. Never force-push.
+
+TERMINAL RECEIPT
+
+Send exactly one `codex.top-level-task-receipt.v1` message to the bound meta task as the last
+external action. For success use `LANDED_CLEAN` and include task identity/nonce, expected base,
+landed commit/tree/live ref, sorted changed paths, subject fingerprint, validated review record
+and digest, finding disposition, checks/limitations, GitNexus result, clean 0/0 status, the exact
+S1 factory-cutover handoff obligation above, completion/non-claim boundary, and
+`next_increment=R2-3S1`.
+
+For failure, send the exact blocked status, evidence, required authority/platform, and a
+copy-ready handoff prompt. Do not begin, render, or dispatch R2-3S1.
+
+COMMON TERMINAL CONTRACT
+
+Before publication:
+
+1. Complete every increment-specific check and proof gate.
+2. Verify the exact file/symbol/test allowlist.
+3. Run `gitnexus_detect_changes()` and inspect every affected flow.
+4. Complete and validate the bounded review sequence.
+5. Require zero open blocking findings.
+6. Fetch/query the live target again and require it still equals the expected base.
+
+When authorized by the increment contract, create one atomic commit and perform a normal
+fast-forward push of `HEAD` to refs/heads/feat/internal-host-orchestrator-world-dispatch-bootstrap. Never force-push. Verify the live remote equals the
+landed commit, refresh GitNexus, restore analyzer-only generated count changes if necessary, and
+finish clean.
+
+Send a `codex.top-level-task-receipt.v1` message to the meta task. For success, use
+`LANDED_CLEAN` and include your bound increment-task thread/host IDs, expected base, landed
+commit/tree, changed paths, subject fingerprint, validated review record and digest, finding
+disposition, checks, GitNexus result, clean status, and next increment.
+
+For failure, send the exact blocked status, evidence, required authority or platform, and a
+complete continuation/handoff prompt.
+
+The `send_message_to_thread` call is your final tool action. After it succeeds, make no more tool
+calls or repository changes. Return only the human-readable final report.
+
+Do not generate the next increment prompt and do not begin R2-3S1. The meta
+orchestrator owns independent verification and subsequent dispatch.
