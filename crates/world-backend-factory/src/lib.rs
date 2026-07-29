@@ -11,12 +11,24 @@ use transport_api_types::{PlatformInstanceIdentityV1, PlatformTransportIdentityV
 use world_api::WorldBackend;
 
 #[cfg(any(test, not(target_os = "linux")))]
-#[cfg_attr(test, allow(dead_code))]
+#[cfg_attr(any(test, not(target_os = "linux")), allow(dead_code))]
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
 enum FactoryPlatform {
     Macos,
     Windows,
     Unsupported,
+}
+
+#[cfg(any(test, target_os = "macos", windows))]
+fn fail_closed_platform_factory(platform: FactoryPlatform) -> Result<Arc<dyn WorldBackend>> {
+    let platform_name = match platform {
+        FactoryPlatform::Macos => "macOS",
+        FactoryPlatform::Windows => "Windows",
+        FactoryPlatform::Unsupported => "unsupported",
+    };
+    Err(anyhow!(
+        "{platform_name} world backends require an explicit authenticated platform bootstrap mapping via factory_with_platform_bootstrap"
+    ))
 }
 
 #[cfg(any(test, not(target_os = "linux")))]
@@ -146,14 +158,12 @@ pub fn factory() -> Result<Arc<dyn WorldBackend>> {
 
 #[cfg(target_os = "macos")]
 pub fn factory() -> Result<Arc<dyn WorldBackend>> {
-    let backend = world_mac_lima::MacLimaBackend::new()?;
-    Ok(Arc::new(backend))
+    fail_closed_platform_factory(FactoryPlatform::Macos)
 }
 
 #[cfg(target_os = "windows")]
 pub fn factory() -> Result<Arc<dyn WorldBackend>> {
-    let backend = world_windows_wsl::WindowsWslBackend::new()?;
-    Ok(Arc::new(backend))
+    fail_closed_platform_factory(FactoryPlatform::Windows)
 }
 
 #[cfg(not(any(target_os = "linux", target_os = "macos", target_os = "windows")))]
@@ -284,10 +294,48 @@ mod tests {
         .expect("mapping")
     }
 
-    #[cfg(any(target_os = "linux", target_os = "macos", target_os = "windows"))]
+    #[cfg(target_os = "linux")]
     #[test]
     fn factory_returns_backend() {
         assert!(factory().is_ok());
+    }
+
+    #[cfg(target_os = "macos")]
+    #[test]
+    fn zero_arg_public_factory_fails_closed_for_macos() {
+        let err = match factory() {
+            Ok(_) => panic!("macOS zero-arg factory must fail closed"),
+            Err(err) => err,
+        };
+        assert!(err.to_string().contains("factory_with_platform_bootstrap"));
+    }
+
+    #[cfg(target_os = "windows")]
+    #[test]
+    fn zero_arg_public_factory_fails_closed_for_windows() {
+        let err = match factory() {
+            Ok(_) => panic!("Windows zero-arg factory must fail closed"),
+            Err(err) => err,
+        };
+        assert!(err.to_string().contains("factory_with_platform_bootstrap"));
+    }
+
+    #[test]
+    fn zero_arg_factory_fails_closed_for_macos() {
+        let err = match fail_closed_platform_factory(FactoryPlatform::Macos) {
+            Ok(_) => panic!("macOS zero-arg factory must fail closed"),
+            Err(err) => err,
+        };
+        assert!(err.to_string().contains("factory_with_platform_bootstrap"));
+    }
+
+    #[test]
+    fn zero_arg_factory_fails_closed_for_windows() {
+        let err = match fail_closed_platform_factory(FactoryPlatform::Windows) {
+            Ok(_) => panic!("Windows zero-arg factory must fail closed"),
+            Err(err) => err,
+        };
+        assert!(err.to_string().contains("factory_with_platform_bootstrap"));
     }
 
     #[cfg(not(any(target_os = "linux", target_os = "macos", target_os = "windows")))]

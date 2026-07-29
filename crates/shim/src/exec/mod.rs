@@ -8,7 +8,11 @@ use self::bootstrap::{
 };
 use self::logging::{collect_world_telemetry, hint_payload, log_spawn_failure, ManagerHintEngine};
 use self::policy::{evaluate_policy, PolicyResult};
-use crate::context::{world_features_enabled, ShimContext};
+use crate::context::{
+    default_platform_bootstrap_mapping_v1, resolve_install_bootstrap_context_from_invocation,
+    resolve_invoked_path, world_features_enabled, ShimContext, SUBSTRATE_WORLD_ID_VAR,
+    SUBSTRATE_WORLD_PROJECT_DIR_VAR,
+};
 use crate::logger::{log_execution, ExecutionLogMetadata};
 use anyhow::Result;
 use std::env;
@@ -24,6 +28,14 @@ pub fn run_shim() -> Result<i32> {
     }
 
     let ctx = ShimContext::from_current_exe()?;
+    let running_executable = env::current_exe()?;
+    let invoked = env::args_os()
+        .next()
+        .filter(|value| !value.is_empty())
+        .ok_or_else(|| anyhow::anyhow!("shim invocation witness is missing"))?;
+    let invoked_path = resolve_invoked_path(&invoked, &running_executable)?;
+    let install_bootstrap_context =
+        resolve_install_bootstrap_context_from_invocation(&invoked_path, &running_executable)?;
 
     let _ = set_global_broker(BrokerHandle::new());
     let _ = set_global_trace_context(TraceContext::default());
@@ -36,7 +48,7 @@ pub fn run_shim() -> Result<i32> {
 
     ctx.setup_execution_env();
 
-    let mut hint_engine = ManagerHintEngine::new();
+    let mut hint_engine = ManagerHintEngine::new(&install_bootstrap_context);
     let capture_stderr = hint_engine
         .as_ref()
         .map(|engine| engine.is_active())
@@ -107,8 +119,35 @@ pub fn run_shim() -> Result<i32> {
 
     if let Some(span) = active_span {
         let exit_code = status.code().unwrap_or(-1);
+        let world_id = env::var(SUBSTRATE_WORLD_ID_VAR).ok();
+        let project_path = env::var_os(SUBSTRATE_WORLD_PROJECT_DIR_VAR).map(PathBuf::from);
+        let platform_bootstrap_mapping = if world_features_enabled() && world_id.is_some() {
+            match default_platform_bootstrap_mapping_v1(&install_bootstrap_context) {
+                Ok(mapping) => mapping,
+                Err(err) => {
+                    if cfg!(any(target_os = "macos", windows)) {
+                        eprintln!(
+                            "Warning: Failed to derive authenticated platform telemetry mapping: {err}"
+                        );
+                    }
+                    None
+                }
+            }
+        } else {
+            None
+        };
         let (scopes_used, fs_diff) = if world_features_enabled() {
-            collect_world_telemetry(span.get_span_id())
+            if let Some(world_id) = world_id.as_deref() {
+                collect_world_telemetry(
+                    span.get_span_id(),
+                    world_id,
+                    &install_bootstrap_context,
+                    platform_bootstrap_mapping.as_ref(),
+                    project_path.as_deref(),
+                )
+            } else {
+                (vec![], None)
+            }
         } else {
             (vec![], None)
         };

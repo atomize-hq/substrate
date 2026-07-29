@@ -6,10 +6,8 @@ use std::collections::HashSet;
 use std::env;
 use std::path::{Path, PathBuf};
 use std::time::SystemTime;
-use substrate_common::{
-    manager_manifest::{ManagerManifest, ManagerSpec, Platform, RegexPattern},
-    paths,
-};
+use substrate_common::manager_manifest::{ManagerManifest, ManagerSpec, Platform, RegexPattern};
+use transport_api_types::{InstallBootstrapContextCarrierV1, PlatformBootstrapMappingV1};
 use world_api::FsDiff;
 
 pub(crate) fn log_spawn_failure(
@@ -41,33 +39,47 @@ pub(crate) fn log_spawn_failure(
     }
 }
 
-pub(crate) fn collect_world_telemetry(span_id: &str) -> (Vec<String>, Option<FsDiff>) {
-    let world_id = match env::var("SUBSTRATE_WORLD_ID") {
-        Ok(id) => id,
-        Err(_) => {
+pub(crate) fn collect_world_telemetry(
+    span_id: &str,
+    world_id: &str,
+    host_carrier: &InstallBootstrapContextCarrierV1,
+    platform_bootstrap_mapping: Option<&PlatformBootstrapMappingV1>,
+    project_path: Option<&Path>,
+) -> (Vec<String>, Option<FsDiff>) {
+    #[cfg(any(target_os = "macos", windows))]
+    if platform_bootstrap_mapping.is_none() {
+        eprintln!(
+            "Warning: Failed to collect authenticated world telemetry: platform bootstrap mapping unavailable"
+        );
+        return (vec![], None);
+    }
+
+    let backend = match world_backend_factory::factory_with_platform_bootstrap(
+        Some(host_carrier),
+        platform_bootstrap_mapping,
+        project_path,
+    ) {
+        Ok(backend) => backend,
+        Err(err) => {
+            eprintln!("Warning: Failed to build world telemetry backend: {err}");
             return (vec![], None);
         }
     };
 
-    if let Ok(backend) = world_backend_factory::factory() {
-        let handle = world_api::WorldHandle {
-            id: world_id.clone(),
-            shared_binding: None,
-        };
+    let handle = world_api::WorldHandle {
+        id: world_id.to_string(),
+        shared_binding: None,
+    };
 
-        let fs_diff = match backend.fs_diff(&handle, span_id) {
-            Ok(diff) => Some(diff),
-            Err(e) => {
-                eprintln!("Warning: Failed to collect fs_diff: {}", e);
-                None
-            }
-        };
+    let fs_diff = match backend.fs_diff(&handle, span_id) {
+        Ok(diff) => Some(diff),
+        Err(err) => {
+            eprintln!("Warning: Failed to collect fs_diff: {err}");
+            None
+        }
+    };
 
-        let scopes_used = vec![];
-        (scopes_used, fs_diff)
-    } else {
-        (vec![], None)
-    }
+    (vec![], fs_diff)
 }
 
 pub(crate) struct ManagerHintEngine {
@@ -76,7 +88,7 @@ pub(crate) struct ManagerHintEngine {
 }
 
 impl ManagerHintEngine {
-    pub(crate) fn new() -> Option<Self> {
+    pub(crate) fn new(host_carrier: &InstallBootstrapContextCarrierV1) -> Option<Self> {
         if hints_disabled() {
             return None;
         }
@@ -86,7 +98,7 @@ impl ManagerHintEngine {
             return None;
         }
 
-        let (base, overlay) = manifest_paths()?;
+        let (base, overlay) = manifest_paths(host_carrier)?;
         let manifest = ManagerManifest::load(&base, overlay.as_deref()).ok()?;
         let specs = manifest.resolve_for_platform(current_platform());
 
@@ -191,39 +203,24 @@ fn disabled_flag(value: &str) -> bool {
     )
 }
 
-fn manifest_paths() -> Option<(PathBuf, Option<PathBuf>)> {
-    if let Ok(override_path) = env::var("SUBSTRATE_MANAGER_MANIFEST") {
-        return Some((PathBuf::from(override_path), manifest_overlay_path()));
+fn manifest_paths(
+    host_carrier: &InstallBootstrapContextCarrierV1,
+) -> Option<(PathBuf, Option<PathBuf>)> {
+    host_carrier.validate().ok()?;
+    let base = repo_manifest_path(host_carrier);
+    if !base.exists() {
+        return None;
     }
-
-    if let Ok(home) = paths::substrate_home() {
-        let base = home.join("manager_hooks.yaml");
-        if base.exists() {
-            return Some((base, Some(home.join("manager_hooks.local.yaml"))));
-        }
-    }
-
-    let fallback = repo_manifest_path();
-    if fallback.exists() {
-        Some((fallback, manifest_overlay_path()))
-    } else {
-        None
-    }
+    Some((base, manifest_overlay_path(host_carrier)))
 }
 
-fn manifest_overlay_path() -> Option<PathBuf> {
-    paths::substrate_home()
-        .ok()
-        .map(|home| home.join("manager_hooks.local.yaml"))
+fn manifest_overlay_path(host_carrier: &InstallBootstrapContextCarrierV1) -> Option<PathBuf> {
+    host_carrier.validate().ok()?;
+    Some(PathBuf::from(&host_carrier.context.selected_host_prefix).join("manager_hooks.local.yaml"))
 }
 
-fn repo_manifest_path() -> PathBuf {
-    let crate_dir = PathBuf::from(env!("CARGO_MANIFEST_DIR"));
-    crate_dir
-        .parent()
-        .and_then(|dir| dir.parent())
-        .map(|root| root.join("config").join("manager_hooks.yaml"))
-        .unwrap_or_else(|| PathBuf::from("config/manager_hooks.yaml"))
+fn repo_manifest_path(host_carrier: &InstallBootstrapContextCarrierV1) -> PathBuf {
+    PathBuf::from(&host_carrier.context.selected_host_prefix).join("manager_hooks.yaml")
 }
 
 fn current_platform() -> Platform {
@@ -244,6 +241,7 @@ mod tests {
     use std::time::SystemTime;
     use std::{env, fs};
     use tempfile::TempDir;
+    use transport_api_types::{InstallBootstrapContextCarrierV1, InstallBootstrapContextV1};
 
     struct EnvGuard {
         key: &'static str,
@@ -268,6 +266,30 @@ mod tests {
         }
     }
 
+    fn test_host_carrier(prefix: &Path) -> InstallBootstrapContextCarrierV1 {
+        #[cfg(unix)]
+        {
+            InstallBootstrapContextCarrierV1::from_context(
+                InstallBootstrapContextV1::new_unix(prefix.to_str().unwrap(), "alice", 1000)
+                    .unwrap(),
+            )
+            .unwrap()
+        }
+
+        #[cfg(windows)]
+        {
+            InstallBootstrapContextCarrierV1::from_context(
+                InstallBootstrapContextV1::new_windows(
+                    prefix.to_str().unwrap(),
+                    r"ACME\Alice",
+                    "S-1-5-21-1000",
+                )
+                .unwrap(),
+            )
+            .unwrap()
+        }
+    }
+
     #[test]
     #[serial]
     fn manager_hint_engine_matches_once_and_dedupes() {
@@ -287,14 +309,12 @@ managers:
         )
         .unwrap();
 
-        let _manifest_guard = EnvGuard::set(
-            "SUBSTRATE_MANAGER_MANIFEST",
-            manifest_path.to_string_lossy(),
-        );
+        let _manifest_guard = EnvGuard::set("SUBSTRATE_MANAGER_MANIFEST", "/tmp/ambient-B.yaml");
         let _world_guard = EnvGuard::set("SUBSTRATE_WORLD", "enabled");
         let _hints_guard = EnvGuard::set("SUBSTRATE_SHIM_HINTS", "1");
+        let host_carrier = test_host_carrier(temp.path());
 
-        let mut engine = ManagerHintEngine::new().expect("hint engine should load");
+        let mut engine = ManagerHintEngine::new(&host_carrier).expect("hint engine should load");
         assert!(engine.is_active());
 
         let first = engine
@@ -323,14 +343,34 @@ managers:
         )
         .unwrap();
 
-        let _manifest_guard = EnvGuard::set(
-            "SUBSTRATE_MANAGER_MANIFEST",
-            manifest_path.to_string_lossy(),
-        );
+        let _manifest_guard = EnvGuard::set("SUBSTRATE_MANAGER_MANIFEST", "/tmp/ambient-B.yaml");
         let _world_guard = EnvGuard::set("SUBSTRATE_WORLD", "enabled");
         let _hints_guard = EnvGuard::set("SUBSTRATE_SHIM_HINTS", "0");
+        let host_carrier = test_host_carrier(temp.path());
 
-        assert!(ManagerHintEngine::new().is_none());
+        assert!(ManagerHintEngine::new(&host_carrier).is_none());
+    }
+
+    #[test]
+    fn manifest_paths_use_authenticated_prefix_only() {
+        let temp = TempDir::new().unwrap();
+        let host_carrier = test_host_carrier(temp.path());
+        let ambient = temp.path().join("ambient").join("manager_hooks.yaml");
+        fs::create_dir_all(ambient.parent().unwrap()).unwrap();
+        fs::write(&ambient, "version: 2\nmanagers: []\n").unwrap();
+        fs::write(
+            temp.path().join("manager_hooks.yaml"),
+            "version: 2\nmanagers: []\n",
+        )
+        .unwrap();
+        let _manifest_guard = EnvGuard::set(
+            "SUBSTRATE_MANAGER_MANIFEST",
+            ambient.to_string_lossy().to_string(),
+        );
+
+        let (base, overlay) = manifest_paths(&host_carrier).expect("manifest paths");
+        assert_eq!(base, temp.path().join("manager_hooks.yaml"));
+        assert_eq!(overlay, Some(temp.path().join("manager_hooks.local.yaml")));
     }
 
     #[test]

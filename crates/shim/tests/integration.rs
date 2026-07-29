@@ -128,7 +128,7 @@ fn test_shim_execution_flow() -> Result<()> {
     Ok(())
 }
 
-/// Test the proven Claude Code hash pinning scenario
+/// Test the Claude Code hash pinning scenario through an actual pinned dispatch.
 #[test]
 fn test_claude_code_hash_pinning_scenario() -> Result<()> {
     let temp = TempDir::new()?;
@@ -176,7 +176,7 @@ fn test_claude_code_hash_pinning_scenario() -> Result<()> {
         fs::set_permissions(&shim_binary, perms)?;
     }
 
-    // Test the exact command sequence that works with Claude Code
+    // Test the exact hash-pinning sequence against a real shim dispatch.
     let shimmed_path = format!("{}:{}", shim_dir.display(), bin_dir.display());
 
     // Test 1: Basic PATH resolution - Test that shim is found first
@@ -198,22 +198,35 @@ fn test_claude_code_hash_pinning_scenario() -> Result<()> {
         "Test command failed. Output: {stdout}"
     );
 
-    // Test 2: Hash pinning - the key discovery from manual testing
+    // Test 2: Hash pinning - make ordinary PATH lookup prefer the real binary, with the shim only later in PATH.
+    let hashed_path = format!("{}:{}:/usr/bin:/bin", bin_dir.display(), shim_dir.display());
+    let hash_log = temp.path().join("hash-trace.jsonl");
     let hash_command = format!(
-        "hash -r; hash -p \"{}\" testcmd; echo pinning-test",
+        "set -e; hash -r; hash -p \"{}\" testcmd; hash -t testcmd >/dev/null; testcmd pinned-arg",
         shim_binary.display()
     );
 
     let output = Command::new("/bin/bash")
         .args(["-c", &hash_command])
-        .env("PATH", &full_path)
+        .env("PATH", &hashed_path)
         .env("SHIM_ORIGINAL_PATH", bin_dir.to_string_lossy().as_ref())
+        .env("SHIM_TRACE_LOG", &hash_log)
         .output()?;
 
     let stdout = String::from_utf8_lossy(&output.stdout);
     assert!(
-        stdout.contains("pinning-test"),
-        "Hash pinning test failed. Output: {stdout}"
+        output.status.success(),
+        "Hash pinning dispatch failed. stdout: {stdout}\nstderr: {}",
+        String::from_utf8_lossy(&output.stderr)
+    );
+    assert!(
+        stdout.contains("testcmd: pinned-arg"),
+        "Hash-pinned shim did not dispatch the expected command. Output: {stdout}"
+    );
+    let log_content = fs::read_to_string(&hash_log)?;
+    assert!(
+        log_content.contains("\"command\":\"testcmd\""),
+        "Hash-pinned shim did not emit the expected trace log. Log: {log_content}"
     );
 
     Ok(())
@@ -694,7 +707,11 @@ managers:
         .env("SHIM_TRACE_LOG", &log_file)
         .env(
             "SUBSTRATE_MANAGER_MANIFEST",
-            manifest_path.to_string_lossy().as_ref(),
+            temp.path()
+                .join("ambient-b")
+                .join("manager_hooks.yaml")
+                .to_string_lossy()
+                .as_ref(),
         )
         .env("SUBSTRATE_WORLD", "enabled")
         .env("SUBSTRATE_SHIM_HINTS", "1")
@@ -791,7 +808,11 @@ managers:
         .env("SHIM_TRACE_LOG", &log_file)
         .env(
             "SUBSTRATE_MANAGER_MANIFEST",
-            manifest_path.to_string_lossy().as_ref(),
+            temp.path()
+                .join("ambient-b")
+                .join("manager_hooks.yaml")
+                .to_string_lossy()
+                .as_ref(),
         )
         .env("SUBSTRATE_WORLD", "enabled")
         .env("SUBSTRATE_SHIM_HINTS", "1")
@@ -893,7 +914,11 @@ managers:
         .env("SHIM_TRACE_LOG", &log_file)
         .env(
             "SUBSTRATE_MANAGER_MANIFEST",
-            manifest_path.to_string_lossy().as_ref(),
+            temp.path()
+                .join("ambient-b")
+                .join("manager_hooks.yaml")
+                .to_string_lossy()
+                .as_ref(),
         )
         .env("SUBSTRATE_WORLD_ENABLED", "false")
         .env("SUBSTRATE_WORLD", "disabled");
