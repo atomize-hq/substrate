@@ -1,0 +1,18 @@
+{
+  "orchestration_id": "substrate-r2-3",
+  "dispatch_nonce": "2234989708fd55aa0b795ad5f64ab760ed79fd6450d11c630ce9ca9053e235b1",
+  "meta_thread_id": "019fa3f7-c447-7132-9126-82e2cf38bd9d",
+  "meta_host_id": "remote-ssh-discovered:spenser-linux-codex",
+  "evidence_id": "R2-3Z/WIN-EVIDENCE",
+  "platform": "windows",
+  "remote": "origin",
+  "target_ref": "refs/heads/feat/internal-host-orchestrator-world-dispatch-bootstrap",
+  "expected_base_commit": "58462482126609ad87e59b896f5d22437461d144",
+  "expected_base_tree": "131cb88fcd22cf739eac5c29a2d6e7d3dded43f0",
+  "project_id": "e5022d35-561c-4fa5-a5db-2cca9aef4e63",
+  "project_path": "C:/Users/spmcc/Documents/__Project_Code/substrate-r2-3",
+  "project_host_id": "remote-control:env_e_6a3d9cd24b5483238ba55b699a98be35",
+  "model": "gpt-5.4",
+  "thinking": "xhigh",
+  "speed": "standard/default"
+}
