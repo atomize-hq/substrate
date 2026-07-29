@@ -3040,6 +3040,7 @@ impl BoundAgentRuntimeStateStore {
     }
 }
 
+#[cfg(any(target_os = "linux", test))]
 impl WorldWorkReceiptRegistry {
     fn bind(
         substrate_home: &Path,
@@ -11223,6 +11224,7 @@ mod tests {
             });
         fs::create_dir_all(&safe_parent).expect("create safe StateStore test parent");
         let temp = tempfile::tempdir_in(safe_parent).expect("safe StateStore tempdir");
+        #[cfg(unix)]
         fs::set_permissions(temp.path(), fs::Permissions::from_mode(0o700))
             .expect("secure StateStore test root");
         authority_env.install_home(temp.path());
@@ -11457,6 +11459,7 @@ mod tests {
             });
         fs::create_dir_all(&safe_parent).expect("create safe StateStore test parent");
         let temp = tempfile::tempdir_in(safe_parent).expect("safe StateStore tempdir");
+        #[cfg(unix)]
         fs::set_permissions(temp.path(), fs::Permissions::from_mode(0o700))
             .expect("secure StateStore test root");
         let store = AgentRuntimeStateStore {
@@ -11477,6 +11480,7 @@ mod tests {
             let recognized_temp_bytes = b"post-activation recognized temp";
             fs::write(&recognized_temp, recognized_temp_bytes)
                 .expect("write post-activation recognized temp");
+            #[cfg(unix)]
             fs::set_permissions(&recognized_temp, fs::Permissions::from_mode(0o600))
                 .expect("secure post-activation recognized temp");
             let participant =
@@ -11622,10 +11626,12 @@ mod tests {
             });
         fs::create_dir_all(&safe_parent).expect("create safe StateStore parent");
         let parent = tempfile::tempdir_in(safe_parent).expect("create safe StateStore tempdir");
+        #[cfg(unix)]
         fs::set_permissions(parent.path(), fs::Permissions::from_mode(0o700))
             .expect("secure StateStore parent");
         let home = parent.path().join("home");
         fs::create_dir(&home).expect("create accepted bootstrap home");
+        #[cfg(unix)]
         fs::set_permissions(&home, fs::Permissions::from_mode(0o700))
             .expect("secure accepted bootstrap home");
         let authority = crate::execution::agent_runtime::host_session_authority::facade::HostSessionAuthority::open(&home)
@@ -11718,6 +11724,7 @@ mod tests {
         let retained = parent.path().join("retained");
         fs::rename(&home, &retained).expect("retain accepted home");
         fs::create_dir(&home).expect("create replacement home");
+        #[cfg(unix)]
         fs::set_permissions(&home, fs::Permissions::from_mode(0o700))
             .expect("secure replacement home");
         let replacement_participants_dir = home.join("run/agent-hub/participants");
@@ -12214,6 +12221,7 @@ mod tests {
             });
         fs::create_dir_all(&safe_parent).expect("create safe StateStore test parent");
         let temp = tempfile::tempdir_in(safe_parent).expect("safe StateStore tempdir");
+        #[cfg(unix)]
         fs::set_permissions(temp.path(), fs::Permissions::from_mode(0o700))
             .expect("secure StateStore test root");
         let store = AgentRuntimeStateStore {
@@ -12231,6 +12239,7 @@ mod tests {
             .join("authority-v1/tmp/root--r2--11111111111111111111111111111111.tmp");
         fs::write(&recognized_temp, b"interrupted non-authoritative root temp")
             .expect("write recognized temp");
+        #[cfg(unix)]
         fs::set_permissions(&recognized_temp, fs::Permissions::from_mode(0o600))
             .expect("secure recognized temp");
 

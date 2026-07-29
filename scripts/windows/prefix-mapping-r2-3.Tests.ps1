@@ -2030,7 +2030,7 @@ function Test-W2StaticScriptShape {
     Assert-Match $wslDoctor '\$forwarderConfigPath = \$script:MappingState\.ForwarderConfigPath' 'wsl-doctor.ps1 must use mapping-derived config path'
     Assert-Match $wslDoctor '\$pidFile = \$script:MappingState\.SharedForwarderPidPath' 'wsl-doctor.ps1 must use mapping-derived pid path'
     Assert-Match $wslDoctor '\$logDir = \$script:MappingState\.ForwarderLogDir' 'wsl-doctor.ps1 must use mapping-derived log path'
-    Assert-Match $startForwarder "\$forwarderRelease = Join-Path \\$resolvedProject 'target/release/substrate-forwarder\\.exe'" 'start-forwarder.ps1 must still prefer the release forwarder binary'
+    Assert-Match $startForwarder '\$forwarderRelease = Join-Path \$resolvedProject ''target/release/substrate-forwarder\.exe''' 'start-forwarder.ps1 must still prefer the release forwarder binary'
     Assert-Match $startForwarder "Write-Warn 'Release binary not found, using debug build'" 'start-forwarder.ps1 must still disclose debug-binary fallback'
     Assert-Match $startForwarder "Build it with 'cargo build -p substrate-forwarder --release'" 'start-forwarder.ps1 must still disclose the release build instruction'
     Assert-True ($startForwarder -notmatch 'SharedForwarderPidPath.*(Remove-Item|Set-Content|Out-File|WriteAllText)') 'start-forwarder.ps1 must not take ownership of the shared pid projection'

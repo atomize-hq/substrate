@@ -16,6 +16,10 @@ use transport_api_types::{
 use world_api::{SharedWorldOwnerSpec, WorldBackend, WorldSpec};
 use world_windows_wsl::WindowsWslBackend;
 
+// Keep these aligned with world_windows_wsl::transport; that module remains private.
+const DEFAULT_WSL_DISTRO: &str = "substrate-wsl";
+const DEFAULT_WSL_AGENT_PIPE: &str = r"\\.\pipe\substrate-agent";
+
 fn context() -> Result<Arc<PlatformWorldContext>> {
     if let Some(ctx) = super::get_context() {
         return Ok(ctx);
@@ -92,10 +96,9 @@ pub fn detect() -> Result<PlatformWorldContext> {
         anyhow::bail!("Windows platform world requires a Windows install bootstrap carrier");
     };
 
-    let default_pipe =
-        normalize_windows_pipe_path(world_windows_wsl::transport::DEFAULT_AGENT_PIPE)
-            .map_err(anyhow::Error::from)
-            .context("default Windows platform world pipe path is invalid")?;
+    let default_pipe = normalize_windows_pipe_path(DEFAULT_WSL_AGENT_PIPE)
+        .map_err(anyhow::Error::from)
+        .context("default Windows platform world pipe path is invalid")?;
     if let Some(conflicting_pipe) = env::var_os("SUBSTRATE_FORWARDER_PIPE") {
         let conflicting_pipe = conflicting_pipe
             .to_str()
@@ -131,7 +134,7 @@ pub fn detect() -> Result<PlatformWorldContext> {
             String::from_utf8(output.stdout).context("WSL observation produced non-UTF-8 output")
         };
 
-        let declared_distro_name = world_windows_wsl::transport::DEFAULT_DISTRO;
+        let declared_distro_name = DEFAULT_WSL_DISTRO;
         let registered = list_names(&["-l", "-q"], "unable to enumerate registered WSL distros")?;
         let registered_matches = registered
             .lines()
@@ -528,7 +531,7 @@ mod tests {
             socket_path: PathBuf::from(r"\\.\pipe\substrate-agent"),
             ensure_ready: Box::new(|| Ok(())),
             ensure_persistent_session_ready_async: Box::new(|| {
-                Box::pin(async { Ok(()) }) as super::PersistentSessionReadyFuture
+                Box::pin(async { Ok(()) }) as super::super::PersistentSessionReadyFuture
             }),
         };
 

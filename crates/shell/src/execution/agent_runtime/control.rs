@@ -3736,11 +3736,12 @@ fn structured_prompt_event_fallback_text(data: &serde_json::Value) -> Option<Str
 
 #[cfg(test)]
 mod tests {
+    #[cfg(unix)]
+    use super::prompt_event_text;
     use super::{
         apply_runtime_cancel_closeout, apply_runtime_stop_closeout,
-        prompt_completion_session_state, prompt_event_text,
-        reconcile_hidden_owner_helper_start_timeout, runtime_is_terminal,
-        validate_public_prompt_command_request, HiddenOwnerHelperLaunchPlan,
+        prompt_completion_session_state, reconcile_hidden_owner_helper_start_timeout,
+        runtime_is_terminal, validate_public_prompt_command_request, HiddenOwnerHelperLaunchPlan,
         HiddenOwnerHelperParticipantPlan, HiddenOwnerHelperSessionPlan,
         HiddenOwnerHelperStartTimeoutReconciliation, HiddenOwnerHelperStartupPromptPlan,
         LoadedPublicPrompt, OwnerHelperMode, PrivateCancelOutcome, PrivateStopOutcome,
@@ -4075,6 +4076,7 @@ mod tests {
         assert!(runtime_is_terminal(&manifest));
     }
 
+    #[cfg(unix)]
     #[test]
     fn prompt_event_text_keeps_top_level_text_passthrough() {
         let text = prompt_event_text(&serde_json::json!({
@@ -4084,6 +4086,7 @@ mod tests {
         assert_eq!(text, "stdout chunk\n");
     }
 
+    #[cfg(unix)]
     #[test]
     fn prompt_event_text_renders_nested_structured_agent_messages() {
         let text = prompt_event_text(&serde_json::json!({
@@ -4096,6 +4099,7 @@ mod tests {
         assert_eq!(text, "[codex] startup prompt success\n");
     }
 
+    #[cfg(unix)]
     #[test]
     fn prompt_event_text_escapes_nested_structured_agent_messages() {
         let text = prompt_event_text(&serde_json::json!({

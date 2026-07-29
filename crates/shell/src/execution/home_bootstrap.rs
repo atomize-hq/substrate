@@ -200,7 +200,7 @@ pub(crate) fn ensure_substrate_home_deps_scaffold() -> Result<(), HomeBootstrapE
         uid: resolve_intended_owner_uid(&substrate_home)?,
     };
     #[cfg(not(unix))]
-    let owner = BootstrapOwner;
+    let owner = BootstrapOwner {};
     ensure_substrate_home_deps_scaffold_at(&substrate_home, owner)
 }
 

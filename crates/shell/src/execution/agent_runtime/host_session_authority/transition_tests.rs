@@ -1,4 +1,5 @@
 use std::fs;
+#[cfg(unix)]
 use std::os::unix::fs::PermissionsExt;
 use std::path::Path;
 
@@ -79,9 +80,11 @@ fn authority() -> (tempfile::TempDir, HostSessionAuthority, WorkspaceBindingV1) 
         });
     fs::create_dir_all(&safe_parent).unwrap();
     let parent = tempfile::tempdir_in(safe_parent).unwrap();
+    #[cfg(unix)]
     fs::set_permissions(parent.path(), fs::Permissions::from_mode(0o700)).unwrap();
     let home = parent.path().join("home");
     fs::create_dir(&home).unwrap();
+    #[cfg(unix)]
     fs::set_permissions(&home, fs::Permissions::from_mode(0o700)).unwrap();
     let authority = HostSessionAuthority::open(&home).unwrap();
     let root = authority.bootstrap().unwrap();

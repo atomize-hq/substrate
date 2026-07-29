@@ -478,7 +478,8 @@ mod tests {
                         .write(true)
                         .open("CONIN$")
                         .expect("open isolated Windows console input");
-                    let console_input_handle = console_input.as_raw_handle();
+                    let console_input_handle =
+                        console_input.as_raw_handle() as windows_sys::Win32::Foundation::HANDLE;
                     assert_ne!(
                         unsafe { SetStdHandle(STD_INPUT_HANDLE, console_input_handle) },
                         0,

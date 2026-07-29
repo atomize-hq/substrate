@@ -1490,14 +1490,22 @@ fn build_world_apt_entrypoint_wrapper_command_v1(entrypoints: &[String]) -> Stri
 #[cfg(test)]
 mod tests {
     use super::*;
+    #[cfg(unix)]
     use crate::execution::install_bootstrap::current_unix_principal_and_home;
+    #[cfg(unix)]
     use serial_test::serial;
+    #[cfg(unix)]
     use std::fs;
+    #[cfg(unix)]
     use std::os::unix::fs::PermissionsExt;
+    #[cfg(unix)]
     use std::process::Command;
+    #[cfg(unix)]
     use tempfile::{Builder, TempDir};
+    #[cfg(unix)]
     use transport_api_types::{InstallBootstrapContextCarrierV1, InstallBootstrapContextV1};
 
+    #[cfg(unix)]
     #[test]
     #[serial]
     fn authenticated_scope_mutations_select_a_and_leave_conflicting_b_unchanged() {
@@ -1755,6 +1763,7 @@ mod tests {
         );
     }
 
+    #[cfg(unix)]
     #[test]
     fn world_deps_codex_runtime_install_script_is_idempotent_and_links_guest_entrypoint() {
         let spec = resolve_codex_runtime_install_spec_for_target_v1("x86_64-unknown-linux-musl")

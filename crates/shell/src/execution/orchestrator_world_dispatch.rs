@@ -1,7 +1,9 @@
-#[cfg(any(target_os = "linux", target_os = "macos"))]
+#[cfg(any(target_os = "linux", target_os = "macos", test))]
 use std::collections::BTreeMap;
+#[cfg(any(target_os = "linux", target_os = "macos", test))]
+use std::path::Path;
 #[cfg(any(target_os = "linux", target_os = "macos"))]
-use std::path::{Path, PathBuf};
+use std::path::PathBuf;
 #[cfg(test)]
 use std::sync::Arc;
 #[cfg(any(target_os = "linux", target_os = "macos", test))]
@@ -22,7 +24,7 @@ use gethostname::gethostname;
 use serde::Serialize;
 #[cfg(target_os = "linux")]
 use sha2::{Digest, Sha256};
-#[cfg(any(target_os = "linux", target_os = "macos"))]
+#[cfg(any(target_os = "linux", target_os = "macos", test))]
 use substrate_broker::Policy;
 #[cfg(target_os = "linux")]
 use tokio::sync::mpsc::UnboundedSender;
@@ -103,8 +105,10 @@ use crate::execution::agent_runtime::{
 use crate::execution::agent_runtime::{
     AgentRuntimeSessionState, OrchestrationObligationAttachState, OrchestrationObligationKind,
     OrchestrationObligationRecord, RunWorldTaskOutcomeV1, SpawnWorldWorkerOutcomeV1, TaskPayloadV1,
-    WorkerSpawnPayloadV1, WorldDispatchModeV1, WorldDispatchPayloadV1,
+    WorkerSpawnPayloadV1,
 };
+#[cfg(any(target_os = "linux", target_os = "macos", test))]
+use crate::execution::agent_runtime::{WorldDispatchModeV1, WorldDispatchPayloadV1};
 #[cfg(any(target_os = "linux", target_os = "macos"))]
 use crate::execution::config_model::{
     self, AgentExecutionScope, CliConfigOverrides, SubstrateConfig,
@@ -554,8 +558,11 @@ async fn fork_world_worker(
     prepared: PreparedOrchestratorWorldDispatch,
     #[cfg(target_os = "linux")] intended_host_principal: Option<&PlatformPrincipalV1>,
 ) -> Result<WorldDispatchOutcomeV1> {
+    #[cfg(any(target_os = "linux", target_os = "macos"))]
     let workspace_root = PathBuf::from(&prepared.session.workspace_root);
+    #[cfg(any(target_os = "linux", target_os = "macos"))]
     let context = resolve_internal_dispatch_context(&workspace_root)?;
+    #[cfg(any(target_os = "linux", target_os = "macos"))]
     enforce_world_dispatch_steering_policy(&prepared, &context.base_policy)?;
     #[cfg(not(target_os = "linux"))]
     {

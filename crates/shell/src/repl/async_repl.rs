@@ -22,10 +22,11 @@ use tokio::task;
 use transport_api_client::AgentClient;
 #[cfg(target_os = "linux")]
 use transport_api_types::PlatformPrincipalV1;
+use transport_api_types::RetainedWorkerLaunchAuthorityProofV1;
 #[cfg(any(target_os = "linux", target_os = "macos"))]
 use transport_api_types::{
     ExecuteCancelRequestV1, ExecuteStreamFrame, MemberRuntimeBackendKindV1,
-    MemberTurnSubmitRequestV1, RetainedWorkerLaunchAuthorityProofV1,
+    MemberTurnSubmitRequestV1,
 };
 use uuid::Uuid;
 
@@ -36,10 +37,11 @@ use crate::execution::agent_events::{
 };
 use crate::execution::agent_inventory::{load_effective_agent_inventory, AgentInventoryEntryV1};
 #[cfg(any(target_os = "linux", target_os = "macos"))]
+use crate::execution::agent_runtime::control::authoritative_host_toolbox_surface_enabled;
+#[cfg(any(target_os = "linux", target_os = "macos"))]
 use crate::execution::agent_runtime::control::spawn_remote_private_prompt_owner;
 use crate::execution::agent_runtime::control::{
-    apply_runtime_cancel_closeout, apply_runtime_stop_closeout,
-    authoritative_host_toolbox_surface_enabled, build_session_resume_extension,
+    apply_runtime_cancel_closeout, apply_runtime_stop_closeout, build_session_resume_extension,
     invalidate_stale_world_members_after_binding, mark_orchestration_session_failed,
     mark_runtime_startup_failed, maybe_build_runtime_owned_toolbox_env,
     note_runtime_stop_requested, persist_runtime_snapshots, persist_world_binding_authority,
@@ -137,17 +139,18 @@ use crate::execution::orchestrator_world_dispatch::dispatch_orchestrator_world_r
 use crate::execution::orchestrator_world_dispatch::prepare_authority_bound_spawn_world_worker;
 #[cfg(target_os = "linux")]
 use crate::execution::orchestrator_world_dispatch::prepare_fork_world_worker_bootstrap;
+#[cfg(any(target_os = "linux", target_os = "macos"))]
+use crate::execution::orchestrator_world_dispatch::prepare_orchestrator_world_dispatch;
 #[cfg(target_os = "macos")]
 use crate::execution::orchestrator_world_dispatch::prepare_spawn_world_worker_bootstrap;
 #[cfg(target_os = "linux")]
 use crate::execution::orchestrator_world_dispatch::recover_world_work_execution_observations;
 #[cfg(target_os = "linux")]
+use crate::execution::orchestrator_world_dispatch::PreparedSpawnWorldWorkerBootstrap;
+#[cfg(target_os = "linux")]
 use crate::execution::orchestrator_world_dispatch::{
     dispatch_orchestrator_world_request_for_principal,
     dispatch_run_world_task_request_with_started_task_run_id_tx_for_principal,
-};
-use crate::execution::orchestrator_world_dispatch::{
-    prepare_orchestrator_world_dispatch, PreparedSpawnWorldWorkerBootstrap,
 };
 use crate::execution::prompt_fulfillment::{
     PromptFulfillmentBridge, PromptFulfillmentCancelHandle,
@@ -4316,6 +4319,7 @@ async fn start_host_orchestrator_runtime_with_prepared_prompt_and_toolbox_reques
             .role
             .clone()
     };
+    #[cfg(any(target_os = "linux", target_os = "macos"))]
     let host_toolbox_surface_requested = authoritative_host_toolbox_surface_enabled(
         &descriptor.backend_id,
         descriptor.execution_scope,
@@ -4323,6 +4327,8 @@ async fn start_host_orchestrator_runtime_with_prepared_prompt_and_toolbox_reques
         &startup_context.effective_config,
         &startup_context.base_policy,
     );
+    #[cfg(not(any(target_os = "linux", target_os = "macos")))]
+    let host_toolbox_surface_requested = false;
     let host_toolbox_surface_authoritative = Arc::new(AtomicBool::new(false));
     let controls_parent_session = runtime_controls_parent_session(&runtime_role);
     let authority_managed = matches!(
@@ -6168,13 +6174,20 @@ fn internal_toolbox_surface_enabled(
         .role
         .clone();
 
-    authoritative_host_toolbox_surface_enabled(
-        &runtime.descriptor.backend_id,
-        runtime.descriptor.execution_scope,
-        runtime_role.as_str(),
-        &startup_context.effective_config,
-        &startup_context.base_policy,
-    )
+    #[cfg(any(target_os = "linux", target_os = "macos"))]
+    {
+        authoritative_host_toolbox_surface_enabled(
+            &runtime.descriptor.backend_id,
+            runtime.descriptor.execution_scope,
+            runtime_role.as_str(),
+            &startup_context.effective_config,
+            &startup_context.base_policy,
+        )
+    }
+    #[cfg(not(any(target_os = "linux", target_os = "macos")))]
+    {
+        false
+    }
 }
 
 #[cfg(unix)]
@@ -6329,6 +6342,15 @@ async fn register_internal_toolbox_transport_for_session(
         task: Some(task),
         path,
     })
+}
+
+#[cfg(not(unix))]
+async fn register_internal_toolbox_transport_for_session(
+    _orchestration_session_id: &str,
+    _caller_participant_id: &str,
+    _request_tx: InternalToolboxDispatchRequestSender,
+) -> Result<InternalToolboxTransport> {
+    anyhow::bail!("authoritative internal toolbox transport is unsupported on this platform")
 }
 
 #[cfg(not(unix))]
@@ -9379,6 +9401,12 @@ struct EnsureMemberRuntimeReadyContext<'a> {
 }
 
 #[cfg(any(target_os = "linux", target_os = "macos"))]
+#[derive(Clone, Copy, Debug, Eq, PartialEq)]
+enum MemberRuntimeFirstDispatchRepairPolicy {
+    Disabled,
+}
+
+#[cfg(not(any(target_os = "linux", target_os = "macos")))]
 #[derive(Clone, Copy, Debug, Eq, PartialEq)]
 enum MemberRuntimeFirstDispatchRepairPolicy {
     Disabled,

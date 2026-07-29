@@ -497,6 +497,7 @@ mod tests {
         });
     }
 
+    #[cfg(unix)]
     #[test]
     #[serial]
     fn host_inbox_materialization_continues_other_pending_records_after_unreadable_artifact() {

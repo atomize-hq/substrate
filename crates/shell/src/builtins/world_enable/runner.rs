@@ -3,9 +3,7 @@ use crate::execution::env_sh_path;
 #[cfg(target_os = "linux")]
 use crate::execution::socket_activation;
 use crate::WorldEnableArgs;
-#[cfg(unix)]
-use anyhow::Context;
-use anyhow::{bail, Result};
+use anyhow::{bail, Context, Result};
 use std::env;
 use std::path::{Path, PathBuf};
 use std::time::Duration;
