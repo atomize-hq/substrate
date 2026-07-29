@@ -1,0 +1,21 @@
+{
+  "protocol": "codex.top-level-task-receipt.v1",
+  "orchestration_id": "substrate-r2-3",
+  "dispatch_nonce": "dabfa9de2a0a2547e78778d4e86cf3a67c9e3708a9727ba5e3e1c6b772a8ffee",
+  "increment": "R2-3T",
+  "status": "BLOCKED_CONTRADICTION",
+  "increment_task": {
+    "thread_id": "019facf7-bc58-7020-b744-e95a13777118",
+    "host_id": "remote-ssh-discovered:spenser-linux-codex"
+  },
+  "expected_base": {
+    "commit": "549949a20f01397e49d3819398359cea522f3a83",
+    "tree": "1b98a9a96d40a4a9e453099815e9bf11b32a4831"
+  },
+  "blocker": {
+    "summary": "The first T attempt incorrectly treated a normal detached Codex worktree and an unrefreshed exact-checkout GitNexus index as a nonce-bound base contradiction.",
+    "details": "Independent review confirms the task worktree HEAD/tree, live target commit/tree, required ancestry, cleanliness, and 0/0 divergence all matched the contract. A task-assigned Codex worktree is expected to be detached; the named target ref is the publication and comparison ref, not a requirement to attach the local checkout to a mutable branch. The contract also explicitly authorizes and requires refreshing GitNexus for the exact checkout before edits. The stale sibling index and stale local branch ref are not product-base contradictions and must not be reconciled or mutated.",
+    "required_authority": "No new product or scope authority is required. Resume the same task and nonce under a control-plane clarification: accept the exact detached HEAD/tree plus live-ref equality as the checkout gate, run the contract-authorized GitNexus analysis in the task worktree, restore analyzer-only AGENTS.md/CLAUDE.md churn if produced, and continue the unchanged R2-3T contract.",
+    "handoff_prompt": "Resume R2-3T in /home/spenser/.codex/worktrees/7cb9/substrate-r2-3 with the same thread, host, and nonce. Do not change or attach the local branch ref. Reverify HEAD/tree/live target/ancestor/cleanliness/0/0, run npx gitnexus analyze in this exact task checkout as explicitly authorized, confirm the index is current at 549949a20f01397e49d3819398359cea522f3a83, restore only analyzer-generated AGENTS.md/CLAUDE.md count churn, then execute the complete unchanged T contract. If any substantive gate differs after that clarification, emit a new blocked receipt."
+  }
+}
