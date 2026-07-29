@@ -17,7 +17,8 @@
     {"id": "R2-3R", "packet_id": "A1.1d-5R2-3R", "next": "R2-3S1", "native_platform": null},
     {"id": "R2-3S1", "packet_id": "A1.1d-5R2-3S1", "next": "R2-3S2", "native_platform": null},
     {"id": "R2-3S2", "packet_id": "A1.1d-5R2-3S2", "next": "R2-3T", "native_platform": null},
-    {"id": "R2-3T", "packet_id": "A1.1d-5R2-3T", "next": "EVIDENCE:R2-3Z", "native_platform": null},
+    {"id": "R2-3T", "packet_id": "A1.1d-5R2-3T", "next": "R2-3ZWR1", "native_platform": null},
+    {"id": "R2-3ZWR1", "packet_id": "A1.1d-5R2-3ZWR1", "next": "EVIDENCE:R2-3Z", "native_platform": "windows"},
     {
       "id": "R2-3Z",
       "packet_id": "A1.1d-5R2-3Z",

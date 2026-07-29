@@ -1,7 +1,7 @@
 {
   "protocol": "codex.top-level-orchestration-state.v1",
   "orchestration_id": "substrate-r2-3",
-  "status": "EVIDENCE_RUNNING",
+  "status": "READY",
   "dispatch_authorized": true,
   "remote": "origin",
   "target_ref": "refs/heads/feat/internal-host-orchestrator-world-dispatch-bootstrap",
@@ -24,19 +24,20 @@
     "R2-3S1",
     "R2-3S2",
     "R2-3T",
+    "R2-3ZWR1",
     "R2-3Z"
   ],
   "required_evidence": [
     {
       "evidence_id": "R2-3Z/MAC-EVIDENCE",
       "platform": "macos",
-      "after_increment": "R2-3T",
+      "after_increment": "R2-3ZWR1",
       "before_increment": "R2-3Z"
     },
     {
       "evidence_id": "R2-3Z/WIN-EVIDENCE",
       "platform": "windows",
-      "after_increment": "R2-3T",
+      "after_increment": "R2-3ZWR1",
       "before_increment": "R2-3Z"
     }
   ],
@@ -50,36 +51,7 @@
     "host_id": "remote-ssh-discovered:spenser-linux-codex"
   },
   "active_dispatch": null,
-  "active_evidence_dispatches": [
-    {
-      "evidence_id": "R2-3Z/MAC-EVIDENCE",
-      "platform": "macos",
-      "project_id": "local-b2016f8a311fef93149e42eaec4d704d",
-      "project_path": "/Users/spensermcconnell/__Active_Code/atomize-hq/substrate",
-      "thread_id": "019fad17-55fe-7e33-bea6-4e7ec9f93ca8",
-      "host_id": "local",
-      "dispatch_nonce": "7632a5d31088592dc6f358758872399ecb1f52229cfd8590e7f80ba809462330",
-      "source": {
-        "commit": "58462482126609ad87e59b896f5d22437461d144",
-        "tree": "131cb88fcd22cf739eac5c29a2d6e7d3dded43f0",
-        "target_ref": "refs/heads/feat/internal-host-orchestrator-world-dispatch-bootstrap"
-      }
-    },
-    {
-      "evidence_id": "R2-3Z/WIN-EVIDENCE",
-      "platform": "windows",
-      "project_id": "e5022d35-561c-4fa5-a5db-2cca9aef4e63",
-      "project_path": "C:/Users/spmcc/Documents/__Project_Code/substrate-r2-3",
-      "thread_id": "019fae3c-bf21-7dc2-b613-8d80d46bb23b",
-      "host_id": "remote-control:env_e_6a3d9cd24b5483238ba55b699a98be35",
-      "dispatch_nonce": "3bd5c390682918b36fbf51ef90723e5112a534f166566bff59c159ea5a4208fb",
-      "source": {
-        "commit": "58462482126609ad87e59b896f5d22437461d144",
-        "tree": "131cb88fcd22cf739eac5c29a2d6e7d3dded43f0",
-        "target_ref": "refs/heads/feat/internal-host-orchestrator-world-dispatch-bootstrap"
-      }
-    }
-  ],
+  "active_evidence_dispatches": [],
   "verified_evidence": [],
   "completed": [
     {
