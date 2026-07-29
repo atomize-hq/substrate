@@ -3,9 +3,14 @@
 use std::collections::HashSet;
 use std::fs;
 use std::process::Command;
+use std::thread;
+use std::time::Duration;
 
 use agent_drift_sentinel::{
     LiveSessionCoordinator, LiveSessionError, LiveSessionRequest, SchedulerPolicy, WarningPolicy,
+};
+use agent_session_compactor::{
+    BoundedClosureCompactor, BoundedClosureError, BoundedClosureRequest, CompactorError,
 };
 use camino::Utf8Path;
 use serde_json::{json, Value};
@@ -30,6 +35,44 @@ fn real_session_live_source_orders_delivery_after_fallible_runtime_observation()
 
     assert_real_session_live_delivery_contract(&source_path, &parsed)
         .expect("protected delivery order");
+}
+
+#[test]
+fn real_session_live_consumes_only_the_compactor_owned_bounded_closure() {
+    let source_path = Utf8Path::new(env!("CARGO_MANIFEST_DIR")).join("src/real_session_live.rs");
+    let source = fs::read_to_string(&source_path).expect("read real-session live source");
+
+    for required in [
+        "BoundedClosureCompactor",
+        "BoundedClosureRequest",
+        ".prepare(&closure_request)",
+        ".state_token().to_string()",
+        ".completed_state_matches(&prepared_state_token)",
+        ".compact(prepared, &compactor_output_dir, None)",
+        "analyze_bundle(&AnalyzeRequest",
+        "load_replay_bundle(&self.analyzer_output_dir())",
+        "self.runtime.observe(event)",
+    ] {
+        assert!(
+            source.contains(required),
+            "real-session live integration must retain {required:?}"
+        );
+    }
+    for forbidden in [
+        "discover_session_artifacts",
+        "compact_codex_sessions",
+        "BufReader",
+        "inspect_rollout_startup_readiness",
+        "rollout_text_fragments",
+        "rollout_tool_call_arguments",
+        "file_size_bytes",
+        "cache_stats",
+    ] {
+        assert!(
+            !source.contains(forbidden),
+            "Sentinel must not own raw-trace operation {forbidden:?}"
+        );
+    }
 }
 
 #[test]
@@ -1461,29 +1504,36 @@ fn permitted_pre_observe_method_call(
             matches!(call.receiver.as_ref(), syn::Expr::MethodCall(latest)
                 if latest.method == "latest_cursor" && latest.args.len() == 1)
         }
+        (Some("LiveSessionCoordinator"), "poll_once", "prepare", 1) => {
+            expression_is_path(&call.receiver, &["self", "closure_compactor"])
+                && call
+                    .args
+                    .first()
+                    .is_some_and(|argument| {
+                        expression_is_reference_to_path(argument, &["closure_request"])
+                    })
+        }
+        (Some("LiveSessionCoordinator"), "poll_once", "snapshot" | "state_token", 0) => {
+            expression_is_path(&call.receiver, &["prepared"])
+        }
+        (Some("LiveSessionCoordinator"), "poll_once", "to_string", 0) => {
+            method_call_is(&call.receiver, "state_token", &["prepared"], 0)
+        }
         (Some("LiveSessionCoordinator"), "poll_once", "clone", 0) => {
             expression_is_path(&call.receiver, &["self", "rollout_path"])
+                || expression_is_path(&call.receiver, &["self", "request", "codex_home"])
+                || expression_is_path(&call.receiver, &["self", "request", "session_id"])
+                || expression_is_path(&call.receiver, &["snapshot", "startup_readiness"])
+                || expression_is_path(
+                    &call.receiver,
+                    &["snapshot", "root_source", "source_file"],
+                )
         }
         (Some("LiveSessionProgress"), "checkpoint_ready_event", "as_str", 0) => {
             expression_is_path(&call.receiver, &["rollout_path"])
         }
         (Some("LiveSessionProgress"), "checkpoint_ready_event", "to_string", 0) => {
             method_call_is(&call.receiver, "as_str", &["rollout_path"], 0)
-        }
-        (None, "file_size_bytes", "map_err", 1) => {
-            matches!(call.receiver.as_ref(), syn::Expr::Call(metadata)
-                if matches!(metadata.func.as_ref(), syn::Expr::Path(function)
-                    if path_is(&function.path, &["fs", "metadata"]))
-                    && metadata.args.len() == 1)
-                && call.args.first().is_some_and(|argument| {
-                    matches!(argument, syn::Expr::Closure(closure) if closure.inputs.len() == 1)
-                })
-        }
-        (None, "file_size_bytes", "to_owned", 0) => {
-            expression_is_path(&call.receiver, &["path"])
-        }
-        (None, "file_size_bytes", "len", 0) => {
-            expression_is_path(&call.receiver, &["metadata"])
         }
         (Some("LiveSessionProgress"), "largest_observed_size_bytes", "max", 1) => {
             expression_is_path(&call.receiver, &["last_completed"])
@@ -1514,6 +1564,12 @@ fn permitted_pre_observe_method_call(
         (Some("LiveSessionProgress"), "has_delivered_checkpoint", "is_empty", 0) => {
             expression_is_path(&call.receiver, &["self", "last_delivered_cursors"])
         }
+        (Some("LiveSessionProgress"), "completed_state_matches", "as_deref", 0) => {
+            expression_is_path(
+                &call.receiver,
+                &["self", "completed_prepared_state_token"],
+            )
+        }
         (Some("LiveSessionProgress"), "checkpoint_is_fresh", method, arguments) => {
             matches!((method, arguments), ("get", 1) | ("is_none_or", 1))
         }
@@ -1528,8 +1584,20 @@ fn permitted_pre_observe_method_call(
         }
         (Some("LiveSessionCoordinator"), "run_pipeline", "clone", 0) => {
             expression_is_path(&call.receiver, &["self", "request", "state_dir"])
-                || expression_is_path(&call.receiver, &["self", "request", "codex_home"])
-                || expression_is_path(&call.receiver, &["self", "request", "session_id"])
+        }
+        (Some("LiveSessionCoordinator"), "run_pipeline", "compact", 3) => {
+            expression_is_path(&call.receiver, &["self", "closure_compactor"])
+                && call
+                    .args
+                    .first()
+                    .is_some_and(|argument| expression_is_path(argument, &["prepared"]))
+                && call
+                    .args
+                    .iter()
+                    .nth(1)
+                    .is_some_and(|argument| {
+                        expression_is_reference_to_path(argument, &["compactor_output_dir"])
+                    })
         }
         (Some("LiveSessionCoordinator"), "compactor_output_dir", "join", 1) => {
             expression_is_path(&call.receiver, &["self", "request", "state_dir"])
@@ -1557,49 +1625,6 @@ fn permitted_pre_observe_method_call(
                 | ("to_string", 0)
                 | ("max", 0)
         ),
-        (None, "inspect_rollout_startup_readiness", method, arguments) => matches!(
-            (method, arguments),
-            ("map_err", 1)
-                | ("to_owned", 0)
-                | ("lines", 0)
-                | ("trim", 0)
-                | ("is_empty", 0)
-        ),
-        (None, "update_rollout_startup_readiness", method, arguments) => matches!(
-            (method, arguments),
-            ("get", 1)
-                | ("and_then", 1)
-                | ("is_some_and", 1)
-                | ("trim", 0)
-                | ("is_empty", 0)
-                | ("is_some", 0)
-        ),
-        (None, "rollout_text_fragments", method, arguments) => matches!(
-            (method, arguments),
-            ("get", 1) | ("and_then", 1) | ("push", 1)
-        ),
-        (None, "rollout_text_has_path_hint", method, arguments) => matches!(
-            (method, arguments),
-            ("split_whitespace", 0)
-                | ("any", 1)
-                | ("trim_matches", 1)
-                | ("trim_end_matches", 1)
-                | ("is_empty", 0)
-                | ("starts_with", 1)
-                | ("contains", 1)
-                | ("iter", 0)
-                | ("ends_with", 1)
-        ),
-        (None, "rollout_tool_call_arguments", method, arguments) => matches!(
-            (method, arguments),
-            ("get", 1) | ("and_then", 1) | ("then", 1) | ("flatten", 0)
-        ),
-        (None, "parse_tool_arguments", method, arguments) => {
-            matches!((method, arguments), ("ok", 0) | ("filter", 1))
-        }
-        (None, "sparse_startup_checkpoint_emission_deferred", method, arguments) => {
-            matches!((method, arguments), ("map", 1) | ("unwrap_or", 1))
-        }
         _ => false,
     }
 }
@@ -1623,17 +1648,13 @@ fn permitted_pre_observe_function_call(
             path_is(path, &["LiveCheckpointEvent", "checkpoint_ready"])
         }
         (Some("LiveSessionProgress"), "checkpoint_ready_event", 1) => path_is(path, &["Some"]),
-        (None, "file_size_bytes", 1) => {
-            path_is(path, &["fs", "metadata"]) || path_is(path, &["Ok"])
-        }
         (Some("LiveSessionProgress"), "largest_observed_size_bytes", 1) => path_is(path, &["Some"]),
         (Some("LiveSessionProgress"), "begin_poll" | "complete_poll", 1) => {
             path_is(path, &["Some"])
         }
+        (Some("LiveSessionProgress"), "completed_state_matches", 1) => path_is(path, &["Some"]),
         (Some("LiveSessionCoordinator"), "run_pipeline", 1) => {
             path_is(path, &["fs", "create_dir_all"])
-                || path_is(path, &["compact_codex_sessions"])
-                || path_is(path, &["Some"])
                 || path_is(path, &["analyze_bundle"])
                 || path_is(path, &["load_replay_bundle"])
                 || path_is(path, &["Ok"])
@@ -1644,34 +1665,12 @@ fn permitted_pre_observe_function_call(
                 || path_is(path, &["Err"])
                 || path_is(path, &["Ok"])
         }
-        (None, "inspect_rollout_startup_readiness", 0) => {
-            path_is(path, &["RolloutStartupReadiness", "default"])
-        }
-        (None, "inspect_rollout_startup_readiness", 1) => {
-            path_is(path, &["fs", "File", "open"])
-                || path_is(path, &["BufReader", "new"])
-                || path_is(path, &["serde_json", "from_str"])
-                || path_is(path, &["Ok"])
-        }
-        (None, "rollout_text_fragments", 0) => path_is(path, &["Vec", "new"]),
-        (None, "rollout_text_fragments", 1) => path_is(path, &["Some"]),
-        (None, "rollout_tool_call_arguments", 1) => path_is(path, &["Some"]),
-        (None, "parse_tool_arguments", 1) => path_is(path, &["serde_json", "from_str"]),
-        (None, "update_rollout_startup_readiness", 1) => path_is(path, &["Some"]),
         _ => false,
     }
 }
 
-fn permitted_pre_observe_function_reference(key: &SameSourceHelperKey, path: &syn::Path) -> bool {
-    match (key.owner.as_deref(), key.name.as_str()) {
-        (None, "update_rollout_startup_readiness")
-        | (None, "rollout_text_fragments")
-        | (None, "rollout_tool_call_arguments") => {
-            path_is(path, &["Value", "as_str"]) || path_is(path, &["Value", "as_array"])
-        }
-        (None, "parse_tool_arguments") => path_is(path, &["Value", "is_object"]),
-        _ => false,
-    }
+fn permitted_pre_observe_function_reference(_key: &SameSourceHelperKey, _path: &syn::Path) -> bool {
+    false
 }
 
 fn method_call_is(
@@ -1774,12 +1773,8 @@ fn assert_same_source_helper_is_bookkeeping_only(
     Ok(())
 }
 
-fn permitted_pre_observe_helper_error(key: &SameSourceHelperKey, error: &str) -> bool {
-    // This exact free helper only accumulates borrowed rollout text into its declared Vec<&str>;
-    // it cannot accept a checkpoint or reach a delivery/persistence capability.
-    key.owner.is_none()
-        && key.name == "rollout_text_fragments"
-        && error == "unclassified method call texts.push"
+fn permitted_pre_observe_helper_error(_key: &SameSourceHelperKey, _error: &str) -> bool {
+    false
 }
 
 fn assert_exact_dominated_delivery_loop(delivery_loop: &syn::ExprForLoop) -> Result<(), String> {
@@ -2090,11 +2085,17 @@ fn statement_is_complete_poll(statement: &syn::Stmt) -> bool {
         call.method == "complete_poll"
             && call.turbofish.is_none()
             && expression_is_path(&call.receiver, &["self", "progress"])
-            && call.args.len() == 1
             && call
                 .args
                 .first()
                 .is_some_and(|argument| expression_is_path(argument, &["observed_size_bytes"]))
+            && match call.args.len() {
+                1 => true,
+                2 => call.args.iter().nth(1).is_some_and(|argument| {
+                    expression_is_path(argument, &["prepared_state_token"])
+                }),
+                _ => false,
+            }
     })
 }
 
@@ -2398,6 +2399,13 @@ fn expression_is_path(expression: &syn::Expr, expected: &[&str]) -> bool {
         .is_some_and(|path| path.iter().map(String::as_str).eq(expected.iter().copied()))
 }
 
+fn expression_is_reference_to_path(expression: &syn::Expr, expected: &[&str]) -> bool {
+    matches!(
+        expression,
+        syn::Expr::Reference(reference) if expression_is_path(&reference.expr, expected)
+    )
+}
+
 fn path_is(path: &syn::Path, expected: &[&str]) -> bool {
     path.leading_colon.is_none()
         && path
@@ -2561,6 +2569,11 @@ fn real_session_live_coordinator_restores_progress_for_restart_idle_decision() {
             persisted_state["progress"]["last_observed_size_bytes"].as_u64(),
             Some(first.observed_size_bytes)
         );
+        assert!(
+            persisted_state["progress"]["completed_prepared_state_token"]
+                .as_str()
+                .is_some_and(|token| !token.is_empty())
+        );
         assert!(persisted_state["progress"]["pending_observed_size_bytes"].is_null());
         assert_eq!(
             persisted_state["progress"]["last_delivered_cursors"]["session-live"]["session_id"]
@@ -2602,6 +2615,292 @@ fn real_session_live_coordinator_restores_progress_for_restart_idle_decision() {
         resumed_idle.latest_cursor.as_ref(),
         Some(&first_latest_cursor)
     );
+}
+
+#[test]
+fn real_session_live_restart_validates_same_length_replacement_before_idle() {
+    let temp_dir = TempDir::new().expect("temp dir");
+    let codex_home = Utf8Path::from_path(temp_dir.path())
+        .expect("utf8 temp dir")
+        .join(".codex");
+    let rollout_dir = codex_home.join("sessions/2026/06/01");
+    fs::create_dir_all(&rollout_dir).expect("create rollout dir");
+    let rollout_path = rollout_dir.join("rollout-session-live.jsonl");
+    fs::write(&rollout_path, first_rollout_phase()).expect("write first phase");
+
+    let state_dir = Utf8Path::from_path(temp_dir.path())
+        .expect("utf8 temp dir")
+        .join("state");
+    {
+        let mut coordinator = LiveSessionCoordinator::new(
+            LiveSessionRequest {
+                codex_home: Some(codex_home.clone()),
+                session_id: "session-live".to_string(),
+                state_dir: state_dir.clone(),
+            },
+            SchedulerPolicy::default(),
+            WarningPolicy::default(),
+        )
+        .expect("create initial coordinator");
+        let first = coordinator.poll_once().expect("initial poll");
+        assert!(first.reran_pipeline);
+        assert!(first.emitted_checkpoints > 0);
+    }
+
+    thread::sleep(Duration::from_millis(1100));
+    let malformed_selected = concat!(
+        "{\"timestamp\":\"2026-06-01T12:00:00Z\",\"type\":\"session_meta\",\"payload\":{\"id\":\"session-live\",\"multi_agent_version\":\"v2\"}}\n",
+        "{\"timestamp\":\"2026-06-01T12:00:01Z\",\"type\":\"event_msg\",\"payload\":{\"type\":\"task_started\",\"turn_id\":\"turn-1\"}}\n",
+        "{\"timestamp\":\"2026-06-01T12:00:02Z\",\"type\":\"response_item\",\"payload\":{\"type\":\"message\",\"role\":\"user\",\"content\":\"malformed-content\",\"internal_chat_message_metadata_passthrough\":{\"turn_id\":\"turn-1\"}}}\n"
+    );
+    assert!(malformed_selected.len() < first_rollout_phase().len());
+    let mut same_length_replacement = malformed_selected.to_string();
+    same_length_replacement
+        .push_str(&" ".repeat(first_rollout_phase().len() - malformed_selected.len()));
+    assert_eq!(same_length_replacement.len(), first_rollout_phase().len());
+    fs::write(&rollout_path, same_length_replacement)
+        .expect("replace rollout with same-length malformed generation");
+
+    let mut restarted = LiveSessionCoordinator::new(
+        LiveSessionRequest {
+            codex_home: Some(codex_home),
+            session_id: "session-live".to_string(),
+            state_dir,
+        },
+        SchedulerPolicy::default(),
+        WarningPolicy::default(),
+    )
+    .expect("prepare replacement generation during restart");
+    let error = restarted
+        .poll_once()
+        .expect_err("replacement generation must be decoded rather than accepted as idle");
+    assert!(matches!(
+        error,
+        LiveSessionError::Compactor(CompactorError::BoundedClosure(
+            BoundedClosureError::SelectedPayloadMalformed { path, .. }
+        )) if path == rollout_path
+    ));
+}
+
+#[test]
+fn real_session_live_restart_revalidates_cursor_after_interrupted_same_length_poll() {
+    let temp_dir = TempDir::new().expect("temp dir");
+    let temp_root = Utf8Path::from_path(temp_dir.path()).expect("utf8 temp dir");
+    let codex_home = temp_root.join(".codex");
+    let rollout_dir = codex_home.join("sessions/2026/06/01");
+    fs::create_dir_all(&rollout_dir).expect("create rollout dir");
+    let rollout_path = rollout_dir.join("rollout-session-live.jsonl");
+
+    let generation_b = format!(
+        "{}{}{}",
+        first_rollout_phase(),
+        second_rollout_phase(),
+        third_rollout_phase()
+    );
+    let mut generation_a = first_rollout_phase().to_string();
+    assert!(generation_a.len() < generation_b.len());
+    generation_a.push_str(&" ".repeat(generation_b.len() - generation_a.len()));
+    assert_eq!(generation_a.len(), generation_b.len());
+    fs::write(&rollout_path, &generation_a).expect("write padded generation A");
+
+    let state_dir = temp_root.join("state");
+    let completed_a = {
+        let mut coordinator = LiveSessionCoordinator::new(
+            LiveSessionRequest {
+                codex_home: Some(codex_home.clone()),
+                session_id: "session-live".to_string(),
+                state_dir: state_dir.clone(),
+            },
+            SchedulerPolicy::default(),
+            WarningPolicy::default(),
+        )
+        .expect("create generation A coordinator");
+        let poll = coordinator.poll_once().expect("complete generation A poll");
+        assert!(poll.reran_pipeline);
+        assert!(poll.emitted_checkpoints > 0);
+        poll
+    };
+    let completed_a_cursor = completed_a
+        .latest_cursor
+        .clone()
+        .expect("generation A should establish a cursor");
+    let completed_a_state = read_persisted_state(&state_dir);
+    let completed_a_token = completed_a_state["progress"]["completed_prepared_state_token"]
+        .as_str()
+        .expect("generation A should persist a completion token")
+        .to_string();
+    assert!(completed_a_state["progress"]["pending_observed_size_bytes"].is_null());
+
+    let preserved_generation_a = temp_root.join("preserved-generation-a.jsonl");
+    fs::rename(&rollout_path, &preserved_generation_a)
+        .expect("preserve generation A outside source discovery");
+    thread::sleep(Duration::from_millis(1100));
+    fs::write(&rollout_path, &generation_b).expect("install same-length generation B");
+    assert_eq!(
+        fs::metadata(&rollout_path)
+            .expect("inspect generation B")
+            .len(),
+        completed_a.observed_size_bytes
+    );
+
+    let helper_state_dir = temp_root.join("helper-state");
+    write_persisted_state(&helper_state_dir, &completed_a_state);
+    let generation_b_poll = {
+        let mut coordinator = LiveSessionCoordinator::new(
+            LiveSessionRequest {
+                codex_home: Some(codex_home.clone()),
+                session_id: "session-live".to_string(),
+                state_dir: helper_state_dir,
+            },
+            SchedulerPolicy::default(),
+            WarningPolicy::default(),
+        )
+        .expect("create generation B helper coordinator");
+        coordinator
+            .poll_once()
+            .expect("same-length generation B must rerun")
+    };
+    assert!(generation_b_poll.reran_pipeline);
+    assert!(
+        generation_b_poll.observations.len() >= 2,
+        "generation B must add at least two fresh checkpoints"
+    );
+    let first_b_observation = generation_b_poll
+        .observations
+        .first()
+        .expect("generation B should emit a fresh observation");
+    let first_b_cursor = first_b_observation.event.cursor.clone();
+    let next_emission_ordinal = first_b_observation.event.emission_ordinal + 1;
+    assert_eq!(first_b_cursor.session_id, "session-live");
+    assert!(first_b_cursor.ordinal > completed_a_cursor.ordinal);
+
+    // This is the exact durable shape after begin_poll and the first B delivery, before
+    // complete_poll can certify generation B.
+    let mut interrupted_state = completed_a_state.clone();
+    interrupted_state["progress"]["completed_prepared_state_token"] = Value::Null;
+    interrupted_state["progress"]["last_delivered_cursors"]["session-live"] = json!({
+        "session_id": first_b_cursor.session_id.clone(),
+        "ordinal": first_b_cursor.ordinal,
+    });
+    interrupted_state["progress"]["next_emission_ordinal"] = json!(next_emission_ordinal);
+    write_persisted_state(&state_dir, &interrupted_state);
+
+    let persisted_interruption = read_persisted_state(&state_dir);
+    assert!(
+        persisted_interruption["progress"]["completed_prepared_state_token"].is_null(),
+        "incremental cursor persistence must not retain generation A's completion certificate"
+    );
+    assert!(persisted_interruption["progress"]["pending_observed_size_bytes"].is_null());
+    assert_eq!(
+        persisted_interruption["progress"]["last_delivered_cursors"]["session-live"]["ordinal"]
+            .as_u64(),
+        Some(first_b_cursor.ordinal as u64)
+    );
+
+    fs::remove_file(&rollout_path).expect("remove generation B");
+    fs::rename(&preserved_generation_a, &rollout_path).expect("restore original generation A");
+    let restored_a_token = BoundedClosureCompactor::default()
+        .prepare(&BoundedClosureRequest {
+            codex_home: Some(codex_home.clone()),
+            root_session_id: "session-live".to_string(),
+        })
+        .expect("prepare restored generation A")
+        .state_token()
+        .to_string();
+    assert_eq!(restored_a_token, completed_a_token);
+
+    let mut restarted = LiveSessionCoordinator::new(
+        LiveSessionRequest {
+            codex_home: Some(codex_home),
+            session_id: "session-live".to_string(),
+            state_dir,
+        },
+        SchedulerPolicy::default(),
+        WarningPolicy::default(),
+    )
+    .expect("load interrupted same-length state against restored generation A");
+    let error = restarted
+        .poll_once()
+        .expect_err("tokenless interrupted progress must rerun and validate the B-derived cursor");
+    assert!(matches!(
+        error,
+        LiveSessionError::PersistedCursorAheadOfAnalyzerClosure {
+            session_id,
+            persisted_ordinal,
+            current_max_ordinal,
+        } if session_id == "session-live"
+            && persisted_ordinal == first_b_cursor.ordinal
+            && current_max_ordinal < persisted_ordinal
+    ));
+}
+
+#[test]
+fn tokenless_persisted_state_forces_one_pipeline_run_before_idle() {
+    let temp_dir = TempDir::new().expect("temp dir");
+    let codex_home = Utf8Path::from_path(temp_dir.path())
+        .expect("utf8 temp dir")
+        .join(".codex");
+    let rollout_dir = codex_home.join("sessions/2026/06/01");
+    fs::create_dir_all(&rollout_dir).expect("create rollout dir");
+    fs::write(
+        rollout_dir.join("rollout-session-live.jsonl"),
+        first_rollout_phase(),
+    )
+    .expect("write first phase");
+
+    let state_dir = Utf8Path::from_path(temp_dir.path())
+        .expect("utf8 temp dir")
+        .join("state");
+    let first_latest_cursor = {
+        let mut coordinator = LiveSessionCoordinator::new(
+            LiveSessionRequest {
+                codex_home: Some(codex_home.clone()),
+                session_id: "session-live".to_string(),
+                state_dir: state_dir.clone(),
+            },
+            SchedulerPolicy::default(),
+            WarningPolicy::default(),
+        )
+        .expect("create initial coordinator");
+        coordinator
+            .poll_once()
+            .expect("initial poll")
+            .latest_cursor
+            .expect("initial cursor")
+    };
+
+    let mut tokenless_state = read_persisted_state(&state_dir);
+    tokenless_state["progress"]
+        .as_object_mut()
+        .expect("progress object")
+        .remove("completed_prepared_state_token");
+    write_persisted_state(&state_dir, &tokenless_state);
+
+    let mut restarted = LiveSessionCoordinator::new(
+        LiveSessionRequest {
+            codex_home: Some(codex_home),
+            session_id: "session-live".to_string(),
+            state_dir: state_dir.clone(),
+        },
+        SchedulerPolicy::default(),
+        WarningPolicy::default(),
+    )
+    .expect("load tokenless current-schema state");
+    let forced = restarted
+        .poll_once()
+        .expect("tokenless state must force a validating pipeline run");
+    assert!(forced.reran_pipeline);
+    assert_eq!(forced.emitted_checkpoints, 0);
+    assert!(forced.observations.is_empty());
+    assert_eq!(forced.latest_cursor.as_ref(), Some(&first_latest_cursor));
+    assert!(
+        read_persisted_state(&state_dir)["progress"]["completed_prepared_state_token"]
+            .as_str()
+            .is_some_and(|token| !token.is_empty())
+    );
+
+    let idle = restarted.poll_once().expect("validated state may now idle");
+    assert!(!idle.reran_pipeline);
 }
 
 #[test]
@@ -2723,6 +3022,11 @@ fn real_session_live_coordinator_replays_pending_growth_after_interrupted_poll_r
     assert_eq!(
         persisted_state["progress"]["last_observed_size_bytes"].as_u64(),
         Some(full_rollout.len() as u64)
+    );
+    assert!(
+        persisted_state["progress"]["completed_prepared_state_token"]
+            .as_str()
+            .is_some_and(|token| !token.is_empty())
     );
     assert!(persisted_state["progress"]["pending_observed_size_bytes"].is_null());
 }
@@ -2901,6 +3205,9 @@ fn real_session_live_coordinator_upgrades_valid_legacy_schema_v1_state_to_v3_pro
         upgraded_state["progress"]["last_observed_size_bytes"].as_u64(),
         Some(first_rollout_phase().len() as u64)
     );
+    assert!(upgraded_state["progress"]["completed_prepared_state_token"]
+        .as_str()
+        .is_some_and(|token| !token.is_empty()));
     assert!(upgraded_state["progress"]["pending_observed_size_bytes"].is_null());
     assert_eq!(
         upgraded_state["progress"]["last_delivered_cursors"]["session-live"]["session_id"].as_str(),
@@ -3115,6 +3422,82 @@ fn real_session_live_coordinator_rejects_ambiguous_rollout_artifacts() {
         error,
         LiveSessionError::AmbiguousRolloutArtifacts { .. }
     ));
+}
+
+#[test]
+fn real_session_live_poller_consumes_bounded_closure_and_preserves_replay_equivalence() {
+    let temp_dir = TempDir::new().expect("temp dir");
+    let codex_home = Utf8Path::from_path(temp_dir.path())
+        .expect("utf8 temp dir")
+        .join(".codex");
+    let rollout_dir = codex_home.join("sessions/2026/06/01");
+    fs::create_dir_all(&rollout_dir).expect("create rollout dir");
+    let root_rollout = rollout_dir.join("rollout-session-live.jsonl");
+    fs::write(&root_rollout, first_rollout_phase()).expect("write root rollout");
+    let unrelated_rollout = rollout_dir.join("rollout-session-unrelated.jsonl");
+    fs::write(
+        &unrelated_rollout,
+        concat!(
+            "{\"timestamp\":\"2026-06-01T12:00:00Z\",\"type\":\"session_meta\",\"payload\":{\"id\":\"session-unrelated\",\"multi_agent_version\":\"v2\"}}\n",
+            "{\"timestamp\":\"2026-06-01T12:00:01Z\",\"type\":\"response_item\",\"payload\":{\"type\":\"message\",\"role\":\"user\",\"content\":\"malformed-content\"}}\n"
+        ),
+    )
+    .expect("write malformed unrelated rollout");
+
+    let state_dir = Utf8Path::from_path(temp_dir.path())
+        .expect("utf8 temp dir")
+        .join("state");
+    let mut coordinator = LiveSessionCoordinator::new(
+        LiveSessionRequest {
+            codex_home: Some(codex_home),
+            session_id: "session-live".to_string(),
+            state_dir: state_dir.clone(),
+        },
+        SchedulerPolicy::default(),
+        WarningPolicy::default(),
+    )
+    .expect("create bounded live coordinator");
+
+    let poll = coordinator
+        .poll_once()
+        .expect("unrelated malformed payload must not poison root closure");
+    assert!(poll.reran_pipeline);
+    assert!(!poll.observations.is_empty());
+    assert!(poll
+        .observations
+        .iter()
+        .all(|observation| { observation.event.cursor.session_id == "session-live" }));
+
+    let manifest: Value = serde_json::from_str(
+        &fs::read_to_string(state_dir.join("compactor/manifest.json"))
+            .expect("read compactor manifest"),
+    )
+    .expect("parse compactor manifest");
+    assert_eq!(
+        manifest["session_ids"],
+        json!(["session-live"]),
+        "Sentinel must receive only the compactor-selected normalized closure"
+    );
+    assert_eq!(manifest["discovered_file_count"].as_u64(), Some(1));
+    assert!(
+        !fs::read_to_string(state_dir.join("compactor/manifest.json"))
+            .expect("reread compactor manifest")
+            .contains("session-unrelated")
+    );
+
+    let replay = agent_drift_sentinel::input::load_replay_bundle(&state_dir.join("analyzer"))
+        .expect("load centralized replay bundle");
+    for observation in &poll.observations {
+        let checkpoint = observation
+            .event
+            .checkpoint
+            .as_ref()
+            .expect("checkpoint-ready live observation");
+        assert!(
+            replay.checkpoints.contains(checkpoint),
+            "validated live observation must be the same checkpoint interpreted by replay"
+        );
+    }
 }
 
 #[test]

@@ -2,7 +2,7 @@
 
 use blake3 as _;
 use camino as _;
-use camino::Utf8PathBuf;
+use camino::{Utf8Path, Utf8PathBuf};
 use codex as _;
 use serde as _;
 use serde_json as _;
@@ -11,6 +11,7 @@ use tempfile as _;
 use time as _;
 use time::OffsetDateTime;
 
+pub mod bounded_closure;
 pub mod canonicalize;
 pub mod cli;
 pub mod dedupe;
@@ -19,6 +20,11 @@ pub mod export;
 pub mod ingest;
 pub mod normalize;
 
+pub use bounded_closure::{
+    BoundedClosureCacheStats, BoundedClosureCompactionResult, BoundedClosureCompactor,
+    BoundedClosureError, BoundedClosureRequest, BoundedClosureSnapshot, BoundedClosureSource,
+    BoundedClosureStartupReadiness, PreparedBoundedClosure, RawTraceSourceState,
+};
 pub use dedupe::{dedupe_rows_exact, DedupeResult};
 pub use dedupe::{DedupeGroup, RowRef};
 pub use discovery::{
@@ -85,6 +91,8 @@ pub struct CompactionRunResult {
 #[derive(Debug, thiserror::Error)]
 pub enum CompactorError {
     #[error(transparent)]
+    BoundedClosure(#[from] BoundedClosureError),
+    #[error(transparent)]
     Discovery(#[from] DiscoveryError),
     #[error(transparent)]
     Ingest(#[from] IngestError),
@@ -100,43 +108,58 @@ pub fn run() -> anyhow::Result<()> {
 
 pub fn compact_codex_sessions(config: &RunConfig) -> Result<CompactionRunResult, CompactorError> {
     let codex_home = resolve_codex_home(config.codex_home.clone())?;
-    let (ingested_rollouts, linkage_metadata) = if config.include_linked_children {
+    if config.include_linked_children {
         let requested_session_id = config
             .session_id
             .as_deref()
             .ok_or(DiscoveryError::LinkedChildrenRequireSessionId)?;
-        let artifacts = discover_session_artifacts(&DiscoverOptions {
-            codex_home: Some(codex_home.clone()),
-            session_id: None,
-        })?;
-        let all_rollouts = ingest_rollout_artifacts(&artifacts)?;
-        let closure = discovery::select_direct_linked_closure(requested_session_id, &all_rollouts)?;
-        let ingested_rollouts = all_rollouts
-            .iter()
-            .filter(|rollout| closure.included_source_files.contains(&rollout.source_file))
-            .cloned()
-            .collect::<Vec<_>>();
-        let linkage_metadata = all_rollouts
-            .iter()
-            .filter(|rollout| closure.linkage_source_files.contains(&rollout.source_file))
-            .map(extract_rollout_linkage_metadata)
-            .collect::<Vec<_>>();
-        (ingested_rollouts, linkage_metadata)
-    } else {
-        let artifacts = discover_session_artifacts(&DiscoverOptions {
-            codex_home: Some(codex_home.clone()),
-            session_id: config.session_id.clone(),
-        })?;
-        let ingested_rollouts = ingest_rollout_artifacts(&artifacts)?;
-        let linkage_metadata = ingested_rollouts
-            .iter()
-            .map(extract_rollout_linkage_metadata)
-            .collect::<Vec<_>>();
-        (ingested_rollouts, linkage_metadata)
-    };
+        let mut compactor = BoundedClosureCompactor::default();
+        let prepared = compactor
+            .prepare(&BoundedClosureRequest {
+                codex_home: Some(codex_home),
+                root_session_id: requested_session_id.to_string(),
+            })
+            .map_err(|error| match error {
+                BoundedClosureError::Discovery(error) => CompactorError::Discovery(error),
+                BoundedClosureError::NoRolloutFiles { codex_home } => {
+                    CompactorError::NoRolloutFiles { codex_home }
+                }
+                error => CompactorError::BoundedClosure(error),
+            })?;
+        return Ok(compactor
+            .compact(prepared, &config.output_dir, config.generated_at)?
+            .run_result);
+    }
 
+    let artifacts = discover_session_artifacts(&DiscoverOptions {
+        codex_home: Some(codex_home.clone()),
+        session_id: config.session_id.clone(),
+    })?;
+    let ingested_rollouts = ingest_rollout_artifacts(&artifacts)?;
+    let linkage_metadata = ingested_rollouts
+        .iter()
+        .map(extract_rollout_linkage_metadata)
+        .collect::<Vec<_>>();
+    compact_ingested_rollouts(
+        &codex_home,
+        &config.output_dir,
+        config.generated_at,
+        ingested_rollouts,
+        linkage_metadata,
+    )
+}
+
+pub(crate) fn compact_ingested_rollouts(
+    codex_home: &Utf8Path,
+    output_dir: &Utf8Path,
+    generated_at: Option<OffsetDateTime>,
+    ingested_rollouts: Vec<IngestedRolloutFile>,
+    linkage_metadata: Vec<RolloutLinkageMetadata>,
+) -> Result<CompactionRunResult, CompactorError> {
     if ingested_rollouts.is_empty() {
-        return Err(CompactorError::NoRolloutFiles { codex_home });
+        return Err(CompactorError::NoRolloutFiles {
+            codex_home: codex_home.to_owned(),
+        });
     }
 
     let archival_rows = ingested_rollouts
@@ -150,9 +173,9 @@ pub fn compact_codex_sessions(config: &RunConfig) -> Result<CompactionRunResult,
         .map(|rollout| rollout.source_file.clone())
         .collect::<Vec<_>>();
     let manifest = export_bundle(&ExportBundleRequest {
-        codex_home: &codex_home,
-        output_dir: &config.output_dir,
-        generated_at: config.generated_at.unwrap_or_else(OffsetDateTime::now_utc),
+        codex_home,
+        output_dir,
+        generated_at: generated_at.unwrap_or_else(OffsetDateTime::now_utc),
         session_ids,
         source_files,
         linkage_metadata: &linkage_metadata,

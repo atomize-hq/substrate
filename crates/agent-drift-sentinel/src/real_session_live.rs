@@ -1,17 +1,15 @@
 use std::collections::{BTreeMap, BTreeSet};
 use std::fs;
-use std::io::{BufRead, BufReader};
 
 use agent_drift_analyzer::{
     analyze_bundle, AnalyzeRequest, AnalyzerError, Checkpoint, InputError as AnalyzerInputError,
 };
 use agent_session_compactor::{
-    compact_codex_sessions, discover_session_artifacts, CompactorError, DiscoverOptions,
-    DiscoveryError, RunConfig,
+    resolve_codex_home, BoundedClosureCompactor, BoundedClosureError, BoundedClosureRequest,
+    BoundedClosureStartupReadiness, CompactorError, DiscoveryError, PreparedBoundedClosure,
 };
 use camino::{Utf8Path, Utf8PathBuf};
 use serde::{Deserialize, Serialize};
-use serde_json::Value;
 
 use crate::input::{load_replay_bundle, CheckpointCursor, InputError};
 use crate::live_input::LiveCheckpointEvent;
@@ -59,6 +57,8 @@ impl LiveSessionPollResult {
 
 #[derive(Debug, thiserror::Error)]
 pub enum LiveSessionError {
+    #[error(transparent)]
+    BoundedClosure(#[from] BoundedClosureError),
     #[error(transparent)]
     Discovery(#[from] DiscoveryError),
     #[error(transparent)]
@@ -154,16 +154,9 @@ pub enum LiveSessionError {
 pub struct LiveSessionCoordinator {
     request: LiveSessionRequest,
     rollout_path: Utf8PathBuf,
+    closure_compactor: BoundedClosureCompactor,
     runtime: LiveRuntime,
     progress: LiveSessionProgress,
-}
-
-#[derive(Debug, Default, Clone, PartialEq, Eq)]
-struct RolloutStartupReadiness {
-    has_session_activity: bool,
-    has_literal_directive_text: bool,
-    has_path_hint: bool,
-    has_parseable_tool_call_arguments: bool,
 }
 
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
@@ -171,6 +164,10 @@ struct LiveSessionProgress {
     // This is the last rollout size that the coordinator fully drained and can safely treat as
     // idle on restart.
     last_observed_size_bytes: Option<u64>,
+    // This token binds idle authority to the complete prepared source state that was last fully
+    // processed, not to byte length or an in-memory compactor cache hit.
+    #[serde(default)]
+    completed_prepared_state_token: Option<String>,
     // This records the rollout size currently being drained so an interrupted poll will rerun
     // against that unchanged size instead of skipping still-undelivered checkpoints.
     #[serde(default)]
@@ -187,6 +184,7 @@ impl Default for LiveSessionProgress {
     fn default() -> Self {
         Self {
             last_observed_size_bytes: None,
+            completed_prepared_state_token: None,
             pending_observed_size_bytes: None,
             last_delivered_cursors: BTreeMap::new(),
             monitor_linked_closure: false,
@@ -212,6 +210,10 @@ impl LiveSessionProgress {
 
     fn last_observed_size_bytes(&self) -> Option<u64> {
         self.last_observed_size_bytes
+    }
+
+    fn completed_state_matches(&self, prepared_state_token: &str) -> bool {
+        self.completed_prepared_state_token.as_deref() == Some(prepared_state_token)
     }
 
     fn largest_observed_size_bytes(&self) -> Option<u64> {
@@ -252,13 +254,15 @@ impl LiveSessionProgress {
     }
 
     fn begin_poll(&mut self, observed_size_bytes: u64) {
+        self.completed_prepared_state_token = None;
         if self.last_observed_size_bytes != Some(observed_size_bytes) {
             self.pending_observed_size_bytes = Some(observed_size_bytes);
         }
     }
 
-    fn complete_poll(&mut self, observed_size_bytes: u64) {
+    fn complete_poll(&mut self, observed_size_bytes: u64, prepared_state_token: String) {
         self.last_observed_size_bytes = Some(observed_size_bytes);
+        self.completed_prepared_state_token = Some(prepared_state_token);
         self.pending_observed_size_bytes = None;
     }
 }
@@ -300,15 +304,26 @@ fn default_next_emission_ordinal() -> usize {
 
 impl LiveSessionCoordinator {
     pub fn new(
-        request: LiveSessionRequest,
+        mut request: LiveSessionRequest,
         scheduler_policy: SchedulerPolicy,
         warning_policy: WarningPolicy,
     ) -> Result<Self, LiveSessionError> {
-        let rollout_path = resolve_rollout_path(&request)?;
+        let codex_home = resolve_codex_home(request.codex_home.clone())?;
+        request.codex_home = Some(codex_home.clone());
+        let mut closure_compactor = BoundedClosureCompactor::default();
+        let prepared = closure_compactor
+            .prepare(&BoundedClosureRequest {
+                codex_home: Some(codex_home.clone()),
+                root_session_id: request.session_id.clone(),
+            })
+            .map_err(|error| map_initial_closure_error(error, &request, &codex_home))?;
+        request.session_id = prepared.snapshot().root_session_id.clone();
+        let rollout_path = prepared.snapshot().root_source.source_file.clone();
         let progress = load_persisted_progress(&request)?;
         Ok(Self {
             request,
             rollout_path,
+            closure_compactor,
             runtime: LiveRuntime::new(scheduler_policy, warning_policy),
             progress,
         })
@@ -327,7 +342,17 @@ impl LiveSessionCoordinator {
     }
 
     pub fn poll_once(&mut self) -> Result<LiveSessionPollResult, LiveSessionError> {
-        let observed_size_bytes = file_size_bytes(&self.rollout_path)?;
+        let closure_request = BoundedClosureRequest {
+            codex_home: self.request.codex_home.clone(),
+            root_session_id: self.request.session_id.clone(),
+        };
+        let prepared = self.closure_compactor.prepare(&closure_request)?;
+        let prepared_state_token = prepared.state_token().to_string();
+        let snapshot = prepared.snapshot();
+        let observed_size_bytes = snapshot.root_source.high_water_mark;
+        let startup_readiness = snapshot.startup_readiness.clone();
+        self.rollout_path = snapshot.root_source.source_file.clone();
+
         if let Some(previous_size_bytes) = self.progress.largest_observed_size_bytes() {
             if observed_size_bytes < previous_size_bytes {
                 return Err(LiveSessionError::RolloutShrank {
@@ -339,6 +364,7 @@ impl LiveSessionCoordinator {
         }
         if let Some(previous_size_bytes) = self.progress.last_observed_size_bytes() {
             if observed_size_bytes == previous_size_bytes
+                && self.progress.completed_state_matches(&prepared_state_token)
                 && !self.progress.monitor_linked_closure
                 && !self
                     .progress
@@ -354,13 +380,14 @@ impl LiveSessionCoordinator {
             }
         }
 
-        let checkpoints = match self.run_pipeline() {
+        let checkpoints = match self.run_pipeline(prepared) {
             Ok(checkpoints) => checkpoints,
             Err(error)
                 if !self.progress.has_delivered_checkpoint()
-                    && sparse_startup_retry_allowed(&self.rollout_path, &error) =>
+                    && sparse_startup_retry_allowed(&startup_readiness, &error) =>
             {
-                self.progress.complete_poll(observed_size_bytes);
+                self.progress
+                    .complete_poll(observed_size_bytes, prepared_state_token);
                 self.persist_state()?;
                 return Ok(LiveSessionPollResult {
                     rollout_path: self.rollout_path.clone(),
@@ -383,8 +410,9 @@ impl LiveSessionCoordinator {
                     agent_drift_analyzer::DelegationTopology::DelegatingParent
                 )
         });
-        if sparse_startup_checkpoint_emission_deferred(&self.progress, &self.rollout_path) {
-            self.progress.complete_poll(observed_size_bytes);
+        if sparse_startup_checkpoint_emission_deferred(&self.progress, &startup_readiness) {
+            self.progress
+                .complete_poll(observed_size_bytes, prepared_state_token);
             self.persist_state()?;
             return Ok(LiveSessionPollResult {
                 rollout_path: self.rollout_path.clone(),
@@ -416,7 +444,8 @@ impl LiveSessionCoordinator {
             observations.push(observation);
         }
 
-        self.progress.complete_poll(observed_size_bytes);
+        self.progress
+            .complete_poll(observed_size_bytes, prepared_state_token);
         self.persist_state()?;
 
         Ok(LiveSessionPollResult {
@@ -432,7 +461,10 @@ impl LiveSessionCoordinator {
         })
     }
 
-    fn run_pipeline(&self) -> Result<Vec<Checkpoint>, LiveSessionError> {
+    fn run_pipeline(
+        &mut self,
+        prepared: PreparedBoundedClosure,
+    ) -> Result<Vec<Checkpoint>, LiveSessionError> {
         fs::create_dir_all(&self.request.state_dir).map_err(|source| {
             LiveSessionError::InspectRollout {
                 path: self.request.state_dir.clone(),
@@ -440,16 +472,12 @@ impl LiveSessionCoordinator {
             }
         })?;
 
-        compact_codex_sessions(&RunConfig {
-            codex_home: self.request.codex_home.clone(),
-            session_id: Some(self.request.session_id.clone()),
-            include_linked_children: true,
-            output_dir: self.compactor_output_dir(),
-            generated_at: None,
-        })?;
+        let compactor_output_dir = self.compactor_output_dir();
+        self.closure_compactor
+            .compact(prepared, &compactor_output_dir, None)?;
 
         analyze_bundle(&AnalyzeRequest {
-            input_dir: self.compactor_output_dir(),
+            input_dir: compactor_output_dir,
             output_dir: self.analyzer_output_dir(),
         })?;
 
@@ -599,6 +627,7 @@ fn progress_from_legacy_cursor(
         .collect();
     LiveSessionProgress {
         last_observed_size_bytes: None,
+        completed_prepared_state_token: None,
         pending_observed_size_bytes: None,
         last_delivered_cursors,
         monitor_linked_closure: false,
@@ -735,59 +764,17 @@ fn validate_analyzer_verified_direct_closure(
     Ok(())
 }
 
-fn resolve_rollout_path(request: &LiveSessionRequest) -> Result<Utf8PathBuf, LiveSessionError> {
-    let codex_home = agent_session_compactor::resolve_codex_home(request.codex_home.clone())?;
-    let artifacts = discover_session_artifacts(&DiscoverOptions {
-        codex_home: Some(codex_home.clone()),
-        session_id: Some(request.session_id.clone()),
-    })?;
-    let rollout_paths = artifacts
-        .into_iter()
-        .map(|artifact| artifact.path)
-        .filter(|path| is_rollout_artifact(path))
-        .collect::<Vec<_>>();
-
-    match rollout_paths.as_slice() {
-        [] => Err(LiveSessionError::MissingRolloutArtifact {
-            session_id: request.session_id.clone(),
-            codex_home,
-        }),
-        [path] => Ok(path.clone()),
-        _ => Err(LiveSessionError::AmbiguousRolloutArtifacts {
-            session_id: request.session_id.clone(),
-            codex_home,
-            paths: rollout_paths,
-        }),
-    }
-}
-
-fn is_rollout_artifact(path: &Utf8Path) -> bool {
-    matches!(
-        path.file_name(),
-        Some(file_name) if file_name.starts_with("rollout-") && file_name.ends_with(".jsonl")
-    )
-}
-
-fn file_size_bytes(path: &Utf8Path) -> Result<u64, LiveSessionError> {
-    let metadata = fs::metadata(path).map_err(|source| LiveSessionError::InspectRollout {
-        path: path.to_owned(),
-        source,
-    })?;
-    Ok(metadata.len())
-}
-
 fn checkpoint_after_cursor(checkpoint: &Checkpoint, cursor: &CheckpointCursor) -> bool {
     checkpoint.session_id > cursor.session_id
         || (checkpoint.session_id == cursor.session_id && checkpoint.ordinal > cursor.ordinal)
 }
 
-fn sparse_startup_retry_allowed(rollout_path: &Utf8Path, error: &LiveSessionError) -> bool {
-    let Ok(readiness) = inspect_rollout_startup_readiness(rollout_path) else {
-        return false;
-    };
-
+fn sparse_startup_retry_allowed(
+    readiness: &BoundedClosureStartupReadiness,
+    error: &LiveSessionError,
+) -> bool {
     match error {
-        LiveSessionError::Compactor(CompactorError::Discovery(
+        LiveSessionError::BoundedClosure(BoundedClosureError::Discovery(
             DiscoveryError::LinkedSessionNotFound { .. },
         )) => !readiness.has_session_activity,
         LiveSessionError::Analyzer(AnalyzerError::Input(AnalyzerInputError::NoSessions {
@@ -795,25 +782,19 @@ fn sparse_startup_retry_allowed(rollout_path: &Utf8Path, error: &LiveSessionErro
         })) => !readiness.has_session_activity,
         LiveSessionError::Analyzer(AnalyzerError::Input(
             AnalyzerInputError::InsufficientContract { reason },
-        )) => sparse_startup_contract_gap(&readiness, reason),
+        )) => sparse_startup_contract_gap(readiness, reason),
         _ => false,
     }
 }
 
 fn sparse_startup_checkpoint_emission_deferred(
     progress: &LiveSessionProgress,
-    rollout_path: &Utf8Path,
+    readiness: &BoundedClosureStartupReadiness,
 ) -> bool {
-    if progress.has_delivered_checkpoint() {
-        return false;
-    }
-
-    inspect_rollout_startup_readiness(rollout_path)
-        .map(|readiness| !readiness.has_session_activity)
-        .unwrap_or(false)
+    !progress.has_delivered_checkpoint() && !readiness.has_session_activity
 }
 
-fn sparse_startup_contract_gap(readiness: &RolloutStartupReadiness, reason: &str) -> bool {
+fn sparse_startup_contract_gap(readiness: &BoundedClosureStartupReadiness, reason: &str) -> bool {
     match reason {
         "no literal user/developer/system rows survived normalization" => {
             !readiness.has_literal_directive_text
@@ -826,192 +807,133 @@ fn sparse_startup_contract_gap(readiness: &RolloutStartupReadiness, reason: &str
     }
 }
 
-fn inspect_rollout_startup_readiness(
-    rollout_path: &Utf8Path,
-) -> Result<RolloutStartupReadiness, LiveSessionError> {
-    let file = fs::File::open(rollout_path).map_err(|source| LiveSessionError::InspectRollout {
-        path: rollout_path.to_owned(),
-        source,
-    })?;
-    let reader = BufReader::new(file);
-    let mut readiness = RolloutStartupReadiness::default();
-
-    for line in reader.lines() {
-        let line = line.map_err(|source| LiveSessionError::InspectRollout {
-            path: rollout_path.to_owned(),
-            source,
-        })?;
-        if line.trim().is_empty() {
-            continue;
-        }
-        let Ok(value) = serde_json::from_str::<Value>(&line) else {
-            continue;
-        };
-        update_rollout_startup_readiness(&mut readiness, &value);
-    }
-
-    Ok(readiness)
-}
-
-fn update_rollout_startup_readiness(readiness: &mut RolloutStartupReadiness, value: &Value) {
-    let event_type = value.get("type").and_then(Value::as_str);
-    if event_type.is_some_and(|event_type| event_type != "session_meta") {
-        readiness.has_session_activity = true;
-    }
-
-    for text in rollout_text_fragments(value) {
-        if !text.trim().is_empty() {
-            readiness.has_literal_directive_text = true;
-            if rollout_text_has_path_hint(text) {
-                readiness.has_path_hint = true;
+fn map_initial_closure_error(
+    error: BoundedClosureError,
+    request: &LiveSessionRequest,
+    codex_home: &Utf8Path,
+) -> LiveSessionError {
+    match error {
+        BoundedClosureError::NoRolloutFiles { .. }
+        | BoundedClosureError::Discovery(DiscoveryError::LinkedSessionNotFound { .. }) => {
+            LiveSessionError::MissingRolloutArtifact {
+                session_id: request.session_id.clone(),
+                codex_home: codex_home.to_owned(),
             }
         }
+        BoundedClosureError::Discovery(DiscoveryError::AmbiguousLinkedSession {
+            source_files,
+            ..
+        }) => LiveSessionError::AmbiguousRolloutArtifacts {
+            session_id: request.session_id.clone(),
+            codex_home: codex_home.to_owned(),
+            paths: source_files,
+        },
+        BoundedClosureError::Discovery(error) => LiveSessionError::Discovery(error),
+        error => LiveSessionError::BoundedClosure(error),
     }
-
-    if let Some(arguments) = rollout_tool_call_arguments(value) {
-        if parse_tool_arguments(arguments).is_some() {
-            readiness.has_parseable_tool_call_arguments = true;
-        }
-    }
-}
-
-fn rollout_text_fragments(value: &Value) -> Vec<&str> {
-    let mut texts = Vec::new();
-    let Some(payload) = value.get("payload") else {
-        return texts;
-    };
-
-    if let Some(message) = payload.get("message").and_then(Value::as_str) {
-        texts.push(message);
-    }
-    if let Some(user_instructions) = payload.get("user_instructions").and_then(Value::as_str) {
-        texts.push(user_instructions);
-    }
-    if let Some(base_instruction_text) = payload
-        .get("base_instructions")
-        .and_then(|base| base.get("text"))
-        .and_then(Value::as_str)
-    {
-        texts.push(base_instruction_text);
-    }
-    if payload.get("type").and_then(Value::as_str) == Some("message")
-        && matches!(
-            payload.get("role").and_then(Value::as_str),
-            Some("user" | "developer" | "system")
-        )
-    {
-        if let Some(content) = payload.get("content").and_then(Value::as_array) {
-            for item in content {
-                if let Some(text) = item.get("text").and_then(Value::as_str) {
-                    texts.push(text);
-                }
-            }
-        }
-    }
-
-    texts
-}
-
-fn rollout_tool_call_arguments(value: &Value) -> Option<&str> {
-    let payload = value.get("payload")?;
-    (payload.get("type").and_then(Value::as_str) == Some("function_call"))
-        .then(|| payload.get("arguments").and_then(Value::as_str))
-        .flatten()
-}
-
-fn parse_tool_arguments(text: &str) -> Option<Value> {
-    serde_json::from_str::<Value>(text)
-        .ok()
-        .filter(Value::is_object)
-}
-
-fn rollout_text_has_path_hint(text: &str) -> bool {
-    text.split_whitespace().any(|raw_token| {
-        let token = raw_token
-            .trim_matches(|ch: char| {
-                matches!(
-                    ch,
-                    ',' | ':' | ';' | '"' | '\'' | '(' | ')' | '[' | ']' | '{' | '}' | '`'
-                )
-            })
-            .trim_end_matches('.');
-        if token.is_empty() || token.starts_with("http://") || token.starts_with("https://") {
-            return false;
-        }
-        let has_separator = token.contains('/') || token.starts_with('.');
-        let has_extension = [
-            ".md", ".rs", ".toml", ".json", ".jsonl", ".yaml", ".yml", ".sh", ".txt",
-        ]
-        .iter()
-        .any(|suffix| token.ends_with(suffix));
-        has_separator || has_extension
-    })
 }
 
 #[cfg(test)]
 mod tests {
-    use super::{
-        inspect_rollout_startup_readiness, sparse_startup_retry_allowed, LiveSessionError,
-        RolloutStartupReadiness,
-    };
-    use agent_drift_analyzer::{AnalyzerError, InputError as AnalyzerInputError};
-    use camino::Utf8Path;
     use std::fs;
+
+    use super::{
+        sparse_startup_retry_allowed, LiveSessionCoordinator, LiveSessionError,
+        LiveSessionProgress, LiveSessionRequest, PersistedLiveSessionState,
+    };
+    use crate::input::CheckpointCursor;
+    use crate::live_runtime::LiveRuntime;
+    use crate::operator_surface::WarningPolicy;
+    use crate::scheduler::SchedulerPolicy;
+    use agent_drift_analyzer::{AnalyzerError, InputError as AnalyzerInputError};
+    use agent_session_compactor::{BoundedClosureCompactor, BoundedClosureStartupReadiness};
+    use camino::{Utf8Path, Utf8PathBuf};
     use tempfile::TempDir;
 
     #[test]
-    fn sparse_startup_retry_allows_no_sessions_only_before_session_activity() {
+    fn same_length_begin_poll_invalidates_completed_certificate_before_delivery() {
         let temp_dir = TempDir::new().expect("temp dir");
-        let rollout_path = Utf8Path::from_path(temp_dir.path())
+        let state_dir = Utf8Path::from_path(temp_dir.path())
             .expect("utf8 temp dir")
-            .join("rollout.jsonl");
-        fs::write(
-            &rollout_path,
-            "{\"timestamp\":\"2026-06-01T12:00:00Z\",\"type\":\"session_meta\",\"payload\":{\"id\":\"session-live\"}}\n",
-        )
-        .expect("write sparse rollout");
+            .join("state");
+        let mut coordinator = LiveSessionCoordinator {
+            request: LiveSessionRequest {
+                codex_home: None,
+                session_id: "session-live".to_string(),
+                state_dir: state_dir.clone(),
+            },
+            rollout_path: Utf8PathBuf::from("/tmp/rollout-session-live.jsonl"),
+            closure_compactor: BoundedClosureCompactor::default(),
+            runtime: LiveRuntime::new(SchedulerPolicy::default(), WarningPolicy::default()),
+            progress: LiveSessionProgress {
+                last_observed_size_bytes: Some(512),
+                completed_prepared_state_token: Some("generation-a".to_string()),
+                ..LiveSessionProgress::default()
+            },
+        };
+        coordinator.progress.record_delivery(CheckpointCursor {
+            session_id: "session-live".to_string(),
+            ordinal: 1,
+        });
 
+        coordinator.progress.begin_poll(512);
+        coordinator.progress.record_delivery(CheckpointCursor {
+            session_id: "session-live".to_string(),
+            ordinal: 2,
+        });
+        coordinator
+            .persist_state()
+            .expect("persist one same-length generation B delivery");
+
+        let persisted: PersistedLiveSessionState = serde_json::from_str(
+            &fs::read_to_string(state_dir.join("live-session-state.json"))
+                .expect("read interrupted progress"),
+        )
+        .expect("parse interrupted progress");
+        assert!(persisted.progress.completed_prepared_state_token.is_none());
+        assert!(persisted.progress.pending_observed_size_bytes.is_none());
+        assert_eq!(
+            persisted
+                .progress
+                .latest_cursor("session-live")
+                .map(|cursor| cursor.ordinal),
+            Some(2)
+        );
+    }
+
+    #[test]
+    fn sparse_startup_retry_allows_no_sessions_only_before_session_activity() {
         let error =
             LiveSessionError::Analyzer(AnalyzerError::Input(AnalyzerInputError::NoSessions {
-                input_dir: rollout_path.parent().expect("parent").join("bundle"),
+                input_dir: Utf8PathBuf::from("/tmp/bundle"),
             }));
-        assert!(sparse_startup_retry_allowed(&rollout_path, &error));
+        assert!(sparse_startup_retry_allowed(
+            &BoundedClosureStartupReadiness::default(),
+            &error
+        ));
 
-        fs::write(
-            &rollout_path,
-            concat!(
-                "{\"timestamp\":\"2026-06-01T12:00:00Z\",\"type\":\"session_meta\",\"payload\":{\"id\":\"session-live\"}}\n",
-                "{\"timestamp\":\"2026-06-01T12:00:01Z\",\"type\":\"event_msg\",\"payload\":{\"type\":\"task_started\",\"turn_id\":\"turn-1\"}}\n"
-            ),
-        )
-        .expect("write active rollout");
-        assert!(!sparse_startup_retry_allowed(&rollout_path, &error));
+        let active = BoundedClosureStartupReadiness {
+            has_session_activity: true,
+            ..BoundedClosureStartupReadiness::default()
+        };
+        assert!(!sparse_startup_retry_allowed(&active, &error));
     }
 
     #[test]
     fn sparse_startup_retry_rejects_non_sparse_contract_breakage() {
-        let temp_dir = TempDir::new().expect("temp dir");
-        let rollout_path = Utf8Path::from_path(temp_dir.path())
-            .expect("utf8 temp dir")
-            .join("rollout.jsonl");
-        fs::write(
-            &rollout_path,
-            concat!(
-                "{\"timestamp\":\"2026-06-01T12:00:00Z\",\"type\":\"session_meta\",\"payload\":{\"id\":\"session-live\",\"base_instructions\":{\"text\":\"Base instructions\"}}}\n",
-                "{\"timestamp\":\"2026-06-01T12:00:01Z\",\"type\":\"event_msg\",\"payload\":{\"type\":\"task_started\",\"turn_id\":\"turn-1\",\"message\":\"docs/specs/agent-drift-sentinel-real-session-live-v0.5-spec.md\"}}\n",
-                "{\"timestamp\":\"2026-06-01T12:00:02Z\",\"type\":\"response_item\",\"payload\":{\"type\":\"message\",\"role\":\"user\",\"content\":[{\"type\":\"input_text\",\"text\":\"inspect crates/agent-drift-sentinel/src/real_session_live.rs\"}]}}\n",
-                "{\"timestamp\":\"2026-06-01T12:00:03Z\",\"type\":\"response_item\",\"payload\":{\"type\":\"function_call\",\"name\":\"functions.shell_command\",\"arguments\":\"{\\\"command\\\":\\\"cargo test -p agent-drift-sentinel\\\",\\\"workdir\\\":\\\"/repo\\\"}\"}}\n"
-            ),
-        )
-        .expect("write rollout");
-
+        let readiness = BoundedClosureStartupReadiness {
+            has_session_activity: true,
+            has_literal_directive_text: true,
+            has_path_hint: true,
+            has_parseable_tool_call_arguments: true,
+        };
         let stable_rows_error = LiveSessionError::Analyzer(AnalyzerError::Input(
             AnalyzerInputError::InsufficientContract {
                 reason: "row references are not unique and stable".to_string(),
             },
         ));
         assert!(!sparse_startup_retry_allowed(
-            &rollout_path,
+            &readiness,
             &stable_rows_error
         ));
 
@@ -1021,36 +943,24 @@ mod tests {
             },
         ));
         assert!(!sparse_startup_retry_allowed(
-            &rollout_path,
+            &readiness,
             &missing_tool_error
         ));
     }
 
     #[test]
-    fn inspect_rollout_startup_readiness_tracks_sparse_requirements() {
-        let temp_dir = TempDir::new().expect("temp dir");
-        let rollout_path = Utf8Path::from_path(temp_dir.path())
-            .expect("utf8 temp dir")
-            .join("rollout.jsonl");
-        fs::write(
-            &rollout_path,
-            concat!(
-                "{\"timestamp\":\"2026-06-01T12:00:00Z\",\"type\":\"session_meta\",\"payload\":{\"id\":\"session-live\",\"base_instructions\":{\"text\":\"Base instructions\"}}}\n",
-                "{\"timestamp\":\"2026-06-01T12:00:01Z\",\"type\":\"turn_context\",\"payload\":{\"turn_id\":\"turn-1\",\"user_instructions\":\"keep crates/agent-drift-sentinel/src/real_session_live.rs in scope\"}}\n",
-                "{\"timestamp\":\"2026-06-01T12:00:02Z\",\"type\":\"response_item\",\"payload\":{\"type\":\"function_call\",\"name\":\"functions.shell_command\",\"arguments\":\"{\\\"command\\\":\\\"cargo test -p agent-drift-sentinel\\\",\\\"workdir\\\":\\\"/repo\\\"}\"}}\n"
-            ),
-        )
-        .expect("write rollout");
-
-        let readiness = inspect_rollout_startup_readiness(&rollout_path).expect("readiness");
-        assert_eq!(
-            readiness,
-            RolloutStartupReadiness {
-                has_session_activity: true,
-                has_literal_directive_text: true,
-                has_path_hint: true,
-                has_parseable_tool_call_arguments: true,
-            }
-        );
+    fn sparse_startup_retry_uses_compactor_owned_readiness_facts() {
+        let readiness = BoundedClosureStartupReadiness {
+            has_session_activity: true,
+            has_literal_directive_text: true,
+            has_path_hint: true,
+            has_parseable_tool_call_arguments: false,
+        };
+        let error = LiveSessionError::Analyzer(AnalyzerError::Input(
+            AnalyzerInputError::InsufficientContract {
+                reason: "tool-call argument payloads are not parseable enough to infer command families and working-set paths".to_string(),
+            },
+        ));
+        assert!(sparse_startup_retry_allowed(&readiness, &error));
     }
 }

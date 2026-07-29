@@ -4,7 +4,7 @@ use std::{env, path::PathBuf};
 use camino::{Utf8Path, Utf8PathBuf};
 use walkdir::WalkDir;
 
-use crate::ingest::{extract_rollout_linkage_metadata, IngestedRolloutFile};
+use crate::ingest::RolloutLinkageMetadata;
 
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct DiscoverOptions {
@@ -49,6 +49,13 @@ pub enum DiscoveryError {
 }
 
 #[derive(Debug, Clone, PartialEq, Eq)]
+pub(crate) struct LinkedClosureArtifact {
+    pub source_file: Utf8PathBuf,
+    pub session_id: Option<String>,
+    pub linkage_metadata: RolloutLinkageMetadata,
+}
+
+#[derive(Debug, Clone, PartialEq, Eq)]
 pub(crate) struct DirectLinkedClosure {
     pub included_source_files: BTreeSet<Utf8PathBuf>,
     pub linkage_source_files: BTreeSet<Utf8PathBuf>,
@@ -56,7 +63,7 @@ pub(crate) struct DirectLinkedClosure {
 
 pub(crate) fn select_direct_linked_closure(
     requested_session_id: &str,
-    rollouts: &[IngestedRolloutFile],
+    rollouts: &[LinkedClosureArtifact],
 ) -> Result<DirectLinkedClosure, DiscoveryError> {
     let requested_session_id = requested_session_id.trim();
     let requested_session_id = requested_session_id
@@ -68,7 +75,7 @@ pub(crate) fn select_direct_linked_closure(
 
     let metadata = rollouts
         .iter()
-        .map(extract_rollout_linkage_metadata)
+        .map(|rollout| rollout.linkage_metadata.clone())
         .collect::<Vec<_>>();
     let root_indexes = rollouts
         .iter()
