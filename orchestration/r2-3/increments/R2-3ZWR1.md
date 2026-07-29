@@ -4,6 +4,19 @@ This is the user-authorized narrow Windows repair inserted after R2-3T and befor
 native-evidence gate. It owns only the two contradictions recorded in
 `orchestration/r2-3/receipts/R2-3Z-WIN-EVIDENCE-diagnostic-2.json`.
 
+NARROW SCOPE AMENDMENT
+
+After the first native-Windows attempt stopped cleanly with
+`BLOCKED_SCOPE_EXPANSION`, the user explicitly authorized the two additional production files
+identified in `orchestration/r2-3/receipts/R2-3ZWR1-attempt-1.json`. The amendment owns only:
+
+- the private `world_windows_wsl::transport` constant references in
+  `crates/shell/src/execution/platform_world/windows.rs`; and
+- the Windows-unavailable `anyhow::Context` import needed by
+  `crates/shell/src/builtins/world_enable/runner.rs`.
+
+No other scope or authority changes.
+
 Use the available skills appropriate to source analysis, test-driven repair, GitNexus impact
 analysis, security review, code review, and git publication. This top-level task and every
 subagent must run at Standard/default speed, never Fast. Every subagent must use GPT-5.4 with
@@ -38,20 +51,23 @@ Production changes are limited to:
 - `crates/shell/src/repl/async_repl.rs`
 - `crates/shell/src/execution/agent_runtime/state_store.rs`
 - `crates/shell/src/execution/orchestrator_world_dispatch.rs`
+- `crates/shell/src/execution/platform_world/windows.rs`
+- `crates/shell/src/builtins/world_enable/runner.rs`
 
 Test changes are limited to:
 
 - `scripts/windows/prefix-mapping-r2-3.Tests.ps1`
-- colocated `#[cfg(test)]` modules already within the three allowed Rust production files, only
+- colocated `#[cfg(test)]` modules already within the five allowed Rust production files, only
   when mechanically necessary to prove the named cfg/build repair.
 
 Do not edit `scripts/windows/start-forwarder.ps1`; the diagnostic proved its release-first,
 debug-fallback behavior is correct. Do not edit any other shell source, test, script, manifest,
 `Cargo.lock`, control document, generated analyzer file, `AGENTS.md`, or `CLAUDE.md`.
 
-If a successful native `cargo build --locked -p shell --lib` requires any additional tracked file,
+If a successful native `cargo build --locked -p shell --lib` requires any additional tracked file
+beyond these six files,
 stop with `BLOCKED_SCOPE_EXPANSION`. Report the exact next compiler diagnostic, required file and
-symbol, why the four-file allowlist cannot repair it, and a copy-ready continuation prompt. Do not
+symbol, why the six-file allowlist cannot repair it, and a copy-ready continuation prompt. Do not
 silently widen the allowlist.
 
 PRE-EDIT BARRIER AND IMPACT
@@ -90,6 +106,10 @@ For the Rust build defects:
 
 - cfg-gate imports, impls, parameters, statements, or functions only where the referenced
   platform-specific definitions are unavailable;
+- repair the two `world_windows_wsl::transport` constant references without making the private
+  module public or adding a new public API;
+- make `anyhow::Context` available on Windows only as required by the existing `.context(...)`
+  call, without changing the world-enable operation;
 - preserve existing Linux and macOS code paths byte-for-byte where practical;
 - preserve Windows fail-closed behavior for unsupported world-worker operations;
 - do not make Linux-only dispatch helpers callable on Windows;
@@ -170,7 +190,7 @@ STOP CONDITIONS
 Stop with the matching blocked receipt if:
 
 - the base, tree, target ref, ancestry, cleanliness, or 0/0 gate differs;
-- a required repair lies outside the exact four-file allowlist;
+- a required repair lies outside the exact six-file allowlist;
 - the repair changes Linux/macOS behavior, weakens Windows fail-closed behavior, adds ambient
   authority, or changes a public API;
 - any platform lifecycle, process, pipe, PID, service, provisioning, cleanup, artifact, or
