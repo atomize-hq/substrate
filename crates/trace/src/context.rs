@@ -48,7 +48,7 @@ pub struct TraceContext {
 
 #[derive(Clone)]
 enum TraceContextBindingV1 {
-    LegacyAmbientCompatibility,
+    Unbound,
     ExplicitProduct {
         trace_output: PathBuf,
         policy_git_directory: PathBuf,
@@ -60,7 +60,7 @@ impl Default for TraceContext {
         Self {
             output: Arc::new(RwLock::new(None)),
             policy_id: Arc::new(RwLock::new("default".to_string())),
-            binding: TraceContextBindingV1::LegacyAmbientCompatibility,
+            binding: TraceContextBindingV1::Unbound,
         }
     }
 }
@@ -97,16 +97,19 @@ impl TraceContext {
 
     pub fn init_trace(&self, path: Option<PathBuf>) -> Result<()> {
         let trace_path = match &self.binding {
-            TraceContextBindingV1::LegacyAmbientCompatibility => path.unwrap_or_else(|| {
-                env::var("SHIM_TRACE_LOG")
-                    .map(PathBuf::from)
-                    .unwrap_or_else(|_| {
-                        dirs::home_dir()
-                            .unwrap_or_else(|| PathBuf::from("/tmp"))
-                            .join(".substrate")
-                            .join("trace.jsonl")
-                    })
-            }),
+            TraceContextBindingV1::Unbound => {
+                let Some(trace_path) = path else {
+                    return Err(anyhow!(
+                        "trace context is unbound; register an explicit product trace context or provide an explicit trace path"
+                    ));
+                };
+                if let Some(existing) = self.output.read().as_ref() {
+                    if existing.path == trace_path {
+                        return Ok(());
+                    }
+                }
+                trace_path
+            }
             TraceContextBindingV1::ExplicitProduct { trace_output, .. } => {
                 if path.as_ref().is_some_and(|path| path != trace_output) {
                     return Err(anyhow!(
@@ -215,7 +218,7 @@ impl TraceContext {
             cwd: env::current_dir()?.to_string_lossy().to_string(),
             policy_id: self.policy_id(),
             policy_commit: match &self.binding {
-                TraceContextBindingV1::LegacyAmbientCompatibility => get_policy_git_hash()?,
+                TraceContextBindingV1::Unbound => get_policy_git_hash()?,
                 TraceContextBindingV1::ExplicitProduct {
                     policy_git_directory,
                     ..
@@ -266,7 +269,13 @@ fn trace_context() -> Result<&'static TraceContext> {
 }
 
 pub fn init_trace(path: Option<PathBuf>) -> Result<()> {
-    trace_context()?.init_trace(path)
+    let context = trace_context()?;
+    if matches!(context.binding, TraceContextBindingV1::Unbound) {
+        return Err(anyhow!(
+            "trace context is not explicitly bound; call set_global_trace_context with TraceContext::explicit_product before global init_trace"
+        ));
+    }
+    context.init_trace(path)
 }
 
 pub fn set_policy_id(policy_id: &str) -> Result<()> {

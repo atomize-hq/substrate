@@ -1,7 +1,7 @@
 use super::*;
 use crate::context::TraceContext;
 use crate::span::SpanBuilder;
-use crate::util::{get_policy_git_hash_at, hash_env_vars};
+use crate::util::{get_policy_git_hash, get_policy_git_hash_at, hash_env_vars};
 use chrono::Utc;
 use serde_json::Value;
 use std::path::Path;
@@ -81,20 +81,140 @@ fn test_trace_initialization() {
 }
 
 #[test]
-fn legacy_ambient_compatibility_remains_the_default_posture() {
+fn default_trace_context_rejects_unbound_init_despite_ambient_env() {
+    let _guard = ENV_LOCK
+        .lock()
+        .unwrap_or_else(|poisoned| poisoned.into_inner());
+    let previous_shim_trace_log = std::env::var_os("SHIM_TRACE_LOG");
+    let previous_home = std::env::var_os("HOME");
+    let previous_userprofile = std::env::var_os("USERPROFILE");
+    let previous_substrate_home = std::env::var_os("SUBSTRATE_HOME");
+    let previous_cwd = std::env::current_dir().unwrap();
+    let tmp = TempDir::new().unwrap();
+    let ambient_repo = tmp.path().join("ambient-repo");
+    let _ = initialize_test_git_repository(&ambient_repo);
+    let shim_trace = tmp.path().join("shim-env").join("trace.jsonl");
+    let home_trace = tmp
+        .path()
+        .join("ambient-home")
+        .join(".substrate")
+        .join("trace.jsonl");
+    let userprofile_trace = tmp
+        .path()
+        .join("ambient-userprofile")
+        .join(".substrate")
+        .join("trace.jsonl");
+    let substrate_home_trace = tmp
+        .path()
+        .join("ambient-substrate-home")
+        .join("trace.jsonl");
+    std::env::set_var("SHIM_TRACE_LOG", &shim_trace);
+    std::env::set_var("HOME", tmp.path().join("ambient-home"));
+    std::env::set_var("USERPROFILE", tmp.path().join("ambient-userprofile"));
+    std::env::set_var("SUBSTRATE_HOME", tmp.path().join("ambient-substrate-home"));
+    std::env::set_current_dir(&ambient_repo).unwrap();
+
+    let context = TraceContext::default();
+    let error = context.init_trace(None).unwrap_err();
+    assert!(error.to_string().contains("unbound"));
+    assert!(!shim_trace.exists());
+    assert!(!home_trace.exists());
+    assert!(!userprofile_trace.exists());
+    assert!(!substrate_home_trace.exists());
+
+    std::env::set_current_dir(previous_cwd).unwrap();
+    match previous_shim_trace_log {
+        Some(value) => std::env::set_var("SHIM_TRACE_LOG", value),
+        None => std::env::remove_var("SHIM_TRACE_LOG"),
+    }
+    match previous_home {
+        Some(value) => std::env::set_var("HOME", value),
+        None => std::env::remove_var("HOME"),
+    }
+    match previous_userprofile {
+        Some(value) => std::env::set_var("USERPROFILE", value),
+        None => std::env::remove_var("USERPROFILE"),
+    }
+    match previous_substrate_home {
+        Some(value) => std::env::set_var("SUBSTRATE_HOME", value),
+        None => std::env::remove_var("SUBSTRATE_HOME"),
+    }
+}
+
+#[test]
+fn global_unbound_init_requires_explicit_product_context() {
     let _guard = ENV_LOCK
         .lock()
         .unwrap_or_else(|poisoned| poisoned.into_inner());
     let previous = std::env::var_os("SHIM_TRACE_LOG");
     let tmp = TempDir::new().unwrap();
-    let ambient_trace = tmp.path().join("legacy-ambient").join("trace.jsonl");
-    std::env::set_var("SHIM_TRACE_LOG", &ambient_trace);
+    let shim_trace = tmp.path().join("shim-env").join("trace.jsonl");
+    let requested_trace = tmp.path().join("requested").join("trace.jsonl");
+    std::env::set_var("SHIM_TRACE_LOG", &shim_trace);
 
-    let context = TraceContext::default();
-    context.init_trace(None).unwrap();
-    assert!(ambient_trace.is_file());
+    let _ = crate::set_global_trace_context(TraceContext::default());
+
+    let none_error = crate::init_trace(None).unwrap_err();
+    assert!(none_error.to_string().contains("not explicitly bound"));
+    let some_error = crate::init_trace(Some(requested_trace.clone())).unwrap_err();
+    assert!(some_error.to_string().contains("not explicitly bound"));
+    assert!(!shim_trace.exists());
+    assert!(!requested_trace.exists());
 
     match previous {
+        Some(value) => std::env::set_var("SHIM_TRACE_LOG", value),
+        None => std::env::remove_var("SHIM_TRACE_LOG"),
+    }
+}
+
+#[test]
+fn ambient_policy_git_lookup_is_disabled() {
+    let _guard = ENV_LOCK
+        .lock()
+        .unwrap_or_else(|poisoned| poisoned.into_inner());
+    let previous_home = std::env::var_os("HOME");
+    let previous_userprofile = std::env::var_os("USERPROFILE");
+    let previous_substrate_home = std::env::var_os("SUBSTRATE_HOME");
+    let previous_shim_trace_log = std::env::var_os("SHIM_TRACE_LOG");
+    let previous_cwd = std::env::current_dir().unwrap();
+    let tmp = TempDir::new().unwrap();
+    let ambient_repo = tmp.path().join("ambient-repo");
+    let commit = initialize_test_git_repository(&ambient_repo);
+    let explicit_trace = tmp.path().join("explicit").join("trace.jsonl");
+
+    std::env::set_var("HOME", &ambient_repo);
+    std::env::set_var("USERPROFILE", &ambient_repo);
+    std::env::set_var("SUBSTRATE_HOME", tmp.path().join("ambient-substrate-home"));
+    std::env::set_var(
+        "SHIM_TRACE_LOG",
+        tmp.path().join("ambient-shim").join("trace.jsonl"),
+    );
+    std::env::set_current_dir(&ambient_repo).unwrap();
+
+    assert_eq!(get_policy_git_hash().unwrap(), None);
+
+    let context = TraceContext::default();
+    context.init_trace(Some(explicit_trace)).unwrap();
+    let replay = context
+        .build_replay_context(None, ExecutionOrigin::Host)
+        .unwrap();
+    assert_eq!(replay.policy_commit, None);
+    assert_ne!(replay.policy_commit.as_deref(), Some(commit.as_str()));
+
+    std::env::set_current_dir(previous_cwd).unwrap();
+    match previous_home {
+        Some(value) => std::env::set_var("HOME", value),
+        None => std::env::remove_var("HOME"),
+    }
+    match previous_userprofile {
+        Some(value) => std::env::set_var("USERPROFILE", value),
+        None => std::env::remove_var("USERPROFILE"),
+    }
+    match previous_substrate_home {
+        Some(value) => std::env::set_var("SUBSTRATE_HOME", value),
+        None => std::env::remove_var("SUBSTRATE_HOME"),
+    }
+    match previous_shim_trace_log {
         Some(value) => std::env::set_var("SHIM_TRACE_LOG", value),
         None => std::env::remove_var("SHIM_TRACE_LOG"),
     }

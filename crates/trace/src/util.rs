@@ -150,49 +150,19 @@ fn is_git_object_id(value: &str) -> bool {
 }
 
 pub fn get_policy_git_hash() -> Result<Option<String>> {
-    use std::path::PathBuf;
-    use std::process::Command;
-
-    let policy_dir = dirs::home_dir()
-        .unwrap_or_else(|| PathBuf::from("/tmp"))
-        .join(".substrate");
-
     let cache_disabled = env::var("SUBSTRATE_POLICY_GIT_CACHE")
         .map(|v| v == "0" || v.eq_ignore_ascii_case("false"))
         .unwrap_or(false);
 
-    let head_path = policy_dir.join(".git/HEAD");
-    let head_mtime = fs::metadata(&head_path).and_then(|m| m.modified()).ok();
-
     let cache_mutex = POLICY_GIT_HASH.get_or_init(|| Mutex::new(CachedPolicyHash::default()));
     let mut cache = cache_mutex.lock().expect("policy git hash cache poisoned");
 
-    if !cache_disabled && head_mtime == cache.mtime {
+    if !cache_disabled && cache.mtime.is_some() {
         return Ok(cache.hash.clone());
     }
 
-    let result = if policy_dir.join(".git").exists() {
-        let output = Command::new("git")
-            .args(["rev-parse", "HEAD"])
-            .current_dir(&policy_dir)
-            .output()?;
+    cache.mtime = Some(SystemTime::now());
+    cache.hash = None;
 
-        if output.status.success() {
-            let hash = String::from_utf8_lossy(&output.stdout).trim().to_string();
-            if hash.is_empty() {
-                None
-            } else {
-                Some(hash)
-            }
-        } else {
-            None
-        }
-    } else {
-        None
-    };
-
-    cache.mtime = head_mtime;
-    cache.hash = result.clone();
-
-    Ok(result)
+    Ok(None)
 }
