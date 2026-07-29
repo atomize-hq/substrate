@@ -1,0 +1,122 @@
+{
+  "protocol": "codex.top-level-task-receipt.v1",
+  "orchestration_id": "substrate-r2-3",
+  "dispatch_nonce": "854781991ce7038d0c81541bd4bf325930e1d83b445f77cfb0f0b9e0bd8f613b",
+  "increment": "R2-3ZWR1",
+  "packet_id": "A1.1d-5R2-3ZWR1",
+  "status": "BLOCKED_SCOPE_EXPANSION",
+  "increment_task": {
+    "thread_id": "019faea7-97f2-79e1-9920-1fafe080ee52",
+    "host_id": "remote-control:env_e_6a3d9cd24b5483238ba55b699a98be35"
+  },
+  "meta_task": {
+    "thread_id": "019fa3f7-c447-7132-9126-82e2cf38bd9d",
+    "host_id": "remote-ssh-discovered:spenser-linux-codex",
+    "control_commit": "00f2b5e3229421096329a5aa368ca56e91d4039e"
+  },
+  "expected_base": {
+    "commit": "58462482126609ad87e59b896f5d22437461d144",
+    "tree": "131cb88fcd22cf739eac5c29a2d6e7d3dded43f0",
+    "target_ref": "refs/heads/feat/internal-host-orchestrator-world-dispatch-bootstrap"
+  },
+  "worktree": {
+    "path": "C:\\Users\\spmcc\\.codex\\worktrees\\102c\\substrate-r2-3",
+    "head_commit": "58462482126609ad87e59b896f5d22437461d144",
+    "head_tree": "131cb88fcd22cf739eac5c29a2d6e7d3dded43f0",
+    "status": "dirty_unstaged",
+    "dirty_paths": [
+      "crates/shell/src/builtins/world_enable/runner.rs",
+      "crates/shell/src/execution/agent_runtime/state_store.rs",
+      "crates/shell/src/execution/home_bootstrap.rs",
+      "crates/shell/src/execution/orchestrator_world_dispatch.rs",
+      "crates/shell/src/execution/platform_world/windows.rs",
+      "crates/shell/src/repl/async_repl.rs",
+      "scripts/windows/prefix-mapping-r2-3.Tests.ps1"
+    ],
+    "staged_paths": []
+  },
+  "evidence": {
+    "checks_passed": [
+      "cargo build --locked -p shell --lib",
+      "pwsh parser validation for scripts/windows/prefix-mapping-r2-3.Tests.ps1",
+      "pwsh -NoProfile -File scripts/windows/prefix-mapping-r2-3.Tests.ps1 -W2Only",
+      "cargo fmt --all -- --check",
+      "cargo check --locked -p shell"
+    ],
+    "checks_blocked": [
+      {
+        "command": "cargo test --locked -p shell \"windows_tests::\" -- --nocapture",
+        "reason": "out-of-allowlist Windows cfg/test-build defects surfaced during honest proof",
+        "first_out_of_allowlist_diagnostics": [
+          {
+            "file": "crates/shell/src/builtins/world_deps/surfaces.rs",
+            "line": 1496,
+            "code": "E0433",
+            "message": "could not find `unix` in `os`"
+          },
+          {
+            "file": "crates/shell/src/builtins/world_deps/surfaces.rs",
+            "line": 1493,
+            "code": "E0432",
+            "message": "unresolved import `current_unix_principal_and_home`"
+          },
+          {
+            "file": "crates/shell/src/builtins/world_deps/surfaces.rs",
+            "line": 1560,
+            "code": "E0425",
+            "message": "cannot find function `bind_authenticated_world_deps_context_v1` in module `crate::builtins::world_deps`"
+          }
+        ],
+        "additional_out_of_allowlist_examples": [
+          {
+            "file": "crates/shell/src/execution/agent_runtime/host_session_authority/transition_tests.rs",
+            "line": 2,
+            "code": "E0433",
+            "message": "could not find `unix` in `os`"
+          },
+          {
+            "file": "crates/shell/src/execution/host_inbox_materialization.rs",
+            "line": 503,
+            "code": "E0433",
+            "message": "could not find `unix` in `os`"
+          },
+          {
+            "file": "crates/shell/src/execution/pty/io/types.rs",
+            "line": 483,
+            "code": "E0308",
+            "message": "Windows console handle type mismatch in lib test build"
+          }
+        ],
+        "in_scope_diagnostics_left_unaddressed_after_stop": [
+          {
+            "file": "crates/shell/src/execution/orchestrator_world_dispatch.rs",
+            "line": 224,
+            "code": "E0412",
+            "message": "cannot find type `BTreeMap` in this scope"
+          },
+          {
+            "file": "crates/shell/src/execution/platform_world/windows.rs",
+            "line": 534,
+            "code": "E0412",
+            "message": "cannot find type `PersistentSessionReadyFuture` in module `super`"
+          }
+        ]
+      }
+    ],
+    "not_run_due_to_blocked": [
+      "cargo clippy --locked -p shell --all-targets -- -D warnings",
+      "gitnexus_detect_changes()",
+      "bounded review sequence",
+      "staging",
+      "commit",
+      "push"
+    ]
+  },
+  "blocker": {
+    "summary": "Native Windows library build succeeded, but the required filtered shell test build exposed pre-existing Windows cfg/test-build defects outside the seven-file allowlist, starting in crates/shell/src/builtins/world_deps/surfaces.rs.",
+    "details": "The existing WIP was preserved and only the authorized home_bootstrap.rs repair plus the remaining in-scope async_repl import fix were added. The worktree has seven unstaged modified allowlist files and no staged changes. The first blocking proof failure is E0433 at crates/shell/src/builtins/world_deps/surfaces.rs:1496 (`std::os::unix::fs::PermissionsExt` on Windows), with companion out-of-allowlist errors in the same file. Additional out-of-allowlist proof blockers surfaced in crates/shell/src/execution/agent_runtime/host_session_authority/transition_tests.rs, crates/shell/src/execution/host_inbox_materialization.rs, and crates/shell/src/execution/pty/io/types.rs. No review, staging, commit, or push occurred.",
+    "required_authority": "Expand the exact allowlist to cover the Windows cfg/test-build blockers required by `cargo test --locked -p shell \"windows_tests::\" -- --nocapture`: crates/shell/src/builtins/world_deps/surfaces.rs, crates/shell/src/execution/agent_runtime/host_session_authority/transition_tests.rs, crates/shell/src/execution/host_inbox_materialization.rs, and crates/shell/src/execution/pty/io/types.rs.",
+    "handoff_prompt": "Resume the bound R2-3ZWR1 task in C:\\Users\\spmcc\\.codex\\worktrees\\102c\\substrate-r2-3 with the existing seven dirty unstaged allowlist files preserved exactly. Identity and nonce remain thread_id 019faea7-97f2-79e1-9920-1fafe080ee52, host_id remote-control:env_e_6a3d9cd24b5483238ba55b699a98be35, dispatch_nonce 854781991ce7038d0c81541bd4bf325930e1d83b445f77cfb0f0b9e0bd8f613b, expected base 58462482126609ad87e59b896f5d22437461d144 / 131cb88fcd22cf739eac5c29a2d6e7d3dded43f0. The native Windows library build now passes, along with PowerShell parser validation, W2Only, cargo fmt --check, and cargo check. Continue only after an explicit allowlist amendment covering the required proof blockers; preserve the worktree without reset, clean, or recreation."
+  },
+  "next_increment": "EVIDENCE:R2-3Z"
+}
