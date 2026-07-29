@@ -1,0 +1,52 @@
+{
+  "protocol": "codex.top-level-evidence-receipt.v1",
+  "orchestration_id": "substrate-r2-3",
+  "dispatch_nonce": "2234989708fd55aa0b795ad5f64ab760ed79fd6450d11c630ce9ca9053e235b1",
+  "evidence_id": "R2-3Z/WIN-EVIDENCE",
+  "status": "BLOCKED_CONTRADICTION",
+  "platform": "windows",
+  "evidence_task": {
+    "thread_id": "019fad17-80c5-7300-946c-f6d12832a35a",
+    "host_id": "remote-control:env_e_6a3d9cd24b5483238ba55b699a98be35"
+  },
+  "source": {
+    "commit": "58462482126609ad87e59b896f5d22437461d144",
+    "tree": "131cb88fcd22cf739eac5c29a2d6e7d3dded43f0",
+    "target_ref": "refs/heads/feat/internal-host-orchestrator-world-dispatch-bootstrap",
+    "live_remote": "58462482126609ad87e59b896f5d22437461d144"
+  },
+  "blocker": {
+    "summary": "Two supplemental proof surfaces remain contradictory: the selected shell Windows test build never reaches test execution because product-source compilation fails first, and the PowerShell W2Only slice records a raw tracked-script variable-expansion failure plus a later unresolved assertion under a literal-text workaround context.",
+    "details": "Supplemental proof contradiction 1 used the recorded command \"cargo test -p shell 'windows_tests::' -- --nocapture\" and exited 101 during compile-before-test. The first actionable compiler diagnostics in the captured log are \"error[E0432]: unresolved import crate::execution::orchestrator_world_dispatch::PreparedSpawnWorldWorkerBootstrap\" at \"crates\\shell\\src\\repl\\async_repl.rs:150:42\", followed by \"error[E0412]: cannot find type WorldWorkReceiptRegistry in this scope\" in \"crates\\shell\\src\\execution\\agent_runtime\\state_store.rs\", and \"error[E0425]: cannot find function resolve_internal_dispatch_context\" / \"enforce_world_dispatch_steering_policy\" at \"crates\\shell\\src\\execution\\orchestrator_world_dispatch.rs:558-559\". Existing log evidence therefore places the first contradiction in product-source compilation reached by the selected test build surface, before any windows_tests:: body ran.\n\nSupplemental proof contradiction 2 raw command used \"pwsh -NoProfile -File scripts/windows/prefix-mapping-r2-3.Tests.ps1 -W2Only\" and exited 1 with \"InvalidOperation\" at \"C:\\Users\\spmcc\\.codex\\worktrees\\752f\\substrate-r2-3\\scripts\\windows\\prefix-mapping-r2-3.Tests.ps1:2033\" and \"The variable '$forwarderRelease' cannot be retrieved because it has not been set.\" Because the raw run used direct -File invocation and the recorded frame is the tracked script file, existing evidence classifies that raw failure as tracked-source execution, not an off-checkout wrapper/extraction. The later literal-text workaround run exited 1 with \"Exception\" at \"C:\\Users\\spmcc\\.codex\\worktrees\\752f\\substrate-r2-3\\scripts\\windows\\prefix-mapping-r2-3.Tests.ps1:43\" and assertion message \"start-forwarder.ps1 must still prefer the release forwarder binary.\" Existing logs do not distinguish whether that second contradiction is accepted-source product drift, tracked-test expectation drift, or workaround-context drift; the already-recorded evidence is insufficient for that classification.",
+    "required_authority": "Central meta-orchestrator receipt validation for protocol correctness, plus a new read-only Windows diagnostic evidence dispatch authorized to inspect tracked source and classify the two supplemental contradictions without changing product state.",
+    "handoff_prompt": "Run a new native-Windows read-only diagnostic evidence dispatch on commit 58462482126609ad87e59b896f5d22437461d144 limited to the supplemental contradictions: inspect tracked crates/shell compile surfaces and tracked scripts/windows/prefix-mapping-r2-3.Tests.ps1 plus scripts/windows/start-forwarder.ps1, classify whether the shell failure is an accepted-source build break versus selected-target build-surface issue, and classify whether the W2Only contradiction beyond the raw tracked-script variable-expansion failure is product drift, tracked-test expectation drift, or workaround-context drift. Do not recollect base token/WSL mapping evidence and do not mutate product state."
+  },
+  "artifact": {
+    "path": "C:\\Users\\spmcc\\.codex\\visualizations\\2026\\07\\29\\019fad17-80c5-7300-946c-f6d12832a35a\\win-evidence\\R2-3Z-WIN-EVIDENCE.artifact.json",
+    "sha256": "sha256:3c20dd509c76b604dcb1311a77369168fa7dacc24e8ccc277ae9b10c2901b0bb"
+  },
+  "successful_native_observations": {
+    "token_account": "SPENSERSDESKTOP\\\\spmcc",
+    "token_sid": "S-1-5-21-2751723029-180146380-611311104-1001",
+    "token_local_application_data": "C:\\\\Users\\\\spmcc\\\\AppData\\\\Local",
+    "selected_distro": "Ubuntu-24.04",
+    "guest_machine_id": "1c0f509abd664e57af5ea7c3652c9e0a",
+    "guest_account": "spenser",
+    "guest_uid": 1000,
+    "guest_home": "/home/spenser",
+    "selected_prefix_a": "C:\\\\Users\\\\spmcc\\\\AppData\\\\Local\\\\Substrate-Evidence-A",
+    "canonical_pipe": "\\\\\\\\.\\pipe\\substrate-agent",
+    "scope_digest": "1fc7c4356393ca3f18694bd9eca8a8c2fc76bedbaa52d0df68e2002e32f5425f",
+    "nonspawning_projection_assertions_passed": true
+  },
+  "checkout_unchanged": true,
+  "prohibited_actions_confirmed": true,
+  "gates": [
+    "R2-DIAG-01",
+    "R2-MAP-WIN-01"
+  ],
+  "receipt_validation": {
+    "authority": "meta-orchestrator-central",
+    "note": "The earlier validator-path miss was a meta-prompt path error; central meta orchestration should validate protocol conformance for this corrected receipt."
+  }
+}
