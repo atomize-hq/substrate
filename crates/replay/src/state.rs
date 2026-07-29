@@ -9,6 +9,7 @@ use std::path::{Path, PathBuf};
 use tokio::io::{AsyncBufReadExt, BufReader};
 
 use crate::replay::ExecutionState;
+use crate::ReplayPlatformBootstrapInputV1;
 use crate::SpanFilter;
 use substrate_trace::{ExecutionOrigin, TransportMeta};
 
@@ -194,6 +195,7 @@ pub async fn load_span_from_trace(trace_file: &Path, span_id: &str) -> Result<Tr
 pub fn reconstruct_state(
     span: &TraceSpan,
     env_overrides: &HashMap<String, String>,
+    platform_bootstrap_mapping: Option<ReplayPlatformBootstrapInputV1>,
 ) -> Result<ExecutionState> {
     let (recorded_origin, recorded_origin_source) = span
         .execution_origin
@@ -322,6 +324,7 @@ pub fn reconstruct_state(
         origin_reason: None,
         origin_reason_code: None,
         world_disable_source: None,
+        platform_bootstrap_mapping,
     })
 }
 
@@ -636,7 +639,7 @@ mod tests {
             env_hash: None,
         };
 
-        let state = reconstruct_state(&span, &HashMap::new()).unwrap();
+        let state = reconstruct_state(&span, &HashMap::new(), None).unwrap();
         assert_eq!(state.cwd, PathBuf::from("/Users/test/workspace"));
         assert_eq!(
             state.env.get(REPLAY_WORLD_CWD_ENV).map(String::as_str),
@@ -693,7 +696,7 @@ mod tests {
             env_hash: None,
         };
 
-        let state = reconstruct_state(&span, &HashMap::new()).unwrap();
+        let state = reconstruct_state(&span, &HashMap::new(), None).unwrap();
         assert_eq!(state.command, "echo");
         assert_eq!(state.args, vec!["hello", "world"]);
         assert_eq!(state.cwd, PathBuf::from("/tmp"));
@@ -702,6 +705,10 @@ mod tests {
         assert_eq!(
             state.env.get(REPLAY_WORLD_CWD_ENV),
             Some(&"/tmp".to_string())
+        );
+        assert!(
+            state.platform_bootstrap_mapping.is_none(),
+            "trace/env reconstruction must not synthesize replay authority"
         );
     }
 
@@ -750,11 +757,87 @@ mod tests {
             env_hash: None,
         };
 
-        let state = reconstruct_state(&span, &HashMap::new()).unwrap();
+        let state = reconstruct_state(&span, &HashMap::new(), None).unwrap();
         assert_eq!(
             state.env.get("SUBSTRATE_WORLD_FS_MODE").map(String::as_str),
             Some("read_only"),
             "replay context world_fs_mode should be exported for backend parity"
         );
+    }
+
+    #[test]
+    fn reconstruct_state_projects_explicit_platform_bootstrap_mapping_only() {
+        use crate::ReplayPlatformBootstrapInputV1;
+        use transport_api_types::{
+            InstallBootstrapContextCarrierV1, InstallBootstrapContextV1, PlatformBootstrapMappingV1,
+        };
+
+        let span = TraceSpan {
+            ts: Utc::now(),
+            event_type: "command_complete".to_string(),
+            span_id: "test-span-platform-input".to_string(),
+            session_id: "test-session".to_string(),
+            component: "shell".to_string(),
+            cmd: "echo hi".to_string(),
+            cwd: Some(PathBuf::from("/tmp")),
+            exit_code: Some(0),
+            duration_ms: Some(10),
+            policy_decision: None,
+            fs_diff: None,
+            scopes_used: None,
+            replay_context: Some(ReplayContext {
+                path: Some("/usr/bin:/bin".to_string()),
+                env_hash: "abc123".to_string(),
+                umask: 22,
+                locale: None,
+                cwd: "/tmp".to_string(),
+                policy_id: "default".to_string(),
+                policy_commit: None,
+                world_image_version: "test".to_string(),
+                hostname: None,
+                user: None,
+                shell: None,
+                term: None,
+                world_image: None,
+                execution_origin: Some(ExecutionOrigin::World),
+                transport: None,
+                anchor_mode: None,
+                anchor_path: None,
+                world_root_mode: None,
+                world_root_path: None,
+                caged: None,
+                world_fs_mode: None,
+            }),
+            transport: None,
+            execution_origin: None,
+            stdout: None,
+            stderr: None,
+            env_hash: None,
+        };
+
+        let host_carrier = InstallBootstrapContextCarrierV1::from_context(
+            InstallBootstrapContextV1::new_unix("/tmp/substrate", "alice", 1000)
+                .expect("host context"),
+        )
+        .expect("host carrier");
+        let mapping = PlatformBootstrapMappingV1::new_lima(
+            &host_carrier,
+            "substrate",
+            "0123456789abcdef0123456789abcdef",
+            "/Users/alice/.lima",
+            "/home/substrate/.substrate",
+            "substrate",
+            1000,
+            "/tmp/substrate/sock/agent.sock",
+            "/run/substrate.sock",
+        )
+        .expect("mapping");
+        let replay_input = ReplayPlatformBootstrapInputV1 {
+            host_carrier,
+            platform_bootstrap_mapping: mapping,
+        };
+
+        let state = reconstruct_state(&span, &HashMap::new(), Some(replay_input.clone())).unwrap();
+        assert_eq!(state.platform_bootstrap_mapping, Some(replay_input));
     }
 }

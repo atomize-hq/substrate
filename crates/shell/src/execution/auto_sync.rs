@@ -46,6 +46,7 @@ fn cli_for_auto_sync(config: &ShellConfig) -> Cli {
         trace: None,
         replay: None,
         replay_verbose: false,
+        replay_platform_bootstrap_input_v1: None,
         flip_world: false,
         caged,
         uncaged,

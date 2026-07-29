@@ -11,6 +11,7 @@ use tokio::time::{timeout, Duration};
 
 use super::{ExecutionResult, ExecutionState};
 use crate::replay::helpers::replay_verbose;
+use crate::ReplayPlatformBootstrapInputV1;
 #[cfg(target_os = "linux")]
 use substrate_common::FsDiff;
 use substrate_common::{log_schema, WorldRootMode};
@@ -36,8 +37,10 @@ use transport_api_client::AgentClient;
 #[cfg(target_os = "linux")]
 use transport_api_types::ExecuteResponse;
 use transport_api_types::{
-    PolicySnapshotWorldFsDimensionV3, PolicySnapshotWorldFsFailClosedV3, PolicySnapshotWorldFsV3,
-    PolicySnapshotWorldFsWriteV3, WorldFsDenyEnforcementV3,
+    InstallBootstrapContextCarrierV1, PlatformBootstrapMappingV1, PlatformInstanceIdentityV1,
+    PlatformTransportIdentityV1, PolicySnapshotWorldFsDimensionV3,
+    PolicySnapshotWorldFsFailClosedV3, PolicySnapshotWorldFsV3, PolicySnapshotWorldFsWriteV3,
+    WorldFsDenyEnforcementV3,
 };
 #[cfg(target_os = "linux")]
 use world::{copydiff, overlayfs};
@@ -45,6 +48,218 @@ use world::{copydiff, overlayfs};
 const ANCHOR_MODE_ENV: &str = "SUBSTRATE_ANCHOR_MODE";
 const ANCHOR_PATH_ENV: &str = "SUBSTRATE_ANCHOR_PATH";
 const REPLAY_WORLD_CWD_ENV: &str = "SUBSTRATE_REPLAY_WORLD_CWD";
+
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+enum ReplayRuntimePlatform {
+    Linux,
+    Macos,
+    Windows,
+    Unsupported,
+}
+
+impl ReplayRuntimePlatform {
+    fn current() -> Self {
+        if cfg!(target_os = "linux") {
+            Self::Linux
+        } else if cfg!(target_os = "macos") {
+            Self::Macos
+        } else if cfg!(target_os = "windows") {
+            Self::Windows
+        } else {
+            Self::Unsupported
+        }
+    }
+}
+
+#[derive(Debug)]
+struct ExplicitFactoryInput {
+    host_carrier: Option<InstallBootstrapContextCarrierV1>,
+    platform_bootstrap_mapping: Option<PlatformBootstrapMappingV1>,
+    project_path: Option<PathBuf>,
+}
+
+fn requires_authenticated_world_result(
+    state: &ExecutionState,
+    platform: ReplayRuntimePlatform,
+) -> bool {
+    matches!(
+        platform,
+        ReplayRuntimePlatform::Macos | ReplayRuntimePlatform::Windows
+    ) && state.target_origin == substrate_trace::ExecutionOrigin::World
+        && state.platform_bootstrap_mapping.is_some()
+}
+
+fn is_runtime_construction_error(err: &anyhow::Error) -> bool {
+    err.chain().any(|cause| {
+        let rendered = cause.to_string();
+        rendered.contains("Failed to create tokio runtime")
+            || rendered.contains("failed to construct tokio runtime")
+    })
+}
+
+fn is_platform_factory_authority_failure(
+    err: &anyhow::Error,
+    platform: ReplayRuntimePlatform,
+) -> bool {
+    if is_runtime_construction_error(err) {
+        return false;
+    }
+
+    err.chain().any(|cause| {
+        let rendered = cause.to_string();
+        match platform {
+            ReplayRuntimePlatform::Macos => {
+                rendered.contains("macOS world replay host carrier")
+                    || rendered.contains("macOS world replay platform bootstrap mapping")
+                    || rendered.contains("macOS world replay requires an explicit authenticated install bootstrap carrier")
+                    || rendered.contains("macOS world replay requires an explicit platform bootstrap mapping")
+                    || rendered.contains("macOS world replay requires a Lima platform bootstrap mapping")
+                    || rendered.contains("typed Lima")
+                    || rendered.contains("install bootstrap context carrier")
+                    || rendered.contains("invalid platform bootstrap mapping")
+                    || rendered.contains("install principal account")
+            }
+            ReplayRuntimePlatform::Windows => {
+                rendered.contains("Windows world replay host carrier")
+                    || rendered.contains("Windows world replay platform bootstrap mapping")
+                    || rendered.contains("Windows world replay requires an explicit authenticated install bootstrap carrier")
+                    || rendered.contains("Windows world replay requires an explicit platform bootstrap mapping")
+                    || rendered.contains("Windows world replay requires a WSL platform bootstrap mapping")
+                    || rendered.contains("Windows world replay requires an explicit project path")
+                    || rendered.contains("Windows world replay project path must be valid UTF-8")
+                    || rendered.contains("Windows WSL backend host carrier is invalid")
+                    || rendered.contains("Windows WSL backend host carrier is not canonical")
+                    || rendered.contains("Windows WSL backend platform bootstrap mapping is invalid")
+                    || rendered.contains("Windows WSL backend platform bootstrap mapping is not canonical")
+                    || rendered.contains("Windows WSL backend requires a Windows install bootstrap carrier")
+                    || rendered.contains("Windows WSL backend requires a WSL platform bootstrap mapping")
+                    || rendered.contains("Windows WSL backend requires the guest socket to be /run/substrate.sock")
+                    || rendered.contains("Windows WSL backend pipe path is invalid")
+                    || rendered.contains("Windows WSL backend pipe path is not canonical")
+                    || rendered.contains("Windows WSL backend host carrier does not match the current Windows principal")
+                    || rendered.contains("Windows WSL backend forwarder scope is invalid")
+                    || rendered.contains("Windows WSL backend control root is invalid")
+                    || rendered.contains("Windows WSL backend platform control root does not match the current Windows scope")
+                    || rendered.contains("Windows WSL backend distro spelling does not match the registered running distro")
+                    || rendered.contains("Windows WSL backend guest machine ID does not match the live WSL distro")
+                    || rendered.contains("Windows WSL backend requires a Unix guest principal")
+                    || rendered.contains("Windows WSL backend guest account or UID does not match the live WSL distro")
+                    || rendered.contains("Windows WSL backend guest substrate home does not match the live WSL account database")
+            }
+            ReplayRuntimePlatform::Linux | ReplayRuntimePlatform::Unsupported => false,
+        }
+    })
+}
+
+fn canonicalize_platform_bootstrap_input(
+    input: &ReplayPlatformBootstrapInputV1,
+    platform: ReplayRuntimePlatform,
+) -> Result<(InstallBootstrapContextCarrierV1, PlatformBootstrapMappingV1)> {
+    let (platform_label, expected_projection) = match platform {
+        ReplayRuntimePlatform::Macos => ("macOS", "Lima"),
+        ReplayRuntimePlatform::Windows => ("Windows", "WSL"),
+        ReplayRuntimePlatform::Linux | ReplayRuntimePlatform::Unsupported => {
+            unreachable!("platform bootstrap canonicalization is only required on macOS/Windows")
+        }
+    };
+
+    let encoded_host = input
+        .host_carrier
+        .encode()
+        .with_context(|| format!("{platform_label} world replay host carrier is invalid"))?;
+    let host_carrier = InstallBootstrapContextCarrierV1::decode(&encoded_host)
+        .with_context(|| format!("{platform_label} world replay host carrier is not canonical"))?;
+    let encoded_mapping = input
+        .platform_bootstrap_mapping
+        .encode(&host_carrier)
+        .with_context(|| {
+            format!("{platform_label} world replay platform bootstrap mapping is invalid")
+        })?;
+    let platform_bootstrap_mapping =
+        PlatformBootstrapMappingV1::decode(&encoded_mapping, &host_carrier).with_context(|| {
+            format!("{platform_label} world replay platform bootstrap mapping is not canonical")
+        })?;
+
+    match (
+        platform,
+        &platform_bootstrap_mapping.platform_instance,
+        &platform_bootstrap_mapping.realized_transport,
+    ) {
+        (
+            ReplayRuntimePlatform::Macos,
+            PlatformInstanceIdentityV1::Lima { .. },
+            PlatformTransportIdentityV1::Lima { .. },
+        )
+        | (
+            ReplayRuntimePlatform::Windows,
+            PlatformInstanceIdentityV1::Wsl { .. },
+            PlatformTransportIdentityV1::Wsl { .. },
+        ) => {}
+        _ => {
+            return Err(anyhow!(
+                "{platform_label} world replay requires a {expected_projection} platform bootstrap mapping"
+            ));
+        }
+    }
+
+    Ok((host_carrier, platform_bootstrap_mapping))
+}
+
+fn explicit_factory_input_for_platform(
+    state: &ExecutionState,
+    _project_dir: &Path,
+    platform: ReplayRuntimePlatform,
+) -> Result<ExplicitFactoryInput> {
+    match platform {
+        ReplayRuntimePlatform::Linux | ReplayRuntimePlatform::Unsupported => {
+            Ok(ExplicitFactoryInput {
+                host_carrier: None,
+                platform_bootstrap_mapping: None,
+                project_path: None,
+            })
+        }
+        ReplayRuntimePlatform::Macos => {
+            let input = state.platform_bootstrap_mapping.as_ref().ok_or_else(|| {
+                anyhow!(
+                    "world replay on macOS requires explicit authenticated platform bootstrap input"
+                )
+            })?;
+            let (host_carrier, platform_bootstrap_mapping) =
+                canonicalize_platform_bootstrap_input(input, platform)?;
+            Ok(ExplicitFactoryInput {
+                host_carrier: Some(host_carrier),
+                platform_bootstrap_mapping: Some(platform_bootstrap_mapping),
+                project_path: None,
+            })
+        }
+        ReplayRuntimePlatform::Windows => {
+            let input = state.platform_bootstrap_mapping.as_ref().ok_or_else(|| {
+                anyhow!(
+                    "world replay on Windows requires explicit authenticated platform bootstrap input"
+                )
+            })?;
+            let (host_carrier, platform_bootstrap_mapping) =
+                canonicalize_platform_bootstrap_input(input, platform)?;
+            let project_path =
+                project_dir_from_env(&state.env, effective_policy_context_cwd(state))?;
+            if project_path.as_os_str().is_empty() {
+                return Err(anyhow!(
+                    "Windows world replay requires an explicit project path"
+                ));
+            }
+            if project_path.to_str().is_none() {
+                return Err(anyhow!(
+                    "Windows world replay project path must be valid UTF-8"
+                ));
+            }
+            Ok(ExplicitFactoryInput {
+                host_carrier: Some(host_carrier),
+                platform_bootstrap_mapping: Some(platform_bootstrap_mapping),
+                project_path: Some(project_path),
+            })
+        }
+    }
+}
 
 fn resolve_policy_snapshot_v3_for_cwd(cwd: &Path) -> Result<PolicySnapshotV3> {
     let (policy, _) = substrate_broker::resolve_effective_policy_with_explain(cwd, false)
@@ -309,6 +524,7 @@ pub async fn execute_with_world_backends(
 ) -> Result<ExecutionResult> {
     let verbose = replay_verbose();
     let world_exec_cwd = effective_world_exec_cwd(state);
+    #[cfg(target_os = "linux")]
     let project_dir = project_dir_from_env(&state.env, &world_exec_cwd)?;
     #[cfg(target_os = "linux")]
     let mut agent_fallback_reason: Option<String> = None;
@@ -359,7 +575,9 @@ pub async fn execute_with_world_backends(
     let try_local_world_backend = true;
 
     if try_local_world_backend {
-        if let Some(result) = try_world_backend(state, &project_dir, verbose).await? {
+        if let Some(result) = try_world_backend(state, verbose).await? {
+            #[cfg(not(target_os = "linux"))]
+            let project_dir = project_dir_from_env(&state.env, &world_exec_cwd)?;
             record_replay_strategy(
                 state,
                 "world-backend",
@@ -394,64 +612,104 @@ pub async fn execute_with_world_backends(
 
 async fn try_world_backend(
     state: &ExecutionState,
-    project_dir: &Path,
     verbose: bool,
 ) -> Result<Option<ExecutionResult>> {
-    if let Ok(backend) = world_backend_factory::factory() {
-        use world_api::ExecRequest;
-        let start = Instant::now();
-        let backend_policy =
-            resolve_policy_snapshot_v3_for_cwd(effective_policy_context_cwd(state))
-                .and_then(|snapshot| {
-                    world_net_filter_from_process_env().and_then(|world_net_filter| {
-                        backend_policy_input_for_snapshot(&snapshot, world_net_filter)
-                    })
-                })
-                .ok();
-        let spec = world_spec_for_replay_backend(project_dir, backend_policy);
-        match backend.ensure_session(&spec) {
-            Ok(handle) => {
-                let req = ExecRequest {
-                    cmd: format!("bash -lc '{}'", state.raw_cmd.replace("'", "'\\''")),
-                    cwd: effective_world_exec_cwd(state),
-                    env: state.env.clone(),
-                    pty: false,
-                    span_id: Some(state.span_id.clone()),
-                    shared_world: None,
-                    member_dispatch: None,
-                };
-                match backend.exec(&handle, req) {
-                    Ok(res) => {
-                        if verbose {
-                            eprintln!("[replay] world strategy: overlay");
-                        }
-                        let duration_ms = start.elapsed().as_millis() as u64;
-                        let out = ExecutionResult {
-                            exit_code: res.exit,
-                            stdout: res.stdout,
-                            stderr: res.stderr,
-                            fs_diff: res.fs_diff,
-                            scopes_used: res.scopes_used,
-                            duration_ms,
-                        };
-                        emit_scopes_line(verbose, &out.scopes_used);
-                        return Ok(Some(out));
-                    }
-                    Err(e) => {
-                        if verbose {
-                            eprintln!("[replay] warn: world exec failed: {}", e);
-                        }
-                    }
-                }
+    let runtime_platform = ReplayRuntimePlatform::current();
+    let fail_closed_typed_world = requires_authenticated_world_result(state, runtime_platform);
+    let explicit_factory_input = explicit_factory_input_for_platform(
+        state,
+        effective_policy_context_cwd(state),
+        runtime_platform,
+    )?;
+    let project_dir = explicit_factory_input
+        .project_path
+        .clone()
+        .unwrap_or(project_dir_from_env(
+            &state.env,
+            &effective_world_exec_cwd(state),
+        )?);
+    let backend = match world_backend_factory::factory_with_platform_bootstrap(
+        explicit_factory_input.host_carrier.as_ref(),
+        explicit_factory_input.platform_bootstrap_mapping.as_ref(),
+        explicit_factory_input.project_path.as_deref(),
+    ) {
+        Ok(backend) => backend,
+        Err(err) if is_platform_factory_authority_failure(&err, runtime_platform) => {
+            return Err(err);
+        }
+        Err(err) => {
+            if fail_closed_typed_world {
+                return Err(err);
             }
-            Err(e) => {
-                if verbose {
-                    eprintln!("[replay] warn: world session creation failed: {}", e);
+            if verbose {
+                eprintln!("[replay] warn: no world backend available on this platform");
+            }
+            return Ok(None);
+        }
+    };
+
+    if runtime_platform == ReplayRuntimePlatform::Windows {
+        return Err(anyhow!(
+            "typed Windows replay lifecycle remains gated on the R3 lifecycle prerequisite"
+        ));
+    }
+
+    use world_api::ExecRequest;
+    let start = Instant::now();
+    let backend_policy = resolve_policy_snapshot_v3_for_cwd(effective_policy_context_cwd(state))
+        .and_then(|snapshot| {
+            world_net_filter_from_process_env().and_then(|world_net_filter| {
+                backend_policy_input_for_snapshot(&snapshot, world_net_filter)
+            })
+        })
+        .ok();
+    let spec = world_spec_for_replay_backend(&project_dir, backend_policy);
+    match backend.ensure_session(&spec) {
+        Ok(handle) => {
+            let req = ExecRequest {
+                cmd: format!("bash -lc '{}'", state.raw_cmd.replace("'", "'\\''")),
+                cwd: effective_world_exec_cwd(state),
+                env: state.env.clone(),
+                pty: false,
+                span_id: Some(state.span_id.clone()),
+                shared_world: None,
+                member_dispatch: None,
+            };
+            match backend.exec(&handle, req) {
+                Ok(res) => {
+                    if verbose {
+                        eprintln!("[replay] world strategy: overlay");
+                    }
+                    let duration_ms = start.elapsed().as_millis() as u64;
+                    let out = ExecutionResult {
+                        exit_code: res.exit,
+                        stdout: res.stdout,
+                        stderr: res.stderr,
+                        fs_diff: res.fs_diff,
+                        scopes_used: res.scopes_used,
+                        duration_ms,
+                    };
+                    emit_scopes_line(verbose, &out.scopes_used);
+                    return Ok(Some(out));
+                }
+                Err(e) => {
+                    if fail_closed_typed_world {
+                        return Err(e);
+                    }
+                    if verbose {
+                        eprintln!("[replay] warn: world exec failed: {}", e);
+                    }
                 }
             }
         }
-    } else if verbose {
-        eprintln!("[replay] warn: no world backend available on this platform");
+        Err(e) => {
+            if fail_closed_typed_world {
+                return Err(e);
+            }
+            if verbose {
+                eprintln!("[replay] warn: world session creation failed: {}", e);
+            }
+        }
     }
 
     Ok(None)
@@ -1155,8 +1413,9 @@ mod tests {
     use std::collections::HashMap;
     use std::sync::{Mutex, OnceLock};
     use transport_api_types::{
-        PolicySnapshotV3, PolicySnapshotWorldFsDimensionV3, PolicySnapshotWorldFsFailClosedV3,
-        PolicySnapshotWorldFsV3, PolicySnapshotWorldFsWriteV3,
+        InstallBootstrapContextCarrierV1, InstallBootstrapContextV1, PlatformBootstrapMappingV1,
+        PlatformTransportIdentityV1, PolicySnapshotV3, PolicySnapshotWorldFsDimensionV3,
+        PolicySnapshotWorldFsFailClosedV3, PolicySnapshotWorldFsV3, PolicySnapshotWorldFsWriteV3,
     };
 
     fn env_lock() -> std::sync::MutexGuard<'static, ()> {
@@ -1210,7 +1469,246 @@ mod tests {
             origin_reason: None,
             origin_reason_code: None,
             world_disable_source: None,
+            platform_bootstrap_mapping: None,
         }
+    }
+
+    fn replay_platform_input() -> ReplayPlatformBootstrapInputV1 {
+        let host_carrier = InstallBootstrapContextCarrierV1::from_context(
+            InstallBootstrapContextV1::new_unix("/tmp/substrate", "alice", 1000)
+                .expect("host context"),
+        )
+        .expect("host carrier");
+        let platform_bootstrap_mapping = PlatformBootstrapMappingV1::new_lima(
+            &host_carrier,
+            "substrate",
+            "0123456789abcdef0123456789abcdef",
+            "/Users/alice/.lima",
+            "/home/substrate/.substrate",
+            "substrate",
+            1000,
+            "/tmp/substrate/sock/agent.sock",
+            "/run/substrate.sock",
+        )
+        .expect("mapping");
+        ReplayPlatformBootstrapInputV1 {
+            host_carrier,
+            platform_bootstrap_mapping,
+        }
+    }
+
+    fn windows_replay_platform_input() -> ReplayPlatformBootstrapInputV1 {
+        let host_carrier = InstallBootstrapContextCarrierV1::from_context(
+            InstallBootstrapContextV1::new_windows("C:/Substrate", "ACME\\Alice", "S-1-5-21-1000")
+                .expect("host context"),
+        )
+        .expect("host carrier");
+        let platform_bootstrap_mapping = PlatformBootstrapMappingV1::new_wsl(
+            &host_carrier,
+            "Substrate-WSL",
+            "0123456789abcdef0123456789abcdef",
+            "C:/Users/Alice/AppData/Local/Substrate/forwarder/abcdef",
+            "/home/substrate/.substrate",
+            "substrate",
+            1000,
+            r"\\.\pipe\substrate-agent",
+            "/run/substrate.sock",
+        )
+        .expect("mapping");
+        ReplayPlatformBootstrapInputV1 {
+            host_carrier,
+            platform_bootstrap_mapping,
+        }
+    }
+
+    #[test]
+    fn explicit_factory_input_for_macos_requires_authenticated_pair() {
+        let mut state = execution_state();
+        state.env.insert(
+            "SUBSTRATE_WORLD_SOCKET".to_string(),
+            "/tmp/ambient.sock".to_string(),
+        );
+
+        let err = explicit_factory_input_for_platform(
+            &state,
+            Path::new("/tmp/project"),
+            ReplayRuntimePlatform::Macos,
+        )
+        .expect_err("macOS replay should fail without explicit authority input");
+
+        assert!(err
+            .to_string()
+            .contains("explicit authenticated platform bootstrap input"));
+    }
+
+    #[test]
+    fn explicit_factory_input_for_macos_rejects_commitment_mismatches() {
+        let mut state = execution_state();
+        let mut replay_input = replay_platform_input();
+        let other_host = InstallBootstrapContextCarrierV1::from_context(
+            InstallBootstrapContextV1::new_unix("/tmp/substrate-b", "bob", 1001)
+                .expect("other host context"),
+        )
+        .expect("other host carrier");
+        replay_input.platform_bootstrap_mapping = PlatformBootstrapMappingV1::new_lima(
+            &other_host,
+            "substrate",
+            "0123456789abcdef0123456789abcdef",
+            "/Users/bob/.lima",
+            "/home/substrate/.substrate",
+            "substrate",
+            1000,
+            "/tmp/substrate/sock/agent.sock",
+            "/run/substrate.sock",
+        )
+        .expect("mismatched mapping");
+        state.platform_bootstrap_mapping = Some(replay_input);
+
+        let err = explicit_factory_input_for_platform(
+            &state,
+            Path::new("/tmp/project"),
+            ReplayRuntimePlatform::Macos,
+        )
+        .expect_err("macOS replay should reject host/mapping commitment mismatches");
+
+        let rendered = format!("{err:#}");
+        assert!(rendered.contains("commitment mismatch"));
+    }
+
+    #[test]
+    fn explicit_factory_input_for_windows_ignores_ambient_projection_sources() {
+        let _lock = env_lock();
+        std::env::set_var("LOCALAPPDATA", "C:/ambient/local");
+        std::env::set_var("USERPROFILE", "C:/ambient/user");
+
+        let mut state = execution_state();
+        state.cwd = PathBuf::from("C:/ambient/repo");
+        state.env.insert(
+            "SUBSTRATE_WORLD_SOCKET".to_string(),
+            r"\\.\pipe\ambient-agent".to_string(),
+        );
+
+        let err = explicit_factory_input_for_platform(
+            &state,
+            Path::new("C:/explicit/project"),
+            ReplayRuntimePlatform::Windows,
+        )
+        .expect_err("Windows replay should not reconstruct authority from ambient inputs");
+
+        assert!(err
+            .to_string()
+            .contains("explicit authenticated platform bootstrap input"));
+
+        std::env::remove_var("LOCALAPPDATA");
+        std::env::remove_var("USERPROFILE");
+    }
+
+    #[test]
+    fn explicit_factory_input_for_windows_rejects_wrong_transport_projection() {
+        let mut state = execution_state();
+        let mut replay_input = replay_platform_input();
+        replay_input.platform_bootstrap_mapping.realized_transport =
+            PlatformTransportIdentityV1::Wsl {
+                pipe_path: r"\\.\pipe\substrate-agent".to_string(),
+                guest_socket: "/run/substrate.sock".to_string(),
+            };
+        state.platform_bootstrap_mapping = Some(replay_input);
+
+        let err = explicit_factory_input_for_platform(
+            &state,
+            Path::new("C:/explicit/project"),
+            ReplayRuntimePlatform::Windows,
+        )
+        .expect_err("Windows replay should reject non-WSL transport projections");
+
+        assert!(err.to_string().contains("platform bootstrap mapping"));
+    }
+
+    #[test]
+    fn explicit_factory_input_for_windows_uses_host_policy_cwd_for_project_path() {
+        let mut state = execution_state();
+        state.cwd = PathBuf::from("C:/host/project");
+        state
+            .env
+            .insert(ANCHOR_MODE_ENV.to_string(), "workspace".to_string());
+        state.platform_bootstrap_mapping = Some(windows_replay_platform_input());
+
+        let input = explicit_factory_input_for_platform(
+            &state,
+            Path::new("/mnt/guest/staged/project"),
+            ReplayRuntimePlatform::Windows,
+        )
+        .expect("Windows replay should keep the host-side project path");
+
+        assert_eq!(input.project_path, Some(PathBuf::from("C:/host/project")));
+    }
+
+    #[test]
+    fn explicit_factory_input_for_windows_accepts_request_carried_project_path_matching_current_dir(
+    ) {
+        let current_dir = std::env::current_dir().expect("current dir");
+        let mut state = execution_state();
+        state.cwd = current_dir.clone();
+        state
+            .env
+            .insert(ANCHOR_MODE_ENV.to_string(), "workspace".to_string());
+        state.env.insert(
+            ANCHOR_PATH_ENV.to_string(),
+            current_dir.to_string_lossy().to_string(),
+        );
+        state.platform_bootstrap_mapping = Some(windows_replay_platform_input());
+
+        let input = explicit_factory_input_for_platform(
+            &state,
+            Path::new("C:/unused"),
+            ReplayRuntimePlatform::Windows,
+        )
+        .expect("Windows replay should accept a request-carried project path");
+
+        assert_eq!(input.project_path, Some(current_dir));
+    }
+
+    #[test]
+    fn typed_world_replay_on_windows_must_not_fall_back_to_host() {
+        let mut state = execution_state();
+        state.target_origin = substrate_trace::ExecutionOrigin::World;
+        state.platform_bootstrap_mapping = Some(windows_replay_platform_input());
+
+        assert!(requires_authenticated_world_result(
+            &state,
+            ReplayRuntimePlatform::Windows
+        ));
+    }
+
+    #[test]
+    fn runtime_construction_errors_do_not_count_as_authority_failures() {
+        let err = anyhow!("failed to construct tokio runtime");
+
+        assert!(is_runtime_construction_error(&err));
+        assert!(!is_platform_factory_authority_failure(
+            &err,
+            ReplayRuntimePlatform::Windows
+        ));
+    }
+
+    #[test]
+    fn semantic_constructor_errors_remain_authority_failures() {
+        let err = anyhow!("Windows WSL backend requires a Windows install bootstrap carrier");
+
+        assert!(is_platform_factory_authority_failure(
+            &err,
+            ReplayRuntimePlatform::Windows
+        ));
+    }
+
+    #[test]
+    fn windows_runtime_state_constructor_errors_do_not_count_as_authority_failures() {
+        let err = anyhow!("declared WSL distro `substrate` is not running");
+
+        assert!(!is_platform_factory_authority_failure(
+            &err,
+            ReplayRuntimePlatform::Windows
+        ));
     }
 
     #[test]

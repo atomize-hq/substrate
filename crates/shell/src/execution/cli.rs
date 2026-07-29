@@ -126,6 +126,14 @@ pub struct Cli {
     #[arg(long = "replay-verbose", requires = "replay")]
     pub replay_verbose: bool,
 
+    #[arg(
+        long = "replay-platform-bootstrap-input-v1",
+        value_name = "INPUT",
+        requires = "replay",
+        hide = true
+    )]
+    pub replay_platform_bootstrap_input_v1: Option<String>,
+
     /// Flip the recorded execution origin (host/world) before applying other world toggles
     #[arg(long = "flip-world", visible_alias = "flip", requires = "replay")]
     pub flip_world: bool,
@@ -647,6 +655,7 @@ mod tests {
         WorldAction, WorldCmd,
     };
     use clap::{CommandFactory, Parser};
+    use serde_json::json;
 
     fn parse_start_args(args: &[&str]) -> super::AgentStartArgs {
         let cli = Cli::try_parse_from(args).expect("agent start should parse");
@@ -779,6 +788,76 @@ mod tests {
         let help = String::from_utf8(help).expect("UTF-8 help");
         assert!(help.contains("--json"));
         assert!(!help.contains("internal-passive-world-doctor-v1"));
+    }
+
+    #[test]
+    fn replay_platform_bootstrap_input_defaults_absent() {
+        let cli = Cli::try_parse_from(["substrate", "--replay", "span-123"])
+            .expect("replay command should parse");
+        assert!(cli.replay_platform_bootstrap_input_v1.is_none());
+    }
+
+    #[test]
+    fn replay_platform_bootstrap_input_parses_when_replay_is_selected() {
+        let input = json!({
+            "host_carrier": {
+                "context": {
+                    "selected_host_prefix": "/tmp/substrate",
+                    "host_substrate_home": "/tmp/substrate",
+                    "host_substrate_root": "/tmp/substrate",
+                    "intended_host_principal": {
+                        "kind": "unix",
+                        "account": "alice",
+                        "uid": 1000
+                    }
+                },
+                "host_context_commitment": "544d04a3e88530f5c5bc5f2af6d139e9c5c1819c5ff0c954a71d104445f8dfdb"
+            },
+            "platform_bootstrap_mapping": {
+                "host_context_commitment": "544d04a3e88530f5c5bc5f2af6d139e9c5c1819c5ff0c954a71d104445f8dfdb",
+                "platform_instance": {
+                    "kind": "lima",
+                    "vm_name": "substrate",
+                    "guest_machine_id": "0123456789abcdef0123456789abcdef"
+                },
+                "host_platform_control_root": "/Users/alice/.lima",
+                "realized_substrate_home": "/home/substrate/.substrate",
+                "realized_principal": {
+                    "kind": "unix",
+                    "account": "substrate",
+                    "uid": 1000
+                },
+                "realized_transport": {
+                    "kind": "lima",
+                    "host_socket": "/tmp/substrate/sock/agent.sock",
+                    "guest_socket": "/run/substrate.sock"
+                }
+            }
+        })
+        .to_string();
+
+        let cli = Cli::try_parse_from([
+            "substrate",
+            "--replay",
+            "span-123",
+            "--replay-platform-bootstrap-input-v1",
+            &input,
+        ])
+        .expect("replay command with hidden authority input should parse");
+
+        assert_eq!(
+            cli.replay_platform_bootstrap_input_v1.as_deref(),
+            Some(input.as_str())
+        );
+    }
+
+    #[test]
+    fn replay_platform_bootstrap_input_flag_is_hidden_from_public_help() {
+        let mut command = Cli::command();
+        let mut help = Vec::new();
+        command.write_long_help(&mut help).expect("render CLI help");
+        let help = String::from_utf8(help).expect("UTF-8 help");
+        assert!(!help.contains("--replay-platform-bootstrap-input-v1"));
     }
 }
 

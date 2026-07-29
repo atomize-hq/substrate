@@ -5,7 +5,7 @@ use crate::execution::config_model::{self, CliConfigOverrides, WorldDisableAttri
 use crate::execution::value_parse::parse_bool_flag;
 #[cfg(test)]
 use crate::execution::world_env_guard;
-use anyhow::{anyhow, Result};
+use anyhow::{anyhow, Context, Result};
 use serde_json::json;
 use std::collections::HashMap;
 use std::env;
@@ -15,7 +15,9 @@ use std::process::Stdio;
 use substrate_common::WorldRootMode;
 use substrate_replay::replay::record_replay_strategy;
 use substrate_replay::state::{load_span_from_trace, reconstruct_state};
+use substrate_replay::ReplayPlatformBootstrapInputV1;
 use substrate_trace::ExecutionOrigin;
+use transport_api_types::{InstallBootstrapContextCarrierV1, PlatformBootstrapMappingV1};
 
 #[derive(Debug)]
 enum ReplayWorldSource {
@@ -356,6 +358,28 @@ fn apply_replay_world_mode_env(env: &mut HashMap<String, String>, mode: &ReplayW
     }
 }
 
+fn decode_replay_platform_bootstrap_input(raw: &str) -> Result<ReplayPlatformBootstrapInputV1> {
+    let parsed: ReplayPlatformBootstrapInputV1 =
+        serde_json::from_str(raw).context("invalid replay platform bootstrap input JSON")?;
+    let encoded_host = parsed
+        .host_carrier
+        .encode()
+        .context("replay platform host carrier is invalid")?;
+    let host_carrier = InstallBootstrapContextCarrierV1::decode(&encoded_host)
+        .context("replay platform host carrier is not canonical")?;
+    let encoded_mapping = parsed
+        .platform_bootstrap_mapping
+        .encode(&host_carrier)
+        .context("replay platform bootstrap mapping is invalid")?;
+    let platform_bootstrap_mapping =
+        PlatformBootstrapMappingV1::decode(&encoded_mapping, &host_carrier)
+            .context("replay platform bootstrap mapping is not canonical")?;
+    Ok(ReplayPlatformBootstrapInputV1 {
+        host_carrier,
+        platform_bootstrap_mapping,
+    })
+}
+
 fn recorded_origin_source(
     state: &substrate_replay::replay::ExecutionState,
 ) -> RecordedOriginSource {
@@ -399,6 +423,85 @@ fn inject_world_root_env(env: &mut HashMap<String, String>, cwd: &Path) {
         .or_insert_with(|| path.to_string_lossy().to_string());
     env.entry("SUBSTRATE_CAGED".to_string())
         .or_insert_with(|| if caged { "1" } else { "0" }.to_string());
+}
+
+fn request_carried_project_dir(
+    span: &substrate_replay::state::TraceSpan,
+) -> Result<(WorldRootMode, PathBuf)> {
+    let request_mode = span
+        .replay_context
+        .as_ref()
+        .and_then(|ctx| ctx.anchor_mode.as_deref())
+        .and_then(WorldRootMode::parse)
+        .unwrap_or(WorldRootMode::Project);
+    let request_anchor_path = span
+        .replay_context
+        .as_ref()
+        .and_then(|ctx| ctx.anchor_path.as_deref())
+        .map(str::trim)
+        .filter(|value| !value.is_empty())
+        .map(PathBuf::from);
+    let request_cwd = span
+        .cwd
+        .as_ref()
+        .filter(|path| !path.as_os_str().is_empty())
+        .cloned();
+
+    let project_dir = match request_mode {
+        WorldRootMode::Project => request_cwd.ok_or_else(|| {
+            anyhow!(
+                "Windows world replay requires an explicit project path from the replay request"
+            )
+        })?,
+        WorldRootMode::FollowCwd => request_cwd.ok_or_else(|| {
+            anyhow!(
+                "Windows world replay requires an explicit project path from the replay request"
+            )
+        })?,
+        WorldRootMode::Custom => request_anchor_path.ok_or_else(|| {
+            anyhow!(
+                "Windows world replay requires an explicit project path from the replay request"
+            )
+        })?,
+    };
+
+    if project_dir.as_os_str().is_empty() {
+        return Err(anyhow!(
+            "Windows world replay requires an explicit project path"
+        ));
+    }
+
+    Ok((request_mode, project_dir))
+}
+
+fn apply_request_carried_windows_project_selector(
+    state: &mut substrate_replay::replay::ExecutionState,
+    span: &substrate_replay::state::TraceSpan,
+) -> Result<()> {
+    if !cfg!(target_os = "windows")
+        || state.platform_bootstrap_mapping.is_none()
+        || state.target_origin != ExecutionOrigin::World
+    {
+        return Ok(());
+    }
+
+    let (mode, project_dir) = request_carried_project_dir(span)?;
+    state.env.insert(
+        "SUBSTRATE_ANCHOR_MODE".to_string(),
+        mode.as_str().to_string(),
+    );
+    match mode {
+        WorldRootMode::Project | WorldRootMode::Custom => {
+            state.env.insert(
+                "SUBSTRATE_ANCHOR_PATH".to_string(),
+                project_dir.to_string_lossy().to_string(),
+            );
+        }
+        WorldRootMode::FollowCwd => {
+            state.env.remove("SUBSTRATE_ANCHOR_PATH");
+        }
+    }
+    Ok(())
 }
 
 pub(crate) fn handle_trace_command(span_id: &str) -> Result<()> {
@@ -482,7 +585,7 @@ pub(crate) fn handle_replay_command(span_id: &str, cli: &Cli) -> Result<()> {
 
     // Reconstruct state from the trace entry (includes PATH/user/env metadata when captured)
     let span = runtime.block_on(async { load_span_from_trace(&trace_file, span_id).await })?;
-    let mut state = reconstruct_state(&span, &HashMap::new())?;
+    let mut state = reconstruct_state(&span, &HashMap::new(), None)?;
 
     // Verbose header
     if verbose_requested {
@@ -512,6 +615,16 @@ pub(crate) fn handle_replay_command(span_id: &str, cli: &Cli) -> Result<()> {
     state.origin_reason_code = Some(replay_world_mode.reason_code().to_string());
     state.world_disable_source = replay_world_mode.effective_disable_source();
 
+    let use_world = replay_world_mode.selected_origin() == ExecutionOrigin::World;
+    if use_world && cfg!(any(target_os = "macos", target_os = "windows")) {
+        state.platform_bootstrap_mapping = cli
+            .replay_platform_bootstrap_input_v1
+            .as_deref()
+            .map(decode_replay_platform_bootstrap_input)
+            .transpose()?;
+    }
+    apply_request_carried_windows_project_selector(&mut state, &span)?;
+
     apply_replay_world_mode_env(&mut state.env, &replay_world_mode);
     inject_world_root_env(&mut state.env, &state.cwd);
     replay_world_mode.apply_env();
@@ -525,7 +638,6 @@ pub(crate) fn handle_replay_command(span_id: &str, cli: &Cli) -> Result<()> {
         }
     }
 
-    let use_world = replay_world_mode.selected_origin() == ExecutionOrigin::World;
     // Best-effort capability warnings when world isolation requested but not available
     if cfg!(target_os = "linux") && use_world {
         // cgroup v2
@@ -619,6 +731,95 @@ pub(crate) fn handle_replay_command(span_id: &str, cli: &Cli) -> Result<()> {
 mod tests {
     use super::*;
     use crate::execution::config_model::WorldDisableSource;
+    use chrono::Utc;
+
+    fn replay_platform_bootstrap_input_json() -> String {
+        json!({
+            "host_carrier": {
+                "context": {
+                    "selected_host_prefix": "/tmp/substrate",
+                    "host_substrate_home": "/tmp/substrate",
+                    "host_substrate_root": "/tmp/substrate",
+                    "intended_host_principal": {
+                        "kind": "unix",
+                        "account": "alice",
+                        "uid": 1000
+                    }
+                },
+                "host_context_commitment": "544d04a3e88530f5c5bc5f2af6d139e9c5c1819c5ff0c954a71d104445f8dfdb"
+            },
+            "platform_bootstrap_mapping": {
+                "host_context_commitment": "544d04a3e88530f5c5bc5f2af6d139e9c5c1819c5ff0c954a71d104445f8dfdb",
+                "platform_instance": {
+                    "kind": "lima",
+                    "vm_name": "substrate",
+                    "guest_machine_id": "0123456789abcdef0123456789abcdef"
+                },
+                "host_platform_control_root": "/Users/alice/.lima",
+                "realized_substrate_home": "/home/substrate/.substrate",
+                "realized_principal": {
+                    "kind": "unix",
+                    "account": "substrate",
+                    "uid": 1000
+                },
+                "realized_transport": {
+                    "kind": "lima",
+                    "host_socket": "/tmp/substrate/sock/agent.sock",
+                    "guest_socket": "/run/substrate.sock"
+                }
+            }
+        })
+        .to_string()
+    }
+
+    fn trace_span_with_request_path(
+        cwd: Option<&str>,
+        anchor_mode: Option<&str>,
+        anchor_path: Option<&str>,
+    ) -> substrate_replay::state::TraceSpan {
+        substrate_replay::state::TraceSpan {
+            ts: Utc::now(),
+            event_type: "command_complete".to_string(),
+            span_id: "span".to_string(),
+            session_id: "session".to_string(),
+            component: "shell".to_string(),
+            cmd: "echo hi".to_string(),
+            cwd: cwd.map(PathBuf::from),
+            exit_code: Some(0),
+            duration_ms: Some(1),
+            policy_decision: None,
+            fs_diff: None,
+            scopes_used: None,
+            replay_context: Some(substrate_trace::ReplayContext {
+                path: None,
+                env_hash: "hash".to_string(),
+                umask: 0,
+                locale: None,
+                cwd: cwd.unwrap_or_default().to_string(),
+                policy_id: "policy".to_string(),
+                policy_commit: None,
+                world_image_version: "test".to_string(),
+                hostname: None,
+                user: None,
+                shell: None,
+                term: None,
+                world_image: None,
+                execution_origin: Some(ExecutionOrigin::World),
+                transport: None,
+                anchor_mode: anchor_mode.map(str::to_string),
+                anchor_path: anchor_path.map(str::to_string),
+                world_root_mode: None,
+                world_root_path: None,
+                caged: Some(true),
+                world_fs_mode: None,
+            }),
+            transport: None,
+            execution_origin: Some(ExecutionOrigin::World),
+            stdout: None,
+            stderr: None,
+            env_hash: None,
+        }
+    }
 
     #[test]
     fn recorded_host_summary_uses_effective_disable_source_unknown_reason() {
@@ -658,5 +859,54 @@ mod tests {
                 "value_display": false,
             }))
         );
+    }
+
+    #[test]
+    fn decode_replay_platform_bootstrap_input_rejects_malformed_json() {
+        let err = decode_replay_platform_bootstrap_input("{not-json")
+            .expect_err("malformed replay authority input must fail");
+
+        assert!(err
+            .to_string()
+            .contains("invalid replay platform bootstrap input JSON"));
+    }
+
+    #[test]
+    fn decode_replay_platform_bootstrap_input_rejects_noncanonical_commitment() {
+        let mut value: serde_json::Value =
+            serde_json::from_str(&replay_platform_bootstrap_input_json()).expect("valid JSON");
+        value["host_carrier"]["host_context_commitment"] = json!("not-a-canonical-commitment");
+
+        let err = decode_replay_platform_bootstrap_input(
+            &serde_json::to_string(&value).expect("serialize invalid replay authority input"),
+        )
+        .expect_err("noncanonical replay authority input must fail");
+
+        assert!(err
+            .to_string()
+            .contains("replay platform host carrier is invalid"));
+    }
+
+    #[test]
+    fn request_carried_project_dir_defaults_to_span_cwd_without_anchor_selector() {
+        let span = trace_span_with_request_path(Some("C:/request/repo"), None, None);
+
+        let (mode, project_dir) =
+            request_carried_project_dir(&span).expect("request-carried project path");
+
+        assert_eq!(mode, WorldRootMode::Project);
+        assert_eq!(project_dir, PathBuf::from("C:/request/repo"));
+    }
+
+    #[test]
+    fn request_carried_project_dir_rejects_missing_request_path() {
+        let span = trace_span_with_request_path(None, None, None);
+
+        let err = request_carried_project_dir(&span)
+            .expect_err("missing request-carried project path must fail");
+
+        assert!(err
+            .to_string()
+            .contains("explicit project path from the replay request"));
     }
 }

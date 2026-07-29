@@ -15,6 +15,8 @@ use std::path::PathBuf;
 use substrate_common::FsDiff;
 use substrate_trace::{ExecutionOrigin, TransportMeta};
 
+use crate::ReplayPlatformBootstrapInputV1;
+
 /// State required to execute a command
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct ExecutionState {
@@ -34,6 +36,8 @@ pub struct ExecutionState {
     pub origin_reason: Option<String>,
     pub origin_reason_code: Option<String>,
     pub world_disable_source: Option<serde_json::Value>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub platform_bootstrap_mapping: Option<ReplayPlatformBootstrapInputV1>,
 }
 
 /// Result of executing a command
@@ -83,6 +87,7 @@ mod tests {
             origin_reason: None,
             origin_reason_code: None,
             world_disable_source: None,
+            platform_bootstrap_mapping: None,
         };
 
         let result = execute_direct(&state, 10).await.unwrap();
@@ -111,6 +116,7 @@ mod tests {
             origin_reason: None,
             origin_reason_code: None,
             world_disable_source: None,
+            platform_bootstrap_mapping: None,
         };
         let res = execute_direct(&state, 10).await.unwrap();
         assert_eq!(res.exit_code, 0);

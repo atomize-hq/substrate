@@ -64,6 +64,7 @@ async fn test_basic_replay_flow() {
         env_overrides: Default::default(),
         ignore_timing: true,
         max_output_compare: 1024,
+        platform_bootstrap_mapping: None,
     };
 
     // Test replaying a successful command
@@ -154,6 +155,7 @@ async fn test_batch_replay() {
         env_overrides: Default::default(),
         ignore_timing: true,
         max_output_compare: 1024,
+        platform_bootstrap_mapping: None,
     };
 
     let span_ids = vec![
@@ -228,7 +230,7 @@ async fn test_env_reconstruction() {
     let mut overrides = HashMap::new();
     overrides.insert("TEST_VAR".to_string(), "test_value".to_string());
 
-    let exec_state = reconstruct_state(&span, &overrides).unwrap();
+    let exec_state = reconstruct_state(&span, &overrides, None).unwrap();
 
     assert_eq!(exec_state.command, "env");
     assert_eq!(exec_state.cwd, PathBuf::from("/workspace"));
@@ -280,7 +282,7 @@ fn reconstruct_state_preserves_caged_anchor_env() {
         env_hash: None,
     };
 
-    let exec_state = reconstruct_state(&span, &HashMap::new()).unwrap();
+    let exec_state = reconstruct_state(&span, &HashMap::new(), None).unwrap();
     assert_eq!(
         exec_state.env.get("SUBSTRATE_ANCHOR_PATH"),
         Some(&"/opt/caged-root".to_string())
@@ -329,7 +331,7 @@ fn reconstruct_state_preserves_uncaged_anchor_env() {
         env_hash: None,
     };
 
-    let exec_state = reconstruct_state(&span, &HashMap::new()).unwrap();
+    let exec_state = reconstruct_state(&span, &HashMap::new(), None).unwrap();
     assert_eq!(
         exec_state.env.get("SUBSTRATE_ANCHOR_MODE"),
         Some(&"custom".to_string())

@@ -64,6 +64,7 @@ fn make_state(raw_cmd: &str) -> ExecutionState {
         origin_reason: None,
         origin_reason_code: None,
         world_disable_source: None,
+        platform_bootstrap_mapping: None,
     }
 }
 

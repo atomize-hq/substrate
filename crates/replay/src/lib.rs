@@ -37,10 +37,15 @@ pub mod regression;
 pub mod replay;
 pub mod state;
 
-use anyhow::Result;
+use anyhow::{anyhow, Result};
 use serde::{Deserialize, Serialize};
 use std::path::PathBuf;
-use substrate_common::FsDiff;
+use substrate_common::{FsDiff, WorldRootMode};
+use substrate_trace::ExecutionOrigin;
+use transport_api_types::{InstallBootstrapContextCarrierV1, PlatformBootstrapMappingV1};
+
+const ANCHOR_MODE_ENV: &str = "SUBSTRATE_ANCHOR_MODE";
+const ANCHOR_PATH_ENV: &str = "SUBSTRATE_ANCHOR_PATH";
 
 /// Result of replaying a traced command
 #[derive(Debug, Clone, Serialize, Deserialize)]
@@ -99,6 +104,13 @@ pub enum DivergenceSeverity {
     Low,      // Timing or non-deterministic differences
 }
 
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(deny_unknown_fields)]
+pub struct ReplayPlatformBootstrapInputV1 {
+    pub host_carrier: InstallBootstrapContextCarrierV1,
+    pub platform_bootstrap_mapping: PlatformBootstrapMappingV1,
+}
+
 /// Configuration for replay execution
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct ReplayConfig {
@@ -116,6 +128,9 @@ pub struct ReplayConfig {
     pub ignore_timing: bool,
     /// Maximum output size to compare (bytes)
     pub max_output_compare: usize,
+    /// Explicit authenticated platform authority for replay world backend construction.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub platform_bootstrap_mapping: Option<ReplayPlatformBootstrapInputV1>,
 }
 
 impl Default for ReplayConfig {
@@ -128,8 +143,114 @@ impl Default for ReplayConfig {
             env_overrides: std::collections::HashMap::new(),
             ignore_timing: true,
             max_output_compare: 1024 * 1024, // 1MB
+            platform_bootstrap_mapping: None,
         }
     }
+}
+
+fn is_replay_authority_failure(err: &anyhow::Error) -> bool {
+    err.chain().any(|cause| {
+        let rendered = cause.to_string();
+        rendered.contains(
+            "world replay on macOS requires explicit authenticated platform bootstrap input",
+        ) || rendered.contains(
+            "world replay on Windows requires explicit authenticated platform bootstrap input",
+        ) || rendered.contains("world replay host carrier")
+            || rendered.contains("world replay platform bootstrap mapping")
+            || rendered.contains("world replay requires a Lima platform bootstrap mapping")
+            || rendered.contains("world replay requires a WSL platform bootstrap mapping")
+            || rendered.contains("world replay requires an explicit project path")
+            || rendered
+                .contains("world replay requires an explicit project path from the replay request")
+            || rendered.contains("authenticated install bootstrap carrier")
+            || rendered.contains("typed Lima")
+            || rendered.contains("Windows WSL backend")
+    })
+}
+
+fn apply_replay_config_to_state(
+    exec_state: &mut crate::replay::ExecutionState,
+    config: &ReplayConfig,
+) {
+    if config.fresh_world {
+        exec_state.target_origin = ExecutionOrigin::World;
+    }
+}
+
+fn request_carried_project_dir(span: &state::TraceSpan) -> Result<(WorldRootMode, PathBuf)> {
+    let request_mode = span
+        .replay_context
+        .as_ref()
+        .and_then(|ctx| ctx.anchor_mode.as_deref())
+        .and_then(WorldRootMode::parse)
+        .unwrap_or(WorldRootMode::Project);
+    let request_anchor_path = span
+        .replay_context
+        .as_ref()
+        .and_then(|ctx| ctx.anchor_path.as_deref())
+        .map(str::trim)
+        .filter(|value| !value.is_empty())
+        .map(PathBuf::from);
+    let request_cwd = span
+        .cwd
+        .as_ref()
+        .filter(|path| !path.as_os_str().is_empty())
+        .cloned();
+
+    let project_dir = match request_mode {
+        WorldRootMode::Project => request_cwd.ok_or_else(|| {
+            anyhow!(
+                "Windows world replay requires an explicit project path from the replay request"
+            )
+        })?,
+        WorldRootMode::FollowCwd => request_cwd.ok_or_else(|| {
+            anyhow!(
+                "Windows world replay requires an explicit project path from the replay request"
+            )
+        })?,
+        WorldRootMode::Custom => request_anchor_path.ok_or_else(|| {
+            anyhow!(
+                "Windows world replay requires an explicit project path from the replay request"
+            )
+        })?,
+    };
+
+    if project_dir.as_os_str().is_empty() {
+        return Err(anyhow!(
+            "Windows world replay requires an explicit project path"
+        ));
+    }
+
+    Ok((request_mode, project_dir))
+}
+
+fn apply_windows_request_project_selector(
+    exec_state: &mut crate::replay::ExecutionState,
+    span: &state::TraceSpan,
+) -> Result<()> {
+    if !cfg!(target_os = "windows")
+        || exec_state.platform_bootstrap_mapping.is_none()
+        || exec_state.target_origin != ExecutionOrigin::World
+    {
+        return Ok(());
+    }
+
+    let (mode, project_dir) = request_carried_project_dir(span)?;
+    exec_state
+        .env
+        .insert(ANCHOR_MODE_ENV.to_string(), mode.as_str().to_string());
+    match mode {
+        WorldRootMode::Project | WorldRootMode::Custom => {
+            exec_state.env.insert(
+                ANCHOR_PATH_ENV.to_string(),
+                project_dir.to_string_lossy().to_string(),
+            );
+        }
+        WorldRootMode::FollowCwd => {
+            exec_state.env.remove(ANCHOR_PATH_ENV);
+        }
+    }
+    Ok(())
 }
 
 /// Main entry point for replaying a span
@@ -138,7 +259,13 @@ pub async fn replay_span(span_id: &str, config: &ReplayConfig) -> Result<ReplayR
     let original_span = state::load_span_from_trace(&config.trace_file, span_id).await?;
 
     // Reconstruct the execution state
-    let exec_state = state::reconstruct_state(&original_span, &config.env_overrides)?;
+    let mut exec_state = state::reconstruct_state(
+        &original_span,
+        &config.env_overrides,
+        config.platform_bootstrap_mapping.clone(),
+    )?;
+    apply_replay_config_to_state(&mut exec_state, config);
+    apply_windows_request_project_selector(&mut exec_state, &original_span)?;
 
     // Execute in a fresh world if configured
     let execution_result = if config.fresh_world {
@@ -175,6 +302,9 @@ pub async fn replay_batch(
         match replay_span(span_id, config).await {
             Ok(result) => results.push(result),
             Err(e) => {
+                if is_replay_authority_failure(&e) {
+                    return Err(e);
+                }
                 tracing::warn!("Failed to replay span {}: {}", span_id, e);
                 // Continue with other spans
             }
@@ -236,6 +366,37 @@ pub struct SpanFilter {
 #[cfg(test)]
 mod tests {
     use super::*;
+    use crate::replay::ExecutionState;
+    use std::collections::HashMap;
+    use std::path::PathBuf;
+    use substrate_trace::TransportMeta;
+    use transport_api_types::{
+        InstallBootstrapContextCarrierV1, InstallBootstrapContextV1, PlatformBootstrapMappingV1,
+    };
+
+    fn replay_platform_input() -> ReplayPlatformBootstrapInputV1 {
+        let host_carrier = InstallBootstrapContextCarrierV1::from_context(
+            InstallBootstrapContextV1::new_unix("/tmp/substrate", "alice", 1000)
+                .expect("host context"),
+        )
+        .expect("host carrier");
+        let mapping = PlatformBootstrapMappingV1::new_lima(
+            &host_carrier,
+            "substrate",
+            "0123456789abcdef0123456789abcdef",
+            "/Users/alice/.lima",
+            "/home/substrate/.substrate",
+            "substrate",
+            1000,
+            "/tmp/substrate/sock/agent.sock",
+            "/run/substrate.sock",
+        )
+        .expect("mapping");
+        ReplayPlatformBootstrapInputV1 {
+            host_carrier,
+            platform_bootstrap_mapping: mapping,
+        }
+    }
 
     #[tokio::test]
     async fn test_replay_config_default() {
@@ -243,5 +404,100 @@ mod tests {
         assert_eq!(config.timeout, 300);
         assert!(config.fresh_world);
         assert!(config.ignore_timing);
+        assert!(config.platform_bootstrap_mapping.is_none());
+    }
+
+    #[test]
+    fn replay_config_serde_omits_platform_bootstrap_mapping_when_absent() {
+        let config = ReplayConfig::default();
+        let json = serde_json::to_value(&config).expect("serialize ReplayConfig");
+
+        assert!(
+            json.get("platform_bootstrap_mapping").is_none(),
+            "optional replay authority should stay absent for backward compatibility: {json:?}"
+        );
+
+        let restored: ReplayConfig =
+            serde_json::from_value(json).expect("deserialize ReplayConfig");
+        assert!(restored.platform_bootstrap_mapping.is_none());
+    }
+
+    #[test]
+    fn replay_config_serde_round_trips_platform_bootstrap_mapping() {
+        let config = ReplayConfig {
+            platform_bootstrap_mapping: Some(replay_platform_input()),
+            ..ReplayConfig::default()
+        };
+
+        let restored: ReplayConfig =
+            serde_json::from_str(&serde_json::to_string(&config).expect("serialize"))
+                .expect("deserialize");
+
+        assert_eq!(
+            restored.platform_bootstrap_mapping,
+            config.platform_bootstrap_mapping
+        );
+    }
+
+    #[test]
+    fn replay_authority_failures_are_classified_for_batch_propagation() {
+        let err = anyhow::anyhow!(
+            "world replay on Windows requires explicit authenticated platform bootstrap input"
+        );
+
+        assert!(is_replay_authority_failure(&err));
+    }
+
+    #[test]
+    fn replay_authority_classifier_catches_wrong_projection_mismatches() {
+        let err = anyhow::anyhow!("world replay requires a WSL platform bootstrap mapping");
+
+        assert!(is_replay_authority_failure(&err));
+    }
+
+    #[test]
+    fn replay_authority_classifier_catches_request_project_path_failures() {
+        let err = anyhow::anyhow!(
+            "Windows world replay requires an explicit project path from the replay request"
+        );
+
+        assert!(is_replay_authority_failure(&err));
+    }
+
+    #[test]
+    fn ordinary_replay_failures_do_not_trip_authority_classifier() {
+        let err = anyhow::anyhow!("trace file missing");
+
+        assert!(!is_replay_authority_failure(&err));
+    }
+
+    #[test]
+    fn fresh_world_promotes_library_replay_target_origin_to_world() {
+        let mut state = ExecutionState {
+            raw_cmd: "echo hi".to_string(),
+            command: "echo".to_string(),
+            args: vec!["hi".to_string()],
+            cwd: PathBuf::from("/tmp"),
+            env: HashMap::new(),
+            stdin: None,
+            session_id: "session".to_string(),
+            span_id: "span".to_string(),
+            recorded_origin: ExecutionOrigin::Host,
+            recorded_origin_source: Some("span".to_string()),
+            recorded_transport: Some(TransportMeta {
+                mode: "unix".to_string(),
+                endpoint: Some("/tmp/substrate.sock".to_string()),
+                socket_activation: None,
+            }),
+            target_origin: ExecutionOrigin::Host,
+            origin_reason: None,
+            origin_reason_code: None,
+            world_disable_source: None,
+            platform_bootstrap_mapping: None,
+        };
+
+        apply_replay_config_to_state(&mut state, &ReplayConfig::default());
+
+        assert_eq!(state.target_origin, ExecutionOrigin::World);
     }
 }
