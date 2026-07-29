@@ -1,0 +1,22 @@
+{
+  "protocol": "codex.top-level-task-receipt.v1",
+  "orchestration_id": "substrate-r2-3",
+  "dispatch_nonce": "c013b5f07611ca8347b09688715f915e6a1291352d49816c8f483796b1405c32",
+  "increment": "R2-3ZWR1",
+  "status": "BLOCKED_SCOPE_EXPANSION",
+  "increment_task": {
+    "thread_id": "019fae87-77e4-7750-8a12-adcf7d4d2b24",
+    "host_id": "remote-control:env_e_6a3d9cd24b5483238ba55b699a98be35"
+  },
+  "expected_base": {
+    "commit": "58462482126609ad87e59b896f5d22437461d144",
+    "tree": "131cb88fcd22cf739eac5c29a2d6e7d3dded43f0"
+  },
+  "blocker": {
+    "summary": "Native Windows proof for R2-3ZWR1 is blocked by two additional production-file compile defects outside the published allowlist, so the accepted four in-scope repairs cannot be completed or proven without narrow scope expansion.",
+    "details": "Required out-of-allowlist files and diagnostics are exact: (1) crates/shell/src/execution/platform_world/windows.rs uses private world_windows_wsl::transport constants, producing E0603 (`module transport is private`) at the DEFAULT_AGENT_PIPE / DEFAULT_DISTRO references; (2) crates/shell/src/builtins/world_enable/runner.rs lacks anyhow::Context on Windows because the import is gated by cfg(unix), producing E0599 (`no method named context found`). The original four in-scope issues remain unchanged and were correctly identified: crates/shell/src/repl/async_repl.rs cfg/import mismatch around PreparedSpawnWorldWorkerBootstrap and Unix-only helper reachability; crates/shell/src/execution/agent_runtime/state_store.rs cfg mismatch around WorldWorkReceiptRegistry impl/types on Windows; crates/shell/src/execution/orchestrator_world_dispatch.rs Windows fork_world_worker path calling helpers gated off Windows; scripts/windows/prefix-mapping-r2-3.Tests.ps1 line 2033 strict-mode regex interpolation bug. No files were edited, staged, committed, or pushed. The checkout remains clean at commit 58462482126609ad87e59b896f5d22437461d144 / tree 131cb88fcd22cf739eac5c29a2d6e7d3dded43f0, and the live remote target is unchanged with ahead/behind 0/0.",
+    "required_authority": "Authorize only the narrow addition of crates/shell/src/execution/platform_world/windows.rs and crates/shell/src/builtins/world_enable/runner.rs to the existing R2-3ZWR1 production allowlist. No other files, behaviors, lifecycle actions, or scope expansion are requested.",
+    "handoff_prompt": "Continue increment R2-3ZWR1 in worktree C:\\Users\\spmcc\\.codex\\worktrees\\7b0c\\substrate-r2-3 with orchestration_id substrate-r2-3, dispatch_nonce c013b5f07611ca8347b09688715f915e6a1291352d49816c8f483796b1405c32, increment-task thread_id 019fae87-77e4-7750-8a12-adcf7d4d2b24, host_id remote-control:env_e_6a3d9cd24b5483238ba55b699a98be35, expected base commit 58462482126609ad87e59b896f5d22437461d144, and expected base tree 131cb88fcd22cf739eac5c29a2d6e7d3dded43f0. Preserve the existing four-file scope exactly: crates/shell/src/repl/async_repl.rs, crates/shell/src/execution/agent_runtime/state_store.rs, crates/shell/src/execution/orchestrator_world_dispatch.rs, and scripts/windows/prefix-mapping-r2-3.Tests.ps1. Add only these two newly authorized production files needed to unblock native Windows proof: crates/shell/src/execution/platform_world/windows.rs and crates/shell/src/builtins/world_enable/runner.rs. Repair only the confirmed compile defects and the strict-mode regex issue, keep scripts/windows/start-forwarder.ps1 unchanged, preserve accepted R2-3A through R2-3T behavior and all lifecycle/transport/replay/shim/policy boundaries, and rerun the native Windows proof gates without widening beyond those six files."
+  },
+  "next_increment": "EVIDENCE:R2-3Z"
+}
