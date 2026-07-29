@@ -6,10 +6,12 @@
 
 use anyhow::Result;
 use nix::libc::ETXTBSY;
+use nix::unistd::{geteuid, User};
 use serde_json::Value;
 use serial_test::serial;
 use std::{fs, io, process::Command, thread, time::Duration};
 use tempfile::TempDir;
+use transport_api_types::{InstallBootstrapContextCarrierV1, InstallBootstrapContextV1};
 
 /// Helper function to get the substrate-shim binary path from workspace root
 fn get_shim_binary_path() -> String {
@@ -54,6 +56,70 @@ fn run_with_retry(mut command: Command) -> Result<std::process::Output> {
     Err(last_err
         .unwrap_or_else(|| io::Error::from_raw_os_error(ETXTBSY))
         .into())
+}
+
+fn initialize_test_git_repository(path: &std::path::Path, policy_yaml: &str) -> String {
+    fs::create_dir_all(path).unwrap();
+    let run = |args: &[&str]| {
+        let output = Command::new("git")
+            .arg("-C")
+            .arg(path)
+            .args(args)
+            .output()
+            .unwrap();
+        assert!(
+            output.status.success(),
+            "git {:?} failed: {}",
+            args,
+            String::from_utf8_lossy(&output.stderr)
+        );
+        output
+    };
+    run(&["init", "--quiet"]);
+    run(&["config", "user.name", "Substrate Shim Integration Test"]);
+    run(&["config", "user.email", "shim-integration@substrate.invalid"]);
+    fs::write(path.join("policy.yaml"), policy_yaml).unwrap();
+    run(&["add", "policy.yaml"]);
+    run(&["commit", "--quiet", "-m", "test policy"]);
+    String::from_utf8(run(&["rev-parse", "HEAD"]).stdout)
+        .unwrap()
+        .trim()
+        .to_string()
+}
+
+fn allow_policy_yaml(policy_id: &str, cmd: &str) -> String {
+    format!("id: \"{policy_id}\"\nname: \"{policy_id}\"\ncmd_allowed:\n  - \"{cmd}\"\n")
+}
+
+fn deny_policy_yaml(policy_id: &str, cmd: &str) -> String {
+    format!("id: \"{policy_id}\"\nname: \"{policy_id}\"\ncmd_denied:\n  - \"{cmd}\"\n")
+}
+
+fn workspace_deny_policy_patch(cmd: &str) -> String {
+    format!("cmd_denied:\n  - \"{cmd}\"\n")
+}
+
+fn write_workspace_policy(root: &std::path::Path, policy_yaml: &str) {
+    let substrate_dir = root.join(".substrate");
+    fs::create_dir_all(&substrate_dir).unwrap();
+    fs::write(substrate_dir.join("workspace.yaml"), "version: 1\n").unwrap();
+    fs::write(substrate_dir.join("policy.yaml"), policy_yaml).unwrap();
+}
+
+fn current_unix_account() -> (String, u32) {
+    let uid = geteuid();
+    let user = User::from_uid(uid)
+        .unwrap()
+        .expect("current user should exist in passwd database");
+    (user.name, uid.as_raw())
+}
+
+fn encoded_unix_host_carrier(prefix: &std::path::Path) -> InstallBootstrapContextCarrierV1 {
+    let (account, uid) = current_unix_account();
+    InstallBootstrapContextCarrierV1::from_context(
+        InstallBootstrapContextV1::new_unix(prefix.to_str().unwrap(), &account, uid).unwrap(),
+    )
+    .unwrap()
 }
 
 /// Test the complete shim execution flow with real binary resolution
@@ -201,6 +267,7 @@ fn test_claude_code_hash_pinning_scenario() -> Result<()> {
     // Test 2: Hash pinning - make ordinary PATH lookup prefer the real binary, with the shim only later in PATH.
     let hashed_path = format!("{}:{}:/usr/bin:/bin", bin_dir.display(), shim_dir.display());
     let hash_log = temp.path().join("hash-trace.jsonl");
+    let trace_path = temp.path().join("trace.jsonl");
     let hash_command = format!(
         "set -e; hash -r; hash -p \"{}\" testcmd; hash -t testcmd >/dev/null; testcmd pinned-arg",
         shim_binary.display()
@@ -223,11 +290,12 @@ fn test_claude_code_hash_pinning_scenario() -> Result<()> {
         stdout.contains("testcmd: pinned-arg"),
         "Hash-pinned shim did not dispatch the expected command. Output: {stdout}"
     );
-    let log_content = fs::read_to_string(&hash_log)?;
+    let log_content = fs::read_to_string(&trace_path)?;
     assert!(
         log_content.contains("\"command\":\"testcmd\""),
         "Hash-pinned shim did not emit the expected trace log. Log: {log_content}"
     );
+    assert!(!hash_log.exists());
 
     Ok(())
 }
@@ -290,6 +358,673 @@ fn test_shim_bypass() -> Result<()> {
     Ok(())
 }
 
+#[test]
+#[serial]
+fn test_physical_shim_binds_trace_and_policy_to_selected_prefix_under_conflicting_ambient_roots(
+) -> Result<()> {
+    let temp = TempDir::new()?;
+    let prefix_a = temp.path().join("selected-a");
+    let prefix_b = temp.path().join("ambient-b");
+    let shim_dir = prefix_a.join("shims");
+    let bin_dir = temp.path().join("bin");
+    fs::create_dir_all(&shim_dir)?;
+    fs::create_dir_all(&bin_dir)?;
+    let commit_a = initialize_test_git_repository(
+        &prefix_a,
+        &allow_policy_yaml("selected-a", "echo policy bound"),
+    );
+    let commit_b = initialize_test_git_repository(
+        &prefix_b,
+        &deny_policy_yaml("ambient-b", "echo policy bound"),
+    );
+    write_workspace_policy(
+        &prefix_b,
+        &deny_policy_yaml("ambient-workspace", "echo policy bound"),
+    );
+
+    let test_script = bin_dir.join("echo");
+    fs::write(&test_script, "#!/bin/bash\necho \"trace-bound: $*\"")?;
+    #[cfg(unix)]
+    {
+        use std::os::unix::fs::PermissionsExt;
+        let mut perms = fs::metadata(&test_script)?.permissions();
+        perms.set_mode(0o755);
+        fs::set_permissions(&test_script, perms)?;
+    }
+
+    let shim_binary = shim_dir.join("echo");
+    fs::copy(get_shim_binary_path(), &shim_binary)?;
+    #[cfg(unix)]
+    {
+        use std::os::unix::fs::PermissionsExt;
+        let mut perms = fs::metadata(&shim_binary)?.permissions();
+        perms.set_mode(0o755);
+        fs::set_permissions(&shim_binary, perms)?;
+    }
+
+    let mut cmd = Command::new(&shim_binary);
+    cmd.args(["policy", "bound"])
+        .env("SHIM_ORIGINAL_PATH", bin_dir.to_string_lossy().as_ref())
+        .env("SUBSTRATE_POLICY_MODE", "enforce")
+        .env("SHIM_TRACE_LOG", prefix_b.join("trace.jsonl"))
+        .env("HOME", &prefix_b)
+        .env("USERPROFILE", &prefix_b)
+        .env("SUBSTRATE_HOME", &prefix_b)
+        .env("SUBSTRATE_ROOT", &prefix_b)
+        .env(
+            "PATH",
+            format!("{}:{}", shim_dir.display(), bin_dir.display()),
+        )
+        .current_dir(&prefix_b)
+        .env_remove("SHIM_DEPTH")
+        .env_remove("SHIM_ACTIVE");
+    let output = run_with_retry(cmd)?;
+
+    assert!(output.status.success());
+    assert_eq!(
+        String::from_utf8_lossy(&output.stdout).trim(),
+        "trace-bound: policy bound"
+    );
+
+    let trace_path = prefix_a.join("trace.jsonl");
+    assert!(trace_path.is_file());
+    assert!(!prefix_b.join("trace.jsonl").exists());
+
+    let entries = fs::read_to_string(&trace_path)?
+        .lines()
+        .map(serde_json::from_str::<Value>)
+        .collect::<std::result::Result<Vec<_>, _>>()?;
+    let span = entries
+        .iter()
+        .find(|value| value["event_type"] == "command_complete")
+        .expect("command_complete span");
+    assert_eq!(span["policy_id"].as_str(), Some("selected-a"));
+    assert_eq!(
+        span["replay_context"]["policy_id"].as_str(),
+        Some("selected-a")
+    );
+    assert_eq!(
+        span["replay_context"]["policy_commit"].as_str(),
+        Some(commit_a.as_str())
+    );
+    assert_ne!(
+        span["replay_context"]["policy_commit"].as_str(),
+        Some(commit_b.as_str())
+    );
+    assert!(
+        entries
+            .iter()
+            .any(|value| value["command"] == "echo" && value["resolved_path"].is_string()),
+        "expected execution log entry in bound trace output"
+    );
+
+    Ok(())
+}
+
+#[test]
+#[serial]
+fn test_physical_shim_merges_bound_global_and_workspace_policy_layers() -> Result<()> {
+    let temp = TempDir::new()?;
+    let prefix_a = temp.path().join("selected-a");
+    let prefix_b = temp.path().join("ambient-b");
+    let shim_dir = prefix_a.join("shims");
+    let bin_dir = temp.path().join("bin");
+    fs::create_dir_all(&shim_dir)?;
+    fs::create_dir_all(&bin_dir)?;
+    fs::create_dir_all(&prefix_b)?;
+    let commit_a =
+        initialize_test_git_repository(&prefix_a, &allow_policy_yaml("selected-a", "echo merged"));
+    write_workspace_policy(&prefix_a, &workspace_deny_policy_patch("echo merged"));
+
+    let test_script = bin_dir.join("echo");
+    fs::write(&test_script, "#!/bin/bash\necho \"merged: $*\"")?;
+    #[cfg(unix)]
+    {
+        use std::os::unix::fs::PermissionsExt;
+        let mut perms = fs::metadata(&test_script)?.permissions();
+        perms.set_mode(0o755);
+        fs::set_permissions(&test_script, perms)?;
+    }
+
+    let shim_binary = shim_dir.join("echo");
+    fs::copy(get_shim_binary_path(), &shim_binary)?;
+    #[cfg(unix)]
+    {
+        use std::os::unix::fs::PermissionsExt;
+        let mut perms = fs::metadata(&shim_binary)?.permissions();
+        perms.set_mode(0o755);
+        fs::set_permissions(&shim_binary, perms)?;
+    }
+
+    let mut cmd = Command::new(&shim_binary);
+    cmd.arg("merged")
+        .env("SUBSTRATE_POLICY_MODE", "enforce")
+        .env("SHIM_ORIGINAL_PATH", bin_dir.to_string_lossy().as_ref())
+        .env("SHIM_TRACE_LOG", prefix_b.join("trace.jsonl"))
+        .env("HOME", &prefix_b)
+        .env("USERPROFILE", &prefix_b)
+        .env("SUBSTRATE_HOME", &prefix_b)
+        .env("SUBSTRATE_ROOT", &prefix_b)
+        .env(
+            "PATH",
+            format!("{}:{}", shim_dir.display(), bin_dir.display()),
+        )
+        .current_dir(&prefix_a)
+        .env_remove("SHIM_DEPTH")
+        .env_remove("SHIM_ACTIVE");
+    let output = run_with_retry(cmd)?;
+
+    assert_eq!(output.status.code(), Some(126));
+    assert!(String::from_utf8_lossy(&output.stderr).contains("command denied by policy"));
+
+    let trace_path = prefix_a.join("trace.jsonl");
+    assert!(trace_path.is_file());
+    assert!(!prefix_b.join("trace.jsonl").exists());
+
+    let entries = fs::read_to_string(&trace_path)?
+        .lines()
+        .map(serde_json::from_str::<Value>)
+        .collect::<std::result::Result<Vec<_>, _>>()?;
+    let span = entries
+        .iter()
+        .find(|value| value["event_type"] == "command_complete")
+        .expect("command_complete span");
+    assert_eq!(span["policy_id"].as_str(), Some("selected-a"));
+    assert_eq!(
+        span["replay_context"]["policy_id"].as_str(),
+        Some("selected-a")
+    );
+    assert_eq!(
+        span["replay_context"]["policy_commit"].as_str(),
+        Some(commit_a.as_str())
+    );
+    assert_eq!(span["policy_decision"]["action"].as_str(), Some("deny"));
+
+    Ok(())
+}
+
+#[test]
+#[serial]
+fn test_physical_shim_honors_descendant_workspace_policy_within_selected_prefix() -> Result<()> {
+    let temp = TempDir::new()?;
+    let prefix_a = temp.path().join("selected-a");
+    let prefix_b = temp.path().join("ambient-b");
+    let child_dir = prefix_a.join("nested").join("child");
+    let shim_dir = prefix_a.join("shims");
+    let bin_dir = temp.path().join("bin");
+    fs::create_dir_all(&shim_dir)?;
+    fs::create_dir_all(&bin_dir)?;
+    fs::create_dir_all(&prefix_b)?;
+    fs::create_dir_all(&child_dir)?;
+    let commit_a = initialize_test_git_repository(
+        &prefix_a,
+        &allow_policy_yaml("selected-a", "echo descendant bound"),
+    );
+    write_workspace_policy(
+        &child_dir,
+        &workspace_deny_policy_patch("echo descendant bound"),
+    );
+
+    let test_script = bin_dir.join("echo");
+    fs::write(&test_script, "#!/bin/bash\necho \"descendant: $*\"")?;
+    #[cfg(unix)]
+    {
+        use std::os::unix::fs::PermissionsExt;
+        let mut perms = fs::metadata(&test_script)?.permissions();
+        perms.set_mode(0o755);
+        fs::set_permissions(&test_script, perms)?;
+    }
+
+    let shim_binary = shim_dir.join("echo");
+    fs::copy(get_shim_binary_path(), &shim_binary)?;
+    #[cfg(unix)]
+    {
+        use std::os::unix::fs::PermissionsExt;
+        let mut perms = fs::metadata(&shim_binary)?.permissions();
+        perms.set_mode(0o755);
+        fs::set_permissions(&shim_binary, perms)?;
+    }
+
+    let mut cmd = Command::new(&shim_binary);
+    cmd.arg("descendant")
+        .env("SUBSTRATE_POLICY_MODE", "enforce")
+        .env("SHIM_ORIGINAL_PATH", bin_dir.to_string_lossy().as_ref())
+        .env("SHIM_TRACE_LOG", prefix_b.join("trace.jsonl"))
+        .env("HOME", &prefix_b)
+        .env("USERPROFILE", &prefix_b)
+        .env("SUBSTRATE_HOME", &prefix_b)
+        .env("SUBSTRATE_ROOT", &prefix_b)
+        .env(
+            "PATH",
+            format!("{}:{}", shim_dir.display(), bin_dir.display()),
+        )
+        .current_dir(&child_dir)
+        .env_remove("SHIM_DEPTH")
+        .env_remove("SHIM_ACTIVE");
+    let output = run_with_retry(cmd)?;
+
+    assert_eq!(output.status.code(), Some(126));
+    assert!(String::from_utf8_lossy(&output.stderr).contains("command denied by policy"));
+
+    let trace_path = prefix_a.join("trace.jsonl");
+    assert!(trace_path.is_file());
+    assert!(!prefix_b.join("trace.jsonl").exists());
+
+    let entries = fs::read_to_string(&trace_path)?
+        .lines()
+        .map(serde_json::from_str::<Value>)
+        .collect::<std::result::Result<Vec<_>, _>>()?;
+    let span = entries
+        .iter()
+        .find(|value| value["event_type"] == "command_complete")
+        .expect("command_complete span");
+    assert_eq!(span["policy_id"].as_str(), Some("selected-a"));
+    assert_eq!(
+        span["replay_context"]["policy_id"].as_str(),
+        Some("selected-a")
+    );
+    assert_eq!(
+        span["replay_context"]["policy_commit"].as_str(),
+        Some(commit_a.as_str())
+    );
+    assert_eq!(span["policy_decision"]["action"].as_str(), Some("deny"));
+
+    Ok(())
+}
+
+#[test]
+#[serial]
+fn test_physical_shim_ignores_ancestor_workspace_policy_outside_selected_prefix() -> Result<()> {
+    let temp = TempDir::new()?;
+    let ambient_root = temp.path().join("ambient-root");
+    let prefix_a = ambient_root.join("selected-a");
+    let prefix_b = temp.path().join("ambient-home");
+    let shim_dir = prefix_a.join("shims");
+    let bin_dir = temp.path().join("bin");
+    fs::create_dir_all(&shim_dir)?;
+    fs::create_dir_all(&bin_dir)?;
+    fs::create_dir_all(&prefix_b)?;
+    let commit_a = initialize_test_git_repository(
+        &prefix_a,
+        &allow_policy_yaml("selected-a", "echo ancestor bound"),
+    );
+    write_workspace_policy(
+        &ambient_root,
+        &deny_policy_yaml("ambient-ancestor", "echo ancestor bound"),
+    );
+
+    let test_script = bin_dir.join("echo");
+    fs::write(&test_script, "#!/bin/bash\necho \"ancestor-bound: $*\"")?;
+    #[cfg(unix)]
+    {
+        use std::os::unix::fs::PermissionsExt;
+        let mut perms = fs::metadata(&test_script)?.permissions();
+        perms.set_mode(0o755);
+        fs::set_permissions(&test_script, perms)?;
+    }
+
+    let shim_binary = shim_dir.join("echo");
+    fs::copy(get_shim_binary_path(), &shim_binary)?;
+    #[cfg(unix)]
+    {
+        use std::os::unix::fs::PermissionsExt;
+        let mut perms = fs::metadata(&shim_binary)?.permissions();
+        perms.set_mode(0o755);
+        fs::set_permissions(&shim_binary, perms)?;
+    }
+
+    let mut cmd = Command::new(&shim_binary);
+    cmd.args(["ancestor", "bound"])
+        .env("SUBSTRATE_POLICY_MODE", "enforce")
+        .env("SHIM_ORIGINAL_PATH", bin_dir.to_string_lossy().as_ref())
+        .env("SHIM_TRACE_LOG", prefix_b.join("trace.jsonl"))
+        .env("HOME", &prefix_b)
+        .env("USERPROFILE", &prefix_b)
+        .env("SUBSTRATE_HOME", &prefix_b)
+        .env("SUBSTRATE_ROOT", &prefix_b)
+        .env(
+            "PATH",
+            format!("{}:{}", shim_dir.display(), bin_dir.display()),
+        )
+        .current_dir(&prefix_a)
+        .env_remove("SHIM_DEPTH")
+        .env_remove("SHIM_ACTIVE");
+    let output = run_with_retry(cmd)?;
+
+    assert!(output.status.success());
+    assert_eq!(
+        String::from_utf8_lossy(&output.stdout).trim(),
+        "ancestor-bound: ancestor bound"
+    );
+
+    let trace_path = prefix_a.join("trace.jsonl");
+    assert!(trace_path.is_file());
+    assert!(!prefix_b.join("trace.jsonl").exists());
+
+    let entries = fs::read_to_string(&trace_path)?
+        .lines()
+        .map(serde_json::from_str::<Value>)
+        .collect::<std::result::Result<Vec<_>, _>>()?;
+    let span = entries
+        .iter()
+        .find(|value| value["event_type"] == "command_complete")
+        .expect("command_complete span");
+    assert_eq!(span["policy_id"].as_str(), Some("selected-a"));
+    assert_eq!(
+        span["replay_context"]["policy_id"].as_str(),
+        Some("selected-a")
+    );
+    assert_eq!(
+        span["replay_context"]["policy_commit"].as_str(),
+        Some(commit_a.as_str())
+    );
+
+    Ok(())
+}
+
+#[test]
+#[serial]
+fn test_physical_shim_bypass_rejects_conflicting_inherited_bootstrap_context() -> Result<()> {
+    let temp = TempDir::new()?;
+    let prefix_a = temp.path().join("selected-a");
+    let prefix_b = temp.path().join("ambient-b");
+    let shim_dir = prefix_a.join("shims");
+    let bin_dir = temp.path().join("bin");
+    fs::create_dir_all(&shim_dir)?;
+    fs::create_dir_all(&bin_dir)?;
+    fs::create_dir_all(&prefix_a)?;
+    fs::create_dir_all(&prefix_b)?;
+
+    let test_script = bin_dir.join("echo");
+    fs::write(&test_script, "#!/bin/bash\necho \"$@\"")?;
+    #[cfg(unix)]
+    {
+        use std::os::unix::fs::PermissionsExt;
+        let mut perms = fs::metadata(&test_script)?.permissions();
+        perms.set_mode(0o755);
+        fs::set_permissions(&test_script, perms)?;
+    }
+
+    let shim_binary = shim_dir.join("echo");
+    fs::copy(get_shim_binary_path(), &shim_binary)?;
+    #[cfg(unix)]
+    {
+        use std::os::unix::fs::PermissionsExt;
+        let mut perms = fs::metadata(&shim_binary)?.permissions();
+        perms.set_mode(0o755);
+        fs::set_permissions(&shim_binary, perms)?;
+    }
+
+    let conflicting = encoded_unix_host_carrier(&prefix_b);
+    let mut cmd = Command::new(&shim_binary);
+    cmd.arg("blocked")
+        .env("SHIM_BYPASS", "1")
+        .env("SHIM_ORIGINAL_PATH", bin_dir.to_string_lossy().as_ref())
+        .env("SHIM_TRACE_LOG", prefix_b.join("trace.jsonl"))
+        .env("HOME", &prefix_b)
+        .env("USERPROFILE", &prefix_b)
+        .env("SUBSTRATE_HOME", &prefix_b)
+        .env("SUBSTRATE_ROOT", &prefix_b)
+        .env(
+            "SUBSTRATE_INSTALL_BOOTSTRAP_CONTEXT_V1",
+            conflicting.encode().unwrap(),
+        )
+        .env(
+            "SUBSTRATE_INSTALL_HOST_CONTEXT_COMMITMENT",
+            &conflicting.host_context_commitment,
+        )
+        .env(
+            "SUBSTRATE_INSTALL_PRIMARY_USER",
+            match &conflicting.context.intended_host_principal {
+                transport_api_types::PlatformPrincipalV1::Unix { account, .. } => account,
+                transport_api_types::PlatformPrincipalV1::Windows { .. } => unreachable!(),
+            },
+        )
+        .env(
+            "SUBSTRATE_INSTALL_PRIMARY_UID",
+            match &conflicting.context.intended_host_principal {
+                transport_api_types::PlatformPrincipalV1::Unix { uid, .. } => uid.to_string(),
+                transport_api_types::PlatformPrincipalV1::Windows { .. } => unreachable!(),
+            },
+        )
+        .current_dir(&prefix_b)
+        .env_remove("SHIM_DEPTH")
+        .env_remove("SHIM_ACTIVE");
+    let output = run_with_retry(cmd)?;
+
+    assert_eq!(output.status.code(), Some(126));
+    assert!(
+        output.stdout.is_empty(),
+        "conflicting inherited bootstrap context should fail before dispatch"
+    );
+    assert!(String::from_utf8_lossy(&output.stderr)
+        .contains("install bootstrap environment projection is missing or conflicting"));
+    assert!(!prefix_a.join("trace.jsonl").exists());
+    assert!(!prefix_b.join("trace.jsonl").exists());
+
+    Ok(())
+}
+
+#[test]
+#[serial]
+fn test_physical_shim_fails_closed_on_malformed_bound_policy() -> Result<()> {
+    let temp = TempDir::new()?;
+    let prefix_a = temp.path().join("selected-a");
+    let prefix_b = temp.path().join("ambient-b");
+    let shim_dir = prefix_a.join("shims");
+    let bin_dir = temp.path().join("bin");
+    fs::create_dir_all(&shim_dir)?;
+    fs::create_dir_all(&bin_dir)?;
+    fs::create_dir_all(&prefix_b)?;
+    fs::write(prefix_a.join("policy.yaml"), ":\n  - invalid").unwrap();
+
+    let test_script = bin_dir.join("echo");
+    fs::write(&test_script, "#!/bin/bash\necho \"malformed policy\"")?;
+    #[cfg(unix)]
+    {
+        use std::os::unix::fs::PermissionsExt;
+        let mut perms = fs::metadata(&test_script)?.permissions();
+        perms.set_mode(0o755);
+        fs::set_permissions(&test_script, perms)?;
+    }
+
+    let shim_binary = shim_dir.join("echo");
+    fs::copy(get_shim_binary_path(), &shim_binary)?;
+    #[cfg(unix)]
+    {
+        use std::os::unix::fs::PermissionsExt;
+        let mut perms = fs::metadata(&shim_binary)?.permissions();
+        perms.set_mode(0o755);
+        fs::set_permissions(&shim_binary, perms)?;
+    }
+
+    let mut cmd = Command::new(&shim_binary);
+    cmd.arg("blocked")
+        .env("SUBSTRATE_POLICY_MODE", "enforce")
+        .env("SHIM_ORIGINAL_PATH", bin_dir.to_string_lossy().as_ref())
+        .env("SHIM_TRACE_LOG", prefix_b.join("trace.jsonl"))
+        .env("HOME", &prefix_b)
+        .env("USERPROFILE", &prefix_b)
+        .env("SUBSTRATE_HOME", &prefix_b)
+        .env("SUBSTRATE_ROOT", &prefix_b)
+        .env(
+            "PATH",
+            format!("{}:{}", shim_dir.display(), bin_dir.display()),
+        )
+        .current_dir(&prefix_b)
+        .env_remove("SHIM_DEPTH")
+        .env_remove("SHIM_ACTIVE");
+    let output = run_with_retry(cmd)?;
+
+    assert_eq!(output.status.code(), Some(126));
+    let stderr = String::from_utf8_lossy(&output.stderr);
+    assert!(
+        stderr.contains("failed to resolve bound effective policy")
+            || stderr.contains("failed to load bound effective policy"),
+        "unexpected stderr: {stderr}"
+    );
+    assert!(!prefix_a.join("trace.jsonl").exists());
+    assert!(!prefix_b.join("trace.jsonl").exists());
+
+    Ok(())
+}
+
+#[test]
+#[serial]
+fn test_physical_shim_rejects_conflicting_inherited_bootstrap_context_without_ambient_fallback(
+) -> Result<()> {
+    let temp = TempDir::new()?;
+    let prefix_a = temp.path().join("selected-a");
+    let prefix_b = temp.path().join("ambient-b");
+    let shim_dir = prefix_a.join("shims");
+    let bin_dir = temp.path().join("bin");
+    fs::create_dir_all(&shim_dir)?;
+    fs::create_dir_all(&bin_dir)?;
+    fs::create_dir_all(&prefix_a)?;
+    fs::create_dir_all(&prefix_b)?;
+
+    let test_script = bin_dir.join("echo");
+    fs::write(&test_script, "#!/bin/bash\necho \"$@\"")?;
+    #[cfg(unix)]
+    {
+        use std::os::unix::fs::PermissionsExt;
+        let mut perms = fs::metadata(&test_script)?.permissions();
+        perms.set_mode(0o755);
+        fs::set_permissions(&test_script, perms)?;
+    }
+
+    let shim_binary = shim_dir.join("echo");
+    fs::copy(get_shim_binary_path(), &shim_binary)?;
+    #[cfg(unix)]
+    {
+        use std::os::unix::fs::PermissionsExt;
+        let mut perms = fs::metadata(&shim_binary)?.permissions();
+        perms.set_mode(0o755);
+        fs::set_permissions(&shim_binary, perms)?;
+    }
+
+    let conflicting = encoded_unix_host_carrier(&prefix_b);
+    let mut cmd = Command::new(&shim_binary);
+    cmd.arg("blocked")
+        .env("SHIM_ORIGINAL_PATH", bin_dir.to_string_lossy().as_ref())
+        .env("SHIM_TRACE_LOG", prefix_b.join("trace.jsonl"))
+        .env("HOME", &prefix_b)
+        .env("USERPROFILE", &prefix_b)
+        .env("SUBSTRATE_HOME", &prefix_b)
+        .env("SUBSTRATE_ROOT", &prefix_b)
+        .env(
+            "SUBSTRATE_INSTALL_BOOTSTRAP_CONTEXT_V1",
+            conflicting.encode().unwrap(),
+        )
+        .env(
+            "SUBSTRATE_INSTALL_HOST_CONTEXT_COMMITMENT",
+            &conflicting.host_context_commitment,
+        )
+        .env(
+            "SUBSTRATE_INSTALL_PRIMARY_USER",
+            match &conflicting.context.intended_host_principal {
+                transport_api_types::PlatformPrincipalV1::Unix { account, .. } => account,
+                transport_api_types::PlatformPrincipalV1::Windows { .. } => unreachable!(),
+            },
+        )
+        .env(
+            "SUBSTRATE_INSTALL_PRIMARY_UID",
+            match &conflicting.context.intended_host_principal {
+                transport_api_types::PlatformPrincipalV1::Unix { uid, .. } => uid.to_string(),
+                transport_api_types::PlatformPrincipalV1::Windows { .. } => unreachable!(),
+            },
+        )
+        .current_dir(&prefix_b)
+        .env_remove("SHIM_DEPTH")
+        .env_remove("SHIM_ACTIVE");
+    let output = run_with_retry(cmd)?;
+
+    assert_eq!(output.status.code(), Some(126));
+    assert!(
+        output.stdout.is_empty(),
+        "conflicting inherited bootstrap context should fail before dispatch"
+    );
+    assert!(String::from_utf8_lossy(&output.stderr)
+        .contains("install bootstrap environment projection is missing or conflicting"));
+    assert!(!prefix_a.join("trace.jsonl").exists());
+    assert!(!prefix_b.join("trace.jsonl").exists());
+
+    Ok(())
+}
+
+#[test]
+#[serial]
+fn test_bypass_mode_does_not_fallback_to_ambient_trace_when_bound_bypass_log_target_is_unwritable(
+) -> Result<()> {
+    let temp = TempDir::new()?;
+    let prefix_a = temp.path().join("selected-a");
+    let prefix_b = temp.path().join("ambient-b");
+    let shim_dir = prefix_a.join("shims");
+    let bin_dir = temp.path().join("bin");
+    fs::create_dir_all(&shim_dir)?;
+    fs::create_dir_all(&bin_dir)?;
+    fs::create_dir_all(&prefix_b)?;
+
+    let test_script = bin_dir.join("echo");
+    fs::write(&test_script, "#!/bin/bash\necho \"bypass bound\"")?;
+    #[cfg(unix)]
+    {
+        use std::os::unix::fs::PermissionsExt;
+        let mut perms = fs::metadata(&test_script)?.permissions();
+        perms.set_mode(0o755);
+        fs::set_permissions(&test_script, perms)?;
+    }
+
+    let shim_binary = shim_dir.join("echo");
+    fs::copy(get_shim_binary_path(), &shim_binary)?;
+    #[cfg(unix)]
+    {
+        use std::os::unix::fs::PermissionsExt;
+        let mut perms = fs::metadata(&shim_binary)?.permissions();
+        perms.set_mode(0o755);
+        fs::set_permissions(&shim_binary, perms)?;
+        let mut root_perms = fs::metadata(&prefix_a)?.permissions();
+        root_perms.set_mode(0o555);
+        fs::set_permissions(&prefix_a, root_perms)?;
+    }
+
+    let mut cmd = Command::new(&shim_binary);
+    cmd.arg("bound")
+        .env("SHIM_BYPASS", "1")
+        .env("SHIM_ORIGINAL_PATH", bin_dir.to_string_lossy().as_ref())
+        .env("SHIM_TRACE_LOG", prefix_b.join("trace.jsonl"))
+        .env("HOME", &prefix_b)
+        .env("USERPROFILE", &prefix_b)
+        .env("SUBSTRATE_HOME", &prefix_b)
+        .env("SUBSTRATE_ROOT", &prefix_b)
+        .env(
+            "PATH",
+            format!("{}:{}", shim_dir.display(), bin_dir.display()),
+        )
+        .current_dir(&prefix_b)
+        .env_remove("SHIM_DEPTH")
+        .env_remove("SHIM_ACTIVE");
+    let output = run_with_retry(cmd)?;
+
+    #[cfg(unix)]
+    {
+        use std::os::unix::fs::PermissionsExt;
+        let mut root_perms = fs::metadata(&prefix_a)?.permissions();
+        root_perms.set_mode(0o755);
+        fs::set_permissions(&prefix_a, root_perms)?;
+    }
+
+    assert!(output.status.success());
+    assert_eq!(
+        String::from_utf8_lossy(&output.stdout).trim(),
+        "bypass bound"
+    );
+    assert!(!prefix_a.join("trace.jsonl").exists());
+    assert!(!prefix_b.join("trace.jsonl").exists());
+
+    Ok(())
+}
+
 /// Test session correlation across multiple command invocations
 #[test]
 fn test_session_correlation() -> Result<()> {
@@ -297,6 +1032,7 @@ fn test_session_correlation() -> Result<()> {
     let bin_dir = temp.path().join("bin");
     let shim_dir = temp.path().join("shims");
     let log_file = temp.path().join("session_test.jsonl");
+    let trace_path = temp.path().join("trace.jsonl");
 
     fs::create_dir_all(&bin_dir)?;
     fs::create_dir_all(&shim_dir)?;
@@ -354,7 +1090,7 @@ fn test_session_correlation() -> Result<()> {
     }
 
     // Verify all log entries have the same session ID
-    let log_content = fs::read_to_string(&log_file)?;
+    let log_content = fs::read_to_string(&trace_path)?;
     let lines: Vec<&str> = log_content.lines().collect();
     let cmd_lines: Vec<&str> = lines
         .iter()
@@ -418,6 +1154,7 @@ fn test_credential_redaction() -> Result<()> {
     let bin_dir = temp.path().join("bin");
     let shim_dir = temp.path().join("shims");
     let log_file = temp.path().join("redaction_test.jsonl");
+    let trace_path = temp.path().join("trace.jsonl");
 
     fs::create_dir_all(&bin_dir)?;
     fs::create_dir_all(&shim_dir)?;
@@ -470,7 +1207,7 @@ fn test_credential_redaction() -> Result<()> {
     assert!(output.status.success());
 
     // Verify credentials were redacted in log payloads that include argv
-    let log_content = fs::read_to_string(&log_file)?;
+    let log_content = fs::read_to_string(&trace_path)?;
     let mut redacted_entry = None;
     for line in log_content.lines() {
         if let Ok(value) = serde_json::from_str::<serde_json::Value>(line) {
@@ -481,7 +1218,10 @@ fn test_credential_redaction() -> Result<()> {
         }
     }
     let Some(entry) = redacted_entry else {
-        panic!("expected argv-bearing log entry in {}", log_file.display());
+        panic!(
+            "expected argv-bearing log entry in {}",
+            trace_path.display()
+        );
     };
     let argv = entry
         .get("argv")
@@ -563,6 +1303,7 @@ fn test_runtime_path_overrides_original_var() -> Result<()> {
     let original_dir = temp.path().join("original");
     let override_dir = temp.path().join("override");
     let log_file = temp.path().join("runtime_path.jsonl");
+    let trace_path = temp.path().join("trace.jsonl");
 
     fs::create_dir_all(&shim_dir)?;
     fs::create_dir_all(&original_dir)?;
@@ -621,7 +1362,7 @@ fn test_runtime_path_overrides_original_var() -> Result<()> {
         String::from_utf8_lossy(&output.stderr)
     );
 
-    let log_content = fs::read_to_string(&log_file)?;
+    let log_content = fs::read_to_string(&trace_path)?;
 
     let stdout = String::from_utf8_lossy(&output.stdout);
     assert!(
@@ -644,6 +1385,7 @@ fn manager_hint_logging_records_entry() -> Result<()> {
     let shim_dir = temp.path().join("shims");
     let bin_dir = temp.path().join("bin");
     let log_file = temp.path().join("hint_log.jsonl");
+    let trace_path = temp.path().join("trace.jsonl");
     let manifest_path = temp.path().join("manager_hooks.yaml");
 
     fs::create_dir_all(&shim_dir)?;
@@ -721,7 +1463,7 @@ managers:
 
     assert!(!output.status.success(), "shim should propagate failure");
 
-    let log_content = fs::read_to_string(&log_file)?;
+    let log_content = fs::read_to_string(&trace_path)?;
     let mut hint_found = false;
     for line in log_content.lines() {
         if let Ok(Value::Object(obj)) = serde_json::from_str::<Value>(line) {
@@ -745,6 +1487,7 @@ fn tier2_manager_hint_logging_records_entry() -> Result<()> {
     let shim_dir = temp.path().join("shims");
     let bin_dir = temp.path().join("bin");
     let log_file = temp.path().join("bun_hint_log.jsonl");
+    let trace_path = temp.path().join("trace.jsonl");
     let manifest_path = temp.path().join("manager_hooks.yaml");
 
     fs::create_dir_all(&shim_dir)?;
@@ -825,7 +1568,7 @@ managers:
         "bun shim should propagate failure so hints emit"
     );
 
-    let log_content = fs::read_to_string(&log_file)?;
+    let log_content = fs::read_to_string(&trace_path)?;
     let mut bun_hint = None;
     for line in log_content.lines() {
         if let Ok(Value::Object(obj)) = serde_json::from_str::<Value>(line) {
@@ -851,6 +1594,7 @@ fn manager_hint_skipped_when_world_disabled() -> Result<()> {
     let shim_dir = temp.path().join("shims");
     let bin_dir = temp.path().join("bin");
     let log_file = temp.path().join("hint_disabled.jsonl");
+    let trace_path = temp.path().join("trace.jsonl");
     let manifest_path = temp.path().join("manager_hooks.yaml");
 
     fs::create_dir_all(&shim_dir)?;
@@ -926,7 +1670,7 @@ managers:
 
     assert!(!output.status.success());
 
-    let hint_entry = fs::read_to_string(&log_file)?
+    let hint_entry = fs::read_to_string(&trace_path)?
         .lines()
         .filter_map(|line| serde_json::from_str::<Value>(line).ok())
         .find(|value| value.get("manager_hint").is_some());
@@ -946,6 +1690,7 @@ fn test_bypass_mode_honors_runtime_path_changes() -> Result<()> {
     let original_dir = temp.path().join("original");
     let override_dir = temp.path().join("override");
     let log_file = temp.path().join("bypass_path.jsonl");
+    let trace_path = temp.path().join("trace.jsonl");
 
     fs::create_dir_all(&shim_dir)?;
     fs::create_dir_all(&original_dir)?;
@@ -1010,7 +1755,7 @@ fn test_bypass_mode_honors_runtime_path_changes() -> Result<()> {
         "expected override binary to run in bypass mode, got: {stdout}"
     );
 
-    let log_content = fs::read_to_string(&log_file)?;
+    let log_content = fs::read_to_string(&trace_path)?;
     assert!(
         log_content.contains(&override_dir.display().to_string()),
         "log should record resolved override path: {log_content}"

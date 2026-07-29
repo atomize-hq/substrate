@@ -24,6 +24,7 @@ pub struct ExecutionLogMetadata<'a> {
 
 /// Log a command execution with full context
 pub fn log_execution(
+    trace_context: &TraceContext,
     log_path: &Path,
     ctx: &ShimContext,
     args: &[std::ffi::OsString],
@@ -101,16 +102,34 @@ pub fn log_execution(
         log_entry["manager_hint"] = hint.clone();
     }
 
-    write_log_entry(log_path, &log_entry)
+    write_log_entry_with_context(trace_context, log_path, &log_entry)
 }
 
 /// Helper function for writing log entries with optional fsync
 pub fn write_log_entry(_log_path: &Path, entry: &Value) -> Result<()> {
-    let _ = set_global_trace_context(TraceContext::default());
-    // Initialize trace if not already set up (no-op if already initialized)
-    let _ = init_trace(None);
+    match init_trace(None) {
+        Ok(()) => {}
+        Err(err)
+            if err
+                .to_string()
+                .contains("Trace context not initialized; call set_global_trace_context") =>
+        {
+            let _ = set_global_trace_context(TraceContext::default());
+            init_trace(None)?;
+        }
+        Err(err) => return Err(err),
+    }
     // Ensure single-line JSON (append_to_trace expects a single Value and handles flushing/rotation)
     append_to_trace(entry)
+}
+
+fn write_log_entry_with_context(
+    trace_context: &TraceContext,
+    _log_path: &Path,
+    entry: &Value,
+) -> Result<()> {
+    trace_context.init_trace(None)?;
+    trace_context.append_to_trace(entry)
 }
 
 /// Redact sensitive command-line arguments
