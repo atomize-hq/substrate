@@ -67,6 +67,19 @@ exactly. This amendment does not authorize changing production control behavior,
 Unix-only helper callable in Windows production, removing Windows-capable tests, or widening into
 any thirteenth file.
 
+WINDOWS CAPABILITY PREREQUISITE SATISFIED
+
+After attempt 6 proved that the required filtered test compiled and ran ten tests, two unchanged
+`install_bootstrap.rs` tests stopped only because the Windows process lacked
+`CreateSymbolicLink` privilege. The user has now enabled Windows Developer Mode and explicitly
+authorized this same task to resume.
+
+This is an environment-only continuation. It does not add `install_bootstrap.rs` or any other file
+to the allowlist. Preserve the existing twelve-file unstaged WIP exactly. Verify Developer Mode
+from the Windows system setting and, if useful, with a disposable symlink capability probe outside
+the checkout; then rerun the unchanged filtered test command. If Windows still returns error 1314,
+stop without editing `install_bootstrap.rs` and report the remaining platform/capability blocker.
+
 Use the available skills appropriate to source analysis, test-driven repair, GitNexus impact
 analysis, security review, code review, and git publication. This top-level task and every
 subagent must run at Standard/default speed, never Fast. Every subagent must use GPT-5.4 with
@@ -137,8 +150,8 @@ Before editing:
    `58462482126609ad87e59b896f5d22437461d144`, tree
    `131cb88fcd22cf739eac5c29a2d6e7d3dded43f0`, target ref
    `refs/heads/feat/internal-host-orchestrator-world-dispatch-bootstrap`, 0 ahead/0 behind, with
-   required ancestor `0f1e147fb735791b44a65099a65167cbdc1803af`. Require exactly the eleven
-   previously authorized dirty unstaged paths recorded in the attempt-5 receipt and no staged,
+   required ancestor `0f1e147fb735791b44a65099a65167cbdc1803af`. Require exactly the twelve
+   previously authorized dirty unstaged paths recorded in the attempt-6 receipt and no staged,
    untracked, analyzer-only, or other tracked changes. Do not reset, clean, recreate, reconcile,
    or discard that WIP.
 2. Verify the live remote still equals that exact commit and tree.
