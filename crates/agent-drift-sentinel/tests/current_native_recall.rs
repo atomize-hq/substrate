@@ -662,6 +662,13 @@ fn current_native_recall_privacy_and_provenance_are_recursive() {
 }
 
 #[test]
+fn current_native_recall_validation_receipt_is_privacy_safe() {
+    let path = Utf8Path::new(env!("CARGO_MANIFEST_DIR"))
+        .join("../../docs/specs/sfr/SFR-RB-100-current-native-recall-corpus-validation.md");
+    recursively_validate_privacy(&path).expect("validate committed P7 receipt privacy");
+}
+
+#[test]
 fn current_native_recall_privacy_identifier_mutations_fail_closed() {
     let path = Utf8Path::new("fixtures/privacy-mutation.json");
     let mutations = [

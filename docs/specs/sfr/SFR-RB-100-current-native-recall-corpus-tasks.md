@@ -450,12 +450,12 @@ Each task runs the P7 target. After every third case, also run the frozen semant
 
 ### Task P7-7.2 — Run the private batch and record the sanitized receipt
 
-- [ ] Freeze the live local inventory and execute the selected batch outside Git.
-- [ ] Record digests, frozen quota configuration, required named strata, per-bucket eligible and
+- [x] Freeze the live local inventory and execute the selected batch outside Git.
+- [x] Record digests, frozen quota configuration, required named strata, per-bucket eligible and
       selected counts, underfill, exact command versions, and pass/fail conclusions.
-- [ ] Require a non-empty selected set and block underfill in every sufficiently populated bucket.
-- [ ] Record inventory-scarcity underfill only when it satisfies the explicit selection limitation.
-- [ ] Classify every concrete contract-relevant contradiction surfaced by the run as fixture/harness
+- [x] Require a non-empty selected set and block underfill in every sufficiently populated bucket.
+- [x] Record inventory-scarcity underfill only when it satisfies the explicit selection limitation.
+- [x] Classify every concrete contract-relevant contradiction surfaced by the run as fixture/harness
       error, production contract defect, or new behavior request before accepting the receipt.
 - **Acceptance:** receipt is sufficient for release signoff, proves the private lane was non-vacuous,
   contains no unresolved contract-relevant contradiction, and contains no raw private data.
