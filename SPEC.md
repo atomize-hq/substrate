@@ -3,7 +3,7 @@
 Candidate specification:
 `docs/specs/sfr/SFR-RB-100-current-native-recall-corpus-spec.md`
 
-Candidate status: **CONFIRMED 2026-07-29 — PLAN/TASK CANDIDATES AWAITING BOUNDED REVIEW**
+Active status: **APPROVED 2026-07-29 — P7 IMPLEMENTATION AUTHORIZED**
 
 Companion plan:
 `docs/specs/sfr/SFR-RB-100-current-native-recall-corpus-plan.md`
@@ -11,9 +11,9 @@ Companion plan:
 Companion task ledger:
 `docs/specs/sfr/SFR-RB-100-current-native-recall-corpus-tasks.md`
 
-Implementation authority: **NONE**. The specification is confirmed, but P7 implementation remains
-blocked until the exact spec/plan/task family receives bounded review and subsequent user approval.
-The closed R6–R8 projection below remains historical authority and is not reopened.
+Implementation authority: **P7 ONLY**. The exact review-reconciled spec/plan/task family is approved
+for autonomous execution in task-ledger order. Production Rust remains outside the default fence;
+the closed R6–R8 projection below remains historical authority and is not reopened.
 
 ## Closed Predecessor Projection: R6 Scorer-Context Cutover Closure
 

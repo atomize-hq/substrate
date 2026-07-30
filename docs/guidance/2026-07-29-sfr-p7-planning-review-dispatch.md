@@ -409,3 +409,10 @@ Implementation authority remains **NONE** pending explicit user approval of the 
 family.
 
 Advisory only; verify against local project truth and authoritative docs; do not reduce scope without user approval.
+
+## User approval transition
+
+On 2026-07-29, the user explicitly invoked `/build auto` against the approved P7 specification,
+plan, and task ledger. That instruction is the implementation approval checkpoint required by the
+planning family. Active authority is recorded in the spec, plan, task ledger, and root routers;
+the review result above remains an immutable account of the pre-approval state.

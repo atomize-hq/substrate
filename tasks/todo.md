@@ -3,10 +3,10 @@
 Candidate task ledger:
 `docs/specs/sfr/SFR-RB-100-current-native-recall-corpus-tasks.md`
 
-Candidate status: **DRAFT — AWAITING BOUNDED GPT PRO REVIEW AND USER APPROVAL**
+Active status: **APPROVED 2026-07-29 — EXECUTION ACTIVE**
 
-Implementation authority: **NONE**. Every P7 implementation checkbox remains open until the exact
-spec/plan/task family is review-reconciled and user-approved.
+Implementation authority: **P7 ONLY**. The exact review-reconciled task ledger may now be executed
+autonomously in dependency order; its production-defect and scope-widening stop rules remain active.
 
 ## Closed Predecessor Projection: R6 Scorer-Context Cutover Closure
 

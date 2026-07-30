@@ -1,10 +1,10 @@
 # SFR-RB-100 SPEC — Current-Native Recall Corpus
 
-Status: **CONFIRMED 2026-07-29 — PLANNING REVIEW RECONCILED; AWAITING USER APPROVAL**
+Status: **APPROVED 2026-07-29 — P7 IMPLEMENTATION AUTHORIZED**
 
-Implementation authority: **NONE**. The user confirmed this specification by directing preparation
-of the companion plan and task ledger. Source changes, fixture generation, and corpus execution
-remain blocked until the user approves the review-reconciled planning family.
+Implementation authority: **P7 ONLY**. The user approved autonomous execution of the exact
+review-reconciled specification, plan, and task ledger. The test/fixture/script/doc-only default
+fence and all production-defect stop rules remain binding.
 
 Baseline: post-P6 commit `133b55249f88492e16f80f98a63368911d733c7e` on
 `feat/sfr-p4-path-semantics`.

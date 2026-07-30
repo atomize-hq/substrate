@@ -3,10 +3,10 @@
 Candidate plan:
 `docs/specs/sfr/SFR-RB-100-current-native-recall-corpus-plan.md`
 
-Candidate status: **DRAFT — AWAITING BOUNDED GPT PRO REVIEW AND USER APPROVAL**
+Active status: **APPROVED 2026-07-29 — EXECUTE IN LEDGER ORDER**
 
-Implementation authority: **NONE**. Downstream build work must follow the candidate plan only after
-its exact spec/plan/task family is review-reconciled and user-approved.
+Implementation authority: **P7 ONLY**. Execute the exact review-reconciled plan autonomously in
+dependency order, preserving its test/fixture/script/doc-only default fence and stop rules.
 
 ## Closed Predecessor Projection: R6 Scorer-Context Cutover Closure
 

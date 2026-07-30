@@ -1,6 +1,6 @@
 # SFR-RB-100 TASKS — Current-Native Recall Corpus
 
-Status: **REVIEW-RECONCILED CANDIDATE — AWAITING USER APPROVAL**
+Status: **APPROVED 2026-07-29 — EXECUTION ACTIVE**
 
 Specification:
 `docs/specs/sfr/SFR-RB-100-current-native-recall-corpus-spec.md`.
@@ -8,8 +8,8 @@ Specification:
 Plan:
 `docs/specs/sfr/SFR-RB-100-current-native-recall-corpus-plan.md`.
 
-Implementation authority: **NONE**. Every implementation checkbox remains open until the reviewed
-document family receives user approval.
+Implementation authority: **P7 ONLY**. Execute this ledger autonomously in dependency order with
+task-scoped verification and commits. Production Rust remains outside the default fence.
 
 Task sizing counts the shared harness, matrix, one self-contained case directory, and any exact owner
 test as logical paths. A case directory may contain multiple JSON/JSONL files but remains one bounded
@@ -37,9 +37,9 @@ fixture surface. No task authorizes a production source edit.
 
 ### Task P7-0.2 — Lock the implementation baseline and protected walls
 
-- [ ] Obtain user approval of the reviewed planning family.
-- [ ] Verify branch, HEAD, ancestry, worktree/index state, and exact P7 path fence.
-- [ ] Capture the current focused-test inventory and confirm frozen corpus counts.
+- [x] Obtain user approval of the reviewed planning family.
+- [x] Verify branch, HEAD, ancestry, worktree/index state, and exact P7 path fence.
+- [x] Capture the current focused-test inventory and confirm frozen corpus counts.
 - **Acceptance:** implementation begins from one exact clean commit descended from
   `133b55249f88492e16f80f98a63368911d733c7e`; semantic 18-case, progress 16-case, and delegated
   10-case walls are recorded as protected.

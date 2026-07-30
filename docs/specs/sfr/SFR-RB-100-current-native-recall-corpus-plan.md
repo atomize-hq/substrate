@@ -1,6 +1,6 @@
 # SFR-RB-100 PLAN — Current-Native Recall Corpus
 
-Status: **REVIEW-RECONCILED CANDIDATE — AWAITING USER APPROVAL**
+Status: **APPROVED 2026-07-29 — EXECUTION ACTIVE**
 
 Companion specification:
 `docs/specs/sfr/SFR-RB-100-current-native-recall-corpus-spec.md`.
@@ -10,9 +10,9 @@ Companion task ledger:
 
 Baseline: post-P6 commit `133b55249f88492e16f80f98a63368911d733c7e`.
 
-Implementation authority: **NONE**. This plan sequences P7 but authorizes no fixture, harness,
-script, production, commit, or push work until the user approves the review-reconciled document
-family.
+Implementation authority: **P7 ONLY**. This plan authorizes autonomous fixture, harness, script,
+document, validation, review, and task-scoped commit work in ledger order. It authorizes no
+production Rust edit, dependency addition, CI change, push, or P8 work.
 
 ## Overview
 
