@@ -1,0 +1,24 @@
+{
+  "case_id": "P7-07",
+  "session_id": "session-p7-07-root",
+  "directive_path": "docs/target.md",
+  "directive_authoritative": false,
+  "authoritative_paths": [
+    "crates/source/src/lib.rs"
+  ],
+  "working_set_paths": [
+    "crates/source/src/lib.rs",
+    "docs/target.md"
+  ],
+  "semantic_goal_drift": {
+    "state": "cleared",
+    "flagged": false,
+    "raw_score": 0
+  },
+  "wrong_plan_branch": {
+    "state": "active",
+    "flagged": true,
+    "raw_score": 60
+  },
+  "claim": "wrong_plan_branch"
+}

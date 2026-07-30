@@ -187,7 +187,7 @@ Each task runs the P7 target. After every third case, also run the frozen semant
 
 ### Task P7-2.7 — P7-07 directive path non-authority control
 
-- [ ] Preserve directive/path syntax in a raw current-native task surface.
+- [x] Preserve directive/path syntax in a raw current-native task surface.
 - **Acceptance:** the directive cannot grant path authority or produce false semantic alignment; exact
   working-set/authority projection is asserted.
 - **Verification:** P7 target.

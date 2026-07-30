@@ -294,16 +294,16 @@
       "expected": {
         "claim": "NoClaim",
         "tests_executed": 0,
-      "forbidden_signal_codes": [
-        "verification_clean",
-        "failure_frontier_advanced"
-      ],
-      "zero_test_output": "running 0 tests",
-      "session_progress": {
-        "status": "insufficient_evidence",
-        "dimension": "verification_closeout_narrowing",
-        "confidence": "low"
-      }
+        "forbidden_signal_codes": [
+          "verification_clean",
+          "failure_frontier_advanced"
+        ],
+        "zero_test_output": "running 0 tests",
+        "session_progress": {
+          "status": "insufficient_evidence",
+          "dimension": "verification_closeout_narrowing",
+          "confidence": "low"
+        }
       },
       "historical_references": [
         "crates/agent-drift-analyzer/tests/fixtures/progress_acceptance/adapted-zero-verifier-097d97e914ca220f/expected.json"
@@ -312,15 +312,17 @@
     {
       "case_id": "P7-07",
       "title": "directive path non-authority control",
-      "implemented": false,
+      "implemented": true,
       "fixture_dir": "p7-07",
       "adapter_classes": [
         "CurrentNativeV2"
       ],
       "event_variants": [
         "session_meta",
+        "task_started",
         "turn_context",
-        "message"
+        "message",
+        "custom_tool_call"
       ],
       "logical_source_files": [
         "raw/root.jsonl"
@@ -339,18 +341,23 @@
       "diagnostic_owners": [
         "objective-path-extraction"
       ],
-      "expected": {
-        "directive_authoritative": false,
-        "signal": "semantic_goal_drift",
-        "state": "active",
-        "flagged": true,
-        "working_set": [
+    "expected": {
+      "directive_authoritative": false,
+      "signal": "wrong_plan_branch",
+      "state": "active",
+      "flagged": true,
+      "raw_score": 60,
+      "authoritative_paths": [
+        "crates/source/src/lib.rs"
+      ],
+        "working_set_paths": [
+          "crates/source/src/lib.rs",
           "docs/target.md"
         ]
-      },
-      "historical_references": [
-        "crates/agent-drift-analyzer/tests/semantic_goal_drift_acceptance.rs"
-      ]
+    },
+    "historical_references": [
+      "crates/agent-drift-analyzer/tests/wrong_plan_branch.rs"
+    ]
     },
     {
       "case_id": "P7-08",

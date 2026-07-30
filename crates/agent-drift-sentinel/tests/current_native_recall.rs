@@ -1214,3 +1214,88 @@ fn p7_06_zero_test_execution_cannot_claim_clean_verification() {
     assert_eq!(expected["tests_executed"], 0);
     assert_eq!(expected["claim"], "NoClaim");
 }
+
+#[test]
+fn p7_07_directive_path_cannot_establish_authority() {
+    let matrix = load_matrix().expect("load P7 matrix");
+    let case = matrix
+        .cases
+        .iter()
+        .find(|case| case.case_id == "P7-07")
+        .expect("P7-07 matrix entry");
+
+    assert!(case.implemented, "P7-07 must be implemented before it runs");
+
+    let case_root = fixture_root().join(&case.fixture_dir);
+    let expected: Value = serde_json::from_str(
+        &fs::read_to_string(case_root.join("expected.json")).expect("read P7-07 expected"),
+    )
+    .expect("parse P7-07 expected");
+    let run = run_single_source_pipeline(&case_root.join("raw/root.jsonl"), "session-p7-07-root");
+    assert_eq!(run.format, RolloutFormat::CurrentNativeV2);
+
+    let session = run
+        .result
+        .sessions
+        .iter()
+        .find(|session| session.session_id == "session-p7-07-root")
+        .expect("P7-07 analyzed session");
+    let authoritative_paths = session
+        .context
+        .truth_artifacts
+        .iter()
+        .filter(|artifact| {
+            matches!(
+                artifact.source.as_str(),
+                "objective_literal" | "directive_literal"
+            )
+        })
+        .map(|artifact| artifact.path.as_str())
+        .collect::<Vec<_>>();
+    assert_eq!(
+        authoritative_paths,
+        expected["authoritative_paths"]
+            .as_array()
+            .expect("P7-07 authoritative paths")
+            .iter()
+            .map(|path| path.as_str().expect("P7-07 authoritative path"))
+            .collect::<Vec<_>>()
+    );
+    assert!(session.context.truth_artifacts.iter().any(|artifact| {
+        artifact.path == expected["directive_path"]
+            && artifact.source == "control_directive_literal"
+    }));
+
+    let projection = canonical_semantic_projection(&run.result, "session-p7-07-root");
+    let final_projection = projection
+        .as_array()
+        .and_then(|checkpoints| checkpoints.last())
+        .expect("P7-07 final canonical checkpoint");
+    assert_eq!(
+        final_projection["working_set_paths"],
+        expected["working_set_paths"]
+    );
+    assert_eq!(
+        final_projection["semantic_goal_drift"],
+        expected["semantic_goal_drift"]
+    );
+    let final_checkpoint = session
+        .checkpoints
+        .last()
+        .expect("P7-07 final analyzer checkpoint");
+    let wrong_plan = final_checkpoint
+        .drift_scores
+        .iter()
+        .find(|score| score.class == DriftClass::WrongPlanBranch)
+        .expect("P7-07 wrong-plan score");
+    assert_eq!(
+        serde_json::json!({
+            "state": wrong_plan.state,
+            "flagged": wrong_plan.flagged,
+            "raw_score": wrong_plan.raw_score,
+        }),
+        expected["wrong_plan_branch"]
+    );
+    assert_eq!(expected["directive_authoritative"], false);
+    assert_eq!(expected["claim"], "wrong_plan_branch");
+}
