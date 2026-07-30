@@ -438,9 +438,9 @@ Each task runs the P7 target. After every third case, also run the frozen semant
 
 ### Task P7-7.1 — Run focused and full release gates
 
-- [ ] Run the P7 target and every focused owner.
-- [ ] Run full compactor, analyzer, Sentinel, and workspace suites.
-- [ ] Run formatting, clippy with `-D warnings`, Python tests, and diff checks.
+- [x] Run the P7 target and every focused owner.
+- [x] Run full compactor, analyzer, Sentinel, and workspace suites.
+- [x] Run formatting, clippy with `-D warnings`, Python tests, and diff checks.
 - **Acceptance:** every command in Checkpoint P7-F of the plan exits zero; failures are classified
   before fixes.
 - **Verification:** saved command/result ledger.
