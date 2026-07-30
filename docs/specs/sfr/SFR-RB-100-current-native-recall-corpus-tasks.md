@@ -338,14 +338,14 @@ Each task runs the P7 target. After every third case, also run the frozen semant
 
 ### Task P7-5.2 — Enforce whole-wall determinism, completeness, and bounded count
 
-- [ ] Run all nineteen cases in two canonicalized wall executions.
-- [ ] Vary temporary roots and stable source/discovery ordering for every applicable case.
-- [ ] Exercise warm and cold closure state for every closure-traversing case.
-- [ ] Compare exact canonical projections for every case and retain P7-19 as the stronger
+- [x] Run all nineteen cases in two canonicalized wall executions.
+- [x] Vary temporary roots and stable source/discovery ordering for every applicable case.
+- [x] Exercise warm and cold closure state for every closure-traversing case.
+- [x] Compare exact canonical projections for every case and retain P7-19 as the stronger
       typed-segment order/identity stress witness.
-- [ ] Assert all required contract families and planned cases are present.
-- [ ] Assert case count remains within 15–25 and explain any count above 22.
-- [ ] Assert every historical reference resolves to a tracked frozen artifact.
+- [x] Assert all required contract families and planned cases are present.
+- [x] Assert case count remains within 15–25 and explain any count above 22.
+- [x] Assert every historical reference resolves to a tracked frozen artifact.
 - **Acceptance:** every case has byte-identical canonical projections across its applicable varied
   runs; deleting, renaming, or adding an undeclared case fails deterministically.
 - **Verification:** P7 target runs the complete varied wall twice in one invocation and once as a
@@ -359,9 +359,9 @@ Each task runs the P7 target. After every third case, also run the frozen semant
 
 ### Checkpoint P7-E1 — Committed corpus complete
 
-- [ ] All nineteen cases pass.
-- [ ] Matrix, privacy, provenance, whole-wall varied-run determinism, and bounded-count gates pass.
-- [ ] Frozen historical walls remain unchanged.
+- [x] All nineteen cases pass.
+- [x] Matrix, privacy, provenance, whole-wall varied-run determinism, and bounded-count gates pass.
+- [x] Frozen historical walls remain unchanged.
 
 ## P7-6 — Private inventory and overlapping-quota sampler
 

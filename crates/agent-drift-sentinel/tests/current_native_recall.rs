@@ -2,6 +2,7 @@
 
 use std::collections::{BTreeMap, BTreeSet};
 use std::fs;
+use std::process::Command;
 
 use agent_drift_analyzer::{analyze_bundle, AnalyzeRequest, AnalyzeResult, DriftClass, DriftState};
 use agent_drift_sentinel::{
@@ -2331,4 +2332,571 @@ fn p7_19_typed_output_is_deterministic_across_varied_runs() {
             .clone()
     );
     assert_eq!(expected["varied_runs_equal"], true);
+}
+
+#[test]
+fn current_native_recall_whole_wall_is_complete_bounded_and_deterministic() {
+    let matrix = load_matrix().expect("load P7 matrix");
+    validate_matrix(&matrix).expect("validate P7 matrix");
+    let directories = tracked_case_directories().expect("list P7 fixture directories");
+    validate_case_inventory(&matrix, &directories).expect("validate P7 fixture inventory");
+
+    assert_eq!(matrix.cases.len(), PLANNED_CASE_IDS.len());
+    assert!(
+        (15..=25).contains(&matrix.cases.len()),
+        "P7 case count must remain inside the approved 15-25 envelope"
+    );
+    assert!(
+        matrix.cases.len() <= 22,
+        "P7 case counts above the soft cap of 22 require a written distinct-contract explanation"
+    );
+    assert!(
+        matrix.cases.iter().all(|case| case.implemented),
+        "all P7 cases must be implemented before the whole wall runs"
+    );
+
+    let covered_contracts = matrix
+        .cases
+        .iter()
+        .flat_map(|case| case.contract_families.iter().map(String::as_str))
+        .collect::<BTreeSet<_>>();
+    let required_contracts = BTreeSet::from([
+        "native_identity",
+        "typed_shape",
+        "semantic_positive",
+        "semantic_conservative",
+        "verification_execution",
+        "path_authority",
+        "lexical_path_identity",
+        "session_isolation",
+        "delegation",
+        "closure_malformed",
+        "analyzer_malformed",
+        "public_live",
+        "compatibility",
+    ]);
+    assert_eq!(
+        required_contracts
+            .difference(&covered_contracts)
+            .copied()
+            .collect::<Vec<_>>(),
+        Vec::<&str>::new(),
+        "P7 matrix is missing required contract families"
+    );
+
+    validate_historical_references(&matrix).expect("validate P7 historical references");
+
+    let cold_forward = run_canonical_recall_wall(&matrix, false, false);
+    let warm_reverse = run_canonical_recall_wall(&matrix, true, true);
+    let cold_bytes = serde_json::to_vec(&cold_forward).expect("serialize cold P7 wall");
+    let warm_bytes = serde_json::to_vec(&warm_reverse).expect("serialize warm P7 wall");
+    assert_eq!(
+        cold_bytes, warm_bytes,
+        "P7 canonical wall must be byte-identical across temporary roots, source order, and cache state"
+    );
+    assert_eq!(
+        cold_forward
+            .as_array()
+            .expect("P7 canonical wall cases")
+            .len(),
+        PLANNED_CASE_IDS.len()
+    );
+}
+
+#[derive(Debug)]
+struct WallSource {
+    path: Utf8PathBuf,
+    session_id: String,
+    is_child: bool,
+}
+
+fn run_canonical_recall_wall(
+    matrix: &RecallMatrix,
+    reverse_sources: bool,
+    warm_closure: bool,
+) -> Value {
+    let mut cases = matrix.cases.iter().collect::<Vec<_>>();
+    cases.sort_by(|left, right| left.case_id.cmp(&right.case_id));
+    Value::Array(
+        cases
+            .into_iter()
+            .map(|case| {
+                let projection = if case
+                    .adapter_classes
+                    .iter()
+                    .any(|adapter| adapter == "BundleV0_2")
+                {
+                    run_canonical_bundle_case(case)
+                } else if case
+                    .adapter_classes
+                    .iter()
+                    .any(|adapter| adapter == "PublicLive")
+                {
+                    run_canonical_public_live_case(case)
+                } else {
+                    run_canonical_raw_case(case, reverse_sources, warm_closure)
+                };
+                serde_json::json!({
+                    "case_id": case.case_id,
+                    "terminal_boundary": case.terminal_boundary,
+                    "projection": projection,
+                })
+            })
+            .collect(),
+    )
+}
+
+fn run_canonical_raw_case(case: &RecallCase, reverse_sources: bool, warm_closure: bool) -> Value {
+    let case_root = fixture_root().join(&case.fixture_dir);
+    let mut sources = case
+        .logical_source_files
+        .iter()
+        .map(|logical| wall_source(&case_root.join(logical)))
+        .collect::<Vec<_>>();
+    if reverse_sources {
+        sources.reverse();
+    }
+
+    let temp_dir = tempfile::TempDir::new().expect("P7 whole-wall temp dir");
+    let temp_root = Utf8Path::from_path(temp_dir.path()).expect("P7 whole-wall UTF-8 temp root");
+    let codex_home = temp_root.join(".codex");
+    let rollout_dir = codex_home.join("sessions/2030/01/01");
+    fs::create_dir_all(&rollout_dir).expect("create P7 whole-wall rollout directory");
+    for source in &sources {
+        fs::copy(
+            &source.path,
+            rollout_dir.join(format!("rollout-{}.jsonl", source.session_id)),
+        )
+        .unwrap_or_else(|error| {
+            panic!(
+                "{} failed to materialize {}: {error}",
+                case.case_id, source.session_id
+            )
+        });
+    }
+
+    let source_ids = sources
+        .iter()
+        .map(|source| source.session_id.as_str())
+        .collect::<BTreeSet<_>>();
+    let mut roots = case
+        .selected_direct_closure
+        .iter()
+        .filter(|session_id| {
+            source_ids.contains(session_id.as_str())
+                && sources
+                    .iter()
+                    .any(|source| source.session_id == **session_id && !source.is_child)
+        })
+        .cloned()
+        .collect::<Vec<_>>();
+    roots.sort();
+    assert!(
+        !roots.is_empty(),
+        "{} has no materialized root session",
+        case.case_id
+    );
+
+    Value::Array(
+        roots
+            .into_iter()
+            .map(|root_session_id| {
+                run_canonical_root(case, &codex_home, temp_root, &root_session_id, warm_closure)
+            })
+            .collect(),
+    )
+}
+
+fn wall_source(path: &Utf8Path) -> WallSource {
+    let source = fs::read_to_string(path)
+        .unwrap_or_else(|error| panic!("read P7 whole-wall source {path}: {error}"));
+    let session_meta = source
+        .lines()
+        .filter(|line| !line.trim().is_empty())
+        .map(|line| {
+            serde_json::from_str::<Value>(line)
+                .unwrap_or_else(|error| panic!("parse P7 whole-wall source {path}: {error}"))
+        })
+        .find(|row| row["type"] == "session_meta")
+        .unwrap_or_else(|| panic!("P7 whole-wall source {path} has no session_meta"));
+    let session_id = session_meta["payload"]["session_id"]
+        .as_str()
+        .unwrap_or_else(|| panic!("P7 whole-wall source {path} has no session identity"))
+        .to_string();
+    let is_child = session_meta
+        .pointer("/payload/source/subagent/thread_spawn/parent_thread_id")
+        .is_some_and(Value::is_string);
+    WallSource {
+        path: path.to_path_buf(),
+        session_id,
+        is_child,
+    }
+}
+
+fn run_canonical_root(
+    case: &RecallCase,
+    codex_home: &Utf8Path,
+    temp_root: &Utf8Path,
+    root_session_id: &str,
+    warm_closure: bool,
+) -> Value {
+    let request = BoundedClosureRequest {
+        codex_home: Some(codex_home.to_path_buf()),
+        root_session_id: root_session_id.to_string(),
+    };
+    let mut compactor = BoundedClosureCompactor::default();
+    if warm_closure {
+        let prepared = compactor.prepare(&request).unwrap_or_else(|error| {
+            panic!(
+                "{} failed to warm closure for {root_session_id}: {error}",
+                case.case_id
+            )
+        });
+        if case.case_id != "P7-14" {
+            compactor
+                .compact(
+                    prepared,
+                    &temp_root.join(format!("warm-{root_session_id}")),
+                    None,
+                )
+                .unwrap_or_else(|error| {
+                    panic!(
+                        "{} failed to compact warm closure for {root_session_id}: {error}",
+                        case.case_id
+                    )
+                });
+        }
+    }
+
+    let prepared = compactor.prepare(&request).unwrap_or_else(|error| {
+        panic!(
+            "{} failed to prepare measured closure for {root_session_id}: {error}",
+            case.case_id
+        )
+    });
+    let output_dir = temp_root.join(format!("measured-{root_session_id}"));
+    match compactor.compact(prepared, &output_dir, None) {
+        Ok(_) => canonical_successful_root(root_session_id, &output_dir, temp_root),
+        Err(CompactorError::BoundedClosure(BoundedClosureError::SelectedPayloadMalformed {
+            failures,
+            ..
+        })) => serde_json::json!({
+            "root_session_id": root_session_id,
+            "status": "error",
+            "error": "selected_payload_malformed",
+            "failures": failures,
+        }),
+        Err(other) => panic!(
+            "{} unexpected closure failure for {root_session_id}: {other}",
+            case.case_id
+        ),
+    }
+}
+
+fn canonical_successful_root(
+    root_session_id: &str,
+    output_dir: &Utf8Path,
+    temp_root: &Utf8Path,
+) -> Value {
+    let manifest: Value = serde_json::from_str(
+        &fs::read_to_string(output_dir.join("manifest.json")).expect("read P7 whole-wall manifest"),
+    )
+    .expect("parse P7 whole-wall manifest");
+    let bundle = canonical_bundle_projection(&manifest, output_dir);
+    let analyzer_dir = temp_root.join(format!("analyzer-{root_session_id}"));
+    let result = analyze_bundle(&AnalyzeRequest {
+        input_dir: output_dir.to_path_buf(),
+        output_dir: analyzer_dir,
+    })
+    .expect("analyze P7 whole-wall bundle");
+    serde_json::json!({
+        "root_session_id": root_session_id,
+        "status": "success",
+        "bundle": bundle,
+        "analyzer": canonical_analyzer_projection(&result),
+    })
+}
+
+fn canonical_bundle_projection(manifest: &Value, output_dir: &Utf8Path) -> Value {
+    let mut files = manifest["files"]
+        .as_array()
+        .expect("P7 whole-wall file registry")
+        .iter()
+        .map(|file| {
+            serde_json::json!({
+                "session_id": file["session_id"],
+                "turns": file["turns"],
+            })
+        })
+        .collect::<Vec<_>>();
+    files.sort_by_key(|file| serde_json::to_vec(file).expect("serialize P7 file projection"));
+
+    let registry = manifest["files"]
+        .as_array()
+        .expect("P7 whole-wall file registry")
+        .iter()
+        .map(|file| {
+            (
+                file["id"].as_u64().expect("P7 whole-wall source file ID"),
+                (
+                    file["session_id"].clone(),
+                    file["turns"].as_array().cloned().unwrap_or_default(),
+                ),
+            )
+        })
+        .collect::<BTreeMap<_, _>>();
+    let compact_rows = fs::read_to_string(output_dir.join("rows.compact.jsonl"))
+        .expect("read P7 whole-wall compact rows")
+        .lines()
+        .map(|line| {
+            let row: Value = serde_json::from_str(line).expect("parse P7 whole-wall compact row");
+            let source_file_id = row["source_file_id"]
+                .as_u64()
+                .expect("P7 whole-wall row source file ID");
+            let (session_id, turns) = registry
+                .get(&source_file_id)
+                .expect("P7 whole-wall row registry entry");
+            let turn_id = row["turn_id_ref"]
+                .as_u64()
+                .and_then(|turn_ref| turns.get(turn_ref as usize))
+                .cloned()
+                .unwrap_or(Value::Null);
+            serde_json::json!({
+                "source_session_id": session_id,
+                "source_kind": row["source_kind"],
+                "turn_id": turn_id,
+                "event_index": row["event_index"],
+                "row_ordinal": row["row_ordinal"],
+                "kind": row["kind"],
+                "user_message_role": row["user_message_role"],
+                "dedupe_identity": row["dedupe_identity"],
+                "text": row["text"],
+                "text_hash_hex": row["text_hash_hex"],
+            })
+        })
+        .collect::<Vec<_>>();
+
+    let mut delegation_links = manifest["delegation_links"]
+        .as_array()
+        .into_iter()
+        .flatten()
+        .map(|link| {
+            serde_json::json!({
+                "parent_session_id": link["parent_session_id"],
+                "child_session_id": link["child_session_id"],
+                "child_origin_parent_session_id": link["child_origin_parent_session_id"],
+                "depth": link["depth"],
+                "state": link["state"],
+                "parent_evidence": canonical_link_evidence(&link["parent_evidence"]),
+                "child_evidence": canonical_link_evidence(&link["child_evidence"]),
+            })
+        })
+        .collect::<Vec<_>>();
+    delegation_links
+        .sort_by_key(|link| serde_json::to_vec(link).expect("serialize P7 link projection"));
+
+    serde_json::json!({
+        "schema_version": manifest["schema_version"],
+        "discovered_file_count": manifest["discovered_file_count"],
+        "archival_row_count": manifest["archival_row_count"],
+        "compact_row_count": manifest["compact_row_count"],
+        "dedupe_group_count": manifest["dedupe_group_count"],
+        "session_ids": manifest["session_ids"],
+        "files": files,
+        "delegation_links": delegation_links,
+        "compact_rows": compact_rows,
+    })
+}
+
+fn canonical_link_evidence(evidence: &Value) -> Vec<Value> {
+    evidence
+        .as_array()
+        .into_iter()
+        .flatten()
+        .map(|entry| {
+            serde_json::json!({
+                "line_number": entry["line_number"],
+                "event_index": entry["event_index"],
+            })
+        })
+        .collect()
+}
+
+fn canonical_analyzer_projection(result: &AnalyzeResult) -> Value {
+    let mut sessions = result.sessions.iter().collect::<Vec<_>>();
+    sessions.sort_by(|left, right| left.session_id.cmp(&right.session_id));
+    Value::Array(
+        sessions
+            .into_iter()
+            .map(|session| {
+                serde_json::json!({
+                    "session_id": session.session_id,
+                    "checkpoints": session.checkpoints.iter().map(|checkpoint| {
+                        serde_json::json!({
+                            "ordinal": checkpoint.ordinal,
+                            "target_display": checkpoint.structured_objective
+                                .as_ref()
+                                .and_then(|objective| objective.target.as_ref())
+                                .map(|target| target.display.as_str()),
+                            "objective": checkpoint.task_frame.objective,
+                            "working_set_paths": checkpoint.task_frame.working_set_paths,
+                            "verification_commands": checkpoint.task_frame.verification_commands,
+                            "delegation": {
+                                "topology": checkpoint.delegation.topology,
+                                "parent_session_id": checkpoint.delegation.parent_session_id,
+                                "child_session_ids": checkpoint.delegation.child_session_ids,
+                                "child_work_visibility": checkpoint.delegation.child_work_visibility,
+                                "confidence": checkpoint.delegation.confidence,
+                                "markers": checkpoint.delegation.markers,
+                            },
+                            "drift_scores": checkpoint.drift_scores.iter().map(|score| {
+                                serde_json::json!({
+                                    "class": score.class,
+                                    "state": score.state,
+                                    "raw_score": score.raw_score,
+                                    "confidence": score.confidence,
+                                    "flagged": score.flagged,
+                                    "reasons": score.evidence.iter()
+                                        .map(|evidence| evidence.reason.as_str())
+                                        .collect::<Vec<_>>(),
+                                })
+                            }).collect::<Vec<_>>(),
+                            "session_progress": checkpoint.session_progress.as_ref().map(|progress| {
+                                serde_json::json!({
+                                    "status": progress.status,
+                                    "dimension": progress.dimension,
+                                    "confidence": progress.confidence,
+                                    "signals": progress.signals.iter().map(|signal| {
+                                        serde_json::json!({
+                                            "code": signal.code,
+                                            "polarity": signal.polarity,
+                                            "strength": signal.strength,
+                                            "summary": signal.summary,
+                                            "before": signal.before,
+                                            "after": signal.after,
+                                        })
+                                    }).collect::<Vec<_>>(),
+                                })
+                            }),
+                        })
+                    }).collect::<Vec<_>>(),
+                })
+            })
+            .collect(),
+    )
+}
+
+fn run_canonical_bundle_case(case: &RecallCase) -> Value {
+    let bundle_dir = fixture_root().join(&case.fixture_dir).join("bundle");
+    let error = agent_drift_analyzer::input::load_bundle(&bundle_dir)
+        .expect_err("P7 whole-wall malformed bundle must be rejected");
+    match error {
+        agent_drift_analyzer::InputError::VerifiedDelegationSessionMissing {
+            parent_session_id,
+            child_session_id,
+            missing_session_id,
+        } => serde_json::json!({
+            "status": "error",
+            "error": "verified_delegation_session_missing",
+            "parent_session_id": parent_session_id,
+            "child_session_id": child_session_id,
+            "missing_session_id": missing_session_id,
+        }),
+        agent_drift_analyzer::InputError::MissingArtifact { path } => serde_json::json!({
+            "status": "error",
+            "error": "missing_artifact",
+            "missing_artifact": path.file_name(),
+        }),
+        other => panic!("{} unexpected analyzer input error: {other}", case.case_id),
+    }
+}
+
+fn run_canonical_public_live_case(case: &RecallCase) -> Value {
+    let fixture: Value = serde_json::from_str(
+        &fs::read_to_string(
+            fixture_root()
+                .join(&case.fixture_dir)
+                .join("live-event.json"),
+        )
+        .expect("read P7 whole-wall public-live fixture"),
+    )
+    .expect("parse P7 whole-wall public-live fixture");
+    let event = LiveCheckpointEvent {
+        emission_ordinal: fixture["emission_ordinal"]
+            .as_u64()
+            .expect("P7 whole-wall emission ordinal") as usize,
+        cursor: CheckpointCursor {
+            session_id: fixture["cursor"]["session_id"]
+                .as_str()
+                .expect("P7 whole-wall cursor session")
+                .to_string(),
+            ordinal: fixture["cursor"]["ordinal"]
+                .as_u64()
+                .expect("P7 whole-wall cursor ordinal") as usize,
+        },
+        trigger: TriggerClass::CheckpointReady,
+        checkpoint: None,
+        source_label: fixture["source_label"].as_str().map(str::to_string),
+    };
+    let mut runtime = LiveRuntime::new(SchedulerPolicy::default(), WarningPolicy::default());
+    let before = runtime.snapshot();
+    let error = runtime
+        .observe(event)
+        .expect_err("P7 whole-wall public-live fixture must be rejected");
+    let emission_ordinal = match error {
+        LiveRuntimeError::MissingCheckpointPayload { emission_ordinal } => emission_ordinal,
+        other => panic!("{} unexpected public-live error: {other}", case.case_id),
+    };
+    let after = runtime.snapshot();
+    serde_json::json!({
+        "status": "error",
+        "error": "missing_checkpoint_payload",
+        "emission_ordinal": emission_ordinal,
+        "state_mutated": before != after,
+        "processed_events_before": before.processed_events,
+        "processed_events_after": after.processed_events,
+    })
+}
+
+fn validate_historical_references(matrix: &RecallMatrix) -> Result<(), String> {
+    let repo_root = Utf8Path::new(env!("CARGO_MANIFEST_DIR"))
+        .parent()
+        .and_then(Utf8Path::parent)
+        .ok_or_else(|| {
+            "P7 historical references [owner=harness] cannot resolve repo root".to_string()
+        })?;
+    for case in &matrix.cases {
+        for reference in &case.historical_references {
+            let path = repo_root.join(reference);
+            if !path.is_file() {
+                return Err(case_error(
+                    case,
+                    &format!("historical reference does not resolve: {reference}"),
+                ));
+            }
+            let tracked = Command::new("git")
+                .args([
+                    "-C",
+                    repo_root.as_str(),
+                    "ls-files",
+                    "--error-unmatch",
+                    "--",
+                ])
+                .arg(reference)
+                .output()
+                .map_err(|error| {
+                    case_error(
+                        case,
+                        &format!("cannot inspect historical reference {reference}: {error}"),
+                    )
+                })?;
+            if !tracked.status.success() {
+                return Err(case_error(
+                    case,
+                    &format!("historical reference is not tracked: {reference}"),
+                ));
+            }
+        }
+    }
+    Ok(())
 }
