@@ -1106,6 +1106,22 @@ fn p7_03_semantic_alignment_is_conservative() {
     let run = run_single_source_pipeline(&case_root.join("raw/root.jsonl"), "session-p7-03-root");
     assert_eq!(run.format, RolloutFormat::CurrentNativeV2);
     let projection = canonical_semantic_projection(&run.result, "session-p7-03-root");
+    let trajectory_targets = projection
+        .as_array()
+        .expect("P7-03 canonical checkpoints")
+        .iter()
+        .filter_map(|checkpoint| checkpoint["target_display"].as_str())
+        .collect::<Vec<_>>();
+    assert_eq!(
+        trajectory_targets,
+        expected["trajectory_target_displays"]
+            .as_array()
+            .expect("P7-03 expected target trajectory")
+            .iter()
+            .map(|target| target.as_str().expect("P7-03 expected target"))
+            .collect::<Vec<_>>(),
+        "P7-03 must compare repeated, eligible aligned objectives"
+    );
     let final_projection = projection
         .as_array()
         .and_then(|checkpoints| checkpoints.last())
@@ -1143,6 +1159,32 @@ fn p7_04_path_narrowing_preserves_progress() {
     .expect("parse P7-04 expected");
     let run = run_single_source_pipeline(&case_root.join("raw/root.jsonl"), "session-p7-04-root");
     let projection = canonical_semantic_projection(&run.result, "session-p7-04-root");
+    let trajectory_targets = projection
+        .as_array()
+        .expect("P7-04 canonical checkpoints")
+        .iter()
+        .filter_map(|checkpoint| checkpoint["target_display"].as_str())
+        .collect::<Vec<_>>();
+    assert_eq!(
+        trajectory_targets,
+        expected["trajectory_target_displays"]
+            .as_array()
+            .expect("P7-04 expected target trajectory")
+            .iter()
+            .map(|target| target.as_str().expect("P7-04 expected target"))
+            .collect::<Vec<_>>(),
+        "P7-04 must exercise a real directory-to-contained-file trajectory"
+    );
+    assert_eq!(
+        trajectory_targets.first().copied(),
+        expected["initial_target_display"].as_str()
+    );
+    let initial_target = trajectory_targets.first().expect("P7-04 initial target");
+    let narrowed_target = trajectory_targets.last().expect("P7-04 narrowed target");
+    assert!(
+        narrowed_target.starts_with(&format!("{initial_target}/")),
+        "P7-04 final target must be a contained member of the initial target"
+    );
     let final_projection = projection
         .as_array()
         .and_then(|checkpoints| checkpoints.last())
@@ -1181,6 +1223,22 @@ fn p7_05_sanctioned_replan_is_suppressed_for_the_declared_reason() {
     .expect("parse P7-05 expected");
     let run = run_single_source_pipeline(&case_root.join("raw/root.jsonl"), "session-p7-05-root");
     let projection = canonical_semantic_projection(&run.result, "session-p7-05-root");
+    let trajectory_targets = projection
+        .as_array()
+        .expect("P7-05 canonical checkpoints")
+        .iter()
+        .filter_map(|checkpoint| checkpoint["target_display"].as_str())
+        .collect::<Vec<_>>();
+    assert_eq!(
+        trajectory_targets,
+        expected["trajectory_target_displays"]
+            .as_array()
+            .expect("P7-05 expected target trajectory")
+            .iter()
+            .map(|target| target.as_str().expect("P7-05 expected target"))
+            .collect::<Vec<_>>(),
+        "P7-05 must contain an otherwise disjoint eligible goal pivot"
+    );
     let final_projection = projection
         .as_array()
         .and_then(|checkpoints| checkpoints.last())
@@ -1218,13 +1276,42 @@ fn p7_05_sanctioned_replan_is_suppressed_for_the_declared_reason() {
             row["kind"] == "user_message"
                 && row["text"]
                     .as_str()
-                    .is_some_and(|text| text.starts_with("Replan:"))
+                    .is_some_and(|text| text.starts_with("/goal Replan:"))
         })
         .expect("P7-05 explicit replan row");
     assert_eq!(replan_row["user_message_role"], "steer");
     assert_eq!(
         final_projection["semantic_reasons"],
         expected["semantic_reasons"]
+    );
+
+    let source = fs::read_to_string(case_root.join("raw/root.jsonl"))
+        .expect("read P7-05 source for counterfactual");
+    assert_eq!(
+        source.matches("Replan:").count(),
+        1,
+        "P7-05 must have exactly one sanctioned-replan marker"
+    );
+    let counterfactual_dir = tempfile::TempDir::new().expect("P7-05 counterfactual temp dir");
+    let counterfactual_path =
+        Utf8Path::from_path(counterfactual_dir.path()).expect("P7-05 UTF-8 counterfactual path");
+    let counterfactual_source = counterfactual_path.join("root.jsonl");
+    fs::write(&counterfactual_source, source.replacen("Replan:", "", 1))
+        .expect("write P7-05 counterfactual source");
+    let counterfactual = run_single_source_pipeline(&counterfactual_source, "session-p7-05-root");
+    let counterfactual_projection =
+        canonical_semantic_projection(&counterfactual.result, "session-p7-05-root");
+    let counterfactual_final = counterfactual_projection
+        .as_array()
+        .and_then(|checkpoints| checkpoints.last())
+        .expect("P7-05 counterfactual final checkpoint");
+    assert_eq!(
+        counterfactual_final["target_display"], expected["structured_target_display"],
+        "removing only the sanction marker must retain the same eligible pivot"
+    );
+    assert_eq!(
+        counterfactual_final["semantic_goal_drift"], expected["counterfactual_without_sanction"],
+        "removing only the sanction marker must restore the positive drift claim"
     );
     assert_eq!(expected["suppression"], "sanctioned_replan");
     assert_eq!(expected["claim"], "NoClaim");

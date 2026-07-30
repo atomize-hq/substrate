@@ -169,7 +169,12 @@
           "raw_score": 0
         },
         "final_target_display": "docs/specs/p7/aligned.md",
-        "semantic_reasons": []
+        "semantic_reasons": [],
+        "trajectory_target_displays": [
+          "docs/specs/p7/aligned.md",
+          "docs/specs/p7/aligned.md",
+          "docs/specs/p7/aligned.md"
+        ]
       },
       "historical_references": [
         "crates/agent-drift-analyzer/tests/fixtures/semantic_goal_drift_acceptance/synthetic-kickoff-line-suffix-same-file/expected.json"
@@ -225,7 +230,13 @@
           "status": "insufficient_evidence",
           "dimension": "planning_convergence",
           "confidence": "low"
-        }
+        },
+        "initial_target_display": "docs/specs/p7",
+        "trajectory_target_displays": [
+          "docs/specs/p7",
+          "docs/specs/p7",
+          "docs/specs/p7/narrowed.md"
+        ]
       },
       "historical_references": [
         "crates/agent-drift-analyzer/tests/fixtures/semantic_goal_drift_acceptance/synthetic-rolling-directory-to-file-narrowing/expected.json"
@@ -275,11 +286,21 @@
           "raw_score": 0
         },
         "semantic_reasons": [],
-        "structured_target_display": "crates/agent-drift-analyzer/src/scoring/mod.rs",
+        "structured_target_display": "docs/specs/p7/alternate.md",
         "replan_working_set_paths": [
-          "docs/specs/p7/replan-spec.md",
-          "docs/specs/p7/replanned.md"
-        ]
+          "crates/agent-drift-analyzer/src/scoring/mod.rs",
+          "docs/specs/p7/alternate.md"
+        ],
+        "trajectory_target_displays": [
+          "crates/agent-drift-analyzer/src/scoring/mod.rs",
+          "crates/agent-drift-analyzer/src/scoring/mod.rs",
+          "docs/specs/p7/alternate.md"
+        ],
+        "counterfactual_without_sanction": {
+          "state": "active",
+          "flagged": true,
+          "raw_score": 80
+        }
       },
       "historical_references": [
         "crates/agent-drift-analyzer/tests/semantic_goal_drift_acceptance.rs"

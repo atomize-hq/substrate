@@ -9,9 +9,19 @@
     "raw_score": 0
   },
   "semantic_reasons": [],
-  "structured_target_display": "crates/agent-drift-analyzer/src/scoring/mod.rs",
+  "structured_target_display": "docs/specs/p7/alternate.md",
   "replan_working_set_paths": [
-    "docs/specs/p7/replan-spec.md",
-    "docs/specs/p7/replanned.md"
-  ]
+    "crates/agent-drift-analyzer/src/scoring/mod.rs",
+    "docs/specs/p7/alternate.md"
+  ],
+  "trajectory_target_displays": [
+    "crates/agent-drift-analyzer/src/scoring/mod.rs",
+    "crates/agent-drift-analyzer/src/scoring/mod.rs",
+    "docs/specs/p7/alternate.md"
+  ],
+  "counterfactual_without_sanction": {
+    "state": "active",
+    "flagged": true,
+    "raw_score": 80
+  }
 }

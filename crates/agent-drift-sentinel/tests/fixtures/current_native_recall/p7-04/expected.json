@@ -13,5 +13,11 @@
     "status": "insufficient_evidence",
     "dimension": "planning_convergence",
     "confidence": "low"
-  }
+  },
+  "initial_target_display": "docs/specs/p7",
+  "trajectory_target_displays": [
+    "docs/specs/p7",
+    "docs/specs/p7",
+    "docs/specs/p7/narrowed.md"
+  ]
 }
