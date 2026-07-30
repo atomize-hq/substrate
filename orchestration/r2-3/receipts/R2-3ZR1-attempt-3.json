@@ -1,0 +1,39 @@
+{
+  "protocol": "codex.top-level-task-receipt.v1",
+  "orchestration_id": "substrate-r2-3",
+  "dispatch_nonce": "1382743f0cc3d905e2ea3fa66ff17c0d038f03d53cae2c2d4c38ee25abe92957",
+  "increment": "R2-3ZR1",
+  "packet_id": "A1.1d-5R2-3ZR1",
+  "status": "BLOCKED_SCOPE_EXPANSION",
+  "increment_task": {
+    "thread_id": "019fb0e5-3516-79c1-a366-d7c88f3c0143",
+    "host_id": "remote-ssh-discovered:spenser-linux-codex"
+  },
+  "expected_base": {
+    "commit": "3a6490ff391453535168491b3f8d26adf9e20938",
+    "tree": "fca816eaed26407ea89d352c7a087a201391bd49"
+  },
+  "blocker": {
+    "summary": "The authorized host-inbox trusted-root repair passed, but the required full shell wall exposed 101 failures across multiple distinct in-scope and out-of-allowlist groups.",
+    "details": "Preflight passed at the expected base/tree/ref/ancestor with a clean checkout and 0/0 divergence. GitNexus was refreshed at 3a6490f; only generated count lines in AGENTS.md and CLAUDE.md changed from 30520/59474/300 to 35804/72193/300 and were restored to HEAD. The task removed contextless MacLimaBackend::new and MacLimaBackend::new_with_vm_name, removed the ambient Default impl, migrated colocated tests to new_with_mapping, converted mac_backend_smoke.rs to explicit --install-bootstrap-context-v1, --platform-bootstrap-mapping-v1, and --project-dir input, and applied the authorized trusted-root repair in host_inbox_materialization.rs::tests::with_store. Formatting, world-mac-lima check/test/clippy, the mac prefix-mapping regression, shell check, and the repaired host-inbox group passed; the host-inbox group improved from seven identical authority-root failures to eight passing tests. The required full shell wall then completed with 1221 passed and 101 failed. Representative failures are not one causal class: shim_doctor/report.rs has a world-deps assertion drift (left 4, right 1); auto_attach.rs still uses stale authority-root scaffolding; orchestrator_world_dispatch.rs has retained-authority preflight failures; and async_repl.rs expects a member launch without a live orchestrator parent. Additional failing groups outside the conditional allowlist include builtins/world_deps/mod.rs, agent_runtime/tool_invocation_contract.rs, execution/agents_cmd.rs, and agent_runtime/retained_worker_runtime.rs. Continuing would require editing or otherwise reconciling files and causes outside the current contract. No control-pack edits, bounded review, fingerprint, staging, commit, push, publication, or native evidence occurred. The worktree remains at the expected HEAD with exactly three unstaged files: crates/world-mac-lima/src/lib.rs, crates/world-mac-lima/examples/mac_backend_smoke.rs, and crates/shell/src/execution/host_inbox_materialization.rs; git diff --check passes.",
+    "required_authority": "Choose one of two bounded paths: authorize a separate read-only shell-wall classification increment before any broader repair, or explicitly narrow R2-3ZR1 to land only the independently proven macOS constructor/example repair plus the authorized host-inbox test-helper repair without claiming a green full shell wall. A blanket six-file repair expansion is not recommended from the current aggregate evidence.",
+    "handoff_prompt": "Preserve the current three-file unstaged WIP in /home/spenser/.codex/worktrees/e847/substrate-r2-3 at HEAD 3a6490ff391453535168491b3f8d26adf9e20938 and tree fca816eaed26407ea89d352c7a087a201391bd49. The trusted-root host-inbox repair is proven and the macOS constructor/example checks pass. Do not assume the remaining 101 shell failures share one cause. Before authorizing any product/test repair beyond the current three files, classify the full failure inventory into causal groups and relate each group to an accepted R2-3 transition or to unrelated baseline drift. Alternatively, if the operator explicitly narrows R2-3ZR1, complete review/publication only for the three independently proven files and record the full shell wall as an unresolved external closeout prerequisite rather than claiming it green. Do not begin native evidence or R2-3Z until the selected path lands and the required post-source evidence gate is regenerated."
+  },
+  "worktree": {
+    "path": "/home/spenser/.codex/worktrees/e847/substrate-r2-3",
+    "changed_paths": [
+      "crates/shell/src/execution/host_inbox_materialization.rs",
+      "crates/world-mac-lima/examples/mac_backend_smoke.rs",
+      "crates/world-mac-lima/src/lib.rs"
+    ],
+    "staged": false,
+    "published": false
+  },
+  "proof_summary": {
+    "world_mac_lima_checks_passed": true,
+    "host_inbox_group_before": "7 failed",
+    "host_inbox_group_after": "8 passed",
+    "full_shell_wall": "1221 passed; 101 failed",
+    "git_diff_check": true
+  }
+}
