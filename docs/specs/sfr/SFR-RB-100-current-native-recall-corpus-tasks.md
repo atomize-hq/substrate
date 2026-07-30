@@ -385,13 +385,13 @@ Each task runs the P7 target. After every third case, also run the frozen semant
 
 ### Task P7-6.2 — Implement deterministic overlapping-quota set cover
 
-- [ ] Assign each candidate all observable language/repository, workflow, tooling, and delegation
+- [x] Assign each candidate all observable language/repository, workflow, tooling, and delegation
       labels.
-- [ ] Select greedily against 3-session ordinary quotas and up-to-5 high-risk/sparse quotas.
-- [ ] Use seed only as a stable tie-breaker and emit selected-set digest plus underfill.
-- [ ] Require a non-empty selected set.
-- [ ] Fail underfill in any bucket whose eligible candidate population meets or exceeds its quota.
-- [ ] Permit inventory-scarcity underfill only when population is below quota and all eligible
+- [x] Select greedily against 3-session ordinary quotas and up-to-5 high-risk/sparse quotas.
+- [x] Use seed only as a stable tie-breaker and emit selected-set digest plus underfill.
+- [x] Require a non-empty selected set.
+- [x] Fail underfill in any bucket whose eligible candidate population meets or exceeds its quota.
+- [x] Permit inventory-scarcity underfill only when population is below quota and all eligible
       candidates are selected or a documented privacy/safety exclusion explains otherwise.
 - **Acceptance:** multi-label sessions receive all genuine credits; unknown never substitutes for a
   named bucket; every populated stratum family has a non-`unknown` selected representative unless

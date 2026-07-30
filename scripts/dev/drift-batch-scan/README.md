@@ -147,6 +147,18 @@ bucket quotas, 5-session high-risk delegation quotas, and the population at whic
 mandatory. P7's overlapping-quota selector consumes this frozen value; it does not mutate quota
 authority during selection.
 
+Candidates receive every named label visible in task-owned user/directive text, typed tool calls,
+current workspace metadata, and typed delegation origin. Global base instructions and raw tool
+outputs are excluded from labeling so common prompt/tool-output vocabulary cannot make every
+session look like every stratum. `unknown` remains visible but never earns a named-bucket credit.
+
+Selection is deterministic greedy set cover. Each candidate's gain is the number of still-unfilled
+named buckets it genuinely covers; the frozen seed is consulted only when gains tie. The selector
+must return a non-empty set, emits a selected-set digest, and validates every bucket after
+selection. A bucket with at least its mandatory population must meet quota. A scarce bucket may
+remain underfilled only when every eligible candidate was selected; that limitation is emitted as
+`permitted_inventory_scarcity` rather than hidden or backfilled with an unrelated session.
+
 ## Sampling notes & caveats
 
 - Rollout cutoff/month comes from the selected `session_meta` timestamp; repo/cwd comes from its

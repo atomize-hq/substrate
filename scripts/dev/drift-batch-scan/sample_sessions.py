@@ -13,9 +13,7 @@ import glob
 import hashlib
 import json
 import os
-import random
 import re
-from collections import Counter
 from pathlib import Path
 from typing import Iterable
 
@@ -84,6 +82,44 @@ class FrozenInventory:
     as_of: str
     candidates: tuple[Candidate, ...]
     digest: str
+
+
+@dataclasses.dataclass(frozen=True)
+class LabeledCandidate:
+    candidate: Candidate
+    labels: frozenset[str]
+
+    def local_record(self) -> dict:
+        strata: dict[str, list[str]] = {}
+        for key in sorted(self.labels):
+            family, label = key.split(":", 1)
+            strata.setdefault(family, []).append(label)
+        return {**self.candidate.local_record(), "strata": strata}
+
+    def digest_record(self) -> dict:
+        return {
+            "candidate": self.candidate.digest_record(),
+            "labels": sorted(self.labels),
+        }
+
+
+@dataclasses.dataclass(frozen=True, order=True)
+class BucketCoverage:
+    family: str
+    label: str
+    quota: int
+    mandatory_population: int
+    eligible: int
+    selected: int
+    underfill: int
+    status: str
+
+
+@dataclasses.dataclass(frozen=True)
+class SelectionResult:
+    selected: tuple[LabeledCandidate, ...]
+    selected_digest: str
+    coverage: tuple[BucketCoverage, ...]
 
 
 def canonical_digest(value: object) -> str:
@@ -248,34 +284,263 @@ def discover_rollout_paths(sessions_root: str) -> list[str]:
     return glob.glob(os.path.join(sessions_root, "**", "rollout-*.jsonl"), recursive=True)
 
 
-def select_monthly_compatibility_sample(
-    inventory: FrozenInventory, *, per_month: int, seed: int
-) -> tuple[Candidate, ...]:
-    """Preserve the R6 batch shape until P7's set-cover selector replaces it in P7-6.2."""
-    rng = random.Random(seed)
-    by_month: dict[str, list[Candidate]] = {}
-    for candidate in inventory.candidates:
-        by_month.setdefault(candidate.month, []).append(candidate)
-    selected = []
-    for month in sorted(by_month):
-        candidates = list(by_month[month])
-        candidates.sort(key=lambda candidate: (canonical_digest(candidate.digest_record()), candidate))
-        rng.shuffle(candidates)
-        preferred = []
-        seen_repos = set()
-        for candidate in candidates:
-            if candidate.repo not in seen_repos:
-                preferred.append(candidate)
-                seen_repos.add(candidate.repo)
-        picked = preferred[:per_month]
-        picked_ids = {candidate.session_id for candidate in picked}
-        picked.extend(
-            candidate
-            for candidate in candidates
-            if candidate.session_id not in picked_ids
+def nested_strings(value: object) -> list[str]:
+    if isinstance(value, str):
+        return [value]
+    if isinstance(value, list):
+        return [text for item in value for text in nested_strings(item)]
+    if isinstance(value, dict):
+        return [text for item in value.values() for text in nested_strings(item)]
+    return []
+
+
+def observable_source(candidate: Candidate) -> str:
+    try:
+        rows = [
+            json.loads(line)
+            for line in Path(candidate.path).read_text(errors="replace").splitlines()
+            if line.strip()
+        ]
+    except OSError:
+        rows = []
+    except json.JSONDecodeError:
+        rows = []
+    values = [candidate.cwd or "", candidate.repo]
+    for row in rows:
+        row_type = row.get("type")
+        payload = row.get("payload")
+        if not isinstance(payload, dict):
+            continue
+        if row_type == "session_meta":
+            if payload.get("source") is not None:
+                values.append(json.dumps(payload["source"], sort_keys=True))
+        elif row_type == "turn_context":
+            values.extend(nested_strings(payload.get("user_instructions")))
+        elif row_type == "response_item":
+            payload_type = payload.get("type")
+            if payload_type == "message" and payload.get("role") == "user":
+                values.extend(nested_strings(payload.get("content")))
+            elif payload_type in {
+                "function_call",
+                "custom_tool_call",
+                "local_shell_call",
+            }:
+                values.extend(nested_strings(payload.get("name")))
+                values.extend(nested_strings(payload.get("arguments")))
+                values.extend(nested_strings(payload.get("input")))
+        elif row_type == "event_msg" and payload.get("type") in {
+            "user_message",
+            "task_started",
+        }:
+            values.extend(nested_strings(payload.get("message")))
+            values.extend(nested_strings(payload.get("text")))
+    return "\n".join(values).lower()
+
+
+def assign_observable_labels(candidate: Candidate) -> LabeledCandidate:
+    source = observable_source(candidate)
+    labels = set()
+
+    language_signals = {
+        "rust": (".rs", "cargo", "rustc", "clippy", "rustfmt"),
+        "js_ts": (".js", ".jsx", ".ts", ".tsx", "node", "npm", "pnpm", "yarn"),
+        "python": (".py", "python", "pytest", "poetry", " uv "),
+    }
+    languages = {
+        label
+        for label, signals in language_signals.items()
+        if any(signal in source for signal in signals)
+    }
+    labels.update(f"language_repo:{label}" for label in languages)
+    if len(languages) > 1:
+        labels.add("language_repo:mixed")
+    if not languages and any(
+        signal in source
+        for signal in (".md", ".mdx", "readme", "/docs/", "/specs/", "documentation")
+    ):
+        labels.add("language_repo:docs_only")
+    if not any(label.startswith("language_repo:") for label in labels):
+        labels.add("language_repo:unknown")
+
+    workflow_signals = {
+        "implementation": ("implement", "build", "create", "edit", "write code"),
+        "docs_planning": (" plan", "spec", "document", "research", "design"),
+        "verification": (" test", "verify", "validation", "check", "clippy"),
+        "review_fix": ("review", " fix", "debug", "failure", "error"),
+    }
+    workflows = {
+        label
+        for label, signals in workflow_signals.items()
+        if any(signal in source for signal in signals)
+    }
+    labels.update(f"workflow:{label}" for label in workflows)
+    if len(workflows) > 1:
+        labels.add("workflow:mixed")
+    if not workflows:
+        labels.add("workflow:unknown")
+
+    tooling_signals = {
+        "cargo_rust": ("cargo", "rustc", "clippy", "rustfmt"),
+        "node_npm": ("node", "npm", "npx", "pnpm", "yarn", "vitest", "jest"),
+        "python_pytest": ("python", "pytest", "poetry", " uv "),
+        "generic_filesystem_doc": (
+            "readme",
+            "documentation",
+            "/docs/",
+            "/specs/",
+            "\"name\":\"shell_command\"",
+        ),
+    }
+    tooling = {
+        label
+        for label, signals in tooling_signals.items()
+        if any(signal in source for signal in signals)
+    }
+    labels.update(f"tooling:{label}" for label in tooling)
+    if not tooling:
+        labels.add("tooling:unknown")
+
+    child_visible = (
+        ("subagent" in source and "thread_spawn" in source)
+        or any(
+            signal in source
+            for signal in (
+                "child rollout",
+                "separate rollout",
+                "spawned agent",
+                "child session id",
+            )
         )
-        selected.extend(picked[:per_month])
-    return tuple(sorted(selected))
+    )
+    delegated_parent = any(
+        signal in source
+        for signal in ("spawn_agent", "wait_agent", "close_agent", "multi_agent_v1")
+    )
+    if child_visible:
+        labels.add("delegation:delegated_child_visible")
+    elif delegated_parent:
+        labels.add("delegation:delegated_parent_opaque")
+    else:
+        labels.add("delegation:single_agent")
+
+    return LabeledCandidate(candidate, frozenset(labels))
+
+
+def bucket_key(bucket: QuotaBucket) -> str:
+    return f"{bucket.family}:{bucket.label}"
+
+
+def validate_selection(
+    config: QuotaConfig,
+    candidates: Iterable[LabeledCandidate],
+    selected: Iterable[LabeledCandidate],
+) -> tuple[BucketCoverage, ...]:
+    candidates = tuple(candidates)
+    selected = tuple(selected)
+    if not selected:
+        raise ValueError("selected set must be non-empty")
+    candidate_ids = {candidate.candidate.session_id for candidate in candidates}
+    selected_ids = {candidate.candidate.session_id for candidate in selected}
+    if len(selected_ids) != len(selected) or not selected_ids <= candidate_ids:
+        raise ValueError("selected set must contain distinct inventory candidates")
+
+    coverage = []
+    for bucket in config.buckets:
+        key = bucket_key(bucket)
+        eligible = sum(key in candidate.labels for candidate in candidates)
+        selected_count = sum(key in candidate.labels for candidate in selected)
+        underfill = max(bucket.quota - selected_count, 0)
+        if eligible >= bucket.mandatory_population and selected_count < bucket.quota:
+            raise ValueError(
+                f"sufficiently populated bucket {key} selected {selected_count}/{bucket.quota}"
+            )
+        if eligible < bucket.quota and selected_count != eligible:
+            raise ValueError(
+                f"scarce bucket {key} must select every eligible candidate "
+                f"({selected_count}/{eligible})"
+            )
+        status = "filled"
+        if underfill:
+            status = "permitted_inventory_scarcity"
+        coverage.append(
+            BucketCoverage(
+                bucket.family,
+                bucket.label,
+                bucket.quota,
+                bucket.mandatory_population,
+                eligible,
+                selected_count,
+                underfill,
+                status,
+            )
+        )
+
+    for family in config.required_families:
+        recognized = any(
+            any(
+                label.startswith(f"{family}:") and not label.endswith(":unknown")
+                for label in candidate.labels
+            )
+            for candidate in candidates
+        )
+        represented = any(
+            any(
+                label.startswith(f"{family}:") and not label.endswith(":unknown")
+                for label in candidate.labels
+            )
+            for candidate in selected
+        )
+        if recognized and not represented:
+            raise ValueError(f"required family {family} has no named selected representative")
+    return tuple(coverage)
+
+
+def select_overlapping_quotas(
+    candidates: Iterable[LabeledCandidate], config: QuotaConfig
+) -> SelectionResult:
+    candidates = tuple(
+        sorted(candidates, key=lambda candidate: candidate.candidate)
+    )
+    if len({candidate.candidate.session_id for candidate in candidates}) != len(candidates):
+        raise ValueError("candidate set contains duplicate session identities")
+    deficits = {bucket_key(bucket): bucket.quota for bucket in config.buckets}
+    remaining = list(candidates)
+    selected = []
+    while remaining:
+        scored = []
+        for candidate in remaining:
+            gain = sum(
+                deficits.get(label, 0) > 0
+                for label in candidate.labels
+                if not label.endswith(":unknown")
+            )
+            tie = canonical_digest(
+                {
+                    "seed": config.seed,
+                    "candidate": candidate.digest_record(),
+                }
+            )
+            scored.append((-gain, tie, candidate.candidate, candidate))
+        scored.sort(key=lambda item: item[:3])
+        negative_gain, _, _, best = scored[0]
+        if negative_gain == 0:
+            break
+        selected.append(best)
+        remaining.remove(best)
+        for label in best.labels:
+            if deficits.get(label, 0) > 0:
+                deficits[label] -= 1
+
+    selected = tuple(sorted(selected, key=lambda candidate: candidate.candidate))
+    coverage = validate_selection(config, candidates, selected)
+    selected_digest = canonical_digest(
+        {
+            "schema_version": 1,
+            "config_digest": config.digest,
+            "selected": [candidate.digest_record() for candidate in selected],
+        }
+    )
+    return SelectionResult(selected, selected_digest, coverage)
 
 
 def main() -> None:
@@ -294,7 +559,6 @@ def main() -> None:
     )
     parser.add_argument("--out", default="selected_sessions.jsonl")
     parser.add_argument("--inventory-out", default="candidate_inventory.jsonl")
-    parser.add_argument("--per-month", type=int, default=10)
     parser.add_argument("--min-bytes", type=int, default=1024)
     parser.add_argument("--max-bytes", type=int, default=15 * 1024 * 1024)
     parser.add_argument("--seed", type=int, default=42)
@@ -308,24 +572,30 @@ def main() -> None:
         min_bytes=args.min_bytes,
         max_bytes=args.max_bytes,
     )
-    selected = select_monthly_compatibility_sample(
-        inventory, per_month=args.per_month, seed=config.seed
-    )
+    labeled = tuple(assign_observable_labels(candidate) for candidate in inventory.candidates)
+    selection = select_overlapping_quotas(labeled, config)
 
     with open(args.inventory_out, "w") as handle:
-        for candidate in inventory.candidates:
+        for candidate in labeled:
             handle.write(json.dumps(candidate.local_record(), sort_keys=True) + "\n")
     with open(args.out, "w") as handle:
-        for candidate in selected:
+        for candidate in selection.selected:
             handle.write(json.dumps(candidate.local_record(), sort_keys=True) + "\n")
 
     print(f"inventory candidates: {len(inventory.candidates)}")
     print(f"inventory as-of:      {inventory.as_of}")
     print(f"inventory digest:     {inventory.digest}")
     print(f"quota config digest:  {config.digest}")
-    print(f"selected (compat):    {len(selected)}")
-    month_counts = Counter(candidate.month for candidate in selected)
-    print("selected by month:    " + json.dumps(dict(sorted(month_counts.items()))))
+    print(f"selected sessions:    {len(selection.selected)}")
+    print(f"selected-set digest:  {selection.selected_digest}")
+    print(
+        "quota coverage:       "
+        + json.dumps(
+            [dataclasses.asdict(bucket) for bucket in selection.coverage],
+            sort_keys=True,
+            separators=(",", ":"),
+        )
+    )
     print(f"private inventory ->  {args.inventory_out}")
     print(f"private selection ->  {args.out}")
 

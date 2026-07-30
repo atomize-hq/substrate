@@ -175,5 +175,174 @@ class FrozenInventoryTests(unittest.TestCase):
             config.buckets.append(config.buckets[0])
 
 
+class OverlappingQuotaSelectionTests(unittest.TestCase):
+    @staticmethod
+    def candidate(session_id):
+        return module.Candidate(
+            timestamp="2026-07-20T12:00:00Z",
+            relative_path=f"2026/07/20/rollout-{session_id}.jsonl",
+            session_id=session_id,
+            path=f"/private/sessions/rollout-{session_id}.jsonl",
+            cwd=f"/workspace/{session_id}",
+            repo=f"repo-{session_id}",
+            month="2026-07",
+            size=2048,
+            source_digest=(session_id.encode().hex() + "0" * 64)[:64],
+        )
+
+    @classmethod
+    def labeled(cls, session_id, *labels):
+        return module.LabeledCandidate(cls.candidate(session_id), frozenset(labels))
+
+    @staticmethod
+    def config(seed, *buckets):
+        return module.QuotaConfig(
+            schema_version=1,
+            seed=seed,
+            required_families=tuple(sorted({bucket.family for bucket in buckets})),
+            buckets=tuple(sorted(buckets)),
+        )
+
+    def test_multi_label_candidate_credits_every_genuine_bucket(self):
+        config = self.config(
+            42,
+            module.QuotaBucket("language_repo", "rust", 1, 1, "ordinary"),
+            module.QuotaBucket("workflow", "verification", 1, 1, "ordinary"),
+        )
+        candidates = [
+            self.labeled("overlap", "language_repo:rust", "workflow:verification"),
+            self.labeled("rust-only", "language_repo:rust"),
+            self.labeled("verification-only", "workflow:verification"),
+        ]
+
+        result = module.select_overlapping_quotas(candidates, config)
+
+        self.assertEqual(
+            [candidate.candidate.session_id for candidate in result.selected],
+            ["overlap"],
+        )
+        self.assertTrue(all(bucket.selected == 1 for bucket in result.coverage))
+
+    def test_seed_is_only_a_stable_tie_breaker(self):
+        bucket = module.QuotaBucket("language_repo", "rust", 1, 1, "ordinary")
+        candidates = [
+            self.labeled("a", "language_repo:rust"),
+            self.labeled("b", "language_repo:rust"),
+            self.labeled("c", "language_repo:rust"),
+        ]
+        first = module.select_overlapping_quotas(
+            list(reversed(candidates)), self.config(42, bucket)
+        )
+        repeat = module.select_overlapping_quotas(
+            candidates, self.config(42, bucket)
+        )
+        self.assertEqual(first.selected, repeat.selected)
+        self.assertEqual(first.selected_digest, repeat.selected_digest)
+
+        choices = {
+            module.select_overlapping_quotas(candidates, self.config(seed, bucket))
+            .selected[0]
+            .candidate.session_id
+            for seed in range(1, 20)
+        }
+        self.assertGreater(len(choices), 1)
+
+    def test_unknown_never_substitutes_for_named_bucket_or_nonempty_selection(self):
+        config = self.config(
+            42, module.QuotaBucket("language_repo", "rust", 3, 3, "ordinary")
+        )
+        with self.assertRaisesRegex(ValueError, "selected set must be non-empty"):
+            module.select_overlapping_quotas(
+                [self.labeled("unknown", "language_repo:unknown")], config
+            )
+
+    def test_sufficiently_populated_underfill_fails_validation(self):
+        config = self.config(
+            42, module.QuotaBucket("language_repo", "rust", 3, 3, "ordinary")
+        )
+        candidates = [
+            self.labeled("a", "language_repo:rust"),
+            self.labeled("b", "language_repo:rust"),
+            self.labeled("c", "language_repo:rust"),
+        ]
+        with self.assertRaisesRegex(ValueError, "sufficiently populated"):
+            module.validate_selection(config, candidates, candidates[:2])
+
+    def test_sparse_inventory_underfill_selects_every_eligible_candidate(self):
+        config = self.config(
+            42, module.QuotaBucket("language_repo", "rust", 3, 3, "ordinary")
+        )
+        candidates = [
+            self.labeled("a", "language_repo:rust"),
+            self.labeled("b", "language_repo:rust"),
+        ]
+
+        result = module.select_overlapping_quotas(candidates, config)
+
+        self.assertEqual(len(result.selected), 2)
+        self.assertEqual(result.coverage[0].eligible, 2)
+        self.assertEqual(result.coverage[0].selected, 2)
+        self.assertEqual(result.coverage[0].underfill, 1)
+        self.assertEqual(
+            result.coverage[0].status, "permitted_inventory_scarcity"
+        )
+
+    def test_observable_labeling_assigns_all_four_stratum_families(self):
+        with tempfile.TemporaryDirectory() as temp_dir:
+            path = pathlib.Path(temp_dir) / "rollout-labeled.jsonl"
+            rows = [
+                {
+                    "timestamp": "2026-07-20T12:00:00Z",
+                    "type": "session_meta",
+                    "payload": {
+                        "id": "session-labeled",
+                        "cwd": "/workspace/rust-repo",
+                        "multi_agent_version": "v2",
+                        "base_instructions": {
+                            "text": "Generic examples mention python, pytest, and npm."
+                        },
+                    },
+                },
+                {
+                    "timestamp": "2026-07-20T12:00:01Z",
+                    "type": "response_item",
+                    "payload": {
+                        "type": "message",
+                        "role": "user",
+                        "content": [
+                            {
+                                "type": "input_text",
+                                "text": "Implement and review src/lib.rs, then run cargo test.",
+                            }
+                        ],
+                    },
+                },
+                {
+                    "timestamp": "2026-07-20T12:00:02Z",
+                    "type": "response_item",
+                    "payload": {
+                        "type": "custom_tool_call",
+                        "name": "spawn_agent",
+                        "call_id": "call-labeled",
+                    },
+                },
+            ]
+            path.write_text("".join(json.dumps(row) + "\n" for row in rows))
+            candidate = self.candidate("labeled")
+            candidate = dataclasses.replace(candidate, path=str(path), cwd="/workspace/rust-repo")
+
+            labeled = module.assign_observable_labels(candidate)
+
+        self.assertIn("language_repo:rust", labeled.labels)
+        self.assertIn("workflow:implementation", labeled.labels)
+        self.assertIn("workflow:verification", labeled.labels)
+        self.assertIn("workflow:review_fix", labeled.labels)
+        self.assertIn("workflow:mixed", labeled.labels)
+        self.assertIn("tooling:cargo_rust", labeled.labels)
+        self.assertIn("delegation:delegated_parent_opaque", labeled.labels)
+        self.assertNotIn("language_repo:python", labeled.labels)
+        self.assertNotIn("tooling:python_pytest", labeled.labels)
+
+
 if __name__ == "__main__":
     unittest.main()
