@@ -4,7 +4,9 @@ use std::collections::{BTreeMap, BTreeSet};
 use std::fs;
 use std::process::Command;
 
-use agent_drift_analyzer::{analyze_bundle, AnalyzeRequest, AnalyzeResult, DriftClass, DriftState};
+use agent_drift_analyzer::{
+    analyze_bundle, AnalyzeRequest, AnalyzeResult, Checkpoint, DriftClass, DriftState,
+};
 use agent_drift_sentinel::{
     CheckpointCursor, LiveCheckpointEvent, LiveRuntime, LiveRuntimeError, LiveSessionCoordinator,
     LiveSessionRequest, SchedulerPolicy, TriggerClass, WarningPolicy,
@@ -2578,6 +2580,36 @@ fn current_native_recall_whole_wall_is_complete_bounded_and_deterministic() {
             .len(),
         PLANNED_CASE_IDS.len()
     );
+    for case_id in ["P7-01", "P7-09"] {
+        let case = cold_forward
+            .as_array()
+            .expect("P7 canonical wall cases")
+            .iter()
+            .find(|case| case["case_id"] == case_id)
+            .unwrap_or_else(|| panic!("{case_id} canonical wall entry"));
+        let roots = case["projection"]
+            .as_array()
+            .unwrap_or_else(|| panic!("{case_id} canonical root projections"));
+        assert!(
+            roots
+                .iter()
+                .all(|root| root["public_live"]["reran_pipeline"] == true),
+            "{case_id} must execute the measured public-live coordinator"
+        );
+        assert!(
+            roots.iter().all(|root| {
+                root["public_live"]["observations"]
+                    .as_array()
+                    .is_some_and(|observations| {
+                        !observations.is_empty()
+                            && observations
+                                .iter()
+                                .all(|observation| observation["trigger"] == "checkpoint_ready")
+                    })
+            }),
+            "{case_id} must project public checkpoint-ready observations"
+        );
+    }
 }
 
 #[derive(Debug)]
@@ -2678,7 +2710,14 @@ fn run_canonical_raw_case(case: &RecallCase, reverse_sources: bool, warm_closure
         roots
             .into_iter()
             .map(|root_session_id| {
-                run_canonical_root(case, &codex_home, temp_root, &root_session_id, warm_closure)
+                run_canonical_root(
+                    case,
+                    &codex_home,
+                    temp_root,
+                    &root_session_id,
+                    warm_closure,
+                    case.terminal_boundary == "public-live checkpoint",
+                )
             })
             .collect(),
     )
@@ -2716,6 +2755,7 @@ fn run_canonical_root(
     temp_root: &Utf8Path,
     root_session_id: &str,
     warm_closure: bool,
+    public_live: bool,
 ) -> Value {
     let request = BoundedClosureRequest {
         codex_home: Some(codex_home.to_path_buf()),
@@ -2745,6 +2785,10 @@ fn run_canonical_root(
         }
     }
 
+    if public_live {
+        return canonical_public_live_root(case, codex_home, temp_root, root_session_id);
+    }
+
     let prepared = compactor.prepare(&request).unwrap_or_else(|error| {
         panic!(
             "{} failed to prepare measured closure for {root_session_id}: {error}",
@@ -2768,6 +2812,98 @@ fn run_canonical_root(
             case.case_id
         ),
     }
+}
+
+fn canonical_public_live_root(
+    case: &RecallCase,
+    codex_home: &Utf8Path,
+    temp_root: &Utf8Path,
+    root_session_id: &str,
+) -> Value {
+    let state_dir = temp_root.join(format!("live-{root_session_id}"));
+    let mut coordinator = LiveSessionCoordinator::new(
+        LiveSessionRequest {
+            codex_home: Some(codex_home.to_path_buf()),
+            session_id: root_session_id.to_string(),
+            state_dir: state_dir.clone(),
+        },
+        SchedulerPolicy::default(),
+        WarningPolicy::default(),
+    )
+    .unwrap_or_else(|error| {
+        panic!(
+            "{} failed to create live coordinator for {root_session_id}: {error}",
+            case.case_id
+        )
+    });
+    let poll = coordinator.poll_once().unwrap_or_else(|error| {
+        panic!(
+            "{} failed public-live poll for {root_session_id}: {error}",
+            case.case_id
+        )
+    });
+    assert!(
+        poll.reran_pipeline,
+        "{} public-live measured poll did not run",
+        case.case_id
+    );
+    assert_eq!(
+        poll.emitted_checkpoints,
+        poll.observations.len(),
+        "{} public-live emission count mismatch",
+        case.case_id
+    );
+
+    let compactor_dir = state_dir.join("compactor");
+    let manifest: Value = serde_json::from_str(
+        &fs::read_to_string(compactor_dir.join("manifest.json"))
+            .expect("read P7 public-live whole-wall manifest"),
+    )
+    .expect("parse P7 public-live whole-wall manifest");
+    let bundle = canonical_bundle_projection(&manifest, &compactor_dir);
+    let result = analyze_bundle(&AnalyzeRequest {
+        input_dir: compactor_dir,
+        output_dir: temp_root.join(format!("live-analyzer-{root_session_id}")),
+    })
+    .expect("analyze P7 public-live whole-wall bundle");
+    let observations = poll
+        .observations
+        .iter()
+        .map(|observation| {
+            serde_json::json!({
+                "emission_ordinal": observation.event.emission_ordinal,
+                "cursor": {
+                    "session_id": observation.event.cursor.session_id,
+                    "ordinal": observation.event.cursor.ordinal,
+                },
+                "trigger": trigger_label(observation.event.trigger),
+                "checkpoint": observation.event.checkpoint.as_ref().map(canonical_checkpoint_projection),
+                "decision": {
+                    "evaluate": observation.decision.evaluate,
+                    "visible_warning_allowed": observation.decision.visible_warning_allowed,
+                    "reason": format!("{:?}", observation.decision.reason),
+                },
+                "runtime_snapshot": canonical_runtime_snapshot(&observation.snapshot),
+            })
+        })
+        .collect::<Vec<_>>();
+
+    serde_json::json!({
+        "root_session_id": root_session_id,
+        "status": "success",
+        "bundle": bundle,
+        "analyzer": canonical_analyzer_projection(&result),
+        "public_live": {
+            "reran_pipeline": poll.reran_pipeline,
+            "emitted_checkpoints": poll.emitted_checkpoints,
+            "latest_cursor": poll.latest_cursor.map(|cursor| serde_json::json!({
+                "session_id": cursor.session_id,
+                "ordinal": cursor.ordinal,
+            })),
+            "observations": observations,
+            "runtime_snapshot": canonical_runtime_snapshot(&coordinator.runtime_snapshot()),
+        },
+    })
 }
 
 fn canonical_successful_root(
@@ -2908,59 +3044,95 @@ fn canonical_analyzer_projection(result: &AnalyzeResult) -> Value {
             .map(|session| {
                 serde_json::json!({
                     "session_id": session.session_id,
-                    "checkpoints": session.checkpoints.iter().map(|checkpoint| {
-                        serde_json::json!({
-                            "ordinal": checkpoint.ordinal,
-                            "target_display": checkpoint.structured_objective
-                                .as_ref()
-                                .and_then(|objective| objective.target.as_ref())
-                                .map(|target| target.display.as_str()),
-                            "objective": checkpoint.task_frame.objective,
-                            "working_set_paths": checkpoint.task_frame.working_set_paths,
-                            "verification_commands": checkpoint.task_frame.verification_commands,
-                            "delegation": {
-                                "topology": checkpoint.delegation.topology,
-                                "parent_session_id": checkpoint.delegation.parent_session_id,
-                                "child_session_ids": checkpoint.delegation.child_session_ids,
-                                "child_work_visibility": checkpoint.delegation.child_work_visibility,
-                                "confidence": checkpoint.delegation.confidence,
-                                "markers": checkpoint.delegation.markers,
-                            },
-                            "drift_scores": checkpoint.drift_scores.iter().map(|score| {
-                                serde_json::json!({
-                                    "class": score.class,
-                                    "state": score.state,
-                                    "raw_score": score.raw_score,
-                                    "confidence": score.confidence,
-                                    "flagged": score.flagged,
-                                    "reasons": score.evidence.iter()
-                                        .map(|evidence| evidence.reason.as_str())
-                                        .collect::<Vec<_>>(),
-                                })
-                            }).collect::<Vec<_>>(),
-                            "session_progress": checkpoint.session_progress.as_ref().map(|progress| {
-                                serde_json::json!({
-                                    "status": progress.status,
-                                    "dimension": progress.dimension,
-                                    "confidence": progress.confidence,
-                                    "signals": progress.signals.iter().map(|signal| {
-                                        serde_json::json!({
-                                            "code": signal.code,
-                                            "polarity": signal.polarity,
-                                            "strength": signal.strength,
-                                            "summary": signal.summary,
-                                            "before": signal.before,
-                                            "after": signal.after,
-                                        })
-                                    }).collect::<Vec<_>>(),
-                                })
-                            }),
-                        })
-                    }).collect::<Vec<_>>(),
+                    "checkpoints": session.checkpoints
+                        .iter()
+                        .map(canonical_checkpoint_projection)
+                        .collect::<Vec<_>>(),
                 })
             })
             .collect(),
     )
+}
+
+fn canonical_checkpoint_projection(checkpoint: &Checkpoint) -> Value {
+    serde_json::json!({
+        "ordinal": checkpoint.ordinal,
+        "target_display": checkpoint.structured_objective
+            .as_ref()
+            .and_then(|objective| objective.target.as_ref())
+            .map(|target| target.display.as_str()),
+        "objective": checkpoint.task_frame.objective,
+        "working_set_paths": checkpoint.task_frame.working_set_paths,
+        "verification_commands": checkpoint.task_frame.verification_commands,
+        "delegation": {
+            "topology": checkpoint.delegation.topology,
+            "parent_session_id": checkpoint.delegation.parent_session_id,
+            "child_session_ids": checkpoint.delegation.child_session_ids,
+            "child_work_visibility": checkpoint.delegation.child_work_visibility,
+            "confidence": checkpoint.delegation.confidence,
+            "markers": checkpoint.delegation.markers,
+        },
+        "drift_scores": checkpoint.drift_scores.iter().map(|score| {
+            serde_json::json!({
+                "class": score.class,
+                "state": score.state,
+                "raw_score": score.raw_score,
+                "confidence": score.confidence,
+                "flagged": score.flagged,
+                "reasons": score.evidence.iter()
+                    .map(|evidence| evidence.reason.as_str())
+                    .collect::<Vec<_>>(),
+            })
+        }).collect::<Vec<_>>(),
+        "session_progress": checkpoint.session_progress.as_ref().map(|progress| {
+            serde_json::json!({
+                "status": progress.status,
+                "dimension": progress.dimension,
+                "confidence": progress.confidence,
+                "signals": progress.signals.iter().map(|signal| {
+                    serde_json::json!({
+                        "code": signal.code,
+                        "polarity": signal.polarity,
+                        "strength": signal.strength,
+                        "summary": signal.summary,
+                        "before": signal.before,
+                        "after": signal.after,
+                    })
+                }).collect::<Vec<_>>(),
+            })
+        }),
+    })
+}
+
+fn trigger_label(trigger: TriggerClass) -> &'static str {
+    match trigger {
+        TriggerClass::CheckpointReady => "checkpoint_ready",
+        TriggerClass::Heartbeat => "heartbeat",
+        TriggerClass::RepeatedFailure => "repeated_failure",
+        TriggerClass::ManualReview => "manual_review",
+    }
+}
+
+fn canonical_runtime_snapshot(snapshot: &agent_drift_sentinel::LiveRuntimeSnapshot) -> Value {
+    serde_json::json!({
+        "latest_cursor": snapshot.latest_cursor.as_ref().map(|cursor| serde_json::json!({
+            "session_id": cursor.session_id,
+            "ordinal": cursor.ordinal,
+        })),
+        "latest_checkpoint_id": snapshot.latest_checkpoint_id,
+        "last_trigger": snapshot.last_trigger.map(trigger_label),
+        "processed_events": snapshot.processed_events,
+        "scheduler_state": {
+            "last_evaluated": snapshot.scheduler_state.last_evaluated.as_ref().map(|cursor| serde_json::json!({
+                "session_id": cursor.session_id,
+                "ordinal": cursor.ordinal,
+            })),
+            "checkpoints_since_last_evaluation": snapshot.scheduler_state.checkpoints_since_last_evaluation,
+            "last_visible_warning_fingerprint": snapshot.scheduler_state.last_visible_warning_fingerprint,
+            "checkpoints_since_last_visible_warning": snapshot.scheduler_state.checkpoints_since_last_visible_warning,
+            "consecutive_flagged_checkpoints": snapshot.scheduler_state.consecutive_flagged_checkpoints,
+        },
+    })
 }
 
 fn run_canonical_bundle_case(case: &RecallCase) -> Value {
