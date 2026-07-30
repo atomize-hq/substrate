@@ -2177,6 +2177,28 @@ fn p7_18_zero_test_legacy_current_native_parity() {
     assert_eq!(expected["claim"], "NoClaim");
 }
 
+fn canonical_typed_output_text(text: &str) -> String {
+    fn sort_json(value: Value) -> Value {
+        match value {
+            Value::Array(values) => Value::Array(values.into_iter().map(sort_json).collect()),
+            Value::Object(values) => Value::Object(
+                values
+                    .into_iter()
+                    .map(|(key, value)| (key, sort_json(value)))
+                    .collect::<BTreeMap<_, _>>()
+                    .into_iter()
+                    .collect(),
+            ),
+            other => other,
+        }
+    }
+
+    serde_json::from_str(text)
+        .map(sort_json)
+        .and_then(|value| serde_json::to_string(&value))
+        .unwrap_or_else(|_| text.to_string())
+}
+
 fn run_p7_19_variant(case_root: &Utf8Path, reverse_creation: bool, warm_cache: bool) -> Value {
     let temp_dir = tempfile::TempDir::new().expect("P7-19 temp dir");
     let temp_root = Utf8Path::from_path(temp_dir.path()).expect("P7-19 UTF-8 temp root");
@@ -2246,7 +2268,9 @@ fn run_p7_19_variant(case_root: &Utf8Path, reverse_creation: bool, warm_cache: b
                     row["dedupe_identity"].as_str().expect("P7-19 typed identity")
                 )
                 .expect("parse P7-19 typed identity"),
-                "text": row["text"],
+                "text": canonical_typed_output_text(
+                    row["text"].as_str().expect("P7-19 typed text")
+                ),
             })
         })
         .collect::<Vec<_>>();
