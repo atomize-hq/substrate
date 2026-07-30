@@ -1,0 +1,82 @@
+{
+  "protocol": "codex.top-level-task-receipt.v1",
+  "orchestration_id": "substrate-r2-3",
+  "dispatch_nonce": "a49da6fa0a78421e40a221b5cea5f3290cdb154ceb3ba44faa331588c3e1f75a",
+  "increment": "R2-3ZR1",
+  "packet_id": "A1.1d-5R2-3ZP1",
+  "status": "AUTHORITY_REQUIRED",
+  "increment_task": {
+    "thread_id": "019fb3ac-2abd-7e90-9510-7d411862ee14",
+    "host_id": "remote-ssh-discovered:spenser-linux-codex"
+  },
+  "expected_base": {
+    "commit": "3a6490ff391453535168491b3f8d26adf9e20938",
+    "tree": "fca816eaed26407ea89d352c7a087a201391bd49",
+    "target_ref": "refs/heads/feat/internal-host-orchestrator-world-dispatch-bootstrap",
+    "required_ancestor": "0f1e147fb735791b44a65099a65167cbdc1803af",
+    "live_remote": "3a6490ff391453535168491b3f8d26adf9e20938"
+  },
+  "artifact": {
+    "path": "/home/spenser/.codex/visualizations/2026/07/30/019fb3ac-2abd-7e90-9510-7d411862ee14/r2-3zp1-invocation-authority-diagnostic.json",
+    "sha256": "sha256:c349dd88767fdb4346ec0483bd609cd51ca9fbd5f9e313332af88d1fd314fff5"
+  },
+  "findings": [
+    "Tracked-path bootstrap rejection on the current published HEAD 3a6490ff391453535168491b3f8d26adf9e20938 occurs at scripts/ci/canonical_shell_wall_runner.py:1171-1200 because the live expected-head commit object lacks the five required P1 trailers.",
+    "Runtime host/self-test paths independently fail at scripts/ci/canonical_shell_wall_runner.py:12133-12159 because _verify_commit_trailers reads and compares P1 trailers on the live expected_head commit object; current HEAD still carries the exact reviewed runner/test blobs from 8c46135c861a468dea316cf9fd7d6c6bb15bddac, so the failure is commit-object/trailer drift, not blob drift.",
+    "Stage authority currently forces launcher.authority_commit_oid == expected_head at scripts/ci/canonical_shell_wall_runner.py:482-499, so an ordinary descendant cannot be authenticated even if trailer verification is moved to a reviewed authority ancestor.",
+    "Current code and the core P1 authority text both enforce reviewed P1 commit == live HEAD == CLI --expected-head. Later provenance schema fields and regression-ledger language imply descendant continuity, but that model was never implemented or fully re-authorized. No currently supported ordinary-descendant invocation was found.",
+    "Linked worktrees are a separate blocker: .git must be a directory identity-matched to the repository and commondir/config.worktree are forbidden, so the current Codex worktree would fail repository_identity_mismatch even after the exit-65 trailer issue is addressed unless execution moves to a full non-worktree checkout or separate worktree support is authorized."
+  ],
+  "proposed_allowlist": {
+    "test_harness_code_files": [
+      "scripts/ci/canonical_shell_wall_runner.py",
+      "scripts/ci/test_canonical_shell_wall_runner.py"
+    ],
+    "runner_symbols_and_sites": [
+      "<module bootstrap trailer gate> (lines 1171-1200)",
+      "<bootstrap authority file gate> (lines 482-499)",
+      "verify_expected_head_object_chain",
+      "_verify_commit_trailers",
+      "host_main",
+      "main(self-test path)",
+      "_default_provenance",
+      "_read_authenticated_staged_provenance",
+      "_validate_provenance_record"
+    ],
+    "test_symbols_and_sites": [
+      "CanonicalShellWallRunnerTests.make_disposable_repo",
+      "existing bootstrap/self-test/schema assertions that assume authority_commit_oid == expected_head",
+      "new descendant-authority positive/negative cases"
+    ],
+    "governance_and_contract_impacts": [
+      "llm-last-mile/runtime-refactor/04-contracts-and-gates.md:7550-7578",
+      "llm-last-mile/runtime-refactor/02-seam-crosswalk.md:1392-1442",
+      "llm-last-mile/runtime-refactor/05-debug-regression-ledger.md:2929-2933"
+    ]
+  },
+  "verification": {
+    "required_checks_passed": true,
+    "checkout_clean": true,
+    "ahead": 0,
+    "behind": 0,
+    "gitnexus_detect_changes_passed": true,
+    "gitnexus_changed_count": 0,
+    "gitnexus_affected_count": 0,
+    "gitnexus_risk_level": "none"
+  },
+  "no_changes_or_publication": {
+    "product_source_edited": false,
+    "staged": false,
+    "committed": false,
+    "pushed": false,
+    "published": false,
+    "preserved_wip_touched": false
+  },
+  "next_increment": "EVIDENCE:R2-3Z",
+  "blocker": {
+    "summary": "Ordinary descendant canonical-wall execution is not authorized or implemented by the current P1 authority model.",
+    "details": "The reviewed RP4 authority commit 8c46135c861a468dea316cf9fd7d6c6bb15bddac still carries the exact accepted runner/test blobs, but the current published HEAD 3a6490ff391453535168491b3f8d26adf9e20938 does not carry the required P1 trailers. The runner therefore rejects current HEAD with invocation_authority_invalid, and the stage-authority/provenance model also forces authority_commit_oid == expected_head. This is not a missed supported descendant path. The minimum coherent fix requires an explicit descendant-authority contract decision first, then the bounded harness/test changes and proof matrix recorded in the artifact. Linked-worktree compatibility is separate and remains fail-closed today.",
+    "required_authority": "Authorize a separate prerequisite increment that first updates the authority model for reviewed-authority-on-descendant execution, then applies the bounded harness-only code/test changes in scripts/ci/canonical_shell_wall_runner.py and scripts/ci/test_canonical_shell_wall_runner.py, and decide whether future evidence will run from a full non-worktree checkout or whether linked-worktree support needs separate scope.",
+    "handoff_prompt": "Fresh prerequisite task only; do not resume or mutate the preserved R2-3ZR1 WIP. Start from commit 3a6490ff391453535168491b3f8d26adf9e20938 on refs/heads/feat/internal-host-orchestrator-world-dispatch-bootstrap. Read /home/spenser/.codex/visualizations/2026/07/30/019fb3ac-2abd-7e90-9510-7d411862ee14/r2-3zp1-invocation-authority-diagnostic.json first. Decide and record whether reviewed authority should survive ordinary descendants. If yes, update the authority contract surfaces named in this receipt, then modify only scripts/ci/canonical_shell_wall_runner.py and scripts/ci/test_canonical_shell_wall_runner.py within the recorded allowlist. Preserve all existing authentication properties, keep linked-worktree rejection fail-closed unless separately authorized, run GitNexus impact on each edited symbol, satisfy the RED/GREEN matrix in the artifact, and do not touch product code or the preserved WIP."
+  }
+}
