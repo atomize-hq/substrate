@@ -181,6 +181,8 @@ def current_native_metadata(raw: bytes) -> tuple[str, str | None, str] | None:
             row = json.loads(raw_line)
         except json.JSONDecodeError:
             continue
+        if not isinstance(row, dict):
+            continue
         if row.get("type") != "session_meta":
             continue
         payload = row.get("payload")

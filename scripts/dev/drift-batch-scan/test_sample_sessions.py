@@ -150,6 +150,26 @@ class FrozenInventoryTests(unittest.TestCase):
 
         self.assertNotEqual(before.digest, after.digest)
 
+    def test_inventory_ignores_non_object_json_rows(self):
+        current = self.write_rollout(
+            "2026/07/20/rollout-current.jsonl", session_id="session-current"
+        )
+        original = current.read_text()
+        current.write_text(json.dumps("non-object diagnostic") + "\n" + original)
+
+        frozen = module.freeze_inventory(
+            [current],
+            sessions_root=self.root,
+            as_of="2026-07-31T23:59:59Z",
+            min_bytes=0,
+            max_bytes=1024 * 1024,
+        )
+
+        self.assertEqual(
+            [candidate.session_id for candidate in frozen.candidates],
+            ["session-current"],
+        )
+
     def test_quota_authority_is_exact_and_immutable(self):
         config = module.freeze_quota_config(seed=42)
 
