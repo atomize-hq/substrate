@@ -1,0 +1,58 @@
+{
+  "protocol": "codex.top-level-task-receipt.v1",
+  "orchestration_id": "substrate-r2-3",
+  "dispatch_nonce": "6346ed3b1bb04ac225c1e32ca94ce0d3fdf1c859f1b4b5eb2d2a993f3cfc9f5b",
+  "increment": "R2-3ZR1",
+  "packet_id": "A1.1d-5R2-3ZC1",
+  "status": "BLOCKED_SCOPE_EXPANSION",
+  "increment_task": {
+    "thread_id": "019fb35f-b602-72d1-b597-72e78063b60d",
+    "host_id": "remote-ssh-discovered:spenser-linux-codex"
+  },
+  "expected_base": {
+    "commit": "3a6490ff391453535168491b3f8d26adf9e20938",
+    "tree": "fca816eaed26407ea89d352c7a087a201391bd49",
+    "target_ref": "refs/heads/feat/internal-host-orchestrator-world-dispatch-bootstrap",
+    "required_ancestor": "0f1e147fb735791b44a65099a65167cbdc1803af"
+  },
+  "blocker": {
+    "summary": "The 101-failure wall is provenance-ineligible, and the canonical authenticated runner cannot run on the accepted source under its current invocation-authority gate.",
+    "details": "The recorded R2-3ZR1-attempt-3 wall used `cargo test --locked -p shell -- --nocapture`, omitting the canonical private TMPDIR/XDG_RUNTIME_DIR root and the required `--lib` selection. It therefore cannot establish new product regressions or authorize broad repair. The exact frozen 45-name baseline and normalized signatures were independently recovered from eligible RP4 artifacts. A fresh canonical wall was attempted only through `scripts/ci/canonical_shell_wall_runner.py`, but the runner rejected both the accepted source and historical integration trial with exit 65 `invocation_authority_invalid`. The exact 101-name inventory remains unavailable. The three-file R2-3ZR1 WIP remains preserved and unchanged; its host-inbox helper group is already focused-green. No product increment landed.",
+    "required_authority": "Authorize a bounded runner-invocation-authority repair/investigation before any further shell repair or R2-3ZR1 landing, or explicitly weaken the closeout contract to permit landing the three-file WIP without an eligible canonical wall. Native evidence and R2-3Z cannot begin because R2-3ZR1 has not landed.",
+    "handoff_prompt": "Start a fresh bounded read-only-first task at product commit 3a6490ff391453535168491b3f8d26adf9e20938 to inspect the canonical runner's invocation-authority gate and its immutable trailer/template expectations. Determine the minimum test-harness-only repair that lets an authenticated canonical wall run on an ordinary reviewed descendant without weakening source, runner, root, toolchain, child-process, or cleanup authentication. Preserve and do not archive or mutate /home/spenser/.codex/worktrees/e847/substrate-r2-3. Do not authorize shell/product repairs from the ineligible 1221/101 totals. If a runner repair is required, return an exact file/symbol/test allowlist for explicit user authority before editing."
+  },
+  "artifact": {
+    "path": "/home/spenser/.codex/visualizations/2026/07/30/019fb35f-b602-72d1-b597-72e78063b60d/r2-3zc1-shell-wall-classification.json",
+    "sha256": "sha256:dabc8e7c65c26c4a383afdd644a36973374b0e41c98501858735ad678ea951a2"
+  },
+  "classification_summary": {
+    "attempt_3_wall": "INELIGIBLE_INVOCATION_PROVENANCE_MISMATCH",
+    "canonical_baseline_45": "Recovered exactly; 23 names are in execution::orchestrator_world_dispatch and 22 are in repl::async_repl.",
+    "wip_already_repaired": "host_inbox_materialization.rs::tests::with_store",
+    "likely_invocation_mismatch_helper_groups": [
+      "crates/shell/src/execution/agent_runtime/auto_attach.rs::tests::with_store",
+      "crates/shell/src/execution/agent_runtime/tool_invocation_contract.rs::tests::with_store",
+      "crates/shell/src/execution/agents_cmd.rs::tests::with_state_store"
+    ],
+    "unrelated_or_pre_existing_drift": "builtins/shim_doctor/report.rs and builtins/world_deps/mod.rs authenticated projection expectations",
+    "unresolved_needs_more_evidence": "crates/shell/src/execution/agent_runtime/retained_worker_runtime.rs",
+    "exact_101_name_inventory_recovered": false
+  },
+  "checks": [
+    "Exact base/tree/ref/ancestor, clean checkout, and 0 ahead/0 behind verified.",
+    "Exact artifact SHA-256 independently verified.",
+    "Frozen canonical 45-name and normalized-signature hashes recovered from eligible RP4 evidence.",
+    "Attempt-3 command provenance classified ineligible.",
+    "Fresh canonical runner attempt stopped at exit 65 invocation_authority_invalid.",
+    "Fresh classifier checkout remained unchanged.",
+    "Preserved three-file WIP remained unchanged.",
+    "Live product remote remained at the expected base."
+  ],
+  "publication": {
+    "no_product_increment_landed": true,
+    "remote_unchanged": true,
+    "fresh_checkout_changed": false,
+    "preserved_wip_changed": false
+  },
+  "next_increment": "EVIDENCE:R2-3Z"
+}
