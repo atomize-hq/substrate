@@ -367,10 +367,10 @@ Each task runs the P7 target. After every third case, also run the frozen semant
 
 ### Task P7-6.1 — Freeze and digest the candidate inventory
 
-- [ ] Filter candidates by the repository’s exact `CurrentNativeV2` route.
-- [ ] Sort a privacy-sensitive local inventory deterministically at an explicit as-of cutoff.
-- [ ] Compute inventory digest without emitting raw private content to committed outputs.
-- [ ] Freeze the exact quota configuration, required named strata, and the minimum candidate
+- [x] Filter candidates by the repository’s exact `CurrentNativeV2` route.
+- [x] Sort a privacy-sensitive local inventory deterministically at an explicit as-of cutoff.
+- [x] Compute inventory digest without emitting raw private content to committed outputs.
+- [x] Freeze the exact quota configuration, required named strata, and the minimum candidate
       population that makes each quota mandatory before selection begins.
 - **Acceptance:** identical synthetic inventory produces identical digest regardless filesystem
   enumeration order; different inventory changes the digest; quota authority cannot change after

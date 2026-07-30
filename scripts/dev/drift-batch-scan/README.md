@@ -24,8 +24,11 @@ S=scripts/dev/drift-batch-scan          # from repo root
 OUT=/tmp/drift-batch                     # any writable scratch dir
 mkdir -p "$OUT" && cd "$OUT"
 
-# 1. sample ~10 sessions/month across the analyzable months, maximizing distinct repos
-python3 "$REPO/$S/sample_sessions.py" --out selected_sessions.jsonl
+# 1. freeze an exact CurrentNativeV2 inventory at an explicit cutoff, then select from it
+python3 "$REPO/$S/sample_sessions.py" \
+  --as-of 2026-07-29T23:59:59Z \
+  --inventory-out candidate_inventory.jsonl \
+  --out selected_sessions.jsonl
 
 # 2. run each session through compactor->analyzer in its own temp codex-home
 #    (isolation avoids cross-session exact-dedupe contamination in the compactor)
@@ -125,20 +128,41 @@ The junk heuristic here is deliberately conservative — it is a diagnostic gate
 production extractor. The real fix lives in `crates/agent-drift-analyzer/src/context/objective.rs`
 (charter Step 1).
 
+## P7 frozen inventory contract
+
+`sample_sessions.py` mirrors the repository's exact raw-adapter route: only sources whose
+`session_meta.payload.multi_agent_version` markers select `CurrentNativeV2` enter the candidate
+inventory. Missing, `disabled`, or `v1` markers remain Legacy; unsupported, non-string, or
+conflicting markers are excluded.
+
+The required `--as-of` value is an inclusive RFC3339 cutoff over the synthetic/session metadata
+timestamp. The script sorts the accepted inventory canonically and hashes a record containing the
+relative source location, source digest, session metadata, and cutoff. Enumeration order and the
+absolute inventory root therefore do not affect the digest, while any candidate-content or
+inventory change does.
+
+Before selection begins, the script constructs one immutable quota contract. It freezes the seed,
+the required `language_repo`, `workflow`, `tooling`, and `delegation` families, 3-session ordinary
+bucket quotas, 5-session high-risk delegation quotas, and the population at which each quota becomes
+mandatory. P7's overlapping-quota selector consumes this frozen value; it does not mutate quota
+authority during selection.
+
 ## Sampling notes & caveats
 
-- Rollout date comes from the path (`sessions/YYYY/MM/DD/`); repo/cwd from line 1
-  (`session_meta.payload.cwd`), normalized by collapsing `/worktrees/<hash>/` and `/.conductor/<name>/`
-  segments so worktrees of one repo count as that repo.
+- Rollout cutoff/month comes from the selected `session_meta` timestamp; repo/cwd comes from its
+  payload and is normalized by collapsing `/worktrees/<hash>/` and `/.conductor/<name>/` segments
+  so worktrees of one repo count as that repo.
 - **Format cutoff (F0):** rollouts before ~2025-09 predate `session_meta` (first line is
   `{id, timestamp, instructions}` with no `cwd`); the analyzer rejects those bundles, so the
   analyzable window is ~the last 11 months. `sample_sessions.py` still lists earlier months but they
   yield little.
-- The sample is seeded (`--seed 42`) for reproducibility, but the underlying `~/.codex/sessions`
-  store grows over time, so a re-run will not reproduce the exact same 110 sessions.
+- The seed (`--seed 42`) is only a stable tie-breaker. Reproduction requires the same explicit
+  cutoff and inventory digest; a growing `~/.codex/sessions` store is not silently treated as the
+  same authority.
 
 ## Not committed
 
-The generated data — `selected_sessions.jsonl` and `batch/` — is intentionally **not** committed:
-it is regenerable from these scripts and contains absolute paths into a private
-`~/.codex/sessions` store plus derived session content. Keep it in a scratch dir.
+The generated data — `candidate_inventory.jsonl`, `selected_sessions.jsonl`, and `batch/` — is
+intentionally **not** committed: it contains absolute paths into a private `~/.codex/sessions`
+store, private identifiers, and derived session content. Keep it in a scratch dir. Only the
+eventual digest/count/underfill receipt is eligible for committed P7 evidence.

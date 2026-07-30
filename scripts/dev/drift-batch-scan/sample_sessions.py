@@ -1,125 +1,333 @@
 #!/usr/bin/env python3
-"""Sample codex rollout sessions equally across months with repo diversity.
+"""Freeze a current-native Codex rollout inventory for private batch selection.
 
-Step 1 of the semantic-goal-drift real-world validation pipeline
-(see README.md). Writes a `selected_sessions.jsonl` manifest that
-`run_batch.py` consumes.
+The committed tests use synthetic rollouts. Real inventory and selection artifacts contain private
+paths and identifiers and must stay in an untracked scratch directory (see README.md).
 """
 from __future__ import annotations
 
 import argparse
+import dataclasses
+import datetime as dt
 import glob
+import hashlib
 import json
 import os
+import random
 import re
 from collections import Counter
-
-DEFAULT_MONTHS = [
-    "2025-08", "2025-09", "2025-10", "2025-11", "2025-12",
-    "2026-01", "2026-02", "2026-03", "2026-04", "2026-05", "2026-06", "2026-07",
-]
+from pathlib import Path
+from typing import Iterable
 
 
-def read_cwd_and_sid(path: str):
-    try:
-        with open(path, "r") as f:
-            first = f.readline()
-        obj = json.loads(first)
-        if obj.get("type") != "session_meta":
-            return None, None
-        pl = obj.get("payload", {})
-        return pl.get("cwd"), pl.get("id")
-    except Exception:
-        return None, None
+@dataclasses.dataclass(frozen=True, order=True)
+class Candidate:
+    timestamp: str
+    relative_path: str
+    session_id: str
+    path: str
+    cwd: str | None
+    repo: str
+    month: str
+    size: int
+    source_digest: str
+    rollout_format: str = "CurrentNativeV2"
+
+    def digest_record(self) -> dict:
+        return {
+            "timestamp": self.timestamp,
+            "relative_path": self.relative_path,
+            "session_id": self.session_id,
+            "cwd": self.cwd,
+            "repo": self.repo,
+            "month": self.month,
+            "size": self.size,
+            "source_digest": self.source_digest,
+            "rollout_format": self.rollout_format,
+        }
+
+    def local_record(self) -> dict:
+        return {"path": self.path, **self.digest_record()}
+
+
+@dataclasses.dataclass(frozen=True, order=True)
+class QuotaBucket:
+    family: str
+    label: str
+    quota: int
+    mandatory_population: int
+    risk_class: str
+
+
+@dataclasses.dataclass(frozen=True)
+class QuotaConfig:
+    schema_version: int
+    seed: int
+    required_families: tuple[str, ...]
+    buckets: tuple[QuotaBucket, ...]
+
+    @property
+    def digest(self) -> str:
+        return canonical_digest(self.public_record())
+
+    def public_record(self) -> dict:
+        return {
+            "schema_version": self.schema_version,
+            "seed": self.seed,
+            "required_families": list(self.required_families),
+            "buckets": [dataclasses.asdict(bucket) for bucket in self.buckets],
+        }
+
+
+@dataclasses.dataclass(frozen=True)
+class FrozenInventory:
+    as_of: str
+    candidates: tuple[Candidate, ...]
+    digest: str
+
+
+def canonical_digest(value: object) -> str:
+    encoded = json.dumps(value, sort_keys=True, separators=(",", ":")).encode("utf-8")
+    return hashlib.sha256(encoded).hexdigest()
+
+
+def freeze_quota_config(seed: int = 42) -> QuotaConfig:
+    ordinary = {
+        "language_repo": ("rust", "js_ts", "python", "docs_only", "mixed"),
+        "workflow": ("implementation", "docs_planning", "verification", "review_fix", "mixed"),
+        "tooling": ("cargo_rust", "node_npm", "python_pytest", "generic_filesystem_doc"),
+        "delegation": ("single_agent",),
+    }
+    high_risk = {
+        "delegation": ("delegated_parent_opaque", "delegated_child_visible"),
+    }
+    buckets = []
+    for family, labels in ordinary.items():
+        for label in labels:
+            buckets.append(QuotaBucket(family, label, 3, 3, "ordinary"))
+    for family, labels in high_risk.items():
+        for label in labels:
+            buckets.append(QuotaBucket(family, label, 5, 5, "high_risk"))
+    return QuotaConfig(
+        schema_version=1,
+        seed=seed,
+        required_families=("language_repo", "workflow", "tooling", "delegation"),
+        buckets=tuple(sorted(buckets)),
+    )
+
+
+def parse_timestamp(value: str) -> dt.datetime:
+    parsed = dt.datetime.fromisoformat(value.replace("Z", "+00:00"))
+    if parsed.tzinfo is None:
+        raise ValueError("timestamp must include a timezone")
+    return parsed.astimezone(dt.timezone.utc)
+
+
+def canonical_timestamp(value: str) -> str:
+    parsed = parse_timestamp(value)
+    return parsed.isoformat(timespec="seconds").replace("+00:00", "Z")
 
 
 def norm_repo(cwd: str | None) -> str:
     if not cwd:
         return "(unknown)"
-    # collapse worktree hash segments: .../worktrees/<hash>/<repo> -> .../<repo>
-    c = re.sub(r"/worktrees/[0-9a-fA-F]+/", "/", cwd)
-    # collapse conductor/temp worktree style too
-    c = re.sub(r"/\.conductor/[^/]+/", "/", c)
-    return os.path.basename(c.rstrip("/")) or c
+    collapsed = re.sub(r"/worktrees/[0-9a-fA-F]+/", "/", cwd)
+    collapsed = re.sub(r"/\.conductor/[^/]+/", "/", collapsed)
+    return os.path.basename(collapsed.rstrip("/")) or collapsed
+
+
+def current_native_metadata(raw: bytes) -> tuple[str, str | None, str] | None:
+    formats = set()
+    identities = set()
+    metadata = []
+    for raw_line in raw.decode("utf-8", errors="replace").splitlines():
+        try:
+            row = json.loads(raw_line)
+        except json.JSONDecodeError:
+            continue
+        if row.get("type") != "session_meta":
+            continue
+        payload = row.get("payload")
+        if not isinstance(payload, dict):
+            return None
+        version = payload.get("multi_agent_version")
+        if version == "v2":
+            formats.add("CurrentNativeV2")
+        elif version is None or version in ("disabled", "v1"):
+            formats.add("Legacy")
+        else:
+            return None
+        session_id = payload.get("id")
+        if not isinstance(session_id, str) or not session_id.strip():
+            return None
+        identities.add(session_id.strip())
+        timestamp = row.get("timestamp")
+        if not isinstance(timestamp, str):
+            return None
+        metadata.append((timestamp, payload.get("cwd")))
+    if formats != {"CurrentNativeV2"} or len(identities) != 1 or not metadata:
+        return None
+    timestamp, cwd = metadata[0]
+    if cwd is not None and not isinstance(cwd, str):
+        return None
+    return next(iter(identities)), cwd, canonical_timestamp(timestamp)
+
+
+def candidate_from_path(
+    path: str | os.PathLike[str],
+    *,
+    sessions_root: str | os.PathLike[str],
+    as_of: str,
+    min_bytes: int,
+    max_bytes: int,
+) -> Candidate | None:
+    candidate_path = Path(path).resolve()
+    root = Path(sessions_root).resolve()
+    try:
+        relative = candidate_path.relative_to(root).as_posix()
+        raw = candidate_path.read_bytes()
+    except (OSError, ValueError):
+        return None
+    size = len(raw)
+    if size < min_bytes or size > max_bytes:
+        return None
+    metadata = current_native_metadata(raw)
+    if metadata is None:
+        return None
+    session_id, cwd, timestamp = metadata
+    if parse_timestamp(timestamp) > parse_timestamp(as_of):
+        return None
+    return Candidate(
+        timestamp=timestamp,
+        relative_path=relative,
+        session_id=session_id,
+        path=str(candidate_path),
+        cwd=cwd,
+        repo=norm_repo(cwd),
+        month=timestamp[:7],
+        size=size,
+        source_digest=hashlib.sha256(raw).hexdigest(),
+    )
+
+
+def freeze_inventory(
+    paths: Iterable[str | os.PathLike[str]],
+    *,
+    sessions_root: str | os.PathLike[str],
+    as_of: str,
+    min_bytes: int = 1024,
+    max_bytes: int = 15 * 1024 * 1024,
+) -> FrozenInventory:
+    canonical_as_of = canonical_timestamp(as_of)
+    candidates = []
+    for path in paths:
+        candidate = candidate_from_path(
+            path,
+            sessions_root=sessions_root,
+            as_of=canonical_as_of,
+            min_bytes=min_bytes,
+            max_bytes=max_bytes,
+        )
+        if candidate is not None:
+            candidates.append(candidate)
+    candidates.sort()
+    session_ids = [candidate.session_id for candidate in candidates]
+    if len(session_ids) != len(set(session_ids)):
+        raise ValueError("current-native inventory contains duplicate session identities")
+    digest = canonical_digest(
+        {
+            "schema_version": 1,
+            "as_of": canonical_as_of,
+            "candidates": [candidate.digest_record() for candidate in candidates],
+        }
+    )
+    return FrozenInventory(canonical_as_of, tuple(candidates), digest)
+
+
+def discover_rollout_paths(sessions_root: str) -> list[str]:
+    return glob.glob(os.path.join(sessions_root, "**", "rollout-*.jsonl"), recursive=True)
+
+
+def select_monthly_compatibility_sample(
+    inventory: FrozenInventory, *, per_month: int, seed: int
+) -> tuple[Candidate, ...]:
+    """Preserve the R6 batch shape until P7's set-cover selector replaces it in P7-6.2."""
+    rng = random.Random(seed)
+    by_month: dict[str, list[Candidate]] = {}
+    for candidate in inventory.candidates:
+        by_month.setdefault(candidate.month, []).append(candidate)
+    selected = []
+    for month in sorted(by_month):
+        candidates = list(by_month[month])
+        candidates.sort(key=lambda candidate: (canonical_digest(candidate.digest_record()), candidate))
+        rng.shuffle(candidates)
+        preferred = []
+        seen_repos = set()
+        for candidate in candidates:
+            if candidate.repo not in seen_repos:
+                preferred.append(candidate)
+                seen_repos.add(candidate.repo)
+        picked = preferred[:per_month]
+        picked_ids = {candidate.session_id for candidate in picked}
+        picked.extend(
+            candidate
+            for candidate in candidates
+            if candidate.session_id not in picked_ids
+        )
+        selected.extend(picked[:per_month])
+    return tuple(sorted(selected))
 
 
 def main() -> None:
-    ap = argparse.ArgumentParser(description=__doc__)
-    ap.add_argument("--sessions-root", default=os.path.expanduser("~/.codex/sessions"),
-                    help="codex rollout session store (default: ~/.codex/sessions)")
-    ap.add_argument("--out", default="selected_sessions.jsonl",
-                    help="manifest output path (default: ./selected_sessions.jsonl)")
-    ap.add_argument("--per-month", type=int, default=10)
-    ap.add_argument("--max-attempts-per-month", type=int, default=60,
-                    help="bound head-1 reads per month")
-    ap.add_argument("--min-bytes", type=int, default=1024, help="skip empty/degenerate")
-    ap.add_argument("--max-bytes", type=int, default=15 * 1024 * 1024,
-                    help="skip absurdly large (pipeline safety)")
-    ap.add_argument("--seed", type=int, default=42)
-    ap.add_argument("--months", nargs="*", default=DEFAULT_MONTHS,
-                    help="YYYY-MM buckets to sample (default: 2025-08 .. 2026-07)")
-    args = ap.parse_args()
+    parser = argparse.ArgumentParser(
+        description=__doc__, formatter_class=argparse.RawDescriptionHelpFormatter
+    )
+    parser.add_argument(
+        "--sessions-root",
+        default=os.path.expanduser("~/.codex/sessions"),
+        help="private Codex rollout store (default: ~/.codex/sessions)",
+    )
+    parser.add_argument(
+        "--as-of",
+        required=True,
+        help="inclusive RFC3339 inventory cutoff; required for reproducibility",
+    )
+    parser.add_argument("--out", default="selected_sessions.jsonl")
+    parser.add_argument("--inventory-out", default="candidate_inventory.jsonl")
+    parser.add_argument("--per-month", type=int, default=10)
+    parser.add_argument("--min-bytes", type=int, default=1024)
+    parser.add_argument("--max-bytes", type=int, default=15 * 1024 * 1024)
+    parser.add_argument("--seed", type=int, default=42)
+    args = parser.parse_args()
 
-    import random
-    random.seed(args.seed)
+    config = freeze_quota_config(args.seed)
+    inventory = freeze_inventory(
+        discover_rollout_paths(args.sessions_root),
+        sessions_root=args.sessions_root,
+        as_of=args.as_of,
+        min_bytes=args.min_bytes,
+        max_bytes=args.max_bytes,
+    )
+    selected = select_monthly_compatibility_sample(
+        inventory, per_month=args.per_month, seed=config.seed
+    )
 
-    selected = []
-    summary = []
-    for ym in args.months:
-        y, m = ym.split("-")
-        files = glob.glob(os.path.join(args.sessions_root, y, m, "**", "rollout-*.jsonl"),
-                          recursive=True)
-        random.shuffle(files)
-        picked = []           # (path, cwd, repo, sid, size)
-        repos_seen = set()
-        pool = []             # candidates read so far (for backfill)
-        attempts = 0
-        # First pass: prefer new repos
-        for path in files:
-            if len(picked) >= args.per_month or attempts >= args.max_attempts_per_month:
-                break
-            try:
-                size = os.path.getsize(path)
-            except OSError:
-                continue
-            if size < args.min_bytes or size > args.max_bytes:
-                continue
-            attempts += 1
-            cwd, sid = read_cwd_and_sid(path)
-            if not sid:
-                continue
-            repo = norm_repo(cwd)
-            pool.append((path, cwd, repo, sid, size))
-            if repo not in repos_seen:
-                repos_seen.add(repo)
-                picked.append((path, cwd, repo, sid, size))
-        # Backfill from pool (repeat repos allowed) if under quota
-        if len(picked) < args.per_month:
-            picked_paths = {p[0] for p in picked}
-            for cand in pool:
-                if len(picked) >= args.per_month:
-                    break
-                if cand[0] in picked_paths:
-                    continue
-                picked.append(cand)
-                picked_paths.add(cand[0])
-        for path, cwd, repo, sid, size in picked:
-            selected.append({"path": path, "month": ym, "cwd": cwd, "repo": repo,
-                             "session_id": sid, "size": size})
-        summary.append((ym, len(picked), len({p[2] for p in picked})))
+    with open(args.inventory_out, "w") as handle:
+        for candidate in inventory.candidates:
+            handle.write(json.dumps(candidate.local_record(), sort_keys=True) + "\n")
+    with open(args.out, "w") as handle:
+        for candidate in selected:
+            handle.write(json.dumps(candidate.local_record(), sort_keys=True) + "\n")
 
-    with open(args.out, "w") as f:
-        for s in selected:
-            f.write(json.dumps(s) + "\n")
-
-    print("month    | picked | distinct_repos")
-    for ym, n, r in summary:
-        print(f"{ym} |   {n:2d}   |   {r}")
-    print(f"\nTOTAL selected: {len(selected)}")
-    rc = Counter(s["repo"] for s in selected)
-    print(f"distinct repos overall: {len(rc)}")
-    print("top repos:", dict(rc.most_common(12)))
-    print(f"manifest -> {args.out}")
+    print(f"inventory candidates: {len(inventory.candidates)}")
+    print(f"inventory as-of:      {inventory.as_of}")
+    print(f"inventory digest:     {inventory.digest}")
+    print(f"quota config digest:  {config.digest}")
+    print(f"selected (compat):    {len(selected)}")
+    month_counts = Counter(candidate.month for candidate in selected)
+    print("selected by month:    " + json.dumps(dict(sorted(month_counts.items()))))
+    print(f"private inventory ->  {args.inventory_out}")
+    print(f"private selection ->  {args.out}")
 
 
 if __name__ == "__main__":
