@@ -140,6 +140,44 @@ def selected_manifest_digest(records: list[dict], config_digest: str) -> str:
     )
 
 
+def validate_selected_source_bytes(
+    record: dict,
+    index: int,
+    *,
+    path: str | os.PathLike[str] | None = None,
+) -> None:
+    source_value = path if path is not None else record.get("path")
+    declared_size = record.get("size")
+    declared_digest = record.get("source_digest")
+    if not isinstance(source_value, (str, os.PathLike)) or not str(source_value):
+        raise ValueError(f"selected manifest record {index} has an invalid source path")
+    source_path = Path(source_value)
+    if not isinstance(declared_size, int) or declared_size < 0:
+        raise ValueError(f"selected manifest record {index} has an invalid source size")
+    if (
+        not isinstance(declared_digest, str)
+        or len(declared_digest) != 64
+        or any(character not in "0123456789abcdef" for character in declared_digest)
+    ):
+        raise ValueError(f"selected manifest record {index} has an invalid source digest")
+
+    digest = hashlib.sha256()
+    actual_size = 0
+    try:
+        with source_path.open("rb") as handle:
+            while chunk := handle.read(1024 * 1024):
+                actual_size += len(chunk)
+                digest.update(chunk)
+    except OSError as error:
+        raise ValueError(
+            f"selected manifest record {index} source cannot be read"
+        ) from error
+    if actual_size != declared_size or digest.hexdigest() != declared_digest:
+        raise ValueError(
+            f"selected manifest record {index} does not match declared source bytes"
+        )
+
+
 def validate_selected_manifest(receipt: dict, records: list[dict]) -> None:
     selection = receipt["selection"]
     if len(records) != selection["selected_count"]:
@@ -154,6 +192,8 @@ def validate_selected_manifest(receipt: dict, records: list[dict]) -> None:
     )
     if actual_digest != selection["digest"]:
         raise ValueError("selected manifest does not match selected-set digest")
+    for index, record in enumerate(records):
+        validate_selected_source_bytes(record, index)
 
 
 def prepare_batch_directories(
@@ -307,7 +347,8 @@ def main() -> None:
         checkpoint_output = os.path.join(ckdir, sid + ".jsonl")
         checkpoint_temp = checkpoint_output + ".tmp"
         try:
-            shutil.copy(path, ch)
+            copied_path = shutil.copy(path, ch)
+            validate_selected_source_bytes(s, i - 1, path=copied_path)
             r1 = subprocess.run([compact, "--codex-home", os.path.join(tmp, "codex-home"),
                                  "--output-dir", bundle], capture_output=True, text=True,
                                 timeout=args.compact_timeout)

@@ -1,3 +1,4 @@
+import hashlib
 import importlib.util
 import json
 import pathlib
@@ -251,35 +252,81 @@ class PrivacySafeReceiptTests(unittest.TestCase):
         module.validate_sanitized_receipt(receipt)
 
     def test_same_sized_selected_manifest_must_match_receipt_digest(self):
-        records = [
-            {
-                'timestamp': '2026-07-20T12:00:00Z',
-                'relative_path': '2026/07/20/rollout-a.jsonl',
-                'session_id': 'session-a',
-                'path': '/scratch/rollout-a.jsonl',
-                'cwd': '/workspace/a',
-                'repo': 'repo-a',
-                'month': '2026-07',
-                'size': 2048,
-                'source_digest': 'a' * 64,
-                'rollout_format': 'CurrentNativeV2',
-                'strata': {
-                    'language_repo': ['rust'],
-                    'workflow': ['verification'],
-                },
-            }
-        ]
-        receipt = self.selection_receipt()
-        receipt['selection']['selected_count'] = 1
-        receipt['selection']['digest'] = run_batch.selected_manifest_digest(
-            records, receipt['quota_config']['digest']
-        )
+        with tempfile.TemporaryDirectory() as root:
+            source = pathlib.Path(root) / 'rollout-a.jsonl'
+            source.write_bytes(b'{}\n')
+            records = [
+                {
+                    'timestamp': '2026-07-20T12:00:00Z',
+                    'relative_path': '2026/07/20/rollout-a.jsonl',
+                    'session_id': 'session-a',
+                    'path': str(source),
+                    'cwd': '/workspace/a',
+                    'repo': 'repo-a',
+                    'month': '2026-07',
+                    'size': source.stat().st_size,
+                    'source_digest': hashlib.sha256(source.read_bytes()).hexdigest(),
+                    'rollout_format': 'CurrentNativeV2',
+                    'strata': {
+                        'language_repo': ['rust'],
+                        'workflow': ['verification'],
+                    },
+                }
+            ]
+            receipt = self.selection_receipt()
+            receipt['selection']['selected_count'] = 1
+            receipt['selection']['digest'] = run_batch.selected_manifest_digest(
+                records, receipt['quota_config']['digest']
+            )
 
-        run_batch.validate_selected_manifest(receipt, records)
+            run_batch.validate_selected_manifest(receipt, records)
 
-        changed = [dict(records[0], source_digest='e' * 64)]
-        with self.assertRaisesRegex(ValueError, 'selected-set digest'):
-            run_batch.validate_selected_manifest(receipt, changed)
+            changed = [dict(records[0], source_digest='e' * 64)]
+            with self.assertRaisesRegex(ValueError, 'selected-set digest'):
+                run_batch.validate_selected_manifest(receipt, changed)
+
+    def test_selected_manifest_path_must_resolve_to_declared_source_bytes(self):
+        with tempfile.TemporaryDirectory() as root:
+            root_path = pathlib.Path(root)
+            selected_source = root_path / 'selected.jsonl'
+            substituted_source = root_path / 'substituted.jsonl'
+            selected_source.write_bytes(b'{"selected":true}\n')
+            substituted_source.write_bytes(b'{"other___":true}\n')
+            self.assertEqual(
+                selected_source.stat().st_size,
+                substituted_source.stat().st_size,
+                'the regression requires a same-sized path-only substitution',
+            )
+
+            records = [
+                {
+                    'timestamp': '2026-07-20T12:00:00Z',
+                    'relative_path': '2026/07/20/rollout-a.jsonl',
+                    'session_id': 'session-a',
+                    'path': str(selected_source),
+                    'cwd': '/workspace/a',
+                    'repo': 'repo-a',
+                    'month': '2026-07',
+                    'size': selected_source.stat().st_size,
+                    'source_digest': hashlib.sha256(
+                        selected_source.read_bytes()
+                    ).hexdigest(),
+                    'rollout_format': 'CurrentNativeV2',
+                    'strata': {},
+                }
+            ]
+            receipt = self.selection_receipt()
+            receipt['selection']['selected_count'] = 1
+            receipt['selection']['digest'] = run_batch.selected_manifest_digest(
+                records, receipt['quota_config']['digest']
+            )
+            run_batch.validate_selected_manifest(receipt, records)
+
+            substituted = [dict(records[0], path=str(substituted_source))]
+            with self.assertRaisesRegex(
+                ValueError, 'does not match declared source bytes'
+            ):
+                run_batch.validate_selected_manifest(receipt, substituted)
 
     def test_batch_directory_must_be_fresh(self):
         with tempfile.TemporaryDirectory() as root:
@@ -331,7 +378,7 @@ class PrivacySafeReceiptTests(unittest.TestCase):
                     'repo': 'repo-a',
                     'month': '2026-07',
                     'size': source.stat().st_size,
-                    'source_digest': 'a' * 64,
+                    'source_digest': hashlib.sha256(source.read_bytes()).hexdigest(),
                     'rollout_format': 'CurrentNativeV2',
                     'strata': {},
                 }
