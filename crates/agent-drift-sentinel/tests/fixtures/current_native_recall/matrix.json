@@ -39,17 +39,27 @@
         "public-live"
       ],
       "expected": {
-        "signal": "semantic_goal_drift",
-        "state": "active",
-        "flagged": true,
-        "raw_score": 80,
+        "case_id": "P7-01",
+        "session_id": "session-p7-01-root",
+        "adapter_class": "CurrentNativeV2",
+        "bundle_schema_version": "v0.2",
+        "semantic_goal_drift": {
+          "state": "active",
+          "flagged": true,
+          "raw_score": 80
+        },
         "final_target_display": "docs/specs/p7/MAP.md",
+        "required_reason_prefixes": [
+          "semantic goal drift current goal:",
+          "semantic goal drift kickoff anchor:",
+          "rolling semantic goal drift previous goal:"
+        ],
+        "public_trigger": "checkpoint_ready",
         "session_progress": {
           "status": "insufficient_evidence",
           "dimension": "planning_convergence",
           "confidence": "low"
-        },
-        "public_trigger": "checkpoint_ready"
+        }
       },
       "historical_references": [
         "crates/agent-drift-analyzer/tests/fixtures/semantic_goal_drift_acceptance/synthetic-rolling-mid-session-pivot/expected.json"
@@ -95,12 +105,23 @@
         "parity-comparison"
       ],
       "expected": {
-        "signal": "semantic_goal_drift",
-        "state": "active",
-        "flagged": true,
-        "raw_score": 80,
+        "case_id": "P7-02",
+        "parity_group": "positive-pivot",
+        "legacy_session_id": "session-p7-02-legacy",
+        "current_native_session_id": "session-p7-02-native",
+        "semantic_goal_drift": {
+          "state": "active",
+          "flagged": true,
+          "raw_score": 80
+        },
         "final_target_display": "docs/specs/p7/MAP.md",
-        "parity": "equal"
+        "canonical_projection": "equal",
+        "excluded_unstable_fields": [
+          "generated_at",
+          "codex_home",
+          "output_dir",
+          "source_file_path"
+        ]
       },
       "historical_references": [
         "crates/agent-drift-analyzer/tests/fixtures/semantic_goal_drift_acceptance/synthetic-rolling-mid-session-pivot/expected.json"
@@ -139,11 +160,14 @@
         "scoring"
       ],
       "expected": {
-        "signal": "semantic_goal_drift",
-        "state": "cleared",
-        "flagged": false,
-        "raw_score": 0,
+        "case_id": "P7-03",
+        "session_id": "session-p7-03-root",
         "claim": "NoClaim",
+        "semantic_goal_drift": {
+          "state": "cleared",
+          "flagged": false,
+          "raw_score": 0
+        },
         "final_target_display": "docs/specs/p7/aligned.md",
         "semantic_reasons": []
       },
@@ -187,6 +211,8 @@
         "scoring"
       ],
       "expected": {
+        "case_id": "P7-04",
+        "session_id": "session-p7-04-root",
         "relation": "narrowing",
         "claim": "NoClaim",
         "semantic_goal_drift": {
@@ -239,6 +265,8 @@
         "scoring"
       ],
       "expected": {
+        "case_id": "P7-05",
+        "session_id": "session-p7-05-root",
         "suppression": "sanctioned_replan",
         "claim": "NoClaim",
         "semantic_goal_drift": {
@@ -246,12 +274,12 @@
           "flagged": false,
           "raw_score": 0
         },
+        "semantic_reasons": [],
         "structured_target_display": "crates/agent-drift-analyzer/src/scoring/mod.rs",
         "replan_working_set_paths": [
           "docs/specs/p7/replan-spec.md",
           "docs/specs/p7/replanned.md"
-        ],
-        "semantic_reasons": []
+        ]
       },
       "historical_references": [
         "crates/agent-drift-analyzer/tests/semantic_goal_drift_acceptance.rs"
@@ -292,6 +320,8 @@
         "scoring"
       ],
       "expected": {
+        "case_id": "P7-06",
+        "session_id": "session-p7-06-root",
         "claim": "NoClaim",
         "tests_executed": 0,
         "forbidden_signal_codes": [
@@ -339,21 +369,32 @@
       "parity_group": null,
       "terminal_boundary": "analyzer scoring",
       "diagnostic_owners": [
-        "objective-path-extraction"
+        "objective-path-extraction",
+        "scoring"
       ],
       "expected": {
+        "case_id": "P7-07",
+        "session_id": "session-p7-07-root",
+        "directive_path": "docs/target.md",
         "directive_authoritative": false,
-        "signal": "wrong_plan_branch",
-        "state": "active",
-        "flagged": true,
-        "raw_score": 60,
         "authoritative_paths": [
           "crates/source/src/lib.rs"
         ],
         "working_set_paths": [
           "crates/source/src/lib.rs",
           "docs/target.md"
-        ]
+        ],
+        "semantic_goal_drift": {
+          "state": "cleared",
+          "flagged": false,
+          "raw_score": 0
+        },
+        "wrong_plan_branch": {
+          "state": "active",
+          "flagged": true,
+          "raw_score": 60
+        },
+        "claim": "wrong_plan_branch"
       },
       "historical_references": [
         "crates/agent-drift-analyzer/tests/wrong_plan_branch.rs"
@@ -393,13 +434,25 @@
         "scoring"
       ],
       "expected": {
-        "signal": "semantic_goal_drift",
-        "state": "active",
-        "flagged": true,
-        "raw_score": 80,
+        "case_id": "P7-08",
+        "session_id": "session-p7-08-root",
         "path_relation": "unrelated",
-        "source_path": "docs/specs/p7/MAP.md",
-        "target_path": "docs/specs/p7/MAPPING-guide.md"
+        "penultimate_target_display": "docs/specs/p7/MAP.md",
+        "final_target_display": "docs/specs/p7/MAPPING-guide.md",
+        "final_working_set_paths": [
+          "docs/specs/p7/MAP.md",
+          "docs/specs/p7/MAPPING-guide.md"
+        ],
+        "semantic_goal_drift": {
+          "state": "active",
+          "flagged": true,
+          "raw_score": 80
+        },
+        "required_reason_prefixes": [
+          "semantic goal drift current goal:",
+          "semantic goal drift kickoff anchor:",
+          "rolling semantic goal drift previous goal:"
+        ]
       },
       "historical_references": [
         "crates/agent-drift-analyzer/tests/fixtures/semantic_goal_drift_acceptance/synthetic-kickoff-hyphen-collision-pivot/expected.json"
@@ -437,9 +490,12 @@
       "terminal_boundary": "public-live checkpoint",
       "diagnostic_owners": [
         "direct-closure",
-        "scoring"
+        "scoring",
+        "public-live"
       ],
       "expected": {
+        "case_id": "P7-09",
+        "session_id": "session-p7-09-root",
         "selected_sessions": [
           "session-p7-09-root"
         ],
@@ -447,6 +503,7 @@
           "session-p7-09-unrelated"
         ],
         "public_trigger": "checkpoint_ready",
+        "final_target_display": "docs/specs/p7/selected.md",
         "semantic_goal_drift": {
           "state": "cleared",
           "flagged": false,
@@ -503,17 +560,60 @@
         "delegation-semantics"
       ],
       "expected": {
-        "topology": "delegating_parent",
-        "child_visibility": "linked",
-        "link_state": "verified",
+        "case_id": "P7-10",
+        "root_session_id": "session-p7-10-root",
+        "child_session_id": "session-p7-10-child",
         "selected_sessions": [
           "session-p7-10-child",
           "session-p7-10-root"
         ],
-        "transitive_sessions": [],
         "excluded_sessions": [
           "session-p7-10-grandchild"
-        ]
+        ],
+        "delegation_link": {
+          "parent_session_id": "session-p7-10-root",
+          "child_session_id": "session-p7-10-child",
+          "child_origin_parent_session_id": "session-p7-10-root",
+          "depth": 1,
+          "state": "verified"
+        },
+        "deeper_residue": {
+          "parent_session_id": "session-p7-10-child",
+          "child_session_id": "session-p7-10-grandchild",
+          "child_origin_parent_session_id": "session-p7-10-child",
+          "depth": 2,
+          "state": "deeper_residue"
+        },
+        "root_delegation": {
+          "topology": "delegating_parent",
+          "parent_session_id": null,
+          "child_session_ids": [
+            "session-p7-10-child"
+          ],
+          "child_work_visibility": "linked",
+          "confidence": "high"
+        },
+        "child_delegation": {
+          "topology": "delegated_child",
+          "parent_session_id": "session-p7-10-root",
+          "child_session_ids": [],
+          "child_work_visibility": "linked",
+          "confidence": "high"
+        },
+        "activity_identity": {
+          "agent_thread_id": "agent-p7-10-child",
+          "event_id": "event-p7-10-activity",
+          "kind": "interacted",
+          "type": "sub_agent_activity"
+        },
+        "agent_message_identity": {
+          "author": "agent-p7-10-child",
+          "content_types": [
+            "input_text"
+          ],
+          "recipient": "session-p7-10-root",
+          "type": "agent_message"
+        }
       },
       "historical_references": [
         "crates/agent-drift-analyzer/tests/fixtures/delegated_acceptance/matrix.json"
@@ -558,13 +658,17 @@
         "analyzer-input"
       ],
       "expected": {
-        "accepted": true,
-        "child_rows": 0,
-        "link_state": "verified",
+        "case_id": "P7-11",
         "selected_sessions": [
           "session-p7-11-child",
           "session-p7-11-root"
-        ]
+        ],
+        "parent_session_id": "session-p7-11-root",
+        "child_session_id": "session-p7-11-child",
+        "child_rows": 0,
+        "link_state": "verified",
+        "child_file_turns": null,
+        "accepted": true
       },
       "historical_references": [
         "crates/agent-session-compactor/tests/export_bundle.rs"
@@ -600,11 +704,13 @@
         "analyzer-input"
       ],
       "expected": {
+        "case_id": "P7-12",
         "accepted": false,
-        "error": "VerifiedDelegationSessionMissing",
+        "error_category": "verified_delegation_session_missing",
         "parent_session_id": "session-p7-12-parent",
         "child_session_id": "session-p7-12-child",
-        "missing_session_id": "session-p7-12-child"
+        "missing_session_id": "session-p7-12-child",
+        "error_message": "verified delegation link session-p7-12-parent -> session-p7-12-child references session session-p7-12-child that is not included in the bundle"
       },
       "historical_references": [
         "crates/agent-drift-analyzer/tests/input_contract.rs"
@@ -644,12 +750,20 @@
         "closure-selection"
       ],
       "expected": {
-        "selected_pipeline": "success",
-        "malformed_source_selected": false,
+        "case_id": "P7-13",
+        "root_session_id": "session-p7-13-root",
         "selected_sessions": [
           "session-p7-13-root"
         ],
-        "malformed_session_id": "session-p7-13-unrelated"
+        "malformed_session_id": "session-p7-13-unrelated",
+        "malformed_source_selected": false,
+        "selected_pipeline": "success",
+        "final_target_display": "docs/specs/p7/malformed-unrelated.md",
+        "semantic_goal_drift": {
+          "state": "cleared",
+          "flagged": false,
+          "raw_score": 0
+        }
       },
       "historical_references": [
         "crates/agent-session-compactor/tests/bounded_closure.rs"
@@ -686,9 +800,12 @@
         "closure-verification"
       ],
       "expected": {
+        "case_id": "P7-14",
+        "root_session_id": "session-p7-14-root",
         "selected_pipeline": "rejected",
-        "error": "SelectedPayloadMalformed",
+        "error_category": "selected_payload_malformed",
         "failure_count": 1,
+        "failure": "line 3: failed to parse current-native Codex rollout JSONL: response_item.payload.content must be an array",
         "analyzer_started": false
       },
       "historical_references": [
@@ -723,9 +840,10 @@
         "analyzer-input"
       ],
       "expected": {
-        "accepted": false,
-        "error": "MissingArtifact",
+        "case_id": "P7-15",
         "bundle_schema": "v0.2",
+        "accepted": false,
+        "error_category": "missing_artifact",
         "missing_artifact": "rows.compact.jsonl"
       },
       "historical_references": [
@@ -760,10 +878,13 @@
         "public-live-validation"
       ],
       "expected": {
+        "case_id": "P7-16",
         "accepted": false,
-        "error": "MissingCheckpointPayload",
+        "error_category": "missing_checkpoint_payload",
         "emission_ordinal": 1,
-        "state_mutated": false
+        "state_mutated": false,
+        "processed_events_before": 0,
+        "processed_events_after": 0
       },
       "historical_references": [
         "crates/agent-drift-sentinel/tests/live_event_shape.rs"
@@ -805,11 +926,17 @@
         "parity-comparison"
       ],
       "expected": {
-        "signal": "semantic_goal_drift",
-        "state": "cleared",
-        "flagged": false,
-        "raw_score": 0,
-        "parity": "equal",
+        "case_id": "P7-17",
+        "parity_group": "aligned-objective",
+        "legacy_session_id": "session-p7-17-legacy",
+        "current_native_session_id": "session-p7-17-native",
+        "final_target_display": "docs/specs/p7/aligned.md",
+        "semantic_goal_drift": {
+          "state": "cleared",
+          "flagged": false,
+          "raw_score": 0
+        },
+        "canonical_projection": "equal",
         "claim": "NoClaim"
       },
       "historical_references": [
@@ -858,12 +985,16 @@
         "progress"
       ],
       "expected": {
+        "case_id": "P7-18",
+        "parity_group": "zero-test",
+        "legacy_session_id": "session-p7-18-legacy",
+        "current_native_session_id": "session-p7-18-native",
+        "canonical_projection": "equal",
         "claim": "NoClaim",
-        "forbidden_signals": [
+        "forbidden_signal_codes": [
           "verification_clean",
           "failure_frontier_advanced"
         ],
-        "parity": "equal",
         "session_progress": {
           "status": "insufficient_evidence",
           "dimension": "verification_closeout_narrowing",
@@ -911,6 +1042,9 @@
         "canonical-projection"
       ],
       "expected": {
+        "case_id": "P7-19",
+        "session_id": "session-p7-19-root",
+        "call_id": "call-p7-19-typed",
         "typed_segment_types": [
           "input_text",
           "input_image",
@@ -921,10 +1055,21 @@
           1,
           2
         ],
+        "typed_segment_text": [
+          "first typed segment",
+          "{\"detail\":\"low\",\"image_url\":\"data:image/png;base64,cDctMTktc3ludGhldGlj\",\"type\":\"input_image\"}",
+          "second typed segment"
+        ],
         "selected_sessions": [
           "session-p7-19-root"
         ],
-        "varied_runs_equal": true
+        "varied_runs_equal": true,
+        "excluded_unstable_fields": [
+          "generated_at",
+          "codex_home",
+          "output_dir",
+          "source_file_path"
+        ]
       },
       "historical_references": [
         "crates/agent-session-compactor/tests/current_native_adapter.rs"

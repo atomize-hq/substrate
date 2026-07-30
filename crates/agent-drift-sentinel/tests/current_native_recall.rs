@@ -183,6 +183,49 @@ fn validate_case_metadata(case: &RecallCase) -> Result<(), String> {
     {
         return Err(case_error(case, "expected must be a non-empty object"));
     }
+    let allowed_terminal_owners: &[&str] = match case.terminal_boundary.as_str() {
+        "public-live checkpoint" => &["public-live"],
+        "analyzer scoring" => &["scoring"],
+        "analyzer delegation semantics" => &["delegation-semantics"],
+        "analyzer input" => &["analyzer-input"],
+        "closure selection" => &["closure-selection"],
+        "closure verification" => &["closure-verification"],
+        "public-live validation" => &["public-live-validation"],
+        "canonical projection" => &["canonical-projection", "parity-comparison"],
+        _ => return Err(case_error(case, "unknown terminal_boundary")),
+    };
+    if !allowed_terminal_owners.iter().any(|required| {
+        case.diagnostic_owners
+            .iter()
+            .any(|actual| actual == required)
+    }) {
+        return Err(case_error(
+            case,
+            &format!(
+                "terminal boundary requires one of these diagnostic owners: {}",
+                allowed_terminal_owners.join(",")
+            ),
+        ));
+    }
+    let expected_path = fixture_root().join(&case.fixture_dir).join("expected.json");
+    let expected_source = fs::read_to_string(&expected_path).map_err(|error| {
+        case_error(
+            case,
+            &format!("cannot read expected projection {expected_path}: {error}"),
+        )
+    })?;
+    let expected_fixture: Value = serde_json::from_str(&expected_source).map_err(|error| {
+        case_error(
+            case,
+            &format!("cannot parse expected projection {expected_path}: {error}"),
+        )
+    })?;
+    if case.expected != expected_fixture {
+        return Err(case_error(
+            case,
+            "matrix expected projection does not match expected.json",
+        ));
+    }
     Ok(())
 }
 
@@ -262,6 +305,22 @@ fn current_native_recall_inventory_negative_controls_fail_closed() {
     assert!(error.contains("P7-99"));
     assert!(error.contains("canonical projection"));
     assert!(error.contains("owner=ingest,canonical-projection"));
+
+    let mut expected_mismatch = matrix.clone();
+    expected_mismatch.cases[0].expected["public_trigger"] = Value::String("other".to_string());
+    let error =
+        validate_matrix(&expected_mismatch).expect_err("matrix expected mutation must fail");
+    assert!(error.contains("P7-01"));
+    assert!(error.contains("matrix expected projection does not match expected.json"));
+    assert!(error.contains("owner=scoring,public-live"));
+
+    let mut owner_mismatch = matrix.clone();
+    owner_mismatch.cases[6].diagnostic_owners = vec!["objective-path-extraction".to_string()];
+    let error =
+        validate_matrix(&owner_mismatch).expect_err("P7-07 terminal owner mutation must fail");
+    assert!(error.contains("P7-07"));
+    assert!(error.contains("terminal boundary requires"));
+    assert!(error.contains("owner=objective-path-extraction"));
 
     let extra = BTreeSet::from(["p7-99".to_string()]);
     let error = validate_case_inventory(&matrix, &extra).expect_err("extra directory must fail");
