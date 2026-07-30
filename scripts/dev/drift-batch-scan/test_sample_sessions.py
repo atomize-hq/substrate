@@ -343,6 +343,34 @@ class OverlappingQuotaSelectionTests(unittest.TestCase):
         self.assertNotIn("language_repo:python", labeled.labels)
         self.assertNotIn("tooling:python_pytest", labeled.labels)
 
+    def test_selection_receipt_contains_only_sanitized_authority(self):
+        config = self.config(
+            42, module.QuotaBucket("language_repo", "rust", 1, 1, "ordinary")
+        )
+        labeled = [self.labeled("private-a", "language_repo:rust")]
+        inventory = module.FrozenInventory(
+            "2026-07-31T23:59:59Z",
+            tuple(candidate.candidate for candidate in labeled),
+            "a" * 64,
+        )
+        selection = module.select_overlapping_quotas(labeled, config)
+
+        receipt = module.build_selection_receipt(inventory, config, selection)
+        serialized = json.dumps(receipt, sort_keys=True)
+
+        self.assertEqual(receipt["inventory"]["route"], "CurrentNativeV2")
+        self.assertEqual(receipt["selection"]["selected_count"], 1)
+        self.assertEqual(receipt["coverage"][0]["eligible"], 1)
+        self.assertEqual(receipt["coverage"][0]["selected"], 1)
+        self.assertFalse(receipt["privacy"]["raw_private_fields_included"])
+        for private_value in (
+            "private-a",
+            "/private/sessions",
+            "/workspace",
+            "repo-private-a",
+        ):
+            self.assertNotIn(private_value, serialized)
+
 
 if __name__ == "__main__":
     unittest.main()

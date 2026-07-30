@@ -28,15 +28,24 @@ mkdir -p "$OUT" && cd "$OUT"
 python3 "$REPO/$S/sample_sessions.py" \
   --as-of 2026-07-29T23:59:59Z \
   --inventory-out candidate_inventory.jsonl \
-  --out selected_sessions.jsonl
+  --out selected_sessions.jsonl \
+  --receipt-out selection_receipt.json
 
 # 2. run each session through compactor->analyzer in its own temp codex-home
 #    (isolation avoids cross-session exact-dedupe contamination in the compactor)
-python3 "$REPO/$S/run_batch.py" --repo "$REPO" --selected selected_sessions.jsonl --batch-dir batch
+python3 "$REPO/$S/run_batch.py" \
+  --repo "$REPO" \
+  --selected selected_sessions.jsonl \
+  --selection-receipt selection_receipt.json \
+  --batch-dir batch \
+  --batch-receipt batch/batch_receipt.json
 
 # 3. coverage diagnostic (F1-F4 plus the explicit R6-3.6 funnel: eligibility, firings,
 #    target-resolved bar, adjacent pairs, diversity, delegation split, and honest export limits)
-python3 "$REPO/$S/tabulate.py" --checkpoints-dir batch/checkpoints
+python3 "$REPO/$S/tabulate.py" \
+  --checkpoints-dir batch/checkpoints \
+  --batch-receipt batch/batch_receipt.json \
+  --receipt-out batch/p7_private_receipt.json
 
 # 4a. ground truth: raw targets behind the fires and the disjoint pairs
 python3 "$REPO/$S/inspect_targets.py" --checkpoints-dir batch/checkpoints
@@ -159,6 +168,22 @@ selection. A bucket with at least its mandatory population must meet quota. A sc
 remain underfilled only when every eligible candidate was selected; that limitation is emitted as
 `permitted_inventory_scarcity` rather than hidden or backfilled with an unrelated session.
 
+## Privacy-safe P7 receipts
+
+The three P7 stages carry authority through two sanitized sidecars:
+
+- `selection_receipt.json` contains only the inventory cutoff/digest/count, immutable quota
+  configuration/digest, selected-set digest/count, and per-bucket eligible/selected/underfill
+  results.
+- `batch/batch_receipt.json` adds only attempted/succeeded/failed counts and coarse failure kinds.
+- `batch/p7_private_receipt.json` adds aggregate analyzer/funnel counts and heuristic stratum counts.
+
+The receipt builders recursively reject raw path, session, repository, and message fields or
+absolute-path string values. The tabulator's repository table is rank-anonymized. Its language,
+workflow, tooling, and delegation tables remain observable distribution heuristics only; the
+receipt explicitly refuses scorer-internal containment, stable-target-hygiene, or sanctioned-replan
+claims.
+
 ## Sampling notes & caveats
 
 - Rollout cutoff/month comes from the selected `session_meta` timestamp; repo/cwd comes from its
@@ -174,7 +199,8 @@ remain underfilled only when every eligible candidate was selected; that limitat
 
 ## Not committed
 
-The generated data — `candidate_inventory.jsonl`, `selected_sessions.jsonl`, and `batch/` — is
-intentionally **not** committed: it contains absolute paths into a private `~/.codex/sessions`
-store, private identifiers, and derived session content. Keep it in a scratch dir. Only the
-eventual digest/count/underfill receipt is eligible for committed P7 evidence.
+The generated `candidate_inventory.jsonl`, `selected_sessions.jsonl`, checkpoint JSONL, and status
+JSONL are intentionally **not** committed: they contain absolute paths into a private
+`~/.codex/sessions` store, private identifiers, and derived session content. Keep them in a scratch
+directory. Only a recursively validated digest/count/underfill aggregate receipt is eligible for
+committed P7 evidence.

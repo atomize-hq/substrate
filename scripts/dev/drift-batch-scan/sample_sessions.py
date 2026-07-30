@@ -543,6 +543,36 @@ def select_overlapping_quotas(
     return SelectionResult(selected, selected_digest, coverage)
 
 
+def build_selection_receipt(
+    inventory: FrozenInventory,
+    config: QuotaConfig,
+    selection: SelectionResult,
+) -> dict:
+    return {
+        "schema_version": "p7-private-selection-v1",
+        "inventory": {
+            "route": "CurrentNativeV2",
+            "as_of": inventory.as_of,
+            "digest": inventory.digest,
+            "candidate_count": len(inventory.candidates),
+        },
+        "quota_config": {
+            **config.public_record(),
+            "digest": config.digest,
+        },
+        "selection": {
+            "digest": selection.selected_digest,
+            "selected_count": len(selection.selected),
+        },
+        "coverage": [
+            dataclasses.asdict(bucket) for bucket in selection.coverage
+        ],
+        "privacy": {
+            "raw_private_fields_included": False,
+        },
+    }
+
+
 def main() -> None:
     parser = argparse.ArgumentParser(
         description=__doc__, formatter_class=argparse.RawDescriptionHelpFormatter
@@ -559,6 +589,7 @@ def main() -> None:
     )
     parser.add_argument("--out", default="selected_sessions.jsonl")
     parser.add_argument("--inventory-out", default="candidate_inventory.jsonl")
+    parser.add_argument("--receipt-out", default="selection_receipt.json")
     parser.add_argument("--min-bytes", type=int, default=1024)
     parser.add_argument("--max-bytes", type=int, default=15 * 1024 * 1024)
     parser.add_argument("--seed", type=int, default=42)
@@ -581,6 +612,10 @@ def main() -> None:
     with open(args.out, "w") as handle:
         for candidate in selection.selected:
             handle.write(json.dumps(candidate.local_record(), sort_keys=True) + "\n")
+    receipt = build_selection_receipt(inventory, config, selection)
+    with open(args.receipt_out, "w") as handle:
+        json.dump(receipt, handle, indent=2, sort_keys=True)
+        handle.write("\n")
 
     print(f"inventory candidates: {len(inventory.candidates)}")
     print(f"inventory as-of:      {inventory.as_of}")
@@ -598,6 +633,7 @@ def main() -> None:
     )
     print(f"private inventory ->  {args.inventory_out}")
     print(f"private selection ->  {args.out}")
+    print(f"sanitized receipt ->  {args.receipt_out}")
 
 
 if __name__ == "__main__":

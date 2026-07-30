@@ -1,4 +1,5 @@
 import importlib.util
+import json
 import pathlib
 import unittest
 
@@ -7,6 +8,12 @@ spec = importlib.util.spec_from_file_location('drift_batch_tabulate', MODULE_PAT
 module = importlib.util.module_from_spec(spec)
 assert spec.loader is not None
 spec.loader.exec_module(module)
+
+RUN_BATCH_PATH = pathlib.Path(__file__).with_name('run_batch.py')
+run_batch_spec = importlib.util.spec_from_file_location('drift_batch_run_batch', RUN_BATCH_PATH)
+run_batch = importlib.util.module_from_spec(run_batch_spec)
+assert run_batch_spec.loader is not None
+run_batch_spec.loader.exec_module(run_batch)
 
 
 class TabulateStrataInferenceTests(unittest.TestCase):
@@ -121,6 +128,114 @@ class TabulateStrataInferenceTests(unittest.TestCase):
             },
         }
         self.assertEqual(module.infer_tooling_type(cp), 'python_pytest')
+
+
+class PrivacySafeReceiptTests(unittest.TestCase):
+    @staticmethod
+    def selection_receipt():
+        return {
+            'schema_version': 'p7-private-selection-v1',
+            'inventory': {
+                'route': 'CurrentNativeV2',
+                'as_of': '2026-07-31T23:59:59Z',
+                'digest': 'a' * 64,
+                'candidate_count': 4,
+            },
+            'quota_config': {
+                'schema_version': 1,
+                'seed': 42,
+                'required_families': ['language_repo'],
+                'buckets': [{
+                    'family': 'language_repo',
+                    'label': 'rust',
+                    'quota': 3,
+                    'mandatory_population': 3,
+                    'risk_class': 'ordinary',
+                }],
+                'digest': 'b' * 64,
+            },
+            'selection': {'digest': 'c' * 64, 'selected_count': 3},
+            'coverage': [{
+                'family': 'language_repo',
+                'label': 'rust',
+                'quota': 3,
+                'mandatory_population': 3,
+                'eligible': 4,
+                'selected': 3,
+                'underfill': 0,
+                'status': 'filled',
+            }],
+            'privacy': {'raw_private_fields_included': False},
+        }
+
+    def test_batch_receipt_counts_outcomes_without_private_status_rows(self):
+        status = [
+            {
+                'session_id': 'private-session-a',
+                'repo': 'private-repo',
+                'ok': True,
+                'error': None,
+            },
+            {
+                'session_id': 'private-session-b',
+                'repo': 'private-repo',
+                'ok': False,
+                'error': 'compact:/private/path leaked',
+            },
+        ]
+
+        receipt = run_batch.build_batch_receipt(self.selection_receipt(), status)
+        serialized = json.dumps(receipt, sort_keys=True)
+
+        self.assertEqual(receipt['batch'], {
+            'attempted_count': 2,
+            'succeeded_count': 1,
+            'failed_count': 1,
+            'failure_kinds': {'compact': 1},
+        })
+        self.assertNotIn('private-session', serialized)
+        self.assertNotIn('private-repo', serialized)
+        self.assertNotIn('/private/path', serialized)
+        run_batch.validate_safe_receipt(receipt)
+
+    def test_tabulation_receipt_contains_only_aggregate_observable_fields(self):
+        batch_receipt = run_batch.build_batch_receipt(
+            self.selection_receipt(), [{'ok': True, 'error': None}]
+        )
+        receipt = module.build_sanitized_receipt(
+            batch_receipt,
+            analysis_coverage={
+                'sessions_analyzed': 1,
+                'total_checkpoints': 3,
+                'semantic_goal_drift_fires': 0,
+            },
+            heuristic_strata={
+                'language_repo': {
+                    'rust': {'checkpoints': 3, 'semantic_goal_drift_fires': 0}
+                }
+            },
+        )
+        serialized = json.dumps(receipt, sort_keys=True)
+
+        self.assertEqual(receipt['selection']['inventory']['digest'], 'a' * 64)
+        self.assertEqual(receipt['analysis_coverage']['sessions_analyzed'], 1)
+        self.assertIn('scorer_internal_claims', receipt['limitations'])
+        for forbidden in (
+            '"session_id"',
+            '"repo"',
+            '"path"',
+            '"message"',
+            '/Users/',
+            '/home/',
+        ):
+            self.assertNotIn(forbidden, serialized)
+        module.validate_sanitized_receipt(receipt)
+
+    def test_receipt_validation_rejects_private_keys_and_paths(self):
+        with self.assertRaisesRegex(ValueError, 'forbidden private key'):
+            run_batch.validate_safe_receipt({'session_id': 'private-session'})
+        with self.assertRaisesRegex(ValueError, 'absolute private path'):
+            module.validate_sanitized_receipt({'detail': '/Users/private/session.jsonl'})
 
 
 if __name__ == '__main__':

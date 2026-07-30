@@ -408,9 +408,9 @@ Each task runs the P7 target. After every third case, also run the frozen semant
 
 ### Task P7-6.3 — Produce privacy-safe batch summaries
 
-- [ ] Thread inventory/selection metadata through the local batch invocation.
-- [ ] Extend tabulation only with observable, non-private coverage fields.
-- [ ] Prevent scorer-internal claims from heuristic strata.
+- [x] Thread inventory/selection metadata through the local batch invocation.
+- [x] Extend tabulation only with observable, non-private coverage fields.
+- [x] Prevent scorer-internal claims from heuristic strata.
 - **Acceptance:** committed tests can validate receipt shape without private sessions; generated local
   report contains digests, frozen quota configuration, required strata, eligible/selected counts,
   and permitted underfill but no raw paths, IDs, repos, or messages.
@@ -427,12 +427,12 @@ Each task runs the P7 target. After every third case, also run the frozen semant
 
 ### Checkpoint P7-E2 — Private lane ready
 
-- [ ] Candidate inventory and selected set are digest-reproducible.
-- [ ] Selected set is non-empty.
-- [ ] Overlapping quotas, mandatory population floors, and permitted scarcity underfill are exact.
-- [ ] Sufficiently populated underfill fails the synthetic harness.
-- [ ] Synthetic sampler/report tests pass without private data.
-- [ ] No private artifact is tracked.
+- [x] Candidate inventory and selected set are digest-reproducible.
+- [x] Selected set is non-empty.
+- [x] Overlapping quotas, mandatory population floors, and permitted scarcity underfill are exact.
+- [x] Sufficiently populated underfill fails the synthetic harness.
+- [x] Synthetic sampler/report tests pass without private data.
+- [x] No private artifact is tracked.
 
 ## P7-7 — Validation, private receipt, review, and closeout
 

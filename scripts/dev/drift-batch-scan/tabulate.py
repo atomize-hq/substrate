@@ -38,6 +38,18 @@ DOC_EXT = {"md", "mdx", "txt", "rst", "adoc"}
 RUST_EXT = {"rs", "toml", "lock"}
 JS_TS_EXT = {"js", "jsx", "ts", "tsx", "mjs", "cjs"}
 PYTHON_EXT = {"py"}
+FORBIDDEN_RECEIPT_KEYS = {
+    "path",
+    "relative_path",
+    "cwd",
+    "repo",
+    "session_id",
+    "source_file_id",
+    "message",
+    "text",
+    "selected_ids",
+    "repositories",
+}
 
 
 def metric_bucket() -> dict[str, int]:
@@ -252,12 +264,92 @@ def print_stratum_table(title: str, rows: dict, order: list[str], source_note: s
     print()
 
 
+def validate_sanitized_receipt(value, key_path=()) -> None:
+    if isinstance(value, dict):
+        for key, child in value.items():
+            if key in FORBIDDEN_RECEIPT_KEYS:
+                joined = ".".join((*key_path, key))
+                raise ValueError(f"forbidden private key in receipt: {joined}")
+            validate_sanitized_receipt(child, (*key_path, key))
+    elif isinstance(value, list):
+        for index, child in enumerate(value):
+            validate_sanitized_receipt(child, (*key_path, str(index)))
+    elif isinstance(value, str):
+        windows_path = (
+            len(value) >= 3
+            and value[0].isalpha()
+            and value[1:3] in (":\\", ":/")
+        )
+        if value.startswith("/") or "~/.codex" in value or windows_path:
+            joined = ".".join(key_path)
+            raise ValueError(f"absolute private path in receipt: {joined}")
+
+
+def build_sanitized_receipt(
+    batch_receipt: dict,
+    *,
+    analysis_coverage: dict,
+    heuristic_strata: dict,
+) -> dict:
+    if batch_receipt.get("schema_version") != "p7-private-batch-v1":
+        raise ValueError("batch receipt has the wrong schema_version")
+    receipt = {
+        "schema_version": "p7-private-recall-validation-v1",
+        "selection": batch_receipt["selection"],
+        "batch": batch_receipt["batch"],
+        "analysis_coverage": analysis_coverage,
+        "heuristic_strata": heuristic_strata,
+        "limitations": {
+            "scorer_internal_claims": [
+                "structural_containment_not_derived",
+                "stable_target_hygiene_not_derived",
+                "sanctioned_replan_not_derived",
+            ],
+            "heuristic_strata_are_distribution_observations_only": True,
+        },
+        "privacy": {
+            "raw_private_fields_included": False,
+        },
+    }
+    validate_sanitized_receipt(receipt)
+    return receipt
+
+
+def sanitized_metric_rows(rows: dict) -> dict:
+    return {
+        category: {
+            "checkpoints": metrics["cp"],
+            "current_bar_eligible": metrics["cur_elig"],
+            "target_resolved_eligible": metrics["tgt_elig"],
+            "semantic_goal_drift_fires": metrics["sgd"],
+            "disjoint_pairs_upper_bound": metrics["disjoint"],
+        }
+        for category, metrics in sorted(rows.items())
+    }
+
+
 def main() -> None:
     ap = argparse.ArgumentParser(description=__doc__)
     ap.add_argument("--checkpoints-dir", default=os.path.join("batch", "checkpoints"),
                     help="dir of per-session checkpoints from run_batch.py "
                          "(default: ./batch/checkpoints)")
+    ap.add_argument("--batch-receipt", default=None,
+                    help="sanitized receipt from run_batch.py "
+                         "(default: sibling batch_receipt.json)")
+    ap.add_argument("--receipt-out", default=None,
+                    help="privacy-safe aggregate receipt "
+                         "(default: sibling p7_private_receipt.json)")
     args = ap.parse_args()
+    batch_dir = os.path.dirname(os.path.abspath(args.checkpoints_dir))
+    batch_receipt_path = args.batch_receipt or os.path.join(
+        batch_dir, "batch_receipt.json"
+    )
+    receipt_out = args.receipt_out or os.path.join(
+        batch_dir, "p7_private_receipt.json"
+    )
+    with open(batch_receipt_path) as handle:
+        batch_receipt = json.load(handle)
+    validate_sanitized_receipt(batch_receipt)
 
     by_session = defaultdict(list)
     for fp in glob.glob(os.path.join(args.checkpoints_dir, "*.jsonl")):
@@ -445,11 +537,11 @@ def main() -> None:
         d = by_month[m]
         print(f"  {m} | {d['cp']:3d} | {d['ts_conf']:6d}  | {d['cur_elig']:7d}  | {d['tgt_elig']}")
     print()
-    print(f"BY REPO (diversity): {len(by_repo)} distinct repos")
+    print(f"BY REPO (privacy-safe diversity): {len(by_repo)} distinct repos")
     top = sorted(by_repo.items(), key=lambda kv: -kv[1]["cp"])[:12]
-    print("  repo                 | cp  | cur-elig | tgt-elig")
-    for r, d in top:
-        print(f"  {r[:20]:20s} | {d['cp']:3d} | {d['cur_elig']:7d}  | {d['tgt_elig']}")
+    print("  anonymized rank | cp  | cur-elig | tgt-elig")
+    for rank, (_, d) in enumerate(top, 1):
+        print(f"  repo-rank-{rank:02d}    | {d['cp']:3d} | {d['cur_elig']:7d}  | {d['tgt_elig']}")
     print()
     print("BY DELEGATION CATEGORY (R6-3.5 stratification — do NOT treat delegated/opaque traces as")
     print("equal-weight proof of scorer precision; session-level marker heuristic, coarser than the")
@@ -488,6 +580,34 @@ def main() -> None:
     print("  - structural-containment suppressions")
     print("  - scorer-true stable-target-hygiene suppressions (the 'stable-target proxy' above is analysis-only)")
     print("  - sanctioned_replan suppressions")
+    receipt = build_sanitized_receipt(
+        batch_receipt,
+        analysis_coverage={
+            "sessions_analyzed": tot_sessions,
+            "total_checkpoints": tot_cp,
+            "structured_objective_present": structured_present,
+            "structured_target_present": structured_target_present,
+            "stable_target_proxy_present": stable_target_proxy,
+            "current_bar_eligible": cur_eligible,
+            "target_resolved_eligible": target_resolved,
+            "adjacent_pairs_total": adjacent_pairs_total,
+            "target_resolved_adjacent_pairs": pairs_both_tgt,
+            "same_target_suppressions": same_target,
+            "changed_target_pairs": changed_target,
+            "disjoint_pairs_upper_bound": changed_disjoint,
+            "semantic_goal_drift_fires": sgd_flagged,
+        },
+        heuristic_strata={
+            "language_repo": sanitized_metric_rows(by_language),
+            "workflow": sanitized_metric_rows(by_workflow),
+            "tooling": sanitized_metric_rows(by_tooling),
+            "delegation": sanitized_metric_rows(by_delegation),
+        },
+    )
+    with open(receipt_out, "w") as handle:
+        json.dump(receipt, handle, indent=2, sort_keys=True)
+        handle.write("\n")
+    print(f"\nprivacy-safe aggregate receipt: {receipt_out}")
 
 
 if __name__ == "__main__":
