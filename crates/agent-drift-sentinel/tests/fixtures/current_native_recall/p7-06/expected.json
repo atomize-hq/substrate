@@ -1,0 +1,16 @@
+{
+  "case_id": "P7-06",
+  "session_id": "session-p7-06-root",
+  "claim": "NoClaim",
+  "tests_executed": 0,
+  "forbidden_signal_codes": [
+    "verification_clean",
+    "failure_frontier_advanced"
+  ],
+  "zero_test_output": "running 0 tests",
+  "session_progress": {
+    "status": "insufficient_evidence",
+    "dimension": "verification_closeout_narrowing",
+    "confidence": "low"
+  }
+}

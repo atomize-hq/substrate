@@ -260,14 +260,16 @@
     {
       "case_id": "P7-06",
       "title": "zero-test execution control",
-      "implemented": false,
+      "implemented": true,
       "fixture_dir": "p7-06",
       "adapter_classes": [
         "CurrentNativeV2"
       ],
       "event_variants": [
         "session_meta",
+        "task_started",
         "turn_context",
+        "message",
         "custom_tool_call",
         "custom_tool_call_output"
       ],
@@ -291,11 +293,17 @@
       ],
       "expected": {
         "claim": "NoClaim",
-        "forbidden_signals": [
-          "verification_clean",
-          "failure_frontier_advanced"
-        ],
-        "tests_executed": 0
+        "tests_executed": 0,
+      "forbidden_signal_codes": [
+        "verification_clean",
+        "failure_frontier_advanced"
+      ],
+      "zero_test_output": "running 0 tests",
+      "session_progress": {
+        "status": "insufficient_evidence",
+        "dimension": "verification_closeout_narrowing",
+        "confidence": "low"
+      }
       },
       "historical_references": [
         "crates/agent-drift-analyzer/tests/fixtures/progress_acceptance/adapted-zero-verifier-097d97e914ca220f/expected.json"

@@ -1137,3 +1137,80 @@ fn p7_05_sanctioned_replan_is_suppressed_for_the_declared_reason() {
     assert_eq!(expected["suppression"], "sanctioned_replan");
     assert_eq!(expected["claim"], "NoClaim");
 }
+
+#[test]
+fn p7_06_zero_test_execution_cannot_claim_clean_verification() {
+    let matrix = load_matrix().expect("load P7 matrix");
+    let case = matrix
+        .cases
+        .iter()
+        .find(|case| case.case_id == "P7-06")
+        .expect("P7-06 matrix entry");
+
+    assert!(case.implemented, "P7-06 must be implemented before it runs");
+
+    let case_root = fixture_root().join(&case.fixture_dir);
+    let expected: Value = serde_json::from_str(
+        &fs::read_to_string(case_root.join("expected.json")).expect("read P7-06 expected"),
+    )
+    .expect("parse P7-06 expected");
+    let run = run_single_source_pipeline(&case_root.join("raw/root.jsonl"), "session-p7-06-root");
+    assert_eq!(run.format, RolloutFormat::CurrentNativeV2);
+
+    let compactor_dir = Utf8Path::new(
+        run.manifest["output_dir"]
+            .as_str()
+            .expect("P7-06 compactor output directory"),
+    );
+    let zero_test_row = fs::read_to_string(compactor_dir.join("rows.compact.jsonl"))
+        .expect("read P7-06 compact rows")
+        .lines()
+        .map(|line| serde_json::from_str::<Value>(line).expect("parse P7-06 compact row"))
+        .find(|row| {
+            row["kind"] == "tool_output"
+                && row["text"]
+                    .as_str()
+                    .is_some_and(|text| text.contains("running 0 tests"))
+        })
+        .expect("P7-06 zero-test tool output");
+    let zero_test_identity: Value = serde_json::from_str(
+        zero_test_row["dedupe_identity"]
+            .as_str()
+            .expect("P7-06 typed tool-output identity"),
+    )
+    .expect("parse P7-06 typed tool-output identity");
+    assert_eq!(zero_test_identity["call_id"], "call-p7-06-zero");
+    assert_eq!(zero_test_identity["segment_type"], "input_text");
+    assert!(zero_test_row["text"]
+        .as_str()
+        .expect("P7-06 zero-test text")
+        .contains(
+            expected["zero_test_output"]
+                .as_str()
+                .expect("P7-06 expected zero-test output")
+        ));
+
+    let projection = canonical_semantic_projection(&run.result, "session-p7-06-root");
+    let final_projection = projection
+        .as_array()
+        .and_then(|checkpoints| checkpoints.last())
+        .expect("P7-06 final canonical checkpoint");
+    let progress = &final_projection["session_progress"];
+    assert_eq!(progress, &expected["session_progress"]);
+    for forbidden in expected["forbidden_signal_codes"]
+        .as_array()
+        .expect("P7-06 forbidden signal codes")
+    {
+        let forbidden = forbidden.as_str().expect("P7-06 signal code");
+        assert!(
+            !progress["signals"]
+                .as_array()
+                .into_iter()
+                .flatten()
+                .any(|signal| signal["code"] == forbidden),
+            "zero-test execution must not emit {forbidden}: {progress}"
+        );
+    }
+    assert_eq!(expected["tests_executed"], 0);
+    assert_eq!(expected["claim"], "NoClaim");
+}

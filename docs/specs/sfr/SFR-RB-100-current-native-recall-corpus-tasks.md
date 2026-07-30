@@ -178,7 +178,7 @@ Each task runs the P7 target. After every third case, also run the frozen semant
 
 ### Task P7-2.6 — P7-06 zero-test execution control
 
-- [ ] Preserve a zero-test execution result through typed output normalization.
+- [x] Preserve a zero-test execution result through typed output normalization.
 - **Acceptance:** exact progress dimension/status and `NoClaim` behavior are pinned; the case forbids
   `verification_clean`, clean recovery, and false frontier advancement.
 - **Verification:** P7 target plus frozen progress wall.
