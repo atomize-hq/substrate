@@ -352,7 +352,7 @@
         "zero_test_output": "running 0 tests",
         "session_progress": {
           "status": "insufficient_evidence",
-          "dimension": "verification_closeout_narrowing",
+          "dimension": "planning_convergence",
           "confidence": "low"
         }
       },
@@ -1018,7 +1018,7 @@
         ],
         "session_progress": {
           "status": "insufficient_evidence",
-          "dimension": "verification_closeout_narrowing",
+          "dimension": "planning_convergence",
           "confidence": "low"
         }
       },

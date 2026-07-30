@@ -52,6 +52,9 @@ fn real_session_live_consumes_only_the_compactor_owned_bounded_closure() {
         "analyze_bundle(&AnalyzeRequest",
         "load_replay_bundle(&self.analyzer_output_dir())",
         "self.runtime.observe(event)",
+        "pub fn configure_closure_cache_for_test(",
+        "Result<Option<PreparedBoundedClosure>, LiveSessionError>",
+        "self.closure_compactor = BoundedClosureCompactor::default()",
     ] {
         assert!(
             source.contains(required),

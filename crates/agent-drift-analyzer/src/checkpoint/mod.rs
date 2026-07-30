@@ -21,7 +21,8 @@ use crate::{
 };
 use agent_session_compactor::{CompactionKind, CompactionRow, RowRef, UserMessageRole};
 use attempt::{
-    build_command_attempts, build_verification_attempts, CommandAttempt, VerificationAttempt,
+    build_command_attempts, build_verification_attempts, AttemptOutcome, CommandAttempt,
+    ExerciseState, VerificationAttempt,
 };
 use camino::Utf8PathBuf;
 use progress::build_session_progress;
@@ -1943,10 +1944,22 @@ fn recovery_state(
             command.verification_like && classify_command_role(command) != CommandRole::Neutral
         })
         .count();
+    let has_false_clean_verification = interval.verification_attempts.iter().any(|attempt| {
+        attempt.outcome == AttemptOutcome::Clean
+            && attempt.exercise_state != ExerciseState::TargetExercised
+            && interval.command_observations.iter().any(|command| {
+                command.verification_like
+                    && classify_command_role(command) != CommandRole::Neutral
+                    && command.evidence.iter().any(|evidence| {
+                        row_ref_key(&evidence.row) == row_ref_key(&attempt.command_row)
+                    })
+            })
+    });
     let preserves_out_of_scope = preserves_out_of_scope_thrash(current, interval);
     let failure_touches_interval =
         failure_loops_touch_interval(&repetition.repeated_failure_loops, interval);
     let clean_verification_interval = interval_verification_command_count > 0
+        && !has_false_clean_verification
         && !preserves_out_of_scope
         && !failure_touches_interval;
 
@@ -4115,6 +4128,11 @@ mod tests {
                 "functions.shell_command",
                 r#"{"command":"cargo test -p agent-drift-analyzer"}"#,
             ),
+            row(
+                5,
+                CompactionKind::ToolOutput,
+                "Exit code: 0\n\nrunning 1 test\n\ntest result: ok. 1 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out",
+            ),
         ];
         let session = BundleSession {
             session_id: "session-recovery-single-root".to_string(),
@@ -4314,6 +4332,76 @@ mod tests {
             interval.verification_attempts[0].target_scope.tests,
             vec!["checkpoints".to_string()]
         );
+    }
+
+    #[test]
+    fn zero_test_attempt_cannot_create_clean_recovery_or_clean_archetype_evidence() {
+        let rows = vec![
+            row(
+                0,
+                CompactionKind::UserMessage,
+                "/goal Verify the analyzer without claiming zero-test success.",
+            ),
+            tool_call(
+                1,
+                "functions.shell_command",
+                "cargo test -p agent-drift-analyzer repeated_target -- --exact",
+            ),
+            tool_call(
+                2,
+                "functions.shell_command",
+                "cargo test -p agent-drift-analyzer repeated_target -- --exact",
+            ),
+            tool_call(
+                3,
+                "functions.shell_command",
+                "cargo test -p agent-drift-analyzer repeated_target -- --exact",
+            ),
+            row(
+                4,
+                CompactionKind::UserMessage,
+                "Continue with one final verification interval.",
+            ),
+            tool_call(
+                5,
+                "functions.shell_command",
+                "cargo test -p agent-drift-analyzer zero_target -- --exact",
+            ),
+            row(
+                6,
+                CompactionKind::ToolOutput,
+                "Exit code: 0\n\nrunning 0 tests\n\ntest result: ok. 0 passed; 0 failed; 0 ignored; 0 measured; 1 filtered out",
+            ),
+        ];
+        let session = BundleSession {
+            session_id: "session-zero-test-recovery".to_string(),
+            archival_rows: rows.clone(),
+            compact_rows: rows,
+        };
+
+        let analyses = checkpoint_analyses(&session);
+        assert_eq!(analyses.len(), 2);
+        let analysis = &analyses[1];
+        assert!(!analysis.repetition.repeated_verification_loops.is_empty());
+        assert_eq!(analysis.recovery.interval_verification_command_count, 1);
+        assert_eq!(analysis.interval.verification_attempts.len(), 1);
+        assert_eq!(
+            analysis.interval.verification_attempts[0].exercise_state,
+            super::attempt::ExerciseState::Unknown
+        );
+        assert_eq!(
+            analysis.interval.verification_attempts[0].outcome,
+            super::attempt::AttemptOutcome::Clean
+        );
+        assert!(!analysis.recovery.clean_verification_interval);
+        assert!(!analysis.recovery.recovered_from_thrash);
+
+        let archetype = super::build_session_archetype(analysis);
+        assert!(!archetype.supporting_evidence.iter().any(|evidence| {
+            evidence
+                .reason
+                .contains("clean recent verification interval strengthened proof-oriented evidence")
+        }));
     }
 
     #[test]

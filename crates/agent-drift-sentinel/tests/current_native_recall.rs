@@ -455,7 +455,11 @@ fn validate_json_identifiers(
 
 fn identifier_kind<'a>(key_path: &[String], value: &'a str) -> Option<&'a str> {
     let key = key_path.last().map(String::as_str).unwrap_or_default();
-    if key == "turn_id" || value.starts_with("turn-") {
+    if key == "author" {
+        Some("agent")
+    } else if key == "recipient" {
+        Some("session")
+    } else if key == "turn_id" || value.starts_with("turn-") {
         Some("turn")
     } else if key == "call_id" || value.starts_with("call-") {
         Some("call")
@@ -738,6 +742,13 @@ fn current_native_recall_privacy_identifier_mutations_fail_closed() {
         ("call", serde_json::json!({"call_id": "call-real"})),
         ("event", serde_json::json!({"event_id": "event-real"})),
         ("agent", serde_json::json!({"agent_id": "agent-real"})),
+        ("agent", serde_json::json!({"author": "thread-child"})),
+        ("agent", serde_json::json!({"author": "turn-p7-01-child"})),
+        ("session", serde_json::json!({"recipient": "thread-parent"})),
+        (
+            "session",
+            serde_json::json!({"recipient": "agent-p7-01-parent"}),
+        ),
         (
             "repo",
             serde_json::json!({"repository_id": "repository-real"}),
@@ -749,6 +760,14 @@ fn current_native_recall_privacy_identifier_mutations_fail_closed() {
             .expect_err("invalid synthetic identifier must fail");
         assert!(error.contains(kind), "{kind} mutation: {error}");
         assert!(error.contains("owner=harness"), "{kind} mutation: {error}");
+    }
+
+    for value in [
+        serde_json::json!({"author": "agent-p7-01-child"}),
+        serde_json::json!({"recipient": "session-p7-01-parent"}),
+    ] {
+        validate_json_identifiers(path, &value, &mut Vec::new())
+            .expect("valid typed agent-message identifier must pass");
     }
 
     let marker_error = validate_forbidden_markers(
@@ -1450,6 +1469,25 @@ fn p7_06_zero_test_execution_cannot_claim_clean_verification() {
             "zero-test execution must not emit {forbidden}: {progress}"
         );
     }
+    let final_checkpoint = run
+        .result
+        .sessions
+        .iter()
+        .find(|session| session.session_id == "session-p7-06-root")
+        .and_then(|session| session.checkpoints.last())
+        .expect("P7-06 final checkpoint");
+    let archetype = final_checkpoint
+        .session_archetype
+        .as_ref()
+        .expect("P7-06 session archetype");
+    assert!(
+        !archetype.supporting_evidence.iter().any(|evidence| {
+            evidence
+                .reason
+                .contains("clean recent verification interval strengthened proof-oriented evidence")
+        }),
+        "zero-test execution must not create clean-recovery archetype evidence: {archetype:?}"
+    );
     assert_eq!(expected["tests_executed"], 0);
     assert_eq!(expected["claim"], "NoClaim");
 }
@@ -2625,8 +2663,12 @@ fn current_native_recall_whole_wall_is_complete_bounded_and_deterministic() {
 
     let cold_forward = run_canonical_recall_wall(&matrix, false, false);
     let warm_reverse = run_canonical_recall_wall(&matrix, true, true);
-    let cold_bytes = serde_json::to_vec(&cold_forward).expect("serialize cold P7 wall");
-    let warm_bytes = serde_json::to_vec(&warm_reverse).expect("serialize warm P7 wall");
+    assert_public_live_closure_cache_state(&cold_forward, "cold");
+    assert_public_live_closure_cache_state(&warm_reverse, "warm");
+    let cold_bytes = serde_json::to_vec(&canonical_wall_behavior(&cold_forward))
+        .expect("serialize cold P7 wall");
+    let warm_bytes = serde_json::to_vec(&canonical_wall_behavior(&warm_reverse))
+        .expect("serialize warm P7 wall");
     assert_eq!(
         cold_bytes, warm_bytes,
         "P7 canonical wall must be byte-identical across temporary roots, source order, and cache state"
@@ -2668,6 +2710,41 @@ fn current_native_recall_whole_wall_is_complete_bounded_and_deterministic() {
             "{case_id} must project public checkpoint-ready observations"
         );
     }
+}
+
+fn assert_public_live_closure_cache_state(wall: &Value, expected: &str) {
+    for case_id in ["P7-01", "P7-09"] {
+        let case = wall
+            .as_array()
+            .expect("P7 canonical wall cases")
+            .iter()
+            .find(|case| case["case_id"] == case_id)
+            .unwrap_or_else(|| panic!("{case_id} canonical wall entry"));
+        let roots = case["projection"]
+            .as_array()
+            .unwrap_or_else(|| panic!("{case_id} canonical root projections"));
+        assert!(
+            roots
+                .iter()
+                .all(|root| { root["public_live"]["closure_cache_state"] == expected }),
+            "{case_id} must exercise coordinator-owned {expected} closure cache state"
+        );
+    }
+}
+
+fn canonical_wall_behavior(wall: &Value) -> Value {
+    let mut behavior = wall.clone();
+    for case in behavior.as_array_mut().expect("P7 canonical wall cases") {
+        let Some(roots) = case.get_mut("projection").and_then(Value::as_array_mut) else {
+            continue;
+        };
+        for root in roots {
+            if let Some(public_live) = root.get_mut("public_live").and_then(Value::as_object_mut) {
+                public_live.remove("closure_cache_state");
+            }
+        }
+    }
+    behavior
 }
 
 #[derive(Debug)]
@@ -2815,6 +2892,16 @@ fn run_canonical_root(
     warm_closure: bool,
     public_live: bool,
 ) -> Value {
+    if public_live {
+        return canonical_public_live_root(
+            case,
+            codex_home,
+            temp_root,
+            root_session_id,
+            warm_closure,
+        );
+    }
+
     let request = BoundedClosureRequest {
         codex_home: Some(codex_home.to_path_buf()),
         root_session_id: root_session_id.to_string(),
@@ -2841,10 +2928,6 @@ fn run_canonical_root(
                     )
                 });
         }
-    }
-
-    if public_live {
-        return canonical_public_live_root(case, codex_home, temp_root, root_session_id);
     }
 
     let prepared = compactor.prepare(&request).unwrap_or_else(|error| {
@@ -2877,6 +2960,7 @@ fn canonical_public_live_root(
     codex_home: &Utf8Path,
     temp_root: &Utf8Path,
     root_session_id: &str,
+    warm_closure: bool,
 ) -> Value {
     let state_dir = temp_root.join(format!("live-{root_session_id}"));
     let mut coordinator = LiveSessionCoordinator::new(
@@ -2894,6 +2978,35 @@ fn canonical_public_live_root(
             case.case_id
         )
     });
+    let closure_cache_witness = coordinator
+        .configure_closure_cache_for_test(warm_closure)
+        .unwrap_or_else(|error| {
+            panic!(
+                "{} failed to configure coordinator-owned closure cache: {error}",
+                case.case_id
+            )
+        });
+    let closure_cache_state = match (warm_closure, closure_cache_witness) {
+        (false, None) => "cold",
+        (true, Some(prepared)) => {
+            let stats = prepared.cache_stats();
+            assert_eq!(
+                (
+                    stats.reused_source_index_count,
+                    stats.rebuilt_source_index_count,
+                    stats.closure_selection_reused,
+                ),
+                (stats.discovered_source_count, 0, true),
+                "{} warm public-live coordinator must reuse all source indexes and closure selection",
+                case.case_id
+            );
+            "warm"
+        }
+        (expected_warm, witness) => panic!(
+            "{} public-live closure cache witness mismatch: expected_warm={expected_warm}, witness={witness:?}",
+            case.case_id
+        ),
+    };
     let poll = coordinator.poll_once().unwrap_or_else(|error| {
         panic!(
             "{} failed public-live poll for {root_session_id}: {error}",
@@ -2952,6 +3065,7 @@ fn canonical_public_live_root(
         "bundle": bundle,
         "analyzer": canonical_analyzer_projection(&result),
         "public_live": {
+            "closure_cache_state": closure_cache_state,
             "reran_pipeline": poll.reran_pipeline,
             "emitted_checkpoints": poll.emitted_checkpoints,
             "latest_cursor": poll.latest_cursor.map(|cursor| serde_json::json!({

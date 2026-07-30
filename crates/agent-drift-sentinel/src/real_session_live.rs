@@ -341,6 +341,23 @@ impl LiveSessionCoordinator {
         self.runtime.snapshot()
     }
 
+    #[doc(hidden)]
+    pub fn configure_closure_cache_for_test(
+        &mut self,
+        warm: bool,
+    ) -> Result<Option<PreparedBoundedClosure>, LiveSessionError> {
+        self.closure_compactor = BoundedClosureCompactor::default();
+        if !warm {
+            return Ok(None);
+        }
+        let closure_request = BoundedClosureRequest {
+            codex_home: self.request.codex_home.clone(),
+            root_session_id: self.request.session_id.clone(),
+        };
+        self.closure_compactor.prepare(&closure_request)?;
+        Ok(Some(self.closure_compactor.prepare(&closure_request)?))
+    }
+
     pub fn poll_once(&mut self) -> Result<LiveSessionPollResult, LiveSessionError> {
         let closure_request = BoundedClosureRequest {
             codex_home: self.request.codex_home.clone(),
