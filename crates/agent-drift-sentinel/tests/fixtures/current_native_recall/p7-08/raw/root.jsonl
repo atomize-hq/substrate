@@ -1,0 +1,9 @@
+{"timestamp":"2026-07-29T18:00:00Z","type":"session_meta","payload":{"session_id":"session-p7-08-root","id":"session-p7-08-root","multi_agent_version":"v2"}}
+{"timestamp":"2026-07-29T18:00:01Z","type":"event_msg","payload":{"type":"task_started","turn_id":"turn-p7-08-one"}}
+{"timestamp":"2026-07-29T18:00:02Z","type":"turn_context","payload":{"turn_id":"turn-p7-08-one","user_instructions":"Treat paths by semantic identity"}}
+{"timestamp":"2026-07-29T18:00:03Z","type":"response_item","payload":{"type":"message","role":"user","content":[{"type":"input_text","text":"/goal Update docs/specs/p7/MAP.md only."}],"internal_chat_message_metadata_passthrough":{"turn_id":"turn-p7-08-one"}}}
+{"timestamp":"2026-07-29T18:00:04Z","type":"response_item","payload":{"type":"custom_tool_call","name":"shell_command","call_id":"call-p7-08-map","input":"{\"command\":\"sed -n '1,160p' docs/specs/p7/MAP.md\",\"workdir\":\"workspace-p7-08\"}","internal_chat_message_metadata_passthrough":{"turn_id":"turn-p7-08-one"}}}
+{"timestamp":"2026-07-29T18:00:05Z","type":"event_msg","payload":{"type":"task_started","turn_id":"turn-p7-08-two"}}
+{"timestamp":"2026-07-29T18:00:06Z","type":"turn_context","payload":{"turn_id":"turn-p7-08-two","user_instructions":"Do not collapse lexical stems"}}
+{"timestamp":"2026-07-29T18:00:07Z","type":"response_item","payload":{"type":"message","role":"user","content":[{"type":"input_text","text":"/goal Update docs/specs/p7/MAPPING-guide.md only."}],"internal_chat_message_metadata_passthrough":{"turn_id":"turn-p7-08-two"}}}
+{"timestamp":"2026-07-29T18:00:08Z","type":"response_item","payload":{"type":"custom_tool_call","name":"shell_command","call_id":"call-p7-08-mapping","input":"{\"command\":\"sed -n '1,160p' docs/specs/p7/MAPPING-guide.md\",\"workdir\":\"workspace-p7-08\"}","internal_chat_message_metadata_passthrough":{"turn_id":"turn-p7-08-two"}}}

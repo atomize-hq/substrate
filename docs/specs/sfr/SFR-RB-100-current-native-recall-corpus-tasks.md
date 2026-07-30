@@ -196,7 +196,7 @@ Each task runs the P7 target. After every third case, also run the frozen semant
 
 ### Task P7-2.8 — P7-08 lexical collision positive
 
-- [ ] Add a prefix, hyphen, stem, or sibling collision where the new target is genuinely unrelated.
+- [x] Add a prefix, hyphen, stem, or sibling collision where the new target is genuinely unrelated.
 - **Acceptance:** lexical similarity cannot suppress the real pivot; exact signal and path identities
   are pinned.
 - **Verification:** P7 target plus frozen semantic wall.
@@ -205,10 +205,10 @@ Each task runs the P7 target. After every third case, also run the frozen semant
 
 ### Checkpoint P7-C — Semantic wall
 
-- [ ] P7-01 through P7-08 pass.
-- [ ] Frozen semantic 18-case and progress 16-case walls pass unchanged.
-- [ ] Positive recall traverses the full production composition.
-- [ ] Conservative cases fail closed for exact declared reasons.
+- [x] P7-01 through P7-08 pass.
+- [x] Frozen semantic 18-case and progress 16-case walls pass unchanged.
+- [x] Positive recall traverses the full production composition.
+- [x] Conservative cases fail closed for exact declared reasons.
 
 ## P7-3 — Session isolation, delegation, and closure
 

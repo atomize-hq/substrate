@@ -1299,3 +1299,65 @@ fn p7_07_directive_path_cannot_establish_authority() {
     assert_eq!(expected["directive_authoritative"], false);
     assert_eq!(expected["claim"], "wrong_plan_branch");
 }
+
+#[test]
+fn p7_08_lexical_collision_preserves_real_pivot() {
+    let matrix = load_matrix().expect("load P7 matrix");
+    let case = matrix
+        .cases
+        .iter()
+        .find(|case| case.case_id == "P7-08")
+        .expect("P7-08 matrix entry");
+
+    assert!(case.implemented, "P7-08 must be implemented before it runs");
+
+    let case_root = fixture_root().join(&case.fixture_dir);
+    let expected: Value = serde_json::from_str(
+        &fs::read_to_string(case_root.join("expected.json")).expect("read P7-08 expected"),
+    )
+    .expect("parse P7-08 expected");
+    let run = run_single_source_pipeline(&case_root.join("raw/root.jsonl"), "session-p7-08-root");
+    assert_eq!(run.format, RolloutFormat::CurrentNativeV2);
+
+    let projection = canonical_semantic_projection(&run.result, "session-p7-08-root");
+    let checkpoints = projection.as_array().expect("P7-08 canonical checkpoints");
+    assert!(checkpoints
+        .iter()
+        .take(checkpoints.len() - 1)
+        .any(|checkpoint| {
+            checkpoint["target_display"] == expected["penultimate_target_display"]
+                && checkpoint["semantic_goal_drift"]["flagged"] == false
+        }));
+    let final_projection = checkpoints
+        .last()
+        .expect("P7-08 final canonical checkpoint");
+    assert_eq!(
+        final_projection["target_display"],
+        expected["final_target_display"]
+    );
+    assert_eq!(
+        final_projection["working_set_paths"],
+        expected["final_working_set_paths"]
+    );
+    assert_eq!(
+        final_projection["semantic_goal_drift"],
+        expected["semantic_goal_drift"]
+    );
+    for prefix in expected["required_reason_prefixes"]
+        .as_array()
+        .expect("P7-08 evidence prefixes")
+    {
+        let prefix = prefix.as_str().expect("P7-08 evidence prefix");
+        assert!(
+            final_projection["semantic_reasons"]
+                .as_array()
+                .expect("P7-08 semantic reasons")
+                .iter()
+                .any(|reason| reason
+                    .as_str()
+                    .is_some_and(|reason| reason.starts_with(prefix))),
+            "P7-08 missing semantic evidence prefix {prefix:?}"
+        );
+    }
+    assert_eq!(expected["path_relation"], "unrelated");
+}

@@ -1,0 +1,21 @@
+{
+  "case_id": "P7-08",
+  "session_id": "session-p7-08-root",
+  "path_relation": "unrelated",
+  "penultimate_target_display": "docs/specs/p7/MAP.md",
+  "final_target_display": "docs/specs/p7/MAPPING-guide.md",
+  "final_working_set_paths": [
+    "docs/specs/p7/MAP.md",
+    "docs/specs/p7/MAPPING-guide.md"
+  ],
+  "semantic_goal_drift": {
+    "state": "active",
+    "flagged": true,
+    "raw_score": 80
+  },
+  "required_reason_prefixes": [
+    "semantic goal drift current goal:",
+    "semantic goal drift kickoff anchor:",
+    "rolling semantic goal drift previous goal:"
+  ]
+}

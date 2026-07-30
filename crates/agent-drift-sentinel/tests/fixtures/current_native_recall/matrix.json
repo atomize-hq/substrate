@@ -341,34 +341,35 @@
       "diagnostic_owners": [
         "objective-path-extraction"
       ],
-    "expected": {
-      "directive_authoritative": false,
-      "signal": "wrong_plan_branch",
-      "state": "active",
-      "flagged": true,
-      "raw_score": 60,
-      "authoritative_paths": [
-        "crates/source/src/lib.rs"
-      ],
+      "expected": {
+        "directive_authoritative": false,
+        "signal": "wrong_plan_branch",
+        "state": "active",
+        "flagged": true,
+        "raw_score": 60,
+        "authoritative_paths": [
+          "crates/source/src/lib.rs"
+        ],
         "working_set_paths": [
           "crates/source/src/lib.rs",
           "docs/target.md"
         ]
-    },
-    "historical_references": [
-      "crates/agent-drift-analyzer/tests/wrong_plan_branch.rs"
-    ]
+      },
+      "historical_references": [
+        "crates/agent-drift-analyzer/tests/wrong_plan_branch.rs"
+      ]
     },
     {
       "case_id": "P7-08",
       "title": "lexical collision positive",
-      "implemented": false,
+      "implemented": true,
       "fixture_dir": "p7-08",
       "adapter_classes": [
         "CurrentNativeV2"
       ],
       "event_variants": [
         "session_meta",
+        "task_started",
         "turn_context",
         "message",
         "custom_tool_call"
@@ -396,7 +397,9 @@
         "state": "active",
         "flagged": true,
         "raw_score": 80,
-        "path_relation": "unrelated"
+        "path_relation": "unrelated",
+        "source_path": "docs/specs/p7/MAP.md",
+        "target_path": "docs/specs/p7/MAPPING-guide.md"
       },
       "historical_references": [
         "crates/agent-drift-analyzer/tests/fixtures/semantic_goal_drift_acceptance/synthetic-kickoff-hyphen-collision-pivot/expected.json"
