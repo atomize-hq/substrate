@@ -1,0 +1,9 @@
+{
+  "case_id": "P7-16",
+  "accepted": false,
+  "error_category": "missing_checkpoint_payload",
+  "emission_ordinal": 1,
+  "state_mutated": false,
+  "processed_events_before": 0,
+  "processed_events_after": 0
+}

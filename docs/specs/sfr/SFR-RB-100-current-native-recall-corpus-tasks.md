@@ -292,8 +292,8 @@ Each task runs the P7 target. After every third case, also run the frozen semant
 
 ### Task P7-4.2 — P7-16 invalid public-live event
 
-- [ ] Provide one invalid public event shape at the checked live boundary.
-- [ ] Snapshot permitted runtime state before and after rejection.
+- [x] Provide one invalid public event shape at the checked live boundary.
+- [x] Snapshot permitted runtime state before and after rejection.
 - **Acceptance:** exact rejection category is pinned and no forbidden state mutation occurs.
 - **Verification:** P7 target plus `live_event_shape` and `live_checkpoint_compatibility`.
 - **Dependencies:** P7-4.1.

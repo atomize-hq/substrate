@@ -1,0 +1,10 @@
+{
+  "emission_ordinal": 1,
+  "cursor": {
+    "session_id": "session-p7-16-root",
+    "ordinal": 1
+  },
+  "trigger": "checkpoint_ready",
+  "checkpoint": null,
+  "source_label": "p7-16-invalid-public-live"
+}

@@ -735,7 +735,7 @@
     {
       "case_id": "P7-16",
       "title": "invalid public-live event",
-      "implemented": false,
+      "implemented": true,
       "fixture_dir": "p7-16",
       "adapter_classes": [
         "PublicLive"
@@ -762,6 +762,7 @@
       "expected": {
         "accepted": false,
         "error": "MissingCheckpointPayload",
+        "emission_ordinal": 1,
         "state_mutated": false
       },
       "historical_references": [

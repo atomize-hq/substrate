@@ -5,7 +5,8 @@ use std::fs;
 
 use agent_drift_analyzer::{analyze_bundle, AnalyzeRequest, AnalyzeResult, DriftClass, DriftState};
 use agent_drift_sentinel::{
-    LiveSessionCoordinator, LiveSessionRequest, SchedulerPolicy, TriggerClass, WarningPolicy,
+    CheckpointCursor, LiveCheckpointEvent, LiveRuntime, LiveRuntimeError, LiveSessionCoordinator,
+    LiveSessionRequest, SchedulerPolicy, TriggerClass, WarningPolicy,
 };
 use agent_session_compactor::{
     BoundedClosureCompactor, BoundedClosureError, BoundedClosureRequest, CompactorError,
@@ -2006,5 +2007,65 @@ fn p7_15_incomplete_bundle_v0_2_is_rejected() {
         other => panic!("P7-15 wrong analyzer input error: {other}"),
     }
     assert_eq!(expected["error_category"], "missing_artifact");
+    assert_eq!(expected["accepted"], false);
+}
+
+#[test]
+fn p7_16_invalid_public_live_event_does_not_mutate_runtime() {
+    let matrix = load_matrix().expect("load P7 matrix");
+    let case = matrix
+        .cases
+        .iter()
+        .find(|case| case.case_id == "P7-16")
+        .expect("P7-16 matrix entry");
+
+    assert!(case.implemented, "P7-16 must be implemented before it runs");
+
+    let case_root = fixture_root().join(&case.fixture_dir);
+    let fixture: Value = serde_json::from_str(
+        &fs::read_to_string(case_root.join("live-event.json")).expect("read P7-16 live event"),
+    )
+    .expect("parse P7-16 live event");
+    let expected: Value = serde_json::from_str(
+        &fs::read_to_string(case_root.join("expected.json")).expect("read P7-16 expected"),
+    )
+    .expect("parse P7-16 expected");
+    assert_eq!(fixture["trigger"], "checkpoint_ready");
+    assert!(fixture["checkpoint"].is_null());
+
+    let event = LiveCheckpointEvent {
+        emission_ordinal: fixture["emission_ordinal"]
+            .as_u64()
+            .expect("P7-16 emission ordinal") as usize,
+        cursor: CheckpointCursor {
+            session_id: fixture["cursor"]["session_id"]
+                .as_str()
+                .expect("P7-16 cursor session")
+                .to_string(),
+            ordinal: fixture["cursor"]["ordinal"]
+                .as_u64()
+                .expect("P7-16 cursor ordinal") as usize,
+        },
+        trigger: TriggerClass::CheckpointReady,
+        checkpoint: None,
+        source_label: fixture["source_label"].as_str().map(str::to_string),
+    };
+    let mut runtime = LiveRuntime::new(SchedulerPolicy::default(), WarningPolicy::default());
+    let before = runtime.snapshot();
+    assert_eq!(before.processed_events, expected["processed_events_before"]);
+    let error = runtime
+        .observe(event)
+        .expect_err("P7-16 missing checkpoint payload must be rejected");
+    assert!(matches!(
+        error,
+        LiveRuntimeError::MissingCheckpointPayload {
+            emission_ordinal: 1
+        }
+    ));
+    let after = runtime.snapshot();
+    assert_eq!(after, before);
+    assert_eq!(after.processed_events, expected["processed_events_after"]);
+    assert_eq!(expected["error_category"], "missing_checkpoint_payload");
+    assert_eq!(expected["state_mutated"], false);
     assert_eq!(expected["accepted"], false);
 }
