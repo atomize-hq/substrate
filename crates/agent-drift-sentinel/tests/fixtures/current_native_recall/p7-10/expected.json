@@ -1,0 +1,56 @@
+{
+  "case_id": "P7-10",
+  "root_session_id": "session-p7-10-root",
+  "child_session_id": "session-p7-10-child",
+  "selected_sessions": [
+    "session-p7-10-child",
+    "session-p7-10-root"
+  ],
+  "excluded_sessions": [
+    "session-p7-10-grandchild"
+  ],
+  "delegation_link": {
+    "parent_session_id": "session-p7-10-root",
+    "child_session_id": "session-p7-10-child",
+    "child_origin_parent_session_id": "session-p7-10-root",
+    "depth": 1,
+    "state": "verified"
+  },
+  "deeper_residue": {
+    "parent_session_id": "session-p7-10-child",
+    "child_session_id": "session-p7-10-grandchild",
+    "child_origin_parent_session_id": "session-p7-10-child",
+    "depth": 2,
+    "state": "deeper_residue"
+  },
+  "root_delegation": {
+    "topology": "delegating_parent",
+    "parent_session_id": null,
+    "child_session_ids": [
+      "session-p7-10-child"
+    ],
+    "child_work_visibility": "linked",
+    "confidence": "high"
+  },
+  "child_delegation": {
+    "topology": "delegated_child",
+    "parent_session_id": "session-p7-10-root",
+    "child_session_ids": [],
+    "child_work_visibility": "linked",
+    "confidence": "high"
+  },
+  "activity_identity": {
+    "agent_thread_id": "agent-p7-10-child",
+    "event_id": "event-p7-10-activity",
+    "kind": "interacted",
+    "type": "sub_agent_activity"
+  },
+  "agent_message_identity": {
+    "author": "agent-p7-10-child",
+    "content_types": [
+      "input_text"
+    ],
+    "recipient": "session-p7-10-root",
+    "type": "agent_message"
+  }
+}

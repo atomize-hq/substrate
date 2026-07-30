@@ -223,8 +223,8 @@ Each task runs the P7 target. After every third case, also run the frozen semant
 
 ### Task P7-3.2 — P7-10 typed delegation linkage
 
-- [ ] Preserve typed parent spawn/result, child origin, turn identity, and agent message/activity.
-- [ ] Load the production-generated bundle-v0.2 through the analyzer without independently
+- [x] Preserve typed parent spawn/result, child origin, turn identity, and agent message/activity.
+- [x] Load the production-generated bundle-v0.2 through the analyzer without independently
       reconstructing delegation metadata.
 - **Acceptance:** exact direct delegation link and file-registry projection survive ingest/export;
   analyzer interpretation retains exact parent/child topology, child-work visibility, linkage

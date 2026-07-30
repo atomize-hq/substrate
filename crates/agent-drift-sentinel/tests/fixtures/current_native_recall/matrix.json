@@ -460,24 +460,31 @@
     {
       "case_id": "P7-10",
       "title": "typed delegation linkage survives composition",
-      "implemented": false,
+      "implemented": true,
       "fixture_dir": "p7-10",
       "adapter_classes": [
         "CurrentNativeV2"
       ],
       "event_variants": [
         "session_meta",
+        "task_started",
         "turn_context",
+        "message",
+        "collab_agent_spawn_begin",
+        "collab_agent_spawn_end",
         "custom_tool_call",
         "custom_tool_call_output",
         "sub_agent_activity",
         "agent_message"
       ],
       "logical_source_files": [
-        "raw/root.jsonl"
+        "raw/root.jsonl",
+        "raw/child.jsonl",
+        "raw/grandchild.jsonl"
       ],
       "selected_direct_closure": [
-        "session-p7-10-root"
+        "session-p7-10-root",
+        "session-p7-10-child"
       ],
       "semantic_family": "delegation",
       "contract_families": [
@@ -498,8 +505,15 @@
       "expected": {
         "topology": "delegating_parent",
         "child_visibility": "linked",
-        "link_state": "verified",
-        "transitive_sessions": []
+      "link_state": "verified",
+      "selected_sessions": [
+        "session-p7-10-child",
+        "session-p7-10-root"
+      ],
+        "transitive_sessions": [],
+        "excluded_sessions": [
+          "session-p7-10-grandchild"
+        ]
       },
       "historical_references": [
         "crates/agent-drift-analyzer/tests/fixtures/delegated_acceptance/matrix.json"

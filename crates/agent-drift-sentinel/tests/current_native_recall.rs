@@ -1482,3 +1482,192 @@ fn p7_09_unrelated_session_is_excluded_from_public_live() {
         );
     }
 }
+
+#[test]
+fn p7_10_typed_delegation_survives_production_bundle() {
+    let matrix = load_matrix().expect("load P7 matrix");
+    let case = matrix
+        .cases
+        .iter()
+        .find(|case| case.case_id == "P7-10")
+        .expect("P7-10 matrix entry");
+
+    assert!(case.implemented, "P7-10 must be implemented before it runs");
+
+    let case_root = fixture_root().join(&case.fixture_dir);
+    let expected: Value = serde_json::from_str(
+        &fs::read_to_string(case_root.join("expected.json")).expect("read P7-10 expected"),
+    )
+    .expect("parse P7-10 expected");
+    let temp_dir = tempfile::TempDir::new().expect("P7-10 temp dir");
+    let temp_root = Utf8Path::from_path(temp_dir.path()).expect("P7-10 UTF-8 temp root");
+    let codex_home = temp_root.join(".codex");
+    let rollout_dir = codex_home.join("sessions/2026/07/29");
+    fs::create_dir_all(&rollout_dir).expect("create P7-10 rollout directory");
+    for session in ["root", "child", "grandchild"] {
+        fs::copy(
+            case_root.join(format!("raw/{session}.jsonl")),
+            rollout_dir.join(format!("rollout-session-p7-10-{session}.jsonl")),
+        )
+        .expect("materialize P7-10 source");
+    }
+
+    let mut compactor = BoundedClosureCompactor::default();
+    let prepared = compactor
+        .prepare(&BoundedClosureRequest {
+            codex_home: Some(codex_home),
+            root_session_id: "session-p7-10-root".to_string(),
+        })
+        .expect("prepare P7-10 direct closure");
+    let compactor_dir = temp_root.join("compactor");
+    compactor
+        .compact(prepared, &compactor_dir, None)
+        .expect("compact P7-10 direct closure");
+    let manifest: Value = serde_json::from_str(
+        &fs::read_to_string(compactor_dir.join("manifest.json")).expect("read P7-10 manifest"),
+    )
+    .expect("parse P7-10 manifest");
+    assert_eq!(manifest["schema_version"], "v0.2");
+    assert_eq!(manifest["session_ids"], expected["selected_sessions"]);
+    let registry = manifest["files"]
+        .as_array()
+        .expect("P7-10 file registry")
+        .iter()
+        .map(|file| {
+            (
+                file["session_id"].as_str().expect("P7-10 registry session"),
+                file["turns"].clone(),
+            )
+        })
+        .collect::<BTreeMap<_, _>>();
+    assert_eq!(
+        registry,
+        BTreeMap::from([
+            (
+                "session-p7-10-child",
+                serde_json::json!(["turn-p7-10-child"]),
+            ),
+            ("session-p7-10-root", serde_json::json!(["turn-p7-10-root"]),),
+        ])
+    );
+    let links = manifest["delegation_links"]
+        .as_array()
+        .expect("P7-10 delegation links");
+    assert_eq!(links.len(), 2, "P7-10 links: {links:?}");
+    let verified_link = links
+        .iter()
+        .find(|link| link["state"] == "verified")
+        .expect("P7-10 verified direct link");
+    for field in [
+        "parent_session_id",
+        "child_session_id",
+        "child_origin_parent_session_id",
+        "depth",
+        "state",
+    ] {
+        assert_eq!(
+            verified_link[field], expected["delegation_link"][field],
+            "P7-10 delegation link field {field}"
+        );
+    }
+    let deeper_residue = links
+        .iter()
+        .find(|link| link["state"] == "deeper_residue")
+        .expect("P7-10 typed deeper residue");
+    for field in [
+        "parent_session_id",
+        "child_session_id",
+        "child_origin_parent_session_id",
+        "depth",
+        "state",
+    ] {
+        assert_eq!(
+            deeper_residue[field], expected["deeper_residue"][field],
+            "P7-10 deeper-residue field {field}"
+        );
+    }
+
+    let compact_rows = fs::read_to_string(compactor_dir.join("rows.compact.jsonl"))
+        .expect("read P7-10 compact rows")
+        .lines()
+        .map(|line| serde_json::from_str::<Value>(line).expect("parse P7-10 compact row"))
+        .collect::<Vec<_>>();
+    let activity = compact_rows
+        .iter()
+        .find(|row| {
+            row["kind"] == "status"
+                && row["text"]
+                    .as_str()
+                    .is_some_and(|text| text.contains("sub_agent_activity"))
+        })
+        .expect("P7-10 typed sub-agent activity");
+    let activity_identity: Value = serde_json::from_str(
+        activity["dedupe_identity"]
+            .as_str()
+            .expect("P7-10 activity identity"),
+    )
+    .expect("parse P7-10 activity identity");
+    assert_eq!(activity_identity, expected["activity_identity"]);
+    let agent_message = compact_rows
+        .iter()
+        .find(|row| row["text"] == "Delegated parser seam is bounded.")
+        .expect("P7-10 typed agent message");
+    let agent_message_identity: Value = serde_json::from_str(
+        agent_message["dedupe_identity"]
+            .as_str()
+            .expect("P7-10 agent-message identity"),
+    )
+    .expect("parse P7-10 agent-message identity");
+    assert_eq!(agent_message_identity, expected["agent_message_identity"]);
+
+    let analyzer_dir = temp_root.join("analyzer");
+    let result = analyze_bundle(&AnalyzeRequest {
+        input_dir: compactor_dir,
+        output_dir: analyzer_dir,
+    })
+    .expect("analyze P7-10 production-generated bundle");
+    assert_eq!(
+        result
+            .sessions
+            .iter()
+            .map(|session| session.session_id.as_str())
+            .collect::<BTreeSet<_>>(),
+        BTreeSet::from(["session-p7-10-child", "session-p7-10-root"])
+    );
+    for (session_id, expected_key) in [
+        ("session-p7-10-root", "root_delegation"),
+        ("session-p7-10-child", "child_delegation"),
+    ] {
+        let checkpoint = result
+            .sessions
+            .iter()
+            .find(|session| session.session_id == session_id)
+            .and_then(|session| session.checkpoints.last())
+            .expect("P7-10 final delegated checkpoint");
+        let projection = serde_json::json!({
+            "topology": checkpoint.delegation.topology,
+            "parent_session_id": checkpoint.delegation.parent_session_id,
+            "child_session_ids": checkpoint.delegation.child_session_ids,
+            "child_work_visibility": checkpoint.delegation.child_work_visibility,
+            "confidence": checkpoint.delegation.confidence,
+        });
+        assert_eq!(
+            projection, expected[expected_key],
+            "P7-10 analyzer delegation projection for {session_id}"
+        );
+    }
+    for excluded in expected["excluded_sessions"]
+        .as_array()
+        .expect("P7-10 excluded sessions")
+    {
+        let excluded = excluded.as_str().expect("P7-10 excluded session");
+        assert!(
+            !manifest["session_ids"]
+                .as_array()
+                .expect("P7-10 selected sessions")
+                .iter()
+                .any(|session| session == excluded),
+            "P7-10 must not select a transitive delegation session"
+        );
+    }
+}
