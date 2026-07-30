@@ -658,13 +658,14 @@
     {
       "case_id": "P7-14",
       "title": "malformed selected source",
-      "implemented": false,
+      "implemented": true,
       "fixture_dir": "p7-14",
       "adapter_classes": [
         "CurrentNativeV2"
       ],
       "event_variants": [
         "session_meta",
+        "turn_context",
         "malformed_response_item"
       ],
       "logical_source_files": [
@@ -686,7 +687,9 @@
       ],
       "expected": {
         "selected_pipeline": "rejected",
-        "error": "SelectedArtifactInvalid"
+        "error": "SelectedPayloadMalformed",
+        "failure_count": 1,
+        "analyzer_started": false
       },
       "historical_references": [
         "crates/agent-session-compactor/tests/bounded_closure.rs"

@@ -7,7 +7,10 @@ use agent_drift_analyzer::{analyze_bundle, AnalyzeRequest, AnalyzeResult, DriftC
 use agent_drift_sentinel::{
     LiveSessionCoordinator, LiveSessionRequest, SchedulerPolicy, TriggerClass, WarningPolicy,
 };
-use agent_session_compactor::{BoundedClosureCompactor, BoundedClosureRequest, RolloutFormat};
+use agent_session_compactor::{
+    BoundedClosureCompactor, BoundedClosureError, BoundedClosureRequest, CompactorError,
+    RolloutFormat,
+};
 use camino::{Utf8Path, Utf8PathBuf};
 use serde::Deserialize;
 use serde_json::Value;
@@ -1902,4 +1905,65 @@ fn p7_13_malformed_unrelated_source_is_excluded() {
     );
     assert_eq!(expected["malformed_source_selected"], false);
     assert_eq!(expected["selected_pipeline"], "success");
+}
+
+#[test]
+fn p7_14_malformed_selected_source_is_rejected() {
+    let matrix = load_matrix().expect("load P7 matrix");
+    let case = matrix
+        .cases
+        .iter()
+        .find(|case| case.case_id == "P7-14")
+        .expect("P7-14 matrix entry");
+
+    assert!(case.implemented, "P7-14 must be implemented before it runs");
+
+    let case_root = fixture_root().join(&case.fixture_dir);
+    let expected: Value = serde_json::from_str(
+        &fs::read_to_string(case_root.join("expected.json")).expect("read P7-14 expected"),
+    )
+    .expect("parse P7-14 expected");
+    let temp_dir = tempfile::TempDir::new().expect("P7-14 temp dir");
+    let temp_root = Utf8Path::from_path(temp_dir.path()).expect("P7-14 UTF-8 temp root");
+    let codex_home = temp_root.join(".codex");
+    let rollout_dir = codex_home.join("sessions/2026/07/30");
+    fs::create_dir_all(&rollout_dir).expect("create P7-14 rollout directory");
+    let selected_path = rollout_dir.join("rollout-session-p7-14-root.jsonl");
+    fs::copy(case_root.join("raw/root.jsonl"), &selected_path)
+        .expect("materialize P7-14 selected source");
+
+    let mut compactor = BoundedClosureCompactor::default();
+    let prepared = compactor
+        .prepare(&BoundedClosureRequest {
+            codex_home: Some(codex_home),
+            root_session_id: "session-p7-14-root".to_string(),
+        })
+        .expect("P7-14 envelope selection succeeds before full decode");
+    let compactor_dir = temp_root.join("compactor");
+    let error = compactor
+        .compact(prepared, &compactor_dir, None)
+        .expect_err("P7-14 selected malformed body must fail closed");
+    match error {
+        CompactorError::BoundedClosure(BoundedClosureError::SelectedPayloadMalformed {
+            path,
+            failures,
+        }) => {
+            assert_eq!(path, selected_path);
+            assert_eq!(
+                failures.len(),
+                expected["failure_count"]
+                    .as_u64()
+                    .expect("P7-14 failure count") as usize
+            );
+            assert_eq!(failures[0], expected["failure"]);
+        }
+        other => panic!("P7-14 wrong closure error: {other}"),
+    }
+    assert!(
+        !compactor_dir.exists(),
+        "P7-14 must not publish an analyzer bundle"
+    );
+    assert_eq!(expected["error_category"], "selected_payload_malformed");
+    assert_eq!(expected["selected_pipeline"], "rejected");
+    assert_eq!(expected["analyzer_started"], false);
 }

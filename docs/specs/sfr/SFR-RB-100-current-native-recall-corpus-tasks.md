@@ -263,7 +263,7 @@ Each task runs the P7 target. After every third case, also run the frozen semant
 
 ### Task P7-3.6 — P7-14 malformed selected source
 
-- [ ] Place equivalent malformed structure inside selected direct closure.
+- [x] Place equivalent malformed structure inside selected direct closure.
 - **Acceptance:** closure verification returns the exact declared error and no analyzer/public-live
   success is emitted.
 - **Verification:** P7 target plus `bounded_closure`.
@@ -272,12 +272,12 @@ Each task runs the P7 target. After every third case, also run the frozen semant
 
 ### Checkpoint P7-D1 — Closure wall
 
-- [ ] P7-09 through P7-14 pass.
-- [ ] Raw P7-10 typed delegation reaches analyzer-owned semantics through its production-generated
+- [x] P7-09 through P7-14 pass.
+- [x] Raw P7-10 typed delegation reaches analyzer-owned semantics through its production-generated
       bundle-v0.2.
-- [ ] Registered metadata-only and missing-child cases remain distinct.
-- [ ] Malformed unrelated and malformed selected cases remain distinct.
-- [ ] Direct closure did not expand transitively.
+- [x] Registered metadata-only and missing-child cases remain distinct.
+- [x] Malformed unrelated and malformed selected cases remain distinct.
+- [x] Direct closure did not expand transitively.
 
 ## P7-4 — Analyzer and public-live boundaries
 

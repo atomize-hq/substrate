@@ -1,0 +1,9 @@
+{
+  "case_id": "P7-14",
+  "root_session_id": "session-p7-14-root",
+  "selected_pipeline": "rejected",
+  "error_category": "selected_payload_malformed",
+  "failure_count": 1,
+  "failure": "line 3: failed to parse current-native Codex rollout JSONL: response_item.payload.content must be an array",
+  "analyzer_started": false
+}
