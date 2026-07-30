@@ -236,7 +236,7 @@ Each task runs the P7 target. After every third case, also run the frozen semant
 
 ### Task P7-3.3 — P7-11 registered metadata-only child
 
-- [ ] Include a verified child in the registry with no compact rows.
+- [x] Include a verified child in the registry with no compact rows.
 - **Acceptance:** export and analyzer accept the child as metadata-only and retain exact linkage
   state.
 - **Verification:** P7 target plus `export_bundle` and `delegated_acceptance`.

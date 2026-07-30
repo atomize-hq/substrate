@@ -505,11 +505,11 @@
       "expected": {
         "topology": "delegating_parent",
         "child_visibility": "linked",
-      "link_state": "verified",
-      "selected_sessions": [
-        "session-p7-10-child",
-        "session-p7-10-root"
-      ],
+        "link_state": "verified",
+        "selected_sessions": [
+          "session-p7-10-child",
+          "session-p7-10-root"
+        ],
         "transitive_sessions": [],
         "excluded_sessions": [
           "session-p7-10-grandchild"
@@ -522,22 +522,28 @@
     {
       "case_id": "P7-11",
       "title": "registered metadata-only child",
-      "implemented": false,
+      "implemented": true,
       "fixture_dir": "p7-11",
       "adapter_classes": [
         "CurrentNativeV2"
       ],
       "event_variants": [
         "session_meta",
+        "task_started",
         "turn_context",
+        "message",
+        "collab_agent_spawn_begin",
+        "collab_agent_spawn_end",
         "custom_tool_call",
         "custom_tool_call_output"
       ],
       "logical_source_files": [
-        "raw/root.jsonl"
+        "raw/root.jsonl",
+        "raw/child.jsonl"
       ],
       "selected_direct_closure": [
-        "session-p7-11-root"
+        "session-p7-11-root",
+        "session-p7-11-child"
       ],
       "semantic_family": "metadata_only_child",
       "contract_families": [
@@ -554,7 +560,11 @@
       "expected": {
         "accepted": true,
         "child_rows": 0,
-        "link_state": "verified"
+        "link_state": "verified",
+        "selected_sessions": [
+          "session-p7-11-child",
+          "session-p7-11-root"
+        ]
       },
       "historical_references": [
         "crates/agent-session-compactor/tests/export_bundle.rs"

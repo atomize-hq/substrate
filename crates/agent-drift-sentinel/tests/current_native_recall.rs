@@ -1671,3 +1671,94 @@ fn p7_10_typed_delegation_survives_production_bundle() {
         );
     }
 }
+
+#[test]
+fn p7_11_verified_metadata_only_child_is_accepted() {
+    let matrix = load_matrix().expect("load P7 matrix");
+    let case = matrix
+        .cases
+        .iter()
+        .find(|case| case.case_id == "P7-11")
+        .expect("P7-11 matrix entry");
+
+    assert!(case.implemented, "P7-11 must be implemented before it runs");
+
+    let case_root = fixture_root().join(&case.fixture_dir);
+    let expected: Value = serde_json::from_str(
+        &fs::read_to_string(case_root.join("expected.json")).expect("read P7-11 expected"),
+    )
+    .expect("parse P7-11 expected");
+    let temp_dir = tempfile::TempDir::new().expect("P7-11 temp dir");
+    let temp_root = Utf8Path::from_path(temp_dir.path()).expect("P7-11 UTF-8 temp root");
+    let codex_home = temp_root.join(".codex");
+    let rollout_dir = codex_home.join("sessions/2026/07/29");
+    fs::create_dir_all(&rollout_dir).expect("create P7-11 rollout directory");
+    for session in ["root", "child"] {
+        fs::copy(
+            case_root.join(format!("raw/{session}.jsonl")),
+            rollout_dir.join(format!("rollout-session-p7-11-{session}.jsonl")),
+        )
+        .expect("materialize P7-11 source");
+    }
+
+    let mut compactor = BoundedClosureCompactor::default();
+    let prepared = compactor
+        .prepare(&BoundedClosureRequest {
+            codex_home: Some(codex_home),
+            root_session_id: "session-p7-11-root".to_string(),
+        })
+        .expect("prepare P7-11 direct closure");
+    let compactor_dir = temp_root.join("compactor");
+    compactor
+        .compact(prepared, &compactor_dir, None)
+        .expect("compact P7-11 direct closure");
+    let manifest: Value = serde_json::from_str(
+        &fs::read_to_string(compactor_dir.join("manifest.json")).expect("read P7-11 manifest"),
+    )
+    .expect("parse P7-11 manifest");
+    assert_eq!(manifest["session_ids"], expected["selected_sessions"]);
+    let child_file = manifest["files"]
+        .as_array()
+        .expect("P7-11 file registry")
+        .iter()
+        .find(|file| file["session_id"] == expected["child_session_id"])
+        .expect("P7-11 metadata-only child registry entry");
+    assert_eq!(child_file["turns"], expected["child_file_turns"]);
+    let child_file_id = child_file["id"].as_u64().expect("P7-11 child file ID");
+    for artifact in ["rows.archival.jsonl", "rows.compact.jsonl"] {
+        let child_rows = fs::read_to_string(compactor_dir.join(artifact))
+            .expect("read P7-11 rows")
+            .lines()
+            .map(|line| serde_json::from_str::<Value>(line).expect("parse P7-11 row"))
+            .filter(|row| row["source_file_id"] == child_file_id)
+            .count();
+        assert_eq!(
+            child_rows,
+            expected["child_rows"]
+                .as_u64()
+                .expect("P7-11 expected child rows") as usize
+        );
+    }
+    let link = manifest["delegation_links"]
+        .as_array()
+        .and_then(|links| links.first())
+        .expect("P7-11 verified delegation link");
+    assert_eq!(link["state"], expected["link_state"]);
+    assert_eq!(link["parent_session_id"], expected["parent_session_id"]);
+    assert_eq!(link["child_session_id"], expected["child_session_id"]);
+
+    let loaded = agent_drift_analyzer::input::load_bundle(&compactor_dir)
+        .expect("P7-11 analyzer accepts metadata-only child");
+    let child = loaded
+        .sessions
+        .iter()
+        .find(|session| session.session_id == "session-p7-11-child")
+        .expect("P7-11 analyzer child session");
+    assert!(child.archival_rows.is_empty());
+    assert!(child.compact_rows.is_empty());
+    assert_eq!(
+        loaded.delegation_graph.by_session_id["session-p7-11-root"].child_links[0].child_session_id,
+        "session-p7-11-child"
+    );
+    assert_eq!(expected["accepted"], true);
+}

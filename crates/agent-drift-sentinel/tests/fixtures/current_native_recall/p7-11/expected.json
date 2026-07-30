@@ -1,0 +1,13 @@
+{
+  "case_id": "P7-11",
+  "selected_sessions": [
+    "session-p7-11-child",
+    "session-p7-11-root"
+  ],
+  "parent_session_id": "session-p7-11-root",
+  "child_session_id": "session-p7-11-child",
+  "child_rows": 0,
+  "link_state": "verified",
+  "child_file_turns": null,
+  "accepted": true
+}
