@@ -468,9 +468,9 @@ Each task runs the P7 target. After every third case, also run the frozen semant
 
 ### Task P7-7.3 — Run GitNexus change detection and bounded implementation review
 
-- [ ] Run GitNexus detection over all uncommitted P7 changes.
-- [ ] Verify affected symbols/flows stay within the approved fence.
-- [ ] Send the exact P7 implementation delta, matrix, and sanitized receipt to a fresh independent
+- [x] Run GitNexus detection over the exact committed P7 range.
+- [x] Verify affected symbols/flows stay within the approved fence.
+- [x] Send the exact P7 implementation delta, matrix, and sanitized receipt to a fresh independent
       reviewer.
 - **Acceptance:** review is semantically bounded to supported P7 inputs and explicit invariants;
   findings are classified and no historical lexical audit is reopened.
