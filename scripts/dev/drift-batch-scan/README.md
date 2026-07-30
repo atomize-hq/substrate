@@ -32,7 +32,8 @@ python3 "$REPO/$S/sample_sessions.py" \
   --receipt-out selection_receipt.json
 
 # 2. run each session through compactor->analyzer in its own temp codex-home
-#    (isolation avoids cross-session exact-dedupe contamination in the compactor)
+#    (isolation avoids cross-session exact-dedupe contamination in the compactor).
+#    The batch path must not already exist; every run gets a fresh checkpoint set.
 python3 "$REPO/$S/run_batch.py" \
   --repo "$REPO" \
   --selected selected_sessions.jsonl \
@@ -175,8 +176,16 @@ The three P7 stages carry authority through two sanitized sidecars:
 - `selection_receipt.json` contains only the inventory cutoff/digest/count, immutable quota
   configuration/digest, selected-set digest/count, and per-bucket eligible/selected/underfill
   results.
-- `batch/batch_receipt.json` adds only attempted/succeeded/failed counts and coarse failure kinds.
-- `batch/p7_private_receipt.json` adds aggregate analyzer/funnel counts and heuristic stratum counts.
+- `batch/batch_receipt.json` adds only attempted/succeeded/failed counts, coarse failure kinds, and a
+  privacy-safe digest/count summary of the exact checkpoint files.
+- `batch/p7_private_receipt.json` adds aggregate analyzer/funnel counts and heuristic stratum counts
+  only after recomputing and matching that checkpoint-set authority.
+
+`run_batch.py` recomputes the sampler's selected-set digest from the private selected manifest before
+execution, refuses a pre-existing batch directory, writes checkpoint files atomically, and exits
+nonzero after recording any failed session. `tabulate.py` refuses failed batches, missing/extra/stale
+checkpoint files, checkpoint/session count mismatches, or an aggregate that does not match the
+batch-bound checkpoint-set digest.
 
 The receipt builders recursively reject raw path, session, repository, and message fields or
 absolute-path string values. The tabulator's repository table is rank-anonymized. Its language,

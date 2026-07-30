@@ -14,12 +14,14 @@ Requires the release/debug binaries to be built first:
 from __future__ import annotations
 
 import argparse
+import hashlib
 import json
 import os
 import shutil
 import subprocess
 import tempfile
 from collections import Counter
+from pathlib import Path
 
 
 def find_repo_root(start: str) -> str:
@@ -53,6 +55,17 @@ _FORBIDDEN_RECEIPT_KEYS = {
     "selected_ids",
     "repositories",
 }
+_CANDIDATE_DIGEST_FIELDS = (
+    "timestamp",
+    "relative_path",
+    "session_id",
+    "cwd",
+    "repo",
+    "month",
+    "size",
+    "source_digest",
+    "rollout_format",
+)
 
 
 def classify_session_delegation(rollout_path: str) -> str:
@@ -90,6 +103,104 @@ def re_windows_absolute_path(value: str) -> bool:
     return len(value) >= 3 and value[0].isalpha() and value[1:3] in (":\\", ":/")
 
 
+def canonical_digest(value: object) -> str:
+    encoded = json.dumps(value, sort_keys=True, separators=(",", ":")).encode("utf-8")
+    return hashlib.sha256(encoded).hexdigest()
+
+
+def selected_manifest_digest(records: list[dict], config_digest: str) -> str:
+    selected = []
+    for index, record in enumerate(records):
+        try:
+            candidate = {field: record[field] for field in _CANDIDATE_DIGEST_FIELDS}
+        except KeyError as error:
+            raise ValueError(
+                f"selected manifest record {index} is missing {error.args[0]}"
+            ) from error
+        strata = record.get("strata")
+        if not isinstance(strata, dict):
+            raise ValueError(f"selected manifest record {index} has invalid strata")
+        labels = []
+        for family, values in sorted(strata.items()):
+            if not isinstance(family, str) or not isinstance(values, list):
+                raise ValueError(f"selected manifest record {index} has invalid strata")
+            for label in values:
+                if not isinstance(label, str):
+                    raise ValueError(
+                        f"selected manifest record {index} has invalid stratum label"
+                    )
+                labels.append(f"{family}:{label}")
+        selected.append({"candidate": candidate, "labels": sorted(labels)})
+    return canonical_digest(
+        {
+            "schema_version": 1,
+            "config_digest": config_digest,
+            "selected": selected,
+        }
+    )
+
+
+def validate_selected_manifest(receipt: dict, records: list[dict]) -> None:
+    selection = receipt["selection"]
+    if len(records) != selection["selected_count"]:
+        raise ValueError("selected manifest count does not match selection receipt")
+    identities = [record.get("session_id") for record in records]
+    if any(not isinstance(identity, str) or not identity for identity in identities):
+        raise ValueError("selected manifest contains an invalid session identity")
+    if len(identities) != len(set(identities)):
+        raise ValueError("selected manifest contains duplicate session identities")
+    actual_digest = selected_manifest_digest(
+        records, receipt["quota_config"]["digest"]
+    )
+    if actual_digest != selection["digest"]:
+        raise ValueError("selected manifest does not match selected-set digest")
+
+
+def prepare_batch_directories(
+    batch_dir: str | os.PathLike[str],
+) -> tuple[Path, Path]:
+    batch_path = Path(batch_dir)
+    if batch_path.exists():
+        raise ValueError("batch directory must not already exist; use a fresh scratch path")
+    checkpoints = batch_path / "checkpoints"
+    work = batch_path / "work"
+    checkpoints.mkdir(parents=True)
+    work.mkdir()
+    return checkpoints, work
+
+
+def checkpoint_set_summary(checkpoints_dir: str | os.PathLike[str]) -> dict:
+    records = []
+    for path in sorted(Path(checkpoints_dir).glob("*.jsonl")):
+        raw = path.read_bytes()
+        checkpoint_count = sum(bool(line.strip()) for line in raw.splitlines())
+        records.append(
+            {
+                "bytes": len(raw),
+                "checkpoint_count": checkpoint_count,
+                "sha256": hashlib.sha256(raw).hexdigest(),
+            }
+        )
+    return {
+        "schema_version": 1,
+        "file_count": len(records),
+        "checkpoint_count": sum(record["checkpoint_count"] for record in records),
+        "digest": canonical_digest(
+            {
+                "schema_version": 1,
+                "files": sorted(
+                    records,
+                    key=lambda record: (
+                        record["sha256"],
+                        record["bytes"],
+                        record["checkpoint_count"],
+                    ),
+                ),
+            }
+        ),
+    }
+
+
 def load_selection_receipt(path: str) -> dict:
     with open(path) as handle:
         receipt = json.load(handle)
@@ -104,8 +215,13 @@ def load_selection_receipt(path: str) -> dict:
     return receipt
 
 
-def build_batch_receipt(selection_receipt: dict, status: list[dict]) -> dict:
+def build_batch_receipt(
+    selection_receipt: dict,
+    status: list[dict],
+    checkpoint_set: dict,
+) -> dict:
     validate_safe_receipt(selection_receipt)
+    validate_safe_receipt(checkpoint_set)
     failure_kinds = Counter()
     for record in status:
         if record.get("ok"):
@@ -123,7 +239,10 @@ def build_batch_receipt(selection_receipt: dict, status: list[dict]) -> dict:
             "failed_count": len(status) - succeeded,
             "failure_kinds": dict(sorted(failure_kinds.items())),
         },
+        "checkpoint_set": checkpoint_set,
     }
+    if checkpoint_set.get("file_count") != succeeded:
+        raise ValueError("checkpoint set file count does not match successful sessions")
     validate_safe_receipt(receipt)
     return receipt
 
@@ -155,17 +274,15 @@ def main() -> None:
             raise SystemExit(f"missing binary {b}\n  build first: "
                              f"cargo build -p agent-session-compactor -p agent-drift-analyzer")
 
-    ckdir = os.path.join(args.batch_dir, "checkpoints")
-    work = os.path.join(args.batch_dir, "work")
-    os.makedirs(ckdir, exist_ok=True)
-    os.makedirs(work, exist_ok=True)
-
     selection_receipt = load_selection_receipt(args.selection_receipt)
     sessions = [json.loads(l) for l in open(args.selected) if l.strip()]
-    if len(sessions) != selection_receipt["selection"]["selected_count"]:
-        raise SystemExit(
-            "selected manifest count does not match sanitized selection receipt"
-        )
+    try:
+        validate_selected_manifest(selection_receipt, sessions)
+        checkpoints_path, work_path = prepare_batch_directories(args.batch_dir)
+    except ValueError as error:
+        raise SystemExit(str(error)) from error
+    ckdir = str(checkpoints_path)
+    work = str(work_path)
     status = []
     ok = 0
     for i, s in enumerate(sessions, 1):
@@ -187,6 +304,8 @@ def main() -> None:
             else classify_session_delegation(path)
         )
         rec["delegation"] = delegation
+        checkpoint_output = os.path.join(ckdir, sid + ".jsonl")
+        checkpoint_temp = checkpoint_output + ".tmp"
         try:
             shutil.copy(path, ch)
             r1 = subprocess.run([compact, "--codex-home", os.path.join(tmp, "codex-home"),
@@ -204,7 +323,7 @@ def main() -> None:
                 raise RuntimeError(rec["error"])
             cpsrc = os.path.join(analysis, "checkpoints.jsonl")
             n = 0
-            with open(os.path.join(ckdir, sid + ".jsonl"), "w") as out:
+            with open(checkpoint_temp, "w") as out:
                 for line in open(cpsrc):
                     if not line.strip():
                         continue
@@ -216,10 +335,15 @@ def main() -> None:
                     cp["_selection_strata"] = s.get("strata", {})
                     out.write(json.dumps(cp) + "\n")
                     n += 1
+            os.replace(checkpoint_temp, checkpoint_output)
             rec["ok"] = True
             rec["n_checkpoints"] = n
             ok += 1
         except Exception as e:
+            try:
+                os.unlink(checkpoint_temp)
+            except FileNotFoundError:
+                pass
             if not rec["error"]:
                 rec["error"] = str(e)[:200]
         finally:
@@ -235,7 +359,11 @@ def main() -> None:
     errs = Counter((r["error"] or "").split(":")[0] for r in status if not r["ok"])
     if errs:
         print("failure kinds:", dict(errs))
-    batch_receipt = build_batch_receipt(selection_receipt, status)
+    batch_receipt = build_batch_receipt(
+        selection_receipt,
+        status,
+        checkpoint_set_summary(ckdir),
+    )
     batch_receipt_path = args.batch_receipt or os.path.join(
         args.batch_dir, "batch_receipt.json"
     )
@@ -243,6 +371,8 @@ def main() -> None:
         json.dump(batch_receipt, handle, indent=2, sort_keys=True)
         handle.write("\n")
     print(f"sanitized batch receipt: {batch_receipt_path}")
+    if batch_receipt["batch"]["failed_count"]:
+        raise SystemExit("batch failed; aggregate receipt is not eligible for signoff")
 
 
 if __name__ == "__main__":

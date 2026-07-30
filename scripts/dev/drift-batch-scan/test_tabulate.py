@@ -1,6 +1,9 @@
 import importlib.util
 import json
 import pathlib
+import subprocess
+import sys
+import tempfile
 import unittest
 
 MODULE_PATH = pathlib.Path(__file__).with_name('tabulate.py')
@@ -184,7 +187,15 @@ class PrivacySafeReceiptTests(unittest.TestCase):
             },
         ]
 
-        receipt = run_batch.build_batch_receipt(self.selection_receipt(), status)
+        checkpoint_set = {
+            'schema_version': 1,
+            'file_count': 1,
+            'checkpoint_count': 2,
+            'digest': 'd' * 64,
+        }
+        receipt = run_batch.build_batch_receipt(
+            self.selection_receipt(), status, checkpoint_set
+        )
         serialized = json.dumps(receipt, sort_keys=True)
 
         self.assertEqual(receipt['batch'], {
@@ -193,6 +204,7 @@ class PrivacySafeReceiptTests(unittest.TestCase):
             'failed_count': 1,
             'failure_kinds': {'compact': 1},
         })
+        self.assertEqual(receipt['checkpoint_set'], checkpoint_set)
         self.assertNotIn('private-session', serialized)
         self.assertNotIn('private-repo', serialized)
         self.assertNotIn('/private/path', serialized)
@@ -200,7 +212,14 @@ class PrivacySafeReceiptTests(unittest.TestCase):
 
     def test_tabulation_receipt_contains_only_aggregate_observable_fields(self):
         batch_receipt = run_batch.build_batch_receipt(
-            self.selection_receipt(), [{'ok': True, 'error': None}]
+            self.selection_receipt(),
+            [{'ok': True, 'error': None}],
+            {
+                'schema_version': 1,
+                'file_count': 1,
+                'checkpoint_count': 3,
+                'digest': 'd' * 64,
+            },
         )
         receipt = module.build_sanitized_receipt(
             batch_receipt,
@@ -230,6 +249,148 @@ class PrivacySafeReceiptTests(unittest.TestCase):
         ):
             self.assertNotIn(forbidden, serialized)
         module.validate_sanitized_receipt(receipt)
+
+    def test_same_sized_selected_manifest_must_match_receipt_digest(self):
+        records = [
+            {
+                'timestamp': '2026-07-20T12:00:00Z',
+                'relative_path': '2026/07/20/rollout-a.jsonl',
+                'session_id': 'session-a',
+                'path': '/scratch/rollout-a.jsonl',
+                'cwd': '/workspace/a',
+                'repo': 'repo-a',
+                'month': '2026-07',
+                'size': 2048,
+                'source_digest': 'a' * 64,
+                'rollout_format': 'CurrentNativeV2',
+                'strata': {
+                    'language_repo': ['rust'],
+                    'workflow': ['verification'],
+                },
+            }
+        ]
+        receipt = self.selection_receipt()
+        receipt['selection']['selected_count'] = 1
+        receipt['selection']['digest'] = run_batch.selected_manifest_digest(
+            records, receipt['quota_config']['digest']
+        )
+
+        run_batch.validate_selected_manifest(receipt, records)
+
+        changed = [dict(records[0], source_digest='e' * 64)]
+        with self.assertRaisesRegex(ValueError, 'selected-set digest'):
+            run_batch.validate_selected_manifest(receipt, changed)
+
+    def test_batch_directory_must_be_fresh(self):
+        with tempfile.TemporaryDirectory() as root:
+            batch_dir = pathlib.Path(root) / 'batch'
+            checkpoints, work = run_batch.prepare_batch_directories(batch_dir)
+            self.assertTrue(checkpoints.is_dir())
+            self.assertTrue(work.is_dir())
+            with self.assertRaisesRegex(ValueError, 'must not already exist'):
+                run_batch.prepare_batch_directories(batch_dir)
+
+    def test_failed_batch_cannot_produce_aggregate_receipt(self):
+        batch_receipt = run_batch.build_batch_receipt(
+            self.selection_receipt(),
+            [{'ok': False, 'error': 'compact:failed'}],
+            {
+                'schema_version': 1,
+                'file_count': 0,
+                'checkpoint_count': 0,
+                'digest': 'd' * 64,
+            },
+        )
+        with self.assertRaisesRegex(ValueError, 'failed sessions'):
+            module.build_sanitized_receipt(
+                batch_receipt,
+                analysis_coverage={'sessions_analyzed': 0},
+                heuristic_strata={},
+            )
+
+    def test_batch_runner_records_failure_and_exits_nonzero(self):
+        with tempfile.TemporaryDirectory() as root:
+            root_path = pathlib.Path(root)
+            repo = root_path / 'repo'
+            binary_dir = repo / 'target' / 'debug'
+            binary_dir.mkdir(parents=True)
+            for name in ('agent-session-compactor', 'agent-drift-analyzer'):
+                binary = binary_dir / name
+                binary.write_text('#!/bin/sh\nexit 1\n')
+                binary.chmod(0o755)
+
+            source = root_path / 'rollout.jsonl'
+            source.write_text('{}\n')
+            records = [
+                {
+                    'timestamp': '2026-07-20T12:00:00Z',
+                    'relative_path': '2026/07/20/rollout-a.jsonl',
+                    'session_id': 'session-a',
+                    'path': str(source),
+                    'cwd': '/workspace/a',
+                    'repo': 'repo-a',
+                    'month': '2026-07',
+                    'size': source.stat().st_size,
+                    'source_digest': 'a' * 64,
+                    'rollout_format': 'CurrentNativeV2',
+                    'strata': {},
+                }
+            ]
+            receipt = self.selection_receipt()
+            receipt['selection']['selected_count'] = 1
+            receipt['selection']['digest'] = run_batch.selected_manifest_digest(
+                records, receipt['quota_config']['digest']
+            )
+            selected = root_path / 'selected.jsonl'
+            selected.write_text(json.dumps(records[0]) + '\n')
+            receipt_path = root_path / 'selection_receipt.json'
+            receipt_path.write_text(json.dumps(receipt))
+            batch_dir = root_path / 'batch'
+
+            result = subprocess.run(
+                [
+                    sys.executable,
+                    str(pathlib.Path(__file__).with_name('run_batch.py')),
+                    '--repo',
+                    str(repo),
+                    '--selected',
+                    str(selected),
+                    '--selection-receipt',
+                    str(receipt_path),
+                    '--batch-dir',
+                    str(batch_dir),
+                ],
+                capture_output=True,
+                text=True,
+                check=False,
+            )
+
+            self.assertNotEqual(result.returncode, 0)
+            self.assertIn('aggregate receipt is not eligible', result.stderr)
+            batch_receipt = json.loads(
+                (batch_dir / 'batch_receipt.json').read_text()
+            )
+            self.assertEqual(batch_receipt['batch']['failed_count'], 1)
+
+    def test_tabulation_rejects_stale_checkpoint_files(self):
+        with tempfile.TemporaryDirectory() as root:
+            checkpoint_dir = pathlib.Path(root) / 'checkpoints'
+            checkpoint_dir.mkdir()
+            (checkpoint_dir / 'current.jsonl').write_text(
+                json.dumps({'_session_file_id': 'current', 'ordinal': 1}) + '\n'
+            )
+            checkpoint_set = run_batch.checkpoint_set_summary(checkpoint_dir)
+            batch_receipt = run_batch.build_batch_receipt(
+                self.selection_receipt(),
+                [{'ok': True, 'error': None}],
+                checkpoint_set,
+            )
+            (checkpoint_dir / 'stale.jsonl').write_text(
+                json.dumps({'_session_file_id': 'stale', 'ordinal': 1}) + '\n'
+            )
+
+            with self.assertRaisesRegex(ValueError, 'checkpoint set'):
+                module.validate_batch_inputs(batch_receipt, checkpoint_dir)
 
     def test_receipt_validation_rejects_private_keys_and_paths(self):
         with self.assertRaisesRegex(ValueError, 'forbidden private key'):

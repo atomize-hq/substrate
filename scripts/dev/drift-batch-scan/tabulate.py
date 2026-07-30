@@ -21,6 +21,8 @@ import os
 import re
 from collections import Counter, defaultdict
 
+from run_batch import checkpoint_set_summary
+
 # objective_class / target-class enum tokens that are not grounded artifacts
 GENERIC = {"implement", "debug", "review", "research", "plan", "validate", "docs", "other_task",
            "repo_slice", "crate_or_package", "file_or_directory", "spec_or_design_doc",
@@ -285,18 +287,63 @@ def validate_sanitized_receipt(value, key_path=()) -> None:
             raise ValueError(f"absolute private path in receipt: {joined}")
 
 
+def validate_successful_batch_receipt(batch_receipt: dict) -> None:
+    if batch_receipt.get("schema_version") != "p7-private-batch-v1":
+        raise ValueError("batch receipt has the wrong schema_version")
+    batch = batch_receipt.get("batch")
+    if not isinstance(batch, dict):
+        raise ValueError("batch receipt is missing batch counts")
+    attempted = batch.get("attempted_count")
+    succeeded = batch.get("succeeded_count")
+    failed = batch.get("failed_count")
+    if not all(isinstance(value, int) for value in (attempted, succeeded, failed)):
+        raise ValueError("batch receipt has invalid batch counts")
+    if attempted < 1:
+        raise ValueError("batch receipt must prove a non-empty execution")
+    if failed != 0 or succeeded != attempted:
+        raise ValueError("batch receipt contains failed sessions")
+    checkpoint_set = batch_receipt.get("checkpoint_set")
+    if not isinstance(checkpoint_set, dict):
+        raise ValueError("batch receipt is missing checkpoint set authority")
+    if checkpoint_set.get("schema_version") != 1:
+        raise ValueError("checkpoint set has the wrong schema_version")
+    if checkpoint_set.get("file_count") != succeeded:
+        raise ValueError("checkpoint set file count does not match successful sessions")
+
+
+def validate_batch_inputs(
+    batch_receipt: dict, checkpoints_dir: str | os.PathLike[str]
+) -> dict:
+    validate_sanitized_receipt(batch_receipt)
+    validate_successful_batch_receipt(batch_receipt)
+    actual = checkpoint_set_summary(checkpoints_dir)
+    if actual != batch_receipt["checkpoint_set"]:
+        raise ValueError("checkpoint set does not match batch receipt")
+    return actual
+
+
 def build_sanitized_receipt(
     batch_receipt: dict,
     *,
     analysis_coverage: dict,
     heuristic_strata: dict,
 ) -> dict:
-    if batch_receipt.get("schema_version") != "p7-private-batch-v1":
-        raise ValueError("batch receipt has the wrong schema_version")
+    validate_successful_batch_receipt(batch_receipt)
+    if (
+        analysis_coverage.get("sessions_analyzed")
+        != batch_receipt["batch"]["succeeded_count"]
+    ):
+        raise ValueError("analysis session count does not match batch receipt")
+    if (
+        analysis_coverage.get("total_checkpoints")
+        != batch_receipt["checkpoint_set"]["checkpoint_count"]
+    ):
+        raise ValueError("analysis checkpoint count does not match checkpoint set")
     receipt = {
         "schema_version": "p7-private-recall-validation-v1",
         "selection": batch_receipt["selection"],
         "batch": batch_receipt["batch"],
+        "checkpoint_set": batch_receipt["checkpoint_set"],
         "analysis_coverage": analysis_coverage,
         "heuristic_strata": heuristic_strata,
         "limitations": {
@@ -349,17 +396,29 @@ def main() -> None:
     )
     with open(batch_receipt_path) as handle:
         batch_receipt = json.load(handle)
-    validate_sanitized_receipt(batch_receipt)
+    validate_batch_inputs(batch_receipt, args.checkpoints_dir)
 
     by_session = defaultdict(list)
-    for fp in glob.glob(os.path.join(args.checkpoints_dir, "*.jsonl")):
+    seen_session_ids = set()
+    for fp in sorted(glob.glob(os.path.join(args.checkpoints_dir, "*.jsonl"))):
+        file_session_ids = set()
         for line in open(fp):
             if not line.strip():
                 continue
             cp = json.loads(line)
-            by_session[cp["_session_file_id"]].append(cp)
+            session_id = cp["_session_file_id"]
+            file_session_ids.add(session_id)
+            by_session[session_id].append(cp)
+        if len(file_session_ids) != 1:
+            raise ValueError("checkpoint file must contain exactly one session")
+        session_id = next(iter(file_session_ids))
+        if session_id in seen_session_ids:
+            raise ValueError("checkpoint session appears in more than one file")
+        seen_session_ids.add(session_id)
     for sid in by_session:
         by_session[sid].sort(key=lambda c: c.get("ordinal", 0))
+    if len(by_session) != batch_receipt["batch"]["succeeded_count"]:
+        raise ValueError("checkpoint session count does not match batch receipt")
 
     tot_cp = 0
     tot_sessions = len(by_session)
