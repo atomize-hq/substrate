@@ -13,7 +13,7 @@ This prompt is self-contained and does not depend on a skill installed on this p
 DISPATCH IDENTITY
 
 - orchestration_id: `substrate-r2-3`
-- dispatch_nonce: `8414e6fd2adf776efb50e4c1674c3f640778beb7679004cf8c74c6e2651322e0`
+- dispatch_nonce: `3b62deaa75285e963505d0bc87db8757d2fe76f86615ee408448b15cab0467e6`
 - meta_thread_id: `019fa3f7-c447-7132-9126-82e2cf38bd9d`
 - meta_host_id: `remote-ssh-discovered:spenser-linux-codex`
 - evidence_id: `R2-3Z/WIN-EVIDENCE`
@@ -74,6 +74,11 @@ portion of `R2-DIAG-01`.
 4. Choose and record one explicit non-root selected Windows prefix `A` without creating it. Choose
    a distinct conflicting ambient root `B`, also without creating it. Select one canonical pipe
    (normally `\\.\pipe\substrate-agent`) and prove its exact normalization.
+   - Use a fresh, cryptographically unique B that has never been used by a prior evidence task.
+   - Verify B and every parent-specific descendant selected for the proof are absent immediately
+     before the proof and remain absent afterward.
+   - Never set `USERPROFILE` or `LOCALAPPDATA` to B on a new `pwsh` launcher process. PowerShell
+     may initialize profile data before the script can enforce the proof boundary.
 5. Create any helper or harness only outside the tracked checkout. Use a temporary Rust harness
    with the published `transport-api-types` crate, plus read-only PowerShell function extraction
    where useful, to construct/validate/encode/decode one IH and one WSL PM from the real native
@@ -95,6 +100,17 @@ portion of `R2-DIAG-01`.
    spawn. Use the applicable published Rust tests, including the forwarder spawn-spec/internal
    preflight tests, and the PowerShell `scripts/windows/prefix-mapping-r2-3.Tests.ps1 -W2Only`
    suite as supplemental proof. Set `CARGO_TARGET_DIR` outside the checkout.
+   - Launch the tracked `-W2Only` suite itself with the normal token-derived `USERPROFILE` and
+     LocalApplicationData, using `pwsh -NoLogo -NoProfile -NonInteractive`.
+   - For the adversarial B proof, create a temporary wrapper only outside the checkout, start it
+     under the normal token-derived profile environment, and set/restore the conflicting
+     environment variables inside that already-running PowerShell process immediately around the
+     extracted non-spawning projection assertions. Do not start a nested PowerShell process after
+     assigning B to `USERPROFILE` or `LOCALAPPDATA`.
+   - Before running any selected Rust `verified_projection_` test, inspect its accepted selector
+     shape and provide a deliberately conflicting but syntactically valid non-authoritative
+     selector. A configuration-parser rejection is not the required before-spawn authority proof;
+     stop rather than retry if an unexpected rejection still occurs.
 7. Do not invoke `scripts/windows/start-forwarder.ps1`, `wsl-warm.ps1`, installers,
    uninstallers, pipe clients, smoke tests, or any command that creates/opens/mutates the product
    pipe or starts a product child. Do not execute production code beyond read-only mapping,
@@ -128,7 +144,7 @@ Create and validate a `codex.top-level-evidence-receipt.v1` receipt with:
 - `checkout_unchanged: true`.
 
 Recover the exact receipt validator and its `protocol_json.py` dependency read-only from meta
-commit `8cd9d85748f817d6749fe79bcc907a15b8f18182` using `git show`, writing both only to a
+commit `7c6f82cbaa6ad91ec73338e0c17d504d88ccce5f` using `git show`, writing both only to a
 temporary directory outside the checkout. Validate the receipt with that temporary validator.
 Do not treat the meta ref as product source and do not write either validator into the checkout.
 If any native prerequisite or proof is missing, send a blocked evidence receipt instead; never

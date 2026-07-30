@@ -12,7 +12,7 @@ This prompt is self-contained and does not depend on a skill installed on this p
 DISPATCH IDENTITY
 
 - orchestration_id: `substrate-r2-3`
-- dispatch_nonce: `b237a0ec5343358e48dc9d70ef549456ea4bb03f2508c22be29cd390a062be09`
+- dispatch_nonce: `39f0b9cf4937faa378080dc70afdd214ec84c17eb93c8949d3b22be2ceda98be`
 - meta_thread_id: `019fa3f7-c447-7132-9126-82e2cf38bd9d`
 - meta_host_id: `remote-ssh-discovered:spenser-linux-codex`
 - evidence_id: `R2-3Z/MAC-EVIDENCE`
@@ -50,6 +50,9 @@ NATIVE PREREQUISITES
   registered running instance; otherwise bind the exact existing declared name.
 - If no suitable instance is already running, stop with `BLOCKED_PLATFORM_HANDOFF_REQUIRED`.
   Never create or start one for this evidence task.
+- A previous read-only attempt observed the declared `substrate` instance as `Stopped`. The user
+  reports that `limactl start substrate` is now running outside the evidence task. Verify the
+  current registered state independently; this report is not evidence by itself.
 
 EVIDENCE CONTRACT
 
@@ -119,7 +122,7 @@ Create and validate a `codex.top-level-evidence-receipt.v1` receipt with:
 - `checkout_unchanged: true`.
 
 Recover the exact receipt validator and its `protocol_json.py` dependency read-only from meta
-commit `8cd9d85748f817d6749fe79bcc907a15b8f18182` using `git show`, writing both only to a
+commit `7c6f82cbaa6ad91ec73338e0c17d504d88ccce5f` using `git show`, writing both only to a
 temporary directory outside the checkout. Validate the receipt with that temporary validator.
 Do not treat the meta ref as product source and do not write either validator into the checkout.
 If any native prerequisite or proof is missing, send a blocked evidence receipt instead; never
