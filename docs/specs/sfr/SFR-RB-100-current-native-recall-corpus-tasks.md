@@ -95,9 +95,9 @@ fixture surface. No task authorizes a production source edit.
 
 ### Task P7-1.2 — Enforce recursive privacy and provenance
 
-- [ ] Define synthetic grammars for session, turn, call, event, agent, repository, and path values.
-- [ ] Recursively scan every P7 fixture and metadata file for forbidden private markers.
-- [ ] Verify declared adapter class and event variants against actual raw records.
+- [x] Define synthetic grammars for session, turn, call, event, agent, repository, and path values.
+- [x] Recursively scan every P7 fixture and metadata file for forbidden private markers.
+- [x] Verify declared adapter class and event variants against actual raw records.
 - **Acceptance:** privacy/provenance violations fail with exact `case_id` and file; a test mutation
   proves each rule can fail; no local absolute path or real identifier is committed.
 - **Verification:** focused P7 test plus targeted negative controls inside the harness.
@@ -110,11 +110,11 @@ fixture surface. No task authorizes a production source edit.
 
 ### Checkpoint P7-B — Foundation
 
-- [ ] Matrix schema self-tests pass; internal negative mutations prove inventory checks fail closed.
-- [ ] Privacy and provenance checks pass and fail closed under mutation.
-- [ ] Harness failures name case, terminal boundary, and diagnostic owner.
-- [ ] The tracked P7 target is not intentionally red while later case directories are incomplete.
-- [ ] No production source or frozen corpus changed.
+- [x] Matrix schema self-tests pass; internal negative mutations prove inventory checks fail closed.
+- [x] Privacy and provenance checks pass and fail closed under mutation.
+- [x] Harness failures name case, terminal boundary, and diagnostic owner.
+- [x] The tracked P7 target is not intentionally red while later case directories are incomplete.
+- [x] No production source or frozen corpus changed.
 
 ## P7-2 — Semantic positive and conservative slices
 

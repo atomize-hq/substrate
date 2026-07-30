@@ -267,3 +267,436 @@ fn current_native_recall_inventory_negative_controls_fail_closed() {
     assert!(error.contains("public-live checkpoint"));
     assert!(error.contains("owner=scoring,public-live"));
 }
+
+fn recursively_validate_privacy(root: &Utf8Path) -> Result<(), String> {
+    let mut pending = vec![root.to_path_buf()];
+    while let Some(path) = pending.pop() {
+        let metadata =
+            fs::metadata(&path).map_err(|error| privacy_error(&path, &error.to_string()))?;
+        if metadata.is_dir() {
+            let mut children = fs::read_dir(&path)
+                .map_err(|error| privacy_error(&path, &error.to_string()))?
+                .map(|entry| {
+                    entry
+                        .map(|entry| Utf8PathBuf::from_path_buf(entry.path()))
+                        .map_err(|error| error.to_string())
+                        .and_then(|path| {
+                            path.map_err(|path| format!("non-UTF-8 fixture path {path:?}"))
+                        })
+                })
+                .collect::<Result<Vec<_>, _>>()?;
+            children.sort();
+            pending.extend(children.into_iter().rev());
+            continue;
+        }
+
+        let source =
+            fs::read_to_string(&path).map_err(|error| privacy_error(&path, &error.to_string()))?;
+        validate_forbidden_markers(&path, &source)?;
+        match path.extension() {
+            Some("json") => {
+                let value: Value = serde_json::from_str(&source)
+                    .map_err(|error| privacy_error(&path, &format!("invalid JSON: {error}")))?;
+                validate_json_identifiers(&path, &value, &mut Vec::new())?;
+            }
+            Some("jsonl") => {
+                for (index, line) in source.lines().enumerate() {
+                    if line.trim().is_empty() {
+                        continue;
+                    }
+                    let value: Value = serde_json::from_str(line).map_err(|error| {
+                        privacy_error(&path, &format!("line {} invalid JSON: {error}", index + 1))
+                    })?;
+                    validate_json_identifiers(&path, &value, &mut Vec::new())?;
+                }
+            }
+            _ => {}
+        }
+    }
+    Ok(())
+}
+
+fn validate_forbidden_markers(path: &Utf8Path, source: &str) -> Result<(), String> {
+    for marker in [
+        "/Users/",
+        "/home/",
+        "/private/",
+        "C:\\Users\\",
+        "__Active_Code",
+        "spensermcconnell",
+        "atomize-hq",
+        "ghp_",
+        "github_pat_",
+        "AKIA",
+        "sk-proj-",
+    ] {
+        if source.contains(marker) {
+            return Err(privacy_error(path, &format!("forbidden marker {marker:?}")));
+        }
+    }
+    Ok(())
+}
+
+fn privacy_error(path: &Utf8Path, message: &str) -> String {
+    let case_id = path
+        .components()
+        .map(|component| component.as_str())
+        .find(|component| {
+            component.len() == 5
+                && component.starts_with("p7-")
+                && component[3..].bytes().all(|byte| byte.is_ascii_digit())
+        })
+        .map(str::to_ascii_uppercase)
+        .unwrap_or_else(|| "P7-MATRIX".to_string());
+    format!("{case_id} privacy scan [owner=harness] file={path}: {message}")
+}
+
+fn validate_json_identifiers(
+    path: &Utf8Path,
+    value: &Value,
+    key_path: &mut Vec<String>,
+) -> Result<(), String> {
+    match value {
+        Value::Object(object) => {
+            for (key, child) in object {
+                key_path.push(key.clone());
+                validate_json_identifiers(path, child, key_path)?;
+                key_path.pop();
+            }
+        }
+        Value::Array(values) => {
+            for child in values {
+                validate_json_identifiers(path, child, key_path)?;
+            }
+        }
+        Value::String(value) => {
+            if let Some(kind) = identifier_kind(key_path, value) {
+                validate_identifier(path, key_path, kind, value)?;
+            }
+            if is_path_field(key_path) {
+                validate_path_value(path, key_path, value)?;
+            }
+        }
+        _ => {}
+    }
+    Ok(())
+}
+
+fn identifier_kind<'a>(key_path: &[String], value: &'a str) -> Option<&'a str> {
+    let key = key_path.last().map(String::as_str).unwrap_or_default();
+    if key == "turn_id" || value.starts_with("turn-") {
+        Some("turn")
+    } else if key == "call_id" || value.starts_with("call-") {
+        Some("call")
+    } else if key == "event_id" || value.starts_with("event-") {
+        Some("event")
+    } else if key == "agent_id" || key == "agent_thread_id" || value.starts_with("agent-") {
+        Some("agent")
+    } else if key == "repository_id" || key == "repo_id" || value.starts_with("repo-") {
+        Some("repo")
+    } else if key.ends_with("session_id")
+        || value.starts_with("session-")
+        || (key == "id" && key_path.iter().any(|component| component == "session_meta"))
+    {
+        Some("session")
+    } else {
+        None
+    }
+}
+
+fn validate_identifier(
+    path: &Utf8Path,
+    key_path: &[String],
+    kind: &str,
+    value: &str,
+) -> Result<(), String> {
+    let expected_prefix = format!("{kind}-p7-");
+    let suffix = value.strip_prefix(&expected_prefix).ok_or_else(|| {
+        privacy_error(
+            path,
+            &format!(
+                "{}={value:?} violates {kind} synthetic grammar",
+                key_path.join(".")
+            ),
+        )
+    })?;
+    let (case_number, tail) = suffix.split_once('-').ok_or_else(|| {
+        privacy_error(
+            path,
+            &format!(
+                "{}={value:?} violates {kind} synthetic grammar",
+                key_path.join(".")
+            ),
+        )
+    })?;
+    let valid_case_number = case_number.len() == 2
+        && case_number.bytes().all(|byte| byte.is_ascii_digit())
+        && matches!(case_number.parse::<u8>(), Ok(1..=19));
+    let valid_tail = !tail.is_empty()
+        && !tail.starts_with('-')
+        && !tail.ends_with('-')
+        && tail
+            .bytes()
+            .all(|byte| byte.is_ascii_lowercase() || byte.is_ascii_digit() || byte == b'-');
+    if !valid_case_number || !valid_tail {
+        return Err(privacy_error(
+            path,
+            &format!(
+                "{}={value:?} violates {kind} synthetic grammar",
+                key_path.join(".")
+            ),
+        ));
+    }
+    Ok(())
+}
+
+fn is_path_field(key_path: &[String]) -> bool {
+    let key = key_path.last().map(String::as_str).unwrap_or_default();
+    key == "path" || key == "file_path" || key == "repository_path" || key.ends_with("_root")
+}
+
+fn validate_path_value(path: &Utf8Path, key_path: &[String], value: &str) -> Result<(), String> {
+    let candidate = Utf8Path::new(value);
+    let valid = !candidate.is_absolute()
+        && !value.contains('\\')
+        && !candidate
+            .components()
+            .any(|component| component.as_str() == "..")
+        && (value.starts_with("workspace-p7-")
+            || value.starts_with("raw/")
+            || value.starts_with("legacy/")
+            || value.starts_with("current-native/")
+            || value.starts_with("bundle/")
+            || value.starts_with("crates/")
+            || value.starts_with("docs/")
+            || value.starts_with("scripts/"));
+    if !valid {
+        return Err(privacy_error(
+            path,
+            &format!(
+                "{}={value:?} violates path synthetic grammar",
+                key_path.join(".")
+            ),
+        ));
+    }
+    Ok(())
+}
+
+fn validate_implemented_case_provenance(
+    root: &Utf8Path,
+    matrix: &RecallMatrix,
+) -> Result<(), String> {
+    for case in matrix.cases.iter().filter(|case| case.implemented) {
+        let case_root = root.join(&case.fixture_dir);
+        let mut actual_adapters = BTreeSet::new();
+        let mut actual_variants = BTreeSet::new();
+        for logical_source in &case.logical_source_files {
+            let source_path = case_root.join(logical_source);
+            if !source_path.is_file() {
+                return Err(case_error(
+                    case,
+                    &format!("declared source {logical_source:?} is missing"),
+                ));
+            }
+            match source_path.extension() {
+                Some("jsonl") => collect_jsonl_provenance(
+                    case,
+                    logical_source,
+                    &source_path,
+                    &mut actual_adapters,
+                    &mut actual_variants,
+                )?,
+                Some("json") if logical_source.ends_with("manifest.json") => {
+                    actual_adapters.insert("BundleV0_2".to_string());
+                    actual_variants.insert("manifest".to_string());
+                }
+                Some("json") if logical_source.ends_with("live-event.json") => {
+                    actual_adapters.insert("PublicLive".to_string());
+                    let value: Value = serde_json::from_str(
+                        &fs::read_to_string(&source_path)
+                            .map_err(|error| case_error(case, &error.to_string()))?,
+                    )
+                    .map_err(|error| case_error(case, &error.to_string()))?;
+                    let variant = value
+                        .get("trigger")
+                        .and_then(Value::as_str)
+                        .ok_or_else(|| case_error(case, "live event must declare trigger"))?;
+                    actual_variants.insert(variant.to_string());
+                }
+                _ => {
+                    return Err(case_error(
+                        case,
+                        &format!("unsupported declared source {logical_source:?}"),
+                    ));
+                }
+            }
+        }
+        let expected_adapters = case
+            .adapter_classes
+            .iter()
+            .cloned()
+            .collect::<BTreeSet<_>>();
+        if actual_adapters != expected_adapters {
+            return Err(case_error(
+                case,
+                &format!(
+                    "adapter provenance mismatch: declared={expected_adapters:?} actual={actual_adapters:?}"
+                ),
+            ));
+        }
+        let expected_variants = case.event_variants.iter().cloned().collect::<BTreeSet<_>>();
+        if actual_variants != expected_variants {
+            return Err(case_error(
+                case,
+                &format!(
+                    "event variant provenance mismatch: declared={expected_variants:?} actual={actual_variants:?}"
+                ),
+            ));
+        }
+    }
+    Ok(())
+}
+
+fn collect_jsonl_provenance(
+    case: &RecallCase,
+    logical_source: &str,
+    source_path: &Utf8Path,
+    actual_adapters: &mut BTreeSet<String>,
+    actual_variants: &mut BTreeSet<String>,
+) -> Result<(), String> {
+    let source =
+        fs::read_to_string(source_path).map_err(|error| case_error(case, &error.to_string()))?;
+    let mut has_current_native_marker = false;
+    for (index, line) in source.lines().enumerate() {
+        if line.trim().is_empty() {
+            continue;
+        }
+        let value: Value = serde_json::from_str(line).map_err(|error| {
+            case_error(
+                case,
+                &format!(
+                    "{} line {} is invalid JSON: {error}",
+                    logical_source,
+                    index + 1
+                ),
+            )
+        })?;
+        let outer = value
+            .get("type")
+            .and_then(Value::as_str)
+            .ok_or_else(|| case_error(case, "raw record must declare type"))?;
+        if outer == "session_meta"
+            && value
+                .pointer("/payload/multi_agent_version")
+                .and_then(Value::as_str)
+                == Some("v2")
+        {
+            has_current_native_marker = true;
+        }
+        match outer {
+            "response_item" | "event_msg" => {
+                let variant = value
+                    .pointer("/payload/type")
+                    .and_then(Value::as_str)
+                    .ok_or_else(|| case_error(case, "typed record must declare payload.type"))?;
+                actual_variants.insert(variant.to_string());
+            }
+            other => {
+                actual_variants.insert(other.to_string());
+            }
+        }
+    }
+
+    if logical_source.starts_with("legacy/") {
+        actual_adapters.insert("Legacy".to_string());
+        actual_variants.insert("legacy_event".to_string());
+    } else if has_current_native_marker {
+        actual_adapters.insert("CurrentNativeV2".to_string());
+    } else {
+        return Err(case_error(
+            case,
+            &format!("{logical_source:?} lacks multi_agent_version=v2"),
+        ));
+    }
+    Ok(())
+}
+
+#[test]
+fn current_native_recall_privacy_and_provenance_are_recursive() {
+    let root = fixture_root();
+    recursively_validate_privacy(&root).expect("validate tracked P7 privacy");
+    let matrix = load_matrix().expect("load P7 matrix");
+    validate_implemented_case_provenance(&root, &matrix)
+        .expect("validate implemented P7 provenance");
+}
+
+#[test]
+fn current_native_recall_privacy_identifier_mutations_fail_closed() {
+    let path = Utf8Path::new("fixtures/privacy-mutation.json");
+    let mutations = [
+        ("session", serde_json::json!({"session_id": "real-session"})),
+        ("turn", serde_json::json!({"turn_id": "turn-real"})),
+        ("call", serde_json::json!({"call_id": "call-real"})),
+        ("event", serde_json::json!({"event_id": "event-real"})),
+        ("agent", serde_json::json!({"agent_id": "agent-real"})),
+        (
+            "repo",
+            serde_json::json!({"repository_id": "repository-real"}),
+        ),
+        ("path", serde_json::json!({"path": "../private/source.rs"})),
+    ];
+    for (kind, value) in mutations {
+        let error = validate_json_identifiers(path, &value, &mut Vec::new())
+            .expect_err("invalid synthetic identifier must fail");
+        assert!(error.contains(kind), "{kind} mutation: {error}");
+        assert!(error.contains("owner=harness"), "{kind} mutation: {error}");
+    }
+
+    let marker_error = validate_forbidden_markers(
+        path,
+        r#"{"path":"/Users/private/project","token":"sk-proj-secret"}"#,
+    )
+    .expect_err("private marker must fail");
+    assert!(marker_error.contains("/Users/"));
+    assert!(marker_error.contains("owner=harness"));
+}
+
+#[test]
+fn current_native_recall_adapter_and_variant_mutations_fail_closed() {
+    let temp_dir = tempfile::TempDir::new().expect("temp dir");
+    let root = Utf8Path::from_path(temp_dir.path()).expect("UTF-8 temp path");
+    let case_root = root.join("p7-01/raw");
+    fs::create_dir_all(&case_root).expect("create synthetic case");
+    fs::write(
+        case_root.join("root.jsonl"),
+        concat!(
+            "{\"type\":\"session_meta\",\"payload\":{\"id\":\"session-p7-01-root\",\"multi_agent_version\":\"v2\"}}\n",
+            "{\"type\":\"turn_context\",\"payload\":{\"turn_id\":\"turn-p7-01-main\"}}\n",
+            "{\"type\":\"response_item\",\"payload\":{\"type\":\"custom_tool_call\",\"name\":\"shell_command\",\"call_id\":\"call-p7-01-build\",\"input\":\"{}\"}}\n",
+            "{\"type\":\"response_item\",\"payload\":{\"type\":\"custom_tool_call_output\",\"call_id\":\"call-p7-01-build\",\"output\":[{\"type\":\"input_text\",\"text\":\"ok\"}]}}\n",
+        ),
+    )
+    .expect("write synthetic raw stream");
+
+    let matrix = load_matrix().expect("load P7 matrix");
+    let mut implemented = matrix.clone();
+    implemented.cases[0].implemented = true;
+    validate_implemented_case_provenance(root, &implemented)
+        .expect("matching adapter and variants pass");
+
+    let mut adapter_mismatch = implemented.clone();
+    adapter_mismatch.cases[0].adapter_classes = vec!["Legacy".to_string()];
+    let error = validate_implemented_case_provenance(root, &adapter_mismatch)
+        .expect_err("adapter mismatch must fail");
+    assert!(error.contains("P7-01"));
+    assert!(error.contains("adapter provenance mismatch"));
+    assert!(error.contains("owner=scoring,public-live"));
+
+    let mut variant_mismatch = implemented;
+    variant_mismatch.cases[0].event_variants.pop();
+    let error = validate_implemented_case_provenance(root, &variant_mismatch)
+        .expect_err("variant mismatch must fail");
+    assert!(error.contains("P7-01"));
+    assert!(error.contains("event variant provenance mismatch"));
+    assert!(error.contains("owner=scoring,public-live"));
+}
