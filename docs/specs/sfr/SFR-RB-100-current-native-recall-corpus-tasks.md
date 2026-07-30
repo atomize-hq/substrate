@@ -254,7 +254,7 @@ Each task runs the P7 target. After every third case, also run the frozen semant
 
 ### Task P7-3.5 — P7-13 malformed unrelated source
 
-- [ ] Add a malformed rollout outside selected direct closure.
+- [x] Add a malformed rollout outside selected direct closure.
 - **Acceptance:** selection excludes it and the selected pipeline succeeds; no deeper residue is
   decoded.
 - **Verification:** P7 target plus `bounded_closure`.

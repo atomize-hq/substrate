@@ -1,0 +1,2 @@
+{"timestamp":"2026-07-29T23:10:00Z","type":"session_meta","payload":{"session_id":"session-p7-13-unrelated","id":"session-p7-13-unrelated","multi_agent_version":"v2"}}
+{"timestamp":"2026-07-29T23:10:01Z","type":"response_item","payload":{"type":"message","role":"user","content":"malformed-content","internal_chat_message_metadata_passthrough":{"turn_id":"turn-p7-13-unrelated"}}}

@@ -1,0 +1,16 @@
+{
+  "case_id": "P7-13",
+  "root_session_id": "session-p7-13-root",
+  "selected_sessions": [
+    "session-p7-13-root"
+  ],
+  "malformed_session_id": "session-p7-13-unrelated",
+  "malformed_source_selected": false,
+  "selected_pipeline": "success",
+  "final_target_display": "docs/specs/p7/malformed-unrelated.md",
+  "semantic_goal_drift": {
+    "state": "cleared",
+    "flagged": false,
+    "raw_score": 0
+  }
+}

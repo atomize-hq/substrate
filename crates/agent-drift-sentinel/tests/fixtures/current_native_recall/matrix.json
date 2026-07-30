@@ -613,17 +613,21 @@
     {
       "case_id": "P7-13",
       "title": "malformed unrelated source",
-      "implemented": false,
+      "implemented": true,
       "fixture_dir": "p7-13",
       "adapter_classes": [
         "CurrentNativeV2"
       ],
       "event_variants": [
         "session_meta",
+        "task_started",
+        "turn_context",
+        "message",
         "malformed_response_item"
       ],
       "logical_source_files": [
-        "raw/root.jsonl"
+        "raw/root.jsonl",
+        "raw/malformed-unrelated.jsonl"
       ],
       "selected_direct_closure": [
         "session-p7-13-root"
@@ -641,7 +645,11 @@
       ],
       "expected": {
         "selected_pipeline": "success",
-        "malformed_source_selected": false
+        "malformed_source_selected": false,
+        "selected_sessions": [
+          "session-p7-13-root"
+        ],
+        "malformed_session_id": "session-p7-13-unrelated"
       },
       "historical_references": [
         "crates/agent-session-compactor/tests/bounded_closure.rs"

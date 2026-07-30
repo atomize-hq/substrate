@@ -617,7 +617,15 @@ fn collect_jsonl_provenance(
                     .pointer("/payload/type")
                     .and_then(Value::as_str)
                     .ok_or_else(|| case_error(case, "typed record must declare payload.type"))?;
-                actual_variants.insert(variant.to_string());
+                if outer == "response_item"
+                    && value
+                        .pointer("/payload/content")
+                        .is_some_and(|content| !content.is_array())
+                {
+                    actual_variants.insert("malformed_response_item".to_string());
+                } else {
+                    actual_variants.insert(variant.to_string());
+                }
             }
             other => {
                 actual_variants.insert(other.to_string());
@@ -1812,4 +1820,86 @@ fn p7_12_missing_verified_child_is_rejected() {
         "verified_delegation_session_missing"
     );
     assert_eq!(expected["accepted"], false);
+}
+
+#[test]
+fn p7_13_malformed_unrelated_source_is_excluded() {
+    let matrix = load_matrix().expect("load P7 matrix");
+    let case = matrix
+        .cases
+        .iter()
+        .find(|case| case.case_id == "P7-13")
+        .expect("P7-13 matrix entry");
+
+    assert!(case.implemented, "P7-13 must be implemented before it runs");
+
+    let case_root = fixture_root().join(&case.fixture_dir);
+    let expected: Value = serde_json::from_str(
+        &fs::read_to_string(case_root.join("expected.json")).expect("read P7-13 expected"),
+    )
+    .expect("parse P7-13 expected");
+    let temp_dir = tempfile::TempDir::new().expect("P7-13 temp dir");
+    let temp_root = Utf8Path::from_path(temp_dir.path()).expect("P7-13 UTF-8 temp root");
+    let codex_home = temp_root.join(".codex");
+    let rollout_dir = codex_home.join("sessions/2026/07/29");
+    fs::create_dir_all(&rollout_dir).expect("create P7-13 rollout directory");
+    fs::copy(
+        case_root.join("raw/root.jsonl"),
+        rollout_dir.join("rollout-session-p7-13-root.jsonl"),
+    )
+    .expect("materialize P7-13 root source");
+    fs::copy(
+        case_root.join("raw/malformed-unrelated.jsonl"),
+        rollout_dir.join("rollout-session-p7-13-unrelated.jsonl"),
+    )
+    .expect("materialize P7-13 malformed unrelated source");
+
+    let mut compactor = BoundedClosureCompactor::default();
+    let prepared = compactor
+        .prepare(&BoundedClosureRequest {
+            codex_home: Some(codex_home),
+            root_session_id: "session-p7-13-root".to_string(),
+        })
+        .expect("P7-13 selection must ignore malformed unrelated body");
+    let compactor_dir = temp_root.join("compactor");
+    compactor
+        .compact(prepared, &compactor_dir, None)
+        .expect("compact P7-13 selected closure");
+    let manifest: Value = serde_json::from_str(
+        &fs::read_to_string(compactor_dir.join("manifest.json")).expect("read P7-13 manifest"),
+    )
+    .expect("parse P7-13 manifest");
+    assert_eq!(manifest["session_ids"], expected["selected_sessions"]);
+    let compact_rows = fs::read_to_string(compactor_dir.join("rows.compact.jsonl"))
+        .expect("read P7-13 compact rows");
+    assert!(
+        !compact_rows.contains(
+            expected["malformed_session_id"]
+                .as_str()
+                .expect("P7-13 malformed session")
+        ),
+        "P7-13 unrelated malformed residue must not be decoded into selected rows"
+    );
+
+    let analyzer_dir = temp_root.join("analyzer");
+    let result = analyze_bundle(&AnalyzeRequest {
+        input_dir: compactor_dir,
+        output_dir: analyzer_dir,
+    })
+    .expect("analyze P7-13 selected bundle");
+    let projection = canonical_semantic_projection(&result, "session-p7-13-root");
+    let final_projection = projection
+        .as_array()
+        .and_then(|checkpoints| checkpoints.last())
+        .expect("P7-13 final canonical checkpoint");
+    assert_eq!(
+        final_projection["target_display"],
+        expected["final_target_display"]
+    );
+    assert_eq!(
+        final_projection["semantic_goal_drift"],
+        expected["semantic_goal_drift"]
+    );
+    assert_eq!(expected["malformed_source_selected"], false);
+    assert_eq!(expected["selected_pipeline"], "success");
 }

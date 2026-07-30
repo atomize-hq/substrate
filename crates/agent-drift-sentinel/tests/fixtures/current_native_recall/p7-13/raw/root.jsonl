@@ -1,0 +1,4 @@
+{"timestamp":"2026-07-29T23:00:00Z","type":"session_meta","payload":{"session_id":"session-p7-13-root","id":"session-p7-13-root","multi_agent_version":"v2"}}
+{"timestamp":"2026-07-29T23:00:01Z","type":"event_msg","payload":{"type":"task_started","turn_id":"turn-p7-13-root"}}
+{"timestamp":"2026-07-29T23:00:02Z","type":"turn_context","payload":{"turn_id":"turn-p7-13-root","user_instructions":"Select only the requested root"}}
+{"timestamp":"2026-07-29T23:00:03Z","type":"response_item","payload":{"type":"message","role":"user","content":[{"type":"input_text","text":"/goal Inspect docs/specs/p7/malformed-unrelated.md only."}],"internal_chat_message_metadata_passthrough":{"turn_id":"turn-p7-13-root"}}}
