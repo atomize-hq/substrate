@@ -2981,6 +2981,22 @@ above without rewriting any raw review verdict or historical wall result.
 | Persistence review findings | Non-blocking process-audit debt outside RP4 product-proof scope | Controller pathname/hash not execution-bound; supervisor parent-directory `fsync` omitted after replace; persisted controller packet omits its post-persistence final verdict. These are cache-only orchestration/attestation issues, not Substrate product/runtime defects and not canonical wall-runner defects. | They do not invalidate the focused, authenticated, canonical-wall, differential, authority, or restoration evidence. |
 | RP5 — bounded final docs closeout | This exact six-file docs change | Preserves **Docs-on-top -> one ordinary fast-forward publication** and makes no wall rerun, no publication claim, and no parity claim. | Source publication has not occurred in this run, and the exact next step after the reviewed/committed RP5 docs remains one ordinary fast-forward source publication. |
 
+R2-3ZP2 is a later runner-contract repair, not a rewrite of the historical RP4 packet above. It
+separates live descendant `expected_head` from reviewed `authority_commit_oid`, adds a separate
+control-plane `reviewed_authority_commit_oid` that must exactly equal
+`authority_commit_oid`, requires the reviewed authority commit to be equal to or an ancestor of
+the live head, requires exact authenticated runner/self-test blob continuity across that boundary,
+propagates both reviewed-authority fields plus projected repository CWD into Stage B, makes
+`reviewed_oid_matches` a verified equality result rather than a caller assertion, and raises the
+authenticated self-test gate to the exact 101-method allowlist. This closes
+reviewed-authority/descendant drift once the reviewed authority OID is supplied independently by
+the trusted control plane, but same-head review provenance remains external to the runner rather
+than derivable from caller-selected OIDs alone. The preserved RP4 packet still remains historical
+evidence for July 25, 2026, including its then-authenticated `99/99` self-test result on proofed
+integration commit `8c46135c861a468dea316cf9fd7d6c6bb15bddac`; that evidence is not retroactively
+relabeled as a post-ZP2 proof. The next reviewed authority commit for future canonical walls must
+be recomputed from final post-ZP2 bytes and trailers rather than inferred from this ledger entry.
+
 That ordinary fast-forward publication subsequently completed at
 `0f1e147fb735791b44a65099a65167cbdc1803af`. R2-3 orientation is next after the process-only
 bounded-review calibration; R2-4 and R3 remain later. Privileged product smoke, non-Linux proof,

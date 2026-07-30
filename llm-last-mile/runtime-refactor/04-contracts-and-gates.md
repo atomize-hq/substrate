@@ -6399,7 +6399,7 @@ shell-library process; `child` means an intentionally inherited helper process.
 | A3 | The read-only subset of the 12 non-parent names in the corrected closure | none in shell-library tests | corresponding config/home/root readers | 0 mutators | All / cfg varies | immutable during this binary | source closure found no parent writer; cannot form a same-process pair | source-only; no future edit |
 | A4 | Child-only `Command::{env,env_remove,env_clear}` projections among the 12 non-parent names | command builders in test helpers | child bootstrap/probe decoders | 14 child spawners plus helper callers | child / cfg varies | per-`Command` environment | parent process is not mutated; exact child inheritance is intentional | LOW/source-closed |
 | B1 | fd 1/fd 2 replacement: `dup`, `dup2`, `pipe`, `close` in capture helpers | `capture_stdout_once`, `capture_stderr_once` | two `PublicPromptRenderer` fallback tests; libtest reporter is competing writer | 2 | All / Unix | manual descriptor save/restore | stdout contamination proven; stderr structurally identical | renderer MEDIUM; capture helpers LOW |
-| B2 | fd 0 `O_NONBLOCK` flag and terminal/console input mode | `test_stdin_nonblock_roundtrip` via `fcntl(F_SETFL)`; `minimal_terminal_guard_handles_creation` via `MinimalTerminalGuard::new` | libtest/input consumers and terminal/console state readers | 2 | All / Unix flag plus Unix/Windows terminal cfg | manual exact flag/mode restore | fixed descriptor is shared despite restoration; inherited child fd 0 would share the same open-file description | test symbols under-resolved |
+| B2 | fd 0 `O_NONBLOCK` flag and terminal/console input mode | manual `fcntl(F_SETFL)` probes plus `minimal_terminal_guard_handles_creation` via `MinimalTerminalGuard::new` | libtest/input consumers and terminal/console state readers | 2 | All / Unix flag plus Unix/Windows terminal cfg | manual exact flag/mode restore | fixed descriptor is shared despite restoration; inherited child fd 0 would share the same open-file description | test symbols under-resolved |
 | B3 | Child/local descriptors and inherited listener descriptors | pipe/listener/child builders | same fixture owner | 103 listener-dependent; 14 child-spawn-dependent | test/child / cfg varies | OS ownership plus joined fixture | no fixed-number replacement in parent; ownership remains local | LOW/source-closed |
 | C1 | Process CWD | `set_current_dir`, `DirGuard`, direct/manual wrappers | `WorldRootSettings::effective_root`, config/workspace/root readers | 100 / 10 files | All / all platforms | `cwd_lock` in routing helpers, `#[serial]`, local guards | forced stable-reader race proven; one unannotated helper-closed test | `effective_root` HIGH, 2 direct / 1 process |
 | C2 | umask | self-spawned sentinel test child | child filesystem creation | 22 helper-closed; 1 direct | child / Unix | child saves and restores exact mode | parent umask never changes; child exits after restore | LOW/source-closed |
@@ -7445,32 +7445,48 @@ Only these new files are authorized:
    `HOST_INVOCATION_ARGV_TEMPLATE_V1`, `BWRAP_STAGE_A_ARGV_TEMPLATE_V1`,
    `BWRAP_STAGE_B_ARGV_TEMPLATE_V1`, and
    `CANONICAL_STDLIB_MANIFEST_V1`; `main`, `parse_args`, `inline_sha1`, `inline_sha256`,
+   `_resolved_commit_oid`,
+   `_resolved_authority_commit_oid`, `_resolved_reviewed_authority_commit_oid`,
    `validate_platform_startup_tcb`, `exec_held_executable`,
    `verify_expected_head_object_chain`, `read_expected_head_blob`,
    `parse_stdlib_manifest`, `preload_validated_modules`, `load_authenticated_module`,
    `run_authenticated_self_tests`, `construct_repository_snapshot`,
    `construct_rustup_home_snapshot`, `construct_cargo_home_seed`,
    `construct_cargo_home_runtime`, `validate_cargo_home_runtime_writes`,
-   `reconstruct_locked_registry`,
-   `seal_snapshot_mounts`, `create_sealed_runner_memfd`, `launch_stage_a_bwrap`,
+   `reconstruct_locked_vendor`,
+   `seal_snapshot_mounts`, `create_sealed_runner_memfd`,
+   `_initialize_staged_artifact_authorities`, `launch_stage_a_bwrap`,
    `launch_stage_b_bwrap`, `parse_bwrap_status`, `create_worker_control_listener`,
-   `accept_authenticated_worker`, `collect_stage_b_output`, `host_main`, `stage_a_main`,
-   `stage_b_worker_main`,
+   `accept_authenticated_worker`, `collect_stage_b_output`,
+   `write_preopened_provenance`, `_publish_evidence_directory`,
+   `host_main`, `stage_a_main`, `stage_b_worker_main`,
    `set_child_subreaper`, `wait_for_containment_empty`, `terminate_contained_children`,
    `prepare_backing_root`, `verify_namespace_mount_teardown`,
    `open_validated_directory`, `validate_safe_ancestor_chain`, `read_effective_acl`,
    `statx_identity`, `revalidate_named_identity`, `verify_clean_repository`,
+   `_verify_clean_repository_with_gitdir`,
    `validate_python_runtime`, `resolve_validated_executable`, `validate_rustup_resolution`,
    `hash_open_file`, `remove_tree_at`,
    `unlink_validated_entry_at`, `preserve_evidence`, `summarize_test_log`,
-   `finalize_after_stage_a_exit`, and `write_provenance`.
+   `_validate_provenance_record`, `_verify_runtime_argv`,
+   `_validate_stage_b_projection_authority`, `_default_provenance`,
+   `_read_authenticated_staged_provenance`, `_finalize_ineligible`,
+   `finalize_after_stage_a_exit`, `_run_bounded_fixture`, and `write_provenance`.
 2. `scripts/ci/test_canonical_shell_wall_runner.py`, containing one
    `CanonicalShellWallRunnerTests` suite; exact fixture/helper symbols `setUp`, `tearDown`,
-   `make_safe_parent`, `make_disposable_repo`, `make_fake_rustup_home`,
+   `make_safe_parent`, `make_disposable_repo`, `fixture_git_environment`,
+   `make_fake_rustup_home`,
    `make_fake_cargo_home_seed`, `make_registry_archives`, `invoke_bootstrap`,
    `invoke_self_test`,
-   `run_bounded_fixture`, `read_final_provenance`, and `assert_ineligible`; and only the
+   `run_bounded_fixture`, `read_final_provenance`,
+   `_assert_primary_command_uses_private_umask_without_mutating_parent`,
+   `_assert_stage_b_rejects_runtime_cwd_drift_from_projection_authority`, and
+   `assert_ineligible`; and only the
    self-tests named below.
+
+Fixture-only descendant repositories and any stubbed inner self-test payloads are unit coverage
+for ancestry/bootstrap wiring only. They do not satisfy the authenticated proof requirement; the
+required proof remains the later disposable full non-worktree checkout described in this contract.
 
 No repository/Python dependency, generated file, configuration, production test, runtime
 shell/world/policy/service, lifecycle, capability, secure-FD, receipt/supervisor, cleanup, or
@@ -7478,8 +7494,10 @@ placement symbol may change. The fixed interpreter is `/usr/bin/python3.13`; the
 standard-library `os`/`ctypes` bindings for `prctl`, `statx`, xattr, pidfd, signal, wait,
 `renameat2`, and descriptor operations. Bubblewrap alone performs namespace, UID/GID-map, tmpfs,
 bind, `/proc`, and mount teardown operations under the exact reviewed argv. The runner resolves no
-namespace helper or executable through ambient `PATH`, needs no subordinate-ID range, and
-requires no privileged service, daemon, or product-state mutation. If an exact Bubblewrap feature
+namespace helper or executable through ambient `PATH`, requires exact current-account
+`/etc/subuid` and `/etc/subgid` entries plus exact held `/usr/bin/newuidmap` and
+`/usr/bin/newgidmap`, and requires no privileged service, daemon, or product-state mutation. If an
+exact Bubblewrap feature
 or required Linux syscall is unavailable, it emits an ineligible/environment result and stops;
 no weaker fallback is permitted. Exact isolated interpreter flags also exclude ambient Python
 startup state.
@@ -7488,8 +7506,9 @@ startup state.
 
 The concrete host-side controller is the authenticated in-memory runner's `host_main`, executed
 directly by exact root-owned `/usr/bin/python3.13` with no enclosing Bubblewrap. Platform
-containment authority begins only when that controller, after authenticating its own expected-HEAD
-runner blob and held platform inputs, directly launches exact installed Bubblewrap
+containment authority begins only when that controller, after authenticating the live
+expected-head runner/test blobs against a reviewed authority commit and held platform inputs,
+directly launches exact installed Bubblewrap
 `/usr/bin/bwrap`, package `bubblewrap 0.11.0-1`, version stdout `bubblewrap 0.11.0\n`, SHA-256
 `11e350f9154f8c8e30482fb087f4c3d033907452b7a5d82d027b6662d07f3ab6`, under the root-owned,
 mode-`0755`, no-foreign-write-ACL platform TCB. Its exact ELF closure also includes
@@ -7517,26 +7536,32 @@ argv       = /usr/bin/python3.13 -I -S -B -c REVIEWED_BOOTSTRAP_V2_BYTES
              host --mode MODE --label LABEL --timeout-seconds SECONDS
              --evidence-parent ABSOLUTE_SAFE_DIRECTORY
              --expected-head FORTY_LOWERCASE_HEX
+             --authority-commit-oid FORTY_LOWERCASE_HEX
+             --reviewed-authority-commit-oid FORTY_LOWERCASE_HEX
 ```
 
 The displayed vector is the structural rendering of
 `HOST_INVOCATION_ARGV_TEMPLATE_V1`, not one invariant runtime hash. The template is the exact
-NUL-terminated concatenation of its argv elements, with five whole-element ASCII slot tokens:
-`{MODE}`, `{LABEL}`, `{TIMEOUT_DECIMAL}`, `{EVIDENCE_PARENT}`, and `{EXPECTED_HEAD}`. No slot may
-appear inside an option name or a partial element. Runtime construction validates each value by
-the CLI contract, substitutes each slot exactly once, forbids NUL, and hashes the resulting
-NUL-terminated argv bytes as that wall's `host_argv_sha256`.
+NUL-terminated concatenation of its argv elements, with seven whole-element ASCII slot tokens:
+`{MODE}`, `{LABEL}`, `{TIMEOUT_DECIMAL}`, `{EVIDENCE_PARENT}`, `{EXPECTED_HEAD}`,
+`{AUTHORITY_COMMIT_OID}`, and `{REVIEWED_AUTHORITY_COMMIT_OID}`. No slot may appear inside an
+option name or a partial element. Runtime construction validates each value by the CLI contract,
+substitutes each slot exactly once,
+forbids NUL, and hashes the resulting NUL-terminated argv bytes as that wall's
+`host_argv_sha256`.
 
 Stage-A and Stage-B constants use the same framing. Their closed whole-element slot sets are:
 
 - Stage A: `{MODE}`, `{LABEL}`, `{TIMEOUT_DECIMAL}`, `{CURRENT_UID_DECIMAL}`,
-  `{CURRENT_GID_DECIMAL}`, `{RUNNER_DATA_FD_DECIMAL}`, `{STATUS_FD_DECIMAL}`,
-  `{EVIDENCE_PARTIAL}`, `{BACKING_PATH}`, `{REPOSITORY_SOURCE}`, `{RUSTUP_SOURCE}`,
-  `{CARGO_SOURCE}`, and `{EXPECTED_HEAD}`;
+  `{CURRENT_GID_DECIMAL}`, `{STAGE_A_USERNS_FD_DECIMAL}`, `{STAGE_B_USERNS_SYNC_FD_DECIMAL}`,
+  `{RUNNER_DATA_FD_DECIMAL}`, `{STATUS_FD_DECIMAL}`, `{EVIDENCE_PARTIAL}`, `{BACKING_PATH}`,
+  `{REPOSITORY_SOURCE}`, `{RUSTUP_SOURCE}`, `{CARGO_SOURCE}`, `{EXPECTED_HEAD}`,
+  `{AUTHORITY_COMMIT_OID}`, and `{REVIEWED_AUTHORITY_COMMIT_OID}`;
 - Stage B: `{MODE}`, `{LABEL}`, `{TIMEOUT_DECIMAL}`, `{CURRENT_UID_DECIMAL}`,
   `{CURRENT_GID_DECIMAL}`, `{RUNNER_DATA_FD_DECIMAL}`, `{STATUS_FD_DECIMAL}`, `{ROOT}`,
   `{REPOSITORY_SNAPSHOT}`, `{RUSTUP_SNAPSHOT}`, `{CARGO_HOME_RUNTIME}`,
-  `{CONTROL_DIRECTORY}`, `{REPOSITORY_CWD}`, and `{EXPECTED_HEAD}`.
+  `{CONTROL_DIRECTORY}`, `{REPOSITORY_CWD}`, `{EXPECTED_HEAD}`, `{AUTHORITY_COMMIT_OID}`, and
+  `{REVIEWED_AUTHORITY_COMMIT_OID}`.
 
 Every path slot is the already descriptor-validated exact absolute pathname for that invocation;
 FD slots name only the exact explicitly passed Bubblewrap-consumed descriptors below. The host
@@ -7551,32 +7576,46 @@ Invocation authority is not an external pathname or replaceable side artifact. T
 implementation commit must carry, in its immutable commit message, exact unique trailers
 `P1-Bootstrap-Bytes`, `P1-Bootstrap-SHA256`, `P1-Host-Argv-Template-SHA256`,
 `P1-Stage-A-Argv-Template-SHA256`, and `P1-Stage-B-Argv-Template-SHA256`. The expected-HEAD runner
-blob in that same commit contains exact `BOOTSTRAP_V2_SOURCE` and the three template constants.
-Because the templates contain literal `{EXPECTED_HEAD}` rather than the resulting commit OID,
+blob named by the reviewed authority commit contains exact `BOOTSTRAP_V2_SOURCE` and the three
+template constants. Because the templates contain literal `{EXPECTED_HEAD}`,
+`{AUTHORITY_COMMIT_OID}`, and `{REVIEWED_AUTHORITY_COMMIT_OID}` rather than resulting commit OIDs,
 their hashes have no self-reference. The fresh P1 provenance/security reviewer independently
-recomputes the byte length and four constant/template hashes from that reviewed blob, requires
-exact trailer equality, records the resulting exact P1 commit OID, and returns CLEAN only for that
-one commit. This commit object plus its independently verified runner blob is
+recomputes the byte length and four
+constant/template hashes from that reviewed blob, requires exact trailer equality, records the
+resulting exact P1 commit OID, and returns CLEAN only for that one commit. This commit object plus
+its independently verified runner blob is
 `P1InvocationAuthorityV1`; Git object framing supplies immutable identity, so no artifact file
 location, owner, mode, or mutable producer exists.
 
 Before each wall, the closeout initiator reads `BOOTSTRAP_V2_SOURCE` from that exact reviewed Git
-blob—not the worktree—substitutes the host template with `{EXPECTED_HEAD}` equal to the
-reviewer-recorded P1 OID, and submits the resulting vector through a direct array-based
-`execve(2)`/spawn primitive with the bootstrap as one `-c` element. This is the only permitted
-control-plane operation outside the tracked runner; it performs no shell rendering, command
-substitution, environment interpolation, temporary launcher creation, or tracked-path execution.
-If the closeout environment cannot supply that direct-array primitive, stop as
-`BroadWallContainmentDecisionRequired`; an ambient/ad hoc launcher is not a fallback. At its first
-instruction V2 binds `/proc/self/cmdline` to the exact validated runtime instantiation of
-`HOST_INVOCATION_ARGV_TEMPLATE_V1`, authenticates the live
-expected-HEAD commit and runner blob through retained Git plus independent object framing,
-recomputes the same constant/template trailers, reconstructs the exact runtime vector from the
-validated slot values, and compiles `host_main`. Live `HEAD`, CLI `--expected-head`, the reviewed
-P1 OID, authenticated commit object, runner blob, V2 bytes, template hashes, and per-wall actual
-argv hash must agree. Stage A and Stage B repeat the corresponding template/substitution check.
-The independent evidence gate repeats every comparison against the reviewer's recorded P1 OID.
-Caller/artifact/bootstrap co-variation therefore cannot establish eligibility.
+blob—not the worktree—substitutes the host template with `{EXPECTED_HEAD}` equal to the live
+descendant commit under test, `{AUTHORITY_COMMIT_OID}` equal to the reviewer-recorded P1 OID, and
+`{REVIEWED_AUTHORITY_COMMIT_OID}` equal to that same reviewer-recorded P1 OID, then submits the
+resulting vector through a direct array-based `execve(2)`/spawn primitive with the bootstrap as
+one `-c` element. This is the only permitted control-plane operation outside the tracked runner;
+it performs no shell rendering, command substitution, environment interpolation, temporary
+launcher creation, or tracked-path execution. If the closeout environment cannot supply that
+direct-array primitive, stop as `BroadWallContainmentDecisionRequired`; an ambient/ad hoc launcher
+is not a fallback. At its first instruction V2 binds `/proc/self/cmdline` to the exact validated
+runtime instantiation of `HOST_INVOCATION_ARGV_TEMPLATE_V1`, authenticates the live expected-head
+commit and reviewed authority commit through retained Git plus independent object framing, proves
+that the authority commit is equal to or an ancestor of the live head, requires
+`--reviewed-authority-commit-oid` to exactly equal `--authority-commit-oid`, requires exact
+authenticated runner/test blob continuity across those two commits, recomputes the same
+constant/template trailers from the reviewed authority blob, reconstructs the exact runtime vector
+from the validated slot values, and compiles `host_main`. Live `HEAD`, CLI `--expected-head`, CLI
+`--authority-commit-oid`, CLI `--reviewed-authority-commit-oid`, the reviewed P1 OID,
+authenticated commit objects, runner/test blobs, V2 bytes, template hashes, and per-wall actual
+argv hashes must agree. Stage A and Stage B repeat the corresponding template/substitution check,
+and the Stage-B authority record carries both reviewed-authority OIDs plus the projected
+repository CWD. Stage B additionally binds that projected repository CWD as authenticated
+projection authority. The independent evidence gate repeats every comparison against the
+reviewer's recorded P1 OID and the live descendant head; `reviewed_oid_matches` is derived from
+the exact equality check between the two reviewed-authority inputs rather than asserted by the
+caller. Once a trusted external control plane supplies that reviewed authority OID independently
+of the live descendant, caller/artifact/bootstrap co-variation cannot turn a later descendant into
+the reviewed authority. The runner alone does not prove independent review for a same-head
+invocation where `expected_head == authority_commit_oid == reviewed_authority_commit_oid`.
 
 `E0` is the exact environment inherited by the canonical Cargo command at the immutable
 checkpoint. P1 control is carried only in validated argv/FDs, never environment. The launcher
@@ -7611,7 +7650,9 @@ For human review only, the structural rendering of the host-controller argv is:
   --label LABEL \
   --timeout-seconds SECONDS \
   --evidence-parent ABSOLUTE_SAFE_DIRECTORY \
-  --expected-head FORTY_LOWERCASE_HEX
+  --expected-head FORTY_LOWERCASE_HEX \
+  --authority-commit-oid FORTY_LOWERCASE_HEX \
+  --reviewed-authority-commit-oid FORTY_LOWERCASE_HEX
 ```
 
 That rendering is never eligibility evidence and must not be executed through an ambient shell;
@@ -7835,26 +7876,33 @@ exact argv; individual mechanics tests may launch only their bounded dummy Bubbl
 ```text
 ["/usr/bin/python3.13","-I","-S","-B","-c",REVIEWED_BOOTSTRAP_V2_BYTES,
  "self-test","--evidence-parent",ABSOLUTE_SAFE_DIRECTORY,
- "--expected-head",FORTY_LOWERCASE_HEX]
+ "--expected-head",FORTY_LOWERCASE_HEX,
+ "--authority-commit-oid",FORTY_LOWERCASE_HEX,
+ "--reviewed-authority-commit-oid",FORTY_LOWERCASE_HEX]
 ```
 
 The authenticated loader constructs one ordered suite containing every allowlisted method below
 exactly once and rejects any extra `test_*` method. It performs no `unittest` discovery. Success
-requires all `95` methods and emits exact compact sorted-key stdout
-`{"failed":0,"run":95,"schema":"substrate.canonical_shell_wall_runner_selftest.v1","status":"clean"}\n`,
+requires all `101` methods and emits exact compact sorted-key stdout
+`{"failed":0,"run":101,"schema":"substrate.canonical_shell_wall_runner_selftest.v1","status":"clean"}\n`,
 zero stderr, and exit `0`. Loader/authority rejection exits `65`; invalid self-test CLI exits
 `64`; a completed test failure emits the same four-key schema with actual integer `failed` and
 `run`, status `failed`, exits `68`, and can never create wall eligibility or a canonical baseline.
 
-`--mode serial` is the only other mode value. All five options are required. `LABEL` must match
-`[a-z0-9][a-z0-9-]{0,63}`; `SECONDS` is an integer in `1..=21600`; the evidence parent must already
-exist and pass the current-UID, directory/no-follow, mode, ACL, and safe-ancestor checks; and
-`--expected-head` must equal live `HEAD`. The invocation CWD must equal the no-symlink repository
-root. `host` and `self-test` are the only public roles. `stage-a` and `stage-b-worker` are
-internal-only roles accepted solely with the exact sealed-blob hash, fixed namespace/mount
-identity, and per-invocation private control/backing identities created by authenticated
-`host_main`; a public attempt fails before setup. There is no tracked-path execution, re-exec
-override, arbitrary command, root,
+`--mode serial` is the only other mode value. `host` requires seven public options:
+`--mode`, `--label`, `--timeout-seconds`, `--evidence-parent`, `--expected-head`,
+`--authority-commit-oid`, and `--reviewed-authority-commit-oid`. `self-test` requires four public
+options: `--evidence-parent`, `--expected-head`, `--authority-commit-oid`, and
+`--reviewed-authority-commit-oid`. `LABEL` must match `[a-z0-9][a-z0-9-]{0,63}`; `SECONDS` is an
+integer in `1..=21600`; the evidence parent must already exist and pass the current-UID,
+directory/no-follow, mode, ACL, and safe-ancestor checks; `--expected-head` must equal live
+`HEAD`; `--authority-commit-oid` must equal or be an ancestor of that live head; and
+`--reviewed-authority-commit-oid` must exactly equal `--authority-commit-oid`. The invocation CWD
+must equal the no-symlink repository root. `host` and `self-test` are the only public roles.
+`stage-a` and `stage-b-worker` are internal-only roles accepted solely with the exact sealed-blob
+hash, fixed namespace/mount identity, and per-invocation private control/backing identities
+created by authenticated `host_main`; a public attempt fails before setup. There is no tracked-path
+execution, re-exec override, arbitrary command, root,
 `TMPDIR`, `XDG_RUNTIME_DIR`, environment, shell, CWD, executable, hash, count, or baseline
 override. `host_main` launches Stage A and retains host-side teardown/finalization authority;
 `stage_a_main` constructs the private seeds/runtime and launches exact nested Bubblewrap Stage B
@@ -8194,7 +8242,8 @@ sequence:
    `--die-with-parent`, private
    propagation, a new `/proc`, read-only binds of repository/rustup-home snapshots, writable bind
    of the private Cargo runtime at canonical Cargo home, writable binds only for target, `R/tmp`,
-   `R/xdg-runtime`, and the fixed control directory, plus the exact original repository CWD.
+   `R/xdg-runtime`, and the fixed control directory, plus the exact projected Stage-B repository
+   CWD (`/home/spenser/__Active_code/substrate`).
    Stage-B runner bytes arrive through a separate sealed-memfd/`--ro-bind-data` projection.
    Stage A clears close-on-exec only for that exact data FD and the exact
    `--json-status-fd` writer in the forked Bubblewrap child. Bubblewrap consumes and closes the
@@ -8354,11 +8403,11 @@ must instead finalize `eligible=true`, `wall_gate=regression`, and `record_stage
 | `wall_gate` | enum, nonnull | `clean`, `regression`, or `ineligible` |
 | `ineligibility_reasons` | array of enum, nonnull | Empty iff eligible; sorted unique values from the closed enum below |
 | `runner_exit_code` | integer, nonnull | One exit code from the table above and precedence rule below |
-| `started_at_utc`, `finalized_at_utc` | RFC 3339 UTC strings, nonnull | Invocation start and final-record times |
-| `request` | object, nonnull | Exact keys `launcher`, `command` (string array), `environment_contract`, `tmpdir`, `xdg_runtime_dir`, `target_dir` (absolute strings or null until root setup), `snapshot_timeout_seconds` (exact `900`), `setup_timeout_seconds` (exact `60`), `wall_timeout_seconds` (requested integer). `launcher` has only `trust_model` (exact `immutable-root-platform-plus-reviewed-git-object`), `controller` (exact `python-v2-host-main`), `authority_commit_oid` (40 lowercase hex), `python_path`, `bootstrap_sha256`, `runner_blob_sha256`, `bubblewrap_path`, `bubblewrap_version`, `bubblewrap_sha256`, `bubblewrap_elf_closure_manifest_sha256`, `host_argv_template_sha256`, `stage_a_argv_template_sha256`, `stage_b_argv_template_sha256`, `host_argv_sha256`, `stage_a_argv_sha256`, `stage_b_argv_sha256` (strings), `authority_commit_matches_live_head`, `authority_commit_trailers_verified`, `reviewed_oid_matches`, `direct_array_spawn`, `sealed_stage_a_runner`, `sealed_stage_b_runner`, `nested_probe_clean` (booleans). `environment_contract` has only `inherited_entry_count` (integer), `inherited_key_names_sha256` (64 lowercase hex), `forbidden_startup_keys_absent`, `tmpdir_overridden`, `xdg_runtime_dir_overridden`, `all_other_entries_byte_equal`, `protected_values_not_recorded` (booleans) |
+| `started_at_utc`, `finalized_at_utc` | RFC 3339 UTC string; `finalized_at_utc` nullable until finalization | Invocation start and final-record times |
+| `request` | object, nonnull | Exact keys `launcher`, `command` (string array), `environment_contract`, `tmpdir`, `xdg_runtime_dir`, `target_dir` (absolute strings or null until root setup), `snapshot_timeout_seconds` (exact `900`), `setup_timeout_seconds` (exact `60`), `wall_timeout_seconds` (requested integer). `launcher` has only `trust_model` (exact `immutable-root-platform-plus-reviewed-git-object`), `controller` (exact `python-v2-host-main`), `authority_commit_oid` (40 lowercase hex), `reviewed_authority_commit_oid` (40 lowercase hex that must exactly equal `authority_commit_oid`), `python_path`, `bootstrap_sha256`, `runner_blob_sha256`, `bubblewrap_path`, `bubblewrap_version`, `bubblewrap_sha256`, `bubblewrap_elf_closure_manifest_sha256`, `host_argv_template_sha256`, `stage_a_argv_template_sha256`, `stage_b_argv_template_sha256` (always 64 lowercase hex), `host_argv_sha256` (64 lowercase hex, nullable until the host argv has been recorded), `stage_a_argv_sha256`, `stage_b_argv_sha256` (64 lowercase hex, nullable only while `mounts.stage_a` / `mounts.stage_b` are null; once the corresponding stage record exists each value must be non-null and equal that stage record's `argv_sha256`), `authority_commit_matches_live_head`, `authority_commit_trailers_verified`, `reviewed_oid_matches`, `direct_array_spawn`, `sealed_stage_a_runner`, `sealed_stage_b_runner`, `nested_probe_clean` (booleans). `reviewed_oid_matches` must be exact `true`, and the validator recomputes the `authority_commit_oid == reviewed_authority_commit_oid` equality even while `repository` is null before preflight completes. `environment_contract` has only `inherited_entry_count` (integer), `inherited_key_names_sha256` (64 lowercase hex), `forbidden_startup_keys_absent`, `tmpdir_overridden`, `xdg_runtime_dir_overridden`, `all_other_entries_byte_equal`, `protected_values_not_recorded` (booleans) |
 | `repository` | object or null | Null only before successful repository preflight; otherwise exact keys `branch`, `head`, `tree`, `cwd` (strings), `clean`, `alternates_absent`, `replace_refs_absent`, `grafts_absent`, `shallow_absent`, `local_config_allowlist_valid`, `worktree_config_absent`, `info_attributes_absent`, `tree_index_equal`, `ignore_sources_tracked`, `untracked_absent` (booleans), `gitdir_identity` (directory identity), `index_pre`, `index_post`, `head_file_pre`, `head_file_post`, `branch_ref_pre`, `branch_ref_post`, `local_config_pre`, `local_config_post`, `info_exclude_pre`, `info_exclude_post` (regular-file identities; each post value nullable only if failure prevents post-check), `tree_manifest_sha256`, `index_manifest_pre_sha256`, `index_manifest_post_sha256`, `ignore_sources_manifest_pre_sha256`, `ignore_sources_manifest_post_sha256`, `tracked_manifest_pre_sha256`, `tracked_manifest_post_sha256`, `untracked_paths_pre_sha256`, `untracked_paths_post_sha256`, `ignored_paths_pre_sha256`, `ignored_paths_post_sha256` (64 lowercase hex; post values nullable only if failure prevents post-check), `tracked_count` (integer) |
 | `toolchain` | object or null | Null only before executable preflight; exact keys `platform`, `machine` (strings), `executables`, `python_runtime`, `rustup_resolution`, and `rust_toolchain_root` |
-| `toolchain.executables` | array of six objects | Ordered `bubblewrap`, `python`, `git`, `rustup`, `toolchain-cargo`, `toolchain-rustc`; exact keys `role`, `path`, `version`, `pre`, `post`. `pre`/`post` each use the executable identity schema below; `post` is null only if failure prevents post-check |
+| `toolchain.executables` | array of eight objects | Ordered `bubblewrap`, `python`, `git`, `newuidmap`, `newgidmap`, `rustup`, `toolchain-cargo`, `toolchain-rustc`; exact keys `role`, `path`, `version`, `pre`, `post`. `pre`/`post` each use the executable identity schema below; `post` is null only if failure prevents post-check |
 | `toolchain.python_runtime` | object | Exact keys `startup_tcb_trust_model` (exact `immutable-root-platform`), `startup_tcb_manifest_sha256`, `initial_modules_sha256`, `proc_maps_sha256` (64 lowercase hex), `ld_so_preload_absent`, `host_controller_verified`, `bubblewrap_launcher_verified`, `canonical_environment_preserved`, `git_executed_from_fd`, `git_object_chain_verified`, `late_imports_absent` (booleans), `flags` (map containing only the six exact flag/value pairs above), `sys_path` (the exact ordered three-string array above), `bootstrap_bytes` (positive integer fixed by the reviewed V2 artifact), `bootstrap_sha256` (that artifact's 64-lowercase-hex hash), `runner_blob_git_oid` (40 lowercase hex), `runner_blob_sha256`, `stdlib_manifest_sha256` (64 lowercase hex), `runner_file` (exact synthetic string), `runner_blob_matches_manifest` (boolean), `self_test_blob_git_oid`, `self_test_blob_sha256`, `self_test_file` (null for `host`; exact authenticated values for `self-test`), and `modules` (module-origin array sorted by module name) |
 | `toolchain.rustup_resolution` | object | Exact keys `cargo_shim_pre`, `cargo_shim_post`, `rustc_shim_pre`, `rustc_shim_post` (symlink identities), `settings_pre`, `settings_post`, `repo_toolchain_file_pre`, `repo_toolchain_file_post` (regular-file identities), `rustup_version_stdout_sha256`, `rustup_version_stderr_sha256`, `cargo_proxy_version_stdout_sha256`, `rustc_proxy_version_stdout_sha256` (64 lowercase hex), `proxy_stderr_empty`, `canonical_selection` (booleans). Post identities are nullable only if failure prevents post-check |
 | `toolchain.rust_toolchain_root` | object | Exact keys `source_path`, `source_pre`, `source_post` (directory identities; post nullable only if unavailable), `directory_count` (exact `26`), `file_count` (exact `213`), `symlink_count` (exact `0`), `regular_file_bytes` (exact `1071859799`), `manifest_pre_sha256`, `manifest_post_sha256` (exact pinned 64-lowercase-hex hash; post nullable only if unavailable) |
@@ -8366,16 +8415,16 @@ must instead finalize `eligible=true`, `wall_gate=regression`, and `record_stage
 | executable identity | object, nonnull when present | Exact keys `dev`, `ino`, `uid`, `mode` (integers), `kind` (exact `regular`), `sha256` (64 lowercase hex), `path_matches_fd`, `owner_ancestor_acl_safe`, `executable` (booleans) |
 | symlink identity | object, nonnull when present | Exact keys `dev`, `ino`, `uid`, `mode` (integers), `kind` (exact `symlink`), `target` (exact `rustup`), `path_matches_lstat`, `owner_ancestor_acl_safe` (booleans) |
 | regular-file identity | object, nonnull when present | Exact keys `dev`, `ino`, `uid`, `mode` (integers), `kind` (exact `regular`), `sha256` (64 lowercase hex), `path_matches_fd`, `owner_ancestor_acl_safe` (booleans) |
-| `namespace` | object or null | Null until namespace setup; otherwise exact keys `host_uid`, `wall_uid`, `host_pid`, `stage_a_bwrap_pid`, `stage_b_bwrap_pid`, `worker_stage_a_pid`, `host_start_time_ticks`, `stage_a_bwrap_start_time_ticks`, `stage_b_bwrap_start_time_ticks`, `worker_start_time_ticks`, `stage_a_pid_namespace_inode`, `stage_a_mount_namespace_inode`, `stage_b_pid_namespace_inode`, `stage_b_mount_namespace_inode` (integers), `uid_map`, `gid_map` (exact strings), `stage_a_bwrap_pidfd_opened`, `stage_a_status_received`, `stage_b_bwrap_pidfd_opened`, `stage_b_status_received`, `worker_pidfd_opened`, `worker_peer_credentials_verified`, `worker_ready_received`, `control_path_absence_proved`, `worker_start_sent`, `worker_subreaper_verified`, `worker_echild_received`, `stage_b_exit_received`, `stage_a_exit_received`, `stage_a_namespace_absent` (booleans) |
-| `mounts` | object or null | Null until mount setup; otherwise exact keys `propagation_private` (boolean), `evidence_parent`, `backing_mountpoint`, `tmpfs`, `stage_a`, `stage_b`, `snapshots`, `cargo_home_runtime`, `proc` |
+| `namespace` | object, nonnull | Always present; exact keys `host_uid`, `wall_uid`, `host_pid`, `stage_a_bwrap_pid`, `stage_b_bwrap_pid`, `worker_stage_a_pid`, `host_start_time_ticks`, `stage_a_bwrap_start_time_ticks`, `stage_b_bwrap_start_time_ticks`, `worker_start_time_ticks`, `stage_a_pid_namespace_inode`, `stage_a_mount_namespace_inode`, `stage_b_pid_namespace_inode`, `stage_b_mount_namespace_inode` (integers or null until that stage), `uid_map`, `gid_map` (exact strings or null until captured), `stage_a_bwrap_pidfd_opened`, `stage_a_status_received`, `stage_b_bwrap_pidfd_opened`, `stage_b_status_received`, `worker_pidfd_opened`, `worker_peer_credentials_verified`, `worker_ready_received`, `control_path_absence_proved`, `worker_start_sent`, `worker_subreaper_verified`, `worker_echild_received`, `stage_b_exit_received`, `stage_a_exit_received`, `stage_a_namespace_absent` (booleans) |
+| `mounts` | object, nonnull | Always present; exact keys `propagation_private` (boolean), `evidence_parent`, `backing_mountpoint`, `tmpfs`, `stage_a`, `stage_b`, `snapshots`, `cargo_home_runtime`, `proc` |
 | `mounts.evidence_parent` | object | Exact `pre`, `post` directory identities; `post` is nullable only before cleanup |
 | `mounts.backing_mountpoint` | object | Exact keys `path`, `underlying_pre`, `mounted`, `underlying_post` (directory identities; later values nullable by stage), `removed`, `name_absence_proved`, `descriptor_closed_after_absence` (booleans or null until cleanup) |
-| `mounts.tmpfs`, `mounts.proc` | object | Exact keys `source`, `fstype`, `flags` (strings), `mount_id` (integer), `unmounted` (boolean or null until teardown) |
-| `mounts.stage_a`, `mounts.stage_b` | object | Exact keys `argv_template_sha256`, `argv_sha256` (64 lowercase hex), `user_namespace`, `mount_namespace`, `pid_namespace`, `json_status_fd`, `as_pid_1`, `builtin_pid1_fail_safe_only` (booleans; Stage A has `as_pid_1=false`/`builtin_pid1_fail_safe_only=true`, Stage B has `as_pid_1=true`/`builtin_pid1_fail_safe_only=false`; the other four are true for both), `uid_map`, `gid_map` (strings), `private_propagation`, `die_with_parent`, `completed`, `unmounted` (booleans or null by stage) |
-| `mounts.snapshots` | array of three objects | Ordered `repository`, `rustup-home`, `cargo-home-seed`; exact keys `role`, `source_manifest_sha256`, `snapshot_manifest_sha256` (64 lowercase hex), `source_entry_count`, `snapshot_entry_count` (integers), `private_tmpfs`, `no_host_alias`, `stage_b_read_only`, `post_manifest_equal`, `removed` (booleans or null by stage). Repository and rustup-home have `stage_b_read_only=true`; Cargo-home seed is not mounted into Stage B and therefore has `stage_b_read_only=false`. Rustup-home hashes bind exact settings plus the pinned toolchain manifest; repository hash derives from the independently verified expected tree; Cargo-home seed binds exact rustup bytes, two shim symlinks, and Cargo.lock/checksum-selected registry subset while proving all three authorized runtime metadata paths absent |
-| `mounts.cargo_home_runtime` | object or null | Null until copied; otherwise exact keys `seed_manifest_sha256`, `pre_manifest_sha256`, `post_manifest_sha256` (64 lowercase hex), `seed_entry_count`, `pre_entry_count`, `post_entry_count` (integers), `private_tmpfs`, `no_host_alias`, `stage_b_writable`, `seed_copy_equal`, `only_authorized_metadata_changed`, `removed` (booleans or null by stage), and `authorized_mutable_paths` (exact ordered array `[".global-cache",".package-cache",".package-cache-mutate"]`) |
+| `mounts.tmpfs`, `mounts.proc` | object or null | Null until that mount exists; otherwise exact keys `source`, `fstype`, `flags` (strings), `mount_id` (integer), `unmounted` (boolean or null until teardown) |
+| `mounts.stage_a`, `mounts.stage_b` | object or null | Null until that stage mount exists; otherwise exact keys `argv_template_sha256`, `argv_sha256` (64 lowercase hex and required to match the corresponding `request.launcher.stage_{a,b}_argv_template_sha256` / `request.launcher.stage_{a,b}_argv_sha256` values), `user_namespace`, `mount_namespace`, `pid_namespace`, `json_status_fd`, `as_pid_1`, `builtin_pid1_fail_safe_only` (booleans; Stage A has `as_pid_1=false`/`builtin_pid1_fail_safe_only=true`, Stage B has `as_pid_1=true`/`builtin_pid1_fail_safe_only=false`; the other four are true for both), `uid_map`, `gid_map` (strings), `private_propagation`, `die_with_parent`, `completed`, `unmounted` (booleans) |
+| `mounts.snapshots` | array of zero to three objects | Ordered prefix of `repository`, `rustup-home`, `cargo-home-seed`; exact keys `role`, `source_manifest_sha256`, `snapshot_manifest_sha256` (64 lowercase hex), `source_entry_count`, `snapshot_entry_count` (integers), `private_tmpfs`, `no_host_alias`, `stage_b_read_only`, `post_manifest_equal`, `removed` (booleans or null by stage). Repository and rustup-home have `stage_b_read_only=true`; Cargo-home seed is not mounted into Stage B and therefore has `stage_b_read_only=false`. Rustup-home hashes bind exact settings plus the pinned toolchain manifest; repository hash derives from the independently verified expected tree; Cargo-home seed binds exact rustup bytes, two shim symlinks, and Cargo.lock/checksum-selected registry subset while proving all three authorized runtime metadata paths absent |
+| `mounts.cargo_home_runtime` | object or null | Null until copied; otherwise exact keys `seed_manifest_sha256`, `pre_manifest_sha256`, `post_manifest_sha256` (64 lowercase hex), `seed_entry_count`, `pre_entry_count`, `post_entry_count` (integers), `private_tmpfs`, `no_host_alias`, `stage_b_writable`, `seed_copy_equal`, `only_authorized_metadata_changed`, `removed` (booleans or null by stage), `authorized_mutable_paths` (exact ordered array `[".global-cache",".package-cache",".package-cache-mutate"]`), and `changed` (sorted unique subset of that ordered allowlist) |
 | directory identity | object, nonnull when present | Exact keys `dev`, `ino`, `mount_id`, `uid`, `mode` (integers), `kind` (exact `directory`), `acl_sha256` (64 lowercase hex), `foreign_effective_write`, `path_matches_fd` (booleans) |
-| `containment` | object or null | Null until Stage B/worker setup; otherwise exact keys `cargo_pid`, `cargo_exit`, `stage_b_exit`, `stage_a_exit` (integers or null if never started/not yet exited), `reaped_descendants`, `event_count`, `output_pipe_dev`, `output_pipe_ino`, `output_bytes_preserved` (integers), `stage_b_setup_timed_out`, `wall_timed_out`, `premature_stage_b_exit`, `echld_observed`, `authenticated_empty_record`, `forced_teardown`, `event_overflow`, `output_pipe_opened_before_stage_b`, `single_pipe_for_stdout_stderr`, `original_stdin_preserved`, `cargo_control_fd_absent`, `output_eof_after_stage_b_reap`, `output_overflow`, `stage_a_namespace_absent` (booleans), `events_file` (string or null before creation) |
+| `containment` | object, nonnull | Always present; exact keys `cargo_pid`, `cargo_exit`, `stage_b_exit`, `stage_a_exit` (integers or null if never started/not yet exited), `reaped_descendants`, `event_count`, `output_pipe_dev`, `output_pipe_ino`, `output_bytes_preserved` (integers or null until observed), `stage_b_setup_timed_out`, `wall_timed_out`, `premature_stage_b_exit`, `echld_observed`, `authenticated_empty_record`, `forced_teardown`, `event_overflow`, `output_pipe_opened_before_stage_b`, `single_pipe_for_stdout_stderr`, `original_stdin_preserved`, `cargo_control_fd_absent`, `output_eof_after_stage_b_reap`, `output_overflow`, `stage_a_namespace_absent` (booleans), `events_file` (string or null before creation) |
 | `roots` | array of zero to nine objects | Present roles in fixed order `root`, `tmp`, `xdg-runtime`, `control`, `target`, `repository-snapshot`, `rustup-home-snapshot`, `cargo-home-seed`, `cargo-home-runtime`; each has exact keys `role`, `path`, `pre`, `post`, `removed`, `name_absence_proved`, `descriptor_closed_after_required_absence`; `post` and the three booleans are null until that phase |
 | `roots[].pre`, `roots[].post` | directory identity or null | `pre` nonnull for every listed role. Child/snapshot post is immediately before its removal; root post is after all child/snapshot absence and immediately before root removal |
 | `evidence` | array of zero to five objects | Present artifacts in fixed order `cargo.log`, `containment.jsonl`, `failure-names.txt`, `normalized-signatures.txt`, `summary.json`; exact keys `name`, `bytes`, `sha256`. Presence follows the stage rules above. A result-complete record has all five; invalid analysis has either both derived text files after successful derivation or neither after failed derivation, never only one. `manifest.sha256` binds every present artifact plus `provenance.json` |
@@ -8516,6 +8565,7 @@ TMPDIR="$R/tmp" XDG_RUNTIME_DIR="$R/xdg-runtime" \
 - `test_process_group_escape_remains_contained`
 - `test_timeout_is_ineligible`
 - `test_snapshot_timeout_is_ineligible`
+- `test_copy_tree_no_follow_preserves_modes_despite_umask`
 - `test_rejects_root_path_replacement`
 - `test_rejects_root_symlink_substitution`
 - `test_rejects_child_entry_replacement`
@@ -8537,6 +8587,7 @@ TMPDIR="$R/tmp" XDG_RUNTIME_DIR="$R/xdg-runtime" \
 - `test_stage_b_setup_timeout_signals_only_retained_bwrap_pidfd`
 - `test_stage_b_timeout_before_status_starts_no_cargo_and_reaps_exact_bwrap`
 - `test_stage_b_bwrap_death_before_worker_ready_is_ineligible`
+- `test_stage_a_maps_vanished_post_status_worker_to_premature_exit`
 - `test_stage_a_parent_loss_before_stage_b_start_starts_no_wall`
 - `test_stage_b_bwrap_loss_after_ready_before_start_is_ineligible`
 - `test_stage_a_start_requires_bwrap_status_worker_pidfd_peer_credentials_and_ready`
@@ -8558,6 +8609,8 @@ TMPDIR="$R/tmp" XDG_RUNTIME_DIR="$R/xdg-runtime" \
 - `test_rejects_dirty_index_worktree_and_nonignored_untracked_state`
 - `test_ignores_only_git_ignored_build_outputs`
 - `test_rejects_git_environment_config_alternates_replace_and_fsmonitor`
+- `test_descendant_authority_commit_must_be_ancestor_with_exact_runner_and_test_blobs`
+- `test_descendant_authority_rejects_non_ancestor_and_authenticated_blob_drift`
 - `test_rejects_local_git_config_include_mode_exclude_worktree_and_unknown_keys`
 - `test_info_exclude_is_held_but_never_cleanliness_authority`
 - `test_rejects_info_attributes_worktree_config_and_index_authority_extensions`
@@ -8577,7 +8630,8 @@ TMPDIR="$R/tmp" XDG_RUNTIME_DIR="$R/xdg-runtime" \
 - `test_self_test_loader_rejects_path_import_discovery_and_blob_mismatch`
 - `test_private_rustup_toolchain_snapshot_matches_pinned_complete_manifest`
 - `test_mounted_rustc_reports_private_sysroot_and_compiles_minimal_test`
-- `test_registry_snapshot_reconstructs_only_lock_checksum_selected_archives`
+- `test_vendor_snapshot_reconstructs_only_lock_checksum_selected_archives`
+- `test_constructed_cargo_home_resolves_locked_vendor_offline_without_drift`
 - `test_private_snapshots_ignore_transient_source_modify_replace_and_restore`
 - `test_cargo_environment_preserves_e0_with_only_tmpdir_xdg_overrides`
 - `test_environment_values_and_protected_markers_are_never_serialized`
@@ -8598,6 +8652,7 @@ TMPDIR="$R/tmp" XDG_RUNTIME_DIR="$R/xdg-runtime" \
 - `test_summarizer_rejects_integer_duplicate_missing_and_panic_grammar`
 - `test_summarizer_rejects_invalid_encoding_nul_and_overflow`
 - `test_mount_source_flags_ids_propagation_and_order_are_exact`
+- `test_projected_root_ids_include_mapped_stage_identity`
 - `test_cache_and_proc_mounts_unmount_before_tmpfs`
 - `test_backing_mountpoint_removed_and_evidence_parent_preserved`
 - `test_parallel_command_and_fresh_root`

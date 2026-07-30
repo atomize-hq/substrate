@@ -441,11 +441,11 @@ try:
         if (_fields[0] in ('built-in','frozen') and _origin!=_fields[0]) or (_fields[0]=='file' and _origin!=_fields[2]):
             raise SystemExit(65)
     _args=sys.argv[1:]
-    if len(_args)!=9 or _args[0] not in ('stage-a','stage-b-worker') or _args[1::2]!=['--mode','--label','--timeout-seconds','--expected-head']:
+    if len(_args)!=13 or _args[0] not in ('stage-a','stage-b-worker') or _args[1::2]!=['--mode','--label','--timeout-seconds','--expected-head','--authority-commit-oid','--reviewed-authority-commit-oid']:
         raise SystemExit(65)
     _role=_args[0]
-    _mode=_args[2];_label=_args[4];_timeout=_args[6];_expected_head=_args[8]
-    if _mode not in ('parallel','serial') or not _timeout.isdecimal() or len(_expected_head)!=40 or any(_c not in '0123456789abcdef' for _c in _expected_head):
+    _mode=_args[2];_label=_args[4];_timeout=_args[6];_expected_head=_args[8];_authority_commit_oid=_args[10];_reviewed_authority_commit_oid=_args[12]
+    if _mode not in ('parallel','serial') or not _timeout.isdecimal() or len(_expected_head)!=40 or any(_c not in '0123456789abcdef' for _c in _expected_head) or len(_authority_commit_oid)!=40 or any(_c not in '0123456789abcdef' for _c in _authority_commit_oid) or len(_reviewed_authority_commit_oid)!=40 or any(_c not in '0123456789abcdef' for _c in _reviewed_authority_commit_oid):
         raise SystemExit(65)
     _authority_path=('/run/substrate-wall-evidence/provenance.json' if _role=='stage-a' else '/run/substrate-wall/control/authority.json')
     _authority_fd=os.open(_authority_path,os.O_RDONLY|os.O_CLOEXEC|os.O_NOFOLLOW)
@@ -482,20 +482,26 @@ try:
     if _role=='stage-a':
         try:
             _launcher=_authority['request']['launcher']
+            _repository=_authority['repository']
             _auth_runner=_launcher['runner_blob_sha256']
-            _auth_head=_launcher['authority_commit_oid']
+            _auth_head=_repository['head']
+            _auth_authority=_launcher['authority_commit_oid']
+            _auth_reviewed=_launcher['reviewed_authority_commit_oid']
+            _auth_repository_cwd=_repository['cwd']
             _auth_mode=_authority['mode'];_auth_label=_authority['label']
             _auth_timeout=str(_authority['request']['wall_timeout_seconds'])
             _invocation_id=_authority['invocation_id']
         except (KeyError,TypeError):
             raise SystemExit(65)
     else:
-        if set(_authority)!=set(('schema','invocation_id','runner_sha256','expected_head','mode','label','timeout_seconds','projections')) or _authority.get('schema')!='substrate.canonical_shell_wall_stage_authority.v1':
+        if set(_authority)!=set(('schema','invocation_id','runner_sha256','expected_head','authority_commit_oid','reviewed_authority_commit_oid','repository_cwd','mode','label','timeout_seconds','projections')) or _authority.get('schema')!='substrate.canonical_shell_wall_stage_authority.v1':
             raise SystemExit(65)
-        _auth_runner=_authority.get('runner_sha256');_auth_head=_authority.get('expected_head')
+        _auth_runner=_authority.get('runner_sha256');_auth_head=_authority.get('expected_head');_auth_authority=_authority.get('authority_commit_oid')
+        _auth_reviewed=_authority.get('reviewed_authority_commit_oid')
+        _auth_repository_cwd=_authority.get('repository_cwd')
         _auth_mode=_authority.get('mode');_auth_label=_authority.get('label')
         _auth_timeout=str(_authority.get('timeout_seconds'));_invocation_id=_authority.get('invocation_id')
-    if _auth_runner!=_sha256(_source) or _auth_head!=_expected_head or _auth_mode!=_mode or _auth_label!=_label or _auth_timeout!=_timeout or not isinstance(_invocation_id,str) or len(_invocation_id)!=32 or any(_c not in '0123456789abcdef' for _c in _invocation_id):
+    if _auth_runner!=_sha256(_source) or _auth_head!=_expected_head or _auth_authority!=_authority_commit_oid or _auth_reviewed!=_reviewed_authority_commit_oid or not isinstance(_auth_repository_cwd,str) or not _auth_repository_cwd.startswith('/') or _auth_mode!=_mode or _auth_label!=_label or _auth_timeout!=_timeout or not isinstance(_invocation_id,str) or len(_invocation_id)!=32 or any(_c not in '0123456789abcdef' for _c in _invocation_id):
         raise SystemExit(65)
     _allowed=frozenset(_manifest)
     def _closed_import(name,globals=None,locals=None,fromlist=(),level=0):
@@ -508,7 +514,7 @@ try:
     class _Module:
         pass
     _module=_Module()
-    _module.__dict__.update({'__name__':'__canonical_stage__','__file__':'<sealed-runner>','__package__':None,'__CANONICAL_MODULE_SOURCE':_source,'__CANONICAL_RUNNER_SHA256':_sha256(_source),'__CANONICAL_STAGE_AUTHORITY':_authority,'__CANONICAL_ORIGINAL_SYS_PATH':_validated_sys_path,'__CANONICAL_IMPORTS_CLOSED':True})
+    _module.__dict__.update({'__name__':'__canonical_stage__','__file__':'<sealed-runner>','__package__':None,'__CANONICAL_MODULE_SOURCE':_source,'__CANONICAL_RUNNER_SHA256':_sha256(_source),'__CANONICAL_STAGE_AUTHORITY':_authority,'__CANONICAL_REPOSITORY_PATH':_auth_repository_cwd,'__CANONICAL_ORIGINAL_SYS_PATH':_validated_sys_path,'__CANONICAL_IMPORTS_CLOSED':True})
     sys.modules['__canonical_stage__']=_module
     exec(compile(_source,_module.__file__,'exec',dont_inherit=True),_module.__dict__,_module.__dict__)
     _result=_module.main(sys.argv[1:])
@@ -547,6 +553,10 @@ HOST_INVOCATION_ARGV_TEMPLATE_V1 = (
     "{EVIDENCE_PARENT}",
     "--expected-head",
     "{EXPECTED_HEAD}",
+    "--authority-commit-oid",
+    "{AUTHORITY_COMMIT_OID}",
+    "--reviewed-authority-commit-oid",
+    "{REVIEWED_AUTHORITY_COMMIT_OID}",
 )
 
 BWRAP_STAGE_A_ARGV_TEMPLATE_V1 = (
@@ -624,7 +634,13 @@ BWRAP_STAGE_A_ARGV_TEMPLATE_V1 = (
     "{TIMEOUT_DECIMAL}",
     "--expected-head",
     "{EXPECTED_HEAD}",
+    "--authority-commit-oid",
+    "{AUTHORITY_COMMIT_OID}",
+    "--reviewed-authority-commit-oid",
+    "{REVIEWED_AUTHORITY_COMMIT_OID}",
 )
+
+STAGE_B_REPOSITORY_CANONICAL_PATH = "/home/spenser/__Active_code/substrate"
 
 BWRAP_STAGE_B_ARGV_TEMPLATE_V1 = (
     "/usr/bin/bwrap",
@@ -733,6 +749,10 @@ BWRAP_STAGE_B_ARGV_TEMPLATE_V1 = (
     "{TIMEOUT_DECIMAL}",
     "--expected-head",
     "{EXPECTED_HEAD}",
+    "--authority-commit-oid",
+    "{AUTHORITY_COMMIT_OID}",
+    "--reviewed-authority-commit-oid",
+    "{REVIEWED_AUTHORITY_COMMIT_OID}",
 )
 
 STAGE_A_CLEANUP_ROLE_ORDER_V1 = (
@@ -982,14 +1002,18 @@ for _key in os.environ:
     if _key.startswith(('LD_','MALLOC_','PYTHON')) or _key in ('GLIBC_TUNABLES','GCONV_PATH','LOCPATH','NLSPATH'):
         raise SystemExit(65)
 _args=sys.argv[1:]
-if not _args or _args[0] not in ('host','self-test') or _args.count('--expected-head')!=1:
+if not _args or _args[0] not in ('host','self-test') or _args.count('--expected-head')!=1 or _args.count('--authority-commit-oid')!=1 or _args.count('--reviewed-authority-commit-oid')!=1:
     raise SystemExit(64)
 try:
     _index=_args.index('--expected-head');_expected=_args[_index+1]
+    _authority_index=_args.index('--authority-commit-oid');_authority=_args[_authority_index+1]
+    _reviewed_index=_args.index('--reviewed-authority-commit-oid');_reviewed=_args[_reviewed_index+1]
 except (ValueError,IndexError):
     raise SystemExit(64)
-if len(_expected)!=40 or any(c not in '0123456789abcdef' for c in _expected):
+if len(_expected)!=40 or any(c not in '0123456789abcdef' for c in _expected) or len(_authority)!=40 or any(c not in '0123456789abcdef' for c in _authority) or len(_reviewed)!=40 or any(c not in '0123456789abcdef' for c in _reviewed):
     raise SystemExit(64)
+if _reviewed!=_authority:
+    raise SystemExit(65)
 def _valid_symbolic_head_ref(ref):
     prefix=b'refs/heads/'
     if not ref.startswith(prefix):
@@ -1109,13 +1133,44 @@ def _lookup(tree_oid,path):
             raise SystemExit(65)
     return mode,current
 _commit=_git_object('commit',_expected)
+if _authority==_expected:
+    _authority_commit=_commit
+else:
+    _authority_commit=None
+    _pending=[_expected]
+    _visited=set()
+    while _pending:
+        _candidate=_pending.pop()
+        if _candidate in _visited:
+            continue
+        _visited.add(_candidate)
+        _candidate_commit=(_commit if _candidate==_expected else _git_object('commit',_candidate))
+        if _candidate==_authority:
+            _authority_commit=_candidate_commit
+            break
+        for _line in _candidate_commit.split(b'\n'):
+            if not _line:
+                break
+            if _line.startswith(b'parent ') and len(_line)==47:
+                _parent=_line[7:].decode('ascii')
+                if len(_parent)!=40 or any(c not in '0123456789abcdef' for c in _parent):
+                    raise SystemExit(65)
+                _pending.append(_parent)
+    if _authority_commit is None:
+        raise SystemExit(65)
 _first=_commit.split(b'\n',1)[0]
 if not _first.startswith(b'tree ') or len(_first)!=45:
     raise SystemExit(65)
 _tree_oid=_first[5:].decode('ascii')
 _runner_mode,_runner_oid=_lookup(_tree_oid,'scripts/ci/canonical_shell_wall_runner.py')
 _test_mode,_test_oid=_lookup(_tree_oid,'scripts/ci/test_canonical_shell_wall_runner.py')
-if _runner_mode!=0o100644 or _test_mode!=0o100644:
+_authority_first=_authority_commit.split(b'\n',1)[0]
+if not _authority_first.startswith(b'tree ') or len(_authority_first)!=45:
+    raise SystemExit(65)
+_authority_tree_oid=_authority_first[5:].decode('ascii')
+_authority_runner_mode,_authority_runner_oid=_lookup(_authority_tree_oid,'scripts/ci/canonical_shell_wall_runner.py')
+_authority_test_mode,_authority_test_oid=_lookup(_authority_tree_oid,'scripts/ci/test_canonical_shell_wall_runner.py')
+if _runner_mode!=0o100644 or _test_mode!=0o100644 or _authority_runner_mode!=0o100644 or _authority_test_mode!=0o100644 or _runner_oid!=_authority_runner_oid or _test_oid!=_authority_test_oid:
     raise SystemExit(65)
 _source=_git_object('blob',_runner_oid)
 _test_source=_git_object('blob',_test_oid)
@@ -1168,7 +1223,7 @@ _host_template=tuple(
 )
 _stage_a_template=_source_template('BWRAP_STAGE_A_ARGV_TEMPLATE_V1',_stage_bootstrap)
 _stage_b_template=_source_template('BWRAP_STAGE_B_ARGV_TEMPLATE_V1',_stage_bootstrap)
-_message_parts=_commit.split(b'\n\n',1)
+_message_parts=_authority_commit.split(b'\n\n',1)
 if len(_message_parts)!=2:
     raise SystemExit(65)
 _trailer_names=(
@@ -1199,8 +1254,8 @@ _expected_trailers={
 if _trailers!=_expected_trailers:
     raise SystemExit(65)
 if _args[0]=='host':
-    if len(_args)!=11 or _args[1::2]!=[
-        '--mode','--label','--timeout-seconds','--evidence-parent','--expected-head'
+    if len(_args)!=15 or _args[1::2]!=[
+        '--mode','--label','--timeout-seconds','--evidence-parent','--expected-head','--authority-commit-oid','--reviewed-authority-commit-oid'
     ]:
         raise SystemExit(64)
     _slots={
@@ -1209,15 +1264,17 @@ if _args[0]=='host':
         '{TIMEOUT_DECIMAL}':_args[6],
         '{EVIDENCE_PARENT}':_args[8],
         '{EXPECTED_HEAD}':_args[10],
+        '{AUTHORITY_COMMIT_OID}':_args[12],
+        '{REVIEWED_AUTHORITY_COMMIT_OID}':_args[14],
     }
     _expected_vector=tuple(_slots.get(value,value) for value in _host_template)
 else:
-    if len(_args)!=5 or _args[1::2]!=['--evidence-parent','--expected-head']:
+    if len(_args)!=9 or _args[1::2]!=['--evidence-parent','--expected-head','--authority-commit-oid','--reviewed-authority-commit-oid']:
         raise SystemExit(64)
     _expected_vector=(
         '/usr/bin/python3.13','-I','-S','-B','-c',
         _bootstrap.decode('utf-8'),
-        'self-test','--evidence-parent',_args[2],'--expected-head',_args[4],
+        'self-test','--evidence-parent',_args[2],'--expected-head',_args[4],'--authority-commit-oid',_args[6],'--reviewed-authority-commit-oid',_args[8],
     )
 if tuple(os.fsdecode(value) for value in _cmdline[:-1])!=_expected_vector:
     raise SystemExit(65)
@@ -1365,7 +1422,7 @@ _python_runtime_bootstrap={
     'self_test_file':('<git-blob:'+_expected+':scripts/ci/test_canonical_shell_wall_runner.py>' if _args[0]=='self-test' else None),
     'modules':_module_records}
 _module=sys.modules['types'].ModuleType('__canonical_runner__')
-_module.__dict__.update({'__name__':'__canonical_runner__','__file__':'<git-blob:'+_expected+':scripts/ci/canonical_shell_wall_runner.py>','__package__':None,'__CANONICAL_MODULE_SOURCE':bytes(_source),'__CANONICAL_SELFTEST_SOURCE':bytes(_test_source),'__CANONICAL_BOOTSTRAP_SHA256':_sha256(_bootstrap),'__CANONICAL_RUNNER_SHA256':_sha256(_source),'__CANONICAL_EXPECTED_HEAD':_expected,'__CANONICAL_CMDLINE':tuple(_cmdline[:-1]),'__CANONICAL_BOOTSTRAP_GIT_FD':_git_fd,'__CANONICAL_BOOTSTRAP_GITDIR_FD':_gitdir,'__CANONICAL_AUTHORITY_TRAILERS':dict(_trailers),'__CANONICAL_ORIGINAL_SYS_PATH':_validated_sys_path,'__CANONICAL_IMPORTS_CLOSED':True,'__CANONICAL_PYTHON_RUNTIME':_python_runtime_bootstrap,'__CANONICAL_MODULE_AUTHORITIES':_module_origin_fds,'__CANONICAL_STARTUP_AUTHORITIES':_startup_fds})
+_module.__dict__.update({'__name__':'__canonical_runner__','__file__':'<git-blob:'+_expected+':scripts/ci/canonical_shell_wall_runner.py>','__package__':None,'__CANONICAL_MODULE_SOURCE':bytes(_source),'__CANONICAL_SELFTEST_SOURCE':bytes(_test_source),'__CANONICAL_BOOTSTRAP_SHA256':_sha256(_bootstrap),'__CANONICAL_RUNNER_SHA256':_sha256(_source),'__CANONICAL_EXPECTED_HEAD':_expected,'__CANONICAL_AUTHORITY_COMMIT_OID':_authority,'__CANONICAL_REVIEWED_AUTHORITY_COMMIT_OID':_reviewed,'__CANONICAL_REPOSITORY_PATH':_root,'__CANONICAL_CMDLINE':tuple(_cmdline[:-1]),'__CANONICAL_BOOTSTRAP_GIT_FD':_git_fd,'__CANONICAL_BOOTSTRAP_GITDIR_FD':_gitdir,'__CANONICAL_AUTHORITY_TRAILERS':dict(_trailers),'__CANONICAL_ORIGINAL_SYS_PATH':_validated_sys_path,'__CANONICAL_IMPORTS_CLOSED':True,'__CANONICAL_PYTHON_RUNTIME':_python_runtime_bootstrap,'__CANONICAL_MODULE_AUTHORITIES':_module_origin_fds,'__CANONICAL_STARTUP_AUTHORITIES':_startup_fds})
 sys.modules['__canonical_runner__']=_module
 try:
     exec(compile(_source,_module.__file__,'exec',dont_inherit=True),_module.__dict__,_module.__dict__)
@@ -4899,16 +4956,53 @@ def _open_validated_gitdir(repository: str) -> int:
         raise
 
 
+def _resolved_commit_oid(value: str | None, *, default: str) -> str:
+    commit_oid = default if value is None else value
+    if not re.fullmatch(r"[0-9a-f]{40}", commit_oid):
+        raise RunnerError(64, "invocation_authority_invalid")
+    return commit_oid
+
+
+def _resolved_authority_commit_oid(
+    expected_head: str,
+    authority_commit_oid: str | None,
+) -> str:
+    return _resolved_commit_oid(authority_commit_oid, default=expected_head)
+
+
+def _resolved_reviewed_authority_commit_oid(
+    authority_commit_oid: str,
+    reviewed_authority_commit_oid: str | None,
+) -> str:
+    reviewed = _resolved_commit_oid(
+        reviewed_authority_commit_oid,
+        default=authority_commit_oid,
+    )
+    if reviewed != authority_commit_oid:
+        raise RunnerError(65, "invocation_authority_invalid")
+    return reviewed
+
+
 def verify_expected_head_object_chain(
     repository: str,
     expected_head: str,
     git: HeldExecutable,
     *,
+    authority_commit_oid: str | None = None,
+    reviewed_authority_commit_oid: str | None = None,
     gitdir_fd: int | None = None,
     retained_metadata: list[dict[str, object]] | None = None,
 ) -> dict[str, object]:
     if not re.fullmatch(r"[0-9a-f]{40}", expected_head):
         raise RunnerError(64, "invocation_authority_invalid")
+    authority_oid = _resolved_authority_commit_oid(
+        expected_head,
+        authority_commit_oid,
+    )
+    reviewed_oid = _resolved_reviewed_authority_commit_oid(
+        authority_oid,
+        reviewed_authority_commit_oid,
+    )
     owns_gitdir = gitdir_fd is None
     active_gitdir = _open_validated_gitdir(repository) if owns_gitdir else gitdir_fd
     assert active_gitdir is not None
@@ -4974,11 +5068,55 @@ def verify_expected_head_object_chain(
             "scripts/ci/test_canonical_shell_wall_runner.py",
             gitdir_fd=active_gitdir,
         )
+        authority_commit = commit
+        authority_tree_oid = tree_oid
+        authority_runner_mode = runner_mode
+        authority_runner_oid = runner_oid
+        authority_test_mode = test_mode
+        authority_test_oid = test_oid
+        if authority_oid != expected_head:
+            code, stdout, stderr = _git_command(
+                git,
+                repository,
+                ["merge-base", "--is-ancestor", authority_oid, expected_head],
+                gitdir_fd=active_gitdir,
+            )
+            if code != 0 or stdout or stderr:
+                raise RunnerError(65, "invocation_authority_invalid")
+            authority_commit = _read_git_object(
+                git,
+                repository,
+                "commit",
+                authority_oid,
+                gitdir_fd=active_gitdir,
+            )
+            authority_tree_oid = _commit_tree_oid(authority_commit)
+            authority_runner_mode, authority_runner_oid = _lookup_tree_path(
+                git,
+                repository,
+                authority_tree_oid,
+                "scripts/ci/canonical_shell_wall_runner.py",
+                gitdir_fd=active_gitdir,
+            )
+            authority_test_mode, authority_test_oid = _lookup_tree_path(
+                git,
+                repository,
+                authority_tree_oid,
+                "scripts/ci/test_canonical_shell_wall_runner.py",
+                gitdir_fd=active_gitdir,
+            )
     finally:
         if owns_gitdir:
             os.close(active_gitdir)
-    if runner_mode != 0o100644 or test_mode != 0o100644:
-        raise RunnerError(65, "repository_identity_mismatch")
+    if (
+        runner_mode != 0o100644
+        or test_mode != 0o100644
+        or authority_runner_mode != 0o100644
+        or authority_test_mode != 0o100644
+        or authority_runner_oid != runner_oid
+        or authority_test_oid != test_oid
+    ):
+        raise RunnerError(65, "invocation_authority_invalid")
     return {
         "branch": ref.removeprefix("refs/heads/"),
         "head": expected_head,
@@ -4986,6 +5124,13 @@ def verify_expected_head_object_chain(
         "commit": commit,
         "runner_oid": runner_oid,
         "test_oid": test_oid,
+        "authority_commit_oid": authority_oid,
+        "reviewed_authority_commit_oid": reviewed_oid,
+        "authority_commit_matches_live_head": authority_oid == expected_head,
+        "authority_commit": authority_commit,
+        "authority_tree": authority_tree_oid,
+        "authority_runner_oid": authority_runner_oid,
+        "authority_test_oid": authority_test_oid,
         "gitdir_identity": gitdir_identity,
         "head_file_identity": head_identity,
         "branch_ref_identity": branch_identity,
@@ -5169,6 +5314,8 @@ def verify_clean_repository(
     expected_head: str,
     git: HeldExecutable,
     *,
+    authority_commit_oid: str | None = None,
+    reviewed_authority_commit_oid: str | None = None,
     gitdir_fd: int | None = None,
     retained_metadata: list[dict[str, object]] | None = None,
 ) -> dict[str, object]:
@@ -5183,6 +5330,8 @@ def verify_clean_repository(
             expected_head,
             git,
             active_gitdir,
+            authority_commit_oid=authority_commit_oid,
+            reviewed_authority_commit_oid=reviewed_authority_commit_oid,
             retained_metadata=retained_metadata,
         )
     finally:
@@ -5196,6 +5345,8 @@ def _verify_clean_repository_with_gitdir(
     git: HeldExecutable,
     gitdir_fd: int,
     *,
+    authority_commit_oid: str | None = None,
+    reviewed_authority_commit_oid: str | None = None,
     retained_metadata: list[dict[str, object]] | None = None,
 ) -> dict[str, object]:
     _config_file_bytes, config_identity = _read_bounded_regular_with_identity_at(
@@ -5243,6 +5394,8 @@ def _verify_clean_repository_with_gitdir(
         repository,
         expected_head,
         git,
+        authority_commit_oid=authority_commit_oid,
+        reviewed_authority_commit_oid=reviewed_authority_commit_oid,
         gitdir_fd=gitdir_fd,
         retained_metadata=retained_metadata,
     )
@@ -7666,6 +7819,7 @@ def _validate_provenance_record(provenance: Mapping[str, object]) -> None:
         )
     ):
         raise RunnerError(71, "evidence_write_failed")
+    launcher = request["launcher"]
     repository = provenance["repository"]
     repository_keys = {
         "branch",
@@ -7745,6 +7899,10 @@ def _validate_provenance_record(provenance: Mapping[str, object]) -> None:
                 for key, value in repository.items()
                 if key.endswith("_sha256")
             )
+        ):
+            raise RunnerError(71, "evidence_write_failed")
+        if launcher["authority_commit_matches_live_head"] is not (
+            launcher["authority_commit_oid"] == repository["head"]
         ):
             raise RunnerError(71, "evidence_write_failed")
     toolchain = provenance["toolchain"]
@@ -8878,11 +9036,11 @@ def _validate_provenance_record(provenance: Mapping[str, object]) -> None:
             )
         ):
             raise RunnerError(71, "evidence_write_failed")
-    launcher = request["launcher"]
     launcher_keys = {
         "trust_model",
         "controller",
         "authority_commit_oid",
+        "reviewed_authority_commit_oid",
         "python_path",
         "bootstrap_sha256",
         "runner_blob_sha256",
@@ -8904,6 +9062,20 @@ def _validate_provenance_record(provenance: Mapping[str, object]) -> None:
         "sealed_stage_b_runner",
         "nested_probe_clean",
     }
+    launcher_required_sha256_keys = {
+        "bootstrap_sha256",
+        "runner_blob_sha256",
+        "bubblewrap_sha256",
+        "bubblewrap_elf_closure_manifest_sha256",
+        "host_argv_template_sha256",
+        "stage_a_argv_template_sha256",
+        "stage_b_argv_template_sha256",
+    }
+    launcher_nullable_sha256_keys = {
+        "host_argv_sha256",
+        "stage_a_argv_sha256",
+        "stage_b_argv_sha256",
+    }
     if (
         not exact_keys(launcher, launcher_keys)
         or launcher["trust_model"]
@@ -8914,10 +9086,18 @@ def _validate_provenance_record(provenance: Mapping[str, object]) -> None:
             str(launcher["authority_commit_oid"]),
         )
         is None
+        or re.fullmatch(
+            r"[0-9a-f]{40}",
+            str(launcher["reviewed_authority_commit_oid"]),
+        )
+        is None
         or any(
-            value is not None and not sha256(value)
-            for key, value in launcher.items()
-            if key.endswith("_sha256")
+            not sha256(launcher[key])
+            for key in launcher_required_sha256_keys
+        )
+        or any(
+            launcher[key] is not None and not sha256(launcher[key])
+            for key in launcher_nullable_sha256_keys
         )
         or any(
             type(launcher[key]) is not bool
@@ -8933,6 +9113,29 @@ def _validate_provenance_record(provenance: Mapping[str, object]) -> None:
         )
     ):
         raise RunnerError(71, "evidence_write_failed")
+    reviewed_oid_matches = (
+        launcher["authority_commit_oid"]
+        == launcher["reviewed_authority_commit_oid"]
+    )
+    if (
+        not reviewed_oid_matches
+        or launcher["reviewed_oid_matches"] is not reviewed_oid_matches
+    ):
+        raise RunnerError(71, "evidence_write_failed")
+    for stage_name in ("stage_a", "stage_b"):
+        stage = mounts[stage_name]
+        launcher_stage_argv_sha256 = launcher[f"{stage_name}_argv_sha256"]
+        if stage is None:
+            if launcher_stage_argv_sha256 is not None:
+                raise RunnerError(71, "evidence_write_failed")
+            continue
+        if (
+            launcher_stage_argv_sha256 is None
+            or stage["argv_template_sha256"]
+            != launcher[f"{stage_name}_argv_template_sha256"]
+            or stage["argv_sha256"] != launcher_stage_argv_sha256
+        ):
+            raise RunnerError(71, "evidence_write_failed")
     environment_contract = request["environment_contract"]
     if (
         not exact_keys(
@@ -9042,7 +9245,6 @@ def _validate_provenance_record(provenance: Mapping[str, object]) -> None:
             or any(
                 launcher[key] is not True
                 for key in (
-                    "authority_commit_matches_live_head",
                     "authority_commit_trailers_verified",
                     "reviewed_oid_matches",
                     "direct_array_spawn",
@@ -9801,6 +10003,17 @@ def _finalize_ineligible(
             )
         )
     provenance["evidence"] = evidence_records
+    request = provenance.get("request")
+    mounts = provenance.get("mounts")
+    if not isinstance(request, dict) or not isinstance(mounts, dict):
+        raise RunnerError(71, "evidence_write_failed")
+    launcher = request.get("launcher")
+    if not isinstance(launcher, dict):
+        raise RunnerError(71, "evidence_write_failed")
+    for stage_name in ("stage_a", "stage_b"):
+        if mounts.get(stage_name) is None:
+            launcher[f"{stage_name}_argv_sha256"] = None
+    _validate_provenance_record(provenance)
     provenance_artifact = artifact_authorities["provenance.json"]
     _rewrite_retained_json_artifact(
         partial_fd,
@@ -9923,14 +10136,20 @@ def parse_args(argv: Sequence[str]) -> dict[str, object]:
         parser.add_argument("--timeout-seconds", required=True)
         parser.add_argument("--evidence-parent", required=True)
         parser.add_argument("--expected-head", required=True)
+        parser.add_argument("--authority-commit-oid", required=True)
+        parser.add_argument("--reviewed-authority-commit-oid", required=True)
     elif role == "self-test":
         parser.add_argument("--evidence-parent", required=True)
         parser.add_argument("--expected-head", required=True)
+        parser.add_argument("--authority-commit-oid", required=True)
+        parser.add_argument("--reviewed-authority-commit-oid", required=True)
     else:
         parser.add_argument("--mode", required=True, choices=("parallel", "serial"))
         parser.add_argument("--label", required=True)
         parser.add_argument("--timeout-seconds", required=True)
         parser.add_argument("--expected-head", required=True)
+        parser.add_argument("--authority-commit-oid", required=True)
+        parser.add_argument("--reviewed-authority-commit-oid", required=True)
     try:
         namespace, extras = parser.parse_known_args(list(argv[1:]))
     except SystemExit as error:
@@ -9943,6 +10162,18 @@ def parse_args(argv: Sequence[str]) -> dict[str, object]:
     if not isinstance(expected_head, str) or not re.fullmatch(
         r"[0-9a-f]{40}",
         expected_head,
+    ):
+        raise RunnerError(64, "invocation_authority_invalid")
+    authority_commit_oid = result["authority_commit_oid"]
+    if not isinstance(authority_commit_oid, str) or not re.fullmatch(
+        r"[0-9a-f]{40}",
+        authority_commit_oid,
+    ):
+        raise RunnerError(64, "invocation_authority_invalid")
+    reviewed_authority_commit_oid = result["reviewed_authority_commit_oid"]
+    if not isinstance(reviewed_authority_commit_oid, str) or not re.fullmatch(
+        r"[0-9a-f]{40}",
+        reviewed_authority_commit_oid,
     ):
         raise RunnerError(64, "invocation_authority_invalid")
     if role != "self-test":
@@ -10011,6 +10242,10 @@ def _verify_runtime_argv(arguments: Mapping[str, object]) -> str:
                 "TIMEOUT_DECIMAL": str(arguments["timeout_seconds"]),
                 "EVIDENCE_PARENT": str(arguments["evidence_parent"]),
                 "EXPECTED_HEAD": str(arguments["expected_head"]),
+                "AUTHORITY_COMMIT_OID": str(arguments["authority_commit_oid"]),
+                "REVIEWED_AUTHORITY_COMMIT_OID": str(
+                    arguments["reviewed_authority_commit_oid"]
+                ),
             },
         )
     elif role == "self-test":
@@ -10026,6 +10261,10 @@ def _verify_runtime_argv(arguments: Mapping[str, object]) -> str:
             str(arguments["evidence_parent"]),
             "--expected-head",
             str(arguments["expected_head"]),
+            "--authority-commit-oid",
+            str(arguments["authority_commit_oid"]),
+            "--reviewed-authority-commit-oid",
+            str(arguments["reviewed_authority_commit_oid"]),
         )
     else:
         expected = (
@@ -10044,6 +10283,10 @@ def _verify_runtime_argv(arguments: Mapping[str, object]) -> str:
             str(arguments["timeout_seconds"]),
             "--expected-head",
             str(arguments["expected_head"]),
+            "--authority-commit-oid",
+            str(arguments["authority_commit_oid"]),
+            "--reviewed-authority-commit-oid",
+            str(arguments["reviewed_authority_commit_oid"]),
         )
     if observed != expected:
         raise RunnerError(65, "invocation_authority_invalid")
@@ -10656,6 +10899,8 @@ def launch_stage_a_bwrap(
     label: str,
     timeout_seconds: int,
     expected_head: str,
+    authority_commit_oid: str,
+    reviewed_authority_commit_oid: str,
     environment: Mapping[str, str],
 ) -> tuple[SpawnedProcess, int, tuple[str, ...]]:
     runner_fd = -1
@@ -10684,6 +10929,8 @@ def launch_stage_a_bwrap(
             "RUSTUP_SOURCE": rustup_source,
             "CARGO_SOURCE": cargo_source,
             "EXPECTED_HEAD": expected_head,
+            "AUTHORITY_COMMIT_OID": authority_commit_oid,
+            "REVIEWED_AUTHORITY_COMMIT_OID": reviewed_authority_commit_oid,
         }
         argv = _substitute_template(BWRAP_STAGE_A_ARGV_TEMPLATE_V1, values)
         spawned = _spawn_held(
@@ -10741,6 +10988,8 @@ def launch_stage_b_bwrap(
     label: str,
     timeout_seconds: int,
     expected_head: str,
+    authority_commit_oid: str,
+    reviewed_authority_commit_oid: str,
     environment: Mapping[str, str],
     output_write_fd: int,
 ) -> tuple[SpawnedProcess, int, tuple[str, ...]]:
@@ -10768,6 +11017,8 @@ def launch_stage_b_bwrap(
             "CONTROL_DIRECTORY": control_directory,
             "REPOSITORY_CWD": repository_cwd,
             "EXPECTED_HEAD": expected_head,
+            "AUTHORITY_COMMIT_OID": authority_commit_oid,
+            "REVIEWED_AUTHORITY_COMMIT_OID": reviewed_authority_commit_oid,
         }
         argv = _substitute_template(BWRAP_STAGE_B_ARGV_TEMPLATE_V1, values)
         spawned = _spawn_held(
@@ -11419,6 +11670,9 @@ def _validate_stage_b_projection_authority(
                 "invocation_id",
                 "runner_sha256",
                 "expected_head",
+                "authority_commit_oid",
+                "reviewed_authority_commit_oid",
+                "repository_cwd",
                 "mode",
                 "label",
                 "timeout_seconds",
@@ -11429,6 +11683,12 @@ def _validate_stage_b_projection_authority(
             or authority["runner_sha256"]
             != globals().get("__CANONICAL_RUNNER_SHA256")
             or authority["expected_head"] != arguments["expected_head"]
+            or authority["authority_commit_oid"]
+            != arguments["authority_commit_oid"]
+            or authority["reviewed_authority_commit_oid"]
+            != arguments["reviewed_authority_commit_oid"]
+            or not isinstance(authority["repository_cwd"], str)
+            or authority["repository_cwd"] != REPOSITORY_CANONICAL_PATH
             or authority["mode"] != arguments["mode"]
             or authority["label"] != arguments["label"]
             or authority["timeout_seconds"] != arguments["timeout_seconds"]
@@ -11591,6 +11851,8 @@ def stage_b_worker_main(arguments: Mapping[str, object]) -> int:
     )
     setup_deadline = time.monotonic() + SETUP_TIMEOUT_SECONDS
     try:
+        if os.getcwd() != REPOSITORY_CANONICAL_PATH:
+            raise RunnerError(68, "invocation_authority_invalid")
         endpoint.settimeout(max(0.001, setup_deadline - time.monotonic()))
         try:
             endpoint.connect(control_path)
@@ -11734,9 +11996,19 @@ def _default_provenance(
     mode: str,
     timeout_seconds: int,
     expected_head: str,
+    authority_commit_oid: str | None = None,
+    reviewed_authority_commit_oid: str | None = None,
     command: Sequence[str],
     environment: Mapping[str, str],
 ) -> dict[str, object]:
+    authority_oid = _resolved_authority_commit_oid(
+        expected_head,
+        authority_commit_oid,
+    )
+    reviewed_oid = _resolved_reviewed_authority_commit_oid(
+        authority_oid,
+        reviewed_authority_commit_oid,
+    )
     key_names = sorted(environment)
     return {
         "schema": SCHEMA,
@@ -11755,7 +12027,8 @@ def _default_provenance(
             "launcher": {
                 "trust_model": "immutable-root-platform-plus-reviewed-git-object",
                 "controller": "python-v2-host-main",
-                "authority_commit_oid": expected_head,
+                "authority_commit_oid": authority_oid,
+                "reviewed_authority_commit_oid": reviewed_oid,
                 "python_path": "/usr/bin/python3.13",
                 "bootstrap_sha256": inline_sha256(BOOTSTRAP_V2_SOURCE.encode()),
                 "runner_blob_sha256": globals().get(
@@ -11778,9 +12051,9 @@ def _default_provenance(
                 "host_argv_sha256": None,
                 "stage_a_argv_sha256": None,
                 "stage_b_argv_sha256": None,
-                "authority_commit_matches_live_head": True,
+                "authority_commit_matches_live_head": authority_oid == expected_head,
                 "authority_commit_trailers_verified": False,
-                "reviewed_oid_matches": True,
+                "reviewed_oid_matches": authority_oid == reviewed_oid,
                 "direct_array_spawn": True,
                 "sealed_stage_a_runner": True,
                 "sealed_stage_b_runner": True,
@@ -11890,7 +12163,13 @@ def _default_provenance(
     }
 
 
-REPOSITORY_CANONICAL_PATH = "/home/spenser/__Active_code/substrate"
+_BOOTSTRAP_REPOSITORY_PATH = globals().get("__CANONICAL_REPOSITORY_PATH")
+REPOSITORY_CANONICAL_PATH = (
+    str(_BOOTSTRAP_REPOSITORY_PATH)
+    if isinstance(_BOOTSTRAP_REPOSITORY_PATH, str)
+    and os.path.isabs(_BOOTSTRAP_REPOSITORY_PATH)
+    else STAGE_B_REPOSITORY_CANONICAL_PATH
+)
 RUSTUP_SOURCE_PATH = "/home/spenser/.rustup"
 CARGO_SOURCE_PATH = "/home/spenser/.cargo"
 
@@ -12583,6 +12862,10 @@ def stage_a_main(arguments: Mapping[str, object]) -> int:
     mode = str(arguments["mode"])
     timeout_seconds = int(arguments["timeout_seconds"])
     expected_head = str(arguments["expected_head"])
+    authority_commit_oid = str(arguments["authority_commit_oid"])
+    reviewed_authority_commit_oid = str(
+        arguments["reviewed_authority_commit_oid"]
+    )
     root_parent = "/run/substrate-wall/backing"
     (
         root_parent_fd,
@@ -12802,6 +13085,8 @@ def stage_a_main(arguments: Mapping[str, object]) -> int:
                 expected_head,
                 held["/usr/bin/git"],
                 stage_a_gitdir_fd,
+                authority_commit_oid=authority_commit_oid,
+                reviewed_authority_commit_oid=reviewed_authority_commit_oid,
             )
             snapshots.append(
                 construct_repository_snapshot(
@@ -12966,6 +13251,9 @@ def stage_a_main(arguments: Mapping[str, object]) -> int:
             "invocation_id": provenance["invocation_id"],
             "runner_sha256": inline_sha256(bytes(runner_source)),
             "expected_head": expected_head,
+            "authority_commit_oid": authority_commit_oid,
+            "reviewed_authority_commit_oid": reviewed_authority_commit_oid,
+            "repository_cwd": STAGE_B_REPOSITORY_CANONICAL_PATH,
             "mode": mode,
             "label": arguments["label"],
             "timeout_seconds": timeout_seconds,
@@ -13040,17 +13328,16 @@ def stage_a_main(arguments: Mapping[str, object]) -> int:
             rustup_snapshot=child_paths["rustup-home-snapshot"],
             cargo_runtime=child_paths["cargo-home-runtime"],
             control_directory=child_paths["control"],
-            repository_cwd=REPOSITORY_CANONICAL_PATH,
+            repository_cwd=STAGE_B_REPOSITORY_CANONICAL_PATH,
             mode=mode,
             label=str(arguments["label"]),
             timeout_seconds=timeout_seconds,
             expected_head=expected_head,
+            authority_commit_oid=authority_commit_oid,
+            reviewed_authority_commit_oid=reviewed_authority_commit_oid,
             environment=environment,
             output_write_fd=output_write,
         )
-        provenance["request"]["launcher"][
-            "stage_b_argv_sha256"
-        ] = inline_sha256(_nul_frame(stage_b_argv))
         provenance["namespace"].update(
             {
                 "stage_b_bwrap_pid": spawned.pid,
@@ -14443,7 +14730,7 @@ def run_authenticated_self_tests(
             authenticated_self_test=True,
         )
         expected_ids = tuple(test_module.SELF_TEST_IDS)
-        if len(expected_ids) != 99 or len(set(expected_ids)) != 99:
+        if len(expected_ids) != 101 or len(set(expected_ids)) != 101:
             raise RunnerError(65, "invocation_authority_invalid")
         suite_class = test_module.CanonicalShellWallRunnerTests
         discovered = {
@@ -14513,27 +14800,94 @@ def _read_authenticated_staged_provenance(
         or not isinstance(original.get("request"), dict)
     ):
         raise RunnerError(71, "evidence_write_failed")
-    staged_launcher = staged["request"].get("launcher")
-    original_launcher = original["request"].get("launcher")
+    staged_request = staged["request"]
+    original_request = original["request"]
+    staged_launcher = staged_request.get("launcher")
+    original_launcher = original_request.get("launcher")
     if not isinstance(staged_launcher, dict) or not isinstance(
         original_launcher,
         dict,
     ):
         raise RunnerError(71, "evidence_write_failed")
+    staged_request["command"] = list(original_request["command"])
+    environment_contract = original_request.get("environment_contract")
+    staged_request["environment_contract"] = (
+        dict(environment_contract)
+        if isinstance(environment_contract, dict)
+        else environment_contract
+    )
     for key in (
-        "authority_commit_oid",
-        "runner_blob_sha256",
-        "bootstrap_sha256",
-        "host_argv_sha256",
+        "tmpdir",
+        "xdg_runtime_dir",
+        "target_dir",
+        "snapshot_timeout_seconds",
+        "setup_timeout_seconds",
+        "wall_timeout_seconds",
     ):
-        if staged_launcher.get(key) != original_launcher.get(key):
+        staged_request[key] = original_request.get(key)
+    for key in (
+        "trust_model",
+        "controller",
+        "authority_commit_oid",
+        "reviewed_authority_commit_oid",
+        "python_path",
+        "bootstrap_sha256",
+        "runner_blob_sha256",
+        "bubblewrap_path",
+        "bubblewrap_version",
+        "bubblewrap_sha256",
+        "bubblewrap_elf_closure_manifest_sha256",
+        "host_argv_template_sha256",
+        "stage_a_argv_template_sha256",
+        "stage_b_argv_template_sha256",
+        "host_argv_sha256",
+        "authority_commit_matches_live_head",
+        "authority_commit_trailers_verified",
+        "reviewed_oid_matches",
+        "direct_array_spawn",
+        "sealed_stage_a_runner",
+        "sealed_stage_b_runner",
+        "nested_probe_clean",
+    ):
+        staged_launcher[key] = original_launcher.get(key)
+    staged_repository = staged.get("repository")
+    original_repository = original.get("repository")
+    if staged_repository is None or original_repository is None:
+        if staged_repository is not original_repository:
             raise RunnerError(71, "evidence_write_failed")
+    else:
+        if not isinstance(staged_repository, dict) or not isinstance(
+            original_repository,
+            dict,
+        ):
+            raise RunnerError(71, "evidence_write_failed")
+        repository_post_keys = {
+            "index_post",
+            "head_file_post",
+            "branch_ref_post",
+            "local_config_post",
+            "info_exclude_post",
+            "index_manifest_post_sha256",
+            "ignore_sources_manifest_post_sha256",
+            "tracked_manifest_post_sha256",
+            "untracked_paths_post_sha256",
+            "ignored_paths_post_sha256",
+        }
+        for key, value in original_repository.items():
+            if key not in repository_post_keys:
+                staged_repository[key] = value
     staged_namespace = staged.get("namespace")
     original_namespace = original.get("namespace")
     if not isinstance(staged_namespace, dict) or not isinstance(
         original_namespace,
         dict,
     ):
+        raise RunnerError(71, "evidence_write_failed")
+    staged_mounts = staged.get("mounts")
+    if not isinstance(staged_mounts, dict):
+        raise RunnerError(71, "evidence_write_failed")
+    stage_a_mount = staged_mounts.get("stage_a")
+    if stage_a_mount is not None and not isinstance(stage_a_mount, dict):
         raise RunnerError(71, "evidence_write_failed")
     staged_host_fields = (
         staged_launcher.get("stage_a_argv_sha256"),
@@ -14564,7 +14918,14 @@ def _read_authenticated_staged_provenance(
             or pidfd_opened is not True
         ):
             raise RunnerError(71, "evidence_write_failed")
-        staged_launcher["stage_a_argv_sha256"] = argv_sha256
+        if stage_a_mount is not None:
+            if (
+                stage_a_mount.get("argv_template_sha256")
+                != original_launcher.get("stage_a_argv_template_sha256")
+                or stage_a_mount.get("argv_sha256") != argv_sha256
+            ):
+                raise RunnerError(71, "evidence_write_failed")
+            staged_launcher["stage_a_argv_sha256"] = argv_sha256
         staged_namespace.update(
             {
                 "stage_a_bwrap_pid": bwrap_pid,
@@ -14592,6 +14953,10 @@ def host_main(arguments: Mapping[str, object]) -> int:
     )
     _reject_product_home_selection(str(arguments["evidence_parent"]))
     expected_head = str(arguments["expected_head"])
+    authority_commit_oid = str(arguments["authority_commit_oid"])
+    reviewed_authority_commit_oid = str(
+        arguments["reviewed_authority_commit_oid"]
+    )
     bootstrap_gitdir_fd = globals().get("__CANONICAL_BOOTSTRAP_GITDIR_FD")
     if type(bootstrap_gitdir_fd) is not int or bootstrap_gitdir_fd < 0:
         raise RunnerError(65, "invocation_authority_invalid")
@@ -14620,6 +14985,8 @@ def host_main(arguments: Mapping[str, object]) -> int:
             REPOSITORY_CANONICAL_PATH,
             expected_head,
             held["/usr/bin/git"],
+            authority_commit_oid=authority_commit_oid,
+            reviewed_authority_commit_oid=reviewed_authority_commit_oid,
             gitdir_fd=bootstrap_gitdir_fd,
             retained_metadata=repository_metadata_authorities,
         )
@@ -14635,7 +15002,7 @@ def host_main(arguments: Mapping[str, object]) -> int:
         }:
             raise RunnerError(72, "internal_invariant_failed")
         cargo_search_authority = retain_cargo_search_path_absence()
-        _verify_commit_trailers(repository["commit"])
+        _verify_commit_trailers(repository["authority_commit"])
         runner_source, runner_oid = read_expected_head_blob(
             REPOSITORY_CANONICAL_PATH,
             expected_head,
@@ -14687,6 +15054,8 @@ def host_main(arguments: Mapping[str, object]) -> int:
             mode=mode,
             timeout_seconds=timeout_seconds,
             expected_head=expected_head,
+            authority_commit_oid=authority_commit_oid,
+            reviewed_authority_commit_oid=reviewed_authority_commit_oid,
             command=command,
             environment=environment,
         )
@@ -14789,6 +15158,8 @@ def host_main(arguments: Mapping[str, object]) -> int:
             label=label,
             timeout_seconds=timeout_seconds,
             expected_head=expected_head,
+            authority_commit_oid=authority_commit_oid,
+            reviewed_authority_commit_oid=reviewed_authority_commit_oid,
             environment=environment,
         )
         close_prepared_acl_user_namespaces(user_namespaces)
@@ -14886,6 +15257,8 @@ def host_main(arguments: Mapping[str, object]) -> int:
             REPOSITORY_CANONICAL_PATH,
             expected_head,
             held["/usr/bin/git"],
+            authority_commit_oid=authority_commit_oid,
+            reviewed_authority_commit_oid=reviewed_authority_commit_oid,
             gitdir_fd=bootstrap_gitdir_fd,
         )
         _revalidate_retained_git_metadata(
@@ -15318,7 +15691,7 @@ def _run_bounded_fixture(
         " for role,path in paths.items():\n"
         "  details=os.stat(path,follow_symlinks=False)\n"
         "  projections[role]={'dev':details.st_dev,'ino':details.st_ino,'mode':0o700,'uid':details.st_uid,'writable':role not in ('repository-snapshot','rustup-home-snapshot')}\n"
-        " authority={'schema':'substrate.canonical_shell_wall_stage_authority.v1','invocation_id':('1'*31+str(len(label)%10)),'runner_sha256':r.inline_sha256(test_source),'expected_head':'0'*40,'mode':'parallel','label':label,'timeout_seconds':3,'projections':projections}\n"
+        " authority={'schema':'substrate.canonical_shell_wall_stage_authority.v1','invocation_id':('1'*31+str(len(label)%10)),'runner_sha256':r.inline_sha256(test_source),'expected_head':'0'*40,'authority_commit_oid':'0'*40,'reviewed_authority_commit_oid':'0'*40,'repository_cwd':r.STAGE_B_REPOSITORY_CANONICAL_PATH,'mode':'parallel','label':label,'timeout_seconds':3,'projections':projections}\n"
         " authority_bytes=(r.json.dumps(authority,sort_keys=True,separators=(',',':'))+'\\n').encode('ascii')\n"
         " authority_fd=os.open('authority.json',os.O_WRONLY|os.O_CREAT|os.O_EXCL|os.O_CLOEXEC,0o400,dir_fd=control_fd)\n"
         " r._write_all(authority_fd,authority_bytes);os.fsync(authority_fd);os.close(authority_fd)\n"
@@ -15328,7 +15701,7 @@ def _run_bounded_fixture(
         " retained=os.dup(output_write) if hold_writer else None\n"
         " log_path=base+'/'+label+'-'+str(cap)+('-held' if hold_writer else '')+'.log';log_fd=os.open(log_path,os.O_RDWR|os.O_CREAT|os.O_EXCL|os.O_CLOEXEC,0o600)\n"
         " environment={'LANG':'C.UTF-8','LC_ALL':'C.UTF-8','TMPDIR':'/run/substrate-wall/backing/root/tmp','XDG_RUNTIME_DIR':'/run/substrate-wall/backing/root/xdg-runtime'}\n"
-        " spawned,status_fd,argv=r.launch_stage_b_bwrap(bwrap=held,userns_fd=stage_b_userns_fd,source=test_source,root=paths['target'],repository_snapshot=paths['repository-snapshot'],rustup_snapshot=paths['rustup-home-snapshot'],cargo_runtime=paths['cargo-home-runtime'],control_directory=paths['control'],repository_cwd=r.REPOSITORY_CANONICAL_PATH,mode='parallel',label=label,timeout_seconds=3,expected_head='0'*40,environment=environment,output_write_fd=output_write)\n"
+        " spawned,status_fd,argv=r.launch_stage_b_bwrap(bwrap=held,userns_fd=stage_b_userns_fd,source=test_source,root=paths['target'],repository_snapshot=paths['repository-snapshot'],rustup_snapshot=paths['rustup-home-snapshot'],cargo_runtime=paths['cargo-home-runtime'],control_directory=paths['control'],repository_cwd=r.STAGE_B_REPOSITORY_CANONICAL_PATH,mode='parallel',label=label,timeout_seconds=3,expected_head='0'*40,authority_commit_oid='0'*40,reviewed_authority_commit_oid='0'*40,environment=environment,output_write_fd=output_write)\n"
         " start_time=r._process_start_time_ticks(spawned.pid);os.close(output_write)\n"
         " first_line=r._read_one_line(status_fd,deadline=time.monotonic()+3);first=r._parse_first_bwrap_record(first_line);worker=int(first['child-pid']);worker_pidfd=os.pidfd_open(worker)\n"
         " observed={'pid':os.stat('/proc/%d/ns/pid'%worker).st_ino,'mnt':os.stat('/proc/%d/ns/mnt'%worker).st_ino};reported={'pid':int(first['pid-namespace']),'mnt':int(first['mnt-namespace'])};assert observed==reported\n"
@@ -16006,6 +16379,19 @@ def main(argv: Sequence[str] | None = None) -> int:
             validate_python_runtime(require_bootstrap=True)
             if os.getcwd() != REPOSITORY_CANONICAL_PATH:
                 raise RunnerError(65, "repository_identity_mismatch")
+            _reject_product_home_selection(str(parsed["evidence_parent"]))
+            evidence_parent_fd: int | None = None
+            try:
+                evidence_parent_fd, _evidence_parent_identity = (
+                    open_validated_directory(
+                        str(parsed["evidence_parent"]),
+                        expected_uid=os.getuid(),
+                        expected_mode=0o700,
+                    )
+                )
+            finally:
+                if evidence_parent_fd is not None:
+                    os.close(evidence_parent_fd)
             bootstrap_gitdir_fd = globals().get("__CANONICAL_BOOTSTRAP_GITDIR_FD")
             if type(bootstrap_gitdir_fd) is not int or bootstrap_gitdir_fd < 0:
                 raise RunnerError(65, "invocation_authority_invalid")
@@ -16019,9 +16405,13 @@ def main(argv: Sequence[str] | None = None) -> int:
                     REPOSITORY_CANONICAL_PATH,
                     str(parsed["expected_head"]),
                     held["/usr/bin/git"],
+                    authority_commit_oid=str(parsed["authority_commit_oid"]),
+                    reviewed_authority_commit_oid=str(
+                        parsed["reviewed_authority_commit_oid"]
+                    ),
                     gitdir_fd=bootstrap_gitdir_fd,
                 )
-                _verify_commit_trailers(chain["commit"])
+                _verify_commit_trailers(chain["authority_commit"])
                 code, stdout, stderr = run_authenticated_self_tests(
                     REPOSITORY_CANONICAL_PATH,
                     str(parsed["expected_head"]),

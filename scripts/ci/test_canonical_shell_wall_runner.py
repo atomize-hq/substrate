@@ -94,6 +94,8 @@ SELF_TEST_IDS = (
     "test_rejects_dirty_index_worktree_and_nonignored_untracked_state",
     "test_ignores_only_git_ignored_build_outputs",
     "test_rejects_git_environment_config_alternates_replace_and_fsmonitor",
+    "test_descendant_authority_commit_must_be_ancestor_with_exact_runner_and_test_blobs",
+    "test_descendant_authority_rejects_non_ancestor_and_authenticated_blob_drift",
     "test_rejects_local_git_config_include_mode_exclude_worktree_and_unknown_keys",
     "test_info_exclude_is_held_but_never_cleanliness_authority",
     "test_rejects_info_attributes_worktree_config_and_index_authority_extensions",
@@ -153,13 +155,13 @@ def _category(index: int) -> str:
         (20, "root-authority"),
         (40, "containment"),
         (46, "cli-diagnostics"),
-        (55, "repository"),
-        (66, "invocation-tcb"),
-        (77, "snapshots-environment"),
-        (82, "evidence"),
-        (89, "summarizer"),
-        (93, "mount-lifecycle"),
-        (99, "success-output-cleanup"),
+        (57, "repository"),
+        (68, "invocation-tcb"),
+        (79, "snapshots-environment"),
+        (84, "evidence"),
+        (91, "summarizer"),
+        (95, "mount-lifecycle"),
+        (101, "success-output-cleanup"),
     )
     for limit, category in boundaries:
         if index < limit:
@@ -315,9 +317,8 @@ class CanonicalShellWallRunnerTests(unittest.TestCase):
         os.chmod(temporary.name, 0o700)
         return temporary.name
 
-    def make_disposable_repo(self) -> str:
-        repository = self.make_safe_parent()
-        environment = {
+    def fixture_git_environment(self) -> dict[str, str]:
+        return {
             "LANG": "C.UTF-8",
             "LC_ALL": "C.UTF-8",
             "PATH": "/usr/bin:/bin",
@@ -328,6 +329,10 @@ class CanonicalShellWallRunnerTests(unittest.TestCase):
             "GIT_COMMITTER_NAME": "P1 Self Test",
             "GIT_COMMITTER_EMAIL": "p1-self-test@example.invalid",
         }
+
+    def make_disposable_repo(self) -> str:
+        repository = self.make_safe_parent()
+        environment = self.fixture_git_environment()
         subprocess.run(
             ["/usr/bin/git", "init", "-q", "-b", "main", repository],
             check=True,
@@ -1652,6 +1657,14 @@ class CanonicalShellWallRunnerTests(unittest.TestCase):
             stage_a_source.index("launch_stage_b_bwrap("),
         )
         self.assertIn(
+            '"repository_cwd": STAGE_B_REPOSITORY_CANONICAL_PATH,',
+            stage_a_source,
+        )
+        self.assertIn(
+            "repository_cwd=STAGE_B_REPOSITORY_CANONICAL_PATH,",
+            stage_a_source,
+        )
+        self.assertIn(
             "first_status_line = _read_stage_b_first_status_or_teardown(",
             stage_a_source,
         )
@@ -2866,6 +2879,10 @@ class CanonicalShellWallRunnerTests(unittest.TestCase):
                 "/home/spenser/__Active_code",
                 "--expected-head",
                 "0" * 40,
+                "--authority-commit-oid",
+                "0" * 40,
+                "--reviewed-authority-commit-oid",
+                "0" * 40,
             ],
             cwd=runner.REPOSITORY_CANONICAL_PATH,
             env=bootstrap_environment,
@@ -2929,6 +2946,8 @@ class CanonicalShellWallRunnerTests(unittest.TestCase):
                     label="launch-failure",
                     timeout_seconds=1,
                     expected_head="0" * 40,
+                    authority_commit_oid="0" * 40,
+                    reviewed_authority_commit_oid="0" * 40,
                     environment=launch_environment,
                 )
             self.assertEqual(
@@ -2958,6 +2977,8 @@ class CanonicalShellWallRunnerTests(unittest.TestCase):
                         label="launch-failure",
                         timeout_seconds=1,
                         expected_head="0" * 40,
+                        authority_commit_oid="0" * 40,
+                        reviewed_authority_commit_oid="0" * 40,
                         environment=launch_environment,
                         output_write_fd=launch_output_write,
                     )
@@ -3061,6 +3082,8 @@ class CanonicalShellWallRunnerTests(unittest.TestCase):
                     label="acquired-child-failure",
                     timeout_seconds=1,
                     expected_head="0" * 40,
+                    authority_commit_oid="0" * 40,
+                    reviewed_authority_commit_oid="0" * 40,
                     environment=launch_environment,
                 )
             self.assertIs(close_injection["failed"], True)
@@ -3095,6 +3118,8 @@ class CanonicalShellWallRunnerTests(unittest.TestCase):
                         label="acquired-child-failure",
                         timeout_seconds=1,
                         expected_head="0" * 40,
+                        authority_commit_oid="0" * 40,
+                        reviewed_authority_commit_oid="0" * 40,
                         environment=launch_environment,
                         output_write_fd=acquired_output_write,
                     )
@@ -3359,6 +3384,10 @@ class CanonicalShellWallRunnerTests(unittest.TestCase):
             "/safe",
             "--expected-head",
             "0" * 40,
+            "--authority-commit-oid",
+            "0" * 40,
+            "--reviewed-authority-commit-oid",
+            "0" * 40,
         )
         for option in ("--command", "--root", "--environment"):
             with self.assertRaises(runner.RunnerError):
@@ -3394,8 +3423,36 @@ class CanonicalShellWallRunnerTests(unittest.TestCase):
                         "/safe",
                         "--expected-head",
                         head,
+                        "--authority-commit-oid",
+                        "0" * 40,
+                        "--reviewed-authority-commit-oid",
+                        "0" * 40,
                     )
                 )
+        for option in (
+            "--authority-commit-oid",
+            "--reviewed-authority-commit-oid",
+        ):
+            malformed = [
+                "host",
+                "--mode",
+                "parallel",
+                "--label",
+                "ok",
+                "--timeout-seconds",
+                "1",
+                "--evidence-parent",
+                "/safe",
+                "--expected-head",
+                "0" * 40,
+                "--authority-commit-oid",
+                "0" * 40,
+                "--reviewed-authority-commit-oid",
+                "0" * 40,
+            ]
+            malformed[malformed.index(option) + 1] = "Z" * 40
+            with self.assertRaises(runner.RunnerError):
+                runner.parse_args(tuple(malformed))
         captured_stderr = io.StringIO()
         previous_stderr = sys.stderr
         sys.stderr = captured_stderr
@@ -3413,6 +3470,10 @@ class CanonicalShellWallRunnerTests(unittest.TestCase):
                         "--evidence-parent",
                         "/safe",
                         "--expected-head",
+                        "0" * 40,
+                        "--authority-commit-oid",
+                        "0" * 40,
+                        "--reviewed-authority-commit-oid",
                         "0" * 40,
                     )
                 )
@@ -3970,6 +4031,853 @@ class CanonicalShellWallRunnerTests(unittest.TestCase):
             os.chdir(previous)
             os.close(git.fd)
 
+    def test_descendant_authority_commit_must_be_ancestor_with_exact_runner_and_test_blobs(
+        self,
+    ) -> None:
+        repository = self.make_disposable_repo()
+        authority_head = subprocess.check_output(
+            ["/usr/bin/git", "-C", repository, "rev-parse", "HEAD"],
+            text=True,
+        ).strip()
+        environment = self.fixture_git_environment()
+        subprocess.run(
+            [
+                "/usr/bin/git",
+                "-C",
+                repository,
+                "commit",
+                "--allow-empty",
+                "-q",
+                "-m",
+                "descendant",
+            ],
+            check=True,
+            env=environment,
+        )
+        descendant_head = subprocess.check_output(
+            ["/usr/bin/git", "-C", repository, "rev-parse", "HEAD"],
+            text=True,
+        ).strip()
+        git = runner.resolve_validated_executable(
+            "/usr/bin/git",
+            runner.PLATFORM_STARTUP_TCB_V1["/usr/bin/git"]["sha256"],
+            expected_uid=0,
+        )
+        try:
+            chain = runner.verify_expected_head_object_chain(
+                repository,
+                descendant_head,
+                git,
+                authority_commit_oid=authority_head,
+                reviewed_authority_commit_oid=authority_head,
+            )
+            self.assertEqual(chain["head"], descendant_head)
+            self.assertEqual(chain["authority_commit_oid"], authority_head)
+            self.assertEqual(
+                chain["reviewed_authority_commit_oid"],
+                authority_head,
+            )
+            self.assertFalse(chain["authority_commit_matches_live_head"])
+            self.assertEqual(chain["runner_oid"], chain["authority_runner_oid"])
+            self.assertEqual(chain["test_oid"], chain["authority_test_oid"])
+        finally:
+            os.close(git.fd)
+        host = _module_source(runner).decode("utf-8")
+        host_function = host[
+            host.index("def host_main") : host.index("def _run_selftest_bootstrap")
+        ]
+        final_closeout = host_function[
+            host_function.rindex("repository_post = verify_clean_repository(") : host_function.index(
+                "_revalidate_retained_git_metadata("
+            )
+        ]
+        self.assertIn(
+            "authority_commit_oid=authority_commit_oid",
+            final_closeout,
+        )
+        self.assertIn(
+            "reviewed_authority_commit_oid=reviewed_authority_commit_oid",
+            final_closeout,
+        )
+
+        # This proves descendant bootstrap/auth wiring only; the contract's full
+        # authenticated proof still runs later from a disposable full checkout.
+        bootstrap_repository = self.make_disposable_repo()
+        bootstrap_runner_path = os.path.join(
+            bootstrap_repository,
+            "scripts",
+            "ci",
+            "canonical_shell_wall_runner.py",
+        )
+        bootstrap_source = _module_source(runner)
+        start = bootstrap_source.index(b"def run_authenticated_self_tests(")
+        end = bootstrap_source.index(
+            b"def _read_authenticated_staged_provenance("
+        )
+        stubbed_bootstrap_source = (
+            bootstrap_source[:start]
+            + (
+                b"def run_authenticated_self_tests(\n"
+                b"    repository: str,\n"
+                b"    expected_head: str,\n"
+                b"    git: HeldExecutable,\n"
+                b"    *,\n"
+                b"    gitdir_fd: int | None = None,\n"
+                b") -> tuple[int, bytes, bytes]:\n"
+                b"    del repository, expected_head, git, gitdir_fd\n"
+                b"    payload = {\n"
+                b"        'failed': 0,\n"
+                b"        'run': 101,\n"
+                b"        'schema': SELF_TEST_SCHEMA,\n"
+                b"        'status': 'clean',\n"
+                b"    }\n"
+                b"    stdout = (\n"
+                b"        json.dumps(payload, sort_keys=True, separators=(',', ':')) + '\\n'\n"
+                b"    ).encode('ascii')\n"
+                b"    return 0, stdout, b''\n\n"
+            )
+            + bootstrap_source[end:]
+        )
+        with open(bootstrap_runner_path, "wb") as handle:
+            handle.write(stubbed_bootstrap_source)
+        subprocess.run(
+            [
+                "/usr/bin/git",
+                "-C",
+                bootstrap_repository,
+                "add",
+                "--",
+                "scripts/ci/canonical_shell_wall_runner.py",
+            ],
+            check=True,
+            env=environment,
+        )
+        subprocess.run(
+            ["/usr/bin/git", "-C", bootstrap_repository, "commit", "--amend", "-q", "-F", "-"],
+            check=True,
+            env=environment,
+            input=(
+                "fixture\n\n"
+                f"P1-Bootstrap-Bytes: {len(runner.BOOTSTRAP_V2_SOURCE.encode())}\n"
+                "P1-Bootstrap-SHA256: "
+                f"{runner.inline_sha256(runner.BOOTSTRAP_V2_SOURCE.encode())}\n"
+                "P1-Host-Argv-Template-SHA256: "
+                f"{runner._template_sha256(runner.HOST_INVOCATION_ARGV_TEMPLATE_V1)}\n"
+                "P1-Stage-A-Argv-Template-SHA256: "
+                f"{runner._template_sha256(runner.BWRAP_STAGE_A_ARGV_TEMPLATE_V1)}\n"
+                "P1-Stage-B-Argv-Template-SHA256: "
+                f"{runner._template_sha256(runner.BWRAP_STAGE_B_ARGV_TEMPLATE_V1)}\n"
+            ),
+            text=True,
+        )
+        bootstrap_authority_head = subprocess.check_output(
+            ["/usr/bin/git", "-C", bootstrap_repository, "rev-parse", "HEAD"],
+            text=True,
+        ).strip()
+        subprocess.run(
+            [
+                "/usr/bin/git",
+                "-C",
+                bootstrap_repository,
+                "commit",
+                "--allow-empty",
+                "-q",
+                "-m",
+                "descendant",
+            ],
+            check=True,
+            env=environment,
+        )
+        bootstrap_descendant_head = subprocess.check_output(
+            ["/usr/bin/git", "-C", bootstrap_repository, "rev-parse", "HEAD"],
+            text=True,
+        ).strip()
+        evidence_parent = self.make_safe_parent()
+        public_environment = {
+            key: value
+            for key, value in os.environ.items()
+            if not key.startswith(runner.FORBIDDEN_STARTUP_PREFIXES)
+            and key not in runner.FORBIDDEN_STARTUP_KEYS
+        }
+        public_environment.update(environment)
+        completed = subprocess.run(
+            [
+                "/usr/bin/python3.13",
+                "-I",
+                "-S",
+                "-B",
+                "-c",
+                runner.BOOTSTRAP_V2_SOURCE,
+                "self-test",
+                "--evidence-parent",
+                evidence_parent,
+                "--expected-head",
+                bootstrap_descendant_head,
+                "--authority-commit-oid",
+                bootstrap_authority_head,
+                "--reviewed-authority-commit-oid",
+                bootstrap_authority_head,
+            ],
+            cwd=bootstrap_repository,
+            env=public_environment,
+            stdin=subprocess.DEVNULL,
+            stdout=subprocess.PIPE,
+            stderr=subprocess.PIPE,
+            check=False,
+        )
+        self.assertEqual(completed.returncode, 0)
+        self.assertEqual(
+            completed.stdout,
+            (
+                '{"failed":0,"run":101,'
+                f'"schema":"{runner.SELF_TEST_SCHEMA}",'
+                '"status":"clean"}\n'
+            ).encode("ascii"),
+        )
+        self.assertEqual(completed.stderr, b"")
+        guarded_bootstrap_repository = self.make_disposable_repo()
+        guarded_bootstrap_runner_path = os.path.join(
+            guarded_bootstrap_repository,
+            "scripts",
+            "ci",
+            "canonical_shell_wall_runner.py",
+        )
+        executed_parent = self.make_safe_parent()
+        executed_path = os.path.join(executed_parent, "executed")
+        guarded_bootstrap_source = (
+            bootstrap_source[:start]
+            + (
+                b"def run_authenticated_self_tests(\n"
+                b"    repository: str,\n"
+                b"    expected_head: str,\n"
+                b"    git: HeldExecutable,\n"
+                b"    *,\n"
+                b"    gitdir_fd: int | None = None,\n"
+                b") -> tuple[int, bytes, bytes]:\n"
+                b"    del repository, expected_head, git, gitdir_fd\n"
+                + f"    open({executed_path!r}, 'wb').write(b'executed')\n".encode(
+                    "utf-8"
+                )
+                + b"    payload = {\n"
+                b"        'failed': 0,\n"
+                b"        'run': 101,\n"
+                b"        'schema': SELF_TEST_SCHEMA,\n"
+                b"        'status': 'clean',\n"
+                b"    }\n"
+                b"    stdout = (\n"
+                b"        json.dumps(payload, sort_keys=True, separators=(',', ':')) + '\\n'\n"
+                b"    ).encode('ascii')\n"
+                b"    return 0, stdout, b''\n\n"
+            )
+            + bootstrap_source[end:]
+        )
+        with open(guarded_bootstrap_runner_path, "wb") as handle:
+            handle.write(guarded_bootstrap_source)
+        subprocess.run(
+            [
+                "/usr/bin/git",
+                "-C",
+                guarded_bootstrap_repository,
+                "add",
+                "--",
+                "scripts/ci/canonical_shell_wall_runner.py",
+            ],
+            check=True,
+            env=environment,
+        )
+        subprocess.run(
+            ["/usr/bin/git", "-C", guarded_bootstrap_repository, "commit", "--amend", "-q", "-F", "-"],
+            check=True,
+            env=environment,
+            input=(
+                "fixture\n\n"
+                f"P1-Bootstrap-Bytes: {len(runner.BOOTSTRAP_V2_SOURCE.encode())}\n"
+                "P1-Bootstrap-SHA256: "
+                f"{runner.inline_sha256(runner.BOOTSTRAP_V2_SOURCE.encode())}\n"
+                "P1-Host-Argv-Template-SHA256: "
+                f"{runner._template_sha256(runner.HOST_INVOCATION_ARGV_TEMPLATE_V1)}\n"
+                "P1-Stage-A-Argv-Template-SHA256: "
+                f"{runner._template_sha256(runner.BWRAP_STAGE_A_ARGV_TEMPLATE_V1)}\n"
+                "P1-Stage-B-Argv-Template-SHA256: "
+                f"{runner._template_sha256(runner.BWRAP_STAGE_B_ARGV_TEMPLATE_V1)}\n"
+            ),
+            text=True,
+        )
+        guarded_bootstrap_head = subprocess.check_output(
+            ["/usr/bin/git", "-C", guarded_bootstrap_repository, "rev-parse", "HEAD"],
+            text=True,
+        ).strip()
+        unsafe_parent = self.make_safe_parent()
+        os.chmod(unsafe_parent, 0o755)
+        missing_parent = os.path.join(self.make_safe_parent(), "missing")
+        for invalid_parent in (unsafe_parent, missing_parent):
+            completed = subprocess.run(
+                [
+                    "/usr/bin/python3.13",
+                    "-I",
+                    "-S",
+                    "-B",
+                    "-c",
+                    runner.BOOTSTRAP_V2_SOURCE,
+                    "self-test",
+                    "--evidence-parent",
+                    invalid_parent,
+                    "--expected-head",
+                    guarded_bootstrap_head,
+                    "--authority-commit-oid",
+                    guarded_bootstrap_head,
+                    "--reviewed-authority-commit-oid",
+                    guarded_bootstrap_head,
+                ],
+                cwd=guarded_bootstrap_repository,
+                env=public_environment,
+                stdin=subprocess.DEVNULL,
+                stdout=subprocess.PIPE,
+                stderr=subprocess.PIPE,
+                check=False,
+            )
+            self.assertEqual(completed.returncode, 67)
+            self.assertEqual(completed.stdout, b"")
+            self.assertIn(
+                completed.stderr,
+                (
+                    b"root_validation_failed\n",
+                    b"safe_parent_rejected\n",
+                ),
+            )
+        self.assertFalse(os.path.exists(executed_path))
+
+    def test_descendant_authority_rejects_non_ancestor_and_authenticated_blob_drift(
+        self,
+    ) -> None:
+        environment = self.fixture_git_environment()
+
+        self_authorizing_repository = self.make_disposable_repo()
+        reviewed_authority_head = subprocess.check_output(
+            ["/usr/bin/git", "-C", self_authorizing_repository, "rev-parse", "HEAD"],
+            text=True,
+        ).strip()
+        subprocess.run(
+            [
+                "/usr/bin/git",
+                "-C",
+                self_authorizing_repository,
+                "commit",
+                "--allow-empty",
+                "-q",
+                "-m",
+                "self-authorizing descendant",
+            ],
+            check=True,
+            env=environment,
+        )
+        self_authorizing_head = subprocess.check_output(
+            ["/usr/bin/git", "-C", self_authorizing_repository, "rev-parse", "HEAD"],
+            text=True,
+        ).strip()
+        self_authorizing_git = runner.resolve_validated_executable(
+            "/usr/bin/git",
+            runner.PLATFORM_STARTUP_TCB_V1["/usr/bin/git"]["sha256"],
+            expected_uid=0,
+        )
+        try:
+            with self.assertRaises(runner.RunnerError) as self_authorizing:
+                runner.verify_expected_head_object_chain(
+                    self_authorizing_repository,
+                    self_authorizing_head,
+                    self_authorizing_git,
+                    authority_commit_oid=self_authorizing_head,
+                    reviewed_authority_commit_oid=reviewed_authority_head,
+                )
+            self.assertEqual(
+                self_authorizing.exception.reason,
+                "invocation_authority_invalid",
+            )
+        finally:
+            os.close(self_authorizing_git.fd)
+
+        public_bootstrap_repository = self.make_disposable_repo()
+        public_reviewed_authority_head = subprocess.check_output(
+            ["/usr/bin/git", "-C", public_bootstrap_repository, "rev-parse", "HEAD"],
+            text=True,
+        ).strip()
+        public_runner_path = os.path.join(
+            public_bootstrap_repository,
+            "scripts",
+            "ci",
+            "canonical_shell_wall_runner.py",
+        )
+        with open(public_runner_path, "rb") as handle:
+            public_runner_source = handle.read()
+        executed_parent = self.make_safe_parent()
+        executed_path = os.path.join(executed_parent, "executed")
+        hostile_prefix = (
+            f"open({executed_path!r},'wb').write(b'executed')\n"
+            "raise SystemExit(99)\n"
+        ).encode("utf-8")
+        with open(public_runner_path, "wb") as handle:
+            handle.write(hostile_prefix)
+            handle.write(public_runner_source)
+        subprocess.run(
+            [
+                "/usr/bin/git",
+                "-C",
+                public_bootstrap_repository,
+                "add",
+                "--",
+                "scripts/ci/canonical_shell_wall_runner.py",
+            ],
+            check=True,
+            env=environment,
+        )
+        subprocess.run(
+            ["/usr/bin/git", "-C", public_bootstrap_repository, "commit", "--amend", "-q", "-F", "-"],
+            check=True,
+            env=environment,
+            input=(
+                "fixture\n\n"
+                f"P1-Bootstrap-Bytes: {len(runner.BOOTSTRAP_V2_SOURCE.encode())}\n"
+                "P1-Bootstrap-SHA256: "
+                f"{runner.inline_sha256(runner.BOOTSTRAP_V2_SOURCE.encode())}\n"
+                "P1-Host-Argv-Template-SHA256: "
+                f"{runner._template_sha256(runner.HOST_INVOCATION_ARGV_TEMPLATE_V1)}\n"
+                "P1-Stage-A-Argv-Template-SHA256: "
+                f"{runner._template_sha256(runner.BWRAP_STAGE_A_ARGV_TEMPLATE_V1)}\n"
+                "P1-Stage-B-Argv-Template-SHA256: "
+                f"{runner._template_sha256(runner.BWRAP_STAGE_B_ARGV_TEMPLATE_V1)}\n"
+            ),
+            text=True,
+        )
+        public_self_authorizing_head = subprocess.check_output(
+            ["/usr/bin/git", "-C", public_bootstrap_repository, "rev-parse", "HEAD"],
+            text=True,
+        ).strip()
+        evidence_parent = self.make_safe_parent()
+        public_environment = {
+            key: value
+            for key, value in os.environ.items()
+            if not key.startswith(runner.FORBIDDEN_STARTUP_PREFIXES)
+            and key not in runner.FORBIDDEN_STARTUP_KEYS
+        }
+        public_environment.update(environment)
+        completed = subprocess.run(
+            [
+                "/usr/bin/python3.13",
+                "-I",
+                "-S",
+                "-B",
+                "-c",
+                runner.BOOTSTRAP_V2_SOURCE,
+                "self-test",
+                "--evidence-parent",
+                evidence_parent,
+                "--expected-head",
+                public_self_authorizing_head,
+                "--authority-commit-oid",
+                public_self_authorizing_head,
+                "--reviewed-authority-commit-oid",
+                public_reviewed_authority_head,
+            ],
+            cwd=public_bootstrap_repository,
+            env=public_environment,
+            stdin=subprocess.DEVNULL,
+            stdout=subprocess.PIPE,
+            stderr=subprocess.PIPE,
+            check=False,
+        )
+        self.assertEqual(
+            (
+                completed.returncode,
+                completed.stdout,
+                completed.stderr,
+            ),
+            (65, b"", b""),
+        )
+        self.assertFalse(os.path.exists(executed_path))
+
+        unrelated_authority_repository = self.make_disposable_repo()
+        with open(
+            os.path.join(unrelated_authority_repository, "authority-only.txt"),
+            "xb",
+        ) as handle:
+            handle.write(b"authority-only\n")
+        subprocess.run(
+            ["/usr/bin/git", "-C", unrelated_authority_repository, "add", "--", "."],
+            check=True,
+            env=environment,
+        )
+        subprocess.run(
+            [
+                "/usr/bin/git",
+                "-C",
+                unrelated_authority_repository,
+                "commit",
+                "-q",
+                "-m",
+                "unrelated authority",
+            ],
+            check=True,
+            env=environment,
+        )
+        unrelated_authority_head = subprocess.check_output(
+            ["/usr/bin/git", "-C", unrelated_authority_repository, "rev-parse", "HEAD"],
+            text=True,
+        ).strip()
+        unrelated_repository = self.make_disposable_repo()
+        with open(os.path.join(unrelated_repository, "tracked.txt"), "ab") as handle:
+            handle.write(b"descendant\n")
+        subprocess.run(
+            ["/usr/bin/git", "-C", unrelated_repository, "add", "--", "tracked.txt"],
+            check=True,
+            env=environment,
+        )
+        subprocess.run(
+            ["/usr/bin/git", "-C", unrelated_repository, "commit", "-q", "-m", "descendant"],
+            check=True,
+            env=environment,
+        )
+        unrelated_descendant_head = subprocess.check_output(
+            ["/usr/bin/git", "-C", unrelated_repository, "rev-parse", "HEAD"],
+            text=True,
+        ).strip()
+        unrelated_git = runner.resolve_validated_executable(
+            "/usr/bin/git",
+            runner.PLATFORM_STARTUP_TCB_V1["/usr/bin/git"]["sha256"],
+            expected_uid=0,
+        )
+        try:
+            with self.assertRaises(runner.RunnerError) as non_ancestor:
+                runner.verify_expected_head_object_chain(
+                    unrelated_repository,
+                    unrelated_descendant_head,
+                    unrelated_git,
+                    authority_commit_oid=unrelated_authority_head,
+                )
+            self.assertEqual(
+                non_ancestor.exception.reason,
+                "invocation_authority_invalid",
+            )
+        finally:
+            os.close(unrelated_git.fd)
+
+        runner_drift_repository = self.make_disposable_repo()
+        runner_authority_head = subprocess.check_output(
+            ["/usr/bin/git", "-C", runner_drift_repository, "rev-parse", "HEAD"],
+            text=True,
+        ).strip()
+        with open(
+            os.path.join(
+                runner_drift_repository,
+                "scripts",
+                "ci",
+                "canonical_shell_wall_runner.py",
+            ),
+            "ab",
+        ) as handle:
+            handle.write(b"\n# descendant drift\n")
+        subprocess.run(
+            ["/usr/bin/git", "-C", runner_drift_repository, "add", "--", "."],
+            check=True,
+            env=environment,
+        )
+        subprocess.run(
+            ["/usr/bin/git", "-C", runner_drift_repository, "commit", "-q", "-m", "runner drift"],
+            check=True,
+            env=environment,
+        )
+        runner_drift_head = subprocess.check_output(
+            ["/usr/bin/git", "-C", runner_drift_repository, "rev-parse", "HEAD"],
+            text=True,
+        ).strip()
+        runner_drift_git = runner.resolve_validated_executable(
+            "/usr/bin/git",
+            runner.PLATFORM_STARTUP_TCB_V1["/usr/bin/git"]["sha256"],
+            expected_uid=0,
+        )
+        try:
+            with self.assertRaises(runner.RunnerError) as runner_drift:
+                runner.verify_expected_head_object_chain(
+                    runner_drift_repository,
+                    runner_drift_head,
+                    runner_drift_git,
+                    authority_commit_oid=runner_authority_head,
+                )
+            self.assertEqual(
+                runner_drift.exception.reason,
+                "invocation_authority_invalid",
+            )
+        finally:
+            os.close(runner_drift_git.fd)
+
+        test_drift_repository = self.make_disposable_repo()
+        test_authority_head = subprocess.check_output(
+            ["/usr/bin/git", "-C", test_drift_repository, "rev-parse", "HEAD"],
+            text=True,
+        ).strip()
+        with open(
+            os.path.join(
+                test_drift_repository,
+                "scripts",
+                "ci",
+                "test_canonical_shell_wall_runner.py",
+            ),
+            "ab",
+        ) as handle:
+            handle.write(b"\n# descendant drift\n")
+        subprocess.run(
+            ["/usr/bin/git", "-C", test_drift_repository, "add", "--", "."],
+            check=True,
+            env=environment,
+        )
+        subprocess.run(
+            ["/usr/bin/git", "-C", test_drift_repository, "commit", "-q", "-m", "test drift"],
+            check=True,
+            env=environment,
+        )
+        test_drift_head = subprocess.check_output(
+            ["/usr/bin/git", "-C", test_drift_repository, "rev-parse", "HEAD"],
+            text=True,
+        ).strip()
+        test_drift_git = runner.resolve_validated_executable(
+            "/usr/bin/git",
+            runner.PLATFORM_STARTUP_TCB_V1["/usr/bin/git"]["sha256"],
+            expected_uid=0,
+        )
+        try:
+            with self.assertRaises(runner.RunnerError) as test_drift:
+                runner.verify_expected_head_object_chain(
+                    test_drift_repository,
+                    test_drift_head,
+                    test_drift_git,
+                    authority_commit_oid=test_authority_head,
+                )
+            self.assertEqual(
+                test_drift.exception.reason,
+                "invocation_authority_invalid",
+            )
+        finally:
+            os.close(test_drift_git.fd)
+
+    def _assert_stage_b_rejects_runtime_cwd_drift_from_projection_authority(
+        self,
+    ) -> None:
+        control_root = self.make_safe_parent()
+        projection_roots = {
+            role: os.path.join(control_root, role)
+            for role in (
+                "repository-snapshot",
+                "rustup-home-snapshot",
+                "cargo-home-runtime",
+                "target",
+                "tmp",
+                "xdg-runtime",
+                "control",
+            )
+        }
+        for path in projection_roots.values():
+            os.makedirs(path, mode=0o700, exist_ok=True)
+            os.chmod(path, 0o700)
+        control_path = projection_roots["control"]
+        control_fd = os.open(
+            control_path,
+            os.O_RDONLY | os.O_DIRECTORY | os.O_CLOEXEC,
+        )
+        projection_fds = {
+            role: os.open(path, os.O_RDONLY | os.O_DIRECTORY | os.O_CLOEXEC)
+            for role, path in projection_roots.items()
+        }
+        projection_identities = {}
+        for offset, role in enumerate(projection_roots, start=1):
+            projection_identities[role] = runner.DirectoryIdentity(
+                dev=1,
+                ino=101 + offset,
+                mount_id=201 + offset,
+                uid=os.getuid(),
+                mode=0o700,
+                kind="directory",
+                acl_sha256="0" * 64,
+                foreign_effective_write=False,
+                path_matches_fd=True,
+            )
+        control_identity = projection_identities["control"]
+        stage_authority = {
+            "schema": "substrate.canonical_shell_wall_stage_authority.v1",
+            "invocation_id": "1" * 32,
+            "runner_sha256": "a" * 64,
+            "expected_head": "0" * 40,
+            "authority_commit_oid": "0" * 40,
+            "reviewed_authority_commit_oid": "0" * 40,
+            "repository_cwd": runner.STAGE_B_REPOSITORY_CANONICAL_PATH,
+            "mode": "parallel",
+            "label": "cwd-drift",
+            "timeout_seconds": 3,
+            "projections": {
+                role: {
+                    "dev": identity.dev,
+                    "ino": identity.ino,
+                    "mode": identity.mode,
+                    "uid": identity.uid,
+                    "writable": role
+                    in {
+                        "cargo-home-runtime",
+                        "target",
+                        "tmp",
+                        "xdg-runtime",
+                        "control",
+                    },
+                }
+                for role, identity in projection_identities.items()
+            },
+        }
+        authority_bytes = (
+            json.dumps(
+                stage_authority,
+                sort_keys=True,
+                separators=(",", ":"),
+            )
+            + "\n"
+        ).encode("ascii")
+        with open(os.path.join(control_path, "authority.json"), "wb") as handle:
+            handle.write(authority_bytes)
+        original_getpid = runner.os.getpid
+        original_getppid = runner.os.getppid
+        original_getcwd = runner.os.getcwd
+        original_validate_maps = runner._validate_current_user_namespace_maps
+        original_set_subreaper = runner.set_child_subreaper
+        original_open_validated_directory = runner.open_validated_directory
+        original_read_effective_acl = runner.read_effective_acl
+        original_mountinfo = runner._mountinfo_for_path
+        original_stage_authority = runner.__dict__.get(
+            "__CANONICAL_STAGE_AUTHORITY"
+        )
+        original_runner_sha256 = runner.__dict__.get(
+            "__CANONICAL_RUNNER_SHA256"
+        )
+        original_validate_home = runner._validate_stage_b_home_projection
+        original_validate_account = runner._validate_stage_b_account_projection
+        try:
+            runner.os.getpid = lambda: 1
+            runner.os.getppid = lambda: 0
+            runner.os.getcwd = lambda: "/tmp/stage-b-cwd-drift"
+            runner._validate_current_user_namespace_maps = lambda _role: None
+            runner.set_child_subreaper = lambda: True
+            runner.__dict__["__CANONICAL_STAGE_AUTHORITY"] = stage_authority
+            runner.__dict__["__CANONICAL_RUNNER_SHA256"] = "a" * 64
+            runner.read_effective_acl = lambda _fd: ("0" * 64, False)
+
+            def fake_open_validated_directory(
+                path: str,
+                *,
+                expected_uid: int,
+                expected_mode: int,
+                validate_ancestors: bool,
+            ) -> tuple[int, runner.DirectoryIdentity]:
+                del expected_uid, expected_mode, validate_ancestors
+                if path == "/run/substrate-wall/control":
+                    return os.dup(control_fd), control_identity
+                role_by_path = {
+                    runner.REPOSITORY_CANONICAL_PATH: "repository-snapshot",
+                    "/home/spenser/.rustup": "rustup-home-snapshot",
+                    "/home/spenser/.cargo": "cargo-home-runtime",
+                    os.path.join(
+                        runner.REPOSITORY_CANONICAL_PATH,
+                        "target",
+                    ): "target",
+                    "/run/substrate-wall/backing/root/tmp": "tmp",
+                    runner.STAGE_B_XDG_RUNTIME_DIR: "xdg-runtime",
+                    "/run/substrate-wall/control": "control",
+                }
+                role = role_by_path[path]
+                return (
+                    os.dup(projection_fds[role]),
+                    projection_identities[role],
+                )
+
+            def fake_mountinfo(path: str) -> dict[str, object]:
+                if path == "/":
+                    return {
+                        "mount_id": 999,
+                        "options": ["ro"],
+                        "optional_fields": [],
+                        "fstype": "tmpfs",
+                        "source": "tmpfs",
+                    }
+                role_by_path = {
+                    runner.REPOSITORY_CANONICAL_PATH: "repository-snapshot",
+                    "/home/spenser/.rustup": "rustup-home-snapshot",
+                    "/home/spenser/.cargo": "cargo-home-runtime",
+                    os.path.join(
+                        runner.REPOSITORY_CANONICAL_PATH,
+                        "target",
+                    ): "target",
+                    "/run/substrate-wall/backing/root/tmp": "tmp",
+                    runner.STAGE_B_XDG_RUNTIME_DIR: "xdg-runtime",
+                    "/run/substrate-wall/control": "control",
+                }
+                role = role_by_path[path]
+                writable = role in {
+                    "cargo-home-runtime",
+                    "target",
+                    "tmp",
+                    "xdg-runtime",
+                    "control",
+                }
+                return {
+                    "mount_id": projection_identities[role].mount_id,
+                    "options": ["rw"] if writable else ["ro"],
+                    "optional_fields": [],
+                    "fstype": "tmpfs",
+                    "source": "tmpfs",
+                }
+
+            runner.open_validated_directory = fake_open_validated_directory
+            runner._mountinfo_for_path = fake_mountinfo
+            runner._validate_stage_b_home_projection = lambda: None
+            runner._validate_stage_b_account_projection = lambda: None
+            with self.assertRaises(runner.RunnerError) as caught:
+                runner.stage_b_worker_main(
+                    {
+                        "mode": "parallel",
+                        "label": "cwd-drift",
+                        "timeout_seconds": 3,
+                        "expected_head": "0" * 40,
+                        "authority_commit_oid": "0" * 40,
+                        "reviewed_authority_commit_oid": "0" * 40,
+                    }
+                )
+            self.assertEqual(
+                caught.exception.reason,
+                "invocation_authority_invalid",
+            )
+        finally:
+            runner.os.getpid = original_getpid
+            runner.os.getppid = original_getppid
+            runner.os.getcwd = original_getcwd
+            runner._validate_current_user_namespace_maps = original_validate_maps
+            runner.set_child_subreaper = original_set_subreaper
+            runner.open_validated_directory = original_open_validated_directory
+            runner.read_effective_acl = original_read_effective_acl
+            runner._mountinfo_for_path = original_mountinfo
+            if original_stage_authority is None:
+                runner.__dict__.pop("__CANONICAL_STAGE_AUTHORITY", None)
+            else:
+                runner.__dict__["__CANONICAL_STAGE_AUTHORITY"] = (
+                    original_stage_authority
+                )
+            if original_runner_sha256 is None:
+                runner.__dict__.pop("__CANONICAL_RUNNER_SHA256", None)
+            else:
+                runner.__dict__["__CANONICAL_RUNNER_SHA256"] = (
+                    original_runner_sha256
+                )
+            runner._validate_stage_b_home_projection = original_validate_home
+            runner._validate_stage_b_account_projection = (
+                original_validate_account
+            )
+            for descriptor in projection_fds.values():
+                os.close(descriptor)
+            os.close(control_fd)
+
     def test_rejects_local_git_config_include_mode_exclude_worktree_and_unknown_keys(
         self,
     ) -> None:
@@ -4354,6 +5262,7 @@ class CanonicalShellWallRunnerTests(unittest.TestCase):
             timeout=8,
         )
         self.assertTrue(all(integrated.values()))
+        self._assert_stage_b_rejects_runtime_cwd_drift_from_projection_authority()
         source = _module_source(runner).decode("utf-8")
         stage_a = source[
             source.index("def stage_a_main")
@@ -4480,6 +5389,10 @@ class CanonicalShellWallRunnerTests(unittest.TestCase):
             source.index("_trailers!=_expected_trailers"),
             source.index("exec(compile(_source"),
         )
+        self.assertLess(
+            source.index("_reviewed!=_authority"),
+            source.index("exec(compile(_source"),
+        )
         repository = self.make_disposable_repo()
         expected_head = subprocess.check_output(
             ["/usr/bin/git", "-C", repository, "rev-parse", "HEAD"],
@@ -4494,6 +5407,8 @@ class CanonicalShellWallRunnerTests(unittest.TestCase):
                 "TIMEOUT_DECIMAL": "1",
                 "EVIDENCE_PARENT": evidence_parent,
                 "EXPECTED_HEAD": expected_head,
+                "AUTHORITY_COMMIT_OID": expected_head,
+                "REVIEWED_AUTHORITY_COMMIT_OID": expected_head,
             },
         )
         environment = {
@@ -4511,9 +5426,18 @@ class CanonicalShellWallRunnerTests(unittest.TestCase):
             stderr=subprocess.PIPE,
             check=False,
         )
-        self.assertEqual(completed.returncode, 65)
-        self.assertEqual(completed.stdout, b"")
-        self.assertEqual(completed.stderr, b"repository_identity_mismatch\n")
+        self.assertEqual(
+            (
+                completed.returncode,
+                completed.stdout,
+                completed.stderr,
+            ),
+            (
+                72,
+                b"",
+                b"internal_invariant_failed\n",
+            ),
+        )
 
     def test_self_test_loader_authenticates_exact_runner_and_test_blobs(self) -> None:
         self.assertIn(
@@ -5226,6 +6150,41 @@ class CanonicalShellWallRunnerTests(unittest.TestCase):
             "roots", "evidence", "result",
         })
         runner._validate_provenance_record(valid)
+        for key in (
+            "bootstrap_sha256",
+            "runner_blob_sha256",
+            "bubblewrap_sha256",
+            "bubblewrap_elf_closure_manifest_sha256",
+            "host_argv_template_sha256",
+            "stage_a_argv_template_sha256",
+            "stage_b_argv_template_sha256",
+        ):
+            malformed_required_hash = json.loads(json.dumps(valid))
+            malformed_required_hash["request"]["launcher"][key] = None
+            with self.assertRaises(runner.RunnerError):
+                runner._validate_provenance_record(malformed_required_hash)
+        malformed_reviewed_equality = json.loads(json.dumps(valid))
+        malformed_reviewed_equality["request"]["launcher"][
+            "reviewed_oid_matches"
+        ] = False
+        with self.assertRaises(runner.RunnerError):
+            runner._validate_provenance_record(malformed_reviewed_equality)
+        malformed_reviewed_authority = json.loads(json.dumps(valid))
+        malformed_reviewed_authority["request"]["launcher"][
+            "reviewed_authority_commit_oid"
+        ] = "a" * 40
+        malformed_reviewed_authority["request"]["launcher"][
+            "reviewed_oid_matches"
+        ] = False
+        with self.assertRaises(runner.RunnerError):
+            runner._validate_provenance_record(malformed_reviewed_authority)
+        for stage_name, hash_char in (("stage_a", "1"), ("stage_b", "2")):
+            malformed_stage_progression = json.loads(json.dumps(valid))
+            malformed_stage_progression["request"]["launcher"][
+                f"{stage_name}_argv_sha256"
+            ] = hash_char * 64
+            with self.assertRaises(runner.RunnerError):
+                runner._validate_provenance_record(malformed_stage_progression)
         unknown = dict(valid)
         unknown["unknown"] = True
         missing = dict(valid)
@@ -5281,8 +6240,10 @@ class CanonicalShellWallRunnerTests(unittest.TestCase):
         )
         for stage_name in ("stage_a", "stage_b"):
             kernel_maps["mounts"][stage_name] = {
-                "argv_template_sha256": "0" * 64,
-                "argv_sha256": "1" * 64,
+                "argv_template_sha256": kernel_maps["request"]["launcher"][
+                    f"{stage_name}_argv_template_sha256"
+                ],
+                "argv_sha256": ("1" if stage_name == "stage_a" else "2") * 64,
                 "as_pid_1": stage_name == "stage_b",
                 "user_namespace": True,
                 "mount_namespace": True,
@@ -5304,12 +6265,32 @@ class CanonicalShellWallRunnerTests(unittest.TestCase):
                 "completed": False,
                 "unmounted": False,
             }
+            kernel_maps["request"]["launcher"][f"{stage_name}_argv_sha256"] = (
+                kernel_maps["mounts"][stage_name]["argv_sha256"]
+            )
         runner._validate_provenance_record(kernel_maps)
 
         malformed_map = json.loads(json.dumps(kernel_maps))
         malformed_map["mounts"]["stage_a"]["uid_map"] = "1000 0 2\n"
         with self.assertRaises(runner.RunnerError) as rejected:
             runner._validate_provenance_record(malformed_map)
+        self.assertEqual(rejected.exception.reason, "evidence_write_failed")
+        malformed_stage_hash = json.loads(json.dumps(kernel_maps))
+        malformed_stage_hash["mounts"]["stage_a"]["argv_sha256"] = "f" * 64
+        with self.assertRaises(runner.RunnerError) as rejected:
+            runner._validate_provenance_record(malformed_stage_hash)
+        self.assertEqual(rejected.exception.reason, "evidence_write_failed")
+        missing_stage_hash = json.loads(json.dumps(kernel_maps))
+        missing_stage_hash["request"]["launcher"]["stage_b_argv_sha256"] = None
+        with self.assertRaises(runner.RunnerError) as rejected:
+            runner._validate_provenance_record(missing_stage_hash)
+        self.assertEqual(rejected.exception.reason, "evidence_write_failed")
+        malformed_stage_template = json.loads(json.dumps(kernel_maps))
+        malformed_stage_template["mounts"]["stage_b"][
+            "argv_template_sha256"
+        ] = "e" * 64
+        with self.assertRaises(runner.RunnerError) as rejected:
+            runner._validate_provenance_record(malformed_stage_template)
         self.assertEqual(rejected.exception.reason, "evidence_write_failed")
 
         kernel_maps["mounts"]["cargo_home_runtime"] = {
@@ -5444,6 +6425,24 @@ class CanonicalShellWallRunnerTests(unittest.TestCase):
         original_record["request"]["launcher"]["stage_a_argv_sha256"] = (
             "1" * 64
         )
+        original_record["request"]["launcher"]["host_argv_sha256"] = "2" * 64
+        original_record["request"]["tmpdir"] = "/tmp/original"
+        original_record["request"]["xdg_runtime_dir"] = "/run/original"
+        original_record["request"]["target_dir"] = "/target/original"
+        original_record["request"]["command"] = ["cargo", "test"]
+        original_record["request"]["environment_contract"][
+            "inherited_entry_count"
+        ] = 7
+        original_record["repository"] = {
+            "branch": "main",
+            "head": "0" * 40,
+            "tree": "1" * 40,
+            "cwd": "/tmp/repository",
+            "clean": True,
+            "tree_manifest_sha256": "2" * 64,
+            "index_pre": {"kind": "original"},
+            "index_post": None,
+        }
         original_record["namespace"].update(
             {
                 "stage_a_bwrap_pid": 123,
@@ -5451,10 +6450,70 @@ class CanonicalShellWallRunnerTests(unittest.TestCase):
                 "stage_a_bwrap_pidfd_opened": True,
             }
         )
+        staged_record["request"]["launcher"].update(
+            {
+                "host_argv_template_sha256": "f" * 64,
+                "bubblewrap_version": "tampered",
+                "host_argv_sha256": "e" * 64,
+                "direct_array_spawn": False,
+            }
+        )
+        staged_record["request"]["command"] = ["tampered"]
+        staged_record["request"]["environment_contract"][
+            "inherited_entry_count"
+        ] = 99
+        staged_record["request"]["tmpdir"] = "/tmp/tampered"
+        staged_record["request"]["xdg_runtime_dir"] = "/run/tampered"
+        staged_record["request"]["target_dir"] = "/target/tampered"
+        staged_record["repository"] = {
+            "branch": "other",
+            "head": "3" * 40,
+            "tree": "4" * 40,
+            "cwd": "/tmp/tampered-repository",
+            "clean": False,
+            "tree_manifest_sha256": "5" * 64,
+            "index_pre": {"kind": "tampered"},
+            "index_post": {"kind": "post"},
+        }
         runner._rewrite_retained_json_artifact(
             staged_authority["partial_fd"],
             staged_artifacts["provenance.json"],
             staged_record,
+        )
+        merged_without_stage_mount = runner._read_authenticated_staged_provenance(
+            staged_authority,
+            original_record,
+        )
+        self.assertIsNone(
+            merged_without_stage_mount["request"]["launcher"][
+                "stage_a_argv_sha256"
+            ]
+        )
+        staged_with_stage_mount = json.loads(json.dumps(staged_record))
+        staged_with_stage_mount["mounts"]["stage_a"] = {
+            "argv_template_sha256": original_record["request"]["launcher"][
+                "stage_a_argv_template_sha256"
+            ],
+            "argv_sha256": original_record["request"]["launcher"][
+                "stage_a_argv_sha256"
+            ],
+            "user_namespace": True,
+            "mount_namespace": True,
+            "pid_namespace": True,
+            "json_status_fd": True,
+            "as_pid_1": False,
+            "builtin_pid1_fail_safe_only": True,
+            "uid_map": runner.CANONICAL_STAGE_A_UID_MAP,
+            "gid_map": runner.CANONICAL_STAGE_A_GID_MAP,
+            "private_propagation": True,
+            "die_with_parent": True,
+            "completed": False,
+            "unmounted": False,
+        }
+        runner._rewrite_retained_json_artifact(
+            staged_authority["partial_fd"],
+            staged_artifacts["provenance.json"],
+            staged_with_stage_mount,
         )
         merged = runner._read_authenticated_staged_provenance(
             staged_authority,
@@ -5463,6 +6522,42 @@ class CanonicalShellWallRunnerTests(unittest.TestCase):
         self.assertEqual(
             merged["request"]["launcher"]["stage_a_argv_sha256"],
             "1" * 64,
+        )
+        self.assertEqual(
+            merged["request"]["launcher"]["host_argv_sha256"],
+            "2" * 64,
+        )
+        self.assertEqual(merged["request"]["command"], ["cargo", "test"])
+        self.assertEqual(
+            merged["request"]["environment_contract"][
+                "inherited_entry_count"
+            ],
+            7,
+        )
+        self.assertEqual(merged["request"]["tmpdir"], "/tmp/original")
+        self.assertEqual(
+            merged["request"]["xdg_runtime_dir"],
+            "/run/original",
+        )
+        self.assertEqual(merged["request"]["target_dir"], "/target/original")
+        self.assertEqual(
+            merged["request"]["launcher"]["bubblewrap_version"],
+            "bubblewrap 0.11.0",
+        )
+        self.assertTrue(merged["request"]["launcher"]["direct_array_spawn"])
+        self.assertEqual(merged["repository"]["branch"], "main")
+        self.assertTrue(merged["repository"]["clean"])
+        self.assertEqual(
+            merged["repository"]["tree_manifest_sha256"],
+            "2" * 64,
+        )
+        self.assertEqual(
+            merged["repository"]["index_pre"],
+            {"kind": "original"},
+        )
+        self.assertEqual(
+            merged["repository"]["index_post"],
+            {"kind": "post"},
         )
         self.assertEqual(merged["namespace"]["stage_a_bwrap_pid"], 123)
         self.assertEqual(
@@ -5553,6 +6648,8 @@ class CanonicalShellWallRunnerTests(unittest.TestCase):
                 "underlying_pre": authority["backing_identity"].as_dict(),
             }
         )
+        record["request"]["launcher"]["stage_a_argv_sha256"] = "1" * 64
+        record["request"]["launcher"]["stage_b_argv_sha256"] = "2" * 64
         final = runner._finalize_ineligible(
             authority,
             record,
@@ -5562,6 +6659,13 @@ class CanonicalShellWallRunnerTests(unittest.TestCase):
         self.assertFalse(os.path.exists(authority["backing_path"]))
         final_record = self.read_final_provenance(final)
         self.assert_ineligible(final_record, "invocation_authority_invalid")
+        self.assertIsNone(
+            final_record["request"]["launcher"]["stage_a_argv_sha256"]
+        )
+        self.assertIsNone(
+            final_record["request"]["launcher"]["stage_b_argv_sha256"]
+        )
+        runner._validate_provenance_record(final_record)
         retained_authority = runner.prepare_backing_root(
             parent,
             "retained-cleanup-failure",
@@ -6784,12 +7888,16 @@ class CanonicalShellWallRunnerTests(unittest.TestCase):
         )
         record["request"]["launcher"].update(
             {
+                "authority_commit_oid": "1" * 40,
+                "reviewed_authority_commit_oid": "1" * 40,
+                "authority_commit_matches_live_head": False,
                 "host_argv_sha256": "0" * 64,
                 "stage_a_argv_sha256": "0" * 64,
                 "stage_b_argv_sha256": "0" * 64,
                 "authority_commit_trailers_verified": True,
             }
         )
+        record["repository"]["head"] = "2" * 40
         record["namespace"].update(
             {
                 "stage_a_bwrap_pid": 2,
@@ -6836,7 +7944,6 @@ class CanonicalShellWallRunnerTests(unittest.TestCase):
             }
         )
         stage_common = {
-            "argv_template_sha256": "0" * 64,
             "argv_sha256": "0" * 64,
             "user_namespace": True,
             "mount_namespace": True,
@@ -6874,6 +7981,9 @@ class CanonicalShellWallRunnerTests(unittest.TestCase):
                 },
                 "stage_a": {
                     **stage_common,
+                    "argv_template_sha256": record["request"]["launcher"][
+                        "stage_a_argv_template_sha256"
+                    ],
                     "uid_map": runner.CANONICAL_STAGE_A_UID_MAP,
                     "gid_map": runner.CANONICAL_STAGE_A_GID_MAP,
                     "as_pid_1": False,
@@ -6881,6 +7991,9 @@ class CanonicalShellWallRunnerTests(unittest.TestCase):
                 },
                 "stage_b": {
                     **stage_common,
+                    "argv_template_sha256": record["request"]["launcher"][
+                        "stage_b_argv_template_sha256"
+                    ],
                     "uid_map": runner.CANONICAL_STAGE_B_UID_MAP,
                     "gid_map": runner.CANONICAL_STAGE_B_GID_MAP,
                     "as_pid_1": True,
@@ -6960,6 +8073,17 @@ class CanonicalShellWallRunnerTests(unittest.TestCase):
         self.assertTrue(os.path.isdir(parent))
         self.assertTrue(os.path.isdir(final))
         self.assertFalse(os.path.exists(authority["backing_path"]))
+        finalized_record = self.read_final_provenance(final)
+        self.assertEqual(
+            finalized_record["request"]["launcher"]["authority_commit_oid"],
+            "1" * 40,
+        )
+        self.assertFalse(
+            finalized_record["request"]["launcher"][
+                "authority_commit_matches_live_head"
+            ]
+        )
+        self.assertEqual(finalized_record["repository"]["head"], "2" * 40)
         with open(
             os.path.join(final, "manifest.sha256"),
             "rt",
@@ -7854,8 +8978,46 @@ class CanonicalShellWallRunnerTests(unittest.TestCase):
     def test_host_controller_bootstrap_commit_templates_and_slots_avoid_self_reference(
         self,
     ) -> None:
-        self.assertEqual(len(SELF_TEST_INVENTORY), 99)
-        self.assertEqual(len({row["id"] for row in SELF_TEST_INVENTORY}), 99)
+        self.assertEqual(
+            runner._template_slots(runner.HOST_INVOCATION_ARGV_TEMPLATE_V1),
+            {
+                "{MODE}",
+                "{LABEL}",
+                "{TIMEOUT_DECIMAL}",
+                "{EVIDENCE_PARENT}",
+                "{EXPECTED_HEAD}",
+                "{AUTHORITY_COMMIT_OID}",
+                "{REVIEWED_AUTHORITY_COMMIT_OID}",
+            },
+        )
+        with self.assertRaises(runner.RunnerError) as partial_slot:
+            runner._template_slots(("prefix-{EXPECTED_HEAD}",))
+        self.assertEqual(partial_slot.exception.reason, "internal_invariant_failed")
+        with self.assertRaises(runner.RunnerError) as duplicate_slot:
+            runner._template_slots(("{EXPECTED_HEAD}", "{EXPECTED_HEAD}"))
+        self.assertEqual(
+            duplicate_slot.exception.reason,
+            "internal_invariant_failed",
+        )
+        with self.assertRaises(runner.RunnerError) as mismatch:
+            runner._substitute_template(
+                runner.HOST_INVOCATION_ARGV_TEMPLATE_V1,
+                {
+                    "BOOTSTRAP_V2_SOURCE": runner.BOOTSTRAP_V2_SOURCE,
+                    "MODE": "parallel",
+                    "LABEL": "slot-test",
+                    "TIMEOUT_DECIMAL": "1",
+                    "EVIDENCE_PARENT": "/tmp",
+                    "EXPECTED_HEAD": "0" * 40,
+                    "AUTHORITY_COMMIT_OID": "1" * 40,
+                },
+            )
+        self.assertEqual(
+            mismatch.exception.reason,
+            "internal_invariant_failed",
+        )
+        self.assertEqual(len(SELF_TEST_INVENTORY), 101)
+        self.assertEqual(len({row["id"] for row in SELF_TEST_INVENTORY}), 101)
         self.assertEqual(
             tuple(row["id"] for row in SELF_TEST_INVENTORY),
             SELF_TEST_IDS,
@@ -7877,7 +9039,7 @@ class CanonicalShellWallRunnerTests(unittest.TestCase):
                 "root-authority": 14,
                 "containment": 20,
                 "cli-diagnostics": 6,
-                "repository": 9,
+                "repository": 11,
                 "invocation-tcb": 11,
                 "snapshots-environment": 11,
                 "evidence": 5,
