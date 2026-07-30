@@ -12,7 +12,7 @@ This prompt is self-contained and does not depend on a skill installed on this p
 DISPATCH IDENTITY
 
 - orchestration_id: `substrate-r2-3`
-- dispatch_nonce: `7632a5d31088592dc6f358758872399ecb1f52229cfd8590e7f80ba809462330`
+- dispatch_nonce: `b237a0ec5343358e48dc9d70ef549456ea4bb03f2508c22be29cd390a062be09`
 - meta_thread_id: `019fa3f7-c447-7132-9126-82e2cf38bd9d`
 - meta_host_id: `remote-ssh-discovered:spenser-linux-codex`
 - evidence_id: `R2-3Z/MAC-EVIDENCE`
@@ -27,8 +27,8 @@ SOURCE BINDING
 
 - remote: `origin`
 - target ref: `refs/heads/feat/internal-host-orchestrator-world-dispatch-bootstrap`
-- commit: `58462482126609ad87e59b896f5d22437461d144`
-- tree: `131cb88fcd22cf739eac5c29a2d6e7d3dded43f0`
+- commit: `3a6490ff391453535168491b3f8d26adf9e20938`
+- tree: `fca816eaed26407ea89d352c7a087a201391bd49`
 - saved project path: `/Users/spensermcconnell/__Active_Code/atomize-hq/substrate`
 - project ID: `local-b2016f8a311fef93149e42eaec4d704d`
 - project host ID: `local`
@@ -118,8 +118,10 @@ Create and validate a `codex.top-level-evidence-receipt.v1` receipt with:
 - `prohibited_actions_confirmed: true`; and
 - `checkout_unchanged: true`.
 
-Validate it with
-`orchestration/r2-3/skill/orchestrate-top-level-tasks/scripts/validate_evidence_receipt.py`.
+Recover the exact receipt validator and its `protocol_json.py` dependency read-only from meta
+commit `8cd9d85748f817d6749fe79bcc907a15b8f18182` using `git show`, writing both only to a
+temporary directory outside the checkout. Validate the receipt with that temporary validator.
+Do not treat the meta ref as product source and do not write either validator into the checkout.
 If any native prerequisite or proof is missing, send a blocked evidence receipt instead; never
 substitute static evidence.
 
