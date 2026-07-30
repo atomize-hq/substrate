@@ -1,0 +1,817 @@
+{
+  "schema_version": 1,
+  "planned_count": 19,
+  "cases": [
+    {
+      "case_id": "P7-01",
+      "title": "typed semantic-goal-drift positive",
+      "implemented": false,
+      "fixture_dir": "p7-01",
+      "adapter_classes": [
+        "CurrentNativeV2"
+      ],
+      "event_variants": [
+        "session_meta",
+        "turn_context",
+        "custom_tool_call",
+        "custom_tool_call_output"
+      ],
+      "logical_source_files": [
+        "raw/root.jsonl"
+      ],
+      "selected_direct_closure": [
+        "session-p7-01-root"
+      ],
+      "semantic_family": "semantic_positive",
+      "contract_families": [
+        "native_identity",
+        "typed_shape",
+        "semantic_positive",
+        "public_live"
+      ],
+      "parity_mode": "current_native_only",
+      "parity_group": null,
+      "terminal_boundary": "public-live checkpoint",
+      "diagnostic_owners": [
+        "scoring",
+        "public-live"
+      ],
+      "expected": {
+        "signal": "semantic_goal_drift",
+        "state": "active",
+        "flagged": true,
+        "raw_score": 80,
+        "public_trigger": "checkpoint_ready"
+      },
+      "historical_references": [
+        "crates/agent-drift-analyzer/tests/fixtures/semantic_goal_drift_acceptance/synthetic-rolling-mid-session-pivot/expected.json"
+      ]
+    },
+    {
+      "case_id": "P7-02",
+      "title": "positive Legacy and CurrentNativeV2 parity",
+      "implemented": false,
+      "fixture_dir": "p7-02",
+      "adapter_classes": [
+        "Legacy",
+        "CurrentNativeV2"
+      ],
+      "event_variants": [
+        "legacy_event",
+        "session_meta",
+        "turn_context",
+        "custom_tool_call",
+        "custom_tool_call_output"
+      ],
+      "logical_source_files": [
+        "legacy/root.jsonl",
+        "current-native/root.jsonl"
+      ],
+      "selected_direct_closure": [
+        "session-p7-02-legacy",
+        "session-p7-02-native"
+      ],
+      "semantic_family": "semantic_positive_parity",
+      "contract_families": [
+        "compatibility",
+        "semantic_positive"
+      ],
+      "parity_mode": "equivalent",
+      "parity_group": "positive-pivot",
+      "terminal_boundary": "canonical projection",
+      "diagnostic_owners": [
+        "parity-comparison"
+      ],
+      "expected": {
+        "signal": "semantic_goal_drift",
+        "state": "active",
+        "flagged": true,
+        "raw_score": 80,
+        "parity": "equal"
+      },
+      "historical_references": [
+        "crates/agent-drift-analyzer/tests/fixtures/semantic_goal_drift_acceptance/synthetic-rolling-mid-session-pivot/expected.json"
+      ]
+    },
+    {
+      "case_id": "P7-03",
+      "title": "semantic alignment control",
+      "implemented": false,
+      "fixture_dir": "p7-03",
+      "adapter_classes": [
+        "CurrentNativeV2"
+      ],
+      "event_variants": [
+        "session_meta",
+        "turn_context",
+        "message",
+        "custom_tool_call",
+        "custom_tool_call_output"
+      ],
+      "logical_source_files": [
+        "raw/root.jsonl"
+      ],
+      "selected_direct_closure": [
+        "session-p7-03-root"
+      ],
+      "semantic_family": "semantic_alignment",
+      "contract_families": [
+        "semantic_conservative"
+      ],
+      "parity_mode": "current_native_only",
+      "parity_group": null,
+      "terminal_boundary": "analyzer scoring",
+      "diagnostic_owners": [
+        "scoring"
+      ],
+      "expected": {
+        "signal": "semantic_goal_drift",
+        "state": "cleared",
+        "flagged": false,
+        "raw_score": 0,
+        "claim": "NoClaim"
+      },
+      "historical_references": [
+        "crates/agent-drift-analyzer/tests/fixtures/semantic_goal_drift_acceptance/synthetic-kickoff-line-suffix-same-file/expected.json"
+      ]
+    },
+    {
+      "case_id": "P7-04",
+      "title": "path narrowing and progression control",
+      "implemented": false,
+      "fixture_dir": "p7-04",
+      "adapter_classes": [
+        "CurrentNativeV2"
+      ],
+      "event_variants": [
+        "session_meta",
+        "turn_context",
+        "message",
+        "custom_tool_call",
+        "custom_tool_call_output"
+      ],
+      "logical_source_files": [
+        "raw/root.jsonl"
+      ],
+      "selected_direct_closure": [
+        "session-p7-04-root"
+      ],
+      "semantic_family": "path_progression",
+      "contract_families": [
+        "semantic_conservative",
+        "path_identity",
+        "progress"
+      ],
+      "parity_mode": "current_native_only",
+      "parity_group": null,
+      "terminal_boundary": "analyzer scoring",
+      "diagnostic_owners": [
+        "progress",
+        "scoring"
+      ],
+      "expected": {
+        "signal": "semantic_goal_drift",
+        "state": "cleared",
+        "flagged": false,
+        "raw_score": 0,
+        "relation": "narrowing",
+        "claim": "NoClaim"
+      },
+      "historical_references": [
+        "crates/agent-drift-analyzer/tests/fixtures/semantic_goal_drift_acceptance/synthetic-rolling-directory-to-file-narrowing/expected.json"
+      ]
+    },
+    {
+      "case_id": "P7-05",
+      "title": "sanctioned replan conservative control",
+      "implemented": false,
+      "fixture_dir": "p7-05",
+      "adapter_classes": [
+        "CurrentNativeV2"
+      ],
+      "event_variants": [
+        "session_meta",
+        "turn_context",
+        "message"
+      ],
+      "logical_source_files": [
+        "raw/root.jsonl"
+      ],
+      "selected_direct_closure": [
+        "session-p7-05-root"
+      ],
+      "semantic_family": "sanctioned_replan",
+      "contract_families": [
+        "semantic_conservative",
+        "authority"
+      ],
+      "parity_mode": "current_native_only",
+      "parity_group": null,
+      "terminal_boundary": "analyzer scoring",
+      "diagnostic_owners": [
+        "scoring"
+      ],
+      "expected": {
+        "signal": "semantic_goal_drift",
+        "state": "cleared",
+        "flagged": false,
+        "raw_score": 0,
+        "suppression": "sanctioned_replan",
+        "claim": "NoClaim"
+      },
+      "historical_references": [
+        "crates/agent-drift-analyzer/tests/semantic_goal_drift_acceptance.rs"
+      ]
+    },
+    {
+      "case_id": "P7-06",
+      "title": "zero-test execution control",
+      "implemented": false,
+      "fixture_dir": "p7-06",
+      "adapter_classes": [
+        "CurrentNativeV2"
+      ],
+      "event_variants": [
+        "session_meta",
+        "turn_context",
+        "custom_tool_call",
+        "custom_tool_call_output"
+      ],
+      "logical_source_files": [
+        "raw/root.jsonl"
+      ],
+      "selected_direct_closure": [
+        "session-p7-06-root"
+      ],
+      "semantic_family": "zero_test_execution",
+      "contract_families": [
+        "verification_execution",
+        "progress"
+      ],
+      "parity_mode": "current_native_only",
+      "parity_group": null,
+      "terminal_boundary": "analyzer scoring",
+      "diagnostic_owners": [
+        "progress",
+        "scoring"
+      ],
+      "expected": {
+        "claim": "NoClaim",
+        "forbidden_signals": [
+          "verification_clean",
+          "failure_frontier_advanced"
+        ],
+        "tests_executed": 0
+      },
+      "historical_references": [
+        "crates/agent-drift-analyzer/tests/fixtures/progress_acceptance/adapted-zero-verifier-097d97e914ca220f/expected.json"
+      ]
+    },
+    {
+      "case_id": "P7-07",
+      "title": "directive path non-authority control",
+      "implemented": false,
+      "fixture_dir": "p7-07",
+      "adapter_classes": [
+        "CurrentNativeV2"
+      ],
+      "event_variants": [
+        "session_meta",
+        "turn_context",
+        "message"
+      ],
+      "logical_source_files": [
+        "raw/root.jsonl"
+      ],
+      "selected_direct_closure": [
+        "session-p7-07-root"
+      ],
+      "semantic_family": "directive_path_authority",
+      "contract_families": [
+        "path_authority",
+        "semantic_conservative"
+      ],
+      "parity_mode": "current_native_only",
+      "parity_group": null,
+      "terminal_boundary": "analyzer scoring",
+      "diagnostic_owners": [
+        "objective-path-extraction"
+      ],
+      "expected": {
+        "directive_authoritative": false,
+        "signal": "semantic_goal_drift",
+        "state": "active",
+        "flagged": true,
+        "working_set": [
+          "docs/target.md"
+        ]
+      },
+      "historical_references": [
+        "crates/agent-drift-analyzer/tests/semantic_goal_drift_acceptance.rs"
+      ]
+    },
+    {
+      "case_id": "P7-08",
+      "title": "lexical collision positive",
+      "implemented": false,
+      "fixture_dir": "p7-08",
+      "adapter_classes": [
+        "CurrentNativeV2"
+      ],
+      "event_variants": [
+        "session_meta",
+        "turn_context",
+        "message",
+        "custom_tool_call"
+      ],
+      "logical_source_files": [
+        "raw/root.jsonl"
+      ],
+      "selected_direct_closure": [
+        "session-p7-08-root"
+      ],
+      "semantic_family": "lexical_path_collision",
+      "contract_families": [
+        "lexical_path_identity",
+        "semantic_positive"
+      ],
+      "parity_mode": "current_native_only",
+      "parity_group": null,
+      "terminal_boundary": "analyzer scoring",
+      "diagnostic_owners": [
+        "path-identity",
+        "scoring"
+      ],
+      "expected": {
+        "signal": "semantic_goal_drift",
+        "state": "active",
+        "flagged": true,
+        "raw_score": 80,
+        "path_relation": "unrelated"
+      },
+      "historical_references": [
+        "crates/agent-drift-analyzer/tests/fixtures/semantic_goal_drift_acceptance/synthetic-kickoff-hyphen-collision-pivot/expected.json"
+      ]
+    },
+    {
+      "case_id": "P7-09",
+      "title": "unrelated-session evidence isolation",
+      "implemented": false,
+      "fixture_dir": "p7-09",
+      "adapter_classes": [
+        "CurrentNativeV2"
+      ],
+      "event_variants": [
+        "session_meta",
+        "turn_context",
+        "message"
+      ],
+      "logical_source_files": [
+        "raw/root.jsonl"
+      ],
+      "selected_direct_closure": [
+        "session-p7-09-root"
+      ],
+      "semantic_family": "session_isolation",
+      "contract_families": [
+        "session_isolation",
+        "direct_closure",
+        "public_live"
+      ],
+      "parity_mode": "current_native_only",
+      "parity_group": null,
+      "terminal_boundary": "public-live checkpoint",
+      "diagnostic_owners": [
+        "direct-closure",
+        "scoring"
+      ],
+      "expected": {
+        "selected_sessions": [
+          "session-p7-09-root"
+        ],
+        "excluded_sessions": [
+          "session-p7-09-unrelated"
+        ],
+        "public_trigger": "checkpoint_ready"
+      },
+      "historical_references": [
+        "crates/agent-drift-sentinel/tests/real_session_live.rs"
+      ]
+    },
+    {
+      "case_id": "P7-10",
+      "title": "typed delegation linkage survives composition",
+      "implemented": false,
+      "fixture_dir": "p7-10",
+      "adapter_classes": [
+        "CurrentNativeV2"
+      ],
+      "event_variants": [
+        "session_meta",
+        "turn_context",
+        "custom_tool_call",
+        "custom_tool_call_output",
+        "sub_agent_activity",
+        "agent_message"
+      ],
+      "logical_source_files": [
+        "raw/root.jsonl"
+      ],
+      "selected_direct_closure": [
+        "session-p7-10-root"
+      ],
+      "semantic_family": "delegation",
+      "contract_families": [
+        "delegation",
+        "native_identity",
+        "typed_shape",
+        "direct_closure"
+      ],
+      "parity_mode": "current_native_only",
+      "parity_group": null,
+      "terminal_boundary": "analyzer delegation semantics",
+      "diagnostic_owners": [
+        "ingest",
+        "closure",
+        "export",
+        "delegation-semantics"
+      ],
+      "expected": {
+        "topology": "delegating_parent",
+        "child_visibility": "linked",
+        "link_state": "verified",
+        "transitive_sessions": []
+      },
+      "historical_references": [
+        "crates/agent-drift-analyzer/tests/fixtures/delegated_acceptance/matrix.json"
+      ]
+    },
+    {
+      "case_id": "P7-11",
+      "title": "registered metadata-only child",
+      "implemented": false,
+      "fixture_dir": "p7-11",
+      "adapter_classes": [
+        "CurrentNativeV2"
+      ],
+      "event_variants": [
+        "session_meta",
+        "turn_context",
+        "custom_tool_call",
+        "custom_tool_call_output"
+      ],
+      "logical_source_files": [
+        "raw/root.jsonl"
+      ],
+      "selected_direct_closure": [
+        "session-p7-11-root"
+      ],
+      "semantic_family": "metadata_only_child",
+      "contract_families": [
+        "delegation",
+        "analyzer_input"
+      ],
+      "parity_mode": "current_native_only",
+      "parity_group": null,
+      "terminal_boundary": "analyzer input",
+      "diagnostic_owners": [
+        "export",
+        "analyzer-input"
+      ],
+      "expected": {
+        "accepted": true,
+        "child_rows": 0,
+        "link_state": "verified"
+      },
+      "historical_references": [
+        "crates/agent-session-compactor/tests/export_bundle.rs"
+      ]
+    },
+    {
+      "case_id": "P7-12",
+      "title": "missing verified child",
+      "implemented": false,
+      "fixture_dir": "p7-12",
+      "adapter_classes": [
+        "BundleV0_2"
+      ],
+      "event_variants": [
+        "manifest",
+        "verified_link"
+      ],
+      "logical_source_files": [
+        "bundle/manifest.json"
+      ],
+      "selected_direct_closure": [
+        "bundle-v0.2"
+      ],
+      "semantic_family": "missing_verified_child",
+      "contract_families": [
+        "delegation",
+        "analyzer_input"
+      ],
+      "parity_mode": "not_applicable",
+      "parity_group": null,
+      "terminal_boundary": "analyzer input",
+      "diagnostic_owners": [
+        "analyzer-input"
+      ],
+      "expected": {
+        "accepted": false,
+        "error": "MissingVerifiedSession"
+      },
+      "historical_references": [
+        "crates/agent-drift-analyzer/tests/input_contract.rs"
+      ]
+    },
+    {
+      "case_id": "P7-13",
+      "title": "malformed unrelated source",
+      "implemented": false,
+      "fixture_dir": "p7-13",
+      "adapter_classes": [
+        "CurrentNativeV2"
+      ],
+      "event_variants": [
+        "session_meta",
+        "malformed_response_item"
+      ],
+      "logical_source_files": [
+        "raw/root.jsonl"
+      ],
+      "selected_direct_closure": [
+        "session-p7-13-root"
+      ],
+      "semantic_family": "malformed_unrelated",
+      "contract_families": [
+        "direct_closure",
+        "closure_malformed"
+      ],
+      "parity_mode": "current_native_only",
+      "parity_group": null,
+      "terminal_boundary": "closure selection",
+      "diagnostic_owners": [
+        "closure-selection"
+      ],
+      "expected": {
+        "selected_pipeline": "success",
+        "malformed_source_selected": false
+      },
+      "historical_references": [
+        "crates/agent-session-compactor/tests/bounded_closure.rs"
+      ]
+    },
+    {
+      "case_id": "P7-14",
+      "title": "malformed selected source",
+      "implemented": false,
+      "fixture_dir": "p7-14",
+      "adapter_classes": [
+        "CurrentNativeV2"
+      ],
+      "event_variants": [
+        "session_meta",
+        "malformed_response_item"
+      ],
+      "logical_source_files": [
+        "raw/root.jsonl"
+      ],
+      "selected_direct_closure": [
+        "session-p7-14-root"
+      ],
+      "semantic_family": "malformed_selected",
+      "contract_families": [
+        "direct_closure",
+        "closure_malformed"
+      ],
+      "parity_mode": "current_native_only",
+      "parity_group": null,
+      "terminal_boundary": "closure verification",
+      "diagnostic_owners": [
+        "closure-verification"
+      ],
+      "expected": {
+        "selected_pipeline": "rejected",
+        "error": "SelectedArtifactInvalid"
+      },
+      "historical_references": [
+        "crates/agent-session-compactor/tests/bounded_closure.rs"
+      ]
+    },
+    {
+      "case_id": "P7-15",
+      "title": "incomplete bundle-v0.2",
+      "implemented": false,
+      "fixture_dir": "p7-15",
+      "adapter_classes": [
+        "BundleV0_2"
+      ],
+      "event_variants": [
+        "manifest"
+      ],
+      "logical_source_files": [
+        "bundle/manifest.json"
+      ],
+      "selected_direct_closure": [
+        "bundle-v0.2"
+      ],
+      "semantic_family": "incomplete_bundle",
+      "contract_families": [
+        "analyzer_malformed"
+      ],
+      "parity_mode": "not_applicable",
+      "parity_group": null,
+      "terminal_boundary": "analyzer input",
+      "diagnostic_owners": [
+        "analyzer-input"
+      ],
+      "expected": {
+        "accepted": false,
+        "error": "MissingArtifact"
+      },
+      "historical_references": [
+        "crates/agent-drift-analyzer/tests/input_contract.rs"
+      ]
+    },
+    {
+      "case_id": "P7-16",
+      "title": "invalid public-live event",
+      "implemented": false,
+      "fixture_dir": "p7-16",
+      "adapter_classes": [
+        "PublicLive"
+      ],
+      "event_variants": [
+        "checkpoint_ready"
+      ],
+      "logical_source_files": [
+        "live-event.json"
+      ],
+      "selected_direct_closure": [
+        "public-live-event"
+      ],
+      "semantic_family": "invalid_public_live",
+      "contract_families": [
+        "public_live"
+      ],
+      "parity_mode": "not_applicable",
+      "parity_group": null,
+      "terminal_boundary": "public-live validation",
+      "diagnostic_owners": [
+        "public-live-validation"
+      ],
+      "expected": {
+        "accepted": false,
+        "error": "MissingCheckpointPayload",
+        "state_mutated": false
+      },
+      "historical_references": [
+        "crates/agent-drift-sentinel/tests/live_event_shape.rs"
+      ]
+    },
+    {
+      "case_id": "P7-17",
+      "title": "aligned Legacy and CurrentNativeV2 parity",
+      "implemented": false,
+      "fixture_dir": "p7-17",
+      "adapter_classes": [
+        "Legacy",
+        "CurrentNativeV2"
+      ],
+      "event_variants": [
+        "legacy_event",
+        "session_meta",
+        "turn_context",
+        "message"
+      ],
+      "logical_source_files": [
+        "legacy/root.jsonl",
+        "current-native/root.jsonl"
+      ],
+      "selected_direct_closure": [
+        "session-p7-17-legacy",
+        "session-p7-17-native"
+      ],
+      "semantic_family": "semantic_alignment_parity",
+      "contract_families": [
+        "compatibility",
+        "semantic_conservative"
+      ],
+      "parity_mode": "equivalent",
+      "parity_group": "aligned-objective",
+      "terminal_boundary": "canonical projection",
+      "diagnostic_owners": [
+        "parity-comparison"
+      ],
+      "expected": {
+        "signal": "semantic_goal_drift",
+        "state": "cleared",
+        "flagged": false,
+        "raw_score": 0,
+        "parity": "equal"
+      },
+      "historical_references": [
+        "crates/agent-drift-analyzer/tests/fixtures/semantic_goal_drift_acceptance/synthetic-rolling-directory-to-file-narrowing/expected.json"
+      ]
+    },
+    {
+      "case_id": "P7-18",
+      "title": "zero-test Legacy and CurrentNativeV2 parity",
+      "implemented": false,
+      "fixture_dir": "p7-18",
+      "adapter_classes": [
+        "Legacy",
+        "CurrentNativeV2"
+      ],
+      "event_variants": [
+        "legacy_event",
+        "session_meta",
+        "turn_context",
+        "custom_tool_call",
+        "custom_tool_call_output"
+      ],
+      "logical_source_files": [
+        "legacy/root.jsonl",
+        "current-native/root.jsonl"
+      ],
+      "selected_direct_closure": [
+        "session-p7-18-legacy",
+        "session-p7-18-native"
+      ],
+      "semantic_family": "zero_test_parity",
+      "contract_families": [
+        "compatibility",
+        "verification_execution",
+        "progress"
+      ],
+      "parity_mode": "equivalent",
+      "parity_group": "zero-test",
+      "terminal_boundary": "canonical projection",
+      "diagnostic_owners": [
+        "parity-comparison",
+        "progress"
+      ],
+      "expected": {
+        "claim": "NoClaim",
+        "forbidden_signals": [
+          "verification_clean",
+          "failure_frontier_advanced"
+        ],
+        "parity": "equal"
+      },
+      "historical_references": [
+        "crates/agent-drift-analyzer/tests/fixtures/progress_acceptance/adapted-zero-verifier-097d97e914ca220f/expected.json"
+      ]
+    },
+    {
+      "case_id": "P7-19",
+      "title": "typed-output determinism stress",
+      "implemented": false,
+      "fixture_dir": "p7-19",
+      "adapter_classes": [
+        "CurrentNativeV2"
+      ],
+      "event_variants": [
+        "session_meta",
+        "turn_context",
+        "custom_tool_call",
+        "custom_tool_call_output"
+      ],
+      "logical_source_files": [
+        "raw/root.jsonl"
+      ],
+      "selected_direct_closure": [
+        "session-p7-19-root"
+      ],
+      "semantic_family": "typed_output_determinism",
+      "contract_families": [
+        "native_identity",
+        "typed_shape",
+        "determinism"
+      ],
+      "parity_mode": "current_native_only",
+      "parity_group": null,
+      "terminal_boundary": "canonical projection",
+      "diagnostic_owners": [
+        "ingest",
+        "canonical-projection"
+      ],
+      "expected": {
+        "typed_segment_types": [
+          "input_text",
+          "input_image",
+          "input_text"
+        ],
+        "typed_segment_order": [
+          0,
+          1,
+          2
+        ],
+        "varied_runs_equal": true
+      },
+      "historical_references": [
+        "crates/agent-session-compactor/tests/current_native_adapter.rs"
+      ]
+    }
+  ]
+}

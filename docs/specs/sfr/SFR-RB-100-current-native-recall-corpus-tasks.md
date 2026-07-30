@@ -75,10 +75,10 @@ fixture surface. No task authorizes a production source edit.
 
 ### Task P7-1.1 — Create the P7 matrix and harness skeleton
 
-- [ ] Add the dedicated Sentinel integration target and fixture root.
-- [ ] Define matrix parsing, case IDs, adapter class, parity mode, terminal boundary, diagnostic
+- [x] Add the dedicated Sentinel integration target and fixture root.
+- [x] Define matrix parsing, case IDs, adapter class, parity mode, terminal boundary, diagnostic
       owners, exact expectations, and historical references.
-- [ ] Fail closed on missing, duplicate, extra, or unknown cases.
+- [x] Fail closed on missing, duplicate, extra, or unknown cases.
 - **Acceptance:** the harness compiles; all nineteen planned case IDs are declared; an internal
   negative mutation or synthetic skeleton inventory proves missing, duplicate, extra, and unknown
   inventory produces a case-specific failure without leaving the tracked P7 target intentionally
