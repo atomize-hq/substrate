@@ -2069,3 +2069,51 @@ fn p7_16_invalid_public_live_event_does_not_mutate_runtime() {
     assert_eq!(expected["state_mutated"], false);
     assert_eq!(expected["accepted"], false);
 }
+
+#[test]
+fn p7_17_aligned_legacy_current_native_parity() {
+    let matrix = load_matrix().expect("load P7 matrix");
+    let case = matrix
+        .cases
+        .iter()
+        .find(|case| case.case_id == "P7-17")
+        .expect("P7-17 matrix entry");
+
+    assert!(case.implemented, "P7-17 must be implemented before it runs");
+
+    let case_root = fixture_root().join(&case.fixture_dir);
+    let expected: Value = serde_json::from_str(
+        &fs::read_to_string(case_root.join("expected.json")).expect("read P7-17 expected"),
+    )
+    .expect("parse P7-17 expected");
+    let legacy =
+        run_single_source_pipeline(&case_root.join("legacy/root.jsonl"), "session-p7-17-legacy");
+    let current_native = run_single_source_pipeline(
+        &case_root.join("current-native/root.jsonl"),
+        "session-p7-17-native",
+    );
+    assert_eq!(legacy.format, RolloutFormat::Legacy);
+    assert_eq!(current_native.format, RolloutFormat::CurrentNativeV2);
+
+    let legacy_projection = canonical_semantic_projection(&legacy.result, "session-p7-17-legacy");
+    let current_native_projection =
+        canonical_semantic_projection(&current_native.result, "session-p7-17-native");
+    assert_eq!(
+        legacy_projection, current_native_projection,
+        "P7-17 aligned canonical projections must match exactly"
+    );
+    let final_projection = current_native_projection
+        .as_array()
+        .and_then(|checkpoints| checkpoints.last())
+        .expect("P7-17 final canonical checkpoint");
+    assert_eq!(
+        final_projection["target_display"],
+        expected["final_target_display"]
+    );
+    assert_eq!(
+        final_projection["semantic_goal_drift"],
+        expected["semantic_goal_drift"]
+    );
+    assert_eq!(expected["canonical_projection"], "equal");
+    assert_eq!(expected["claim"], "NoClaim");
+}

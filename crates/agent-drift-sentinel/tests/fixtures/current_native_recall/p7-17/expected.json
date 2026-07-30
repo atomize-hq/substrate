@@ -1,0 +1,14 @@
+{
+  "case_id": "P7-17",
+  "parity_group": "aligned-objective",
+  "legacy_session_id": "session-p7-17-legacy",
+  "current_native_session_id": "session-p7-17-native",
+  "final_target_display": "docs/specs/p7/aligned.md",
+  "semantic_goal_drift": {
+    "state": "cleared",
+    "flagged": false,
+    "raw_score": 0
+  },
+  "canonical_projection": "equal",
+  "claim": "NoClaim"
+}

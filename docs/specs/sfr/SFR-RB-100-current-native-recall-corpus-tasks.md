@@ -301,7 +301,7 @@ Each task runs the P7 target. After every third case, also run the frozen semant
 
 ### Task P7-4.3 — P7-17 aligned Legacy/CurrentNativeV2 parity
 
-- [ ] Express equivalent aligned legacy and `CurrentNativeV2` raw streams.
+- [x] Express equivalent aligned legacy and `CurrentNativeV2` raw streams.
 - **Acceptance:** canonical semantic projections match exactly and remain conservative.
 - **Verification:** P7 target.
 - **Dependencies:** P7-4.2.

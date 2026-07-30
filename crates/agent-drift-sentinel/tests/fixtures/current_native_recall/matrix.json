@@ -772,7 +772,7 @@
     {
       "case_id": "P7-17",
       "title": "aligned Legacy and CurrentNativeV2 parity",
-      "implemented": false,
+      "implemented": true,
       "fixture_dir": "p7-17",
       "adapter_classes": [
         "Legacy",
@@ -781,6 +781,7 @@
       "event_variants": [
         "legacy_event",
         "session_meta",
+        "task_started",
         "turn_context",
         "message"
       ],
@@ -808,7 +809,8 @@
         "state": "cleared",
         "flagged": false,
         "raw_score": 0,
-        "parity": "equal"
+        "parity": "equal",
+        "claim": "NoClaim"
       },
       "historical_references": [
         "crates/agent-drift-analyzer/tests/fixtures/semantic_goal_drift_acceptance/synthetic-rolling-directory-to-file-narrowing/expected.json"
