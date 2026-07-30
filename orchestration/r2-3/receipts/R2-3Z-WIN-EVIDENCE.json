@@ -1,0 +1,41 @@
+{
+  "protocol": "codex.top-level-evidence-receipt.v1",
+  "orchestration_id": "substrate-r2-3",
+  "dispatch_nonce": "3b62deaa75285e963505d0bc87db8757d2fe76f86615ee408448b15cab0467e6",
+  "evidence_id": "R2-3Z/WIN-EVIDENCE",
+  "status": "EVIDENCE_CLEAN",
+  "platform": "windows",
+  "evidence_task": {
+    "thread_id": "019fb098-6d91-79d1-a343-5f599a6f2f0f",
+    "host_id": "remote-control:env_e_6a3d9cd24b5483238ba55b699a98be35"
+  },
+  "source": {
+    "commit": "3a6490ff391453535168491b3f8d26adf9e20938",
+    "tree": "fca816eaed26407ea89d352c7a087a201391bd49",
+    "target_ref": "refs/heads/feat/internal-host-orchestrator-world-dispatch-bootstrap",
+    "live_remote": "3a6490ff391453535168491b3f8d26adf9e20938"
+  },
+  "environment": {
+    "host_id": "remote-control:env_e_6a3d9cd24b5483238ba55b699a98be35",
+    "project_id": "e5022d35-561c-4fa5-a5db-2cca9aef4e63",
+    "project_path": "C:/Users/spmcc/Documents/__Project_Code/substrate-r2-3",
+    "os_version": "Windows 10 Home 25H2 build 26200.7462 x64; PowerShell 7.6.4",
+    "tool_versions": {
+      "pwsh": "PowerShell 7.6.4",
+      "wsl": "WSL version: 2.7.11.0; Kernel version: 6.1.18.3-2; WSLg version: 1.0.73.2; MSRDC version: 1.2.7214; Direct3D version: 1.611.1-81528511; DXCore version: 10.0.26100.1-240331-1435.ge-release; Windows version: 10.0.26200.7462",
+      "git": "git version 2.46.0.windows.1",
+      "cargo": "cargo 1.89.0 (c24e10642 2025-06-23)",
+      "rustc": "rustc 1.89.0 (29483883e 2025-08-04)"
+    }
+  },
+  "evidence": {
+    "artifact_path": "C:\\Users\\spmcc\\AppData\\Local\\Temp\\substrate-r2-3-win-evidence-d8c2e800cf34471c8ff9b6b446876fcc\\R2-3Z-WIN-EVIDENCE-artifact.json",
+    "artifact_sha256": "sha256:462da5d640ec38772645d28dc8dff798c3840d92362b7972e4bf6e73d77ca82e",
+    "gates": [
+      "R2-DIAG-01",
+      "R2-MAP-WIN-01"
+    ]
+  },
+  "prohibited_actions_confirmed": true,
+  "checkout_unchanged": true
+}
