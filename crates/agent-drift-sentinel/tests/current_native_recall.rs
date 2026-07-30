@@ -1361,3 +1361,124 @@ fn p7_08_lexical_collision_preserves_real_pivot() {
     }
     assert_eq!(expected["path_relation"], "unrelated");
 }
+
+#[test]
+fn p7_09_unrelated_session_is_excluded_from_public_live() {
+    let matrix = load_matrix().expect("load P7 matrix");
+    let case = matrix
+        .cases
+        .iter()
+        .find(|case| case.case_id == "P7-09")
+        .expect("P7-09 matrix entry");
+
+    assert!(case.implemented, "P7-09 must be implemented before it runs");
+
+    let case_root = fixture_root().join(&case.fixture_dir);
+    let expected: Value = serde_json::from_str(
+        &fs::read_to_string(case_root.join("expected.json")).expect("read P7-09 expected"),
+    )
+    .expect("parse P7-09 expected");
+    let run_live = |include_unrelated: bool| {
+        let temp_dir = tempfile::TempDir::new().expect("P7-09 temp dir");
+        let temp_root = Utf8Path::from_path(temp_dir.path()).expect("P7-09 UTF-8 temp root");
+        let codex_home = temp_root.join(".codex");
+        let rollout_dir = codex_home.join("sessions/2026/07/29");
+        fs::create_dir_all(&rollout_dir).expect("create P7-09 rollout directory");
+        fs::copy(
+            case_root.join("raw/root.jsonl"),
+            rollout_dir.join("rollout-session-p7-09-root.jsonl"),
+        )
+        .expect("materialize P7-09 selected source");
+        if include_unrelated {
+            fs::copy(
+                case_root.join("raw/unrelated.jsonl"),
+                rollout_dir.join("rollout-session-p7-09-unrelated.jsonl"),
+            )
+            .expect("materialize P7-09 unrelated source");
+        }
+
+        let state_dir = temp_root.join("state");
+        let mut coordinator = LiveSessionCoordinator::new(
+            LiveSessionRequest {
+                codex_home: Some(codex_home),
+                session_id: "session-p7-09-root".to_string(),
+                state_dir: state_dir.clone(),
+            },
+            SchedulerPolicy::default(),
+            WarningPolicy::default(),
+        )
+        .expect("create P7-09 live coordinator");
+        let poll = coordinator.poll_once().expect("run P7-09 public-live path");
+        assert!(poll.reran_pipeline);
+        let observation = poll.observations.last().expect("P7-09 public observation");
+        let checkpoint = observation
+            .event
+            .checkpoint
+            .as_ref()
+            .expect("P7-09 public checkpoint");
+        let semantic = checkpoint
+            .drift_scores
+            .iter()
+            .find(|score| score.class == DriftClass::SemanticGoalDrift)
+            .expect("P7-09 semantic score");
+        assert_eq!(
+            observation.event.trigger,
+            TriggerClass::CheckpointReady,
+            "P7-09 public observation must remain checkpoint-owned"
+        );
+        let public_projection = serde_json::json!({
+            "trigger": "checkpoint_ready",
+            "target_display": checkpoint
+                .structured_objective
+                .as_ref()
+                .and_then(|objective| objective.target.as_ref())
+                .map(|target| target.display.as_str()),
+            "semantic_goal_drift": {
+                "state": semantic.state,
+                "flagged": semantic.flagged,
+                "raw_score": semantic.raw_score,
+            },
+        });
+        let manifest: Value = serde_json::from_str(
+            &fs::read_to_string(state_dir.join("compactor/manifest.json"))
+                .expect("read P7-09 manifest"),
+        )
+        .expect("parse P7-09 manifest");
+        let compact_rows = fs::read_to_string(state_dir.join("compactor/rows.compact.jsonl"))
+            .expect("read P7-09 compact rows");
+        (manifest, public_projection, compact_rows)
+    };
+
+    let (selected_manifest, selected_projection, _) = run_live(false);
+    let (isolated_manifest, isolated_projection, isolated_rows) = run_live(true);
+    assert_eq!(
+        selected_manifest["session_ids"],
+        expected["selected_sessions"]
+    );
+    assert_eq!(
+        isolated_manifest["session_ids"],
+        expected["selected_sessions"]
+    );
+    assert_eq!(
+        selected_projection, isolated_projection,
+        "unrelated rollout evidence must not alter the public-live result"
+    );
+    assert_eq!(isolated_projection["trigger"], expected["public_trigger"]);
+    assert_eq!(
+        isolated_projection["target_display"],
+        expected["final_target_display"]
+    );
+    assert_eq!(
+        isolated_projection["semantic_goal_drift"],
+        expected["semantic_goal_drift"]
+    );
+    for excluded in expected["excluded_sessions"]
+        .as_array()
+        .expect("P7-09 excluded sessions")
+    {
+        assert!(
+            !isolated_rows.contains(excluded.as_str().expect("P7-09 excluded session")),
+            "P7-09 unrelated session residue reached compact rows"
+        );
+    }
+}

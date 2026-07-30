@@ -214,7 +214,7 @@ Each task runs the P7 target. After every third case, also run the frozen semant
 
 ### Task P7-3.1 — P7-09 unrelated-session isolation
 
-- [ ] Place semantically tempting evidence in an unrelated rollout outside selected closure.
+- [x] Place semantically tempting evidence in an unrelated rollout outside selected closure.
 - **Acceptance:** unrelated evidence cannot affect selected bundle, score, or public observation; the
   manifest contains only selected session IDs.
 - **Verification:** P7 target plus `real_session_live`.

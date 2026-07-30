@@ -1,0 +1,17 @@
+{
+  "case_id": "P7-09",
+  "session_id": "session-p7-09-root",
+  "selected_sessions": [
+    "session-p7-09-root"
+  ],
+  "excluded_sessions": [
+    "session-p7-09-unrelated"
+  ],
+  "public_trigger": "checkpoint_ready",
+  "final_target_display": "docs/specs/p7/selected.md",
+  "semantic_goal_drift": {
+    "state": "cleared",
+    "flagged": false,
+    "raw_score": 0
+  }
+}

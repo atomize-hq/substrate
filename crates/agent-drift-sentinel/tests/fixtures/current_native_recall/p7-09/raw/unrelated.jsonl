@@ -1,0 +1,7 @@
+{"timestamp":"2026-07-29T19:10:00Z","type":"session_meta","payload":{"session_id":"session-p7-09-unrelated","id":"session-p7-09-unrelated","multi_agent_version":"v2"}}
+{"timestamp":"2026-07-29T19:10:01Z","type":"event_msg","payload":{"type":"task_started","turn_id":"turn-p7-09-unrelated-one"}}
+{"timestamp":"2026-07-29T19:10:02Z","type":"turn_context","payload":{"turn_id":"turn-p7-09-unrelated-one","user_instructions":"Unrelated evidence must stay isolated"}}
+{"timestamp":"2026-07-29T19:10:03Z","type":"response_item","payload":{"type":"message","role":"user","content":[{"type":"input_text","text":"/goal Update docs/specs/p7/selected.md only."}],"internal_chat_message_metadata_passthrough":{"turn_id":"turn-p7-09-unrelated-one"}}}
+{"timestamp":"2026-07-29T19:10:04Z","type":"event_msg","payload":{"type":"task_started","turn_id":"turn-p7-09-unrelated-two"}}
+{"timestamp":"2026-07-29T19:10:05Z","type":"turn_context","payload":{"turn_id":"turn-p7-09-unrelated-two","user_instructions":"This pivot belongs to another rollout"}}
+{"timestamp":"2026-07-29T19:10:06Z","type":"response_item","payload":{"type":"message","role":"user","content":[{"type":"input_text","text":"/goal Replace crates/unrelated/src/lib.rs only."}],"internal_chat_message_metadata_passthrough":{"turn_id":"turn-p7-09-unrelated-two"}}}

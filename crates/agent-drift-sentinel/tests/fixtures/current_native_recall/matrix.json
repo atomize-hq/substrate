@@ -408,18 +408,20 @@
     {
       "case_id": "P7-09",
       "title": "unrelated-session evidence isolation",
-      "implemented": false,
+      "implemented": true,
       "fixture_dir": "p7-09",
       "adapter_classes": [
         "CurrentNativeV2"
       ],
       "event_variants": [
         "session_meta",
+        "task_started",
         "turn_context",
         "message"
       ],
       "logical_source_files": [
-        "raw/root.jsonl"
+        "raw/root.jsonl",
+        "raw/unrelated.jsonl"
       ],
       "selected_direct_closure": [
         "session-p7-09-root"
@@ -444,7 +446,12 @@
         "excluded_sessions": [
           "session-p7-09-unrelated"
         ],
-        "public_trigger": "checkpoint_ready"
+        "public_trigger": "checkpoint_ready",
+        "semantic_goal_drift": {
+          "state": "cleared",
+          "flagged": false,
+          "raw_score": 0
+        }
       },
       "historical_references": [
         "crates/agent-drift-sentinel/tests/real_session_live.rs"
