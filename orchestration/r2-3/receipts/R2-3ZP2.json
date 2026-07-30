@@ -1,0 +1,122 @@
+{
+  "canonical_wall": {
+    "counts": {
+      "discovered": 1309,
+      "failed": 45,
+      "ignored": 0,
+      "passed": 1264
+    },
+    "failure_names_sha256": "b23bb59ad12833d2c1d37c19c54933cd6bcb1c75e0dab8a70179b9881372be70",
+    "signatures_sha256": "33c686a6ec9f3a0a4f51e1fca976445e6804da12fbbff50312a03f0042cdfac3"
+  },
+  "changed_files": [
+    "llm-last-mile/runtime-refactor/02-seam-crosswalk.md",
+    "llm-last-mile/runtime-refactor/04-contracts-and-gates.md",
+    "llm-last-mile/runtime-refactor/05-debug-regression-ledger.md",
+    "scripts/ci/canonical_shell_wall_runner.py",
+    "scripts/ci/test_canonical_shell_wall_runner.py"
+  ],
+  "dispatch_nonce": "72cbb6196cad4b5d69c24f74c4b2b56f68438862113ed11f95f06d27c1c92704",
+  "expected_base": {
+    "commit": "3a6490ff391453535168491b3f8d26adf9e20938",
+    "required_ancestor": "0f1e147fb735791b44a65099a65167cbdc1803af",
+    "tree": "fca816eaed26407ea89d352c7a087a201391bd49"
+  },
+  "finding_disposition": {
+    "closed": [
+      "R2-3ZP2-P2-001",
+      "R2-3ZP2-P2-002",
+      "R2-3ZP2-P2-003",
+      "R2-3ZP2-P2-004",
+      "R2-3ZP2-P2-005",
+      "R2-3ZP2-P2-006",
+      "R2-3ZP2-P3-001",
+      "R2-3ZP2-P4-001"
+    ],
+    "open": []
+  },
+  "gitnexus": {
+    "affected_count": 0,
+    "changed_count": 129,
+    "changed_files": 5,
+    "detect_changes_scope": "all",
+    "risk_level": "low",
+    "targeted_impact_analysis": "symbol lookup undercovered; source-derived blast radius reviewed before edits"
+  },
+  "increment": "R2-3ZP2",
+  "increment_task": {
+    "host_id": "remote-ssh-discovered:spenser-linux-codex",
+    "thread_id": "019fb3cc-f883-7930-b76c-5ec031997f95"
+  },
+  "landed": {
+    "commit": "ec05167bd7bcb7be874af48fe33d6edb71492516",
+    "live_remote": "ec05167bd7bcb7be874af48fe33d6edb71492516",
+    "target_ref": "refs/heads/feat/internal-host-orchestrator-world-dispatch-bootstrap",
+    "tree": "b0d399cfb09655d5ff61d47ec68408e52ba5cfec"
+  },
+  "meta_task": {
+    "host_id": "remote-ssh-discovered:spenser-linux-codex",
+    "thread_id": "019fa3f7-c447-7132-9126-82e2cf38bd9d"
+  },
+  "next_increment": "R2-3ZR1",
+  "orchestration_id": "substrate-r2-3",
+  "p1_trailers": {
+    "P1-Bootstrap-Bytes": "34196",
+    "P1-Bootstrap-SHA256": "7db3b59e78c40303cd2f665fe6a9e506fbb95aece21774fafad2bd466d556b90",
+    "P1-Host-Argv-Template-SHA256": "9c2fa5afb0c67ce5af88fe14c845a63d04fb26f6ea9100f5fa54a9c51b70b2c5",
+    "P1-Stage-A-Argv-Template-SHA256": "2b7ab6eb650dec7fa499787c18d746d1c4f9ecb5d91b1d0e20a7051e176fce22",
+    "P1-Stage-B-Argv-Template-SHA256": "0594686d4c23549b400ebae0de7898c4ea540c970a136101521a717535b7e31e"
+  },
+  "proof": {
+    "authority_commit": "ec05167bd7bcb7be874af48fe33d6edb71492516",
+    "authority_self_test": {
+      "failed": 0,
+      "run": 101,
+      "schema": "substrate.canonical_shell_wall_runner_selftest.v1",
+      "status": "clean"
+    },
+    "descendant_commit": "39dbfa773f6ab24efb055e98a2b7e3ea6ba0e340",
+    "descendant_self_test": {
+      "failed": 0,
+      "run": 101,
+      "schema": "substrate.canonical_shell_wall_runner_selftest.v1",
+      "status": "clean"
+    },
+    "identity": "disposable-full-non-worktree-checkout",
+    "repo": "/home/spenser/.local/state/r2-3zp2-proof-rvmrk1wb/repo",
+    "root": "/home/spenser/.local/state/r2-3zp2-proof-rvmrk1wb"
+  },
+  "protocol": "codex.top-level-task-receipt.v1",
+  "review": {
+    "diff_patch_path": "/home/spenser/.codex/visualizations/2026/07/30/019fb3cc-f883-7930-b76c-5ec031997f95/r2-3zp2-review/current-diff.patch",
+    "diff_patch_sha256": "sha256:ca48ee4398aa9ce5712d75299c9316ed9da621172117a1d0f9e9be00d9884fa8",
+    "p1": 0,
+    "p2": 0,
+    "p3_p4_disposition": "all dispositioned",
+    "packet_id": "A1.1d-5R2-3ZP2",
+    "record_path": "/home/spenser/.codex/visualizations/2026/07/30/019fb3cc-f883-7930-b76c-5ec031997f95/r2-3zp2-review/review-cycle-record.json",
+    "record_sha256": "sha256:34c7b660a2c78b9fc100ec819270486c35bcd7ddf95e5e34098a8be80f937821",
+    "subject_manifest_path": "/home/spenser/.codex/visualizations/2026/07/30/019fb3cc-f883-7930-b76c-5ec031997f95/r2-3zp2-review/subject-manifest.txt",
+    "subject_manifest_sha256": "sha256:a2831b5afad5e5854946c41f686f47df316208c180094f566a96c3098c65e470",
+    "terminal": "CLEAN",
+    "validated": true
+  },
+  "status": "LANDED_CLEAN",
+  "subject_fingerprint": "sha256:a2831b5afad5e5854946c41f686f47df316208c180094f566a96c3098c65e470",
+  "verification": {
+    "ahead": 0,
+    "allowlist_passed": true,
+    "authority_proof_clean": true,
+    "authorized_files_only": true,
+    "behind": 0,
+    "canonical_wall_matches_expected": true,
+    "change_detection_passed": true,
+    "checkout_clean": true,
+    "descendant_proof_clean": true,
+    "git_diff_check_clean": true,
+    "py_compile_clean": true,
+    "remote_matches_landed": true,
+    "required_checks_passed": true,
+    "review_record_validated": true
+  }
+}
