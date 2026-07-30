@@ -1,0 +1,30 @@
+{
+  "case_id": "P7-19",
+  "session_id": "session-p7-19-root",
+  "call_id": "call-p7-19-typed",
+  "typed_segment_types": [
+    "input_text",
+    "input_image",
+    "input_text"
+  ],
+  "typed_segment_order": [
+    0,
+    1,
+    2
+  ],
+  "typed_segment_text": [
+    "first typed segment",
+    "{\"detail\":\"low\",\"image_url\":\"data:image/png;base64,cDctMTktc3ludGhldGlj\",\"type\":\"input_image\"}",
+    "second typed segment"
+  ],
+  "selected_sessions": [
+    "session-p7-19-root"
+  ],
+  "varied_runs_equal": true,
+  "excluded_unstable_fields": [
+    "generated_at",
+    "codex_home",
+    "output_dir",
+    "source_file_path"
+  ]
+}

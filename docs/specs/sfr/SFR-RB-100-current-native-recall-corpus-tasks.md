@@ -326,8 +326,8 @@ Each task runs the P7 target. After every third case, also run the frozen semant
 
 ### Task P7-5.1 — P7-19 typed-output determinism stress
 
-- [ ] Add multiple typed output segments whose type/order/turn/call identity must survive.
-- [ ] Run the case under different temporary roots, reversed source creation/discovery order, and
+- [x] Add multiple typed output segments whose type/order/turn/call identity must survive.
+- [x] Run the case under different temporary roots, reversed source creation/discovery order, and
       warm/cold closure state.
 - **Acceptance:** canonical projections are byte-identical across runs; the raw unstable fields are
   explicitly excluded; typed sequence remains exact.

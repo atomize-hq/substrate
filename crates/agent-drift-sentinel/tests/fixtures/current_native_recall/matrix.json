@@ -877,19 +877,22 @@
     {
       "case_id": "P7-19",
       "title": "typed-output determinism stress",
-      "implemented": false,
+      "implemented": true,
       "fixture_dir": "p7-19",
       "adapter_classes": [
         "CurrentNativeV2"
       ],
       "event_variants": [
         "session_meta",
+        "task_started",
         "turn_context",
+        "message",
         "custom_tool_call",
         "custom_tool_call_output"
       ],
       "logical_source_files": [
-        "raw/root.jsonl"
+        "raw/root.jsonl",
+        "raw/unrelated.jsonl"
       ],
       "selected_direct_closure": [
         "session-p7-19-root"
@@ -917,6 +920,9 @@
           0,
           1,
           2
+        ],
+        "selected_sessions": [
+          "session-p7-19-root"
         ],
         "varied_runs_equal": true
       },

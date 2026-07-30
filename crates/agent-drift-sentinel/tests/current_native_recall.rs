@@ -2175,3 +2175,160 @@ fn p7_18_zero_test_legacy_current_native_parity() {
     assert_eq!(expected["canonical_projection"], "equal");
     assert_eq!(expected["claim"], "NoClaim");
 }
+
+fn run_p7_19_variant(case_root: &Utf8Path, reverse_creation: bool, warm_cache: bool) -> Value {
+    let temp_dir = tempfile::TempDir::new().expect("P7-19 temp dir");
+    let temp_root = Utf8Path::from_path(temp_dir.path()).expect("P7-19 UTF-8 temp root");
+    let codex_home = temp_root.join(".codex");
+    let rollout_dir = codex_home.join("sessions/2026/07/30");
+    fs::create_dir_all(&rollout_dir).expect("create P7-19 rollout directory");
+    let mut sources = [
+        ("root", "rollout-session-p7-19-root.jsonl", "raw/root.jsonl"),
+        (
+            "unrelated",
+            "rollout-session-p7-19-unrelated.jsonl",
+            "raw/unrelated.jsonl",
+        ),
+    ];
+    if reverse_creation {
+        sources.reverse();
+    }
+    for (label, destination, source) in sources {
+        fs::copy(case_root.join(source), rollout_dir.join(destination))
+            .unwrap_or_else(|error| panic!("materialize P7-19 {label} source: {error}"));
+    }
+
+    let mut compactor = BoundedClosureCompactor::default();
+    if warm_cache {
+        let prepared = compactor
+            .prepare(&BoundedClosureRequest {
+                codex_home: Some(codex_home.clone()),
+                root_session_id: "session-p7-19-root".to_string(),
+            })
+            .expect("prepare P7-19 warm-up closure");
+        compactor
+            .compact(prepared, &temp_root.join("warm-up"), None)
+            .expect("compact P7-19 warm-up closure");
+    }
+    let prepared = compactor
+        .prepare(&BoundedClosureRequest {
+            codex_home: Some(codex_home),
+            root_session_id: "session-p7-19-root".to_string(),
+        })
+        .expect("prepare P7-19 measured closure");
+    let compactor_dir = temp_root.join("compactor");
+    compactor
+        .compact(prepared, &compactor_dir, None)
+        .expect("compact P7-19 measured closure");
+    let manifest: Value = serde_json::from_str(
+        &fs::read_to_string(compactor_dir.join("manifest.json")).expect("read P7-19 manifest"),
+    )
+    .expect("parse P7-19 manifest");
+    let typed_output_rows = fs::read_to_string(compactor_dir.join("rows.compact.jsonl"))
+        .expect("read P7-19 compact rows")
+        .lines()
+        .map(|line| serde_json::from_str::<Value>(line).expect("parse P7-19 compact row"))
+        .filter(|row| {
+            row["kind"] == "tool_output"
+                && row["dedupe_identity"].as_str().is_some_and(|identity| {
+                    serde_json::from_str::<Value>(identity)
+                        .is_ok_and(|identity| identity["call_id"] == "call-p7-19-typed")
+                })
+        })
+        .map(|row| {
+            serde_json::json!({
+                "source_file_id": row["source_file_id"],
+                "turn_id_ref": row["turn_id_ref"],
+                "event_index": row["event_index"],
+                "row_ordinal": row["row_ordinal"],
+                "dedupe_identity": serde_json::from_str::<Value>(
+                    row["dedupe_identity"].as_str().expect("P7-19 typed identity")
+                )
+                .expect("parse P7-19 typed identity"),
+                "text": row["text"],
+            })
+        })
+        .collect::<Vec<_>>();
+
+    let analyzer_dir = temp_root.join("analyzer");
+    let result = analyze_bundle(&AnalyzeRequest {
+        input_dir: compactor_dir,
+        output_dir: analyzer_dir,
+    })
+    .expect("analyze P7-19 bundle");
+    serde_json::json!({
+        "schema_version": manifest["schema_version"],
+        "session_ids": manifest["session_ids"],
+        "files": manifest["files"]
+            .as_array()
+            .expect("P7-19 file registry")
+            .iter()
+            .map(|file| serde_json::json!({
+                "id": file["id"],
+                "session_id": file["session_id"],
+                "turns": file["turns"],
+            }))
+            .collect::<Vec<_>>(),
+        "typed_output_rows": typed_output_rows,
+        "semantic_projection": canonical_semantic_projection(&result, "session-p7-19-root"),
+    })
+}
+
+#[test]
+fn p7_19_typed_output_is_deterministic_across_varied_runs() {
+    let matrix = load_matrix().expect("load P7 matrix");
+    let case = matrix
+        .cases
+        .iter()
+        .find(|case| case.case_id == "P7-19")
+        .expect("P7-19 matrix entry");
+
+    assert!(case.implemented, "P7-19 must be implemented before it runs");
+
+    let case_root = fixture_root().join(&case.fixture_dir);
+    let expected: Value = serde_json::from_str(
+        &fs::read_to_string(case_root.join("expected.json")).expect("read P7-19 expected"),
+    )
+    .expect("parse P7-19 expected");
+    let cold_forward = run_p7_19_variant(&case_root, false, false);
+    let cold_reverse = run_p7_19_variant(&case_root, true, false);
+    let warm_reverse = run_p7_19_variant(&case_root, true, true);
+    assert_eq!(cold_forward, cold_reverse);
+    assert_eq!(cold_forward, warm_reverse);
+    assert_eq!(cold_forward["session_ids"], expected["selected_sessions"]);
+
+    let typed_rows = cold_forward["typed_output_rows"]
+        .as_array()
+        .expect("P7-19 typed output rows");
+    assert_eq!(
+        typed_rows
+            .iter()
+            .map(|row| row["dedupe_identity"]["segment_type"].clone())
+            .collect::<Vec<_>>(),
+        expected["typed_segment_types"]
+            .as_array()
+            .expect("P7-19 segment types")
+            .clone()
+    );
+    assert_eq!(
+        typed_rows
+            .iter()
+            .map(|row| row["dedupe_identity"]["segment_index"].clone())
+            .collect::<Vec<_>>(),
+        expected["typed_segment_order"]
+            .as_array()
+            .expect("P7-19 segment order")
+            .clone()
+    );
+    assert_eq!(
+        typed_rows
+            .iter()
+            .map(|row| row["text"].clone())
+            .collect::<Vec<_>>(),
+        expected["typed_segment_text"]
+            .as_array()
+            .expect("P7-19 segment text")
+            .clone()
+    );
+    assert_eq!(expected["varied_runs_equal"], true);
+}
