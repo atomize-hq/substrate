@@ -1967,3 +1967,44 @@ fn p7_14_malformed_selected_source_is_rejected() {
     assert_eq!(expected["selected_pipeline"], "rejected");
     assert_eq!(expected["analyzer_started"], false);
 }
+
+#[test]
+fn p7_15_incomplete_bundle_v0_2_is_rejected() {
+    let matrix = load_matrix().expect("load P7 matrix");
+    let case = matrix
+        .cases
+        .iter()
+        .find(|case| case.case_id == "P7-15")
+        .expect("P7-15 matrix entry");
+
+    assert!(case.implemented, "P7-15 must be implemented before it runs");
+
+    let case_root = fixture_root().join(&case.fixture_dir);
+    let expected: Value = serde_json::from_str(
+        &fs::read_to_string(case_root.join("expected.json")).expect("read P7-15 expected"),
+    )
+    .expect("parse P7-15 expected");
+    let manifest: Value = serde_json::from_str(
+        &fs::read_to_string(case_root.join("bundle/manifest.json")).expect("read P7-15 manifest"),
+    )
+    .expect("parse P7-15 manifest");
+    assert_eq!(manifest["schema_version"], expected["bundle_schema"]);
+
+    let error = agent_drift_analyzer::input::load_bundle(&case_root.join("bundle"))
+        .expect_err("P7-15 incomplete bundle-v0.2 must be rejected");
+    match &error {
+        agent_drift_analyzer::InputError::MissingArtifact { path } => {
+            assert_eq!(
+                path.file_name(),
+                Some(
+                    expected["missing_artifact"]
+                        .as_str()
+                        .expect("P7-15 missing artifact")
+                )
+            );
+        }
+        other => panic!("P7-15 wrong analyzer input error: {other}"),
+    }
+    assert_eq!(expected["error_category"], "missing_artifact");
+    assert_eq!(expected["accepted"], false);
+}

@@ -1,0 +1,20 @@
+{
+  "schema_version": "v0.2",
+  "generated_at": "2026-07-30T01:00:00Z",
+  "codex_home": "workspace-p7-15/codex-home",
+  "output_dir": "bundle/output",
+  "discovered_file_count": 1,
+  "archival_row_count": 0,
+  "compact_row_count": 0,
+  "dedupe_group_count": 0,
+  "session_ids": [
+    "session-p7-15-root"
+  ],
+  "files": [
+    {
+      "id": 0,
+      "path": "bundle/rollout-root.jsonl",
+      "session_id": "session-p7-15-root"
+    }
+  ]
+}

@@ -283,7 +283,7 @@ Each task runs the P7 target. After every third case, also run the frozen semant
 
 ### Task P7-4.1 — P7-15 incomplete bundle-v0.2
 
-- [ ] Construct the smallest intentionally incomplete analyzer-facing bundle.
+- [x] Construct the smallest intentionally incomplete analyzer-facing bundle.
 - **Acceptance:** `load_bundle` returns the selected exact `InputError`; the case is called
   bundle-v0.2, never a v2 rollout fixture.
 - **Verification:** P7 target plus `input_contract`.

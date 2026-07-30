@@ -1,0 +1,7 @@
+{
+  "case_id": "P7-15",
+  "bundle_schema": "v0.2",
+  "accepted": false,
+  "error_category": "missing_artifact",
+  "missing_artifact": "rows.compact.jsonl"
+}

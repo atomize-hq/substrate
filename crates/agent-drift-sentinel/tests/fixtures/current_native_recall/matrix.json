@@ -698,7 +698,7 @@
     {
       "case_id": "P7-15",
       "title": "incomplete bundle-v0.2",
-      "implemented": false,
+      "implemented": true,
       "fixture_dir": "p7-15",
       "adapter_classes": [
         "BundleV0_2"
@@ -724,7 +724,9 @@
       ],
       "expected": {
         "accepted": false,
-        "error": "MissingArtifact"
+        "error": "MissingArtifact",
+        "bundle_schema": "v0.2",
+        "missing_artifact": "rows.compact.jsonl"
       },
       "historical_references": [
         "crates/agent-drift-analyzer/tests/input_contract.rs"
