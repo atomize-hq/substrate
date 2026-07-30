@@ -493,9 +493,9 @@ Each task runs the P7 target. After every third case, also run the frozen semant
 
 ### Task P7-7.5 — Commit and establish P8 baseline
 
-- [ ] Reconfirm hashes, path boundary, validation ledger, review result, and GitNexus change report.
-- [ ] Stage exactly approved P7 files and create a scoped Conventional Commit.
-- [ ] Verify the worktree is clean and record the commit as P8 baseline.
+- [x] Reconfirm hashes, path boundary, validation ledger, review result, and GitNexus change report.
+- [x] Stage exactly approved P7 files and create a scoped Conventional Commit.
+- [x] Verify the worktree is clean and record the commit as P8 baseline.
 - **Acceptance:** one review-clean P7 commit contains no private data or unrelated changes; push occurs
   only on explicit user direction.
 - **Verification:**
@@ -508,11 +508,11 @@ Each task runs the P7 target. After every third case, also run the frozen semant
 
 ### Checkpoint P7-F — Complete
 
-- [ ] All specification success criteria are proven.
-- [ ] All focused/full/static/private gates are green.
-- [ ] Privacy and whole-wall determinism are machine-proven.
-- [ ] Private selection is non-empty; sufficiently populated quotas are filled; every surfaced
+- [x] All specification success criteria are proven.
+- [x] All focused/full/static/private gates are green.
+- [x] Privacy and whole-wall determinism are machine-proven.
+- [x] Private selection is non-empty; sufficiently populated quotas are filled; every surfaced
       contract-relevant contradiction is classified.
-- [ ] Exact implementation delta is independently review clean.
-- [ ] P7 is committed and the worktree is clean.
-- [ ] P8 baseline is recorded; P8 itself has not started.
+- [x] Exact implementation delta is independently review clean.
+- [x] P7 is committed and the worktree is clean.
+- [x] P8 baseline is recorded; P8 itself has not started.
