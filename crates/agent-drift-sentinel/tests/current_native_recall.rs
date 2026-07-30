@@ -1059,6 +1059,7 @@ fn canonical_semantic_projection(result: &AnalyzeResult, session_id: &str) -> Va
             .checkpoints
             .iter()
             .map(|checkpoint| {
+                let objective = checkpoint.structured_objective.as_ref();
                 let semantic = checkpoint
                     .drift_scores
                     .iter()
@@ -1072,6 +1073,12 @@ fn canonical_semantic_projection(result: &AnalyzeResult, session_id: &str) -> Va
                         .and_then(|objective| objective.target.as_ref())
                         .map(|target| target.display.as_str()),
                     "working_set_paths": checkpoint.task_frame.working_set_paths,
+                    "scorer_eligibility_witness": {
+                        "objective_class": objective.map(|objective| objective.objective_class),
+                        "objective_confidence": objective.map(|objective| objective.confidence),
+                        "unknown_count": objective.map(|objective| objective.unknowns.len()),
+                        "semantic_score_confidence": semantic.confidence,
+                    },
                     "semantic_goal_drift": {
                         "state": semantic.state,
                         "flagged": semantic.flagged,
@@ -1087,6 +1094,32 @@ fn canonical_semantic_projection(result: &AnalyzeResult, session_id: &str) -> Va
             })
             .collect(),
     )
+}
+
+fn assert_scorer_eligible_projection(checkpoint: &Value, label: &str) {
+    let witness = &checkpoint["scorer_eligibility_witness"];
+    assert_eq!(
+        witness["objective_class"], "task_statement",
+        "{label} must expose an eligible task statement: {witness}"
+    );
+    assert!(
+        matches!(
+            witness["objective_confidence"].as_str(),
+            Some("medium" | "high")
+        ),
+        "{label} must expose medium-or-higher objective confidence: {witness}"
+    );
+    assert_eq!(
+        witness["unknown_count"], 0,
+        "{label} must expose an objective without unknowns"
+    );
+    assert!(
+        matches!(
+            witness["semantic_score_confidence"].as_str(),
+            Some("medium" | "high")
+        ),
+        "{label} must prove that semantic scoring passed its eligibility gate: {witness}"
+    );
 }
 
 #[test]
@@ -1108,6 +1141,15 @@ fn p7_03_semantic_alignment_is_conservative() {
     let run = run_single_source_pipeline(&case_root.join("raw/root.jsonl"), "session-p7-03-root");
     assert_eq!(run.format, RolloutFormat::CurrentNativeV2);
     let projection = canonical_semantic_projection(&run.result, "session-p7-03-root");
+    for (index, checkpoint) in projection
+        .as_array()
+        .expect("P7-03 canonical checkpoints")
+        .iter()
+        .filter(|checkpoint| checkpoint["target_display"].is_string())
+        .enumerate()
+    {
+        assert_scorer_eligible_projection(checkpoint, &format!("P7-03 checkpoint {}", index + 1));
+    }
     let trajectory_targets = projection
         .as_array()
         .expect("P7-03 canonical checkpoints")
@@ -1161,6 +1203,15 @@ fn p7_04_path_narrowing_preserves_progress() {
     .expect("parse P7-04 expected");
     let run = run_single_source_pipeline(&case_root.join("raw/root.jsonl"), "session-p7-04-root");
     let projection = canonical_semantic_projection(&run.result, "session-p7-04-root");
+    for (index, checkpoint) in projection
+        .as_array()
+        .expect("P7-04 canonical checkpoints")
+        .iter()
+        .filter(|checkpoint| checkpoint["target_display"].is_string())
+        .enumerate()
+    {
+        assert_scorer_eligible_projection(checkpoint, &format!("P7-04 checkpoint {}", index + 1));
+    }
     let trajectory_targets = projection
         .as_array()
         .expect("P7-04 canonical checkpoints")
@@ -1245,6 +1296,7 @@ fn p7_05_sanctioned_replan_is_suppressed_for_the_declared_reason() {
         .as_array()
         .and_then(|checkpoints| checkpoints.last())
         .expect("P7-05 final canonical checkpoint");
+    assert_scorer_eligible_projection(final_projection, "P7-05 sanctioned checkpoint");
     assert_eq!(
         final_projection["semantic_goal_drift"],
         expected["semantic_goal_drift"]
@@ -1307,6 +1359,12 @@ fn p7_05_sanctioned_replan_is_suppressed_for_the_declared_reason() {
         .as_array()
         .and_then(|checkpoints| checkpoints.last())
         .expect("P7-05 counterfactual final checkpoint");
+    assert_scorer_eligible_projection(counterfactual_final, "P7-05 counterfactual checkpoint");
+    assert_eq!(
+        final_projection["scorer_eligibility_witness"],
+        counterfactual_final["scorer_eligibility_witness"],
+        "removing only the sanction marker must retain the same eligible structured goal"
+    );
     assert_eq!(
         counterfactual_final["target_display"], expected["structured_target_display"],
         "removing only the sanction marker must retain the same eligible pivot"
