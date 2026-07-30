@@ -1,0 +1,17 @@
+{
+  "case_id": "P7-05",
+  "session_id": "session-p7-05-root",
+  "suppression": "sanctioned_replan",
+  "claim": "NoClaim",
+  "semantic_goal_drift": {
+    "state": "cleared",
+    "flagged": false,
+    "raw_score": 0
+  },
+  "semantic_reasons": [],
+  "structured_target_display": "crates/agent-drift-analyzer/src/scoring/mod.rs",
+  "replan_working_set_paths": [
+    "docs/specs/p7/replan-spec.md",
+    "docs/specs/p7/replanned.md"
+  ]
+}

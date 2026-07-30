@@ -208,15 +208,18 @@
     {
       "case_id": "P7-05",
       "title": "sanctioned replan conservative control",
-      "implemented": false,
+      "implemented": true,
       "fixture_dir": "p7-05",
       "adapter_classes": [
         "CurrentNativeV2"
       ],
       "event_variants": [
         "session_meta",
+        "task_started",
         "turn_context",
-        "message"
+        "message",
+        "custom_tool_call",
+        "custom_tool_call_output"
       ],
       "logical_source_files": [
         "raw/root.jsonl"
@@ -236,12 +239,19 @@
         "scoring"
       ],
       "expected": {
-        "signal": "semantic_goal_drift",
-        "state": "cleared",
-        "flagged": false,
-        "raw_score": 0,
         "suppression": "sanctioned_replan",
-        "claim": "NoClaim"
+        "claim": "NoClaim",
+        "semantic_goal_drift": {
+          "state": "cleared",
+          "flagged": false,
+          "raw_score": 0
+        },
+        "structured_target_display": "crates/agent-drift-analyzer/src/scoring/mod.rs",
+        "replan_working_set_paths": [
+          "docs/specs/p7/replan-spec.md",
+          "docs/specs/p7/replanned.md"
+        ],
+        "semantic_reasons": []
       },
       "historical_references": [
         "crates/agent-drift-analyzer/tests/semantic_goal_drift_acceptance.rs"

@@ -1070,3 +1070,70 @@ fn p7_04_path_narrowing_preserves_progress() {
     assert_eq!(expected["relation"], "narrowing");
     assert_eq!(expected["claim"], "NoClaim");
 }
+
+#[test]
+fn p7_05_sanctioned_replan_is_suppressed_for_the_declared_reason() {
+    let matrix = load_matrix().expect("load P7 matrix");
+    let case = matrix
+        .cases
+        .iter()
+        .find(|case| case.case_id == "P7-05")
+        .expect("P7-05 matrix entry");
+
+    assert!(case.implemented, "P7-05 must be implemented before it runs");
+
+    let case_root = fixture_root().join(&case.fixture_dir);
+    let expected: Value = serde_json::from_str(
+        &fs::read_to_string(case_root.join("expected.json")).expect("read P7-05 expected"),
+    )
+    .expect("parse P7-05 expected");
+    let run = run_single_source_pipeline(&case_root.join("raw/root.jsonl"), "session-p7-05-root");
+    let projection = canonical_semantic_projection(&run.result, "session-p7-05-root");
+    let final_projection = projection
+        .as_array()
+        .and_then(|checkpoints| checkpoints.last())
+        .expect("P7-05 final canonical checkpoint");
+    assert_eq!(
+        final_projection["semantic_goal_drift"],
+        expected["semantic_goal_drift"]
+    );
+    assert_eq!(
+        final_projection["target_display"],
+        expected["structured_target_display"]
+    );
+    let working_set_paths = final_projection["working_set_paths"]
+        .as_array()
+        .expect("P7-05 working-set paths");
+    for path in expected["replan_working_set_paths"]
+        .as_array()
+        .expect("P7-05 replan working-set paths")
+    {
+        assert!(
+            working_set_paths.contains(path),
+            "the sanctioned replan path {path:?} must remain visible"
+        );
+    }
+    let compactor_dir = Utf8Path::new(
+        run.manifest["output_dir"]
+            .as_str()
+            .expect("P7-05 compactor output directory"),
+    );
+    let replan_row = fs::read_to_string(compactor_dir.join("rows.compact.jsonl"))
+        .expect("read P7-05 compact rows")
+        .lines()
+        .map(|line| serde_json::from_str::<Value>(line).expect("parse P7-05 compact row"))
+        .find(|row| {
+            row["kind"] == "user_message"
+                && row["text"]
+                    .as_str()
+                    .is_some_and(|text| text.starts_with("Replan:"))
+        })
+        .expect("P7-05 explicit replan row");
+    assert_eq!(replan_row["user_message_role"], "steer");
+    assert_eq!(
+        final_projection["semantic_reasons"],
+        expected["semantic_reasons"]
+    );
+    assert_eq!(expected["suppression"], "sanctioned_replan");
+    assert_eq!(expected["claim"], "NoClaim");
+}

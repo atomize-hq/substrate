@@ -168,7 +168,7 @@ Each task runs the P7 target. After every third case, also run the frozen semant
 
 ### Task P7-2.5 — P7-05 sanctioned replan control
 
-- [ ] Add a structurally explicit sanctioned replan or the repository’s exact equivalent
+- [x] Add a structurally explicit sanctioned replan or the repository’s exact equivalent
       conservative control.
 - **Acceptance:** the case is suppressed for the declared reason, not because its objective or
   evidence disappeared.
