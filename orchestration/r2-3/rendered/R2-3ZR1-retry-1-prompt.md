@@ -1,3 +1,65 @@
+Use $orchestrate-top-level-tasks and every skill required by the increment contract.
+
+ROLE
+
+You are the fresh top-level increment orchestrator for R2-3ZR1. You own this increment only.
+You may use subagents for GitNexus/source analysis, bounded implementation, test/proof execution,
+and independent review. You remain responsible for scope, shared-worktree integration,
+verification, publication, and the terminal receipt.
+
+DISPATCH IDENTITY
+
+- orchestration_id: substrate-r2-3
+- dispatch_nonce: 81dd798cbdb999c8a5b64b4c74cb0e3172a1e1d2ef5d4391015ab75c123c8959
+- meta_thread_id: 019fa3f7-c447-7132-9126-82e2cf38bd9d
+- meta_host_id: remote-ssh-discovered:spenser-linux-codex
+- increment: R2-3ZR1
+- packet_id: A1.1d-5R2-3ZR1
+- next_increment: EVIDENCE:R2-3Z
+
+INCREMENT-TASK IDENTITY BARRIER
+
+Do not edit, delegate, run implementation checks, or publish until the meta orchestrator sends a
+follow-up binding your own real increment-task thread ID and host ID to this dispatch nonce. Echo
+those exact IDs in every terminal receipt.
+
+REPOSITORY BOUNDARY
+
+Work only in the task-assigned checkout:
+
+the fresh retry task-assigned Linux Codex worktree provisioned from the remote-tracking product ref
+
+Never mutate these protected checkouts:
+
+- /home/spenser/__Active_code/substrate
+- /home/spenser/__Active_code/substrate-r2-3
+- /home/spenser/__Active_code/substrate-r2-3-meta-orchestration
+- /home/spenser/.codex/worktrees/0499/substrate-r2-3
+- /home/spenser/.codex/worktrees/b5aa/substrate-r2-3
+- /home/spenser/.codex/worktrees/bb3f/substrate-r2-3
+- C:\Users\spmcc\Documents\__Project_Code\substrate-r2-3
+
+Canonical starting state:
+
+- remote: origin
+- target ref: refs/heads/feat/internal-host-orchestrator-world-dispatch-bootstrap
+- expected base commit: 3a6490ff391453535168491b3f8d26adf9e20938
+- expected base tree: fca816eaed26407ea89d352c7a087a201391bd49
+- required ancestor: 0f1e147fb735791b44a65099a65167cbdc1803af
+
+Before editing, fetch/query the live remote and verify the exact base, tree, ancestry, cleanliness,
+0 ahead/0 behind, and current GitNexus index. If they differ, send BASE_DRIFT or
+BLOCKED_CONTRADICTION. Do not reconcile, merge, rebase, reset, clean, or force-push.
+
+SUBAGENT ORCHESTRATION
+
+Use repository-required model/reasoning settings for every subagent. Complete required pre-edit
+impact analysis before any subagent edits an existing symbol. Give editing subagents mutually
+exclusive ownership when practical. Use fresh read-only subagents for independent review. Do not
+allow a reviewer to review implementation it authored.
+
+INCREMENT CONTRACT
+
 CURRENT AUTHORIZED INCREMENT: A1.1d-5R2-3ZR1
 
 This is the user-authorized bounded repair and reconciliation increment inserted after the
@@ -319,3 +381,33 @@ clean status, explicit non-claims, and `next_increment: EVIDENCE:R2-3Z`.
 
 The send to the meta task is your final tool action. Do not dispatch native evidence, do not begin
 R2-3Z, and do not begin R2-4 or R3.
+
+COMMON TERMINAL CONTRACT
+
+Before publication:
+
+1. Complete every increment-specific check and proof gate.
+2. Verify the exact file/symbol/test allowlist.
+3. Run `gitnexus_detect_changes()` and inspect every affected flow.
+4. Complete and validate the bounded review sequence.
+5. Require zero open blocking findings.
+6. Fetch/query the live target again and require it still equals the expected base.
+
+When authorized by the increment contract, create one atomic commit and perform a normal
+fast-forward push of `HEAD` to refs/heads/feat/internal-host-orchestrator-world-dispatch-bootstrap. Never force-push. Verify the live remote equals the
+landed commit, refresh GitNexus, restore analyzer-only generated count changes if necessary, and
+finish clean.
+
+Send a `codex.top-level-task-receipt.v1` message to the meta task. For success, use
+`LANDED_CLEAN` and include your bound increment-task thread/host IDs, expected base, landed
+commit/tree, changed paths, subject fingerprint, validated review record and digest, finding
+disposition, checks, GitNexus result, clean status, and next increment.
+
+For failure, send the exact blocked status, evidence, required authority or platform, and a
+complete continuation/handoff prompt.
+
+The `send_message_to_thread` call is your final tool action. After it succeeds, make no more tool
+calls or repository changes. Return only the human-readable final report.
+
+Do not generate the next increment prompt and do not begin EVIDENCE:R2-3Z. The meta
+orchestrator owns independent verification and subsequent dispatch.

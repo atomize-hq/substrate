@@ -1,0 +1,22 @@
+{
+  "protocol": "codex.top-level-task-receipt.v1",
+  "orchestration_id": "substrate-r2-3",
+  "dispatch_nonce": "295068221de52f5cd0e3a376b668275682932b36070505cd1ce138cccab6c260",
+  "increment": "R2-3ZR1",
+  "packet_id": "A1.1d-5R2-3ZR1",
+  "status": "BLOCKED_CONTRADICTION",
+  "increment_task": {
+    "thread_id": "019fb0cc-099e-70e1-80c3-160142cb1271",
+    "host_id": "remote-ssh-discovered:spenser-linux-codex"
+  },
+  "expected_base": {
+    "commit": "3a6490ff391453535168491b3f8d26adf9e20938",
+    "tree": "fca816eaed26407ea89d352c7a087a201391bd49"
+  },
+  "blocker": {
+    "summary": "Task-assigned worktree failed the clean-checkout gate before any in-scope execution.",
+    "details": "Verified against the bound checkout /home/spenser/.codex/worktrees/0499/substrate-r2-3 after identity binding. Gates that passed: HEAD=3a6490ff391453535168491b3f8d26adf9e20938, HEAD tree=fca816eaed26407ea89d352c7a087a201391bd49, origin/feat/internal-host-orchestrator-world-dispatch-bootstrap=3a6490ff391453535168491b3f8d26adf9e20938, required ancestor 0f1e147fb735791b44a65099a65167cbdc1803af is present, divergence=0 ahead / 0 behind, and GitNexus was refreshed successfully for this exact worktree. Failing gate: git status --porcelain=v1 reported tracked modifications outside increment authority: \" M AGENTS.md\" and \" M CLAUDE.md\". Because the increment contract requires an exact clean checkout before any implementation, delegation, or proof work, no edits, subagent dispatches, or proof commands were started.",
+    "required_authority": "Provide a clean task-assigned checkout at the same target ref/commit/tree, or explicitly resolve the tracked AGENTS.md and CLAUDE.md modifications outside this increment before redispatch. This increment task will not reconcile, reset, clean, merge, or rebase the checkout.",
+    "handoff_prompt": "Fresh R2-3ZR1 continuation only after the checkout is clean. Bind a fresh increment task to the same contract and nonce-scoped authority pattern, then verify: remote origin, target ref refs/heads/feat/internal-host-orchestrator-world-dispatch-bootstrap, expected commit 3a6490ff391453535168491b3f8d26adf9e20938, expected tree fca816eaed26407ea89d352c7a087a201391bd49, required ancestor 0f1e147fb735791b44a65099a65167cbdc1803af, clean checkout, and 0 ahead / 0 behind. The prior blocked condition was tracked local modifications to AGENTS.md and CLAUDE.md in /home/spenser/.codex/worktrees/0499/substrate-r2-3 while all commit/tree/ref gates otherwise matched. Do not repair that checkout from inside the increment task. If a fresh clean worktree passes preflight, continue the previously delivered full R2-3ZR1 contract unchanged from the pre-edit verification stage."
+  }
+}
