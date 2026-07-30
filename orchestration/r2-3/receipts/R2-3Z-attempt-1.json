@@ -1,0 +1,22 @@
+{
+  "protocol": "codex.top-level-task-receipt.v1",
+  "orchestration_id": "substrate-r2-3",
+  "dispatch_nonce": "05c87ef021e9d63a1a227a1eb168fc11718eb70ce6a7e008b94ac2a9fbc549cd",
+  "increment": "R2-3Z",
+  "status": "BASE_DRIFT",
+  "increment_task": {
+    "thread_id": "019fb0b1-dfca-7ae1-b6f9-292aa880f273",
+    "host_id": "remote-ssh-discovered:spenser-linux-codex"
+  },
+  "expected_base": {
+    "commit": "3a6490ff391453535168491b3f8d26adf9e20938",
+    "tree": "fca816eaed26407ea89d352c7a087a201391bd49"
+  },
+  "blocker": {
+    "summary": "Task checkout does not match the nonce-bound R2-3Z base",
+    "details": "On July 30, 2026, after fetching origin/feat/internal-host-orchestrator-world-dispatch-bootstrap, the live target resolved to commit 3a6490ff391453535168491b3f8d26adf9e20938 with tree fca816eaed26407ea89d352c7a087a201391bd49 as required. This task worktree is detached at commit 58462482126609ad87e59b896f5d22437461d144 with tree 131cb88fcd22cf739eac5c29a2d6e7d3dded43f0. git status --short --branch reported a clean detached HEAD, and git rev-list --left-right --count origin/feat/internal-host-orchestrator-world-dispatch-bootstrap...HEAD returned 1 0, so the checkout is one commit behind the accepted source. The required ancestor 0f1e147fb735791b44a65099a65167cbdc1803af is present, but the exact base/tree gate failed before any delegation, implementation checks, control-pack edits, or publication.",
+    "required_authority": "Meta orchestration or a human must provide a fresh or corrected R2-3Z task worktree whose HEAD exactly equals commit 3a6490ff391453535168491b3f8d26adf9e20938 and tree fca816eaed26407ea89d352c7a087a201391bd49 on refs/heads/feat/internal-host-orchestrator-world-dispatch-bootstrap with 0 ahead and 0 behind divergence. This task must not reconcile, merge, rebase, reset, or otherwise advance the drifted checkout.",
+    "handoff_prompt": "Resume R2-3Z only in a fresh increment task or corrected worktree on host remote-ssh-discovered:spenser-linux-codex, bound to dispatch_nonce 05c87ef021e9d63a1a227a1eb168fc11718eb70ce6a7e008b94ac2a9fbc549cd, with thread/host identity established before execution. The product checkout must have HEAD 3a6490ff391453535168491b3f8d26adf9e20938, tree fca816eaed26407ea89d352c7a087a201391bd49, target ref refs/heads/feat/internal-host-orchestrator-world-dispatch-bootstrap, required ancestor 0f1e147fb735791b44a65099a65167cbdc1803af, a clean worktree, and 0 ahead/0 behind divergence. Re-run the full pre-edit closeout audit from the rendered R2-3Z contract. Do not reuse or repair the current detached checkout at commit 58462482126609ad87e59b896f5d22437461d144."
+  },
+  "next_increment": "COMPLETE"
+}
