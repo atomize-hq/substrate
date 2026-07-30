@@ -1,0 +1,44 @@
+{
+  "protocol": "codex.top-level-evidence-receipt.v1",
+  "orchestration_id": "substrate-r2-3",
+  "dispatch_nonce": "39f0b9cf4937faa378080dc70afdd214ec84c17eb93c8949d3b22be2ceda98be",
+  "evidence_id": "R2-3Z/MAC-EVIDENCE",
+  "status": "EVIDENCE_CLEAN",
+  "platform": "macos",
+  "evidence_task": {
+    "thread_id": "019fb097-9cc7-7c63-b476-df69c102fda2",
+    "host_id": "local"
+  },
+  "source": {
+    "commit": "3a6490ff391453535168491b3f8d26adf9e20938",
+    "tree": "fca816eaed26407ea89d352c7a087a201391bd49",
+    "target_ref": "refs/heads/feat/internal-host-orchestrator-world-dispatch-bootstrap",
+    "live_remote": "3a6490ff391453535168491b3f8d26adf9e20938"
+  },
+  "environment": {
+    "host_id": "local",
+    "project_id": "local-b2016f8a311fef93149e42eaec4d704d",
+    "project_path": "/Users/spensermcconnell/__Active_Code/atomize-hq/substrate",
+    "worktree_path": "/Users/spensermcconnell/.codex/worktrees/9dc8/substrate",
+    "os_version": "macOS 15.7.7 (24G720); Darwin Spensers-MacBook-Pro.local 24.6.0 Darwin Kernel Version 24.6.0: Tue Apr 21 20:18:11 PDT 2026; root:xnu-11417.140.69.710.16~1/RELEASE_ARM64_T6020 arm64",
+    "tool_versions": {
+      "limactl": "limactl version 2.1.1",
+      "jq": "jq-1.7.1-apple",
+      "python3": "Python 3.11.9",
+      "bash": "GNU bash, version 3.2.57(1)-release (arm64-apple-darwin24)",
+      "git": "git version 2.39.5 (Apple Git-154)",
+      "cargo": "cargo 1.89.0 (c24e10642 2025-06-23)",
+      "rustc": "rustc 1.89.0 (29483883e 2025-08-04)"
+    }
+  },
+  "evidence": {
+    "artifact_path": "/Users/spensermcconnell/.codex/visualizations/2026/07/30/019fb097-9cc7-7c63-b476-df69c102fda2/mac-evidence-r2-3z/R2-3Z-MAC-EVIDENCE.artifact.json",
+    "artifact_sha256": "sha256:e3a69bb5719cb21f3abbd244e967fd3f3f92a308a6c5ee937ee1fbec5cee4fe6",
+    "gates": [
+      "R2-DIAG-01",
+      "R2-MAP-MAC-01"
+    ]
+  },
+  "prohibited_actions_confirmed": true,
+  "checkout_unchanged": true
+}

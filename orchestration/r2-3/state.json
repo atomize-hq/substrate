@@ -81,7 +81,24 @@
       }
     }
   ],
-  "verified_evidence": [],
+  "verified_evidence": [
+    {
+      "evidence_id": "R2-3Z/MAC-EVIDENCE",
+      "platform": "macos",
+      "project_id": "local-b2016f8a311fef93149e42eaec4d704d",
+      "project_path": "/Users/spensermcconnell/__Active_Code/atomize-hq/substrate",
+      "receipt_path": "orchestration/r2-3/receipts/R2-3Z-MAC-EVIDENCE.json",
+      "thread_id": "019fb097-9cc7-7c63-b476-df69c102fda2",
+      "host_id": "local",
+      "dispatch_nonce": "39f0b9cf4937faa378080dc70afdd214ec84c17eb93c8949d3b22be2ceda98be",
+      "receipt_sha256": "sha256:a57963fba865f8113c22f83b30b551a011b74d33d58ac833e4465400043d20cf",
+      "source": {
+        "commit": "3a6490ff391453535168491b3f8d26adf9e20938",
+        "tree": "fca816eaed26407ea89d352c7a087a201391bd49",
+        "target_ref": "refs/heads/feat/internal-host-orchestrator-world-dispatch-bootstrap"
+      }
+    }
+  ],
   "completed": [
     {
       "increment": "R2-3A",
