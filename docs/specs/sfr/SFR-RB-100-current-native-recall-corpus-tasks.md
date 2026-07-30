@@ -159,7 +159,7 @@ Each task runs the P7 target. After every third case, also run the frozen semant
 
 ### Task P7-2.4 — P7-04 path narrowing/progression control
 
-- [ ] Add a legitimate directory/file or artifact-family narrowing/progression witness.
+- [x] Add a legitimate directory/file or artifact-family narrowing/progression witness.
 - **Acceptance:** the exact narrowing/progression result stays non-drift and preserves expected
   progress semantics.
 - **Verification:** P7 target.

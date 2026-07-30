@@ -1032,3 +1032,41 @@ fn p7_03_semantic_alignment_is_conservative() {
     );
     assert_eq!(expected["claim"], "NoClaim");
 }
+
+#[test]
+fn p7_04_path_narrowing_preserves_progress() {
+    let matrix = load_matrix().expect("load P7 matrix");
+    let case = matrix
+        .cases
+        .iter()
+        .find(|case| case.case_id == "P7-04")
+        .expect("P7-04 matrix entry");
+
+    assert!(case.implemented, "P7-04 must be implemented before it runs");
+
+    let case_root = fixture_root().join(&case.fixture_dir);
+    let expected: Value = serde_json::from_str(
+        &fs::read_to_string(case_root.join("expected.json")).expect("read P7-04 expected"),
+    )
+    .expect("parse P7-04 expected");
+    let run = run_single_source_pipeline(&case_root.join("raw/root.jsonl"), "session-p7-04-root");
+    let projection = canonical_semantic_projection(&run.result, "session-p7-04-root");
+    let final_projection = projection
+        .as_array()
+        .and_then(|checkpoints| checkpoints.last())
+        .expect("P7-04 final canonical checkpoint");
+    assert_eq!(
+        final_projection["semantic_goal_drift"],
+        expected["semantic_goal_drift"]
+    );
+    assert_eq!(
+        final_projection["target_display"],
+        expected["final_target_display"]
+    );
+    assert_eq!(
+        final_projection["session_progress"],
+        expected["session_progress"]
+    );
+    assert_eq!(expected["relation"], "narrowing");
+    assert_eq!(expected["claim"], "NoClaim");
+}

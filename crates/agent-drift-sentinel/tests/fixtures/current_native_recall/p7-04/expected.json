@@ -1,0 +1,17 @@
+{
+  "case_id": "P7-04",
+  "session_id": "session-p7-04-root",
+  "relation": "narrowing",
+  "claim": "NoClaim",
+  "semantic_goal_drift": {
+    "state": "cleared",
+    "flagged": false,
+    "raw_score": 0
+  },
+  "final_target_display": "docs/specs/p7/narrowed.md",
+  "session_progress": {
+    "status": "insufficient_evidence",
+    "dimension": "planning_convergence",
+    "confidence": "low"
+  }
+}
