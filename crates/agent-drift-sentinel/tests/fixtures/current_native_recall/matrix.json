@@ -109,13 +109,14 @@
     {
       "case_id": "P7-03",
       "title": "semantic alignment control",
-      "implemented": false,
+      "implemented": true,
       "fixture_dir": "p7-03",
       "adapter_classes": [
         "CurrentNativeV2"
       ],
       "event_variants": [
         "session_meta",
+        "task_started",
         "turn_context",
         "message",
         "custom_tool_call",
@@ -142,7 +143,9 @@
         "state": "cleared",
         "flagged": false,
         "raw_score": 0,
-        "claim": "NoClaim"
+        "claim": "NoClaim",
+        "final_target_display": "docs/specs/p7/aligned.md",
+        "semantic_reasons": []
       },
       "historical_references": [
         "crates/agent-drift-analyzer/tests/fixtures/semantic_goal_drift_acceptance/synthetic-kickoff-line-suffix-same-file/expected.json"

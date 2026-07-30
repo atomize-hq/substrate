@@ -994,3 +994,41 @@ fn canonical_semantic_projection(result: &AnalyzeResult, session_id: &str) -> Va
             .collect(),
     )
 }
+
+#[test]
+fn p7_03_semantic_alignment_is_conservative() {
+    let matrix = load_matrix().expect("load P7 matrix");
+    let case = matrix
+        .cases
+        .iter()
+        .find(|case| case.case_id == "P7-03")
+        .expect("P7-03 matrix entry");
+
+    assert!(case.implemented, "P7-03 must be implemented before it runs");
+
+    let case_root = fixture_root().join(&case.fixture_dir);
+    let expected: Value = serde_json::from_str(
+        &fs::read_to_string(case_root.join("expected.json")).expect("read P7-03 expected"),
+    )
+    .expect("parse P7-03 expected");
+    let run = run_single_source_pipeline(&case_root.join("raw/root.jsonl"), "session-p7-03-root");
+    assert_eq!(run.format, RolloutFormat::CurrentNativeV2);
+    let projection = canonical_semantic_projection(&run.result, "session-p7-03-root");
+    let final_projection = projection
+        .as_array()
+        .and_then(|checkpoints| checkpoints.last())
+        .expect("P7-03 final canonical checkpoint");
+    assert_eq!(
+        final_projection["semantic_goal_drift"],
+        expected["semantic_goal_drift"]
+    );
+    assert_eq!(
+        final_projection["target_display"],
+        expected["final_target_display"]
+    );
+    assert_eq!(
+        final_projection["semantic_reasons"], expected["semantic_reasons"],
+        "P7-03 NoClaim must be an exact cleared score with no semantic evidence"
+    );
+    assert_eq!(expected["claim"], "NoClaim");
+}

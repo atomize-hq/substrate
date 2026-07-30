@@ -150,7 +150,7 @@ Each task runs the P7 target. After every third case, also run the frozen semant
 
 ### Task P7-2.3 — P7-03 semantic alignment control
 
-- [ ] Add a current-native aligned-objective case.
+- [x] Add a current-native aligned-objective case.
 - **Acceptance:** exact conservative signal/state/`NoClaim` outcome is pinned; absence of a panic is
   insufficient.
 - **Verification:** P7 target plus frozen semantic/progress walls.
