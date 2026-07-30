@@ -1,0 +1,43 @@
+{
+  "protocol": "codex.top-level-task-receipt.v1",
+  "orchestration_id": "substrate-r2-3",
+  "dispatch_nonce": "f48c1e95710b3f98aee943e2fe1ea85b21f7f5e8204ad9126c0126d72238674f",
+  "increment": "R2-3ZR1",
+  "packet_id": "A1.1d-5R2-3ZR1R1",
+  "status": "BLOCKED_SCOPE_EXPANSION",
+  "increment_task": {
+    "thread_id": "019fb502-1217-7fc2-aeba-c4c5d157c364",
+    "host_id": "remote-ssh-discovered:spenser-linux-codex"
+  },
+  "expected_base": {
+    "commit": "ec05167bd7bcb7be874af48fe33d6edb71492516",
+    "tree": "b0d399cfb09655d5ff61d47ec68408e52ba5cfec"
+  },
+  "subject_fingerprint": "sha256:a2a83917a2e2efa3fa8a01886b98d533c801d598f9c2255e2b5c96b9138355df",
+  "changed_files": [
+    "crates/shell/src/execution/host_inbox_materialization.rs",
+    "crates/world-mac-lima/examples/mac_backend_smoke.rs",
+    "crates/world-mac-lima/src/lib.rs",
+    "llm-last-mile/runtime-refactor/00-README.md",
+    "llm-last-mile/runtime-refactor/02-seam-crosswalk.md",
+    "llm-last-mile/runtime-refactor/03-phase-slice-map.md",
+    "llm-last-mile/runtime-refactor/04-contracts-and-gates.md",
+    "llm-last-mile/runtime-refactor/05-debug-regression-ledger.md"
+  ],
+  "review": {
+    "packet_id": "A1.1d-5R2-3ZR1R1",
+    "record_path": "/tmp/R2-3ZR1R1-review/review-cycle-record.json",
+    "record_sha256": "sha256:13e094baca4dc56b79153d349374dfb9240d6bce5e3ff1d921c2b7bc03515774",
+    "validated": true,
+    "terminal": "BOUNDED_STOP",
+    "p1": 1,
+    "p2": 0,
+    "p3_p4_disposition": "discovery findings remediated inside allowlist; closure blocked by out-of-allowlist macOS smoke caller"
+  },
+  "blocker": {
+    "summary": "Current R2-3ZR1 subject requires an out-of-allowlist macOS smoke caller update.",
+    "details": "Fresh closure review on July 30, 2026 found that crates/world-mac-lima/examples/mac_backend_smoke.rs now correctly requires explicit typed CLI inputs, but scripts/mac/orchestration-smoke.sh still invokes cargo run -p world-mac-lima --example mac_backend_smoke with no arguments (line 83), reachable from scripts/mac/smoke.sh --orchestration-conformance. That makes the reviewed subject regress an existing macOS conformance/smoke path. The blocking caller sits outside the packet allowlist, and this packet explicitly forbids runner/script edits. All allowed-file proofs remain clean, but publication is blocked because landing the typed example contract now requires authority to change the macOS smoke caller or a different explicitly authorized strategy.",
+    "required_authority": "Expand the packet allowlist to cover the macOS smoke caller path (at minimum scripts/mac/orchestration-smoke.sh, and any required companion caller/proof surface such as scripts/mac/smoke.sh) plus the associated proof/update contract, or issue a new bounded authority that preserves the typed example requirement without changing forbidden files.",
+    "handoff_prompt": "Resume R2-3ZR1 from /home/spenser/.codex/worktrees/3b8f/substrate-r2-3 with the current unpublished staged subject fingerprint sha256:a2a83917a2e2efa3fa8a01886b98d533c801d598f9c2255e2b5c96b9138355df and staged tree 23ab6fef27689321458e37b332925b434834978c. Do not commit, push, publish, or mutate protected checkout /home/spenser/.codex/worktrees/e847/substrate-r2-3. The bounded-stop review record is /tmp/R2-3ZR1R1-review/review-cycle-record.json (sha256:13e094baca4dc56b79153d349374dfb9240d6bce5e3ff1d921c2b7bc03515774). Discovery findings were remediated; closure then found a blocking out-of-allowlist caller: scripts/mac/orchestration-smoke.sh:83 still runs cargo run -p world-mac-lima --example mac_backend_smoke with no arguments, reachable from scripts/mac/smoke.sh:967. Under current authority the typed example contract cannot land because the caller fix is forbidden. If new authority expands scope, start with GitNexus/source closure on the macOS smoke caller symbols/scripts, repair only the newly authorized caller surface, rerun the required world-mac-lima and shell proofs, regenerate the staged subject fingerprint, and launch a fresh closure review burst."
+  }
+}

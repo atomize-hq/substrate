@@ -1,7 +1,7 @@
 {
   "protocol": "codex.top-level-orchestration-state.v1",
   "orchestration_id": "substrate-r2-3",
-  "status": "RUNNING",
+  "status": "BLOCKED",
   "dispatch_authorized": true,
   "remote": "origin",
   "target_ref": "refs/heads/feat/internal-host-orchestrator-world-dispatch-bootstrap",
@@ -52,28 +52,16 @@
     "thread_id": "019fa3f7-c447-7132-9126-82e2cf38bd9d",
     "host_id": "remote-ssh-discovered:spenser-linux-codex"
   },
-  "active_dispatch": {
-    "increment": "R2-3ZR1",
+  "active_dispatch": null,
+  "last_diagnostic": {
+    "diagnostic_id": "R2-3ZR1R1",
     "packet_id": "A1.1d-5R2-3ZR1R1",
+    "status": "BLOCKED_SCOPE_EXPANSION",
     "thread_id": "019fb502-1217-7fc2-aeba-c4c5d157c364",
     "host_id": "remote-ssh-discovered:spenser-linux-codex",
     "dispatch_nonce": "f48c1e95710b3f98aee943e2fe1ea85b21f7f5e8204ad9126c0126d72238674f",
-    "expected_base": {
-      "commit": "ec05167bd7bcb7be874af48fe33d6edb71492516",
-      "tree": "b0d399cfb09655d5ff61d47ec68408e52ba5cfec"
-    },
-    "target_ref": "refs/heads/feat/internal-host-orchestrator-world-dispatch-bootstrap",
-    "read_only": false
-  },
-  "last_diagnostic": {
-    "diagnostic_id": "R2-3ZP1",
-    "packet_id": "A1.1d-5R2-3ZP1",
-    "status": "AUTHORITY_REQUIRED",
-    "thread_id": "019fb3ac-2abd-7e90-9510-7d411862ee14",
-    "host_id": "remote-ssh-discovered:spenser-linux-codex",
-    "dispatch_nonce": "a49da6fa0a78421e40a221b5cea5f3290cdb154ceb3ba44faa331588c3e1f75a",
-    "receipt_path": "orchestration/r2-3/receipts/R2-3ZR1-prerequisite-1.json",
-    "artifact_sha256": "sha256:c349dd88767fdb4346ec0483bd609cd51ca9fbd5f9e313332af88d1fd314fff5"
+    "receipt_path": "orchestration/r2-3/receipts/R2-3ZR1-attempt-4.json",
+    "artifact_sha256": "sha256:a2a83917a2e2efa3fa8a01886b98d533c801d598f9c2255e2b5c96b9138355df"
   },
   "active_evidence_dispatches": [],
   "verified_evidence": [],
