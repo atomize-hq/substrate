@@ -1,4 +1,14 @@
-# Active Tasks: R6 Scorer-Context Cutover Closure
+# Active Task Router
+
+Candidate task ledger:
+`docs/specs/sfr/SFR-RB-100-current-native-recall-corpus-tasks.md`
+
+Candidate status: **DRAFT — AWAITING BOUNDED GPT PRO REVIEW AND USER APPROVAL**
+
+Implementation authority: **NONE**. Every P7 implementation checkbox remains open until the exact
+spec/plan/task family is review-reconciled and user-approved.
+
+## Closed Predecessor Projection: R6 Scorer-Context Cutover Closure
 
 Canonical authority:
 `docs/specs/r6/FINDINGS-r6-scorer-context-cutover-closure.md`
