@@ -514,6 +514,19 @@ fn validate_implemented_case_provenance(
                 Some("json") if logical_source.ends_with("manifest.json") => {
                     actual_adapters.insert("BundleV0_2".to_string());
                     actual_variants.insert("manifest".to_string());
+                    let value: Value = serde_json::from_str(
+                        &fs::read_to_string(&source_path)
+                            .map_err(|error| case_error(case, &error.to_string()))?,
+                    )
+                    .map_err(|error| case_error(case, &error.to_string()))?;
+                    if value["delegation_links"]
+                        .as_array()
+                        .into_iter()
+                        .flatten()
+                        .any(|link| link["state"] == "verified")
+                    {
+                        actual_variants.insert("verified_link".to_string());
+                    }
                 }
                 Some("json") if logical_source.ends_with("live-event.json") => {
                     actual_adapters.insert("PublicLive".to_string());
@@ -1761,4 +1774,42 @@ fn p7_11_verified_metadata_only_child_is_accepted() {
         "session-p7-11-child"
     );
     assert_eq!(expected["accepted"], true);
+}
+
+#[test]
+fn p7_12_missing_verified_child_is_rejected() {
+    let matrix = load_matrix().expect("load P7 matrix");
+    let case = matrix
+        .cases
+        .iter()
+        .find(|case| case.case_id == "P7-12")
+        .expect("P7-12 matrix entry");
+
+    assert!(case.implemented, "P7-12 must be implemented before it runs");
+
+    let case_root = fixture_root().join(&case.fixture_dir);
+    let expected: Value = serde_json::from_str(
+        &fs::read_to_string(case_root.join("expected.json")).expect("read P7-12 expected"),
+    )
+    .expect("parse P7-12 expected");
+    let error = agent_drift_analyzer::input::load_bundle(&case_root.join("bundle"))
+        .expect_err("P7-12 missing verified child must be rejected");
+    match &error {
+        agent_drift_analyzer::InputError::VerifiedDelegationSessionMissing {
+            parent_session_id,
+            child_session_id,
+            missing_session_id,
+        } => {
+            assert_eq!(parent_session_id, &expected["parent_session_id"]);
+            assert_eq!(child_session_id, &expected["child_session_id"]);
+            assert_eq!(missing_session_id, &expected["missing_session_id"]);
+        }
+        other => panic!("P7-12 wrong analyzer input error: {other}"),
+    }
+    assert_eq!(error.to_string(), expected["error_message"]);
+    assert_eq!(
+        expected["error_category"],
+        "verified_delegation_session_missing"
+    );
+    assert_eq!(expected["accepted"], false);
 }

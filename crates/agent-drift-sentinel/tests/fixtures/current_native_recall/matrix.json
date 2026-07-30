@@ -573,7 +573,7 @@
     {
       "case_id": "P7-12",
       "title": "missing verified child",
-      "implemented": false,
+      "implemented": true,
       "fixture_dir": "p7-12",
       "adapter_classes": [
         "BundleV0_2"
@@ -601,7 +601,10 @@
       ],
       "expected": {
         "accepted": false,
-        "error": "MissingVerifiedSession"
+        "error": "VerifiedDelegationSessionMissing",
+        "parent_session_id": "session-p7-12-parent",
+        "child_session_id": "session-p7-12-child",
+        "missing_session_id": "session-p7-12-child"
       },
       "historical_references": [
         "crates/agent-drift-analyzer/tests/input_contract.rs"

@@ -1,0 +1,9 @@
+{
+  "case_id": "P7-12",
+  "accepted": false,
+  "error_category": "verified_delegation_session_missing",
+  "parent_session_id": "session-p7-12-parent",
+  "child_session_id": "session-p7-12-child",
+  "missing_session_id": "session-p7-12-child",
+  "error_message": "verified delegation link session-p7-12-parent -> session-p7-12-child references session session-p7-12-child that is not included in the bundle"
+}

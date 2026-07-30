@@ -1,0 +1,29 @@
+{
+  "schema_version": "v0.2",
+  "generated_at": "2026-07-29T22:00:00Z",
+  "codex_home": "workspace-p7-12/codex-home",
+  "output_dir": "bundle/output",
+  "discovered_file_count": 1,
+  "archival_row_count": 0,
+  "compact_row_count": 0,
+  "dedupe_group_count": 0,
+  "session_ids": [
+    "session-p7-12-parent"
+  ],
+  "files": [
+    {
+      "id": 0,
+      "path": "bundle/rollout-parent.jsonl",
+      "session_id": "session-p7-12-parent"
+    }
+  ],
+  "delegation_links": [
+    {
+      "parent_session_id": "session-p7-12-parent",
+      "child_session_id": "session-p7-12-child",
+      "child_origin_parent_session_id": "session-p7-12-parent",
+      "depth": 1,
+      "state": "verified"
+    }
+  ]
+}

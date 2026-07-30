@@ -245,7 +245,7 @@ Each task runs the P7 target. After every third case, also run the frozen semant
 
 ### Task P7-3.4 — P7-12 missing verified child
 
-- [ ] Remove the required child from the registry while preserving the verified link.
+- [x] Remove the required child from the registry while preserving the verified link.
 - **Acceptance:** analyzer rejects the bundle with the selected exact missing-session/input error;
   it is not treated as metadata-only.
 - **Verification:** P7 target plus `input_contract`.
