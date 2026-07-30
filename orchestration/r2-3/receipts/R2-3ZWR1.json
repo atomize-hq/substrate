@@ -1,0 +1,93 @@
+{
+  "protocol": "codex.top-level-task-receipt.v1",
+  "orchestration_id": "substrate-r2-3",
+  "dispatch_nonce": "854781991ce7038d0c81541bd4bf325930e1d83b445f77cfb0f0b9e0bd8f613b",
+  "increment": "R2-3ZWR1",
+  "packet_id": "A1.1d-5R2-3ZWR1",
+  "status": "LANDED_CLEAN",
+  "increment_task": {
+    "thread_id": "019faea7-97f2-79e1-9920-1fafe080ee52",
+    "host_id": "remote-control:env_e_6a3d9cd24b5483238ba55b699a98be35"
+  },
+  "expected_base": {
+    "commit": "58462482126609ad87e59b896f5d22437461d144",
+    "tree": "131cb88fcd22cf739eac5c29a2d6e7d3dded43f0"
+  },
+  "landed": {
+    "commit": "3a6490ff391453535168491b3f8d26adf9e20938",
+    "tree": "fca816eaed26407ea89d352c7a087a201391bd49",
+    "target_ref": "refs/heads/feat/internal-host-orchestrator-world-dispatch-bootstrap",
+    "live_remote": "3a6490ff391453535168491b3f8d26adf9e20938"
+  },
+  "changed_files": [
+    "crates/shell/src/builtins/world_deps/surfaces.rs",
+    "crates/shell/src/builtins/world_enable/runner.rs",
+    "crates/shell/src/execution/agent_runtime/control.rs",
+    "crates/shell/src/execution/agent_runtime/host_session_authority/transition_tests.rs",
+    "crates/shell/src/execution/agent_runtime/state_store.rs",
+    "crates/shell/src/execution/home_bootstrap.rs",
+    "crates/shell/src/execution/host_inbox_materialization.rs",
+    "crates/shell/src/execution/orchestrator_world_dispatch.rs",
+    "crates/shell/src/execution/platform_world/windows.rs",
+    "crates/shell/src/execution/pty/io/types.rs",
+    "crates/shell/src/repl/async_repl.rs",
+    "scripts/windows/prefix-mapping-r2-3.Tests.ps1"
+  ],
+  "subject_fingerprint": "sha256:2b0eee820940ade09dadc291d48f3b4323f699bdc9b2c9ae875b6cdea0ca71b5",
+  "review": {
+    "packet_id": "A1.1d-5R2-3ZWR1",
+    "record_path": "C:\\Users\\spmcc\\.codex\\visualizations\\2026\\07\\29\\019faea7-97f2-79e1-9920-1fafe080ee52\\A1.1d-5R2-3ZWR1-review-cycle.json",
+    "record_sha256": "sha256:2437ce9ba7dc2a61a24ae4f73e5cb4a9224dfd44da59f4db99833ff5cddd1959",
+    "validated": true,
+    "terminal": "CLEAN",
+    "p1": 0,
+    "p2": 0,
+    "p3_p4_disposition": "Discovery review on fingerprint sha256:63bf6dfb09a0d5a27b18dfb2856ec217ba2ecf850be267151b3888049a114b11 recorded the duplicated private WSL defaults as a nonblocking P4; the blocking cross-platform import P1 was remediated, closure reviewers on sha256:2b0eee820940ade09dadc291d48f3b4323f699bdc9b2c9ae875b6cdea0ca71b5 reported zero open P1/P2 and no additional closure P3/P4, and the duplication remained accepted as nonblocking because backend API widening or out-of-allowlist edits were forbidden while exact-value assertions proved equality."
+  },
+  "checks": {
+    "passed": [
+      "Windows Developer Mode registry AllowDevelopmentWithoutDevLicense=1",
+      "PowerShell parser validation for scripts/windows/prefix-mapping-r2-3.Tests.ps1",
+      "pwsh -NoProfile -File scripts/windows/prefix-mapping-r2-3.Tests.ps1 -W2Only",
+      "cargo fmt --all -- --check",
+      "cargo build --locked -p shell --lib",
+      "cargo check --locked -p shell",
+      "cargo test --locked -p shell \"windows_tests::\" -- --nocapture (10 passed, 0 failed)",
+      "git diff --check",
+      "Exact source assertions for repaired private WSL constants",
+      "Frozen-source assertion for scripts/windows/start-forwarder.ps1 release-first/debug-fallback block at blob 8de6e312be52e5b782f2d1598f06f58d9b4730a0"
+    ],
+    "limitations": [
+      "cargo clippy --locked -p shell --all-targets -- -D warnings stopped before shell-subject diagnostics on pre-existing out-of-allowlist warnings in crates/world-windows-wsl/src/backend.rs:631: clippy::map_flatten and clippy::trim_split_whitespace"
+    ]
+  },
+  "gitnexus": {
+    "detect_changes": {
+      "status": "PASS",
+      "risk": "HIGH",
+      "files": 12,
+      "symbols": 29,
+      "affected_flows": 10,
+      "disposition": "All affected flows were inspected and derived from exposing the unchanged WorldWorkReceiptRegistry::bind implementation to test builds; production body and callers were unchanged."
+    },
+    "analyze": {
+      "status": "PASS",
+      "index_status": "up-to-date",
+      "indexed_commit": "3a6490f",
+      "nodes": 35236,
+      "edges": 83699,
+      "clusters": 925,
+      "flows": 300
+    }
+  },
+  "verification": {
+    "required_checks_passed": true,
+    "allowlist_passed": true,
+    "change_detection_passed": true,
+    "checkout_clean": true,
+    "ahead": 0,
+    "behind": 0
+  },
+  "completion_boundary": "R2-3ZWR1 completes only the narrow repair prerequisite needed to rerun native R2-3Z evidence. It does not complete either native evidence gate, R2-3Z, the R2-3 parent packet, or any R3 row.",
+  "next_increment": "EVIDENCE:R2-3Z"
+}
