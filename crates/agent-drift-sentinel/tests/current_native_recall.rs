@@ -3,10 +3,11 @@
 use std::collections::{BTreeMap, BTreeSet};
 use std::fs;
 
-use agent_drift_analyzer::{DriftClass, DriftState};
+use agent_drift_analyzer::{analyze_bundle, AnalyzeRequest, AnalyzeResult, DriftClass, DriftState};
 use agent_drift_sentinel::{
     LiveSessionCoordinator, LiveSessionRequest, SchedulerPolicy, TriggerClass, WarningPolicy,
 };
+use agent_session_compactor::{BoundedClosureCompactor, BoundedClosureRequest, RolloutFormat};
 use camino::{Utf8Path, Utf8PathBuf};
 use serde::Deserialize;
 use serde_json::Value;
@@ -686,6 +687,9 @@ fn current_native_recall_adapter_and_variant_mutations_fail_closed() {
 
     let matrix = load_matrix().expect("load P7 matrix");
     let mut implemented = matrix.clone();
+    for case in &mut implemented.cases {
+        case.implemented = false;
+    }
     implemented.cases[0].implemented = true;
     validate_implemented_case_provenance(root, &implemented)
         .expect("matching adapter and variants pass");
@@ -850,4 +854,143 @@ fn p7_01_typed_semantic_goal_drift_reaches_public_live() {
         final_observation.snapshot.processed_events,
         poll.observations.len()
     );
+}
+
+#[test]
+fn p7_02_positive_legacy_current_native_parity() {
+    let matrix = load_matrix().expect("load P7 matrix");
+    let case = matrix
+        .cases
+        .iter()
+        .find(|case| case.case_id == "P7-02")
+        .expect("P7-02 matrix entry");
+
+    assert!(case.implemented, "P7-02 must be implemented before it runs");
+
+    let case_root = fixture_root().join(&case.fixture_dir);
+    let expected: Value = serde_json::from_str(
+        &fs::read_to_string(case_root.join("expected.json")).expect("read P7-02 expected"),
+    )
+    .expect("parse P7-02 expected");
+    let legacy =
+        run_single_source_pipeline(&case_root.join("legacy/root.jsonl"), "session-p7-02-legacy");
+    let current_native = run_single_source_pipeline(
+        &case_root.join("current-native/root.jsonl"),
+        "session-p7-02-native",
+    );
+    assert_eq!(legacy.format, RolloutFormat::Legacy);
+    assert_eq!(current_native.format, RolloutFormat::CurrentNativeV2);
+    assert_eq!(legacy.manifest["schema_version"], "v0.2");
+    assert_eq!(current_native.manifest["schema_version"], "v0.2");
+
+    let legacy_projection = canonical_semantic_projection(&legacy.result, "session-p7-02-legacy");
+    let native_projection =
+        canonical_semantic_projection(&current_native.result, "session-p7-02-native");
+    assert_eq!(
+        legacy_projection, native_projection,
+        "P7-02 canonical semantic projection must ignore adapter-local and unstable manifest fields"
+    );
+    let final_projection = native_projection
+        .as_array()
+        .and_then(|checkpoints| checkpoints.last())
+        .expect("P7-02 final canonical checkpoint");
+    assert_eq!(
+        final_projection["semantic_goal_drift"],
+        expected["semantic_goal_drift"]
+    );
+    assert_eq!(
+        final_projection["target_display"],
+        expected["final_target_display"]
+    );
+}
+
+struct PipelineRun {
+    _temp_dir: tempfile::TempDir,
+    format: RolloutFormat,
+    manifest: Value,
+    result: AnalyzeResult,
+}
+
+fn run_single_source_pipeline(source: &Utf8Path, session_id: &str) -> PipelineRun {
+    let temp_dir = tempfile::TempDir::new().expect("pipeline temp dir");
+    let root = Utf8Path::from_path(temp_dir.path()).expect("UTF-8 pipeline temp root");
+    let codex_home = root.join(".codex");
+    let rollout_dir = codex_home.join("sessions/2026/07/29");
+    fs::create_dir_all(&rollout_dir).expect("create pipeline rollout directory");
+    fs::copy(
+        source,
+        rollout_dir.join(format!("rollout-{session_id}.jsonl")),
+    )
+    .expect("materialize pipeline source");
+
+    let mut compactor = BoundedClosureCompactor::default();
+    let prepared = compactor
+        .prepare(&BoundedClosureRequest {
+            codex_home: Some(codex_home),
+            root_session_id: session_id.to_string(),
+        })
+        .expect("prepare single-source closure");
+    let format = prepared.snapshot().root_source.format;
+    let compactor_dir = root.join("compactor");
+    compactor
+        .compact(prepared, &compactor_dir, None)
+        .expect("compact single-source closure");
+    let manifest: Value = serde_json::from_str(
+        &fs::read_to_string(compactor_dir.join("manifest.json")).expect("read compactor manifest"),
+    )
+    .expect("parse compactor manifest");
+    let analyzer_dir = root.join("analyzer");
+    let result = analyze_bundle(&AnalyzeRequest {
+        input_dir: compactor_dir,
+        output_dir: analyzer_dir,
+    })
+    .expect("analyze single-source bundle");
+
+    PipelineRun {
+        _temp_dir: temp_dir,
+        format,
+        manifest,
+        result,
+    }
+}
+
+fn canonical_semantic_projection(result: &AnalyzeResult, session_id: &str) -> Value {
+    let session = result
+        .sessions
+        .iter()
+        .find(|session| session.session_id == session_id)
+        .expect("canonical projection session");
+    Value::Array(
+        session
+            .checkpoints
+            .iter()
+            .map(|checkpoint| {
+                let semantic = checkpoint
+                    .drift_scores
+                    .iter()
+                    .find(|score| score.class == DriftClass::SemanticGoalDrift)
+                    .expect("canonical semantic-goal-drift score");
+                serde_json::json!({
+                    "ordinal": checkpoint.ordinal,
+                    "target_display": checkpoint
+                        .structured_objective
+                        .as_ref()
+                        .and_then(|objective| objective.target.as_ref())
+                        .map(|target| target.display.as_str()),
+                    "working_set_paths": checkpoint.task_frame.working_set_paths,
+                    "semantic_goal_drift": {
+                        "state": semantic.state,
+                        "flagged": semantic.flagged,
+                        "raw_score": semantic.raw_score,
+                    },
+                    "semantic_reasons": semantic
+                        .evidence
+                        .iter()
+                        .map(|evidence| evidence.reason.as_str())
+                        .collect::<Vec<_>>(),
+                    "session_progress": checkpoint.session_progress,
+                })
+            })
+            .collect(),
+    )
 }

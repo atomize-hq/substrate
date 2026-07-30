@@ -140,8 +140,8 @@ Each task runs the P7 target. After every third case, also run the frozen semant
 
 ### Task P7-2.2 — P7-02 positive Legacy/CurrentNativeV2 parity
 
-- [ ] Express equivalent legacy and `CurrentNativeV2` raw streams for one true pivot.
-- [ ] Compare only canonical semantic projections.
+- [x] Express equivalent legacy and `CurrentNativeV2` raw streams for one true pivot.
+- [x] Compare only canonical semantic projections.
 - **Acceptance:** both paths produce the same declared semantic projection; unstable manifest fields
   are excluded explicitly.
 - **Verification:** P7 target.

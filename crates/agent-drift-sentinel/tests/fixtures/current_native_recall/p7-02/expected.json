@@ -1,0 +1,19 @@
+{
+  "case_id": "P7-02",
+  "parity_group": "positive-pivot",
+  "legacy_session_id": "session-p7-02-legacy",
+  "current_native_session_id": "session-p7-02-native",
+  "semantic_goal_drift": {
+    "state": "active",
+    "flagged": true,
+    "raw_score": 80
+  },
+  "final_target_display": "docs/specs/p7/MAP.md",
+  "canonical_projection": "equal",
+  "excluded_unstable_fields": [
+    "generated_at",
+    "codex_home",
+    "output_dir",
+    "source_file_path"
+  ]
+}
