@@ -54,9 +54,9 @@ fixture surface. No task authorizes a production source edit.
 
 ### Task P7-0.3 — Run implementation preflight and GitNexus scope analysis
 
-- [ ] Refresh the GitNexus index if stale.
-- [ ] Query the existing cross-layer flow and record the intended test-only blast radius.
-- [ ] Confirm no production Rust symbol is authorized.
+- [x] Refresh the GitNexus index if stale.
+- [x] Query the existing cross-layer flow and record the intended test-only blast radius.
+- [x] Confirm no production Rust symbol is authorized.
 - **Acceptance:** preflight records the existing Sentinel/compactor/analyzer seam and a
   test/fixture/script/doc-only default fence.
 - **Verification:** GitNexus query/context output plus `git diff --check`.
@@ -66,10 +66,10 @@ fixture surface. No task authorizes a production source edit.
 
 ### Checkpoint P7-A — Planning lock
 
-- [ ] GPT Pro planning review reconciled.
-- [ ] User approved the reviewed family.
-- [ ] Exact clean baseline and protected walls recorded.
-- [ ] No implementation or production edit occurred before this checkpoint.
+- [x] GPT Pro planning review reconciled.
+- [x] User approved the reviewed family.
+- [x] Exact clean baseline and protected walls recorded.
+- [x] No implementation or production edit occurred before this checkpoint.
 
 ## P7-1 — Harness, matrix, privacy, and provenance
 

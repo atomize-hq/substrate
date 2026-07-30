@@ -60,3 +60,25 @@ directories.
 
 Inventory was captured with each target's `cargo test ... -- --list` command from the approved
 specification. No production or frozen-corpus file changed during preflight.
+
+## GitNexus seam preflight
+
+- Indexed repository: `sfr-p5-substrate`.
+- The index was refreshed from this worktree with
+  `npx gitnexus analyze --force --index-only --name sfr-p5-substrate`.
+- The natural-language seam query remained FTS-degraded after the refresh and returned no ranked
+  process. This is recorded as an index search limitation, not as evidence that no seam exists.
+- Exact symbol context resolved
+  `real_session_live_poller_consumes_bounded_closure_and_preserves_replay_equivalence` at
+  `crates/agent-drift-sentinel/tests/real_session_live.rs:3427-3500`.
+- GitNexus identified exact outgoing calls to:
+  - `LiveSessionCoordinator::poll_once`;
+  - `FixtureLiveCheckpointSource::from_path`; and
+  - `load_replay_bundle`.
+- Exact context for `LiveSessionCoordinator::poll_once` showed the production CLI caller and the
+  existing `real_session_live` integration witnesses, including bounded-closure/replay equivalence,
+  verified-child coordination, restart, cursor, and sparse-startup controls.
+
+P7 will compose through that existing public test surface. Its intended blast radius is new
+integration-test symbols, fixture data, Python batch-tool helpers/tests, and documentation only.
+No production Rust symbol is authorized.
