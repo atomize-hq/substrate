@@ -1,0 +1,53 @@
+{
+  "protocol": "codex.top-level-evidence-receipt.v1",
+  "orchestration_id": "substrate-r2-3",
+  "dispatch_nonce": "8414e6fd2adf776efb50e4c1674c3f640778beb7679004cf8c74c6e2651322e0",
+  "evidence_id": "R2-3Z/WIN-EVIDENCE",
+  "status": "BLOCKED_NATIVE_EVIDENCE",
+  "platform": "windows",
+  "evidence_task": {
+    "thread_id": "019fb070-c99f-7d72-965f-0cfa41b32bbc",
+    "host_id": "remote-control:env_e_6a3d9cd24b5483238ba55b699a98be35"
+  },
+  "source": {
+    "commit": "3a6490ff391453535168491b3f8d26adf9e20938",
+    "tree": "fca816eaed26407ea89d352c7a087a201391bd49",
+    "target_ref": "refs/heads/feat/internal-host-orchestrator-world-dispatch-bootstrap",
+    "live_remote": "3a6490ff391453535168491b3f8d26adf9e20938"
+  },
+  "blocker": {
+    "summary": "Conflicting ambient root B was created during proof execution, so clean evidence cannot be claimed.",
+    "details": "B was absent before proof execution. The nested PowerShell -W2Only invocation, run with a conflicting USERPROFILE rooted at B, created profile/AppData/Local/Microsoft/PowerShell/StartupProfileData-NonInteractive. The contract forbids creation of B and forbids cleanup, retry, or replacement. No cleanup was performed. One supplemental verified_projection_ test group also rejected the deliberately conflicting TCP selector during configuration before spawn and was not retried.",
+    "required_authority": "Dispatch a fresh native Windows evidence task with a new untouched ambient-conflict root and a launcher that prevents PowerShell profile-data initialization before conflicting inherited values are applied."
+  },
+  "environment": {
+    "host_id": "remote-control:env_e_6a3d9cd24b5483238ba55b699a98be35",
+    "project_id": "e5022d35-561c-4fa5-a5db-2cca9aef4e63",
+    "project_path": "C:/Users/spmcc/Documents/__Project_Code/substrate-r2-3",
+    "assigned_worktree_path": "C:\\Users\\spmcc\\.codex\\worktrees\\0300\\substrate-r2-3",
+    "os_version": "Microsoft Windows 11 Home 25H2 build 26200.7462 X64",
+    "tool_versions": {
+      "cargo": "cargo 1.89.0 (c24e10642 2025-06-23)",
+      "git": "git version 2.46.0.windows.1",
+      "powershell": "PowerShell 7.6.4 Core X64",
+      "rustc": "rustc 1.89.0 (29483883e 2025-08-04)",
+      "wsl": "WSL 2.7.11.0"
+    }
+  },
+  "evidence": {
+    "artifact_path": "C:\\Users\\spmcc\\.codex\\visualizations\\2026\\07\\30\\019fb070-c99f-7d72-965f-0cfa41b32bbc\\r2-3z-win-evidence\\R2-3Z-WIN-EVIDENCE.json",
+    "artifact_sha256": "sha256:3d0c6638e9cc493066fd6b56d270481c6d634c704289177f3c0393d50039f894",
+    "gates": [
+      "R2-DIAG-01",
+      "R2-MAP-WIN-01"
+    ]
+  },
+  "meta_task": {
+    "thread_id": "019fa3f7-c447-7132-9126-82e2cf38bd9d",
+    "host_id": "remote-ssh-discovered:spenser-linux-codex",
+    "published_dispatch_state": "3afac030fa88d46178e2923dcdc971b5dc4740b6"
+  },
+  "prohibited_actions_confirmed": false,
+  "checkout_unchanged": true,
+  "unclaimed": "Provisioning, product pipe transport, forwarder activation, and native lifecycle work remain unclaimed."
+}
