@@ -1,7 +1,7 @@
 {
   "protocol": "codex.top-level-orchestration-state.v1",
   "orchestration_id": "substrate-r2-3",
-  "status": "READY",
+  "status": "EVIDENCE_RUNNING",
   "dispatch_authorized": true,
   "remote": "origin",
   "target_ref": "refs/heads/feat/internal-host-orchestrator-world-dispatch-bootstrap",
@@ -51,7 +51,36 @@
     "host_id": "remote-ssh-discovered:spenser-linux-codex"
   },
   "active_dispatch": null,
-  "active_evidence_dispatches": [],
+  "active_evidence_dispatches": [
+    {
+      "evidence_id": "R2-3Z/MAC-EVIDENCE",
+      "platform": "macos",
+      "project_id": "local-b2016f8a311fef93149e42eaec4d704d",
+      "project_path": "/Users/spensermcconnell/__Active_Code/atomize-hq/substrate",
+      "thread_id": "019fb070-b8e7-78c2-bbf4-ab2df87a38dc",
+      "host_id": "local",
+      "dispatch_nonce": "b237a0ec5343358e48dc9d70ef549456ea4bb03f2508c22be29cd390a062be09",
+      "source": {
+        "commit": "3a6490ff391453535168491b3f8d26adf9e20938",
+        "tree": "fca816eaed26407ea89d352c7a087a201391bd49",
+        "target_ref": "refs/heads/feat/internal-host-orchestrator-world-dispatch-bootstrap"
+      }
+    },
+    {
+      "evidence_id": "R2-3Z/WIN-EVIDENCE",
+      "platform": "windows",
+      "project_id": "e5022d35-561c-4fa5-a5db-2cca9aef4e63",
+      "project_path": "C:/Users/spmcc/Documents/__Project_Code/substrate-r2-3",
+      "thread_id": "019fb070-c99f-7d72-965f-0cfa41b32bbc",
+      "host_id": "remote-control:env_e_6a3d9cd24b5483238ba55b699a98be35",
+      "dispatch_nonce": "8414e6fd2adf776efb50e4c1674c3f640778beb7679004cf8c74c6e2651322e0",
+      "source": {
+        "commit": "3a6490ff391453535168491b3f8d26adf9e20938",
+        "tree": "fca816eaed26407ea89d352c7a087a201391bd49",
+        "target_ref": "refs/heads/feat/internal-host-orchestrator-world-dispatch-bootstrap"
+      }
+    }
+  ],
   "verified_evidence": [],
   "completed": [
     {
