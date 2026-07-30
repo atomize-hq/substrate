@@ -819,7 +819,7 @@
     {
       "case_id": "P7-18",
       "title": "zero-test Legacy and CurrentNativeV2 parity",
-      "implemented": false,
+      "implemented": true,
       "fixture_dir": "p7-18",
       "adapter_classes": [
         "Legacy",
@@ -828,7 +828,11 @@
       "event_variants": [
         "legacy_event",
         "session_meta",
+        "task_started",
         "turn_context",
+        "message",
+        "function_call",
+        "function_call_output",
         "custom_tool_call",
         "custom_tool_call_output"
       ],
@@ -859,7 +863,12 @@
           "verification_clean",
           "failure_frontier_advanced"
         ],
-        "parity": "equal"
+        "parity": "equal",
+        "session_progress": {
+          "status": "insufficient_evidence",
+          "dimension": "verification_closeout_narrowing",
+          "confidence": "low"
+        }
       },
       "historical_references": [
         "crates/agent-drift-analyzer/tests/fixtures/progress_acceptance/adapted-zero-verifier-097d97e914ca220f/expected.json"

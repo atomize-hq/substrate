@@ -309,7 +309,7 @@ Each task runs the P7 target. After every third case, also run the frozen semant
 
 ### Task P7-4.4 — P7-18 zero-test Legacy/CurrentNativeV2 parity
 
-- [ ] Express equivalent zero-test evidence in both supported adapter classes.
+- [x] Express equivalent zero-test evidence in both supported adapter classes.
 - **Acceptance:** canonical progress/scoring projections match and neither claims clean verification.
 - **Verification:** P7 target plus frozen progress wall.
 - **Dependencies:** P7-4.3.
@@ -317,10 +317,10 @@ Each task runs the P7 target. After every third case, also run the frozen semant
 
 ### Checkpoint P7-D2 — Boundary and compatibility wall
 
-- [ ] P7-15 through P7-18 pass.
-- [ ] Exact analyzer/public-live failures are stage-owned.
-- [ ] All three declared parity pairs compare canonical projections only.
-- [ ] Relevant existing compactor/analyzer/Sentinel owner tests pass.
+- [x] P7-15 through P7-18 pass.
+- [x] Exact analyzer/public-live failures are stage-owned.
+- [x] All three declared parity pairs compare canonical projections only.
+- [x] Relevant existing compactor/analyzer/Sentinel owner tests pass.
 
 ## P7-5 — Determinism
 

@@ -2117,3 +2117,61 @@ fn p7_17_aligned_legacy_current_native_parity() {
     assert_eq!(expected["canonical_projection"], "equal");
     assert_eq!(expected["claim"], "NoClaim");
 }
+
+#[test]
+fn p7_18_zero_test_legacy_current_native_parity() {
+    let matrix = load_matrix().expect("load P7 matrix");
+    let case = matrix
+        .cases
+        .iter()
+        .find(|case| case.case_id == "P7-18")
+        .expect("P7-18 matrix entry");
+
+    assert!(case.implemented, "P7-18 must be implemented before it runs");
+
+    let case_root = fixture_root().join(&case.fixture_dir);
+    let expected: Value = serde_json::from_str(
+        &fs::read_to_string(case_root.join("expected.json")).expect("read P7-18 expected"),
+    )
+    .expect("parse P7-18 expected");
+    let legacy =
+        run_single_source_pipeline(&case_root.join("legacy/root.jsonl"), "session-p7-18-legacy");
+    let current_native = run_single_source_pipeline(
+        &case_root.join("current-native/root.jsonl"),
+        "session-p7-18-native",
+    );
+    assert_eq!(legacy.format, RolloutFormat::Legacy);
+    assert_eq!(current_native.format, RolloutFormat::CurrentNativeV2);
+
+    let legacy_projection = canonical_semantic_projection(&legacy.result, "session-p7-18-legacy");
+    let current_native_projection =
+        canonical_semantic_projection(&current_native.result, "session-p7-18-native");
+    assert_eq!(
+        legacy_projection, current_native_projection,
+        "P7-18 zero-test canonical projections must match exactly"
+    );
+    let final_projection = current_native_projection
+        .as_array()
+        .and_then(|checkpoints| checkpoints.last())
+        .expect("P7-18 final canonical checkpoint");
+    assert_eq!(
+        final_projection["session_progress"],
+        expected["session_progress"]
+    );
+    for forbidden in expected["forbidden_signal_codes"]
+        .as_array()
+        .expect("P7-18 forbidden signal codes")
+    {
+        let forbidden = forbidden.as_str().expect("P7-18 signal code");
+        assert!(
+            !final_projection["session_progress"]["signals"]
+                .as_array()
+                .into_iter()
+                .flatten()
+                .any(|signal| signal["code"] == forbidden),
+            "P7-18 zero-test parity must not emit {forbidden}"
+        );
+    }
+    assert_eq!(expected["canonical_projection"], "equal");
+    assert_eq!(expected["claim"], "NoClaim");
+}

@@ -1,0 +1,17 @@
+{
+  "case_id": "P7-18",
+  "parity_group": "zero-test",
+  "legacy_session_id": "session-p7-18-legacy",
+  "current_native_session_id": "session-p7-18-native",
+  "canonical_projection": "equal",
+  "claim": "NoClaim",
+  "forbidden_signal_codes": [
+    "verification_clean",
+    "failure_frontier_advanced"
+  ],
+  "session_progress": {
+    "status": "insufficient_evidence",
+    "dimension": "verification_closeout_narrowing",
+    "confidence": "low"
+  }
+}
