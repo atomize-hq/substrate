@@ -1,11 +1,11 @@
 # SFR-RB-100 P7 Validation Receipt
 
-Status: **PRIVATE LANE PASS — BOUNDED IMPLEMENTATION REVIEW PENDING**
+Status: **REMEDIATED PRIVATE LANE PASS — BOUNDED FOLLOW-UP REVIEW PENDING**
 
 ## Authority
 
 - P6 baseline: `133b55249f88492e16f80f98a63368911d733c7e`
-- Private-run source checkpoint: `52b15b8dad1509ad85addbfc2d56c08aa5861c1d`
+- Private-run source checkpoint: `154465e38e4cfe94ac4046144d581d84060be858`
 - Inventory route: repository `CurrentNativeV2`
 - Inventory cutoff: `2026-07-30T04:19:50Z`
 - Raw rollout, selected-session, checkpoint, path, repository, message, and identifier data remained
@@ -13,11 +13,11 @@ Status: **PRIVATE LANE PASS — BOUNDED IMPLEMENTATION REVIEW PENDING**
 
 ## Release Gate Ledger
 
-The following commands exited zero after the P7-19 canonical typed-output correction:
+The following commands exited zero after all four accepted bounded-review findings were remediated:
 
 | Gate | Result |
 |---|---|
-| `cargo test -p agent-drift-sentinel --test current_native_recall -- --nocapture` | PASS |
+| `cargo test -p agent-drift-sentinel --test current_native_recall -- --nocapture` | PASS, 26 tests |
 | `cargo test -p agent-session-compactor --test current_native_adapter -- --nocapture` | PASS, 7 tests |
 | `cargo test -p agent-session-compactor --test bounded_closure -- --nocapture` | PASS, 10 tests |
 | `cargo test -p agent-session-compactor --test export_bundle -- --nocapture` | PASS, 5 tests |
@@ -34,7 +34,7 @@ The following commands exited zero after the P7-19 canonical typed-output correc
 | `cargo clippy --workspace --all-targets -- -D warnings` | PASS |
 | `cargo test --workspace -- --nocapture` | PASS |
 | `python3 scripts/dev/drift-batch-scan/test_sample_sessions.py` | PASS, 12 tests |
-| `python3 scripts/dev/drift-batch-scan/test_tabulate.py` | PASS, 9 tests |
+| `python3 scripts/dev/drift-batch-scan/test_tabulate.py` | PASS, 14 tests |
 | `git diff --check` | PASS |
 
 ## Frozen Inventory And Selection
@@ -85,6 +85,7 @@ was non-empty.
 | Attempted sessions | 6 |
 | Succeeded sessions | 6 |
 | Failed sessions | 0 |
+| Checkpoint files | 6 |
 | Total checkpoints | 13 |
 | Checkpoints with structured objective | 13 |
 | Checkpoints with structured target | 0 |
@@ -93,8 +94,9 @@ was non-empty.
 | Target-resolved adjacent pairs | 0 |
 | Semantic-goal-drift firings | 0 |
 | Distinct anonymized repository ranks | 3 |
-| Batch-receipt file digest | `f9a8b14820e7195286440021eca5097274a37baad4f5c2892bd5563cef089d1b` |
-| Aggregate-receipt file digest | `273aef0e7e1e46b9d077f437a33585ff2c48e377e5f5f67f5368339f0ac05d87` |
+| Checkpoint-set digest | `5bda9ce249f49b59f2d6680bb125e884aba126b03663e8e7c735eff093ee60d1` |
+| Batch-receipt file digest | `17fb9bbff1b0c6bb3c5b920f3313e16bf04a725ab1feefe70644667a2ed6efe1` |
+| Aggregate-receipt file digest | `43660be5630ea0189c70dfcc284d4ccbdaa592f2dd27ac51b357048c8e3485ca` |
 
 The zero eligible/firing counts are distribution observations, not a contradiction: the selected
 private checkpoints did not contain analyzer-grounded structured targets. The committed P7 wall,
@@ -109,18 +111,40 @@ sanctioned-replan behavior.
 | Rust compiler | `rustc 1.89.0 (29483883e 2025-08-04)` |
 | Cargo | `cargo 1.89.0 (c24e10642 2025-06-23)` |
 | Python | `3.11.9` |
-| Compactor | version `0.1.0`; binary digest `2033589c6c1b20e8963c7bd97aa40106bab6a69a4927d7ef819bf86ca369491d` |
-| Analyzer | binary digest `d3da8947e9f122be607c4f102c955116ab2018c28247ee7626ddb6406448f48b` |
+| Compactor | version `0.1.0`; binary digest `b728f2a8e77f78b98abe200f89e35460d3d54de63f14baeab0f63eb463f033eb` |
+| Analyzer | binary digest `3c3944bb2471bbf83d9b68e63ff52852a76f42f5828000c5e75aa4dbb119f0fc` |
 | Sampler | `52cbd7c409b9de8f856601ff20c5e47a258d57c47ce9c6ba6cb830ad02662aa5` |
-| Batch runner | `d97c76fdc9cc983065e9ab1ab3f668e94c8ee637148a3b0b1505d9fd6c2de4ed` |
-| Tabulator | `cf9a56ba557275e1003ce378fc928902ee70e22adb6c786af3a66e4cd9689157` |
+| Batch runner | `13ff4b94909eb6bb1d5b62da38efe3835a9a2a79fb9c7ee8a672a4b733105f87` |
+| Tabulator | `75a7f7b5fca66f3e7787df339ffceda4745d4c8738a17581aa40d9c27c19f965` |
+
+## Bounded Review Remediation
+
+The initial bounded implementation review reported one High and three Medium P7-owned
+fixture/harness defects. All four were accepted and repaired without production-Rust changes:
+
+1. `d62d8fc0a` binds the selected manifest to its receipt digest, requires a fresh batch directory,
+   writes checkpoints atomically, exits nonzero on any batch failure, and binds aggregation to the
+   exact successful checkpoint set.
+2. `232c6d1e3` makes the matrix expected projection exactly match each tracked `expected.json` and
+   requires a diagnostic owner compatible with the declared terminal boundary.
+3. `1e8c811b4` makes aligned, narrowing, and sanctioned-replan controls causal. The replan case now
+   proves the same eligible pivot becomes an active score of 80 when only the sanction marker is
+   removed.
+4. `154465e38` carries whole-wall P7-01 and P7-09 execution through the public-live coordinator and
+   includes public events, scheduler decisions, and runtime state in the canonical determinism
+   projection.
+
+The frozen six-session selection was then rerun through the strengthened chain. The selected-set
+digest matched before execution; the fresh checkpoint set contained exactly six files and thirteen
+checkpoints; the batch recorded six successes and zero failures; and the tabulator recomputed the
+same checkpoint-set digest before producing the aggregate receipt.
 
 ## Three-Way Triage
 
-1. **Fixture/harness error — fixed.** The first inventory pass encountered a valid non-object JSON
-   row. The sampler incorrectly attempted object lookup on the decoded scalar. The parser now
-   ignores non-object rows, and a focused regression test plus the complete Python sampler suite
-   pass at commit `52b15b8dad1509ad85addbfc2d56c08aa5861c1d`.
+1. **Fixture/harness errors — fixed.** The first inventory pass encountered a valid non-object JSON
+   row; the sampler now ignores non-object rows. The later bounded review found four additional
+   P7-owned proof defects, all repaired and covered by mutation or counterfactual tests as recorded
+   above. The private lane was rerun after those repairs rather than reusing its earlier receipt.
 2. **Production contract defect — none surfaced.** All six selected sessions completed compaction
    and analysis. The run produced no concrete evidence contradicting a stated P7 or inherited
    P1-P6 contract.
@@ -136,8 +160,10 @@ sanctioned-replan behavior.
 - Raw inventory, selection, per-session output, and tabulation artifacts remain untracked.
 - `current_native_recall_validation_receipt_is_privacy_safe` recursively applies the committed P7
   forbidden-marker scan to this document.
-- Structural receipt validation proved a non-empty run, zero batch failures, filled sufficiently
-  populated quotas, and only exact permitted-scarcity underfill.
+- Structural receipt validation proved the selected-set digest before execution, a fresh exact
+  checkpoint set, a non-empty run, zero batch failures, filled sufficiently populated quotas, and
+  only exact permitted-scarcity underfill.
 
-**Conclusion:** the P7 release wall and private-batch obligations are satisfied. Independent bounded
-implementation review remains required before P7 closeout.
+**Conclusion:** the remediated P7 release wall and strengthened private-batch obligations are
+satisfied. A bounded follow-up review of only the accepted-finding remediation delta remains
+required before P7 closeout.

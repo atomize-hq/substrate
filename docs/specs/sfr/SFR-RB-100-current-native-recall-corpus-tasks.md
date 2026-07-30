@@ -481,10 +481,9 @@ Each task runs the P7 target. After every third case, also run the frozen semant
 
 ### Task P7-7.4 — Reconcile review findings
 
-- [ ] Fix only confirmed fixture/harness defects within P7.
-- [ ] Stop for a separately authorized production remediation if any production contract defect is
-      confirmed.
-- [ ] Rerun the smallest affected gates, then the full release wall.
+- [x] Fix only confirmed fixture/harness defects within P7.
+- [x] Confirm no production contract defect requires a separately authorized remediation.
+- [x] Rerun the smallest affected gates, then the full release wall and strengthened private lane.
 - **Acceptance:** exact final delta is review clean; no unsupported behavior or threshold change was
   introduced.
 - **Verification:** final bounded review response plus full gate ledger.
