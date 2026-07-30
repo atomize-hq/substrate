@@ -129,9 +129,9 @@ Each task runs the P7 target. After every third case, also run the frozen semant
 
 ### Task P7-2.1 — P7-01 typed semantic-goal-drift positive
 
-- [ ] Preserve a raw stream routed as `CurrentNativeV2`, typed tool input/output ordering, turn
+- [x] Preserve a raw stream routed as `CurrentNativeV2`, typed tool input/output ordering, turn
       identity, and a true abandoned-goal pivot.
-- [ ] Traverse direct closure, bundle-v0.2 export, analyzer, and public-live delivery.
+- [x] Traverse direct closure, bundle-v0.2 export, analyzer, and public-live delivery.
 - **Acceptance:** exact declared semantic signal, score/state/progress, evidence, and public-live
   result match; no legacy-shaped approximation is used.
 - **Verification:** P7 target plus frozen semantic wall.

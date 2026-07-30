@@ -3,6 +3,10 @@
 use std::collections::{BTreeMap, BTreeSet};
 use std::fs;
 
+use agent_drift_analyzer::{DriftClass, DriftState};
+use agent_drift_sentinel::{
+    LiveSessionCoordinator, LiveSessionRequest, SchedulerPolicy, TriggerClass, WarningPolicy,
+};
 use camino::{Utf8Path, Utf8PathBuf};
 use serde::Deserialize;
 use serde_json::Value;
@@ -671,7 +675,9 @@ fn current_native_recall_adapter_and_variant_mutations_fail_closed() {
         case_root.join("root.jsonl"),
         concat!(
             "{\"type\":\"session_meta\",\"payload\":{\"id\":\"session-p7-01-root\",\"multi_agent_version\":\"v2\"}}\n",
+            "{\"type\":\"event_msg\",\"payload\":{\"type\":\"task_started\",\"turn_id\":\"turn-p7-01-main\"}}\n",
             "{\"type\":\"turn_context\",\"payload\":{\"turn_id\":\"turn-p7-01-main\"}}\n",
+            "{\"type\":\"response_item\",\"payload\":{\"type\":\"message\",\"role\":\"user\",\"content\":[{\"type\":\"input_text\",\"text\":\"Synthetic prompt\"}],\"internal_chat_message_metadata_passthrough\":{\"turn_id\":\"turn-p7-01-main\"}}}\n",
             "{\"type\":\"response_item\",\"payload\":{\"type\":\"custom_tool_call\",\"name\":\"shell_command\",\"call_id\":\"call-p7-01-build\",\"input\":\"{}\"}}\n",
             "{\"type\":\"response_item\",\"payload\":{\"type\":\"custom_tool_call_output\",\"call_id\":\"call-p7-01-build\",\"output\":[{\"type\":\"input_text\",\"text\":\"ok\"}]}}\n",
         ),
@@ -699,4 +705,149 @@ fn current_native_recall_adapter_and_variant_mutations_fail_closed() {
     assert!(error.contains("P7-01"));
     assert!(error.contains("event variant provenance mismatch"));
     assert!(error.contains("owner=scoring,public-live"));
+}
+
+#[test]
+fn p7_01_typed_semantic_goal_drift_reaches_public_live() {
+    let matrix = load_matrix().expect("load P7 matrix");
+    let case = matrix
+        .cases
+        .iter()
+        .find(|case| case.case_id == "P7-01")
+        .expect("P7-01 matrix entry");
+
+    assert!(case.implemented, "P7-01 must be implemented before it runs");
+
+    let case_root = fixture_root().join(&case.fixture_dir);
+    let expected: Value = serde_json::from_str(
+        &fs::read_to_string(case_root.join("expected.json")).expect("read P7-01 expected"),
+    )
+    .expect("parse P7-01 expected");
+    let temp_dir = tempfile::TempDir::new().expect("temp dir");
+    let temp_root = Utf8Path::from_path(temp_dir.path()).expect("UTF-8 temp root");
+    let codex_home = temp_root.join(".codex");
+    let rollout_dir = codex_home.join("sessions/2026/07/29");
+    fs::create_dir_all(&rollout_dir).expect("create P7-01 rollout directory");
+    fs::copy(
+        case_root.join("raw/root.jsonl"),
+        rollout_dir.join("rollout-session-p7-01-root.jsonl"),
+    )
+    .expect("materialize P7-01 raw stream");
+
+    let state_dir = temp_root.join("state");
+    let mut coordinator = LiveSessionCoordinator::new(
+        LiveSessionRequest {
+            codex_home: Some(codex_home),
+            session_id: "session-p7-01-root".to_string(),
+            state_dir: state_dir.clone(),
+        },
+        SchedulerPolicy::default(),
+        WarningPolicy::default(),
+    )
+    .expect("create P7-01 live coordinator");
+    let poll = coordinator.poll_once().expect("run P7-01 production path");
+    assert!(poll.reran_pipeline);
+    assert!(poll.emitted_checkpoints >= 3);
+    assert!(!poll.observations.is_empty());
+    assert!(poll.observations.iter().all(|observation| {
+        observation.event.trigger == TriggerClass::CheckpointReady
+            && observation.event.cursor.session_id == "session-p7-01-root"
+    }));
+
+    let manifest: Value = serde_json::from_str(
+        &fs::read_to_string(state_dir.join("compactor/manifest.json"))
+            .expect("read P7-01 manifest"),
+    )
+    .expect("parse P7-01 manifest");
+    assert_eq!(
+        manifest["schema_version"],
+        expected["bundle_schema_version"]
+    );
+    assert_eq!(
+        manifest["session_ids"],
+        serde_json::json!(["session-p7-01-root"])
+    );
+    assert_eq!(
+        manifest["files"][0]["turns"],
+        serde_json::json!(["turn-p7-01-one", "turn-p7-01-three", "turn-p7-01-two"])
+    );
+
+    let compact_rows = fs::read_to_string(state_dir.join("compactor/rows.compact.jsonl"))
+        .expect("read P7-01 compact rows")
+        .lines()
+        .map(|line| serde_json::from_str::<Value>(line).expect("parse P7-01 compact row"))
+        .collect::<Vec<_>>();
+    let first_call_outputs = compact_rows
+        .iter()
+        .filter(|row| row["kind"] == "tool_output")
+        .filter_map(|row| {
+            row["dedupe_identity"]
+                .as_str()
+                .and_then(|identity| serde_json::from_str::<Value>(identity).ok())
+        })
+        .filter(|identity| identity["call_id"] == "call-p7-01-one")
+        .collect::<Vec<_>>();
+    assert_eq!(first_call_outputs.len(), 2);
+    assert_eq!(first_call_outputs[0]["segment_index"], 0);
+    assert_eq!(first_call_outputs[1]["segment_index"], 1);
+    assert!(first_call_outputs
+        .iter()
+        .all(|identity| identity["segment_type"] == "input_text"));
+
+    let final_checkpoint = poll
+        .observations
+        .iter()
+        .filter_map(|observation| observation.event.checkpoint.as_ref())
+        .max_by_key(|checkpoint| checkpoint.ordinal)
+        .expect("P7-01 final checkpoint");
+    let semantic = final_checkpoint
+        .drift_scores
+        .iter()
+        .find(|score| score.class == DriftClass::SemanticGoalDrift)
+        .expect("P7-01 semantic-goal-drift score");
+    assert_eq!(semantic.state, DriftState::Active);
+    assert!(semantic.flagged);
+    assert_eq!(
+        semantic.raw_score,
+        expected["semantic_goal_drift"]["raw_score"]
+    );
+    let target = final_checkpoint
+        .structured_objective
+        .as_ref()
+        .and_then(|objective| objective.target.as_ref())
+        .expect("P7-01 final structured target");
+    assert_eq!(target.display, expected["final_target_display"]);
+    for prefix in expected["required_reason_prefixes"]
+        .as_array()
+        .expect("P7-01 evidence prefixes")
+    {
+        let prefix = prefix.as_str().expect("P7-01 evidence prefix");
+        assert!(
+            semantic
+                .evidence
+                .iter()
+                .any(|evidence| evidence.reason.starts_with(prefix)),
+            "P7-01 missing semantic evidence prefix {prefix:?}"
+        );
+    }
+    assert_eq!(
+        serde_json::to_value(
+            final_checkpoint
+                .session_progress
+                .as_ref()
+                .expect("P7-01 progress")
+        )
+        .expect("serialize P7-01 progress"),
+        expected["session_progress"],
+        "P7-01 must retain the exact progress projection"
+    );
+    let final_observation = poll.observations.last().expect("P7-01 final observation");
+    assert_eq!(
+        final_observation.event.trigger,
+        TriggerClass::CheckpointReady
+    );
+    assert_eq!(
+        final_observation.snapshot.processed_events,
+        poll.observations.len()
+    );
 }

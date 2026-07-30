@@ -1,0 +1,23 @@
+{
+  "case_id": "P7-01",
+  "session_id": "session-p7-01-root",
+  "adapter_class": "CurrentNativeV2",
+  "bundle_schema_version": "v0.2",
+  "semantic_goal_drift": {
+    "state": "active",
+    "flagged": true,
+    "raw_score": 80
+  },
+  "final_target_display": "docs/specs/p7/MAP.md",
+  "required_reason_prefixes": [
+    "semantic goal drift current goal:",
+    "semantic goal drift kickoff anchor:",
+    "rolling semantic goal drift previous goal:"
+  ],
+  "public_trigger": "checkpoint_ready",
+  "session_progress": {
+    "status": "insufficient_evidence",
+    "dimension": "planning_convergence",
+    "confidence": "low"
+  }
+}

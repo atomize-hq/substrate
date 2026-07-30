@@ -5,14 +5,16 @@
     {
       "case_id": "P7-01",
       "title": "typed semantic-goal-drift positive",
-      "implemented": false,
+      "implemented": true,
       "fixture_dir": "p7-01",
       "adapter_classes": [
         "CurrentNativeV2"
       ],
       "event_variants": [
         "session_meta",
+        "task_started",
         "turn_context",
+        "message",
         "custom_tool_call",
         "custom_tool_call_output"
       ],
@@ -41,6 +43,12 @@
         "state": "active",
         "flagged": true,
         "raw_score": 80,
+        "final_target_display": "docs/specs/p7/MAP.md",
+        "session_progress": {
+          "status": "insufficient_evidence",
+          "dimension": "planning_convergence",
+          "confidence": "low"
+        },
         "public_trigger": "checkpoint_ready"
       },
       "historical_references": [
