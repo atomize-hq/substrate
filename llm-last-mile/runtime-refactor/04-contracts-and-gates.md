@@ -7112,6 +7112,44 @@ the exact private-root invocation restored the 45-failure wall. Runtime source a
 unchanged. The 59 failures are not added to the baseline, waived, treated as product failures or
 environment drift, used to weaken trusted-root validation, or used to justify serial-only proof.
 
+## R2-3 closeout-policy amendment (R2-3ZD1)
+
+The canonical shell-wall runner remains proof infrastructure, not an R2-3 completion gate.
+`R2-3ZP3` is permanently deferred from the blocking R2-3 path. Its unpublished commits
+`2cb796ffef68c2b049376984a90ce0382e5f3980`,
+`9fa3fe0d4ed2933521dfcd67919d91aa9da6a499`, `50948dbeb921582515a34bb6b7be21c46f29d008`, and
+`868994efaf132bb04c6cdd7c82da9433333c94e5` are diagnostic evidence only; they are not accepted
+product source and must not be cherry-picked, pushed, or represented as landed.
+
+The recurring canonical-runner defect is now explicit. Authenticated wall execution can materialize
+honest shell results yet still finalize ineligible with `evidence_write_failed` and
+`mount_teardown_failed`, because the current runner does not yet produce authenticated Stage-A
+completion/teardown proof or prove hidden backing-path removal. R2-3 closeout therefore makes no
+claim of eligible canonical-runner provenance; this defect remains open proof-infrastructure work
+outside the R2-3 completion gate.
+
+The blocking closeout suffix is `R2-3ZT1 -> R2-3ZH1 -> R2-3ZM5 -> fresh native macOS and Windows
+evidence -> R2-3Z`.
+
+- After `R2-3ZT1`, direct `cargo test --locked -p shell --lib -- --nocapture` validation must
+  produce exactly `1322 discovered / 1277 passed / 45 failed / 0 ignored`.
+- The frozen 45-name inventory SHA-256 remains
+  `b23bb59ad12833d2c1d37c19c54933cd6bcb1c75e0dab8a70179b9881372be70`.
+- The frozen normalized-signature SHA-256 remains
+  `33c686a6ec9f3a0a4f51e1fca976445e6804da12fbbff50312a03f0042cdfac3`.
+- Count-only equivalence is insufficient. Any additional failure, missing frozen failure, or
+  changed frozen signature blocks closeout until classified.
+- `R2-3ZH1` owns only the host-inbox trusted-root test helper.
+- `R2-3ZM5` owns only the macOS contextless-constructor removal and typed pre-R3 smoke contract.
+- `R2-3ZH1` and `R2-3ZM5` still require their focused tests, package checks, formatting/Clippy
+  gates, and direct shell regression checks.
+- Fresh source-bound native macOS and Windows evidence must be collected after `R2-3ZM5` and
+  before `R2-3Z`; older clean receipts are historical support only after later product commits.
+- `R2-3Z` may close only with those direct product/static checks and fresh native receipts clean,
+  while explicitly recording the canonical-runner provenance limitation.
+- This amendment completes no R3 lifecycle/forwarding/provisioning row and closes no runtime-
+  refactor work outside the bounded R2-3 packet.
+
 ## Normative renewed R2-2 publication contract
 
 The selected model is **Docs-on-top → one fast-forward publication**. This section is the normative

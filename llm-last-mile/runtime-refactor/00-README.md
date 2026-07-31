@@ -4,17 +4,19 @@
 **Scope:** planning, contracts, sequencing, and proof gates; not implementation history
 **Source directive:** [`../../substrate-runtime-refactor-directive-revised.md`](../../substrate-runtime-refactor-directive-revised.md)
 **Repo-truth snapshot:** 2026-07-17 at `6ab2a515e13946324d0aac25b144e1c3408cb2c1`; re-check live code before every slice
-**Current authorized increment:** docs-first `A1.1d-5R2-3D` subdivision only. The R2-2 remedial
-detour, RP3/RP4/RP5 publication, and bounded-review calibration are complete. Historical R2-2
-publication remains anchored at `0f1e147fb735791b44a65099a65167cbdc1803af`; the current published
-tip is `43e528af8c71c4f42a7b1238f729078f20ee3760`, including the already-landed private installer
-configuration, trusted gateway-smoke manifest staging, agent-doctor install-context propagation,
-and process-only bounded-review calibration fixes. R2-3D freezes the bounded
-`D/A/B/C/M1-M4/W1-W5/F/R/S1/S2/T/Z` execution sequence in `03` and changes no product/runtime
-contract or proof result. It authorizes no R2-3A product code, prior-packet rerun, or reopening of
-RP3/RP4/RP5 or those post-publication fixes absent a concrete contradiction. R2-4, R3, privileged
-product smoke, native non-Linux proof, and direct-member Codex/UAA gateway adoption remain later or
-unstarted.
+**Current authorized increment:** docs-only `A1.1d-5R2-3ZD1` closeout-policy amendment. The R2-2
+remedial detour, RP3/RP4/RP5 publication, the ordinary fast-forward publication at
+`0f1e147fb735791b44a65099a65167cbdc1803af`, the four post-publication calibration fixes, and
+runner-contract repair `R2-3ZP2` are complete. This amendment binds to published base
+`ec05167bd7bcb7be874af48fe33d6edb71492516` / tree
+`b0d399cfb09655d5ff61d47ec68408e52ba5cfec`, permanently removes `R2-3ZP3` from the blocking R2-3
+path, preserves its unpublished commits `2cb796ffef68c2b049376984a90ce0382e5f3980`,
+`9fa3fe0d4ed2933521dfcd67919d91aa9da6a499`, `50948dbeb921582515a34bb6b7be21c46f29d008`, and
+`868994efaf132bb04c6cdd7c82da9433333c94e5` as diagnostic evidence only, and freezes the remaining
+closeout sequence `R2-3ZT1 -> R2-3ZH1 -> R2-3ZM5 -> fresh native macOS/Windows evidence ->
+R2-3Z` in `03` with the direct-verification gate in `04`. It authorizes no product/runtime
+implementation, no canonical-runner proof claim, no reopening of RP3/RP4/RP5 or `R2-3ZP2`
+absent contradiction, and no R2-4/R3 work.
 
 ## Canonical repo location
 
@@ -980,15 +982,41 @@ follows.
 
 ## A1.1d-5R2-2 RP3/RP4/RP5 closeout status
 
-This section is the controlling current status. It preserves the historical RP0 planning checkpoint
-above without rewriting it.
+This section preserves the final R2-2 closeout status. The current R2-3 status follows below, and
+the historical RP0 planning checkpoint above remains unchanged.
 
 | Packet | Current disposition |
 |---|---|
 | RP3 | Complete. The canonical baseline remains `1309 discovered / 1264 passed / 45 failed / 0 ignored`, with failure-name hash `b23bb59ad12833d2c1d37c19c54933cd6bcb1c75e0dab8a70179b9881372be70`, normalized-signature hash `33c686a6ec9f3a0a4f51e1fca976445e6804da12fbbff50312a03f0042cdfac3`, and six pairwise differentials `0`. No historical count, hash, or failure membership changes. |
 | RP4 | Product proof accepted clean by human disposition on exact integration commit/tree `8c46135c861a468dea316cf9fd7d6c6bb15bddac` / `5358497a8baec6f36e15aaef58415a759e64977d`. The focused exact PASS sentinel, authenticated runner self-test `99/99`, four distinct canonical walls, proof-process `6 launched / 6 reaped / 0 live`, and exact original/integration restoration all passed. Detailed packet and review hashes remain recorded in [05-debug-regression-ledger.md](05-debug-regression-ledger.md). |
 | Persistence review distinction | The raw review verdict remains `REQUEST_CHANGES`. Its three cache-only findings are preserved as non-blocking process-audit debt outside RP4 product-proof scope: controller pathname/hash not execution-bound; supervisor parent-directory `fsync` omitted after replace; persisted controller packet omits its post-persistence final verdict. They do not invalidate the focused, authenticated, canonical-wall, differential, authority, or restoration evidence. |
-| RP5 | This exact six-file documentation change is the bounded closeout packet. The publication model remains **Docs-on-top -> one ordinary fast-forward publication**. Source publication has not occurred in this run, no local/upstream/remote parity is claimed, and the exact next step after the reviewed/committed RP5 docs remains one ordinary fast-forward source publication. |
+| RP5 | Historical exact six-file closeout packet. Its publication model remained **Docs-on-top -> one ordinary fast-forward publication**, and that publication later completed at `0f1e147fb735791b44a65099a65167cbdc1803af`. This row makes no later R2-3 claim. |
 
-R2-3 remains blocked until that publication. R2-4 and R3 remain later. Privileged product smoke,
-non-Linux proof, direct-member adoption, and seam promotion remain unclaimed.
+## A1.1d-5R2-3 closeout-policy status
+
+`R2-3ZP2` is accepted landed source, but `R2-3ZP3` is permanently deferred from the blocking R2-3
+path. Its unpublished commits `2cb796ffef68c2b049376984a90ce0382e5f3980`,
+`9fa3fe0d4ed2933521dfcd67919d91aa9da6a499`, `50948dbeb921582515a34bb6b7be21c46f29d008`, and
+`868994efaf132bb04c6cdd7c82da9433333c94e5` are diagnostic evidence only. They are not accepted
+product source and must not be cherry-picked, pushed, or represented as landed.
+
+The canonical shell-wall runner remains open proof-infrastructure work outside the R2-3 completion
+gate. Authenticated wall executions can materialize honest shell results yet still finalize
+ineligible with `evidence_write_failed` and `mount_teardown_failed`, leaving authenticated
+stage-A completion and hidden backing-path teardown unproven. R2-3 closeout therefore makes no
+claim of eligible canonical-runner provenance.
+
+The remaining blocking sequence is `R2-3ZT1 -> R2-3ZH1 -> R2-3ZM5 -> fresh native macOS and
+Windows evidence -> R2-3Z`. After `R2-3ZT1`, direct
+`cargo test --locked -p shell --lib -- --nocapture` validation must produce exactly
+`1322 discovered / 1277 passed / 45 failed / 0 ignored`, with failure-name SHA-256
+`b23bb59ad12833d2c1d37c19c54933cd6bcb1c75e0dab8a70179b9881372be70` and normalized-signature
+SHA-256 `33c686a6ec9f3a0a4f51e1fca976445e6804da12fbbff50312a03f0042cdfac3`. Count-only
+equivalence is insufficient: any additional failure, missing frozen failure, or changed frozen
+signature blocks closeout until classified. `R2-3ZH1` owns only the host-inbox trusted-root test
+helper. `R2-3ZM5` owns only the macOS contextless-constructor removal and typed pre-R3 smoke
+contract. Their focused tests, package checks, formatting/Clippy gates, and direct shell
+regressions remain mandatory. Older native receipts are historical support only after later
+product commits; fresh source-bound native macOS and Windows evidence must be recollected after
+`R2-3ZM5` and before `R2-3Z`. R2-4, R3, privileged product smoke, direct-member adoption, and
+the broader runtime-refactor backlog remain open.

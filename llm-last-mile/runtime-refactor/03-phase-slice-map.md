@@ -742,7 +742,9 @@ R2-3D
   -> R2-3A -> R2-3B -> R2-3C
   -> R2-3M1 -> R2-3M2 -> R2-3M3 -> R2-3M4
   -> R2-3W1 -> R2-3W2 -> R2-3W3 -> R2-3W4 -> R2-3W5
-  -> R2-3F -> R2-3R -> R2-3S1 -> R2-3S2 -> R2-3T -> R2-3Z
+  -> R2-3F -> R2-3R -> R2-3S1 -> R2-3S2 -> R2-3T
+  -> R2-3ZD1 -> R2-3ZT1 -> R2-3ZH1 -> R2-3ZM5
+  -> fresh native macOS/Windows evidence -> R2-3Z
 ```
 
 This order is sequential. A later increment may be re-subdivided before implementation if its
@@ -762,6 +764,13 @@ increment supplies a prerequisite but may not claim that PI complete. PI-059 is 
 call-site update; PI-077 and PI-078 are frozen capability guards; PI-050 remains an R2-4 guardrail;
 PI-080 is already satisfied by R2-2. PI-047, PI-051, PI-053, PI-092–PI-102, and PI-113–PI-114
 remain R3-exclusive. No child may claim the parent packet complete before R2-3Z.
+
+`R2-3ZP3` is permanently deferred from the blocking path. Its unpublished commits
+`2cb796ffef68c2b049376984a90ce0382e5f3980`, `9fa3fe0d4ed2933521dfcd67919d91aa9da6a499`,
+`50948dbeb921582515a34bb6b7be21c46f29d008`, and
+`868994efaf132bb04c6cdd7c82da9433333c94e5` are preserved only as diagnostic proof-infrastructure
+evidence, are not accepted product source, and must not be cherry-picked, pushed, or represented
+as landed. `R2-3ZD1` is this closeout-policy amendment only and completes no product proof.
 
 Every child uses this same fingerprint/review method:
 
@@ -1259,9 +1268,11 @@ expansion, false native claim, or need to guess guest identity is
 
 **R2-3Z — integration evidence and closeout.**
 
-- **Outcome/claim:** join the completed child increments, prove the complete R2-3 parent exit gate,
-  record native assignments truthfully, and hand only R3-owned lifecycle work forward. No production
-  repair is allowed.
+- **Outcome/claim:** after `R2-3ZT1`, `R2-3ZH1`, `R2-3ZM5`, and fresh native macOS/Windows
+  evidence are complete, join the completed child increments, prove the complete R2-3 parent exit
+  gate through direct product/static checks plus fresh native evidence, record the
+  canonical-runner provenance limitation truthfully, and hand only R3-owned lifecycle work
+  forward. No production repair is allowed.
 - **PI ownership:** closes only after code+proof for PI-009, PI-022, PI-039–PI-046, PI-048–PI-049,
   PI-052, PI-054–PI-058, PI-060, PI-068–PI-070, PI-075–PI-076, PI-079, PI-081, PI-090–PI-091,
   PI-112, PI-115–PI-116, and PI-118 is present. PI-059 remains harness-only; PI-077/PI-078 remain
@@ -1269,27 +1280,44 @@ expansion, false native claim, or need to guess guest identity is
 - **Files/symbols:** no production file or symbol. Evidence transcription may touch only the six
   existing runtime-refactor control-pack Markdown files and only to record current proof; any
   product defect returns to its owning child under a new fingerprint/review sequence.
-- **Tests/proof:** run every focused test authorized by A–T, format/Clippy/workspace checks
-  proportionate to the touched crates, exact installer/script parser and frozen-byte checks,
-  R2-SHIM-01, R2-GEN-01, R2-DIAG-01, R2-MAP-MAC-01, R2-MAP-WIN-01, applicable
-  R2-RUNTIME-01 regression, allowlist/diff/GitNexus checks, and the parent independent review lenses.
-- **Native macOS:** supported macOS with a pre-existing Lima instance; record OS/Lima/tool versions,
-  A/B, IH commitment, account-database `~/.lima` control root, VM name/machine ID, guest
-  account/UID/home, future `A/sock/agent.sock` to `/run/substrate.sock`, ambient transport
-  availability as non-authority, and the explicit R3 prerequisite. Start no forwarder and perform
-  no socket/process lifecycle action.
-- **Native Windows:** supported Windows with a pre-existing WSL instance; record OS/WSL/tool
-  versions, A/B, account+SID, token Known Folder, exact registered distro/machine ID, guest
-  account/UID/home, normalized pipe/scope digest/shared PID root, A-scoped config/logs, and
-  PM-derived WSL argv/environment under conflicting ambient values. Perform no provisioning,
-  timeout kill, stop, PID deletion, unregister, or cleanup action. Missing runners leave the exact
-  native assignments pending; static proof never substitutes.
+- **Canonical-runner limitation:** `R2-3ZP3` is permanently deferred from the blocking path.
+  Unpublished commits `2cb796ffef68c2b049376984a90ce0382e5f3980`,
+  `9fa3fe0d4ed2933521dfcd67919d91aa9da6a499`,
+  `50948dbeb921582515a34bb6b7be21c46f29d008`, and
+  `868994efaf132bb04c6cdd7c82da9433333c94e5` remain diagnostic evidence only. Honest
+  authenticated wall results that still finalize ineligible with `evidence_write_failed` and
+  `mount_teardown_failed` remain proof-infrastructure work outside the R2-3 gate.
+- **Tests/proof:** run every focused test authorized by A–T and the Z suffix packets. After
+  `R2-3ZT1`, direct `cargo test --locked -p shell --lib -- --nocapture` must produce exactly
+  `1322 discovered / 1277 passed / 45 failed / 0 ignored`, with failure-name SHA-256
+  `b23bb59ad12833d2c1d37c19c54933cd6bcb1c75e0dab8a70179b9881372be70` and normalized-signature
+  SHA-256 `33c686a6ec9f3a0a4f51e1fca976445e6804da12fbbff50312a03f0042cdfac3`. Count-only
+  equivalence is insufficient: any additional failure, missing frozen failure, or changed frozen
+  signature blocks closeout until classified. `R2-3ZH1` owns only the host-inbox trusted-root test
+  helper. `R2-3ZM5` owns only the macOS contextless-constructor removal and typed pre-R3 smoke
+  contract. Their focused tests, package checks, formatting/Clippy/workspace checks proportionate
+  to the touched crates, exact installer/script parser and frozen-byte checks, R2-SHIM-01,
+  R2-GEN-01, R2-DIAG-01, R2-MAP-MAC-01, R2-MAP-WIN-01, applicable R2-RUNTIME-01 regression,
+  allowlist/diff/GitNexus checks, and the parent independent review lenses remain mandatory.
+- **Native macOS:** after `R2-3ZM5`, use supported macOS with a pre-existing Lima instance and
+  record OS/Lima/tool versions, A/B, IH commitment, account-database `~/.lima` control root, VM
+  name/machine ID, guest account/UID/home, future `A/sock/agent.sock` to `/run/substrate.sock`,
+  ambient transport availability as non-authority, and the explicit R3 prerequisite. Start no
+  forwarder and perform no socket/process lifecycle action. Older native receipts are historical
+  support only after later product commits.
+- **Native Windows:** after `R2-3ZM5`, use supported Windows with a pre-existing WSL instance and
+  record OS/WSL/tool versions, A/B, account+SID, token Known Folder, exact registered
+  distro/machine ID, guest account/UID/home, normalized pipe/scope digest/shared PID root,
+  A-scoped config/logs, and PM-derived WSL argv/environment under conflicting ambient values.
+  Perform no provisioning, timeout kill, stop, PID deletion, unregister, or cleanup action. Older
+  native receipts are historical support only after later product commits. Missing runners leave
+  the exact native assignments pending; static proof never substitutes.
 - **Impact/review/stop:** no pre-edit symbol impact unless a defect is returned to an owner.
   Fingerprint the exact closeout evidence/test subject and use packet ID `A1.1d-5R2-3Z`; require
   fresh host-context/mapping-security, lifecycle/R2-versus-R3, and
   allowlist/native-honesty/regression lenses under the bounded-review record. Any production fix,
-  false native claim, incomplete PI/proof, changed guard/frozen byte, open P1/P2, or R3 authority
-  leakage prevents closeout.
+  false native claim, false canonical-runner-eligibility claim, incomplete PI/proof, changed
+  guard/frozen byte, open P1/P2, or R3 authority leakage prevents closeout.
 
 ###### A1.1d-5R2-4 — R2 integration and closeout
 
