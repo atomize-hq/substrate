@@ -66,17 +66,18 @@
       "tree": "df4eb9869304a629a480dc47adbf79fd0ebf56b2"
     },
     "target_ref": "refs/heads/feat/internal-host-orchestrator-world-dispatch-bootstrap",
-    "read_only": false
+    "read_only": false,
+    "proof_correction": "rerun direct shell wall once with short mode-0700 roots beneath /home/spenser/t and both TMPDIR and XDG_RUNTIME_DIR set; no source/scope change"
   },
   "last_diagnostic": {
-    "diagnostic_id": "R2-3ZT1",
-    "packet_id": "A1.1d-5R2-3ZT1",
+    "diagnostic_id": "R2-3ZM5-attempt-1",
+    "packet_id": "A1.1d-5R2-3ZM5",
     "status": "BLOCKED_CONTRADICTION",
-    "thread_id": "019fb954-7e67-7710-92a4-168378e46698",
+    "thread_id": "019fb9c5-d7bc-79c2-8572-614b1fa72561",
     "host_id": "remote-ssh-discovered:spenser-linux-codex",
-    "dispatch_nonce": "773da0f680e7bf330ae22d133c587f96ca9c8e506b90845003e3d7acc6a0fa22",
-    "receipt_path": "orchestration/r2-3/receipts/R2-3ZT1-attempt-1.json",
-    "artifact_sha256": "sha256:c6de1349137dcb16d03b87be5364dc50d74a5052565e2c8d40dfed303592bed9"
+    "dispatch_nonce": "442b3f902a927a4ab09058d21fb92b7eb3163056133e0e72b39e5f27c06f5c44",
+    "receipt_path": "orchestration/r2-3/receipts/R2-3ZM5-attempt-1.json",
+    "artifact_sha256": "sha256:479196cb766a2040a0be30758d159c0557d2f7ea90811e494d6860c8a620b02b"
   },
   "active_evidence_dispatches": [],
   "verified_evidence": [],
