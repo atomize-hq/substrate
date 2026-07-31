@@ -177,12 +177,29 @@ mod tests {
     use serial_test::serial;
     use std::fs;
     use std::path::PathBuf;
-    use tempfile::tempdir;
+    use tempfile::tempdir_in;
 
     fn with_store(test: impl FnOnce(&AgentRuntimeStateStore)) {
         let authority_env = crate::execution::AuthorityEnvTestGuard::preserve();
-        let temp = tempdir().expect("tempdir");
-        authority_env.install_home(temp.path());
+        let safe_parent = std::env::var_os("XDG_RUNTIME_DIR")
+            .map(PathBuf::from)
+            .unwrap_or_else(|| {
+                PathBuf::from(std::env::var_os("HOME").expect("tests require HOME")).join(".cache")
+            });
+        fs::create_dir_all(&safe_parent).expect("create host inbox authority parent");
+        let temp = tempdir_in(safe_parent).expect("secure host inbox tempdir");
+        let substrate_home = temp.path().join("home");
+        fs::create_dir_all(&substrate_home).expect("create host inbox substrate home");
+        #[cfg(unix)]
+        {
+            use std::os::unix::fs::PermissionsExt as _;
+
+            fs::set_permissions(temp.path(), fs::Permissions::from_mode(0o700))
+                .expect("secure host inbox tempdir mode");
+            fs::set_permissions(&substrate_home, fs::Permissions::from_mode(0o700))
+                .expect("secure host inbox substrate home mode");
+        }
+        authority_env.install_home(&substrate_home);
         let store = AgentRuntimeStateStore::new().expect("state store");
         test(&store);
     }
