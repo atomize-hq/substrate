@@ -1,7 +1,7 @@
 {
   "protocol": "codex.top-level-orchestration-state.v1",
   "orchestration_id": "substrate-r2-3",
-  "status": "BLOCKED",
+  "status": "READY",
   "dispatch_authorized": true,
   "remote": "origin",
   "target_ref": "refs/heads/feat/internal-host-orchestrator-world-dispatch-bootstrap",
@@ -26,6 +26,8 @@
     "R2-3T",
     "R2-3ZWR1",
     "R2-3ZP2",
+    "R2-3ZP3",
+    "R2-3ZT1",
     "R2-3ZR1",
     "R2-3Z"
   ],
