@@ -1,7 +1,7 @@
 {
   "protocol": "codex.top-level-orchestration-state.v1",
   "orchestration_id": "substrate-r2-3",
-  "status": "RUNNING",
+  "status": "READY",
   "dispatch_authorized": true,
   "remote": "origin",
   "target_ref": "refs/heads/feat/internal-host-orchestrator-world-dispatch-bootstrap",
@@ -46,29 +46,16 @@
       "before_increment": "R2-3Z"
     }
   ],
-  "cursor": 19,
+  "cursor": 20,
   "expected_base": {
-    "commit": "ec05167bd7bcb7be874af48fe33d6edb71492516",
-    "tree": "b0d399cfb09655d5ff61d47ec68408e52ba5cfec"
+    "commit": "3f909efd1b94bbde99bae160de75958a5447485e",
+    "tree": "1829774bf998bb41f7710a9d38e82bdadf62b4af"
   },
   "meta": {
     "thread_id": "019fa3f7-c447-7132-9126-82e2cf38bd9d",
     "host_id": "remote-ssh-discovered:spenser-linux-codex"
   },
-  "active_dispatch": {
-    "increment": "R2-3ZD1",
-    "packet_id": "A1.1d-5R2-3ZD1",
-    "thread_id": "019fb938-c5c4-75e0-800e-6fb098a869bb",
-    "host_id": "remote-ssh-discovered:spenser-linux-codex",
-    "dispatch_nonce": "0e7d829e299027cba8f5c833949ec604946cf91952945506958aef258a0b6426",
-    "expected_base": {
-      "commit": "ec05167bd7bcb7be874af48fe33d6edb71492516",
-      "tree": "b0d399cfb09655d5ff61d47ec68408e52ba5cfec"
-    },
-    "target_ref": "refs/heads/feat/internal-host-orchestrator-world-dispatch-bootstrap",
-    "read_only": false,
-    "scope_amendment": "documentation-only closeout-policy amendment limited to four runtime-refactor control records; permanently defers R2-3ZP3 and establishes direct product/native verification before R2-3Z"
-  },
+  "active_dispatch": null,
   "last_diagnostic": {
     "diagnostic_id": "R2-3ZP3",
     "packet_id": "A1.1d-5R2-3ZP3",
@@ -195,6 +182,12 @@
       "commit": "ec05167bd7bcb7be874af48fe33d6edb71492516",
       "tree": "b0d399cfb09655d5ff61d47ec68408e52ba5cfec",
       "receipt_path": "orchestration/r2-3/receipts/R2-3ZP2.json"
+    },
+    {
+      "increment": "R2-3ZD1",
+      "commit": "3f909efd1b94bbde99bae160de75958a5447485e",
+      "tree": "1829774bf998bb41f7710a9d38e82bdadf62b4af",
+      "receipt_path": "orchestration/r2-3/receipts/R2-3ZD1.json"
     }
   ]
 }

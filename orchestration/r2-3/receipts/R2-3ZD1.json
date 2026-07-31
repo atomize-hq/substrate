@@ -1,0 +1,58 @@
+{
+  "protocol": "codex.top-level-task-receipt.v1",
+  "orchestration_id": "substrate-r2-3",
+  "dispatch_nonce": "0e7d829e299027cba8f5c833949ec604946cf91952945506958aef258a0b6426",
+  "increment": "R2-3ZD1",
+  "status": "LANDED_CLEAN",
+  "increment_task": {
+    "thread_id": "019fb938-c5c4-75e0-800e-6fb098a869bb",
+    "host_id": "remote-ssh-discovered:spenser-linux-codex"
+  },
+  "expected_base": {
+    "commit": "ec05167bd7bcb7be874af48fe33d6edb71492516",
+    "tree": "b0d399cfb09655d5ff61d47ec68408e52ba5cfec"
+  },
+  "landed": {
+    "commit": "3f909efd1b94bbde99bae160de75958a5447485e",
+    "tree": "1829774bf998bb41f7710a9d38e82bdadf62b4af",
+    "target_ref": "refs/heads/feat/internal-host-orchestrator-world-dispatch-bootstrap",
+    "live_remote": "3f909efd1b94bbde99bae160de75958a5447485e"
+  },
+  "subject_fingerprint": "sha256:1f01116099b4af53c03e7f00c2ee73b6826ae4d7c30d17ccb564b47070575115",
+  "changed_files": [
+    "llm-last-mile/runtime-refactor/00-README.md",
+    "llm-last-mile/runtime-refactor/03-phase-slice-map.md",
+    "llm-last-mile/runtime-refactor/04-contracts-and-gates.md",
+    "llm-last-mile/runtime-refactor/05-debug-regression-ledger.md"
+  ],
+  "review": {
+    "packet_id": "A1.1d-5R2-3ZD1",
+    "record_path": "/tmp/r2-3zd1-review-record.json",
+    "record_sha256": "sha256:db43fcb8d6695d0d3232d3353944cf6ff255492c70e20fc04f95e4d67ea39d33",
+    "validated": true,
+    "terminal": "CLEAN",
+    "p1": 0,
+    "p2": 0,
+    "p3_p4_disposition": "No open blocking findings; native-evidence wording drift and the omitted deferred intermediate commit were corrected before publication."
+  },
+  "verification": {
+    "required_checks_passed": true,
+    "allowlist_passed": true,
+    "change_detection_passed": true,
+    "checkout_clean": true,
+    "ahead": 0,
+    "behind": 0
+  },
+  "next_increment": "R2-3ZT1",
+  "receipt_normalization": {
+    "reason": "The task supplied publication/changed_paths/review_record aliases; the meta orchestrator normalized them to the canonical receipt schema after independent remote, tree, topology, diff, terminal-task, digest, and review-content verification.",
+    "task_reported_subject_fingerprint": "sha256:10b9bece6fc753972008a17486664140e568330df43a741e799db04826cb2496",
+    "canonical_manifest_path": "orchestration/r2-3/receipts/R2-3ZD1-subject-manifest.txt",
+    "canonical_manifest_sha256": "sha256:1f01116099b4af53c03e7f00c2ee73b6826ae4d7c30d17ccb564b47070575115"
+  },
+  "policy_outcome": {
+    "deferred_from_blocking_path": "R2-3ZP3",
+    "direct_verification_sequence": "R2-3ZT1 -> R2-3ZH1 -> R2-3ZM5 -> fresh native macOS/Windows evidence -> R2-3Z",
+    "runner_limitation": "No eligible canonical-runner provenance claim is made for R2-3 closeout."
+  }
+}

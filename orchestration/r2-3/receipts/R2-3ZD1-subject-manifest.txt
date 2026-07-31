@@ -1,0 +1,5 @@
+base ec05167bd7bcb7be874af48fe33d6edb71492516
+100644 1fb11ee6b106a2779f63ddafe789fdbea9595461 0	llm-last-mile/runtime-refactor/00-README.md
+100644 8980eaac8cf1447fbfdf212f91a0ce97ff3ecdf6 0	llm-last-mile/runtime-refactor/03-phase-slice-map.md
+100644 f6dc9d82d43e7c25387e548d5df0b970902b7990 0	llm-last-mile/runtime-refactor/04-contracts-and-gates.md
+100644 08ce993956fab8a8ca7d93f6131203945da98038 0	llm-last-mile/runtime-refactor/05-debug-regression-ledger.md
