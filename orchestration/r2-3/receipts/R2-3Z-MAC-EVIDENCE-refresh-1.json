@@ -1,0 +1,43 @@
+{
+  "protocol": "codex.top-level-evidence-receipt.v1",
+  "orchestration_id": "substrate-r2-3",
+  "dispatch_nonce": "eba960c4ad90f9ad4eb6d1ceea2c278f438d35526f534aa5bbd6ad7cddf4f918",
+  "evidence_id": "R2-3Z/MAC-EVIDENCE",
+  "status": "EVIDENCE_CLEAN",
+  "platform": "macos",
+  "evidence_task": {
+    "thread_id": "019fba06-3a62-7b03-8d61-62d042467901",
+    "host_id": "local"
+  },
+  "source": {
+    "commit": "c583c5f293644fab75d8d42bd3bcad63f114d4fe",
+    "tree": "a070f5f5787c27180f13dece9a1c3c3241728fda",
+    "target_ref": "refs/heads/feat/internal-host-orchestrator-world-dispatch-bootstrap",
+    "live_remote": "c583c5f293644fab75d8d42bd3bcad63f114d4fe"
+  },
+  "environment": {
+    "host_id": "local",
+    "project_id": "local-b2016f8a311fef93149e42eaec4d704d",
+    "project_path": "/Users/spensermcconnell/__Active_Code/atomize-hq/substrate",
+    "os_version": "ProductName:\t\tmacOS\nProductVersion:\t\t15.7.7\nBuildVersion:\t\t24G720",
+    "tool_versions": {
+      "bash": "GNU bash, version 3.2.57(1)-release (arm64-apple-darwin24)\nCopyright (C) 2007 Free Software Foundation, Inc.",
+      "cargo": "cargo 1.89.0 (c24e10642 2025-06-23)",
+      "git": "git version 2.39.5 (Apple Git-154)",
+      "jq": "jq-1.7.1-apple",
+      "limactl": "limactl version 2.1.1",
+      "python3": "Python 3.11.9",
+      "rustc": "rustc 1.89.0 (29483883e 2025-08-04)"
+    }
+  },
+  "evidence": {
+    "artifact_path": "/Users/spensermcconnell/.codex/visualizations/2026/07/31/019fba06-3a62-7b03-8d61-62d042467901/r2-3z-mac-evidence/r2-3z-mac-evidence-artifact.json",
+    "artifact_sha256": "sha256:64a726d45b8bb6724fe43f566903d7b5e5ed6ef16119f14d30cd5a03edcc7e50",
+    "gates": [
+      "R2-DIAG-01",
+      "R2-MAP-MAC-01"
+    ]
+  },
+  "prohibited_actions_confirmed": true,
+  "checkout_unchanged": true
+}

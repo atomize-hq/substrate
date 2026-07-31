@@ -1,0 +1,49 @@
+{
+  "protocol": "codex.top-level-evidence-receipt.v1",
+  "orchestration_id": "substrate-r2-3",
+  "dispatch_nonce": "35e9db62772cc8a2ad494b6cf155378c875e5064cb2ef1fc4ab2f39cc0e3cfa4",
+  "evidence_id": "R2-3Z/WIN-EVIDENCE",
+  "status": "BLOCKED_PLATFORM_HANDOFF_REQUIRED",
+  "platform": "windows",
+  "evidence_task": {
+    "thread_id": "019fba06-476f-7ae0-b0f7-a04a4bc67168",
+    "host_id": "remote-control:env_e_6a3d9cd24b5483238ba55b699a98be35"
+  },
+  "source": {
+    "commit": "c583c5f293644fab75d8d42bd3bcad63f114d4fe",
+    "tree": "a070f5f5787c27180f13dece9a1c3c3241728fda",
+    "target_ref": "refs/heads/feat/internal-host-orchestrator-world-dispatch-bootstrap",
+    "live_remote": "c583c5f293644fab75d8d42bd3bcad63f114d4fe"
+  },
+  "blocker": {
+    "summary": "No suitable WSL2 distribution remained already Running when guest-side evidence collection would have begun.",
+    "details": "The first prerequisite scan observed Ubuntu-24.04 as Running. The final authoritative non-starting confirmation, wsl.exe -l -v, showed Ubuntu-24.04, Ubuntu-22.04, and docker-desktop all Stopped. This evidence task is not authorized to start WSL, so the required guest mapping observations could not be collected without breaking the contract.",
+    "required_authority": "A human or meta-orchestrator must provide a fresh native Windows evidence dispatch only after a pre-existing registered WSL2 distribution is already Running.",
+    "handoff_prompt": "Re-dispatch native Windows evidence for R2-3Z/WIN-EVIDENCE only after a pre-existing registered WSL2 distribution is already Running on the host. Reuse the same source ref/commit/tree and continue the mapping-only contract without lifecycle actions."
+  },
+  "environment": {
+    "host_id": "remote-control:env_e_6a3d9cd24b5483238ba55b699a98be35",
+    "project_id": "e5022d35-561c-4fa5-a5db-2cca9aef4e63",
+    "project_path": "C:/Users/spmcc/Documents/__Project_Code/substrate-r2-3",
+    "assigned_worktree_path": "C:\\Users\\spmcc\\.codex\\worktrees\\4c0d\\substrate-r2-3",
+    "os_version": "Microsoft Windows 10 Home 25H2 build 26200.7462 X64",
+    "tool_versions": {
+      "powershell": "PowerShell 7.6.4 Core X64",
+      "wsl": "WSL version: 2.7.11.0",
+      "git": "git version 2.46.0.windows.1",
+      "cargo": "cargo 1.89.0 (c24e10642 2025-06-23)",
+      "rustc": "rustc 1.89.0 (29483883e 2025-08-04)"
+    }
+  },
+  "evidence": {
+    "artifact_path": "C:\\Users\\spmcc\\.codex\\visualizations\\2026\\07\\31\\019fba06-476f-7ae0-b0f7-a04a4bc67168\\r2-3z-win-evidence\\R2-3Z-WIN-EVIDENCE.blocked.artifact.json",
+    "artifact_sha256": "sha256:c15e0ff06d4f0c42294489be82e8be8c46591a46f149b2aecd26b858333be0db",
+    "gates": [
+      "R2-DIAG-01",
+      "R2-MAP-WIN-01"
+    ]
+  },
+  "prohibited_actions_confirmed": true,
+  "checkout_unchanged": true,
+  "unclaimed": "Provisioning, product pipe transport, forwarder activation, and native lifecycle work remain unclaimed."
+}
