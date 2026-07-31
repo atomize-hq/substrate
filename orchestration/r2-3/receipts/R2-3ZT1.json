@@ -1,0 +1,60 @@
+{
+  "protocol": "codex.top-level-task-receipt.v1",
+  "orchestration_id": "substrate-r2-3",
+  "packet_id": "A1.1d-5R2-3ZT1",
+  "dispatch_nonce": "773da0f680e7bf330ae22d133c587f96ca9c8e506b90845003e3d7acc6a0fa22",
+  "increment": "R2-3ZT1",
+  "status": "LANDED_CLEAN",
+  "increment_task": {
+    "thread_id": "019fb954-7e67-7710-92a4-168378e46698",
+    "host_id": "remote-ssh-discovered:spenser-linux-codex"
+  },
+  "expected_base": {
+    "commit": "3f909efd1b94bbde99bae160de75958a5447485e",
+    "tree": "1829774bf998bb41f7710a9d38e82bdadf62b4af"
+  },
+  "landed": {
+    "commit": "56e0a8582d562bd7e60e8f4348b4d596e1b2b36e",
+    "tree": "de567b39283733403c089d18fe81ae5d81d081ee",
+    "target_ref": "refs/heads/feat/internal-host-orchestrator-world-dispatch-bootstrap",
+    "live_remote": "56e0a8582d562bd7e60e8f4348b4d596e1b2b36e"
+  },
+  "subject_fingerprint": "sha256:cfb791c474fb488695d6982348ce7b7ec17fb5850cb269a17dd897b857b28462",
+  "changed_files": [
+    "crates/shell/src/execution/agent_runtime/retained_worker_runtime.rs"
+  ],
+  "review": {
+    "packet_id": "A1.1d-5R2-3ZT1",
+    "record_path": "/home/spenser/t/review-artifacts/R2-3ZT1.review-cycle-record.json",
+    "record_sha256": "sha256:c5139264f177b7a111ef3fc2f3f879d0bc50dadb3fd8843b8e8d97001b97fff5",
+    "validated": true,
+    "terminal": "CLEAN",
+    "p1": 0,
+    "p2": 0,
+    "p3_p4_disposition": "none"
+  },
+  "verification": {
+    "required_checks_passed": true,
+    "allowlist_passed": true,
+    "change_detection_passed": true,
+    "checkout_clean": true,
+    "ahead": 0,
+    "behind": 0
+  },
+  "next_increment": "R2-3ZH1",
+  "subject_manifest": {
+    "path": "/home/spenser/t/review-artifacts/R2-3ZT1.subject-manifest.txt",
+    "sha256": "sha256:cfb791c474fb488695d6982348ce7b7ec17fb5850cb269a17dd897b857b28462"
+  },
+  "direct_shell_wall": {
+    "counts": {
+      "discovered": 1322,
+      "passed": 1274,
+      "failed": 48,
+      "ignored": 0
+    },
+    "failure_name_sha256": "sha256:c6de1349137dcb16d03b87be5364dc50d74a5052565e2c8d40dfed303592bed9",
+    "normalized_signature_sha256": "sha256:2a0df9b340cc7e5e1b6e4f76e60e6f937b7442008142d78a7ae24bbcd2f60a90",
+    "queued_promotion_absent_from_failure_set": true
+  }
+}
