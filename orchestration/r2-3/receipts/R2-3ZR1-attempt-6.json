@@ -1,0 +1,83 @@
+{
+  "protocol": "codex.top-level-task-receipt.v1",
+  "orchestration_id": "substrate-r2-3",
+  "dispatch_nonce": "f48c1e95710b3f98aee943e2fe1ea85b21f7f5e8204ad9126c0126d72238674f",
+  "increment": "R2-3ZR1",
+  "packet_id": "A1.1d-5R2-3ZR1R1",
+  "status": "BLOCKED_SCOPE_EXPANSION",
+  "increment_task": {
+    "thread_id": "019fb502-1217-7fc2-aeba-c4c5d157c364",
+    "host_id": "remote-ssh-discovered:spenser-linux-codex"
+  },
+  "expected_base": {
+    "commit": "ec05167bd7bcb7be874af48fe33d6edb71492516",
+    "tree": "b0d399cfb09655d5ff61d47ec68408e52ba5cfec"
+  },
+  "local_unpublished": {
+    "commit": "199e1b1a5f3854934a08727f2846e028c065c5cb",
+    "tree": "15e17d17fa1a9222488a695a0e4e360376e3556c",
+    "target_ref": "refs/heads/feat/internal-host-orchestrator-world-dispatch-bootstrap",
+    "remote_commit": "ec05167bd7bcb7be874af48fe33d6edb71492516",
+    "remote_tree": "b0d399cfb09655d5ff61d47ec68408e52ba5cfec",
+    "ahead": 1,
+    "behind": 0,
+    "checkout_clean": true
+  },
+  "subject_fingerprint": "sha256:265a5d142274889c5a9ba13baa953980cc99ef0bfc81a0a99660962fda0f8c8d",
+  "review": {
+    "record_path": "/tmp/R2-3ZR1R1-review/review-cycle-record-supplemental.json",
+    "record_sha256": "sha256:de016ac0caf063f4a72ddd6ce593674920a902bdb758e52019e1175fe72589cc",
+    "validated": true,
+    "terminal": "CLEAN",
+    "p1": 0,
+    "p2": 0,
+    "digest_path": "/tmp/R2-3ZR1R1-review/supplemental-review-digest.txt",
+    "digest_sha256": "sha256:bb367e56c8aea0b03ff623e9810ad4374b73e1648ac3d7e56a933f8830f92f76"
+  },
+  "proof": {
+    "runner_blob_continuity": true,
+    "self_test": {
+      "status": "clean",
+      "run": 101,
+      "failed": 0,
+      "path": "/home/spenser/.codex-r2-3zr1-proof.MRPJNk/self-test.json"
+    },
+    "parallel_wall": {
+      "status": "ineligible",
+      "invocation_id": "33dbc2e02cebb5b0ff706a776532f4a6",
+      "provenance_path": "/home/spenser/.codex-r2-3zr1-proof.MRPJNk/evidence/r2-3zr1-final-parallel-33dbc2e02cebb5b0ff706a776532f4a6/provenance.json",
+      "provenance_sha256": "sha256:8f710abe8602b6335ac4aa9c5aee027e9fab19216f0253d23a154029f09c1be5",
+      "summary_path": "/home/spenser/.codex-r2-3zr1-proof.MRPJNk/evidence/r2-3zr1-final-parallel-33dbc2e02cebb5b0ff706a776532f4a6/summary.json",
+      "summary_sha256": "sha256:6642ece9d47ae60b0e7b7fc5b304ebd186b27afbab98a1e422b558141e2eab40",
+      "failure_names_path": "/home/spenser/.codex-r2-3zr1-proof.MRPJNk/evidence/r2-3zr1-final-parallel-33dbc2e02cebb5b0ff706a776532f4a6/failure-names.txt",
+      "failure_names_sha256": "sha256:e46e0f4cc12e34f11007cfe992c0e2020400771b91e43ad8ddc7dbaabcb8a549",
+      "ineligibility_reasons": [
+        "evidence_write_failed",
+        "mount_teardown_failed"
+      ],
+      "cargo_exit_code": 101,
+      "canonical_match": false,
+      "counts": {
+        "discovered": 1322,
+        "passed": 1276,
+        "failed": 46,
+        "ignored": 0
+      },
+      "frozen_expected_counts": {
+        "discovered": 1309,
+        "passed": 1264,
+        "failed": 45,
+        "ignored": 0
+      },
+      "frozen_expected_failure_names_sha256": "sha256:b23bb59ad12833d2c1d37c19c54933cd6bcb1c75e0dab8a70179b9881372be70",
+      "frozen_expected_signatures_sha256": "sha256:33c686a6ec9f3a0a4f51e1fca976445e6804da12fbbff50312a03f0042cdfac3",
+      "actual_signatures_sha256": "sha256:ec97e683028e8865859f8c6d65db1856b02a5b848a5aab54b75c20c6bd9cbe49"
+    }
+  },
+  "blocker": {
+    "summary": "Authenticated canonical wall mismatch and ineligible proof record after local final commit.",
+    "details": "Local commit 199e1b1a5f3854934a08727f2846e028c065c5cb was created but not pushed. Runner/self-test blobs matched reviewed authority commit ec05167bd7bcb7be874af48fe33d6edb71492516 and the authenticated self-test passed clean with run=101 failed=0. The authenticated parallel wall then exited 71 with wall_gate=ineligible at invocation_id 33dbc2e02cebb5b0ff706a776532f4a6. provenance.json finalized 2026-07-31T00:37:21Z with eligible=false and ineligibility_reasons [evidence_write_failed, mount_teardown_failed]. summary.json recorded cargo_exit_code=101, canonical_match=false, counts 1322 discovered / 1276 passed / 46 failed / 0 ignored, failure_name_count=46, failure_names_sha256=e46e0f4cc12e34f11007cfe992c0e2020400771b91e43ad8ddc7dbaabcb8a549, normalized_signatures_sha256=ec97e683028e8865859f8c6d65db1856b02a5b848a5aab54b75c20c6bd9cbe49. The 46-name set includes the frozen 23 execution::orchestrator_world_dispatch failures and 22 repl::async_repl failures plus one extra non-frozen failure in execution::agent_runtime::retained_worker_runtime::tests::queued_promotion_persists_no_request_prompt_payload_or_diagnostic_preimage. Contract requires exact 1309 / 1264 / 45 / 0 and frozen failure/signature hashes; count/name/signature mismatch is a blocked result. Remote target remains unchanged at expected base ec05167bd7bcb7be874af48fe33d6edb71492516 / tree b0d399cfb09655d5ff61d47ec68408e52ba5cfec.",
+    "required_authority": "Fresh authority is required to investigate or remediate the canonical wall divergence and ineligible proof record. Any credible next step may require touching protected wall-owned areas outside the current R2-3ZR1 allowlist, re-running under revised proof conditions, or both. Current authority forbids amend/reset/publish and does not authorize repairs beyond the bounded macOS/example/test-helper scope.",
+    "handoff_prompt": "Resume bound R2-3ZR1 in /home/spenser/.codex/worktrees/3b8f/substrate-r2-3 from local unpublished commit 199e1b1a5f3854934a08727f2846e028c065c5cb. Do not reset, amend, or publish. Preserve remote base ec05167bd7bcb7be874af48fe33d6edb71492516 / tree b0d399cfb09655d5ff61d47ec68408e52ba5cfec and inspect proof artifacts under /home/spenser/.codex-r2-3zr1-proof.MRPJNk, especially self-test.json, parallel.json, evidence/r2-3zr1-final-parallel-33dbc2e02cebb5b0ff706a776532f4a6/provenance.json, summary.json, failure-names.txt, and cargo.log. Treat runner/self-test blob continuity and the clean supplemental review record as already verified. Determine whether the blocked result is caused by environment/proof-runner ineligibility, a real extra wall regression (notably queued_promotion_persists_no_request_prompt_payload_or_diagnostic_preimage), or both. If remediation requires files outside the current allowlist, obtain explicit scope expansion before editing."
+  }
+}
