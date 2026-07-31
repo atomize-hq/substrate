@@ -1,0 +1,21 @@
+{
+  "protocol": "codex.top-level-task-receipt.v1",
+  "orchestration_id": "substrate-r2-3",
+  "dispatch_nonce": "3d2cefa4a2dac1608cfa885551df2d3eb28216396728c9a30edecf6cdd9b74a0",
+  "increment": "R2-3Z",
+  "status": "AUTHORITY_REQUIRED",
+  "increment_task": {
+    "thread_id": "019fba3a-9e25-7321-a900-dd410e530c67",
+    "host_id": "remote-ssh-discovered:spenser-linux-codex"
+  },
+  "expected_base": {
+    "commit": "c583c5f293644fab75d8d42bd3bcad63f114d4fe",
+    "tree": "a070f5f5787c27180f13dece9a1c3c3241728fda"
+  },
+  "blocker": {
+    "summary": "Identity-binding follow-up absent",
+    "details": "The task emitted its initialization-barrier receipt before the meta orchestrator's identity-binding follow-up reached the task conversation. Work stopped before repository access or mutation.",
+    "required_authority": "Re-send the exact identity binding to the same task and nonce.",
+    "handoff_prompt": "Bind thread 019fba3a-9e25-7321-a900-dd410e530c67 on host remote-ssh-discovered:spenser-linux-codex to nonce 3d2cefa4a2dac1608cfa885551df2d3eb28216396728c9a30edecf6cdd9b74a0 and resume the existing R2-3Z contract."
+  }
+}

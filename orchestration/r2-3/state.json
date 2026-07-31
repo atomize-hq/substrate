@@ -67,14 +67,13 @@
     "target_ref": "refs/heads/feat/internal-host-orchestrator-world-dispatch-bootstrap"
   },
   "last_diagnostic": {
-    "diagnostic_id": "R2-3ZM5-attempt-2",
-    "packet_id": "A1.1d-5R2-3ZM5",
-    "status": "BLOCKED_CONTRADICTION",
-    "thread_id": "019fb9c5-d7bc-79c2-8572-614b1fa72561",
+    "diagnostic_id": "R2-3Z-attempt-3",
+    "packet_id": "A1.1d-5R2-3Z",
+    "status": "AUTHORITY_REQUIRED",
+    "thread_id": "019fba3a-9e25-7321-a900-dd410e530c67",
     "host_id": "remote-ssh-discovered:spenser-linux-codex",
-    "dispatch_nonce": "442b3f902a927a4ab09058d21fb92b7eb3163056133e0e72b39e5f27c06f5c44",
-    "receipt_path": "orchestration/r2-3/receipts/R2-3ZM5-attempt-2.json",
-    "artifact_sha256": "sha256:07c508c2c9d24526406d3e55abc56038f26bae24e10e95b5b6baf278b87db106"
+    "dispatch_nonce": "3d2cefa4a2dac1608cfa885551df2d3eb28216396728c9a30edecf6cdd9b74a0",
+    "receipt_path": "orchestration/r2-3/receipts/R2-3Z-attempt-3.json"
   },
   "active_evidence_dispatches": [],
   "verified_evidence": [
