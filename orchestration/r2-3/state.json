@@ -67,17 +67,17 @@
     },
     "target_ref": "refs/heads/feat/internal-host-orchestrator-world-dispatch-bootstrap",
     "read_only": false,
-    "proof_correction": "rerun direct shell wall once with short mode-0700 roots beneath /home/spenser/t and both TMPDIR and XDG_RUNTIME_DIR set; no source/scope change"
+    "proof_correction": "do not rerun flaky full Linux shell wall; inherit exact R2-3ZH1 wall on current base and prove x86_64 Linux dependency-graph exclusion plus shell-lib no-run compilation; no source/scope change"
   },
   "last_diagnostic": {
-    "diagnostic_id": "R2-3ZM5-attempt-1",
+    "diagnostic_id": "R2-3ZM5-attempt-2",
     "packet_id": "A1.1d-5R2-3ZM5",
     "status": "BLOCKED_CONTRADICTION",
     "thread_id": "019fb9c5-d7bc-79c2-8572-614b1fa72561",
     "host_id": "remote-ssh-discovered:spenser-linux-codex",
     "dispatch_nonce": "442b3f902a927a4ab09058d21fb92b7eb3163056133e0e72b39e5f27c06f5c44",
-    "receipt_path": "orchestration/r2-3/receipts/R2-3ZM5-attempt-1.json",
-    "artifact_sha256": "sha256:479196cb766a2040a0be30758d159c0557d2f7ea90811e494d6860c8a620b02b"
+    "receipt_path": "orchestration/r2-3/receipts/R2-3ZM5-attempt-2.json",
+    "artifact_sha256": "sha256:07c508c2c9d24526406d3e55abc56038f26bae24e10e95b5b6baf278b87db106"
   },
   "active_evidence_dispatches": [],
   "verified_evidence": [],

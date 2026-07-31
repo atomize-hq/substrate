@@ -1,0 +1,43 @@
+{
+  "protocol": "codex.top-level-task-receipt.v1",
+  "status": "BLOCKED_CONTRADICTION",
+  "orchestration_id": "substrate-r2-3",
+  "dispatch_nonce": "442b3f902a927a4ab09058d21fb92b7eb3163056133e0e72b39e5f27c06f5c44",
+  "increment": "R2-3ZM5",
+  "packet_id": "A1.1d-5R2-3ZM5",
+  "next_increment": "EVIDENCE:R2-3Z",
+  "increment_task": {
+    "thread_id": "019fb9c5-d7bc-79c2-8572-614b1fa72561",
+    "host_id": "remote-ssh-discovered:spenser-linux-codex"
+  },
+  "expected_base": {
+    "commit": "610db8a9350c9b52496954f5c93232d885f439d9",
+    "tree": "df4eb9869304a629a480dc47adbf79fd0ebf56b2"
+  },
+  "changed_files": [
+    "crates/world-mac-lima/src/lib.rs",
+    "crates/world-mac-lima/examples/mac_backend_smoke.rs",
+    "scripts/mac/orchestration-smoke.sh"
+  ],
+  "subject_fingerprint": "sha256:621f0c697cfd39d93783925729412ee798d8a6bb4fec4dc04f91d7b6a55126ea",
+  "blocker": {
+    "summary": "The single corrected full shell-wall rerun remained non-comparable because shared runtime/socket fixtures produced 28 additional environment-sensitive failures.",
+    "details": "With mode-0700 TMPDIR and XDG_RUNTIME_DIR beneath /home/spenser/t, legacy authority-root failures fell to zero, but the run produced 1322/1246/76/0. The 28 failures outside the common 48 center on compacted runtime transport-root assertions and AddrInUse stop-socket fixtures. The three changed files are macOS-gated world-mac-lima Rust/example code and a macOS shell script; they are outside the Linux shell-library executable graph. The exact 48 wall already passed on the current base in R2-3ZH1.",
+    "required_authority": "Replace this increment's non-causal full Linux shell-wall rerun with dependency-graph, cfg-closure, and shell-library no-run compilation proof. Preserve the exact R2-3ZH1 wall as inherited base evidence and leave native behavior to the already-required fresh macOS evidence gate.",
+    "handoff_prompt": "Resume the same R2-3ZM5 task without changing its three-file source subject. Do not rerun the full shell wall. Prove from cargo tree/metadata and cfg/source closure that the three changed files are absent from the x86_64-unknown-linux-gnu shell-library test executable graph, run cargo test --locked -p shell --lib --no-run successfully with private roots, cite the exact R2-3ZH1 48-result proof on base 610db8a9 as inherited evidence, then continue independent review and publication if all existing macOS-focused gates remain clean."
+  },
+  "corrected_wall": {
+    "proof_root": "/home/spenser/t/r2-3zm5-wall.Mh0NTc",
+    "counts": {
+      "discovered": 1322,
+      "passed": 1246,
+      "failed": 76,
+      "ignored": 0
+    },
+    "failure_names_sha256": "sha256:bcea0ce7e94f44d92da5edebc3cc78c358b90d3832defd8d2f7b902bb22dee78",
+    "normalized_signatures_sha256": "sha256:f284090f867478312dfdcff9e2f329bd8b836be084a6ff6820087006971c1380",
+    "raw_log_sha256": "sha256:07c508c2c9d24526406d3e55abc56038f26bae24e10e95b5b6baf278b87db106",
+    "legacy_authority_root_failures": 0,
+    "classification": "environment-sensitive shared runtime transport/socket fixture cluster"
+  }
+}

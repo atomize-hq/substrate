@@ -199,18 +199,25 @@ Keep all logs, copied sources, and temporary harnesses outside the checkout.
 9. `bash tests/mac/prefix_mapping_r2_3.sh` as supplemental regression proof.
 10. Attempt Apple-target static compilation honestly. An absent target/SDK/C toolchain is an
     environment limitation, never native evidence.
-11. Run direct `cargo test --locked -p shell --lib -- --nocapture` with the same accepted short,
-    trusted root shape used by R2-3ZT1 and R2-3ZH1. Create a fresh mode-0700 directory beneath
-    `/home/spenser/t`, create mode-0700 `t` and `x` children, preserve the normal `HOME` and
-    toolchain environment, and set both `TMPDIR=<root>/t` and `XDG_RUNTIME_DIR=<root>/x` for the
-    command. Do not use `/tmp` ancestry and do not omit `XDG_RUNTIME_DIR`; those conditions trigger
-    unrelated legacy authority-root failures and are not comparable proof. Require the unchanged
-    accepted `1322 / 1274 / 48 / 0` result, failure-name SHA-256
-    `c6de1349137dcb16d03b87be5364dc50d74a5052565e2c8d40dfed303592bed9`, and normalized-signature
+11. Do not rerun the full Linux shell-library wall. R2-3ZH1 already ran it on the exact current
+    base `610db8a9350c9b52496954f5c93232d885f439d9` and established the accepted
+    `1322 / 1274 / 48 / 0` result with failure-name SHA-256
+    `c6de1349137dcb16d03b87be5364dc50d74a5052565e2c8d40dfed303592bed9` and normalized-signature
     SHA-256 `2a0df9b340cc7e5e1b6e4f76e60e6f937b7442008142d78a7ae24bbcd2f60a90`.
-    If this exact rerun differs, stop; do not retry with alternate roots, bless a new baseline, or
-    edit source to affect the wall.
-12. Prove manifests and `Cargo.lock` are unchanged; run `git diff --check`, exact three-file
+    Two R2-3ZM5 reruns showed that executing the shared-state suite again produces unrelated,
+    root/socket-sensitive fixture clusters even while the common accepted failures remain. Preserve
+    both blocked logs as diagnostic evidence; do not bless their 100- or 76-failure inventories.
+12. Replace that non-causal execution gate with all of the following:
+    - run `cargo tree --locked -p shell --target x86_64-unknown-linux-gnu -e normal,build,dev` (or
+      equivalent Cargo metadata proof) and show the modified macOS target code/example/script is
+      absent from the Linux shell-library test executable dependency graph;
+    - run `cargo test --locked -p shell --lib --no-run` successfully with private mode-0700 roots;
+    - prove by cfg and exact-diff closure that `world-mac-lima` changes compile only for macOS and
+      `scripts/mac/orchestration-smoke.sh` is not part of the Rust test executable; and
+    - have independent review explicitly validate that inheriting the exact R2-3ZH1 wall is honest
+      and that fresh native macOS evidence, not Linux shell fixture execution, owns behavior proof
+      for this subject.
+13. Prove manifests and `Cargo.lock` are unchanged; run `git diff --check`, exact three-file
     containment, and `gitnexus_detect_changes()` with every affected flow inspected.
 
 Do not use or repair the deferred authenticated canonical-wall runner. Linux and cross-target
@@ -224,8 +231,8 @@ GPT-5.4 Extra High reviewers at Standard/default speed covering:
 
 1. constructor removal, typed mapping security, caller closure, and absence of ambient fallback;
 2. pre-R3 example/script semantics, hostile-environment fail closure, and lifecycle/R3 byte freeze;
-3. exact allowlist, direct shell-wall honesty, proof limitations, and readiness for source-bound
-   native evidence.
+3. exact allowlist, inherited R2-3ZH1 wall honesty, Linux dependency-graph exclusion, proof
+   limitations, and readiness for source-bound native evidence.
 
 Validate the standard bounded review-cycle record. Publication requires terminal CLEAN, P1=0,
 P2=0, complete P3/P4 disposition, all required proofs, and the live target still equal to the
@@ -244,7 +251,8 @@ TERMINAL RECEIPT
 Use `increment: "R2-3ZM5"`, `packet_id: "A1.1d-5R2-3ZM5"`, and
 `next_increment: "EVIDENCE:R2-3Z"`. A LANDED_CLEAN receipt must include landed commit/tree/ref,
 exact three changed paths, subject manifest/fingerprint, validated review record/digest, source
-closure, frozen-body hashes, focused Rust/script proof, direct 48-result wall hashes, cross-target
+closure, frozen-body hashes, focused Rust/script proof, inherited R2-3ZH1 48-result wall reference,
+Linux dependency-graph/no-run proof, both non-canonical wall diagnostic dispositions, cross-target
 limitations, GitNexus result, remote 0/0, and clean checkout. For failure, send exact evidence,
 required authority, and a complete handoff prompt. Receipt send is the final tool action.
 
