@@ -1,7 +1,7 @@
 {
   "protocol": "codex.top-level-orchestration-state.v1",
   "orchestration_id": "substrate-r2-3",
-  "status": "RUNNING",
+  "status": "BLOCKED",
   "dispatch_authorized": true,
   "remote": "origin",
   "target_ref": "refs/heads/feat/internal-host-orchestrator-world-dispatch-bootstrap",
@@ -54,28 +54,15 @@
     "thread_id": "019fa3f7-c447-7132-9126-82e2cf38bd9d",
     "host_id": "remote-ssh-discovered:spenser-linux-codex"
   },
-  "active_dispatch": {
-    "increment": "R2-3ZP3",
+  "active_dispatch": null,
+  "last_diagnostic": {
+    "diagnostic_id": "R2-3ZP3",
     "packet_id": "A1.1d-5R2-3ZP3",
+    "status": "AUTHORITY_REQUIRED",
     "thread_id": "019fb829-785d-76f3-9078-bcae86dd9f3f",
     "host_id": "remote-ssh-discovered:spenser-linux-codex",
     "dispatch_nonce": "745771f218d81aed279861b84b759bba3b5d85fbe4e8afea95e655e5b59653d9",
-    "expected_base": {
-      "commit": "ec05167bd7bcb7be874af48fe33d6edb71492516",
-      "tree": "b0d399cfb09655d5ff61d47ec68408e52ba5cfec"
-    },
-    "target_ref": "refs/heads/feat/internal-host-orchestrator-world-dispatch-bootstrap",
-    "read_only": false,
-    "scope_amendment": "fresh proof-infrastructure prerequisite limited to canonical_shell_wall_runner.py and its test; preserves R2-3ZR1 donor WIP read-only and may publish only an eligible runner authority commit"
-  },
-  "last_diagnostic": {
-    "diagnostic_id": "R2-3ZR1R1",
-    "packet_id": "A1.1d-5R2-3ZR1R1",
-    "status": "AUTHORITY_REQUIRED",
-    "thread_id": "019fb502-1217-7fc2-aeba-c4c5d157c364",
-    "host_id": "remote-ssh-discovered:spenser-linux-codex",
-    "dispatch_nonce": "f48c1e95710b3f98aee943e2fe1ea85b21f7f5e8204ad9126c0126d72238674f",
-    "receipt_path": "orchestration/r2-3/receipts/R2-3ZR1-attempt-8.json",
+    "receipt_path": "orchestration/r2-3/receipts/R2-3ZP3-attempt-1.json",
     "artifact_sha256": "sha256:de9a857e5d6341d2f2430ed15354355568fb45a10d34f294384fa905a8ce452e"
   },
   "active_evidence_dispatches": [],

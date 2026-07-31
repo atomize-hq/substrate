@@ -1,0 +1,124 @@
+{
+  "protocol": "codex.top-level-task-receipt.v1",
+  "orchestration_id": "substrate-r2-3",
+  "dispatch_nonce": "745771f218d81aed279861b84b759bba3b5d85fbe4e8afea95e655e5b59653d9",
+  "increment": "R2-3ZP3",
+  "packet_id": "A1.1d-5R2-3ZP3",
+  "status": "AUTHORITY_REQUIRED",
+  "increment_task": {
+    "thread_id": "019fb829-785d-76f3-9078-bcae86dd9f3f",
+    "host_id": "remote-ssh-discovered:spenser-linux-codex"
+  },
+  "expected_base": {
+    "commit": "ec05167bd7bcb7be874af48fe33d6edb71492516",
+    "tree": "b0d399cfb09655d5ff61d47ec68408e52ba5cfec"
+  },
+  "local_checkout": {
+    "path": "/home/spenser/.codex/worktrees/4712/substrate-r2-3",
+    "head": "2cb796ffef68c2b049376984a90ce0382e5f3980",
+    "tree": "3fa8da269ee97deb5ba73ebb9a4c39e8bc39a6df",
+    "target_ref": "refs/heads/feat/internal-host-orchestrator-world-dispatch-bootstrap",
+    "divergence": {
+      "ahead": 1,
+      "behind": 0
+    },
+    "required_ancestor_present": "0f1e147fb735791b44a65099a65167cbdc1803af",
+    "clean": true
+  },
+  "remote_target": {
+    "head": "ec05167bd7bcb7be874af48fe33d6edb71492516",
+    "divergence_from_local": {
+      "ahead": 1,
+      "behind": 0
+    }
+  },
+  "changed_paths": [
+    "scripts/ci/canonical_shell_wall_runner.py",
+    "scripts/ci/test_canonical_shell_wall_runner.py"
+  ],
+  "subject": {
+    "two_file_diff_sha256": "sha256:de9a857e5d6341d2f2430ed15354355568fb45a10d34f294384fa905a8ce452e",
+    "runner_sha256": "sha256:e446cf4a15fe024fb8796bd889e0ea9e00b323799d510c90a587f711e14658b5",
+    "test_sha256": "sha256:78981f03afe1c8eb907f3094b7278f9e847c71f4153262a0e748546ebacfa63c"
+  },
+  "trailers": {
+    "P1-Bootstrap-Bytes": "34196",
+    "P1-Bootstrap-SHA256": "7db3b59e78c40303cd2f665fe6a9e506fbb95aece21774fafad2bd466d556b90",
+    "P1-Host-Argv-Template-SHA256": "9c2fa5afb0c67ce5af88fe14c845a63d04fb26f6ea9100f5fa54a9c51b70b2c5",
+    "P1-Stage-A-Argv-Template-SHA256": "2b7ab6eb650dec7fa499787c18d746d1c4f9ecb5d91b1d0e20a7051e176fce22",
+    "P1-Stage-B-Argv-Template-SHA256": "0594686d4c23549b400ebae0de7898c4ea540c970a136101521a717535b7e31e"
+  },
+  "checks": {
+    "py_compile": "clean",
+    "focused_authenticated_tests": "clean",
+    "full_authenticated_selftests_local": "clean_103_of_103",
+    "git_diff_check": "clean",
+    "gitnexus": "impact textual-closure fallback due Python symbol gap; detect_changes pre-commit low risk changed_files=2 affected_processes=0; subject unchanged after commit"
+  },
+  "proof": {
+    "root": "/home/spenser/r2-3zp3-proof-final.j_ewwylb",
+    "setup_and_selftest_summary": {
+      "path": "/home/spenser/r2-3zp3-proof-final.j_ewwylb/setup-and-selftest-summary.json",
+      "sha256": "f1f5152c94dbf009f50d924506cb9d94b9df26fb0587b23e43772fb0774d1869"
+    },
+    "selftests": "authority clean 103/103; descendant clean 103/103; descendant head 09e971fb3713669b1c35626cbedc678783f8ec71",
+    "authority_serial": {
+      "host_stdout": "wall_gate=ineligible invocation_id=599b04d579c4fb43d54a66629b67b27d",
+      "evidence_dir": "/home/spenser/r2-3zp3-proof-final.j_ewwylb/artifacts/authority/wall-serial/evidence-parent/authority-serial-599b04d579c4fb43d54a66629b67b27d",
+      "retained_backing_dir": "/home/spenser/r2-3zp3-proof-final.j_ewwylb/artifacts/authority/wall-serial/evidence-parent/.authority-serial-599b04d579c4fb43d54a66629b67b27d.backing",
+      "summary": {
+        "failed": 46,
+        "passed": 1276,
+        "discovered": 1322,
+        "ignored": 0,
+        "cargo_exit_code": 101,
+        "failure_names_sha256": "e46e0f4cc12e34f11007cfe992c0e2020400771b91e43ad8ddc7dbaabcb8a549",
+        "normalized_signatures_sha256": "415f1a0c37b3455ce2bf4b5a4d5e6a6e85d2f5c506e47d24692f69f83955fb0f",
+        "canonical_match": false
+      },
+      "provenance": {
+        "sha256": "150ee86a25c362e5286122a53b3a23f545d965fb22566406bc19cadd7d46b85b",
+        "eligible": false,
+        "wall_gate": "ineligible",
+        "record_stage": "cleanup",
+        "runner_exit_code": 71,
+        "ineligibility_reasons": [
+          "evidence_write_failed",
+          "mount_teardown_failed"
+        ],
+        "result": null,
+        "stage_a_status_received": false,
+        "stage_a_exit_received": false,
+        "stage_a_namespace_absent": false,
+        "stage_b_status_received": false,
+        "worker_ready_received": false,
+        "stage_b_exit_received": false
+      },
+      "artifact_hashes": {
+        "cargo.log": "53af5ac1e8912dfef58664c1276910d465fd455ff4f443310a650d899e85955a",
+        "containment.jsonl": "c65fce85e67ac2929f5f9fc7a460a6e9b8f05cb67fc85cabaf36246686bf4ed0",
+        "failure-names.txt": "e46e0f4cc12e34f11007cfe992c0e2020400771b91e43ad8ddc7dbaabcb8a549",
+        "normalized-signatures.txt": "415f1a0c37b3455ce2bf4b5a4d5e6a6e85d2f5c506e47d24692f69f83955fb0f",
+        "summary.json": "d4c29fef25ca11d8ee5311ee5118dee0e3a65fbbc904a9baaec2037022665a43"
+      }
+    },
+    "matrix_completion": "stopped after first authority-serial post-commit failure per contract"
+  },
+  "review": {
+    "record": "/home/spenser/r2-3zp3-proof-final.j_ewwylb/review/review-cycle-record.json",
+    "record_sha256": "sha256:a3b80a4202015a1f4a16b0e269b88ef2201a3043de57e44e9db1d2408db0bef8",
+    "validator_result": "VALID",
+    "verdict": "CLEAN",
+    "p1": 0,
+    "p2": 0,
+    "p3": 4,
+    "p4": 1
+  },
+  "blocker": {
+    "summary": "Post-commit authority proof still fails. Honest regression artifacts materialize, but provenance remains ineligible with evidence_write_failed + mount_teardown_failed, stage_a_status_received=false, stage_b_status_received=false, worker_ready_received=false, and retained hidden backing directory.",
+    "details": "The local unpublished authority commit remains 2cb796ffef68c2b049376984a90ce0382e5f3980 / tree 3fa8da269ee97deb5ba73ebb9a4c39e8bc39a6df in /home/spenser/.codex/worktrees/4712/substrate-r2-3, the checkout is clean, divergence is ahead 1 / behind 0 from remote ec05167bd7bcb7be874af48fe33d6edb71492516, and no publication occurred. Checks remain clean, including authenticated self-tests at 103/103 and a validated CLEAN review with P1=0 and P2=0. The first post-commit authority-serial proof honestly materialized 1322 discovered / 1276 passed / 46 failed / 0 ignored with the recorded failure and signature hashes, but provenance remains eligible=false with runner_exit_code 71, evidence_write_failed and mount_teardown_failed, result null, no stage-A/stage-B/worker-ready status, and a retained hidden backing directory. The remaining proof matrix was not attempted after the required stop, and nothing was amended, reset, published, or pushed.",
+    "required_authority": "Resume the same bound R2-3ZP3 increment from preserved local authority commit 2cb796ffef68c2b049376984a90ce0382e5f3980/tree 3fa8da269ee97deb5ba73ebb9a4c39e8bc39a6df. Do not amend, reset, or publish. Continue diagnosis only within the two allowlisted files and fresh external proof roots.",
+    "handoff_prompt": "Resume R2-3ZP3 from preserved local authority commit 2cb796ffef68c2b049376984a90ce0382e5f3980 in /home/spenser/.codex/worktrees/4712/substrate-r2-3. Keep the checkout clean and donor worktree read-only. Reuse /home/spenser/r2-3zp3-proof-final.j_ewwylb as historical evidence only. Preserve the clean 103/103 authority and descendant self-tests and the honest 1322/1276/46/0 failure artifacts. The bounded goal is to repair the remaining post-commit proof failure so authority and descendant serial/parallel runs all finalize eligible=true with proven backing/mount/namespace teardown, without weakening authentication, containment, teardown, evidence integrity, descendant authority, or fail-closed behavior, and without expanding beyond the two allowlisted files or into the known retained-worker increment."
+  },
+  "next_increment": "R2-3ZT1"
+}
