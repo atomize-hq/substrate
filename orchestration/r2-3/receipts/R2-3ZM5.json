@@ -1,0 +1,112 @@
+{
+  "protocol": "codex.top-level-task-receipt.v1",
+  "orchestration_id": "substrate-r2-3",
+  "dispatch_nonce": "442b3f902a927a4ab09058d21fb92b7eb3163056133e0e72b39e5f27c06f5c44",
+  "increment": "R2-3ZM5",
+  "packet_id": "A1.1d-5R2-3ZM5",
+  "status": "LANDED_CLEAN",
+  "increment_task": {
+    "thread_id": "019fb9c5-d7bc-79c2-8572-614b1fa72561",
+    "host_id": "remote-ssh-discovered:spenser-linux-codex"
+  },
+  "expected_base": {
+    "commit": "610db8a9350c9b52496954f5c93232d885f439d9",
+    "tree": "df4eb9869304a629a480dc47adbf79fd0ebf56b2"
+  },
+  "landed": {
+    "commit": "c583c5f293644fab75d8d42bd3bcad63f114d4fe",
+    "tree": "a070f5f5787c27180f13dece9a1c3c3241728fda",
+    "target_ref": "refs/heads/feat/internal-host-orchestrator-world-dispatch-bootstrap",
+    "live_remote": "c583c5f293644fab75d8d42bd3bcad63f114d4fe"
+  },
+  "subject_fingerprint": "sha256:621f0c697cfd39d93783925729412ee798d8a6bb4fec4dc04f91d7b6a55126ea",
+  "changed_files": [
+    "crates/world-mac-lima/examples/mac_backend_smoke.rs",
+    "crates/world-mac-lima/src/lib.rs",
+    "scripts/mac/orchestration-smoke.sh"
+  ],
+  "subject_manifest": {
+    "path": "/home/spenser/t/r2-3zm5-review.hZYSS9/subject-manifest.json",
+    "sha256": "sha256:8b5a4bb6c7cc00dc20d02197465ad819c2283911b663deef71c2267d8cbb8f45"
+  },
+  "review": {
+    "packet_id": "A1.1d-5R2-3ZM5",
+    "record_path": "/home/spenser/t/r2-3zm5-review.hZYSS9/review-cycle-record.json",
+    "record_sha256": "sha256:5ef12170dc9cbf2e7faf4aba7f9ddb631deaa02ab11814def1abc20fbd64fc08",
+    "validated": true,
+    "terminal": "CLEAN",
+    "p1": 0,
+    "p2": 0,
+    "p3_p4_disposition": "none"
+  },
+  "source_closure": {
+    "remaining_contextless_constructor_calls": 0,
+    "remaining_default_impl": 0,
+    "replacement_ambient_constructor_paths": 0,
+    "sole_shell_caller_of_mac_backend_smoke": "scripts/mac/orchestration-smoke.sh",
+    "production_contextless_platform_factory_consumers": 0
+  },
+  "proof": {
+    "required_checks_passed": true,
+    "inherited_shell_wall": {
+      "source_increment": "R2-3ZH1",
+      "source_commit": "610db8a9350c9b52496954f5c93232d885f439d9",
+      "discovered": 1322,
+      "passed": 1274,
+      "failed": 48,
+      "ignored": 0,
+      "failure_names_sha256": "sha256:c6de1349137dcb16d03b87be5364dc50d74a5052565e2c8d40dfed303592bed9",
+      "normalized_signatures_sha256": "sha256:2a0df9b340cc7e5e1b6e4f76e60e6f937b7442008142d78a7ae24bbcd2f60a90"
+    },
+    "linux_exclusion": {
+      "proof_root": "/home/spenser/t/r2-3zm5-proof.3ZeeGf",
+      "cargo_tree_sha256": "sha256:63d373a575704f68e3b7d346d1953563cf2bba67378368434145139c62410283",
+      "cargo_metadata_sha256": "sha256:36063da47ba1aece7fa3f81ef2d74bf432e406d44c32578874d9506006d10712",
+      "shell_no_run_log_sha256": "sha256:ddec52647ce61c6aa900920b9975551f66831e84ebda7fb39a8b544072d408c8",
+      "shell_no_run_status": 0,
+      "world_mac_lima_reachable_from_linux_shell_graph": false,
+      "linux_shell_tree_contains_world_mac_lima": false
+    },
+    "diagnostic_wall_runs": [
+      {
+        "discovered": 1322,
+        "passed": 1222,
+        "failed": 100,
+        "ignored": 0,
+        "raw_log_sha256": "sha256:479196cb766a2040a0be30758d159c0557d2f7ea90811e494d6860c8a620b02b",
+        "disposition": "non-canonical diagnostic only"
+      },
+      {
+        "discovered": 1322,
+        "passed": 1246,
+        "failed": 76,
+        "ignored": 0,
+        "raw_log_sha256": "sha256:07c508c2c9d24526406d3e55abc56038f26bae24e10e95b5b6baf278b87db106",
+        "disposition": "non-canonical diagnostic only"
+      }
+    ],
+    "manifests_unchanged": true,
+    "cross_target_limitation": "aarch64-apple-darwin target unavailable on Linux; native proof remains assigned to EVIDENCE:R2-3Z"
+  },
+  "gitnexus": {
+    "risk_level": "low",
+    "changed_files": 3,
+    "changed_symbols": 16,
+    "affected_processes": 0
+  },
+  "verification": {
+    "required_checks_passed": true,
+    "allowlist_passed": true,
+    "change_detection_passed": true,
+    "checkout_clean": true,
+    "ahead": 0,
+    "behind": 0,
+    "final_live_base_match": true,
+    "remote_zero_zero": true,
+    "meta_terminal_barrier_passed": true,
+    "meta_remote_tree_diff_verified": true,
+    "meta_subject_fingerprint_recomputed": true,
+    "meta_review_record_validated": true
+  },
+  "next_increment": "EVIDENCE:R2-3Z"
+}
