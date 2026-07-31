@@ -1,7 +1,7 @@
 {
   "protocol": "codex.top-level-orchestration-state.v1",
   "orchestration_id": "substrate-r2-3",
-  "status": "RUNNING",
+  "status": "BLOCKED",
   "dispatch_authorized": true,
   "remote": "origin",
   "target_ref": "refs/heads/feat/internal-host-orchestrator-world-dispatch-bootstrap",
@@ -54,20 +54,7 @@
     "thread_id": "019fa3f7-c447-7132-9126-82e2cf38bd9d",
     "host_id": "remote-ssh-discovered:spenser-linux-codex"
   },
-  "active_dispatch": {
-    "increment": "R2-3ZP3",
-    "packet_id": "A1.1d-5R2-3ZP3",
-    "thread_id": "019fb829-785d-76f3-9078-bcae86dd9f3f",
-    "host_id": "remote-ssh-discovered:spenser-linux-codex",
-    "dispatch_nonce": "745771f218d81aed279861b84b759bba3b5d85fbe4e8afea95e655e5b59653d9",
-    "expected_base": {
-      "commit": "ec05167bd7bcb7be874af48fe33d6edb71492516",
-      "tree": "b0d399cfb09655d5ff61d47ec68408e52ba5cfec"
-    },
-    "target_ref": "refs/heads/feat/internal-host-orchestrator-world-dispatch-bootstrap",
-    "read_only": false,
-    "scope_amendment": "user-authorized continuation from preserved local commit 2cb796ff, limited to canonical_shell_wall_runner.py and its test, fresh external proof roots, and eligible teardown/provenance proof; current candidate is the final proof-tooling attempt and any recurrence of the same provenance/teardown failure requires immediate AUTHORITY_REQUIRED stop with no further edits, commits, retries, wall legs, or publication; no product/test-helper/native-evidence/publication expansion"
-  },
+  "active_dispatch": null,
   "last_diagnostic": {
     "diagnostic_id": "R2-3ZP3",
     "packet_id": "A1.1d-5R2-3ZP3",
@@ -75,8 +62,8 @@
     "thread_id": "019fb829-785d-76f3-9078-bcae86dd9f3f",
     "host_id": "remote-ssh-discovered:spenser-linux-codex",
     "dispatch_nonce": "745771f218d81aed279861b84b759bba3b5d85fbe4e8afea95e655e5b59653d9",
-    "receipt_path": "orchestration/r2-3/receipts/R2-3ZP3-attempt-1.json",
-    "artifact_sha256": "sha256:de9a857e5d6341d2f2430ed15354355568fb45a10d34f294384fa905a8ce452e"
+    "receipt_path": "orchestration/r2-3/receipts/R2-3ZP3-attempt-2.json",
+    "artifact_sha256": "sha256:e4c80523fd50c13c23d288b415969e9f1ae55dcd8f29625d7d5fc3f02ea66655"
   },
   "active_evidence_dispatches": [],
   "verified_evidence": [],

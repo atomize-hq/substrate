@@ -1,0 +1,134 @@
+{
+  "protocol": "codex.top-level-task-receipt.v1",
+  "status": "AUTHORITY_REQUIRED",
+  "orchestration_id": "substrate-r2-3",
+  "dispatch_nonce": "745771f218d81aed279861b84b759bba3b5d85fbe4e8afea95e655e5b59653d9",
+  "increment": "R2-3ZP3",
+  "packet_id": "A1.1d-5R2-3ZP3",
+  "next_increment": "R2-3ZT1",
+  "increment_task": {
+    "thread_id": "019fb829-785d-76f3-9078-bcae86dd9f3f",
+    "host_id": "remote-ssh-discovered:spenser-linux-codex"
+  },
+  "meta": {
+    "thread_id": "019fa3f7-c447-7132-9126-82e2cf38bd9d",
+    "host_id": "remote-ssh-discovered:spenser-linux-codex"
+  },
+  "expected_base": {
+    "commit": "ec05167bd7bcb7be874af48fe33d6edb71492516",
+    "tree": "b0d399cfb09655d5ff61d47ec68408e52ba5cfec"
+  },
+  "target": {
+    "worktree": "/home/spenser/.codex/worktrees/4712/substrate-r2-3",
+    "ref": "refs/heads/feat/internal-host-orchestrator-world-dispatch-bootstrap",
+    "required_ancestor": "0f1e147fb735791b44a65099a65167cbdc1803af"
+  },
+  "subject_fingerprint": {
+    "local_unpublished_commit": "868994efaf132bb04c6cdd7c82da9433333c94e5",
+    "local_unpublished_commit_subject": "fix: refresh namespace teardown exemptions",
+    "preserved_local_commit_chain": [
+      "2cb796ffef68c2b049376984a90ce0382e5f3980",
+      "50948dbeb921582515a34bb6b7be21c46f29d008",
+      "868994efaf132bb04c6cdd7c82da9433333c94e5"
+    ],
+    "changed_paths": [
+      "scripts/ci/canonical_shell_wall_runner.py",
+      "scripts/ci/test_canonical_shell_wall_runner.py"
+    ],
+    "p1_trailers": {
+      "P1-Bootstrap-Bytes": "34196",
+      "P1-Bootstrap-SHA256": "7db3b59e78c40303cd2f665fe6a9e506fbb95aece21774fafad2bd466d556b90",
+      "P1-Host-Argv-Template-SHA256": "9c2fa5afb0c67ce5af88fe14c845a63d04fb26f6ea9100f5fa54a9c51b70b2c5",
+      "P1-Stage-A-Argv-Template-SHA256": "2b7ab6eb650dec7fa499787c18d746d1c4f9ecb5d91b1d0e20a7051e176fce22",
+      "P1-Stage-B-Argv-Template-SHA256": "0594686d4c23549b400ebae0de7898c4ea540c970a136101521a717535b7e31e"
+    }
+  },
+  "checks": {
+    "local_py_compile": "passed",
+    "local_focused_authenticated_tests": {
+      "run": 3,
+      "failed": 0,
+      "status": "clean"
+    },
+    "local_full_authenticated_selftests": {
+      "run": 103,
+      "failed": 0,
+      "status": "clean"
+    },
+    "git_diff_check": "passed",
+    "exact_two_file_containment": true,
+    "gitnexus": {
+      "impact": "tooling_gap_python_symbols_not_found_risk_unknown",
+      "detect_changes": "tooling_gap_no_changes_detected_on_python_diff"
+    }
+  },
+  "proofs": {
+    "proof_root": "/home/spenser/r2-3zp3-proof-final.m7j01osg",
+    "historical_read_only_proof_root": "/home/spenser/r2-3zp3-proof-final.j_ewwylb",
+    "authority_selftest": {
+      "status": "passed",
+      "run": 103,
+      "failed": 0
+    },
+    "first_post_commit_wall_leg": {
+      "repo": "authority",
+      "mode": "serial",
+      "returncode": 71,
+      "stdout": "wall_gate=ineligible invocation_id=5a339b1d6cdd82e8ab7ad24c14924a65",
+      "final_evidence_dir": "/home/spenser/r2-3zp3-proof-final.m7j01osg/artifacts/authority/wall-serial/evidence-parent/authority-serial-5a339b1d6cdd82e8ab7ad24c14924a65",
+      "retained_backing_dir": "/home/spenser/r2-3zp3-proof-final.m7j01osg/artifacts/authority/wall-serial/evidence-parent/.authority-serial-5a339b1d6cdd82e8ab7ad24c14924a65.backing",
+      "artifact_set": [
+        "cargo.log",
+        "containment.jsonl",
+        "failure-names.txt",
+        "manifest.sha256",
+        "normalized-signatures.txt",
+        "provenance.json",
+        "summary.json"
+      ],
+      "provenance_excerpt": {
+        "eligible": false,
+        "wall_gate": "ineligible",
+        "record_stage": "cleanup",
+        "runner_exit_code": 71,
+        "ineligibility_reasons": [
+          "evidence_write_failed",
+          "mount_teardown_failed"
+        ],
+        "stage_a_status_received": false,
+        "stage_b_status_received": true,
+        "worker_ready_received": true,
+        "stage_b_exit_received": true,
+        "stage_a_exit_received": false,
+        "stage_a_namespace_absent": false,
+        "stage_a_unmounted": false,
+        "stage_b_unmounted": false,
+        "tmpfs_unmounted": false,
+        "proc_unmounted": false,
+        "result_is_null": false
+      }
+    },
+    "user_directed_cutoff_triggered": true,
+    "remaining_wall_legs_not_run": [
+      "authority-parallel",
+      "descendant-serial",
+      "descendant-parallel"
+    ]
+  },
+  "review": {
+    "status": "not_started",
+    "reason": "user-directed proof-tooling cutoff triggered immediately after the first post-commit authority-serial wall leg reproduced the blocked provenance/teardown class"
+  },
+  "clean_status": {
+    "task_checkout_clean": true,
+    "publication_attempted": false,
+    "push_attempted": false,
+    "r2_3zp3_unlanded": true
+  },
+  "blocker": {
+    "summary": "User-directed final-attempt proof cutoff reached. The first post-commit authority-serial wall leg reproduced the same blocked provenance/teardown failure class, so R2-3ZP3 remains unlanded and no further wall legs, edits, commits, retries, or publication attempts were performed.",
+    "details": "Local candidate 868994efaf132bb04c6cdd7c82da9433333c94e5, preserving ancestors 2cb796ffef68c2b049376984a90ce0382e5f3980 and 50948dbeb921582515a34bb6b7be21c46f29d008, passed py_compile, three targeted authenticated tests, the full 103/103 authenticated self-test suite, git diff --check, and exact two-file containment. The first real post-commit authority-serial wall leg then failed with rc=71 and wall_gate=ineligible. Its provenance remained eligible=false with evidence_write_failed and mount_teardown_failed, missing stage-A completion, unproven namespace/mount teardown, and a retained hidden backing directory. Per the user-imposed final-attempt cutoff, the task performed no additional wall leg, retry, workaround, review, publication, amend, reset, or new candidate commit.",
+    "required_authority": "Explicit user/meta authority would be required to continue beyond the imposed final-attempt cutoff. The current orchestration decision is to stop R2-3ZP3 rather than grant that authority.",
+    "handoff_prompt": "Do not resume R2-3ZP3 under the current orchestration decision. Preserve the unpublished local commit chain and proof roots as diagnostic evidence only. Any future restart would require an explicit reversal of the user-directed proof-tooling cutoff and a new bounded authority decision."
+  }
+}
