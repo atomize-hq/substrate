@@ -33,3 +33,6 @@ docs/project_management/packs/**/logs/
 .substrate
 archive
 .agents
+
+# Private local audit evidence; preserve repo-local but never commit.
+artifacts/private/
