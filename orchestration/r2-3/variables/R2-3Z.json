@@ -1,7 +1,7 @@
 {
   "INCREMENT": "R2-3Z",
   "ORCHESTRATION_ID": "substrate-r2-3",
-  "DISPATCH_NONCE": "05c87ef021e9d63a1a227a1eb168fc11718eb70ce6a7e008b94ac2a9fbc549cd",
+  "DISPATCH_NONCE": "3d2cefa4a2dac1608cfa885551df2d3eb28216396728c9a30edecf6cdd9b74a0",
   "META_THREAD_ID": "019fa3f7-c447-7132-9126-82e2cf38bd9d",
   "META_HOST_ID": "remote-ssh-discovered:spenser-linux-codex",
   "PACKET_ID": "A1.1d-5R2-3Z",
@@ -15,7 +15,7 @@
   ],
   "REMOTE": "origin",
   "TARGET_REF": "refs/heads/feat/internal-host-orchestrator-world-dispatch-bootstrap",
-  "EXPECTED_BASE_COMMIT": "3a6490ff391453535168491b3f8d26adf9e20938",
-  "EXPECTED_BASE_TREE": "fca816eaed26407ea89d352c7a087a201391bd49",
+  "EXPECTED_BASE_COMMIT": "c583c5f293644fab75d8d42bd3bcad63f114d4fe",
+  "EXPECTED_BASE_TREE": "a070f5f5787c27180f13dece9a1c3c3241728fda",
   "REQUIRED_ANCESTOR": "0f1e147fb735791b44a65099a65167cbdc1803af"
 }

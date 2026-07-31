@@ -1,0 +1,42 @@
+{
+  "protocol": "codex.top-level-evidence-receipt.v1",
+  "orchestration_id": "substrate-r2-3",
+  "dispatch_nonce": "c1430b3ffa7b22854dfc8d4564ec51b2f16d1a0da71af9e46889eca1302e726c",
+  "evidence_id": "R2-3Z/WIN-EVIDENCE",
+  "status": "EVIDENCE_CLEAN",
+  "platform": "windows",
+  "evidence_task": {
+    "thread_id": "019fba1b-deea-7830-ae74-e8569134aeb3",
+    "host_id": "remote-control:env_e_6a3d9cd24b5483238ba55b699a98be35"
+  },
+  "source": {
+    "commit": "c583c5f293644fab75d8d42bd3bcad63f114d4fe",
+    "tree": "a070f5f5787c27180f13dece9a1c3c3241728fda",
+    "target_ref": "refs/heads/feat/internal-host-orchestrator-world-dispatch-bootstrap",
+    "live_remote": "c583c5f293644fab75d8d42bd3bcad63f114d4fe"
+  },
+  "environment": {
+    "host_id": "remote-control:env_e_6a3d9cd24b5483238ba55b699a98be35",
+    "project_id": "e5022d35-561c-4fa5-a5db-2cca9aef4e63",
+    "project_path": "C:/Users/spmcc/Documents/__Project_Code/substrate-r2-3",
+    "os_version": "Windows 10 Home 2009 build 26200 64-bit; PowerShell 7.6.4",
+    "tool_versions": {
+      "pwsh": "7.6.4",
+      "wsl.exe --version": "WSL version: 2.7.11.0\n\nKernel version: 6.18.33.2-2\n\nWSLg version: 1.0.73.2\n\nMSRDC version: 1.2.7214\n\nDirect3D version: 1.611.1-81528511\n\nDXCore version: 10.0.26100.1-240331-1435.ge-release\n\nWindows version: 10.0.26200.7462",
+      "wsl.exe --status": "Default Distribution: Ubuntu-24.04\n\nDefault Version: 2",
+      "git --version": "git version 2.46.0.windows.1",
+      "cargo --version": "cargo 1.89.0 (c24e10642 2025-06-23)",
+      "rustc --version": "rustc 1.89.0 (29483883e 2025-08-04)"
+    }
+  },
+  "evidence": {
+    "artifact_path": "C:\\Users\\spmcc\\AppData\\Local\\Temp\\substrate-r2-3-win-evidence-f73c4d2b9ff46874\\artifacts\\R2-3Z-WIN-EVIDENCE.artifact.json",
+    "artifact_sha256": "sha256:2c36a8dae9f3bcfa1c240c62a1e44f93aee0798702ae78a0076d43778b93d46e",
+    "gates": [
+      "R2-DIAG-01",
+      "R2-MAP-WIN-01"
+    ]
+  },
+  "prohibited_actions_confirmed": true,
+  "checkout_unchanged": true
+}

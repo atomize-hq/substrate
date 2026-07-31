@@ -1,7 +1,7 @@
 {
   "protocol": "codex.top-level-orchestration-state.v1",
   "orchestration_id": "substrate-r2-3",
-  "status": "EVIDENCE_RUNNING",
+  "status": "READY",
   "dispatch_authorized": true,
   "remote": "origin",
   "target_ref": "refs/heads/feat/internal-host-orchestrator-world-dispatch-bootstrap",
@@ -66,22 +66,7 @@
     "receipt_path": "orchestration/r2-3/receipts/R2-3ZM5-attempt-2.json",
     "artifact_sha256": "sha256:07c508c2c9d24526406d3e55abc56038f26bae24e10e95b5b6baf278b87db106"
   },
-  "active_evidence_dispatches": [
-    {
-      "evidence_id": "R2-3Z/WIN-EVIDENCE",
-      "platform": "windows",
-      "project_id": "e5022d35-561c-4fa5-a5db-2cca9aef4e63",
-      "project_path": "C:/Users/spmcc/Documents/__Project_Code/substrate-r2-3",
-      "thread_id": "019fba1b-deea-7830-ae74-e8569134aeb3",
-      "host_id": "remote-control:env_e_6a3d9cd24b5483238ba55b699a98be35",
-      "dispatch_nonce": "c1430b3ffa7b22854dfc8d4564ec51b2f16d1a0da71af9e46889eca1302e726c",
-      "source": {
-        "commit": "c583c5f293644fab75d8d42bd3bcad63f114d4fe",
-        "tree": "a070f5f5787c27180f13dece9a1c3c3241728fda",
-        "target_ref": "refs/heads/feat/internal-host-orchestrator-world-dispatch-bootstrap"
-      }
-    }
-  ],
+  "active_evidence_dispatches": [],
   "verified_evidence": [
     {
       "evidence_id": "R2-3Z/MAC-EVIDENCE",
@@ -93,6 +78,22 @@
       "dispatch_nonce": "eba960c4ad90f9ad4eb6d1ceea2c278f438d35526f534aa5bbd6ad7cddf4f918",
       "receipt_path": "orchestration/r2-3/receipts/R2-3Z-MAC-EVIDENCE-refresh-1.json",
       "receipt_sha256": "sha256:3b44f6387070b7aaea4306ae58d7f280b1cee3e163ee59219d4900ce3f53dfaf",
+      "source": {
+        "commit": "c583c5f293644fab75d8d42bd3bcad63f114d4fe",
+        "tree": "a070f5f5787c27180f13dece9a1c3c3241728fda",
+        "target_ref": "refs/heads/feat/internal-host-orchestrator-world-dispatch-bootstrap"
+      }
+    },
+    {
+      "evidence_id": "R2-3Z/WIN-EVIDENCE",
+      "platform": "windows",
+      "project_id": "e5022d35-561c-4fa5-a5db-2cca9aef4e63",
+      "project_path": "C:/Users/spmcc/Documents/__Project_Code/substrate-r2-3",
+      "thread_id": "019fba1b-deea-7830-ae74-e8569134aeb3",
+      "host_id": "remote-control:env_e_6a3d9cd24b5483238ba55b699a98be35",
+      "dispatch_nonce": "c1430b3ffa7b22854dfc8d4564ec51b2f16d1a0da71af9e46889eca1302e726c",
+      "receipt_path": "orchestration/r2-3/receipts/R2-3Z-WIN-EVIDENCE-refresh-1.json",
+      "receipt_sha256": "sha256:4ee942690655c1fac185244438d14e2561df52c306dea7e5428d556b530fd28c",
       "source": {
         "commit": "c583c5f293644fab75d8d42bd3bcad63f114d4fe",
         "tree": "a070f5f5787c27180f13dece9a1c3c3241728fda",
