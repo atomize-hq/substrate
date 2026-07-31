@@ -7112,6 +7112,19 @@ the exact private-root invocation restored the 45-failure wall. Runtime source a
 unchanged. The 59 failures are not added to the baseline, waived, treated as product failures or
 environment drift, used to weaken trusted-root validation, or used to justify serial-only proof.
 
+### Current descendant-authority closeout note
+
+Current post-publication closeout authority remains bound to reviewed runner repair commit
+`ec05167bd7bcb7be874af48fe33d6edb71492516` and its exact P1 trailers plus authenticated
+runner/self-test blobs. The protected donor `R2-3ZWR1` at
+`3a6490ff391453535168491b3f8d26adf9e20938` preserved a three-file macOS/test-harness repair
+boundary, and `R2-3ZR1` closes only that boundary on the descendant base: no public contextless
+`MacLimaBackend` constructors, explicit typed smoke/example construction, migrated colocated tests,
+and focused host-inbox trusted-parent hardening retained only because the reverted helper fails the
+focused shell tests while the retained helper passes them. This note does not authorize or claim
+any canonical-wall repair, runner/self-test blob change, PI-077/PI-078 change, native evidence,
+or R3 lifecycle activation.
+
 ## Normative renewed R2-2 publication contract
 
 The selected model is **Docs-on-top → one fast-forward publication**. This section is the normative

@@ -1,4 +1,4 @@
-// Mac backend smoke test example
+// Mac backend typed pre-R3 contract validation example
 
 #[cfg(not(target_os = "macos"))]
 fn main() {
@@ -6,103 +6,82 @@ fn main() {
 }
 
 #[cfg(target_os = "macos")]
-use anyhow::Result;
+use anyhow::{Context, Result};
 #[cfg(target_os = "macos")]
 use std::path::PathBuf;
 #[cfg(target_os = "macos")]
-use world_api::{
-    BackendPolicyInputV1, BackendPolicySnapshotV3, BackendPolicySnapshotWorldFsDimensionV3,
-    BackendPolicySnapshotWorldFsFailClosedV3, BackendPolicySnapshotWorldFsV3,
-    BackendPolicySnapshotWorldFsWriteV3, BackendWorldFsDenyEnforcementV3,
-    BackendWorldNetworkRoutingV1, ExecRequest, WorldBackend, WorldFsMode, WorldSpec,
-};
+use transport_api_types::{InstallBootstrapContextCarrierV1, PlatformBootstrapMappingV1};
 #[cfg(target_os = "macos")]
 use world_mac_lima::MacLimaBackend;
 
 #[cfg(target_os = "macos")]
-fn staged_workspace_current() -> PathBuf {
-    std::env::var("SUBSTRATE_LIMA_STAGED_WORKSPACE_CURRENT")
-        .map(PathBuf::from)
-        .unwrap_or_else(|_| PathBuf::from("/var/lib/substrate/staged-workspace/current"))
-}
+fn parse_args() -> Result<(
+    InstallBootstrapContextCarrierV1,
+    PlatformBootstrapMappingV1,
+    PathBuf,
+)> {
+    let mut encoded_host_carrier = None;
+    let mut encoded_mapping = None;
+    let mut project_dir = None;
+    let mut args = std::env::args().skip(1);
 
-#[cfg(target_os = "macos")]
-fn smoke_world_spec(project_dir: PathBuf) -> WorldSpec {
-    WorldSpec {
-        project_dir,
-        fs_mode: WorldFsMode::ReadOnly,
-        // Keep the generic Lima backend smoke focused on routed reachability and
-        // authoritative backend-policy handoff. Opt-in netfilter posture is
-        // verified separately by the dedicated macOS netfilter conformance flow.
-        backend_policy: Some(BackendPolicyInputV1 {
-            schema_version: 1,
-            policy_snapshot: BackendPolicySnapshotV3 {
-                schema_version: 3,
-                net_allowed: Vec::new(),
-                world_fs: BackendPolicySnapshotWorldFsV3 {
-                    host_visible: false,
-                    fail_closed: BackendPolicySnapshotWorldFsFailClosedV3 { routing: true },
-                    deny_enforcement: Some(BackendWorldFsDenyEnforcementV3::Strict),
-                    caged_required: true,
-                    discover: Some(BackendPolicySnapshotWorldFsDimensionV3 {
-                        allow_list: vec![".".to_string()],
-                        deny_list: vec!["tmp".to_string()],
-                    }),
-                    read: Some(BackendPolicySnapshotWorldFsDimensionV3 {
-                        allow_list: vec![".".to_string()],
-                        deny_list: vec!["private".to_string()],
-                    }),
-                    write: BackendPolicySnapshotWorldFsWriteV3 {
-                        enabled: false,
-                        allow_list: vec!["out".to_string()],
-                        deny_list: vec!["out/blocked".to_string()],
-                    },
-                },
-            },
-            world_network: BackendWorldNetworkRoutingV1 {
-                isolate_network: false,
-                allowed_domains: Vec::new(),
-            },
-        }),
-        ..WorldSpec::default()
+    while let Some(arg) = args.next() {
+        match arg.as_str() {
+            "--install-bootstrap-context-v1" => {
+                let value = args
+                    .next()
+                    .context("missing value for --install-bootstrap-context-v1")?;
+                if encoded_host_carrier.replace(value).is_some() {
+                    anyhow::bail!("duplicate --install-bootstrap-context-v1");
+                }
+            }
+            "--platform-bootstrap-mapping-v1" => {
+                let value = args
+                    .next()
+                    .context("missing value for --platform-bootstrap-mapping-v1")?;
+                if encoded_mapping.replace(value).is_some() {
+                    anyhow::bail!("duplicate --platform-bootstrap-mapping-v1");
+                }
+            }
+            "--project-dir" => {
+                let value = args.next().context("missing value for --project-dir")?;
+                if project_dir.replace(value).is_some() {
+                    anyhow::bail!("duplicate --project-dir");
+                }
+            }
+            _ => anyhow::bail!(
+                "usage: mac_backend_smoke --install-bootstrap-context-v1 <carrier> --platform-bootstrap-mapping-v1 <mapping> --project-dir <absolute-path>"
+            ),
+        }
     }
+
+    let encoded_host_carrier =
+        encoded_host_carrier.context("missing --install-bootstrap-context-v1")?;
+    let host_carrier = InstallBootstrapContextCarrierV1::decode(&encoded_host_carrier)
+        .map_err(|err| anyhow::anyhow!("invalid --install-bootstrap-context-v1: {err}"))?;
+
+    let encoded_mapping = encoded_mapping.context("missing --platform-bootstrap-mapping-v1")?;
+    let mapping = PlatformBootstrapMappingV1::decode(&encoded_mapping, &host_carrier)
+        .map_err(|err| anyhow::anyhow!("invalid --platform-bootstrap-mapping-v1: {err}"))?;
+
+    let project_dir = PathBuf::from(project_dir.context("missing --project-dir")?);
+    if !project_dir.is_absolute() {
+        anyhow::bail!("--project-dir must be an absolute path");
+    }
+
+    Ok((host_carrier, mapping, project_dir))
 }
 
 #[cfg(target_os = "macos")]
 fn main() -> Result<()> {
-    println!("Creating MacLimaBackend...");
-    let backend = MacLimaBackend::new()?;
+    let (host_carrier, mapping, project_dir) = parse_args()?;
+    let project_label = project_dir
+        .file_name()
+        .and_then(|value| value.to_str())
+        .unwrap_or("<root>");
 
-    println!("Creating world session with authoritative backend policy...");
-    let project_dir = staged_workspace_current();
-    let spec = smoke_world_spec(project_dir.clone());
-    let handle = backend.ensure_session(&spec)?;
-    println!("World session created: {}", handle.id);
-
-    println!("Executing test command...");
-    let req = ExecRequest {
-        cmd: "bash -lc 'echo from-mac-backend'".to_string(),
-        cwd: project_dir,
-        env: std::env::vars().collect(),
-        pty: false,
-        span_id: None,
-        shared_world: None,
-        member_dispatch: None,
-    };
-
-    let res = backend.exec(&handle, req)?;
-    println!(
-        "Command executed:\n  exit={}\n  stdout={}\n  stderr={}",
-        res.exit,
-        String::from_utf8_lossy(&res.stdout),
-        String::from_utf8_lossy(&res.stderr)
-    );
-
-    if res.exit == 0 {
-        println!("✓ Smoke test passed!");
-    } else {
-        println!("✗ Command failed with exit code {}", res.exit);
-    }
+    let _backend = MacLimaBackend::new_with_mapping(host_carrier, mapping)?;
+    println!("✓ Typed pre-R3 MacLimaBackend contract validation passed (project={project_label})");
 
     Ok(())
 }

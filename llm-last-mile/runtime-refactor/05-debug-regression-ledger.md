@@ -2997,10 +2997,32 @@ integration commit `8c46135c861a468dea316cf9fd7d6c6bb15bddac`; that evidence is 
 relabeled as a post-ZP2 proof. The next reviewed authority commit for future canonical walls must
 be recomputed from final post-ZP2 bytes and trailers rather than inferred from this ledger entry.
 
+### R2-3 descendant-authority repair status
+
 That ordinary fast-forward publication subsequently completed at
-`0f1e147fb735791b44a65099a65167cbdc1803af`. R2-3 orientation is next after the process-only
-bounded-review calibration; R2-4 and R3 remain later. Privileged product smoke, non-Linux proof,
-direct-member adoption, and seam promotion remain unclaimed.
+`0f1e147fb735791b44a65099a65167cbdc1803af`. The protected donor `R2-3ZWR1` then stopped cleanly at
+`3a6490ff391453535168491b3f8d26adf9e20938` with unreconciled WIP limited to
+`crates/shell/src/execution/host_inbox_materialization.rs`,
+`crates/world-mac-lima/examples/mac_backend_smoke.rs`, and
+`crates/world-mac-lima/src/lib.rs`. `R2-3ZP2` landed the reviewed descendant-authority runner
+repair at `ec05167bd7bcb7be874af48fe33d6edb71492516`, preserving the canonical
+`1309 discovered / 1264 passed / 45 failed / 0 ignored` wall, failure-name hash
+`b23bb59ad12833d2c1d37c19c54933cd6bcb1c75e0dab8a70179b9881372be70`,
+normalized-signature hash `33c686a6ec9f3a0a4f51e1fca976445e6804da12fbbff50312a03f0042cdfac3`,
+and the exact P1 authority trailers plus runner/self-test blob continuity.
+
+`R2-3ZR1` is the bounded descendant-authority closeout on top of `ec05167`. It removes the
+remaining public contextless `MacLimaBackend` constructors, requires the macOS smoke/example path
+to decode one `InstallBootstrapContextCarrierV1`, one `PlatformBootstrapMappingV1`, and one
+absolute project directory, and migrates the colocated test/private-helper construction path to
+`MacLimaBackend::new_with_mapping`. The focused trusted-root hardening in
+`host_inbox_materialization.rs` is retained only because the reverted helper fails seven focused
+shell tests with `legacy authority writer preflight failed` / `open retained legacy StateStore root`
+while the retained helper passes the same focused filter. This descendant-authority closeout does
+not claim native evidence, canonical-wall repair, PI-077/PI-078 change, or R3 lifecycle progress.
+
+Fresh native evidence under `R2-3Z` remains outstanding. R2-4 and R3 remain later. Privileged
+product smoke, non-Linux proof, direct-member adoption, and seam promotion remain unclaimed.
 
 ## Review-process calibration
 

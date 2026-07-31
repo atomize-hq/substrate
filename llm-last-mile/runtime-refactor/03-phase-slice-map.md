@@ -1266,6 +1266,15 @@ expansion, false native claim, or need to guess guest identity is
   PI-052, PI-054–PI-058, PI-060, PI-068–PI-070, PI-075–PI-076, PI-079, PI-081, PI-090–PI-091,
   PI-112, PI-115–PI-116, and PI-118 is present. PI-059 remains harness-only; PI-077/PI-078 remain
   byte-frozen; PI-050/PI-080 and every R3 row retain the ownership above.
+- **Current descendant-authority status:** post-publication `R2-3ZWR1` preserved a protected
+  three-file donor at `3a6490ff391453535168491b3f8d26adf9e20938`; `R2-3ZP2` landed the reviewed
+  runner descendant-authority repair at `ec05167bd7bcb7be874af48fe33d6edb71492516`; and
+  `R2-3ZR1` closes only the residual macOS ambient-constructor seam plus the causally retained
+  trusted-parent host-inbox test-helper hardening by removing `MacLimaBackend::new`/`new_with_vm_name`,
+  typing the smoke/example path, migrating the colocated tests/private helpers, and retaining the
+  focused `host_inbox_materialization` helper change only because the reverted-vs-retained proof
+  kept it causally justified. `R2-3Z` remains open for fresh native evidence and parent closeout
+  only; PI-077/PI-078 and every R3 lifecycle row remain unchanged.
 - **Files/symbols:** no production file or symbol. Evidence transcription may touch only the six
   existing runtime-refactor control-pack Markdown files and only to record current proof; any
   product defect returns to its owning child under a new fingerprint/review sequence.

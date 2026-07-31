@@ -33,8 +33,8 @@ pub mod transport;
 pub mod vm;
 
 use crate::transport::{
-    managed_host_socket_path, managed_host_socket_path_for_mapping, CANONICAL_GUEST_SOCKET_PATH,
-    COMPATIBILITY_TCP_HOST, COMPATIBILITY_TCP_PORT,
+    managed_host_socket_path_for_mapping, CANONICAL_GUEST_SOCKET_PATH, COMPATIBILITY_TCP_HOST,
+    COMPATIBILITY_TCP_PORT,
 };
 pub use forwarding::{ForwardingHandle, ForwardingKind};
 pub use transport::Transport;
@@ -109,19 +109,6 @@ unsafe extern "C" {
 }
 
 impl MacLimaBackend {
-    /// Diagnostic compatibility constructor that still relies on ambient host state.
-    pub fn new() -> Result<Self> {
-        let vm_name = std::env::var("SUBSTRATE_LIMA_VM_NAME")
-            .or_else(|_| std::env::var("LIMA_VM_NAME"))
-            .unwrap_or_else(|_| "substrate".to_string());
-        let agent_socket = managed_host_socket_path();
-
-        // Auto-select best transport
-        let transport = Transport::auto_select()?;
-
-        Self::from_parts(vm_name, agent_socket, transport, None, None)
-    }
-
     // Helper to drive an async future whether or not a Tokio runtime is already active.
     fn block_on_compat<F, T>(&self, fut: F) -> T
     where
@@ -172,13 +159,6 @@ impl MacLimaBackend {
         })
     }
 
-    /// Diagnostic compatibility constructor that still relies on ambient host state.
-    pub fn new_with_vm_name(vm_name: String) -> Result<Self> {
-        let mut backend = Self::new()?;
-        backend.vm_name = vm_name;
-        Ok(backend)
-    }
-
     /// Typed constructor for validated Lima primitives; lifecycle remains gated on R3.
     pub fn new_with_mapping(
         host_carrier: InstallBootstrapContextCarrierV1,
@@ -196,10 +176,34 @@ impl MacLimaBackend {
     }
 
     #[cfg(test)]
+    fn test_backend_for_prefix_and_vm_name(prefix: &str, vm_name: &str) -> Result<Self> {
+        let (principal, home) = current_unix_principal_and_home()?;
+        let PlatformPrincipalV1::Unix { account, uid } = &principal else {
+            anyhow::bail!("expected Unix principal for typed Lima test backend");
+        };
+        let host = InstallBootstrapContextCarrierV1::from_context(
+            transport_api_types::InstallBootstrapContextV1::new_unix(prefix, account, *uid)?,
+        )?;
+        let mapping = PlatformBootstrapMappingV1::new_lima(
+            &host,
+            vm_name,
+            "0123456789abcdef0123456789abcdef",
+            home.join(".lima").to_str().context("UTF-8 home path")?,
+            "/home/substrate/.substrate",
+            "substrate",
+            1000,
+            &format!("{prefix}/sock/agent.sock"),
+            CANONICAL_GUEST_SOCKET_PATH,
+        )?;
+        Self::new_with_mapping(host, mapping)
+    }
+
+    #[cfg(test)]
     pub(crate) fn with_session_setup_mock(
         session_setup_override: std::sync::Arc<dyn SessionSetupMock>,
     ) -> Result<Self> {
-        let mut backend = Self::new()?;
+        let mut backend =
+            Self::test_backend_for_prefix_and_vm_name("/tmp/substrate-session-setup", "substrate")?;
         backend.session_setup_override = Some(session_setup_override);
         Ok(backend)
     }
@@ -846,12 +850,6 @@ fn current_unix_principal_and_home() -> Result<(PlatformPrincipalV1, PathBuf)> {
     ))
 }
 
-impl Default for MacLimaBackend {
-    fn default() -> Self {
-        Self::new().expect("Failed to create MacLimaBackend")
-    }
-}
-
 impl Drop for MacLimaBackend {
     fn drop(&mut self) {
         tracing::debug!("Shutting down MacLimaBackend runtime");
@@ -1194,40 +1192,32 @@ mod tests {
 
     #[test]
     fn test_backend_creation() {
-        let _env_guard = crate::test_util::lock_env();
-        let prev_substrate_lima_vm_name = std::env::var_os("SUBSTRATE_LIMA_VM_NAME");
-        let prev_lima_vm_name = std::env::var_os("LIMA_VM_NAME");
-        std::env::remove_var("SUBSTRATE_LIMA_VM_NAME");
-        std::env::remove_var("LIMA_VM_NAME");
+        let (_, home) = current_unix_principal_and_home().expect("current Unix principal");
+        let expected_control_root = home.join(".lima");
+        let backend = MacLimaBackend::test_backend_for_prefix_and_vm_name(
+            "/tmp/typed-backend-creation",
+            "substrate",
+        )
+        .expect("typed backend");
 
-        // This should work even if Lima is not installed
-        match MacLimaBackend::new() {
-            Ok(backend) => {
-                assert_eq!(backend.vm_name, "substrate");
-                assert!(backend
-                    .agent_socket
-                    .to_string_lossy()
-                    .contains(".substrate/sock"));
-                assert!(backend.typed_host_account_home.is_none());
-                assert!(backend.typed_lima_control_root.is_none());
-            }
-            Err(e) => {
-                println!("Expected failure when Lima not available: {}", e);
-            }
-        }
-
-        match prev_substrate_lima_vm_name {
-            Some(value) => std::env::set_var("SUBSTRATE_LIMA_VM_NAME", value),
-            None => std::env::remove_var("SUBSTRATE_LIMA_VM_NAME"),
-        }
-        match prev_lima_vm_name {
-            Some(value) => std::env::set_var("LIMA_VM_NAME", value),
-            None => std::env::remove_var("LIMA_VM_NAME"),
-        }
+        assert_eq!(backend.vm_name, "substrate");
+        assert_eq!(
+            backend.agent_socket,
+            PathBuf::from("/tmp/typed-backend-creation/sock/agent.sock")
+        );
+        assert!(matches!(backend.transport, Transport::UnixSocket));
+        assert_eq!(
+            backend.typed_host_account_home.as_deref(),
+            Some(home.as_path())
+        );
+        assert_eq!(
+            backend.typed_lima_control_root.as_deref(),
+            Some(expected_control_root.as_path())
+        );
     }
 
     #[test]
-    fn test_backend_vm_name_override_prefers_substrate_env() {
+    fn test_backend_creation_prefers_explicit_vm_name_over_ambient_env() {
         let _env_guard = crate::test_util::lock_env();
         let prev_substrate_lima_vm_name = std::env::var_os("SUBSTRATE_LIMA_VM_NAME");
         let prev_lima_vm_name = std::env::var_os("LIMA_VM_NAME");
@@ -1235,10 +1225,18 @@ mod tests {
         std::env::set_var("LIMA_VM_NAME", "substrate-arch");
         std::env::set_var("SUBSTRATE_LIMA_VM_NAME", "substrate-arch-override");
 
-        let backend = MacLimaBackend::new().expect("backend");
-        assert_eq!(backend.vm_name, "substrate-arch-override");
-        assert!(backend.typed_host_account_home.is_none());
-        assert!(backend.typed_lima_control_root.is_none());
+        let backend = MacLimaBackend::test_backend_for_prefix_and_vm_name(
+            "/tmp/typed-backend-vm-override",
+            "typed-vm-name",
+        )
+        .expect("typed backend");
+        assert_eq!(backend.vm_name, "typed-vm-name");
+        assert_eq!(
+            backend.agent_socket,
+            PathBuf::from("/tmp/typed-backend-vm-override/sock/agent.sock")
+        );
+        assert!(backend.typed_host_account_home.is_some());
+        assert!(backend.typed_lima_control_root.is_some());
 
         match prev_substrate_lima_vm_name {
             Some(value) => std::env::set_var("SUBSTRATE_LIMA_VM_NAME", value),
@@ -1251,7 +1249,7 @@ mod tests {
     }
 
     #[test]
-    fn test_backend_creation_uses_substrate_home_without_home() {
+    fn test_backend_creation_ignores_ambient_substrate_home_without_home() {
         let _env_guard = crate::test_util::lock_env();
         let prev_home = std::env::var_os("HOME");
         let prev_substrate_home = std::env::var_os("SUBSTRATE_HOME");
@@ -1263,13 +1261,17 @@ mod tests {
         std::env::remove_var("SUBSTRATE_LIMA_VM_NAME");
         std::env::remove_var("LIMA_VM_NAME");
 
-        let backend = MacLimaBackend::new().expect("backend should honor SUBSTRATE_HOME");
+        let backend = MacLimaBackend::test_backend_for_prefix_and_vm_name(
+            "/tmp/typed-substrate-home-only",
+            "substrate",
+        )
+        .expect("typed backend should ignore ambient substrate home");
         assert_eq!(
             backend.agent_socket,
-            PathBuf::from("/tmp/substrate-home-only/sock/agent.sock")
+            PathBuf::from("/tmp/typed-substrate-home-only/sock/agent.sock")
         );
-        assert!(backend.typed_host_account_home.is_none());
-        assert!(backend.typed_lima_control_root.is_none());
+        assert!(backend.typed_host_account_home.is_some());
+        assert!(backend.typed_lima_control_root.is_some());
 
         match prev_home {
             Some(value) => std::env::set_var("HOME", value),
@@ -1687,105 +1689,108 @@ mod tests {
         let prev = std::env::var("SUBSTRATE_WORLD_FS_MODE").ok();
         std::env::set_var("SUBSTRATE_WORLD_FS_MODE", "read_only");
 
-        if let Ok(backend) = MacLimaBackend::new() {
-            let world = WorldHandle {
-                id: "vm:substrate".to_string(),
-                shared_binding: None,
-            };
-            let spec = WorldSpec {
-                fs_mode: WorldFsMode::ReadOnly,
-                backend_policy: Some(sample_backend_policy(
-                    &["https://api.example.com"],
-                    &["api.example.com"],
-                    false,
-                    true,
-                )),
-                ..WorldSpec::default()
-            };
-            backend.apply_policy(&world, &spec).expect("apply policy");
+        let backend = MacLimaBackend::test_backend_for_prefix_and_vm_name(
+            "/tmp/typed-convert-exec-request",
+            "substrate",
+        )
+        .expect("typed backend");
+        let world = WorldHandle {
+            id: "vm:substrate".to_string(),
+            shared_binding: None,
+        };
+        let spec = WorldSpec {
+            fs_mode: WorldFsMode::ReadOnly,
+            backend_policy: Some(sample_backend_policy(
+                &["https://api.example.com"],
+                &["api.example.com"],
+                false,
+                true,
+            )),
+            ..WorldSpec::default()
+        };
+        backend.apply_policy(&world, &spec).expect("apply policy");
 
-            let req = ExecRequest {
-                cmd: "echo hi".to_string(),
-                cwd: PathBuf::from("/tmp"),
-                env: std::collections::HashMap::new(),
-                pty: false,
-                span_id: None,
-                shared_world: Some(world_api::SharedWorldOwnerSpec {
-                    orchestration_session_id: "orch_123".to_string(),
-                    action: world_api::SharedWorldOwnerAction::AttachOrCreate,
-                }),
-                member_dispatch: Some(world_api::MemberDispatchRequestV1 {
-                    schema_version: 1,
-                    orchestration_session_id: "orch_123".to_string(),
-                    participant_id: "participant_123".to_string(),
-                    orchestrator_participant_id: "participant_root".to_string(),
-                    parent_participant_id: None,
-                    resumed_from_participant_id: None,
-                    backend_id: "backend_123".to_string(),
-                    protocol: "stdio".to_string(),
-                    run_id: "run_123".to_string(),
-                    world_id: "wld_123".to_string(),
-                    world_generation: 0,
-                    initial_prompt: Some("prompt".to_string()),
-                    resolved_runtime: world_api::ResolvedMemberRuntimeDescriptorV1 {
-                        backend_kind: world_api::MemberRuntimeBackendKindV1::Codex,
-                        binary_path: "/usr/bin/env".to_string(),
-                    },
-                }),
-            };
-            let world_state = backend
-                .effective_world_policy_state(&world)
-                .expect("world policy state");
-            let agent_req = backend
-                .convert_exec_request(&req, &world_state)
-                .expect("convert exec request");
-            assert_eq!(
-                agent_req.world_fs_mode,
-                Some(WorldFsMode::ReadOnly),
-                "mac backend should pass through env-derived fs mode"
-            );
-            assert_eq!(agent_req.shared_world, req.shared_world);
-            assert_eq!(
-                agent_req.policy_snapshot.net_allowed,
-                vec!["https://api.example.com".to_string()]
-            );
-            assert!(!agent_req.policy_snapshot.world_fs.host_visible);
-            assert!(agent_req.policy_snapshot.world_fs.fail_closed.routing);
-            assert!(!agent_req.policy_snapshot.world_fs.write.enabled);
-            assert_eq!(
-                agent_req.policy_snapshot.world_fs.write.allow_list,
-                vec!["out".to_string()]
-            );
-            assert_eq!(
-                agent_req.policy_snapshot.world_fs.write.deny_list,
-                vec!["out/blocked".to_string()]
-            );
-            assert_eq!(
-                agent_req.world_network,
-                Some(WorldNetworkRoutingV1 {
-                    isolate_network: true,
-                    allowed_domains: vec!["api.example.com".to_string()],
-                })
-            );
-            assert_eq!(
-                agent_req.member_dispatch.as_ref().map(|dispatch| (
-                    dispatch.orchestration_session_id.as_str(),
-                    dispatch.participant_id.as_str(),
-                    dispatch.orchestrator_participant_id.as_str(),
-                    dispatch.backend_id.as_str(),
-                    dispatch.world_id.as_str(),
-                    dispatch.world_generation,
-                )),
-                Some((
-                    "orch_123",
-                    "participant_123",
-                    "participant_root",
-                    "backend_123",
-                    "wld_123",
-                    0,
-                ))
-            );
-        }
+        let req = ExecRequest {
+            cmd: "echo hi".to_string(),
+            cwd: PathBuf::from("/tmp"),
+            env: std::collections::HashMap::new(),
+            pty: false,
+            span_id: None,
+            shared_world: Some(world_api::SharedWorldOwnerSpec {
+                orchestration_session_id: "orch_123".to_string(),
+                action: world_api::SharedWorldOwnerAction::AttachOrCreate,
+            }),
+            member_dispatch: Some(world_api::MemberDispatchRequestV1 {
+                schema_version: 1,
+                orchestration_session_id: "orch_123".to_string(),
+                participant_id: "participant_123".to_string(),
+                orchestrator_participant_id: "participant_root".to_string(),
+                parent_participant_id: None,
+                resumed_from_participant_id: None,
+                backend_id: "backend_123".to_string(),
+                protocol: "stdio".to_string(),
+                run_id: "run_123".to_string(),
+                world_id: "wld_123".to_string(),
+                world_generation: 0,
+                initial_prompt: Some("prompt".to_string()),
+                resolved_runtime: world_api::ResolvedMemberRuntimeDescriptorV1 {
+                    backend_kind: world_api::MemberRuntimeBackendKindV1::Codex,
+                    binary_path: "/usr/bin/env".to_string(),
+                },
+            }),
+        };
+        let world_state = backend
+            .effective_world_policy_state(&world)
+            .expect("world policy state");
+        let agent_req = backend
+            .convert_exec_request(&req, &world_state)
+            .expect("convert exec request");
+        assert_eq!(
+            agent_req.world_fs_mode,
+            Some(WorldFsMode::ReadOnly),
+            "mac backend should pass through env-derived fs mode"
+        );
+        assert_eq!(agent_req.shared_world, req.shared_world);
+        assert_eq!(
+            agent_req.policy_snapshot.net_allowed,
+            vec!["https://api.example.com".to_string()]
+        );
+        assert!(!agent_req.policy_snapshot.world_fs.host_visible);
+        assert!(agent_req.policy_snapshot.world_fs.fail_closed.routing);
+        assert!(!agent_req.policy_snapshot.world_fs.write.enabled);
+        assert_eq!(
+            agent_req.policy_snapshot.world_fs.write.allow_list,
+            vec!["out".to_string()]
+        );
+        assert_eq!(
+            agent_req.policy_snapshot.world_fs.write.deny_list,
+            vec!["out/blocked".to_string()]
+        );
+        assert_eq!(
+            agent_req.world_network,
+            Some(WorldNetworkRoutingV1 {
+                isolate_network: true,
+                allowed_domains: vec!["api.example.com".to_string()],
+            })
+        );
+        assert_eq!(
+            agent_req.member_dispatch.as_ref().map(|dispatch| (
+                dispatch.orchestration_session_id.as_str(),
+                dispatch.participant_id.as_str(),
+                dispatch.orchestrator_participant_id.as_str(),
+                dispatch.backend_id.as_str(),
+                dispatch.world_id.as_str(),
+                dispatch.world_generation,
+            )),
+            Some((
+                "orch_123",
+                "participant_123",
+                "participant_root",
+                "backend_123",
+                "wld_123",
+                0,
+            ))
+        );
 
         match prev {
             Some(value) => std::env::set_var("SUBSTRATE_WORLD_FS_MODE", value),
@@ -1796,223 +1801,229 @@ mod tests {
     #[test]
     fn apply_policy_updates_backend_policy_state() {
         let _env_guard = crate::test_util::lock_env();
+        let backend = MacLimaBackend::test_backend_for_prefix_and_vm_name(
+            "/tmp/typed-apply-policy-updates",
+            "substrate",
+        )
+        .expect("typed backend");
+        let world = WorldHandle {
+            id: "vm:substrate".to_string(),
+            shared_binding: None,
+        };
+        let req = ExecRequest {
+            cmd: "echo hi".to_string(),
+            cwd: PathBuf::from("/tmp"),
+            env: std::collections::HashMap::new(),
+            pty: false,
+            span_id: None,
+            shared_world: None,
+            member_dispatch: None,
+        };
 
-        if let Ok(backend) = MacLimaBackend::new() {
-            let world = WorldHandle {
-                id: "vm:substrate".to_string(),
-                shared_binding: None,
-            };
-            let req = ExecRequest {
-                cmd: "echo hi".to_string(),
-                cwd: PathBuf::from("/tmp"),
-                env: std::collections::HashMap::new(),
-                pty: false,
-                span_id: None,
-                shared_world: None,
-                member_dispatch: None,
-            };
+        let first = WorldSpec {
+            backend_policy: Some(sample_backend_policy(
+                &["https://first.example.com"],
+                &["first.example.com"],
+                true,
+                true,
+            )),
+            ..WorldSpec::default()
+        };
+        backend
+            .apply_policy(&world, &first)
+            .expect("apply first policy");
+        let first_state = backend
+            .effective_world_policy_state(&world)
+            .expect("first world state");
+        let first_agent_req = backend
+            .convert_exec_request(&req, &first_state)
+            .expect("convert first request");
+        assert_eq!(
+            first_agent_req.policy_snapshot.net_allowed,
+            vec!["https://first.example.com".to_string()]
+        );
+        assert_eq!(
+            first_agent_req.world_network,
+            Some(WorldNetworkRoutingV1 {
+                isolate_network: true,
+                allowed_domains: vec!["first.example.com".to_string()],
+            })
+        );
 
-            let first = WorldSpec {
-                backend_policy: Some(sample_backend_policy(
-                    &["https://first.example.com"],
-                    &["first.example.com"],
-                    true,
-                    true,
-                )),
-                ..WorldSpec::default()
-            };
-            backend
-                .apply_policy(&world, &first)
-                .expect("apply first policy");
-            let first_state = backend
-                .effective_world_policy_state(&world)
-                .expect("first world state");
-            let first_agent_req = backend
-                .convert_exec_request(&req, &first_state)
-                .expect("convert first request");
-            assert_eq!(
-                first_agent_req.policy_snapshot.net_allowed,
-                vec!["https://first.example.com".to_string()]
-            );
-            assert_eq!(
-                first_agent_req.world_network,
-                Some(WorldNetworkRoutingV1 {
-                    isolate_network: true,
-                    allowed_domains: vec!["first.example.com".to_string()],
-                })
-            );
-
-            let second = WorldSpec {
-                backend_policy: Some(sample_backend_policy(
-                    &["https://second.example.com"],
-                    &["second.example.com"],
-                    false,
-                    false,
-                )),
-                ..WorldSpec::default()
-            };
-            backend
-                .apply_policy(&world, &second)
-                .expect("apply second policy");
-            let second_state = backend
-                .effective_world_policy_state(&world)
-                .expect("second world state");
-            let second_agent_req = backend
-                .convert_exec_request(&req, &second_state)
-                .expect("convert second request");
-            assert_eq!(
-                second_agent_req.policy_snapshot.net_allowed,
-                vec!["https://second.example.com".to_string()]
-            );
-            assert_eq!(
-                second_agent_req.world_network,
-                Some(WorldNetworkRoutingV1 {
-                    isolate_network: false,
-                    allowed_domains: vec!["second.example.com".to_string()],
-                })
-            );
-            assert!(!second_agent_req.policy_snapshot.world_fs.write.enabled);
-        }
+        let second = WorldSpec {
+            backend_policy: Some(sample_backend_policy(
+                &["https://second.example.com"],
+                &["second.example.com"],
+                false,
+                false,
+            )),
+            ..WorldSpec::default()
+        };
+        backend
+            .apply_policy(&world, &second)
+            .expect("apply second policy");
+        let second_state = backend
+            .effective_world_policy_state(&world)
+            .expect("second world state");
+        let second_agent_req = backend
+            .convert_exec_request(&req, &second_state)
+            .expect("convert second request");
+        assert_eq!(
+            second_agent_req.policy_snapshot.net_allowed,
+            vec!["https://second.example.com".to_string()]
+        );
+        assert_eq!(
+            second_agent_req.world_network,
+            Some(WorldNetworkRoutingV1 {
+                isolate_network: false,
+                allowed_domains: vec!["second.example.com".to_string()],
+            })
+        );
+        assert!(!second_agent_req.policy_snapshot.world_fs.write.enabled);
     }
 
     #[test]
     fn apply_policy_fail_closes_without_backend_policy() {
         let _env_guard = crate::test_util::lock_env();
+        let backend = MacLimaBackend::test_backend_for_prefix_and_vm_name(
+            "/tmp/typed-apply-policy-fail-closed",
+            "substrate",
+        )
+        .expect("typed backend");
+        let world = WorldHandle {
+            id: "vm:substrate".to_string(),
+            shared_binding: None,
+        };
+        let req = ExecRequest {
+            cmd: "echo hi".to_string(),
+            cwd: PathBuf::from("/tmp"),
+            env: std::collections::HashMap::new(),
+            pty: false,
+            span_id: None,
+            shared_world: None,
+            member_dispatch: None,
+        };
 
-        if let Ok(backend) = MacLimaBackend::new() {
-            let world = WorldHandle {
-                id: "vm:substrate".to_string(),
-                shared_binding: None,
-            };
-            let req = ExecRequest {
-                cmd: "echo hi".to_string(),
-                cwd: PathBuf::from("/tmp"),
-                env: std::collections::HashMap::new(),
-                pty: false,
-                span_id: None,
-                shared_world: None,
-                member_dispatch: None,
-            };
+        let err = backend
+            .apply_policy(&world, &WorldSpec::default())
+            .expect_err("missing backend policy must fail-close");
+        assert!(
+            err.to_string()
+                .contains("requires authoritative backend_policy"),
+            "unexpected error: {err}"
+        );
 
-            let err = backend
-                .apply_policy(&world, &WorldSpec::default())
-                .expect_err("missing backend policy must fail-close");
-            assert!(
-                err.to_string()
-                    .contains("requires authoritative backend_policy"),
-                "unexpected error: {err}"
-            );
-
-            let world_state = backend
-                .effective_world_policy_state(&world)
-                .expect("world state should be recorded fail-closed");
-            let err = backend
-                .convert_exec_request(&req, &world_state)
-                .expect_err("missing policy state must remain fail-closed");
-            assert!(
-                err.to_string()
-                    .contains("missing authoritative backend_policy"),
-                "unexpected conversion error: {err}"
-            );
-        }
+        let world_state = backend
+            .effective_world_policy_state(&world)
+            .expect("world state should be recorded fail-closed");
+        let err = backend
+            .convert_exec_request(&req, &world_state)
+            .expect_err("missing policy state must remain fail-closed");
+        assert!(
+            err.to_string()
+                .contains("missing authoritative backend_policy"),
+            "unexpected conversion error: {err}"
+        );
     }
 
     #[test]
     fn world_policy_state_is_scoped_per_world_handle() {
         let _env_guard = crate::test_util::lock_env();
+        let backend = MacLimaBackend::test_backend_for_prefix_and_vm_name(
+            "/tmp/typed-world-policy-state",
+            "substrate",
+        )
+        .expect("typed backend");
+        let first_world = WorldHandle {
+            id: "vm:substrate:first".to_string(),
+            shared_binding: None,
+        };
+        let second_world = WorldHandle {
+            id: "vm:substrate:second".to_string(),
+            shared_binding: None,
+        };
+        let req = ExecRequest {
+            cmd: "echo hi".to_string(),
+            cwd: PathBuf::from("/tmp"),
+            env: std::collections::HashMap::new(),
+            pty: false,
+            span_id: None,
+            shared_world: None,
+            member_dispatch: None,
+        };
 
-        if let Ok(backend) = MacLimaBackend::new() {
-            let first_world = WorldHandle {
-                id: "vm:substrate:first".to_string(),
-                shared_binding: None,
-            };
-            let second_world = WorldHandle {
-                id: "vm:substrate:second".to_string(),
-                shared_binding: None,
-            };
-            let req = ExecRequest {
-                cmd: "echo hi".to_string(),
-                cwd: PathBuf::from("/tmp"),
-                env: std::collections::HashMap::new(),
-                pty: false,
-                span_id: None,
-                shared_world: None,
-                member_dispatch: None,
-            };
+        backend
+            .apply_policy(
+                &first_world,
+                &WorldSpec {
+                    fs_mode: WorldFsMode::ReadOnly,
+                    backend_policy: Some(sample_backend_policy(
+                        &["https://first.example.com"],
+                        &["first.example.com"],
+                        false,
+                        true,
+                    )),
+                    ..WorldSpec::default()
+                },
+            )
+            .expect("apply first policy");
+        backend
+            .apply_policy(
+                &second_world,
+                &WorldSpec {
+                    fs_mode: WorldFsMode::Writable,
+                    backend_policy: Some(sample_backend_policy(
+                        &["https://second.example.com"],
+                        &["second.example.com"],
+                        true,
+                        false,
+                    )),
+                    ..WorldSpec::default()
+                },
+            )
+            .expect("apply second policy");
 
-            backend
-                .apply_policy(
-                    &first_world,
-                    &WorldSpec {
-                        fs_mode: WorldFsMode::ReadOnly,
-                        backend_policy: Some(sample_backend_policy(
-                            &["https://first.example.com"],
-                            &["first.example.com"],
-                            false,
-                            true,
-                        )),
-                        ..WorldSpec::default()
-                    },
-                )
-                .expect("apply first policy");
-            backend
-                .apply_policy(
-                    &second_world,
-                    &WorldSpec {
-                        fs_mode: WorldFsMode::Writable,
-                        backend_policy: Some(sample_backend_policy(
-                            &["https://second.example.com"],
-                            &["second.example.com"],
-                            true,
-                            false,
-                        )),
-                        ..WorldSpec::default()
-                    },
-                )
-                .expect("apply second policy");
+        let first_agent_req = backend
+            .convert_exec_request(
+                &req,
+                &backend
+                    .effective_world_policy_state(&first_world)
+                    .expect("first world state"),
+            )
+            .expect("convert first request");
+        let second_agent_req = backend
+            .convert_exec_request(
+                &req,
+                &backend
+                    .effective_world_policy_state(&second_world)
+                    .expect("second world state"),
+            )
+            .expect("convert second request");
 
-            let first_agent_req = backend
-                .convert_exec_request(
-                    &req,
-                    &backend
-                        .effective_world_policy_state(&first_world)
-                        .expect("first world state"),
-                )
-                .expect("convert first request");
-            let second_agent_req = backend
-                .convert_exec_request(
-                    &req,
-                    &backend
-                        .effective_world_policy_state(&second_world)
-                        .expect("second world state"),
-                )
-                .expect("convert second request");
-
-            assert_eq!(
-                first_agent_req.policy_snapshot.net_allowed,
-                vec!["https://first.example.com".to_string()]
-            );
-            assert_eq!(
-                second_agent_req.policy_snapshot.net_allowed,
-                vec!["https://second.example.com".to_string()]
-            );
-            assert_eq!(first_agent_req.world_fs_mode, Some(WorldFsMode::ReadOnly));
-            assert_eq!(second_agent_req.world_fs_mode, Some(WorldFsMode::Writable));
-            assert_eq!(
-                first_agent_req.world_network,
-                Some(WorldNetworkRoutingV1 {
-                    isolate_network: true,
-                    allowed_domains: vec!["first.example.com".to_string()],
-                })
-            );
-            assert_eq!(
-                second_agent_req.world_network,
-                Some(WorldNetworkRoutingV1 {
-                    isolate_network: false,
-                    allowed_domains: vec!["second.example.com".to_string()],
-                })
-            );
-        }
+        assert_eq!(
+            first_agent_req.policy_snapshot.net_allowed,
+            vec!["https://first.example.com".to_string()]
+        );
+        assert_eq!(
+            second_agent_req.policy_snapshot.net_allowed,
+            vec!["https://second.example.com".to_string()]
+        );
+        assert_eq!(first_agent_req.world_fs_mode, Some(WorldFsMode::ReadOnly));
+        assert_eq!(second_agent_req.world_fs_mode, Some(WorldFsMode::Writable));
+        assert_eq!(
+            first_agent_req.world_network,
+            Some(WorldNetworkRoutingV1 {
+                isolate_network: true,
+                allowed_domains: vec!["first.example.com".to_string()],
+            })
+        );
+        assert_eq!(
+            second_agent_req.world_network,
+            Some(WorldNetworkRoutingV1 {
+                isolate_network: false,
+                allowed_domains: vec!["second.example.com".to_string()],
+            })
+        );
     }
 
     #[test]

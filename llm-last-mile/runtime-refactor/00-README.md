@@ -990,5 +990,18 @@ above without rewriting it.
 | Persistence review distinction | The raw review verdict remains `REQUEST_CHANGES`. Its three cache-only findings are preserved as non-blocking process-audit debt outside RP4 product-proof scope: controller pathname/hash not execution-bound; supervisor parent-directory `fsync` omitted after replace; persisted controller packet omits its post-persistence final verdict. They do not invalidate the focused, authenticated, canonical-wall, differential, authority, or restoration evidence. |
 | RP5 | This exact six-file documentation change is the bounded closeout packet. The publication model remains **Docs-on-top -> one ordinary fast-forward publication**. Source publication has not occurred in this run, no local/upstream/remote parity is claimed, and the exact next step after the reviewed/committed RP5 docs remains one ordinary fast-forward source publication. |
 
-R2-3 remains blocked until that publication. R2-4 and R3 remain later. Privileged product smoke,
-non-Linux proof, direct-member adoption, and seam promotion remain unclaimed.
+That ordinary fast-forward publication later completed at
+`0f1e147fb735791b44a65099a65167cbdc1803af`. The protected blocked donor `R2-3ZWR1` then stopped
+cleanly at `3a6490ff391453535168491b3f8d26adf9e20938` with an exact three-file repair boundary:
+`crates/shell/src/execution/host_inbox_materialization.rs`,
+`crates/world-mac-lima/examples/mac_backend_smoke.rs`, and
+`crates/world-mac-lima/src/lib.rs`. `R2-3ZP2` subsequently landed the reviewed descendant-authority
+runner repair at `ec05167bd7bcb7be874af48fe33d6edb71492516`, preserving the canonical
+`1309 discovered / 1264 passed / 45 failed / 0 ignored` wall plus the exact P1 trailers and
+authenticated runner/self-test blobs. `R2-3ZR1` is the bounded descendant-authority closeout on
+top of `ec05167`: it removes the remaining public contextless `MacLimaBackend` constructors,
+migrates the macOS smoke/example and colocated tests to explicit typed carrier/mapping input, and
+retains the focused host-inbox trusted-parent hardening only because the reverted helper fails the
+focused shell tests while the retained helper passes them. Fresh native evidence under `R2-3Z`
+remains outstanding. R2-4 and R3 remain later. Privileged product smoke, non-Linux proof,
+direct-member adoption, and seam promotion remain unclaimed.

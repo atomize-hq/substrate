@@ -1412,6 +1412,23 @@ Linked-worktree support remains out of scope. Authenticated proof
 must use a disposable full non-worktree checkout of the repository rather than a fixture-only
 mini-repository.
 
+### R2-3ZR1 current implementation note
+
+The historical seam table above is preserved unchanged, but current descendant-authority status is
+narrower than the original ambient-macOS entries suggest. Earlier M4/F/R/S1 work moved owned
+production callers onto typed platform-bootstrap surfaces. The protected donor `R2-3ZWR1` then
+stopped cleanly at `3a6490ff391453535168491b3f8d26adf9e20938` with unreconciled WIP limited to
+`crates/shell/src/execution/host_inbox_materialization.rs`,
+`crates/world-mac-lima/examples/mac_backend_smoke.rs`, and
+`crates/world-mac-lima/src/lib.rs`. `R2-3ZP2` landed reviewed runner descendant-authority at
+`ec05167bd7bcb7be874af48fe33d6edb71492516`. `R2-3ZR1` closes the residual ambient macOS
+constructor seam by removing public `MacLimaBackend::new` and `MacLimaBackend::new_with_vm_name`,
+requiring `mac_backend_smoke` to decode one `InstallBootstrapContextCarrierV1`, one
+`PlatformBootstrapMappingV1`, and one absolute project directory, and migrating the colocated
+tests/private helpers to `MacLimaBackend::new_with_mapping`. `world-backend-factory` and
+`platform_world` remain typed callers, PI-077/PI-078 stay frozen, and no native-evidence or R3
+lifecycle claim is made here.
+
 ### R1 direct-caller inventory
 
 | Direct `run_cmd` call at `f7ded83` | Value class | Disclosure disposition |
