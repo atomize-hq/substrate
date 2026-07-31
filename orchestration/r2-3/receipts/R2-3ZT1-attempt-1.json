@@ -1,0 +1,29 @@
+{
+  "protocol": "codex.top-level-task-receipt.v1",
+  "orchestration_id": "substrate-r2-3",
+  "dispatch_nonce": "773da0f680e7bf330ae22d133c587f96ca9c8e506b90845003e3d7acc6a0fa22",
+  "increment": "R2-3ZT1",
+  "packet_id": "A1.1d-5R2-3ZT1",
+  "status": "BLOCKED_CONTRADICTION",
+  "increment_task": {
+    "thread_id": "019fb954-7e67-7710-92a4-168378e46698",
+    "host_id": "remote-ssh-discovered:spenser-linux-codex"
+  },
+  "expected_base": {
+    "commit": "3f909efd1b94bbde99bae160de75958a5447485e",
+    "tree": "1829774bf998bb41f7710a9d38e82bdadf62b4af"
+  },
+  "blocker": {
+    "summary": "The one-file retained-worker repair passes, but the accepted source has three additional pre-existing world-deps/doctor expectation failures beyond the frozen 45.",
+    "details": "The focused queued-promotion failure was reproduced before the test-only explicit trace-context repair and passes afterward. The repaired test is absent from the direct wall failure set. The exact direct shell-library run produced 1322 discovered / 1274 passed / 48 failed / 0 ignored. The 48-name set is the frozen 23 orchestrator-world-dispatch failures plus 22 async-repl failures plus exactly three deterministic world-deps/doctor expectation failures: builtins::shim_doctor::report::tests::world_deps_fixture_cannot_establish_runtime_health_or_cross_a, builtins::shim_doctor::report::tests::world_deps_section_forwards_authenticated_a_under_conflicting_ambient_b, and builtins::world_deps::tests::doctor_snapshot_uses_authenticated_a_under_conflicting_ambient_b_without_mutation. These three were previously classified as unrelated/pre-existing drift and are outside the one-file R2-3ZT1 authority. The live 48-name SHA-256 is c6de1349137dcb16d03b87be5364dc50d74a5052565e2c8d40dfed303592bed9 and the normalized-signature SHA-256 is 2a0df9b340cc7e5e1b6e4f76e60e6f937b7442008142d78a7ae24bbcd2f60a90.",
+    "required_authority": "Authorize a corrected R2-3 direct-wall baseline of the frozen 45 plus the exact three separately classified pre-existing world-deps/doctor failures, or authorize a separate bounded owner to repair those unrelated expectations before R2-3ZT1 can publish.",
+    "handoff_prompt": "Resume the same R2-3ZT1 task in /home/spenser/.codex/worktrees/1dbc/substrate-r2-3 only after explicit baseline authority. Preserve the one modified tracked file crates/shell/src/execution/agent_runtime/retained_worker_runtime.rs and do not publish yet. The focused before/after proof is clean and the retained-worker failure is removed. If the corrected 48 baseline is authorized, require exact counts 1322/1274/48/0, exact failure-name SHA-256 c6de1349137dcb16d03b87be5364dc50d74a5052565e2c8d40dfed303592bed9, exact normalized-signature SHA-256 2a0df9b340cc7e5e1b6e4f76e60e6f937b7442008142d78a7ae24bbcd2f60a90, the exact three named non-frozen failures, absence of the queued-promotion failure, all remaining quality/review gates, and exact one-file publication. Do not edit the three unrelated test files under R2-3ZT1."
+  },
+  "evidence": {
+    "focused_before": "/home/spenser/.codex/visualizations/2026/07/31/019fb954-7e67-7710-92a4-168378e46698/substrate-r2-3zt1.UcIRoh/logs/focused-before-sanitized.log",
+    "focused_after": "/home/spenser/.codex/visualizations/2026/07/31/019fb954-7e67-7710-92a4-168378e46698/substrate-r2-3zt1.UcIRoh/logs/focused-after-sanitized.log",
+    "direct_wall_raw": "/home/spenser/t/direct-shell-lib.rootenv.raw.log",
+    "failure_names": "/home/spenser/t/direct-shell-lib.rootenv.failure-names.txt",
+    "normalized_signatures": "/home/spenser/t/direct-shell-lib.rootenv.normalized-signatures.txt"
+  }
+}

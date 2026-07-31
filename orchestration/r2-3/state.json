@@ -1,7 +1,7 @@
 {
   "protocol": "codex.top-level-orchestration-state.v1",
   "orchestration_id": "substrate-r2-3",
-  "status": "RUNNING",
+  "status": "BLOCKED",
   "dispatch_authorized": true,
   "remote": "origin",
   "target_ref": "refs/heads/feat/internal-host-orchestrator-world-dispatch-bootstrap",
@@ -55,29 +55,16 @@
     "thread_id": "019fa3f7-c447-7132-9126-82e2cf38bd9d",
     "host_id": "remote-ssh-discovered:spenser-linux-codex"
   },
-  "active_dispatch": {
-    "increment": "R2-3ZT1",
+  "active_dispatch": null,
+  "last_diagnostic": {
+    "diagnostic_id": "R2-3ZT1",
     "packet_id": "A1.1d-5R2-3ZT1",
+    "status": "BLOCKED_CONTRADICTION",
     "thread_id": "019fb954-7e67-7710-92a4-168378e46698",
     "host_id": "remote-ssh-discovered:spenser-linux-codex",
     "dispatch_nonce": "773da0f680e7bf330ae22d133c587f96ca9c8e506b90845003e3d7acc6a0fa22",
-    "expected_base": {
-      "commit": "3f909efd1b94bbde99bae160de75958a5447485e",
-      "tree": "1829774bf998bb41f7710a9d38e82bdadf62b4af"
-    },
-    "target_ref": "refs/heads/feat/internal-host-orchestrator-world-dispatch-bootstrap",
-    "read_only": false,
-    "scope_amendment": "test-only retained-worker explicit trace-context repair limited to retained_worker_runtime.rs; direct shell lib wall must restore the exact frozen 45-name and signature inventory"
-  },
-  "last_diagnostic": {
-    "diagnostic_id": "R2-3ZP3",
-    "packet_id": "A1.1d-5R2-3ZP3",
-    "status": "AUTHORITY_REQUIRED",
-    "thread_id": "019fb829-785d-76f3-9078-bcae86dd9f3f",
-    "host_id": "remote-ssh-discovered:spenser-linux-codex",
-    "dispatch_nonce": "745771f218d81aed279861b84b759bba3b5d85fbe4e8afea95e655e5b59653d9",
-    "receipt_path": "orchestration/r2-3/receipts/R2-3ZP3-attempt-2.json",
-    "artifact_sha256": "sha256:e4c80523fd50c13c23d288b415969e9f1ae55dcd8f29625d7d5fc3f02ea66655"
+    "receipt_path": "orchestration/r2-3/receipts/R2-3ZT1-attempt-1.json",
+    "artifact_sha256": "sha256:c6de1349137dcb16d03b87be5364dc50d74a5052565e2c8d40dfed303592bed9"
   },
   "active_evidence_dispatches": [],
   "verified_evidence": [],
