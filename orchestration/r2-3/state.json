@@ -66,7 +66,7 @@
     },
     "target_ref": "refs/heads/feat/internal-host-orchestrator-world-dispatch-bootstrap",
     "read_only": false,
-    "scope_amendment": "user-authorized continuation from preserved local commit 2cb796ff, limited to canonical_shell_wall_runner.py and its test, fresh external proof roots, and eligible teardown/provenance proof; no product/test-helper/native-evidence/publication expansion"
+    "scope_amendment": "user-authorized continuation from preserved local commit 2cb796ff, limited to canonical_shell_wall_runner.py and its test, fresh external proof roots, and eligible teardown/provenance proof; current candidate is the final proof-tooling attempt and any recurrence of the same provenance/teardown failure requires immediate AUTHORITY_REQUIRED stop with no further edits, commits, retries, wall legs, or publication; no product/test-helper/native-evidence/publication expansion"
   },
   "last_diagnostic": {
     "diagnostic_id": "R2-3ZP3",
