@@ -1,0 +1,91 @@
+{
+  "artifact": {
+    "path": "/home/spenser/r2-3zr1-readonly-classification-final.v9p3a6j2/classification.json",
+    "sha256": "sha256:ec13948c5c53069789d0ba4419f2699cefcd189464b33ed4d3df8abde55e7b36"
+  },
+  "blocker": {
+    "details": "A fresh external comparison was run against both the accepted base ec05167bd7bcb7be874af48fe33d6edb71492516 and the local unpublished commit 199e1b1a5f3854934a08727f2846e028c065c5cb under the same toolchain, authenticated runner bytes, command contract, and non-worktree full-checkout conditions. Both inventory runs discovered exactly 1322 tests with identical test-name hashes, proving the 1309 baseline delta is not caused by the local source change. The exact shell delta between the two commits is only crates/shell/src/execution/host_inbox_materialization.rs, and the targeted retained-worker test function is unchanged at the same source location in both commits. Repeated focused serial and parallel reruns of execution::agent_runtime::retained_worker_runtime::tests::queued_promotion_persists_no_request_prompt_payload_or_diagnostic_preimage fail identically at both commits because a nested admission_head_subprocess_worker path lacks an explicitly bound trace context before global init_trace. Authenticated wall attempts at both commits and in both modes all land in the same 1322/1276/46/0 bucket with the same failure-name and normalized-signature hashes, but every wall provenance record is eligible=false with ineligibility_reasons [evidence_write_failed, mount_teardown_failed]. The original external classifier completed the evidence runs and then crashed while assembling its own summary, so this replacement artifact was written from the finished external evidence set without touching the task checkout.",
+    "handoff_prompt": "Resume bound R2-3ZR1 in /home/spenser/.codex/worktrees/3b8f/substrate-r2-3 without mutating the checkout or publishing. Start from accepted remote base/tree ec05167bd7bcb7be874af48fe33d6edb71492516 / b0d399cfb09655d5ff61d47ec68408e52ba5cfec and local unpublished commit/tree 199e1b1a5f3854934a08727f2846e028c065c5cb / 15e17d17fa1a9222488a695a0e4e360376e3556c. Read the replacement classification artifact at /home/spenser/r2-3zr1-readonly-classification-final.v9p3a6j2/classification.json first. Treat the 1309-versus-1322 inventory discrepancy as resolved stale baseline evidence, not a source transition. Focus only on why all four authenticated wall attempts are ineligible with evidence_write_failed and mount_teardown_failed while still producing the same 46-name failure bucket and why the unchanged retained-worker focused test lacks explicit trace context in its nested subprocess helper. Keep work read-only first. If a harness-only repair is sufficient, constrain any edit authority to scripts/ci/canonical_shell_wall_runner.py and scripts/ci/test_canonical_shell_wall_runner.py. If any crates/shell product or test edit becomes necessary, stop and request a second explicit scope expansion before changing it. Do not start native evidence or R2-3Z.",
+    "required_authority": "Authorize a fresh bounded read-write follow-up limited to canonical wall-owned shell baseline/provenance investigation, with harness edits restricted to scripts/ci/canonical_shell_wall_runner.py and scripts/ci/test_canonical_shell_wall_runner.py if and only if read-only investigation proves they are necessary. Do not authorize product/test edits in crates/shell, publication of the local unpublished commit, native evidence, or R2-3Z yet. If resolving wall ineligibility or the unchanged retained-worker failure requires product/test changes, require a second explicit scope expansion naming those exact files and symbols before editing.",
+    "summary": "Fresh matched proof classifies the 1309-versus-1322 delta as stale baseline evidence, but authenticated wall runs remain ineligible and require new authority before any repair or publication."
+  },
+  "dispatch_nonce": "f48c1e95710b3f98aee943e2fe1ea85b21f7f5e8204ad9126c0126d72238674f",
+  "expected_base": {
+    "commit": "ec05167bd7bcb7be874af48fe33d6edb71492516",
+    "live_remote": "ec05167bd7bcb7be874af48fe33d6edb71492516",
+    "required_ancestor": "0f1e147fb735791b44a65099a65167cbdc1803af",
+    "target_ref": "refs/heads/feat/internal-host-orchestrator-world-dispatch-bootstrap",
+    "tree": "b0d399cfb09655d5ff61d47ec68408e52ba5cfec"
+  },
+  "increment": "R2-3ZR1",
+  "increment_task": {
+    "host_id": "remote-ssh-discovered:spenser-linux-codex",
+    "thread_id": "019fb502-1217-7fc2-aeba-c4c5d157c364"
+  },
+  "local_unpublished": {
+    "ahead": 1,
+    "behind": 0,
+    "checkout_clean": true,
+    "commit": "199e1b1a5f3854934a08727f2846e028c065c5cb",
+    "remote_commit": "ec05167bd7bcb7be874af48fe33d6edb71492516",
+    "remote_tree": "b0d399cfb09655d5ff61d47ec68408e52ba5cfec",
+    "target_ref": "refs/heads/feat/internal-host-orchestrator-world-dispatch-bootstrap",
+    "tree": "15e17d17fa1a9222488a695a0e4e360376e3556c"
+  },
+  "orchestration_id": "substrate-r2-3",
+  "packet_id": "A1.1d-5R2-3ZR1R1",
+  "proof": {
+    "authenticated_wall": {
+      "eligible_runs": 0,
+      "ineligible_runs": 4,
+      "shared_counts": {
+        "discovered": 1322,
+        "failed": 46,
+        "ignored": 0,
+        "passed": 1276
+      },
+      "shared_failure_names_sha256": "sha256:e46e0f4cc12e34f11007cfe992c0e2020400771b91e43ad8ddc7dbaabcb8a549",
+      "shared_ineligibility_reasons": [
+        "evidence_write_failed",
+        "mount_teardown_failed"
+      ],
+      "shared_normalized_signatures_sha256": "sha256:415f1a0c37b3455ce2bf4b5a4d5e6a6e85d2f5c506e47d24692f69f83955fb0f"
+    },
+    "focused_target": {
+      "failed_runs": 12,
+      "root_cause_class": "missing_explicit_trace_context_in_nested_admission_head_subprocess_worker",
+      "symbol": "execution::agent_runtime::retained_worker_runtime::tests::queued_promotion_persists_no_request_prompt_payload_or_diagnostic_preimage"
+    },
+    "inventory": {
+      "base_discovered": 1322,
+      "head_discovered": 1322,
+      "test_names_match_exactly": true,
+      "test_names_sha256": "sha256:651e6b5509d928185e4de76eaae00c290110926265b9ca66297a4d050261f33f"
+    }
+  },
+  "protocol": "codex.top-level-task-receipt.v1",
+  "review": {
+    "digest_path": "/tmp/R2-3ZR1R1-review/supplemental-review-digest.txt",
+    "digest_sha256": "sha256:bb367e56c8aea0b03ff623e9810ad4374b73e1648ac3d7e56a933f8830f92f76",
+    "p1": 0,
+    "p2": 0,
+    "record_path": "/tmp/R2-3ZR1R1-review/review-cycle-record-supplemental.json",
+    "record_sha256": "sha256:de016ac0caf063f4a72ddd6ce593674920a902bdb758e52019e1175fe72589cc",
+    "terminal": "CLEAN",
+    "validated": true
+  },
+  "status": "AUTHORITY_REQUIRED",
+  "supporting_artifacts": {
+    "writer_crash_path": "/home/spenser/r2-3zr1-readonly-classification-final.v9p3a6j2/original-classifier-crash.txt",
+    "writer_crash_sha256": "sha256:8372877f8a5d2ffe0fb7a90268d9175449554e07b37062167c40b282b6811259"
+  },
+  "verification": {
+    "ahead": 1,
+    "behind": 0,
+    "checkout_unchanged": true,
+    "clean": true,
+    "live_remote_reverified": true,
+    "runner_blob_continuity": true,
+    "self_test_blob_continuity": true
+  }
+}
