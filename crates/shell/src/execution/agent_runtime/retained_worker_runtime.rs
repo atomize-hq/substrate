@@ -6193,9 +6193,13 @@ mod tests {
             return;
         };
         if let Some(trace_path) = std::env::var_os("SHIM_TRACE_LOG") {
-            substrate_trace::set_global_trace_context(substrate_trace::TraceContext::default())
-                .unwrap();
-            substrate_trace::init_trace(Some(trace_path.into())).unwrap();
+            let trace_path = std::path::PathBuf::from(trace_path);
+            let trace_root = trace_path.parent().unwrap();
+            substrate_trace::set_global_trace_context(
+                substrate_trace::TraceContext::explicit_product(trace_root).unwrap(),
+            )
+            .unwrap();
+            substrate_trace::init_trace(Some(trace_path)).unwrap();
         }
         let authority = HostSessionAuthority::open(std::path::Path::new(&home)).unwrap();
         let issuer = std::env::var(ADMISSION_HEAD_SUBPROCESS_ISSUER).unwrap();
@@ -8502,7 +8506,7 @@ mod tests {
             .unwrap(),
         )
         .unwrap();
-        let trace_path = parent.path().join("configured-admission-trace.jsonl");
+        let trace_path = parent.path().join("trace.jsonl");
         let output = Command::new(std::env::current_exe().unwrap())
             .arg("--exact")
             .arg("execution::agent_runtime::retained_worker_runtime::tests::admission_head_subprocess_worker")
