@@ -12,7 +12,7 @@ This prompt is self-contained and does not depend on a skill installed on this p
 DISPATCH IDENTITY
 
 - orchestration_id: `substrate-r2-3`
-- dispatch_nonce: `39f0b9cf4937faa378080dc70afdd214ec84c17eb93c8949d3b22be2ceda98be`
+- dispatch_nonce: `eba960c4ad90f9ad4eb6d1ceea2c278f438d35526f534aa5bbd6ad7cddf4f918`
 - meta_thread_id: `019fa3f7-c447-7132-9126-82e2cf38bd9d`
 - meta_host_id: `remote-ssh-discovered:spenser-linux-codex`
 - evidence_id: `R2-3Z/MAC-EVIDENCE`
@@ -27,8 +27,8 @@ SOURCE BINDING
 
 - remote: `origin`
 - target ref: `refs/heads/feat/internal-host-orchestrator-world-dispatch-bootstrap`
-- commit: `3a6490ff391453535168491b3f8d26adf9e20938`
-- tree: `fca816eaed26407ea89d352c7a087a201391bd49`
+- commit: `c583c5f293644fab75d8d42bd3bcad63f114d4fe`
+- tree: `a070f5f5787c27180f13dece9a1c3c3241728fda`
 - saved project path: `/Users/spensermcconnell/__Active_Code/atomize-hq/substrate`
 - project ID: `local-b2016f8a311fef93149e42eaec4d704d`
 - project host ID: `local`
@@ -89,13 +89,21 @@ This is the native pre-existing-Lima, no-forwarder mapping-only assignment for
    home, `~/.lima` control root, VM name, guest machine ID, guest account/UID/home, realized guest
    substrate home, `A/sock/agent.sock`, `/run/substrate.sock`, and the explicit R3 prerequisite.
    Do not place the raw carrier or raw encoded PM in general logs.
-6. Run `bash tests/mac/prefix_mapping_r2_3.sh` only as supplemental regression proof. Static or
+6. From those same real observations, invoke the published
+   `world-mac-lima` `mac_backend_smoke` example directly with explicit
+   `--install-bootstrap-context-v1`, `--platform-bootstrap-mapping-v1`, and `--project-dir`
+   arguments. It must validate typed construction and exit successfully before lifecycle,
+   forwarding, readiness, endpoint, session, or exec behavior. Run it under conflicting ambient
+   values and prove the explicit authenticated inputs win. Set `CARGO_TARGET_DIR` outside the
+   checkout. Do not run the enclosing `scripts/mac/orchestration-smoke.sh`, because that script
+   intentionally includes warm/product lifecycle legs outside this evidence assignment.
+7. Run `bash tests/mac/prefix_mapping_r2_3.sh` only as supplemental regression proof. Static or
    fixture proof does not replace the native observations above. Set `CARGO_TARGET_DIR` outside
    the checkout for any Cargo command.
-7. Prove no prohibited command ran. At minimum inspect the exact commands you invoked and record
+8. Prove no prohibited command ran. At minimum inspect the exact commands you invoked and record
    that no `limactl start`, `create`, `stop`, `delete`, `copy`, `factory-reset`, forwarder command,
    socket unlink/removal, guest unit/service mutation, or provisioning command occurred.
-8. Finish with the same HEAD/tree, empty tracked and untracked status, no staged diff, no commit,
+9. Finish with the same HEAD/tree, empty tracked and untracked status, no staged diff, no commit,
    no push, and the live remote still equal to the bound source commit.
 
 Do not run `lima-warm.sh` without `--check-only`. Do not run installer, uninstaller, enable,
@@ -122,7 +130,7 @@ Create and validate a `codex.top-level-evidence-receipt.v1` receipt with:
 - `checkout_unchanged: true`.
 
 Recover the exact receipt validator and its `protocol_json.py` dependency read-only from meta
-commit `7c6f82cbaa6ad91ec73338e0c17d504d88ccce5f` using `git show`, writing both only to a
+commit `21252983b077d48b4a4bc27971221b9092c91971` using `git show`, writing both only to a
 temporary directory outside the checkout. Validate the receipt with that temporary validator.
 Do not treat the meta ref as product source and do not write either validator into the checkout.
 If any native prerequisite or proof is missing, send a blocked evidence receipt instead; never
