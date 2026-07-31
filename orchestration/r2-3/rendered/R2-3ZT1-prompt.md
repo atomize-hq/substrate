@@ -74,8 +74,8 @@ Land one atomic, test-only repair in
 `crates/shell/src/execution/agent_runtime/retained_worker_runtime.rs` so the nested
 `admission_head_subprocess_worker` receives the explicit trace context required by the accepted
 unbound-trace contract. The focused queued-promotion test must pass, and the direct shell library
-suite must return from the current 46-failure diagnostic bucket to the exact frozen 45-failure
-inventory.
+suite must contain the frozen 45 failures plus exactly three separately classified, pre-existing
+world-deps/doctor expectation failures.
 
 BOUND SOURCE
 
@@ -146,22 +146,30 @@ direct suite with fresh private external roots:
 
 `cargo test --locked -p shell --lib -- --nocapture`
 
-The nonzero Cargo exit caused by the frozen failures is expected. Parse the complete raw output
+The nonzero Cargo exit caused by the accepted failures is expected. Parse the complete raw output
 without changing repository files and require all of the following:
 
-- exactly `1322 discovered / 1277 passed / 45 failed / 0 ignored`;
-- exactly 45 failure names;
+- exactly `1322 discovered / 1274 passed / 48 failed / 0 ignored`;
+- exactly 48 failure names;
 - failure-name SHA-256
-  `b23bb59ad12833d2c1d37c19c54933cd6bcb1c75e0dab8a70179b9881372be70`;
-- exactly 45 normalized signatures;
+  `c6de1349137dcb16d03b87be5364dc50d74a5052565e2c8d40dfed303592bed9`;
+- exactly 48 normalized signatures;
 - normalized-signature SHA-256
-  `33c686a6ec9f3a0a4f51e1fca976445e6804da12fbbff50312a03f0042cdfac3`;
+  `2a0df9b340cc7e5e1b6e4f76e60e6f937b7442008142d78a7ae24bbcd2f60a90`;
+- the set contains the complete frozen 45-name inventory unchanged;
+- the only three names outside that frozen inventory are exactly:
+  `builtins::shim_doctor::report::tests::world_deps_fixture_cannot_establish_runtime_health_or_cross_a`,
+  `builtins::shim_doctor::report::tests::world_deps_section_forwards_authenticated_a_under_conflicting_ambient_b`,
+  and
+  `builtins::world_deps::tests::doctor_snapshot_uses_authenticated_a_under_conflicting_ambient_b_without_mutation`;
 - the repaired queued-promotion test is absent from the failure set; and
 - no frozen failure is missing, renamed, substituted, or changed.
 
-Count-only equivalence is insufficient. Use the accepted frozen inventory/parser semantics from
-the runtime-refactor records read-only; do not edit or invoke the broken authenticated wrapper.
-Store raw logs, extracted names, normalized signatures, counts, and hashes outside the checkout.
+Count-only equivalence is insufficient. The three additional failures remain separately owned
+runtime-refactor debt and are not repaired or blessed as product behavior by this increment. Use
+the accepted frozen inventory/parser semantics from the runtime-refactor records read-only; do not
+edit or invoke the broken authenticated wrapper. Store raw logs, extracted names, normalized
+signatures, counts, and hashes outside the checkout.
 
 QUALITY GATES
 
@@ -189,8 +197,11 @@ force-push.
 
 COMPLETION BOUNDARY
 
-Success completes only R2-3ZT1. It does not repair the host-inbox helper, land the macOS cleanup,
-run native evidence, execute R2-3Z, complete broader runtime-refactor work, or complete any R3 row.
+Success completes only R2-3ZT1. It does not repair the three pre-existing world-deps/doctor
+expectation failures, repair the host-inbox helper, land the macOS cleanup, run native evidence,
+execute R2-3Z, complete broader runtime-refactor work, or complete any R3 row. The final R2-3
+closeout records must correct the temporary 45-only wording introduced by R2-3ZD1 to this exact
+48-result decomposition.
 
 TERMINAL RECEIPT
 
@@ -198,7 +209,8 @@ Use `increment: "R2-3ZT1"`, `packet_id: "A1.1d-5R2-3ZT1"`, and
 `next_increment: "R2-3ZH1"`. A LANDED_CLEAN receipt must use the canonical receipt schema and
 include landed commit/tree/ref, the exact one changed path, canonical subject-manifest fingerprint
 and path, validated standard review record/digest, focused before/after proof, direct shell-wall
-counts/name/signature hashes, quality checks, GitNexus result, remote 0/0, and clean checkout. For
+48-count/name/signature hashes and exact 45-plus-3 decomposition, quality checks, GitNexus result,
+remote 0/0, and clean checkout. For
 failure, send exact evidence, required authority, and a complete handoff prompt. Receipt send is
 the final tool action.
 
