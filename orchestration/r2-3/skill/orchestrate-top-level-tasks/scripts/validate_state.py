@@ -372,8 +372,14 @@ def main() -> int:
     if status in {"EVIDENCE_RUNNING", "EVIDENCE_RECEIPTS_RECEIVED", "EVIDENCE_VERIFYING"}:
         if not required_for_current:
             fail(f"{status} requires an evidence-gated current increment")
-        if set(evidence_ids) != required_for_current:
-            fail("active evidence dispatches must exactly match the current evidence gate")
+        missing_required = required_for_current - verified_set
+        if not missing_required:
+            fail(f"{status} requires at least one unverified evidence requirement")
+        if set(evidence_ids) != missing_required:
+            fail(
+                "active evidence dispatches must exactly match the unverified "
+                "requirements for the current evidence gate"
+            )
     if status in {"DISPATCHING", "RUNNING", "RECEIPT_RECEIVED", "VERIFYING"}:
         if not required_for_current.issubset(verified_set):
             fail("current increment may not run before all required evidence verifies")

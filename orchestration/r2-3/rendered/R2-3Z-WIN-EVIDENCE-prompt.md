@@ -13,7 +13,7 @@ This prompt is self-contained and does not depend on a skill installed on this p
 DISPATCH IDENTITY
 
 - orchestration_id: `substrate-r2-3`
-- dispatch_nonce: `35e9db62772cc8a2ad494b6cf155378c875e5064cb2ef1fc4ab2f39cc0e3cfa4`
+- dispatch_nonce: `c1430b3ffa7b22854dfc8d4564ec51b2f16d1a0da71af9e46889eca1302e726c`
 - meta_thread_id: `019fa3f7-c447-7132-9126-82e2cf38bd9d`
 - meta_host_id: `remote-ssh-discovered:spenser-linux-codex`
 - evidence_id: `R2-3Z/WIN-EVIDENCE`
@@ -50,6 +50,8 @@ NATIVE PREREQUISITES
 - A pre-existing registered WSL2 distribution must already be `Running`.
 - Use the explicitly declared registered distribution name. Default to `substrate-wsl` only when
   that is the exact registered running name.
+- The user reports that `Ubuntu-24.04` is now Running outside this evidence task. Verify that state
+  independently before guest observation; the report is not evidence by itself.
 - If no suitable distribution is already running, stop with
   `BLOCKED_PLATFORM_HANDOFF_REQUIRED`. Never install, import, create, start, terminate, stop, or
   unregister one for this evidence task.
