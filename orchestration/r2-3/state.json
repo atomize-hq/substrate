@@ -1,7 +1,7 @@
 {
   "protocol": "codex.top-level-orchestration-state.v1",
   "orchestration_id": "substrate-r2-3",
-  "status": "READY",
+  "status": "RUNNING",
   "dispatch_authorized": true,
   "remote": "origin",
   "target_ref": "refs/heads/feat/internal-host-orchestrator-world-dispatch-bootstrap",
@@ -55,7 +55,19 @@
     "thread_id": "019fa3f7-c447-7132-9126-82e2cf38bd9d",
     "host_id": "remote-ssh-discovered:spenser-linux-codex"
   },
-  "active_dispatch": null,
+  "active_dispatch": {
+    "increment": "R2-3ZM5",
+    "packet_id": "A1.1d-5R2-3ZM5",
+    "thread_id": "019fb9c5-d7bc-79c2-8572-614b1fa72561",
+    "host_id": "remote-ssh-discovered:spenser-linux-codex",
+    "dispatch_nonce": "442b3f902a927a4ab09058d21fb92b7eb3163056133e0e72b39e5f27c06f5c44",
+    "expected_base": {
+      "commit": "610db8a9350c9b52496954f5c93232d885f439d9",
+      "tree": "df4eb9869304a629a480dc47adbf79fd0ebf56b2"
+    },
+    "target_ref": "refs/heads/feat/internal-host-orchestrator-world-dispatch-bootstrap",
+    "read_only": false
+  },
   "last_diagnostic": {
     "diagnostic_id": "R2-3ZT1",
     "packet_id": "A1.1d-5R2-3ZT1",
