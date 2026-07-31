@@ -1,0 +1,165 @@
+{
+  "protocol": "codex.top-level-task-receipt.v1",
+  "orchestration_id": "substrate-r2-3",
+  "packet_id": "A1.1d-5R2-3Z",
+  "dispatch_nonce": "3d2cefa4a2dac1608cfa885551df2d3eb28216396728c9a30edecf6cdd9b74a0",
+  "increment": "R2-3Z",
+  "status": "LANDED_CLEAN",
+  "increment_task": {
+    "thread_id": "019fba3a-9e25-7321-a900-dd410e530c67",
+    "host_id": "remote-ssh-discovered:spenser-linux-codex"
+  },
+  "meta_task": {
+    "thread_id": "019fa3f7-c447-7132-9126-82e2cf38bd9d",
+    "host_id": "remote-ssh-discovered:spenser-linux-codex"
+  },
+  "expected_base": {
+    "commit": "c583c5f293644fab75d8d42bd3bcad63f114d4fe",
+    "tree": "a070f5f5787c27180f13dece9a1c3c3241728fda"
+  },
+  "landed": {
+    "commit": "7a9ded10482dee2c1383477950a321ed3ee046f5",
+    "tree": "ec85b9ba89462cbe0cddbc725ece66aade2363ee",
+    "target_ref": "refs/heads/feat/internal-host-orchestrator-world-dispatch-bootstrap",
+    "live_remote": "7a9ded10482dee2c1383477950a321ed3ee046f5"
+  },
+  "required_ancestor": "0f1e147fb735791b44a65099a65167cbdc1803af",
+  "subject_fingerprint": "sha256:2478c015df2851e05b767f81a8cc889cd1b936be38fbc11c33e816f2ff607a5a",
+  "changed_files": [
+    "llm-last-mile/runtime-refactor/00-README.md",
+    "llm-last-mile/runtime-refactor/02-seam-crosswalk.md",
+    "llm-last-mile/runtime-refactor/03-phase-slice-map.md",
+    "llm-last-mile/runtime-refactor/04-contracts-and-gates.md",
+    "llm-last-mile/runtime-refactor/05-debug-regression-ledger.md"
+  ],
+  "review": {
+    "packet_id": "A1.1d-5R2-3Z",
+    "record_path": "/home/spenser/.codex/visualizations/2026/07/31/019fba3a-9e25-7321-a900-dd410e530c67/review/review-record.json",
+    "record_sha256": "sha256:a3236d6ec901906d1ef84851d45995b2d595820be93d20cb40e3af1bb9db73ef",
+    "validated": true,
+    "terminal": "CLEAN",
+    "p1": 0,
+    "p2": 0,
+    "p3_p4_disposition": "none"
+  },
+  "review_artifacts": {
+    "discovery_review_path": "/home/spenser/.codex/visualizations/2026/07/31/019fba3a-9e25-7321-a900-dd410e530c67/review/discovery-aggregate-review.md",
+    "discovery_review_sha256": "sha256:984023b068271781caf407fabffddfcba86c5eb21d03dab88b636eb469b1c409",
+    "final_review_path": "/home/spenser/.codex/visualizations/2026/07/31/019fba3a-9e25-7321-a900-dd410e530c67/review/final-clean-review.md",
+    "final_review_sha256": "sha256:ac7cab67a195861aae3bafa00ee521283b2d43e282d661f493f746b8cef9ac1d",
+    "subject_fingerprint_path": "/home/spenser/.codex/visualizations/2026/07/31/019fba3a-9e25-7321-a900-dd410e530c67/review/r2-3z-subject-fingerprint.txt",
+    "subject_fingerprint_file_sha256": "sha256:1c016b4647de612a412eab04443330e60068f3eea5dacfc35176a99efaa3138a",
+    "closure_reviewers": [
+      "019fba87-1fe5-7b13-b6a2-32f2376ab203",
+      "019fba87-2326-72d3-939a-27bd6448be3c",
+      "019fba87-265a-73b0-81e6-b8b957e9e4ef"
+    ]
+  },
+  "accepted_source": {
+    "children": {
+      "R2-3ZD1": "3f909efd1b94bbde99bae160de75958a5447485e",
+      "R2-3ZT1": "56e0a8582d562bd7e60e8f4348b4d596e1b2b36e",
+      "R2-3ZH1": "610db8a9350c9b52496954f5c93232d885f439d9",
+      "R2-3ZM5": {
+        "commit": "c583c5f293644fab75d8d42bd3bcad63f114d4fe",
+        "tree": "a070f5f5787c27180f13dece9a1c3c3241728fda"
+      }
+    }
+  },
+  "accepted_direct_proof": {
+    "discovered": 1322,
+    "passed": 1274,
+    "failed": 48,
+    "ignored": 0,
+    "failure_name_sha256": "sha256:c6de1349137dcb16d03b87be5364dc50d74a5052565e2c8d40dfed303592bed9",
+    "normalized_signature_sha256": "sha256:2a0df9b340cc7e5e1b6e4f76e60e6f937b7442008142d78a7ae24bbcd2f60a90",
+    "repaired_tests_absent_from_failure_set": true,
+    "classified_open_non_r2_3_failures": [
+      "builtins::shim_doctor::report::tests::world_deps_fixture_cannot_establish_runtime_health_or_cross_a",
+      "builtins::shim_doctor::report::tests::world_deps_section_forwards_authenticated_a_under_conflicting_ambient_b",
+      "builtins::world_deps::tests::doctor_snapshot_uses_authenticated_a_under_conflicting_ambient_b_without_mutation"
+    ],
+    "diagnostic_noncanonical_runs_not_promoted": [
+      "R2-3ZM5 100-failure diagnostic run",
+      "R2-3ZM5 76-failure diagnostic run"
+    ]
+  },
+  "evidence": {
+    "macos": {
+      "receipt_path": "orchestration/r2-3/receipts/R2-3Z-MAC-EVIDENCE-refresh-1.json",
+      "receipt_sha256": "sha256:3b44f6387070b7aaea4306ae58d7f280b1cee3e163ee59219d4900ce3f53dfaf",
+      "artifact_sha256": "sha256:64a726d45b8bb6724fe43f566903d7b5e5ed6ef16119f14d30cd5a03edcc7e50",
+      "task_thread_id": "019fba06-3a62-7b03-8d61-62d042467901",
+      "host_id": "local",
+      "gates": ["R2-DIAG-01", "R2-MAP-MAC-01"]
+    },
+    "windows": {
+      "receipt_path": "orchestration/r2-3/receipts/R2-3Z-WIN-EVIDENCE-refresh-1.json",
+      "receipt_sha256": "sha256:4ee942690655c1fac185244438d14e2561df52c306dea7e5428d556b530fd28c",
+      "artifact_sha256": "sha256:2c36a8dae9f3bcfa1c240c62a1e44f93aee0798702ae78a0076d43778b93d46e",
+      "task_thread_id": "019fba1b-deea-7830-ae74-e8569134aeb3",
+      "host_id": "remote-control:env_e_6a3d9cd24b5483238ba55b699a98be35",
+      "gates": ["R2-DIAG-01", "R2-MAP-WIN-01"]
+    }
+  },
+  "checks": [
+    "Accepted child/source receipt identities and source sequence verified against bound base commit/tree and required ancestor.",
+    "Fresh macOS and Windows evidence receipts revalidated with validate_evidence_receipt.py and recorded SHA-256 digests.",
+    "Accepted direct Linux proof transcribed exactly as 1322 discovered / 1274 passed / 48 failed / 0 ignored with the recorded failure-set and normalized-signature hashes.",
+    "cargo test --locked -p shell --lib --no-run",
+    "cargo fmt --all -- --check",
+    "bash -n scripts/mac/orchestration-smoke.sh",
+    "git diff --check",
+    "git diff --cached --check",
+    "exact allowlist check against the five permitted control-pack files",
+    "gitnexus_detect_changes(scope=all) reported low risk and 0 affected processes on the staged docs subject",
+    "live remote equality verified before push and again after push",
+    "review-record.json revalidated with validate_review_cycle.py"
+  ],
+  "gitnexus": {
+    "detect_changes_scope": "all",
+    "detect_changes_risk": "low",
+    "affected_processes": 0,
+    "changed_files": 5,
+    "changed_count": 23,
+    "indexed_repo": "substrate"
+  },
+  "pi_gate_disposition": {
+    "closed_r2_3_rows": [
+      "PI-059 transcribed as harness-only closure evidence within R2-3 scope",
+      "PI-077 transcribed as byte-frozen fail-closed guard coverage",
+      "PI-078 transcribed as byte-frozen fail-closed guard coverage",
+      "R2-3-owned gate and parent closeout rows updated to reflect accepted 48-failure truth and fresh native evidence"
+    ],
+    "preserved_open": [
+      "PI-050 remains an R2-4 guardrail and is not closed by R2-3Z",
+      "PI-080 remains satisfied by earlier R2-2 work and is not reopened",
+      "All R3 lifecycle, forwarding, provisioning, rollback, cleanup, and convergence work remains open"
+    ],
+    "canonical_runner": "R2-3ZP3 remains deferred proof infrastructure only; no eligible canonical-runner provenance claim was made. The documented evidence_write_failed and mount_teardown_failed limitation remains open and separate from product completion."
+  },
+  "verification": {
+    "required_checks_passed": true,
+    "allowlist_passed": true,
+    "change_detection_passed": true,
+    "checkout_clean": true,
+    "review_clean": true,
+    "remote_equal_after_push": true,
+    "ahead": 0,
+    "behind": 0
+  },
+  "limitations": [
+    "This closeout is docs-only and does not repair product code, tests, scripts, manifests, lockfiles, or proof infrastructure.",
+    "The three classified world_deps/report failures remain open unrelated expectation drift outside R2-3 ownership.",
+    "The noncanonical 100-failure and 76-failure R2-3ZM5 diagnostics are not promoted to canonical proof.",
+    "Broader non-Linux product proof, privileged product smoke, direct-member adoption, and later lifecycle/provisioning work remain unclaimed here."
+  ],
+  "completion_boundary": "R2-3Z closes only the bounded R2-3 parent by joining already-landed child increments, transcribing accepted direct Linux proof plus fresh native evidence into the five-file control pack, closing only R2-3-owned PI/gate rows, and publishing one reviewed docs-only closeout commit. It does not complete R2-4, R3, canonical-runner proof infrastructure, the three classified non-R2-3 failures, privileged full-world provisioning, direct-member adoption, or later lifecycle/forwarding/cleanup/convergence work.",
+  "open_work": [
+    "R2-3ZP3 deferred canonical-runner proof infrastructure remains unpublished diagnostic evidence only.",
+    "R2-4 guardrail follow-on remains open.",
+    "All R3 lifecycle, forwarding, provisioning, cleanup, rollback, and convergence work remains open.",
+    "The three classified non-R2-3 world_deps/report failures remain open unrelated expectation drift."
+  ],
+  "next_increment": "COMPLETE"
+}
