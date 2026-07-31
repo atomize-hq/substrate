@@ -1,0 +1,65 @@
+{
+  "protocol": "codex.top-level-task-receipt.v1",
+  "orchestration_id": "substrate-r2-3",
+  "dispatch_nonce": "e4423f8ee31677b96ad201349ea6c808c94748e75216b82b134e28fd7946a194",
+  "increment": "R2-3ZH1",
+  "packet_id": "A1.1d-5R2-3ZH1",
+  "status": "LANDED_CLEAN",
+  "increment_task": {
+    "thread_id": "019fb995-3093-7400-a199-44b2f54afd4c",
+    "host_id": "remote-ssh-discovered:spenser-linux-codex"
+  },
+  "expected_base": {
+    "commit": "56e0a8582d562bd7e60e8f4348b4d596e1b2b36e",
+    "tree": "de567b39283733403c089d18fe81ae5d81d081ee"
+  },
+  "landed": {
+    "commit": "610db8a9350c9b52496954f5c93232d885f439d9",
+    "tree": "df4eb9869304a629a480dc47adbf79fd0ebf56b2",
+    "target_ref": "refs/heads/feat/internal-host-orchestrator-world-dispatch-bootstrap",
+    "live_remote": "610db8a9350c9b52496954f5c93232d885f439d9"
+  },
+  "subject_fingerprint": "sha256:58b6a5e0eed998e348b7b43e427421ca97a6e7cefa570f9bf7c86f3eb0f2f76c",
+  "changed_files": [
+    "crates/shell/src/execution/host_inbox_materialization.rs"
+  ],
+  "review": {
+    "packet_id": "A1.1d-5R2-3ZH1",
+    "record_path": "/tmp/substrate-r2-3zh1-proof/review-artifacts/R2-3ZH1.review-cycle-record.json",
+    "record_sha256": "sha256:e6375348a1939ae599df85ef2ea8703b85885f7cdc611e73745284f9fef2ede2",
+    "validated": true,
+    "terminal": "CLEAN",
+    "p1": 0,
+    "p2": 0,
+    "p3_p4_disposition": "none"
+  },
+  "verification": {
+    "required_checks_passed": true,
+    "allowlist_passed": true,
+    "change_detection_passed": true,
+    "checkout_clean": true,
+    "ahead": 0,
+    "behind": 0
+  },
+  "next_increment": "R2-3ZM5",
+  "subject_manifest": {
+    "path": "/tmp/substrate-r2-3zh1-proof/subject-manifest.diff",
+    "sha256": "sha256:58b6a5e0eed998e348b7b43e427421ca97a6e7cefa570f9bf7c86f3eb0f2f76c"
+  },
+  "focused_proof": {
+    "before": "8 targeted tests ran; 7 failed under XDG_RUNTIME_DIR unset and TMPDIR=/tmp with legacy authority writer preflight rejection",
+    "after_hostile": "8 targeted tests passed under the same hostile environment",
+    "after_direct_wall": "8 targeted tests passed under private mode-0700 TMPDIR and XDG_RUNTIME_DIR"
+  },
+  "direct_shell_wall": {
+    "counts": {
+      "discovered": 1322,
+      "passed": 1274,
+      "failed": 48,
+      "ignored": 0
+    },
+    "failure_names_sha256": "sha256:c6de1349137dcb16d03b87be5364dc50d74a5052565e2c8d40dfed303592bed9",
+    "normalized_signatures_sha256": "sha256:2a0df9b340cc7e5e1b6e4f76e60e6f937b7442008142d78a7ae24bbcd2f60a90",
+    "host_inbox_materialization_absent": true
+  }
+}
