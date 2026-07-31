@@ -1,7 +1,7 @@
 {
   "protocol": "codex.top-level-orchestration-state.v1",
   "orchestration_id": "substrate-r2-3",
-  "status": "READY",
+  "status": "RUNNING",
   "dispatch_authorized": true,
   "remote": "origin",
   "target_ref": "refs/heads/feat/internal-host-orchestrator-world-dispatch-bootstrap",
@@ -54,7 +54,20 @@
     "thread_id": "019fa3f7-c447-7132-9126-82e2cf38bd9d",
     "host_id": "remote-ssh-discovered:spenser-linux-codex"
   },
-  "active_dispatch": null,
+  "active_dispatch": {
+    "increment": "R2-3ZP3",
+    "packet_id": "A1.1d-5R2-3ZP3",
+    "thread_id": "019fb829-785d-76f3-9078-bcae86dd9f3f",
+    "host_id": "remote-ssh-discovered:spenser-linux-codex",
+    "dispatch_nonce": "745771f218d81aed279861b84b759bba3b5d85fbe4e8afea95e655e5b59653d9",
+    "expected_base": {
+      "commit": "ec05167bd7bcb7be874af48fe33d6edb71492516",
+      "tree": "b0d399cfb09655d5ff61d47ec68408e52ba5cfec"
+    },
+    "target_ref": "refs/heads/feat/internal-host-orchestrator-world-dispatch-bootstrap",
+    "read_only": false,
+    "scope_amendment": "fresh proof-infrastructure prerequisite limited to canonical_shell_wall_runner.py and its test; preserves R2-3ZR1 donor WIP read-only and may publish only an eligible runner authority commit"
+  },
   "last_diagnostic": {
     "diagnostic_id": "R2-3ZR1R1",
     "packet_id": "A1.1d-5R2-3ZR1R1",
