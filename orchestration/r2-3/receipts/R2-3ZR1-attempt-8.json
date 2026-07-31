@@ -1,0 +1,105 @@
+{
+  "protocol": "codex.top-level-task-receipt.v1",
+  "orchestration_id": "substrate-r2-3",
+  "dispatch_nonce": "f48c1e95710b3f98aee943e2fe1ea85b21f7f5e8204ad9126c0126d72238674f",
+  "increment": "R2-3ZR1",
+  "packet_id": "A1.1d-5R2-3ZR1R1",
+  "status": "AUTHORITY_REQUIRED",
+  "increment_task": {
+    "thread_id": "019fb502-1217-7fc2-aeba-c4c5d157c364",
+    "host_id": "remote-ssh-discovered:spenser-linux-codex"
+  },
+  "expected_base": {
+    "commit": "ec05167bd7bcb7be874af48fe33d6edb71492516",
+    "tree": "b0d399cfb09655d5ff61d47ec68408e52ba5cfec"
+  },
+  "local_checkout": {
+    "path": "/home/spenser/.codex/worktrees/3b8f/substrate-r2-3",
+    "head": "199e1b1a5f3854934a08727f2846e028c065c5cb",
+    "tree": "15e17d17fa1a9222488a695a0e4e360376e3556c",
+    "target_ref": "refs/heads/feat/internal-host-orchestrator-world-dispatch-bootstrap",
+    "divergence": {
+      "ahead": 1,
+      "behind": 0
+    },
+    "required_ancestor_present": "0f1e147fb735791b44a65099a65167cbdc1803af"
+  },
+  "scope": {
+    "authorized_and_modified_paths": [
+      "scripts/ci/canonical_shell_wall_runner.py",
+      "scripts/ci/test_canonical_shell_wall_runner.py"
+    ],
+    "unrelated_preexisting_task_checkout_changes": [
+      "AGENTS.md",
+      "CLAUDE.md"
+    ]
+  },
+  "subject": {
+    "two_file_diff_sha256": "sha256:de9a857e5d6341d2f2430ed15354355568fb45a10d34f294384fa905a8ce452e",
+    "file_hashes": {
+      "scripts/ci/canonical_shell_wall_runner.py": "sha256:e446cf4a15fe024fb8796bd889e0ea9e00b323799d510c90a587f711e14658b5",
+      "scripts/ci/test_canonical_shell_wall_runner.py": "sha256:78981f03afe1c8eb907f3094b7278f9e847c71f4153262a0e748546ebacfa63c"
+    }
+  },
+  "checks": {
+    "py_compile": "clean",
+    "git_diff_check_authorized_paths": "clean",
+    "gitnexus": {
+      "impact_analysis": "tooling_gap_noted",
+      "detect_changes": "tooling_gap_noted"
+    }
+  },
+  "review": {
+    "record": "/home/spenser/r2-3zr1-runner-proof-final.l69l_x14/review/review-cycle-record.json",
+    "note": "/home/spenser/r2-3zr1-runner-proof-final.l69l_x14/review/discovery-review.txt",
+    "validator_command": "python3 llm-last-mile/runtime-refactor/review-control/validate_review_cycle.py /home/spenser/r2-3zr1-runner-proof-final.l69l_x14/review/review-cycle-record.json",
+    "validator_result": "VALID",
+    "verdict": "CLEAN",
+    "p1": 0,
+    "p2": 0
+  },
+  "proof": {
+    "root": "/home/spenser/r2-3zr1-runner-proof-final.l69l_x14",
+    "setup_and_selftest_summary": "/home/spenser/r2-3zr1-runner-proof-final.l69l_x14/setup-and-selftest-summary.json",
+    "wall_summary": "/home/spenser/r2-3zr1-runner-proof-final.l69l_x14/wall-proof-summary.json",
+    "receipt_data": "/home/spenser/r2-3zr1-runner-proof-final.l69l_x14/runner-only-receipt-data.json",
+    "authenticated_selftests": {
+      "base": "clean_103_of_103",
+      "head": "clean_103_of_103"
+    },
+    "wall_matrix": "all four authenticated wall runs remain ineligible under the final runner-only subject; the prior evidence_write_failed signature is removed, but each run now stops earlier with stage_a_liveness_failed plus mount_teardown_failed before summary.json materializes",
+    "known_shape_probe": "/home/spenser/r2-3zr1-knownshape-probe.eve991tt",
+    "archive_probe": "/home/spenser/r2-3zr1-archive-probe.m4q4y6oz"
+  },
+  "conclusion": {
+    "runner_only_repair_outcome": "partial",
+    "proven": [
+      "The two-file patch removes the prior evidence_write_failed wall signature.",
+      "The final subject passes py_compile, targeted authenticated recovery/schema tests, and full authenticated self-tests on base/head proof commits."
+    ],
+    "unproven": [
+      "eligible finalized wall provenance",
+      "summary.json / failure-names.txt / normalized-signatures.txt materialization under current authenticated wall runs",
+      "clean teardown of the hidden backing directory during the new pre-status failure path"
+    ]
+  },
+  "next_authority": {
+    "kind": "AUTHORITY_REQUIRED",
+    "requested_scope": [
+      "a separately bounded continuation limited to scripts/ci/canonical_shell_wall_runner.py and scripts/ci/test_canonical_shell_wall_runner.py",
+      "permission for sanitized runner diagnostics only in fresh external disposable proof roots"
+    ],
+    "explicitly_not_authorized": [
+      "crates/shell/src/execution/agent_runtime/retained_worker_runtime.rs",
+      "native evidence",
+      "R2-3Z",
+      "publication"
+    ]
+  },
+  "blocker": {
+    "summary": "The two-file runner/test patch removes the prior evidence_write_failed wall signature, but all four authenticated wall proofs now stop earlier with stage_a_liveness_failed plus mount_teardown_failed before summary.json materializes.",
+    "details": "Base and head authenticated self-tests are both clean at 103/103. The four-run authenticated wall matrix recorded in /home/spenser/r2-3zr1-runner-proof-final.l69l_x14/wall-proof-summary.json shows that the prior evidence_write_failed signature is gone, but all four runs remain ineligible because they now stop earlier with stage_a_liveness_failed plus mount_teardown_failed before summary.json materializes. The observed event shape is stage_a_started followed by stage_a_status_received=false, with the hidden .backing directory retained at failure time. The same pre-status failure shape reproduces in the previously known-good external proof repo shape rooted at /home/spenser/r2-3zr1-knownshape-probe.eve991tt. The archive probe rooted at /home/spenser/r2-3zr1-archive-probe.m4q4y6oz did not produce an alternative eligible path because it was blocked by repository_dirty.",
+    "required_authority": "Grant a separately bounded continuation limited to scripts/ci/canonical_shell_wall_runner.py and scripts/ci/test_canonical_shell_wall_runner.py, plus permission for sanitized runner diagnostics only in fresh external disposable proof roots. This continuation does not include authority for crates/shell/src/execution/agent_runtime/retained_worker_runtime.rs, native evidence, R2-3Z, or publication.",
+    "handoff_prompt": "Resume the same bound R2-3ZR1 increment from preserved local unpublished commit 199e1b1a5f3854934a08727f2846e028c065c5cb / tree 15e17d17fa1a9222488a695a0e4e360376e3556c in /home/spenser/.codex/worktrees/3b8f/substrate-r2-3. Preserve every existing R2-3ZR1 product/control-pack change exactly. Do not edit any tracked file except scripts/ci/canonical_shell_wall_runner.py and scripts/ci/test_canonical_shell_wall_runner.py. Reuse the exact runner-only subject fingerprint sha256:de9a857e5d6341d2f2430ed15354355568fb45a10d34f294384fa905a8ce452e and the existing external proof roots /home/spenser/r2-3zr1-runner-proof-final.l69l_x14, /home/spenser/r2-3zr1-knownshape-probe.eve991tt, and /home/spenser/r2-3zr1-archive-probe.m4q4y6oz as historical evidence only. Reverify only the preserved base/tree/divergence facts and the clean 103/103 authenticated self-test state, then continue the remaining runner-only diagnosis needed to explain and repair the new pre-status wall failure shape. Any new diagnostics must be sanitized and written only to fresh external disposable proof roots. The bounded goal is to determine whether a same-two-file harness-only repair can convert the new stage_a_liveness_failed plus mount_teardown_failed path into eligible finalized wall provenance without weakening any authentication, containment, teardown, evidence-integrity, descendant-authority, or fail-closed property. Do not request or use authority for crates/shell/src/execution/agent_runtime/retained_worker_runtime.rs, native evidence, R2-3Z, or publication."
+  }
+}

@@ -1,7 +1,7 @@
 {
   "protocol": "codex.top-level-orchestration-state.v1",
   "orchestration_id": "substrate-r2-3",
-  "status": "RUNNING",
+  "status": "BLOCKED",
   "dispatch_authorized": true,
   "remote": "origin",
   "target_ref": "refs/heads/feat/internal-host-orchestrator-world-dispatch-bootstrap",
@@ -52,20 +52,7 @@
     "thread_id": "019fa3f7-c447-7132-9126-82e2cf38bd9d",
     "host_id": "remote-ssh-discovered:spenser-linux-codex"
   },
-  "active_dispatch": {
-    "increment": "R2-3ZR1",
-    "packet_id": "A1.1d-5R2-3ZR1R1",
-    "thread_id": "019fb502-1217-7fc2-aeba-c4c5d157c364",
-    "host_id": "remote-ssh-discovered:spenser-linux-codex",
-    "dispatch_nonce": "f48c1e95710b3f98aee943e2fe1ea85b21f7f5e8204ad9126c0126d72238674f",
-    "expected_base": {
-      "commit": "ec05167bd7bcb7be874af48fe33d6edb71492516",
-      "tree": "b0d399cfb09655d5ff61d47ec68408e52ba5cfec"
-    },
-    "target_ref": "refs/heads/feat/internal-host-orchestrator-world-dispatch-bootstrap",
-    "read_only": false,
-    "scope_amendment": "read-only-first canonical-wall evidence-finalization investigation; repair authority limited exactly to scripts/ci/canonical_shell_wall_runner.py and scripts/ci/test_canonical_shell_wall_runner.py; no crates/shell edits, commit/amend/reset, product publication, native evidence, or R2-3Z"
-  },
+  "active_dispatch": null,
   "last_diagnostic": {
     "diagnostic_id": "R2-3ZR1R1",
     "packet_id": "A1.1d-5R2-3ZR1R1",
@@ -73,8 +60,8 @@
     "thread_id": "019fb502-1217-7fc2-aeba-c4c5d157c364",
     "host_id": "remote-ssh-discovered:spenser-linux-codex",
     "dispatch_nonce": "f48c1e95710b3f98aee943e2fe1ea85b21f7f5e8204ad9126c0126d72238674f",
-    "receipt_path": "orchestration/r2-3/receipts/R2-3ZR1-attempt-7.json",
-    "artifact_sha256": "sha256:ec13948c5c53069789d0ba4419f2699cefcd189464b33ed4d3df8abde55e7b36"
+    "receipt_path": "orchestration/r2-3/receipts/R2-3ZR1-attempt-8.json",
+    "artifact_sha256": "sha256:de9a857e5d6341d2f2430ed15354355568fb45a10d34f294384fa905a8ce452e"
   },
   "active_evidence_dispatches": [],
   "verified_evidence": [],
