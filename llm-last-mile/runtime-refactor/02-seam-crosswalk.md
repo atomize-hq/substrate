@@ -292,7 +292,7 @@ may make the later target unambiguous but may not perform, authorize, or define 
 | PI-108 | `DiagnosticProjection` | World/Host/Health/shim doctor receives typed IH and passes A-derived config/deps paths to the existing report collector. Health and direct Unix shim doctor continue through `collect_report_for_context` → `build_report`. The existing World-disabled branch returns its frozen disabled snapshot without a child or fixture lookup. The embedded world-deps branch may use only the A-rooted world-deps fixture or its existing collector. Under F5-PD, whenever the authenticated Linux World-enabled branch reaches `gather_world_doctor_snapshot`, it uses the hidden passive child; `A/health/world_doctor.json` is `cfg(test)` evidence only on that path. Existing non-Linux fixture/public-child mechanics remain frozen compatibility, cannot supply F5-PD/F5 authority or proof, and cannot claim A-bound/native truth. No authenticated Linux diagnostic reconstructs default H, consults B, invokes a contextless child, mutates the parent environment, or discloses carrier/credential/request/sensitive-principal bytes. The context-aware exposure and checked-projection compatibility collector remain behavior-frozen and R2-3-owned; R2 | named platform/health handlers; exact Route D world-deps carrier/fixture mechanics plus the exact Linux F5-PD World Doctor files/symbols below; no authenticated Linux production World Doctor fixture authority | R2-DIAG-01; native Linux | R2-2 Route D plus bounded F5-PD prerequisite |
 | PI-109 | `DiagnosticProjection` | installer-managed config proof receives the hidden argv carrier; root dispatch validates it and `ShellConfig::from_cli` explicitly forwards typed IH only to the Config branch, where `run_current_show` resolves the global layer through the existing opened-bootstrap-home contract with explain parity; workspace/Cli/config semantics stay frozen; R2 | `config_cmd.rs::{handle_config_command,run_current_show}` and `config_model.rs::{resolve_effective_config_for_bootstrap_home,resolve_effective_config_with_explain_for_bootstrap_home}` exact context intake/delegation only | R2-DIAG-01/R2-LINUX-01; native Linux | R2-2 |
 | PI-110 | `DiagnosticProjection` | installer-managed policy proof uses the same hidden argv carrier/typed IH; `ShellConfig::from_cli` explicitly forwards only to the Policy branch and `run_current_show` resolves the A-global layer through the existing opened-bootstrap-home contract with explain parity; workspace/policy semantics stay frozen and ambient B cannot select the global layer; R2 | `policy_cmd.rs::{handle_policy_command,run_current_show}` and `policy_model.rs::{resolve_effective_policy_for_bootstrap_home,resolve_effective_policy_with_explain_for_bootstrap_home}` exact context intake/delegation only | R2-DIAG-01/R2-LINUX-01; native Linux | R2-2 |
-| PI-111 | `ExplicitHostPropagation` | **R2-2E implementation/proof clause complete.** Routes A–D left gateway configuration, effective policy, network policy, runtime-family inventory, Codex home, disabled routing, and client selection ambient. R2-2E now validates A before status/mutation/launch, keeps existing config/effective-policy owners and `policy_snapshot.rs` as the single snapshot/network owner, removes contextless unavailable synthesis, and fixes the authenticated Linux socket to `/run/substrate.sock`. Because E has no authenticated platform-endpoint source, macOS fails before client construction/`auto_select`, and Windows/other contextless entries fail before config/policy/inventory/disabled/client selection; frozen ambient compatibility remains R2-3-owned and unreachable from E. Existing policy/network/credential semantics remain unchanged. This does not complete direct-member Codex/UAA gateway adoption or the full credential/config architecture; E3/D1/D3 and the open RG-CONFIG/RG-UAA gates retain that work. | `platform/mod.rs::handle_world_command` Gateway arm; exact R2-2E symbols in `world_gateway.rs`, `policy_snapshot.rs`, and `agent_inventory.rs`; lower platform adapters and schemas frozen | R2-RUNTIME-01/R2-DIAG-01; focused Linux plus non-Unix build/static fail-closed cfg, native platform product proof deferred | R2-2E and F are complete; current next proof work is remediation planning → R1 → P1 → fresh canonical baseline → renewed production-fix-free closeout; R2-3 remains blocked |
+| PI-111 | `ExplicitHostPropagation` | **R2-2E implementation/proof clause complete.** Routes A–D left gateway configuration, effective policy, network policy, runtime-family inventory, Codex home, disabled routing, and client selection ambient. R2-2E now validates A before status/mutation/launch, keeps existing config/effective-policy owners and `policy_snapshot.rs` as the single snapshot/network owner, removes contextless unavailable synthesis, and fixes the authenticated Linux socket to `/run/substrate.sock`. Because E has no authenticated platform-endpoint source, macOS fails before client construction/`auto_select`, and Windows/other contextless entries fail before config/policy/inventory/disabled/client selection; frozen ambient compatibility remains R2-3-owned and unreachable from E. Existing policy/network/credential semantics remain unchanged. This does not complete direct-member Codex/UAA gateway adoption or the full credential/config architecture; E3/D1/D3 and the open RG-CONFIG/RG-UAA gates retain that work. | `platform/mod.rs::handle_world_command` Gateway arm; exact R2-2E symbols in `world_gateway.rs`, `policy_snapshot.rs`, and `agent_inventory.rs`; lower platform adapters and schemas frozen | R2-RUNTIME-01/R2-DIAG-01; focused Linux plus non-Unix build/static fail-closed cfg, native platform product proof deferred | R2-2E and F are complete; at that checkpoint the next proof work was remediation planning → R1 → P1 → fresh canonical baseline → renewed production-fix-free closeout. Source publication later completed, after which the accepted R2-3 suffix and refreshed native evidence closed R2-3. |
 | PI-112 | `GeneratedProjectionConsumption` | `UserKnownHostsFile` is an A-relative generated helper projection carried into the verified Lima mapping; existence/content never selects A or PM; R2 | `create_ssh_uds_forwarding` known-hosts path parameter only | R2-MAP-MAC-01/R2-GEN-01; static plus assigned native macOS | R2-3 |
 | PI-113 | `R3CleanupOnly` | forwarder-child kill/wait and socket removal on handle drop are teardown/cleanup authority reserved exclusively to R3; R2 mapping edits freeze the body | `ForwardingHandle::drop` body frozen in R2 | R3-LIFE-01; native macOS | R3 |
 | PI-114 | `R3CleanupOnly` | timed-out SSH child kill/wait is current-attempt rollback reserved exclusively to R3; R2 mapping edits freeze the branch | `create_ssh_uds_forwarding` timeout-kill branch frozen in R2 | R3-LIFE-01; native macOS | R3 |
@@ -384,6 +384,21 @@ PI-061–PI-063, PI-067, PI-082–PI-085, PI-104, and PI-117. PI-050 remains an 
 PI-064 and PI-092–PI-093 remain frozen R3 lifecycle rows. PI-118, release/sudo/service/runtime rows,
 platform mappings, and joined R2-4 proof remain unstarted. No row changes classification and no seam
 is promoted.
+
+R2-3 closes exactly these inventory rows at source checkpoint
+`c583c5f293644fab75d8d42bd3bcad63f114d4fe`: PI-009, PI-022, PI-039–PI-046, PI-048–PI-049,
+PI-052, PI-054–PI-058, PI-060, PI-068–PI-070, PI-075–PI-076, PI-079, PI-081, PI-090–PI-091,
+PI-112, PI-115–PI-116, and PI-118. The accepted direct shell-library proof is
+`1322 discovered / 1274 passed / 48 failed / 0 ignored`, with failure-name SHA-256
+`c6de1349137dcb16d03b87be5364dc50d74a5052565e2c8d40dfed303592bed9` and normalized-signature
+SHA-256 `2a0df9b340cc7e5e1b6e4f76e60e6f937b7442008142d78a7ae24bbcd2f60a90`; the historical 45-failure
+inventory remains intact and the only additional failures are the three separately classified
+world-deps/report expectations named in `00` and `05` and summarized in `03`. The refreshed source-bound native
+macOS and Windows receipts are `EVIDENCE_CLEAN` for `R2-DIAG-01`, `R2-MAP-MAC-01`, and
+`R2-MAP-WIN-01` at that same source. The R2-3-owned exceptions remain PI-059 as harness-only and
+PI-077/PI-078 as byte-frozen fail-closed guards; PI-050 remains the R2-4 guardrail; PI-080 remains satisfied by earlier R2-2 Linux
+restart-scope work and is not reopened here; and no R3 lifecycle/forwarding/provisioning/cleanup/
+rollback/convergence row changes classification or ownership here.
 
 Inventory closure rules:
 
@@ -541,9 +556,9 @@ separately approved privileged platform-attestation boundary; R1 neither implies
 The bounded R1 implementation and reviews are clean; R2-0 planning and R2-1 implementation are
 complete, while R2-2 Routes A–D remain individually review-clean and R2-2E is implementation-,
 proof-, and review-complete. At that historical checkpoint F0/F0a/F0b/F0-HC were also canonically
-complete and F was the exact next packet. Renewed closeout,
-R2-3/R2-4/R3 remain unstarted, and the R1 evidence does
-not promote this seam, and all later lifecycle/product gates remain open.
+complete and F was the exact next packet. Renewed closeout, R2-3, R2-4, and R3 were still
+unstarted; the R1 evidence did not promote this seam, and all later lifecycle/product gates
+remained open.
 
 **A1.2a-WB/A1.2a-S closeout:** A1.2a-WB makes Start issuance, application/persistence, and exact
 current-authority resolution enforce the same Host/world-binding matrix while leaving exact binding
@@ -1293,9 +1308,11 @@ mandatory stop, regardless of passing tests.
 
 ## A1.1d-5R2-2F completed seam crosswalk
 
-This section is the controlling status for the F rows above. It supersedes their live phrases that
-name F5-PD or F5 as the next packet; those phrases remain historical checkpoint evidence. F is
-complete, while renewed R2-2 integration closeout and every later slice remain unstarted.
+This section is the controlling historical status for the F rows above. It supersedes their live
+phrases that name F5-PD or F5 as the next packet; those phrases remain historical checkpoint
+evidence. At that checkpoint F was complete, while renewed R2-2 integration closeout and every
+later slice were still unstarted. Later RP3/RP4/RP5 publication work and the accepted R2-3 suffix
+closeout now sit above that historical F checkpoint without rewriting it.
 
 | Increment | Runtime proof commit before documentation replay | Exact owner/path closure | Final disposition |
 |---|---|---|---|
@@ -1371,8 +1388,8 @@ The selected model is **Docs-on-top → one fast-forward publication**.
 | P1 implementation/review | R1 implementation/review CLEAN; exact two-file P1 allowlist and authenticated tracked-runner contract | One bounded P1 commit, all adversarial self-tests, then fresh provenance/security review CLEAN | Product runtime/test semantics, dependencies, privileged state, fallback harness, or source push | Ordered after R1 and before any new wall |
 | Fresh canonical baseline | Reviewed P1 commit; three fresh parallel roots and one fresh serial root | Run all four walls only through P1; require independently valid provenance, canonical counts/hashes, and zero differential | Reuse of any prior wall/root, parent-only waiting, pathname-only cleanup, or implementation remediation | Evidence node, not an implementation commit |
 | Renewed production-fix-free closeout | R1/P1 implementation and reviews CLEAN plus the fresh P1 baseline; complete focused/integration wall and four independent read-only reviews | Run closeout proofs, then reviews, with no implementation/test commit during the closeout itself | Repairing production, tests, fixtures, scripts, schemas, dependencies, or generated files during closeout; claiming product smoke or seam promotion | Failure or stop leaves source remote unchanged and requires docs-first future remediation |
-| Final integration-closeout docs | Exact already assembled runtime range plus the RP4 proof packet accepted clean by human disposition; final six-file RP5 closeout commit | Follow the range and evidence it certifies; draft/validate/review to CLEAN, commit the exact reviewed bytes, then rerun final validation/reviews | Placing closeout docs below the certified range, treating authority docs as proof, rewriting a finding, or publishing on any unresolved finding | Current RP5 packet. The raw persistence review remains `REQUEST_CHANGES`; its three cache-only findings are preserved as non-blocking process-audit debt outside RP4 product-proof scope. Source publication remains next. |
-| Source publication | Original 17 runtime commits plus publication-authority docs, B1 broad-wall invocation docs, remediation-planning docs, the bounded R1 and P1 implementation commits, and final integration-closeout docs | Freshly read the source remote at exact `2f6f1f69b3519dafff01ef543e7d260da2c37700`; bind an explicit expected-old-OID CAS/lease to that exact OID; independently prove the update is an ordinary fast-forward; require final local HEAD, upstream, and remote parity | Using the CAS/lease to permit a forced/non-fast-forward update; push after a changed old OID; second/staged source push; replay, rebase, rewrite, cherry-pick, merge commit, force push; or admission of blocked/preservation-only donor ancestry | Source publication has not occurred in this run; after the reviewed/committed RP5 docs it remains the exact next step |
+| Final integration-closeout docs | Exact already assembled runtime range plus the RP4 proof packet accepted clean by human disposition; final six-file RP5 closeout commit | Follow the range and evidence it certifies; draft/validate/review to CLEAN, commit the exact reviewed bytes, then rerun final validation/reviews | Placing closeout docs below the certified range, treating authority docs as proof, rewriting a finding, or publishing on any unresolved finding | Preserved RP5 packet. The raw persistence review remains `REQUEST_CHANGES`; its three cache-only findings are preserved as non-blocking process-audit debt outside RP4 product-proof scope. At that checkpoint, source publication was the next step; it later completed before the accepted R2-3 suffix and refreshed native evidence closed R2-3. |
+| Source publication | Original 17 runtime commits plus publication-authority docs, B1 broad-wall invocation docs, remediation-planning docs, the bounded R1 and P1 implementation commits, and final integration-closeout docs | Freshly read the source remote at exact `2f6f1f69b3519dafff01ef543e7d260da2c37700`; bind an explicit expected-old-OID CAS/lease to that exact OID; independently prove the update is an ordinary fast-forward; require final local HEAD, upstream, and remote parity | Using the CAS/lease to permit a forced/non-fast-forward update; push after a changed old OID; second/staged source push; replay, rebase, rewrite, cherry-pick, merge commit, force push; or admission of blocked/preservation-only donor ancestry | At that checkpoint, source publication had not yet occurred; after the reviewed/committed RP5 docs it was the exact next step and later completed without rewrite. |
 
 The earlier F and Route D replay procedures remain packet-specific historical evidence. The 17
 runtime commits already rest on the latest F documentation, so another replay would change commit
@@ -1474,9 +1491,10 @@ proves descendant emptiness. Stage A then removes all in-namespace entries under
 namespace teardown, removes the exact underlying backing path, and finalizes evidence. Any other
 Cargo runtime change is ineligible.
 
-The current crosswalk transition is this bounded RP5 closeout docs packet. RP3 is complete, RP4
-product proof is accepted clean by human disposition, and the raw persistence review remains
-`REQUEST_CHANGES` for three cache-only non-blocking process-audit debt items outside RP4
-product-proof scope. The docs-on-top -> one ordinary fast-forward publication model is unchanged.
-Source publication has not occurred in this run and remains the exact next step after the
-reviewed/committed RP5 docs; R2-3, R2-4, and R3 remain ordered behind that publication.
+At that preserved RP5 checkpoint, the crosswalk transition was this bounded RP5 closeout docs
+packet. RP3 was complete, RP4 product proof was accepted clean by human disposition, and the raw
+persistence review remained `REQUEST_CHANGES` for three cache-only non-blocking process-audit debt
+items outside RP4 product-proof scope. The docs-on-top -> one ordinary fast-forward publication
+model stayed unchanged. Source publication had not yet occurred in that RP5 run; it later
+completed, after which the R2-3 suffix and refreshed native evidence closed R2-3. R2-4 and R3
+remain later than that completed publication/closeout chain.

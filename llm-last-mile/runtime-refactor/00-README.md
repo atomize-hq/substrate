@@ -4,19 +4,19 @@
 **Scope:** planning, contracts, sequencing, and proof gates; not implementation history
 **Source directive:** [`../../substrate-runtime-refactor-directive-revised.md`](../../substrate-runtime-refactor-directive-revised.md)
 **Repo-truth snapshot:** 2026-07-17 at `6ab2a515e13946324d0aac25b144e1c3408cb2c1`; re-check live code before every slice
-**Current authorized increment:** docs-only `A1.1d-5R2-3ZD1` closeout-policy amendment. The R2-2
-remedial detour, RP3/RP4/RP5 publication, the ordinary fast-forward publication at
-`0f1e147fb735791b44a65099a65167cbdc1803af`, the four post-publication calibration fixes, and
-runner-contract repair `R2-3ZP2` are complete. This amendment binds to published base
-`ec05167bd7bcb7be874af48fe33d6edb71492516` / tree
-`b0d399cfb09655d5ff61d47ec68408e52ba5cfec`, permanently removes `R2-3ZP3` from the blocking R2-3
-path, preserves its unpublished commits `2cb796ffef68c2b049376984a90ce0382e5f3980`,
+**Current authorized increment:** docs-only `A1.1d-5R2-3Z` closeout complete at source
+`c583c5f293644fab75d8d42bd3bcad63f114d4fe` / tree
+`a070f5f5787c27180f13dece9a1c3c3241728fda`. The R2-2 remedial detour, the RP3/RP4 proof-closeout
+packets, the RP5 docs-only closeout packet, the ordinary fast-forward publication at
+`0f1e147fb735791b44a65099a65167cbdc1803af`, the four
+post-publication calibration fixes, runner-contract repair `R2-3ZP2`, the focused child repairs
+`R2-3ZT1`/`R2-3ZH1`, the macOS compatibility cleanup `R2-3ZM5`, and the refreshed source-bound
+native macOS/Windows evidence receipts are complete. `R2-3ZP3` remains permanently deferred from
+the blocking R2-3 path; its unpublished commits `2cb796ffef68c2b049376984a90ce0382e5f3980`,
 `9fa3fe0d4ed2933521dfcd67919d91aa9da6a499`, `50948dbeb921582515a34bb6b7be21c46f29d008`, and
-`868994efaf132bb04c6cdd7c82da9433333c94e5` as diagnostic evidence only, and freezes the remaining
-closeout sequence `R2-3ZT1 -> R2-3ZH1 -> R2-3ZM5 -> fresh native macOS/Windows evidence ->
-R2-3Z` in `03` with the direct-verification gate in `04`. It authorizes no product/runtime
-implementation, no canonical-runner proof claim, no reopening of RP3/RP4/RP5 or `R2-3ZP2`
-absent contradiction, and no R2-4/R3 work.
+`868994efaf132bb04c6cdd7c82da9433333c94e5` remain diagnostic evidence only. This closeout records
+no canonical-runner provenance claim, reopens no RP3/RP4/RP5 or `R2-3ZP2` packet absent
+contradiction, and leaves `A1.1d-5R2-4` plus all R3 work open and later.
 
 ## Canonical repo location
 
@@ -230,15 +230,15 @@ not propagated across every install/uninstall child, and partial-install cleanup
 convergent. Remediation remains bounded to **A1.1d-5R1 → A1.1d-5R2 → A1.1d-5R3**. R1 is
 implemented and review-clean through `4d0acff68e20d86b97fe5367b8a4617554f33ef4`.
 **A1.1d-5R2-0 is planning-complete, A1.1d-5R2-1 is implementation- and review-complete through
-`2653c2ef20ae2e119a444811e6fb46e86d1a6ec6`, and Routes A–F are complete.** The live R2 sequence is
-**Routes A–F complete → remediation planning → R1 → P1 → fresh canonical baseline → renewed R2-2
-production-fix-free integration closeout → final six-file closeout docs → one ordinary
-fast-forward source publication → R2-3 → R2-4**, followed by R3. The earlier failed integration
-closeout proved that R2-2 remains incomplete and
-unpublished; the completed E, harness, and F packets do not replace the renewed closeout. R2-3,
-R2-4, and R3 remain unstarted. Until the renewed closeout and later assigned lifecycle/product
-smoke pass, both A1.1d Linux closeout and only the Linux product-smoke portion of the B1/B2.1 joint
-closeout remain blocked. B1 receipt and B2.1 supervisor semantics did not regress, and native
+`2653c2ef20ae2e119a444811e6fb46e86d1a6ec6`, and Routes A–F are complete.** At that audit
+checkpoint, the live R2 sequence was **Routes A–F complete → remediation planning → R1 → P1 →
+fresh canonical baseline → renewed R2-2 production-fix-free integration closeout → final six-file
+closeout docs → one ordinary fast-forward source publication → R2-3 → R2-4**, followed by R3.
+The earlier failed integration closeout proved that R2-2 remained incomplete and unpublished; the
+completed E, harness, and F packets did not replace the renewed closeout. R2-3, R2-4, and R3 were
+then unstarted. Until the renewed closeout and later assigned lifecycle/product smoke pass, both
+A1.1d Linux closeout and only the Linux product-smoke portion of the B1/B2.1 joint closeout
+remained blocked. B1 receipt and B2.1 supervisor semantics did not regress, and native
 macOS A1.1d proof is not added as a dependency of the B1/B2.1 corridor.
 
 Before R2-1 runtime work, the control pack resolves one historical trigger conflict without changing
@@ -274,9 +274,10 @@ broker, world capability, policy, gateway, receipt, supervisor, worker, replay, 
 the contract correction is recorded by `17ea3a839345cd47a5b2409cde0d4facdde09446` and its bounded
 runtime by `4d0acff68e20d86b97fe5367b8a4617554f33ef4`. `RG-HOME-01` and `RG-INSTALL-01` remain open,
 A1.1d and A1 remain incomplete, B3.1 remains blocked, and the R2 packets/R3 remain separately
-owned; R2-1 is complete and R2-2 is in progress through review-clean Routes A, B, C, and D. The
-failed Routes A–D integration closeout is blocker evidence rather than a completed packet; R2-2E is
-implementation-, proof-, and review-complete. The combined F0/F0a/F0b/F0-HC harness corridor is
+owned; at that historical pre-F checkpoint, R2-1 was complete and R2-2 was in progress through
+review-clean Routes A, B, C, and D. The failed Routes A–D integration closeout was blocker
+evidence rather than a completed packet; R2-2E was implementation-, proof-, and review-complete.
+The combined F0/F0a/F0b/F0-HC harness corridor is
 implemented, proof-complete, review-clean, committed, and preserved. At that historical pre-F
 checkpoint, R2-2F was the exact next packet; the completed-F closeout below supersedes that
 next-task status. Renewed closeout, R2-3/R2-4/R3 remained unstarted there. Static macOS/Windows
@@ -288,9 +289,9 @@ action, Unix principal binding, A-over-B dev/shim/generated projection matrix, a
 explicit trace/policy binding are proven without changing the neutral trace setter, physical shim,
 replay, world-deps production, lifecycle behavior, or any later packet owner.
 
-The active planning packet remains **A1.1d-5R2-2 — Unix release, sudo, Linux service, and runtime
-propagation**. Routes A–D remain individually review-clean at their final replayed commits
-`3bf59b30e4c7348b8ff6315e3eb3658d74af2552`,
+The active planning packet at that checkpoint remained **A1.1d-5R2-2 — Unix release, sudo, Linux
+service, and runtime propagation**. Routes A–D remained individually review-clean at their final
+replayed commits `3bf59b30e4c7348b8ff6315e3eb3658d74af2552`,
 `1b5219d5c7471f492865ab55e4efc0d1ab0cac49`,
 `0290b829ebaf222fcdc942678178a5e4545de62c`, and
 `6452d3a0650df4075c3ef720bad37920a8e5859d`; none is reopened by this correction. Their named
@@ -744,8 +745,8 @@ execution capability, policy, network, filesystem, caging, placement, credential
 lifecycle behavior. Public World doctor compatibility is frozen. Authenticated shim/Health
 composition will no longer activate infrastructure merely to collect its nested diagnostic; when
 passive evidence is absent, user-visible composition reports unavailable rather than success or
-implicit activation. F5, the final F walls, F closeout, renewed R2-2 closeout, R2-3, R2-4, and R3
-remain unstarted.
+implicit activation. At that checkpoint, F5, the final F walls, F closeout, renewed R2-2
+closeout, R2-3, R2-4, and R3 remained unstarted.
 
 The exact next task at that checkpoint was **Implement F5-PD, re-review it, then resume F5**. The
 canonical F closeout below supersedes that live-status conclusion without changing the historical
@@ -992,7 +993,7 @@ the historical RP0 planning checkpoint above remains unchanged.
 | Persistence review distinction | The raw review verdict remains `REQUEST_CHANGES`. Its three cache-only findings are preserved as non-blocking process-audit debt outside RP4 product-proof scope: controller pathname/hash not execution-bound; supervisor parent-directory `fsync` omitted after replace; persisted controller packet omits its post-persistence final verdict. They do not invalidate the focused, authenticated, canonical-wall, differential, authority, or restoration evidence. |
 | RP5 | Historical exact six-file closeout packet. Its publication model remained **Docs-on-top -> one ordinary fast-forward publication**, and that publication later completed at `0f1e147fb735791b44a65099a65167cbdc1803af`. This row makes no later R2-3 claim. |
 
-## A1.1d-5R2-3 closeout-policy status
+## A1.1d-5R2-3 closeout status
 
 `R2-3ZP2` is accepted landed source, but `R2-3ZP3` is permanently deferred from the blocking R2-3
 path. Its unpublished commits `2cb796ffef68c2b049376984a90ce0382e5f3980`,
@@ -1006,17 +1007,29 @@ ineligible with `evidence_write_failed` and `mount_teardown_failed`, leaving aut
 stage-A completion and hidden backing-path teardown unproven. R2-3 closeout therefore makes no
 claim of eligible canonical-runner provenance.
 
-The remaining blocking sequence is `R2-3ZT1 -> R2-3ZH1 -> R2-3ZM5 -> fresh native macOS and
-Windows evidence -> R2-3Z`. After `R2-3ZT1`, direct
-`cargo test --locked -p shell --lib -- --nocapture` validation must produce exactly
-`1322 discovered / 1277 passed / 45 failed / 0 ignored`, with failure-name SHA-256
-`b23bb59ad12833d2c1d37c19c54933cd6bcb1c75e0dab8a70179b9881372be70` and normalized-signature
-SHA-256 `33c686a6ec9f3a0a4f51e1fca976445e6804da12fbbff50312a03f0042cdfac3`. Count-only
-equivalence is insufficient: any additional failure, missing frozen failure, or changed frozen
-signature blocks closeout until classified. `R2-3ZH1` owns only the host-inbox trusted-root test
-helper. `R2-3ZM5` owns only the macOS contextless-constructor removal and typed pre-R3 smoke
-contract. Their focused tests, package checks, formatting/Clippy gates, and direct shell
-regressions remain mandatory. Older native receipts are historical support only after later
-product commits; fresh source-bound native macOS and Windows evidence must be recollected after
-`R2-3ZM5` and before `R2-3Z`. R2-4, R3, privileged product smoke, direct-member adoption, and
-the broader runtime-refactor backlog remain open.
+The accepted closeout chain is `R2-3ZT1 -> R2-3ZH1 -> R2-3ZM5 -> fresh native macOS and Windows
+evidence -> R2-3Z`, with landed commits `56e0a8582d562bd7e60e8f4348b4d596e1b2b36e`,
+`610db8a9350c9b52496954f5c93232d885f439d9`, and
+`c583c5f293644fab75d8d42bd3bcad63f114d4fe`. The accepted direct shell-library proof at that final
+source is `1322 discovered / 1274 passed / 48 failed / 0 ignored`, with failure-name SHA-256
+`c6de1349137dcb16d03b87be5364dc50d74a5052565e2c8d40dfed303592bed9` and normalized-signature
+SHA-256 `2a0df9b340cc7e5e1b6e4f76e60e6f937b7442008142d78a7ae24bbcd2f60a90`. The historical 45-failure
+inventory remains present, and the only additional failures are the separately classified,
+non-R2-3 world-deps/report expectations
+`builtins::shim_doctor::report::tests::world_deps_fixture_cannot_establish_runtime_health_or_cross_a`,
+`builtins::shim_doctor::report::tests::world_deps_section_forwards_authenticated_a_under_conflicting_ambient_b`,
+and `builtins::world_deps::tests::doctor_snapshot_uses_authenticated_a_under_conflicting_ambient_b_without_mutation`.
+Count-only equivalence remains insufficient: any additional failure, missing frozen failure, or
+changed normalized signature still blocks the closeout truth. `R2-3ZH1` owns only the host-inbox
+trusted-root test helper. `R2-3ZM5` owns only the macOS contextless-constructor removal and typed
+pre-R3 smoke contract. The refreshed source-bound native evidence receipts validated clean at
+receipt digests `sha256:3b44f6387070b7aaea4306ae58d7f280b1cee3e163ee59219d4900ce3f53dfaf` and
+`sha256:4ee942690655c1fac185244438d14e2561df52c306dea7e5428d556b530fd28c`, with artifact digests
+`sha256:64a726d45b8bb6724fe43f566903d7b5e5ed6ef16119f14d30cd5a03edcc7e50` and
+`sha256:2c36a8dae9f3bcfa1c240c62a1e44f93aee0798702ae78a0076d43778b93d46e`, for gates
+`R2-DIAG-01`, `R2-MAP-MAC-01`, and `R2-MAP-WIN-01` without any lifecycle/provisioning claim.
+R2-3 therefore closes only the explicitly listed PI rows and leaves its R2-3-owned exceptions
+PI-059 harness-only and PI-077/PI-078 byte-frozen fail-closed guards; PI-050 as the R2-4 guardrail; PI-080 satisfied by earlier R2-2 Linux restart-scope
+work and not reopened here; every R3 lifecycle/forwarding/provisioning/cleanup/rollback/
+convergence item open; and privileged product smoke, direct-member adoption, and the broader
+runtime-refactor backlog later.

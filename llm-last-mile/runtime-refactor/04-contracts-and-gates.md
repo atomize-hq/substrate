@@ -7112,7 +7112,7 @@ the exact private-root invocation restored the 45-failure wall. Runtime source a
 unchanged. The 59 failures are not added to the baseline, waived, treated as product failures or
 environment drift, used to weaken trusted-root validation, or used to justify serial-only proof.
 
-## R2-3 closeout-policy amendment (R2-3ZD1)
+## R2-3 closeout status
 
 The canonical shell-wall runner remains proof infrastructure, not an R2-3 completion gate.
 `R2-3ZP3` is permanently deferred from the blocking R2-3 path. Its unpublished commits
@@ -7128,27 +7128,37 @@ completion/teardown proof or prove hidden backing-path removal. R2-3 closeout th
 claim of eligible canonical-runner provenance; this defect remains open proof-infrastructure work
 outside the R2-3 completion gate.
 
-The blocking closeout suffix is `R2-3ZT1 -> R2-3ZH1 -> R2-3ZM5 -> fresh native macOS and Windows
-evidence -> R2-3Z`.
+The accepted closeout suffix landed as `R2-3ZT1 -> R2-3ZH1 -> R2-3ZM5 -> fresh native macOS and
+Windows evidence -> R2-3Z`, with landed commits `56e0a8582d562bd7e60e8f4348b4d596e1b2b36e`,
+`610db8a9350c9b52496954f5c93232d885f439d9`, and
+`c583c5f293644fab75d8d42bd3bcad63f114d4fe`.
 
-- After `R2-3ZT1`, direct `cargo test --locked -p shell --lib -- --nocapture` validation must
-  produce exactly `1322 discovered / 1277 passed / 45 failed / 0 ignored`.
-- The frozen 45-name inventory SHA-256 remains
-  `b23bb59ad12833d2c1d37c19c54933cd6bcb1c75e0dab8a70179b9881372be70`.
-- The frozen normalized-signature SHA-256 remains
-  `33c686a6ec9f3a0a4f51e1fca976445e6804da12fbbff50312a03f0042cdfac3`.
-- Count-only equivalence is insufficient. Any additional failure, missing frozen failure, or
-  changed frozen signature blocks closeout until classified.
+- The accepted direct shell-library proof at final source is
+  `1322 discovered / 1274 passed / 48 failed / 0 ignored`.
+- The direct failure-name SHA-256 is
+  `c6de1349137dcb16d03b87be5364dc50d74a5052565e2c8d40dfed303592bed9`.
+- The direct normalized-signature SHA-256 is
+  `2a0df9b340cc7e5e1b6e4f76e60e6f937b7442008142d78a7ae24bbcd2f60a90`.
+- Count-only equivalence remains insufficient. The historical 45-failure inventory must remain
+  present, and the only additional failures may be the separately classified non-R2-3 expectations
+  `builtins::shim_doctor::report::tests::world_deps_fixture_cannot_establish_runtime_health_or_cross_a`,
+  `builtins::shim_doctor::report::tests::world_deps_section_forwards_authenticated_a_under_conflicting_ambient_b`,
+  and `builtins::world_deps::tests::doctor_snapshot_uses_authenticated_a_under_conflicting_ambient_b_without_mutation`.
 - `R2-3ZH1` owns only the host-inbox trusted-root test helper.
 - `R2-3ZM5` owns only the macOS contextless-constructor removal and typed pre-R3 smoke contract.
-- `R2-3ZH1` and `R2-3ZM5` still require their focused tests, package checks, formatting/Clippy
-  gates, and direct shell regression checks.
-- Fresh source-bound native macOS and Windows evidence must be collected after `R2-3ZM5` and
-  before `R2-3Z`; older clean receipts are historical support only after later product commits.
-- `R2-3Z` may close only with those direct product/static checks and fresh native receipts clean,
-  while explicitly recording the canonical-runner provenance limitation.
-- This amendment completes no R3 lifecycle/forwarding/provisioning row and closes no runtime-
-  refactor work outside the bounded R2-3 packet.
+- The refreshed source-bound native receipts validated clean at
+  `sha256:3b44f6387070b7aaea4306ae58d7f280b1cee3e163ee59219d4900ce3f53dfaf` / artifact
+  `sha256:64a726d45b8bb6724fe43f566903d7b5e5ed6ef16119f14d30cd5a03edcc7e50` for
+  `R2-DIAG-01` and `R2-MAP-MAC-01`, and
+  `sha256:4ee942690655c1fac185244438d14e2561df52c306dea7e5428d556b530fd28c` / artifact
+  `sha256:2c36a8dae9f3bcfa1c240c62a1e44f93aee0798702ae78a0076d43778b93d46e` for
+  `R2-DIAG-01` and `R2-MAP-WIN-01`.
+- R2-3 closes only the explicitly listed PI rows while explicitly preserving the canonical-runner
+  provenance limitation, the R2-3-owned exceptions PI-059 harness-only status and
+  PI-077/PI-078 byte-frozen fail-closed guards,
+  PI-050 as the R2-4 guardrail, PI-080 as satisfied by earlier R2-2 Linux restart-scope work and
+  not reopened here, and every R3 lifecycle/forwarding/provisioning/cleanup/rollback/convergence
+  row as open.
 
 ## Normative renewed R2-2 publication contract
 
@@ -7226,8 +7236,9 @@ complete. RP4 product proof on exact integration commit/tree
 `5358497a8baec6f36e15aaef58415a759e64977d` is accepted clean by human disposition, while the raw
 persistence review remains `REQUEST_CHANGES` for three cache-only orchestration/attestation
 findings preserved as non-blocking process-audit debt outside RP4 product-proof scope. This exact
-six-file change is the bounded RP5 closeout packet; source publication has not occurred in this
-run and remains the exact next step after the reviewed/committed RP5 docs.
+six-file change was the bounded RP5 closeout packet; source publication had not yet occurred in
+that run and was the exact next step after the reviewed/committed RP5 docs before later completing
+without rewrite.
 
 ### Required topology
 
@@ -7300,8 +7311,10 @@ or topology requires the affected proof/review to rerun from the corrected prese
 commit containing a post-commit finding is never rewritten by amend, rebase, or force push. The
 local publication-authority commit may remain preserved, but it is authority only and must not
 imply that renewed proof ran,
-R2-2 passed, product smoke passed, or any seam was promoted. R2-3 remains blocked until the
-successful one-fast-forward publication completes; R2-4 and R3 remain later.
+R2-2 passed, product smoke passed, or any seam was promoted. At that checkpoint, R2-3 remained
+blocked until the successful one-fast-forward publication completed; that publication later
+completed, after which the accepted R2-3 suffix and refreshed native evidence closed R2-3. R2-4
+and R3 remain later.
 
 ## A1.1d-5R2-2 closeout-remediation contracts (historical RP1/RP2 record)
 
@@ -8721,8 +8734,9 @@ persistence review remains `REQUEST_CHANGES` for three cache-only process-audit 
 as non-blocking debt outside RP4 product-proof scope. This exact six-file change is the bounded
 RP5 closeout packet.
 
-The docs-on-top -> one ordinary fast-forward publication model is unchanged. Source publication has
-not occurred in this run, and no local/upstream/remote parity is claimed. After the
-reviewed/committed RP5 docs, the exact next step is one ordinary fast-forward source publication.
-R2-3 remains blocked until that publication; R2-4 and R3 remain later. No historical result is
-rewritten as passing.
+At that preserved RP5 checkpoint, the docs-on-top -> one ordinary fast-forward publication model
+was unchanged. Source publication had not yet occurred in that run, and no local/upstream/remote
+parity was claimed there. After the reviewed/committed RP5 docs, the exact next step was one
+ordinary fast-forward source publication. That publication later completed, after which the R2-3
+suffix and refreshed native evidence closed R2-3; R2-4 and R3 remain later. No historical result
+is rewritten as passing.

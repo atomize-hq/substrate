@@ -749,10 +749,10 @@ R2-3D
 
 This order is sequential. A later increment may be re-subdivided before implementation if its
 pre-edit impact or source-closure evidence exceeds the frozen risk ceiling; it may not absorb an
-earlier incomplete outcome. `R2-3D` alone is authorized by the current docs-first session. It
-completes only the subdivision below and does not authorize or complete `R2-3A`.
+earlier incomplete outcome. `R2-3D` alone was authorized by the initiating docs-first session. It
+completed only the subdivision below and did not authorize or complete `R2-3A` by itself.
 
-The current published tip includes four frozen prerequisites after the historical R2-2 publication:
+At that checkpoint, the published tip included four frozen prerequisites after the historical R2-2 publication:
 `ebaf8941` keeps installer configuration private, `a009959b` stages gateway-smoke manifests as
 trusted files, `343844c9` preserves install context in agent doctor, and `43e528af` calibrates the
 bounded-review process. They remain prior work, not R2-3 implementation or proof. Reopening any of
@@ -770,7 +770,8 @@ remain R3-exclusive. No child may claim the parent packet complete before R2-3Z.
 `50948dbeb921582515a34bb6b7be21c46f29d008`, and
 `868994efaf132bb04c6cdd7c82da9433333c94e5` are preserved only as diagnostic proof-infrastructure
 evidence, are not accepted product source, and must not be cherry-picked, pushed, or represented
-as landed. `R2-3ZD1` is this closeout-policy amendment only and completes no product proof.
+as landed. `R2-3ZD1` was the closeout-policy amendment only and completed no product proof by
+itself.
 
 Every child uses this same fingerprint/review method:
 
@@ -1268,17 +1269,21 @@ expansion, false native claim, or need to guess guest identity is
 
 **R2-3Z — integration evidence and closeout.**
 
-- **Outcome/claim:** after `R2-3ZT1`, `R2-3ZH1`, `R2-3ZM5`, and fresh native macOS/Windows
-  evidence are complete, join the completed child increments, prove the complete R2-3 parent exit
-  gate through direct product/static checks plus fresh native evidence, record the
-  canonical-runner provenance limitation truthfully, and hand only R3-owned lifecycle work
-  forward. No production repair is allowed.
+- **Outcome/claim:** `R2-3ZT1`, `R2-3ZH1`, `R2-3ZM5`, and the refreshed native macOS/Windows
+  evidence are complete. This closeout joins the completed child increments, proves the complete
+  R2-3 parent exit gate through accepted direct product/static checks plus fresh native evidence,
+  records the canonical-runner provenance limitation truthfully, and hands only later-owner R2-4
+  work plus R3-owned lifecycle/forwarding/provisioning/cleanup/rollback/convergence work forward.
+  No production repair is allowed.
 - **PI ownership:** closes only after code+proof for PI-009, PI-022, PI-039–PI-046, PI-048–PI-049,
   PI-052, PI-054–PI-058, PI-060, PI-068–PI-070, PI-075–PI-076, PI-079, PI-081, PI-090–PI-091,
   PI-112, PI-115–PI-116, and PI-118 is present. PI-059 remains harness-only; PI-077/PI-078 remain
-  byte-frozen; PI-050/PI-080 and every R3 row retain the ownership above.
-- **Files/symbols:** no production file or symbol. Evidence transcription may touch only the six
-  existing runtime-refactor control-pack Markdown files and only to record current proof; any
+  byte-frozen fail-closed guards; PI-050 remains the R2-4 guardrail; PI-080 remains satisfied by earlier R2-2 Linux
+  restart-scope work and is not reopened here; and every R3 lifecycle/forwarding/provisioning/
+  cleanup/rollback/convergence row retains the ownership above.
+- **Files/symbols:** no production file or symbol. Evidence transcription may touch only the five
+  existing runtime-refactor control-pack Markdown files in this bounded closeout subject and only
+  to record current proof; any
   product defect returns to its owning child under a new fingerprint/review sequence.
 - **Canonical-runner limitation:** `R2-3ZP3` is permanently deferred from the blocking path.
   Unpublished commits `2cb796ffef68c2b049376984a90ce0382e5f3980`,
@@ -1287,37 +1292,43 @@ expansion, false native claim, or need to guess guest identity is
   `868994efaf132bb04c6cdd7c82da9433333c94e5` remain diagnostic evidence only. Honest
   authenticated wall results that still finalize ineligible with `evidence_write_failed` and
   `mount_teardown_failed` remain proof-infrastructure work outside the R2-3 gate.
-- **Tests/proof:** run every focused test authorized by A–T and the Z suffix packets. After
-  `R2-3ZT1`, direct `cargo test --locked -p shell --lib -- --nocapture` must produce exactly
-  `1322 discovered / 1277 passed / 45 failed / 0 ignored`, with failure-name SHA-256
-  `b23bb59ad12833d2c1d37c19c54933cd6bcb1c75e0dab8a70179b9881372be70` and normalized-signature
-  SHA-256 `33c686a6ec9f3a0a4f51e1fca976445e6804da12fbbff50312a03f0042cdfac3`. Count-only
-  equivalence is insufficient: any additional failure, missing frozen failure, or changed frozen
-  signature blocks closeout until classified. `R2-3ZH1` owns only the host-inbox trusted-root test
-  helper. `R2-3ZM5` owns only the macOS contextless-constructor removal and typed pre-R3 smoke
-  contract. Their focused tests, package checks, formatting/Clippy/workspace checks proportionate
-  to the touched crates, exact installer/script parser and frozen-byte checks, R2-SHIM-01,
-  R2-GEN-01, R2-DIAG-01, R2-MAP-MAC-01, R2-MAP-WIN-01, applicable R2-RUNTIME-01 regression,
-  allowlist/diff/GitNexus checks, and the parent independent review lenses remain mandatory.
-- **Native macOS:** after `R2-3ZM5`, use supported macOS with a pre-existing Lima instance and
-  record OS/Lima/tool versions, A/B, IH commitment, account-database `~/.lima` control root, VM
-  name/machine ID, guest account/UID/home, future `A/sock/agent.sock` to `/run/substrate.sock`,
-  ambient transport availability as non-authority, and the explicit R3 prerequisite. Start no
-  forwarder and perform no socket/process lifecycle action. Older native receipts are historical
-  support only after later product commits.
-- **Native Windows:** after `R2-3ZM5`, use supported Windows with a pre-existing WSL instance and
-  record OS/WSL/tool versions, A/B, account+SID, token Known Folder, exact registered
-  distro/machine ID, guest account/UID/home, normalized pipe/scope digest/shared PID root,
-  A-scoped config/logs, and PM-derived WSL argv/environment under conflicting ambient values.
-  Perform no provisioning, timeout kill, stop, PID deletion, unregister, or cleanup action. Older
-  native receipts are historical support only after later product commits. Missing runners leave
-  the exact native assignments pending; static proof never substitutes.
+- **Tests/proof:** the accepted direct shell-library result at final source
+  `c583c5f293644fab75d8d42bd3bcad63f114d4fe` is
+  `1322 discovered / 1274 passed / 48 failed / 0 ignored`, with failure-name SHA-256
+  `c6de1349137dcb16d03b87be5364dc50d74a5052565e2c8d40dfed303592bed9` and normalized-signature
+  SHA-256 `2a0df9b340cc7e5e1b6e4f76e60e6f937b7442008142d78a7ae24bbcd2f60a90`. Count-only
+  equivalence remains insufficient: the historical 45-failure inventory must remain present, and
+  the only additional failures may be the three separately classified non-R2-3 world-deps/report
+  expectations. `R2-3ZH1` owns only the host-inbox trusted-root test helper. `R2-3ZM5` owns only
+  the macOS contextless-constructor removal and typed pre-R3 smoke contract. Their focused tests,
+  package checks, formatting/Clippy/workspace checks proportionate to the touched crates, exact
+  installer/script parser and frozen-byte checks, R2-SHIM-01, R2-GEN-01, R2-DIAG-01,
+  R2-MAP-MAC-01, R2-MAP-WIN-01, applicable R2-RUNTIME-01 regression, allowlist/diff/GitNexus
+  checks, and the parent independent review lenses remain mandatory.
+- **Native macOS:** the refreshed source-bound macOS receipt
+  `sha256:3b44f6387070b7aaea4306ae58d7f280b1cee3e163ee59219d4900ce3f53dfaf` is
+  `EVIDENCE_CLEAN` for `R2-DIAG-01` and `R2-MAP-MAC-01` at source
+  `c583c5f293644fab75d8d42bd3bcad63f114d4fe` / tree
+  `a070f5f5787c27180f13dece9a1c3c3241728fda`, with artifact digest
+  `sha256:64a726d45b8bb6724fe43f566903d7b5e5ed6ef16119f14d30cd5a03edcc7e50`. It records supported
+  macOS/Lima/tool versions, the typed account-database-derived Lima control root, and the future
+  `A/sock/agent.sock` to `/run/substrate.sock` target without starting a forwarder or claiming any
+  socket/process lifecycle action.
+- **Native Windows:** the refreshed source-bound Windows receipt
+  `sha256:4ee942690655c1fac185244438d14e2561df52c306dea7e5428d556b530fd28c` is
+  `EVIDENCE_CLEAN` for `R2-DIAG-01` and `R2-MAP-WIN-01` at that same source/tree, with artifact
+  digest `sha256:2c36a8dae9f3bcfa1c240c62a1e44f93aee0798702ae78a0076d43778b93d46e`. It records the exact
+  account+SID, registered distro/machine ID, normalized pipe/scope digest/shared PID root, and
+  PM-derived WSL argv/environment under conflicting ambient values without provisioning, timeout
+  kill, stop, PID deletion, unregister, or cleanup claims. Static proof never substitutes for a
+  missing native assignment.
 - **Impact/review/stop:** no pre-edit symbol impact unless a defect is returned to an owner.
-  Fingerprint the exact closeout evidence/test subject and use packet ID `A1.1d-5R2-3Z`; require
-  fresh host-context/mapping-security, lifecycle/R2-versus-R3, and
-  allowlist/native-honesty/regression lenses under the bounded-review record. Any production fix,
-  false native claim, false canonical-runner-eligibility claim, incomplete PI/proof, changed
-  guard/frozen byte, open P1/P2, or R3 authority leakage prevents closeout.
+  The accepted closeout subject uses packet ID `A1.1d-5R2-3Z` and a fresh bounded-review record
+  over host-context/mapping-security, lifecycle/R2-versus-R3, and
+  allowlist/native-honesty/regression lenses. Any production fix, false native claim, false
+  canonical-runner-eligibility claim, incomplete PI/proof, changed guard/frozen byte, open P1/P2,
+  or R3 authority leakage still prevents closeout. This row is complete only for R2-3; R2-4 and
+  later R3 work remain next.
 
 ###### A1.1d-5R2-4 — R2 integration and closeout
 
@@ -2096,10 +2107,10 @@ differentials. RP4 product proof on exact integration commit/tree
 `8c46135c861a468dea316cf9fd7d6c6bb15bddac` / `5358497a8baec6f36e15aaef58415a759e64977d` is
 accepted clean by human disposition; the raw persistence review remains `REQUEST_CHANGES` and is
 preserved as three cache-only orchestration/attestation findings carried as non-blocking
-process-audit debt outside RP4 product-proof scope. This exact six-file change is the bounded RP5
-closeout docs packet. Source publication has not occurred in this run and remains the exact next
-step after the reviewed/committed RP5 docs; only after that publication does R2-3 become next,
-with R2-4 and R3 later.
+process-audit debt outside RP4 product-proof scope. This exact six-file change was the bounded RP5
+closeout docs packet. Source publication had not yet occurred in that run and was the exact next
+step after the reviewed/committed RP5 docs; it later completed before the accepted R2-3 suffix and
+refreshed native evidence closed R2-3, with R2-4 and R3 still later.
 
 ## R2-2 remediation insertion before renewed closeout (historical RP0-RP4 plan)
 
@@ -2135,6 +2146,6 @@ Historical closeout results stay historical: the four earlier matching walls rem
 the original NOT CLEAN/BLOCKED reviews remain findings, not passes. The table above is preserved as
 historical sequencing only. RP3, RP4, RP5, and the ordinary fast-forward source publication later
 completed at `0f1e147fb735791b44a65099a65167cbdc1803af`; the process-only bounded-review
-calibration also completed. The current published tip
-`43e528af8c71c4f42a7b1238f729078f20ee3760` authorizes only the docs-first R2-3D subdivision above.
-R2-3A product code remains a separately authorized future control-pack node.
+calibration also completed. At that checkpoint, the published tip
+`43e528af8c71c4f42a7b1238f729078f20ee3760` authorized only the docs-first R2-3D subdivision above.
+R2-3A product code remained a separately authorized future control-pack node.
