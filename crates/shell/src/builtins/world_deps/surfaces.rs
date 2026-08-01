@@ -310,7 +310,7 @@ fn run_current_list(
 
     match args.view {
         WorldDepsCurrentListViewArg::Available => {
-            let view = resolve_current_inventory_view(&cwd, &cfg, global_deps_dir.as_deref())?;
+            let view = resolve_current_inventory_view(cwd, cfg, global_deps_dir.as_deref())?;
             if view.is_empty() {
                 eprintln!("substrate: note: no deps inventory items visible for this directory; add definitions under $SUBSTRATE_HOME/deps/ or <workspace_root>/.substrate/deps/");
             }
@@ -330,11 +330,11 @@ fn run_current_list(
             Ok(())
         }
         WorldDepsCurrentListViewArg::Enabled => {
-            run_current_list_enabled(&cwd, &cfg, global_deps_dir.as_deref(), args.json)
+            run_current_list_enabled(cwd, cfg, global_deps_dir.as_deref(), args.json)
         }
         WorldDepsCurrentListViewArg::Applied => run_current_list_applied(
-            &cwd,
-            &cfg,
+            cwd,
+            cfg,
             global_deps_dir.as_deref(),
             args.all,
             args.json,
@@ -368,15 +368,15 @@ fn run_current_show(
         } else {
             None
         };
-    let view = resolve_current_inventory_view(&cwd, &cfg, global_deps_dir.as_deref())?;
+    let view = resolve_current_inventory_view(cwd, cfg, global_deps_dir.as_deref())?;
     let item = view.get(&args.item_name).ok_or_else(|| {
         config_model::user_error(format!("unknown deps item '{}'", args.item_name))
     })?;
 
     if args.explain {
         let explain = build_current_show_explain_v1(
-            &cwd,
-            &cfg,
+            cwd,
+            cfg,
             &view,
             &args.item_name,
             &item,
@@ -497,7 +497,7 @@ fn run_current_install(
         } else {
             None
         };
-    let view = resolve_current_inventory_view(&cwd, &cfg, global_deps_dir.as_deref())?;
+    let view = resolve_current_inventory_view(cwd, cfg, global_deps_dir.as_deref())?;
 
     let plan = compute_install_plan_v1(&view, &args.item_names)?;
     if args.verbose {
@@ -561,7 +561,7 @@ fn run_current_sync(
         } else {
             None
         };
-    let view = resolve_current_inventory_view(&cwd, &cfg, global_deps_dir.as_deref())?;
+    let view = resolve_current_inventory_view(cwd, cfg, global_deps_dir.as_deref())?;
 
     let item_names: Vec<String> = if args.all {
         let mut out: Vec<String> = Vec::new();
@@ -3086,7 +3086,7 @@ fn run_workspace_add(
         } else {
             None
         };
-    let view = resolve_current_inventory_view(&cwd, &cfg, global_deps_dir.as_deref())?;
+    let view = resolve_current_inventory_view(cwd, cfg, global_deps_dir.as_deref())?;
 
     let unknown = items
         .iter()

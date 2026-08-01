@@ -233,7 +233,7 @@ pub(crate) fn collect_doctor_snapshot_v1(
     };
     let view = surfaces::resolve_current_inventory_view(
         cwd,
-        &cfg,
+        cfg,
         #[cfg(target_os = "linux")]
         global_deps_dir,
         #[cfg(not(target_os = "linux"))]
@@ -318,7 +318,7 @@ pub(crate) fn resolve_effective_enabled_provisioning_requirements_v1(
         } else {
             None
         };
-    let view = surfaces::resolve_current_inventory_view(cwd, &cfg, global_deps_dir.as_deref())?;
+    let view = surfaces::resolve_current_inventory_view(cwd, cfg, global_deps_dir.as_deref())?;
     let apt = surfaces::resolve_enabled_apt_requirements_v1(&view, &cfg.world.deps.enabled)?;
     let pacman = surfaces::resolve_enabled_pacman_packages_v1(&view, &cfg.world.deps.enabled)?;
 

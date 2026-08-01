@@ -254,7 +254,7 @@ pub(crate) fn handle_world_command(
             let world_disable_attribution =
                 resolve_doctor_world_disable_attribution(effective.world.enabled, explain);
             env::set_var("SUBSTRATE_POLICY_MODE", effective.policy.mode.as_str());
-            crate::execution::export_runtime_config_env(&effective);
+            crate::execution::export_runtime_config_env(effective);
             let code = world_doctor_main(
                 *json,
                 effective.world.enabled,
@@ -382,7 +382,7 @@ pub(crate) fn handle_host_command(
             let world_disable_attribution =
                 resolve_doctor_world_disable_attribution(effective.world.enabled, explain);
             env::set_var("SUBSTRATE_POLICY_MODE", effective.policy.mode.as_str());
-            crate::execution::export_runtime_config_env(&effective);
+            crate::execution::export_runtime_config_env(effective);
             let code = host_doctor_main(
                 *json,
                 effective.world.enabled,
