@@ -1,0 +1,76 @@
+{
+  "schema_version": 1,
+  "packet_id": "A1.1d-5R2-3Z",
+  "status": "complete",
+  "stop_reason": null,
+  "cycles": [
+    {
+      "cycle_id": "discovery-1",
+      "kind": "discovery",
+      "subject_fingerprint": "sha256:95bbc80af02bde430baf7b78ebb965289702bcbd79b81abc2989d28d7eb9f7bc",
+      "trigger_cycle_id": null,
+      "trigger_finding_ids": [],
+      "causal_evidence_refs": [],
+      "review_refs": [
+        "/home/spenser/.codex/visualizations/2026/07/31/019fba3a-9e25-7321-a900-dd410e530c67/review/discovery-aggregate-review.md"
+      ],
+      "verdict": "findings",
+      "findings": [
+        {
+          "finding_id": "R2-3Z-P2-001",
+          "priority": "P2"
+        },
+        {
+          "finding_id": "R2-3Z-P2-002",
+          "priority": "P2"
+        },
+        {
+          "finding_id": "R2-3Z-P2-003",
+          "priority": "P2"
+        },
+        {
+          "finding_id": "R2-3Z-P2-004",
+          "priority": "P2"
+        },
+        {
+          "finding_id": "R2-3Z-P2-005",
+          "priority": "P2"
+        },
+        {
+          "finding_id": "R2-3Z-P2-006",
+          "priority": "P2"
+        },
+        {
+          "finding_id": "R2-3Z-P2-007",
+          "priority": "P2"
+        },
+        {
+          "finding_id": "R2-3Z-P2-008",
+          "priority": "P2"
+        }
+      ]
+    },
+    {
+      "cycle_id": "closure-1",
+      "kind": "closure",
+      "subject_fingerprint": "sha256:2478c015df2851e05b767f81a8cc889cd1b936be38fbc11c33e816f2ff607a5a",
+      "trigger_cycle_id": "discovery-1",
+      "trigger_finding_ids": [
+        "R2-3Z-P2-001",
+        "R2-3Z-P2-002",
+        "R2-3Z-P2-003",
+        "R2-3Z-P2-004",
+        "R2-3Z-P2-005",
+        "R2-3Z-P2-006",
+        "R2-3Z-P2-007",
+        "R2-3Z-P2-008"
+      ],
+      "causal_evidence_refs": [],
+      "review_refs": [
+        "/home/spenser/.codex/visualizations/2026/07/31/019fba3a-9e25-7321-a900-dd410e530c67/review/final-clean-review.md"
+      ],
+      "verdict": "clean",
+      "findings": []
+    }
+  ]
+}

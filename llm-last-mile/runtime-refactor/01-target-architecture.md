@@ -1059,21 +1059,27 @@ This ordering changes no authority, platform, credential, policy, network, files
 capability, lifecycle, receipt, supervisor, retained-worker, cleanup, rollback, secure-FD, or
 compatibility boundary. The source remote remains documentation-only through this bounded RP5
 closeout packet. The preserved pre-disposition four-review-CLEAN gate is historical only. The
-controlling current state recorded below is that RP4 product proof is accepted clean by human
+controlling state at the historical RP5 documentation checkpoint recorded below was that RP4
+product proof was accepted clean by human
 disposition on the exact integration commit/tree, while the raw persistence `REQUEST_CHANGES`
 remains preserved as three cache-only orchestration/attestation findings carried as non-blocking
-process-audit debt outside RP4 product-proof scope. Publication remains unperformed and is only
-the next step after the reviewed/committed RP5 docs. A failed or stopped wall publishes nothing
-and authorizes no runtime/test repair. R2-2 stays incomplete, non-Linux posture stays
-compatibility/unavailable/unproven, product smoke stays unclaimed, no seam is promoted, and R2-3
-remains blocked. Final closeout documentation is reviewed before its exact bytes are committed and
+process-audit debt outside RP4 product-proof scope. At that checkpoint publication remained
+unperformed and was only the next step after the reviewed/committed RP5 docs. A failed or stopped
+wall would publish nothing and authorize no runtime/test repair. At that checkpoint R2-2 remained
+incomplete, non-Linux posture remained compatibility/unavailable/unproven, product smoke stayed
+unclaimed, no seam was promoted, and R2-3 remained blocked. Final closeout documentation was
+reviewed before its exact bytes were committed and
 revalidated/re-reviewed afterward; any post-commit finding stops publication. A purely documentary
 finding may use only an append-only six-file remediation-doc successor followed by renewed
 documentation validation/review; a finding that invalidates proof or topology reruns the affected
 proof/review. Neither permits a rewrite. The eventual source update requires both an explicit
 expected-old-OID CAS/lease fixed to
 `2f6f1f69b3519dafff01ef543e7d260da2c37700` and an independent proof that the update is a normal
-fast-forward; the lease is never authority for a forced update.
+fast-forward; the lease is never authority for a forced update. RP5 publication subsequently
+completed by ordinary fast-forward at `0f1e147fb735791b44a65099a65167cbdc1803af`. The accepted
+R2-3 suffix and refreshed native evidence then closed R2-3 at
+`7a9ded10482dee2c1383477950a321ed3ee046f5`. R2-4 is now the next authorized packet and remains
+unstarted; R3 and all explicitly later or unclaimed work remain open.
 
 The docs-on-top -> one ordinary fast-forward publication model above remains controlling. Its RP0
 sequencing is historical only; the controlling current RP3/RP4/RP5 closeout status is recorded
@@ -1275,7 +1281,7 @@ family, platform adapter, credential route, or cleanup authority. The four prior
 ineligible, R2-2 remained incomplete, and R2-3 remained blocked. The exact next architectural node
 at that checkpoint was the bounded R1 increment. The controlling current status follows.
 
-## RP3/RP4/RP5 closeout architecture status
+## RP3/RP4/RP5 closeout architecture status and subsequent completion
 
 The architecture above remains unchanged. RP3 is complete with the same canonical
 `1309/1264/45/0` baseline and zero pairwise differentials. RP4 product proof is accepted clean by
@@ -1286,8 +1292,10 @@ human disposition on exact integration commit/tree
 outside RP4 product-proof scope. This packet claims no non-Linux proof, privileged product smoke,
 or seam promotion.
 
-This exact six-file change is the bounded RP5 closeout packet. It expands no authority boundary and
-adds no new architecture. The docs-on-top -> one ordinary fast-forward publication model remains
-controlling. Source publication has not occurred in this run; after the reviewed/committed RP5
-docs, the exact next step is that single ordinary fast-forward publication. R2-3 stays blocked
-until then; R2-4, R3, and direct-member Codex/UAA gateway adoption remain later or unclaimed.
+That exact six-file change was the bounded RP5 closeout packet. It expanded no authority boundary
+and added no new architecture. The docs-on-top -> one ordinary fast-forward publication model was
+followed: source publication completed at `0f1e147fb735791b44a65099a65167cbdc1803af` without
+rewriting historical proof. The accepted R2-3 suffix and refreshed native evidence subsequently
+closed R2-3 at `7a9ded10482dee2c1383477950a321ed3ee046f5`. R2-4 is the next authorized join/proof packet and
+remains unstarted. R3, direct-member Codex/UAA gateway adoption, and all other explicitly later or
+unclaimed work remain open.

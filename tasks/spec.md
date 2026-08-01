@@ -1,4 +1,10 @@
-# Spec: A1.1c Authority Store Bootstrap and Crash Reconciliation
+# Historical completed spec: A1.1c Authority Store Bootstrap and Crash Reconciliation
+
+> **Bookkeeping status:** This file is the preserved completed A1.1c specification; it is not the
+> current implementation authority. R2-3 is complete. R2-4 is the next authorized packet but is
+> not started. Its remaining start gates are inactive prerequisites only: a clean/current indexed
+> checkout, the operator-approved dedicated Linux window and restoration baseline, and explicit
+> future packet authority. This file creates no R2-4 implementation plan or task list.
 
 ## Objective
 

@@ -7133,6 +7133,16 @@ Windows evidence -> R2-3Z`, with landed commits `56e0a8582d562bd7e60e8f4348b4d59
 `610db8a9350c9b52496954f5c93232d885f439d9`, and
 `c583c5f293644fab75d8d42bd3bcad63f114d4fe`.
 
+The durable machine closeout evidence is the byte-identical tracked
+[terminal receipt](review-control/r2-3z-terminal-receipt.json), SHA-256
+`681700be6b4c483a78896573f8c982591c6f026fae566fe8c45b5b829f82e58a`, and the byte-identical
+tracked [review-cycle record](review-control/r2-3z-review-cycle-record.json), SHA-256
+`a3236d6ec901906d1ef84851d45995b2d595820be93d20cb40e3af1bb9db73ef`. The receipt binds terminal
+subject fingerprint `sha256:2478c015df2851e05b767f81a8cc889cd1b936be38fbc11c33e816f2ff607a5a`
+and terminal review verdict `CLEAN`. The tracked JSON retains its original external review paths;
+the raw external review Markdown and subject-fingerprint file were not copied into this repository.
+[`review-control/README.md`](review-control/README.md) records the source paths and retention limit.
+
 - The accepted direct shell-library proof at final source is
   `1322 discovered / 1274 passed / 48 failed / 0 ignored`.
 - The direct failure-name SHA-256 is

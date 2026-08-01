@@ -1,4 +1,10 @@
-# A1.1c Tasks
+# Historical completed tasks: A1.1c
+
+> **Bookkeeping status:** Every item below is preserved completed A1.1c history, not a current task
+> queue. R2-3 is complete. R2-4 is the next authorized packet but is not started. Its remaining
+> start gates are inactive prerequisites only: a clean/current indexed checkout, the operator-
+> approved dedicated Linux window and restoration baseline, and explicit future packet authority.
+> No executable R2-4 task is opened by this file.
 
 ## Task 1: Durable store schema and validation
 

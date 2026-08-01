@@ -1,4 +1,10 @@
-# Implementation Plan: A1.1c Authority Store Persistence
+# Historical completed plan: A1.1c Authority Store Persistence
+
+> **Bookkeeping status:** This plan is retained as completed A1.1c history and is not executable
+> current work. R2-3 is complete. R2-4 is the next authorized packet but is not started. Its
+> remaining start gates are inactive prerequisites only: a clean/current indexed checkout, the
+> operator-approved dedicated Linux window and restoration baseline, and explicit future packet
+> authority. No R2-4 implementation sequence is defined here.
 
 ## Architecture decisions
 

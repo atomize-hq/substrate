@@ -1,0 +1,43 @@
+{
+  "schema_version": 1,
+  "packet_id": "PRE-R2-4-READINESS",
+  "status": "complete",
+  "stop_reason": null,
+  "cycles": [
+    {
+      "cycle_id": "discovery-1",
+      "kind": "discovery",
+      "subject_fingerprint": "sha256:8143807df46996773e4eaf20b853393a4d40f6379a20add1ce4eb8a57c5e17b6",
+      "trigger_cycle_id": null,
+      "trigger_finding_ids": [],
+      "causal_evidence_refs": [],
+      "review_refs": [
+        "pre-r2-4-readiness-discovery-authority.md",
+        "pre-r2-4-readiness-discovery-evidence.md",
+        "pre-r2-4-readiness-discovery-boundary.md"
+      ],
+      "verdict": "findings",
+      "findings": [
+        {
+          "finding_id": "PRE-R2-4-P2-001",
+          "priority": "P2"
+        }
+      ]
+    },
+    {
+      "cycle_id": "closure-1",
+      "kind": "closure",
+      "subject_fingerprint": "sha256:f7ec9993ca7f1396ebd275dc3614045c57974a73cd450037e15e3bc7d7e8641d",
+      "trigger_cycle_id": "discovery-1",
+      "trigger_finding_ids": [
+        "PRE-R2-4-P2-001"
+      ],
+      "causal_evidence_refs": [],
+      "review_refs": [
+        "pre-r2-4-readiness-closure.md"
+      ],
+      "verdict": "clean",
+      "findings": []
+    }
+  ]
+}

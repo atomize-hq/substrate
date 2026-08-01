@@ -1,0 +1,13 @@
+2a7749c934b2dec38f829d686fef0f66dbcec03e6d1f3e3c12ae33aa8c2c1f86  AGENTS.md
+85bf73ccfb11c3fe3c9c6f0ccc32daf5bb5e72f60426b5270d813004f13f28cd  CLAUDE.md
+1cce2b2529e18f3d9be0b5c10b3bdacfe3e5c756d08f539e0b4df078a3f8cce4  llm-last-mile/runtime-refactor/00-README.md
+5a4fb3e2185705651e4a7ce2180e40047ebd536b8c732eb68128a05d337a9104  llm-last-mile/runtime-refactor/01-target-architecture.md
+9d39c3c1f210959a713c620d8d14a6a283299525df2e95b1729b90022ae35d53  llm-last-mile/runtime-refactor/03-phase-slice-map.md
+cd6ad515fdb56c0b2e331fa3f43572793a78d554987f63f1d0f1989e81b89007  llm-last-mile/runtime-refactor/04-contracts-and-gates.md
+3e33edd307853a5ad6268f2c23c5bc61b7ca073442f2226d10f66dd7aff70328  llm-last-mile/runtime-refactor/review-control/README.md
+a3236d6ec901906d1ef84851d45995b2d595820be93d20cb40e3af1bb9db73ef  llm-last-mile/runtime-refactor/review-control/r2-3z-review-cycle-record.json
+681700be6b4c483a78896573f8c982591c6f026fae566fe8c45b5b829f82e58a  llm-last-mile/runtime-refactor/review-control/r2-3z-terminal-receipt.json
+19a8066382f9d841d7adee12191506448452ea8ac9db42da78232c81c3010ffc  llm-last-mile/runtime-refactor/review-control/r2-4-linux-host-booking.md
+e988747e717ef3ae9d3846bdecb04f881fedf74f61d758994462be9a28323cfb  tasks/plan.md
+70909170c8058767ff91996f91decc0e803fc8b4d195c5edd8a74f03b4236ad4  tasks/spec.md
+6a3f614770116531be899405e3e47e60c81b36d5139d3608f1120c991b44f642  tasks/todo.md

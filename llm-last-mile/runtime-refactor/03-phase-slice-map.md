@@ -1349,6 +1349,14 @@ expansion, false native claim, or need to guess guest identity is
 | Stop conditions | An R2 row lacks an owner/proof; production repair is attempted; cleanup leaked into R2; Linux product host is unavailable; a native claim lacks native evidence; a seam/root architecture must change. |
 | Next packet | A1.1d-5R3 — Partial-install cleanup and idempotency. |
 
+**Pre-start host status:** R2-4 remains unstarted. The future dedicated Linux proof is
+conditionally assigned to `remote-ssh-discovered:spenser-linux-codex` under the
+[booking and restoration contract](review-control/r2-4-linux-host-booking.md). That assignment is
+not a readiness or product-proof claim: the operator-owned exclusive window, interactive-sudo
+posture, baseline acceptance, and restoration sign-off in that contract must all be satisfied
+before the packet can start. Failure of any gate is the row's existing `Linux product host is
+unavailable` stop condition. No production-file allowlist is created by this booking.
+
 R2 transports the exact context that R3 will later use, but R3 exclusively owns deleting partial
 candidates; current-attempt rollback; removal of managed gateway/helper/unit/socket artifacts;
 managed-artifact ownership manifests used for deletion; removal of recursive/wildcard deletion;
