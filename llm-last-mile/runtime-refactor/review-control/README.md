@@ -27,8 +27,23 @@ python3 llm-last-mile/runtime-refactor/review-control/validate_review_cycle.py \
   llm-last-mile/runtime-refactor/review-control/r2-3z-review-cycle-record.json
 ```
 
-## Pre-R2-4 readiness
+## R2-4 readiness history and terminal closeout
 
-The future dedicated Linux proof assignment and restoration boundary are recorded in
-[`r2-4-linux-host-booking.md`](r2-4-linux-host-booking.md). It is a pre-start contract, not R2-4
-execution or proof.
+The dedicated Linux proof assignment and restoration boundary are preserved in
+[`r2-4-linux-host-booking.md`](r2-4-linux-host-booking.md) as historical pre-start authority. That
+record is not itself R2-4 execution or proof.
+
+The terminal bounded closeout is recorded in:
+
+- [`r2-4-closeout-evidence.md`](r2-4-closeout-evidence.md), which binds the exact source lineage,
+  immutable resume-5/resume-6 evidence, legacy plain-text receipt-propagation deviation, adopted
+  proof matrix, one-object `0640`/`0650` decision, and exclusions; and
+- [`r2-4-closeout-subject.sha256`](r2-4-closeout-subject.sha256), which freezes the reviewed
+  control-pack/evidence subject, including this index.
+
+The terminal review-cycle JSON, review history, and three lens records are post-subject metadata:
+`r2-4-closeout-review-cycle-record.json`, `r2-4-closeout-review-history.md`,
+`r2-4-closeout-review-authority.md`, `r2-4-closeout-review-boundary.md`, and
+`r2-4-closeout-review-platform.md`. They are created only after reviewers bind the frozen subject
+and are excluded from its fingerprint to avoid self-reference. They do not replace product proof
+or packet authority.

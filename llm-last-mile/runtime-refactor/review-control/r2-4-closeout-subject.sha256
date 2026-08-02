@@ -1,0 +1,8 @@
+8978e730c50c7fd82f1809c6f1baed11b04525dc682e549ae9379c95e88d9300  llm-last-mile/runtime-refactor/00-README.md
+c0bdd56a1b98f96e9d18156af67ebf9fdb875bffcd1562cc1aff795a510f10a1  llm-last-mile/runtime-refactor/01-target-architecture.md
+ae1e296330cd1b029e97d5a62ea43b85109e7a7a02c4304691eb5ca03e4c882d  llm-last-mile/runtime-refactor/02-seam-crosswalk.md
+2916900108e43fd70e9d044ca3b1a15a4f53b2d95a6981076bf1a42496131aa1  llm-last-mile/runtime-refactor/03-phase-slice-map.md
+a1d0b95d95ac318be691b4a51ec902294fee3d557d56fb4eaf0f18f912718bdf  llm-last-mile/runtime-refactor/04-contracts-and-gates.md
+0cc4afe53cd91b09dbe1aafb6a4ea0c042c6c5bb6eb8946caf09c30f7ebdbf08  llm-last-mile/runtime-refactor/05-debug-regression-ledger.md
+94bf9a952702b05a937092a8d6dbfdd6be76c391ab0b1743dba530e38856ffa8  llm-last-mile/runtime-refactor/review-control/README.md
+ec20f8443747c68e611ce3aa4dccc425677bcf71a1739f4281e4657d9873b14b  llm-last-mile/runtime-refactor/review-control/r2-4-closeout-evidence.md

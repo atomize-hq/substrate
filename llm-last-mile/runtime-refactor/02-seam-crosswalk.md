@@ -1498,3 +1498,19 @@ items outside RP4 product-proof scope. The docs-on-top -> one ordinary fast-forw
 model stayed unchanged. Source publication had not yet occurred in that RP5 run; it later
 completed, after which the R2-3 suffix and refreshed native evidence closed R2-3. R2-4 and R3
 remain later than that completed publication/closeout chain.
+
+## R2-4 terminal crosswalk disposition
+
+R2-4 closes only the propagation join. PI-050 remains classified `OutOfScope`: the common ambient
+resolver was not edited, and the bounded hostile-B proof confirms explicit context at the owned
+leaves remained authoritative. No PI row changes owner or classification, no direct-member,
+gateway, retained-worker, authoritative-session, or platform-lifecycle seam is promoted, and the
+R2-3 native macOS/Windows mapping evidence is not enlarged into a new R2-4 platform claim.
+
+The terminal source/evidence bindings and supersession boundary are recorded in
+[`review-control/r2-4-closeout-evidence.md`](review-control/r2-4-closeout-evidence.md). Resume-5
+remains historical evidence at `316ee5c6cf12c060388c9d9376e0a79537f2094a`; only its PATH-
+bypass and incomplete public-wrapper limitations are superseded by corrected resume-6 proof
+landed at `d5a46fb3a5afbd0e1a92e027d85ae76c3576dc32`. Passive health/world-deps diagnostics stay in
+their separate lane. Every uninstall-leftover, cleanup, rollback, manifest, and convergence action
+remains R3-owned. R3 is next.

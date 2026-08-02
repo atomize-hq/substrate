@@ -1078,8 +1078,9 @@ expected-old-OID CAS/lease fixed to
 fast-forward; the lease is never authority for a forced update. RP5 publication subsequently
 completed by ordinary fast-forward at `0f1e147fb735791b44a65099a65167cbdc1803af`. The accepted
 R2-3 suffix and refreshed native evidence then closed R2-3 at
-`7a9ded10482dee2c1383477950a321ed3ee046f5`. R2-4 is now the next authorized packet and remains
-unstarted; R3 and all explicitly later or unclaimed work remain open.
+`7a9ded10482dee2c1383477950a321ed3ee046f5`. R2-4 subsequently closed as the bounded
+documentation/evidence-only propagation join recorded in the terminal section below; R3 and all
+explicitly later or unclaimed work remain open.
 
 The docs-on-top -> one ordinary fast-forward publication model above remains controlling. Its RP0
 sequencing is historical only; the controlling current RP3/RP4/RP5 closeout status is recorded
@@ -1296,6 +1297,21 @@ That exact six-file change was the bounded RP5 closeout packet. It expanded no a
 and added no new architecture. The docs-on-top -> one ordinary fast-forward publication model was
 followed: source publication completed at `0f1e147fb735791b44a65099a65167cbdc1803af` without
 rewriting historical proof. The accepted R2-3 suffix and refreshed native evidence subsequently
-closed R2-3 at `7a9ded10482dee2c1383477950a321ed3ee046f5`. R2-4 is the next authorized join/proof packet and
-remains unstarted. R3, direct-member Codex/UAA gateway adoption, and all other explicitly later or
-unclaimed work remain open.
+closed R2-3 at `7a9ded10482dee2c1383477950a321ed3ee046f5`. R2-4 subsequently closed as the bounded
+documentation/evidence-only propagation join recorded below. R3, direct-member Codex/UAA gateway
+adoption, and all other explicitly later or unclaimed work remain open.
+
+## R2-4 bounded closeout architecture disposition
+
+R2-4 adds no architecture and promotes no seam. It joins already-landed R2 propagation by proving
+that an explicit custom A remains authoritative under hostile ambient B through normal first and
+repeat install, generated projections, and public uninstall-wrapper child authentication. The
+bounded Linux record also adopts only quick world-command and Codex CLI reachability, not an
+authenticated Codex turn, retained-worker/session lifecycle, direct-member world/Codex design, or
+gateway adoption. The exact source/evidence chain and exclusions are bound in
+[`review-control/r2-4-closeout-evidence.md`](review-control/r2-4-closeout-evidence.md).
+
+Passive health/world-deps diagnostic failures remain a separate existing lane. Uninstall
+leftovers, cleanup, rollback, manifest, and convergence remain R3-owned. The local `0640`/`0650`
+archive-mode observation is a one-object restoration decision, not a changed permission model.
+R3 is the next architecture packet; R2-4 does not close A1.1d, A1, or the runtime refactor.

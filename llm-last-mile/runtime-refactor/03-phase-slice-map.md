@@ -1349,13 +1349,18 @@ expansion, false native claim, or need to guess guest identity is
 | Stop conditions | An R2 row lacks an owner/proof; production repair is attempted; cleanup leaked into R2; Linux product host is unavailable; a native claim lacks native evidence; a seam/root architecture must change. |
 | Next packet | A1.1d-5R3 — Partial-install cleanup and idempotency. |
 
-**Pre-start host status:** R2-4 remains unstarted. The future dedicated Linux proof is
-conditionally assigned to `remote-ssh-discovered:spenser-linux-codex` under the
-[booking and restoration contract](review-control/r2-4-linux-host-booking.md). That assignment is
-not a readiness or product-proof claim: the operator-owned exclusive window, interactive-sudo
-posture, baseline acceptance, and restoration sign-off in that contract must all be satisfied
-before the packet can start. Failure of any gate is the row's existing `Linux product host is
-unavailable` stop condition. No production-file allowlist is created by this booking.
+**Terminal host status:** the historical conditional assignment in the
+[booking and restoration contract](review-control/r2-4-linux-host-booking.md) remains preserved as
+pre-start authority. The bounded Linux proof and exact restoration later completed on
+`spenser-linux` from source `316ee5c6cf12c060388c9d9376e0a79537f2094a` / tree
+`1eae07018caef023b2f27ef22892825b140e9a4d`; the product correction that removed its PATH-bypass
+and public-wrapper limitations landed as `d5a46fb3a5afbd0e1a92e027d85ae76c3576dc32` / tree
+`b2d68905580d35d7d63aea8f36f274f723c26733`. The
+[R2-4 closeout evidence record](review-control/r2-4-closeout-evidence.md) binds the immutable
+artifacts and the later `NARROW_R2_4` authority: the historical full-world/Codex phrase is adopted
+only as a bounded supported-Linux world-backed command and Codex-runtime reachability record,
+without authenticated execution or architectural promotion. No production-file allowlist is
+created by this closeout.
 
 R2 transports the exact context that R3 will later use, but R3 exclusively owns deleting partial
 candidates; current-attempt rollback; removal of managed gateway/helper/unit/socket artifacts;

@@ -4,29 +4,23 @@
 **Scope:** planning, contracts, sequencing, and proof gates; not implementation history
 **Source directive:** [`../../substrate-runtime-refactor-directive-revised.md`](../../substrate-runtime-refactor-directive-revised.md)
 **Repo-truth snapshot:** 2026-07-17 at `6ab2a515e13946324d0aac25b144e1c3408cb2c1`; re-check live code before every slice
-**Current authorized increment:** docs-only `A1.1d-5R2-3Z` closeout landed at
-`7a9ded10482dee2c1383477950a321ed3ee046f5` / tree
-`ec85b9ba89462cbe0cddbc725ece66aade2363ee`, with the accepted product-proof source fixed at
-`c583c5f293644fab75d8d42bd3bcad63f114d4fe` / tree
-`a070f5f5787c27180f13dece9a1c3c3241728fda`. The R2-2 remedial detour, the RP3/RP4 proof-closeout
-packets, the RP5 docs-only closeout packet, the ordinary fast-forward publication at
-`0f1e147fb735791b44a65099a65167cbdc1803af`, the four
-post-publication calibration fixes, runner-contract repair `R2-3ZP2`, the focused child repairs
-`R2-3ZT1`/`R2-3ZH1`, the macOS compatibility cleanup `R2-3ZM5`, and the refreshed source-bound
-native macOS/Windows evidence receipts are complete. The byte-identical tracked
-[R2-3Z terminal receipt](review-control/r2-3z-terminal-receipt.json) and
-[review-cycle record](review-control/r2-3z-review-cycle-record.json), their hashes, and the limits
-on which external review artifacts were retained are indexed in
-[`review-control/`](review-control/README.md). `R2-3ZP3` remains permanently deferred from
-the blocking R2-3 path; its unpublished commits `2cb796ffef68c2b049376984a90ce0382e5f3980`,
-`9fa3fe0d4ed2933521dfcd67919d91aa9da6a499`, `50948dbeb921582515a34bb6b7be21c46f29d008`, and
-`868994efaf132bb04c6cdd7c82da9433333c94e5` remain diagnostic evidence only. This closeout records
-no canonical-runner provenance claim, reopens no RP3/RP4/RP5 or `R2-3ZP2` packet absent
-contradiction. `A1.1d-5R2-4` is the next authorized packet but remains unstarted. Its exact Linux
-host is conditionally assigned under the
-[pre-start booking and restoration contract](review-control/r2-4-linux-host-booking.md); the
-documented operator-window and sudo gates remain unsatisfied, so it is not a readiness or product-
-proof claim. R3 and all explicitly later or unclaimed work remain open.
+**Current authorized increment:** `A1.1d-5R2-4` is closed by this documentation/evidence-only
+control-pack increment. R2-3 remains closed at `7a9ded10482dee2c1383477950a321ed3ee046f5` /
+tree `ec85b9ba89462cbe0cddbc725ece66aade2363ee`. The bounded R2-4 Linux proof was captured from
+`316ee5c6cf12c060388c9d9376e0a79537f2094a` / tree
+`1eae07018caef023b2f27ef22892825b140e9a4d`; its PATH-upsert and public-wrapper limitations were
+then corrected and superseded by proof for landed correction
+`d5a46fb3a5afbd0e1a92e027d85ae76c3576dc32` / tree
+`b2d68905580d35d7d63aea8f36f274f723c26733`, parent
+`316ee5c6cf12c060388c9d9376e0a79537f2094a`, on
+`refs/heads/feat/internal-host-orchestrator-world-dispatch-bootstrap`. The exact authority chain,
+immutable artifact hashes, adopted proof matrix, bounded cache-mode decision, and completion
+limits are recorded in the
+[R2-4 closeout evidence record](review-control/r2-4-closeout-evidence.md). This closes only the
+R2-owned context-propagation join. It does not claim authenticated Codex execution, retained
+workers or tasks, authoritative-session lifecycle, direct-member world/Codex architecture,
+gateway adoption, passive-health remediation, uninstall convergence, R3, or the whole runtime
+refactor. `A1.1d-5R3` is next and remains unstarted.
 
 ## Canonical repo location
 

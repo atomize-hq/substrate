@@ -1,0 +1,23 @@
+{
+  "schema_version": 1,
+  "packet_id": "A1.1d-5R2-4",
+  "status": "complete",
+  "stop_reason": null,
+  "cycles": [
+    {
+      "cycle_id": "terminal-1",
+      "kind": "discovery",
+      "subject_fingerprint": "sha256:4e809d221e520455ea5ef7fc92d5e7e6497d9ff13a5e0c7c223559b9270be7cc",
+      "trigger_cycle_id": null,
+      "trigger_finding_ids": [],
+      "causal_evidence_refs": [],
+      "review_refs": [
+        "r2-4-closeout-review-authority.md",
+        "r2-4-closeout-review-boundary.md",
+        "r2-4-closeout-review-platform.md"
+      ],
+      "verdict": "clean",
+      "findings": []
+    }
+  ]
+}
