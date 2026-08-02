@@ -3108,13 +3108,13 @@ upsert_path_snippet() {
 
   if [[ -f "${target}" ]] && grep -Fq "${PATH_SNIPPET_START}" "${target}" && grep -Fq "${PATH_SNIPPET_END}" "${target}"; then
     # Remove existing block (if present) so we can append a fresh one.
-    sed "\#^${PATH_SNIPPET_START}\$#,\#^${PATH_SNIPPET_END}\$#d" "${target}" > "${tmp}"
+    sed "/^${PATH_SNIPPET_START}\$/,/^${PATH_SNIPPET_END}\$/d" "${target}" > "${tmp}"
   else
     [[ -f "${target}" ]] && cat "${target}" > "${tmp}"
   fi
 
   {
-    if [[ -s "${tmp}" ]]; then
+    if [[ -s "${tmp}" && -n "$(tail -n 1 "${tmp}")" ]]; then
       printf '\n'
     fi
     printf '%s\n' "${snippet}"

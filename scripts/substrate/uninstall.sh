@@ -338,7 +338,7 @@ printf "\033[32mSubstrate uninstall running…\033[0m\n"
 if [[ -f "${LOADER_DIR}/bash_loading_animations.sh" ]]; then
   # shellcheck disable=SC1090
   source "${LOADER_DIR}/bash_loading_animations.sh"
-  if [[ -n "${BLA_braille_fill_bar[*]:-}" ]]; then
+  if [[ -t 1 && -n "${BLA_braille_fill_bar[*]:-}" ]]; then
     BLA::start_loading_animation "${BLA_braille_fill_bar[@]}"
     LOADER_STARTED=1
   fi

@@ -227,7 +227,14 @@ for uninstall_order in carrier-first help-first; do
     uninstall_help_args+=(--help --install-bootstrap-context-v1 "${INSTALL_WRAPPER_CARRIER}")
   fi
   set +e
-  HOME="${AMBIENT_B}" bash -x "${UNINSTALL_CHILD}" "${uninstall_help_args[@]}" \
+  HOME="${AMBIENT_B}" \
+    SUBSTRATE_HOME="${SELECTED_A}" \
+    SUBSTRATE_ROOT="${SELECTED_A}" \
+    SUBSTRATE_INSTALL_HOST_CONTEXT_COMMITMENT="${INSTALL_WRAPPER_COMMITMENT}" \
+    SUBSTRATE_INSTALL_PRIMARY_USER="${CURRENT_ACCOUNT}" \
+    SUBSTRATE_INSTALL_PRIMARY_UID="${CURRENT_UID}" \
+    SUBSTRATE_INSTALL_BOOTSTRAP_CONTEXT_V1="${INSTALL_WRAPPER_CARRIER}" \
+    bash -x "${UNINSTALL_CHILD}" "${uninstall_help_args[@]}" \
     >"${release_entry_stdout}" 2>"${release_entry_stderr}"
   uninstall_help_status=$?
   set -e
@@ -275,8 +282,8 @@ set -euo pipefail
 STUB
   chmod +x "${fixture_dir}/${child_name}"
   cat > "${fixture_dir}/loader/bash_loading_animations.sh" <<'LOADER'
-BLA_braille_fill_bar=()
-BLA::start_loading_animation() { :; }
+BLA_braille_fill_bar=(frame)
+BLA::start_loading_animation() { return 97; }
 BLA::stop_loading_animation() { :; }
 LOADER
 
@@ -978,10 +985,53 @@ verify_release_projections() (
   rm -f "${PREFIX}/env.sh.saved"
 
   local path_home="${WORK_ROOT}/path-home"
+  local path_rc="${path_home}/.bashrc"
+  local path_rc_first="${WORK_ROOT}/path-rc-first"
+  local path_rc_expected="${WORK_ROOT}/path-rc-expected"
+  local stale_path="${WORK_ROOT}/stale/bin"
   mkdir -p "${path_home}"
+  printf '%s\n' \
+    'unrelated-before' \
+    "${PATH_SNIPPET_START}" \
+    "export PATH=\"${stale_path}:\${PATH}\"" \
+    "${PATH_SNIPPET_END}" \
+    'unrelated-after' > "${path_rc}"
   SHELL=/bin/bash update_shell_path "${PREFIX}/bin" "${path_home}"
-  grep -Fq "${PREFIX}/bin" "${path_home}/.bashrc" \
+  {
+    printf '%s\n' 'unrelated-before' 'unrelated-after'
+    printf '\n'
+    render_path_snippet_sh "${PREFIX}/bin"
+  } > "${path_rc_expected}"
+  cmp -s "${path_rc_expected}" "${path_rc}" \
+    || fail "PATH upsert did not preserve the exact unrelated profile bytes"
+  cp "${path_rc}" "${path_rc_first}"
+  grep -Fxq 'unrelated-before' "${path_rc}" \
+    || fail "PATH upsert changed unrelated bytes before the managed block"
+  grep -Fxq 'unrelated-after' "${path_rc}" \
+    || fail "PATH upsert changed unrelated bytes after the managed block"
+  [[ "$(grep -Fxc -- "${PATH_SNIPPET_START}" "${path_rc}")" -eq 1 \
+      && "$(grep -Fxc -- "${PATH_SNIPPET_END}" "${path_rc}")" -eq 1 ]] \
+    || fail "PATH upsert did not leave exactly one managed block"
+  grep -Fq "${PREFIX}/bin" "${path_rc}" \
     || fail "PATH upsert did not target the intended account home"
+  if grep -Fq "${stale_path}" "${path_rc}"; then
+    fail "PATH upsert retained the stale managed block"
+  fi
+  SHELL=/bin/bash update_shell_path "${PREFIX}/bin" "${path_home}"
+  cmp -s "${path_rc_first}" "${path_rc}" \
+    || fail "repeat PATH upsert changed the profile bytes"
+  [[ "$(grep -Fxc -- "${PATH_SNIPPET_START}" "${path_rc}")" -eq 1 \
+      && "$(grep -Fxc -- "${PATH_SNIPPET_END}" "${path_rc}")" -eq 1 ]] \
+    || fail "repeat PATH upsert did not leave exactly one managed block"
+  grep -Fq "${PREFIX}/bin" "${path_rc}" \
+    || fail "repeat PATH upsert did not retain the intended account home"
+  grep -Fxq 'unrelated-before' "${path_rc}" \
+    || fail "repeat PATH upsert changed unrelated bytes before the managed block"
+  grep -Fxq 'unrelated-after' "${path_rc}" \
+    || fail "repeat PATH upsert changed unrelated bytes after the managed block"
+  if grep -Fq "${stale_path}" "${path_rc}"; then
+    fail "repeat PATH upsert restored the stale managed block"
+  fi
   [[ ! -e "${AMBIENT_B}/.bashrc" ]] || fail "PATH upsert mutated ambient B"
 
   local argv_record="${WORK_ROOT}/shim-argv"
