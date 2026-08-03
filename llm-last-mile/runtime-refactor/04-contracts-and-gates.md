@@ -8778,14 +8778,24 @@ production/test allowlist and reruns no broad product or Cargo wall. The control
 
 The predecessor's immutable receipt is legacy plain text, not V1 JSON. Its later exact propagation
 and the parent's independent Git/hash verification are recorded transparently; no replacement
-JSON protocol claim is made. R3 is next. Authenticated Codex, retained workers/tasks,
-authoritative-session repair/refresh, orchestrator packet-3 lifecycle/routing, gateway adoption,
-direct-member architecture, A1.1d/A1, and the whole runtime refactor remain open.
+JSON protocol claim is made. R3 implementation is `PARKED_BY_USER` and no R3 implementation task
+has been dispatched. The next candidate implementation line is
+`B1/B2.1 joint closeout -> B3.1 -> C1 -> A1.2b`; after A1.2b, R3 must be revalidated, explicitly
+reauthorized, resumed, and completed before A1.3, A1.4, or A1 closeout. Authenticated Codex,
+retained workers/tasks, authoritative-session repair/refresh,
+orchestrator packet-3 lifecycle/routing, gateway adoption, direct-member architecture, A1.1d/A1,
+and the whole runtime refactor remain open.
 
 ## A1.1d-5R3 lifecycle contracts and gates
 
-These contracts are normative for the packets indexed in `03`. They authorize no action during
-`A1.1d-5R3-PLAN`.
+These contracts are normative preserved planning evidence for the packets indexed in `03`. They
+authorize no action during `A1.1d-5R3-PLAN`, they are not the current next implementation line,
+and no R3 implementation task has been dispatched. Planning is complete at
+`19c40d41679e843e3e524f64fb9827959849d33e` / `d7f6b84c9efc8ad03d98ad55c4e1a31611b96335` with
+planning fingerprint `sha256:8f4cf54640443dbeb82fffbef68fac8d03eeaa6c72cf4e44f645044bc2b210e7`.
+R3 implementation is `PARKED_BY_USER`. Resume requires fresh explicit authority plus live
+revalidation after the `B1/B2.1 joint closeout -> B3.1 -> C1 -> A1.2b` corridor, and R3 must then
+be explicitly reauthorized, resumed, and completed before A1.3, A1.4, or A1 closeout.
 
 ### `R3-CANDIDATE-01` — exact synchronous candidate rollback
 
@@ -9976,6 +9986,12 @@ Every packet additionally requires exact path/symbol/test allowlist comparison, 
 format/schema/link checks, `git diff --check`, staged secret/credential inspection,
 `gitnexus_detect_changes()`, clean index/worktree/untracked state after commit, and live
 remote/base/ancestry verification immediately before its one normal fast-forward push.
+
+No `cargo test --workspace` expected-failure inventory is frozen by this control pack. Approximate
+claims about how many workspace failures are "expected" are not authority. Any later task that
+requires a full-workspace run must either pass that gate or first land a separately reviewed exact
+baseline contract naming the command, environment, discovered/pass/fail/ignored counts, exact
+failure identities and stable signatures, provenance, and allowed transition rules.
 
 Terminal receipt status mapping is closed:
 

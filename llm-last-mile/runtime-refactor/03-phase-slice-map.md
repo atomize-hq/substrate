@@ -2165,9 +2165,16 @@ R2-3A product code remained a separately authorized future control-pack node.
 
 ## A1.1d-5R3 authoritative implementation index
 
-This is an index, not a dispatch. The first edge is
-`AUTHORITY_REQUIRED:R3_IMPLEMENTATION -> A1.1d-5R3-HOME`; only the user/meta orchestrator may
-cross it. Every later edge is also an explicit authority gate. No task is pre-created.
+This is preserved planning evidence, not the current next dispatch. Planning is complete at
+`19c40d41679e843e3e524f64fb9827959849d33e` / `d7f6b84c9efc8ad03d98ad55c4e1a31611b96335` with
+planning fingerprint `sha256:8f4cf54640443dbeb82fffbef68fac8d03eeaa6c72cf4e44f645044bc2b210e7`.
+R3 implementation is `PARKED_BY_USER`, no R3 implementation task has been dispatched, and the
+current authority wall is `AUTHORITY_REQUIRED:B1_B2_1_JOINT_CLOSEOUT`. That wall gates the
+already-defined corridor `B1/B2.1 joint closeout -> B3.1 -> C1 -> A1.2b`. Only after that
+corridor lands may a fresh user/meta authority gate revalidate live repository truth and reopen the
+preserved future edge `AUTHORITY_REQUIRED:R3_IMPLEMENTATION -> A1.1d-5R3-HOME`; R3 must then
+complete before A1.3, A1.4, or A1 closeout. Every later edge remains an explicit authority gate.
+No task is pre-created.
 
 ```text
 AUTHORITY_REQUIRED:R3_IMPLEMENTATION

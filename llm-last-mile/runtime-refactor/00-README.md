@@ -6,13 +6,18 @@
 **Repo-truth snapshot:** 2026-08-02 at
 `4ceecd50e20d822dda7cbd8f0e1bef4ccad65d8e` / tree
 `8ed5dc7a354b731016a103b68091864b6a09223a`; re-check live code before every slice.
-**Current authorized increment:** `A1.1d-5R3-PLAN` is planning-only authority to freeze the R3
-implementation graph. R2-4 remains the terminal predecessor and closes only context propagation;
-its evidence is unchanged in the
+**Current scheduling state:** `A1.1d-5R3-PLAN` is complete planning-only authority that froze the
+R3 implementation graph at `19c40d41679e843e3e524f64fb9827959849d33e` /
+`d7f6b84c9efc8ad03d98ad55c4e1a31611b96335` with terminal planning fingerprint
+`sha256:8f4cf54640443dbeb82fffbef68fac8d03eeaa6c72cf4e44f645044bc2b210e7`. R3 implementation is
+`PARKED_BY_USER` and no R3 implementation task has been dispatched. R2-4 remains the terminal
+predecessor and closes only context propagation; its evidence is unchanged in the
 [R2-4 closeout evidence record](review-control/r2-4-closeout-evidence.md). This increment changes
 no product behavior, test, dependency, fixture, script, schema, generated product artifact, or
-platform state and dispatches no successor. After this plan lands, the only successor is the
-explicit user authority gate `AUTHORITY_REQUIRED:R3_IMPLEMENTATION`.
+platform state and dispatches no successor. The current authority wall is
+`AUTHORITY_REQUIRED:B1_B2_1_JOINT_CLOSEOUT`, gating the corridor
+`B1/B2.1 joint closeout -> B3.1 -> C1 -> A1.2b`; after A1.2b, R3 must be revalidated, explicitly
+reauthorized, resumed, and completed before A1.3, A1.4, or A1 closeout.
 
 ## Canonical repo location
 
@@ -217,6 +222,16 @@ recovered through `c519024bd91b6ca6e332d0b8881f7d13ded940e0` and
 `717579b0744154d343985ad439fb8756158f376f`. B1/B2.1-0 is review-clean through
 `83101dcbcc750e6e8fb8979bea19f1f777792188`. Its joint production integration closeout has not
 begun, B3.1 is not dependency-ready, and no seam is promoted.
+
+User-authorized scheduling disposition: R3 planning is complete at this checkpoint
+(`19c40d41679e843e3e524f64fb9827959849d33e` / `d7f6b84c9efc8ad03d98ad55c4e1a31611b96335`,
+planning fingerprint `sha256:8f4cf54640443dbeb82fffbef68fac8d03eeaa6c72cf4e44f645044bc2b210e7`), but R3
+implementation is `PARKED_BY_USER` and no R3 implementation task has been dispatched. The current
+authority wall is `AUTHORITY_REQUIRED:B1_B2_1_JOINT_CLOSEOUT`, which gates the already-defined
+corridor `B1/B2.1 joint closeout -> B3.1 -> C1 -> A1.2b`. After A1.2b lands, R3 must be
+revalidated, explicitly reauthorized, resumed, and completed before A1.3, A1.4, or A1 closeout.
+No `cargo test --workspace` expected-failure inventory is frozen at this checkpoint; approximate
+workspace-failure counts are not authority.
 
 The internal **A1.1d-5I installer/bootstrap compatibility audit** is now complete at the
 `b29897e0` baseline. It is evidence beneath A1.1d-5, not an A1.1d-6 checkpoint, and it changes no
@@ -1033,14 +1048,19 @@ runtime-refactor backlog later.
 ## A1.1d-5R3-PLAN authoritative planning status
 
 `A1.1d-5R3-PLAN` freezes an implementation-ready decomposition for lifecycle cleanup and
-convergence. It is not implementation or native evidence. The exact architecture is in
+convergence. It is not implementation or native evidence. Planning is complete at
+`19c40d41679e843e3e524f64fb9827959849d33e` / `d7f6b84c9efc8ad03d98ad55c4e1a31611b96335` with
+terminal planning fingerprint `sha256:8f4cf54640443dbeb82fffbef68fac8d03eeaa6c72cf4e44f645044bc2b210e7`.
+`R3` implementation is `PARKED_BY_USER`, no R3 implementation task has been dispatched from this
+plan, and the index below is preserved intent rather than the current next implementation line. The
+exact architecture is in
 [01-target-architecture.md](01-target-architecture.md), row ownership in
 [02-seam-crosswalk.md](02-seam-crosswalk.md), dispatch-ready packet contracts in
 [03-phase-slice-map.md](03-phase-slice-map.md), normative gates in
 [04-contracts-and-gates.md](04-contracts-and-gates.md), and planned proof in
 [05-debug-regression-ledger.md](05-debug-regression-ledger.md).
 
-The ordered implementation index is:
+The preserved future-resume implementation index is:
 
 1. `A1.1d-5R3-HOME` — descriptor-bound synchronous private-home candidate rollback;
 2. `A1.1d-5R3-MANIFEST` — non-destructive managed-artifact contract and durable manifest core;
@@ -1061,12 +1081,12 @@ The ordered implementation index is:
 11. `A1.1d-5R3-CLOSEOUT` — cross-platform evidence ingestion and gate closeout with no product
     behavior change.
 
-`HOME` and `MANIFEST` may be separately authorized from this index; every destructive packet
-depends on `MANIFEST`. `LINUX` and `MAC` precede `UNIX` so the three historically bundled rows
-PI-012, PI-026, and PI-095 have one row owner and disjoint provider fences rather than shared
-mutation ownership. `WIN` remains mutation-disjoint but follows MAC closeout in the publication
-chain. Each implementation is published before its native evidence task, so every evidence receipt
-binds an exact remote-equal commit/tree/ref.
+After a later revalidated resume, `HOME` and `MANIFEST` may be separately authorized from this
+index; every destructive packet depends on `MANIFEST`. `LINUX` and `MAC` precede `UNIX` so the
+three historically bundled rows PI-012, PI-026, and PI-095 have one row owner and disjoint
+provider fences rather than shared mutation ownership. `WIN` remains mutation-disjoint but follows
+MAC closeout in the publication chain. Each implementation is published before its native evidence
+task, so every evidence receipt binds an exact remote-equal commit/tree/ref.
 Each platform closeout depends on its clean evidence receipt, and final `CLOSEOUT` depends on all
 three final native evidence tasks at the same published UNIX checkpoint. No task is pre-created by
 this document.

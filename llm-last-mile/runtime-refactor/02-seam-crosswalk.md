@@ -1513,7 +1513,10 @@ remains historical evidence at `316ee5c6cf12c060388c9d9376e0a79537f2094a`; only 
 bypass and incomplete public-wrapper limitations are superseded by corrected resume-6 proof
 landed at `d5a46fb3a5afbd0e1a92e027d85ae76c3576dc32`. Passive health/world-deps diagnostics stay in
 their separate lane. Every uninstall-leftover, cleanup, rollback, manifest, and convergence action
-remains R3-owned. R3 is next.
+remains R3-owned. R3 implementation is `PARKED_BY_USER` and no R3 implementation task has been
+dispatched. The next candidate implementation line is the already-defined
+`B1/B2.1 joint closeout -> B3.1 -> C1 -> A1.2b` corridor; after A1.2b, R3 must be revalidated,
+explicitly reauthorized, resumed, and completed before A1.3, A1.4, or A1 closeout.
 
 ## A1.1d-5R3 canonical ownership and source-closure crosswalk
 

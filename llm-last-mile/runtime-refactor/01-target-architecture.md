@@ -1314,7 +1314,11 @@ gateway adoption. The exact source/evidence chain and exclusions are bound in
 Passive health/world-deps diagnostic failures remain a separate existing lane. Uninstall
 leftovers, cleanup, rollback, manifest, and convergence remain R3-owned. The local `0640`/`0650`
 archive-mode observation is a one-object restoration decision, not a changed permission model.
-R3 is the next architecture packet; R2-4 does not close A1.1d, A1, or the runtime refactor.
+R3 planning is complete, but R3 implementation is `PARKED_BY_USER` and no R3 implementation task
+has been dispatched. The next candidate implementation line is the already-defined
+`B1/B2.1 joint closeout -> B3.1 -> C1 -> A1.2b` corridor. After A1.2b, R3 must be revalidated,
+explicitly reauthorized, resumed, and completed before A1.3, A1.4, or A1 closeout. R2-4 does not
+close A1.1d, A1, or the runtime refactor.
 
 ## A1.1d-5R3 lifecycle ownership architecture
 

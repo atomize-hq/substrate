@@ -3087,14 +3087,25 @@ controller/supervisor remediation and changes no RP3/RP4/RP5 proof result.
 
 The full absolute paths, artifact hashes, authority provenance, proof matrix, and exclusions are in
 [`review-control/r2-4-closeout-evidence.md`](review-control/r2-4-closeout-evidence.md). R2-4 is
-closed only as the bounded R2 propagation join. R3 is next; the larger architecture and runtime-
-refactor program remain open.
+closed only as the bounded R2 propagation join. R3 implementation is `PARKED_BY_USER`; the next
+candidate implementation line is `B1/B2.1 joint closeout -> B3.1 -> C1 -> A1.2b`, and after
+A1.2b R3 must be revalidated, explicitly reauthorized, resumed, and completed before A1.3, A1.4,
+or A1 closeout. The larger architecture and runtime-refactor program remain open.
 
 ## A1.1d-5R3 planned proof and regression ledger
 
 Nothing in this section is executed evidence. It freezes the future proof obligations at planning
 source `4ceecd50e20d822dda7cbd8f0e1bef4ccad65d8e` / tree
-`8ed5dc7a354b731016a103b68091864b6a09223a`.
+`8ed5dc7a354b731016a103b68091864b6a09223a`. Planning is complete at
+`19c40d41679e843e3e524f64fb9827959849d33e` / `d7f6b84c9efc8ad03d98ad55c4e1a31611b96335` with
+planning fingerprint `sha256:8f4cf54640443dbeb82fffbef68fac8d03eeaa6c72cf4e44f645044bc2b210e7`.
+R3 implementation is `PARKED_BY_USER`, no implementation task has been dispatched from this plan,
+and the current candidate implementation corridor is
+`AUTHORITY_REQUIRED:B1_B2_1_JOINT_CLOSEOUT -> B3.1 -> C1 -> A1.2b`. After A1.2b, a fresh authority
+gate must revalidate this preserved proof program before R3 is explicitly reauthorized, resumed,
+and completed before A1.3, A1.4, or A1 closeout. No `cargo test --workspace`
+expected-failure inventory is frozen here, and approximate
+workspace-failure counts are not authority.
 
 ### Source-closure and risk ledger
 

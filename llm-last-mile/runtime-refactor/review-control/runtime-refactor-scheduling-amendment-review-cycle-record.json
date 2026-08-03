@@ -1,0 +1,23 @@
+{
+  "schema_version": 1,
+  "packet_id": "runtime-refactor-scheduling-amendment",
+  "status": "complete",
+  "stop_reason": null,
+  "cycles": [
+    {
+      "cycle_id": "discovery-1",
+      "kind": "discovery",
+      "subject_fingerprint": "sha256:1d75980ceac67564df9561d96013acc491194502f9a9fcad93ae4078a94549b0",
+      "trigger_cycle_id": null,
+      "trigger_finding_ids": [],
+      "causal_evidence_refs": [],
+      "review_refs": [
+        "runtime-refactor-scheduling-amendment-review-authority-sequencing.md",
+        "runtime-refactor-scheduling-amendment-review-control-pack-consistency.md",
+        "runtime-refactor-scheduling-amendment-review-regression-baseline.md"
+      ],
+      "verdict": "clean",
+      "findings": []
+    }
+  ]
+}
