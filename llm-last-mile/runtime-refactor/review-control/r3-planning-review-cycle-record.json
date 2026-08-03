@@ -1,0 +1,106 @@
+{
+  "schema_version": 1,
+  "packet_id": "A1.1d-5R3-PLAN",
+  "status": "complete",
+  "stop_reason": null,
+  "cycles": [
+    {
+      "cycle_id": "discovery-1",
+      "kind": "discovery",
+      "subject_fingerprint": "sha256:da97c6ca51b27a61fb1e0f64050030a46f84b38329136ffc337f263a0fe0576d",
+      "trigger_cycle_id": null,
+      "trigger_finding_ids": [],
+      "causal_evidence_refs": [],
+      "review_refs": [
+        "r3-planning-review-authority-security.md",
+        "r3-planning-review-lifecycle-convergence.md",
+        "r3-planning-review-cross-platform-allowlist.md"
+      ],
+      "verdict": "findings",
+      "findings": [
+        {
+          "finding_id": "R3-AS-005",
+          "priority": "P1"
+        },
+        {
+          "finding_id": "R3-AS-006-DISCOVERY",
+          "priority": "P1"
+        },
+        {
+          "finding_id": "R3-CPA-002",
+          "priority": "P1"
+        },
+        {
+          "finding_id": "R3-CPA-004",
+          "priority": "P1"
+        },
+        {
+          "finding_id": "R3-CPA-003",
+          "priority": "P2"
+        },
+        {
+          "finding_id": "R3-LC-DISCOVERY-001",
+          "priority": "P2"
+        },
+        {
+          "finding_id": "R3-LC-DISCOVERY-002",
+          "priority": "P2"
+        }
+      ]
+    },
+    {
+      "cycle_id": "closure-1",
+      "kind": "closure",
+      "subject_fingerprint": "sha256:e2b91149587e8d23dab2455de443e56383506d75bac041ca1402ecee71e43835",
+      "trigger_cycle_id": "discovery-1",
+      "trigger_finding_ids": [
+        "R3-AS-005",
+        "R3-AS-006-DISCOVERY",
+        "R3-CPA-002",
+        "R3-CPA-004",
+        "R3-CPA-003",
+        "R3-LC-DISCOVERY-001",
+        "R3-LC-DISCOVERY-002"
+      ],
+      "causal_evidence_refs": [],
+      "review_refs": [
+        "r3-planning-review-authority-security.md",
+        "r3-planning-review-lifecycle-convergence.md",
+        "r3-planning-review-cross-platform-allowlist.md"
+      ],
+      "verdict": "findings",
+      "findings": [
+        {
+          "finding_id": "R3-AS-006",
+          "priority": "P1"
+        },
+        {
+          "finding_id": "R3-AS-007",
+          "priority": "P1"
+        }
+      ]
+    },
+    {
+      "cycle_id": "supplemental-causal-1",
+      "kind": "supplemental_causal",
+      "subject_fingerprint": "sha256:8f4cf54640443dbeb82fffbef68fac8d03eeaa6c72cf4e44f645044bc2b210e7",
+      "trigger_cycle_id": "closure-1",
+      "trigger_finding_ids": [
+        "R3-AS-006",
+        "R3-AS-007"
+      ],
+      "causal_evidence_refs": [
+        "r3-planning-review-authority-security.md#supplemental-causal-evidence",
+        "r3-planning-review-lifecycle-convergence.md#supplemental-causal-evidence",
+        "r3-planning-review-cross-platform-allowlist.md#supplemental-causal-evidence"
+      ],
+      "review_refs": [
+        "r3-planning-review-authority-security.md",
+        "r3-planning-review-lifecycle-convergence.md",
+        "r3-planning-review-cross-platform-allowlist.md"
+      ],
+      "verdict": "clean",
+      "findings": []
+    }
+  ]
+}
