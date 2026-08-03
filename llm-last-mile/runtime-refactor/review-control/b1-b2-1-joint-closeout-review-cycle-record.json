@@ -1,0 +1,70 @@
+{
+  "schema_version": 1,
+  "packet_id": "runtime-refactor-b1-b2-1-joint-closeout",
+  "status": "complete",
+  "stop_reason": null,
+  "cycles": [
+    {
+      "cycle_id": "discovery-1",
+      "kind": "discovery",
+      "subject_fingerprint": "sha256:e5893da84231eb69f394a4bcbb11fe27cb50a234ba08b9a4d73bc6d687bd5fac",
+      "trigger_cycle_id": null,
+      "trigger_finding_ids": [],
+      "causal_evidence_refs": [],
+      "review_refs": [
+        "b1-b2-1-joint-closeout-review-authority-ownership.md",
+        "b1-b2-1-joint-closeout-review-production-recovery.md",
+        "b1-b2-1-joint-closeout-review-regression-proof.md"
+      ],
+      "verdict": "findings",
+      "findings": [
+        {
+          "finding_id": "B1-B2-1-P1-001",
+          "priority": "P1"
+        },
+        {
+          "finding_id": "B1-B2-1-P2-001",
+          "priority": "P2"
+        }
+      ]
+    },
+    {
+      "cycle_id": "closure-1",
+      "kind": "closure",
+      "subject_fingerprint": "sha256:353093b37763ebe05d7f2eaff6fec44994d8067861b791a3d5a7392370fd9124",
+      "trigger_cycle_id": "discovery-1",
+      "trigger_finding_ids": [
+        "B1-B2-1-P1-001",
+        "B1-B2-1-P2-001"
+      ],
+      "causal_evidence_refs": [],
+      "review_refs": [
+        "b1-b2-1-joint-closeout-review-production-recovery.md"
+      ],
+      "verdict": "findings",
+      "findings": [
+        {
+          "finding_id": "B1-B2-1-P2-002",
+          "priority": "P2"
+        }
+      ]
+    },
+    {
+      "cycle_id": "supplemental-1",
+      "kind": "supplemental_causal",
+      "subject_fingerprint": "sha256:95bb6b041f64a4c13adfa34966526aaa9bdfca85c99c2656a891de0a3e4bb601",
+      "trigger_cycle_id": "closure-1",
+      "trigger_finding_ids": [
+        "B1-B2-1-P2-002"
+      ],
+      "causal_evidence_refs": [
+        "llm-last-mile/runtime-refactor/03-phase-slice-map.md"
+      ],
+      "review_refs": [
+        "b1-b2-1-joint-closeout-review-production-recovery.md"
+      ],
+      "verdict": "clean",
+      "findings": []
+    }
+  ]
+}

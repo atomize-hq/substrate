@@ -12,12 +12,18 @@ R3 implementation graph at `19c40d41679e843e3e524f64fb9827959849d33e` /
 `sha256:8f4cf54640443dbeb82fffbef68fac8d03eeaa6c72cf4e44f645044bc2b210e7`. R3 implementation is
 `PARKED_BY_USER` and no R3 implementation task has been dispatched. R2-4 remains the terminal
 predecessor and closes only context propagation; its evidence is unchanged in the
-[R2-4 closeout evidence record](review-control/r2-4-closeout-evidence.md). This increment changes
-no product behavior, test, dependency, fixture, script, schema, generated product artifact, or
-platform state and dispatches no successor. The current authority wall is
-`AUTHORITY_REQUIRED:B1_B2_1_JOINT_CLOSEOUT`, gating the corridor
-`B1/B2.1 joint closeout -> B3.1 -> C1 -> A1.2b`; after A1.2b, R3 must be revalidated, explicitly
-reauthorized, resumed, and completed before A1.3, A1.4, or A1 closeout.
+[R2-4 closeout evidence record](review-control/r2-4-closeout-evidence.md). The B1/B2.1 joint
+production integration closeout is now complete on the frozen 2026-08-03 production source at
+`f37943eb917285a044c5e12a05b481572c8d0a09` / tree
+`54ae7b2a2d467a568b575665b99dcb94ef2893a2`, with packet evidence recorded in
+[`review-control/b1-b2-1-joint-closeout-differential-evidence.json`](review-control/b1-b2-1-joint-closeout-differential-evidence.json)
+and
+[`review-control/b1-b2-1-joint-closeout-linux-evidence.md`](review-control/b1-b2-1-joint-closeout-linux-evidence.md).
+This closeout adds no new product or test bytes and dispatches no successor. The just-closed
+authority wall was `AUTHORITY_REQUIRED:B1_B2_1_JOINT_CLOSEOUT`; the next candidate implementation
+line is `B3.1 -> C1 -> A1.2b`, and each later packet still requires fresh explicit authority. After
+A1.2b, R3 must be revalidated, explicitly reauthorized, resumed, and completed before A1.3, A1.4,
+or A1 closeout.
 
 ## Canonical repo location
 
@@ -220,15 +226,18 @@ or any post-turn behavior. B1/B2.1-R0 is now landed and independently review-cle
 recovered through `c519024bd91b6ca6e332d0b8881f7d13ded940e0` and
 `de727091a39c884044179a89135df3db5d566778`, with versioned authority-store binding corrected by
 `717579b0744154d343985ad439fb8756158f376f`. B1/B2.1-0 is review-clean through
-`83101dcbcc750e6e8fb8979bea19f1f777792188`. Its joint production integration closeout has not
-begun, B3.1 is not dependency-ready, and no seam is promoted.
+`83101dcbcc750e6e8fb8979bea19f1f777792188`. The later joint production integration closeout is now
+recorded against the bound 2026-08-03 source snapshot without additional product/test edits; its
+supported Linux doctor plus installed-product smoke preserves the existing host product boundary
+rather than source-binding the installed binary. B3.1 is dependency-ready, and no seam is
+promoted.
 
 User-authorized scheduling disposition: R3 planning is complete at this checkpoint
 (`19c40d41679e843e3e524f64fb9827959849d33e` / `d7f6b84c9efc8ad03d98ad55c4e1a31611b96335`,
 planning fingerprint `sha256:8f4cf54640443dbeb82fffbef68fac8d03eeaa6c72cf4e44f645044bc2b210e7`), but R3
-implementation is `PARKED_BY_USER` and no R3 implementation task has been dispatched. The current
-authority wall is `AUTHORITY_REQUIRED:B1_B2_1_JOINT_CLOSEOUT`, which gates the already-defined
-corridor `B1/B2.1 joint closeout -> B3.1 -> C1 -> A1.2b`. After A1.2b lands, R3 must be
+implementation is `PARKED_BY_USER` and no R3 implementation task has been dispatched. The
+previously active authority wall `AUTHORITY_REQUIRED:B1_B2_1_JOINT_CLOSEOUT` is now closed. The
+next candidate implementation line is `B3.1 -> C1 -> A1.2b`, and after A1.2b lands R3 must be
 revalidated, explicitly reauthorized, resumed, and completed before A1.3, A1.4, or A1 closeout.
 No `cargo test --workspace` expected-failure inventory is frozen at this checkpoint; approximate
 workspace-failure counts are not authority.

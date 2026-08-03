@@ -1,0 +1,279 @@
+{
+  "schema_version": 1,
+  "packet_id": "runtime-refactor-b1-b2-1-joint-closeout",
+  "increment": "B1_B2_1_JOINT_CLOSEOUT",
+  "bound_source": {
+    "commit": "f37943eb917285a044c5e12a05b481572c8d0a09",
+    "tree": "54ae7b2a2d467a568b575665b99dcb94ef2893a2",
+    "required_ancestor": "83101dcbcc750e6e8fb8979bea19f1f777792188",
+    "checkout": "/home/spenser/.codex/worktrees/9469/substrate",
+    "date": "2026-08-03",
+    "product_test_bytes_changed": false
+  },
+  "baseline": {
+    "artifact_root": "/home/spenser/.cache/substrate-runtime-refactor/b1-b2-1-joint-closeout-retry3-preflight-20260803T193755Z",
+    "inventory": {
+      "discovered": 1322,
+      "passed": 1274,
+      "failed": 48,
+      "ignored": 0,
+      "failure_names_sha256": "c6de1349137dcb16d03b87be5364dc50d74a5052565e2c8d40dfed303592bed9",
+      "normalized_signatures_sha256": "2a0df9b340cc7e5e1b6e4f76e60e6f937b7442008142d78a7ae24bbcd2f60a90"
+    },
+    "parallel": {
+      "discovered": 1322,
+      "passed": 1274,
+      "failed": 48,
+      "ignored": 0,
+      "failure_name_count": 48,
+      "failure_names_sha256": "c6de1349137dcb16d03b87be5364dc50d74a5052565e2c8d40dfed303592bed9",
+      "signature_count": 48,
+      "normalized_signatures_sha256": "2a0df9b340cc7e5e1b6e4f76e60e6f937b7442008142d78a7ae24bbcd2f60a90",
+      "raw_log_sha256": "0c5ad46dbd536b1c91581582efd01e97b1865f0f95ff20ab5888f81eba8dbb0f",
+      "duplicate_panics": 0,
+      "missing_panic_count": 0,
+      "malformed_count": 0,
+      "final_status": "FAILED",
+      "known_extra_present": [
+        "builtins::shim_doctor::report::tests::world_deps_fixture_cannot_establish_runtime_health_or_cross_a",
+        "builtins::shim_doctor::report::tests::world_deps_section_forwards_authenticated_a_under_conflicting_ambient_b",
+        "builtins::world_deps::tests::doctor_snapshot_uses_authenticated_a_under_conflicting_ambient_b_without_mutation"
+      ],
+      "known_extra_missing": [],
+      "baseline_match": true,
+      "make_public_exit_status": 2,
+      "make_recipe_status": 101,
+      "selected_root": ".siER",
+      "selected_root_path": "/run/user/1000/.siER",
+      "selected_root_exists_after": false,
+      "combined_log": "/home/spenser/.cache/substrate-runtime-refactor/b1-b2-1-joint-closeout-retry3-preflight-20260803T193755Z/parallel/make.combined.log"
+    },
+    "serial": {
+      "discovered": 1322,
+      "passed": 1274,
+      "failed": 48,
+      "ignored": 0,
+      "failure_name_count": 48,
+      "failure_names_sha256": "c6de1349137dcb16d03b87be5364dc50d74a5052565e2c8d40dfed303592bed9",
+      "signature_count": 48,
+      "normalized_signatures_sha256": "2a0df9b340cc7e5e1b6e4f76e60e6f937b7442008142d78a7ae24bbcd2f60a90",
+      "raw_log_sha256": "5d0c7bc7093f9bee147764923f02e856baa22991a2fce44fa00cc2822bacc4ff",
+      "duplicate_panics": 0,
+      "missing_panic_count": 0,
+      "malformed_count": 0,
+      "final_status": "FAILED",
+      "known_extra_present": [
+        "builtins::shim_doctor::report::tests::world_deps_fixture_cannot_establish_runtime_health_or_cross_a",
+        "builtins::shim_doctor::report::tests::world_deps_section_forwards_authenticated_a_under_conflicting_ambient_b",
+        "builtins::world_deps::tests::doctor_snapshot_uses_authenticated_a_under_conflicting_ambient_b_without_mutation"
+      ],
+      "known_extra_missing": [],
+      "baseline_match": true,
+      "make_public_exit_status": 2,
+      "make_recipe_status": 101,
+      "selected_root": ".s5zp",
+      "selected_root_path": "/run/user/1000/.s5zp",
+      "selected_root_exists_after": false,
+      "combined_log": "/home/spenser/.cache/substrate-runtime-refactor/b1-b2-1-joint-closeout-retry3-preflight-20260803T193755Z/serial/make.combined.log"
+    },
+    "artifact_hashes": {
+      "parallel_log_sha256": "0c5ad46dbd536b1c91581582efd01e97b1865f0f95ff20ab5888f81eba8dbb0f",
+      "serial_log_sha256": "5d0c7bc7093f9bee147764923f02e856baa22991a2fce44fa00cc2822bacc4ff",
+      "parallel_failure_names_sha256": "c6de1349137dcb16d03b87be5364dc50d74a5052565e2c8d40dfed303592bed9",
+      "parallel_normalized_signatures_sha256": "2a0df9b340cc7e5e1b6e4f76e60e6f937b7442008142d78a7ae24bbcd2f60a90",
+      "serial_failure_names_sha256": "c6de1349137dcb16d03b87be5364dc50d74a5052565e2c8d40dfed303592bed9",
+      "serial_normalized_signatures_sha256": "2a0df9b340cc7e5e1b6e4f76e60e6f937b7442008142d78a7ae24bbcd2f60a90"
+    }
+  },
+  "current": {
+    "artifact_root": "/home/spenser/.cache/substrate-runtime-refactor/b1-b2-1-joint-closeout-retry3-final-20260803T202403Z",
+    "parallel": {
+      "discovered": 1322,
+      "passed": 1274,
+      "failed": 48,
+      "ignored": 0,
+      "failure_name_count": 48,
+      "failure_names_sha256": "c6de1349137dcb16d03b87be5364dc50d74a5052565e2c8d40dfed303592bed9",
+      "signature_count": 48,
+      "normalized_signatures_sha256": "2a0df9b340cc7e5e1b6e4f76e60e6f937b7442008142d78a7ae24bbcd2f60a90",
+      "raw_log_sha256": "d08114b14d5b6c672185bca3951f4490b3f27bf6636b7b3a6504de28520c1314",
+      "duplicate_panics": 0,
+      "missing_panic_count": 0,
+      "malformed_count": 0,
+      "final_status": "FAILED",
+      "known_extra_present": [
+        "builtins::shim_doctor::report::tests::world_deps_fixture_cannot_establish_runtime_health_or_cross_a",
+        "builtins::shim_doctor::report::tests::world_deps_section_forwards_authenticated_a_under_conflicting_ambient_b",
+        "builtins::world_deps::tests::doctor_snapshot_uses_authenticated_a_under_conflicting_ambient_b_without_mutation"
+      ],
+      "known_extra_missing": [],
+      "make_public_exit_status": 2,
+      "make_recipe_status": 101,
+      "selected_root": ".sRjD",
+      "selected_root_path": "/run/user/1000/.sRjD",
+      "selected_root_exists_after": false,
+      "combined_log": "/home/spenser/.cache/substrate-runtime-refactor/b1-b2-1-joint-closeout-retry3-final-20260803T202403Z/parallel/make.combined.log"
+    },
+    "serial": {
+      "discovered": 1322,
+      "passed": 1274,
+      "failed": 48,
+      "ignored": 0,
+      "failure_name_count": 48,
+      "failure_names_sha256": "c6de1349137dcb16d03b87be5364dc50d74a5052565e2c8d40dfed303592bed9",
+      "signature_count": 48,
+      "normalized_signatures_sha256": "2a0df9b340cc7e5e1b6e4f76e60e6f937b7442008142d78a7ae24bbcd2f60a90",
+      "raw_log_sha256": "db18ffcf9bcb66e16dee31f545122b775d7c5e185b848c19191d1269ce60ef34",
+      "duplicate_panics": 0,
+      "missing_panic_count": 0,
+      "malformed_count": 0,
+      "final_status": "FAILED",
+      "known_extra_present": [
+        "builtins::shim_doctor::report::tests::world_deps_fixture_cannot_establish_runtime_health_or_cross_a",
+        "builtins::shim_doctor::report::tests::world_deps_section_forwards_authenticated_a_under_conflicting_ambient_b",
+        "builtins::world_deps::tests::doctor_snapshot_uses_authenticated_a_under_conflicting_ambient_b_without_mutation"
+      ],
+      "known_extra_missing": [],
+      "make_public_exit_status": 2,
+      "make_recipe_status": 101,
+      "selected_root": ".sdAv",
+      "selected_root_path": "/run/user/1000/.sdAv",
+      "selected_root_exists_after": false,
+      "combined_log": "/home/spenser/.cache/substrate-runtime-refactor/b1-b2-1-joint-closeout-retry3-final-20260803T202403Z/serial/make.combined.log"
+    },
+    "artifact_hashes": {
+      "parallel_log_sha256": "d08114b14d5b6c672185bca3951f4490b3f27bf6636b7b3a6504de28520c1314",
+      "parallel_root_watch_sha256": "498953e47c678e4c7714dd13f4cf07e1f32bee0b1c12275301d4b22e68e82286",
+      "serial_log_sha256": "db18ffcf9bcb66e16dee31f545122b775d7c5e185b848c19191d1269ce60ef34",
+      "serial_root_watch_sha256": "9b887206f0388894c8ae9b8de65da69c7280984e81112c52dd997260d7c39437"
+    }
+  },
+  "differential": {
+    "inventory_match": true,
+    "retained_failure_names_match": true,
+    "retained_normalized_signatures_match": true,
+    "parallel_vs_baseline_failure_names_diff_empty": true,
+    "parallel_vs_baseline_signatures_diff_empty": true,
+    "serial_vs_baseline_failure_names_diff_empty": true,
+    "serial_vs_baseline_signatures_diff_empty": true,
+    "transitions": {
+      "parallel": {
+        "PassToFail": 0,
+        "FailToChangedFailure": 0,
+        "Removed": 0,
+        "RenamedOrSubstituted": 0,
+        "NewFail": 0,
+        "NewIgnored": 0,
+        "FailToPass": 0,
+        "FailToSameFailure": 48
+      },
+      "serial": {
+        "PassToFail": 0,
+        "FailToChangedFailure": 0,
+        "Removed": 0,
+        "RenamedOrSubstituted": 0,
+        "NewFail": 0,
+        "NewIgnored": 0,
+        "FailToPass": 0,
+        "FailToSameFailure": 48
+      }
+    },
+    "failure_to_pass_manifest": [],
+    "new_test_manifest": [],
+    "known_extra_failures": [
+      "builtins::shim_doctor::report::tests::world_deps_fixture_cannot_establish_runtime_health_or_cross_a",
+      "builtins::shim_doctor::report::tests::world_deps_section_forwards_authenticated_a_under_conflicting_ambient_b",
+      "builtins::world_deps::tests::doctor_snapshot_uses_authenticated_a_under_conflicting_ambient_b_without_mutation"
+    ],
+    "current_changed_paths_before_review_files": [
+      "llm-last-mile/runtime-refactor/00-README.md",
+      "llm-last-mile/runtime-refactor/01-target-architecture.md",
+      "llm-last-mile/runtime-refactor/02-seam-crosswalk.md",
+      "llm-last-mile/runtime-refactor/03-phase-slice-map.md",
+      "llm-last-mile/runtime-refactor/04-contracts-and-gates.md",
+      "llm-last-mile/runtime-refactor/05-debug-regression-ledger.md",
+      "llm-last-mile/runtime-refactor/review-control/b1-b2-1-joint-closeout-linux-evidence.md",
+      "llm-last-mile/runtime-refactor/review-control/b1-b2-1-joint-closeout-differential-evidence.json"
+    ]
+  },
+  "checks": {
+    "make_shell_lib_wall": {
+      "status": 2,
+      "recipe_status": 101,
+      "summary_path": "/home/spenser/.cache/substrate-runtime-refactor/b1-b2-1-joint-closeout-retry3-final-20260803T202403Z/parallel/summary.json",
+      "log_path": "/home/spenser/.cache/substrate-runtime-refactor/b1-b2-1-joint-closeout-retry3-final-20260803T202403Z/parallel/make.combined.log"
+    },
+    "make_shell_lib_wall_serial": {
+      "status": 2,
+      "recipe_status": 101,
+      "summary_path": "/home/spenser/.cache/substrate-runtime-refactor/b1-b2-1-joint-closeout-retry3-final-20260803T202403Z/serial/summary.json",
+      "log_path": "/home/spenser/.cache/substrate-runtime-refactor/b1-b2-1-joint-closeout-retry3-final-20260803T202403Z/serial/make.combined.log"
+    },
+    "cargo_fmt_all_check": {
+      "status": 0
+    },
+    "cargo_check_workspace_all_targets": {
+      "status": 0
+    },
+    "cargo_clippy_shell_all_targets_d_warnings": {
+      "status": 0
+    },
+    "git_diff_check": {
+      "status": 0
+    },
+    "focused_tests": [
+      {
+        "command": "cargo test -p shell --lib b21_ -- --nocapture",
+        "status": 0,
+        "log_path": "/home/spenser/.cache/substrate-runtime-refactor/b1-b2-1-joint-closeout-retry3-preflight-20260803T193755Z/focused-tests/b21.log",
+        "passed_summary": "13 passed / 0 failed / 1309 filtered out"
+      },
+      {
+        "command": "cargo test -p shell --lib dispatch_contract_inspect_world_worker_ephemeral_ -- --nocapture",
+        "status": 0,
+        "log_path": "/home/spenser/.cache/substrate-runtime-refactor/b1-b2-1-joint-closeout-retry3-preflight-20260803T193755Z/focused-tests/inspect_ephemeral.log",
+        "passed_summary": "8 passed / 0 failed / 1314 filtered out"
+      },
+      {
+        "command": "cargo test -p shell --lib dispatch_contract_cancel_world_work_ephemeral_ -- --nocapture",
+        "status": 0,
+        "log_path": "/home/spenser/.cache/substrate-runtime-refactor/b1-b2-1-joint-closeout-retry3-preflight-20260803T193755Z/focused-tests/cancel_ephemeral.log",
+        "passed_summary": "3 passed / 0 failed / 1319 filtered out"
+      },
+      {
+        "command": "cargo test -p shell --lib active_ephemeral_terminal_ -- --nocapture",
+        "status": 0,
+        "log_path": "/home/spenser/.cache/substrate-runtime-refactor/b1-b2-1-joint-closeout-retry3-preflight-20260803T193755Z/focused-tests/active_ephemeral.log",
+        "passed_summary": "3 passed / 0 failed / 1319 filtered out"
+      },
+      {
+        "command": "cargo test -p shell --lib authoritative_active_task_state -- --nocapture",
+        "status": 0,
+        "log_path": "/home/spenser/.cache/substrate-runtime-refactor/b1-b2-1-joint-closeout-retry3-preflight-20260803T193755Z/focused-tests/follow_up_active_task_retry.log",
+        "passed_summary": "1 passed / 0 failed / 1321 filtered out"
+      },
+      {
+        "command": "cargo test -p shell --lib ordinary_continue_joins_canonical_retained_target_and_supervision -- --nocapture",
+        "status": 0,
+        "log_path": "/home/spenser/.cache/substrate-runtime-refactor/b1-b2-1-joint-closeout-retry3-preflight-20260803T193755Z/focused-tests/ordinary_continue_retry.log",
+        "passed_summary": "1 passed / 0 failed / 1321 filtered out"
+      }
+    ],
+    "linux_smoke": {
+      "artifact_root": "/home/spenser/.cache/substrate-runtime-refactor/b1-b2-1-joint-closeout-retry3-preflight-20260803T193755Z/linux-smoke",
+      "command": "substrate --world --shim-skip -c true",
+      "status": 0,
+      "stdout_bytes": 0,
+      "stderr_bytes": 0,
+      "before_doctor_sha256": "c40b2b54b88c40f0152766b1c731950a4affb512c694a28c3d6eb3ce24f4b919",
+      "after_doctor_sha256": "44aab9e142b0f647b6ceb986b90a5194eee9657f9b8341e7aafc5738e0526575",
+      "metadata_sha256": "6c3eaab095332be71164bf8a8e9c5cfef5925d663467348da4c7671adb9983c6"
+    }
+  },
+  "notes": [
+    "The joint closeout landed as a proof-and-docs packet against the bound 2026-08-03 source snapshot with no product/test diffs.",
+    "No changes were made to crates/shell/src/execution/orchestrator_world_dispatch.rs or crates/shell/src/execution/agent_runtime/state_store.rs in this closeout.",
+    "The supported Linux doctor plus installed-product smoke preserved socket activation, ACL boundary, and world-service availability; it validates the existing host product boundary rather than commit/tree provenance for the installed binary, and only world.collected_at_utc and world.policy_resolution_mode changed between before/after doctor snapshots.",
+    "Retained full-dispatch proof covers the exact ContinueWorldWorker handoff into supervision; retained foreground-waiter drop remains separately proved at the accepted-stream boundary."
+  ]
+}

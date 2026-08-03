@@ -61,9 +61,11 @@ The immutable receipt core is recovered and review-clean through `6436289f`; the
 supervisor core through `c519024b`; exact replay/startup activation through `de727091`; and the
 versioned authority-store correction through `717579b0`. The action-scoped B-owned dispatch view,
 including the read-only active-task tool adapter, is review-clean through `83101dcb`. This records
-only the B1/B2.1-0 prerequisite: B1 and B2.1 remain below complete, their joint production
-integration closeout has not begun, foreground behavior remains blocking until B2.2, B3.1 is not
-dependency-ready, and no seam classification is promoted.
+the B1/B2.1-0 prerequisite plus its later joint production integration closeout on frozen
+2026-08-03 source `f37943eb917285a044c5e12a05b481572c8d0a09` /
+`54ae7b2a2d467a568b575665b99dcb94ef2893a2`: B1 and B2.1 are now production-complete for the named
+accepted families, foreground behavior remains blocking until B2.2, B3.1 is dependency-ready, and
+no seam classification is promoted.
 
 ## Authority map
 
@@ -1299,8 +1301,8 @@ Passive health/world-deps diagnostic failures remain a separate existing lane. U
 leftovers, cleanup, rollback, manifest, and convergence remain R3-owned. The local `0640`/`0650`
 archive-mode observation is a one-object restoration decision, not a changed permission model.
 R3 planning is complete, but R3 implementation is `PARKED_BY_USER` and no R3 implementation task
-has been dispatched. The next candidate implementation line is the already-defined
-`B1/B2.1 joint closeout -> B3.1 -> C1 -> A1.2b` corridor. After A1.2b, R3 must be revalidated,
+has been dispatched. The just-closed corridor head was the B1/B2.1 joint closeout; the next
+candidate implementation line is `B3.1 -> C1 -> A1.2b`. After A1.2b, R3 must be revalidated,
 explicitly reauthorized, resumed, and completed before A1.3, A1.4, or A1 closeout. R2-4 does not
 close A1.1d, A1, or the runtime refactor.
 
