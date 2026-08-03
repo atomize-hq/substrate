@@ -1,0 +1,155 @@
+{
+  "schema_version": 1,
+  "record_type": "runtime-refactor-scheduling-receipt-reconciliation",
+  "status": "complete",
+  "source_orchestration_id": "substrate-runtime-refactor-reschedule-20260803-3ded9464f4fb",
+  "source_increment": "RUNTIME-REFACTOR-SCHEDULING-AMENDMENT",
+  "source_task_thread_id": "019fc5a2-f3bf-7432-96fd-a51b665462c9",
+  "source_dispatch_nonce": "e600f2ec834544aaf1d6bebb756fe94f9f1ed5f707815ac099b0e44d34da773a",
+  "malformed_receipt_sha256": "sha256:6383de85fc4d54d4e1746525e3ad9dbcf6326d043708cfb28898bd2f0de71dfe",
+  "validator_error": "increment_task must be an object",
+  "verified_landing": {
+    "original_base": {
+      "commit": "19c40d41679e843e3e524f64fb9827959849d33e",
+      "tree": "d7f6b84c9efc8ad03d98ad55c4e1a31611b96335"
+    },
+    "landed": {
+      "commit": "3763fb8515b8a25d3bc8c75f3ec7b21b55e9b4ee",
+      "tree": "73c42e0a52b7092439dab9544545bf4094ac176c"
+    },
+    "target_ref": "refs/heads/feat/internal-host-orchestrator-world-dispatch-bootstrap",
+    "changed_paths": [
+      "llm-last-mile/runtime-refactor/00-README.md",
+      "llm-last-mile/runtime-refactor/01-target-architecture.md",
+      "llm-last-mile/runtime-refactor/02-seam-crosswalk.md",
+      "llm-last-mile/runtime-refactor/03-phase-slice-map.md",
+      "llm-last-mile/runtime-refactor/04-contracts-and-gates.md",
+      "llm-last-mile/runtime-refactor/05-debug-regression-ledger.md",
+      "llm-last-mile/runtime-refactor/review-control/runtime-refactor-scheduling-amendment-review-authority-sequencing.md",
+      "llm-last-mile/runtime-refactor/review-control/runtime-refactor-scheduling-amendment-review-control-pack-consistency.md",
+      "llm-last-mile/runtime-refactor/review-control/runtime-refactor-scheduling-amendment-review-cycle-record.json",
+      "llm-last-mile/runtime-refactor/review-control/runtime-refactor-scheduling-amendment-review-regression-baseline.md"
+    ],
+    "commit_subject": "docs: record runtime-refactor scheduling amendment",
+    "subject_fingerprint": "sha256:1d75980ceac67564df9561d96013acc491194502f9a9fcad93ae4078a94549b0"
+  },
+  "existing_review": {
+    "path": "llm-last-mile/runtime-refactor/review-control/runtime-refactor-scheduling-amendment-review-cycle-record.json",
+    "digest": "sha256:3162a7554c2902debf11023bd2416e17e8d8b6619e2d08651e97d428df65efb4",
+    "validated": true,
+    "terminal": "CLEAN",
+    "findings": {
+      "p1": 0,
+      "p2": 0,
+      "p3": 0,
+      "p4": 0
+    }
+  },
+  "reconciliation_authority": {
+    "user_authorized": true,
+    "new_reviews_authorized": false,
+    "production_implementation_authorized": false,
+    "successor_dispatch_authorized": false,
+    "reconciliation_orchestration_id": "substrate-runtime-refactor-receipt-reconcile-20260803-d07c8887113d"
+  },
+  "validation": {
+    "task_checkout_state": {
+      "command": "git symbolic-ref -q HEAD || echo DETACHED; git status --porcelain=v1 --branch; git rev-parse HEAD^{commit} HEAD^{tree}",
+      "result": {
+        "detached": true,
+        "clean": true,
+        "head_commit": "3763fb8515b8a25d3bc8c75f3ec7b21b55e9b4ee",
+        "head_tree": "73c42e0a52b7092439dab9544545bf4094ac176c"
+      }
+    },
+    "protected_checkout_state": {
+      "command": "git status --porcelain=v1 --branch",
+      "result": {
+        "clean_worktree": true
+      }
+    },
+    "live_remote_before_reconciliation": {
+      "command": "git ls-remote origin refs/heads/feat/internal-host-orchestrator-world-dispatch-bootstrap",
+      "result": {
+        "commit": "3763fb8515b8a25d3bc8c75f3ec7b21b55e9b4ee",
+        "target_ref": "refs/heads/feat/internal-host-orchestrator-world-dispatch-bootstrap"
+      }
+    },
+    "base_commit_is_single_child": {
+      "command": "git rev-list --all --children | rg '^19c40d41679e843e3e524f64fb9827959849d33e\\b'",
+      "result": "19c40d41679e843e3e524f64fb9827959849d33e 3763fb8515b8a25d3bc8c75f3ec7b21b55e9b4ee"
+    },
+    "base_commit_subject": {
+      "command": "git show -s --format=%s 3763fb8515b8a25d3bc8c75f3ec7b21b55e9b4ee",
+      "result": "docs: record runtime-refactor scheduling amendment"
+    },
+    "base_commit_diff_paths": {
+      "command": "git diff-tree --no-commit-id --name-only -r 3763fb8515b8a25d3bc8c75f3ec7b21b55e9b4ee",
+      "result": [
+        "llm-last-mile/runtime-refactor/00-README.md",
+        "llm-last-mile/runtime-refactor/01-target-architecture.md",
+        "llm-last-mile/runtime-refactor/02-seam-crosswalk.md",
+        "llm-last-mile/runtime-refactor/03-phase-slice-map.md",
+        "llm-last-mile/runtime-refactor/04-contracts-and-gates.md",
+        "llm-last-mile/runtime-refactor/05-debug-regression-ledger.md",
+        "llm-last-mile/runtime-refactor/review-control/runtime-refactor-scheduling-amendment-review-authority-sequencing.md",
+        "llm-last-mile/runtime-refactor/review-control/runtime-refactor-scheduling-amendment-review-control-pack-consistency.md",
+        "llm-last-mile/runtime-refactor/review-control/runtime-refactor-scheduling-amendment-review-cycle-record.json",
+        "llm-last-mile/runtime-refactor/review-control/runtime-refactor-scheduling-amendment-review-regression-baseline.md"
+      ]
+    },
+    "six_document_subject_fingerprint": {
+      "command": "(sha256sum llm-last-mile/runtime-refactor/00-README.md llm-last-mile/runtime-refactor/01-target-architecture.md llm-last-mile/runtime-refactor/02-seam-crosswalk.md llm-last-mile/runtime-refactor/03-phase-slice-map.md llm-last-mile/runtime-refactor/04-contracts-and-gates.md llm-last-mile/runtime-refactor/05-debug-regression-ledger.md) | sha256sum",
+      "result": "sha256:1d75980ceac67564df9561d96013acc491194502f9a9fcad93ae4078a94549b0"
+    },
+    "existing_review_digest": {
+      "command": "sha256sum llm-last-mile/runtime-refactor/review-control/runtime-refactor-scheduling-amendment-review-cycle-record.json",
+      "result": "sha256:3162a7554c2902debf11023bd2416e17e8d8b6619e2d08651e97d428df65efb4"
+    },
+    "existing_review_validator": {
+      "command": "python3 llm-last-mile/runtime-refactor/review-control/validate_review_cycle.py llm-last-mile/runtime-refactor/review-control/runtime-refactor-scheduling-amendment-review-cycle-record.json",
+      "result": "VALID: llm-last-mile/runtime-refactor/review-control/runtime-refactor-scheduling-amendment-review-cycle-record.json"
+    },
+    "malformed_receipt_digest": {
+      "command": "sha256sum orchestration/substrate-runtime-refactor-reschedule-20260803-3ded9464f4fb/receipts/RUNTIME-REFACTOR-SCHEDULING-AMENDMENT.landed-claimed-malformed.json",
+      "result": "sha256:6383de85fc4d54d4e1746525e3ad9dbcf6326d043708cfb28898bd2f0de71dfe"
+    },
+    "malformed_receipt_validator": {
+      "command": "python3 validate_receipt.py orchestration/substrate-runtime-refactor-reschedule-20260803-3ded9464f4fb/receipts/RUNTIME-REFACTOR-SCHEDULING-AMENDMENT.landed-claimed-malformed.json --expected-next AUTHORITY_REQUIRED:B1_B2_1_JOINT_CLOSEOUT",
+      "result": "increment_task must be an object"
+    },
+    "reconciliation_record_json_parse": {
+      "command": "python3 -m json.tool llm-last-mile/runtime-refactor/review-control/runtime-refactor-scheduling-amendment-receipt-reconciliation.json",
+      "result": "ok"
+    },
+    "working_tree_allowlist": {
+      "command": "git diff --name-only",
+      "result": [
+        "llm-last-mile/runtime-refactor/review-control/runtime-refactor-scheduling-amendment-receipt-reconciliation.json"
+      ]
+    },
+    "working_tree_diff_check": {
+      "command": "git diff --check",
+      "result": "clean"
+    },
+    "staged_allowlist": {
+      "command": "git diff --cached --name-only",
+      "result": [
+        "llm-last-mile/runtime-refactor/review-control/runtime-refactor-scheduling-amendment-receipt-reconciliation.json"
+      ]
+    },
+    "staged_diff_check": {
+      "command": "git diff --cached --check",
+      "result": "clean"
+    },
+    "staged_secret_and_conflict_scan": {
+      "command": "git diff --cached --no-ext-diff --text | rg -n '<conflict markers or credential shapes>'",
+      "result": "no matches"
+    },
+    "gitnexus_staged_change_detection": {
+      "command": "npx gitnexus detect-changes --scope staged --repo substrate",
+      "result": "No changes detected."
+    }
+  },
+  "next_increment": "AUTHORITY_REQUIRED:B1_B2_1_JOINT_CLOSEOUT"
+}
