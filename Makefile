@@ -132,6 +132,227 @@ pre-ci:
 	fi
 	cargo run --bin substrate -- --version
 
+define shell_lib_wall_recipe
+	@bash -eu -o pipefail -c '\
+		mode="$$1"; \
+		if [ "$$mode" != "parallel" ] && [ "$$mode" != "serial" ]; then \
+			echo "ERROR: unsupported shell-lib-wall mode: $$mode" >&2; \
+			exit 2; \
+		fi; \
+		if [ "$$(uname -s)" != "Linux" ]; then \
+			echo "ERROR: shell-lib-wall supports Linux hosts only" >&2; \
+			exit 2; \
+		fi; \
+		repo_root="$$(git rev-parse --show-toplevel 2>/dev/null || true)"; \
+		if [ -z "$$repo_root" ] || [ "$$PWD" != "$$repo_root" ]; then \
+			echo "ERROR: shell-lib-wall must run from the repository root" >&2; \
+			exit 2; \
+		fi; \
+		for required in cargo git getfacl chmod id mkdir mktemp ps readlink rm sed sleep stat; do \
+			command -v "$$required" >/dev/null 2>&1 || { \
+				echo "ERROR: required utility not found: $$required" >&2; \
+				exit 2; \
+			}; \
+		done; \
+		uid="$$(id -u)"; \
+		parent="$${SUBSTRATE_TEST_TRUSTED_PARENT:-/run/user/$$uid}"; \
+		validate_private_dir() { \
+			dir="$$1"; \
+			label="$$2"; \
+			case "$$dir" in \
+				/*) ;; \
+				*) echo "ERROR: $$label must be an absolute path: $$dir" >&2; return 2 ;; \
+			esac; \
+			case "$$dir" in \
+				/tmp|/tmp/*|/var/tmp|/var/tmp/*) \
+					echo "ERROR: $$label must not be under a shared temporary parent: $$dir" >&2; \
+					return 2 ;; \
+			esac; \
+			[ -d "$$dir" ] || { echo "ERROR: $$label must exist as a directory: $$dir" >&2; return 2; }; \
+			[ ! -L "$$dir" ] || { echo "ERROR: $$label must not be a symlink: $$dir" >&2; return 2; }; \
+			canonical="$$(readlink -e -- "$$dir")" || { \
+				echo "ERROR: unable to resolve $$label: $$dir" >&2; \
+				return 2; \
+			}; \
+			[ "$$canonical" = "$$dir" ] || { \
+				echo "ERROR: $$label must not contain symlinked path components: $$dir" >&2; \
+				return 2; \
+			}; \
+			sig="$$(stat -c "%u:%a:%d:%i:%F" -- "$$dir")" || { \
+				echo "ERROR: unable to stat $$label: $$dir" >&2; \
+				return 2; \
+			}; \
+			IFS=: read -r dir_uid dir_mode dir_dev dir_ino dir_type <<< "$$sig"; \
+			[ "$$dir_type" = "directory" ] || { \
+				echo "ERROR: $$label is not a directory: $$dir" >&2; \
+				return 2; \
+			}; \
+			[ "$$dir_uid" = "$$uid" ] || { \
+				echo "ERROR: $$label must be owned by the current user: $$dir" >&2; \
+				return 2; \
+			}; \
+			[ "$$dir_mode" = "700" ] || { \
+				echo "ERROR: $$label must have exact mode 0700: $$dir" >&2; \
+				return 2; \
+			}; \
+			acl_lines="$$(getfacl -cp -- "$$dir" 2>/dev/null | sed "/^#/d;/^$$/d")" || { \
+				echo "ERROR: unable to read ACLs for $$label: $$dir" >&2; \
+				return 2; \
+			}; \
+			[ -n "$$acl_lines" ] || { \
+				echo "ERROR: $$label produced no ACL data: $$dir" >&2; \
+				return 2; \
+			}; \
+			if ! printf "%s\n" "$$acl_lines" | while IFS= read -r acl_line; do \
+				case "$$acl_line" in \
+					user::rwx|group::---|other::---) ;; \
+					*) exit 1 ;; \
+				esac; \
+			done; then \
+				echo "ERROR: $$label has unsupported or unsafe ACL state: $$dir" >&2; \
+				return 2; \
+			fi; \
+		}; \
+		root=""; \
+		root_sig=""; \
+		cleanup_needed=0; \
+		cleanup_permitted=1; \
+		perform_cleanup() { \
+			[ "$$cleanup_needed" = "1" ] || return 0; \
+			[ "$$cleanup_permitted" = "1" ] || return 0; \
+			case "$$root" in \
+				"$$parent"/*) ;; \
+				*) echo "ERROR: cleanup root escaped trusted parent: $$root" >&2; return 70 ;; \
+			esac; \
+			[ -d "$$root" ] || { echo "ERROR: cleanup root missing or not a directory: $$root" >&2; return 70; }; \
+			[ ! -L "$$root" ] || { echo "ERROR: cleanup root became a symlink: $$root" >&2; return 70; }; \
+			current_sig="$$(stat -c "%u:%a:%d:%i:%F" -- "$$root")" || { \
+				echo "ERROR: unable to stat cleanup root: $$root" >&2; \
+				return 70; \
+			}; \
+			[ "$$current_sig" = "$$root_sig" ] || { \
+				echo "ERROR: cleanup root identity drifted: $$root" >&2; \
+				return 70; \
+			}; \
+			rm -rf -- "$$root"; \
+			[ ! -e "$$root" ] || { echo "ERROR: cleanup left root behind: $$root" >&2; return 70; }; \
+			cleanup_needed=0; \
+		}; \
+		on_exit() { \
+			status="$$?"; \
+			trap - EXIT; \
+			if [ "$$cleanup_needed" = "1" ] && [ "$$cleanup_permitted" = "1" ]; then \
+				perform_cleanup || exit "$$?"; \
+			fi; \
+			exit "$$status"; \
+		}; \
+		trap on_exit EXIT; \
+		validate_private_dir "$$parent" "shell-lib-wall trusted parent"; \
+		root="$$(mktemp -d -p "$$parent" .sXXX)" || { \
+			echo "ERROR: failed to create shell-lib-wall root beneath $$parent" >&2; \
+			exit 2; \
+		}; \
+		chmod 700 "$$root"; \
+		validate_private_dir "$$root" "shell-lib-wall root"; \
+		root_sig="$$(stat -c "%u:%a:%d:%i:%F" -- "$$root")"; \
+		cleanup_needed=1; \
+		tmpdir="$$root/t"; \
+		xdg_runtime_dir="$$root/x"; \
+		mkdir "$$tmpdir" "$$xdg_runtime_dir"; \
+		chmod 700 "$$tmpdir" "$$xdg_runtime_dir"; \
+		validate_private_dir "$$tmpdir" "shell-lib-wall TMPDIR"; \
+		validate_private_dir "$$xdg_runtime_dir" "shell-lib-wall XDG_RUNTIME_DIR"; \
+		for transport in \
+			"$$xdg_runtime_dir/sZZ/h/run/agent-hub/handles/stop/ssssssssssss-pppppppppppp.sock" \
+			"$$xdg_runtime_dir/sZZ/h/run/agent-hub/handles/cancel/ssssssssssss-pppppppppppp.cancel.sock" \
+			"$$xdg_runtime_dir/sZZ/h/run/agent-hub/handles/prompt/ssssssssssss-pppppppppppp.prompt.sock" \
+			"$$xdg_runtime_dir/sZZ/h/run/agent-hub/handles/startup/ssssssssssss-pppppppppppp.startup.sock"; do \
+			[ "$${#transport}" -le 100 ] || { \
+				echo "ERROR: shell-lib-wall compact runtime root still exceeds the fixture socket limit: $$transport" >&2; \
+				exit 2; \
+			}; \
+		done; \
+		cargo_args=(test -p shell --lib -- --nocapture); \
+		if [ "$$mode" = "serial" ]; then \
+			cargo_args+=(--test-threads=1); \
+		fi; \
+		get_proc_start_ticks() { \
+			pid="$$1"; \
+			[ -r "/proc/$$pid/stat" ] || return 1; \
+			IFS= read -r stat_line < "/proc/$$pid/stat" || return 1; \
+			stat_rest="$${stat_line##*) }"; \
+			set -- $$stat_rest; \
+			printf "%s\n" "$$20"; \
+		}; \
+		collect_descendants() { \
+			target_pid="$$1"; \
+			ps_snapshot="$$2"; \
+			declare -A related=(); \
+			related["$$target_pid"]=1; \
+			changed=1; \
+			while [ "$$changed" = "1" ]; do \
+				changed=0; \
+				while read -r pid ppid; do \
+					[ -n "$$pid" ] || continue; \
+					if [ -n "$${related[$$ppid]+x}" ] && [ -z "$${related[$$pid]+x}" ]; then \
+						related["$$pid"]=1; \
+						changed=1; \
+					fi; \
+				done <<< "$$ps_snapshot"; \
+			done; \
+			for pid in "$${!related[@]}"; do \
+				[ "$$pid" = "$$target_pid" ] || printf "%s\n" "$$pid"; \
+			done; \
+		}; \
+		declare -A observed_descendant_start_ticks=(); \
+		set +e; \
+		env \
+			TMPDIR="$$tmpdir" \
+			XDG_RUNTIME_DIR="$$xdg_runtime_dir" \
+			cargo "$${cargo_args[@]}" & \
+		cargo_pid="$$!"; \
+		while kill -0 "$$cargo_pid" 2>/dev/null; do \
+			ps_snapshot="$$(ps -eo pid=,ppid=)"; \
+			while read -r descendant_pid; do \
+				[ -n "$$descendant_pid" ] || continue; \
+				if [ -z "$${observed_descendant_start_ticks[$$descendant_pid]+x}" ]; then \
+					descendant_start_ticks="$$(get_proc_start_ticks "$$descendant_pid" || true)"; \
+					if [ -n "$$descendant_start_ticks" ]; then \
+						observed_descendant_start_ticks["$$descendant_pid"]="$$descendant_start_ticks"; \
+					fi; \
+				fi; \
+			done < <(collect_descendants "$$cargo_pid" "$$ps_snapshot"); \
+			sleep 0.05; \
+		done; \
+		wait "$$cargo_pid"; \
+		cargo_status="$$?"; \
+		set -e; \
+		retained_descendants=""; \
+		for descendant_pid in "$${!observed_descendant_start_ticks[@]}"; do \
+			descendant_start_ticks="$$(get_proc_start_ticks "$$descendant_pid" || true)"; \
+			if [ -n "$$descendant_start_ticks" ] && [ "$$descendant_start_ticks" = "$${observed_descendant_start_ticks[$$descendant_pid]}" ]; then \
+				retained_descendants="$$retained_descendants $$descendant_pid"; \
+			fi; \
+		done; \
+		retained_descendants="$${retained_descendants# }"; \
+		if [ -n "$$retained_descendants" ]; then \
+			echo "ERROR: shell-lib-wall detected retained Cargo descendants after exit: $$retained_descendants" >&2; \
+			cleanup_permitted=0; \
+			exit 70; \
+		fi; \
+		perform_cleanup; \
+		exit "$$cargo_status"; \
+	' -- $(1)
+endef
+
+.PHONY: shell-lib-wall
+shell-lib-wall:
+	$(call shell_lib_wall_recipe,parallel)
+
+.PHONY: shell-lib-wall-serial
+shell-lib-wall-serial:
+	$(call shell_lib_wall_recipe,serial)
+
 # =========================
 # Planning-system automation
 # =========================

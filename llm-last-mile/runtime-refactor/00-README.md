@@ -1012,11 +1012,14 @@ path. Its unpublished commits `2cb796ffef68c2b049376984a90ce0382e5f3980`,
 `868994efaf132bb04c6cdd7c82da9433333c94e5` are diagnostic evidence only. They are not accepted
 product source and must not be cherry-picked, pushed, or represented as landed.
 
-The canonical shell-wall runner remains open proof-infrastructure work outside the R2-3 completion
-gate. Authenticated wall executions can materialize honest shell results yet still finalize
-ineligible with `evidence_write_failed` and `mount_teardown_failed`, leaving authenticated
-stage-A completion and hidden backing-path teardown unproven. R2-3 closeout therefore makes no
-claim of eligible canonical-runner provenance.
+The tracked canonical shell-wall Python runner remains historical proof-infrastructure evidence
+outside the accepted closeout gate. Its authenticated `1322 discovered / 1277 passed / 45 failed /
+0 ignored` result is diagnostic only because the runner still finalized provenance-ineligible with
+`evidence_write_failed` and `mount_teardown_failed`, leaving authenticated stage-A completion and
+hidden backing-path teardown unproven. For this exact source, the sole normative broad shell-wall
+entrypoints are `make shell-lib-wall` and `make shell-lib-wall-serial`; they validate the private
+environment, run the exact Cargo argv, stream Cargo output unchanged, and leave GNU Make's
+standard public exit mapping intact.
 
 The accepted closeout chain is `R2-3ZT1 -> R2-3ZH1 -> R2-3ZM5 -> fresh native macOS and Windows
 evidence -> R2-3Z`, with landed commits `56e0a8582d562bd7e60e8f4348b4d596e1b2b36e`,

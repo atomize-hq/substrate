@@ -1,0 +1,23 @@
+{
+  "schema_version": 1,
+  "packet_id": "runtime-refactor-b1-b2-1-proof-fixture-remediation",
+  "status": "complete",
+  "stop_reason": null,
+  "cycles": [
+    {
+      "cycle_id": "terminal-1",
+      "kind": "discovery",
+      "subject_fingerprint": "sha256:c4027fca095cfb6004ef15341f9eb565d6cbe3e527f75254f099f1cb8b0f673e",
+      "trigger_cycle_id": null,
+      "trigger_finding_ids": [],
+      "causal_evidence_refs": [],
+      "review_refs": [
+        "b1-b2-1-proof-fixture-remediation-review-make-authority.md",
+        "b1-b2-1-proof-fixture-remediation-review-baseline-integrity.md",
+        "b1-b2-1-proof-fixture-remediation-review-runner-retirement.md"
+      ],
+      "verdict": "clean",
+      "findings": []
+    }
+  ]
+}

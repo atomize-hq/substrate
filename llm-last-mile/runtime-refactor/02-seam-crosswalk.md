@@ -1408,26 +1408,19 @@ history, not as the current state.
 | R1 — carrier non-disclosure | `scripts/substrate/install-substrate.sh::deploy_shims` passes `--install-bootstrap-context-v1 VALUE` to generic `run_cmd`; dry-run renders `$*` verbatim and disclosed the authenticated carrier | Existing production file: add `run_cmd_with_redacted_install_bootstrap_carrier`; change only `deploy_shims`. Existing test file: add exactly `assert_shim_dry_run_carrier_non_disclosure` and its top-level invocation in `tests/installers/prefix_propagation_r2_2.sh`; existing assertion helpers are reused unchanged | Fixed-placeholder dry-run; byte-exact live argv; boundary cases for spaces, quotes, newlines, Unicode, leading dashes, reordering, end-of-options, and missing/duplicate/malformed flags; inherited xtrace non-disclosure/restoration; stdout/stderr/log/trace/generated-file sentinel scan; unchanged full dry-run and uninstall compatibility run without editing them | `run_cmd`, `run_with_sudo`, parser/carrier construction, validation, commitment, prefix selection, install/uninstall semantics, shim behavior, credentials, and tests outside the named file are frozen | AUTHORIZED, NOT IMPLEMENTED |
 | P1 — canonical provenance runner | Failed external harness waited only on Cargo, asserted descendant exit without proof, closed root descriptors, then used pathname `shutil.rmtree`; all four matching walls are ineligible | New test-harness files only: `scripts/ci/canonical_shell_wall_runner.py` and `scripts/ci/test_canonical_shell_wall_runner.py`, with the exact symbols/tests in `04-contracts-and-gates.md`; exact direct Python/V2 authenticated `host_main` controller under the installed OS/Python/Bubblewrap TCB; immutable P1-commit trailers bind independently verified bootstrap and host/Stage-A/Stage-B argv-template constants, while each invocation records its substituted actual hashes; held-FD Git/object verification; sealed `--ro-bind-data` runner projections; authenticated `stage_a_main` and `stage_b_worker_main` | Reviewed P1 OID plus commit-trailer/template/substituted-argv and TCB proof; Bubblewrap identity/nested/detached-descendant probes; held-Git-FD object-chain proof; authenticated in-memory 95-test loader; immutable repository/rustup/Cargo seeds plus separately writable Cargo runtime limited to `.package-cache`, `.package-cache-mutate`, `.global-cache`; fixed private `SOCK_SEQPACKET` worker path, matching `SO_PEERCRED`/child pidfd, close-on-exec and unchanged stdin; one explicit Stage-A-owned combined-output pipe with EOF/backpressure/bounds/hash proof and no Cargo control/evidence FD; Stage-B `--as-pid-1` worker subreaper/reap to `ECHILD`; Stage-A in-namespace deletion; retained host proof of Stage-A namespace teardown and underlying backing absence before final eligibility; then a new three-parallel/one-serial canonical baseline | No production shell/world/policy/service/lifecycle/capability/secure-FD symbol; no dependency; Linux only; no privileged daemon/service/product mutation; no mutable external invocation artifact, ambient shell, unnamed supervisor, tracked runner/test-path execution, mutable Git/object authority, host source/cache/toolchain execution, repository target authority, parent-only wait, assumed arbitrary control/evidence FD inheritance, Stage-A self-finalization, mutable local Git exclude/config authority, `pgrep -P`, sleep, one-time snapshot observation, glob, pathname-only cleanup, real product home, or Cargo/rustup selector override | AUTHORIZED, NOT IMPLEMENTED |
 
-### P1 current implementation note
+### P1 historical runner note and current authority
 
-R2-3ZP2 implements the bounded descendant-authority refinement without rewriting the historical RP0
-authorization table above. The public `host` and `self-test` entrypoints now require live
-`--expected-head`, reviewed `--authority-commit-oid`, and reviewed
-`--reviewed-authority-commit-oid`. `--expected-head` is the exact descendant commit under test;
-`--authority-commit-oid` is the reviewed authority commit that must be equal to or an ancestor of
-that live head while preserving exact authenticated
-`scripts/ci/{canonical_shell_wall_runner.py,test_canonical_shell_wall_runner.py}` blob identity.
-`--reviewed-authority-commit-oid` is a separate control-plane echo that must exactly equal
-`--authority-commit-oid`; `reviewed_oid_matches` now records that verified equality rather than an
-asserted provenance bit. That equality check prevents reviewed/authority drift inside the runner,
-but it does not by itself prove that a same-head authority invocation was independently reviewed;
-selecting the reviewed authority commit remains an external trusted-control-plane responsibility.
-Stage A propagates both reviewed-authority fields into Stage B, Stage B additionally binds the
-projected repository CWD as authenticated projection authority, and the authenticated self-test
-loader now requires the exact 101-method allowlist in `04-contracts-and-gates.md`.
-Linked-worktree support remains out of scope. Authenticated proof
-must use a disposable full non-worktree checkout of the repository rather than a fixture-only
-mini-repository.
+The R2-3ZP2 runner refinement above is preserved as source-bound historical evidence only. The
+tracked Python runner's authenticated `1322 discovered / 1277 passed / 45 failed / 0 ignored`
+result remained provenance-ineligible and is diagnostic only, not current baseline authority.
+
+For this exact source, `make shell-lib-wall` and `make shell-lib-wall-serial` are the sole
+normative broad shell-wall entrypoints. They are Linux-only repo-root public commands that validate
+a compact trusted private root, set private `TMPDIR` and `XDG_RUNTIME_DIR`, run the exact Cargo
+argv, stream Cargo output unchanged, preserve the underlying Cargo recipe status through exact-root
+cleanup, and leave GNU Make's standard public exit mapping intact. The historical 45-failure set
+remains intact; only the three separately classified world-deps/report failures documented above
+may appear in addition to it.
 
 ### R1 direct-caller inventory
 

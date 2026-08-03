@@ -1170,39 +1170,23 @@ xtrace restoration remain unchanged. Generic `run_cmd` and all nonsensitive dry-
 compatible. A structurally valid live child retains its exact exit status; only the helper's
 structural rejections return `2`, after `deploy_shims` restores the inherited xtrace state.
 
-### P1: tracked proof runner outside product authority
+### P1: retired runner history and current Make authority
 
-No tracked repository helper currently combines private-root validation, reparenting-stable
-descendant containment, log/hash preservation, and deletion under continuous descriptor
-authority. The production `trusted_fs` module, world cgroups, service lifecycle, and platform
-provisioning scripts are not reusable P1 surfaces: changing or importing them would couple a test
-proof runner to product authority and exceed this remediation.
+The tracked P1 Python runner and its self-tests are retained only as historical diagnostic
+evidence. Their authenticated `1322 discovered / 1277 passed / 45 failed / 0 ignored` result is
+not baseline authority because the runner never achieved eligible provenance, and this increment
+retires `scripts/ci/canonical_shell_wall_runner.py` plus
+`scripts/ci/test_canonical_shell_wall_runner.py` rather than extending them.
 
-P1 therefore adds one Linux-only test-harness module,
-`scripts/ci/canonical_shell_wall_runner.py`, plus
-`scripts/ci/test_canonical_shell_wall_runner.py`. It adds no repository or Python dependency and
-uses only `/usr/bin/python3.13 -I -S -B`, a validated fixed standard-library origin set, and fixed Linux system-call
-interfaces. It does not resolve an `unshare` program or any executable through ambient `PATH`.
-The launch trust boundary is explicit: exact installed Bubblewrap 0.11.0 plus the kernel and
-root-owned pinned Python/ELF/startup closure are the immutable platform TCB. A clean nested
-unprivileged Bubblewrap probe source-closes the namespace launcher. The concrete host controller
-is exact `/usr/bin/python3.13 -I -S -B -c REVIEWED_BOOTSTRAP_V2_BYTES` plus authenticated in-memory
-`host_main`. The exact P1 implementation commit binds bootstrap length/hash and all three
-argv-template hashes in immutable commit trailers to constants in its independently verified
-runner blob; each template contains the literal `{EXPECTED_HEAD}` slot, so commit construction is
-not self-referential. The fresh reviewer records that commit OID. Every direct-array runtime
-instantiation must substitute that OID into the template's exact `{EXPECTED_HEAD}` slot, and its
-separately recorded actual argv hash must equal the hash independently recomputed over those
-instantiated NUL-terminated bytes. There is
-no external mutable authority artifact, unnamed supervisor, ambient shell, or tracked launcher
-pathname. Python does not pretend to
-authenticate code that necessarily ran before its first `-c` instruction. Reviewed V2 bytes use
-only built-in/frozen primitives and inline SHA-1/SHA-256 until later module origins are validated,
-execute retained Git by FD, independently verify the expected-commit/tree/blob object chain, and
-compile runner/self-test blobs only under synthetic names. `host_main` supplies authenticated
-runner bytes to Stage A by sealed memfd plus Bubblewrap `--ro-bind-data`. Stage A copies verified
-repository, selected rustup/toolchain, and Cargo-shim/registry inputs into private tmpfs seeds,
-then makes one separate writable Cargo-home runtime copy. Nested Stage B read-only projects the
+For the exact bound source, broad shell-wall authority is now two Linux-only repo-root Make
+targets: `make shell-lib-wall` and `make shell-lib-wall-serial`. Each target validates a trusted
+current-user-owned mode-`0700` parent, creates one compact private mode-`0700` root with private
+`TMPDIR` and `XDG_RUNTIME_DIR`, rejects overlong runtime socket layouts, runs exact Cargo argv
+`cargo test -p shell --lib -- --nocapture` with only `--test-threads=1` appended for the serial
+target, streams Cargo output unchanged, preserves Cargo's recipe exit status through exact-root
+cleanup, and leaves GNU Make's standard public zero/nonzero mapping unchanged. No Python, new
+repository script, production helper, dependency, or semantic result parser participates in the
+current authority path.
 repository/rustup snapshots and writable-projects only that private Cargo runtime at the canonical
 Cargo-home path. The seed omits Cargo 1.89 metadata files; the runtime may create or change only
 exact regular files `.package-cache`, `.package-cache-mutate`, and `.global-cache`. Every other

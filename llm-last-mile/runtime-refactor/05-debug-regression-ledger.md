@@ -3026,8 +3026,11 @@ failures may be the separately classified non-R2-3 expectations
 `builtins::shim_doctor::report::tests::world_deps_fixture_cannot_establish_runtime_health_or_cross_a`,
 `builtins::shim_doctor::report::tests::world_deps_section_forwards_authenticated_a_under_conflicting_ambient_b`,
 and `builtins::world_deps::tests::doctor_snapshot_uses_authenticated_a_under_conflicting_ambient_b_without_mutation`.
-The noncanonical 100- and 76-failure `R2-3ZM5` reruns remain diagnostic-only environment evidence
-and never replace this accepted direct proof.
+The sole current broad shell-wall entrypoints for this exact source are `make shell-lib-wall` and
+`make shell-lib-wall-serial`. The provenance-ineligible authenticated runner's
+`1322 discovered / 1277 passed / 45 failed / 0 ignored` result, plus the noncanonical 100- and
+76-failure `R2-3ZM5` reruns, remain diagnostic-only environment evidence and never replace this
+accepted direct proof.
 
 The refreshed source-bound native receipts are authoritative at this closeout:
 

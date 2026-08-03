@@ -1305,6 +1305,10 @@ expansion, false native claim, or need to guess guest identity is
   installer/script parser and frozen-byte checks, R2-SHIM-01, R2-GEN-01, R2-DIAG-01,
   R2-MAP-MAC-01, R2-MAP-WIN-01, applicable R2-RUNTIME-01 regression, allowlist/diff/GitNexus
   checks, and the parent independent review lenses remain mandatory.
+- **Current broad-wall authority:** the only normative public entrypoints for this exact source are
+  `make shell-lib-wall` and `make shell-lib-wall-serial`. The tracked Python runner remains
+  historical diagnostic evidence only and its provenance-ineligible `1322 / 1277 / 45 / 0` result
+  never overrides the accepted direct Make baseline.
 - **Native macOS:** the refreshed source-bound macOS receipt
   `sha256:3b44f6387070b7aaea4306ae58d7f280b1cee3e163ee59219d4900ce3f53dfaf` is
   `EVIDENCE_CLEAN` for `R2-DIAG-01` and `R2-MAP-MAC-01` at source

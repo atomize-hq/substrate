@@ -7154,6 +7154,14 @@ the raw external review Markdown and subject-fingerprint file were not copied in
   `builtins::shim_doctor::report::tests::world_deps_fixture_cannot_establish_runtime_health_or_cross_a`,
   `builtins::shim_doctor::report::tests::world_deps_section_forwards_authenticated_a_under_conflicting_ambient_b`,
   and `builtins::world_deps::tests::doctor_snapshot_uses_authenticated_a_under_conflicting_ambient_b_without_mutation`.
+- The sole current broad shell-wall entrypoints are `make shell-lib-wall` and
+  `make shell-lib-wall-serial`.
+- Each Make target is Linux-only and repo-root only, validates a trusted current-user-owned
+  mode-`0700` parent plus compact private `TMPDIR` and `XDG_RUNTIME_DIR`, runs exact Cargo argv,
+  streams Cargo output unchanged, preserves the Cargo recipe exit status through exact-root cleanup,
+  and leaves GNU Make's standard public zero/nonzero mapping intact.
+- The tracked Python runner and its self-tests are retired from live repository authority. Their
+  authenticated `1322 / 1277 / 45 / 0` result remains historical diagnostic evidence only.
 - `R2-3ZH1` owns only the host-inbox trusted-root test helper.
 - `R2-3ZM5` owns only the macOS contextless-constructor removal and typed pre-R3 smoke contract.
 - The refreshed source-bound native receipts validated clean at
@@ -7497,9 +7505,13 @@ The source-closure candidate inventory is exact:
 No other repository Python, shell, Rust test utility, cgroup, subreaper, checkpoint, or cleanup
 helper supplies the combined contract. Bubblewrap is not extended or edited.
 
-#### Exact implementation allowlist
+#### Historical runner allowlist (retired diagnostic-only)
 
-Only these new files are authorized:
+The following Python-runner design is preserved as historical diagnostic evidence only. It is not
+the current broad shell-wall authority, and B1_B2_1 retires the tracked runner files instead of
+extending them.
+
+The historical P1 design authorized only these new files:
 
 1. `scripts/ci/canonical_shell_wall_runner.py`, Linux-only, Python standard library only, with:
    exact constants `BOOTSTRAP_V2_SOURCE`, `PLATFORM_STARTUP_TCB_V1`,
@@ -7563,7 +7575,10 @@ or required Linux syscall is unavailable, it emits an ineligible/environment res
 no weaker fallback is permitted. Exact isolated interpreter flags also exclude ambient Python
 startup state.
 
-#### Exact runner interface
+#### Historical runner interface (retired diagnostic-only)
+
+The following interface is preserved only to explain the retired diagnostic runner. It must never
+be treated as the current broad shell-wall entrypoint.
 
 The concrete host-side controller is the authenticated in-memory runner's `host_main`, executed
 directly by exact root-owned `/usr/bin/python3.13` with no enclosing Bubblewrap. Platform
