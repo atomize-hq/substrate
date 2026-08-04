@@ -23,9 +23,12 @@ This closeout adds no new product or test bytes and dispatches no successor. The
 Tuesday, August 4, 2026 B3.1 source candidate then completed the typed retained-event/causation
 packet, with the authorized line-movement-only differential recorded in
 [`review-control/b3-1-differential-evidence.json`](review-control/b3-1-differential-evidence.json).
+The bound Tuesday, August 4, 2026 C1 source candidate then completed the obligation
+materialization and semantic-cut packet, with its accepted differential recorded in
+[`review-control/c1-differential-evidence.json`](review-control/c1-differential-evidence.json).
 The just-closed authority wall was `AUTHORITY_REQUIRED:B1_B2_1_JOINT_CLOSEOUT`; the next
-candidate implementation line is `C1 -> A1.2b`, and each later packet still requires fresh
-explicit authority. After A1.2b, R3 must be revalidated, explicitly reauthorized, resumed, and
+candidate implementation line is `A1.2b`, and each later packet still requires fresh explicit
+authority. After A1.2b, R3 must be revalidated, explicitly reauthorized, resumed, and
 completed before A1.3, A1.4, or A1 closeout.
 
 ## Canonical repo location
@@ -232,16 +235,16 @@ recovered through `c519024bd91b6ca6e332d0b8881f7d13ded940e0` and
 `83101dcbcc750e6e8fb8979bea19f1f777792188`. The later joint production integration closeout is now
 recorded against the bound 2026-08-03 source snapshot without additional product/test edits; its
 supported Linux doctor plus installed-product smoke preserves the existing host product boundary
-rather than source-binding the installed binary. B3.1 is complete on the bound Tuesday, August 4,
-2026 source candidate, C1 is next, and no seam is promoted.
+rather than source-binding the installed binary. B3.1 and C1 are complete on the bound Tuesday,
+August 4, 2026 source candidate, A1.2b is next, and no seam is promoted.
 
 User-authorized scheduling disposition: R3 planning is complete at this checkpoint
 (`19c40d41679e843e3e524f64fb9827959849d33e` / `d7f6b84c9efc8ad03d98ad55c4e1a31611b96335`,
 planning fingerprint `sha256:8f4cf54640443dbeb82fffbef68fac8d03eeaa6c72cf4e44f645044bc2b210e7`), but R3
 implementation is `PARKED_BY_USER` and no R3 implementation task has been dispatched. The
 previously active authority wall `AUTHORITY_REQUIRED:B1_B2_1_JOINT_CLOSEOUT` is now closed, B3.1
-is complete on the bound Tuesday, August 4, 2026 candidate, and the next candidate implementation
-line is `C1 -> A1.2b`. After A1.2b lands R3 must be revalidated, explicitly reauthorized,
+and C1 are complete on the bound Tuesday, August 4, 2026 candidate, and the next candidate
+implementation line is `A1.2b`. After A1.2b lands R3 must be revalidated, explicitly reauthorized,
 resumed, and completed before A1.3, A1.4, or A1 closeout. No `cargo test --workspace`
 expected-failure inventory is frozen at this checkpoint; approximate workspace-failure counts are
 not authority.

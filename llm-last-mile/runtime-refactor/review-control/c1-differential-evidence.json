@@ -1,0 +1,282 @@
+{
+  "schema_version": 1,
+  "packet_id": "runtime-refactor-c1-obligation-materialization-cut",
+  "increment": "C1",
+  "bound_source": {
+    "commit": "cac04f0d3d6535eeb73ad9f5e0929386d4531ce6",
+    "tree": "368ceca6e8beb047f86a82e1b729fe6fb7390bdf",
+    "required_ancestor": "83101dcbcc750e6e8fb8979bea19f1f777792188",
+    "checkout": "/home/spenser/.codex/worktrees/5224/substrate",
+    "date": "2026-08-04"
+  },
+  "baseline": {
+    "artifact_root": "/home/spenser/.codex/visualizations/2026/08/04/019fcb37-2cc2-7ca0-8756-38ab5c443166/c1-proof-baseline",
+    "inventory": {
+      "discovered": 1324,
+      "passed": 1276,
+      "failed": 48,
+      "ignored": 0,
+      "failure_names_sha256": "c6de1349137dcb16d03b87be5364dc50d74a5052565e2c8d40dfed303592bed9",
+      "normalized_signatures_sha256": "167807acacbf51c8507ef1c6a20d195b5d1a19e66ea62e5d612de1c2ef340f17"
+    },
+    "parallel": {
+      "summary_path": "/home/spenser/.codex/visualizations/2026/08/04/019fcb37-2cc2-7ca0-8756-38ab5c443166/c1-proof-baseline/parallel.summary.derived.json",
+      "log_path": "/home/spenser/.codex/visualizations/2026/08/04/019fcb37-2cc2-7ca0-8756-38ab5c443166/c1-proof-baseline/shell-lib-wall.parallel.base.log",
+      "failure_names_path": "/home/spenser/.codex/visualizations/2026/08/04/019fcb37-2cc2-7ca0-8756-38ab5c443166/c1-proof-baseline/parallel.failure-names.txt",
+      "normalized_signatures_path": "/home/spenser/.codex/visualizations/2026/08/04/019fcb37-2cc2-7ca0-8756-38ab5c443166/c1-proof-baseline/parallel.normalized-signatures.txt",
+      "raw_log_sha256": "79fe05ddd8fdac6a3fbcf7c7906634a3ee45b95fbcd732fdab9d6220091dc161",
+      "summary_sha256": "e68faad4d665c6b2b8ca696cd96387e5e4e83d398ab70c215f35afaf2d4ccd5b"
+    },
+    "serial": {
+      "summary_path": "/home/spenser/.codex/visualizations/2026/08/04/019fcb37-2cc2-7ca0-8756-38ab5c443166/c1-proof-baseline/serial.summary.derived.json",
+      "log_path": "/home/spenser/.codex/visualizations/2026/08/04/019fcb37-2cc2-7ca0-8756-38ab5c443166/c1-proof-baseline/shell-lib-wall.serial.base.log",
+      "failure_names_path": "/home/spenser/.codex/visualizations/2026/08/04/019fcb37-2cc2-7ca0-8756-38ab5c443166/c1-proof-baseline/serial.failure-names.txt",
+      "normalized_signatures_path": "/home/spenser/.codex/visualizations/2026/08/04/019fcb37-2cc2-7ca0-8756-38ab5c443166/c1-proof-baseline/serial.normalized-signatures.txt",
+      "raw_log_sha256": "95b50e84e5b2ba87184d55aff954556c0356b9820353e1ce7ffd48be5848d7ac",
+      "summary_sha256": "7369528e546e1c37af4f541097350fc6c4f3733390d0f6d2ff1d8c3627f445c0"
+    }
+  },
+  "current": {
+    "artifact_root": "/home/spenser/.codex/visualizations/2026/08/04/019fcb37-2cc2-7ca0-8756-38ab5c443166/c1-proof-final-remediated",
+    "inventory": {
+      "discovered": 1330,
+      "passed": 1282,
+      "failed": 48,
+      "ignored": 0,
+      "failure_names_sha256": "c6de1349137dcb16d03b87be5364dc50d74a5052565e2c8d40dfed303592bed9",
+      "normalized_signatures_sha256": "e53ffb35dbd4fe32ea60ad8da88efe449edc510a5bd0b3fe446e8a368d5beb40"
+    },
+    "parallel": {
+      "summary_path": "/home/spenser/.codex/visualizations/2026/08/04/019fcb37-2cc2-7ca0-8756-38ab5c443166/c1-proof-final-remediated/parallel.summary.json",
+      "log_path": "/home/spenser/.codex/visualizations/2026/08/04/019fcb37-2cc2-7ca0-8756-38ab5c443166/c1-proof-final-remediated/parallel.raw.log",
+      "failure_names_path": "/home/spenser/.codex/visualizations/2026/08/04/019fcb37-2cc2-7ca0-8756-38ab5c443166/c1-proof-final-remediated/parallel.failure-names.txt",
+      "normalized_signatures_path": "/home/spenser/.codex/visualizations/2026/08/04/019fcb37-2cc2-7ca0-8756-38ab5c443166/c1-proof-final-remediated/parallel.normalized-signatures.txt",
+      "raw_log_sha256": "6b4604a15580ba9b79a4063b0d76fe6606398c3f84c48cda800788150720ae9b",
+      "summary_sha256": "3f35a2d88b73c4b3359a569419591ed0b39303b5a260553066cf8cdffef70db1"
+    },
+    "serial": {
+      "summary_path": "/home/spenser/.codex/visualizations/2026/08/04/019fcb37-2cc2-7ca0-8756-38ab5c443166/c1-proof-final-remediated/serial.summary.json",
+      "log_path": "/home/spenser/.codex/visualizations/2026/08/04/019fcb37-2cc2-7ca0-8756-38ab5c443166/c1-proof-final-remediated/serial.raw.log",
+      "failure_names_path": "/home/spenser/.codex/visualizations/2026/08/04/019fcb37-2cc2-7ca0-8756-38ab5c443166/c1-proof-final-remediated/serial.failure-names.txt",
+      "normalized_signatures_path": "/home/spenser/.codex/visualizations/2026/08/04/019fcb37-2cc2-7ca0-8756-38ab5c443166/c1-proof-final-remediated/serial.normalized-signatures.txt",
+      "raw_log_sha256": "a79081e7df594d01eb0824961db4b428abef7d76e644a765f5bd0cfe4651911d",
+      "summary_sha256": "e5bcc4e6b7bcedb27970d1112a7f969c78737e881bf998054b2a5b34912af1ec"
+    }
+  },
+  "authorized_differential": {
+    "historical_normalized_signatures_sha256": "167807acacbf51c8507ef1c6a20d195b5d1a19e66ea62e5d612de1c2ef340f17",
+    "accepted_candidate_normalized_signatures_sha256": "e53ffb35dbd4fe32ea60ad8da88efe449edc510a5bd0b3fe446e8a368d5beb40",
+    "failure_names_sha256": "c6de1349137dcb16d03b87be5364dc50d74a5052565e2c8d40dfed303592bed9",
+    "exact_changed_signature_count": 23,
+    "exact_changed_paths": [
+      "crates/shell/src/execution/orchestrator_world_dispatch.rs"
+    ],
+    "parallel_serial_equivalent": true,
+    "non_location_differences": {
+      "inventory_changed": true,
+      "inventory_growth_exactly_six_named_passing_tests": true,
+      "failure_names_changed": false,
+      "failure_messages_changed": false,
+      "preexisting_test_names_changed": false,
+      "assertion_text_changed": false,
+      "behavior_changed": false,
+      "paths_changed": false,
+      "columns_changed": false,
+      "ignored_state_changed": false
+    },
+    "new_passing_tests": [
+      "execution::agent_runtime::obligation_ledger::tests::unresolved_attention_entries_sort_by_canonical_commitment_before_obligation_id",
+      "execution::agent_runtime::state_store::tests::close_prepared_internal_continue_approval_response_obligation_updates_c1_materialized_canonical_record",
+      "execution::agent_runtime::state_store::tests::obligation_ledger_plan_persists_to_nonlegacy_root_and_cursor_derives_from_state",
+      "execution::agent_runtime::state_store::tests::obligation_ledger_plan_rebases_session_revision_after_unrelated_acceptance_advance",
+      "execution::orchestrator_world_dispatch::tests::b21_retained_materializes_attention_obligation_before_terminal_cut_and_replay_is_noop",
+      "execution::orchestrator_world_dispatch::tests::b21_retained_snapshot_is_pending_until_exact_terminal_cut_then_completes"
+    ],
+    "exact_location_deltas": [
+      {
+        "test": "execution::orchestrator_world_dispatch::tests::continue_world_worker_dispatch_returns_real_typed_internal_outcome",
+        "before_location": "crates/shell/src/execution/orchestrator_world_dispatch.rs:11057:14",
+        "after_location": "crates/shell/src/execution/orchestrator_world_dispatch.rs:11739:14",
+        "path_unchanged": true,
+        "column_unchanged": true,
+        "normalized_panic_body_unchanged": true
+      },
+      {
+        "test": "execution::orchestrator_world_dispatch::tests::dispatch_contract_continue_target_resolution_reuses_prepared_authoritative_store",
+        "before_location": "crates/shell/src/execution/orchestrator_world_dispatch.rs:15116:18",
+        "after_location": "crates/shell/src/execution/orchestrator_world_dispatch.rs:15798:18",
+        "path_unchanged": true,
+        "column_unchanged": true,
+        "normalized_panic_body_unchanged": true
+      },
+      {
+        "test": "execution::orchestrator_world_dispatch::tests::dispatch_contract_continue_world_worker_approval_response_closes_after_successful_delivery",
+        "before_location": "crates/shell/src/execution/orchestrator_world_dispatch.rs:17424:18",
+        "after_location": "crates/shell/src/execution/orchestrator_world_dispatch.rs:18106:18",
+        "path_unchanged": true,
+        "column_unchanged": true,
+        "normalized_panic_body_unchanged": true
+      },
+      {
+        "test": "execution::orchestrator_world_dispatch::tests::dispatch_contract_continue_world_worker_approval_response_denies_by_default_before_target_resolution",
+        "before_location": "crates/shell/src/execution/orchestrator_world_dispatch.rs:15250:9",
+        "after_location": "crates/shell/src/execution/orchestrator_world_dispatch.rs:15932:9",
+        "path_unchanged": true,
+        "column_unchanged": true,
+        "normalized_panic_body_unchanged": true
+      },
+      {
+        "test": "execution::orchestrator_world_dispatch::tests::dispatch_contract_continue_world_worker_approval_response_leaves_obligation_pending_when_delivery_fails",
+        "before_location": "crates/shell/src/execution/orchestrator_world_dispatch.rs:17510:9",
+        "after_location": "crates/shell/src/execution/orchestrator_world_dispatch.rs:18192:9",
+        "path_unchanged": true,
+        "column_unchanged": true,
+        "normalized_panic_body_unchanged": true
+      },
+      {
+        "test": "execution::orchestrator_world_dispatch::tests::dispatch_contract_continue_world_worker_clarification_response_closes_follow_up_exactly_once_after_successful_delivery",
+        "before_location": "crates/shell/src/execution/orchestrator_world_dispatch.rs:17663:14",
+        "after_location": "crates/shell/src/execution/orchestrator_world_dispatch.rs:18345:14",
+        "path_unchanged": true,
+        "column_unchanged": true,
+        "normalized_panic_body_unchanged": true
+      },
+      {
+        "test": "execution::orchestrator_world_dispatch::tests::dispatch_contract_continue_world_worker_clarification_response_denies_by_default_before_target_resolution",
+        "before_location": "crates/shell/src/execution/orchestrator_world_dispatch.rs:15292:9",
+        "after_location": "crates/shell/src/execution/orchestrator_world_dispatch.rs:15974:9",
+        "path_unchanged": true,
+        "column_unchanged": true,
+        "normalized_panic_body_unchanged": true
+      },
+      {
+        "test": "execution::orchestrator_world_dispatch::tests::dispatch_contract_continue_world_worker_clarification_response_leaves_follow_up_pending_when_delivery_fails",
+        "before_location": "crates/shell/src/execution/orchestrator_world_dispatch.rs:17779:9",
+        "after_location": "crates/shell/src/execution/orchestrator_world_dispatch.rs:18461:9",
+        "path_unchanged": true,
+        "column_unchanged": true,
+        "normalized_panic_body_unchanged": true
+      },
+      {
+        "test": "execution::orchestrator_world_dispatch::tests::dispatch_contract_continue_world_worker_control_directive_denies_by_default_before_target_resolution",
+        "before_location": "crates/shell/src/execution/orchestrator_world_dispatch.rs:15334:9",
+        "after_location": "crates/shell/src/execution/orchestrator_world_dispatch.rs:16016:9",
+        "path_unchanged": true,
+        "column_unchanged": true,
+        "normalized_panic_body_unchanged": true
+      },
+      {
+        "test": "execution::orchestrator_world_dispatch::tests::dispatch_contract_continue_world_worker_control_directive_returns_explanation_ready_error_when_delivery_fails",
+        "before_location": "crates/shell/src/execution/orchestrator_world_dispatch.rs:17266:9",
+        "after_location": "crates/shell/src/execution/orchestrator_world_dispatch.rs:17948:9",
+        "path_unchanged": true,
+        "column_unchanged": true,
+        "normalized_panic_body_unchanged": true
+      },
+      {
+        "test": "execution::orchestrator_world_dispatch::tests::dispatch_contract_continue_world_worker_control_directive_submits_rendered_prompt_to_exact_retained_worker",
+        "before_location": "crates/shell/src/execution/orchestrator_world_dispatch.rs:17046:14",
+        "after_location": "crates/shell/src/execution/orchestrator_world_dispatch.rs:17728:14",
+        "path_unchanged": true,
+        "column_unchanged": true,
+        "normalized_panic_body_unchanged": true
+      },
+      {
+        "test": "execution::orchestrator_world_dispatch::tests::dispatch_contract_continue_world_worker_control_directive_surfaces_control_ack_without_persisting_obligation",
+        "before_location": "crates/shell/src/execution/orchestrator_world_dispatch.rs:17188:10",
+        "after_location": "crates/shell/src/execution/orchestrator_world_dispatch.rs:17870:10",
+        "path_unchanged": true,
+        "column_unchanged": true,
+        "normalized_panic_body_unchanged": true
+      },
+      {
+        "test": "execution::orchestrator_world_dispatch::tests::dispatch_contract_continue_world_worker_denied_packet_three_events_persist_nothing",
+        "before_location": "crates/shell/src/execution/orchestrator_world_dispatch.rs:15055:18",
+        "after_location": "crates/shell/src/execution/orchestrator_world_dispatch.rs:15737:18",
+        "path_unchanged": true,
+        "column_unchanged": true,
+        "normalized_panic_body_unchanged": true
+      },
+      {
+        "test": "execution::orchestrator_world_dispatch::tests::dispatch_contract_continue_world_worker_persists_fork_request_without_allocating_child_worker",
+        "before_location": "crates/shell/src/execution/orchestrator_world_dispatch.rs:11057:14",
+        "after_location": "crates/shell/src/execution/orchestrator_world_dispatch.rs:11739:14",
+        "path_unchanged": true,
+        "column_unchanged": true,
+        "normalized_panic_body_unchanged": true
+      },
+      {
+        "test": "execution::orchestrator_world_dispatch::tests::dispatch_contract_continue_world_worker_persists_packet_three_worker_obligations_exactly_once_on_live_path",
+        "before_location": "crates/shell/src/execution/orchestrator_world_dispatch.rs:11057:14",
+        "after_location": "crates/shell/src/execution/orchestrator_world_dispatch.rs:11739:14",
+        "path_unchanged": true,
+        "column_unchanged": true,
+        "normalized_panic_body_unchanged": true
+      },
+      {
+        "test": "execution::orchestrator_world_dispatch::tests::dispatch_contract_continue_world_worker_policy_denials_precede_stale_target_resolution",
+        "before_location": "crates/shell/src/execution/orchestrator_world_dispatch.rs:15206:13",
+        "after_location": "crates/shell/src/execution/orchestrator_world_dispatch.rs:15888:13",
+        "path_unchanged": true,
+        "column_unchanged": true,
+        "normalized_panic_body_unchanged": true
+      },
+      {
+        "test": "execution::orchestrator_world_dispatch::tests::dispatch_contract_continue_world_worker_preserves_fork_request_when_blocked_follows",
+        "before_location": "crates/shell/src/execution/orchestrator_world_dispatch.rs:11057:14",
+        "after_location": "crates/shell/src/execution/orchestrator_world_dispatch.rs:11739:14",
+        "path_unchanged": true,
+        "column_unchanged": true,
+        "normalized_panic_body_unchanged": true
+      },
+      {
+        "test": "execution::orchestrator_world_dispatch::tests::dispatch_contract_continue_world_worker_progress_ack_denies_by_default_before_target_resolution",
+        "before_location": "crates/shell/src/execution/orchestrator_world_dispatch.rs:15376:9",
+        "after_location": "crates/shell/src/execution/orchestrator_world_dispatch.rs:16058:9",
+        "path_unchanged": true,
+        "column_unchanged": true,
+        "normalized_panic_body_unchanged": true
+      },
+      {
+        "test": "execution::orchestrator_world_dispatch::tests::dispatch_contract_continue_world_worker_progress_ack_reaches_target_resolution_when_policy_enabled",
+        "before_location": "crates/shell/src/execution/orchestrator_world_dispatch.rs:15428:9",
+        "after_location": "crates/shell/src/execution/orchestrator_world_dispatch.rs:16110:9",
+        "path_unchanged": true,
+        "column_unchanged": true,
+        "normalized_panic_body_unchanged": true
+      },
+      {
+        "test": "execution::orchestrator_world_dispatch::tests::dispatch_contract_continue_world_worker_progress_ack_submits_rendered_prompt_to_exact_retained_worker",
+        "before_location": "crates/shell/src/execution/orchestrator_world_dispatch.rs:15567:14",
+        "after_location": "crates/shell/src/execution/orchestrator_world_dispatch.rs:16249:14",
+        "path_unchanged": true,
+        "column_unchanged": true,
+        "normalized_panic_body_unchanged": true
+      },
+      {
+        "test": "execution::orchestrator_world_dispatch::tests::dispatch_contract_continue_world_worker_progress_ack_surfaces_progress_update_without_persisting_obligation",
+        "before_location": "crates/shell/src/execution/orchestrator_world_dispatch.rs:15709:10",
+        "after_location": "crates/shell/src/execution/orchestrator_world_dispatch.rs:16391:10",
+        "path_unchanged": true,
+        "column_unchanged": true,
+        "normalized_panic_body_unchanged": true
+      },
+      {
+        "test": "execution::orchestrator_world_dispatch::tests::dispatch_contract_prepare_orchestrator_world_dispatch_defers_continue_target_resolution_until_after_steering",
+        "before_location": "crates/shell/src/execution/orchestrator_world_dispatch.rs:15090:18",
+        "after_location": "crates/shell/src/execution/orchestrator_world_dispatch.rs:15772:18",
+        "path_unchanged": true,
+        "column_unchanged": true,
+        "normalized_panic_body_unchanged": true
+      },
+      {
+        "test": "execution::orchestrator_world_dispatch::tests::dispatch_contract_spawn_world_worker_uses_authoritative_workspace_root_for_bootstrap",
+        "before_location": "crates/shell/src/execution/orchestrator_world_dispatch.rs:24722:10",
+        "after_location": "crates/shell/src/execution/orchestrator_world_dispatch.rs:25404:10",
+        "path_unchanged": true,
+        "column_unchanged": true,
+        "normalized_panic_body_unchanged": true
+      }
+    ]
+  }
+}

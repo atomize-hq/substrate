@@ -64,6 +64,13 @@ use crate::execution::agent_runtime::host_session_authority::HostSessionAuthorit
 #[cfg(target_os = "linux")]
 use crate::execution::agent_runtime::mapping::AgentRuntimeBackendKind;
 #[cfg(target_os = "linux")]
+use crate::execution::agent_runtime::obligation_ledger::reconcile_retained_event_obligations;
+#[cfg(all(target_os = "linux", test))]
+use crate::execution::agent_runtime::obligation_ledger::{
+    read_obligation_ledger_snapshot, ObligationAttentionDispositionV1,
+    ObligationLedgerSnapshotReadRequestV1, ObligationLedgerSnapshotReadV1,
+};
+#[cfg(target_os = "linux")]
 use crate::execution::agent_runtime::retained_worker_runtime::{
     CanonicalDescriptorAndRuntimePlanV1, CanonicalExactCurrentAuthorityV1,
     CanonicalPolicyAndAdmissionCapV1, CanonicalValidatedSpawnRequestV1,
@@ -103,9 +110,12 @@ use crate::execution::agent_runtime::{
 };
 #[cfg(target_os = "linux")]
 use crate::execution::agent_runtime::{
-    AgentRuntimeSessionState, OrchestrationObligationAttachState, OrchestrationObligationKind,
-    OrchestrationObligationRecord, RunWorldTaskOutcomeV1, SpawnWorldWorkerOutcomeV1, TaskPayloadV1,
-    WorkerSpawnPayloadV1,
+    AgentRuntimeSessionState, OrchestrationObligationKind, RunWorldTaskOutcomeV1,
+    SpawnWorldWorkerOutcomeV1, TaskPayloadV1, WorkerSpawnPayloadV1,
+};
+#[cfg(target_os = "linux")]
+use crate::execution::agent_runtime::{
+    OrchestrationObligationAttachState, OrchestrationObligationRecord,
 };
 #[cfg(any(target_os = "linux", target_os = "macos", test))]
 use crate::execution::agent_runtime::{WorldDispatchModeV1, WorldDispatchPayloadV1};
@@ -1072,7 +1082,6 @@ struct ContinueWorldWorkerStreamResult {
     exit_code: i32,
     surfaced_thread_id: Option<String>,
     surfaced_worker_event: Option<ContinueWorldWorkerEventV1>,
-    surfaced_canonical_worker_event: Option<substrate_common::agent_events::WorldWorkerEventV1>,
 }
 
 #[cfg(target_os = "linux")]
@@ -1871,6 +1880,7 @@ async fn continue_world_worker(
         let acceptance_submission =
             prepare_retained_acceptance_submission(&prepared, &workspace_root)?;
         let stream_result = execute_accepted_continue_world_worker_stream_for_turn_kind(
+            &prepared.store,
             &acceptance_submission.submit_request,
             &base_policy,
             turn_kind,
@@ -1886,28 +1896,31 @@ async fn continue_world_worker(
         &prepared,
         clarification_closeout.as_ref(),
     )?;
+    if matches!(
+        prepared.request.payload,
+        WorldDispatchPayloadV1::WorkerContinueForkCommand(_)
+    ) {
+        if let Some(worker_event) = stream_result.surfaced_worker_event.as_ref() {
+            persist_continue_world_worker_obligation(
+                &prepared.store,
+                &submit_request,
+                worker_event,
+            )
+            .with_context(|| {
+                format!(
+                    "failed to persist non-C1 fork-command obligation for {}",
+                    submit_request.participant_id
+                )
+            })?;
+        }
+    }
     if let Some(compatibility) = prepared.compatibility.as_ref() {
-        if let Some(worker_event) = stream_result
+        if stream_result
             .surfaced_worker_event
             .as_ref()
             .filter(|event| continue_world_worker_event_persists_live_obligation(event.event_class))
+            .is_some()
         {
-            if let Some(canonical_worker_event) =
-                stream_result.surfaced_canonical_worker_event.as_ref()
-            {
-                persist_continue_world_worker_obligation_typed(
-                    &prepared.store,
-                    &submit_request,
-                    worker_event,
-                    canonical_worker_event,
-                )?;
-            } else {
-                persist_continue_world_worker_obligation(
-                    &prepared.store,
-                    &submit_request,
-                    worker_event,
-                )?;
-            }
             spawn_router_owned_auto_attach_discovery_trigger(
                 prepared.store.clone(),
                 compatibility.session.orchestration_session_id.clone(),
@@ -2680,29 +2693,6 @@ fn persist_continue_world_worker_obligation_common(
             obligation.obligation_id, request.participant_id
         )
     })
-}
-
-#[cfg(target_os = "linux")]
-fn persist_continue_world_worker_obligation_typed(
-    store: &AgentRuntimeStateStore,
-    request: &transport_api_types::MemberTurnSubmitRequestV1,
-    worker_event: &ContinueWorldWorkerEventV1,
-    canonical_worker_event: &substrate_common::agent_events::WorldWorkerEventV1,
-) -> Result<()> {
-    persist_continue_world_worker_obligation_common(
-        store,
-        request,
-        worker_event,
-        ContinueWorldWorkerObligationFacts {
-            payload_request_id: &canonical_worker_event.request_id,
-            causation_event_id: Some(&canonical_worker_event.event_id),
-            causation_message_id: Some(&canonical_worker_event.causation_message_id),
-            causation_request_id: Some(&canonical_worker_event.causation_request_id),
-            target_backend_id: &canonical_worker_event.target_backend_id,
-            world_id: &canonical_worker_event.world_id,
-            world_generation: canonical_worker_event.world_generation,
-        },
-    )
 }
 
 #[cfg(target_os = "linux")]
@@ -5056,11 +5046,13 @@ async fn execute_continue_world_worker_stream_for_turn_kind(
     policy: &Policy,
     turn_kind: ContinueWorldWorkerTurnKind,
 ) -> Result<ContinueWorldWorkerStreamResult> {
-    execute_continue_world_worker_stream_for_turn_kind_impl(request, policy, turn_kind, None).await
+    execute_continue_world_worker_stream_for_turn_kind_impl(request, policy, turn_kind, None, None)
+        .await
 }
 
 #[cfg(target_os = "linux")]
 async fn execute_accepted_continue_world_worker_stream_for_turn_kind(
+    store: &AgentRuntimeStateStore,
     request: &transport_api_types::MemberTurnSubmitRequestV1,
     policy: &Policy,
     turn_kind: ContinueWorldWorkerTurnKind,
@@ -5071,6 +5063,7 @@ async fn execute_accepted_continue_world_worker_stream_for_turn_kind(
     validate_retained_submission_against_proposal(request, acceptance_proposal)?;
     let request = request.clone();
     let policy = policy.clone();
+    let store = store.clone();
     let receipt_registry = receipt_registry.clone();
     let execution_supervisor = execution_supervisor.clone();
     let acceptance_proposal = acceptance_proposal.clone();
@@ -5084,6 +5077,7 @@ async fn execute_accepted_continue_world_worker_stream_for_turn_kind(
                 &execution_supervisor,
                 &acceptance_proposal,
             )),
+            Some(&store),
         )
         .await;
         if outcome.is_err() {
@@ -5116,6 +5110,7 @@ async fn execute_continue_world_worker_stream_for_turn_kind_impl(
         &WorldWorkExecutionSupervisor,
         &WorldWorkAcceptanceProposalV1,
     )>,
+    store: Option<&AgentRuntimeStateStore>,
 ) -> Result<ContinueWorldWorkerStreamResult> {
     use http_body_util::BodyExt as _;
     use transport_api_types::ExecuteStreamFrame;
@@ -5135,8 +5130,6 @@ async fn execute_continue_world_worker_stream_for_turn_kind_impl(
     let mut stream_error = None::<String>;
     let mut surfaced_thread_id = None::<String>;
     let mut surfaced_worker_event = None::<ContinueWorldWorkerEventV1>;
-    let mut surfaced_canonical_worker_event =
-        None::<substrate_common::agent_events::WorldWorkerEventV1>;
 
     while let Some(frame) = body.as_mut().frame().await {
         let frame = match frame {
@@ -5344,6 +5337,24 @@ async fn execute_continue_world_worker_stream_for_turn_kind_impl(
                             }
                             return Err(err);
                         }
+                        if let (
+                            Some((receipt_registry, execution_supervisor, _)),
+                            Some(claim),
+                            Some(store),
+                        ) = (acceptance, active_claim.as_ref(), store)
+                        {
+                            if let Err(err) = reconcile_retained_event_obligations(
+                                store,
+                                receipt_registry,
+                                execution_supervisor,
+                                &claim.acceptance_record_id,
+                            ) {
+                                if stream_error.is_none() {
+                                    stream_error = Some(format!("{err:#}"));
+                                }
+                                continue;
+                            }
+                        }
                         let preserve_existing_live_event =
                             surfaced_worker_event.as_ref().is_some_and(|existing| {
                                 continue_world_worker_event_persists_live_obligation(
@@ -5353,7 +5364,6 @@ async fn execute_continue_world_worker_stream_for_turn_kind_impl(
                         if !preserve_existing_live_event {
                             // Preserve the first surfaced durable worker obligation even if
                             // later obligation-like or ordinary stream events arrive before exit.
-                            surfaced_canonical_worker_event = classified_event.canonical.clone();
                             surfaced_worker_event = Some(classified_event.compatibility());
                         }
                     }
@@ -5367,6 +5377,23 @@ async fn execute_continue_world_worker_stream_for_turn_kind_impl(
                     exit_code = Some(exit);
                     if acceptance.is_none() {
                         break;
+                    }
+                    if let (
+                        Some((receipt_registry, execution_supervisor, _)),
+                        Some(claim),
+                        Some(store),
+                    ) = (acceptance, active_claim.as_ref(), store)
+                    {
+                        if let Err(err) = reconcile_retained_event_obligations(
+                            store,
+                            receipt_registry,
+                            execution_supervisor,
+                            &claim.acceptance_record_id,
+                        ) {
+                            if stream_error.is_none() {
+                                stream_error = Some(format!("{err:#}"));
+                            }
+                        }
                     }
                 }
                 ExecuteStreamFrame::Error { message, .. } => {
@@ -5429,19 +5456,13 @@ async fn execute_continue_world_worker_stream_for_turn_kind_impl(
     if surfaced_thread_id.is_none() {
         surfaced_thread_id = surfaced_worker_event
             .as_ref()
-            .and_then(|worker_event| worker_event.thread_id.clone())
-            .or_else(|| {
-                surfaced_canonical_worker_event
-                    .as_ref()
-                    .map(|worker_event| worker_event.thread_id.clone())
-            });
+            .and_then(|worker_event| worker_event.thread_id.clone());
     }
 
     Ok(ContinueWorldWorkerStreamResult {
         exit_code,
         surfaced_thread_id,
         surfaced_worker_event,
-        surfaced_canonical_worker_event,
     })
 }
 
@@ -9266,6 +9287,18 @@ mod tests {
         WorldWorkAcceptanceProposalV1,
         transport_api_types::MemberTurnSubmitRequestV1,
     ) {
+        reserve_b21_retained_acceptance_with_correlation(receipt_registry, authority_store_id, None)
+    }
+
+    #[cfg(target_os = "linux")]
+    fn reserve_b21_retained_acceptance_with_correlation(
+        receipt_registry: &WorldWorkReceiptRegistry,
+        authority_store_id: &str,
+        host_transition_correlation: Option<substrate_common::HostTransitionWorkCorrelationV1>,
+    ) -> (
+        WorldWorkAcceptanceProposalV1,
+        transport_api_types::MemberTurnSubmitRequestV1,
+    ) {
         let mut request_out = None;
         let outcome = receipt_registry
             .prepare_world_work_acceptance_proposal(
@@ -9282,6 +9315,8 @@ mod tests {
                     proposal.acceptance_context.message_id = Some(message_id.clone());
                     proposal.authority_store_id = authority_store_id.to_string();
                     proposal.created_at = allocation.created_at;
+                    proposal.acceptance_context.host_transition_correlation =
+                        host_transition_correlation.clone();
                     request.acceptance_context = Some(proposal.acceptance_context.clone());
                     let ProposedWorldWorkIdentityV1::RetainedTurn {
                         message_id: proposed_message_id,
@@ -9529,8 +9564,10 @@ mod tests {
     #[tokio::test(flavor = "multi_thread", worker_threads = 2)]
     #[serial]
     async fn b21_retained_production_handoff_claims_before_next_frame() {
-        let (_authority_root, receipt_registry, execution_supervisor, authority_store_id) =
+        let (authority_root, receipt_registry, execution_supervisor, authority_store_id) =
             b21_test_acceptance_stores();
+        let _home_guard = EnvVarGuard::set_path("SUBSTRATE_HOME", authority_root.path());
+        let store = sample_state_store();
         let (proposal, submit_request) =
             reserve_b21_retained_acceptance(&receipt_registry, &authority_store_id);
         let acceptance_record_id = proposal
@@ -9606,6 +9643,7 @@ mod tests {
 
         let policy = sample_world_dispatch_policy();
         let execute = execute_accepted_continue_world_worker_stream_for_turn_kind(
+            &store,
             &submit_request,
             &policy,
             ContinueWorldWorkerTurnKind::GenericContinue,
@@ -9663,9 +9701,648 @@ mod tests {
     #[cfg(target_os = "linux")]
     #[tokio::test(flavor = "multi_thread", worker_threads = 2)]
     #[serial]
-    async fn b21_accepted_retained_policy_error_observes_exact_terminal_before_failing_waiter() {
-        let (_authority_root, receipt_registry, execution_supervisor, authority_store_id) =
+    async fn b21_retained_materializes_attention_obligation_before_terminal_cut_and_replay_is_noop()
+    {
+        let (authority_root, receipt_registry, execution_supervisor, authority_store_id) =
             b21_test_acceptance_stores();
+        let _home_guard = EnvVarGuard::set_path("SUBSTRATE_HOME", authority_root.path());
+        let store = sample_state_store();
+        let (proposal, submit_request) =
+            reserve_b21_retained_acceptance(&receipt_registry, &authority_store_id);
+        let acceptance_record_id = proposal
+            .acceptance_context
+            .proposed_acceptance_record_id
+            .clone();
+        let socket_home = tempdir().expect("B2.1 retained materialization socket tempdir");
+        let socket_path = socket_home.path().join("b21-retained-materialization.sock");
+        let listener =
+            UnixListener::bind(&socket_path).expect("bind B2.1 retained materialization socket");
+        let (event_sent_tx, event_sent_rx) = tokio::sync::oneshot::channel();
+        let (allow_terminal_tx, allow_terminal_rx) = tokio::sync::oneshot::channel();
+        let submit_for_server = submit_request.clone();
+        let server = tokio::spawn(async move {
+            let mut stream = loop {
+                let (mut stream, _addr) = listener
+                    .accept()
+                    .await
+                    .expect("accept B2.1 retained materialization connection");
+                let (header, _) = read_http_request(&mut stream)
+                    .await
+                    .expect("read B2.1 retained materialization request");
+                let first_line = header.lines().next().unwrap_or_default();
+                if first_line.starts_with("GET /v1/capabilities ") {
+                    write_http_json(
+                        &mut stream,
+                        "200 OK",
+                        r#"{"schema_version":1,"policy_snapshot_v1_supported":true}"#,
+                    )
+                    .await;
+                    continue;
+                }
+                assert!(first_line.starts_with("POST /v1/member_turn/stream "));
+                break stream;
+            };
+            write_http_stream_start(&mut stream).await;
+            write_chunked_frame(
+                &mut stream,
+                &transport_api_types::ExecuteStreamFrame::Start {
+                    frame_identity: test_runtime_frame_identity(1),
+                    span_id: "spn_b21_retained_materialization".to_string(),
+                },
+            )
+            .await;
+            write_chunked_frame(
+                &mut stream,
+                &transport_api_types::ExecuteStreamFrame::Event {
+                    frame_identity: test_runtime_frame_identity(2),
+                    event: sample_typed_continue_stream_event_for_request(
+                        &submit_for_server,
+                        test_runtime_frame_identity(2),
+                        test_runtime_event_identity(1),
+                        json!({
+                            "event_class": "approval_request",
+                            "payload": { "message": "requires approval" }
+                        }),
+                    ),
+                },
+            )
+            .await;
+            event_sent_tx
+                .send(())
+                .expect("signal retained materialization event");
+            allow_terminal_rx
+                .await
+                .expect("release retained materialization terminal");
+            write_chunked_frame(
+                &mut stream,
+                &transport_api_types::ExecuteStreamFrame::Exit {
+                    frame_identity: test_runtime_frame_identity(3),
+                    event_identity: test_runtime_event_identity(2),
+                    terminal_identity: test_runtime_terminal_identity(2),
+                    exit: 0,
+                    span_id: "spn_b21_retained_materialization".to_string(),
+                    scopes_used: Vec::new(),
+                    fs_diff: None,
+                    process_telemetry: Default::default(),
+                },
+            )
+            .await;
+            finish_chunked_stream(&mut stream).await;
+        });
+        let _socket_guard = EnvVarGuard::set_path("SUBSTRATE_WORLD_SOCKET", &socket_path);
+
+        let policy = sample_world_dispatch_policy();
+        let execute = execute_accepted_continue_world_worker_stream_for_turn_kind(
+            &store,
+            &submit_request,
+            &policy,
+            ContinueWorldWorkerTurnKind::GenericContinue,
+            &receipt_registry,
+            &execution_supervisor,
+            &proposal,
+        );
+        let observe_materialization = async {
+            timeout(Duration::from_secs(3), event_sent_rx)
+                .await
+                .expect("timed out waiting for retained materialization event")
+                .expect("observe retained materialization event");
+            let state = timeout(Duration::from_secs(3), async {
+                loop {
+                    let state = store
+                        .load_obligation_ledger_state("sess_dispatch", &acceptance_record_id)
+                        .expect("load retained C1 state");
+                    if let Some(state) = state.filter(|state| {
+                        state.materialized_through_event_sequence == 1
+                            && state.terminal_event_sequence.is_none()
+                    }) {
+                        break state;
+                    }
+                    tokio::task::yield_now().await;
+                }
+            })
+            .await
+            .unwrap_or_else(|_| {
+                let diagnostic = reconcile_retained_event_obligations(
+                    &store,
+                    &receipt_registry,
+                    &execution_supervisor,
+                    &acceptance_record_id,
+                )
+                .map(|state| format!("{state:?}"))
+                .unwrap_or_else(|error| format!("{error:#}"));
+                panic!(
+                    "timed out waiting for pre-terminal retained C1 materialization; direct reconcile: {diagnostic}"
+                );
+            });
+            assert_eq!(state.session_ledger_revision, 1);
+            let events = store
+                .list_materialized_obligation_ledger_events("sess_dispatch", &acceptance_record_id)
+                .expect("list retained C1 events before terminal");
+            assert_eq!(events.len(), 1);
+            assert_eq!(
+                events[0].event_class,
+                substrate_common::agent_events::WorldWorkerEventClassV1::ApprovalRequest
+            );
+            assert_eq!(events[0].source_journal_event.event_sequence, 1);
+            assert!(events[0].obligation_id.is_some());
+
+            let obligations = store
+                .list_materialized_obligation_ledger_obligations(
+                    "sess_dispatch",
+                    &acceptance_record_id,
+                )
+                .expect("list retained C1 obligations before terminal");
+            assert_eq!(obligations.len(), 1);
+            assert_eq!(
+                obligations[0].kind,
+                OrchestrationObligationKind::ApprovalRequired
+            );
+            assert!(obligations[0].has_c1_materialization_identity());
+            assert_eq!(
+                obligations[0]
+                    .source_journal_event
+                    .as_ref()
+                    .expect("C1 obligation source journal event")
+                    .event_sequence,
+                1
+            );
+            assert!(
+                !store.canonical_obligations_dir("sess_dispatch").exists(),
+                "C1 retained materialization must not recreate legacy session obligation artifacts"
+            );
+            allow_terminal_tx
+                .send(())
+                .expect("release retained materialization terminal frame");
+        };
+        let (result, ()) = tokio::join!(execute, observe_materialization);
+        let result =
+            result.expect("B2.1 retained materialization stream completes after durable handoff");
+        assert_eq!(result.exit_code, 0);
+
+        let terminal_state = store
+            .load_obligation_ledger_state("sess_dispatch", &acceptance_record_id)
+            .expect("load retained terminal C1 state")
+            .expect("retained terminal C1 state exists");
+        assert_eq!(terminal_state.session_ledger_revision, 2);
+        assert_eq!(terminal_state.materialized_through_event_sequence, 2);
+        assert_eq!(terminal_state.terminal_event_sequence, Some(2));
+
+        let cursor_before = store
+            .load_obligation_ledger_revision_cursor("sess_dispatch")
+            .expect("load retained C1 revision cursor");
+        let obligation_id = store
+            .list_materialized_obligation_ledger_obligations("sess_dispatch", &acceptance_record_id)
+            .expect("list retained C1 obligations before crash simulation")[0]
+            .obligation_id
+            .clone();
+        let event_path =
+            store.canonical_obligation_ledger_event_path("sess_dispatch", &acceptance_record_id, 1);
+        let obligation_path = store.canonical_obligation_ledger_obligation_path(
+            "sess_dispatch",
+            &acceptance_record_id,
+            &obligation_id,
+        );
+        std::fs::remove_file(&event_path).expect("remove retained C1 event artifact");
+        std::fs::remove_file(&obligation_path).expect("remove retained C1 obligation artifact");
+
+        let repaired_state = reconcile_retained_event_obligations(
+            &store,
+            &receipt_registry,
+            &execution_supervisor,
+            &acceptance_record_id,
+        )
+        .expect("re-hydrate missing retained C1 children after simulated crash");
+        let cursor_after_repair = store
+            .load_obligation_ledger_revision_cursor("sess_dispatch")
+            .expect("reload retained C1 revision cursor after repair");
+        assert_eq!(repaired_state, terminal_state);
+        assert_eq!(cursor_before, cursor_after_repair);
+        assert!(
+            event_path.is_file(),
+            "repair must restore the missing retained C1 event artifact"
+        );
+        assert!(
+            obligation_path.is_file(),
+            "repair must restore the missing retained C1 obligation artifact"
+        );
+
+        let replay_state = reconcile_retained_event_obligations(
+            &store,
+            &receipt_registry,
+            &execution_supervisor,
+            &acceptance_record_id,
+        )
+        .expect("replay exact retained observation into C1");
+        let cursor_after = store
+            .load_obligation_ledger_revision_cursor("sess_dispatch")
+            .expect("reload retained C1 revision cursor");
+        assert_eq!(replay_state, terminal_state);
+        assert_eq!(cursor_after_repair, cursor_after);
+        assert_eq!(
+            store
+                .list_materialized_obligation_ledger_events("sess_dispatch", &acceptance_record_id)
+                .expect("list retained C1 events after replay")
+                .len(),
+            1
+        );
+        assert_eq!(
+            store
+                .list_materialized_obligation_ledger_obligations(
+                    "sess_dispatch",
+                    &acceptance_record_id,
+                )
+                .expect("list retained C1 obligations after replay")
+                .len(),
+            1
+        );
+        server
+            .await
+            .expect("join B2.1 retained materialization server");
+    }
+
+    #[cfg(target_os = "linux")]
+    #[tokio::test(flavor = "multi_thread", worker_threads = 2)]
+    #[serial]
+    async fn b21_retained_snapshot_is_pending_until_exact_terminal_cut_then_completes() {
+        let (authority_root, receipt_registry, execution_supervisor, authority_store_id) =
+            b21_test_acceptance_stores();
+        let _home_guard = EnvVarGuard::set_path("SUBSTRATE_HOME", authority_root.path());
+        let store = sample_state_store();
+        let correlation = substrate_common::HostTransitionWorkCorrelationV1 {
+            schema_version: 1,
+            authority_store_id: authority_store_id.clone(),
+            orchestration_session_id: "sess_dispatch".to_string(),
+            authoritative_participant_id: "orch_dispatch".to_string(),
+            transition_intent_id: "intent-c1-snapshot".to_string(),
+            transition_intent_revision_observed: 7,
+            transition_run_id: "turn-run-c1-snapshot".to_string(),
+            transition_payload_commitment:
+                substrate_common::OpaqueAuthorityCommitmentV1::StoreHmacSha256 {
+                    key_id: "ak_c1_snapshot".to_string(),
+                    domain: "substrate.a1.transition-input.v1".to_string(),
+                    digest_hex: "0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef"
+                        .to_string(),
+                },
+            authority_revision_observed: 11,
+        };
+        let (proposal, submit_request) = reserve_b21_retained_acceptance_with_correlation(
+            &receipt_registry,
+            &authority_store_id,
+            Some(correlation.clone()),
+        );
+        let acceptance_record_id = proposal
+            .acceptance_context
+            .proposed_acceptance_record_id
+            .clone();
+        let required_terminal_event_id = test_runtime_event_identity(2).event_id;
+        let socket_home = tempdir().expect("B2.1 retained snapshot socket tempdir");
+        let socket_path = socket_home.path().join("b21-retained-snapshot.sock");
+        let listener =
+            UnixListener::bind(&socket_path).expect("bind B2.1 retained snapshot socket");
+        let (event_sent_tx, event_sent_rx) = tokio::sync::oneshot::channel();
+        let (allow_terminal_tx, allow_terminal_rx) = tokio::sync::oneshot::channel();
+        let submit_for_server = submit_request.clone();
+        let server = tokio::spawn(async move {
+            let mut stream = loop {
+                let (mut stream, _addr) = listener
+                    .accept()
+                    .await
+                    .expect("accept B2.1 retained snapshot connection");
+                let (header, _) = read_http_request(&mut stream)
+                    .await
+                    .expect("read B2.1 retained snapshot request");
+                let first_line = header.lines().next().unwrap_or_default();
+                if first_line.starts_with("GET /v1/capabilities ") {
+                    write_http_json(
+                        &mut stream,
+                        "200 OK",
+                        r#"{"schema_version":1,"policy_snapshot_v1_supported":true}"#,
+                    )
+                    .await;
+                    continue;
+                }
+                assert!(first_line.starts_with("POST /v1/member_turn/stream "));
+                break stream;
+            };
+            write_http_stream_start(&mut stream).await;
+            write_chunked_frame(
+                &mut stream,
+                &transport_api_types::ExecuteStreamFrame::Start {
+                    frame_identity: test_runtime_frame_identity(1),
+                    span_id: "spn_b21_retained_snapshot".to_string(),
+                },
+            )
+            .await;
+            write_chunked_frame(
+                &mut stream,
+                &transport_api_types::ExecuteStreamFrame::Event {
+                    frame_identity: test_runtime_frame_identity(2),
+                    event: sample_typed_continue_stream_event_for_request(
+                        &submit_for_server,
+                        test_runtime_frame_identity(2),
+                        test_runtime_event_identity(1),
+                        json!({
+                            "event_class": "approval_request",
+                            "payload": { "message": "requires approval" }
+                        }),
+                    ),
+                },
+            )
+            .await;
+            event_sent_tx
+                .send(())
+                .expect("signal retained snapshot event");
+            allow_terminal_rx
+                .await
+                .expect("release retained snapshot terminal");
+            write_chunked_frame(
+                &mut stream,
+                &transport_api_types::ExecuteStreamFrame::Exit {
+                    frame_identity: test_runtime_frame_identity(3),
+                    event_identity: test_runtime_event_identity(2),
+                    terminal_identity: test_runtime_terminal_identity(2),
+                    exit: 0,
+                    span_id: "spn_b21_retained_snapshot".to_string(),
+                    scopes_used: Vec::new(),
+                    fs_diff: None,
+                    process_telemetry: Default::default(),
+                },
+            )
+            .await;
+            finish_chunked_stream(&mut stream).await;
+        });
+        let _socket_guard = EnvVarGuard::set_path("SUBSTRATE_WORLD_SOCKET", &socket_path);
+
+        let policy = sample_world_dispatch_policy();
+        let execute = execute_accepted_continue_world_worker_stream_for_turn_kind(
+            &store,
+            &submit_request,
+            &policy,
+            ContinueWorldWorkerTurnKind::GenericContinue,
+            &receipt_registry,
+            &execution_supervisor,
+            &proposal,
+        );
+        let observe_snapshot = async {
+            timeout(Duration::from_secs(3), event_sent_rx)
+                .await
+                .expect("timed out waiting for retained snapshot event")
+                .expect("observe retained snapshot event");
+            let _state = timeout(Duration::from_secs(3), async {
+                loop {
+                    let state = store
+                        .load_obligation_ledger_state("sess_dispatch", &acceptance_record_id)
+                        .expect("load retained snapshot C1 state");
+                    if let Some(state) =
+                        state.filter(|state| state.materialized_through_event_sequence == 1)
+                    {
+                        break state;
+                    }
+                    tokio::task::yield_now().await;
+                }
+            })
+            .await
+            .unwrap_or_else(|_| {
+                let diagnostic = reconcile_retained_event_obligations(
+                    &store,
+                    &receipt_registry,
+                    &execution_supervisor,
+                    &acceptance_record_id,
+                )
+                .map(|state| format!("{state:?}"))
+                .unwrap_or_else(|error| format!("{error:#}"));
+                panic!(
+                    "timed out waiting for retained snapshot C1 state; direct reconcile: {diagnostic}"
+                );
+            });
+
+            let acceptance = receipt_registry
+                .inspect_world_work_acceptance_by_id(&authority_store_id, &acceptance_record_id)
+                .expect("inspect retained snapshot acceptance")
+                .expect("retained snapshot acceptance exists");
+            let snapshot_request = ObligationLedgerSnapshotReadRequestV1 {
+                schema_version: 1,
+                authority_store_id: authority_store_id.clone(),
+                orchestration_session_id: acceptance.orchestration_session_id.clone(),
+                authoritative_participant_id: acceptance.caller_participant_id.clone(),
+                acceptance_record_id: acceptance.acceptance_record_id.clone(),
+                acceptance_record_revision: acceptance.record_revision,
+                stream_id: acceptance.runtime_acceptance.stream_id.clone(),
+                accepted_work_identity: acceptance.work_identity.clone(),
+                host_transition_correlation: correlation.clone(),
+                transition_intent_id: correlation.transition_intent_id.clone(),
+                transition_run_id: correlation.transition_run_id.clone(),
+                authority_revision_observed: acceptance.authority_revision_observed,
+                required_terminal_event_id: required_terminal_event_id.clone(),
+                required_terminal_event_sequence: 2,
+            };
+
+            let pending = read_obligation_ledger_snapshot(
+                &store,
+                &receipt_registry,
+                &execution_supervisor,
+                &snapshot_request,
+            )
+            .expect("read retained C1 snapshot before terminal");
+            match pending {
+                ObligationLedgerSnapshotReadV1::Pending {
+                    observed_session_ledger_revision,
+                    required_terminal_event_sequence,
+                    ..
+                } => {
+                    assert_eq!(observed_session_ledger_revision, 1);
+                    assert_eq!(required_terminal_event_sequence, 2);
+                }
+                ObligationLedgerSnapshotReadV1::Complete { .. } => {
+                    panic!("retained C1 snapshot cannot complete before the exact terminal cut")
+                }
+            }
+
+            allow_terminal_tx
+                .send(())
+                .expect("release retained snapshot terminal frame");
+            snapshot_request
+        };
+        let (result, snapshot_request) = tokio::join!(execute, observe_snapshot);
+        let result = result.expect("B2.1 retained snapshot stream completes");
+        assert_eq!(result.exit_code, 0);
+
+        let complete = read_obligation_ledger_snapshot(
+            &store,
+            &receipt_registry,
+            &execution_supervisor,
+            &snapshot_request,
+        )
+        .expect("read retained C1 snapshot after terminal");
+        match complete {
+            ObligationLedgerSnapshotReadV1::Pending { .. } => {
+                panic!("retained C1 snapshot must complete at the exact terminal cut")
+            }
+            ObligationLedgerSnapshotReadV1::Complete { snapshot } => {
+                assert_eq!(
+                    snapshot.transition_intent_id,
+                    correlation.transition_intent_id
+                );
+                assert_eq!(snapshot.transition_run_id, correlation.transition_run_id);
+                assert_eq!(
+                    snapshot.materialization_cut.terminal_event_id,
+                    required_terminal_event_id
+                );
+                assert_eq!(snapshot.materialization_cut.terminal_event_sequence, 2);
+                assert_eq!(
+                    snapshot
+                        .materialization_cut
+                        .materialized_through_event_sequence,
+                    2
+                );
+                assert_eq!(snapshot.materialized_journal_events.len(), 1);
+                assert_eq!(snapshot.materialized_journal_events[0].event_sequence, 1);
+                assert_eq!(
+                    snapshot.attention_disposition,
+                    ObligationAttentionDispositionV1::HasUnresolvedAttention
+                );
+                assert_eq!(snapshot.unresolved_attention_obligations.len(), 1);
+            }
+        }
+
+        let mut mismatched_terminal_request = snapshot_request.clone();
+        mismatched_terminal_request.required_terminal_event_id = "evt_terminal_wrong".to_string();
+        let mismatched_terminal_err = read_obligation_ledger_snapshot(
+            &store,
+            &receipt_registry,
+            &execution_supervisor,
+            &mismatched_terminal_request,
+        )
+        .expect_err("mismatched retained snapshot terminal cut must fail closed");
+        assert!(
+            mismatched_terminal_err
+                .to_string()
+                .contains("terminal cut mismatched the exact supervisor observation"),
+            "retained snapshot should reject a mismatched terminal cut explicitly: {mismatched_terminal_err:#}"
+        );
+
+        let stored_obligation = store
+            .list_materialized_obligation_ledger_obligations("sess_dispatch", &acceptance_record_id)
+            .expect("list retained snapshot C1 obligations for corruption test")[0]
+            .clone();
+        let obligation_path = store.canonical_obligation_ledger_obligation_path(
+            "sess_dispatch",
+            &acceptance_record_id,
+            &stored_obligation.obligation_id,
+        );
+
+        let mut drifted = stored_obligation.clone();
+        drifted.kind = OrchestrationObligationKind::Blocked;
+        drifted.summary = "drifted retained snapshot obligation".to_string();
+        std::fs::write(
+            &obligation_path,
+            serde_json::to_vec_pretty(&drifted)
+                .expect("serialize drifted retained snapshot obligation"),
+        )
+        .expect("persist drifted retained snapshot obligation");
+        let drifted_err = read_obligation_ledger_snapshot(
+            &store,
+            &receipt_registry,
+            &execution_supervisor,
+            &snapshot_request,
+        )
+        .expect_err("drifted retained C1 obligation must fail the exact snapshot cut closed");
+        assert!(
+            drifted_err
+                .to_string()
+                .contains("conflicting duplicate C1 obligation"),
+            "retained snapshot should reject immutable obligation drift explicitly: {drifted_err:#}"
+        );
+        std::fs::write(
+            &obligation_path,
+            serde_json::to_vec_pretty(&stored_obligation)
+                .expect("serialize restored retained snapshot obligation"),
+        )
+        .expect("restore retained snapshot obligation after drift test");
+
+        let mut unexpected = stored_obligation;
+        unexpected.obligation_id = "obl_c1_snapshot_unexpected".to_string();
+        unexpected.canonical_record_commitment = Some(
+            crate::execution::agent_runtime::obligation_ledger::obligation_snapshot_record_commitment(
+                &snapshot_request.authority_store_id,
+                &snapshot_request.orchestration_session_id,
+                &snapshot_request.authoritative_participant_id,
+                unexpected
+                    .source_journal_event
+                    .as_ref()
+                    .expect("unexpected C1 obligation source journal event"),
+                &unexpected.obligation_id,
+                unexpected
+                    .obligation_revision
+                    .expect("unexpected C1 obligation revision"),
+            )
+            .expect("compute unexpected C1 obligation commitment"),
+        );
+        let unexpected_path = store.canonical_obligation_ledger_obligation_path(
+            "sess_dispatch",
+            &acceptance_record_id,
+            &unexpected.obligation_id,
+        );
+        std::fs::write(
+            &unexpected_path,
+            serde_json::to_vec_pretty(&unexpected)
+                .expect("serialize unexpected retained snapshot obligation"),
+        )
+        .expect("persist unexpected retained snapshot obligation");
+        let unexpected_err = read_obligation_ledger_snapshot(
+            &store,
+            &receipt_registry,
+            &execution_supervisor,
+            &snapshot_request,
+        )
+        .expect_err("unexpected retained C1 obligation must fail the exact snapshot cut closed");
+        assert!(
+            unexpected_err
+                .to_string()
+                .contains("unexpected C1 materialized obligation"),
+            "unexpected retained C1 obligation should be rejected explicitly: {unexpected_err:#}"
+        );
+        std::fs::remove_file(&unexpected_path)
+            .expect("remove unexpected retained snapshot obligation");
+
+        let mut corrupted_state = store
+            .load_obligation_ledger_state("sess_dispatch", &acceptance_record_id)
+            .expect("load retained snapshot C1 state for corruption test")
+            .expect("retained snapshot C1 state exists for corruption test");
+        corrupted_state.session_ledger_revision += 1;
+        corrupted_state.materialized_through_event_sequence = 3;
+        let corrupted_state_path =
+            store.canonical_obligation_ledger_state_path("sess_dispatch", &acceptance_record_id);
+        std::fs::write(
+            &corrupted_state_path,
+            serde_json::to_vec_pretty(&corrupted_state)
+                .expect("serialize corrupted retained snapshot state"),
+        )
+        .expect("persist corrupted retained snapshot state");
+        let watermark_err = read_obligation_ledger_snapshot(
+            &store,
+            &receipt_registry,
+            &execution_supervisor,
+            &snapshot_request,
+        )
+        .expect_err("watermark beyond the exact retained terminal cut must fail closed");
+        assert!(
+            watermark_err
+                .to_string()
+                .contains("watermark advanced beyond the exact observed event cut"),
+            "retained snapshot should reject a watermark beyond the exact cut: {watermark_err:#}"
+        );
+        server.await.expect("join B2.1 retained snapshot server");
+    }
+
+    #[cfg(target_os = "linux")]
+    #[tokio::test(flavor = "multi_thread", worker_threads = 2)]
+    #[serial]
+    async fn b21_accepted_retained_policy_error_observes_exact_terminal_before_failing_waiter() {
+        let (authority_root, receipt_registry, execution_supervisor, authority_store_id) =
+            b21_test_acceptance_stores();
+        let _home_guard = EnvVarGuard::set_path("SUBSTRATE_HOME", authority_root.path());
+        let store = sample_state_store();
         let (proposal, submit_request) =
             reserve_b21_retained_acceptance(&receipt_registry, &authority_store_id);
         let acceptance_record_id = proposal
@@ -9759,6 +10436,7 @@ mod tests {
         let _socket_guard = EnvVarGuard::set_path("SUBSTRATE_WORLD_SOCKET", &socket_path);
 
         let result = execute_accepted_continue_world_worker_stream_for_turn_kind(
+            &store,
             &submit_request,
             &Policy::default(),
             ContinueWorldWorkerTurnKind::GenericContinue,
@@ -9893,8 +10571,10 @@ mod tests {
     #[tokio::test(flavor = "multi_thread", worker_threads = 2)]
     #[serial]
     async fn b21_dropping_retained_foreground_waiter_does_not_drop_observation() {
-        let (_authority_root, receipt_registry, execution_supervisor, authority_store_id) =
+        let (authority_root, receipt_registry, execution_supervisor, authority_store_id) =
             b21_test_acceptance_stores();
+        let _home_guard = EnvVarGuard::set_path("SUBSTRATE_HOME", authority_root.path());
+        let store = sample_state_store();
         let (proposal, submit_request) =
             reserve_b21_retained_acceptance(&receipt_registry, &authority_store_id);
         let acceptance_record_id = proposal
@@ -9956,10 +10636,12 @@ mod tests {
         });
         let _socket_guard = EnvVarGuard::set_path("SUBSTRATE_WORLD_SOCKET", &socket_path);
         let policy = sample_world_dispatch_policy();
+        let store_for_waiter = store.clone();
         let receipt_for_waiter = receipt_registry.clone();
         let supervisor_for_waiter = execution_supervisor.clone();
         let foreground_waiter = tokio::spawn(async move {
             execute_accepted_continue_world_worker_stream_for_turn_kind(
+                &store_for_waiter,
                 &submit_request,
                 &policy,
                 ContinueWorldWorkerTurnKind::GenericContinue,
@@ -26605,8 +27287,10 @@ agents:
     #[tokio::test(flavor = "multi_thread", worker_threads = 2)]
     #[serial]
     async fn accepted_retained_typed_event_validation_precedes_generic_journaling() {
-        let (_authority_root, receipt_registry, execution_supervisor, authority_store_id) =
+        let (authority_root, receipt_registry, execution_supervisor, authority_store_id) =
             b21_test_acceptance_stores();
+        let _home_guard = EnvVarGuard::set_path("SUBSTRATE_HOME", authority_root.path());
+        let store = sample_state_store();
         let (proposal, submit_request) =
             reserve_b21_retained_acceptance(&receipt_registry, &authority_store_id);
         let acceptance_record_id = proposal
@@ -26700,6 +27384,7 @@ agents:
         let _socket_guard = EnvVarGuard::set_path("SUBSTRATE_WORLD_SOCKET", &socket_path);
 
         let result = execute_accepted_continue_world_worker_stream_for_turn_kind(
+            &store,
             &submit_request,
             &Policy::default(),
             ContinueWorldWorkerTurnKind::GenericContinue,

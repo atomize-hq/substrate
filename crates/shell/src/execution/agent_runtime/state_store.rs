@@ -40,6 +40,8 @@ use super::{
     host_inbox::{HostInboxMaterializationState, HostInboxRecord},
     mapping::{MEMBER_ROLE, ORCHESTRATOR_ROLE},
     obligation_ledger::{
+        MaterializedObligationLedgerEventV1, ObligationLedgerMaterializationPlanV1,
+        ObligationLedgerRevisionCursorV1, ObligationLedgerSessionStateV1,
         OrchestrationObligationAttachState, OrchestrationObligationKind,
         OrchestrationObligationRecord, OrchestrationObligationReviewState,
         OrchestrationObligationSeverity,
@@ -50,6 +52,15 @@ use super::{
     },
     session::{AgentRuntimeParticipantRecord, AgentRuntimeSessionManifest},
 };
+
+const STALE_C1_OBLIGATION_LEDGER_MATERIALIZATION_PLAN_ERROR: &str =
+    "stale or conflicting C1 obligation ledger materialization plan";
+
+pub(crate) fn is_stale_or_conflicting_c1_obligation_ledger_materialization_plan_error(
+    error: &anyhow::Error,
+) -> bool {
+    error.root_cause().to_string() == STALE_C1_OBLIGATION_LEDGER_MATERIALIZATION_PLAN_ERROR
+}
 
 #[derive(Clone, Debug)]
 pub(crate) struct AgentRuntimeSessionRecord {
@@ -3027,6 +3038,66 @@ impl BoundAgentRuntimeStateStore {
         self.store.list_obligations(orchestration_session_id)
     }
 
+    pub(crate) fn load_obligation_ledger_revision_cursor(
+        &self,
+        orchestration_session_id: &str,
+    ) -> Result<ObligationLedgerRevisionCursorV1> {
+        self.store
+            .load_obligation_ledger_revision_cursor(orchestration_session_id)
+    }
+
+    pub(crate) fn load_obligation_ledger_state(
+        &self,
+        orchestration_session_id: &str,
+        acceptance_record_id: &str,
+    ) -> Result<Option<ObligationLedgerSessionStateV1>> {
+        self.store
+            .load_obligation_ledger_state(orchestration_session_id, acceptance_record_id)
+    }
+
+    pub(crate) fn load_materialized_obligation_ledger_event(
+        &self,
+        orchestration_session_id: &str,
+        acceptance_record_id: &str,
+        event_sequence: u64,
+    ) -> Result<Option<MaterializedObligationLedgerEventV1>> {
+        self.store.load_materialized_obligation_ledger_event(
+            orchestration_session_id,
+            acceptance_record_id,
+            event_sequence,
+        )
+    }
+
+    pub(crate) fn list_materialized_obligation_ledger_events(
+        &self,
+        orchestration_session_id: &str,
+        acceptance_record_id: &str,
+    ) -> Result<Vec<MaterializedObligationLedgerEventV1>> {
+        self.store.list_materialized_obligation_ledger_events(
+            orchestration_session_id,
+            acceptance_record_id,
+        )
+    }
+
+    pub(crate) fn list_materialized_obligation_ledger_obligations(
+        &self,
+        orchestration_session_id: &str,
+        acceptance_record_id: &str,
+    ) -> Result<Vec<OrchestrationObligationRecord>> {
+        self.store.list_materialized_obligation_ledger_obligations(
+            orchestration_session_id,
+            acceptance_record_id,
+        )
+    }
+
+    pub(crate) fn apply_obligation_ledger_materialization_plan(
+        &self,
+        plan: &ObligationLedgerMaterializationPlanV1,
+    ) -> Result<()> {
+        self.store
+            .apply_obligation_ledger_materialization_plan(plan)
+    }
+
     pub(crate) fn load_orchestration_session(
         &self,
         orchestration_session_id: &str,
@@ -3407,6 +3478,36 @@ struct ResolvedPublicSessionAuthority {
 }
 
 impl AgentRuntimeStateStore {
+    fn rebase_obligation_ledger_materialization_plan(
+        plan: &ObligationLedgerMaterializationPlanV1,
+        current_cursor: &ObligationLedgerRevisionCursorV1,
+    ) -> Result<(
+        ObligationLedgerRevisionCursorV1,
+        ObligationLedgerSessionStateV1,
+    )> {
+        let revision_delta = plan
+            .next_revision_cursor
+            .current_session_ledger_revision
+            .checked_sub(
+                plan.expected_revision_cursor
+                    .current_session_ledger_revision,
+            )
+            .ok_or_else(|| {
+                anyhow::anyhow!("C1 materialization plan session ledger revision regressed")
+            })?;
+        let rebased_revision = current_cursor
+            .current_session_ledger_revision
+            .checked_add(revision_delta)
+            .ok_or_else(|| {
+                anyhow::anyhow!("C1 materialization plan session ledger revision overflowed")
+            })?;
+        let mut rebased_cursor = current_cursor.clone();
+        rebased_cursor.current_session_ledger_revision = rebased_revision;
+        let mut rebased_state = plan.next_state.clone();
+        rebased_state.session_ledger_revision = rebased_revision;
+        Ok((rebased_cursor, rebased_state))
+    }
+
     pub(crate) fn new() -> Result<Self> {
         Ok(Self {
             substrate_home: substrate_paths::substrate_home()?,
@@ -3776,12 +3877,12 @@ impl AgentRuntimeStateStore {
     ) -> Result<Option<OrchestrationObligationRecord>> {
         use super::host_session_authority::store::LegacyStateStoreCollectionV1::Sessions;
         let file_name = format!("{obligation_id}.json");
-        let obligation = Self::transaction_read_json::<OrchestrationObligationRecord>(
+        let legacy = Self::transaction_read_json::<OrchestrationObligationRecord>(
             transaction,
             Sessions,
             &[orchestration_session_id, "obligations", file_name.as_str()],
         )?;
-        if let Some(obligation) = obligation.as_ref() {
+        if let Some(obligation) = legacy.as_ref() {
             self.validate_obligation_record(obligation)?;
             if obligation.orchestration_session_id != orchestration_session_id
                 || obligation.obligation_id != obligation_id
@@ -3789,7 +3890,21 @@ impl AgentRuntimeStateStore {
                 anyhow::bail!("orchestration obligation artifact identity mismatch");
             }
         }
-        Ok(obligation)
+        let materialized = self
+            .load_materialized_obligation_ledger_obligation_for_session_transaction(
+                transaction,
+                orchestration_session_id,
+                obligation_id,
+            )?;
+        match (legacy, materialized) {
+            (None, None) => Ok(None),
+            (Some(obligation), None) | (None, Some(obligation)) => Ok(Some(obligation)),
+            (Some(_), Some(_)) => {
+                anyhow::bail!(
+                    "duplicate orchestration obligation identity across compatibility surfaces"
+                )
+            }
+        }
     }
 
     fn list_obligations_transaction(
@@ -3798,15 +3913,208 @@ impl AgentRuntimeStateStore {
         orchestration_session_id: &str,
     ) -> Result<Vec<OrchestrationObligationRecord>> {
         use super::host_session_authority::store::LegacyStateStoreCollectionV1::Sessions;
-        let mut obligations = Self::transaction_list_json::<OrchestrationObligationRecord>(
+        let legacy = Self::transaction_list_json::<OrchestrationObligationRecord>(
             transaction,
             Sessions,
             &[orchestration_session_id, "obligations"],
         )?;
-        for obligation in &obligations {
+        for obligation in &legacy {
             self.validate_obligation_record(obligation)?;
             if obligation.orchestration_session_id != orchestration_session_id {
                 anyhow::bail!("orchestration obligation belongs to another session");
+            }
+        }
+        let materialized = self
+            .list_materialized_obligation_ledger_obligations_for_session_transaction(
+                transaction,
+                orchestration_session_id,
+            )?;
+        merge_compatibility_obligations(legacy, materialized)
+    }
+
+    fn load_obligation_ledger_revision_cursor_transaction(
+        transaction: &mut super::host_session_authority::store::LegacyWriterGuard,
+        orchestration_session_id: &str,
+    ) -> Result<Option<ObligationLedgerRevisionCursorV1>> {
+        use super::host_session_authority::store::LegacyStateStoreCollectionV1::Sessions;
+        Self::transaction_read_json::<ObligationLedgerRevisionCursorV1>(
+            transaction,
+            Sessions,
+            &[
+                orchestration_session_id,
+                "obligation-ledger",
+                "revision-cursor.json",
+            ],
+        )
+    }
+
+    fn load_obligation_ledger_state_transaction(
+        &self,
+        transaction: &mut super::host_session_authority::store::LegacyWriterGuard,
+        orchestration_session_id: &str,
+        acceptance_record_id: &str,
+    ) -> Result<Option<ObligationLedgerSessionStateV1>> {
+        use super::host_session_authority::store::LegacyStateStoreCollectionV1::Sessions;
+        let state = Self::transaction_read_json::<ObligationLedgerSessionStateV1>(
+            transaction,
+            Sessions,
+            &[
+                orchestration_session_id,
+                "obligation-ledger",
+                "acceptances",
+                acceptance_record_id,
+                "state.json",
+            ],
+        )?;
+        if let Some(state) = state.as_ref() {
+            state.validate()?;
+            if state.orchestration_session_id != orchestration_session_id
+                || state.acceptance_record_id != acceptance_record_id
+            {
+                anyhow::bail!("obligation ledger state artifact identity mismatch");
+            }
+        }
+        Ok(state)
+    }
+
+    fn load_materialized_obligation_ledger_event_transaction(
+        &self,
+        transaction: &mut super::host_session_authority::store::LegacyWriterGuard,
+        orchestration_session_id: &str,
+        acceptance_record_id: &str,
+        event_sequence: u64,
+    ) -> Result<Option<MaterializedObligationLedgerEventV1>> {
+        use super::host_session_authority::store::LegacyStateStoreCollectionV1::Sessions;
+        let file_name = format!("{event_sequence:020}.json");
+        let event = Self::transaction_read_json::<MaterializedObligationLedgerEventV1>(
+            transaction,
+            Sessions,
+            &[
+                orchestration_session_id,
+                "obligation-ledger",
+                "acceptances",
+                acceptance_record_id,
+                "events",
+                file_name.as_str(),
+            ],
+        )?;
+        if let Some(event) = event.as_ref() {
+            event.validate()?;
+            if event.orchestration_session_id != orchestration_session_id
+                || event.acceptance_record_id != acceptance_record_id
+                || event.source_journal_event.event_sequence != event_sequence
+            {
+                anyhow::bail!("materialized obligation ledger event artifact identity mismatch");
+            }
+        }
+        Ok(event)
+    }
+
+    fn list_materialized_obligation_ledger_events_transaction(
+        &self,
+        transaction: &mut super::host_session_authority::store::LegacyWriterGuard,
+        orchestration_session_id: &str,
+        acceptance_record_id: &str,
+    ) -> Result<Vec<MaterializedObligationLedgerEventV1>> {
+        use super::host_session_authority::store::LegacyStateStoreCollectionV1::Sessions;
+        let mut events = Self::transaction_list_json::<MaterializedObligationLedgerEventV1>(
+            transaction,
+            Sessions,
+            &[
+                orchestration_session_id,
+                "obligation-ledger",
+                "acceptances",
+                acceptance_record_id,
+                "events",
+            ],
+        )?;
+        for event in &events {
+            event.validate()?;
+            if event.orchestration_session_id != orchestration_session_id
+                || event.acceptance_record_id != acceptance_record_id
+            {
+                anyhow::bail!("materialized obligation ledger event belongs to another acceptance");
+            }
+        }
+        events.sort_by(|left, right| {
+            left.source_journal_event
+                .event_sequence
+                .cmp(&right.source_journal_event.event_sequence)
+                .then(
+                    left.source_journal_event
+                        .event_id
+                        .cmp(&right.source_journal_event.event_id),
+                )
+        });
+        Ok(events)
+    }
+
+    fn load_materialized_obligation_ledger_obligation_transaction(
+        &self,
+        transaction: &mut super::host_session_authority::store::LegacyWriterGuard,
+        orchestration_session_id: &str,
+        acceptance_record_id: &str,
+        obligation_id: &str,
+    ) -> Result<Option<OrchestrationObligationRecord>> {
+        use super::host_session_authority::store::LegacyStateStoreCollectionV1::Sessions;
+        let file_name = format!("{obligation_id}.json");
+        let obligation = Self::transaction_read_json::<OrchestrationObligationRecord>(
+            transaction,
+            Sessions,
+            &[
+                orchestration_session_id,
+                "obligation-ledger",
+                "acceptances",
+                acceptance_record_id,
+                "obligations",
+                file_name.as_str(),
+            ],
+        )?;
+        if let Some(obligation) = obligation.as_ref() {
+            self.validate_obligation_record(obligation)?;
+            if obligation.orchestration_session_id != orchestration_session_id
+                || obligation.obligation_id != obligation_id
+            {
+                anyhow::bail!("C1 materialized obligation artifact identity mismatch");
+            }
+            let Some(source_journal_event) = obligation.source_journal_event.as_ref() else {
+                anyhow::bail!("C1 materialized obligation omitted source_journal_event");
+            };
+            if source_journal_event.acceptance_record_id != acceptance_record_id {
+                anyhow::bail!("C1 materialized obligation belongs to another acceptance");
+            }
+        }
+        Ok(obligation)
+    }
+
+    fn list_materialized_obligation_ledger_obligations_transaction(
+        &self,
+        transaction: &mut super::host_session_authority::store::LegacyWriterGuard,
+        orchestration_session_id: &str,
+        acceptance_record_id: &str,
+    ) -> Result<Vec<OrchestrationObligationRecord>> {
+        use super::host_session_authority::store::LegacyStateStoreCollectionV1::Sessions;
+        let mut obligations = Self::transaction_list_json::<OrchestrationObligationRecord>(
+            transaction,
+            Sessions,
+            &[
+                orchestration_session_id,
+                "obligation-ledger",
+                "acceptances",
+                acceptance_record_id,
+                "obligations",
+            ],
+        )?;
+        for obligation in &obligations {
+            self.validate_obligation_record(obligation)?;
+            if obligation.orchestration_session_id != orchestration_session_id {
+                anyhow::bail!("C1 materialized obligation belongs to another session");
+            }
+            let Some(source_journal_event) = obligation.source_journal_event.as_ref() else {
+                anyhow::bail!("C1 materialized obligation omitted source_journal_event");
+            };
+            if source_journal_event.acceptance_record_id != acceptance_record_id {
+                anyhow::bail!("C1 materialized obligation belongs to another acceptance");
             }
         }
         obligations.sort_by(|left, right| {
@@ -3834,11 +4142,11 @@ impl AgentRuntimeStateStore {
         if session.is_none() && participants.is_empty() {
             return Ok(None);
         }
-        Ok(Some(self.build_session_record(
-            orchestration_session_id,
-            session,
-            participants,
-        )))
+        let mut record = self.build_session_record(orchestration_session_id, session, participants);
+        let obligations =
+            self.list_obligations_transaction(transaction, orchestration_session_id)?;
+        project_session_attention_compatibility(&mut record.session, &obligations)?;
+        Ok(Some(record))
     }
 
     fn list_sessions_transaction(
@@ -3877,9 +4185,13 @@ impl AgentRuntimeStateStore {
     }
 
     fn write_obligation_transaction(
+        &self,
         transaction: &mut super::host_session_authority::store::LegacyWriterGuard,
         obligation: &OrchestrationObligationRecord,
     ) -> Result<()> {
+        if obligation.has_c1_materialization_identity() {
+            return self.write_materialized_obligation_ledger_obligation(transaction, obligation);
+        }
         use super::host_session_authority::store::LegacyStateStoreCollectionV1::Sessions;
         let file_name = format!("{}.json", obligation.obligation_id);
         Self::transaction_write_json(
@@ -3890,6 +4202,112 @@ impl AgentRuntimeStateStore {
                 "obligations",
                 file_name.as_str(),
             ],
+            obligation,
+        )
+    }
+
+    fn write_obligation_ledger_revision_cursor_transaction(
+        transaction: &mut super::host_session_authority::store::LegacyWriterGuard,
+        orchestration_session_id: &str,
+        cursor: &ObligationLedgerRevisionCursorV1,
+    ) -> Result<()> {
+        use super::host_session_authority::store::LegacyStateStoreCollectionV1::Sessions;
+        cursor.validate()?;
+        Self::transaction_write_json(
+            transaction,
+            Sessions,
+            &[
+                orchestration_session_id,
+                "obligation-ledger",
+                "revision-cursor.json",
+            ],
+            cursor,
+        )
+    }
+
+    fn write_obligation_ledger_state_transaction(
+        transaction: &mut super::host_session_authority::store::LegacyWriterGuard,
+        state: &ObligationLedgerSessionStateV1,
+    ) -> Result<()> {
+        use super::host_session_authority::store::LegacyStateStoreCollectionV1::Sessions;
+        state.validate()?;
+        Self::transaction_write_json(
+            transaction,
+            Sessions,
+            &[
+                state.orchestration_session_id.as_str(),
+                "obligation-ledger",
+                "acceptances",
+                state.acceptance_record_id.as_str(),
+                "state.json",
+            ],
+            state,
+        )
+    }
+
+    fn write_materialized_obligation_ledger_event_transaction(
+        transaction: &mut super::host_session_authority::store::LegacyWriterGuard,
+        event: &MaterializedObligationLedgerEventV1,
+    ) -> Result<()> {
+        use super::host_session_authority::store::LegacyStateStoreCollectionV1::Sessions;
+        event.validate()?;
+        let file_name = format!("{:020}.json", event.source_journal_event.event_sequence);
+        Self::transaction_write_json(
+            transaction,
+            Sessions,
+            &[
+                event.orchestration_session_id.as_str(),
+                "obligation-ledger",
+                "acceptances",
+                event.acceptance_record_id.as_str(),
+                "events",
+                file_name.as_str(),
+            ],
+            event,
+        )
+    }
+
+    fn write_materialized_obligation_ledger_obligation_transaction(
+        transaction: &mut super::host_session_authority::store::LegacyWriterGuard,
+        obligation: &OrchestrationObligationRecord,
+    ) -> Result<()> {
+        use super::host_session_authority::store::LegacyStateStoreCollectionV1::Sessions;
+        let acceptance_record_id = obligation_c1_acceptance_record_id(obligation)?;
+        let file_name = format!("{}.json", obligation.obligation_id);
+        Self::transaction_write_json(
+            transaction,
+            Sessions,
+            &[
+                obligation.orchestration_session_id.as_str(),
+                "obligation-ledger",
+                "acceptances",
+                acceptance_record_id,
+                "obligations",
+                file_name.as_str(),
+            ],
+            obligation,
+        )
+    }
+
+    fn write_materialized_obligation_ledger_obligation(
+        &self,
+        transaction: &mut super::host_session_authority::store::LegacyWriterGuard,
+        obligation: &OrchestrationObligationRecord,
+    ) -> Result<()> {
+        self.validate_obligation_record(obligation)?;
+        if self.bootstrap_home.is_some() {
+            return Self::write_materialized_obligation_ledger_obligation_transaction(
+                transaction,
+                obligation,
+            );
+        }
+        let acceptance_record_id = obligation_c1_acceptance_record_id(obligation)?;
+        write_atomic_json(
+            &self.canonical_obligation_ledger_obligation_path(
+                &obligation.orchestration_session_id,
+                acceptance_record_id,
+                &obligation.obligation_id,
+            ),
             obligation,
         )
     }
@@ -4060,6 +4478,108 @@ impl AgentRuntimeStateStore {
     pub(crate) fn canonical_obligations_dir(&self, orchestration_session_id: &str) -> PathBuf {
         self.canonical_session_dir(orchestration_session_id)
             .join("obligations")
+    }
+
+    #[allow(dead_code)]
+    pub(crate) fn canonical_obligation_ledger_dir(
+        &self,
+        orchestration_session_id: &str,
+    ) -> PathBuf {
+        self.substrate_home
+            .join("obligation-ledger")
+            .join(orchestration_session_id)
+    }
+
+    #[allow(dead_code)]
+    pub(crate) fn canonical_obligation_ledger_acceptances_dir(
+        &self,
+        orchestration_session_id: &str,
+    ) -> PathBuf {
+        self.canonical_obligation_ledger_dir(orchestration_session_id)
+            .join("acceptances")
+    }
+
+    #[allow(dead_code)]
+    pub(crate) fn canonical_obligation_ledger_acceptance_dir(
+        &self,
+        orchestration_session_id: &str,
+        acceptance_record_id: &str,
+    ) -> PathBuf {
+        self.canonical_obligation_ledger_acceptances_dir(orchestration_session_id)
+            .join(acceptance_record_id)
+    }
+
+    #[allow(dead_code)]
+    pub(crate) fn canonical_obligation_ledger_revision_cursor_path(
+        &self,
+        orchestration_session_id: &str,
+    ) -> PathBuf {
+        self.canonical_obligation_ledger_dir(orchestration_session_id)
+            .join("revision-cursor.json")
+    }
+
+    #[allow(dead_code)]
+    pub(crate) fn canonical_obligation_ledger_state_path(
+        &self,
+        orchestration_session_id: &str,
+        acceptance_record_id: &str,
+    ) -> PathBuf {
+        self.canonical_obligation_ledger_acceptance_dir(
+            orchestration_session_id,
+            acceptance_record_id,
+        )
+        .join("state.json")
+    }
+
+    #[allow(dead_code)]
+    pub(crate) fn canonical_obligation_ledger_events_dir(
+        &self,
+        orchestration_session_id: &str,
+        acceptance_record_id: &str,
+    ) -> PathBuf {
+        self.canonical_obligation_ledger_acceptance_dir(
+            orchestration_session_id,
+            acceptance_record_id,
+        )
+        .join("events")
+    }
+
+    #[allow(dead_code)]
+    pub(crate) fn canonical_obligation_ledger_event_path(
+        &self,
+        orchestration_session_id: &str,
+        acceptance_record_id: &str,
+        event_sequence: u64,
+    ) -> PathBuf {
+        self.canonical_obligation_ledger_events_dir(orchestration_session_id, acceptance_record_id)
+            .join(format!("{event_sequence:020}.json"))
+    }
+
+    #[allow(dead_code)]
+    pub(crate) fn canonical_obligation_ledger_obligations_dir(
+        &self,
+        orchestration_session_id: &str,
+        acceptance_record_id: &str,
+    ) -> PathBuf {
+        self.canonical_obligation_ledger_acceptance_dir(
+            orchestration_session_id,
+            acceptance_record_id,
+        )
+        .join("obligations")
+    }
+
+    #[allow(dead_code)]
+    pub(crate) fn canonical_obligation_ledger_obligation_path(
+        &self,
+        orchestration_session_id: &str,
+        acceptance_record_id: &str,
+        obligation_id: &str,
+    ) -> PathBuf {
+        self.canonical_obligation_ledger_obligations_dir(
+            orchestration_session_id,
+            acceptance_record_id,
+        )
+        .join(format!("{obligation_id}.json"))
     }
 
     pub(crate) fn canonical_active_ephemeral_tasks_dir(
@@ -4563,11 +5083,10 @@ impl AgentRuntimeStateStore {
             return Ok(None);
         }
 
-        Ok(Some(self.build_session_record(
-            orchestration_session_id,
-            session,
-            participants,
-        )))
+        let mut record = self.build_session_record(orchestration_session_id, session, participants);
+        let obligations = self.list_obligations(orchestration_session_id)?;
+        project_session_attention_compatibility(&mut record.session, &obligations)?;
+        Ok(Some(record))
     }
 
     pub(crate) fn list_sessions(&self) -> Result<Vec<AgentRuntimeSessionRecord>> {
@@ -6164,6 +6683,10 @@ impl AgentRuntimeStateStore {
                     obligation.obligation_id
                 )
             })?;
+        if obligation.has_c1_materialization_identity() {
+            self.write_materialized_obligation_ledger_obligation(transaction, obligation)?;
+            return Ok(());
+        }
         let existing = self.load_obligation_transaction(
             transaction,
             &obligation.orchestration_session_id,
@@ -7010,29 +7533,41 @@ impl AgentRuntimeStateStore {
             });
         }
         let path = self.canonical_obligation_path(orchestration_session_id, obligation_id);
-        let Some(obligation) = read_regular_json_if_exists::<OrchestrationObligationRecord>(&path)?
-        else {
-            return Ok(None);
-        };
-        self.validate_obligation_record(&obligation)
-            .with_context(|| format!("invalid orchestration obligation in {}", path.display()))?;
-        if obligation.orchestration_session_id != orchestration_session_id {
-            anyhow::bail!(
-                "orchestration obligation {} belongs to session {} not {}",
-                obligation_id,
-                obligation.orchestration_session_id,
-                orchestration_session_id
-            );
+        let legacy = read_regular_json_if_exists::<OrchestrationObligationRecord>(&path)?;
+        if let Some(obligation) = legacy.as_ref() {
+            self.validate_obligation_record(obligation)
+                .with_context(|| {
+                    format!("invalid orchestration obligation in {}", path.display())
+                })?;
+            if obligation.orchestration_session_id != orchestration_session_id {
+                anyhow::bail!(
+                    "orchestration obligation {} belongs to session {} not {}",
+                    obligation_id,
+                    obligation.orchestration_session_id,
+                    orchestration_session_id
+                );
+            }
+            if obligation.obligation_id != obligation_id {
+                anyhow::bail!(
+                    "orchestration obligation artifact {} stored mismatched obligation_id {}",
+                    path.display(),
+                    obligation.obligation_id
+                );
+            }
         }
-        if obligation.obligation_id != obligation_id {
-            anyhow::bail!(
-                "orchestration obligation artifact {} stored mismatched obligation_id {}",
-                path.display(),
-                obligation.obligation_id
-            );
+        let materialized = self.load_materialized_obligation_ledger_obligation_for_session(
+            orchestration_session_id,
+            obligation_id,
+        )?;
+        match (legacy, materialized) {
+            (None, None) => Ok(None),
+            (Some(obligation), None) | (None, Some(obligation)) => Ok(Some(obligation)),
+            (Some(_), Some(_)) => {
+                anyhow::bail!(
+                    "duplicate orchestration obligation identity across compatibility surfaces"
+                )
+            }
         }
-
-        Ok(Some(obligation))
     }
 
     #[allow(dead_code)]
@@ -7046,6 +7581,209 @@ impl AgentRuntimeStateStore {
             });
         }
         let obligations_dir = self.canonical_obligations_dir(orchestration_session_id);
+        let mut legacy = Vec::new();
+        if let Some(entries) = safe_read_dir(&obligations_dir)? {
+            for entry in entries {
+                let entry = entry
+                    .with_context(|| format!("failed to read {}", obligations_dir.display()))?;
+                let path = entry.path();
+                if path.extension().and_then(|value| value.to_str()) != Some("json") {
+                    continue;
+                }
+
+                let Some(obligation) =
+                    read_regular_json_if_exists::<OrchestrationObligationRecord>(&path)?
+                else {
+                    continue;
+                };
+                self.validate_obligation_record(&obligation)
+                    .with_context(|| {
+                        format!("invalid orchestration obligation in {}", path.display())
+                    })?;
+                if obligation.orchestration_session_id != orchestration_session_id {
+                    anyhow::bail!(
+                        "orchestration obligation {} belongs to session {} not {}",
+                        obligation.obligation_id,
+                        obligation.orchestration_session_id,
+                        orchestration_session_id
+                    );
+                }
+                legacy.push(obligation);
+            }
+        }
+        let materialized = self.list_materialized_obligation_ledger_obligations_for_session(
+            orchestration_session_id,
+        )?;
+        merge_compatibility_obligations(legacy, materialized)
+    }
+
+    pub(crate) fn load_obligation_ledger_revision_cursor(
+        &self,
+        orchestration_session_id: &str,
+    ) -> Result<ObligationLedgerRevisionCursorV1> {
+        if self.bootstrap_home.is_some() {
+            return self.with_legacy_snapshot_transaction(|transaction| {
+                Ok(Self::load_obligation_ledger_revision_cursor_transaction(
+                    transaction,
+                    orchestration_session_id,
+                )?
+                .unwrap_or(ObligationLedgerRevisionCursorV1 {
+                    schema_version: 1,
+                    current_session_ledger_revision: 0,
+                }))
+            });
+        }
+        let path = self.canonical_obligation_ledger_revision_cursor_path(orchestration_session_id);
+        let cursor = read_regular_json_if_exists::<ObligationLedgerRevisionCursorV1>(&path)?
+            .unwrap_or(ObligationLedgerRevisionCursorV1 {
+                schema_version: 1,
+                current_session_ledger_revision: 0,
+            });
+        cursor.validate()?;
+        let state_revision = self.max_obligation_ledger_state_revision(orchestration_session_id)?;
+        Ok(ObligationLedgerRevisionCursorV1 {
+            schema_version: 1,
+            current_session_ledger_revision: state_revision,
+        })
+    }
+
+    pub(crate) fn load_obligation_ledger_state(
+        &self,
+        orchestration_session_id: &str,
+        acceptance_record_id: &str,
+    ) -> Result<Option<ObligationLedgerSessionStateV1>> {
+        if self.bootstrap_home.is_some() {
+            return self.with_legacy_snapshot_transaction(|transaction| {
+                self.load_obligation_ledger_state_transaction(
+                    transaction,
+                    orchestration_session_id,
+                    acceptance_record_id,
+                )
+            });
+        }
+        let path = self
+            .canonical_obligation_ledger_state_path(orchestration_session_id, acceptance_record_id);
+        let Some(state) = read_regular_json_if_exists::<ObligationLedgerSessionStateV1>(&path)?
+        else {
+            return Ok(None);
+        };
+        state.validate()?;
+        if state.orchestration_session_id != orchestration_session_id
+            || state.acceptance_record_id != acceptance_record_id
+        {
+            anyhow::bail!("obligation ledger state artifact identity mismatch");
+        }
+        Ok(Some(state))
+    }
+
+    pub(crate) fn load_materialized_obligation_ledger_event(
+        &self,
+        orchestration_session_id: &str,
+        acceptance_record_id: &str,
+        event_sequence: u64,
+    ) -> Result<Option<MaterializedObligationLedgerEventV1>> {
+        if self.bootstrap_home.is_some() {
+            return self.with_legacy_snapshot_transaction(|transaction| {
+                self.load_materialized_obligation_ledger_event_transaction(
+                    transaction,
+                    orchestration_session_id,
+                    acceptance_record_id,
+                    event_sequence,
+                )
+            });
+        }
+        let path = self.canonical_obligation_ledger_event_path(
+            orchestration_session_id,
+            acceptance_record_id,
+            event_sequence,
+        );
+        let Some(event) =
+            read_regular_json_if_exists::<MaterializedObligationLedgerEventV1>(&path)?
+        else {
+            return Ok(None);
+        };
+        event.validate()?;
+        if event.orchestration_session_id != orchestration_session_id
+            || event.acceptance_record_id != acceptance_record_id
+            || event.source_journal_event.event_sequence != event_sequence
+        {
+            anyhow::bail!("materialized obligation ledger event artifact identity mismatch");
+        }
+        Ok(Some(event))
+    }
+
+    pub(crate) fn list_materialized_obligation_ledger_events(
+        &self,
+        orchestration_session_id: &str,
+        acceptance_record_id: &str,
+    ) -> Result<Vec<MaterializedObligationLedgerEventV1>> {
+        if self.bootstrap_home.is_some() {
+            return self.with_legacy_snapshot_transaction(|transaction| {
+                self.list_materialized_obligation_ledger_events_transaction(
+                    transaction,
+                    orchestration_session_id,
+                    acceptance_record_id,
+                )
+            });
+        }
+        let events_dir = self
+            .canonical_obligation_ledger_events_dir(orchestration_session_id, acceptance_record_id);
+        let Some(entries) = safe_read_dir(&events_dir)? else {
+            return Ok(Vec::new());
+        };
+
+        let mut events = Vec::new();
+        for entry in entries {
+            let entry =
+                entry.with_context(|| format!("failed to read {}", events_dir.display()))?;
+            let path = entry.path();
+            if path.extension().and_then(|value| value.to_str()) != Some("json") {
+                continue;
+            }
+            let Some(event) =
+                read_regular_json_if_exists::<MaterializedObligationLedgerEventV1>(&path)?
+            else {
+                continue;
+            };
+            event.validate()?;
+            if event.orchestration_session_id != orchestration_session_id
+                || event.acceptance_record_id != acceptance_record_id
+            {
+                anyhow::bail!("materialized obligation ledger event belongs to another acceptance");
+            }
+            events.push(event);
+        }
+        events.sort_by(|left, right| {
+            left.source_journal_event
+                .event_sequence
+                .cmp(&right.source_journal_event.event_sequence)
+                .then(
+                    left.source_journal_event
+                        .event_id
+                        .cmp(&right.source_journal_event.event_id),
+                )
+        });
+        Ok(events)
+    }
+
+    pub(crate) fn list_materialized_obligation_ledger_obligations(
+        &self,
+        orchestration_session_id: &str,
+        acceptance_record_id: &str,
+    ) -> Result<Vec<OrchestrationObligationRecord>> {
+        if self.bootstrap_home.is_some() {
+            return self.with_legacy_snapshot_transaction(|transaction| {
+                self.list_materialized_obligation_ledger_obligations_transaction(
+                    transaction,
+                    orchestration_session_id,
+                    acceptance_record_id,
+                )
+            });
+        }
+        let obligations_dir = self.canonical_obligation_ledger_obligations_dir(
+            orchestration_session_id,
+            acceptance_record_id,
+        );
         let Some(entries) = safe_read_dir(&obligations_dir)? else {
             return Ok(Vec::new());
         };
@@ -7058,7 +7796,6 @@ impl AgentRuntimeStateStore {
             if path.extension().and_then(|value| value.to_str()) != Some("json") {
                 continue;
             }
-
             let Some(obligation) =
                 read_regular_json_if_exists::<OrchestrationObligationRecord>(&path)?
             else {
@@ -7066,15 +7803,16 @@ impl AgentRuntimeStateStore {
             };
             self.validate_obligation_record(&obligation)
                 .with_context(|| {
-                    format!("invalid orchestration obligation in {}", path.display())
+                    format!("invalid C1 materialized obligation in {}", path.display())
                 })?;
             if obligation.orchestration_session_id != orchestration_session_id {
-                anyhow::bail!(
-                    "orchestration obligation {} belongs to session {} not {}",
-                    obligation.obligation_id,
-                    obligation.orchestration_session_id,
-                    orchestration_session_id
-                );
+                anyhow::bail!("C1 materialized obligation belongs to another session");
+            }
+            let Some(source_journal_event) = obligation.source_journal_event.as_ref() else {
+                anyhow::bail!("C1 materialized obligation omitted source_journal_event");
+            };
+            if source_journal_event.acceptance_record_id != acceptance_record_id {
+                anyhow::bail!("C1 materialized obligation belongs to another acceptance");
             }
             obligations.push(obligation);
         }
@@ -7085,6 +7823,206 @@ impl AgentRuntimeStateStore {
                 .then(left.obligation_id.cmp(&right.obligation_id))
         });
         Ok(obligations)
+    }
+
+    pub(crate) fn apply_obligation_ledger_materialization_plan(
+        &self,
+        plan: &ObligationLedgerMaterializationPlanV1,
+    ) -> Result<()> {
+        plan.validate()?;
+        if self.bootstrap_home.is_none() {
+            let _write_guard = snapshot_write_lock()
+                .lock()
+                .expect("snapshot write mutex poisoned");
+            let current_cursor = self.load_obligation_ledger_revision_cursor(
+                &plan.next_state.orchestration_session_id,
+            )?;
+            let current_state = self.load_obligation_ledger_state(
+                &plan.next_state.orchestration_session_id,
+                &plan.next_state.acceptance_record_id,
+            )?;
+            if current_state != plan.expected_state {
+                anyhow::bail!(STALE_C1_OBLIGATION_LEDGER_MATERIALIZATION_PLAN_ERROR);
+            }
+            let (effective_next_revision_cursor, effective_next_state) =
+                if current_cursor == plan.expected_revision_cursor {
+                    (plan.next_revision_cursor.clone(), plan.next_state.clone())
+                } else {
+                    Self::rebase_obligation_ledger_materialization_plan(plan, &current_cursor)?
+                };
+
+            for event in &plan.materialized_events {
+                match self.load_materialized_obligation_ledger_event(
+                    &event.orchestration_session_id,
+                    &event.acceptance_record_id,
+                    event.source_journal_event.event_sequence,
+                )? {
+                    Some(existing) if existing == *event => {}
+                    Some(_) => anyhow::bail!(
+                        "conflicting duplicate C1 materialized event {}",
+                        event.source_journal_event.event_id
+                    ),
+                    None => write_atomic_json(
+                        &self.canonical_obligation_ledger_event_path(
+                            &event.orchestration_session_id,
+                            &event.acceptance_record_id,
+                            event.source_journal_event.event_sequence,
+                        ),
+                        event,
+                    )?,
+                }
+            }
+
+            for obligation in &plan.projected_obligations {
+                let existing = self
+                    .list_materialized_obligation_ledger_obligations(
+                        &obligation.orchestration_session_id,
+                        &effective_next_state.acceptance_record_id,
+                    )?
+                    .into_iter()
+                    .find(|existing| existing.obligation_id == obligation.obligation_id);
+                match existing {
+                    Some(existing)
+                        if existing.matches_c1_materialization_projection(obligation) => {}
+                    Some(_) => anyhow::bail!(
+                        "conflicting duplicate C1 obligation {}",
+                        obligation.obligation_id
+                    ),
+                    None => {
+                        self.validate_obligation_record(obligation)?;
+                        write_atomic_json(
+                            &self.canonical_obligation_ledger_obligation_path(
+                                &obligation.orchestration_session_id,
+                                &effective_next_state.acceptance_record_id,
+                                &obligation.obligation_id,
+                            ),
+                            obligation,
+                        )?;
+                    }
+                }
+            }
+
+            write_atomic_json(
+                &self.canonical_obligation_ledger_state_path(
+                    &effective_next_state.orchestration_session_id,
+                    &effective_next_state.acceptance_record_id,
+                ),
+                &effective_next_state,
+            )?;
+            write_atomic_json(
+                &self.canonical_obligation_ledger_revision_cursor_path(
+                    &effective_next_state.orchestration_session_id,
+                ),
+                &effective_next_revision_cursor,
+            )?;
+            return Ok(());
+        }
+        self.with_legacy_snapshot_transaction(|transaction| {
+            let current_cursor = Self::load_obligation_ledger_revision_cursor_transaction(
+                transaction,
+                &plan.next_state.orchestration_session_id,
+            )?
+            .unwrap_or(ObligationLedgerRevisionCursorV1 {
+                schema_version: 1,
+                current_session_ledger_revision: 0,
+            });
+            current_cursor.validate()?;
+            let current_state = self.load_obligation_ledger_state_transaction(
+                transaction,
+                &plan.next_state.orchestration_session_id,
+                &plan.next_state.acceptance_record_id,
+            )?;
+            if current_state != plan.expected_state {
+                anyhow::bail!(STALE_C1_OBLIGATION_LEDGER_MATERIALIZATION_PLAN_ERROR);
+            }
+            let (effective_next_revision_cursor, effective_next_state) =
+                if current_cursor == plan.expected_revision_cursor {
+                    (plan.next_revision_cursor.clone(), plan.next_state.clone())
+                } else {
+                    Self::rebase_obligation_ledger_materialization_plan(plan, &current_cursor)?
+                };
+
+            for event in &plan.materialized_events {
+                match self.load_materialized_obligation_ledger_event_transaction(
+                    transaction,
+                    &event.orchestration_session_id,
+                    &event.acceptance_record_id,
+                    event.source_journal_event.event_sequence,
+                )? {
+                    Some(existing) if existing == *event => {}
+                    Some(_) => anyhow::bail!(
+                        "conflicting duplicate C1 materialized event {}",
+                        event.source_journal_event.event_id
+                    ),
+                    None => Self::write_materialized_obligation_ledger_event_transaction(
+                        transaction,
+                        event,
+                    )?,
+                }
+            }
+
+            for obligation in &plan.projected_obligations {
+                match self.load_materialized_obligation_ledger_obligation_transaction(
+                    transaction,
+                    &obligation.orchestration_session_id,
+                    &effective_next_state.acceptance_record_id,
+                    &obligation.obligation_id,
+                )? {
+                    Some(existing)
+                        if existing.matches_c1_materialization_projection(obligation) => {}
+                    Some(_) => anyhow::bail!(
+                        "conflicting duplicate C1 obligation {}",
+                        obligation.obligation_id
+                    ),
+                    None => Self::write_materialized_obligation_ledger_obligation_transaction(
+                        transaction,
+                        obligation,
+                    )?,
+                }
+            }
+
+            Self::write_obligation_ledger_revision_cursor_transaction(
+                transaction,
+                &effective_next_state.orchestration_session_id,
+                &effective_next_revision_cursor,
+            )?;
+            Self::write_obligation_ledger_state_transaction(transaction, &effective_next_state)?;
+            Ok(())
+        })
+    }
+
+    fn max_obligation_ledger_state_revision(&self, orchestration_session_id: &str) -> Result<u64> {
+        let acceptances_dir =
+            self.canonical_obligation_ledger_acceptances_dir(orchestration_session_id);
+        let Some(entries) = safe_read_dir(&acceptances_dir)? else {
+            return Ok(0);
+        };
+
+        let mut max_revision = 0;
+        for entry in entries {
+            let entry =
+                entry.with_context(|| format!("failed to read {}", acceptances_dir.display()))?;
+            let path = entry.path();
+            if !entry
+                .file_type()
+                .with_context(|| format!("inspect {}", path.display()))?
+                .is_dir()
+            {
+                continue;
+            }
+            let state_path = path.join("state.json");
+            let Some(state) =
+                read_regular_json_if_exists::<ObligationLedgerSessionStateV1>(&state_path)?
+            else {
+                continue;
+            };
+            state.validate()?;
+            if state.orchestration_session_id != orchestration_session_id {
+                anyhow::bail!("obligation ledger state artifact belongs to another session");
+            }
+            max_revision = max_revision.max(state.session_ledger_revision);
+        }
+        Ok(max_revision)
     }
 
     #[allow(dead_code)]
@@ -7163,7 +8101,7 @@ impl AgentRuntimeStateStore {
             let mut claimed = candidate.clone();
             claimed.mark_attach_claimed(router_identity, Utc::now());
             self.validate_obligation_record(&claimed)?;
-            Self::write_obligation_transaction(transaction, &claimed)?;
+            self.write_obligation_transaction(transaction, &claimed)?;
 
             Ok(SessionAutoAttachClaim::Claimed {
                 obligation_id: claimed.obligation_id,
@@ -7230,7 +8168,7 @@ impl AgentRuntimeStateStore {
                 }
 
                 self.validate_obligation_record(&obligation)?;
-                Self::write_obligation_transaction(transaction, &obligation)?;
+                self.write_obligation_transaction(transaction, &obligation)?;
             }
 
             Ok(result)
@@ -7267,7 +8205,7 @@ impl AgentRuntimeStateStore {
 
             obligation.release_attach_claim(Utc::now());
             self.validate_obligation_record(&obligation)?;
-            Self::write_obligation_transaction(transaction, &obligation)?;
+            self.write_obligation_transaction(transaction, &obligation)?;
             Ok(true)
         })
     }
@@ -7310,7 +8248,7 @@ impl AgentRuntimeStateStore {
             let settled_at = Utc::now();
             obligation.mark_attach_failed_closed(completion_reason, settled_at);
             self.validate_obligation_record(&obligation)?;
-            Self::write_obligation_transaction(transaction, &obligation)?;
+            self.write_obligation_transaction(transaction, &obligation)?;
 
             Ok(SessionAutoAttachSettleResult {
                 failed_closed_obligation_ids: vec![obligation.obligation_id],
@@ -7360,7 +8298,7 @@ impl AgentRuntimeStateStore {
                 }
 
                 self.validate_obligation_record(&obligation)?;
-                Self::write_obligation_transaction(transaction, &obligation)?;
+                self.write_obligation_transaction(transaction, &obligation)?;
             }
 
             Ok(result)
@@ -7756,10 +8694,25 @@ impl AgentRuntimeStateStore {
     ) -> Result<Option<OrchestrationSessionRecord>> {
         if self.bootstrap_home.is_some() {
             return self.with_legacy_snapshot_transaction(|transaction| {
-                self.load_authoritative_session_transaction(transaction, orchestration_session_id)
+                let Some(mut session) = self.load_authoritative_session_transaction(
+                    transaction,
+                    orchestration_session_id,
+                )?
+                else {
+                    return Ok(None);
+                };
+                let obligations =
+                    self.list_obligations_transaction(transaction, orchestration_session_id)?;
+                project_session_attention_compatibility(&mut session, &obligations)?;
+                Ok(Some(session))
             });
         }
-        self.load_authoritative_session(orchestration_session_id)
+        let Some(mut session) = self.load_authoritative_session(orchestration_session_id)? else {
+            return Ok(None);
+        };
+        let obligations = self.list_obligations(orchestration_session_id)?;
+        project_session_attention_compatibility(&mut session, &obligations)?;
+        Ok(Some(session))
     }
 
     #[allow(dead_code)]
@@ -7780,9 +8733,12 @@ impl AgentRuntimeStateStore {
                 }
                 let mut sessions = Vec::new();
                 for session_id in session_ids {
-                    if let Some(session) =
+                    if let Some(mut session) =
                         self.load_authoritative_session_transaction(transaction, &session_id)?
                     {
+                        let obligations =
+                            self.list_obligations_transaction(transaction, &session_id)?;
+                        project_session_attention_compatibility(&mut session, &obligations)?;
                         sessions.push(session);
                     }
                 }
@@ -7800,7 +8756,9 @@ impl AgentRuntimeStateStore {
         }
 
         for session_id in session_ids {
-            if let Some(session) = self.load_authoritative_session(&session_id)? {
+            if let Some(mut session) = self.load_authoritative_session(&session_id)? {
+                let obligations = self.list_obligations(&session_id)?;
+                project_session_attention_compatibility(&mut session, &obligations)?;
                 sessions.push(session);
             }
         }
@@ -8350,6 +9308,244 @@ impl AgentRuntimeStateStore {
 
         Ok(obligation)
     }
+
+    fn list_materialized_obligation_ledger_acceptance_ids(
+        &self,
+        orchestration_session_id: &str,
+    ) -> Result<Vec<String>> {
+        let acceptances_dir =
+            self.canonical_obligation_ledger_acceptances_dir(orchestration_session_id);
+        let Some(entries) = safe_read_dir(&acceptances_dir)? else {
+            return Ok(Vec::new());
+        };
+        let mut acceptance_ids = Vec::new();
+        for entry in entries {
+            let entry =
+                entry.with_context(|| format!("failed to read {}", acceptances_dir.display()))?;
+            if !entry
+                .file_type()
+                .with_context(|| format!("inspect {}", entry.path().display()))?
+                .is_dir()
+            {
+                continue;
+            }
+            acceptance_ids.push(entry.file_name().to_string_lossy().into_owned());
+        }
+        acceptance_ids.sort();
+        acceptance_ids.dedup();
+        Ok(acceptance_ids)
+    }
+
+    fn list_materialized_obligation_ledger_acceptance_ids_transaction(
+        &self,
+        transaction: &mut super::host_session_authority::store::LegacyWriterGuard,
+        orchestration_session_id: &str,
+    ) -> Result<Vec<String>> {
+        use super::host_session_authority::store::LegacyStateStoreCollectionV1::Sessions;
+        let mut acceptance_ids = transaction
+            .read_directory(
+                Sessions,
+                &[orchestration_session_id, "obligation-ledger", "acceptances"],
+            )
+            .context("enumerate retained C1 obligation ledger acceptances")?
+            .into_iter()
+            .filter(|entry| entry.is_directory)
+            .map(|entry| entry.name)
+            .collect::<Vec<_>>();
+        acceptance_ids.sort();
+        acceptance_ids.dedup();
+        Ok(acceptance_ids)
+    }
+
+    fn load_materialized_obligation_ledger_obligation_for_session(
+        &self,
+        orchestration_session_id: &str,
+        obligation_id: &str,
+    ) -> Result<Option<OrchestrationObligationRecord>> {
+        let mut found = None;
+        for acceptance_record_id in
+            self.list_materialized_obligation_ledger_acceptance_ids(orchestration_session_id)?
+        {
+            let path = self.canonical_obligation_ledger_obligation_path(
+                orchestration_session_id,
+                &acceptance_record_id,
+                obligation_id,
+            );
+            let Some(obligation) =
+                read_regular_json_if_exists::<OrchestrationObligationRecord>(&path)?
+            else {
+                continue;
+            };
+            self.validate_obligation_record(&obligation)
+                .with_context(|| {
+                    format!("invalid C1 materialized obligation in {}", path.display())
+                })?;
+            if obligation.orchestration_session_id != orchestration_session_id
+                || obligation.obligation_id != obligation_id
+            {
+                anyhow::bail!("C1 materialized obligation artifact identity mismatch");
+            }
+            let Some(source_journal_event) = obligation.source_journal_event.as_ref() else {
+                anyhow::bail!("C1 materialized obligation omitted source_journal_event");
+            };
+            if source_journal_event.acceptance_record_id != acceptance_record_id {
+                anyhow::bail!("C1 materialized obligation belongs to another acceptance");
+            }
+            if found.replace(obligation).is_some() {
+                anyhow::bail!("duplicate C1 materialized obligation identity across acceptances");
+            }
+        }
+        Ok(found)
+    }
+
+    fn load_materialized_obligation_ledger_obligation_for_session_transaction(
+        &self,
+        transaction: &mut super::host_session_authority::store::LegacyWriterGuard,
+        orchestration_session_id: &str,
+        obligation_id: &str,
+    ) -> Result<Option<OrchestrationObligationRecord>> {
+        if self.bootstrap_home.is_none() {
+            return self.load_materialized_obligation_ledger_obligation_for_session(
+                orchestration_session_id,
+                obligation_id,
+            );
+        }
+        let mut found = None;
+        for acceptance_record_id in self
+            .list_materialized_obligation_ledger_acceptance_ids_transaction(
+                transaction,
+                orchestration_session_id,
+            )?
+        {
+            let Some(obligation) = self
+                .load_materialized_obligation_ledger_obligation_transaction(
+                    transaction,
+                    orchestration_session_id,
+                    &acceptance_record_id,
+                    obligation_id,
+                )?
+            else {
+                continue;
+            };
+            if found.replace(obligation).is_some() {
+                anyhow::bail!("duplicate C1 materialized obligation identity across acceptances");
+            }
+        }
+        Ok(found)
+    }
+
+    fn list_materialized_obligation_ledger_obligations_for_session(
+        &self,
+        orchestration_session_id: &str,
+    ) -> Result<Vec<OrchestrationObligationRecord>> {
+        let mut obligations = Vec::new();
+        for acceptance_record_id in
+            self.list_materialized_obligation_ledger_acceptance_ids(orchestration_session_id)?
+        {
+            obligations.extend(self.list_materialized_obligation_ledger_obligations(
+                orchestration_session_id,
+                &acceptance_record_id,
+            )?);
+        }
+        obligations.sort_by(|left, right| {
+            left.created_at
+                .cmp(&right.created_at)
+                .then(left.obligation_id.cmp(&right.obligation_id))
+        });
+        Ok(obligations)
+    }
+
+    fn list_materialized_obligation_ledger_obligations_for_session_transaction(
+        &self,
+        transaction: &mut super::host_session_authority::store::LegacyWriterGuard,
+        orchestration_session_id: &str,
+    ) -> Result<Vec<OrchestrationObligationRecord>> {
+        if self.bootstrap_home.is_none() {
+            return self.list_materialized_obligation_ledger_obligations_for_session(
+                orchestration_session_id,
+            );
+        }
+        let mut obligations = Vec::new();
+        for acceptance_record_id in self
+            .list_materialized_obligation_ledger_acceptance_ids_transaction(
+                transaction,
+                orchestration_session_id,
+            )?
+        {
+            obligations.extend(
+                self.list_materialized_obligation_ledger_obligations_transaction(
+                    transaction,
+                    orchestration_session_id,
+                    &acceptance_record_id,
+                )?,
+            );
+        }
+        obligations.sort_by(|left, right| {
+            left.created_at
+                .cmp(&right.created_at)
+                .then(left.obligation_id.cmp(&right.obligation_id))
+        });
+        Ok(obligations)
+    }
+}
+
+fn obligation_c1_acceptance_record_id(obligation: &OrchestrationObligationRecord) -> Result<&str> {
+    if !obligation.has_c1_materialization_identity() {
+        anyhow::bail!("C1 materialized obligation omitted canonical identity");
+    }
+    obligation
+        .source_journal_event
+        .as_ref()
+        .map(|event| event.acceptance_record_id.as_str())
+        .ok_or_else(|| anyhow::anyhow!("C1 materialized obligation omitted source_journal_event"))
+}
+
+fn merge_compatibility_obligations(
+    legacy: Vec<OrchestrationObligationRecord>,
+    materialized: Vec<OrchestrationObligationRecord>,
+) -> Result<Vec<OrchestrationObligationRecord>> {
+    let mut obligations = BTreeMap::new();
+    for obligation in legacy.into_iter().chain(materialized) {
+        match obligations.entry(obligation.obligation_id.clone()) {
+            std::collections::btree_map::Entry::Vacant(entry) => {
+                entry.insert(obligation);
+            }
+            std::collections::btree_map::Entry::Occupied(_) => {
+                anyhow::bail!(
+                    "duplicate orchestration obligation identity across compatibility surfaces"
+                );
+            }
+        }
+    }
+    let mut obligations = obligations.into_values().collect::<Vec<_>>();
+    obligations.sort_by(|left, right| {
+        left.created_at
+            .cmp(&right.created_at)
+            .then(left.obligation_id.cmp(&right.obligation_id))
+    });
+    Ok(obligations)
+}
+
+fn project_session_attention_compatibility(
+    session: &mut OrchestrationSessionRecord,
+    obligations: &[OrchestrationObligationRecord],
+) -> Result<()> {
+    let projected_pending_count = projected_pending_inbox_count_from_obligations(obligations)?;
+    if projected_pending_count <= session.pending_inbox_count {
+        return Ok(());
+    }
+    session.pending_inbox_count = projected_pending_count;
+    if session.state.is_terminal() || session.attached_participant_id().is_some() {
+        return Ok(());
+    }
+    session.posture = if projected_pending_count > 0 {
+        OrchestrationSessionPosture::AwaitingAttention
+    } else if session.active_participant_id().is_none() {
+        OrchestrationSessionPosture::BornUnattached
+    } else {
+        OrchestrationSessionPosture::ParkedResumable
+    };
+    Ok(())
 }
 
 fn retired_public_turn_backend_guidance(backend_id: &str) -> Option<&'static str> {
@@ -8386,6 +9582,29 @@ fn write_atomic_json(path: &Path, value: &impl serde::Serialize) -> Result<()> {
     tmp.persist(path)
         .map_err(|err| err.error)
         .with_context(|| format!("failed to persist {}", path.display()))?;
+    sync_directory_chain(parent)?;
+    Ok(())
+}
+
+fn sync_directory_chain(dir: &Path) -> Result<()> {
+    let mut current = Some(dir);
+    while let Some(path) = current {
+        sync_directory(path)?;
+        current = path.parent().filter(|parent| *parent != path);
+    }
+    Ok(())
+}
+
+#[cfg(unix)]
+fn sync_directory(dir: &Path) -> Result<()> {
+    fs::File::open(dir)
+        .with_context(|| format!("failed to open directory {}", dir.display()))?
+        .sync_all()
+        .with_context(|| format!("failed to fsync directory {}", dir.display()))
+}
+
+#[cfg(not(unix))]
+fn sync_directory(_dir: &Path) -> Result<()> {
     Ok(())
 }
 
@@ -11446,6 +12665,468 @@ mod tests {
                 .expect("participant should exist");
             assert_eq!(loaded, participant);
             assert!(store.participant_path("ash_roundtrip").exists());
+        });
+    }
+
+    #[test]
+    #[serial_test::serial]
+    fn obligation_ledger_plan_persists_to_nonlegacy_root_and_cursor_derives_from_state() {
+        with_store(|store| {
+            let authority_store_id = "authority-store-c1";
+            let orchestration_session_id = "sess_c1_store";
+            let authoritative_participant_id = "orch_dispatch";
+            let orchestrator = detached_orchestrator(
+                "codex",
+                orchestration_session_id,
+                authoritative_participant_id,
+            );
+            let mut parent = parked_parent(&orchestrator);
+            parent.set_world_binding("world-17", 2);
+            store
+                .persist_orchestration_session(&parent)
+                .expect("persist C1 parent session");
+            store
+                .persist_participant(&orchestrator)
+                .expect("persist C1 orchestrator");
+            let acceptance_record_id = "wwa_018f0f2e-7b4c-7aa1-8c22-123456789abc";
+            let accepted_work_identity = AcceptedWorldWorkIdentityV1::RetainedTurn {
+                active_run_id: "req_continue".to_string(),
+                message_id: "wwm_018f0f2e-7b4c-7aa1-8c22-123456789abd".to_string(),
+                target_participant_id: "ash_member".to_string(),
+            };
+            let source_journal_event =
+                crate::execution::agent_runtime::obligation_ledger::SupervisorJournalEventRefV1 {
+                    schema_version: 1,
+                    journal_entry_id: "wwje_c1_store_event_1".to_string(),
+                    acceptance_record_id: acceptance_record_id.to_string(),
+                    acceptance_record_revision: 1,
+                    accepted_work_identity: accepted_work_identity.clone(),
+                    stream_id: "stream-c1-store".to_string(),
+                    frame_sequence: 2,
+                    event_id: "evt_c1_store_1".to_string(),
+                    event_sequence: 1,
+                    transport_event_commitment: AuthorityObjectCommitmentV1::CanonicalSha256 {
+                        digest_hex: "a".repeat(64),
+                    },
+                };
+            let payload = json!({
+                "schema_version": 1,
+                "event_class": "approval_request",
+                "request_id": "req_continue",
+                "active_run_id": "req_continue",
+                "target_participant_id": "orch_dispatch",
+                "source_backend_id": "cli:codex-world",
+                "thread_id": "thread-root",
+                "stream_id": "stream-c1-store",
+                "frame_sequence": 2,
+                "event_id": "evt_c1_store_1",
+                "event_sequence": 1,
+                "host_transition_correlation": null,
+                "payload": {
+                    "message": "requires approval"
+                }
+            });
+            let payload_commitment =
+                crate::execution::agent_runtime::obligation_ledger::obligation_payload_commitment(
+                    &payload,
+                )
+                .expect("compute C1 payload commitment");
+            let canonical_record_commitment =
+                crate::execution::agent_runtime::obligation_ledger::obligation_snapshot_record_commitment(
+                    authority_store_id,
+                    orchestration_session_id,
+                    authoritative_participant_id,
+                    &source_journal_event,
+                    "obl_c1_store_1",
+                    1,
+                )
+                .expect("compute C1 record commitment");
+
+            let mut obligation = pending_obligation(
+                orchestration_session_id,
+                "obl_c1_store_1",
+                OrchestrationObligationKind::ApprovalRequired,
+            );
+            obligation.attach_state = OrchestrationObligationAttachState::Eligible;
+            obligation.source_participant_id = Some("ash_member".to_string());
+            obligation.target_backend_id = Some("cli:codex_world".to_string());
+            obligation.world_id = Some("world-17".to_string());
+            obligation.world_generation = Some(2);
+            obligation.causation_event_id = Some("evt_c1_store_1".to_string());
+            obligation.causation_message_id =
+                Some("wwm_018f0f2e-7b4c-7aa1-8c22-123456789abd".to_string());
+            obligation.causation_request_id = Some("req_continue".to_string());
+            obligation.payload = Some(payload.clone());
+            obligation.authority_store_id = Some(authority_store_id.to_string());
+            obligation.authoritative_participant_id =
+                Some(authoritative_participant_id.to_string());
+            obligation.obligation_revision = Some(1);
+            obligation.source_journal_event = Some(source_journal_event.clone());
+            obligation.payload_commitment = Some(payload_commitment.clone());
+            obligation.canonical_record_commitment = Some(canonical_record_commitment.clone());
+
+            let event = MaterializedObligationLedgerEventV1 {
+                schema_version: 1,
+                authority_store_id: authority_store_id.to_string(),
+                orchestration_session_id: orchestration_session_id.to_string(),
+                authoritative_participant_id: authoritative_participant_id.to_string(),
+                acceptance_record_id: acceptance_record_id.to_string(),
+                acceptance_record_revision: 1,
+                accepted_work_identity: accepted_work_identity.clone(),
+                stream_id: "stream-c1-store".to_string(),
+                source_journal_event: source_journal_event.clone(),
+                event_class:
+                    substrate_common::agent_events::WorldWorkerEventClassV1::ApprovalRequest,
+                attention_required: true,
+                emitted_at: Utc::now(),
+                obligation_id: Some("obl_c1_store_1".to_string()),
+            };
+            let state = ObligationLedgerSessionStateV1 {
+                schema_version: 1,
+                authority_store_id: authority_store_id.to_string(),
+                orchestration_session_id: orchestration_session_id.to_string(),
+                authoritative_participant_id: authoritative_participant_id.to_string(),
+                acceptance_record_id: acceptance_record_id.to_string(),
+                acceptance_record_revision: 1,
+                accepted_work_identity: accepted_work_identity.clone(),
+                stream_id: "stream-c1-store".to_string(),
+                host_transition_correlation: None,
+                authority_revision_observed: 11,
+                session_ledger_revision: 1,
+                materialized_through_event_sequence: 1,
+                terminal_event_id: None,
+                terminal_event_sequence: None,
+            };
+            let plan = ObligationLedgerMaterializationPlanV1 {
+                expected_revision_cursor: ObligationLedgerRevisionCursorV1 {
+                    schema_version: 1,
+                    current_session_ledger_revision: 0,
+                },
+                expected_state: None,
+                next_revision_cursor: ObligationLedgerRevisionCursorV1 {
+                    schema_version: 1,
+                    current_session_ledger_revision: 1,
+                },
+                next_state: state.clone(),
+                materialized_events: vec![event.clone()],
+                projected_obligations: vec![obligation.clone()],
+            };
+
+            store
+                .apply_obligation_ledger_materialization_plan(&plan)
+                .expect("persist C1 obligation-ledger materialization plan");
+
+            assert!(
+                store
+                    .canonical_obligation_ledger_dir(orchestration_session_id)
+                    .is_dir(),
+                "C1 must persist into the top-level obligation-ledger root"
+            );
+            assert!(
+                !store
+                    .canonical_obligations_dir(orchestration_session_id)
+                    .exists(),
+                "C1 must not recreate legacy session obligations"
+            );
+            assert_eq!(
+                store
+                    .load_obligation_ledger_state(orchestration_session_id, acceptance_record_id,)
+                    .expect("load persisted C1 state"),
+                Some(state.clone())
+            );
+            assert_eq!(
+                store
+                    .load_materialized_obligation_ledger_event(
+                        orchestration_session_id,
+                        acceptance_record_id,
+                        1,
+                    )
+                    .expect("load persisted C1 event"),
+                Some(event)
+            );
+            assert_eq!(
+                store
+                    .list_materialized_obligation_ledger_obligations(
+                        orchestration_session_id,
+                        acceptance_record_id,
+                    )
+                    .expect("list persisted C1 obligations"),
+                vec![obligation]
+            );
+            let compatibility_obligation = store
+                .load_obligation(orchestration_session_id, "obl_c1_store_1")
+                .expect("load compatibility-projected C1 obligation")
+                .expect("compatibility-projected C1 obligation exists");
+            assert!(compatibility_obligation.has_c1_materialization_identity());
+            assert_eq!(
+                store
+                    .list_obligations(orchestration_session_id)
+                    .expect("list compatibility-projected C1 obligations"),
+                vec![compatibility_obligation.clone()]
+            );
+            let projected_session = store
+                .load_orchestration_session(orchestration_session_id)
+                .expect("load C1 projected session")
+                .expect("C1 projected session exists");
+            assert_eq!(projected_session.pending_inbox_count, 1);
+            assert_eq!(
+                projected_session.posture,
+                OrchestrationSessionPosture::AwaitingAttention
+            );
+            match store
+                .claim_session_auto_attach(orchestration_session_id, "router::c1")
+                .expect("claim C1 auto-attach obligation")
+            {
+                SessionAutoAttachClaim::Claimed { obligation_id, .. } => {
+                    assert_eq!(obligation_id, "obl_c1_store_1");
+                }
+                other => panic!("expected claimed C1 auto-attach obligation, got {other:?}"),
+            }
+            let claimed = store
+                .load_obligation(orchestration_session_id, "obl_c1_store_1")
+                .expect("reload claimed C1 obligation")
+                .expect("claimed C1 obligation exists");
+            assert_eq!(
+                claimed.attach_state,
+                OrchestrationObligationAttachState::Claimed
+            );
+            assert_eq!(
+                store
+                    .load_obligation_ledger_revision_cursor(orchestration_session_id)
+                    .expect("load derived C1 cursor"),
+                ObligationLedgerRevisionCursorV1 {
+                    schema_version: 1,
+                    current_session_ledger_revision: 1,
+                }
+            );
+
+            write_atomic_json(
+                &store.canonical_obligation_ledger_revision_cursor_path(orchestration_session_id),
+                &ObligationLedgerRevisionCursorV1 {
+                    schema_version: 1,
+                    current_session_ledger_revision: 0,
+                },
+            )
+            .expect("overwrite persisted cursor with stale bytes");
+
+            assert_eq!(
+                store
+                    .load_obligation_ledger_revision_cursor(orchestration_session_id)
+                    .expect("derive C1 cursor from persisted state after stale cursor write"),
+                ObligationLedgerRevisionCursorV1 {
+                    schema_version: 1,
+                    current_session_ledger_revision: 1,
+                }
+            );
+        });
+    }
+
+    #[test]
+    #[serial_test::serial]
+    fn obligation_ledger_plan_rebases_session_revision_after_unrelated_acceptance_advance() {
+        with_store(|store| {
+            let authority_store_id = "authority-store-c1-rebase";
+            let orchestration_session_id = "sess_c1_rebase";
+            let authoritative_participant_id = "orch_dispatch";
+
+            let build_plan = |acceptance_record_id: &str,
+                              message_id: &str,
+                              obligation_id: &str,
+                              journal_entry_id: &str,
+                              stream_id: &str,
+                              event_id: &str|
+             -> ObligationLedgerMaterializationPlanV1 {
+                let accepted_work_identity = AcceptedWorldWorkIdentityV1::RetainedTurn {
+                    active_run_id: format!("run_{obligation_id}"),
+                    message_id: message_id.to_string(),
+                    target_participant_id: "ash_member".to_string(),
+                };
+                let source_journal_event =
+                    crate::execution::agent_runtime::obligation_ledger::SupervisorJournalEventRefV1 {
+                        schema_version: 1,
+                        journal_entry_id: journal_entry_id.to_string(),
+                        acceptance_record_id: acceptance_record_id.to_string(),
+                        acceptance_record_revision: 1,
+                        accepted_work_identity: accepted_work_identity.clone(),
+                        stream_id: stream_id.to_string(),
+                        frame_sequence: 2,
+                        event_id: event_id.to_string(),
+                        event_sequence: 1,
+                        transport_event_commitment: AuthorityObjectCommitmentV1::CanonicalSha256 {
+                            digest_hex: "b".repeat(64),
+                        },
+                    };
+                let payload = json!({
+                    "schema_version": 1,
+                    "event_class": "approval_request",
+                    "request_id": format!("req_{obligation_id}"),
+                    "active_run_id": format!("run_{obligation_id}"),
+                    "target_participant_id": "orch_dispatch",
+                    "source_backend_id": "cli:codex-world",
+                    "thread_id": format!("thread_{obligation_id}"),
+                    "stream_id": stream_id,
+                    "frame_sequence": 2,
+                    "event_id": event_id,
+                    "event_sequence": 1,
+                    "host_transition_correlation": null,
+                    "payload": {
+                        "message": format!("requires approval for {obligation_id}")
+                    }
+                });
+                let payload_commitment =
+                    crate::execution::agent_runtime::obligation_ledger::obligation_payload_commitment(
+                        &payload,
+                    )
+                    .expect("compute rebase-test C1 payload commitment");
+                let canonical_record_commitment =
+                    crate::execution::agent_runtime::obligation_ledger::obligation_snapshot_record_commitment(
+                        authority_store_id,
+                        orchestration_session_id,
+                        authoritative_participant_id,
+                        &source_journal_event,
+                        obligation_id,
+                        1,
+                    )
+                    .expect("compute rebase-test C1 record commitment");
+
+                let mut obligation = pending_obligation(
+                    orchestration_session_id,
+                    obligation_id,
+                    OrchestrationObligationKind::ApprovalRequired,
+                );
+                obligation.attach_state = OrchestrationObligationAttachState::Eligible;
+                obligation.source_participant_id = Some("ash_member".to_string());
+                obligation.target_backend_id = Some("cli:codex_world".to_string());
+                obligation.world_id = Some("world-17".to_string());
+                obligation.world_generation = Some(2);
+                obligation.causation_event_id = Some(event_id.to_string());
+                obligation.causation_message_id = Some(message_id.to_string());
+                obligation.causation_request_id = Some(format!("req_{obligation_id}"));
+                obligation.payload = Some(payload);
+                obligation.authority_store_id = Some(authority_store_id.to_string());
+                obligation.authoritative_participant_id =
+                    Some(authoritative_participant_id.to_string());
+                obligation.obligation_revision = Some(1);
+                obligation.source_journal_event = Some(source_journal_event.clone());
+                obligation.payload_commitment = Some(payload_commitment);
+                obligation.canonical_record_commitment = Some(canonical_record_commitment);
+
+                let event = MaterializedObligationLedgerEventV1 {
+                    schema_version: 1,
+                    authority_store_id: authority_store_id.to_string(),
+                    orchestration_session_id: orchestration_session_id.to_string(),
+                    authoritative_participant_id: authoritative_participant_id.to_string(),
+                    acceptance_record_id: acceptance_record_id.to_string(),
+                    acceptance_record_revision: 1,
+                    accepted_work_identity: accepted_work_identity.clone(),
+                    stream_id: stream_id.to_string(),
+                    source_journal_event,
+                    event_class:
+                        substrate_common::agent_events::WorldWorkerEventClassV1::ApprovalRequest,
+                    attention_required: true,
+                    emitted_at: Utc::now(),
+                    obligation_id: Some(obligation_id.to_string()),
+                };
+                let state = ObligationLedgerSessionStateV1 {
+                    schema_version: 1,
+                    authority_store_id: authority_store_id.to_string(),
+                    orchestration_session_id: orchestration_session_id.to_string(),
+                    authoritative_participant_id: authoritative_participant_id.to_string(),
+                    acceptance_record_id: acceptance_record_id.to_string(),
+                    acceptance_record_revision: 1,
+                    accepted_work_identity,
+                    stream_id: stream_id.to_string(),
+                    host_transition_correlation: None,
+                    authority_revision_observed: 11,
+                    session_ledger_revision: 1,
+                    materialized_through_event_sequence: 1,
+                    terminal_event_id: None,
+                    terminal_event_sequence: None,
+                };
+                ObligationLedgerMaterializationPlanV1 {
+                    expected_revision_cursor: ObligationLedgerRevisionCursorV1 {
+                        schema_version: 1,
+                        current_session_ledger_revision: 0,
+                    },
+                    expected_state: None,
+                    next_revision_cursor: ObligationLedgerRevisionCursorV1 {
+                        schema_version: 1,
+                        current_session_ledger_revision: 1,
+                    },
+                    next_state: state,
+                    materialized_events: vec![event],
+                    projected_obligations: vec![obligation],
+                }
+            };
+            let orchestrator = detached_orchestrator(
+                "codex",
+                orchestration_session_id,
+                authoritative_participant_id,
+            );
+            let mut parent = parked_parent(&orchestrator);
+            parent.set_world_binding("world-17", 2);
+            store
+                .persist_orchestration_session(&parent)
+                .expect("persist rebase-test parent session");
+            store
+                .persist_participant(&orchestrator)
+                .expect("persist rebase-test orchestrator");
+
+            let plan_b = build_plan(
+                "wwa_018f0f2e-7b4c-7aa1-8c22-123456789ac1",
+                "wwm_018f0f2e-7b4c-7aa1-8c22-123456789bc1",
+                "obl_c1_rebase_b",
+                "wwje_c1_rebase_b",
+                "stream-c1-rebase-b",
+                "evt_c1_rebase_b",
+            );
+            store
+                .apply_obligation_ledger_materialization_plan(&plan_b)
+                .expect("apply unrelated rebase-test C1 plan first");
+
+            let plan_a = build_plan(
+                "wwa_018f0f2e-7b4c-7aa1-8c22-123456789ac0",
+                "wwm_018f0f2e-7b4c-7aa1-8c22-123456789bc0",
+                "obl_c1_rebase_a",
+                "wwje_c1_rebase_a",
+                "stream-c1-rebase-a",
+                "evt_c1_rebase_a",
+            );
+            store
+                .apply_obligation_ledger_materialization_plan(&plan_a)
+                .expect("rebase C1 plan after unrelated acceptance advanced the session cursor");
+
+            assert_eq!(
+                store
+                    .load_obligation_ledger_revision_cursor(orchestration_session_id)
+                    .expect("load rebased session cursor"),
+                ObligationLedgerRevisionCursorV1 {
+                    schema_version: 1,
+                    current_session_ledger_revision: 2,
+                }
+            );
+            assert_eq!(
+                store
+                    .load_obligation_ledger_state(
+                        orchestration_session_id,
+                        "wwa_018f0f2e-7b4c-7aa1-8c22-123456789ac0",
+                    )
+                    .expect("load rebased acceptance state")
+                    .expect("rebased acceptance state exists")
+                    .session_ledger_revision,
+                2
+            );
+            assert_eq!(
+                store
+                    .load_obligation_ledger_state(
+                        orchestration_session_id,
+                        "wwa_018f0f2e-7b4c-7aa1-8c22-123456789ac1",
+                    )
+                    .expect("load unrelated acceptance state")
+                    .expect("unrelated acceptance state exists")
+                    .session_ledger_revision,
+                1
+            );
         });
     }
 
@@ -16878,6 +18559,216 @@ mod tests {
                     .expect("settled session exists");
                 assert_eq!(settled_session.pending_inbox_count, 0);
             }
+        });
+    }
+
+    #[test]
+    #[serial_test::serial]
+    fn close_prepared_internal_continue_approval_response_obligation_updates_c1_materialized_canonical_record(
+    ) {
+        with_store(|store| {
+            let authority_store_id = "authority-store-c1-closeout";
+            let session_id = "sess_continue_c1";
+            let orchestrator = live_orchestrator("codex", session_id, "orch_continue_c1");
+            let mut parent = parked_parent(&orchestrator);
+            parent.set_world_binding("world-17", 2);
+            let member = live_member(
+                "codex_world",
+                session_id,
+                "ash_continue_c1",
+                "orch_continue_c1",
+            );
+
+            store
+                .persist_orchestration_session(&parent)
+                .expect("persist C1 closeout session");
+            store
+                .persist_participant(&orchestrator)
+                .expect("persist C1 closeout orchestrator");
+            store
+                .persist_participant(&member)
+                .expect("persist C1 closeout member");
+
+            let acceptance_record_id = "wwa_018f0f2e-7b4c-7aa1-8c22-c10000000001";
+            let accepted_work_identity = AcceptedWorldWorkIdentityV1::RetainedTurn {
+                active_run_id: "req_continue_c1".to_string(),
+                message_id: "wwm_018f0f2e-7b4c-7aa1-8c22-c10000000002".to_string(),
+                target_participant_id: "ash_continue_c1".to_string(),
+            };
+            let source_journal_event =
+                crate::execution::agent_runtime::obligation_ledger::SupervisorJournalEventRefV1 {
+                    schema_version: 1,
+                    journal_entry_id: "wwje_c1_closeout_event_1".to_string(),
+                    acceptance_record_id: acceptance_record_id.to_string(),
+                    acceptance_record_revision: 1,
+                    accepted_work_identity: accepted_work_identity.clone(),
+                    stream_id: "stream-c1-closeout".to_string(),
+                    frame_sequence: 2,
+                    event_id: "evt_c1_closeout_1".to_string(),
+                    event_sequence: 1,
+                    transport_event_commitment: AuthorityObjectCommitmentV1::CanonicalSha256 {
+                        digest_hex: "b".repeat(64),
+                    },
+                };
+            let payload = json!({
+                "schema_version": 1,
+                "event_class": "approval_request",
+                "request_id": "req_continue_c1",
+                "active_run_id": "req_continue_c1",
+                "target_participant_id": "orch_continue_c1",
+                "source_backend_id": "cli:codex_world",
+                "thread_id": "thread-c1-closeout",
+                "stream_id": "stream-c1-closeout",
+                "frame_sequence": 2,
+                "event_id": "evt_c1_closeout_1",
+                "event_sequence": 1,
+                "host_transition_correlation": null,
+                "payload": { "message": "needs approval" }
+            });
+            let payload_commitment =
+                crate::execution::agent_runtime::obligation_ledger::obligation_payload_commitment(
+                    &payload,
+                )
+                .expect("compute C1 closeout payload commitment");
+            let canonical_record_commitment = crate::execution::agent_runtime::obligation_ledger::obligation_snapshot_record_commitment(
+                authority_store_id,
+                session_id,
+                "orch_continue_c1",
+                &source_journal_event,
+                "obl_c1_closeout",
+                1,
+            )
+            .expect("compute C1 closeout record commitment");
+
+            let mut obligation = pending_continue_approval_obligation(
+                session_id,
+                "obl_c1_closeout",
+                "ash_continue_c1",
+            );
+            obligation.authority_store_id = Some(authority_store_id.to_string());
+            obligation.authoritative_participant_id = Some("orch_continue_c1".to_string());
+            obligation.obligation_revision = Some(1);
+            obligation.source_journal_event = Some(source_journal_event.clone());
+            obligation.payload = Some(payload.clone());
+            obligation.payload_commitment = Some(payload_commitment);
+            obligation.canonical_record_commitment = Some(canonical_record_commitment);
+            obligation.causation_event_id = Some("evt_c1_closeout_1".to_string());
+            obligation.causation_message_id =
+                Some("wwm_018f0f2e-7b4c-7aa1-8c22-c10000000002".to_string());
+            obligation.causation_request_id = Some("req_continue_c1".to_string());
+            obligation.ingress_source_kind = Some("world_work_execution_supervisor".to_string());
+            obligation.ingress_source_id = Some("wwje_c1_closeout_event_1".to_string());
+
+            let event = MaterializedObligationLedgerEventV1 {
+                schema_version: 1,
+                authority_store_id: authority_store_id.to_string(),
+                orchestration_session_id: session_id.to_string(),
+                authoritative_participant_id: "orch_continue_c1".to_string(),
+                acceptance_record_id: acceptance_record_id.to_string(),
+                acceptance_record_revision: 1,
+                accepted_work_identity: accepted_work_identity.clone(),
+                stream_id: "stream-c1-closeout".to_string(),
+                source_journal_event: source_journal_event.clone(),
+                event_class:
+                    substrate_common::agent_events::WorldWorkerEventClassV1::ApprovalRequest,
+                attention_required: true,
+                emitted_at: obligation.created_at,
+                obligation_id: Some("obl_c1_closeout".to_string()),
+            };
+            let state = ObligationLedgerSessionStateV1 {
+                schema_version: 1,
+                authority_store_id: authority_store_id.to_string(),
+                orchestration_session_id: session_id.to_string(),
+                authoritative_participant_id: "orch_continue_c1".to_string(),
+                acceptance_record_id: acceptance_record_id.to_string(),
+                acceptance_record_revision: 1,
+                accepted_work_identity,
+                stream_id: "stream-c1-closeout".to_string(),
+                host_transition_correlation: None,
+                authority_revision_observed: 17,
+                session_ledger_revision: 1,
+                materialized_through_event_sequence: 1,
+                terminal_event_id: None,
+                terminal_event_sequence: None,
+            };
+            store
+                .apply_obligation_ledger_materialization_plan(
+                    &ObligationLedgerMaterializationPlanV1 {
+                        expected_revision_cursor: ObligationLedgerRevisionCursorV1 {
+                            schema_version: 1,
+                            current_session_ledger_revision: 0,
+                        },
+                        expected_state: None,
+                        next_revision_cursor: ObligationLedgerRevisionCursorV1 {
+                            schema_version: 1,
+                            current_session_ledger_revision: 1,
+                        },
+                        next_state: state,
+                        materialized_events: vec![event],
+                        projected_obligations: vec![obligation.clone()],
+                    },
+                )
+                .expect("persist C1 closeout materialization plan");
+
+            let resolved_target = store
+                .resolve_internal_continue_world_dispatch_target(
+                    session_id,
+                    "orch_continue_c1",
+                    "ash_continue_c1",
+                    "cli:codex_world",
+                )
+                .expect("resolve C1 continue target");
+            let closeout = store
+                .prepare_internal_continue_approval_response_obligation_closeout(
+                    &resolved_target,
+                    &WorkerContinueApprovalResponsePayloadV1 {
+                        approval_obligation_id: "obl_c1_closeout".to_string(),
+                        decision: ApprovalResponseDecisionV1::Approve,
+                        thread_id: None,
+                    },
+                )
+                .expect("prepare C1 approval closeout");
+            let closed = store
+                .close_prepared_internal_continue_approval_response_obligation(
+                    &closeout,
+                    Some("approved by host".to_string()),
+                )
+                .expect("close C1 approval closeout");
+
+            assert_eq!(closed.state, OrchestrationObligationState::Resolved);
+            assert_eq!(
+                closed.review_state,
+                OrchestrationObligationReviewState::Resolved
+            );
+            assert!(!closed.attention_required);
+            assert!(
+                !store.canonical_obligations_dir(session_id).exists(),
+                "C1 closeout must not recreate legacy session obligation artifacts"
+            );
+            let persisted = store
+                .load_obligation(session_id, "obl_c1_closeout")
+                .expect("load closed C1 obligation")
+                .expect("closed C1 obligation exists");
+            assert_eq!(persisted.state, OrchestrationObligationState::Resolved);
+            assert_eq!(
+                persisted.review_state,
+                OrchestrationObligationReviewState::Resolved
+            );
+            assert_eq!(
+                persisted.resolution_note.as_deref(),
+                Some("approved by host")
+            );
+            assert!(
+                persisted.has_c1_materialization_identity(),
+                "C1 closeout must preserve canonical materialization identity"
+            );
+            assert!(
+                store
+                    .load_inbox_item(session_id, "obl_c1_closeout")
+                    .expect("load C1 closeout inbox compatibility artifact")
+                    .is_none(),
+                "C1 closeout must not recreate compatibility inbox projections"
+            );
         });
     }
 

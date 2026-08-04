@@ -1724,8 +1724,8 @@ shell differential is `981 passed / 160 failed / 0 ignored` to
 causally attributed to the real dispatcher or tool-to-dispatch correction. All forbidden
 transition classes are zero and all 149 retained normalized failure signatures are unchanged.
 This result closes only B1/B2.1-0 at that historical checkpoint. The later joint production
-integration closeout is now recorded below; B3.1 is complete on the bound Tuesday, August 4, 2026
-candidate, C1 is next, and no seam is promoted.
+integration closeout is now recorded below; B3.1 and C1 are complete on the bound Tuesday,
+August 4, 2026 candidate, A1.2b is next, and no seam is promoted.
 
 ## B1/B2.1 joint production closeout recorded result
 
@@ -1788,7 +1788,8 @@ normalized panic bodies remain unchanged, and the exact historical-to-final diff
 recorded in
 [`review-control/b3-1-differential-evidence.json`](review-control/b3-1-differential-evidence.json).
 No test name, failure message, assertion, or production behavior is removed, renamed, substituted,
-ignored, or weakened. B3.1 is complete, C1 is now the next packet, and no seam is promoted.
+ignored, or weakened. B3.1 is complete, C1 is complete on the same bound Tuesday candidate,
+A1.2b is now the next packet, and no seam is promoted.
 
 ## Track C — Obligations, inbox, auto-attach, and router attach
 
@@ -1797,6 +1798,21 @@ ignored, or weakened. B3.1 is complete, C1 is now the next packet, and no seam i
 | **C1 — Event-to-obligation materializer and semantic cut** | Consume durable exact events, idempotently create canonical obligations while the supervisor observes active work, and own the monotonic ledger revision/materialized-event cut plus closed snapshot query consumed by A1.2b. | ObligationLedger. | `01` invariants 4–6; `02` RuntimeEventTransport/Supervisor/Messaging/Obligation rows; `04` runtime carrier, supervisor rules, and `ObligationLedgerSnapshotReadV1`; `05` `RG-OBL-01`/`RG-OBL-02`; obligation-ledger producer/dedupe sections. | RuntimeEventTransport; ReceiptRegistry; Supervisor; MessagingProtocol; HostSessionAuthority consume-only client. | `agent_runtime/obligation_ledger.rs`; bounded consumer integration from the receipt-scoped supervisor journal; bounded StateStore persistence only; focused materialization/cut/snapshot tests. | No runtime identity generation, receipt acceptance, observation ownership, retained-envelope or host-transition semantics, producer event eligibility choice, inbox rendering, router launch, direct prompt injection, or transfer of obligation semantics to HostSessionAuthority/StateStore. Stream exhaustion, EOF, timeout, PID/helper/socket state, inbox rows, pending counts, worker flags, and compatibility projections are forbidden completeness inputs. | Each B3.1 attention event creates exactly one canonical obligation before the exact B0 terminal event when applicable; duplicate journal replay creates none. Before classification and snapshot capture, C1 verifies that every post-acknowledgement retained B2.1 `Event` journal ref through the cut commits one full canonical B3.1 target/source/thread/class/attention/request/message/transition/payload envelope. The ledger advances one monotonic session revision and materialized-through event watermark, returns Pending before coverage, then returns a Complete snapshot binding exact store/session/participant, B1 acceptance ID/revision and accepted active run, B0 stream/terminal event, and the complete ordered exhaustive join of all retained `Event` refs through the cut even for `NoUnresolvedAttention`, plus unchanged owner-supplied transition intent/revision/payload commitment and distinct transition run, authority revision, disposition, and sorted canonical-record commitments. Any untyped/omitted/substituted event or stale/mismatched scope, correlation, revision, cut, disposition, or record commitment keeps the cut non-Complete. | `RG-OBL-01`, C1 clauses of `RG-OBL-02`, obligation clauses of `RG-SUP-01`, bounded consumer clauses of `RG-MSG-01`, and C1 clauses of `RG-OBS-01`. | A1.1e, B0, B1, B2.1, and B3.1. | A1.2b production correlation supply and consumption/adoption, C2 projections, C3 router behavior, B2.2 foreground early return, and every seam promotion. |
 | **C2 — Inbox and auto-attach projections** | Make inbox and attach eligibility pure projections over obligation state and effective policy. | InboxProjection and AutoAttachProjection. | `02` projection rows; notification inbox design; auto-attach trigger design. | ObligationLedger; CompatibilityReadModel; SteeringPolicyEngine. | `agent_runtime/{host_inbox,obligation_ledger,auto_attach,state_store}.rs`; `host_inbox_materialization.rs`; projection tests. | No host process launch, no worker action, and no removal of compatibility ingress without migration proof. | Deleting/rebuilding projections does not lose obligation truth; session-coalesced claim is deterministic; wrong-host and policy denial fail closed. | Projection clauses of `RG-OBL-02`, `RG-ATTACH-01`, `RG-BASE-03`. | A1, A2/A3, C1, and B4; B4 transitively supplies B2.2/B3.2/E2. | C3 router launch and unrelated worker controls. |
 | **C3 — Router ownership restoration** | Consume attach-eligible claims, restore one sanctioned host episode, settle the claim, and stop. | RouterAttachTrigger for triggering; HostSessionAuthority for the attach transition. | `02` RouterAttachTrigger row; router responsibilities/non-responsibilities; `04` HostExecutionEpisodeV1. | HostSessionAuthority; SurfaceAdapter; AutoAttachProjection. | `agent_runtime/auto_attach.rs`; bounded router entrypoint; helper launch adapter; router tests. | No prompt replay, approval/answer/fork/continue, or always-running backend assumption. | Router produces one attach outcome per session claim and cannot invoke worker-control verbs; manual reattach coexists without duplicate ownership. | `RG-ATTACH-01`, `RG-ATTACH-02`, `RG-AUTH-01`. | C2 and A1/A2. | Worker-control, receipt, and unrelated policy work. |
+
+At the bound Tuesday, August 4, 2026 source candidate, C1 is complete. The accepted retained path
+now feeds exact B1 acceptance plus B2.1 durable retained `Event` refs and validated B3.1 envelopes
+into `ObligationLedger` as each typed `Event` or terminal `Exit` is durably accepted, removes the
+old terminal-coupled production writer from that C1-owned accepted path, and advances the
+monotonic ledger revision/materialized-through watermark without reopening B0/B1/B2.1/B3.1
+ownership. Broad proof remains monotonic through both `make shell-lib-wall` and
+`make shell-lib-wall-serial` at `1330 discovered / 1282 passed / 48 failed / 0 ignored`, with
+failure-name SHA-256 `c6de1349137dcb16d03b87be5364dc50d74a5052565e2c8d40dfed303592bed9` and
+normalized-signature SHA-256
+`e53ffb35dbd4fe32ea60ad8da88efe449edc510a5bd0b3fe446e8a368d5beb40`. That inventory growth is
+exactly six new passing shell tests, and the retained 48-failure differential is limited to 23
+FILE:LINE-only movements in `crates/shell/src/execution/orchestrator_world_dispatch.rs` recorded in
+[`review-control/c1-differential-evidence.json`](review-control/c1-differential-evidence.json).
+A1.2b is now the next packet and no seam is promoted.
 
 ## Track D — UAA execution envelope and side-effect mediation
 
@@ -2241,8 +2257,9 @@ This is preserved planning evidence, not the current next dispatch. Planning is 
 planning fingerprint `sha256:8f4cf54640443dbeb82fffbef68fac8d03eeaa6c72cf4e44f645044bc2b210e7`.
 R3 implementation is `PARKED_BY_USER`, no R3 implementation task has been dispatched, and the
 previous authority wall `AUTHORITY_REQUIRED:B1_B2_1_JOINT_CLOSEOUT` is now closed. B3.1 is
-complete on the bound Tuesday, August 4, 2026 candidate, and the next candidate implementation
-line is `C1 -> A1.2b`. Only after that corridor lands may a fresh user/meta authority gate
+complete on the bound Tuesday, August 4, 2026 candidate, C1 is complete on that same bound
+Tuesday candidate, and the next candidate implementation line is `A1.2b`. Only after A1.2b lands
+may a fresh user/meta authority gate
 revalidate live repository truth and reopen the preserved future edge
 `AUTHORITY_REQUIRED:R3_IMPLEMENTATION -> A1.1d-5R3-HOME`; R3 must then complete before A1.3, A1.4,
 or A1 closeout. Every later edge remains an explicit authority gate.

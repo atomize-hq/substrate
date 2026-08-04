@@ -210,6 +210,13 @@ impl WorldWorkJournalEntryV1 {
         }
         Ok(frame)
     }
+
+    pub(crate) fn decode_for_c1(
+        &self,
+        claim: &WorldWorkExecutionClaimV1,
+    ) -> Result<ExecuteStreamFrame> {
+        self.decode_and_validate(claim)
+    }
 }
 
 #[derive(Clone, Debug, Deserialize, Eq, PartialEq, Serialize)]
