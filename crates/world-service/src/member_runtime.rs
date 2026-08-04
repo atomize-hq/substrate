@@ -18,7 +18,10 @@ use std::{
     path::Path,
     sync::{Arc, Mutex, RwLock},
 };
-use substrate_common::agent_events::{AgentEvent, AgentEventKind, MessageEventKind};
+use substrate_common::agent_events::{
+    AgentEvent, AgentEventKind, MessageEventKind, NormalizedWorldWorkerEventFacetV1,
+    WorldWorkerEventClassV1, WorldWorkerEventV1,
+};
 use tokio_stream::wrappers::UnboundedReceiverStream;
 use transport_api_types::{
     ExecuteStreamFrame, MemberDispatchRequestV1, MemberRuntimeBackendKindV1,
@@ -97,10 +100,16 @@ struct MemberStreamContext {
     run_id: String,
     acceptance_context: Option<transport_api_types::WorldWorkAcceptanceContextV1>,
     participant_id: String,
+    orchestrator_participant_id: String,
     parent_participant_id: Option<String>,
     resumed_from_participant_id: Option<String>,
     backend_id: String,
     protocol: serde_json::Value,
+}
+
+struct PreparedMemberRuntimeEvent {
+    event: AgentEvent,
+    worker_event_facet: Option<NormalizedWorldWorkerEventFacetV1>,
 }
 
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
@@ -268,6 +277,7 @@ impl MemberRuntimeManager {
             run_id: dispatch.run_id.clone(),
             acceptance_context,
             participant_id: dispatch.participant_id.clone(),
+            orchestrator_participant_id: dispatch.orchestrator_participant_id.clone(),
             parent_participant_id: dispatch.parent_participant_id.clone(),
             resumed_from_participant_id: dispatch.resumed_from_participant_id.clone(),
             backend_id: dispatch.backend_id.clone(),
@@ -1270,7 +1280,7 @@ fn frame_from_wrapper_event(
     agent_id: &str,
     producer: &mut RuntimeEventStreamProducer,
 ) -> Result<Option<ExecuteStreamFrame>> {
-    let Some(event) = agent_event_from_wrapper_event(
+    let prepared = agent_event_from_wrapper_event(
         context,
         binding,
         span_id,
@@ -1278,10 +1288,32 @@ fn frame_from_wrapper_event(
         emitted_registered,
         mode,
         agent_id,
-    ) else {
-        return Ok(None);
-    };
-    producer.event(event).map(Some)
+    )?;
+    let mut frame = producer.event(prepared.event)?;
+    if let Some(facet) = prepared.worker_event_facet {
+        let ExecuteStreamFrame::Event {
+            frame_identity,
+            event,
+        } = &mut frame
+        else {
+            unreachable!("producer.event must return an Event frame");
+        };
+        let event_identity = event.event_identity.clone().ok_or_else(|| {
+            anyhow!("member runtime typed worker event omitted event_identity after stamping")
+        })?;
+        event.worker_event = Some(world_worker_event_from_facet(
+            context,
+            binding,
+            frame_identity,
+            &event_identity,
+            event.ts,
+            facet,
+        )?);
+        event
+            .validate_identity_contract()
+            .map_err(anyhow::Error::msg)?;
+    }
+    Ok(Some(frame))
 }
 
 #[allow(clippy::too_many_arguments)]
@@ -1343,8 +1375,14 @@ fn agent_event_from_wrapper_event(
     emitted_registered: &mut bool,
     mode: MemberStreamMode,
     agent_id: &str,
-) -> Option<AgentEvent> {
-    let surfaced_thread_id = surfaced_uaa_thread_id_from_data(wrapper_event.data.as_ref());
+) -> Result<PreparedMemberRuntimeEvent> {
+    let worker_event_facet = normalized_world_worker_event_facet_v1(context, mode, &wrapper_event)?;
+    let surfaced_thread_id = worker_event_facet
+        .as_ref()
+        .map(|facet| facet.thread_id.clone())
+        .or_else(|| surfaced_uaa_thread_id_from_data(wrapper_event.data.as_ref()));
+    let compatibility_uaa_event =
+        normalized_world_worker_payload_uaa_event(wrapper_event.data.as_ref());
     if mode == MemberStreamMode::Bootstrap {
         if let Some(event) = registered_event_from_data(
             context,
@@ -1354,9 +1392,15 @@ fn agent_event_from_wrapper_event(
             agent_id,
         ) {
             *emitted_registered = true;
-            return Some(event);
+            return Ok(PreparedMemberRuntimeEvent {
+                event,
+                worker_event_facet: None,
+            });
         }
     }
+
+    let compatibility_message =
+        wrapper_event_compatibility_message(&wrapper_event, worker_event_facet.is_some());
 
     let mut event = match wrapper_event.kind {
         AgentWrapperEventKind::Status => AgentEvent::message(
@@ -1364,47 +1408,35 @@ fn agent_event_from_wrapper_event(
             context.orchestration_session_id.clone(),
             context.run_id.clone(),
             MessageEventKind::Status,
-            wrapper_event
-                .message
-                .clone()
-                .unwrap_or_else(|| "member runtime status".to_string()),
+            compatibility_message.clone(),
         ),
         AgentWrapperEventKind::TextOutput => AgentEvent::message(
             agent_id,
             context.orchestration_session_id.clone(),
             context.run_id.clone(),
             MessageEventKind::TaskProgress,
-            wrapper_event
-                .text
-                .clone()
-                .unwrap_or_else(|| "member runtime output".to_string()),
+            compatibility_message.clone(),
         ),
         AgentWrapperEventKind::ToolCall | AgentWrapperEventKind::ToolResult => AgentEvent::message(
             agent_id,
             context.orchestration_session_id.clone(),
             context.run_id.clone(),
             MessageEventKind::TaskProgress,
-            wrapper_event
-                .message
-                .clone()
-                .unwrap_or_else(|| "member runtime tool activity".to_string()),
+            compatibility_message.clone(),
         ),
         AgentWrapperEventKind::Error => AgentEvent::alert(
             agent_id,
             context.orchestration_session_id.clone(),
             context.run_id.clone(),
             "agent_wrapper_error",
-            wrapper_event
-                .message
-                .clone()
-                .unwrap_or_else(|| "member runtime error".to_string()),
+            compatibility_message.clone(),
         ),
         AgentWrapperEventKind::Unknown => AgentEvent::message(
             agent_id,
             context.orchestration_session_id.clone(),
             context.run_id.clone(),
             MessageEventKind::TaskProgress,
-            "member runtime emitted an unknown event".to_string(),
+            compatibility_message,
         ),
     };
 
@@ -1418,14 +1450,19 @@ fn agent_event_from_wrapper_event(
     );
     event.thread_id = surfaced_thread_id;
 
-    if let Some(data) = wrapper_event.data {
+    if wrapper_event.data.is_some() {
         if let Some(obj) = event.data.as_object_mut() {
-            obj.insert("uaa_event".to_string(), data);
+            if let Some(uaa_event) = compatibility_uaa_event {
+                obj.insert("uaa_event".to_string(), uaa_event);
+            }
             obj.insert("protocol".to_string(), context.protocol.clone());
         }
     }
 
-    Some(event)
+    Ok(PreparedMemberRuntimeEvent {
+        event,
+        worker_event_facet,
+    })
 }
 
 fn registered_event_from_data(
@@ -1452,13 +1489,14 @@ fn registered_event_from_data(
         parent_participant_id: context.parent_participant_id.clone(),
         resumed_from_participant_id: context.resumed_from_participant_id.clone(),
         backend_id: Some(context.backend_id.clone()),
-        thread_id: surfaced_uaa_thread_id_from_data(Some(data)),
+        thread_id: surfaced_uaa_session_id_from_data(Some(data)),
         role: Some(MEMBER_ROLE.to_string()),
         world_id: Some(binding.world_id.clone()),
         world_generation: Some(binding.world_generation),
         cmd_id: None,
         span_id: Some(span_id.to_string()),
         event_identity: None,
+        worker_event: None,
         channel: None,
         identity_tuple: None,
         placement_posture: None,
@@ -1488,6 +1526,412 @@ fn stamp_event_identity(
     event.set_pure_agent_telemetry_identity(agent_id.to_string());
 }
 
+fn world_worker_event_from_facet(
+    context: &MemberStreamContext,
+    binding: &SharedWorldBindingSnapshot,
+    frame_identity: &transport_api_types::RuntimeFrameIdentityV1,
+    event_identity: &transport_api_types::RuntimeEventIdentityV1,
+    emitted_at: chrono::DateTime<chrono::Utc>,
+    facet: NormalizedWorldWorkerEventFacetV1,
+) -> Result<WorldWorkerEventV1> {
+    let acceptance_context = context
+        .acceptance_context
+        .as_ref()
+        .ok_or_else(|| anyhow!("typed retained worker event requires acceptance_context"))?;
+    let worker_event = WorldWorkerEventV1 {
+        schema_version: 1,
+        acceptance_record_id: acceptance_context.proposed_acceptance_record_id.clone(),
+        stream_id: frame_identity.stream_id.clone(),
+        frame_sequence: frame_identity.frame_sequence,
+        event_id: event_identity.event_id.clone(),
+        event_sequence: event_identity.event_sequence,
+        request_id: acceptance_context.request_id.clone(),
+        active_run_id: context.run_id.clone(),
+        host_transition_correlation: acceptance_context.host_transition_correlation.clone(),
+        causation_message_id: facet.causation_message_id,
+        causation_request_id: facet.causation_request_id,
+        orchestration_session_id: context.orchestration_session_id.clone(),
+        source_participant_id: context.participant_id.clone(),
+        target_participant_id: context.orchestrator_participant_id.clone(),
+        source_backend_id: context.backend_id.clone(),
+        target_backend_id: acceptance_context.caller_backend_id.clone(),
+        world_id: binding.world_id.clone(),
+        world_generation: binding.world_generation,
+        thread_id: facet.thread_id,
+        event_class: facet.event_class,
+        attention_required: facet.attention_required,
+        payload: facet.payload,
+        emitted_at,
+    };
+    worker_event.validate().map_err(anyhow::Error::msg)?;
+    Ok(worker_event)
+}
+
+fn normalized_world_worker_event_facet_v1(
+    context: &MemberStreamContext,
+    mode: MemberStreamMode,
+    wrapper_event: &AgentWrapperEvent,
+) -> Result<Option<NormalizedWorldWorkerEventFacetV1>> {
+    if mode != MemberStreamMode::SubmittedTurn {
+        return Ok(None);
+    }
+    let Some(acceptance_context) = context.acceptance_context.as_ref() else {
+        return Ok(None);
+    };
+    let causation_message_id = acceptance_context.message_id.clone().ok_or_else(|| {
+        anyhow!("typed retained worker event requires acceptance_context.message_id")
+    })?;
+    let thread_id = typed_retained_thread_id_from_data(wrapper_event.data.as_ref())
+        .ok_or_else(|| anyhow!("typed retained worker event omitted thread_id"))?;
+    let event_class = normalized_world_worker_event_class_v1(wrapper_event)?;
+    let attention_required = event_class.attention_required_by_default()
+        || normalized_world_worker_attention_required(wrapper_event.data.as_ref()).unwrap_or(false);
+    let facet = NormalizedWorldWorkerEventFacetV1 {
+        schema_version: 1,
+        thread_id,
+        event_class,
+        attention_required,
+        causation_message_id,
+        causation_request_id: acceptance_context.request_id.clone(),
+        payload: normalized_world_worker_event_payload(wrapper_event)?,
+    };
+    facet.validate().map_err(anyhow::Error::msg)?;
+    Ok(Some(facet))
+}
+
+fn normalized_world_worker_event_class_v1(
+    wrapper_event: &AgentWrapperEvent,
+) -> Result<WorldWorkerEventClassV1> {
+    let data = wrapper_event.data.as_ref();
+
+    if let Some(label) = normalized_world_worker_event_class_label(data) {
+        return match label {
+            "reply" => Ok(WorldWorkerEventClassV1::Reply),
+            "progress_update" => Ok(WorldWorkerEventClassV1::ProgressUpdate),
+            "control_ack" => Ok(WorldWorkerEventClassV1::ControlAck),
+            "follow_up_question" => Ok(WorldWorkerEventClassV1::FollowUpQuestion),
+            "approval_request" => Ok(WorldWorkerEventClassV1::ApprovalRequest),
+            "blocked" => Ok(WorldWorkerEventClassV1::Blocked),
+            "attention_required" => Ok(WorldWorkerEventClassV1::AttentionRequired),
+            "fork_request" => Ok(WorldWorkerEventClassV1::ForkRequest),
+            "fork_recommendation" => Ok(WorldWorkerEventClassV1::ForkRecommendation),
+            "result" => Ok(WorldWorkerEventClassV1::Result),
+            "failure" => Ok(WorldWorkerEventClassV1::Failure),
+            "approval_response" | "fork_command" | "progress_ack" | "control_directive" => {
+                anyhow::bail!(
+                    "unsupported_worker_event_class: retained member emitted deferred worker event class {}",
+                    label
+                )
+            }
+            other => anyhow::bail!(
+                "unsupported_worker_event_class: retained member emitted worker event class {}",
+                other
+            ),
+        };
+    }
+
+    if let Some(event_class) = normalized_world_worker_event_class_from_stream_shape(data) {
+        return Ok(event_class);
+    }
+    if let Some(event_class) = normalized_world_worker_event_class_from_runtime_shape(data) {
+        return Ok(event_class);
+    }
+
+    anyhow::bail!(
+        "unsupported_worker_event_shape: retained member emitted no supported typed worker event shape"
+    )
+}
+
+fn normalized_world_worker_event_class_from_stream_shape(
+    data: Option<&serde_json::Value>,
+) -> Option<WorldWorkerEventClassV1> {
+    let event_type = normalized_world_worker_stream_event_type(data)?;
+    match event_type {
+        "thread.started" | "thread.resumed" | "turn.started" => {
+            Some(WorldWorkerEventClassV1::ProgressUpdate)
+        }
+        "turn.completed" => Some(WorldWorkerEventClassV1::Result),
+        "turn.failed" | "item.failed" | "error" => Some(WorldWorkerEventClassV1::Failure),
+        "item.started" | "item.created" | "item.delta" | "item.updated" | "item.completed" => {
+            match normalized_world_worker_stream_item_type(data) {
+                Some("agent_message")
+                    if event_type == "item.completed"
+                        || normalized_world_worker_stream_item_status(data)
+                            == Some("completed") =>
+                {
+                    Some(WorldWorkerEventClassV1::Reply)
+                }
+                Some("error") => Some(WorldWorkerEventClassV1::Failure),
+                Some(_) | None => Some(WorldWorkerEventClassV1::ProgressUpdate),
+            }
+        }
+        _ => None,
+    }
+}
+
+fn normalized_world_worker_event_class_from_runtime_shape(
+    data: Option<&serde_json::Value>,
+) -> Option<WorldWorkerEventClassV1> {
+    if normalized_world_worker_runtime_tools_facet(data) {
+        if normalized_world_worker_runtime_tools_facet_failed(data) {
+            return Some(WorldWorkerEventClassV1::Failure);
+        }
+        return Some(WorldWorkerEventClassV1::ProgressUpdate);
+    }
+    None
+}
+
+fn normalized_world_worker_runtime_tools_facet(data: Option<&serde_json::Value>) -> bool {
+    normalized_world_worker_string_field(data, &["/schema", "/raw_event/schema"])
+        == Some("agent_api.tools.structured.v1")
+}
+
+fn normalized_world_worker_runtime_tools_facet_failed(data: Option<&serde_json::Value>) -> bool {
+    normalized_world_worker_string_field(data, &["/tool/status", "/raw_event/tool/status"])
+        == Some("failed")
+        || normalized_world_worker_string_field(data, &["/tool/phase", "/raw_event/tool/phase"])
+            == Some("fail")
+}
+
+fn normalized_world_worker_stream_event_type(data: Option<&serde_json::Value>) -> Option<&str> {
+    normalized_world_worker_string_field(data, &["/type", "/raw_event/type"])
+}
+
+fn normalized_world_worker_stream_item_type(data: Option<&serde_json::Value>) -> Option<&str> {
+    normalized_world_worker_string_field(
+        data,
+        &[
+            "/item_type",
+            "/item/item_type",
+            "/item/type",
+            "/raw_event/item_type",
+            "/raw_event/item/item_type",
+            "/raw_event/item/type",
+        ],
+    )
+}
+
+fn normalized_world_worker_stream_item_status(data: Option<&serde_json::Value>) -> Option<&str> {
+    normalized_world_worker_string_field(
+        data,
+        &[
+            "/status",
+            "/item/status",
+            "/raw_event/status",
+            "/raw_event/item/status",
+        ],
+    )
+}
+
+fn normalized_world_worker_event_class_label(data: Option<&serde_json::Value>) -> Option<&str> {
+    normalized_world_worker_string_field(data, &["/event_class", "/raw_event/event_class"])
+}
+
+fn normalized_world_worker_attention_required(data: Option<&serde_json::Value>) -> Option<bool> {
+    normalized_world_worker_bool_field(
+        data,
+        &["/attention_required", "/raw_event/attention_required"],
+    )
+}
+
+fn normalized_world_worker_event_payload(
+    wrapper_event: &AgentWrapperEvent,
+) -> Result<serde_json::Value> {
+    let data = wrapper_event.data.as_ref();
+    for (pointer, label) in [
+        ("/payload", "payload"),
+        ("/raw_event/payload", "raw_event.payload"),
+        ("/content", "content"),
+        ("/raw_event/content", "raw_event.content"),
+        ("/tool", "tool"),
+        ("/raw_event/tool", "raw_event.tool"),
+    ] {
+        if let Some(value) = data.and_then(|data| data.pointer(pointer)) {
+            if !value.is_object() {
+                anyhow::bail!(
+                    "unsupported_worker_event_shape: retained member emitted malformed {} object",
+                    label
+                );
+            }
+        }
+    }
+
+    let mut payload = normalized_world_worker_payload_object(data);
+    if !payload.contains_key("message") {
+        if let Some(message) = normalized_world_worker_payload_message(data) {
+            payload.insert("message".to_string(), serde_json::Value::String(message));
+        }
+    }
+    if !payload.contains_key("event_id") {
+        if let Some(event_id) =
+            normalized_world_worker_string_field(data, &["/event_id", "/raw_event/event_id"])
+        {
+            payload.insert(
+                "event_id".to_string(),
+                serde_json::Value::String(event_id.to_string()),
+            );
+        }
+    }
+    if !payload.contains_key("message_id") {
+        if let Some(message_id) =
+            normalized_world_worker_string_field(data, &["/message_id", "/raw_event/message_id"])
+        {
+            payload.insert(
+                "message_id".to_string(),
+                serde_json::Value::String(message_id.to_string()),
+            );
+        }
+    }
+    let payload_has_supported_semantics = !payload.is_empty();
+    if let Some(uaa_event) = normalized_world_worker_payload_uaa_event(data) {
+        payload.entry("uaa_event".to_string()).or_insert(uaa_event);
+    }
+    if normalized_world_worker_event_class_label(data).is_some() && !payload_has_supported_semantics
+    {
+        anyhow::bail!(
+            "unsupported_worker_event_shape: retained member emitted no supported typed payload"
+        );
+    }
+    if payload.is_empty() {
+        anyhow::bail!(
+            "unsupported_worker_event_shape: retained member emitted no supported typed payload"
+        );
+    }
+    Ok(serde_json::Value::Object(payload))
+}
+
+fn normalized_world_worker_payload_message(data: Option<&serde_json::Value>) -> Option<String> {
+    normalized_world_worker_string_field(
+        data,
+        &[
+            "/payload/message",
+            "/raw_event/payload/message",
+            "/message",
+            "/raw_event/message",
+            "/content/text",
+            "/raw_event/content/text",
+        ],
+    )
+    .map(str::to_string)
+}
+
+fn wrapper_event_default_message(kind: &AgentWrapperEventKind) -> &'static str {
+    match kind {
+        AgentWrapperEventKind::Status => "member runtime status",
+        AgentWrapperEventKind::TextOutput => "member runtime output",
+        AgentWrapperEventKind::ToolCall | AgentWrapperEventKind::ToolResult => {
+            "member runtime tool activity"
+        }
+        AgentWrapperEventKind::Error => "member runtime error",
+        AgentWrapperEventKind::Unknown => "member runtime emitted an unknown event",
+    }
+}
+
+fn wrapper_event_compatibility_message(
+    wrapper_event: &AgentWrapperEvent,
+    typed_retained_event: bool,
+) -> String {
+    if typed_retained_event {
+        return normalized_world_worker_payload_message(wrapper_event.data.as_ref())
+            .unwrap_or_else(|| wrapper_event_default_message(&wrapper_event.kind).to_string());
+    }
+
+    match wrapper_event.kind {
+        AgentWrapperEventKind::Status => wrapper_event
+            .message
+            .clone()
+            .unwrap_or_else(|| wrapper_event_default_message(&wrapper_event.kind).to_string()),
+        AgentWrapperEventKind::TextOutput => wrapper_event
+            .text
+            .clone()
+            .unwrap_or_else(|| wrapper_event_default_message(&wrapper_event.kind).to_string()),
+        AgentWrapperEventKind::ToolCall
+        | AgentWrapperEventKind::ToolResult
+        | AgentWrapperEventKind::Error => wrapper_event
+            .message
+            .clone()
+            .unwrap_or_else(|| wrapper_event_default_message(&wrapper_event.kind).to_string()),
+        AgentWrapperEventKind::Unknown => {
+            wrapper_event_default_message(&wrapper_event.kind).to_string()
+        }
+    }
+}
+
+fn normalized_world_worker_payload_object(
+    data: Option<&serde_json::Value>,
+) -> serde_json::Map<String, serde_json::Value> {
+    for pointer in ["/payload", "/raw_event/payload"] {
+        if let Some(serde_json::Value::Object(object)) =
+            data.and_then(|value| value.pointer(pointer))
+        {
+            return normalized_world_worker_sanitized_object(object);
+        }
+    }
+    serde_json::Map::new()
+}
+
+fn normalized_world_worker_payload_uaa_event(
+    data: Option<&serde_json::Value>,
+) -> Option<serde_json::Value> {
+    let serde_json::Value::Object(object) = data? else {
+        return None;
+    };
+    let uaa_event = normalized_world_worker_sanitized_object(object);
+    (!uaa_event.is_empty()).then_some(serde_json::Value::Object(uaa_event))
+}
+
+fn normalized_world_worker_sanitized_object(
+    object: &serde_json::Map<String, serde_json::Value>,
+) -> serde_json::Map<String, serde_json::Value> {
+    object
+        .iter()
+        .filter(|(key, _)| !normalized_world_worker_secret_key(key))
+        .map(|(key, value)| (key.clone(), normalized_world_worker_sanitized_value(value)))
+        .collect()
+}
+
+fn normalized_world_worker_sanitized_value(value: &serde_json::Value) -> serde_json::Value {
+    match value {
+        serde_json::Value::Object(object) => {
+            serde_json::Value::Object(normalized_world_worker_sanitized_object(object))
+        }
+        serde_json::Value::Array(items) => serde_json::Value::Array(
+            items
+                .iter()
+                .map(normalized_world_worker_sanitized_value)
+                .collect(),
+        ),
+        _ => value.clone(),
+    }
+}
+
+fn normalized_world_worker_secret_key(key: &str) -> bool {
+    key.eq_ignore_ascii_case("prompt") || key.eq_ignore_ascii_case("command")
+}
+
+fn normalized_world_worker_string_field<'a>(
+    data: Option<&'a serde_json::Value>,
+    pointers: &[&str],
+) -> Option<&'a str> {
+    let data = data?;
+    pointers.iter().find_map(|pointer| {
+        data.pointer(pointer)
+            .and_then(serde_json::Value::as_str)
+            .map(str::trim)
+            .filter(|value| !value.is_empty())
+    })
+}
+
+fn normalized_world_worker_bool_field(
+    data: Option<&serde_json::Value>,
+    pointers: &[&str],
+) -> Option<bool> {
+    let data = data?;
+    pointers
+        .iter()
+        .find_map(|pointer| data.pointer(pointer).and_then(serde_json::Value::as_bool))
+}
+
 fn surfaced_uaa_session_id_from_data(data: Option<&serde_json::Value>) -> Option<String> {
     let data = data?;
     for pointer in ["/internal/uaa_session_id", "/session/id"] {
@@ -1509,6 +1953,19 @@ fn surfaced_uaa_thread_id_from_data(data: Option<&serde_json::Value>) -> Option<
         "/raw_event/thread_id",
         "/raw_event/session/id",
     ] {
+        if let Some(thread_id) = data.pointer(pointer).and_then(serde_json::Value::as_str) {
+            let trimmed = thread_id.trim();
+            if !trimmed.is_empty() {
+                return Some(trimmed.to_string());
+            }
+        }
+    }
+    None
+}
+
+fn typed_retained_thread_id_from_data(data: Option<&serde_json::Value>) -> Option<String> {
+    let data = data?;
+    for pointer in ["/thread_id", "/raw_event/thread_id"] {
         if let Some(thread_id) = data.pointer(pointer).and_then(serde_json::Value::as_str) {
             let trimmed = thread_id.trim();
             if !trimmed.is_empty() {
@@ -1754,6 +2211,7 @@ impl ActiveMemberRuntime {
             run_id,
             acceptance_context,
             participant_id: self.participant_id.clone(),
+            orchestrator_participant_id: self.orchestrator_participant_id.clone(),
             parent_participant_id: self.parent_participant_id.clone(),
             resumed_from_participant_id: self.resumed_from_participant_id.clone(),
             backend_id: self.backend_id.clone(),
@@ -2271,6 +2729,7 @@ mod tests {
                 host_transition_correlation: None,
             }),
             participant_id: "ash_member".to_string(),
+            orchestrator_participant_id: "ash_orchestrator".to_string(),
             parent_participant_id: None,
             resumed_from_participant_id: None,
             backend_id: "cli:codex".to_string(),
@@ -2983,6 +3442,19 @@ base_url = "https://gateway.example.invalid/v1"
         let payload = json!({
             "session": {
                 "id": "thread-session"
+            },
+            "raw_event": {
+                "thread_id": "thread-raw-event"
+            }
+        });
+        assert_eq!(
+            surfaced_uaa_thread_id_from_data(Some(&payload)).as_deref(),
+            Some("thread-session")
+        );
+
+        let payload = json!({
+            "session": {
+                "id": "thread-session"
             }
         });
         assert_eq!(
@@ -3068,6 +3540,7 @@ base_url = "https://gateway.example.invalid/v1"
             run_id: "run_bootstrap".to_string(),
             acceptance_context: None,
             participant_id: "ash_member".to_string(),
+            orchestrator_participant_id: "ash_orchestrator".to_string(),
             parent_participant_id: None,
             resumed_from_participant_id: None,
             backend_id: "cli:codex".to_string(),
@@ -3166,7 +3639,7 @@ base_url = "https://gateway.example.invalid/v1"
             })),
         };
 
-        let event = agent_event_from_wrapper_event(
+        let prepared = agent_event_from_wrapper_event(
             &sample_stream_context(),
             &sample_world_binding(),
             "spn_submitted",
@@ -3176,12 +3649,262 @@ base_url = "https://gateway.example.invalid/v1"
             "codex_world",
         )
         .expect("submitted turn event");
+        let event = prepared.event;
 
         assert_eq!(event.thread_id.as_deref(), Some("thread-submitted"));
         assert_eq!(event.participant_id.as_deref(), Some("ash_member"));
         assert_eq!(event.backend_id.as_deref(), Some("cli:codex"));
         assert_eq!(event.world_id.as_deref(), Some("world_123"));
         assert_eq!(event.world_generation, Some(7));
+
+        let missing_explicit_thread = AgentWrapperEvent {
+            agent_kind: agent_api::AgentWrapperKind::new("codex").expect("agent kind"),
+            kind: AgentWrapperEventKind::Status,
+            channel: Some("status".to_string()),
+            text: None,
+            message: Some("submitted turn".to_string()),
+            data: Some(json!({
+                "event_class": "progress_update",
+                "session": {
+                    "id": "thread-from-session"
+                },
+                "payload": {
+                    "message": "submitted turn"
+                }
+            })),
+        };
+        let err = match agent_event_from_wrapper_event(
+            &sample_member_stream_context(Some("wwm_018f0f3a-9b2c-7def-8abc-0123456789ac")),
+            &sample_world_binding(),
+            "spn_submitted",
+            missing_explicit_thread,
+            &mut false,
+            MemberStreamMode::SubmittedTurn,
+            "codex_world",
+        ) {
+            Ok(_) => panic!("submitted turn without explicit thread_id must fail closed"),
+            Err(err) => err,
+        };
+        assert!(
+            err.to_string()
+                .contains("typed retained worker event omitted thread_id"),
+            "unexpected error: {err}"
+        );
+    }
+
+    #[test]
+    fn submitted_turn_payload_is_sanitized_to_compatibility_subset() {
+        let wrapper_event = AgentWrapperEvent {
+            agent_kind: agent_api::AgentWrapperKind::new("codex").expect("agent kind"),
+            kind: AgentWrapperEventKind::Status,
+            channel: Some("status".to_string()),
+            text: None,
+            message: Some("raw wrapper secret".to_string()),
+            data: Some(json!({
+                "type": "item.started",
+                "thread_id": "thread-submitted",
+                "turn_id": "turn-2",
+                "item_id": "cmd-1",
+                "status": "in_progress",
+                "item_type": "command_execution",
+                "event_id": "evt-provider-1",
+                "message_id": "msg-provider-1",
+                "message": "tool progress",
+                "content": {
+                    "command": "cargo test",
+                    "prompt": "secret prompt"
+                },
+                "tool": {
+                    "kind": "command_execution",
+                    "status": "running",
+                    "phase": "execute",
+                    "prompt": "also secret"
+                },
+                "prompt": "root secret"
+            })),
+        };
+
+        let prepared = agent_event_from_wrapper_event(
+            &sample_member_stream_context(Some("wwm_018f0f3a-9b2c-7def-8abc-0123456789ac")),
+            &sample_world_binding(),
+            "spn_submitted",
+            wrapper_event,
+            &mut false,
+            MemberStreamMode::SubmittedTurn,
+            "codex_world",
+        )
+        .expect("submitted turn event");
+        let worker_event = prepared
+            .worker_event_facet
+            .as_ref()
+            .expect("submitted turn event must carry typed worker_event facet");
+
+        assert_eq!(
+            worker_event.event_class,
+            WorldWorkerEventClassV1::ProgressUpdate
+        );
+        assert_eq!(
+            worker_event.payload.get("message"),
+            Some(&json!("tool progress"))
+        );
+        assert_eq!(
+            prepared.event.data.get("message"),
+            Some(&json!("tool progress"))
+        );
+        assert!(worker_event
+            .payload
+            .pointer("/uaa_event/content/command")
+            .is_none());
+        assert_eq!(
+            worker_event.payload.pointer("/uaa_event/tool/kind"),
+            Some(&json!("command_execution"))
+        );
+        assert_eq!(
+            worker_event.payload.pointer("/uaa_event/event_id"),
+            Some(&json!("evt-provider-1"))
+        );
+        assert_eq!(
+            prepared.event.data.pointer("/uaa_event/event_id"),
+            Some(&json!("evt-provider-1"))
+        );
+        assert_eq!(
+            prepared.event.data.pointer("/uaa_event/message_id"),
+            Some(&json!("msg-provider-1"))
+        );
+        assert!(worker_event.payload.get("prompt").is_none());
+        assert!(worker_event
+            .payload
+            .pointer("/uaa_event/content/prompt")
+            .is_none());
+        assert!(worker_event
+            .payload
+            .pointer("/uaa_event/tool/prompt")
+            .is_none());
+        assert!(prepared.event.data.pointer("/uaa_event/prompt").is_none());
+        assert!(prepared
+            .event
+            .data
+            .pointer("/uaa_event/content/prompt")
+            .is_none());
+        assert!(prepared
+            .event
+            .data
+            .pointer("/uaa_event/tool/prompt")
+            .is_none());
+
+        let missing_supported_payload = AgentWrapperEvent {
+            agent_kind: agent_api::AgentWrapperKind::new("codex").expect("agent kind"),
+            kind: AgentWrapperEventKind::Status,
+            channel: Some("status".to_string()),
+            text: None,
+            message: Some("tool progress".to_string()),
+            data: Some(json!({
+                "event_class": "progress_update",
+                "thread_id": "thread-submitted"
+            })),
+        };
+        let err = match agent_event_from_wrapper_event(
+            &sample_member_stream_context(Some("wwm_018f0f3a-9b2c-7def-8abc-0123456789ac")),
+            &sample_world_binding(),
+            "spn_submitted",
+            missing_supported_payload,
+            &mut false,
+            MemberStreamMode::SubmittedTurn,
+            "codex_world",
+        ) {
+            Ok(_) => panic!("submitted turn without supported payload must fail closed"),
+            Err(err) => err,
+        };
+        assert!(
+            err.to_string()
+                .contains("unsupported_worker_event_shape: retained member emitted no supported typed payload"),
+            "unexpected error: {err}"
+        );
+    }
+
+    #[test]
+    fn submitted_turn_control_ack_remains_typed_without_nested_event_class() {
+        let wrapper_event = AgentWrapperEvent {
+            agent_kind: agent_api::AgentWrapperKind::new("codex").expect("agent kind"),
+            kind: AgentWrapperEventKind::Status,
+            channel: Some("status".to_string()),
+            text: None,
+            message: Some("raw wrapper directive".to_string()),
+            data: Some(json!({
+                "event_class": "control_ack",
+                "thread_id": "thread-submitted",
+                "payload": {
+                    "message": "directive applied",
+                    "detail": "directive detail"
+                }
+            })),
+        };
+
+        let prepared = agent_event_from_wrapper_event(
+            &sample_member_stream_context(Some("wwm_018f0f3a-9b2c-7def-8abc-0123456789ac")),
+            &sample_world_binding(),
+            "spn_submitted",
+            wrapper_event,
+            &mut false,
+            MemberStreamMode::SubmittedTurn,
+            "codex_world",
+        )
+        .expect("submitted turn control_ack event");
+        let worker_event = prepared
+            .worker_event_facet
+            .as_ref()
+            .expect("submitted turn control_ack must carry typed worker_event facet");
+
+        assert_eq!(
+            worker_event.event_class,
+            WorldWorkerEventClassV1::ControlAck
+        );
+        assert_eq!(
+            worker_event.payload.get("message"),
+            Some(&json!("directive applied"))
+        );
+        assert_eq!(
+            prepared.event.data.get("message"),
+            Some(&json!("directive applied"))
+        );
+        assert_eq!(
+            worker_event.payload.get("detail"),
+            Some(&json!("directive detail"))
+        );
+        assert!(worker_event.payload.get("event_class").is_none());
+        assert_eq!(
+            prepared.event.data.pointer("/uaa_event/event_class"),
+            Some(&json!("control_ack"))
+        );
+
+        let ambiguous_wrapper_fallback = AgentWrapperEvent {
+            agent_kind: agent_api::AgentWrapperKind::new("codex").expect("agent kind"),
+            kind: AgentWrapperEventKind::TextOutput,
+            channel: Some("assistant".to_string()),
+            text: Some("assistant reply".to_string()),
+            message: None,
+            data: Some(json!({
+                "thread_id": "thread-submitted"
+            })),
+        };
+        let err = match agent_event_from_wrapper_event(
+            &sample_member_stream_context(Some("wwm_018f0f3a-9b2c-7def-8abc-0123456789ac")),
+            &sample_world_binding(),
+            "spn_submitted",
+            ambiguous_wrapper_fallback,
+            &mut false,
+            MemberStreamMode::SubmittedTurn,
+            "codex_world",
+        ) {
+            Ok(_) => panic!("submitted turn without explicit typed shape must fail closed"),
+            Err(err) => err,
+        };
+        assert!(
+            err.to_string().contains(
+                "unsupported_worker_event_shape: retained member emitted no supported typed worker event shape"
+            ),
+            "unexpected error: {err}"
+        );
     }
 
     #[test]

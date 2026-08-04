@@ -1072,12 +1072,46 @@ struct ContinueWorldWorkerStreamResult {
     exit_code: i32,
     surfaced_thread_id: Option<String>,
     surfaced_worker_event: Option<ContinueWorldWorkerEventV1>,
+    surfaced_canonical_worker_event: Option<substrate_common::agent_events::WorldWorkerEventV1>,
 }
 
 #[cfg(target_os = "linux")]
 struct ContinueWorldWorkerForkBootstrapOutcome {
     source_participant_id: String,
     child_participant_id: String,
+}
+
+#[cfg(target_os = "linux")]
+#[derive(Clone, Debug, Serialize)]
+struct ValidatedContinueWorldWorkerEvent {
+    event_class: ContinueWorldWorkerEventClassV1,
+    source_participant_id: String,
+    target_participant_id: String,
+    source_backend_id: String,
+    attention_required: bool,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    thread_id: Option<String>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    stream_channel: Option<String>,
+    payload: serde_json::Value,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    canonical: Option<substrate_common::agent_events::WorldWorkerEventV1>,
+}
+
+#[cfg(target_os = "linux")]
+impl ValidatedContinueWorldWorkerEvent {
+    fn compatibility(&self) -> ContinueWorldWorkerEventV1 {
+        ContinueWorldWorkerEventV1 {
+            event_class: self.event_class,
+            source_participant_id: self.source_participant_id.clone(),
+            target_participant_id: self.target_participant_id.clone(),
+            source_backend_id: self.source_backend_id.clone(),
+            attention_required: self.attention_required,
+            thread_id: self.thread_id.clone(),
+            stream_channel: self.stream_channel.clone(),
+            payload: self.payload.clone(),
+        }
+    }
 }
 
 #[cfg(target_os = "linux")]
@@ -1858,11 +1892,22 @@ async fn continue_world_worker(
             .as_ref()
             .filter(|event| continue_world_worker_event_persists_live_obligation(event.event_class))
         {
-            persist_continue_world_worker_obligation(
-                &prepared.store,
-                &submit_request,
-                worker_event,
-            )?;
+            if let Some(canonical_worker_event) =
+                stream_result.surfaced_canonical_worker_event.as_ref()
+            {
+                persist_continue_world_worker_obligation_typed(
+                    &prepared.store,
+                    &submit_request,
+                    worker_event,
+                    canonical_worker_event,
+                )?;
+            } else {
+                persist_continue_world_worker_obligation(
+                    &prepared.store,
+                    &submit_request,
+                    worker_event,
+                )?;
+            }
             spawn_router_owned_auto_attach_discovery_trigger(
                 prepared.store.clone(),
                 compatibility.session.orchestration_session_id.clone(),
@@ -2302,7 +2347,8 @@ fn continue_world_worker_event_persists_live_obligation(
 ) -> bool {
     matches!(
         event_class,
-        ContinueWorldWorkerEventClassV1::FollowUpQuestion
+        ContinueWorldWorkerEventClassV1::AttentionRequired
+            | ContinueWorldWorkerEventClassV1::FollowUpQuestion
             | ContinueWorldWorkerEventClassV1::Blocked
             | ContinueWorldWorkerEventClassV1::ApprovalRequest
             | ContinueWorldWorkerEventClassV1::ForkRequest
@@ -2569,10 +2615,22 @@ fn log_router_owned_auto_attach_outcome(outcome: &RouterOwnedAutoAttachOutcomeRe
 }
 
 #[cfg(target_os = "linux")]
-fn persist_continue_world_worker_obligation(
+struct ContinueWorldWorkerObligationFacts<'a> {
+    payload_request_id: &'a str,
+    causation_event_id: Option<&'a str>,
+    causation_message_id: Option<&'a str>,
+    causation_request_id: Option<&'a str>,
+    target_backend_id: &'a str,
+    world_id: &'a str,
+    world_generation: u64,
+}
+
+#[cfg(target_os = "linux")]
+fn persist_continue_world_worker_obligation_common(
     store: &AgentRuntimeStateStore,
     request: &transport_api_types::MemberTurnSubmitRequestV1,
     worker_event: &ContinueWorldWorkerEventV1,
+    facts: ContinueWorldWorkerObligationFacts<'_>,
 ) -> Result<()> {
     let Some((obligation_kind, obligation_summary)) =
         continue_world_worker_obligation_kind_and_summary(worker_event)
@@ -2599,17 +2657,17 @@ fn persist_continue_world_worker_obligation(
         obligation.target_host_id = Some(local_host_id);
     }
     obligation.attention_required = worker_event.attention_required;
-    obligation.causation_event_id = continue_world_worker_causation_event_id(worker_event);
-    obligation.causation_message_id = continue_world_worker_causation_message_id(worker_event);
-    obligation.causation_request_id = Some(request.run_id.clone());
+    obligation.causation_event_id = facts.causation_event_id.map(str::to_string);
+    obligation.causation_message_id = facts.causation_message_id.map(str::to_string);
+    obligation.causation_request_id = facts.causation_request_id.map(str::to_string);
     obligation.attach_state = continue_world_worker_obligation_attach_state(obligation_kind);
     obligation.source_participant_id = Some(worker_event.source_participant_id.clone());
-    obligation.target_backend_id = Some(request.backend_id.clone());
-    obligation.world_id = Some(request.world_id.clone());
-    obligation.world_generation = Some(request.world_generation);
+    obligation.target_backend_id = Some(facts.target_backend_id.to_string());
+    obligation.world_id = Some(facts.world_id.to_string());
+    obligation.world_generation = Some(facts.world_generation);
     obligation.payload = Some(serde_json::json!({
         "event_class": continue_world_worker_persisted_event_label(worker_event.event_class),
-        "request_id": request.run_id,
+        "request_id": facts.payload_request_id,
         "target_participant_id": worker_event.target_participant_id,
         "source_backend_id": worker_event.source_backend_id,
         "thread_id": worker_event.thread_id,
@@ -2625,35 +2683,54 @@ fn persist_continue_world_worker_obligation(
 }
 
 #[cfg(target_os = "linux")]
-fn continue_world_worker_causation_event_id(
+fn persist_continue_world_worker_obligation_typed(
+    store: &AgentRuntimeStateStore,
+    request: &transport_api_types::MemberTurnSubmitRequestV1,
     worker_event: &ContinueWorldWorkerEventV1,
-) -> Option<String> {
-    continue_world_worker_string_field(
-        &worker_event.payload,
-        &[
-            "/event_id",
-            "/uaa_event/event_id",
-            "/uaa_event/raw_event/event_id",
-            "/raw_event/event_id",
-        ],
+    canonical_worker_event: &substrate_common::agent_events::WorldWorkerEventV1,
+) -> Result<()> {
+    persist_continue_world_worker_obligation_common(
+        store,
+        request,
+        worker_event,
+        ContinueWorldWorkerObligationFacts {
+            payload_request_id: &canonical_worker_event.request_id,
+            causation_event_id: Some(&canonical_worker_event.event_id),
+            causation_message_id: Some(&canonical_worker_event.causation_message_id),
+            causation_request_id: Some(&canonical_worker_event.causation_request_id),
+            target_backend_id: &canonical_worker_event.target_backend_id,
+            world_id: &canonical_worker_event.world_id,
+            world_generation: canonical_worker_event.world_generation,
+        },
     )
-    .map(ToOwned::to_owned)
 }
 
 #[cfg(target_os = "linux")]
-fn continue_world_worker_causation_message_id(
+fn persist_continue_world_worker_obligation(
+    store: &AgentRuntimeStateStore,
+    request: &transport_api_types::MemberTurnSubmitRequestV1,
     worker_event: &ContinueWorldWorkerEventV1,
-) -> Option<String> {
-    continue_world_worker_string_field(
-        &worker_event.payload,
-        &[
-            "/message_id",
-            "/uaa_event/message_id",
-            "/uaa_event/raw_event/message_id",
-            "/raw_event/message_id",
-        ],
+) -> Result<()> {
+    persist_continue_world_worker_obligation_common(
+        store,
+        request,
+        worker_event,
+        ContinueWorldWorkerObligationFacts {
+            payload_request_id: &request.run_id,
+            causation_event_id: continue_world_worker_string_field(
+                &worker_event.payload,
+                &["/event_id"],
+            ),
+            causation_message_id: continue_world_worker_string_field(
+                &worker_event.payload,
+                &["/message_id"],
+            ),
+            causation_request_id: Some(&request.run_id),
+            target_backend_id: &worker_event.source_backend_id,
+            world_id: &request.world_id,
+            world_generation: request.world_generation,
+        },
     )
-    .map(ToOwned::to_owned)
 }
 
 #[cfg(target_os = "linux")]
@@ -2671,6 +2748,13 @@ fn continue_world_worker_obligation_kind_and_summary(
     worker_event: &ContinueWorldWorkerEventV1,
 ) -> Option<(OrchestrationObligationKind, String)> {
     let (kind, summary) = match worker_event.event_class {
+        ContinueWorldWorkerEventClassV1::AttentionRequired => (
+            OrchestrationObligationKind::FollowUpRequired,
+            format!(
+                "retained worker {} requires host attention during continue_world_worker",
+                worker_event.source_participant_id
+            ),
+        ),
         ContinueWorldWorkerEventClassV1::FollowUpQuestion => (
             OrchestrationObligationKind::FollowUpRequired,
             format!(
@@ -2748,6 +2832,7 @@ fn continue_world_worker_persisted_event_label(
 ) -> &'static str {
     match event_class {
         ContinueWorldWorkerEventClassV1::ControlAck => "control_ack",
+        ContinueWorldWorkerEventClassV1::AttentionRequired => "attention_required",
         ContinueWorldWorkerEventClassV1::ApprovalRequest => "approval_request",
         ContinueWorldWorkerEventClassV1::ForkRequest => "fork_request",
         ContinueWorldWorkerEventClassV1::ForkRecommendation => "fork_recommendation",
@@ -5050,6 +5135,8 @@ async fn execute_continue_world_worker_stream_for_turn_kind_impl(
     let mut stream_error = None::<String>;
     let mut surfaced_thread_id = None::<String>;
     let mut surfaced_worker_event = None::<ContinueWorldWorkerEventV1>;
+    let mut surfaced_canonical_worker_event =
+        None::<substrate_common::agent_events::WorldWorkerEventV1>;
 
     while let Some(frame) = body.as_mut().frame().await {
         let frame = match frame {
@@ -5087,7 +5174,44 @@ async fn execute_continue_world_worker_stream_for_turn_kind_impl(
                     }
                 };
 
-            if !matches!(frame, ExecuteStreamFrame::Start { .. }) {
+            let classified_event = if let ExecuteStreamFrame::Event {
+                frame_identity,
+                event,
+            } = &frame
+            {
+                if active_span_id.is_none() {
+                    anyhow::bail!(
+                        "continue_world_worker stream emitted Event before Start acknowledgement"
+                    );
+                }
+                Some(
+                    match classify_continue_world_worker_event_with_frame_identity(
+                        request,
+                        turn_kind,
+                        frame_identity,
+                        event,
+                    ) {
+                        Ok(classified_event) => classified_event,
+                        Err(err) => {
+                            cancel_continue_world_worker_turn(&client, active_span_id.as_deref())
+                                .await;
+                            if acceptance.is_some() {
+                                if stream_error.is_none() {
+                                    stream_error = Some(format!("{err:#}"));
+                                }
+                                continue;
+                            }
+                            return Err(err);
+                        }
+                    },
+                )
+            } else {
+                None
+            };
+            if !matches!(
+                frame,
+                ExecuteStreamFrame::Start { .. } | ExecuteStreamFrame::Event { .. }
+            ) {
                 if let Some((_, execution_supervisor, _)) = acceptance {
                     let claim = active_claim.as_ref().ok_or_else(|| {
                         anyhow::anyhow!(
@@ -5179,33 +5303,32 @@ async fn execute_continue_world_worker_stream_for_turn_kind_impl(
                         active_span_id = Some(span_id);
                     }
                 }
-                ExecuteStreamFrame::Event { event, .. } => {
-                    if active_span_id.is_none() {
-                        anyhow::bail!(
-                            "continue_world_worker stream emitted Event before Start acknowledgement"
-                        );
-                    }
+                ExecuteStreamFrame::Event {
+                    frame_identity: _,
+                    ref event,
+                } => {
                     if surfaced_thread_id.is_none() {
-                        surfaced_thread_id = surfaced_thread_id_from_event(&event);
+                        surfaced_thread_id = surfaced_thread_id_from_event(event);
                     }
-                    let classified_event =
-                        match classify_continue_world_worker_event(request, turn_kind, &event) {
-                            Ok(classified_event) => classified_event,
-                            Err(err) => {
-                                cancel_continue_world_worker_turn(
-                                    &client,
-                                    active_span_id.as_deref(),
-                                )
-                                .await;
-                                if acceptance.is_some() {
-                                    if stream_error.is_none() {
-                                        stream_error = Some(format!("{err:#}"));
-                                    }
-                                    continue;
-                                }
-                                return Err(err);
-                            }
-                        };
+                    if let Some((_, execution_supervisor, _)) = acceptance {
+                        let claim = active_claim.as_ref().ok_or_else(|| {
+                            anyhow::anyhow!(
+                                "accepted continue_world_worker stream emitted a frame before durable Start claim"
+                            )
+                        })?;
+                        if execution_supervisor.journal_frame(claim, &frame, &line)?
+                            == WorldWorkJournalAppendOutcomeV1::ExactReplay
+                        {
+                            continue;
+                        }
+                    }
+                    let classified_event = classified_event
+                        .expect("event frames must compute retained classification");
+                    if surfaced_thread_id.is_none() {
+                        surfaced_thread_id = classified_event
+                            .as_ref()
+                            .and_then(|classified_event| classified_event.thread_id.clone());
+                    }
                     if let Some(classified_event) = classified_event {
                         if let Err(err) = enforce_continue_world_worker_event_policy(
                             policy,
@@ -5230,7 +5353,8 @@ async fn execute_continue_world_worker_stream_for_turn_kind_impl(
                         if !preserve_existing_live_event {
                             // Preserve the first surfaced durable worker obligation even if
                             // later obligation-like or ordinary stream events arrive before exit.
-                            surfaced_worker_event = Some(classified_event);
+                            surfaced_canonical_worker_event = classified_event.canonical.clone();
+                            surfaced_worker_event = Some(classified_event.compatibility());
                         }
                     }
                 }
@@ -5302,11 +5426,22 @@ async fn execute_continue_world_worker_stream_for_turn_kind_impl(
     if let Some(message) = stream_error {
         anyhow::bail!(message);
     }
+    if surfaced_thread_id.is_none() {
+        surfaced_thread_id = surfaced_worker_event
+            .as_ref()
+            .and_then(|worker_event| worker_event.thread_id.clone())
+            .or_else(|| {
+                surfaced_canonical_worker_event
+                    .as_ref()
+                    .map(|worker_event| worker_event.thread_id.clone())
+            });
+    }
 
     Ok(ContinueWorldWorkerStreamResult {
         exit_code,
         surfaced_thread_id,
         surfaced_worker_event,
+        surfaced_canonical_worker_event,
     })
 }
 
@@ -5316,6 +5451,13 @@ fn enforce_continue_world_worker_event_policy(
     event_class: ContinueWorldWorkerEventClassV1,
 ) -> Result<()> {
     match event_class {
+        ContinueWorldWorkerEventClassV1::AttentionRequired
+            if !policy.world_dispatch_follow_up_allowed() =>
+        {
+            anyhow::bail!(
+                "attention_required_not_allowed: retained workers may not require host attention under current policy"
+            );
+        }
         ContinueWorldWorkerEventClassV1::ApprovalRequest
             if !policy.world_dispatch_approval_requests_allowed() =>
         {
@@ -5384,12 +5526,7 @@ fn surfaced_thread_id_from_event(
         return Some(thread_id.to_string());
     }
 
-    for pointer in [
-        "/uaa_event/thread_id",
-        "/uaa_event/session/id",
-        "/uaa_event/raw_event/thread_id",
-        "/uaa_event/raw_event/session/id",
-    ] {
+    for pointer in ["/uaa_event/thread_id", "/uaa_event/raw_event/thread_id"] {
         if let Some(thread_id) = event
             .data
             .pointer(pointer)
@@ -5405,12 +5542,51 @@ fn surfaced_thread_id_from_event(
     None
 }
 
-#[cfg(target_os = "linux")]
+#[cfg(all(test, target_os = "linux"))]
 fn classify_continue_world_worker_event(
     request: &transport_api_types::MemberTurnSubmitRequestV1,
     turn_kind: ContinueWorldWorkerTurnKind,
     event: &substrate_common::agent_events::AgentEvent,
-) -> Result<Option<ContinueWorldWorkerEventV1>> {
+) -> Result<Option<ValidatedContinueWorldWorkerEvent>> {
+    let frame_identity = event.worker_event.as_ref().map_or_else(
+        || transport_api_types::RuntimeFrameIdentityV1 {
+            schema_version:
+                substrate_common::agent_events::RUNTIME_FRAME_IDENTITY_SCHEMA_VERSION_V1,
+            stream_id: "rts_legacy_compat".to_string(),
+            frame_sequence: 1,
+        },
+        |worker_event| transport_api_types::RuntimeFrameIdentityV1 {
+            schema_version:
+                substrate_common::agent_events::RUNTIME_FRAME_IDENTITY_SCHEMA_VERSION_V1,
+            stream_id: worker_event.stream_id.clone(),
+            frame_sequence: worker_event.frame_sequence,
+        },
+    );
+    classify_continue_world_worker_event_with_frame_identity(
+        request,
+        turn_kind,
+        &frame_identity,
+        event,
+    )
+}
+
+#[cfg(target_os = "linux")]
+fn classify_continue_world_worker_event_with_frame_identity(
+    request: &transport_api_types::MemberTurnSubmitRequestV1,
+    turn_kind: ContinueWorldWorkerTurnKind,
+    frame_identity: &transport_api_types::RuntimeFrameIdentityV1,
+    event: &substrate_common::agent_events::AgentEvent,
+) -> Result<Option<ValidatedContinueWorldWorkerEvent>> {
+    if request.acceptance_context.is_some() {
+        return validate_typed_continue_world_worker_event(
+            request,
+            turn_kind,
+            frame_identity,
+            event,
+        )
+        .map(Some);
+    }
+
     let event_class = if let Some(event_class_label) =
         continue_world_worker_event_class_label(event)
     {
@@ -5534,7 +5710,8 @@ fn classify_continue_world_worker_event(
     let attention_required = event_class.attention_required_by_default()
         || continue_world_worker_attention_required(event).unwrap_or(false);
 
-    Ok(Some(ContinueWorldWorkerEventV1 {
+    Ok(Some(ValidatedContinueWorldWorkerEvent {
+        canonical: None,
         event_class,
         source_participant_id: source_participant_id.to_string(),
         target_participant_id: request.orchestrator_participant_id.clone(),
@@ -5547,12 +5724,212 @@ fn classify_continue_world_worker_event(
 }
 
 #[cfg(target_os = "linux")]
+fn validate_typed_continue_world_worker_event(
+    request: &transport_api_types::MemberTurnSubmitRequestV1,
+    turn_kind: ContinueWorldWorkerTurnKind,
+    frame_identity: &transport_api_types::RuntimeFrameIdentityV1,
+    event: &substrate_common::agent_events::AgentEvent,
+) -> Result<ValidatedContinueWorldWorkerEvent> {
+    let acceptance_context = request.acceptance_context.as_ref().ok_or_else(|| {
+        anyhow::anyhow!("continue_world_worker typed validation requires acceptance_context")
+    })?;
+    let worker_event = event.worker_event.as_ref().ok_or_else(|| {
+        anyhow::anyhow!(
+            "protocol error: continue_world_worker surfaced accepted retained Event without worker_event"
+        )
+    })?;
+    event
+        .validate_identity_contract()
+        .map_err(anyhow::Error::msg)?;
+
+    if worker_event.stream_id != frame_identity.stream_id
+        || worker_event.frame_sequence != frame_identity.frame_sequence
+    {
+        anyhow::bail!(
+            "protocol error: continue_world_worker surfaced worker event frame identity did not match Event frame identity"
+        );
+    }
+    if worker_event.acceptance_record_id != acceptance_context.proposed_acceptance_record_id {
+        anyhow::bail!(
+            "protocol error: continue_world_worker surfaced worker event acceptance_record_id {} did not match accepted {}",
+            worker_event.acceptance_record_id,
+            acceptance_context.proposed_acceptance_record_id,
+        );
+    }
+    if worker_event.request_id != acceptance_context.request_id {
+        anyhow::bail!(
+            "protocol error: continue_world_worker surfaced worker event request_id {} did not match accepted request {}",
+            worker_event.request_id,
+            acceptance_context.request_id,
+        );
+    }
+    if worker_event.active_run_id != request.run_id {
+        anyhow::bail!(
+            "protocol error: continue_world_worker surfaced worker event active_run_id {} did not match targeted request {}",
+            worker_event.active_run_id,
+            request.run_id,
+        );
+    }
+    if worker_event.causation_request_id != acceptance_context.request_id {
+        anyhow::bail!(
+            "protocol error: continue_world_worker surfaced worker event causation_request_id {} did not match accepted request {}",
+            worker_event.causation_request_id,
+            acceptance_context.request_id,
+        );
+    }
+    let expected_message_id = acceptance_context.message_id.as_deref().ok_or_else(|| {
+        anyhow::anyhow!(
+            "continue_world_worker typed validation requires acceptance_context.message_id"
+        )
+    })?;
+    if worker_event.causation_message_id != expected_message_id {
+        anyhow::bail!(
+            "protocol error: continue_world_worker surfaced worker event causation_message_id {} did not match accepted message {}",
+            worker_event.causation_message_id,
+            expected_message_id,
+        );
+    }
+    if worker_event.target_backend_id != acceptance_context.caller_backend_id {
+        anyhow::bail!(
+            "protocol error: continue_world_worker surfaced worker event target_backend_id {} did not match accepted caller backend {}",
+            worker_event.target_backend_id,
+            acceptance_context.caller_backend_id,
+        );
+    }
+    if worker_event.host_transition_correlation != acceptance_context.host_transition_correlation {
+        anyhow::bail!(
+            "protocol error: continue_world_worker surfaced worker event host_transition_correlation did not match accepted context"
+        );
+    }
+    if worker_event.orchestration_session_id != request.orchestration_session_id {
+        anyhow::bail!(
+            "protocol error: continue_world_worker surfaced worker event orchestration_session_id {} did not match targeted orchestration session {}",
+            worker_event.orchestration_session_id,
+            request.orchestration_session_id,
+        );
+    }
+    if worker_event.source_participant_id != request.participant_id {
+        anyhow::bail!(
+            "protocol error: continue_world_worker surfaced worker event participant_id {} did not match targeted retained worker {}",
+            worker_event.source_participant_id,
+            request.participant_id,
+        );
+    }
+    if worker_event.target_participant_id != request.orchestrator_participant_id {
+        anyhow::bail!(
+            "protocol error: continue_world_worker surfaced worker event target_participant_id {} did not match targeted orchestrator {}",
+            worker_event.target_participant_id,
+            request.orchestrator_participant_id,
+        );
+    }
+    if worker_event.source_backend_id != request.backend_id {
+        anyhow::bail!(
+            "protocol error: continue_world_worker surfaced worker event backend_id {} did not match targeted backend {}",
+            worker_event.source_backend_id,
+            request.backend_id,
+        );
+    }
+    if worker_event.world_id != request.world_id {
+        anyhow::bail!(
+            "protocol error: continue_world_worker surfaced worker event world_id {} did not match targeted world {}",
+            worker_event.world_id,
+            request.world_id,
+        );
+    }
+    if worker_event.world_generation != request.world_generation {
+        anyhow::bail!(
+            "protocol error: continue_world_worker surfaced worker event world_generation {} did not match targeted world generation {}",
+            worker_event.world_generation,
+            request.world_generation,
+        );
+    }
+
+    Ok(ValidatedContinueWorldWorkerEvent {
+        canonical: Some(worker_event.clone()),
+        ..typed_continue_world_worker_event_projection(
+            turn_kind,
+            event.channel.clone(),
+            worker_event,
+        )?
+    })
+}
+
+#[cfg(target_os = "linux")]
+fn typed_continue_world_worker_event_projection(
+    turn_kind: ContinueWorldWorkerTurnKind,
+    stream_channel: Option<String>,
+    worker_event: &substrate_common::agent_events::WorldWorkerEventV1,
+) -> Result<ValidatedContinueWorldWorkerEvent> {
+    use substrate_common::agent_events::WorldWorkerEventClassV1;
+
+    let event_class = match worker_event.event_class {
+        WorldWorkerEventClassV1::Reply => ContinueWorldWorkerEventClassV1::Reply,
+        WorldWorkerEventClassV1::ProgressUpdate | WorldWorkerEventClassV1::ControlAck => {
+            if typed_worker_event_projects_control_ack(worker_event) {
+                if turn_kind != ContinueWorldWorkerTurnKind::ControlDirective {
+                    anyhow::bail!(
+                        "unsupported_worker_event_class: continue_world_worker accepts control_ack only for typed control_directive delivery"
+                    );
+                }
+                if worker_event.attention_required {
+                    anyhow::bail!(
+                        "protocol error: continue_world_worker projected control_ack with attention_required=true"
+                    );
+                }
+                ContinueWorldWorkerEventClassV1::ControlAck
+            } else {
+                ContinueWorldWorkerEventClassV1::ProgressUpdate
+            }
+        }
+        WorldWorkerEventClassV1::FollowUpQuestion => {
+            ContinueWorldWorkerEventClassV1::FollowUpQuestion
+        }
+        WorldWorkerEventClassV1::ApprovalRequest => {
+            ContinueWorldWorkerEventClassV1::ApprovalRequest
+        }
+        WorldWorkerEventClassV1::Blocked => ContinueWorldWorkerEventClassV1::Blocked,
+        WorldWorkerEventClassV1::AttentionRequired => {
+            ContinueWorldWorkerEventClassV1::AttentionRequired
+        }
+        WorldWorkerEventClassV1::ForkRequest => ContinueWorldWorkerEventClassV1::ForkRequest,
+        WorldWorkerEventClassV1::ForkRecommendation => {
+            ContinueWorldWorkerEventClassV1::ForkRecommendation
+        }
+        WorldWorkerEventClassV1::Result => ContinueWorldWorkerEventClassV1::Result,
+        WorldWorkerEventClassV1::Failure => ContinueWorldWorkerEventClassV1::Failure,
+    };
+
+    Ok(ValidatedContinueWorldWorkerEvent {
+        event_class,
+        source_participant_id: worker_event.source_participant_id.clone(),
+        target_participant_id: worker_event.target_participant_id.clone(),
+        source_backend_id: worker_event.source_backend_id.clone(),
+        attention_required: worker_event.attention_required,
+        thread_id: Some(worker_event.thread_id.clone()),
+        stream_channel,
+        payload: worker_event.payload.clone(),
+        canonical: Some(worker_event.clone()),
+    })
+}
+
+#[cfg(target_os = "linux")]
+fn typed_worker_event_projects_control_ack(
+    worker_event: &substrate_common::agent_events::WorldWorkerEventV1,
+) -> bool {
+    matches!(
+        worker_event.event_class,
+        substrate_common::agent_events::WorldWorkerEventClassV1::ControlAck
+    )
+}
+
+#[cfg(target_os = "linux")]
 fn continue_world_worker_event_requires_explicit_identity(
     event_class: ContinueWorldWorkerEventClassV1,
 ) -> bool {
     matches!(
         event_class,
-        ContinueWorldWorkerEventClassV1::ControlAck
+        ContinueWorldWorkerEventClassV1::AttentionRequired
+            | ContinueWorldWorkerEventClassV1::ControlAck
             | ContinueWorldWorkerEventClassV1::ApprovalRequest
             | ContinueWorldWorkerEventClassV1::ForkRequest
             | ContinueWorldWorkerEventClassV1::ForkRecommendation
@@ -5567,7 +5944,8 @@ fn continue_world_worker_event_requires_exact_session_world_binding(
 ) -> bool {
     matches!(
         event_class,
-        ContinueWorldWorkerEventClassV1::ControlAck
+        ContinueWorldWorkerEventClassV1::AttentionRequired
+            | ContinueWorldWorkerEventClassV1::ControlAck
             | ContinueWorldWorkerEventClassV1::ApprovalRequest
             | ContinueWorldWorkerEventClassV1::ForkRequest
             | ContinueWorldWorkerEventClassV1::ForkRecommendation
@@ -7317,6 +7695,13 @@ mod tests {
     }
 
     #[cfg(target_os = "linux")]
+    fn install_secure_substrate_home() -> AuthorityEnvTestTempDir {
+        let substrate_home = secure_authority_tempdir();
+        substrate_home.install_as_home();
+        substrate_home
+    }
+
+    #[cfg(target_os = "linux")]
     fn activate_b_owned_dispatch_authority(
         substrate_home: &Path,
         workspace_root: &Path,
@@ -8221,6 +8606,7 @@ mod tests {
             cmd_id: None,
             span_id: Some("spn_continue".to_string()),
             event_identity: Some(test_runtime_event_identity(1)),
+            worker_event: None,
             channel: Some("worker.reply".to_string()),
             identity_tuple: None,
             placement_posture: None,
@@ -8237,6 +8623,107 @@ mod tests {
             run_id: run_id.to_string(),
             ..sample_continue_stream_event(data)
         }
+    }
+
+    #[cfg(target_os = "linux")]
+    fn sample_typed_continue_stream_event_for_request(
+        request: &transport_api_types::MemberTurnSubmitRequestV1,
+        frame_identity: transport_api_types::RuntimeFrameIdentityV1,
+        event_identity: transport_api_types::RuntimeEventIdentityV1,
+        data: serde_json::Value,
+    ) -> substrate_common::agent_events::AgentEvent {
+        let acceptance_context = request
+            .acceptance_context
+            .as_ref()
+            .expect("accepted retained fixture requires acceptance_context");
+        let mut event = sample_continue_stream_event_for_run(&request.run_id, data);
+        let thread_id = event
+            .thread_id
+            .clone()
+            .expect("accepted retained fixture requires thread_id");
+        event.orchestration_session_id = request.orchestration_session_id.clone();
+        event.participant_id = Some(request.participant_id.clone());
+        event.backend_id = Some(request.backend_id.clone());
+        event.world_id = Some(request.world_id.clone());
+        event.world_generation = Some(request.world_generation);
+        event.event_identity = Some(event_identity.clone());
+
+        let event_class_label = continue_world_worker_event_class_label(&event)
+            .expect("accepted retained fixture requires event_class label");
+        let event_class = match event_class_label {
+            "reply" => substrate_common::agent_events::WorldWorkerEventClassV1::Reply,
+            "progress_update" => {
+                substrate_common::agent_events::WorldWorkerEventClassV1::ProgressUpdate
+            }
+            "follow_up_question" => {
+                substrate_common::agent_events::WorldWorkerEventClassV1::FollowUpQuestion
+            }
+            "approval_request" => {
+                substrate_common::agent_events::WorldWorkerEventClassV1::ApprovalRequest
+            }
+            "blocked" => substrate_common::agent_events::WorldWorkerEventClassV1::Blocked,
+            "attention_required" => {
+                substrate_common::agent_events::WorldWorkerEventClassV1::AttentionRequired
+            }
+            "fork_request" => substrate_common::agent_events::WorldWorkerEventClassV1::ForkRequest,
+            "fork_recommendation" => {
+                substrate_common::agent_events::WorldWorkerEventClassV1::ForkRecommendation
+            }
+            "result" => substrate_common::agent_events::WorldWorkerEventClassV1::Result,
+            "failure" => substrate_common::agent_events::WorldWorkerEventClassV1::Failure,
+            "control_ack" => substrate_common::agent_events::WorldWorkerEventClassV1::ControlAck,
+            other => panic!("unsupported accepted retained fixture worker event class {other}"),
+        };
+        let attention_required = event_class.attention_required_by_default()
+            || continue_world_worker_attention_required(&event).unwrap_or(false);
+        let mut payload = continue_world_worker_event_payload(&event);
+        let payload_missing_event_class =
+            continue_world_worker_string_field(&payload, &["/event_class"]).is_none();
+        if payload_missing_event_class {
+            if let Some(object) = payload.as_object_mut() {
+                object.insert(
+                    "event_class".to_string(),
+                    serde_json::Value::String(event_class_label.to_string()),
+                );
+            }
+        }
+
+        let worker_event = substrate_common::agent_events::WorldWorkerEventV1 {
+            schema_version: 1,
+            acceptance_record_id: acceptance_context.proposed_acceptance_record_id.clone(),
+            stream_id: frame_identity.stream_id.clone(),
+            frame_sequence: frame_identity.frame_sequence,
+            event_id: event_identity.event_id.clone(),
+            event_sequence: event_identity.event_sequence,
+            request_id: acceptance_context.request_id.clone(),
+            active_run_id: request.run_id.clone(),
+            host_transition_correlation: acceptance_context.host_transition_correlation.clone(),
+            causation_message_id: acceptance_context
+                .message_id
+                .clone()
+                .expect("accepted retained fixture requires message_id"),
+            causation_request_id: acceptance_context.request_id.clone(),
+            orchestration_session_id: request.orchestration_session_id.clone(),
+            source_participant_id: request.participant_id.clone(),
+            target_participant_id: request.orchestrator_participant_id.clone(),
+            source_backend_id: request.backend_id.clone(),
+            target_backend_id: acceptance_context.caller_backend_id.clone(),
+            world_id: request.world_id.clone(),
+            world_generation: request.world_generation,
+            thread_id,
+            event_class,
+            attention_required,
+            payload,
+            emitted_at: event.ts,
+        };
+        worker_event
+            .validate()
+            .expect("accepted retained fixture worker_event must be valid");
+        event.worker_event = Some(worker_event);
+        event
+            .validate_identity_contract()
+            .expect("accepted retained fixture worker_event must match top-level event identity");
+        event
     }
 
     #[cfg(target_os = "linux")]
@@ -8269,6 +8756,9 @@ mod tests {
     ) -> Policy {
         let mut policy = Policy::default();
         match event_class {
+            ContinueWorldWorkerEventClassV1::AttentionRequired => {
+                policy.agents_world_dispatch_obligations_follow_up_allowed = true;
+            }
             ContinueWorldWorkerEventClassV1::ApprovalRequest => {
                 policy.agents_world_dispatch_obligations_approval_allowed = true;
             }
@@ -8293,6 +8783,7 @@ mod tests {
     fn continue_worker_event_label(event_class: ContinueWorldWorkerEventClassV1) -> &'static str {
         match event_class {
             ContinueWorldWorkerEventClassV1::ControlAck => "control_ack",
+            ContinueWorldWorkerEventClassV1::AttentionRequired => "attention_required",
             ContinueWorldWorkerEventClassV1::ApprovalRequest => "approval_request",
             ContinueWorldWorkerEventClassV1::ForkRequest => "fork_request",
             ContinueWorldWorkerEventClassV1::ForkRecommendation => "fork_recommendation",
@@ -9218,8 +9709,10 @@ mod tests {
                         &mut stream,
                         &transport_api_types::ExecuteStreamFrame::Event {
                             frame_identity: test_runtime_frame_identity(2),
-                            event: sample_continue_stream_event_for_run(
-                                &submitted.run_id,
+                            event: sample_typed_continue_stream_event_for_request(
+                                &submitted,
+                                test_runtime_frame_identity(2),
+                                test_runtime_event_identity(1),
                                 json!({
                                     "event_class": "approval_request",
                                     "payload": { "message": "requires approval" }
@@ -10259,7 +10752,6 @@ mod tests {
         }
     }
 
-    #[cfg(target_os = "linux")]
     fn persist_authoritative_continue_dispatch_state(
         store: &AgentRuntimeStateStore,
         workspace_root: &Path,
@@ -11165,6 +11657,7 @@ mod tests {
                         cmd_id: None,
                         span_id: Some("spawn-principal-route".to_string()),
                         event_identity: Some(test_runtime_event_identity(1)),
+                        worker_event: None,
                         channel: None,
                         identity_tuple: None,
                         placement_posture: None,
@@ -11470,6 +11963,18 @@ mod tests {
             ),
             (
                 sample_continue_stream_event(json!({
+                    "event_class": "attention_required",
+                    "payload": {
+                        "message": "needs host attention"
+                    }
+                })),
+                "attention_required",
+                true,
+                "/message",
+                Some("needs host attention"),
+            ),
+            (
+                sample_continue_stream_event(json!({
                     "event_class": "approval_request",
                     "payload": {
                         "message": "requires approval"
@@ -11600,12 +12105,7 @@ mod tests {
     #[test]
     fn continue_world_worker_dispatch_contract_rejects_deferred_worker_event_classes() {
         let submit = sample_continue_submit_request();
-        for deferred in [
-            "approval_response",
-            "fork_command",
-            "control_directive",
-            "attention_required",
-        ] {
+        for deferred in ["approval_response", "fork_command", "control_directive"] {
             let err = classify_continue_world_worker_event(
                 &submit,
                 ContinueWorldWorkerTurnKind::GenericContinue,
@@ -11791,6 +12291,19 @@ mod tests {
                 "orchestration_session_id sess_other did not match targeted orchestration session sess_dispatch",
             ),
             (
+                "attention_required",
+                substrate_common::agent_events::AgentEvent {
+                    world_generation: Some(9),
+                    ..sample_continue_stream_event(json!({
+                        "event_class": "attention_required",
+                        "payload": {
+                            "message": "needs host attention"
+                        }
+                    }))
+                },
+                "world_generation 9 did not match targeted world generation 2",
+            ),
+            (
                 "blocked",
                 substrate_common::agent_events::AgentEvent {
                     world_id: Some("world-other".to_string()),
@@ -11827,6 +12340,7 @@ mod tests {
         let submit = sample_continue_submit_request();
 
         for event_label in [
+            "attention_required",
             "control_ack",
             "approval_request",
             "fork_request",
@@ -12103,6 +12617,16 @@ mod tests {
                     }
                 })),
             ),
+            (
+                "attention_required",
+                "attention_required_not_allowed:",
+                sample_continue_stream_event(json!({
+                    "event_class": "attention_required",
+                    "payload": {
+                        "message": "needs host attention"
+                    }
+                })),
+            ),
         ];
 
         for (event_label, expected_denial, event) in cases {
@@ -12252,6 +12776,15 @@ mod tests {
                     "event_class": "blocked",
                     "payload": {
                         "message": "waiting on host input"
+                    }
+                })),
+            ),
+            (
+                ContinueWorldWorkerEventClassV1::AttentionRequired,
+                sample_continue_stream_event(json!({
+                    "event_class": "attention_required",
+                    "payload": {
+                        "message": "needs host attention"
                     }
                 })),
             ),
@@ -13057,15 +13590,20 @@ mod tests {
     #[serial]
     fn dispatch_contract_persist_continue_world_worker_obligation_projects_supported_events_into_canonical_state(
     ) {
-        let substrate_home =
-            AuthorityEnvTestTempDir::new(tempdir().expect("substrate home tempdir"));
-        substrate_home.install_as_home();
+        let _substrate_home = install_secure_substrate_home();
         let workspace_root = tempdir().expect("workspace root tempdir");
         let store = AgentRuntimeStateStore::new().expect("state store");
         persist_authoritative_continue_dispatch_state(&store, workspace_root.path(), "world-17", 2);
         let expected_local_host_id = resolve_local_obligation_host_id();
 
         let cases = [
+            (
+                ContinueWorldWorkerEventClassV1::AttentionRequired,
+                OrchestrationObligationKind::FollowUpRequired,
+                OrchestrationObligationAttachState::Eligible,
+                true,
+                "retained worker ash_member requires host attention during continue_world_worker",
+            ),
             (
                 ContinueWorldWorkerEventClassV1::FollowUpQuestion,
                 OrchestrationObligationKind::FollowUpRequired,
@@ -13240,9 +13778,7 @@ mod tests {
     #[serial]
     fn dispatch_contract_persist_continue_world_worker_obligation_canonicalizes_exact_causation_ids_when_present(
     ) {
-        let substrate_home =
-            AuthorityEnvTestTempDir::new(tempdir().expect("substrate home tempdir"));
-        substrate_home.install_as_home();
+        let _substrate_home = install_secure_substrate_home();
         let workspace_root = tempdir().expect("workspace root tempdir");
         let store = AgentRuntimeStateStore::new().expect("state store");
         persist_authoritative_continue_dispatch_state(&store, workspace_root.path(), "world-17", 2);
@@ -13300,9 +13836,7 @@ mod tests {
     #[serial]
     fn dispatch_contract_persist_continue_world_worker_obligation_keeps_ambiguous_item_ids_out_of_canonical_message_identity(
     ) {
-        let substrate_home =
-            AuthorityEnvTestTempDir::new(tempdir().expect("substrate home tempdir"));
-        substrate_home.install_as_home();
+        let _substrate_home = install_secure_substrate_home();
         let workspace_root = tempdir().expect("workspace root tempdir");
         let store = AgentRuntimeStateStore::new().expect("state store");
         persist_authoritative_continue_dispatch_state(&store, workspace_root.path(), "world-17", 2);
@@ -13353,9 +13887,7 @@ mod tests {
     #[serial]
     fn router_owned_auto_attach_session_trigger_fails_closed_for_detached_continue_world_worker_obligations_when_router_policy_is_disabled(
     ) {
-        let substrate_home =
-            AuthorityEnvTestTempDir::new(tempdir().expect("substrate home tempdir"));
-        substrate_home.install_as_home();
+        let _substrate_home = install_secure_substrate_home();
         let workspace_root = tempdir().expect("workspace root tempdir");
         let store = AgentRuntimeStateStore::new().expect("state store");
         persist_detached_continue_dispatch_state(&store, workspace_root.path(), "world-17", 2);
@@ -13408,9 +13940,7 @@ mod tests {
     #[test]
     #[serial]
     fn router_owned_auto_attach_discovery_trigger_discovers_other_detached_candidate_sessions() {
-        let substrate_home =
-            AuthorityEnvTestTempDir::new(tempdir().expect("substrate home tempdir"));
-        substrate_home.install_as_home();
+        let _substrate_home = install_secure_substrate_home();
         let store = AgentRuntimeStateStore::new().expect("state store");
 
         let unrelated_workspace = tempdir().expect("unrelated workspace root tempdir");
@@ -13547,9 +14077,7 @@ mod tests {
     {
         use std::os::unix::fs::PermissionsExt;
 
-        let substrate_home =
-            AuthorityEnvTestTempDir::new(tempdir().expect("substrate home tempdir"));
-        substrate_home.install_as_home();
+        let _substrate_home = install_secure_substrate_home();
         let workspace_root = tempdir().expect("workspace root tempdir");
         let store = AgentRuntimeStateStore::new().expect("state store");
         persist_detached_continue_dispatch_state(&store, workspace_root.path(), "world-18", 3);
@@ -13599,9 +14127,7 @@ mod tests {
     #[test]
     #[serial]
     fn build_router_owned_auto_attach_outcome_record_joins_fail_closed_router_session_details() {
-        let substrate_home =
-            AuthorityEnvTestTempDir::new(tempdir().expect("substrate home tempdir"));
-        substrate_home.install_as_home();
+        let _substrate_home = install_secure_substrate_home();
         let workspace_root = tempdir().expect("workspace root tempdir");
         let store = AgentRuntimeStateStore::new().expect("state store");
         persist_detached_continue_dispatch_state(&store, workspace_root.path(), "world-17", 2);
@@ -13688,9 +14214,7 @@ mod tests {
     #[test]
     #[serial]
     fn build_router_owned_auto_attach_outcome_record_preserves_attached_settlement_detail() {
-        let substrate_home =
-            AuthorityEnvTestTempDir::new(tempdir().expect("substrate home tempdir"));
-        substrate_home.install_as_home();
+        let _substrate_home = install_secure_substrate_home();
         let store = AgentRuntimeStateStore::new().expect("state store");
 
         let mut session = sample_session();
@@ -13860,9 +14384,7 @@ mod tests {
         });
 
         let _socket_guard = EnvVarGuard::set_path("SUBSTRATE_WORLD_SOCKET", &socket_path);
-        let substrate_home =
-            AuthorityEnvTestTempDir::new(tempdir().expect("substrate home tempdir"));
-        substrate_home.install_as_home();
+        let substrate_home = install_secure_substrate_home();
         fs::write(
             substrate_home.path().join("policy.yaml"),
             r#"id: test-global-policy
@@ -14041,9 +14563,7 @@ agents:
         });
 
         let _socket_guard = EnvVarGuard::set_path("SUBSTRATE_WORLD_SOCKET", &socket_path);
-        let substrate_home =
-            AuthorityEnvTestTempDir::new(tempdir().expect("substrate home tempdir"));
-        substrate_home.install_as_home();
+        let substrate_home = install_secure_substrate_home();
         fs::write(
             substrate_home.path().join("policy.yaml"),
             r#"id: test-global-policy
@@ -14142,6 +14662,13 @@ agents:
 
         for case in [
             Case {
+                event_class: ContinueWorldWorkerEventClassV1::AttentionRequired,
+                expected_kind: OrchestrationObligationKind::FollowUpRequired,
+                expected_message: "needs host attention",
+                exact_event_id: Some("evt-live-attention"),
+                exact_message_id: Some("msg-live-attention"),
+            },
+            Case {
                 event_class: ContinueWorldWorkerEventClassV1::FollowUpQuestion,
                 expected_kind: OrchestrationObligationKind::FollowUpRequired,
                 expected_message: "need host confirmation",
@@ -14235,9 +14762,7 @@ agents:
             });
 
             let _socket_guard = EnvVarGuard::set_path("SUBSTRATE_WORLD_SOCKET", &socket_path);
-            let substrate_home =
-                AuthorityEnvTestTempDir::new(tempdir().expect("substrate home tempdir"));
-            substrate_home.install_as_home();
+            let substrate_home = install_secure_substrate_home();
             fs::write(
                 substrate_home.path().join("policy.yaml"),
                 format!(
@@ -14482,9 +15007,7 @@ agents:
             });
 
             let _socket_guard = EnvVarGuard::set_path("SUBSTRATE_WORLD_SOCKET", &socket_path);
-            let substrate_home =
-                AuthorityEnvTestTempDir::new(tempdir().expect("substrate home tempdir"));
-            substrate_home.install_as_home();
+            let substrate_home = install_secure_substrate_home();
             fs::write(
                 substrate_home.path().join("policy.yaml"),
                 r#"id: test-global-policy
@@ -14557,9 +15080,7 @@ agents:
     #[serial]
     fn dispatch_contract_prepare_orchestrator_world_dispatch_defers_continue_target_resolution_until_after_steering(
     ) {
-        let substrate_home =
-            AuthorityEnvTestTempDir::new(tempdir().expect("substrate home tempdir"));
-        substrate_home.install_as_home();
+        let _substrate_home = install_secure_substrate_home();
         let workspace_root = tempdir().expect("workspace root tempdir");
         let store = AgentRuntimeStateStore::new().expect("state store");
         persist_stale_continue_dispatch_state(&store, workspace_root.path(), "world-17", 2);
@@ -14661,9 +15182,7 @@ agents:
         ];
 
         for case in cases {
-            let substrate_home =
-                AuthorityEnvTestTempDir::new(tempdir().expect("substrate home tempdir"));
-            substrate_home.install_as_home();
+            let substrate_home = install_secure_substrate_home();
             write_world_dispatch_policy(
                 substrate_home.path(),
                 case.enabled,
@@ -14707,9 +15226,7 @@ agents:
     #[serial]
     async fn dispatch_contract_continue_world_worker_approval_response_denies_by_default_before_target_resolution(
     ) {
-        let substrate_home =
-            AuthorityEnvTestTempDir::new(tempdir().expect("substrate home tempdir"));
-        substrate_home.install_as_home();
+        let substrate_home = install_secure_substrate_home();
         write_world_dispatch_policy(
             substrate_home.path(),
             true,
@@ -14751,9 +15268,7 @@ agents:
     #[serial]
     async fn dispatch_contract_continue_world_worker_clarification_response_denies_by_default_before_target_resolution(
     ) {
-        let substrate_home =
-            AuthorityEnvTestTempDir::new(tempdir().expect("substrate home tempdir"));
-        substrate_home.install_as_home();
+        let substrate_home = install_secure_substrate_home();
         write_world_dispatch_policy(
             substrate_home.path(),
             true,
@@ -14795,9 +15310,7 @@ agents:
     #[serial]
     async fn dispatch_contract_continue_world_worker_control_directive_denies_by_default_before_target_resolution(
     ) {
-        let substrate_home =
-            AuthorityEnvTestTempDir::new(tempdir().expect("substrate home tempdir"));
-        substrate_home.install_as_home();
+        let substrate_home = install_secure_substrate_home();
         write_world_dispatch_policy(
             substrate_home.path(),
             true,
@@ -14839,9 +15352,7 @@ agents:
     #[serial]
     async fn dispatch_contract_continue_world_worker_progress_ack_denies_by_default_before_target_resolution(
     ) {
-        let substrate_home =
-            AuthorityEnvTestTempDir::new(tempdir().expect("substrate home tempdir"));
-        substrate_home.install_as_home();
+        let substrate_home = install_secure_substrate_home();
         write_world_dispatch_policy(
             substrate_home.path(),
             true,
@@ -14883,9 +15394,7 @@ agents:
     #[serial]
     async fn dispatch_contract_continue_world_worker_progress_ack_reaches_target_resolution_when_policy_enabled(
     ) {
-        let substrate_home =
-            AuthorityEnvTestTempDir::new(tempdir().expect("substrate home tempdir"));
-        substrate_home.install_as_home();
+        let substrate_home = install_secure_substrate_home();
         write_world_dispatch_policy_with_progress_acks(
             substrate_home.path(),
             true,
@@ -14946,9 +15455,7 @@ agents:
     async fn dispatch_contract_continue_world_worker_progress_ack_submits_rendered_prompt_to_exact_retained_worker(
     ) {
         let _env_guard = world_env_guard();
-        let substrate_home =
-            AuthorityEnvTestTempDir::new(tempdir().expect("substrate home tempdir"));
-        substrate_home.install_as_home();
+        let substrate_home = install_secure_substrate_home();
         write_world_dispatch_policy_with_progress_acks(
             substrate_home.path(),
             true,
@@ -15110,9 +15617,7 @@ agents:
     async fn dispatch_contract_continue_world_worker_progress_ack_surfaces_progress_update_without_persisting_obligation(
     ) {
         let _env_guard = world_env_guard();
-        let substrate_home =
-            AuthorityEnvTestTempDir::new(tempdir().expect("substrate home tempdir"));
-        substrate_home.install_as_home();
+        let substrate_home = install_secure_substrate_home();
         write_world_dispatch_policy_with_progress_acks(
             substrate_home.path(),
             true,
@@ -15257,9 +15762,7 @@ agents:
     #[serial]
     async fn dispatch_contract_continue_world_worker_fork_command_denies_by_default_before_target_resolution(
     ) {
-        let substrate_home =
-            AuthorityEnvTestTempDir::new(tempdir().expect("substrate home tempdir"));
-        substrate_home.install_as_home();
+        let substrate_home = install_secure_substrate_home();
         write_world_dispatch_policy(
             substrate_home.path(),
             true,
@@ -15521,6 +16024,7 @@ agents:
                                 cmd_id: None,
                                 span_id: Some("fork-bootstrap-span".to_string()),
                                 event_identity: Some(test_runtime_event_identity(1)),
+                                worker_event: None,
                                 channel: None,
                                 identity_tuple: None,
                                 placement_posture: None,
@@ -15782,6 +16286,7 @@ agents:
                                 cmd_id: None,
                                 span_id: Some("fork-bootstrap-span".to_string()),
                                 event_identity: Some(test_runtime_event_identity(1)),
+                                worker_event: None,
                                 channel: None,
                                 identity_tuple: None,
                                 placement_posture: None,
@@ -15915,9 +16420,7 @@ agents:
     #[serial]
     async fn dispatch_contract_continue_world_worker_fork_command_rejects_terminal_exact_source_before_delivery(
     ) {
-        let substrate_home =
-            AuthorityEnvTestTempDir::new(tempdir().expect("substrate home tempdir"));
-        substrate_home.install_as_home();
+        let substrate_home = install_secure_substrate_home();
         write_world_dispatch_policy_with_fork_commands(
             substrate_home.path(),
             true,
@@ -15959,9 +16462,7 @@ agents:
     async fn dispatch_contract_continue_world_worker_fork_command_wraps_post_delivery_source_invalidation_as_bootstrap_failure(
     ) {
         let _env_guard = world_env_guard();
-        let substrate_home =
-            AuthorityEnvTestTempDir::new(tempdir().expect("substrate home tempdir"));
-        substrate_home.install_as_home();
+        let substrate_home = install_secure_substrate_home();
         write_world_dispatch_policy_with_fork_commands(
             substrate_home.path(),
             true,
@@ -16087,9 +16588,7 @@ agents:
             "SUBSTRATE_WORLD_DEPS_GUEST_BIN_DIR",
             test_world_codex_runtime_bin().as_path(),
         );
-        let substrate_home =
-            AuthorityEnvTestTempDir::new(tempdir().expect("substrate home tempdir"));
-        substrate_home.install_as_home();
+        let substrate_home = install_secure_substrate_home();
         write_world_dispatch_policy_with_fork_commands(
             substrate_home.path(),
             true,
@@ -16224,9 +16723,7 @@ agents:
     async fn dispatch_contract_continue_world_worker_fork_command_persists_live_obligation_before_bootstrap_failure(
     ) {
         let _env_guard = world_env_guard();
-        let substrate_home =
-            AuthorityEnvTestTempDir::new(tempdir().expect("substrate home tempdir"));
-        substrate_home.install_as_home();
+        let substrate_home = install_secure_substrate_home();
         fs::write(
             substrate_home.path().join("policy.yaml"),
             r#"id: test-global-policy
@@ -16437,9 +16934,7 @@ agents:
     async fn dispatch_contract_continue_world_worker_control_directive_submits_rendered_prompt_to_exact_retained_worker(
     ) {
         let _env_guard = world_env_guard();
-        let substrate_home =
-            AuthorityEnvTestTempDir::new(tempdir().expect("substrate home tempdir"));
-        substrate_home.install_as_home();
+        let substrate_home = install_secure_substrate_home();
         write_world_dispatch_policy_with_control_directives(
             substrate_home.path(),
             true,
@@ -16599,9 +17094,7 @@ agents:
     async fn dispatch_contract_continue_world_worker_control_directive_surfaces_control_ack_without_persisting_obligation(
     ) {
         let _env_guard = world_env_guard();
-        let substrate_home =
-            AuthorityEnvTestTempDir::new(tempdir().expect("substrate home tempdir"));
-        substrate_home.install_as_home();
+        let substrate_home = install_secure_substrate_home();
         write_world_dispatch_policy_with_control_directives(
             substrate_home.path(),
             true,
@@ -16746,9 +17239,7 @@ agents:
     ) {
         let _env_guard = world_env_guard();
         let _socket_activation_guard = SocketActivationOverrideGuard::set("socket_activation");
-        let substrate_home =
-            AuthorityEnvTestTempDir::new(tempdir().expect("substrate home tempdir"));
-        substrate_home.install_as_home();
+        let substrate_home = install_secure_substrate_home();
         write_world_dispatch_policy_with_control_directives(
             substrate_home.path(),
             true,
@@ -16802,9 +17293,7 @@ agents:
             ),
         ] {
             let _env_guard = world_env_guard();
-            let substrate_home =
-                AuthorityEnvTestTempDir::new(tempdir().expect("substrate home tempdir"));
-            substrate_home.install_as_home();
+            let substrate_home = install_secure_substrate_home();
             write_world_dispatch_policy_with_approval_responses(
                 substrate_home.path(),
                 true,
@@ -16989,9 +17478,7 @@ agents:
     async fn dispatch_contract_continue_world_worker_approval_response_leaves_obligation_pending_when_delivery_fails(
     ) {
         let _env_guard = world_env_guard();
-        let substrate_home =
-            AuthorityEnvTestTempDir::new(tempdir().expect("substrate home tempdir"));
-        substrate_home.install_as_home();
+        let substrate_home = install_secure_substrate_home();
         write_world_dispatch_policy_with_approval_responses(
             substrate_home.path(),
             true,
@@ -17046,9 +17533,7 @@ agents:
     async fn dispatch_contract_continue_world_worker_clarification_response_closes_follow_up_exactly_once_after_successful_delivery(
     ) {
         let _env_guard = world_env_guard();
-        let substrate_home =
-            AuthorityEnvTestTempDir::new(tempdir().expect("substrate home tempdir"));
-        substrate_home.install_as_home();
+        let substrate_home = install_secure_substrate_home();
         write_world_dispatch_policy_with_clarification_responses(
             substrate_home.path(),
             true,
@@ -17257,9 +17742,7 @@ agents:
     async fn dispatch_contract_continue_world_worker_clarification_response_leaves_follow_up_pending_when_delivery_fails(
     ) {
         let _env_guard = world_env_guard();
-        let substrate_home =
-            AuthorityEnvTestTempDir::new(tempdir().expect("substrate home tempdir"));
-        substrate_home.install_as_home();
+        let substrate_home = install_secure_substrate_home();
         write_world_dispatch_policy_with_clarification_responses(
             substrate_home.path(),
             true,
@@ -17357,9 +17840,7 @@ agents:
         ];
 
         for case in cases {
-            let substrate_home =
-                AuthorityEnvTestTempDir::new(tempdir().expect("substrate home tempdir"));
-            substrate_home.install_as_home();
+            let substrate_home = install_secure_substrate_home();
             write_world_dispatch_policy(
                 substrate_home.path(),
                 case.enabled,
@@ -17440,9 +17921,7 @@ agents:
         ];
 
         for case in cases {
-            let substrate_home =
-                AuthorityEnvTestTempDir::new(tempdir().expect("substrate home tempdir"));
-            substrate_home.install_as_home();
+            let substrate_home = install_secure_substrate_home();
             write_world_dispatch_policy(
                 substrate_home.path(),
                 case.enabled,
@@ -17488,9 +17967,7 @@ agents:
     #[serial]
     async fn dispatch_contract_inspect_world_worker_returns_authoritative_snapshot_without_mutation(
     ) {
-        let substrate_home =
-            AuthorityEnvTestTempDir::new(tempdir().expect("substrate home tempdir"));
-        substrate_home.install_as_home();
+        let substrate_home = install_secure_substrate_home();
         write_allowed_world_dispatch_policy(
             substrate_home.path(),
             "cli:codex-world",
@@ -18055,9 +18532,7 @@ agents:
     #[test]
     #[serial]
     fn register_active_ephemeral_world_task_rejects_duplicate_task_run_id() {
-        let substrate_home =
-            AuthorityEnvTestTempDir::new(tempdir().expect("substrate home tempdir"));
-        substrate_home.install_as_home();
+        let _substrate_home = install_secure_substrate_home();
         let store = AgentRuntimeStateStore::new().expect("state store");
         let _guard = store
             .register_active_ephemeral_world_task(ActiveEphemeralWorldTaskRecord {
@@ -18289,6 +18764,7 @@ agents:
                                 cmd_id: None,
                                 span_id: Some("spawn-retained-target".to_string()),
                                 event_identity: Some(test_runtime_event_identity(1)),
+                                worker_event: None,
                                 channel: None,
                                 identity_tuple: None,
                                 placement_posture: None,
@@ -18326,8 +18802,10 @@ agents:
                         },
                     )
                     .await;
-                    let mut worker_event = sample_continue_stream_event_for_run(
-                        &submitted.run_id,
+                    let mut worker_event = sample_typed_continue_stream_event_for_request(
+                        &submitted,
+                        test_runtime_frame_identity(2),
+                        test_runtime_event_identity(1),
                         json!({
                             "event_class": "follow_up_question",
                             "payload": {
@@ -18335,12 +18813,6 @@ agents:
                             }
                         }),
                     );
-                    worker_event.orchestration_session_id =
-                        submitted.orchestration_session_id.clone();
-                    worker_event.participant_id = Some(submitted.participant_id.clone());
-                    worker_event.backend_id = Some(submitted.backend_id.clone());
-                    worker_event.world_id = Some(submitted.world_id.clone());
-                    worker_event.world_generation = Some(submitted.world_generation);
                     worker_event.span_id = Some("continue-retained-target".to_string());
                     write_chunked_frame(
                         &mut stream,
@@ -18705,9 +19177,7 @@ agents:
         ];
 
         for case in cases {
-            let substrate_home =
-                AuthorityEnvTestTempDir::new(tempdir().expect("substrate home tempdir"));
-            substrate_home.install_as_home();
+            let substrate_home = install_secure_substrate_home();
             write_world_dispatch_policy(
                 substrate_home.path(),
                 case.enabled,
@@ -22007,9 +22477,7 @@ agents:
     #[test]
     #[serial]
     fn persist_detached_stop_world_worker_closeout_rejects_backend_drift() {
-        let substrate_home =
-            AuthorityEnvTestTempDir::new(tempdir().expect("substrate home tempdir"));
-        substrate_home.install_as_home();
+        let _substrate_home = install_secure_substrate_home();
         let workspace_root = tempdir().expect("workspace root tempdir");
         let store = AgentRuntimeStateStore::new().expect("state store");
         persist_detached_continue_dispatch_state(&store, workspace_root.path(), "world-17", 2);
@@ -22043,9 +22511,7 @@ agents:
     #[test]
     #[serial]
     fn persist_detached_stop_world_worker_closeout_rejects_terminal_target_race() {
-        let substrate_home =
-            AuthorityEnvTestTempDir::new(tempdir().expect("substrate home tempdir"));
-        substrate_home.install_as_home();
+        let _substrate_home = install_secure_substrate_home();
         let workspace_root = tempdir().expect("workspace root tempdir");
         let store = AgentRuntimeStateStore::new().expect("state store");
         persist_detached_continue_dispatch_state(&store, workspace_root.path(), "world-17", 2);
@@ -22082,9 +22548,7 @@ agents:
     #[serial]
     fn persist_detached_stop_world_worker_closeout_rejects_terminal_target_race_without_sanctioned_owner(
     ) {
-        let substrate_home =
-            AuthorityEnvTestTempDir::new(tempdir().expect("substrate home tempdir"));
-        substrate_home.install_as_home();
+        let _substrate_home = install_secure_substrate_home();
         let workspace_root = tempdir().expect("workspace root tempdir");
         let store = AgentRuntimeStateStore::new().expect("state store");
         persist_authoritative_continue_dispatch_state(&store, workspace_root.path(), "world-17", 2);
@@ -22143,9 +22607,7 @@ agents:
     #[test]
     #[serial]
     fn persist_detached_stop_world_worker_closeout_rejects_stale_owner_successor_drift() {
-        let substrate_home =
-            AuthorityEnvTestTempDir::new(tempdir().expect("substrate home tempdir"));
-        substrate_home.install_as_home();
+        let _substrate_home = install_secure_substrate_home();
         let workspace_root = tempdir().expect("workspace root tempdir");
         let store = AgentRuntimeStateStore::new().expect("state store");
         persist_stale_attached_continue_dispatch_state(
@@ -22209,9 +22671,7 @@ agents:
     #[test]
     #[serial]
     fn persist_detached_stop_world_worker_closeout_rejects_owner_rebinding_lineage_mutation() {
-        let substrate_home =
-            AuthorityEnvTestTempDir::new(tempdir().expect("substrate home tempdir"));
-        substrate_home.install_as_home();
+        let _substrate_home = install_secure_substrate_home();
         let workspace_root = tempdir().expect("workspace root tempdir");
         let store = AgentRuntimeStateStore::new().expect("state store");
         persist_stale_attached_continue_dispatch_state(
@@ -22287,9 +22747,7 @@ agents:
     #[serial]
     fn persist_detached_stop_world_worker_closeout_rejects_owner_rebinding_world_binding_mutation()
     {
-        let substrate_home =
-            AuthorityEnvTestTempDir::new(tempdir().expect("substrate home tempdir"));
-        substrate_home.install_as_home();
+        let _substrate_home = install_secure_substrate_home();
         let workspace_root = tempdir().expect("workspace root tempdir");
         let store = AgentRuntimeStateStore::new().expect("state store");
         persist_stale_attached_continue_dispatch_state(
@@ -22367,9 +22825,7 @@ agents:
     #[serial]
     fn persist_detached_stop_world_worker_closeout_rejects_session_only_world_binding_drift_without_sanctioned_owner(
     ) {
-        let substrate_home =
-            AuthorityEnvTestTempDir::new(tempdir().expect("substrate home tempdir"));
-        substrate_home.install_as_home();
+        let _substrate_home = install_secure_substrate_home();
         let workspace_root = tempdir().expect("workspace root tempdir");
         let store = AgentRuntimeStateStore::new().expect("state store");
         persist_authoritative_continue_dispatch_state(&store, workspace_root.path(), "world-17", 2);
@@ -22420,9 +22876,7 @@ agents:
     #[test]
     #[serial]
     fn persist_detached_stop_world_worker_closeout_rejects_stale_owner_linkage_drift() {
-        let substrate_home =
-            AuthorityEnvTestTempDir::new(tempdir().expect("substrate home tempdir"));
-        substrate_home.install_as_home();
+        let _substrate_home = install_secure_substrate_home();
         let workspace_root = tempdir().expect("workspace root tempdir");
         let store = AgentRuntimeStateStore::new().expect("state store");
         persist_stale_attached_continue_dispatch_state(
@@ -23779,6 +24233,7 @@ agents:
             cmd_id: None,
             span_id: Some("spn_spawn".to_string()),
             event_identity: Some(test_runtime_event_identity(1)),
+            worker_event: None,
             channel: None,
             identity_tuple: None,
             placement_posture: None,
@@ -24224,6 +24679,7 @@ agents:
                                 cmd_id: None,
                                 span_id: Some("spn_spawn".to_string()),
                                 event_identity: Some(test_runtime_event_identity(1)),
+                                worker_event: None,
                                 channel: None,
                                 identity_tuple: None,
                                 placement_posture: None,
@@ -24418,6 +24874,7 @@ agents:
                         cmd_id: None,
                         span_id: Some("spn_fork".to_string()),
                         event_identity: Some(test_runtime_event_identity(1)),
+                        worker_event: None,
                         channel: None,
                         identity_tuple: None,
                         placement_posture: None,
@@ -24626,6 +25083,7 @@ agents:
                         cmd_id: None,
                         span_id: Some("spn_fork".to_string()),
                         event_identity: Some(test_runtime_event_identity(1)),
+                        worker_event: None,
                         channel: None,
                         identity_tuple: None,
                         placement_posture: None,
@@ -24854,6 +25312,7 @@ agents:
                         cmd_id: None,
                         span_id: Some("spn_fork".to_string()),
                         event_identity: Some(test_runtime_event_identity(1)),
+                        worker_event: None,
                         channel: None,
                         identity_tuple: None,
                         placement_posture: None,
@@ -25106,6 +25565,7 @@ agents:
                         cmd_id: None,
                         span_id: Some("spn_fork".to_string()),
                         event_identity: Some(test_runtime_event_identity(1)),
+                        worker_event: None,
                         channel: None,
                         identity_tuple: None,
                         placement_posture: None,
@@ -25406,6 +25866,7 @@ agents:
                         cmd_id: None,
                         span_id: Some("spn_fork".to_string()),
                         event_identity: Some(test_runtime_event_identity(1)),
+                        worker_event: None,
                         channel: None,
                         identity_tuple: None,
                         placement_posture: None,
@@ -25507,9 +25968,7 @@ agents:
             "SUBSTRATE_WORLD_DEPS_GUEST_BIN_DIR",
             test_world_codex_runtime_bin().as_path(),
         );
-        let substrate_home =
-            AuthorityEnvTestTempDir::new(tempdir().expect("substrate home tempdir"));
-        substrate_home.install_as_home();
+        let substrate_home = install_secure_substrate_home();
         write_allowed_world_dispatch_policy(
             substrate_home.path(),
             "cli:codex-world",
@@ -25594,6 +26053,7 @@ agents:
                         cmd_id: None,
                         span_id: Some("spn_fork".to_string()),
                         event_identity: Some(test_runtime_event_identity(1)),
+                        worker_event: None,
                         channel: None,
                         identity_tuple: None,
                         placement_posture: None,
@@ -26088,5 +26548,193 @@ agents:
             failure.contains("downstream completion remains worker-defined"),
             "non-zero progress_ack summary must keep completion separate from acknowledgement: {failure}"
         );
+    }
+
+    #[cfg(target_os = "linux")]
+    #[test]
+    fn typed_control_ack_projection_uses_top_level_worker_event_class() {
+        let (_proposal, request) = sample_retained_acceptance_submission();
+        let event = substrate_common::agent_events::AgentEvent {
+            worker_event: Some(substrate_common::agent_events::WorldWorkerEventV1 {
+                event_class: substrate_common::agent_events::WorldWorkerEventClassV1::ControlAck,
+                attention_required: false,
+                payload: serde_json::json!({
+                    "message": "directive applied"
+                }),
+                ..sample_typed_continue_stream_event_for_request(
+                    &request,
+                    test_runtime_frame_identity(2),
+                    test_runtime_event_identity(1),
+                    serde_json::json!({
+                        "event_class": "control_ack",
+                        "payload": {
+                            "message": "directive applied"
+                        }
+                    }),
+                )
+                .worker_event
+                .expect("fixture typed worker_event")
+            }),
+            ..sample_typed_continue_stream_event_for_request(
+                &request,
+                test_runtime_frame_identity(2),
+                test_runtime_event_identity(1),
+                serde_json::json!({
+                    "event_class": "control_ack",
+                    "payload": {
+                        "message": "directive applied"
+                    }
+                }),
+            )
+        };
+
+        let classified = classify_continue_world_worker_event(
+            &request,
+            ContinueWorldWorkerTurnKind::ControlDirective,
+            &event,
+        )
+        .expect("typed control_ack should validate")
+        .expect("typed control_ack should surface");
+        assert_eq!(
+            classified.event_class,
+            ContinueWorldWorkerEventClassV1::ControlAck
+        );
+    }
+
+    #[cfg(target_os = "linux")]
+    #[tokio::test(flavor = "multi_thread", worker_threads = 2)]
+    #[serial]
+    async fn accepted_retained_typed_event_validation_precedes_generic_journaling() {
+        let (_authority_root, receipt_registry, execution_supervisor, authority_store_id) =
+            b21_test_acceptance_stores();
+        let (proposal, submit_request) =
+            reserve_b21_retained_acceptance(&receipt_registry, &authority_store_id);
+        let acceptance_record_id = proposal
+            .acceptance_context
+            .proposed_acceptance_record_id
+            .clone();
+        let socket_home = tempdir().expect("socket tempdir");
+        let socket_path = socket_home
+            .path()
+            .join("b21-retained-typed-before-journal.sock");
+        let listener = UnixListener::bind(&socket_path).expect("bind stub world socket");
+        let cancel_requests = Arc::new(std::sync::Mutex::new(Vec::<ExecuteCancelRequestV1>::new()));
+        let cancel_requests_for_server = cancel_requests.clone();
+        let submit_for_server = submit_request.clone();
+        let server = tokio::spawn(async move {
+            while let Ok((mut stream, _addr)) = listener.accept().await {
+                let Some((header, body)) = read_http_request(&mut stream).await else {
+                    continue;
+                };
+                let first_line = header.lines().next().unwrap_or("");
+                if first_line.starts_with("GET /v1/capabilities ") {
+                    write_http_json(
+                        &mut stream,
+                        "200 OK",
+                        r#"{"schema_version":1,"policy_snapshot_v1_supported":true}"#,
+                    )
+                    .await;
+                    continue;
+                }
+                if first_line.starts_with("POST /v1/member_turn/stream ") {
+                    let _parsed: transport_api_types::MemberTurnSubmitRequestV1 =
+                        serde_json::from_slice(&body).expect("decode retained submit request");
+                    write_http_stream_start(&mut stream).await;
+                    write_chunked_frame(
+                        &mut stream,
+                        &transport_api_types::ExecuteStreamFrame::Start {
+                            frame_identity: test_runtime_frame_identity(1),
+                            span_id: "spn_b21_retained_untyped_event".to_string(),
+                        },
+                    )
+                    .await;
+                    write_chunked_frame(
+                        &mut stream,
+                        &transport_api_types::ExecuteStreamFrame::Event {
+                            frame_identity: test_runtime_frame_identity(2),
+                            event: sample_continue_stream_event_for_run(
+                                &submit_for_server.run_id,
+                                serde_json::json!({
+                                    "event_class": "reply",
+                                    "payload": { "message": "should not journal" }
+                                }),
+                            ),
+                        },
+                    )
+                    .await;
+                    write_chunked_frame(
+                        &mut stream,
+                        &transport_api_types::ExecuteStreamFrame::Exit {
+                            frame_identity: test_runtime_frame_identity(2),
+                            event_identity: test_runtime_event_identity(1),
+                            terminal_identity: test_runtime_terminal_identity(1),
+                            exit: 130,
+                            span_id: "spn_b21_retained_untyped_event".to_string(),
+                            scopes_used: Vec::new(),
+                            fs_diff: None,
+                            process_telemetry: Default::default(),
+                        },
+                    )
+                    .await;
+                    finish_chunked_stream(&mut stream).await;
+                    continue;
+                }
+                if first_line.starts_with("POST /v1/execute/cancel ") {
+                    let parsed: ExecuteCancelRequestV1 =
+                        serde_json::from_slice(&body).expect("decode retained cancel request");
+                    cancel_requests_for_server
+                        .lock()
+                        .expect("cancel requests mutex poisoned")
+                        .push(parsed);
+                    write_http_json(
+                        &mut stream,
+                        "200 OK",
+                        r#"{"schema_version":1,"delivered":true}"#,
+                    )
+                    .await;
+                    break;
+                }
+                write_http_json(&mut stream, "404 Not Found", r#"{"error":"not_found"}"#).await;
+            }
+        });
+        let _socket_guard = EnvVarGuard::set_path("SUBSTRATE_WORLD_SOCKET", &socket_path);
+
+        let result = execute_accepted_continue_world_worker_stream_for_turn_kind(
+            &submit_request,
+            &Policy::default(),
+            ContinueWorldWorkerTurnKind::GenericContinue,
+            &receipt_registry,
+            &execution_supervisor,
+            &proposal,
+        )
+        .await;
+        let error = match result {
+            Err(error) => error,
+            Ok(_) => panic!("missing typed worker_event should fail the foreground waiter"),
+        };
+        assert!(
+            error
+                .to_string()
+                .contains("accepted retained Event without worker_event"),
+            "unexpected error: {error:#}"
+        );
+        let observation = execution_supervisor
+            .inspect_observation_by_acceptance_id(&acceptance_record_id)
+            .expect("inspect retained malformed-event observation")
+            .expect("retained malformed-event observation exists");
+        assert_eq!(observation.durable_frame_cursor, Some(2));
+        assert_eq!(observation.durable_event_cursor, Some(1));
+        assert_eq!(observation.journal.len(), 2);
+        assert_eq!(
+            observation.terminal.map(|terminal| terminal.exit_code),
+            Some(130)
+        );
+        server.await.expect("join retained malformed-event server");
+        let recorded = cancel_requests
+            .lock()
+            .expect("cancel requests mutex poisoned");
+        assert_eq!(recorded.len(), 1);
+        assert_eq!(recorded[0].span_id, "spn_b21_retained_untyped_event");
+        assert_eq!(recorded[0].sig, "INT");
     }
 }

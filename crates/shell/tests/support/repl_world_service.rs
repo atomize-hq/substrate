@@ -414,6 +414,7 @@ impl ReplWorldAgentStub {
                             cmd_id: None,
                             span_id: Some(span_id.to_string()),
                             event_identity: Some(runtime_event_identity(span_id, 1)),
+                            worker_event: None,
                             channel: None,
                             identity_tuple: None,
                             placement_posture: None,

@@ -1,0 +1,76 @@
+{
+  "schema_version": 1,
+  "packet_id": "runtime-refactor-b3-1-retained-event-semantics",
+  "status": "complete",
+  "stop_reason": null,
+  "cycles": [
+    {
+      "cycle_id": "discovery-1",
+      "kind": "discovery",
+      "subject_fingerprint": "sha256:f9b151fbdfcdf8a28846ef36ebe4f67d6ba6290cb193bc7f44ceca24db7c84f6",
+      "trigger_cycle_id": null,
+      "trigger_finding_ids": [],
+      "causal_evidence_refs": [],
+      "review_refs": [
+        "b3-1-review-authority-semantics.md",
+        "b3-1-review-producer-normalization.md",
+        "b3-1-review-consumer-regression.md"
+      ],
+      "verdict": "findings",
+      "findings": [
+        {
+          "finding_id": "B3-1-P1-001",
+          "priority": "P1"
+        },
+        {
+          "finding_id": "B3-1-P2-001",
+          "priority": "P2"
+        },
+        {
+          "finding_id": "B3-1-P2-002",
+          "priority": "P2"
+        }
+      ]
+    },
+    {
+      "cycle_id": "closure-1",
+      "kind": "closure",
+      "subject_fingerprint": "sha256:06536a430f05715d5358a6cecb9394c729a68df5d671569ec3c692158835cbac",
+      "trigger_cycle_id": "discovery-1",
+      "trigger_finding_ids": [
+        "B3-1-P1-001",
+        "B3-1-P2-001",
+        "B3-1-P2-002"
+      ],
+      "causal_evidence_refs": [],
+      "review_refs": [
+        "b3-1-review-producer-normalization.md"
+      ],
+      "verdict": "findings",
+      "findings": [
+        {
+          "finding_id": "B3-1-P1-002",
+          "priority": "P1"
+        }
+      ]
+    },
+    {
+      "cycle_id": "supplemental-1",
+      "kind": "supplemental_causal",
+      "subject_fingerprint": "sha256:57a1926c85c3069a6d7a42b5476f51edb5f7ef0032c31a68dee2c30d19294288",
+      "trigger_cycle_id": "closure-1",
+      "trigger_finding_ids": [
+        "B3-1-P1-002"
+      ],
+      "causal_evidence_refs": [
+        "crates/world-service/src/member_runtime.rs",
+        "llm-last-mile/runtime-refactor/review-control/b3-1-differential-evidence.json"
+      ],
+      "review_refs": [
+        "b3-1-review-producer-normalization.md"
+      ],
+      "verdict": "clean",
+      "findings": []
+    }
+  ]
+}

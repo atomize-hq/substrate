@@ -1069,6 +1069,7 @@ mod tests {
                 cmd_id: None,
                 span_id: Some("task-run-b2-1".to_string()),
                 event_identity: Some(event_identity(event_sequence)),
+                worker_event: None,
                 channel: Some("worker.progress".to_string()),
                 identity_tuple: None,
                 placement_posture: None,

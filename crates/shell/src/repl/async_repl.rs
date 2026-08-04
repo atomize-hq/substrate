@@ -16572,6 +16572,7 @@ mod tests {
                             cmd_id: None,
                             span_id: Some(span_id.clone()),
                             event_identity: Some(registered_identity),
+                            worker_event: None,
                             channel: None,
                             identity_tuple: None,
                             placement_posture: None,

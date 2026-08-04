@@ -1929,8 +1929,8 @@ adapter and complete recovered-core/B1/B2.1-0 range.
 
 B1 receipt core recovered/review-clean: **yes**. B2.1 supervisor core recovered/review-clean:
 **yes**. B1/B2.1-0 review-clean: **yes**. B1/B2.1 joint production integration closeout:
-**complete**. B3.1 dependency-ready: **yes**. Seam promotions: **none**. Within the B corridor, the
-next architectural packet is B3.1. At the
+**complete**. B3.1 complete: **yes**. Seam promotions: **none**. Within the B corridor, the next
+architectural packet is C1. At the
 B1/B2.1-0 closeout, the repository's exact next packet was A1.1d-5R2-1 — Host context construction
 and Unix dev propagation; after review-clean R2-2 Routes A–E, the failed integration closeout, and
 the completed exact harness closeout, the next packet at that historical checkpoint was
@@ -1939,6 +1939,38 @@ integration closeout, R2-3, R2-4, and R3. The completed-F ledger below supersede
 status. Only the joint closeout's Linux
 product-smoke portion waits for those remediations and their required smoke, and its receipt and
 supervisor semantics are not reopened.
+
+## B3.1 recorded result
+
+At the bound Tuesday, August 4, 2026 source candidate, B3.1 closes the retained worker-to-host
+typed event prerequisite without changing `ExecuteStreamFrame`. Producer normalization now happens
+only in `world-service` before `AgentEvent` construction, every retained post-acknowledgement
+`Event` frame in scope carries the typed `worker_event` member or fails closed before emission, and
+shell consumers validate the complete envelope instead of using JSON-pointer repair on
+`AgentEvent.data`.
+
+Broad proof remained monotonic through both `make shell-lib-wall` and `make shell-lib-wall-serial`
+at `1324 discovered / 1276 passed / 48 failed / 0 ignored` with failure-name SHA-256
+`c6de1349137dcb16d03b87be5364dc50d74a5052565e2c8d40dfed303592bed9`. That inventory growth is
+exactly two new passing shell tests:
+`execution::orchestrator_world_dispatch::tests::accepted_retained_typed_event_validation_precedes_generic_journaling`
+and
+`execution::orchestrator_world_dispatch::tests::typed_control_ack_projection_uses_top_level_worker_event_class`.
+The historical normalized-signature SHA-256
+`2a0df9b340cc7e5e1b6e4f76e60e6f937b7442008142d78a7ae24bbcd2f60a90` first moved to the earlier
+independently authorized intermediate candidate SHA-256
+`a1753d3d2dcd19f36a9350660ce88d9f2713871dd7734414c005ab8e52e70470`, then to the superseded
+serial candidate SHA-256 `401fd5d38e059961de7fd4f773f7a817b9f2c1790ded0500228ed1168f7e811a`,
+and finally to the accepted candidate SHA-256
+`167807acacbf51c8507ef1c6a20d195b5d1a19e66ea62e5d612de1c2ef340f17`. The accepted final
+differential against the superseded serial candidate is limited to 23 FILE:LINE-only movements in
+`crates/shell/src/execution/orchestrator_world_dispatch.rs`; test names, file paths, columns, and
+normalized panic bodies remain unchanged, and the exact historical-to-final differential remains
+recorded in
+[`review-control/b3-1-differential-evidence.json`](review-control/b3-1-differential-evidence.json).
+No failure name, failure message, assertion, test identity, or production behavior was removed,
+renamed, substituted, ignored, or weakened. B3.1 is complete, C1 is next, and no seam is
+promoted.
 
 ## Baseline behaviors that all tracks preserve
 
@@ -3093,9 +3125,10 @@ controller/supervisor remediation and changes no RP3/RP4/RP5 proof result.
 The full absolute paths, artifact hashes, authority provenance, proof matrix, and exclusions are in
 [`review-control/r2-4-closeout-evidence.md`](review-control/r2-4-closeout-evidence.md). R2-4 is
 closed only as the bounded R2 propagation join. R3 implementation is `PARKED_BY_USER`; the
-just-closed corridor head was the B1/B2.1 joint closeout, the next candidate implementation line
-is `B3.1 -> C1 -> A1.2b`, and after A1.2b R3 must be revalidated, explicitly reauthorized,
-resumed, and completed before A1.3, A1.4, or A1 closeout. The larger architecture and
+just-closed corridor head was the B1/B2.1 joint closeout, B3.1 is complete on the bound Tuesday,
+August 4, 2026 candidate, the next candidate implementation line is `C1 -> A1.2b`, and after
+A1.2b R3 must be revalidated, explicitly reauthorized, resumed, and completed before A1.3, A1.4,
+or A1 closeout. The larger architecture and
 runtime-refactor program remain open.
 
 ## A1.1d-5R3 planned proof and regression ledger
@@ -3107,10 +3140,10 @@ source `4ceecd50e20d822dda7cbd8f0e1bef4ccad65d8e` / tree
 planning fingerprint `sha256:8f4cf54640443dbeb82fffbef68fac8d03eeaa6c72cf4e44f645044bc2b210e7`.
 R3 implementation is `PARKED_BY_USER`, no implementation task has been dispatched from this plan,
 and the just-closed corridor head was
-`AUTHORITY_REQUIRED:B1_B2_1_JOINT_CLOSEOUT`; the next candidate implementation corridor is
-`B3.1 -> C1 -> A1.2b`. After A1.2b, a fresh authority gate must revalidate this preserved proof
-program before R3 is explicitly reauthorized, resumed, and completed before A1.3, A1.4, or A1
-closeout. No `cargo test --workspace`
+`AUTHORITY_REQUIRED:B1_B2_1_JOINT_CLOSEOUT`; B3.1 is complete on the bound Tuesday, August 4, 2026
+candidate, and the next candidate implementation corridor is `C1 -> A1.2b`. After A1.2b, a fresh
+authority gate must revalidate this preserved proof program before R3 is explicitly reauthorized,
+resumed, and completed before A1.3, A1.4, or A1 closeout. No `cargo test --workspace`
 expected-failure inventory is frozen here, and approximate
 workspace-failure counts are not authority.
 

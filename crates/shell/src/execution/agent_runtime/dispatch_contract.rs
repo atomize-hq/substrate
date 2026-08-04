@@ -1186,6 +1186,7 @@ pub(crate) enum ContinueWorldWorkerEventClassV1 {
     Result,
     Failure,
     ControlAck,
+    AttentionRequired,
     FollowUpQuestion,
     Blocked,
     ApprovalRequest,
@@ -1202,6 +1203,7 @@ impl ContinueWorldWorkerEventClassV1 {
             "result" => Some(Self::Result),
             "failure" => Some(Self::Failure),
             "control_ack" => Some(Self::ControlAck),
+            "attention_required" => Some(Self::AttentionRequired),
             "follow_up_question" => Some(Self::FollowUpQuestion),
             "blocked" => Some(Self::Blocked),
             "approval_request" => Some(Self::ApprovalRequest),
@@ -1214,18 +1216,18 @@ impl ContinueWorldWorkerEventClassV1 {
     pub(crate) fn attention_required_by_default(self) -> bool {
         matches!(
             self,
-            Self::FollowUpQuestion | Self::Blocked | Self::ApprovalRequest | Self::ForkRequest
+            Self::AttentionRequired
+                | Self::FollowUpQuestion
+                | Self::Blocked
+                | Self::ApprovalRequest
+                | Self::ForkRequest
         )
     }
 
     pub(crate) fn is_deferred_wire_label(label: &str) -> bool {
         matches!(
             label.trim(),
-            "approval_response"
-                | "fork_command"
-                | "progress_ack"
-                | "control_directive"
-                | "attention_required"
+            "approval_response" | "fork_command" | "progress_ack" | "control_directive"
         )
     }
 }

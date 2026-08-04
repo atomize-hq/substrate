@@ -64,8 +64,8 @@ including the read-only active-task tool adapter, is review-clean through `83101
 the B1/B2.1-0 prerequisite plus its later joint production integration closeout on frozen
 2026-08-03 source `f37943eb917285a044c5e12a05b481572c8d0a09` /
 `54ae7b2a2d467a568b575665b99dcb94ef2893a2`: B1 and B2.1 are now production-complete for the named
-accepted families, foreground behavior remains blocking until B2.2, B3.1 is dependency-ready, and
-no seam classification is promoted.
+accepted families, foreground behavior remains blocking until B2.2, B3.1 is complete on the bound
+Tuesday, August 4, 2026 source candidate, C1 is next, and no seam classification is promoted.
 
 ## Authority map
 
@@ -1301,10 +1301,11 @@ Passive health/world-deps diagnostic failures remain a separate existing lane. U
 leftovers, cleanup, rollback, manifest, and convergence remain R3-owned. The local `0640`/`0650`
 archive-mode observation is a one-object restoration decision, not a changed permission model.
 R3 planning is complete, but R3 implementation is `PARKED_BY_USER` and no R3 implementation task
-has been dispatched. The just-closed corridor head was the B1/B2.1 joint closeout; the next
-candidate implementation line is `B3.1 -> C1 -> A1.2b`. After A1.2b, R3 must be revalidated,
-explicitly reauthorized, resumed, and completed before A1.3, A1.4, or A1 closeout. R2-4 does not
-close A1.1d, A1, or the runtime refactor.
+has been dispatched. The just-closed corridor head was the B1/B2.1 joint closeout, B3.1 is
+complete on the bound Tuesday, August 4, 2026 candidate, and the next candidate implementation
+line is `C1 -> A1.2b`. After A1.2b, R3 must be revalidated, explicitly reauthorized, resumed, and
+completed before A1.3, A1.4, or A1 closeout. R2-4 does not close A1.1d, A1, or the runtime
+refactor.
 
 ## A1.1d-5R3 lifecycle ownership architecture
 
