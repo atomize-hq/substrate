@@ -56,26 +56,74 @@ impl HomeBootstrapError {
             provenance.push_str(&format!(", acl-observation={}", class.as_str()));
         }
         provenance.push_str(&format!(
-            ", reason={}, candidate-created={})",
+            ", reason={}, candidate-created={}, candidate-rollback={})",
             error.reason().as_str(),
-            error.candidate_provenance().creation_as_str()
+            error.candidate_provenance().creation_as_str(),
+            error.candidate_rollback().as_str(),
         ));
 
-        use crate::execution::agent_runtime::host_session_authority::trusted_fs::PrivateHomeCandidateProvenance;
-        let instruction = match error.candidate_provenance() {
-            PrivateHomeCandidateProvenance::Created => {
+        use crate::execution::agent_runtime::host_session_authority::trusted_fs::{
+            PrivateHomeCandidateProvenance, PrivateHomeCandidateRollback,
+        };
+        let instruction = match (
+            error.candidate_provenance(),
+            error.candidate_rollback(),
+        ) {
+            (
+                PrivateHomeCandidateProvenance::Created,
+                PrivateHomeCandidateRollback::RolledBack,
+            ) => {
+                "The rejected current-attempt candidate was removed before publication."
+            }
+            (
+                PrivateHomeCandidateProvenance::Created,
+                PrivateHomeCandidateRollback::DisarmedAfterAcceptance,
+            ) => {
+                "The accepted home was already published; existing roots are never repaired; reset it manually and retry."
+            }
+            (
+                PrivateHomeCandidateProvenance::Created,
+                PrivateHomeCandidateRollback::PreservedNonEmpty,
+            ) => {
+                "The rejected current-attempt candidate could not be removed safely because it was no longer empty; no accepted home was published."
+            }
+            (
+                PrivateHomeCandidateProvenance::Created,
+                PrivateHomeCandidateRollback::PreservedRequestedPathMismatch,
+            ) => {
+                "The rejected current-attempt candidate could not be removed safely because the requested-path identity changed before cleanup; no accepted home was published."
+            }
+            (
+                PrivateHomeCandidateProvenance::Created,
+                PrivateHomeCandidateRollback::PreservedAlreadyExists,
+            ) => {
+                "The rejected current-attempt candidate could not be restored safely because the requested path was reoccupied during cleanup; no accepted home was published."
+            }
+            (
+                PrivateHomeCandidateProvenance::Created,
+                PrivateHomeCandidateRollback::PreservedAmbiguousLookup,
+            ) => {
+                "The rejected current-attempt candidate could not be removed safely because cleanup could not rejoin a stable name/identity view; no accepted home was published."
+            }
+            (
+                PrivateHomeCandidateProvenance::Created,
+                PrivateHomeCandidateRollback::PreservedValidationUnavailable,
+            ) => {
+                "The rejected current-attempt candidate could not be removed safely because cleanup validation became unavailable; no accepted home was published."
+            }
+            (PrivateHomeCandidateProvenance::Created, PrivateHomeCandidateRollback::NotAttempted) => {
                 "The rejected candidate was created by this attempt and remains in place; this attempt performs no cleanup."
             }
-            PrivateHomeCandidateProvenance::Unknown => {
+            (PrivateHomeCandidateProvenance::Unknown, _) => {
                 "Candidate creation could not be determined after a failed creation wait; this attempt performs no cleanup and gives no existing-root reset instruction."
             }
-            PrivateHomeCandidateProvenance::PreExisting => {
+            (PrivateHomeCandidateProvenance::PreExisting, _) => {
                 "Existing roots are never repaired; reset it manually and retry."
             }
-            PrivateHomeCandidateProvenance::NotCreated if role == "ancestor" => {
+            (PrivateHomeCandidateProvenance::NotCreated, _) if role == "ancestor" => {
                 "The offending ancestor was not modified; correct that object and retry."
             }
-            PrivateHomeCandidateProvenance::NotCreated => {
+            (PrivateHomeCandidateProvenance::NotCreated, _) => {
                 "No candidate was created; correct the requested path or parent and retry."
             }
         };
@@ -569,7 +617,7 @@ mod tests {
     use super::{select_intended_owner_name, HomeBootstrapError};
     use crate::execution::agent_runtime::host_session_authority::trusted_fs::{
         PrivateHomeAclAuthority, PrivateHomeAclKind, PrivateHomeCandidateProvenance,
-        PrivateHomeError, PrivateHomeObjectRole,
+        PrivateHomeCandidateRollback, PrivateHomeError, PrivateHomeObjectRole,
     };
     use std::ffi::OsString;
     #[cfg(target_os = "linux")]
@@ -814,9 +862,13 @@ mod tests {
         assert!(rendered.contains("role=final-root"));
         assert!(rendered.contains("acl-kind=default"));
         assert!(rendered.contains("candidate-created=yes"));
-        assert!(rendered.contains("performs no cleanup"));
+        assert!(rendered.contains("removed before publication"));
         assert!(!rendered.contains("reset it manually"));
-        assert!(requested.is_dir());
+        assert_eq!(
+            private_error.candidate_rollback(),
+            PrivateHomeCandidateRollback::RolledBack
+        );
+        assert!(!requested.exists());
     }
 
     #[cfg(target_os = "linux")]
@@ -861,9 +913,13 @@ mod tests {
         assert!(rendered.contains("acl-kind=default"));
         assert!(rendered.contains("authority=default-acl-present"));
         assert!(rendered.contains("candidate-created=yes"));
-        assert!(rendered.contains("performs no cleanup"));
+        assert!(rendered.contains("removed before publication"));
         assert!(!rendered.contains("reset it manually"));
-        assert!(requested.is_dir());
+        assert_eq!(
+            private_error.candidate_rollback(),
+            PrivateHomeCandidateRollback::RolledBack
+        );
+        assert!(!requested.exists());
     }
 
     #[cfg(target_os = "linux")]
@@ -911,6 +967,12 @@ mod tests {
                 Some(PrivateHomeAclAuthority::DefaultAclPresent)
             );
             assert_eq!(private_error.candidate_provenance(), expected_provenance);
+            let expected_rollback = if preexisting {
+                PrivateHomeCandidateRollback::NotAttempted
+            } else {
+                PrivateHomeCandidateRollback::DisarmedAfterAcceptance
+            };
+            assert_eq!(private_error.candidate_rollback(), expected_rollback);
             let rendered =
                 HomeBootstrapError::unsupported_private_home(&requested, owner_uid, &private_error)
                     .to_string();
@@ -923,8 +985,8 @@ mod tests {
             if preexisting {
                 assert!(rendered.contains("reset it manually"));
             } else {
-                assert!(rendered.contains("performs no cleanup"));
-                assert!(!rendered.contains("reset it manually"));
+                assert!(rendered.contains("accepted home was already published"));
+                assert!(rendered.contains("reset it manually"));
             }
         }
     }

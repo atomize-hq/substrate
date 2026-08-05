@@ -162,6 +162,33 @@ impl PrivateHomeCandidateProvenance {
     }
 }
 
+#[derive(Clone, Copy, Debug, Eq, PartialEq)]
+pub(crate) enum PrivateHomeCandidateRollback {
+    NotAttempted,
+    RolledBack,
+    DisarmedAfterAcceptance,
+    PreservedNonEmpty,
+    PreservedRequestedPathMismatch,
+    PreservedAlreadyExists,
+    PreservedAmbiguousLookup,
+    PreservedValidationUnavailable,
+}
+
+impl PrivateHomeCandidateRollback {
+    pub(crate) fn as_str(self) -> &'static str {
+        match self {
+            Self::NotAttempted => "not-attempted",
+            Self::RolledBack => "rolled-back-before-publication",
+            Self::DisarmedAfterAcceptance => "disarmed-after-acceptance",
+            Self::PreservedNonEmpty => "preserved-nonempty",
+            Self::PreservedRequestedPathMismatch => "preserved-requested-path-mismatch",
+            Self::PreservedAlreadyExists => "preserved-already-exists",
+            Self::PreservedAmbiguousLookup => "preserved-ambiguous-lookup",
+            Self::PreservedValidationUnavailable => "preserved-validation-unavailable",
+        }
+    }
+}
+
 #[derive(Debug)]
 pub(crate) struct PrivateHomeError {
     reason: PrivateHomeReason,
@@ -172,6 +199,7 @@ pub(crate) struct PrivateHomeError {
     acl_authority: Option<PrivateHomeAclAuthority>,
     acl_diagnostic_class: Option<LinuxAclDiagnosticClassV1>,
     candidate_provenance: PrivateHomeCandidateProvenance,
+    candidate_rollback: PrivateHomeCandidateRollback,
 }
 
 impl PrivateHomeError {
@@ -185,6 +213,7 @@ impl PrivateHomeError {
             acl_authority: None,
             acl_diagnostic_class: None,
             candidate_provenance: PrivateHomeCandidateProvenance::NotCreated,
+            candidate_rollback: PrivateHomeCandidateRollback::NotAttempted,
         }
     }
 
@@ -251,6 +280,11 @@ impl PrivateHomeError {
         self
     }
 
+    fn with_candidate_rollback(mut self, rollback: PrivateHomeCandidateRollback) -> Self {
+        self.candidate_rollback = rollback;
+        self
+    }
+
     pub(crate) fn reason(&self) -> PrivateHomeReason {
         self.reason
     }
@@ -285,6 +319,10 @@ impl PrivateHomeError {
 
     pub(crate) fn candidate_provenance(&self) -> PrivateHomeCandidateProvenance {
         self.candidate_provenance
+    }
+
+    pub(crate) fn candidate_rollback(&self) -> PrivateHomeCandidateRollback {
+        self.candidate_rollback
     }
 
     #[cfg(test)]
@@ -327,8 +365,8 @@ mod platform {
 
     use super::{
         CanonicalDirectoryV1, File, LinuxAclDiagnosticClassV1, PrivateHomeAclAuthority,
-        PrivateHomeAclKind, PrivateHomeCandidateProvenance, PrivateHomeError,
-        PrivateHomeObjectRole, PrivateHomeReason, TrustedFsError,
+        PrivateHomeAclKind, PrivateHomeCandidateProvenance, PrivateHomeCandidateRollback,
+        PrivateHomeError, PrivateHomeObjectRole, PrivateHomeReason, TrustedFsError,
     };
     use crate::execution::agent_runtime::host_session_authority::schema::DirectoryPhysicalIdentityV1;
 
@@ -348,6 +386,16 @@ mod platform {
     #[cfg(all(test, target_os = "linux"))]
     std::thread_local! {
         static TEST_LINUX_ACL_READ: std::cell::RefCell<Option<TestLinuxAclRead>> = const {
+            std::cell::RefCell::new(None)
+        };
+    }
+    #[cfg(test)]
+    enum TestPrivateHomeBeforeRestore {
+        OccupyRequestedPath(PathBuf),
+    }
+    #[cfg(test)]
+    std::thread_local! {
+        static TEST_PRIVATE_HOME_BEFORE_RESTORE: std::cell::RefCell<Option<TestPrivateHomeBeforeRestore>> = const {
             std::cell::RefCell::new(None)
         };
     }
@@ -394,6 +442,16 @@ mod platform {
     enum DirectoryCreation {
         Created,
         Existing,
+    }
+
+    const PRIVATE_HOME_ROLLBACK_STAGE_MODE: libc::mode_t = 0o300;
+
+    struct PrivateHomeRollbackStage {
+        directory: File,
+        stage_name: CString,
+        candidate_name: CString,
+        device_id: u64,
+        inode: u64,
     }
 
     struct TrustedDirectoryChain {
@@ -449,6 +507,76 @@ mod platform {
                 path.push(OsStr::from_bytes(component.as_bytes()));
             }
             path
+        }
+    }
+
+    impl PrivateHomeRollbackStage {
+        fn create(parent: RawFd, owner_uid: libc::uid_t) -> Result<Self, PrivateHomeError> {
+            for _ in 0..8 {
+                let stage_name = random_component(".substrate-home-rollback-")?;
+                match mkdirat_exact_mode(parent, &stage_name)? {
+                    DirectoryCreation::Existing => continue,
+                    DirectoryCreation::Created => {
+                        let directory = openat_file(
+                            parent,
+                            &stage_name,
+                            libc::O_RDONLY | libc::O_DIRECTORY | libc::O_CLOEXEC | libc::O_NOFOLLOW,
+                            0,
+                        )
+                        .map_err(|_| {
+                            PrivateHomeError::new(PrivateHomeReason::ValidationUnavailable)
+                        })?;
+                        converge_created_owner(directory.as_raw_fd(), owner_uid).map_err(|_| {
+                            PrivateHomeError::new(PrivateHomeReason::ValidationUnavailable)
+                        })?;
+                        // SAFETY: directory is the newly created rollback-stage container.
+                        if unsafe {
+                            libc::fchmod(directory.as_raw_fd(), PRIVATE_HOME_ROLLBACK_STAGE_MODE)
+                        } != 0
+                        {
+                            return Err(PrivateHomeError::new(
+                                PrivateHomeReason::ValidationUnavailable,
+                            ));
+                        }
+                        let stat = fstat(directory.as_raw_fd()).map_err(|_| {
+                            PrivateHomeError::new(PrivateHomeReason::ValidationUnavailable)
+                        })?;
+                        return Ok(Self {
+                            directory,
+                            stage_name,
+                            candidate_name: random_component("candidate-")?,
+                            device_id: stat.st_dev as u64,
+                            inode: stat.st_ino as u64,
+                        });
+                    }
+                }
+            }
+            Err(PrivateHomeError::new(
+                PrivateHomeReason::ValidationUnavailable,
+            ))
+        }
+
+        #[cfg_attr(
+            target_os = "linux",
+            allow(
+                clippy::unnecessary_cast,
+                reason = "Darwin dev_t and ino_t require normalization to u64"
+            )
+        )]
+        fn cleanup_empty_container_best_effort(&self, parent: RawFd) {
+            let Ok(stat) = fstat(self.directory.as_raw_fd()) else {
+                return;
+            };
+            if stat.st_dev as u64 != self.device_id || stat.st_ino as u64 != self.inode {
+                return;
+            }
+            if validate_named_identity(parent, &self.stage_name, &stat).is_err() {
+                return;
+            }
+            // SAFETY: parent and stage_name still reference the same empty rollback container.
+            unsafe {
+                libc::unlinkat(parent, self.stage_name.as_ptr(), libc::AT_REMOVEDIR);
+            }
         }
     }
 
@@ -695,9 +823,16 @@ mod platform {
 
         pub(crate) fn revalidate_private_home(&self) -> Result<(), PrivateHomeError> {
             let error_at_root = |error: PrivateHomeError| {
-                error
+                let error = error
                     .at_path(&self.requested_home, PrivateHomeObjectRole::FinalRoot)
-                    .for_attempt_with_provenance(&self.requested_home, self.candidate_provenance)
+                    .for_attempt_with_provenance(&self.requested_home, self.candidate_provenance);
+                if self.candidate_provenance == PrivateHomeCandidateProvenance::Created {
+                    error.with_candidate_rollback(
+                        PrivateHomeCandidateRollback::DisarmedAfterAcceptance,
+                    )
+                } else {
+                    error
+                }
             };
             let stat = fstat(self.directory.file.as_raw_fd()).map_err(|_| {
                 error_at_root(PrivateHomeError::new(
@@ -908,7 +1043,16 @@ mod platform {
         raw_path: &Path,
         owner_uid: libc::uid_t,
     ) -> Result<TrustedAuthorityRoot, PrivateHomeError> {
-        ensure_private_substrate_home_with(raw_path, owner_uid, || {}, || {}, || {})
+        ensure_private_substrate_home_with(
+            raw_path,
+            owner_uid,
+            || {},
+            || {},
+            || {},
+            || {},
+            || {},
+            || {},
+        )
     }
 
     #[cfg(test)]
@@ -917,7 +1061,34 @@ mod platform {
         owner_uid: libc::uid_t,
         after_create: impl FnOnce(),
     ) -> Result<TrustedAuthorityRoot, PrivateHomeError> {
-        ensure_private_substrate_home_with(raw_path, owner_uid, after_create, || {}, || {})
+        ensure_private_substrate_home_with(
+            raw_path,
+            owner_uid,
+            after_create,
+            || {},
+            || {},
+            || {},
+            || {},
+            || {},
+        )
+    }
+
+    #[cfg(test)]
+    pub(crate) fn ensure_private_substrate_home_with_after_first_open_for_test(
+        raw_path: &Path,
+        owner_uid: libc::uid_t,
+        after_first_open: impl FnOnce(),
+    ) -> Result<TrustedAuthorityRoot, PrivateHomeError> {
+        ensure_private_substrate_home_with(
+            raw_path,
+            owner_uid,
+            || {},
+            after_first_open,
+            || {},
+            || {},
+            || {},
+            || {},
+        )
     }
 
     #[cfg(test)]
@@ -926,7 +1097,70 @@ mod platform {
         owner_uid: libc::uid_t,
         before_from_opened: impl FnOnce(),
     ) -> Result<TrustedAuthorityRoot, PrivateHomeError> {
-        ensure_private_substrate_home_with(raw_path, owner_uid, || {}, || {}, before_from_opened)
+        ensure_private_substrate_home_with(
+            raw_path,
+            owner_uid,
+            || {},
+            || {},
+            before_from_opened,
+            || {},
+            || {},
+            || {},
+        )
+    }
+
+    #[cfg(test)]
+    pub(crate) fn ensure_private_substrate_home_with_before_cleanup_for_test(
+        raw_path: &Path,
+        owner_uid: libc::uid_t,
+        before_cleanup: impl FnOnce(),
+    ) -> Result<TrustedAuthorityRoot, PrivateHomeError> {
+        ensure_private_substrate_home_with(
+            raw_path,
+            owner_uid,
+            || {},
+            || {},
+            || {},
+            before_cleanup,
+            || {},
+            || {},
+        )
+    }
+
+    #[cfg(test)]
+    pub(crate) fn ensure_private_substrate_home_with_after_cleanup_for_test(
+        raw_path: &Path,
+        owner_uid: libc::uid_t,
+        after_cleanup: impl FnOnce(),
+    ) -> Result<TrustedAuthorityRoot, PrivateHomeError> {
+        ensure_private_substrate_home_with(
+            raw_path,
+            owner_uid,
+            || {},
+            || {},
+            || {},
+            || {},
+            after_cleanup,
+            || {},
+        )
+    }
+
+    #[cfg(test)]
+    pub(crate) fn ensure_private_substrate_home_with_after_acceptance_for_test(
+        raw_path: &Path,
+        owner_uid: libc::uid_t,
+        after_acceptance: impl FnOnce(),
+    ) -> Result<TrustedAuthorityRoot, PrivateHomeError> {
+        ensure_private_substrate_home_with(
+            raw_path,
+            owner_uid,
+            || {},
+            || {},
+            || {},
+            || {},
+            || {},
+            after_acceptance,
+        )
     }
 
     #[cfg_attr(
@@ -936,13 +1170,35 @@ mod platform {
             reason = "Darwin dev_t and ino_t require normalization to u64"
         )
     )]
-    fn ensure_private_substrate_home_with(
+    #[allow(
+        clippy::too_many_arguments,
+        reason = "Test-only phase hooks bracket candidate lifecycle crash points without widening callers"
+    )]
+    fn ensure_private_substrate_home_with<
+        AfterCreate,
+        AfterFirstOpen,
+        BeforeFromOpened,
+        BeforeCleanup,
+        AfterCleanup,
+        AfterAcceptance,
+    >(
         raw_path: &Path,
         owner_uid: libc::uid_t,
-        after_create: impl FnOnce(),
-        after_first_open: impl FnOnce(),
-        before_from_opened: impl FnOnce(),
-    ) -> Result<TrustedAuthorityRoot, PrivateHomeError> {
+        after_create: AfterCreate,
+        after_first_open: AfterFirstOpen,
+        before_from_opened: BeforeFromOpened,
+        before_cleanup: BeforeCleanup,
+        after_cleanup: AfterCleanup,
+        after_acceptance: AfterAcceptance,
+    ) -> Result<TrustedAuthorityRoot, PrivateHomeError>
+    where
+        AfterCreate: FnOnce(),
+        AfterFirstOpen: FnOnce(),
+        BeforeFromOpened: FnOnce(),
+        BeforeCleanup: FnOnce(),
+        AfterCleanup: FnOnce(),
+        AfterAcceptance: FnOnce(),
+    {
         validate_bootstrap_input(raw_path)
             .map_err(|_| PrivateHomeError::new(PrivateHomeReason::ValidationUnavailable))
             .map_err(|error| {
@@ -1002,6 +1258,32 @@ mod platform {
         } else {
             PrivateHomeCandidateProvenance::PreExisting
         };
+        let error_at_root = |error: PrivateHomeError| {
+            error
+                .at_path(raw_path, PrivateHomeObjectRole::FinalRoot)
+                .for_attempt_with_provenance(raw_path, candidate_provenance)
+        };
+        let error_at_parent = |error: PrivateHomeError| {
+            error
+                .at_path(parent_path, PrivateHomeObjectRole::Ancestor)
+                .for_attempt_with_provenance(raw_path, candidate_provenance)
+        };
+        let mut before_cleanup = Some(before_cleanup);
+        let mut after_cleanup = Some(after_cleanup);
+        let mut rollback_created = |error: PrivateHomeError, opened: File| {
+            if candidate_provenance != PrivateHomeCandidateProvenance::Created {
+                return error;
+            }
+            if let Some(hook) = before_cleanup.take() {
+                hook();
+            }
+            let error =
+                rollback_created_private_home_candidate(parent, &name, owner_uid, opened, error);
+            if let Some(hook) = after_cleanup.take() {
+                hook();
+            }
+            error
+        };
 
         let opened = openat_file(
             parent.as_raw_fd(),
@@ -1015,13 +1297,17 @@ mod platform {
                 .for_attempt_with_provenance(raw_path, candidate_provenance)
         })?;
 
-        let opened_stat = fstat(opened.as_raw_fd())
-            .map_err(|_| PrivateHomeError::new(PrivateHomeReason::ValidationUnavailable))
-            .map_err(|error| {
-                error
-                    .at_path(raw_path, PrivateHomeObjectRole::FinalRoot)
-                    .for_attempt_with_provenance(raw_path, candidate_provenance)
-            })?;
+        let opened_stat = match fstat(opened.as_raw_fd()) {
+            Ok(stat) => stat,
+            Err(_) => {
+                return Err(rollback_created(
+                    error_at_root(PrivateHomeError::new(
+                        PrivateHomeReason::ValidationUnavailable,
+                    )),
+                    opened,
+                ));
+            }
+        };
         after_first_open();
 
         if creation == DirectoryCreation::Created {
@@ -1031,84 +1317,318 @@ mod platform {
             let effective = effective_uid();
             if effective != owner_uid {
                 if effective != 0 {
-                    return Err(PrivateHomeError::new(PrivateHomeReason::WrongOwner)
-                        .at_path(raw_path, PrivateHomeObjectRole::FinalRoot)
-                        .for_attempt_with_provenance(raw_path, candidate_provenance));
+                    return Err(rollback_created(
+                        error_at_root(PrivateHomeError::new(PrivateHomeReason::WrongOwner)),
+                        opened,
+                    ));
                 }
                 // SAFETY: opened is the newly created directory and gid -1 preserves its group.
                 if unsafe { libc::fchown(opened.as_raw_fd(), owner_uid, !0 as libc::gid_t) } != 0 {
-                    return Err(
-                        PrivateHomeError::new(PrivateHomeReason::ValidationUnavailable)
-                            .at_path(raw_path, PrivateHomeObjectRole::FinalRoot)
-                            .for_attempt_with_provenance(raw_path, candidate_provenance),
-                    );
+                    return Err(rollback_created(
+                        error_at_root(PrivateHomeError::new(
+                            PrivateHomeReason::ValidationUnavailable,
+                        )),
+                        opened,
+                    ));
                 }
             }
             // SAFETY: opened is the newly created directory; fchmod defeats ambient umask.
             if unsafe { libc::fchmod(opened.as_raw_fd(), DIRECTORY_MODE) } != 0 {
-                return Err(
-                    PrivateHomeError::new(PrivateHomeReason::ValidationUnavailable)
-                        .at_path(raw_path, PrivateHomeObjectRole::FinalRoot)
-                        .for_attempt_with_provenance(raw_path, candidate_provenance),
-                );
+                return Err(rollback_created(
+                    error_at_root(PrivateHomeError::new(
+                        PrivateHomeReason::ValidationUnavailable,
+                    )),
+                    opened,
+                ));
             }
-            opened
-                .sync_all()
-                .map_err(|_| PrivateHomeError::new(PrivateHomeReason::ValidationUnavailable))
-                .map_err(|error| {
-                    error
-                        .at_path(raw_path, PrivateHomeObjectRole::FinalRoot)
-                        .for_attempt_with_provenance(raw_path, candidate_provenance)
-                })?;
-            parent
-                .sync_all()
-                .map_err(|_| PrivateHomeError::new(PrivateHomeReason::ValidationUnavailable))
-                .map_err(|error| {
-                    error
-                        .at_path(parent_path, PrivateHomeObjectRole::Ancestor)
-                        .for_attempt_with_provenance(raw_path, candidate_provenance)
-                })?;
+            if opened.sync_all().is_err() {
+                return Err(rollback_created(
+                    error_at_root(PrivateHomeError::new(
+                        PrivateHomeReason::ValidationUnavailable,
+                    )),
+                    opened,
+                ));
+            }
+            if parent.sync_all().is_err() {
+                return Err(rollback_created(
+                    error_at_parent(PrivateHomeError::new(
+                        PrivateHomeReason::ValidationUnavailable,
+                    )),
+                    opened,
+                ));
+            }
         }
 
-        let accepted_stat = fstat(opened.as_raw_fd())
-            .map_err(|_| PrivateHomeError::new(PrivateHomeReason::ValidationUnavailable))
-            .map_err(|error| {
-                error
-                    .at_path(raw_path, PrivateHomeObjectRole::FinalRoot)
-                    .for_attempt_with_provenance(raw_path, candidate_provenance)
-            })?;
+        let accepted_stat = match fstat(opened.as_raw_fd()) {
+            Ok(stat) => stat,
+            Err(_) => {
+                return Err(rollback_created(
+                    error_at_root(PrivateHomeError::new(
+                        PrivateHomeReason::ValidationUnavailable,
+                    )),
+                    opened,
+                ));
+            }
+        };
         if accepted_stat.st_dev != opened_stat.st_dev || accepted_stat.st_ino != opened_stat.st_ino
         {
-            return Err(PrivateHomeError::new(PrivateHomeReason::Replaced)
-                .at_path(raw_path, PrivateHomeObjectRole::FinalRoot)
-                .for_attempt_with_provenance(raw_path, candidate_provenance));
+            return Err(rollback_created(
+                error_at_root(PrivateHomeError::new(PrivateHomeReason::Replaced)),
+                opened,
+            ));
         }
-        validate_private_home_stat(&accepted_stat, owner_uid).map_err(|error| {
-            error
-                .at_path(raw_path, PrivateHomeObjectRole::FinalRoot)
-                .for_attempt_with_provenance(raw_path, candidate_provenance)
-        })?;
-        validate_final_private_home_acl(opened.as_raw_fd(), &accepted_stat, owner_uid).map_err(
-            |error| {
-                error
-                    .at_path(raw_path, PrivateHomeObjectRole::FinalRoot)
-                    .for_attempt_with_provenance(raw_path, candidate_provenance)
-            },
-        )?;
+        if let Err(error) =
+            validate_private_home_stat(&accepted_stat, owner_uid).map_err(error_at_root)
+        {
+            return Err(rollback_created(error, opened));
+        }
+        if let Err(error) =
+            validate_final_private_home_acl(opened.as_raw_fd(), &accepted_stat, owner_uid)
+                .map_err(error_at_root)
+        {
+            return Err(rollback_created(error, opened));
+        }
         before_from_opened();
-        let root =
-            TrustedAuthorityRoot::from_opened(opened, owner_uid, raw_path, candidate_provenance)?;
-        parent_chain
+        if let Err(error) = parent_chain
             .revalidate(owner_uid)
-            .map_err(|error| error.for_attempt_with_provenance(raw_path, candidate_provenance))?;
-        validate_named_private_home(parent.as_raw_fd(), &name, &accepted_stat, owner_uid).map_err(
-            |error| {
-                error
-                    .at_path(raw_path, PrivateHomeObjectRole::FinalRoot)
-                    .for_attempt_with_provenance(raw_path, candidate_provenance)
-            },
-        )?;
+            .map_err(|error| error.for_attempt_with_provenance(raw_path, candidate_provenance))
+        {
+            return Err(rollback_created(error, opened));
+        }
+        if let Err(error) =
+            validate_named_private_home(parent.as_raw_fd(), &name, &accepted_stat, owner_uid)
+                .map_err(error_at_root)
+        {
+            return Err(rollback_created(error, opened));
+        }
+        let published = match opened.try_clone() {
+            Ok(file) => file,
+            Err(_) => {
+                return Err(rollback_created(
+                    error_at_root(PrivateHomeError::new(
+                        PrivateHomeReason::ValidationUnavailable,
+                    )),
+                    opened,
+                ));
+            }
+        };
+        let root = match TrustedAuthorityRoot::from_opened(
+            published,
+            owner_uid,
+            raw_path,
+            candidate_provenance,
+        ) {
+            Ok(root) => root,
+            Err(error) => return Err(rollback_created(error, opened)),
+        };
+        drop(opened);
+        after_acceptance();
         Ok(root)
+    }
+
+    fn rollback_created_private_home_candidate(
+        parent: &File,
+        name: &CStr,
+        owner_uid: libc::uid_t,
+        opened: File,
+        original_error: PrivateHomeError,
+    ) -> PrivateHomeError {
+        let expected = match fstat(opened.as_raw_fd()) {
+            Ok(stat) => stat,
+            Err(_) => {
+                return original_error.with_candidate_rollback(
+                    PrivateHomeCandidateRollback::PreservedValidationUnavailable,
+                );
+            }
+        };
+        let stage = match PrivateHomeRollbackStage::create(parent.as_raw_fd(), owner_uid) {
+            Ok(stage) => stage,
+            Err(_) => {
+                return original_error.with_candidate_rollback(
+                    PrivateHomeCandidateRollback::PreservedValidationUnavailable,
+                );
+            }
+        };
+        if let Err(error) = validate_named_entry_identity(parent.as_raw_fd(), name, &expected) {
+            stage.cleanup_empty_container_best_effort(parent.as_raw_fd());
+            return original_error
+                .with_candidate_rollback(rollback_preserved_from_reason(error.reason()));
+        }
+        if rename_no_replace_at(
+            parent.as_raw_fd(),
+            name,
+            stage.directory.as_raw_fd(),
+            &stage.candidate_name,
+        ) != 0
+        {
+            let rollback = rollback_move_failure(io::Error::last_os_error());
+            stage.cleanup_empty_container_best_effort(parent.as_raw_fd());
+            return original_error.with_candidate_rollback(rollback);
+        }
+        if validate_named_entry_identity(
+            stage.directory.as_raw_fd(),
+            &stage.candidate_name,
+            &expected,
+        )
+        .is_err()
+        {
+            let rollback = match restore_staged_candidate(parent, name, &stage, &expected) {
+                Ok(()) => PrivateHomeCandidateRollback::PreservedRequestedPathMismatch,
+                Err(rollback) => rollback,
+            };
+            stage.cleanup_empty_container_best_effort(parent.as_raw_fd());
+            return original_error.with_candidate_rollback(rollback);
+        }
+        match rollback_candidate_is_empty(&opened, expected.st_dev as u64) {
+            Ok(true) => {}
+            Ok(false) => {
+                let rollback = match restore_staged_candidate(parent, name, &stage, &expected) {
+                    Ok(()) => PrivateHomeCandidateRollback::PreservedNonEmpty,
+                    Err(rollback) => rollback,
+                };
+                stage.cleanup_empty_container_best_effort(parent.as_raw_fd());
+                return original_error.with_candidate_rollback(rollback);
+            }
+            Err(rollback) => {
+                let rollback = match restore_staged_candidate(parent, name, &stage, &expected) {
+                    Ok(()) => rollback,
+                    Err(restore_rollback) => restore_rollback,
+                };
+                stage.cleanup_empty_container_best_effort(parent.as_raw_fd());
+                return original_error.with_candidate_rollback(rollback);
+            }
+        }
+        // SAFETY: stage.directory is the protected rollback container and candidate_name has just
+        // been verified against the still-open candidate descriptor.
+        if unsafe {
+            libc::unlinkat(
+                stage.directory.as_raw_fd(),
+                stage.candidate_name.as_ptr(),
+                libc::AT_REMOVEDIR,
+            )
+        } != 0
+        {
+            let error = io::Error::last_os_error();
+            let preferred = if matches!(
+                error.raw_os_error(),
+                Some(libc::ENOTEMPTY) | Some(libc::EEXIST)
+            ) {
+                PrivateHomeCandidateRollback::PreservedNonEmpty
+            } else {
+                PrivateHomeCandidateRollback::PreservedValidationUnavailable
+            };
+            let rollback = match restore_staged_candidate(parent, name, &stage, &expected) {
+                Ok(()) => preferred,
+                Err(rollback) => rollback,
+            };
+            stage.cleanup_empty_container_best_effort(parent.as_raw_fd());
+            return original_error.with_candidate_rollback(rollback);
+        }
+        let _ = stage.directory.sync_all();
+        let _ = parent.sync_all();
+        stage.cleanup_empty_container_best_effort(parent.as_raw_fd());
+        original_error.with_candidate_rollback(PrivateHomeCandidateRollback::RolledBack)
+    }
+
+    fn rollback_move_failure(error: io::Error) -> PrivateHomeCandidateRollback {
+        match error.kind() {
+            io::ErrorKind::NotFound => PrivateHomeCandidateRollback::PreservedRequestedPathMismatch,
+            io::ErrorKind::AlreadyExists => PrivateHomeCandidateRollback::PreservedAlreadyExists,
+            _ => PrivateHomeCandidateRollback::PreservedValidationUnavailable,
+        }
+    }
+
+    fn rollback_preserved_from_reason(reason: PrivateHomeReason) -> PrivateHomeCandidateRollback {
+        match reason {
+            PrivateHomeReason::ValidationUnavailable => {
+                PrivateHomeCandidateRollback::PreservedAmbiguousLookup
+            }
+            _ => PrivateHomeCandidateRollback::PreservedRequestedPathMismatch,
+        }
+    }
+
+    fn rollback_candidate_is_empty(
+        opened: &File,
+        device_id: u64,
+    ) -> Result<bool, PrivateHomeCandidateRollback> {
+        let directory = TrustedDirectory {
+            file: opened
+                .try_clone()
+                .map_err(|_| PrivateHomeCandidateRollback::PreservedValidationUnavailable)?,
+            device_id,
+        };
+        directory
+            .entries()
+            .map(|entries| entries.is_empty())
+            .map_err(|_| PrivateHomeCandidateRollback::PreservedValidationUnavailable)
+    }
+
+    #[cfg(test)]
+    fn with_test_private_home_before_restore<T>(
+        override_value: TestPrivateHomeBeforeRestore,
+        run: impl FnOnce() -> T,
+    ) -> T {
+        struct Reset;
+        impl Drop for Reset {
+            fn drop(&mut self) {
+                TEST_PRIVATE_HOME_BEFORE_RESTORE.with(|state| *state.borrow_mut() = None);
+            }
+        }
+
+        TEST_PRIVATE_HOME_BEFORE_RESTORE.with(|state| *state.borrow_mut() = Some(override_value));
+        let _reset = Reset;
+        run()
+    }
+
+    #[cfg(test)]
+    fn trigger_test_private_home_before_restore() {
+        TEST_PRIVATE_HOME_BEFORE_RESTORE.with(|state| {
+            let Some(override_value) = state.borrow_mut().take() else {
+                return;
+            };
+            match override_value {
+                TestPrivateHomeBeforeRestore::OccupyRequestedPath(path) => {
+                    fs::create_dir(&path).unwrap();
+                    use std::os::unix::fs::PermissionsExt;
+
+                    fs::set_permissions(&path, fs::Permissions::from_mode(DIRECTORY_MODE)).unwrap();
+                }
+            }
+        });
+    }
+
+    fn restore_staged_candidate(
+        parent: &File,
+        name: &CStr,
+        stage: &PrivateHomeRollbackStage,
+        expected: &libc::stat,
+    ) -> Result<(), PrivateHomeCandidateRollback> {
+        #[cfg(test)]
+        trigger_test_private_home_before_restore();
+        if rename_no_replace_at(
+            stage.directory.as_raw_fd(),
+            &stage.candidate_name,
+            parent.as_raw_fd(),
+            name,
+        ) != 0
+        {
+            let error = io::Error::last_os_error();
+            return Err(match error.kind() {
+                io::ErrorKind::AlreadyExists => {
+                    PrivateHomeCandidateRollback::PreservedAlreadyExists
+                }
+                io::ErrorKind::NotFound => {
+                    PrivateHomeCandidateRollback::PreservedRequestedPathMismatch
+                }
+                _ => PrivateHomeCandidateRollback::PreservedValidationUnavailable,
+            });
+        }
+        if validate_named_identity(parent.as_raw_fd(), name, expected).is_err() {
+            return Err(PrivateHomeCandidateRollback::PreservedValidationUnavailable);
+        }
+        let _ = stage.directory.sync_all();
+        let _ = parent.sync_all();
+        Ok(())
     }
 
     #[cfg_attr(
@@ -1741,6 +2261,25 @@ mod platform {
         CString::new(value).map_err(|_| TrustedFsError::new("authority name contains NUL"))
     }
 
+    fn random_component(prefix: &str) -> Result<CString, PrivateHomeError> {
+        let mut bytes = [0_u8; 12];
+        // SAFETY: bytes points to writable memory and getentropy accepts <= 256 bytes.
+        if unsafe { libc::getentropy(bytes.as_mut_ptr().cast(), bytes.len()) } != 0 {
+            return Err(PrivateHomeError::new(
+                PrivateHomeReason::ValidationUnavailable,
+            ));
+        }
+        const HEX: &[u8; 16] = b"0123456789abcdef";
+        let mut value = String::with_capacity(prefix.len() + bytes.len() * 2);
+        value.push_str(prefix);
+        for byte in bytes {
+            value.push(HEX[(byte >> 4) as usize] as char);
+            value.push(HEX[(byte & 0x0f) as usize] as char);
+        }
+        component(&value)
+            .map_err(|_| PrivateHomeError::new(PrivateHomeReason::ValidationUnavailable))
+    }
+
     fn c_string(value: &OsStr) -> Result<CString, TrustedFsError> {
         CString::new(value.as_bytes()).map_err(|_| TrustedFsError::new("path contains NUL"))
     }
@@ -2107,6 +2646,25 @@ mod platform {
             return Err(TrustedFsError::new(
                 "trusted directory name no longer joins accepted descriptor identity",
             ));
+        }
+        Ok(())
+    }
+
+    fn validate_named_entry_identity(
+        parent: RawFd,
+        name: &CStr,
+        accepted: &libc::stat,
+    ) -> Result<(), PrivateHomeError> {
+        let named = fstatat_nofollow(parent, name)
+            .map_err(|_| PrivateHomeError::new(PrivateHomeReason::ValidationUnavailable))?;
+        if kind_from_mode(named.st_mode) == EntryKind::Symlink {
+            return Err(PrivateHomeError::new(PrivateHomeReason::Symlink));
+        }
+        if kind_from_mode(named.st_mode) != EntryKind::Directory {
+            return Err(PrivateHomeError::new(PrivateHomeReason::WrongType));
+        }
+        if named.st_dev != accepted.st_dev || named.st_ino != accepted.st_ino {
+            return Err(PrivateHomeError::new(PrivateHomeReason::Replaced));
         }
         Ok(())
     }
@@ -3590,7 +4148,7 @@ mod platform {
 
         #[cfg(target_os = "linux")]
         #[test]
-        fn rejected_current_attempt_candidate_records_final_root_provenance_without_cleanup() {
+        fn rejected_current_attempt_candidate_rolls_back_before_publication() {
             let temp = tempfile::Builder::new()
                 .prefix("substrate-a1-created-acl-provenance-")
                 .tempdir_in(safe_test_parent())
@@ -3610,6 +4168,9 @@ mod platform {
                 },
                 || {},
                 || {},
+                || {},
+                || {},
+                || {},
             )
             .unwrap_err();
 
@@ -3622,10 +4183,192 @@ mod platform {
                 Some(PrivateHomeAclAuthority::DefaultAclPresent)
             );
             assert!(error.candidate_created());
-            assert!(
-                target.is_dir(),
-                "R1 must not clean up the rejected candidate"
+            assert_eq!(
+                error.candidate_rollback(),
+                PrivateHomeCandidateRollback::RolledBack
             );
+            assert!(
+                !target.exists(),
+                "rolled-back candidate must not remain published"
+            );
+        }
+
+        #[cfg(target_os = "linux")]
+        #[test]
+        fn nonempty_rejected_current_attempt_candidate_is_preserved_in_place() {
+            let temp = tempfile::Builder::new()
+                .prefix("substrate-a1-created-nonempty-preserved-")
+                .tempdir_in(safe_test_parent())
+                .unwrap();
+            fs::set_permissions(temp.path(), fs::Permissions::from_mode(0o700)).unwrap();
+            let target = temp.path().join("home");
+            let marker = target.join("marker");
+
+            let error = ensure_private_substrate_home_with(
+                &target,
+                effective_uid(),
+                || {},
+                || {},
+                || {
+                    fs::write(&marker, b"retain-me").unwrap();
+                    let candidate = File::open(&target).unwrap();
+                    set_linux_acl(
+                        &candidate,
+                        c"system.posix_acl_default",
+                        &linux_named_user_acl(0, 0),
+                    );
+                },
+                || {},
+                || {},
+                || {},
+            )
+            .unwrap_err();
+
+            assert_eq!(error.reason(), PrivateHomeReason::ForeignAcl);
+            assert_eq!(
+                error.candidate_provenance(),
+                PrivateHomeCandidateProvenance::Created
+            );
+            assert_eq!(
+                error.candidate_rollback(),
+                PrivateHomeCandidateRollback::PreservedNonEmpty
+            );
+            assert!(target.is_dir());
+            assert_eq!(fs::read(marker).unwrap(), b"retain-me");
+        }
+
+        #[cfg(target_os = "linux")]
+        #[test]
+        fn cleanup_requested_path_replacement_preserves_the_rejected_candidate() {
+            let temp = tempfile::Builder::new()
+                .prefix("substrate-a1-created-name-mismatch-")
+                .tempdir_in(safe_test_parent())
+                .unwrap();
+            fs::set_permissions(temp.path(), fs::Permissions::from_mode(0o700)).unwrap();
+            let target = temp.path().join("home");
+            let retained = temp.path().join("retained");
+
+            let error = ensure_private_substrate_home_with(
+                &target,
+                effective_uid(),
+                || {},
+                || {},
+                || {
+                    let candidate = File::open(&target).unwrap();
+                    set_linux_acl(
+                        &candidate,
+                        c"system.posix_acl_default",
+                        &linux_named_user_acl(0, 0),
+                    );
+                },
+                || {
+                    fs::rename(&target, &retained).unwrap();
+                    fs::create_dir(&target).unwrap();
+                    fs::set_permissions(&target, fs::Permissions::from_mode(0o700)).unwrap();
+                },
+                || {},
+                || {},
+            )
+            .unwrap_err();
+
+            assert_eq!(error.reason(), PrivateHomeReason::ForeignAcl);
+            assert_eq!(
+                error.candidate_rollback(),
+                PrivateHomeCandidateRollback::PreservedRequestedPathMismatch
+            );
+            assert!(retained.is_dir());
+            assert!(target.is_dir());
+            assert_ne!(
+                fs::symlink_metadata(&retained).unwrap().ino(),
+                fs::symlink_metadata(&target).unwrap().ino()
+            );
+        }
+
+        #[cfg(target_os = "linux")]
+        #[test]
+        fn cleanup_missing_requested_name_is_classified_as_ambiguous_lookup() {
+            let temp = tempfile::Builder::new()
+                .prefix("substrate-a1-created-ambiguous-lookup-")
+                .tempdir_in(safe_test_parent())
+                .unwrap();
+            fs::set_permissions(temp.path(), fs::Permissions::from_mode(0o700)).unwrap();
+            let target = temp.path().join("home");
+            let retained = temp.path().join("retained");
+
+            let error = ensure_private_substrate_home_with(
+                &target,
+                effective_uid(),
+                || {},
+                || {},
+                || {
+                    let candidate = File::open(&target).unwrap();
+                    set_linux_acl(
+                        &candidate,
+                        c"system.posix_acl_default",
+                        &linux_named_user_acl(0, 0),
+                    );
+                },
+                || {
+                    fs::rename(&target, &retained).unwrap();
+                },
+                || {},
+                || {},
+            )
+            .unwrap_err();
+
+            assert_eq!(error.reason(), PrivateHomeReason::ForeignAcl);
+            assert_eq!(
+                error.candidate_rollback(),
+                PrivateHomeCandidateRollback::PreservedAmbiguousLookup
+            );
+            assert!(!target.exists());
+            assert!(retained.is_dir());
+        }
+
+        #[cfg(target_os = "linux")]
+        #[test]
+        fn cleanup_reoccupied_requested_path_is_classified_as_already_exists() {
+            let temp = tempfile::Builder::new()
+                .prefix("substrate-a1-created-restore-exists-")
+                .tempdir_in(safe_test_parent())
+                .unwrap();
+            fs::set_permissions(temp.path(), fs::Permissions::from_mode(0o700)).unwrap();
+            let target = temp.path().join("home");
+            let marker = target.join("marker");
+
+            let error = with_test_private_home_before_restore(
+                TestPrivateHomeBeforeRestore::OccupyRequestedPath(target.clone()),
+                || {
+                    ensure_private_substrate_home_with(
+                        &target,
+                        effective_uid(),
+                        || {},
+                        || {},
+                        || {
+                            fs::write(&marker, b"retain-me").unwrap();
+                            let candidate = File::open(&target).unwrap();
+                            set_linux_acl(
+                                &candidate,
+                                c"system.posix_acl_default",
+                                &linux_named_user_acl(0, 0),
+                            );
+                        },
+                        || {},
+                        || {},
+                        || {},
+                    )
+                    .unwrap_err()
+                },
+            );
+
+            assert_eq!(error.reason(), PrivateHomeReason::ForeignAcl);
+            assert_eq!(
+                error.candidate_rollback(),
+                PrivateHomeCandidateRollback::PreservedAlreadyExists
+            );
+            assert!(target.is_dir());
+            assert!(!target.join("marker").exists());
+            assert!(fs::read_dir(&target).unwrap().next().is_none());
         }
 
         #[cfg(target_os = "linux")]
@@ -3834,6 +4577,9 @@ mod platform {
                 },
                 || {},
                 || {},
+                || {},
+                || {},
+                || {},
             );
             let root = outcome.expect("the first opened valid candidate defines accepted identity");
             let retained_inode = fs::symlink_metadata(&retained).unwrap().ino();
@@ -3862,7 +4608,7 @@ mod platform {
             fs::set_permissions(&parent, fs::Permissions::from_mode(0o700)).unwrap();
             let target = parent.join("home");
             let retained_parent = temp.path().join("retained-parent");
-            let outcome = ensure_private_substrate_home_with(
+            let error = ensure_private_substrate_home_with(
                 &target,
                 effective_uid(),
                 || {},
@@ -3875,10 +4621,18 @@ mod platform {
                         .unwrap();
                 },
                 || {},
-            );
+                || {},
+                || {},
+                || {},
+            )
+            .unwrap_err();
 
-            assert_eq!(outcome.unwrap_err().reason(), PrivateHomeReason::Replaced);
-            assert!(retained_parent.join("home").is_dir());
+            assert_eq!(error.reason(), PrivateHomeReason::Replaced);
+            assert_eq!(
+                error.candidate_rollback(),
+                PrivateHomeCandidateRollback::RolledBack
+            );
+            assert!(!retained_parent.join("home").exists());
             assert!(parent.join("home").is_dir());
             assert!(!parent.join("home/deps").exists());
         }
@@ -3897,9 +4651,188 @@ mod platform {
             fs::create_dir(&target).unwrap();
             fs::set_permissions(&target, fs::Permissions::from_mode(0o700)).unwrap();
 
+            let private_error = root.revalidate_private_home().unwrap_err();
+            assert_eq!(private_error.reason(), PrivateHomeReason::Replaced);
+            assert_eq!(
+                private_error.candidate_provenance(),
+                PrivateHomeCandidateProvenance::Created
+            );
+            assert_eq!(
+                private_error.candidate_rollback(),
+                PrivateHomeCandidateRollback::DisarmedAfterAcceptance
+            );
             assert!(root.revalidate().is_err());
             assert!(retained.is_dir());
             assert!(target.is_dir());
+        }
+
+        #[cfg(target_os = "linux")]
+        #[test]
+        fn crash_boundaries_preserve_fail_closed_residue_until_cleanup_or_acceptance() {
+            use std::os::unix::process::ExitStatusExt;
+
+            const CHILD_TEST: &str = "execution::agent_runtime::host_session_authority::trusted_fs::platform::tests::crash_boundaries_preserve_fail_closed_residue_until_cleanup_or_acceptance";
+            const ROOT_ENV: &str = "SUBSTRATE_A1_HOME_CRASH_ROOT";
+            const PHASE_ENV: &str = "SUBSTRATE_A1_HOME_CRASH_PHASE";
+
+            if let (Some(root_path), Some(phase)) =
+                (std::env::var_os(ROOT_ENV), std::env::var_os(PHASE_ENV))
+            {
+                let target = PathBuf::from(root_path).join("home");
+                match phase.to_string_lossy().as_ref() {
+                    "after-create" => {
+                        let _ = ensure_private_substrate_home_with_after_create_for_test(
+                            &target,
+                            effective_uid(),
+                            || {
+                                let candidate = File::open(&target).unwrap();
+                                set_linux_acl(
+                                    &candidate,
+                                    c"system.posix_acl_default",
+                                    &linux_named_user_acl(0, 0),
+                                );
+                                // SAFETY: test-only child intentionally simulates abrupt death.
+                                unsafe { libc::kill(libc::getpid(), libc::SIGKILL) };
+                            },
+                        );
+                    }
+                    "after-first-open" => {
+                        let _ = ensure_private_substrate_home_with_after_first_open_for_test(
+                            &target,
+                            effective_uid(),
+                            || {
+                                let candidate = File::open(&target).unwrap();
+                                set_linux_acl(
+                                    &candidate,
+                                    c"system.posix_acl_default",
+                                    &linux_named_user_acl(0, 0),
+                                );
+                                // SAFETY: test-only child intentionally simulates abrupt death.
+                                unsafe { libc::kill(libc::getpid(), libc::SIGKILL) };
+                            },
+                        );
+                    }
+                    "before-validation" => {
+                        let _ = ensure_private_substrate_home_with_before_from_opened_for_test(
+                            &target,
+                            effective_uid(),
+                            || {
+                                let candidate = File::open(&target).unwrap();
+                                set_linux_acl(
+                                    &candidate,
+                                    c"system.posix_acl_default",
+                                    &linux_named_user_acl(0, 0),
+                                );
+                                // SAFETY: test-only child intentionally simulates abrupt death.
+                                unsafe { libc::kill(libc::getpid(), libc::SIGKILL) };
+                            },
+                        );
+                    }
+                    "before-cleanup" => {
+                        let _ = ensure_private_substrate_home_with(
+                            &target,
+                            effective_uid(),
+                            || {
+                                let candidate = File::open(&target).unwrap();
+                                set_linux_acl(
+                                    &candidate,
+                                    c"system.posix_acl_default",
+                                    &linux_named_user_acl(0, 0),
+                                );
+                            },
+                            || {},
+                            || {},
+                            || {
+                                // SAFETY: test-only child intentionally simulates abrupt death.
+                                unsafe { libc::kill(libc::getpid(), libc::SIGKILL) };
+                            },
+                            || {},
+                            || {},
+                        );
+                    }
+                    "after-cleanup" => {
+                        let _ = ensure_private_substrate_home_with(
+                            &target,
+                            effective_uid(),
+                            || {
+                                let candidate = File::open(&target).unwrap();
+                                set_linux_acl(
+                                    &candidate,
+                                    c"system.posix_acl_default",
+                                    &linux_named_user_acl(0, 0),
+                                );
+                            },
+                            || {},
+                            || {},
+                            || {},
+                            || {
+                                // SAFETY: test-only child intentionally simulates abrupt death.
+                                unsafe { libc::kill(libc::getpid(), libc::SIGKILL) };
+                            },
+                            || {},
+                        );
+                    }
+                    "after-acceptance" => {
+                        let _ = ensure_private_substrate_home_with_after_acceptance_for_test(
+                            &target,
+                            effective_uid(),
+                            || {
+                                // SAFETY: test-only child intentionally simulates abrupt death.
+                                unsafe { libc::kill(libc::getpid(), libc::SIGKILL) };
+                            },
+                        );
+                    }
+                    phase => panic!("unexpected crash phase {phase}"),
+                }
+                panic!("crash phase did not terminate the child");
+            }
+
+            for phase in [
+                "after-create",
+                "after-first-open",
+                "before-validation",
+                "before-cleanup",
+                "after-cleanup",
+                "after-acceptance",
+            ] {
+                let temp = tempfile::Builder::new()
+                    .prefix(&format!("substrate-a1-home-crash-{phase}-"))
+                    .tempdir_in(safe_test_parent())
+                    .unwrap();
+                fs::set_permissions(temp.path(), fs::Permissions::from_mode(0o700)).unwrap();
+                let status = std::process::Command::new(std::env::current_exe().unwrap())
+                    .args(["--exact", CHILD_TEST, "--nocapture", "--test-threads=1"])
+                    .env(ROOT_ENV, temp.path())
+                    .env(PHASE_ENV, phase)
+                    .status()
+                    .unwrap();
+                assert_eq!(status.signal(), Some(libc::SIGKILL), "{phase}");
+
+                let target = temp.path().join("home");
+                match phase {
+                    "after-cleanup" => {
+                        assert!(!target.exists(), "{phase}");
+                        let root = ensure_private_substrate_home(&target, effective_uid()).unwrap();
+                        root.revalidate().unwrap();
+                    }
+                    "after-acceptance" => {
+                        assert!(target.is_dir(), "{phase}");
+                        let root = ensure_private_substrate_home(&target, effective_uid()).unwrap();
+                        root.revalidate().unwrap();
+                    }
+                    _ => {
+                        assert!(target.is_dir(), "{phase}");
+                        let error =
+                            ensure_private_substrate_home(&target, effective_uid()).unwrap_err();
+                        assert_eq!(error.reason(), PrivateHomeReason::ForeignAcl, "{phase}");
+                        assert_eq!(
+                            error.candidate_provenance(),
+                            PrivateHomeCandidateProvenance::PreExisting,
+                            "{phase}"
+                        );
+                    }
+                }
+            }
         }
 
         #[test]
