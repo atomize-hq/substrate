@@ -9,6 +9,7 @@
     reason = "R0 is a component proof and deliberately has no production ingress caller"
 )]
 
+use std::borrow::Cow;
 use std::collections::{BTreeMap, BTreeSet};
 use std::fmt;
 
@@ -36,8 +37,8 @@ use super::host_session_authority::schema::{
     AgentDescriptorHashInputV1, AgentDescriptorV1, AgentExecutionScopeV1,
     AuthoritativeLineageHashInputV1, AuthorityObjectCommitmentV1, AuthorityObjectRefV1,
     DurableSessionAuthorityHashInputV1, DurableSessionAuthorityOriginV1, HostAttachContractV1,
-    PolicyObjectHashInputV1, ResumeHandleHashInputV1, RetainedWorkerObjectHashInputV1, TimestampV1,
-    WorldBindingV1,
+    HostSessionPostureV1, PolicyObjectHashInputV1, ResumeHandleHashInputV1,
+    RetainedWorkerObjectHashInputV1, TimestampV1, WorldBindingV1,
 };
 use super::host_session_authority::store_schema::{
     DurableSessionAuthorityV1, HostSessionTransitionIntentStateV2,
@@ -869,14 +870,13 @@ impl RetainedWorkerRuntime {
                     &mut semantic_failure,
                 )?;
             }
-            let VersionedStateRoot::V2(root) = transaction.authority_root() else {
-                return Err(
-                    super::host_session_authority::store::BootstrapError::retained_admission_semantic(),
-                );
-            };
+            let root = retain_semantic_error(
+                preserved_start_root_view(transaction.authority_root()),
+                &mut semantic_failure,
+            )?;
             retain_semantic_error(
                 validate_admission_to_current_r0_only(
-                    root,
+                    root.as_ref(),
                     &current_plan.exact_authority,
                     record,
                 ),
@@ -885,7 +885,7 @@ impl RetainedWorkerRuntime {
             let mut canonical_plan = presented_plan.clone();
             canonical_plan.exact_authority = retain_semantic_error(
                 reconstruct_exact_authority_at_revision(
-                    root,
+                    root.as_ref(),
                     &current_plan.exact_authority,
                     record.admission_authority_revision,
                 ),
@@ -893,7 +893,7 @@ impl RetainedWorkerRuntime {
             )?;
             retain_semantic_error(
                 validate_supplied_admission_authority(
-                    root,
+                    root.as_ref(),
                     &current_plan.exact_authority,
                     &canonical_plan.exact_authority,
                     record,
@@ -901,11 +901,7 @@ impl RetainedWorkerRuntime {
                 &mut semantic_failure,
             )?;
             retain_semantic_error(
-                verify_admission_record_fingerprint(
-                    &canonical_plan,
-                    record,
-                    &envelope.secret_key,
-                ),
+                verify_admission_record_fingerprint(&canonical_plan, record, &envelope.secret_key),
                 &mut semantic_failure,
             )?;
             if record.authority_store_id != canonical_plan.exact_authority.authority_store_id
@@ -943,8 +939,7 @@ impl RetainedWorkerRuntime {
             {
                 retain_semantic_error(
                     Err(RetainedWorkerRuntimeError(
-                        "exact existing admission conflicts with canonical re-presentation"
-                            .into(),
+                        "exact existing admission conflicts with canonical re-presentation".into(),
                     )),
                     &mut semantic_failure,
                 )?;
@@ -1043,14 +1038,13 @@ impl RetainedWorkerRuntime {
                     .ok_or_else(
                         super::host_session_authority::store::BootstrapError::retained_admission_semantic,
                     )?;
-                let VersionedStateRoot::V2(root) = transaction.authority_root() else {
-                    return Err(
-                        super::host_session_authority::store::BootstrapError::retained_admission_semantic(),
-                    );
-                };
+                let root = retain_semantic_error(
+                    preserved_start_root_view(transaction.authority_root()),
+                    &mut semantic_failure,
+                )?;
                 retain_semantic_error(
                     validate_admission_to_current_r0_only(
-                        root,
+                        root.as_ref(),
                         &current_plan.exact_authority,
                         record,
                     ),
@@ -1058,7 +1052,7 @@ impl RetainedWorkerRuntime {
                 )?;
                 fingerprint_plan.exact_authority = retain_semantic_error(
                     reconstruct_exact_authority_at_revision(
-                        root,
+                        root.as_ref(),
                         &current_plan.exact_authority,
                         record.admission_authority_revision,
                     ),
@@ -1066,7 +1060,7 @@ impl RetainedWorkerRuntime {
                 )?;
                 retain_semantic_error(
                     validate_supplied_admission_authority(
-                        root,
+                        root.as_ref(),
                         &current_plan.exact_authority,
                         &fingerprint_plan.exact_authority,
                         record,
@@ -1584,7 +1578,7 @@ impl RetainedWorkerRuntime {
         admission_registration: &RetainedWorkerAdmissionRegistrationV1,
     ) -> Result<ResolvedPostR0RegisteredGraphV1, RetainedWorkerRuntimeError> {
         let root = authority
-            .read_a12a_root()
+            .read_preserved_start_root_v2()
             .map_err(|error| RetainedWorkerRuntimeError(error.to_string()))?;
         let registration = root
             .retained_worker_registration_journal
@@ -1625,9 +1619,10 @@ impl RetainedWorkerRuntime {
         current_plan.exact_authority =
             CanonicalExactCurrentAuthorityV1::from_resolved(&resolved_authority);
         let root = authority
-            .read_a12a_root()
+            .read_preserved_start_root_v2()
             .map_err(|error| RetainedWorkerRuntimeError(error.to_string()))?;
-        validate_admission_plan(&VersionedStateRoot::V2(root.clone()), &current_plan)?;
+        let versioned_root = VersionedStateRoot::V2(root.clone());
+        validate_admission_plan(&versioned_root, &current_plan)?;
         let registration = admission_registration(&record.state).ok_or_else(|| {
             RetainedWorkerRuntimeError("post-R0 admission has no registration".into())
         })?;
@@ -1674,11 +1669,6 @@ impl RetainedWorkerRuntime {
                 validate_admission_registry(&registry, transaction.authority_root()),
                 &mut semantic_failure,
             )?;
-            let VersionedStateRoot::V2(root) = transaction.authority_root() else {
-                return Err(
-                    super::host_session_authority::store::BootstrapError::retained_admission_semantic(),
-                );
-            };
             let mut found = Vec::new();
             for record in registry
                 .records_by_session
@@ -1693,7 +1683,7 @@ impl RetainedWorkerRuntime {
                     RetainedWorkerAdmissionStateV1::AuthorityRegistrationHead { .. }
                 ) {
                     retain_semantic_error(
-                        admission_registration_from_hsa(root, record),
+                        admission_registration_from_hsa(transaction.authority_root(), record),
                         &mut semantic_failure,
                     )?
                 } else {
@@ -2416,7 +2406,7 @@ impl RetainedWorkerRuntime {
             ));
         }
         let root = authority
-            .read_a12a_root()
+            .read_preserved_start_root_v2()
             .map_err(|error| RetainedWorkerRuntimeError(error.to_string()))?;
         let SessionNamespaceRecordV1::Authority(root_authority) = root
             .session_namespace_map
@@ -2712,6 +2702,18 @@ fn valid_key_id(value: &str) -> bool {
     })
 }
 
+fn preserved_start_root_view(
+    authority_root: &VersionedStateRoot,
+) -> Result<Cow<'_, StateRootV2>, RetainedWorkerRuntimeError> {
+    match authority_root {
+        VersionedStateRoot::V2(root) => Ok(Cow::Borrowed(root)),
+        VersionedStateRoot::V3(root) => Ok(Cow::Owned(root.preserved_v2_view())),
+        VersionedStateRoot::V1(_) => Err(RetainedWorkerRuntimeError(
+            "retained admission requires strict V2 or preserved V3 authority".into(),
+        )),
+    }
+}
+
 fn validate_supplied_admission_authority(
     root: &StateRootV2,
     current_exact_authority: &CanonicalExactCurrentAuthorityV1,
@@ -2772,11 +2774,7 @@ fn prepare_registration_head_in_registry(
     head_acquired_at: TimestampV1,
 ) -> Result<(AdmissionHeadPreparationV1, bool), RetainedWorkerRuntimeError> {
     validate_admission_plan(authority_root, current_plan)?;
-    let VersionedStateRoot::V2(root) = authority_root else {
-        return Err(RetainedWorkerRuntimeError(
-            "registration head requires strict V2 authority".into(),
-        ));
-    };
+    let root = preserved_start_root_view(authority_root)?;
     let mut record = registry
         .records_by_session
         .get(&current_plan.spawn_request.orchestration_session_id)
@@ -2784,7 +2782,7 @@ fn prepare_registration_head_in_registry(
         .cloned()
         .ok_or_else(|| RetainedWorkerRuntimeError("admission slot is absent".into()))?;
     validate_supplied_admission_authority(
-        root,
+        root.as_ref(),
         &current_plan.exact_authority,
         &supplied_plan.exact_authority,
         &record,
@@ -2804,7 +2802,7 @@ fn prepare_registration_head_in_registry(
             ));
         }
         RetainedWorkerAdmissionStateV1::AuthorityRegistrationHead { .. } => {
-            admission_registration_from_hsa(root, &record)?;
+            admission_registration_from_hsa(authority_root, &record)?;
             return Ok((AdmissionHeadPreparationV1::Ready(record), false));
         }
         RetainedWorkerAdmissionStateV1::SlotReserved { .. } => {}
@@ -2838,7 +2836,7 @@ fn prepare_registration_head_in_registry(
     if lowest.is_none_or(|(_, participant_id)| participant_id != retained_participant_id) {
         return Ok((AdmissionHeadPreparationV1::Queued, false));
     }
-    validate_admission_to_current_r0_only(root, &current_plan.exact_authority, &record)?;
+    validate_admission_to_current_r0_only(root.as_ref(), &current_plan.exact_authority, &record)?;
     record.state = RetainedWorkerAdmissionStateV1::AuthorityRegistrationHead {
         authority_revision_expected: current_plan.exact_authority.authority_revision,
         authority_record_commitment_expected: current_plan
@@ -2893,11 +2891,7 @@ fn advance_registration_head_in_registry(
     input: &AdmissionRegistrationAdvanceInputV1<'_>,
 ) -> Result<(RetainedWorkerAdmissionRecordV1, bool), RetainedWorkerRuntimeError> {
     validate_admission_plan(authority_root, current_plan)?;
-    let VersionedStateRoot::V2(root) = authority_root else {
-        return Err(RetainedWorkerRuntimeError(
-            "registration advancement requires strict V2 authority".into(),
-        ));
-    };
+    let root = preserved_start_root_view(authority_root)?;
     let mut record = registry
         .records_by_session
         .get(&current_plan.spawn_request.orchestration_session_id)
@@ -2905,7 +2899,7 @@ fn advance_registration_head_in_registry(
         .cloned()
         .ok_or_else(|| RetainedWorkerRuntimeError("admission slot is absent".into()))?;
     validate_supplied_admission_authority(
-        root,
+        root.as_ref(),
         &current_plan.exact_authority,
         &supplied_plan.exact_authority,
         &record,
@@ -2919,7 +2913,7 @@ fn advance_registration_head_in_registry(
             &input.post_r0_graph.result,
         )?;
         validate_post_r0_registered_graph(
-            root,
+            root.as_ref(),
             &record,
             current_plan,
             registration,
@@ -2937,9 +2931,12 @@ fn advance_registration_head_in_registry(
             "only the registration head can advance after R0".into(),
         ));
     }
-    let registration = admission_registration_from_hsa(root, &record)?.ok_or_else(|| {
-        RetainedWorkerRuntimeError("R0 registration has not reached durable Applied truth".into())
-    })?;
+    let registration =
+        admission_registration_from_hsa(authority_root, &record)?.ok_or_else(|| {
+            RetainedWorkerRuntimeError(
+                "R0 registration has not reached durable Applied truth".into(),
+            )
+        })?;
     validate_registration_result(
         authority_root,
         &record,
@@ -2947,7 +2944,7 @@ fn advance_registration_head_in_registry(
         &input.post_r0_graph.result,
     )?;
     validate_post_r0_registered_graph(
-        root,
+        root.as_ref(),
         &record,
         current_plan,
         &registration,
@@ -2978,11 +2975,7 @@ fn claim_transport_in_registry(
     claim_input: &AdmissionTransportClaimInputV1<'_>,
 ) -> Result<RetainedWorkerTransportClaimV1, RetainedWorkerRuntimeError> {
     validate_admission_plan(authority_root, current_plan)?;
-    let VersionedStateRoot::V2(root) = authority_root else {
-        return Err(RetainedWorkerRuntimeError(
-            "transport claim requires strict V2 authority".into(),
-        ));
-    };
+    let root = preserved_start_root_view(authority_root)?;
     let mut record = registry
         .records_by_session
         .get(&current_plan.spawn_request.orchestration_session_id)
@@ -2990,7 +2983,7 @@ fn claim_transport_in_registry(
         .cloned()
         .ok_or_else(|| RetainedWorkerRuntimeError("admission slot is absent".into()))?;
     validate_supplied_admission_authority(
-        root,
+        root.as_ref(),
         &current_plan.exact_authority,
         &supplied_plan.exact_authority,
         &record,
@@ -3003,7 +2996,7 @@ fn claim_transport_in_registry(
             ));
         };
         validate_post_r0_registered_graph(
-            root,
+            root.as_ref(),
             &record,
             current_plan,
             registration,
@@ -3084,11 +3077,7 @@ fn advance_admission_runtime_truth_in_registry(
     truth: &AdmissionRuntimeTruthInputV1<'_>,
 ) -> Result<(RetainedWorkerAdmissionRecordV1, bool), RetainedWorkerRuntimeError> {
     validate_admission_plan(authority_root, current_plan)?;
-    let VersionedStateRoot::V2(root) = authority_root else {
-        return Err(RetainedWorkerRuntimeError(
-            "runtime truth requires strict V2 authority".into(),
-        ));
-    };
+    let root = preserved_start_root_view(authority_root)?;
     let mut record = registry
         .records_by_session
         .get(&current_plan.spawn_request.orchestration_session_id)
@@ -3096,7 +3085,7 @@ fn advance_admission_runtime_truth_in_registry(
         .cloned()
         .ok_or_else(|| RetainedWorkerRuntimeError("admission slot is absent".into()))?;
     validate_supplied_admission_authority(
-        root,
+        root.as_ref(),
         &current_plan.exact_authority,
         &supplied_plan.exact_authority,
         &record,
@@ -3110,7 +3099,7 @@ fn advance_admission_runtime_truth_in_registry(
             )
         })?;
     validate_post_r0_registered_graph(
-        root,
+        root.as_ref(),
         &record,
         current_plan,
         &registration,
@@ -3320,9 +3309,10 @@ fn advance_admission_runtime_truth_in_registry(
 }
 
 fn admission_registration_from_hsa(
-    root: &StateRootV2,
+    authority_root: &VersionedStateRoot,
     record: &RetainedWorkerAdmissionRecordV1,
 ) -> Result<Option<RetainedWorkerAdmissionRegistrationV1>, RetainedWorkerRuntimeError> {
+    let root = preserved_start_root_view(authority_root)?;
     let RetainedWorkerAdmissionStateV1::AuthorityRegistrationHead {
         authority_revision_expected,
         authority_record_commitment_expected,
@@ -3386,7 +3376,7 @@ fn admission_registration_from_hsa(
         retained_worker_ref: registration.retained_worker_ref.clone(),
     };
     validate_admission_registration_against_authority(
-        &VersionedStateRoot::V2(root.clone()),
+        authority_root,
         record,
         &admission_registration,
     )?;
@@ -3432,11 +3422,7 @@ fn validate_registration_result(
     registration: &RetainedWorkerAdmissionRegistrationV1,
     result: &RetainedWorkerRegistrationResultV1,
 ) -> Result<(), RetainedWorkerRuntimeError> {
-    let VersionedStateRoot::V2(root) = authority_root else {
-        return Err(RetainedWorkerRuntimeError(
-            "R0 result validation requires strict V2 authority".into(),
-        ));
-    };
+    let root = preserved_start_root_view(authority_root)?;
     let durable = root
         .retained_worker_registration_journal
         .get(&registration.registration_id)
@@ -3628,11 +3614,7 @@ fn validate_complete_post_r0_registry_graphs(
     authority_root: &VersionedStateRoot,
     resolved_graphs: &BTreeMap<(String, String), ResolvedPostR0RegistryGraphV1>,
 ) -> Result<(), RetainedWorkerRuntimeError> {
-    let VersionedStateRoot::V2(root) = authority_root else {
-        return Err(RetainedWorkerRuntimeError(
-            "complete post-R0 registry validation requires V2 authority".into(),
-        ));
-    };
+    let root = preserved_start_root_view(authority_root)?;
     let mut validated_count = 0_usize;
     for record in registry
         .records_by_session
@@ -3645,7 +3627,7 @@ fn validate_complete_post_r0_registry_graphs(
             record.state,
             RetainedWorkerAdmissionStateV1::AuthorityRegistrationHead { .. }
         ) {
-            admission_registration_from_hsa(root, record)?
+            admission_registration_from_hsa(authority_root, record)?
         } else {
             None
         };
@@ -3660,7 +3642,7 @@ fn validate_complete_post_r0_registry_graphs(
             RetainedWorkerRuntimeError("complete post-R0 registry graph is absent".into())
         })?;
         validate_post_r0_registered_graph_against_expectation(
-            root,
+            root.as_ref(),
             record,
             &resolved.current_exact_authority,
             &resolved.registered_graph.resolved_target.descriptor,
@@ -3730,6 +3712,7 @@ fn reserve_slot_in_registry(
     bootstrap_run_entropy: [u8; 16],
 ) -> Result<RetainedWorkerAdmissionSlotV1, RetainedWorkerRuntimeError> {
     validate_admission_plan(authority_root, current_plan)?;
+    let root = preserved_start_root_view(authority_root)?;
     if let Some(locator) = registry
         .issuer_request_index
         .get(&supplied_plan.issuer_request_id)
@@ -3741,13 +3724,8 @@ fn reserve_slot_in_registry(
             .ok_or_else(|| {
                 RetainedWorkerRuntimeError("admission issuer index is dangling".into())
             })?;
-        let VersionedStateRoot::V2(root) = authority_root else {
-            return Err(RetainedWorkerRuntimeError(
-                "admission retry requires strict V2 authority".into(),
-            ));
-        };
         validate_supplied_admission_authority(
-            root,
+            root.as_ref(),
             &current_plan.exact_authority,
             &supplied_plan.exact_authority,
             record,
@@ -3920,11 +3898,7 @@ fn validate_admission_plan(
     let exact = &plan.exact_authority;
     let runtime = &plan.descriptor_and_runtime_plan;
     let policy = &plan.policy_and_admission_cap;
-    let VersionedStateRoot::V2(root) = authority_root else {
-        return Err(RetainedWorkerRuntimeError(
-            "retained admission requires strict V2 authority".into(),
-        ));
-    };
+    let root = preserved_start_root_view(authority_root)?;
     let SessionNamespaceRecordV1::Authority(locked_authority) = root
         .session_namespace_map
         .get(&request.orchestration_session_id)
@@ -4082,6 +4056,8 @@ fn reconstruct_exact_authority_at_revision(
     let HostSessionTransitionIntentStateV2::Applied {
         authority_revision_after,
         authority_record_commitment,
+        active_authoritative_participant_id,
+        resulting_posture,
         applied_at,
         ..
     } = &intent.state
@@ -4090,12 +4066,34 @@ fn reconstruct_exact_authority_at_revision(
             "admission authority ancestry Start is not applied".into(),
         ));
     };
-    let mut authority = current.authority.clone();
-    authority.authority_revision = *authority_revision_after;
-    authority.authoritative_participant_lineage = intent.resulting_authoritative_lineage.clone();
-    authority.retained_worker_refs.clear();
-    authority.internal_resume_handle_refs.clear();
-    authority.updated_at = applied_at.clone();
+    if *authority_revision_after != 1
+        || active_authoritative_participant_id != &intent.target_authoritative_participant_id
+        || *resulting_posture != HostSessionPostureV1::ActiveAttached
+    {
+        return Err(RetainedWorkerRuntimeError(
+            "admission authority ancestry Start proof is inconsistent".into(),
+        ));
+    }
+    let mut authority = DurableSessionAuthorityV1 {
+        schema_version: current.authority.schema_version,
+        orchestration_session_id: current.authority.orchestration_session_id.clone(),
+        shell_trace_session_id: current.authority.shell_trace_session_id.clone(),
+        authority_revision: *authority_revision_after,
+        origin: current.authority.origin.clone(),
+        authoritative_participant_lineage: intent.resulting_authoritative_lineage.clone(),
+        active_authoritative_participant_id: Some(
+            intent.target_authoritative_participant_id.clone(),
+        ),
+        workspace_binding: current.authority.workspace_binding.clone(),
+        world_binding: current.authority.world_binding.clone(),
+        host_attach_contract_ref: current.authority.host_attach_contract_ref.clone(),
+        retained_worker_refs: Vec::new(),
+        internal_resume_handle_refs: Vec::new(),
+        lifecycle_posture: HostSessionPostureV1::ActiveAttached,
+        current_policy_ref: current.authority.current_policy_ref.clone(),
+        current_policy_revision: current.authority.current_policy_revision.clone(),
+        updated_at: applied_at.clone(),
+    };
     let mut commitment = canonical_authority_commitment(&authority)?;
     if commitment != *authority_record_commitment {
         return Err(RetainedWorkerRuntimeError(
@@ -4458,11 +4456,7 @@ fn validate_admission_registry(
             "admission registry indices are inexact".into(),
         ));
     }
-    let VersionedStateRoot::V2(root) = authority_root else {
-        return Err(RetainedWorkerRuntimeError(
-            "retained admission requires strict V2 authority".into(),
-        ));
-    };
+    let root = preserved_start_root_view(authority_root)?;
     for request in root.retained_worker_registration_request_index.values() {
         let admission_issuer = request
             .issuer_request_id
@@ -4542,11 +4536,7 @@ fn validate_admission_registration_against_authority(
     record: &RetainedWorkerAdmissionRecordV1,
     admission_registration: &RetainedWorkerAdmissionRegistrationV1,
 ) -> Result<(), RetainedWorkerRuntimeError> {
-    let VersionedStateRoot::V2(root) = authority_root else {
-        return Err(RetainedWorkerRuntimeError(
-            "post-R0 admission record requires V2 authority".into(),
-        ));
-    };
+    let root = preserved_start_root_view(authority_root)?;
     let registration = root
         .retained_worker_registration_journal
         .get(&admission_registration.registration_id)
@@ -9641,6 +9631,55 @@ mod tests {
             &changed_wrapper_caller_plan,
         )
         .is_err());
+    }
+
+    #[test]
+    fn rewinding_r0_ancestry_ignores_non_r0_current_authority_fields() {
+        let (_parent, authority, _) = started_authority();
+        let runtime = RetainedWorkerRuntime;
+        let first_plan = admission_plan(&authority, "rewind-first", "first prompt", 3);
+        let queued_plan = admission_plan(&authority, "rewind-queued", "queued prompt", 3);
+        runtime
+            .reserve_admission_slot(&authority, &first_plan)
+            .unwrap();
+        let queued = runtime
+            .reserve_admission_slot(&authority, &queued_plan)
+            .unwrap();
+        runtime
+            .register_admitted_worker(&authority, &first_plan)
+            .unwrap();
+        let root = authority.read_a12a_root().unwrap();
+        let resolved = authority.resolve_current_exact("r0-session", None).unwrap();
+        let mut current = CanonicalExactCurrentAuthorityV1::from_resolved(&resolved);
+        current.authority.lifecycle_posture = HostSessionPostureV1::AwaitingAttention;
+        current.authority.active_authoritative_participant_id = Some("changed-caller".into());
+
+        let rewound = reconstruct_exact_authority_at_revision(
+            &root,
+            &current,
+            queued.record.admission_authority_revision,
+        )
+        .unwrap();
+
+        assert_eq!(
+            rewound.authority_revision,
+            queued.record.admission_authority_revision
+        );
+        assert_eq!(
+            rewound.authority_record_commitment,
+            queued.record.admission_authority_record_commitment
+        );
+        assert_eq!(
+            rewound
+                .authority
+                .active_authoritative_participant_id
+                .as_deref(),
+            Some(resolved.caller.participant_id.as_str())
+        );
+        assert_eq!(
+            rewound.authority.lifecycle_posture,
+            HostSessionPostureV1::ActiveAttached
+        );
     }
 
     #[test]

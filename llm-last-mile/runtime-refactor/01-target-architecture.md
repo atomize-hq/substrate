@@ -1301,10 +1301,11 @@ Passive health/world-deps diagnostic failures remain a separate existing lane. U
 leftovers, cleanup, rollback, manifest, and convergence remain R3-owned. The local `0640`/`0650`
 archive-mode observation is a one-object restoration decision, not a changed permission model.
 R3 planning is complete, but R3 implementation is `PARKED_BY_USER` and no R3 implementation task
-has been dispatched. The just-closed corridor head was the B1/B2.1 joint closeout, B3.1 is
-complete on the bound Tuesday, August 4, 2026 candidate, and the next candidate implementation
-line is `C1 -> A1.2b`. After A1.2b, R3 must be revalidated, explicitly reauthorized, resumed, and
-completed before A1.3, A1.4, or A1 closeout. R2-4 does not close A1.1d, A1, or the runtime
+has been dispatched. The just-closed corridor head was the B1/B2.1 joint closeout, B3.1, C1, and
+the bounded internal A1.2b packet are complete on the bound Tuesday, August 4, 2026 candidate,
+and the next authority gate is `AUTHORITY_REQUIRED:R3_RESUME`. R3 must be revalidated, explicitly
+reauthorized, resumed, and completed before A1.3, A1.4, or A1 closeout. R2-4 does not close
+A1.1d, A1, or the runtime
 refactor.
 
 ## A1.1d-5R3 lifecycle ownership architecture

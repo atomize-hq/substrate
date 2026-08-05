@@ -23,7 +23,7 @@ use super::store_schema::{
     DurableSessionAuthorityV1, HostSessionPostTurnApplicationV1,
     HostSessionStartupOwnershipApplicationV1, HostSessionTransitionIntentStateV2,
     RetainedWorkerAuthorityRegistrationRequestV1, RetainedWorkerAuthorityRegistrationV1,
-    SessionNamespaceRecordV1, StateRootV1,
+    SessionNamespaceRecordV1, StateRootV1, StateRootV2, StateRootV3, VersionedStateRoot,
 };
 use super::transition::{verify_applied_start, ApplyHostSessionTransitionRequestV1};
 #[cfg(any(target_os = "linux", target_os = "macos"))]
@@ -318,6 +318,17 @@ impl HostSessionAuthority {
         store::read_opened_root(&self.root).map_err(store_error)
     }
 
+    pub(crate) fn read_preserved_start_root_v2(&self) -> Result<StateRootV2, AuthorityFacadeError> {
+        let root = store::read_opened_root_v2_or_v3(&self.root).map_err(store_error)?;
+        match root {
+            VersionedStateRoot::V2(root) => Ok(root),
+            VersionedStateRoot::V3(root) => Ok(root.preserved_v2_view()),
+            VersionedStateRoot::V1(_) => Err(AuthorityFacadeError(
+                "current authority requires strict StateRootV2 or StateRootV3".into(),
+            )),
+        }
+    }
+
     pub(crate) fn prepare_typed_object(
         &self,
         expected_root_revision: u64,
@@ -425,12 +436,45 @@ impl HostSessionAuthority {
                 "orchestration session ID must be exact and non-empty".into(),
             ));
         }
-        let root = store::read_opened_root_v2(&self.root).map_err(store_error)?;
+        let root = store::read_opened_root_v2_or_v3(&self.root).map_err(store_error)?;
+        match root {
+            VersionedStateRoot::V2(root) => self.resolve_current_exact_from_preserved_start_root(
+                &root,
+                orchestration_session_id,
+                expected,
+            ),
+            VersionedStateRoot::V3(root) => {
+                let preserved = root.preserved_v2_view();
+                self.resolve_current_exact_from_preserved_start_root(
+                    &preserved,
+                    orchestration_session_id,
+                    expected,
+                )
+                .or_else(|_| {
+                    self.resolve_current_exact_from_v3_root(
+                        &root,
+                        orchestration_session_id,
+                        expected,
+                    )
+                })
+            }
+            VersionedStateRoot::V1(_) => Err(AuthorityFacadeError(
+                "current authority requires strict StateRootV2 or StateRootV3".into(),
+            )),
+        }
+    }
+
+    fn resolve_current_exact_from_preserved_start_root(
+        &self,
+        root: &StateRootV2,
+        orchestration_session_id: &str,
+        expected: Option<&AuthorityObservationV1>,
+    ) -> Result<ResolvedCurrentAuthorityV1, AuthorityFacadeError> {
         let Some(SessionNamespaceRecordV1::Authority(authority)) =
             root.session_namespace_map.get(orchestration_session_id)
         else {
             return Err(AuthorityFacadeError(
-                "exact V2 session namespace record is not current durable authority".into(),
+                "exact session namespace record is not current durable authority".into(),
             ));
         };
         let authority = authority.as_ref().clone();
@@ -451,42 +495,50 @@ impl HostSessionAuthority {
                 "current authority origin conflicts with its Start intent".into(),
             ));
         }
-        let (claim_id, authority_revision_after, active_authoritative_participant_id) =
-            match &intent.state {
-                HostSessionTransitionIntentStateV2::Applied {
+        let (
+            claim_id,
+            authority_revision_after,
+            active_authoritative_participant_id,
+            applied_at,
+            authority_record_commitment,
+        ) = match &intent.state {
+            HostSessionTransitionIntentStateV2::Applied {
+                claim_id,
+                authority_revision_before: None,
+                authority_revision_after,
+                active_authoritative_participant_id,
+                resulting_posture: HostSessionPostureV1::ActiveAttached,
+                authority_record_commitment,
+                startup_ownership,
+                post_turn,
+                applied_at,
+                ..
+            } if matches!(
+                startup_ownership.as_ref(),
+                HostSessionStartupOwnershipApplicationV1::Pending {
+                    expected_run_id,
+                    expected_authority_revision,
+                    expected_active_authoritative_participant_id,
+                } if expected_run_id == &intent.run_id
+                    && expected_authority_revision == authority_revision_after
+                    && expected_active_authoritative_participant_id
+                        == active_authoritative_participant_id
+            ) && post_turn.as_ref() == &HostSessionPostTurnApplicationV1::NotApplicable =>
+            {
+                (
                     claim_id,
-                    authority_revision_before: None,
-                    authority_revision_after,
+                    *authority_revision_after,
                     active_authoritative_participant_id,
-                    resulting_posture: HostSessionPostureV1::ActiveAttached,
-                    startup_ownership,
-                    post_turn,
-                    ..
-                } if matches!(
-                    startup_ownership.as_ref(),
-                    HostSessionStartupOwnershipApplicationV1::Pending {
-                        expected_run_id,
-                        expected_authority_revision,
-                        expected_active_authoritative_participant_id,
-                    } if expected_run_id == &intent.run_id
-                        && expected_authority_revision == authority_revision_after
-                        && expected_active_authoritative_participant_id
-                            == active_authoritative_participant_id
-                ) && post_turn.as_ref()
-                    == &HostSessionPostTurnApplicationV1::NotApplicable =>
-                {
-                    (
-                        claim_id,
-                        *authority_revision_after,
-                        active_authoritative_participant_id,
-                    )
-                }
-                _ => {
-                    return Err(AuthorityFacadeError(
-                        "current authority is not a complete applied A1.2a Start".into(),
-                    ))
-                }
-            };
+                    applied_at,
+                    authority_record_commitment,
+                )
+            }
+            _ => {
+                return Err(AuthorityFacadeError(
+                    "current authority is not a complete applied A1.2a Start".into(),
+                ))
+            }
+        };
         if authority_revision_after != 1
             || active_authoritative_participant_id != &intent.target_authoritative_participant_id
         {
@@ -500,7 +552,7 @@ impl HostSessionAuthority {
             .ok_or_else(|| AuthorityFacadeError("applied Start revision underflow".into()))?;
         verify_applied_start(
             self,
-            &root,
+            root,
             intent,
             &ApplyHostSessionTransitionRequestV1 {
                 intent_id: intent.intent_id.clone(),
@@ -512,8 +564,40 @@ impl HostSessionAuthority {
             },
         )
         .map_err(|error| AuthorityFacadeError(error.to_string()))?;
+        let initial_authority = DurableSessionAuthorityV1 {
+            schema_version: authority.schema_version,
+            orchestration_session_id: authority.orchestration_session_id.clone(),
+            shell_trace_session_id: authority.shell_trace_session_id.clone(),
+            authority_revision: authority_revision_after,
+            origin: authority.origin.clone(),
+            authoritative_participant_lineage: intent.resulting_authoritative_lineage.clone(),
+            active_authoritative_participant_id: Some(
+                intent.target_authoritative_participant_id.clone(),
+            ),
+            workspace_binding: authority.workspace_binding.clone(),
+            world_binding: authority.world_binding.clone(),
+            host_attach_contract_ref: authority.host_attach_contract_ref.clone(),
+            retained_worker_refs: Vec::new(),
+            internal_resume_handle_refs: Vec::new(),
+            lifecycle_posture: HostSessionPostureV1::ActiveAttached,
+            current_policy_ref: authority.current_policy_ref.clone(),
+            current_policy_revision: authority.current_policy_revision.clone(),
+            updated_at: applied_at.clone(),
+        };
+        let initial_commitment = canonical_commitment(&authority_hash_input(&initial_authority))?;
+        if initial_commitment != *authority_record_commitment {
+            return Err(AuthorityFacadeError(
+                "applied Start authority proof is inconsistent".into(),
+            ));
+        }
+        verify_retained_registration_descendant_v2(
+            root,
+            &initial_authority,
+            &authority,
+            &initial_commitment,
+        )?;
 
-        let descriptor_bytes = store::read_typed_object_v2_opened(
+        let descriptor_bytes = store::read_typed_object_v2_or_v3_opened(
             &self.root,
             root.root_revision,
             &intent.descriptor_ref,
@@ -522,7 +606,7 @@ impl HostSessionAuthority {
         .map_err(store_error)?;
         let descriptor: AgentDescriptorHashInputV1 = canonical_json::from_slice(&descriptor_bytes)
             .map_err(|error| AuthorityFacadeError(error.to_string()))?;
-        let attach_bytes = store::read_typed_object_v2_opened(
+        let attach_bytes = store::read_typed_object_v2_or_v3_opened(
             &self.root,
             root.root_revision,
             &intent.host_attach_contract_ref,
@@ -531,7 +615,7 @@ impl HostSessionAuthority {
         .map_err(store_error)?;
         let attach: HostAttachContractHashInputV1 = canonical_json::from_slice(&attach_bytes)
             .map_err(|error| AuthorityFacadeError(error.to_string()))?;
-        let policy_bytes = store::read_typed_object_v2_opened(
+        let policy_bytes = store::read_typed_object_v2_or_v3_opened(
             &self.root,
             root.root_revision,
             &attach.contract.policy_ref,
@@ -620,6 +704,158 @@ impl HostSessionAuthority {
         })
     }
 
+    fn resolve_current_exact_from_v3_root(
+        &self,
+        root: &StateRootV3,
+        orchestration_session_id: &str,
+        expected: Option<&AuthorityObservationV1>,
+    ) -> Result<ResolvedCurrentAuthorityV1, AuthorityFacadeError> {
+        let Some(SessionNamespaceRecordV1::Authority(authority)) =
+            root.session_namespace_map.get(orchestration_session_id)
+        else {
+            return Err(AuthorityFacadeError(
+                "exact session namespace record is not current durable authority".into(),
+            ));
+        };
+        let authority = authority.as_ref().clone();
+        let authority_record_commitment = canonical_commitment(&authority_hash_input(&authority))?;
+        let persisted_commitment = exact_current_authority_proof_v3(
+            root,
+            &authority.orchestration_session_id,
+            authority.authority_revision,
+        )?;
+        if persisted_commitment != &authority_record_commitment {
+            return Err(AuthorityFacadeError(
+                "durable V3 application proof does not commit to current authority".into(),
+            ));
+        }
+        let authoritative_lineage_commitment =
+            canonical_commitment(&AuthoritativeLineageHashInputV1 {
+                schema_version: 1,
+                orchestration_session_id: authority.orchestration_session_id.clone(),
+                participant_ids: authority.authoritative_participant_lineage.clone(),
+            })?;
+        let attach_ref = authority.host_attach_contract_ref.as_ref().ok_or_else(|| {
+            AuthorityFacadeError("current authority has no attach contract".into())
+        })?;
+        let attach_bytes = store::read_typed_object_v2_or_v3_opened(
+            &self.root,
+            root.root_revision,
+            attach_ref,
+            None,
+        )
+        .map_err(store_error)?;
+        let attach: HostAttachContractHashInputV1 = canonical_json::from_slice(&attach_bytes)
+            .map_err(|error| AuthorityFacadeError(error.to_string()))?;
+        let descriptor_bytes = store::read_typed_object_v2_or_v3_opened(
+            &self.root,
+            root.root_revision,
+            &attach.contract.descriptor_ref,
+            None,
+        )
+        .map_err(store_error)?;
+        let descriptor: AgentDescriptorHashInputV1 = canonical_json::from_slice(&descriptor_bytes)
+            .map_err(|error| AuthorityFacadeError(error.to_string()))?;
+        let current_policy_ref = authority
+            .current_policy_ref
+            .as_ref()
+            .ok_or_else(|| AuthorityFacadeError("current authority has no policy ref".into()))?;
+        if current_policy_ref != &attach.contract.policy_ref {
+            return Err(AuthorityFacadeError(
+                "current authority policy ref conflicts with its attach contract".into(),
+            ));
+        }
+        let policy_bytes = store::read_typed_object_v2_or_v3_opened(
+            &self.root,
+            root.root_revision,
+            current_policy_ref,
+            None,
+        )
+        .map_err(store_error)?;
+        let policy: PolicyObjectHashInputV1 = canonical_json::from_slice(&policy_bytes)
+            .map_err(|error| AuthorityFacadeError(error.to_string()))?;
+        if descriptor.schema_version != 1
+            || descriptor.descriptor.schema_version != 1
+            || attach.schema_version != 1
+            || attach.contract.schema_version != 1
+            || policy.schema_version != 1
+            || authority.host_attach_contract_ref.as_ref() != Some(attach_ref)
+            || authority.current_policy_ref.as_ref() != Some(&attach.contract.policy_ref)
+            || authority.current_policy_revision.as_ref() != Some(&policy.policy_revision)
+            || attach.contract.backend_id != descriptor.descriptor.backend_id
+            || attach.contract.execution_scope != descriptor.descriptor.execution_scope
+            || attach.contract.protocol != descriptor.descriptor.protocol
+            || (descriptor.descriptor.execution_scope
+                == super::schema::AgentExecutionScopeV1::World
+                && authority.world_binding.is_none())
+            || attach
+                .contract
+                .continuity_resume_handle_ref
+                .as_ref()
+                .is_some_and(|reference| {
+                    !authority
+                        .internal_resume_handle_refs
+                        .iter()
+                        .any(|current| current == reference)
+                })
+        {
+            return Err(AuthorityFacadeError(
+                "applied V3 descriptor, attach contract, or policy truth is inconsistent".into(),
+            ));
+        }
+        let observation = AuthorityObservationV1 {
+            authority_store_id: root.authority_store_id.clone(),
+            bootstrap_home: root.bootstrap_home.clone(),
+            orchestration_session_id: authority.orchestration_session_id.clone(),
+            root_revision: root.root_revision,
+            authority_revision: authority.authority_revision,
+            authority_record_commitment,
+            authoritative_lineage_commitment,
+        };
+        if expected.is_some_and(|value| value != &observation) {
+            return Err(AuthorityFacadeError(
+                "stale or mismatched exact current-authority observation".into(),
+            ));
+        }
+        let active_participant_id = authority
+            .active_authoritative_participant_id
+            .clone()
+            .ok_or_else(|| AuthorityFacadeError("current authority has no active caller".into()))?;
+        if !authority
+            .authoritative_participant_lineage
+            .contains(&active_participant_id)
+        {
+            return Err(AuthorityFacadeError(
+                "current authority caller is not part of its authoritative lineage".into(),
+            ));
+        }
+        let bound_state_store =
+            super::super::state_store::AgentRuntimeStateStore::for_bootstrap_home(
+                &self.bootstrap_home(),
+            )
+            .map_err(|error| AuthorityFacadeError(error.to_string()))?;
+        if bound_state_store.bootstrap_home_identity() != &root.bootstrap_home {
+            return Err(AuthorityFacadeError(
+                "bound StateStore does not match current authority bootstrap home".into(),
+            ));
+        }
+        let caller_descriptor_ref = attach.contract.descriptor_ref.clone();
+        let host_attach_contract = attach.contract;
+        Ok(ResolvedCurrentAuthorityV1 {
+            observation,
+            authority,
+            caller: ResolvedAuthorityCallerV1 {
+                participant_id: active_participant_id,
+                role: AuthorityParticipantRoleV1::Orchestrator,
+                descriptor_ref: caller_descriptor_ref,
+                descriptor: descriptor.descriptor,
+            },
+            host_attach_contract,
+            current_policy: policy,
+            bound_state_store,
+        })
+    }
+
     #[allow(clippy::too_many_arguments)]
     pub(crate) fn reserve_retained_worker_registration(
         &self,
@@ -684,8 +920,13 @@ impl HostSessionAuthority {
         expected_root_revision: u64,
         reference: &AuthorityObjectRefV1,
     ) -> Result<Vec<u8>, AuthorityFacadeError> {
-        store::read_typed_object_v2_opened(&self.root, expected_root_revision, reference, None)
-            .map_err(store_error)
+        store::read_typed_object_v2_or_v3_opened(
+            &self.root,
+            expected_root_revision,
+            reference,
+            None,
+        )
+        .map_err(store_error)
     }
 
     #[cfg(test)]
@@ -882,6 +1123,249 @@ pub(super) fn exact_current_authority_proof<'root>(
         ));
     };
     Ok(commitment)
+}
+
+fn exact_current_authority_proof_v3<'root>(
+    root: &'root StateRootV3,
+    orchestration_session_id: &str,
+    authority_revision: u64,
+) -> Result<&'root AuthorityObjectCommitmentV1, AuthorityFacadeError> {
+    let mut commitment = None;
+    let mut highest_revision = None;
+    for journal in root.application_journal.values() {
+        let Some(intent) = root.transition_intent_map.get(&journal.intent_id) else {
+            continue;
+        };
+        if intent.orchestration_session_id != orchestration_session_id {
+            continue;
+        }
+        let phases = std::iter::once((
+            journal.initial_application.authority_revision_after,
+            &journal.initial_application.authority_record_commitment,
+        ))
+        .chain(
+            journal
+                .startup_terminal_application
+                .as_ref()
+                .map(|startup| {
+                    (
+                        startup.authority_revision_after,
+                        &startup.authority_record_commitment_after,
+                    )
+                }),
+        )
+        .chain(journal.post_turn_application.as_ref().map(|post_turn| {
+            (
+                post_turn.authority_revision_after,
+                &post_turn.authority_record_commitment,
+            )
+        }));
+        for (revision, candidate) in phases {
+            highest_revision =
+                Some(highest_revision.map_or(revision, |highest: u64| highest.max(revision)));
+            if revision != authority_revision {
+                continue;
+            }
+            if commitment.replace(candidate).is_some() {
+                return Err(AuthorityFacadeError(
+                    "current authority revision has ambiguous durable V3 application proof".into(),
+                ));
+            }
+        }
+    }
+    for journal in root.successor_application_journal.values() {
+        let Some(intent) = root.successor_transition_intent_map.get(&journal.intent_id) else {
+            continue;
+        };
+        if intent.orchestration_session_id != orchestration_session_id {
+            continue;
+        }
+        let phases = std::iter::once((
+            journal.initial_application.authority_revision_after,
+            &journal.initial_application.authority_record_commitment,
+        ))
+        .chain(
+            journal
+                .startup_terminal_application
+                .as_ref()
+                .map(|startup| {
+                    (
+                        startup.authority_revision_after,
+                        &startup.authority_record_commitment_after,
+                    )
+                }),
+        )
+        .chain(journal.post_turn_application.as_ref().map(|post_turn| {
+            (
+                post_turn.authority_revision_after,
+                &post_turn.authority_record_commitment,
+            )
+        }));
+        for (revision, candidate) in phases {
+            highest_revision =
+                Some(highest_revision.map_or(revision, |highest: u64| highest.max(revision)));
+            if revision != authority_revision {
+                continue;
+            }
+            if commitment.replace(candidate).is_some() {
+                return Err(AuthorityFacadeError(
+                    "current authority revision has ambiguous durable V3 application proof".into(),
+                ));
+            }
+        }
+    }
+    for registration in root.retained_worker_registration_journal.values() {
+        if registration.orchestration_session_id != orchestration_session_id {
+            continue;
+        }
+        let revision = registration.authority_revision_after;
+        let candidate = &registration.authority_record_commitment_after;
+        highest_revision =
+            Some(highest_revision.map_or(revision, |highest: u64| highest.max(revision)));
+        if revision != authority_revision {
+            continue;
+        }
+        if commitment.replace(candidate).is_some() {
+            return Err(AuthorityFacadeError(
+                "current authority revision has ambiguous durable V3 application proof".into(),
+            ));
+        }
+    }
+    if highest_revision.is_some_and(|revision| revision > authority_revision) {
+        return Err(AuthorityFacadeError(
+            "current authority revision is behind durable V3 application proof".into(),
+        ));
+    }
+    let Some(commitment) = commitment else {
+        return Err(AuthorityFacadeError(
+            "current authority revision has no durable V3 application proof".into(),
+        ));
+    };
+    Ok(commitment)
+}
+
+fn verify_retained_registration_descendant_v2(
+    root: &StateRootV2,
+    initial_authority: &DurableSessionAuthorityV1,
+    current_authority: &DurableSessionAuthorityV1,
+    initial_commitment: &AuthorityObjectCommitmentV1,
+) -> Result<(), AuthorityFacadeError> {
+    let mut expected = initial_authority.clone();
+    let mut expected_commitment = canonical_commitment(&authority_hash_input(&expected))?;
+    if &expected_commitment != initial_commitment
+        || current_authority.authority_revision < expected.authority_revision
+    {
+        return Err(AuthorityFacadeError(
+            "Start application authority origin is inconsistent".into(),
+        ));
+    }
+    let mut consumed = Vec::new();
+    while expected.authority_revision < current_authority.authority_revision {
+        let candidates = root
+            .retained_worker_registration_journal
+            .iter()
+            .filter(|(_, registration)| {
+                registration.orchestration_session_id == expected.orchestration_session_id
+                    && registration.authority_revision_before == expected.authority_revision
+                    && registration.authority_record_commitment_before == expected_commitment
+            })
+            .collect::<Vec<_>>();
+        let [(registration_key, registration)] = candidates.as_slice() else {
+            return Err(AuthorityFacadeError(
+                "current authority has no unique contiguous R0 registration ancestry".into(),
+            ));
+        };
+        if *registration_key != &registration.registration_id
+            || registration.authority_revision_after != expected.authority_revision + 1
+            || expected.current_policy_ref.as_ref() != Some(&registration.current_policy_ref)
+            || expected.world_binding.as_ref() != Some(&registration.world_binding)
+            || expected
+                .authoritative_participant_lineage
+                .contains(&registration.retained_participant_id)
+            || expected
+                .retained_worker_refs
+                .contains(&registration.retained_worker_ref)
+        {
+            return Err(AuthorityFacadeError(
+                "R0 registration ancestry link is inconsistent".into(),
+            ));
+        }
+        let request = root
+            .retained_worker_registration_request_index
+            .get(&registration.issuer_request_id)
+            .ok_or_else(|| {
+                AuthorityFacadeError("R0 registration ancestry has no request record".into())
+            })?;
+        if request.issuer_request_id != registration.issuer_request_id
+            || request.registration_id != registration.registration_id
+            || request.orchestration_session_id != registration.orchestration_session_id
+            || request.authority_revision_before != registration.authority_revision_before
+            || request.authority_record_commitment_before
+                != registration.authority_record_commitment_before
+            || request.retained_participant_id != registration.retained_participant_id
+            || request.descriptor_ref_id != registration.descriptor_ref.ref_id
+            || request.descriptor_commitment != registration.descriptor_ref.commitment
+            || request.resume_handle_ref_id != registration.resume_handle_ref.ref_id
+            || request.resume_handle_commitment != registration.resume_handle_ref.commitment
+            || request.retained_worker_ref_id != registration.retained_worker_ref.ref_id
+            || request.retained_worker_commitment != registration.retained_worker_ref.commitment
+            || request.current_policy_ref != registration.current_policy_ref
+            || request.world_binding != registration.world_binding
+            || request.registered_at != registration.registered_at
+            || !matches!(
+                &request.state,
+                super::store_schema::RetainedWorkerAuthorityRegistrationRequestStateV1::Applied {
+                    authority_revision_after,
+                    authority_record_commitment_after,
+                } if *authority_revision_after == registration.authority_revision_after
+                    && authority_record_commitment_after
+                        == &registration.authority_record_commitment_after
+            )
+        {
+            return Err(AuthorityFacadeError(
+                "R0 registration request and ancestry link disagree".into(),
+            ));
+        }
+
+        expected.authority_revision = registration.authority_revision_after;
+        expected
+            .authoritative_participant_lineage
+            .push(registration.retained_participant_id.clone());
+        expected
+            .retained_worker_refs
+            .push(registration.retained_worker_ref.clone());
+        expected.updated_at = registration.registered_at.clone();
+        let lineage_commitment = canonical_commitment(&AuthoritativeLineageHashInputV1 {
+            schema_version: 1,
+            orchestration_session_id: expected.orchestration_session_id.clone(),
+            participant_ids: expected.authoritative_participant_lineage.clone(),
+        })?;
+        if lineage_commitment != registration.authoritative_lineage_commitment_after {
+            return Err(AuthorityFacadeError(
+                "R0 registration lineage commitment is inconsistent".into(),
+            ));
+        }
+        expected_commitment = canonical_commitment(&authority_hash_input(&expected))?;
+        if expected_commitment != registration.authority_record_commitment_after {
+            return Err(AuthorityFacadeError(
+                "R0 registration authority commitment is inconsistent".into(),
+            ));
+        }
+        consumed.push(registration.registration_id.clone());
+    }
+    let session_registration_count = root
+        .retained_worker_registration_journal
+        .values()
+        .filter(|registration| {
+            registration.orchestration_session_id == expected.orchestration_session_id
+        })
+        .count();
+    if consumed.len() != session_registration_count || expected != *current_authority {
+        return Err(AuthorityFacadeError(
+            "current authority is not the exact contiguous R0 registration descendant".into(),
+        ));
+    }
+    Ok(())
 }
 
 fn validate_current_authority_proofs(root: &StateRootV1) -> Result<(), AuthorityFacadeError> {

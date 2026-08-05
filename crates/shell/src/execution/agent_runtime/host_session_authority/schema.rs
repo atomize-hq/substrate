@@ -2,6 +2,12 @@ use std::fmt;
 
 use chrono::NaiveDateTime;
 use serde::{Deserialize, Deserializer, Serialize, Serializer};
+use substrate_common::HostTransitionWorkCorrelationV1;
+
+use super::super::obligation_ledger::{
+    ObligationMaterializationCutV1, SupervisorJournalEventRefV1,
+};
+use super::super::state_store::AcceptedWorldWorkIdentityV1;
 
 #[derive(Clone, Debug, Eq, PartialEq)]
 pub(crate) struct TimestampV1(String);
@@ -116,6 +122,9 @@ pub(crate) enum AuthorityObjectKindV1 {
     LeaseToken,
     ApplicationResult,
     InputAcceptance,
+    StartupOwnershipResult,
+    ObligationSnapshot,
+    PostTurnProtocolEvent,
     PostTurnCompletion,
     TerminalHandoff,
 }
@@ -459,10 +468,193 @@ pub(crate) struct InputAcceptanceHashInputV1 {
 
 #[derive(Clone, Copy, Debug, Deserialize, Eq, PartialEq, Serialize)]
 #[serde(tag = "kind", deny_unknown_fields)]
+pub(crate) enum HostStartupTerminalReasonV1 {
+    RuntimeCreationRejected,
+    StartupFailedBeforeOwnership,
+}
+
+#[derive(Clone, Debug, Deserialize, Eq, PartialEq, Serialize)]
+#[serde(tag = "kind", content = "value", deny_unknown_fields)]
+pub(crate) enum HostStartupOwnershipProtocolEventV1 {
+    OwnershipAccepted {
+        ownership_acknowledgement_id: String,
+    },
+    RuntimeCreationRejected {
+        rejection_id: String,
+    },
+    StartupFailedBeforeOwnership {
+        failure_id: String,
+    },
+}
+
+#[derive(Clone, Debug, Deserialize, Eq, PartialEq, Serialize)]
+#[serde(tag = "kind", content = "value", deny_unknown_fields)]
+pub(crate) enum HostStartupOwnershipProtocolActorV1 {
+    TargetAuthoritativeParticipant {
+        participant_id: String,
+    },
+    LaunchApplicationClaimant {
+        claim_id: String,
+        claimant_attempt_id: String,
+    },
+}
+
+#[derive(Clone, Debug, Deserialize, Eq, PartialEq, Serialize)]
+#[serde(deny_unknown_fields)]
+pub(crate) struct HostStartupOwnershipEvidenceV1 {
+    pub(crate) schema_version: u32,
+    pub(crate) evidence_id: String,
+    pub(crate) authority_store_id: String,
+    pub(crate) orchestration_session_id: String,
+    pub(crate) intent_id: String,
+    pub(crate) claim_id: String,
+    pub(crate) claimant_attempt_id: String,
+    pub(crate) run_id: String,
+    pub(crate) application_result_ref: AuthorityObjectRefV1,
+    pub(crate) expected_authority_revision: u64,
+    pub(crate) active_authoritative_participant_id: String,
+    pub(crate) protocol_actor: HostStartupOwnershipProtocolActorV1,
+    pub(crate) protocol_event: HostStartupOwnershipProtocolEventV1,
+    pub(crate) observed_at: TimestampV1,
+}
+
+#[derive(Clone, Debug, Deserialize, Eq, PartialEq, Serialize)]
+#[serde(tag = "kind", content = "value", deny_unknown_fields)]
+pub(crate) enum StartupOwnershipOutcomeV1 {
+    Accepted,
+    TerminalReconciled {
+        reason: HostStartupTerminalReasonV1,
+        authority_revision_after: u64,
+        resulting_posture: HostSessionPostureV1,
+        authority_record_commitment: AuthorityObjectCommitmentV1,
+    },
+}
+
+#[derive(Clone, Debug, Deserialize, Eq, PartialEq, Serialize)]
+#[serde(deny_unknown_fields)]
+pub(crate) struct StartupOwnershipResultHashInputV1 {
+    pub(crate) schema_version: u32,
+    pub(crate) evidence: HostStartupOwnershipEvidenceV1,
+    pub(crate) outcome: StartupOwnershipOutcomeV1,
+    pub(crate) resolved_at: TimestampV1,
+}
+
+#[derive(Clone, Copy, Debug, Deserialize, Eq, PartialEq, Serialize)]
+#[serde(tag = "kind", deny_unknown_fields)]
+pub(crate) enum ObligationSnapshotRecordStateV1 {
+    UnresolvedAttention,
+}
+
+#[derive(Clone, Debug, Deserialize, Eq, PartialEq, Serialize)]
+#[serde(deny_unknown_fields)]
+pub(crate) struct ObligationSnapshotRecordHashInputV1 {
+    pub(crate) schema_version: u32,
+    pub(crate) authority_store_id: String,
+    pub(crate) orchestration_session_id: String,
+    pub(crate) authoritative_participant_id: String,
+    pub(crate) source_journal_event: SupervisorJournalEventRefV1,
+    pub(crate) obligation_id: String,
+    pub(crate) obligation_revision: u64,
+    pub(crate) state: ObligationSnapshotRecordStateV1,
+}
+
+#[derive(Clone, Debug, Deserialize, Eq, PartialEq, Serialize)]
+#[serde(deny_unknown_fields)]
+pub(crate) struct UnresolvedAttentionObligationSnapshotEntryV1 {
+    pub(crate) obligation_id: String,
+    pub(crate) obligation_revision: u64,
+    pub(crate) canonical_record_commitment: AuthorityObjectCommitmentV1,
+}
+
+#[derive(Clone, Copy, Debug, Deserialize, Eq, PartialEq, Serialize)]
+#[serde(tag = "kind", deny_unknown_fields)]
+pub(crate) enum ObligationAttentionDispositionV1 {
+    NoUnresolvedAttention,
+    HasUnresolvedAttention,
+}
+
+#[derive(Clone, Debug, Deserialize, Eq, PartialEq, Serialize)]
+#[serde(deny_unknown_fields)]
+pub(crate) struct ObligationSnapshotHashInputV1 {
+    pub(crate) schema_version: u32,
+    pub(crate) authority_store_id: String,
+    pub(crate) orchestration_session_id: String,
+    pub(crate) authoritative_participant_id: String,
+    pub(crate) acceptance_record_id: String,
+    pub(crate) acceptance_record_revision: u64,
+    pub(crate) stream_id: String,
+    pub(crate) accepted_work_identity: AcceptedWorldWorkIdentityV1,
+    pub(crate) host_transition_correlation: HostTransitionWorkCorrelationV1,
+    pub(crate) transition_intent_id: String,
+    pub(crate) transition_run_id: String,
+    pub(crate) authority_revision_observed: u64,
+    pub(crate) materialization_cut: ObligationMaterializationCutV1,
+    pub(crate) materialized_journal_events: Vec<SupervisorJournalEventRefV1>,
+    pub(crate) attention_disposition: ObligationAttentionDispositionV1,
+    pub(crate) unresolved_attention_obligations: Vec<UnresolvedAttentionObligationSnapshotEntryV1>,
+    pub(crate) captured_at: TimestampV1,
+}
+
+#[derive(Clone, Copy, Debug, Deserialize, Eq, PartialEq, Serialize)]
+#[serde(tag = "kind", deny_unknown_fields)]
 pub(crate) enum PostTurnCompletionOutcomeV1 {
     ResumableClean,
     TerminalClean,
     TerminalFailure,
+}
+
+#[derive(Clone, Copy, Debug, Deserialize, Eq, PartialEq, Serialize)]
+#[serde(tag = "kind", deny_unknown_fields)]
+pub(crate) enum HostPostTurnTerminalReasonV1 {
+    ResumeRuntimeCreationRejected,
+    TargetFailedBeforeInputAcceptance,
+    TargetFailedAfterInputAcceptance,
+}
+
+#[derive(Clone, Debug, Deserialize, Eq, PartialEq, Serialize)]
+#[serde(tag = "kind", content = "value", deny_unknown_fields)]
+pub(crate) enum HostPostTurnProtocolEventKindV1 {
+    ResumableClean,
+    TerminalClean,
+    TerminalFailure {
+        reason: HostPostTurnTerminalReasonV1,
+    },
+}
+
+#[derive(Clone, Debug, Deserialize, Eq, PartialEq, Serialize)]
+#[serde(tag = "kind", content = "value", deny_unknown_fields)]
+pub(crate) enum HostPostTurnProtocolActorV1 {
+    TargetAuthoritativeParticipant {
+        participant_id: String,
+    },
+    LaunchApplicationClaimant {
+        claim_id: String,
+        claimant_attempt_id: String,
+    },
+}
+
+#[derive(Clone, Debug, Deserialize, Eq, PartialEq, Serialize)]
+#[serde(deny_unknown_fields)]
+pub(crate) struct PostTurnProtocolEventHashInputV1 {
+    pub(crate) schema_version: u32,
+    pub(crate) authority_store_id: String,
+    pub(crate) orchestration_session_id: String,
+    pub(crate) intent_id: String,
+    pub(crate) claim_id: String,
+    pub(crate) claimant_attempt_id: String,
+    pub(crate) run_id: String,
+    pub(crate) authority_revision_observed: u64,
+    pub(crate) active_authoritative_participant_id: String,
+    pub(crate) acceptance_record_id: String,
+    pub(crate) acceptance_record_revision: u64,
+    pub(crate) stream_id: String,
+    pub(crate) accepted_work_identity: AcceptedWorldWorkIdentityV1,
+    pub(crate) host_transition_correlation: HostTransitionWorkCorrelationV1,
+    pub(crate) protocol_actor: HostPostTurnProtocolActorV1,
+    pub(crate) event_id: String,
+    pub(crate) event_sequence: u64,
+    pub(crate) kind: HostPostTurnProtocolEventKindV1,
+    pub(crate) emitted_at: TimestampV1,
 }
 
 #[derive(Clone, Debug, Deserialize, Eq, PartialEq, Serialize)]
@@ -472,6 +664,14 @@ pub(crate) struct PostTurnCompletionHashInputV1 {
     pub(crate) intent_id: String,
     pub(crate) run_id: String,
     pub(crate) authority_revision_observed: u64,
+    pub(crate) acceptance_record_id: String,
+    pub(crate) acceptance_record_revision: u64,
+    pub(crate) stream_id: String,
+    pub(crate) accepted_work_identity: AcceptedWorldWorkIdentityV1,
+    pub(crate) host_transition_correlation: HostTransitionWorkCorrelationV1,
+    pub(crate) terminal_event_id: String,
+    pub(crate) terminal_event_sequence: u64,
+    pub(crate) protocol_event_ref: AuthorityObjectRefV1,
     pub(crate) outcome: PostTurnCompletionOutcomeV1,
     pub(crate) completed_at: TimestampV1,
 }
@@ -496,6 +696,22 @@ pub(crate) struct TerminalHandoffHashInputV1 {
     pub(crate) terminal_state: TerminalHandoffStateV1,
     pub(crate) application_result_ref: Option<AuthorityObjectRefV1>,
     pub(crate) input_acceptance_ref: Option<AuthorityObjectRefV1>,
+    pub(crate) post_turn_completion_ref: Option<AuthorityObjectRefV1>,
+    pub(crate) post_turn_application_result_ref: Option<AuthorityObjectRefV1>,
+    pub(crate) recorded_at: TimestampV1,
+}
+
+#[derive(Clone, Debug, Deserialize, Eq, PartialEq, Serialize)]
+#[serde(deny_unknown_fields)]
+pub(crate) struct TerminalHandoffHashInputV2 {
+    pub(crate) schema_version: u32,
+    pub(crate) intent_id: String,
+    pub(crate) run_id: String,
+    pub(crate) payload_commitment: AuthorityObjectCommitmentV1,
+    pub(crate) terminal_state: TerminalHandoffStateV1,
+    pub(crate) application_result_ref: Option<AuthorityObjectRefV1>,
+    pub(crate) input_acceptance_ref: Option<AuthorityObjectRefV1>,
+    pub(crate) startup_ownership_result_ref: Option<AuthorityObjectRefV1>,
     pub(crate) post_turn_completion_ref: Option<AuthorityObjectRefV1>,
     pub(crate) post_turn_application_result_ref: Option<AuthorityObjectRefV1>,
     pub(crate) recorded_at: TimestampV1,

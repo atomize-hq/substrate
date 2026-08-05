@@ -2,7 +2,9 @@ use std::collections::BTreeMap;
 use std::fmt;
 
 use serde::{Deserialize, Serialize};
+use substrate_common::HostTransitionWorkCorrelationV1;
 
+use super::super::state_store::AcceptedWorldWorkIdentityV1;
 use super::schema::{
     AuthoritativeLineageHashInputV1, AuthorityObjectCommitmentV1, AuthorityObjectKindV1,
     AuthorityObjectRefV1, CanonicalDirectoryV1, DurableSessionAuthorityHashInputV1,
@@ -88,10 +90,36 @@ pub(crate) struct StateRootV2 {
     pub(crate) object_index: BTreeMap<String, AuthorityObjectIndexEntryV1>,
 }
 
+#[derive(Clone, Debug, Deserialize, Eq, PartialEq, Serialize)]
+#[serde(deny_unknown_fields)]
+pub(crate) struct StateRootV3 {
+    pub(crate) schema_version: u32,
+    pub(crate) authority_store_id: String,
+    pub(crate) bootstrap_home: CanonicalDirectoryV1,
+    pub(crate) root_revision: u64,
+    pub(crate) active_commitment_key_id: String,
+    pub(crate) commitment_key_registry: BTreeMap<String, AuthorityStoreCommitmentKeyV1>,
+    pub(crate) greenfield_namespace_certificate: GreenfieldNamespaceCertificateV1,
+    pub(crate) session_namespace_map: BTreeMap<String, SessionNamespaceRecordV1>,
+    pub(crate) transition_intent_map: BTreeMap<String, HostSessionTransitionIntentV2>,
+    pub(crate) issuer_request_index: BTreeMap<String, IssuerRequestIndexEntryV1>,
+    pub(crate) application_journal: BTreeMap<String, HostSessionTransitionApplicationJournalV2>,
+    pub(crate) retained_worker_registration_request_index:
+        BTreeMap<String, RetainedWorkerAuthorityRegistrationRequestV1>,
+    pub(crate) retained_worker_registration_journal:
+        BTreeMap<String, RetainedWorkerAuthorityRegistrationV1>,
+    pub(crate) successor_transition_intent_map: BTreeMap<String, HostSessionTransitionIntentV3>,
+    pub(crate) successor_issuer_request_index: BTreeMap<String, IssuerRequestIndexEntryV1>,
+    pub(crate) successor_application_journal:
+        BTreeMap<String, HostSessionTransitionApplicationJournalV3>,
+    pub(crate) object_index: BTreeMap<String, AuthorityObjectIndexEntryV1>,
+}
+
 #[derive(Clone, Debug, Eq, PartialEq)]
 pub(crate) enum VersionedStateRoot {
     V1(StateRootV1),
     V2(StateRootV2),
+    V3(StateRootV3),
 }
 
 impl VersionedStateRoot {
@@ -112,6 +140,9 @@ impl VersionedStateRoot {
             2 => super::canonical_json::from_slice(bytes)
                 .map(Self::V2)
                 .map_err(|_| StoreSchemaError("invalid strict StateRootV2")),
+            3 => super::canonical_json::from_slice(bytes)
+                .map(Self::V3)
+                .map_err(|_| StoreSchemaError("invalid strict StateRootV3")),
             _ => Err(StoreSchemaError(
                 "unsupported authority root schema version",
             )),
@@ -124,6 +155,7 @@ impl VersionedStateRoot {
         match self {
             Self::V1(root) => super::canonical_json::to_vec(root),
             Self::V2(root) => super::canonical_json::to_vec(root),
+            Self::V3(root) => super::canonical_json::to_vec(root),
         }
     }
 
@@ -131,6 +163,7 @@ impl VersionedStateRoot {
         match self {
             Self::V1(root) => root.validate(),
             Self::V2(root) => root.validate(),
+            Self::V3(root) => root.validate(),
         }
     }
 
@@ -138,6 +171,7 @@ impl VersionedStateRoot {
         match self {
             Self::V1(root) => root.root_revision,
             Self::V2(root) => root.root_revision,
+            Self::V3(root) => root.root_revision,
         }
     }
 
@@ -145,6 +179,7 @@ impl VersionedStateRoot {
         match self {
             Self::V1(root) => &root.authority_store_id,
             Self::V2(root) => &root.authority_store_id,
+            Self::V3(root) => &root.authority_store_id,
         }
     }
 
@@ -152,6 +187,7 @@ impl VersionedStateRoot {
         match self {
             Self::V1(root) => &root.bootstrap_home,
             Self::V2(root) => &root.bootstrap_home,
+            Self::V3(root) => &root.bootstrap_home,
         }
     }
 
@@ -159,6 +195,7 @@ impl VersionedStateRoot {
         match self {
             Self::V1(root) => &root.greenfield_namespace_certificate,
             Self::V2(root) => &root.greenfield_namespace_certificate,
+            Self::V3(root) => &root.greenfield_namespace_certificate,
         }
     }
 
@@ -166,6 +203,7 @@ impl VersionedStateRoot {
         match self {
             Self::V1(root) => &root.active_commitment_key_id,
             Self::V2(root) => &root.active_commitment_key_id,
+            Self::V3(root) => &root.active_commitment_key_id,
         }
     }
 
@@ -173,6 +211,7 @@ impl VersionedStateRoot {
         match self {
             Self::V1(root) => &mut root.active_commitment_key_id,
             Self::V2(root) => &mut root.active_commitment_key_id,
+            Self::V3(root) => &mut root.active_commitment_key_id,
         }
     }
 
@@ -182,6 +221,7 @@ impl VersionedStateRoot {
         match self {
             Self::V1(root) => &root.commitment_key_registry,
             Self::V2(root) => &root.commitment_key_registry,
+            Self::V3(root) => &root.commitment_key_registry,
         }
     }
 
@@ -191,6 +231,7 @@ impl VersionedStateRoot {
         match self {
             Self::V1(root) => &mut root.commitment_key_registry,
             Self::V2(root) => &mut root.commitment_key_registry,
+            Self::V3(root) => &mut root.commitment_key_registry,
         }
     }
 
@@ -198,6 +239,7 @@ impl VersionedStateRoot {
         match self {
             Self::V1(root) => root.root_revision = revision,
             Self::V2(root) => root.root_revision = revision,
+            Self::V3(root) => root.root_revision = revision,
         }
     }
 }
@@ -331,6 +373,28 @@ pub(crate) struct HostSessionTransitionApplicationJournalV2 {
     pub(crate) initial_application: InitialTransitionApplicationJournalV1,
     pub(crate) startup_terminal_application: Option<StartupOwnershipTerminalApplicationJournalV1>,
     pub(crate) post_turn_application: Option<PostTurnApplicationJournalV1>,
+}
+
+#[derive(Clone, Debug, Deserialize, Eq, PartialEq, Serialize)]
+#[serde(deny_unknown_fields)]
+pub(crate) struct PostTurnApplicationJournalV2 {
+    pub(crate) completion_ref: AuthorityObjectRefV1,
+    pub(crate) obligation_snapshot_ref: Option<AuthorityObjectRefV1>,
+    pub(crate) authority_revision_before: u64,
+    pub(crate) authority_revision_after: u64,
+    pub(crate) authority_record_commitment: AuthorityObjectCommitmentV1,
+    pub(crate) application_result_ref: AuthorityObjectRefV1,
+    pub(crate) applied_at: TimestampV1,
+}
+
+#[derive(Clone, Debug, Deserialize, Eq, PartialEq, Serialize)]
+#[serde(deny_unknown_fields)]
+pub(crate) struct HostSessionTransitionApplicationJournalV3 {
+    pub(crate) schema_version: u32,
+    pub(crate) intent_id: String,
+    pub(crate) initial_application: InitialTransitionApplicationJournalV1,
+    pub(crate) startup_terminal_application: Option<StartupOwnershipTerminalApplicationJournalV1>,
+    pub(crate) post_turn_application: Option<PostTurnApplicationJournalV2>,
 }
 
 #[derive(Clone, Debug, Deserialize, Eq, PartialEq, Serialize)]
@@ -473,6 +537,40 @@ pub(crate) struct HostSessionTransitionIntentV2 {
 }
 
 #[derive(Clone, Debug, Deserialize, Eq, PartialEq, Serialize)]
+#[serde(deny_unknown_fields)]
+pub(crate) struct HostSessionTransitionIntentV3 {
+    pub(crate) schema_version: u32,
+    pub(crate) intent_id: String,
+    pub(crate) issuer_request_id: String,
+    pub(crate) intent_revision: u64,
+    pub(crate) mode: HostSessionTransitionModeV1,
+    pub(crate) authority_precondition: HostSessionAuthorityPreconditionV1,
+    pub(crate) orchestration_session_id: String,
+    pub(crate) shell_trace_session_id: String,
+    pub(crate) caller: HostSessionTransitionCallerV1,
+    pub(crate) source_authoritative_participant_id: Option<String>,
+    pub(crate) target_authoritative_participant_id: String,
+    pub(crate) target_participant_lease_token_ref: AuthorityObjectRefV1,
+    pub(crate) run_id: String,
+    pub(crate) resulting_authoritative_lineage: Vec<String>,
+    pub(crate) workspace_binding: WorkspaceBindingV1,
+    pub(crate) world_binding: Option<WorldBindingV1>,
+    pub(crate) descriptor_ref: AuthorityObjectRefV1,
+    pub(crate) host_attach_contract_ref: AuthorityObjectRefV1,
+    pub(crate) resume_handle_ref: Option<AuthorityObjectRefV1>,
+    pub(crate) transition_input_ref: Option<AuthorityObjectRefV1>,
+    pub(crate) post_turn_disposition: Option<HostPostTurnDispositionV1>,
+    pub(crate) transport_payload_ref: AuthorityObjectRefV1,
+    pub(crate) payload_commitment: AuthorityObjectCommitmentV1,
+    pub(crate) issued_at: TimestampV1,
+    pub(crate) expires_at: TimestampV1,
+    pub(crate) state: HostSessionTransitionIntentStateV3,
+    pub(crate) input_handoff: HostSessionTransitionInputHandoffV1,
+    pub(crate) transport_payload_state: HostSessionTransitionTransportPayloadStateV1,
+    pub(crate) updated_at: TimestampV1,
+}
+
+#[derive(Clone, Debug, Deserialize, Eq, PartialEq, Serialize)]
 #[serde(tag = "kind", content = "value", deny_unknown_fields)]
 pub(crate) enum HostSessionTransitionIntentStateV2 {
     Issued,
@@ -494,6 +592,41 @@ pub(crate) enum HostSessionTransitionIntentStateV2 {
         application_result_ref: AuthorityObjectRefV1,
         startup_ownership: Box<HostSessionStartupOwnershipApplicationV1>,
         post_turn: Box<HostSessionPostTurnApplicationV1>,
+        applied_at: TimestampV1,
+    },
+    Rejected {
+        reason: HostSessionTransitionTerminalRejectionV1,
+        terminal_handoff_ref: AuthorityObjectRefV1,
+        rejected_at: TimestampV1,
+    },
+    Expired {
+        terminal_handoff_ref: AuthorityObjectRefV1,
+        expired_at: TimestampV1,
+    },
+}
+
+#[derive(Clone, Debug, Deserialize, Eq, PartialEq, Serialize)]
+#[serde(tag = "kind", content = "value", deny_unknown_fields)]
+pub(crate) enum HostSessionTransitionIntentStateV3 {
+    Issued,
+    Claimed {
+        claim_id: String,
+        claimant_attempt_id: String,
+        claim_revision: u64,
+        claimed_at: TimestampV1,
+        claim_expires_at: TimestampV1,
+    },
+    Applied {
+        claim_id: String,
+        claimant_attempt_id: String,
+        authority_revision_before: Option<u64>,
+        authority_revision_after: u64,
+        active_authoritative_participant_id: String,
+        resulting_posture: HostSessionPostureV1,
+        authority_record_commitment: AuthorityObjectCommitmentV1,
+        application_result_ref: AuthorityObjectRefV1,
+        startup_ownership: Box<HostSessionStartupOwnershipApplicationV1>,
+        post_turn: Box<HostSessionPostTurnApplicationV2>,
         applied_at: TimestampV1,
     },
     Rejected {
@@ -605,6 +738,38 @@ pub(crate) enum HostSessionPostTurnApplicationV1 {
 
 #[derive(Clone, Debug, Deserialize, Eq, PartialEq, Serialize)]
 #[serde(tag = "kind", content = "value", deny_unknown_fields)]
+pub(crate) enum HostSessionPostTurnApplicationV2 {
+    NotApplicable,
+    Pending {
+        expected_run_id: String,
+        expected_authority_revision: u64,
+    },
+    AwaitingObligationCut {
+        completion_ref: Box<AuthorityObjectRefV1>,
+        expected_run_id: String,
+        expected_authority_revision: u64,
+        acceptance_record_id: String,
+        acceptance_record_revision: u64,
+        stream_id: String,
+        accepted_work_identity: AcceptedWorldWorkIdentityV1,
+        host_transition_correlation: Box<HostTransitionWorkCorrelationV1>,
+        required_terminal_event_id: String,
+        required_terminal_event_sequence: u64,
+        recorded_at: TimestampV1,
+    },
+    Applied {
+        completion_ref: Box<AuthorityObjectRefV1>,
+        obligation_snapshot_ref: Option<Box<AuthorityObjectRefV1>>,
+        authority_revision_before: u64,
+        authority_revision_after: u64,
+        resulting_posture: HostSessionPostureV1,
+        application_result_ref: Box<AuthorityObjectRefV1>,
+        applied_at: TimestampV1,
+    },
+}
+
+#[derive(Clone, Debug, Deserialize, Eq, PartialEq, Serialize)]
+#[serde(tag = "kind", content = "value", deny_unknown_fields)]
 pub(crate) enum HostSessionTransitionInputHandoffV1 {
     NotApplicable,
     Pending {
@@ -648,6 +813,13 @@ impl fmt::Display for StoreSchemaError {
 }
 
 impl std::error::Error for StoreSchemaError {}
+
+#[derive(Clone, Debug, Eq, PartialEq)]
+struct ReconstructedAuthorityStateV1 {
+    authority: DurableSessionAuthorityV1,
+    authority_record_commitment: AuthorityObjectCommitmentV1,
+    authoritative_lineage_commitment: AuthorityObjectCommitmentV1,
+}
 
 impl AuthorityStoreInitializationV1 {
     pub(crate) fn validate(&self) -> Result<(), StoreSchemaError> {
@@ -770,6 +942,7 @@ impl StateRootV2 {
                 record,
                 &self.authority_store_id,
                 &self.bootstrap_home,
+                false,
             )?;
         }
         for (key, intent) in &self.transition_intent_map {
@@ -1426,6 +1599,1275 @@ impl StateRootV2 {
     }
 }
 
+impl StateRootV3 {
+    pub(crate) fn try_from_v2(root: &StateRootV2) -> Result<Self, StoreSchemaError> {
+        root.validate()?;
+        let upgraded = Self {
+            schema_version: 3,
+            authority_store_id: root.authority_store_id.clone(),
+            bootstrap_home: root.bootstrap_home.clone(),
+            root_revision: root
+                .root_revision
+                .checked_add(1)
+                .ok_or(StoreSchemaError("authority root revision overflow"))?,
+            active_commitment_key_id: root.active_commitment_key_id.clone(),
+            commitment_key_registry: root.commitment_key_registry.clone(),
+            greenfield_namespace_certificate: root.greenfield_namespace_certificate.clone(),
+            session_namespace_map: root.session_namespace_map.clone(),
+            transition_intent_map: root.transition_intent_map.clone(),
+            issuer_request_index: root.issuer_request_index.clone(),
+            application_journal: root.application_journal.clone(),
+            retained_worker_registration_request_index: root
+                .retained_worker_registration_request_index
+                .clone(),
+            retained_worker_registration_journal: root.retained_worker_registration_journal.clone(),
+            successor_transition_intent_map: BTreeMap::new(),
+            successor_issuer_request_index: BTreeMap::new(),
+            successor_application_journal: BTreeMap::new(),
+            object_index: root.object_index.clone(),
+        };
+        upgraded.validate()?;
+        Ok(upgraded)
+    }
+
+    pub(crate) fn validate_greenfield(&self) -> Result<(), StoreSchemaError> {
+        self.validate()?;
+        if !self.session_namespace_map.is_empty()
+            || !self.transition_intent_map.is_empty()
+            || !self.issuer_request_index.is_empty()
+            || !self.application_journal.is_empty()
+            || !self.retained_worker_registration_request_index.is_empty()
+            || !self.retained_worker_registration_journal.is_empty()
+            || !self.successor_transition_intent_map.is_empty()
+            || !self.successor_issuer_request_index.is_empty()
+            || !self.successor_application_journal.is_empty()
+            || !self.object_index.is_empty()
+        {
+            return Err(StoreSchemaError(
+                "A1.2b StateRootV3 must remain greenfield-empty",
+            ));
+        }
+        Ok(())
+    }
+
+    pub(crate) fn preserved_v2_view(&self) -> StateRootV2 {
+        StateRootV2 {
+            schema_version: 2,
+            authority_store_id: self.authority_store_id.clone(),
+            bootstrap_home: self.bootstrap_home.clone(),
+            root_revision: self.root_revision,
+            active_commitment_key_id: self.active_commitment_key_id.clone(),
+            commitment_key_registry: self.commitment_key_registry.clone(),
+            greenfield_namespace_certificate: self.greenfield_namespace_certificate.clone(),
+            session_namespace_map: self.session_namespace_map.clone(),
+            transition_intent_map: self.transition_intent_map.clone(),
+            issuer_request_index: self.issuer_request_index.clone(),
+            application_journal: self.application_journal.clone(),
+            retained_worker_registration_request_index: self
+                .retained_worker_registration_request_index
+                .clone(),
+            retained_worker_registration_journal: self.retained_worker_registration_journal.clone(),
+            object_index: self.object_index.clone(),
+        }
+    }
+
+    fn preserved_v2_validation_view(&self) -> Result<StateRootV2, StoreSchemaError> {
+        let mut preserved = self.preserved_v2_view();
+        let mut preserved_transport_refs = Vec::new();
+        for intent in preserved.transition_intent_map.values_mut() {
+            let HostSessionTransitionIntentStateV2::Applied {
+                authority_revision_after,
+                active_authoritative_participant_id,
+                startup_ownership,
+                post_turn,
+                ..
+            } = &mut intent.state
+            else {
+                continue;
+            };
+            if !matches!(
+                startup_ownership.as_ref(),
+                HostSessionStartupOwnershipApplicationV1::Pending { .. }
+            ) {
+                *startup_ownership = Box::new(HostSessionStartupOwnershipApplicationV1::Pending {
+                    expected_run_id: intent.run_id.clone(),
+                    expected_authority_revision: *authority_revision_after,
+                    expected_active_authoritative_participant_id:
+                        active_authoritative_participant_id.clone(),
+                });
+            }
+            *post_turn = Box::new(HostSessionPostTurnApplicationV1::NotApplicable);
+            if let (
+                Some(reference),
+                HostSessionTransitionInputHandoffV1::TerminalWithoutAcceptance { .. },
+            ) = (&intent.transition_input_ref, &intent.input_handoff)
+            {
+                intent.input_handoff = HostSessionTransitionInputHandoffV1::Pending {
+                    input_ref: reference.clone(),
+                    run_id: intent.run_id.clone(),
+                };
+            }
+            intent.transport_payload_state = HostSessionTransitionTransportPayloadStateV1::Retained;
+            preserved_transport_refs.push(intent.transport_payload_ref.ref_id.clone());
+        }
+        for ref_id in preserved_transport_refs {
+            if let Some(entry) = preserved.object_index.get_mut(&ref_id) {
+                entry.storage_state = AuthorityObjectStorageStateV1::Present;
+            }
+        }
+        for journal in preserved.application_journal.values_mut() {
+            journal.startup_terminal_application = None;
+            journal.post_turn_application = None;
+        }
+        for (session_id, record) in &mut preserved.session_namespace_map {
+            if let SessionNamespaceRecordV1::Authority(authority) = record {
+                if self.has_any_successor_transition(session_id)
+                    || authority.authority_revision != 1
+                    || authority.lifecycle_posture != HostSessionPostureV1::ActiveAttached
+                {
+                    let history = self.reconstruct_v2_authority_history(authority.as_ref())?;
+                    let reconstructed = history
+                        .last_key_value()
+                        .map(|(_, state)| state.authority.clone())
+                        .ok_or(StoreSchemaError(
+                            "V3 preserved V2 authority history is empty",
+                        ))?;
+                    **authority = reconstructed;
+                }
+                authority.internal_resume_handle_refs.clear();
+            }
+        }
+        preserved
+            .object_index
+            .retain(|_, entry| entry.object_schema_version == SCHEMA_VERSION);
+        Ok(preserved)
+    }
+
+    pub(crate) fn validate(&self) -> Result<(), StoreSchemaError> {
+        if self.schema_version != 3 {
+            return Err(StoreSchemaError("StateRootV3 requires schema version 3"));
+        }
+        if self.root_revision < 3 {
+            return Err(StoreSchemaError("V3 root revision must be at least three"));
+        }
+        let preserved = self.preserved_v2_validation_view()?;
+        preserved.validate()?;
+        let mut successor_histories = BTreeMap::new();
+        for (key, record) in &self.session_namespace_map {
+            if key != record.orchestration_session_id() {
+                return Err(StoreSchemaError("V3 session namespace map key mismatch"));
+            }
+            validate_namespace_record_identity(
+                record,
+                &self.authority_store_id,
+                &self.bootstrap_home,
+                true,
+            )?;
+            if let SessionNamespaceRecordV1::Authority(authority) = record {
+                let history = if self.has_any_successor_transition(key) {
+                    let history =
+                        self.reconstruct_successor_authority_history(authority.as_ref())?;
+                    let reconstructed = history
+                        .last_key_value()
+                        .map(|(_, state)| &state.authority)
+                        .ok_or(StoreSchemaError("V3 successor authority history is empty"))?;
+                    if reconstructed != authority.as_ref() {
+                        return Err(StoreSchemaError(
+                            "current V3 authority is not the exact reconstructed successor state",
+                        ));
+                    }
+                    history
+                } else {
+                    let history =
+                        self.reconstruct_v2_runtime_authority_history(authority.as_ref())?;
+                    let reconstructed = history
+                        .last_key_value()
+                        .map(|(_, state)| &state.authority)
+                        .ok_or(StoreSchemaError("V3 runtime V2 history is empty"))?;
+                    if reconstructed != authority.as_ref() {
+                        return Err(StoreSchemaError(
+                            "current V3 authority is not the exact reconstructed V2 runtime state",
+                        ));
+                    }
+                    history
+                };
+                successor_histories.insert(key.clone(), history);
+            }
+        }
+        for (key, entry) in &self.object_index {
+            require_version(entry.schema_version)?;
+            validate_ref_id(&entry.ref_id)
+                .map_err(|_| StoreSchemaError("invalid V3 object index ref ID"))?;
+            if key != &entry.ref_id
+                || !v3_object_schema_version_allowed(entry.object_kind, entry.object_schema_version)
+            {
+                return Err(StoreSchemaError("V3 object index entry mismatch"));
+            }
+            if entry.object_kind != AuthorityObjectKindV1::TransitionTransportPayload
+                && entry.storage_state != AuthorityObjectStorageStateV1::Present
+            {
+                return Err(StoreSchemaError(
+                    "only V3 transport payload objects may be released",
+                ));
+            }
+        }
+        for (key, intent) in &self.successor_transition_intent_map {
+            if key != &intent.intent_id || intent.schema_version != 3 {
+                return Err(StoreSchemaError("V3 successor intent map entry mismatch"));
+            }
+            if self.transition_intent_map.contains_key(key) {
+                return Err(StoreSchemaError(
+                    "V3 successor intent identity collides with preserved Start intent",
+                ));
+            }
+            let history = successor_histories
+                .get(&intent.orchestration_session_id)
+                .ok_or(StoreSchemaError(
+                    "V3 successor session has no reconstructed authority history",
+                ))?;
+            self.validate_successor_intent_relations(intent, history)?;
+        }
+        for (key, entry) in &self.successor_issuer_request_index {
+            if key != &entry.issuer_request_id {
+                return Err(StoreSchemaError(
+                    "V3 successor issuer request index key mismatch",
+                ));
+            }
+            if self.issuer_request_index.contains_key(key) {
+                return Err(StoreSchemaError(
+                    "V3 successor issuer request identity collides with preserved Start intent",
+                ));
+            }
+            require_version(entry.schema_version)?;
+            let intent = self
+                .successor_transition_intent_map
+                .get(&entry.intent_id)
+                .ok_or(StoreSchemaError(
+                    "V3 successor issuer request references no intent",
+                ))?;
+            if intent.issuer_request_id != entry.issuer_request_id
+                || intent.orchestration_session_id != entry.orchestration_session_id
+                || intent.payload_commitment != entry.payload_commitment
+            {
+                return Err(StoreSchemaError(
+                    "V3 successor issuer request and intent disagree",
+                ));
+            }
+        }
+        for (key, journal) in &self.successor_application_journal {
+            if key != &journal.intent_id || journal.schema_version != 3 {
+                return Err(StoreSchemaError(
+                    "V3 successor application journal entry mismatch",
+                ));
+            }
+            let intent = self
+                .successor_transition_intent_map
+                .get(&journal.intent_id)
+                .ok_or(StoreSchemaError(
+                    "V3 successor application journal references no intent",
+                ))?;
+            self.validate_successor_application_journal(intent, journal)?;
+        }
+        if self.successor_issuer_request_index.len() != self.successor_transition_intent_map.len() {
+            return Err(StoreSchemaError(
+                "every V3 successor intent requires one issuer index entry",
+            ));
+        }
+        Ok(())
+    }
+
+    fn validate_successor_intent_relations(
+        &self,
+        intent: &HostSessionTransitionIntentV3,
+        history: &BTreeMap<u64, ReconstructedAuthorityStateV1>,
+    ) -> Result<(), StoreSchemaError> {
+        required(&intent.intent_id)?;
+        required(&intent.issuer_request_id)?;
+        required(&intent.orchestration_session_id)?;
+        required(&intent.shell_trace_session_id)?;
+        required(&intent.target_authoritative_participant_id)?;
+        required(&intent.run_id)?;
+        if intent.intent_revision == 0
+            || intent.workspace_binding.authority_store_id != self.authority_store_id
+            || intent.workspace_binding.authority_store_root != self.bootstrap_home
+            || intent.issued_at.as_str() >= intent.expires_at.as_str()
+        {
+            return Err(StoreSchemaError("V3 successor intent binding mismatch"));
+        }
+        let (
+            authority_revision,
+            expected_authority_record_commitment,
+            active_authoritative_participant_id,
+            authoritative_lineage_commitment,
+            lifecycle_posture,
+        ) = match &intent.authority_precondition {
+            HostSessionAuthorityPreconditionV1::ExpectedRevision {
+                authority_revision,
+                authority_record_commitment,
+                active_authoritative_participant_id,
+                authoritative_lineage_commitment,
+                lifecycle_posture,
+            } => (
+                *authority_revision,
+                authority_record_commitment,
+                active_authoritative_participant_id,
+                authoritative_lineage_commitment,
+                *lifecycle_posture,
+            ),
+            HostSessionAuthorityPreconditionV1::ExpectedAbsent => {
+                return Err(StoreSchemaError(
+                    "V3 successor intent requires ExpectedRevision",
+                ))
+            }
+        };
+        if authority_revision == 0 {
+            return Err(StoreSchemaError(
+                "V3 successor authority precondition is invalid",
+            ));
+        }
+        validate_registration_commitment(expected_authority_record_commitment)?;
+        validate_registration_commitment(authoritative_lineage_commitment)?;
+        required(active_authoritative_participant_id)?;
+        let precondition_state = history.get(&authority_revision).ok_or(StoreSchemaError(
+            "V3 successor authority precondition has no reconstructed state",
+        ))?;
+        let precondition_authority = &precondition_state.authority;
+        let mut expected_successor_lineage = precondition_authority
+            .authoritative_participant_lineage
+            .clone();
+        expected_successor_lineage.push(intent.target_authoritative_participant_id.clone());
+        if !matches!(
+            intent.mode,
+            HostSessionTransitionModeV1::Attach | HostSessionTransitionModeV1::ResumeOneTurn
+        ) || !matches!(
+            lifecycle_posture,
+            HostSessionPostureV1::ParkedResumable
+                | HostSessionPostureV1::DetachedReconciled
+                | HostSessionPostureV1::AwaitingAttention
+                | HostSessionPostureV1::StaleRecoverable
+        ) || intent.source_authoritative_participant_id.as_deref()
+            != Some(active_authoritative_participant_id.as_str())
+            || intent.resulting_authoritative_lineage != expected_successor_lineage
+            || intent
+                .resulting_authoritative_lineage
+                .iter()
+                .collect::<std::collections::BTreeSet<_>>()
+                .len()
+                != intent.resulting_authoritative_lineage.len()
+            || active_authoritative_participant_id == &intent.target_authoritative_participant_id
+            || intent.target_participant_lease_token_ref.object_kind
+                != AuthorityObjectKindV1::LeaseToken
+            || intent.descriptor_ref.object_kind != AuthorityObjectKindV1::AgentDescriptor
+            || intent.host_attach_contract_ref.object_kind
+                != AuthorityObjectKindV1::HostAttachContract
+            || intent.transport_payload_ref.object_kind
+                != AuthorityObjectKindV1::TransitionTransportPayload
+            || precondition_authority.orchestration_session_id != intent.orchestration_session_id
+            || precondition_authority.shell_trace_session_id != intent.shell_trace_session_id
+            || precondition_authority.workspace_binding != intent.workspace_binding
+            || precondition_authority.world_binding != intent.world_binding
+            || precondition_authority.host_attach_contract_ref.as_ref()
+                != Some(&intent.host_attach_contract_ref)
+        {
+            return Err(StoreSchemaError("strict V3 successor intent is invalid"));
+        }
+        if precondition_state.authority_record_commitment != *expected_authority_record_commitment
+            || precondition_state.authoritative_lineage_commitment
+                != *authoritative_lineage_commitment
+            || precondition_authority
+                .active_authoritative_participant_id
+                .as_deref()
+                != Some(active_authoritative_participant_id.as_str())
+            || precondition_authority.lifecycle_posture != lifecycle_posture
+        {
+            return Err(StoreSchemaError(
+                "V3 successor authority precondition does not match reconstructed history",
+            ));
+        }
+        match intent.mode {
+            HostSessionTransitionModeV1::Attach => {
+                if intent.transition_input_ref.is_some()
+                    || !matches!(
+                        intent.input_handoff,
+                        HostSessionTransitionInputHandoffV1::NotApplicable
+                    )
+                    || intent.post_turn_disposition.is_some()
+                {
+                    return Err(StoreSchemaError(
+                        "V3 Attach input or post-turn state is invalid",
+                    ));
+                }
+            }
+            HostSessionTransitionModeV1::ResumeOneTurn => {
+                let Some(reference) = intent.transition_input_ref.as_ref() else {
+                    return Err(StoreSchemaError(
+                        "V3 Resume requires a transition input ref",
+                    ));
+                };
+                if reference.object_kind != AuthorityObjectKindV1::TransitionInput {
+                    return Err(StoreSchemaError("V3 Resume input ref kind is invalid"));
+                }
+                if intent.resume_handle_ref.is_none()
+                    || intent.post_turn_disposition
+                        != Some(HostPostTurnDispositionV1::ReconcileToAttentionParkOrTerminal)
+                {
+                    return Err(StoreSchemaError(
+                        "V3 Resume handle or post-turn disposition is invalid",
+                    ));
+                }
+                match &intent.input_handoff {
+                    HostSessionTransitionInputHandoffV1::Pending { input_ref, run_id }
+                    | HostSessionTransitionInputHandoffV1::Accepted {
+                        input_ref, run_id, ..
+                    }
+                    | HostSessionTransitionInputHandoffV1::TerminalWithoutAcceptance {
+                        input_ref,
+                        run_id,
+                        ..
+                    } if input_ref == reference && run_id == &intent.run_id => {}
+                    _ => return Err(StoreSchemaError("V3 Resume input handoff is inconsistent")),
+                }
+            }
+            HostSessionTransitionModeV1::Start => {
+                return Err(StoreSchemaError("V3 successor mode cannot be Start"))
+            }
+        }
+        let issuer = self
+            .successor_issuer_request_index
+            .get(&intent.issuer_request_id)
+            .ok_or(StoreSchemaError(
+                "V3 successor intent has no issuer request entry",
+            ))?;
+        if issuer.intent_id != intent.intent_id
+            || issuer.orchestration_session_id != intent.orchestration_session_id
+            || issuer.payload_commitment != intent.payload_commitment
+        {
+            return Err(StoreSchemaError(
+                "V3 successor intent and issuer request disagree",
+            ));
+        }
+        match &intent.state {
+            HostSessionTransitionIntentStateV3::Issued => {
+                if intent.intent_revision != 1
+                    || self
+                        .successor_application_journal
+                        .contains_key(&intent.intent_id)
+                {
+                    return Err(StoreSchemaError("issued V3 successor state is invalid"));
+                }
+            }
+            HostSessionTransitionIntentStateV3::Claimed {
+                claim_id,
+                claimant_attempt_id,
+                claim_revision,
+                claimed_at,
+                claim_expires_at,
+            } => {
+                required(claim_id)?;
+                required(claimant_attempt_id)?;
+                if *claim_revision < 2
+                    || *claim_revision != intent.intent_revision
+                    || claimed_at.as_str() >= claim_expires_at.as_str()
+                    || self
+                        .successor_application_journal
+                        .contains_key(&intent.intent_id)
+                {
+                    return Err(StoreSchemaError("claimed V3 successor state is invalid"));
+                }
+            }
+            HostSessionTransitionIntentStateV3::Applied {
+                claim_id,
+                claimant_attempt_id,
+                authority_revision_before,
+                authority_revision_after,
+                active_authoritative_participant_id,
+                resulting_posture,
+                authority_record_commitment,
+                application_result_ref,
+                startup_ownership,
+                post_turn,
+                ..
+            } => {
+                required(claim_id)?;
+                required(claimant_attempt_id)?;
+                if intent.intent_revision < 3
+                    || authority_revision_before != &Some(authority_revision)
+                    || *authority_revision_after
+                        != authority_revision
+                            .checked_add(1)
+                            .ok_or(StoreSchemaError("successor authority revision overflow"))?
+                    || active_authoritative_participant_id
+                        != &intent.target_authoritative_participant_id
+                    || *resulting_posture != HostSessionPostureV1::ActiveAttached
+                    || application_result_ref.object_kind
+                        != AuthorityObjectKindV1::ApplicationResult
+                {
+                    return Err(StoreSchemaError("applied V3 successor result is invalid"));
+                }
+                validate_registration_commitment(authority_record_commitment)?;
+                let applied_state =
+                    history
+                        .get(authority_revision_after)
+                        .ok_or(StoreSchemaError(
+                            "applied V3 successor has no reconstructed authority state",
+                        ))?;
+                match intent.mode {
+                    HostSessionTransitionModeV1::Attach => {
+                        if matches!(
+                            startup_ownership.as_ref(),
+                            HostSessionStartupOwnershipApplicationV1::NotApplicable
+                        ) || post_turn.as_ref()
+                            != &HostSessionPostTurnApplicationV2::NotApplicable
+                        {
+                            return Err(StoreSchemaError(
+                                "applied V3 Attach startup or post-turn state is invalid",
+                            ));
+                        }
+                    }
+                    HostSessionTransitionModeV1::ResumeOneTurn => {
+                        if startup_ownership.as_ref()
+                            != &HostSessionStartupOwnershipApplicationV1::NotApplicable
+                            || matches!(
+                                post_turn.as_ref(),
+                                HostSessionPostTurnApplicationV2::NotApplicable
+                            )
+                        {
+                            return Err(StoreSchemaError(
+                                "applied V3 Resume startup or post-turn state is invalid",
+                            ));
+                        }
+                    }
+                    HostSessionTransitionModeV1::Start => unreachable!(),
+                }
+                let (expected_current_revision, expected_current_posture) = match intent.mode {
+                    HostSessionTransitionModeV1::Attach => match startup_ownership.as_ref() {
+                        HostSessionStartupOwnershipApplicationV1::Pending { .. }
+                        | HostSessionStartupOwnershipApplicationV1::Accepted { .. } => (
+                            *authority_revision_after,
+                            HostSessionPostureV1::ActiveAttached,
+                        ),
+                        HostSessionStartupOwnershipApplicationV1::TerminalReconciled {
+                            authority_revision_after,
+                            resulting_posture,
+                            ..
+                        } => (*authority_revision_after, *resulting_posture),
+                        HostSessionStartupOwnershipApplicationV1::NotApplicable => unreachable!(),
+                    },
+                    HostSessionTransitionModeV1::ResumeOneTurn => match post_turn.as_ref() {
+                        HostSessionPostTurnApplicationV2::Pending { .. }
+                        | HostSessionPostTurnApplicationV2::AwaitingObligationCut { .. } => (
+                            *authority_revision_after,
+                            HostSessionPostureV1::ActiveAttached,
+                        ),
+                        HostSessionPostTurnApplicationV2::Applied {
+                            authority_revision_after,
+                            resulting_posture,
+                            ..
+                        } => (*authority_revision_after, *resulting_posture),
+                        HostSessionPostTurnApplicationV2::NotApplicable => unreachable!(),
+                    },
+                    HostSessionTransitionModeV1::Start => unreachable!(),
+                };
+                if applied_state.authority_record_commitment != *authority_record_commitment
+                    || applied_state.authority.authority_revision != *authority_revision_after
+                    || applied_state.authority.lifecycle_posture
+                        != HostSessionPostureV1::ActiveAttached
+                    || applied_state
+                        .authority
+                        .active_authoritative_participant_id
+                        .as_deref()
+                        != Some(intent.target_authoritative_participant_id.as_str())
+                    || applied_state
+                        .authority
+                        .authoritative_participant_lineage
+                        .last()
+                        != Some(&intent.target_authoritative_participant_id)
+                    || !applied_state
+                        .authority
+                        .authoritative_participant_lineage
+                        .iter()
+                        .any(|participant| participant == active_authoritative_participant_id)
+                    || intent.resume_handle_ref.as_ref().is_some_and(|reference| {
+                        !applied_state
+                            .authority
+                            .internal_resume_handle_refs
+                            .iter()
+                            .any(|current| current == reference)
+                    })
+                {
+                    return Err(StoreSchemaError(
+                        "applied V3 successor authority does not match intent state",
+                    ));
+                }
+                let journal = self
+                    .successor_application_journal
+                    .get(&intent.intent_id)
+                    .ok_or(StoreSchemaError(
+                        "applied V3 successor has no application journal",
+                    ))?;
+                self.validate_successor_application_journal(intent, journal)?;
+                let current_state =
+                    history
+                        .get(&expected_current_revision)
+                        .ok_or(StoreSchemaError(
+                            "applied V3 successor phase has no reconstructed authority state",
+                        ))?;
+                if current_state.authority.lifecycle_posture != expected_current_posture {
+                    return Err(StoreSchemaError(
+                        "applied V3 successor terminal phase conflicts with reconstructed history",
+                    ));
+                }
+            }
+            HostSessionTransitionIntentStateV3::Rejected {
+                terminal_handoff_ref,
+                ..
+            }
+            | HostSessionTransitionIntentStateV3::Expired {
+                terminal_handoff_ref,
+                ..
+            } => {
+                if terminal_handoff_ref.object_kind != AuthorityObjectKindV1::TerminalHandoff
+                    || self
+                        .successor_application_journal
+                        .contains_key(&intent.intent_id)
+                {
+                    return Err(StoreSchemaError("terminal V3 successor state is invalid"));
+                }
+            }
+        }
+        let transport_index = self
+            .object_index
+            .get(&intent.transport_payload_ref.ref_id)
+            .ok_or(StoreSchemaError(
+                "V3 successor transport payload has no object index entry",
+            ))?;
+        if transport_index.object_kind != AuthorityObjectKindV1::TransitionTransportPayload
+            || !transport_states_match(
+                &intent.transport_payload_state,
+                &transport_index.storage_state,
+            )
+        {
+            return Err(StoreSchemaError(
+                "V3 successor transport parent and object index disagree",
+            ));
+        }
+        Ok(())
+    }
+
+    fn validate_successor_application_journal(
+        &self,
+        intent: &HostSessionTransitionIntentV3,
+        journal: &HostSessionTransitionApplicationJournalV3,
+    ) -> Result<(), StoreSchemaError> {
+        let HostSessionTransitionIntentStateV3::Applied {
+            authority_revision_before,
+            authority_revision_after,
+            authority_record_commitment,
+            application_result_ref,
+            startup_ownership,
+            post_turn,
+            ..
+        } = &intent.state
+        else {
+            return Err(StoreSchemaError(
+                "non-applied V3 successor has an application journal",
+            ));
+        };
+        if journal.initial_application.authority_revision_before != *authority_revision_before
+            || journal.initial_application.authority_revision_after != *authority_revision_after
+            || journal.initial_application.authority_record_commitment
+                != *authority_record_commitment
+            || journal.initial_application.application_result_ref != *application_result_ref
+        {
+            return Err(StoreSchemaError(
+                "V3 successor initial application and journal disagree",
+            ));
+        }
+        match intent.mode {
+            HostSessionTransitionModeV1::Attach => {
+                match startup_ownership.as_ref() {
+                    HostSessionStartupOwnershipApplicationV1::Pending { .. }
+                    | HostSessionStartupOwnershipApplicationV1::Accepted { .. } => {
+                        if journal.startup_terminal_application.is_some() {
+                            return Err(StoreSchemaError(
+                                "nonterminal V3 Attach startup ownership has a terminal journal",
+                            ));
+                        }
+                    }
+                    HostSessionStartupOwnershipApplicationV1::TerminalReconciled {
+                        result_ref,
+                        evidence_id,
+                        authority_revision_before,
+                        authority_revision_after,
+                        resulting_posture,
+                        ..
+                    } => {
+                        let Some(terminal) = &journal.startup_terminal_application else {
+                            return Err(StoreSchemaError(
+                                "terminal V3 Attach startup ownership has no journal",
+                            ));
+                        };
+                        if terminal.startup_ownership_result_ref != *result_ref
+                            || terminal.evidence_id != *evidence_id
+                            || terminal.authority_revision_before != *authority_revision_before
+                            || terminal.authority_revision_after != *authority_revision_after
+                            || terminal.resulting_posture != *resulting_posture
+                        {
+                            return Err(StoreSchemaError(
+                                "V3 Attach startup terminal journal disagrees with intent state",
+                            ));
+                        }
+                    }
+                    HostSessionStartupOwnershipApplicationV1::NotApplicable => {
+                        return Err(StoreSchemaError(
+                            "V3 Attach startup ownership cannot be NotApplicable",
+                        ))
+                    }
+                }
+                if post_turn.as_ref() != &HostSessionPostTurnApplicationV2::NotApplicable
+                    || journal.post_turn_application.is_some()
+                {
+                    return Err(StoreSchemaError(
+                        "V3 Attach post-turn journal state is invalid",
+                    ));
+                }
+            }
+            HostSessionTransitionModeV1::ResumeOneTurn => {
+                if startup_ownership.as_ref()
+                    != &HostSessionStartupOwnershipApplicationV1::NotApplicable
+                    || journal.startup_terminal_application.is_some()
+                {
+                    return Err(StoreSchemaError(
+                        "V3 Resume startup journal state is invalid",
+                    ));
+                }
+                match post_turn.as_ref() {
+                    HostSessionPostTurnApplicationV2::Pending { .. }
+                    | HostSessionPostTurnApplicationV2::AwaitingObligationCut { .. } => {
+                        if journal.post_turn_application.is_some() {
+                            return Err(StoreSchemaError(
+                                "nonterminal V3 Resume post-turn has an application journal",
+                            ));
+                        }
+                    }
+                    HostSessionPostTurnApplicationV2::Applied {
+                        completion_ref,
+                        obligation_snapshot_ref,
+                        authority_revision_before,
+                        authority_revision_after,
+                        application_result_ref,
+                        ..
+                    } => {
+                        let Some(post_turn_journal) = &journal.post_turn_application else {
+                            return Err(StoreSchemaError(
+                                "applied V3 Resume post-turn has no journal",
+                            ));
+                        };
+                        if post_turn_journal.completion_ref != **completion_ref
+                            || post_turn_journal.obligation_snapshot_ref.as_ref()
+                                != obligation_snapshot_ref.as_deref()
+                            || post_turn_journal.authority_revision_before
+                                != *authority_revision_before
+                            || post_turn_journal.authority_revision_after
+                                != *authority_revision_after
+                            || post_turn_journal.application_result_ref != **application_result_ref
+                        {
+                            return Err(StoreSchemaError(
+                                "V3 Resume post-turn journal disagrees with intent state",
+                            ));
+                        }
+                    }
+                    HostSessionPostTurnApplicationV2::NotApplicable => {
+                        return Err(StoreSchemaError(
+                            "V3 Resume post-turn cannot be NotApplicable",
+                        ))
+                    }
+                }
+            }
+            HostSessionTransitionModeV1::Start => {
+                return Err(StoreSchemaError(
+                    "V3 successor journal cannot belong to Start",
+                ))
+            }
+        }
+        Ok(())
+    }
+
+    fn has_any_successor_transition(&self, orchestration_session_id: &str) -> bool {
+        self.successor_transition_intent_map
+            .values()
+            .any(|intent| intent.orchestration_session_id == orchestration_session_id)
+    }
+
+    fn reconstruct_v2_authority_history(
+        &self,
+        current_authority: &DurableSessionAuthorityV1,
+    ) -> Result<BTreeMap<u64, ReconstructedAuthorityStateV1>, StoreSchemaError> {
+        let DurableSessionAuthorityOriginV1::StartIntent {
+            intent_id,
+            issuer_request_id,
+            payload_commitment,
+        } = &current_authority.origin;
+        let intent = self
+            .transition_intent_map
+            .get(intent_id)
+            .ok_or(StoreSchemaError(
+                "V3 preserved V2 history has no origin Start intent",
+            ))?;
+        let HostSessionTransitionIntentStateV2::Applied {
+            authority_revision_before: None,
+            authority_revision_after,
+            active_authoritative_participant_id,
+            resulting_posture,
+            authority_record_commitment,
+            applied_at,
+            ..
+        } = &intent.state
+        else {
+            return Err(StoreSchemaError(
+                "V3 preserved V2 history requires an applied origin Start intent",
+            ));
+        };
+        if intent.issuer_request_id != *issuer_request_id
+            || intent.payload_commitment != *payload_commitment
+            || intent.orchestration_session_id != current_authority.orchestration_session_id
+            || *authority_revision_after != 1
+            || active_authoritative_participant_id != &intent.target_authoritative_participant_id
+            || *resulting_posture != HostSessionPostureV1::ActiveAttached
+        {
+            return Err(StoreSchemaError(
+                "V3 preserved V2 Start origin is inconsistent",
+            ));
+        }
+        let journal = self
+            .application_journal
+            .get(intent_id)
+            .ok_or(StoreSchemaError(
+                "V3 preserved V2 history has no origin Start journal",
+            ))?;
+        if journal
+            .initial_application
+            .authority_revision_before
+            .is_some()
+            || journal.initial_application.authority_revision_after != 1
+            || journal.initial_application.authority_record_commitment
+                != *authority_record_commitment
+            || journal.initial_application.applied_at != *applied_at
+        {
+            return Err(StoreSchemaError(
+                "V3 preserved V2 Start journal disagrees with its origin intent",
+            ));
+        }
+        let mut history = BTreeMap::new();
+        let initial = reconstruct_authority_state(DurableSessionAuthorityV1 {
+            schema_version: 1,
+            orchestration_session_id: current_authority.orchestration_session_id.clone(),
+            shell_trace_session_id: current_authority.shell_trace_session_id.clone(),
+            authority_revision: 1,
+            origin: current_authority.origin.clone(),
+            authoritative_participant_lineage: intent.resulting_authoritative_lineage.clone(),
+            active_authoritative_participant_id: Some(
+                intent.target_authoritative_participant_id.clone(),
+            ),
+            workspace_binding: current_authority.workspace_binding.clone(),
+            world_binding: current_authority.world_binding.clone(),
+            host_attach_contract_ref: current_authority.host_attach_contract_ref.clone(),
+            retained_worker_refs: Vec::new(),
+            internal_resume_handle_refs: Vec::new(),
+            lifecycle_posture: HostSessionPostureV1::ActiveAttached,
+            current_policy_ref: current_authority.current_policy_ref.clone(),
+            current_policy_revision: current_authority.current_policy_revision.clone(),
+            updated_at: journal.initial_application.applied_at.clone(),
+        })?;
+        if initial.authority_record_commitment
+            != journal.initial_application.authority_record_commitment
+        {
+            return Err(StoreSchemaError(
+                "V3 preserved V2 Start authority commitment is inconsistent",
+            ));
+        }
+        history.insert(initial.authority.authority_revision, initial.clone());
+        let session_registration_count = self
+            .retained_worker_registration_journal
+            .values()
+            .filter(|registration| {
+                registration.orchestration_session_id == current_authority.orchestration_session_id
+            })
+            .count();
+        let mut consumed = 0_usize;
+        let mut latest = initial;
+        while consumed < session_registration_count {
+            let candidates = self
+                .retained_worker_registration_journal
+                .values()
+                .filter(|registration| {
+                    registration.orchestration_session_id
+                        == current_authority.orchestration_session_id
+                        && registration.authority_revision_before
+                            == latest.authority.authority_revision
+                        && registration.authority_record_commitment_before
+                            == latest.authority_record_commitment
+                })
+                .collect::<Vec<_>>();
+            let [registration] = candidates.as_slice() else {
+                return Err(StoreSchemaError(
+                    "V3 preserved V2 retained authority ancestry is not uniquely contiguous",
+                ));
+            };
+            let request = self
+                .retained_worker_registration_request_index
+                .get(&registration.issuer_request_id)
+                .ok_or(StoreSchemaError(
+                    "V3 preserved V2 retained registration has no request record",
+                ))?;
+            validate_applied_registration_request(request, registration)?;
+            let next = reconstruct_authority_state(DurableSessionAuthorityV1 {
+                schema_version: latest.authority.schema_version,
+                orchestration_session_id: latest.authority.orchestration_session_id.clone(),
+                shell_trace_session_id: latest.authority.shell_trace_session_id.clone(),
+                authority_revision: registration.authority_revision_after,
+                origin: latest.authority.origin.clone(),
+                authoritative_participant_lineage: {
+                    let mut lineage = latest.authority.authoritative_participant_lineage.clone();
+                    lineage.push(registration.retained_participant_id.clone());
+                    lineage
+                },
+                active_authoritative_participant_id: latest
+                    .authority
+                    .active_authoritative_participant_id
+                    .clone(),
+                workspace_binding: latest.authority.workspace_binding.clone(),
+                world_binding: latest.authority.world_binding.clone(),
+                host_attach_contract_ref: latest.authority.host_attach_contract_ref.clone(),
+                retained_worker_refs: {
+                    let mut refs = latest.authority.retained_worker_refs.clone();
+                    refs.push(registration.retained_worker_ref.clone());
+                    refs
+                },
+                internal_resume_handle_refs: Vec::new(),
+                lifecycle_posture: latest.authority.lifecycle_posture,
+                current_policy_ref: latest.authority.current_policy_ref.clone(),
+                current_policy_revision: latest.authority.current_policy_revision.clone(),
+                updated_at: registration.registered_at.clone(),
+            })?;
+            if next.authority_record_commitment != registration.authority_record_commitment_after
+                || next.authoritative_lineage_commitment
+                    != registration.authoritative_lineage_commitment_after
+            {
+                return Err(StoreSchemaError(
+                    "V3 preserved V2 retained authority reconstruction is inconsistent",
+                ));
+            }
+            history.insert(next.authority.authority_revision, next.clone());
+            latest = next;
+            consumed += 1;
+        }
+        Ok(history)
+    }
+
+    fn reconstruct_successor_authority_history(
+        &self,
+        current_authority: &DurableSessionAuthorityV1,
+    ) -> Result<BTreeMap<u64, ReconstructedAuthorityStateV1>, StoreSchemaError> {
+        let mut history = self.reconstruct_v2_runtime_authority_history(current_authority)?;
+        let mut consumed = std::collections::BTreeSet::new();
+        loop {
+            let (latest_revision, latest_state) = history
+                .last_key_value()
+                .ok_or(StoreSchemaError("V3 successor authority history is empty"))?;
+            let candidates = self
+                .successor_transition_intent_map
+                .values()
+                .filter(|intent| {
+                    intent.orchestration_session_id == current_authority.orchestration_session_id
+                        && matches!(
+                            &intent.state,
+                            HostSessionTransitionIntentStateV3::Applied {
+                                authority_revision_before,
+                                ..
+                            } if authority_revision_before == &Some(*latest_revision)
+                        )
+                })
+                .collect::<Vec<_>>();
+            let intent = match candidates.as_slice() {
+                [] => break,
+                [intent] => *intent,
+                _ => return Err(StoreSchemaError("V3 applied successor chain is ambiguous")),
+            };
+            let journal = self
+                .successor_application_journal
+                .get(&intent.intent_id)
+                .ok_or(StoreSchemaError(
+                    "applied V3 successor has no application journal",
+                ))?;
+            let HostSessionTransitionIntentStateV3::Applied {
+                authority_revision_before,
+                authority_revision_after,
+                authority_record_commitment,
+                startup_ownership,
+                post_turn,
+                ..
+            } = &intent.state
+            else {
+                unreachable!()
+            };
+            if authority_revision_before != &Some(*latest_revision)
+                || journal.initial_application.authority_revision_before
+                    != *authority_revision_before
+                || journal.initial_application.authority_revision_after != *authority_revision_after
+                || journal.initial_application.authority_record_commitment
+                    != *authority_record_commitment
+            {
+                return Err(StoreSchemaError(
+                    "applied V3 successor journal disagrees with initial application state",
+                ));
+            }
+            let initial_state = reconstruct_successor_initial_state(
+                latest_state,
+                intent,
+                &journal.initial_application.applied_at,
+            )?;
+            if initial_state.authority_record_commitment != *authority_record_commitment {
+                return Err(StoreSchemaError(
+                    "applied V3 successor initial authority commitment is inconsistent",
+                ));
+            }
+            history.insert(
+                initial_state.authority.authority_revision,
+                initial_state.clone(),
+            );
+            match (intent.mode, startup_ownership.as_ref(), post_turn.as_ref()) {
+                (
+                    HostSessionTransitionModeV1::Attach,
+                    HostSessionStartupOwnershipApplicationV1::TerminalReconciled {
+                        authority_revision_after,
+                        resulting_posture,
+                        ..
+                    },
+                    HostSessionPostTurnApplicationV2::NotApplicable,
+                ) => {
+                    let terminal =
+                        journal
+                            .startup_terminal_application
+                            .as_ref()
+                            .ok_or(StoreSchemaError(
+                                "terminal V3 Attach startup ownership has no journal",
+                            ))?;
+                    let reconciled = reconstruct_reconciled_authority_state(
+                        &initial_state,
+                        *authority_revision_after,
+                        terminal.authority_record_commitment_after.clone(),
+                        *resulting_posture,
+                        &terminal.applied_at,
+                    )?;
+                    history.insert(reconciled.authority.authority_revision, reconciled);
+                }
+                (
+                    HostSessionTransitionModeV1::ResumeOneTurn,
+                    HostSessionStartupOwnershipApplicationV1::NotApplicable,
+                    HostSessionPostTurnApplicationV2::Applied {
+                        authority_revision_after,
+                        resulting_posture,
+                        applied_at,
+                        ..
+                    },
+                ) => {
+                    let post_turn_journal =
+                        journal
+                            .post_turn_application
+                            .as_ref()
+                            .ok_or(StoreSchemaError(
+                                "applied V3 Resume post-turn has no journal",
+                            ))?;
+                    let reconciled = reconstruct_reconciled_authority_state(
+                        &initial_state,
+                        *authority_revision_after,
+                        post_turn_journal.authority_record_commitment.clone(),
+                        *resulting_posture,
+                        applied_at,
+                    )?;
+                    history.insert(reconciled.authority.authority_revision, reconciled);
+                }
+                _ => {}
+            }
+            consumed.insert(intent.intent_id.clone());
+        }
+        let applied_count = self
+            .successor_transition_intent_map
+            .values()
+            .filter(|intent| {
+                intent.orchestration_session_id == current_authority.orchestration_session_id
+                    && matches!(
+                        intent.state,
+                        HostSessionTransitionIntentStateV3::Applied { .. }
+                    )
+            })
+            .count();
+        if consumed.len() != applied_count {
+            return Err(StoreSchemaError(
+                "V3 applied successor chain is disconnected from current authority",
+            ));
+        }
+        Ok(history)
+    }
+
+    fn reconstruct_v2_runtime_authority_history(
+        &self,
+        current_authority: &DurableSessionAuthorityV1,
+    ) -> Result<BTreeMap<u64, ReconstructedAuthorityStateV1>, StoreSchemaError> {
+        let mut history = self.reconstruct_v2_authority_history(current_authority)?;
+        let DurableSessionAuthorityOriginV1::StartIntent { intent_id, .. } =
+            &current_authority.origin;
+        let intent = self
+            .transition_intent_map
+            .get(intent_id)
+            .ok_or(StoreSchemaError(
+                "V3 runtime V2 history has no origin Start intent",
+            ))?;
+        let HostSessionTransitionIntentStateV2::Applied {
+            startup_ownership, ..
+        } = &intent.state
+        else {
+            return Err(StoreSchemaError(
+                "V3 runtime V2 history requires an applied origin Start intent",
+            ));
+        };
+        let latest = history
+            .last_key_value()
+            .map(|(_, state)| state.clone())
+            .ok_or(StoreSchemaError("V3 runtime V2 history is empty"))?;
+        let journal = self
+            .application_journal
+            .get(intent_id)
+            .ok_or(StoreSchemaError(
+                "V3 runtime V2 history has no origin Start journal",
+            ))?;
+        match (
+            startup_ownership.as_ref(),
+            journal.startup_terminal_application.as_ref(),
+        ) {
+            (HostSessionStartupOwnershipApplicationV1::Pending { .. }, None)
+            | (HostSessionStartupOwnershipApplicationV1::Accepted { .. }, None) => Ok(history),
+            (
+                HostSessionStartupOwnershipApplicationV1::TerminalReconciled {
+                    authority_revision_before,
+                    authority_revision_after,
+                    resulting_posture,
+                    ..
+                },
+                Some(terminal),
+            ) => {
+                if terminal.authority_revision_before != *authority_revision_before
+                    || terminal.authority_record_commitment_before
+                        != latest.authority_record_commitment
+                    || *authority_revision_before != latest.authority.authority_revision
+                    || terminal.authority_revision_after != *authority_revision_after
+                    || terminal.resulting_posture != *resulting_posture
+                {
+                    return Err(StoreSchemaError(
+                        "V3 runtime V2 startup terminal proof is inconsistent",
+                    ));
+                }
+                let reconciled = self.reconstruct_v2_runtime_terminal_state(
+                    current_authority,
+                    &latest,
+                    *authority_revision_after,
+                    terminal.authority_record_commitment_after.clone(),
+                    *resulting_posture,
+                    &terminal.applied_at,
+                )?;
+                history.insert(reconciled.authority.authority_revision, reconciled);
+                Ok(history)
+            }
+            (HostSessionStartupOwnershipApplicationV1::NotApplicable, _)
+            | (HostSessionStartupOwnershipApplicationV1::Pending { .. }, Some(_))
+            | (HostSessionStartupOwnershipApplicationV1::Accepted { .. }, Some(_))
+            | (HostSessionStartupOwnershipApplicationV1::TerminalReconciled { .. }, None) => Err(
+                StoreSchemaError("V3 runtime V2 startup ownership state is inconsistent"),
+            ),
+        }
+    }
+
+    fn reconstruct_v2_runtime_terminal_state(
+        &self,
+        current_authority: &DurableSessionAuthorityV1,
+        latest: &ReconstructedAuthorityStateV1,
+        authority_revision_after: u64,
+        expected_commitment: AuthorityObjectCommitmentV1,
+        resulting_posture: HostSessionPostureV1,
+        applied_at: &TimestampV1,
+    ) -> Result<ReconstructedAuthorityStateV1, StoreSchemaError> {
+        if let Ok(reconciled) = reconstruct_reconciled_authority_state(
+            latest,
+            authority_revision_after,
+            expected_commitment.clone(),
+            resulting_posture,
+            applied_at,
+        ) {
+            return Ok(reconciled);
+        }
+
+        let mut authority = latest.authority.clone();
+        authority.authority_revision = authority_revision_after;
+        authority.lifecycle_posture = resulting_posture;
+        authority.updated_at = applied_at.clone();
+        authority.internal_resume_handle_refs =
+            self.runtime_resume_handles_for_revision(current_authority, authority_revision_after);
+        let reconstructed = reconstruct_authority_state(authority)?;
+        if reconstructed.authority_record_commitment != expected_commitment {
+            return Err(StoreSchemaError(
+                "reconciled V3 authority commitment is inconsistent",
+            ));
+        }
+        Ok(reconstructed)
+    }
+
+    fn runtime_resume_handles_for_revision(
+        &self,
+        current_authority: &DurableSessionAuthorityV1,
+        authority_revision: u64,
+    ) -> Vec<AuthorityObjectRefV1> {
+        let referenced = self
+            .successor_transition_intent_map
+            .values()
+            .filter(|intent| {
+                intent.orchestration_session_id == current_authority.orchestration_session_id
+                    && matches!(
+                        &intent.authority_precondition,
+                        HostSessionAuthorityPreconditionV1::ExpectedRevision {
+                            authority_revision: revision,
+                            ..
+                        } if *revision == authority_revision
+                    )
+            })
+            .filter_map(|intent| {
+                intent
+                    .resume_handle_ref
+                    .as_ref()
+                    .map(|reference| (reference.ref_id.clone(), reference.clone()))
+            })
+            .collect::<BTreeMap<_, _>>();
+
+        if referenced.is_empty() {
+            return current_authority.internal_resume_handle_refs.clone();
+        }
+
+        let mut ordered = current_authority
+            .internal_resume_handle_refs
+            .iter()
+            .filter(|reference| referenced.contains_key(&reference.ref_id))
+            .cloned()
+            .collect::<Vec<_>>();
+        for (ref_id, reference) in referenced {
+            if ordered.iter().any(|current| current.ref_id == ref_id) {
+                continue;
+            }
+            ordered.push(reference);
+        }
+        ordered
+    }
+}
+
 fn validate_registration_commitment(
     commitment: &AuthorityObjectCommitmentV1,
 ) -> Result<(), StoreSchemaError> {
@@ -1529,6 +2971,85 @@ fn authority_record_commitment(
     .map_err(|_| StoreSchemaError("commit durable retained authority"))
 }
 
+fn reconstruct_authority_state(
+    authority: DurableSessionAuthorityV1,
+) -> Result<ReconstructedAuthorityStateV1, StoreSchemaError> {
+    let authority_record_commitment = authority_record_commitment(&authority)?;
+    let authoritative_lineage_commitment = AuthorityObjectCommitmentV1::CanonicalSha256 {
+        digest_hex: super::hash::canonical_sha256(&AuthoritativeLineageHashInputV1 {
+            schema_version: 1,
+            orchestration_session_id: authority.orchestration_session_id.clone(),
+            participant_ids: authority.authoritative_participant_lineage.clone(),
+        })
+        .map_err(|_| StoreSchemaError("commit durable authority lineage"))?,
+    };
+    Ok(ReconstructedAuthorityStateV1 {
+        authority,
+        authority_record_commitment,
+        authoritative_lineage_commitment,
+    })
+}
+
+fn reconstruct_successor_initial_state(
+    latest_state: &ReconstructedAuthorityStateV1,
+    intent: &HostSessionTransitionIntentV3,
+    applied_at: &TimestampV1,
+) -> Result<ReconstructedAuthorityStateV1, StoreSchemaError> {
+    let mut authority = latest_state.authority.clone();
+    authority.authority_revision = match &intent.state {
+        HostSessionTransitionIntentStateV3::Applied {
+            authority_revision_after,
+            ..
+        } => *authority_revision_after,
+        _ => {
+            return Err(StoreSchemaError(
+                "reconstruct successor initial state requires an applied intent",
+            ))
+        }
+    };
+    authority.active_authoritative_participant_id =
+        Some(intent.target_authoritative_participant_id.clone());
+    authority
+        .authoritative_participant_lineage
+        .push(intent.target_authoritative_participant_id.clone());
+    authority.host_attach_contract_ref = Some(intent.host_attach_contract_ref.clone());
+    authority.world_binding = intent.world_binding.clone();
+    if let Some(resume_handle_ref) = intent.resume_handle_ref.as_ref() {
+        if !authority
+            .internal_resume_handle_refs
+            .iter()
+            .any(|current| current == resume_handle_ref)
+        {
+            authority
+                .internal_resume_handle_refs
+                .push(resume_handle_ref.clone());
+        }
+    }
+    authority.lifecycle_posture = HostSessionPostureV1::ActiveAttached;
+    authority.updated_at = applied_at.clone();
+    reconstruct_authority_state(authority)
+}
+
+fn reconstruct_reconciled_authority_state(
+    latest_state: &ReconstructedAuthorityStateV1,
+    authority_revision_after: u64,
+    expected_commitment: AuthorityObjectCommitmentV1,
+    resulting_posture: HostSessionPostureV1,
+    applied_at: &TimestampV1,
+) -> Result<ReconstructedAuthorityStateV1, StoreSchemaError> {
+    let mut authority = latest_state.authority.clone();
+    authority.authority_revision = authority_revision_after;
+    authority.lifecycle_posture = resulting_posture;
+    authority.updated_at = applied_at.clone();
+    let reconstructed = reconstruct_authority_state(authority)?;
+    if reconstructed.authority_record_commitment != expected_commitment {
+        return Err(StoreSchemaError(
+            "reconciled V3 authority commitment is inconsistent",
+        ));
+    }
+    Ok(reconstructed)
+}
+
 fn all_unique(values: &[String]) -> bool {
     values
         .iter()
@@ -1550,6 +3071,7 @@ fn validate_namespace_record_identity(
     record: &SessionNamespaceRecordV1,
     authority_store_id: &str,
     bootstrap_home: &CanonicalDirectoryV1,
+    allow_internal_resume_handles: bool,
 ) -> Result<(), StoreSchemaError> {
     match record {
         SessionNamespaceRecordV1::Authority(authority) => {
@@ -1559,18 +3081,24 @@ fn validate_namespace_record_identity(
             if authority.authority_revision == 0
                 || authority.workspace_binding.authority_store_id != authority_store_id
                 || &authority.workspace_binding.authority_store_root != bootstrap_home
-                || !authority.internal_resume_handle_refs.is_empty()
                 || authority.authoritative_participant_lineage.is_empty()
                 || !all_unique(&authority.authoritative_participant_lineage)
                 || !all_unique_refs(&authority.retained_worker_refs)
+                || !all_unique_refs(&authority.internal_resume_handle_refs)
                 || authority
                     .active_authoritative_participant_id
                     .as_ref()
                     .is_some_and(|active| {
                         !authority.authoritative_participant_lineage.contains(active)
                     })
+                || (!allow_internal_resume_handles
+                    && !authority.internal_resume_handle_refs.is_empty())
             {
-                return Err(StoreSchemaError("V2 durable authority binding mismatch"));
+                return Err(StoreSchemaError(if allow_internal_resume_handles {
+                    "V3 durable authority binding mismatch"
+                } else {
+                    "V2 durable authority binding mismatch"
+                }));
             }
         }
         SessionNamespaceRecordV1::StartReservation(reservation) => {
@@ -1591,6 +3119,14 @@ fn validate_namespace_record_identity(
         }
     }
     Ok(())
+}
+
+fn v3_object_schema_version_allowed(
+    object_kind: AuthorityObjectKindV1,
+    schema_version: u32,
+) -> bool {
+    schema_version == SCHEMA_VERSION
+        || (object_kind == AuthorityObjectKindV1::TerminalHandoff && schema_version == 2)
 }
 
 fn reservation_matches_v2(

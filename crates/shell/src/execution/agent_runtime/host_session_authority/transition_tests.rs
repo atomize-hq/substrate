@@ -3,29 +3,50 @@ use std::fs;
 use std::os::unix::fs::PermissionsExt;
 use std::path::Path;
 
-use super::facade::{AuthorityParticipantRoleV1, HostSessionAuthority};
+use crate::execution::agent_runtime::obligation_ledger::{
+    self, ObligationAttentionDispositionV1, ObligationLedgerSnapshotReadV1,
+    ObligationMaterializationCutV1,
+    ObligationSnapshotHashInputV1 as LedgerObligationSnapshotHashInputV1,
+    SupervisorJournalEventRefV1,
+};
+use crate::execution::agent_runtime::state_store::AcceptedWorldWorkIdentityV1;
+
+use super::facade::{
+    AuthorityParticipantRoleV1, HostSessionAuthority, ResolvedCurrentAuthorityV1,
+    RetainedWorkerAuthorityPreconditionV1,
+};
 use super::schema::{
-    AgentDescriptorV1, AgentExecutionScopeV1, AuthoritativeLineageHashInputV1,
-    AuthorityObjectCommitmentV1, AuthorityObjectKindV1, AuthorityObjectRefV1,
-    DurableSessionAuthorityHashInputV1, HostAttachCapabilitiesV1, HostAttachExecutionClientStartV1,
-    HostAttachLaunchKnobsV1, HostAttachModePreferenceV1, HostSessionAuthorityPreconditionV1,
+    AgentDescriptorHashInputV1, AgentDescriptorV1, AgentExecutionScopeV1,
+    AuthoritativeLineageHashInputV1, AuthorityObjectCommitmentV1, AuthorityObjectKindV1,
+    AuthorityObjectRefV1, DurableSessionAuthorityHashInputV1, HostAttachCapabilitiesV1,
+    HostAttachExecutionClientStartV1, HostAttachLaunchKnobsV1, HostAttachModePreferenceV1,
+    HostPostTurnDispositionV1, HostPostTurnProtocolActorV1, HostPostTurnProtocolEventKindV1,
+    HostPostTurnTerminalReasonV1, HostSessionAuthorityPreconditionV1, HostSessionPostureV1,
     HostSessionTransitionCallerKindV1, HostSessionTransitionCallerV1, HostSessionTransitionModeV1,
-    PolicyObjectHashInputV1, RuntimeBackendKindV1, TimestampV1, WorkspaceBindingV1, WorldBindingV1,
+    HostStartupOwnershipProtocolActorV1, HostStartupOwnershipProtocolEventV1,
+    PolicyObjectHashInputV1, ResumeHandleHashInputV1, RetainedWorkerObjectHashInputV1,
+    RuntimeBackendKindV1, StartupOwnershipOutcomeV1, StartupOwnershipResultHashInputV1,
+    TerminalHandoffHashInputV2, TimestampV1, WorkspaceBindingV1, WorldBindingV1,
 };
 use super::store_schema::{
-    DurableSessionAuthorityV1, HostSessionPostTurnApplicationV1,
+    DurableSessionAuthorityV1, HostSessionPostTurnApplicationV1, HostSessionPostTurnApplicationV2,
     HostSessionStartupOwnershipApplicationV1, HostSessionTransitionInputHandoffV1,
-    HostSessionTransitionIntentStateV2, HostSessionTransitionTransportPayloadStateV1,
+    HostSessionTransitionIntentStateV2, HostSessionTransitionIntentStateV3,
+    HostSessionTransitionTransportPayloadStateV1,
     RetainedWorkerAuthorityRegistrationRequestStateV1,
     RetainedWorkerAuthorityRegistrationRequestV1, RetainedWorkerAuthorityRegistrationV1,
-    SessionNamespaceRecordV1, StartTombstoneStateV1,
+    SessionNamespaceRecordV1, StartTombstoneStateV1, StateRootV3,
 };
 use super::transition::{
-    ApplicationCrashPointV1, ApplyHostSessionTransitionRequestV1,
-    ClaimHostSessionTransitionRequestV1, ExpireHostSessionTransitionRequestV1, ExpiryCrashPointV1,
-    IssueCrashPointV1, IssueHostSessionTransitionRequestV1, StartContractMaterialV1,
-    TransitionApplicationOutcomeV1, TransitionClaimOutcomeV1, TransitionIssueOutcomeV1,
-    TransitionTerminalOutcomeV1,
+    AcceptTransitionInputRequestV1, ApplicationCrashPointV1, ApplyHostSessionTransitionRequestV1,
+    ClaimHostSessionTransitionRequestV1, ConsumeObligationSnapshotRequestV1,
+    ExpireHostSessionTransitionRequestV1, ExpiryCrashPointV1, InputAcceptanceOutcomeV1,
+    IssueCrashPointV1, IssueHostSessionTransitionRequestV1, IssueSuccessorTransitionRequestV1,
+    ObligationSnapshotConsumptionOutcomeV1, PostTurnResolutionOutcomeV1, ResolvePostTurnRequestV1,
+    ResolveStartupOwnershipRequestV1, StartContractMaterialV1, StartupOwnershipResolutionOutcomeV1,
+    SuccessorTransitionApplicationOutcomeV1, SuccessorTransitionClaimOutcomeV1,
+    SuccessorTransitionIssueOutcomeV1, TransitionApplicationOutcomeV1, TransitionClaimOutcomeV1,
+    TransitionIssueOutcomeV1, TransitionTerminalOutcomeV1,
 };
 
 fn timestamp(value: &str) -> TimestampV1 {
@@ -37,6 +58,27 @@ fn canonical_commitment<T: super::validation::CanonicalHashInputV1>(
 ) -> AuthorityObjectCommitmentV1 {
     AuthorityObjectCommitmentV1::CanonicalSha256 {
         digest_hex: super::hash::canonical_sha256(value).unwrap(),
+    }
+}
+
+fn opaque_commitment(
+    value: &AuthorityObjectCommitmentV1,
+) -> substrate_common::OpaqueAuthorityCommitmentV1 {
+    match value {
+        AuthorityObjectCommitmentV1::CanonicalSha256 { digest_hex } => {
+            substrate_common::OpaqueAuthorityCommitmentV1::CanonicalSha256 {
+                digest_hex: digest_hex.clone(),
+            }
+        }
+        AuthorityObjectCommitmentV1::StoreHmacSha256 {
+            key_id,
+            domain,
+            digest_hex,
+        } => substrate_common::OpaqueAuthorityCommitmentV1::StoreHmacSha256 {
+            key_id: key_id.clone(),
+            domain: domain.clone(),
+            digest_hex: digest_hex.clone(),
+        },
     }
 }
 
@@ -184,6 +226,647 @@ fn issue_and_claim_start(
         expected_intent_revision: claimed.intent_revision,
         claim_id: claim.claim_id,
         expected_claim_revision: claim_revision,
+    }
+}
+
+fn insert_present_v3(root: &mut StateRootV3, reference: &AuthorityObjectRefV1, byte_length: usize) {
+    root.object_index.insert(
+        reference.ref_id.clone(),
+        super::store_schema::AuthorityObjectIndexEntryV1 {
+            schema_version: 1,
+            ref_id: reference.ref_id.clone(),
+            object_kind: reference.object_kind,
+            object_schema_version: reference.schema_version,
+            byte_length: byte_length as u64,
+            storage_state: super::store_schema::AuthorityObjectStorageStateV1::Present,
+        },
+    );
+}
+
+fn upgrade_to_detached_v3_authority(
+    authority: &HostSessionAuthority,
+    request: &IssueHostSessionTransitionRequestV1,
+) -> ResolvedCurrentAuthorityV1 {
+    let home = request
+        .workspace_binding
+        .authority_store_root
+        .physical_path
+        .clone();
+    let application = issue_and_claim_start(authority, request);
+    authority
+        .apply_start_at(&application, timestamp("2026-07-14T12:01:10.000000000Z"))
+        .unwrap();
+
+    let exact_v2 = authority.read_a12a_root().unwrap();
+    let exact_v3 = super::store::upgrade_v2_root_to_v3_test(Path::new(&home), &exact_v2).unwrap();
+    let trusted_root = super::trusted_fs::TrustedAuthorityRoot::open(Path::new(&home)).unwrap();
+    let start_authority = match exact_v3.session_namespace_map[&request.orchestration_session_id] {
+        SessionNamespaceRecordV1::Authority(ref authority) => authority.as_ref().clone(),
+        _ => panic!("expected durable start authority"),
+    };
+    let start_commitment = canonical_commitment(&authority_hash_input(&start_authority));
+    let start_intent = exact_v3.transition_intent_map[&request.intent_id].clone();
+    let super::store_schema::HostSessionTransitionIntentStateV2::Applied {
+        claim_id,
+        claimant_attempt_id,
+        application_result_ref,
+        ..
+    } = &start_intent.state
+    else {
+        panic!("expected applied start")
+    };
+    let reconciled_at = timestamp("2026-07-14T12:01:20.000000000Z");
+    let evidence_id = "startup-reject-1".to_string();
+    let mut detached_authority = start_authority.clone();
+    detached_authority.authority_revision = 2;
+    detached_authority.lifecycle_posture = HostSessionPostureV1::DetachedReconciled;
+    detached_authority.updated_at = reconciled_at.clone();
+    let detached_commitment = canonical_commitment(&authority_hash_input(&detached_authority));
+    let startup_result = super::schema::StartupOwnershipResultHashInputV1 {
+        schema_version: 1,
+        evidence: super::schema::HostStartupOwnershipEvidenceV1 {
+            schema_version: 1,
+            evidence_id: evidence_id.clone(),
+            authority_store_id: exact_v3.authority_store_id.clone(),
+            orchestration_session_id: request.orchestration_session_id.clone(),
+            intent_id: request.intent_id.clone(),
+            claim_id: claim_id.clone(),
+            claimant_attempt_id: claimant_attempt_id.clone(),
+            run_id: request.run_id.clone(),
+            application_result_ref: application_result_ref.clone(),
+            expected_authority_revision: 1,
+            active_authoritative_participant_id: request
+                .target_authoritative_participant_id
+                .clone(),
+            protocol_actor:
+                super::schema::HostStartupOwnershipProtocolActorV1::LaunchApplicationClaimant {
+                    claim_id: claim_id.clone(),
+                    claimant_attempt_id: claimant_attempt_id.clone(),
+                },
+            protocol_event:
+                super::schema::HostStartupOwnershipProtocolEventV1::RuntimeCreationRejected {
+                    rejection_id: evidence_id.clone(),
+                },
+            observed_at: reconciled_at.clone(),
+        },
+        outcome: super::schema::StartupOwnershipOutcomeV1::TerminalReconciled {
+            reason: super::schema::HostStartupTerminalReasonV1::RuntimeCreationRejected,
+            authority_revision_after: 2,
+            resulting_posture: HostSessionPostureV1::DetachedReconciled,
+            authority_record_commitment: detached_commitment.clone(),
+        },
+        resolved_at: reconciled_at.clone(),
+    };
+    let startup_result_bytes = super::canonical_json::to_vec(&startup_result).unwrap();
+    let startup_result_object = super::store::prepare_generated_object_v3_opened(
+        &trusted_root,
+        exact_v3.root_revision,
+        AuthorityObjectKindV1::StartupOwnershipResult,
+        &startup_result_bytes,
+        None,
+    )
+    .unwrap();
+    let mut detached_root = exact_v3.clone();
+    detached_root.root_revision += 1;
+    let super::store_schema::HostSessionTransitionIntentStateV2::Applied {
+        startup_ownership, ..
+    } = &mut detached_root
+        .transition_intent_map
+        .get_mut(&request.intent_id)
+        .unwrap()
+        .state
+    else {
+        panic!("expected applied start")
+    };
+    *startup_ownership = Box::new(
+        super::store_schema::HostSessionStartupOwnershipApplicationV1::TerminalReconciled {
+            evidence_id: evidence_id.clone(),
+            result_ref: startup_result_object.reference.clone(),
+            authority_revision_before: 1,
+            authority_revision_after: 2,
+            resulting_posture: HostSessionPostureV1::DetachedReconciled,
+            reconciled_at: reconciled_at.clone(),
+        },
+    );
+    detached_root
+        .transition_intent_map
+        .get_mut(&request.intent_id)
+        .unwrap()
+        .intent_revision = 4;
+    detached_root
+        .transition_intent_map
+        .get_mut(&request.intent_id)
+        .unwrap()
+        .updated_at = reconciled_at.clone();
+    detached_root.session_namespace_map.insert(
+        request.orchestration_session_id.clone(),
+        SessionNamespaceRecordV1::Authority(Box::new(detached_authority.clone())),
+    );
+    detached_root
+        .application_journal
+        .get_mut(&request.intent_id)
+        .unwrap()
+        .startup_terminal_application = Some(
+        super::store_schema::StartupOwnershipTerminalApplicationJournalV1 {
+            schema_version: 1,
+            startup_ownership_result_ref: startup_result_object.reference.clone(),
+            evidence_id: evidence_id.clone(),
+            authority_revision_before: 1,
+            authority_record_commitment_before: start_commitment,
+            authority_revision_after: 2,
+            resulting_posture: HostSessionPostureV1::DetachedReconciled,
+            authority_record_commitment_after: detached_commitment,
+            applied_at: reconciled_at.clone(),
+        },
+    );
+    insert_present_v3(
+        &mut detached_root,
+        &startup_result_object.reference,
+        startup_result_object.byte_length as usize,
+    );
+    detached_root.validate().unwrap();
+    super::store::commit_v3_root_exact_current_opened(
+        &trusted_root,
+        &exact_v3,
+        &detached_root,
+        || Ok(()),
+    )
+    .unwrap();
+
+    authority
+        .resolve_current_exact(&request.orchestration_session_id, None)
+        .unwrap()
+}
+
+fn park_with_resume_handle(
+    authority: &HostSessionAuthority,
+    request: &IssueHostSessionTransitionRequestV1,
+) -> (ResolvedCurrentAuthorityV1, AuthorityObjectRefV1) {
+    let home = request
+        .workspace_binding
+        .authority_store_root
+        .physical_path
+        .clone();
+    let application = issue_and_claim_start(authority, request);
+    authority
+        .apply_start_at(&application, timestamp("2026-07-14T12:01:10.000000000Z"))
+        .unwrap();
+
+    let exact_v2 = authority.read_a12a_root().unwrap();
+    let exact_v3 = super::store::upgrade_v2_root_to_v3_test(Path::new(&home), &exact_v2).unwrap();
+    let trusted_root = super::trusted_fs::TrustedAuthorityRoot::open(Path::new(&home)).unwrap();
+    let start_authority = match exact_v3.session_namespace_map[&request.orchestration_session_id] {
+        SessionNamespaceRecordV1::Authority(ref authority) => authority.as_ref().clone(),
+        _ => panic!("expected detached authority"),
+    };
+    let start_commitment = canonical_commitment(&authority_hash_input(&start_authority));
+    let start_intent = exact_v3.transition_intent_map[&request.intent_id].clone();
+    let super::store_schema::HostSessionTransitionIntentStateV2::Applied {
+        claim_id,
+        claimant_attempt_id,
+        application_result_ref,
+        ..
+    } = &start_intent.state
+    else {
+        panic!("expected applied start")
+    };
+    let resume_handle_value = ResumeHandleHashInputV1 {
+        schema_version: 1,
+        orchestration_session_id: request.orchestration_session_id.clone(),
+        participant_id: request.target_authoritative_participant_id.clone(),
+        backend_id: request.start_contract.descriptor.backend_id.clone(),
+        protocol: request.start_contract.descriptor.protocol.clone(),
+        internal_uaa_session_id: "uaa-session-1".into(),
+    };
+    let resume_handle_bytes = super::canonical_json::to_vec(&resume_handle_value).unwrap();
+    let resume_handle = super::store::prepare_generated_object_v3_opened(
+        &trusted_root,
+        exact_v3.root_revision,
+        AuthorityObjectKindV1::ResumeHandle,
+        &resume_handle_bytes,
+        None,
+    )
+    .unwrap();
+    let reconciled_at = timestamp("2026-07-14T12:02:00.000000000Z");
+    let evidence_id = "startup-reject-resume-1".to_string();
+    let mut detached_authority = start_authority.clone();
+    detached_authority.authority_revision = 2;
+    detached_authority.lifecycle_posture = HostSessionPostureV1::DetachedReconciled;
+    detached_authority
+        .internal_resume_handle_refs
+        .push(resume_handle.reference.clone());
+    detached_authority.updated_at = reconciled_at.clone();
+    let detached_commitment = canonical_commitment(&authority_hash_input(&detached_authority));
+    let startup_result = super::schema::StartupOwnershipResultHashInputV1 {
+        schema_version: 1,
+        evidence: super::schema::HostStartupOwnershipEvidenceV1 {
+            schema_version: 1,
+            evidence_id: evidence_id.clone(),
+            authority_store_id: exact_v3.authority_store_id.clone(),
+            orchestration_session_id: request.orchestration_session_id.clone(),
+            intent_id: request.intent_id.clone(),
+            claim_id: claim_id.clone(),
+            claimant_attempt_id: claimant_attempt_id.clone(),
+            run_id: request.run_id.clone(),
+            application_result_ref: application_result_ref.clone(),
+            expected_authority_revision: 1,
+            active_authoritative_participant_id: request
+                .target_authoritative_participant_id
+                .clone(),
+            protocol_actor:
+                super::schema::HostStartupOwnershipProtocolActorV1::LaunchApplicationClaimant {
+                    claim_id: claim_id.clone(),
+                    claimant_attempt_id: claimant_attempt_id.clone(),
+                },
+            protocol_event:
+                super::schema::HostStartupOwnershipProtocolEventV1::RuntimeCreationRejected {
+                    rejection_id: evidence_id.clone(),
+                },
+            observed_at: reconciled_at.clone(),
+        },
+        outcome: super::schema::StartupOwnershipOutcomeV1::TerminalReconciled {
+            reason: super::schema::HostStartupTerminalReasonV1::RuntimeCreationRejected,
+            authority_revision_after: 2,
+            resulting_posture: HostSessionPostureV1::DetachedReconciled,
+            authority_record_commitment: detached_commitment.clone(),
+        },
+        resolved_at: reconciled_at.clone(),
+    };
+    let startup_result_bytes = super::canonical_json::to_vec(&startup_result).unwrap();
+    let startup_result_object = super::store::prepare_generated_object_v3_opened(
+        &trusted_root,
+        exact_v3.root_revision,
+        AuthorityObjectKindV1::StartupOwnershipResult,
+        &startup_result_bytes,
+        None,
+    )
+    .unwrap();
+    let mut detached_root = exact_v3.clone();
+    detached_root.root_revision += 1;
+    let super::store_schema::HostSessionTransitionIntentStateV2::Applied {
+        startup_ownership, ..
+    } = &mut detached_root
+        .transition_intent_map
+        .get_mut(&request.intent_id)
+        .unwrap()
+        .state
+    else {
+        panic!("expected applied start")
+    };
+    *startup_ownership = Box::new(
+        super::store_schema::HostSessionStartupOwnershipApplicationV1::TerminalReconciled {
+            evidence_id: evidence_id.clone(),
+            result_ref: startup_result_object.reference.clone(),
+            authority_revision_before: 1,
+            authority_revision_after: 2,
+            resulting_posture: HostSessionPostureV1::DetachedReconciled,
+            reconciled_at: reconciled_at.clone(),
+        },
+    );
+    detached_root
+        .transition_intent_map
+        .get_mut(&request.intent_id)
+        .unwrap()
+        .intent_revision = 4;
+    detached_root
+        .transition_intent_map
+        .get_mut(&request.intent_id)
+        .unwrap()
+        .updated_at = reconciled_at.clone();
+    detached_root.session_namespace_map.insert(
+        request.orchestration_session_id.clone(),
+        SessionNamespaceRecordV1::Authority(Box::new(detached_authority)),
+    );
+    detached_root
+        .application_journal
+        .get_mut(&request.intent_id)
+        .unwrap()
+        .startup_terminal_application = Some(
+        super::store_schema::StartupOwnershipTerminalApplicationJournalV1 {
+            schema_version: 1,
+            startup_ownership_result_ref: startup_result_object.reference.clone(),
+            evidence_id: evidence_id.clone(),
+            authority_revision_before: 1,
+            authority_record_commitment_before: start_commitment,
+            authority_revision_after: 2,
+            resulting_posture: HostSessionPostureV1::DetachedReconciled,
+            authority_record_commitment_after: detached_commitment,
+            applied_at: reconciled_at.clone(),
+        },
+    );
+    insert_present_v3(
+        &mut detached_root,
+        &startup_result_object.reference,
+        startup_result_object.byte_length as usize,
+    );
+    insert_present_v3(
+        &mut detached_root,
+        &resume_handle.reference,
+        resume_handle.byte_length as usize,
+    );
+    detached_root.validate().unwrap();
+    super::store::commit_v3_root_exact_current_opened(
+        &trusted_root,
+        &exact_v3,
+        &detached_root,
+        || Ok(()),
+    )
+    .unwrap();
+    (
+        authority
+            .resolve_current_exact(&request.orchestration_session_id, None)
+            .unwrap(),
+        resume_handle.reference,
+    )
+}
+
+fn attach_successor_request(
+    current: &ResolvedCurrentAuthorityV1,
+    target_participant_id: &str,
+) -> IssueSuccessorTransitionRequestV1 {
+    let mut lineage = current.authority.authoritative_participant_lineage.clone();
+    lineage.push(target_participant_id.to_string());
+    IssueSuccessorTransitionRequestV1 {
+        intent_id: "intent-attach-1".into(),
+        issuer_request_id: "request-attach-1".into(),
+        mode: HostSessionTransitionModeV1::Attach,
+        authority_precondition: HostSessionAuthorityPreconditionV1::ExpectedRevision {
+            authority_revision: current.observation.authority_revision,
+            authority_record_commitment: current.observation.authority_record_commitment.clone(),
+            active_authoritative_participant_id: current
+                .authority
+                .active_authoritative_participant_id
+                .clone()
+                .unwrap(),
+            authoritative_lineage_commitment: current
+                .observation
+                .authoritative_lineage_commitment
+                .clone(),
+            lifecycle_posture: current.authority.lifecycle_posture,
+        },
+        orchestration_session_id: current.authority.orchestration_session_id.clone(),
+        shell_trace_session_id: current.authority.shell_trace_session_id.clone(),
+        caller: HostSessionTransitionCallerV1 {
+            kind: HostSessionTransitionCallerKindV1::Repl,
+            caller_participant_id: current
+                .authority
+                .active_authoritative_participant_id
+                .clone(),
+            auto_attach_obligation_id: None,
+            auto_attach_claim_owner: None,
+        },
+        source_authoritative_participant_id: current
+            .authority
+            .active_authoritative_participant_id
+            .clone(),
+        target_authoritative_participant_id: target_participant_id.into(),
+        target_participant_lease_token: b"lease-attach-1".to_vec(),
+        run_id: "run-attach-1".into(),
+        resulting_authoritative_lineage: lineage,
+        workspace_binding: current.authority.workspace_binding.clone(),
+        world_binding: current.authority.world_binding.clone(),
+        resume_handle_ref: None,
+        transition_input: None,
+        post_turn_disposition: None,
+    }
+}
+
+fn resume_successor_request(
+    current: &ResolvedCurrentAuthorityV1,
+    resume_handle_ref: AuthorityObjectRefV1,
+    target_participant_id: &str,
+) -> IssueSuccessorTransitionRequestV1 {
+    let mut lineage = current.authority.authoritative_participant_lineage.clone();
+    lineage.push(target_participant_id.to_string());
+    IssueSuccessorTransitionRequestV1 {
+        intent_id: "intent-resume-1".into(),
+        issuer_request_id: "request-resume-1".into(),
+        mode: HostSessionTransitionModeV1::ResumeOneTurn,
+        authority_precondition: HostSessionAuthorityPreconditionV1::ExpectedRevision {
+            authority_revision: current.observation.authority_revision,
+            authority_record_commitment: current.observation.authority_record_commitment.clone(),
+            active_authoritative_participant_id: current
+                .authority
+                .active_authoritative_participant_id
+                .clone()
+                .unwrap(),
+            authoritative_lineage_commitment: current
+                .observation
+                .authoritative_lineage_commitment
+                .clone(),
+            lifecycle_posture: current.authority.lifecycle_posture,
+        },
+        orchestration_session_id: current.authority.orchestration_session_id.clone(),
+        shell_trace_session_id: current.authority.shell_trace_session_id.clone(),
+        caller: HostSessionTransitionCallerV1 {
+            kind: HostSessionTransitionCallerKindV1::Repl,
+            caller_participant_id: current
+                .authority
+                .active_authoritative_participant_id
+                .clone(),
+            auto_attach_obligation_id: None,
+            auto_attach_claim_owner: None,
+        },
+        source_authoritative_participant_id: current
+            .authority
+            .active_authoritative_participant_id
+            .clone(),
+        target_authoritative_participant_id: target_participant_id.into(),
+        target_participant_lease_token: b"lease-resume-1".to_vec(),
+        run_id: "run-resume-1".into(),
+        resulting_authoritative_lineage: lineage,
+        workspace_binding: current.authority.workspace_binding.clone(),
+        world_binding: current.authority.world_binding.clone(),
+        resume_handle_ref: Some(resume_handle_ref),
+        transition_input: Some(br#"{"input":"resume"}"#.to_vec()),
+        post_turn_disposition: Some(HostPostTurnDispositionV1::ReconcileToAttentionParkOrTerminal),
+    }
+}
+
+fn applied_resume_successor(
+    authority: &HostSessionAuthority,
+    request: &IssueHostSessionTransitionRequestV1,
+) -> IssueSuccessorTransitionRequestV1 {
+    let (current, resume_handle_ref) = park_with_resume_handle(authority, request);
+    let successor = resume_successor_request(&current, resume_handle_ref, "participant-resume-1");
+    let SuccessorTransitionIssueOutcomeV1::Issued(issued) = authority
+        .issue_successor_at(
+            &current,
+            &successor,
+            timestamp("2026-07-14T12:04:00.000000000Z"),
+            300,
+        )
+        .unwrap()
+    else {
+        panic!("first resume issuance must commit")
+    };
+    let claim = ClaimHostSessionTransitionRequestV1 {
+        intent_id: issued.intent_id.clone(),
+        issuer_request_id: issued.issuer_request_id.clone(),
+        payload_commitment: issued.payload_commitment.clone(),
+        expected_intent_revision: issued.intent_revision,
+        claim_id: "claim-resume-1".into(),
+        claimant_attempt_id: "attempt-resume-1".into(),
+    };
+    let SuccessorTransitionClaimOutcomeV1::Claimed(claimed) = authority
+        .claim_successor_at(&claim, timestamp("2026-07-14T12:04:10.000000000Z"), 30)
+        .unwrap()
+    else {
+        panic!("first resume claim must commit")
+    };
+    let HostSessionTransitionIntentStateV3::Claimed { claim_revision, .. } = claimed.state else {
+        panic!("resume claim must retain a claim")
+    };
+    let application = ApplyHostSessionTransitionRequestV1 {
+        intent_id: claimed.intent_id.clone(),
+        issuer_request_id: claimed.issuer_request_id.clone(),
+        payload_commitment: claimed.payload_commitment.clone(),
+        expected_intent_revision: claimed.intent_revision,
+        claim_id: claim.claim_id,
+        expected_claim_revision: claim_revision,
+    };
+    let SuccessorTransitionApplicationOutcomeV1::Applied(_) = authority
+        .apply_successor_at(&application, timestamp("2026-07-14T12:04:20.000000000Z"))
+        .unwrap()
+    else {
+        panic!("first resume application must commit")
+    };
+    successor
+}
+
+fn retained_work_identity(target_participant_id: &str) -> AcceptedWorldWorkIdentityV1 {
+    AcceptedWorldWorkIdentityV1::RetainedTurn {
+        active_run_id: "accepted-run-1".into(),
+        message_id: "message-1".into(),
+        target_participant_id: target_participant_id.into(),
+    }
+}
+
+fn transition_correlation(
+    intent: &super::store_schema::HostSessionTransitionIntentV3,
+    authority_revision_observed: u64,
+) -> substrate_common::HostTransitionWorkCorrelationV1 {
+    substrate_common::HostTransitionWorkCorrelationV1 {
+        schema_version: 1,
+        authority_store_id: intent.workspace_binding.authority_store_id.clone(),
+        orchestration_session_id: intent.orchestration_session_id.clone(),
+        authoritative_participant_id: intent.target_authoritative_participant_id.clone(),
+        transition_intent_id: intent.intent_id.clone(),
+        transition_intent_revision_observed: intent.intent_revision,
+        transition_run_id: intent.run_id.clone(),
+        transition_payload_commitment: opaque_commitment(&intent.payload_commitment),
+        authority_revision_observed,
+    }
+}
+
+fn post_turn_request(
+    intent: &super::store_schema::HostSessionTransitionIntentV3,
+    authority_revision_observed: u64,
+    kind: HostPostTurnProtocolEventKindV1,
+    protocol_actor: HostPostTurnProtocolActorV1,
+    emitted_at: &str,
+    completed_at: &str,
+) -> ResolvePostTurnRequestV1 {
+    ResolvePostTurnRequestV1 {
+        intent_id: intent.intent_id.clone(),
+        issuer_request_id: intent.issuer_request_id.clone(),
+        payload_commitment: intent.payload_commitment.clone(),
+        protocol_actor,
+        event_id: "terminal-event-1".into(),
+        event_sequence: 9,
+        kind,
+        emitted_at: timestamp(emitted_at),
+        acceptance_record_id: "acceptance-1".into(),
+        acceptance_record_revision: 7,
+        stream_id: "stream-1".into(),
+        accepted_work_identity: retained_work_identity(&intent.target_authoritative_participant_id),
+        host_transition_correlation: transition_correlation(intent, authority_revision_observed),
+        completed_at: timestamp(completed_at),
+    }
+}
+
+fn pending_ledger_read(
+    intent: &super::store_schema::HostSessionTransitionIntentV3,
+    authority_revision_observed: u64,
+) -> ObligationLedgerSnapshotReadV1 {
+    ObligationLedgerSnapshotReadV1::Pending {
+        authority_store_id: intent.workspace_binding.authority_store_id.clone(),
+        orchestration_session_id: intent.orchestration_session_id.clone(),
+        authoritative_participant_id: intent.target_authoritative_participant_id.clone(),
+        acceptance_record_id: "acceptance-1".into(),
+        acceptance_record_revision: 7,
+        stream_id: "stream-1".into(),
+        accepted_work_identity: retained_work_identity(&intent.target_authoritative_participant_id),
+        host_transition_correlation: transition_correlation(intent, authority_revision_observed),
+        transition_intent_id: intent.intent_id.clone(),
+        transition_run_id: intent.run_id.clone(),
+        authority_revision_observed,
+        observed_session_ledger_revision: 21,
+        required_terminal_event_id: "terminal-event-1".into(),
+        required_terminal_event_sequence: 9,
+    }
+}
+
+fn complete_ledger_snapshot(
+    intent: &super::store_schema::HostSessionTransitionIntentV3,
+    authority_revision_observed: u64,
+    attention_disposition: ObligationAttentionDispositionV1,
+) -> LedgerObligationSnapshotHashInputV1 {
+    let unresolved_attention_obligations = match attention_disposition {
+        ObligationAttentionDispositionV1::NoUnresolvedAttention => Vec::new(),
+        ObligationAttentionDispositionV1::HasUnresolvedAttention => vec![
+            obligation_ledger::UnresolvedAttentionObligationSnapshotEntryV1 {
+                obligation_id: "obl-1".into(),
+                obligation_revision: 3,
+                canonical_record_commitment: AuthorityObjectCommitmentV1::CanonicalSha256 {
+                    digest_hex: "e".repeat(64),
+                },
+            },
+        ],
+    };
+    LedgerObligationSnapshotHashInputV1 {
+        schema_version: 1,
+        authority_store_id: intent.workspace_binding.authority_store_id.clone(),
+        orchestration_session_id: intent.orchestration_session_id.clone(),
+        authoritative_participant_id: intent.target_authoritative_participant_id.clone(),
+        acceptance_record_id: "acceptance-1".into(),
+        acceptance_record_revision: 7,
+        stream_id: "stream-1".into(),
+        accepted_work_identity: retained_work_identity(&intent.target_authoritative_participant_id),
+        host_transition_correlation: transition_correlation(intent, authority_revision_observed),
+        transition_intent_id: intent.intent_id.clone(),
+        transition_run_id: intent.run_id.clone(),
+        authority_revision_observed,
+        materialization_cut: ObligationMaterializationCutV1 {
+            acceptance_record_id: "acceptance-1".into(),
+            acceptance_record_revision: 7,
+            stream_id: "stream-1".into(),
+            session_ledger_revision: 21,
+            terminal_event_id: "terminal-event-1".into(),
+            terminal_event_sequence: 9,
+            materialized_through_event_sequence: 9,
+        },
+        materialized_journal_events: vec![SupervisorJournalEventRefV1 {
+            schema_version: 1,
+            stream_id: "stream-1".into(),
+            journal_entry_id: "journal-1".into(),
+            acceptance_record_id: "acceptance-1".into(),
+            acceptance_record_revision: 7,
+            accepted_work_identity: retained_work_identity(
+                &intent.target_authoritative_participant_id,
+            ),
+            frame_sequence: 1,
+            event_sequence: 9,
+            event_id: "terminal-event-1".into(),
+            transport_event_commitment: AuthorityObjectCommitmentV1::CanonicalSha256 {
+                digest_hex: "f".repeat(64),
+            },
+        }],
+        attention_disposition,
+        unresolved_attention_obligations,
+        captured_at: chrono::DateTime::parse_from_rfc3339("2026-07-14T12:05:00.000000000Z")
+            .unwrap()
+            .with_timezone(&chrono::Utc),
     }
 }
 
@@ -1275,4 +1958,2529 @@ fn typed_current_authority_read_joins_applied_descriptor_and_bound_store() {
     assert!(authority
         .resolve_current_exact(&request.orchestration_session_id, Some(&stale))
         .is_err());
+}
+
+#[test]
+fn strict_v3_publication_preserves_exact_current_authority_resolution() {
+    let (_parent, authority, binding) = authority();
+    let home = binding.authority_store_root.physical_path.clone();
+    let mut request = start_request(binding.clone());
+    request.start_contract.descriptor.execution_scope = AgentExecutionScopeV1::World;
+    request
+        .start_contract
+        .launch_knobs
+        .requested_execution_scope = AgentExecutionScopeV1::World;
+    request.world_binding = Some(WorldBindingV1 {
+        world_id: "world-v3-upgrade-1".into(),
+        world_generation: 9,
+    });
+    let application = issue_and_claim_start(&authority, &request);
+    authority
+        .apply_start_at(&application, timestamp("2026-07-14T12:01:10.000000000Z"))
+        .unwrap();
+
+    let exact_v2 = authority.read_a12a_root().unwrap();
+    let upgraded = super::store::upgrade_v2_root_to_v3_test(Path::new(&home), &exact_v2).unwrap();
+    assert_eq!(
+        super::store::upgrade_v2_root_to_v3_test(Path::new(&home), &exact_v2).unwrap(),
+        upgraded
+    );
+
+    let resolved = authority
+        .resolve_current_exact(&request.orchestration_session_id, None)
+        .unwrap();
+    assert_eq!(resolved.observation.root_revision, upgraded.root_revision);
+    assert_eq!(resolved.observation.authority_revision, 1);
+    assert_eq!(
+        resolved.authority.orchestration_session_id,
+        request.orchestration_session_id
+    );
+    assert_eq!(resolved.authority.world_binding, request.world_binding);
+    assert_eq!(
+        resolved.authority.authoritative_participant_lineage,
+        request.resulting_authoritative_lineage
+    );
+    assert_eq!(
+        resolved.caller.role,
+        AuthorityParticipantRoleV1::Orchestrator
+    );
+}
+
+#[test]
+fn strict_v3_current_authority_resolution_accepts_detached_start_and_successor_attach() {
+    let (_parent, authority, binding) = authority();
+    let home = binding.authority_store_root.physical_path.clone();
+    let request = start_request(binding.clone());
+    let application = issue_and_claim_start(&authority, &request);
+    authority
+        .apply_start_at(&application, timestamp("2026-07-14T12:01:10.000000000Z"))
+        .unwrap();
+
+    let exact_v2 = authority.read_a12a_root().unwrap();
+    let exact_v3 = super::store::upgrade_v2_root_to_v3_test(Path::new(&home), &exact_v2).unwrap();
+    let trusted_root = super::trusted_fs::TrustedAuthorityRoot::open(Path::new(&home)).unwrap();
+    let insert_present = |root: &mut super::store_schema::StateRootV3,
+                          reference: &AuthorityObjectRefV1,
+                          byte_length: usize| {
+        root.object_index.insert(
+            reference.ref_id.clone(),
+            super::store_schema::AuthorityObjectIndexEntryV1 {
+                schema_version: 1,
+                ref_id: reference.ref_id.clone(),
+                object_kind: reference.object_kind,
+                object_schema_version: reference.schema_version,
+                byte_length: byte_length as u64,
+                storage_state: super::store_schema::AuthorityObjectStorageStateV1::Present,
+            },
+        );
+    };
+    let start_authority = match exact_v3.session_namespace_map[&request.orchestration_session_id] {
+        SessionNamespaceRecordV1::Authority(ref authority) => authority.as_ref().clone(),
+        _ => panic!("expected durable start authority"),
+    };
+    let start_commitment = canonical_commitment(&authority_hash_input(&start_authority));
+    let start_intent = exact_v3.transition_intent_map[&request.intent_id].clone();
+    let super::store_schema::HostSessionTransitionIntentStateV2::Applied {
+        claim_id,
+        claimant_attempt_id,
+        application_result_ref,
+        ..
+    } = &start_intent.state
+    else {
+        panic!("expected applied start")
+    };
+    let reconciled_at = timestamp("2026-07-14T12:01:20.000000000Z");
+    let evidence_id = "startup-reject-1".to_string();
+    let mut detached_authority = start_authority.clone();
+    detached_authority.authority_revision = 2;
+    detached_authority.lifecycle_posture = super::schema::HostSessionPostureV1::DetachedReconciled;
+    detached_authority.updated_at = reconciled_at.clone();
+    let detached_commitment = canonical_commitment(&authority_hash_input(&detached_authority));
+    let startup_result = super::schema::StartupOwnershipResultHashInputV1 {
+        schema_version: 1,
+        evidence: super::schema::HostStartupOwnershipEvidenceV1 {
+            schema_version: 1,
+            evidence_id: evidence_id.clone(),
+            authority_store_id: exact_v3.authority_store_id.clone(),
+            orchestration_session_id: request.orchestration_session_id.clone(),
+            intent_id: request.intent_id.clone(),
+            claim_id: claim_id.clone(),
+            claimant_attempt_id: claimant_attempt_id.clone(),
+            run_id: request.run_id.clone(),
+            application_result_ref: application_result_ref.clone(),
+            expected_authority_revision: 1,
+            active_authoritative_participant_id: request
+                .target_authoritative_participant_id
+                .clone(),
+            protocol_actor:
+                super::schema::HostStartupOwnershipProtocolActorV1::LaunchApplicationClaimant {
+                    claim_id: claim_id.clone(),
+                    claimant_attempt_id: claimant_attempt_id.clone(),
+                },
+            protocol_event:
+                super::schema::HostStartupOwnershipProtocolEventV1::RuntimeCreationRejected {
+                    rejection_id: evidence_id.clone(),
+                },
+            observed_at: reconciled_at.clone(),
+        },
+        outcome: super::schema::StartupOwnershipOutcomeV1::TerminalReconciled {
+            reason: super::schema::HostStartupTerminalReasonV1::RuntimeCreationRejected,
+            authority_revision_after: 2,
+            resulting_posture: super::schema::HostSessionPostureV1::DetachedReconciled,
+            authority_record_commitment: detached_commitment.clone(),
+        },
+        resolved_at: reconciled_at.clone(),
+    };
+    let startup_result_bytes = super::canonical_json::to_vec(&startup_result).unwrap();
+    let startup_result_object = super::store::prepare_generated_object_v3_opened(
+        &trusted_root,
+        exact_v3.root_revision,
+        AuthorityObjectKindV1::StartupOwnershipResult,
+        &startup_result_bytes,
+        None,
+    )
+    .unwrap();
+    let mut detached_root = exact_v3.clone();
+    detached_root.root_revision += 1;
+    let super::store_schema::HostSessionTransitionIntentStateV2::Applied {
+        startup_ownership, ..
+    } = &mut detached_root
+        .transition_intent_map
+        .get_mut(&request.intent_id)
+        .unwrap()
+        .state
+    else {
+        panic!("expected applied start")
+    };
+    *startup_ownership = Box::new(
+        super::store_schema::HostSessionStartupOwnershipApplicationV1::TerminalReconciled {
+            evidence_id: evidence_id.clone(),
+            result_ref: startup_result_object.reference.clone(),
+            authority_revision_before: 1,
+            authority_revision_after: 2,
+            resulting_posture: super::schema::HostSessionPostureV1::DetachedReconciled,
+            reconciled_at: reconciled_at.clone(),
+        },
+    );
+    detached_root
+        .transition_intent_map
+        .get_mut(&request.intent_id)
+        .unwrap()
+        .intent_revision = 4;
+    detached_root
+        .transition_intent_map
+        .get_mut(&request.intent_id)
+        .unwrap()
+        .updated_at = reconciled_at.clone();
+    detached_root.session_namespace_map.insert(
+        request.orchestration_session_id.clone(),
+        SessionNamespaceRecordV1::Authority(Box::new(detached_authority.clone())),
+    );
+    detached_root
+        .application_journal
+        .get_mut(&request.intent_id)
+        .unwrap()
+        .startup_terminal_application = Some(
+        super::store_schema::StartupOwnershipTerminalApplicationJournalV1 {
+            schema_version: 1,
+            startup_ownership_result_ref: startup_result_object.reference.clone(),
+            evidence_id: evidence_id.clone(),
+            authority_revision_before: 1,
+            authority_record_commitment_before: start_commitment.clone(),
+            authority_revision_after: 2,
+            resulting_posture: super::schema::HostSessionPostureV1::DetachedReconciled,
+            authority_record_commitment_after: detached_commitment.clone(),
+            applied_at: reconciled_at.clone(),
+        },
+    );
+    insert_present(
+        &mut detached_root,
+        &startup_result_object.reference,
+        startup_result_object.byte_length as usize,
+    );
+    detached_root.validate().unwrap();
+    super::store::commit_v3_root_exact_current_opened(
+        &trusted_root,
+        &exact_v3,
+        &detached_root,
+        || Ok(()),
+    )
+    .unwrap();
+    let detached_resolved = authority
+        .resolve_current_exact(&request.orchestration_session_id, None)
+        .unwrap();
+    assert_eq!(detached_resolved.authority.authority_revision, 2);
+    assert_eq!(
+        detached_resolved.authority.lifecycle_posture,
+        super::schema::HostSessionPostureV1::DetachedReconciled
+    );
+
+    let detached_root = authority.read_a12b_root().unwrap();
+    let detached_authority =
+        match detached_root.session_namespace_map[&request.orchestration_session_id] {
+            SessionNamespaceRecordV1::Authority(ref authority) => authority.as_ref().clone(),
+            _ => panic!("expected detached authority"),
+        };
+    let detached_lineage_commitment = canonical_commitment(&AuthoritativeLineageHashInputV1 {
+        schema_version: 1,
+        orchestration_session_id: detached_authority.orchestration_session_id.clone(),
+        participant_ids: detached_authority.authoritative_participant_lineage.clone(),
+    });
+    let successor_issued_at = timestamp("2026-07-14T12:02:00.000000000Z");
+    let successor_applied_at = timestamp("2026-07-14T12:02:10.000000000Z");
+    let successor_expires_at = timestamp("2026-07-14T12:07:00.000000000Z");
+    let successor_intent_id = "intent-attach-successor-1".to_string();
+    let successor_request_id = "request-attach-successor-1".to_string();
+    let successor_run_id = "run-attach-successor-1".to_string();
+    let successor_participant_id = "participant-successor-1".to_string();
+    let object_context = super::store::ObjectVerificationContextV1 {
+        intent_id: successor_intent_id.clone(),
+        run_id: successor_run_id.clone(),
+        parent_intent: None,
+    };
+    let lease_bytes = b"lease-successor-1".to_vec();
+    let lease = super::store::prepare_generated_object_v3_opened(
+        &trusted_root,
+        detached_root.root_revision,
+        AuthorityObjectKindV1::LeaseToken,
+        &lease_bytes,
+        Some(&object_context),
+    )
+    .unwrap();
+    let start_descriptor_ref = detached_root.transition_intent_map[&request.intent_id]
+        .descriptor_ref
+        .clone();
+    let start_attach_ref = detached_root.transition_intent_map[&request.intent_id]
+        .host_attach_contract_ref
+        .clone();
+    let transport_value = super::schema::TransitionTransportPayloadObjectV1 {
+        schema_version: 1,
+        intent_id: successor_intent_id.clone(),
+        mode: HostSessionTransitionModeV1::Attach,
+        orchestration_session_id: request.orchestration_session_id.clone(),
+        shell_trace_session_id: request.shell_trace_session_id.clone(),
+        caller: HostSessionTransitionCallerV1 {
+            kind: HostSessionTransitionCallerKindV1::Repl,
+            caller_participant_id: Some(request.target_authoritative_participant_id.clone()),
+            auto_attach_obligation_id: None,
+            auto_attach_claim_owner: None,
+        },
+        source_authoritative_participant_id: Some(
+            request.target_authoritative_participant_id.clone(),
+        ),
+        target_authoritative_participant_id: successor_participant_id.clone(),
+        target_participant_lease_token_ref: lease.reference.clone(),
+        run_id: successor_run_id.clone(),
+        resulting_authoritative_lineage: vec![
+            request.target_authoritative_participant_id.clone(),
+            successor_participant_id.clone(),
+        ],
+        workspace_binding: request.workspace_binding.clone(),
+        world_binding: request.world_binding.clone(),
+        descriptor_ref: start_descriptor_ref.clone(),
+        host_attach_contract_ref: start_attach_ref.clone(),
+        resume_handle_ref: None,
+        transition_input_ref: None,
+        post_turn_disposition: None,
+    };
+    let transport_bytes = super::canonical_json::to_vec(&transport_value).unwrap();
+    let transport_ref = super::store::allocate_sensitive_object_ref_v3_opened(
+        &trusted_root,
+        detached_root.root_revision,
+        AuthorityObjectKindV1::TransitionTransportPayload,
+        &transport_bytes,
+        &object_context,
+    )
+    .unwrap();
+    let mut successor_authority = detached_authority.clone();
+    successor_authority.authority_revision = 3;
+    successor_authority.active_authoritative_participant_id =
+        Some(successor_participant_id.clone());
+    successor_authority
+        .authoritative_participant_lineage
+        .push(successor_participant_id.clone());
+    successor_authority.lifecycle_posture = super::schema::HostSessionPostureV1::ActiveAttached;
+    successor_authority.updated_at = successor_applied_at.clone();
+    let successor_authority_commitment =
+        canonical_commitment(&authority_hash_input(&successor_authority));
+    let payload_commitment =
+        canonical_commitment(&super::schema::HostSessionTransitionPayloadHashInputV1 {
+            schema_version: 1,
+            intent_id: successor_intent_id.clone(),
+            issuer_request_id: successor_request_id.clone(),
+            mode: HostSessionTransitionModeV1::Attach,
+            authority_precondition: HostSessionAuthorityPreconditionV1::ExpectedRevision {
+                authority_revision: 2,
+                authority_record_commitment: detached_commitment.clone(),
+                active_authoritative_participant_id: request
+                    .target_authoritative_participant_id
+                    .clone(),
+                authoritative_lineage_commitment: detached_lineage_commitment.clone(),
+                lifecycle_posture: super::schema::HostSessionPostureV1::DetachedReconciled,
+            },
+            orchestration_session_id: request.orchestration_session_id.clone(),
+            shell_trace_session_id: request.shell_trace_session_id.clone(),
+            caller: transport_value.caller.clone(),
+            source_authoritative_participant_id: transport_value
+                .source_authoritative_participant_id
+                .clone(),
+            target_authoritative_participant_id: successor_participant_id.clone(),
+            target_participant_lease_token_ref: lease.reference.clone(),
+            run_id: successor_run_id.clone(),
+            resulting_authoritative_lineage: transport_value
+                .resulting_authoritative_lineage
+                .clone(),
+            workspace_binding: request.workspace_binding.clone(),
+            world_binding: request.world_binding.clone(),
+            descriptor_ref: start_descriptor_ref.clone(),
+            host_attach_contract_ref: start_attach_ref.clone(),
+            resume_handle_ref: None,
+            transition_input_ref: None,
+            post_turn_disposition: None,
+            transport_payload_ref: transport_ref.clone(),
+            issued_at: successor_issued_at.clone(),
+            expires_at: successor_expires_at.clone(),
+        });
+    let successor_application = super::schema::ApplicationResultHashInputV1 {
+        schema_version: 1,
+        intent_id: successor_intent_id.clone(),
+        mode: HostSessionTransitionModeV1::Attach,
+        run_id: successor_run_id.clone(),
+        phase: super::schema::ApplicationResultPhaseV1::InitialTransition {
+            authority_revision_before: Some(2),
+            authority_revision_after: 3,
+            active_authoritative_participant_id: successor_participant_id.clone(),
+            resulting_posture: super::schema::HostSessionPostureV1::ActiveAttached,
+            authority_record_commitment: successor_authority_commitment.clone(),
+            post_turn_pending_run_id: None,
+        },
+        applied_at: successor_applied_at.clone(),
+    };
+    let successor_application_bytes =
+        super::canonical_json::to_vec(&successor_application).unwrap();
+    let successor_application_object = super::store::prepare_generated_object_v3_opened(
+        &trusted_root,
+        detached_root.root_revision,
+        AuthorityObjectKindV1::ApplicationResult,
+        &successor_application_bytes,
+        None,
+    )
+    .unwrap();
+    let successor_intent = super::store_schema::HostSessionTransitionIntentV3 {
+        schema_version: 3,
+        intent_id: successor_intent_id.clone(),
+        issuer_request_id: successor_request_id.clone(),
+        intent_revision: 3,
+        mode: HostSessionTransitionModeV1::Attach,
+        authority_precondition: HostSessionAuthorityPreconditionV1::ExpectedRevision {
+            authority_revision: 2,
+            authority_record_commitment: detached_commitment.clone(),
+            active_authoritative_participant_id: request
+                .target_authoritative_participant_id
+                .clone(),
+            authoritative_lineage_commitment: detached_lineage_commitment.clone(),
+            lifecycle_posture: super::schema::HostSessionPostureV1::DetachedReconciled,
+        },
+        orchestration_session_id: request.orchestration_session_id.clone(),
+        shell_trace_session_id: request.shell_trace_session_id.clone(),
+        caller: transport_value.caller.clone(),
+        source_authoritative_participant_id: transport_value
+            .source_authoritative_participant_id
+            .clone(),
+        target_authoritative_participant_id: successor_participant_id.clone(),
+        target_participant_lease_token_ref: lease.reference.clone(),
+        run_id: successor_run_id.clone(),
+        resulting_authoritative_lineage: transport_value.resulting_authoritative_lineage.clone(),
+        workspace_binding: request.workspace_binding.clone(),
+        world_binding: request.world_binding.clone(),
+        descriptor_ref: start_descriptor_ref.clone(),
+        host_attach_contract_ref: start_attach_ref.clone(),
+        resume_handle_ref: None,
+        transition_input_ref: None,
+        post_turn_disposition: None,
+        transport_payload_ref: transport_ref.clone(),
+        payload_commitment: payload_commitment.clone(),
+        issued_at: successor_issued_at.clone(),
+        expires_at: successor_expires_at.clone(),
+        state: super::store_schema::HostSessionTransitionIntentStateV3::Applied {
+            claim_id: "claim-attach-successor-1".into(),
+            claimant_attempt_id: "attempt-attach-successor-1".into(),
+            authority_revision_before: Some(2),
+            authority_revision_after: 3,
+            active_authoritative_participant_id: successor_participant_id.clone(),
+            resulting_posture: super::schema::HostSessionPostureV1::ActiveAttached,
+            authority_record_commitment: successor_authority_commitment.clone(),
+            application_result_ref: successor_application_object.reference.clone(),
+            startup_ownership: Box::new(
+                super::store_schema::HostSessionStartupOwnershipApplicationV1::Pending {
+                    expected_run_id: successor_run_id.clone(),
+                    expected_authority_revision: 3,
+                    expected_active_authoritative_participant_id: successor_participant_id.clone(),
+                },
+            ),
+            post_turn: Box::new(
+                super::store_schema::HostSessionPostTurnApplicationV2::NotApplicable,
+            ),
+            applied_at: successor_applied_at.clone(),
+        },
+        input_handoff: super::store_schema::HostSessionTransitionInputHandoffV1::NotApplicable,
+        transport_payload_state:
+            super::store_schema::HostSessionTransitionTransportPayloadStateV1::Retained,
+        updated_at: successor_applied_at.clone(),
+    };
+    let transport_context = super::store::ObjectVerificationContextV1 {
+        intent_id: successor_intent_id.clone(),
+        run_id: successor_run_id.clone(),
+        parent_intent: Some(super::store::VersionedObjectVerificationParentIntentV1::V3(
+            Box::new(successor_intent.clone()),
+        )),
+    };
+    super::store::prepare_typed_object_v3_opened(
+        &trusted_root,
+        detached_root.root_revision,
+        &transport_ref,
+        &transport_bytes,
+        Some(&transport_context),
+    )
+    .unwrap();
+    let mut successor_root = detached_root.clone();
+    successor_root.root_revision += 1;
+    successor_root.session_namespace_map.insert(
+        request.orchestration_session_id.clone(),
+        SessionNamespaceRecordV1::Authority(Box::new(successor_authority.clone())),
+    );
+    successor_root
+        .successor_transition_intent_map
+        .insert(successor_intent_id.clone(), successor_intent.clone());
+    successor_root.successor_issuer_request_index.insert(
+        successor_request_id.clone(),
+        super::store_schema::IssuerRequestIndexEntryV1 {
+            schema_version: 1,
+            issuer_request_id: successor_request_id.clone(),
+            orchestration_session_id: request.orchestration_session_id.clone(),
+            intent_id: successor_intent_id.clone(),
+            payload_commitment: payload_commitment.clone(),
+        },
+    );
+    successor_root.successor_application_journal.insert(
+        successor_intent_id.clone(),
+        super::store_schema::HostSessionTransitionApplicationJournalV3 {
+            schema_version: 3,
+            intent_id: successor_intent_id.clone(),
+            initial_application: super::store_schema::InitialTransitionApplicationJournalV1 {
+                authority_revision_before: Some(2),
+                authority_revision_after: 3,
+                authority_record_commitment: successor_authority_commitment.clone(),
+                application_result_ref: successor_application_object.reference.clone(),
+                applied_at: successor_applied_at.clone(),
+            },
+            startup_terminal_application: None,
+            post_turn_application: None,
+        },
+    );
+    insert_present(
+        &mut successor_root,
+        &lease.reference,
+        lease.byte_length as usize,
+    );
+    insert_present(&mut successor_root, &transport_ref, transport_bytes.len());
+    insert_present(
+        &mut successor_root,
+        &successor_application_object.reference,
+        successor_application_object.byte_length as usize,
+    );
+    successor_root.validate().unwrap();
+    super::store::commit_v3_root_exact_current_opened(
+        &trusted_root,
+        &detached_root,
+        &successor_root,
+        || Ok(()),
+    )
+    .unwrap();
+
+    let resolved = authority
+        .resolve_current_exact(&request.orchestration_session_id, None)
+        .unwrap();
+    assert_eq!(
+        resolved.observation.root_revision,
+        successor_root.root_revision
+    );
+    assert_eq!(resolved.observation.authority_revision, 3);
+    assert_eq!(
+        resolved
+            .authority
+            .active_authoritative_participant_id
+            .as_deref(),
+        Some(successor_participant_id.as_str())
+    );
+    assert_eq!(
+        resolved.authority.lifecycle_posture,
+        super::schema::HostSessionPostureV1::ActiveAttached
+    );
+    assert_eq!(
+        resolved.authority.authoritative_participant_lineage,
+        vec![
+            request.target_authoritative_participant_id.clone(),
+            successor_participant_id.clone(),
+        ]
+    );
+    assert_eq!(resolved.caller.participant_id, successor_participant_id);
+    assert_eq!(
+        resolved.caller.role,
+        AuthorityParticipantRoleV1::Orchestrator
+    );
+    assert_eq!(
+        resolved.caller.descriptor,
+        request.start_contract.descriptor
+    );
+    assert_eq!(resolved.current_policy, request.start_contract.policy);
+}
+
+#[test]
+fn successor_attach_issue_claim_apply_retries_to_one_initial_application() {
+    let (_parent, authority, binding) = authority();
+    let request = start_request(binding);
+    let current = upgrade_to_detached_v3_authority(&authority, &request);
+    let successor = attach_successor_request(&current, "participant-attach-1");
+
+    let SuccessorTransitionIssueOutcomeV1::Issued(issued) = authority
+        .issue_successor_at(
+            &current,
+            &successor,
+            timestamp("2026-07-14T12:03:00.000000000Z"),
+            300,
+        )
+        .unwrap()
+    else {
+        panic!("first successor issuance must commit")
+    };
+    assert_eq!(
+        authority
+            .issue_successor_at(
+                &current,
+                &successor,
+                timestamp("2026-07-14T12:03:00.000000000Z"),
+                300,
+            )
+            .unwrap(),
+        SuccessorTransitionIssueOutcomeV1::Joined(issued.clone())
+    );
+
+    let claim = ClaimHostSessionTransitionRequestV1 {
+        intent_id: issued.intent_id.clone(),
+        issuer_request_id: issued.issuer_request_id.clone(),
+        payload_commitment: issued.payload_commitment.clone(),
+        expected_intent_revision: issued.intent_revision,
+        claim_id: "claim-attach-1".into(),
+        claimant_attempt_id: "attempt-attach-1".into(),
+    };
+    let SuccessorTransitionClaimOutcomeV1::Claimed(claimed) = authority
+        .claim_successor_at(&claim, timestamp("2026-07-14T12:03:10.000000000Z"), 30)
+        .unwrap()
+    else {
+        panic!("first successor claim must commit")
+    };
+    assert_eq!(
+        authority
+            .claim_successor_at(&claim, timestamp("2026-07-14T12:03:11.000000000Z"), 30)
+            .unwrap(),
+        SuccessorTransitionClaimOutcomeV1::Joined(claimed.clone())
+    );
+
+    let HostSessionTransitionIntentStateV3::Claimed { claim_revision, .. } = claimed.state else {
+        panic!("successor claim must retain a claim")
+    };
+    let application = ApplyHostSessionTransitionRequestV1 {
+        intent_id: claimed.intent_id.clone(),
+        issuer_request_id: claimed.issuer_request_id.clone(),
+        payload_commitment: claimed.payload_commitment.clone(),
+        expected_intent_revision: claimed.intent_revision,
+        claim_id: claim.claim_id.clone(),
+        expected_claim_revision: claim_revision,
+    };
+    let SuccessorTransitionApplicationOutcomeV1::Applied(applied) = authority
+        .apply_successor_at(&application, timestamp("2026-07-14T12:03:20.000000000Z"))
+        .unwrap()
+    else {
+        panic!("first successor application must commit")
+    };
+    assert_eq!(
+        authority
+            .apply_successor_at(&application, timestamp("2026-07-14T12:03:21.000000000Z"))
+            .unwrap(),
+        SuccessorTransitionApplicationOutcomeV1::Joined(applied.clone())
+    );
+
+    let root = authority.read_a12b_root().unwrap();
+    let SessionNamespaceRecordV1::Authority(current_authority) =
+        &root.session_namespace_map[&request.orchestration_session_id]
+    else {
+        panic!("successor application must retain a durable authority")
+    };
+    assert_eq!(current_authority.authority_revision, 3);
+    assert_eq!(
+        current_authority
+            .active_authoritative_participant_id
+            .as_deref(),
+        Some("participant-attach-1")
+    );
+    assert_eq!(
+        current_authority.lifecycle_posture,
+        HostSessionPostureV1::ActiveAttached
+    );
+    let HostSessionTransitionIntentStateV3::Applied {
+        startup_ownership,
+        post_turn,
+        ..
+    } = &root.successor_transition_intent_map[&successor.intent_id].state
+    else {
+        panic!("successor intent must be applied")
+    };
+    assert!(matches!(
+        startup_ownership.as_ref(),
+        HostSessionStartupOwnershipApplicationV1::Pending {
+            expected_run_id,
+            expected_authority_revision: 3,
+            expected_active_authoritative_participant_id,
+        } if expected_run_id == "run-attach-1"
+            && expected_active_authoritative_participant_id == "participant-attach-1"
+    ));
+    assert_eq!(
+        post_turn.as_ref(),
+        &HostSessionPostTurnApplicationV2::NotApplicable
+    );
+    assert_eq!(
+        &root.successor_transition_intent_map[&successor.intent_id].transport_payload_state,
+        &HostSessionTransitionTransportPayloadStateV1::Retained
+    );
+}
+
+#[test]
+fn successor_attach_issue_rejects_preserved_start_identity_collisions() {
+    let (_parent, authority, binding) = authority();
+    let request = start_request(binding);
+    let current = upgrade_to_detached_v3_authority(&authority, &request);
+    let root_before_rejection = authority.read_a12b_root().unwrap();
+
+    let mut colliding_intent = attach_successor_request(&current, "participant-attach-1");
+    colliding_intent.intent_id = request.intent_id.clone();
+    colliding_intent.issuer_request_id = "request-attach-collide-intent".into();
+    assert_eq!(
+        authority
+            .issue_successor_at(
+                &current,
+                &colliding_intent,
+                timestamp("2026-07-14T12:04:00.000000000Z"),
+                300,
+            )
+            .unwrap_err()
+            .to_string(),
+        "successor issuance identity collides with committed Start intent"
+    );
+    assert_eq!(authority.read_a12b_root().unwrap(), root_before_rejection);
+
+    let mut colliding_request = attach_successor_request(&current, "participant-attach-2");
+    colliding_request.intent_id = "intent-attach-collide-request".into();
+    colliding_request.issuer_request_id = request.issuer_request_id.clone();
+    colliding_request.run_id = "run-attach-collide-request".into();
+    assert_eq!(
+        authority
+            .issue_successor_at(
+                &current,
+                &colliding_request,
+                timestamp("2026-07-14T12:04:10.000000000Z"),
+                300,
+            )
+            .unwrap_err()
+            .to_string(),
+        "successor issuance identity collides with committed Start intent"
+    );
+    assert_eq!(authority.read_a12b_root().unwrap(), root_before_rejection);
+}
+
+#[test]
+fn successor_attach_startup_acceptance_preserves_current_authority_and_retries() {
+    let (_parent, authority, binding) = authority();
+    let request = start_request(binding);
+    let current = upgrade_to_detached_v3_authority(&authority, &request);
+    let successor = attach_successor_request(&current, "participant-attach-1");
+
+    let SuccessorTransitionIssueOutcomeV1::Issued(issued) = authority
+        .issue_successor_at(
+            &current,
+            &successor,
+            timestamp("2026-07-14T12:05:00.000000000Z"),
+            300,
+        )
+        .unwrap()
+    else {
+        panic!("first successor issuance must commit")
+    };
+    let claim = ClaimHostSessionTransitionRequestV1 {
+        intent_id: issued.intent_id.clone(),
+        issuer_request_id: issued.issuer_request_id.clone(),
+        payload_commitment: issued.payload_commitment.clone(),
+        expected_intent_revision: issued.intent_revision,
+        claim_id: "claim-attach-startup-1".into(),
+        claimant_attempt_id: "attempt-attach-startup-1".into(),
+    };
+    let SuccessorTransitionClaimOutcomeV1::Claimed(claimed) = authority
+        .claim_successor_at(&claim, timestamp("2026-07-14T12:05:10.000000000Z"), 30)
+        .unwrap()
+    else {
+        panic!("first successor claim must commit")
+    };
+    let HostSessionTransitionIntentStateV3::Claimed { claim_revision, .. } = claimed.state else {
+        panic!("successor claim must retain a claim")
+    };
+    let application = ApplyHostSessionTransitionRequestV1 {
+        intent_id: claimed.intent_id.clone(),
+        issuer_request_id: claimed.issuer_request_id.clone(),
+        payload_commitment: claimed.payload_commitment.clone(),
+        expected_intent_revision: claimed.intent_revision,
+        claim_id: claim.claim_id.clone(),
+        expected_claim_revision: claim_revision,
+    };
+    authority
+        .apply_successor_at(&application, timestamp("2026-07-14T12:05:20.000000000Z"))
+        .unwrap();
+
+    let resolution = ResolveStartupOwnershipRequestV1 {
+        intent_id: successor.intent_id.clone(),
+        issuer_request_id: successor.issuer_request_id.clone(),
+        payload_commitment: claimed.payload_commitment.clone(),
+        protocol_actor: HostStartupOwnershipProtocolActorV1::TargetAuthoritativeParticipant {
+            participant_id: "participant-attach-1".into(),
+        },
+        protocol_event: HostStartupOwnershipProtocolEventV1::OwnershipAccepted {
+            ownership_acknowledgement_id: "startup-accept-attach-1".into(),
+        },
+        observed_at: timestamp("2026-07-14T12:05:30.000000000Z"),
+    };
+    let StartupOwnershipResolutionOutcomeV1::ResolvedSuccessor(resolved) = authority
+        .resolve_startup_ownership_at(&resolution, timestamp("2026-07-14T12:05:31.000000000Z"))
+        .unwrap()
+    else {
+        panic!("first startup acceptance must commit")
+    };
+    assert_eq!(
+        authority
+            .resolve_startup_ownership_at(&resolution, timestamp("2026-07-14T12:05:31.000000000Z"),)
+            .unwrap(),
+        StartupOwnershipResolutionOutcomeV1::JoinedSuccessor(resolved.clone())
+    );
+
+    let root = authority.read_a12b_root().unwrap();
+    let SessionNamespaceRecordV1::Authority(current_authority) =
+        &root.session_namespace_map[&request.orchestration_session_id]
+    else {
+        panic!("startup acceptance must retain a durable authority")
+    };
+    assert_eq!(current_authority.authority_revision, 3);
+    assert_eq!(
+        current_authority
+            .active_authoritative_participant_id
+            .as_deref(),
+        Some("participant-attach-1")
+    );
+    assert_eq!(
+        current_authority.lifecycle_posture,
+        HostSessionPostureV1::ActiveAttached
+    );
+    let journal = &root.successor_application_journal[&successor.intent_id];
+    assert!(journal.startup_terminal_application.is_none());
+    let HostSessionTransitionIntentStateV3::Applied {
+        startup_ownership, ..
+    } = &root.successor_transition_intent_map[&successor.intent_id].state
+    else {
+        panic!("resolved successor intent must remain applied")
+    };
+    let HostSessionStartupOwnershipApplicationV1::Accepted {
+        evidence_id,
+        result_ref,
+        authority_revision,
+        ..
+    } = startup_ownership.as_ref()
+    else {
+        panic!("startup ownership must be accepted")
+    };
+    assert_eq!(evidence_id, "startup-accept-attach-1");
+    assert_eq!(*authority_revision, 3);
+    let trusted_root = super::trusted_fs::TrustedAuthorityRoot::open(Path::new(
+        &root.bootstrap_home.physical_path,
+    ))
+    .unwrap();
+    let result_bytes = super::store::read_typed_object_v2_or_v3_opened(
+        &trusted_root,
+        root.root_revision,
+        result_ref,
+        None,
+    )
+    .unwrap();
+    let result: StartupOwnershipResultHashInputV1 =
+        super::canonical_json::from_slice(&result_bytes).unwrap();
+    assert_eq!(result.outcome, StartupOwnershipOutcomeV1::Accepted);
+    assert_eq!(
+        result.evidence.protocol_event,
+        HostStartupOwnershipProtocolEventV1::OwnershipAccepted {
+            ownership_acknowledgement_id: "startup-accept-attach-1".into(),
+        }
+    );
+}
+
+#[test]
+fn strict_v3_reopen_rejects_successor_lineage_drift() {
+    let (_parent, authority, binding) = authority();
+    let request = start_request(binding);
+    let current = upgrade_to_detached_v3_authority(&authority, &request);
+    let successor = attach_successor_request(&current, "participant-attach-1");
+
+    let SuccessorTransitionIssueOutcomeV1::Issued(issued) = authority
+        .issue_successor_at(
+            &current,
+            &successor,
+            timestamp("2026-07-14T12:05:00.000000000Z"),
+            300,
+        )
+        .unwrap()
+    else {
+        panic!("first successor issuance must commit")
+    };
+    let claim = ClaimHostSessionTransitionRequestV1 {
+        intent_id: issued.intent_id.clone(),
+        issuer_request_id: issued.issuer_request_id.clone(),
+        payload_commitment: issued.payload_commitment.clone(),
+        expected_intent_revision: issued.intent_revision,
+        claim_id: "claim-attach-lineage-drift-1".into(),
+        claimant_attempt_id: "attempt-attach-lineage-drift-1".into(),
+    };
+    let SuccessorTransitionClaimOutcomeV1::Claimed(claimed) = authority
+        .claim_successor_at(&claim, timestamp("2026-07-14T12:05:10.000000000Z"), 30)
+        .unwrap()
+    else {
+        panic!("successor claim must commit")
+    };
+    let HostSessionTransitionIntentStateV3::Claimed { claim_revision, .. } = claimed.state else {
+        panic!("successor claim must retain a claim")
+    };
+    let application = ApplyHostSessionTransitionRequestV1 {
+        intent_id: claimed.intent_id.clone(),
+        issuer_request_id: claimed.issuer_request_id.clone(),
+        payload_commitment: claimed.payload_commitment.clone(),
+        expected_intent_revision: claimed.intent_revision,
+        claim_id: claim.claim_id.clone(),
+        expected_claim_revision: claim_revision,
+    };
+    authority
+        .apply_successor_at(&application, timestamp("2026-07-14T12:05:20.000000000Z"))
+        .unwrap();
+
+    let mut tampered_root = authority.read_a12b_root().unwrap();
+    tampered_root
+        .successor_transition_intent_map
+        .get_mut(&successor.intent_id)
+        .unwrap()
+        .resulting_authoritative_lineage = vec![successor.target_authoritative_participant_id];
+    let authority_root_path =
+        Path::new(&request.workspace_binding.authority_store_root.physical_path);
+    fs::write(
+        authority_root_path.join("authority-v1/state-root-v1.json"),
+        super::store_schema::VersionedStateRoot::V3(tampered_root)
+            .to_canonical_bytes()
+            .unwrap(),
+    )
+    .unwrap();
+
+    let reopened = super::trusted_fs::TrustedAuthorityRoot::open(authority_root_path).unwrap();
+    assert!(super::store::read_opened_root_v2_or_v3(&reopened).is_err());
+}
+
+#[test]
+fn successor_attach_startup_retry_rejects_changed_resolution_metadata() {
+    let (_parent, authority, binding) = authority();
+    let request = start_request(binding);
+    let current = upgrade_to_detached_v3_authority(&authority, &request);
+    let successor = attach_successor_request(&current, "participant-attach-1");
+
+    let SuccessorTransitionIssueOutcomeV1::Issued(issued) = authority
+        .issue_successor_at(
+            &current,
+            &successor,
+            timestamp("2026-07-14T12:05:00.000000000Z"),
+            300,
+        )
+        .unwrap()
+    else {
+        panic!("successor issuance must commit")
+    };
+    let claim = ClaimHostSessionTransitionRequestV1 {
+        intent_id: issued.intent_id.clone(),
+        issuer_request_id: issued.issuer_request_id.clone(),
+        payload_commitment: issued.payload_commitment.clone(),
+        expected_intent_revision: issued.intent_revision,
+        claim_id: "claim-attach-startup-retry-1".into(),
+        claimant_attempt_id: "attempt-attach-startup-retry-1".into(),
+    };
+    let SuccessorTransitionClaimOutcomeV1::Claimed(claimed) = authority
+        .claim_successor_at(&claim, timestamp("2026-07-14T12:05:10.000000000Z"), 30)
+        .unwrap()
+    else {
+        panic!("successor claim must commit")
+    };
+    let HostSessionTransitionIntentStateV3::Claimed { claim_revision, .. } = claimed.state else {
+        panic!("successor claim must retain a claim")
+    };
+    let application = ApplyHostSessionTransitionRequestV1 {
+        intent_id: claimed.intent_id.clone(),
+        issuer_request_id: claimed.issuer_request_id.clone(),
+        payload_commitment: claimed.payload_commitment.clone(),
+        expected_intent_revision: claimed.intent_revision,
+        claim_id: claim.claim_id.clone(),
+        expected_claim_revision: claim_revision,
+    };
+    authority
+        .apply_successor_at(&application, timestamp("2026-07-14T12:05:20.000000000Z"))
+        .unwrap();
+
+    let resolution = ResolveStartupOwnershipRequestV1 {
+        intent_id: successor.intent_id.clone(),
+        issuer_request_id: successor.issuer_request_id.clone(),
+        payload_commitment: claimed.payload_commitment.clone(),
+        protocol_actor: HostStartupOwnershipProtocolActorV1::TargetAuthoritativeParticipant {
+            participant_id: "participant-attach-1".into(),
+        },
+        protocol_event: HostStartupOwnershipProtocolEventV1::OwnershipAccepted {
+            ownership_acknowledgement_id: "startup-accept-attach-retry-1".into(),
+        },
+        observed_at: timestamp("2026-07-14T12:05:30.000000000Z"),
+    };
+    authority
+        .resolve_startup_ownership_at(&resolution, timestamp("2026-07-14T12:05:31.000000000Z"))
+        .unwrap();
+
+    let mut changed_observed = resolution.clone();
+    changed_observed.observed_at = timestamp("2026-07-14T12:05:30.000000001Z");
+    assert!(authority
+        .resolve_startup_ownership_at(
+            &changed_observed,
+            timestamp("2026-07-14T12:05:31.000000000Z"),
+        )
+        .is_err());
+
+    assert!(authority
+        .resolve_startup_ownership_at(&resolution, timestamp("2026-07-14T12:05:31.000000001Z"),)
+        .is_err());
+}
+
+#[test]
+fn successor_attach_startup_terminal_reconciliation_detaches_and_retries() {
+    let (_parent, authority, binding) = authority();
+    let request = start_request(binding);
+    let current = upgrade_to_detached_v3_authority(&authority, &request);
+    let successor = attach_successor_request(&current, "participant-attach-1");
+
+    let SuccessorTransitionIssueOutcomeV1::Issued(issued) = authority
+        .issue_successor_at(
+            &current,
+            &successor,
+            timestamp("2026-07-14T12:06:00.000000000Z"),
+            300,
+        )
+        .unwrap()
+    else {
+        panic!("first successor issuance must commit")
+    };
+    let claim = ClaimHostSessionTransitionRequestV1 {
+        intent_id: issued.intent_id.clone(),
+        issuer_request_id: issued.issuer_request_id.clone(),
+        payload_commitment: issued.payload_commitment.clone(),
+        expected_intent_revision: issued.intent_revision,
+        claim_id: "claim-attach-startup-terminal-1".into(),
+        claimant_attempt_id: "attempt-attach-startup-terminal-1".into(),
+    };
+    let SuccessorTransitionClaimOutcomeV1::Claimed(claimed) = authority
+        .claim_successor_at(&claim, timestamp("2026-07-14T12:06:10.000000000Z"), 30)
+        .unwrap()
+    else {
+        panic!("first successor claim must commit")
+    };
+    let HostSessionTransitionIntentStateV3::Claimed { claim_revision, .. } = claimed.state else {
+        panic!("successor claim must retain a claim")
+    };
+    let application = ApplyHostSessionTransitionRequestV1 {
+        intent_id: claimed.intent_id.clone(),
+        issuer_request_id: claimed.issuer_request_id.clone(),
+        payload_commitment: claimed.payload_commitment.clone(),
+        expected_intent_revision: claimed.intent_revision,
+        claim_id: claim.claim_id.clone(),
+        expected_claim_revision: claim_revision,
+    };
+    authority
+        .apply_successor_at(&application, timestamp("2026-07-14T12:06:20.000000000Z"))
+        .unwrap();
+
+    let resolution = ResolveStartupOwnershipRequestV1 {
+        intent_id: successor.intent_id.clone(),
+        issuer_request_id: successor.issuer_request_id.clone(),
+        payload_commitment: claimed.payload_commitment.clone(),
+        protocol_actor: HostStartupOwnershipProtocolActorV1::LaunchApplicationClaimant {
+            claim_id: claim.claim_id.clone(),
+            claimant_attempt_id: claim.claimant_attempt_id.clone(),
+        },
+        protocol_event: HostStartupOwnershipProtocolEventV1::RuntimeCreationRejected {
+            rejection_id: "startup-reject-attach-1".into(),
+        },
+        observed_at: timestamp("2026-07-14T12:06:30.000000000Z"),
+    };
+    let StartupOwnershipResolutionOutcomeV1::ResolvedSuccessor(resolved) = authority
+        .resolve_startup_ownership_at(&resolution, timestamp("2026-07-14T12:06:31.000000000Z"))
+        .unwrap()
+    else {
+        panic!("first terminal startup reconciliation must commit")
+    };
+    assert_eq!(
+        authority
+            .resolve_startup_ownership_at(&resolution, timestamp("2026-07-14T12:06:31.000000000Z"),)
+            .unwrap(),
+        StartupOwnershipResolutionOutcomeV1::JoinedSuccessor(resolved.clone())
+    );
+
+    let root = authority.read_a12b_root().unwrap();
+    let SessionNamespaceRecordV1::Authority(current_authority) =
+        &root.session_namespace_map[&request.orchestration_session_id]
+    else {
+        panic!("terminal startup reconciliation must retain a durable authority")
+    };
+    assert_eq!(current_authority.authority_revision, 4);
+    assert_eq!(
+        current_authority
+            .active_authoritative_participant_id
+            .as_deref(),
+        Some("participant-attach-1")
+    );
+    assert_eq!(
+        current_authority.lifecycle_posture,
+        HostSessionPostureV1::DetachedReconciled
+    );
+    let journal = &root.successor_application_journal[&successor.intent_id];
+    assert!(journal.startup_terminal_application.is_some());
+    let intent = &root.successor_transition_intent_map[&successor.intent_id];
+    let HostSessionTransitionIntentStateV3::Applied {
+        startup_ownership, ..
+    } = &intent.state
+    else {
+        panic!("resolved successor intent must remain applied")
+    };
+    let HostSessionStartupOwnershipApplicationV1::TerminalReconciled {
+        evidence_id,
+        result_ref,
+        authority_revision_before,
+        authority_revision_after,
+        resulting_posture,
+        ..
+    } = startup_ownership.as_ref()
+    else {
+        panic!("startup ownership must be terminally reconciled")
+    };
+    assert_eq!(evidence_id, "startup-reject-attach-1");
+    assert_eq!(*authority_revision_before, 3);
+    assert_eq!(*authority_revision_after, 4);
+    assert_eq!(*resulting_posture, HostSessionPostureV1::DetachedReconciled);
+    assert!(matches!(
+        intent.transport_payload_state,
+        HostSessionTransitionTransportPayloadStateV1::ReleaseEligible { .. }
+    ));
+    let trusted_root = super::trusted_fs::TrustedAuthorityRoot::open(Path::new(
+        &root.bootstrap_home.physical_path,
+    ))
+    .unwrap();
+    let result_bytes = super::store::read_typed_object_v2_or_v3_opened(
+        &trusted_root,
+        root.root_revision,
+        result_ref,
+        None,
+    )
+    .unwrap();
+    let result: StartupOwnershipResultHashInputV1 =
+        super::canonical_json::from_slice(&result_bytes).unwrap();
+    assert_eq!(
+        result.outcome,
+        StartupOwnershipOutcomeV1::TerminalReconciled {
+            reason: super::schema::HostStartupTerminalReasonV1::RuntimeCreationRejected,
+            authority_revision_after: 4,
+            resulting_posture: HostSessionPostureV1::DetachedReconciled,
+            authority_record_commitment: canonical_commitment(&authority_hash_input(
+                current_authority
+            )),
+        }
+    );
+}
+
+#[test]
+fn reopen_rejects_v3_successor_attach_terminal_handoff_without_startup_result_ref() {
+    let (_parent, authority, binding) = authority();
+    let request = start_request(binding);
+    let current = upgrade_to_detached_v3_authority(&authority, &request);
+    let successor = attach_successor_request(&current, "participant-attach-1");
+
+    let SuccessorTransitionIssueOutcomeV1::Issued(issued) = authority
+        .issue_successor_at(
+            &current,
+            &successor,
+            timestamp("2026-07-14T12:06:00.000000000Z"),
+            300,
+        )
+        .unwrap()
+    else {
+        panic!("successor issuance must commit")
+    };
+    let claim = ClaimHostSessionTransitionRequestV1 {
+        intent_id: issued.intent_id.clone(),
+        issuer_request_id: issued.issuer_request_id.clone(),
+        payload_commitment: issued.payload_commitment.clone(),
+        expected_intent_revision: issued.intent_revision,
+        claim_id: "claim-attach-startup-reopen-1".into(),
+        claimant_attempt_id: "attempt-attach-startup-reopen-1".into(),
+    };
+    let SuccessorTransitionClaimOutcomeV1::Claimed(claimed) = authority
+        .claim_successor_at(&claim, timestamp("2026-07-14T12:06:10.000000000Z"), 30)
+        .unwrap()
+    else {
+        panic!("successor claim must commit")
+    };
+    let HostSessionTransitionIntentStateV3::Claimed { claim_revision, .. } = claimed.state else {
+        panic!("successor claim must retain a claim")
+    };
+    let application = ApplyHostSessionTransitionRequestV1 {
+        intent_id: claimed.intent_id.clone(),
+        issuer_request_id: claimed.issuer_request_id.clone(),
+        payload_commitment: claimed.payload_commitment.clone(),
+        expected_intent_revision: claimed.intent_revision,
+        claim_id: claim.claim_id.clone(),
+        expected_claim_revision: claim_revision,
+    };
+    authority
+        .apply_successor_at(&application, timestamp("2026-07-14T12:06:20.000000000Z"))
+        .unwrap();
+    let resolution = ResolveStartupOwnershipRequestV1 {
+        intent_id: successor.intent_id.clone(),
+        issuer_request_id: successor.issuer_request_id.clone(),
+        payload_commitment: claimed.payload_commitment.clone(),
+        protocol_actor: HostStartupOwnershipProtocolActorV1::LaunchApplicationClaimant {
+            claim_id: claim.claim_id.clone(),
+            claimant_attempt_id: claim.claimant_attempt_id.clone(),
+        },
+        protocol_event: HostStartupOwnershipProtocolEventV1::RuntimeCreationRejected {
+            rejection_id: "startup-reject-attach-reopen-1".into(),
+        },
+        observed_at: timestamp("2026-07-14T12:06:30.000000000Z"),
+    };
+    authority
+        .resolve_startup_ownership_at(&resolution, timestamp("2026-07-14T12:06:31.000000000Z"))
+        .unwrap();
+
+    let root = authority.read_a12b_root().unwrap();
+    let trusted_root = super::trusted_fs::TrustedAuthorityRoot::open(Path::new(
+        &root.bootstrap_home.physical_path,
+    ))
+    .unwrap();
+    let intent = &root.successor_transition_intent_map[&successor.intent_id];
+    let HostSessionTransitionTransportPayloadStateV1::ReleaseEligible {
+        terminal_handoff_ref,
+    } = &intent.transport_payload_state
+    else {
+        panic!("terminalized Attach must retain its terminal handoff")
+    };
+    let terminal_bytes = super::store::read_typed_object_v2_or_v3_opened(
+        &trusted_root,
+        root.root_revision,
+        terminal_handoff_ref,
+        None,
+    )
+    .unwrap();
+    let mut terminal: TerminalHandoffHashInputV2 =
+        super::canonical_json::from_slice(&terminal_bytes).unwrap();
+    terminal.startup_ownership_result_ref = None;
+    let corrupted_terminal_bytes = super::canonical_json::to_vec(&terminal).unwrap();
+    let corrupted_commitment = canonical_commitment(&terminal);
+
+    let mut corrupted_root = root.clone();
+    let mut corrupted_terminal_ref = terminal_handoff_ref.clone();
+    corrupted_terminal_ref.commitment = corrupted_commitment;
+    let successor_intent = corrupted_root
+        .successor_transition_intent_map
+        .get_mut(&successor.intent_id)
+        .unwrap();
+    successor_intent.transport_payload_state =
+        HostSessionTransitionTransportPayloadStateV1::ReleaseEligible {
+            terminal_handoff_ref: corrupted_terminal_ref.clone(),
+        };
+    corrupted_root
+        .object_index
+        .get_mut(&successor_intent.transport_payload_ref.ref_id)
+        .unwrap()
+        .storage_state = super::store_schema::AuthorityObjectStorageStateV1::ReleaseEligible {
+        terminal_handoff_ref: corrupted_terminal_ref.clone(),
+    };
+    corrupted_root
+        .object_index
+        .get_mut(&corrupted_terminal_ref.ref_id)
+        .unwrap()
+        .byte_length = corrupted_terminal_bytes.len() as u64;
+
+    let home = Path::new(&corrupted_root.bootstrap_home.physical_path);
+    let object_path = home.join(format!(
+        "authority-v1/objects/terminal-handoff/v1/{}.obj",
+        corrupted_terminal_ref.ref_id
+    ));
+    fs::write(&object_path, &corrupted_terminal_bytes).unwrap();
+    fs::write(
+        home.join("authority-v1/state-root-v1.json"),
+        super::canonical_json::to_vec(&corrupted_root).unwrap(),
+    )
+    .unwrap();
+
+    let reopened = super::trusted_fs::TrustedAuthorityRoot::open(home).unwrap();
+    assert!(super::store::read_opened_root_v2_or_v3(&reopened).is_err());
+}
+
+#[test]
+fn strict_v3_startup_acceptance_preserves_applied_start_and_retries() {
+    let (_parent, authority, binding) = authority();
+    let request = start_request(binding);
+    let application = issue_and_claim_start(&authority, &request);
+    authority
+        .apply_start_at(&application, timestamp("2026-07-14T12:01:10.000000000Z"))
+        .unwrap();
+    let exact_v2 = authority.read_a12a_root().unwrap();
+    let exact_v3 = super::store::upgrade_v2_root_to_v3_test(
+        Path::new(&request.workspace_binding.authority_store_root.physical_path),
+        &exact_v2,
+    )
+    .unwrap();
+    let resolution = ResolveStartupOwnershipRequestV1 {
+        intent_id: request.intent_id.clone(),
+        issuer_request_id: request.issuer_request_id.clone(),
+        payload_commitment: exact_v3.transition_intent_map[&request.intent_id]
+            .payload_commitment
+            .clone(),
+        protocol_actor: HostStartupOwnershipProtocolActorV1::TargetAuthoritativeParticipant {
+            participant_id: request.target_authoritative_participant_id.clone(),
+        },
+        protocol_event: HostStartupOwnershipProtocolEventV1::OwnershipAccepted {
+            ownership_acknowledgement_id: "startup-accept-start-1".into(),
+        },
+        observed_at: timestamp("2026-07-14T12:01:20.000000000Z"),
+    };
+    let StartupOwnershipResolutionOutcomeV1::ResolvedStart(resolved) = authority
+        .resolve_startup_ownership_at(&resolution, timestamp("2026-07-14T12:01:21.000000000Z"))
+        .unwrap()
+    else {
+        panic!("first preserved Start startup acceptance must commit")
+    };
+    assert_eq!(
+        authority
+            .resolve_startup_ownership_at(&resolution, timestamp("2026-07-14T12:01:21.000000000Z"),)
+            .unwrap(),
+        StartupOwnershipResolutionOutcomeV1::JoinedStart(resolved.clone())
+    );
+
+    let root = authority.read_a12b_root().unwrap();
+    let SessionNamespaceRecordV1::Authority(current_authority) =
+        &root.session_namespace_map[&request.orchestration_session_id]
+    else {
+        panic!("accepted Start must retain current authority")
+    };
+    assert_eq!(current_authority.authority_revision, 1);
+    assert_eq!(
+        current_authority
+            .active_authoritative_participant_id
+            .as_deref(),
+        Some(request.target_authoritative_participant_id.as_str())
+    );
+    assert_eq!(
+        current_authority.lifecycle_posture,
+        HostSessionPostureV1::ActiveAttached
+    );
+    let journal = &root.application_journal[&request.intent_id];
+    assert!(journal.startup_terminal_application.is_none());
+    let HostSessionTransitionIntentStateV2::Applied {
+        startup_ownership, ..
+    } = &root.transition_intent_map[&request.intent_id].state
+    else {
+        panic!("preserved Start must remain applied")
+    };
+    let HostSessionStartupOwnershipApplicationV1::Accepted {
+        evidence_id,
+        result_ref,
+        authority_revision,
+        ..
+    } = startup_ownership.as_ref()
+    else {
+        panic!("preserved Start startup must be accepted")
+    };
+    assert_eq!(evidence_id, "startup-accept-start-1");
+    assert_eq!(*authority_revision, 1);
+    let trusted_root = super::trusted_fs::TrustedAuthorityRoot::open(Path::new(
+        &root.bootstrap_home.physical_path,
+    ))
+    .unwrap();
+    let result_bytes = super::store::read_typed_object_v2_or_v3_opened(
+        &trusted_root,
+        root.root_revision,
+        result_ref,
+        None,
+    )
+    .unwrap();
+    let result: StartupOwnershipResultHashInputV1 =
+        super::canonical_json::from_slice(&result_bytes).unwrap();
+    assert_eq!(result.outcome, StartupOwnershipOutcomeV1::Accepted);
+    assert_eq!(result.evidence.expected_authority_revision, 1);
+    assert_eq!(
+        result.evidence.protocol_event,
+        HostStartupOwnershipProtocolEventV1::OwnershipAccepted {
+            ownership_acknowledgement_id: "startup-accept-start-1".into(),
+        }
+    );
+}
+
+#[test]
+fn strict_v3_startup_retry_rejects_changed_start_resolution_metadata() {
+    let (_parent, authority, binding) = authority();
+    let request = start_request(binding);
+    let application = issue_and_claim_start(&authority, &request);
+    authority
+        .apply_start_at(&application, timestamp("2026-07-14T12:01:10.000000000Z"))
+        .unwrap();
+    let exact_v2 = authority.read_a12a_root().unwrap();
+    let exact_v3 = super::store::upgrade_v2_root_to_v3_test(
+        Path::new(&request.workspace_binding.authority_store_root.physical_path),
+        &exact_v2,
+    )
+    .unwrap();
+    let resolution = ResolveStartupOwnershipRequestV1 {
+        intent_id: request.intent_id.clone(),
+        issuer_request_id: request.issuer_request_id.clone(),
+        payload_commitment: exact_v3.transition_intent_map[&request.intent_id]
+            .payload_commitment
+            .clone(),
+        protocol_actor: HostStartupOwnershipProtocolActorV1::TargetAuthoritativeParticipant {
+            participant_id: request.target_authoritative_participant_id.clone(),
+        },
+        protocol_event: HostStartupOwnershipProtocolEventV1::OwnershipAccepted {
+            ownership_acknowledgement_id: "startup-accept-start-retry-1".into(),
+        },
+        observed_at: timestamp("2026-07-14T12:01:20.000000000Z"),
+    };
+    authority
+        .resolve_startup_ownership_at(&resolution, timestamp("2026-07-14T12:01:21.000000000Z"))
+        .unwrap();
+
+    let mut changed_event = resolution.clone();
+    changed_event.protocol_event = HostStartupOwnershipProtocolEventV1::OwnershipAccepted {
+        ownership_acknowledgement_id: "startup-accept-start-retry-2".into(),
+    };
+    assert!(authority
+        .resolve_startup_ownership_at(&changed_event, timestamp("2026-07-14T12:01:21.000000000Z"),)
+        .is_err());
+
+    let mut changed_observed = resolution.clone();
+    changed_observed.observed_at = timestamp("2026-07-14T12:01:20.000000001Z");
+    assert!(authority
+        .resolve_startup_ownership_at(
+            &changed_observed,
+            timestamp("2026-07-14T12:01:21.000000000Z"),
+        )
+        .is_err());
+
+    assert!(authority
+        .resolve_startup_ownership_at(&resolution, timestamp("2026-07-14T12:01:21.000000001Z"),)
+        .is_err());
+}
+
+#[test]
+fn strict_v3_startup_acceptance_preserves_r0_descendant_current_authority_resolution() {
+    let (_parent, authority, binding) = authority();
+    let mut request = start_request(binding);
+    request.start_contract.descriptor.execution_scope = AgentExecutionScopeV1::World;
+    request
+        .start_contract
+        .launch_knobs
+        .requested_execution_scope = AgentExecutionScopeV1::World;
+    request.world_binding = Some(WorldBindingV1 {
+        world_id: "world-start-accept-1".into(),
+        world_generation: 1,
+    });
+    let application = issue_and_claim_start(&authority, &request);
+    authority
+        .apply_start_at(&application, timestamp("2026-07-14T12:01:10.000000000Z"))
+        .unwrap();
+    let root_before_r0 = authority.read_a12a_root().unwrap();
+    let SessionNamespaceRecordV1::Authority(current_authority) =
+        &root_before_r0.session_namespace_map[&request.orchestration_session_id]
+    else {
+        panic!("applied Start must have current authority")
+    };
+    let expected_authority = RetainedWorkerAuthorityPreconditionV1 {
+        authority_store_id: root_before_r0.authority_store_id.clone(),
+        authority_revision: current_authority.authority_revision,
+        authority_record_commitment: canonical_commitment(&authority_hash_input(current_authority)),
+    };
+    let descriptor_bytes = super::canonical_json::to_vec(&AgentDescriptorHashInputV1 {
+        schema_version: 1,
+        descriptor: request.start_contract.descriptor.clone(),
+    })
+    .unwrap();
+    let retained_participant_id = "participant-retained-accept-1".to_string();
+    let session_id = request.orchestration_session_id.clone();
+    let resume_handle_bytes = super::canonical_json::to_vec(&ResumeHandleHashInputV1 {
+        schema_version: 1,
+        orchestration_session_id: session_id.clone(),
+        participant_id: retained_participant_id.clone(),
+        backend_id: request.start_contract.descriptor.backend_id.clone(),
+        protocol: request.start_contract.descriptor.protocol.clone(),
+        internal_uaa_session_id: "uaa-retained-accept-1".into(),
+    })
+    .unwrap();
+    let retained_participant_id_for_worker = retained_participant_id.clone();
+    let session_id_for_worker = session_id.clone();
+    let reserved = authority
+        .reserve_retained_worker_registration_at(
+            "r0-request-startup-accept-1",
+            &session_id,
+            &expected_authority,
+            &retained_participant_id,
+            descriptor_bytes,
+            resume_handle_bytes,
+            timestamp("2026-07-14T12:01:30.000000000Z"),
+            None,
+            move |descriptor_ref, resume_handle_ref, policy_ref, world_binding| {
+                super::canonical_json::to_vec(&RetainedWorkerObjectHashInputV1 {
+                    schema_version: 1,
+                    orchestration_session_id: session_id_for_worker.clone(),
+                    participant_id: retained_participant_id_for_worker.clone(),
+                    world_binding: world_binding.clone(),
+                    descriptor_ref: descriptor_ref.clone(),
+                    resume_handle_ref: resume_handle_ref.clone(),
+                    policy_ref: policy_ref.clone(),
+                })
+                .map_err(|_| "serialize retained worker")
+            },
+        )
+        .unwrap();
+    authority
+        .publish_reserved_retained_object(
+            &reserved,
+            &reserved.descriptor_ref,
+            &reserved.descriptor_bytes,
+        )
+        .unwrap();
+    authority
+        .publish_reserved_retained_object(
+            &reserved,
+            &reserved.resume_handle_ref,
+            &reserved.resume_handle_bytes,
+        )
+        .unwrap();
+    authority
+        .publish_reserved_retained_object(
+            &reserved,
+            &reserved.retained_worker_ref,
+            &reserved.retained_worker_bytes,
+        )
+        .unwrap();
+    authority
+        .apply_reserved_retained_worker_registration(&reserved)
+        .unwrap();
+
+    let root_after_r0 = authority.read_a12a_root().unwrap();
+    super::store::upgrade_v2_root_to_v3_test(
+        Path::new(&request.workspace_binding.authority_store_root.physical_path),
+        &root_after_r0,
+    )
+    .unwrap();
+    let root_after_upgrade = authority.read_a12b_root().unwrap();
+    let resolution = ResolveStartupOwnershipRequestV1 {
+        intent_id: request.intent_id.clone(),
+        issuer_request_id: request.issuer_request_id.clone(),
+        payload_commitment: root_after_upgrade.transition_intent_map[&request.intent_id]
+            .payload_commitment
+            .clone(),
+        protocol_actor: HostStartupOwnershipProtocolActorV1::TargetAuthoritativeParticipant {
+            participant_id: request.target_authoritative_participant_id.clone(),
+        },
+        protocol_event: HostStartupOwnershipProtocolEventV1::OwnershipAccepted {
+            ownership_acknowledgement_id: "startup-accept-start-r0-1".into(),
+        },
+        observed_at: timestamp("2026-07-14T12:01:40.000000000Z"),
+    };
+    authority
+        .resolve_startup_ownership_at(&resolution, timestamp("2026-07-14T12:01:41.000000000Z"))
+        .unwrap();
+
+    let resolved = authority
+        .resolve_current_exact(&request.orchestration_session_id, None)
+        .unwrap();
+    assert_eq!(resolved.observation.authority_revision, 2);
+    assert_eq!(resolved.authority.authority_revision, 2);
+    assert_eq!(
+        resolved
+            .authority
+            .authoritative_participant_lineage
+            .last()
+            .map(String::as_str),
+        Some(retained_participant_id.as_str())
+    );
+    assert_eq!(resolved.authority.retained_worker_refs.len(), 1);
+}
+
+#[test]
+fn strict_v3_current_authority_resolution_rejects_unproven_r0_descendant_mutation() {
+    let (_parent, authority, binding) = authority();
+    let mut request = start_request(binding);
+    request.start_contract.descriptor.execution_scope = AgentExecutionScopeV1::World;
+    request
+        .start_contract
+        .launch_knobs
+        .requested_execution_scope = AgentExecutionScopeV1::World;
+    request.world_binding = Some(WorldBindingV1 {
+        world_id: "world-start-accept-invalid-r0".into(),
+        world_generation: 1,
+    });
+    let application = issue_and_claim_start(&authority, &request);
+    authority
+        .apply_start_at(&application, timestamp("2026-07-14T12:01:10.000000000Z"))
+        .unwrap();
+    let root_before_r0 = authority.read_a12a_root().unwrap();
+    let SessionNamespaceRecordV1::Authority(current_authority) =
+        &root_before_r0.session_namespace_map[&request.orchestration_session_id]
+    else {
+        panic!("applied Start must have current authority")
+    };
+    let expected_authority = RetainedWorkerAuthorityPreconditionV1 {
+        authority_store_id: root_before_r0.authority_store_id.clone(),
+        authority_revision: current_authority.authority_revision,
+        authority_record_commitment: canonical_commitment(&authority_hash_input(current_authority)),
+    };
+    let descriptor_bytes = super::canonical_json::to_vec(&AgentDescriptorHashInputV1 {
+        schema_version: 1,
+        descriptor: request.start_contract.descriptor.clone(),
+    })
+    .unwrap();
+    let retained_participant_id = "participant-retained-invalid-r0".to_string();
+    let session_id = request.orchestration_session_id.clone();
+    let resume_handle_bytes = super::canonical_json::to_vec(&ResumeHandleHashInputV1 {
+        schema_version: 1,
+        orchestration_session_id: session_id.clone(),
+        participant_id: retained_participant_id.clone(),
+        backend_id: request.start_contract.descriptor.backend_id.clone(),
+        protocol: request.start_contract.descriptor.protocol.clone(),
+        internal_uaa_session_id: "uaa-retained-invalid-r0".into(),
+    })
+    .unwrap();
+    let retained_participant_id_for_worker = retained_participant_id.clone();
+    let session_id_for_worker = session_id.clone();
+    let reserved = authority
+        .reserve_retained_worker_registration_at(
+            "r0-request-invalid-r0-1",
+            &session_id,
+            &expected_authority,
+            &retained_participant_id,
+            descriptor_bytes,
+            resume_handle_bytes,
+            timestamp("2026-07-14T12:01:30.000000000Z"),
+            None,
+            move |descriptor_ref, resume_handle_ref, policy_ref, world_binding| {
+                super::canonical_json::to_vec(&RetainedWorkerObjectHashInputV1 {
+                    schema_version: 1,
+                    orchestration_session_id: session_id_for_worker.clone(),
+                    participant_id: retained_participant_id_for_worker.clone(),
+                    world_binding: world_binding.clone(),
+                    descriptor_ref: descriptor_ref.clone(),
+                    resume_handle_ref: resume_handle_ref.clone(),
+                    policy_ref: policy_ref.clone(),
+                })
+                .map_err(|_| "serialize retained worker")
+            },
+        )
+        .unwrap();
+    authority
+        .publish_reserved_retained_object(
+            &reserved,
+            &reserved.descriptor_ref,
+            &reserved.descriptor_bytes,
+        )
+        .unwrap();
+    authority
+        .publish_reserved_retained_object(
+            &reserved,
+            &reserved.resume_handle_ref,
+            &reserved.resume_handle_bytes,
+        )
+        .unwrap();
+    authority
+        .publish_reserved_retained_object(
+            &reserved,
+            &reserved.retained_worker_ref,
+            &reserved.retained_worker_bytes,
+        )
+        .unwrap();
+    authority
+        .apply_reserved_retained_worker_registration(&reserved)
+        .unwrap();
+    super::store::upgrade_v2_root_to_v3_test(
+        Path::new(&request.workspace_binding.authority_store_root.physical_path),
+        &authority.read_a12a_root().unwrap(),
+    )
+    .unwrap();
+
+    let mut tampered_root = authority.read_a12b_root().unwrap();
+    let SessionNamespaceRecordV1::Authority(tampered_authority) = tampered_root
+        .session_namespace_map
+        .get_mut(&request.orchestration_session_id)
+        .expect("R0 descendant must have current authority")
+    else {
+        panic!("expected current authority record")
+    };
+    tampered_authority.lifecycle_posture = HostSessionPostureV1::AwaitingAttention;
+    let authority_root_path =
+        Path::new(&request.workspace_binding.authority_store_root.physical_path);
+    fs::write(
+        authority_root_path.join("authority-v1/state-root-v1.json"),
+        super::store_schema::VersionedStateRoot::V3(tampered_root)
+            .to_canonical_bytes()
+            .unwrap(),
+    )
+    .unwrap();
+
+    assert!(authority
+        .resolve_current_exact(&request.orchestration_session_id, None)
+        .is_err());
+}
+
+#[test]
+fn strict_v3_startup_terminal_reconciliation_advances_exact_r0_descendant_start() {
+    let (_parent, authority, binding) = authority();
+    let mut request = start_request(binding);
+    request.start_contract.descriptor.execution_scope = AgentExecutionScopeV1::World;
+    request
+        .start_contract
+        .launch_knobs
+        .requested_execution_scope = AgentExecutionScopeV1::World;
+    request.world_binding = Some(WorldBindingV1 {
+        world_id: "world-start-1".into(),
+        world_generation: 1,
+    });
+    request.transition_input = Some(b"startup-input-1".to_vec());
+    let application = issue_and_claim_start(&authority, &request);
+    authority
+        .apply_start_at(&application, timestamp("2026-07-14T12:01:10.000000000Z"))
+        .unwrap();
+    let root_before_r0 = authority.read_a12a_root().unwrap();
+    let SessionNamespaceRecordV1::Authority(current_authority) =
+        &root_before_r0.session_namespace_map[&request.orchestration_session_id]
+    else {
+        panic!("applied Start must have current authority")
+    };
+    let expected_authority = RetainedWorkerAuthorityPreconditionV1 {
+        authority_store_id: root_before_r0.authority_store_id.clone(),
+        authority_revision: current_authority.authority_revision,
+        authority_record_commitment: canonical_commitment(&authority_hash_input(current_authority)),
+    };
+    let descriptor_bytes = super::canonical_json::to_vec(&AgentDescriptorHashInputV1 {
+        schema_version: 1,
+        descriptor: request.start_contract.descriptor.clone(),
+    })
+    .unwrap();
+    let retained_participant_id = "participant-retained-1".to_string();
+    let session_id = request.orchestration_session_id.clone();
+    let resume_handle_bytes = super::canonical_json::to_vec(&ResumeHandleHashInputV1 {
+        schema_version: 1,
+        orchestration_session_id: session_id.clone(),
+        participant_id: retained_participant_id.clone(),
+        backend_id: request.start_contract.descriptor.backend_id.clone(),
+        protocol: request.start_contract.descriptor.protocol.clone(),
+        internal_uaa_session_id: "uaa-retained-1".into(),
+    })
+    .unwrap();
+    let retained_participant_id_for_worker = retained_participant_id.clone();
+    let session_id_for_worker = session_id.clone();
+    let reserved = authority
+        .reserve_retained_worker_registration_at(
+            "r0-request-startup-1",
+            &session_id,
+            &expected_authority,
+            &retained_participant_id,
+            descriptor_bytes,
+            resume_handle_bytes,
+            timestamp("2026-07-14T12:01:30.000000000Z"),
+            None,
+            move |descriptor_ref, resume_handle_ref, policy_ref, world_binding| {
+                super::canonical_json::to_vec(&RetainedWorkerObjectHashInputV1 {
+                    schema_version: 1,
+                    orchestration_session_id: session_id_for_worker.clone(),
+                    participant_id: retained_participant_id_for_worker.clone(),
+                    world_binding: world_binding.clone(),
+                    descriptor_ref: descriptor_ref.clone(),
+                    resume_handle_ref: resume_handle_ref.clone(),
+                    policy_ref: policy_ref.clone(),
+                })
+                .map_err(|_| "serialize retained worker")
+            },
+        )
+        .unwrap();
+    authority
+        .publish_reserved_retained_object(
+            &reserved,
+            &reserved.descriptor_ref,
+            &reserved.descriptor_bytes,
+        )
+        .unwrap();
+    authority
+        .publish_reserved_retained_object(
+            &reserved,
+            &reserved.resume_handle_ref,
+            &reserved.resume_handle_bytes,
+        )
+        .unwrap();
+    authority
+        .publish_reserved_retained_object(
+            &reserved,
+            &reserved.retained_worker_ref,
+            &reserved.retained_worker_bytes,
+        )
+        .unwrap();
+    let applied_registration = authority
+        .apply_reserved_retained_worker_registration(&reserved)
+        .unwrap();
+    assert!(!applied_registration.joined);
+
+    let root_after_r0 = authority.read_a12a_root().unwrap();
+    let SessionNamespaceRecordV1::Authority(descendant_authority) =
+        &root_after_r0.session_namespace_map[&request.orchestration_session_id]
+    else {
+        panic!("R0 must retain a descendant authority")
+    };
+    assert_eq!(descendant_authority.authority_revision, 2);
+    assert_eq!(
+        descendant_authority
+            .active_authoritative_participant_id
+            .as_deref(),
+        Some(request.target_authoritative_participant_id.as_str())
+    );
+    assert_eq!(
+        descendant_authority
+            .authoritative_participant_lineage
+            .last()
+            .map(String::as_str),
+        Some(retained_participant_id.as_str())
+    );
+    super::store::upgrade_v2_root_to_v3_test(
+        Path::new(&request.workspace_binding.authority_store_root.physical_path),
+        &root_after_r0,
+    )
+    .unwrap();
+
+    let root_after_upgrade = authority.read_a12b_root().unwrap();
+
+    let resolution = ResolveStartupOwnershipRequestV1 {
+        intent_id: request.intent_id.clone(),
+        issuer_request_id: request.issuer_request_id.clone(),
+        payload_commitment: root_after_upgrade.transition_intent_map[&request.intent_id]
+            .payload_commitment
+            .clone(),
+        protocol_actor: HostStartupOwnershipProtocolActorV1::TargetAuthoritativeParticipant {
+            participant_id: request.target_authoritative_participant_id.clone(),
+        },
+        protocol_event: HostStartupOwnershipProtocolEventV1::StartupFailedBeforeOwnership {
+            failure_id: "startup-failed-start-1".into(),
+        },
+        observed_at: timestamp("2026-07-14T12:01:40.000000000Z"),
+    };
+    let StartupOwnershipResolutionOutcomeV1::ResolvedStart(resolved) = authority
+        .resolve_startup_ownership_at(&resolution, timestamp("2026-07-14T12:01:41.000000000Z"))
+        .unwrap()
+    else {
+        panic!("terminal preserved Start startup reconciliation must commit")
+    };
+    assert_eq!(
+        authority
+            .resolve_startup_ownership_at(&resolution, timestamp("2026-07-14T12:01:41.000000000Z"),)
+            .unwrap(),
+        StartupOwnershipResolutionOutcomeV1::JoinedStart(resolved.clone())
+    );
+
+    let root = authority.read_a12b_root().unwrap();
+    let SessionNamespaceRecordV1::Authority(current_authority) =
+        &root.session_namespace_map[&request.orchestration_session_id]
+    else {
+        panic!("terminal preserved Start must retain current authority")
+    };
+    assert_eq!(current_authority.authority_revision, 3);
+    assert_eq!(
+        current_authority.lifecycle_posture,
+        HostSessionPostureV1::Terminal
+    );
+    assert_eq!(
+        current_authority
+            .active_authoritative_participant_id
+            .as_deref(),
+        Some(request.target_authoritative_participant_id.as_str())
+    );
+    assert_eq!(
+        current_authority
+            .authoritative_participant_lineage
+            .last()
+            .map(String::as_str),
+        Some(retained_participant_id.as_str())
+    );
+    assert_eq!(current_authority.retained_worker_refs.len(), 1);
+    let journal = &root.application_journal[&request.intent_id];
+    assert!(journal.startup_terminal_application.is_some());
+    let intent = &root.transition_intent_map[&request.intent_id];
+    let HostSessionTransitionIntentStateV2::Applied {
+        startup_ownership, ..
+    } = &intent.state
+    else {
+        panic!("terminal preserved Start must remain applied")
+    };
+    let HostSessionStartupOwnershipApplicationV1::TerminalReconciled {
+        evidence_id,
+        result_ref,
+        authority_revision_before,
+        authority_revision_after,
+        resulting_posture,
+        ..
+    } = startup_ownership.as_ref()
+    else {
+        panic!("preserved Start startup must be terminally reconciled")
+    };
+    assert_eq!(evidence_id, "startup-failed-start-1");
+    assert_eq!(*authority_revision_before, 2);
+    assert_eq!(*authority_revision_after, 3);
+    assert_eq!(*resulting_posture, HostSessionPostureV1::Terminal);
+    assert!(matches!(
+        intent.transport_payload_state,
+        HostSessionTransitionTransportPayloadStateV1::ReleaseEligible { .. }
+    ));
+    assert!(matches!(
+        intent.input_handoff,
+        HostSessionTransitionInputHandoffV1::TerminalWithoutAcceptance { .. }
+    ));
+    let trusted_root = super::trusted_fs::TrustedAuthorityRoot::open(Path::new(
+        &root.bootstrap_home.physical_path,
+    ))
+    .unwrap();
+    let result_bytes = super::store::read_typed_object_v2_or_v3_opened(
+        &trusted_root,
+        root.root_revision,
+        result_ref,
+        None,
+    )
+    .unwrap();
+    let result: StartupOwnershipResultHashInputV1 =
+        super::canonical_json::from_slice(&result_bytes).unwrap();
+    assert_eq!(
+        result.outcome,
+        StartupOwnershipOutcomeV1::TerminalReconciled {
+            reason: super::schema::HostStartupTerminalReasonV1::StartupFailedBeforeOwnership,
+            authority_revision_after: 3,
+            resulting_posture: HostSessionPostureV1::Terminal,
+            authority_record_commitment: canonical_commitment(&authority_hash_input(
+                current_authority
+            )),
+        }
+    );
+    assert_eq!(result.evidence.expected_authority_revision, 1);
+}
+
+#[test]
+fn successor_resume_issue_claim_apply_retries_to_one_pending_post_turn() {
+    let (_parent, authority, binding) = authority();
+    let request = start_request(binding);
+    let (current, resume_handle_ref) = park_with_resume_handle(&authority, &request);
+    let successor =
+        resume_successor_request(&current, resume_handle_ref.clone(), "participant-resume-1");
+
+    let SuccessorTransitionIssueOutcomeV1::Issued(issued) = authority
+        .issue_successor_at(
+            &current,
+            &successor,
+            timestamp("2026-07-14T12:04:00.000000000Z"),
+            300,
+        )
+        .unwrap()
+    else {
+        panic!("first resume issuance must commit")
+    };
+    assert_eq!(
+        authority
+            .issue_successor_at(
+                &current,
+                &successor,
+                timestamp("2026-07-14T12:04:00.000000000Z"),
+                300,
+            )
+            .unwrap(),
+        SuccessorTransitionIssueOutcomeV1::Joined(issued.clone())
+    );
+
+    let claim = ClaimHostSessionTransitionRequestV1 {
+        intent_id: issued.intent_id.clone(),
+        issuer_request_id: issued.issuer_request_id.clone(),
+        payload_commitment: issued.payload_commitment.clone(),
+        expected_intent_revision: issued.intent_revision,
+        claim_id: "claim-resume-1".into(),
+        claimant_attempt_id: "attempt-resume-1".into(),
+    };
+    let SuccessorTransitionClaimOutcomeV1::Claimed(claimed) = authority
+        .claim_successor_at(&claim, timestamp("2026-07-14T12:04:10.000000000Z"), 30)
+        .unwrap()
+    else {
+        panic!("first resume claim must commit")
+    };
+    assert_eq!(
+        authority
+            .claim_successor_at(&claim, timestamp("2026-07-14T12:04:11.000000000Z"), 30)
+            .unwrap(),
+        SuccessorTransitionClaimOutcomeV1::Joined(claimed.clone())
+    );
+
+    let HostSessionTransitionIntentStateV3::Claimed { claim_revision, .. } = claimed.state else {
+        panic!("resume claim must retain a claim")
+    };
+    let application = ApplyHostSessionTransitionRequestV1 {
+        intent_id: claimed.intent_id.clone(),
+        issuer_request_id: claimed.issuer_request_id.clone(),
+        payload_commitment: claimed.payload_commitment.clone(),
+        expected_intent_revision: claimed.intent_revision,
+        claim_id: claim.claim_id.clone(),
+        expected_claim_revision: claim_revision,
+    };
+    let SuccessorTransitionApplicationOutcomeV1::Applied(applied) = authority
+        .apply_successor_at(&application, timestamp("2026-07-14T12:04:20.000000000Z"))
+        .unwrap()
+    else {
+        panic!("first resume application must commit")
+    };
+    assert_eq!(
+        authority
+            .apply_successor_at(&application, timestamp("2026-07-14T12:04:21.000000000Z"))
+            .unwrap(),
+        SuccessorTransitionApplicationOutcomeV1::Joined(applied.clone())
+    );
+
+    let root = authority.read_a12b_root().unwrap();
+    let SessionNamespaceRecordV1::Authority(current_authority) =
+        &root.session_namespace_map[&request.orchestration_session_id]
+    else {
+        panic!("resume application must retain a durable authority")
+    };
+    assert_eq!(current_authority.authority_revision, 3);
+    assert_eq!(
+        current_authority
+            .active_authoritative_participant_id
+            .as_deref(),
+        Some("participant-resume-1")
+    );
+    assert_eq!(
+        current_authority.lifecycle_posture,
+        HostSessionPostureV1::ActiveAttached
+    );
+    assert!(current_authority
+        .internal_resume_handle_refs
+        .iter()
+        .any(|current| current == &resume_handle_ref));
+    let intent = &root.successor_transition_intent_map[&successor.intent_id];
+    let HostSessionTransitionIntentStateV3::Applied {
+        startup_ownership,
+        post_turn,
+        ..
+    } = &intent.state
+    else {
+        panic!("resume successor intent must be applied")
+    };
+    assert_eq!(
+        startup_ownership.as_ref(),
+        &HostSessionStartupOwnershipApplicationV1::NotApplicable
+    );
+    assert!(matches!(
+        post_turn.as_ref(),
+        HostSessionPostTurnApplicationV2::Pending {
+            expected_run_id,
+            expected_authority_revision: 3,
+        } if expected_run_id == "run-resume-1"
+    ));
+    assert!(matches!(
+        intent.input_handoff,
+        HostSessionTransitionInputHandoffV1::Pending {
+            ref run_id, ..
+        } if run_id == "run-resume-1"
+    ));
+}
+
+#[test]
+fn successor_resume_input_acceptance_and_obligation_cut_consumption_retries() {
+    let (_parent, authority, binding) = authority();
+    let request = start_request(binding);
+    let successor = applied_resume_successor(&authority, &request);
+    let applied_root = authority.read_a12b_root().unwrap();
+    let applied_intent = applied_root.successor_transition_intent_map[&successor.intent_id].clone();
+
+    let input_acceptance = AcceptTransitionInputRequestV1 {
+        intent_id: applied_intent.intent_id.clone(),
+        issuer_request_id: applied_intent.issuer_request_id.clone(),
+        payload_commitment: applied_intent.payload_commitment.clone(),
+        accepting_participant_id: applied_intent.target_authoritative_participant_id.clone(),
+        accepted_at: timestamp("2026-07-14T12:04:30.000000000Z"),
+    };
+    let InputAcceptanceOutcomeV1::Accepted(accepted_intent) = authority
+        .accept_transition_input(&input_acceptance)
+        .unwrap()
+    else {
+        panic!("first resume input acceptance must commit")
+    };
+    assert_eq!(
+        authority
+            .accept_transition_input(&input_acceptance)
+            .unwrap(),
+        InputAcceptanceOutcomeV1::Joined(accepted_intent.clone())
+    );
+
+    let resume_post_turn = post_turn_request(
+        &accepted_intent,
+        3,
+        HostPostTurnProtocolEventKindV1::ResumableClean,
+        HostPostTurnProtocolActorV1::TargetAuthoritativeParticipant {
+            participant_id: accepted_intent.target_authoritative_participant_id.clone(),
+        },
+        "2026-07-14T12:04:40.000000000Z",
+        "2026-07-14T12:04:41.000000000Z",
+    );
+    let PostTurnResolutionOutcomeV1::AwaitingObligationCut(awaiting_cut_intent) =
+        authority.resolve_post_turn(&resume_post_turn).unwrap()
+    else {
+        panic!("resumable post-turn must await an obligation cut")
+    };
+    assert_eq!(
+        authority.resolve_post_turn(&resume_post_turn).unwrap(),
+        PostTurnResolutionOutcomeV1::Joined(awaiting_cut_intent.clone())
+    );
+
+    let root_before_pending = authority.read_a12b_root().unwrap();
+    let ConsumeObligationSnapshotRequestV1 {
+        intent_id,
+        issuer_request_id,
+        payload_commitment,
+        ..
+    } = ConsumeObligationSnapshotRequestV1 {
+        intent_id: awaiting_cut_intent.intent_id.clone(),
+        issuer_request_id: awaiting_cut_intent.issuer_request_id.clone(),
+        payload_commitment: awaiting_cut_intent.payload_commitment.clone(),
+        ledger_read: pending_ledger_read(&accepted_intent, 3),
+    };
+    let pending_cut = ConsumeObligationSnapshotRequestV1 {
+        intent_id: intent_id.clone(),
+        issuer_request_id: issuer_request_id.clone(),
+        payload_commitment: payload_commitment.clone(),
+        ledger_read: pending_ledger_read(&accepted_intent, 3),
+    };
+    assert_eq!(
+        authority.consume_obligation_snapshot(&pending_cut).unwrap(),
+        ObligationSnapshotConsumptionOutcomeV1::Pending(awaiting_cut_intent.clone())
+    );
+    assert_eq!(authority.read_a12b_root().unwrap(), root_before_pending);
+
+    let complete_cut = ConsumeObligationSnapshotRequestV1 {
+        intent_id,
+        issuer_request_id,
+        payload_commitment,
+        ledger_read: ObligationLedgerSnapshotReadV1::Complete {
+            snapshot: complete_ledger_snapshot(
+                &accepted_intent,
+                3,
+                ObligationAttentionDispositionV1::NoUnresolvedAttention,
+            ),
+        },
+    };
+    let ObligationSnapshotConsumptionOutcomeV1::Applied(applied_after_cut) = authority
+        .consume_obligation_snapshot(&complete_cut)
+        .unwrap()
+    else {
+        panic!("complete cut must apply exactly once")
+    };
+    assert_eq!(
+        authority
+            .consume_obligation_snapshot(&complete_cut)
+            .unwrap(),
+        ObligationSnapshotConsumptionOutcomeV1::Joined(applied_after_cut.clone())
+    );
+
+    let final_root = authority.read_a12b_root().unwrap();
+    let SessionNamespaceRecordV1::Authority(current_authority) =
+        &final_root.session_namespace_map[&request.orchestration_session_id]
+    else {
+        panic!("resume obligation-cut completion must retain a durable authority")
+    };
+    assert_eq!(current_authority.authority_revision, 4);
+    assert_eq!(
+        current_authority.lifecycle_posture,
+        HostSessionPostureV1::ParkedResumable
+    );
+    assert_eq!(
+        current_authority
+            .active_authoritative_participant_id
+            .as_deref(),
+        Some("participant-resume-1")
+    );
+
+    let final_intent = &final_root.successor_transition_intent_map[&successor.intent_id];
+    assert!(matches!(
+        final_intent.transport_payload_state,
+        HostSessionTransitionTransportPayloadStateV1::ReleaseEligible { .. }
+    ));
+    let HostSessionTransitionIntentStateV3::Applied { post_turn, .. } = &final_intent.state else {
+        panic!("resume successor must remain applied after cut completion")
+    };
+    assert!(matches!(
+        post_turn.as_ref(),
+        HostSessionPostTurnApplicationV2::Applied {
+            obligation_snapshot_ref: Some(_),
+            authority_revision_before: 3,
+            authority_revision_after: 4,
+            resulting_posture: HostSessionPostureV1::ParkedResumable,
+            ..
+        }
+    ));
+    assert!(matches!(
+        final_intent.input_handoff,
+        HostSessionTransitionInputHandoffV1::Accepted { ref run_id, .. }
+            if run_id == "run-resume-1"
+    ));
+    assert!(
+        final_root.successor_application_journal[&successor.intent_id]
+            .post_turn_application
+            .is_some()
+    );
+}
+
+#[test]
+fn successor_resume_pre_acceptance_terminal_failure_terminalizes_input_and_retries() {
+    let (_parent, authority, binding) = authority();
+    let request = start_request(binding);
+    let successor = applied_resume_successor(&authority, &request);
+    let applied_root = authority.read_a12b_root().unwrap();
+    let applied_intent = applied_root.successor_transition_intent_map[&successor.intent_id].clone();
+
+    let terminal_failure = post_turn_request(
+        &applied_intent,
+        3,
+        HostPostTurnProtocolEventKindV1::TerminalFailure {
+            reason: HostPostTurnTerminalReasonV1::ResumeRuntimeCreationRejected,
+        },
+        HostPostTurnProtocolActorV1::LaunchApplicationClaimant {
+            claim_id: "claim-resume-1".into(),
+            claimant_attempt_id: "attempt-resume-1".into(),
+        },
+        "2026-07-14T12:04:30.000000000Z",
+        "2026-07-14T12:04:31.000000000Z",
+    );
+    let PostTurnResolutionOutcomeV1::Applied(applied_terminal_intent) =
+        authority.resolve_post_turn(&terminal_failure).unwrap()
+    else {
+        panic!("pre-acceptance runtime rejection must terminalize exactly once")
+    };
+    assert_eq!(
+        authority.resolve_post_turn(&terminal_failure).unwrap(),
+        PostTurnResolutionOutcomeV1::Joined(applied_terminal_intent.clone())
+    );
+
+    let final_root = authority.read_a12b_root().unwrap();
+    let SessionNamespaceRecordV1::Authority(current_authority) =
+        &final_root.session_namespace_map[&request.orchestration_session_id]
+    else {
+        panic!("terminal failure must retain a durable authority")
+    };
+    assert_eq!(current_authority.authority_revision, 4);
+    assert_eq!(
+        current_authority.lifecycle_posture,
+        HostSessionPostureV1::Terminal
+    );
+    assert_eq!(
+        current_authority
+            .active_authoritative_participant_id
+            .as_deref(),
+        Some("participant-resume-1")
+    );
+
+    let final_intent = &final_root.successor_transition_intent_map[&successor.intent_id];
+    let HostSessionTransitionIntentStateV3::Applied { post_turn, .. } = &final_intent.state else {
+        panic!("terminal failure successor must remain applied")
+    };
+    assert!(matches!(
+        post_turn.as_ref(),
+        HostSessionPostTurnApplicationV2::Applied {
+            obligation_snapshot_ref: None,
+            authority_revision_before: 3,
+            authority_revision_after: 4,
+            resulting_posture: HostSessionPostureV1::Terminal,
+            ..
+        }
+    ));
+    assert!(matches!(
+        final_intent.input_handoff,
+        HostSessionTransitionInputHandoffV1::TerminalWithoutAcceptance {
+            ref run_id, ..
+        } if run_id == "run-resume-1"
+    ));
+    assert!(matches!(
+        final_intent.transport_payload_state,
+        HostSessionTransitionTransportPayloadStateV1::ReleaseEligible { .. }
+    ));
+    assert!(
+        final_root.successor_application_journal[&successor.intent_id]
+            .post_turn_application
+            .is_some()
+    );
+}
+
+#[test]
+fn successor_resume_complete_cut_with_unresolved_attention_advances_to_awaiting_attention() {
+    let (_parent, authority, binding) = authority();
+    let request = start_request(binding);
+    let successor = applied_resume_successor(&authority, &request);
+    let applied_root = authority.read_a12b_root().unwrap();
+    let applied_intent = applied_root.successor_transition_intent_map[&successor.intent_id].clone();
+
+    let input_acceptance = AcceptTransitionInputRequestV1 {
+        intent_id: applied_intent.intent_id.clone(),
+        issuer_request_id: applied_intent.issuer_request_id.clone(),
+        payload_commitment: applied_intent.payload_commitment.clone(),
+        accepting_participant_id: applied_intent.target_authoritative_participant_id.clone(),
+        accepted_at: timestamp("2026-07-14T12:04:30.000000000Z"),
+    };
+    authority
+        .accept_transition_input(&input_acceptance)
+        .unwrap();
+
+    let accepted_root = authority.read_a12b_root().unwrap();
+    let accepted_intent =
+        accepted_root.successor_transition_intent_map[&successor.intent_id].clone();
+    let awaiting_cut_request = post_turn_request(
+        &accepted_intent,
+        3,
+        HostPostTurnProtocolEventKindV1::ResumableClean,
+        HostPostTurnProtocolActorV1::TargetAuthoritativeParticipant {
+            participant_id: accepted_intent.target_authoritative_participant_id.clone(),
+        },
+        "2026-07-14T12:04:40.000000000Z",
+        "2026-07-14T12:04:41.000000000Z",
+    );
+    authority.resolve_post_turn(&awaiting_cut_request).unwrap();
+
+    let complete_cut = ConsumeObligationSnapshotRequestV1 {
+        intent_id: accepted_intent.intent_id.clone(),
+        issuer_request_id: accepted_intent.issuer_request_id.clone(),
+        payload_commitment: accepted_intent.payload_commitment.clone(),
+        ledger_read: ObligationLedgerSnapshotReadV1::Complete {
+            snapshot: complete_ledger_snapshot(
+                &accepted_intent,
+                3,
+                ObligationAttentionDispositionV1::HasUnresolvedAttention,
+            ),
+        },
+    };
+    let ObligationSnapshotConsumptionOutcomeV1::Applied(applied_attention_intent) = authority
+        .consume_obligation_snapshot(&complete_cut)
+        .unwrap()
+    else {
+        panic!("unresolved-attention cut must apply exactly once")
+    };
+    assert_eq!(
+        authority
+            .consume_obligation_snapshot(&complete_cut)
+            .unwrap(),
+        ObligationSnapshotConsumptionOutcomeV1::Joined(applied_attention_intent.clone())
+    );
+
+    let final_root = authority.read_a12b_root().unwrap();
+    let SessionNamespaceRecordV1::Authority(current_authority) =
+        &final_root.session_namespace_map[&request.orchestration_session_id]
+    else {
+        panic!("attention cut must retain a durable authority")
+    };
+    assert_eq!(current_authority.authority_revision, 4);
+    assert_eq!(
+        current_authority.lifecycle_posture,
+        HostSessionPostureV1::AwaitingAttention
+    );
+
+    let final_intent = &final_root.successor_transition_intent_map[&successor.intent_id];
+    let HostSessionTransitionIntentStateV3::Applied { post_turn, .. } = &final_intent.state else {
+        panic!("attention successor must remain applied")
+    };
+    assert!(matches!(
+        post_turn.as_ref(),
+        HostSessionPostTurnApplicationV2::Applied {
+            obligation_snapshot_ref: Some(_),
+            authority_revision_before: 3,
+            authority_revision_after: 4,
+            resulting_posture: HostSessionPostureV1::AwaitingAttention,
+            ..
+        }
+    ));
+    assert!(matches!(
+        final_intent.transport_payload_state,
+        HostSessionTransitionTransportPayloadStateV1::ReleaseEligible { .. }
+    ));
+}
+
+#[test]
+fn successor_resume_complete_cut_rejects_materialization_watermark_beyond_terminal_event() {
+    let (_parent, authority, binding) = authority();
+    let request = start_request(binding);
+    let successor = applied_resume_successor(&authority, &request);
+    let applied_root = authority.read_a12b_root().unwrap();
+    let applied_intent = applied_root.successor_transition_intent_map[&successor.intent_id].clone();
+
+    let input_acceptance = AcceptTransitionInputRequestV1 {
+        intent_id: applied_intent.intent_id.clone(),
+        issuer_request_id: applied_intent.issuer_request_id.clone(),
+        payload_commitment: applied_intent.payload_commitment.clone(),
+        accepting_participant_id: applied_intent.target_authoritative_participant_id.clone(),
+        accepted_at: timestamp("2026-07-14T12:04:30.000000000Z"),
+    };
+    authority
+        .accept_transition_input(&input_acceptance)
+        .unwrap();
+
+    let accepted_root = authority.read_a12b_root().unwrap();
+    let accepted_intent =
+        accepted_root.successor_transition_intent_map[&successor.intent_id].clone();
+    let awaiting_cut_request = post_turn_request(
+        &accepted_intent,
+        3,
+        HostPostTurnProtocolEventKindV1::ResumableClean,
+        HostPostTurnProtocolActorV1::TargetAuthoritativeParticipant {
+            participant_id: accepted_intent.target_authoritative_participant_id.clone(),
+        },
+        "2026-07-14T12:04:40.000000000Z",
+        "2026-07-14T12:04:41.000000000Z",
+    );
+    authority.resolve_post_turn(&awaiting_cut_request).unwrap();
+
+    let mut overrun_snapshot = complete_ledger_snapshot(
+        &accepted_intent,
+        3,
+        ObligationAttentionDispositionV1::NoUnresolvedAttention,
+    );
+    overrun_snapshot
+        .materialization_cut
+        .materialized_through_event_sequence += 1;
+    let complete_cut = ConsumeObligationSnapshotRequestV1 {
+        intent_id: accepted_intent.intent_id.clone(),
+        issuer_request_id: accepted_intent.issuer_request_id.clone(),
+        payload_commitment: accepted_intent.payload_commitment.clone(),
+        ledger_read: ObligationLedgerSnapshotReadV1::Complete {
+            snapshot: overrun_snapshot,
+        },
+    };
+
+    let root_before_rejection = authority.read_a12b_root().unwrap();
+    let error = authority
+        .consume_obligation_snapshot(&complete_cut)
+        .unwrap_err();
+    assert_eq!(
+        error.to_string(),
+        "complete obligation snapshot conflicts with AwaitingObligationCut commitments"
+    );
+    assert_eq!(authority.read_a12b_root().unwrap(), root_before_rejection);
+}
+
+#[test]
+fn successor_resume_complete_cut_join_and_current_resolution_survive_released_transport_payload() {
+    let (_parent, authority, binding) = authority();
+    let request = start_request(binding);
+    let successor = applied_resume_successor(&authority, &request);
+    let applied_root = authority.read_a12b_root().unwrap();
+    let applied_intent = applied_root.successor_transition_intent_map[&successor.intent_id].clone();
+
+    let input_acceptance = AcceptTransitionInputRequestV1 {
+        intent_id: applied_intent.intent_id.clone(),
+        issuer_request_id: applied_intent.issuer_request_id.clone(),
+        payload_commitment: applied_intent.payload_commitment.clone(),
+        accepting_participant_id: applied_intent.target_authoritative_participant_id.clone(),
+        accepted_at: timestamp("2026-07-14T12:04:30.000000000Z"),
+    };
+    authority
+        .accept_transition_input(&input_acceptance)
+        .unwrap();
+
+    let accepted_root = authority.read_a12b_root().unwrap();
+    let accepted_intent =
+        accepted_root.successor_transition_intent_map[&successor.intent_id].clone();
+    let awaiting_cut_request = post_turn_request(
+        &accepted_intent,
+        3,
+        HostPostTurnProtocolEventKindV1::ResumableClean,
+        HostPostTurnProtocolActorV1::TargetAuthoritativeParticipant {
+            participant_id: accepted_intent.target_authoritative_participant_id.clone(),
+        },
+        "2026-07-14T12:04:40.000000000Z",
+        "2026-07-14T12:04:41.000000000Z",
+    );
+    authority.resolve_post_turn(&awaiting_cut_request).unwrap();
+
+    let complete_cut = ConsumeObligationSnapshotRequestV1 {
+        intent_id: accepted_intent.intent_id.clone(),
+        issuer_request_id: accepted_intent.issuer_request_id.clone(),
+        payload_commitment: accepted_intent.payload_commitment.clone(),
+        ledger_read: ObligationLedgerSnapshotReadV1::Complete {
+            snapshot: complete_ledger_snapshot(
+                &accepted_intent,
+                3,
+                ObligationAttentionDispositionV1::NoUnresolvedAttention,
+            ),
+        },
+    };
+    authority
+        .consume_obligation_snapshot(&complete_cut)
+        .unwrap();
+
+    let release_eligible_root = authority.read_a12b_root().unwrap();
+    let release_eligible_intent =
+        release_eligible_root.successor_transition_intent_map[&successor.intent_id].clone();
+    let HostSessionTransitionTransportPayloadStateV1::ReleaseEligible {
+        terminal_handoff_ref: expected_terminal_handoff_ref,
+    } = &release_eligible_intent.transport_payload_state
+    else {
+        panic!("completed resume cut must mark transport payload release-eligible")
+    };
+    let released_at = timestamp("2026-07-14T12:05:10.000000000Z");
+    let mut released_root = release_eligible_root.clone();
+    released_root.root_revision += 1;
+    released_root
+        .successor_transition_intent_map
+        .get_mut(&successor.intent_id)
+        .unwrap()
+        .transport_payload_state = HostSessionTransitionTransportPayloadStateV1::Released {
+        terminal_handoff_ref: expected_terminal_handoff_ref.clone(),
+        released_at: released_at.clone(),
+    };
+    released_root
+        .object_index
+        .get_mut(&release_eligible_intent.transport_payload_ref.ref_id)
+        .unwrap()
+        .storage_state = super::store_schema::AuthorityObjectStorageStateV1::Released {
+        terminal_handoff_ref: expected_terminal_handoff_ref.clone(),
+        released_at: released_at.clone(),
+    };
+    released_root.validate().unwrap();
+
+    let authority_root_path = Path::new(&release_eligible_root.bootstrap_home.physical_path);
+    let transport_path = authority_root_path.join(format!(
+        "authority-v1/objects/transition-transport-payload/v1/{}.obj",
+        release_eligible_intent.transport_payload_ref.ref_id
+    ));
+    assert!(transport_path.exists());
+    fs::remove_file(&transport_path).unwrap();
+    fs::write(
+        authority_root_path.join("authority-v1/state-root-v1.json"),
+        super::store_schema::VersionedStateRoot::V3(released_root.clone())
+            .to_canonical_bytes()
+            .unwrap(),
+    )
+    .unwrap();
+    assert!(!transport_path.exists());
+
+    let ObligationSnapshotConsumptionOutcomeV1::Joined(joined_after_release) = authority
+        .consume_obligation_snapshot(&complete_cut)
+        .unwrap()
+    else {
+        panic!("released transport payload must still join the exact completed cut")
+    };
+    assert!(matches!(
+        joined_after_release.transport_payload_state,
+        HostSessionTransitionTransportPayloadStateV1::Released {
+            ref terminal_handoff_ref,
+            ref released_at,
+        } if terminal_handoff_ref == expected_terminal_handoff_ref
+            && released_at == &timestamp("2026-07-14T12:05:10.000000000Z")
+    ));
+
+    let resolved = authority
+        .resolve_current_exact(&request.orchestration_session_id, None)
+        .unwrap();
+    assert_eq!(resolved.authority.authority_revision, 4);
+    assert_eq!(
+        resolved.authority.lifecycle_posture,
+        HostSessionPostureV1::ParkedResumable
+    );
+    assert_eq!(
+        resolved
+            .authority
+            .active_authoritative_participant_id
+            .as_deref(),
+        Some("participant-resume-1")
+    );
 }

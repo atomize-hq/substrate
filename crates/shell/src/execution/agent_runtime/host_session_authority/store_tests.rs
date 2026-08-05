@@ -803,6 +803,105 @@ fn greenfield_upgrade_is_atomic_crash_recoverable_and_exactly_retryable() {
 }
 
 #[test]
+fn strict_v3_upgrade_preserves_v2_maps_and_joins_exact_retry_only() {
+    let root = root();
+    platform::bootstrap_test(root.path(), material(0x45), None).unwrap();
+    let RootUpgradeOutcomeV1::Upgraded(v2) =
+        platform::upgrade_greenfield_root_test(root.path(), [0x46; 16], None).unwrap()
+    else {
+        panic!("fixture must publish strict V2")
+    };
+
+    let upgraded = platform::upgrade_v2_root_to_v3_test(root.path(), &v2).unwrap();
+    assert_eq!(upgraded.schema_version, 3);
+    assert_eq!(upgraded.root_revision, v2.root_revision + 1);
+    assert_eq!(upgraded.authority_store_id, v2.authority_store_id);
+    assert_eq!(upgraded.bootstrap_home, v2.bootstrap_home);
+    assert_eq!(
+        upgraded.greenfield_namespace_certificate,
+        v2.greenfield_namespace_certificate
+    );
+    assert_eq!(upgraded.session_namespace_map, v2.session_namespace_map);
+    assert_eq!(upgraded.transition_intent_map, v2.transition_intent_map);
+    assert_eq!(upgraded.issuer_request_index, v2.issuer_request_index);
+    assert_eq!(upgraded.application_journal, v2.application_journal);
+    assert_eq!(
+        upgraded.retained_worker_registration_request_index,
+        v2.retained_worker_registration_request_index
+    );
+    assert_eq!(
+        upgraded.retained_worker_registration_journal,
+        v2.retained_worker_registration_journal
+    );
+    assert_eq!(upgraded.object_index, v2.object_index);
+    assert!(upgraded.successor_transition_intent_map.is_empty());
+    assert!(upgraded.successor_issuer_request_index.is_empty());
+    assert!(upgraded.successor_application_journal.is_empty());
+
+    let mut preserved_expected = v2.clone();
+    preserved_expected.root_revision = upgraded.root_revision;
+    assert_eq!(upgraded.preserved_v2_view(), preserved_expected);
+
+    let VersionedStateRoot::V3(decoded) = VersionedStateRoot::decode(
+        &fs::read(root.path().join("authority-v1/state-root-v1.json")).unwrap(),
+    )
+    .unwrap() else {
+        panic!("published V3 root must decode through the V3 discriminator")
+    };
+    assert_eq!(decoded, upgraded);
+    assert_eq!(
+        platform::upgrade_v2_root_to_v3_test(root.path(), &v2).unwrap(),
+        upgraded
+    );
+
+    let mut stale = v2.clone();
+    stale.root_revision += 1;
+    let error = platform::upgrade_v2_root_to_v3_test(root.path(), &stale).unwrap_err();
+    assert_eq!(
+        error.to_string(),
+        "current authority root does not match the exact V3 retry candidate"
+    );
+
+    let reopened = TrustedAuthorityRoot::open(root.path()).unwrap();
+    let VersionedStateRoot::V3(reopened_root) = read_opened_root_v2_or_v3(&reopened).unwrap()
+    else {
+        panic!("reopened exact root must remain V3")
+    };
+    assert_eq!(reopened_root, upgraded);
+}
+
+#[test]
+fn strict_v3_validation_rejects_no_successor_runtime_authority_drift() {
+    let root = root();
+    let v1 = platform::bootstrap_test(root.path(), material(0x47), None).unwrap();
+    let mut v2 = v2_with_issued_start(&v1);
+    apply_placeholder_v2_start(&mut v2);
+
+    let mut upgraded = crate::execution::agent_runtime::host_session_authority::store_schema::StateRootV3::try_from_v2(&v2).unwrap();
+    let authority_session_id = upgraded
+        .session_namespace_map
+        .iter()
+        .find_map(|(session_id, record)| {
+            matches!(record, SessionNamespaceRecordV1::Authority(_)).then(|| session_id.clone())
+        })
+        .unwrap();
+    let SessionNamespaceRecordV1::Authority(authority) = upgraded
+        .session_namespace_map
+        .get_mut(&authority_session_id)
+        .unwrap()
+    else {
+        panic!("upgraded root must retain the V2 start authority")
+    };
+    authority.authority_revision += 1;
+    authority.lifecycle_posture = HostSessionPostureV1::AwaitingAttention;
+
+    assert_eq!(
+        upgraded.validate().unwrap_err().to_string(),
+        "current V3 authority is not the exact reconstructed V2 runtime state"
+    );
+}
+
+#[test]
 fn greenfield_upgrade_rejects_orphans_without_any_mutation() {
     let root = root();
     let v1 = platform::bootstrap_test(root.path(), material(0x05), None).unwrap();
@@ -835,6 +934,32 @@ fn greenfield_upgrade_rejects_orphans_without_any_mutation() {
     assert_eq!(fs::read(root_path).unwrap(), before);
     assert_eq!(fs::read(object_path).unwrap(), bytes);
     assert_eq!(before, canonical_json::to_vec(&v1).unwrap());
+}
+
+#[test]
+fn reserved_ref_id_vacancy_rejects_v3_only_orphan_kinds() {
+    let root = root();
+    platform::bootstrap_test(root.path(), material(0x54), None).unwrap();
+    platform::upgrade_greenfield_root_test(root.path(), [0x55; 16], None).unwrap();
+    let ref_id = "ao_88888888888888888888888888888888";
+    for kind_directory in [
+        "startup-ownership-result",
+        "obligation-snapshot",
+        "post-turn-protocol-event",
+    ] {
+        let directory = root
+            .path()
+            .join(format!("authority-v1/objects/{kind_directory}/v1"));
+        fs::create_dir_all(&directory).unwrap();
+        fs::set_permissions(&directory, fs::Permissions::from_mode(0o700)).unwrap();
+        let orphan = directory.join(format!("{ref_id}.obj"));
+        fs::write(&orphan, b"orphan").unwrap();
+        fs::set_permissions(&orphan, fs::Permissions::from_mode(0o600)).unwrap();
+        assert!(
+            !platform::reserved_object_ref_id_is_globally_absent_test(root.path(), ref_id).unwrap()
+        );
+        fs::remove_file(orphan).unwrap();
+    }
 }
 
 #[test]
@@ -3973,6 +4098,42 @@ fn world_work_storage_transactions_accept_versioned_authority_without_mutating_i
 
     assert_eq!(fs::read(root_path).unwrap(), root_before);
     assert!(legacy_writer_guard(bootstrap.path()).is_err());
+}
+
+#[test]
+fn identity_bound_legacy_transactions_reject_activated_v2_and_v3_authority() {
+    let bootstrap = root();
+    platform::bootstrap_test(bootstrap.path(), material(0xe2), None).unwrap();
+    let RootUpgradeOutcomeV1::Upgraded(_) =
+        platform::upgrade_greenfield_root_test(bootstrap.path(), [0xe3; 16], None).unwrap()
+    else {
+        panic!("fresh greenfield authority must upgrade to V2")
+    };
+    let expected_identity = TrustedAuthorityRoot::open(bootstrap.path())
+        .unwrap()
+        .identity()
+        .clone();
+    assert!(
+        begin_legacy_transaction_for_identity_test(bootstrap.path(), &expected_identity).is_err()
+    );
+    assert!(legacy_writer_guard(bootstrap.path()).is_err());
+
+    let upgraded = root();
+    platform::bootstrap_test(upgraded.path(), material(0xe5), None).unwrap();
+    let RootUpgradeOutcomeV1::Upgraded(v2) =
+        platform::upgrade_greenfield_root_test(upgraded.path(), [0xe6; 16], None).unwrap()
+    else {
+        panic!("fresh greenfield authority must upgrade to V2")
+    };
+    platform::upgrade_v2_root_to_v3_test(upgraded.path(), &v2).unwrap();
+    let expected_identity = TrustedAuthorityRoot::open(upgraded.path())
+        .unwrap()
+        .identity()
+        .clone();
+    assert!(
+        begin_legacy_transaction_for_identity_test(upgraded.path(), &expected_identity).is_err()
+    );
+    assert!(legacy_writer_guard(upgraded.path()).is_err());
 }
 
 #[test]

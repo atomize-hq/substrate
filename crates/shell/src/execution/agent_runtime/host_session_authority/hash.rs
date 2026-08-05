@@ -72,8 +72,12 @@ pub(crate) enum CanonicalObjectHashInputV1<'a> {
     TransitionTransportPayload(&'a super::schema::TransitionTransportPayloadObjectV1),
     ApplicationResult(&'a super::schema::ApplicationResultHashInputV1),
     InputAcceptance(&'a super::schema::InputAcceptanceHashInputV1),
+    StartupOwnershipResult(&'a super::schema::StartupOwnershipResultHashInputV1),
+    ObligationSnapshot(&'a super::schema::ObligationSnapshotHashInputV1),
+    PostTurnProtocolEvent(&'a super::schema::PostTurnProtocolEventHashInputV1),
     PostTurnCompletion(&'a super::schema::PostTurnCompletionHashInputV1),
     TerminalHandoff(&'a super::schema::TerminalHandoffHashInputV1),
+    TerminalHandoffV2(&'a super::schema::TerminalHandoffHashInputV2),
 }
 
 impl CanonicalObjectHashInputV1<'_> {
@@ -89,8 +93,13 @@ impl CanonicalObjectHashInputV1<'_> {
             }
             Self::ApplicationResult(_) => AuthorityObjectKindV1::ApplicationResult,
             Self::InputAcceptance(_) => AuthorityObjectKindV1::InputAcceptance,
+            Self::StartupOwnershipResult(_) => AuthorityObjectKindV1::StartupOwnershipResult,
+            Self::ObligationSnapshot(_) => AuthorityObjectKindV1::ObligationSnapshot,
+            Self::PostTurnProtocolEvent(_) => AuthorityObjectKindV1::PostTurnProtocolEvent,
             Self::PostTurnCompletion(_) => AuthorityObjectKindV1::PostTurnCompletion,
-            Self::TerminalHandoff(_) => AuthorityObjectKindV1::TerminalHandoff,
+            Self::TerminalHandoff(_) | Self::TerminalHandoffV2(_) => {
+                AuthorityObjectKindV1::TerminalHandoff
+            }
         }
     }
 }
@@ -117,8 +126,12 @@ pub(crate) fn canonical_object_bytes(
         CanonicalObjectHashInputV1::TransitionTransportPayload(value) => encode!(value),
         CanonicalObjectHashInputV1::ApplicationResult(value) => encode!(value),
         CanonicalObjectHashInputV1::InputAcceptance(value) => encode!(value),
+        CanonicalObjectHashInputV1::StartupOwnershipResult(value) => encode!(value),
+        CanonicalObjectHashInputV1::ObligationSnapshot(value) => encode!(value),
+        CanonicalObjectHashInputV1::PostTurnProtocolEvent(value) => encode!(value),
         CanonicalObjectHashInputV1::PostTurnCompletion(value) => encode!(value),
         CanonicalObjectHashInputV1::TerminalHandoff(value) => encode!(value),
+        CanonicalObjectHashInputV1::TerminalHandoffV2(value) => encode!(value),
     }
 }
 
@@ -392,11 +405,20 @@ mod tests {
             AuthorityObjectKindV1::HostAttachContract,
             AuthorityObjectKindV1::ApplicationResult,
             AuthorityObjectKindV1::InputAcceptance,
+            AuthorityObjectKindV1::StartupOwnershipResult,
+            AuthorityObjectKindV1::ObligationSnapshot,
+            AuthorityObjectKindV1::PostTurnProtocolEvent,
             AuthorityObjectKindV1::PostTurnCompletion,
             AuthorityObjectKindV1::TerminalHandoff,
         ] {
             assert!(validate_object_commitment_rule(kind, 1, &canonical).is_ok());
         }
+        assert!(validate_object_commitment_rule(
+            AuthorityObjectKindV1::TerminalHandoff,
+            2,
+            &canonical,
+        )
+        .is_ok());
 
         for (kind, domain) in [
             (

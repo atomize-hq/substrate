@@ -1,0 +1,89 @@
+{
+  "schema_version": 1,
+  "packet_id": "runtime-refactor-a1-2b-successor-post-turn-completion",
+  "status": "complete",
+  "stop_reason": null,
+  "cycles": [
+    {
+      "cycle_id": "discovery-1",
+      "kind": "discovery",
+      "subject_fingerprint": "sha256:ecc3fe2f83745ec07507f4ef21d1758a020068e2755c624eeaed3e7a01c58df3",
+      "trigger_cycle_id": null,
+      "trigger_finding_ids": [],
+      "causal_evidence_refs": [],
+      "review_refs": [
+        "a1-2b-review-schema-persistence.md",
+        "a1-2b-review-successor-reconciliation.md",
+        "a1-2b-review-ledger-authority-boundary.md"
+      ],
+      "verdict": "findings",
+      "findings": [
+        {
+          "finding_id": "A1-2B-P2-001",
+          "priority": "P2"
+        },
+        {
+          "finding_id": "A1-2B-P2-002",
+          "priority": "P2"
+        }
+      ]
+    },
+    {
+      "cycle_id": "closure-1",
+      "kind": "closure",
+      "subject_fingerprint": "sha256:be2b7f4352153c6bfd206fd223eab81c2b13510e824ccd1aa5087e7bf75564c8",
+      "trigger_cycle_id": "discovery-1",
+      "trigger_finding_ids": [
+        "A1-2B-P2-001",
+        "A1-2B-P2-002"
+      ],
+      "causal_evidence_refs": [],
+      "review_refs": [
+        "a1-2b-review-schema-persistence.md",
+        "a1-2b-review-successor-reconciliation.md",
+        "a1-2b-review-ledger-authority-boundary.md"
+      ],
+      "verdict": "findings",
+      "findings": [
+        {
+          "finding_id": "A1-2B-P1-001",
+          "priority": "P1"
+        },
+        {
+          "finding_id": "A1-2B-P1-002",
+          "priority": "P1"
+        },
+        {
+          "finding_id": "A1-2B-P2-003",
+          "priority": "P2"
+        }
+      ]
+    },
+    {
+      "cycle_id": "supplemental-1",
+      "kind": "supplemental_causal",
+      "subject_fingerprint": "sha256:72ac97adbbadd1692409782789daea7f1c64cdd34996563865b4d5959afc4b0b",
+      "trigger_cycle_id": "closure-1",
+      "trigger_finding_ids": [
+        "A1-2B-P1-001",
+        "A1-2B-P1-002",
+        "A1-2B-P2-003"
+      ],
+      "causal_evidence_refs": [
+        "crates/shell/src/execution/agent_runtime/host_session_authority/transition.rs",
+        "crates/shell/src/execution/agent_runtime/host_session_authority/store_schema.rs",
+        "crates/shell/src/execution/agent_runtime/host_session_authority/transition_tests.rs",
+        "llm-last-mile/runtime-refactor/02-seam-crosswalk.md",
+        "llm-last-mile/runtime-refactor/03-phase-slice-map.md",
+        "llm-last-mile/runtime-refactor/05-debug-regression-ledger.md"
+      ],
+      "review_refs": [
+        "a1-2b-review-schema-persistence.md",
+        "a1-2b-review-successor-reconciliation.md",
+        "a1-2b-review-ledger-authority-boundary.md"
+      ],
+      "verdict": "clean",
+      "findings": []
+    }
+  ]
+}

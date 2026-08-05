@@ -57,10 +57,10 @@ Primary source memos:
 closed startup evidence binds exact store/session/intent/claim/claimant-attempt/run/application/authority/
 participant identity, the exact target-participant or launch-claimant protocol actor, and durably
 records the matching acceptance or definitive terminal reason. Timeout,
-EOF, helper/PID/socket/handle/readiness loss, and ambiguity remain Pending. Exact retries after
-`ReleaseEligible`, payload deletion, and `Released` join through terminal proof without requiring
-deleted transport bytes; an unexpected Released copy is removed and its exact object directory is
-`fsync`ed before success. Every Resume terminal outcome references one immutable, exact-scope
+EOF, helper/PID/socket/handle/readiness loss, and ambiguity remain Pending. The later
+payload-deletion and root-advance proof from `ReleaseEligible` to `Released` remains part of the
+overall gate, but the current A1.2b packet closes only `ReleaseEligible` plus exact join tolerance
+if a separately validated `Released` state is reopened. Every Resume terminal outcome references one immutable, exact-scope
 post-turn protocol event with the matching actor, event ID/sequence, outcome/reason, input state,
 completion, and application result; transport/process/readiness/timeout/EOF/local-error inference
 cannot construct it. Resume terminal completion may close without an obligation snapshot, but
@@ -1969,8 +1969,8 @@ normalized panic bodies remain unchanged, and the exact historical-to-final diff
 recorded in
 [`review-control/b3-1-differential-evidence.json`](review-control/b3-1-differential-evidence.json).
 No failure name, failure message, assertion, test identity, or production behavior was removed,
-renamed, substituted, ignored, or weakened. B3.1 is complete, C1 is recorded below, A1.2b is now
-the next packet, and no seam is promoted.
+renamed, substituted, ignored, or weakened. B3.1 is complete, C1 is recorded below, A1.2b is also
+recorded below as complete on the same bound Tuesday candidate, and no seam is promoted.
 
 ## C1 recorded result
 
@@ -2009,8 +2009,42 @@ and normalized panic bodies remain unchanged, and the exact baseline-to-final di
 recorded in
 [`review-control/c1-differential-evidence.json`](review-control/c1-differential-evidence.json).
 No failure name, failure message, assertion, test identity, or production behavior is removed,
-renamed, substituted, ignored, or weakened. C1 is complete, A1.2b is next, and no seam is
-promoted.
+renamed, substituted, ignored, or weakened. C1 is complete, A1.2b is recorded below as complete
+on the same bound Tuesday candidate, and no seam is promoted.
+
+## A1.2b recorded result
+
+At the bound Tuesday, August 4, 2026 source candidate, A1.2b completes the bounded internal
+successor/post-turn packet without public CLI/helper/REPL/auto-attach adoption and without
+beginning R3 or A1.3. HostSessionAuthority now publishes only one strict V2-to-V3 root extension
+that preserves every strict V2 Start intent, both R0 retained-registration maps, existing
+application-proof bytes, and the exact current-authority/R0 lineage corridor without widening
+older roots or down-converting V3. Exact current-authority resolution is closed-version aware, the
+retained-admission corridor consumes the preserved V2 Start view under V3, and startup acceptance
+continues to authenticate the original Start application revision only through one unique
+contiguous R0 registration-proof chain to exact current authority.
+
+Successor `Attach`/`ResumeOneTurn` issuance, claim/application, input acceptance, startup/post-turn
+reconciliation, `AwaitingObligationCut`, unchanged C1 `Pending`/`Complete` consumption, immutable
+journals/results, exact retry, transport reprojection, and `ReleaseEligible` handoff now remain
+entirely inside HostSessionAuthority without classifying or rewriting ledger truth. Complete
+snapshots use the unchanged C1 disposition directly; pending, incomplete, mismatched, or
+substituted cuts remain pending or fail closed. Exact result join survives a separately validated
+`Released` transport state through durable reprojection, but this packet does not claim the
+destructive payload-deletion/root-advance step itself.
+
+Focused host-session-authority strict codec/store/transition/reconciliation tests and retained
+admission compatibility tests are green. Both `make shell-lib-wall` and
+`make shell-lib-wall-serial` retain the exact 48-failure inventory and the accepted hashes
+`c6de1349137dcb16d03b87be5364dc50d74a5052565e2c8d40dfed303592bed9` /
+`e53ffb35dbd4fe32ea60ad8da88efe449edc510a5bd0b3fe446e8a368d5beb40` while growing broad proof to
+`1351 discovered / 1303 passed / 48 failed / 0 ignored`, exactly twenty-one new passing shell
+tests, and zero retained failure-name/message/assertion/test-identity/behavior drift. The accepted
+differential is recorded in
+[`review-control/a1-2b-differential-evidence.json`](review-control/a1-2b-differential-evidence.json).
+A1.2b is complete only as the bounded internal durable successor/post-turn protocol; no seam is
+promoted, public consumer adoption remains A1.3/A1.4-owned, and the next authority gate is
+`AUTHORITY_REQUIRED:R3_RESUME`.
 
 ## Baseline behaviors that all tracks preserve
 
@@ -3165,11 +3199,11 @@ controller/supervisor remediation and changes no RP3/RP4/RP5 proof result.
 The full absolute paths, artifact hashes, authority provenance, proof matrix, and exclusions are in
 [`review-control/r2-4-closeout-evidence.md`](review-control/r2-4-closeout-evidence.md). R2-4 is
 closed only as the bounded R2 propagation join. R3 implementation is `PARKED_BY_USER`; the
-just-closed corridor head was the B1/B2.1 joint closeout, B3.1 and C1 are complete on the bound
-Tuesday, August 4, 2026 candidate, the next candidate implementation line is `A1.2b`, and after
-A1.2b R3 must be revalidated, explicitly reauthorized, resumed, and completed before A1.3, A1.4,
-or A1 closeout. The larger architecture and
-runtime-refactor program remain open.
+just-closed corridor head was the B1/B2.1 joint closeout, B3.1, C1, and the bounded internal
+A1.2b packet are complete on the bound Tuesday, August 4, 2026 candidate, the next authority gate
+is `AUTHORITY_REQUIRED:R3_RESUME`, and R3 must be revalidated, explicitly reauthorized, resumed,
+and completed before A1.3, A1.4, or A1 closeout. The larger architecture and runtime-refactor
+program remain open.
 
 ## A1.1d-5R3 planned proof and regression ledger
 
@@ -3180,10 +3214,11 @@ source `4ceecd50e20d822dda7cbd8f0e1bef4ccad65d8e` / tree
 planning fingerprint `sha256:8f4cf54640443dbeb82fffbef68fac8d03eeaa6c72cf4e44f645044bc2b210e7`.
 R3 implementation is `PARKED_BY_USER`, no implementation task has been dispatched from this plan,
 and the just-closed corridor head was
-`AUTHORITY_REQUIRED:B1_B2_1_JOINT_CLOSEOUT`; B3.1 and C1 are complete on the bound Tuesday,
-August 4, 2026 candidate, and the next candidate implementation corridor is `A1.2b`. After A1.2b,
-a fresh authority gate must revalidate this preserved proof program before R3 is explicitly
-reauthorized, resumed, and completed before A1.3, A1.4, or A1 closeout. No `cargo test --workspace`
+`AUTHORITY_REQUIRED:B1_B2_1_JOINT_CLOSEOUT`; B3.1, C1, and the bounded internal A1.2b packet are
+complete on the bound Tuesday, August 4, 2026 candidate, and the next authority gate is
+`AUTHORITY_REQUIRED:R3_RESUME`. A fresh authority gate must revalidate this preserved proof
+program before R3 is explicitly reauthorized, resumed, and completed before A1.3, A1.4, or A1
+closeout. No `cargo test --workspace`
 expected-failure inventory is frozen here, and approximate
 workspace-failure counts are not authority.
 

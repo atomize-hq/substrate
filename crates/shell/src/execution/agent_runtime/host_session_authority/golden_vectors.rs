@@ -86,7 +86,7 @@ fn every_named_canonical_wrapper_matches_committed_bytes_and_sha256() {
     );
     assert_canonical_vector::<PostTurnCompletionHashInputV1>(
         include_bytes!("testdata/post-turn-completion.json"),
-        "3925ec20c2dab9423495a6458d9a7c580871302093436f1685dcebc1fd071fa8",
+        "5f09e17c0e0822f97e04d13977fb4b009b62a49ad92703b629bb953d82ec704c",
     );
     assert_canonical_vector::<TerminalHandoffHashInputV1>(
         include_bytes!("testdata/terminal-handoff.json"),

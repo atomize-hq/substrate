@@ -6,6 +6,9 @@ use super::{
     SessionNamespaceRecordV1, StateRootV1, StateRootV2, StoreError,
     VersionedObjectVerificationParentIntentV1,
 };
+use crate::execution::agent_runtime::host_session_authority::store_schema::{
+    HostSessionPostTurnApplicationV2, HostSessionTransitionIntentStateV3, StateRootV3,
+};
 use crate::execution::agent_runtime::host_session_authority::validation::ValidatedCanonicalV1;
 
 #[derive(Clone, Debug, Eq, PartialEq)]
@@ -255,6 +258,214 @@ pub(super) fn collect_reachable_objects_v2(
     Ok(reachable)
 }
 
+pub(super) fn collect_reachable_objects_v3(
+    root: &StateRootV3,
+) -> Result<std::collections::BTreeMap<String, ReachableObjectV1>, StoreError> {
+    let mut reachable = std::collections::BTreeMap::new();
+    collect_namespace_refs(&mut reachable, root.session_namespace_map.values())?;
+    for intent in root.transition_intent_map.values() {
+        let context = ObjectVerificationContextV1 {
+            intent_id: intent.intent_id.clone(),
+            run_id: intent.run_id.clone(),
+            parent_intent: None,
+        };
+        add_expected_ref(
+            &mut reachable,
+            &intent.target_participant_lease_token_ref,
+            AuthorityObjectKindV1::LeaseToken,
+            Some(context.clone()),
+        )?;
+        add_expected_ref(
+            &mut reachable,
+            &intent.descriptor_ref,
+            AuthorityObjectKindV1::AgentDescriptor,
+            None,
+        )?;
+        add_expected_ref(
+            &mut reachable,
+            &intent.host_attach_contract_ref,
+            AuthorityObjectKindV1::HostAttachContract,
+            None,
+        )?;
+        add_optional_ref(
+            &mut reachable,
+            intent.resume_handle_ref.as_ref(),
+            AuthorityObjectKindV1::ResumeHandle,
+            None,
+        )?;
+        add_optional_ref(
+            &mut reachable,
+            intent.transition_input_ref.as_ref(),
+            AuthorityObjectKindV1::TransitionInput,
+            Some(context.clone()),
+        )?;
+        add_expected_ref(
+            &mut reachable,
+            &intent.transport_payload_ref,
+            AuthorityObjectKindV1::TransitionTransportPayload,
+            Some(ObjectVerificationContextV1 {
+                intent_id: intent.intent_id.clone(),
+                run_id: intent.run_id.clone(),
+                parent_intent: Some(VersionedObjectVerificationParentIntentV1::V2(Box::new(
+                    intent.clone(),
+                ))),
+            }),
+        )?;
+        collect_intent_state_refs_v2(&mut reachable, &intent.state)?;
+        collect_input_handoff_refs(&mut reachable, &intent.input_handoff, &context)?;
+        match &intent.transport_payload_state {
+            HostSessionTransitionTransportPayloadStateV1::Retained => {}
+            HostSessionTransitionTransportPayloadStateV1::ReleaseEligible {
+                terminal_handoff_ref,
+            }
+            | HostSessionTransitionTransportPayloadStateV1::Released {
+                terminal_handoff_ref,
+                ..
+            } => add_expected_ref(
+                &mut reachable,
+                terminal_handoff_ref,
+                AuthorityObjectKindV1::TerminalHandoff,
+                None,
+            )?,
+        }
+    }
+    for journal in root.application_journal.values() {
+        add_expected_ref(
+            &mut reachable,
+            &journal.initial_application.application_result_ref,
+            AuthorityObjectKindV1::ApplicationResult,
+            None,
+        )?;
+        if let Some(startup_terminal_application) = &journal.startup_terminal_application {
+            add_expected_ref(
+                &mut reachable,
+                &startup_terminal_application.startup_ownership_result_ref,
+                AuthorityObjectKindV1::StartupOwnershipResult,
+                None,
+            )?;
+        }
+        if let Some(post_turn) = &journal.post_turn_application {
+            add_expected_ref(
+                &mut reachable,
+                &post_turn.completion_ref,
+                AuthorityObjectKindV1::PostTurnCompletion,
+                None,
+            )?;
+            add_expected_ref(
+                &mut reachable,
+                &post_turn.application_result_ref,
+                AuthorityObjectKindV1::ApplicationResult,
+                None,
+            )?;
+        }
+    }
+
+    for intent in root.successor_transition_intent_map.values() {
+        let context = ObjectVerificationContextV1 {
+            intent_id: intent.intent_id.clone(),
+            run_id: intent.run_id.clone(),
+            parent_intent: None,
+        };
+        add_expected_ref(
+            &mut reachable,
+            &intent.target_participant_lease_token_ref,
+            AuthorityObjectKindV1::LeaseToken,
+            Some(context.clone()),
+        )?;
+        add_expected_ref(
+            &mut reachable,
+            &intent.descriptor_ref,
+            AuthorityObjectKindV1::AgentDescriptor,
+            None,
+        )?;
+        add_expected_ref(
+            &mut reachable,
+            &intent.host_attach_contract_ref,
+            AuthorityObjectKindV1::HostAttachContract,
+            None,
+        )?;
+        add_optional_ref(
+            &mut reachable,
+            intent.resume_handle_ref.as_ref(),
+            AuthorityObjectKindV1::ResumeHandle,
+            None,
+        )?;
+        add_optional_ref(
+            &mut reachable,
+            intent.transition_input_ref.as_ref(),
+            AuthorityObjectKindV1::TransitionInput,
+            Some(context.clone()),
+        )?;
+        add_expected_ref(
+            &mut reachable,
+            &intent.transport_payload_ref,
+            AuthorityObjectKindV1::TransitionTransportPayload,
+            Some(ObjectVerificationContextV1 {
+                intent_id: intent.intent_id.clone(),
+                run_id: intent.run_id.clone(),
+                parent_intent: Some(VersionedObjectVerificationParentIntentV1::V3(Box::new(
+                    intent.clone(),
+                ))),
+            }),
+        )?;
+        collect_intent_state_refs_v3(&mut reachable, &intent.state)?;
+        collect_input_handoff_refs(&mut reachable, &intent.input_handoff, &context)?;
+        match &intent.transport_payload_state {
+            HostSessionTransitionTransportPayloadStateV1::Retained => {}
+            HostSessionTransitionTransportPayloadStateV1::ReleaseEligible {
+                terminal_handoff_ref,
+            }
+            | HostSessionTransitionTransportPayloadStateV1::Released {
+                terminal_handoff_ref,
+                ..
+            } => add_expected_ref(
+                &mut reachable,
+                terminal_handoff_ref,
+                AuthorityObjectKindV1::TerminalHandoff,
+                None,
+            )?,
+        }
+    }
+
+    for journal in root.successor_application_journal.values() {
+        add_expected_ref(
+            &mut reachable,
+            &journal.initial_application.application_result_ref,
+            AuthorityObjectKindV1::ApplicationResult,
+            None,
+        )?;
+        if let Some(startup_terminal_application) = &journal.startup_terminal_application {
+            add_expected_ref(
+                &mut reachable,
+                &startup_terminal_application.startup_ownership_result_ref,
+                AuthorityObjectKindV1::StartupOwnershipResult,
+                None,
+            )?;
+        }
+        if let Some(post_turn) = &journal.post_turn_application {
+            add_expected_ref(
+                &mut reachable,
+                &post_turn.completion_ref,
+                AuthorityObjectKindV1::PostTurnCompletion,
+                None,
+            )?;
+            add_optional_ref(
+                &mut reachable,
+                post_turn.obligation_snapshot_ref.as_ref(),
+                AuthorityObjectKindV1::ObligationSnapshot,
+                None,
+            )?;
+            add_expected_ref(
+                &mut reachable,
+                &post_turn.application_result_ref,
+                AuthorityObjectKindV1::ApplicationResult,
+                None,
+            )?;
+        }
+    }
+    Ok(reachable)
+}
+
 fn collect_namespace_refs<'a>(
     reachable: &mut std::collections::BTreeMap<String, ReachableObjectV1>,
     records: impl Iterator<Item = &'a SessionNamespaceRecordV1>,
@@ -322,12 +533,23 @@ fn collect_intent_state_refs_v2(
                 AuthorityObjectKindV1::ApplicationResult,
                 None,
             )?;
-            if !matches!(
-                startup_ownership.as_ref(),
-                HostSessionStartupOwnershipApplicationV1::Pending { .. }
-            ) || post_turn.as_ref() != &HostSessionPostTurnApplicationV1::NotApplicable
-            {
-                return Err(StoreError("A1.2a V2 applied Start substate is unsupported"));
+            match startup_ownership.as_ref() {
+                HostSessionStartupOwnershipApplicationV1::Pending { .. } => {}
+                HostSessionStartupOwnershipApplicationV1::Accepted { result_ref, .. }
+                | HostSessionStartupOwnershipApplicationV1::TerminalReconciled {
+                    result_ref, ..
+                } => add_expected_ref(
+                    reachable,
+                    result_ref,
+                    AuthorityObjectKindV1::StartupOwnershipResult,
+                    None,
+                )?,
+                HostSessionStartupOwnershipApplicationV1::NotApplicable => {
+                    return Err(StoreError("V2 Start startup ownership is invalid"))
+                }
+            }
+            if post_turn.as_ref() != &HostSessionPostTurnApplicationV1::NotApplicable {
+                return Err(StoreError("V2 Start post-turn substate is invalid"));
             }
             Ok(())
         }
@@ -336,6 +558,92 @@ fn collect_intent_state_refs_v2(
             ..
         }
         | HostSessionTransitionIntentStateV2::Expired {
+            terminal_handoff_ref,
+            ..
+        } => add_expected_ref(
+            reachable,
+            terminal_handoff_ref,
+            AuthorityObjectKindV1::TerminalHandoff,
+            None,
+        ),
+    }
+}
+
+fn collect_intent_state_refs_v3(
+    reachable: &mut std::collections::BTreeMap<String, ReachableObjectV1>,
+    state: &HostSessionTransitionIntentStateV3,
+) -> Result<(), StoreError> {
+    match state {
+        HostSessionTransitionIntentStateV3::Issued
+        | HostSessionTransitionIntentStateV3::Claimed { .. } => Ok(()),
+        HostSessionTransitionIntentStateV3::Applied {
+            application_result_ref,
+            startup_ownership,
+            post_turn,
+            ..
+        } => {
+            add_expected_ref(
+                reachable,
+                application_result_ref,
+                AuthorityObjectKindV1::ApplicationResult,
+                None,
+            )?;
+            match startup_ownership.as_ref() {
+                HostSessionStartupOwnershipApplicationV1::NotApplicable
+                | HostSessionStartupOwnershipApplicationV1::Pending { .. } => {}
+                HostSessionStartupOwnershipApplicationV1::Accepted { result_ref, .. }
+                | HostSessionStartupOwnershipApplicationV1::TerminalReconciled {
+                    result_ref, ..
+                } => add_expected_ref(
+                    reachable,
+                    result_ref,
+                    AuthorityObjectKindV1::StartupOwnershipResult,
+                    None,
+                )?,
+            }
+            match post_turn.as_ref() {
+                HostSessionPostTurnApplicationV2::NotApplicable
+                | HostSessionPostTurnApplicationV2::Pending { .. } => Ok(()),
+                HostSessionPostTurnApplicationV2::AwaitingObligationCut {
+                    completion_ref, ..
+                } => add_expected_ref(
+                    reachable,
+                    completion_ref,
+                    AuthorityObjectKindV1::PostTurnCompletion,
+                    None,
+                ),
+                HostSessionPostTurnApplicationV2::Applied {
+                    completion_ref,
+                    obligation_snapshot_ref,
+                    application_result_ref,
+                    ..
+                } => {
+                    add_expected_ref(
+                        reachable,
+                        completion_ref,
+                        AuthorityObjectKindV1::PostTurnCompletion,
+                        None,
+                    )?;
+                    add_optional_ref(
+                        reachable,
+                        obligation_snapshot_ref.as_deref(),
+                        AuthorityObjectKindV1::ObligationSnapshot,
+                        None,
+                    )?;
+                    add_expected_ref(
+                        reachable,
+                        application_result_ref,
+                        AuthorityObjectKindV1::ApplicationResult,
+                        None,
+                    )
+                }
+            }
+        }
+        HostSessionTransitionIntentStateV3::Rejected {
+            terminal_handoff_ref,
+            ..
+        }
+        | HostSessionTransitionIntentStateV3::Expired {
             terminal_handoff_ref,
             ..
         } => add_expected_ref(
@@ -474,10 +782,7 @@ pub(super) fn add_expected_ref(
     expected_kind: AuthorityObjectKindV1,
     context: Option<ObjectVerificationContextV1>,
 ) -> Result<(), StoreError> {
-    if reference.object_kind != expected_kind
-        || reference.schema_version != 1
-        || reference.validate().is_err()
-    {
+    if reference.object_kind != expected_kind || reference.validate().is_err() {
         return Err(StoreError(
             "parent-owned object ref has the wrong kind or version",
         ));

@@ -1,4 +1,7 @@
 use super::*;
+use crate::execution::agent_runtime::host_session_authority::store_schema::{
+    HostSessionTransitionIntentV3, StateRootV3,
+};
 
 pub(super) trait ObjectVerificationRootV1 {
     fn authority_store_id(&self) -> &str;
@@ -30,6 +33,26 @@ impl ObjectVerificationRootV1 for StateRootV1 {
 }
 
 impl ObjectVerificationRootV1 for StateRootV2 {
+    fn authority_store_id(&self) -> &str {
+        &self.authority_store_id
+    }
+
+    fn active_commitment_key_id(&self) -> &str {
+        &self.active_commitment_key_id
+    }
+
+    fn commitment_key_registry(
+        &self,
+    ) -> &std::collections::BTreeMap<String, AuthorityStoreCommitmentKeyV1> {
+        &self.commitment_key_registry
+    }
+
+    fn object_index(&self) -> &std::collections::BTreeMap<String, AuthorityObjectIndexEntryV1> {
+        &self.object_index
+    }
+}
+
+impl ObjectVerificationRootV1 for StateRootV3 {
     fn authority_store_id(&self) -> &str {
         &self.authority_store_id
     }
@@ -192,6 +215,9 @@ pub(super) fn reserved_object_ref_id_is_globally_absent(
         AuthorityObjectKindV1::LeaseToken,
         AuthorityObjectKindV1::ApplicationResult,
         AuthorityObjectKindV1::InputAcceptance,
+        AuthorityObjectKindV1::StartupOwnershipResult,
+        AuthorityObjectKindV1::ObligationSnapshot,
+        AuthorityObjectKindV1::PostTurnProtocolEvent,
         AuthorityObjectKindV1::PostTurnCompletion,
         AuthorityObjectKindV1::TerminalHandoff,
     ] {
@@ -275,6 +301,17 @@ pub(super) fn verify_object_bytes<R: ObjectVerificationRootV1>(
                             ));
                         }
                         validate_transport_parent_v2(bytes, parent)?;
+                    }
+                    VersionedObjectVerificationParentIntentV1::V3(parent) => {
+                        if context.intent_id != parent.intent_id
+                            || context.run_id != parent.run_id
+                            || reference != &parent.transport_payload_ref
+                        {
+                            return Err(BootstrapError(
+                                "transport ref or HMAC context disagrees with V3 parent",
+                            ));
+                        }
+                        validate_transport_parent_v3(bytes, parent)?;
                     }
                 }
             } else if context.parent_intent.is_some() {
@@ -395,6 +432,43 @@ fn validate_transport_parent_v2(
     Ok(())
 }
 
+fn validate_transport_parent_v3(
+    bytes: &[u8],
+    intent: &HostSessionTransitionIntentV3,
+) -> Result<(), BootstrapError> {
+    use crate::execution::agent_runtime::host_session_authority::schema::TransitionTransportPayloadObjectV1;
+    use crate::execution::agent_runtime::host_session_authority::validation::ValidatedCanonicalV1;
+
+    let payload: TransitionTransportPayloadObjectV1 = canonical_json::from_slice(bytes)
+        .map_err(|_| BootstrapError("transport payload bytes are invalid"))?;
+    payload
+        .validate()
+        .map_err(|_| BootstrapError("transport payload schema is invalid"))?;
+    if payload.intent_id != intent.intent_id
+        || payload.mode != intent.mode
+        || payload.orchestration_session_id != intent.orchestration_session_id
+        || payload.shell_trace_session_id != intent.shell_trace_session_id
+        || payload.caller != intent.caller
+        || payload.source_authoritative_participant_id != intent.source_authoritative_participant_id
+        || payload.target_authoritative_participant_id != intent.target_authoritative_participant_id
+        || payload.target_participant_lease_token_ref != intent.target_participant_lease_token_ref
+        || payload.run_id != intent.run_id
+        || payload.resulting_authoritative_lineage != intent.resulting_authoritative_lineage
+        || payload.workspace_binding != intent.workspace_binding
+        || payload.world_binding != intent.world_binding
+        || payload.descriptor_ref != intent.descriptor_ref
+        || payload.host_attach_contract_ref != intent.host_attach_contract_ref
+        || payload.resume_handle_ref != intent.resume_handle_ref
+        || payload.transition_input_ref != intent.transition_input_ref
+        || payload.post_turn_disposition != intent.post_turn_disposition
+    {
+        return Err(BootstrapError(
+            "transport payload and V3 parent intent disagree",
+        ));
+    }
+    Ok(())
+}
+
 pub(super) fn canonical_digest(
     kind: AuthorityObjectKindV1,
     bytes: &[u8],
@@ -419,12 +493,19 @@ pub(super) fn canonical_digest(
         AuthorityObjectKindV1::InputAcceptance => {
             canonical_digest_as::<InputAcceptanceHashInputV1>(bytes)
         }
+        AuthorityObjectKindV1::StartupOwnershipResult => {
+            canonical_digest_as::<crate::execution::agent_runtime::host_session_authority::schema::StartupOwnershipResultHashInputV1>(bytes)
+        }
+        AuthorityObjectKindV1::ObligationSnapshot => {
+            canonical_digest_as::<crate::execution::agent_runtime::host_session_authority::schema::ObligationSnapshotHashInputV1>(bytes)
+        }
+        AuthorityObjectKindV1::PostTurnProtocolEvent => {
+            canonical_digest_as::<crate::execution::agent_runtime::host_session_authority::schema::PostTurnProtocolEventHashInputV1>(bytes)
+        }
         AuthorityObjectKindV1::PostTurnCompletion => {
             canonical_digest_as::<PostTurnCompletionHashInputV1>(bytes)
         }
-        AuthorityObjectKindV1::TerminalHandoff => {
-            canonical_digest_as::<TerminalHandoffHashInputV1>(bytes)
-        }
+        AuthorityObjectKindV1::TerminalHandoff => canonical_digest_terminal_handoff(bytes),
         AuthorityObjectKindV1::TransitionTransportPayload
         | AuthorityObjectKindV1::TransitionInput
         | AuthorityObjectKindV1::LeaseToken => Err(BootstrapError(
@@ -440,6 +521,19 @@ where
     let value: T = canonical_json::from_slice(bytes)
         .map_err(|_| BootstrapError("canonical object bytes are invalid"))?;
     canonical_sha256(&value).map_err(|_| BootstrapError("canonical object is invalid"))
+}
+
+fn canonical_digest_terminal_handoff(bytes: &[u8]) -> Result<String, BootstrapError> {
+    let version = serde_json::from_slice::<serde_json::Value>(bytes)
+        .map_err(|_| BootstrapError("canonical object bytes are invalid"))?
+        .get("schema_version")
+        .and_then(|value| value.as_u64())
+        .ok_or(BootstrapError("canonical object bytes are invalid"))?;
+    match version {
+        1 => canonical_digest_as::<TerminalHandoffHashInputV1>(bytes),
+        2 => canonical_digest_as::<crate::execution::agent_runtime::host_session_authority::schema::TerminalHandoffHashInputV2>(bytes),
+        _ => Err(BootstrapError("canonical object bytes are invalid")),
+    }
 }
 
 pub(super) fn sensitive_domain(kind: AuthorityObjectKindV1) -> Option<SensitiveDomainV1> {

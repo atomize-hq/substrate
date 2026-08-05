@@ -8,7 +8,7 @@ pub(super) fn rotate_commitment_key_with(
 ) -> Result<StateRootV1, BootstrapError> {
     match rotate_commitment_key_impl(path, expected_root_revision, material, stop, true)? {
         VersionedStateRoot::V1(root) => Ok(root),
-        VersionedStateRoot::V2(_) => Err(BootstrapError(
+        VersionedStateRoot::V2(_) | VersionedStateRoot::V3(_) => Err(BootstrapError(
             "V1 key rotation caller encountered StateRootV2",
         )),
     }
@@ -113,7 +113,7 @@ pub(super) fn retire_commitment_key_with(
         true,
     )? {
         VersionedStateRoot::V1(root) => Ok(root),
-        VersionedStateRoot::V2(_) => Err(BootstrapError(
+        VersionedStateRoot::V2(_) | VersionedStateRoot::V3(_) => Err(BootstrapError(
             "V1 key retirement caller encountered StateRootV2",
         )),
     }
@@ -162,6 +162,7 @@ fn retire_commitment_key_impl(
             match &root {
                 VersionedStateRoot::V1(root) => transaction.layout.reconcile_key_files(root),
                 VersionedStateRoot::V2(root) => transaction.layout.reconcile_key_files_v2(root),
+                VersionedStateRoot::V3(root) => transaction.layout.reconcile_key_files_v3(root),
             }
             .map_err(|_| BootstrapError("finish retired key cleanup"))?;
             return Ok(root);
@@ -198,6 +199,7 @@ fn retire_commitment_key_impl(
         match &root {
             VersionedStateRoot::V1(root) => transaction.layout.reconcile_key_files(root),
             VersionedStateRoot::V2(root) => transaction.layout.reconcile_key_files_v2(root),
+            VersionedStateRoot::V3(root) => transaction.layout.reconcile_key_files_v3(root),
         }
         .map_err(|_| BootstrapError("remove retired commitment key"))?;
         Ok(root)

@@ -688,6 +688,7 @@ impl VersionedSemanticTransaction<'_, '_> {
         match &self.root {
             VersionedStateRoot::V1(root) => self.layout.reconcile_after_preflight(root),
             VersionedStateRoot::V2(root) => self.layout.reconcile_after_preflight_v2(root),
+            VersionedStateRoot::V3(root) => self.layout.reconcile_after_preflight_v3(root),
         }
         .map_err(|_| BootstrapError("reconcile versioned authority store after preflight"))
     }
@@ -720,6 +721,8 @@ impl VersionedSemanticTransaction<'_, '_> {
                 (&current, candidate),
                 (VersionedStateRoot::V1(_), VersionedStateRoot::V1(_))
                     | (VersionedStateRoot::V2(_), VersionedStateRoot::V2(_))
+                    | (VersionedStateRoot::V2(_), VersionedStateRoot::V3(_))
+                    | (VersionedStateRoot::V3(_), VersionedStateRoot::V3(_))
             )
         {
             return Err(BootstrapError(
@@ -753,6 +756,7 @@ fn validate_versioned_candidate(
     match candidate {
         VersionedStateRoot::V1(root) => layout.validate_root_candidate(root),
         VersionedStateRoot::V2(root) => layout.validate_root_candidate_v2(root),
+        VersionedStateRoot::V3(root) => layout.validate_root_candidate_v3(root),
     }
     .map_err(|_| BootstrapError("validate versioned publication candidate"))
 }
@@ -1099,6 +1103,11 @@ impl WorldWorkReceiptRegistryTransactionV1<'_> {
                     .validate_matching_marker_if_present_v2(value)
                     .map_err(|_| BootstrapError("revalidate B1 receipt V2 initialization marker"))?
             }
+            VersionedStateRoot::V3(value) => {
+                layout
+                    .validate_matching_marker_if_present_v3(value)
+                    .map_err(|_| BootstrapError("revalidate B1 receipt V3 initialization marker"))?
+            }
         }
         if current != self.locked_root
             || current.authority_store_id() != self.authority_store_id
@@ -1233,6 +1242,11 @@ impl WorldWorkExecutionSupervisorTransactionV1<'_> {
                 .map_err(|_| {
                 BootstrapError("revalidate B2.1 supervisor V2 initialization marker")
             })?,
+            VersionedStateRoot::V3(value) => layout
+                .validate_matching_marker_if_present_v3(value)
+                .map_err(|_| {
+                BootstrapError("revalidate B2.1 supervisor V3 initialization marker")
+            })?,
         }
         if observed != self.locked_root
             || self.locked_root.bootstrap_home() != self.root.identity()
@@ -1333,6 +1347,9 @@ fn begin_world_work_receipt_registry_transaction<'storage>(
         VersionedStateRoot::V2(value) => layout
             .validate_matching_marker_if_present_v2(value)
             .map_err(|_| BootstrapError("validate B1 receipt V2 initialization marker"))?,
+        VersionedStateRoot::V3(value) => layout
+            .validate_matching_marker_if_present_v3(value)
+            .map_err(|_| BootstrapError("validate B1 receipt V3 initialization marker"))?,
     }
     if locked_root.bootstrap_home() != root.identity()
         || locked_root.authority_store_id() != expected_authority_store_id
@@ -1342,6 +1359,7 @@ fn begin_world_work_receipt_registry_transaction<'storage>(
     match &locked_root {
         VersionedStateRoot::V1(value) => layout.reconcile_after_preflight(value),
         VersionedStateRoot::V2(value) => layout.reconcile_after_preflight_v2(value),
+        VersionedStateRoot::V3(value) => layout.reconcile_after_preflight_v3(value),
     }
     .map_err(|_| BootstrapError("reconcile B1 receipt authority store"))?;
     let reconciled = layout
@@ -1447,6 +1465,9 @@ fn begin_world_work_execution_supervisor_transaction<'storage>(
         VersionedStateRoot::V2(value) => layout
             .validate_matching_marker_if_present_v2(value)
             .map_err(|_| BootstrapError("validate B2.1 supervisor V2 initialization marker"))?,
+        VersionedStateRoot::V3(value) => layout
+            .validate_matching_marker_if_present_v3(value)
+            .map_err(|_| BootstrapError("validate B2.1 supervisor V3 initialization marker"))?,
     }
     if locked_root.bootstrap_home() != root.identity()
         || locked_root.authority_store_id() != expected_authority_store_id
@@ -1456,6 +1477,7 @@ fn begin_world_work_execution_supervisor_transaction<'storage>(
     match &locked_root {
         VersionedStateRoot::V1(value) => layout.reconcile_after_preflight(value),
         VersionedStateRoot::V2(value) => layout.reconcile_after_preflight_v2(value),
+        VersionedStateRoot::V3(value) => layout.reconcile_after_preflight_v3(value),
     }
     .map_err(|_| BootstrapError("reconcile B2.1 supervisor authority store"))?;
     let reconciled = layout
@@ -2122,6 +2144,9 @@ pub(super) fn with_opened_existing_versioned_semantic_preflight<T>(
         VersionedStateRoot::V2(root) => layout
             .validate_matching_marker_if_present_v2(root)
             .map_err(|_| BootstrapError("validate V2 initialization marker"))?,
+        VersionedStateRoot::V3(root) => layout
+            .validate_matching_marker_if_present_v3(root)
+            .map_err(|_| BootstrapError("validate V3 initialization marker"))?,
     }
     operation(&VersionedSemanticTransaction {
         layout: &layout,

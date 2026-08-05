@@ -3773,9 +3773,11 @@ supply, and release as the remainder of the aggregate A1.2 intent protocol. Star
 the original application revision only through the unique contiguous R0-registration ancestry
 rule below; arbitrary stale authority remains rejected. Neither A1.2 packet owns runtime
 event identity, receipt acceptance, durable observation, retained-event semantics, canonical
-obligations, or their event/materialization cut. Until that corridor exists, A1.2b retains
-`AwaitingObligationCut` and cannot claim aggregate A1.2 closure. A1.3 adopts the protocol on real
-CLI/REPL consumers; A1.1 primitive tests are not evidence that a production Start path is adopted.
+obligations, or their event/materialization cut. On the bound Tuesday, August 4, 2026 source
+candidate, the bounded internal A1.2b durable protocol is complete and retains
+`AwaitingObligationCut` only as the exact incomplete-cut durable state. Aggregate A1.2 remains
+open because A1.3 adopts the protocol on real CLI/REPL consumers; A1.1 primitive tests are not
+evidence that a production Start path is adopted.
 
 ### Start namespace reservation
 
@@ -4436,8 +4438,9 @@ that sequence, B1/B2.1-R0 is independently review-clean, and B3.2a plus B3.2a-WA
 review-clean through `d0a70727c2bec2b2d6fe0754ea469c4682684dda`. The recovered B1/B2.1 cores
 and B1/B2.1-0 implementation are review-clean through `6436289f`, `c519024b`, `de727091`,
 `717579b0`, and `83101dcb`. The later joint production closeout is complete on the frozen
-2026-08-03 source without additional product bytes, and B3.1 is complete on the bound Tuesday,
-August 4, 2026 candidate. C1 is now the next packet. The historical prepared type also combined
+2026-08-03 source without additional product bytes, and B3.1, C1, and the bounded internal A1.2b
+packet are complete on the bound Tuesday, August 4, 2026 candidate. The next authority gate is
+`AUTHORITY_REQUIRED:R3_RESUME`. The historical prepared type also combined
 B-owned accepted/inspection routing with retained-worker admission data that has no canonical
 live-state representation.
 
@@ -8799,10 +8802,10 @@ production/test allowlist and reruns no broad product or Cargo wall. The control
 The predecessor's immutable receipt is legacy plain text, not V1 JSON. Its later exact propagation
 and the parent's independent Git/hash verification are recorded transparently; no replacement
 JSON protocol claim is made. R3 implementation is `PARKED_BY_USER` and no R3 implementation task
-has been dispatched. The just-closed corridor head was the B1/B2.1 joint closeout, B3.1 is
-complete on the bound Tuesday, August 4, 2026 candidate, and the next candidate implementation
-line is `C1 -> A1.2b`; after A1.2b, R3 must be revalidated, explicitly reauthorized, resumed, and
-completed before A1.3, A1.4, or A1 closeout. Authenticated Codex,
+has been dispatched. The just-closed corridor head was the B1/B2.1 joint closeout, B3.1, C1, and
+the bounded internal A1.2b packet are complete on the bound Tuesday, August 4, 2026 candidate,
+the next authority gate is `AUTHORITY_REQUIRED:R3_RESUME`, and R3 must be revalidated, explicitly
+reauthorized, resumed, and completed before A1.3, A1.4, or A1 closeout. Authenticated Codex,
 retained workers/tasks, authoritative-session repair/refresh,
 orchestrator packet-3 lifecycle/routing, gateway adoption, direct-member architecture, A1.1d/A1,
 and the whole runtime refactor remain open.
@@ -8815,8 +8818,8 @@ and no R3 implementation task has been dispatched. Planning is complete at
 `19c40d41679e843e3e524f64fb9827959849d33e` / `d7f6b84c9efc8ad03d98ad55c4e1a31611b96335` with
 planning fingerprint `sha256:8f4cf54640443dbeb82fffbef68fac8d03eeaa6c72cf4e44f645044bc2b210e7`.
 R3 implementation is `PARKED_BY_USER`. Resume requires fresh explicit authority plus live
-revalidation after the now-next `C1 -> A1.2b` corridor, and R3 must then be explicitly
-reauthorized, resumed, and completed before A1.3, A1.4, or A1 closeout.
+revalidation after the now-complete bounded internal A1.2b corridor, and R3 must then be
+explicitly reauthorized, resumed, and completed before A1.3, A1.4, or A1 closeout.
 
 ### `R3-CANDIDATE-01` — exact synchronous candidate rollback
 

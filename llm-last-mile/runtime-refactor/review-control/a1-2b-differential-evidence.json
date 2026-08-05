@@ -1,0 +1,110 @@
+{
+  "schema_version": 1,
+  "packet_id": "runtime-refactor-a1-2b-successor-post-turn-completion",
+  "increment": "A1.2b",
+  "bound_source": {
+    "commit": "658dc5996c50a8d8edcd55111191b37605393490",
+    "tree": "7fcf5da83e69096bbdf0bbad7250338c96b030ac",
+    "required_ancestor": "83101dcbcc750e6e8fb8979bea19f1f777792188",
+    "checkout": "/home/spenser/.codex/worktrees/1860/substrate",
+    "date": "2026-08-04"
+  },
+  "baseline": {
+    "artifact_root": "/home/spenser/.codex/visualizations/2026/08/04/019fcb37-2cc2-7ca0-8756-38ab5c443166/c1-proof-final-remediated",
+    "inventory": {
+      "discovered": 1330,
+      "passed": 1282,
+      "failed": 48,
+      "ignored": 0,
+      "failure_names_sha256": "c6de1349137dcb16d03b87be5364dc50d74a5052565e2c8d40dfed303592bed9",
+      "normalized_signatures_sha256": "e53ffb35dbd4fe32ea60ad8da88efe449edc510a5bd0b3fe446e8a368d5beb40"
+    },
+    "parallel": {
+      "summary_path": "/home/spenser/.codex/visualizations/2026/08/04/019fcb37-2cc2-7ca0-8756-38ab5c443166/c1-proof-final-remediated/parallel.summary.json",
+      "log_path": "/home/spenser/.codex/visualizations/2026/08/04/019fcb37-2cc2-7ca0-8756-38ab5c443166/c1-proof-final-remediated/parallel.raw.log",
+      "failure_names_path": "/home/spenser/.codex/visualizations/2026/08/04/019fcb37-2cc2-7ca0-8756-38ab5c443166/c1-proof-final-remediated/parallel.failure-names.txt",
+      "normalized_signatures_path": "/home/spenser/.codex/visualizations/2026/08/04/019fcb37-2cc2-7ca0-8756-38ab5c443166/c1-proof-final-remediated/parallel.normalized-signatures.txt",
+      "raw_log_sha256": "6b4604a15580ba9b79a4063b0d76fe6606398c3f84c48cda800788150720ae9b",
+      "summary_sha256": "3f35a2d88b73c4b3359a569419591ed0b39303b5a260553066cf8cdffef70db1"
+    },
+    "serial": {
+      "summary_path": "/home/spenser/.codex/visualizations/2026/08/04/019fcb37-2cc2-7ca0-8756-38ab5c443166/c1-proof-final-remediated/serial.summary.json",
+      "log_path": "/home/spenser/.codex/visualizations/2026/08/04/019fcb37-2cc2-7ca0-8756-38ab5c443166/c1-proof-final-remediated/serial.raw.log",
+      "failure_names_path": "/home/spenser/.codex/visualizations/2026/08/04/019fcb37-2cc2-7ca0-8756-38ab5c443166/c1-proof-final-remediated/serial.failure-names.txt",
+      "normalized_signatures_path": "/home/spenser/.codex/visualizations/2026/08/04/019fcb37-2cc2-7ca0-8756-38ab5c443166/c1-proof-final-remediated/serial.normalized-signatures.txt",
+      "raw_log_sha256": "a79081e7df594d01eb0824961db4b428abef7d76e644a765f5bd0cfe4651911d",
+      "summary_sha256": "e5bcc4e6b7bcedb27970d1112a7f969c78737e881bf998054b2a5b34912af1ec"
+    }
+  },
+  "current": {
+    "artifact_root": "/home/spenser/.codex/visualizations/2026/08/04/019fcc9c-01e6-7a33-81c0-fb323fb128e5/a1_2b_artifacts",
+    "inventory": {
+      "discovered": 1351,
+      "passed": 1303,
+      "failed": 48,
+      "ignored": 0,
+      "failure_names_sha256": "c6de1349137dcb16d03b87be5364dc50d74a5052565e2c8d40dfed303592bed9",
+      "normalized_signatures_sha256": "e53ffb35dbd4fe32ea60ad8da88efe449edc510a5bd0b3fe446e8a368d5beb40"
+    },
+    "parallel": {
+      "summary_path": "/home/spenser/.codex/visualizations/2026/08/04/019fcc9c-01e6-7a33-81c0-fb323fb128e5/a1_2b_artifacts/parallel.summary.json",
+      "log_path": "/home/spenser/.codex/visualizations/2026/08/04/019fcc9c-01e6-7a33-81c0-fb323fb128e5/a1_2b_artifacts/make-shell-lib-wall.post_complete_wall_correction.log",
+      "failure_names_path": "/home/spenser/.codex/visualizations/2026/08/04/019fcc9c-01e6-7a33-81c0-fb323fb128e5/a1_2b_artifacts/parallel.failure-names.txt",
+      "normalized_signatures_path": "/home/spenser/.codex/visualizations/2026/08/04/019fcc9c-01e6-7a33-81c0-fb323fb128e5/a1_2b_artifacts/parallel.normalized-signatures.txt",
+      "raw_log_sha256": "b20fe5d365fba253aa46b9d42188fbbf39e6270213a73820cccf39bbbb85f2c5",
+      "summary_sha256": "2320195e41e405556449a54418f579009db47659ee5f4dd91f72a47d8ac204d7"
+    },
+    "serial": {
+      "summary_path": "/home/spenser/.codex/visualizations/2026/08/04/019fcc9c-01e6-7a33-81c0-fb323fb128e5/a1_2b_artifacts/serial.summary.json",
+      "log_path": "/home/spenser/.codex/visualizations/2026/08/04/019fcc9c-01e6-7a33-81c0-fb323fb128e5/a1_2b_artifacts/make-shell-lib-wall-serial.post_complete_wall_correction.log",
+      "failure_names_path": "/home/spenser/.codex/visualizations/2026/08/04/019fcc9c-01e6-7a33-81c0-fb323fb128e5/a1_2b_artifacts/serial.failure-names.txt",
+      "normalized_signatures_path": "/home/spenser/.codex/visualizations/2026/08/04/019fcc9c-01e6-7a33-81c0-fb323fb128e5/a1_2b_artifacts/serial.normalized-signatures.txt",
+      "raw_log_sha256": "91c7f2e1686a232445d44351e1be988595e9c52480149e2dbfa9e83a2bf4545d",
+      "summary_sha256": "844a3aa14a9a7d962326d99422034453da0df68389d6a1fee87bbaee537d5d50"
+    }
+  },
+  "authorized_differential": {
+    "historical_normalized_signatures_sha256": "167807acacbf51c8507ef1c6a20d195b5d1a19e66ea62e5d612de1c2ef340f17",
+    "accepted_candidate_normalized_signatures_sha256": "e53ffb35dbd4fe32ea60ad8da88efe449edc510a5bd0b3fe446e8a368d5beb40",
+    "failure_names_sha256": "c6de1349137dcb16d03b87be5364dc50d74a5052565e2c8d40dfed303592bed9",
+    "exact_changed_signature_count": 0,
+    "exact_changed_paths": [],
+    "parallel_serial_equivalent": true,
+    "non_location_differences": {
+      "inventory_changed": true,
+      "inventory_growth_exactly_twenty_one_named_passing_tests": true,
+      "failure_names_changed": false,
+      "failure_messages_changed": false,
+      "preexisting_test_names_changed": false,
+      "assertion_text_changed": false,
+      "behavior_changed": false,
+      "paths_changed": false,
+      "columns_changed": false,
+      "ignored_state_changed": false
+    },
+    "new_passing_tests": [
+      "execution::agent_runtime::host_session_authority::store::tests::identity_bound_legacy_transactions_reject_activated_v2_and_v3_authority",
+      "execution::agent_runtime::host_session_authority::store::tests::reserved_ref_id_vacancy_rejects_v3_only_orphan_kinds",
+      "execution::agent_runtime::host_session_authority::store::tests::strict_v3_upgrade_preserves_v2_maps_and_joins_exact_retry_only",
+      "execution::agent_runtime::host_session_authority::transition_tests::reopen_rejects_v3_successor_attach_terminal_handoff_without_startup_result_ref",
+      "execution::agent_runtime::host_session_authority::transition_tests::strict_v3_current_authority_resolution_accepts_detached_start_and_successor_attach",
+      "execution::agent_runtime::host_session_authority::transition_tests::strict_v3_current_authority_resolution_rejects_unproven_r0_descendant_mutation",
+      "execution::agent_runtime::host_session_authority::transition_tests::strict_v3_publication_preserves_exact_current_authority_resolution",
+      "execution::agent_runtime::host_session_authority::transition_tests::successor_attach_issue_claim_apply_retries_to_one_initial_application",
+      "execution::agent_runtime::host_session_authority::transition_tests::strict_v3_startup_acceptance_preserves_applied_start_and_retries",
+      "execution::agent_runtime::host_session_authority::transition_tests::strict_v3_startup_acceptance_preserves_r0_descendant_current_authority_resolution",
+      "execution::agent_runtime::host_session_authority::transition_tests::strict_v3_startup_retry_rejects_changed_start_resolution_metadata",
+      "execution::agent_runtime::host_session_authority::transition_tests::strict_v3_startup_terminal_reconciliation_advances_exact_r0_descendant_start",
+      "execution::agent_runtime::host_session_authority::transition_tests::successor_attach_startup_acceptance_preserves_current_authority_and_retries",
+      "execution::agent_runtime::host_session_authority::transition_tests::successor_attach_startup_retry_rejects_changed_resolution_metadata",
+      "execution::agent_runtime::host_session_authority::transition_tests::successor_attach_startup_terminal_reconciliation_detaches_and_retries",
+      "execution::agent_runtime::host_session_authority::transition_tests::successor_resume_complete_cut_join_and_current_resolution_survive_released_transport_payload",
+      "execution::agent_runtime::host_session_authority::transition_tests::successor_resume_complete_cut_with_unresolved_attention_advances_to_awaiting_attention",
+      "execution::agent_runtime::host_session_authority::transition_tests::successor_resume_input_acceptance_and_obligation_cut_consumption_retries",
+      "execution::agent_runtime::host_session_authority::transition_tests::successor_resume_issue_claim_apply_retries_to_one_pending_post_turn",
+      "execution::agent_runtime::host_session_authority::transition_tests::successor_resume_pre_acceptance_terminal_failure_terminalizes_input_and_retries",
+      "execution::agent_runtime::retained_worker_runtime::tests::rewinding_r0_ancestry_ignores_non_r0_current_authority_fields"
+    ],
+    "exact_location_deltas": []
+  }
+}

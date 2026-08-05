@@ -1,4 +1,12 @@
 use super::*;
+use crate::execution::agent_runtime::host_session_authority::schema::{
+    HostSessionTransitionModeV1, TerminalHandoffHashInputV2,
+};
+use crate::execution::agent_runtime::host_session_authority::store_schema::StateRootV3;
+use crate::execution::agent_runtime::host_session_authority::store_schema::{
+    HostSessionPostTurnApplicationV2, HostSessionTransitionIntentStateV3,
+    HostSessionTransitionIntentV3,
+};
 
 pub(super) struct StoreLayout<'a> {
     pub(super) bootstrap: &'a TrustedDirectory,
@@ -239,6 +247,18 @@ impl<'a> StoreLayout<'a> {
         self.reconcile_key_files_v2(root)?;
         self.reconcile_released_objects_v2(root)?;
         self.validate_existing_objects_v2(root, false)
+    }
+
+    pub(super) fn reconcile_after_preflight_v3(
+        &self,
+        root: &StateRootV3,
+    ) -> Result<(), StoreError> {
+        let preserved = root.preserved_v2_view();
+        self.reconcile_temps()?;
+        self.remove_matching_marker_v3(root)?;
+        self.reconcile_key_files_v3(root)?;
+        self.reconcile_released_objects_v2(&preserved)?;
+        self.validate_existing_objects_v3(root, false)
     }
 
     pub(super) fn validate_closed_layout(&self) -> Result<(), StoreError> {
@@ -531,6 +551,11 @@ impl<'a> StoreLayout<'a> {
                 self.validate_existing_objects_v2(root, true)?;
                 self.validate_reachable_objects_v2(root)?;
             }
+            VersionedStateRoot::V3(root) => {
+                self.validate_existing_keys_v3(root)?;
+                self.validate_existing_objects_v3(root, true)?;
+                self.validate_reachable_objects_v3(root)?;
+            }
         }
         Ok(root)
     }
@@ -578,6 +603,21 @@ impl<'a> StoreLayout<'a> {
                     &root.commitment_key_registry,
                 )?;
                 self.validate_matching_marker_if_present_v2(root)?;
+            }
+            VersionedStateRoot::V3(root) => {
+                root.validate_greenfield()
+                    .map_err(|_| StoreError("validate strict greenfield StateRootV3"))?;
+                if &root.bootstrap_home != bootstrap_home {
+                    return Err(StoreError("greenfield StateRootV3 home mismatch"));
+                }
+                self.validate_existing_keys_v3(root)?;
+                self.validate_existing_objects_v3(root, true)?;
+                self.validate_reachable_objects_v3(root)?;
+                self.validate_greenfield_upgrade_occupancy(
+                    &root.authority_store_id,
+                    &root.commitment_key_registry,
+                )?;
+                self.validate_matching_marker_if_present_v3(root)?;
             }
         }
         Ok(root)
@@ -711,6 +751,10 @@ impl<'a> StoreLayout<'a> {
         Ok(())
     }
 
+    pub(super) fn validate_existing_keys_v3(&self, root: &StateRootV3) -> Result<(), StoreError> {
+        self.validate_existing_keys_v2(&root.preserved_v2_view())
+    }
+
     pub(super) fn validate_root_candidate(&self, root: &StateRootV1) -> Result<(), StoreError> {
         root.validate()
             .map_err(|_| StoreError("validate proposed state root"))?;
@@ -725,6 +769,14 @@ impl<'a> StoreLayout<'a> {
         self.validate_existing_keys_v2(root)?;
         self.validate_existing_objects_v2(root, false)?;
         self.validate_reachable_objects_v2(root)
+    }
+
+    pub(super) fn validate_root_candidate_v3(&self, root: &StateRootV3) -> Result<(), StoreError> {
+        root.validate()
+            .map_err(|_| StoreError("validate proposed V3 state root"))?;
+        self.validate_existing_keys_v3(root)?;
+        self.validate_existing_objects_v3(root, false)?;
+        self.validate_reachable_objects_v3(root)
     }
 
     pub(super) fn validate_existing_keys(&self, root: &StateRootV1) -> Result<(), StoreError> {
@@ -780,6 +832,10 @@ impl<'a> StoreLayout<'a> {
     }
 
     pub(super) fn reconcile_key_files_v2(&self, root: &StateRootV2) -> Result<(), StoreError> {
+        self.reconcile_key_registry(&root.commitment_key_registry)
+    }
+
+    pub(super) fn reconcile_key_files_v3(&self, root: &StateRootV3) -> Result<(), StoreError> {
         self.reconcile_key_registry(&root.commitment_key_registry)
     }
 
@@ -849,6 +905,14 @@ impl<'a> StoreLayout<'a> {
         allow_released_copy: bool,
     ) -> Result<(), StoreError> {
         self.validate_existing_object_index(&root.object_index, allow_released_copy)
+    }
+
+    pub(super) fn validate_existing_objects_v3(
+        &self,
+        root: &StateRootV3,
+        allow_released_copy: bool,
+    ) -> Result<(), StoreError> {
+        self.validate_existing_objects_v2(&root.preserved_v2_view(), allow_released_copy)
     }
 
     fn validate_existing_object_index(
@@ -1359,6 +1423,164 @@ impl<'a> StoreLayout<'a> {
         Ok(())
     }
 
+    pub(super) fn validate_reachable_objects_v3(
+        &self,
+        root: &StateRootV3,
+    ) -> Result<(), StoreError> {
+        let mut reachable = super::reachability::collect_reachable_objects_v3(root)?;
+        let mut pending = reachable.keys().cloned().collect::<Vec<_>>();
+        let mut processed = std::collections::BTreeSet::new();
+        let mut attach_contracts = std::collections::BTreeMap::new();
+        let mut descriptors = std::collections::BTreeMap::new();
+        let mut resume_handles = std::collections::BTreeMap::new();
+        let mut retained_workers = std::collections::BTreeMap::new();
+        let mut terminal_handoffs_v1 = std::collections::BTreeMap::new();
+        let mut terminal_handoffs_v2 = std::collections::BTreeMap::new();
+        while let Some(ref_id) = pending.pop() {
+            if !processed.insert(ref_id.clone()) {
+                continue;
+            }
+            let object = reachable
+                .get(&ref_id)
+                .cloned()
+                .ok_or(StoreError("V3 reachable object disappeared"))?;
+            let index = root
+                .object_index
+                .get(&ref_id)
+                .ok_or(StoreError("V3 parent ref is absent from object index"))?;
+            if index.object_kind != object.reference.object_kind
+                || index.object_schema_version != object.reference.schema_version
+            {
+                return Err(StoreError("V3 parent ref and object index disagree"));
+            }
+            if matches!(
+                index.storage_state,
+                AuthorityObjectStorageStateV1::Released { .. }
+            ) {
+                continue;
+            }
+            let bytes = self.read_object_bytes(&object.reference)?;
+            verify_object_bytes(
+                self,
+                root,
+                &object.reference,
+                &bytes,
+                object.context.as_ref(),
+                true,
+            )
+            .map_err(|_| StoreError("V3 parent-owned object commitment mismatch"))?;
+            let before = reachable.len();
+            match object.reference.object_kind {
+                AuthorityObjectKindV1::HostAttachContract => {
+                    let value: HostAttachContractHashInputV1 =
+                        canonical_json::from_slice(&bytes)
+                            .map_err(|_| StoreError("decode V3 host attach contract graph"))?;
+                    add_expected_ref(
+                        &mut reachable,
+                        &value.contract.descriptor_ref,
+                        AuthorityObjectKindV1::AgentDescriptor,
+                        None,
+                    )?;
+                    add_expected_ref(
+                        &mut reachable,
+                        &value.contract.policy_ref,
+                        AuthorityObjectKindV1::Policy,
+                        None,
+                    )?;
+                    if let Some(reference) = value.contract.continuity_resume_handle_ref.as_ref() {
+                        add_expected_ref(
+                            &mut reachable,
+                            reference,
+                            AuthorityObjectKindV1::ResumeHandle,
+                            None,
+                        )?;
+                    }
+                    attach_contracts.insert(ref_id.clone(), value);
+                }
+                AuthorityObjectKindV1::AgentDescriptor => {
+                    let value: AgentDescriptorHashInputV1 = canonical_json::from_slice(&bytes)
+                        .map_err(|_| StoreError("decode V3 agent descriptor graph"))?;
+                    descriptors.insert(ref_id.clone(), value);
+                }
+                AuthorityObjectKindV1::RetainedWorker => {
+                    let value: RetainedWorkerObjectHashInputV1 = canonical_json::from_slice(&bytes)
+                        .map_err(|_| StoreError("decode V3 retained worker graph"))?;
+                    for (reference, kind) in [
+                        (
+                            &value.descriptor_ref,
+                            AuthorityObjectKindV1::AgentDescriptor,
+                        ),
+                        (
+                            &value.resume_handle_ref,
+                            AuthorityObjectKindV1::ResumeHandle,
+                        ),
+                        (&value.policy_ref, AuthorityObjectKindV1::Policy),
+                    ] {
+                        add_expected_ref(&mut reachable, reference, kind, None)?;
+                    }
+                    retained_workers.insert(ref_id.clone(), value);
+                }
+                AuthorityObjectKindV1::ResumeHandle => {
+                    let value: ResumeHandleHashInputV1 = canonical_json::from_slice(&bytes)
+                        .map_err(|_| StoreError("decode V3 resume handle graph"))?;
+                    resume_handles.insert(ref_id.clone(), value);
+                }
+                AuthorityObjectKindV1::TerminalHandoff => {
+                    match terminal_handoff_schema_version(&bytes)? {
+                        1 => {
+                            let value: TerminalHandoffHashInputV1 =
+                                canonical_json::from_slice(&bytes)
+                                    .map_err(|_| StoreError("decode V3 terminal handoff graph"))?;
+                            terminal_handoffs_v1.insert(ref_id.clone(), value);
+                        }
+                        2 => {
+                            let value: TerminalHandoffHashInputV2 =
+                                canonical_json::from_slice(&bytes)
+                                    .map_err(|_| StoreError("decode V3 terminal handoff graph"))?;
+                            terminal_handoffs_v2.insert(ref_id.clone(), value);
+                        }
+                        _ => return Err(StoreError("decode V3 terminal handoff graph")),
+                    }
+                }
+                AuthorityObjectKindV1::PostTurnCompletion => {
+                    let value: PostTurnCompletionHashInputV1 =
+                        canonical_json::from_slice(&bytes)
+                            .map_err(|_| StoreError("decode V3 post-turn completion graph"))?;
+                    add_expected_ref(
+                        &mut reachable,
+                        &value.protocol_event_ref,
+                        AuthorityObjectKindV1::PostTurnProtocolEvent,
+                        None,
+                    )?;
+                }
+                _ => {}
+            }
+            if reachable.len() > before {
+                pending.extend(
+                    reachable
+                        .keys()
+                        .filter(|key| !processed.contains(*key))
+                        .cloned(),
+                );
+            }
+        }
+        if reachable.len() != root.object_index.len() {
+            return Err(StoreError("V3 object index and parent reachability differ"));
+        }
+        self.validate_decoded_object_graphs_v3(
+            root,
+            DecodedObjectGraphsV3 {
+                attach_contracts: &attach_contracts,
+                descriptors: &descriptors,
+                resume_handles: &resume_handles,
+                retained_workers: &retained_workers,
+                terminal_handoffs_v1: &terminal_handoffs_v1,
+                terminal_handoffs_v2: &terminal_handoffs_v2,
+            },
+        )?;
+        Ok(())
+    }
+
     fn validate_decoded_object_graphs(
         &self,
         root: &StateRootV1,
@@ -1536,6 +1758,291 @@ impl<'a> StoreLayout<'a> {
         Ok(())
     }
 
+    fn validate_decoded_object_graphs_v3(
+        &self,
+        root: &StateRootV3,
+        graphs: DecodedObjectGraphsV3<'_>,
+    ) -> Result<(), StoreError> {
+        for (ref_id, attach) in graphs.attach_contracts {
+            let descriptor = graphs
+                .descriptors
+                .get(&attach.contract.descriptor_ref.ref_id)
+                .ok_or(StoreError("V3 attach descriptor is unreachable"))?;
+            if descriptor.descriptor.backend_id != attach.contract.backend_id
+                || descriptor.descriptor.protocol != attach.contract.protocol
+                || descriptor.descriptor.execution_scope != attach.contract.execution_scope
+            {
+                return Err(StoreError("V3 attach contract and descriptor disagree"));
+            }
+            for intent in root
+                .transition_intent_map
+                .values()
+                .filter(|intent| intent.host_attach_contract_ref.ref_id == *ref_id)
+            {
+                if attach.contract.descriptor_ref != intent.descriptor_ref
+                    || attach.contract.continuity_resume_handle_ref != intent.resume_handle_ref
+                {
+                    return Err(StoreError(
+                        "V3 preserved Start attach contract and intent graph disagree",
+                    ));
+                }
+                if let Some(reference) = &attach.contract.continuity_resume_handle_ref {
+                    let resume = graphs
+                        .resume_handles
+                        .get(&reference.ref_id)
+                        .ok_or(StoreError(
+                            "V3 preserved Start resume handle is unreachable",
+                        ))?;
+                    validate_resume_identity(
+                        resume,
+                        &intent.orchestration_session_id,
+                        &intent.target_authoritative_participant_id,
+                        &attach.contract.backend_id,
+                        &attach.contract.protocol,
+                    )?;
+                }
+            }
+            for intent in root
+                .successor_transition_intent_map
+                .values()
+                .filter(|intent| intent.host_attach_contract_ref.ref_id == *ref_id)
+            {
+                if attach.contract.descriptor_ref != intent.descriptor_ref {
+                    return Err(StoreError(
+                        "V3 attach contract and successor intent graph disagree",
+                    ));
+                }
+                let Some(source_participant_id) =
+                    intent.source_authoritative_participant_id.as_ref()
+                else {
+                    return Err(StoreError(
+                        "V3 successor intent is missing its source participant",
+                    ));
+                };
+                if let Some(reference) = &attach.contract.continuity_resume_handle_ref {
+                    let resume = graphs
+                        .resume_handles
+                        .get(&reference.ref_id)
+                        .ok_or(StoreError("V3 successor resume handle is unreachable"))?;
+                    validate_resume_identity(
+                        resume,
+                        &intent.orchestration_session_id,
+                        source_participant_id,
+                        &attach.contract.backend_id,
+                        &attach.contract.protocol,
+                    )?;
+                }
+                if let Some(reference) = &intent.resume_handle_ref {
+                    let resume = graphs
+                        .resume_handles
+                        .get(&reference.ref_id)
+                        .ok_or(StoreError(
+                            "V3 successor intent resume handle is unreachable",
+                        ))?;
+                    validate_resume_identity(
+                        resume,
+                        &intent.orchestration_session_id,
+                        source_participant_id,
+                        &attach.contract.backend_id,
+                        &attach.contract.protocol,
+                    )?;
+                }
+            }
+        }
+        for (ref_id, worker) in graphs.retained_workers {
+            let descriptor = graphs
+                .descriptors
+                .get(&worker.descriptor_ref.ref_id)
+                .ok_or(StoreError("V3 retained descriptor is unreachable"))?;
+            let resume = graphs
+                .resume_handles
+                .get(&worker.resume_handle_ref.ref_id)
+                .ok_or(StoreError("V3 retained resume handle is unreachable"))?;
+            if descriptor.descriptor.execution_scope != AgentExecutionScopeV1::World {
+                return Err(StoreError("V3 retained descriptor is not world-scoped"));
+            }
+            validate_resume_identity(
+                resume,
+                &worker.orchestration_session_id,
+                &worker.participant_id,
+                &descriptor.descriptor.backend_id,
+                &descriptor.descriptor.protocol,
+            )?;
+            let parents = root
+                .session_namespace_map
+                .values()
+                .filter_map(|record| match record {
+                    SessionNamespaceRecordV1::Authority(authority)
+                        if authority
+                            .retained_worker_refs
+                            .iter()
+                            .any(|reference| reference.ref_id == *ref_id) =>
+                    {
+                        Some(authority.as_ref())
+                    }
+                    _ => None,
+                })
+                .collect::<Vec<_>>();
+            let [authority] = parents.as_slice() else {
+                return Err(StoreError(
+                    "V3 retained worker has no unique authority parent",
+                ));
+            };
+            let registrations = root
+                .retained_worker_registration_journal
+                .values()
+                .filter(|registration| registration.retained_worker_ref.ref_id == *ref_id)
+                .collect::<Vec<_>>();
+            let [registration] = registrations.as_slice() else {
+                return Err(StoreError(
+                    "V3 retained worker has no unique registration parent",
+                ));
+            };
+            if worker.orchestration_session_id != authority.orchestration_session_id
+                || worker.orchestration_session_id != registration.orchestration_session_id
+                || worker.participant_id != registration.retained_participant_id
+                || !authority
+                    .authoritative_participant_lineage
+                    .contains(&worker.participant_id)
+                || authority.world_binding.as_ref() != Some(&worker.world_binding)
+                || authority.current_policy_ref.as_ref() != Some(&worker.policy_ref)
+                || worker.world_binding != registration.world_binding
+                || worker.descriptor_ref != registration.descriptor_ref
+                || worker.resume_handle_ref != registration.resume_handle_ref
+                || worker.policy_ref != registration.current_policy_ref
+            {
+                return Err(StoreError(
+                    "V3 retained object graph and authority disagree",
+                ));
+            }
+        }
+        for authority in root
+            .session_namespace_map
+            .values()
+            .filter_map(|record| match record {
+                SessionNamespaceRecordV1::Authority(authority) => Some(authority.as_ref()),
+                _ => None,
+            })
+        {
+            for reference in &authority.internal_resume_handle_refs {
+                let resume = graphs
+                    .resume_handles
+                    .get(&reference.ref_id)
+                    .ok_or(StoreError("V3 authority resume handle is unreachable"))?;
+                if resume.orchestration_session_id != authority.orchestration_session_id
+                    || !authority
+                        .authoritative_participant_lineage
+                        .contains(&resume.participant_id)
+                {
+                    return Err(StoreError("V3 authority resume identity disagrees"));
+                }
+                let attach = authority
+                    .host_attach_contract_ref
+                    .as_ref()
+                    .and_then(|attach_ref| graphs.attach_contracts.get(&attach_ref.ref_id))
+                    .filter(|attach| {
+                        attach.contract.continuity_resume_handle_ref.as_ref() == Some(reference)
+                    });
+                let worker = graphs
+                    .retained_workers
+                    .values()
+                    .find(|worker| worker.resume_handle_ref == *reference);
+                match (attach, worker) {
+                    (Some(attach), _) => validate_resume_identity(
+                        resume,
+                        &authority.orchestration_session_id,
+                        &resume.participant_id,
+                        &attach.contract.backend_id,
+                        &attach.contract.protocol,
+                    )?,
+                    (None, Some(worker)) => {
+                        let descriptor = graphs
+                            .descriptors
+                            .get(&worker.descriptor_ref.ref_id)
+                            .ok_or(StoreError("V3 resume owner descriptor is unreachable"))?;
+                        validate_resume_identity(
+                            resume,
+                            &authority.orchestration_session_id,
+                            &worker.participant_id,
+                            &descriptor.descriptor.backend_id,
+                            &descriptor.descriptor.protocol,
+                        )?;
+                    }
+                    (None, None) => {}
+                }
+            }
+        }
+        for intent in root.transition_intent_map.values() {
+            let terminal_ref = match &intent.state {
+                HostSessionTransitionIntentStateV2::Rejected {
+                    terminal_handoff_ref,
+                    ..
+                }
+                | HostSessionTransitionIntentStateV2::Expired {
+                    terminal_handoff_ref,
+                    ..
+                } => Some(terminal_handoff_ref),
+                HostSessionTransitionIntentStateV2::Issued
+                | HostSessionTransitionIntentStateV2::Claimed { .. }
+                | HostSessionTransitionIntentStateV2::Applied { .. } => {
+                    match &intent.transport_payload_state {
+                        HostSessionTransitionTransportPayloadStateV1::ReleaseEligible {
+                            terminal_handoff_ref,
+                        }
+                        | HostSessionTransitionTransportPayloadStateV1::Released {
+                            terminal_handoff_ref,
+                            ..
+                        } => Some(terminal_handoff_ref),
+                        HostSessionTransitionTransportPayloadStateV1::Retained => None,
+                    }
+                }
+            };
+            if let Some(reference) = terminal_ref {
+                let terminal = terminal_handoff_graph(
+                    reference,
+                    graphs.terminal_handoffs_v1,
+                    graphs.terminal_handoffs_v2,
+                )?;
+                validate_terminal_handoff_preserved_start_v3(intent, terminal)?;
+            }
+        }
+        for intent in root.successor_transition_intent_map.values() {
+            let terminal_ref = match &intent.state {
+                HostSessionTransitionIntentStateV3::Rejected {
+                    terminal_handoff_ref,
+                    ..
+                }
+                | HostSessionTransitionIntentStateV3::Expired {
+                    terminal_handoff_ref,
+                    ..
+                } => Some(terminal_handoff_ref),
+                HostSessionTransitionIntentStateV3::Issued
+                | HostSessionTransitionIntentStateV3::Claimed { .. }
+                | HostSessionTransitionIntentStateV3::Applied { .. } => {
+                    match &intent.transport_payload_state {
+                        HostSessionTransitionTransportPayloadStateV1::ReleaseEligible {
+                            terminal_handoff_ref,
+                        }
+                        | HostSessionTransitionTransportPayloadStateV1::Released {
+                            terminal_handoff_ref,
+                            ..
+                        } => Some(terminal_handoff_ref),
+                        HostSessionTransitionTransportPayloadStateV1::Retained => None,
+                    }
+                }
+            };
+            if let Some(reference) = terminal_ref {
+                let terminal = terminal_handoff_graph(
+                    reference,
+                    graphs.terminal_handoffs_v1,
+                    graphs.terminal_handoffs_v2,
+                )?;
+                validate_terminal_handoff_v3(intent, terminal)?;
+            }
+        }
+        Ok(())
+    }
+
     pub(super) fn read_object_bytes(
         &self,
         reference: &AuthorityObjectRefV1,
@@ -1644,6 +2151,28 @@ impl<'a> StoreLayout<'a> {
         Ok(())
     }
 
+    pub(super) fn validate_matching_marker_if_present_v3(
+        &self,
+        root: &StateRootV3,
+    ) -> Result<(), StoreError> {
+        self.validate_matching_marker_if_present_v2(&root.preserved_v2_view())
+    }
+
+    pub(super) fn remove_matching_marker_v3(&self, root: &StateRootV3) -> Result<(), StoreError> {
+        self.validate_matching_marker_if_present_v3(root)?;
+        if self
+            .authority
+            .entry_kind(INIT_FILE)
+            .map_err(|_| StoreError("inspect V3 initialization marker for removal"))?
+            .is_some()
+        {
+            self.authority
+                .unlink_file(INIT_FILE)
+                .map_err(|_| StoreError("remove committed V3 initialization marker"))?;
+        }
+        Ok(())
+    }
+
     pub(super) fn keys_empty(&self) -> Result<bool, StoreError> {
         self.keys
             .entries()
@@ -1676,6 +2205,48 @@ pub(super) fn validate_resume_identity(
         ))
     } else {
         Ok(())
+    }
+}
+
+struct DecodedObjectGraphsV3<'a> {
+    attach_contracts: &'a std::collections::BTreeMap<String, HostAttachContractHashInputV1>,
+    descriptors: &'a std::collections::BTreeMap<String, AgentDescriptorHashInputV1>,
+    resume_handles: &'a std::collections::BTreeMap<String, ResumeHandleHashInputV1>,
+    retained_workers: &'a std::collections::BTreeMap<String, RetainedWorkerObjectHashInputV1>,
+    terminal_handoffs_v1: &'a std::collections::BTreeMap<String, TerminalHandoffHashInputV1>,
+    terminal_handoffs_v2: &'a std::collections::BTreeMap<String, TerminalHandoffHashInputV2>,
+}
+
+enum TerminalHandoffGraphV3<'a> {
+    V1(&'a TerminalHandoffHashInputV1),
+    V2(&'a TerminalHandoffHashInputV2),
+}
+
+fn terminal_handoff_schema_version(bytes: &[u8]) -> Result<u32, StoreError> {
+    let value: serde_json::Value = serde_json::from_slice(bytes)
+        .map_err(|_| StoreError("decode V3 terminal handoff graph"))?;
+    let version = value
+        .get("schema_version")
+        .and_then(serde_json::Value::as_u64)
+        .ok_or(StoreError("decode V3 terminal handoff graph"))?;
+    u32::try_from(version).map_err(|_| StoreError("decode V3 terminal handoff graph"))
+}
+
+fn terminal_handoff_graph<'a>(
+    reference: &AuthorityObjectRefV1,
+    terminal_handoffs_v1: &'a std::collections::BTreeMap<String, TerminalHandoffHashInputV1>,
+    terminal_handoffs_v2: &'a std::collections::BTreeMap<String, TerminalHandoffHashInputV2>,
+) -> Result<TerminalHandoffGraphV3<'a>, StoreError> {
+    match (
+        terminal_handoffs_v1.get(&reference.ref_id),
+        terminal_handoffs_v2.get(&reference.ref_id),
+    ) {
+        (Some(_), Some(_)) => Err(StoreError(
+            "V3 terminal handoff appears with multiple schema versions",
+        )),
+        (Some(terminal), None) => Ok(TerminalHandoffGraphV3::V1(terminal)),
+        (None, Some(terminal)) => Ok(TerminalHandoffGraphV3::V2(terminal)),
+        (None, None) => Err(StoreError("V3 terminal handoff is unreachable")),
     }
 }
 
@@ -1737,6 +2308,102 @@ fn validate_terminal_handoff(
     }
 }
 
+fn validate_terminal_handoff_preserved_start_v3(
+    intent: &HostSessionTransitionIntentV2,
+    terminal: TerminalHandoffGraphV3<'_>,
+) -> Result<(), StoreError> {
+    let input_acceptance_ref = match &intent.input_handoff {
+        HostSessionTransitionInputHandoffV1::Accepted { acceptance_ref, .. } => {
+            Some(acceptance_ref)
+        }
+        _ => None,
+    };
+    match &intent.state {
+        HostSessionTransitionIntentStateV2::Applied {
+            application_result_ref,
+            startup_ownership,
+            ..
+        } => {
+            let HostSessionStartupOwnershipApplicationV1::TerminalReconciled { result_ref, .. } =
+                startup_ownership.as_ref()
+            else {
+                return Err(StoreError(
+                    "nonterminal V3 preserved Start has a terminal handoff",
+                ));
+            };
+            let TerminalHandoffGraphV3::V2(terminal) = terminal else {
+                return Err(StoreError(
+                    "V3 preserved Start terminal handoff must use the successor schema",
+                ));
+            };
+            if terminal.intent_id != intent.intent_id
+                || terminal.run_id != intent.run_id
+                || terminal.payload_commitment != intent.payload_commitment
+                || terminal.terminal_state != TerminalHandoffStateV1::Applied
+                || terminal.application_result_ref.as_ref() != Some(application_result_ref)
+                || terminal.input_acceptance_ref.as_ref() != input_acceptance_ref
+                || terminal.startup_ownership_result_ref.as_ref() != Some(result_ref)
+                || terminal.post_turn_completion_ref.is_some()
+                || terminal.post_turn_application_result_ref.is_some()
+            {
+                Err(StoreError(
+                    "V3 preserved Start terminal handoff and intent graph disagree",
+                ))
+            } else {
+                Ok(())
+            }
+        }
+        HostSessionTransitionIntentStateV2::Rejected { reason, .. } => {
+            let TerminalHandoffGraphV3::V1(terminal) = terminal else {
+                return Err(StoreError(
+                    "V3 preserved Start rejection handoff must preserve the V1 schema",
+                ));
+            };
+            if terminal.intent_id != intent.intent_id
+                || terminal.run_id != intent.run_id
+                || terminal.payload_commitment != intent.payload_commitment
+                || terminal.terminal_state != (TerminalHandoffStateV1::Rejected { reason: *reason })
+                || terminal.application_result_ref.is_some()
+                || terminal.input_acceptance_ref.as_ref() != input_acceptance_ref
+                || terminal.post_turn_completion_ref.is_some()
+                || terminal.post_turn_application_result_ref.is_some()
+            {
+                Err(StoreError(
+                    "V3 preserved Start terminal handoff and intent graph disagree",
+                ))
+            } else {
+                Ok(())
+            }
+        }
+        HostSessionTransitionIntentStateV2::Expired { .. } => {
+            let TerminalHandoffGraphV3::V1(terminal) = terminal else {
+                return Err(StoreError(
+                    "V3 preserved Start expiry handoff must preserve the V1 schema",
+                ));
+            };
+            if terminal.intent_id != intent.intent_id
+                || terminal.run_id != intent.run_id
+                || terminal.payload_commitment != intent.payload_commitment
+                || terminal.terminal_state != TerminalHandoffStateV1::Expired
+                || terminal.application_result_ref.is_some()
+                || terminal.input_acceptance_ref.as_ref() != input_acceptance_ref
+                || terminal.post_turn_completion_ref.is_some()
+                || terminal.post_turn_application_result_ref.is_some()
+            {
+                Err(StoreError(
+                    "V3 preserved Start terminal handoff and intent graph disagree",
+                ))
+            } else {
+                Ok(())
+            }
+        }
+        HostSessionTransitionIntentStateV2::Issued
+        | HostSessionTransitionIntentStateV2::Claimed { .. } => Err(StoreError(
+            "nonterminal V3 preserved Start has a terminal handoff",
+        )),
+    }
+}
+
 fn validate_terminal_handoff_v2(
     intent: &HostSessionTransitionIntentV2,
     terminal: &TerminalHandoffHashInputV1,
@@ -1778,6 +2445,147 @@ fn validate_terminal_handoff_v2(
         Err(StoreError("V2 terminal handoff and Start intent disagree"))
     } else {
         Ok(())
+    }
+}
+
+fn validate_terminal_handoff_v3(
+    intent: &HostSessionTransitionIntentV3,
+    terminal: TerminalHandoffGraphV3<'_>,
+) -> Result<(), StoreError> {
+    let input_acceptance_ref = match &intent.input_handoff {
+        HostSessionTransitionInputHandoffV1::Accepted { acceptance_ref, .. } => {
+            Some(acceptance_ref)
+        }
+        _ => None,
+    };
+    match &intent.state {
+        HostSessionTransitionIntentStateV3::Applied {
+            application_result_ref,
+            startup_ownership,
+            post_turn,
+            ..
+        } => match intent.mode {
+            HostSessionTransitionModeV1::Attach => {
+                let HostSessionStartupOwnershipApplicationV1::TerminalReconciled {
+                    result_ref, ..
+                } = startup_ownership.as_ref()
+                else {
+                    return Err(StoreError("nonterminal V3 Attach has a terminal handoff"));
+                };
+                let TerminalHandoffGraphV3::V2(terminal) = terminal else {
+                    return Err(StoreError(
+                        "V3 Attach terminal handoff must use the successor schema",
+                    ));
+                };
+                if terminal.intent_id != intent.intent_id
+                    || terminal.run_id != intent.run_id
+                    || terminal.payload_commitment != intent.payload_commitment
+                    || terminal.terminal_state != TerminalHandoffStateV1::Applied
+                    || terminal.application_result_ref.as_ref() != Some(application_result_ref)
+                    || terminal.input_acceptance_ref.as_ref() != input_acceptance_ref
+                    || terminal.startup_ownership_result_ref.as_ref() != Some(result_ref)
+                    || terminal.post_turn_completion_ref.is_some()
+                    || terminal.post_turn_application_result_ref.is_some()
+                {
+                    Err(StoreError(
+                        "V3 Attach terminal handoff and intent graph disagree",
+                    ))
+                } else {
+                    Ok(())
+                }
+            }
+            HostSessionTransitionModeV1::ResumeOneTurn => {
+                if startup_ownership.as_ref()
+                    != &HostSessionStartupOwnershipApplicationV1::NotApplicable
+                {
+                    return Err(StoreError(
+                        "V3 Resume startup ownership cannot coexist with a terminal handoff",
+                    ));
+                }
+                let HostSessionPostTurnApplicationV2::Applied {
+                    completion_ref,
+                    application_result_ref: post_turn_application_result_ref,
+                    ..
+                } = post_turn.as_ref()
+                else {
+                    return Err(StoreError("nonterminal V3 Resume has a terminal handoff"));
+                };
+                let TerminalHandoffGraphV3::V1(terminal) = terminal else {
+                    return Err(StoreError(
+                        "V3 Resume post-turn handoff must preserve the V1 terminal schema",
+                    ));
+                };
+                if terminal.intent_id != intent.intent_id
+                    || terminal.run_id != intent.run_id
+                    || terminal.payload_commitment != intent.payload_commitment
+                    || terminal.terminal_state != TerminalHandoffStateV1::Applied
+                    || terminal.application_result_ref.as_ref() != Some(application_result_ref)
+                    || terminal.input_acceptance_ref.as_ref() != input_acceptance_ref
+                    || terminal.post_turn_completion_ref.as_ref() != Some(completion_ref.as_ref())
+                    || terminal.post_turn_application_result_ref.as_ref()
+                        != Some(post_turn_application_result_ref.as_ref())
+                {
+                    Err(StoreError(
+                        "V3 Resume terminal handoff and intent graph disagree",
+                    ))
+                } else {
+                    Ok(())
+                }
+            }
+            HostSessionTransitionModeV1::Start => Err(StoreError(
+                "V3 successor terminal handoff cannot belong to Start",
+            )),
+        },
+        HostSessionTransitionIntentStateV3::Rejected { reason, .. } => {
+            let TerminalHandoffGraphV3::V2(terminal) = terminal else {
+                return Err(StoreError(
+                    "V3 successor rejection handoff must use the successor schema",
+                ));
+            };
+            if terminal.intent_id != intent.intent_id
+                || terminal.run_id != intent.run_id
+                || terminal.payload_commitment != intent.payload_commitment
+                || terminal.terminal_state != (TerminalHandoffStateV1::Rejected { reason: *reason })
+                || terminal.application_result_ref.is_some()
+                || terminal.input_acceptance_ref.as_ref() != input_acceptance_ref
+                || terminal.startup_ownership_result_ref.is_some()
+                || terminal.post_turn_completion_ref.is_some()
+                || terminal.post_turn_application_result_ref.is_some()
+            {
+                Err(StoreError(
+                    "V3 successor terminal handoff and intent graph disagree",
+                ))
+            } else {
+                Ok(())
+            }
+        }
+        HostSessionTransitionIntentStateV3::Expired { .. } => {
+            let TerminalHandoffGraphV3::V2(terminal) = terminal else {
+                return Err(StoreError(
+                    "V3 successor expiry handoff must use the successor schema",
+                ));
+            };
+            if terminal.intent_id != intent.intent_id
+                || terminal.run_id != intent.run_id
+                || terminal.payload_commitment != intent.payload_commitment
+                || terminal.terminal_state != TerminalHandoffStateV1::Expired
+                || terminal.application_result_ref.is_some()
+                || terminal.input_acceptance_ref.as_ref() != input_acceptance_ref
+                || terminal.startup_ownership_result_ref.is_some()
+                || terminal.post_turn_completion_ref.is_some()
+                || terminal.post_turn_application_result_ref.is_some()
+            {
+                Err(StoreError(
+                    "V3 successor terminal handoff and intent graph disagree",
+                ))
+            } else {
+                Ok(())
+            }
+        }
+        HostSessionTransitionIntentStateV3::Issued
+        | HostSessionTransitionIntentStateV3::Claimed { .. } => Err(StoreError(
+            "nonterminal V3 successor has a terminal handoff",
+        )),
     }
 }
 

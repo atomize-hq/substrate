@@ -1,7 +1,12 @@
 use std::fmt;
 
 use serde::Serialize;
+use substrate_common::HostTransitionWorkCorrelationV1;
 
+use super::super::obligation_ledger::{
+    ObligationMaterializationCutV1, SupervisorJournalEventRefV1,
+};
+use super::super::state_store::AcceptedWorldWorkIdentityV1;
 use super::schema::*;
 
 #[derive(Clone, Debug, Eq, PartialEq)]
@@ -31,6 +36,16 @@ fn schema_v1(value: u32) -> Result<(), ValidationError> {
     }
 }
 
+fn schema_v2(value: u32) -> Result<(), ValidationError> {
+    if value == 2 {
+        Ok(())
+    } else {
+        Err(ValidationError(
+            "named hash input requires schema version 2",
+        ))
+    }
+}
+
 fn required(value: &str) -> Result<(), ValidationError> {
     if value.is_empty() {
         Err(ValidationError(
@@ -38,6 +53,16 @@ fn required(value: &str) -> Result<(), ValidationError> {
         ))
     } else {
         Ok(())
+    }
+}
+
+fn object_schema_version(
+    object_kind: AuthorityObjectKindV1,
+    schema_version: u32,
+) -> Result<(), ValidationError> {
+    match object_kind {
+        AuthorityObjectKindV1::TerminalHandoff if matches!(schema_version, 1 | 2) => Ok(()),
+        _ => schema_v1(schema_version),
     }
 }
 
@@ -85,7 +110,7 @@ pub(crate) fn validate_object_commitment_rule(
     schema_version: u32,
     commitment: &AuthorityObjectCommitmentV1,
 ) -> Result<(), ValidationError> {
-    schema_v1(schema_version)?;
+    object_schema_version(object_kind, schema_version)?;
     validate_commitment(commitment)?;
     let expected_domain = match object_kind {
         AuthorityObjectKindV1::TransitionTransportPayload => {
@@ -100,6 +125,9 @@ pub(crate) fn validate_object_commitment_rule(
         | AuthorityObjectKindV1::HostAttachContract
         | AuthorityObjectKindV1::ApplicationResult
         | AuthorityObjectKindV1::InputAcceptance
+        | AuthorityObjectKindV1::StartupOwnershipResult
+        | AuthorityObjectKindV1::ObligationSnapshot
+        | AuthorityObjectKindV1::PostTurnProtocolEvent
         | AuthorityObjectKindV1::PostTurnCompletion
         | AuthorityObjectKindV1::TerminalHandoff => None,
     };
@@ -120,7 +148,7 @@ fn validate_ref(
     value: &AuthorityObjectRefV1,
     expected_kind: AuthorityObjectKindV1,
 ) -> Result<(), ValidationError> {
-    if !prefixed_id(&value.ref_id, "ao_") || value.schema_version != 1 {
+    if !prefixed_id(&value.ref_id, "ao_") {
         return Err(ValidationError(
             "invalid authority object reference identity",
         ));
@@ -164,10 +192,59 @@ fn validate_canonical_commitment(
     }
 }
 
+fn validate_work_identity(value: &AcceptedWorldWorkIdentityV1) -> Result<(), ValidationError> {
+    match value {
+        AcceptedWorldWorkIdentityV1::EphemeralTask { task_run_id } => required(task_run_id),
+        AcceptedWorldWorkIdentityV1::RetainedTurn {
+            active_run_id,
+            message_id,
+            target_participant_id,
+        } => {
+            required(active_run_id)?;
+            required(message_id)?;
+            required(target_participant_id)
+        }
+    }
+}
+
+fn validate_host_transition_correlation(
+    value: &HostTransitionWorkCorrelationV1,
+) -> Result<(), ValidationError> {
+    value
+        .validate()
+        .map_err(|_| ValidationError("invalid host transition correlation"))
+}
+
+fn validate_supervisor_journal_event(
+    value: &SupervisorJournalEventRefV1,
+) -> Result<(), ValidationError> {
+    schema_v1(value.schema_version)?;
+    required(&value.journal_entry_id)?;
+    required(&value.acceptance_record_id)?;
+    if value.acceptance_record_revision == 0 {
+        return Err(ValidationError("invalid acceptance record revision"));
+    }
+    validate_work_identity(&value.accepted_work_identity)?;
+    required(&value.stream_id)?;
+    required(&value.event_id)?;
+    validate_canonical_commitment(&value.transport_event_commitment)
+}
+
+fn validate_obligation_cut(value: &ObligationMaterializationCutV1) -> Result<(), ValidationError> {
+    required(&value.acceptance_record_id)?;
+    if value.acceptance_record_revision == 0 || value.session_ledger_revision == 0 {
+        return Err(ValidationError(
+            "invalid obligation materialization cut revision",
+        ));
+    }
+    required(&value.stream_id)?;
+    required(&value.terminal_event_id)
+}
+
 impl sealed::Sealed for AuthorityObjectRefV1 {}
 impl ValidatedCanonicalV1 for AuthorityObjectRefV1 {
     fn validate(&self) -> Result<(), ValidationError> {
-        if !prefixed_id(&self.ref_id, "ao_") || self.schema_version != 1 {
+        if !prefixed_id(&self.ref_id, "ao_") {
             return Err(ValidationError(
                 "invalid authority object reference identity",
             ));
@@ -489,17 +566,199 @@ impl ValidatedCanonicalV1 for InputAcceptanceHashInputV1 {
     }
 }
 
+impl sealed::Sealed for StartupOwnershipResultHashInputV1 {}
+impl ValidatedCanonicalV1 for StartupOwnershipResultHashInputV1 {
+    fn validate(&self) -> Result<(), ValidationError> {
+        schema_v1(self.schema_version)?;
+        let evidence = &self.evidence;
+        schema_v1(evidence.schema_version)?;
+        required(&evidence.evidence_id)?;
+        required(&evidence.authority_store_id)?;
+        required(&evidence.orchestration_session_id)?;
+        required(&evidence.intent_id)?;
+        required(&evidence.claim_id)?;
+        required(&evidence.claimant_attempt_id)?;
+        required(&evidence.run_id)?;
+        validate_ref(
+            &evidence.application_result_ref,
+            AuthorityObjectKindV1::ApplicationResult,
+        )?;
+        if evidence.expected_authority_revision == 0 {
+            return Err(ValidationError("invalid expected authority revision"));
+        }
+        required(&evidence.active_authoritative_participant_id)?;
+        match &evidence.protocol_actor {
+            HostStartupOwnershipProtocolActorV1::TargetAuthoritativeParticipant {
+                participant_id,
+            } => {
+                required(participant_id)?;
+            }
+            HostStartupOwnershipProtocolActorV1::LaunchApplicationClaimant {
+                claim_id,
+                claimant_attempt_id,
+            } => {
+                required(claim_id)?;
+                required(claimant_attempt_id)?;
+            }
+        }
+        match &evidence.protocol_event {
+            HostStartupOwnershipProtocolEventV1::OwnershipAccepted {
+                ownership_acknowledgement_id,
+            } => required(ownership_acknowledgement_id)?,
+            HostStartupOwnershipProtocolEventV1::RuntimeCreationRejected { rejection_id } => {
+                required(rejection_id)?
+            }
+            HostStartupOwnershipProtocolEventV1::StartupFailedBeforeOwnership { failure_id } => {
+                required(failure_id)?
+            }
+        }
+        match &self.outcome {
+            StartupOwnershipOutcomeV1::Accepted => {}
+            StartupOwnershipOutcomeV1::TerminalReconciled {
+                authority_revision_after,
+                authority_record_commitment,
+                ..
+            } => {
+                if *authority_revision_after == 0 {
+                    return Err(ValidationError("invalid terminal authority revision"));
+                }
+                validate_canonical_commitment(authority_record_commitment)?;
+            }
+        }
+        Ok(())
+    }
+}
+
+impl sealed::Sealed for ObligationSnapshotRecordHashInputV1 {}
+impl ValidatedCanonicalV1 for ObligationSnapshotRecordHashInputV1 {
+    fn validate(&self) -> Result<(), ValidationError> {
+        schema_v1(self.schema_version)?;
+        required(&self.authority_store_id)?;
+        required(&self.orchestration_session_id)?;
+        required(&self.authoritative_participant_id)?;
+        validate_supervisor_journal_event(&self.source_journal_event)?;
+        required(&self.obligation_id)?;
+        if self.obligation_revision == 0 {
+            return Err(ValidationError("invalid obligation revision"));
+        }
+        Ok(())
+    }
+}
+
+impl sealed::Sealed for ObligationSnapshotHashInputV1 {}
+impl ValidatedCanonicalV1 for ObligationSnapshotHashInputV1 {
+    fn validate(&self) -> Result<(), ValidationError> {
+        schema_v1(self.schema_version)?;
+        required(&self.authority_store_id)?;
+        required(&self.orchestration_session_id)?;
+        required(&self.authoritative_participant_id)?;
+        required(&self.acceptance_record_id)?;
+        if self.acceptance_record_revision == 0 || self.authority_revision_observed == 0 {
+            return Err(ValidationError("invalid obligation snapshot revision"));
+        }
+        required(&self.stream_id)?;
+        validate_work_identity(&self.accepted_work_identity)?;
+        validate_host_transition_correlation(&self.host_transition_correlation)?;
+        required(&self.transition_intent_id)?;
+        required(&self.transition_run_id)?;
+        validate_obligation_cut(&self.materialization_cut)?;
+        let mut last_materialized = None;
+        for event in &self.materialized_journal_events {
+            validate_supervisor_journal_event(event)?;
+            let key = (
+                event.event_sequence,
+                event.frame_sequence,
+                event.journal_entry_id.as_str(),
+                event.event_id.as_str(),
+            );
+            if last_materialized.is_some_and(|last| last >= key) {
+                return Err(ValidationError(
+                    "materialized journal events must be strictly ordered",
+                ));
+            }
+            last_materialized = Some(key);
+        }
+        let mut last_unresolved = None;
+        for obligation in &self.unresolved_attention_obligations {
+            required(&obligation.obligation_id)?;
+            if obligation.obligation_revision == 0 {
+                return Err(ValidationError("invalid unresolved obligation revision"));
+            }
+            validate_canonical_commitment(&obligation.canonical_record_commitment)?;
+            let digest_hex = match &obligation.canonical_record_commitment {
+                AuthorityObjectCommitmentV1::CanonicalSha256 { digest_hex } => digest_hex.as_str(),
+                AuthorityObjectCommitmentV1::StoreHmacSha256 { .. } => {
+                    return Err(ValidationError("expected a canonical SHA-256 commitment"))
+                }
+            };
+            let key = (
+                obligation.obligation_id.as_str(),
+                obligation.obligation_revision,
+                digest_hex,
+            );
+            if last_unresolved.is_some_and(|last| last >= key) {
+                return Err(ValidationError(
+                    "unresolved attention obligations must be strictly ordered",
+                ));
+            }
+            last_unresolved = Some(key);
+        }
+        Ok(())
+    }
+}
+
+impl sealed::Sealed for PostTurnProtocolEventHashInputV1 {}
+impl ValidatedCanonicalV1 for PostTurnProtocolEventHashInputV1 {
+    fn validate(&self) -> Result<(), ValidationError> {
+        schema_v1(self.schema_version)?;
+        required(&self.authority_store_id)?;
+        required(&self.orchestration_session_id)?;
+        required(&self.intent_id)?;
+        required(&self.claim_id)?;
+        required(&self.claimant_attempt_id)?;
+        required(&self.run_id)?;
+        if self.authority_revision_observed == 0 || self.acceptance_record_revision == 0 {
+            return Err(ValidationError("invalid post-turn protocol revision"));
+        }
+        required(&self.active_authoritative_participant_id)?;
+        required(&self.acceptance_record_id)?;
+        required(&self.stream_id)?;
+        validate_work_identity(&self.accepted_work_identity)?;
+        validate_host_transition_correlation(&self.host_transition_correlation)?;
+        match &self.protocol_actor {
+            HostPostTurnProtocolActorV1::TargetAuthoritativeParticipant { participant_id } => {
+                required(participant_id)?
+            }
+            HostPostTurnProtocolActorV1::LaunchApplicationClaimant {
+                claim_id,
+                claimant_attempt_id,
+            } => {
+                required(claim_id)?;
+                required(claimant_attempt_id)?;
+            }
+        }
+        required(&self.event_id)
+    }
+}
+
 impl sealed::Sealed for PostTurnCompletionHashInputV1 {}
 impl ValidatedCanonicalV1 for PostTurnCompletionHashInputV1 {
     fn validate(&self) -> Result<(), ValidationError> {
         schema_v1(self.schema_version)?;
         required(&self.intent_id)?;
         required(&self.run_id)?;
-        if self.authority_revision_observed == 0 {
-            Err(ValidationError("invalid observed authority revision"))
-        } else {
-            Ok(())
+        if self.authority_revision_observed == 0 || self.acceptance_record_revision == 0 {
+            return Err(ValidationError("invalid observed authority revision"));
         }
+        required(&self.acceptance_record_id)?;
+        required(&self.stream_id)?;
+        validate_work_identity(&self.accepted_work_identity)?;
+        validate_host_transition_correlation(&self.host_transition_correlation)?;
+        required(&self.terminal_event_id)?;
+        validate_ref(
+            &self.protocol_event_ref,
+            AuthorityObjectKindV1::PostTurnProtocolEvent,
+        )
     }
 }
 
@@ -526,6 +785,32 @@ impl ValidatedCanonicalV1 for TerminalHandoffHashInputV1 {
     }
 }
 
+impl sealed::Sealed for TerminalHandoffHashInputV2 {}
+impl ValidatedCanonicalV1 for TerminalHandoffHashInputV2 {
+    fn validate(&self) -> Result<(), ValidationError> {
+        schema_v2(self.schema_version)?;
+        required(&self.intent_id)?;
+        required(&self.run_id)?;
+        validate_canonical_commitment(&self.payload_commitment)?;
+        if let Some(value) = &self.application_result_ref {
+            validate_ref(value, AuthorityObjectKindV1::ApplicationResult)?;
+        }
+        if let Some(value) = &self.input_acceptance_ref {
+            validate_ref(value, AuthorityObjectKindV1::InputAcceptance)?;
+        }
+        if let Some(value) = &self.startup_ownership_result_ref {
+            validate_ref(value, AuthorityObjectKindV1::StartupOwnershipResult)?;
+        }
+        if let Some(value) = &self.post_turn_completion_ref {
+            validate_ref(value, AuthorityObjectKindV1::PostTurnCompletion)?;
+        }
+        if let Some(value) = &self.post_turn_application_result_ref {
+            validate_ref(value, AuthorityObjectKindV1::ApplicationResult)?;
+        }
+        Ok(())
+    }
+}
+
 impl CanonicalHashInputV1 for AuthorityObjectRefV1 {}
 impl CanonicalHashInputV1 for AgentDescriptorHashInputV1 {}
 impl CanonicalHashInputV1 for HostAttachContractHashInputV1 {}
@@ -537,8 +822,13 @@ impl CanonicalHashInputV1 for DurableSessionAuthorityHashInputV1 {}
 impl CanonicalHashInputV1 for HostSessionTransitionPayloadHashInputV1 {}
 impl CanonicalHashInputV1 for ApplicationResultHashInputV1 {}
 impl CanonicalHashInputV1 for InputAcceptanceHashInputV1 {}
+impl CanonicalHashInputV1 for StartupOwnershipResultHashInputV1 {}
+impl CanonicalHashInputV1 for ObligationSnapshotRecordHashInputV1 {}
+impl CanonicalHashInputV1 for ObligationSnapshotHashInputV1 {}
+impl CanonicalHashInputV1 for PostTurnProtocolEventHashInputV1 {}
 impl CanonicalHashInputV1 for PostTurnCompletionHashInputV1 {}
 impl CanonicalHashInputV1 for TerminalHandoffHashInputV1 {}
+impl CanonicalHashInputV1 for TerminalHandoffHashInputV2 {}
 
 pub(crate) mod sealed {
     pub trait Sealed {}
