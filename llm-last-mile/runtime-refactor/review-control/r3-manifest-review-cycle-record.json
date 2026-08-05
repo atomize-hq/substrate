@@ -1,0 +1,23 @@
+{
+  "schema_version": 1,
+  "packet_id": "A1.1d-5R3-MANIFEST",
+  "status": "complete",
+  "stop_reason": null,
+  "cycles": [
+    {
+      "cycle_id": "discovery-1",
+      "kind": "discovery",
+      "subject_fingerprint": "sha256:8b9a601620f69303c60d458977f48509f48c0ba8fd977afa713a39b57fb6e394",
+      "trigger_cycle_id": null,
+      "trigger_finding_ids": [],
+      "causal_evidence_refs": [],
+      "review_refs": [
+        "r3-manifest-review-authority-security.md",
+        "r3-manifest-review-lifecycle-convergence.md",
+        "r3-manifest-review-allowlist-evidence.md"
+      ],
+      "verdict": "clean",
+      "findings": []
+    }
+  ]
+}

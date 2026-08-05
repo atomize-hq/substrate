@@ -132,6 +132,10 @@ pre-ci:
 	fi
 	cargo run --bin substrate -- --version
 
+.PHONY: r3-native-evidence-validator-test
+r3-native-evidence-validator-test:
+	python3 scripts/ci/test_validate_r3_native_evidence.py
+
 define shell_lib_wall_recipe
 	@bash -eu -o pipefail -c '\
 		mode="$$1"; \

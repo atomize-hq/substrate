@@ -9,6 +9,7 @@ pub mod authority_commitment;
 pub mod fs_diff;
 pub mod gateway_auth_bundle;
 pub mod identity;
+pub mod managed_artifact;
 pub mod manager_manifest;
 pub mod paths;
 pub mod seccomp;
@@ -35,6 +36,53 @@ pub use gateway_auth_bundle::{
 pub use identity::{
     validate_identity_tuple_and_placement_posture, IdentityTuple, PlacementExecution,
     PlacementPosture,
+};
+pub use managed_artifact::{
+    action_receipt_artifact_sha256_v1, canonical_action_receipt_bytes_v1,
+    canonical_action_receipt_index_bytes_v1, canonical_guest_publisher_pairing_ticket_v1,
+    canonical_guest_publisher_reservation_unused_acknowledgement_v1,
+    canonical_guest_publisher_reservation_unused_proof_v1,
+    canonical_guest_publisher_test_retirement_ticket_core_v1,
+    canonical_lifecycle_publisher_protected_state_v1, canonical_lifecycle_signature_payload_v1,
+    canonical_lima_stage_one_authorization_v1, canonical_managed_action_prepared_record_v1,
+    canonical_managed_action_receipt_signature_payload_v1, canonical_manifest_bytes_v1,
+    canonical_publisher_bootstrap_authorization_v1, canonical_publisher_bootstrap_core_v1,
+    commit_action_receipt_index_to_head_v1, compare_and_swap_action_receipt_index_v1,
+    derive_publisher_bootstrap_component_target_v1,
+    guest_publisher_reservation_unused_acknowledgement_artifact_sha256_v1,
+    guest_publisher_reservation_unused_proof_artifact_sha256_v1, lifecycle_anchor_sha256_v1,
+    managed_action_prepared_record_sha256_v1, parse_and_validate_manifest_v1,
+    parse_p256_spki_der_v1, parse_publisher_bootstrap_authorization_v1,
+    retirement_receipt_artifact_sha256_v1, sign_lifecycle_anchor_for_test_v1,
+    sign_managed_action_prepared_record_for_test_v1, sign_managed_action_receipt_for_test_v1,
+    validate_complete_publisher_bootstrap_component_set_v1,
+    validate_guest_publisher_pairing_ticket_v1,
+    validate_guest_publisher_reservation_unused_acknowledgement_v1,
+    validate_guest_publisher_reservation_unused_proof_v1,
+    validate_guest_publisher_test_retirement_acknowledgement_v1,
+    validate_guest_publisher_test_retirement_authorization_v1,
+    validate_lifecycle_publisher_protected_state_v1, validate_lima_stage_one_authorization_v1,
+    validate_managed_action_receipt_signature_v1, validate_managed_lifecycle_publisher_request_v1,
+    validate_publisher_bootstrap_authorization_v1,
+    validate_publisher_test_retirement_acknowledgement_v1, verify_ed25519_fixed_v1,
+    verify_lifecycle_signature_v1, verify_p256_p1363_low_s_v1, CanonicalManifestBytesV1,
+    ExecutorBuildEvidenceV1, GuestPublisherBootstrapHelloV1, GuestPublisherBootstrapTranscriptV1,
+    GuestPublisherPairingChallengeV1, GuestPublisherPairingGuestIntentV1,
+    GuestPublisherPairingHostRecordV1, GuestPublisherPairingTicketV1,
+    GuestPublisherReservationUnusedAcknowledgementV1, GuestPublisherReservationUnusedProofV1,
+    GuestPublisherRetirementReservationV1, GuestPublisherTestRetirementAcknowledgementV1,
+    GuestPublisherTestRetirementAuthorizationV1, GuestPublisherTestRetirementCommitmentV1,
+    GuestPublisherTestRetirementReceiptV1, LifecyclePublisherAnchorV1,
+    LifecyclePublisherProtectedStateV1, LifecycleSignatureV1, LimaStageOneAuthorizationV1,
+    ManagedActionPreparedRecordV1, ManagedActionReceiptIndexEntryV1, ManagedActionReceiptIndexV1,
+    ManagedActionReceiptV1, ManagedActionV1, ManagedArtifactDispositionV1, ManagedArtifactEntryV1,
+    ManagedArtifactIdentityV1, ManagedArtifactManifestV1, ManagedArtifactRoleV1,
+    ManagedExecutorIdentityV1, ManagedLifecyclePublisherRequestV1, ManagedLifecycleStateV1,
+    ManagedManifestHeadV1, ManagedSharedClaimV1, ManagedSharedClaimsV1,
+    PublisherBootstrapAuthorizationV1, PublisherBootstrapComponentRoleV1,
+    PublisherBootstrapComponentV1, PublisherTestRetirementAcknowledgementV1,
+    PublisherTestRetirementAuthorizationV1, PublisherTestRetirementCommitmentV1,
+    PublisherTestRetirementReceiptV1, PublisherTransportFrameV1,
 };
 pub use manager_manifest::{
     DetectSpec, GuestSpec, InitSpec, InstallClass, InstallSpec, ManagerManifest, ManagerSpec,

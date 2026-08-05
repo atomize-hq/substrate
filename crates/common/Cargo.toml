@@ -14,10 +14,16 @@ categories = ["development-tools::debugging"]
 anyhow = "1.0"
 dirs = "5.0"
 serde = { version = "1.0", features = ["derive"] }
-serde_json = "1.0"
+serde_json = { workspace = true }
 chrono = { version = "0.4", features = ["serde"] }
 regex = "1.11"
 serde_yaml = "0.9"
+sha2 = { workspace = true }
+uuid = { workspace = true }
+base64 = { workspace = true }
+ed25519-dalek = { workspace = true }
+p256 = { workspace = true }
+rand_core = { workspace = true }
 
 [dev-dependencies]
 tempfile = "3.0"

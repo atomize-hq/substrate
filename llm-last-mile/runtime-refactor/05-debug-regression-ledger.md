@@ -3566,3 +3566,18 @@ checkpoint, validate independently, report exact restoration and `EVIDENCE_CLEAN
 cross-platform regression/review walls are clean with zero unresolved P1-P4. Any missing,
 stale, cross-checkpoint, digest-mismatched, partially restored, or statically substituted evidence
 leaves the corresponding gate open. R3 closeout does not authorize the later A1.1d/A1 program.
+
+## R3 implementation status append
+
+### `A1.1d-5R3-MANIFEST`
+
+- Status: `LANDED_CLEAN`.
+- Newly landed proof surface: canonical/golden manifest encoding, duplicate/unknown/wrong-type
+  rejection, receipt/index/head publication joins, bootstrap and pairing-ticket signature checks,
+  preserving provider-unavailable channel behavior, the hidden direct-interactive control binary,
+  and `validate_r3_native_evidence.py` with focused tests for source/evidence/successor/correlation
+  joins.
+- Remaining frozen truth: this packet performs no delete/replace/stop/kill/unregister/restore
+  action, claims no native evidence, and leaves platform execution and retirement side effects to
+  later packets.
+- Successor: `AUTHORITY_REQUIRED:A1.1d-5R3-LINUX`.

@@ -3119,3 +3119,14 @@ behavior may change. Predecessors: all three final native evidence tasks; succes
   substitute is accepted.
 - Non-goals/freeze: every production symbol, test, fixture, script, dependency, schema, generated
   product artifact, platform selection, passive health, and later runtime-refactor packet.
+
+## R3 implementation status append
+
+### `A1.1d-5R3-MANIFEST`
+
+`A1.1d-5R3-MANIFEST` is landed and closes the packet contract above without widening scope. The
+landed subject is the exact allowlisted common/shell/root/CI surface for canonical managed-artifact
+types, canonical encoders/validators, manifest publication/head/index helpers, hidden
+`substrate-lifecycle-control`, platform-provider preserving stubs, and the native-evidence
+validator. The packet remains non-destructive, records only manifest/bootstrap authority, and
+leaves the next implementation authority at `AUTHORITY_REQUIRED:A1.1d-5R3-LINUX`.

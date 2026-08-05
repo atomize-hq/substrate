@@ -1157,3 +1157,20 @@ retained workers/tasks, authoritative-session repair, orchestrator packet-3 life
 gateway adoption beyond exact managed cleanup, direct-member architecture, unrelated
 runtime-refactor work, policy/capability redesign, a new shared state root, or reinterpretation of
 the bounded `0640`/`0650` cache observation. R1/R2 evidence is immutable.
+
+## R3 implementation status append
+
+### `A1.1d-5R3-MANIFEST`
+
+- Status: `LANDED_CLEAN`.
+- Scope: landed the non-destructive managed-artifact manifest/parser/publication/state-transition
+  core, hidden `substrate-lifecycle-control` direct-interactive surface, and
+  `scripts/ci/validate_r3_native_evidence.py`.
+- Boundaries preserved: no destructive lifecycle execution, no consumer integration, no new
+  top-level shared root, and provider channels remain preserving `provider_unavailable` stubs until
+  their sole platform packets land.
+- Successor: `AUTHORITY_REQUIRED:A1.1d-5R3-LINUX`.
+- Review control: `review-control/r3-manifest-review-cycle-record.json`,
+  `review-control/r3-manifest-review-authority-security.md`,
+  `review-control/r3-manifest-review-lifecycle-convergence.md`, and
+  `review-control/r3-manifest-review-allowlist-evidence.md`.

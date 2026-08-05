@@ -10094,3 +10094,15 @@ those six paths in lexical order: each line is the lowercase 64-hex content dige
 repository-relative path, and LF. Review reports and the cycle record are excluded so they can
 attest to that fixed subject. Publication remains one planning commit and one ordinary fast-forward
 push.
+
+## R3 implementation status append
+
+### `A1.1d-5R3-MANIFEST`
+
+`A1.1d-5R3-MANIFEST` now has a landed implementation for the non-destructive portions of
+`R3-MANIFEST-01`: canonical manifest parsing, canonical bytes/digests, manifest/index/head/shared
+claim publication helpers, receipt and pairing/ticket verification helpers, hidden direct-
+interactive control entrypoints, and the separate native-evidence artifact validator required by
+later evidence tasks and closeout. Its provider channels remain preserving `provider_unavailable`
+stubs until LINUX/MAC/WIN replace them, and the closed terminal status mapping above remains
+unchanged. Successor authority remains `AUTHORITY_REQUIRED:A1.1d-5R3-LINUX`.
