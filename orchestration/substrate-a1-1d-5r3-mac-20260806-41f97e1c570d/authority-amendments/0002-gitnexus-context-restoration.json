@@ -1,0 +1,29 @@
+{
+  "amendment_id": "substrate-a1-1d-5r3-mac-20260806-41f97e1c570d-fence-0002",
+  "recorded_at_utc": "2026-08-06T20:54:26Z",
+  "authority_basis": "The original user grant permits meta adjudication of common R3 MAC blockers including justified file-touch fence and GitNexus corrections that remain strictly inside the MAC corridor.",
+  "trigger_attempt": 2,
+  "trigger_thread_id": "019fd8d5-c799-7d10-b47c-f1c7828534f5",
+  "raw_receipt_path": "orchestration/substrate-a1-1d-5r3-mac-20260806-41f97e1c570d/receipts/A1.1d-5R3-MAC.attempt-2.raw-blocked.json",
+  "raw_receipt_sha256": "sha256:e09aaf23de467c3b0601fe32735c804c79e58f98d63083716d0cd85813e76d8f",
+  "raw_receipt_protocol_valid": false,
+  "raw_receipt_validation_error": "unsupported receipt protocol",
+  "independent_observation": {
+    "task_terminal": true,
+    "task_head": "270f6e55e1a94b7e2f9b2667e605980d2e50579c",
+    "task_tree": "acef6844c15d17aba8cfd18d2fc7ef88d9c3420b",
+    "live_remote": "270f6e55e1a94b7e2f9b2667e605980d2e50579c",
+    "cached_changes": [],
+    "unstaged_changes": ["AGENTS.md", "CLAUDE.md"],
+    "diff_summary": "Only GitNexus-generated alias/count/resource rows changed from substrate-current to substrate; 10 insertions and 10 deletions across the two files.",
+    "product_or_packet_changes": false,
+    "commit_or_push": false
+  },
+  "adjudication": {
+    "status": "AUTHORIZED_NARROW_CORRECTION_FOR_FRESH_REDISPATCH",
+    "fresh_task_required": true,
+    "permitted_preflight_action": "After a required npx gitnexus analyze, if and only if the complete repository diff is exactly AGENTS.md and CLAUDE.md and every changed hunk is confined to the generated gitnexus:start/gitnexus:end blocks, restore only those two files byte-for-byte from the expected base using explicit git show redirection or equivalent file writes. Do not use git reset, checkout, restore, clean, or stash.",
+    "required_postcondition": "AGENTS.md and CLAUDE.md hash exactly to expected-base blobs, git status is clean, and the refreshed external GitNexus index remains usable before any product edit.",
+    "forbidden": "No commit of generated context changes, no restoration of any other path, no product/test/control-pack edit during this preflight, and no wider file-fence amendment."
+  }
+}

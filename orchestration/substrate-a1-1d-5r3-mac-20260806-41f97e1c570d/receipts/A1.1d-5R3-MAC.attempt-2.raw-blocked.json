@@ -1,0 +1,37 @@
+{
+  "schema": "codex.top-level-task-receipt.v1",
+  "status": "BLOCKED_CONTRADICTION",
+  "orchestration_id": "substrate-a1-1d-5r3-mac-20260806-41f97e1c570d",
+  "dispatch_nonce": "24a6713f9a51eb2da1b3af8512339a188ba07636898ff9dcbb3cd7704a2c5a53",
+  "increment": "A1.1d-5R3-MAC",
+  "packet_id": "A1.1d-5R3-MAC",
+  "increment_task_thread_id": "019fd8d5-c799-7d10-b47c-f1c7828534f5",
+  "increment_task_host_id": "local",
+  "meta_thread_id": "019fd8c3-b12c-7e73-919f-898600ab0f64",
+  "meta_host_id": "local",
+  "exact_task_worktree": "/Users/spensermcconnell/.codex/worktrees/867b/substrate",
+  "expected_base_commit": "270f6e55e1a94b7e2f9b2667e605980d2e50579c",
+  "expected_base_tree": "acef6844c15d17aba8cfd18d2fc7ef88d9c3420b",
+  "target_ref": "refs/heads/feat/internal-host-orchestrator-world-dispatch-bootstrap",
+  "remote": "origin",
+  "publication_mode": "remote",
+  "publication_preflight": {
+    "head": "270f6e55e1a94b7e2f9b2667e605980d2e50579c",
+    "tree": "acef6844c15d17aba8cfd18d2fc7ef88d9c3420b",
+    "detached": true,
+    "index_clean_before_index_refresh": true,
+    "remote_ref": "270f6e55e1a94b7e2f9b2667e605980d2e50579c",
+    "ancestor_verified": true
+  },
+  "evidence": [
+    "Bound audit prompt SHA-256 matched a448eaf2105a1aeeddf71b2adec0b152b6430d6f1e831f061e9ad6d6d0d9940d.",
+    "The mandated GitNexus freshness refresh (`npx gitnexus analyze`) altered only out-of-packet AGENTS.md and CLAUDE.md, changing the generated GitNexus repo alias/resource rows from substrate-current to substrate.",
+    "Current status is exactly two unstaged out-of-fence files: AGENTS.md and CLAUDE.md; no index changes, product changes, test changes, docs changes, commits, or publication occurred.",
+    "HEAD/tree and live remote target remain equal to the required predecessor."
+  ],
+  "blocked_reason": "The increment permits only the exact R3-DOCS/review-control documentation surface plus listed MAC production/test paths. AGENTS.md and CLAUDE.md are neither allowed nor a permitted generated artifact. The contract also forbids reconciliation/reset/clean on an authority/fence contradiction, so I did not restore or discard these modifications.",
+  "required_authority": "Explicit meta authority must either (a) authorize exact byte restoration of only AGENTS.md and CLAUDE.md to expected-base content without a reset/clean operation, or (b) bind a freshly clean exact-base task worktree after the GitNexus index is refreshed with no repository-context injection. No broader file-fence amendment is implied.",
+  "continuation_handoff_prompt": "Resume only after the required authority is supplied. Re-verify exact task identity, remote/base/tree/ancestry/index cleanliness, and the two permitted restoration/rebinding facts; then continue A1.1d-5R3-MAC from pre-edit GitNexus impact analysis. Do not start EVIDENCE:R3-MAC-IMP-01 or native evidence.",
+  "next_increment": "EVIDENCE:R3-MAC-IMP-01",
+  "next_increment_dispatched": false
+}
