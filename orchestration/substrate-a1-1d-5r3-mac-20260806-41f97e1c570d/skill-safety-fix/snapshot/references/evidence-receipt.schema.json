@@ -1,0 +1,262 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://atomize.systems/schemas/codex-top-level-evidence-receipt-v1.json",
+  "title": "Codex top-level evidence receipt v1",
+  "type": "object",
+  "required": [
+    "protocol",
+    "orchestration_id",
+    "dispatch_nonce",
+    "evidence_id",
+    "status",
+    "platform",
+    "evidence_task",
+    "source"
+  ],
+  "properties": {
+    "protocol": {
+      "const": "codex.top-level-evidence-receipt.v1"
+    },
+    "orchestration_id": {
+      "type": "string",
+      "minLength": 1
+    },
+    "dispatch_nonce": {
+      "type": "string",
+      "pattern": "^[0-9a-f]{32,}$"
+    },
+    "evidence_id": {
+      "type": "string",
+      "minLength": 1
+    },
+    "status": {
+      "type": "string"
+    },
+    "platform": {
+      "enum": [
+        "linux",
+        "macos",
+        "windows"
+      ]
+    },
+    "evidence_task": {
+      "$ref": "#/$defs/taskIdentity"
+    },
+    "source": {
+      "oneOf": [
+        {
+          "$ref": "#/$defs/remoteSource"
+        },
+        {
+          "$ref": "#/$defs/localSource"
+        }
+      ]
+    },
+    "environment": {
+      "$ref": "#/$defs/environment"
+    },
+    "evidence": {
+      "$ref": "#/$defs/evidence"
+    },
+    "prohibited_actions_confirmed": {
+      "const": true
+    },
+    "checkout_unchanged": {
+      "const": true
+    },
+    "blocker": {
+      "type": "object"
+    }
+  },
+  "oneOf": [
+    {
+      "properties": {
+        "status": {
+          "const": "EVIDENCE_CLEAN"
+        }
+      },
+      "required": [
+        "environment",
+        "evidence",
+        "prohibited_actions_confirmed",
+        "checkout_unchanged"
+      ],
+      "not": {
+        "required": [
+          "blocker"
+        ]
+      }
+    },
+    {
+      "properties": {
+        "status": {
+          "enum": [
+            "BLOCKED_NATIVE_EVIDENCE",
+            "BLOCKED_PLATFORM_HANDOFF_REQUIRED",
+            "BLOCKED_CONTRADICTION",
+            "AUTHORITY_REQUIRED",
+            "BASE_DRIFT"
+          ]
+        }
+      },
+      "required": [
+        "blocker"
+      ]
+    }
+  ],
+  "additionalProperties": false,
+  "$defs": {
+    "oid": {
+      "type": "string",
+      "pattern": "^[0-9a-f]{40}$"
+    },
+    "digest": {
+      "type": "string",
+      "pattern": "^sha256:[0-9a-f]{64}$"
+    },
+    "taskIdentity": {
+      "type": "object",
+      "required": [
+        "thread_id",
+        "host_id"
+      ],
+      "properties": {
+        "thread_id": {
+          "type": "string",
+          "minLength": 1
+        },
+        "host_id": {
+          "type": "string",
+          "minLength": 1
+        }
+      },
+      "additionalProperties": false
+    },
+    "remoteSource": {
+      "type": "object",
+      "required": [
+        "commit",
+        "tree",
+        "target_ref",
+        "live_remote"
+      ],
+      "properties": {
+        "publication_mode": {
+          "const": "remote"
+        },
+        "commit": {
+          "$ref": "#/$defs/oid"
+        },
+        "tree": {
+          "$ref": "#/$defs/oid"
+        },
+        "target_ref": {
+          "type": "string",
+          "pattern": "^refs/heads/.+$"
+        },
+        "live_remote": {
+          "$ref": "#/$defs/oid"
+        }
+      },
+      "additionalProperties": false
+    },
+    "localSource": {
+      "type": "object",
+      "required": [
+        "publication_mode",
+        "commit",
+        "tree",
+        "target_ref",
+        "local_ref",
+        "worktree"
+      ],
+      "properties": {
+        "publication_mode": {
+          "const": "local"
+        },
+        "commit": {
+          "$ref": "#/$defs/oid"
+        },
+        "tree": {
+          "$ref": "#/$defs/oid"
+        },
+        "target_ref": {
+          "type": "string",
+          "pattern": "^refs/heads/.+$"
+        },
+        "local_ref": {
+          "$ref": "#/$defs/oid"
+        },
+        "worktree": {
+          "type": "string",
+          "minLength": 1
+        }
+      },
+      "additionalProperties": false
+    },
+    "environment": {
+      "type": "object",
+      "required": [
+        "host_id",
+        "project_id",
+        "project_path",
+        "os_version",
+        "tool_versions"
+      ],
+      "properties": {
+        "host_id": {
+          "type": "string",
+          "minLength": 1
+        },
+        "project_id": {
+          "type": "string",
+          "minLength": 1
+        },
+        "project_path": {
+          "type": "string",
+          "minLength": 1
+        },
+        "os_version": {
+          "type": "string",
+          "minLength": 1
+        },
+        "tool_versions": {
+          "type": "object",
+          "minProperties": 1,
+          "additionalProperties": {
+            "type": "string",
+            "minLength": 1
+          }
+        }
+      },
+      "additionalProperties": false
+    },
+    "evidence": {
+      "type": "object",
+      "required": [
+        "artifact_path",
+        "artifact_sha256",
+        "gates"
+      ],
+      "properties": {
+        "artifact_path": {
+          "type": "string",
+          "minLength": 1
+        },
+        "artifact_sha256": {
+          "$ref": "#/$defs/digest"
+        },
+        "gates": {
+          "type": "array",
+          "minItems": 1,
+          "uniqueItems": true,
+          "items": {
+            "type": "string",
+            "minLength": 1
+          }
+        }
+      },
+      "additionalProperties": false
+    }
+  }
+}

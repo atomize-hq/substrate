@@ -1,0 +1,235 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://atomize.systems/schemas/codex-top-level-orchestration-state-v1.json",
+  "title": "Codex top-level orchestration state v1",
+  "type": "object",
+  "required": [
+    "protocol",
+    "orchestration_id",
+    "status",
+    "dispatch_authorized",
+    "target_ref",
+    "required_ancestor",
+    "sequence",
+    "required_evidence",
+    "cursor",
+    "expected_base",
+    "meta",
+    "active_dispatch",
+    "active_evidence_dispatches",
+    "verified_evidence",
+    "completed"
+  ],
+  "properties": {
+    "protocol": {
+      "const": "codex.top-level-orchestration-state.v1"
+    },
+    "orchestration_id": {
+      "type": "string",
+      "minLength": 1
+    },
+    "status": {
+      "enum": [
+        "INITIALIZING",
+        "READY",
+        "DISPATCHING",
+        "RUNNING",
+        "RECEIPT_RECEIVED",
+        "VERIFYING",
+        "EVIDENCE_RUNNING",
+        "EVIDENCE_RECEIPTS_RECEIVED",
+        "EVIDENCE_VERIFYING",
+        "BLOCKED",
+        "COMPLETE"
+      ]
+    },
+    "dispatch_authorized": {
+      "type": "boolean"
+    },
+    "publication_mode": {
+      "enum": [
+        "remote",
+        "local"
+      ],
+      "default": "remote"
+    },
+    "remote": {
+      "type": [
+        "string",
+        "null"
+      ]
+    },
+    "remote_observation": {
+      "oneOf": [
+        {
+          "type": "null"
+        },
+        {
+          "type": "object",
+          "required": [
+            "name",
+            "target_ref",
+            "before"
+          ],
+          "properties": {
+            "name": {
+              "type": [
+                "string",
+                "null"
+              ]
+            },
+            "target_ref": {
+              "type": "string",
+              "pattern": "^refs/heads/.+$"
+            },
+            "before": {
+              "oneOf": [
+                {
+                  "$ref": "#/$defs/oid"
+                },
+                {
+                  "type": "null"
+                }
+              ]
+            }
+          },
+          "additionalProperties": false
+        }
+      ]
+    },
+    "target_ref": {
+      "type": "string",
+      "pattern": "^refs/heads/.+$"
+    },
+    "required_ancestor": {
+      "$ref": "#/$defs/oid"
+    },
+    "sequence": {
+      "type": "array",
+      "minItems": 1,
+      "uniqueItems": true,
+      "items": {
+        "type": "string",
+        "minLength": 1
+      }
+    },
+    "required_evidence": {
+      "type": "array"
+    },
+    "cursor": {
+      "type": "integer",
+      "minimum": 0
+    },
+    "expected_base": {
+      "$ref": "#/$defs/commitTree"
+    },
+    "meta": {
+      "type": "object",
+      "required": [
+        "thread_id",
+        "host_id"
+      ],
+      "properties": {
+        "thread_id": {
+          "type": [
+            "string",
+            "null"
+          ]
+        },
+        "host_id": {
+          "type": [
+            "string",
+            "null"
+          ]
+        }
+      },
+      "additionalProperties": false
+    },
+    "active_dispatch": {
+      "type": [
+        "object",
+        "null"
+      ]
+    },
+    "active_evidence_dispatches": {
+      "type": "array"
+    },
+    "verified_evidence": {
+      "type": "array"
+    },
+    "completed": {
+      "type": "array"
+    }
+  },
+  "allOf": [
+    {
+      "if": {
+        "properties": {
+          "publication_mode": {
+            "const": "remote"
+          }
+        }
+      },
+      "then": {
+        "required": [
+          "remote",
+          "remote_observation"
+        ],
+        "properties": {
+          "remote": {
+            "type": "string",
+            "minLength": 1
+          },
+          "remote_observation": {
+            "type": "null"
+          }
+        }
+      }
+    },
+    {
+      "if": {
+        "required": [
+          "publication_mode"
+        ],
+        "properties": {
+          "publication_mode": {
+            "const": "local"
+          }
+        }
+      },
+      "then": {
+        "required": [
+          "remote_observation"
+        ],
+        "properties": {
+          "remote_observation": {
+            "type": "object"
+          }
+        }
+      }
+    }
+  ],
+  "additionalProperties": false,
+  "$defs": {
+    "oid": {
+      "type": "string",
+      "pattern": "^[0-9a-f]{40}$"
+    },
+    "commitTree": {
+      "type": "object",
+      "required": [
+        "commit",
+        "tree"
+      ],
+      "properties": {
+        "commit": {
+          "$ref": "#/$defs/oid"
+        },
+        "tree": {
+          "$ref": "#/$defs/oid"
+        }
+      },
+      "additionalProperties": false
+    }
+  }
+}

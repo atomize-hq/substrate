@@ -1,0 +1,37 @@
+{
+  "protocol": "codex.top-level-evidence-receipt.v1",
+  "orchestration_id": "example",
+  "dispatch_nonce": "00000000000000000000000000000000",
+  "evidence_id": "EXAMPLE-MAC-EVIDENCE",
+  "status": "EVIDENCE_CLEAN",
+  "platform": "macos",
+  "evidence_task": {
+    "thread_id": "example-thread",
+    "host_id": "example-host"
+  },
+  "source": {
+    "publication_mode": "remote",
+    "commit": "1111111111111111111111111111111111111111",
+    "tree": "2222222222222222222222222222222222222222",
+    "target_ref": "refs/heads/example",
+    "live_remote": "1111111111111111111111111111111111111111"
+  },
+  "environment": {
+    "host_id": "example-host",
+    "project_id": "example-project",
+    "project_path": "/example/project",
+    "os_version": "Example OS 1",
+    "tool_versions": {
+      "example": "1.0"
+    }
+  },
+  "evidence": {
+    "artifact_path": "/tmp/example-evidence.json",
+    "artifact_sha256": "sha256:0000000000000000000000000000000000000000000000000000000000000000",
+    "gates": [
+      "EXAMPLE-GATE-1"
+    ]
+  },
+  "prohibited_actions_confirmed": true,
+  "checkout_unchanged": true
+}

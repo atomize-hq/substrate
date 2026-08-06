@@ -1,0 +1,546 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://atomize.systems/schemas/codex-top-level-task-receipt-v1.json",
+  "title": "Codex top-level task receipt v1",
+  "type": "object",
+  "required": [
+    "protocol",
+    "orchestration_id",
+    "dispatch_nonce",
+    "increment",
+    "status",
+    "increment_task",
+    "expected_base"
+  ],
+  "properties": {
+    "protocol": {
+      "const": "codex.top-level-task-receipt.v1"
+    },
+    "orchestration_id": {
+      "type": "string",
+      "minLength": 1
+    },
+    "dispatch_nonce": {
+      "type": "string",
+      "pattern": "^[0-9a-f]{32,}$"
+    },
+    "increment": {
+      "type": "string",
+      "minLength": 1
+    },
+    "status": {
+      "type": "string"
+    },
+    "increment_task": {
+      "$ref": "#/$defs/taskIdentity"
+    },
+    "expected_base": {
+      "$ref": "#/$defs/commitTree"
+    },
+    "landed": {
+      "$ref": "#/$defs/landed"
+    },
+    "closed": {
+      "$ref": "#/$defs/closed"
+    },
+    "publication": {
+      "$ref": "#/$defs/localPublication"
+    },
+    "subject_fingerprint": {
+      "$ref": "#/$defs/digest"
+    },
+    "changed_files": {
+      "$ref": "#/$defs/pathList"
+    },
+    "review": {
+      "$ref": "#/$defs/review"
+    },
+    "verification": {
+      "type": "object"
+    },
+    "next_increment": {
+      "type": "string",
+      "minLength": 1
+    },
+    "blocker": {
+      "$ref": "#/$defs/blocker"
+    }
+  },
+  "oneOf": [
+    {
+      "properties": {
+        "status": {
+          "const": "LANDED_CLEAN"
+        },
+        "verification": {
+          "$ref": "#/$defs/remoteVerification"
+        }
+      },
+      "required": [
+        "landed",
+        "subject_fingerprint",
+        "changed_files",
+        "review",
+        "verification",
+        "next_increment"
+      ],
+      "not": {
+        "anyOf": [
+          {
+            "required": [
+              "closed"
+            ]
+          },
+          {
+            "required": [
+              "publication"
+            ]
+          },
+          {
+            "required": [
+              "blocker"
+            ]
+          }
+        ]
+      }
+    },
+    {
+      "properties": {
+        "status": {
+          "const": "CLOSED_CLEAN"
+        },
+        "verification": {
+          "$ref": "#/$defs/localVerification"
+        }
+      },
+      "required": [
+        "closed",
+        "publication",
+        "subject_fingerprint",
+        "changed_files",
+        "review",
+        "verification",
+        "next_increment"
+      ],
+      "not": {
+        "anyOf": [
+          {
+            "required": [
+              "landed"
+            ]
+          },
+          {
+            "required": [
+              "blocker"
+            ]
+          }
+        ]
+      }
+    },
+    {
+      "properties": {
+        "status": {
+          "enum": [
+            "BLOCKED_CONTRADICTION",
+            "BLOCKED_SCOPE_EXPANSION",
+            "BLOCKED_REVIEW",
+            "BLOCKED_NATIVE_EVIDENCE",
+            "BLOCKED_PLATFORM_HANDOFF_REQUIRED",
+            "BLOCKED_TASK_NOT_TERMINAL",
+            "AUTHORITY_REQUIRED",
+            "BASE_DRIFT"
+          ]
+        }
+      },
+      "required": [
+        "blocker"
+      ],
+      "allOf": [
+        {
+          "if": {
+            "properties": {
+              "status": {
+                "const": "BLOCKED_PLATFORM_HANDOFF_REQUIRED"
+              }
+            }
+          },
+          "then": {
+            "properties": {
+              "blocker": {
+                "required": [
+                  "handoff_prompt"
+                ]
+              }
+            }
+          }
+        }
+      ],
+      "not": {
+        "anyOf": [
+          {
+            "required": [
+              "landed"
+            ]
+          },
+          {
+            "required": [
+              "closed"
+            ]
+          },
+          {
+            "required": [
+              "publication"
+            ]
+          }
+        ]
+      }
+    }
+  ],
+  "additionalProperties": false,
+  "$defs": {
+    "oid": {
+      "type": "string",
+      "pattern": "^[0-9a-f]{40}$"
+    },
+    "digest": {
+      "type": "string",
+      "pattern": "^sha256:[0-9a-f]{64}$"
+    },
+    "branchRef": {
+      "type": "string",
+      "pattern": "^refs/heads/.+$"
+    },
+    "absolutePath": {
+      "type": "string",
+      "minLength": 1
+    },
+    "repoPath": {
+      "type": "string",
+      "pattern": "^(?!/)(?!.*(?:^|/)\\.\\.(?:/|$))(?!.*\\\\).+$"
+    },
+    "pathList": {
+      "type": "array",
+      "minItems": 1,
+      "uniqueItems": true,
+      "items": {
+        "$ref": "#/$defs/repoPath"
+      }
+    },
+    "taskIdentity": {
+      "type": "object",
+      "required": [
+        "thread_id",
+        "host_id"
+      ],
+      "properties": {
+        "thread_id": {
+          "type": "string",
+          "minLength": 1
+        },
+        "host_id": {
+          "type": "string",
+          "minLength": 1
+        }
+      },
+      "additionalProperties": false
+    },
+    "commitTree": {
+      "type": "object",
+      "required": [
+        "commit",
+        "tree"
+      ],
+      "properties": {
+        "commit": {
+          "$ref": "#/$defs/oid"
+        },
+        "tree": {
+          "$ref": "#/$defs/oid"
+        }
+      },
+      "additionalProperties": false
+    },
+    "landed": {
+      "type": "object",
+      "required": [
+        "commit",
+        "tree",
+        "target_ref",
+        "live_remote"
+      ],
+      "properties": {
+        "commit": {
+          "$ref": "#/$defs/oid"
+        },
+        "tree": {
+          "$ref": "#/$defs/oid"
+        },
+        "target_ref": {
+          "$ref": "#/$defs/branchRef"
+        },
+        "live_remote": {
+          "$ref": "#/$defs/oid"
+        }
+      },
+      "additionalProperties": false
+    },
+    "closed": {
+      "type": "object",
+      "required": [
+        "worktree",
+        "branch_ref",
+        "work_commit",
+        "work_tree",
+        "control_commit",
+        "control_tree",
+        "local_ref",
+        "work_changed_files",
+        "control_changed_files"
+      ],
+      "properties": {
+        "worktree": {
+          "$ref": "#/$defs/absolutePath"
+        },
+        "branch_ref": {
+          "$ref": "#/$defs/branchRef"
+        },
+        "work_commit": {
+          "$ref": "#/$defs/oid"
+        },
+        "work_tree": {
+          "$ref": "#/$defs/oid"
+        },
+        "control_commit": {
+          "$ref": "#/$defs/oid"
+        },
+        "control_tree": {
+          "$ref": "#/$defs/oid"
+        },
+        "local_ref": {
+          "$ref": "#/$defs/oid"
+        },
+        "work_changed_files": {
+          "$ref": "#/$defs/pathList"
+        },
+        "control_changed_files": {
+          "$ref": "#/$defs/pathList"
+        }
+      },
+      "additionalProperties": false
+    },
+    "localPublication": {
+      "type": "object",
+      "required": [
+        "mode",
+        "merge_performed",
+        "push_performed",
+        "remote_mutation",
+        "remote_observation"
+      ],
+      "properties": {
+        "mode": {
+          "const": "local_only"
+        },
+        "merge_performed": {
+          "const": false
+        },
+        "push_performed": {
+          "const": false
+        },
+        "remote_mutation": {
+          "const": false
+        },
+        "remote_observation": {
+          "type": "object",
+          "required": [
+            "name",
+            "target_ref",
+            "before",
+            "after"
+          ],
+          "properties": {
+            "name": {
+              "type": [
+                "string",
+                "null"
+              ]
+            },
+            "target_ref": {
+              "$ref": "#/$defs/branchRef"
+            },
+            "before": {
+              "oneOf": [
+                {
+                  "$ref": "#/$defs/oid"
+                },
+                {
+                  "type": "null"
+                }
+              ]
+            },
+            "after": {
+              "oneOf": [
+                {
+                  "$ref": "#/$defs/oid"
+                },
+                {
+                  "type": "null"
+                }
+              ]
+            }
+          },
+          "additionalProperties": false
+        }
+      },
+      "additionalProperties": false
+    },
+    "review": {
+      "type": "object",
+      "required": [
+        "packet_id",
+        "record_path",
+        "record_sha256",
+        "validated",
+        "terminal",
+        "p1",
+        "p2",
+        "p3_p4_disposition"
+      ],
+      "properties": {
+        "packet_id": {
+          "type": "string",
+          "minLength": 1
+        },
+        "record_path": {
+          "$ref": "#/$defs/absolutePath"
+        },
+        "record_sha256": {
+          "$ref": "#/$defs/digest"
+        },
+        "validated": {
+          "const": true
+        },
+        "terminal": {
+          "const": "CLEAN"
+        },
+        "p1": {
+          "const": 0
+        },
+        "p2": {
+          "const": 0
+        },
+        "p3_p4_disposition": {
+          "type": "string",
+          "minLength": 1
+        }
+      },
+      "additionalProperties": false
+    },
+    "remoteVerification": {
+      "type": "object",
+      "required": [
+        "required_checks_passed",
+        "allowlist_passed",
+        "change_detection_passed",
+        "checkout_clean",
+        "ahead",
+        "behind"
+      ],
+      "properties": {
+        "required_checks_passed": {
+          "const": true
+        },
+        "allowlist_passed": {
+          "const": true
+        },
+        "change_detection_passed": {
+          "const": true
+        },
+        "checkout_clean": {
+          "const": true
+        },
+        "ahead": {
+          "const": 0
+        },
+        "behind": {
+          "const": 0
+        }
+      },
+      "additionalProperties": false
+    },
+    "localVerification": {
+      "type": "object",
+      "required": [
+        "required_checks_passed",
+        "allowlist_passed",
+        "change_detection_passed",
+        "checkout_clean",
+        "local_ref_verified",
+        "two_commit_topology_verified",
+        "no_merge_performed",
+        "no_push_performed",
+        "remote_unchanged"
+      ]
+      ,
+      "properties": {
+        "required_checks_passed": {
+          "const": true
+        },
+        "allowlist_passed": {
+          "const": true
+        },
+        "change_detection_passed": {
+          "const": true
+        },
+        "checkout_clean": {
+          "const": true
+        },
+        "local_ref_verified": {
+          "const": true
+        },
+        "two_commit_topology_verified": {
+          "const": true
+        },
+        "no_merge_performed": {
+          "const": true
+        },
+        "no_push_performed": {
+          "const": true
+        },
+        "remote_unchanged": {
+          "const": true
+        }
+      },
+      "additionalProperties": false
+    },
+    "blocker": {
+      "type": "object",
+      "required": [
+        "summary",
+        "details",
+        "required_authority"
+      ],
+      "properties": {
+        "summary": {
+          "type": "string",
+          "minLength": 1
+        },
+        "details": {
+          "type": "string",
+          "minLength": 1
+        },
+        "required_authority": {
+          "type": "string",
+          "minLength": 1
+        },
+        "handoff_prompt": {
+          "type": [
+            "string",
+            "null"
+          ]
+        }
+      },
+      "additionalProperties": false
+    }
+  }
+}

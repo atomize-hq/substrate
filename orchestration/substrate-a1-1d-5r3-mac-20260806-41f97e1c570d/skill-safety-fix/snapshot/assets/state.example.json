@@ -1,0 +1,42 @@
+{
+  "protocol": "codex.top-level-orchestration-state.v1",
+  "orchestration_id": "example",
+  "status": "INITIALIZING",
+  "dispatch_authorized": false,
+  "publication_mode": "remote",
+  "remote": "origin",
+  "remote_observation": null,
+  "target_ref": "refs/heads/example",
+  "required_ancestor": "0000000000000000000000000000000000000000",
+  "sequence": [
+    "EXAMPLE-1",
+    "EXAMPLE-2"
+  ],
+  "required_evidence": [
+    {
+      "evidence_id": "EXAMPLE-MAC-EVIDENCE",
+      "platform": "macos",
+      "after_increment": "EXAMPLE-1",
+      "before_increment": "EXAMPLE-2"
+    },
+    {
+      "evidence_id": "EXAMPLE-WIN-EVIDENCE",
+      "platform": "windows",
+      "after_increment": "EXAMPLE-1",
+      "before_increment": "EXAMPLE-2"
+    }
+  ],
+  "cursor": 0,
+  "expected_base": {
+    "commit": "0000000000000000000000000000000000000000",
+    "tree": "0000000000000000000000000000000000000000"
+  },
+  "meta": {
+    "thread_id": null,
+    "host_id": null
+  },
+  "active_dispatch": null,
+  "active_evidence_dispatches": [],
+  "verified_evidence": [],
+  "completed": []
+}

@@ -1,0 +1,69 @@
+{
+  "protocol": "codex.top-level-task-receipt.v1",
+  "orchestration_id": "example",
+  "dispatch_nonce": "00000000000000000000000000000000",
+  "increment": "EXAMPLE-1",
+  "status": "CLOSED_CLEAN",
+  "increment_task": {
+    "thread_id": "example-thread",
+    "host_id": "example-host"
+  },
+  "expected_base": {
+    "commit": "0000000000000000000000000000000000000000",
+    "tree": "0000000000000000000000000000000000000000"
+  },
+  "closed": {
+    "worktree": "/tmp/example-worktree",
+    "branch_ref": "refs/heads/feat/example",
+    "work_commit": "1111111111111111111111111111111111111111",
+    "work_tree": "2222222222222222222222222222222222222222",
+    "control_commit": "3333333333333333333333333333333333333333",
+    "control_tree": "4444444444444444444444444444444444444444",
+    "local_ref": "3333333333333333333333333333333333333333",
+    "work_changed_files": [
+      "src/example.py"
+    ],
+    "control_changed_files": [
+      "control/example.json"
+    ]
+  },
+  "publication": {
+    "mode": "local_only",
+    "merge_performed": false,
+    "push_performed": false,
+    "remote_mutation": false,
+    "remote_observation": {
+      "name": null,
+      "target_ref": "refs/heads/example",
+      "before": null,
+      "after": null
+    }
+  },
+  "subject_fingerprint": "sha256:0000000000000000000000000000000000000000000000000000000000000000",
+  "changed_files": [
+    "control/example.json",
+    "src/example.py"
+  ],
+  "review": {
+    "packet_id": "EXAMPLE-1",
+    "record_path": "/tmp/example-review.json",
+    "record_sha256": "sha256:0000000000000000000000000000000000000000000000000000000000000000",
+    "validated": true,
+    "terminal": "CLEAN",
+    "p1": 0,
+    "p2": 0,
+    "p3_p4_disposition": "none"
+  },
+  "verification": {
+    "required_checks_passed": true,
+    "allowlist_passed": true,
+    "change_detection_passed": true,
+    "checkout_clean": true,
+    "local_ref_verified": true,
+    "two_commit_topology_verified": true,
+    "no_merge_performed": true,
+    "no_push_performed": true,
+    "remote_unchanged": true
+  },
+  "next_increment": "EXAMPLE-2"
+}
