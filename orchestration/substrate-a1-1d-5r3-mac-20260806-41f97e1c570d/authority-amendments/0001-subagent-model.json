@@ -1,0 +1,24 @@
+{
+  "amendment_id": "substrate-a1-1d-5r3-mac-20260806-41f97e1c570d-model-0001",
+  "recorded_at_utc": "2026-08-06T20:47:15Z",
+  "authority_source": "explicit user instruction in meta thread 019fd8c3-b12c-7e73-919f-898600ab0f64",
+  "user_instruction": "use gpt-5.6-terra on extra-high",
+  "effective_scope": [
+    "A1.1d-5R3-MAC increment orchestrator",
+    "all A1.1d-5R3-MAC implementation subagents",
+    "all A1.1d-5R3-MAC independent review subagents"
+  ],
+  "authorized_model": "gpt-5.6-terra",
+  "authorized_reasoning": "xhigh",
+  "supersedes_only": "the prior gpt-5.4 Extra High requirement for this orchestration's A1.1d-5R3-MAC dispatch and its subagents/reviewers",
+  "unchanged_boundaries": [
+    "packet scope",
+    "file and symbol fences",
+    "GitNexus impact and change-detection requirements",
+    "causal review protocol",
+    "remote publication contract",
+    "native-evidence separation",
+    "protected checkout prohibition",
+    "successor EVIDENCE:R3-MAC-IMP-01"
+  ]
+}
