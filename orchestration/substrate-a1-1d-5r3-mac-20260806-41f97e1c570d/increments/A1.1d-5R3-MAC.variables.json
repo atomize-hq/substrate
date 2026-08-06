@@ -6,7 +6,7 @@
   "INCREMENT": "A1.1d-5R3-MAC",
   "PACKET_ID": "A1.1d-5R3-MAC",
   "NEXT_INCREMENT": "EVIDENCE:R3-MAC-IMP-01",
-  "WORKING_DIRECTORY": "TASK_ASSIGNED_WORKTREE_PENDING_EXACT_BINDING_IN_NONCE_MATCHED_FOLLOWUP",
+  "WORKING_DIRECTORY": "/Users/spensermcconnell/.codex/worktrees/9843/substrate",
   "PROTECTED_CHECKOUTS": [
     "/Users/spensermcconnell/__Active_Code/atomize-hq/substrate",
     "/Users/spensermcconnell/.codex/worktrees/eb49/substrate"
