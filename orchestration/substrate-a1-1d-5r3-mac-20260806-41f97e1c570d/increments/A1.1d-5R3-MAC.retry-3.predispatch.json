@@ -5,9 +5,9 @@
   "attempt": 4,
   "dispatch_nonce": "84392e6f217153abafdd033bf2b503ea9f901949c4ff34345ad93a2c06632faf",
   "phase": "INITIALIZING",
-  "thread_id": null,
-  "host_id": null,
-  "worktree": null,
+  "thread_id": "019fd97a-3740-7261-a7e8-0008845709b5",
+  "host_id": "local",
+  "worktree": "/Users/spensermcconnell/.codex/worktrees/a943/substrate",
   "expected_base": {
     "commit": "270f6e55e1a94b7e2f9b2667e605980d2e50579c",
     "tree": "acef6844c15d17aba8cfd18d2fc7ef88d9c3420b"
@@ -17,11 +17,19 @@
   "initial_prompt_path": "increments/A1.1d-5R3-MAC.retry-3.initial-prompt.md",
   "model": "gpt-5.6-terra",
   "reasoning": "xhigh",
-  "skill_hydration": null,
-  "status": "READY_FOR_CREATE_THREAD",
+  "skill_hydration": {
+    "source": "/Users/spensermcconnell/__Active_Code/atomize-hq/substrate/.agents/skills/orchestrate-top-level-tasks",
+    "target": "/Users/spensermcconnell/.codex/worktrees/a943/substrate/.agents/skills/orchestrate-top-level-tasks",
+    "file_count": 26,
+    "sha256": "61d99190f680d3738fa824348e671e8eb84b2729bf31952ef16031c6ba24d903",
+    "verified": true
+  },
+  "status": "TASK_CREATED_HYDRATED_AWAITING_BINDING",
   "project_id": "local-b2016f8a311fef93149e42eaec4d704d",
   "project_host_id": "local",
   "project_path": "/Users/spensermcconnell/__Active_Code/atomize-hq/substrate",
   "target_ref": "refs/heads/feat/internal-host-orchestrator-world-dispatch-bootstrap",
-  "publication_mode": "remote"
+  "publication_mode": "remote",
+  "prompt_sha256": "sha256:62dcfdc072f909c136a8858e369dde2e2fe7c1f53ab50f034da1fff7106e2aa4",
+  "contract_sha256": "sha256:d4097c22defcee29cd334109ce7d264c10b86cbaa1ec6ee7cea407ce14c06f9b"
 }
