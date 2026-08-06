@@ -1,7 +1,7 @@
 {
   "protocol": "codex.top-level-orchestration-state.v1",
   "orchestration_id": "substrate-a1-1d-5r3-mac-20260806-41f97e1c570d",
-  "status": "READY",
+  "status": "RUNNING",
   "dispatch_authorized": true,
   "publication_mode": "remote",
   "remote": "origin",
@@ -29,7 +29,32 @@
     "thread_id": "019fd8c3-b12c-7e73-919f-898600ab0f64",
     "host_id": "local"
   },
-  "active_dispatch": null,
+  "active_dispatch": {
+    "increment": "A1.1d-5R3-MAC",
+    "attempt": 2,
+    "thread_id": "019fd8d5-c799-7d10-b47c-f1c7828534f5",
+    "host_id": "local",
+    "client_thread_id": "client-new-thread:c27eb890-9dc3-46c2-bc67-9a375380786d",
+    "dispatch_nonce": "24a6713f9a51eb2da1b3af8512339a188ba07636898ff9dcbb3cd7704a2c5a53",
+    "expected_base": {
+      "commit": "270f6e55e1a94b7e2f9b2667e605980d2e50579c",
+      "tree": "acef6844c15d17aba8cfd18d2fc7ef88d9c3420b"
+    },
+    "target_ref": "refs/heads/feat/internal-host-orchestrator-world-dispatch-bootstrap",
+    "publication_mode": "remote",
+    "project_id": "local-b2016f8a311fef93149e42eaec4d704d",
+    "project_path": "/Users/spensermcconnell/__Active_Code/atomize-hq/substrate",
+    "task_worktree": "/Users/spensermcconnell/.codex/worktrees/867b/substrate",
+    "task_starting_state": "detached-at-target-ref",
+    "orchestrator_model": "gpt-5.6-terra",
+    "subagent_model": "gpt-5.6-terra",
+    "reasoning_effort": "xhigh",
+    "authority_amendment_path": "orchestration/substrate-a1-1d-5r3-mac-20260806-41f97e1c570d/authority-amendments/0001-subagent-model.json",
+    "initial_prompt_path": "orchestration/substrate-a1-1d-5r3-mac-20260806-41f97e1c570d/increments/A1.1d-5R3-MAC.retry-1.initial-prompt.md",
+    "initial_prompt_sha256": "sha256:863e9d1f71d588d4fba6aaa6e49c7df016cb650b597ca36cd1fedc9746239c83",
+    "bound_prompt_path": "orchestration/substrate-a1-1d-5r3-mac-20260806-41f97e1c570d/increments/A1.1d-5R3-MAC.retry-1.prompt.md",
+    "bound_prompt_sha256": "sha256:a448eaf2105a1aeeddf71b2adec0b152b6430d6f1e831f061e9ad6d6d0d9940d"
+  },
   "active_evidence_dispatches": [],
   "verified_evidence": [],
   "completed": []
