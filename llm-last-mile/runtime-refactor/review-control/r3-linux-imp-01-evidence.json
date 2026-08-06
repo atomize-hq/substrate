@@ -1,0 +1,274 @@
+{
+  "allowed_actions": [
+    "bootstrap-publisher",
+    "install-repeat-retry",
+    "intent-publication-probe",
+    "product-smoke",
+    "restore-baseline",
+    "retire-test-publisher",
+    "service-socket-smoke",
+    "world-smoke"
+  ],
+  "artifact_manifest": {
+    "entries": [
+      "/home/spenser/.codex/orchestration/runtime-refactor-r3-home-manifest-linux-20260805T032054Z/receipts/r3-linux-imp-01-probe.json",
+      "/home/spenser/.codex/orchestration/runtime-refactor-r3-home-manifest-linux-20260805T032054Z/receipts/r3-linux-imp-01-product-smoke.json"
+    ],
+    "sha256": "sha256:ea5a177f83a1861d7f4f3838ff25c07ce0877f5d2fbe1e24920134acb41a682e"
+  },
+  "commands": [
+    {
+      "argv": [
+        "git",
+        "ls-remote",
+        "origin",
+        "refs/heads/feat/internal-host-orchestrator-world-dispatch-bootstrap"
+      ],
+      "index": 1,
+      "status": 0,
+      "stderr_sha256": "sha256:e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+      "stdout_sha256": "sha256:60976361667ee31fd66cd6194ad193eaa08c5daedf27f7f0e708c8973f99d150"
+    },
+    {
+      "argv": [
+        "bash",
+        "tests/installers/linux_lifecycle_r3.sh"
+      ],
+      "index": 2,
+      "status": 0,
+      "stderr_sha256": "sha256:d07e8f8a43dbe9e7b00cf0e99e794cc6c3e9bd8512abf044ceb43113c72605fc",
+      "stdout_sha256": "sha256:e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+    },
+    {
+      "argv": [
+        "bash",
+        "tests/installers/world_provision_smoke.sh"
+      ],
+      "index": 3,
+      "status": 0,
+      "stderr_sha256": "sha256:303771fea838cbdb77e8cc738d20855a0dbedea53fecc4b1491c7df8262cd360",
+      "stdout_sha256": "sha256:36e248ebda18a6bda7d3895405c26d559b1288fcb56af8564135a142fc9a0e7a"
+    },
+    {
+      "argv": [
+        "bash",
+        "tests/installers/world_provision_context_r2_2.sh"
+      ],
+      "index": 4,
+      "status": 0,
+      "stderr_sha256": "sha256:e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+      "stdout_sha256": "sha256:1b76fc83f674791716dc5a121c9af52102fed4c34091e8292775bcf88d6e7e71"
+    },
+    {
+      "argv": [
+        "bash",
+        "tests/installers/install_state_smoke.sh",
+        "--scenario",
+        "all"
+      ],
+      "index": 5,
+      "status": 1,
+      "stderr_sha256": "sha256:4162797ef44dcd80e78c33ed77c0d4d3f07011338ded8ad5ff0231ee511254ac",
+      "stdout_sha256": "sha256:e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+    },
+    {
+      "argv": [
+        "bash",
+        "tests/installers/prefix_propagation_r2_2.sh"
+      ],
+      "index": 6,
+      "status": 0,
+      "stderr_sha256": "sha256:23065dbe12514ea42786e81211a6c6fd4b287082baa93a884d7b6dc699749e50",
+      "stdout_sha256": "sha256:b8fb0ba31dc82152d8609111af746236e304326d052734dbc1a76a46cb7b9b3e"
+    },
+    {
+      "argv": [
+        "sudo",
+        "python3",
+        "/home/spenser/.codex/orchestration/runtime-refactor-r3-home-manifest-linux-20260805T032054Z/receipts/r3-linux-imp-01-intent-probe.py",
+        "/var/lib/substrate",
+        "/home/spenser/.codex/orchestration/runtime-refactor-r3-home-manifest-linux-20260805T032054Z/receipts/r3-linux-imp-01-probe.json"
+      ],
+      "index": 7,
+      "status": 0,
+      "stderr_sha256": "sha256:e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+      "stdout_sha256": "sha256:e384b5f54eec23894441e8d4a2e403e32f3647b2385066228e8c920bb32b5997"
+    },
+    {
+      "argv": [
+        "/home/spenser/__Active_code/substrate/target/debug/substrate",
+        "--install-prefix",
+        "/run/user/1000/r3-prefix-copy.7sj0_ogl",
+        "--shim-skip",
+        "world",
+        "doctor",
+        "--json"
+      ],
+      "index": 8,
+      "status": 0,
+      "stderr_sha256": "sha256:e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+      "stdout_sha256": "sha256:eb828d685b40d227170a2565cee6355447b4548a610386b4e87e2564f092c47b"
+    },
+    {
+      "argv": [
+        "/home/spenser/__Active_code/substrate/target/debug/substrate",
+        "--install-prefix",
+        "/run/user/1000/r3-prefix-copy.7sj0_ogl",
+        "--shim-skip",
+        "shim",
+        "doctor",
+        "--json"
+      ],
+      "index": 9,
+      "status": 0,
+      "stderr_sha256": "sha256:e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+      "stdout_sha256": "sha256:f03c5feb2eb82c1c949e8d91ef113610a25bf4ee05660432f805a5dba30bc71b"
+    },
+    {
+      "argv": [
+        "/home/spenser/__Active_code/substrate/target/debug/substrate",
+        "--install-prefix",
+        "/run/user/1000/r3-prefix-copy.7sj0_ogl",
+        "--shim-skip",
+        "health",
+        "--json"
+      ],
+      "index": 10,
+      "status": 0,
+      "stderr_sha256": "sha256:e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+      "stdout_sha256": "sha256:ebfa446aedc8a7e5fca220e3d5624cacf4338f49655fe43283c4cef195c3493f"
+    },
+    {
+      "argv": [
+        "/home/spenser/__Active_code/substrate/target/debug/substrate",
+        "--install-prefix",
+        "/run/user/1000/r3-prefix-copy.7sj0_ogl",
+        "--shim-skip",
+        "--world",
+        "-c",
+        "printf 'nonpty-evidence\\n'"
+      ],
+      "index": 11,
+      "status": 0,
+      "stderr_sha256": "sha256:e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+      "stdout_sha256": "sha256:ffe7fb641f1a04539553578665958566ccc57ec0892a274645cc1ad1edbc0f4d"
+    },
+    {
+      "argv": [
+        "/home/spenser/__Active_code/substrate/target/debug/substrate",
+        "--install-prefix",
+        "/run/user/1000/r3-prefix-copy.7sj0_ogl",
+        "--shim-skip",
+        "--world",
+        "--pty",
+        "-c",
+        "printf 'pty-evidence\\n'"
+      ],
+      "index": 12,
+      "status": 0,
+      "stderr_sha256": "sha256:e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+      "stdout_sha256": "sha256:3a58500e7510abc23258490b9e59477988eadc4243e92761c9589b85e2d0bcba"
+    },
+    {
+      "argv": [
+        "sudo",
+        "-k"
+      ],
+      "index": 13,
+      "status": 0,
+      "stderr_sha256": "sha256:e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+      "stdout_sha256": "sha256:e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+    },
+    {
+      "argv": [
+        "sudo",
+        "-n",
+        "true"
+      ],
+      "index": 14,
+      "status": 0,
+      "stderr_sha256": "sha256:e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+      "stdout_sha256": "sha256:e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+    }
+  ],
+  "correlation": {
+    "dispatch_nonce": "271c19aad73ce3896b66f21557bebeb4e480edc414b8dd3cf35076c33911f406",
+    "evidence_task_host_id": "remote-ssh-discovered:spenser-linux-codex",
+    "evidence_task_thread_id": "019fd7bc-4c4f-7743-81a2-f8dd859f5f2d",
+    "orchestration_id": "runtime-refactor-r3-home-manifest-linux-20260805T032054Z",
+    "return_host_id": "remote-ssh-discovered:spenser-linux-codex",
+    "return_thread_id": "019fcff5-16c3-7de1-9ae4-c7f184a94adf",
+    "source_task_host_id": "remote-ssh-discovered:spenser-linux-codex",
+    "source_task_thread_id": "019fcff5-16c3-7de1-9ae4-c7f184a94adf"
+  },
+  "evidence_id": "EVIDENCE:R3-LINUX-IMP-01",
+  "gated_successor": "AUTHORITY_REQUIRED:A1.1d-5R3-LINUX-CLOSEOUT",
+  "intent_publication_capability": {
+    "effective_root": true,
+    "filesystem_identity": "type=ext2/ext3 dev=47435403 mount=?",
+    "linkat_empty_path_supported": true,
+    "otmpfile_supported": true,
+    "probe_artifact_sha256": "sha256:1fc43325e098bf10dae74dd6820f05c02e6ca26b4b2225dd5d954b97c1ac8c52",
+    "probe_commands": [
+      {
+        "argv": [
+          "sudo",
+          "python3",
+          "/home/spenser/.codex/orchestration/runtime-refactor-r3-home-manifest-linux-20260805T032054Z/receipts/r3-linux-imp-01-intent-probe.py",
+          "/var/lib/substrate",
+          "/home/spenser/.codex/orchestration/runtime-refactor-r3-home-manifest-linux-20260805T032054Z/receipts/r3-linux-imp-01-probe.json"
+        ],
+        "index": 1,
+        "status": 0,
+        "stderr_sha256": "sha256:e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+        "stdout_sha256": "sha256:e384b5f54eec23894441e8d4a2e403e32f3647b2385066228e8c920bb32b5997"
+      }
+    ],
+    "same_filesystem": true,
+    "state_root_identity": "dev=66306 ino=6029320 mode=0750 uid=0 gid=954"
+  },
+  "platform": {
+    "architecture": "x86_64",
+    "os": "linux"
+  },
+  "product_project_id": "2ccb802f-301c-4af4-9bd5-51d22808f0a2",
+  "prohibited_actions": [
+    "ambient-home-mutation",
+    "delete",
+    "kill",
+    "restore-by-reset",
+    "retained-sudo-credential",
+    "shared-state-removal",
+    "stop",
+    "unregister"
+  ],
+  "restoration_manifest": {
+    "entries": [
+      "/home/spenser/.codex/orchestration/runtime-refactor-r3-home-manifest-linux-20260805T032054Z/receipts/r3-linux-imp-01-baseline.json",
+      "/home/spenser/.codex/orchestration/runtime-refactor-r3-home-manifest-linux-20260805T032054Z/receipts/r3-linux-imp-01-restoration.json"
+    ],
+    "sha256": "sha256:42861474b46d94ba08ed00ac447a3ab5c9076dd4218a298694385150ecbf2cf3"
+  },
+  "result": {
+    "restoration_exact": true,
+    "status": "EVIDENCE_CLEAN",
+    "summary": "Linux provider harnesses, world/shim/health smoke, PTY/non-PTY checks, and intent publication probe passed with exact restoration parity; install_state_smoke reproduced the documented pre-existing hosted-bundle mismatch unchanged."
+  },
+  "schema_owner": "substrate.r3-native-evidence",
+  "schema_version": 1,
+  "source": {
+    "commit": "fef5bf688ade61bfaf40e43d21fb77ae492fa5fe",
+    "live_remote": "fef5bf688ade61bfaf40e43d21fb77ae492fa5fe",
+    "ref": "refs/heads/feat/internal-host-orchestrator-world-dispatch-bootstrap",
+    "tree": "827e88f2c069cd27a04e99a57894bd5a753b2e55"
+  },
+  "tool_versions": {
+    "bash": "GNU bash, version 5.3.3(1)-release (x86_64-pc-linux-gnu)",
+    "cargo": "cargo 1.89.0 (c24e10642 2025-06-23)",
+    "git": "git version 2.51.0",
+    "python3": "Python 3.10.11",
+    "rustc": "rustc 1.89.0 (29483883e 2025-08-04)",
+    "substrate": "substrate 0.2.8",
+    "systemctl": "systemd 257 (257.9-1-manjaro)"
+  }
+}

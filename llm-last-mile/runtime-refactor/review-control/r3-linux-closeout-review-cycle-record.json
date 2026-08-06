@@ -1,0 +1,23 @@
+{
+  "schema_version": 1,
+  "packet_id": "A1.1d-5R3-LINUX-CLOSEOUT",
+  "status": "complete",
+  "stop_reason": null,
+  "cycles": [
+    {
+      "cycle_id": "discovery-1",
+      "kind": "discovery",
+      "subject_fingerprint": "sha256:83a49872df62fc0a3c4c4baa05ac8ff164a5a2973f24011b7628866fe66cee86",
+      "trigger_cycle_id": null,
+      "trigger_finding_ids": [],
+      "causal_evidence_refs": [],
+      "review_refs": [
+        "r3-linux-closeout-review-authority-security.md",
+        "r3-linux-closeout-review-lifecycle-convergence.md",
+        "r3-linux-closeout-review-allowlist-evidence.md"
+      ],
+      "verdict": "clean",
+      "findings": []
+    }
+  ]
+}

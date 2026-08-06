@@ -10116,3 +10116,13 @@ protected/disposable publisher prepared-transition and receipt publication paths
 handoff used by `world-provision.sh`. The packet preserves the closed product wall for Unix
 orchestrator bodies, native evidence, and other platforms, and leaves successor authority at
 `EVIDENCE:R3-LINUX-IMP-01`.
+
+### `A1.1d-5R3-LINUX-CLOSEOUT`
+
+`A1.1d-5R3-LINUX-CLOSEOUT` now has a landed docs/evidence closeout for the published Linux
+provider checkpoint. It materializes the validated external evidence artifact and the
+`codex.top-level-evidence-receipt.v1` under `review-control`, revalidates the artifact via
+`validate_r3_native_evidence.py` with exact evidence/source/gated-successor joins, revalidates the
+receipt with the orchestration skill validator, and records the bounded closeout review set. The
+packet changes no production or test bytes, performs no Linux repair or MAC dispatch, and for this
+authoritative orchestration the terminal successor is `COMPLETE`.

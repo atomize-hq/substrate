@@ -1190,3 +1190,22 @@ the bounded `0640`/`0650` cache observation. R1/R2 evidence is immutable.
   `review-control/r3-linux-review-authority-security.md`,
   `review-control/r3-linux-review-lifecycle-convergence.md`, and
   `review-control/r3-linux-review-allowlist-evidence.md`.
+
+### `A1.1d-5R3-LINUX-CLOSEOUT`
+
+- Status: `LANDED_CLEAN`.
+- Scope: materialized the validated external Linux evidence artifact and evidence receipt under
+  `review-control`, revalidated the artifact with
+  `scripts/ci/validate_r3_native_evidence.py`, revalidated the receipt with
+  `orchestrate-top-level-tasks/scripts/validate_evidence_receipt.py`, and recorded the bounded
+  closeout review set with no production or test byte change.
+- Boundaries preserved: only `review-control/r3-linux-imp-01-evidence.json`,
+  `review-control/r3-linux-imp-01-receipt.json`, the exact `linux-closeout` review set, and this
+  bounded `R3-DOCS` status append are materialized; no Linux repair, MAC dispatch, or evidence
+  reinterpretation is introduced.
+- Successor: `COMPLETE` for this authoritative orchestration closeout; the stale packet-local
+  `A1.1d-5R3-MAC` wording is historical only and is not reused in the terminal receipt.
+- Review control: `review-control/r3-linux-closeout-review-cycle-record.json`,
+  `review-control/r3-linux-closeout-review-authority-security.md`,
+  `review-control/r3-linux-closeout-review-lifecycle-convergence.md`, and
+  `review-control/r3-linux-closeout-review-allowlist-evidence.md`.

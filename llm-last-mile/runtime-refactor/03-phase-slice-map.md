@@ -3140,3 +3140,17 @@ fixtures proving created versus pre-existing state preservation, protected/dispo
 transactions, endpoint non-requestability, service/socket non-propagation, and guest bootstrap
 pairing joins. Unix row-owner orchestrators remain frozen, the packet claims no native evidence,
 and the next authority is `EVIDENCE:R3-LINUX-IMP-01`.
+
+### `A1.1d-5R3-LINUX-CLOSEOUT`
+
+`A1.1d-5R3-LINUX-CLOSEOUT` is landed and closes the Linux evidence-closeout contract above without
+widening scope. The landed subject is the exact copy of
+`review-control/r3-linux-imp-01-evidence.json` and
+`review-control/r3-linux-imp-01-receipt.json`, the exact `linux-closeout` review set, and this
+bounded `R3-DOCS` status append. Before publication, the closeout revalidated
+`EVIDENCE:R3-LINUX-IMP-01` against source commit `fef5bf688ade61bfaf40e43d21fb77ae492fa5fe`,
+tree `827e88f2c069cd27a04e99a57894bd5a753b2e55`, ref
+`refs/heads/feat/internal-host-orchestrator-world-dispatch-bootstrap`, and gated successor
+`AUTHORITY_REQUIRED:A1.1d-5R3-LINUX-CLOSEOUT`, then revalidated the separate evidence receipt.
+No production or test bytes changed, no MAC packet is authorized here, and the authoritative
+successor for this orchestration closeout is `COMPLETE`.

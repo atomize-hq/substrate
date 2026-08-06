@@ -1,0 +1,42 @@
+{
+  "checkout_unchanged": true,
+  "dispatch_nonce": "271c19aad73ce3896b66f21557bebeb4e480edc414b8dd3cf35076c33911f406",
+  "environment": {
+    "host_id": "remote-ssh-discovered:spenser-linux-codex",
+    "os_version": "Linux 6.16.8-1-MANJARO x86_64 GNU/Linux | Manjaro Linux",
+    "project_id": "2ccb802f-301c-4af4-9bd5-51d22808f0a2",
+    "project_path": "/home/spenser/__Active_code/substrate",
+    "tool_versions": {
+      "bash": "GNU bash, version 5.3.3(1)-release (x86_64-pc-linux-gnu)",
+      "cargo": "cargo 1.89.0 (c24e10642 2025-06-23)",
+      "git": "git version 2.51.0",
+      "python3": "Python 3.10.11",
+      "rustc": "rustc 1.89.0 (29483883e 2025-08-04)",
+      "substrate": "substrate 0.2.8",
+      "systemctl": "systemd 257 (257.9-1-manjaro)"
+    }
+  },
+  "evidence": {
+    "artifact_path": "/home/spenser/.codex/orchestration/runtime-refactor-r3-home-manifest-linux-20260805T032054Z/receipts/r3-linux-imp-01-evidence.json",
+    "artifact_sha256": "sha256:fac7a986a5115f4c214639ad85b6005f2eadfe75777396e967b96dcbe589befe",
+    "gates": [
+      "EVIDENCE:R3-LINUX-IMP-01"
+    ]
+  },
+  "evidence_id": "EVIDENCE:R3-LINUX-IMP-01",
+  "evidence_task": {
+    "host_id": "remote-ssh-discovered:spenser-linux-codex",
+    "thread_id": "019fd7bc-4c4f-7743-81a2-f8dd859f5f2d"
+  },
+  "orchestration_id": "runtime-refactor-r3-home-manifest-linux-20260805T032054Z",
+  "platform": "linux",
+  "prohibited_actions_confirmed": true,
+  "protocol": "codex.top-level-evidence-receipt.v1",
+  "source": {
+    "commit": "fef5bf688ade61bfaf40e43d21fb77ae492fa5fe",
+    "live_remote": "fef5bf688ade61bfaf40e43d21fb77ae492fa5fe",
+    "target_ref": "refs/heads/feat/internal-host-orchestrator-world-dispatch-bootstrap",
+    "tree": "827e88f2c069cd27a04e99a57894bd5a753b2e55"
+  },
+  "status": "EVIDENCE_CLEAN"
+}

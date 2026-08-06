@@ -3595,3 +3595,16 @@ leaves the corresponding gate open. R3 closeout does not authorize the later A1.
   hosted-bundle `world-agent` versus installer `world-service` mismatch is pre-existing at the
   bound base and outside this packet's editable fence.
 - Successor: `EVIDENCE:R3-LINUX-IMP-01`.
+
+### `A1.1d-5R3-LINUX-CLOSEOUT`
+
+- Status: `LANDED_CLEAN`.
+- Newly landed proof surface: exact repository materialization of the validated
+  `review-control/r3-linux-imp-01-evidence.json` artifact and
+  `review-control/r3-linux-imp-01-receipt.json` receipt, explicit revalidation of their
+  evidence/source/digest joins, and the exact `linux-closeout` review set for the bounded
+  docs/evidence closeout.
+- Remaining frozen truth: no production, test, fixture, script, dependency, or platform bytes
+  changed; the artifact's documented `install_state_smoke.sh` hosted-bundle mismatch remains
+  reproduced unchanged at the bound source; and no MAC authority starts here.
+- Successor: `COMPLETE` for this authoritative orchestration closeout.
