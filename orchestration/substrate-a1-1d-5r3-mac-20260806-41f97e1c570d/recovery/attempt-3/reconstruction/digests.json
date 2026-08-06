@@ -1,0 +1,27 @@
+{
+  "bundle_inputs": {
+    "audit_report_sha256": "99869c925b5caeebb9c8fa0f960d621771d8e533b04a7add4b06b6501d83b7c0",
+    "bundle_digests_sha256": "b2d6fc57e15227be0c8df0095909d64b4a402356ee9ae6b8aba0f0fb055c8706",
+    "historical_subject_fingerprint": "sha256:e60963026aa39be67e334119ff7ae61f3f15f19dbfd31539d790f8735b493924",
+    "recovered_tree_sha256": "a023bc6e2f4929277468f5f418e954b0d7b96671d2d8c24f8790a9674763ff88",
+    "recovery_manifest_sha256": "9edb61f5aab00299706efe3e73050886d81d80d1eedfdbf15c7d8662d595a908",
+    "review_cycle_record_sha256": "bc7258fb432375e50af899f14691c7691980d4f99a8174b8e2d6ee2e1a29e003"
+  },
+  "evidence_revision": 2,
+  "reconstruction_evidence": {
+    "digests_json": {
+      "path": "reconstruction/digests.json",
+      "self_sha256_not_embedded_to_avoid_recursion": true
+    },
+    "receipt_json": {
+      "path": "reconstruction/receipt.json",
+      "sha256": "9a843a6332eeba544cfe03d260e9478f56b4694cb06a06d014589e7cfaaf2264"
+    },
+    "report_md": {
+      "path": "reconstruction/report.md",
+      "sha256": "9cd95d947220792629d30fd063c7f156da239200261bb51b5189ccf0a47e7b8f"
+    }
+  },
+  "schema": "substrate.a1-1d-5r3-mac.reconstruction-digests.v1",
+  "verdict": "RESTORED_EXACT"
+}

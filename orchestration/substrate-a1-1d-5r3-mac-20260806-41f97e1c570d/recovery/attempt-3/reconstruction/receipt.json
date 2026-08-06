@@ -1,0 +1,1618 @@
+{
+  "authority": "recovery_only_byte_restoration",
+  "checks": [
+    {
+      "actual": "99869c925b5caeebb9c8fa0f960d621771d8e533b04a7add4b06b6501d83b7c0",
+      "expected": "99869c925b5caeebb9c8fa0f960d621771d8e533b04a7add4b06b6501d83b7c0",
+      "id": "audit.report.sha256",
+      "status": "PASS"
+    },
+    {
+      "actual": "VERIFIED_COMPLETE",
+      "expected": "VERIFIED_COMPLETE",
+      "id": "audit.report.verdict",
+      "status": "PASS"
+    },
+    {
+      "actual": true,
+      "detail": {
+        "check_count": 14
+      },
+      "expected": true,
+      "id": "audit.report.all_checks_pass",
+      "status": "PASS"
+    },
+    {
+      "actual": [],
+      "expected": [],
+      "id": "audit.report.defects",
+      "status": "PASS"
+    },
+    {
+      "actual": "9edb61f5aab00299706efe3e73050886d81d80d1eedfdbf15c7d8662d595a908",
+      "expected": "9edb61f5aab00299706efe3e73050886d81d80d1eedfdbf15c7d8662d595a908",
+      "id": "recovery_manifest.sha256",
+      "status": "PASS"
+    },
+    {
+      "actual": "COMPLETE",
+      "expected": "COMPLETE",
+      "id": "recovery_manifest.completeness_verdict",
+      "status": "PASS"
+    },
+    {
+      "actual": 19,
+      "expected": 19,
+      "id": "recovery_manifest.declared_changed_path_count",
+      "status": "PASS"
+    },
+    {
+      "actual": 19,
+      "expected": 19,
+      "id": "recovery_manifest.files_count",
+      "status": "PASS"
+    },
+    {
+      "actual": "270f6e55e1a94b7e2f9b2667e605980d2e50579c",
+      "expected": "270f6e55e1a94b7e2f9b2667e605980d2e50579c",
+      "id": "recovery_manifest.expected_base.commit",
+      "status": "PASS"
+    },
+    {
+      "actual": "acef6844c15d17aba8cfd18d2fc7ef88d9c3420b",
+      "expected": "acef6844c15d17aba8cfd18d2fc7ef88d9c3420b",
+      "id": "recovery_manifest.expected_base.tree",
+      "status": "PASS"
+    },
+    {
+      "actual": "9edb61f5aab00299706efe3e73050886d81d80d1eedfdbf15c7d8662d595a908",
+      "expected": "9edb61f5aab00299706efe3e73050886d81d80d1eedfdbf15c7d8662d595a908",
+      "id": "bundle_digests.manifest",
+      "status": "PASS"
+    },
+    {
+      "actual": "a023bc6e2f4929277468f5f418e954b0d7b96671d2d8c24f8790a9674763ff88",
+      "expected": "a023bc6e2f4929277468f5f418e954b0d7b96671d2d8c24f8790a9674763ff88",
+      "id": "bundle_digests.recovered_tree",
+      "status": "PASS"
+    },
+    {
+      "actual": "/Users/spensermcconnell/.codex/worktrees/ace6/substrate",
+      "expected": "/Users/spensermcconnell/.codex/worktrees/ace6/substrate",
+      "id": "target.toplevel",
+      "status": "PASS"
+    },
+    {
+      "actual": "270f6e55e1a94b7e2f9b2667e605980d2e50579c",
+      "expected": "270f6e55e1a94b7e2f9b2667e605980d2e50579c",
+      "id": "target.head",
+      "status": "PASS"
+    },
+    {
+      "actual": "acef6844c15d17aba8cfd18d2fc7ef88d9c3420b",
+      "expected": "acef6844c15d17aba8cfd18d2fc7ef88d9c3420b",
+      "id": "target.head_tree",
+      "status": "PASS"
+    },
+    {
+      "actual": true,
+      "detail": {
+        "git_dir": "/Users/spensermcconnell/__Active_Code/atomize-hq/substrate/.git/worktrees/substrate6"
+      },
+      "expected": true,
+      "id": "target.git_dir_exists",
+      "status": "PASS"
+    },
+    {
+      "actual": true,
+      "detail": {
+        "common_git_dir": "/Users/spensermcconnell/__Active_Code/atomize-hq/substrate/.git"
+      },
+      "expected": true,
+      "id": "target.common_git_dir_exists",
+      "status": "PASS"
+    },
+    {
+      "actual": 1,
+      "detail": {
+        "symbolic_ref_output": ""
+      },
+      "expected": 1,
+      "id": "target.detached_head_exit",
+      "status": "PASS"
+    },
+    {
+      "actual": true,
+      "detail": {
+        "administrative_record": [
+          "worktree /Users/spensermcconnell/.codex/worktrees/ace6/substrate",
+          "HEAD 270f6e55e1a94b7e2f9b2667e605980d2e50579c",
+          "detached",
+          ""
+        ]
+      },
+      "expected": true,
+      "id": "target.linked_worktree_registered",
+      "status": "PASS"
+    },
+    {
+      "actual": true,
+      "detail": {
+        "administrative_record": [
+          "worktree /Users/spensermcconnell/.codex/worktrees/ace6/substrate",
+          "HEAD 270f6e55e1a94b7e2f9b2667e605980d2e50579c",
+          "detached",
+          ""
+        ]
+      },
+      "expected": true,
+      "id": "target.linked_worktree_detached_record",
+      "status": "PASS"
+    },
+    {
+      "actual": [],
+      "expected": [],
+      "id": "target.staged_paths",
+      "status": "PASS"
+    },
+    {
+      "actual": 19,
+      "expected": 19,
+      "id": "target.status_record_count",
+      "status": "PASS"
+    },
+    {
+      "actual": 11,
+      "expected": 11,
+      "id": "target.modified_tracked_count",
+      "status": "PASS"
+    },
+    {
+      "actual": 8,
+      "expected": 8,
+      "id": "target.untracked_count",
+      "status": "PASS"
+    },
+    {
+      "actual": [
+        "crates/shell/src/execution/managed_lifecycle/macos_client.rs",
+        "crates/world-mac-lima/src/forwarding.rs",
+        "crates/world-mac-lima/src/lib.rs",
+        "llm-last-mile/runtime-refactor/00-README.md",
+        "llm-last-mile/runtime-refactor/02-seam-crosswalk.md",
+        "llm-last-mile/runtime-refactor/03-phase-slice-map.md",
+        "llm-last-mile/runtime-refactor/04-contracts-and-gates.md",
+        "llm-last-mile/runtime-refactor/05-debug-regression-ledger.md",
+        "scripts/mac/lima-stop.sh",
+        "scripts/mac/lima-warm.sh",
+        "scripts/mac/lima/units/substrate-world-service.socket"
+      ],
+      "expected": [
+        "crates/shell/src/execution/managed_lifecycle/macos_client.rs",
+        "crates/world-mac-lima/src/forwarding.rs",
+        "crates/world-mac-lima/src/lib.rs",
+        "llm-last-mile/runtime-refactor/00-README.md",
+        "llm-last-mile/runtime-refactor/02-seam-crosswalk.md",
+        "llm-last-mile/runtime-refactor/03-phase-slice-map.md",
+        "llm-last-mile/runtime-refactor/04-contracts-and-gates.md",
+        "llm-last-mile/runtime-refactor/05-debug-regression-ledger.md",
+        "scripts/mac/lima-stop.sh",
+        "scripts/mac/lima-warm.sh",
+        "scripts/mac/lima/units/substrate-world-service.socket"
+      ],
+      "id": "target.modified_tracked_paths",
+      "status": "PASS"
+    },
+    {
+      "actual": [
+        "llm-last-mile/runtime-refactor/review-control/r3-mac-review-allowlist-evidence.md",
+        "llm-last-mile/runtime-refactor/review-control/r3-mac-review-authority-security.md",
+        "llm-last-mile/runtime-refactor/review-control/r3-mac-review-cycle-record.json",
+        "llm-last-mile/runtime-refactor/review-control/r3-mac-review-lifecycle-convergence.md",
+        "scripts/mac/com.substrate.lifecycle.publisher.v1.plist",
+        "scripts/mac/lima-lifecycle.sh",
+        "src/bin/substrate-lifecycle-macos.rs",
+        "tests/mac/lifecycle_r3.sh"
+      ],
+      "expected": [
+        "llm-last-mile/runtime-refactor/review-control/r3-mac-review-allowlist-evidence.md",
+        "llm-last-mile/runtime-refactor/review-control/r3-mac-review-authority-security.md",
+        "llm-last-mile/runtime-refactor/review-control/r3-mac-review-cycle-record.json",
+        "llm-last-mile/runtime-refactor/review-control/r3-mac-review-lifecycle-convergence.md",
+        "scripts/mac/com.substrate.lifecycle.publisher.v1.plist",
+        "scripts/mac/lima-lifecycle.sh",
+        "src/bin/substrate-lifecycle-macos.rs",
+        "tests/mac/lifecycle_r3.sh"
+      ],
+      "id": "target.untracked_paths",
+      "status": "PASS"
+    },
+    {
+      "actual": [],
+      "expected": [],
+      "id": "target.unexpected_status_records",
+      "status": "PASS"
+    },
+    {
+      "actual": [
+        "crates/shell/src/execution/managed_lifecycle/macos_client.rs",
+        "crates/world-mac-lima/src/forwarding.rs",
+        "crates/world-mac-lima/src/lib.rs",
+        "llm-last-mile/runtime-refactor/00-README.md",
+        "llm-last-mile/runtime-refactor/02-seam-crosswalk.md",
+        "llm-last-mile/runtime-refactor/03-phase-slice-map.md",
+        "llm-last-mile/runtime-refactor/04-contracts-and-gates.md",
+        "llm-last-mile/runtime-refactor/05-debug-regression-ledger.md",
+        "llm-last-mile/runtime-refactor/review-control/r3-mac-review-allowlist-evidence.md",
+        "llm-last-mile/runtime-refactor/review-control/r3-mac-review-authority-security.md",
+        "llm-last-mile/runtime-refactor/review-control/r3-mac-review-cycle-record.json",
+        "llm-last-mile/runtime-refactor/review-control/r3-mac-review-lifecycle-convergence.md",
+        "scripts/mac/com.substrate.lifecycle.publisher.v1.plist",
+        "scripts/mac/lima-lifecycle.sh",
+        "scripts/mac/lima-stop.sh",
+        "scripts/mac/lima-warm.sh",
+        "scripts/mac/lima/units/substrate-world-service.socket",
+        "src/bin/substrate-lifecycle-macos.rs",
+        "tests/mac/lifecycle_r3.sh"
+      ],
+      "expected": [
+        "crates/shell/src/execution/managed_lifecycle/macos_client.rs",
+        "crates/world-mac-lima/src/forwarding.rs",
+        "crates/world-mac-lima/src/lib.rs",
+        "llm-last-mile/runtime-refactor/00-README.md",
+        "llm-last-mile/runtime-refactor/02-seam-crosswalk.md",
+        "llm-last-mile/runtime-refactor/03-phase-slice-map.md",
+        "llm-last-mile/runtime-refactor/04-contracts-and-gates.md",
+        "llm-last-mile/runtime-refactor/05-debug-regression-ledger.md",
+        "llm-last-mile/runtime-refactor/review-control/r3-mac-review-allowlist-evidence.md",
+        "llm-last-mile/runtime-refactor/review-control/r3-mac-review-authority-security.md",
+        "llm-last-mile/runtime-refactor/review-control/r3-mac-review-cycle-record.json",
+        "llm-last-mile/runtime-refactor/review-control/r3-mac-review-lifecycle-convergence.md",
+        "scripts/mac/com.substrate.lifecycle.publisher.v1.plist",
+        "scripts/mac/lima-lifecycle.sh",
+        "scripts/mac/lima-stop.sh",
+        "scripts/mac/lima-warm.sh",
+        "scripts/mac/lima/units/substrate-world-service.socket",
+        "src/bin/substrate-lifecycle-macos.rs",
+        "tests/mac/lifecycle_r3.sh"
+      ],
+      "id": "target.all_status_paths",
+      "status": "PASS"
+    },
+    {
+      "actual": true,
+      "expected": true,
+      "id": "target.file.crates/shell/src/execution/managed_lifecycle/macos_client.rs.regular",
+      "status": "PASS"
+    },
+    {
+      "actual": "0644",
+      "expected": "0644",
+      "id": "target.file.crates/shell/src/execution/managed_lifecycle/macos_client.rs.mode",
+      "status": "PASS"
+    },
+    {
+      "actual": "8e7329c4b46919f959fdf3bb59d41aa3f6a04f679e74dc7b7f3a38c031f4dcc4",
+      "expected": "8e7329c4b46919f959fdf3bb59d41aa3f6a04f679e74dc7b7f3a38c031f4dcc4",
+      "id": "target.file.crates/shell/src/execution/managed_lifecycle/macos_client.rs.sha256",
+      "status": "PASS"
+    },
+    {
+      "actual": "00951d4616ecc0eefefe4f1e09e8ca520b38b059",
+      "expected": "00951d4616ecc0eefefe4f1e09e8ca520b38b059",
+      "id": "target.file.crates/shell/src/execution/managed_lifecycle/macos_client.rs.git_blob_oid",
+      "status": "PASS"
+    },
+    {
+      "actual": 7024,
+      "expected": 7024,
+      "id": "target.file.crates/shell/src/execution/managed_lifecycle/macos_client.rs.bytes",
+      "status": "PASS"
+    },
+    {
+      "actual": true,
+      "expected": true,
+      "id": "target.file.crates/world-mac-lima/src/forwarding.rs.regular",
+      "status": "PASS"
+    },
+    {
+      "actual": "0644",
+      "expected": "0644",
+      "id": "target.file.crates/world-mac-lima/src/forwarding.rs.mode",
+      "status": "PASS"
+    },
+    {
+      "actual": "244908830ed7a44ca07e772f0eb0e49f401aa6829c4eb6ef6cc520d0a18ba050",
+      "expected": "244908830ed7a44ca07e772f0eb0e49f401aa6829c4eb6ef6cc520d0a18ba050",
+      "id": "target.file.crates/world-mac-lima/src/forwarding.rs.sha256",
+      "status": "PASS"
+    },
+    {
+      "actual": "4dc51e1893714cd02c244bef8325dedb90c815f5",
+      "expected": "4dc51e1893714cd02c244bef8325dedb90c815f5",
+      "id": "target.file.crates/world-mac-lima/src/forwarding.rs.git_blob_oid",
+      "status": "PASS"
+    },
+    {
+      "actual": 62558,
+      "expected": 62558,
+      "id": "target.file.crates/world-mac-lima/src/forwarding.rs.bytes",
+      "status": "PASS"
+    },
+    {
+      "actual": true,
+      "expected": true,
+      "id": "target.file.crates/world-mac-lima/src/lib.rs.regular",
+      "status": "PASS"
+    },
+    {
+      "actual": "0644",
+      "expected": "0644",
+      "id": "target.file.crates/world-mac-lima/src/lib.rs.mode",
+      "status": "PASS"
+    },
+    {
+      "actual": "798834ffb6f7d586cb465b9d4dbfc0426985b98058c4b2afa83b14f087b92ff1",
+      "expected": "798834ffb6f7d586cb465b9d4dbfc0426985b98058c4b2afa83b14f087b92ff1",
+      "id": "target.file.crates/world-mac-lima/src/lib.rs.sha256",
+      "status": "PASS"
+    },
+    {
+      "actual": "916a330c484567b2f80e424ab3c02125ec6ff71a",
+      "expected": "916a330c484567b2f80e424ab3c02125ec6ff71a",
+      "id": "target.file.crates/world-mac-lima/src/lib.rs.git_blob_oid",
+      "status": "PASS"
+    },
+    {
+      "actual": 83512,
+      "expected": 83512,
+      "id": "target.file.crates/world-mac-lima/src/lib.rs.bytes",
+      "status": "PASS"
+    },
+    {
+      "actual": true,
+      "expected": true,
+      "id": "target.file.llm-last-mile/runtime-refactor/00-README.md.regular",
+      "status": "PASS"
+    },
+    {
+      "actual": "0644",
+      "expected": "0644",
+      "id": "target.file.llm-last-mile/runtime-refactor/00-README.md.mode",
+      "status": "PASS"
+    },
+    {
+      "actual": "7903189e841d054946f6b43df231185aff2d307bd4c5ad6f0b65dca7f0f2d991",
+      "expected": "7903189e841d054946f6b43df231185aff2d307bd4c5ad6f0b65dca7f0f2d991",
+      "id": "target.file.llm-last-mile/runtime-refactor/00-README.md.sha256",
+      "status": "PASS"
+    },
+    {
+      "actual": "18c882d12a984c19dadd6e22bb6d4598cf7ad705",
+      "expected": "18c882d12a984c19dadd6e22bb6d4598cf7ad705",
+      "id": "target.file.llm-last-mile/runtime-refactor/00-README.md.git_blob_oid",
+      "status": "PASS"
+    },
+    {
+      "actual": 91461,
+      "expected": 91461,
+      "id": "target.file.llm-last-mile/runtime-refactor/00-README.md.bytes",
+      "status": "PASS"
+    },
+    {
+      "actual": true,
+      "expected": true,
+      "id": "target.file.llm-last-mile/runtime-refactor/02-seam-crosswalk.md.regular",
+      "status": "PASS"
+    },
+    {
+      "actual": "0644",
+      "expected": "0644",
+      "id": "target.file.llm-last-mile/runtime-refactor/02-seam-crosswalk.md.mode",
+      "status": "PASS"
+    },
+    {
+      "actual": "652091c30407cb41bb9fffdbe22622aacdbce23af22ea3dcf15d70215d97ee36",
+      "expected": "652091c30407cb41bb9fffdbe22622aacdbce23af22ea3dcf15d70215d97ee36",
+      "id": "target.file.llm-last-mile/runtime-refactor/02-seam-crosswalk.md.sha256",
+      "status": "PASS"
+    },
+    {
+      "actual": "1ed1c3c99a6db32ac9a16e71d1811ac7a7777c39",
+      "expected": "1ed1c3c99a6db32ac9a16e71d1811ac7a7777c39",
+      "id": "target.file.llm-last-mile/runtime-refactor/02-seam-crosswalk.md.git_blob_oid",
+      "status": "PASS"
+    },
+    {
+      "actual": 344016,
+      "expected": 344016,
+      "id": "target.file.llm-last-mile/runtime-refactor/02-seam-crosswalk.md.bytes",
+      "status": "PASS"
+    },
+    {
+      "actual": true,
+      "expected": true,
+      "id": "target.file.llm-last-mile/runtime-refactor/03-phase-slice-map.md.regular",
+      "status": "PASS"
+    },
+    {
+      "actual": "0644",
+      "expected": "0644",
+      "id": "target.file.llm-last-mile/runtime-refactor/03-phase-slice-map.md.mode",
+      "status": "PASS"
+    },
+    {
+      "actual": "bf7070a4ed87e05c2d884e70fd0af34467703e6ec23173470762c718483ea4a4",
+      "expected": "bf7070a4ed87e05c2d884e70fd0af34467703e6ec23173470762c718483ea4a4",
+      "id": "target.file.llm-last-mile/runtime-refactor/03-phase-slice-map.md.sha256",
+      "status": "PASS"
+    },
+    {
+      "actual": "f1b80255bcef8453f51902c9d41192342dea369c",
+      "expected": "f1b80255bcef8453f51902c9d41192342dea369c",
+      "id": "target.file.llm-last-mile/runtime-refactor/03-phase-slice-map.md.git_blob_oid",
+      "status": "PASS"
+    },
+    {
+      "actual": 418364,
+      "expected": 418364,
+      "id": "target.file.llm-last-mile/runtime-refactor/03-phase-slice-map.md.bytes",
+      "status": "PASS"
+    },
+    {
+      "actual": true,
+      "expected": true,
+      "id": "target.file.llm-last-mile/runtime-refactor/04-contracts-and-gates.md.regular",
+      "status": "PASS"
+    },
+    {
+      "actual": "0644",
+      "expected": "0644",
+      "id": "target.file.llm-last-mile/runtime-refactor/04-contracts-and-gates.md.mode",
+      "status": "PASS"
+    },
+    {
+      "actual": "5c48831e2673380315f2c9cc23a49ad0e88536e3b4e5953ccd0141ed19a4ec72",
+      "expected": "5c48831e2673380315f2c9cc23a49ad0e88536e3b4e5953ccd0141ed19a4ec72",
+      "id": "target.file.llm-last-mile/runtime-refactor/04-contracts-and-gates.md.sha256",
+      "status": "PASS"
+    },
+    {
+      "actual": "8fb7a413f3982da812b1c2e34af406f63695be9f",
+      "expected": "8fb7a413f3982da812b1c2e34af406f63695be9f",
+      "id": "target.file.llm-last-mile/runtime-refactor/04-contracts-and-gates.md.git_blob_oid",
+      "status": "PASS"
+    },
+    {
+      "actual": 751118,
+      "expected": 751118,
+      "id": "target.file.llm-last-mile/runtime-refactor/04-contracts-and-gates.md.bytes",
+      "status": "PASS"
+    },
+    {
+      "actual": true,
+      "expected": true,
+      "id": "target.file.llm-last-mile/runtime-refactor/05-debug-regression-ledger.md.regular",
+      "status": "PASS"
+    },
+    {
+      "actual": "0644",
+      "expected": "0644",
+      "id": "target.file.llm-last-mile/runtime-refactor/05-debug-regression-ledger.md.mode",
+      "status": "PASS"
+    },
+    {
+      "actual": "9ee9d8405a9c1eef028b042595334fb414fe9799b4031fa5185dfa0507edd722",
+      "expected": "9ee9d8405a9c1eef028b042595334fb414fe9799b4031fa5185dfa0507edd722",
+      "id": "target.file.llm-last-mile/runtime-refactor/05-debug-regression-ledger.md.sha256",
+      "status": "PASS"
+    },
+    {
+      "actual": "4ce6919302c135844e6b50b48dcb68bb8afea256",
+      "expected": "4ce6919302c135844e6b50b48dcb68bb8afea256",
+      "id": "target.file.llm-last-mile/runtime-refactor/05-debug-regression-ledger.md.git_blob_oid",
+      "status": "PASS"
+    },
+    {
+      "actual": 365837,
+      "expected": 365837,
+      "id": "target.file.llm-last-mile/runtime-refactor/05-debug-regression-ledger.md.bytes",
+      "status": "PASS"
+    },
+    {
+      "actual": true,
+      "expected": true,
+      "id": "target.file.llm-last-mile/runtime-refactor/review-control/r3-mac-review-allowlist-evidence.md.regular",
+      "status": "PASS"
+    },
+    {
+      "actual": "0644",
+      "expected": "0644",
+      "id": "target.file.llm-last-mile/runtime-refactor/review-control/r3-mac-review-allowlist-evidence.md.mode",
+      "status": "PASS"
+    },
+    {
+      "actual": "ed65f98a752a66ae821847078bad7dd006a1d5036cade9ec8c1b79af7751b8ab",
+      "expected": "ed65f98a752a66ae821847078bad7dd006a1d5036cade9ec8c1b79af7751b8ab",
+      "id": "target.file.llm-last-mile/runtime-refactor/review-control/r3-mac-review-allowlist-evidence.md.sha256",
+      "status": "PASS"
+    },
+    {
+      "actual": "ee1172cfbdea895744c354a4989349c208971522",
+      "expected": "ee1172cfbdea895744c354a4989349c208971522",
+      "id": "target.file.llm-last-mile/runtime-refactor/review-control/r3-mac-review-allowlist-evidence.md.git_blob_oid",
+      "status": "PASS"
+    },
+    {
+      "actual": 4241,
+      "expected": 4241,
+      "id": "target.file.llm-last-mile/runtime-refactor/review-control/r3-mac-review-allowlist-evidence.md.bytes",
+      "status": "PASS"
+    },
+    {
+      "actual": true,
+      "expected": true,
+      "id": "target.file.llm-last-mile/runtime-refactor/review-control/r3-mac-review-authority-security.md.regular",
+      "status": "PASS"
+    },
+    {
+      "actual": "0644",
+      "expected": "0644",
+      "id": "target.file.llm-last-mile/runtime-refactor/review-control/r3-mac-review-authority-security.md.mode",
+      "status": "PASS"
+    },
+    {
+      "actual": "3a984d3b2182f4bc565370eb25c4a98863ede8d16f64ec4b978db66721b015b3",
+      "expected": "3a984d3b2182f4bc565370eb25c4a98863ede8d16f64ec4b978db66721b015b3",
+      "id": "target.file.llm-last-mile/runtime-refactor/review-control/r3-mac-review-authority-security.md.sha256",
+      "status": "PASS"
+    },
+    {
+      "actual": "5810f59c3ad4b88e5092f44b0808908786d49062",
+      "expected": "5810f59c3ad4b88e5092f44b0808908786d49062",
+      "id": "target.file.llm-last-mile/runtime-refactor/review-control/r3-mac-review-authority-security.md.git_blob_oid",
+      "status": "PASS"
+    },
+    {
+      "actual": 6389,
+      "expected": 6389,
+      "id": "target.file.llm-last-mile/runtime-refactor/review-control/r3-mac-review-authority-security.md.bytes",
+      "status": "PASS"
+    },
+    {
+      "actual": true,
+      "expected": true,
+      "id": "target.file.llm-last-mile/runtime-refactor/review-control/r3-mac-review-cycle-record.json.regular",
+      "status": "PASS"
+    },
+    {
+      "actual": "0644",
+      "expected": "0644",
+      "id": "target.file.llm-last-mile/runtime-refactor/review-control/r3-mac-review-cycle-record.json.mode",
+      "status": "PASS"
+    },
+    {
+      "actual": "bc7258fb432375e50af899f14691c7691980d4f99a8174b8e2d6ee2e1a29e003",
+      "expected": "bc7258fb432375e50af899f14691c7691980d4f99a8174b8e2d6ee2e1a29e003",
+      "id": "target.file.llm-last-mile/runtime-refactor/review-control/r3-mac-review-cycle-record.json.sha256",
+      "status": "PASS"
+    },
+    {
+      "actual": "0775cfde96312ce2b73a94cca2004aacf59a7fd9",
+      "expected": "0775cfde96312ce2b73a94cca2004aacf59a7fd9",
+      "id": "target.file.llm-last-mile/runtime-refactor/review-control/r3-mac-review-cycle-record.json.git_blob_oid",
+      "status": "PASS"
+    },
+    {
+      "actual": 4779,
+      "expected": 4779,
+      "id": "target.file.llm-last-mile/runtime-refactor/review-control/r3-mac-review-cycle-record.json.bytes",
+      "status": "PASS"
+    },
+    {
+      "actual": true,
+      "expected": true,
+      "id": "target.file.llm-last-mile/runtime-refactor/review-control/r3-mac-review-lifecycle-convergence.md.regular",
+      "status": "PASS"
+    },
+    {
+      "actual": "0644",
+      "expected": "0644",
+      "id": "target.file.llm-last-mile/runtime-refactor/review-control/r3-mac-review-lifecycle-convergence.md.mode",
+      "status": "PASS"
+    },
+    {
+      "actual": "321dd181a40841fcce83a62835fe37f75b51c953e29922caee60445695481bba",
+      "expected": "321dd181a40841fcce83a62835fe37f75b51c953e29922caee60445695481bba",
+      "id": "target.file.llm-last-mile/runtime-refactor/review-control/r3-mac-review-lifecycle-convergence.md.sha256",
+      "status": "PASS"
+    },
+    {
+      "actual": "644da35b2565a5740642a84632c686328dcd9684",
+      "expected": "644da35b2565a5740642a84632c686328dcd9684",
+      "id": "target.file.llm-last-mile/runtime-refactor/review-control/r3-mac-review-lifecycle-convergence.md.git_blob_oid",
+      "status": "PASS"
+    },
+    {
+      "actual": 5765,
+      "expected": 5765,
+      "id": "target.file.llm-last-mile/runtime-refactor/review-control/r3-mac-review-lifecycle-convergence.md.bytes",
+      "status": "PASS"
+    },
+    {
+      "actual": true,
+      "expected": true,
+      "id": "target.file.scripts/mac/com.substrate.lifecycle.publisher.v1.plist.regular",
+      "status": "PASS"
+    },
+    {
+      "actual": "0644",
+      "expected": "0644",
+      "id": "target.file.scripts/mac/com.substrate.lifecycle.publisher.v1.plist.mode",
+      "status": "PASS"
+    },
+    {
+      "actual": "e75eb753882ffb00aa611bee9976e4f66e44c4fdc59cc43bd9e23aa5020f860d",
+      "expected": "e75eb753882ffb00aa611bee9976e4f66e44c4fdc59cc43bd9e23aa5020f860d",
+      "id": "target.file.scripts/mac/com.substrate.lifecycle.publisher.v1.plist.sha256",
+      "status": "PASS"
+    },
+    {
+      "actual": "5b5f63b69c37f6d0155214de37589924311db014",
+      "expected": "5b5f63b69c37f6d0155214de37589924311db014",
+      "id": "target.file.scripts/mac/com.substrate.lifecycle.publisher.v1.plist.git_blob_oid",
+      "status": "PASS"
+    },
+    {
+      "actual": 615,
+      "expected": 615,
+      "id": "target.file.scripts/mac/com.substrate.lifecycle.publisher.v1.plist.bytes",
+      "status": "PASS"
+    },
+    {
+      "actual": true,
+      "expected": true,
+      "id": "target.file.scripts/mac/lima-lifecycle.sh.regular",
+      "status": "PASS"
+    },
+    {
+      "actual": "0755",
+      "expected": "0755",
+      "id": "target.file.scripts/mac/lima-lifecycle.sh.mode",
+      "status": "PASS"
+    },
+    {
+      "actual": "334be549d7882372863560b6773120c389886c5af452b61b719acf2a7d383d32",
+      "expected": "334be549d7882372863560b6773120c389886c5af452b61b719acf2a7d383d32",
+      "id": "target.file.scripts/mac/lima-lifecycle.sh.sha256",
+      "status": "PASS"
+    },
+    {
+      "actual": "084baed08f71750471be9262028b8c3a69f05d99",
+      "expected": "084baed08f71750471be9262028b8c3a69f05d99",
+      "id": "target.file.scripts/mac/lima-lifecycle.sh.git_blob_oid",
+      "status": "PASS"
+    },
+    {
+      "actual": 8833,
+      "expected": 8833,
+      "id": "target.file.scripts/mac/lima-lifecycle.sh.bytes",
+      "status": "PASS"
+    },
+    {
+      "actual": true,
+      "expected": true,
+      "id": "target.file.scripts/mac/lima-stop.sh.regular",
+      "status": "PASS"
+    },
+    {
+      "actual": "0755",
+      "expected": "0755",
+      "id": "target.file.scripts/mac/lima-stop.sh.mode",
+      "status": "PASS"
+    },
+    {
+      "actual": "bea9a8791d8a339d7036bac2bde413150a5f54f6269df099728029854b61802c",
+      "expected": "bea9a8791d8a339d7036bac2bde413150a5f54f6269df099728029854b61802c",
+      "id": "target.file.scripts/mac/lima-stop.sh.sha256",
+      "status": "PASS"
+    },
+    {
+      "actual": "d8fd432dc4c6fa1488cb4f2906c97119e316ad17",
+      "expected": "d8fd432dc4c6fa1488cb4f2906c97119e316ad17",
+      "id": "target.file.scripts/mac/lima-stop.sh.git_blob_oid",
+      "status": "PASS"
+    },
+    {
+      "actual": 1524,
+      "expected": 1524,
+      "id": "target.file.scripts/mac/lima-stop.sh.bytes",
+      "status": "PASS"
+    },
+    {
+      "actual": true,
+      "expected": true,
+      "id": "target.file.scripts/mac/lima-warm.sh.regular",
+      "status": "PASS"
+    },
+    {
+      "actual": "0755",
+      "expected": "0755",
+      "id": "target.file.scripts/mac/lima-warm.sh.mode",
+      "status": "PASS"
+    },
+    {
+      "actual": "db5e79f1234c3fcec02e1a6b6ddf29ec5a8a572dbeeaed53a0e1acb4c3729c41",
+      "expected": "db5e79f1234c3fcec02e1a6b6ddf29ec5a8a572dbeeaed53a0e1acb4c3729c41",
+      "id": "target.file.scripts/mac/lima-warm.sh.sha256",
+      "status": "PASS"
+    },
+    {
+      "actual": "3bc5f61ba81f196e95be7b860756b340e4e7e1d4",
+      "expected": "3bc5f61ba81f196e95be7b860756b340e4e7e1d4",
+      "id": "target.file.scripts/mac/lima-warm.sh.git_blob_oid",
+      "status": "PASS"
+    },
+    {
+      "actual": 46177,
+      "expected": 46177,
+      "id": "target.file.scripts/mac/lima-warm.sh.bytes",
+      "status": "PASS"
+    },
+    {
+      "actual": true,
+      "expected": true,
+      "id": "target.file.scripts/mac/lima/units/substrate-world-service.socket.regular",
+      "status": "PASS"
+    },
+    {
+      "actual": "0644",
+      "expected": "0644",
+      "id": "target.file.scripts/mac/lima/units/substrate-world-service.socket.mode",
+      "status": "PASS"
+    },
+    {
+      "actual": "6f58cd6f4064198342c860abfca31dba1d90190b1f39d84286e26b2d9c6d62cc",
+      "expected": "6f58cd6f4064198342c860abfca31dba1d90190b1f39d84286e26b2d9c6d62cc",
+      "id": "target.file.scripts/mac/lima/units/substrate-world-service.socket.sha256",
+      "status": "PASS"
+    },
+    {
+      "actual": "71d959a727f7f38a5053a4e0b5a2a38ec2e771fc",
+      "expected": "71d959a727f7f38a5053a4e0b5a2a38ec2e771fc",
+      "id": "target.file.scripts/mac/lima/units/substrate-world-service.socket.git_blob_oid",
+      "status": "PASS"
+    },
+    {
+      "actual": 258,
+      "expected": 258,
+      "id": "target.file.scripts/mac/lima/units/substrate-world-service.socket.bytes",
+      "status": "PASS"
+    },
+    {
+      "actual": true,
+      "expected": true,
+      "id": "target.file.src/bin/substrate-lifecycle-macos.rs.regular",
+      "status": "PASS"
+    },
+    {
+      "actual": "0644",
+      "expected": "0644",
+      "id": "target.file.src/bin/substrate-lifecycle-macos.rs.mode",
+      "status": "PASS"
+    },
+    {
+      "actual": "16736ae9d26a29ad937283a772bae4223fd1dd78057ef27d5971edabaff234e5",
+      "expected": "16736ae9d26a29ad937283a772bae4223fd1dd78057ef27d5971edabaff234e5",
+      "id": "target.file.src/bin/substrate-lifecycle-macos.rs.sha256",
+      "status": "PASS"
+    },
+    {
+      "actual": "32ba65874e0c5fce9fdeaf3427cf9cdf8961124b",
+      "expected": "32ba65874e0c5fce9fdeaf3427cf9cdf8961124b",
+      "id": "target.file.src/bin/substrate-lifecycle-macos.rs.git_blob_oid",
+      "status": "PASS"
+    },
+    {
+      "actual": 30730,
+      "expected": 30730,
+      "id": "target.file.src/bin/substrate-lifecycle-macos.rs.bytes",
+      "status": "PASS"
+    },
+    {
+      "actual": true,
+      "expected": true,
+      "id": "target.file.tests/mac/lifecycle_r3.sh.regular",
+      "status": "PASS"
+    },
+    {
+      "actual": "0755",
+      "expected": "0755",
+      "id": "target.file.tests/mac/lifecycle_r3.sh.mode",
+      "status": "PASS"
+    },
+    {
+      "actual": "0705d558ea507e1d63ca035f56f032fb2936be4e01033ed7a63df42a221bbd2f",
+      "expected": "0705d558ea507e1d63ca035f56f032fb2936be4e01033ed7a63df42a221bbd2f",
+      "id": "target.file.tests/mac/lifecycle_r3.sh.sha256",
+      "status": "PASS"
+    },
+    {
+      "actual": "9bcfa8d9b24d57e1c63fbdba17065ffc1159cf8b",
+      "expected": "9bcfa8d9b24d57e1c63fbdba17065ffc1159cf8b",
+      "id": "target.file.tests/mac/lifecycle_r3.sh.git_blob_oid",
+      "status": "PASS"
+    },
+    {
+      "actual": 11335,
+      "expected": 11335,
+      "id": "target.file.tests/mac/lifecycle_r3.sh.bytes",
+      "status": "PASS"
+    },
+    {
+      "actual": 19,
+      "expected": 19,
+      "id": "target.recovered_tree.row_count",
+      "status": "PASS"
+    },
+    {
+      "actual": [
+        "crates/shell/src/execution/managed_lifecycle/macos_client.rs\t0644\t8e7329c4b46919f959fdf3bb59d41aa3f6a04f679e74dc7b7f3a38c031f4dcc4\t00951d4616ecc0eefefe4f1e09e8ca520b38b059\t7024",
+        "crates/world-mac-lima/src/forwarding.rs\t0644\t244908830ed7a44ca07e772f0eb0e49f401aa6829c4eb6ef6cc520d0a18ba050\t4dc51e1893714cd02c244bef8325dedb90c815f5\t62558",
+        "crates/world-mac-lima/src/lib.rs\t0644\t798834ffb6f7d586cb465b9d4dbfc0426985b98058c4b2afa83b14f087b92ff1\t916a330c484567b2f80e424ab3c02125ec6ff71a\t83512",
+        "llm-last-mile/runtime-refactor/00-README.md\t0644\t7903189e841d054946f6b43df231185aff2d307bd4c5ad6f0b65dca7f0f2d991\t18c882d12a984c19dadd6e22bb6d4598cf7ad705\t91461",
+        "llm-last-mile/runtime-refactor/02-seam-crosswalk.md\t0644\t652091c30407cb41bb9fffdbe22622aacdbce23af22ea3dcf15d70215d97ee36\t1ed1c3c99a6db32ac9a16e71d1811ac7a7777c39\t344016",
+        "llm-last-mile/runtime-refactor/03-phase-slice-map.md\t0644\tbf7070a4ed87e05c2d884e70fd0af34467703e6ec23173470762c718483ea4a4\tf1b80255bcef8453f51902c9d41192342dea369c\t418364",
+        "llm-last-mile/runtime-refactor/04-contracts-and-gates.md\t0644\t5c48831e2673380315f2c9cc23a49ad0e88536e3b4e5953ccd0141ed19a4ec72\t8fb7a413f3982da812b1c2e34af406f63695be9f\t751118",
+        "llm-last-mile/runtime-refactor/05-debug-regression-ledger.md\t0644\t9ee9d8405a9c1eef028b042595334fb414fe9799b4031fa5185dfa0507edd722\t4ce6919302c135844e6b50b48dcb68bb8afea256\t365837",
+        "llm-last-mile/runtime-refactor/review-control/r3-mac-review-allowlist-evidence.md\t0644\ted65f98a752a66ae821847078bad7dd006a1d5036cade9ec8c1b79af7751b8ab\tee1172cfbdea895744c354a4989349c208971522\t4241",
+        "llm-last-mile/runtime-refactor/review-control/r3-mac-review-authority-security.md\t0644\t3a984d3b2182f4bc565370eb25c4a98863ede8d16f64ec4b978db66721b015b3\t5810f59c3ad4b88e5092f44b0808908786d49062\t6389",
+        "llm-last-mile/runtime-refactor/review-control/r3-mac-review-cycle-record.json\t0644\tbc7258fb432375e50af899f14691c7691980d4f99a8174b8e2d6ee2e1a29e003\t0775cfde96312ce2b73a94cca2004aacf59a7fd9\t4779",
+        "llm-last-mile/runtime-refactor/review-control/r3-mac-review-lifecycle-convergence.md\t0644\t321dd181a40841fcce83a62835fe37f75b51c953e29922caee60445695481bba\t644da35b2565a5740642a84632c686328dcd9684\t5765",
+        "scripts/mac/com.substrate.lifecycle.publisher.v1.plist\t0644\te75eb753882ffb00aa611bee9976e4f66e44c4fdc59cc43bd9e23aa5020f860d\t5b5f63b69c37f6d0155214de37589924311db014\t615",
+        "scripts/mac/lima-lifecycle.sh\t0755\t334be549d7882372863560b6773120c389886c5af452b61b719acf2a7d383d32\t084baed08f71750471be9262028b8c3a69f05d99\t8833",
+        "scripts/mac/lima-stop.sh\t0755\tbea9a8791d8a339d7036bac2bde413150a5f54f6269df099728029854b61802c\td8fd432dc4c6fa1488cb4f2906c97119e316ad17\t1524",
+        "scripts/mac/lima-warm.sh\t0755\tdb5e79f1234c3fcec02e1a6b6ddf29ec5a8a572dbeeaed53a0e1acb4c3729c41\t3bc5f61ba81f196e95be7b860756b340e4e7e1d4\t46177",
+        "scripts/mac/lima/units/substrate-world-service.socket\t0644\t6f58cd6f4064198342c860abfca31dba1d90190b1f39d84286e26b2d9c6d62cc\t71d959a727f7f38a5053a4e0b5a2a38ec2e771fc\t258",
+        "src/bin/substrate-lifecycle-macos.rs\t0644\t16736ae9d26a29ad937283a772bae4223fd1dd78057ef27d5971edabaff234e5\t32ba65874e0c5fce9fdeaf3427cf9cdf8961124b\t30730",
+        "tests/mac/lifecycle_r3.sh\t0755\t0705d558ea507e1d63ca035f56f032fb2936be4e01033ed7a63df42a221bbd2f\t9bcfa8d9b24d57e1c63fbdba17065ffc1159cf8b\t11335"
+      ],
+      "expected": [
+        "crates/shell/src/execution/managed_lifecycle/macos_client.rs\t0644\t8e7329c4b46919f959fdf3bb59d41aa3f6a04f679e74dc7b7f3a38c031f4dcc4\t00951d4616ecc0eefefe4f1e09e8ca520b38b059\t7024",
+        "crates/world-mac-lima/src/forwarding.rs\t0644\t244908830ed7a44ca07e772f0eb0e49f401aa6829c4eb6ef6cc520d0a18ba050\t4dc51e1893714cd02c244bef8325dedb90c815f5\t62558",
+        "crates/world-mac-lima/src/lib.rs\t0644\t798834ffb6f7d586cb465b9d4dbfc0426985b98058c4b2afa83b14f087b92ff1\t916a330c484567b2f80e424ab3c02125ec6ff71a\t83512",
+        "llm-last-mile/runtime-refactor/00-README.md\t0644\t7903189e841d054946f6b43df231185aff2d307bd4c5ad6f0b65dca7f0f2d991\t18c882d12a984c19dadd6e22bb6d4598cf7ad705\t91461",
+        "llm-last-mile/runtime-refactor/02-seam-crosswalk.md\t0644\t652091c30407cb41bb9fffdbe22622aacdbce23af22ea3dcf15d70215d97ee36\t1ed1c3c99a6db32ac9a16e71d1811ac7a7777c39\t344016",
+        "llm-last-mile/runtime-refactor/03-phase-slice-map.md\t0644\tbf7070a4ed87e05c2d884e70fd0af34467703e6ec23173470762c718483ea4a4\tf1b80255bcef8453f51902c9d41192342dea369c\t418364",
+        "llm-last-mile/runtime-refactor/04-contracts-and-gates.md\t0644\t5c48831e2673380315f2c9cc23a49ad0e88536e3b4e5953ccd0141ed19a4ec72\t8fb7a413f3982da812b1c2e34af406f63695be9f\t751118",
+        "llm-last-mile/runtime-refactor/05-debug-regression-ledger.md\t0644\t9ee9d8405a9c1eef028b042595334fb414fe9799b4031fa5185dfa0507edd722\t4ce6919302c135844e6b50b48dcb68bb8afea256\t365837",
+        "llm-last-mile/runtime-refactor/review-control/r3-mac-review-allowlist-evidence.md\t0644\ted65f98a752a66ae821847078bad7dd006a1d5036cade9ec8c1b79af7751b8ab\tee1172cfbdea895744c354a4989349c208971522\t4241",
+        "llm-last-mile/runtime-refactor/review-control/r3-mac-review-authority-security.md\t0644\t3a984d3b2182f4bc565370eb25c4a98863ede8d16f64ec4b978db66721b015b3\t5810f59c3ad4b88e5092f44b0808908786d49062\t6389",
+        "llm-last-mile/runtime-refactor/review-control/r3-mac-review-cycle-record.json\t0644\tbc7258fb432375e50af899f14691c7691980d4f99a8174b8e2d6ee2e1a29e003\t0775cfde96312ce2b73a94cca2004aacf59a7fd9\t4779",
+        "llm-last-mile/runtime-refactor/review-control/r3-mac-review-lifecycle-convergence.md\t0644\t321dd181a40841fcce83a62835fe37f75b51c953e29922caee60445695481bba\t644da35b2565a5740642a84632c686328dcd9684\t5765",
+        "scripts/mac/com.substrate.lifecycle.publisher.v1.plist\t0644\te75eb753882ffb00aa611bee9976e4f66e44c4fdc59cc43bd9e23aa5020f860d\t5b5f63b69c37f6d0155214de37589924311db014\t615",
+        "scripts/mac/lima-lifecycle.sh\t0755\t334be549d7882372863560b6773120c389886c5af452b61b719acf2a7d383d32\t084baed08f71750471be9262028b8c3a69f05d99\t8833",
+        "scripts/mac/lima-stop.sh\t0755\tbea9a8791d8a339d7036bac2bde413150a5f54f6269df099728029854b61802c\td8fd432dc4c6fa1488cb4f2906c97119e316ad17\t1524",
+        "scripts/mac/lima-warm.sh\t0755\tdb5e79f1234c3fcec02e1a6b6ddf29ec5a8a572dbeeaed53a0e1acb4c3729c41\t3bc5f61ba81f196e95be7b860756b340e4e7e1d4\t46177",
+        "scripts/mac/lima/units/substrate-world-service.socket\t0644\t6f58cd6f4064198342c860abfca31dba1d90190b1f39d84286e26b2d9c6d62cc\t71d959a727f7f38a5053a4e0b5a2a38ec2e771fc\t258",
+        "src/bin/substrate-lifecycle-macos.rs\t0644\t16736ae9d26a29ad937283a772bae4223fd1dd78057ef27d5971edabaff234e5\t32ba65874e0c5fce9fdeaf3427cf9cdf8961124b\t30730",
+        "tests/mac/lifecycle_r3.sh\t0755\t0705d558ea507e1d63ca035f56f032fb2936be4e01033ed7a63df42a221bbd2f\t9bcfa8d9b24d57e1c63fbdba17065ffc1159cf8b\t11335"
+      ],
+      "id": "target.recovered_tree.rows",
+      "status": "PASS"
+    },
+    {
+      "actual": "a023bc6e2f4929277468f5f418e954b0d7b96671d2d8c24f8790a9674763ff88",
+      "expected": "a023bc6e2f4929277468f5f418e954b0d7b96671d2d8c24f8790a9674763ff88",
+      "id": "target.recovered_tree.sha256",
+      "status": "PASS"
+    },
+    {
+      "actual": [
+        "crates/shell/src/execution/managed_lifecycle/macos_client.rs",
+        "crates/world-mac-lima/src/forwarding.rs",
+        "crates/world-mac-lima/src/lib.rs",
+        "llm-last-mile/runtime-refactor/00-README.md",
+        "llm-last-mile/runtime-refactor/02-seam-crosswalk.md",
+        "llm-last-mile/runtime-refactor/03-phase-slice-map.md",
+        "llm-last-mile/runtime-refactor/04-contracts-and-gates.md",
+        "llm-last-mile/runtime-refactor/05-debug-regression-ledger.md",
+        "scripts/mac/com.substrate.lifecycle.publisher.v1.plist",
+        "scripts/mac/lima-lifecycle.sh",
+        "scripts/mac/lima-stop.sh",
+        "scripts/mac/lima-warm.sh",
+        "scripts/mac/lima/units/substrate-world-service.socket",
+        "src/bin/substrate-lifecycle-macos.rs",
+        "tests/mac/installer_parity_fixture.sh",
+        "tests/mac/lifecycle_r3.sh"
+      ],
+      "expected": [
+        "crates/shell/src/execution/managed_lifecycle/macos_client.rs",
+        "crates/world-mac-lima/src/forwarding.rs",
+        "crates/world-mac-lima/src/lib.rs",
+        "llm-last-mile/runtime-refactor/00-README.md",
+        "llm-last-mile/runtime-refactor/02-seam-crosswalk.md",
+        "llm-last-mile/runtime-refactor/03-phase-slice-map.md",
+        "llm-last-mile/runtime-refactor/04-contracts-and-gates.md",
+        "llm-last-mile/runtime-refactor/05-debug-regression-ledger.md",
+        "scripts/mac/com.substrate.lifecycle.publisher.v1.plist",
+        "scripts/mac/lima-lifecycle.sh",
+        "scripts/mac/lima-stop.sh",
+        "scripts/mac/lima-warm.sh",
+        "scripts/mac/lima/units/substrate-world-service.socket",
+        "src/bin/substrate-lifecycle-macos.rs",
+        "tests/mac/installer_parity_fixture.sh",
+        "tests/mac/lifecycle_r3.sh"
+      ],
+      "id": "historical_subject.paths_sorted",
+      "status": "PASS"
+    },
+    {
+      "actual": 16,
+      "expected": 16,
+      "id": "historical_subject.path_count",
+      "status": "PASS"
+    },
+    {
+      "actual": "940147c2e1d2d763cf6953af8afa239dfffa7ac8",
+      "expected": "940147c2e1d2d763cf6953af8afa239dfffa7ac8",
+      "id": "historical_subject.installer_fixture_blob_oid",
+      "status": "PASS"
+    },
+    {
+      "actual": "sha256:e60963026aa39be67e334119ff7ae61f3f15f19dbfd31539d790f8735b493924",
+      "expected": "sha256:e60963026aa39be67e334119ff7ae61f3f15f19dbfd31539d790f8735b493924",
+      "id": "historical_subject.fingerprint",
+      "status": "PASS"
+    },
+    {
+      "actual": "bc7258fb432375e50af899f14691c7691980d4f99a8174b8e2d6ee2e1a29e003",
+      "expected": "bc7258fb432375e50af899f14691c7691980d4f99a8174b8e2d6ee2e1a29e003",
+      "id": "review_record.sha256",
+      "status": "PASS"
+    },
+    {
+      "actual": [
+        "cycles",
+        "packet_id",
+        "schema_version",
+        "status",
+        "stop_reason"
+      ],
+      "expected": [
+        "cycles",
+        "packet_id",
+        "schema_version",
+        "status",
+        "stop_reason"
+      ],
+      "id": "review_record.top_level_fields",
+      "status": "PASS"
+    },
+    {
+      "actual": 1,
+      "expected": 1,
+      "id": "review_record.schema_version",
+      "status": "PASS"
+    },
+    {
+      "actual": "A1.1d-5R3-MAC",
+      "expected": "A1.1d-5R3-MAC",
+      "id": "review_record.packet_id",
+      "status": "PASS"
+    },
+    {
+      "actual": "bounded_stop",
+      "expected": "bounded_stop",
+      "id": "review_record.status",
+      "status": "PASS"
+    },
+    {
+      "actual": "budget_exhausted",
+      "expected": "budget_exhausted",
+      "id": "review_record.stop_reason",
+      "status": "PASS"
+    },
+    {
+      "actual": 4,
+      "expected": 4,
+      "id": "review_record.cycle_count",
+      "status": "PASS"
+    },
+    {
+      "actual": [
+        "discovery-1",
+        "closure-1",
+        "supplemental-causal-1",
+        "supplemental-causal-2"
+      ],
+      "expected": [
+        "discovery-1",
+        "closure-1",
+        "supplemental-causal-1",
+        "supplemental-causal-2"
+      ],
+      "id": "review_record.cycle_ids",
+      "status": "PASS"
+    },
+    {
+      "actual": [
+        "discovery",
+        "closure",
+        "supplemental_causal",
+        "supplemental_causal"
+      ],
+      "expected": [
+        "discovery",
+        "closure",
+        "supplemental_causal",
+        "supplemental_causal"
+      ],
+      "id": "review_record.cycle_kinds",
+      "status": "PASS"
+    },
+    {
+      "actual": 2,
+      "expected": 2,
+      "id": "review_record.supplemental_causal_count",
+      "status": "PASS"
+    },
+    {
+      "actual": "findings",
+      "expected": "findings",
+      "id": "review_record.terminal_verdict",
+      "status": "PASS"
+    },
+    {
+      "actual": "sha256:e60963026aa39be67e334119ff7ae61f3f15f19dbfd31539d790f8735b493924",
+      "expected": "sha256:e60963026aa39be67e334119ff7ae61f3f15f19dbfd31539d790f8735b493924",
+      "id": "review_record.terminal_subject_fingerprint",
+      "status": "PASS"
+    },
+    {
+      "actual": [
+        "P1-MAC-FINAL-001",
+        "P1-MAC-FINAL-002",
+        "P1-MAC-FINAL-003",
+        "P1-MAC-FINAL-004",
+        "P2-MAC-FINAL-001",
+        "P2-MAC-FINAL-002"
+      ],
+      "expected": [
+        "P1-MAC-FINAL-001",
+        "P1-MAC-FINAL-002",
+        "P1-MAC-FINAL-003",
+        "P1-MAC-FINAL-004",
+        "P2-MAC-FINAL-001",
+        "P2-MAC-FINAL-002"
+      ],
+      "id": "review_record.terminal_findings",
+      "status": "PASS"
+    },
+    {
+      "actual": "acef6844c15d17aba8cfd18d2fc7ef88d9c3420b",
+      "expected": "acef6844c15d17aba8cfd18d2fc7ef88d9c3420b",
+      "id": "meta_repo.base_tree_after",
+      "status": "PASS"
+    },
+    {
+      "actual": "270f6e55e1a94b7e2f9b2667e605980d2e50579c\trefs/heads/feat/internal-host-orchestrator-world-dispatch-bootstrap",
+      "expected": "270f6e55e1a94b7e2f9b2667e605980d2e50579c\trefs/heads/feat/internal-host-orchestrator-world-dispatch-bootstrap",
+      "id": "remote.live_base_after",
+      "status": "PASS"
+    },
+    {
+      "actual": "270f6e55e1a94b7e2f9b2667e605980d2e50579c",
+      "expected": "270f6e55e1a94b7e2f9b2667e605980d2e50579c",
+      "id": "protected.head_after",
+      "status": "PASS"
+    },
+    {
+      "actual": "acef6844c15d17aba8cfd18d2fc7ef88d9c3420b",
+      "expected": "acef6844c15d17aba8cfd18d2fc7ef88d9c3420b",
+      "id": "protected.tree_after",
+      "status": "PASS"
+    },
+    {
+      "actual": 0,
+      "detail": {
+        "stderr": "",
+        "stdout": ""
+      },
+      "expected": 0,
+      "id": "protected.worktree_clean_after",
+      "status": "PASS"
+    },
+    {
+      "actual": 0,
+      "detail": {
+        "stderr": "",
+        "stdout": ""
+      },
+      "expected": 0,
+      "id": "protected.index_clean_after",
+      "status": "PASS"
+    },
+    {
+      "actual": "",
+      "expected": "",
+      "id": "protected.status_after",
+      "status": "PASS"
+    },
+    {
+      "actual": "",
+      "expected": "",
+      "id": "evidence_revision.protected_status_empty",
+      "status": "PASS"
+    },
+    {
+      "actual": 1,
+      "expected": 1,
+      "id": "evidence_revision.target_detached_exit",
+      "status": "PASS"
+    },
+    {
+      "actual": "270f6e55e1a94b7e2f9b2667e605980d2e50579c",
+      "expected": "270f6e55e1a94b7e2f9b2667e605980d2e50579c",
+      "id": "evidence_revision.target_head",
+      "status": "PASS"
+    },
+    {
+      "actual": "acef6844c15d17aba8cfd18d2fc7ef88d9c3420b",
+      "expected": "acef6844c15d17aba8cfd18d2fc7ef88d9c3420b",
+      "id": "evidence_revision.target_tree",
+      "status": "PASS"
+    },
+    {
+      "actual": "270f6e55e1a94b7e2f9b2667e605980d2e50579c\trefs/heads/feat/internal-host-orchestrator-world-dispatch-bootstrap",
+      "expected": "270f6e55e1a94b7e2f9b2667e605980d2e50579c\trefs/heads/feat/internal-host-orchestrator-world-dispatch-bootstrap",
+      "id": "evidence_revision.live_remote_base",
+      "status": "PASS"
+    }
+  ],
+  "evidence_revision": 2,
+  "evidence_revision_note": "Revision 2 immediately revalidated protected diff exit codes and detached identity. Revision 1 serialized blank stdout instead of the zero exit code for two protected-clean checks; no target or protected working-tree mutation occurred during evidence correction.",
+  "failure_count": 0,
+  "failures": [],
+  "historical_subject": {
+    "fingerprint": "sha256:e60963026aa39be67e334119ff7ae61f3f15f19dbfd31539d790f8735b493924",
+    "manifest": "expected_base=270f6e55e1a94b7e2f9b2667e605980d2e50579c\ncrates/shell/src/execution/managed_lifecycle/macos_client.rs\t100644\t00951d4616ecc0eefefe4f1e09e8ca520b38b059\ncrates/world-mac-lima/src/forwarding.rs\t100644\t4dc51e1893714cd02c244bef8325dedb90c815f5\ncrates/world-mac-lima/src/lib.rs\t100644\t916a330c484567b2f80e424ab3c02125ec6ff71a\nllm-last-mile/runtime-refactor/00-README.md\t100644\t18c882d12a984c19dadd6e22bb6d4598cf7ad705\nllm-last-mile/runtime-refactor/02-seam-crosswalk.md\t100644\t1ed1c3c99a6db32ac9a16e71d1811ac7a7777c39\nllm-last-mile/runtime-refactor/03-phase-slice-map.md\t100644\tf1b80255bcef8453f51902c9d41192342dea369c\nllm-last-mile/runtime-refactor/04-contracts-and-gates.md\t100644\t8fb7a413f3982da812b1c2e34af406f63695be9f\nllm-last-mile/runtime-refactor/05-debug-regression-ledger.md\t100644\t4ce6919302c135844e6b50b48dcb68bb8afea256\nscripts/mac/com.substrate.lifecycle.publisher.v1.plist\tNEW\t5b5f63b69c37f6d0155214de37589924311db014\nscripts/mac/lima-lifecycle.sh\tNEW\t084baed08f71750471be9262028b8c3a69f05d99\nscripts/mac/lima-stop.sh\t100755\td8fd432dc4c6fa1488cb4f2906c97119e316ad17\nscripts/mac/lima-warm.sh\t100755\t3bc5f61ba81f196e95be7b860756b340e4e7e1d4\nscripts/mac/lima/units/substrate-world-service.socket\t100644\t71d959a727f7f38a5053a4e0b5a2a38ec2e771fc\nsrc/bin/substrate-lifecycle-macos.rs\tNEW\t32ba65874e0c5fce9fdeaf3427cf9cdf8961124b\ntests/mac/installer_parity_fixture.sh\t100755\t940147c2e1d2d763cf6953af8afa239dfffa7ac8\ntests/mac/lifecycle_r3.sh\tNEW\t9bcfa8d9b24d57e1c63fbdba17065ffc1159cf8b\n",
+    "path_count": 16,
+    "paths": [
+      "crates/shell/src/execution/managed_lifecycle/macos_client.rs",
+      "crates/world-mac-lima/src/forwarding.rs",
+      "crates/world-mac-lima/src/lib.rs",
+      "llm-last-mile/runtime-refactor/00-README.md",
+      "llm-last-mile/runtime-refactor/02-seam-crosswalk.md",
+      "llm-last-mile/runtime-refactor/03-phase-slice-map.md",
+      "llm-last-mile/runtime-refactor/04-contracts-and-gates.md",
+      "llm-last-mile/runtime-refactor/05-debug-regression-ledger.md",
+      "scripts/mac/com.substrate.lifecycle.publisher.v1.plist",
+      "scripts/mac/lima-lifecycle.sh",
+      "scripts/mac/lima-stop.sh",
+      "scripts/mac/lima-warm.sh",
+      "scripts/mac/lima/units/substrate-world-service.socket",
+      "src/bin/substrate-lifecycle-macos.rs",
+      "tests/mac/installer_parity_fixture.sh",
+      "tests/mac/lifecycle_r3.sh"
+    ]
+  },
+  "inputs": {
+    "audit_report": "/Users/spensermcconnell/.codex/worktrees/eb49/substrate/orchestration/substrate-a1-1d-5r3-mac-20260806-41f97e1c570d/recovery/attempt-3/audit/report.json",
+    "base": {
+      "commit": "270f6e55e1a94b7e2f9b2667e605980d2e50579c",
+      "tree": "acef6844c15d17aba8cfd18d2fc7ef88d9c3420b"
+    },
+    "bundle": "/Users/spensermcconnell/.codex/worktrees/eb49/substrate/orchestration/substrate-a1-1d-5r3-mac-20260806-41f97e1c570d/recovery/attempt-3",
+    "expected": {
+      "audit_report_sha256": "99869c925b5caeebb9c8fa0f960d621771d8e533b04a7add4b06b6501d83b7c0",
+      "final_subject_fingerprint": "sha256:e60963026aa39be67e334119ff7ae61f3f15f19dbfd31539d790f8735b493924",
+      "recovered_tree_sha256": "a023bc6e2f4929277468f5f418e954b0d7b96671d2d8c24f8790a9674763ff88",
+      "recovery_manifest_sha256": "9edb61f5aab00299706efe3e73050886d81d80d1eedfdbf15c7d8662d595a908",
+      "review_record_sha256": "bc7258fb432375e50af899f14691c7691980d4f99a8174b8e2d6ee2e1a29e003"
+    },
+    "recovery_manifest": "/Users/spensermcconnell/.codex/worktrees/eb49/substrate/orchestration/substrate-a1-1d-5r3-mac-20260806-41f97e1c570d/recovery/attempt-3/recovery-manifest.json"
+  },
+  "operations": {
+    "authorized": [
+      "created_one_detached_linked_worktree_at_exact_target",
+      "copied_only_19_manifest_listed_recovered_files",
+      "applied_manifest_modes",
+      "wrote_reconstruction_evidence_only_under_reconstruction_directory"
+    ],
+    "not_performed": [
+      "git_add",
+      "git_commit",
+      "git_push",
+      "remote_publication",
+      "protected_checkout_reset_or_clean_or_switch_or_edit",
+      "implementation_tests",
+      "reviews",
+      "GitNexus",
+      "native_evidence",
+      "successor_dispatch"
+    ]
+  },
+  "orchestration_id": "substrate-a1-1d-5r3-mac-20260806-41f97e1c570d",
+  "per_path_recovery": [
+    {
+      "base_state": "present",
+      "bytes": 7024,
+      "git_blob_oid": "00951d4616ecc0eefefe4f1e09e8ca520b38b059",
+      "mode": "0644",
+      "path": "crates/shell/src/execution/managed_lifecycle/macos_client.rs",
+      "sha256": "8e7329c4b46919f959fdf3bb59d41aa3f6a04f679e74dc7b7f3a38c031f4dcc4"
+    },
+    {
+      "base_state": "present",
+      "bytes": 62558,
+      "git_blob_oid": "4dc51e1893714cd02c244bef8325dedb90c815f5",
+      "mode": "0644",
+      "path": "crates/world-mac-lima/src/forwarding.rs",
+      "sha256": "244908830ed7a44ca07e772f0eb0e49f401aa6829c4eb6ef6cc520d0a18ba050"
+    },
+    {
+      "base_state": "present",
+      "bytes": 83512,
+      "git_blob_oid": "916a330c484567b2f80e424ab3c02125ec6ff71a",
+      "mode": "0644",
+      "path": "crates/world-mac-lima/src/lib.rs",
+      "sha256": "798834ffb6f7d586cb465b9d4dbfc0426985b98058c4b2afa83b14f087b92ff1"
+    },
+    {
+      "base_state": "present",
+      "bytes": 91461,
+      "git_blob_oid": "18c882d12a984c19dadd6e22bb6d4598cf7ad705",
+      "mode": "0644",
+      "path": "llm-last-mile/runtime-refactor/00-README.md",
+      "sha256": "7903189e841d054946f6b43df231185aff2d307bd4c5ad6f0b65dca7f0f2d991"
+    },
+    {
+      "base_state": "present",
+      "bytes": 344016,
+      "git_blob_oid": "1ed1c3c99a6db32ac9a16e71d1811ac7a7777c39",
+      "mode": "0644",
+      "path": "llm-last-mile/runtime-refactor/02-seam-crosswalk.md",
+      "sha256": "652091c30407cb41bb9fffdbe22622aacdbce23af22ea3dcf15d70215d97ee36"
+    },
+    {
+      "base_state": "present",
+      "bytes": 418364,
+      "git_blob_oid": "f1b80255bcef8453f51902c9d41192342dea369c",
+      "mode": "0644",
+      "path": "llm-last-mile/runtime-refactor/03-phase-slice-map.md",
+      "sha256": "bf7070a4ed87e05c2d884e70fd0af34467703e6ec23173470762c718483ea4a4"
+    },
+    {
+      "base_state": "present",
+      "bytes": 751118,
+      "git_blob_oid": "8fb7a413f3982da812b1c2e34af406f63695be9f",
+      "mode": "0644",
+      "path": "llm-last-mile/runtime-refactor/04-contracts-and-gates.md",
+      "sha256": "5c48831e2673380315f2c9cc23a49ad0e88536e3b4e5953ccd0141ed19a4ec72"
+    },
+    {
+      "base_state": "present",
+      "bytes": 365837,
+      "git_blob_oid": "4ce6919302c135844e6b50b48dcb68bb8afea256",
+      "mode": "0644",
+      "path": "llm-last-mile/runtime-refactor/05-debug-regression-ledger.md",
+      "sha256": "9ee9d8405a9c1eef028b042595334fb414fe9799b4031fa5185dfa0507edd722"
+    },
+    {
+      "base_state": "absent",
+      "bytes": 4241,
+      "git_blob_oid": "ee1172cfbdea895744c354a4989349c208971522",
+      "mode": "0644",
+      "path": "llm-last-mile/runtime-refactor/review-control/r3-mac-review-allowlist-evidence.md",
+      "sha256": "ed65f98a752a66ae821847078bad7dd006a1d5036cade9ec8c1b79af7751b8ab"
+    },
+    {
+      "base_state": "absent",
+      "bytes": 6389,
+      "git_blob_oid": "5810f59c3ad4b88e5092f44b0808908786d49062",
+      "mode": "0644",
+      "path": "llm-last-mile/runtime-refactor/review-control/r3-mac-review-authority-security.md",
+      "sha256": "3a984d3b2182f4bc565370eb25c4a98863ede8d16f64ec4b978db66721b015b3"
+    },
+    {
+      "base_state": "absent",
+      "bytes": 4779,
+      "git_blob_oid": "0775cfde96312ce2b73a94cca2004aacf59a7fd9",
+      "mode": "0644",
+      "path": "llm-last-mile/runtime-refactor/review-control/r3-mac-review-cycle-record.json",
+      "sha256": "bc7258fb432375e50af899f14691c7691980d4f99a8174b8e2d6ee2e1a29e003"
+    },
+    {
+      "base_state": "absent",
+      "bytes": 5765,
+      "git_blob_oid": "644da35b2565a5740642a84632c686328dcd9684",
+      "mode": "0644",
+      "path": "llm-last-mile/runtime-refactor/review-control/r3-mac-review-lifecycle-convergence.md",
+      "sha256": "321dd181a40841fcce83a62835fe37f75b51c953e29922caee60445695481bba"
+    },
+    {
+      "base_state": "absent",
+      "bytes": 615,
+      "git_blob_oid": "5b5f63b69c37f6d0155214de37589924311db014",
+      "mode": "0644",
+      "path": "scripts/mac/com.substrate.lifecycle.publisher.v1.plist",
+      "sha256": "e75eb753882ffb00aa611bee9976e4f66e44c4fdc59cc43bd9e23aa5020f860d"
+    },
+    {
+      "base_state": "absent",
+      "bytes": 8833,
+      "git_blob_oid": "084baed08f71750471be9262028b8c3a69f05d99",
+      "mode": "0755",
+      "path": "scripts/mac/lima-lifecycle.sh",
+      "sha256": "334be549d7882372863560b6773120c389886c5af452b61b719acf2a7d383d32"
+    },
+    {
+      "base_state": "present",
+      "bytes": 1524,
+      "git_blob_oid": "d8fd432dc4c6fa1488cb4f2906c97119e316ad17",
+      "mode": "0755",
+      "path": "scripts/mac/lima-stop.sh",
+      "sha256": "bea9a8791d8a339d7036bac2bde413150a5f54f6269df099728029854b61802c"
+    },
+    {
+      "base_state": "present",
+      "bytes": 46177,
+      "git_blob_oid": "3bc5f61ba81f196e95be7b860756b340e4e7e1d4",
+      "mode": "0755",
+      "path": "scripts/mac/lima-warm.sh",
+      "sha256": "db5e79f1234c3fcec02e1a6b6ddf29ec5a8a572dbeeaed53a0e1acb4c3729c41"
+    },
+    {
+      "base_state": "present",
+      "bytes": 258,
+      "git_blob_oid": "71d959a727f7f38a5053a4e0b5a2a38ec2e771fc",
+      "mode": "0644",
+      "path": "scripts/mac/lima/units/substrate-world-service.socket",
+      "sha256": "6f58cd6f4064198342c860abfca31dba1d90190b1f39d84286e26b2d9c6d62cc"
+    },
+    {
+      "base_state": "absent",
+      "bytes": 30730,
+      "git_blob_oid": "32ba65874e0c5fce9fdeaf3427cf9cdf8961124b",
+      "mode": "0644",
+      "path": "src/bin/substrate-lifecycle-macos.rs",
+      "sha256": "16736ae9d26a29ad937283a772bae4223fd1dd78057ef27d5971edabaff234e5"
+    },
+    {
+      "base_state": "absent",
+      "bytes": 11335,
+      "git_blob_oid": "9bcfa8d9b24d57e1c63fbdba17065ffc1159cf8b",
+      "mode": "0755",
+      "path": "tests/mac/lifecycle_r3.sh",
+      "sha256": "0705d558ea507e1d63ca035f56f032fb2936be4e01033ed7a63df42a221bbd2f"
+    }
+  ],
+  "post_reconstruction_observations": {
+    "live_remote": {
+      "oid": "270f6e55e1a94b7e2f9b2667e605980d2e50579c",
+      "ref": "refs/heads/feat/internal-host-orchestrator-world-dispatch-bootstrap",
+      "remote": "origin"
+    },
+    "protected_checkout": {
+      "head": "270f6e55e1a94b7e2f9b2667e605980d2e50579c",
+      "index_clean": true,
+      "path": "/Users/spensermcconnell/__Active_Code/atomize-hq/substrate",
+      "status_records": [],
+      "tree": "acef6844c15d17aba8cfd18d2fc7ef88d9c3420b",
+      "worktree_clean": true
+    },
+    "target": {
+      "administrative_record": [
+        "worktree /Users/spensermcconnell/.codex/worktrees/ace6/substrate",
+        "HEAD 270f6e55e1a94b7e2f9b2667e605980d2e50579c",
+        "detached",
+        ""
+      ],
+      "common_git_dir": "/Users/spensermcconnell/__Active_Code/atomize-hq/substrate/.git",
+      "detached": true,
+      "git_dir": "/Users/spensermcconnell/__Active_Code/atomize-hq/substrate/.git/worktrees/substrate6",
+      "head": "270f6e55e1a94b7e2f9b2667e605980d2e50579c",
+      "modified_tracked_paths": [
+        "crates/shell/src/execution/managed_lifecycle/macos_client.rs",
+        "crates/world-mac-lima/src/forwarding.rs",
+        "crates/world-mac-lima/src/lib.rs",
+        "llm-last-mile/runtime-refactor/00-README.md",
+        "llm-last-mile/runtime-refactor/02-seam-crosswalk.md",
+        "llm-last-mile/runtime-refactor/03-phase-slice-map.md",
+        "llm-last-mile/runtime-refactor/04-contracts-and-gates.md",
+        "llm-last-mile/runtime-refactor/05-debug-regression-ledger.md",
+        "scripts/mac/lima-stop.sh",
+        "scripts/mac/lima-warm.sh",
+        "scripts/mac/lima/units/substrate-world-service.socket"
+      ],
+      "path": "/Users/spensermcconnell/.codex/worktrees/ace6/substrate",
+      "staged_paths": [],
+      "status_records": [
+        {
+          "path": "crates/shell/src/execution/managed_lifecycle/macos_client.rs",
+          "xy": " M"
+        },
+        {
+          "path": "crates/world-mac-lima/src/forwarding.rs",
+          "xy": " M"
+        },
+        {
+          "path": "crates/world-mac-lima/src/lib.rs",
+          "xy": " M"
+        },
+        {
+          "path": "llm-last-mile/runtime-refactor/00-README.md",
+          "xy": " M"
+        },
+        {
+          "path": "llm-last-mile/runtime-refactor/02-seam-crosswalk.md",
+          "xy": " M"
+        },
+        {
+          "path": "llm-last-mile/runtime-refactor/03-phase-slice-map.md",
+          "xy": " M"
+        },
+        {
+          "path": "llm-last-mile/runtime-refactor/04-contracts-and-gates.md",
+          "xy": " M"
+        },
+        {
+          "path": "llm-last-mile/runtime-refactor/05-debug-regression-ledger.md",
+          "xy": " M"
+        },
+        {
+          "path": "scripts/mac/lima-stop.sh",
+          "xy": " M"
+        },
+        {
+          "path": "scripts/mac/lima-warm.sh",
+          "xy": " M"
+        },
+        {
+          "path": "scripts/mac/lima/units/substrate-world-service.socket",
+          "xy": " M"
+        },
+        {
+          "path": "llm-last-mile/runtime-refactor/review-control/r3-mac-review-allowlist-evidence.md",
+          "xy": "??"
+        },
+        {
+          "path": "llm-last-mile/runtime-refactor/review-control/r3-mac-review-authority-security.md",
+          "xy": "??"
+        },
+        {
+          "path": "llm-last-mile/runtime-refactor/review-control/r3-mac-review-cycle-record.json",
+          "xy": "??"
+        },
+        {
+          "path": "llm-last-mile/runtime-refactor/review-control/r3-mac-review-lifecycle-convergence.md",
+          "xy": "??"
+        },
+        {
+          "path": "scripts/mac/com.substrate.lifecycle.publisher.v1.plist",
+          "xy": "??"
+        },
+        {
+          "path": "scripts/mac/lima-lifecycle.sh",
+          "xy": "??"
+        },
+        {
+          "path": "src/bin/substrate-lifecycle-macos.rs",
+          "xy": "??"
+        },
+        {
+          "path": "tests/mac/lifecycle_r3.sh",
+          "xy": "??"
+        }
+      ],
+      "tree": "acef6844c15d17aba8cfd18d2fc7ef88d9c3420b",
+      "untracked_paths": [
+        "llm-last-mile/runtime-refactor/review-control/r3-mac-review-allowlist-evidence.md",
+        "llm-last-mile/runtime-refactor/review-control/r3-mac-review-authority-security.md",
+        "llm-last-mile/runtime-refactor/review-control/r3-mac-review-cycle-record.json",
+        "llm-last-mile/runtime-refactor/review-control/r3-mac-review-lifecycle-convergence.md",
+        "scripts/mac/com.substrate.lifecycle.publisher.v1.plist",
+        "scripts/mac/lima-lifecycle.sh",
+        "src/bin/substrate-lifecycle-macos.rs",
+        "tests/mac/lifecycle_r3.sh"
+      ]
+    }
+  },
+  "pre_reconstruction_observations": {
+    "live_remote_before": {
+      "oid": "270f6e55e1a94b7e2f9b2667e605980d2e50579c",
+      "ref": "refs/heads/feat/internal-host-orchestrator-world-dispatch-bootstrap",
+      "remote": "origin"
+    },
+    "protected_checkout_before": {
+      "head": "270f6e55e1a94b7e2f9b2667e605980d2e50579c",
+      "index_clean": true,
+      "status_records": [],
+      "tree": "acef6844c15d17aba8cfd18d2fc7ef88d9c3420b",
+      "worktree_clean": true
+    },
+    "target_path_before": "/Users/spensermcconnell/.codex/worktrees/ace6/substrate",
+    "target_path_was_absent": true,
+    "target_path_was_not_registered_as_linked_worktree": true
+  },
+  "recovered_tree": {
+    "algorithm": "UTF-8 sorted rows: path, tab, octal mode, tab, file SHA-256, tab, Git blob OID, tab, byte size, newline",
+    "row_count": 19,
+    "rows": [
+      "crates/shell/src/execution/managed_lifecycle/macos_client.rs\t0644\t8e7329c4b46919f959fdf3bb59d41aa3f6a04f679e74dc7b7f3a38c031f4dcc4\t00951d4616ecc0eefefe4f1e09e8ca520b38b059\t7024",
+      "crates/world-mac-lima/src/forwarding.rs\t0644\t244908830ed7a44ca07e772f0eb0e49f401aa6829c4eb6ef6cc520d0a18ba050\t4dc51e1893714cd02c244bef8325dedb90c815f5\t62558",
+      "crates/world-mac-lima/src/lib.rs\t0644\t798834ffb6f7d586cb465b9d4dbfc0426985b98058c4b2afa83b14f087b92ff1\t916a330c484567b2f80e424ab3c02125ec6ff71a\t83512",
+      "llm-last-mile/runtime-refactor/00-README.md\t0644\t7903189e841d054946f6b43df231185aff2d307bd4c5ad6f0b65dca7f0f2d991\t18c882d12a984c19dadd6e22bb6d4598cf7ad705\t91461",
+      "llm-last-mile/runtime-refactor/02-seam-crosswalk.md\t0644\t652091c30407cb41bb9fffdbe22622aacdbce23af22ea3dcf15d70215d97ee36\t1ed1c3c99a6db32ac9a16e71d1811ac7a7777c39\t344016",
+      "llm-last-mile/runtime-refactor/03-phase-slice-map.md\t0644\tbf7070a4ed87e05c2d884e70fd0af34467703e6ec23173470762c718483ea4a4\tf1b80255bcef8453f51902c9d41192342dea369c\t418364",
+      "llm-last-mile/runtime-refactor/04-contracts-and-gates.md\t0644\t5c48831e2673380315f2c9cc23a49ad0e88536e3b4e5953ccd0141ed19a4ec72\t8fb7a413f3982da812b1c2e34af406f63695be9f\t751118",
+      "llm-last-mile/runtime-refactor/05-debug-regression-ledger.md\t0644\t9ee9d8405a9c1eef028b042595334fb414fe9799b4031fa5185dfa0507edd722\t4ce6919302c135844e6b50b48dcb68bb8afea256\t365837",
+      "llm-last-mile/runtime-refactor/review-control/r3-mac-review-allowlist-evidence.md\t0644\ted65f98a752a66ae821847078bad7dd006a1d5036cade9ec8c1b79af7751b8ab\tee1172cfbdea895744c354a4989349c208971522\t4241",
+      "llm-last-mile/runtime-refactor/review-control/r3-mac-review-authority-security.md\t0644\t3a984d3b2182f4bc565370eb25c4a98863ede8d16f64ec4b978db66721b015b3\t5810f59c3ad4b88e5092f44b0808908786d49062\t6389",
+      "llm-last-mile/runtime-refactor/review-control/r3-mac-review-cycle-record.json\t0644\tbc7258fb432375e50af899f14691c7691980d4f99a8174b8e2d6ee2e1a29e003\t0775cfde96312ce2b73a94cca2004aacf59a7fd9\t4779",
+      "llm-last-mile/runtime-refactor/review-control/r3-mac-review-lifecycle-convergence.md\t0644\t321dd181a40841fcce83a62835fe37f75b51c953e29922caee60445695481bba\t644da35b2565a5740642a84632c686328dcd9684\t5765",
+      "scripts/mac/com.substrate.lifecycle.publisher.v1.plist\t0644\te75eb753882ffb00aa611bee9976e4f66e44c4fdc59cc43bd9e23aa5020f860d\t5b5f63b69c37f6d0155214de37589924311db014\t615",
+      "scripts/mac/lima-lifecycle.sh\t0755\t334be549d7882372863560b6773120c389886c5af452b61b719acf2a7d383d32\t084baed08f71750471be9262028b8c3a69f05d99\t8833",
+      "scripts/mac/lima-stop.sh\t0755\tbea9a8791d8a339d7036bac2bde413150a5f54f6269df099728029854b61802c\td8fd432dc4c6fa1488cb4f2906c97119e316ad17\t1524",
+      "scripts/mac/lima-warm.sh\t0755\tdb5e79f1234c3fcec02e1a6b6ddf29ec5a8a572dbeeaed53a0e1acb4c3729c41\t3bc5f61ba81f196e95be7b860756b340e4e7e1d4\t46177",
+      "scripts/mac/lima/units/substrate-world-service.socket\t0644\t6f58cd6f4064198342c860abfca31dba1d90190b1f39d84286e26b2d9c6d62cc\t71d959a727f7f38a5053a4e0b5a2a38ec2e771fc\t258",
+      "src/bin/substrate-lifecycle-macos.rs\t0644\t16736ae9d26a29ad937283a772bae4223fd1dd78057ef27d5971edabaff234e5\t32ba65874e0c5fce9fdeaf3427cf9cdf8961124b\t30730",
+      "tests/mac/lifecycle_r3.sh\t0755\t0705d558ea507e1d63ca035f56f032fb2936be4e01033ed7a63df42a221bbd2f\t9bcfa8d9b24d57e1c63fbdba17065ffc1159cf8b\t11335"
+    ],
+    "sha256": "a023bc6e2f4929277468f5f418e954b0d7b96671d2d8c24f8790a9674763ff88"
+  },
+  "review_cycle_record": {
+    "cycle_ids": [
+      "discovery-1",
+      "closure-1",
+      "supplemental-causal-1",
+      "supplemental-causal-2"
+    ],
+    "path": "llm-last-mile/runtime-refactor/review-control/r3-mac-review-cycle-record.json",
+    "sha256": "bc7258fb432375e50af899f14691c7691980d4f99a8174b8e2d6ee2e1a29e003",
+    "status": "bounded_stop",
+    "stop_reason": "budget_exhausted",
+    "supplemental_causal_count": 2,
+    "terminal_findings": [
+      "P1-MAC-FINAL-001",
+      "P1-MAC-FINAL-002",
+      "P1-MAC-FINAL-003",
+      "P1-MAC-FINAL-004",
+      "P2-MAC-FINAL-001",
+      "P2-MAC-FINAL-002"
+    ]
+  },
+  "schema": "substrate.a1-1d-5r3-mac.reconstruction-receipt.v1",
+  "status_inventory": {
+    "modified_tracked_count": 11,
+    "modified_tracked_paths": [
+      "crates/shell/src/execution/managed_lifecycle/macos_client.rs",
+      "crates/world-mac-lima/src/forwarding.rs",
+      "crates/world-mac-lima/src/lib.rs",
+      "llm-last-mile/runtime-refactor/00-README.md",
+      "llm-last-mile/runtime-refactor/02-seam-crosswalk.md",
+      "llm-last-mile/runtime-refactor/03-phase-slice-map.md",
+      "llm-last-mile/runtime-refactor/04-contracts-and-gates.md",
+      "llm-last-mile/runtime-refactor/05-debug-regression-ledger.md",
+      "scripts/mac/lima-stop.sh",
+      "scripts/mac/lima-warm.sh",
+      "scripts/mac/lima/units/substrate-world-service.socket"
+    ],
+    "staged_count": 0,
+    "staged_paths": [],
+    "unexpected_status_records": [],
+    "untracked_count": 8,
+    "untracked_paths": [
+      "llm-last-mile/runtime-refactor/review-control/r3-mac-review-allowlist-evidence.md",
+      "llm-last-mile/runtime-refactor/review-control/r3-mac-review-authority-security.md",
+      "llm-last-mile/runtime-refactor/review-control/r3-mac-review-cycle-record.json",
+      "llm-last-mile/runtime-refactor/review-control/r3-mac-review-lifecycle-convergence.md",
+      "scripts/mac/com.substrate.lifecycle.publisher.v1.plist",
+      "scripts/mac/lima-lifecycle.sh",
+      "src/bin/substrate-lifecycle-macos.rs",
+      "tests/mac/lifecycle_r3.sh"
+    ]
+  },
+  "verdict": "RESTORED_EXACT"
+}

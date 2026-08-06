@@ -1,0 +1,1857 @@
+{
+  "checks": [
+    {
+      "details": {
+        "expected_line_count": 1241,
+        "expected_sha256": "114a6f051814f46070e51af691ef4a6a87adf24d465f1ed500ff6a6edc331c98",
+        "line_count": 1241,
+        "sha256": "114a6f051814f46070e51af691ef4a6a87adf24d465f1ed500ff6a6edc331c98"
+      },
+      "id": "transcript_identity",
+      "status": "PASS"
+    },
+    {
+      "details": {
+        "expected_commit": "270f6e55e1a94b7e2f9b2667e605980d2e50579c",
+        "expected_tree": "acef6844c15d17aba8cfd18d2fc7ef88d9c3420b",
+        "head": "270f6e55e1a94b7e2f9b2667e605980d2e50579c",
+        "tree": "acef6844c15d17aba8cfd18d2fc7ef88d9c3420b"
+      },
+      "id": "exact_base_identity",
+      "status": "PASS"
+    },
+    {
+      "details": {
+        "errors": [],
+        "functions_exec_count": 174,
+        "input_and_output_hash_algorithm": "SHA-256 input; SHA-256 sorted-key compact JSON output inventory",
+        "raw_custom_calls": 174
+      },
+      "id": "transcript_extraction_full_exec_provenance",
+      "status": "PASS"
+    },
+    {
+      "details": {
+        "errors": [],
+        "event_count": 64,
+        "first": "call_WUEPUjxfNiGXnQgUzDCc80Pd",
+        "input_and_output_hash_algorithm": "SHA-256 input; SHA-256 sorted-key compact JSON output inventory",
+        "last": "call_xQFd0EAohZBj6mOPDrA1cMXm",
+        "sequence": "strict 1..64 chronological transcript lines"
+      },
+      "id": "mutation_event_chronology_and_raw_provenance",
+      "status": "PASS"
+    },
+    {
+      "details": {
+        "errors": [],
+        "pre_audit_regular_file_count": 24
+      },
+      "id": "all_bundle_artifact_hashes",
+      "status": "PASS"
+    },
+    {
+      "details": {
+        "actual_path_count": 19,
+        "manifest_path_count": 19,
+        "paths_match": true,
+        "special_or_symlink_entries": []
+      },
+      "id": "recovered_path_set_and_file_types",
+      "status": "PASS"
+    },
+    {
+      "details": {
+        "classification_counts": {
+          "modified": 11,
+          "new": 8
+        },
+        "paths_with_mismatch": []
+      },
+      "id": "per_path_base_and_recovered_exactness",
+      "status": "PASS"
+    },
+    {
+      "details": {
+        "bundle_rows_exact": true,
+        "expected_sha256": "a023bc6e2f4929277468f5f418e954b0d7b96671d2d8c24f8790a9674763ff88",
+        "row_count": 19,
+        "sha256": "a023bc6e2f4929277468f5f418e954b0d7b96671d2d8c24f8790a9674763ff88"
+      },
+      "id": "recovered_tree_row_digest",
+      "status": "PASS"
+    },
+    {
+      "details": {
+        "errors": [],
+        "expected_sha256": "sha256:e60963026aa39be67e334119ff7ae61f3f15f19dbfd31539d790f8735b493924",
+        "sha256": "sha256:e60963026aa39be67e334119ff7ae61f3f15f19dbfd31539d790f8735b493924",
+        "source_path_list_call": "call_Eb02M8CRfq8P03Ua4XHtYdpr",
+        "subject_path_count": 16,
+        "subject_paths_sorted": true,
+        "terminal_algorithm_call": "call_lmcD1PyIOR0nFyozkGxrlLpc"
+      },
+      "id": "historical_final_subject_fingerprint",
+      "status": "PASS"
+    },
+    {
+      "details": {
+        "errors": [],
+        "objects": [
+          {
+            "matches_recovered_bytes": true,
+            "oid": "d8fd432dc4c6fa1488cb4f2906c97119e316ad17",
+            "path": "scripts/mac/lima-stop.sh",
+            "sha256": "bea9a8791d8a339d7036bac2bde413150a5f54f6269df099728029854b61802c",
+            "type": "blob"
+          },
+          {
+            "matches_recovered_bytes": true,
+            "oid": "3bc5f61ba81f196e95be7b860756b340e4e7e1d4",
+            "path": "scripts/mac/lima-warm.sh",
+            "sha256": "db5e79f1234c3fcec02e1a6b6ddf29ec5a8a572dbeeaed53a0e1acb4c3729c41",
+            "type": "blob"
+          }
+        ]
+      },
+      "id": "retained_git_object_sources_for_two_terminal_blobs",
+      "status": "PASS"
+    },
+    {
+      "details": {
+        "cycle_count": 4,
+        "errors": [],
+        "expected_sha256": "bc7258fb432375e50af899f14691c7691980d4f99a8174b8e2d6ee2e1a29e003",
+        "final_findings": [
+          {
+            "finding_id": "P1-MAC-FINAL-001",
+            "priority": "P1"
+          },
+          {
+            "finding_id": "P1-MAC-FINAL-002",
+            "priority": "P1"
+          },
+          {
+            "finding_id": "P1-MAC-FINAL-003",
+            "priority": "P1"
+          },
+          {
+            "finding_id": "P1-MAC-FINAL-004",
+            "priority": "P1"
+          },
+          {
+            "finding_id": "P2-MAC-FINAL-001",
+            "priority": "P2"
+          },
+          {
+            "finding_id": "P2-MAC-FINAL-002",
+            "priority": "P2"
+          }
+        ],
+        "sha256": "bc7258fb432375e50af899f14691c7691980d4f99a8174b8e2d6ee2e1a29e003"
+      },
+      "id": "review_record_digest_and_semantic_terminal_sequence",
+      "status": "PASS"
+    },
+    {
+      "details": {
+        "errors": [],
+        "final_review_anchor": {
+          "call_id": "call_479rfmLoMxBgjWSLoK5hdCUb",
+          "transcript_line": 1181
+        },
+        "final_subject_anchor": {
+          "call_id": "call_lmcD1PyIOR0nFyozkGxrlLpc",
+          "transcript_line": 1129
+        },
+        "post_anchor_static_target_scan": "all later raw calls scanned for direct Path/cat/apply-patch targets; prose/receipt references excluded",
+        "stale_candidates": {
+          "crates/shell/src/execution/managed_lifecycle/macos_client.rs": [],
+          "crates/world-mac-lima/src/forwarding.rs": [],
+          "crates/world-mac-lima/src/lib.rs": [],
+          "llm-last-mile/runtime-refactor/00-README.md": [],
+          "llm-last-mile/runtime-refactor/02-seam-crosswalk.md": [],
+          "llm-last-mile/runtime-refactor/03-phase-slice-map.md": [],
+          "llm-last-mile/runtime-refactor/04-contracts-and-gates.md": [],
+          "llm-last-mile/runtime-refactor/05-debug-regression-ledger.md": [],
+          "llm-last-mile/runtime-refactor/review-control/r3-mac-review-allowlist-evidence.md": [],
+          "llm-last-mile/runtime-refactor/review-control/r3-mac-review-authority-security.md": [],
+          "llm-last-mile/runtime-refactor/review-control/r3-mac-review-cycle-record.json": [],
+          "llm-last-mile/runtime-refactor/review-control/r3-mac-review-lifecycle-convergence.md": [],
+          "scripts/mac/com.substrate.lifecycle.publisher.v1.plist": [],
+          "scripts/mac/lima-lifecycle.sh": [],
+          "scripts/mac/lima-stop.sh": [],
+          "scripts/mac/lima-warm.sh": [],
+          "scripts/mac/lima/units/substrate-world-service.socket": [],
+          "src/bin/substrate-lifecycle-macos.rs": [],
+          "tests/mac/lifecycle_r3.sh": []
+        }
+      },
+      "id": "all_19_path_chronological_transcript_provenance_and_no_later_stale_mutation",
+      "status": "PASS"
+    },
+    {
+      "details": {
+        "errors": [],
+        "exact_final_path_count": 19,
+        "plan_sha256": "96e5fa7ffd3f11de9f15786941eb7d1e166d8dc5dda21672b91751c0cb92a6cb",
+        "reconstruction_method": "start detached exact base; copy only manifest-listed recovered-files with listed modes; do not git add"
+      },
+      "id": "replay_plan_determinism_and_protected_boundary",
+      "status": "PASS"
+    },
+    {
+      "details": {
+        "base_commit": "270f6e55e1a94b7e2f9b2667e605980d2e50579c",
+        "base_tree": "acef6844c15d17aba8cfd18d2fc7ef88d9c3420b",
+        "errors": [],
+        "modified_paths": 11,
+        "staged_paths": [],
+        "untracked_paths": 8
+      },
+      "id": "detached_exact_base_worktree_reconstruction_sufficiency",
+      "status": "PASS"
+    }
+  ],
+  "defects": [],
+  "independent_digests": {
+    "bundle_digests_file": {
+      "sha256": "b2d6fc57e15227be0c8df0095909d64b4a402356ee9ae6b8aba0f0fb055c8706"
+    },
+    "final_subject_fingerprint": {
+      "expected_sha256": "sha256:e60963026aa39be67e334119ff7ae61f3f15f19dbfd31539d790f8735b493924",
+      "sha256": "sha256:e60963026aa39be67e334119ff7ae61f3f15f19dbfd31539d790f8735b493924"
+    },
+    "mutation_events": {
+      "count": 64,
+      "expected_sha256": "531ab053ca66bca12eea9610883dc7f3664dff3aafcacd361029bc7bcd436076",
+      "sha256": "531ab053ca66bca12eea9610883dc7f3664dff3aafcacd361029bc7bcd436076"
+    },
+    "recovered_tree": {
+      "expected_sha256": "a023bc6e2f4929277468f5f418e954b0d7b96671d2d8c24f8790a9674763ff88",
+      "row_count": 19,
+      "sha256": "a023bc6e2f4929277468f5f418e954b0d7b96671d2d8c24f8790a9674763ff88"
+    },
+    "recovery_manifest": {
+      "expected_sha256": "9edb61f5aab00299706efe3e73050886d81d80d1eedfdbf15c7d8662d595a908",
+      "sha256": "9edb61f5aab00299706efe3e73050886d81d80d1eedfdbf15c7d8662d595a908"
+    },
+    "replay_plan": {
+      "expected_sha256": "96e5fa7ffd3f11de9f15786941eb7d1e166d8dc5dda21672b91751c0cb92a6cb",
+      "sha256": "96e5fa7ffd3f11de9f15786941eb7d1e166d8dc5dda21672b91751c0cb92a6cb"
+    },
+    "review_record": {
+      "expected_sha256": "bc7258fb432375e50af899f14691c7691980d4f99a8174b8e2d6ee2e1a29e003",
+      "sha256": "bc7258fb432375e50af899f14691c7691980d4f99a8174b8e2d6ee2e1a29e003"
+    },
+    "transcript": {
+      "line_count": 1241,
+      "path": "/Users/spensermcconnell/.codex/sessions/2026/08/06/rollout-2026-08-06T16-56-31-019fd8dd-071f-7e53-9107-69ca8b9be586.jsonl",
+      "sha256": "114a6f051814f46070e51af691ef4a6a87adf24d465f1ed500ff6a6edc331c98"
+    },
+    "transcript_extraction": {
+      "expected_sha256": "6cb8ab1734eb89132cdfa3b93d37ef8529fbb76a6e6d7a78c866774ab6886d6c",
+      "sha256": "6cb8ab1734eb89132cdfa3b93d37ef8529fbb76a6e6d7a78c866774ab6886d6c"
+    }
+  },
+  "per_path_coverage": [
+    {
+      "base": {
+        "bytes": 879,
+        "git_blob_oid": "9996ba171835aa0a6a5d53001d6be96c5ff7b971",
+        "mode": "100644",
+        "sha256": "638bc9f5d2b9814e94437b928258d41ccef505ba4575a4ab3b74c4d69ce568ff",
+        "state": "present"
+      },
+      "classification": "modified",
+      "last_declared_mutation": {
+        "call_id": "call_IGiXYVuuQ014SjiQuJnQ0Lsz",
+        "sequence": 59,
+        "timestamp": "2026-08-06T21:54:30.994Z",
+        "transcript_line": 1099,
+        "valid_event_and_path_binding": true
+      },
+      "later_path_specific_mutation_candidates": [],
+      "manifest_base_exact": true,
+      "manifest_provenance": [
+        {
+          "call_id": "call_1zg1eirD9f03H0da83UFqC85",
+          "transcript_line": 311
+        },
+        {
+          "call_id": "call_nqL2gg4HIpQamrf6nFE03QO4",
+          "transcript_line": 333
+        },
+        {
+          "call_id": "call_V3XqrcoIys83uNWvICpSt4ID",
+          "transcript_line": 371
+        },
+        {
+          "call_id": "call_obDIrSTHYnma6NPiLPgrvzWw",
+          "transcript_line": 711
+        },
+        {
+          "call_id": "call_IGiXYVuuQ014SjiQuJnQ0Lsz",
+          "transcript_line": 1099
+        }
+      ],
+      "manifest_recovered_exact": true,
+      "path": "crates/shell/src/execution/managed_lifecycle/macos_client.rs",
+      "recovered": {
+        "bytes": 7024,
+        "git_blob_oid": "00951d4616ecc0eefefe4f1e09e8ca520b38b059",
+        "mode": "0644",
+        "sha256": "8e7329c4b46919f959fdf3bb59d41aa3f6a04f679e74dc7b7f3a38c031f4dcc4"
+      },
+      "terminal_anchor": {
+        "call_id": "call_lmcD1PyIOR0nFyozkGxrlLpc",
+        "transcript_line": 1129
+      },
+      "transcript_provenance_coverage": [
+        {
+          "call_id": "call_1zg1eirD9f03H0da83UFqC85",
+          "sequence": 5,
+          "timestamp": "2026-08-06T21:09:23.019Z",
+          "transcript_line": 311,
+          "valid_event_and_path_binding": true
+        },
+        {
+          "call_id": "call_nqL2gg4HIpQamrf6nFE03QO4",
+          "sequence": 8,
+          "timestamp": "2026-08-06T21:11:06.374Z",
+          "transcript_line": 333,
+          "valid_event_and_path_binding": true
+        },
+        {
+          "call_id": "call_V3XqrcoIys83uNWvICpSt4ID",
+          "sequence": 9,
+          "timestamp": "2026-08-06T21:12:59.920Z",
+          "transcript_line": 371,
+          "valid_event_and_path_binding": true
+        },
+        {
+          "call_id": "call_obDIrSTHYnma6NPiLPgrvzWw",
+          "sequence": 34,
+          "timestamp": "2026-08-06T21:30:41.421Z",
+          "transcript_line": 711,
+          "valid_event_and_path_binding": true
+        },
+        {
+          "call_id": "call_IGiXYVuuQ014SjiQuJnQ0Lsz",
+          "sequence": 59,
+          "timestamp": "2026-08-06T21:54:30.994Z",
+          "transcript_line": 1099,
+          "valid_event_and_path_binding": true
+        }
+      ]
+    },
+    {
+      "base": {
+        "bytes": 32502,
+        "git_blob_oid": "92f65b18d19e85429bbeac7a2a0ce53cc9899bfc",
+        "mode": "100644",
+        "sha256": "f3359bb41fc8a4c57a2d3498f743bdf7c14b3ac0857727d9981bc3b8c2a84599",
+        "state": "present"
+      },
+      "classification": "modified",
+      "last_declared_mutation": {
+        "call_id": "call_Ybxcr2yiTnkBVTKWdKwWT0UN",
+        "sequence": 58,
+        "timestamp": "2026-08-06T21:52:54.904Z",
+        "transcript_line": 1078,
+        "valid_event_and_path_binding": true
+      },
+      "later_path_specific_mutation_candidates": [],
+      "manifest_base_exact": true,
+      "manifest_provenance": [
+        {
+          "call_id": "call_wA6Uw08zSviIrADirWSZFNPP",
+          "transcript_line": 300
+        },
+        {
+          "call_id": "call_V3XqrcoIys83uNWvICpSt4ID",
+          "transcript_line": 371
+        },
+        {
+          "call_id": "call_dpyRbL0EYLMFQMkCXR86REyu",
+          "transcript_line": 407
+        },
+        {
+          "call_id": "call_RdY89LB1Ode1Bgu95pUAjMDR",
+          "transcript_line": 416
+        },
+        {
+          "call_id": "call_9u9tED07Syrd9qdFF44JkpAo",
+          "transcript_line": 677
+        },
+        {
+          "call_id": "call_SolyQzuHgjKaj4UuL6o4NlRE",
+          "transcript_line": 686
+        },
+        {
+          "call_id": "call_obDIrSTHYnma6NPiLPgrvzWw",
+          "transcript_line": 711
+        },
+        {
+          "call_id": "call_GdQnhONB5ODj05DA7rO89h3f",
+          "transcript_line": 726
+        },
+        {
+          "call_id": "call_CqTmiV9xrz1whKWA1ZCA5dKB",
+          "transcript_line": 736
+        },
+        {
+          "call_id": "call_hmiZTbqACwbSYtkZu3hhvOw1",
+          "transcript_line": 772
+        },
+        {
+          "call_id": "call_B4CO5eyGdJZhOL8YsFouXly0",
+          "transcript_line": 776
+        },
+        {
+          "call_id": "call_jiaKvumKQnwSg25TuyhcH1wd",
+          "transcript_line": 795
+        },
+        {
+          "call_id": "call_Iwb4MLwMOj7Tj9YDAZyG5heP",
+          "transcript_line": 799
+        },
+        {
+          "call_id": "call_vdDCTgvoTMACE1SKINh1RFcm",
+          "transcript_line": 803
+        },
+        {
+          "call_id": "call_zLEYjAWSm7XoE40cVqnSAzKy",
+          "transcript_line": 807
+        },
+        {
+          "call_id": "call_4T9rI2Bnczd7tGHmyQLNjsNC",
+          "transcript_line": 1041
+        },
+        {
+          "call_id": "call_ovIjoWDz4w3ymJ9RWgSikskY",
+          "transcript_line": 1050
+        },
+        {
+          "call_id": "call_tZh0eY7XIXqJXOFO3wVzu3WK",
+          "transcript_line": 1054
+        },
+        {
+          "call_id": "call_uxpR1nDYB6e8RCY3OswVo8ml",
+          "transcript_line": 1058
+        },
+        {
+          "call_id": "call_Ybxcr2yiTnkBVTKWdKwWT0UN",
+          "transcript_line": 1078
+        }
+      ],
+      "manifest_recovered_exact": true,
+      "path": "crates/world-mac-lima/src/forwarding.rs",
+      "recovered": {
+        "bytes": 62558,
+        "git_blob_oid": "4dc51e1893714cd02c244bef8325dedb90c815f5",
+        "mode": "0644",
+        "sha256": "244908830ed7a44ca07e772f0eb0e49f401aa6829c4eb6ef6cc520d0a18ba050"
+      },
+      "terminal_anchor": {
+        "call_id": "call_lmcD1PyIOR0nFyozkGxrlLpc",
+        "transcript_line": 1129
+      },
+      "transcript_provenance_coverage": [
+        {
+          "call_id": "call_wA6Uw08zSviIrADirWSZFNPP",
+          "sequence": 3,
+          "timestamp": "2026-08-06T21:08:52.526Z",
+          "transcript_line": 300,
+          "valid_event_and_path_binding": true
+        },
+        {
+          "call_id": "call_V3XqrcoIys83uNWvICpSt4ID",
+          "sequence": 9,
+          "timestamp": "2026-08-06T21:12:59.920Z",
+          "transcript_line": 371,
+          "valid_event_and_path_binding": true
+        },
+        {
+          "call_id": "call_dpyRbL0EYLMFQMkCXR86REyu",
+          "sequence": 14,
+          "timestamp": "2026-08-06T21:14:47.062Z",
+          "transcript_line": 407,
+          "valid_event_and_path_binding": true
+        },
+        {
+          "call_id": "call_RdY89LB1Ode1Bgu95pUAjMDR",
+          "sequence": 15,
+          "timestamp": "2026-08-06T21:15:32.337Z",
+          "transcript_line": 416,
+          "valid_event_and_path_binding": true
+        },
+        {
+          "call_id": "call_9u9tED07Syrd9qdFF44JkpAo",
+          "sequence": 29,
+          "timestamp": "2026-08-06T21:28:30.921Z",
+          "transcript_line": 677,
+          "valid_event_and_path_binding": true
+        },
+        {
+          "call_id": "call_SolyQzuHgjKaj4UuL6o4NlRE",
+          "sequence": 30,
+          "timestamp": "2026-08-06T21:29:08.251Z",
+          "transcript_line": 686,
+          "valid_event_and_path_binding": true
+        },
+        {
+          "call_id": "call_obDIrSTHYnma6NPiLPgrvzWw",
+          "sequence": 34,
+          "timestamp": "2026-08-06T21:30:41.421Z",
+          "transcript_line": 711,
+          "valid_event_and_path_binding": true
+        },
+        {
+          "call_id": "call_GdQnhONB5ODj05DA7rO89h3f",
+          "sequence": 36,
+          "timestamp": "2026-08-06T21:31:56.053Z",
+          "transcript_line": 726,
+          "valid_event_and_path_binding": true
+        },
+        {
+          "call_id": "call_CqTmiV9xrz1whKWA1ZCA5dKB",
+          "sequence": 37,
+          "timestamp": "2026-08-06T21:32:37.184Z",
+          "transcript_line": 736,
+          "valid_event_and_path_binding": true
+        },
+        {
+          "call_id": "call_hmiZTbqACwbSYtkZu3hhvOw1",
+          "sequence": 38,
+          "timestamp": "2026-08-06T21:34:44.461Z",
+          "transcript_line": 772,
+          "valid_event_and_path_binding": true
+        },
+        {
+          "call_id": "call_B4CO5eyGdJZhOL8YsFouXly0",
+          "sequence": 39,
+          "timestamp": "2026-08-06T21:34:58.175Z",
+          "transcript_line": 776,
+          "valid_event_and_path_binding": true
+        },
+        {
+          "call_id": "call_jiaKvumKQnwSg25TuyhcH1wd",
+          "sequence": 41,
+          "timestamp": "2026-08-06T21:35:52.253Z",
+          "transcript_line": 795,
+          "valid_event_and_path_binding": true
+        },
+        {
+          "call_id": "call_Iwb4MLwMOj7Tj9YDAZyG5heP",
+          "sequence": 42,
+          "timestamp": "2026-08-06T21:36:09.401Z",
+          "transcript_line": 799,
+          "valid_event_and_path_binding": true
+        },
+        {
+          "call_id": "call_vdDCTgvoTMACE1SKINh1RFcm",
+          "sequence": 43,
+          "timestamp": "2026-08-06T21:36:29.549Z",
+          "transcript_line": 803,
+          "valid_event_and_path_binding": true
+        },
+        {
+          "call_id": "call_zLEYjAWSm7XoE40cVqnSAzKy",
+          "sequence": 44,
+          "timestamp": "2026-08-06T21:36:41.582Z",
+          "transcript_line": 807,
+          "valid_event_and_path_binding": true
+        },
+        {
+          "call_id": "call_4T9rI2Bnczd7tGHmyQLNjsNC",
+          "sequence": 52,
+          "timestamp": "2026-08-06T21:50:21.757Z",
+          "transcript_line": 1041,
+          "valid_event_and_path_binding": true
+        },
+        {
+          "call_id": "call_ovIjoWDz4w3ymJ9RWgSikskY",
+          "sequence": 53,
+          "timestamp": "2026-08-06T21:50:48.931Z",
+          "transcript_line": 1050,
+          "valid_event_and_path_binding": true
+        },
+        {
+          "call_id": "call_tZh0eY7XIXqJXOFO3wVzu3WK",
+          "sequence": 54,
+          "timestamp": "2026-08-06T21:51:05.598Z",
+          "transcript_line": 1054,
+          "valid_event_and_path_binding": true
+        },
+        {
+          "call_id": "call_uxpR1nDYB6e8RCY3OswVo8ml",
+          "sequence": 55,
+          "timestamp": "2026-08-06T21:51:37.727Z",
+          "transcript_line": 1058,
+          "valid_event_and_path_binding": true
+        },
+        {
+          "call_id": "call_Ybxcr2yiTnkBVTKWdKwWT0UN",
+          "sequence": 58,
+          "timestamp": "2026-08-06T21:52:54.904Z",
+          "transcript_line": 1078,
+          "valid_event_and_path_binding": true
+        }
+      ]
+    },
+    {
+      "base": {
+        "bytes": 83231,
+        "git_blob_oid": "06b066071577d3b29be620772f87fee347d77ceb",
+        "mode": "100644",
+        "sha256": "ae3abd1a3915f98cff2a39a358598e7fc947c129f55ea942a2bca762f25e6aee",
+        "state": "present"
+      },
+      "classification": "modified",
+      "last_declared_mutation": {
+        "call_id": "call_obDIrSTHYnma6NPiLPgrvzWw",
+        "sequence": 34,
+        "timestamp": "2026-08-06T21:30:41.421Z",
+        "transcript_line": 711,
+        "valid_event_and_path_binding": true
+      },
+      "later_path_specific_mutation_candidates": [],
+      "manifest_base_exact": true,
+      "manifest_provenance": [
+        {
+          "call_id": "call_CSRGdIvLKNYXhEnDsiGXaDB3",
+          "transcript_line": 306
+        },
+        {
+          "call_id": "call_dpyRbL0EYLMFQMkCXR86REyu",
+          "transcript_line": 407
+        },
+        {
+          "call_id": "call_RdY89LB1Ode1Bgu95pUAjMDR",
+          "transcript_line": 416
+        },
+        {
+          "call_id": "call_zbUjSRBW38PIjsNh9mETFvs8",
+          "transcript_line": 424
+        },
+        {
+          "call_id": "call_9u9tED07Syrd9qdFF44JkpAo",
+          "transcript_line": 677
+        },
+        {
+          "call_id": "call_obDIrSTHYnma6NPiLPgrvzWw",
+          "transcript_line": 711
+        }
+      ],
+      "manifest_recovered_exact": true,
+      "path": "crates/world-mac-lima/src/lib.rs",
+      "recovered": {
+        "bytes": 83512,
+        "git_blob_oid": "916a330c484567b2f80e424ab3c02125ec6ff71a",
+        "mode": "0644",
+        "sha256": "798834ffb6f7d586cb465b9d4dbfc0426985b98058c4b2afa83b14f087b92ff1"
+      },
+      "terminal_anchor": {
+        "call_id": "call_lmcD1PyIOR0nFyozkGxrlLpc",
+        "transcript_line": 1129
+      },
+      "transcript_provenance_coverage": [
+        {
+          "call_id": "call_CSRGdIvLKNYXhEnDsiGXaDB3",
+          "sequence": 4,
+          "timestamp": "2026-08-06T21:09:07.442Z",
+          "transcript_line": 306,
+          "valid_event_and_path_binding": true
+        },
+        {
+          "call_id": "call_dpyRbL0EYLMFQMkCXR86REyu",
+          "sequence": 14,
+          "timestamp": "2026-08-06T21:14:47.062Z",
+          "transcript_line": 407,
+          "valid_event_and_path_binding": true
+        },
+        {
+          "call_id": "call_RdY89LB1Ode1Bgu95pUAjMDR",
+          "sequence": 15,
+          "timestamp": "2026-08-06T21:15:32.337Z",
+          "transcript_line": 416,
+          "valid_event_and_path_binding": true
+        },
+        {
+          "call_id": "call_zbUjSRBW38PIjsNh9mETFvs8",
+          "sequence": 16,
+          "timestamp": "2026-08-06T21:15:53.585Z",
+          "transcript_line": 424,
+          "valid_event_and_path_binding": true
+        },
+        {
+          "call_id": "call_9u9tED07Syrd9qdFF44JkpAo",
+          "sequence": 29,
+          "timestamp": "2026-08-06T21:28:30.921Z",
+          "transcript_line": 677,
+          "valid_event_and_path_binding": true
+        },
+        {
+          "call_id": "call_obDIrSTHYnma6NPiLPgrvzWw",
+          "sequence": 34,
+          "timestamp": "2026-08-06T21:30:41.421Z",
+          "transcript_line": 711,
+          "valid_event_and_path_binding": true
+        }
+      ]
+    },
+    {
+      "base": {
+        "bytes": 90623,
+        "git_blob_oid": "b496aa0bfdf9020eb89d5a57d343dac32668b13c",
+        "mode": "100644",
+        "sha256": "9a913a6da5b5048802207736785e88a24137dbef254db0425d6d6dd1f6eca8cc",
+        "state": "present"
+      },
+      "classification": "modified",
+      "last_declared_mutation": {
+        "call_id": "call_mPXiFvYOnSI0M88j4A1lqjx1",
+        "sequence": 18,
+        "timestamp": "2026-08-06T21:17:25.164Z",
+        "transcript_line": 451,
+        "valid_event_and_path_binding": true
+      },
+      "later_path_specific_mutation_candidates": [],
+      "manifest_base_exact": true,
+      "manifest_provenance": [
+        {
+          "call_id": "call_mPXiFvYOnSI0M88j4A1lqjx1",
+          "transcript_line": 451
+        }
+      ],
+      "manifest_recovered_exact": true,
+      "path": "llm-last-mile/runtime-refactor/00-README.md",
+      "recovered": {
+        "bytes": 91461,
+        "git_blob_oid": "18c882d12a984c19dadd6e22bb6d4598cf7ad705",
+        "mode": "0644",
+        "sha256": "7903189e841d054946f6b43df231185aff2d307bd4c5ad6f0b65dca7f0f2d991"
+      },
+      "terminal_anchor": {
+        "call_id": "call_lmcD1PyIOR0nFyozkGxrlLpc",
+        "transcript_line": 1129
+      },
+      "transcript_provenance_coverage": [
+        {
+          "call_id": "call_mPXiFvYOnSI0M88j4A1lqjx1",
+          "sequence": 18,
+          "timestamp": "2026-08-06T21:17:25.164Z",
+          "transcript_line": 451,
+          "valid_event_and_path_binding": true
+        }
+      ]
+    },
+    {
+      "base": {
+        "bytes": 343374,
+        "git_blob_oid": "e44f544062eac5dad8f5fb035ddbe2c47e5ef821",
+        "mode": "100644",
+        "sha256": "e2ef63ca3f9be4a990372da9faa8f3a1c8ff5dec293536effd9b2bfa21d7ffb4",
+        "state": "present"
+      },
+      "classification": "modified",
+      "last_declared_mutation": {
+        "call_id": "call_mPXiFvYOnSI0M88j4A1lqjx1",
+        "sequence": 18,
+        "timestamp": "2026-08-06T21:17:25.164Z",
+        "transcript_line": 451,
+        "valid_event_and_path_binding": true
+      },
+      "later_path_specific_mutation_candidates": [],
+      "manifest_base_exact": true,
+      "manifest_provenance": [
+        {
+          "call_id": "call_mPXiFvYOnSI0M88j4A1lqjx1",
+          "transcript_line": 451
+        }
+      ],
+      "manifest_recovered_exact": true,
+      "path": "llm-last-mile/runtime-refactor/02-seam-crosswalk.md",
+      "recovered": {
+        "bytes": 344016,
+        "git_blob_oid": "1ed1c3c99a6db32ac9a16e71d1811ac7a7777c39",
+        "mode": "0644",
+        "sha256": "652091c30407cb41bb9fffdbe22622aacdbce23af22ea3dcf15d70215d97ee36"
+      },
+      "terminal_anchor": {
+        "call_id": "call_lmcD1PyIOR0nFyozkGxrlLpc",
+        "transcript_line": 1129
+      },
+      "transcript_provenance_coverage": [
+        {
+          "call_id": "call_mPXiFvYOnSI0M88j4A1lqjx1",
+          "sequence": 18,
+          "timestamp": "2026-08-06T21:17:25.164Z",
+          "transcript_line": 451,
+          "valid_event_and_path_binding": true
+        }
+      ]
+    },
+    {
+      "base": {
+        "bytes": 418043,
+        "git_blob_oid": "30f712ef4b790819e66b36a274243a48ee840c04",
+        "mode": "100644",
+        "sha256": "484d5557f9dd3e593541630cf245c053c2a1e5c685cee43a7329b9bbaa26c0bd",
+        "state": "present"
+      },
+      "classification": "modified",
+      "last_declared_mutation": {
+        "call_id": "call_mPXiFvYOnSI0M88j4A1lqjx1",
+        "sequence": 18,
+        "timestamp": "2026-08-06T21:17:25.164Z",
+        "transcript_line": 451,
+        "valid_event_and_path_binding": true
+      },
+      "later_path_specific_mutation_candidates": [],
+      "manifest_base_exact": true,
+      "manifest_provenance": [
+        {
+          "call_id": "call_mPXiFvYOnSI0M88j4A1lqjx1",
+          "transcript_line": 451
+        }
+      ],
+      "manifest_recovered_exact": true,
+      "path": "llm-last-mile/runtime-refactor/03-phase-slice-map.md",
+      "recovered": {
+        "bytes": 418364,
+        "git_blob_oid": "f1b80255bcef8453f51902c9d41192342dea369c",
+        "mode": "0644",
+        "sha256": "bf7070a4ed87e05c2d884e70fd0af34467703e6ec23173470762c718483ea4a4"
+      },
+      "terminal_anchor": {
+        "call_id": "call_lmcD1PyIOR0nFyozkGxrlLpc",
+        "transcript_line": 1129
+      },
+      "transcript_provenance_coverage": [
+        {
+          "call_id": "call_mPXiFvYOnSI0M88j4A1lqjx1",
+          "sequence": 18,
+          "timestamp": "2026-08-06T21:17:25.164Z",
+          "transcript_line": 451,
+          "valid_event_and_path_binding": true
+        }
+      ]
+    },
+    {
+      "base": {
+        "bytes": 750674,
+        "git_blob_oid": "38f365ccf078317a0323e3ad8dd20d21ab44861c",
+        "mode": "100644",
+        "sha256": "b8527d6f9655fc3fee23f0d1ca97838ad4c762ef90ed7cb7d6625d8de8657bed",
+        "state": "present"
+      },
+      "classification": "modified",
+      "last_declared_mutation": {
+        "call_id": "call_mPXiFvYOnSI0M88j4A1lqjx1",
+        "sequence": 18,
+        "timestamp": "2026-08-06T21:17:25.164Z",
+        "transcript_line": 451,
+        "valid_event_and_path_binding": true
+      },
+      "later_path_specific_mutation_candidates": [],
+      "manifest_base_exact": true,
+      "manifest_provenance": [
+        {
+          "call_id": "call_mPXiFvYOnSI0M88j4A1lqjx1",
+          "transcript_line": 451
+        }
+      ],
+      "manifest_recovered_exact": true,
+      "path": "llm-last-mile/runtime-refactor/04-contracts-and-gates.md",
+      "recovered": {
+        "bytes": 751118,
+        "git_blob_oid": "8fb7a413f3982da812b1c2e34af406f63695be9f",
+        "mode": "0644",
+        "sha256": "5c48831e2673380315f2c9cc23a49ad0e88536e3b4e5953ccd0141ed19a4ec72"
+      },
+      "terminal_anchor": {
+        "call_id": "call_lmcD1PyIOR0nFyozkGxrlLpc",
+        "transcript_line": 1129
+      },
+      "transcript_provenance_coverage": [
+        {
+          "call_id": "call_mPXiFvYOnSI0M88j4A1lqjx1",
+          "sequence": 18,
+          "timestamp": "2026-08-06T21:17:25.164Z",
+          "transcript_line": 451,
+          "valid_event_and_path_binding": true
+        }
+      ]
+    },
+    {
+      "base": {
+        "bytes": 365182,
+        "git_blob_oid": "eb3fc740108c28761e5799da0d3fe742edf63798",
+        "mode": "100644",
+        "sha256": "04107f1c167902f07ba982189cc5d4904b63186d1346799211925070f62ff1cb",
+        "state": "present"
+      },
+      "classification": "modified",
+      "last_declared_mutation": {
+        "call_id": "call_mPXiFvYOnSI0M88j4A1lqjx1",
+        "sequence": 18,
+        "timestamp": "2026-08-06T21:17:25.164Z",
+        "transcript_line": 451,
+        "valid_event_and_path_binding": true
+      },
+      "later_path_specific_mutation_candidates": [],
+      "manifest_base_exact": true,
+      "manifest_provenance": [
+        {
+          "call_id": "call_mPXiFvYOnSI0M88j4A1lqjx1",
+          "transcript_line": 451
+        }
+      ],
+      "manifest_recovered_exact": true,
+      "path": "llm-last-mile/runtime-refactor/05-debug-regression-ledger.md",
+      "recovered": {
+        "bytes": 365837,
+        "git_blob_oid": "4ce6919302c135844e6b50b48dcb68bb8afea256",
+        "mode": "0644",
+        "sha256": "9ee9d8405a9c1eef028b042595334fb414fe9799b4031fa5185dfa0507edd722"
+      },
+      "terminal_anchor": {
+        "call_id": "call_lmcD1PyIOR0nFyozkGxrlLpc",
+        "transcript_line": 1129
+      },
+      "transcript_provenance_coverage": [
+        {
+          "call_id": "call_mPXiFvYOnSI0M88j4A1lqjx1",
+          "sequence": 18,
+          "timestamp": "2026-08-06T21:17:25.164Z",
+          "transcript_line": 451,
+          "valid_event_and_path_binding": true
+        }
+      ]
+    },
+    {
+      "base": {
+        "bytes": 0,
+        "git_blob_oid": null,
+        "mode": null,
+        "sha256": null,
+        "state": "absent"
+      },
+      "classification": "new",
+      "last_declared_mutation": {
+        "call_id": "call_479rfmLoMxBgjWSLoK5hdCUb",
+        "sequence": 63,
+        "timestamp": "2026-08-06T22:03:09.874Z",
+        "transcript_line": 1181,
+        "valid_event_and_path_binding": true
+      },
+      "later_path_specific_mutation_candidates": [],
+      "manifest_base_exact": true,
+      "manifest_provenance": [
+        {
+          "call_id": "call_I3rZrlCvPYsLLrShFBK8PIWP",
+          "transcript_line": 275
+        },
+        {
+          "call_id": "call_dKzB6H7y8mMVcdKyes6nhV8v",
+          "transcript_line": 908
+        },
+        {
+          "call_id": "call_aPP4B4Fo99UV08YhcZXU9Kls",
+          "transcript_line": 1037
+        },
+        {
+          "call_id": "call_479rfmLoMxBgjWSLoK5hdCUb",
+          "transcript_line": 1181
+        }
+      ],
+      "manifest_recovered_exact": true,
+      "path": "llm-last-mile/runtime-refactor/review-control/r3-mac-review-allowlist-evidence.md",
+      "recovered": {
+        "bytes": 4241,
+        "git_blob_oid": "ee1172cfbdea895744c354a4989349c208971522",
+        "mode": "0644",
+        "sha256": "ed65f98a752a66ae821847078bad7dd006a1d5036cade9ec8c1b79af7751b8ab"
+      },
+      "terminal_anchor": {
+        "call_id": "call_479rfmLoMxBgjWSLoK5hdCUb",
+        "transcript_line": 1181
+      },
+      "transcript_provenance_coverage": [
+        {
+          "call_id": "call_I3rZrlCvPYsLLrShFBK8PIWP",
+          "sequence": 2,
+          "timestamp": "2026-08-06T21:07:17.698Z",
+          "transcript_line": 275,
+          "valid_event_and_path_binding": true
+        },
+        {
+          "call_id": "call_dKzB6H7y8mMVcdKyes6nhV8v",
+          "sequence": 48,
+          "timestamp": "2026-08-06T21:40:35.323Z",
+          "transcript_line": 908,
+          "valid_event_and_path_binding": true
+        },
+        {
+          "call_id": "call_aPP4B4Fo99UV08YhcZXU9Kls",
+          "sequence": 51,
+          "timestamp": "2026-08-06T21:49:58.048Z",
+          "transcript_line": 1037,
+          "valid_event_and_path_binding": true
+        },
+        {
+          "call_id": "call_479rfmLoMxBgjWSLoK5hdCUb",
+          "sequence": 63,
+          "timestamp": "2026-08-06T22:03:09.874Z",
+          "transcript_line": 1181,
+          "valid_event_and_path_binding": true
+        }
+      ]
+    },
+    {
+      "base": {
+        "bytes": 0,
+        "git_blob_oid": null,
+        "mode": null,
+        "sha256": null,
+        "state": "absent"
+      },
+      "classification": "new",
+      "last_declared_mutation": {
+        "call_id": "call_479rfmLoMxBgjWSLoK5hdCUb",
+        "sequence": 63,
+        "timestamp": "2026-08-06T22:03:09.874Z",
+        "transcript_line": 1181,
+        "valid_event_and_path_binding": true
+      },
+      "later_path_specific_mutation_candidates": [],
+      "manifest_base_exact": true,
+      "manifest_provenance": [
+        {
+          "call_id": "call_I3rZrlCvPYsLLrShFBK8PIWP",
+          "transcript_line": 275
+        },
+        {
+          "call_id": "call_dKzB6H7y8mMVcdKyes6nhV8v",
+          "transcript_line": 908
+        },
+        {
+          "call_id": "call_aPP4B4Fo99UV08YhcZXU9Kls",
+          "transcript_line": 1037
+        },
+        {
+          "call_id": "call_479rfmLoMxBgjWSLoK5hdCUb",
+          "transcript_line": 1181
+        }
+      ],
+      "manifest_recovered_exact": true,
+      "path": "llm-last-mile/runtime-refactor/review-control/r3-mac-review-authority-security.md",
+      "recovered": {
+        "bytes": 6389,
+        "git_blob_oid": "5810f59c3ad4b88e5092f44b0808908786d49062",
+        "mode": "0644",
+        "sha256": "3a984d3b2182f4bc565370eb25c4a98863ede8d16f64ec4b978db66721b015b3"
+      },
+      "terminal_anchor": {
+        "call_id": "call_479rfmLoMxBgjWSLoK5hdCUb",
+        "transcript_line": 1181
+      },
+      "transcript_provenance_coverage": [
+        {
+          "call_id": "call_I3rZrlCvPYsLLrShFBK8PIWP",
+          "sequence": 2,
+          "timestamp": "2026-08-06T21:07:17.698Z",
+          "transcript_line": 275,
+          "valid_event_and_path_binding": true
+        },
+        {
+          "call_id": "call_dKzB6H7y8mMVcdKyes6nhV8v",
+          "sequence": 48,
+          "timestamp": "2026-08-06T21:40:35.323Z",
+          "transcript_line": 908,
+          "valid_event_and_path_binding": true
+        },
+        {
+          "call_id": "call_aPP4B4Fo99UV08YhcZXU9Kls",
+          "sequence": 51,
+          "timestamp": "2026-08-06T21:49:58.048Z",
+          "transcript_line": 1037,
+          "valid_event_and_path_binding": true
+        },
+        {
+          "call_id": "call_479rfmLoMxBgjWSLoK5hdCUb",
+          "sequence": 63,
+          "timestamp": "2026-08-06T22:03:09.874Z",
+          "transcript_line": 1181,
+          "valid_event_and_path_binding": true
+        }
+      ]
+    },
+    {
+      "base": {
+        "bytes": 0,
+        "git_blob_oid": null,
+        "mode": null,
+        "sha256": null,
+        "state": "absent"
+      },
+      "classification": "new",
+      "last_declared_mutation": {
+        "call_id": "call_479rfmLoMxBgjWSLoK5hdCUb",
+        "sequence": 63,
+        "timestamp": "2026-08-06T22:03:09.874Z",
+        "transcript_line": 1181,
+        "valid_event_and_path_binding": true
+      },
+      "later_path_specific_mutation_candidates": [],
+      "manifest_base_exact": true,
+      "manifest_provenance": [
+        {
+          "call_id": "call_I3rZrlCvPYsLLrShFBK8PIWP",
+          "transcript_line": 275
+        },
+        {
+          "call_id": "call_dKzB6H7y8mMVcdKyes6nhV8v",
+          "transcript_line": 908
+        },
+        {
+          "call_id": "call_aPP4B4Fo99UV08YhcZXU9Kls",
+          "transcript_line": 1037
+        },
+        {
+          "call_id": "call_479rfmLoMxBgjWSLoK5hdCUb",
+          "transcript_line": 1181
+        }
+      ],
+      "manifest_recovered_exact": true,
+      "path": "llm-last-mile/runtime-refactor/review-control/r3-mac-review-cycle-record.json",
+      "recovered": {
+        "bytes": 4779,
+        "git_blob_oid": "0775cfde96312ce2b73a94cca2004aacf59a7fd9",
+        "mode": "0644",
+        "sha256": "bc7258fb432375e50af899f14691c7691980d4f99a8174b8e2d6ee2e1a29e003"
+      },
+      "terminal_anchor": {
+        "call_id": "call_479rfmLoMxBgjWSLoK5hdCUb",
+        "transcript_line": 1181
+      },
+      "transcript_provenance_coverage": [
+        {
+          "call_id": "call_I3rZrlCvPYsLLrShFBK8PIWP",
+          "sequence": 2,
+          "timestamp": "2026-08-06T21:07:17.698Z",
+          "transcript_line": 275,
+          "valid_event_and_path_binding": true
+        },
+        {
+          "call_id": "call_dKzB6H7y8mMVcdKyes6nhV8v",
+          "sequence": 48,
+          "timestamp": "2026-08-06T21:40:35.323Z",
+          "transcript_line": 908,
+          "valid_event_and_path_binding": true
+        },
+        {
+          "call_id": "call_aPP4B4Fo99UV08YhcZXU9Kls",
+          "sequence": 51,
+          "timestamp": "2026-08-06T21:49:58.048Z",
+          "transcript_line": 1037,
+          "valid_event_and_path_binding": true
+        },
+        {
+          "call_id": "call_479rfmLoMxBgjWSLoK5hdCUb",
+          "sequence": 63,
+          "timestamp": "2026-08-06T22:03:09.874Z",
+          "transcript_line": 1181,
+          "valid_event_and_path_binding": true
+        }
+      ]
+    },
+    {
+      "base": {
+        "bytes": 0,
+        "git_blob_oid": null,
+        "mode": null,
+        "sha256": null,
+        "state": "absent"
+      },
+      "classification": "new",
+      "last_declared_mutation": {
+        "call_id": "call_479rfmLoMxBgjWSLoK5hdCUb",
+        "sequence": 63,
+        "timestamp": "2026-08-06T22:03:09.874Z",
+        "transcript_line": 1181,
+        "valid_event_and_path_binding": true
+      },
+      "later_path_specific_mutation_candidates": [],
+      "manifest_base_exact": true,
+      "manifest_provenance": [
+        {
+          "call_id": "call_I3rZrlCvPYsLLrShFBK8PIWP",
+          "transcript_line": 275
+        },
+        {
+          "call_id": "call_dKzB6H7y8mMVcdKyes6nhV8v",
+          "transcript_line": 908
+        },
+        {
+          "call_id": "call_aPP4B4Fo99UV08YhcZXU9Kls",
+          "transcript_line": 1037
+        },
+        {
+          "call_id": "call_479rfmLoMxBgjWSLoK5hdCUb",
+          "transcript_line": 1181
+        }
+      ],
+      "manifest_recovered_exact": true,
+      "path": "llm-last-mile/runtime-refactor/review-control/r3-mac-review-lifecycle-convergence.md",
+      "recovered": {
+        "bytes": 5765,
+        "git_blob_oid": "644da35b2565a5740642a84632c686328dcd9684",
+        "mode": "0644",
+        "sha256": "321dd181a40841fcce83a62835fe37f75b51c953e29922caee60445695481bba"
+      },
+      "terminal_anchor": {
+        "call_id": "call_479rfmLoMxBgjWSLoK5hdCUb",
+        "transcript_line": 1181
+      },
+      "transcript_provenance_coverage": [
+        {
+          "call_id": "call_I3rZrlCvPYsLLrShFBK8PIWP",
+          "sequence": 2,
+          "timestamp": "2026-08-06T21:07:17.698Z",
+          "transcript_line": 275,
+          "valid_event_and_path_binding": true
+        },
+        {
+          "call_id": "call_dKzB6H7y8mMVcdKyes6nhV8v",
+          "sequence": 48,
+          "timestamp": "2026-08-06T21:40:35.323Z",
+          "transcript_line": 908,
+          "valid_event_and_path_binding": true
+        },
+        {
+          "call_id": "call_aPP4B4Fo99UV08YhcZXU9Kls",
+          "sequence": 51,
+          "timestamp": "2026-08-06T21:49:58.048Z",
+          "transcript_line": 1037,
+          "valid_event_and_path_binding": true
+        },
+        {
+          "call_id": "call_479rfmLoMxBgjWSLoK5hdCUb",
+          "sequence": 63,
+          "timestamp": "2026-08-06T22:03:09.874Z",
+          "transcript_line": 1181,
+          "valid_event_and_path_binding": true
+        }
+      ]
+    },
+    {
+      "base": {
+        "bytes": 0,
+        "git_blob_oid": null,
+        "mode": null,
+        "sha256": null,
+        "state": "absent"
+      },
+      "classification": "new",
+      "last_declared_mutation": {
+        "call_id": "call_nqL2gg4HIpQamrf6nFE03QO4",
+        "sequence": 8,
+        "timestamp": "2026-08-06T21:11:06.374Z",
+        "transcript_line": 333,
+        "valid_event_and_path_binding": true
+      },
+      "later_path_specific_mutation_candidates": [],
+      "manifest_base_exact": true,
+      "manifest_provenance": [
+        {
+          "call_id": "call_nqL2gg4HIpQamrf6nFE03QO4",
+          "transcript_line": 333
+        }
+      ],
+      "manifest_recovered_exact": true,
+      "path": "scripts/mac/com.substrate.lifecycle.publisher.v1.plist",
+      "recovered": {
+        "bytes": 615,
+        "git_blob_oid": "5b5f63b69c37f6d0155214de37589924311db014",
+        "mode": "0644",
+        "sha256": "e75eb753882ffb00aa611bee9976e4f66e44c4fdc59cc43bd9e23aa5020f860d"
+      },
+      "terminal_anchor": {
+        "call_id": "call_lmcD1PyIOR0nFyozkGxrlLpc",
+        "transcript_line": 1129
+      },
+      "transcript_provenance_coverage": [
+        {
+          "call_id": "call_nqL2gg4HIpQamrf6nFE03QO4",
+          "sequence": 8,
+          "timestamp": "2026-08-06T21:11:06.374Z",
+          "transcript_line": 333,
+          "valid_event_and_path_binding": true
+        }
+      ]
+    },
+    {
+      "base": {
+        "bytes": 0,
+        "git_blob_oid": null,
+        "mode": null,
+        "sha256": null,
+        "state": "absent"
+      },
+      "classification": "new",
+      "last_declared_mutation": {
+        "call_id": "call_qUCbE1niHSda91V2YgdOOOnD",
+        "sequence": 45,
+        "timestamp": "2026-08-06T21:37:50.348Z",
+        "transcript_line": 838,
+        "valid_event_and_path_binding": true
+      },
+      "later_path_specific_mutation_candidates": [],
+      "manifest_base_exact": true,
+      "manifest_provenance": [
+        {
+          "call_id": "call_nqL2gg4HIpQamrf6nFE03QO4",
+          "transcript_line": 333
+        },
+        {
+          "call_id": "call_RtdXuf773ZtoW4yte2BCMOJd",
+          "transcript_line": 393
+        },
+        {
+          "call_id": "call_xMatL5NnAUwkwm84HWZBEGZS",
+          "transcript_line": 698
+        },
+        {
+          "call_id": "call_2PX82OW57ytD2eGhGClEwJpj",
+          "transcript_line": 706
+        },
+        {
+          "call_id": "call_qUCbE1niHSda91V2YgdOOOnD",
+          "transcript_line": 838
+        }
+      ],
+      "manifest_recovered_exact": true,
+      "path": "scripts/mac/lima-lifecycle.sh",
+      "recovered": {
+        "bytes": 8833,
+        "git_blob_oid": "084baed08f71750471be9262028b8c3a69f05d99",
+        "mode": "0755",
+        "sha256": "334be549d7882372863560b6773120c389886c5af452b61b719acf2a7d383d32"
+      },
+      "terminal_anchor": {
+        "call_id": "call_lmcD1PyIOR0nFyozkGxrlLpc",
+        "transcript_line": 1129
+      },
+      "transcript_provenance_coverage": [
+        {
+          "call_id": "call_nqL2gg4HIpQamrf6nFE03QO4",
+          "sequence": 8,
+          "timestamp": "2026-08-06T21:11:06.374Z",
+          "transcript_line": 333,
+          "valid_event_and_path_binding": true
+        },
+        {
+          "call_id": "call_RtdXuf773ZtoW4yte2BCMOJd",
+          "sequence": 13,
+          "timestamp": "2026-08-06T21:14:09.504Z",
+          "transcript_line": 393,
+          "valid_event_and_path_binding": true
+        },
+        {
+          "call_id": "call_xMatL5NnAUwkwm84HWZBEGZS",
+          "sequence": 32,
+          "timestamp": "2026-08-06T21:29:54.333Z",
+          "transcript_line": 698,
+          "valid_event_and_path_binding": true
+        },
+        {
+          "call_id": "call_2PX82OW57ytD2eGhGClEwJpj",
+          "sequence": 33,
+          "timestamp": "2026-08-06T21:30:27.889Z",
+          "transcript_line": 706,
+          "valid_event_and_path_binding": true
+        },
+        {
+          "call_id": "call_qUCbE1niHSda91V2YgdOOOnD",
+          "sequence": 45,
+          "timestamp": "2026-08-06T21:37:50.348Z",
+          "transcript_line": 838,
+          "valid_event_and_path_binding": true
+        }
+      ]
+    },
+    {
+      "base": {
+        "bytes": 452,
+        "git_blob_oid": "acb54aae9cce799848a08c3f40aec503f0fdcbeb",
+        "mode": "100755",
+        "sha256": "3ec86b1e31a944167563c17d62406b7f7687e7646f6cc25c811259508ba95654",
+        "state": "present"
+      },
+      "classification": "modified",
+      "last_declared_mutation": {
+        "call_id": "call_nqL2gg4HIpQamrf6nFE03QO4",
+        "sequence": 8,
+        "timestamp": "2026-08-06T21:11:06.374Z",
+        "transcript_line": 333,
+        "valid_event_and_path_binding": true
+      },
+      "later_path_specific_mutation_candidates": [],
+      "manifest_base_exact": true,
+      "manifest_provenance": [
+        {
+          "call_id": "call_nqL2gg4HIpQamrf6nFE03QO4",
+          "transcript_line": 333
+        }
+      ],
+      "manifest_recovered_exact": true,
+      "path": "scripts/mac/lima-stop.sh",
+      "recovered": {
+        "bytes": 1524,
+        "git_blob_oid": "d8fd432dc4c6fa1488cb4f2906c97119e316ad17",
+        "mode": "0755",
+        "sha256": "bea9a8791d8a339d7036bac2bde413150a5f54f6269df099728029854b61802c"
+      },
+      "terminal_anchor": {
+        "call_id": "call_lmcD1PyIOR0nFyozkGxrlLpc",
+        "transcript_line": 1129
+      },
+      "transcript_provenance_coverage": [
+        {
+          "call_id": "call_nqL2gg4HIpQamrf6nFE03QO4",
+          "sequence": 8,
+          "timestamp": "2026-08-06T21:11:06.374Z",
+          "transcript_line": 333,
+          "valid_event_and_path_binding": true
+        }
+      ]
+    },
+    {
+      "base": {
+        "bytes": 68368,
+        "git_blob_oid": "963d9190234d253fd6f375f64d60f5fa7e5f68c9",
+        "mode": "100755",
+        "sha256": "5afb651f20e140508c08829255bbca76ba4cd87c8a60f765e1425f72a1463872",
+        "state": "present"
+      },
+      "classification": "modified",
+      "last_declared_mutation": {
+        "call_id": "call_FIgrrCcQHbhYSaBY6beJPc20",
+        "sequence": 57,
+        "timestamp": "2026-08-06T21:52:20.828Z",
+        "transcript_line": 1070,
+        "valid_event_and_path_binding": true
+      },
+      "later_path_specific_mutation_candidates": [],
+      "manifest_base_exact": true,
+      "manifest_provenance": [
+        {
+          "call_id": "call_yErYRFmufF9SIjLEEImv1jai",
+          "transcript_line": 376
+        },
+        {
+          "call_id": "call_HEEz9imu9wWly2kATrO78iJ9",
+          "transcript_line": 380
+        },
+        {
+          "call_id": "call_FsuwsupNub1Lc6XQvhf9DcOk",
+          "transcript_line": 477
+        },
+        {
+          "call_id": "call_29YAZAdq3NdJSercx8AJhSpi",
+          "transcript_line": 487
+        },
+        {
+          "call_id": "call_lUOhvVOvMmxPeH1VlwvwET3T",
+          "transcript_line": 499
+        },
+        {
+          "call_id": "call_MsbOlw697BnrhU8Y4F4Gfq6x",
+          "transcript_line": 515
+        },
+        {
+          "call_id": "call_JI1ORO1vleSeEss6OPZZbldd",
+          "transcript_line": 1066
+        },
+        {
+          "call_id": "call_FIgrrCcQHbhYSaBY6beJPc20",
+          "transcript_line": 1070
+        }
+      ],
+      "manifest_recovered_exact": true,
+      "path": "scripts/mac/lima-warm.sh",
+      "recovered": {
+        "bytes": 46177,
+        "git_blob_oid": "3bc5f61ba81f196e95be7b860756b340e4e7e1d4",
+        "mode": "0755",
+        "sha256": "db5e79f1234c3fcec02e1a6b6ddf29ec5a8a572dbeeaed53a0e1acb4c3729c41"
+      },
+      "terminal_anchor": {
+        "call_id": "call_lmcD1PyIOR0nFyozkGxrlLpc",
+        "transcript_line": 1129
+      },
+      "transcript_provenance_coverage": [
+        {
+          "call_id": "call_yErYRFmufF9SIjLEEImv1jai",
+          "sequence": 10,
+          "timestamp": "2026-08-06T21:13:38.257Z",
+          "transcript_line": 376,
+          "valid_event_and_path_binding": true
+        },
+        {
+          "call_id": "call_HEEz9imu9wWly2kATrO78iJ9",
+          "sequence": 11,
+          "timestamp": "2026-08-06T21:13:47.378Z",
+          "transcript_line": 380,
+          "valid_event_and_path_binding": true
+        },
+        {
+          "call_id": "call_FsuwsupNub1Lc6XQvhf9DcOk",
+          "sequence": 19,
+          "timestamp": "2026-08-06T21:18:21.441Z",
+          "transcript_line": 477,
+          "valid_event_and_path_binding": true
+        },
+        {
+          "call_id": "call_29YAZAdq3NdJSercx8AJhSpi",
+          "sequence": 20,
+          "timestamp": "2026-08-06T21:18:54.372Z",
+          "transcript_line": 487,
+          "valid_event_and_path_binding": true
+        },
+        {
+          "call_id": "call_lUOhvVOvMmxPeH1VlwvwET3T",
+          "sequence": 21,
+          "timestamp": "2026-08-06T21:19:24.032Z",
+          "transcript_line": 499,
+          "valid_event_and_path_binding": true
+        },
+        {
+          "call_id": "call_MsbOlw697BnrhU8Y4F4Gfq6x",
+          "sequence": 22,
+          "timestamp": "2026-08-06T21:20:03.776Z",
+          "transcript_line": 515,
+          "valid_event_and_path_binding": true
+        },
+        {
+          "call_id": "call_JI1ORO1vleSeEss6OPZZbldd",
+          "sequence": 56,
+          "timestamp": "2026-08-06T21:52:07.448Z",
+          "transcript_line": 1066,
+          "valid_event_and_path_binding": true
+        },
+        {
+          "call_id": "call_FIgrrCcQHbhYSaBY6beJPc20",
+          "sequence": 57,
+          "timestamp": "2026-08-06T21:52:20.828Z",
+          "transcript_line": 1070,
+          "valid_event_and_path_binding": true
+        }
+      ]
+    },
+    {
+      "base": {
+        "bytes": 297,
+        "git_blob_oid": "5648d4d1fccadb6381082f20c628d414795f343e",
+        "mode": "100644",
+        "sha256": "fd2491f6ad22863a9ff274987a12b5eda7b1f748882996b693d3fcd98f829137",
+        "state": "present"
+      },
+      "classification": "modified",
+      "last_declared_mutation": {
+        "call_id": "call_RtdXuf773ZtoW4yte2BCMOJd",
+        "sequence": 13,
+        "timestamp": "2026-08-06T21:14:09.504Z",
+        "transcript_line": 393,
+        "valid_event_and_path_binding": true
+      },
+      "later_path_specific_mutation_candidates": [],
+      "manifest_base_exact": true,
+      "manifest_provenance": [
+        {
+          "call_id": "call_RtdXuf773ZtoW4yte2BCMOJd",
+          "transcript_line": 393
+        }
+      ],
+      "manifest_recovered_exact": true,
+      "path": "scripts/mac/lima/units/substrate-world-service.socket",
+      "recovered": {
+        "bytes": 258,
+        "git_blob_oid": "71d959a727f7f38a5053a4e0b5a2a38ec2e771fc",
+        "mode": "0644",
+        "sha256": "6f58cd6f4064198342c860abfca31dba1d90190b1f39d84286e26b2d9c6d62cc"
+      },
+      "terminal_anchor": {
+        "call_id": "call_lmcD1PyIOR0nFyozkGxrlLpc",
+        "transcript_line": 1129
+      },
+      "transcript_provenance_coverage": [
+        {
+          "call_id": "call_RtdXuf773ZtoW4yte2BCMOJd",
+          "sequence": 13,
+          "timestamp": "2026-08-06T21:14:09.504Z",
+          "transcript_line": 393,
+          "valid_event_and_path_binding": true
+        }
+      ]
+    },
+    {
+      "base": {
+        "bytes": 0,
+        "git_blob_oid": null,
+        "mode": null,
+        "sha256": null,
+        "state": "absent"
+      },
+      "classification": "new",
+      "last_declared_mutation": {
+        "call_id": "call_IQkTXlEJ6oj3ydIj5j9SdSZ4",
+        "sequence": 61,
+        "timestamp": "2026-08-06T21:56:08.003Z",
+        "transcript_line": 1111,
+        "valid_event_and_path_binding": true
+      },
+      "later_path_specific_mutation_candidates": [],
+      "manifest_base_exact": true,
+      "manifest_provenance": [
+        {
+          "call_id": "call_mFJsRRrEo0w2BejkTvJFe2lh",
+          "transcript_line": 323
+        },
+        {
+          "call_id": "call_SMFpDuwmOBRAWo7HdN9SrmlX",
+          "transcript_line": 328
+        },
+        {
+          "call_id": "call_V3XqrcoIys83uNWvICpSt4ID",
+          "transcript_line": 371
+        },
+        {
+          "call_id": "call_xMatL5NnAUwkwm84HWZBEGZS",
+          "transcript_line": 698
+        },
+        {
+          "call_id": "call_2PX82OW57ytD2eGhGClEwJpj",
+          "transcript_line": 706
+        },
+        {
+          "call_id": "call_obDIrSTHYnma6NPiLPgrvzWw",
+          "transcript_line": 711
+        },
+        {
+          "call_id": "call_1Snc8DzXRPKC8f5GODgLbdhn",
+          "transcript_line": 844
+        },
+        {
+          "call_id": "call_IkWCvcNjnZFUSCiB3y5pQlHp",
+          "transcript_line": 969
+        },
+        {
+          "call_id": "call_IQkTXlEJ6oj3ydIj5j9SdSZ4",
+          "transcript_line": 1111
+        }
+      ],
+      "manifest_recovered_exact": true,
+      "path": "src/bin/substrate-lifecycle-macos.rs",
+      "recovered": {
+        "bytes": 30730,
+        "git_blob_oid": "32ba65874e0c5fce9fdeaf3427cf9cdf8961124b",
+        "mode": "0644",
+        "sha256": "16736ae9d26a29ad937283a772bae4223fd1dd78057ef27d5971edabaff234e5"
+      },
+      "terminal_anchor": {
+        "call_id": "call_lmcD1PyIOR0nFyozkGxrlLpc",
+        "transcript_line": 1129
+      },
+      "transcript_provenance_coverage": [
+        {
+          "call_id": "call_mFJsRRrEo0w2BejkTvJFe2lh",
+          "sequence": 6,
+          "timestamp": "2026-08-06T21:10:23.803Z",
+          "transcript_line": 323,
+          "valid_event_and_path_binding": true
+        },
+        {
+          "call_id": "call_SMFpDuwmOBRAWo7HdN9SrmlX",
+          "sequence": 7,
+          "timestamp": "2026-08-06T21:10:42.737Z",
+          "transcript_line": 328,
+          "valid_event_and_path_binding": true
+        },
+        {
+          "call_id": "call_V3XqrcoIys83uNWvICpSt4ID",
+          "sequence": 9,
+          "timestamp": "2026-08-06T21:12:59.920Z",
+          "transcript_line": 371,
+          "valid_event_and_path_binding": true
+        },
+        {
+          "call_id": "call_xMatL5NnAUwkwm84HWZBEGZS",
+          "sequence": 32,
+          "timestamp": "2026-08-06T21:29:54.333Z",
+          "transcript_line": 698,
+          "valid_event_and_path_binding": true
+        },
+        {
+          "call_id": "call_2PX82OW57ytD2eGhGClEwJpj",
+          "sequence": 33,
+          "timestamp": "2026-08-06T21:30:27.889Z",
+          "transcript_line": 706,
+          "valid_event_and_path_binding": true
+        },
+        {
+          "call_id": "call_obDIrSTHYnma6NPiLPgrvzWw",
+          "sequence": 34,
+          "timestamp": "2026-08-06T21:30:41.421Z",
+          "transcript_line": 711,
+          "valid_event_and_path_binding": true
+        },
+        {
+          "call_id": "call_1Snc8DzXRPKC8f5GODgLbdhn",
+          "sequence": 46,
+          "timestamp": "2026-08-06T21:38:19.022Z",
+          "transcript_line": 844,
+          "valid_event_and_path_binding": true
+        },
+        {
+          "call_id": "call_IkWCvcNjnZFUSCiB3y5pQlHp",
+          "sequence": 49,
+          "timestamp": "2026-08-06T21:44:16.338Z",
+          "transcript_line": 969,
+          "valid_event_and_path_binding": true
+        },
+        {
+          "call_id": "call_IQkTXlEJ6oj3ydIj5j9SdSZ4",
+          "sequence": 61,
+          "timestamp": "2026-08-06T21:56:08.003Z",
+          "transcript_line": 1111,
+          "valid_event_and_path_binding": true
+        }
+      ]
+    },
+    {
+      "base": {
+        "bytes": 0,
+        "git_blob_oid": null,
+        "mode": null,
+        "sha256": null,
+        "state": "absent"
+      },
+      "classification": "new",
+      "last_declared_mutation": {
+        "call_id": "call_6A1cP53qYNhSCTVq8uKPjzCm",
+        "sequence": 60,
+        "timestamp": "2026-08-06T21:54:47.891Z",
+        "transcript_line": 1103,
+        "valid_event_and_path_binding": true
+      },
+      "later_path_specific_mutation_candidates": [],
+      "manifest_base_exact": true,
+      "manifest_provenance": [
+        {
+          "call_id": "call_sEEzVypIFHqqMJUPKrqlkvYN",
+          "transcript_line": 428
+        },
+        {
+          "call_id": "call_Nza0Mpz3p5KiAVyK8hicxiOH",
+          "transcript_line": 524
+        },
+        {
+          "call_id": "call_BZYNA7gfxLX7InJPEVarZtlG",
+          "transcript_line": 562
+        },
+        {
+          "call_id": "call_xMatL5NnAUwkwm84HWZBEGZS",
+          "transcript_line": 698
+        },
+        {
+          "call_id": "call_B2kHHOZk2mKESZQPWkhAH7fO",
+          "transcript_line": 715
+        },
+        {
+          "call_id": "call_qUCbE1niHSda91V2YgdOOOnD",
+          "transcript_line": 838
+        },
+        {
+          "call_id": "call_6A1cP53qYNhSCTVq8uKPjzCm",
+          "transcript_line": 1103
+        }
+      ],
+      "manifest_recovered_exact": true,
+      "path": "tests/mac/lifecycle_r3.sh",
+      "recovered": {
+        "bytes": 11335,
+        "git_blob_oid": "9bcfa8d9b24d57e1c63fbdba17065ffc1159cf8b",
+        "mode": "0755",
+        "sha256": "0705d558ea507e1d63ca035f56f032fb2936be4e01033ed7a63df42a221bbd2f"
+      },
+      "terminal_anchor": {
+        "call_id": "call_lmcD1PyIOR0nFyozkGxrlLpc",
+        "transcript_line": 1129
+      },
+      "transcript_provenance_coverage": [
+        {
+          "call_id": "call_sEEzVypIFHqqMJUPKrqlkvYN",
+          "sequence": 17,
+          "timestamp": "2026-08-06T21:16:25.010Z",
+          "transcript_line": 428,
+          "valid_event_and_path_binding": true
+        },
+        {
+          "call_id": "call_Nza0Mpz3p5KiAVyK8hicxiOH",
+          "sequence": 23,
+          "timestamp": "2026-08-06T21:20:25.722Z",
+          "transcript_line": 524,
+          "valid_event_and_path_binding": true
+        },
+        {
+          "call_id": "call_BZYNA7gfxLX7InJPEVarZtlG",
+          "sequence": 25,
+          "timestamp": "2026-08-06T21:21:57.829Z",
+          "transcript_line": 562,
+          "valid_event_and_path_binding": true
+        },
+        {
+          "call_id": "call_xMatL5NnAUwkwm84HWZBEGZS",
+          "sequence": 32,
+          "timestamp": "2026-08-06T21:29:54.333Z",
+          "transcript_line": 698,
+          "valid_event_and_path_binding": true
+        },
+        {
+          "call_id": "call_B2kHHOZk2mKESZQPWkhAH7fO",
+          "sequence": 35,
+          "timestamp": "2026-08-06T21:31:01.217Z",
+          "transcript_line": 715,
+          "valid_event_and_path_binding": true
+        },
+        {
+          "call_id": "call_qUCbE1niHSda91V2YgdOOOnD",
+          "sequence": 45,
+          "timestamp": "2026-08-06T21:37:50.348Z",
+          "transcript_line": 838,
+          "valid_event_and_path_binding": true
+        },
+        {
+          "call_id": "call_6A1cP53qYNhSCTVq8uKPjzCm",
+          "sequence": 60,
+          "timestamp": "2026-08-06T21:54:47.891Z",
+          "transcript_line": 1103,
+          "valid_event_and_path_binding": true
+        }
+      ]
+    }
+  ],
+  "schema": "substrate.a1-1d-5r3-mac.recovery.audit.v1",
+  "scope": {
+    "audit_constraints": "read-only bundle/base audit; no recovered file, state, product checkout, worktree, commit, push, native evidence, or causal-cycle remediation was changed",
+    "base_commit": "270f6e55e1a94b7e2f9b2667e605980d2e50579c",
+    "base_repo": "/Users/spensermcconnell/__Active_Code/atomize-hq/substrate",
+    "base_tree": "acef6844c15d17aba8cfd18d2fc7ef88d9c3420b",
+    "bundle": "/Users/spensermcconnell/.codex/worktrees/eb49/substrate/orchestration/substrate-a1-1d-5r3-mac-20260806-41f97e1c570d/recovery/attempt-3"
+  },
+  "verdict": "VERIFIED_COMPLETE"
+}

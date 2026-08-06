@@ -1,0 +1,44 @@
+{
+  "manifest": {
+    "path": "recovery-manifest.json",
+    "sha256": "9edb61f5aab00299706efe3e73050886d81d80d1eedfdbf15c7d8662d595a908"
+  },
+  "mutation_events": {
+    "path": "mutation-events.jsonl",
+    "sha256": "531ab053ca66bca12eea9610883dc7f3664dff3aafcacd361029bc7bcd436076"
+  },
+  "recovered_tree": {
+    "algorithm": "UTF-8 sorted rows: path, tab, octal mode, tab, file SHA-256, tab, Git blob OID, tab, byte size, newline",
+    "rows": [
+      "crates/shell/src/execution/managed_lifecycle/macos_client.rs\t0644\t8e7329c4b46919f959fdf3bb59d41aa3f6a04f679e74dc7b7f3a38c031f4dcc4\t00951d4616ecc0eefefe4f1e09e8ca520b38b059\t7024",
+      "crates/world-mac-lima/src/forwarding.rs\t0644\t244908830ed7a44ca07e772f0eb0e49f401aa6829c4eb6ef6cc520d0a18ba050\t4dc51e1893714cd02c244bef8325dedb90c815f5\t62558",
+      "crates/world-mac-lima/src/lib.rs\t0644\t798834ffb6f7d586cb465b9d4dbfc0426985b98058c4b2afa83b14f087b92ff1\t916a330c484567b2f80e424ab3c02125ec6ff71a\t83512",
+      "llm-last-mile/runtime-refactor/00-README.md\t0644\t7903189e841d054946f6b43df231185aff2d307bd4c5ad6f0b65dca7f0f2d991\t18c882d12a984c19dadd6e22bb6d4598cf7ad705\t91461",
+      "llm-last-mile/runtime-refactor/02-seam-crosswalk.md\t0644\t652091c30407cb41bb9fffdbe22622aacdbce23af22ea3dcf15d70215d97ee36\t1ed1c3c99a6db32ac9a16e71d1811ac7a7777c39\t344016",
+      "llm-last-mile/runtime-refactor/03-phase-slice-map.md\t0644\tbf7070a4ed87e05c2d884e70fd0af34467703e6ec23173470762c718483ea4a4\tf1b80255bcef8453f51902c9d41192342dea369c\t418364",
+      "llm-last-mile/runtime-refactor/04-contracts-and-gates.md\t0644\t5c48831e2673380315f2c9cc23a49ad0e88536e3b4e5953ccd0141ed19a4ec72\t8fb7a413f3982da812b1c2e34af406f63695be9f\t751118",
+      "llm-last-mile/runtime-refactor/05-debug-regression-ledger.md\t0644\t9ee9d8405a9c1eef028b042595334fb414fe9799b4031fa5185dfa0507edd722\t4ce6919302c135844e6b50b48dcb68bb8afea256\t365837",
+      "llm-last-mile/runtime-refactor/review-control/r3-mac-review-allowlist-evidence.md\t0644\ted65f98a752a66ae821847078bad7dd006a1d5036cade9ec8c1b79af7751b8ab\tee1172cfbdea895744c354a4989349c208971522\t4241",
+      "llm-last-mile/runtime-refactor/review-control/r3-mac-review-authority-security.md\t0644\t3a984d3b2182f4bc565370eb25c4a98863ede8d16f64ec4b978db66721b015b3\t5810f59c3ad4b88e5092f44b0808908786d49062\t6389",
+      "llm-last-mile/runtime-refactor/review-control/r3-mac-review-cycle-record.json\t0644\tbc7258fb432375e50af899f14691c7691980d4f99a8174b8e2d6ee2e1a29e003\t0775cfde96312ce2b73a94cca2004aacf59a7fd9\t4779",
+      "llm-last-mile/runtime-refactor/review-control/r3-mac-review-lifecycle-convergence.md\t0644\t321dd181a40841fcce83a62835fe37f75b51c953e29922caee60445695481bba\t644da35b2565a5740642a84632c686328dcd9684\t5765",
+      "scripts/mac/com.substrate.lifecycle.publisher.v1.plist\t0644\te75eb753882ffb00aa611bee9976e4f66e44c4fdc59cc43bd9e23aa5020f860d\t5b5f63b69c37f6d0155214de37589924311db014\t615",
+      "scripts/mac/lima-lifecycle.sh\t0755\t334be549d7882372863560b6773120c389886c5af452b61b719acf2a7d383d32\t084baed08f71750471be9262028b8c3a69f05d99\t8833",
+      "scripts/mac/lima-stop.sh\t0755\tbea9a8791d8a339d7036bac2bde413150a5f54f6269df099728029854b61802c\td8fd432dc4c6fa1488cb4f2906c97119e316ad17\t1524",
+      "scripts/mac/lima-warm.sh\t0755\tdb5e79f1234c3fcec02e1a6b6ddf29ec5a8a572dbeeaed53a0e1acb4c3729c41\t3bc5f61ba81f196e95be7b860756b340e4e7e1d4\t46177",
+      "scripts/mac/lima/units/substrate-world-service.socket\t0644\t6f58cd6f4064198342c860abfca31dba1d90190b1f39d84286e26b2d9c6d62cc\t71d959a727f7f38a5053a4e0b5a2a38ec2e771fc\t258",
+      "src/bin/substrate-lifecycle-macos.rs\t0644\t16736ae9d26a29ad937283a772bae4223fd1dd78057ef27d5971edabaff234e5\t32ba65874e0c5fce9fdeaf3427cf9cdf8961124b\t30730",
+      "tests/mac/lifecycle_r3.sh\t0755\t0705d558ea507e1d63ca035f56f032fb2936be4e01033ed7a63df42a221bbd2f\t9bcfa8d9b24d57e1c63fbdba17065ffc1159cf8b\t11335"
+    ],
+    "sha256": "a023bc6e2f4929277468f5f418e954b0d7b96671d2d8c24f8790a9674763ff88"
+  },
+  "replay_plan": {
+    "path": "replay-plan.md",
+    "sha256": "96e5fa7ffd3f11de9f15786941eb7d1e166d8dc5dda21672b91751c0cb92a6cb"
+  },
+  "schema": "substrate.a1-1d-5r3-mac.bundle-digests.v1",
+  "transcript_extraction": {
+    "path": "transcript-extraction.json",
+    "sha256": "6cb8ab1734eb89132cdfa3b93d37ef8529fbb76a6e6d7a78c866774ab6886d6c"
+  }
+}

@@ -1,0 +1,75 @@
+{
+  "schema": "substrate.a1-1d-5r3-mac.meta-recovery-verification.v1",
+  "verification_status": "PARENT_VERIFIED_EXACT",
+  "recorded_at_utc": "2026-08-06T23:17:19Z",
+  "orchestration_id": "substrate-a1-1d-5r3-mac-20260806-41f97e1c570d",
+  "increment": "A1.1d-5R3-MAC",
+  "attempt": 3,
+  "pipeline": {
+    "ordering": "strictly_sequential",
+    "successful_agents": [
+      {
+        "ordinal": 1,
+        "task": "/root/recover_transcript_bundle_v2",
+        "role": "transcript_recovery",
+        "verdict": "COMPLETE"
+      },
+      {
+        "ordinal": 2,
+        "task": "/root/audit_recovery_bundle",
+        "role": "independent_recovery_audit",
+        "verdict": "VERIFIED_COMPLETE"
+      },
+      {
+        "ordinal": 3,
+        "task": "/root/reconstruct_recovered_worktree",
+        "role": "audited_bundle_reconstruction",
+        "verdict": "RESTORED_EXACT"
+      }
+    ],
+    "transport_note": "The first launch of recovery agent 1 failed before execution because the runtime rejected its forked input. The replacement agent performed the complete recovery role; the failed launch created no artifacts or repository changes."
+  },
+  "recovery_bundle": {
+    "root": "orchestration/substrate-a1-1d-5r3-mac-20260806-41f97e1c570d/recovery/attempt-3",
+    "source_transcript_sha256": "sha256:114a6f051814f46070e51af691ef4a6a87adf24d465f1ed500ff6a6edc331c98",
+    "recovery_manifest_sha256": "sha256:9edb61f5aab00299706efe3e73050886d81d80d1eedfdbf15c7d8662d595a908",
+    "recovered_tree_sha256": "sha256:a023bc6e2f4929277468f5f418e954b0d7b96671d2d8c24f8790a9674763ff88",
+    "audit_report_sha256": "sha256:99869c925b5caeebb9c8fa0f960d621771d8e533b04a7add4b06b6501d83b7c0",
+    "audit_digests_sha256": "sha256:a96816e12b4ab2a71272c20603aeb39fe105a471f7c9fea5cda583bb7d2bad6c",
+    "reconstruction_receipt_sha256": "sha256:9a843a6332eeba544cfe03d260e9478f56b4694cb06a06d014589e7cfaaf2264",
+    "reconstruction_digests_sha256": "sha256:72c040cd99adc24ab7af9ce542b3c8e1375e3351e1373d62b61baadeb5a78ee0"
+  },
+  "restored_worktree": {
+    "path": "/Users/spensermcconnell/.codex/worktrees/ace6/substrate",
+    "git_dir": "/Users/spensermcconnell/__Active_Code/atomize-hq/substrate/.git/worktrees/substrate6",
+    "detached": true,
+    "head": "270f6e55e1a94b7e2f9b2667e605980d2e50579c",
+    "head_tree": "acef6844c15d17aba8cfd18d2fc7ef88d9c3420b",
+    "modified_tracked_count": 11,
+    "untracked_count": 8,
+    "staged_count": 0,
+    "status_path_count": 19,
+    "unexpected_status_records": [],
+    "recovered_tree_sha256": "sha256:a023bc6e2f4929277468f5f418e954b0d7b96671d2d8c24f8790a9674763ff88",
+    "historical_subject_fingerprint": "sha256:e60963026aa39be67e334119ff7ae61f3f15f19dbfd31539d790f8735b493924",
+    "review_record_sha256": "sha256:bc7258fb432375e50af899f14691c7691980d4f99a8174b8e2d6ee2e1a29e003",
+    "review_record_validator_valid": true
+  },
+  "containment": {
+    "live_remote": "270f6e55e1a94b7e2f9b2667e605980d2e50579c",
+    "protected_checkout_head": "270f6e55e1a94b7e2f9b2667e605980d2e50579c",
+    "protected_checkout_tree": "acef6844c15d17aba8cfd18d2fc7ef88d9c3420b",
+    "protected_checkout_clean": true,
+    "product_commit_created": false,
+    "product_push_observed": false
+  },
+  "authority_posture": {
+    "orchestration_status_remains": "BLOCKED",
+    "third_causal_cycle_authorized": false,
+    "remediation_authorized": false,
+    "publication_authorized": false,
+    "native_evidence_authorized": false,
+    "successor_dispatch_authorized": false,
+    "continuation": "The exact prior filesystem path and historical uncommitted bytes are restored and retained. Further implementation still requires explicit authority for a third causal cycle and any exact MAC fence expansion."
+  }
+}
