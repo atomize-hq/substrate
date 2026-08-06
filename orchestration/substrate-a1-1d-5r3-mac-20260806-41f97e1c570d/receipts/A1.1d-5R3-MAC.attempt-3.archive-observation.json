@@ -1,0 +1,33 @@
+{
+  "observation_status": "DISPOSABLE_TASK_WORKTREE_REMOVED_AFTER_TERMINAL_ARCHIVE",
+  "recorded_at_utc": "2026-08-06T22:10:50Z",
+  "orchestration_id": "substrate-a1-1d-5r3-mac-20260806-41f97e1c570d",
+  "increment": "A1.1d-5R3-MAC",
+  "attempt": 3,
+  "thread_id": "019fd8dd-071f-7e53-9107-69ca8b9be586",
+  "host_id": "local",
+  "prior_worktree": "/Users/spensermcconnell/.codex/worktrees/ace6/substrate",
+  "sequence": [
+    "The terminal task was independently verified while its uncommitted worktree still existed.",
+    "The completed task was archived after the verified blocked receipt and BLOCKED state were committed.",
+    "Archiving removed the disposable ace6 worktree.",
+    "The task was immediately unarchived, but the worktree was not restored."
+  ],
+  "current_observation": {
+    "task_worktree_exists": false,
+    "task_thread_archived": false,
+    "live_remote": "270f6e55e1a94b7e2f9b2667e605980d2e50579c",
+    "protected_checkout_clean": true,
+    "product_commit_created": false,
+    "product_push_observed": false
+  },
+  "historical_subject_binding": {
+    "final_subject_fingerprint": "sha256:e60963026aa39be67e334119ff7ae61f3f15f19dbfd31539d790f8735b493924",
+    "review_record_sha256": "sha256:bc7258fb432375e50af899f14691c7691980d4f99a8174b8e2d6ee2e1a29e003",
+    "receipt_sha256": "sha256:5bdf23ca2f7f2a71708b82f5b3e65c76201d59af4c2b8ecba02e81be94a90852",
+    "session_rollout_path": "/Users/spensermcconnell/.codex/sessions/2026/08/06/rollout-2026-08-06T16-56-31-019fd8dd-071f-7e53-9107-69ca8b9be586.jsonl",
+    "session_rollout_sha256": "sha256:114a6f051814f46070e51af691ef4a6a87adf24d465f1ed500ff6a6edc331c98",
+    "session_rollout_bytes": 4277101
+  },
+  "continuation_consequence": "The receipt's proposed exact-worktree continuation is no longer possible. Any authorized continuation must use a freshly bound clean exact-base task worktree and must independently reconstruct or reimplement the bounded MAC subject before addressing the six findings. This observation grants no third causal cycle, file-fence expansion, evidence dispatch, publication, or successor authority."
+}
