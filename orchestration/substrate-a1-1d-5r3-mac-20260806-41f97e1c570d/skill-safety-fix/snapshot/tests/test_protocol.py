@@ -377,34 +377,49 @@ class LifecycleSafetyTests(unittest.TestCase):
         self.assertIn("Never automatically archive a task", meta_prompt)
         self.assertIn("Preserve the task-assigned worktree exactly", increment_prompt)
 
-    def test_ignored_repo_skill_has_global_install_contract(self) -> None:
+    def test_repo_local_skill_has_worktree_hydration_contract(self) -> None:
         skill = (SKILL / "SKILL.md").read_text()
         protocol = (REFERENCES / "protocol.md").read_text()
-        self.assertIn("Never assume a fresh repository", skill)
+        self.assertIn("repository-local skill", skill)
+        self.assertIn("never install or register it as a global Codex skill", skill)
         self.assertIn("Git worktree creation materializes tracked repository content only", protocol)
+        self.assertNotIn("install_global_skill.py", skill)
+        self.assertNotIn("Install this skill under the global Codex skill root", protocol)
 
         with tempfile.TemporaryDirectory() as directory:
-            codex_home = Path(directory) / "codex-home"
-            install = run(
+            worktree = Path(directory) / "task-worktree"
+            worktree.mkdir()
+            (worktree / ".git").write_text("gitdir: /tmp/example\n")
+
+            hydrate = run(
                 sys.executable,
-                str(SCRIPTS / "install_global_skill.py"),
-                "--codex-home",
-                str(codex_home),
+                str(SCRIPTS / "hydrate_worktree_skill.py"),
+                str(worktree),
             )
-            self.assertEqual(install.returncode, 0, install.stderr)
-            target = codex_home / "skills" / "orchestrate-top-level-tasks"
-            self.assertTrue(target.is_symlink())
-            self.assertEqual(target.resolve(), SKILL.resolve())
+            self.assertEqual(hydrate.returncode, 0, hydrate.stderr)
+            target = worktree / ".agents" / "skills" / "orchestrate-top-level-tasks"
+            self.assertTrue((target / "SKILL.md").is_file())
+            self.assertFalse(target.is_symlink())
+            self.assertNotIn("__pycache__", {part for path in target.rglob("*") for part in path.parts})
 
             check = run(
                 sys.executable,
-                str(SCRIPTS / "install_global_skill.py"),
-                "--codex-home",
-                str(codex_home),
+                str(SCRIPTS / "hydrate_worktree_skill.py"),
+                str(worktree),
                 "--check",
             )
             self.assertEqual(check.returncode, 0, check.stderr)
-            self.assertIn("VERIFIED global skill", check.stdout)
+            self.assertIn('"status": "verified"', check.stdout)
+
+            (target / "SKILL.md").write_text("different\n")
+            mismatch = run(
+                sys.executable,
+                str(SCRIPTS / "hydrate_worktree_skill.py"),
+                str(worktree),
+                "--check",
+            )
+            self.assertNotEqual(mismatch.returncode, 0)
+            self.assertIn("hydrated skill differs", mismatch.stderr)
 
 
 if __name__ == "__main__":

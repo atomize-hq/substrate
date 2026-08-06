@@ -1,18 +1,19 @@
 {
-  "schema": "codex.orchestration-skill-safety-fix.v1",
+  "schema": "codex.orchestration-skill-safety-fix.v2",
   "orchestration_id": "substrate-a1-1d-5r3-mac-20260806-41f97e1c570d",
-  "recorded_at": "2026-08-06T19:30:00-04:00",
+  "recorded_at": "2026-08-06T19:37:39.917522-04:00",
   "source_skill_root": "/Users/spensermcconnell/__Active_Code/atomize-hq/substrate/.agents/skills/orchestrate-top-level-tasks",
+  "scope": "repository-local-only",
   "global_skill_path": "/Users/spensermcconnell/.codex/skills/orchestrate-top-level-tasks",
   "global_install": {
-    "type": "symlink",
-    "target": "/Users/spensermcconnell/__Active_Code/atomize-hq/substrate/.agents/skills/orchestrate-top-level-tasks",
-    "verified": true
+    "present": false,
+    "required": false,
+    "prohibited": true
   },
   "repository_tracking": {
     "agents_gitignore_rule": ".gitignore:5:.agents",
     "tracked_skill_file_count": 0,
-    "explanation": "Git linked worktrees materialize tracked commit content; ignored and untracked .agents content is not copied."
+    "explanation": "Git linked worktrees materialize tracked commit content; this intentionally ignored repository-local skill is hydrated into each fresh task worktree before identity binding."
   },
   "archive_root_cause": {
     "old_skill_instruction": "Persist the verified receipt, update state, archive the completed task, and only then dispatch the next increment.",
@@ -25,9 +26,10 @@
     "Never archive blocked, failed, authority-required, base-drift, non-success, dirty, staged, untracked, or unique-state tasks.",
     "Archiving is not a completion gate or successor-dispatch prerequisite.",
     "Archive only with explicit user authorization and persisted disposal-safety proof.",
-    "Install the ignored repo-local skill globally and verify it.",
-    "Resolve the skill root absolutely and make rendered prompts self-contained.",
-    "Snapshot required skill assets and validators into durable orchestration state."
+    "Keep this skill repository-local and prohibit global installation or registration.",
+    "Hydrate and digest-verify the repository-local skill in each fresh meta, increment, and evidence task worktree before authority binding.",
+    "Refuse to overwrite a missing-path mismatch or differing task-local skill.",
+    "Keep initialization prompts self-contained until the hydrated skill can load on the binding turn."
   ],
   "validation": {
     "unittest": {
@@ -35,140 +37,166 @@
       "passed": 16
     },
     "skill_validator_source": "passed",
-    "skill_validator_global": "passed",
-    "global_installer_check": "passed"
+    "global_symlink_absent": true,
+    "hydrate_create_check_and_mismatch_refusal": "passed"
   },
   "snapshot_file_count": 26,
   "snapshot_files": [
     {
       "path": "SKILL.md",
-      "sha256": "83cfcaf4f3f446e5b838fd305be48b6d2afb0daaa74d78249b299562a84cdf07",
-      "bytes": 10846
+      "sha256": "83fb07d3a9d932f79e4679bdf071b4205424a48730dca300d74c0f8ecca694fd",
+      "bytes": 11751,
+      "mode": "0644"
     },
     {
       "path": "agents/openai.yaml",
       "sha256": "8a4a88b505679f630c53b79bb535ed4261ef38053367c3b411152d37dae8ea37",
-      "bytes": 253
+      "bytes": 253,
+      "mode": "0644"
     },
     {
       "path": "assets/blocked-receipt.example.json",
       "sha256": "1d0e3f9c20aac0707ad8291f84316b9706d450e3c804fe2c488288e12c1ca872",
-      "bytes": 831
+      "bytes": 831,
+      "mode": "0644"
     },
     {
       "path": "assets/closed-receipt.example.json",
       "sha256": "91a9741cc16c514c11078ca2b2913bebc52399434374641559affca5207167a2",
-      "bytes": 2077
+      "bytes": 2077,
+      "mode": "0644"
     },
     {
       "path": "assets/evidence-receipt.example.json",
       "sha256": "c9d3affd61ffc0212cda725e6b8548bbb697f3980625881d16a6bbb408c06a83",
-      "bytes": 1101
+      "bytes": 1101,
+      "mode": "0644"
     },
     {
       "path": "assets/evidence-task-prompt-template.md",
       "sha256": "3fda0a9e3afed0dd8919aeb2bcda3bbf88297f42b66f415c77effd112788d136",
-      "bytes": 2205
+      "bytes": 2205,
+      "mode": "0644"
     },
     {
       "path": "assets/increment-orchestrator-prompt-template.md",
-      "sha256": "a755071fbe902e6867b197ae3e78957be121a65ffb04e8bb5ce394c85f154dc4",
-      "bytes": 4270
+      "sha256": "f228d5c543ccea865267ff58fea3d122b50018ab19e36abc3695e34a286a30ae",
+      "bytes": 4529,
+      "mode": "0644"
     },
     {
       "path": "assets/landing-receipt.example.json",
       "sha256": "a2bc98d4c7800c2b0bfea4b228c0005a178887004edcdcf0357081acd53c00af",
-      "bytes": 1336
+      "bytes": 1336,
+      "mode": "0644"
     },
     {
       "path": "assets/local-evidence-receipt.example.json",
       "sha256": "c1d4196c4abd6f41197e4dd7d47869201085eeead2471b28a3c56b3eee5ab758",
-      "bytes": 1151
+      "bytes": 1151,
+      "mode": "0644"
     },
     {
       "path": "assets/meta-orchestrator-prompt-template.md",
-      "sha256": "284c85e038fcbdd6b3f2449904b919ffea8fbb47ce710317ebead9ea31fe96b1",
-      "bytes": 3020
+      "sha256": "0476b3c1acf51b5f338c647cc8a1cffb3dc5263187af54e00edf66b838dca6b7",
+      "bytes": 3467,
+      "mode": "0644"
     },
     {
       "path": "assets/state.example.json",
       "sha256": "0c7efe53c7a69c9d1b0b450686d34b1ecbfe240aaf61a5010e1b9a90061fd6a4",
-      "bytes": 1071
+      "bytes": 1071,
+      "mode": "0644"
     },
     {
       "path": "references/evidence-receipt.schema.json",
       "sha256": "eaddd56b6c738977f1841604599ca2189f19440ab11942254033d8e8573d9170",
-      "bytes": 5350
+      "bytes": 5350,
+      "mode": "0644"
     },
     {
       "path": "references/orchestration-state.schema.json",
       "sha256": "c1bc3304d80d675b073538f1645a050a1fd4c194f115cd8b5c80dbb6736f51db",
-      "bytes": 4570
+      "bytes": 4570,
+      "mode": "0644"
     },
     {
       "path": "references/platform-dispatch.md",
       "sha256": "8947993cdadc785ed91d5824345b89d6fbe0541ad6b2fc68a07aa6bcb9c92202",
-      "bytes": 2410
+      "bytes": 2410,
+      "mode": "0644"
     },
     {
       "path": "references/protocol.md",
-      "sha256": "73d025682041777180541c1728fbbc5bf6d706f76d71a4021ee8c8f987562dc9",
-      "bytes": 16782
+      "sha256": "df0bb3b49e3c599c4b23a8b32bf34407435e20409c546a3012423b480e13e281",
+      "bytes": 17425,
+      "mode": "0644"
     },
     {
       "path": "references/task-receipt.schema.json",
       "sha256": "c2e320d2c7a9181ebc83f2e3394d51e45080a9c3241270c602bf9f40bea7adb5",
-      "bytes": 11377
+      "bytes": 11377,
+      "mode": "0644"
     },
     {
       "path": "scripts/bind_meta_identity.py",
       "sha256": "ba85387700efcc28f789a7b89cae61aace85120adc209753d4f076d9244ff6f1",
-      "bytes": 2288
+      "bytes": 2288,
+      "mode": "0644"
     },
     {
-      "path": "scripts/install_global_skill.py",
-      "sha256": "fb058f1a47e0a8cf51e2f7267f7e8c06baec717f3d64c2a2bf50df830fed4168",
-      "bytes": 2351
+      "path": "scripts/hydrate_worktree_skill.py",
+      "sha256": "cebaa02763096fa62997df98a48af02f9638f0dee1d5778fdf2a057c6c2a21f9",
+      "bytes": 5253,
+      "mode": "0755"
     },
     {
       "path": "scripts/protocol_json.py",
       "sha256": "4894b07d182a0e8a2fa85f35df29b29a31a00ea7c044ea58ac138b44ae14e794",
-      "bytes": 2474
+      "bytes": 2474,
+      "mode": "0644"
     },
     {
       "path": "scripts/render_increment_prompt.py",
       "sha256": "d62bfd4cfd5f6d59dc8ae91e3adfc4825d4c3b5a2bc544a5fd53c79e195c8771",
-      "bytes": 4238
+      "bytes": 4238,
+      "mode": "0755"
     },
     {
       "path": "scripts/validate_evidence_receipt.py",
       "sha256": "7d950fb58861bd361c4bd7ebea01f1f2a10265c66cd3d50a948d0b253bfda68d",
-      "bytes": 6847
+      "bytes": 6847,
+      "mode": "0755"
     },
     {
       "path": "scripts/validate_receipt.py",
       "sha256": "1bf7dad09747a4b13cf7f2632123b22289d3e7c42d9eb697502a8ab3c9a73add",
-      "bytes": 11250
+      "bytes": 11250,
+      "mode": "0755"
     },
     {
       "path": "scripts/validate_state.py",
       "sha256": "4b2da1f9c4c8f17891dbac80bd42dfb805feca9203a9c35be49c029500d1006f",
-      "bytes": 20177
+      "bytes": 20177,
+      "mode": "0755"
     },
     {
       "path": "scripts/verify_local_closeout.py",
       "sha256": "27c6d0159536f59cf80c0183545b16e753750a147fe516773524eb521313f54e",
-      "bytes": 7533
+      "bytes": 7533,
+      "mode": "0755"
     },
     {
       "path": "scripts/verify_local_evidence.py",
       "sha256": "a5d5b53b5bccfd45b4d86bb42ad7689b11b6d4917e044f119ee5b38de0d93d3e",
-      "bytes": 3200
+      "bytes": 3200,
+      "mode": "0755"
     },
     {
       "path": "tests/test_protocol.py",
-      "sha256": "d391b5bcdfabc4cede358f53e50930fc2b6119922e5e9b583d3f0399fe7f0132",
-      "bytes": 16441
+      "sha256": "9df6652f284bf467acdba9831e069448928567d64ee2bff7ec0b1bcbd2131aa7",
+      "bytes": 17195,
+      "mode": "0644"
     }
   ]
 }

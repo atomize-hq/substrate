@@ -12,10 +12,12 @@ host ID, state path, target ref, and explicit start authority.
 After identity binding:
 
 1. Read the orchestration state at {{STATE_PATH}}.
-2. Read the reusable protocol from the absolute {{SKILL_PATH}}. Do not assume the task worktree
-   contains `.agents/`; repo-local ignored skills are not materialized by Git worktree creation.
-   Snapshot the required templates, references, and validator scripts into durable orchestration
-   state and record their source paths and SHA-256s before dispatch.
+2. Read the reusable protocol from the absolute {{SKILL_PATH}}. This skill is repository-local and
+   must never be installed globally. Before identity binding, the creator must have hydrated and
+   verified the skill at `.agents/skills/orchestrate-top-level-tasks` in this task worktree. Stop if
+   that local copy is absent or differs from the persisted hydration digest. Snapshot the required
+   templates, references, and validator scripts into durable orchestration state and record their
+   source paths and SHA-256s before dispatch.
 3. Verify the exact product target:
    - publication mode: read from durable state and the increment contract
    - remote: {{REMOTE}}
@@ -44,6 +46,9 @@ After identity binding:
     assigned worktree. Never archive blocked/failed/authority-required/base-drift or dirty tasks.
     Successor dispatch depends on terminal verification, not archiving. Archive only after explicit
     user authorization and a persisted disposal-safety proof.
+15. After creating any increment or evidence task, resolve its exact assigned worktree, hydrate the
+    repository-local skill there with `scripts/hydrate_worktree_skill.py`, verify and persist the
+    digest, and only then send identity binding or start authority.
 
 Render each increment prompt from:
 

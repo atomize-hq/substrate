@@ -13,21 +13,26 @@ inside each increment task; do not confuse them with user-visible top-level task
 
 Before creating or messaging any top-level task:
 
-1. Resolve the absolute skill root from this loaded `SKILL.md`. Never assume a fresh repository
-   worktree contains `.agents/`; Git worktrees contain tracked files, not ignored local skills.
+1. Resolve the absolute skill root from this loaded `SKILL.md`. This is a repository-local skill;
+   never install or register it as a global Codex skill.
 2. Read `references/protocol.md` completely.
 3. Read `references/platform-dispatch.md` when any gate is host- or OS-specific.
 4. Use `assets/meta-orchestrator-prompt-template.md` to create the persistent meta prompt.
 5. Use `assets/increment-orchestrator-prompt-template.md` for each fresh increment task.
 6. Use `assets/evidence-task-prompt-template.md` for native/read-only platform evidence.
 
-Install this skill once under the global Codex skill root so every fresh task can resolve it even
-when the repository ignores `.agents/`:
+Git worktrees do not copy this repository's ignored `.agents/` directory. Before sending identity
+binding or start authority to any newly created meta, increment, or evidence task, hydrate the
+exact repository-local skill into that task's assigned worktree and verify it:
 
 ```bash
-python3 scripts/install_global_skill.py
-python3 scripts/install_global_skill.py --check
+python3 scripts/hydrate_worktree_skill.py /absolute/task/worktree
+python3 scripts/hydrate_worktree_skill.py /absolute/task/worktree --check
 ```
+
+Run the script from the authoritative repository-local skill root, persist its reported source,
+target, file count, and digest, and do not bind the task if hydration fails. The task's initial
+prompt must remain self-contained until the next turn can load the hydrated skill.
 
 Before the first dispatch, snapshot the exact templates, references, and validator scripts needed
 by the workflow into the orchestration state root and record their source path and SHA-256. Render
@@ -72,9 +77,11 @@ history and defeats fresh-context isolation.
    product checkout.
 4. Create the meta task with an initialization prompt that forbids dispatch until identity binding.
 5. If `create_thread` returns a temporary client ID, resolve the real thread with `list_threads`.
-6. Send the meta task its own thread ID, host ID, orchestration ID, state path, and explicit
+6. Resolve the meta task's exact assigned worktree, hydrate this repository-local skill into it,
+   verify the hydrated digest, and persist the hydration record.
+7. Send the meta task its own thread ID, host ID, orchestration ID, state path, and explicit
    dispatch posture.
-7. Persist the identity binding before the first dispatch.
+8. Persist the identity binding before the first dispatch.
 
 Represent setup-only authorization explicitly. Keep `dispatch_authorized=false` after identity
 binding unless the user authorized the workflow to start. Never infer start authority from setup.
@@ -88,9 +95,12 @@ binding unless the user authorized the workflow to start. Never infer start auth
 3. Render the prompt with `scripts/render_increment_prompt.py`.
 4. Generate a unique dispatch nonce.
 5. Create a fresh top-level task at the exact starting ref.
-6. Resolve and record the real thread ID, host ID, nonce, and expected base.
-7. Send the task an identity-binding follow-up authorizing work for that dispatch.
-8. End the meta turn after dispatch; do not block on the full implementation.
+6. Resolve and record the real thread ID, host ID, exact assigned worktree, nonce, and expected
+   base.
+7. Hydrate this repository-local skill into the fresh worktree, verify its digest, and persist the
+   hydration record before granting any authority.
+8. Send the task an identity-binding follow-up authorizing work for that dispatch.
+9. End the meta turn after dispatch; do not block on the full implementation.
 
 The increment orchestrator may use subagents. Require it to:
 
@@ -179,7 +189,9 @@ never assume an earlier inventory is current.
 Run independent read-only platform evidence tasks concurrently only when their contracts do not
 mutate the shared target. Require structured evidence receipts. Bind each dispatch to its platform,
 project ID/path, host ID, source checkpoint, nonce, and task identity. Apply the same bounded
-terminal barrier used for increment tasks before accepting an evidence receipt.
+terminal barrier used for increment tasks before accepting an evidence receipt. Hydrate and verify
+the repository-local skill in every evidence-task worktree before sending identity binding or
+read-only start authority.
 
 If the platform is unavailable, emit the human handoff package defined in
 `references/platform-dispatch.md`. Do not claim the parent workflow complete.

@@ -411,17 +411,23 @@ authority. A later explicit user instruction may set `dispatch_authorized=true`.
 
 ### Skill availability
 
-Git worktree creation materializes tracked repository content only. Ignored or untracked
-`.agents/` directories are not copied into fresh worktrees. Therefore:
+This skill is repository-local. Never install, symlink, or register it under a global Codex skill
+root. Git worktree creation materializes tracked repository content only, so this repository's
+ignored `.agents/` directory is not copied into fresh worktrees automatically. Therefore:
 
-1. Install this skill under the global Codex skill root with
-   `scripts/install_global_skill.py`; verify it with `--check`.
-2. Resolve the active skill root from the loaded `SKILL.md`, never from an assumed repository-
-   relative `.agents/skills/orchestrate-top-level-tasks` path.
-3. Before first dispatch, copy the exact prompt templates, references, and validator scripts needed
+1. Resolve the authoritative source root from the loaded repository-local `SKILL.md`.
+2. Create every meta, increment, and evidence task with a self-contained initialization prompt that
+   prohibits work until a later identity-binding or start-authority turn.
+3. Resolve the fresh task's exact assigned worktree, then run the authoritative source copy of
+   `scripts/hydrate_worktree_skill.py /absolute/task/worktree` followed by `--check`.
+4. Persist the hydration source, target, file count, and aggregate digest in orchestration state.
+   Do not send identity binding or start authority unless the verification matches that record.
+5. Never overwrite a differing task-local skill. Treat a missing or mismatched hydrated copy as
+   `BLOCKED_CONTRADICTION` and preserve the worktree for inspection.
+6. Before first dispatch, copy the exact prompt templates, references, and validator scripts needed
    for the workflow into its durable orchestration state root and record source paths and SHA-256s.
-4. Make every increment and evidence prompt self-contained. A dispatched task must not depend on a
-   repo-local skill being present in its assigned product worktree.
+7. Do not hydrate an already active or dirty task as a repair mechanism. Hydration belongs between
+   fresh worktree creation and the task's authority-binding follow-up.
 
 ### Archive safety
 
