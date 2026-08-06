@@ -1,0 +1,85 @@
+{
+  "verification_status": "VERIFIED_NON_ADVANCING_BLOCK",
+  "orchestration_id": "substrate-a1-1d-5r3-mac-20260806-41f97e1c570d",
+  "increment": "A1.1d-5R3-MAC",
+  "attempt": 3,
+  "receipt_path": "orchestration/substrate-a1-1d-5r3-mac-20260806-41f97e1c570d/receipts/A1.1d-5R3-MAC.attempt-3.blocked.json",
+  "receipt_sha256": "sha256:5bdf23ca2f7f2a71708b82f5b3e65c76201d59af4c2b8ecba02e81be94a90852",
+  "receipt_validator_valid": true,
+  "receipt_schema_valid": false,
+  "receipt_schema_errors": [
+    "increment_task contains unexpected increment and dispatch_attempt properties",
+    "review uses a blocked diagnostic shape rather than the success-only packet_id, p1, p2, p3_p4_disposition, and CLEAN shape",
+    "changed_paths and publication_observation are additional top-level properties"
+  ],
+  "blocked_claim_accepted_for_non_advancement_only": true,
+  "expected_successor_was_not_authorized": true,
+  "task_terminal": {
+    "verified": true,
+    "thread_id": "019fd8dd-071f-7e53-9107-69ca8b9be586",
+    "host_id": "local",
+    "status": "idle",
+    "turn_status": "completed",
+    "final_summary": "Blocked with four P1 and two P2 findings; no staging, commit, push, native evidence, or successor work."
+  },
+  "correlation": {
+    "orchestration_id_matches": true,
+    "dispatch_nonce_matches": true,
+    "increment_matches": true,
+    "thread_id_matches": true,
+    "host_id_matches": true,
+    "expected_base_matches": true,
+    "next_increment_matches_authoritative_index": true
+  },
+  "repository": {
+    "target_ref": "refs/heads/feat/internal-host-orchestrator-world-dispatch-bootstrap",
+    "live_remote": "270f6e55e1a94b7e2f9b2667e605980d2e50579c",
+    "local_target_ref": "270f6e55e1a94b7e2f9b2667e605980d2e50579c",
+    "target_divergence": "0/0",
+    "protected_checkout_head": "270f6e55e1a94b7e2f9b2667e605980d2e50579c",
+    "protected_checkout_tree": "acef6844c15d17aba8cfd18d2fc7ef88d9c3420b",
+    "protected_checkout_clean": true,
+    "increment_worktree": "/Users/spensermcconnell/.codex/worktrees/ace6/substrate",
+    "increment_head": "270f6e55e1a94b7e2f9b2667e605980d2e50579c",
+    "increment_tree": "acef6844c15d17aba8cfd18d2fc7ef88d9c3420b",
+    "increment_index_clean": true,
+    "increment_worktree_clean": false,
+    "declared_changed_path_count": 19,
+    "actual_changed_path_count": 19,
+    "declared_changed_paths_match_actual": true,
+    "published_commit_created": false,
+    "remote_mutation_observed": false
+  },
+  "review": {
+    "record_path": "/Users/spensermcconnell/.codex/worktrees/ace6/substrate/llm-last-mile/runtime-refactor/review-control/r3-mac-review-cycle-record.json",
+    "record_sha256": "sha256:bc7258fb432375e50af899f14691c7691980d4f99a8174b8e2d6ee2e1a29e003",
+    "record_validator_valid": true,
+    "packet_id": "A1.1d-5R3-MAC",
+    "status": "bounded_stop",
+    "stop_reason": "budget_exhausted",
+    "cycle_kinds": [
+      "discovery",
+      "closure",
+      "supplemental_causal",
+      "supplemental_causal"
+    ],
+    "final_subject_fingerprint": "sha256:e60963026aa39be67e334119ff7ae61f3f15f19dbfd31539d790f8735b493924",
+    "final_verdict": "findings",
+    "open_findings": [
+      "P1-MAC-FINAL-001",
+      "P1-MAC-FINAL-002",
+      "P1-MAC-FINAL-003",
+      "P1-MAC-FINAL-004",
+      "P2-MAC-FINAL-001",
+      "P2-MAC-FINAL-002"
+    ]
+  },
+  "authority_decision": {
+    "status": "AUTHORITY_REQUIRED",
+    "existing_meta_authority_sufficient": false,
+    "basis": "The bound review authority permits at most two supplemental causal cycles. Both have been consumed, the validated record stopped for budget exhaustion, and unresolved P1/P2 findings prohibit publication. The typical-blocker adjudication grant does not override this explicit cycle cap.",
+    "required_authority": "The user must explicitly authorize a third causal remediation/review cycle and bind the exact additional MAC symbol and authority-validation fence needed for the six remaining findings, or direct abandonment of this uncommitted attempt. No evidence or closeout dispatch is authorized.",
+    "evidence_dispatch_authorized": false,
+    "closeout_dispatch_authorized": false
+  }
+}
