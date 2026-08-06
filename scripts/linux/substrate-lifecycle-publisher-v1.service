@@ -1,0 +1,20 @@
+[Unit]
+Description=Substrate Lifecycle Publisher
+After=network-online.target
+Wants=network-online.target
+
+[Service]
+Type=simple
+ExecStart=/usr/libexec/substrate/substrate-lifecycle-linux run-publisher
+Restart=always
+RestartSec=5
+WorkingDirectory=/var/lib/substrate
+StandardOutput=journal
+StandardError=journal
+NoNewPrivileges=yes
+ProtectSystem=strict
+ProtectHome=read-only
+ReadWritePaths=/var/lib/substrate /run
+
+[Install]
+WantedBy=multi-user.target

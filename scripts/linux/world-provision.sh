@@ -25,10 +25,11 @@ SUBSTRATE_STATE_PATH="/var/lib/substrate"
 WORLD_DEPS_ROOT_PATH="${SUBSTRATE_STATE_PATH}/world-deps"
 WORLD_DEPS_BIN_PATH="${WORLD_DEPS_ROOT_PATH}/bin"
 INVOKING_USER=""
-INVOKING_HOME=""
 SUBSTRATE_CLI_BIN_PATH=""
+LIFECYCLE_EXECUTOR_BIN_PATH=""
 ACL_HELPER_SOURCE_PATH=""
 ACL_HELPER_INSTALL_PATH="/usr/libexec/substrate/substrate-apply-socket-acl"
+LIFECYCLE_EXECUTOR_INSTALL_PATH="/usr/libexec/substrate/substrate-lifecycle-linux"
 ACL_DROPIN_PATH="/etc/systemd/system/substrate-world-service.socket.d/20-substrate-group-acl.conf"
 CODEX_BACKEND_ID="cli:codex-host"
 CODEX_ACCOUNT_ID_ENV="SUBSTRATE_LLM_BACKEND_AUTH_CLI_CODEX_ACCOUNT_ID"
@@ -303,7 +304,7 @@ sudo_cmd() {
     shift
     local tool_path=""
     if [[ "${tool}" == */* ]]; then
-        if [[ "${tool}" != "${ACL_HELPER_INSTALL_PATH}" ]]; then
+        if [[ "${tool}" != "${ACL_HELPER_INSTALL_PATH}" && "${tool}" != "${LIFECYCLE_EXECUTOR_INSTALL_PATH}" ]]; then
             echo "Unsupported absolute privileged tool path: ${tool}" >&2
             return 126
         fi
@@ -505,9 +506,11 @@ print_gateway_lifecycle_proof_skip() {
 
 prepare_gateway_smoke_auth() {
     local account_home="$1"
+    local auth_dir="${account_home}/.codex"
     local auth_path="${account_home}/.codex/auth.json"
+    local dir_created="0"
     if [[ -f "${auth_path}" ]]; then
-        printf '%s\n' "present"
+        printf '%s\t%s\t%s\n' "present" "${auth_path}" "${dir_created}"
         return 0
     fi
 
@@ -519,20 +522,33 @@ prepare_gateway_smoke_auth() {
   "access_token": "header.payload.signature"
 }
 JSON
-    install -d -m0700 "${account_home}/.codex"
+    if [[ ! -d "${auth_dir}" ]]; then
+        install -d -m0700 "${auth_dir}"
+        dir_created="1"
+    fi
     install -m0600 "${tmp}" "${auth_path}"
     rm -f "${tmp}"
-    printf '%s\n' "created"
+    printf '%s\t%s\t%s\n' "created" "${auth_path}" "${dir_created}"
 }
 
 cleanup_gateway_smoke_auth() {
-    rm -f "${INVOKING_HOME}/.codex/auth.json"
+    local auth_path="$1"
+    local dir_created="${2:-0}"
+    local auth_dir
+
+    rm -f "${auth_path}"
+    if [[ "${dir_created}" == "1" ]]; then
+        auth_dir="$(dirname "${auth_path}")"
+        rmdir "${auth_dir}" 2>/dev/null || true
+    fi
 }
 
 run_gateway_lifecycle_proof() {
     local substrate_cli="$1"
     local auth_mode="$2"
     local auth_state=""
+    local auth_path=""
+    local auth_dir_created="0"
     local cleanup_auth=0
     local status_json=""
     local base_url=""
@@ -543,6 +559,7 @@ run_gateway_lifecycle_proof() {
     echo "==> Running gateway lifecycle proof (auth: ${auth_mode})"
     if [[ "${auth_mode}" == "synthetic_auth_file" ]]; then
         auth_state="$(prepare_gateway_smoke_auth "${INSTALL_BOOTSTRAP_ACCOUNT_HOME}")"
+        IFS=$'\t' read -r auth_state auth_path auth_dir_created <<< "${auth_state}"
         if [[ "${auth_state}" == "created" ]]; then
             cleanup_auth=1
         fi
@@ -580,7 +597,7 @@ run_gateway_lifecycle_proof() {
     set -e
 
     if [[ ${cleanup_auth} -eq 1 ]]; then
-        cleanup_gateway_smoke_auth
+        cleanup_gateway_smoke_auth "${auth_path}" "${auth_dir_created}"
     fi
     if [[ ${proof_status} -ne 0 ]]; then
         return "${proof_status}"
@@ -928,31 +945,31 @@ if [[ "${HELP_REQUESTED}" -eq 1 ]]; then
 fi
 
 INVOKING_USER="${INSTALL_BOOTSTRAP_ACCOUNT}"
-INVOKING_HOME="${INSTALL_BOOTSTRAP_ACCOUNT_HOME}"
-
 SCRIPT_DIR=$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)
 REPO_ROOT=$(cd "${SCRIPT_DIR}/../.." && pwd)
 WORLD_AGENT_BIN_PATH="${REPO_ROOT}/target/${PROFILE}/world-service"
 GATEWAY_BIN_PATH="${REPO_ROOT}/target/${PROFILE}/substrate-gateway"
 SUBSTRATE_CLI_BIN_PATH="${REPO_ROOT}/target/${PROFILE}/substrate"
+LIFECYCLE_EXECUTOR_BIN_PATH="${REPO_ROOT}/target/${PROFILE}/substrate-lifecycle-linux"
 ACL_HELPER_SOURCE_PATH="${REPO_ROOT}/scripts/linux/substrate-apply-socket-acl.sh"
 
 if [[ ${SKIP_BUILD} -eq 0 ]]; then
-    echo "==> Building substrate + world-service + substrate-gateway (profile: ${PROFILE})"
+    echo "==> Building substrate + substrate-lifecycle-linux + world-service + substrate-gateway (profile: ${PROFILE})"
     if [[ "${PROFILE}" == "release" ]]; then
         WORLD_AGENT_BIN_PATH="${REPO_ROOT}/target/release/world-service"
         GATEWAY_BIN_PATH="${REPO_ROOT}/target/release/substrate-gateway"
         SUBSTRATE_CLI_BIN_PATH="${REPO_ROOT}/target/release/substrate"
+        LIFECYCLE_EXECUTOR_BIN_PATH="${REPO_ROOT}/target/release/substrate-lifecycle-linux"
         if [[ ${DRY_RUN} -eq 1 ]]; then
-            show_cmd cargo build -p substrate --bin substrate -p world-service -p substrate-gateway --release --manifest-path "${REPO_ROOT}/Cargo.toml"
+            show_cmd cargo build -p substrate --bin substrate --bin substrate-lifecycle-linux -p world-service -p substrate-gateway --release --manifest-path "${REPO_ROOT}/Cargo.toml"
         else
-            cargo build -p substrate --bin substrate -p world-service -p substrate-gateway --release --manifest-path "${REPO_ROOT}/Cargo.toml"
+            cargo build -p substrate --bin substrate --bin substrate-lifecycle-linux -p world-service -p substrate-gateway --release --manifest-path "${REPO_ROOT}/Cargo.toml"
         fi
     else
         if [[ ${DRY_RUN} -eq 1 ]]; then
-            show_cmd cargo build -p substrate --bin substrate -p world-service -p substrate-gateway --profile "${PROFILE}" --manifest-path "${REPO_ROOT}/Cargo.toml"
+            show_cmd cargo build -p substrate --bin substrate --bin substrate-lifecycle-linux -p world-service -p substrate-gateway --profile "${PROFILE}" --manifest-path "${REPO_ROOT}/Cargo.toml"
         else
-            cargo build -p substrate --bin substrate -p world-service -p substrate-gateway --profile "${PROFILE}" --manifest-path "${REPO_ROOT}/Cargo.toml"
+            cargo build -p substrate --bin substrate --bin substrate-lifecycle-linux -p world-service -p substrate-gateway --profile "${PROFILE}" --manifest-path "${REPO_ROOT}/Cargo.toml"
         fi
     fi
 else
@@ -971,6 +988,11 @@ fi
 
 if [[ ${DRY_RUN} -eq 0 && ! -x "${SUBSTRATE_CLI_BIN_PATH}" ]]; then
     echo "substrate binary not found at ${SUBSTRATE_CLI_BIN_PATH}. Did the build succeed?" >&2
+    exit 1
+fi
+
+if [[ ${DRY_RUN} -eq 0 && ! -x "${LIFECYCLE_EXECUTOR_BIN_PATH}" ]]; then
+    echo "substrate-lifecycle-linux binary not found at ${LIFECYCLE_EXECUTOR_BIN_PATH}. Did the build succeed?" >&2
     exit 1
 fi
 
@@ -1006,10 +1028,6 @@ elif ! env \
     echo "Private SUBSTRATE_HOME bootstrap rejected ${SUBSTRATE_HOME_FOR_AGENT}; no existing root was repaired." >&2
     exit 5
 fi
-
-echo "==> Ensuring ${SUBSTRATE_GROUP} group and membership"
-ensure_substrate_group_exists
-ensure_user_in_group "${INVOKING_USER}"
 
 SERVICE_PATH="/etc/systemd/system/substrate-world-service.service"
 SOCKET_PATH="/etc/systemd/system/substrate-world-service.socket"
@@ -1069,7 +1087,6 @@ UNIT
 read -r -d '' SOCKET_UNIT_CONTENT <<'UNIT' || true
 [Unit]
 Description=Substrate World Service Socket
-PartOf=substrate-world-service.service
 
 [Socket]
 ListenStream=/run/substrate.sock
@@ -1089,107 +1106,7 @@ read -r -d '' SOCKET_DROPIN_CONTENT <<'UNIT' || true
 ExecStartPost=-/usr/libexec/substrate/substrate-apply-socket-acl --socket /run/substrate.sock substrate
 UNIT
 
-echo "==> Installing world-service to /usr/local/bin (sudo will prompt if needed)"
-sudo_cmd install -Dm0755 "${WORLD_AGENT_BIN_PATH}" /usr/local/bin/substrate-world-service
-echo "==> Installing substrate-gateway to /usr/local/bin (no dedicated service)"
-sudo_cmd install -Dm0755 "${GATEWAY_BIN_PATH}" /usr/local/bin/substrate-gateway
-echo "==> Installing ACL bridge helper to ${ACL_HELPER_INSTALL_PATH}"
-sudo_cmd install -Dm0755 "${ACL_HELPER_SOURCE_PATH}" "${ACL_HELPER_INSTALL_PATH}"
+# shellcheck source=scripts/linux/world-lifecycle.sh
+source "${SCRIPT_DIR}/world-lifecycle.sh"
 
-echo "==> Ensuring runtime directories exist"
-sudo_cmd install -d -m0750 -o root -g "${SUBSTRATE_GROUP}" /run/substrate
-sudo_cmd install -d -m0750 -o root -g "${SUBSTRATE_GROUP}" "${SUBSTRATE_STATE_PATH}"
-sudo_cmd install -d -m0750 -o root -g "${SUBSTRATE_GROUP}" "${WORLD_DEPS_ROOT_PATH}"
-sudo_cmd install -d -m0750 -o root -g "${SUBSTRATE_GROUP}" "${WORLD_DEPS_BIN_PATH}"
-
-echo "==> Writing systemd units to ${SERVICE_PATH} and ${SOCKET_PATH}"
-install_unit "${SERVICE_PATH}" "${SERVICE_UNIT_CONTENT}"
-install_unit "${SOCKET_PATH}" "${SOCKET_UNIT_CONTENT}"
-install_unit "${ACL_DROPIN_PATH}" "${SOCKET_DROPIN_CONTENT}"
-
-echo "==> Reloading systemd and enabling socket activation"
-LEGACY_WORLD_UNIT_PREFIX="substrate-world"
-LEGACY_SERVICE="${LEGACY_WORLD_UNIT_PREFIX}-agent.service"
-LEGACY_SOCKET="${LEGACY_WORLD_UNIT_PREFIX}-agent.socket"
-if sudo_cmd systemctl cat "${LEGACY_SERVICE}" >/dev/null 2>&1; then
-    sudo_cmd systemctl stop "${LEGACY_SERVICE}" || true
-    sudo_cmd systemctl disable "${LEGACY_SERVICE}" || true
-fi
-if sudo_cmd systemctl cat "${LEGACY_SOCKET}" >/dev/null 2>&1; then
-    sudo_cmd systemctl stop "${LEGACY_SOCKET}" || true
-    sudo_cmd systemctl disable "${LEGACY_SOCKET}" || true
-fi
-sudo_cmd rm -f "/etc/systemd/system/${LEGACY_SERVICE}" "/etc/systemd/system/${LEGACY_SOCKET}" || true
-sudo_cmd systemctl daemon-reload
-sudo_cmd systemctl enable substrate-world-service.service
-sudo_cmd systemctl enable substrate-world-service.socket
-
-echo "==> Restarting socket/service to enforce ${SOCKET_FS_PATH} ownership"
-sudo_cmd systemctl stop substrate-world-service.service
-sudo_cmd systemctl stop substrate-world-service.socket
-sudo_cmd install -d -m0750 -o root -g "${SUBSTRATE_GROUP}" /run/substrate
-sudo_cmd install -d -m0750 -o root -g "${SUBSTRATE_GROUP}" "${SUBSTRATE_STATE_PATH}"
-sudo_cmd install -d -m0750 -o root -g "${SUBSTRATE_GROUP}" "${WORLD_DEPS_ROOT_PATH}"
-sudo_cmd install -d -m0750 -o root -g "${SUBSTRATE_GROUP}" "${WORLD_DEPS_BIN_PATH}"
-sudo_cmd rm -f "${SOCKET_FS_PATH}"
-sudo_cmd systemctl start substrate-world-service.socket
-sudo_cmd "${ACL_HELPER_INSTALL_PATH}" --socket "${SOCKET_FS_PATH}" "${SUBSTRATE_GROUP}" || true
-sudo_cmd "${ACL_HELPER_INSTALL_PATH}" --directory-traverse "${SUBSTRATE_STATE_PATH}" "${SUBSTRATE_GROUP}" || true
-sudo_cmd "${ACL_HELPER_INSTALL_PATH}" --tree-readonly "${WORLD_DEPS_ROOT_PATH}" "${SUBSTRATE_GROUP}" || true
-sudo_cmd systemctl start substrate-world-service.service
-
-echo "==> ${SOCKET_FS_PATH} listing (should be root:${SUBSTRATE_GROUP} 0660)"
-sudo_cmd ls -l "${SOCKET_FS_PATH}"
-if command -v getfacl >/dev/null 2>&1; then
-    echo "==> ${SOCKET_FS_PATH} ACL"
-    sudo_cmd getfacl -cp "${SOCKET_FS_PATH}" || true
-else
-    print_acl_bridge_warning
-fi
-verify_socket_acl_bridge "${INVOKING_USER}"
-echo "==> ${WORLD_DEPS_ROOT_PATH} listing (should be root:${SUBSTRATE_GROUP} 0750 with named-user ACL bridge when needed)"
-WORLD_DEPS_PROBE_PATH="$(world_deps_probe_path)"
-if sudo_cmd test -e "${WORLD_DEPS_PROBE_PATH}" >/dev/null 2>&1; then
-    sudo_cmd ls -ld "${SUBSTRATE_STATE_PATH}" "${WORLD_DEPS_ROOT_PATH}" "${WORLD_DEPS_BIN_PATH}" "${WORLD_DEPS_PROBE_PATH}"
-else
-    sudo_cmd ls -ld "${SUBSTRATE_STATE_PATH}" "${WORLD_DEPS_ROOT_PATH}" "${WORLD_DEPS_BIN_PATH}"
-    echo "==> World-deps runtime probe path not present yet: ${WORLD_DEPS_PROBE_PATH}"
-fi
-if command -v getfacl >/dev/null 2>&1; then
-    echo "==> ${WORLD_DEPS_ROOT_PATH} ACL"
-    if sudo_cmd test -e "${WORLD_DEPS_PROBE_PATH}" >/dev/null 2>&1; then
-        sudo_cmd getfacl -cp "${SUBSTRATE_STATE_PATH}" "${WORLD_DEPS_ROOT_PATH}" "${WORLD_DEPS_BIN_PATH}" "${WORLD_DEPS_PROBE_PATH}" || true
-    else
-        sudo_cmd getfacl -cp "${SUBSTRATE_STATE_PATH}" "${WORLD_DEPS_ROOT_PATH}" "${WORLD_DEPS_BIN_PATH}" || true
-    fi
-fi
-verify_world_deps_acl_bridge "${INVOKING_USER}"
-echo "==> Installed gateway binary"
-sudo_cmd ls -l /usr/local/bin/substrate-gateway
-
-echo "==> substrate-world-service.socket status (last 10 log lines)"
-sudo_cmd systemctl status substrate-world-service.socket --no-pager --lines=10 || true
-echo "==> substrate-world-service.service status (last 10 log lines)"
-sudo_cmd systemctl status substrate-world-service.service --no-pager --lines=10 || true
-
-if [[ ${DRY_RUN} -eq 1 ]]; then
-    substrate_cli="$(resolve_substrate_cli 2>/dev/null || true)"
-    if [[ -z "${substrate_cli}" ]]; then
-        substrate_cli="${SUBSTRATE_CLI_BIN_PATH}"
-    fi
-else
-    substrate_cli="$(resolve_substrate_cli)"
-fi
-maybe_run_gateway_lifecycle_proof "${substrate_cli}"
-
-print_linger_guidance "${INVOKING_USER}"
-
-echo "==> Provisioning complete"
-echo "    Verify socket with: sudo ls -l ${SOCKET_FS_PATH}"
-echo "    Verify socket ACL: sudo getfacl -cp ${SOCKET_FS_PATH}"
-echo "    Verify world-deps ACL: sudo getfacl -cp ${SUBSTRATE_STATE_PATH} ${WORLD_DEPS_ROOT_PATH} ${WORLD_DEPS_BIN_PATH} $(world_deps_probe_path)"
-echo "    Probe capabilities: sudo curl --unix-socket ${SOCKET_FS_PATH} http://localhost/v1/capabilities"
-echo "    Verify gateway lifecycle: $(basename "${substrate_cli:-substrate}") world gateway status --json"
-echo "    Doctor socket block: substrate host doctor --json | jq '.host.world_socket'"
-echo "    Doctor member-selection block: substrate agent doctor --json | jq '.checks[] | select(.check==\"member_selection\")'"
-echo "    Shim summary: substrate --shim-status | grep 'World socket'"
+main

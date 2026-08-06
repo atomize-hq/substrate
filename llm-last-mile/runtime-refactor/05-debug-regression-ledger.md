@@ -3581,3 +3581,17 @@ leaves the corresponding gate open. R3 closeout does not authorize the later A1.
   action, claims no native evidence, and leaves platform execution and retirement side effects to
   later packets.
 - Successor: `AUTHORITY_REQUIRED:A1.1d-5R3-LINUX`.
+
+### `A1.1d-5R3-LINUX`
+
+- Status: `LANDED_CLEAN`.
+- Newly landed proof surface: exact Linux executor/client wiring, fixed root-owned publisher
+  service/socket units, `world-lifecycle.sh` pre-state snapshot/restore, protected and disposable
+  publisher prepared transitions and canonical receipt paths, service/socket non-propagation, guest
+  bootstrap transcript verification and negative coverage, and dry-run gateway-proof baseline
+  restoration.
+- Remaining frozen truth: this packet claims no native evidence, does not widen Unix/macOS/Windows
+  ownership, and leaves run-only regression bytes unchanged; the reproduced `install_state_smoke.sh`
+  hosted-bundle `world-agent` versus installer `world-service` mismatch is pre-existing at the
+  bound base and outside this packet's editable fence.
+- Successor: `EVIDENCE:R3-LINUX-IMP-01`.

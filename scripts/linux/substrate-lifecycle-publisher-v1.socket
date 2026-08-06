@@ -1,0 +1,13 @@
+[Unit]
+Description=Substrate Lifecycle Publisher Socket
+
+[Socket]
+ListenSequentialPacket=/run/substrate-lifecycle-publisher-v1.sock
+SocketMode=0600
+SocketUser=root
+SocketGroup=root
+RemoveOnStop=yes
+Service=substrate-lifecycle-publisher-v1.service
+
+[Install]
+WantedBy=sockets.target

@@ -10106,3 +10106,13 @@ interactive control entrypoints, and the separate native-evidence artifact valid
 later evidence tasks and closeout. Its provider channels remain preserving `provider_unavailable`
 stubs until LINUX/MAC/WIN replace them, and the closed terminal status mapping above remains
 unchanged. Successor authority remains `AUTHORITY_REQUIRED:A1.1d-5R3-LINUX`.
+
+### `A1.1d-5R3-LINUX`
+
+`A1.1d-5R3-LINUX` now has a landed implementation for the Linux portions of the managed-system
+lifecycle contract: the exact `substrate-lifecycle-linux` executor and attested sudo relay,
+protected/disposable publisher prepared-transition and receipt publication paths, fixed
+`substrate-lifecycle-publisher-v1` service/socket units, and the exact pre-state snapshot/restore
+handoff used by `world-provision.sh`. The packet preserves the closed product wall for Unix
+orchestrator bodies, native evidence, and other platforms, and leaves successor authority at
+`EVIDENCE:R3-LINUX-IMP-01`.

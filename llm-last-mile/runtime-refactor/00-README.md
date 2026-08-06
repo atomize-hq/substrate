@@ -1174,3 +1174,19 @@ the bounded `0640`/`0650` cache observation. R1/R2 evidence is immutable.
   `review-control/r3-manifest-review-authority-security.md`,
   `review-control/r3-manifest-review-lifecycle-convergence.md`, and
   `review-control/r3-manifest-review-allowlist-evidence.md`.
+
+### `A1.1d-5R3-LINUX`
+
+- Status: `LANDED_CLEAN`.
+- Scope: landed the Linux managed-system provider: `substrate-lifecycle-linux`, the fixed
+  root-owned publisher service/socket units, the bounded `world-provision.sh` handoff to
+  `world-lifecycle.sh`, Linux client relay/attestation, and focused Linux fixtures for exact
+  pre-state restoration and publisher bootstrap.
+- Boundaries preserved: Unix row-owner orchestrators remain unchanged; service/socket propagation
+  stays split so service state cannot mutate socket endpoint identity; no native evidence bytes are
+  created; and macOS, Windows, passive health, and run-only regression bytes remain frozen.
+- Successor: `EVIDENCE:R3-LINUX-IMP-01`.
+- Review control: `review-control/r3-linux-review-cycle-record.json`,
+  `review-control/r3-linux-review-authority-security.md`,
+  `review-control/r3-linux-review-lifecycle-convergence.md`, and
+  `review-control/r3-linux-review-allowlist-evidence.md`.

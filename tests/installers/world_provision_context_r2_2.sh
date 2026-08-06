@@ -269,6 +269,7 @@ run_world_enable \
 [[ "${WORLD_ENABLE_RC}" -eq 0 ]] || fail "plain public help failed"
 grep -Fq -- "Substrate World Enable Helper" "${STDOUT_PATH}" \
   || fail "plain public help did not emit usage"
+# shellcheck disable=SC2016
 if grep -Fq -- '$SUBSTRATE_HOME' "${STDOUT_PATH}"; then
   fail "plain public help advertised ambient SUBSTRATE_HOME authority"
 fi

@@ -21,7 +21,8 @@ usage() {
 Usage: tests/installers/world_provision_smoke.sh [--profile <name>] [--keep-root]
 
 Verifies scripts/linux/world-provision.sh writes the substrate socket unit with
-SocketGroup=substrate, records group membership operations, emits linger guidance,
+SocketGroup=substrate, installs the Linux lifecycle executor plus its socket-
+activated units, records group membership operations, emits linger guidance,
 skips the gateway proof on a clean install, runs the proof when config/policy
 make it eligible, and only reports the world-deps ACL bridge green when the real
 runtime probe path is reachable. The harness stubs systemd and gateway commands
@@ -237,12 +238,26 @@ fake_root="${FAKE_ROOT:-}"
 if [[ -n "${log}" ]]; then
   printf 'systemctl %s\n' "$*" >>"${log}"
 fi
+if [[ $# -ge 2 && "$1" == "is-enabled" ]]; then
+  printf 'disabled\n'
+  exit 1
+fi
+if [[ $# -ge 2 && "$1" == "is-active" ]]; then
+  printf 'inactive\n'
+  exit 3
+fi
 if [[ $# -ge 2 && "$1" == "start" && "$2" == "substrate-world-service.socket" && -n "${fake_root}" ]]; then
   socket_path="${fake_root}/run/substrate.sock"
   mkdir -p "$(dirname "${socket_path}")"
   : >"${socket_path}"
   chmod 0660 "${socket_path}" 2>/dev/null || true
   chgrp substrate "${socket_path}" 2>/dev/null || true
+fi
+if [[ $# -ge 2 && "$1" == "start" && "$2" == "substrate-lifecycle-publisher-v1.socket" && -n "${fake_root}" ]]; then
+  socket_path="${fake_root}/run/substrate-lifecycle-publisher-v1.sock"
+  mkdir -p "$(dirname "${socket_path}")"
+  : >"${socket_path}"
+  chmod 0600 "${socket_path}" 2>/dev/null || true
 fi
 exit 0
 EOF
@@ -553,6 +568,7 @@ write_stub_helpers() {
 ensure_stub_binaries() {
   local world_agent_bin="${REPO_ROOT}/target/${PROFILE}/world-service"
   local gateway_bin="${REPO_ROOT}/target/${PROFILE}/substrate-gateway"
+  local lifecycle_executor_bin="${REPO_ROOT}/target/${PROFILE}/substrate-lifecycle-linux"
   mkdir -p "$(dirname "${world_agent_bin}")"
 
   cat >"${world_agent_bin}" <<'EOF'
@@ -567,40 +583,589 @@ exit 0
 EOF
   chmod +x "${gateway_bin}"
 
+  cat >"${lifecycle_executor_bin}" <<'EOF'
+#!/usr/bin/env bash
+exit 0
+EOF
+  chmod +x "${lifecycle_executor_bin}"
+
   write_stub_substrate
 }
 
+# shellcheck disable=SC2030,SC2034
 verify_synthetic_auth_account_home_cleanup() (
   set -euo pipefail
   local isolated_root="${WORK_ROOT}/synthetic-auth-isolated"
-  local account_home="${isolated_root}/account-home"
-  local auth_path="${account_home}/.codex/auth.json"
+  local created_home="${isolated_root}/account-home-created"
+  local existing_home="${isolated_root}/account-home-existing"
+  local created_auth_path="${created_home}/.codex/auth.json"
+  local existing_auth_path="${existing_home}/.codex/auth.json"
+  local existing_codex_dir="${existing_home}/.codex"
   local gateway_log="${isolated_root}/gateway.log"
   local carrier="isolated-authenticated-carrier"
   local substrate_stub="${REPO_ROOT}/target/${PROFILE}/substrate"
-  mkdir -p "${account_home}"
+  local existing_mode_before
+  local existing_mode_after
+  mkdir -p "${created_home}" "${existing_codex_dir}"
+  chmod 0755 "${existing_codex_dir}"
   : > "${gateway_log}"
 
   # shellcheck disable=SC1090
   source <(awk '/^while \[\[ \$# -gt 0 \]\]; do/ { exit } { print }' \
     "${REPO_ROOT}/scripts/linux/world-provision.sh")
   REPO_ROOT="$(cd "${SCRIPT_DIR}/../.." && pwd)"
-  INSTALL_BOOTSTRAP_ACCOUNT_HOME="${account_home}"
-  INVOKING_HOME="${account_home}"
   INSTALL_BOOTSTRAP_CONTEXT_V1="${carrier}"
   SUBSTRATE_INSTALL_BOOTSTRAP_CONTEXT_V1="${carrier}"
   export SUBSTRATE_INSTALL_BOOTSTRAP_CONTEXT_V1
   export SUBSTRATE_TEST_GATEWAY_LOG="${gateway_log}"
-  export SUBSTRATE_TEST_EXPECTED_SYNTHETIC_AUTH="${auth_path}"
   PATH="${STUB_BIN}:${PATH}"
 
-  run_gateway_lifecycle_proof "${substrate_stub}" synthetic_auth_file
+  run_auth_cleanup_probe() {
+    local account_home="$1"
+    local auth_path="$2"
+    INSTALL_BOOTSTRAP_ACCOUNT_HOME="${account_home}"
+    INVOKING_HOME="${account_home}"
+    export SUBSTRATE_TEST_EXPECTED_SYNTHETIC_AUTH="${auth_path}"
+    : > "${gateway_log}"
+    run_gateway_lifecycle_proof "${substrate_stub}" synthetic_auth_file
+    assert_contains "synthetic-auth-present ${auth_path}" "${gateway_log}" \
+      "gateway proof must create synthetic auth in the committed account home before dispatch"
+    [[ ! -e "${auth_path}" ]] \
+      || fatal "gateway proof did not remove the synthetic auth file it created at ${auth_path}"
+  }
 
-  assert_contains "synthetic-auth-present ${auth_path}" "${gateway_log}" \
-    "gateway proof must create synthetic auth in the committed account home before dispatch"
-  [[ ! -e "${auth_path}" ]] \
-    || fatal "gateway proof did not remove the synthetic auth file it created at ${auth_path}"
+  run_auth_cleanup_probe "${created_home}" "${created_auth_path}"
+  [[ ! -e "${created_home}/.codex" ]] \
+    || fatal "gateway proof must remove the synthetic auth parent directory it created under ${created_home}"
+
+  existing_mode_before="$(stat -c '%a' "${existing_codex_dir}")"
+  run_auth_cleanup_probe "${existing_home}" "${existing_auth_path}"
+  [[ -d "${existing_codex_dir}" ]] \
+    || fatal "gateway proof must preserve a pre-existing synthetic auth parent directory at ${existing_codex_dir}"
+  existing_mode_after="$(stat -c '%a' "${existing_codex_dir}")"
+  [[ "${existing_mode_after}" == "${existing_mode_before}" ]] \
+    || fatal "gateway proof must preserve the pre-existing ${existing_codex_dir} mode (${existing_mode_before} != ${existing_mode_after})"
 )
+
+verify_world_lifecycle_acl_restore() {
+  local output
+  local script_path
+
+  script_path="$(cd "${SCRIPT_DIR}/../.." && pwd)/scripts/linux/world-lifecycle.sh"
+  output="$(
+    SCRIPT_PATH="${script_path}" bash 2>&1 <<'EOF'
+set -euo pipefail
+source "${SCRIPT_PATH}"
+
+FAKE_ROOT="$(mktemp -d)"
+SOCKET_FS_PATH="${FAKE_ROOT}/run/substrate.sock"
+SUBSTRATE_STATE_PATH="${FAKE_ROOT}/var/lib/substrate"
+WORLD_DEPS_ROOT_PATH="${SUBSTRATE_STATE_PATH}/world-deps"
+WORLD_DEPS_BIN_PATH="${WORLD_DEPS_ROOT_PATH}/bin"
+WORLD_AGENT_BIN_PATH="${FAKE_ROOT}/artifacts/world-agent"
+GATEWAY_BIN_PATH="${FAKE_ROOT}/artifacts/gateway"
+ACL_HELPER_SOURCE_PATH="${FAKE_ROOT}/artifacts/acl-helper"
+ACL_HELPER_INSTALL_PATH="${FAKE_ROOT}/usr/libexec/substrate/substrate-apply-socket-acl"
+LIFECYCLE_EXECUTOR_BIN_PATH="${FAKE_ROOT}/artifacts/lifecycle"
+SCRIPT_DIR="${FAKE_ROOT}/artifacts/scripts/linux"
+SERVICE_PATH="${FAKE_ROOT}/etc/systemd/system/substrate-world-service.service"
+SOCKET_PATH="${FAKE_ROOT}/etc/systemd/system/substrate-world-service.socket"
+ACL_DROPIN_PATH="${FAKE_ROOT}/etc/systemd/system/substrate-world-service.socket.d/20-substrate-group-acl.conf"
+SERVICE_UNIT_CONTENT="service"
+SOCKET_UNIT_CONTENT="socket"
+SOCKET_DROPIN_CONTENT="dropin"
+INVOKING_USER="tester"
+SUBSTRATE_CLI_BIN_PATH="/bin/true"
+SUBSTRATE_GROUP="substrate"
+DRY_RUN=0
+
+mkdir -p \
+  "${FAKE_ROOT}/run" \
+  "${WORLD_DEPS_BIN_PATH}" \
+  "${FAKE_ROOT}/artifacts" \
+  "$(dirname "${ACL_HELPER_INSTALL_PATH}")" \
+  "${SCRIPT_DIR}" \
+  "$(dirname "${SERVICE_PATH}")" \
+  "$(dirname "${ACL_DROPIN_PATH}")"
+install -m0644 /dev/null "${WORLD_AGENT_BIN_PATH}"
+install -m0644 /dev/null "${GATEWAY_BIN_PATH}"
+install -m0644 /dev/null "${ACL_HELPER_SOURCE_PATH}"
+install -m0644 /dev/null "${ACL_HELPER_INSTALL_PATH}"
+install -m0644 /dev/null "${LIFECYCLE_EXECUTOR_BIN_PATH}"
+install -m0644 /dev/null "${SERVICE_PATH}"
+install -m0644 /dev/null "${SOCKET_PATH}"
+install -m0644 /dev/null "${ACL_DROPIN_PATH}"
+install -m0644 /dev/null "${SOCKET_FS_PATH}"
+
+getfacl() { :; }
+setfacl() { :; }
+
+sudo_cmd() {
+  local cmd="$1"
+  shift || true
+  case "${cmd}" in
+    test|cp|rm|install)
+      command "${cmd}" "$@"
+      ;;
+    getfacl)
+      local arg
+      for arg in "$@"; do
+        [[ "${arg}" == -* ]] && continue
+        printf '# file: %s\n' "${arg}"
+        printf 'user::rwx\ngroup::r-x\nother::---\n'
+      done
+      ;;
+    setfacl)
+      printf 'setfacl %s\n' "$*"
+      ;;
+    *)
+      return 0
+      ;;
+  esac
+}
+
+LINUX_MANAGED_STATE_SNAPSHOT_ROOT="$(mktemp -d)"
+: >"$(linux_snapshot_acl_state_path)"
+linux_snapshot_acl_state "world-socket-acl" "${SOCKET_FS_PATH}" "0"
+linux_snapshot_acl_state "state-root-acl" "${SUBSTRATE_STATE_PATH}" "0"
+linux_snapshot_acl_state "world-deps-acl" "${WORLD_DEPS_ROOT_PATH}" "1"
+install -m0644 /dev/null "${SOCKET_FS_PATH}"
+cat "$(linux_snapshot_acl_state_path)"
+while IFS=$'\t' read -r label target recursive backup; do
+  [[ -n "${label}" ]] || continue
+  linux_restore_acl_state "${label}" "${target}" "${recursive}" "${backup}"
+done <"$(linux_snapshot_acl_state_path)"
+EOF
+  )"
+
+  if ! grep -Fq -- $'world-socket-acl\t' <<<"${output}"; then
+    fatal "world-lifecycle must snapshot pre-existing socket ACL state before mutation"
+  fi
+  if ! grep -Fq -- $'state-root-acl\t' <<<"${output}"; then
+    fatal "world-lifecycle must snapshot pre-existing state-root ACL state before mutation"
+  fi
+  if ! grep -Fq -- $'world-deps-acl\t' <<<"${output}"; then
+    fatal "world-lifecycle must snapshot pre-existing world-deps ACL state before mutation"
+  fi
+  if [[ "$(grep -c '^setfacl --restore=' <<<"${output}")" -ne 3 ]]; then
+    fatal "world-lifecycle must restore all pre-existing ACL snapshots after service-state replay"
+  fi
+}
+
+verify_world_lifecycle_symlink_restore() {
+  local output
+  local script_path
+
+  script_path="$(cd "${SCRIPT_DIR}/../.." && pwd)/scripts/linux/world-lifecycle.sh"
+  output="$(
+    SCRIPT_PATH="${script_path}" bash 2>&1 <<'EOF'
+set -euo pipefail
+source "${SCRIPT_PATH}"
+
+DRY_RUN=0
+FAKE_ROOT="$(mktemp -d)"
+TARGET="${FAKE_ROOT}/etc/systemd/system/substrate-world-service.service"
+LINK_TARGET="${FAKE_ROOT}/units/substrate-world-service.service"
+
+mkdir -p "$(dirname "${TARGET}")" "$(dirname "${LINK_TARGET}")"
+printf 'unit\n' >"${LINK_TARGET}"
+ln -s "${LINK_TARGET}" "${TARGET}"
+
+sudo_cmd() {
+  local cmd="$1"
+  shift || true
+  case "${cmd}" in
+    test|cp|rm|install|mkdir|stat)
+      command "${cmd}" "$@"
+      ;;
+    chown)
+      return 0
+      ;;
+    *)
+      return 0
+      ;;
+  esac
+}
+
+LINUX_MANAGED_STATE_SNAPSHOT_ROOT="$(mktemp -d)"
+: >"$(linux_snapshot_manifest_path)"
+linux_snapshot_path "world-service-unit" "${TARGET}"
+rm -f "${TARGET}"
+printf 'replacement\n' >"${TARGET}"
+while IFS=$'\t' read -r label target type mode backup owner group; do
+  [[ -n "${label}" ]] || continue
+  linux_restore_path "${label}" "${target}" "${type}" "${mode}" "${backup}" "${owner}" "${group}"
+done <"$(linux_snapshot_manifest_path)"
+
+type_field="$(cut -f3 "$(linux_snapshot_manifest_path)")"
+printf 'type=%s\n' "${type_field}"
+if [[ -L "${TARGET}" ]]; then
+  printf 'link=%s\n' "$(readlink "${TARGET}")"
+else
+  printf 'link=missing\n'
+fi
+EOF
+  )"
+
+  if ! grep -Fq -- "type=symlink" <<<"${output}"; then
+    fatal "world-lifecycle must snapshot symlinked managed targets without collapsing them into regular files"
+  fi
+  if ! grep -Fq -- "link=" <<<"${output}"; then
+    fatal "world-lifecycle symlink restore test did not report the restored link target"
+  fi
+  if grep -Fq -- "link=missing" <<<"${output}"; then
+    fatal "world-lifecycle must restore a symlinked managed target as a symlink"
+  fi
+}
+
+verify_world_lifecycle_directory_owner_restore() {
+  local output
+  local script_path
+
+  script_path="$(cd "${SCRIPT_DIR}/../.." && pwd)/scripts/linux/world-lifecycle.sh"
+  output="$(
+    EXPECTED_UID="1111" EXPECTED_GID="2222" SCRIPT_PATH="${script_path}" bash 2>&1 <<'EOF'
+set -euo pipefail
+source "${SCRIPT_PATH}"
+
+DRY_RUN=0
+FAKE_ROOT="$(mktemp -d)"
+TARGET="${FAKE_ROOT}/var/lib/substrate"
+
+mkdir -p "${TARGET}"
+chmod 0750 "${TARGET}"
+
+sudo_cmd() {
+  local cmd="$1"
+  shift || true
+  case "${cmd}" in
+    test|cp|rm|install|mkdir)
+      command "${cmd}" "$@"
+      ;;
+    stat)
+      if [[ "${1:-}" == "-c" ]]; then
+        case "${2:-}" in
+          %a)
+            command stat "$@"
+            ;;
+          %u)
+            printf '%s\n' "${EXPECTED_UID}"
+            ;;
+          %g)
+            printf '%s\n' "${EXPECTED_GID}"
+            ;;
+          *)
+            command stat "$@"
+            ;;
+        esac
+      else
+        command stat "$@"
+      fi
+      ;;
+    chown)
+      printf 'chown %s\n' "$*"
+      ;;
+    *)
+      return 0
+      ;;
+  esac
+}
+
+LINUX_MANAGED_STATE_SNAPSHOT_ROOT="$(mktemp -d)"
+: >"$(linux_snapshot_manifest_path)"
+linux_snapshot_path "state-root" "${TARGET}"
+rm -rf "${TARGET}"
+while IFS=$'\t' read -r label target type mode backup owner group; do
+  [[ -n "${label}" ]] || continue
+  printf 'manifest=%s:%s\n' "${owner}" "${group}"
+  linux_restore_path "${label}" "${target}" "${type}" "${mode}" "${backup}" "${owner}" "${group}"
+done <"$(linux_snapshot_manifest_path)"
+printf 'mode=%s\n' "$(stat -c '%a' "${TARGET}")"
+EOF
+  )"
+
+  if ! grep -Fq -- "manifest=1111:2222" <<<"${output}"; then
+    fatal "world-lifecycle must record directory owner/group metadata in the rollback manifest"
+  fi
+  if ! grep -Fq -- "chown 1111:2222 " <<<"${output}"; then
+    fatal "world-lifecycle must replay directory owner/group metadata during rollback"
+  fi
+  if ! grep -Fq -- "mode=750" <<<"${output}"; then
+    fatal "world-lifecycle owner restore test did not preserve the original directory mode"
+  fi
+}
+
+verify_world_lifecycle_dry_run_skips_snapshot() {
+  local output
+  local script_path
+
+  script_path="$(cd "${SCRIPT_DIR}/../.." && pwd)/scripts/linux/world-lifecycle.sh"
+  output="$(
+    SCRIPT_PATH="${script_path}" bash 2>&1 <<'EOF'
+set -euo pipefail
+source "${SCRIPT_PATH}"
+
+WORLD_AGENT_BIN_PATH="/bin/true"
+GATEWAY_BIN_PATH="/bin/true"
+ACL_HELPER_SOURCE_PATH="/bin/true"
+LIFECYCLE_EXECUTOR_BIN_PATH="/bin/true"
+LIFECYCLE_EXECUTOR_INSTALL_PATH="/usr/libexec/substrate/substrate-lifecycle-linux"
+SCRIPT_DIR="/tmp"
+SERVICE_PATH="/tmp/substrate-world-service.service"
+SOCKET_PATH="/tmp/substrate-world-service.socket"
+ACL_DROPIN_PATH="/tmp/20-substrate-group-acl.conf"
+SERVICE_UNIT_CONTENT="service"
+SOCKET_UNIT_CONTENT="socket"
+SOCKET_DROPIN_CONTENT="dropin"
+INVOKING_USER="tester"
+SUBSTRATE_CLI_BIN_PATH="/bin/true"
+SUBSTRATE_STATE_PATH="/tmp/substrate-state"
+WORLD_DEPS_ROOT_PATH="/tmp/world-deps"
+WORLD_DEPS_BIN_PATH="/tmp/world-deps/bin"
+SOCKET_FS_PATH="/tmp/substrate.sock"
+DRY_RUN=1
+
+record_linux_managed_state() {
+  printf 'record-called\n'
+  return 99
+}
+
+install_linux_managed_state() {
+  printf 'install-called\n'
+}
+
+resolve_substrate_cli() {
+  printf '/bin/true\n'
+}
+
+maybe_run_gateway_lifecycle_proof() {
+  :
+}
+
+print_linger_guidance() {
+  :
+}
+
+main
+EOF
+  )"
+
+  if grep -Fq -- "record-called" <<<"${output}"; then
+    fatal "world-lifecycle dry-run must skip mutable pre-state snapshot capture"
+  fi
+  if ! grep -Fq -- "install-called" <<<"${output}"; then
+    fatal "world-lifecycle dry-run test did not reach the bounded install path"
+  fi
+}
+
+verify_world_lifecycle_err_trap_inherits() {
+  local output
+  local script_path
+  local status
+
+  script_path="$(cd "${SCRIPT_DIR}/../.." && pwd)/scripts/linux/world-lifecycle.sh"
+
+  set +e
+  output="$(
+    SCRIPT_PATH="${script_path}" bash 2>&1 <<'EOF'
+set -euo pipefail
+source "${SCRIPT_PATH}"
+
+SUBSTRATE_GROUP="substrate"
+INVOKING_USER="tester"
+GROUP_STATE="$(mktemp)"
+USER_MEMBER_STATE="$(mktemp)"
+rm -f "${GROUP_STATE}" "${USER_MEMBER_STATE}"
+
+linux_require_world_context() {
+  return 0
+}
+
+record_linux_managed_state() {
+  LINUX_MANAGED_STATE_SNAPSHOT_ROOT="$(mktemp -d)"
+  : >"$(linux_snapshot_manifest_path)"
+  : >"$(linux_snapshot_service_path)"
+  : >"$(linux_snapshot_acl_state_path)"
+  printf '%s\t%s\t%s\t%s\n' "${SUBSTRATE_GROUP}" "${INVOKING_USER}" "0" "0" >"$(linux_snapshot_account_state_path)"
+}
+
+failing_helper() {
+  false
+}
+
+install_linux_managed_state() {
+  : >"${GROUP_STATE}"
+  : >"${USER_MEMBER_STATE}"
+  failing_helper
+}
+
+sudo_cmd() {
+  local cmd="$1"
+  shift || true
+  case "${cmd}" in
+    systemctl)
+      return 0
+      ;;
+    gpasswd)
+      printf 'restore-gpasswd %s\n' "$*"
+      rm -f "${USER_MEMBER_STATE}"
+      return 0
+      ;;
+    groupdel)
+      printf 'restore-groupdel %s\n' "$*"
+      rm -f "${GROUP_STATE}"
+      return 0
+      ;;
+    usermod)
+      printf 'restore-usermod %s\n' "$*"
+      : >"${USER_MEMBER_STATE}"
+      return 0
+      ;;
+    groupadd)
+      printf 'restore-groupadd %s\n' "$*"
+      : >"${GROUP_STATE}"
+      return 0
+      ;;
+    *)
+      return 0
+      ;;
+  esac
+}
+
+getent() {
+  if [[ "${1:-}" == "group" && "${2:-}" == "${SUBSTRATE_GROUP}" && -f "${GROUP_STATE}" ]]; then
+    printf '%s:x:1000:\n' "${SUBSTRATE_GROUP}"
+    return 0
+  fi
+  return 2
+}
+
+id() {
+  if [[ "${1:-}" == "-nG" && "${2:-}" == "${INVOKING_USER}" ]]; then
+    if [[ -f "${USER_MEMBER_STATE}" ]]; then
+      printf 'wheel %s\n' "${SUBSTRATE_GROUP}"
+    else
+      printf 'wheel\n'
+    fi
+    return 0
+  fi
+  if [[ "${1:-}" == "${INVOKING_USER}" ]]; then
+    printf 'uid=1000(%s) gid=1000(%s) groups=1000(%s)\n' "${INVOKING_USER}" "${INVOKING_USER}" "${INVOKING_USER}"
+    return 0
+  fi
+  command id "$@"
+}
+
+user_in_group() {
+  [[ -f "${USER_MEMBER_STATE}" ]]
+}
+
+resolve_substrate_cli() {
+  printf '/bin/true\n'
+}
+
+maybe_run_gateway_lifecycle_proof() {
+  :
+}
+
+print_linger_guidance() {
+  :
+}
+
+main
+EOF
+  )"
+  status=$?
+  set -e
+
+  if [[ "${status}" -eq 0 ]]; then
+    fatal "world-lifecycle ERR trap inheritance test unexpectedly succeeded"
+  fi
+  if ! grep -Fq -- "restore-gpasswd -d tester substrate" <<<"${output}"; then
+    fatal "world-lifecycle ERR trap did not remove restored group membership after a helper failure"
+  fi
+  if ! grep -Fq -- "restore-groupdel substrate" <<<"${output}"; then
+    fatal "world-lifecycle ERR trap did not remove the created substrate group after a helper failure"
+  fi
+}
+
+verify_world_lifecycle_exact_service_restore() {
+  local output
+  local script_path
+
+  script_path="$(cd "${SCRIPT_DIR}/../.." && pwd)/scripts/linux/world-lifecycle.sh"
+  output="$(
+    SCRIPT_PATH="${script_path}" bash 2>&1 <<'EOF'
+set -euo pipefail
+source "${SCRIPT_PATH}"
+
+EXECUTOR_LOG="$(mktemp)"
+
+sudo_cmd() {
+  local cmd="$1"
+  shift || true
+  if [[ "${cmd}" == "systemctl" ]]; then
+    printf 'systemctl %s\n' "$*"
+    if [[ "${1:-}" == "start" && "${2:-}" == "broken.service" ]]; then
+      return 1
+    fi
+  fi
+  return 0
+}
+
+invoke_linux_lifecycle_executor() {
+  printf '%s\n' "$*" >>"${EXECUTOR_LOG}"
+  return 0
+}
+
+linux_restore_service_state "masked.service" "masked" "inactive"
+linux_restore_service_state "masked-active.service" "masked" "active"
+linux_restore_service_state "substrate-lifecycle-publisher-v1.service" "enabled" "active"
+linux_restore_service_state "runtime.service" "enabled-runtime" "active"
+
+set +e
+linux_restore_service_state "failed.service" "disabled" "failed"
+status=$?
+linux_restore_service_state "broken.service" "enabled" "active"
+broken_status=$?
+set -e
+printf 'failed-status=%s\n' "${status}"
+printf 'broken-status=%s\n' "${broken_status}"
+cat "${EXECUTOR_LOG}"
+EOF
+  )"
+
+  if ! grep -Fq -- "systemctl mask masked.service" <<<"${output}"; then
+    fatal "world-lifecycle restore must preserve masked unit state"
+  fi
+  local masked_active_unmask_line
+  local masked_active_start_line
+  local masked_active_mask_line
+  masked_active_unmask_line="$(grep -n "systemctl unmask masked-active.service" <<<"${output}" | cut -d: -f1)"
+  masked_active_start_line="$(grep -n "systemctl start masked-active.service" <<<"${output}" | cut -d: -f1)"
+  masked_active_mask_line="$(grep -n "systemctl mask masked-active.service" <<<"${output}" | cut -d: -f1)"
+  if [[ -z "${masked_active_unmask_line}" || -z "${masked_active_start_line}" || -z "${masked_active_mask_line}" ]]; then
+    fatal "world-lifecycle restore must unmask, start, and remask masked active units"
+  fi
+  if ! [[ "${masked_active_unmask_line}" -lt "${masked_active_start_line}" && "${masked_active_start_line}" -lt "${masked_active_mask_line}" ]]; then
+    fatal "world-lifecycle restore must start masked active units before restoring the masked state"
+  fi
+  if ! grep -Fq -- "systemctl enable --runtime runtime.service" <<<"${output}"; then
+    fatal "world-lifecycle restore must preserve runtime-only enablement"
+  fi
+  if ! grep -Fq -- "systemctl start runtime.service" <<<"${output}"; then
+    fatal "world-lifecycle restore must preserve active unit state"
+  fi
+  if ! grep -Fq -- "service-state --service-unit substrate-lifecycle-publisher-v1.service --action start" <<<"${output}"; then
+    fatal "world-lifecycle restore must delegate lifecycle publisher service start through the Linux lifecycle executor"
+  fi
+  if ! grep -Fq -- "failed-status=1" <<<"${output}"; then
+    fatal "world-lifecycle restore must fail closed for unsupported active states"
+  fi
+  if ! grep -Fq -- "broken-status=1" <<<"${output}"; then
+    fatal "world-lifecycle restore must fail closed when a systemctl restore transition fails"
+  fi
+}
 
 assert_contains() {
   local needle="$1"
@@ -629,6 +1194,29 @@ assert_socket_unit() {
   assert_contains "SocketMode=0660" "${unit}" "socket mode must be 0660"
   assert_contains "SocketUser=root" "${unit}" "socket user must remain root"
   assert_contains "SocketGroup=substrate" "${unit}" "socket group must be substrate"
+  assert_not_contains "PartOf=substrate-world-service.service" "${unit}" "world socket must not inherit PartOf propagation"
+}
+
+assert_lifecycle_install() {
+  local fake_root="$1"
+  local provision_log="$2"
+  local systemctl_log="$3"
+  local executor="${fake_root}/usr/libexec/substrate/substrate-lifecycle-linux"
+  local service_unit="${fake_root}/etc/systemd/system/substrate-lifecycle-publisher-v1.service"
+  local socket_unit="${fake_root}/etc/systemd/system/substrate-lifecycle-publisher-v1.socket"
+  local socket_path="${fake_root}/run/substrate-lifecycle-publisher-v1.sock"
+
+  [[ -x "${executor}" ]] || fatal "lifecycle executor missing at ${executor}"
+  [[ -f "${service_unit}" ]] || fatal "lifecycle service unit missing at ${service_unit}"
+  [[ -f "${socket_unit}" ]] || fatal "lifecycle socket unit missing at ${socket_unit}"
+  [[ -e "${socket_path}" ]] || fatal "lifecycle socket endpoint missing at ${socket_path}"
+
+  assert_contains "ExecStart=/usr/libexec/substrate/substrate-lifecycle-linux run-publisher" "${service_unit}" "lifecycle service must launch the Linux executor"
+  assert_contains "ListenSequentialPacket=/run/substrate-lifecycle-publisher-v1.sock" "${socket_unit}" "lifecycle socket must listen on the fixed seqpacket endpoint"
+  assert_contains "Service=substrate-lifecycle-publisher-v1.service" "${socket_unit}" "lifecycle socket must target the fixed publisher service"
+  assert_contains "Verify lifecycle socket: sudo ls -l /run/substrate-lifecycle-publisher-v1.sock" "${provision_log}" "provisioner must surface lifecycle socket verification guidance"
+  assert_contains "systemctl enable substrate-lifecycle-publisher-v1.socket" "${systemctl_log}" "lifecycle socket must be enabled"
+  assert_contains "systemctl start substrate-lifecycle-publisher-v1.socket" "${systemctl_log}" "lifecycle socket must be started"
 }
 
 assert_service_context_unit() {
@@ -763,6 +1351,7 @@ EOF
   esac
 }
 
+# shellcheck disable=SC2031
 run_scenario() {
   local scenario_name="$1"
   local config_json="$2"
@@ -832,6 +1421,7 @@ run_scenario() {
 
   assert_socket_unit "${fake_root}"
   assert_service_context_unit "${fake_root}" "${selected_prefix}"
+  assert_lifecycle_install "${fake_root}" "${provision_log}" "${systemctl_log}"
   assert_group_ops "${group_log}"
   assert_linger_guidance "${provision_log}"
   assert_group_guidance "${provision_log}"
@@ -864,6 +1454,12 @@ run_scenario() {
 write_stub_helpers
 ensure_stub_binaries
 verify_synthetic_auth_account_home_cleanup
+verify_world_lifecycle_acl_restore
+verify_world_lifecycle_symlink_restore
+verify_world_lifecycle_directory_owner_restore
+verify_world_lifecycle_dry_run_skips_snapshot
+verify_world_lifecycle_err_trap_inherits
+verify_world_lifecycle_exact_service_restore
 
 run_scenario \
   "clean-install" \

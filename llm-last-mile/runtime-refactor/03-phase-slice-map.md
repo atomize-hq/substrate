@@ -3130,3 +3130,13 @@ types, canonical encoders/validators, manifest publication/head/index helpers, h
 `substrate-lifecycle-control`, platform-provider preserving stubs, and the native-evidence
 validator. The packet remains non-destructive, records only manifest/bootstrap authority, and
 leaves the next implementation authority at `AUTHORITY_REQUIRED:A1.1d-5R3-LINUX`.
+
+### `A1.1d-5R3-LINUX`
+
+`A1.1d-5R3-LINUX` is landed and closes the Linux provider contract above without widening scope.
+The landed subject is the exact Linux executor/client surface, fixed publisher service/socket
+units, bounded `world-provision.sh` replacement with one `world-lifecycle.sh` call, and focused
+fixtures proving created versus pre-existing state preservation, protected/disposable publisher
+transactions, endpoint non-requestability, service/socket non-propagation, and guest bootstrap
+pairing joins. Unix row-owner orchestrators remain frozen, the packet claims no native evidence,
+and the next authority is `EVIDENCE:R3-LINUX-IMP-01`.
