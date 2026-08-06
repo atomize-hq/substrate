@@ -1,7 +1,7 @@
 {
   "protocol": "codex.top-level-orchestration-state.v1",
   "orchestration_id": "substrate-a1-1d-5r3-mac-20260806-41f97e1c570d",
-  "status": "RUNNING",
+  "status": "BLOCKED",
   "dispatch_authorized": true,
   "publication_mode": "remote",
   "remote": "origin",
@@ -29,27 +29,7 @@
     "thread_id": "019fd8c3-b12c-7e73-919f-898600ab0f64",
     "host_id": "local"
   },
-  "active_dispatch": {
-    "increment": "A1.1d-5R3-MAC",
-    "thread_id": "019fd8ca-8ac9-79a3-bc63-34e25ac0275c",
-    "host_id": "local",
-    "client_thread_id": "client-new-thread:837fefb0-ada5-41d0-a5c5-ef50e3633be2",
-    "dispatch_nonce": "870c9d6661784d2ce8e8a2cee2fb98dcb94e7a2e09400a839468cf21b928d812",
-    "expected_base": {
-      "commit": "270f6e55e1a94b7e2f9b2667e605980d2e50579c",
-      "tree": "acef6844c15d17aba8cfd18d2fc7ef88d9c3420b"
-    },
-    "target_ref": "refs/heads/feat/internal-host-orchestrator-world-dispatch-bootstrap",
-    "publication_mode": "remote",
-    "project_id": "local-b2016f8a311fef93149e42eaec4d704d",
-    "project_path": "/Users/spensermcconnell/__Active_Code/atomize-hq/substrate",
-    "task_worktree": "/Users/spensermcconnell/.codex/worktrees/9843/substrate",
-    "task_starting_state": "detached-at-target-ref",
-    "initial_prompt_path": "orchestration/substrate-a1-1d-5r3-mac-20260806-41f97e1c570d/increments/A1.1d-5R3-MAC.initial-prompt.md",
-    "initial_prompt_sha256": "sha256:2a4be61cc115347518450c6a568ada4888af6e6c4f63310c4fffa594f8e00a37",
-    "bound_prompt_path": "orchestration/substrate-a1-1d-5r3-mac-20260806-41f97e1c570d/increments/A1.1d-5R3-MAC.prompt.md",
-    "bound_prompt_sha256": "sha256:2095c4e899c69015faa232d449ee7418df51f2a0fd03dbdabc1ffd1bfc7932ac"
-  },
+  "active_dispatch": null,
   "active_evidence_dispatches": [],
   "verified_evidence": [],
   "completed": []

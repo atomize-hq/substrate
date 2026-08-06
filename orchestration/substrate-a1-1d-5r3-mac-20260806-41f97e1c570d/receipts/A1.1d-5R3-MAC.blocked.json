@@ -1,0 +1,22 @@
+{
+  "protocol": "codex.top-level-task-receipt.v1",
+  "orchestration_id": "substrate-a1-1d-5r3-mac-20260806-41f97e1c570d",
+  "dispatch_nonce": "870c9d6661784d2ce8e8a2cee2fb98dcb94e7a2e09400a839468cf21b928d812",
+  "increment": "A1.1d-5R3-MAC",
+  "status": "BLOCKED_REVIEW",
+  "increment_task": {
+    "thread_id": "019fd8ca-8ac9-79a3-bc63-34e25ac0275c",
+    "host_id": "local"
+  },
+  "expected_base": {
+    "commit": "270f6e55e1a94b7e2f9b2667e605980d2e50579c",
+    "tree": "acef6844c15d17aba8cfd18d2fc7ef88d9c3420b"
+  },
+  "blocker": {
+    "summary": "Required gpt-5.4 Extra High subagent and independent-review transport is unavailable in this increment task.",
+    "details": "After exact identity binding and successful live authority verification, spawn_agent was invoked with model gpt-5.4 and reasoning_effort xhigh. The runtime rejected it with: Unknown model `gpt-5.4` for spawn_agent. Available models: gpt-5.6-sol, gpt-5.6-terra. The increment contract and repository AGENTS.md require every subagent and reviewer to use gpt-5.4 Extra High, and the causal review contract requires fresh read-only subagents. Substituting gpt-5.6 or creating an additional top-level task would violate the bound contract. No product/control files were changed, no implementation or native checks were run, no commit was created, and nothing was pushed. HEAD, index tree, and live origin target remain exactly at the expected base/tree; the checkout is clean.",
+    "required_authority": "Provide a subagent runtime that supports gpt-5.4 with Extra High reasoning, or explicitly amend the increment contract and repository subagent-model requirement to authorize an available model. Do not advance to EVIDENCE:R3-MAC-IMP-01.",
+    "handoff_prompt": "Freshly dispatch A1.1d-5R3-MAC from remote ref refs/heads/feat/internal-host-orchestrator-world-dispatch-bootstrap only after independently re-verifying it still equals commit 270f6e55e1a94b7e2f9b2667e605980d2e50579c and tree acef6844c15d17aba8cfd18d2fc7ef88d9c3420b. Bind a new task thread/host and nonce to an exact clean task worktree. Preserve the full existing MAC packet, protected-checkout, GitNexus, causal-review, publication, native-evidence, and successor boundaries. Before edits, confirm the task can spawn fresh read-only and editing subagents with the contract-authorized model gpt-5.4 at Extra High reasoning; if the model requirement is intentionally changed, obtain explicit authority and update the dispatch contract before work. Then complete A1.1d-5R3-MAC only, publish exactly one normal fast-forward product/test/review commit if all gates pass, and return next_increment EVIDENCE:R3-MAC-IMP-01. Do not begin native evidence or any successor."
+  },
+  "next_increment": "EVIDENCE:R3-MAC-IMP-01"
+}

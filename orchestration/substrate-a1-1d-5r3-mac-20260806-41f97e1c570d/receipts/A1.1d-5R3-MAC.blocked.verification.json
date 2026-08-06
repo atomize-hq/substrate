@@ -1,0 +1,52 @@
+{
+  "verification_status": "VERIFIED_NON_ADVANCING_BLOCK",
+  "orchestration_id": "substrate-a1-1d-5r3-mac-20260806-41f97e1c570d",
+  "increment": "A1.1d-5R3-MAC",
+  "receipt_path": "orchestration/substrate-a1-1d-5r3-mac-20260806-41f97e1c570d/receipts/A1.1d-5R3-MAC.blocked.json",
+  "receipt_sha256": "sha256:e90f660936973251ce55205ac173390dd1c8e353ea43675487fb65a163a1d634",
+  "receipt_schema_valid": true,
+  "receipt_validator_valid": true,
+  "expected_successor_was_not_authorized": true,
+  "task_terminal": {
+    "verified": true,
+    "thread_id": "019fd8ca-8ac9-79a3-bc63-34e25ac0275c",
+    "host_id": "local",
+    "status": "idle",
+    "turn_status": "completed"
+  },
+  "correlation": {
+    "orchestration_id_matches": true,
+    "dispatch_nonce_matches": true,
+    "increment_matches": true,
+    "thread_id_matches": true,
+    "host_id_matches": true,
+    "expected_base_matches": true
+  },
+  "repository": {
+    "target_ref": "refs/heads/feat/internal-host-orchestrator-world-dispatch-bootstrap",
+    "live_remote": "270f6e55e1a94b7e2f9b2667e605980d2e50579c",
+    "local_target_ref": "270f6e55e1a94b7e2f9b2667e605980d2e50579c",
+    "protected_checkout_head": "270f6e55e1a94b7e2f9b2667e605980d2e50579c",
+    "protected_checkout_tree": "acef6844c15d17aba8cfd18d2fc7ef88d9c3420b",
+    "protected_checkout_clean": true,
+    "target_divergence": "0/0",
+    "increment_worktree": "/Users/spensermcconnell/.codex/worktrees/9843/substrate",
+    "increment_head": "270f6e55e1a94b7e2f9b2667e605980d2e50579c",
+    "increment_tree": "acef6844c15d17aba8cfd18d2fc7ef88d9c3420b",
+    "increment_worktree_clean": true,
+    "increment_diff_empty": true,
+    "published_commit_created": false,
+    "remote_mutation_observed": false
+  },
+  "blocker": {
+    "classification": "BLOCKED_REVIEW",
+    "independently_consistent": true,
+    "required_model": "gpt-5.4",
+    "required_reasoning": "xhigh",
+    "runtime_available_spawn_models": [
+      "gpt-5.6-sol",
+      "gpt-5.6-terra"
+    ],
+    "basis": "The increment transcript reports the gpt-5.4 spawn rejection, and the current collaboration runtime exposes only gpt-5.6-sol and gpt-5.6-terra as spawn-agent model overrides. No authorized substitution exists."
+  }
+}
