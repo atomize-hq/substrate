@@ -1,7 +1,7 @@
 {
   "protocol": "codex.top-level-orchestration-state.v1",
   "orchestration_id": "substrate-a1-1d-5r3-mac-20260806-41f97e1c570d",
-  "status": "READY",
+  "status": "RUNNING",
   "dispatch_authorized": true,
   "publication_mode": "remote",
   "remote": "origin",
@@ -29,7 +29,35 @@
     "thread_id": "019fd8c3-b12c-7e73-919f-898600ab0f64",
     "host_id": "local"
   },
-  "active_dispatch": null,
+  "active_dispatch": {
+    "increment": "A1.1d-5R3-MAC",
+    "attempt": 3,
+    "thread_id": "019fd8dd-071f-7e53-9107-69ca8b9be586",
+    "host_id": "local",
+    "client_thread_id": "client-new-thread:84ed5d9a-839a-4f29-9aff-a8fa65cfe617",
+    "dispatch_nonce": "9500813dbb9d717960edeecc28a0ae443a3b1ded5d2c0780c5f915c832e7d6c4",
+    "expected_base": {
+      "commit": "270f6e55e1a94b7e2f9b2667e605980d2e50579c",
+      "tree": "acef6844c15d17aba8cfd18d2fc7ef88d9c3420b"
+    },
+    "target_ref": "refs/heads/feat/internal-host-orchestrator-world-dispatch-bootstrap",
+    "publication_mode": "remote",
+    "project_id": "local-b2016f8a311fef93149e42eaec4d704d",
+    "project_path": "/Users/spensermcconnell/__Active_Code/atomize-hq/substrate",
+    "task_worktree": "/Users/spensermcconnell/.codex/worktrees/ace6/substrate",
+    "task_starting_state": "detached-at-target-ref",
+    "orchestrator_model": "gpt-5.6-terra",
+    "subagent_model": "gpt-5.6-terra",
+    "reasoning_effort": "xhigh",
+    "authority_amendment_paths": [
+      "orchestration/substrate-a1-1d-5r3-mac-20260806-41f97e1c570d/authority-amendments/0001-subagent-model.json",
+      "orchestration/substrate-a1-1d-5r3-mac-20260806-41f97e1c570d/authority-amendments/0002-gitnexus-context-restoration.json"
+    ],
+    "initial_prompt_path": "orchestration/substrate-a1-1d-5r3-mac-20260806-41f97e1c570d/increments/A1.1d-5R3-MAC.retry-2.initial-prompt.md",
+    "initial_prompt_sha256": "sha256:32c39516cc06a6d8c9e9dd9366589cacad671caa2218efbe19d24a4fae23c0a2",
+    "bound_prompt_path": "orchestration/substrate-a1-1d-5r3-mac-20260806-41f97e1c570d/increments/A1.1d-5R3-MAC.retry-2.prompt.md",
+    "bound_prompt_sha256": "sha256:ff21d225e5a1dad8cf4cd3bd977bf16da85cb849c594717917b0dbc6e1dfa0b5"
+  },
   "active_evidence_dispatches": [],
   "verified_evidence": [],
   "completed": []
