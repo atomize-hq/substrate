@@ -1,0 +1,36 @@
+{
+  "protocol": "codex.top-level-orchestration-state.v1",
+  "orchestration_id": "substrate-a1-1d-5r3-mac-20260806-41f97e1c570d",
+  "status": "READY",
+  "dispatch_authorized": true,
+  "publication_mode": "remote",
+  "remote": "origin",
+  "remote_observation": null,
+  "target_ref": "refs/heads/feat/internal-host-orchestrator-world-dispatch-bootstrap",
+  "required_ancestor": "270f6e55e1a94b7e2f9b2667e605980d2e50579c",
+  "sequence": [
+    "A1.1d-5R3-MAC",
+    "A1.1d-5R3-MAC-CLOSEOUT"
+  ],
+  "required_evidence": [
+    {
+      "evidence_id": "EVIDENCE:R3-MAC-IMP-01",
+      "platform": "macos",
+      "after_increment": "A1.1d-5R3-MAC",
+      "before_increment": "A1.1d-5R3-MAC-CLOSEOUT"
+    }
+  ],
+  "cursor": 0,
+  "expected_base": {
+    "commit": "270f6e55e1a94b7e2f9b2667e605980d2e50579c",
+    "tree": "acef6844c15d17aba8cfd18d2fc7ef88d9c3420b"
+  },
+  "meta": {
+    "thread_id": "019fd8c3-b12c-7e73-919f-898600ab0f64",
+    "host_id": "local"
+  },
+  "active_dispatch": null,
+  "active_evidence_dispatches": [],
+  "verified_evidence": [],
+  "completed": []
+}

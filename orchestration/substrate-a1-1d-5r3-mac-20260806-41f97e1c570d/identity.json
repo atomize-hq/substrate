@@ -1,0 +1,22 @@
+{
+  "orchestration_id": "substrate-a1-1d-5r3-mac-20260806-41f97e1c570d",
+  "meta_thread_id": "019fd8c3-b12c-7e73-919f-898600ab0f64",
+  "meta_host_id": "local",
+  "meta_worktree_path": "/Users/spensermcconnell/.codex/worktrees/eb49/substrate",
+  "orchestration_branch": "feat/r3-mac-meta-orchestration-41f97e1c570d",
+  "state_root": "/Users/spensermcconnell/.codex/worktrees/eb49/substrate/orchestration/substrate-a1-1d-5r3-mac-20260806-41f97e1c570d",
+  "state_path": "/Users/spensermcconnell/.codex/worktrees/eb49/substrate/orchestration/substrate-a1-1d-5r3-mac-20260806-41f97e1c570d/state.json",
+  "increments_path": "/Users/spensermcconnell/.codex/worktrees/eb49/substrate/orchestration/substrate-a1-1d-5r3-mac-20260806-41f97e1c570d/increments",
+  "receipts_path": "/Users/spensermcconnell/.codex/worktrees/eb49/substrate/orchestration/substrate-a1-1d-5r3-mac-20260806-41f97e1c570d/receipts",
+  "meta_prompt_path": "/Users/spensermcconnell/.codex/worktrees/eb49/substrate/orchestration/substrate-a1-1d-5r3-mac-20260806-41f97e1c570d/meta-orchestration-prompt.md",
+  "source_skill_root": "/Users/spensermcconnell/__Active_Code/atomize-hq/substrate/.agents/skills/orchestrate-top-level-tasks",
+  "target_project_id": "local-b2016f8a311fef93149e42eaec4d704d",
+  "target_project_host_id": "local",
+  "target_project_path": "/Users/spensermcconnell/__Active_Code/atomize-hq/substrate",
+  "remote": "origin",
+  "target_ref": "refs/heads/feat/internal-host-orchestrator-world-dispatch-bootstrap",
+  "expected_base_commit": "270f6e55e1a94b7e2f9b2667e605980d2e50579c",
+  "expected_base_tree": "acef6844c15d17aba8cfd18d2fc7ef88d9c3420b",
+  "dispatch_authorized": true,
+  "terminal_stop": "AUTHORITY_REQUIRED:A1.1d-5R3-WIN"
+}
