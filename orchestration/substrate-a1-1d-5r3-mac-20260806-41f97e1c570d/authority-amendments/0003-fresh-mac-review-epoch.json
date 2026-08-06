@@ -1,0 +1,91 @@
+{
+  "amendment_id": "substrate-a1-1d-5r3-mac-20260806-41f97e1c570d-fresh-review-0003",
+  "recorded_at_utc": "2026-08-06T23:47:10Z",
+  "authority_source": "explicit user instruction in meta thread 019fd8c3-b12c-7e73-919f-898600ab0f64",
+  "user_instruction": "correct, proceed with initializing and dispatching",
+  "trigger": {
+    "prior_attempt": 3,
+    "prior_task_thread_id": "019fd8dd-071f-7e53-9107-69ca8b9be586",
+    "prior_status": "BLOCKED_SCOPE_EXPANSION",
+    "prior_review_record_sha256": "sha256:bc7258fb432375e50af899f14691c7691980d4f99a8174b8e2d6ee2e1a29e003",
+    "prior_subject_fingerprint": "sha256:e60963026aa39be67e334119ff7ae61f3f15f19dbfd31539d790f8735b493924",
+    "stop_reason": "budget_exhausted"
+  },
+  "adjudication": {
+    "status": "AUTHORIZED_FRESH_MAC_REMEDIATION_AND_REVIEW_EPOCH",
+    "fresh_top_level_task_required": true,
+    "fresh_dispatch_nonce_required": true,
+    "fresh_exact_base_worktree_required": true,
+    "recovered_ace6_posture": "preserve byte-for-byte as immutable read-only donor; do not archive, clean, reset, edit, commit, or publish from it",
+    "authorized_model": "gpt-5.6-terra",
+    "authorized_reasoning": "xhigh"
+  },
+  "mandatory_findings": [
+    {
+      "finding_id": "P1-MAC-FINAL-001",
+      "priority": "P1",
+      "required_outcome": "Bind authorization to the actual accepted XPC connection peer and audit token before request handling or mutation."
+    },
+    {
+      "finding_id": "P1-MAC-FINAL-002",
+      "priority": "P1",
+      "required_outcome": "Eliminate raw or unjoined lifecycle mutation and direct retire commands; require canonical carrier, mapping, role identity, and receipt joins."
+    },
+    {
+      "finding_id": "P1-MAC-FINAL-003",
+      "priority": "P1",
+      "required_outcome": "Require validated LimaStageOneAuthorizationV1 before any absent-instance create/start or other warm-path mutation."
+    },
+    {
+      "finding_id": "P1-MAC-FINAL-004",
+      "priority": "P1",
+      "required_outcome": "Replace the pre-spawn StreamLocalBindUnlink race with a race-free owned SSH-UDS activation strategy and exact teardown/restoration."
+    },
+    {
+      "finding_id": "P2-MAC-FINAL-001",
+      "priority": "P2",
+      "required_outcome": "Add non-native executable semantic coverage for XPC peer/audit-token authorization behavior without claiming native evidence."
+    },
+    {
+      "finding_id": "P2-MAC-FINAL-002",
+      "priority": "P2",
+      "required_outcome": "Add deterministic coverage for the pre-spawn unlink/replacement race and refusal/restoration behavior."
+    }
+  ],
+  "expanded_mac_fence": {
+    "rule": "Permit only MAC-corridor helpers, tests, and call-site adjustments strictly necessary to resolve the six mandatory findings inside the existing A1.1d-5R3-MAC production/test/documentation paths.",
+    "authorized_surfaces": [
+      "src/bin/substrate-lifecycle-macos.rs MAC-local XPC peer/audit-token, authorization, carrier/mapping/Stage-1 validation, mutation, receipt, and test-only seams",
+      "crates/shell/src/execution/managed_lifecycle/macos_client.rs MAC publisher channel/request/response and pairing-carrier joins",
+      "crates/world-mac-lima/src/forwarding.rs SSH-UDS activation ownership, race-free bind/unlink/replacement, teardown/restoration, and embedded tests",
+      "crates/world-mac-lima/src/lib.rs only the already-owned MAC forwarding activation callers and embedded tests",
+      "scripts/mac/lima-lifecycle.sh, scripts/mac/lima-stop.sh, and scripts/mac/lima-warm.sh canonical carrier/mapping/Stage-1 validation before mutation",
+      "tests/mac/lifecycle_r3.sh and tests/mac/installer_parity_fixture.sh bounded non-native semantic/race fixtures",
+      "existing R3-DOCS and exact r3-mac review-control set"
+    ],
+    "new_helpers": "New private MAC-local helper symbols are authorized only when directly required by a mandatory finding and impact-reviewed before edit.",
+    "still_frozen": [
+      "new_with_mapping",
+      "mapping validation outside the existing MAC call sites",
+      "auto_select",
+      "VSock and TCP",
+      "ambient selectors or new selector/caller families",
+      "Unix, Linux, Windows, final native-gate, and unrelated runtime-refactor packets",
+      "native provisioning, code signing, publisher installation, or Lima evidence execution"
+    ]
+  },
+  "review_epoch": {
+    "prior_epoch": "frozen predecessor evidence; do not append a fifth cycle",
+    "canonical_record": "replace r3-mac-review-cycle-record.json with a new schema-valid v1 epoch after the six known findings are remediated; preserve the predecessor digest in this authority record and task receipt",
+    "budget": [
+      "one fresh discovery review or same-subject burst on the remediated subject",
+      "one different fresh closure review when the discovery returns P1/P2 findings and remediation changes the subject",
+      "at most two supplemental causal cycles only for P1/P2 directly caused or unmasked by the immediately preceding remediation under this unchanged amended authority and risk"
+    ],
+    "clean_ends_loop": true,
+    "p3_p4": "record or deduplicate in 06-review-finding-inventory.md; no automatic remediation cycle"
+  },
+  "publication": "Exactly one normal fast-forward product/test/review commit to the existing target ref only after all six findings are resolved, the new review epoch is CLEAN, required checks pass, and change detection is bounded.",
+  "successor": "EVIDENCE:R3-MAC-IMP-01",
+  "forbidden": "Do not dispatch or run native evidence, MAC closeout, WIN, UNIX, or final native-gate work in this task."
+}

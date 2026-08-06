@@ -1,7 +1,7 @@
 {
   "protocol": "codex.top-level-orchestration-state.v1",
   "orchestration_id": "substrate-a1-1d-5r3-mac-20260806-41f97e1c570d",
-  "status": "BLOCKED",
+  "status": "READY",
   "dispatch_authorized": true,
   "publication_mode": "remote",
   "remote": "origin",

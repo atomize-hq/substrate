@@ -1,0 +1,27 @@
+{
+  "schema": "codex.top-level-predispatch.v1",
+  "orchestration_id": "substrate-a1-1d-5r3-mac-20260806-41f97e1c570d",
+  "increment": "A1.1d-5R3-MAC",
+  "attempt": 4,
+  "dispatch_nonce": "84392e6f217153abafdd033bf2b503ea9f901949c4ff34345ad93a2c06632faf",
+  "phase": "INITIALIZING",
+  "thread_id": null,
+  "host_id": null,
+  "worktree": null,
+  "expected_base": {
+    "commit": "270f6e55e1a94b7e2f9b2667e605980d2e50579c",
+    "tree": "acef6844c15d17aba8cfd18d2fc7ef88d9c3420b"
+  },
+  "authority_amendment": "authority-amendments/0003-fresh-mac-review-epoch.json",
+  "contract_path": "increments/A1.1d-5R3-MAC.retry-3.contract.md",
+  "initial_prompt_path": "increments/A1.1d-5R3-MAC.retry-3.initial-prompt.md",
+  "model": "gpt-5.6-terra",
+  "reasoning": "xhigh",
+  "skill_hydration": null,
+  "status": "READY_FOR_CREATE_THREAD",
+  "project_id": "local-b2016f8a311fef93149e42eaec4d704d",
+  "project_host_id": "local",
+  "project_path": "/Users/spensermcconnell/__Active_Code/atomize-hq/substrate",
+  "target_ref": "refs/heads/feat/internal-host-orchestrator-world-dispatch-bootstrap",
+  "publication_mode": "remote"
+}
