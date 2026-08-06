@@ -1,7 +1,7 @@
 {
   "protocol": "codex.top-level-orchestration-state.v1",
   "orchestration_id": "substrate-a1-1d-5r3-mac-20260806-41f97e1c570d",
-  "status": "DISPATCHING",
+  "status": "RUNNING",
   "dispatch_authorized": true,
   "publication_mode": "remote",
   "remote": "origin",
@@ -43,7 +43,7 @@
     },
     "target_ref": "refs/heads/feat/internal-host-orchestrator-world-dispatch-bootstrap",
     "publication_mode": "remote",
-    "phase": "HYDRATED_AWAITING_BINDING",
+    "phase": "AUTHORIZED_RUNNING",
     "authority_amendment": "authority-amendments/0003-fresh-mac-review-epoch.json",
     "contract_path": "increments/A1.1d-5R3-MAC.retry-3.contract.md",
     "contract_sha256": "sha256:d4097c22defcee29cd334109ce7d264c10b86cbaa1ec6ee7cea407ce14c06f9b",
@@ -62,7 +62,8 @@
       "path": "/Users/spensermcconnell/.codex/worktrees/ace6/substrate",
       "posture": "immutable_read_only",
       "recovered_tree_sha256": "sha256:a023bc6e2f4929277468f5f418e954b0d7b96671d2d8c24f8790a9674763ff88"
-    }
+    },
+    "identity_binding_sent_at_utc": "2026-08-06T23:49:55Z"
   },
   "active_evidence_dispatches": [],
   "verified_evidence": [],

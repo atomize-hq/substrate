@@ -1,0 +1,24 @@
+{
+  "schema": "codex.top-level-dispatch-binding.v1",
+  "orchestration_id": "substrate-a1-1d-5r3-mac-20260806-41f97e1c570d",
+  "increment": "A1.1d-5R3-MAC",
+  "attempt": 4,
+  "thread_id": "019fd97a-3740-7261-a7e8-0008845709b5",
+  "host_id": "local",
+  "worktree": "/Users/spensermcconnell/.codex/worktrees/a943/substrate",
+  "dispatch_nonce": "84392e6f217153abafdd033bf2b503ea9f901949c4ff34345ad93a2c06632faf",
+  "binding_sent_at_utc": "2026-08-06T23:49:55Z",
+  "binding_prompt_path": "increments/A1.1d-5R3-MAC.retry-3.binding-prompt.md",
+  "prompt_sha256": "sha256:62dcfdc072f909c136a8858e369dde2e2fe7c1f53ab50f034da1fff7106e2aa4",
+  "contract_sha256": "sha256:d4097c22defcee29cd334109ce7d264c10b86cbaa1ec6ee7cea407ce14c06f9b",
+  "skill_hydration": {
+    "source": "/Users/spensermcconnell/__Active_Code/atomize-hq/substrate/.agents/skills/orchestrate-top-level-tasks",
+    "target": "/Users/spensermcconnell/.codex/worktrees/a943/substrate/.agents/skills/orchestrate-top-level-tasks",
+    "file_count": 26,
+    "sha256": "61d99190f680d3738fa824348e671e8eb84b2729bf31952ef16031c6ba24d903",
+    "verified": true
+  },
+  "model": "gpt-5.6-terra",
+  "reasoning": "xhigh",
+  "dispatch_authorized": true
+}
