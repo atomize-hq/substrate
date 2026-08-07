@@ -1,7 +1,7 @@
 {
   "protocol": "codex.top-level-orchestration-state.v1",
   "orchestration_id": "substrate-a1-1d-5r3-mac-20260806-41f97e1c570d",
-  "status": "DISPATCHING",
+  "status": "RUNNING",
   "dispatch_authorized": true,
   "publication_mode": "remote",
   "remote": "origin",
@@ -61,7 +61,7 @@
     "reasoning": "xhigh",
     "authority_persisted_at_utc": "2026-08-07T19:21:19.735464Z",
     "binding_sent_at_utc": "2026-08-07T19:21:45.949072Z",
-    "status": "DISPATCHING_CONTINUATION",
+    "status": "RUNNING_CONTINUATION",
     "continuation": 7,
     "continuation_nonce": "e8b183d657cdfebb9890749939737d814461ff1b801d796d95c0987d5b479b5d",
     "continuation_authority_path": "authority-amendments/0030-r5-install-provenance-stage1-capsule-effect.json",
@@ -81,7 +81,12 @@
     "prior_continuation_delivery_verified_at_utc": "2026-08-07T21:21:40Z",
     "prior_continuation_turn_id": "019fde1a-1a8d-7c83-8f0a-95c2ced03d2a",
     "preserved_subject_fingerprint": "sha256:a69dce04d313466f15f5c2284fe60fe4531a9f946ec53f9aca7f0b181e8c9147",
-    "preserved_combined_subject_sha256": "sha256:66934fd54096eb209e7e29e214ef93f983fe7edf68205c925e4513329f41757c"
+    "preserved_combined_subject_sha256": "sha256:66934fd54096eb209e7e29e214ef93f983fe7edf68205c925e4513329f41757c",
+    "continuation_sent_at_utc": "2026-08-07T21:44:00Z",
+    "continuation_delivery_path": "increments/AUX-R3-MAC-EVIDENCE-RECOVERY-R5.continuation-0030-delivery.json",
+    "continuation_delivery_verified_at_utc": "2026-08-07T21:44:00Z",
+    "continuation_turn_id": "019fde2e-4b1f-7e81-9f87-c52c49fc7bce",
+    "continuation_wait_cursor": "02c3d9a2-cefa-4c23-ab5f-aab2a1493429:12"
   },
   "active_evidence_dispatches": [],
   "verified_evidence": [],
@@ -334,7 +339,7 @@
     "successor_dispatched": true
   },
   "auxiliary_recovery_implementation": {
-    "status": "DISPATCHING_CONTINUATION",
+    "status": "RUNNING_CONTINUATION",
     "sequence": [
       "AUX-R3-MAC-EVIDENCE-RECOVERY-R1",
       "AUX-R3-MAC-EVIDENCE-RECOVERY-R2",
@@ -662,7 +667,12 @@
     "preserved_tracked_diff_sha256": "sha256:26b115f6edf314cb8b2860a71854f8576fb7ca39efafff361d6322aea68fbef4",
     "status_entry_count": 17,
     "preserved_subject_fingerprint": "sha256:a69dce04d313466f15f5c2284fe60fe4531a9f946ec53f9aca7f0b181e8c9147",
-    "preserved_combined_subject_sha256": "sha256:66934fd54096eb209e7e29e214ef93f983fe7edf68205c925e4513329f41757c"
+    "preserved_combined_subject_sha256": "sha256:66934fd54096eb209e7e29e214ef93f983fe7edf68205c925e4513329f41757c",
+    "continuation_sent_at_utc": "2026-08-07T21:44:00Z",
+    "continuation_delivery_path": "increments/AUX-R3-MAC-EVIDENCE-RECOVERY-R5.continuation-0030-delivery.json",
+    "continuation_delivery_verified_at_utc": "2026-08-07T21:44:00Z",
+    "continuation_turn_id": "019fde2e-4b1f-7e81-9f87-c52c49fc7bce",
+    "continuation_wait_cursor": "02c3d9a2-cefa-4c23-ab5f-aab2a1493429:12"
   },
   "standing_successor_authority": {
     "source_amendment": "authority-amendments/0011-r3-mac-evidence-recovery-r2-and-standing-successors.json",
