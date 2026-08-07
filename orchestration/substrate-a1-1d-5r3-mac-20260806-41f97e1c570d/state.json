@@ -1,7 +1,7 @@
 {
   "protocol": "codex.top-level-orchestration-state.v1",
   "orchestration_id": "substrate-a1-1d-5r3-mac-20260806-41f97e1c570d",
-  "status": "READY",
+  "status": "DISPATCHING",
   "dispatch_authorized": true,
   "publication_mode": "remote",
   "remote": "origin",
@@ -36,7 +36,31 @@
     "thread_id": "019fd8c3-b12c-7e73-919f-898600ab0f64",
     "host_id": "local"
   },
-  "active_dispatch": null,
+  "active_dispatch": {
+    "increment": "AUX-R3-MAC-EVIDENCE-RECOVERY-R3",
+    "thread_id": "019fdd57-3a7e-7dc3-922e-9125801393bc",
+    "host_id": "local",
+    "worktree": "/Users/spensermcconnell/.codex/worktrees/9afb/substrate",
+    "dispatch_nonce": "436e79e59e5a06bdafa67f5b066c95934838835e4d127f57f4d8ec8ebadad3f3",
+    "expected_base": {
+      "commit": "fc150213826b8b423f042b4591d6b8b1cb3ace20",
+      "tree": "02217ad2dbd106ae5befc60c8de862b6f3864647"
+    },
+    "target_ref": "refs/heads/feat/internal-host-orchestrator-world-dispatch-bootstrap",
+    "publication_mode": "remote",
+    "project_id": "local-b2016f8a311fef93149e42eaec4d704d",
+    "project_path": "/Users/spensermcconnell/__Active_Code/atomize-hq/substrate",
+    "prompt_path": "increments/AUX-R3-MAC-EVIDENCE-RECOVERY-R3.prompt.md",
+    "prompt_sha256": "sha256:c20394e27d4a6b1b6b379925bab84af243066f4e043dd5a715483e35ba86b220",
+    "binding_path": "increments/AUX-R3-MAC-EVIDENCE-RECOVERY-R3.binding.json",
+    "binding_prompt_path": "increments/AUX-R3-MAC-EVIDENCE-RECOVERY-R3.binding-prompt.md",
+    "binding_prompt_sha256": "sha256:626293ecec929c63170a14e6746493c76787dc6e51dd0452bd36bb99b5d67a86",
+    "skill_hydration_path": "increments/AUX-R3-MAC-EVIDENCE-RECOVERY-R3.skill-hydration.json",
+    "skill_hydration_sha256": "sha256:e3de93f358594033ed59696a9624d2d0ac2fd0c2aa7ddf4a532810a05b262282",
+    "model": "gpt-5.6-terra",
+    "reasoning": "xhigh",
+    "authority_persisted_at_utc": "2026-08-07T17:49:36.457865Z"
+  },
   "active_evidence_dispatches": [],
   "verified_evidence": [],
   "completed": [
@@ -251,7 +275,7 @@
     "successor_dispatched": true
   },
   "auxiliary_recovery_implementation": {
-    "status": "READY",
+    "status": "DISPATCHING",
     "sequence": [
       "AUX-R3-MAC-EVIDENCE-RECOVERY-R1",
       "AUX-R3-MAC-EVIDENCE-RECOVERY-R2",
@@ -273,17 +297,17 @@
     "donor_worktree": "/Users/spensermcconnell/.codex/worktrees/60cc/substrate",
     "donor_mutation_authorized": false,
     "task_archiving_authorized": false,
-    "thread_id": null,
-    "host_id": null,
-    "worktree": null,
-    "predispatch_path": "increments/AUX-R3-MAC-EVIDENCE-RECOVERY-R2.retry-2.predispatch.json",
-    "variables_path": "increments/AUX-R3-MAC-EVIDENCE-RECOVERY-R2.retry-2.variables.json",
-    "prompt_path": "increments/AUX-R3-MAC-EVIDENCE-RECOVERY-R2.retry-2.prompt.md",
-    "prompt_sha256": "sha256:e0bbcbe1f1ba03c75f6aeb9051f5f336d4c577be4bf7664ec119fe95ebfb9b23",
-    "binding_path": "increments/AUX-R3-MAC-EVIDENCE-RECOVERY-R2.retry-2.binding.json",
-    "binding_prompt_path": "increments/AUX-R3-MAC-EVIDENCE-RECOVERY-R2.retry-2.binding-prompt.md",
-    "binding_prompt_sha256": "sha256:4dacac6165a0018fa26dc7c9f976dc4480d7d780fb0da7af37c63eea1fd3eba1",
-    "skill_hydration_path": "increments/AUX-R3-MAC-EVIDENCE-RECOVERY-R2.retry-2.skill-hydration.json",
+    "thread_id": "019fdd57-3a7e-7dc3-922e-9125801393bc",
+    "host_id": "local",
+    "worktree": "/Users/spensermcconnell/.codex/worktrees/9afb/substrate",
+    "predispatch_path": "increments/AUX-R3-MAC-EVIDENCE-RECOVERY-R3.predispatch.json",
+    "variables_path": "increments/AUX-R3-MAC-EVIDENCE-RECOVERY-R3.variables.json",
+    "prompt_path": "increments/AUX-R3-MAC-EVIDENCE-RECOVERY-R3.prompt.md",
+    "prompt_sha256": "sha256:c20394e27d4a6b1b6b379925bab84af243066f4e043dd5a715483e35ba86b220",
+    "binding_path": "increments/AUX-R3-MAC-EVIDENCE-RECOVERY-R3.binding.json",
+    "binding_prompt_path": "increments/AUX-R3-MAC-EVIDENCE-RECOVERY-R3.binding-prompt.md",
+    "binding_prompt_sha256": "sha256:626293ecec929c63170a14e6746493c76787dc6e51dd0452bd36bb99b5d67a86",
+    "skill_hydration_path": "increments/AUX-R3-MAC-EVIDENCE-RECOVERY-R3.skill-hydration.json",
     "model": "gpt-5.6-terra",
     "reasoning": "xhigh",
     "binding_sent_at_utc": "2026-08-07T15:55:03Z",
@@ -345,7 +369,7 @@
         "task_archived": false
       }
     ],
-    "attempt": 2,
+    "attempt": 1,
     "continuation": 1,
     "continuation_nonce": "3f7553bcb50a0c0d06373e6a469f8972c9a31a59b06a13eea36a255a66c06760",
     "continuation_prompt_path": "increments/AUX-R3-MAC-EVIDENCE-RECOVERY-R2.attempt-2.continuation-0014-prompt.md",

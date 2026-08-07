@@ -28,5 +28,17 @@
   "initial_prompt_path": "increments/AUX-R3-MAC-EVIDENCE-RECOVERY-R3.initial-prompt.md",
   "gitnexus_analyze_forbidden": true,
   "mac_only_policy": "authority-amendments/0016-r3-mac-only-platform-proof.json",
-  "created_at_utc": "2026-08-07T17:48:14.142747Z"
+  "created_at_utc": "2026-08-07T17:48:14.142747Z",
+  "thread_id": "019fdd57-3a7e-7dc3-922e-9125801393bc",
+  "host_id": "local",
+  "worktree": "/Users/spensermcconnell/.codex/worktrees/9afb/substrate",
+  "worktree_head": "fc150213826b8b423f042b4591d6b8b1cb3ace20",
+  "worktree_tree": "02217ad2dbd106ae5befc60c8de862b6f3864647",
+  "worktree_index_tree": "02217ad2dbd106ae5befc60c8de862b6f3864647",
+  "worktree_clean": true,
+  "skill_hydration_path": "increments/AUX-R3-MAC-EVIDENCE-RECOVERY-R3.skill-hydration.json",
+  "prompt_path": "increments/AUX-R3-MAC-EVIDENCE-RECOVERY-R3.prompt.md",
+  "prompt_sha256": "sha256:c20394e27d4a6b1b6b379925bab84af243066f4e043dd5a715483e35ba86b220",
+  "binding_path": "increments/AUX-R3-MAC-EVIDENCE-RECOVERY-R3.binding.json",
+  "binding_prompt_path": "increments/AUX-R3-MAC-EVIDENCE-RECOVERY-R3.binding-prompt.md"
 }
