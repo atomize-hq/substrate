@@ -1,7 +1,7 @@
 {
   "protocol": "codex.top-level-orchestration-state.v1",
   "orchestration_id": "substrate-a1-1d-5r3-mac-20260806-41f97e1c570d",
-  "status": "DISPATCHING",
+  "status": "RUNNING",
   "dispatch_authorized": true,
   "publication_mode": "remote",
   "remote": "origin",
@@ -64,7 +64,8 @@
     "continuation_nonce": "7248430e5c8dbbc79b54a44ae45b017323fd33138c5097703a5d19a10a4c8e77",
     "continuation_prompt_path": "increments/AUX-R3-MAC-EVIDENCE-RECOVERY-R4.continuation-0022-prompt.md",
     "provisional_product_commit": "fd4bf60ac53e1bf66060b199edf3891b4bc66b55",
-    "provisional_product_tree": "6344b49af892770e0bfe8d9ed74d17936730f8a2"
+    "provisional_product_tree": "6344b49af892770e0bfe8d9ed74d17936730f8a2",
+    "continuation_sent_at_utc": "2026-08-07T19:15:01.286636Z"
   },
   "active_evidence_dispatches": [],
   "verified_evidence": [],
@@ -297,7 +298,7 @@
     "successor_dispatched": true
   },
   "auxiliary_recovery_implementation": {
-    "status": "DISPATCHING",
+    "status": "RUNNING",
     "sequence": [
       "AUX-R3-MAC-EVIDENCE-RECOVERY-R1",
       "AUX-R3-MAC-EVIDENCE-RECOVERY-R2",
@@ -407,7 +408,8 @@
     "continuation": 1,
     "continuation_nonce": "7248430e5c8dbbc79b54a44ae45b017323fd33138c5097703a5d19a10a4c8e77",
     "continuation_prompt_path": "increments/AUX-R3-MAC-EVIDENCE-RECOVERY-R4.continuation-0022-prompt.md",
-    "future_same_packet_continuation_allowed": true
+    "future_same_packet_continuation_allowed": true,
+    "continuation_sent_at_utc": "2026-08-07T19:15:01.286636Z"
   },
   "standing_successor_authority": {
     "source_amendment": "authority-amendments/0011-r3-mac-evidence-recovery-r2-and-standing-successors.json",
