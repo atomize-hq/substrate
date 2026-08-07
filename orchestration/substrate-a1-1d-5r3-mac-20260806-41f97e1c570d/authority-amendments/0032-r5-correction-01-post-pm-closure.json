@@ -1,0 +1,111 @@
+{
+  "protocol": "codex.orchestration-authority-amendment.v1",
+  "orchestration_id": "substrate-a1-1d-5r3-mac-20260806-41f97e1c570d",
+  "amendment_id": "0032-r5-correction-01-post-pm-closure",
+  "authority_source": "user explicit authorization of a new named R5 corrective packet in the same preserved task/worktree with a fresh review budget",
+  "authorized_increment": "AUX-R3-MAC-EVIDENCE-RECOVERY-R5",
+  "corrective_packet_id": "AUX-R3-MAC-EVIDENCE-RECOVERY-R5-CORRECTION-01",
+  "existing_task": {
+    "thread_id": "019fddab-1dd2-7570-9bd3-7f3841ce0283",
+    "host_id": "local",
+    "worktree": "/Users/spensermcconnell/.codex/worktrees/686b/substrate",
+    "original_dispatch_nonce": "e480367f5a8308d8ee73f97eb7734c80bd49e37a31c3a70a6e663668d622e70e",
+    "prior_continuation_nonce": "0e8e152431fa298d6477b4cf1320cec307034fd3397052ed9914d15ed1f39ab4",
+    "continuation_nonce": "4ebe6614bf0515a5100e3d1598ddc3d51480de18ae8bbda650fa12c8916e674f",
+    "preserved_subject_fingerprint": "sha256:d1f4e28e5bd3ca3ccb66e981397698e527403a647ce2103021debdae5a67007d",
+    "preserved_tracked_diff_sha256": "sha256:cf835ac3a2a619636cce2b4cfb2ece6c2b4766fa4a11f27ab023a35161c67648",
+    "preserved_status_entry_count": 19,
+    "staged_paths": 0,
+    "prior_review_record_sha256": "sha256:db01b433cde39ed5ec8bd6a8ffbc628105a60f6ff2315edbd38501f25847eced"
+  },
+  "expected_base_commit": "05d655fa1458a276f179d12057cbda772cc51eb6",
+  "expected_base_tree": "845694f733fccbfcd3703957bf4976da0ed59b40",
+  "target_ref": "refs/heads/feat/internal-host-orchestrator-world-dispatch-bootstrap",
+  "classification": "A fresh bounded correction subpacket for three final R5 post-PM P1s and their P2 proof gap. It completes the existing R5 mapped-action/receipt contract, does not change R6 pairing/session authority, and does not open a new platform or generic transport/broker surface.",
+  "mandatory_inputs": [
+    "P1-R5-POST-PM-INSTANCE-RECEIPT-PLAN-GAP",
+    "P1-R5-POST-PM-PREPARED-CAS-UNRECOVERABLE",
+    "P1-R5-POST-PM-GUEST-EXECUTOR-CIRCULAR-BOOTSTRAP",
+    "P2-R5-POST-PM-EXECUTOR-TRANSACTION-PROOF-GAP"
+  ],
+  "instance_receipt_plan": {
+    "requirement": "Extend the signed generation-two post-PM receipt plan for the existing mac.lima.instance entry to exactly Start, Stop, Remove and Restore. Keep Create exclusively as the Stage-1 cross-generation receipt.",
+    "identity": "Every ordinary instance action gets a deterministic receipt ID/path joined to scope, exact attempt, entry, action, manifest generation/digest and request digest. lima-stop must resolve its exact signed Stop plan before effect.",
+    "prohibitions": "No new role/action pair, generic action string, caller-selected instance, or reuse of the Stage-1 Create receipt."
+  },
+  "prepared_cas_recovery": {
+    "classification": "Classify requests before the normal current-counter gate as exactly new, exact prepared retry, exact effect-started retry, exact completed retry, or conflict.",
+    "prepared_retry": "Accept only when request counter + 1 equals current state counter, source anchor is still current, and the retained signed prepared record exact-matches request/receipt/entry/action/attempt/manifest/executor. Do not allocate or increment again.",
+    "effect_journal": "Use a durable executor-owned per-attempt effect journal under the existing fixed lifecycle state root, absent-or-exact and no-follow, with Prepared, EffectStarted, EffectObserved and Completed states joined to request/prepared hashes. Persist EffectStarted before spawn and EffectObserved before receipt publication.",
+    "resume": "Prepared with no effect journal may mark/start once. EffectStarted must first perform the exact action-specific read-only observation: exact intended after-state completes without replay; exact before-state may resume only through the same idempotent closed primitive and attempt journal; any partial/ambiguous/mismatched state preserves and blocks. Completed returns only the exact durable receipt. CAS/retry paths must never strand a known no-effect prepared record or repeat an observed effect."
+  },
+  "non_circular_guest_effects": {
+    "decision": "R5 must not depend on an already-installed guest r5-post-pm executor. Remove every R5 invocation of /usr/libexec/substrate/substrate-lifecycle-linux r5-post-pm. Do not edit src/bin/substrate-lifecycle-linux.rs; that file remains R6-owned.",
+    "host_executor": "The fixed macOS privileged executor performs each existing closed R5 guest transition using only measured limactl plus an exhaustive role/action-specific table of fixed guest executables and literal argv. This is executor-owned lifecycle control, not caller-visible session or pairing authority.",
+    "artifact_projection": "For staged workspace, publisher-executor, guest binaries, units and other byte objects, source bytes must come only from the no-follow manifest/build-evidence-bound installed or staged artifact identity. Use fixed limactl copy to an executor-owned attempt-scoped guest temporary path followed by fixed install/chown/chmod/fsync/digest/rename commands and strict re-observation. No repository, CWD, environment, caller path or payload.",
+    "non_byte_effects": "Directories, group, membership, private home, sentinel, known-hosts and service/socket states use only fixed system executables/argv derived from the validated manifest role and PM. Known-hosts remains descriptor/no-follow on the host.",
+    "publisher_executor_role": "Installing and attesting the fixed guest publisher-executor artifact is an ordinary R5 projected artifact action for later use; it is not a prerequisite for executing R5 itself. Its exact digest/owner/mode/path must be observed before its receipt completes.",
+    "prohibitions": "No generic guest executor, arbitrary shell string, raw helper, caller command, new endpoint/transport, pairing session, or Linux-host behavior."
+  },
+  "proof": {
+    "pure_helpers": "Factor receipt-plan lookup, request-state classification, effect-command planning, artifact source/target joins and retry decisions into deterministic pure helpers testable on macOS without native mutation.",
+    "required": [
+      "unit tests prove all four ordinary instance receipt plans and reject Create/unlisted actions",
+      "unit tests prove new/prepared/effect-started/completed/conflict counter and CAS classifications plus every kill boundary",
+      "unit tests prove exhaustive role/action command plans, fixed tools/argv, artifact identity joins and no r5-post-pm dependency",
+      "tests prove exact after-state completion, exact before-state safe resume, and ambiguous preservation",
+      "existing shell/control/XPC/installer tests and MAC native plus x86_64-apple-darwin checks remain green"
+    ],
+    "native_actions": false
+  },
+  "authorized_implementation_test_paths": [
+    "crates/common/src/lib.rs",
+    "crates/common/src/managed_artifact.rs",
+    "crates/shell/src/execution/managed_lifecycle.rs",
+    "crates/shell/src/execution/managed_lifecycle/macos_client.rs",
+    "crates/shell/src/execution/mod.rs",
+    "crates/shell/src/lib.rs",
+    "crates/shell/tests/managed_lifecycle_v1.rs",
+    "scripts/mac/lima-lifecycle.sh",
+    "scripts/mac/lima-stop.sh",
+    "scripts/mac/lima-warm.sh",
+    "scripts/substrate/dev-install-substrate.sh",
+    "src/bin/substrate-lifecycle-control.rs",
+    "src/bin/substrate-lifecycle-macos.rs",
+    "tests/installers/dev_install_bash32_fd_regression.sh",
+    "tests/mac/lifecycle_r3.sh"
+  ],
+  "immutable_prior_review_artifacts": {
+    "llm-last-mile/runtime-refactor/review-control/r3-mac-evidence-recovery-r5-review-allowlist-evidence.md": "sha256:d816b0e02ee9881c7ed4bf630cea31e53b2d9a34b047d0142455ae3d7d0f9396",
+    "llm-last-mile/runtime-refactor/review-control/r3-mac-evidence-recovery-r5-review-authority-security.md": "sha256:648cd48bbfef59c7c72c1e0616f95bd06971f02d22d3b8e7b49ab35de88d0d52",
+    "llm-last-mile/runtime-refactor/review-control/r3-mac-evidence-recovery-r5-review-lifecycle-convergence.md": "sha256:65c947ae63db721ed02dd7dfe6e783103f9d38d94a555ea6b2a53b9d8e89310a",
+    "llm-last-mile/runtime-refactor/review-control/r3-mac-evidence-recovery-r5-review-cycle-record.json": "sha256:db01b433cde39ed5ec8bd6a8ffbc628105a60f6ff2315edbd38501f25847eced"
+  },
+  "authorized_new_review_paths": [
+    "llm-last-mile/runtime-refactor/review-control/r3-mac-evidence-recovery-r5-correction-01-review-authority-security.md",
+    "llm-last-mile/runtime-refactor/review-control/r3-mac-evidence-recovery-r5-correction-01-review-lifecycle-convergence.md",
+    "llm-last-mile/runtime-refactor/review-control/r3-mac-evidence-recovery-r5-correction-01-review-allowlist-evidence.md",
+    "llm-last-mile/runtime-refactor/review-control/r3-mac-evidence-recovery-r5-correction-01-review-cycle-record.json"
+  ],
+  "conditional_inventory_path": "llm-last-mile/runtime-refactor/06-review-finding-inventory.md only for valid P3/P4 record",
+  "review": {
+    "packet_id": "AUX-R3-MAC-EVIDENCE-RECOVERY-R5-CORRECTION-01",
+    "fresh_budget": true,
+    "sequence": "after mandatory-input remediation, one fresh discovery review or same-subject three-lens burst, remediation of valid P1/P2, then one different fresh closure review",
+    "supplemental_cycles_max": 2,
+    "supplemental_rule": "only P1/P2 directly caused or unmasked by immediately preceding remediation under unchanged authority/risk",
+    "reviewers": "fresh read-only gpt-5.6-terra Extra High; closure different from discovery",
+    "p3_p4": "record only; no remediation cycle",
+    "terminal": "CLEAN permits publication; exhausted budget with P1/P2 blocks"
+  },
+  "hard_exclusions": [
+    "editing or repurposing the immutable prior R5 review record/artifacts",
+    "src/bin/substrate-lifecycle-linux.rs or any ordinary Linux-host/Windows behavior",
+    "new role/action pair, generic effect broker/helper/selector, endpoint, transport, forwarding, pairing or TTY/session behavior",
+    "caller/env/project/CWD/Git/remote selected tool/path/payload/command/manifest/authority",
+    "native install, code signing, Keychain/XPC/Lima mutation or official evidence action",
+    "reset, clean, rebase, archive, donor-copy or publication before terminal CLEAN"
+  ],
+  "publication": "On terminal CLEAN, publish the complete accumulated R5 subject plus immutable prior review artifacts and new correction review artifacts as exactly one normal fast-forward commit from the expected base, return increment AUX-R3-MAC-EVIDENCE-RECOVERY-R5 with packet_id correction and next_increment R6.",
+  "terminal_successor": "AUX-R3-MAC-EVIDENCE-RECOVERY-R6"
+}
