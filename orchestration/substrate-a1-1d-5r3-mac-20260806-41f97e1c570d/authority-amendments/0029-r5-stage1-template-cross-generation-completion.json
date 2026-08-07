@@ -1,0 +1,145 @@
+{
+  "protocol": "codex.orchestration-authority-amendment.v1",
+  "orchestration_id": "substrate-a1-1d-5r3-mac-20260806-41f97e1c570d",
+  "amendment_id": "0029-r5-stage1-template-cross-generation-completion",
+  "authority_source": "meta authority for a typical R5-internal contract contradiction; this corrects the temporal model without widening beyond the R3 MAC corridor",
+  "authorized_increment": "AUX-R3-MAC-EVIDENCE-RECOVERY-R5",
+  "existing_task": {
+    "thread_id": "019fddab-1dd2-7570-9bd3-7f3841ce0283",
+    "host_id": "local",
+    "worktree": "/Users/spensermcconnell/.codex/worktrees/686b/substrate",
+    "original_dispatch_nonce": "e480367f5a8308d8ee73f97eb7734c80bd49e37a31c3a70a6e663668d622e70e",
+    "prior_continuation_nonce": "272ee6e53079be7e14091241bc84dc22a15f2d0d2b04999e6158e3bb2e713c93",
+    "continuation_nonce": "bb14577c654e5fbdb30bb981d4f0d712acd04c960219939f9b26b789c0f6420a",
+    "preserved_tracked_diff_sha256": "sha256:ed4508ec3156589d8977679ce700dd6a2ec36105253ada38d28f6fcf26a6d453",
+    "preserved_combined_subject_sha256": "sha256:b6b7b8ce97fd9cdc6ecd023fde3aa816f1b187cccbff431870d75afdce4ccef9",
+    "preserved_status_entry_count": 17,
+    "staged_paths": 0
+  },
+  "expected_base_commit": "05d655fa1458a276f179d12057cbda772cc51eb6",
+  "expected_base_tree": "845694f733fccbfcd3703957bf4976da0ed59b40",
+  "target_ref": "refs/heads/feat/internal-host-orchestrator-world-dispatch-bootstrap",
+  "supersession": {
+    "supersedes_only": "0028 requirement that signed LimaStageOneAuthorizationV1 contain a complete post-PM next_pm_manifest before create/start",
+    "retains": [
+      "all seven discovery finding IDs and their mandatory remediation",
+      "root-owned retained bootstrap provenance",
+      "FD3 peer image admission and bounded framing",
+      "scope-bound global control admission",
+      "closed ordinary request shapes and exact joins",
+      "authoritative receipt/index/head/anchor persistence",
+      "exact path fence, MAC-only proof, review lineage, publication and hard exclusions"
+    ],
+    "partial_work": "The incomplete 0028 Stage-1 schema/implementation attempt in already-authorized paths may be revised or superseded surgically; no reset, clean, donor bulk-copy, or path expansion."
+  },
+  "pre_effect_stage_one_authority": {
+    "type": "MacLimaStageOneSuccessorTemplateV1",
+    "carrier": "a canonical field of the signed LimaStageOneAuthorizationV1; never generic request/tag/argv/environment/file output",
+    "mapping_state": "PlatformBootstrapMappingV1 is absent before the instance exists. LimaStageOneAuthorizationV1 is itself the only pre-PM mapping authority and MUST NOT contain a fabricated PM commitment or guest_machine_id.",
+    "required_bindings": [
+      "schema owner/version and deterministic derivation algorithm identifier",
+      "current pre-PM manifest generation/digest and current signed-anchor digest/counter; counter 0 is valid",
+      "next generation exactly current+1 and previous_manifest_sha256 exactly current pre-PM manifest digest",
+      "IH commitment, scope, installation, intended principal, selected prefix/control root, instance name/profile/source/executor/attempt/nonce/expiry",
+      "fixed full-manifest metadata/time policy, exact ordered non-machine-dependent entries, exact planned receipt ID/path and exact single observation slot kind guest_machine_id"
+    ],
+    "signature": "The existing lifecycle signature covers the complete authorization and template. Its signing public key must exact-match the current signed anchor public key and protected publisher key; an embedded self-selected key is not authority.",
+    "post_effect_variability": "Only the guest_machine_id observed from the exact selected create/start result may be supplied after effect. Every other template-derived byte is fixed before effect."
+  },
+  "post_effect_derivation": {
+    "producer": "the existing privileged macOS lifecycle publisher/executor, using the already-authorized System-Keychain publisher key; no new signer, transport, endpoint, session, or protected-state field",
+    "steps": [
+      "observe guest_machine_id from the selected instance effect and verify instance/control-root/source/attempt joins",
+      "construct PlatformBootstrapMappingV1 with the existing canonical constructor",
+      "derive the PM commitment and exact PM-dependent manifest projection/entries from the signed template plus that one observation",
+      "validate the complete mac_host_shared/mac_lima generation+1 manifest and reject any byte not deterministically implied",
+      "sign the action receipt and next anchor only after derivation and durable observation"
+    ],
+    "no_post_effect_discretion": "No timestamp, nonce, path, principal, source, action, entry order, receipt identity, or manifest metadata may be selected post-effect."
+  },
+  "specialized_cross_generation_completion": {
+    "scope": "one R5-only Stage-1 completion path, e.g. validate/complete_mac_lima_stage_one_transition_v1; it is the sole exception to generic same-manifest receipt validation",
+    "source_state": [
+      "current protected state and signed anchor are pre-PM generation N",
+      "initial greenfield signed-anchor counter 0 is valid",
+      "prepared record is bound to source generation N and allocates action counter current+1"
+    ],
+    "transition_order": [
+      "durable prepared allocation at generation N",
+      "selected absent-instance create/start effect",
+      "derive and validate full PM generation N+1 manifest from signed template plus observed guest_machine_id",
+      "create and sign ManagedActionReceiptV1 binding source anchor/prepared digest, exact observed PM, and generation N+1 manifest",
+      "publish generation N+1 manifest, empty index/head, receipt file, receipt index and receipt head with no-follow absent-or-exact semantics",
+      "sign generation N+1 anchor with existing publisher key",
+      "CAS protected state from exact source revision to generation N+1 anchor with prepared_record=None and counter advanced exactly once",
+      "CAS MacPublisherControlAdmissionV1 to exact authorization/manifest/anchor/state revision join",
+      "return only the durable receipt observation after all joins"
+    ],
+    "validation_exception": "Do not call or weaken the generic resume_action_receipt_commit_v1 same-manifest rule for this cross-generation step. Add a specialized validator that explicitly proves source generation N -> receipt/manifest/anchor generation N+1 and leaves generic actions unchanged.",
+    "protected_state": "LifecyclePublisherProtectedStateV1 schema/fields remain unchanged. Existing anchor, prepared_record, counter and revision fields are sufficient.",
+    "retry_and_kill": [
+      "before effect: exact prepared state resumes; mismatch blocks",
+      "after effect before derived manifest/receipt durability: ambiguous prepared state preserves and requires exact observation; never repeat or invent machine identity",
+      "after any manifest/receipt/index/head write: absent-or-exact resume only; mismatch blocks",
+      "after next-anchor signing/CAS: exact joined state completes idempotently; partial admission CAS blocks until exact repair through the same transaction",
+      "no overwriteable last-action receipt is authoritative"
+    ]
+  },
+  "ordinary_bridge_corrections": [
+    "fix publisher_request_v1 versus publisher_request serialization/decoder mismatch",
+    "both tags reject unknown/legacy/cross-tag fields and exact-join IH/PM/principal/control-root/machine/source/build/anchor/manifest",
+    "ordinary post-PM actions retain the generic same-generation receipt path; only Stage-1 uses the specialized cross-generation path"
+  ],
+  "inline_authority": "This continuation prompt and its nonce are the complete authority delivered to the task. The meta-only amendment JSON is not expected to exist in the product task worktree and its absence is not a blocker.",
+  "authorized_implementation_test_paths": [
+    "crates/common/src/lib.rs",
+    "crates/common/src/managed_artifact.rs",
+    "crates/shell/src/execution/managed_lifecycle.rs",
+    "crates/shell/src/execution/managed_lifecycle/macos_client.rs",
+    "crates/shell/src/execution/mod.rs",
+    "crates/shell/src/lib.rs",
+    "crates/shell/tests/managed_lifecycle_v1.rs",
+    "scripts/mac/lima-lifecycle.sh",
+    "scripts/mac/lima-stop.sh",
+    "scripts/mac/lima-warm.sh",
+    "src/bin/substrate-lifecycle-control.rs",
+    "src/bin/substrate-lifecycle-macos.rs",
+    "tests/mac/lifecycle_r3.sh",
+    "scripts/substrate/dev-install-substrate.sh",
+    "tests/installers/dev_install_bash32_fd_regression.sh"
+  ],
+  "authorized_review_paths": [
+    "llm-last-mile/runtime-refactor/review-control/r3-mac-evidence-recovery-r5-review-authority-security.md",
+    "llm-last-mile/runtime-refactor/review-control/r3-mac-evidence-recovery-r5-review-lifecycle-convergence.md",
+    "llm-last-mile/runtime-refactor/review-control/r3-mac-evidence-recovery-r5-review-allowlist-evidence.md",
+    "llm-last-mile/runtime-refactor/review-control/r3-mac-evidence-recovery-r5-review-cycle-record.json"
+  ],
+  "required_tests": [
+    "template signature key exact-joins current anchor; counter zero accepted only for exact initial pre-PM state",
+    "template rejects fabricated/placeholder PM and all post-effect variability except exact guest_machine_id",
+    "post-effect machine mismatch, instance mismatch, mapping derivation mismatch and manifest byte mismatch preserve and block",
+    "specialized generation N to N+1 receipt/manifest/anchor/state/admission success plus kill/retry at every ordered durability boundary",
+    "generic same-manifest receipt validation remains unchanged and rejects cross-generation use",
+    "ordinary wrapper/decoder field-name and closed-shape regressions",
+    "all 0028 provenance, peer, FD3 framing/timeout, admission, receipt, descriptor, role/action and no-generic-selector tests"
+  ],
+  "review": {
+    "existing_cycle": "discovery-1 bounded_stop remains authoritative",
+    "next_cycle_after_remediation": "closure-1 using a different fresh gpt-5.6-terra Extra High read-only reviewer",
+    "supplemental_cycles_max": 2,
+    "supplemental_rule": "only valid P1/P2 directly caused or unmasked by immediately preceding remediation",
+    "p3_p4": "record only; do not remediate or open cycles",
+    "clean_terminal": true
+  },
+  "hard_exclusions": [
+    "new LifecyclePublisherProtectedStateV1 field or schema version",
+    "new signer, generic broker, endpoint, transport, session, FD3 frame, R6 pairing/data/TTY behavior",
+    "generic selector, caller-supplied authority path, ambient project/Git/remote authority or fabricated pre-PM mapping",
+    "Linux/Windows source, target commands or behavior",
+    "native install, code signing, Keychain/XPC/Lima mutation, lifecycle action or evidence action",
+    "path expansion beyond exact fifteen implementation/test plus four review paths",
+    "reset, clean, rebase, archive, donor bulk-copy, commit or publication before terminal CLEAN"
+  ],
+  "publication": "exactly one normal fast-forward R5 commit only after deterministic MAC-only gates and terminal CLEAN review",
+  "terminal_successor": "AUX-R3-MAC-EVIDENCE-RECOVERY-R6"
+}

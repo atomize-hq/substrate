@@ -1,0 +1,50 @@
+{
+  "schema": "codex.top-level-task-receipt.v1",
+  "status": "BLOCKED_CONTRADICTION",
+  "increment": "AUX-R3-MAC-EVIDENCE-RECOVERY-R5",
+  "task_thread_id": "019fddab-1dd2-7570-9bd3-7f3841ce0283",
+  "task_host_id": "local",
+  "orchestration_id": "substrate-a1-1d-5r3-mac-20260806-41f97e1c570d",
+  "dispatch_nonce": "e480367f5a8308d8ee73f97eb7734c80bd49e37a31c3a70a6e663668d622e70e",
+  "continuation_nonce": "272ee6e53079be7e14091241bc84dc22a15f2d0d2b04999e6158e3bb2e713c93",
+  "expected_base_commit": "05d655fa1458a276f179d12057cbda772cc51eb6",
+  "expected_base_tree": "845694f733fccbfcd3703957bf4976da0ed59b40",
+  "live_remote": {
+    "remote": "origin",
+    "ref": "refs/heads/feat/internal-host-orchestrator-world-dispatch-bootstrap",
+    "observed_commit": "05d655fa1458a276f179d12057cbda772cc51eb6",
+    "unchanged": true
+  },
+  "evidence": {
+    "binding": "HEAD/tree/remote exactly matched; 17 status entries; index has 0 staged paths.",
+    "manual_impact": "GitNexus was unavailable for substrate-current in the assigned worktree; manual caller/callee/decoder/XPC/descriptor/timeout/retry/cfg analysis was used. No npx index mutation was run.",
+    "contradiction_1": "LimaStageOneAuthorizationV1 must be signed before effect, but the required full next_pm_manifest must contain the finalized PlatformBootstrapMappingV1 projection. The only Lima mapping constructor requires guest_machine_id; the contract orders create/start, then machine observation, then PM finalization. Thus the required signed manifest needs an unknown post-effect value before effect.",
+    "contradiction_2": "The existing generic receipt transition cannot bridge pre-PM generation 1 to the required full PM successor: resume_action_receipt_commit_v1 requires protected anchor == receipt manifest, while protected-state validation requires its prepared record == current anchor manifest. The next signed anchor is ordered only after receipt index/head, yielding a cycle.",
+    "contradiction_3": "The initial greenfield pre-PM protected state has counter 0, while the added required Stage-1 expected pre-PM counter would reject 0. Existing receipt machinery commits only already-signed records and cannot create the required signed receipt/final anchor/CAS transaction.",
+    "contradiction_4": "The ordinary bridge remains materially inconsistent: its request type retains optional legacy fields, its validator only rejects cross-tag publisher/Stage fields, and the wrapper emits publisher_request_v1 while the Rust decoder field is publisher_request. Correcting that does not resolve the Stage-1 ordering contradiction."
+  },
+  "preserved_worktree": {
+    "status_entries": 17,
+    "staged_paths": 0,
+    "changed_path_inventory_unchanged": true,
+    "current_tracked_diff_sha256": "ed4508ec3156589d8977679ce700dd6a2ec36105253ada38d28f6fcf26a6d453",
+    "note": "No reset, clean, rebase, native action, test execution, commit, publication, or R6 work occurred. A bounded incomplete common-schema attempt remains only in already-authorized existing paths and is preserved exactly; it is not represented as a working remediation."
+  },
+  "checks": {
+    "identity_base_tree_remote": "PASS",
+    "index_and_inventory": "PASS",
+    "review_record_prior_state": "VALID before amendment work",
+    "git_diff_check": "PASS",
+    "deterministic_proof": "NOT RUN: semantic contradiction precedes a safely implementable change",
+    "review_closure_1": "NOT STARTED: no coherent remediated subject exists",
+    "publication": "NOT ATTEMPTED"
+  },
+  "required_authority": [
+    "Define a pre-effect signed Stage-1 successor representation whose binding does not require the unknown post-create guest_machine_id, plus exact post-effect derivation/verification semantics; or expressly authorize a new trusted post-effect signing authority and its paths.",
+    "Authorize a non-cyclic cross-generation pre-PM-anchor to finalized-PM-manifest transaction, including the exact protected-state/receipt/index/head invariants and any additional common or transport symbols needed. The existing no-new-protected-state-fields rule conflicts with the required bridge as written.",
+    "Clarify whether Stage-1 is allowed to omit PlatformBootstrapMappingV1 before the absent create and name the authorized pre-PM mapping type/producer; current PlatformBootstrapMappingV1 is necessarily post-PM.",
+    "Provide the missing authority-amendment artifact or state that the inline continuation is the complete replacement; authority-amendments/0028-r5-provenance-stage1-admission-receipt-remediation.json is absent from the assigned checkout."
+  ],
+  "continuation_handoff": "Resume R5 only after authority resolves the Stage-1 temporal/cross-generation contradiction. Preserve this worktree and the 17-path subject; do not reset, clean, rebase, publish, archive, perform native actions, or begin R6. Rebind base/tree/remote/status and inspect the preserved partial common-schema edits before deciding whether to complete, revise, or supersede them.",
+  "next_increment": "AUX-R3-MAC-EVIDENCE-RECOVERY-R6"
+}

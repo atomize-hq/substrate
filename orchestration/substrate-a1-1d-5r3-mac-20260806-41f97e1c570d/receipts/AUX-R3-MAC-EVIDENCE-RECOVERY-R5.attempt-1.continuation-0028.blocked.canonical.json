@@ -1,0 +1,22 @@
+{
+  "protocol": "codex.top-level-task-receipt.v1",
+  "orchestration_id": "substrate-a1-1d-5r3-mac-20260806-41f97e1c570d",
+  "dispatch_nonce": "e480367f5a8308d8ee73f97eb7734c80bd49e37a31c3a70a6e663668d622e70e",
+  "increment": "AUX-R3-MAC-EVIDENCE-RECOVERY-R5",
+  "status": "BLOCKED_CONTRADICTION",
+  "increment_task": {
+    "thread_id": "019fddab-1dd2-7570-9bd3-7f3841ce0283",
+    "host_id": "local"
+  },
+  "expected_base": {
+    "commit": "05d655fa1458a276f179d12057cbda772cc51eb6",
+    "tree": "845694f733fccbfcd3703957bf4976da0ed59b40"
+  },
+  "blocker": {
+    "summary": "R5 continuation 0028 imposed a temporally impossible pre-effect full PM manifest and the generic same-manifest receipt transition cannot perform the required pre-PM to post-PM generation change.",
+    "details": "The signed Stage-1 authority was required to contain a complete next_pm_manifest before Lima create/start, but PlatformBootstrapMappingV1 requires the guest machine identity observed only after that effect. Existing generic receipt/protected-state invariants also cycle because they require the current anchor, prepared record, receipt, and manifest to share one manifest identity. The exact worktree remains preserved at the expected base with 17 status entries, no staged paths, tracked diff sha256:ed4508ec3156589d8977679ce700dd6a2ec36105253ada38d28f6fcf26a6d453, and no native action, test, commit, push, or R6 work.",
+    "required_authority": "Replace only the impossible 0028 Stage-1 rule with a signed pre-effect successor template that leaves exactly guest_machine_id as the post-effect observation, then authorize a specialized cross-generation completion from the current pre-PM anchor to the derived full PM manifest, receipt/index/head, next signed anchor, protected-state CAS, and admission record. Counter zero is valid for the initial pre-PM anchor. Keep the protected-state schema unchanged and retain all other 0028 R5 remediation authority.",
+    "handoff_prompt": "Continue the same R5 task/worktree under continuation 0029. Reverify exact base/tree/remote/index/status/diff. Revise or supersede only the incomplete 0028 Stage-1 schema attempt as needed. Implement the signed MacLimaStageOneSuccessorTemplateV1 and specialized cross-generation completion using the existing publisher signing key, complete the remaining seven discovery remediations inside the exact existing 15 implementation/test plus four review paths, run MAC-only proof, then closure-1 and bounded supplemental review if causally required. Publish one fast-forward R5 commit only after terminal CLEAN. Do not begin R6 or native evidence."
+  },
+  "next_increment": "AUX-R3-MAC-EVIDENCE-RECOVERY-R6"
+}

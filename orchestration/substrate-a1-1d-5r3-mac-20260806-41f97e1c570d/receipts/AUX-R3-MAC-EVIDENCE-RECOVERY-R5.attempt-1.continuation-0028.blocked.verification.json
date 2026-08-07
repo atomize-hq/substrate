@@ -1,0 +1,51 @@
+{
+  "protocol": "codex.top-level-task-receipt-verification.v1",
+  "orchestration_id": "substrate-a1-1d-5r3-mac-20260806-41f97e1c570d",
+  "increment": "AUX-R3-MAC-EVIDENCE-RECOVERY-R5",
+  "attempt": 1,
+  "continuation_nonce": "272ee6e53079be7e14091241bc84dc22a15f2d0d2b04999e6158e3bb2e713c93",
+  "verified_at_utc": "2026-08-07T21:20:35Z",
+  "raw_receipt_path": "receipts/AUX-R3-MAC-EVIDENCE-RECOVERY-R5.attempt-1.continuation-0028.blocked.raw.json",
+  "canonical_receipt_path": "receipts/AUX-R3-MAC-EVIDENCE-RECOVERY-R5.attempt-1.continuation-0028.blocked.canonical.json",
+  "terminal_barrier": {
+    "thread_id": "019fddab-1dd2-7570-9bd3-7f3841ce0283",
+    "host_id": "local",
+    "turn_id": "019fde0f-f283-7832-9617-f004250039dc",
+    "status": "completed",
+    "thread_status": "idle",
+    "cursor": "02c3d9a2-cefa-4c23-ab5f-aab2a1493429:9"
+  },
+  "independent_observation": {
+    "worktree": "/Users/spensermcconnell/.codex/worktrees/686b/substrate",
+    "head": "05d655fa1458a276f179d12057cbda772cc51eb6",
+    "head_tree": "845694f733fccbfcd3703957bf4976da0ed59b40",
+    "index_tree": "845694f733fccbfcd3703957bf4976da0ed59b40",
+    "live_remote": "05d655fa1458a276f179d12057cbda772cc51eb6",
+    "staged_paths": 0,
+    "status_entry_count": 17,
+    "tracked_diff_sha256": "sha256:ed4508ec3156589d8977679ce700dd6a2ec36105253ada38d28f6fcf26a6d453",
+    "tracked_and_untracked_subject_sha256": "sha256:b6b7b8ce97fd9cdc6ecd023fde3aa816f1b187cccbff431870d75afdce4ccef9",
+    "diff_check": "clean"
+  },
+  "review_verification": {
+    "record_path": "llm-last-mile/runtime-refactor/review-control/r3-mac-evidence-recovery-r5-review-cycle-record.json",
+    "validator": "VALID",
+    "status": "bounded_stop",
+    "record_sha256": "sha256:6eea8804d5c027ed5272f139afdef20ee752a32e86e132fdc117e5816738fb85",
+    "next_permitted_review_after_remediation": "closure-1"
+  },
+  "repo_truth_classification": {
+    "blocker_valid": true,
+    "same_r5_mac_corridor": true,
+    "amendment_0028_temporal_model_invalid": true,
+    "pre_effect_template_required": true,
+    "post_effect_machine_observation_required": true,
+    "specialized_cross_generation_completion_required": true,
+    "new_signer_or_transport_required": false,
+    "protected_state_schema_change_required": false,
+    "next_increment_dispatched": false
+  },
+  "verdict": "ACCEPTED_NON_ADVANCING_BLOCK_AND_ADJUDICATED_FOR_SAME_TASK_CONTINUATION",
+  "raw_receipt_sha256": "sha256:dbde477cdfb8e1158663c1bcd20db20c19eae43e942736295851f43d2eb8e916",
+  "canonical_receipt_sha256": "sha256:06aec9d663418870f3b7091f0d0548a048ae5fad40ecedc65607371b512155ad"
+}
