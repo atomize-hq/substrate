@@ -411,23 +411,31 @@ authority. A later explicit user instruction may set `dispatch_authorized=true`.
 
 ### Skill availability
 
-This skill is repository-local. Never install, symlink, or register it under a global Codex skill
-root. Git worktree creation materializes tracked repository content only, so this repository's
-ignored `.agents/` directory is not copied into fresh worktrees automatically. Therefore:
+This complete skill suite is repository-local. Never install, symlink, or register it under a
+global Codex skill root. Git worktree creation materializes tracked repository content only, so
+this repository's ignored `.agents/` directory is not copied into fresh worktrees automatically.
+Therefore:
 
-1. Resolve the authoritative source root from the loaded repository-local `SKILL.md`.
+1. Resolve the authoritative `.agents/skills` source root from the loaded repository-local
+   `SKILL.md`.
 2. Create every meta, increment, and evidence task with a self-contained initialization prompt that
    prohibits work until a later identity-binding or start-authority turn.
-3. Resolve the fresh task's exact assigned worktree, then run the authoritative source copy of
-   `scripts/hydrate_worktree_skill.py /absolute/task/worktree` followed by `--check`.
-4. Persist the hydration source, target, file count, and aggregate digest in orchestration state.
-   Do not send identity binding or start authority unless the verification matches that record.
-5. Never overwrite a differing task-local skill. Treat a missing or mismatched hydrated copy as
-   `BLOCKED_CONTRADICTION` and preserve the worktree for inspection.
+3. Resolve the fresh task's exact assigned worktree, then run the authoritative orchestration-skill
+   copy of `scripts/hydrate_worktree_skill.py /absolute/task/worktree` followed by `--check`. The
+   script must mirror the complete repository-local `.agents/skills` suite.
+4. Persist the hydration source, target, skill count, skill names, file count, and aggregate digest
+   in orchestration state. Do not send identity binding or start authority unless the verification
+   matches that record.
+5. Never overwrite a differing task-local skill suite. The only permitted in-place migration is an
+   exact verified legacy worktree containing only the old `orchestrate-top-level-tasks` copy. Treat
+   every other missing or mismatched hydrated copy as `BLOCKED_CONTRADICTION` and preserve the
+   worktree for inspection.
 6. Before first dispatch, copy the exact prompt templates, references, and validator scripts needed
    for the workflow into its durable orchestration state root and record source paths and SHA-256s.
 7. Do not hydrate an already active or dirty task as a repair mechanism. Hydration belongs between
-   fresh worktree creation and the task's authority-binding follow-up.
+   fresh worktree creation and the task's authority-binding follow-up. A user-authorized migration
+   of a verified legacy single-skill meta worktree is infrastructure maintenance, must be recorded,
+   and does not grant product authority.
 
 ### Archive safety
 

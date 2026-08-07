@@ -1,8 +1,8 @@
 Use the repository-local $orchestrate-top-level-tasks skill and every skill required by the
 increment contract. Never use or install a global copy. This initial prompt is self-contained;
-before identity binding, the meta orchestrator must hydrate and verify the skill at
-`.agents/skills/orchestrate-top-level-tasks` in the assigned worktree. If the bound follow-up
-arrives while that local skill is absent or its persisted digest does not match, stop with
+before identity binding, the meta orchestrator must hydrate and verify the complete repository-
+local suite at `.agents/skills` in the assigned worktree. If the bound follow-up arrives while that
+local suite is absent, incomplete, or its persisted digest does not match, stop with
 BLOCKED_CONTRADICTION before any work.
 
 ROLE

@@ -3,6 +3,7 @@ from __future__ import annotations
 import hashlib
 import json
 import os
+import shutil
 import subprocess
 import sys
 import tempfile
@@ -377,11 +378,11 @@ class LifecycleSafetyTests(unittest.TestCase):
         self.assertIn("Never automatically archive a task", meta_prompt)
         self.assertIn("Preserve the task-assigned worktree exactly", increment_prompt)
 
-    def test_repo_local_skill_has_worktree_hydration_contract(self) -> None:
+    def test_repo_local_skill_suite_has_worktree_hydration_contract(self) -> None:
         skill = (SKILL / "SKILL.md").read_text()
         protocol = (REFERENCES / "protocol.md").read_text()
         self.assertIn("repository-local skill", skill)
-        self.assertIn("never install or register it as a global Codex skill", skill)
+        self.assertIn("never install or register any of it as a global Codex skill", skill)
         self.assertIn("Git worktree creation materializes tracked repository content only", protocol)
         self.assertNotIn("install_global_skill.py", skill)
         self.assertNotIn("Install this skill under the global Codex skill root", protocol)
@@ -397,10 +398,15 @@ class LifecycleSafetyTests(unittest.TestCase):
                 str(worktree),
             )
             self.assertEqual(hydrate.returncode, 0, hydrate.stderr)
-            target = worktree / ".agents" / "skills" / "orchestrate-top-level-tasks"
-            self.assertTrue((target / "SKILL.md").is_file())
+            target = worktree / ".agents" / "skills"
+            orchestration = target / "orchestrate-top-level-tasks"
+            self.assertTrue((orchestration / "SKILL.md").is_file())
+            self.assertTrue((target / "spec-driven-development" / "SKILL.md").is_file())
             self.assertFalse(target.is_symlink())
             self.assertNotIn("__pycache__", {part for path in target.rglob("*") for part in path.parts})
+            hydration_report = json.loads(hydrate.stdout)
+            self.assertGreater(hydration_report["skill_count"], 1)
+            self.assertIn("spec-driven-development", hydration_report["skills"])
 
             check = run(
                 sys.executable,
@@ -411,7 +417,7 @@ class LifecycleSafetyTests(unittest.TestCase):
             self.assertEqual(check.returncode, 0, check.stderr)
             self.assertIn('"status": "verified"', check.stdout)
 
-            (target / "SKILL.md").write_text("different\n")
+            (target / "spec-driven-development" / "SKILL.md").write_text("different\n")
             mismatch = run(
                 sys.executable,
                 str(SCRIPTS / "hydrate_worktree_skill.py"),
@@ -419,7 +425,26 @@ class LifecycleSafetyTests(unittest.TestCase):
                 "--check",
             )
             self.assertNotEqual(mismatch.returncode, 0)
-            self.assertIn("hydrated skill differs", mismatch.stderr)
+            self.assertIn("hydrated skill suite differs", mismatch.stderr)
+
+    def test_verified_legacy_single_skill_copy_is_upgraded(self) -> None:
+        with tempfile.TemporaryDirectory() as directory:
+            worktree = Path(directory) / "task-worktree"
+            worktree.mkdir()
+            (worktree / ".git").write_text("gitdir: /tmp/example\n")
+            legacy = worktree / ".agents" / "skills" / "orchestrate-top-level-tasks"
+            shutil.copytree(SKILL, legacy, ignore=shutil.ignore_patterns("__pycache__", "*.pyc"))
+
+            hydrate = run(
+                sys.executable,
+                str(SCRIPTS / "hydrate_worktree_skill.py"),
+                str(worktree),
+            )
+            self.assertEqual(hydrate.returncode, 0, hydrate.stderr)
+            self.assertIn('"status": "upgraded"', hydrate.stdout)
+            self.assertTrue(
+                (worktree / ".agents" / "skills" / "spec-driven-development" / "SKILL.md").is_file()
+            )
 
 
 if __name__ == "__main__":

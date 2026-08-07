@@ -1,9 +1,9 @@
 {
-  "schema": "codex.orchestration-skill-safety-fix.v2",
+  "schema": "codex.orchestration-skill-safety-fix.v3",
   "orchestration_id": "substrate-a1-1d-5r3-mac-20260806-41f97e1c570d",
-  "recorded_at": "2026-08-06T19:37:39.917522-04:00",
-  "source_skill_root": "/Users/spensermcconnell/__Active_Code/atomize-hq/substrate/.agents/skills/orchestrate-top-level-tasks",
-  "scope": "repository-local-only",
+  "recorded_at": "2026-08-07T10:07:37.790344-04:00",
+  "source_skill_root": "/Users/spensermcconnell/__Active_Code/atomize-hq/substrate/.agents/skills",
+  "scope": "repository-local-complete-suite",
   "global_skill_path": "/Users/spensermcconnell/.codex/skills/orchestrate-top-level-tasks",
   "global_install": {
     "present": false,
@@ -26,26 +26,28 @@
     "Never archive blocked, failed, authority-required, base-drift, non-success, dirty, staged, untracked, or unique-state tasks.",
     "Archiving is not a completion gate or successor-dispatch prerequisite.",
     "Archive only with explicit user authorization and persisted disposal-safety proof.",
-    "Keep this skill repository-local and prohibit global installation or registration.",
-    "Hydrate and digest-verify the repository-local skill in each fresh meta, increment, and evidence task worktree before authority binding.",
-    "Refuse to overwrite a missing-path mismatch or differing task-local skill.",
-    "Keep initialization prompts self-contained until the hydrated skill can load on the binding turn."
+    "Keep the complete skill suite repository-local and prohibit global installation or registration.",
+    "Hydrate and digest-verify the complete repository-local .agents/skills suite in every fresh meta, increment, evidence, and auxiliary top-level task worktree before authority binding.",
+    "Refuse to overwrite an arbitrary differing task-local skill suite.",
+    "Permit only a verified exact legacy single-orchestrator-skill migration; otherwise stop for reconciliation.",
+    "Keep initialization prompts self-contained until the hydrated suite can load on the binding turn."
   ],
   "validation": {
     "unittest": {
-      "command": "python3 -m unittest discover -s <skill>/tests -p 'test_*.py' -v",
-      "passed": 16
+      "command": "PYTHONDONTWRITEBYTECODE=1 python3 .agents/skills/orchestrate-top-level-tasks/tests/test_protocol.py",
+      "passed": 17
     },
     "skill_validator_source": "passed",
     "global_symlink_absent": true,
-    "hydrate_create_check_and_mismatch_refusal": "passed"
+    "hydrate_complete_suite_create_check_mismatch_and_legacy_migration": "passed",
+    "current_meta_complete_suite_check": "passed"
   },
   "snapshot_file_count": 26,
   "snapshot_files": [
     {
       "path": "SKILL.md",
-      "sha256": "83fb07d3a9d932f79e4679bdf071b4205424a48730dca300d74c0f8ecca694fd",
-      "bytes": 11751,
+      "sha256": "1c3a1c1931eafbeccc1b7348dd1316b9289de01526b1daae088e0049cfa587e9",
+      "bytes": 11958,
       "mode": "0644"
     },
     {
@@ -80,8 +82,8 @@
     },
     {
       "path": "assets/increment-orchestrator-prompt-template.md",
-      "sha256": "f228d5c543ccea865267ff58fea3d122b50018ab19e36abc3695e34a286a30ae",
-      "bytes": 4529,
+      "sha256": "8648a1c25869e87b6fd837b9fa623f04707b397fabb5e53b1b2507a863d76bd9",
+      "bytes": 4541,
       "mode": "0644"
     },
     {
@@ -98,8 +100,8 @@
     },
     {
       "path": "assets/meta-orchestrator-prompt-template.md",
-      "sha256": "0476b3c1acf51b5f338c647cc8a1cffb3dc5263187af54e00edf66b838dca6b7",
-      "bytes": 3467,
+      "sha256": "4a03fd3d2b429b64923055ef2f16651add663fc351fc05850f38c7eb609bc482",
+      "bytes": 3515,
       "mode": "0644"
     },
     {
@@ -128,8 +130,8 @@
     },
     {
       "path": "references/protocol.md",
-      "sha256": "df0bb3b49e3c599c4b23a8b32bf34407435e20409c546a3012423b480e13e281",
-      "bytes": 17425,
+      "sha256": "bc075a606623b1d2a555a58f8daa63370e3261747880d78f91ee759ce5583909",
+      "bytes": 17908,
       "mode": "0644"
     },
     {
@@ -146,8 +148,8 @@
     },
     {
       "path": "scripts/hydrate_worktree_skill.py",
-      "sha256": "cebaa02763096fa62997df98a48af02f9638f0dee1d5778fdf2a057c6c2a21f9",
-      "bytes": 5253,
+      "sha256": "b7bdaca5c1c0ef26eae9586e59d333150b63888fd9d43e8c4b76ba555c5aaed0",
+      "bytes": 7993,
       "mode": "0755"
     },
     {
@@ -194,9 +196,69 @@
     },
     {
       "path": "tests/test_protocol.py",
-      "sha256": "9df6652f284bf467acdba9831e069448928567d64ee2bff7ec0b1bcbd2131aa7",
-      "bytes": 17195,
+      "sha256": "5259b4be6cc912157c73d80e8ec59e36d3efbfebdd1a038075f54b1c5b9c3520",
+      "bytes": 18506,
       "mode": "0644"
     }
-  ]
+  ],
+  "orchestration_skill_root": "/Users/spensermcconnell/__Active_Code/atomize-hq/substrate/.agents/skills/orchestrate-top-level-tasks",
+  "hydration_unit": {
+    "source": "/Users/spensermcconnell/__Active_Code/atomize-hq/substrate/.agents/skills",
+    "target_relative_path": ".agents/skills",
+    "required_for": [
+      "meta",
+      "increment",
+      "evidence",
+      "auxiliary-top-level"
+    ],
+    "timing": "before identity or start-authority binding",
+    "exact_mirror_required": true,
+    "global_install_prohibited": true
+  },
+  "suite_inventory": {
+    "skill_count": 25,
+    "skills": [
+      "api-and-interface-design",
+      "browser-testing-with-devtools",
+      "ci-cd-and-automation",
+      "code-review-and-quality",
+      "code-simplification",
+      "context-engineering",
+      "debugging-and-error-recovery",
+      "deprecation-and-migration",
+      "documentation-and-adrs",
+      "doubt-driven-development",
+      "frontend-ui-engineering",
+      "git-workflow-and-versioning",
+      "idea-refine",
+      "incremental-implementation",
+      "interview-me",
+      "observability-and-instrumentation",
+      "orchestrate-top-level-tasks",
+      "performance-optimization",
+      "planning-and-task-breakdown",
+      "security-and-hardening",
+      "shipping-and-launch",
+      "source-driven-development",
+      "spec-driven-development",
+      "test-driven-development",
+      "using-agent-skills"
+    ],
+    "file_count": 54,
+    "sha256": "e3de93f358594033ed59696a9624d2d0ac2fd0c2aa7ddf4a532810a05b262282"
+  },
+  "meta_worktree_migration": {
+    "worktree": "/Users/spensermcconnell/.codex/worktrees/eb49/substrate",
+    "legacy_single_skill_equal_to_existing_durable_snapshot": true,
+    "legacy_copy_preserved_at": "/Users/spensermcconnell/.codex/worktrees/eb49/substrate/.agents/skills.legacy-single-skill",
+    "complete_suite_target": "/Users/spensermcconnell/.codex/worktrees/eb49/substrate/.agents/skills",
+    "verification_status": "verified",
+    "sha256": "e3de93f358594033ed59696a9624d2d0ac2fd0c2aa7ddf4a532810a05b262282"
+  },
+  "workflow_corrections": {
+    "spec_approval_pause_required": false,
+    "planning_task_may_complete_spec_plan_todo_in_one_bounded_docs_only_run": true,
+    "planning_task_may_implement_product_changes": false
+  },
+  "dispatch_invariant": "Do not send identity/start binding to any fresh top-level task until the complete repository-local .agents/skills suite has been hydrated into and digest-verified in that exact task worktree."
 }
