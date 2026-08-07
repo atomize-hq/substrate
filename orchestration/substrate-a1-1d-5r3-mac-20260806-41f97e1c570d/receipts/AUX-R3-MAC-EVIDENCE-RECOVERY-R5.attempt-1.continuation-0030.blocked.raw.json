@@ -1,0 +1,97 @@
+{
+  "schema": "codex.top-level-task-receipt.v1",
+  "status": "BLOCKED_SCOPE_EXPANSION",
+  "increment": "AUX-R3-MAC-EVIDENCE-RECOVERY-R5",
+  "orchestration_id": "substrate-a1-1d-5r3-mac-20260806-41f97e1c570d",
+  "dispatch_nonce": "e480367f5a8308d8ee73f97eb7734c80bd49e37a31c3a70a6e663668d622e70e",
+  "continuation_nonce": "e8b183d657cdfebb9890749939737d814461ff1b801d796d95c0987d5b479b5d",
+  "increment_task_thread_id": "019fddab-1dd2-7570-9bd3-7f3841ce0283",
+  "increment_task_host_id": "local",
+  "worktree": "/Users/spensermcconnell/.codex/worktrees/686b/substrate",
+  "expected_base": "05d655fa1458a276f179d12057cbda772cc51eb6",
+  "expected_tree": "845694f733fccbfcd3703957bf4976da0ed59b40",
+  "remote": {
+    "name": "origin",
+    "ref": "refs/heads/feat/internal-host-orchestrator-world-dispatch-bootstrap",
+    "observed": "05d655fa1458a276f179d12057cbda772cc51eb6",
+    "unchanged": true
+  },
+  "publication": {
+    "commit": null,
+    "pushed": false,
+    "reason": "terminal CLEAN not reached"
+  },
+  "subject_fingerprint": "sha256:f3cd94a1c5e7de3dd531c30add61f8976d69fbacdad9db3b267364b201a4a5ab",
+  "diff_sha256": "sha256:ea87ea0e647dbf14e1b3c4ce583f79692b2b8040f34d6945586415d12ef6c5a7",
+  "changed_paths": [
+    "crates/common/src/lib.rs",
+    "crates/common/src/managed_artifact.rs",
+    "crates/shell/src/execution/managed_lifecycle.rs",
+    "crates/shell/src/execution/managed_lifecycle/macos_client.rs",
+    "crates/shell/src/execution/mod.rs",
+    "crates/shell/src/lib.rs",
+    "crates/shell/tests/managed_lifecycle_v1.rs",
+    "llm-last-mile/runtime-refactor/review-control/r3-mac-evidence-recovery-r5-review-allowlist-evidence.md",
+    "llm-last-mile/runtime-refactor/review-control/r3-mac-evidence-recovery-r5-review-authority-security.md",
+    "llm-last-mile/runtime-refactor/review-control/r3-mac-evidence-recovery-r5-review-cycle-record.json",
+    "llm-last-mile/runtime-refactor/review-control/r3-mac-evidence-recovery-r5-review-lifecycle-convergence.md",
+    "scripts/mac/lima-lifecycle.sh",
+    "scripts/mac/lima-stop.sh",
+    "scripts/mac/lima-warm.sh",
+    "scripts/substrate/dev-install-substrate.sh",
+    "src/bin/substrate-lifecycle-control.rs",
+    "src/bin/substrate-lifecycle-macos.rs",
+    "tests/installers/dev_install_bash32_fd_regression.sh",
+    "tests/mac/lifecycle_r3.sh"
+  ],
+  "review": {
+    "status": "VALID bounded_stop",
+    "record": "llm-last-mile/runtime-refactor/review-control/r3-mac-evidence-recovery-r5-review-cycle-record.json",
+    "digest": "sha256:f1db2ee8993b3ab7dad0bf645217ec4d13b14ed31251f5917223744cd54d601f",
+    "cycles": [
+      "discovery-1",
+      "closure-1",
+      "supplemental-causal-1"
+    ],
+    "findings": {
+      "resolved": [
+        "P2-R5-RAW-WARM-SESSION"
+      ],
+      "blocking": [
+        "P1-R5-IH-ONLY-RANDOMIZED-DIRECT-BOOTSTRAP-RETRY",
+        "P1-R5-POST-PM-NO-AUTHORITATIVE-TRANSACTION"
+      ]
+    }
+  },
+  "checks": [
+    "cargo fmt --all -- --check PASS",
+    "bash tests/mac/lifecycle_r3.sh PASS",
+    "bash tests/installers/dev_install_bash32_fd_regression.sh PASS",
+    "cargo test -p substrate-common --lib --no-fail-fast PASS (79)",
+    "cargo test --manifest-path crates/shell/Cargo.toml --test managed_lifecycle_v1 --no-fail-fast PASS (4)",
+    "cargo check --bin substrate-lifecycle-macos --bin substrate-lifecycle-control PASS",
+    "cargo check --target x86_64-apple-darwin --bin substrate-lifecycle-macos --bin substrate-lifecycle-control PASS",
+    "git diff --check PASS",
+    "exact 15 implementation/test + 4 review path fence PASS",
+    "changed-byte secret scan PASS",
+    "review-cycle validator PASS",
+    "GitNexus unavailable/UNKNOWN; manual caller/callee/decoder/XPC/descriptor/timeout/retry/receipt/cfg fallback used; npx gitnexus analyze not run"
+  ],
+  "cleanliness": {
+    "status_entries": 19,
+    "staged_paths": 0,
+    "clean": false,
+    "preserved": true
+  },
+  "evidence": [
+    "The direct command accepts only MacPublisherBootstrapRequestV1 IH. Each invocation creates a fresh UUIDv7 scope/attempt and expiry; durable intent/capsule/admission state is scope+original-authorization-digest bound. A lost/timed-out FD3 response cannot be exactly rediscovered/replayed by the IH-only request.",
+    "After the authorized removal of configure_guest raw guest-shell calls, the only normal post-PM continuation is post_pm_action. The privileged executor rejects every admitted PostPmAction before any effect or authoritative prepared/receipt/index/head/anchor/protected-state/admission transaction, so normal warm and lima-stop cannot complete their required mapped action."
+  ],
+  "required_authority": [
+    "Authorize a durable no-follow retained bootstrap attempt locator/index or an explicitly different recoverable direct-bootstrap protocol that permits recovery of the originally allocated scope, bounded time facts, and authorization digest without serializing the complete authorization or widening ordinary stdin.",
+    "Authorize the exact closed post-PM role/action effects and authoritative prepared/receipt/index/head/anchor/protected-state/admission transaction, or explicitly defer that closure to a successor packet with an unambiguous R5/R6 boundary. Do not authorize a generic effect broker, forwarding implementation, guest-pairing session, new endpoint, or caller selector by implication."
+  ],
+  "continuation_prompt": "Continue only after meta supplies a new nonce and explicit authority resolving both P1s. Preserve this worktree and its 19-path uncommitted subject; do not reset, clean, rebase, archive, donor-copy, publish, run native actions, or dispatch R6. Rebind base/tree/remote/index and validate the review record before any new edit. The next packet must define the exact recoverable bootstrap-attempt retention mechanism and the exact ordinary post-PM transaction closure, with a revised path/symbol/role-action fence and fresh review requirements.",
+  "next_increment": "AUX-R3-MAC-EVIDENCE-RECOVERY-R6",
+  "next_increment_dispatched": false
+}

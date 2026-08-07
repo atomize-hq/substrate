@@ -1,0 +1,58 @@
+{
+  "protocol": "codex.top-level-task-receipt-verification.v1",
+  "orchestration_id": "substrate-a1-1d-5r3-mac-20260806-41f97e1c570d",
+  "increment": "AUX-R3-MAC-EVIDENCE-RECOVERY-R5",
+  "attempt": 1,
+  "continuation_nonce": "e8b183d657cdfebb9890749939737d814461ff1b801d796d95c0987d5b479b5d",
+  "verified_at_utc": "2026-08-07T22:46:00Z",
+  "raw_receipt_path": "receipts/AUX-R3-MAC-EVIDENCE-RECOVERY-R5.attempt-1.continuation-0030.blocked.raw.json",
+  "canonical_receipt_path": "receipts/AUX-R3-MAC-EVIDENCE-RECOVERY-R5.attempt-1.continuation-0030.blocked.canonical.json",
+  "terminal_barrier": {
+    "thread_id": "019fddab-1dd2-7570-9bd3-7f3841ce0283",
+    "host_id": "local",
+    "turn_id": "019fde2e-4b1f-7e81-9f87-c52c49fc7bce",
+    "status": "completed",
+    "thread_status": "idle",
+    "cursor": "02c3d9a2-cefa-4c23-ab5f-aab2a1493429:13"
+  },
+  "independent_observation": {
+    "worktree": "/Users/spensermcconnell/.codex/worktrees/686b/substrate",
+    "head": "05d655fa1458a276f179d12057cbda772cc51eb6",
+    "head_tree": "845694f733fccbfcd3703957bf4976da0ed59b40",
+    "index_tree": "845694f733fccbfcd3703957bf4976da0ed59b40",
+    "live_remote": "05d655fa1458a276f179d12057cbda772cc51eb6",
+    "staged_paths": 0,
+    "status_entry_count": 19,
+    "tracked_diff_sha256": "sha256:ea87ea0e647dbf14e1b3c4ce583f79692b2b8040f34d6945586415d12ef6c5a7",
+    "diff_check": "clean",
+    "tracked_and_untracked_subject_sha256": "sha256:f215a392020792fa401d97c6d794737a5e6ed33f03adff893b3135100f2ee101"
+  },
+  "review_verification": {
+    "record_path": "llm-last-mile/runtime-refactor/review-control/r3-mac-evidence-recovery-r5-review-cycle-record.json",
+    "validator": "VALID",
+    "status": "bounded_stop",
+    "cycles": [
+      "discovery-1",
+      "closure-1",
+      "supplemental-causal-1"
+    ],
+    "record_sha256": "sha256:f1db2ee8993b3ab7dad0bf645217ec4d13b14ed31251f5917223744cd54d601f",
+    "open_p1": [
+      "P1-R5-IH-ONLY-RANDOMIZED-DIRECT-BOOTSTRAP-RETRY",
+      "P1-R5-POST-PM-NO-AUTHORITATIVE-TRANSACTION"
+    ]
+  },
+  "repo_truth_classification": {
+    "blocker_valid": true,
+    "same_r5_mac_corridor": true,
+    "attempt_locator_is_r5_bootstrap_recovery": true,
+    "post_pm_transaction_is_r5_owned": true,
+    "r6_pairing_behavior_required": false,
+    "path_expansion_required": false,
+    "eligible_final_causal_cycle": "supplemental-causal-2",
+    "next_increment_dispatched": false
+  },
+  "verdict": "ACCEPTED_NON_ADVANCING_BLOCK_AND_ADJUDICATED_FOR_SAME_TASK_FINAL_CAUSAL_CONTINUATION",
+  "raw_receipt_sha256": "sha256:e8f5b7d34a1f7e69be1efa47aa4921118c8ed2861a318b12395561ab2ba816eb",
+  "canonical_receipt_sha256": "sha256:065b0964d58ba0155e31c2b474ee13e08ecfcd9d8b71e1a260455ee363fba731"
+}

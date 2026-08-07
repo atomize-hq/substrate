@@ -1,0 +1,22 @@
+{
+  "protocol": "codex.top-level-task-receipt.v1",
+  "orchestration_id": "substrate-a1-1d-5r3-mac-20260806-41f97e1c570d",
+  "dispatch_nonce": "e480367f5a8308d8ee73f97eb7734c80bd49e37a31c3a70a6e663668d622e70e",
+  "increment": "AUX-R3-MAC-EVIDENCE-RECOVERY-R5",
+  "status": "BLOCKED_SCOPE_EXPANSION",
+  "increment_task": {
+    "thread_id": "019fddab-1dd2-7570-9bd3-7f3841ce0283",
+    "host_id": "local"
+  },
+  "expected_base": {
+    "commit": "05d655fa1458a276f179d12057cbda772cc51eb6",
+    "tree": "845694f733fccbfcd3703957bf4976da0ed59b40"
+  },
+  "blocker": {
+    "summary": "R5 has no exact retry locator for an IH-only direct bootstrap and no authoritative transaction for closed post-PM actions.",
+    "details": "The preserved 19-path subject passes deterministic MAC-only proof but remains review-bounded with two P1s. Each direct-bootstrap invocation allocates new scope/attempt/time, so a lost response cannot recover the exact original state. The executor also rejects every PostPmAction before effect and before prepared/receipt/index/head/anchor/protected-state/admission durability. HEAD/tree/index/remote remain the expected base, staged paths are zero, tracked diff is sha256:ea87ea0e647dbf14e1b3c4ce583f79692b2b8040f34d6945586415d12ef6c5a7, and no native action, commit, publication, or R6 work occurred.",
+    "required_authority": "Retain a no-follow, System-Keychain-backed locator keyed only by the admitted IH/principal/install provenance so the executor reopens the exact original bootstrap attempt; and implement the existing R5 closed post-PM role/action table as an executor-owned prepared/effect/receipt/index/head/anchor/protected-state/admission transaction. Keep the exact 15 implementation/test and four review paths; add no generic broker, selector, endpoint, transport, pairing session, or R6 behavior.",
+    "handoff_prompt": "Continue the same preserved R5 task under continuation 0031. Reverify base/tree/remote/index, the 19-path inventory, tracked diff and review record. Remediate only P1-R5-IH-ONLY-RANDOMIZED-DIRECT-BOOTSTRAP-RETRY and P1-R5-POST-PM-NO-AUTHORITATIVE-TRANSACTION, run the final permitted supplemental-causal-2 review, and publish only if it is CLEAN. Otherwise return bounded_stop; do not begin R6."
+  },
+  "next_increment": "AUX-R3-MAC-EVIDENCE-RECOVERY-R6"
+}
