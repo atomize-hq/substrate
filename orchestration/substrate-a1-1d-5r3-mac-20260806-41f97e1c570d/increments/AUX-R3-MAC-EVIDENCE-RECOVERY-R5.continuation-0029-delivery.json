@@ -1,0 +1,26 @@
+{
+  "schema": "codex.orchestration-continuation-delivery.v1",
+  "orchestration_id": "substrate-a1-1d-5r3-mac-20260806-41f97e1c570d",
+  "increment": "AUX-R3-MAC-EVIDENCE-RECOVERY-R5",
+  "task_thread_id": "019fddab-1dd2-7570-9bd3-7f3841ce0283",
+  "task_host_id": "local",
+  "continuation_nonce": "bb14577c654e5fbdb30bb981d4f0d712acd04c960219939f9b26b789c0f6420a",
+  "prompt_path": "increments/AUX-R3-MAC-EVIDENCE-RECOVERY-R5.continuation-0029-prompt.md",
+  "prompt_sha256": "sha256:6ae9cc13336266db1780d2796bbbb96f53bc4ee55cce7f520a698a8b2c6b45a3",
+  "delivery_ack": {
+    "threadId": "019fddab-1dd2-7570-9bd3-7f3841ce0283"
+  },
+  "delivery_verified_at_utc": "2026-08-07T21:21:40Z",
+  "task_turn_id": "019fde1a-1a8d-7c83-8f0a-95c2ced03d2a",
+  "task_turn_status": "inProgress",
+  "wait_cursor": "02c3d9a2-cefa-4c23-ab5f-aab2a1493429:10",
+  "preserved_worktree": {
+    "path": "/Users/spensermcconnell/.codex/worktrees/686b/substrate",
+    "head": "05d655fa1458a276f179d12057cbda772cc51eb6",
+    "tree": "845694f733fccbfcd3703957bf4976da0ed59b40",
+    "tracked_diff_sha256": "sha256:ed4508ec3156589d8977679ce700dd6a2ec36105253ada38d28f6fcf26a6d453",
+    "combined_subject_sha256": "sha256:b6b7b8ce97fd9cdc6ecd023fde3aa816f1b187cccbff431870d75afdce4ccef9",
+    "status_entries": 17,
+    "staged_paths": 0
+  }
+}
