@@ -1,7 +1,7 @@
 {
   "protocol": "codex.top-level-orchestration-state.v1",
   "orchestration_id": "substrate-a1-1d-5r3-mac-20260806-41f97e1c570d",
-  "status": "DISPATCHING",
+  "status": "RUNNING",
   "dispatch_authorized": true,
   "publication_mode": "remote",
   "remote": "origin",
@@ -61,7 +61,7 @@
     "reasoning": "xhigh",
     "authority_persisted_at_utc": "2026-08-07T19:21:19.735464Z",
     "binding_sent_at_utc": "2026-08-07T19:21:45.949072Z",
-    "status": "DISPATCHING_CONTINUATION",
+    "status": "RUNNING_CONTINUATION",
     "continuation": 2,
     "continuation_nonce": "ee590b74571010efafdb5df8d8f7b69ed439425b6f73894c5f8601e282c34915",
     "continuation_authority_path": "authority-amendments/0025-r5-minimal-common-bootstrap-authority.json",
@@ -76,7 +76,8 @@
     "prior_continuation_sent_at_utc": "2026-08-07T19:34:17Z",
     "prior_continuation_nonce": "f426b9c13f0079bc1e3d28ad13db88c61ff7144ee00198e01f11c561b9705c63",
     "preserved_tracked_diff_sha256": "sha256:2ca7279d89fd38b7591508c309e0a75100e3627c9784029336184a241e097829",
-    "status_entry_count": 11
+    "status_entry_count": 11,
+    "continuation_sent_at_utc": "2026-08-07T19:50:55Z"
   },
   "active_evidence_dispatches": [],
   "verified_evidence": [],
@@ -329,7 +330,7 @@
     "successor_dispatched": true
   },
   "auxiliary_recovery_implementation": {
-    "status": "DISPATCHING_CONTINUATION",
+    "status": "RUNNING",
     "sequence": [
       "AUX-R3-MAC-EVIDENCE-RECOVERY-R1",
       "AUX-R3-MAC-EVIDENCE-RECOVERY-R2",
@@ -491,7 +492,8 @@
     "blocked_receipt_path": "receipts/AUX-R3-MAC-EVIDENCE-RECOVERY-R5.attempt-1.continuation-0024.blocked.raw.json",
     "blocked_verification_path": "receipts/AUX-R3-MAC-EVIDENCE-RECOVERY-R5.attempt-1.continuation-0024.blocked.verification.json",
     "prior_continuation_sent_at_utc": "2026-08-07T19:34:17Z",
-    "prior_continuation_nonce": "f426b9c13f0079bc1e3d28ad13db88c61ff7144ee00198e01f11c561b9705c63"
+    "prior_continuation_nonce": "f426b9c13f0079bc1e3d28ad13db88c61ff7144ee00198e01f11c561b9705c63",
+    "continuation_sent_at_utc": "2026-08-07T19:50:55Z"
   },
   "standing_successor_authority": {
     "source_amendment": "authority-amendments/0011-r3-mac-evidence-recovery-r2-and-standing-successors.json",
