@@ -1,0 +1,191 @@
+{
+  "protocol": "codex.auxiliary-source-correction-scope-freeze-receipt.v1",
+  "status": "BLOCKED_SCOPE_EXPANSION",
+  "task": "019fd9fe-670c-7253-bf60-86f78cd373b5",
+  "host": "local",
+  "worktree": "/Users/spensermcconnell/.codex/worktrees/60cc/substrate",
+  "amendment": {
+    "id": "0008-r3-mac-source-correction-scope-freeze",
+    "path": "/Users/spensermcconnell/.codex/worktrees/eb49/substrate/orchestration/substrate-a1-1d-5r3-mac-20260806-41f97e1c570d/authority-amendments/0008-r3-mac-source-correction-scope-freeze.json",
+    "sha256": "ead28f8bfd2dbb9f4c2162f756cd5665b3136175261c5ca87ed202bd61382aa4",
+    "meta_commit": "38c7bdac6eab9b43841d2aa96a7612eb4c955106"
+  },
+  "subject": {
+    "base": "d8a65fc8890dd37584aaeac2984c906188e5f06e",
+    "tree": "d8f25cc993f264f0c67fe3e00180eb393e41b2e3",
+    "tracked_diff_sha256": "39682fd4415a00ae4099580135a687d3e11858f62f84e9ef6ff3771bafd4b54c",
+    "untracked_sha256": {
+      "tests/installers/dev_install_bash32_fd_regression.sh": "2de2da832cbb38c1722d2075ffcef781d7bb9d23a76318cfd6d3b54fee0b0664",
+      "tests/mac/dev_install_compile_surface_r3.sh": "4ddc3cbb9758d84b2dd1529a6f9896d108934ac106ff4a197f134e869147b06c"
+    },
+    "reverified_after_freeze": {
+      "head": "d8a65fc8890dd37584aaeac2984c906188e5f06e",
+      "tree": "d8f25cc993f264f0c67fe3e00180eb393e41b2e3",
+      "staged_paths": 0,
+      "tracked_changed_paths": 26,
+      "status_entries": 28,
+      "diffstat": "+8821/-681",
+      "live_target": "origin refs/heads/feat/internal-host-orchestrator-world-dispatch-bootstrap",
+      "live_target_commit": "d8a65fc8890dd37584aaeac2984c906188e5f06e"
+    },
+    "scope_reduction": "No hunk was restored or deleted after 0008. A purported small deletion would either reintroduce a verified compile blocker or selectively change the unapproved pairing design without an authorized replacement. The mandated preserved subject therefore remains byte-for-byte at the verified snapshot; this is not a publication-ready reduced implementation."
+  },
+  "path_ledger": [
+    ["Cargo.toml", "0007 Mac Keychain/FD/XPC implementation dependencies only."],
+    ["Cargo.lock", "Lock resolution for the same 0007 dependencies only."],
+    ["crates/common/src/lib.rs", "0007 re-exports of the typed pairing/host-record contract."],
+    ["crates/common/src/managed_artifact.rs", "0007 shared typed ticket, protected-state, host-record, XPC-attestation, canonicalization, validation, CAS-transition, expiry, revoke/retire and Lima-stage contract; also contains the unapproved lima-stdio-v1 channel/frame model."],
+    ["crates/shell/src/builtins/world_deps/mod.rs", "Original blocker 2: Mac shell compile borrow correction."],
+    ["crates/shell/src/execution/agent_runtime/mod.rs", "Original blocker 2: enables existing world supervisor module under macOS cfg."],
+    ["crates/shell/src/execution/agent_runtime/state_store.rs", "Original blocker 2: macOS cfg admission of existing retained-world state types/functions; Linux branch was already admitted and bodies are unchanged."],
+    ["crates/shell/src/execution/managed_lifecycle.rs", "0007 typed issue/advance/consume client trait and request/response plumbing."],
+    ["crates/shell/src/execution/managed_lifecycle/linux_client.rs", "Original blocker 2 macOS SOCK_CLOEXEC compile fallback plus 0007 shared typed unavailable-client adaptation; ordinary Linux provider remains unavailable."],
+    ["crates/shell/src/execution/managed_lifecycle/macos_client.rs", "0007 fixed-path bootstrap FD3 seqpacket and audited XPC client/control plumbing."],
+    ["crates/shell/src/execution/managed_lifecycle/windows_client.rs", "0007 shared signature adaptation only; every Windows pairing operation still immediately returns provider_unavailable_error."],
+    ["crates/shell/src/execution/orchestrator_world_dispatch.rs", "Original blocker 2: macOS cfg admission for existing authority helpers; Linux behavior unchanged."],
+    ["crates/shell/src/execution/platform/macos.rs", "Original blocker 2: cfg-local test/type-check correction only."],
+    ["crates/shell/src/repl/async_repl.rs", "Original blocker 2: macOS cfg admission for existing start_remote_member_runtime."],
+    ["crates/shell/tests/managed_lifecycle_v1.rs", "0007 typed-control/fail-closed regression coverage."],
+    ["llm-last-mile/runtime-refactor/03-phase-slice-map.md", "Original blocker 4 control-pack correction: trusted caller supplies expected project ID; preserves historical Linux ID validation."],
+    ["llm-last-mile/runtime-refactor/04-contracts-and-gates.md", "Original blocker 4 control-pack correction only; no authority or transport widening."],
+    ["llm-last-mile/runtime-refactor/05-debug-regression-ledger.md", "Original blocker 4 control-pack correction only; records the validator binding."],
+    ["scripts/ci/test_validate_r3_native_evidence.py", "Original blocker 4 regression coverage for supplied ID, absence/mismatch failure, and historical Linux fixture."],
+    ["scripts/ci/validate_r3_native_evidence.py", "Original blocker 4: required --expected-product-project-id replaces fixed Linux UUID."],
+    ["scripts/mac/lima-lifecycle.sh", "0007 Stage-1/control invocation plumbing. Open P1: generic mapped lifecycle still directly invokes lima-action, while the new Mac executor rejects lima-action."],
+    ["scripts/substrate/dev-install-substrate.sh", "Original blocker 1 Bash-3.2-compatible FD handling; separately 0007 macOS-only build/copy of the control and Mac lifecycle binaries."],
+    ["src/bin/substrate-lifecycle-control.rs", "0007 typed issue/advance/consume client control and fail-closed retained-channel/TTY gate. Its fixed single-stdio premise is unapproved and remains blocked."],
+    ["src/bin/substrate-lifecycle-linux.rs", "0007 exact Lima guest-executor mode: signed staged guest executor and guest pairing stdio frames; Linux-only kernel test cfg is compile/test portability. This is not an ordinary Linux-host lifecycle change."],
+    ["src/bin/substrate-lifecycle-macos.rs", "0007 System Keychain P-256, SPKI/signature normalization, XPC/audit-token/designated-requirement control, ticket issue/advance/consume, reservation record CAS and unused revoke/retire implementation."],
+    ["tests/mac/lifecycle_r3.sh", "0007 static/fail-closed coverage; closure review found it insufficient because it mocks the helper and asserts the blocked control behavior."],
+    ["tests/installers/dev_install_bash32_fd_regression.sh", "Original blocker 1 untracked regression: default Bash 3.2 FD/env/argv and isolated temp-prefix install proof."],
+    ["tests/mac/dev_install_compile_surface_r3.sh", "Original blocker 2 untracked regression: canonical installer compile surface including control and Mac lifecycle bins."]
+  ],
+  "symbol_ledger": {
+    "original_blocker_1": [
+      "scripts/substrate/dev-install-substrate.sh installer FD lifecycle and macOS build/copy branch",
+      "tests/installers/dev_install_bash32_fd_regression.sh harness"
+    ],
+    "original_blocker_2": [
+      "resolve_current_inventory_view",
+      "agent_runtime::world_work_execution_supervisor cfg module",
+      "state_store existing SharedWorldMetadata/ResolvedInternal/WorldWork/BoundAgentRuntimeStateStore cfg family",
+      "PreparedOrchestratorWorldDispatch, prepare_orchestrator_world_dispatch, validate_authoritative_session_boundary, validate_authoritative_world_binding_for_steering, summarize_run_world_task_result cfg family",
+      "platform::macos cfg-local doctor/test branch",
+      "start_remote_member_runtime cfg admission",
+      "linux_client::set_close_on_exec_v1",
+      "substrate-lifecycle-linux Linux-only seqpacket test cfg",
+      "tests/mac/dev_install_compile_surface_r3.sh"
+    ],
+    "original_blocker_4": [
+      "validate_r3_native_evidence CLI expected-project-ID validation surface",
+      "its Python unit fixtures/callers and the three runtime-refactor control-pack documents"
+    ],
+    "amendment_0007_shared_contract": [
+      "MacPublisherControlAuthorityV1, GuestPublisherReservedTargetObservationV1, GuestPublisherPairingComponentCommitmentV1, GuestPublisherPairingRequestBindingV1",
+      "GuestPublisherPairingHostStateV1, GuestPublisherPairingUnusedReasonV1, GuestPublisherPairingUnusedRevocationV1, GuestPublisherPairingTransportObservationV1, MacPublisherXpcOperationV1, MacPublisherXpcAttestationV1",
+      "GuestPublisherPairingIssueRequest/ResponseV1, ConsumeRequest/ResponseV1, AdvanceRequest/ResponseV1, UnusedRevocationRequest/ResponseV1, UnusedRetirementRequest/ResponseV1, MacLimaGuestPairingStageOneRecordV1",
+      "all added canonical_*, *_sha256_v1, derive_*, validate_*, and host-record transition helpers for those types",
+      "GuestPublisherPairingGuestChannelV1, GuestPublisherPairingStdioPhaseV1, GuestPublisherPairingStdioFrameV1 and their canonical/parse/validate APIs: present but explicitly unapproved lima-stdio-v1 design, not accepted authority"
+    ],
+    "amendment_0007_clients": [
+      "managed_lifecycle typed issue/advance/consume trait/request-response plumbing",
+      "macos_client::verify_mac_bootstrap_control_image_v1, open_mac_xpc_channel_v1, run_mac_bootstrap_frame_v1, open_mac_bootstrap_seqpacket_v1, send/read seqpacket helpers, advance_guest_publisher_pairing_v1, consume_guest_publisher_pairing_ticket_v1",
+      "linux_client::advance_guest_publisher_pairing_v1 and consume_guest_publisher_pairing_ticket_v1 unavailable stubs",
+      "windows_client::advance_guest_publisher_pairing_v1 and consume_guest_publisher_pairing_ticket_v1 unavailable stubs"
+    ],
+    "amendment_0007_macos_executor": [
+      "bootstrap_mac_publisher_from_channel_v1, bootstrap_mac_publisher_from_authorized_channel_v1, build_initial_mac_publisher_protected_state_v1",
+      "Mac Keychain account/read/CAS/control-admission/P-256 SPKI/signing helpers; open_system_keychain_protected_state_v1 and compare_and_swap_mac_publisher_protected_state_v1",
+      "run_mac_xpc_publisher_v1, accept_mac_xpc_connection_v1, attest_mac_xpc_audit_token_v1, verify_mac_control_designated_requirement_v1, handle_mac_publisher_request_v1",
+      "issue_lima_guest_pairing_ticket_v1, advance_lima_guest_pairing_record_v1, consume_lima_guest_pairing_ticket_v1, prove_lima_guest_pairing_unused_v1, retire_lima_guest_pairing_unused_v1 and their ticket/record signing/validation helpers"
+    ],
+    "amendment_0007_lima_guest_and_control": [
+      "substrate-lifecycle-linux::run_guest_pairing_stdio_v1, read/write_guest_pairing_stdio_frame_v1, verify_lima_guest_pairing_stdio_execution_v1, guest pairing intent hash selectors",
+      "substrate-lifecycle-control::advance_guest_publisher_pairing_v1, consume_guest_publisher_pairing_v1, validate_pairing_issue_control_request_v1, require_lima_retained_channel_tty_capability_v1, require_lima_retained_transport_tty_capability_v1",
+      "the last two gates reject rather than bypass the unapproved one-stream design; they do not authorize a second logical channel"
+    ]
+  },
+  "platform_proof": {
+    "windows": {
+      "changed_path": "crates/shell/src/execution/managed_lifecycle/windows_client.rs",
+      "compile_only": true,
+      "proof": [
+        "Only shared Rust import/signature/return-type changes and tests were made.",
+        "issue, advance, and consume each unconditionally return provider_unavailable_error(\"windows\", ...).",
+        "No Windows executor, pipe, registry, key store, endpoint, transport, selector, or principal was edited or introduced."
+      ]
+    },
+    "linux": {
+      "ordinary_linux_host_behavior_change": false,
+      "classifications": [
+        "linux_client preserves Linux SOCK_CLOEXEC behavior; the FD_CLOEXEC fallback is cfg(not(target_os = linux)) for macOS compilation.",
+        "agent runtime/state store/orchestrator/repl cfg changes only add macOS to paths Linux already compiled; their Linux bodies are unchanged.",
+        "substrate-lifecycle-linux guest-pairing-stdio is an exact Lima guest-executor mode with a fixed lima-stdio-v1 binding and staged-artifact verification, not a Linux host lifecycle path; legacy Linux flows remain present.",
+        "two Linux seqpacket test cfg guards prevent non-Linux test execution of an unsupported kernel socket; production behavior is unchanged."
+      ]
+    },
+    "control_pack": {
+      "edits": [
+        "03-phase-slice-map.md",
+        "04-contracts-and-gates.md",
+        "05-debug-regression-ledger.md"
+      ],
+      "proof": "Each records the already-authorized validator caller binding to --expected-product-project-id and historic Linux-fixture preservation. None creates pairing authority, a new transport, selector, endpoint, principal, evidence action, or successor."
+    }
+  },
+  "assumptions_and_unapproved_design": {
+    "single_stdio_channel": "GuestPublisherPairingGuestChannelV1 fixes transport=lima-stdio-v1. GuestPublisherPairingStdioFrameV1 fixes Begin -> Hello -> Transcript -> Anchor newline frames. run_guest_pairing_stdio_v1 reads/writes that one retained stream. This is unapproved and is not authority.",
+    "one_child_channel": "The channel object binds one PM-root/instance/guest-machine/source/artifact/transfer-nonce tuple. No implementation of an additional logical child session exists.",
+    "alternate_channel_or_transport": "No second channel was added. The control gate's language treating ssh as an alternate child transport must not be read as a prohibition on a logically distinct session over the same PM-bound SSH transport; amendment 0008 says it is not such authority either.",
+    "tty": "Contract-required fingerprint/challenge/literal confirmation remains intended for guest /dev/tty. Current limactl shell exposes one shell stream with a tty toggle, not an independently retained data FD; the current code cannot prove simultaneous independent TTY and ticket/transcript channel.",
+    "operator_confirmation": "No intentional confirmation transfer through argv, env, or protocol pipe is added. The unresolved architecture is precisely the missing independent TTY/data session.",
+    "endpoint": "Mac XPC service and fixed Keychain service/account conventions are added under 0007; no alternate broker endpoint/socket is added.",
+    "selectors": "Fixed prefix/control path, fixed helper names, fixed FD3 bootstrap, and fixed lima-stdio-v1 are assumed. Ticket binds PM, machine, stage/artifact/component/challenge/generation; no dynamic selector is introduced.",
+    "principals": "Mac XPC audit token plus designated requirement and protected Keychain P-256 key are the host control principal assumptions; guest operator confirmation remains local TTY. No new Windows/Linux principal is introduced.",
+    "mapped_lifecycle": "scripts/mac/lima-lifecycle.sh still assumes direct lima-action submission for generic mapped lifecycle, while the Mac executor rejects it. This is an unresolved P1, not an authorized bypass."
+  },
+  "review_record": {
+    "discovery_review": "Found valid P1 pairing protocol nonfunctionality and P1 raw lima-action mapped-lifecycle dispatch mismatch; P2 compile regression was later corrected by adding lifecycle-bin checks.",
+    "closure_review": "NOT CLEAN: issue/advance/consume fail closed before ticket issuance; static test mocks mask the helper mismatch; current Lima capability cannot give separate guest TTY plus retained data over its one stream.",
+    "scope_freeze_review": "No new remediation/review cycle, edit, test, native state operation, stage, commit, push, installation, evidence run, or successor dispatch was performed after 0008."
+  },
+  "completed_tests_before_freeze": [
+    "/bin/bash tests/installers/dev_install_bash32_fd_regression.sh",
+    "bash tests/mac/dev_install_compile_surface_r3.sh",
+    "python3 -m unittest scripts.ci.test_validate_r3_native_evidence",
+    "cargo test -p substrate-common --lib managed_artifact --no-fail-fast",
+    "cargo test -p shell --test managed_lifecycle_v1 -- --nocapture",
+    "cargo test -p substrate --bin substrate-lifecycle-control -- --nocapture",
+    "cargo test -p substrate --bin substrate-lifecycle-linux -- --nocapture",
+    "cargo check --bin substrate-lifecycle-control --quiet",
+    "cargo check --bin substrate-lifecycle-macos --quiet",
+    "cargo check --target aarch64-apple-darwin --bin substrate-lifecycle-macos --quiet",
+    "bash tests/mac/lifecycle_r3.sh",
+    "cargo fmt --all -- --check",
+    "git diff --check"
+  ],
+  "native_state": {
+    "created": false,
+    "keychain_xpc_lima_host_prefix_or_evidence_mutated": false,
+    "note": "No native disposable state was created; no post-state cleanup was necessary."
+  },
+  "blocker_disposition": {
+    "bash32_installer": "Focused regression passed; source correction retained.",
+    "mac_shell_compile": "Focused source/build-surface regression passed; correction retained.",
+    "validator_project_id": "Focused Python tests passed; caller-supplied fail-closed binding retained.",
+    "signed_pairing_issuer": "NOT CLEAN/NOT ADVANCING: host implementation is present, but the unapproved single-stdio design cannot satisfy independent TTY and does not reach issuance; mapped lifecycle dispatch is also mismatched."
+  },
+  "required_future_decisions": [
+    "Explicitly decide whether and how a logically distinct authenticated data/TTY session/channel, joined to the same PM-bound SSH transport, is permitted; specify its bindings, lifetime, failure/retry, replay and operator-confirmation semantics. This is not authorization to add an alternate transport.",
+    "Explicitly authorize or reject the replacement for direct lima-action generic mapped-lifecycle submission, including the trusted carrier, bootstrap ordering, and lifecycle request authority.",
+    "Then decide whether to retain, surgically remove, or replace the current lima-stdio-v1 prototype. No continuation may treat the current one-stream implementation as accepted authority."
+  ],
+  "publication": {
+    "commit": null,
+    "push": null,
+    "remote_equals_base": true,
+    "successor_dispatched": false,
+    "successor": "AUX-R3-MAC-HOST-PREP-INSTALL-RETRY",
+    "publication_prohibited": true
+  }
+}
