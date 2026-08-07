@@ -1,0 +1,28 @@
+{
+  "schema": "codex.orchestration-continuation-delivery.v1",
+  "orchestration_id": "substrate-a1-1d-5r3-mac-20260806-41f97e1c570d",
+  "increment": "AUX-R3-MAC-EVIDENCE-RECOVERY-R5",
+  "task_thread_id": "019fddab-1dd2-7570-9bd3-7f3841ce0283",
+  "task_host_id": "local",
+  "continuation_nonce": "7541b1c6ca6fa045a27e2f28fc160dd853ba7cda1692e9927194d83bcd077202",
+  "prompt_path": "increments/AUX-R3-MAC-EVIDENCE-RECOVERY-R5.continuation-0026-prompt.md",
+  "prompt_sha256": "sha256:86a1935b538e4fa67f47140834904f3407ba65f92f30cdba28aa0a3ff52b7336",
+  "delivery_ack": {
+    "threadId": "019fddab-1dd2-7570-9bd3-7f3841ce0283"
+  },
+  "delivery_verified_at_utc": "2026-08-07T20:23:07Z",
+  "task_turn_id": "019fdde4-25b2-7a63-9b3f-2b4fac61d601",
+  "task_turn_status": "inProgress",
+  "wait_cursor": "02c3d9a2-cefa-4c23-ab5f-aab2a1493429:4",
+  "prior_latest_turn_id": "019fddc7-3369-7692-be69-53dc1acd2ee0",
+  "prior_latest_turn_status": "completed",
+  "correction": "The earlier control-state timestamp was written before task-turn delivery was independently verified. Continuation 0026 was re-sent directly and this record binds the verified active turn.",
+  "preserved_worktree": {
+    "path": "/Users/spensermcconnell/.codex/worktrees/686b/substrate",
+    "head": "05d655fa1458a276f179d12057cbda772cc51eb6",
+    "tree": "845694f733fccbfcd3703957bf4976da0ed59b40",
+    "tracked_diff_sha256": "1980e47680d0d775a43de622da8622bbd8c7d8c76273b9693e4d061b674b0463",
+    "status_entries": 13,
+    "staged_paths": 0
+  }
+}
