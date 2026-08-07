@@ -3631,3 +3631,24 @@ pre-spawn SSH-UDS replacement by disabling SSH-side unlink. The added checks are
 no Lima, launchd, Keychain, code-signing, publisher installation, or evidence artifact is run or
 created here. Fresh review is recorded only in the exact MAC review-control set; the sole
 successor remains `EVIDENCE:R3-MAC-IMP-01`.
+
+## AUX-R3-MAC-EVIDENCE-RECOVERY-PLAN regression status (2026-08-07)
+
+Recovery requires separate non-native proof for: Bash-3.2 caller-FD preservation; macOS cfg and
+installer lifecycle-binary compile surface with Linux behavior unchanged; dispatch-supplied expected
+project-ID validation including historic Linux evidence; audit-token-before-XPC-decode and
+canonical P-256/Stage-1/ticket CAS negatives; raw `lima-action`/direct-helper rejection; and the
+same-PM dual data/independent-TTY binding, no-confirmation-leak, retry/expiry/replay preservation
+matrix. These checks do not substitute for native publisher, Keychain, XPC, Lima, session, or
+restoration evidence. The latter remains `EVIDENCE:R3-MAC-IMP-01` and returns the platform-handoff
+status if the supported host cannot prove the required two-session capability.
+
+## AUX-R3-MAC-EVIDENCE-RECOVERY-PLAN regression-command and status correction (2026-08-07)
+
+The recovery evidence validator command must include the fresh dispatch-bound
+`--expected-product-project-id`; direct test coverage rejects missing/mismatched values and validates
+the historical Linux artifact with `2ccb802f-301c-4af4-9bd5-51d22808f0a2`. For native evidence,
+`BLOCKED_PLATFORM_HANDOFF_REQUIRED` means the supported platform/privilege/capability was unavailable
+before action; an available action, validator, or restoration-parity failure is
+`BLOCKED_NATIVE_EVIDENCE`. Earlier MAC attempt-4 status is historical only and cannot bypass the
+future recovery implementation receipt prerequisite.

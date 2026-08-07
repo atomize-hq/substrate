@@ -1,0 +1,105 @@
+{
+  "schema_version": 1,
+  "packet_id": "AUX-R3-MAC-EVIDENCE-RECOVERY-PLAN",
+  "status": "complete",
+  "stop_reason": null,
+  "cycles": [
+    {
+      "cycle_id": "discovery-1",
+      "kind": "discovery",
+      "subject_fingerprint": "sha256:3b61ff48072a47a59316364b0a46fde84259e4834d003cfae0c8177506c0f2f1",
+      "trigger_cycle_id": null,
+      "trigger_finding_ids": [],
+      "causal_evidence_refs": [],
+      "review_refs": [
+        "llm-last-mile/runtime-refactor/review-control/r3-mac-evidence-recovery-planning-review-authority-security.md",
+        "llm-last-mile/runtime-refactor/review-control/r3-mac-evidence-recovery-planning-review-lifecycle-convergence.md",
+        "llm-last-mile/runtime-refactor/review-control/r3-mac-evidence-recovery-planning-review-allowlist-evidence.md"
+      ],
+      "verdict": "findings",
+      "findings": [
+        {
+          "finding_id": "P1-PLN-001",
+          "priority": "P1"
+        },
+        {
+          "finding_id": "P1-ASR-001",
+          "priority": "P1"
+        },
+        {
+          "finding_id": "P1-ASR-002",
+          "priority": "P1"
+        },
+        {
+          "finding_id": "P1-LCR-002",
+          "priority": "P1"
+        },
+        {
+          "finding_id": "P1-AER-002",
+          "priority": "P1"
+        },
+        {
+          "finding_id": "P2-ASR-003",
+          "priority": "P2"
+        },
+        {
+          "finding_id": "P2-ASR-004",
+          "priority": "P2"
+        },
+        {
+          "finding_id": "P2-LCR-003",
+          "priority": "P2"
+        },
+        {
+          "finding_id": "P2-LCR-004",
+          "priority": "P2"
+        },
+        {
+          "finding_id": "P2-AER-003",
+          "priority": "P2"
+        },
+        {
+          "finding_id": "P2-AER-004",
+          "priority": "P2"
+        },
+        {
+          "finding_id": "P2-AER-005",
+          "priority": "P2"
+        },
+        {
+          "finding_id": "P2-AER-006",
+          "priority": "P2"
+        }
+      ]
+    },
+    {
+      "cycle_id": "closure-1",
+      "kind": "closure",
+      "subject_fingerprint": "sha256:71c0b6794dcc4dc3b4e0df9269c9add66fdc03eb66957d0c002942ee6eee1234",
+      "trigger_cycle_id": "discovery-1",
+      "trigger_finding_ids": [
+        "P1-PLN-001",
+        "P1-ASR-001",
+        "P1-ASR-002",
+        "P1-LCR-002",
+        "P1-AER-002",
+        "P2-ASR-003",
+        "P2-ASR-004",
+        "P2-LCR-003",
+        "P2-LCR-004",
+        "P2-AER-003",
+        "P2-AER-004",
+        "P2-AER-005",
+        "P2-AER-006"
+      ],
+      "causal_evidence_refs": [],
+      "review_refs": [
+        "llm-last-mile/runtime-refactor/review-control/r3-mac-evidence-recovery-planning-review-authority-security.md",
+        "llm-last-mile/runtime-refactor/review-control/r3-mac-evidence-recovery-planning-review-lifecycle-convergence.md",
+        "llm-last-mile/runtime-refactor/review-control/r3-mac-evidence-recovery-planning-review-allowlist-evidence.md"
+      ],
+      "verdict": "clean",
+      "findings": []
+    }
+  ]
+}

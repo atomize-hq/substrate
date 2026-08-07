@@ -1685,3 +1685,20 @@ pre-spawn SSH-UDS replacement by disabling SSH-side unlink. The added checks are
 no Lima, launchd, Keychain, code-signing, publisher installation, or evidence artifact is run or
 created here. Fresh review is recorded only in the exact MAC review-control set; the sole
 successor remains `EVIDENCE:R3-MAC-IMP-01`.
+
+## AUX-R3-MAC-EVIDENCE-RECOVERY-PLAN crosswalk status (2026-08-07)
+
+The source-correction donor is not an owner transfer for PI-051, PI-098–101, PI-113, or PI-114.
+Its broad prototype is discarded/recreated hunk-by-hunk under the recovery plan. The retained
+portable fixes have no new MAC lifecycle authority. The future MAC recovery keeps the existing
+PM/machine/source/artifact and protected publisher ownership, replaces raw `lima-action` with a
+fixed typed control-to-XPC submit bridge, and requires a data session plus independently controlling
+operator-TTY session bound to the same PM transport identity. A new selector, endpoint, principal,
+ordinary Linux host path, or Windows behavior remains a scope-expansion stop.
+
+## AUX-R3-MAC-EVIDENCE-RECOVERY-PLAN authority supersession (2026-08-07)
+
+For this orchestration, the prior MAC attempt does not cross the source-to-evidence seam. The only
+eligible source-side predecessor for a fresh evidence dispatch is the later recovery implementation
+receipt that proves the R1–R6 hunk fences, review closure, and remote equality. This documentation
+packet provides no implementation or evidence authority.

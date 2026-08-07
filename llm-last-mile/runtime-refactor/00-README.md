@@ -1236,3 +1236,23 @@ pre-spawn SSH-UDS replacement by disabling SSH-side unlink. The added checks are
 no Lima, launchd, Keychain, code-signing, publisher installation, or evidence artifact is run or
 created here. Fresh review is recorded only in the exact MAC review-control set; the sole
 successor remains `EVIDENCE:R3-MAC-IMP-01`.
+
+## AUX-R3-MAC-EVIDENCE-RECOVERY-PLAN status (2026-08-07)
+
+The preserved `AUX-R3-MAC-SOURCE-CORRECTION` donor at
+`d8a65fc8890dd37584aaeac2984c906188e5f06e` is audit input only: its 26 tracked and two untracked
+paths (`+8821/-681`, tracked diff
+`39682fd4415a00ae4099580135a687d3e11858f62f84e9ef6ff3771bafd4b54c`) must never be published
+wholesale. `AUX-R3-MAC-EVIDENCE-RECOVERY-PLAN` freezes small recovery packets that retain the
+Bash-3.2 descriptor, macOS compile, and trusted expected-project-ID corrections while replacing
+both the unapproved `lima-stdio-v1` premise and raw `lima-action` dispatch. The only later entry is
+`AUTHORITY_REQUIRED:AUX-R3-MAC-EVIDENCE-RECOVERY-IMPLEMENTATION`; planning itself does not authorize
+source, installation, Keychain/XPC/Lima, native evidence, or a successor dispatch.
+
+## AUX-R3-MAC-EVIDENCE-RECOVERY-PLAN current authority correction (2026-08-07)
+
+This recovery status supersedes the earlier present-tense MAC-attempt successor wording for this
+orchestration: historical attempt-4 and the preserved donor are ineligible to authorize
+`EVIDENCE:R3-MAC-IMP-01`. Only the separately authorized recovery implementation's reviewed,
+remote-equal receipt after R1–R6 may be considered by a fresh evidence dispatch. The recovery
+implementation remains authority-required; this planning commit does not start it.

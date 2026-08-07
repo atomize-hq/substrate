@@ -10146,3 +10146,38 @@ pre-spawn SSH-UDS replacement by disabling SSH-side unlink. The added checks are
 no Lima, launchd, Keychain, code-signing, publisher installation, or evidence artifact is run or
 created here. Fresh review is recorded only in the exact MAC review-control set; the sole
 successor remains `EVIDENCE:R3-MAC-IMP-01`.
+
+## AUX-R3-MAC-EVIDENCE-RECOVERY-PLAN recovery decision (2026-08-07)
+
+For MAC recovery, a signed guest pairing uses two distinct logical sessions bound to the same
+accepted PM mapping/SSH transport identity and a single fresh pairing-session nonce: a typed data
+session carries ticket/hello/transcript/anchor frames, while an independently controlling guest TTY
+session displays scope and receives the human-entered fingerprint/challenge/literal. Transport
+observations are evidence only; P-256 SPKI/anchor/ticket/record joins remain authority. Confirmation
+must not pass through the data session, argv, environment, file, pipe, or automation. Absence,
+non-TTY, mismatched PM/machine/source/artifact/session, expiry, replay, or ambiguous generation-CAS
+preserves state and blocks. A raw `lima-action` is replaced by a fixed control-binary typed
+`submit-mapped-lifecycle-v1` request whose carrier/mapping/role/Stage-1 joins are repeated by the
+admitted XPC executor before effect. This is source-planning authority only; native proof remains
+exclusively `EVIDENCE:R3-MAC-IMP-01`.
+
+## AUX-R3-MAC-EVIDENCE-RECOVERY-PLAN current contract correction (2026-08-07)
+
+For this planning packet only, the authoritative planning subject is the exact eight-file list in
+`r3-mac-evidence-recovery/TASKS.md` (five current-status/control documents plus `SPEC.md`, `PLAN.md`,
+and `TASKS.md`), not any earlier six-file planning-subject shorthand. Its hash is computed only by
+`for p in <eight literal paths>; do shasum -a 256 -- "$p"; done | LC_ALL=C sort | shasum -a 256`;
+review-control files are excluded and all discovery/closure entries bind the resulting value.
+
+The recovery-era evidence command additionally requires
+`--expected-product-project-id <dispatch-bound-project-id>` between source-ref and gated-successor;
+a missing/mismatched argument invalidates evidence. The historical Linux validation keeps
+`2ccb802f-301c-4af4-9bd5-51d22808f0a2` as its explicitly passed historical binding.
+
+`LimaStageOneAuthorizationV1` is limited to the absent fixed `mac.lima.instance/Create` branch
+before PM finalization. It never substitutes for `PublisherBootstrapAuthorizationV1`, never authorizes
+forwarding/post-PM roles, and never makes a script bootstrap-capable. The attested host control alone
+prints full fingerprint/challenge values on its retained terminal; a separate guest controlling TTY
+requires manual values from that terminal and binds only a confirmation commitment to the protected
+record. The recovery route supersedes older present-tense attempt-4-to-evidence wording: only a
+future reviewed remote-equal R1–R6 receipt may precede a fresh evidence dispatch.

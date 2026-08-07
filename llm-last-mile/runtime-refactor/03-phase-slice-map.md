@@ -3173,3 +3173,28 @@ pre-spawn SSH-UDS replacement by disabling SSH-side unlink. The added checks are
 no Lima, launchd, Keychain, code-signing, publisher installation, or evidence artifact is run or
 created here. Fresh review is recorded only in the exact MAC review-control set; the sole
 successor remains `EVIDENCE:R3-MAC-IMP-01`.
+
+## AUX-R3-MAC-EVIDENCE-RECOVERY-PLAN packet status (2026-08-07)
+
+Before any renewed MAC implementation, the published recovery plan requires independently landable
+R1 Bash descriptor, R2 macOS compile, R3 trusted evidence-project-ID, R4 protected MAC
+Keychain/P-256/Stage-1, R5 typed mapped-submit, and R6 dual PM-bound data/TTY session packets.
+They are exact-hunk recreation packets, not a donor merge. R6 is the first possible predecessor of
+a separately authorized `EVIDENCE:R3-MAC-IMP-01`; each packet has its own predecessor, review,
+remote publication gate, and explicit authority stop. `lima-stdio-v1`, raw `lima-action`, a direct
+helper relay, an unbound channel, a Windows behavior change, and an ordinary Linux host pairing
+route are excluded.
+
+## AUX-R3-MAC-EVIDENCE-RECOVERY-PLAN current evidence-command and successor rule (2026-08-07)
+
+For every recovery-era provider/final evidence validation, the authoritative invocation is
+`validate_r3_native_evidence.py <artifact> --expected-evidence-id <id> --expected-source-commit <oid>
+--expected-source-tree <tree> --expected-source-ref <ref> --expected-product-project-id
+<dispatch-bound-project-id> --expected-gated-successor <value>`. The expected project ID is supplied
+by the fresh evidence dispatch and is never inferred from the artifact. The historical Linux
+artifact uses its declared historical ID `2ccb802f-301c-4af4-9bd5-51d22808f0a2`.
+
+This rule supersedes only the older present-tense R3 MAC succession for the bound recovery route:
+historical attempt-4 and the 8,821-line donor cannot authorize evidence. A separately authorized
+`EVIDENCE:R3-MAC-IMP-01` may begin only after the future R1–R6 recovery implementation has one
+reviewed remote-equal receipt; no plan, donor, or partial R1–R5 receipt is an evidence predecessor.
