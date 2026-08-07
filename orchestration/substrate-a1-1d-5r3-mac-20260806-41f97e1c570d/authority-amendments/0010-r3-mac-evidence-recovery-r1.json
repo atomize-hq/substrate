@@ -1,0 +1,40 @@
+{
+  "protocol": "codex.orchestration-authority-amendment.v1",
+  "orchestration_id": "substrate-a1-1d-5r3-mac-20260806-41f97e1c570d",
+  "amendment_id": "0010-r3-mac-evidence-recovery-r1",
+  "authority_source": "explicit user authorization to split recovery implementation into six sequential top-level tasks and dispatch R1 now",
+  "authorized_increment": "AUX-R3-MAC-EVIDENCE-RECOVERY-R1",
+  "dispatch_nonce": "3db435048a170d726093482541effdb41b1f930bd2cd6d627048b285eacc15ab",
+  "expected_base_commit": "d4bd729de8d344dfc567aaa62203838f68c2c895",
+  "expected_base_tree": "3d5005d38c83b68c0a9813c10cbe6cb11996aed0",
+  "target_ref": "refs/heads/feat/internal-host-orchestrator-world-dispatch-bootstrap",
+  "publication_mode": "remote",
+  "scope": [
+    "implement only R1 Bash 3.2 installer descriptor preservation from the landed recovery plan",
+    "manually recreate only the audited donor hunk for resolve_install_bootstrap_context and its isolated caller-FD regression",
+    "complete the repository-defined causal cascading review process and publish one atomic fast-forward commit only if CLEAN"
+  ],
+  "hard_exclusions": [
+    "R2 through R6 implementation",
+    "lifecycle binary build or copy changes",
+    "macOS Keychain, XPC, Lima, selector, pairing, install, native evidence, or host mutation",
+    "Windows behavior or ordinary Linux host behavior changes",
+    "bulk donor transplant or any donor mutation"
+  ],
+  "workflow": {
+    "split_sequence": [
+      "AUX-R3-MAC-EVIDENCE-RECOVERY-R1",
+      "AUX-R3-MAC-EVIDENCE-RECOVERY-R2",
+      "AUX-R3-MAC-EVIDENCE-RECOVERY-R3",
+      "AUX-R3-MAC-EVIDENCE-RECOVERY-R4",
+      "AUX-R3-MAC-EVIDENCE-RECOVERY-R5",
+      "AUX-R3-MAC-EVIDENCE-RECOVERY-R6"
+    ],
+    "only_r1_dispatch_authorized": true,
+    "later_packets_require_fresh_authority": true,
+    "subagent_model": "gpt-5.6-terra",
+    "subagent_reasoning": "xhigh",
+    "preserve_blocked_task_and_worktree": true
+  },
+  "terminal_successor": "AUTHORITY_REQUIRED:AUX-R3-MAC-EVIDENCE-RECOVERY-R2"
+}

@@ -1,8 +1,8 @@
 {
   "protocol": "codex.top-level-orchestration-state.v1",
   "orchestration_id": "substrate-a1-1d-5r3-mac-20260806-41f97e1c570d",
-  "status": "BLOCKED",
-  "dispatch_authorized": false,
+  "status": "READY",
+  "dispatch_authorized": true,
   "publication_mode": "remote",
   "remote": "origin",
   "remote_observation": null,
@@ -10,20 +10,27 @@
   "required_ancestor": "270f6e55e1a94b7e2f9b2667e605980d2e50579c",
   "sequence": [
     "A1.1d-5R3-MAC",
+    "AUX-R3-MAC-EVIDENCE-RECOVERY-PLAN",
+    "AUX-R3-MAC-EVIDENCE-RECOVERY-R1",
+    "AUX-R3-MAC-EVIDENCE-RECOVERY-R2",
+    "AUX-R3-MAC-EVIDENCE-RECOVERY-R3",
+    "AUX-R3-MAC-EVIDENCE-RECOVERY-R4",
+    "AUX-R3-MAC-EVIDENCE-RECOVERY-R5",
+    "AUX-R3-MAC-EVIDENCE-RECOVERY-R6",
     "A1.1d-5R3-MAC-CLOSEOUT"
   ],
   "required_evidence": [
     {
       "evidence_id": "EVIDENCE:R3-MAC-IMP-01",
       "platform": "macos",
-      "after_increment": "A1.1d-5R3-MAC",
+      "after_increment": "AUX-R3-MAC-EVIDENCE-RECOVERY-R6",
       "before_increment": "A1.1d-5R3-MAC-CLOSEOUT"
     }
   ],
-  "cursor": 1,
+  "cursor": 2,
   "expected_base": {
-    "commit": "d8a65fc8890dd37584aaeac2984c906188e5f06e",
-    "tree": "d8f25cc993f264f0c67fe3e00180eb393e41b2e3"
+    "commit": "d4bd729de8d344dfc567aaa62203838f68c2c895",
+    "tree": "3d5005d38c83b68c0a9813c10cbe6cb11996aed0"
   },
   "meta": {
     "thread_id": "019fd8c3-b12c-7e73-919f-898600ab0f64",
@@ -42,24 +49,20 @@
       "verification_path": "receipts/A1.1d-5R3-MAC.attempt-4.verification.json",
       "source_thread_id": "019fd97a-3740-7261-a7e8-0008845709b5",
       "source_host_id": "local"
+    },
+    {
+      "increment": "AUX-R3-MAC-EVIDENCE-RECOVERY-PLAN",
+      "commit": "d4bd729de8d344dfc567aaa62203838f68c2c895",
+      "tree": "3d5005d38c83b68c0a9813c10cbe6cb11996aed0",
+      "receipt_status": "LANDED_CLEAN",
+      "receipt_path": "receipts/AUX-R3-MAC-EVIDENCE-RECOVERY-PLAN.json",
+      "verification_path": "receipts/AUX-R3-MAC-EVIDENCE-RECOVERY-PLAN.verification.json",
+      "source_thread_id": "019fdc95-705b-7cd0-92a3-8980c09c8193",
+      "source_host_id": "local"
     }
   ],
-  "last_blocker": {
-    "status": "AUTHORITY_REQUIRED",
-    "task_class": "r3_mac_evidence_recovery_implementation",
-    "planning_increment": "AUX-R3-MAC-EVIDENCE-RECOVERY-PLAN",
-    "planning_thread_id": "019fdc95-705b-7cd0-92a3-8980c09c8193",
-    "planning_host_id": "local",
-    "planning_receipt_path": "receipts/AUX-R3-MAC-EVIDENCE-RECOVERY-PLAN.json",
-    "planning_verification_path": "receipts/AUX-R3-MAC-EVIDENCE-RECOVERY-PLAN.verification.json",
-    "planning_landed_commit": "d4bd729de8d344dfc567aaa62203838f68c2c895",
-    "planning_landed_tree": "3d5005d38c83b68c0a9813c10cbe6cb11996aed0",
-    "summary": "The recovery SPEC/PLAN/TASKS and causal review landed CLEAN. Fresh explicit authority is required before defining or dispatching the R1-R6 implementation sequence.",
-    "continuation_authorized": false,
-    "successor": "AUTHORITY_REQUIRED:AUX-R3-MAC-EVIDENCE-RECOVERY-IMPLEMENTATION",
-    "advance": false
-  },
-  "current_authority_amendment": "authority-amendments/0009-r3-mac-evidence-recovery-planning.json",
+  "last_blocker": null,
+  "current_authority_amendment": "authority-amendments/0010-r3-mac-evidence-recovery-r1.json",
   "evidence_attempt": 2,
   "retry_authority": {
     "evidence_id": "EVIDENCE:R3-MAC-IMP-01",
@@ -226,5 +229,29 @@
     "task_archived": false,
     "next_increment": "AUTHORITY_REQUIRED:AUX-R3-MAC-EVIDENCE-RECOVERY-IMPLEMENTATION",
     "successor_dispatched": false
+  },
+  "auxiliary_recovery_implementation": {
+    "status": "READY",
+    "sequence": [
+      "AUX-R3-MAC-EVIDENCE-RECOVERY-R1",
+      "AUX-R3-MAC-EVIDENCE-RECOVERY-R2",
+      "AUX-R3-MAC-EVIDENCE-RECOVERY-R3",
+      "AUX-R3-MAC-EVIDENCE-RECOVERY-R4",
+      "AUX-R3-MAC-EVIDENCE-RECOVERY-R5",
+      "AUX-R3-MAC-EVIDENCE-RECOVERY-R6"
+    ],
+    "cursor": 0,
+    "authorized_increment": "AUX-R3-MAC-EVIDENCE-RECOVERY-R1",
+    "later_packets_require_fresh_authority": true,
+    "dispatch_nonce": "3db435048a170d726093482541effdb41b1f930bd2cd6d627048b285eacc15ab",
+    "authority_amendment": "authority-amendments/0010-r3-mac-evidence-recovery-r1.json",
+    "expected_base": {
+      "commit": "d4bd729de8d344dfc567aaa62203838f68c2c895",
+      "tree": "3d5005d38c83b68c0a9813c10cbe6cb11996aed0"
+    },
+    "next_increment": "AUTHORITY_REQUIRED:AUX-R3-MAC-EVIDENCE-RECOVERY-R2",
+    "donor_worktree": "/Users/spensermcconnell/.codex/worktrees/60cc/substrate",
+    "donor_mutation_authorized": false,
+    "task_archiving_authorized": false
   }
 }
