@@ -1,0 +1,35 @@
+{
+  "protocol": "codex.orchestration-authority-amendment.v1",
+  "orchestration_id": "substrate-a1-1d-5r3-mac-20260806-41f97e1c570d",
+  "amendment_id": "0009-r3-mac-evidence-recovery-planning",
+  "authority_source": "explicit user authorization to dispatch a narrow planning task and complete the repository-defined causal cascading review process",
+  "authorized_increment": "AUX-R3-MAC-EVIDENCE-RECOVERY-PLAN",
+  "dispatch_nonce": "c1f964d03d31a82ad5bf8b15a61b1a90cb618e20199b83b5674c6552a38a1798",
+  "expected_base_commit": "d8a65fc8890dd37584aaeac2984c906188e5f06e",
+  "expected_base_tree": "d8f25cc993f264f0c67fe3e00180eb393e41b2e3",
+  "target_ref": "refs/heads/feat/internal-host-orchestrator-world-dispatch-bootstrap",
+  "publication_mode": "remote",
+  "scope": [
+    "author a narrow runtime-refactor SPEC, PLAN, and TASKS packet for salvaging only the corrections required to unblock EVIDENCE:R3-MAC-IMP-01",
+    "derive the packet from live base truth, the preserved 60cc donor diff, amendment 0008, the independent scope-ledger audit, and the existing A1.1d-5R3-MAC/EVIDENCE contracts",
+    "freeze the exact recovery hunk/path/symbol boundary, the same-PM-bound data/TTY decision, the trusted mapped-lifecycle submission decision, and the minimum retained Keychain/XPC/ticket surface",
+    "complete and validate the repository-defined bounded causal cascading review process"
+  ],
+  "workflow": {
+    "load_using_agent_skills_first": true,
+    "required_skills": [
+      "using-agent-skills",
+      "spec-driven-development",
+      "planning-and-task-breakdown",
+      "incremental-implementation",
+      "documentation-and-adrs",
+      "code-review-and-quality",
+      "security-and-hardening"
+    ],
+    "spec_user_approval_pause_required": false,
+    "implementation_authorized": false,
+    "native_host_mutation_authorized": false,
+    "official_evidence_authorized": false
+  },
+  "terminal_successor": "AUTHORITY_REQUIRED:AUX-R3-MAC-EVIDENCE-RECOVERY-IMPLEMENTATION"
+}
