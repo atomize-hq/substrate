@@ -25,9 +25,15 @@ resolve_install_bootstrap_context() {
   local declared="$1"
   local raw_prefix="$2"
   local supplied_carrier="$3"
-  local context_fd
 
-  exec {context_fd}< <(python3 - "${declared}" "${raw_prefix}" "${supplied_carrier}" <<'PY'
+  if ! {
+    IFS= read -r -d '' PREFIX
+    IFS= read -r -d '' INSTALL_BOOTSTRAP_CONTEXT_V1
+    IFS= read -r -d '' INSTALL_BOOTSTRAP_COMMITMENT
+    IFS= read -r -d '' INSTALL_BOOTSTRAP_ACCOUNT
+    IFS= read -r -d '' INSTALL_BOOTSTRAP_UID
+    IFS= read -r -d '' INSTALL_BOOTSTRAP_ACCOUNT_HOME
+  } < <(python3 - "${declared}" "${raw_prefix}" "${supplied_carrier}" <<'PY'
 import base64
 import hashlib
 import os
@@ -184,14 +190,9 @@ except Exception:
     print("invalid install bootstrap context", file=sys.stderr)
     raise SystemExit(2)
 PY
-  )
-  IFS= read -r -d '' PREFIX <&"${context_fd}" || fatal "Unable to resolve install bootstrap context."
-  IFS= read -r -d '' INSTALL_BOOTSTRAP_CONTEXT_V1 <&"${context_fd}" || fatal "Unable to resolve install bootstrap context."
-  IFS= read -r -d '' INSTALL_BOOTSTRAP_COMMITMENT <&"${context_fd}" || fatal "Unable to resolve install bootstrap context."
-  IFS= read -r -d '' INSTALL_BOOTSTRAP_ACCOUNT <&"${context_fd}" || fatal "Unable to resolve install bootstrap context."
-  IFS= read -r -d '' INSTALL_BOOTSTRAP_UID <&"${context_fd}" || fatal "Unable to resolve install bootstrap context."
-  IFS= read -r -d '' INSTALL_BOOTSTRAP_ACCOUNT_HOME <&"${context_fd}" || fatal "Unable to resolve install bootstrap context."
-  exec {context_fd}<&-
+  ); then
+    fatal "Unable to resolve install bootstrap context."
+  fi
 
   export SUBSTRATE_HOME="${PREFIX}"
   export SUBSTRATE_ROOT="${PREFIX}"
