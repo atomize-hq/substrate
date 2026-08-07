@@ -1,0 +1,48 @@
+{
+  "schema_version": 1,
+  "packet_id": "AUX-R3-MAC-EVIDENCE-RECOVERY-R3",
+  "status": "complete",
+  "stop_reason": null,
+  "cycles": [
+    {
+      "cycle_id": "discovery-1",
+      "kind": "discovery",
+      "subject_fingerprint": "sha256:6e27dae469b25c297abd33de5d0cdacae97eedb51b2f69a1a7474a61bc8f136c",
+      "trigger_cycle_id": null,
+      "trigger_finding_ids": [],
+      "causal_evidence_refs": [],
+      "review_refs": [
+        "llm-last-mile/runtime-refactor/review-control/r3-mac-evidence-recovery-r3-review-authority-security.md",
+        "llm-last-mile/runtime-refactor/review-control/r3-mac-evidence-recovery-r3-review-lifecycle-convergence.md",
+        "llm-last-mile/runtime-refactor/review-control/r3-mac-evidence-recovery-r3-review-allowlist-evidence.md"
+      ],
+      "verdict": "findings",
+      "findings": [
+        {
+          "finding_id": "P1-R3-PROJECT-ID-EMPTY",
+          "priority": "P1"
+        },
+        {
+          "finding_id": "P2-R3-LIFECYCLE-EMPTY-IDENTITY",
+          "priority": "P2"
+        }
+      ]
+    },
+    {
+      "cycle_id": "closure-1",
+      "kind": "closure",
+      "subject_fingerprint": "sha256:4389d61398923bee07fb9f67dce89b9744d5a5eb79444214cb15fca6128eb0df",
+      "trigger_cycle_id": "discovery-1",
+      "trigger_finding_ids": [
+        "P1-R3-PROJECT-ID-EMPTY",
+        "P2-R3-LIFECYCLE-EMPTY-IDENTITY"
+      ],
+      "causal_evidence_refs": [],
+      "review_refs": [
+        "llm-last-mile/runtime-refactor/review-control/r3-mac-evidence-recovery-r3-review-authority-security.md"
+      ],
+      "verdict": "clean",
+      "findings": []
+    }
+  ]
+}

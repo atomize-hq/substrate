@@ -3652,3 +3652,8 @@ the historical Linux artifact with `2ccb802f-301c-4af4-9bd5-51d22808f0a2`. For n
 before action; an available action, validator, or restoration-parity failure is
 `BLOCKED_NATIVE_EVIDENCE`. Earlier MAC attempt-4 status is historical only and cannot bypass the
 future recovery implementation receipt prerequisite.
+
+
+## AUX-R3-MAC-EVIDENCE-RECOVERY-R3 recovery-current validator invocation (2026-08-07)
+
+`validate_r3_native_evidence.py <artifact> --expected-evidence-id <id> --expected-source-commit <oid> --expected-source-tree <tree> --expected-source-ref <ref> --expected-product-project-id <dispatch-bound-project-id> --expected-gated-successor <value>`

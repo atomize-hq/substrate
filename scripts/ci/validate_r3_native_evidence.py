@@ -280,8 +280,13 @@ def validate_artifact(
     expected_source_commit: str,
     expected_source_tree: str,
     expected_source_ref: str,
+    expected_product_project_id: str,
     expected_gated_successor: str,
 ) -> None:
+    expected_product_project_id = require_string(
+        expected_product_project_id,
+        "expected_product_project_id",
+    )
     require(isinstance(artifact, dict), "artifact must be a JSON object")
     require(
         set(artifact) == TOP_LEVEL_FIELDS,
@@ -314,8 +319,8 @@ def validate_artifact(
         "gated_successor does not match the expected value",
     )
     require(
-        artifact["product_project_id"] == "2ccb802f-301c-4af4-9bd5-51d22808f0a2",
-        "product_project_id must equal the fixed R3 project UUID",
+        artifact["product_project_id"] == expected_product_project_id,
+        "product_project_id does not match the expected value",
     )
     require_platform(artifact["platform"], expected_evidence_id)
     allowed_actions = require_action_set(artifact["allowed_actions"], "allowed_actions")
@@ -346,6 +351,7 @@ def parse_args() -> argparse.Namespace:
     parser.add_argument("--expected-source-commit", required=True)
     parser.add_argument("--expected-source-tree", required=True)
     parser.add_argument("--expected-source-ref", required=True)
+    parser.add_argument("--expected-product-project-id", required=True)
     parser.add_argument("--expected-gated-successor", required=True)
     return parser.parse_args()
 
@@ -360,6 +366,7 @@ def main() -> int:
             expected_source_commit=args.expected_source_commit,
             expected_source_tree=args.expected_source_tree,
             expected_source_ref=args.expected_source_ref,
+            expected_product_project_id=args.expected_product_project_id,
             expected_gated_successor=args.expected_gated_successor,
         )
     except (OSError, json.JSONDecodeError, ValidationError) as error:

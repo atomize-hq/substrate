@@ -10181,3 +10181,8 @@ prints full fingerprint/challenge values on its retained terminal; a separate gu
 requires manual values from that terminal and binds only a confirmation commitment to the protected
 record. The recovery route supersedes older present-tense attempt-4-to-evidence wording: only a
 future reviewed remote-equal R1–R6 receipt may precede a fresh evidence dispatch.
+
+
+## AUX-R3-MAC-EVIDENCE-RECOVERY-R3 recovery-current validator invocation (2026-08-07)
+
+`validate_r3_native_evidence.py <artifact> --expected-evidence-id <id> --expected-source-commit <oid> --expected-source-tree <tree> --expected-source-ref <ref> --expected-product-project-id <dispatch-bound-project-id> --expected-gated-successor <value>`

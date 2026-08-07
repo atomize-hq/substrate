@@ -7,9 +7,15 @@ from pathlib import Path
 
 
 SCRIPT = Path(__file__).resolve().parent / "validate_r3_native_evidence.py"
+HISTORICAL_LINUX_PROJECT_ID = "2ccb802f-301c-4af4-9bd5-51d22808f0a2"
+DISPATCH_BOUND_PROJECT_ID = "dispatch-bound-project-id"
+HISTORICAL_LINUX_FIXTURE = (
+    Path(__file__).resolve().parents[2]
+    / "llm-last-mile/runtime-refactor/review-control/r3-linux-imp-01-evidence.json"
+)
 
 
-def valid_artifact() -> dict:
+def valid_artifact(product_project_id: str = HISTORICAL_LINUX_PROJECT_ID) -> dict:
     return {
         "schema_owner": "substrate.r3-native-evidence",
         "schema_version": 1,
@@ -24,7 +30,7 @@ def valid_artifact() -> dict:
             "os": "linux",
             "architecture": "x86_64",
         },
-        "product_project_id": "2ccb802f-301c-4af4-9bd5-51d22808f0a2",
+        "product_project_id": product_project_id,
         "tool_versions": {
             "cargo": "cargo 1.89.0",
             "rustc": "rustc 1.89.0",
@@ -85,7 +91,10 @@ def valid_artifact() -> dict:
     }
 
 
-def run_validator(path: Path) -> subprocess.CompletedProcess[str]:
+def run_validator(
+    path: Path,
+    expected_product_project_id: str = HISTORICAL_LINUX_PROJECT_ID,
+) -> subprocess.CompletedProcess[str]:
     return subprocess.run(
         [
             sys.executable,
@@ -99,6 +108,8 @@ def run_validator(path: Path) -> subprocess.CompletedProcess[str]:
             "b" * 40,
             "--expected-source-ref",
             "refs/heads/feat/internal-host-orchestrator-world-dispatch-bootstrap",
+            "--expected-product-project-id",
+            expected_product_project_id,
             "--expected-gated-successor",
             "AUTHORITY_REQUIRED:A1.1d-5R3-LINUX-CLOSEOUT",
         ],
@@ -115,9 +126,70 @@ class ValidateR3NativeEvidenceTests(unittest.TestCase):
             json.dump(artifact, handle)
         return Path(handle.name)
 
-    def test_accepts_valid_artifact(self) -> None:
+    def test_accepts_artifact_with_dispatch_bound_project_id(self) -> None:
+        artifact_path = self.write_artifact(valid_artifact(DISPATCH_BOUND_PROJECT_ID))
+        result = run_validator(artifact_path, DISPATCH_BOUND_PROJECT_ID)
+        self.assertEqual(result.returncode, 0, result.stderr)
+        self.assertIn("VALID:", result.stdout)
+
+    def test_rejects_missing_expected_product_project_id(self) -> None:
         artifact_path = self.write_artifact(valid_artifact())
-        result = run_validator(artifact_path)
+        result = subprocess.run(
+            [
+                sys.executable,
+                str(SCRIPT),
+                str(artifact_path),
+                "--expected-evidence-id",
+                "EVIDENCE:R3-LINUX-IMP-01",
+                "--expected-source-commit",
+                "a" * 40,
+                "--expected-source-tree",
+                "b" * 40,
+                "--expected-source-ref",
+                "refs/heads/feat/internal-host-orchestrator-world-dispatch-bootstrap",
+                "--expected-gated-successor",
+                "AUTHORITY_REQUIRED:A1.1d-5R3-LINUX-CLOSEOUT",
+            ],
+            text=True,
+            capture_output=True,
+            check=False,
+        )
+        self.assertNotEqual(result.returncode, 0)
+        self.assertIn("--expected-product-project-id", result.stderr)
+
+        blank_result = run_validator(artifact_path, "")
+        self.assertNotEqual(blank_result.returncode, 0)
+        self.assertIn("expected_product_project_id must be a non-empty string", blank_result.stderr)
+
+    def test_rejects_mismatched_expected_product_project_id(self) -> None:
+        artifact_path = self.write_artifact(valid_artifact(DISPATCH_BOUND_PROJECT_ID))
+        result = run_validator(artifact_path, HISTORICAL_LINUX_PROJECT_ID)
+        self.assertNotEqual(result.returncode, 0)
+        self.assertIn("product_project_id does not match", result.stderr)
+
+    def test_accepts_historical_linux_fixture_with_explicit_project_id(self) -> None:
+        result = subprocess.run(
+            [
+                sys.executable,
+                str(SCRIPT),
+                str(HISTORICAL_LINUX_FIXTURE),
+                "--expected-evidence-id",
+                "EVIDENCE:R3-LINUX-IMP-01",
+                "--expected-source-commit",
+                "fef5bf688ade61bfaf40e43d21fb77ae492fa5fe",
+                "--expected-source-tree",
+                "827e88f2c069cd27a04e99a57894bd5a753b2e55",
+                "--expected-source-ref",
+                "refs/heads/feat/internal-host-orchestrator-world-dispatch-bootstrap",
+                "--expected-product-project-id",
+                HISTORICAL_LINUX_PROJECT_ID,
+                "--expected-gated-successor",
+                "AUTHORITY_REQUIRED:A1.1d-5R3-LINUX-CLOSEOUT",
+            ],
+            text=True,
+            capture_output=True,
+            check=False,
+        )
         self.assertEqual(result.returncode, 0, result.stderr)
         self.assertIn("VALID:", result.stdout)
 

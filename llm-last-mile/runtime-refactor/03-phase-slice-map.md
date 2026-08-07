@@ -3198,3 +3198,8 @@ This rule supersedes only the older present-tense R3 MAC succession for the boun
 historical attempt-4 and the 8,821-line donor cannot authorize evidence. A separately authorized
 `EVIDENCE:R3-MAC-IMP-01` may begin only after the future R1–R6 recovery implementation has one
 reviewed remote-equal receipt; no plan, donor, or partial R1–R5 receipt is an evidence predecessor.
+
+
+## AUX-R3-MAC-EVIDENCE-RECOVERY-R3 recovery-current validator invocation (2026-08-07)
+
+`validate_r3_native_evidence.py <artifact> --expected-evidence-id <id> --expected-source-commit <oid> --expected-source-tree <tree> --expected-source-ref <ref> --expected-product-project-id <dispatch-bound-project-id> --expected-gated-successor <value>`
