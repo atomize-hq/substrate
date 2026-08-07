@@ -122,7 +122,7 @@
     "official_evidence_dispatch_allowed": false
   },
   "auxiliary_source_correction": {
-    "status": "READY_TO_BIND",
+    "status": "RUNNING",
     "task_class": "general_macos_source_correction",
     "official_increment_or_evidence": false,
     "attempt": 1,
@@ -145,6 +145,7 @@
     "binding_prompt_sha256": "sha256:502e10d1c947f95353a5dd187404b0922d487419b81bb9ff26fa47994616a267",
     "model": "gpt-5.6-terra",
     "reasoning": "xhigh",
+    "binding_sent_at_utc": "2026-08-07T02:13:48Z",
     "skill_hydration": {
       "source": "/Users/spensermcconnell/__Active_Code/atomize-hq/substrate/.agents/skills/orchestrate-top-level-tasks",
       "target": "/Users/spensermcconnell/.codex/worktrees/60cc/substrate/.agents/skills/orchestrate-top-level-tasks",
