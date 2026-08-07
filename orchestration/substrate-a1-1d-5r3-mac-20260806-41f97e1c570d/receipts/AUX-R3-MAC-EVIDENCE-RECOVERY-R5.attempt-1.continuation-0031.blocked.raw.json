@@ -1,0 +1,101 @@
+{
+  "schema": "codex.top-level-task-receipt.v1",
+  "status": "BLOCKED_REVIEW",
+  "orchestration_id": "substrate-a1-1d-5r3-mac-20260806-41f97e1c570d",
+  "dispatch_nonce": "e480367f5a8308d8ee73f97eb7734c80bd49e37a31c3a70a6e663668d622e70e",
+  "continuation_nonce": "0e8e152431fa298d6477b4cf1320cec307034fd3397052ed9914d15ed1f39ab4",
+  "increment": "AUX-R3-MAC-EVIDENCE-RECOVERY-R5",
+  "increment_task_thread_id": "019fddab-1dd2-7570-9bd3-7f3841ce0283",
+  "increment_task_host_id": "local",
+  "expected_base_commit": "05d655fa1458a276f179d12057cbda772cc51eb6",
+  "expected_base_tree": "845694f733fccbfcd3703957bf4976da0ed59b40",
+  "publication": {
+    "mode": "remote",
+    "target": "origin refs/heads/feat/internal-host-orchestrator-world-dispatch-bootstrap",
+    "remote_observation": "05d655fa1458a276f179d12057cbda772cc51eb6",
+    "published": false,
+    "reason": "validated final supplemental-causal-2 review ended with unresolved P1 findings; review budget exhausted"
+  },
+  "subject_fingerprint": "sha256:d1f4e28e5bd3ca3ccb66e981397698e527403a647ce2103021debdae5a67007d",
+  "changed_paths": [
+    "crates/common/src/lib.rs",
+    "crates/common/src/managed_artifact.rs",
+    "crates/shell/src/execution/managed_lifecycle.rs",
+    "crates/shell/src/execution/managed_lifecycle/macos_client.rs",
+    "crates/shell/src/execution/mod.rs",
+    "crates/shell/src/lib.rs",
+    "crates/shell/tests/managed_lifecycle_v1.rs",
+    "scripts/mac/lima-lifecycle.sh",
+    "scripts/mac/lima-stop.sh",
+    "scripts/mac/lima-warm.sh",
+    "scripts/substrate/dev-install-substrate.sh",
+    "src/bin/substrate-lifecycle-control.rs",
+    "src/bin/substrate-lifecycle-macos.rs",
+    "tests/installers/dev_install_bash32_fd_regression.sh",
+    "tests/mac/lifecycle_r3.sh"
+  ],
+  "review_metadata_paths": [
+    "llm-last-mile/runtime-refactor/review-control/r3-mac-evidence-recovery-r5-review-authority-security.md",
+    "llm-last-mile/runtime-refactor/review-control/r3-mac-evidence-recovery-r5-review-lifecycle-convergence.md",
+    "llm-last-mile/runtime-refactor/review-control/r3-mac-evidence-recovery-r5-review-allowlist-evidence.md",
+    "llm-last-mile/runtime-refactor/review-control/r3-mac-evidence-recovery-r5-review-cycle-record.json"
+  ],
+  "review": {
+    "record": "llm-last-mile/runtime-refactor/review-control/r3-mac-evidence-recovery-r5-review-cycle-record.json",
+    "record_sha256": "sha256:db01b433cde39ed5ec8bd6a8ffbc628105a60f6ff2315edbd38501f25847eced",
+    "validated": true,
+    "status": "bounded_stop",
+    "stop_reason": "budget_exhausted",
+    "final_cycle": "supplemental-causal-2",
+    "final_verdict": "findings"
+  },
+  "finding_disposition": {
+    "open_p1": [
+      {
+        "id": "P1-R5-POST-PM-INSTANCE-RECEIPT-PLAN-GAP",
+        "evidence": "src/bin/substrate-lifecycle-macos.rs admits ordinary mac.lima.instance Start/Stop/Remove/Restore but generation-two receipt planning reserves only Stage-1 Create; typed lima-stop is rejected before effect."
+      },
+      {
+        "id": "P1-R5-POST-PM-PREPARED-CAS-UNRECOVERABLE",
+        "evidence": "The normal current-counter gate rejects an exact retry after prepared-record CAS increments state.counter and before the effect marker, so a known no-effect transaction is stranded."
+      },
+      {
+        "id": "P1-R5-POST-PM-GUEST-EXECUTOR-CIRCULAR-BOOTSTRAP",
+        "evidence": "Fixed guest r5-post-pm is invoked but is neither installed nor attested after marker-only Stage-1; the publisher-executor row invokes that same absent path."
+      }
+    ],
+    "open_p2": [
+      {
+        "id": "P2-R5-POST-PM-EXECUTOR-TRANSACTION-PROOF-GAP",
+        "evidence": "Focused Rust test proves decoder closure only and MAC fixture is lexical-only; neither proves receipt planning, guest artifact identity, or prepared-CAS recovery."
+      }
+    ],
+    "direct_bootstrap_retry": "Final reviewer found no additional P1/P2 in the retained IH-only locator remediation."
+  },
+  "deterministic_checks": [
+    "cargo test -p substrate-common --lib --no-fail-fast: 80 passed",
+    "cargo test --manifest-path crates/shell/Cargo.toml --test managed_lifecycle_v1 --no-fail-fast: 4 passed",
+    "bash tests/installers/dev_install_bash32_fd_regression.sh: passed",
+    "bash tests/mac/lifecycle_r3.sh: passed",
+    "cargo check --bin substrate-lifecycle-macos --bin substrate-lifecycle-control: passed",
+    "cargo check --target x86_64-apple-darwin --bin substrate-lifecycle-macos --bin substrate-lifecycle-control: passed",
+    "cargo fmt --all -- --check: passed",
+    "git diff --check: passed",
+    "MAC-only static containment and changed-byte credential scan: passed"
+  ],
+  "change_detection": {
+    "gitnexus": "inconclusive: GitNexus has no substrate-current index for assigned worktree; its available indexes are other worktrees. No npx gitnexus analyze was run.",
+    "manual_fallback": "exact 15-path plus 4-review-path inventory, shell caller/callee, Rust decoder/XPC/receipt/retry/descriptor review, static diff and platform containment all performed"
+  },
+  "worktree": {
+    "preserved": true,
+    "staged_paths": 0,
+    "status_entries": 19,
+    "clean": false,
+    "mutations_after_final_review": "review metadata only"
+  },
+  "required_authority": "A new explicit R5 authority is required to remediate the three final P1 findings. It must authorize a complete signed receipt plan for every ordinary instance action, an exact prepared-before-effect recovery transition, and a non-circular installed/attested fixed guest post-PM executor/artifact closure (or explicitly revise the R5 boundary). The current final causal review budget permits no fix.",
+  "continuation_handoff_prompt": "Resume only AUX-R3-MAC-EVIDENCE-RECOVERY-R5 in /Users/spensermcconnell/.codex/worktrees/686b/substrate. Rebind thread/host/nonce/base/tree/live remote and preserve the current 19-entry, zero-staged worktree without reset/clean/rebase/donor copy. Start from review record sha256:db01b433cde39ed5ec8bd6a8ffbc628105a60f6ff2315edbd38501f25847eced and resolve P1-R5-POST-PM-INSTANCE-RECEIPT-PLAN-GAP, P1-R5-POST-PM-PREPARED-CAS-UNRECOVERABLE, and P1-R5-POST-PM-GUEST-EXECUTOR-CIRCULAR-BOOTSTRAP under new explicit authority before a new review sequence. Do not dispatch R6.",
+  "next_increment": "AUX-R3-MAC-EVIDENCE-RECOVERY-R6",
+  "next_increment_dispatched": false
+}

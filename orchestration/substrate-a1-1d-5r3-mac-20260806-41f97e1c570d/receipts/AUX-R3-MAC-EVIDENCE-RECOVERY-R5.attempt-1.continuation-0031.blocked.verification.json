@@ -1,0 +1,58 @@
+{
+  "protocol": "codex.top-level-task-receipt-verification.v1",
+  "orchestration_id": "substrate-a1-1d-5r3-mac-20260806-41f97e1c570d",
+  "increment": "AUX-R3-MAC-EVIDENCE-RECOVERY-R5",
+  "attempt": 1,
+  "continuation_nonce": "0e8e152431fa298d6477b4cf1320cec307034fd3397052ed9914d15ed1f39ab4",
+  "verified_at_utc": "2026-08-07T23:20:39Z",
+  "raw_receipt_path": "receipts/AUX-R3-MAC-EVIDENCE-RECOVERY-R5.attempt-1.continuation-0031.blocked.raw.json",
+  "canonical_receipt_path": "receipts/AUX-R3-MAC-EVIDENCE-RECOVERY-R5.attempt-1.continuation-0031.blocked.canonical.json",
+  "terminal_barrier": {
+    "thread_id": "019fddab-1dd2-7570-9bd3-7f3841ce0283",
+    "host_id": "local",
+    "turn_id": "019fde68-9304-7243-8a8d-740e1afc3d71",
+    "status": "completed",
+    "thread_status": "idle",
+    "cursor": "02c3d9a2-cefa-4c23-ab5f-aab2a1493429:15"
+  },
+  "independent_observation": {
+    "worktree": "/Users/spensermcconnell/.codex/worktrees/686b/substrate",
+    "head": "05d655fa1458a276f179d12057cbda772cc51eb6",
+    "head_tree": "845694f733fccbfcd3703957bf4976da0ed59b40",
+    "index_tree": "845694f733fccbfcd3703957bf4976da0ed59b40",
+    "live_remote": "05d655fa1458a276f179d12057cbda772cc51eb6",
+    "staged_paths": 0,
+    "status_entry_count": 19,
+    "tracked_diff_sha256": "sha256:cf835ac3a2a619636cce2b4cfb2ece6c2b4766fa4a11f27ab023a35161c67648",
+    "diff_check": "clean"
+  },
+  "review_verification": {
+    "record_path": "llm-last-mile/runtime-refactor/review-control/r3-mac-evidence-recovery-r5-review-cycle-record.json",
+    "validator": "VALID",
+    "status": "bounded_stop",
+    "stop_reason": "budget_exhausted",
+    "record_sha256": "sha256:db01b433cde39ed5ec8bd6a8ffbc628105a60f6ff2315edbd38501f25847eced",
+    "final_cycle": "supplemental-causal-2",
+    "open_p1": [
+      "P1-R5-POST-PM-INSTANCE-RECEIPT-PLAN-GAP",
+      "P1-R5-POST-PM-PREPARED-CAS-UNRECOVERABLE",
+      "P1-R5-POST-PM-GUEST-EXECUTOR-CIRCULAR-BOOTSTRAP"
+    ],
+    "open_p2": [
+      "P2-R5-POST-PM-EXECUTOR-TRANSACTION-PROOF-GAP"
+    ]
+  },
+  "repo_truth_classification": {
+    "receipt_valid_non_advancing": true,
+    "review_budget_exhausted": true,
+    "direct_bootstrap_retry_clean": true,
+    "post_pm_transaction_not_clean": true,
+    "r6_dispatch_forbidden": true,
+    "same_task_additional_supplemental_cycle_forbidden": true,
+    "fresh_corrective_packet_requires_explicit_authority": true,
+    "worktree_preserved": true
+  },
+  "verdict": "ACCEPTED_NON_ADVANCING_BLOCKED_REVIEW",
+  "raw_receipt_sha256": "sha256:3b2b1621cdd9df9ee873f93a4c10ce7d0ddb3d3f19eb564173f0ca2faa6e78b0",
+  "canonical_receipt_sha256": "sha256:f2a5f28d8d9c6f57a21253fcdbfcbd118bf2f607bf5a39bcbf090afbd1a12cdb"
+}

@@ -1,0 +1,22 @@
+{
+  "protocol": "codex.top-level-task-receipt.v1",
+  "orchestration_id": "substrate-a1-1d-5r3-mac-20260806-41f97e1c570d",
+  "dispatch_nonce": "e480367f5a8308d8ee73f97eb7734c80bd49e37a31c3a70a6e663668d622e70e",
+  "increment": "AUX-R3-MAC-EVIDENCE-RECOVERY-R5",
+  "status": "BLOCKED_REVIEW",
+  "increment_task": {
+    "thread_id": "019fddab-1dd2-7570-9bd3-7f3841ce0283",
+    "host_id": "local"
+  },
+  "expected_base": {
+    "commit": "05d655fa1458a276f179d12057cbda772cc51eb6",
+    "tree": "845694f733fccbfcd3703957bf4976da0ed59b40"
+  },
+  "blocker": {
+    "summary": "R5 exhausted its causal review budget with three open P1 findings and one open P2 in the post-PM transaction.",
+    "details": "The final supplemental-causal-2 reviewer accepted the direct-bootstrap retry closure but found that ordinary instance actions have no complete receipt plan, exact retry after prepared-record CAS is stranded, and the fixed guest post-PM executor is circularly absent/unattested. Deterministic MAC-only checks pass, but the validated review record is bounded_stop/budget_exhausted. HEAD/tree/index/remote remain the expected base; 19 status entries and zero staged paths are preserved; no native action, commit, push, or R6 work occurred.",
+    "required_authority": "Create a fresh explicitly bounded R5 corrective packet/review budget for the three P1s and their proof gap, or explicitly revise the R5/R6 boundary. The existing supplemental budget cannot be extended in place.",
+    "handoff_prompt": "Resume only AUX-R3-MAC-EVIDENCE-RECOVERY-R5 in /Users/spensermcconnell/.codex/worktrees/686b/substrate. Rebind thread/host/nonce/base/tree/live remote and preserve the current 19-entry, zero-staged worktree without reset/clean/rebase/donor copy. Start from review record sha256:db01b433cde39ed5ec8bd6a8ffbc628105a60f6ff2315edbd38501f25847eced and resolve P1-R5-POST-PM-INSTANCE-RECEIPT-PLAN-GAP, P1-R5-POST-PM-PREPARED-CAS-UNRECOVERABLE, and P1-R5-POST-PM-GUEST-EXECUTOR-CIRCULAR-BOOTSTRAP under new explicit authority before a new review sequence. Do not dispatch R6."
+  },
+  "next_increment": "AUX-R3-MAC-EVIDENCE-RECOVERY-R6"
+}
