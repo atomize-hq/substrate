@@ -1,0 +1,36 @@
+{
+  "protocol": "codex.auxiliary-host-prep-dispatch-binding.v1",
+  "orchestration_id": "substrate-a1-1d-5r3-mac-20260806-41f97e1c570d",
+  "task_class": "general_auxiliary_host_preparation",
+  "official_increment_or_evidence": false,
+  "attempt": 1,
+  "dispatch_nonce": "5fa439de8a75a37f6c31b4cc7f758fc8e0d556f86e840d7bd7d48297c3f12e42",
+  "task": {
+    "thread_id": "019fd9ed-4067-7922-8034-da8abbc8717e",
+    "host_id": "local",
+    "worktree": "/Users/spensermcconnell/.codex/worktrees/abc3/substrate",
+    "model": "gpt-5.6-terra",
+    "reasoning": "xhigh"
+  },
+  "return_meta": {
+    "thread_id": "019fd8c3-b12c-7e73-919f-898600ab0f64",
+    "host_id": "local"
+  },
+  "source": {
+    "remote": "origin",
+    "target_ref": "refs/heads/feat/internal-host-orchestrator-world-dispatch-bootstrap",
+    "commit": "d8a65fc8890dd37584aaeac2984c906188e5f06e",
+    "tree": "d8f25cc993f264f0c67fe3e00180eb393e41b2e3"
+  },
+  "skill_hydration": {
+    "source": "/Users/spensermcconnell/__Active_Code/atomize-hq/substrate/.agents/skills/orchestrate-top-level-tasks",
+    "target": "/Users/spensermcconnell/.codex/worktrees/abc3/substrate/.agents/skills/orchestrate-top-level-tasks",
+    "file_count": 26,
+    "sha256": "61d99190f680d3738fa824348e671e8eb84b2729bf31952ef16031c6ba24d903",
+    "verified": true
+  },
+  "authority_amendment": "authority-amendments/0005-general-macos-host-prep-install.json",
+  "binding_prompt_path": "increments/AUX-R3-MAC-HOST-PREP-INSTALL.attempt-1.binding-prompt.md",
+  "binding_prompt_sha256": "sha256:eb2e5d77cef50d903fe4904bc1745053bac16e0ec6498fb1ba48ac9f8d18c44e",
+  "dispatch_authorized": true
+}

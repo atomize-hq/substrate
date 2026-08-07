@@ -80,7 +80,7 @@
     "guest_sudo_noninteractive_verified": true
   },
   "auxiliary_host_preparation": {
-    "status": "INITIALIZING",
+    "status": "READY_TO_BIND",
     "task_class": "general_auxiliary_host_preparation",
     "official_increment_or_evidence": false,
     "attempt": 1,
@@ -95,10 +95,21 @@
       "target_ref": "refs/heads/feat/internal-host-orchestrator-world-dispatch-bootstrap",
       "live_remote": "d8a65fc8890dd37584aaeac2984c906188e5f06e"
     },
-    "thread_id": null,
-    "host_id": null,
-    "worktree": null,
-    "skill_hydration": null,
+    "thread_id": "019fd9ed-4067-7922-8034-da8abbc8717e",
+    "host_id": "local",
+    "worktree": "/Users/spensermcconnell/.codex/worktrees/abc3/substrate",
+    "binding_path": "increments/AUX-R3-MAC-HOST-PREP-INSTALL.attempt-1.binding.json",
+    "binding_prompt_path": "increments/AUX-R3-MAC-HOST-PREP-INSTALL.attempt-1.binding-prompt.md",
+    "binding_prompt_sha256": "sha256:eb2e5d77cef50d903fe4904bc1745053bac16e0ec6498fb1ba48ac9f8d18c44e",
+    "model": "gpt-5.6-terra",
+    "reasoning": "xhigh",
+    "skill_hydration": {
+      "source": "/Users/spensermcconnell/__Active_Code/atomize-hq/substrate/.agents/skills/orchestrate-top-level-tasks",
+      "target": "/Users/spensermcconnell/.codex/worktrees/abc3/substrate/.agents/skills/orchestrate-top-level-tasks",
+      "file_count": 26,
+      "sha256": "61d99190f680d3738fa824348e671e8eb84b2729bf31952ef16031c6ba24d903",
+      "verified": true
+    },
     "official_evidence_dispatch_allowed": false
   }
 }
