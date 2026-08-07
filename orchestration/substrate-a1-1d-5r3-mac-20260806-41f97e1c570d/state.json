@@ -1,7 +1,7 @@
 {
   "protocol": "codex.top-level-orchestration-state.v1",
   "orchestration_id": "substrate-a1-1d-5r3-mac-20260806-41f97e1c570d",
-  "status": "DISPATCHING",
+  "status": "RUNNING",
   "dispatch_authorized": true,
   "publication_mode": "remote",
   "remote": "origin",
@@ -59,7 +59,8 @@
     "skill_hydration_sha256": "sha256:e3de93f358594033ed59696a9624d2d0ac2fd0c2aa7ddf4a532810a05b262282",
     "model": "gpt-5.6-terra",
     "reasoning": "xhigh",
-    "authority_persisted_at_utc": "2026-08-07T19:21:19.735464Z"
+    "authority_persisted_at_utc": "2026-08-07T19:21:19.735464Z",
+    "binding_sent_at_utc": "2026-08-07T19:21:45.949072Z"
   },
   "active_evidence_dispatches": [],
   "verified_evidence": [],
@@ -298,7 +299,7 @@
     "successor_dispatched": true
   },
   "auxiliary_recovery_implementation": {
-    "status": "DISPATCHING",
+    "status": "RUNNING",
     "sequence": [
       "AUX-R3-MAC-EVIDENCE-RECOVERY-R1",
       "AUX-R3-MAC-EVIDENCE-RECOVERY-R2",
@@ -333,7 +334,7 @@
     "skill_hydration_path": "increments/AUX-R3-MAC-EVIDENCE-RECOVERY-R5.skill-hydration.json",
     "model": "gpt-5.6-terra",
     "reasoning": "xhigh",
-    "binding_sent_at_utc": "2026-08-07T18:05:01.056031Z",
+    "binding_sent_at_utc": "2026-08-07T19:21:45.949072Z",
     "receipt_path": "receipts/AUX-R3-MAC-EVIDENCE-RECOVERY-R4.json",
     "receipt_sha256": "sha256:1e6a4822fece775a33f049d6c770f3788bcfa1e0e06216816785562ba46dd02b",
     "verification_path": "receipts/AUX-R3-MAC-EVIDENCE-RECOVERY-R4.verification.json",
@@ -348,7 +349,7 @@
     "subject_fingerprint": "sha256:efd2f5b317b53cb79e4738f46f2633d0403e6d182f11339cc36ab708690ecc52",
     "worktree_preserved": true,
     "task_archived": false,
-    "successor_dispatched": false,
+    "successor_dispatched": true,
     "standing_successor_authority": true,
     "attempt_history": [
       {
