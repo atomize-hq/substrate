@@ -1,0 +1,41 @@
+{
+  "protocol": "codex.top-level-task-receipt-verification.v1",
+  "orchestration_id": "substrate-a1-1d-5r3-mac-20260806-41f97e1c570d",
+  "increment": "AUX-R3-MAC-EVIDENCE-RECOVERY-R5",
+  "attempt": 1,
+  "continuation_nonce": "f426b9c13f0079bc1e3d28ad13db88c61ff7144ee00198e01f11c561b9705c63",
+  "verified_at_utc": "2026-08-07T19:47:54Z",
+  "raw_receipt_path": "receipts/AUX-R3-MAC-EVIDENCE-RECOVERY-R5.attempt-1.continuation-0024.blocked.raw.json",
+  "canonical_receipt_path": "receipts/AUX-R3-MAC-EVIDENCE-RECOVERY-R5.attempt-1.continuation-0024.blocked.canonical.json",
+  "terminal_barrier": {
+    "thread_id": "019fddab-1dd2-7570-9bd3-7f3841ce0283",
+    "host_id": "local",
+    "turn_id": "019fddb7-ea5e-7c23-befb-72b14f50de6d",
+    "status": "completed",
+    "thread_status": "idle",
+    "cursor": "02c3d9a2-cefa-4c23-ab5f-aab2a1493429:2"
+  },
+  "independent_observation": {
+    "worktree": "/Users/spensermcconnell/.codex/worktrees/686b/substrate",
+    "head": "05d655fa1458a276f179d12057cbda772cc51eb6",
+    "head_tree": "845694f733fccbfcd3703957bf4976da0ed59b40",
+    "index_tree": "845694f733fccbfcd3703957bf4976da0ed59b40",
+    "live_remote": "05d655fa1458a276f179d12057cbda772cc51eb6",
+    "staged_paths": 0,
+    "status_entry_count": 11,
+    "tracked_binary_diff_sha256": "sha256:2ca7279d89fd38b7591508c309e0a75100e3627c9784029336184a241e097829",
+    "diff_check": "clean"
+  },
+  "repo_truth_classification": {
+    "mac_control_authority_type_already_landed": true,
+    "publisher_bootstrap_authorization_field_missing": true,
+    "common_protected_state_expansion_required": false,
+    "separate_system_keychain_control_admission_already_exists": true,
+    "shell_reexport_paths_are_support_only": true,
+    "r6_transport_required": false,
+    "review_started": false
+  },
+  "verdict": "ACCEPTED_NON_ADVANCING_BLOCK_AND_ADJUDICATED_FOR_SAME_TASK_CONTINUATION",
+  "raw_receipt_sha256": "sha256:8fec0970b0871686500245a957b3331b4c1708f386b3d9f68ad0582703e294d5",
+  "canonical_receipt_sha256": "sha256:9dcecc9ce990f606451c413fb969bca9003f43d0834715fb2ab4eabb260151c9"
+}

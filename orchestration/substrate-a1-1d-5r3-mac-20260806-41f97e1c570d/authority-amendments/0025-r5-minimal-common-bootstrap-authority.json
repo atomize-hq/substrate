@@ -1,0 +1,96 @@
+{
+  "protocol": "codex.orchestration-authority-amendment.v1",
+  "orchestration_id": "substrate-a1-1d-5r3-mac-20260806-41f97e1c570d",
+  "amendment_id": "0025-r5-minimal-common-bootstrap-authority",
+  "authority_source": "meta authority for same-corridor repo-truth path-fence corrections; this is the omitted minimal R4 common binding required to make the landed R5 direct-bootstrap contract functional",
+  "authorized_increment": "AUX-R3-MAC-EVIDENCE-RECOVERY-R5",
+  "existing_task": {
+    "thread_id": "019fddab-1dd2-7570-9bd3-7f3841ce0283",
+    "host_id": "local",
+    "worktree": "/Users/spensermcconnell/.codex/worktrees/686b/substrate",
+    "original_dispatch_nonce": "e480367f5a8308d8ee73f97eb7734c80bd49e37a31c3a70a6e663668d622e70e",
+    "prior_continuation_nonce": "f426b9c13f0079bc1e3d28ad13db88c61ff7144ee00198e01f11c561b9705c63",
+    "continuation_nonce": "ee590b74571010efafdb5df8d8f7b69ed439425b6f73894c5f8601e282c34915",
+    "preserved_tracked_diff_sha256": "sha256:2ca7279d89fd38b7591508c309e0a75100e3627c9784029336184a241e097829",
+    "preserved_status_entry_count": 11,
+    "staged_paths": 0
+  },
+  "expected_base_commit": "05d655fa1458a276f179d12057cbda772cc51eb6",
+  "expected_base_tree": "845694f733fccbfcd3703957bf4976da0ed59b40",
+  "target_ref": "refs/heads/feat/internal-host-orchestrator-world-dispatch-bootstrap",
+  "classification": "minimal R5 bootstrap-authority support closure; not a donor transplant, protected-state schema expansion, cross-platform adapter, or R6 session change",
+  "newly_authorized_paths": {
+    "crates/common/src/managed_artifact.rs": [
+      "PublisherBootstrapAuthorizationV1.mac_control_authority as an optional canonical field",
+      "validate_publisher_bootstrap_authorization_v1 exact MAC-required/non-MAC-forbidden and source/build joins",
+      "publisher_bootstrap_authorization_sha256_v1 only if needed for exact retry",
+      "focused inline tests for required, mismatched, non-MAC, unknown-field and canonical-digest behavior"
+    ],
+    "crates/common/src/lib.rs": [
+      "only the exact re-export of publisher_bootstrap_authorization_sha256_v1 if that helper is implemented"
+    ],
+    "crates/shell/src/execution/mod.rs": [
+      "only the already-preserved exact re-exports required by substrate-lifecycle-control and substrate-lifecycle-macos"
+    ],
+    "crates/shell/src/lib.rs": [
+      "only the already-preserved exact R5 re-exports required by the two binaries"
+    ]
+  },
+  "common_schema_rules": [
+    "mac_host_shared requires mac_control_authority and validates it with the already-landed MacPublisherControlAuthorityV1 validator",
+    "control authority source_commit/source_tree/source_ref must equal the bootstrap authorization source binding",
+    "control authority target_triple must join the exact published control artifact/build record and must not be inferred from the connecting peer",
+    "every non-mac_host_shared authorization rejects a present mac_control_authority",
+    "the canonical authorization digest includes the control authority field",
+    "historical Linux and other non-MAC authorization fixtures remain valid only without the field"
+  ],
+  "protected_state_boundary": {
+    "LifecyclePublisherProtectedStateV1_schema_change": false,
+    "rationale": "Avoid cross-platform struct-literal churn. Bind exact retry through the existing LifecyclePublisherAnchorV1.request_sha256 authorization digest and the already-existing fixed global System-Keychain MacPublisherControlAuthorityV1 admission account.",
+    "required_join": "bootstrap must persist or exact-retry the signed scope state and fixed global control-admission account, then verify the account authority source/build/digest against the protected anchor and current authorization before enabling XPC"
+  },
+  "fd3_runtime_joins": [
+    "derive the retained requester PID from the kernel-owned AF_UNIX peer credential interface, not serialized input",
+    "resolve and hash the retained requester executable and compare it to authorization.mac_control_authority",
+    "resolve and hash the running executor image and compare it to authorization.executor_build_evidence",
+    "join the invoking controlling terminal/session using kernel process and terminal observations",
+    "one canonical request frame and one bounded response frame only; EOF, second frame, mismatch, replacement, cancellation or timeout fails preserving-first"
+  ],
+  "issuer_boundary": "The direct control command may derive the authorization only from the exact retained lifecycle capsule, published implementation receipt/build evidence, its current executable identity and the fixed executor identity. No ambient/default project, donor state, caller JSON, reusable authorization file, environment carrier, argv carrier or script output is permitted.",
+  "full_implementation_and_test_subject_paths": [
+    "crates/common/src/managed_artifact.rs",
+    "crates/common/src/lib.rs",
+    "crates/shell/src/execution/managed_lifecycle.rs",
+    "crates/shell/src/execution/managed_lifecycle/macos_client.rs",
+    "crates/shell/src/execution/mod.rs",
+    "crates/shell/src/lib.rs",
+    "src/bin/substrate-lifecycle-control.rs",
+    "src/bin/substrate-lifecycle-macos.rs",
+    "scripts/mac/lima-lifecycle.sh",
+    "scripts/mac/lima-warm.sh",
+    "scripts/mac/lima-stop.sh",
+    "crates/shell/tests/managed_lifecycle_v1.rs",
+    "tests/mac/lifecycle_r3.sh"
+  ],
+  "review": {
+    "review_started": false,
+    "discovery": "one fresh same-subject three-lens discovery burst or discovery review",
+    "closure": "one different fresh closure reviewer",
+    "supplemental_cycles_max": 2,
+    "remediate": ["P1", "P2"],
+    "p3_p4": "record only in 06-review-finding-inventory.md; no remediation or review cycle",
+    "clean_terminal": true
+  },
+  "hard_exclusions": [
+    "LifecyclePublisherProtectedStateV1 field/schema expansion",
+    "src/bin/substrate-lifecycle-linux.rs, Windows code, Linux/Windows behavior or target commands",
+    "donor bulk copy or any donor-only pairing/channel/protected-state prototype beyond the exact field/validator logic named here",
+    "new endpoint, transport family, principal, generic selector, reusable authority record, or R6 guest session",
+    "forwarding implementation",
+    "native install, code signing, Keychain/XPC/Lima mutation, lifecycle action or evidence",
+    "npx gitnexus analyze or tracked context injection",
+    "publication before terminal review CLEAN"
+  ],
+  "publication": "one normal fast-forward R5 commit only after exact MAC-only deterministic proof and terminal review CLEAN",
+  "terminal_successor": "AUX-R3-MAC-EVIDENCE-RECOVERY-R6"
+}

@@ -1,0 +1,42 @@
+{
+  "schema": "codex.top-level-task-receipt.v1",
+  "status": "BLOCKED_CONTRADICTION",
+  "increment": "AUX-R3-MAC-EVIDENCE-RECOVERY-R5",
+  "orchestration_id": "substrate-a1-1d-5r3-mac-20260806-41f97e1c570d",
+  "dispatch_nonce": "e480367f5a8308d8ee73f97eb7734c80bd49e37a31c3a70a6e663668d622e70e",
+  "continuation_nonce": "f426b9c13f0079bc1e3d28ad13db88c61ff7144ee00198e01f11c561b9705c63",
+  "increment_task_thread_id": "019fddab-1dd2-7570-9bd3-7f3841ce0283",
+  "increment_task_host_id": "local",
+  "exact_worktree": "/Users/spensermcconnell/.codex/worktrees/686b/substrate",
+  "expected_base_commit": "05d655fa1458a276f179d12057cbda772cc51eb6",
+  "expected_base_tree": "845694f733fccbfcd3703957bf4976da0ed59b40",
+  "remote_observation": "origin refs/heads/feat/internal-host-orchestrator-world-dispatch-bootstrap was verified at 05d655fa1458a276f179d12057cbda772cc51eb6 before continuation implementation.",
+  "evidence": [
+    "The frozen base PublisherBootstrapAuthorizationV1 has no mac_control_authority field, although MacPublisherControlAuthorityV1 already exists from R4.",
+    "The FD3 contract requires joining the retained requester PID/executable identity and exact executor identity/digest before bootstrap.",
+    "The read-only donor confirms the missing common-schema dependency but confers no transplant authority.",
+    "Adding the minimal authorization field and validation requires crates/common/src/managed_artifact.rs and, only if needed for an exact helper export, crates/common/src/lib.rs."
+  ],
+  "partial_state": {
+    "preserved_uncommitted_paths": [
+      "crates/shell/src/execution/managed_lifecycle.rs",
+      "crates/shell/src/execution/managed_lifecycle/macos_client.rs",
+      "crates/shell/src/execution/mod.rs",
+      "crates/shell/src/lib.rs",
+      "crates/shell/tests/managed_lifecycle_v1.rs",
+      "scripts/mac/lima-lifecycle.sh",
+      "scripts/mac/lima-warm.sh",
+      "scripts/mac/lima-stop.sh",
+      "src/bin/substrate-lifecycle-control.rs",
+      "src/bin/substrate-lifecycle-macos.rs",
+      "tests/mac/lifecycle_r3.sh"
+    ],
+    "diff_check": "clean",
+    "commit_or_push": "none",
+    "native_actions": "none",
+    "reviews_started": false
+  },
+  "required_authority": "Authorize the minimal common authorization-schema/control-authority closure and exact R5 re-export support paths, without importing the donor's broader protected-state/pairing prototype.",
+  "continuation_handoff": "Preserve this worktree and all uncommitted changes. Continue only under the narrow common-schema amendment, rerun focused MAC-only proof, then complete fresh review and one fast-forward R5 publication if CLEAN.",
+  "next_increment": "AUX-R3-MAC-EVIDENCE-RECOVERY-R6"
+}
