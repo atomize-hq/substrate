@@ -22,6 +22,7 @@ const LIFECYCLE_PUBLISHER_PROTECTED_STATE_OWNER_V1: &str =
     "substrate.lifecycle-publisher-protected-state";
 const LIFECYCLE_SIGNATURE_PREFIX_V1: &[u8] = b"SUBSTRATE-LIFECYCLE-SIGNATURE-V1\0";
 const LIMA_STAGE_ONE_SCHEMA_OWNER_V1: &str = "substrate.lima-stage-one-authorization";
+const MAC_PUBLISHER_CONTROL_AUTHORITY_OWNER_V1: &str = "substrate.mac-publisher-control-authority";
 
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]
 #[serde(rename_all = "snake_case")]
@@ -343,6 +344,25 @@ pub struct PublisherBootstrapComponentV1 {
     pub durability_method: String,
 }
 
+/// Immutable authorization for the one macOS host-control image that may connect to the fixed
+/// lifecycle publisher Mach service.
+///
+/// The authority is installed before the listener starts. It is never inferred from an accepted
+/// XPC peer, which would turn peer admission into a trust-on-first-use decision.
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]
+#[serde(deny_unknown_fields)]
+pub struct MacPublisherControlAuthorityV1 {
+    pub schema_owner: String,
+    pub schema_version: u32,
+    pub control_binary: String,
+    pub source_commit: String,
+    pub source_tree: String,
+    pub source_ref: String,
+    pub target_triple: String,
+    pub artifact_sha256: String,
+    pub designated_requirement: String,
+}
+
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]
 #[serde(deny_unknown_fields)]
 pub struct GuestPublisherRetirementReservationV1 {
@@ -568,6 +588,7 @@ pub struct GuestPublisherPairingHostRecordV1 {
     pub ticket: GuestPublisherPairingTicketV1,
     pub current_anchor_counter: u64,
     pub current_anchor_sha256: String,
+    pub record_generation: u64,
     #[serde(default)]
     pub transport_observations: Vec<String>,
     #[serde(default, skip_serializing_if = "Option::is_none")]
@@ -1097,6 +1118,81 @@ pub fn canonical_guest_publisher_pairing_ticket_v1(
     canonical_json_to_vec(ticket).context("encode guest pairing ticket")
 }
 
+/// Validate the one fixed macOS control identity committed before XPC service startup.
+pub fn validate_mac_publisher_control_authority_v1(
+    authority: &MacPublisherControlAuthorityV1,
+) -> Result<()> {
+    require_schema(
+        &authority.schema_owner,
+        authority.schema_version,
+        MAC_PUBLISHER_CONTROL_AUTHORITY_OWNER_V1,
+        1,
+    )?;
+    if authority.control_binary != "substrate-lifecycle-control" {
+        bail!("macOS control authority must name the fixed substrate-lifecycle-control binary");
+    }
+    require_git_oid(
+        &authority.source_commit,
+        "macOS control authority source_commit",
+    )?;
+    require_git_oid(
+        &authority.source_tree,
+        "macOS control authority source_tree",
+    )?;
+    require_nonempty_no_nul(&authority.source_ref, "macOS control authority source_ref")?;
+    require_nonempty_no_nul(
+        &authority.target_triple,
+        "macOS control authority target_triple",
+    )?;
+    require_hex_digest(
+        &authority.artifact_sha256,
+        "macOS control authority artifact_sha256",
+    )?;
+    require_nonempty_no_nul(
+        &authority.designated_requirement,
+        "macOS control authority designated_requirement",
+    )?;
+    const CONTROL_REQUIREMENT_PREFIX: &str =
+        "anchor apple generic and identifier \"com.substrate.lifecycle.publisher.v1\" and cdhash H\"";
+    let control_cdhash = authority
+        .designated_requirement
+        .strip_prefix(CONTROL_REQUIREMENT_PREFIX)
+        .and_then(|value| value.strip_suffix('"'))
+        .ok_or_else(|| {
+            anyhow!(
+                "macOS control authority must pin the fixed lifecycle-control identifier and CodeDirectory hash"
+            )
+        })?;
+    if control_cdhash.len() != 40
+        || !control_cdhash
+            .bytes()
+            .all(|byte| byte.is_ascii_hexdigit() && !byte.is_ascii_uppercase())
+    {
+        bail!("macOS control authority has an invalid fixed CodeDirectory hash");
+    }
+    if authority.designated_requirement.len() > 4096 {
+        bail!("macOS control authority designated_requirement is too long");
+    }
+    Ok(())
+}
+
+/// Encode the fixed macOS XPC-control admission record as canonical JSON.
+pub fn canonical_mac_publisher_control_authority_v1(
+    authority: &MacPublisherControlAuthorityV1,
+) -> Result<Vec<u8>> {
+    validate_mac_publisher_control_authority_v1(authority)?;
+    canonical_json_to_vec(authority).context("encode macOS publisher control authority")
+}
+
+/// Hash canonical macOS XPC-control admission bytes for exact-retry comparison.
+pub fn mac_publisher_control_authority_sha256_v1(
+    authority: &MacPublisherControlAuthorityV1,
+) -> Result<String> {
+    Ok(lower_hex(&Sha256::digest(
+        canonical_mac_publisher_control_authority_v1(authority)?,
+    )))
+}
+
 pub fn validate_guest_publisher_pairing_ticket_v1(
     ticket: &GuestPublisherPairingTicketV1,
 ) -> Result<()> {
@@ -1128,7 +1224,174 @@ pub fn validate_guest_publisher_pairing_ticket_v1(
     if challenge_sha != ticket.challenge_sha256 {
         bail!("pairing ticket challenge digest mismatch");
     }
+    if ticket.challenge.source_commit != ticket.current_anchor.executor_identity.source_commit
+        || ticket.challenge.source_tree != ticket.current_anchor.executor_identity.source_tree
+        || ticket.challenge.source_ref != ticket.current_anchor.executor_identity.source_ref
+        || ticket.challenge.executor_build_evidence_sha256
+            != ticket.current_anchor.executor_identity.artifact_sha256
+    {
+        bail!("pairing ticket source or artifact binding does not match current anchor");
+    }
+    if ticket.challenge.host_context_commitment != ticket.current_anchor.host_context_commitment
+        || ticket.challenge.platform_mapping_commitment
+            != ticket.current_anchor.platform_mapping_commitment
+    {
+        bail!("pairing ticket host binding does not match current anchor");
+    }
+    if ticket.current_anchor.authority_domain == "mac_host_shared" {
+        if ticket.host_generation != ticket.current_anchor.manifest_generation {
+            bail!("macOS pairing ticket host generation does not match current anchor");
+        }
+        if ticket.current_anchor.signature.algorithm != "ecdsa-p256-sha256-p1363-low-s-v1"
+            || ticket.current_anchor.signature.public_key != ticket.signer_spki_der
+            || ticket.signature.algorithm != "ecdsa-p256-sha256-p1363-low-s-v1"
+            || ticket.signature.public_key != ticket.signer_spki_der
+        {
+            bail!("macOS pairing ticket signatures must use the canonical ticket P-256 SPKI");
+        }
+    }
     verify_lifecycle_signature_v1(&ticket.schema_owner, ticket, &ticket.signature)
+}
+
+/// Validate a pairing ticket against an explicit clock so callers must check expiry before use.
+pub fn validate_guest_publisher_pairing_ticket_at_v1(
+    ticket: &GuestPublisherPairingTicketV1,
+    now_unix_ns: u64,
+) -> Result<()> {
+    validate_guest_publisher_pairing_ticket_v1(ticket)?;
+    if now_unix_ns >= ticket.challenge.expires_at_unix_ns {
+        bail!("pairing ticket has expired");
+    }
+    Ok(())
+}
+
+/// Validate the protected local record for a single macOS guest-pairing ticket.
+///
+/// Stage R4 records only ticket issuance and one terminal consumption. It intentionally rejects
+/// transport/session material so later channel work cannot be smuggled through this state type.
+pub fn validate_guest_publisher_pairing_host_record_v1(
+    record: &GuestPublisherPairingHostRecordV1,
+) -> Result<()> {
+    require_schema(
+        &record.schema_owner,
+        record.schema_version,
+        "substrate.guest-publisher-pairing-host-record",
+        1,
+    )?;
+    validate_guest_publisher_pairing_ticket_v1(&record.ticket)?;
+    if record.ticket.current_anchor.authority_domain != "mac_host_shared" {
+        bail!("R4 host pairing records require mac_host_shared authority");
+    }
+    if record.current_anchor_counter != record.ticket.host_counter
+        || record.current_anchor_sha256 != record.ticket.current_anchor_sha256
+    {
+        bail!("host pairing record anchor binding does not match ticket");
+    }
+    if record.record_generation == 0 {
+        bail!("host pairing record generation must be positive");
+    }
+    if !record.transport_observations.is_empty()
+        || record.hello.is_some()
+        || record.transcript.is_some()
+        || record.guest_anchor_sha256.is_some()
+    {
+        bail!("R4 host pairing records must not contain channel or session material");
+    }
+    match record.state.as_str() {
+        "ticket_issued" => {
+            if record.record_generation != 1 || record.previous_record_sha256.is_some() {
+                bail!("initial host pairing record must be generation one without a predecessor");
+            }
+        }
+        "ticket_consumed" => {
+            if record.record_generation < 2 {
+                bail!("consumed host pairing record must advance its generation");
+            }
+            let previous = record
+                .previous_record_sha256
+                .as_deref()
+                .ok_or_else(|| anyhow!("consumed host pairing record requires predecessor hash"))?;
+            require_hex_digest(previous, "host pairing record previous_record_sha256")?;
+        }
+        _ => bail!("unknown R4 host pairing record state"),
+    }
+    if record.signature.algorithm != "ecdsa-p256-sha256-p1363-low-s-v1"
+        || record.signature.public_key != record.ticket.signer_spki_der
+    {
+        bail!("host pairing record signer must be the canonical ticket P-256 SPKI");
+    }
+    verify_lifecycle_signature_v1(&record.schema_owner, record, &record.signature)
+}
+
+/// Canonical bytes for a protected macOS host pairing record.
+pub fn canonical_guest_publisher_pairing_host_record_v1(
+    record: &GuestPublisherPairingHostRecordV1,
+) -> Result<Vec<u8>> {
+    validate_guest_publisher_pairing_host_record_v1(record)?;
+    canonical_json_to_vec(record).context("encode host pairing record")
+}
+
+/// Digest canonical protected host pairing state for generation-CAS evidence.
+pub fn guest_publisher_pairing_host_record_sha256_v1(
+    record: &GuestPublisherPairingHostRecordV1,
+) -> Result<String> {
+    Ok(lower_hex(&Sha256::digest(
+        canonical_guest_publisher_pairing_host_record_v1(record)?,
+    )))
+}
+
+/// Apply the only R4 host-record transition: issued ticket to terminal consumption.
+pub fn compare_and_swap_guest_publisher_pairing_host_record_v1(
+    current: &GuestPublisherPairingHostRecordV1,
+    next: &GuestPublisherPairingHostRecordV1,
+) -> Result<()> {
+    let now_unix_ns = std::time::SystemTime::now()
+        .duration_since(std::time::UNIX_EPOCH)
+        .context("read clock for guest pairing host-record transition")?;
+    let now_unix_ns = u64::try_from(now_unix_ns.as_nanos())
+        .context("guest pairing host-record clock overflow")?;
+    compare_and_swap_guest_publisher_pairing_host_record_at_v1(current, next, now_unix_ns)
+}
+
+/// Apply the R4 host-record transition at an explicit time. The durable owner must invoke this
+/// before its protected-store CAS so an expired ticket cannot become terminal consumption state.
+pub fn compare_and_swap_guest_publisher_pairing_host_record_at_v1(
+    current: &GuestPublisherPairingHostRecordV1,
+    next: &GuestPublisherPairingHostRecordV1,
+    now_unix_ns: u64,
+) -> Result<()> {
+    validate_guest_publisher_pairing_host_record_v1(current)?;
+    validate_guest_publisher_pairing_host_record_v1(next)?;
+    validate_guest_publisher_pairing_ticket_at_v1(&current.ticket, now_unix_ns)?;
+    validate_guest_publisher_pairing_ticket_at_v1(&next.ticket, now_unix_ns)?;
+    if current == next {
+        return Ok(());
+    }
+    if current.ticket != next.ticket
+        || current.current_anchor_counter != next.current_anchor_counter
+        || current.current_anchor_sha256 != next.current_anchor_sha256
+        || current.transport_observations != next.transport_observations
+        || current.hello != next.hello
+        || current.transcript != next.transcript
+        || current.guest_anchor_sha256 != next.guest_anchor_sha256
+    {
+        bail!("host pairing record transition changes immutable ticket bindings");
+    }
+    if current.state != "ticket_issued" || next.state != "ticket_consumed" {
+        bail!("R4 host pairing records may only consume an issued ticket once");
+    }
+    let expected_generation = current
+        .record_generation
+        .checked_add(1)
+        .ok_or_else(|| anyhow!("host pairing record generation overflow"))?;
+    if next.record_generation != expected_generation {
+        bail!("host pairing record generation-CAS mismatch");
+    }
+    let current_digest = guest_publisher_pairing_host_record_sha256_v1(current)?;
+    if next.previous_record_sha256.as_deref() != Some(current_digest.as_str()) {
+        bail!("host pairing record predecessor digest mismatch");
+    }
+    Ok(())
 }
 
 pub fn canonical_lifecycle_signature_payload_v1<T: Serialize>(
@@ -2602,6 +2865,9 @@ fn validate_pairing_challenge_v1(challenge: &GuestPublisherPairingChallengeV1) -
     )?;
     require_uuid_v7(&challenge.challenge_id, "pairing challenge challenge_id")?;
     decode_base64url(&challenge.challenge, "pairing challenge value")?;
+    if challenge.expires_at_unix_ns == 0 {
+        bail!("pairing challenge expiry must be positive");
+    }
     require_hex_digest(
         &challenge.host_key_fingerprint_sha256,
         "pairing challenge host_key_fingerprint_sha256",
@@ -2625,6 +2891,10 @@ fn validate_pairing_challenge_v1(challenge: &GuestPublisherPairingChallengeV1) -
     if let Some(commitment) = &challenge.platform_mapping_commitment {
         require_hex_digest(commitment, "pairing challenge platform_mapping_commitment")?;
     }
+    require_nonempty_no_nul(
+        &challenge.guest_machine_identity,
+        "pairing challenge guest_machine_identity",
+    )?;
     require_git_oid(&challenge.source_commit, "pairing challenge source_commit")?;
     require_git_oid(&challenge.source_tree, "pairing challenge source_tree")?;
     require_nonempty_no_nul(&challenge.source_ref, "pairing challenge source_ref")
@@ -3940,6 +4210,146 @@ mod tests {
         }
     }
 
+    fn sign_p256_record_v1<T: Serialize>(
+        signing_key: &P256SigningKey,
+        owner: &str,
+        record: &T,
+    ) -> String {
+        let payload = canonical_lifecycle_signature_payload_v1(owner, record).unwrap();
+        let signature: P256Signature = signing_key.sign(&payload);
+        let signature = signature.normalize_s().unwrap_or(signature);
+        URL_SAFE_NO_PAD.encode(signature.to_bytes())
+    }
+
+    fn mac_pairing_signing_key_v1() -> P256SigningKey {
+        P256SigningKey::from_bytes((&[8_u8; 32]).into()).unwrap()
+    }
+
+    fn mac_pairing_spki_der_v1(signing_key: &P256SigningKey) -> Vec<u8> {
+        let public_key = P256PublicKeyDocument::from_sec1_bytes(
+            signing_key
+                .verifying_key()
+                .to_encoded_point(false)
+                .as_bytes(),
+        )
+        .unwrap();
+        public_key.to_public_key_der().unwrap().as_ref().to_vec()
+    }
+
+    fn valid_mac_pairing_ticket_v1() -> (P256SigningKey, GuestPublisherPairingTicketV1) {
+        let signing_key = mac_pairing_signing_key_v1();
+        let spki_der = mac_pairing_spki_der_v1(&signing_key);
+        let signer_spki_der = URL_SAFE_NO_PAD.encode(&spki_der);
+        let mut anchor = LifecyclePublisherAnchorV1 {
+            schema_owner: "substrate.lifecycle-publisher-anchor".to_string(),
+            schema_version: 1,
+            authority_domain: "mac_host_shared".to_string(),
+            host_context_commitment: "1".repeat(64),
+            platform_mapping_commitment: Some("2".repeat(64)),
+            scope_id: "018f3e4a-7b2c-7c91-8a6f-2e1d5c4b3a90".to_string(),
+            manifest_generation: 1,
+            manifest_sha256: "3".repeat(64),
+            action_receipt_index_revision: 1,
+            action_receipt_index_sha256: "4".repeat(64),
+            head_sha256: "5".repeat(64),
+            previous_anchor_sha256: None,
+            request_sha256: "6".repeat(64),
+            requester_principal: "substrate-control".to_string(),
+            attempt_nonce: "attempt-1".to_string(),
+            executor_identity: ManagedExecutorIdentityV1 {
+                source_commit: "a".repeat(40),
+                source_tree: "b".repeat(40),
+                source_ref: "refs/heads/test".to_string(),
+                target_triple: "aarch64-apple-darwin".to_string(),
+                artifact_sha256: "c".repeat(64),
+                artifact_path: "/Library/PrivilegedHelperTools/substrate-lifecycle-macos"
+                    .to_string(),
+                toolchain: None,
+                code_identity: None,
+            },
+            signature: LifecycleSignatureV1 {
+                algorithm: "ecdsa-p256-sha256-p1363-low-s-v1".to_string(),
+                public_key: signer_spki_der.clone(),
+                signature: String::new(),
+            },
+        };
+        anchor.signature.signature =
+            sign_p256_record_v1(&signing_key, &anchor.schema_owner, &anchor);
+        let anchor_sha256 = lifecycle_anchor_sha256_v1(&anchor).unwrap();
+        let challenge = GuestPublisherPairingChallengeV1 {
+            schema_owner: "substrate.guest-publisher-pairing-challenge".to_string(),
+            schema_version: 1,
+            challenge_id: "018f3e4a-7b2c-7c91-8a6f-2e1d5c4b3a91".to_string(),
+            challenge: URL_SAFE_NO_PAD.encode([0x11_u8; 32]),
+            expires_at_unix_ns: 9_000_000_000_000_000_000,
+            host_key_fingerprint_sha256: lower_hex(&Sha256::digest(&spki_der)),
+            current_anchor_sha256: anchor_sha256.clone(),
+            host_context_commitment: anchor.host_context_commitment.clone(),
+            platform_mapping_commitment: anchor.platform_mapping_commitment.clone(),
+            guest_machine_identity: "guest-machine-1".to_string(),
+            source_commit: anchor.executor_identity.source_commit.clone(),
+            source_tree: anchor.executor_identity.source_tree.clone(),
+            source_ref: anchor.executor_identity.source_ref.clone(),
+            executor_build_evidence_sha256: anchor.executor_identity.artifact_sha256.clone(),
+            guest_component_commitment_sha256: "d".repeat(64),
+        };
+        let challenge_sha256 =
+            lower_hex(&Sha256::digest(canonical_json_to_vec(&challenge).unwrap()));
+        let mut ticket = GuestPublisherPairingTicketV1 {
+            schema_owner: "substrate.guest-publisher-pairing-ticket".to_string(),
+            schema_version: 1,
+            challenge,
+            signer_spki_der: signer_spki_der.clone(),
+            current_anchor: anchor,
+            current_anchor_sha256: anchor_sha256,
+            challenge_sha256,
+            host_generation: 1,
+            host_counter: 1,
+            guest_test_retirement_commitment: None,
+            signature: LifecycleSignatureV1 {
+                algorithm: "ecdsa-p256-sha256-p1363-low-s-v1".to_string(),
+                public_key: signer_spki_der,
+                signature: String::new(),
+            },
+        };
+        ticket.signature.signature =
+            sign_p256_record_v1(&signing_key, &ticket.schema_owner, &ticket);
+        (signing_key, ticket)
+    }
+
+    fn signed_mac_pairing_host_record_v1(
+        signing_key: &P256SigningKey,
+        ticket: GuestPublisherPairingTicketV1,
+        record_generation: u64,
+        state: &str,
+        previous_record_sha256: Option<String>,
+    ) -> GuestPublisherPairingHostRecordV1 {
+        let mut record = GuestPublisherPairingHostRecordV1 {
+            schema_owner: "substrate.guest-publisher-pairing-host-record".to_string(),
+            schema_version: 1,
+            ticket,
+            current_anchor_counter: 1,
+            current_anchor_sha256: "pending".to_string(),
+            record_generation,
+            transport_observations: Vec::new(),
+            hello: None,
+            transcript: None,
+            guest_anchor_sha256: None,
+            state: state.to_string(),
+            previous_record_sha256,
+            signature: LifecycleSignatureV1 {
+                algorithm: "ecdsa-p256-sha256-p1363-low-s-v1".to_string(),
+                public_key: String::new(),
+                signature: String::new(),
+            },
+        };
+        record.current_anchor_sha256 = record.ticket.current_anchor_sha256.clone();
+        record.signature.public_key = record.ticket.signer_spki_der.clone();
+        record.signature.signature =
+            sign_p256_record_v1(signing_key, &record.schema_owner, &record);
+        record
+    }
+
     fn sample_manifest() -> ManagedArtifactManifestV1 {
         ManagedArtifactManifestV1 {
             schema_owner: MANIFEST_SCHEMA_OWNER_V1.to_string(),
@@ -4298,6 +4708,184 @@ mod tests {
         let signature: P256Signature = signing_key.sign(&payload);
         ticket.signature.signature = URL_SAFE_NO_PAD.encode(signature.to_bytes());
         assert!(validate_guest_publisher_pairing_ticket_v1(&ticket).is_err());
+    }
+
+    #[test]
+    fn mac_control_authority_is_canonical_and_rejects_nonfixed_requirements() {
+        let mut authority = MacPublisherControlAuthorityV1 {
+            schema_owner: MAC_PUBLISHER_CONTROL_AUTHORITY_OWNER_V1.to_string(),
+            schema_version: 1,
+            control_binary: "substrate-lifecycle-control".to_string(),
+            source_commit: "a".repeat(40),
+            source_tree: "b".repeat(40),
+            source_ref: "refs/heads/test".to_string(),
+            target_triple: "aarch64-apple-darwin".to_string(),
+            artifact_sha256: "c".repeat(64),
+            designated_requirement: concat!(
+                "anchor apple generic and identifier \"com.substrate.lifecycle.publisher.v1\" ",
+                "and cdhash H\"0123456789abcdef0123456789abcdef01234567\""
+            )
+            .to_string(),
+        };
+        let canonical = canonical_mac_publisher_control_authority_v1(&authority)
+            .expect("canonical fixed control authority");
+        assert_eq!(
+            mac_publisher_control_authority_sha256_v1(&authority).unwrap(),
+            lower_hex(&Sha256::digest(canonical))
+        );
+
+        authority.designated_requirement = "identifier \"attacker\"".to_string();
+        assert!(validate_mac_publisher_control_authority_v1(&authority).is_err());
+    }
+
+    #[test]
+    fn mac_pairing_ticket_rejects_malformed_spki_high_s_expiry_and_generation_mismatch() {
+        let (signing_key, ticket) = valid_mac_pairing_ticket_v1();
+        validate_guest_publisher_pairing_ticket_v1(&ticket).expect("valid P-256 ticket");
+        validate_guest_publisher_pairing_ticket_at_v1(&ticket, 41).expect("ticket unexpired");
+        assert!(validate_guest_publisher_pairing_ticket_at_v1(
+            &ticket,
+            ticket.challenge.expires_at_unix_ns
+        )
+        .is_err());
+
+        let mut malformed_spki = ticket.clone();
+        malformed_spki.signer_spki_der = URL_SAFE_NO_PAD.encode([0x30_u8, 0x00]);
+        assert!(validate_guest_publisher_pairing_ticket_v1(&malformed_spki).is_err());
+
+        let mut high_s = ticket.clone();
+        let payload =
+            canonical_lifecycle_signature_payload_v1(&high_s.schema_owner, &high_s).unwrap();
+        let signature: P256Signature = signing_key.sign(&payload);
+        let low_s = signature.normalize_s().unwrap_or(signature);
+        let mut high_s_bytes = low_s.to_bytes();
+        let scalar = &high_s_bytes[32..];
+        let order = [
+            0xff, 0xff, 0xff, 0xff, 0x00, 0x00, 0x00, 0x00, 0xff, 0xff, 0xff, 0xff, 0xff, 0xff,
+            0xff, 0xff, 0xbc, 0xe6, 0xfa, 0xad, 0xa7, 0x17, 0x9e, 0x84, 0xf3, 0xb9, 0xca, 0xc2,
+            0xfc, 0x63, 0x25, 0x51,
+        ];
+        let mut opposite_s = [0_u8; 32];
+        let mut borrow = 0_i16;
+        for index in (0..32).rev() {
+            let difference = order[index] as i16 - scalar[index] as i16 - borrow;
+            if difference < 0 {
+                opposite_s[index] = (difference + 256) as u8;
+                borrow = 1;
+            } else {
+                opposite_s[index] = difference as u8;
+                borrow = 0;
+            }
+        }
+        assert_eq!(borrow, 0);
+        high_s_bytes[32..].copy_from_slice(&opposite_s);
+        P256Signature::from_slice(&high_s_bytes).expect("valid high-S representation");
+        high_s.signature.signature = URL_SAFE_NO_PAD.encode(high_s_bytes);
+        assert!(validate_guest_publisher_pairing_ticket_v1(&high_s).is_err());
+
+        let mut generation_mismatch = ticket.clone();
+        generation_mismatch.host_generation += 1;
+        assert!(validate_guest_publisher_pairing_ticket_v1(&generation_mismatch).is_err());
+
+        let mut machine_mismatch = ticket;
+        machine_mismatch.challenge.guest_machine_identity.clear();
+        assert!(validate_guest_publisher_pairing_ticket_v1(&machine_mismatch).is_err());
+    }
+
+    #[test]
+    fn mac_pairing_host_record_rejects_stale_generation_and_replay() {
+        let (signing_key, ticket) = valid_mac_pairing_ticket_v1();
+        let issued = signed_mac_pairing_host_record_v1(
+            &signing_key,
+            ticket.clone(),
+            1,
+            "ticket_issued",
+            None,
+        );
+        validate_guest_publisher_pairing_host_record_v1(&issued).expect("initial host record");
+        let issued_sha256 = guest_publisher_pairing_host_record_sha256_v1(&issued).unwrap();
+        let consumed = signed_mac_pairing_host_record_v1(
+            &signing_key,
+            ticket.clone(),
+            2,
+            "ticket_consumed",
+            Some(issued_sha256),
+        );
+        compare_and_swap_guest_publisher_pairing_host_record_v1(&issued, &consumed)
+            .expect("single consumption transition");
+
+        let mut stale_generation = consumed.clone();
+        stale_generation.record_generation = 3;
+        stale_generation.signature.signature = sign_p256_record_v1(
+            &signing_key,
+            &stale_generation.schema_owner,
+            &stale_generation,
+        );
+        assert!(compare_and_swap_guest_publisher_pairing_host_record_v1(
+            &issued,
+            &stale_generation
+        )
+        .is_err());
+
+        let consumed_sha256 = guest_publisher_pairing_host_record_sha256_v1(&consumed).unwrap();
+        let replay = signed_mac_pairing_host_record_v1(
+            &signing_key,
+            ticket.clone(),
+            3,
+            "ticket_issued",
+            Some(consumed_sha256),
+        );
+        assert!(
+            compare_and_swap_guest_publisher_pairing_host_record_v1(&consumed, &replay).is_err()
+        );
+
+        let mut expired_ticket = ticket;
+        expired_ticket.challenge.expires_at_unix_ns = 1;
+        expired_ticket.challenge_sha256 = lower_hex(&Sha256::digest(
+            canonical_json_to_vec(&expired_ticket.challenge).unwrap(),
+        ));
+        expired_ticket.signature.signature =
+            sign_p256_record_v1(&signing_key, &expired_ticket.schema_owner, &expired_ticket);
+        let expired_issued = signed_mac_pairing_host_record_v1(
+            &signing_key,
+            expired_ticket.clone(),
+            1,
+            "ticket_issued",
+            None,
+        );
+        let expired_issued_sha256 =
+            guest_publisher_pairing_host_record_sha256_v1(&expired_issued).unwrap();
+        let expired_consumed = signed_mac_pairing_host_record_v1(
+            &signing_key,
+            expired_ticket,
+            2,
+            "ticket_consumed",
+            Some(expired_issued_sha256),
+        );
+        assert!(compare_and_swap_guest_publisher_pairing_host_record_at_v1(
+            &expired_issued,
+            &expired_consumed,
+            1,
+        )
+        .is_err());
+    }
+
+    #[test]
+    fn mac_protected_state_validation_rejects_malformed_p256_spki() {
+        let (_, ticket) = valid_mac_pairing_ticket_v1();
+        let mut state = LifecyclePublisherProtectedStateV1 {
+            schema_owner: LIFECYCLE_PUBLISHER_PROTECTED_STATE_OWNER_V1.to_string(),
+            schema_version: 1,
+            current_anchor: ticket.current_anchor,
+            counter: 1,
+            prepared_record: None,
+            previous_protected_state_sha256: None,
+            state_revision: 1,
+        };
+        validate_lifecycle_publisher_protected_state_v1(&state)
+            .expect("valid P-256 protected state");
+        state.current_anchor.signature.public_key = URL_SAFE_NO_PAD.encode([0x30_u8, 0x00]);
+        assert!(validate_lifecycle_publisher_protected_state_v1(&state).is_err());
     }
 
     #[test]

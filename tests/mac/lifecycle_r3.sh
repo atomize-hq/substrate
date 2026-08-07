@@ -86,6 +86,91 @@ assert not accepts_peer_audit_token([1, 0, 0, 0, 0, 0, 0, 0])
 assert accepts_peer_audit_token([1, 0, 0, 0, 0, 501, 0, 0])
 PY
 
+python3 - "${MAC_EXECUTOR}" <<'PY'
+from pathlib import Path
+import sys
+
+source = Path(sys.argv[1]).read_text()
+
+def body(name, following):
+    start = source.index(name)
+    end = source.index(following, start)
+    return source[start:end]
+
+for literal in (
+    'MAC_KEYCHAIN_SERVICE_V1: &str = "com.substrate.lifecycle.v1"',
+    'MAC_CONTROL_ADMISSION_ACCOUNT_V1: &str = "mac-control-admission-authority.v1"',
+    'kSecUseSystemKeychain',
+    'kSecAttrIsExtractable',
+    '!= kCFBooleanFalse',
+    'SecKeyCopyExternalRepresentation(public_key',
+):
+    if literal not in source:
+        raise SystemExit(f'R4 System Keychain foundation is missing {literal}')
+
+unscoped_open = body(
+    'pub fn open_system_keychain_protected_state_v1',
+    '/// Compare-and-swap protected state',
+)
+if 'exact scope-bound System Keychain account' not in unscoped_open or 'fs::read' in unscoped_open:
+    raise SystemExit('R4 protected-state open is not scope-bound System Keychain only')
+
+listener = body('unsafe extern "C" fn listener_event', 'unsafe extern "C" fn peer_event')
+admission = listener.index('mac_verified_control_peer_requirement_v1()')
+peer_requirement = listener.index('xpc_connection_set_peer_code_signing_requirement')
+if admission > peer_requirement:
+    raise SystemExit('R4 XPC listener sets peer requirement before loading fixed Keychain authority')
+authority_validator = Path(sys.argv[1].replace('src/bin/substrate-lifecycle-macos.rs', 'crates/common/src/managed_artifact.rs')).read_text()
+authority_start = authority_validator.index('pub fn validate_mac_publisher_control_authority_v1')
+authority_end = authority_validator.index('\n/// Encode the fixed macOS XPC-control admission record', authority_start)
+authority = authority_validator[authority_start:authority_end]
+if ('CONTROL_REQUIREMENT_PREFIX' not in authority
+        or 'and cdhash H\\"' not in authority
+        or 'control_cdhash.len() != 40' not in authority):
+    raise SystemExit('R4 XPC authority does not pin the exact lifecycle-control CodeDirectory hash')
+if ('LISTENER_BLOCK_DESCRIPTOR_V1' not in source
+        or 'size: std::mem::size_of::<BlockV1>()' not in source
+        or 'PEER_BLOCK_DESCRIPTOR_V1' not in source
+        or 'size: std::mem::size_of::<PeerBlockV1>()' not in source):
+    raise SystemExit('R4 XPC Block descriptors do not match their captured layout')
+if ('xpc_connection_set_peer_code_signing_requirement(event, requirement.as_ptr()) != 0'
+        not in listener
+        or 'xpc_connection_cancel(event)' not in listener):
+    raise SystemExit('R4 XPC listener activates a peer after peer-requirement setup failure')
+
+dispatch = body('unsafe fn dispatch_peer_request', '\n    }\n}')
+audit = dispatch.index('let audit_token = mac_audit_token_ffi_v1(peer)?;')
+accepted = dispatch.index('accept_mac_xpc_connection_v1(&service, &audit_token)?;')
+control_image = dispatch.index('attest_mac_xpc_control_image_v1(event, &authority)?;')
+decode = dispatch.index('xpc_dictionary_get_string(event')
+if not audit < accepted < control_image < decode:
+    raise SystemExit('R4 XPC request decodes bytes before actual peer and exact artifact admission')
+if 'proc_pidpath' in source:
+    raise SystemExit('R4 XPC control-image admission resolves a mutable executable path by PID')
+for required in ('SecRequirementCreateWithString', 'SecCodeCreateWithXPCMessage', 'SecCodeCheckValidity'):
+    if required not in source:
+        raise SystemExit(f'R4 XPC control-image admission is missing {required}')
+
+issuer = body('pub fn issue_lima_guest_pairing_ticket_v1', '/// Consume one signed ticket')
+stage_open = issuer.index('open_mac_lima_guest_pairing_stage_one_record_v1')
+state_open = issuer.index('read_system_keychain_protected_state_for_scope_unbound_v1')
+stage_validate = issuer.index('validate_mac_lima_guest_pairing_stage_one_record_for_issue_v1')
+key_binding = issuer.index('validate_system_keychain_protected_state_key_binding_v1')
+if not stage_open < state_open < stage_validate < key_binding:
+    raise SystemExit('R4 ticket issuer does not validate Stage-1 joins before binding the signing key')
+if 'R5 typed issue contract' not in issuer:
+    raise SystemExit('R4 ticket issuer does not fail closed without the separately authorized typed input')
+
+for forbidden in (
+    'lima-stdio-v1',
+    'GuestPublisherPairingGuestChannelV1',
+    'GuestPublisherPairingIssueRequestV1',
+    'MacPublisherXpcOperationV1',
+):
+    if forbidden in source:
+        raise SystemExit(f'R4 source introduces forbidden channel or generic issue surface: {forbidden}')
+PY
+
 python3 - "${MAC_EXECUTOR}" "${MAC_CLIENT}" "${REPO_ROOT}/crates/world-mac-lima/src/forwarding.rs" <<'PY'
 from pathlib import Path
 import sys

@@ -5629,8 +5629,10 @@ version = "0.2.8"
 dependencies = [
  "anyhow",
  "env_logger",
+ "libc",
  "serde",
  "serde_json",
+ "sha2",
  "shell",
  "substrate-common",
  "substrate-shim",

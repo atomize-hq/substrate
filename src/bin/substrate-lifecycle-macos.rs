@@ -10,14 +10,20 @@ use serde_json::{json, Value};
 use sha2::{Digest, Sha256};
 use std::fs;
 use std::io::{Read as _, Write as _};
+#[cfg(target_os = "macos")]
+use std::os::fd::AsRawFd;
+#[cfg(target_os = "macos")]
+use std::os::unix::fs::{MetadataExt, OpenOptionsExt};
 use std::path::{Path, PathBuf};
+use std::time::{SystemTime, UNIX_EPOCH};
 use substrate_common::{
-    canonical_lifecycle_publisher_protected_state_v1, parse_p256_spki_der_v1,
-    validate_guest_publisher_pairing_ticket_v1, validate_lifecycle_publisher_protected_state_v1,
-    validate_lima_stage_one_authorization_v1, validate_managed_lifecycle_publisher_request_v1,
+    canonical_lifecycle_publisher_protected_state_v1, canonical_mac_publisher_control_authority_v1,
+    parse_p256_spki_der_v1, validate_guest_publisher_pairing_ticket_v1,
+    validate_lifecycle_publisher_protected_state_v1, validate_lima_stage_one_authorization_v1,
+    validate_mac_publisher_control_authority_v1, validate_managed_lifecycle_publisher_request_v1,
     validate_publisher_bootstrap_authorization_v1, verify_p256_p1363_low_s_v1,
     GuestPublisherPairingTicketV1, LifecyclePublisherProtectedStateV1, LimaStageOneAuthorizationV1,
-    ManagedArtifactIdentityV1, ManagedLifecyclePublisherRequestV1,
+    MacPublisherControlAuthorityV1, ManagedArtifactIdentityV1, ManagedLifecyclePublisherRequestV1,
     PublisherBootstrapAuthorizationV1,
 };
 
@@ -25,6 +31,8 @@ const MAC_MACH_SERVICE_V1: &str = "com.substrate.lifecycle.publisher.v1";
 const MAC_STATE_ROOT_V1: &str = "/Library/Application Support/Substrate/lifecycle-v1";
 const MAC_CONTROL_DESIGNATED_REQUIREMENT_V1: &str =
     "anchor apple generic and identifier \"com.substrate.lifecycle.publisher.v1\"";
+const MAC_KEYCHAIN_SERVICE_V1: &str = "com.substrate.lifecycle.v1";
+const MAC_CONTROL_ADMISSION_ACCOUNT_V1: &str = "mac-control-admission-authority.v1";
 const MAX_MAC_XPC_FRAME_BYTES_V1: usize = 1024 * 1024;
 
 /// Fixed state projections owned by the designated macOS lifecycle publisher.
@@ -74,6 +82,32 @@ fn main() -> Result<()> {
         .write_all(&serde_json::to_vec(&response).context("encode lifecycle response")?)
         .context("write macOS lifecycle executor response")?;
     Ok(())
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn r4_fixed_keychain_accounts_and_xpc_admission_reject_substitution() {
+        let scope = "018f3e4a-7b2c-7c91-8a6f-2e1d5c4b3a90";
+        assert_eq!(
+            mac_keychain_protected_state_account_v1(scope).unwrap(),
+            "018f3e4a-7b2c-7c91-8a6f-2e1d5c4b3a90:current-anchor"
+        );
+        assert_eq!(
+            mac_keychain_signing_key_tag_v1(scope).unwrap(),
+            b"018f3e4a-7b2c-7c91-8a6f-2e1d5c4b3a90:signing-key"
+        );
+        assert!(mac_keychain_protected_state_account_v1("not-a-v7-uuid").is_err());
+        let service = MacLifecyclePublisherServiceV1 {
+            mach_service: MAC_MACH_SERVICE_V1,
+        };
+        verify_mac_control_designated_requirement_v1(&service).unwrap();
+        assert!(attest_mac_xpc_audit_token_v1(&[0; 8]).is_err());
+        assert!(attest_mac_xpc_audit_token_v1(&[1, 0, 0, 0, 0, 0, 0, 0]).is_err());
+        assert!(attest_mac_xpc_audit_token_v1(&[1, 0, 0, 0, 0, 501, 0, 0]).is_ok());
+    }
 }
 
 /// Open the fixed private lifecycle capsule after the caller has validated its typed authority.
@@ -415,20 +449,421 @@ pub fn publish_mac_action_receipt_v1(
     )
 }
 
+/// The minimum durable record which binds a prior Lima Stage-1 authorization to a host ticket.
+///
+/// It deliberately contains no channel, peer-frame, or mapped-action state. R4 only consumes a
+/// record already written by an independently authorized predecessor; it does not create a guest
+/// or invoke Lima.
+#[derive(Debug, Clone)]
+struct MacLimaGuestPairingStageOneRecordV1 {
+    scope_id: String,
+    stage_one: LimaStageOneAuthorizationV1,
+    guest_machine_identity: String,
+    staged_executor_sha256: String,
+    record_generation: u64,
+}
+
+fn parse_mac_lima_guest_pairing_stage_one_record_v1(
+    value: &Value,
+) -> Result<MacLimaGuestPairingStageOneRecordV1> {
+    let object = value
+        .as_object()
+        .ok_or_else(|| anyhow::anyhow!("protected Lima Stage-1 record must be an object"))?;
+    const KEYS: [&str; 7] = [
+        "schema_owner",
+        "schema_version",
+        "scope_id",
+        "stage_one",
+        "guest_machine_identity",
+        "staged_executor_sha256",
+        "record_generation",
+    ];
+    if object.len() != KEYS.len() || KEYS.iter().any(|key| !object.contains_key(*key)) {
+        bail!("protected Lima Stage-1 record has unknown or missing fields");
+    }
+    if object.get("schema_owner").and_then(Value::as_str)
+        != Some("substrate.mac-lima-guest-pairing-stage-one-record")
+        || object.get("schema_version").and_then(Value::as_u64) != Some(1)
+    {
+        bail!("protected Lima Stage-1 record schema mismatch");
+    }
+    Ok(MacLimaGuestPairingStageOneRecordV1 {
+        scope_id: object
+            .get("scope_id")
+            .and_then(Value::as_str)
+            .ok_or_else(|| anyhow::anyhow!("protected Lima Stage-1 record scope is invalid"))?
+            .to_string(),
+        stage_one: serde_json::from_value(
+            object.get("stage_one").cloned().ok_or_else(|| {
+                anyhow::anyhow!("protected Lima Stage-1 record lacks authorization")
+            })?,
+        )
+        .context("decode protected Lima Stage-1 authorization")?,
+        guest_machine_identity: object
+            .get("guest_machine_identity")
+            .and_then(Value::as_str)
+            .ok_or_else(|| anyhow::anyhow!("protected Lima Stage-1 machine identity is invalid"))?
+            .to_string(),
+        staged_executor_sha256: object
+            .get("staged_executor_sha256")
+            .and_then(Value::as_str)
+            .ok_or_else(|| anyhow::anyhow!("protected Lima Stage-1 artifact digest is invalid"))?
+            .to_string(),
+        record_generation: object
+            .get("record_generation")
+            .and_then(Value::as_u64)
+            .ok_or_else(|| anyhow::anyhow!("protected Lima Stage-1 generation is invalid"))?,
+    })
+}
+
+fn canonical_mac_lima_guest_pairing_stage_one_record_value_v1(
+    record: &MacLimaGuestPairingStageOneRecordV1,
+) -> Result<Value> {
+    Ok(json!({
+        "schema_owner": "substrate.mac-lima-guest-pairing-stage-one-record",
+        "schema_version": 1,
+        "scope_id": record.scope_id,
+        "stage_one": serde_json::to_value(&record.stage_one)
+            .context("encode protected Lima Stage-1 authorization")?,
+        "guest_machine_identity": record.guest_machine_identity,
+        "staged_executor_sha256": record.staged_executor_sha256,
+        "record_generation": record.record_generation,
+    }))
+}
+
+#[cfg(target_os = "macos")]
+struct MacKeychainCasGuardV1 {
+    file: fs::File,
+}
+
+#[cfg(not(target_os = "macos"))]
+struct MacKeychainCasGuardV1;
+
+#[cfg(target_os = "macos")]
+impl Drop for MacKeychainCasGuardV1 {
+    fn drop(&mut self) {
+        // SAFETY: the descriptor is owned solely by this guard and flock only releases its lock.
+        let _ = unsafe { libc::flock(self.file.as_raw_fd(), libc::LOCK_UN) };
+    }
+}
+
+fn mac_keychain_durable_cas_guard_v1(account: &str) -> Result<MacKeychainCasGuardV1> {
+    #[cfg(target_os = "macos")]
+    {
+        if account.is_empty() || account.contains('\0') {
+            bail!("macOS Keychain CAS account is invalid");
+        }
+        let root = Path::new(MAC_STATE_ROOT_V1);
+        fs::create_dir_all(root).context("create fixed macOS Keychain CAS root")?;
+        let lock_path = root.join(format!(
+            "keychain-cas-{:x}.lock",
+            Sha256::digest(account.as_bytes())
+        ));
+        let file = fs::OpenOptions::new()
+            .read(true)
+            .write(true)
+            .create(true)
+            .mode(0o600)
+            .custom_flags(libc::O_CLOEXEC | libc::O_NOFOLLOW)
+            .open(&lock_path)
+            .with_context(|| format!("open macOS Keychain CAS lock {}", lock_path.display()))?;
+        let metadata = file
+            .metadata()
+            .with_context(|| format!("inspect macOS Keychain CAS lock {}", lock_path.display()))?;
+        if !metadata.file_type().is_file() || metadata.uid() != 0 || metadata.mode() & 0o077 != 0 {
+            bail!("macOS Keychain CAS lock must be a root-owned private regular file");
+        }
+        // SAFETY: flock serializes the fixed account's read/validate/write/readback sequence.
+        if unsafe { libc::flock(file.as_raw_fd(), libc::LOCK_EX) } != 0 {
+            return Err(std::io::Error::last_os_error())
+                .context("acquire macOS Keychain inter-process CAS lock");
+        }
+        return Ok(MacKeychainCasGuardV1 { file });
+    }
+    #[cfg(not(target_os = "macos"))]
+    {
+        let _ = account;
+        bail!("macOS Keychain CAS is unavailable off macOS")
+    }
+}
+
+fn mac_require_uuid_v7_component_v1(value: &str, field: &str) -> Result<()> {
+    let bytes = value.as_bytes();
+    if bytes.len() != 36
+        || ![8_usize, 13, 18, 23]
+            .iter()
+            .all(|offset| bytes[*offset] == b'-')
+        || bytes[14] != b'7'
+        || !matches!(bytes[19], b'8' | b'9' | b'a' | b'b')
+        || bytes.iter().enumerate().any(|(offset, byte)| {
+            !matches!(offset, 8 | 13 | 18 | 23)
+                && (!byte.is_ascii_hexdigit() || byte.is_ascii_uppercase())
+        })
+    {
+        bail!("{field} must be an exact UUIDv7");
+    }
+    Ok(())
+}
+
+fn mac_keychain_account_v1(scope_id: &str, suffix: &str) -> Result<String> {
+    mac_require_uuid_v7_component_v1(scope_id, "System Keychain scope")?;
+    if suffix.is_empty() || suffix.contains(['\0', '\n', '\r']) {
+        bail!("System Keychain account suffix is invalid");
+    }
+    Ok(format!("{scope_id}:{suffix}"))
+}
+
+fn mac_keychain_protected_state_account_v1(scope_id: &str) -> Result<String> {
+    mac_keychain_account_v1(scope_id, "current-anchor")
+}
+
+fn mac_keychain_signing_key_tag_v1(scope_id: &str) -> Result<Vec<u8>> {
+    Ok(mac_keychain_account_v1(scope_id, "signing-key")?.into_bytes())
+}
+
+fn mac_keychain_stage_one_record_account_v1(scope_id: &str) -> Result<String> {
+    mac_keychain_account_v1(scope_id, "lima-guest-pairing-stage-one")
+}
+
+fn mac_keychain_read_item_v1(service: &str, account: &str) -> Result<Option<Vec<u8>>> {
+    if service != MAC_KEYCHAIN_SERVICE_V1 || account.is_empty() || account.contains('\0') {
+        bail!("System Keychain item address is not fixed");
+    }
+    #[cfg(target_os = "macos")]
+    {
+        return mac_system_keychain_ffi_v1::read_generic_password(service, account);
+    }
+    #[cfg(not(target_os = "macos"))]
+    {
+        let _ = (service, account);
+        bail!("System Keychain lifecycle state is unavailable off macOS")
+    }
+}
+
+fn mac_keychain_compare_and_swap_item_v1(
+    service: &str,
+    account: &str,
+    expected: Option<&[u8]>,
+    next: &[u8],
+) -> Result<()> {
+    if service != MAC_KEYCHAIN_SERVICE_V1
+        || account.is_empty()
+        || account.contains('\0')
+        || next.is_empty()
+    {
+        bail!("System Keychain CAS item address or bytes are invalid");
+    }
+    #[cfg(target_os = "macos")]
+    {
+        return mac_system_keychain_ffi_v1::compare_and_swap_generic_password(
+            service, account, expected, next,
+        );
+    }
+    #[cfg(not(target_os = "macos"))]
+    {
+        let _ = (service, account, expected, next);
+        bail!("System Keychain lifecycle CAS is unavailable off macOS")
+    }
+}
+
+fn base64url_encode_mac_v1(bytes: &[u8]) -> String {
+    const TABLE: &[u8; 64] = b"ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789-_";
+    let mut output = String::with_capacity((bytes.len() * 4).div_ceil(3));
+    for chunk in bytes.chunks(3) {
+        let word = (u32::from(chunk[0]) << 16)
+            | (u32::from(*chunk.get(1).unwrap_or(&0)) << 8)
+            | u32::from(*chunk.get(2).unwrap_or(&0));
+        output.push(TABLE[((word >> 18) & 0x3f) as usize] as char);
+        output.push(TABLE[((word >> 12) & 0x3f) as usize] as char);
+        if chunk.len() > 1 {
+            output.push(TABLE[((word >> 6) & 0x3f) as usize] as char);
+        }
+        if chunk.len() > 2 {
+            output.push(TABLE[(word & 0x3f) as usize] as char);
+        }
+    }
+    output
+}
+
+fn mac_open_system_keychain_p256_spki_der_v1(scope_id: &str) -> Result<Vec<u8>> {
+    let key_tag = mac_keychain_signing_key_tag_v1(scope_id)?;
+    #[cfg(target_os = "macos")]
+    {
+        return export_mac_p256_spki_der_v1(&mac_system_keychain_ffi_v1::open_p256_spki_der(
+            &key_tag,
+        )?);
+    }
+    #[cfg(not(target_os = "macos"))]
+    {
+        let _ = key_tag;
+        bail!("System Keychain P-256 key is unavailable off macOS")
+    }
+}
+
+fn mac_verified_control_peer_requirement_v1() -> Result<String> {
+    Ok(mac_verified_control_authority_v1()?.designated_requirement)
+}
+
+fn mac_verified_control_authority_v1() -> Result<MacPublisherControlAuthorityV1> {
+    let bytes =
+        mac_keychain_read_item_v1(MAC_KEYCHAIN_SERVICE_V1, MAC_CONTROL_ADMISSION_ACCOUNT_V1)?
+            .ok_or_else(|| {
+                anyhow::anyhow!("macOS XPC listener has no fixed admission authority")
+            })?;
+    let authority: MacPublisherControlAuthorityV1 =
+        serde_json::from_slice(&bytes).context("decode fixed macOS XPC admission authority")?;
+    validate_mac_publisher_control_authority_v1(&authority)?;
+    if canonical_mac_publisher_control_authority_v1(&authority)? != bytes {
+        bail!("fixed macOS XPC admission authority is not canonical");
+    }
+    Ok(authority)
+}
+
+fn attest_mac_xpc_control_image_v1(
+    message: *mut core::ffi::c_void,
+    authority: &MacPublisherControlAuthorityV1,
+) -> Result<()> {
+    if message.is_null() {
+        bail!("macOS XPC peer message is null");
+    }
+    #[cfg(target_os = "macos")]
+    {
+        mac_system_keychain_ffi_v1::verify_xpc_message_requirement(
+            message,
+            &authority.designated_requirement,
+        )?;
+        return Ok(());
+    }
+    #[cfg(not(target_os = "macos"))]
+    {
+        let _ = (message, authority);
+        bail!("macOS XPC control-image attestation is unavailable off macOS")
+    }
+}
+
+fn read_system_keychain_protected_state_for_scope_unbound_v1(
+    scope_id: &str,
+) -> Result<Option<LifecyclePublisherProtectedStateV1>> {
+    let account = mac_keychain_protected_state_account_v1(scope_id)?;
+    let Some(bytes) = mac_keychain_read_item_v1(MAC_KEYCHAIN_SERVICE_V1, &account)? else {
+        return Ok(None);
+    };
+    let state: LifecyclePublisherProtectedStateV1 =
+        serde_json::from_slice(&bytes).context("decode System Keychain protected state")?;
+    validate_lifecycle_publisher_protected_state_v1(&state)?;
+    if state.current_anchor.scope_id != scope_id
+        || canonical_lifecycle_publisher_protected_state_v1(&state)? != bytes
+    {
+        bail!("System Keychain protected state does not match its exact account");
+    }
+    Ok(Some(state))
+}
+
+fn open_system_keychain_protected_state_for_scope_v1(
+    scope_id: &str,
+) -> Result<Option<LifecyclePublisherProtectedStateV1>> {
+    let Some(state) = read_system_keychain_protected_state_for_scope_unbound_v1(scope_id)? else {
+        return Ok(None);
+    };
+    validate_system_keychain_protected_state_key_binding_v1(scope_id, &state)?;
+    Ok(Some(state))
+}
+
+fn validate_system_keychain_protected_state_key_binding_v1(
+    scope_id: &str,
+    state: &LifecyclePublisherProtectedStateV1,
+) -> Result<()> {
+    let spki_der = mac_open_system_keychain_p256_spki_der_v1(scope_id)?;
+    if state.current_anchor.signature.algorithm != "ecdsa-p256-sha256-p1363-low-s-v1"
+        || state.current_anchor.signature.public_key != base64url_encode_mac_v1(&spki_der)
+    {
+        bail!("System Keychain protected state is not bound to its non-exportable P-256 key");
+    }
+    Ok(())
+}
+
+fn canonical_mac_lima_guest_pairing_stage_one_record_v1(
+    record: &MacLimaGuestPairingStageOneRecordV1,
+) -> Result<Vec<u8>> {
+    validate_mac_lima_guest_pairing_stage_one_record_v1(record)?;
+    serde_json::to_vec(&canonical_mac_lima_guest_pairing_stage_one_record_value_v1(
+        record,
+    )?)
+    .context("encode canonical protected Lima Stage-1 record")
+}
+
+fn validate_mac_lima_guest_pairing_stage_one_record_v1(
+    record: &MacLimaGuestPairingStageOneRecordV1,
+) -> Result<()> {
+    mac_require_uuid_v7_component_v1(&record.scope_id, "protected Lima Stage-1 scope")?;
+    validate_lima_stage_one_authorization_v1(&record.stage_one)?;
+    if !record.stage_one.expected_absent
+        || record.guest_machine_identity.is_empty()
+        || record.guest_machine_identity.contains(['\0', '\n', '\r'])
+        || record.staged_executor_sha256.len() != 64
+        || !record
+            .staged_executor_sha256
+            .bytes()
+            .all(|byte| byte.is_ascii_hexdigit() && !byte.is_ascii_uppercase())
+        || record.record_generation == 0
+    {
+        bail!("protected Lima Stage-1 record is malformed");
+    }
+    Ok(())
+}
+
+fn open_mac_lima_guest_pairing_stage_one_record_v1(
+    scope_id: &str,
+) -> Result<Option<MacLimaGuestPairingStageOneRecordV1>> {
+    let account = mac_keychain_stage_one_record_account_v1(scope_id)?;
+    let Some(bytes) = mac_keychain_read_item_v1(MAC_KEYCHAIN_SERVICE_V1, &account)? else {
+        return Ok(None);
+    };
+    let value: Value =
+        serde_json::from_slice(&bytes).context("decode protected Lima Stage-1 record")?;
+    let record = parse_mac_lima_guest_pairing_stage_one_record_v1(&value)?;
+    if record.scope_id != scope_id
+        || canonical_mac_lima_guest_pairing_stage_one_record_v1(&record)? != bytes
+    {
+        bail!("protected Lima Stage-1 record does not match its exact account");
+    }
+    Ok(Some(record))
+}
+
+fn mac_now_unix_ns_v1() -> Result<u64> {
+    let duration = SystemTime::now()
+        .duration_since(UNIX_EPOCH)
+        .context("read macOS clock for Stage-1 expiry")?;
+    u64::try_from(duration.as_nanos()).context("macOS Stage-1 clock exceeds u64 nanoseconds")
+}
+
+fn validate_mac_lima_guest_pairing_stage_one_record_for_issue_v1(
+    record: &MacLimaGuestPairingStageOneRecordV1,
+    protected_state: &LifecyclePublisherProtectedStateV1,
+) -> Result<()> {
+    validate_mac_lima_guest_pairing_stage_one_record_v1(record)?;
+    validate_lifecycle_publisher_protected_state_v1(protected_state)?;
+    if record.stage_one.expires_at_unix_ns <= mac_now_unix_ns_v1()? {
+        bail!("protected Lima Stage-1 authorization has expired");
+    }
+    let anchor = &protected_state.current_anchor;
+    if record.stage_one.host_context_commitment != anchor.host_context_commitment
+        || record.stage_one.source_commit != anchor.executor_identity.source_commit
+        || record.stage_one.source_tree != anchor.executor_identity.source_tree
+        || record.stage_one.source_ref != anchor.executor_identity.source_ref
+        || record.staged_executor_sha256 != anchor.executor_identity.artifact_sha256
+    {
+        bail!("protected Lima Stage-1 record does not join the protected host anchor");
+    }
+    Ok(())
+}
+
 /// Open the protected publisher state and reject malformed or substituted records.
 pub fn open_system_keychain_protected_state_v1(
     executor: &MacManagedArtifactExecutorV1,
 ) -> Result<Option<LifecyclePublisherProtectedStateV1>> {
-    match fs::read(&executor.protected_state) {
-        Ok(bytes) => {
-            let state: LifecyclePublisherProtectedStateV1 =
-                serde_json::from_slice(&bytes).context("decode protected macOS publisher state")?;
-            validate_lifecycle_publisher_protected_state_v1(&state)?;
-            Ok(Some(state))
-        }
-        Err(error) if error.kind() == std::io::ErrorKind::NotFound => Ok(None),
-        Err(error) => Err(error).context("read protected macOS publisher state"),
-    }
+    let _ = executor;
+    bail!("macOS protected-state open requires an exact scope-bound System Keychain account")
 }
 
 /// Compare-and-swap protected state on its canonical prior bytes, never a pathname-only update.
@@ -437,14 +872,35 @@ pub fn compare_and_swap_mac_publisher_protected_state_v1(
     current: Option<&LifecyclePublisherProtectedStateV1>,
     next: &LifecyclePublisherProtectedStateV1,
 ) -> Result<()> {
+    let _ = executor;
     validate_lifecycle_publisher_protected_state_v1(next)?;
-    let observed = open_system_keychain_protected_state_v1(executor)?;
+    let scope_id = current
+        .map(|state| state.current_anchor.scope_id.as_str())
+        .unwrap_or(next.current_anchor.scope_id.as_str());
+    if next.current_anchor.scope_id != scope_id {
+        bail!("next protected state does not match the System Keychain scope");
+    }
+    let spki_der = mac_open_system_keychain_p256_spki_der_v1(scope_id)?;
+    if next.current_anchor.signature.algorithm != "ecdsa-p256-sha256-p1363-low-s-v1"
+        || next.current_anchor.signature.public_key != base64url_encode_mac_v1(&spki_der)
+    {
+        bail!("next protected state is not bound to its System Keychain P-256 key");
+    }
+    let account = mac_keychain_protected_state_account_v1(scope_id)?;
+    let _guard = mac_keychain_durable_cas_guard_v1(&account)?;
+    let observed = open_system_keychain_protected_state_for_scope_v1(scope_id)?;
     if observed.as_ref() != current {
         bail!("macOS publisher protected-state compare-and-swap conflict");
     }
-    mac_atomic_file_ffi_v1(
-        &executor.protected_state,
-        &canonical_lifecycle_publisher_protected_state_v1(next)?,
+    let expected = current
+        .map(canonical_lifecycle_publisher_protected_state_v1)
+        .transpose()?;
+    let next = canonical_lifecycle_publisher_protected_state_v1(next)?;
+    mac_keychain_compare_and_swap_item_v1(
+        MAC_KEYCHAIN_SERVICE_V1,
+        &account,
+        expected.as_deref(),
+        &next,
     )
 }
 
@@ -497,6 +953,7 @@ pub fn resume_mac_publisher_bootstrap_v1(executor: &MacManagedArtifactExecutorV1
 /// Run the fixed XPC publisher service with no dynamic Mach-service name.
 pub fn run_mac_xpc_publisher_v1(service: &MacLifecyclePublisherServiceV1) -> Result<()> {
     verify_mac_control_designated_requirement_v1(service)?;
+    let _ = mac_verified_control_peer_requirement_v1()?;
     mac_xpc_listener_ffi_v1(service.mach_service)
 }
 
@@ -506,6 +963,7 @@ pub fn accept_mac_xpc_connection_v1(
     audit_token: &[u32; 8],
 ) -> Result<()> {
     verify_mac_control_designated_requirement_v1(service)?;
+    let _ = mac_verified_control_peer_requirement_v1()?;
     attest_mac_xpc_audit_token_v1(audit_token)
 }
 
@@ -555,7 +1013,22 @@ pub fn issue_lima_guest_pairing_ticket_v1(
     request: &ManagedLifecyclePublisherRequestV1,
 ) -> Result<Value> {
     validate_managed_lifecycle_publisher_request_v1(request)?;
-    bail!("macOS guest-pairing ticket issuance requires the native host-key/XPC evidence channel")
+    let stage_one = open_mac_lima_guest_pairing_stage_one_record_v1(&request.scope_id)?
+        .ok_or_else(|| anyhow::anyhow!("macOS ticket issue has no protected Stage-1 record"))?;
+    let protected_state =
+        read_system_keychain_protected_state_for_scope_unbound_v1(&request.scope_id)?
+            .ok_or_else(|| anyhow::anyhow!("macOS ticket issue has no protected host state"))?;
+    if request.host_context_commitment != protected_state.current_anchor.host_context_commitment
+        || request.current_anchor_sha256
+            != substrate_common::lifecycle_anchor_sha256_v1(&protected_state.current_anchor)?
+        || request.manifest_generation != protected_state.current_anchor.manifest_generation
+        || request.manifest_sha256 != protected_state.current_anchor.manifest_sha256
+    {
+        bail!("macOS ticket issue request does not join protected host state");
+    }
+    validate_mac_lima_guest_pairing_stage_one_record_for_issue_v1(&stage_one, &protected_state)?;
+    validate_system_keychain_protected_state_key_binding_v1(&request.scope_id, &protected_state)?;
+    bail!("macOS ticket issue requires the separately authorized R5 typed issue contract")
 }
 
 /// Consume one signed ticket exactly once from the protected pairing record.
@@ -723,6 +1196,355 @@ fn relay_mac_xpc_publisher_request_v1(operation: &str, request: &[u8]) -> Result
     bail!("fixed macOS XPC publisher client is unavailable off macOS")
 }
 
+/// Direct System-Keychain/Security framework fence. It admits only fixed service/account/key-tag
+/// values prepared by the R4 helpers above; it exposes no private-key export operation.
+#[cfg(target_os = "macos")]
+mod mac_system_keychain_ffi_v1 {
+    use super::*;
+    use std::ffi::c_void;
+    use std::ptr;
+
+    type CfType = *const c_void;
+    type CfMutableDictionary = *mut c_void;
+    type CfData = *const c_void;
+    type SecCode = *const c_void;
+    type SecKey = *const c_void;
+    type SecRequirement = *const c_void;
+    type OsStatus = i32;
+
+    const ERR_SEC_SUCCESS: OsStatus = 0;
+    const ERR_SEC_DUPLICATE_ITEM: OsStatus = -25299;
+    const ERR_SEC_ITEM_NOT_FOUND: OsStatus = -25300;
+
+    struct OwnedCf(Vec<CfType>);
+
+    impl OwnedCf {
+        fn new() -> Self {
+            Self(Vec::new())
+        }
+
+        unsafe fn hold<T>(&mut self, value: *const T) -> *const T {
+            if !value.is_null() {
+                self.0.push(value.cast());
+            }
+            value
+        }
+    }
+
+    impl Drop for OwnedCf {
+        fn drop(&mut self) {
+            unsafe {
+                for value in self.0.drain(..).rev() {
+                    CFRelease(value);
+                }
+            }
+        }
+    }
+
+    unsafe fn cf_string(owned: &mut OwnedCf, value: &str) -> Result<CfType> {
+        let result = CFStringCreateWithBytes(
+            kCFAllocatorDefault,
+            value.as_bytes().as_ptr(),
+            value.len() as isize,
+            0x0800_0100,
+            0,
+        );
+        if result.is_null() {
+            bail!("allocate System Keychain UTF-8 string");
+        }
+        Ok(owned.hold(result).cast())
+    }
+
+    unsafe fn cf_data(owned: &mut OwnedCf, value: &[u8]) -> Result<CfType> {
+        let result = CFDataCreate(kCFAllocatorDefault, value.as_ptr(), value.len() as isize);
+        if result.is_null() {
+            bail!("allocate System Keychain data");
+        }
+        Ok(owned.hold(result).cast())
+    }
+
+    unsafe fn dictionary(
+        owned: &mut OwnedCf,
+        entries: &[(CfType, CfType)],
+    ) -> Result<CfMutableDictionary> {
+        let dictionary = CFDictionaryCreateMutable(
+            kCFAllocatorDefault,
+            entries.len() as isize,
+            ptr::null(),
+            ptr::null(),
+        );
+        if dictionary.is_null() {
+            bail!("allocate System Keychain query");
+        }
+        owned.hold(dictionary);
+        for (key, value) in entries {
+            CFDictionarySetValue(dictionary, *key, *value);
+        }
+        Ok(dictionary)
+    }
+
+    unsafe fn generic_query(
+        owned: &mut OwnedCf,
+        service: &str,
+        account: &str,
+        return_data: bool,
+    ) -> Result<CfMutableDictionary> {
+        let service = cf_string(owned, service)?;
+        let account = cf_string(owned, account)?;
+        let mut entries = vec![
+            (kSecClass, kSecClassGenericPassword),
+            (kSecAttrService, service),
+            (kSecAttrAccount, account),
+            (kSecUseSystemKeychain, kCFBooleanTrue),
+        ];
+        if return_data {
+            entries.push((kSecReturnData, kCFBooleanTrue));
+            entries.push((kSecMatchLimit, kSecMatchLimitOne));
+        }
+        dictionary(owned, &entries)
+    }
+
+    pub(super) fn read_generic_password(service: &str, account: &str) -> Result<Option<Vec<u8>>> {
+        unsafe {
+            let mut owned = OwnedCf::new();
+            let query = generic_query(&mut owned, service, account, true)?;
+            let mut result: CfType = ptr::null();
+            match SecItemCopyMatching(query, &mut result) {
+                ERR_SEC_ITEM_NOT_FOUND => Ok(None),
+                ERR_SEC_SUCCESS if !result.is_null() => {
+                    owned.hold(result);
+                    let length = CFDataGetLength(result.cast());
+                    let bytes = CFDataGetBytePtr(result.cast());
+                    if length < 0 || bytes.is_null() {
+                        bail!("System Keychain returned invalid item data");
+                    }
+                    Ok(Some(
+                        std::slice::from_raw_parts(bytes, length as usize).to_vec(),
+                    ))
+                }
+                status => bail!("System Keychain read failed with OSStatus {status}"),
+            }
+        }
+    }
+
+    pub(super) fn compare_and_swap_generic_password(
+        service: &str,
+        account: &str,
+        expected: Option<&[u8]>,
+        next: &[u8],
+    ) -> Result<()> {
+        let observed = read_generic_password(service, account)?;
+        if observed.as_deref() != expected {
+            bail!("System Keychain generic-password compare-and-swap conflict");
+        }
+        unsafe {
+            let mut owned = OwnedCf::new();
+            let query = generic_query(&mut owned, service, account, false)?;
+            let data = cf_data(&mut owned, next)?;
+            let update = dictionary(&mut owned, &[(kSecValueData, data)])?;
+            let status = if expected.is_some() {
+                SecItemUpdate(query, update)
+            } else {
+                let service = cf_string(&mut owned, service)?;
+                let account = cf_string(&mut owned, account)?;
+                let add = dictionary(
+                    &mut owned,
+                    &[
+                        (kSecClass, kSecClassGenericPassword),
+                        (kSecAttrService, service),
+                        (kSecAttrAccount, account),
+                        (kSecUseSystemKeychain, kCFBooleanTrue),
+                        (kSecValueData, data),
+                    ],
+                )?;
+                SecItemAdd(add, ptr::null_mut())
+            };
+            if status == ERR_SEC_DUPLICATE_ITEM && expected.is_none() {
+                bail!("System Keychain generic-password compare-and-swap conflict");
+            }
+            if status != ERR_SEC_SUCCESS {
+                bail!("System Keychain generic-password update failed with OSStatus {status}");
+            }
+        }
+        if read_generic_password(service, account)?.as_deref() != Some(next) {
+            bail!("System Keychain generic-password write verification failed");
+        }
+        Ok(())
+    }
+
+    unsafe fn open_private_key(owned: &mut OwnedCf, key_tag: &[u8]) -> Result<SecKey> {
+        let tag = cf_data(owned, key_tag)?;
+        let query = dictionary(
+            owned,
+            &[
+                (kSecClass, kSecClassKey),
+                (kSecAttrApplicationTag, tag),
+                (kSecAttrKeyClass, kSecAttrKeyClassPrivate),
+                (kSecReturnRef, kCFBooleanTrue),
+                (kSecUseSystemKeychain, kCFBooleanTrue),
+            ],
+        )?;
+        let mut result: CfType = ptr::null();
+        let status = SecItemCopyMatching(query, &mut result);
+        if status == ERR_SEC_ITEM_NOT_FOUND {
+            bail!("System Keychain lifecycle P-256 signing key is absent");
+        }
+        if status != ERR_SEC_SUCCESS || result.is_null() {
+            bail!("open System Keychain lifecycle P-256 signing key failed with OSStatus {status}");
+        }
+        owned.hold(result);
+        let attributes = SecKeyCopyAttributes(result.cast());
+        if attributes.is_null() {
+            bail!("System Keychain lifecycle P-256 key has no inspectable attributes");
+        }
+        owned.hold(attributes);
+        if CFDictionaryGetValue(attributes.cast(), kSecAttrIsExtractable) != kCFBooleanFalse {
+            bail!("System Keychain lifecycle P-256 key is not explicitly non-exportable");
+        }
+        Ok(result.cast())
+    }
+
+    unsafe fn spki_for_private_key(owned: &mut OwnedCf, private_key: SecKey) -> Result<Vec<u8>> {
+        let public_key = SecKeyCopyPublicKey(private_key);
+        if public_key.is_null() {
+            bail!("derive System Keychain lifecycle public key");
+        }
+        owned.hold(public_key);
+        let mut error: CfType = ptr::null();
+        let point = SecKeyCopyExternalRepresentation(public_key, &mut error);
+        if !error.is_null() {
+            owned.hold(error);
+        }
+        if point.is_null() {
+            bail!("export System Keychain P-256 public point");
+        }
+        owned.hold(point);
+        let length = CFDataGetLength(point);
+        let bytes = CFDataGetBytePtr(point);
+        if length != 65 || bytes.is_null() || *bytes != 0x04 {
+            bail!("System Keychain public key is not an uncompressed P-256 point");
+        }
+        let mut spki = vec![
+            0x30, 0x59, 0x30, 0x13, 0x06, 0x07, 0x2a, 0x86, 0x48, 0xce, 0x3d, 0x02, 0x01, 0x06,
+            0x08, 0x2a, 0x86, 0x48, 0xce, 0x3d, 0x03, 0x01, 0x07, 0x03, 0x42, 0x00,
+        ];
+        spki.extend_from_slice(std::slice::from_raw_parts(bytes, length as usize));
+        parse_p256_spki_der_v1(&spki)?;
+        Ok(spki)
+    }
+
+    pub(super) fn open_p256_spki_der(key_tag: &[u8]) -> Result<Vec<u8>> {
+        unsafe {
+            let mut owned = OwnedCf::new();
+            let key = open_private_key(&mut owned, key_tag)?;
+            spki_for_private_key(&mut owned, key)
+        }
+    }
+
+    /// Verify the code identity bound by XPC to this exact incoming message.  Security creates
+    /// the `SecCode` from the message's kernel-provided audit token, so this never resolves a
+    /// mutable executable path by PID.
+    pub(super) fn verify_xpc_message_requirement(
+        message: *mut c_void,
+        designated_requirement: &str,
+    ) -> Result<()> {
+        if message.is_null() || designated_requirement.is_empty() {
+            bail!("macOS XPC control-image requirement has no message or requirement");
+        }
+        unsafe {
+            let mut owned = OwnedCf::new();
+            let requirement_text = cf_string(&mut owned, designated_requirement)?;
+            let mut requirement: SecRequirement = ptr::null();
+            let status = SecRequirementCreateWithString(requirement_text, 0, &mut requirement);
+            if status != ERR_SEC_SUCCESS || requirement.is_null() {
+                bail!("compile fixed macOS XPC code requirement failed with OSStatus {status}");
+            }
+            owned.hold(requirement);
+
+            let mut code: SecCode = ptr::null();
+            let status = SecCodeCreateWithXPCMessage(message, 0, &mut code);
+            if status != ERR_SEC_SUCCESS || code.is_null() {
+                bail!("resolve macOS XPC peer code from the audited message failed with OSStatus {status}");
+            }
+            owned.hold(code);
+            let status = SecCodeCheckValidity(code, 0, requirement);
+            if status != ERR_SEC_SUCCESS {
+                bail!("fixed macOS XPC peer did not satisfy the protected code requirement with OSStatus {status}");
+            }
+            Ok(())
+        }
+    }
+
+    #[link(name = "Security", kind = "framework")]
+    unsafe extern "C" {
+        static kSecClass: CfType;
+        static kSecClassGenericPassword: CfType;
+        static kSecClassKey: CfType;
+        static kSecAttrService: CfType;
+        static kSecAttrAccount: CfType;
+        static kSecAttrApplicationTag: CfType;
+        static kSecAttrKeyClass: CfType;
+        static kSecAttrKeyClassPrivate: CfType;
+        static kSecAttrIsExtractable: CfType;
+        static kSecValueData: CfType;
+        static kSecReturnData: CfType;
+        static kSecReturnRef: CfType;
+        static kSecMatchLimit: CfType;
+        static kSecMatchLimitOne: CfType;
+        static kSecUseSystemKeychain: CfType;
+        fn SecItemCopyMatching(query: CfType, result: *mut CfType) -> OsStatus;
+        fn SecItemAdd(attributes: CfType, result: *mut CfType) -> OsStatus;
+        fn SecItemUpdate(query: CfType, attributes: CfType) -> OsStatus;
+        fn SecRequirementCreateWithString(
+            text: CfType,
+            flags: u32,
+            requirement: *mut SecRequirement,
+        ) -> OsStatus;
+        fn SecCodeCreateWithXPCMessage(
+            message: *mut c_void,
+            flags: u32,
+            code: *mut SecCode,
+        ) -> OsStatus;
+        fn SecCodeCheckValidity(code: SecCode, flags: u32, requirement: SecRequirement)
+            -> OsStatus;
+        fn SecKeyCopyPublicKey(key: SecKey) -> SecKey;
+        fn SecKeyCopyAttributes(key: SecKey) -> CfType;
+        fn SecKeyCopyExternalRepresentation(key: SecKey, error: *mut CfType) -> CfData;
+    }
+
+    #[link(name = "CoreFoundation", kind = "framework")]
+    unsafe extern "C" {
+        static kCFAllocatorDefault: CfType;
+        static kCFBooleanTrue: CfType;
+        static kCFBooleanFalse: CfType;
+        fn CFRelease(value: CfType);
+        fn CFStringCreateWithBytes(
+            allocator: CfType,
+            bytes: *const u8,
+            num_bytes: isize,
+            encoding: u32,
+            is_external_representation: u8,
+        ) -> CfType;
+        fn CFDataCreate(allocator: CfType, bytes: *const u8, length: isize) -> CfData;
+        fn CFDataGetLength(data: CfData) -> isize;
+        fn CFDataGetBytePtr(data: CfData) -> *const u8;
+        fn CFDictionaryCreateMutable(
+            allocator: CfType,
+            capacity: isize,
+            key_callbacks: *const c_void,
+            value_callbacks: *const c_void,
+        ) -> CfMutableDictionary;
+        fn CFDictionarySetValue(dictionary: CfMutableDictionary, key: CfType, value: CfType);
+        fn CFDictionaryGetValue(dictionary: CfType, key: CfType) -> CfType;
+    }
+}
+
+#[cfg(target_os = "macos")]
+#[repr(C)]
+struct MacAuditTokenFfiV1 {
+    values: [u32; 8],
+}
+
 #[cfg(target_os = "macos")]
 mod mac_xpc_listener_ffi_v1 {
     use super::*;
@@ -748,15 +1570,15 @@ mod mac_xpc_listener_ffi_v1 {
         peer: *mut core::ffi::c_void,
     }
 
-    static BLOCK_DESCRIPTOR_V1: BlockDescriptorV1 = BlockDescriptorV1 {
+    static LISTENER_BLOCK_DESCRIPTOR_V1: BlockDescriptorV1 = BlockDescriptorV1 {
+        reserved: 0,
+        size: std::mem::size_of::<BlockV1>(),
+    };
+
+    static PEER_BLOCK_DESCRIPTOR_V1: BlockDescriptorV1 = BlockDescriptorV1 {
         reserved: 0,
         size: std::mem::size_of::<PeerBlockV1>(),
     };
-
-    #[repr(C)]
-    struct AuditTokenV1 {
-        values: [u32; 8],
-    }
 
     pub(super) unsafe fn peer_audit_token(peer: *mut core::ffi::c_void) -> [u32; 8] {
         xpc_connection_get_audit_token(peer).values
@@ -764,13 +1586,14 @@ mod mac_xpc_listener_ffi_v1 {
 
     unsafe fn block_v1(
         invoke: unsafe extern "C" fn(*mut BlockV1, *mut core::ffi::c_void),
+        descriptor: *const BlockDescriptorV1,
     ) -> BlockV1 {
         BlockV1 {
-            isa: _NSConcreteStackBlock.as_mut_ptr().cast(),
+            isa: std::ptr::addr_of_mut!(_NSConcreteStackBlock).cast(),
             flags: 0,
             reserved: 0,
             invoke,
-            descriptor: &BLOCK_DESCRIPTOR_V1,
+            descriptor,
         }
     }
 
@@ -786,23 +1609,29 @@ mod mac_xpc_listener_ffi_v1 {
         if listener.is_null() {
             bail!("unable to create fixed macOS XPC listener");
         }
-        let mut listener_block = block_v1(listener_event);
+        let mut listener_block = block_v1(listener_event, &LISTENER_BLOCK_DESCRIPTOR_V1);
         xpc_connection_set_event_handler(listener, (&mut listener_block as *mut BlockV1).cast());
         xpc_connection_activate(listener);
         dispatch_main();
     }
 
     unsafe extern "C" fn listener_event(_block: *mut BlockV1, event: *mut core::ffi::c_void) {
-        if event.is_null() || xpc_get_type(event) != (&_xpc_type_connection as *const _).cast() {
+        if event.is_null() || xpc_get_type(event) != std::ptr::addr_of!(_xpc_type_connection).cast()
+        {
             return;
         }
-        let requirement = match std::ffi::CString::new(MAC_CONTROL_DESIGNATED_REQUIREMENT_V1) {
+        let requirement = match mac_verified_control_peer_requirement_v1()
+            .and_then(|value| std::ffi::CString::new(value).context("encode fixed XPC requirement"))
+        {
             Ok(value) => value,
             Err(_) => return,
         };
-        xpc_connection_set_peer_code_signing_requirement(event, requirement.as_ptr());
+        if xpc_connection_set_peer_code_signing_requirement(event, requirement.as_ptr()) != 0 {
+            xpc_connection_cancel(event);
+            return;
+        }
         let mut peer_block = PeerBlockV1 {
-            block: block_v1(peer_event),
+            block: block_v1(peer_event, &PEER_BLOCK_DESCRIPTOR_V1),
             peer: event,
         };
         xpc_connection_set_event_handler(event, (&mut peer_block.block as *mut BlockV1).cast());
@@ -814,7 +1643,7 @@ mod mac_xpc_listener_ffi_v1 {
     unsafe extern "C" fn peer_event(block: *mut BlockV1, event: *mut core::ffi::c_void) {
         if block.is_null()
             || event.is_null()
-            || xpc_get_type(event) != (&_xpc_type_dictionary as *const _).cast()
+            || xpc_get_type(event) != std::ptr::addr_of!(_xpc_type_dictionary).cast()
         {
             return;
         }
@@ -857,6 +1686,8 @@ mod mac_xpc_listener_ffi_v1 {
             mach_service: MAC_MACH_SERVICE_V1,
         };
         accept_mac_xpc_connection_v1(&service, &audit_token)?;
+        let authority = mac_verified_control_authority_v1()?;
+        attest_mac_xpc_control_image_v1(event, &authority)?;
         let operation = xpc_dictionary_get_string(event, c"operation".as_ptr());
         if operation.is_null() {
             bail!("fixed macOS XPC request is missing operation");
@@ -992,7 +1823,7 @@ unsafe extern "C" {
 unsafe extern "C" {}
 
 #[cfg(target_os = "macos")]
-#[link(name = "xpc")]
+#[link(name = "System")]
 unsafe extern "C" {
     static mut _NSConcreteStackBlock: [*mut core::ffi::c_void; 32];
     static _xpc_type_connection: core::ffi::c_void;
@@ -1009,8 +1840,8 @@ unsafe extern "C" {
     fn xpc_connection_set_peer_code_signing_requirement(
         connection: *mut core::ffi::c_void,
         requirement: *const core::ffi::c_char,
-    );
-    fn xpc_connection_get_audit_token(connection: *mut core::ffi::c_void) -> AuditTokenV1;
+    ) -> i32;
+    fn xpc_connection_get_audit_token(connection: *mut core::ffi::c_void) -> MacAuditTokenFfiV1;
     fn xpc_connection_activate(connection: *mut core::ffi::c_void);
     fn xpc_connection_cancel(connection: *mut core::ffi::c_void);
     fn xpc_connection_send_message(
