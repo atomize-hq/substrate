@@ -1,0 +1,100 @@
+{
+  "protocol": "codex.top-level-task-receipt-verification.v1",
+  "orchestration_id": "substrate-a1-1d-5r3-mac-20260806-41f97e1c570d",
+  "increment": "AUX-R3-MAC-EVIDENCE-RECOVERY-R2",
+  "verified_at_utc": "2026-08-07T17:46:31Z",
+  "raw_receipt_path": "receipts/AUX-R3-MAC-EVIDENCE-RECOVERY-R2.raw.json",
+  "raw_receipt_sha256": "sha256:e4bd62234bebc885ea61700f4fc8220aeb692058f890e778fe5aa19c7ef6e018",
+  "canonical_receipt_path": "receipts/AUX-R3-MAC-EVIDENCE-RECOVERY-R2.json",
+  "canonical_receipt_sha256": "sha256:14d04d4d7fcc44943f29b205c2c815c2a688dd6ea89c436fa30ad503abfee643",
+  "schema_reconciliation": {
+    "raw_jsonschema": "NONCANONICAL_TASK_REPORT",
+    "canonical_validate_receipt": "VALID",
+    "canonical_jsonschema": "VALID",
+    "semantic_success_claim_changed": false
+  },
+  "correlation": {
+    "dispatch_nonce_match": true,
+    "continuation_nonce_match": true,
+    "increment_match": true,
+    "thread_id_match": true,
+    "host_id_match": true,
+    "expected_base_match": true,
+    "target_ref_match": true
+  },
+  "terminal_barrier": {
+    "thread_id": "019fdcee-73e6-77a2-8a16-1d1c86223f9c",
+    "host_id": "local",
+    "turn_id": "019fdd49-eb97-7b00-a1cd-022d65721db5",
+    "status": "completed",
+    "thread_status": "idle"
+  },
+  "publication": {
+    "mode": "remote",
+    "expected_base": "bb098b6e265a4b6cadc4b7ca908c8b6ccf59f2b9",
+    "expected_base_tree": "688ae2860d99d6d5cf1019e0d3ba27c7cc26b6cc",
+    "landed_commit": "fc150213826b8b423f042b4591d6b8b1cb3ace20",
+    "landed_tree": "02217ad2dbd106ae5befc60c8de862b6f3864647",
+    "sole_parent": "bb098b6e265a4b6cadc4b7ca908c8b6ccf59f2b9",
+    "live_remote": "fc150213826b8b423f042b4591d6b8b1cb3ace20",
+    "fast_forward": true,
+    "ahead": 0,
+    "behind": 0
+  },
+  "changed_files": [
+    "crates/shell/src/builtins/world_deps/mod.rs",
+    "crates/shell/src/execution/agent_runtime/mod.rs",
+    "crates/shell/src/execution/agent_runtime/state_store.rs",
+    "crates/shell/src/execution/managed_lifecycle/linux_client.rs",
+    "crates/shell/src/execution/orchestrator_world_dispatch.rs",
+    "crates/shell/src/execution/platform/macos.rs",
+    "crates/shell/src/repl/async_repl.rs",
+    "llm-last-mile/runtime-refactor/review-control/r3-mac-evidence-recovery-r2-review-allowlist-evidence.md",
+    "llm-last-mile/runtime-refactor/review-control/r3-mac-evidence-recovery-r2-review-authority-security.md",
+    "llm-last-mile/runtime-refactor/review-control/r3-mac-evidence-recovery-r2-review-cycle-record.json",
+    "llm-last-mile/runtime-refactor/review-control/r3-mac-evidence-recovery-r2-review-lifecycle-convergence.md",
+    "scripts/substrate/dev-install-substrate.sh",
+    "tests/installers/dev_install_bash32_fd_regression.sh",
+    "tests/mac/dev_install_compile_surface_r3.sh"
+  ],
+  "changed_files_exact": true,
+  "review": {
+    "record_sha256": "sha256:912f11a3242d6c95a0d2831248bd25712cc48100bbefcbc9b3d2e3fc6dde7c00",
+    "validator": "VALID",
+    "record_status": "complete",
+    "terminal": "CLEAN",
+    "p1": 0,
+    "p2": 0,
+    "subject_fingerprint_recomputed": "sha256:58eb0087e72627a045912f72adfd4e386469a40e093db0ecde00d0e949ef7668",
+    "subject_fingerprint_algorithm": "shasum -a 256 over each of the ten subject paths, lexical full-line sort, then shasum -a 256 over the manifest",
+    "subject_fingerprint_match": true,
+    "lens_sha256": {
+      "authority_security": "sha256:61360cafff29fc1a4bcf831c762106c114206822fb7ec14bd27d3c0bc497915f",
+      "lifecycle_convergence": "sha256:8f9bfb1c34aba7105d523c25c9c8ee11d2ae0df6c2e92f38bf5653eb4afb72ea",
+      "allowlist_evidence": "sha256:78a1022dba8a1129814124b9cd7680aabae07d79d36abcaad300956b063e9023"
+    },
+    "causal_lineage": [
+      "discovery-1 -> P2-R2-LIFECYCLE-001",
+      "closure-1 -> P2-R2-LIFECYCLE-002",
+      "supplemental-causal-1 -> CLEAN"
+    ]
+  },
+  "independent_checks": {
+    "task_head_match": true,
+    "task_tree_match": true,
+    "task_index_tree_match": true,
+    "task_worktree_clean": true,
+    "protected_checkout_tracked_clean": true,
+    "mac_only_policy_observed": true
+  },
+  "successor": {
+    "value": "AUX-R3-MAC-EVIDENCE-RECOVERY-R3",
+    "standing_authority_condition_satisfied": true
+  },
+  "task_preservation": {
+    "worktree": "/Users/spensermcconnell/.codex/worktrees/bacb/substrate",
+    "archived": false,
+    "preserved": true
+  },
+  "verdict": "ACCEPTED_LANDED_CLEAN"
+}

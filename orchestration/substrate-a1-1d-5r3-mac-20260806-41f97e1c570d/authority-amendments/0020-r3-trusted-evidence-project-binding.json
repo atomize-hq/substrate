@@ -1,0 +1,78 @@
+{
+  "protocol": "codex.orchestration-authority-amendment.v1",
+  "orchestration_id": "substrate-a1-1d-5r3-mac-20260806-41f97e1c570d",
+  "amendment_id": "0020-r3-trusted-evidence-project-binding",
+  "authority_source": "standing successor authority in amendment 0011, activated by independently verified AUX-R3-MAC-EVIDENCE-RECOVERY-R2 LANDED_CLEAN with terminal review CLEAN",
+  "authorized_increment": "AUX-R3-MAC-EVIDENCE-RECOVERY-R3",
+  "dispatch_nonce": "436e79e59e5a06bdafa67f5b066c95934838835e4d127f57f4d8ec8ebadad3f3",
+  "expected_base_commit": "fc150213826b8b423f042b4591d6b8b1cb3ace20",
+  "expected_base_tree": "02217ad2dbd106ae5befc60c8de862b6f3864647",
+  "target_ref": "refs/heads/feat/internal-host-orchestrator-world-dispatch-bootstrap",
+  "publication_mode": "remote",
+  "completion_claim": "native-evidence validation accepts only a dispatch-supplied expected project ID and preserves the historical Linux artifact only under its explicitly supplied historical expected project ID",
+  "authorized_paths": [
+    "scripts/ci/validate_r3_native_evidence.py",
+    "scripts/ci/test_validate_r3_native_evidence.py",
+    "llm-last-mile/runtime-refactor/03-phase-slice-map.md",
+    "llm-last-mile/runtime-refactor/04-contracts-and-gates.md",
+    "llm-last-mile/runtime-refactor/05-debug-regression-ledger.md",
+    "llm-last-mile/runtime-refactor/review-control/r3-mac-evidence-recovery-r3-review-authority-security.md",
+    "llm-last-mile/runtime-refactor/review-control/r3-mac-evidence-recovery-r3-review-lifecycle-convergence.md",
+    "llm-last-mile/runtime-refactor/review-control/r3-mac-evidence-recovery-r3-review-allowlist-evidence.md",
+    "llm-last-mile/runtime-refactor/review-control/r3-mac-evidence-recovery-r3-review-cycle-record.json"
+  ],
+  "symbol_fence": {
+    "scripts/ci/validate_r3_native_evidence.py": [
+      "validate_artifact",
+      "parse_args",
+      "main"
+    ],
+    "scripts/ci/test_validate_r3_native_evidence.py": [
+      "valid dispatch-supplied project ID",
+      "missing expected project ID rejection",
+      "mismatched expected project ID rejection",
+      "historical Linux artifact with explicit historical expected ID"
+    ]
+  },
+  "documentation_rule": "append only the recovery-current authoritative validator invocation with required --expected-product-project-id; do not rewrite frozen architecture or prior evidence",
+  "donor_policy": {
+    "path": "/Users/spensermcconnell/.codex/worktrees/60cc/substrate",
+    "read_only": true,
+    "manual_recreation_only": true,
+    "bulk_patch_or_transplant_forbidden": true
+  },
+  "mac_only_policy": {
+    "source": "authority-amendments/0016-r3-mac-only-platform-proof.json",
+    "linux_or_windows_target_compilation": "not a gate and prohibited as recovery work",
+    "historical_linux_fixture": "permitted only as static predecessor-compatibility validation with historical project ID",
+    "linux_or_windows_remediation": false,
+    "native_macos_action": false
+  },
+  "review": {
+    "process": "repository-defined causal cascading review",
+    "remediate": ["P1", "P2"],
+    "p3_p4": "record in 06-review-finding-inventory.md when valid; no remediation or review cycle",
+    "discovery": "one discovery review or same-subject three-lens burst",
+    "closure": "one different fresh closure reviewer",
+    "supplemental_cycles_max": 2,
+    "supplemental_cause": "only a P1/P2 caused or unmasked by the immediately preceding remediation under unchanged authority and risk",
+    "clean_terminal": true
+  },
+  "hard_exclusions": [
+    "R4 through R6 implementation",
+    "native evidence execution or artifact creation",
+    "Keychain, XPC, Lima, pairing, installer, lifecycle, or host mutation",
+    "artifact project ID as authorization",
+    "Windows or ordinary Linux runtime behavior",
+    "npx gitnexus analyze or tracked GitNexus context injection",
+    "donor mutation, reset, clean, checkout, commit, or publication"
+  ],
+  "workflow": {
+    "subagent_model": "gpt-5.6-terra",
+    "subagent_reasoning": "xhigh",
+    "hydrate_complete_repository_local_skill_suite": true,
+    "preserve_task_and_worktree": true,
+    "publication": "one normal fast-forward commit only after validated terminal CLEAN"
+  },
+  "terminal_successor": "AUX-R3-MAC-EVIDENCE-RECOVERY-R4"
+}

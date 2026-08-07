@@ -1,0 +1,32 @@
+{
+  "protocol": "codex.top-level-task-predispatch.v1",
+  "orchestration_id": "substrate-a1-1d-5r3-mac-20260806-41f97e1c570d",
+  "increment": "AUX-R3-MAC-EVIDENCE-RECOVERY-R3",
+  "attempt": 1,
+  "dispatch_nonce": "436e79e59e5a06bdafa67f5b066c95934838835e4d127f57f4d8ec8ebadad3f3",
+  "authority_amendment": "authority-amendments/0020-r3-trusted-evidence-project-binding.json",
+  "authority_amendment_sha256": "sha256:e7c8d3950f17474ee2890ccc65d4a64c663cd196716bca47a4b00eb6cddad69e",
+  "project_id": "local-b2016f8a311fef93149e42eaec4d704d",
+  "project_host_id": "local",
+  "project_path": "/Users/spensermcconnell/__Active_Code/atomize-hq/substrate",
+  "publication_mode": "remote",
+  "remote": "origin",
+  "target_ref": "refs/heads/feat/internal-host-orchestrator-world-dispatch-bootstrap",
+  "expected_base": {
+    "commit": "fc150213826b8b423f042b4591d6b8b1cb3ace20",
+    "tree": "02217ad2dbd106ae5befc60c8de862b6f3864647"
+  },
+  "live_remote": "fc150213826b8b423f042b4591d6b8b1cb3ace20",
+  "terminal_predecessor": {
+    "increment": "AUX-R3-MAC-EVIDENCE-RECOVERY-R2",
+    "thread_id": "019fdcee-73e6-77a2-8a16-1d1c86223f9c",
+    "status": "LANDED_CLEAN",
+    "terminal_review": "CLEAN",
+    "task_status": "idle"
+  },
+  "contract_path": "increments/AUX-R3-MAC-EVIDENCE-RECOVERY-R3.contract.md",
+  "initial_prompt_path": "increments/AUX-R3-MAC-EVIDENCE-RECOVERY-R3.initial-prompt.md",
+  "gitnexus_analyze_forbidden": true,
+  "mac_only_policy": "authority-amendments/0016-r3-mac-only-platform-proof.json",
+  "created_at_utc": "2026-08-07T17:48:14.142747Z"
+}
