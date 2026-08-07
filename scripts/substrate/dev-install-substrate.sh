@@ -1651,6 +1651,68 @@ stage_managed_linux_binary_copy() {
   log "Cached Linux ${label} into ${dest_path}"
 }
 
+# The macOS control and lifecycle executor are copied, not linked, because their exact bytes are
+# later committed by the publisher-bootstrap authorization. A source-tree target symlink could
+# change after installation and must not become control authority.
+stage_managed_mac_control_binary_copy() {
+  local src="$1"
+  local dest="$2"
+  local repo_root="$3"
+  local manifest_path="$4"
+  local label="$5"
+  local binary_tmp
+  local manifest_tmp
+  local manifest_filter_status
+
+  [[ -f "${src}" && -x "${src}" ]] || fatal "Expected ${label} source at ${src}"
+  mkdir -p "$(dirname "${dest}")" "$(dirname "${manifest_path}")"
+
+  if [[ -e "${dest}" || -L "${dest}" ]]; then
+    if ! path_is_managed_bundle_entry "${dest}" "${repo_root}" "${manifest_path}"; then
+      fatal "Refusing to overwrite unmanaged ${label} at ${dest}"
+    fi
+  fi
+
+  binary_tmp="${dest}.tmp.$$"
+  manifest_tmp="${manifest_path}.tmp.$$"
+  if ! cp "${src}" "${binary_tmp}"; then
+    rm -f "${binary_tmp}" "${manifest_tmp}"
+    return 1
+  fi
+  if ! chmod 0755 "${binary_tmp}"; then
+    rm -f "${binary_tmp}" "${manifest_tmp}"
+    return 1
+  fi
+  if ! : > "${manifest_tmp}"; then
+    rm -f "${binary_tmp}" "${manifest_tmp}"
+    return 1
+  fi
+  if [[ -f "${manifest_path}" ]]; then
+    if grep -Fxv -- "${dest}" "${manifest_path}" > "${manifest_tmp}"; then
+      :
+    else
+      manifest_filter_status=$?
+      if [[ "${manifest_filter_status}" -gt 1 ]]; then
+        rm -f "${binary_tmp}" "${manifest_tmp}"
+        return 1
+      fi
+    fi
+  fi
+  if ! printf '%s\n' "${dest}" >> "${manifest_tmp}"; then
+    rm -f "${binary_tmp}" "${manifest_tmp}"
+    return 1
+  fi
+  if ! mv "${manifest_tmp}" "${manifest_path}"; then
+    rm -f "${binary_tmp}" "${manifest_tmp}"
+    return 1
+  fi
+  if ! mv "${binary_tmp}" "${dest}"; then
+    rm -f "${binary_tmp}"
+    return 1
+  fi
+  log "Copied immutable ${label} into ${dest}"
+}
+
 clear_managed_prefix_linux_binary_cache() {
   if [[ ! -f "${MANAGED_MAC_LINUX_BINARIES_PATH}" ]]; then
     return 0
@@ -2005,6 +2067,9 @@ cd "${REPO_ROOT}"
 
 TARGET_DIR="${PROFILE}"
 BUILD_FLAGS=(build -p substrate --bin substrate --bin substrate-shim -p substrate-gateway --bin substrate-gateway)
+if [[ "${IS_MAC}" -eq 1 ]]; then
+  BUILD_FLAGS+=(--bin substrate-lifecycle-control --bin substrate-lifecycle-macos)
+fi
 if [[ "${PROFILE}" == "release" ]]; then
   BUILD_FLAGS+=(--release)
 fi
@@ -2041,6 +2106,7 @@ INSTALL_CONFIG_PATH="${PREFIX%/}/config.yaml"
 ENV_SH_PATH="${PREFIX%/}/env.sh"
 MANAGED_STATE_DIR="${PREFIX%/}/.dev-install-managed"
 MANAGED_MAC_LINUX_BINARIES_PATH="${MANAGED_STATE_DIR}/mac-linux-binaries.txt"
+MANAGED_MAC_CONTROL_BINARIES_PATH="${MANAGED_STATE_DIR}/mac-control-binaries.txt"
 
 mkdir -p "${PREFIX}" "${BIN_DIR}" "${VERSION_CONFIG_DIR}"
 clear_managed_prefix_linux_binary_cache
@@ -2099,6 +2165,16 @@ for binary in substrate substrate-shim substrate-forwarder host-proxy world-serv
     stage_managed_bundle_symlink "${src}.exe" "${BIN_DIR}/${binary}.exe" "${REPO_ROOT}" "" "host binary ${binary}.exe"
   fi
 done
+
+if [[ "${IS_MAC}" -eq 1 ]]; then
+  mkdir -p "${MANAGED_STATE_DIR}"
+  for binary in substrate-lifecycle-control substrate-lifecycle-macos; do
+    src="${REPO_ROOT}/target/${TARGET_DIR}/${binary}"
+    stage_managed_mac_control_binary_copy \
+      "${src}" "${BIN_DIR}/${binary}" "${REPO_ROOT}" \
+      "${MANAGED_MAC_CONTROL_BINARIES_PATH}" "macOS ${binary}"
+  done
+fi
 
 # Provide substrate-world-service alias so CLI discovery works without extra config.
 world_service_src="${REPO_ROOT}/target/${TARGET_DIR}/world-service"

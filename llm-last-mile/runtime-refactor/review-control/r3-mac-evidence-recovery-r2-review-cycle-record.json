@@ -1,0 +1,65 @@
+{
+  "schema_version": 1,
+  "packet_id": "AUX-R3-MAC-EVIDENCE-RECOVERY-R2",
+  "status": "complete",
+  "stop_reason": null,
+  "cycles": [
+    {
+      "cycle_id": "discovery-1",
+      "kind": "discovery",
+      "subject_fingerprint": "sha256:03bb9c919cd142e1b65079eddd188602410e1d36a3fce740df2979ec41d89b74",
+      "trigger_cycle_id": null,
+      "trigger_finding_ids": [],
+      "causal_evidence_refs": [],
+      "review_refs": [
+        "llm-last-mile/runtime-refactor/review-control/r3-mac-evidence-recovery-r2-review-authority-security.md",
+        "llm-last-mile/runtime-refactor/review-control/r3-mac-evidence-recovery-r2-review-lifecycle-convergence.md",
+        "llm-last-mile/runtime-refactor/review-control/r3-mac-evidence-recovery-r2-review-allowlist-evidence.md"
+      ],
+      "verdict": "findings",
+      "findings": [
+        {
+          "finding_id": "P2-R2-LIFECYCLE-001",
+          "priority": "P2"
+        }
+      ]
+    },
+    {
+      "cycle_id": "closure-1",
+      "kind": "closure",
+      "subject_fingerprint": "sha256:3277175c543c1769c6121e70bab52c2f94c35cda04ac3a0031d758a7b6467095",
+      "trigger_cycle_id": "discovery-1",
+      "trigger_finding_ids": [
+        "P2-R2-LIFECYCLE-001"
+      ],
+      "causal_evidence_refs": [],
+      "review_refs": [
+        "llm-last-mile/runtime-refactor/review-control/r3-mac-evidence-recovery-r2-review-lifecycle-convergence.md"
+      ],
+      "verdict": "findings",
+      "findings": [
+        {
+          "finding_id": "P2-R2-LIFECYCLE-002",
+          "priority": "P2"
+        }
+      ]
+    },
+    {
+      "cycle_id": "supplemental-causal-1",
+      "kind": "supplemental_causal",
+      "subject_fingerprint": "sha256:58eb0087e72627a045912f72adfd4e386469a40e093db0ecde00d0e949ef7668",
+      "trigger_cycle_id": "closure-1",
+      "trigger_finding_ids": [
+        "P2-R2-LIFECYCLE-002"
+      ],
+      "causal_evidence_refs": [
+        "scripts/substrate/dev-install-substrate.sh: P2-R2-LIFECYCLE-001 manifest_tmp staging is the path whose grep status P2-R2-LIFECYCLE-002 now guards"
+      ],
+      "review_refs": [
+        "llm-last-mile/runtime-refactor/review-control/r3-mac-evidence-recovery-r2-review-lifecycle-convergence.md"
+      ],
+      "verdict": "clean",
+      "findings": []
+    }
+  ]
+}

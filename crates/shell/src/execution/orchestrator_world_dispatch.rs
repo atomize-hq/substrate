@@ -35,7 +35,7 @@ use uuid::Uuid;
 
 #[cfg(any(target_os = "linux", target_os = "macos"))]
 use crate::execution::agent_inventory::{load_effective_agent_inventory, AgentInventoryEntryV1};
-#[cfg(any(target_os = "linux", test))]
+#[cfg(any(target_os = "linux", target_os = "macos", test))]
 use crate::execution::agent_runtime::control::world_task_terminal_state_from_exit_code;
 #[cfg(target_os = "linux")]
 use crate::execution::agent_runtime::control::{
@@ -95,7 +95,7 @@ use crate::execution::agent_runtime::world_work_execution_supervisor::{
     WorldWorkExecutionObservationV1, WorldWorkExecutionSupervisor, WorldWorkInterruptionReasonV1,
     WorldWorkJournalAppendOutcomeV1, WorldWorkRecoveryAttemptV1,
 };
-#[cfg(any(target_os = "linux", test))]
+#[cfg(any(target_os = "linux", target_os = "macos", test))]
 use crate::execution::agent_runtime::WorldTaskTerminalStateV1;
 #[cfg(any(target_os = "linux", target_os = "macos"))]
 use crate::execution::agent_runtime::{
@@ -192,7 +192,7 @@ struct RouterOwnedAutoAttachOutcomeRecord {
 pub(crate) struct PreparedOrchestratorWorldDispatch {
     pub store: AgentRuntimeStateStore,
     pub request: ValidatedWorldDispatchRequestV1,
-    #[cfg(any(target_os = "linux", test))]
+    #[cfg(any(target_os = "linux", target_os = "macos", test))]
     b_owned_authority:
         Option<crate::execution::agent_runtime::state_store::ResolvedWorldWorkRegistryAuthorityV1>,
     compatibility: Option<CompatibilityPreparedOrchestratorWorldDispatch>,
@@ -217,7 +217,7 @@ impl std::ops::Deref for PreparedOrchestratorWorldDispatch {
     }
 }
 
-#[cfg(any(target_os = "linux", test))]
+#[cfg(any(target_os = "linux", target_os = "macos", test))]
 impl PreparedOrchestratorWorldDispatch {
     fn b_owned_authority(
         &self,
@@ -353,7 +353,7 @@ pub(crate) fn prepare_orchestrator_world_dispatch(
     request: WorldDispatchRequestV1,
 ) -> Result<PreparedOrchestratorWorldDispatch> {
     let request = request.validate()?;
-    #[cfg(any(target_os = "linux", test))]
+    #[cfg(any(target_os = "linux", target_os = "macos", test))]
     if request.action == WorldDispatchActionV1::RunWorldTask
         || (request.action == WorldDispatchActionV1::ContinueWorldWorker
             && !matches!(
@@ -407,7 +407,7 @@ pub(crate) fn prepare_orchestrator_world_dispatch(
     Ok(PreparedOrchestratorWorldDispatch {
         store: store.clone(),
         request,
-        #[cfg(any(target_os = "linux", test))]
+        #[cfg(any(target_os = "linux", target_os = "macos", test))]
         b_owned_authority: None,
         compatibility: Some(CompatibilityPreparedOrchestratorWorldDispatch {
             session,
@@ -3521,7 +3521,7 @@ fn enforce_world_dispatch_steering_policy(
 fn validate_authoritative_session_boundary(
     prepared: &PreparedOrchestratorWorldDispatch,
 ) -> Result<()> {
-    #[cfg(any(target_os = "linux", test))]
+    #[cfg(any(target_os = "linux", target_os = "macos", test))]
     if let Some(authority) = prepared.b_owned_authority.as_ref() {
         if prepared.request.orchestration_session_id != authority.orchestration_session_id
             || prepared.request.caller_participant_id != authority.caller_participant_id
@@ -3563,7 +3563,7 @@ fn validate_authoritative_session_boundary(
 fn validate_authoritative_world_binding_for_steering(
     prepared: &PreparedOrchestratorWorldDispatch,
 ) -> Result<()> {
-    #[cfg(any(target_os = "linux", test))]
+    #[cfg(any(target_os = "linux", target_os = "macos", test))]
     if let Some(authority) = prepared.b_owned_authority.as_ref() {
         if prepared.request.world_id != authority.world_id
             || prepared.request.world_generation != authority.world_generation
@@ -6336,7 +6336,7 @@ fn receipt_from_registered_event(
     })
 }
 
-#[cfg(any(target_os = "linux", test))]
+#[cfg(any(target_os = "linux", target_os = "macos", test))]
 fn summarize_run_world_task_result(
     backend_id: &str,
     exit_code: i32,

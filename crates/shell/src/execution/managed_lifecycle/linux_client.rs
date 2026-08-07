@@ -71,16 +71,13 @@ pub fn issue_guest_publisher_pairing_ticket_v1(
 
 pub fn open_linux_seqpacket_channel_v1() -> Result<(UnixDatagram, OwnedFd)> {
     let mut fds = [-1_i32; 2];
+    #[cfg(target_os = "linux")]
+    let socket_type = libc::SOCK_SEQPACKET | libc::SOCK_CLOEXEC;
+    #[cfg(target_os = "macos")]
+    let socket_type = libc::SOCK_SEQPACKET;
     // SAFETY: libc::socketpair is called with fixed AF_UNIX/SOCK_SEQPACKET flags and a
     // two-element output array.
-    let rc = unsafe {
-        libc::socketpair(
-            libc::AF_UNIX,
-            libc::SOCK_SEQPACKET | libc::SOCK_CLOEXEC,
-            0,
-            fds.as_mut_ptr(),
-        )
-    };
+    let rc = unsafe { libc::socketpair(libc::AF_UNIX, socket_type, 0, fds.as_mut_ptr()) };
     if rc != 0 {
         return Err(std::io::Error::last_os_error()).context("open SOCK_SEQPACKET socketpair");
     }
@@ -88,8 +85,27 @@ pub fn open_linux_seqpacket_channel_v1() -> Result<(UnixDatagram, OwnedFd)> {
     let left = unsafe { OwnedFd::from_raw_fd(fds[0]) };
     // SAFETY: both descriptors are freshly returned by socketpair.
     let right = unsafe { OwnedFd::from_raw_fd(fds[1]) };
+    #[cfg(target_os = "macos")]
+    {
+        set_close_on_exec_v1(left.as_raw_fd())?;
+        set_close_on_exec_v1(right.as_raw_fd())?;
+    }
     let parent = owned_fd_to_unix_datagram_v1(left)?;
     Ok((parent, right))
+}
+
+#[cfg(target_os = "macos")]
+fn set_close_on_exec_v1(fd: std::os::fd::RawFd) -> Result<()> {
+    // SAFETY: fcntl only reads or updates descriptor flags for the supplied open descriptor.
+    let flags = unsafe { libc::fcntl(fd, libc::F_GETFD) };
+    if flags < 0 {
+        return Err(std::io::Error::last_os_error()).context("read socket close-on-exec flags");
+    }
+    // SAFETY: fcntl only updates descriptor flags for the supplied open descriptor.
+    if unsafe { libc::fcntl(fd, libc::F_SETFD, flags | libc::FD_CLOEXEC) } < 0 {
+        return Err(std::io::Error::last_os_error()).context("set socket close-on-exec flags");
+    }
+    Ok(())
 }
 
 pub fn attest_linux_publisher_response_v1(response_bytes: &[u8]) -> Result<()> {

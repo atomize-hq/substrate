@@ -12,7 +12,7 @@ pub(crate) mod session;
 pub(crate) mod state_store;
 pub(crate) mod tool_invocation_contract;
 pub(crate) mod validator;
-#[cfg(any(target_os = "linux", test))]
+#[cfg(any(target_os = "linux", target_os = "macos", test))]
 pub(crate) mod world_work_execution_supervisor;
 
 #[allow(unused_imports)]

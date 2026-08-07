@@ -9,18 +9,18 @@ use std::sync::{Mutex, OnceLock};
 use anyhow::{Context, Result};
 use chrono::{DateTime, Utc};
 use serde::{Deserialize, Serialize};
-#[cfg(any(target_os = "linux", test))]
+#[cfg(any(target_os = "linux", target_os = "macos", test))]
 use sha2::{Digest, Sha256};
 use tempfile::NamedTempFile;
 use uuid::Uuid;
-#[cfg(any(target_os = "linux", test))]
+#[cfg(any(target_os = "linux", target_os = "macos", test))]
 use world_api::SharedWorldBindingState;
 
 use substrate_common::paths as substrate_paths;
 
 use crate::execution::config_model::AgentExecutionScope;
 
-#[cfg(any(target_os = "linux", test))]
+#[cfg(any(target_os = "linux", target_os = "macos", test))]
 use super::dispatch_contract::{
     ApprovalResponseDecisionV1, ControlDirectiveKindV1, RetainedWorkerInspectSnapshotV1,
     TaskPayloadV1, ValidatedWorldDispatchRequestV1, WorkerContinueApprovalResponsePayloadV1,
@@ -29,7 +29,7 @@ use super::dispatch_contract::{
     WorkerContinueProgressAckPayloadV1, WorldDispatchActionV1, WorldDispatchModeV1,
     WorldDispatchPayloadV1,
 };
-#[cfg(any(target_os = "linux", test))]
+#[cfg(any(target_os = "linux", target_os = "macos", test))]
 use super::obligation_ledger::ApprovalObligationCloseoutDisposition;
 use super::{
     auto_attach::{
@@ -398,14 +398,14 @@ impl ResolvedInternalWorldDispatchCaller {
     }
 }
 
-#[cfg(any(target_os = "linux", test))]
+#[cfg(any(target_os = "linux", target_os = "macos", test))]
 const SHARED_WORLD_METADATA_FILE: &str = "session.json";
 
-#[cfg(any(target_os = "linux", test))]
+#[cfg(any(target_os = "linux", target_os = "macos", test))]
 #[cfg(test)]
 const SHARED_WORLD_METADATA_ROOT_TEST_ENV: &str = "SUBSTRATE_TEST_SHARED_WORLD_METADATA_ROOT";
 
-#[cfg(any(target_os = "linux", test))]
+#[cfg(any(target_os = "linux", target_os = "macos", test))]
 #[derive(Clone, Debug, Default, Deserialize, Eq, PartialEq)]
 #[serde(rename_all = "snake_case")]
 enum SharedWorldMetadataOwnerMode {
@@ -414,7 +414,7 @@ enum SharedWorldMetadataOwnerMode {
     SharedOrchestration,
 }
 
-#[cfg(any(target_os = "linux", test))]
+#[cfg(any(target_os = "linux", target_os = "macos", test))]
 #[derive(Clone, Debug, Default, Deserialize, Eq, PartialEq)]
 struct SharedWorldMetadataRecord {
     world_id: String,
@@ -428,7 +428,7 @@ struct SharedWorldMetadataRecord {
     binding_state: Option<SharedWorldBindingState>,
 }
 
-#[cfg(any(target_os = "linux", test))]
+#[cfg(any(target_os = "linux", target_os = "macos", test))]
 fn shared_world_metadata_root() -> PathBuf {
     #[cfg(test)]
     if let Some(root) = std::env::var_os(SHARED_WORLD_METADATA_ROOT_TEST_ENV) {
@@ -445,7 +445,7 @@ fn shared_world_metadata_root() -> PathBuf {
     )
 }
 
-#[cfg(any(target_os = "linux", test))]
+#[cfg(any(target_os = "linux", target_os = "macos", test))]
 fn default_shared_world_metadata_root(
     uid: u32,
     xdg_runtime_dir: Option<&Path>,
@@ -464,13 +464,13 @@ fn default_shared_world_metadata_root(
     PathBuf::from(format!("/tmp/substrate-worlds-{uid}"))
 }
 
-#[cfg(all(unix, any(target_os = "linux", test)))]
+#[cfg(all(unix, any(target_os = "linux", target_os = "macos", test)))]
 fn current_uid() -> u32 {
     // SAFETY: geteuid reads process credentials without requiring additional invariants.
     unsafe { libc::geteuid() as u32 }
 }
 
-#[cfg(all(not(unix), any(target_os = "linux", test)))]
+#[cfg(all(not(unix), any(target_os = "linux", target_os = "macos", test)))]
 fn current_uid() -> u32 {
     0
 }
@@ -481,7 +481,7 @@ enum RouterAutoAttachSessionReadiness {
     NoCandidate { reason: &'static str },
 }
 
-#[cfg(any(target_os = "linux", test))]
+#[cfg(any(target_os = "linux", target_os = "macos", test))]
 #[allow(dead_code)]
 #[derive(Clone, Debug)]
 pub(crate) struct ResolvedInternalForkWorldDispatchLineage {
@@ -493,7 +493,7 @@ pub(crate) struct ResolvedInternalForkWorldDispatchLineage {
     pub world_generation: u64,
 }
 
-#[cfg(any(target_os = "linux", test))]
+#[cfg(any(target_os = "linux", target_os = "macos", test))]
 #[derive(Clone, Debug)]
 pub(crate) struct ResolvedInternalForkWorldDispatchTarget {
     pub session: OrchestrationSessionRecord,
@@ -501,7 +501,7 @@ pub(crate) struct ResolvedInternalForkWorldDispatchTarget {
     pub source_participant: AgentRuntimeParticipantRecord,
 }
 
-#[cfg(any(target_os = "linux", test))]
+#[cfg(any(target_os = "linux", target_os = "macos", test))]
 impl ResolvedInternalForkWorldDispatchTarget {
     #[allow(dead_code)]
     pub(crate) fn orchestration_session_id(&self) -> &str {
@@ -580,7 +580,7 @@ impl ResolvedInternalForkWorldDispatchTarget {
     }
 }
 
-#[cfg(any(target_os = "linux", test))]
+#[cfg(any(target_os = "linux", target_os = "macos", test))]
 #[derive(Clone, Debug)]
 pub(crate) struct ResolvedInternalContinueWorldDispatchTarget {
     pub session: OrchestrationSessionRecord,
@@ -588,7 +588,7 @@ pub(crate) struct ResolvedInternalContinueWorldDispatchTarget {
     pub target_participant: AgentRuntimeParticipantRecord,
 }
 
-#[cfg(any(target_os = "linux", test))]
+#[cfg(any(target_os = "linux", target_os = "macos", test))]
 impl ResolvedInternalContinueWorldDispatchTarget {
     #[allow(dead_code)]
     pub(crate) fn orchestration_session_id(&self) -> &str {
@@ -597,7 +597,7 @@ impl ResolvedInternalContinueWorldDispatchTarget {
 }
 
 #[allow(dead_code)]
-#[cfg(any(target_os = "linux", test))]
+#[cfg(any(target_os = "linux", target_os = "macos", test))]
 #[derive(Clone, Debug, Eq, PartialEq)]
 pub(crate) struct PreparedInternalApprovalResponseObligationCloseout {
     orchestration_session_id: String,
@@ -610,7 +610,7 @@ pub(crate) struct PreparedInternalApprovalResponseObligationCloseout {
 }
 
 #[allow(dead_code)]
-#[cfg(any(target_os = "linux", test))]
+#[cfg(any(target_os = "linux", target_os = "macos", test))]
 #[derive(Clone, Debug, Eq, PartialEq)]
 pub(crate) struct PreparedInternalClarificationResponseObligationCloseout {
     orchestration_session_id: String,
@@ -621,7 +621,7 @@ pub(crate) struct PreparedInternalClarificationResponseObligationCloseout {
     world_generation: u64,
 }
 
-#[cfg(any(target_os = "linux", test))]
+#[cfg(any(target_os = "linux", target_os = "macos", test))]
 #[derive(Clone, Debug)]
 pub(crate) struct ResolvedInternalInspectWorldDispatchTarget {
     pub session: OrchestrationSessionRecord,
@@ -631,7 +631,7 @@ pub(crate) struct ResolvedInternalInspectWorldDispatchTarget {
     pub target_participant: AgentRuntimeParticipantRecord,
 }
 
-#[cfg(any(target_os = "linux", test))]
+#[cfg(any(target_os = "linux", target_os = "macos", test))]
 impl ResolvedInternalInspectWorldDispatchTarget {
     #[allow(dead_code)]
     pub(crate) fn orchestration_session_id(&self) -> &str {
@@ -659,7 +659,7 @@ impl ResolvedInternalInspectWorldDispatchTarget {
     }
 }
 
-#[cfg(any(target_os = "linux", test))]
+#[cfg(any(target_os = "linux", target_os = "macos", test))]
 #[derive(Clone, Debug)]
 pub(crate) struct ExactRetainedWorkerStopDispatchTarget {
     orchestration_session_id: String,
@@ -670,7 +670,7 @@ pub(crate) struct ExactRetainedWorkerStopDispatchTarget {
     orchestrator_participant_id: String,
 }
 
-#[cfg(any(target_os = "linux", test))]
+#[cfg(any(target_os = "linux", target_os = "macos", test))]
 impl ExactRetainedWorkerStopDispatchTarget {
     fn capture(
         orchestration_session_id: &str,
@@ -789,7 +789,7 @@ impl ExactRetainedWorkerStopDispatchTarget {
     }
 }
 
-#[cfg(any(target_os = "linux", test))]
+#[cfg(any(target_os = "linux", target_os = "macos", test))]
 #[derive(Clone, Debug)]
 pub(crate) struct ResolvedInternalStopWorldDispatchTarget {
     pub session: OrchestrationSessionRecord,
@@ -800,7 +800,7 @@ pub(crate) struct ResolvedInternalStopWorldDispatchTarget {
     exact_target: ExactRetainedWorkerStopDispatchTarget,
 }
 
-#[cfg(any(target_os = "linux", test))]
+#[cfg(any(target_os = "linux", target_os = "macos", test))]
 impl ResolvedInternalStopWorldDispatchTarget {
     #[allow(dead_code)]
     pub(crate) fn orchestration_session_id(&self) -> &str {
@@ -896,7 +896,7 @@ impl ResolvedInternalStopWorldDispatchTarget {
     }
 }
 
-#[cfg(any(target_os = "linux", test))]
+#[cfg(any(target_os = "linux", target_os = "macos", test))]
 #[derive(Clone, Debug)]
 pub(crate) struct ResolvedInternalCancelWorldDispatchTarget {
     pub session: OrchestrationSessionRecord,
@@ -908,7 +908,7 @@ pub(crate) struct ResolvedInternalCancelWorldDispatchTarget {
     pub active_run_id: String,
 }
 
-#[cfg(any(target_os = "linux", test))]
+#[cfg(any(target_os = "linux", target_os = "macos", test))]
 impl ResolvedInternalCancelWorldDispatchTarget {
     #[allow(dead_code)]
     pub(crate) fn orchestration_session_id(&self) -> &str {
@@ -952,7 +952,7 @@ pub(crate) enum WorldWorkProposalFamilyV1 {
     RetainedTurn,
 }
 
-#[cfg(any(target_os = "linux", test))]
+#[cfg(any(target_os = "linux", target_os = "macos", test))]
 #[derive(Clone, Debug, Deserialize, Eq, PartialEq, Serialize)]
 #[serde(
     tag = "kind",
@@ -969,7 +969,7 @@ pub(crate) enum ProposedWorldWorkIdentityV1 {
     },
 }
 
-#[cfg(any(target_os = "linux", test))]
+#[cfg(any(target_os = "linux", target_os = "macos", test))]
 #[allow(
     clippy::large_enum_variant,
     reason = "durable submission identity mirrors the frozen B1 typed schema"
@@ -993,7 +993,7 @@ pub(crate) enum WorldWorkSubmissionIdentityV1 {
     },
 }
 
-#[cfg(any(target_os = "linux", test))]
+#[cfg(any(target_os = "linux", target_os = "macos", test))]
 #[derive(Clone, Debug, Deserialize, Eq, PartialEq, Serialize)]
 #[serde(deny_unknown_fields)]
 pub(crate) struct WorldWorkAcceptanceProposalV1 {
@@ -1016,7 +1016,7 @@ pub(crate) struct WorldWorkAcceptanceProposalV1 {
     pub(crate) created_at: DateTime<Utc>,
 }
 
-#[cfg(any(target_os = "linux", test))]
+#[cfg(any(target_os = "linux", target_os = "macos", test))]
 impl WorldWorkAcceptanceProposalV1 {
     pub(crate) fn validate(&self) -> Result<()> {
         use super::host_session_authority::schema::AuthorityObjectKindV1;
@@ -1192,7 +1192,7 @@ impl WorldWorkAcceptanceProposalV1 {
     }
 }
 
-#[cfg(any(target_os = "linux", test))]
+#[cfg(any(target_os = "linux", target_os = "macos", test))]
 #[derive(Clone, Debug, Deserialize, Eq, Ord, PartialEq, PartialOrd, Serialize)]
 #[serde(
     tag = "kind",
@@ -1211,7 +1211,7 @@ pub(crate) enum AcceptedWorldWorkIdentityV1 {
     },
 }
 
-#[cfg(any(target_os = "linux", test))]
+#[cfg(any(target_os = "linux", target_os = "macos", test))]
 #[derive(Clone, Copy, Debug, Deserialize, Eq, PartialEq, Serialize)]
 #[serde(rename_all = "snake_case")]
 pub(crate) enum RuntimeAcceptanceAcknowledgementKindV1 {
@@ -1220,7 +1220,7 @@ pub(crate) enum RuntimeAcceptanceAcknowledgementKindV1 {
     RegisteredFrame,
 }
 
-#[cfg(any(target_os = "linux", test))]
+#[cfg(any(target_os = "linux", target_os = "macos", test))]
 #[derive(Clone, Debug, Deserialize, Eq, PartialEq, Serialize)]
 #[serde(deny_unknown_fields)]
 pub(crate) struct RuntimeAcceptanceEvidenceV1 {
@@ -1236,7 +1236,7 @@ pub(crate) struct RuntimeAcceptanceEvidenceV1 {
     pub(crate) observed_at: DateTime<Utc>,
 }
 
-#[cfg(any(target_os = "linux", test))]
+#[cfg(any(target_os = "linux", target_os = "macos", test))]
 #[derive(Clone, Debug, Deserialize, Eq, PartialEq, Serialize)]
 #[serde(deny_unknown_fields)]
 pub(crate) struct WorldWorkAcceptanceRecordV1 {
@@ -1263,18 +1263,18 @@ pub(crate) struct WorldWorkAcceptanceRecordV1 {
     pub(crate) record_revision: u64,
 }
 
-#[cfg(any(target_os = "linux", test))]
+#[cfg(any(target_os = "linux", target_os = "macos", test))]
 #[derive(Clone, Debug, Eq, PartialEq)]
 pub(crate) struct PersistedWorldWorkAcceptanceV1(WorldWorkAcceptanceRecordV1);
 
-#[cfg(any(target_os = "linux", test))]
+#[cfg(any(target_os = "linux", target_os = "macos", test))]
 impl PersistedWorldWorkAcceptanceV1 {
     pub(super) fn record(&self) -> &WorldWorkAcceptanceRecordV1 {
         &self.0
     }
 }
 
-#[cfg(any(target_os = "linux", test))]
+#[cfg(any(target_os = "linux", target_os = "macos", test))]
 impl WorldWorkAcceptanceRecordV1 {
     pub(super) fn validate(&self) -> Result<()> {
         use super::host_session_authority::schema::AuthorityObjectKindV1;
@@ -1360,7 +1360,7 @@ impl WorldWorkAcceptanceRecordV1 {
     }
 }
 
-#[cfg(any(target_os = "linux", test))]
+#[cfg(any(target_os = "linux", target_os = "macos", test))]
 #[derive(Clone, Debug, Deserialize, Eq, PartialEq, Serialize)]
 #[serde(deny_unknown_fields)]
 struct WorldWorkReceiptRegistrySessionStateV1 {
@@ -1369,7 +1369,7 @@ struct WorldWorkReceiptRegistrySessionStateV1 {
     records_by_acceptance_record_id: BTreeMap<String, WorldWorkAcceptanceRecordV1>,
 }
 
-#[cfg(any(target_os = "linux", test))]
+#[cfg(any(target_os = "linux", target_os = "macos", test))]
 impl Default for WorldWorkReceiptRegistrySessionStateV1 {
     fn default() -> Self {
         Self {
@@ -1380,7 +1380,7 @@ impl Default for WorldWorkReceiptRegistrySessionStateV1 {
     }
 }
 
-#[cfg(any(target_os = "linux", test))]
+#[cfg(any(target_os = "linux", target_os = "macos", test))]
 impl WorldWorkReceiptRegistrySessionStateV1 {
     fn validate(&self, session_id: &str, authority_store_id: &str) -> Result<()> {
         if self.schema_version != 1 {
@@ -1427,7 +1427,7 @@ impl WorldWorkReceiptRegistrySessionStateV1 {
     }
 }
 
-#[cfg(any(target_os = "linux", test))]
+#[cfg(any(target_os = "linux", target_os = "macos", test))]
 #[derive(Clone, Debug, Deserialize, Eq, PartialEq, Serialize)]
 #[serde(deny_unknown_fields)]
 struct WorldWorkReceiptRegistryStateV1 {
@@ -1435,7 +1435,7 @@ struct WorldWorkReceiptRegistryStateV1 {
     sessions_by_id: BTreeMap<String, WorldWorkReceiptRegistrySessionStateV1>,
 }
 
-#[cfg(any(target_os = "linux", test))]
+#[cfg(any(target_os = "linux", target_os = "macos", test))]
 impl Default for WorldWorkReceiptRegistryStateV1 {
     fn default() -> Self {
         Self {
@@ -1445,7 +1445,7 @@ impl Default for WorldWorkReceiptRegistryStateV1 {
     }
 }
 
-#[cfg(any(target_os = "linux", test))]
+#[cfg(any(target_os = "linux", target_os = "macos", test))]
 impl WorldWorkReceiptRegistryStateV1 {
     fn validate(&self, authority_store_id: &str) -> Result<()> {
         if self.schema_version != 1 {
@@ -1501,7 +1501,7 @@ impl WorldWorkReceiptRegistryStateV1 {
     }
 }
 
-#[cfg(any(target_os = "linux", test))]
+#[cfg(any(target_os = "linux", target_os = "macos", test))]
 #[derive(Clone, Copy, Debug, Deserialize, Eq, PartialEq, Serialize)]
 #[serde(tag = "kind", deny_unknown_fields)]
 enum CanonicalWorldDispatchActionV1 {
@@ -1514,7 +1514,7 @@ enum CanonicalWorldDispatchActionV1 {
     StopWorldWorker,
 }
 
-#[cfg(any(target_os = "linux", test))]
+#[cfg(any(target_os = "linux", target_os = "macos", test))]
 impl From<WorldDispatchActionV1> for CanonicalWorldDispatchActionV1 {
     fn from(value: WorldDispatchActionV1) -> Self {
         match value {
@@ -1529,7 +1529,7 @@ impl From<WorldDispatchActionV1> for CanonicalWorldDispatchActionV1 {
     }
 }
 
-#[cfg(any(target_os = "linux", test))]
+#[cfg(any(target_os = "linux", target_os = "macos", test))]
 impl From<CanonicalWorldDispatchActionV1> for WorldDispatchActionV1 {
     fn from(value: CanonicalWorldDispatchActionV1) -> Self {
         match value {
@@ -1544,7 +1544,7 @@ impl From<CanonicalWorldDispatchActionV1> for WorldDispatchActionV1 {
     }
 }
 
-#[cfg(any(target_os = "linux", test))]
+#[cfg(any(target_os = "linux", target_os = "macos", test))]
 #[derive(Clone, Copy, Debug, Deserialize, Eq, PartialEq, Serialize)]
 #[serde(tag = "kind", deny_unknown_fields)]
 enum CanonicalWorldDispatchModeV1 {
@@ -1552,7 +1552,7 @@ enum CanonicalWorldDispatchModeV1 {
     Retained,
 }
 
-#[cfg(any(target_os = "linux", test))]
+#[cfg(any(target_os = "linux", target_os = "macos", test))]
 impl From<WorldDispatchModeV1> for CanonicalWorldDispatchModeV1 {
     fn from(value: WorldDispatchModeV1) -> Self {
         match value {
@@ -1562,7 +1562,7 @@ impl From<WorldDispatchModeV1> for CanonicalWorldDispatchModeV1 {
     }
 }
 
-#[cfg(any(target_os = "linux", test))]
+#[cfg(any(target_os = "linux", target_os = "macos", test))]
 impl From<CanonicalWorldDispatchModeV1> for WorldDispatchModeV1 {
     fn from(value: CanonicalWorldDispatchModeV1) -> Self {
         match value {
@@ -1572,14 +1572,14 @@ impl From<CanonicalWorldDispatchModeV1> for WorldDispatchModeV1 {
     }
 }
 
-#[cfg(any(target_os = "linux", test))]
+#[cfg(any(target_os = "linux", target_os = "macos", test))]
 #[derive(Clone, Debug, Deserialize, Eq, PartialEq, Serialize)]
 #[serde(deny_unknown_fields)]
 struct CanonicalTaskPayloadV1 {
     prompt: String,
 }
 
-#[cfg(any(target_os = "linux", test))]
+#[cfg(any(target_os = "linux", target_os = "macos", test))]
 #[derive(Clone, Debug, Deserialize, Eq, PartialEq, Serialize)]
 #[serde(deny_unknown_fields)]
 struct CanonicalWorkerContinuePayloadV1 {
@@ -1587,7 +1587,7 @@ struct CanonicalWorkerContinuePayloadV1 {
     thread_id: Option<String>,
 }
 
-#[cfg(any(target_os = "linux", test))]
+#[cfg(any(target_os = "linux", target_os = "macos", test))]
 #[derive(Clone, Copy, Debug, Deserialize, Eq, PartialEq, Serialize)]
 #[serde(tag = "kind", deny_unknown_fields)]
 enum CanonicalApprovalResponseDecisionV1 {
@@ -1595,7 +1595,7 @@ enum CanonicalApprovalResponseDecisionV1 {
     Deny,
 }
 
-#[cfg(any(target_os = "linux", test))]
+#[cfg(any(target_os = "linux", target_os = "macos", test))]
 impl From<ApprovalResponseDecisionV1> for CanonicalApprovalResponseDecisionV1 {
     fn from(value: ApprovalResponseDecisionV1) -> Self {
         match value {
@@ -1605,7 +1605,7 @@ impl From<ApprovalResponseDecisionV1> for CanonicalApprovalResponseDecisionV1 {
     }
 }
 
-#[cfg(any(target_os = "linux", test))]
+#[cfg(any(target_os = "linux", target_os = "macos", test))]
 impl From<CanonicalApprovalResponseDecisionV1> for ApprovalResponseDecisionV1 {
     fn from(value: CanonicalApprovalResponseDecisionV1) -> Self {
         match value {
@@ -1615,7 +1615,7 @@ impl From<CanonicalApprovalResponseDecisionV1> for ApprovalResponseDecisionV1 {
     }
 }
 
-#[cfg(any(target_os = "linux", test))]
+#[cfg(any(target_os = "linux", target_os = "macos", test))]
 #[derive(Clone, Debug, Deserialize, Eq, PartialEq, Serialize)]
 #[serde(deny_unknown_fields)]
 struct CanonicalWorkerContinueApprovalResponsePayloadV1 {
@@ -1624,7 +1624,7 @@ struct CanonicalWorkerContinueApprovalResponsePayloadV1 {
     thread_id: Option<String>,
 }
 
-#[cfg(any(target_os = "linux", test))]
+#[cfg(any(target_os = "linux", target_os = "macos", test))]
 #[derive(Clone, Debug, Deserialize, Eq, PartialEq, Serialize)]
 #[serde(deny_unknown_fields)]
 struct CanonicalWorkerContinueClarificationResponsePayloadV1 {
@@ -1633,7 +1633,7 @@ struct CanonicalWorkerContinueClarificationResponsePayloadV1 {
     thread_id: Option<String>,
 }
 
-#[cfg(any(target_os = "linux", test))]
+#[cfg(any(target_os = "linux", target_os = "macos", test))]
 #[derive(Clone, Debug, Deserialize, Eq, PartialEq, Serialize)]
 #[serde(deny_unknown_fields)]
 struct CanonicalWorkerContinueForkCommandPayloadV1 {
@@ -1643,14 +1643,14 @@ struct CanonicalWorkerContinueForkCommandPayloadV1 {
     thread_id: Option<String>,
 }
 
-#[cfg(any(target_os = "linux", test))]
+#[cfg(any(target_os = "linux", target_os = "macos", test))]
 #[derive(Clone, Debug, Deserialize, Eq, PartialEq, Serialize)]
 #[serde(deny_unknown_fields)]
 struct CanonicalWorkerContinueProgressAckPayloadV1 {
     thread_id: Option<String>,
 }
 
-#[cfg(any(target_os = "linux", test))]
+#[cfg(any(target_os = "linux", target_os = "macos", test))]
 #[derive(Clone, Copy, Debug, Deserialize, Eq, PartialEq, Serialize)]
 #[serde(tag = "kind", deny_unknown_fields)]
 enum CanonicalControlDirectiveKindV1 {
@@ -1661,7 +1661,7 @@ enum CanonicalControlDirectiveKindV1 {
     PrepareHandoff,
 }
 
-#[cfg(any(target_os = "linux", test))]
+#[cfg(any(target_os = "linux", target_os = "macos", test))]
 impl From<ControlDirectiveKindV1> for CanonicalControlDirectiveKindV1 {
     fn from(value: ControlDirectiveKindV1) -> Self {
         match value {
@@ -1674,7 +1674,7 @@ impl From<ControlDirectiveKindV1> for CanonicalControlDirectiveKindV1 {
     }
 }
 
-#[cfg(any(target_os = "linux", test))]
+#[cfg(any(target_os = "linux", target_os = "macos", test))]
 impl From<CanonicalControlDirectiveKindV1> for ControlDirectiveKindV1 {
     fn from(value: CanonicalControlDirectiveKindV1) -> Self {
         match value {
@@ -1687,7 +1687,7 @@ impl From<CanonicalControlDirectiveKindV1> for ControlDirectiveKindV1 {
     }
 }
 
-#[cfg(any(target_os = "linux", test))]
+#[cfg(any(target_os = "linux", target_os = "macos", test))]
 #[derive(Clone, Debug, Deserialize, Eq, PartialEq, Serialize)]
 #[serde(deny_unknown_fields)]
 struct CanonicalWorkerContinueControlDirectivePayloadV1 {
@@ -1696,7 +1696,7 @@ struct CanonicalWorkerContinueControlDirectivePayloadV1 {
     thread_id: Option<String>,
 }
 
-#[cfg(any(target_os = "linux", test))]
+#[cfg(any(target_os = "linux", target_os = "macos", test))]
 #[derive(Clone, Debug, Deserialize, Eq, PartialEq, Serialize)]
 #[serde(tag = "kind", content = "value", deny_unknown_fields)]
 enum CanonicalWorldDispatchPayloadV1 {
@@ -1709,7 +1709,7 @@ enum CanonicalWorldDispatchPayloadV1 {
     WorkerContinueControlDirective(CanonicalWorkerContinueControlDirectivePayloadV1),
 }
 
-#[cfg(any(target_os = "linux", test))]
+#[cfg(any(target_os = "linux", target_os = "macos", test))]
 impl TryFrom<&WorldDispatchPayloadV1> for CanonicalWorldDispatchPayloadV1 {
     type Error = anyhow::Error;
 
@@ -1771,7 +1771,7 @@ impl TryFrom<&WorldDispatchPayloadV1> for CanonicalWorldDispatchPayloadV1 {
     }
 }
 
-#[cfg(any(target_os = "linux", test))]
+#[cfg(any(target_os = "linux", target_os = "macos", test))]
 impl From<CanonicalWorldDispatchPayloadV1> for WorldDispatchPayloadV1 {
     fn from(value: CanonicalWorldDispatchPayloadV1) -> Self {
         match value {
@@ -1824,7 +1824,7 @@ impl From<CanonicalWorldDispatchPayloadV1> for WorldDispatchPayloadV1 {
     }
 }
 
-#[cfg(any(target_os = "linux", test))]
+#[cfg(any(target_os = "linux", target_os = "macos", test))]
 #[derive(Clone, Debug, Deserialize, Eq, PartialEq, Serialize)]
 #[serde(deny_unknown_fields)]
 struct CanonicalValidatedWorldDispatchRequestV1 {
@@ -1842,7 +1842,7 @@ struct CanonicalValidatedWorldDispatchRequestV1 {
     payload: CanonicalWorldDispatchPayloadV1,
 }
 
-#[cfg(any(target_os = "linux", test))]
+#[cfg(any(target_os = "linux", target_os = "macos", test))]
 impl TryFrom<&ValidatedWorldDispatchRequestV1> for CanonicalValidatedWorldDispatchRequestV1 {
     type Error = anyhow::Error;
 
@@ -1864,7 +1864,7 @@ impl TryFrom<&ValidatedWorldDispatchRequestV1> for CanonicalValidatedWorldDispat
     }
 }
 
-#[cfg(any(target_os = "linux", test))]
+#[cfg(any(target_os = "linux", target_os = "macos", test))]
 impl TryFrom<CanonicalValidatedWorldDispatchRequestV1> for ValidatedWorldDispatchRequestV1 {
     type Error = anyhow::Error;
 
@@ -1887,7 +1887,7 @@ impl TryFrom<CanonicalValidatedWorldDispatchRequestV1> for ValidatedWorldDispatc
     }
 }
 
-#[cfg(any(target_os = "linux", test))]
+#[cfg(any(target_os = "linux", target_os = "macos", test))]
 #[derive(Clone, Copy, Debug, Deserialize, Eq, PartialEq, Serialize)]
 #[serde(tag = "kind", deny_unknown_fields)]
 enum CanonicalMemberRuntimeBackendKindV1 {
@@ -1895,7 +1895,7 @@ enum CanonicalMemberRuntimeBackendKindV1 {
     ClaudeCode,
 }
 
-#[cfg(any(target_os = "linux", test))]
+#[cfg(any(target_os = "linux", target_os = "macos", test))]
 impl From<transport_api_types::MemberRuntimeBackendKindV1> for CanonicalMemberRuntimeBackendKindV1 {
     fn from(value: transport_api_types::MemberRuntimeBackendKindV1) -> Self {
         match value {
@@ -1905,7 +1905,7 @@ impl From<transport_api_types::MemberRuntimeBackendKindV1> for CanonicalMemberRu
     }
 }
 
-#[cfg(any(target_os = "linux", test))]
+#[cfg(any(target_os = "linux", target_os = "macos", test))]
 impl From<CanonicalMemberRuntimeBackendKindV1> for transport_api_types::MemberRuntimeBackendKindV1 {
     fn from(value: CanonicalMemberRuntimeBackendKindV1) -> Self {
         match value {
@@ -1915,7 +1915,7 @@ impl From<CanonicalMemberRuntimeBackendKindV1> for transport_api_types::MemberRu
     }
 }
 
-#[cfg(any(target_os = "linux", test))]
+#[cfg(any(target_os = "linux", target_os = "macos", test))]
 #[derive(Clone, Debug, Deserialize, Eq, PartialEq, Serialize)]
 #[serde(deny_unknown_fields)]
 struct CanonicalResolvedMemberRuntimeDescriptorV1 {
@@ -1923,7 +1923,7 @@ struct CanonicalResolvedMemberRuntimeDescriptorV1 {
     binary_path: String,
 }
 
-#[cfg(any(target_os = "linux", test))]
+#[cfg(any(target_os = "linux", target_os = "macos", test))]
 #[derive(Clone, Debug, Deserialize, Eq, PartialEq, Serialize)]
 #[serde(deny_unknown_fields)]
 struct CanonicalMemberDispatchRequestV1 {
@@ -1942,7 +1942,7 @@ struct CanonicalMemberDispatchRequestV1 {
     resolved_runtime: CanonicalResolvedMemberRuntimeDescriptorV1,
 }
 
-#[cfg(any(target_os = "linux", test))]
+#[cfg(any(target_os = "linux", target_os = "macos", test))]
 impl From<&transport_api_types::MemberDispatchRequestV1> for CanonicalMemberDispatchRequestV1 {
     fn from(value: &transport_api_types::MemberDispatchRequestV1) -> Self {
         Self {
@@ -1966,7 +1966,7 @@ impl From<&transport_api_types::MemberDispatchRequestV1> for CanonicalMemberDisp
     }
 }
 
-#[cfg(any(target_os = "linux", test))]
+#[cfg(any(target_os = "linux", target_os = "macos", test))]
 impl TryFrom<CanonicalMemberDispatchRequestV1> for transport_api_types::MemberDispatchRequestV1 {
     type Error = anyhow::Error;
 
@@ -1995,7 +1995,7 @@ impl TryFrom<CanonicalMemberDispatchRequestV1> for transport_api_types::MemberDi
     }
 }
 
-#[cfg(any(target_os = "linux", test))]
+#[cfg(any(target_os = "linux", target_os = "macos", test))]
 #[derive(Clone, Debug, Deserialize, Eq, PartialEq, Serialize)]
 #[serde(deny_unknown_fields)]
 struct CanonicalWorldWorkAcceptanceContextV1 {
@@ -2007,7 +2007,7 @@ struct CanonicalWorldWorkAcceptanceContextV1 {
     host_transition_correlation: Option<substrate_common::HostTransitionWorkCorrelationV1>,
 }
 
-#[cfg(any(target_os = "linux", test))]
+#[cfg(any(target_os = "linux", target_os = "macos", test))]
 impl From<&transport_api_types::WorldWorkAcceptanceContextV1>
     for CanonicalWorldWorkAcceptanceContextV1
 {
@@ -2023,7 +2023,7 @@ impl From<&transport_api_types::WorldWorkAcceptanceContextV1>
     }
 }
 
-#[cfg(any(target_os = "linux", test))]
+#[cfg(any(target_os = "linux", target_os = "macos", test))]
 impl TryFrom<CanonicalWorldWorkAcceptanceContextV1>
     for transport_api_types::WorldWorkAcceptanceContextV1
 {
@@ -2043,7 +2043,7 @@ impl TryFrom<CanonicalWorldWorkAcceptanceContextV1>
     }
 }
 
-#[cfg(any(target_os = "linux", test))]
+#[cfg(any(target_os = "linux", target_os = "macos", test))]
 #[derive(Clone, Debug, Deserialize, Eq, PartialEq, Serialize)]
 #[serde(tag = "kind", content = "value", deny_unknown_fields)]
 enum CanonicalWorldWorkSubmissionIdentityV1 {
@@ -2058,7 +2058,7 @@ enum CanonicalWorldWorkSubmissionIdentityV1 {
     },
 }
 
-#[cfg(any(target_os = "linux", test))]
+#[cfg(any(target_os = "linux", target_os = "macos", test))]
 impl TryFrom<&WorldWorkSubmissionIdentityV1> for CanonicalWorldWorkSubmissionIdentityV1 {
     type Error = anyhow::Error;
 
@@ -2089,7 +2089,7 @@ impl TryFrom<&WorldWorkSubmissionIdentityV1> for CanonicalWorldWorkSubmissionIde
     }
 }
 
-#[cfg(any(target_os = "linux", test))]
+#[cfg(any(target_os = "linux", target_os = "macos", test))]
 impl TryFrom<CanonicalWorldWorkSubmissionIdentityV1> for WorldWorkSubmissionIdentityV1 {
     type Error = anyhow::Error;
 
@@ -2115,7 +2115,7 @@ impl TryFrom<CanonicalWorldWorkSubmissionIdentityV1> for WorldWorkSubmissionIden
     }
 }
 
-#[cfg(any(target_os = "linux", test))]
+#[cfg(any(target_os = "linux", target_os = "macos", test))]
 #[derive(Clone, Debug, Deserialize, Eq, PartialEq, Serialize)]
 #[serde(deny_unknown_fields)]
 struct CanonicalWorldWorkAcceptanceProposalV1 {
@@ -2137,7 +2137,7 @@ struct CanonicalWorldWorkAcceptanceProposalV1 {
     created_at: DateTime<Utc>,
 }
 
-#[cfg(any(target_os = "linux", test))]
+#[cfg(any(target_os = "linux", target_os = "macos", test))]
 impl TryFrom<&WorldWorkAcceptanceProposalV1> for CanonicalWorldWorkAcceptanceProposalV1 {
     type Error = anyhow::Error;
 
@@ -2166,7 +2166,7 @@ impl TryFrom<&WorldWorkAcceptanceProposalV1> for CanonicalWorldWorkAcceptancePro
     }
 }
 
-#[cfg(any(target_os = "linux", test))]
+#[cfg(any(target_os = "linux", target_os = "macos", test))]
 impl TryFrom<CanonicalWorldWorkAcceptanceProposalV1> for WorldWorkAcceptanceProposalV1 {
     type Error = anyhow::Error;
 
@@ -2194,7 +2194,7 @@ impl TryFrom<CanonicalWorldWorkAcceptanceProposalV1> for WorldWorkAcceptanceProp
     }
 }
 
-#[cfg(any(target_os = "linux", test))]
+#[cfg(any(target_os = "linux", target_os = "macos", test))]
 #[derive(Clone, Copy, Debug, Deserialize, Eq, PartialEq, Serialize)]
 #[serde(tag = "kind", deny_unknown_fields)]
 enum CanonicalRuntimeAcceptanceAcknowledgementKindV1 {
@@ -2203,7 +2203,7 @@ enum CanonicalRuntimeAcceptanceAcknowledgementKindV1 {
     RegisteredFrame,
 }
 
-#[cfg(any(target_os = "linux", test))]
+#[cfg(any(target_os = "linux", target_os = "macos", test))]
 impl From<RuntimeAcceptanceAcknowledgementKindV1>
     for CanonicalRuntimeAcceptanceAcknowledgementKindV1
 {
@@ -2216,7 +2216,7 @@ impl From<RuntimeAcceptanceAcknowledgementKindV1>
     }
 }
 
-#[cfg(any(target_os = "linux", test))]
+#[cfg(any(target_os = "linux", target_os = "macos", test))]
 impl From<CanonicalRuntimeAcceptanceAcknowledgementKindV1>
     for RuntimeAcceptanceAcknowledgementKindV1
 {
@@ -2233,7 +2233,7 @@ impl From<CanonicalRuntimeAcceptanceAcknowledgementKindV1>
     }
 }
 
-#[cfg(any(target_os = "linux", test))]
+#[cfg(any(target_os = "linux", target_os = "macos", test))]
 #[derive(Clone, Debug, Deserialize, Eq, PartialEq, Serialize)]
 #[serde(deny_unknown_fields)]
 struct CanonicalRuntimeAcceptanceEvidenceV1 {
@@ -2249,7 +2249,7 @@ struct CanonicalRuntimeAcceptanceEvidenceV1 {
     observed_at: DateTime<Utc>,
 }
 
-#[cfg(any(target_os = "linux", test))]
+#[cfg(any(target_os = "linux", target_os = "macos", test))]
 impl From<&RuntimeAcceptanceEvidenceV1> for CanonicalRuntimeAcceptanceEvidenceV1 {
     fn from(value: &RuntimeAcceptanceEvidenceV1) -> Self {
         Self {
@@ -2267,7 +2267,7 @@ impl From<&RuntimeAcceptanceEvidenceV1> for CanonicalRuntimeAcceptanceEvidenceV1
     }
 }
 
-#[cfg(any(target_os = "linux", test))]
+#[cfg(any(target_os = "linux", target_os = "macos", test))]
 impl From<CanonicalRuntimeAcceptanceEvidenceV1> for RuntimeAcceptanceEvidenceV1 {
     fn from(value: CanonicalRuntimeAcceptanceEvidenceV1) -> Self {
         Self {
@@ -2285,7 +2285,7 @@ impl From<CanonicalRuntimeAcceptanceEvidenceV1> for RuntimeAcceptanceEvidenceV1 
     }
 }
 
-#[cfg(any(target_os = "linux", test))]
+#[cfg(any(target_os = "linux", target_os = "macos", test))]
 #[derive(Clone, Debug, Deserialize, Eq, PartialEq, Serialize)]
 #[serde(deny_unknown_fields)]
 struct CanonicalWorldWorkAcceptanceRecordV1 {
@@ -2310,7 +2310,7 @@ struct CanonicalWorldWorkAcceptanceRecordV1 {
     record_revision: u64,
 }
 
-#[cfg(any(target_os = "linux", test))]
+#[cfg(any(target_os = "linux", target_os = "macos", test))]
 impl From<&WorldWorkAcceptanceRecordV1> for CanonicalWorldWorkAcceptanceRecordV1 {
     fn from(value: &WorldWorkAcceptanceRecordV1) -> Self {
         Self {
@@ -2337,7 +2337,7 @@ impl From<&WorldWorkAcceptanceRecordV1> for CanonicalWorldWorkAcceptanceRecordV1
     }
 }
 
-#[cfg(any(target_os = "linux", test))]
+#[cfg(any(target_os = "linux", target_os = "macos", test))]
 impl TryFrom<CanonicalWorldWorkAcceptanceRecordV1> for WorldWorkAcceptanceRecordV1 {
     type Error = anyhow::Error;
 
@@ -2368,7 +2368,7 @@ impl TryFrom<CanonicalWorldWorkAcceptanceRecordV1> for WorldWorkAcceptanceRecord
     }
 }
 
-#[cfg(any(target_os = "linux", test))]
+#[cfg(any(target_os = "linux", target_os = "macos", test))]
 #[derive(Clone, Debug, Deserialize, Eq, PartialEq, Serialize)]
 #[serde(deny_unknown_fields)]
 struct CanonicalWorldWorkReceiptRegistrySessionStateV1 {
@@ -2377,7 +2377,7 @@ struct CanonicalWorldWorkReceiptRegistrySessionStateV1 {
     records_by_acceptance_record_id: BTreeMap<String, CanonicalWorldWorkAcceptanceRecordV1>,
 }
 
-#[cfg(any(target_os = "linux", test))]
+#[cfg(any(target_os = "linux", target_os = "macos", test))]
 #[derive(Clone, Debug, Deserialize, Eq, PartialEq, Serialize)]
 #[serde(deny_unknown_fields)]
 struct CanonicalWorldWorkReceiptRegistryStateV1 {
@@ -2385,7 +2385,7 @@ struct CanonicalWorldWorkReceiptRegistryStateV1 {
     sessions_by_id: BTreeMap<String, CanonicalWorldWorkReceiptRegistrySessionStateV1>,
 }
 
-#[cfg(any(target_os = "linux", test))]
+#[cfg(any(target_os = "linux", target_os = "macos", test))]
 impl TryFrom<&WorldWorkReceiptRegistryStateV1> for CanonicalWorldWorkReceiptRegistryStateV1 {
     type Error = anyhow::Error;
 
@@ -2425,7 +2425,7 @@ impl TryFrom<&WorldWorkReceiptRegistryStateV1> for CanonicalWorldWorkReceiptRegi
     }
 }
 
-#[cfg(any(target_os = "linux", test))]
+#[cfg(any(target_os = "linux", target_os = "macos", test))]
 impl TryFrom<CanonicalWorldWorkReceiptRegistryStateV1> for WorldWorkReceiptRegistryStateV1 {
     type Error = anyhow::Error;
 
@@ -2456,7 +2456,7 @@ impl TryFrom<CanonicalWorldWorkReceiptRegistryStateV1> for WorldWorkReceiptRegis
     }
 }
 
-#[cfg(any(target_os = "linux", test))]
+#[cfg(any(target_os = "linux", target_os = "macos", test))]
 #[derive(Clone, Debug)]
 pub(crate) struct WorldWorkProposalAllocationV1 {
     pub(crate) acceptance_record_id: String,
@@ -2465,7 +2465,7 @@ pub(crate) struct WorldWorkProposalAllocationV1 {
     pub(crate) existing_proposal: Option<WorldWorkAcceptanceProposalV1>,
 }
 
-#[cfg(any(target_os = "linux", test))]
+#[cfg(any(target_os = "linux", target_os = "macos", test))]
 #[allow(
     clippy::large_enum_variant,
     reason = "reservation outcome returns the exact durable B1 proposal or record"
@@ -2476,7 +2476,7 @@ pub(crate) enum WorldWorkProposalReservationOutcomeV1 {
     Accepted(WorldWorkAcceptanceRecordV1),
 }
 
-#[cfg(any(target_os = "linux", test))]
+#[cfg(any(target_os = "linux", target_os = "macos", test))]
 fn validate_world_work_required(field: &str, value: &str) -> Result<()> {
     if value.is_empty() || value.trim() != value {
         anyhow::bail!("world work {field} must be non-empty and trimmed");
@@ -2484,7 +2484,7 @@ fn validate_world_work_required(field: &str, value: &str) -> Result<()> {
     Ok(())
 }
 
-#[cfg(any(target_os = "linux", test))]
+#[cfg(any(target_os = "linux", target_os = "macos", test))]
 fn validate_world_work_digest(field: &str, value: &str) -> Result<()> {
     if value.len() != 64
         || !value
@@ -2496,7 +2496,7 @@ fn validate_world_work_digest(field: &str, value: &str) -> Result<()> {
     Ok(())
 }
 
-#[cfg(any(target_os = "linux", test))]
+#[cfg(any(target_os = "linux", target_os = "macos", test))]
 fn validate_world_work_policy_ref(
     reference: &super::host_session_authority::schema::AuthorityObjectRefV1,
 ) -> Result<()> {
@@ -2522,7 +2522,7 @@ fn validate_world_work_policy_ref(
     }
 }
 
-#[cfg(any(target_os = "linux", test))]
+#[cfg(any(target_os = "linux", target_os = "macos", test))]
 fn valid_world_work_uuid_v7(value: &str, prefix: &str) -> bool {
     let Some(uuid) = value.strip_prefix(prefix) else {
         return false;
@@ -2538,7 +2538,7 @@ fn valid_world_work_uuid_v7(value: &str, prefix: &str) -> bool {
         && matches!(bytes[19], b'8' | b'9' | b'a' | b'b')
 }
 
-#[cfg(any(target_os = "linux", test))]
+#[cfg(any(target_os = "linux", target_os = "macos", test))]
 fn validate_acceptance_record_matches_proposal(
     record: &WorldWorkAcceptanceRecordV1,
     proposal: &WorldWorkAcceptanceProposalV1,
@@ -2567,7 +2567,7 @@ fn validate_acceptance_record_matches_proposal(
     Ok(())
 }
 
-#[cfg(any(target_os = "linux", test))]
+#[cfg(any(target_os = "linux", target_os = "macos", test))]
 fn acceptance_records_are_exact_retries(
     existing: &WorldWorkAcceptanceRecordV1,
     candidate: &WorldWorkAcceptanceRecordV1,
@@ -2587,7 +2587,10 @@ struct ResolvedAuthoritativeSessionControl {
     session_posture: PublicSessionPosture,
 }
 
-#[cfg_attr(not(any(target_os = "linux", test)), allow(dead_code))]
+#[cfg_attr(
+    not(any(target_os = "linux", target_os = "macos", test)),
+    allow(dead_code)
+)]
 #[derive(Clone, Debug, Deserialize, Eq, PartialEq, Serialize)]
 pub(crate) struct ActiveEphemeralWorldTaskRecord {
     pub orchestration_session_id: String,
@@ -2619,7 +2622,10 @@ impl ActiveEphemeralWorldTaskRecord {
     }
 }
 
-#[cfg_attr(not(any(target_os = "linux", test)), allow(dead_code))]
+#[cfg_attr(
+    not(any(target_os = "linux", target_os = "macos", test)),
+    allow(dead_code)
+)]
 #[allow(
     dead_code,
     reason = "legacy active-task compatibility remains until B1/B2.1-0 adoption"
@@ -2649,14 +2655,14 @@ pub(crate) struct AgentRuntimeStateStore {
 pub(crate) struct BoundAgentRuntimeStateStore {
     store: AgentRuntimeStateStore,
 }
-#[cfg(any(target_os = "linux", test))]
+#[cfg(any(target_os = "linux", target_os = "macos", test))]
 #[derive(Clone, Debug)]
 pub(crate) struct WorldWorkReceiptRegistry {
     storage: super::host_session_authority::store::WorldWorkReceiptRegistryStorageV1,
     authority_store_id: String,
 }
 
-#[cfg(any(target_os = "linux", test))]
+#[cfg(any(target_os = "linux", target_os = "macos", test))]
 #[derive(Clone, Debug)]
 pub(crate) struct ResolvedWorldWorkRegistryAuthorityV1 {
     pub(crate) receipt_registry: WorldWorkReceiptRegistry,
@@ -2678,20 +2684,20 @@ pub(crate) struct ResolvedWorldWorkRegistryAuthorityV1 {
     pub(crate) retained_target: Option<ResolvedCanonicalRetainedWorldDispatchTargetV1>,
 }
 
-#[cfg(any(target_os = "linux", test))]
+#[cfg(any(target_os = "linux", target_os = "macos", test))]
 #[derive(Clone, Debug)]
 pub(crate) struct ResolvedCanonicalRetainedWorldDispatchTargetV1 {
     pub(crate) participant_id: String,
     pub(crate) backend_id: String,
 }
 
-#[cfg(any(target_os = "linux", test))]
+#[cfg(any(target_os = "linux", target_os = "macos", test))]
 #[derive(Clone, Debug)]
 pub(crate) struct ResolvedActiveEphemeralWorldWorkV1 {
     pub(crate) acceptance_record: WorldWorkAcceptanceRecordV1,
 }
 
-#[cfg(any(target_os = "linux", test))]
+#[cfg(any(target_os = "linux", target_os = "macos", test))]
 impl ResolvedWorldWorkRegistryAuthorityV1 {
     pub(crate) fn resolve_active_ephemeral_observation(
         &self,
@@ -2800,7 +2806,7 @@ impl ResolvedWorldWorkRegistryAuthorityV1 {
     }
 }
 
-#[cfg(any(target_os = "linux", test))]
+#[cfg(any(target_os = "linux", target_os = "macos", test))]
 fn resolve_canonical_retained_world_dispatch_target(
     authority: &super::host_session_authority::facade::HostSessionAuthority,
     current: &super::host_session_authority::facade::ResolvedCurrentAuthorityV1,
@@ -2916,7 +2922,7 @@ fn resolve_canonical_retained_world_dispatch_target(
     })
 }
 
-#[cfg(any(target_os = "linux", test))]
+#[cfg(any(target_os = "linux", target_os = "macos", test))]
 #[derive(Clone, Debug)]
 pub(crate) struct WorldWorkRecoveryAuthorityV1 {
     pub(crate) receipt_registry: WorldWorkReceiptRegistry,
@@ -3017,7 +3023,7 @@ impl BoundAgentRuntimeStateStore {
         self.store.list_host_inbox_records()
     }
 
-    #[cfg(any(target_os = "linux", test))]
+    #[cfg(any(target_os = "linux", target_os = "macos", test))]
     pub(crate) fn list_host_inbox_record_ids(&self) -> Result<Vec<String>> {
         self.store.list_host_inbox_record_ids()
     }
@@ -3111,7 +3117,7 @@ impl BoundAgentRuntimeStateStore {
     }
 }
 
-#[cfg(any(target_os = "linux", test))]
+#[cfg(any(target_os = "linux", target_os = "macos", test))]
 impl WorldWorkReceiptRegistry {
     fn bind(
         substrate_home: &Path,
@@ -3533,7 +3539,7 @@ impl AgentRuntimeStateStore {
             },
         })
     }
-    #[cfg(any(target_os = "linux", test))]
+    #[cfg(any(target_os = "linux", target_os = "macos", test))]
     pub(crate) fn resolve_world_work_registry_authority(
         &self,
         orchestration_session_id: &str,
@@ -3629,7 +3635,7 @@ impl AgentRuntimeStateStore {
         })
     }
 
-    #[cfg(any(target_os = "linux", test))]
+    #[cfg(any(target_os = "linux", target_os = "macos", test))]
     pub(crate) fn bind_world_work_recovery_authority(
         &self,
     ) -> Result<Option<WorldWorkRecoveryAuthorityV1>> {
@@ -4312,7 +4318,7 @@ impl AgentRuntimeStateStore {
         )
     }
 
-    #[cfg(any(target_os = "linux", test))]
+    #[cfg(any(target_os = "linux", target_os = "macos", test))]
     fn load_exact_pending_obligation_transaction(
         &self,
         transaction: &mut super::host_session_authority::store::LegacyWriterGuard,
@@ -4433,7 +4439,7 @@ impl AgentRuntimeStateStore {
         self.substrate_home.join("host_inbox")
     }
 
-    #[cfg(any(target_os = "linux", test))]
+    #[cfg(any(target_os = "linux", target_os = "macos", test))]
     fn invalid_host_inbox_artifacts_dir(&self) -> PathBuf {
         self.host_inbox_dir().join(".invalid_artifacts")
     }
@@ -4616,7 +4622,7 @@ impl AgentRuntimeStateStore {
         Ok(self.host_inbox_dir().join(format!("{record_id}.json")))
     }
 
-    #[cfg(any(target_os = "linux", test))]
+    #[cfg(any(target_os = "linux", target_os = "macos", test))]
     fn invalid_host_inbox_artifact_record_path(&self, record_id: &str) -> Result<PathBuf> {
         HostInboxRecord::validate_record_id(record_id)?;
         Ok(self
@@ -4847,7 +4853,10 @@ impl AgentRuntimeStateStore {
             .collect())
     }
 
-    #[cfg_attr(not(any(target_os = "linux", test)), allow(dead_code))]
+    #[cfg_attr(
+        not(any(target_os = "linux", target_os = "macos", test)),
+        allow(dead_code)
+    )]
     #[allow(
         dead_code,
         reason = "activated-store legacy writer remains rejectable compatibility surface"
@@ -4999,7 +5008,10 @@ impl AgentRuntimeStateStore {
         Ok(records)
     }
 
-    #[cfg_attr(not(any(target_os = "linux", test)), allow(dead_code))]
+    #[cfg_attr(
+        not(any(target_os = "linux", target_os = "macos", test)),
+        allow(dead_code)
+    )]
     #[allow(
         dead_code,
         reason = "activated-store legacy writer remains rejectable compatibility surface"
@@ -5449,7 +5461,7 @@ impl AgentRuntimeStateStore {
         })
     }
 
-    #[cfg(any(target_os = "linux", test))]
+    #[cfg(any(target_os = "linux", target_os = "macos", test))]
     pub(crate) fn resolve_internal_continue_world_dispatch_target(
         &self,
         orchestration_session_id: &str,
@@ -5549,7 +5561,7 @@ impl AgentRuntimeStateStore {
         })
     }
 
-    #[cfg(any(target_os = "linux", test))]
+    #[cfg(any(target_os = "linux", target_os = "macos", test))]
     pub(crate) fn resolve_internal_continue_fork_command_dispatch_target(
         &self,
         orchestration_session_id: &str,
@@ -5582,7 +5594,7 @@ impl AgentRuntimeStateStore {
         })
     }
 
-    #[cfg(any(target_os = "linux", test))]
+    #[cfg(any(target_os = "linux", target_os = "macos", test))]
     #[allow(dead_code)]
     fn prepare_internal_continue_approval_response_obligation_closeout(
         &self,
@@ -5626,7 +5638,7 @@ impl AgentRuntimeStateStore {
         })
     }
 
-    #[cfg(any(target_os = "linux", test))]
+    #[cfg(any(target_os = "linux", target_os = "macos", test))]
     #[allow(dead_code)]
     fn close_prepared_internal_continue_approval_response_obligation(
         &self,
@@ -5661,7 +5673,7 @@ impl AgentRuntimeStateStore {
         })
     }
 
-    #[cfg(any(target_os = "linux", test))]
+    #[cfg(any(target_os = "linux", target_os = "macos", test))]
     #[allow(dead_code)]
     fn prepare_internal_continue_clarification_response_obligation_closeout(
         &self,
@@ -5704,7 +5716,7 @@ impl AgentRuntimeStateStore {
         })
     }
 
-    #[cfg(any(target_os = "linux", test))]
+    #[cfg(any(target_os = "linux", target_os = "macos", test))]
     #[allow(dead_code)]
     fn close_prepared_internal_continue_clarification_response_obligation(
         &self,
@@ -5801,7 +5813,7 @@ impl AgentRuntimeStateStore {
         )
     }
 
-    #[cfg(any(target_os = "linux", test))]
+    #[cfg(any(target_os = "linux", target_os = "macos", test))]
     #[allow(dead_code)]
     pub(crate) fn resolve_internal_fork_world_dispatch_target(
         &self,
@@ -5901,7 +5913,7 @@ impl AgentRuntimeStateStore {
         })
     }
 
-    #[cfg(any(target_os = "linux", test))]
+    #[cfg(any(target_os = "linux", target_os = "macos", test))]
     #[allow(dead_code)]
     pub(crate) fn resolve_internal_inspect_world_dispatch_target(
         &self,
@@ -5991,7 +6003,7 @@ impl AgentRuntimeStateStore {
         })
     }
 
-    #[cfg(any(target_os = "linux", test))]
+    #[cfg(any(target_os = "linux", target_os = "macos", test))]
     #[allow(dead_code)]
     pub(crate) fn resolve_internal_stop_world_dispatch_target(
         &self,
@@ -6109,7 +6121,7 @@ impl AgentRuntimeStateStore {
         })
     }
 
-    #[cfg(any(target_os = "linux", test))]
+    #[cfg(any(target_os = "linux", target_os = "macos", test))]
     #[allow(dead_code)]
     pub(crate) fn resolve_internal_cancel_world_dispatch_target(
         &self,
@@ -6847,7 +6859,7 @@ impl AgentRuntimeStateStore {
         read_regular_json_if_exists::<HostInboxRecord>(path)
     }
 
-    #[cfg(any(target_os = "linux", test))]
+    #[cfg(any(target_os = "linux", target_os = "macos", test))]
     fn synthesize_failed_closed_invalid_host_inbox_artifact_record(
         &self,
         record_id: &str,
@@ -6874,7 +6886,7 @@ impl AgentRuntimeStateStore {
         Ok(record)
     }
 
-    #[cfg(any(target_os = "linux", test))]
+    #[cfg(any(target_os = "linux", target_os = "macos", test))]
     fn invalid_host_inbox_artifact_record_id(path: &Path) -> String {
         let artifact_name = path
             .file_name()
@@ -6890,7 +6902,7 @@ impl AgentRuntimeStateStore {
         format!("invalid_host_inbox_artifact_{suffix}")
     }
 
-    #[cfg(any(target_os = "linux", test))]
+    #[cfg(any(target_os = "linux", target_os = "macos", test))]
     pub(crate) fn record_invalid_host_inbox_artifact_failure(
         &self,
         path: &Path,
@@ -7430,7 +7442,7 @@ impl AgentRuntimeStateStore {
         Ok(records)
     }
 
-    #[cfg(any(target_os = "linux", test))]
+    #[cfg(any(target_os = "linux", target_os = "macos", test))]
     pub(crate) fn list_host_inbox_record_ids(&self) -> Result<Vec<String>> {
         if self.bootstrap_home.is_some() {
             return self.with_legacy_snapshot_transaction(|transaction| {
@@ -7472,7 +7484,7 @@ impl AgentRuntimeStateStore {
         Ok(record_ids)
     }
 
-    #[cfg(any(target_os = "linux", test))]
+    #[cfg(any(target_os = "linux", target_os = "macos", test))]
     pub(crate) fn list_invalid_host_inbox_artifact_paths(&self) -> Result<Vec<PathBuf>> {
         if self.bootstrap_home.is_some() {
             return self.with_legacy_snapshot_transaction(|transaction| {
@@ -8323,7 +8335,7 @@ impl AgentRuntimeStateStore {
         Ok(())
     }
 
-    #[cfg(any(target_os = "linux", test))]
+    #[cfg(any(target_os = "linux", target_os = "macos", test))]
     pub(crate) fn recover_active_shared_world_binding_from_local_metadata(
         &self,
         orchestration_session_id: &str,
@@ -8334,7 +8346,7 @@ impl AgentRuntimeStateStore {
         )
     }
 
-    #[cfg(any(target_os = "linux", test))]
+    #[cfg(any(target_os = "linux", target_os = "macos", test))]
     pub(crate) fn recover_active_shared_world_binding_from_local_metadata_only(
         &self,
         orchestration_session_id: &str,
@@ -8345,7 +8357,7 @@ impl AgentRuntimeStateStore {
         )
     }
 
-    #[cfg(any(target_os = "linux", test))]
+    #[cfg(any(target_os = "linux", target_os = "macos", test))]
     fn recover_active_shared_world_binding_from_local_metadata_with_unreadable_fallback(
         &self,
         orchestration_session_id: &str,
@@ -8476,7 +8488,7 @@ impl AgentRuntimeStateStore {
         }
     }
 
-    #[cfg(any(target_os = "linux", test))]
+    #[cfg(any(target_os = "linux", target_os = "macos", test))]
     fn recover_active_shared_world_binding_from_authoritative_live_participants(
         &self,
         orchestration_session_id: &str,
@@ -9179,7 +9191,7 @@ impl AgentRuntimeStateStore {
         })
     }
 
-    #[cfg(any(target_os = "linux", test))]
+    #[cfg(any(target_os = "linux", target_os = "macos", test))]
     #[allow(dead_code)]
     fn load_exact_pending_approval_obligation_for_continue_target(
         &self,
@@ -9244,7 +9256,7 @@ impl AgentRuntimeStateStore {
         Ok(obligation)
     }
 
-    #[cfg(any(target_os = "linux", test))]
+    #[cfg(any(target_os = "linux", target_os = "macos", test))]
     #[allow(dead_code)]
     fn load_exact_pending_follow_up_obligation_for_continue_target(
         &self,
@@ -12456,7 +12468,7 @@ mod tests {
         std::env::remove_var(SHARED_WORLD_METADATA_ROOT_TEST_ENV);
     }
 
-    #[cfg(any(target_os = "linux", test))]
+    #[cfg(any(target_os = "linux", target_os = "macos", test))]
     fn write_shared_world_metadata_for_test(
         world_id: &str,
         orchestration_session_id: &str,
@@ -12487,7 +12499,7 @@ mod tests {
         metadata_dir
     }
 
-    #[cfg(any(target_os = "linux", test))]
+    #[cfg(any(target_os = "linux", target_os = "macos", test))]
     #[test]
     #[serial_test::serial]
     fn active_ephemeral_world_task_registry_round_trips_live_task_identity() {
@@ -12535,7 +12547,7 @@ mod tests {
         });
     }
 
-    #[cfg(any(target_os = "linux", test))]
+    #[cfg(any(target_os = "linux", target_os = "macos", test))]
     #[test]
     #[serial_test::serial]
     fn active_ephemeral_world_task_registry_allows_duplicate_task_run_id_across_sessions() {
@@ -12582,7 +12594,7 @@ mod tests {
         });
     }
 
-    #[cfg(any(target_os = "linux", test))]
+    #[cfg(any(target_os = "linux", target_os = "macos", test))]
     #[test]
     #[serial_test::serial]
     fn active_ephemeral_world_task_registry_rejects_duplicate_task_run_id_within_session() {
@@ -12616,7 +12628,7 @@ mod tests {
         });
     }
 
-    #[cfg(any(target_os = "linux", test))]
+    #[cfg(any(target_os = "linux", target_os = "macos", test))]
     #[test]
     #[serial_test::serial]
     fn load_active_ephemeral_world_task_maps_not_found_to_none() {

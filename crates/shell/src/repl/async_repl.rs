@@ -9615,7 +9615,7 @@ fn refresh_member_runtime_binding_from_shared_world_metadata_after_mismatch(
     Ok(Some(refreshed_binding))
 }
 
-#[cfg(target_os = "linux")]
+#[cfg(any(target_os = "linux", target_os = "macos"))]
 async fn start_remote_member_runtime(
     startup_context: &RuntimeOrchestrationContext,
     initial_binding: PersistedWorldBinding,

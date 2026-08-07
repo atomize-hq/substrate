@@ -233,7 +233,7 @@ pub(crate) fn collect_doctor_snapshot_v1(
     };
     let view = surfaces::resolve_current_inventory_view(
         cwd,
-        cfg,
+        &cfg,
         #[cfg(target_os = "linux")]
         global_deps_dir,
         #[cfg(not(target_os = "linux"))]

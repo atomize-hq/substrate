@@ -146,23 +146,23 @@ mod world_doctor_macos {
         }
 
         #[cfg(test)]
-        let Ok(install_context) =
-            crate::execution::install_bootstrap::checked_install_bootstrap_context_from_projections(
-            )
-        else {
-            return Vec::new();
-        };
-        let validated_socket =
-            PathBuf::from(&install_context.context.selected_host_prefix).join("sock/agent.sock");
-        host_visible_transports_for(Transport::auto_select().unwrap_or_default())
-            .into_iter()
-            .filter_map(|transport| match transport {
-                HostVisibleTransport::Unix(_) => {
-                    Some(HostVisibleTransport::Unix(validated_socket.clone()))
-                }
-                HostVisibleTransport::Tcp { .. } => None,
-            })
-            .collect()
+        {
+            let Ok(install_context) = crate::execution::install_bootstrap::checked_install_bootstrap_context_from_projections()
+            else {
+                return Vec::new();
+            };
+            let validated_socket = PathBuf::from(&install_context.context.selected_host_prefix)
+                .join("sock/agent.sock");
+            host_visible_transports_for(Transport::auto_select().unwrap_or_default())
+                .into_iter()
+                .filter_map(|transport| match transport {
+                    HostVisibleTransport::Unix(_) => {
+                        Some(HostVisibleTransport::Unix(validated_socket.clone()))
+                    }
+                    HostVisibleTransport::Tcp { .. } => None,
+                })
+                .collect()
+        }
     }
 
     fn socket_override_in_effect() -> bool {
