@@ -1,0 +1,22 @@
+{
+  "protocol": "codex.top-level-task-receipt.v1",
+  "orchestration_id": "substrate-a1-1d-5r3-mac-20260806-41f97e1c570d",
+  "dispatch_nonce": "e480367f5a8308d8ee73f97eb7734c80bd49e37a31c3a70a6e663668d622e70e",
+  "increment": "AUX-R3-MAC-EVIDENCE-RECOVERY-R5",
+  "status": "BLOCKED_CONTRADICTION",
+  "increment_task": {
+    "thread_id": "019fddab-1dd2-7570-9bd3-7f3841ce0283",
+    "host_id": "local"
+  },
+  "expected_base": {
+    "commit": "05d655fa1458a276f179d12057cbda772cc51eb6",
+    "tree": "845694f733fccbfcd3703957bf4976da0ed59b40"
+  },
+  "blocker": {
+    "summary": "R5 lacks a retained per-scope pre-PM capsule and a closed privileged Lima create/observe primitive; the global installer provenance was incorrectly required to contain per-scope manifest state.",
+    "details": "The current Stage-1 authorization contains only an instance selector and profile digest; the protected executor cannot execute or reobserve the absent-instance transition without inventing a caller-selected config/helper. The installer also cannot truthfully write a global record containing per-scope pre-PM manifest identity. The worktree remains exact-base, uncommitted and preserved with 17 status entries, zero staged paths, tracked diff sha256:26b115f6edf314cb8b2860a71854f8576fb7ca39efafff361d6322aea68fbef4, and no native action/publication/R6 work.",
+    "required_authority": "Split global install/image/tool provenance from a per-scope protected pre-PM lifecycle capsule. Have the direct bootstrap transaction construct and persist the canonical generation-one manifest and issue the one-use signed Stage-1 authorization. Authorize the executor to use only an embedded, versioned profile template and the installer-measured limactl executable for one closed absent-instance create/start plus strict post-effect identity observation. Keep the exact existing R5 path fence and protected-state schema.",
+    "handoff_prompt": "Continue the same R5 worktree under continuation 0030. Reverify exact binding and preserved diff. Surgically revise the partial provenance/Stage-1 code: global installer provenance must contain only install-time facts; direct bootstrap must persist the per-scope canonical pre-PM capsule and issue the signed one-use Stage-1 authorization; the executor must own the fixed profile rendering, limactl invocation, absence proof, attempt-marker verification, machine/account/UID/home observation, PM derivation and specialized N-to-N+1 completion. Run MAC-only deterministic proof then closure-1. Publish only after terminal CLEAN; do not begin R6."
+  },
+  "next_increment": "AUX-R3-MAC-EVIDENCE-RECOVERY-R6"
+}

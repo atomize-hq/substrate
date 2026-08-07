@@ -1,0 +1,38 @@
+{
+  "protocol": "codex.top-level-task-receipt.v1",
+  "status": "BLOCKED_CONTRADICTION",
+  "orchestration_id": "substrate-a1-1d-5r3-mac-20260806-41f97e1c570d",
+  "increment": "AUX-R3-MAC-EVIDENCE-RECOVERY-R5",
+  "increment_task_thread_id": "019fddab-1dd2-7570-9bd3-7f3841ce0283",
+  "increment_task_host_id": "local",
+  "original_dispatch_nonce": "e480367f5a8308d8ee73f97eb7734c80bd49e37a31c3a70a6e663668d622e70e",
+  "continuation_nonce": "bb14577c654e5fbdb30bb981d4f0d712acd04c960219939f9b26b789c0f6420a",
+  "worktree": "/Users/spensermcconnell/.codex/worktrees/686b/substrate",
+  "base_commit": "05d655fa1458a276f179d12057cbda772cc51eb6",
+  "base_tree": "845694f733fccbfcd3703957bf4976da0ed59b40",
+  "remote_observation": "origin refs/heads/feat/internal-host-orchestrator-world-dispatch-bootstrap = 05d655fa1458a276f179d12057cbda772cc51eb6",
+  "index": "clean (0 staged)",
+  "worktree_state": "preserved, uncommitted, 13 modified implementation/test paths plus 4 existing R5 review artifacts; no reset/clean/rebase/archive/donor mutation/publication/native action performed.",
+  "review_record": "existing discovery-1 record previously validated VALID at sha256:6eea8804d5c027ed5272f139afdef20ee752a32e86e132fdc117e5816738fb85; closure-1 not started because deterministic subject is incomplete.",
+  "blocking_contradiction": [
+    "The Stage-1 authorization binds instance_name/profile_sha256 but supplies no closed create configuration/source and the executor has no authorized create/start/machine-observation primitive. The current executor only validates and writes an overwriteable receipt; a caller-selected raw helper/config/transport is forbidden.",
+    "The installer has no retained provenance producer; its current copies are prefix-local rather than the fixed privileged-helper path. The global sidecar was also incorrectly required to know a per-scope pre-PM manifest identity unavailable at install time.",
+    "No retained artifact contains the complete pre-PM manifest bytes or immutable selected-create profile/config, so the specialized transition cannot truthfully allocate, perform, reobserve, or resume without fabricating authority."
+  ],
+  "partial_bounded_remediation": [
+    "common signed MacLimaStageOneSuccessorTemplateV1 validation, counter-zero acceptance, and canonical manifest identity helper",
+    "strict ordinary Stage wrapper omission of PM mapping",
+    "provenance reader/no-follow peer pre-decode attestation and bounded FD3 initial-frame timeout",
+    "scope-bound MacPublisherControlAdmissionV1 validation",
+    "shell Stage-only N-to-N+1 receipt/index/head completer and static derivation helper"
+  ],
+  "checks": [
+    "cargo test -p substrate-common mac_lima_stage_one_successor_template --lib: PASS",
+    "cargo test -p shell --test managed_lifecycle_v1: PASS (4)",
+    "bash tests/mac/lifecycle_r3.sh: PASS",
+    "cargo check --bin substrate-lifecycle-macos --bin substrate-lifecycle-control: PASS with pre-existing/unrelated warnings",
+    "git diff --check: PASS"
+  ],
+  "required_authority": "Authorize an exact retained pre-PM capsule/provenance producer with canonical manifest bytes and stable attempt/time; authorize the immutable selected-create profile/config source plus fixed executor effect/guest observation primitive; define installer provenance without caller/env/ambient authority and join it to the actual privileged helper.",
+  "next_increment": "AUX-R3-MAC-EVIDENCE-RECOVERY-R6 (not dispatched)"
+}

@@ -1,0 +1,175 @@
+{
+  "protocol": "codex.orchestration-authority-amendment.v1",
+  "orchestration_id": "substrate-a1-1d-5r3-mac-20260806-41f97e1c570d",
+  "amendment_id": "0030-r5-install-provenance-stage1-capsule-effect",
+  "authority_source": "meta authority for repo-truth corrections strictly inside R5 and the R3 MAC corridor",
+  "authorized_increment": "AUX-R3-MAC-EVIDENCE-RECOVERY-R5",
+  "existing_task": {
+    "thread_id": "019fddab-1dd2-7570-9bd3-7f3841ce0283",
+    "host_id": "local",
+    "worktree": "/Users/spensermcconnell/.codex/worktrees/686b/substrate",
+    "original_dispatch_nonce": "e480367f5a8308d8ee73f97eb7734c80bd49e37a31c3a70a6e663668d622e70e",
+    "prior_continuation_nonce": "bb14577c654e5fbdb30bb981d4f0d712acd04c960219939f9b26b789c0f6420a",
+    "continuation_nonce": "e8b183d657cdfebb9890749939737d814461ff1b801d796d95c0987d5b479b5d",
+    "preserved_tracked_diff_sha256": "sha256:26b115f6edf314cb8b2860a71854f8576fb7ca39efafff361d6322aea68fbef4",
+    "preserved_combined_subject_sha256": "sha256:66934fd54096eb209e7e29e214ef93f983fe7edf68205c925e4513329f41757c",
+    "preserved_status_entry_count": 17,
+    "staged_paths": 0
+  },
+  "expected_base_commit": "05d655fa1458a276f179d12057cbda772cc51eb6",
+  "expected_base_tree": "845694f733fccbfcd3703957bf4976da0ed59b40",
+  "target_ref": "refs/heads/feat/internal-host-orchestrator-world-dispatch-bootstrap",
+  "classification": "The recovery SPEC already requires the R5 executor to prove absence, create/start the fixed instance, observe/reobserve guest identity, finalize PM and publish the full manifest. This amendment supplies the missing retained producers and closed effect primitive; it does not add a generic helper, caller selector, transport, platform or R6 behavior.",
+  "supersession": {
+    "replace": [
+      "0028 global MacPublisherBootstrapProvenanceV1 fields manifest_generation/manifest_sha256",
+      "0029 assumption that guest_machine_id alone is sufficient post-effect",
+      "any incomplete partial implementation that derives authority from caller manifest/profile/path or writes overwriteable last-action-receipt authority"
+    ],
+    "retain": [
+      "all seven discovery findings",
+      "FD3 peer-image admission and bounded framing",
+      "global control admission",
+      "signed successor-template and specialized N-to-N+1 completion",
+      "closed ordinary request shapes",
+      "exact path fence, MAC-only proof, review lineage and hard exclusions"
+    ]
+  },
+  "global_install_provenance": {
+    "record": "MacPublisherInstallProvenanceV1 (the partial MacPublisherBootstrapProvenanceV1 may be renamed or narrowed)",
+    "fixed_path": "/Library/Application Support/Substrate/lifecycle/bootstrap-provenance.v1.json",
+    "mode": "root:wheel 0444 canonical JSON; no secrets; authenticity is root ownership, no-follow parent/file identity, exact bytes and absent-or-exact publication",
+    "producer": "The MAC branch of scripts/substrate/dev-install-substrate.sh writes it only after prefix control binary, fixed privileged executor, LaunchDaemon plist and managed-copy records are durable. Repeat install accepts exact bytes only; mismatch/partial state blocks without overwrite or adoption.",
+    "install_time_fields": [
+      "schema/version",
+      "source commit/tree/ref and R5 review-record SHA-256",
+      "exact IH commitment/selected prefix",
+      "prefix control binary fixed path plus descriptor identity/digest/code identity/requirement",
+      "fixed executor path /Library/PrivilegedHelperTools/com.substrate.lifecycle.publisher.v1 plus descriptor identity/digest/code identity/requirement",
+      "LaunchDaemon plist path/digest",
+      "resolved limactl executable absolute path plus descriptor identity/digest/code identity/version",
+      "embedded Stage-1 profile-template algorithm/version/digest"
+    ],
+    "forbidden_fields": [
+      "scope ID",
+      "attempt/nonce/time",
+      "pre-PM manifest bytes/generation/digest",
+      "PM/machine identity",
+      "caller/env/project/CWD selected data"
+    ],
+    "fixed_helper_join": "The installer must durably install the executor at the exact fixed privileged-helper path used by the FD3/XPC code and install the existing fixed LaunchDaemon plist. Prefix-local executor copies are non-authorizing convenience only. The fixed control image remains the prefix bin path recorded by provenance."
+  },
+  "direct_bootstrap_and_capsule": {
+    "minimal_request": "The hidden direct command accepts only a canonical MacPublisherBootstrapRequestV1 containing the exact IH carrier. Any legacy manifest, scope, source/build, profile, action, Stage-1, PM, path or authority field rejects. The trusted measured control image reads the root-owned install provenance and allocates scope/attempt/nonces/times itself after terminal confirmation.",
+    "authorization": "Construct PublisherBootstrapAuthorizationV1 entirely from decoded IH, retained install provenance, secure UUIDv7/nonces and bounded issued/expiry times. Construct the canonical generation-one pre-PM mac_host_shared/mac_lima manifest internally: PM absent, entries/receipts empty, principal/IH/source/build exact. Include the full canonical pre-PM manifest in the retained FD3 authorization or an exact nested capsule field; its digest must equal the authorization manifest identity. Caller seed bytes are never authority.",
+    "record": "MacLimaStageOneCapsuleV1 in a fixed per-scope System-Keychain account, separate from LifecyclePublisherProtectedStateV1",
+    "creation_order": [
+      "validate FD3 peer and install provenance",
+      "construct/validate full pre-PM manifest and bootstrap authorization",
+      "create/resume bootstrap intent/key/initial counter-zero anchor",
+      "construct and sign one-use LimaStageOneAuthorizationV1 using the same System-Keychain P-256 key",
+      "persist capsule absent-or-exact and exact-join pre-PM manifest bytes/digest, bootstrap authorization digest, initial anchor digest/counter, Stage-1 authorization/template/profile, install provenance digest and state revision",
+      "persist global control admission",
+      "return the signed Stage-1 authorization in the bounded direct-bootstrap response"
+    ],
+    "capsule_states": [
+      "Issued",
+      "Prepared",
+      "EffectStarted",
+      "InstanceObserved",
+      "Completed",
+      "PreservingBlocked"
+    ],
+    "replay": "The returned Stage-1 authorization is public carrier data but one-use authority comes from signature plus the exact current capsule/anchor state. Replay after Prepared/Completed or any mismatch blocks."
+  },
+  "stage_one_profile": {
+    "source": "A versioned canonical profile template embedded in substrate-lifecycle-macos.rs; no caller path, LIMA_PROFILE_PATH, PROJECT_PATH, environment, repository lookup or scripts/mac/lima/substrate.yaml input.",
+    "render_inputs": [
+      "signed attempt_id",
+      "signed capsule digest",
+      "fixed instance name and fixed image/template constants only"
+    ],
+    "contents": "Minimal Lima realization only. It may write one fixed root-owned guest Stage-1 attempt marker containing attempt_id and capsule digest so crash/retry can prove this exact create. It must not install packages, alter DNS, stage project files, create publisher/world components or perform post-PM guest projection.",
+    "binding": "Install provenance binds template algorithm/version/digest. The signed Stage-1 authorization carries canonical rendered profile bytes as base64url plus rendered SHA-256; executor re-renders and requires byte equality before effect."
+  },
+  "closed_lima_effect": {
+    "owner": "execute_mac_managed_action_v1 StageOne branch in the fixed privileged executor only",
+    "tool": "Open the provenance-recorded limactl executable no-follow, verify descriptor identity/digest/code identity/version immediately before use, and execute only that fixed tool. No PATH-selected or caller-selected executable.",
+    "config": "Write the internally re-rendered signed profile to one root-owned, no-follow, attempt-scoped file below the fixed lifecycle state root; fsync file/parent and record identity in the capsule before spawn. This is an executor-owned transaction artifact, not a request/file carrier.",
+    "environment": "Clear inherited selection variables. Set exact HOME and LIMA_HOME from the decoded IH/account-database-derived control root; construct PATH only from the recorded limactl parent plus fixed system directories.",
+    "closed_commands": [
+      "limactl list <fixed-instance> --json for exact absence/status proof",
+      "limactl start --tty=false --name <fixed-instance> <executor-owned-profile-path> for the sole create/start effect",
+      "limactl shell <fixed-instance> -- <fixed literal observation command> for marker, /etc/machine-id, account, uid and account-database home observation"
+    ],
+    "observation": "After start, strictly parse and reobserve twice: exact instance/status, fixed attempt marker, lowercase 32-hex machine ID, guest account, positive UID and account-database home. The allowed post-effect observation tuple is LimaStageOneObservationV1, not guest_machine_id alone. Derive PlatformBootstrapMappingV1 only from this exact tuple plus signed IH/template.",
+    "forbidden": [
+      "generic lima-action",
+      "raw helper relay",
+      "caller config/profile/tool/path/argv/environment",
+      "arbitrary shell command",
+      "additional endpoint or transport",
+      "guest provisioning beyond the fixed attempt marker"
+    ]
+  },
+  "retry_and_completion": {
+    "before_effect": "Capsule Issued/Prepared plus proven absence may continue. Persist EffectStarted before spawn.",
+    "after_effect": "If instance is absent, exact same attempt may retry create. If present, resume only when fixed marker, instance and all reobserved identity fields exact-join the capsule; otherwise PreservingBlocked. Never adopt based on name or apparent profile bytes.",
+    "ambiguous": "Timeout/unknown status/partial marker/mismatch preserves instance and capsule and returns the closed blocked result; no delete/recreate.",
+    "completion": "Use the 0029 specialized source-generation N to PM-generation N+1 manifest/receipt/index/head/anchor/protected-state/admission CAS. Persist Completed only after every durable join. Generic same-generation actions remain unchanged."
+  },
+  "authorized_implementation_test_paths": [
+    "crates/common/src/lib.rs",
+    "crates/common/src/managed_artifact.rs",
+    "crates/shell/src/execution/managed_lifecycle.rs",
+    "crates/shell/src/execution/managed_lifecycle/macos_client.rs",
+    "crates/shell/src/execution/mod.rs",
+    "crates/shell/src/lib.rs",
+    "crates/shell/tests/managed_lifecycle_v1.rs",
+    "scripts/mac/lima-lifecycle.sh",
+    "scripts/mac/lima-stop.sh",
+    "scripts/mac/lima-warm.sh",
+    "src/bin/substrate-lifecycle-control.rs",
+    "src/bin/substrate-lifecycle-macos.rs",
+    "tests/mac/lifecycle_r3.sh",
+    "scripts/substrate/dev-install-substrate.sh",
+    "tests/installers/dev_install_bash32_fd_regression.sh"
+  ],
+  "authorized_review_paths": [
+    "llm-last-mile/runtime-refactor/review-control/r3-mac-evidence-recovery-r5-review-authority-security.md",
+    "llm-last-mile/runtime-refactor/review-control/r3-mac-evidence-recovery-r5-review-lifecycle-convergence.md",
+    "llm-last-mile/runtime-refactor/review-control/r3-mac-evidence-recovery-r5-review-allowlist-evidence.md",
+    "llm-last-mile/runtime-refactor/review-control/r3-mac-evidence-recovery-r5-review-cycle-record.json"
+  ],
+  "required_tests": [
+    "installer fixed control/executor/plist/provenance ordering, absent/exact retry, partial/mismatch/symlink/owner/mode/digest preservation",
+    "global provenance rejects any per-scope manifest field and exact-joins fixed helper/control/limactl/template",
+    "minimal direct request rejects legacy caller authority; generated pre-PM manifest/capsule/authorization exact joins",
+    "same publisher key signs initial anchor and Stage-1 authorization; capsule replay and state mismatch reject",
+    "embedded profile render/digest/marker and no package/DNS/project/guest-projection content",
+    "fixed limactl image/env/argv/config identity, absence proof, existing-instance rejection, timeout and exit handling",
+    "each kill/retry boundary across profile durability, EffectStarted, spawn, marker/status/identity observations and specialized completion",
+    "machine/account/UID/home double-observation and PM derivation mismatch negatives",
+    "all prior 0028/0029 provenance, FD3, admission, ordinary closed-shape, receipt, role/action and descriptor tests"
+  ],
+  "review": {
+    "existing_cycle": "discovery-1 bounded_stop remains authoritative",
+    "next_cycle_after_remediation": "closure-1 using a different fresh gpt-5.6-terra Extra High read-only reviewer",
+    "supplemental_cycles_max": 2,
+    "supplemental_rule": "only valid P1/P2 directly caused or unmasked by immediately preceding remediation",
+    "p3_p4": "record only",
+    "clean_terminal": true
+  },
+  "inline_authority": "This prompt and nonce are complete authority. The meta-only amendment JSON is not expected in the product task worktree.",
+  "hard_exclusions": [
+    "new LifecyclePublisherProtectedStateV1 field/schema",
+    "new generic broker/helper/selector, endpoint, transport, session or R6 pairing/data/TTY behavior",
+    "caller/env/project/CWD/Git/remote selected profile, tool, path, manifest or authority",
+    "editing scripts/mac/lima/substrate.yaml or any path beyond exact fifteen implementation/test plus four review paths",
+    "Linux/Windows source, target commands or behavior",
+    "native install, code signing, Keychain/XPC/Lima mutation, lifecycle/evidence action in this implementation task",
+    "reset, clean, rebase, archive, donor bulk-copy, commit/publication before terminal CLEAN"
+  ],
+  "publication": "one normal fast-forward R5 commit after MAC-only deterministic proof and terminal CLEAN",
+  "terminal_successor": "AUX-R3-MAC-EVIDENCE-RECOVERY-R6"
+}
