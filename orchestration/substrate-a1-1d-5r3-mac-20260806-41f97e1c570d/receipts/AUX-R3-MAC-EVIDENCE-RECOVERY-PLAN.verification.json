@@ -1,0 +1,80 @@
+{
+  "protocol": "codex.orchestration-receipt-verification.v1",
+  "orchestration_id": "substrate-a1-1d-5r3-mac-20260806-41f97e1c570d",
+  "increment": "AUX-R3-MAC-EVIDENCE-RECOVERY-PLAN",
+  "verified_at": "2026-08-07T14:47:40.514467+00:00",
+  "dispatch_nonce": "c1f964d03d31a82ad5bf8b15a61b1a90cb618e20199b83b5674c6552a38a1798",
+  "task": {
+    "thread_id": "019fdc95-705b-7cd0-92a3-8980c09c8193",
+    "host_id": "local",
+    "worktree": "/Users/spensermcconnell/.codex/worktrees/e2c8/substrate",
+    "turn_id": "019fdc97-9f94-7990-8958-760d2e25f002",
+    "turn_status": "completed",
+    "receipt_reconciliation_turn_id": "019fdcaf-1b66-7b21-92bd-a40680a32468",
+    "worktree_clean": true,
+    "task_archived": false
+  },
+  "receipt": {
+    "raw_path": "receipts/AUX-R3-MAC-EVIDENCE-RECOVERY-PLAN.raw.json",
+    "raw_sha256": "sha256:72440a9ac1217d099d6790803ceb8abe0a2b2d7d105f2aec244dcc75e8e55f08",
+    "raw_validation": "rejected: unsupported receipt protocol because raw message used schema instead of protocol and noncanonical wrapper fields",
+    "canonical_path": "receipts/AUX-R3-MAC-EVIDENCE-RECOVERY-PLAN.json",
+    "canonical_sha256": "sha256:7e5f840398f93612dd902a0a784f752bdb21731426f5481180b17fca5b6cd3c1",
+    "canonical_validator": "passed",
+    "jsonschema": "passed"
+  },
+  "landing": {
+    "expected_base_commit": "d8a65fc8890dd37584aaeac2984c906188e5f06e",
+    "expected_base_tree": "d8f25cc993f264f0c67fe3e00180eb393e41b2e3",
+    "commit": "d4bd729de8d344dfc567aaa62203838f68c2c895",
+    "tree": "3d5005d38c83b68c0a9813c10cbe6cb11996aed0",
+    "parent": "d8a65fc8890dd37584aaeac2984c906188e5f06e",
+    "live_remote": "d4bd729de8d344dfc567aaa62203838f68c2c895",
+    "normal_fast_forward": true,
+    "changed_path_count": 12,
+    "changed_paths_match_receipt": true,
+    "protected_checkout_tracked_clean": true
+  },
+  "subject": {
+    "path_count": 8,
+    "fingerprint": "sha256:71c0b6794dcc4dc3b4e0df9269c9add66fdc03eb66957d0c002942ee6eee1234",
+    "fingerprint_recomputed": true,
+    "review_metadata_excluded_from_fingerprint": true
+  },
+  "review": {
+    "record_path": "llm-last-mile/runtime-refactor/review-control/r3-mac-evidence-recovery-planning-review-cycle-record.json",
+    "record_sha256": "sha256:84afdc50ba7960377a66a6bc38986e13be84eda0b262d8e629512422795e8e0b",
+    "validator": "passed",
+    "terminal": "CLEAN",
+    "p1": 0,
+    "p2": 0,
+    "discovery_remediated": {
+      "p1": 5,
+      "p2": 8
+    },
+    "p3_p4_disposition": "No valid unfixed P3/P4 findings; inventory unchanged.",
+    "artifact_sha256": {
+      "authority_security": "sha256:23e1d7aa1975e1ee00c74c7767d3cd186fd36848f73ae4fc7d88b56d7274a222",
+      "lifecycle_convergence": "sha256:345fc9cbcd7cc3ebedf50b831974f1614e6a38d520e066eb0434d2cc45d3adb5",
+      "allowlist_evidence": "sha256:a74f199552142550c578503d676cbf9cb1a897cafbf52091ea91c76497440c19"
+    }
+  },
+  "donor": {
+    "worktree": "/Users/spensermcconnell/.codex/worktrees/60cc/substrate",
+    "head": "d8a65fc8890dd37584aaeac2984c906188e5f06e",
+    "tree": "d8f25cc993f264f0c67fe3e00180eb393e41b2e3",
+    "tracked_diff_sha256": "sha256:39682fd4415a00ae4099580135a687d3e11858f62f84e9ef6ff3771bafd4b54c",
+    "tracked_paths": 26,
+    "untracked_paths": 2,
+    "status_entries": 28,
+    "staged_paths": 0,
+    "preserved": true
+  },
+  "advance": {
+    "accepted": true,
+    "next_increment": "AUTHORITY_REQUIRED:AUX-R3-MAC-EVIDENCE-RECOVERY-IMPLEMENTATION",
+    "successor_dispatched": false,
+    "dispatch_authorized": false,
+    "official_state_expected_base_remains_original_mac_checkpoint_until_sequence_amendment": true
+  }
+}

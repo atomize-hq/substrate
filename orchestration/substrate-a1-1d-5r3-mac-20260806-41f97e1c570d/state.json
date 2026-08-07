@@ -2,7 +2,7 @@
   "protocol": "codex.top-level-orchestration-state.v1",
   "orchestration_id": "substrate-a1-1d-5r3-mac-20260806-41f97e1c570d",
   "status": "BLOCKED",
-  "dispatch_authorized": true,
+  "dispatch_authorized": false,
   "publication_mode": "remote",
   "remote": "origin",
   "remote_observation": null,
@@ -45,25 +45,21 @@
     }
   ],
   "last_blocker": {
-    "status": "BLOCKED_SCOPE_EXPANSION",
-    "task_class": "general_macos_source_correction",
-    "attempt": 1,
-    "thread_id": "019fd9fe-670c-7253-bf60-86f78cd373b5",
-    "host_id": "local",
-    "dispatch_nonce": "d7c49c63813094f35052883eb0a2964d28ce2df44d2c422664ea69c7c5f7072c",
-    "receipt_path": "receipts/AUX-R3-MAC-SOURCE-CORRECTION.attempt-1.scope-freeze-0008.blocked.json",
-    "verification_path": "receipts/AUX-R3-MAC-SOURCE-CORRECTION.attempt-1.scope-freeze-0008.blocked.verification.json",
-    "review_path": "/tmp/substrate-aux-source-correction-019fd9fe-670c-7253-bf60-86f78cd373b5/ticket-authority-discovery-review.md",
-    "review_sha256": "sha256:9223ec21429d28452b01b950e60f2d833993675e6043819eeca16571a93aaa57",
-    "summary": "An independent read-only audit confirmed the ledger with corrections, three P1s, and three P2 scope/classification findings; publication remains blocked on explicit same-PM-bound transport/TTY-channel and trusted mapped-lifecycle submission decisions.",
-    "authority_resolution": "authority-amendments/0008-r3-mac-source-correction-scope-freeze.json",
+    "status": "AUTHORITY_REQUIRED",
+    "task_class": "r3_mac_evidence_recovery_implementation",
+    "planning_increment": "AUX-R3-MAC-EVIDENCE-RECOVERY-PLAN",
+    "planning_thread_id": "019fdc95-705b-7cd0-92a3-8980c09c8193",
+    "planning_host_id": "local",
+    "planning_receipt_path": "receipts/AUX-R3-MAC-EVIDENCE-RECOVERY-PLAN.json",
+    "planning_verification_path": "receipts/AUX-R3-MAC-EVIDENCE-RECOVERY-PLAN.verification.json",
+    "planning_landed_commit": "d4bd729de8d344dfc567aaa62203838f68c2c895",
+    "planning_landed_tree": "3d5005d38c83b68c0a9813c10cbe6cb11996aed0",
+    "summary": "The recovery SPEC/PLAN/TASKS and causal review landed CLEAN. Fresh explicit authority is required before defining or dispatching the R1-R6 implementation sequence.",
     "continuation_authorized": false,
-    "worktree": "/Users/spensermcconnell/.codex/worktrees/60cc/substrate",
-    "worktree_preserved": true,
-    "task_archived": false,
+    "successor": "AUTHORITY_REQUIRED:AUX-R3-MAC-EVIDENCE-RECOVERY-IMPLEMENTATION",
     "advance": false
   },
-  "current_authority_amendment": "authority-amendments/0008-r3-mac-source-correction-scope-freeze.json",
+  "current_authority_amendment": "authority-amendments/0009-r3-mac-evidence-recovery-planning.json",
   "evidence_attempt": 2,
   "retry_authority": {
     "evidence_id": "EVIDENCE:R3-MAC-IMP-01",
@@ -201,5 +197,34 @@
     "scope_reduction_only": true,
     "install_retry_dispatch_allowed": false,
     "official_evidence_dispatch_allowed": false
+  },
+  "auxiliary_recovery_planning": {
+    "status": "LANDED_CLEAN",
+    "official_increment_or_evidence": false,
+    "increment": "AUX-R3-MAC-EVIDENCE-RECOVERY-PLAN",
+    "dispatch_nonce": "c1f964d03d31a82ad5bf8b15a61b1a90cb618e20199b83b5674c6552a38a1798",
+    "thread_id": "019fdc95-705b-7cd0-92a3-8980c09c8193",
+    "host_id": "local",
+    "worktree": "/Users/spensermcconnell/.codex/worktrees/e2c8/substrate",
+    "expected_base": {
+      "commit": "d8a65fc8890dd37584aaeac2984c906188e5f06e",
+      "tree": "d8f25cc993f264f0c67fe3e00180eb393e41b2e3"
+    },
+    "landed": {
+      "commit": "d4bd729de8d344dfc567aaa62203838f68c2c895",
+      "tree": "3d5005d38c83b68c0a9813c10cbe6cb11996aed0",
+      "target_ref": "refs/heads/feat/internal-host-orchestrator-world-dispatch-bootstrap",
+      "live_remote": "d4bd729de8d344dfc567aaa62203838f68c2c895"
+    },
+    "receipt_path": "receipts/AUX-R3-MAC-EVIDENCE-RECOVERY-PLAN.json",
+    "receipt_sha256": "sha256:7e5f840398f93612dd902a0a784f752bdb21731426f5481180b17fca5b6cd3c1",
+    "verification_path": "receipts/AUX-R3-MAC-EVIDENCE-RECOVERY-PLAN.verification.json",
+    "review_terminal": "CLEAN",
+    "review_record_sha256": "sha256:84afdc50ba7960377a66a6bc38986e13be84eda0b262d8e629512422795e8e0b",
+    "subject_fingerprint": "sha256:71c0b6794dcc4dc3b4e0df9269c9add66fdc03eb66957d0c002942ee6eee1234",
+    "worktree_preserved": true,
+    "task_archived": false,
+    "next_increment": "AUTHORITY_REQUIRED:AUX-R3-MAC-EVIDENCE-RECOVERY-IMPLEMENTATION",
+    "successor_dispatched": false
   }
 }
