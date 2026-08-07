@@ -1,0 +1,71 @@
+{
+  "protocol": "codex.top-level-task-receipt-verification.v1",
+  "orchestration_id": "substrate-a1-1d-5r3-mac-20260806-41f97e1c570d",
+  "increment": "AUX-R3-MAC-EVIDENCE-RECOVERY-R2",
+  "attempt": 1,
+  "verified_at_utc": "2026-08-07T15:53:20Z",
+  "raw_receipt_path": "receipts/AUX-R3-MAC-EVIDENCE-RECOVERY-R2.attempt-1.blocked.raw.json",
+  "raw_receipt_sha256": "sha256:fba11f9ab066e8a777f8443864768c7cae8b92368e997b72e55211591e255d39",
+  "canonical_receipt_path": "receipts/AUX-R3-MAC-EVIDENCE-RECOVERY-R2.attempt-1.blocked.json",
+  "canonical_receipt_sha256": "sha256:122fec7966dfa96ccf8b2bfa8d8d7cf58c0eef00ffdc95c9cbf787739795785a",
+  "schema_reconciliation": {
+    "removed_top_level_fields": [
+      "observed",
+      "preflight",
+      "next_increment"
+    ],
+    "semantic_fields_changed": false,
+    "canonical_validate_receipt": "VALID",
+    "canonical_jsonschema": "VALID"
+  },
+  "terminal_barrier": {
+    "thread_id": "019fdce6-3860-7bb2-8099-20c870f8d3e2",
+    "host_id": "local",
+    "turn_id": "019fdce6-f366-79b3-9cb6-c81e77334860",
+    "status": "completed",
+    "thread_status": "idle"
+  },
+  "observed": {
+    "worktree": "/Users/spensermcconnell/.codex/worktrees/05f9/substrate",
+    "head": "bb098b6e265a4b6cadc4b7ca908c8b6ccf59f2b9",
+    "head_tree": "688ae2860d99d6d5cf1019e0d3ba27c7cc26b6cc",
+    "index_tree": "688ae2860d99d6d5cf1019e0d3ba27c7cc26b6cc",
+    "live_remote_target": "bb098b6e265a4b6cadc4b7ca908c8b6ccf59f2b9",
+    "target_ref": "refs/heads/feat/internal-host-orchestrator-world-dispatch-bootstrap",
+    "changed_paths": [
+      "AGENTS.md",
+      "CLAUDE.md"
+    ],
+    "unstaged_binary_diff_sha256": "ef17cfd4a80a07828229af3964757caabf7ca439050a6e68a9f739e154a395ed",
+    "AGENTS_md": {
+      "working_sha256": "fe4f1adac20528157679ba277b1a28f9080fa6f6bb66cbcae7c8d4411e6b16af",
+      "base_sha256": "7194254b5b50f71c4eaeff3169587952d223b4163a187161db199f131991f080"
+    },
+    "CLAUDE_md": {
+      "working_sha256": "75728f428496fffcf9ace5beb3f7495152c8af11800dca7806ccef0b83dff5ed",
+      "base_sha256": "9b077cb335d1434aad45d06fae2c08e7cfdc22b1e21c04e0c2fa4f8b01d12eff"
+    },
+    "diff_check": "passed"
+  },
+  "independent_verification": {
+    "head_match": true,
+    "tree_match": true,
+    "index_tree_match": true,
+    "live_remote_match": true,
+    "staged_paths": 0,
+    "changed_paths_exact": [
+      "AGENTS.md",
+      "CLAUDE.md"
+    ],
+    "unstaged_binary_diff_sha256_match": true,
+    "working_and_base_file_hashes_match": true,
+    "no_r2_product_or_test_change": true,
+    "no_commit_or_push": true
+  },
+  "task_preservation": {
+    "worktree": "/Users/spensermcconnell/.codex/worktrees/05f9/substrate",
+    "dirty_preserved": true,
+    "archived": false
+  },
+  "verdict": "ACCEPTED_NON_ADVANCING_BLOCK"
+}

@@ -1,0 +1,70 @@
+{
+  "protocol": "codex.top-level-task-receipt.v1",
+  "orchestration_id": "substrate-a1-1d-5r3-mac-20260806-41f97e1c570d",
+  "dispatch_nonce": "49e8d36feff2e9ea0ef78ab92f14dc2680d3fe4e9ee2ffcd0badb8c1f113c41e",
+  "increment": "AUX-R3-MAC-EVIDENCE-RECOVERY-R2",
+  "status": "BLOCKED_CONTRADICTION",
+  "increment_task": {
+    "thread_id": "019fdce6-3860-7bb2-8099-20c870f8d3e2",
+    "host_id": "local"
+  },
+  "expected_base": {
+    "commit": "bb098b6e265a4b6cadc4b7ca908c8b6ccf59f2b9",
+    "tree": "688ae2860d99d6d5cf1019e0d3ba27c7cc26b6cc"
+  },
+  "observed": {
+    "worktree": "/Users/spensermcconnell/.codex/worktrees/05f9/substrate",
+    "head": "bb098b6e265a4b6cadc4b7ca908c8b6ccf59f2b9",
+    "head_tree": "688ae2860d99d6d5cf1019e0d3ba27c7cc26b6cc",
+    "index_tree": "688ae2860d99d6d5cf1019e0d3ba27c7cc26b6cc",
+    "live_remote_target": "bb098b6e265a4b6cadc4b7ca908c8b6ccf59f2b9",
+    "target_ref": "refs/heads/feat/internal-host-orchestrator-world-dispatch-bootstrap",
+    "changed_paths": ["AGENTS.md", "CLAUDE.md"],
+    "unstaged_binary_diff_sha256": "ef17cfd4a80a07828229af3964757caabf7ca439050a6e68a9f739e154a395ed",
+    "AGENTS_md": {
+      "working_sha256": "fe4f1adac20528157679ba277b1a28f9080fa6f6bb66cbcae7c8d4411e6b16af",
+      "base_sha256": "7194254b5b50f71c4eaeff3169587952d223b4163a187161db199f131991f080"
+    },
+    "CLAUDE_md": {
+      "working_sha256": "75728f428496fffcf9ace5beb3f7495152c8af11800dca7806ccef0b83dff5ed",
+      "base_sha256": "9b077cb335d1434aad45d06fae2c08e7cfdc22b1e21c04e0c2fa4f8b01d12eff"
+    },
+    "diff_check": "passed"
+  },
+  "blocker": {
+    "summary": "Unexpected tracked mutations outside the R2 allowlist.",
+    "details": "After clean exact-base/remote/skill/donor preflight, GitNexus query reported degraded FTS. Per repository instruction I ran `npx gitnexus analyze`; it succeeded but automatically rewrote AGENTS.md and CLAUDE.md GitNexus metadata. Neither path is in R2's production, test, review-metadata, or permitted P3/P4 allowlist. The worktree is now dirty only at those two paths; no R2 code/test edit, test/build, install/native action, staging, commit, or publication occurred. I did not restore, checkout, reset, clean, rebase, or otherwise reconcile the bytes, preserving the blocked worktree.",
+    "required_authority": "Explicit new authority is required to remediate the two generated tracked-file mutations (or to allocate a fresh exact-base R2 worktree), followed by a fresh identity/base binding. The current R2 contract prohibits reconciling this contradiction.",
+    "handoff_prompt": "Continue only under fresh explicit authority. Rebind task identity/worktree/base/tree/remote. First independently inspect the two-path generated diff and decide whether exact restoration of AGENTS.md and CLAUDE.md is authorized; otherwise provision a fresh worktree at bb098b6e265a4b6cadc4b7ca908c8b6ccf59f2b9 / 688ae2860d99d6d5cf1019e0d3ba27c7cc26b6cc. Do not use the donor as a baseline or mutate protected checkouts. Reconfirm live remote target. Only then restart R2 pre-edit GitNexus analysis with an index-only/no-file-injection method or user-approved exception. Do not begin R3-R6, installation, or native evidence."
+  },
+  "preflight": {
+    "skill_suite": {
+      "source": "/Users/spensermcconnell/.codex/worktrees/eb49/substrate/.agents/skills",
+      "target": "/Users/spensermcconnell/.codex/worktrees/05f9/substrate/.agents/skills",
+      "skill_count": 25,
+      "file_count": 54,
+      "sha256": "e3de93f358594033ed59696a9624d2d0ac2fd0c2aa7ddf4a532810a05b262282",
+      "status": "verified"
+    },
+    "donor": {
+      "path": "/Users/spensermcconnell/.codex/worktrees/60cc/substrate",
+      "head": "d8a65fc8890dd37584aaeac2984c906188e5f06e",
+      "tree": "d8f25cc993f264f0c67fe3e00180eb393e41b2e3",
+      "working_binary_diff_sha256": "39682fd4415a00ae4099580135a687d3e11858f62f84e9ef6ff3771bafd4b54c",
+      "mac_test_sha256": "4ddc3cbb9758d84b2dd1529a6f9896d108934ac106ff4a197f134e869147b06c",
+      "installer_test_sha256": "2de2da832cbb38c1722d2075ffcef781d7bb9d23a76318cfd6d3b54fee0b0664"
+    },
+    "loaded_repository_local_skills": [
+      ".agents/skills/using-agent-skills/SKILL.md",
+      ".agents/skills/orchestrate-top-level-tasks/SKILL.md",
+      ".agents/skills/source-driven-development/SKILL.md",
+      ".agents/skills/test-driven-development/SKILL.md",
+      ".agents/skills/incremental-implementation/SKILL.md",
+      ".agents/skills/debugging-and-error-recovery/SKILL.md",
+      ".agents/skills/code-review-and-quality/SKILL.md",
+      ".agents/skills/security-and-hardening/SKILL.md",
+      ".agents/skills/git-workflow-and-versioning/SKILL.md"
+    ]
+  },
+  "next_increment": null
+}

@@ -1,0 +1,29 @@
+{
+  "protocol": "codex.orchestration-authority-amendment.v1",
+  "orchestration_id": "substrate-a1-1d-5r3-mac-20260806-41f97e1c570d",
+  "amendment_id": "0012-r2-gitnexus-generated-file-adjudication",
+  "authority_source": "explicit user direction that the generated AGENTS.md/CLAUDE.md contradiction is not a stop and may be adjudicated, together with standing meta authority for bounded GitNexus blockers",
+  "authorized_increment": "AUX-R3-MAC-EVIDENCE-RECOVERY-R2",
+  "retry_attempt": 2,
+  "dispatch_nonce": "7f33f40d8af93e12561b3b1e23fa38bfe3fca28e15c70f53caf6525dc85d68de",
+  "expected_base_commit": "bb098b6e265a4b6cadc4b7ca908c8b6ccf59f2b9",
+  "expected_base_tree": "688ae2860d99d6d5cf1019e0d3ba27c7cc26b6cc",
+  "target_ref": "refs/heads/feat/internal-host-orchestrator-world-dispatch-bootstrap",
+  "publication_mode": "remote",
+  "adjudication": {
+    "blocked_attempt_worktree": "/Users/spensermcconnell/.codex/worktrees/05f9/substrate",
+    "blocked_attempt_preserved_byte_for_byte": true,
+    "exact_generated_paths": [
+      "AGENTS.md",
+      "CLAUDE.md"
+    ],
+    "restoration_of_blocked_worktree_authorized": false,
+    "fresh_exact-base_worktree_required": true,
+    "npx_gitnexus_analyze_forbidden_in_retry": true,
+    "tracked_context_file_injection_forbidden": true,
+    "degraded_or_unknown_GitNexus_result_disposition": "record the tool result and complete manual exact-symbol/cfg/caller analysis; do not refresh by mutating repository files",
+    "scope_change": false
+  },
+  "scope": "retry the unchanged R2 contract only",
+  "terminal_successor": "AUX-R3-MAC-EVIDENCE-RECOVERY-R3"
+}
