@@ -1,0 +1,77 @@
+{
+  "protocol": "codex.top-level-task-receipt-verification.v1",
+  "orchestration_id": "substrate-a1-1d-5r3-mac-20260806-41f97e1c570d",
+  "increment": "AUX-R3-MAC-EVIDENCE-RECOVERY-R3",
+  "verified_at_utc": "2026-08-07T18:01:08Z",
+  "raw_receipt_path": "receipts/AUX-R3-MAC-EVIDENCE-RECOVERY-R3.raw.json",
+  "raw_receipt_sha256": "sha256:26ff968010ad1b5df7dbc0cdbb552486d212050eafd050428377e40632f5d14e",
+  "canonical_receipt_path": "receipts/AUX-R3-MAC-EVIDENCE-RECOVERY-R3.json",
+  "canonical_receipt_sha256": "sha256:4ab8c3bda9e2dbc7460bb9fc1e303dcf63c72e5889c8dc23efd31ab57b75fc20",
+  "schema_reconciliation": {
+    "raw_validate_receipt": "VALID_WITH_REPORT_FIELDS",
+    "canonical_validate_receipt": "VALID",
+    "canonical_jsonschema": "VALID",
+    "semantic_success_claim_changed": false
+  },
+  "correlation": {
+    "dispatch_nonce_match": true,
+    "increment_match": true,
+    "thread_id_match": true,
+    "host_id_match": true,
+    "expected_base_match": true,
+    "target_ref_match": true
+  },
+  "terminal_barrier": {
+    "thread_id": "019fdd57-3a7e-7dc3-922e-9125801393bc",
+    "host_id": "local",
+    "turn_id": "019fdd58-74f3-7921-abfe-f4fb5ffb6ee9",
+    "status": "completed",
+    "thread_status": "idle"
+  },
+  "publication": {
+    "mode": "remote",
+    "expected_base": "fc150213826b8b423f042b4591d6b8b1cb3ace20",
+    "expected_base_tree": "02217ad2dbd106ae5befc60c8de862b6f3864647",
+    "landed_commit": "b12cb6c6e2dc326b4150291ef30676171df34f58",
+    "landed_tree": "ddcd56b3a10b02cbe1a978e8522293a0b30e2dae",
+    "sole_parent": "fc150213826b8b423f042b4591d6b8b1cb3ace20",
+    "live_remote": "b12cb6c6e2dc326b4150291ef30676171df34f58",
+    "fast_forward": true,
+    "ahead": 0,
+    "behind": 0
+  },
+  "changed_files_exact": true,
+  "review": {
+    "record_sha256": "sha256:bd40da4bf3b97668b3245db2d8d46f4722e689411dc2bf4e1cc4a4ef14728fd1",
+    "validator": "VALID",
+    "terminal": "CLEAN",
+    "p1": 0,
+    "p2": 0,
+    "p3_p4_disposition": "none",
+    "subject_fingerprint_recomputed": "sha256:4389d61398923bee07fb9f67dce89b9744d5a5eb79444214cb15fca6128eb0df",
+    "subject_fingerprint_match": true,
+    "lens_sha256": {
+      "authority_security": "sha256:15d2ee71b8ce6da8d4865fee38db7d1662e536b4b587490b3857ed96896beb34",
+      "lifecycle_convergence": "sha256:b3c94c73fc9b7221a196d38468cce8d1d2130527bf8e7c329320b897886712c1",
+      "allowlist_evidence": "sha256:db5a303d2d4f5b570a6538d3dfe140c363c3122ede0f4077ea77aff25e97ad85"
+    }
+  },
+  "independent_checks": {
+    "task_head_match": true,
+    "task_tree_match": true,
+    "task_index_tree_match": true,
+    "task_worktree_clean": true,
+    "protected_checkout_tracked_clean": true,
+    "changed_files_match_receipt": true
+  },
+  "successor": {
+    "value": "AUX-R3-MAC-EVIDENCE-RECOVERY-R4",
+    "standing_authority_condition_satisfied": true
+  },
+  "task_preservation": {
+    "worktree": "/Users/spensermcconnell/.codex/worktrees/9afb/substrate",
+    "archived": false,
+    "preserved": true
+  },
+  "verdict": "ACCEPTED_LANDED_CLEAN"
+}

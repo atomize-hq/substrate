@@ -1,0 +1,67 @@
+{
+  "protocol": "codex.top-level-task-receipt.v1",
+  "orchestration_id": "substrate-a1-1d-5r3-mac-20260806-41f97e1c570d",
+  "dispatch_nonce": "436e79e59e5a06bdafa67f5b066c95934838835e4d127f57f4d8ec8ebadad3f3",
+  "increment": "AUX-R3-MAC-EVIDENCE-RECOVERY-R3",
+  "status": "LANDED_CLEAN",
+  "increment_task": {
+    "thread_id": "019fdd57-3a7e-7dc3-922e-9125801393bc",
+    "host_id": "local"
+  },
+  "expected_base": {
+    "commit": "fc150213826b8b423f042b4591d6b8b1cb3ace20",
+    "tree": "02217ad2dbd106ae5befc60c8de862b6f3864647"
+  },
+  "landed": {
+    "commit": "b12cb6c6e2dc326b4150291ef30676171df34f58",
+    "tree": "ddcd56b3a10b02cbe1a978e8522293a0b30e2dae",
+    "target_ref": "refs/heads/feat/internal-host-orchestrator-world-dispatch-bootstrap",
+    "live_remote": "b12cb6c6e2dc326b4150291ef30676171df34f58"
+  },
+  "subject_fingerprint": "sha256:4389d61398923bee07fb9f67dce89b9744d5a5eb79444214cb15fca6128eb0df",
+  "changed_files": [
+    "llm-last-mile/runtime-refactor/03-phase-slice-map.md",
+    "llm-last-mile/runtime-refactor/04-contracts-and-gates.md",
+    "llm-last-mile/runtime-refactor/05-debug-regression-ledger.md",
+    "llm-last-mile/runtime-refactor/review-control/r3-mac-evidence-recovery-r3-review-allowlist-evidence.md",
+    "llm-last-mile/runtime-refactor/review-control/r3-mac-evidence-recovery-r3-review-authority-security.md",
+    "llm-last-mile/runtime-refactor/review-control/r3-mac-evidence-recovery-r3-review-cycle-record.json",
+    "llm-last-mile/runtime-refactor/review-control/r3-mac-evidence-recovery-r3-review-lifecycle-convergence.md",
+    "scripts/ci/test_validate_r3_native_evidence.py",
+    "scripts/ci/validate_r3_native_evidence.py"
+  ],
+  "review": {
+    "packet_id": "AUX-R3-MAC-EVIDENCE-RECOVERY-R3",
+    "record_path": "/Users/spensermcconnell/.codex/worktrees/9afb/substrate/llm-last-mile/runtime-refactor/review-control/r3-mac-evidence-recovery-r3-review-cycle-record.json",
+    "record_sha256": "sha256:bd40da4bf3b97668b3245db2d8d46f4722e689411dc2bf4e1cc4a4ef14728fd1",
+    "validated": true,
+    "terminal": "CLEAN",
+    "p1": 0,
+    "p2": 0,
+    "p3_p4_disposition": "none"
+  },
+  "verification": {
+    "required_checks_passed": true,
+    "allowlist_passed": true,
+    "change_detection_passed": true,
+    "checkout_clean": true,
+    "ahead": 0,
+    "behind": 0
+  },
+  "checks": [
+    "python3 -m unittest -v scripts.ci.test_validate_r3_native_evidence",
+    "direct missing/mismatched/blank expected-product-project-id rejection",
+    "direct historical Linux static fixture validation with explicit historical project ID",
+    "python3 -m py_compile scripts/ci/validate_r3_native_evidence.py scripts/ci/test_validate_r3_native_evidence.py",
+    "validate_review_cycle.py",
+    "exact nine-path inventory and production/test symbol fence",
+    "recovery-current authoritative command flag check",
+    "changed-byte secret scan",
+    "git diff --check"
+  ],
+  "change_detection": {
+    "gitnexus": "LOW risk; 0 affected processes; manual exact nine-path fallback passed",
+    "manual": "only the authorized production/test/docs/review-control paths changed"
+  },
+  "next_increment": "AUX-R3-MAC-EVIDENCE-RECOVERY-R4"
+}

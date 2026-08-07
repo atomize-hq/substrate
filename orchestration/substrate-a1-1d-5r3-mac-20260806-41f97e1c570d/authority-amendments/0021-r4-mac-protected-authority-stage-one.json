@@ -1,0 +1,117 @@
+{
+  "protocol": "codex.orchestration-authority-amendment.v1",
+  "orchestration_id": "substrate-a1-1d-5r3-mac-20260806-41f97e1c570d",
+  "amendment_id": "0021-r4-mac-protected-authority-stage-one",
+  "authority_source": "standing successor authority in amendment 0011, activated by independently verified AUX-R3-MAC-EVIDENCE-RECOVERY-R3 LANDED_CLEAN with terminal review CLEAN",
+  "authorized_increment": "AUX-R3-MAC-EVIDENCE-RECOVERY-R4",
+  "dispatch_nonce": "f71d4838dead60f64a351dfc18b394d912949f589efbd94425d24c88a0eae981",
+  "expected_base_commit": "b12cb6c6e2dc326b4150291ef30676171df34f58",
+  "expected_base_tree": "ddcd56b3a10b02cbe1a978e8522293a0b30e2dae",
+  "target_ref": "refs/heads/feat/internal-host-orchestrator-world-dispatch-bootstrap",
+  "publication_mode": "remote",
+  "completion_claim": "the minimum System-Keychain P-256 XPC Stage-1 ticket and protected host-record foundation required by the existing MAC control pack exists without a channel protocol, mapped action, native state mutation, or raw caller operation",
+  "authorized_paths": [
+    "Cargo.toml",
+    "Cargo.lock",
+    "crates/common/src/lib.rs",
+    "crates/common/src/managed_artifact.rs",
+    "src/bin/substrate-lifecycle-macos.rs",
+    "tests/mac/lifecycle_r3.sh",
+    "llm-last-mile/runtime-refactor/review-control/r3-mac-evidence-recovery-r4-review-authority-security.md",
+    "llm-last-mile/runtime-refactor/review-control/r3-mac-evidence-recovery-r4-review-lifecycle-convergence.md",
+    "llm-last-mile/runtime-refactor/review-control/r3-mac-evidence-recovery-r4-review-allowlist-evidence.md",
+    "llm-last-mile/runtime-refactor/review-control/r3-mac-evidence-recovery-r4-review-cycle-record.json"
+  ],
+  "conditional_control_path": "llm-last-mile/runtime-refactor/06-review-finding-inventory.md only when a fresh reviewer reports a valid P3/P4 that the authoritative process requires to be tracked; it is never part of the implementation subject and creates no remediation cycle",
+  "support_closure_clarification": "Within the five production paths, minimum private constants, FFI declarations, serialization helpers, error adapters, and immediate private helper functions are authorized only when directly necessary for and reachable from a named R4 type/function. Record each in a path-and-symbol ledger. No generic request wrapper, new endpoint, channel/session abstraction, mapped action, caller-selected operation, or unrelated FFI family is authorized.",
+  "manifest_fence": {
+    "Cargo.toml": [
+      "root package dependency libc = \"0.2\"",
+      "root package dependency sha2 = { workspace = true }"
+    ],
+    "Cargo.lock": "only the corresponding libc and sha2 entries in the substrate package dependency list; no package version, checksum, feature, or other dependency edge may change"
+  },
+  "named_common_surface": [
+    "MacPublisherControlAuthorityV1",
+    "LimaStageOneAuthorizationV1",
+    "GuestPublisherPairingChallengeV1",
+    "GuestPublisherPairingTicketV1",
+    "GuestPublisherPairingHostRecordV1",
+    "their canonical encoders",
+    "validate_lifecycle_publisher_protected_state_v1",
+    "validate_guest_publisher_pairing_ticket_v1",
+    "exact SPKI P1363 expiry generation-CAS and replay helpers"
+  ],
+  "named_macos_surface": [
+    "open_system_keychain_protected_state_v1",
+    "compare_and_swap_mac_publisher_protected_state_v1",
+    "open_mac_lima_guest_pairing_stage_one_record_v1",
+    "validate_mac_lima_guest_pairing_stage_one_record_for_issue_v1",
+    "export_mac_p256_spki_der_v1",
+    "normalize_mac_p256_signature_p1363_low_s_v1",
+    "run_mac_xpc_publisher_v1",
+    "accept_mac_xpc_connection_v1",
+    "attest_mac_xpc_audit_token_v1",
+    "verify_mac_control_designated_requirement_v1",
+    "issue_lima_guest_pairing_ticket_v1"
+  ],
+  "required_ordering_and_negatives": [
+    "actual XPC peer audit token and designated requirement are admitted before any request bytes are decoded",
+    "System Keychain service is com.substrate.lifecycle.v1 and P-256 signing keys are non-exportable",
+    "SPKI DER and P1363 low-S representations are canonical and malformed or high-S input fails closed",
+    "Stage-1 record and mapping/source/artifact joins validate before ticket issue",
+    "expired, replayed, wrong-peer, wrong-requirement, wrong-PM, wrong-machine, wrong-source, wrong-artifact, and stale-generation inputs fail before effect",
+    "no ticket, channel, mapped lifecycle action, bootstrap effect, or native state action executes in tests"
+  ],
+  "donor_policy": {
+    "path": "/Users/spensermcconnell/.codex/worktrees/60cc/substrate",
+    "read_only": true,
+    "manual_selective_reimplementation_only": true,
+    "discard": [
+      "GuestPublisherPairingGuestChannelV1",
+      "GuestPublisherPairingStdioPhaseV1",
+      "GuestPublisherPairingStdioFrameV1",
+      "generic request wrappers",
+      "retirement prototype",
+      "raw lima-action",
+      "unrelated FFI bulk"
+    ]
+  },
+  "mac_only_policy": {
+    "source": "authority-amendments/0016-r3-mac-only-platform-proof.json",
+    "allowed_compile_targets": ["native arm64 macOS", "x86_64-apple-darwin when useful"],
+    "linux_or_windows_target_compilation": false,
+    "linux_or_windows_remediation": false,
+    "native_keychain_xpc_lima_or_install_action": false
+  },
+  "review": {
+    "process": "repository-defined causal cascading review",
+    "remediate": ["P1", "P2"],
+    "p3_p4": "record only; no remediation or review cycle",
+    "discovery": "one same-subject three-lens burst or one discovery review",
+    "closure": "one different fresh closure reviewer",
+    "supplemental_cycles_max": 2,
+    "supplemental_cause": "only P1/P2 directly caused or unmasked by the immediately preceding remediation under unchanged authority and risk",
+    "clean_terminal": true
+  },
+  "hard_exclusions": [
+    "R5 or R6 implementation",
+    "lima-stdio-v1 or any guest channel/session/frame type",
+    "mapped lifecycle submit or generic lifecycle action",
+    "guest command or direct helper action",
+    "raw XPC caller-selected operation",
+    "Windows or ordinary Linux host behavior",
+    "lima-lifecycle.sh or lima-warm.sh",
+    "installation, code signing, Keychain mutation, XPC service launch, Lima mutation, or native evidence",
+    "npx gitnexus analyze or tracked GitNexus context injection",
+    "bulk donor transplant or donor mutation"
+  ],
+  "workflow": {
+    "subagent_model": "gpt-5.6-terra",
+    "subagent_reasoning": "xhigh",
+    "hydrate_complete_repository_local_skill_suite": true,
+    "preserve_task_and_worktree": true,
+    "publication": "one normal fast-forward commit only after all compile/test/review gates are terminal CLEAN"
+  },
+  "terminal_successor": "AUX-R3-MAC-EVIDENCE-RECOVERY-R5"
+}
