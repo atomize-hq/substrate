@@ -1,0 +1,57 @@
+{
+  "protocol": "codex.orchestration-authority-amendment.v1",
+  "orchestration_id": "substrate-a1-1d-5r3-mac-20260806-41f97e1c570d",
+  "amendment_id": "0017-r2-managed-copy-retry-convergence",
+  "authority_source": "standing meta authority to remediate valid P1/P2 findings strictly inside the active R2 MAC-only packet, together with the user's standing instruction to continue bounded same-packet work in the existing task",
+  "authorized_increment": "AUX-R3-MAC-EVIDENCE-RECOVERY-R2",
+  "existing_task": {
+    "thread_id": "019fdcee-73e6-77a2-8a16-1d1c86223f9c",
+    "host_id": "local",
+    "worktree": "/Users/spensermcconnell/.codex/worktrees/bacb/substrate",
+    "original_dispatch_nonce": "7f33f40d8af93e12561b3b1e23fa38bfe3fca28e15c70f53caf6525dc85d68de",
+    "prior_continuation_nonce": "2248c338b9bfc2c0dcb702ea5828ab9674436c1fa3f02f740d6b817c897d779c",
+    "continuation_nonce": "ab5f7cbe656daeeec75e2e2e96d3f753f34ce266913c42088e7547e291dba1af",
+    "preserved_tracked_diff_sha256": "sha256:c24cd01ade9c201cc7cdfc801c1f3c28b445d58adc63247d8e64b96c44add835",
+    "preserved_untracked_test_sha256": "sha256:0a03fde502464ce62bb2e94cec65bd86d98c8117579f5a3ad758bcad4e03ddc3",
+    "review_record_sha256": "sha256:2863d377948976092c5f50971bc7e5e5b698ef86634396699294a892c1ab1ab7"
+  },
+  "trigger_finding": {
+    "id": "P2-R2-LIFECYCLE-001",
+    "source_cycle": "discovery-1",
+    "priority": "P2"
+  },
+  "authorized_paths": [
+    "scripts/substrate/dev-install-substrate.sh",
+    "tests/installers/dev_install_bash32_fd_regression.sh",
+    "llm-last-mile/runtime-refactor/review-control/r3-mac-evidence-recovery-r2-review-cycle-record.json",
+    "llm-last-mile/runtime-refactor/review-control/r3-mac-evidence-recovery-r2-review-lifecycle-convergence.md",
+    "llm-last-mile/runtime-refactor/review-control/r3-mac-evidence-recovery-r2-review-authority-security.md",
+    "llm-last-mile/runtime-refactor/review-control/r3-mac-evidence-recovery-r2-review-allowlist-evidence.md"
+  ],
+  "authorized_symbols": [
+    "stage_managed_mac_control_binary_copy",
+    "the existing two-binary MAC managed-copy call site",
+    "the existing installer regression fixture cases needed for injected failure and retry convergence"
+  ],
+  "required_behavior": [
+    "a copy or manifest failure must not strand an unmanifested destination that a retry treats as unmanaged",
+    "temporary binary and manifest artifacts are cleaned or remain safely recoverable",
+    "a failure on either member of the fixed two-binary pair must converge on retry to exactly both immutable binaries and exactly both manifest entries",
+    "unmanaged pre-existing destinations remain fail-closed and are never overwritten",
+    "the exact two named binaries, copy-not-link semantics, permissions, and MAC-only branch remain unchanged"
+  ],
+  "review_continuation": {
+    "kind": "discovery remediation followed by one fresh different closure review",
+    "supplemental_cycles": "at most two and only for P1/P2 directly caused or unmasked by the immediately preceding remediation",
+    "clean_terminal": true
+  },
+  "forbidden": [
+    "new product or test paths",
+    "Linux or Windows target work or behavior changes",
+    "R3/R4 implementation, lifecycle-macos compile closure, installation, native evidence",
+    "toolchain cache mutation",
+    "npx gitnexus analyze",
+    "commit or publication before terminal CLEAN"
+  ],
+  "terminal_successor": "AUX-R3-MAC-EVIDENCE-RECOVERY-R3"
+}

@@ -1,0 +1,38 @@
+{
+  "protocol": "codex.top-level-task-receipt-verification.v1",
+  "orchestration_id": "substrate-a1-1d-5r3-mac-20260806-41f97e1c570d",
+  "increment": "AUX-R3-MAC-EVIDENCE-RECOVERY-R2",
+  "attempt": 2,
+  "continuation_nonce": "2248c338b9bfc2c0dcb702ea5828ab9674436c1fa3f02f740d6b817c897d779c",
+  "verified_at_utc": "2026-08-07T17:16:22.064183Z",
+  "raw_receipt_path": "receipts/AUX-R3-MAC-EVIDENCE-RECOVERY-R2.attempt-2.continuation-0016.blocked.json",
+  "raw_receipt_sha256": "sha256:2305dc5d637119a9f6e94163d9f80d3930d404ce43a434c8048c23831ff15a5e",
+  "canonical_receipt_path": "receipts/AUX-R3-MAC-EVIDENCE-RECOVERY-R2.attempt-2.continuation-0016.blocked.canonical.json",
+  "canonical_receipt_sha256": "sha256:6bc27ea5f9bbb45b6cfca1b2d5f5326714099015c5e87e827ebefd3731d79d41",
+  "terminal_barrier": {
+    "thread_id": "019fdcee-73e6-77a2-8a16-1d1c86223f9c",
+    "host_id": "local",
+    "turn_id": "019fdd2b-28ce-73b3-95bd-f0e36795ae07",
+    "status": "completed",
+    "thread_status": "idle"
+  },
+  "independent_observation": {
+    "head": "bb098b6e265a4b6cadc4b7ca908c8b6ccf59f2b9",
+    "head_tree": "688ae2860d99d6d5cf1019e0d3ba27c7cc26b6cc",
+    "index_tree": "688ae2860d99d6d5cf1019e0d3ba27c7cc26b6cc",
+    "live_remote": "bb098b6e265a4b6cadc4b7ca908c8b6ccf59f2b9",
+    "staged_paths": 0,
+    "status_entry_count": 14,
+    "tracked_binary_diff_sha256": "sha256:c24cd01ade9c201cc7cdfc801c1f3c28b445d58adc63247d8e64b96c44add835",
+    "untracked_compile_test_sha256": "sha256:0a03fde502464ce62bb2e94cec65bd86d98c8117579f5a3ad758bcad4e03ddc3",
+    "review_record_sha256": "sha256:2863d377948976092c5f50971bc7e5e5b698ef86634396699294a892c1ab1ab7"
+  },
+  "review_validation": {
+    "status": "bounded_stop",
+    "valid_p2": [
+      "P2-R2-LIFECYCLE-001"
+    ],
+    "publication_prohibited": true
+  },
+  "verdict": "ACCEPTED_NON_ADVANCING_BLOCK"
+}

@@ -1,0 +1,22 @@
+{
+  "protocol": "codex.top-level-task-receipt.v1",
+  "orchestration_id": "substrate-a1-1d-5r3-mac-20260806-41f97e1c570d",
+  "dispatch_nonce": "7f33f40d8af93e12561b3b1e23fa38bfe3fca28e15c70f53caf6525dc85d68de",
+  "increment": "AUX-R3-MAC-EVIDENCE-RECOVERY-R2",
+  "status": "BLOCKED_SCOPE_EXPANSION",
+  "increment_task": {
+    "thread_id": "019fdcee-73e6-77a2-8a16-1d1c86223f9c",
+    "host_id": "local"
+  },
+  "expected_base": {
+    "commit": "bb098b6e265a4b6cadc4b7ca908c8b6ccf59f2b9",
+    "tree": "688ae2860d99d6d5cf1019e0d3ba27c7cc26b6cc"
+  },
+  "blocker": {
+    "summary": "Fresh R2 discovery review found one valid P2 in managed MAC binary/manifest retry convergence.",
+    "details": "All MAC-only deterministic checks passed. P2-R2-LIFECYCLE-001 shows that binary publication before durable manifest state can strand an unmanaged destination or partial pair. The preserved subject is unstaged and unpublished.",
+    "required_authority": "Grant bounded R2 MAC-only remediation in the existing installer managed-copy helper/call site and installer regression fixture, then run fresh closure review.",
+    "handoff_prompt": "Preserve the same worktree and review record. Do not begin R3/R4 or widen beyond the exact P2 remediation."
+  },
+  "next_increment": "AUX-R3-MAC-EVIDENCE-RECOVERY-R3"
+}
