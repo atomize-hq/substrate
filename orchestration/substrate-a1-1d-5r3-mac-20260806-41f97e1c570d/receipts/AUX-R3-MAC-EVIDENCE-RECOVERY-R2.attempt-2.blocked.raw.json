@@ -1,0 +1,55 @@
+{
+  "reported_protocol_line": "codex.top-level-task-receipt.v1",
+  "status": "BLOCKED_SCOPE_EXPANSION",
+  "increment": "AUX-R3-MAC-EVIDENCE-RECOVERY-R2",
+  "packet_id": "AUX-R3-MAC-EVIDENCE-RECOVERY-R2",
+  "attempt": 2,
+  "orchestration_id": "substrate-a1-1d-5r3-mac-20260806-41f97e1c570d",
+  "dispatch_nonce": "7f33f40d8af93e12561b3b1e23fa38bfe3fca28e15c70f53caf6525dc85d68de",
+  "increment_task": {
+    "thread_id": "019fdcee-73e6-77a2-8a16-1d1c86223f9c",
+    "host_id": "local"
+  },
+  "expected_base": {
+    "commit": "bb098b6e265a4b6cadc4b7ca908c8b6ccf59f2b9",
+    "tree": "688ae2860d99d6d5cf1019e0d3ba27c7cc26b6cc"
+  },
+  "publication": {
+    "mode": "remote",
+    "target": "refs/heads/feat/internal-host-orchestrator-world-dispatch-bootstrap",
+    "live_target_before_stop": "bb098b6e265a4b6cadc4b7ca908c8b6ccf59f2b9",
+    "performed": false,
+    "commit": null,
+    "push": null
+  },
+  "blocking_gate": {
+    "name": "required macOS lifecycle-binary compile surface",
+    "command": "bash tests/mac/dev_install_compile_surface_r3.sh",
+    "result": "failed (exit 101)",
+    "evidence": [
+      "src/bin/substrate-lifecycle-macos.rs:10: unresolved import sha2",
+      "src/bin/substrate-lifecycle-macos.rs:1013: AuditTokenV1 not found; its definition is private in crates/shell/src/execution/platform/macos.rs",
+      "src/bin/substrate-lifecycle-macos.rs:796 and :817: pointer .cast type inference errors"
+    ],
+    "scope_contradiction": "The R2 check reaches frozen lifecycle-macos/Cargo/API surfaces owned by R4."
+  },
+  "current_preserved_worktree": {
+    "worktree": "/Users/spensermcconnell/.codex/worktrees/bacb/substrate",
+    "staged": false,
+    "clean": false,
+    "paths": [
+      "crates/shell/src/builtins/world_deps/mod.rs",
+      "crates/shell/src/execution/agent_runtime/mod.rs",
+      "crates/shell/src/execution/agent_runtime/state_store.rs",
+      "crates/shell/src/execution/managed_lifecycle/linux_client.rs",
+      "crates/shell/src/execution/orchestrator_world_dispatch.rs",
+      "crates/shell/src/execution/platform/macos.rs",
+      "crates/shell/src/repl/async_repl.rs",
+      "scripts/substrate/dev-install-substrate.sh",
+      "tests/installers/dev_install_bash32_fd_regression.sh",
+      "tests/mac/dev_install_compile_surface_r3.sh"
+    ]
+  },
+  "required_authority_to_continue": "Correct the R2/R4 compile-gate ownership contradiction and dispatch a fresh exact-base R2 retry.",
+  "handoff": "Preserve the bacb worktree exactly; use a fresh exact-base worktree and do not begin R3."
+}

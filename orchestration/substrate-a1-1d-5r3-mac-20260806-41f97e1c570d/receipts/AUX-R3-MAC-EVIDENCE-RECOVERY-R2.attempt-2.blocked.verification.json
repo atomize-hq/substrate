@@ -1,0 +1,42 @@
+{
+  "protocol": "codex.top-level-task-receipt-verification.v1",
+  "orchestration_id": "substrate-a1-1d-5r3-mac-20260806-41f97e1c570d",
+  "increment": "AUX-R3-MAC-EVIDENCE-RECOVERY-R2",
+  "attempt": 2,
+  "verified_at_utc": "2026-08-07T16:09:45Z",
+  "raw_receipt_path": "receipts/AUX-R3-MAC-EVIDENCE-RECOVERY-R2.attempt-2.blocked.raw.json",
+  "raw_receipt_sha256": "sha256:2ee7f79035bf5c8924ad1f0b004c16658d685580965b3dfa60d016625bf046a8",
+  "canonical_receipt_path": "receipts/AUX-R3-MAC-EVIDENCE-RECOVERY-R2.attempt-2.blocked.json",
+  "canonical_receipt_sha256": "sha256:1bb19d707e9341057b211d56c6e6c5c3e4cc5c33dc9dd82156c3fd2867cbe43f",
+  "schema_reconciliation": {
+    "added_protocol_from_separate_receipt_header": true,
+    "mapped_extended_fields_to_blocker": true,
+    "canonical_validate_receipt": "VALID",
+    "canonical_jsonschema": "VALID"
+  },
+  "terminal_barrier": {
+    "thread_id": "019fdcee-73e6-77a2-8a16-1d1c86223f9c",
+    "host_id": "local",
+    "turn_id": "019fdcef-3f80-70b1-a6ea-61133b555792",
+    "status": "completed",
+    "thread_status": "idle"
+  },
+  "independent_observation": {
+    "worktree": "/Users/spensermcconnell/.codex/worktrees/bacb/substrate",
+    "head": "bb098b6e265a4b6cadc4b7ca908c8b6ccf59f2b9",
+    "head_tree": "688ae2860d99d6d5cf1019e0d3ba27c7cc26b6cc",
+    "index_tree": "688ae2860d99d6d5cf1019e0d3ba27c7cc26b6cc",
+    "live_remote": "bb098b6e265a4b6cadc4b7ca908c8b6ccf59f2b9",
+    "staged_paths": 0,
+    "status_entry_count": 10,
+    "tracked_binary_diff_sha256": "sha256:200f5e0563ce1af63625d0ed33822520d96f9dcadedee6b32a7b843fdfd314f2",
+    "untracked_compile_test_sha256": "sha256:6f926b83ce7263f0950ecdd98d451a85f80a2a496cb98e31503ce07954255781",
+    "forbidden_hashes_unchanged": true
+  },
+  "adjudication": "R2 owns cfg admission and installer source shape, not completion of the frozen lifecycle-macos authority implementation. Actual lifecycle-macos compile is deferred as a mandatory R4 gate; R2 must not weaken or repair it.",
+  "task_preservation": {
+    "worktree_preserved": true,
+    "archived": false
+  },
+  "verdict": "ACCEPTED_NON_ADVANCING_BLOCK"
+}

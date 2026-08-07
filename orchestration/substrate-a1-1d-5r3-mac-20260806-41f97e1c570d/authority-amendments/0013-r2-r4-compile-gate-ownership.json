@@ -1,0 +1,39 @@
+{
+  "protocol": "codex.orchestration-authority-amendment.v1",
+  "orchestration_id": "substrate-a1-1d-5r3-mac-20260806-41f97e1c570d",
+  "amendment_id": "0013-r2-r4-compile-gate-ownership",
+  "authority_source": "standing meta authority to adjudicate bounded MAC packet-fence and proof-gate contradictions without user interruption",
+  "authorized_increment": "AUX-R3-MAC-EVIDENCE-RECOVERY-R2",
+  "retry_attempt": 3,
+  "dispatch_nonce": "39ae4ba470520f8a9267e1dc628c36299820b612a3f6ef5e0606b3d767b86a86",
+  "expected_base_commit": "bb098b6e265a4b6cadc4b7ca908c8b6ccf59f2b9",
+  "expected_base_tree": "688ae2860d99d6d5cf1019e0d3ba27c7cc26b6cc",
+  "target_ref": "refs/heads/feat/internal-host-orchestrator-world-dispatch-bootstrap",
+  "publication_mode": "remote",
+  "adjudication": {
+    "r2_owns": [
+      "named shell macOS cfg admissions",
+      "installer BUILD_FLAGS and fixed managed-copy source shape",
+      "non-native/source-shape regression for exactly two lifecycle binaries"
+    ],
+    "r2_does_not_own": [
+      "src/bin/substrate-lifecycle-macos.rs",
+      "Cargo.toml/Cargo.lock lifecycle-macos dependencies",
+      "AuditToken/API/FFI compile closure"
+    ],
+    "corrected_r2_compile_gate": [
+      "native and x86_64-apple-darwin shell/library/ordinary host-binary compile for the named cfg leaves",
+      "source-shape assertions that the installer names and fixed-copies substrate-lifecycle-control and substrate-lifecycle-macos",
+      "do not compile substrate-lifecycle-macos under R2"
+    ],
+    "deferred_mandatory_r4_gate": "R4 must compile substrate-lifecycle-macos after landing its authorized Cargo/Keychain/XPC/Stage-1 source surface and may not claim CLEAN without resolving sha2, AuditToken, and pointer-cast closure",
+    "scope_change": false
+  },
+  "preservation": {
+    "attempt_2_worktree": "/Users/spensermcconnell/.codex/worktrees/bacb/substrate",
+    "tracked_diff_sha256": "sha256:200f5e0563ce1af63625d0ed33822520d96f9dcadedee6b32a7b843fdfd314f2",
+    "untracked_compile_test_sha256": "sha256:6f926b83ce7263f0950ecdd98d451a85f80a2a496cb98e31503ce07954255781",
+    "mutation_authorized": false
+  },
+  "terminal_successor": "AUX-R3-MAC-EVIDENCE-RECOVERY-R3"
+}

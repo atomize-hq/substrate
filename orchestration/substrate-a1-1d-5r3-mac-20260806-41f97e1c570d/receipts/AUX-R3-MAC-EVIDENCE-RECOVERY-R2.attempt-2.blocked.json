@@ -1,0 +1,21 @@
+{
+  "protocol": "codex.top-level-task-receipt.v1",
+  "orchestration_id": "substrate-a1-1d-5r3-mac-20260806-41f97e1c570d",
+  "dispatch_nonce": "7f33f40d8af93e12561b3b1e23fa38bfe3fca28e15c70f53caf6525dc85d68de",
+  "increment": "AUX-R3-MAC-EVIDENCE-RECOVERY-R2",
+  "status": "BLOCKED_SCOPE_EXPANSION",
+  "increment_task": {
+    "thread_id": "019fdcee-73e6-77a2-8a16-1d1c86223f9c",
+    "host_id": "local"
+  },
+  "expected_base": {
+    "commit": "bb098b6e265a4b6cadc4b7ca908c8b6ccf59f2b9",
+    "tree": "688ae2860d99d6d5cf1019e0d3ba27c7cc26b6cc"
+  },
+  "blocker": {
+    "summary": "The required R2 compile-surface check reaches lifecycle-macos/Cargo/API surfaces owned and frozen until R4.",
+    "details": "After completing only permitted R2 cfg/build-surface changes, bash tests/mac/dev_install_compile_surface_r3.sh reached substrate-lifecycle-macos and failed on missing package sha2, inaccessible AuditTokenV1, and pointer cast inference. Fixing those under R2 would change frozen lifecycle source, manifest/lockfile, or API surfaces. No review, commit, push, native action, or R3 dispatch occurred. The ten-path partial R2 worktree is preserved unstaged.",
+    "required_authority": "Adjudicate the packet sequencing contradiction by limiting R2 compile proof to its shell/macOS cfg and installer source-shape ownership and deferring actual substrate-lifecycle-macos compilation to R4, then dispatch a fresh R2 retry.",
+    "handoff_prompt": "Preserve /Users/spensermcconnell/.codex/worktrees/bacb/substrate exactly. Dispatch a fresh exact-base R2 task with the corrected compile gate, retain every other R2 fence, and bind the deferred lifecycle-macos compile closure to R4. Do not begin R3 until R2 lands CLEAN."
+  }
+}
