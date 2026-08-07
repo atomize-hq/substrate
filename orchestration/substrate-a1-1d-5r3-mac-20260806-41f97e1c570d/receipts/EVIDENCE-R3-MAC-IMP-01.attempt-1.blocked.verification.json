@@ -1,0 +1,53 @@
+{
+  "protocol": "codex.top-level-evidence-block-verification.v1",
+  "orchestration_id": "substrate-a1-1d-5r3-mac-20260806-41f97e1c570d",
+  "evidence_id": "EVIDENCE:R3-MAC-IMP-01",
+  "status": "BLOCKED_PLATFORM_HANDOFF_REQUIRED",
+  "verified": true,
+  "verified_at_utc": "2026-08-07T00:54:00Z",
+  "correlation": {
+    "dispatch_nonce": "1669f74ede86799f7097bf2a2317d1b5f44f535bf0fa10171d500cfe4cf4e3a4",
+    "thread_id": "019fd9ad-3edc-7c52-b107-ecc814f1c97d",
+    "host_id": "local",
+    "project_id": "local-b2016f8a311fef93149e42eaec4d704d",
+    "project_path": "/Users/spensermcconnell/__Active_Code/atomize-hq/substrate"
+  },
+  "terminal_barrier": {
+    "thread_status": "idle",
+    "turn_id": "019fd9ae-656f-7702-a308-10c42e2ea17c",
+    "turn_status": "completed",
+    "turn_error": null
+  },
+  "source": {
+    "commit": "d8a65fc8890dd37584aaeac2984c906188e5f06e",
+    "tree": "d8f25cc993f264f0c67fe3e00180eb393e41b2e3",
+    "target_ref": "refs/heads/feat/internal-host-orchestrator-world-dispatch-bootstrap",
+    "live_remote": "d8a65fc8890dd37584aaeac2984c906188e5f06e",
+    "evidence_worktree_clean": true,
+    "protected_checkout_clean": true
+  },
+  "receipt": {
+    "path": "receipts/EVIDENCE-R3-MAC-IMP-01.attempt-1.blocked.json",
+    "sha256": "sha256:576921919eff7ddc58651fddfca5fe66f30e595449000c4cb2a6df58f9a2f2fb",
+    "structurally_valid": true
+  },
+  "artifact": {
+    "path": "/Users/spensermcconnell/.codex/evidence/substrate-a1-1d-5r3-mac-20260806-41f97e1c570d/EVIDENCE-R3-MAC-IMP-01/1669f74ede86799f7097bf2a2317d1b5f44f535bf0fa10171d500cfe4cf4e3a4/r3-mac-imp-01-evidence.json",
+    "sha256": "sha256:a7f5cb9de26b97d7cccd136f467067b011f31a4abab48fb0333b7073781f9483",
+    "validator_result": "VALID",
+    "result_status": "BLOCKED_PLATFORM_HANDOFF_REQUIRED",
+    "restoration_exact": true,
+    "native_evidence_satisfied": false
+  },
+  "blocker": {
+    "summary": "The required live human host-and-guest controlling-TTY pairing boundary was unavailable, and exact IH/PM bytes were not bound.",
+    "required_authority": "Fresh nonce-bound EVIDENCE:R3-MAC-IMP-01 dispatch with exact IH/PM and a live human operator using two independent controlling TTYs."
+  },
+  "disposition": {
+    "advance": false,
+    "mac_closeout_authorized": false,
+    "task_archived": false,
+    "worktree_preserved": true,
+    "worktree": "/Users/spensermcconnell/.codex/worktrees/2fdb/substrate"
+  }
+}

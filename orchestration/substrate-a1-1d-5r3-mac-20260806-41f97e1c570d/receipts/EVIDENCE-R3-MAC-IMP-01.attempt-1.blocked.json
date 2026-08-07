@@ -1,0 +1,46 @@
+{
+  "protocol": "codex.top-level-evidence-receipt.v1",
+  "orchestration_id": "substrate-a1-1d-5r3-mac-20260806-41f97e1c570d",
+  "dispatch_nonce": "1669f74ede86799f7097bf2a2317d1b5f44f535bf0fa10171d500cfe4cf4e3a4",
+  "evidence_id": "EVIDENCE:R3-MAC-IMP-01",
+  "status": "BLOCKED_PLATFORM_HANDOFF_REQUIRED",
+  "platform": "macos",
+  "evidence_task": {
+    "thread_id": "019fd9ad-3edc-7c52-b107-ecc814f1c97d",
+    "host_id": "local"
+  },
+  "source": {
+    "publication_mode": "remote",
+    "commit": "d8a65fc8890dd37584aaeac2984c906188e5f06e",
+    "tree": "d8f25cc993f264f0c67fe3e00180eb393e41b2e3",
+    "target_ref": "refs/heads/feat/internal-host-orchestrator-world-dispatch-bootstrap",
+    "live_remote": "d8a65fc8890dd37584aaeac2984c906188e5f06e"
+  },
+  "environment": {
+    "host_id": "local",
+    "project_id": "local-b2016f8a311fef93149e42eaec4d704d",
+    "project_path": "/Users/spensermcconnell/__Active_Code/atomize-hq/substrate",
+    "os_version": "macOS 15.7.7 (24G720) arm64",
+    "tool_versions": {
+      "python": "3.11.9",
+      "cargo": "1.89.0",
+      "rustc": "1.89.0",
+      "git": "2.39.5",
+      "limactl": "2.1.1",
+      "ssh": "OpenSSH_9.9p2"
+    }
+  },
+  "prohibited_actions_confirmed": true,
+  "checkout_unchanged": true,
+  "blocker": {
+    "summary": "Required live human pairing TTY boundary is unavailable; exact IH/PM scope is not bound.",
+    "details": "Read-only preflight confirmed macOS 15.7.7 arm64, limactl 2.1.1, OpenSSH 9.9p2, a running but deliberately unselected Lima instance, exact remote-equal source checkout, and unchanged post-preflight source/saved-project/Lima/LaunchDaemon/System-Keychain observations. The task itself has no controlling TTY (command 9); no live independent host/guest controlling TTY confirmation was available. No exact InstallBootstrapContextV1 or PlatformBootstrapMappingV1 bytes were provided, so the contract prohibited choosing a default/ambient candidate or entering the guest. No build, code-signing, host/guest mutation, socket/known-host action, pairing, bootstrap, probe, retirement, repository mutation, or publication ran.",
+    "required_authority": "Provide a fresh nonce-bound native evidence environment with verified exact IH/PM and a live human operator who can perform the independent host-and-guest controlling-TTY literal pairing confirmation before any MAC lifecycle action.",
+    "handoff_prompt": "Continue only as a new EVIDENCE:R3-MAC-IMP-01 task at origin refs/heads/feat/internal-host-orchestrator-world-dispatch-bootstrap = d8a65fc8890dd37584aaeac2984c906188e5f06e / d8f25cc993f264f0c67fe3e00180eb393e41b2e3. Discover local project local-b2016f8a311fef93149e42eaec4d704d at /Users/spensermcconnell/__Active_Code/atomize-hq/substrate, hydrate/verify the local skill, validate IH/PM without ambient/default selection, and obtain the required two live controlling TTYs for literal full fingerprint/challenge confirmation. Then perform the contract-defined external ExecutorBuildEvidenceV1 build, baseline, guest atomic-intent probe, MAC-only lifecycle/publisher/pairing/retirement/restoration proof, artifact validation, and receipt validation. Do not use this blocked artifact as native evidence or dispatch MAC-CLOSEOUT.",
+    "artifact_path": "/Users/spensermcconnell/.codex/evidence/substrate-a1-1d-5r3-mac-20260806-41f97e1c570d/EVIDENCE-R3-MAC-IMP-01/1669f74ede86799f7097bf2a2317d1b5f44f535bf0fa10171d500cfe4cf4e3a4/r3-mac-imp-01-evidence.json",
+    "artifact_sha256": "sha256:a7f5cb9de26b97d7cccd136f467067b011f31a4abab48fb0333b7073781f9483",
+    "satisfied_gates": [],
+    "gated_successor": "AUTHORITY_REQUIRED:A1.1d-5R3-MAC-CLOSEOUT",
+    "restoration_exact": true
+  }
+}
