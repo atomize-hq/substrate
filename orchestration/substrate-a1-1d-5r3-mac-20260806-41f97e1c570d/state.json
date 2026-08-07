@@ -54,7 +54,8 @@
     "binding_path": "increments/AUX-R3-MAC-EVIDENCE-RECOVERY-R2.retry-1.binding.json",
     "skill_hydration_path": "increments/AUX-R3-MAC-EVIDENCE-RECOVERY-R2.retry-1.skill-hydration.json",
     "model": "gpt-5.6-terra",
-    "reasoning": "xhigh"
+    "reasoning": "xhigh",
+    "binding_sent_at_utc": "2026-08-07T15:55:03Z"
   },
   "active_evidence_dispatches": [],
   "verified_evidence": [],
@@ -295,7 +296,7 @@
     "skill_hydration_path": "increments/AUX-R3-MAC-EVIDENCE-RECOVERY-R2.retry-1.skill-hydration.json",
     "model": "gpt-5.6-terra",
     "reasoning": "xhigh",
-    "binding_sent_at_utc": "2026-08-07T15:45:58Z",
+    "binding_sent_at_utc": "2026-08-07T15:55:03Z",
     "receipt_path": "receipts/AUX-R3-MAC-EVIDENCE-RECOVERY-R1.json",
     "receipt_sha256": "sha256:d05441caa0ece70485b407e9d052e69a71748078d9727f860cf99746007d1222",
     "verification_path": "receipts/AUX-R3-MAC-EVIDENCE-RECOVERY-R1.verification.json",
