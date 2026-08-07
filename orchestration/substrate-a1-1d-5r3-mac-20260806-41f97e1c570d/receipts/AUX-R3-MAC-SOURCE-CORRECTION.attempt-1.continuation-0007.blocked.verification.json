@@ -1,0 +1,28 @@
+{
+  "protocol": "codex.meta-receipt-verification.v1",
+  "orchestration_id": "substrate-a1-1d-5r3-mac-20260806-41f97e1c570d",
+  "verified_at_utc": "2026-08-07T04:12:09Z",
+  "receipt": "receipts/AUX-R3-MAC-SOURCE-CORRECTION.attempt-1.continuation-0007.blocked.json",
+  "accepted_as": "non-advancing blocked preservation checkpoint",
+  "task_terminal_before_scope_freeze_followup": true,
+  "task_status_observed": "idle",
+  "task_turn_status_observed": "completed",
+  "head": "d8a65fc8890dd37584aaeac2984c906188e5f06e",
+  "head_tree": "d8f25cc993f264f0c67fe3e00180eb393e41b2e3",
+  "tracked_diff_sha256": "sha256:39682fd4415a00ae4099580135a687d3e11858f62f84e9ef6ff3771bafd4b54c",
+  "tracked_changed_path_count": 26,
+  "worktree_status_entry_count": 28,
+  "staged_path_count": 0,
+  "untracked_sha256": {
+    "tests/installers/dev_install_bash32_fd_regression.sh": "sha256:2de2da832cbb38c1722d2075ffcef781d7bb9d23a76318cfd6d3b54fee0b0664",
+    "tests/mac/dev_install_compile_surface_r3.sh": "sha256:4ddc3cbb9758d84b2dd1529a6f9896d108934ac106ff4a197f134e869147b06c"
+  },
+  "live_remote": "d8a65fc8890dd37584aaeac2984c906188e5f06e",
+  "live_remote_equals_original_base": true,
+  "protected_checkout_clean": true,
+  "commit_created": false,
+  "push_performed": false,
+  "worktree_preserved": true,
+  "advance": false,
+  "scope_freeze_followup": "authority-amendments/0008-r3-mac-source-correction-scope-freeze.json"
+}

@@ -1,0 +1,133 @@
+{
+  "protocol": "codex.auxiliary-source-correction-receipt.v1",
+  "status": "BLOCKED",
+  "task": {
+    "thread_id": "019fd9fe-670c-7253-bf60-86f78cd373b5",
+    "host_id": "local",
+    "worktree": "/Users/spensermcconnell/.codex/worktrees/60cc/substrate",
+    "continuation_nonce": "e347bf1023f0193e5cfe204e86df65f0f9cb688cd554fb4d46f28479e49dc9a2",
+    "original_dispatch_nonce": "d7c49c63813094f35052883eb0a2964d28ce2df44d2c422664ea69c7c5f7072c"
+  },
+  "base": {
+    "commit": "d8a65fc8890dd37584aaeac2984c906188e5f06e",
+    "tree": "d8f25cc993f264f0c67fe3e00180eb393e41b2e3",
+    "head": "d8a65fc8890dd37584aaeac2984c906188e5f06e",
+    "head_tree": "d8f25cc993f264f0c67fe3e00180eb393e41b2e3"
+  },
+  "subject": {
+    "preserved": true,
+    "staged_paths": 0,
+    "tracked_changed_paths": 26,
+    "untracked_paths": [
+      "tests/installers/dev_install_bash32_fd_regression.sh",
+      "tests/mac/dev_install_compile_surface_r3.sh"
+    ],
+    "tracked_diff_sha256": "sha256:39682fd4415a00ae4099580135a687d3e11858f62f84e9ef6ff3771bafd4b54c",
+    "untracked_sha256": {
+      "tests/installers/dev_install_bash32_fd_regression.sh": "sha256:2de2da832cbb38c1722d2075ffcef781d7bb9d23a76318cfd6d3b54fee0b0664",
+      "tests/mac/dev_install_compile_surface_r3.sh": "sha256:4ddc3cbb9758d84b2dd1529a6f9896d108934ac106ff4a197f134e869147b06c"
+    },
+    "files": [
+      "Cargo.lock",
+      "Cargo.toml",
+      "crates/common/src/lib.rs",
+      "crates/common/src/managed_artifact.rs",
+      "crates/shell/src/builtins/world_deps/mod.rs",
+      "crates/shell/src/execution/agent_runtime/mod.rs",
+      "crates/shell/src/execution/agent_runtime/state_store.rs",
+      "crates/shell/src/execution/managed_lifecycle.rs",
+      "crates/shell/src/execution/managed_lifecycle/linux_client.rs",
+      "crates/shell/src/execution/managed_lifecycle/macos_client.rs",
+      "crates/shell/src/execution/managed_lifecycle/windows_client.rs",
+      "crates/shell/src/execution/orchestrator_world_dispatch.rs",
+      "crates/shell/src/execution/platform/macos.rs",
+      "crates/shell/src/repl/async_repl.rs",
+      "crates/shell/tests/managed_lifecycle_v1.rs",
+      "llm-last-mile/runtime-refactor/03-phase-slice-map.md",
+      "llm-last-mile/runtime-refactor/04-contracts-and-gates.md",
+      "llm-last-mile/runtime-refactor/05-debug-regression-ledger.md",
+      "scripts/ci/test_validate_r3_native_evidence.py",
+      "scripts/ci/validate_r3_native_evidence.py",
+      "scripts/mac/lima-lifecycle.sh",
+      "scripts/substrate/dev-install-substrate.sh",
+      "src/bin/substrate-lifecycle-control.rs",
+      "src/bin/substrate-lifecycle-linux.rs",
+      "src/bin/substrate-lifecycle-macos.rs",
+      "tests/mac/lifecycle_r3.sh",
+      "tests/installers/dev_install_bash32_fd_regression.sh",
+      "tests/mac/dev_install_compile_surface_r3.sh"
+    ]
+  },
+  "blocker_dispositions": {
+    "bash_3_2_fd": "FIXED_AND_ISOLATED_TESTED: canonical dev install completed in a temporary prefix under /bin/bash 3.2; argv/environment/caller-FD regression passed.",
+    "shell_compile_errors": "FIXED_AND_TESTED: mac compile-surface regression now includes substrate-lifecycle-control and substrate-lifecycle-macos; focused checks passed.",
+    "validator_project_id": "FIXED_AND_TESTED: caller-supplied expected project ID is mandatory; historical Linux fixture remains accepted with its historical expected ID.",
+    "signed_ticket_issuer": "NOT_CLEAN: typed Keychain/XPC/P-256/CAS/revocation code was implemented and static/focused checks pass, but the required complete MAC guest pairing protocol cannot run safely under the retained fixed transport."
+  },
+  "unresolved_p1": [
+    {
+      "id": "R3-MAC-PAIRING-TRANSPORT-TTY",
+      "evidence": [
+        "llm-last-mile/runtime-refactor/04-contracts-and-gates.md:9382-9389 requires a guest tty independent of stdin/stdout and forbids confirmation over the child channel.",
+        "src/bin/substrate-lifecycle-linux.rs uses the sole retained stdio stream for Begin/Hello/Transcript/Anchor; its tty routine aliases stdin when tty-backed.",
+        "limactl 2.1.1 shell --help exposes only one shell stream and --tty toggle, with no separate authenticated data/tty primitive."
+      ],
+      "disposition": "Fail closed before ticket issue; no alternate SSH/direct-TCP/Unix transport, selector, principal, or confirmation bypass was added."
+    },
+    {
+      "id": "R3-MAC-MAPPED-LIFECYCLE-DISPATCH",
+      "evidence": [
+        "scripts/mac/lima-lifecycle.sh invokes the helper with lima-action.",
+        "src/bin/substrate-lifecycle-macos.rs rejects lima-action after the XPC hardening, while scripts/mac/lima-warm.sh reaches that wrapper."
+      ],
+      "disposition": "Closure review P1; safely fails rather than restoring the raw privileged-helper bypass. A trusted mapped submit/bootstrap bridge is absent."
+    }
+  ],
+  "validation": {
+    "passed": [
+      "tests/installers/dev_install_bash32_fd_regression.sh",
+      "tests/mac/dev_install_compile_surface_r3.sh",
+      "python3 -m unittest scripts.ci.test_validate_r3_native_evidence",
+      "cargo test -p substrate-common --lib managed_artifact --no-fail-fast (28 passed)",
+      "cargo test -p shell --test managed_lifecycle_v1 -- --nocapture (14 passed)",
+      "cargo test -p substrate --bin substrate-lifecycle-control -- --nocapture",
+      "cargo test -p substrate --bin substrate-lifecycle-linux -- --nocapture (macOS: 2 passed; Linux-only seqpacket tests remain cfg-gated)",
+      "cargo check --bin substrate-lifecycle-control --quiet",
+      "cargo check --bin substrate-lifecycle-macos --quiet",
+      "cargo check --target aarch64-apple-darwin --bin substrate-lifecycle-macos --quiet",
+      "tests/mac/lifecycle_r3.sh",
+      "cargo fmt --all -- --check",
+      "git diff --check"
+    ],
+    "native_disposable_state": {
+      "created": false,
+      "pre_state_capture": "not applicable",
+      "post_state_restoration": "not applicable",
+      "reason": "No native success test was attempted because the unresolved P1 would require a forbidden transport or confirmation bypass. No Keychain, XPC service, Lima, canonical prefix, or official evidence artifact was mutated."
+    }
+  },
+  "review": {
+    "discovery": "Fresh full-subject discovery found and remediated typed XPC admission, expiry, protected-state initialization, interprocess CAS, revocation, and guest artifact/anchor joins; GitNexus was UNKNOWN/degraded for many new/private symbols and was supplemented by manual review.",
+    "transport_audit": "Fresh independent audit confirmed no existing authorized primitive can separate retained pairing frames from an independent guest tty.",
+    "closure": "Fresh different closure review: NOT CLEAN, P1 transport/tty and mapped lifecycle dispatch; compile-surface P2 was remediated afterward and revalidated.",
+    "gitnexus_detect_changes": "Ran before publication decision: 26 changed tracked files, medium risk, one affected process; no commit is permitted while P1 remains."
+  },
+  "publication": {
+    "commit": null,
+    "tree": null,
+    "pushed": false,
+    "remote": {
+      "name": "origin",
+      "ref": "refs/heads/feat/internal-host-orchestrator-world-dispatch-bootstrap",
+      "observed_commit": "d8a65fc8890dd37584aaeac2984c906188e5f06e",
+      "equals_original_base": true
+    },
+    "worktree_preserved": true
+  },
+  "authority_needed": [
+    "An explicit contract-approved, authenticated second child data/TTY primitive for Lima that preserves independently entered guest confirmation, or an explicit amendment of the guest-confirmation rule. This must supersede the current no-alternate-transport boundary.",
+    "An explicit trusted mapped lifecycle submit/bootstrap bridge replacing raw helper lima-action, including its exact control-request authority carrier; restoring the raw helper relay would be an authority bypass."
+  ],
+  "successor": "AUX-R3-MAC-HOST-PREP-INSTALL-RETRY",
+  "successor_dispatch_authorized": false
+}
