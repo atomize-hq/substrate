@@ -1,0 +1,71 @@
+{
+  "artifact_root": "/Users/spensermcconnell/.codex/evidence/substrate-a1-1d-5r3-mac-20260806-41f97e1c570d/EVIDENCE-R3-MAC-IMP-01/61f37af30a2a6d5e4aec55ead3875f9d027d44d5dabd1f39a260dc656029752a",
+  "attempt": 2,
+  "authority_record": {
+    "additional_user_interaction_requested": false,
+    "human_delegated_native_run": true,
+    "ptys_allocated_or_confirmation_entered": false,
+    "reason": "Stopped before lifecycle/pairing due preflight blockers; no non-TTY bypass was used."
+  },
+  "blocker": {
+    "details": "The dispatch requires local-b2016f8a311fef93149e42eaec4d704d at /Users/spensermcconnell/__Active_Code/atomize-hq/substrate and states that historical remote Linux project identity must not replace it. The exact artifact validator requires the sole artifact product_project_id field to equal 2ccb802f-301c-4af4-9bd5-51d22808f0a2. A truthful local-ID artifact failed the mandated validator with that exact error. Independently, the canonically selected host prefix /Users/spensermcconnell/.substrate is pre-existing mode 0755 rather than required private mode 0700 and may not be repaired by this evidence task. Source capability inspection also shows issue_lima_guest_pairing_ticket_v1 unconditionally errors instead of issuing the required signed ticket. Source binding, remote equality, canonical IH/PM derivation, Lima/SSH/sudo observations, external Cargo validation, and final checkout/sentinel parity are recorded in the external artifact.",
+    "handoff_prompt": "Fresh evidence task: bind a new nonce/task/worktree to the corrected published source; require project ID local-b2016f8a311fef93149e42eaec4d704d and verify artifact validation accepts that same actual project identity; verify the selected prefix is an already-valid owner-501 mode-0700 private directory without mutating it; independently verify the signed guest-ticket issuance path is implemented; then rerun full MAC IMP preflight, agent-operated independent PTYs, capability probe, lifecycle, restoration, artifact validation, and receipt validation. Do not reuse this nonce or claim EVIDENCE_CLEAN from this preflight artifact.",
+    "required_authority": "A new authoritative correction must reconcile the local native project binding with the artifact validator schema/value. Separately, an authorized owner must provide a selected host prefix that already satisfies the private-home contract (or land a reviewed correction that changes the contract) and land an implementation that can issue the required signed guest pairing ticket. Dispatch a fresh evidence attempt only after those conditions are published and bound.",
+    "summary": "Authoritative project binding contradicts the exact artifact validator; native lifecycle was not started."
+  },
+  "checkout_unchanged": true,
+  "dispatch_nonce": "61f37af30a2a6d5e4aec55ead3875f9d027d44d5dabd1f39a260dc656029752a",
+  "environment": {
+    "architecture": "arm64",
+    "host_id": "local",
+    "os_version": "macOS 15.7.7 (24G720)",
+    "project_id": "local-b2016f8a311fef93149e42eaec4d704d",
+    "project_path": "/Users/spensermcconnell/__Active_Code/atomize-hq/substrate",
+    "tool_versions": {
+      "cargo": "cargo 1.89.0 (c24e10642 2025-06-23)",
+      "limactl": "limactl version 2.1.1",
+      "rustc": "rustc 1.89.0 (29483883e 2025-08-04)",
+      "ssh": "OpenSSH_9.9p2, LibreSSL 3.3.6"
+    }
+  },
+  "evidence": {
+    "artifact_path": "/Users/spensermcconnell/.codex/evidence/substrate-a1-1d-5r3-mac-20260806-41f97e1c570d/EVIDENCE-R3-MAC-IMP-01/61f37af30a2a6d5e4aec55ead3875f9d027d44d5dabd1f39a260dc656029752a/r3-mac-imp-01-attempt-2-preflight-artifact.json",
+    "artifact_sha256": "sha256:8bf7db4929345a3e91f7d6c44d5abb200ae9ce7b10ec8382c652eda1ddfa7b18",
+    "artifact_validation": {
+      "failure": "product_project_id must equal the fixed R3 project UUID",
+      "record_path": "/Users/spensermcconnell/.codex/evidence/substrate-a1-1d-5r3-mac-20260806-41f97e1c570d/EVIDENCE-R3-MAC-IMP-01/61f37af30a2a6d5e4aec55ead3875f9d027d44d5dabd1f39a260dc656029752a/preflight/artifact-validator-result.json",
+      "record_sha256": "sha256:ce0802440cdd650871f73173ad062d8b03b8cb4a0e30fe6b024db63ea657ac8c",
+      "status": 1,
+      "validated": false,
+      "validator": "scripts/ci/validate_r3_native_evidence.py"
+    },
+    "gates": [
+      "EVIDENCE:R3-MAC-IMP-01"
+    ]
+  },
+  "evidence_id": "EVIDENCE:R3-MAC-IMP-01",
+  "evidence_task": {
+    "host_id": "local",
+    "thread_id": "019fd9d2-5cea-74e1-b442-2b97a69656cc"
+  },
+  "gated_successor": "AUTHORITY_REQUIRED:A1.1d-5R3-MAC-CLOSEOUT",
+  "orchestration_id": "substrate-a1-1d-5r3-mac-20260806-41f97e1c570d",
+  "platform": "macos",
+  "prohibited_actions_confirmed": true,
+  "protocol": "codex.top-level-evidence-receipt.v1",
+  "restoration": {
+    "exact_parity_proven": true,
+    "host_or_guest_lifecycle_mutations_attempted": false,
+    "post_state_path": "/Users/spensermcconnell/.codex/evidence/substrate-a1-1d-5r3-mac-20260806-41f97e1c570d/EVIDENCE-R3-MAC-IMP-01/61f37af30a2a6d5e4aec55ead3875f9d027d44d5dabd1f39a260dc656029752a/preflight/post-state.json",
+    "post_state_sha256": "sha256:5b82b378c5c4ba3eceedad31e553d0f2a71978a0fb99f447f03b587455fd7a57"
+  },
+  "source": {
+    "commit": "d8a65fc8890dd37584aaeac2984c906188e5f06e",
+    "live_remote": "d8a65fc8890dd37584aaeac2984c906188e5f06e",
+    "publication_mode": "remote",
+    "remote": "origin",
+    "target_ref": "refs/heads/feat/internal-host-orchestrator-world-dispatch-bootstrap",
+    "tree": "d8f25cc993f264f0c67fe3e00180eb393e41b2e3"
+  },
+  "status": "BLOCKED_CONTRADICTION"
+}

@@ -1,0 +1,94 @@
+{
+  "protocol": "codex.top-level-evidence-block-verification.v1",
+  "orchestration_id": "substrate-a1-1d-5r3-mac-20260806-41f97e1c570d",
+  "evidence_id": "EVIDENCE:R3-MAC-IMP-01",
+  "attempt": 2,
+  "status": "BLOCKED_CONTRADICTION",
+  "verified": true,
+  "verified_at_utc": "2026-08-07T01:36:35Z",
+  "correlation": {
+    "dispatch_nonce": "61f37af30a2a6d5e4aec55ead3875f9d027d44d5dabd1f39a260dc656029752a",
+    "thread_id": "019fd9d2-5cea-74e1-b442-2b97a69656cc",
+    "host_id": "local",
+    "project_id": "local-b2016f8a311fef93149e42eaec4d704d",
+    "project_path": "/Users/spensermcconnell/__Active_Code/atomize-hq/substrate"
+  },
+  "terminal_barrier": {
+    "thread_status": "idle",
+    "turn_id": "019fd9d3-6ea0-7681-a472-b8a5780c70f2",
+    "turn_status": "completed",
+    "turn_error": null
+  },
+  "source": {
+    "commit": "d8a65fc8890dd37584aaeac2984c906188e5f06e",
+    "tree": "d8f25cc993f264f0c67fe3e00180eb393e41b2e3",
+    "target_ref": "refs/heads/feat/internal-host-orchestrator-world-dispatch-bootstrap",
+    "live_remote": "d8a65fc8890dd37584aaeac2984c906188e5f06e",
+    "evidence_worktree_clean": true,
+    "protected_checkout_clean": true
+  },
+  "receipt": {
+    "path": "receipts/EVIDENCE-R3-MAC-IMP-01.attempt-2.blocked.json",
+    "sha256": "sha256:75590bb3437b472c97b83c47e0bc430537322c6106d33758d915059e9b61955f",
+    "structurally_valid": true
+  },
+  "artifact": {
+    "path": "/Users/spensermcconnell/.codex/evidence/substrate-a1-1d-5r3-mac-20260806-41f97e1c570d/EVIDENCE-R3-MAC-IMP-01/61f37af30a2a6d5e4aec55ead3875f9d027d44d5dabd1f39a260dc656029752a/r3-mac-imp-01-attempt-2-preflight-artifact.json",
+    "sha256": "sha256:8bf7db4929345a3e91f7d6c44d5abb200ae9ce7b10ec8382c652eda1ddfa7b18",
+    "preflight_result_status": "BLOCKED_PLATFORM_HANDOFF_REQUIRED",
+    "native_evidence_satisfied": false,
+    "restoration_exact": true,
+    "host_or_guest_lifecycle_mutations_attempted": false,
+    "post_state_path": "/Users/spensermcconnell/.codex/evidence/substrate-a1-1d-5r3-mac-20260806-41f97e1c570d/EVIDENCE-R3-MAC-IMP-01/61f37af30a2a6d5e4aec55ead3875f9d027d44d5dabd1f39a260dc656029752a/preflight/post-state.json",
+    "post_state_sha256": "sha256:5b82b378c5c4ba3eceedad31e553d0f2a71978a0fb99f447f03b587455fd7a57"
+  },
+  "artifact_validator": {
+    "path": "scripts/ci/validate_r3_native_evidence.py",
+    "record_path": "/Users/spensermcconnell/.codex/evidence/substrate-a1-1d-5r3-mac-20260806-41f97e1c570d/EVIDENCE-R3-MAC-IMP-01/61f37af30a2a6d5e4aec55ead3875f9d027d44d5dabd1f39a260dc656029752a/preflight/artifact-validator-result.json",
+    "record_sha256": "sha256:ce0802440cdd650871f73173ad062d8b03b8cb4a0e30fe6b024db63ea657ac8c",
+    "reproduced_status": 1,
+    "reproduced_stdout_sha256": "sha256:e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+    "reproduced_stderr_sha256": "sha256:41f4d2d30ca6059604c582475f57573167375249f0a9c323745aa2d28c033f09",
+    "reproduced_failure": "product_project_id must equal the fixed R3 project UUID",
+    "hard_coded_expected_project_id": "2ccb802f-301c-4af4-9bd5-51d22808f0a2",
+    "bound_actual_project_id": "local-b2016f8a311fef93149e42eaec4d704d",
+    "contradiction_confirmed": true
+  },
+  "private_home_contract": {
+    "selected_prefix": "/Users/spensermcconnell/.substrate",
+    "owner": "spensermcconnell",
+    "uid": 501,
+    "observed_mode": "0755",
+    "required_mode": "0700",
+    "automatic_repair_forbidden": true,
+    "contradiction_confirmed": true
+  },
+  "guest_ticket_capability": {
+    "symbol": "issue_lima_guest_pairing_ticket_v1",
+    "path": "src/bin/substrate-lifecycle-macos.rs",
+    "implementation": "unconditionally returns an error after request validation",
+    "required_signed_ticket_issuance_available": false,
+    "contradiction_confirmed": true
+  },
+  "sudo_authority": {
+    "host_noninteractive_sudo": true,
+    "guest_noninteractive_sudo": true,
+    "sentinel_path": "/etc/sudoers.d/substrate-r3-mac-evidence",
+    "sentinel_sha256_before": "sha256:52105fc35b3128daf23f3e0f84ad09f791cb5ad1a26922fca3a8784e24bf6be8",
+    "sentinel_sha256_after": "sha256:52105fc35b3128daf23f3e0f84ad09f791cb5ad1a26922fca3a8784e24bf6be8",
+    "sudo_is_not_a_blocker": true
+  },
+  "blocker": {
+    "summary": "Native evidence cannot proceed because the artifact validator rejects the bound local project identity, the selected private home is mode 0755 instead of 0700, and signed guest-ticket issuance is unimplemented.",
+    "requires_published_product_or_control_correction": true,
+    "fresh_evidence_attempt_required_after_correction": true
+  },
+  "disposition": {
+    "advance": false,
+    "mac_closeout_authorized": false,
+    "new_evidence_attempt_dispatched": false,
+    "task_archived": false,
+    "worktree_preserved": true,
+    "worktree": "/Users/spensermcconnell/.codex/worktrees/46c9/substrate"
+  }
+}
