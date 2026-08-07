@@ -1,0 +1,56 @@
+{
+  "protocol": "codex.top-level-evidence-dispatch-binding.v1",
+  "orchestration_id": "substrate-a1-1d-5r3-mac-20260806-41f97e1c570d",
+  "evidence_id": "EVIDENCE:R3-MAC-IMP-01",
+  "attempt": 2,
+  "dispatch_nonce": "61f37af30a2a6d5e4aec55ead3875f9d027d44d5dabd1f39a260dc656029752a",
+  "evidence_task": {
+    "thread_id": "019fd9d2-5cea-74e1-b442-2b97a69656cc",
+    "host_id": "local",
+    "worktree": "/Users/spensermcconnell/.codex/worktrees/46c9/substrate",
+    "model": "gpt-5.6-terra",
+    "reasoning": "xhigh"
+  },
+  "source": {
+    "publication_mode": "remote",
+    "remote": "origin",
+    "target_ref": "refs/heads/feat/internal-host-orchestrator-world-dispatch-bootstrap",
+    "commit": "d8a65fc8890dd37584aaeac2984c906188e5f06e",
+    "tree": "d8f25cc993f264f0c67fe3e00180eb393e41b2e3",
+    "live_remote": "d8a65fc8890dd37584aaeac2984c906188e5f06e",
+    "source_task_thread_id": "019fd97a-3740-7261-a7e8-0008845709b5",
+    "source_task_host_id": "local"
+  },
+  "project": {
+    "project_id": "local-b2016f8a311fef93149e42eaec4d704d",
+    "project_path": "/Users/spensermcconnell/__Active_Code/atomize-hq/substrate",
+    "host_id": "local",
+    "platform": "macos",
+    "is_git_repository": true
+  },
+  "authority_amendment": "authority-amendments/0004-agent-operated-native-evidence.json",
+  "agent_operated_authority": {
+    "derive_ih_pm": true,
+    "canonical_lima_instance": "substrate",
+    "operate_two_controlling_ptys": true,
+    "enter_literal_pairing_confirmation": true,
+    "additional_user_interaction": false,
+    "host_sudo_noninteractive_verified": true,
+    "guest_sudo_noninteractive_verified": true,
+    "sudoers_sentinel": "/etc/sudoers.d/substrate-r3-mac-evidence"
+  },
+  "skill_hydration": {
+    "source": "/Users/spensermcconnell/__Active_Code/atomize-hq/substrate/.agents/skills/orchestrate-top-level-tasks",
+    "target": "/Users/spensermcconnell/.codex/worktrees/46c9/substrate/.agents/skills/orchestrate-top-level-tasks",
+    "file_count": 26,
+    "sha256": "61d99190f680d3738fa824348e671e8eb84b2729bf31952ef16031c6ba24d903",
+    "verified": true
+  },
+  "contract_path": "increments/EVIDENCE-R3-MAC-IMP-01.attempt-2.contract.md",
+  "contract_sha256": "sha256:e5ba6086259ad10c0b05088f61c33d6679db56f97b55ac45d08c955bf2af89c9",
+  "initial_prompt_path": "increments/EVIDENCE-R3-MAC-IMP-01.attempt-2.initial-prompt.md",
+  "initial_prompt_sha256": "sha256:e9d27cb35e81853074ca14e8aa5beb1dc4f105fd6fccd1b0e72dce01566a6300",
+  "artifact_root": "/Users/spensermcconnell/.codex/evidence/substrate-a1-1d-5r3-mac-20260806-41f97e1c570d/EVIDENCE-R3-MAC-IMP-01/61f37af30a2a6d5e4aec55ead3875f9d027d44d5dabd1f39a260dc656029752a",
+  "gated_successor": "AUTHORITY_REQUIRED:A1.1d-5R3-MAC-CLOSEOUT",
+  "start_authorized": true
+}
