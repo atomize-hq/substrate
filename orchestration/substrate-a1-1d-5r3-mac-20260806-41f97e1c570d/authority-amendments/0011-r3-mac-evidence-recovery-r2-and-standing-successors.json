@@ -1,0 +1,50 @@
+{
+  "protocol": "codex.orchestration-authority-amendment.v1",
+  "orchestration_id": "substrate-a1-1d-5r3-mac-20260806-41f97e1c570d",
+  "amendment_id": "0011-r3-mac-evidence-recovery-r2-and-standing-successors",
+  "authority_source": "explicit user authorization to dispatch R2 now and thereafter dispatch the next recovery implementation task without another approval when the previous task independently verifies LANDED_CLEAN with terminal review CLEAN",
+  "authorized_increment": "AUX-R3-MAC-EVIDENCE-RECOVERY-R2",
+  "dispatch_nonce": "49e8d36feff2e9ea0ef78ab92f14dc2680d3fe4e9ee2ffcd0badb8c1f113c41e",
+  "expected_base_commit": "bb098b6e265a4b6cadc4b7ca908c8b6ccf59f2b9",
+  "expected_base_tree": "688ae2860d99d6d5cf1019e0d3ba27c7cc26b6cc",
+  "target_ref": "refs/heads/feat/internal-host-orchestrator-world-dispatch-bootstrap",
+  "publication_mode": "remote",
+  "standing_successor_authority": {
+    "applies_to": [
+      "AUX-R3-MAC-EVIDENCE-RECOVERY-R2",
+      "AUX-R3-MAC-EVIDENCE-RECOVERY-R3",
+      "AUX-R3-MAC-EVIDENCE-RECOVERY-R4",
+      "AUX-R3-MAC-EVIDENCE-RECOVERY-R5",
+      "AUX-R3-MAC-EVIDENCE-RECOVERY-R6"
+    ],
+    "condition": "the immediate predecessor receipt is structurally valid, task-terminal, independently verified LANDED_CLEAN, remote-equal, and terminal review CLEAN with no unresolved P1/P2 or scope/base contradiction",
+    "one_task_at_a_time": true,
+    "precreation_forbidden": true,
+    "blocked_or_unverifiable_receipt_stops": true,
+    "official_native_evidence_not_granted_by_this_standing_clause": true
+  },
+  "scope": [
+    "implement only R2 macOS compile admission and fixed installer lifecycle-binary build/copy surface",
+    "manually recreate only the audited R2 donor hunks and exact compile/build-copy regression assertions",
+    "complete the repository-defined causal cascading review process and publish one atomic fast-forward commit only if CLEAN"
+  ],
+  "r2_fence_clarification": [
+    "the PLAN phrase fixed managed-copy branch includes only the MAC-only stage_managed_mac_control_binary_copy helper, MANAGED_MAC_CONTROL_BINARIES_PATH, and the two-binary copy/manifest loop required for substrate-lifecycle-control and substrate-lifecycle-macos",
+    "known GitNexus HIGH/CRITICAL results limited to the exact named cfg-admission symbols are review obligations, not a new authority stop; any unlisted symbol/path or behavior remains a scope-expansion stop"
+  ],
+  "hard_exclusions": [
+    "R3 through R6 implementation",
+    "pairing APIs or protocol",
+    "Keychain/XPC/Lima/native actions",
+    "new dependencies",
+    "Windows source/runtime behavior",
+    "ordinary Linux host behavior",
+    "bulk donor transplant or donor mutation"
+  ],
+  "workflow": {
+    "subagent_model": "gpt-5.6-terra",
+    "subagent_reasoning": "xhigh",
+    "preserve_blocked_task_and_worktree": true
+  },
+  "terminal_successor": "AUX-R3-MAC-EVIDENCE-RECOVERY-R3"
+}
