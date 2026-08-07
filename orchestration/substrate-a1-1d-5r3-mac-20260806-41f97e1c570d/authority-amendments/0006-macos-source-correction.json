@@ -1,0 +1,40 @@
+{
+  "protocol": "codex.orchestration-authority-amendment.v1",
+  "orchestration_id": "substrate-a1-1d-5r3-mac-20260806-41f97e1c570d",
+  "amendment_id": "0006-macos-source-correction",
+  "authorized_at_utc": "2026-08-07T02:11:06Z",
+  "authority_source": "user",
+  "purpose": "Dispatch one fresh mutating top-level source-correction task to fix every verified source blocker preventing canonical macOS installation and later R3 MAC evidence.",
+  "dispatch_nonce": "d7c49c63813094f35052883eb0a2964d28ce2df44d2c422664ea69c7c5f7072c",
+  "source": {
+    "publication_mode": "remote",
+    "remote": "origin",
+    "target_ref": "refs/heads/feat/internal-host-orchestrator-world-dispatch-bootstrap",
+    "commit": "d8a65fc8890dd37584aaeac2984c906188e5f06e",
+    "tree": "d8f25cc993f264f0c67fe3e00180eb393e41b2e3"
+  },
+  "task_class": "general_macos_source_correction",
+  "official_increment_or_evidence": false,
+  "required_corrections": [
+    "make the canonical dev installer execute correctly under the default macOS Bash 3.2 or deliberately and safely re-exec an explicitly verified supported Bash without requiring ambient PATH manipulation",
+    "resolve all 11 exact macOS shell-crate compilation errors captured by the auxiliary install task without masking, disabling, or deleting the affected functionality",
+    "implement genuine macOS host-key/XPC signed guest pairing-ticket issuance with the packet-required scope, expiry, one-use, identity, signature, and failure semantics",
+    "replace the stale fixed native-evidence project UUID with an explicit validator binding that accepts the exact caller-authorized project ID while preserving existing Linux and other platform validation"
+  ],
+  "scope_rule": "The task may edit any production, installer, test, validator, fixture, documentation, or review-control path directly required to close the four verified blockers and their causal regressions. Unrelated product behavior, architectures, transports, selectors, and runtime-refactor packets remain frozen.",
+  "publication": {
+    "required": true,
+    "mode": "remote",
+    "commit_count": 1,
+    "push": "normal fast-forward only"
+  },
+  "review": {
+    "model": "gpt-5.6-terra",
+    "reasoning": "xhigh",
+    "required": true,
+    "sequence": "fresh discovery review, remediation if needed, different fresh closure review, at most two supplemental causal P1/P2 cycles",
+    "p3_p4": "record only unless explicitly required by a P1/P2 causal remediation"
+  },
+  "host_boundary": "This source-correction task must not perform the real host installation or official evidence run. A fresh auxiliary install task will consume its published commit after independent receipt verification.",
+  "successor_rule": "Do not auto-dispatch installation or official evidence. Return a structured terminal receipt to the meta task."
+}

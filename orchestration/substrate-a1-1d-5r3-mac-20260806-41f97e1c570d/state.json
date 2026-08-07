@@ -69,7 +69,7 @@
     "task_archived": false,
     "advance": false
   },
-  "current_authority_amendment": "authority-amendments/0005-general-macos-host-prep-install.json",
+  "current_authority_amendment": "authority-amendments/0006-macos-source-correction.json",
   "evidence_attempt": 2,
   "retry_authority": {
     "evidence_id": "EVIDENCE:R3-MAC-IMP-01",
@@ -119,6 +119,30 @@
     "host_prefix_repaired": true,
     "canonical_install_completed": false,
     "current_host_sudo_noninteractive": false,
+    "official_evidence_dispatch_allowed": false
+  },
+  "auxiliary_source_correction": {
+    "status": "INITIALIZING",
+    "task_class": "general_macos_source_correction",
+    "official_increment_or_evidence": false,
+    "attempt": 1,
+    "dispatch_nonce": "d7c49c63813094f35052883eb0a2964d28ce2df44d2c422664ea69c7c5f7072c",
+    "authority_amendment": "authority-amendments/0006-macos-source-correction.json",
+    "authority_amendment_sha256": "sha256:59c5ceceefdd52700f92a1a63c1e240a488de55f282a9b45cabf1c94d8d5b48f",
+    "initial_prompt_path": "increments/AUX-R3-MAC-SOURCE-CORRECTION.attempt-1.initial-prompt.md",
+    "initial_prompt_sha256": "sha256:4259747d382bf56c6e741d890c06958475b625beb6ff0b661e3cbbbb9bb98c89",
+    "source": {
+      "commit": "d8a65fc8890dd37584aaeac2984c906188e5f06e",
+      "tree": "d8f25cc993f264f0c67fe3e00180eb393e41b2e3",
+      "target_ref": "refs/heads/feat/internal-host-orchestrator-world-dispatch-bootstrap",
+      "live_remote": "d8a65fc8890dd37584aaeac2984c906188e5f06e"
+    },
+    "thread_id": null,
+    "host_id": null,
+    "worktree": null,
+    "skill_hydration": null,
+    "publication_required": true,
+    "install_retry_dispatch_allowed": false,
     "official_evidence_dispatch_allowed": false
   }
 }
