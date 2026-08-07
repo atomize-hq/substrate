@@ -1,7 +1,7 @@
 {
   "protocol": "codex.top-level-orchestration-state.v1",
   "orchestration_id": "substrate-a1-1d-5r3-mac-20260806-41f97e1c570d",
-  "status": "DISPATCHING",
+  "status": "RUNNING",
   "dispatch_authorized": true,
   "publication_mode": "remote",
   "remote": "origin",
@@ -61,7 +61,7 @@
     "reasoning": "xhigh",
     "authority_persisted_at_utc": "2026-08-07T19:21:19.735464Z",
     "binding_sent_at_utc": "2026-08-07T19:21:45.949072Z",
-    "status": "DISPATCHING_CONTINUATION",
+    "status": "RUNNING_CONTINUATION",
     "continuation": 1,
     "continuation_nonce": "f426b9c13f0079bc1e3d28ad13db88c61ff7144ee00198e01f11c561b9705c63",
     "continuation_authority_path": "authority-amendments/0024-r5-caller-migration-bootstrap-fd3.json",
@@ -72,7 +72,8 @@
     "blocked_receipt_path": "receipts/AUX-R3-MAC-EVIDENCE-RECOVERY-R5.attempt-1.blocked.raw.json",
     "blocked_verification_path": "receipts/AUX-R3-MAC-EVIDENCE-RECOVERY-R5.attempt-1.blocked.verification.json",
     "blocked_verification_sha256": "sha256:d154b302e0f34fcf046f2cfe7e7aec6805586fd3ff94b600605d790892ea98bd",
-    "preserved_two_path_binary_diff_sha256": "sha256:9e4ffa66e20bc4d46c4885ef519cbf2b0b6afad0356fa6b10164e58fc953976c"
+    "preserved_two_path_binary_diff_sha256": "sha256:9e4ffa66e20bc4d46c4885ef519cbf2b0b6afad0356fa6b10164e58fc953976c",
+    "continuation_sent_at_utc": "2026-08-07T19:34:17Z"
   },
   "active_evidence_dispatches": [],
   "verified_evidence": [],
@@ -324,7 +325,7 @@
     "successor_dispatched": true
   },
   "auxiliary_recovery_implementation": {
-    "status": "DISPATCHING_CONTINUATION",
+    "status": "RUNNING",
     "sequence": [
       "AUX-R3-MAC-EVIDENCE-RECOVERY-R1",
       "AUX-R3-MAC-EVIDENCE-RECOVERY-R2",
@@ -468,7 +469,8 @@
     "continuation_prompt_sha256": "sha256:bb19ff91c6ff051eb621a2dd2332c3ff7e1f0c481444981cba09b960bf53d04e",
     "continuation_prepared_at_utc": "2026-08-07T19:32:17Z",
     "blocked_receipt_path": "receipts/AUX-R3-MAC-EVIDENCE-RECOVERY-R5.attempt-1.blocked.raw.json",
-    "blocked_verification_path": "receipts/AUX-R3-MAC-EVIDENCE-RECOVERY-R5.attempt-1.blocked.verification.json"
+    "blocked_verification_path": "receipts/AUX-R3-MAC-EVIDENCE-RECOVERY-R5.attempt-1.blocked.verification.json",
+    "continuation_sent_at_utc": "2026-08-07T19:34:17Z"
   },
   "standing_successor_authority": {
     "source_amendment": "authority-amendments/0011-r3-mac-evidence-recovery-r2-and-standing-successors.json",
