@@ -53,7 +53,8 @@
     "project_path": "/Users/spensermcconnell/__Active_Code/atomize-hq/substrate",
     "prompt_path": "increments/AUX-R3-MAC-EVIDENCE-RECOVERY-R2.attempt-2.continuation-0014-prompt.md",
     "model": "gpt-5.6-terra",
-    "reasoning": "xhigh"
+    "reasoning": "xhigh",
+    "continuation_sent_at_utc": "2026-08-07T16:13:46.486533Z"
   },
   "active_evidence_dispatches": [],
   "verified_evidence": [],
@@ -384,7 +385,8 @@
       "start_authority_sent": false,
       "worktree_preserved": true,
       "task_archived": false,
-      "withdrawal_prompt_path": "increments/AUX-R3-MAC-EVIDENCE-RECOVERY-R2.retry-2.withdrawal-prompt.md"
+      "withdrawal_prompt_path": "increments/AUX-R3-MAC-EVIDENCE-RECOVERY-R2.retry-2.withdrawal-prompt.md",
+      "withdrawal_sent_at_utc": "2026-08-07T16:13:46.486533Z"
     }
   ]
 }
