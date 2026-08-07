@@ -1,7 +1,7 @@
 {
   "protocol": "codex.top-level-orchestration-state.v1",
   "orchestration_id": "substrate-a1-1d-5r3-mac-20260806-41f97e1c570d",
-  "status": "READY",
+  "status": "RUNNING",
   "dispatch_authorized": true,
   "publication_mode": "remote",
   "remote": "origin",
@@ -36,7 +36,26 @@
     "thread_id": "019fd8c3-b12c-7e73-919f-898600ab0f64",
     "host_id": "local"
   },
-  "active_dispatch": null,
+  "active_dispatch": {
+    "increment": "AUX-R3-MAC-EVIDENCE-RECOVERY-R2",
+    "thread_id": "019fdcfd-7dc6-7102-b279-6c37421f08d8",
+    "host_id": "local",
+    "worktree": "/Users/spensermcconnell/.codex/worktrees/1958/substrate",
+    "dispatch_nonce": "39ae4ba470520f8a9267e1dc628c36299820b612a3f6ef5e0606b3d767b86a86",
+    "expected_base": {
+      "commit": "bb098b6e265a4b6cadc4b7ca908c8b6ccf59f2b9",
+      "tree": "688ae2860d99d6d5cf1019e0d3ba27c7cc26b6cc"
+    },
+    "target_ref": "refs/heads/feat/internal-host-orchestrator-world-dispatch-bootstrap",
+    "publication_mode": "remote",
+    "project_id": "local-b2016f8a311fef93149e42eaec4d704d",
+    "project_path": "/Users/spensermcconnell/__Active_Code/atomize-hq/substrate",
+    "prompt_path": "increments/AUX-R3-MAC-EVIDENCE-RECOVERY-R2.retry-2.prompt.md",
+    "binding_path": "increments/AUX-R3-MAC-EVIDENCE-RECOVERY-R2.retry-2.binding.json",
+    "skill_hydration_path": "increments/AUX-R3-MAC-EVIDENCE-RECOVERY-R2.retry-2.skill-hydration.json",
+    "model": "gpt-5.6-terra",
+    "reasoning": "xhigh"
+  },
   "active_evidence_dispatches": [],
   "verified_evidence": [],
   "completed": [
@@ -241,7 +260,7 @@
     "successor_dispatched": true
   },
   "auxiliary_recovery_implementation": {
-    "status": "READY",
+    "status": "RUNNING",
     "sequence": [
       "AUX-R3-MAC-EVIDENCE-RECOVERY-R1",
       "AUX-R3-MAC-EVIDENCE-RECOVERY-R2",
@@ -263,17 +282,17 @@
     "donor_worktree": "/Users/spensermcconnell/.codex/worktrees/60cc/substrate",
     "donor_mutation_authorized": false,
     "task_archiving_authorized": false,
-    "thread_id": "019fdcee-73e6-77a2-8a16-1d1c86223f9c",
+    "thread_id": "019fdcfd-7dc6-7102-b279-6c37421f08d8",
     "host_id": "local",
-    "worktree": "/Users/spensermcconnell/.codex/worktrees/bacb/substrate",
-    "predispatch_path": "increments/AUX-R3-MAC-EVIDENCE-RECOVERY-R2.retry-1.predispatch.json",
-    "variables_path": "increments/AUX-R3-MAC-EVIDENCE-RECOVERY-R2.retry-1.variables.json",
-    "prompt_path": "increments/AUX-R3-MAC-EVIDENCE-RECOVERY-R2.retry-1.prompt.md",
-    "prompt_sha256": "sha256:9e1b8bbfcd5fa1b999e33010dc8623d53551bf12ff25d6d9e0be98ee43c227c6",
-    "binding_path": "increments/AUX-R3-MAC-EVIDENCE-RECOVERY-R2.retry-1.binding.json",
-    "binding_prompt_path": "increments/AUX-R3-MAC-EVIDENCE-RECOVERY-R2.retry-1.binding-prompt.md",
-    "binding_prompt_sha256": "sha256:5e216c046a2e86bfeb35166f04824bd29d2cd0b2844aa3edfa5bae87077ef52c",
-    "skill_hydration_path": "increments/AUX-R3-MAC-EVIDENCE-RECOVERY-R2.retry-1.skill-hydration.json",
+    "worktree": "/Users/spensermcconnell/.codex/worktrees/1958/substrate",
+    "predispatch_path": "increments/AUX-R3-MAC-EVIDENCE-RECOVERY-R2.retry-2.predispatch.json",
+    "variables_path": "increments/AUX-R3-MAC-EVIDENCE-RECOVERY-R2.retry-2.variables.json",
+    "prompt_path": "increments/AUX-R3-MAC-EVIDENCE-RECOVERY-R2.retry-2.prompt.md",
+    "prompt_sha256": "sha256:e0bbcbe1f1ba03c75f6aeb9051f5f336d4c577be4bf7664ec119fe95ebfb9b23",
+    "binding_path": "increments/AUX-R3-MAC-EVIDENCE-RECOVERY-R2.retry-2.binding.json",
+    "binding_prompt_path": "increments/AUX-R3-MAC-EVIDENCE-RECOVERY-R2.retry-2.binding-prompt.md",
+    "binding_prompt_sha256": "sha256:4dacac6165a0018fa26dc7c9f976dc4480d7d780fb0da7af37c63eea1fd3eba1",
+    "skill_hydration_path": "increments/AUX-R3-MAC-EVIDENCE-RECOVERY-R2.retry-2.skill-hydration.json",
     "model": "gpt-5.6-terra",
     "reasoning": "xhigh",
     "binding_sent_at_utc": "2026-08-07T15:55:03Z",

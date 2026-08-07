@@ -1,0 +1,30 @@
+{
+  "protocol": "codex.top-level-task-predispatch.v1",
+  "orchestration_id": "substrate-a1-1d-5r3-mac-20260806-41f97e1c570d",
+  "increment": "AUX-R3-MAC-EVIDENCE-RECOVERY-R2",
+  "attempt": 3,
+  "dispatch_nonce": "39ae4ba470520f8a9267e1dc628c36299820b612a3f6ef5e0606b3d767b86a86",
+  "project_id": "local-b2016f8a311fef93149e42eaec4d704d",
+  "project_host_id": "local",
+  "project_path": "/Users/spensermcconnell/__Active_Code/atomize-hq/substrate",
+  "thread_id": "019fdcfd-7dc6-7102-b279-6c37421f08d8",
+  "host_id": "local",
+  "worktree": "/Users/spensermcconnell/.codex/worktrees/1958/substrate",
+  "publication_mode": "remote",
+  "remote": "origin",
+  "target_ref": "refs/heads/feat/internal-host-orchestrator-world-dispatch-bootstrap",
+  "expected_base": {
+    "commit": "bb098b6e265a4b6cadc4b7ca908c8b6ccf59f2b9",
+    "tree": "688ae2860d99d6d5cf1019e0d3ba27c7cc26b6cc"
+  },
+  "live_remote": "bb098b6e265a4b6cadc4b7ca908c8b6ccf59f2b9",
+  "worktree_head": "bb098b6e265a4b6cadc4b7ca908c8b6ccf59f2b9",
+  "worktree_tree": "688ae2860d99d6d5cf1019e0d3ba27c7cc26b6cc",
+  "worktree_tracked_clean": true,
+  "attempt_1_preserved": true,
+  "attempt_2_preserved": true,
+  "gitnexus_analyze_forbidden": true,
+  "corrected_compile_gate": true,
+  "deferred_r4_compile_gate": true,
+  "skill_hydration_path": "increments/AUX-R3-MAC-EVIDENCE-RECOVERY-R2.retry-2.skill-hydration.json"
+}

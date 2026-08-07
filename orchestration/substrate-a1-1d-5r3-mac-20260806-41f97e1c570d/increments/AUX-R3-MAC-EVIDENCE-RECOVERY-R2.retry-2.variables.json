@@ -1,0 +1,28 @@
+{
+  "ORCHESTRATION_ID": "substrate-a1-1d-5r3-mac-20260806-41f97e1c570d",
+  "DISPATCH_NONCE": "39ae4ba470520f8a9267e1dc628c36299820b612a3f6ef5e0606b3d767b86a86",
+  "META_THREAD_ID": "019fd8c3-b12c-7e73-919f-898600ab0f64",
+  "META_HOST_ID": "local",
+  "INCREMENT": "AUX-R3-MAC-EVIDENCE-RECOVERY-R2",
+  "PACKET_ID": "AUX-R3-MAC-EVIDENCE-RECOVERY-R2",
+  "NEXT_INCREMENT": "AUX-R3-MAC-EVIDENCE-RECOVERY-R3",
+  "WORKING_DIRECTORY": "/Users/spensermcconnell/.codex/worktrees/1958/substrate",
+  "PROTECTED_CHECKOUTS": [
+    "/Users/spensermcconnell/__Active_Code/atomize-hq/substrate",
+    "/Users/spensermcconnell/.codex/worktrees/eb49/substrate",
+    "/Users/spensermcconnell/.codex/worktrees/60cc/substrate",
+    "/Users/spensermcconnell/.codex/worktrees/05f9/substrate",
+    "/Users/spensermcconnell/.codex/worktrees/bacb/substrate",
+    "/Users/spensermcconnell/.codex/worktrees/8fd3/substrate",
+    "/Users/spensermcconnell/.codex/worktrees/e2c8/substrate",
+    "/Users/spensermcconnell/.codex/worktrees/abc3/substrate",
+    "/Users/spensermcconnell/.codex/worktrees/a943/substrate",
+    "/Users/spensermcconnell/.codex/worktrees/2fdb/substrate",
+    "/Users/spensermcconnell/.codex/worktrees/46c9/substrate"
+  ],
+  "REMOTE": "origin",
+  "TARGET_REF": "refs/heads/feat/internal-host-orchestrator-world-dispatch-bootstrap",
+  "EXPECTED_BASE_COMMIT": "bb098b6e265a4b6cadc4b7ca908c8b6ccf59f2b9",
+  "EXPECTED_BASE_TREE": "688ae2860d99d6d5cf1019e0d3ba27c7cc26b6cc",
+  "REQUIRED_ANCESTOR": "bb098b6e265a4b6cadc4b7ca908c8b6ccf59f2b9"
+}
