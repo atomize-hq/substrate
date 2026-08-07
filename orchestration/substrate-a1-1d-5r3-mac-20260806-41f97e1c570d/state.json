@@ -38,10 +38,11 @@
   },
   "active_dispatch": {
     "increment": "AUX-R3-MAC-EVIDENCE-RECOVERY-R2",
-    "thread_id": "019fdcfd-7dc6-7102-b279-6c37421f08d8",
+    "thread_id": "019fdcee-73e6-77a2-8a16-1d1c86223f9c",
     "host_id": "local",
-    "worktree": "/Users/spensermcconnell/.codex/worktrees/1958/substrate",
-    "dispatch_nonce": "39ae4ba470520f8a9267e1dc628c36299820b612a3f6ef5e0606b3d767b86a86",
+    "worktree": "/Users/spensermcconnell/.codex/worktrees/bacb/substrate",
+    "dispatch_nonce": "7f33f40d8af93e12561b3b1e23fa38bfe3fca28e15c70f53caf6525dc85d68de",
+    "continuation_nonce": "3f7553bcb50a0c0d06373e6a469f8972c9a31a59b06a13eea36a255a66c06760",
     "expected_base": {
       "commit": "bb098b6e265a4b6cadc4b7ca908c8b6ccf59f2b9",
       "tree": "688ae2860d99d6d5cf1019e0d3ba27c7cc26b6cc"
@@ -50,9 +51,7 @@
     "publication_mode": "remote",
     "project_id": "local-b2016f8a311fef93149e42eaec4d704d",
     "project_path": "/Users/spensermcconnell/__Active_Code/atomize-hq/substrate",
-    "prompt_path": "increments/AUX-R3-MAC-EVIDENCE-RECOVERY-R2.retry-2.prompt.md",
-    "binding_path": "increments/AUX-R3-MAC-EVIDENCE-RECOVERY-R2.retry-2.binding.json",
-    "skill_hydration_path": "increments/AUX-R3-MAC-EVIDENCE-RECOVERY-R2.retry-2.skill-hydration.json",
+    "prompt_path": "increments/AUX-R3-MAC-EVIDENCE-RECOVERY-R2.attempt-2.continuation-0014-prompt.md",
     "model": "gpt-5.6-terra",
     "reasoning": "xhigh"
   },
@@ -91,7 +90,7 @@
     }
   ],
   "last_blocker": null,
-  "current_authority_amendment": "authority-amendments/0013-r2-r4-compile-gate-ownership.json",
+  "current_authority_amendment": "authority-amendments/0014-existing-task-bounded-continuation.json",
   "evidence_attempt": 2,
   "retry_authority": {
     "evidence_id": "EVIDENCE:R3-MAC-IMP-01",
@@ -272,8 +271,8 @@
     "cursor": 1,
     "authorized_increment": "AUX-R3-MAC-EVIDENCE-RECOVERY-R2",
     "later_packets_require_fresh_authority": true,
-    "dispatch_nonce": "39ae4ba470520f8a9267e1dc628c36299820b612a3f6ef5e0606b3d767b86a86",
-    "authority_amendment": "authority-amendments/0013-r2-r4-compile-gate-ownership.json",
+    "dispatch_nonce": "7f33f40d8af93e12561b3b1e23fa38bfe3fca28e15c70f53caf6525dc85d68de",
+    "authority_amendment": "authority-amendments/0014-existing-task-bounded-continuation.json",
     "expected_base": {
       "commit": "bb098b6e265a4b6cadc4b7ca908c8b6ccf59f2b9",
       "tree": "688ae2860d99d6d5cf1019e0d3ba27c7cc26b6cc"
@@ -282,9 +281,9 @@
     "donor_worktree": "/Users/spensermcconnell/.codex/worktrees/60cc/substrate",
     "donor_mutation_authorized": false,
     "task_archiving_authorized": false,
-    "thread_id": "019fdcfd-7dc6-7102-b279-6c37421f08d8",
+    "thread_id": "019fdcee-73e6-77a2-8a16-1d1c86223f9c",
     "host_id": "local",
-    "worktree": "/Users/spensermcconnell/.codex/worktrees/1958/substrate",
+    "worktree": "/Users/spensermcconnell/.codex/worktrees/bacb/substrate",
     "predispatch_path": "increments/AUX-R3-MAC-EVIDENCE-RECOVERY-R2.retry-2.predispatch.json",
     "variables_path": "increments/AUX-R3-MAC-EVIDENCE-RECOVERY-R2.retry-2.variables.json",
     "prompt_path": "increments/AUX-R3-MAC-EVIDENCE-RECOVERY-R2.retry-2.prompt.md",
@@ -342,7 +341,11 @@
         "tracked_diff_sha256": "sha256:200f5e0563ce1af63625d0ed33822520d96f9dcadedee6b32a7b843fdfd314f2"
       }
     ],
-    "attempt": 3
+    "attempt": 2,
+    "continuation": 1,
+    "continuation_nonce": "3f7553bcb50a0c0d06373e6a469f8972c9a31a59b06a13eea36a255a66c06760",
+    "continuation_prompt_path": "increments/AUX-R3-MAC-EVIDENCE-RECOVERY-R2.attempt-2.continuation-0014-prompt.md",
+    "future_same_packet_continuation_allowed": true
   },
   "standing_successor_authority": {
     "source_amendment": "authority-amendments/0011-r3-mac-evidence-recovery-r2-and-standing-successors.json",
@@ -369,5 +372,19 @@
       "xpc_get_type pointer cast inference"
     ],
     "must_pass_before_r4_landed_clean": true
-  }
+  },
+  "withdrawn_prestart_tasks": [
+    {
+      "increment": "AUX-R3-MAC-EVIDENCE-RECOVERY-R2",
+      "thread_id": "019fdcfd-7dc6-7102-b279-6c37421f08d8",
+      "host_id": "local",
+      "worktree": "/Users/spensermcconnell/.codex/worktrees/1958/substrate",
+      "dispatch_nonce": "39ae4ba470520f8a9267e1dc628c36299820b612a3f6ef5e0606b3d767b86a86",
+      "identity_binding_sent": false,
+      "start_authority_sent": false,
+      "worktree_preserved": true,
+      "task_archived": false,
+      "withdrawal_prompt_path": "increments/AUX-R3-MAC-EVIDENCE-RECOVERY-R2.retry-2.withdrawal-prompt.md"
+    }
+  ]
 }

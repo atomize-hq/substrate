@@ -1,0 +1,43 @@
+{
+  "protocol": "codex.orchestration-authority-amendment.v1",
+  "orchestration_id": "substrate-a1-1d-5r3-mac-20260806-41f97e1c570d",
+  "amendment_id": "0014-existing-task-bounded-continuation",
+  "authority_source": "explicit user instruction that future bounded adjudications should be sent to the existing session instead of creating a fresh top-level task each time",
+  "authorized_increment": "AUX-R3-MAC-EVIDENCE-RECOVERY-R2",
+  "existing_task": {
+    "thread_id": "019fdcee-73e6-77a2-8a16-1d1c86223f9c",
+    "host_id": "local",
+    "worktree": "/Users/spensermcconnell/.codex/worktrees/bacb/substrate",
+    "original_dispatch_nonce": "7f33f40d8af93e12561b3b1e23fa38bfe3fca28e15c70f53caf6525dc85d68de",
+    "continuation_nonce": "3f7553bcb50a0c0d06373e6a469f8972c9a31a59b06a13eea36a255a66c06760",
+    "preserved_tracked_diff_sha256": "sha256:200f5e0563ce1af63625d0ed33822520d96f9dcadedee6b32a7b843fdfd314f2",
+    "preserved_untracked_test_sha256": "sha256:6f926b83ce7263f0950ecdd98d451a85f80a2a496cb98e31503ce07954255781"
+  },
+  "authorized_correction": {
+    "continue_from_preserved_partial_r2_diff": true,
+    "replace_lifecycle_binary_compile_invocation_with_r2_owned_shell_host_compile_and_exact_installer_source_shape_proof": true,
+    "defer_lifecycle_macos_compile_to_r4": true,
+    "edit_new_paths": false,
+    "lifecycle_macos_source_or_cargo_changes": false,
+    "gitnexus_refresh": false
+  },
+  "future_policy": {
+    "reuse_existing_task_for_bounded_same-packet_adjudication": true,
+    "require_exact_task_worktree_and_subject_hash_reverification": true,
+    "new_task_required_only_for_base_change_cross_packet_successor_or_unrecoverable_task": true,
+    "blocked_worktree_preservation_remains_required": true
+  },
+  "withdrawn_prestart_task": {
+    "thread_id": "019fdcfd-7dc6-7102-b279-6c37421f08d8",
+    "host_id": "local",
+    "worktree": "/Users/spensermcconnell/.codex/worktrees/1958/substrate",
+    "dispatch_nonce": "39ae4ba470520f8a9267e1dc628c36299820b612a3f6ef5e0606b3d767b86a86",
+    "identity_binding_sent": false,
+    "start_authority_sent": false,
+    "must_remain_unmodified_and_unarchived": true
+  },
+  "receipt_binding": {
+    "dispatch_nonce": "7f33f40d8af93e12561b3b1e23fa38bfe3fca28e15c70f53caf6525dc85d68de",
+    "next_increment": "AUX-R3-MAC-EVIDENCE-RECOVERY-R3"
+  }
+}
