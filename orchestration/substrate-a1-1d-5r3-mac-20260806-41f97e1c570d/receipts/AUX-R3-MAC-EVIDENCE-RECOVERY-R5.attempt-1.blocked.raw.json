@@ -1,0 +1,42 @@
+{
+  "protocol": "codex.top-level-task-receipt.v1",
+  "orchestration_id": "substrate-a1-1d-5r3-mac-20260806-41f97e1c570d",
+  "dispatch_nonce": "e480367f5a8308d8ee73f97eb7734c80bd49e37a31c3a70a6e663668d622e70e",
+  "increment": "AUX-R3-MAC-EVIDENCE-RECOVERY-R5",
+  "status": "BLOCKED_SCOPE_EXPANSION",
+  "increment_task": {
+    "thread_id": "019fddab-1dd2-7570-9bd3-7f3841ce0283",
+    "host_id": "local"
+  },
+  "expected_base": {
+    "commit": "05d655fa1458a276f179d12057cbda772cc51eb6",
+    "tree": "845694f733fccbfcd3703957bf4976da0ed59b40"
+  },
+  "publication": {
+    "mode": "remote",
+    "remote": "origin",
+    "target_ref": "refs/heads/feat/internal-host-orchestrator-world-dispatch-bootstrap",
+    "observed_before": "05d655fa1458a276f179d12057cbda772cc51eb6",
+    "published": false
+  },
+  "blocker": {
+    "summary": "R5's exact wrapper/direct-bootstrap contract conflicts with frozen current callers and with the absent retained authorization-delivery surface.",
+    "details": "Frozen scripts/mac/lima-warm.sh invokes scripts/mac/lima-lifecycle.sh with generic actions destroy-vm, ensure-vm-ready, stage-workspace, install-guest-artifacts, and configure-guest; frozen scripts/mac/lima-stop.sh invokes it with stop. R5 requires exactly two literal wrapper branches, stage_one_create and post_pm_action, and prohibits raw/generic action paths. src/bin/substrate-lifecycle-control.rs also deserializes the entire ManagedLifecycleControlRequestV1 from stdin before command dispatch and extracts PublisherBootstrapAuthorizationV1 from that serialized request. The control pack instead requires an independently issued authorization immediately delivered over the retained bootstrap channel. No product implementation, commit, or push occurred; only two focused failing-test additions exist.",
+    "required_authority": "Permit the exact frozen caller paths to migrate to the two typed tags and authorize the existing control-pack-defined nonserialized FD3 bootstrap channel within the current R5 production paths, without a generic compatibility selector or R6 transport.",
+    "handoff_prompt": "Continue the same R5 task/worktree only after the path-fence correction binds the exact caller migration and existing retained bootstrap FD3 delivery. Preserve the two focused failing tests and do not dispatch R6."
+  },
+  "verification": {
+    "identity_worktree": "/Users/spensermcconnell/.codex/worktrees/686b/substrate",
+    "required_ancestor": "270f6e55e1a94b7e2f9b2667e605980d2e50579c",
+    "ancestor_verified": true,
+    "changed_paths": [
+      "crates/shell/tests/managed_lifecycle_v1.rs",
+      "tests/mac/lifecycle_r3.sh"
+    ],
+    "clean_before_tdd": true,
+    "checkout_clean_now": false,
+    "commit_created": false,
+    "push_performed": false
+  },
+  "next_increment": "AUX-R3-MAC-EVIDENCE-RECOVERY-R6"
+}

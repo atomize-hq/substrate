@@ -1,0 +1,106 @@
+{
+  "protocol": "codex.orchestration-authority-amendment.v1",
+  "orchestration_id": "substrate-a1-1d-5r3-mac-20260806-41f97e1c570d",
+  "amendment_id": "0024-r5-caller-migration-bootstrap-fd3",
+  "authority_source": "meta authority for same-corridor repo-truth corrections, grounded in the landed recovery SPEC/PLAN and the existing 04-contracts-and-gates.md bootstrap FD3 contract",
+  "authorized_increment": "AUX-R3-MAC-EVIDENCE-RECOVERY-R5",
+  "existing_task": {
+    "thread_id": "019fddab-1dd2-7570-9bd3-7f3841ce0283",
+    "host_id": "local",
+    "worktree": "/Users/spensermcconnell/.codex/worktrees/686b/substrate",
+    "original_dispatch_nonce": "e480367f5a8308d8ee73f97eb7734c80bd49e37a31c3a70a6e663668d622e70e",
+    "continuation_nonce": "f426b9c13f0079bc1e3d28ad13db88c61ff7144ee00198e01f11c561b9705c63",
+    "preserved_two_path_binary_diff_sha256": "sha256:9e4ffa66e20bc4d46c4885ef519cbf2b0b6afad0356fa6b10164e58fc953976c",
+    "preserved_managed_lifecycle_test_sha256": "sha256:66fb76aed33596512e0df259db80ee25e5a4a361f05b718ba687b3674d3aeaee",
+    "preserved_mac_lifecycle_test_sha256": "sha256:46abcb154bbe6ee99ed0bfcb87c715ec8bb178cc2697c32744b21378e82cd5d6"
+  },
+  "expected_base_commit": "05d655fa1458a276f179d12057cbda772cc51eb6",
+  "expected_base_tree": "845694f733fccbfcd3703957bf4976da0ed59b40",
+  "target_ref": "refs/heads/feat/internal-host-orchestrator-world-dispatch-bootstrap",
+  "classification": "R5 path-fence and delivery-binding correction; not R6 transport authority and not a generic compatibility expansion",
+  "authorized_new_paths": {
+    "scripts/mac/lima-warm.sh": [
+      "destroy_vm",
+      "ensure_vm_ready",
+      "stage_workspace",
+      "ensure_substrate_group",
+      "install_agent_from_host",
+      "install_cli_from_host",
+      "install_gateway_from_host",
+      "install_guest_binaries",
+      "bootstrap_guest_private_home",
+      "write_systemd_units",
+      "enable_socket_activation",
+      "write_layout_sentinel",
+      "configure_guest"
+    ],
+    "scripts/mac/lima-stop.sh": [
+      "resolve_lima_stop_authority_v1",
+      "invoke_mapped_lima_stop_v1"
+    ]
+  },
+  "caller_migration": {
+    "wrapper_tags": [
+      "stage_one_create",
+      "post_pm_action"
+    ],
+    "requirements": [
+      "replace every listed generic lima-lifecycle.sh selector with exactly one of the two literal typed tags",
+      "stage_one_create is permitted only for an exactly absent selected mac.lima.instance/Create with complete Stage-1 joins",
+      "all existing-instance Start/Stop/Remove/Restore and guest projection calls use post_pm_action with the already-authorized exact closed role/action request",
+      "post_pm_action never carries LimaStageOneAuthorizationV1",
+      "do not translate a legacy generic action name into a caller-selected role/action; validate the supplied canonical request and fail closed on mismatch",
+      "remove every generic compatibility branch and raw helper path"
+    ],
+    "private_helper_rule": "Only minimum immediate private helpers in the two newly authorized scripts, directly reachable from the named caller functions and recorded in the R5 path-and-symbol ledger, are permitted."
+  },
+  "bootstrap_fd3": {
+    "existing_authority": "04-contracts-and-gates.md requires a retained AF_UNIX SOCK_SEQPACKET|SOCK_CLOEXEC channel, peer on descriptor 3, exact elevated executor, and --publisher-bootstrap-fd 3",
+    "control_branch": "src/bin/substrate-lifecycle-control.rs must select publisher-bootstrap before ordinary stdin ManagedLifecycleControlRequestV1 decoding, obtain controlling-terminal confirmation, independently derive and issue the canonical authorization from authoritative retained state, and immediately send only that authorization over the retained bootstrap channel",
+    "executor_branch": "src/bin/substrate-lifecycle-macos.rs may add the exact --publisher-bootstrap-fd 3 entrypoint and minimum immediate channel/frame helpers required to consume one canonical authorization, verify peer/image/build/terminal joins, perform bootstrap, and return one bounded response",
+    "client_support": "crates/shell/src/execution/managed_lifecycle/macos_client.rs and managed_lifecycle.rs may implement the already-specified macOS socketpair/descriptor-preserving spawn and response plumbing; no new endpoint, protocol family, or reusable carrier is authorized",
+    "serialization_forbidden": "PublisherBootstrapAuthorizationV1 must not be a ManagedLifecycleControlRequestV1 field or arrive through ordinary stdin JSON, argv, environment, file, generated projection, script output, or reusable record",
+    "failure_policy": "Missing exact authoritative state, TTY, FD3, peer/image/build join, one-frame boundary, or response attestation fails closed before effect."
+  },
+  "linker_closure": {
+    "path": "crates/shell/src/execution/managed_lifecycle/macos_client.rs",
+    "authorization": "replace the incorrect standalone xpc linker declaration with the repository's existing macOS System-library convention so the required native R5 test can link",
+    "forbidden": "no SDK, library, toolchain, dependency, or host installation"
+  },
+  "authorized_implementation_and_test_subject_paths": [
+    "crates/shell/src/execution/managed_lifecycle.rs",
+    "crates/shell/src/execution/managed_lifecycle/macos_client.rs",
+    "src/bin/substrate-lifecycle-control.rs",
+    "src/bin/substrate-lifecycle-macos.rs",
+    "scripts/mac/lima-lifecycle.sh",
+    "scripts/mac/lima-warm.sh",
+    "scripts/mac/lima-stop.sh",
+    "crates/shell/tests/managed_lifecycle_v1.rs",
+    "tests/mac/lifecycle_r3.sh"
+  ],
+  "review": {
+    "review_started": false,
+    "discovery": "one fresh same-subject three-lens discovery burst or discovery review",
+    "closure": "one different fresh closure reviewer",
+    "supplemental_cycles_max": 2,
+    "remediate": [
+      "P1",
+      "P2"
+    ],
+    "p3_p4": "record only in 06-review-finding-inventory.md; no remediation or review cycle",
+    "clean_terminal": true
+  },
+  "hard_exclusions": [
+    "generic selector, raw lima-action, raw privileged helper execution, or generic compatibility bridge",
+    "new endpoint, transport family, principal, selector, request carrier, guest session, or R6 dual-session pairing work",
+    "forwarding implementation",
+    "serialization or replay of PublisherBootstrapAuthorizationV1",
+    "caller-selected XPC operation, caller ticket, caller record, caller key path, or Stage-1 reuse",
+    "Linux or Windows target work or behavior changes",
+    "native install, code signing, Keychain mutation, XPC service launch, Lima mutation, lifecycle action, or evidence",
+    "npx gitnexus analyze or tracked context injection",
+    "donor mutation or bulk transplant"
+  ],
+  "publication": "one normal fast-forward R5 commit only after exact MAC-only deterministic proof and terminal review CLEAN",
+  "terminal_successor": "AUX-R3-MAC-EVIDENCE-RECOVERY-R6"
+}

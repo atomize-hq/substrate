@@ -1,0 +1,22 @@
+{
+  "protocol": "codex.top-level-task-receipt.v1",
+  "orchestration_id": "substrate-a1-1d-5r3-mac-20260806-41f97e1c570d",
+  "dispatch_nonce": "e480367f5a8308d8ee73f97eb7734c80bd49e37a31c3a70a6e663668d622e70e",
+  "increment": "AUX-R3-MAC-EVIDENCE-RECOVERY-R5",
+  "status": "BLOCKED_SCOPE_EXPANSION",
+  "increment_task": {
+    "thread_id": "019fddab-1dd2-7570-9bd3-7f3841ce0283",
+    "host_id": "local"
+  },
+  "expected_base": {
+    "commit": "05d655fa1458a276f179d12057cbda772cc51eb6",
+    "tree": "845694f733fccbfcd3703957bf4976da0ed59b40"
+  },
+  "blocker": {
+    "summary": "R5 needs its current wrapper callers migrated and its already-specified retained bootstrap FD3 path completed.",
+    "details": "The wrapper cannot expose only stage_one_create and post_pm_action while frozen callers still send generic selectors. Direct publisher bootstrap also cannot remain independently authorized while the control command deserializes that authorization from an ordinary stdin request. The exact-base worktree remains unpublished and contains only two focused failing-test changes.",
+    "required_authority": "Authorize the two caller paths and existing control-pack FD3 bootstrap delivery as a same-packet R5 fence correction.",
+    "handoff_prompt": "Continue R5 in the preserved task/worktree under amendment 0024 only; do not begin R6."
+  },
+  "next_increment": "AUX-R3-MAC-EVIDENCE-RECOVERY-R6"
+}

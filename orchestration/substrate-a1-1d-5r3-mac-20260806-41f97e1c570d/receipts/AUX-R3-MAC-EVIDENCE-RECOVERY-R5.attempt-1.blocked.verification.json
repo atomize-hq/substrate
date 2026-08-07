@@ -1,0 +1,44 @@
+{
+  "protocol": "codex.top-level-task-receipt-verification.v1",
+  "orchestration_id": "substrate-a1-1d-5r3-mac-20260806-41f97e1c570d",
+  "increment": "AUX-R3-MAC-EVIDENCE-RECOVERY-R5",
+  "attempt": 1,
+  "verified_at_utc": "2026-08-07T19:32:17Z",
+  "raw_receipt_path": "receipts/AUX-R3-MAC-EVIDENCE-RECOVERY-R5.attempt-1.blocked.raw.json",
+  "canonical_receipt_path": "receipts/AUX-R3-MAC-EVIDENCE-RECOVERY-R5.attempt-1.blocked.canonical.json",
+  "terminal_barrier": {
+    "thread_id": "019fddab-1dd2-7570-9bd3-7f3841ce0283",
+    "host_id": "local",
+    "turn_id": "019fddac-7f22-7a82-95f5-cfe9f2baf577",
+    "status": "completed",
+    "thread_status": "idle",
+    "cursor": "02c3d9a2-cefa-4c23-ab5f-aab2a1493429:1"
+  },
+  "independent_observation": {
+    "worktree": "/Users/spensermcconnell/.codex/worktrees/686b/substrate",
+    "head": "05d655fa1458a276f179d12057cbda772cc51eb6",
+    "head_tree": "845694f733fccbfcd3703957bf4976da0ed59b40",
+    "index_tree": "845694f733fccbfcd3703957bf4976da0ed59b40",
+    "live_remote": "05d655fa1458a276f179d12057cbda772cc51eb6",
+    "staged_paths": 0,
+    "status_entry_count": 2,
+    "changed_paths": [
+      "crates/shell/tests/managed_lifecycle_v1.rs",
+      "tests/mac/lifecycle_r3.sh"
+    ],
+    "two_path_binary_diff_sha256": "sha256:9e4ffa66e20bc4d46c4885ef519cbf2b0b6afad0356fa6b10164e58fc953976c",
+    "managed_lifecycle_test_sha256": "sha256:66fb76aed33596512e0df259db80ee25e5a4a361f05b718ba687b3674d3aeaee",
+    "mac_lifecycle_test_sha256": "sha256:46abcb154bbe6ee99ed0bfcb87c715ec8bb178cc2697c32744b21378e82cd5d6"
+  },
+  "repo_truth_classification": {
+    "same_packet_correction": true,
+    "control_pack_fd3_authority": "04-contracts-and-gates.md defines the macOS SOCK_SEQPACKET bootstrap peer on descriptor 3 and --publisher-bootstrap-fd 3",
+    "recovery_spec_authority": "SPEC.md requires independently issued PublisherBootstrapAuthorizationV1 immediately delivered over the retained bootstrap channel and forbids serialization",
+    "caller_migration_required": true,
+    "r6_transport_required": false,
+    "review_started": false
+  },
+  "verdict": "ACCEPTED_NON_ADVANCING_BLOCK_AND_ADJUDICATED_FOR_SAME_TASK_CONTINUATION",
+  "raw_receipt_sha256": "sha256:c0f6f9e50c8eba30234543842cc75eb03a4316a50b99ff7742a99ec89a278468",
+  "canonical_receipt_sha256": "sha256:0843172fed350582a447b08127ad3284cc90d3c41757ccd25aa58ca80a4d674a"
+}
