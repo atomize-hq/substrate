@@ -1,0 +1,84 @@
+{
+  "protocol": "codex.top-level-task-receipt-verification.v1",
+  "orchestration_id": "substrate-a1-1d-5r3-mac-20260806-41f97e1c570d",
+  "increment": "AUX-R3-MAC-EVIDENCE-RECOVERY-R4",
+  "verified_at_utc": "2026-08-07T19:17:46Z",
+  "raw_receipt_path": "receipts/AUX-R3-MAC-EVIDENCE-RECOVERY-R4.raw.json",
+  "raw_receipt_sha256": "sha256:d052cdeeb0c96bfe9f704b75eb84857f4689d3889c6cde38c739188295784d1f",
+  "canonical_receipt_path": "receipts/AUX-R3-MAC-EVIDENCE-RECOVERY-R4.json",
+  "canonical_receipt_sha256": "sha256:1e6a4822fece775a33f049d6c770f3788bcfa1e0e06216816785562ba46dd02b",
+  "schema_reconciliation": {
+    "raw_kind": "replacement_control_metadata_receipt",
+    "raw_jsonschema": "NONCANONICAL_FLAT_REPORT",
+    "canonical_validate_receipt": "VALID",
+    "canonical_jsonschema": "VALID",
+    "semantic_success_claim_changed": false
+  },
+  "correlation": {
+    "original_dispatch_nonce_match": true,
+    "continuation_nonce_match": true,
+    "increment_match": true,
+    "thread_id_match": true,
+    "host_id_match": true,
+    "expected_base_match": true,
+    "target_ref_match": true
+  },
+  "terminal_barrier": {
+    "thread_id": "019fdd64-c189-7020-872f-c334fb49d502",
+    "host_id": "local",
+    "turn_id": "019fdda6-42b4-7411-9b40-be795658e97e",
+    "status": "completed",
+    "thread_status": "idle"
+  },
+  "publication": {
+    "mode": "remote",
+    "expected_base": "b12cb6c6e2dc326b4150291ef30676171df34f58",
+    "expected_base_tree": "ddcd56b3a10b02cbe1a978e8522293a0b30e2dae",
+    "reviewed_product_commit": "fd4bf60ac53e1bf66060b199edf3891b4bc66b55",
+    "reviewed_product_tree": "6344b49af892770e0bfe8d9ed74d17936730f8a2",
+    "reviewed_product_parent": "b12cb6c6e2dc326b4150291ef30676171df34f58",
+    "control_metadata_commit": "05d655fa1458a276f179d12057cbda772cc51eb6",
+    "control_metadata_tree": "845694f733fccbfcd3703957bf4976da0ed59b40",
+    "control_metadata_parent": "fd4bf60ac53e1bf66060b199edf3891b4bc66b55",
+    "control_changed_files": ["llm-last-mile/runtime-refactor/06-review-finding-inventory.md"],
+    "live_remote": "05d655fa1458a276f179d12057cbda772cc51eb6",
+    "fast_forward": true,
+    "ahead": 0,
+    "behind": 0
+  },
+  "changed_files_exact": true,
+  "review": {
+    "record_sha256": "sha256:b67ee6b4eb0328e6a5d8d6aaaa1a61c68f61791b0c92291974df6d1a682b5ac4",
+    "validator": "VALID",
+    "terminal": "CLEAN",
+    "p1": 0,
+    "p2": 0,
+    "subject_fingerprint_recomputed": "sha256:efd2f5b317b53cb79e4738f46f2633d0403e6d182f11339cc36ab708690ecc52",
+    "subject_fingerprint_match": true,
+    "p3_p4_disposition": {
+      "finding": "P3-R4-CLOSURE-RESPONSE-METADATA",
+      "inventory_id": "RR-RF-0005",
+      "priority": "P3",
+      "status": "accepted",
+      "inventory_entry_verified": true
+    }
+  },
+  "independent_checks": {
+    "task_head_match": true,
+    "task_index_tree_match": true,
+    "task_worktree_clean": true,
+    "protected_checkout_tracked_clean": true,
+    "product_bytes_unchanged_by_control_commit": true,
+    "exact_expected_base_to_control_tip_union": true
+  },
+  "successor": {
+    "value": "AUX-R3-MAC-EVIDENCE-RECOVERY-R5",
+    "standing_authority_condition_satisfied": true
+  },
+  "task_preservation": {
+    "worktree": "/Users/spensermcconnell/.codex/worktrees/858f/substrate",
+    "archived": false,
+    "preserved": true
+  },
+  "verdict": "ACCEPTED_LANDED_CLEAN"
+}

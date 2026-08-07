@@ -1,0 +1,54 @@
+{
+  "protocol": "codex.top-level-task-receipt.v1",
+  "orchestration_id": "substrate-a1-1d-5r3-mac-20260806-41f97e1c570d",
+  "dispatch_nonce": "f71d4838dead60f64a351dfc18b394d912949f589efbd94425d24c88a0eae981",
+  "increment": "AUX-R3-MAC-EVIDENCE-RECOVERY-R4",
+  "status": "LANDED_CLEAN",
+  "increment_task": {
+    "thread_id": "019fdd64-c189-7020-872f-c334fb49d502",
+    "host_id": "local"
+  },
+  "expected_base": {
+    "commit": "b12cb6c6e2dc326b4150291ef30676171df34f58",
+    "tree": "ddcd56b3a10b02cbe1a978e8522293a0b30e2dae"
+  },
+  "landed": {
+    "commit": "05d655fa1458a276f179d12057cbda772cc51eb6",
+    "tree": "845694f733fccbfcd3703957bf4976da0ed59b40",
+    "target_ref": "refs/heads/feat/internal-host-orchestrator-world-dispatch-bootstrap",
+    "live_remote": "05d655fa1458a276f179d12057cbda772cc51eb6"
+  },
+  "subject_fingerprint": "sha256:efd2f5b317b53cb79e4738f46f2633d0403e6d182f11339cc36ab708690ecc52",
+  "changed_files": [
+    "Cargo.lock",
+    "Cargo.toml",
+    "crates/common/src/lib.rs",
+    "crates/common/src/managed_artifact.rs",
+    "llm-last-mile/runtime-refactor/06-review-finding-inventory.md",
+    "llm-last-mile/runtime-refactor/review-control/r3-mac-evidence-recovery-r4-review-allowlist-evidence.md",
+    "llm-last-mile/runtime-refactor/review-control/r3-mac-evidence-recovery-r4-review-authority-security.md",
+    "llm-last-mile/runtime-refactor/review-control/r3-mac-evidence-recovery-r4-review-cycle-record.json",
+    "llm-last-mile/runtime-refactor/review-control/r3-mac-evidence-recovery-r4-review-lifecycle-convergence.md",
+    "src/bin/substrate-lifecycle-macos.rs",
+    "tests/mac/lifecycle_r3.sh"
+  ],
+  "review": {
+    "packet_id": "AUX-R3-MAC-EVIDENCE-RECOVERY-R4",
+    "record_path": "/Users/spensermcconnell/.codex/worktrees/858f/substrate/llm-last-mile/runtime-refactor/review-control/r3-mac-evidence-recovery-r4-review-cycle-record.json",
+    "record_sha256": "sha256:b67ee6b4eb0328e6a5d8d6aaaa1a61c68f61791b0c92291974df6d1a682b5ac4",
+    "validated": true,
+    "terminal": "CLEAN",
+    "p1": 0,
+    "p2": 0,
+    "p3_p4_disposition": "P3-R4-CLOSURE-RESPONSE-METADATA is tracked as accepted inventory item RR-RF-0005; no remediation or review cycle."
+  },
+  "verification": {
+    "required_checks_passed": true,
+    "allowlist_passed": true,
+    "change_detection_passed": true,
+    "checkout_clean": true,
+    "ahead": 0,
+    "behind": 0
+  },
+  "next_increment": "AUX-R3-MAC-EVIDENCE-RECOVERY-R5"
+}
