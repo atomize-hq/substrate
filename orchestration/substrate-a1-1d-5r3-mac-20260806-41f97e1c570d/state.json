@@ -55,7 +55,8 @@
     "model": "gpt-5.6-terra",
     "reasoning": "xhigh",
     "prior_continuation_nonce": "48c556cf19c9c4ac60b5d8c1ee4adf744184885a66ae7a3c9223e8df7aa96dbe",
-    "authority_persisted_at_utc": "2026-08-07T17:00:09.876008Z"
+    "authority_persisted_at_utc": "2026-08-07T17:00:09.876008Z",
+    "continuation_sent_at_utc": "2026-08-07T17:00:33.105150Z"
   },
   "active_evidence_dispatches": [],
   "verified_evidence": [],
