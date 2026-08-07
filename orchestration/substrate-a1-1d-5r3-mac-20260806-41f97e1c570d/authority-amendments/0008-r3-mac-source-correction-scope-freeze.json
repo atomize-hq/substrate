@@ -1,0 +1,57 @@
+{
+  "protocol": "codex.orchestration-authority-amendment.v1",
+  "orchestration_id": "substrate-a1-1d-5r3-mac-20260806-41f97e1c570d",
+  "amendment_id": "0008-r3-mac-source-correction-scope-freeze",
+  "authorized_at_utc": "2026-08-07T04:09:18Z",
+  "authority_source": "explicit user approval after live transcript, worktree, control-pack, and macos-hardening inspection",
+  "task": {
+    "thread_id": "019fd9fe-670c-7253-bf60-86f78cd373b5",
+    "host_id": "local",
+    "worktree": "/Users/spensermcconnell/.codex/worktrees/60cc/substrate"
+  },
+  "supersedes": "Amendment 0007 remains the outer correction authority, but its open-ended remediation and publication posture is immediately frozen by this amendment. This amendment does not authorize a new transport, selector, endpoint, principal, operator model, evidence run, installation, commit, or push.",
+  "observed_subject": {
+    "base_commit": "d8a65fc8890dd37584aaeac2984c906188e5f06e",
+    "base_tree": "d8f25cc993f264f0c67fe3e00180eb393e41b2e3",
+    "tracked_diff_sha256": "sha256:39682fd4415a00ae4099580135a687d3e11858f62f84e9ef6ff3771bafd4b54c",
+    "tracked_changed_path_count": 26,
+    "worktree_status_entry_count": 28,
+    "staged_path_count": 0,
+    "tracked_insertions": 8821,
+    "tracked_deletions": 681,
+    "untracked_paths": {
+      "tests/installers/dev_install_bash32_fd_regression.sh": "sha256:2de2da832cbb38c1722d2075ffcef781d7bb9d23a76318cfd6d3b54fee0b0664",
+      "tests/mac/dev_install_compile_surface_r3.sh": "sha256:4ddc3cbb9758d84b2dd1529a6f9896d108934ac106ff4a197f134e869147b06c"
+    }
+  },
+  "immediate_freeze": [
+    "allow the already-running fresh closure reviewer to finish read-only",
+    "do not begin another remediation cycle, editing subagent, production edit, native state mutation, staging, commit, or push",
+    "do not dispatch installation, official evidence, or any successor",
+    "preserve the worktree and every current byte; do not reset, clean, checkout, reconstruct, archive, or discard"
+  ],
+  "required_scope_ledger": [
+    "map every changed repository path and every materially changed production symbol to exactly one of the four original source blockers or an explicit amendment-0007 authorized surface",
+    "identify whether each Linux-named change is solely a Lima guest-executor requirement or changes ordinary Linux host behavior",
+    "identify every Windows change and prove it is a minimal compile-only shared-contract adapter with zero Windows pairing or runtime behavior change",
+    "identify every control-pack documentation edit and prove it records an already-authorized correction rather than retroactively widening implementation authority",
+    "separately enumerate all single-stdio-channel, one-child-channel, alternate-channel, TTY, operator-confirmation, transport, selector, endpoint, or principal assumptions introduced by the diff"
+  ],
+  "scope_reduction_only": [
+    "after the current closure review and complete scope ledger, only surgical exact-hunk restoration or deletion that reduces the subject is authorized",
+    "do not use reset, clean, checkout, rebase, reconstruction, or wholesale file replacement",
+    "do not add a repository path beyond the observed 28 status entries",
+    "do not increase aggregate production-code insertions or widen the changed-symbol set",
+    "restore or remove any Windows behavior change; retain only demonstrably necessary compile-only adaptation",
+    "restore or remove ordinary Linux host behavior changes; retain only backward-compatible shared adaptation and exact Lima guest-executor pairing behavior required by the MAC protocol",
+    "remove or stop on any code or contract assertion that treats one retained stdio SSH channel as exclusive authority or treats another logical channel on the same PM-bound SSH transport as automatically prohibited"
+  ],
+  "transport_and_tty_boundary": [
+    "the current single-stdio-channel design is unapproved and is not authority",
+    "the phrases one canonical transport, no alternate transport, and single broker endpoint do not by themselves prohibit multiple logically distinct channels or sessions joined to the same PM-bound transport",
+    "this amendment does not authorize implementing a second channel; if the independent guest controlling-TTY requirement cannot be met without a transport or channel decision, stop instead of designing another architecture layer",
+    "do not weaken the written pairing, TTY, transcript, ticket, Keychain, XPC, PM, machine, artifact, replay, or restoration requirements"
+  ],
+  "terminal_posture": "After the closure review, ledger, and any scope-reduction-only pass, return a non-advancing BLOCKED_SCOPE_EXPANSION receipt/report with the exact remaining diff, path/symbol ledger, review findings, tests already completed, and the precise transport/TTY decision still required. Publication remains prohibited until a later explicit meta continuation accepts the reduced scope.",
+  "successor_dispatch_authorized": false
+}
