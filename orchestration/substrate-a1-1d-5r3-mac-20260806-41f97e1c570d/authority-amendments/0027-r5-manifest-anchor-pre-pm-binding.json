@@ -1,0 +1,91 @@
+{
+  "protocol": "codex.orchestration-authority-amendment.v1",
+  "orchestration_id": "substrate-a1-1d-5r3-mac-20260806-41f97e1c570d",
+  "amendment_id": "0027-r5-manifest-anchor-pre-pm-binding",
+  "authority_source": "meta authority for a same-corridor R5 schema and pre-PM posture correction; no platform, transport, protected-state, successor, or path widening",
+  "authorized_increment": "AUX-R3-MAC-EVIDENCE-RECOVERY-R5",
+  "existing_task": {
+    "thread_id": "019fddab-1dd2-7570-9bd3-7f3841ce0283",
+    "host_id": "local",
+    "worktree": "/Users/spensermcconnell/.codex/worktrees/686b/substrate",
+    "original_dispatch_nonce": "e480367f5a8308d8ee73f97eb7734c80bd49e37a31c3a70a6e663668d622e70e",
+    "prior_continuation_nonce": "7541b1c6ca6fa045a27e2f28fc160dd853ba7cda1692e9927194d83bcd077202",
+    "continuation_nonce": "614b644ffe0b074a92b0a1e3c08c8ecd0cd3979328e978c59a3c2b489438e693",
+    "preserved_tracked_diff_sha256": "sha256:e4a3efba520eaf074904803ded3914a8857319b3b1c0d76933e6870664c79577",
+    "preserved_status_entry_count": 13,
+    "staged_paths": 0
+  },
+  "expected_base_commit": "05d655fa1458a276f179d12057cbda772cc51eb6",
+  "expected_base_tree": "845694f733fccbfcd3703957bf4976da0ed59b40",
+  "target_ref": "refs/heads/feat/internal-host-orchestrator-world-dispatch-bootstrap",
+  "classification": "R5-only manifest-to-first-anchor binding plus a closed pre-PM mac_host_shared bootstrap-manifest exception",
+  "manifest_anchor_binding": {
+    "decision": "PublisherBootstrapAuthorizationV1 gains mandatory canonical manifest_generation and manifest_sha256 members. For MAC R5 authorization, generation must be positive and digest must be 64 lowercase hex. The authorization digest therefore binds both values, and the executor copies them exactly into the first LifecyclePublisherAnchorV1.",
+    "fd3_boundary": "FD3 still carries exactly one canonical PublisherBootstrapAuthorizationV1 frame. The untrusted ManagedLifecycleControlRequestV1 seed, manifest bytes, wrapper objects, protected state, or separate manifest frame never cross FD3.",
+    "retry": "The System-Keychain bootstrap intent, first anchor, and exact retry all bind the same authorization digest, manifest_generation, and manifest_sha256. Any mismatch preserves state and blocks.",
+    "schema_scope": "The two fields are added only in the already-authorized common type/validator and MAC R5 constructors/tests. No Linux or Windows source, constructor, target, or behavior may change."
+  },
+  "pre_pm_mac_manifest_exception": {
+    "decision": "Permit a canonical mac_host_shared manifest with platform_mapping_commitment absent only for the greenfield pre-PM publisher-bootstrap posture. Both the authorization PM commitment and the bound manifest PM commitment must be absent; a one-sided exception is forbidden.",
+    "closed_shape": [
+      "publisher_expected_absent is true",
+      "manifest authority_domain is mac_host_shared and platform_kind is mac_lima",
+      "manifest_generation is exactly 1",
+      "previous_manifest_sha256 is absent",
+      "lifecycle_state is ManifestDurable",
+      "entries and planned_action_receipts are empty",
+      "manifest scope/installation, host_context_commitment, requester/intended principal, attempt, generation, and digest exact-join the validated IH seed and bootstrap authorization",
+      "the hidden direct publisher-bootstrap command and successful retained controlling-TTY confirmation are the only issuer"
+    ],
+    "effect_boundary": "The pre-PM manifest is bootstrap authority evidence bound in the authorization, Prepared intent, and first signed anchor. It authorizes no mapped lifecycle action, pairing/ticket action, guest projection, PM-dependent locator, forwarding, or generic request.",
+    "pm_finalization": "After the sole Stage-1 absent-instance create obtains the machine identity and finalizes PM, the executor must publish the next full mac_host_shared manifest with both PM carrier/commitment present and exact-joined, previous_manifest_sha256 equal to the pre-PM digest, and a strictly next generation before any post-PM or guest action. The protected anchor is CAS-advanced to that PM-bound manifest before those actions.",
+    "post_pm_rule": "Every finalized-PM bootstrap or managed action requires authorization and manifest PM commitments both present and equal. The general mac_host_shared PM-required rule remains unchanged outside the exact greenfield pre-PM shape."
+  },
+  "authorized_paths": [
+    "crates/common/src/managed_artifact.rs",
+    "crates/common/src/lib.rs",
+    "crates/shell/src/execution/managed_lifecycle.rs",
+    "crates/shell/src/execution/managed_lifecycle/macos_client.rs",
+    "crates/shell/src/execution/mod.rs",
+    "crates/shell/src/lib.rs",
+    "src/bin/substrate-lifecycle-control.rs",
+    "src/bin/substrate-lifecycle-macos.rs",
+    "scripts/mac/lima-lifecycle.sh",
+    "scripts/mac/lima-warm.sh",
+    "scripts/mac/lima-stop.sh",
+    "crates/shell/tests/managed_lifecycle_v1.rs",
+    "tests/mac/lifecycle_r3.sh"
+  ],
+  "required_tests": [
+    "authorization canonical bytes/digest change when either manifest binding changes and reject zero/non-hex/missing/unknown fields",
+    "first anchor copies exact manifest generation/digest and request_sha256 remains the canonical authorization digest",
+    "pre-PM exact closed manifest shape accepts only with both PM fields absent",
+    "one-sided PM presence, nonempty entries/receipts, non-first generation, prior digest, wrong lifecycle state, or any IH/scope/principal/attempt mismatch rejects",
+    "finalized-PM authorization and manifest require both PM commitments present and equal",
+    "Stage-1 PM finalization publishes the strictly next full manifest and advances the anchor before any post-PM/guest action",
+    "all earlier FD3 peer/TTY/image/intent/key/state/admission kill/retry and replay negatives remain"
+  ],
+  "review": {
+    "review_started": false,
+    "discovery": "one fresh same-subject discovery burst/review after deterministic proof",
+    "closure": "one different fresh closure reviewer",
+    "supplemental_cycles_max": 2,
+    "remediate": [
+      "P1",
+      "P2"
+    ],
+    "p3_p4": "record only in 06-review-finding-inventory.md; no remediation cycle",
+    "clean_terminal": true
+  },
+  "hard_exclusions": [
+    "LifecyclePublisherProtectedStateV1 field or schema expansion",
+    "a second FD3 frame, manifest wrapper, seed wrapper, new carrier, endpoint, transport, session, broker, or R6 surface",
+    "general relaxation of mac_host_shared PM requirements outside the exact pre-PM bootstrap shape",
+    "caller-supplied authorization, authorization digest, target, component relaxation, or ambient/default PM/VM selection",
+    "Linux or Windows source, behavior, target commands, or constructors",
+    "new changed path beyond the preserved thirteen",
+    "native install, code signing, Keychain/XPC/Lima mutation, lifecycle action, evidence action, commit, or publication before terminal CLEAN"
+  ],
+  "publication": "one normal fast-forward R5 commit only after MAC-only deterministic proof and terminal review CLEAN",
+  "terminal_successor": "AUX-R3-MAC-EVIDENCE-RECOVERY-R6"
+}

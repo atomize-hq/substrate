@@ -1,0 +1,22 @@
+{
+  "protocol": "codex.top-level-task-receipt.v1",
+  "orchestration_id": "substrate-a1-1d-5r3-mac-20260806-41f97e1c570d",
+  "dispatch_nonce": "e480367f5a8308d8ee73f97eb7734c80bd49e37a31c3a70a6e663668d622e70e",
+  "increment": "AUX-R3-MAC-EVIDENCE-RECOVERY-R5",
+  "status": "BLOCKED_CONTRADICTION",
+  "increment_task": {
+    "thread_id": "019fddab-1dd2-7570-9bd3-7f3841ce0283",
+    "host_id": "local"
+  },
+  "expected_base": {
+    "commit": "05d655fa1458a276f179d12057cbda772cc51eb6",
+    "tree": "845694f733fccbfcd3703957bf4976da0ed59b40"
+  },
+  "blocker": {
+    "summary": "The first signed MAC publisher anchor lacks an executor-visible manifest generation/digest binding, and the pre-PM MAC bootstrap posture conflicts with the general PM-required manifest rule.",
+    "details": "Continuation 0026 correctly preserved the one-object FD3 boundary and the existing protected-state shape. The canonical PublisherBootstrapAuthorizationV1 delivered over FD3 does not carry the manifest_generation or manifest_sha256 required by LifecyclePublisherAnchorV1, so the executor cannot construct or exact-retry the first anchor. Separately, the general mac_host_shared manifest validator requires a PM commitment even though the explicitly authorized pre-PM greenfield bootstrap posture requires both authorization and manifest PM commitments to be absent. The task stopped with the exact 13-path unstaged worktree preserved; no native action, commit, push, or R6 work occurred.",
+    "required_authority": "Within R5, add a canonical manifest generation/digest binding to PublisherBootstrapAuthorizationV1 and define a closed pre-PM mac_host_shared bootstrap-manifest exception whose PM fields are both absent until Stage-1 finalizes PM. Do not extend protected state or add an FD3 wrapper.",
+    "handoff_prompt": "Preserve this exact 13-path worktree without reset/clean/rebase. Do not publish or begin R6. After the two schema/PM decisions are bound, continue R5 by completing the FD3 peer/TTY/keychain intent/key/first-anchor transaction, then run MAC-only proof and the required fresh review sequence."
+  },
+  "next_increment": "AUX-R3-MAC-EVIDENCE-RECOVERY-R6"
+}

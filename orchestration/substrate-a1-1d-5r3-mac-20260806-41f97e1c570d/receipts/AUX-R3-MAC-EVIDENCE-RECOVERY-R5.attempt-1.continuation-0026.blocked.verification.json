@@ -1,0 +1,43 @@
+{
+  "protocol": "codex.top-level-task-receipt-verification.v1",
+  "orchestration_id": "substrate-a1-1d-5r3-mac-20260806-41f97e1c570d",
+  "increment": "AUX-R3-MAC-EVIDENCE-RECOVERY-R5",
+  "attempt": 1,
+  "continuation_nonce": "7541b1c6ca6fa045a27e2f28fc160dd853ba7cda1692e9927194d83bcd077202",
+  "verified_at_utc": "2026-08-07T20:33:32Z",
+  "raw_receipt_path": "receipts/AUX-R3-MAC-EVIDENCE-RECOVERY-R5.attempt-1.continuation-0026.blocked.raw.json",
+  "canonical_receipt_path": "receipts/AUX-R3-MAC-EVIDENCE-RECOVERY-R5.attempt-1.continuation-0026.blocked.canonical.json",
+  "terminal_barrier": {
+    "thread_id": "019fddab-1dd2-7570-9bd3-7f3841ce0283",
+    "host_id": "local",
+    "turn_id": "019fdde4-25b2-7a63-9b3f-2b4fac61d601",
+    "status": "completed",
+    "thread_status": "idle",
+    "cursor": "02c3d9a2-cefa-4c23-ab5f-aab2a1493429:5"
+  },
+  "independent_observation": {
+    "worktree": "/Users/spensermcconnell/.codex/worktrees/686b/substrate",
+    "head": "05d655fa1458a276f179d12057cbda772cc51eb6",
+    "head_tree": "845694f733fccbfcd3703957bf4976da0ed59b40",
+    "index_tree": "845694f733fccbfcd3703957bf4976da0ed59b40",
+    "live_remote": "05d655fa1458a276f179d12057cbda772cc51eb6",
+    "staged_paths": 0,
+    "status_entry_count": 13,
+    "tracked_binary_diff_sha256": "sha256:e4a3efba520eaf074904803ded3914a8857319b3b1c0d76933e6870664c79577",
+    "diff_check": "clean"
+  },
+  "repo_truth_classification": {
+    "first_anchor_requires_manifest_generation_and_digest": true,
+    "fd3_payload_must_remain_exactly_one_bootstrap_authorization": true,
+    "protected_state_expansion_required": false,
+    "authorization_schema_binding_is_minimum_same_packet_fix": true,
+    "pre_pm_mac_bootstrap_exception_required": true,
+    "general_post_pm_manifest_pm_requirement_remains": true,
+    "new_transport_or_r6_surface_required": false,
+    "review_started": false
+  },
+  "verdict": "ACCEPTED_NON_ADVANCING_BLOCK_AND_ADJUDICATED_FOR_SAME_TASK_CONTINUATION",
+  "raw_receipt_sha256": "sha256:f8bb4cd06dbfbfd7646399dece34ef9b18da1429cbcf1ce74285aa8d3a7a1668",
+  "canonical_receipt_sha256": "sha256:3e095da2a451b3673eb0c34305f1c3b7c3e4fe22db73c829deee8f90361650cf",
+  "verification_sha256_note": "Computed after this field is omitted from the digest; state binds the file digest."
+}

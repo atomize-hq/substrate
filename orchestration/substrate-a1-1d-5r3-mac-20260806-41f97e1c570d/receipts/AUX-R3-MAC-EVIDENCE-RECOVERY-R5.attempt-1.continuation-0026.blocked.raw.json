@@ -1,0 +1,49 @@
+{
+  "schema": "codex.top-level-task-receipt.v1",
+  "status": "BLOCKED_CONTRADICTION",
+  "increment": "AUX-R3-MAC-EVIDENCE-RECOVERY-R5",
+  "orchestration_id": "substrate-a1-1d-5r3-mac-20260806-41f97e1c570d",
+  "dispatch_nonce": "e480367f5a8308d8ee73f97eb7734c80bd49e37a31c3a70a6e663668d622e70e",
+  "continuation_nonce": "7541b1c6ca6fa045a27e2f28fc160dd853ba7cda1692e9927194d83bcd077202",
+  "increment_task_thread_id": "019fddab-1dd2-7570-9bd3-7f3841ce0283",
+  "increment_task_host_id": "local",
+  "expected_base_commit": "05d655fa1458a276f179d12057cbda772cc51eb6",
+  "expected_base_tree": "845694f733fccbfcd3703957bf4976da0ed59b40",
+  "live_remote_observation": "05d655fa1458a276f179d12057cbda772cc51eb6",
+  "worktree": "/Users/spensermcconnell/.codex/worktrees/686b/substrate",
+  "staged_paths": [],
+  "status_entries": 13,
+  "partial_diff_sha256": "e4a3efba520eaf074904803ded3914a8857319b3b1c0d76933e6870664c79577",
+  "changed_paths": [
+    "crates/common/src/lib.rs",
+    "crates/common/src/managed_artifact.rs",
+    "crates/shell/src/execution/managed_lifecycle.rs",
+    "crates/shell/src/execution/managed_lifecycle/macos_client.rs",
+    "crates/shell/src/execution/mod.rs",
+    "crates/shell/src/lib.rs",
+    "crates/shell/tests/managed_lifecycle_v1.rs",
+    "scripts/mac/lima-lifecycle.sh",
+    "scripts/mac/lima-stop.sh",
+    "scripts/mac/lima-warm.sh",
+    "src/bin/substrate-lifecycle-control.rs",
+    "src/bin/substrate-lifecycle-macos.rs",
+    "tests/mac/lifecycle_r3.sh"
+  ],
+  "evidence": [
+    "LifecyclePublisherAnchorV1 requires manifest_generation and manifest_sha256 (crates/common/src/managed_artifact.rs:273-274).",
+    "The mandated FD3 payload is only canonical PublisherBootstrapAuthorizationV1, whose exact schema has neither manifest_generation nor manifest_sha256 (crates/common/src/managed_artifact.rs:391-417).",
+    "The R5 fence forbids extending LifecyclePublisherProtectedStateV1, and the executor may not receive the untrusted seed or an FD3 wrapper; it therefore cannot construct or exact-retry a valid signed first anchor joined to the canonical seed.",
+    "A separate pre-PM contradiction remains: mac_host_shared manifest validation requires platform_mapping_commitment (crates/common/src/managed_artifact.rs:1846 onward), while 0026 requires both PM carrier/commitment fields absent in the pre-PM posture."
+  ],
+  "partial_work_preserved": [
+    "0026 seed decoder now admits only the hidden direct command and rejects tag/action/protected-state/publisher/Stage-1/pairing carriers.",
+    "control and executor image measurement/identity comparison was started; mac control and executor artifact equality requirement was corrected to independent measurement.",
+    "The focused direct-bootstrap test is intentionally red pending the missing authority contract; no native action, commit, or publication occurred."
+  ],
+  "required_authority": [
+    "Authorize a canonical, nonserialized PublisherBootstrapAuthorizationV1 binding for manifest_generation and manifest_sha256 (and state whether they are required for mac_host_shared), or authorize one exact retained executor-visible manifest-anchor join that does not add protected-state fields or an FD3 wrapper.",
+    "Resolve the pre-PM mac_host_shared manifest/PM requirement: either permit a canonical mac_host_shared manifest with no PM commitment in the pre-PM posture, or state that the manifest PM commitment is an allowed exception and define how it joins the absent authorization PM fields."
+  ],
+  "continuation_handoff": "Preserve this exact 13-path worktree without reset/clean/rebase. Do not publish or begin R6. After the two schema/PM decisions are bound, continue R5 by completing the FD3 peer/TTY/keychain intent/key/first-anchor transaction, then run MAC-only proof and the required fresh review sequence.",
+  "next_increment": "AUX-R3-MAC-EVIDENCE-RECOVERY-R6"
+}
