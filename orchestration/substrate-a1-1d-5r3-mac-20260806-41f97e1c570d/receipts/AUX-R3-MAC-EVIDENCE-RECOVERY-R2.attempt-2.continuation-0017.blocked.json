@@ -1,0 +1,41 @@
+{
+  "protocol": "codex.top-level-task-receipt.v1",
+  "status": "BLOCKED_SCOPE_EXPANSION",
+  "increment": "AUX-R3-MAC-EVIDENCE-RECOVERY-R2",
+  "packet_id": "AUX-R3-MAC-EVIDENCE-RECOVERY-R2",
+  "orchestration_id": "substrate-a1-1d-5r3-mac-20260806-41f97e1c570d",
+  "dispatch_nonce": "7f33f40d8af93e12561b3b1e23fa38bfe3fca28e15c70f53caf6525dc85d68de",
+  "continuation_nonce": "ab5f7cbe656daeeec75e2e2e96d3f753f34ce266913c42088e7547e291dba1af",
+  "task_thread_id": "019fdcee-73e6-77a2-8a16-1d1c86223f9c",
+  "task_host_id": "local",
+  "exact_worktree": "/Users/spensermcconnell/.codex/worktrees/bacb/substrate",
+  "expected_base": "bb098b6e265a4b6cadc4b7ca908c8b6ccf59f2b9",
+  "expected_base_tree": "688ae2860d99d6d5cf1019e0d3ba27c7cc26b6cc",
+  "observed_head": "bb098b6e265a4b6cadc4b7ca908c8b6ccf59f2b9",
+  "observed_tree": "688ae2860d99d6d5cf1019e0d3ba27c7cc26b6cc",
+  "observed_remote_target": "bb098b6e265a4b6cadc4b7ca908c8b6ccf59f2b9",
+  "remediation": {
+    "finding_id": "P2-R2-LIFECYCLE-001",
+    "behavior": "Stages binary and manifest independently, commits manifest before destination replacement, cleans failure temporaries, preserves fail-closed unmanaged destinations, and proves retry convergence."
+  },
+  "blocker": {
+    "reason": "tests/mac/dev_install_compile_surface_r3.sh still requires literal tmp variable names from the pre-remediation helper and fails after its native and x86_64-apple-darwin checks.",
+    "authority_conflict": "Continuation 0017 allowed only the installer helper/call site and Bash fixture.",
+    "required_authority": "Authorize only the static helper-invariant block in tests/mac/dev_install_compile_surface_r3.sh to validate binary_tmp/manifest_tmp staging, cleanup, and commit ordering."
+  },
+  "evidence": {
+    "git_diff_check": "PASS",
+    "installer_fixture": "PASS",
+    "mac_compile_surface": "FAIL only at stale static assertion",
+    "tracked_binary_diff_sha256_current": "1a202492a960baa181a1012f439f558e61c596676fe17c4290c2e7b0959a0074",
+    "untracked_compile_test_sha256": "0a03fde502464ce62bb2e94cec65bd86d98c8117579f5a3ad758bcad4e03ddc3",
+    "review_record_sha256": "2863d377948976092c5f50971bc7e5e5b698ef86634396699294a892c1ab1ab7"
+  },
+  "review_and_publication": {
+    "review_record_status": "discovery bounded_stop",
+    "closure_review": "not started",
+    "commit": null,
+    "push": null
+  },
+  "next_increment": null
+}

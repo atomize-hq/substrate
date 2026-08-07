@@ -1,0 +1,31 @@
+{
+  "protocol": "codex.top-level-task-receipt-verification.v1",
+  "orchestration_id": "substrate-a1-1d-5r3-mac-20260806-41f97e1c570d",
+  "increment": "AUX-R3-MAC-EVIDENCE-RECOVERY-R2",
+  "attempt": 2,
+  "continuation_nonce": "ab5f7cbe656daeeec75e2e2e96d3f753f34ce266913c42088e7547e291dba1af",
+  "verified_at_utc": "2026-08-07T17:24:07.789897Z",
+  "raw_receipt_path": "receipts/AUX-R3-MAC-EVIDENCE-RECOVERY-R2.attempt-2.continuation-0017.blocked.json",
+  "raw_receipt_sha256": "sha256:31477e86eb7d857dab1b845c2f22f9ebcf6bef568f52355cc41c69eedb4f2a49",
+  "canonical_receipt_path": "receipts/AUX-R3-MAC-EVIDENCE-RECOVERY-R2.attempt-2.continuation-0017.blocked.canonical.json",
+  "canonical_receipt_sha256": "sha256:aefdf06f974a6a8009c7e0e818722a315b53a3ee2a7687fb61d8e1580ea7048c",
+  "terminal_barrier": {
+    "thread_id": "019fdcee-73e6-77a2-8a16-1d1c86223f9c",
+    "host_id": "local",
+    "turn_id": "019fdd3a-362b-7952-81da-ca30fc694789",
+    "status": "completed",
+    "thread_status": "idle"
+  },
+  "independent_observation": {
+    "head": "bb098b6e265a4b6cadc4b7ca908c8b6ccf59f2b9",
+    "head_tree": "688ae2860d99d6d5cf1019e0d3ba27c7cc26b6cc",
+    "index_tree": "688ae2860d99d6d5cf1019e0d3ba27c7cc26b6cc",
+    "live_remote": "bb098b6e265a4b6cadc4b7ca908c8b6ccf59f2b9",
+    "staged_paths": 0,
+    "status_entry_count": 14,
+    "tracked_binary_diff_sha256": "sha256:1a202492a960baa181a1012f439f558e61c596676fe17c4290c2e7b0959a0074",
+    "untracked_compile_test_sha256": "sha256:0a03fde502464ce62bb2e94cec65bd86d98c8117579f5a3ad758bcad4e03ddc3",
+    "review_record_sha256": "sha256:2863d377948976092c5f50971bc7e5e5b698ef86634396699294a892c1ab1ab7"
+  },
+  "verdict": "ACCEPTED_NON_ADVANCING_BLOCK"
+}

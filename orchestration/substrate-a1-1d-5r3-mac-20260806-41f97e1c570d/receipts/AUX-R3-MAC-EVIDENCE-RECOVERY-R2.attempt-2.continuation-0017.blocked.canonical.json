@@ -1,0 +1,22 @@
+{
+  "protocol": "codex.top-level-task-receipt.v1",
+  "orchestration_id": "substrate-a1-1d-5r3-mac-20260806-41f97e1c570d",
+  "dispatch_nonce": "7f33f40d8af93e12561b3b1e23fa38bfe3fca28e15c70f53caf6525dc85d68de",
+  "increment": "AUX-R3-MAC-EVIDENCE-RECOVERY-R2",
+  "status": "BLOCKED_SCOPE_EXPANSION",
+  "increment_task": {
+    "thread_id": "019fdcee-73e6-77a2-8a16-1d1c86223f9c",
+    "host_id": "local"
+  },
+  "expected_base": {
+    "commit": "bb098b6e265a4b6cadc4b7ca908c8b6ccf59f2b9",
+    "tree": "688ae2860d99d6d5cf1019e0d3ba27c7cc26b6cc"
+  },
+  "blocker": {
+    "summary": "The MAC compile-surface test contains stale helper-variable assertions after the authorized P2 remediation.",
+    "details": "MAC cargo checks and the installer failure/retry fixture pass. Only the static assertion still expects the old tmp variable shape. The worktree is preserved unstaged and unpublished.",
+    "required_authority": "Authorize only the static helper-invariant block in tests/mac/dev_install_compile_surface_r3.sh to validate binary_tmp/manifest_tmp staging, cleanup, and commit ordering.",
+    "handoff_prompt": "Continue the same R2 task after binding a narrow test-only correction, then rerun MAC-only gates and closure review."
+  },
+  "next_increment": "AUX-R3-MAC-EVIDENCE-RECOVERY-R3"
+}

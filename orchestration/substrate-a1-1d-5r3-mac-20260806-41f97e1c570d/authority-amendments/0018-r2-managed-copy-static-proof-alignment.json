@@ -1,0 +1,42 @@
+{
+  "protocol": "codex.orchestration-authority-amendment.v1",
+  "orchestration_id": "substrate-a1-1d-5r3-mac-20260806-41f97e1c570d",
+  "amendment_id": "0018-r2-managed-copy-static-proof-alignment",
+  "authority_source": "standing meta authority to correct a stale R2 test fence directly caused by the authorized P2 remediation in the same MAC-only packet",
+  "authorized_increment": "AUX-R3-MAC-EVIDENCE-RECOVERY-R2",
+  "existing_task": {
+    "thread_id": "019fdcee-73e6-77a2-8a16-1d1c86223f9c",
+    "host_id": "local",
+    "worktree": "/Users/spensermcconnell/.codex/worktrees/bacb/substrate",
+    "original_dispatch_nonce": "7f33f40d8af93e12561b3b1e23fa38bfe3fca28e15c70f53caf6525dc85d68de",
+    "prior_continuation_nonce": "ab5f7cbe656daeeec75e2e2e96d3f753f34ce266913c42088e7547e291dba1af",
+    "continuation_nonce": "247ed8fe255205152bfe548529a6796e6532f91748f7e4cea5764829dfe9ddae",
+    "preserved_tracked_diff_sha256": "sha256:1a202492a960baa181a1012f439f558e61c596676fe17c4290c2e7b0959a0074",
+    "preserved_untracked_test_sha256": "sha256:0a03fde502464ce62bb2e94cec65bd86d98c8117579f5a3ad758bcad4e03ddc3",
+    "review_record_sha256": "sha256:2863d377948976092c5f50971bc7e5e5b698ef86634396699294a892c1ab1ab7"
+  },
+  "authorized_change": {
+    "path": "tests/mac/dev_install_compile_surface_r3.sh",
+    "surface": "only the static required-invariant block for stage_managed_mac_control_binary_copy",
+    "requirements": [
+      "assert binary_tmp and manifest_tmp are distinct",
+      "assert source copy and chmod target binary_tmp",
+      "assert manifest creation and destination entry target manifest_tmp",
+      "assert failure cleanup covers both temporary paths where applicable",
+      "assert manifest_tmp is moved to manifest_path before binary_tmp is moved to dest",
+      "retain unmanaged-destination, exact BUILD_FLAGS, exact two-binary call-site, native arm64, and x86_64-apple-darwin assertions"
+    ],
+    "production_edits": false
+  },
+  "review_continuation": "After deterministic gates pass, freeze the new subject and run the already-required fresh different closure review; use only bounded causal supplemental cycles if caused/unmasked P1/P2 appear.",
+  "forbidden": [
+    "any production edit",
+    "new test path",
+    "Linux/Windows target work",
+    "R3/R4 work",
+    "toolchain cache mutation",
+    "npx gitnexus analyze",
+    "publication before terminal CLEAN"
+  ],
+  "terminal_successor": "AUX-R3-MAC-EVIDENCE-RECOVERY-R3"
+}
