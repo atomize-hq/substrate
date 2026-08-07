@@ -1,0 +1,58 @@
+{
+  "protocol": "codex.top-level-task-receipt.v1",
+  "status": "BLOCKED_SCOPE_EXPANSION",
+  "increment": "AUX-R3-MAC-EVIDENCE-RECOVERY-R2",
+  "packet_id": "AUX-R3-MAC-EVIDENCE-RECOVERY-R2",
+  "attempt": 2,
+  "orchestration_id": "substrate-a1-1d-5r3-mac-20260806-41f97e1c570d",
+  "original_dispatch_nonce": "7f33f40d8af93e12561b3b1e23fa38bfe3fca28e15c70f53caf6525dc85d68de",
+  "prior_continuation_nonce": "3f7553bcb50a0c0d06373e6a469f8972c9a31a59b06a13eea36a255a66c06760",
+  "continuation_nonce": "48c556cf19c9c4ac60b5d8c1ee4adf744184885a66ae7a3c9223e8df7aa96dbe",
+  "increment_task": {
+    "thread_id": "019fdcee-73e6-77a2-8a16-1d1c86223f9c",
+    "host_id": "local",
+    "worktree": "/Users/spensermcconnell/.codex/worktrees/bacb/substrate"
+  },
+  "expected_base": {
+    "commit": "bb098b6e265a4b6cadc4b7ca908c8b6ccf59f2b9",
+    "tree": "688ae2860d99d6d5cf1019e0d3ba27c7cc26b6cc"
+  },
+  "preservation_reverification": {
+    "head": "bb098b6e265a4b6cadc4b7ca908c8b6ccf59f2b9",
+    "tree": "688ae2860d99d6d5cf1019e0d3ba27c7cc26b6cc",
+    "tracked_binary_diff_sha256": "200f5e0563ce1af63625d0ed33822520d96f9dcadedee6b32a7b843fdfd314f2",
+    "untracked_compile_test_sha256": "0a03fde502464ce62bb2e94cec65bd86d98c8117579f5a3ad758bcad4e03ddc3",
+    "live_remote": {
+      "target": "refs/heads/feat/internal-host-orchestrator-world-dispatch-bootstrap",
+      "commit": "bb098b6e265a4b6cadc4b7ca908c8b6ccf59f2b9"
+    },
+    "git_diff_check": "PASS"
+  },
+  "external_disposable_toolchains": {
+    "cache_root": "/Users/spensermcconnell/.cache/substrate-r2-cross-toolchains",
+    "windows": {
+      "wrapper": "cargo-xwin 0.23.0",
+      "target": "x86_64-pc-windows-msvc",
+      "exit_status": 101
+    },
+    "linux": {
+      "wrapper": "Zig 0.13.0",
+      "target": "x86_64-unknown-linux-gnu",
+      "exit_status": 0
+    },
+    "repository_mutations_for_toolchains": "none"
+  },
+  "proof": {
+    "linux_real_target_compile": "PASS",
+    "windows_real_target_compile": "Reached source compilation with the downloaded SDK sysroot and failed with 20 frozen cfg/source errors.",
+    "windows_wsl_source_hash": {
+      "paths": 27,
+      "base_and_worktree_aggregate_sha256": "3bf4f3b4dcc134a7febae7175497fffb9f9886094c7e851f76c8a5c79253280c",
+      "byte_identical": true
+    },
+    "windows_error_total": 20
+  },
+  "blocking_reason": "The continuation required both genuine target checks to pass. Windows compilation exposes frozen out-of-corridor cfg/source closure. Remediation would exceed R2. No source remediation, review, commit, push, or successor dispatch occurred.",
+  "required_authority": "Make the R3 MAC recovery corridor MAC-only: remove Linux/Windows target compilation as blocking gates, require MAC native and x86_64-apple-darwin checks plus hashes/diff/static positive macOS cfg proof, narrow the new non-Linux fallback to macOS, and record but do not remediate the Windows baseline failures.",
+  "handoff": "Continue the same preserved R2 task/worktree only after exact MAC-only authority is bound. Do not clean, reset, restore, commit, rebase, merge, or publish before binding."
+}

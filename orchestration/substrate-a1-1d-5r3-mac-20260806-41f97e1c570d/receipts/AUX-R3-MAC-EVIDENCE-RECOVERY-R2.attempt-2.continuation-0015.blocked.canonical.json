@@ -1,0 +1,22 @@
+{
+  "protocol": "codex.top-level-task-receipt.v1",
+  "orchestration_id": "substrate-a1-1d-5r3-mac-20260806-41f97e1c570d",
+  "dispatch_nonce": "7f33f40d8af93e12561b3b1e23fa38bfe3fca28e15c70f53caf6525dc85d68de",
+  "increment": "AUX-R3-MAC-EVIDENCE-RECOVERY-R2",
+  "status": "BLOCKED_SCOPE_EXPANSION",
+  "increment_task": {
+    "thread_id": "019fdcee-73e6-77a2-8a16-1d1c86223f9c",
+    "host_id": "local"
+  },
+  "expected_base": {
+    "commit": "bb098b6e265a4b6cadc4b7ca908c8b6ccf59f2b9",
+    "tree": "688ae2860d99d6d5cf1019e0d3ba27c7cc26b6cc"
+  },
+  "blocker": {
+    "summary": "The R2 Windows target-compile gate reaches 20 out-of-corridor Windows/shared-source closure failures.",
+    "details": "Disposable Linux proof passed. Windows xwin reached genuine source compilation, then failed in frozen shared/Windows closure. All 27 Windows/WSL files remain byte-identical. The repository subject remains preserved unstaged with no review, commit, push, or successor dispatch.",
+    "required_authority": "Make the R3 MAC recovery corridor MAC-only: remove Linux/Windows target compilation as blocking gates, require MAC native and x86_64-apple-darwin checks plus hashes/diff/static positive macOS cfg proof, narrow the new non-Linux fallback to macOS, and record but do not remediate the Windows baseline failures.",
+    "handoff_prompt": "Continue the same preserved R2 task/worktree only after exact MAC-only authority is bound. Do not clean, reset, restore, commit, rebase, merge, or publish before binding."
+  },
+  "next_increment": "AUX-R3-MAC-EVIDENCE-RECOVERY-R3"
+}

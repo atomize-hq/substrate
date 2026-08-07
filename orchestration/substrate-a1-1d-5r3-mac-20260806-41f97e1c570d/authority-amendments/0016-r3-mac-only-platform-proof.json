@@ -1,0 +1,54 @@
+{
+  "protocol": "codex.orchestration-authority-amendment.v1",
+  "orchestration_id": "substrate-a1-1d-5r3-mac-20260806-41f97e1c570d",
+  "amendment_id": "0016-r3-mac-only-platform-proof",
+  "authority_source": "explicit user approval of the proposed correction making R2 through R6 MAC-only and instructing the existing R2 task to finish under that correction",
+  "applies_to": [
+    "AUX-R3-MAC-EVIDENCE-RECOVERY-R2",
+    "AUX-R3-MAC-EVIDENCE-RECOVERY-R3",
+    "AUX-R3-MAC-EVIDENCE-RECOVERY-R4",
+    "AUX-R3-MAC-EVIDENCE-RECOVERY-R5",
+    "AUX-R3-MAC-EVIDENCE-RECOVERY-R6"
+  ],
+  "existing_r2_task": {
+    "thread_id": "019fdcee-73e6-77a2-8a16-1d1c86223f9c",
+    "host_id": "local",
+    "worktree": "/Users/spensermcconnell/.codex/worktrees/bacb/substrate",
+    "original_dispatch_nonce": "7f33f40d8af93e12561b3b1e23fa38bfe3fca28e15c70f53caf6525dc85d68de",
+    "prior_continuation_nonce": "48c556cf19c9c4ac60b5d8c1ee4adf744184885a66ae7a3c9223e8df7aa96dbe",
+    "continuation_nonce": "2248c338b9bfc2c0dcb702ea5828ab9674436c1fa3f02f740d6b817c897d779c",
+    "preserved_tracked_diff_sha256": "sha256:200f5e0563ce1af63625d0ed33822520d96f9dcadedee6b32a7b843fdfd314f2",
+    "preserved_untracked_test_sha256": "sha256:0a03fde502464ce62bb2e94cec65bd86d98c8117579f5a3ad758bcad4e03ddc3"
+  },
+  "superseded_platform_gates": {
+    "linux_target_compile_blocking": false,
+    "windows_target_compile_blocking": false,
+    "cross_toolchain_provisioning_required": false,
+    "cross_platform_failure_remediation_authorized": false
+  },
+  "required_mac_only_proof": [
+    "native arm64 macOS checks for the packet-owned surface",
+    "x86_64-apple-darwin checks for the packet-owned surface",
+    "exact changed-path and symbol allowlist",
+    "byte-identical hashes for forbidden Windows/WSL paths",
+    "Linux-body diff proof for any shared or Linux-named path",
+    "static proof that new MAC branches use positive target_os = macos predicates rather than not-linux predicates",
+    "repository-defined causal cascading review and clean publication gates"
+  ],
+  "r2_authorized_correction": {
+    "path": "crates/shell/src/execution/managed_lifecycle/linux_client.rs",
+    "symbol": "set_close_on_exec_v1 and its new call/socket_type predicates",
+    "change": "replace only the R2-introduced cfg(not(target_os = linux)) MAC fallback predicates with cfg(target_os = macos)",
+    "additional_product_or_test_changes": false
+  },
+  "out_of_corridor_debt": {
+    "windows_target_errors": 20,
+    "disposition": "record in R2 review/receipt evidence as observed baseline/out-of-corridor debt; do not remediate, widen, or make it a publication blocker",
+    "linux_target_result": "nonblocking extra evidence already passed; perform no further Linux work"
+  },
+  "external_cache": {
+    "path": "/Users/spensermcconnell/.cache/substrate-r2-cross-toolchains",
+    "disposition": "leave untouched; no further provisioning or cleanup is authorized by this amendment"
+  },
+  "terminal_successor": "AUX-R3-MAC-EVIDENCE-RECOVERY-R3"
+}
