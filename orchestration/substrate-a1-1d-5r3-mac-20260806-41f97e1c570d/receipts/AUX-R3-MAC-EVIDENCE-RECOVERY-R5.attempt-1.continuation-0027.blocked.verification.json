@@ -1,0 +1,54 @@
+{
+  "protocol": "codex.top-level-task-receipt-verification.v1",
+  "orchestration_id": "substrate-a1-1d-5r3-mac-20260806-41f97e1c570d",
+  "increment": "AUX-R3-MAC-EVIDENCE-RECOVERY-R5",
+  "attempt": 1,
+  "continuation_nonce": "614b644ffe0b074a92b0a1e3c08c8ecd0cd3979328e978c59a3c2b489438e693",
+  "verified_at_utc": "2026-08-07T21:09:51Z",
+  "raw_receipt_path": "receipts/AUX-R3-MAC-EVIDENCE-RECOVERY-R5.attempt-1.continuation-0027.blocked.raw.json",
+  "canonical_receipt_path": "receipts/AUX-R3-MAC-EVIDENCE-RECOVERY-R5.attempt-1.continuation-0027.blocked.canonical.json",
+  "terminal_barrier": {
+    "thread_id": "019fddab-1dd2-7570-9bd3-7f3841ce0283",
+    "host_id": "local",
+    "turn_id": "019fddee-87c6-7cc3-81f5-f40ce48672a5",
+    "status": "completed",
+    "thread_status": "idle",
+    "cursor": "02c3d9a2-cefa-4c23-ab5f-aab2a1493429:7"
+  },
+  "independent_observation": {
+    "worktree": "/Users/spensermcconnell/.codex/worktrees/686b/substrate",
+    "head": "05d655fa1458a276f179d12057cbda772cc51eb6",
+    "head_tree": "845694f733fccbfcd3703957bf4976da0ed59b40",
+    "index_tree": "845694f733fccbfcd3703957bf4976da0ed59b40",
+    "live_remote": "05d655fa1458a276f179d12057cbda772cc51eb6",
+    "staged_paths": 0,
+    "status_entry_count": 17,
+    "tracked_and_untracked_subject_fingerprint": "sha256:a69dce04d313466f15f5c2284fe60fe4531a9f946ec53f9aca7f0b181e8c9147",
+    "diff_check": "clean"
+  },
+  "review_verification": {
+    "record_path": "llm-last-mile/runtime-refactor/review-control/r3-mac-evidence-recovery-r5-review-cycle-record.json",
+    "validator": "VALID",
+    "status": "bounded_stop",
+    "record_sha256": "sha256:6eea8804d5c027ed5272f139afdef20ee752a32e86e132fdc117e5816738fb85",
+    "metadata_file_sha256": {
+      "r3-mac-evidence-recovery-r5-review-allowlist-evidence.md": "sha256:3472e88055b40e3c3fd0837f2db6bed9e3b33e01eb585f843b8879b9d7c1dff8",
+      "r3-mac-evidence-recovery-r5-review-authority-security.md": "sha256:fcf9fffa7f23488ad03c45901353bec93ba3ebffe26c7fd11d8030be7d2ae7a4",
+      "r3-mac-evidence-recovery-r5-review-lifecycle-convergence.md": "sha256:fbea30b3ef8a854f1904520089a07c020d17c782bb04010e236cf6f77fadc76d"
+    }
+  },
+  "repo_truth_classification": {
+    "findings_valid": true,
+    "same_r5_mac_corridor": true,
+    "new_transport_required": false,
+    "new_protected_state_field_required": false,
+    "installer_owned_root_provenance_required": true,
+    "stage_one_signed_successor_manifest_required": true,
+    "authoritative_receipt_index_head_anchor_transaction_required": true,
+    "review_cycle_started": true,
+    "next_permitted_review_after_remediation": "closure-1"
+  },
+  "verdict": "ACCEPTED_NON_ADVANCING_BLOCK_AND_ADJUDICATED_FOR_SAME_TASK_REMEDIATION",
+  "raw_receipt_sha256": "sha256:b964c9d923e38eb3ca316f27d3772f90e881ce5e4eab167aa6eeb13822a29026",
+  "canonical_receipt_sha256": "sha256:0249cb21506f8ea2f5b006ef7dc491d624c1df58515ba5d303eee53018569472"
+}

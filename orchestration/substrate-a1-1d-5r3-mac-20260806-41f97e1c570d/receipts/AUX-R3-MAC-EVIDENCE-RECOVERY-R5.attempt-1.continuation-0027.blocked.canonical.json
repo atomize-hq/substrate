@@ -1,0 +1,22 @@
+{
+  "protocol": "codex.top-level-task-receipt.v1",
+  "orchestration_id": "substrate-a1-1d-5r3-mac-20260806-41f97e1c570d",
+  "dispatch_nonce": "e480367f5a8308d8ee73f97eb7734c80bd49e37a31c3a70a6e663668d622e70e",
+  "increment": "AUX-R3-MAC-EVIDENCE-RECOVERY-R5",
+  "status": "BLOCKED_SCOPE_EXPANSION",
+  "increment_task": {
+    "thread_id": "019fddab-1dd2-7570-9bd3-7f3841ce0283",
+    "host_id": "local"
+  },
+  "expected_base": {
+    "commit": "05d655fa1458a276f179d12057cbda772cc51eb6",
+    "tree": "845694f733fccbfcd3703957bf4976da0ed59b40"
+  },
+  "blocker": {
+    "summary": "R5 discovery found six P1 authority/lifecycle defects and one P2 FD3 proof defect that require a bounded MAC provenance, Stage-1 finalization, admission-record, and authoritative receipt correction.",
+    "details": "The frozen thirteen-path subject passes focused compile/tests but trusts a caller-supplied direct seed without a retained provenance root, decodes FD3 authority before independently hashing the kernel peer image, stores a bare global XPC control authority without a scope/authorization/manifest/anchor join, does not advance the pre-PM anchor through the Stage-1 full-PM manifest transition, leaves ordinary request joins incomplete, emits a nonauthoritative overwriteable receipt, and lacks a bounded initial FD3 read. The validated discovery record is a bounded scope stop. The worktree is preserved with thirteen implementation/test paths and four review-control artifacts; no native action, commit, push, or R6 work occurred.",
+    "required_authority": "Within the R3 MAC corridor, authorize a root-owned fixed bootstrap-provenance record installed with the two MAC binaries, a signed Stage-1 successor-manifest payload and authoritative receipt/index/head/anchor transaction, a scope-bound global control-admission record, pre-decode no-follow peer-image measurement, and a bounded FD3 initial-frame timeout. No generic carrier, new transport, protected-state field, Linux/Windows change, or R6 surface is authorized.",
+    "handoff_prompt": "Resume only after meta issues a new nonce-bound R5 correction that authorizes the missing trusted provenance and Stage-1 successor-manifest/anchor authority surface. Preserve /Users/spensermcconnell/.codex/worktrees/686b/substrate exactly as-is. Reverify base/tree/remote/index and the 13-path plus allowed-review-metadata inventory before any edit. Do not reset/clean/rebase/publish, do not run native actions, and do not begin AUX-R3-MAC-EVIDENCE-RECOVERY-R6."
+  },
+  "next_increment": "AUX-R3-MAC-EVIDENCE-RECOVERY-R6"
+}

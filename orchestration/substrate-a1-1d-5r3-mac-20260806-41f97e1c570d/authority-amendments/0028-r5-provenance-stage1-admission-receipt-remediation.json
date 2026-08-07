@@ -1,0 +1,136 @@
+{
+  "protocol": "codex.orchestration-authority-amendment.v1",
+  "orchestration_id": "substrate-a1-1d-5r3-mac-20260806-41f97e1c570d",
+  "amendment_id": "0028-r5-provenance-stage1-admission-receipt-remediation",
+  "authority_source": "meta authority for valid discovery P1/P2 remediation strictly inside R5 and the R3 MAC corridor",
+  "authorized_increment": "AUX-R3-MAC-EVIDENCE-RECOVERY-R5",
+  "existing_task": {
+    "thread_id": "019fddab-1dd2-7570-9bd3-7f3841ce0283",
+    "host_id": "local",
+    "worktree": "/Users/spensermcconnell/.codex/worktrees/686b/substrate",
+    "original_dispatch_nonce": "e480367f5a8308d8ee73f97eb7734c80bd49e37a31c3a70a6e663668d622e70e",
+    "prior_continuation_nonce": "614b644ffe0b074a92b0a1e3c08c8ecd0cd3979328e978c59a3c2b489438e693",
+    "continuation_nonce": "272ee6e53079be7e14091241bc84dc22a15f2d0d2b04999e6158e3bb2e713c93",
+    "preserved_subject_fingerprint": "sha256:a69dce04d313466f15f5c2284fe60fe4531a9f946ec53f9aca7f0b181e8c9147",
+    "preserved_status_entry_count": 17,
+    "staged_paths": 0
+  },
+  "expected_base_commit": "05d655fa1458a276f179d12057cbda772cc51eb6",
+  "expected_base_tree": "845694f733fccbfcd3703957bf4976da0ed59b40",
+  "target_ref": "refs/heads/feat/internal-host-orchestrator-world-dispatch-bootstrap",
+  "trigger_review": {
+    "cycle_id": "discovery-1",
+    "record": "llm-last-mile/runtime-refactor/review-control/r3-mac-evidence-recovery-r5-review-cycle-record.json",
+    "subject_fingerprint": "sha256:a69dce04d313466f15f5c2284fe60fe4531a9f946ec53f9aca7f0b181e8c9147",
+    "finding_ids": [
+      "P1-R5-DIRECT-SEED-NO-RETAINED-TRUST-ROOT",
+      "P1-R5-FD3-PEER-TOFU-IMAGE-BINDING",
+      "P1-R5-XPC-ADMISSION-NO-ANCHOR-JOIN",
+      "P1-R5-STAGE1-NO-PM-MANIFEST-ANCHOR-ADVANCE",
+      "P1-R5-ORDINARY-CLOSED-SHAPE-AND-JOINS",
+      "P1-R5-NONAUTHORITATIVE-ACTION-RECEIPT",
+      "P2-R5-FD3-FRAME-AND-RESPONSE-PROOF"
+    ]
+  },
+  "classification": "bounded remediation of the seven valid R5 discovery findings; no new packet, transport, platform, protected-state field, or R6 behavior",
+  "trusted_bootstrap_provenance": {
+    "record": "MacPublisherBootstrapProvenanceV1",
+    "fixed_path": "/Library/Application Support/Substrate/lifecycle/bootstrap-provenance.v1.json",
+    "installation": "The MAC branch of dev-install-substrate.sh writes an absent-or-exact root:wheel 0600 canonical record only after both fixed MAC binaries and their managed-copy manifest are durable. It records source commit/tree/ref, reviewed R5 review-record digest, control/executor target triples, digests, no-follow physical identities and code-designated requirements, plus the canonical pre-PM manifest identity and IH commitment. Parent and file are opened no-follow and fsynced; mismatch blocks and is never overwritten or adopted.",
+    "runtime": "The hidden direct command treats stdin only as a requested seed. Before deriving authorization it opens the fixed provenance record and both installed binaries no-follow, verifies root ownership/mode/parent identity, recomputes record digest, image digests/physical/code identities and source/review/manifest joins, and rejects any seed value not exactly equal to retained provenance. The seed never becomes authority.",
+    "prohibitions": [
+      "no path supplied by caller",
+      "no environment or argv carrier",
+      "no project/CWD/Git/remote lookup",
+      "no overwrite/repair/adoption on mismatch"
+    ]
+  },
+  "fd3_peer_and_frame": {
+    "rule": "Before decoding any FD3 authorization bytes, derive the kernel peer PID, resolve the peer executable, open it O_NOFOLLOW|O_CLOEXEC, fstat/hash through the descriptor, re-observe the peer path/identity, and compare digest/physical/code identity to the already retained provenance/control authority. The decoded frame may only further constrain that authority.",
+    "timeout": "Apply a fixed bounded timeout to the initial FD3 frame read and to the single bounded response/EOF proof. Timeout, EOF, extra frame, peer exit, path/identity change, or mismatch preserves state and fails.",
+    "no_tofu": true
+  },
+  "global_control_admission": {
+    "record": "MacPublisherControlAdmissionV1",
+    "fields": [
+      "schema owner/version",
+      "scope_id",
+      "control_authority",
+      "bootstrap_authorization_sha256",
+      "manifest_generation",
+      "manifest_sha256",
+      "current_anchor_sha256",
+      "state_revision"
+    ],
+    "rule": "Store this canonical record in the fixed global System-Keychain admission account instead of a bare control authority. Listener startup and every XPC admission must load the current protected state and exact-join the admission record, authorization/manifest identity, current signed anchor and measured peer before request decode. Update it only in the same preserving CAS transition as anchor advancement; mismatch blocks."
+  },
+  "stage_one_successor_manifest": {
+    "carrier": "Extend the signed LimaStageOneAuthorizationV1 itself\u2014not the generic request/tag/argv/environment\u2014with one canonical next_pm_manifest, expected_pre_pm_anchor_sha256/counter, and the exact planned Stage-1 receipt identity. The existing lifecycle signature covers every byte.",
+    "joins": [
+      "next manifest is mac_host_shared/mac_lima, generation exactly current+1, previous_manifest_sha256 equals current pre-PM digest",
+      "IH/scope/principal/source/executor/attempt exact-join Stage-1 authorization and current anchor",
+      "PM commitment/control-root/instance/machine identity are derived from the observed created instance and must exact-match the signed manifest projection before publication",
+      "no post-PM or guest action is accepted until the full manifest, empty index/head, action receipt/index/head, next signed anchor, protected state and admission record are durable and exact-joined"
+    ],
+    "transaction": "Use the existing ManagedActionPreparedRecordV1, ManagedActionReceiptV1, receipt-index/head helpers and protected-state CAS. Remove the overwriteable last-action-receipt shortcut. Allocate the receipt before effect, preserve ambiguity on kill/failure, publish the signed authoritative receipt after durable observation, advance index/head, sign the next anchor, CAS protected state/admission, and return only the durable receipt observation.",
+    "retry": "Exact matching prepared/receipt/index/head/anchor/admission state resumes; missing or mismatched state blocks without replacement."
+  },
+  "ordinary_request_remediation": {
+    "closed_shape": "Both ordinary tags reject every legacy manifest, protected-state, action-receipt, pairing-ticket, bootstrap-authorization and unknown field not explicitly required by that tag.",
+    "joins": "Recompute and exact-join IH carrier, PM carrier, scope, principal, control root, instance/machine identity, source/build evidence, current anchor, manifest generation/digest and role/action before XPC/effect. Stage-1 remains absent-instance-create only; post-PM remains the closed table only.",
+    "receipt": "Every ordinary action uses the same authoritative prepared/receipt/index/head/anchor CAS path; no fixed overwriteable receipt is authoritative."
+  },
+  "authorized_implementation_test_paths": [
+    "crates/common/src/lib.rs",
+    "crates/common/src/managed_artifact.rs",
+    "crates/shell/src/execution/managed_lifecycle.rs",
+    "crates/shell/src/execution/managed_lifecycle/macos_client.rs",
+    "crates/shell/src/execution/mod.rs",
+    "crates/shell/src/lib.rs",
+    "crates/shell/tests/managed_lifecycle_v1.rs",
+    "scripts/mac/lima-lifecycle.sh",
+    "scripts/mac/lima-stop.sh",
+    "scripts/mac/lima-warm.sh",
+    "src/bin/substrate-lifecycle-control.rs",
+    "src/bin/substrate-lifecycle-macos.rs",
+    "tests/mac/lifecycle_r3.sh",
+    "scripts/substrate/dev-install-substrate.sh",
+    "tests/installers/dev_install_bash32_fd_regression.sh"
+  ],
+  "authorized_review_paths": [
+    "llm-last-mile/runtime-refactor/review-control/r3-mac-evidence-recovery-r5-review-authority-security.md",
+    "llm-last-mile/runtime-refactor/review-control/r3-mac-evidence-recovery-r5-review-lifecycle-convergence.md",
+    "llm-last-mile/runtime-refactor/review-control/r3-mac-evidence-recovery-r5-review-allowlist-evidence.md",
+    "llm-last-mile/runtime-refactor/review-control/r3-mac-evidence-recovery-r5-review-cycle-record.json"
+  ],
+  "path_expansion_reason": "Only the MAC installer branch can create the fixed root-owned provenance trust root before first publisher bootstrap; its existing Bash 3.2/retry regression is the bounded fixture for that behavior.",
+  "required_tests": [
+    "fabricated/self-consistent direct seeds reject unless every value exact-joins the root-owned provenance record and measured binaries",
+    "provenance absent/create/exact-retry, parent/file symlink, owner/mode, read/hash/fsync, partial binary/record publication and mismatch preservation",
+    "FD3 peer PID/path replacement, no-follow identity/digest/code-requirement mismatch and initial/read/response/EOF timeout/extra-frame negatives",
+    "admission record absent/mismatch/anchor rollback/manifest mismatch/state revision and listener-before-decode negatives",
+    "Stage-1 signed next-manifest field/PM/source/scope/principal/anchor/receipt joins and every kill/retry boundary",
+    "authoritative prepared receipt -> effect -> receipt file -> index -> head -> signed anchor -> protected-state/admission CAS ordering",
+    "both ordinary tags reject legacy/unknown/cross-tag fields and every cross-IH/PM/principal/control-root/machine/source/build/anchor/manifest pair",
+    "existing R5 role/action, descriptor preservation, pre-PM, image, TTY and no-generic-selector tests remain"
+  ],
+  "review": {
+    "current_cycle": "discovery-1 findings",
+    "next_cycle_after_remediation": "closure-1 with a different fresh reviewer on the new frozen subject",
+    "supplemental_cycles_max": 2,
+    "supplemental_rule": "only P1/P2 directly caused or unmasked by the immediately preceding remediation",
+    "p3_p4": "record only; no remediation cycle",
+    "clean_terminal": true
+  },
+  "hard_exclusions": [
+    "LifecyclePublisherProtectedStateV1 field/schema expansion",
+    "generic request, generic selector, caller path, caller provenance record, ambient project/Git/remote authority, second FD3 frame, or new transport/endpoint/session",
+    "R6 ticket/data/TTY session implementation or guest pairing behavior",
+    "Linux/Windows source, constructors, target commands, behavior, or platform proof",
+    "native install, code signing, Keychain/XPC/Lima mutation, lifecycle action, or evidence action in this implementation task",
+    "any implementation/test path beyond the exact fifteen-path list",
+    "reset, clean, rebase, donor bulk-copy, commit or publication before terminal CLEAN"
+  ],
+  "publication": "one normal fast-forward R5 commit only after all discovery P1/P2 findings are remediated, MAC-only deterministic proof passes, and closure/supplemental review terminates CLEAN",
+  "terminal_successor": "AUX-R3-MAC-EVIDENCE-RECOVERY-R6"
+}

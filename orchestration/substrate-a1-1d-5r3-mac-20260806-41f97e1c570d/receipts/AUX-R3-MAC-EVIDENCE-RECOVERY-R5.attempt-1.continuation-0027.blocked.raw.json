@@ -1,0 +1,104 @@
+{
+  "schema": "codex.top-level-task-receipt.v1",
+  "status": "BLOCKED_SCOPE_EXPANSION",
+  "orchestration_id": "substrate-a1-1d-5r3-mac-20260806-41f97e1c570d",
+  "packet_id": "AUX-R3-MAC-EVIDENCE-RECOVERY-R5",
+  "original_dispatch_nonce": "e480367f5a8308d8ee73f97eb7734c80bd49e37a31c3a70a6e663668d622e70e",
+  "continuation_nonce": "614b644ffe0b074a92b0a1e3c08c8ecd0cd3979328e978c59a3c2b489438e693",
+  "increment_task_thread_id": "019fddab-1dd2-7570-9bd3-7f3841ce0283",
+  "increment_task_host_id": "local",
+  "worktree": "/Users/spensermcconnell/.codex/worktrees/686b/substrate",
+  "expected_base_commit": "05d655fa1458a276f179d12057cbda772cc51eb6",
+  "expected_base_tree": "845694f733fccbfcd3703957bf4976da0ed59b40",
+  "publication": {
+    "attempted": false,
+    "reason": "unresolved P1 scope contradiction; normal fast-forward commit/push prohibited",
+    "live_remote_target": "origin refs/heads/feat/internal-host-orchestrator-world-dispatch-bootstrap",
+    "live_remote_observation": "05d655fa1458a276f179d12057cbda772cc51eb6",
+    "head": "05d655fa1458a276f179d12057cbda772cc51eb6",
+    "tree": "845694f733fccbfcd3703957bf4976da0ed59b40"
+  },
+  "frozen_implementation_subject_fingerprint": "sha256:a69dce04d313466f15f5c2284fe60fe4531a9f946ec53f9aca7f0b181e8c9147",
+  "implementation_paths": [
+    "crates/common/src/lib.rs",
+    "crates/common/src/managed_artifact.rs",
+    "crates/shell/src/execution/managed_lifecycle.rs",
+    "crates/shell/src/execution/managed_lifecycle/macos_client.rs",
+    "crates/shell/src/execution/mod.rs",
+    "crates/shell/src/lib.rs",
+    "crates/shell/tests/managed_lifecycle_v1.rs",
+    "scripts/mac/lima-lifecycle.sh",
+    "scripts/mac/lima-stop.sh",
+    "scripts/mac/lima-warm.sh",
+    "src/bin/substrate-lifecycle-control.rs",
+    "src/bin/substrate-lifecycle-macos.rs",
+    "tests/mac/lifecycle_r3.sh"
+  ],
+  "review": {
+    "status": "bounded_stop",
+    "review_record": "llm-last-mile/runtime-refactor/review-control/r3-mac-evidence-recovery-r5-review-cycle-record.json",
+    "review_record_validation": "VALID",
+    "review_metadata_digest": "sha256:2d7074ee2fabd87f4ccfb3c77f6732c47a1532ff15e5be4e4226e03324913527",
+    "review_metadata_paths": [
+      "llm-last-mile/runtime-refactor/review-control/r3-mac-evidence-recovery-r5-review-authority-security.md",
+      "llm-last-mile/runtime-refactor/review-control/r3-mac-evidence-recovery-r5-review-lifecycle-convergence.md",
+      "llm-last-mile/runtime-refactor/review-control/r3-mac-evidence-recovery-r5-review-allowlist-evidence.md",
+      "llm-last-mile/runtime-refactor/review-control/r3-mac-evidence-recovery-r5-review-cycle-record.json"
+    ],
+    "independent_reviews": [
+      "authority/security discovery",
+      "lifecycle/convergence discovery",
+      "allowlist/evidence discovery",
+      "fresh independent closure confirmation"
+    ],
+    "open_blocking_findings": [
+      "P1-R5-DIRECT-SEED-NO-RETAINED-TRUST-ROOT",
+      "P1-R5-FD3-PEER-TOFU-IMAGE-BINDING",
+      "P1-R5-XPC-ADMISSION-NO-ANCHOR-JOIN",
+      "P1-R5-STAGE1-NO-PM-MANIFEST-ANCHOR-ADVANCE",
+      "P1-R5-ORDINARY-CLOSED-SHAPE-AND-JOINS",
+      "P1-R5-NONAUTHORITATIVE-ACTION-RECEIPT",
+      "P2-R5-FD3-FRAME-AND-RESPONSE-PROOF"
+    ]
+  },
+  "evidence": {
+    "scope_stop": "The current closed two-tag wrapper and Stage-1 request carry no authenticated full next-PM manifest/receipt material. The pre-PM anchor deliberately retains only its digest/identity, so the required Stage-1 -> full PM manifest -> protected-anchor CAS cannot be reconstructed without inventing a new authority carrier/surface. The direct seed also has no retained-capsule/published-receipt locator and must not become the bootstrap trust root.",
+    "key_source_locations": [
+      "scripts/mac/lima-lifecycle.sh: stage_one_create serialization has carrier/mapping/evidence/Stage-1 authorization only",
+      "src/bin/substrate-lifecycle-macos.rs: execute_mac_managed_action_v1 does not advance a PM-bound anchor",
+      "src/bin/substrate-lifecycle-control.rs: direct seed is caller stdin and currently only self-consistency validated",
+      "src/bin/substrate-lifecycle-macos.rs: FD3 peer admission does not hash the peer executable against mac_control_authority.artifact_sha256"
+    ],
+    "gitnexus": "Current task worktree absent from configured GitNexus repositories; detect_changes/impact returned UNKNOWN repository/target-unavailable results. Manual caller/callee, decoder, XPC, FD, timeout, retry, receipt, descriptor, and cfg analysis was used; npx gitnexus analyze was not run."
+  },
+  "partial_checks_passed": [
+    "cargo check --bin substrate-lifecycle-control --bin substrate-lifecycle-macos",
+    "cargo check --target x86_64-apple-darwin --bin substrate-lifecycle-control --bin substrate-lifecycle-macos",
+    "cargo test -p shell --test managed_lifecycle_v1 -- --nocapture",
+    "cargo test -p substrate-common mac_bootstrap -- --nocapture",
+    "cargo test -p substrate-common mac_pre_pm_manifest_exception -- --nocapture",
+    "bash tests/mac/lifecycle_r3.sh",
+    "cargo fmt --all -- --check",
+    "git diff --check",
+    "changed-byte secret scan",
+    "review-cycle validator"
+  ],
+  "hygiene": {
+    "index_entries": 0,
+    "worktree": "preserved with the thirteen allowed implementation/test paths plus four allowed R5 review-metadata paths; no reset, clean, rebase, commit, or push",
+    "native_actions": "none",
+    "forbidden_platform_commands": "none"
+  },
+  "required_authority": {
+    "status": "new bounded correction authority required before any remediation",
+    "required_scope": [
+      "introduce a trusted non-caller-selected retained pre-PM provenance source for canonical manifest/build/reviewed implementation receipt verification, including exact no-follow locator/identity",
+      "define the authenticated Stage-1 finalization input and durable receipt/index/anchor CAS that publishes generation+1 full PM-bound manifest before post-PM",
+      "define the global control-admission record's exact authorization-digest/manifest/anchor join",
+      "require kernel-peer executable no-follow physical identity and SHA-256 comparison before peer-selected authority decode, and bound the FD3 initial-frame timeout"
+    ],
+    "prohibition": "Do not infer, ambiently discover, serialize, or add this authority through the existing generic request, wrapper tag, argv, environment, file, or protected-state field without explicit new packet authority."
+  },
+  "continuation_handoff": "Resume only after meta issues a new nonce-bound R5 correction that authorizes the missing trusted provenance and Stage-1 successor-manifest/anchor authority surface. Preserve /Users/spensermcconnell/.codex/worktrees/686b/substrate exactly as-is. Reverify base/tree/remote/index and the 13-path plus allowed-review-metadata inventory before any edit. Do not reset/clean/rebase/publish, do not run native actions, and do not begin AUX-R3-MAC-EVIDENCE-RECOVERY-R6.",
+  "next_increment": "AUX-R3-MAC-EVIDENCE-RECOVERY-R6 (not dispatched)"
+}
