@@ -1,0 +1,127 @@
+{
+  "protocol": "codex.orchestration-authority-amendment.v1",
+  "orchestration_id": "substrate-a1-1d-5r3-mac-20260806-41f97e1c570d",
+  "amendment_id": "0026-r5-direct-seed-greenfield-anchor",
+  "authority_source": "meta authority for a same-corridor R5 contract correction; this supersedes only amendment 0025's over-broad ban on any seed request and supplies the missing greenfield Keychain intent/first-anchor transition",
+  "authorized_increment": "AUX-R3-MAC-EVIDENCE-RECOVERY-R5",
+  "existing_task": {
+    "thread_id": "019fddab-1dd2-7570-9bd3-7f3841ce0283",
+    "host_id": "local",
+    "worktree": "/Users/spensermcconnell/.codex/worktrees/686b/substrate",
+    "original_dispatch_nonce": "e480367f5a8308d8ee73f97eb7734c80bd49e37a31c3a70a6e663668d622e70e",
+    "prior_continuation_nonce": "ee590b74571010efafdb5df8d8f7b69ed439425b6f73894c5f8601e282c34915",
+    "continuation_nonce": "7541b1c6ca6fa045a27e2f28fc160dd853ba7cda1692e9927194d83bcd077202",
+    "preserved_tracked_diff_sha256": "sha256:1980e47680d0d775a43de622da8622bbd8c7d8c76273b9693e4d061b674b0463",
+    "preserved_status_entry_count": 13,
+    "staged_paths": 0
+  },
+  "expected_base_commit": "05d655fa1458a276f179d12057cbda772cc51eb6",
+  "expected_base_tree": "845694f733fccbfcd3703957bf4976da0ed59b40",
+  "target_ref": "refs/heads/feat/internal-host-orchestrator-world-dispatch-bootstrap",
+  "classification": "R5 direct-bootstrap seed derivation and MAC-only greenfield intent/key/anchor/admission transition; no new transport, endpoint, platform, successor, or protected-state schema",
+  "seed_contract": {
+    "serialized_seed_allowed": true,
+    "rule": "Only the hidden substrate-lifecycle-control publisher-bootstrap command may read exactly one canonical ManagedLifecycleControlRequestV1 seed from stdin before opening the retained controlling TTY. The seed is untrusted derivation input, never an authorization, and the complete PublisherBootstrapAuthorizationV1 is derived in memory and immediately delivered only over FD3.",
+    "required_fields": [
+      "authority_domain=mac_host_shared",
+      "scope_id",
+      "selected_host_prefix",
+      "requester_principal",
+      "host_context_commitment",
+      "host_platform_control_root",
+      "manifest",
+      "install_bootstrap_context_v1",
+      "executor_build_evidence"
+    ],
+    "optional_pre_or_post_pm_fields": [
+      "platform_mapping_commitment and platform_bootstrap_mapping_v1 must be both absent for the pre-PM bootstrap posture or both present and exact-join for a finalized PM posture"
+    ],
+    "forbidden_fields": [
+      "tag",
+      "action_receipt",
+      "publisher_protected_state",
+      "publisher_request",
+      "lima_stage_one_authorization_v1",
+      "pairing_ticket",
+      "any complete bootstrap authorization"
+    ],
+    "derivation": "Re-decode and exact-join the IH carrier, optional PM carrier, canonical manifest/head seed data, current control executable/code identity, and fixed executor image/build evidence. Derive stable scope, requester, issue/expiry, nonce, ordered component set and confirmation from those bound records plus the successful literal controlling-TTY confirmation. Never accept a caller-supplied target, component relaxation, authorization bytes, digest, code requirement, or current-image measurement.",
+    "exact_retry": "The canonical seed must provide stable attempt/manifest identity and time bounds. Replaying the same seed may only exact-join the same authorization digest and state transition; a different seed, stale expiry, reordered component set, changed image, or changed carrier fails preserving-first."
+  },
+  "control_and_executor_identity_correction": [
+    "mac_control_authority.artifact_sha256 measures substrate-lifecycle-control; executor_build_evidence.artifact_sha256 measures substrate-lifecycle-macos. They are expected to differ and must never be equated.",
+    "Their source commit/tree/ref and target triple must exact-join, while each image digest, physical identity, and code identity is independently recomputed from the actual retained process/image.",
+    "The MAC control authority may add an exact reviewed_implementation_receipt_sha256 field if needed to carry the control-pack-required reviewed receipt binding; this is MAC-only and requires focused canonical/unknown-field/mismatch tests."
+  ],
+  "greenfield_state_transition": {
+    "preexisting_anchor_required": false,
+    "rule": "publisher_expected_absent means no publisher protected state exists at initial admission. After FD3 peer/image/build/TTY/authorization validation, the executor creates the first signed anchor; no pre-existing signed anchor is an input.",
+    "bootstrap_intent": "Before key creation, CAS one scope-bound canonical MAC bootstrap-intent record into the existing fixed System-Keychain service/account family. It binds the authorization digest, control authority, executor evidence, attempt, and state. It is the crash-recovery reservation, not a new transport or reusable authorization carrier.",
+    "key_and_anchor": "Under a matching Prepared intent, create-or-exact-reopen the non-exportable P-256 key, record/verify its public SPKI binding, build and sign the initial LifecyclePublisherAnchorV1 with request_sha256 equal to the canonical authorization digest, and CAS the existing LifecyclePublisherProtectedStateV1 without adding fields.",
+    "admission_order": [
+      "validate FD3 kernel peer/image/TTY and canonical authorization",
+      "preflight fixed global control authority",
+      "CAS Prepared bootstrap intent",
+      "create or exact-reopen intent-bound P-256 key",
+      "sign and CAS initial protected state",
+      "persist or exact-join fixed global control-admission authority",
+      "mark intent Completed and return one bounded response"
+    ],
+    "retry_matrix": [
+      "no intent/key/state: initial create",
+      "matching Prepared intent with matching key and no state: resume signing/state CAS",
+      "matching state with request_sha256 and key: repair/verify global admission and complete",
+      "matching Completed intent/state/admission: idempotent success",
+      "orphan key without matching intent, mismatched intent, state, key, control authority, source, image, or authorization digest: preserving-first block"
+    ],
+    "crash_safety": "Every transition is absent-create or exact CAS/readback. No mismatch may delete, replace, adopt, or rotate state."
+  },
+  "authorized_paths": [
+    "crates/common/src/managed_artifact.rs",
+    "crates/common/src/lib.rs",
+    "crates/shell/src/execution/managed_lifecycle.rs",
+    "crates/shell/src/execution/managed_lifecycle/macos_client.rs",
+    "crates/shell/src/execution/mod.rs",
+    "crates/shell/src/lib.rs",
+    "src/bin/substrate-lifecycle-control.rs",
+    "src/bin/substrate-lifecycle-macos.rs",
+    "scripts/mac/lima-lifecycle.sh",
+    "scripts/mac/lima-warm.sh",
+    "scripts/mac/lima-stop.sh",
+    "crates/shell/tests/managed_lifecycle_v1.rs",
+    "tests/mac/lifecycle_r3.sh"
+  ],
+  "required_tests": [
+    "canonical seed accepts only the exact hidden direct shape and rejects mapped tags/action/pairing/full-authorization carriers",
+    "control and executor hashes are distinct and independently measured",
+    "pre-PM absent-PM and finalized-PM joins are explicit, never ambient/default",
+    "greenfield no-intent/no-key/no-state creates first signed anchor",
+    "kill/retry after intent CAS, key create, protected-state CAS, and admission-account CAS converges only for the exact digest",
+    "orphan/mismatched intent-key-state-admission combinations preserve and block",
+    "second frame, EOF, timeout, child loss, peer/image/TTY mismatch and replay all fail closed"
+  ],
+  "review": {
+    "review_started": false,
+    "discovery": "one fresh same-subject three-lens discovery burst or discovery review",
+    "closure": "one different fresh closure reviewer",
+    "supplemental_cycles_max": 2,
+    "remediate": [
+      "P1",
+      "P2"
+    ],
+    "p3_p4": "record only in 06-review-finding-inventory.md; no remediation or review cycle",
+    "clean_terminal": true
+  },
+  "hard_exclusions": [
+    "LifecyclePublisherProtectedStateV1 field/schema expansion",
+    "caller-supplied PublisherBootstrapAuthorizationV1 or authorization digest",
+    "ambient/default project, prefix, VM, PM, code identity, source identity or component selection",
+    "new endpoint, transport, session, principal, generic selector, broker, forwarding implementation or R6 pairing surface",
+    "src/bin/substrate-lifecycle-linux.rs, Windows code, Linux/Windows behavior or target commands",
+    "native install, code signing, Keychain/XPC/Lima mutation, lifecycle action or evidence during this implementation task",
+    "npx gitnexus analyze or tracked context injection",
+    "publication before terminal review CLEAN"
+  ],
+  "publication": "one normal fast-forward R5 commit only after exact MAC-only deterministic proof and terminal review CLEAN",
+  "terminal_successor": "AUX-R3-MAC-EVIDENCE-RECOVERY-R6"
+}

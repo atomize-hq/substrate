@@ -1,0 +1,22 @@
+{
+  "protocol": "codex.top-level-task-receipt.v1",
+  "orchestration_id": "substrate-a1-1d-5r3-mac-20260806-41f97e1c570d",
+  "dispatch_nonce": "e480367f5a8308d8ee73f97eb7734c80bd49e37a31c3a70a6e663668d622e70e",
+  "increment": "AUX-R3-MAC-EVIDENCE-RECOVERY-R5",
+  "status": "BLOCKED_CONTRADICTION",
+  "increment_task": {
+    "thread_id": "019fddab-1dd2-7570-9bd3-7f3841ce0283",
+    "host_id": "local"
+  },
+  "expected_base": {
+    "commit": "05d655fa1458a276f179d12057cbda772cc51eb6",
+    "tree": "845694f733fccbfcd3703957bf4976da0ed59b40"
+  },
+  "blocker": {
+    "summary": "R5 lacks a bound direct-bootstrap seed derivation and greenfield signed-anchor creation transition.",
+    "details": "The 13-path partial subject is unpublished and review has not started. Current code has no allowed source for stable authorization seed fields and no exact crash-safe first-anchor/key/admission transition.",
+    "required_authority": "Authorize a canonical seed request as untrusted derivation input plus a MAC-only System-Keychain bootstrap-intent reservation and first signed-anchor transition; do not expand LifecyclePublisherProtectedStateV1 or enter R6.",
+    "handoff_prompt": "Continue the preserved R5 task only under amendment 0026."
+  },
+  "next_increment": "AUX-R3-MAC-EVIDENCE-RECOVERY-R6"
+}

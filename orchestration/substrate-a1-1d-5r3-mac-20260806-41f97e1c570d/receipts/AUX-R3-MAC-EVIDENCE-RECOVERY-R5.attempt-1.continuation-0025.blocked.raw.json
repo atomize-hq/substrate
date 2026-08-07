@@ -1,0 +1,68 @@
+{
+  "schema": "codex.top-level-task-receipt.v1",
+  "status": "BLOCKED_CONTRADICTION",
+  "increment": "AUX-R3-MAC-EVIDENCE-RECOVERY-R5",
+  "orchestration_id": "substrate-a1-1d-5r3-mac-20260806-41f97e1c570d",
+  "dispatch_nonce": "e480367f5a8308d8ee73f97eb7734c80bd49e37a31c3a70a6e663668d622e70e",
+  "continuation_nonce": "ee590b74571010efafdb5df8d8f7b69ed439425b6f73894c5f8601e282c34915",
+  "increment_task_thread_id": "019fddab-1dd2-7570-9bd3-7f3841ce0283",
+  "increment_task_host_id": "local",
+  "exact_worktree": "/Users/spensermcconnell/.codex/worktrees/686b/substrate",
+  "expected_base_commit": "05d655fa1458a276f179d12057cbda772cc51eb6",
+  "expected_base_tree": "845694f733fccbfcd3703957bf4976da0ed59b40",
+  "live_remote": {
+    "remote": "origin",
+    "ref": "refs/heads/feat/internal-host-orchestrator-world-dispatch-bootstrap",
+    "commit": "05d655fa1458a276f179d12057cbda772cc51eb6"
+  },
+  "preserved_worktree": {
+    "staged_paths": 0,
+    "clean_index": true,
+    "dirty_paths": [
+      "crates/common/src/lib.rs",
+      "crates/common/src/managed_artifact.rs",
+      "crates/shell/src/execution/managed_lifecycle.rs",
+      "crates/shell/src/execution/managed_lifecycle/macos_client.rs",
+      "crates/shell/src/execution/mod.rs",
+      "crates/shell/src/lib.rs",
+      "crates/shell/tests/managed_lifecycle_v1.rs",
+      "scripts/mac/lima-lifecycle.sh",
+      "scripts/mac/lima-stop.sh",
+      "scripts/mac/lima-warm.sh",
+      "src/bin/substrate-lifecycle-control.rs",
+      "src/bin/substrate-lifecycle-macos.rs",
+      "tests/mac/lifecycle_r3.sh"
+    ],
+    "tracked_diff_sha256": "1980e47680d0d775a43de622da8622bbd8c7d8c76273b9693e4d061b674b0463",
+    "diff_check": "clean"
+  },
+  "evidence": {
+    "binding_reverified": true,
+    "gitnexus": "R5 symbols absent from the only available stale donor index; manual caller/callee, decoder, XPC, descriptor, retry, Drop, and cfg fallback completed. No index permission to widen scope.",
+    "focused_checks": [
+      "cargo test -p substrate-common mac_bootstrap_authority -- --nocapture: PASS",
+      "cargo test -p shell --test managed_lifecycle_v1 -- --nocapture: PASS (4 tests)",
+      "bash tests/mac/lifecycle_r3.sh: PASS",
+      "cargo check --bin substrate-lifecycle-control --bin substrate-lifecycle-macos: PASS",
+      "git diff --check: PASS"
+    ],
+    "reviews_started": false,
+    "publication": "not attempted"
+  },
+  "contradiction": {
+    "required_behavior": "The hidden direct control command must independently derive a complete canonical PublisherBootstrapAuthorizationV1 only from retained lifecycle capsule, published implementation/build evidence, current control image, and fixed executor identity; the executor must bind the authorization digest through the signed LifecyclePublisherAnchorV1.request_sha256 and compare it with the fixed System-Keychain control-admission authority before XPC.",
+    "missing_authoritative_inputs": [
+      "The permitted R5 surfaces expose no retained source for the complete authorization's required scope, carrier/mapping, requester, issued/expiry, nonce, ordered component set, and confirmation values. The existing protected state/anchor retains only a request digest and executor identity, not recoverable authorization bytes or all required fields.",
+      "The permitted common correction explicitly forbids adding the necessary retained authorization/control/digest fields to LifecyclePublisherProtectedStateV1. The current executor has no permitted existing signing-key creation/signing path that can construct a new signed anchor for a greenfield publisher_expected_absent transition.",
+      "The read-only donor's implementation resolves this only by importing prohibited LifecyclePublisherProtectedStateV1 extensions and broader pairing/session state; importing those is expressly forbidden."
+    ],
+    "prohibited_or_unsafe_alternatives": [
+      "Synthesizing authorization from defaults, ambient project state, argv, stdin JSON, environment, file carrier, generated projection, or script output violates the direct-bootstrap contract.",
+      "Accepting a frame without an anchor/control-account digest join violates preserving-first admission.",
+      "Adding new persisted capsule/state fields, generic broker, endpoint, transport, or R6 pairing surface exceeds the exact thirteen-path and R5 authority fence."
+    ],
+    "required_authority": "Issue a reconciled R5 continuation that either (a) names an already-existing authoritative retained authorization capsule/record and exact permitted accessor with enough fields to reconstruct and bind the canonical authorization, or (b) explicitly permits the minimum signed-anchor/control-admission persistence and signing capability needed for greenfield creation, including precise additional paths/fields. It must also resolve the conflict between publisher_expected_absent and a required pre-existing signed anchor digest."
+  },
+  "continuation_handoff": "Preserve this worktree and unstaged 13-path diff. Do not reset, clean, rebase, publish, or start R6. On an authority-bearing continuation, first reverify base/tree/remote/index and this diff SHA, then implement only the named retained-source/anchor resolution, rerun focused MAC-only proof, conduct the required fresh review burst/closure review, and publish exactly one fast-forward commit only after CLEAN.",
+  "next_increment": "AUX-R3-MAC-EVIDENCE-RECOVERY-R6"
+}

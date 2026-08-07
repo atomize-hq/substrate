@@ -1,0 +1,43 @@
+{
+  "protocol": "codex.top-level-task-receipt-verification.v1",
+  "orchestration_id": "substrate-a1-1d-5r3-mac-20260806-41f97e1c570d",
+  "increment": "AUX-R3-MAC-EVIDENCE-RECOVERY-R5",
+  "attempt": 1,
+  "continuation_nonce": "ee590b74571010efafdb5df8d8f7b69ed439425b6f73894c5f8601e282c34915",
+  "verified_at_utc": "2026-08-07T20:16:06Z",
+  "raw_receipt_path": "receipts/AUX-R3-MAC-EVIDENCE-RECOVERY-R5.attempt-1.continuation-0025.blocked.raw.json",
+  "canonical_receipt_path": "receipts/AUX-R3-MAC-EVIDENCE-RECOVERY-R5.attempt-1.continuation-0025.blocked.canonical.json",
+  "terminal_barrier": {
+    "thread_id": "019fddab-1dd2-7570-9bd3-7f3841ce0283",
+    "host_id": "local",
+    "turn_id": "019fddc7-3369-7692-be69-53dc1acd2ee0",
+    "status": "completed",
+    "thread_status": "idle",
+    "cursor": "02c3d9a2-cefa-4c23-ab5f-aab2a1493429:3"
+  },
+  "independent_observation": {
+    "worktree": "/Users/spensermcconnell/.codex/worktrees/686b/substrate",
+    "head": "05d655fa1458a276f179d12057cbda772cc51eb6",
+    "head_tree": "845694f733fccbfcd3703957bf4976da0ed59b40",
+    "index_tree": "845694f733fccbfcd3703957bf4976da0ed59b40",
+    "live_remote": "05d655fa1458a276f179d12057cbda772cc51eb6",
+    "staged_paths": 0,
+    "status_entry_count": 13,
+    "tracked_binary_diff_sha256": "sha256:1980e47680d0d775a43de622da8622bbd8c7d8c76273b9693e4d061b674b0463",
+    "diff_check": "clean"
+  },
+  "repo_truth_classification": {
+    "direct_authorization_seed_source_missing": true,
+    "existing_control_request_and_manifest_can_supply_bounded_seed_inputs": true,
+    "authorization_itself_must_remain_nonserialized": true,
+    "greenfield_system_keychain_intent_and_first_anchor_transition_missing": true,
+    "preexisting_signed_anchor_required": false,
+    "protected_state_schema_expansion_required": false,
+    "current_control_and_executor_hash_equality_is_invalid": true,
+    "r6_transport_required": false,
+    "review_started": false
+  },
+  "verdict": "ACCEPTED_NON_ADVANCING_BLOCK_AND_ADJUDICATED_FOR_SAME_TASK_CONTINUATION",
+  "raw_receipt_sha256": "sha256:85ae62850738618886d65a652347bd1f257e50e12af39ecda200df1c862e05da",
+  "canonical_receipt_sha256": "sha256:227646e82cf35013ededb2c8cedd1426e07768a48648827ce4b34c489130a099"
+}
