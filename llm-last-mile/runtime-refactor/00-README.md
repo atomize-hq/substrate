@@ -1209,3 +1209,30 @@ the bounded `0640`/`0650` cache observation. R1/R2 evidence is immutable.
   `review-control/r3-linux-closeout-review-authority-security.md`,
   `review-control/r3-linux-closeout-review-lifecycle-convergence.md`, and
   `review-control/r3-linux-closeout-review-allowlist-evidence.md`.
+
+### `A1.1d-5R3-MAC`
+
+- Status: implementation publication scope; non-native fixtures and static checks only.
+- Scope: manifest-bound fixed-executor MAC lifecycle wiring, PM-bound SSH-UDS activation with
+  exact teardown ownership, mapped Lima staging/teardown delegation, and the exact socket
+  non-propagation change.
+- Boundaries preserved: no native publisher/Lima provisioning, code-signing, build evidence,
+  or evidence bytes are created; ambient selectors, VSock/TCP, `new_with_mapping`, Linux,
+  Windows, and run-only fixture bytes remain frozen.
+- Successor: `EVIDENCE:R3-MAC-IMP-01`.
+- Review control: `review-control/r3-mac-review-cycle-record.json`,
+  `review-control/r3-mac-review-authority-security.md`,
+  `review-control/r3-mac-review-lifecycle-convergence.md`, and
+  `review-control/r3-mac-review-allowlist-evidence.md`.
+
+## A1.1d-5R3-MAC attempt-4 remediation status (2026-08-06)
+
+Under `substrate-a1-1d-5r3-mac-20260806-41f97e1c570d` amendment
+`0003-fresh-mac-review-epoch.json`, this new nonce-bound epoch reconstructs the verified
+19-path attempt-3 baseline solely to remediate the six mandatory P1/P2 findings. It binds the
+actual XPC peer audit token before request decoding, repeats canonical carrier/mapping/role and
+Stage-1 joins before any mapped mutation, removes the standalone retire operation, and refuses
+pre-spawn SSH-UDS replacement by disabling SSH-side unlink. The added checks are non-native only:
+no Lima, launchd, Keychain, code-signing, publisher installation, or evidence artifact is run or
+created here. Fresh review is recorded only in the exact MAC review-control set; the sole
+successor remains `EVIDENCE:R3-MAC-IMP-01`.

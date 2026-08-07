@@ -1,6 +1,5 @@
 [Unit]
 Description=Substrate World Service Socket
-PartOf=substrate-world-service.service
 
 [Socket]
 ListenStream=/run/substrate.sock

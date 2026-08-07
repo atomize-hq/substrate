@@ -1663,3 +1663,25 @@ Implementation publication and native proof are distinct. LINUX, MAC, WIN, and U
 their reviewed implementation before any native evidence task. Every IMP/final evidence task binds
 a live-remote-equal commit/tree/ref and validates `codex.top-level-evidence-receipt.v1`; evidence
 tasks never modify the repository. Platform closeout packets own only evidence/control ingestion.
+
+### `A1.1d-5R3-MAC` implementation status
+
+The MAC implementation packet materializes only the stated fixed-executor/request boundary:
+typed mapping selects the already-fixed SSH-UDS path and records exact socket/known-host
+before-state for timeout/Drop/retry restoration; mapped scripts carry prefix, bootstrap carrier,
+platform mapping, and executor-build evidence to the executor rather than issuing Lima mutations.
+The socket unit no longer allows service-to-socket propagation. Native publisher installation,
+artifact build evidence, disposable Lima lifecycle, and human-pinned pairing remain exclusively
+with `EVIDENCE:R3-MAC-IMP-01`.
+
+## A1.1d-5R3-MAC attempt-4 remediation status (2026-08-06)
+
+Under `substrate-a1-1d-5r3-mac-20260806-41f97e1c570d` amendment
+`0003-fresh-mac-review-epoch.json`, this new nonce-bound epoch reconstructs the verified
+19-path attempt-3 baseline solely to remediate the six mandatory P1/P2 findings. It binds the
+actual XPC peer audit token before request decoding, repeats canonical carrier/mapping/role and
+Stage-1 joins before any mapped mutation, removes the standalone retire operation, and refuses
+pre-spawn SSH-UDS replacement by disabling SSH-side unlink. The added checks are non-native only:
+no Lima, launchd, Keychain, code-signing, publisher installation, or evidence artifact is run or
+created here. Fresh review is recorded only in the exact MAC review-control set; the sole
+successor remains `EVIDENCE:R3-MAC-IMP-01`.

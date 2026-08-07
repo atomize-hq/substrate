@@ -3154,3 +3154,22 @@ tree `827e88f2c069cd27a04e99a57894bd5a753b2e55`, ref
 `AUTHORITY_REQUIRED:A1.1d-5R3-LINUX-CLOSEOUT`, then revalidated the separate evidence receipt.
 No production or test bytes changed, no MAC packet is authorized here, and the authoritative
 successor for this orchestration closeout is `COMPLETE`.
+
+### `A1.1d-5R3-MAC`
+
+This implementation subject owns only the MAC allowlisted executor/client, mapped lifecycle
+wrappers, SSH-UDS activation/teardown, socket non-propagation, and non-native fixture proof. It
+does not execute native provisioning or create evidence bytes. Its sole successor is
+`EVIDENCE:R3-MAC-IMP-01`.
+
+## A1.1d-5R3-MAC attempt-4 remediation status (2026-08-06)
+
+Under `substrate-a1-1d-5r3-mac-20260806-41f97e1c570d` amendment
+`0003-fresh-mac-review-epoch.json`, this new nonce-bound epoch reconstructs the verified
+19-path attempt-3 baseline solely to remediate the six mandatory P1/P2 findings. It binds the
+actual XPC peer audit token before request decoding, repeats canonical carrier/mapping/role and
+Stage-1 joins before any mapped mutation, removes the standalone retire operation, and refuses
+pre-spawn SSH-UDS replacement by disabling SSH-side unlink. The added checks are non-native only:
+no Lima, launchd, Keychain, code-signing, publisher installation, or evidence artifact is run or
+created here. Fresh review is recorded only in the exact MAC review-control set; the sole
+successor remains `EVIDENCE:R3-MAC-IMP-01`.

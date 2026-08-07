@@ -14,13 +14,29 @@ use transport_api_types::{InstallBootstrapContextCarrierV1, PlatformBootstrapMap
 #[cfg(test)]
 use crate::transport::managed_host_socket_path_for_mapping;
 
+#[cfg(target_os = "macos")]
+const O_NOFOLLOW_V1: i32 = 0x0100;
+#[cfg(target_os = "linux")]
+const O_NOFOLLOW_V1: i32 = 0x20000;
+#[cfg(not(any(target_os = "macos", target_os = "linux")))]
+const O_NOFOLLOW_V1: i32 = 0;
+#[cfg(target_os = "macos")]
+const O_NONBLOCK_V1: i32 = 0x0004;
+#[cfg(target_os = "linux")]
+const O_NONBLOCK_V1: i32 = 0x0800;
+#[cfg(not(any(target_os = "macos", target_os = "linux")))]
+const O_NONBLOCK_V1: i32 = 0;
+
 /// Forwarding transport kind.
 #[derive(Debug, Clone)]
 pub enum ForwardingKind {
     /// VSock proxy forwarding
     Vsock { port: u16 },
     /// SSH Unix Domain Socket forwarding
-    SshUds { path: PathBuf },
+    SshUds {
+        path: PathBuf,
+        mapped_attempt: Option<MappedSshUdsAttemptV1>,
+    },
     /// SSH TCP forwarding
     SshTcp { port: u16 },
 }
@@ -29,6 +45,24 @@ pub enum ForwardingKind {
 pub struct ForwardingHandle {
     kind: ForwardingKind,
     child: Option<Child>,
+}
+
+/// Receipt-bound state for the typed SSH-UDS forwarding attempt.
+///
+/// Compatibility forwarding deliberately has no instance of this type.  The typed path records
+/// the exact before-state so Drop can retire only the socket and known-host mutation it created.
+#[derive(Debug, Clone)]
+pub struct MappedSshUdsAttemptV1 {
+    socket_path: PathBuf,
+    socket_device: u64,
+    socket_inode: u64,
+    known_hosts_path: PathBuf,
+    known_hosts_existed: bool,
+    known_hosts_before: Vec<u8>,
+    known_hosts_device: Option<u64>,
+    known_hosts_inode: Option<u64>,
+    known_hosts_created_device: Option<u64>,
+    known_hosts_created_inode: Option<u64>,
 }
 
 impl ForwardingHandle {
@@ -41,6 +75,55 @@ impl ForwardingHandle {
 impl Drop for ForwardingHandle {
     fn drop(&mut self) {
         debug!("Dropping ForwardingHandle for {:?}", self.kind);
+
+        let mapped_attempt = match &mut self.kind {
+            ForwardingKind::SshUds { mapped_attempt, .. } => mapped_attempt.take(),
+            ForwardingKind::Vsock { .. } | ForwardingKind::SshTcp { .. } => None,
+        };
+        if let Some(attempt) = mapped_attempt {
+            let mut child_reaped = true;
+            if let Some(mut child) = self.child.take() {
+                match child.try_wait() {
+                    Ok(Some(_)) => {}
+                    Ok(None) => {
+                        if let Err(error) = child.kill() {
+                            warn!("Failed to kill mapped SSH forwarding process: {error}");
+                            child_reaped = false;
+                        }
+                        if child_reaped {
+                            if let Err(error) = child.wait() {
+                                warn!("Failed to wait for mapped SSH forwarding process: {error}");
+                                child_reaped = false;
+                            }
+                        }
+                    }
+                    Err(error) => {
+                        warn!("Failed to poll mapped SSH forwarding process: {error}");
+                        child_reaped = false;
+                    }
+                }
+            }
+
+            if !child_reaped {
+                warn!(
+                    "Preserving mapped SSH socket because its child could not be reaped; reconciling known_hosts independently"
+                );
+            } else if let Err(error) = remove_exact_mapped_ssh_socket_v1(&attempt) {
+                warn!(
+                    "Preserving replaced mapped SSH socket {}: {error}",
+                    attempt.socket_path.display()
+                );
+            }
+
+            // Socket replacement never bypasses independent A-local known-host rollback.
+            if let Err(error) = restore_exact_mapped_known_hosts_entry_v1(&attempt) {
+                warn!(
+                    "Failed to restore mapped known_hosts {}: {error}",
+                    attempt.known_hosts_path.display()
+                );
+            }
+            return;
+        }
 
         // Terminate child process if running
         if let Some(mut child) = self.child.take() {
@@ -56,7 +139,7 @@ impl Drop for ForwardingHandle {
         }
 
         // Clean up sockets if needed
-        if let ForwardingKind::SshUds { ref path } = self.kind {
+        if let ForwardingKind::SshUds { ref path, .. } = self.kind {
             if path.exists() {
                 if let Err(e) = std::fs::remove_file(path) {
                     warn!("Failed to remove socket file: {}", e);
@@ -191,6 +274,530 @@ fn create_vsock_forwarding(vm_name: &str) -> Result<ForwardingHandle> {
     })
 }
 
+#[cfg(unix)]
+fn unix_regular_file_identity_v1(path: &Path) -> Result<Option<(u64, u64)>> {
+    use std::os::unix::fs::MetadataExt as _;
+    match std::fs::symlink_metadata(path) {
+        Ok(metadata) if metadata.file_type().is_file() => {
+            Ok(Some((metadata.dev(), metadata.ino())))
+        }
+        Ok(_) => anyhow::bail!("mapped lifecycle path is not an exact regular file"),
+        Err(error) if error.kind() == std::io::ErrorKind::NotFound => Ok(None),
+        Err(error) => Err(error).with_context(|| format!("inspect {}", path.display())),
+    }
+}
+
+#[cfg(unix)]
+fn mapped_socket_identity_v1(path: &Path) -> Result<Option<(u64, u64)>> {
+    use std::os::unix::fs::{FileTypeExt as _, MetadataExt as _};
+    match std::fs::symlink_metadata(path) {
+        Ok(metadata) if metadata.file_type().is_socket() => {
+            Ok(Some((metadata.dev(), metadata.ino())))
+        }
+        Ok(_) => anyhow::bail!("mapped SSH forwarding path is not an exact Unix socket"),
+        Err(error) if error.kind() == std::io::ErrorKind::NotFound => Ok(None),
+        Err(error) => Err(error).with_context(|| format!("inspect {}", path.display())),
+    }
+}
+
+#[cfg(not(unix))]
+fn unix_regular_file_identity_v1(_path: &Path) -> Result<Option<(u64, u64)>> {
+    Ok(None)
+}
+
+#[cfg(not(unix))]
+fn mapped_socket_identity_v1(_path: &Path) -> Result<Option<(u64, u64)>> {
+    Ok(None)
+}
+
+fn remove_exact_mapped_ssh_socket_v1(attempt: &MappedSshUdsAttemptV1) -> Result<()> {
+    let Some((device, inode)) = mapped_socket_identity_v1(&attempt.socket_path)? else {
+        return Ok(());
+    };
+    if device != attempt.socket_device || inode != attempt.socket_inode {
+        anyhow::bail!("mapped SSH socket identity changed")
+    }
+    // A pathname check followed by unlink could delete a foreign replacement.  The SSH child
+    // owns the listener and normally unlinks it during orderly kill/wait; if a path remains
+    // afterward, preserve it for explicit reconciliation rather than racing an untrusted name.
+    anyhow::bail!(
+        "mapped SSH child left an owned socket after reap; preserving it rather than path-unlinking"
+    )
+}
+
+fn restore_exact_mapped_known_hosts_entry_v1(attempt: &MappedSshUdsAttemptV1) -> Result<()> {
+    let current = unix_regular_file_identity_v1(&attempt.known_hosts_path)?;
+    if attempt.known_hosts_existed {
+        let expected_identity = attempt.known_hosts_device.zip(attempt.known_hosts_inode);
+        if current != expected_identity {
+            anyhow::bail!("mapped known_hosts identity changed")
+        }
+        #[cfg(unix)]
+        {
+            use std::io::{Seek as _, SeekFrom, Write as _};
+            use std::os::unix::fs::{MetadataExt as _, OpenOptionsExt as _};
+
+            let mut file = std::fs::OpenOptions::new()
+                .read(true)
+                .write(true)
+                .custom_flags(O_NOFOLLOW_V1)
+                .open(&attempt.known_hosts_path)
+                .with_context(|| {
+                    format!(
+                        "open exact mapped known_hosts without following links {}",
+                        attempt.known_hosts_path.display()
+                    )
+                })?;
+            let metadata = file
+                .metadata()
+                .context("inspect opened mapped known_hosts")?;
+            if Some((metadata.dev(), metadata.ino())) != expected_identity {
+                anyhow::bail!("opened mapped known_hosts identity changed")
+            }
+            file.set_len(0)
+                .context("truncate exact mapped known_hosts")?;
+            file.seek(SeekFrom::Start(0))
+                .context("seek exact mapped known_hosts")?;
+            file.write_all(&attempt.known_hosts_before)
+                .context("restore exact mapped known_hosts through its verified descriptor")?;
+            return file.sync_all().context("sync restored mapped known_hosts");
+        }
+        #[cfg(not(unix))]
+        {
+            let _ = current;
+            anyhow::bail!("exact mapped known_hosts restoration is unavailable off Unix")
+        }
+    }
+    match (
+        current,
+        attempt
+            .known_hosts_created_device
+            .zip(attempt.known_hosts_created_inode),
+    ) {
+        (None, _) => Ok(()),
+        (Some(identity), Some(created_identity)) if identity == created_identity => anyhow::bail!(
+            "mapped SSH child left a created known_hosts file; preserving it rather than path-unlinking"
+        ),
+        (Some(_), _) => anyhow::bail!(
+            "mapped known_hosts was not captured as an exact child-created regular file"
+        ),
+    }
+}
+
+fn mapped_ssh_attempt_v1(
+    socket_path: PathBuf,
+    socket_identity: Option<(u64, u64)>,
+    known_hosts_path: PathBuf,
+    known_hosts_existed: bool,
+    known_hosts_before: Vec<u8>,
+    known_hosts_identity: Option<(u64, u64)>,
+    known_hosts_created_identity: Option<(u64, u64)>,
+) -> MappedSshUdsAttemptV1 {
+    MappedSshUdsAttemptV1 {
+        socket_path,
+        socket_device: socket_identity.map_or(0, |(device, _)| device),
+        socket_inode: socket_identity.map_or(0, |(_, inode)| inode),
+        known_hosts_path,
+        known_hosts_existed,
+        known_hosts_before,
+        known_hosts_device: known_hosts_identity.map(|(device, _)| device),
+        known_hosts_inode: known_hosts_identity.map(|(_, inode)| inode),
+        known_hosts_created_device: known_hosts_created_identity.map(|(device, _)| device),
+        known_hosts_created_inode: known_hosts_created_identity.map(|(_, inode)| inode),
+    }
+}
+
+/// Retire a failed mapped attempt before returning its error.
+///
+/// Both state projections are reconciled independently: a replaced socket must not suppress
+/// known-host rollback, and an inability to reap the child preserves only the socket it might
+/// still own. Ownership identities are captured only while the child is observed live, so a new
+/// pathname occupant can never be adopted or unlinked after an early-exit race.
+fn cleanup_failed_mapped_ssh_attempt_v1(
+    child: Option<Child>,
+    socket_path: PathBuf,
+    owned_socket_identity: Option<(u64, u64)>,
+    known_hosts_path: PathBuf,
+    known_hosts_existed: bool,
+    known_hosts_before: Vec<u8>,
+    known_hosts_identity: Option<(u64, u64)>,
+    known_hosts_created_identity: Option<(u64, u64)>,
+) -> Result<()> {
+    let child_reaped = match child {
+        None => true,
+        Some(mut child) => match child
+            .try_wait()
+            .context("poll failed mapped SSH forwarding")?
+        {
+            Some(_) => true,
+            None => match child.kill() {
+                Ok(()) => child
+                    .wait()
+                    .context("wait for failed mapped SSH forwarding")
+                    .is_ok(),
+                Err(error) => {
+                    warn!("failed to kill mapped SSH forwarding during cleanup: {error}");
+                    false
+                }
+            },
+        },
+    };
+
+    let socket_result = if child_reaped {
+        match owned_socket_identity {
+            Some(identity) => remove_exact_mapped_ssh_socket_v1(&mapped_ssh_attempt_v1(
+                socket_path.clone(),
+                Some(identity),
+                known_hosts_path.clone(),
+                known_hosts_existed,
+                known_hosts_before.clone(),
+                known_hosts_identity,
+                known_hosts_created_identity,
+            )),
+            None => {
+                // An early exit before a live child observation has no ownership proof. Preserve
+                // any pathname occupant rather than converting a replacement race into unlink.
+                Ok(())
+            }
+        }
+    } else {
+        warn!(
+            "preserving mapped SSH socket because failed child could not be reaped; reconciling known_hosts independently"
+        );
+        Ok(())
+    };
+    let known_hosts_result = restore_exact_mapped_known_hosts_entry_v1(&mapped_ssh_attempt_v1(
+        socket_path,
+        None,
+        known_hosts_path,
+        known_hosts_existed,
+        known_hosts_before,
+        known_hosts_identity,
+        known_hosts_created_identity,
+    ));
+
+    match (socket_result, known_hosts_result) {
+        (Ok(()), Ok(())) => Ok(()),
+        (Err(socket_error), Ok(())) => {
+            Err(socket_error).context("failed mapped SSH socket cleanup")
+        }
+        (Ok(()), Err(known_hosts_error)) => {
+            Err(known_hosts_error).context("failed mapped known_hosts cleanup")
+        }
+        (Err(socket_error), Err(known_hosts_error)) => Err(anyhow::anyhow!(
+            "failed mapped SSH cleanup: socket={socket_error:#}; known_hosts={known_hosts_error:#}"
+        )),
+    }
+}
+
+/// Record the exact A-local known-hosts before-state before `accept-new` can mutate it.
+pub fn record_mapped_known_hosts_entry_v1(
+    path: &Path,
+) -> Result<(bool, Vec<u8>, Option<(u64, u64)>)> {
+    #[cfg(unix)]
+    {
+        use std::io::Read as _;
+        use std::os::unix::fs::{MetadataExt as _, OpenOptionsExt as _};
+
+        let mut options = std::fs::OpenOptions::new();
+        options
+            .read(true)
+            .custom_flags(O_NOFOLLOW_V1 | O_NONBLOCK_V1);
+        match options.open(path) {
+            Ok(mut file) => {
+                let metadata = file.metadata().with_context(|| {
+                    format!("inspect opened mapped known_hosts {}", path.display())
+                })?;
+                if !metadata.file_type().is_file() {
+                    anyhow::bail!("mapped lifecycle path is not an exact regular file");
+                }
+                let mut bytes = Vec::new();
+                file.read_to_end(&mut bytes).with_context(|| {
+                    format!("read opened mapped known_hosts {}", path.display())
+                })?;
+                Ok((true, bytes, Some((metadata.dev(), metadata.ino()))))
+            }
+            Err(error) if error.kind() == std::io::ErrorKind::NotFound => {
+                Ok((false, Vec::new(), None))
+            }
+            Err(error) => Err(error).with_context(|| {
+                format!(
+                    "open mapped known_hosts without following links {}",
+                    path.display()
+                )
+            }),
+        }
+    }
+    #[cfg(not(unix))]
+    {
+        let _ = path;
+        Ok((false, Vec::new(), None))
+    }
+}
+
+/// Restore the recorded A-local known-hosts before-state without touching any global SSH file.
+pub fn restore_mapped_known_hosts_entry_v1(path: &Path, existed: bool, bytes: &[u8]) -> Result<()> {
+    if existed {
+        std::fs::write(path, bytes)
+            .with_context(|| format!("restore mapped known_hosts {}", path.display()))?;
+    } else {
+        match std::fs::remove_file(path) {
+            Ok(()) => {}
+            Err(error) if error.kind() == std::io::ErrorKind::NotFound => {}
+            Err(error) => {
+                return Err(error).with_context(|| {
+                    format!("remove created mapped known_hosts {}", path.display())
+                });
+            }
+        }
+    }
+    Ok(())
+}
+
+/// Create the only typed-product forwarding path: the already-selected PM SSH-UDS mapping.
+///
+/// The function accepts projections that were validated by `new_with_mapping`; it never consults
+/// `HOME`, `LIMA_HOME`, `SUBSTRATE_HOME`, auto-select, VSock, or TCP fallback state.
+pub fn create_mapped_ssh_uds_forwarding_v1(
+    vm_name: &str,
+    socket_path: PathBuf,
+    host_account_home: &Path,
+    lima_control_root: &Path,
+) -> Result<ForwardingHandle> {
+    let expected_control_root = host_account_home.join(".lima");
+    if lima_control_root != expected_control_root {
+        anyhow::bail!("mapped Lima control root does not match the validated host account home");
+    }
+    let socket_parent = socket_path
+        .parent()
+        .ok_or_else(|| anyhow::anyhow!("mapped host socket has no parent"))?;
+    let socket_parent_metadata = std::fs::symlink_metadata(socket_parent)
+        .with_context(|| format!("inspect mapped socket parent {}", socket_parent.display()))?;
+    if !socket_parent_metadata.file_type().is_dir() {
+        anyhow::bail!("mapped host socket parent is not a directory");
+    }
+    match std::fs::symlink_metadata(&socket_path) {
+        Ok(_) => anyhow::bail!("mapped host socket must be absent before a typed SSH-UDS attempt"),
+        Err(error) if error.kind() == std::io::ErrorKind::NotFound => {}
+        Err(error) => {
+            return Err(error)
+                .with_context(|| format!("inspect mapped host socket {}", socket_path.display()))
+        }
+    }
+
+    let ssh_config = lima_control_root.join(vm_name).join("ssh.config");
+    if !ssh_config.is_file() {
+        anyhow::bail!("mapped Lima SSH config is not an exact regular file");
+    }
+    let selected_prefix = socket_parent
+        .parent()
+        .ok_or_else(|| anyhow::anyhow!("mapped host socket parent has no selected prefix"))?;
+    let known_hosts_path = selected_prefix.join("lima_known_hosts");
+    let (known_hosts_existed, known_hosts_before, known_hosts_identity) =
+        record_mapped_known_hosts_entry_v1(&known_hosts_path)?;
+
+    let ssh_args = vec![
+        "-F".to_string(),
+        ssh_config.to_string_lossy().to_string(),
+        "-o".to_string(),
+        "ControlMaster=no".to_string(),
+        "-o".to_string(),
+        "ControlPath=none".to_string(),
+        "-o".to_string(),
+        "BatchMode=yes".to_string(),
+        "-o".to_string(),
+        "ConnectTimeout=5".to_string(),
+        "-o".to_string(),
+        "ExitOnForwardFailure=yes".to_string(),
+        "-o".to_string(),
+        // A typed attempt never asks SSH to unlink the target before its child-owned identity
+        // exists.  A pathname that appears after the pre-spawn absence observation therefore
+        // makes SSH fail closed, instead of allowing a foreign socket or symlink to be removed.
+        "StreamLocalBindUnlink=no".to_string(),
+        "-o".to_string(),
+        "StrictHostKeyChecking=accept-new".to_string(),
+        "-o".to_string(),
+        format!("UserKnownHostsFile={}", known_hosts_path.display()),
+        "-o".to_string(),
+        "GlobalKnownHostsFile=/dev/null".to_string(),
+        "-L".to_string(),
+        format!("{}:{}", socket_path.display(), CANONICAL_GUEST_SOCKET_PATH),
+        format!("lima-{vm_name}"),
+        "-N".to_string(),
+    ];
+    let mut command = Command::new("ssh");
+    command
+        .args(&ssh_args)
+        .stdin(Stdio::null())
+        .stdout(Stdio::null())
+        .stderr(Stdio::piped());
+    #[cfg(unix)]
+    {
+        use std::os::unix::process::CommandExt as _;
+        command.process_group(0);
+    }
+    let mut child = match command.spawn() {
+        Ok(child) => child,
+        Err(error) => {
+            let cleanup = restore_exact_mapped_known_hosts_entry_v1(&mapped_ssh_attempt_v1(
+                socket_path.clone(),
+                None,
+                known_hosts_path.clone(),
+                known_hosts_existed,
+                known_hosts_before.clone(),
+                known_hosts_identity,
+                None,
+            ));
+            return match cleanup {
+                Ok(()) => Err(error).context("start mapped SSH UDS forwarding"),
+                Err(cleanup_error) => Err(anyhow::anyhow!(
+                    "start mapped SSH UDS forwarding failed: {error}; known_hosts rollback failed: {cleanup_error:#}"
+                )),
+            };
+        }
+    };
+    let mut stderr = String::new();
+    // Identities become owned only when observed while the SSH child is still live. This keeps an
+    // early-exit/replacement race fail-closed: cleanup never adopts a pathname at exit time.
+    let mut owned_socket_identity = None;
+    let mut created_known_hosts_identity = None;
+    for _ in 0..20 {
+        if let Some(status) = child.try_wait().context("poll mapped SSH forwarding")? {
+            if let Some(mut output) = child.stderr.take() {
+                use std::io::Read as _;
+                let _ = output.read_to_string(&mut stderr);
+            }
+            let cleanup = cleanup_failed_mapped_ssh_attempt_v1(
+                None,
+                socket_path.clone(),
+                owned_socket_identity,
+                known_hosts_path.clone(),
+                known_hosts_existed,
+                known_hosts_before.clone(),
+                known_hosts_identity,
+                created_known_hosts_identity,
+            );
+            return match cleanup {
+                Ok(()) => Err(anyhow::anyhow!(
+                    "mapped SSH UDS forwarding exited {status}: {}",
+                    stderr.trim()
+                )),
+                Err(cleanup_error) => Err(anyhow::anyhow!(
+                    "mapped SSH UDS forwarding exited {status}: {}; cleanup failed: {cleanup_error:#}",
+                    stderr.trim()
+                )),
+            };
+        }
+
+        if owned_socket_identity.is_none() {
+            match mapped_socket_identity_v1(&socket_path) {
+                Ok(identity) => owned_socket_identity = identity,
+                Err(error) => {
+                    let _ = cleanup_failed_mapped_ssh_attempt_v1(
+                        Some(child),
+                        socket_path.clone(),
+                        owned_socket_identity,
+                        known_hosts_path.clone(),
+                        known_hosts_existed,
+                        known_hosts_before.clone(),
+                        known_hosts_identity,
+                        created_known_hosts_identity,
+                    );
+                    return Err(error)
+                        .context("observe exact mapped SSH socket while child is live");
+                }
+            }
+        }
+        if !known_hosts_existed && created_known_hosts_identity.is_none() {
+            match unix_regular_file_identity_v1(&known_hosts_path) {
+                Ok(identity) => created_known_hosts_identity = identity,
+                Err(error) => {
+                    let _ = cleanup_failed_mapped_ssh_attempt_v1(
+                        Some(child),
+                        socket_path.clone(),
+                        owned_socket_identity,
+                        known_hosts_path.clone(),
+                        known_hosts_existed,
+                        known_hosts_before.clone(),
+                        known_hosts_identity,
+                        created_known_hosts_identity,
+                    );
+                    return Err(error)
+                        .context("observe exact mapped known_hosts while child is live");
+                }
+            }
+        }
+
+        if probe_caps_uds(&socket_path) {
+            let socket_identity = match mapped_socket_identity_v1(&socket_path)? {
+                Some(identity) => identity,
+                None => {
+                    let _ = cleanup_failed_mapped_ssh_attempt_v1(
+                        Some(child),
+                        socket_path.clone(),
+                        owned_socket_identity,
+                        known_hosts_path.clone(),
+                        known_hosts_existed,
+                        known_hosts_before.clone(),
+                        known_hosts_identity,
+                        created_known_hosts_identity,
+                    );
+                    anyhow::bail!("mapped SSH forwarding health probe had no exact Unix socket");
+                }
+            };
+            if owned_socket_identity != Some(socket_identity) {
+                let _ = cleanup_failed_mapped_ssh_attempt_v1(
+                    Some(child),
+                    socket_path.clone(),
+                    owned_socket_identity,
+                    known_hosts_path.clone(),
+                    known_hosts_existed,
+                    known_hosts_before.clone(),
+                    known_hosts_identity,
+                    created_known_hosts_identity,
+                );
+                anyhow::bail!(
+                    "mapped SSH forwarding socket identity changed before health acceptance"
+                );
+            }
+            return Ok(ForwardingHandle {
+                kind: ForwardingKind::SshUds {
+                    path: socket_path.clone(),
+                    mapped_attempt: Some(mapped_ssh_attempt_v1(
+                        socket_path,
+                        owned_socket_identity,
+                        known_hosts_path,
+                        known_hosts_existed,
+                        known_hosts_before,
+                        known_hosts_identity,
+                        created_known_hosts_identity,
+                    )),
+                },
+                child: Some(child),
+            });
+        }
+        std::thread::sleep(Duration::from_millis(500));
+    }
+
+    let cleanup = cleanup_failed_mapped_ssh_attempt_v1(
+        Some(child),
+        socket_path,
+        owned_socket_identity,
+        known_hosts_path,
+        known_hosts_existed,
+        known_hosts_before,
+        known_hosts_identity,
+        created_known_hosts_identity,
+    );
+    match cleanup {
+        Ok(()) => anyhow::bail!(
+            "mapped SSH UDS forwarding timed out before a healthy exact socket was observed"
+        ),
+        Err(cleanup_error) => anyhow::bail!(
+            "mapped SSH UDS forwarding timed out before a healthy exact socket was observed; cleanup failed: {cleanup_error:#}"
+        ),
+    }
+}
 fn create_ssh_uds_forwarding(
     vm_name: &str,
     socket_path: Option<PathBuf>,
@@ -302,7 +909,10 @@ fn create_ssh_uds_forwarding(
                 socket_path.display()
             );
             return Ok(ForwardingHandle {
-                kind: ForwardingKind::SshUds { path: socket_path },
+                kind: ForwardingKind::SshUds {
+                    path: socket_path,
+                    mapped_attempt: None,
+                },
                 child: Some(child),
             });
         }
@@ -532,6 +1142,7 @@ mod tests {
             },
             ForwardingKind::SshUds {
                 path: PathBuf::from("/tmp/test.sock"),
+                mapped_attempt: None,
             },
             ForwardingKind::SshTcp {
                 port: COMPATIBILITY_TCP_PORT,
@@ -831,63 +1442,357 @@ exit 0
     }
 
     #[test]
-    fn r3_lifecycle_blocks_remain_frozen() {
+    fn r3_mapped_ssh_uds_lifecycle_is_exact_and_compatibility_is_preserved() {
         const SOURCE: &str = include_str!("forwarding.rs");
-        const DROP_BLOCK: &str = r#"impl Drop for ForwardingHandle {
-    fn drop(&mut self) {
-        debug!("Dropping ForwardingHandle for {:?}", self.kind);
+        let mapped_start = SOURCE
+            .find("pub fn create_mapped_ssh_uds_forwarding_v1(")
+            .expect("mapped SSH-UDS constructor");
+        let mapped_end = SOURCE[mapped_start..]
+            .find("\nfn create_ssh_uds_forwarding(")
+            .map(|offset| mapped_start + offset)
+            .expect("mapped SSH-UDS constructor end");
+        let mapped = &SOURCE[mapped_start..mapped_end];
+        assert!(mapped.contains("StreamLocalBindUnlink=no"));
+        assert!(!mapped.contains("StreamLocalBindUnlink=yes"));
+        assert!(mapped.contains("ConnectTimeout=5"));
+        assert!(mapped.contains("cleanup_failed_mapped_ssh_attempt_v1"));
+        assert!(mapped.contains("record_mapped_known_hosts_entry_v1"));
+        assert!(mapped.contains("restore_exact_mapped_known_hosts_entry_v1"));
+        assert!(!mapped.contains("auto_select("));
+        assert!(!mapped.contains("create_ssh_tcp_forwarding("));
+        assert!(!mapped.contains("create_vsock_forwarding("));
 
-        // Terminate child process if running
-        if let Some(mut child) = self.child.take() {
-            match child.kill() {
-                Ok(_) => {
-                    debug!("Killed forwarding process");
-                    let _ = child.wait();
-                }
-                Err(e) => {
-                    warn!("Failed to kill forwarding process: {}", e);
-                }
-            }
+        let cleanup_start = SOURCE
+            .find("fn cleanup_failed_mapped_ssh_attempt_v1(")
+            .expect("mapped SSH cleanup helper");
+        let cleanup_end = SOURCE[cleanup_start..]
+            .find("\n/// Record the exact A-local")
+            .map(|offset| cleanup_start + offset)
+            .expect("mapped SSH cleanup helper end");
+        let cleanup = &SOURCE[cleanup_start..cleanup_end];
+        assert!(cleanup.contains("child.kill()"));
+        assert!(cleanup.contains(".wait()"));
+        assert!(cleanup.contains("owned_socket_identity"));
+        assert!(cleanup.contains("remove_exact_mapped_ssh_socket_v1"));
+        assert!(cleanup.contains("restore_exact_mapped_known_hosts_entry_v1"));
+        assert!(mapped.contains("created_known_hosts_identity"));
+
+        let drop_start = SOURCE
+            .find("impl Drop for ForwardingHandle {")
+            .expect("ForwardingHandle drop");
+        let drop_end = SOURCE[drop_start..]
+            .find("\nfn probe_caps_uds(")
+            .map(|offset| drop_start + offset)
+            .expect("ForwardingHandle drop end");
+        let drop_body = &SOURCE[drop_start..drop_end];
+        assert!(drop_body.contains("mapped_attempt.take()"));
+        assert!(drop_body.contains("remove_exact_mapped_ssh_socket_v1"));
+        assert!(drop_body.contains("Preserving replaced mapped SSH socket"));
+        assert!(drop_body.contains("restore_exact_mapped_known_hosts_entry_v1"));
+        assert!(drop_body.contains("reconciling known_hosts independently"));
+    }
+
+    #[test]
+    fn mapped_ssh_uds_early_exit_restores_exact_state_and_retries() {
+        let _env_guard = crate::test_util::lock_env();
+        let temp = tempdir().expect("tempdir");
+        let host_home = temp.path().join("host-home");
+        let control_root = host_home.join(".lima");
+        let selected_prefix = temp.path().join("selected-prefix");
+        let socket_path = selected_prefix.join("sock/agent.sock");
+        let bin = temp.path().join("bin");
+        fs::create_dir_all(socket_path.parent().expect("socket parent")).expect("socket parent");
+        fs::create_dir_all(control_root.join("substrate")).expect("control root");
+        fs::create_dir_all(&bin).expect("fake ssh bin");
+        fs::write(
+            control_root.join("substrate/ssh.config"),
+            "Host lima-substrate\n  User fixture\n",
+        )
+        .expect("ssh config");
+        let known_hosts = selected_prefix.join("lima_known_hosts");
+        fs::write(&known_hosts, b"before\n").expect("seed known hosts");
+
+        let ssh = bin.join("ssh");
+        fs::write(
+            &ssh,
+            r##"#!/usr/bin/env bash
+set -euo pipefail
+known_hosts=""
+socket_path=""
+previous=""
+for arg in "$@"; do
+  case "$arg" in
+    UserKnownHostsFile=*) known_hosts="${arg#UserKnownHostsFile=}" ;;
+  esac
+  if [[ "$previous" == "-L" ]]; then
+    socket_path="${arg%:/run/substrate.sock}"
+  fi
+  previous="$arg"
+done
+mkdir -p "$(dirname "$known_hosts")"
+printf 'mutated\n' >"$known_hosts"
+python3 - "$socket_path" <<'EOF_FAKEPY'
+import socket
+import sys
+listener = socket.socket(socket.AF_UNIX, socket.SOCK_STREAM)
+listener.bind(sys.argv[1])
+listener.close()
+EOF_FAKEPY
+# Keep the child live long enough for the constructor to capture the identities it owns.
+sleep 1
+# The SSH child owns this listener and removes it as part of its orderly exit.  The host-side
+# cleanup must not race a leftover pathname after the child has been reaped.
+rm -f -- "$socket_path"
+printf 'fixture ssh failed after state mutation\n' >&2
+exit 23
+"##,
+        )
+        .expect("fake ssh");
+        #[cfg(unix)]
+        {
+            use std::os::unix::fs::PermissionsExt;
+            let mut permissions = fs::metadata(&ssh).expect("fake ssh metadata").permissions();
+            permissions.set_mode(0o755);
+            fs::set_permissions(&ssh, permissions).expect("fake ssh permissions");
+        }
+        let previous_path = env::var_os("PATH");
+        let path = previous_path.as_ref().map_or_else(
+            || bin.display().to_string(),
+            |previous| format!("{}:{}", bin.display(), previous.to_string_lossy()),
+        );
+        env::set_var("PATH", path);
+
+        for attempt in 0..2 {
+            let error = match create_mapped_ssh_uds_forwarding_v1(
+                "substrate",
+                socket_path.clone(),
+                &host_home,
+                &control_root,
+            ) {
+                Ok(_) => panic!("fake ssh must fail after its socket and known-host mutation"),
+                Err(error) => error,
+            };
+            assert!(
+                error.to_string().contains("exited"),
+                "unexpected attempt {attempt} error: {error:#}"
+            );
+            assert!(
+                !socket_path.exists(),
+                "failed attempt {attempt} retained its socket"
+            );
+            assert_eq!(
+                fs::read(&known_hosts).expect("known hosts after failed attempt"),
+                b"before\n"
+            );
         }
 
-        // Clean up sockets if needed
-        if let ForwardingKind::SshUds { ref path } = self.kind {
-            if path.exists() {
-                if let Err(e) = std::fs::remove_file(path) {
-                    warn!("Failed to remove socket file: {}", e);
-                }
-            }
+        match previous_path {
+            Some(value) => env::set_var("PATH", value),
+            None => env::remove_var("PATH"),
         }
     }
-}"#;
-        const PRELAUNCH_UNLINK_BLOCK: &str = r#"    // Remove old socket if exists
-    if socket_path.exists() {
-        debug!("Removing old socket file");
-        std::fs::remove_file(&socket_path)?;
-    }"#;
-        const STREAMLOCAL_BIND_UNLINK_BLOCK: &str = r#""-o".to_string(),
-        "StreamLocalBindUnlink=yes".to_string(),"#;
-        const TIMEOUT_BLOCK: &str = r#"    match child.try_wait() {
-        Ok(None) => {
-            if let Err(err) = child.kill() {
-                warn!("Failed to kill timed out SSH forwarding process: {err}");
-            }
-            if let Err(err) = child.wait() {
-                warn!("Failed to wait on timed out SSH forwarding process: {err}");
-            }"#;
 
-        assert!(SOURCE.contains(DROP_BLOCK), "drop block changed");
+    #[test]
+    fn mapped_ssh_uds_refuses_pre_spawn_replacement_without_unlink() {
+        let _env_guard = crate::test_util::lock_env();
+        let temp = tempdir().expect("tempdir");
+        let host_home = temp.path().join("host-home");
+        let control_root = host_home.join(".lima");
+        let selected_prefix = temp.path().join("selected-prefix");
+        let socket_path = selected_prefix.join("sock/agent.sock");
+        let bin = temp.path().join("bin");
+        fs::create_dir_all(socket_path.parent().expect("socket parent")).expect("socket parent");
+        fs::create_dir_all(control_root.join("substrate")).expect("control root");
+        fs::create_dir_all(&bin).expect("fake ssh bin");
+        fs::write(
+            control_root.join("substrate/ssh.config"),
+            "Host lima-substrate\n  User fixture\n",
+        )
+        .expect("ssh config");
+
+        let ssh = bin.join("ssh");
+        fs::write(
+            &ssh,
+            r##"#!/usr/bin/env bash
+set -euo pipefail
+socket_path=""
+unlink_mode=""
+previous=""
+for arg in "$@"; do
+  case "$arg" in
+    StreamLocalBindUnlink=*) unlink_mode="${arg#StreamLocalBindUnlink=}" ;;
+  esac
+  if [[ "$previous" == "-L" ]]; then
+    socket_path="${arg%:/run/substrate.sock}"
+  fi
+  previous="$arg"
+done
+printf 'foreign-pre-spawn-occupant\n' >"$socket_path"
+if [[ "$unlink_mode" == "yes" ]]; then
+  rm -f -- "$socket_path"
+fi
+exit 23
+"##,
+        )
+        .expect("fake ssh");
+        #[cfg(unix)]
+        {
+            use std::os::unix::fs::PermissionsExt;
+            let mut permissions = fs::metadata(&ssh).expect("fake ssh metadata").permissions();
+            permissions.set_mode(0o755);
+            fs::set_permissions(&ssh, permissions).expect("fake ssh permissions");
+        }
+        let previous_path = env::var_os("PATH");
+        let path = previous_path.as_ref().map_or_else(
+            || bin.display().to_string(),
+            |previous| format!("{}:{}", bin.display(), previous.to_string_lossy()),
+        );
+        env::set_var("PATH", path);
+
+        let error = match create_mapped_ssh_uds_forwarding_v1(
+            "substrate",
+            socket_path.clone(),
+            &host_home,
+            &control_root,
+        ) {
+            Ok(_) => panic!("a pre-spawn replacement must make the typed attempt fail closed"),
+            Err(error) => error,
+        };
         assert!(
-            SOURCE.contains(PRELAUNCH_UNLINK_BLOCK),
-            "pre-launch unlink block changed"
+            error.to_string().contains("exited"),
+            "unexpected error: {error:#}"
+        );
+        assert_eq!(
+            fs::read(&socket_path).expect("foreign replacement remains"),
+            b"foreign-pre-spawn-occupant\n"
+        );
+
+        match previous_path {
+            Some(value) => env::set_var("PATH", value),
+            None => env::remove_var("PATH"),
+        }
+    }
+
+    #[test]
+    fn mapped_cleanup_preserves_replaced_and_symlinked_paths() {
+        use std::os::unix::fs::{symlink, FileTypeExt as _, MetadataExt as _};
+
+        let temp = tempdir().expect("tempdir");
+        let socket_path = temp.path().join("agent.sock");
+        let original_socket = UnixListener::bind(&socket_path).expect("original socket");
+        let original_metadata = fs::symlink_metadata(&socket_path).expect("socket metadata");
+        let known_hosts = temp.path().join("lima_known_hosts");
+        fs::write(&known_hosts, b"before\n").expect("known hosts");
+        let known_metadata = fs::symlink_metadata(&known_hosts).expect("known-host metadata");
+        let attempt = mapped_ssh_attempt_v1(
+            socket_path.clone(),
+            Some((original_metadata.dev(), original_metadata.ino())),
+            known_hosts.clone(),
+            true,
+            b"before\n".to_vec(),
+            Some((known_metadata.dev(), known_metadata.ino())),
+            None,
+        );
+
+        fs::remove_file(&socket_path).expect("unlink original socket pathname");
+        let replacement_socket = UnixListener::bind(&socket_path).expect("replacement socket");
+        let replacement = temp.path().join("replacement-known-hosts");
+        fs::write(&replacement, b"replacement\n").expect("replacement known hosts");
+        fs::rename(&replacement, &known_hosts).expect("replace known hosts atomically");
+
+        assert!(remove_exact_mapped_ssh_socket_v1(&attempt).is_err());
+        assert!(fs::symlink_metadata(&socket_path)
+            .expect("replacement socket remains")
+            .file_type()
+            .is_socket());
+        assert!(restore_exact_mapped_known_hosts_entry_v1(&attempt).is_err());
+        assert_eq!(fs::read(&known_hosts).unwrap(), b"replacement\n");
+
+        drop(replacement_socket);
+        drop(original_socket);
+        fs::remove_file(&socket_path).expect("remove replacement socket");
+        let target = temp.path().join("external-target");
+        fs::write(&target, b"external\n").expect("external target");
+        fs::remove_file(&known_hosts).expect("remove replacement known hosts");
+        symlink(&target, &known_hosts).expect("symlink known hosts");
+        assert!(record_mapped_known_hosts_entry_v1(&known_hosts).is_err());
+        assert!(restore_exact_mapped_known_hosts_entry_v1(&attempt).is_err());
+        assert!(fs::symlink_metadata(&known_hosts)
+            .expect("symlink remains")
+            .file_type()
+            .is_symlink());
+    }
+
+    #[test]
+    fn mapped_cleanup_preserves_unobserved_early_exit_paths() {
+        let temp = tempdir().expect("tempdir");
+        let socket_path = temp.path().join("agent.sock");
+        let listener =
+            UnixListener::bind(&socket_path).expect("socket created after an unobserved exit");
+        let known_hosts = temp.path().join("lima_known_hosts");
+        fs::write(&known_hosts, b"unobserved-created\n").expect("created known hosts");
+
+        let cleanup = cleanup_failed_mapped_ssh_attempt_v1(
+            None,
+            socket_path.clone(),
+            None,
+            known_hosts.clone(),
+            false,
+            Vec::new(),
+            None,
+            None,
         );
         assert!(
-            SOURCE.contains(STREAMLOCAL_BIND_UNLINK_BLOCK),
-            "StreamLocalBindUnlink block changed"
+            cleanup.is_err(),
+            "unobserved known_hosts must not be adopted for unlink"
+        );
+        assert!(socket_path.exists(), "unobserved socket must be preserved");
+        assert_eq!(fs::read(&known_hosts).unwrap(), b"unobserved-created\n");
+
+        drop(listener);
+        fs::remove_file(&socket_path).expect("manual safe socket retirement");
+    }
+
+    #[test]
+    fn mapped_known_hosts_before_state_round_trips() {
+        let tempdir = tempfile::tempdir().expect("tempdir");
+        let existing = tempdir.path().join("existing_known_hosts");
+        std::fs::write(&existing, b"before\n").expect("seed existing known_hosts");
+        let (existed, before, _) =
+            record_mapped_known_hosts_entry_v1(&existing).expect("record existing");
+        std::fs::write(&existing, b"after\n").expect("replace existing known_hosts");
+        restore_mapped_known_hosts_entry_v1(&existing, existed, &before).expect("restore existing");
+        assert_eq!(std::fs::read(&existing).unwrap(), b"before\n");
+
+        let absent = tempdir.path().join("absent_known_hosts");
+        let (existed, before, _) =
+            record_mapped_known_hosts_entry_v1(&absent).expect("record absent");
+        std::fs::write(&absent, b"created\n").expect("create known_hosts");
+        restore_mapped_known_hosts_entry_v1(&absent, existed, &before).expect("restore absent");
+        assert!(!absent.exists());
+    }
+
+    #[cfg(unix)]
+    #[test]
+    fn mapped_known_hosts_snapshot_rejects_fifo_without_blocking() {
+        let tempdir = tempfile::tempdir().expect("tempdir");
+        let fifo = tempdir.path().join("lima_known_hosts");
+        let result = std::process::Command::new("mkfifo")
+            .arg(&fifo)
+            .status()
+            .expect("run mkfifo");
+        assert!(result.success(), "mkfifo failed with {result}");
+
+        let started = std::time::Instant::now();
+        let error = record_mapped_known_hosts_entry_v1(&fifo)
+            .expect_err("FIFO must be rejected before any blocking read");
+        assert!(
+            started.elapsed() < std::time::Duration::from_secs(1),
+            "FIFO snapshot blocked before rejection"
         );
         assert!(
-            SOURCE.contains(TIMEOUT_BLOCK),
-            "timeout kill/wait block changed"
+            error.to_string().contains("exact regular file"),
+            "unexpected FIFO rejection: {error:#}"
         );
     }
 }

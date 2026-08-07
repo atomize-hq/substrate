@@ -3608,3 +3608,26 @@ leaves the corresponding gate open. R3 closeout does not authorize the later A1.
   changed; the artifact's documented `install_state_smoke.sh` hosted-bundle mismatch remains
   reproduced unchanged at the bound source; and no MAC authority starts here.
 - Successor: `COMPLETE` for this authoritative orchestration closeout.
+
+### `A1.1d-5R3-MAC`
+
+- Status: implementation publication scope; no native evidence claim.
+- Newly bounded proof surface: typed SSH-UDS exact unlink/timeout/Drop/known-host restoration,
+  mapped lifecycle argument/evidence refusal, tombstoned guest DNS/package/toolchain/Cargo
+  remediation, exact socket non-propagation, and the non-executing mock executor fixture.
+- Remaining evidence-only truth: supported-Lima publisher installation, host/guest executor build
+  evidence, code-signing, independent-TTY pairing, lifecycle/restoration exercise, and external
+  receipts belong solely to `EVIDENCE:R3-MAC-IMP-01`.
+- Successor: `EVIDENCE:R3-MAC-IMP-01`.
+
+## A1.1d-5R3-MAC attempt-4 remediation status (2026-08-06)
+
+Under `substrate-a1-1d-5r3-mac-20260806-41f97e1c570d` amendment
+`0003-fresh-mac-review-epoch.json`, this new nonce-bound epoch reconstructs the verified
+19-path attempt-3 baseline solely to remediate the six mandatory P1/P2 findings. It binds the
+actual XPC peer audit token before request decoding, repeats canonical carrier/mapping/role and
+Stage-1 joins before any mapped mutation, removes the standalone retire operation, and refuses
+pre-spawn SSH-UDS replacement by disabling SSH-side unlink. The added checks are non-native only:
+no Lima, launchd, Keychain, code-signing, publisher installation, or evidence artifact is run or
+created here. Fresh review is recorded only in the exact MAC review-control set; the sole
+successor remains `EVIDENCE:R3-MAC-IMP-01`.
