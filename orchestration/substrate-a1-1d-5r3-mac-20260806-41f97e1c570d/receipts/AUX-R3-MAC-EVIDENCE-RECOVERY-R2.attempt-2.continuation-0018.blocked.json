@@ -1,0 +1,58 @@
+{
+  "protocol": "codex.top-level-task-receipt.v1",
+  "status": "BLOCKED_SCOPE_EXPANSION",
+  "increment": "AUX-R3-MAC-EVIDENCE-RECOVERY-R2",
+  "packet_id": "AUX-R3-MAC-EVIDENCE-RECOVERY-R2",
+  "orchestration_id": "substrate-a1-1d-5r3-mac-20260806-41f97e1c570d",
+  "dispatch_nonce": "7f33f40d8af93e12561b3b1e23fa38bfe3fca28e15c70f53caf6525dc85d68de",
+  "continuation_nonce": "247ed8fe255205152bfe548529a6796e6532f91748f7e4cea5764829dfe9ddae",
+  "task_thread_id": "019fdcee-73e6-77a2-8a16-1d1c86223f9c",
+  "task_host_id": "local",
+  "exact_worktree": "/Users/spensermcconnell/.codex/worktrees/bacb/substrate",
+  "expected_base": "bb098b6e265a4b6cadc4b7ca908c8b6ccf59f2b9",
+  "expected_base_tree": "688ae2860d99d6d5cf1019e0d3ba27c7cc26b6cc",
+  "observed_head": "bb098b6e265a4b6cadc4b7ca908c8b6ccf59f2b9",
+  "observed_tree": "688ae2860d99d6d5cf1019e0d3ba27c7cc26b6cc",
+  "observed_remote_target": "bb098b6e265a4b6cadc4b7ca908c8b6ccf59f2b9",
+  "continuation_0018_change": {
+    "authorized_surface": "tests/mac/dev_install_compile_surface_r3.sh static helper invariants only",
+    "result": "PASS with strict binary_tmp/manifest_tmp staging, cleanup, and ordering proof",
+    "untracked_compile_test_sha256_after": "62c47ff28d3bfbb0b27ee204258dc3d52340e59a427118ab21abba18c921e170"
+  },
+  "deterministic_evidence": {
+    "mac_compile_surface": "PASS",
+    "installer_fixture": "PASS",
+    "bash_syntax": "PASS",
+    "formatting": "PASS",
+    "diff_check": "PASS",
+    "static_platform_proof": "PASS",
+    "allowlist": "PASS",
+    "secret_scan": "PASS"
+  },
+  "frozen_subject": {
+    "fingerprint": "sha256:3277175c543c1769c6121e70bab52c2f94c35cda04ac3a0031d758a7b6467095"
+  },
+  "closure_review": {
+    "cycle_id": "closure-1",
+    "verdict": "findings",
+    "valid_finding": {
+      "id": "P2-R2-LIFECYCLE-002",
+      "priority": "P2",
+      "evidence": "grep -Fxv output uses || true, conflating normal status 1 with real read/I/O/permission failure and permitting a partial manifest that blocks retry.",
+      "causal_relation": "directly unmasked by P2-R2-LIFECYCLE-001 remediation"
+    },
+    "review_record_sha256": "74fc39e47b461c901e67dd7a8f9521faf148615308130d770ada9ced1b2bfcf0"
+  },
+  "blocker": {
+    "reason": "Continuation 0018 allowed no production/fixture change.",
+    "required_authority": "Authorize the helper to distinguish grep status 1 from >1, clean temporaries and fail before publication on real read error; add manifest-read failure/retry coverage; then run supplemental_causal-1."
+  },
+  "preservation": {
+    "tracked_binary_diff_sha256": "1a202492a960baa181a1012f439f558e61c596676fe17c4290c2e7b0959a0074",
+    "untracked_compile_test_sha256": "62c47ff28d3bfbb0b27ee204258dc3d52340e59a427118ab21abba18c921e170",
+    "review_record_sha256": "74fc39e47b461c901e67dd7a8f9521faf148615308130d770ada9ced1b2bfcf0",
+    "staged": false,
+    "commit": null,
+    "push": null
+  }
+}

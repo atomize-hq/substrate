@@ -1,0 +1,58 @@
+{
+  "protocol": "codex.orchestration-authority-amendment.v1",
+  "orchestration_id": "substrate-a1-1d-5r3-mac-20260806-41f97e1c570d",
+  "amendment_id": "0019-r2-manifest-read-failure-convergence",
+  "authority_source": "standing meta authority for valid P1/P2 directly caused or unmasked by the immediately preceding remediation inside the unchanged R2 MAC-only risk and authority boundary",
+  "authorized_increment": "AUX-R3-MAC-EVIDENCE-RECOVERY-R2",
+  "existing_task": {
+    "thread_id": "019fdcee-73e6-77a2-8a16-1d1c86223f9c",
+    "host_id": "local",
+    "worktree": "/Users/spensermcconnell/.codex/worktrees/bacb/substrate",
+    "original_dispatch_nonce": "7f33f40d8af93e12561b3b1e23fa38bfe3fca28e15c70f53caf6525dc85d68de",
+    "prior_continuation_nonce": "247ed8fe255205152bfe548529a6796e6532f91748f7e4cea5764829dfe9ddae",
+    "continuation_nonce": "353fae0cab2c3d5475c33214236731e3547e44a4a1f1b7f8420aba8a85272056",
+    "preserved_tracked_diff_sha256": "sha256:1a202492a960baa181a1012f439f558e61c596676fe17c4290c2e7b0959a0074",
+    "preserved_untracked_test_sha256": "sha256:62c47ff28d3bfbb0b27ee204258dc3d52340e59a427118ab21abba18c921e170",
+    "review_record_sha256": "sha256:74fc39e47b461c901e67dd7a8f9521faf148615308130d770ada9ced1b2bfcf0"
+  },
+  "trigger": {
+    "cycle_id": "closure-1",
+    "finding_id": "P2-R2-LIFECYCLE-002",
+    "priority": "P2",
+    "causal_relation": "directly unmasked by remediation of P2-R2-LIFECYCLE-001"
+  },
+  "authorized_paths": [
+    "scripts/substrate/dev-install-substrate.sh",
+    "tests/installers/dev_install_bash32_fd_regression.sh",
+    "llm-last-mile/runtime-refactor/review-control/r3-mac-evidence-recovery-r2-review-lifecycle-convergence.md",
+    "llm-last-mile/runtime-refactor/review-control/r3-mac-evidence-recovery-r2-review-cycle-record.json"
+  ],
+  "authorized_change": {
+    "helper": "stage_managed_mac_control_binary_copy",
+    "production": "capture grep exit status; accept only 0 or 1; on status >1 clean binary_tmp and manifest_tmp and return failure before manifest or destination publication",
+    "fixture": "inject an actual existing-manifest read failure, prove the existing pair/manifest remain intact, prove no temporaries, and prove retry convergence",
+    "new_paths": false
+  },
+  "review_authority": {
+    "next_cycle_id": "supplemental-causal-1",
+    "kind": "supplemental_causal",
+    "trigger_cycle_id": "closure-1",
+    "trigger_finding_ids": [
+      "P2-R2-LIFECYCLE-002"
+    ],
+    "causal_evidence_required": true,
+    "reviewer": "fresh read-only independent",
+    "remaining_supplemental_budget_after_this": 1
+  },
+  "forbidden": [
+    "other product/test edits",
+    "new paths",
+    "Linux/Windows target work",
+    "R3/R4 work",
+    "native actions",
+    "toolchain cache mutation",
+    "npx gitnexus analyze",
+    "publication before terminal CLEAN"
+  ],
+  "terminal_successor": "AUX-R3-MAC-EVIDENCE-RECOVERY-R3"
+}
