@@ -42,7 +42,7 @@
     "host_id": "local",
     "worktree": "/Users/spensermcconnell/.codex/worktrees/bacb/substrate",
     "dispatch_nonce": "7f33f40d8af93e12561b3b1e23fa38bfe3fca28e15c70f53caf6525dc85d68de",
-    "continuation_nonce": "3f7553bcb50a0c0d06373e6a469f8972c9a31a59b06a13eea36a255a66c06760",
+    "continuation_nonce": "48c556cf19c9c4ac60b5d8c1ee4adf744184885a66ae7a3c9223e8df7aa96dbe",
     "expected_base": {
       "commit": "bb098b6e265a4b6cadc4b7ca908c8b6ccf59f2b9",
       "tree": "688ae2860d99d6d5cf1019e0d3ba27c7cc26b6cc"
@@ -51,10 +51,11 @@
     "publication_mode": "remote",
     "project_id": "local-b2016f8a311fef93149e42eaec4d704d",
     "project_path": "/Users/spensermcconnell/__Active_Code/atomize-hq/substrate",
-    "prompt_path": "increments/AUX-R3-MAC-EVIDENCE-RECOVERY-R2.attempt-2.continuation-0014-prompt.md",
+    "prompt_path": "increments/AUX-R3-MAC-EVIDENCE-RECOVERY-R2.attempt-2.continuation-0015-prompt.md",
     "model": "gpt-5.6-terra",
     "reasoning": "xhigh",
-    "continuation_sent_at_utc": "2026-08-07T16:13:46.486533Z"
+    "prior_continuation_nonce": "3f7553bcb50a0c0d06373e6a469f8972c9a31a59b06a13eea36a255a66c06760",
+    "authority_persisted_at_utc": "2026-08-07T16:21:46.297331Z"
   },
   "active_evidence_dispatches": [],
   "verified_evidence": [],
@@ -91,7 +92,7 @@
     }
   ],
   "last_blocker": null,
-  "current_authority_amendment": "authority-amendments/0014-existing-task-bounded-continuation.json",
+  "current_authority_amendment": "authority-amendments/0015-r2-disposable-cross-toolchain-proof.json",
   "evidence_attempt": 2,
   "retry_authority": {
     "evidence_id": "EVIDENCE:R3-MAC-IMP-01",
@@ -388,5 +389,12 @@
       "withdrawal_prompt_path": "increments/AUX-R3-MAC-EVIDENCE-RECOVERY-R2.retry-2.withdrawal-prompt.md",
       "withdrawal_sent_at_utc": "2026-08-07T16:13:46.486533Z"
     }
-  ]
+  ],
+  "last_adjudicated_blocker": {
+    "receipt_path": "receipts/AUX-R3-MAC-EVIDENCE-RECOVERY-R2.attempt-2.continuation-0014.blocked-platform-toolchain.json",
+    "verification_path": "receipts/AUX-R3-MAC-EVIDENCE-RECOVERY-R2.attempt-2.continuation-0014.blocked-platform-toolchain.verification.json",
+    "status": "BLOCKED_PLATFORM_HANDOFF_REQUIRED",
+    "adjudication": "authority-amendments/0015-r2-disposable-cross-toolchain-proof.json",
+    "worktree_preserved": true
+  }
 }

@@ -1,0 +1,71 @@
+{
+  "protocol": "codex.top-level-task-receipt.v1",
+  "status": "BLOCKED_PLATFORM_TOOLCHAIN",
+  "increment": "AUX-R3-MAC-EVIDENCE-RECOVERY-R2",
+  "packet_id": "AUX-R3-MAC-EVIDENCE-RECOVERY-R2",
+  "attempt": 2,
+  "orchestration_id": "substrate-a1-1d-5r3-mac-20260806-41f97e1c570d",
+  "original_dispatch_nonce": "7f33f40d8af93e12561b3b1e23fa38bfe3fca28e15c70f53caf6525dc85d68de",
+  "continuation_nonce": "3f7553bcb50a0c0d06373e6a469f8972c9a31a59b06a13eea36a255a66c06760",
+  "increment_task": {
+    "thread_id": "019fdcee-73e6-77a2-8a16-1d1c86223f9c",
+    "host_id": "local",
+    "worktree": "/Users/spensermcconnell/.codex/worktrees/bacb/substrate"
+  },
+  "expected_base": {
+    "commit": "bb098b6e265a4b6cadc4b7ca908c8b6ccf59f2b9",
+    "tree": "688ae2860d99d6d5cf1019e0d3ba27c7cc26b6cc"
+  },
+  "continuation_preflight": {
+    "base": "verified",
+    "tree": "verified",
+    "preserved_tracked_diff_sha256": "200f5e0563ce1af63625d0ed33822520d96f9dcadedee6b32a7b843fdfd314f2",
+    "original_untracked_compile_test_sha256": "6f926b83ce7263f0950ecdd98d451a85f80a2a496cb98e31503ce07954255781",
+    "live_remote": {
+      "target": "refs/heads/feat/internal-host-orchestrator-world-dispatch-bootstrap",
+      "commit": "bb098b6e265a4b6cadc4b7ca908c8b6ccf59f2b9"
+    }
+  },
+  "authorized_continuation_change": {
+    "path": "tests/mac/dev_install_compile_surface_r3.sh",
+    "new_sha256": "0a03fde502464ce62bb2e94cec65bd86d98c8117579f5a3ad758bcad4e03ddc3",
+    "description": "Replaced the lifecycle-macos compile invocation with native and x86_64-apple-darwin ordinary shell/host checks; added exact static assertions for the two-bin macOS BUILD_FLAGS and fixed managed-copy/manifest branch. The test records the sha2/AuditTokenV1/pointer-cast lifecycle-macos failure as a mandatory deferred R4 gate."
+  },
+  "passed_checks": [
+    "bash tests/mac/dev_install_compile_surface_r3.sh (native and x86_64-apple-darwin shell/ordinary host checks): PASS",
+    "/bin/bash tests/installers/dev_install_bash32_fd_regression.sh: PASS",
+    "/bin/bash -n scripts/substrate/dev-install-substrate.sh: PASS",
+    "cargo fmt --all -- --check: PASS",
+    "git diff --check: PASS",
+    "27 Windows/WSL-named tracked source files aggregate hash base=worktree=3bf4f3b4dcc134a7febae7175497fffb9f9886094c7e851f76c8a5c79253280c"
+  ],
+  "blocking_platform_evidence": {
+    "required_windows_command": "cargo check --target x86_64-pc-windows-msvc -p substrate --bin substrate --bin substrate-shim -p substrate-gateway --bin substrate-gateway",
+    "rust_target_installed": true,
+    "result": "failed (exit 101) in ring 0.17.14",
+    "exact_reason": "The macOS host has no configured Windows MSVC SDK/C header environment: ring invokes cc with --target=x86_64-pc-windows-msvc and fails at fatal error: assert.h file not found; VCINSTALLDIR, CC_x86_64-pc-windows-msvc, and related target compiler variables are unset.",
+    "secondary_linux_evidence": "cargo check --target x86_64-unknown-linux-gnu reaches ring and fails because x86_64-linux-gnu-gcc is not installed. No compiler/toolchain installation or substitute was attempted."
+  },
+  "gitnexus": {
+    "refresh": "not run; npx gitnexus analyze and tracked context injection remain forbidden",
+    "continuation_test_impact": "degraded: requested substrate-current is absent from the index registry",
+    "manual_fallback": "The earlier complete exact-symbol/cfg/caller analysis remains the implementation proof; this continuation changed only the allowed test invocation/static assertions."
+  },
+  "review_and_publication": {
+    "subject_fingerprint": null,
+    "causal_review": "not started; deterministic platform proof gate is incomplete",
+    "change_detection": "not run; publication is prohibited",
+    "commit": null,
+    "push": null
+  },
+  "preserved_state": {
+    "head": "bb098b6e265a4b6cadc4b7ca908c8b6ccf59f2b9",
+    "tree": "688ae2860d99d6d5cf1019e0d3ba27c7cc26b6cc",
+    "tracked_diff_sha256": "200f5e0563ce1af63625d0ed33822520d96f9dcadedee6b32a7b843fdfd314f2",
+    "clean": false,
+    "staged": false,
+    "reason": "The exact preserved R2 subject plus the single continuation-authorized untracked test change remain uncommitted. No reset, clean, restore, rebase, merge, commit, or remote mutation was performed."
+  },
+  "required_authority_or_environment": "Provide a configured x86_64-pc-windows-msvc C toolchain/Windows SDK with headers (and, for the requested Linux focused check, x86_64-linux-gnu-gcc) in the task environment, or explicitly amend the deterministic platform proof contract. R2 does not authorize toolchain installation, target substitution, Windows source changes, or Linux behavior changes.",
+  "handoff": "Preserve this existing worktree byte-for-byte. Do not clean, reset, restore, commit, or publish. Once the platform environment/authority is supplied, resume this same R2 subject under a new explicit continuation binding; reverify base/tree/diff/test/remote, rerun the failed target checks, then complete the remaining deterministic checks, fresh causal review, and publication. R3 was not dispatched."
+}

@@ -1,0 +1,40 @@
+{
+  "protocol": "codex.top-level-task-receipt-verification.v1",
+  "orchestration_id": "substrate-a1-1d-5r3-mac-20260806-41f97e1c570d",
+  "increment": "AUX-R3-MAC-EVIDENCE-RECOVERY-R2",
+  "attempt": 2,
+  "continuation_nonce": "3f7553bcb50a0c0d06373e6a469f8972c9a31a59b06a13eea36a255a66c06760",
+  "verified_at_utc": "2026-08-07T16:21:46.297331Z",
+  "raw_receipt_path": "receipts/AUX-R3-MAC-EVIDENCE-RECOVERY-R2.attempt-2.continuation-0014.blocked-platform-toolchain.raw.json",
+  "raw_receipt_sha256": "sha256:1899dbcbad3a04e1ce2b32515059b76cde15fa2a3916aaffaf7de8803429a82f",
+  "canonical_receipt_path": "receipts/AUX-R3-MAC-EVIDENCE-RECOVERY-R2.attempt-2.continuation-0014.blocked-platform-toolchain.json",
+  "canonical_receipt_sha256": "sha256:1d0f82692b3e98df52676a8b20421fb094fd0369595f194465648ab9470bfa3d",
+  "schema_reconciliation": {
+    "mapped_noncanonical_status": "BLOCKED_PLATFORM_TOOLCHAIN -> BLOCKED_PLATFORM_HANDOFF_REQUIRED",
+    "mapped_extended_fields_to_blocker": true
+  },
+  "terminal_barrier": {
+    "thread_id": "019fdcee-73e6-77a2-8a16-1d1c86223f9c",
+    "host_id": "local",
+    "turn_id": "019fdd00-233a-7a83-8006-316369deda10",
+    "status": "completed",
+    "thread_status": "idle"
+  },
+  "independent_observation": {
+    "worktree": "/Users/spensermcconnell/.codex/worktrees/bacb/substrate",
+    "head": "bb098b6e265a4b6cadc4b7ca908c8b6ccf59f2b9",
+    "head_tree": "688ae2860d99d6d5cf1019e0d3ba27c7cc26b6cc",
+    "index_tree": "688ae2860d99d6d5cf1019e0d3ba27c7cc26b6cc",
+    "live_remote": "bb098b6e265a4b6cadc4b7ca908c8b6ccf59f2b9",
+    "staged_paths": 0,
+    "status_entry_count": 10,
+    "tracked_binary_diff_sha256": "sha256:200f5e0563ce1af63625d0ed33822520d96f9dcadedee6b32a7b843fdfd314f2",
+    "untracked_compile_test_sha256": "sha256:0a03fde502464ce62bb2e94cec65bd86d98c8117579f5a3ad758bcad4e03ddc3"
+  },
+  "adjudication": "Do not weaken Windows/Linux compatibility proof. Authorize only disposable external cross-toolchain provisioning and equivalent real target compilation, with no repository-path expansion.",
+  "task_preservation": {
+    "worktree_preserved": true,
+    "archived": false
+  },
+  "verdict": "ACCEPTED_NON_ADVANCING_BLOCK"
+}
