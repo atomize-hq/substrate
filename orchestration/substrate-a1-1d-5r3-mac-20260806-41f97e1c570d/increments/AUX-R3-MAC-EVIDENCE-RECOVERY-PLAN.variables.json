@@ -1,0 +1,24 @@
+{
+  "ORCHESTRATION_ID": "substrate-a1-1d-5r3-mac-20260806-41f97e1c570d",
+  "DISPATCH_NONCE": "c1f964d03d31a82ad5bf8b15a61b1a90cb618e20199b83b5674c6552a38a1798",
+  "META_THREAD_ID": "019fd8c3-b12c-7e73-919f-898600ab0f64",
+  "META_HOST_ID": "local",
+  "INCREMENT": "AUX-R3-MAC-EVIDENCE-RECOVERY-PLAN",
+  "PACKET_ID": "AUX-R3-MAC-EVIDENCE-RECOVERY-PLAN",
+  "NEXT_INCREMENT": "AUTHORITY_REQUIRED:AUX-R3-MAC-EVIDENCE-RECOVERY-IMPLEMENTATION",
+  "WORKING_DIRECTORY": "/Users/spensermcconnell/.codex/worktrees/e2c8/substrate",
+  "PROTECTED_CHECKOUTS": [
+    "/Users/spensermcconnell/__Active_Code/atomize-hq/substrate",
+    "/Users/spensermcconnell/.codex/worktrees/eb49/substrate",
+    "/Users/spensermcconnell/.codex/worktrees/60cc/substrate",
+    "/Users/spensermcconnell/.codex/worktrees/abc3/substrate",
+    "/Users/spensermcconnell/.codex/worktrees/a943/substrate",
+    "/Users/spensermcconnell/.codex/worktrees/2fdb/substrate",
+    "/Users/spensermcconnell/.codex/worktrees/46c9/substrate"
+  ],
+  "REMOTE": "origin",
+  "TARGET_REF": "refs/heads/feat/internal-host-orchestrator-world-dispatch-bootstrap",
+  "EXPECTED_BASE_COMMIT": "d8a65fc8890dd37584aaeac2984c906188e5f06e",
+  "EXPECTED_BASE_TREE": "d8f25cc993f264f0c67fe3e00180eb393e41b2e3",
+  "REQUIRED_ANCESTOR": "d8a65fc8890dd37584aaeac2984c906188e5f06e"
+}

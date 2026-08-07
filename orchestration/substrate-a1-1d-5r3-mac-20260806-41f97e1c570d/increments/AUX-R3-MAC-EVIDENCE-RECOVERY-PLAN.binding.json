@@ -1,0 +1,40 @@
+{
+  "protocol": "codex.top-level-task-binding.v1",
+  "orchestration_id": "substrate-a1-1d-5r3-mac-20260806-41f97e1c570d",
+  "dispatch_nonce": "c1f964d03d31a82ad5bf8b15a61b1a90cb618e20199b83b5674c6552a38a1798",
+  "increment": "AUX-R3-MAC-EVIDENCE-RECOVERY-PLAN",
+  "task": {
+    "thread_id": "019fdc95-705b-7cd0-92a3-8980c09c8193",
+    "host_id": "local",
+    "worktree": "/Users/spensermcconnell/.codex/worktrees/e2c8/substrate"
+  },
+  "expected_base": {
+    "commit": "d8a65fc8890dd37584aaeac2984c906188e5f06e",
+    "tree": "d8f25cc993f264f0c67fe3e00180eb393e41b2e3"
+  },
+  "target": {
+    "remote": "origin",
+    "ref": "refs/heads/feat/internal-host-orchestrator-world-dispatch-bootstrap",
+    "publication_mode": "remote"
+  },
+  "skills": {
+    "source": "/Users/spensermcconnell/__Active_Code/atomize-hq/substrate/.agents/skills",
+    "target": "/Users/spensermcconnell/.codex/worktrees/e2c8/substrate/.agents/skills",
+    "skill_count": 25,
+    "file_count": 54,
+    "sha256": "e3de93f358594033ed59696a9624d2d0ac2fd0c2aa7ddf4a532810a05b262282",
+    "verified": true
+  },
+  "model": {
+    "task": "gpt-5.6-terra",
+    "requested_reasoning": "extra-high",
+    "create_thread_reasoning_override": "runtime_rejected_xhigh_so_omitted",
+    "subagents": "gpt-5.6-terra",
+    "subagent_reasoning": "extra-high"
+  },
+  "start_authorized": true,
+  "implementation_authorized": false,
+  "next_increment": "AUTHORITY_REQUIRED:AUX-R3-MAC-EVIDENCE-RECOVERY-IMPLEMENTATION",
+  "contract_sha256": "sha256:aee1a3708d2f7d387ee4379fdaaef8cc75d065fd1b9d900144e6e5ce7c477da1",
+  "rendered_prompt_sha256": "sha256:a19316b2ebc735810e616fbda295ef4c4c23a1ed982fed469d60231803f9e252"
+}
