@@ -1,0 +1,161 @@
+{
+  "artifacts": [
+    {
+      "path": "/Users/spensermcconnell/.codex/auxiliary-host-prep/019fd9ed-4067-7922-8034-da8abbc8717e/pre-state.txt",
+      "sha256": "sha256:1927354703347535a3df32bed597f151dfae15989ededd4d3b672f3600fd313b"
+    },
+    {
+      "path": "/Users/spensermcconnell/.codex/auxiliary-host-prep/019fd9ed-4067-7922-8034-da8abbc8717e/gitnexus-collateral-source-restore.txt",
+      "sha256": "sha256:2ecac7925bae2291c01e61e800af2842b39b57ed35073b67b5b0a15222fc57de"
+    },
+    {
+      "path": "/Users/spensermcconnell/.codex/auxiliary-host-prep/019fd9ed-4067-7922-8034-da8abbc8717e/permission-repair-v1.txt",
+      "sha256": "sha256:e96d1036d87a52e10c1b042da5e09944bce9298c5403e6ae9f81cabbb06b8e9e"
+    },
+    {
+      "path": "/Users/spensermcconnell/.codex/auxiliary-host-prep/019fd9ed-4067-7922-8034-da8abbc8717e/permission-repair-before-hashes.txt",
+      "sha256": "sha256:949cc866f1d8007a5f6e33a3c8f2085aad1c771a4b9bf82f7d6fe9bf1311c3d5"
+    },
+    {
+      "path": "/Users/spensermcconnell/.codex/auxiliary-host-prep/019fd9ed-4067-7922-8034-da8abbc8717e/permission-repair-after-hashes.txt",
+      "sha256": "sha256:949cc866f1d8007a5f6e33a3c8f2085aad1c771a4b9bf82f7d6fe9bf1311c3d5"
+    },
+    {
+      "path": "/Users/spensermcconnell/.codex/auxiliary-host-prep/019fd9ed-4067-7922-8034-da8abbc8717e/lima-warm-check-only.stdout.txt",
+      "sha256": "sha256:40b73c7a5801882de6694c253f01d6eb5c62190c3a758f7e3e2ea903cd073aa4"
+    },
+    {
+      "path": "/Users/spensermcconnell/.codex/auxiliary-host-prep/019fd9ed-4067-7922-8034-da8abbc8717e/lima-warm-check-only.stderr.txt",
+      "sha256": "sha256:e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+    },
+    {
+      "path": "/Users/spensermcconnell/.codex/auxiliary-host-prep/019fd9ed-4067-7922-8034-da8abbc8717e/lima-warm-check-only.status.txt",
+      "sha256": "sha256:9347e345fa9876be906dc4c8f78ca649138c4dd57aed8593cf7efc01c6ed1a39"
+    },
+    {
+      "path": "/Users/spensermcconnell/.codex/auxiliary-host-prep/019fd9ed-4067-7922-8034-da8abbc8717e/canonical-dev-install-release.stdout.txt",
+      "sha256": "sha256:e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+    },
+    {
+      "path": "/Users/spensermcconnell/.codex/auxiliary-host-prep/019fd9ed-4067-7922-8034-da8abbc8717e/canonical-dev-install-release.stderr.txt",
+      "sha256": "sha256:679bc7b252967ab6b6b34c82d2f16b6546577140ea52e8cc5c14090d1c6d0690"
+    },
+    {
+      "path": "/Users/spensermcconnell/.codex/auxiliary-host-prep/019fd9ed-4067-7922-8034-da8abbc8717e/canonical-dev-install-release.status.txt",
+      "sha256": "sha256:26bf7be84444bc3b77f5a909a4c66aee8de7828b5cc2579f0f764ac7075ad74b"
+    },
+    {
+      "path": "/Users/spensermcconnell/.codex/auxiliary-host-prep/019fd9ed-4067-7922-8034-da8abbc8717e/canonical-dev-install-release-bash5.stdout.txt",
+      "sha256": "sha256:1a9003f809659a098b3338020a7a12dc3265fef3ff025e9a2076b292758f4e16"
+    },
+    {
+      "path": "/Users/spensermcconnell/.codex/auxiliary-host-prep/019fd9ed-4067-7922-8034-da8abbc8717e/canonical-dev-install-release-bash5.stderr.txt",
+      "sha256": "sha256:4b7cbe762061cb2bc7cba295eab7b7afb8d3d13b40f0a6f6d43983cb8bf40e6e"
+    },
+    {
+      "path": "/Users/spensermcconnell/.codex/auxiliary-host-prep/019fd9ed-4067-7922-8034-da8abbc8717e/canonical-dev-install-release-bash5.status.txt",
+      "sha256": "sha256:b938cac9739e3b88690b103c5eb0a6eae7fb510b39cfce5992d7f012d6466c1a"
+    },
+    {
+      "path": "/Users/spensermcconnell/.codex/auxiliary-host-prep/019fd9ed-4067-7922-8034-da8abbc8717e/post-source-build-block-readiness.txt",
+      "sha256": "sha256:d0b574a6c7fc9f45837bd743db9db51b25c4b94bf5d33642289574d4c6a4b46e"
+    }
+  ],
+  "blockers": [
+    {
+      "details": "Canonical source install with Bash 5 failed compiling shell with 11 Rust errors, including unresolved world-work identity imports, missing libc::SOCK_CLOEXEC, missing install_context, absent PreparedOrchestratorWorldDispatch.b_owned_authority, missing start_remote_member_runtime, and a SubstrateConfig borrow mismatch.",
+      "evidence_path": "/Users/spensermcconnell/.codex/auxiliary-host-prep/019fd9ed-4067-7922-8034-da8abbc8717e/canonical-dev-install-release-bash5.stderr.txt",
+      "evidence_sha256": "sha256:4b7cbe762061cb2bc7cba295eab7b7afb8d3d13b40f0a6f6d43983cb8bf40e6e",
+      "kind": "published_source_compile_failure"
+    },
+    {
+      "details": "src/bin/substrate-lifecycle-macos.rs issue_lima_guest_pairing_ticket_v1 validates request then unconditionally bails that native host-key/XPC evidence channel is required; signed ticket issuance is not implemented.",
+      "evidence_path": "/Users/spensermcconnell/.codex/worktrees/abc3/substrate/src/bin/substrate-lifecycle-macos.rs",
+      "kind": "published_source_pairing_ticket_stub",
+      "line_range": "553-560"
+    },
+    {
+      "details": "scripts/ci/validate_r3_native_evidence.py requires 2ccb802f-301c-4af4-9bd5-51d22808f0a2, contradicting the bound local project ID local-b2016f8a311fef93149e42eaec4d704d.",
+      "evidence_path": "/Users/spensermcconnell/.codex/worktrees/abc3/substrate/scripts/ci/validate_r3_native_evidence.py",
+      "kind": "published_source_fixed_project_id",
+      "line_range": "317-318"
+    }
+  ],
+  "completed_preparation": [
+    "Verified task worktree, remote commit/tree, clean source, protected-checkout cleanliness, hydration inventory (26 files, 61d99190f680d3738fa824348e671e8eb84b2729bf31952ef16031c6ba24d903), and pre-mutation sentinel SHA-256.",
+    "Recorded external pre-state before authorized remediation.",
+    "Repaired only /Users/spensermcconnell/.substrate from uid 501 mode 0755 to uid 501 mode 0700; file-content SHA-256 inventory is byte-identical before/after.",
+    "Verified Lima substrate VM is Running and guest sudo -n succeeds; mapped guest account uid 501 is in the substrate group.",
+    "Ran scripts/mac/lima-warm.sh --check-only: required host tools and layout sentinel pass, while forwarding/service/socket readiness remains absent.",
+    "Attempted the canonical exact-source dev installer twice: default interpreter fails on macOS Bash 3.2; with already-installed Bash 5 selected, the exact published shell crate fails compilation before installation."
+  ],
+  "continuation_handoff": {
+    "required_before_rerun": [
+      "Publish a source correction that makes the exact shell crate compile on macOS.",
+      "Implement genuine macOS host-key/XPC signed guest pairing-ticket issuance; do not bypass the ticket gate.",
+      "Correct the R3 native-evidence validator project identity for the bound local project or bind official evidence to a project identity the published validator accepts.",
+      "Bind a fresh task to the corrected remote commit/tree; verify /Users/spensermcconnell/.substrate remains uid 501 mode 0700 and source/protected checkout cleanliness.",
+      "Use the canonical dev installer from the corrected source; this host already has Bash 5 at /opt/homebrew/bin/bash, but default PATH selects macOS Bash 3.2 and triggers the current script compatibility failure.",
+      "Only after canonical install succeeds, rerun Lima check/doctor and readiness validations. Dispatch official EVIDENCE:R3-MAC-IMP-01 separately; this task did not perform it."
+    ]
+  },
+  "incidental_recovery": {
+    "detail": "npx gitnexus analyze --force rewrote tracked AGENTS.md and CLAUDE.md metadata after the clean-source preflight; the exact HEAD versions were immediately restored. Final source is clean.",
+    "evidence_path": "/Users/spensermcconnell/.codex/auxiliary-host-prep/019fd9ed-4067-7922-8034-da8abbc8717e/gitnexus-collateral-source-restore.txt",
+    "evidence_sha256": "sha256:2ecac7925bae2291c01e61e800af2842b39b57ed35073b67b5b0a15222fc57de"
+  },
+  "installation": {
+    "canonical_command": "env PATH=/opt/homebrew/bin:$PATH scripts/substrate/dev-install-substrate.sh --prefix /Users/spensermcconnell/.substrate --profile release",
+    "exit_status": 101,
+    "host_prefix": {
+      "mode": "0700",
+      "path": "/Users/spensermcconnell/.substrate",
+      "uid": 501
+    },
+    "installed_binary": "absent at /Users/spensermcconnell/.substrate/bin/substrate",
+    "result": "failed_before_install"
+  },
+  "prohibited_actions_confirmed": {
+    "no_staging_commit_or_push": true,
+    "no_unrelated_lima_instance_service_keychain_or_data_deleted": true,
+    "official_evidence_artifact_or_receipt_not_created": true,
+    "official_evidence_r3_mac_imp_01_not_run": true,
+    "protected_checkout_not_mutated": true,
+    "source_product_control_review_files_not_changed": true,
+    "sudoers_sentinel_not_modified": true
+  },
+  "protocol": "codex.auxiliary-host-prep-receipt.v1",
+  "readiness": {
+    "guest_gateway_binary": "/usr/local/bin/substrate-gateway present",
+    "guest_socket": "/run/substrate.sock absent",
+    "guest_sudo_noninteractive": true,
+    "guest_world_service": "inactive; unit absent",
+    "guest_world_service_binary": "/usr/local/bin/substrate-world-service absent",
+    "host_forward_socket": "/Users/spensermcconnell/.substrate/sock/agent.sock absent",
+    "host_sudo_post_attempt": "sudo -n true returned password required; pre-state sentinel hash was recorded before this credential state changed.",
+    "lima_check_only": "Forwarding activation unavailable: R3 prerequisite unmet.",
+    "lima_vm": "substrate Running",
+    "pre_state_sudoers_sentinel_sha256": "sha256:52105fc35b3128daf23f3e0f84ad09f791cb5ad1a26922fca3a8784e24bf6be8",
+    "publisher_launchdaemon": "absent in pre-state"
+  },
+  "source": {
+    "commit": "d8a65fc8890dd37584aaeac2984c906188e5f06e",
+    "live_remote": "d8a65fc8890dd37584aaeac2984c906188e5f06e",
+    "protected_checkout": "/Users/spensermcconnell/__Active_Code/atomize-hq/substrate",
+    "protected_checkout_clean": true,
+    "remote": "origin",
+    "target_ref": "refs/heads/feat/internal-host-orchestrator-world-dispatch-bootstrap",
+    "tree": "d8f25cc993f264f0c67fe3e00180eb393e41b2e3",
+    "worktree": "/Users/spensermcconnell/.codex/worktrees/abc3/substrate",
+    "worktree_clean": true
+  },
+  "status": "BLOCKED_SOURCE_CORRECTION",
+  "task": {
+    "dispatch_nonce": "5fa439de8a75a37f6c31b4cc7f758fc8e0d556f86e840d7bd7d48297c3f12e42",
+    "host_id": "local",
+    "orchestration_id": "substrate-a1-1d-5r3-mac-20260806-41f97e1c570d",
+    "return_host_id": "local",
+    "return_thread_id": "019fd8c3-b12c-7e73-919f-898600ab0f64",
+    "thread_id": "019fd9ed-4067-7922-8034-da8abbc8717e"
+  }
+}

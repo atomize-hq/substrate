@@ -1,0 +1,114 @@
+{
+  "protocol": "codex.auxiliary-host-prep-verification.v1",
+  "orchestration_id": "substrate-a1-1d-5r3-mac-20260806-41f97e1c570d",
+  "status": "BLOCKED_SOURCE_CORRECTION",
+  "verified": true,
+  "verified_at_utc": "2026-08-07T02:05:58Z",
+  "correlation": {
+    "dispatch_nonce": "5fa439de8a75a37f6c31b4cc7f758fc8e0d556f86e840d7bd7d48297c3f12e42",
+    "thread_id": "019fd9ed-4067-7922-8034-da8abbc8717e",
+    "host_id": "local",
+    "worktree": "/Users/spensermcconnell/.codex/worktrees/abc3/substrate",
+    "binding_match": true
+  },
+  "terminal_barrier": {
+    "thread_status": "idle",
+    "turn_id": "019fd9ee-7361-78d2-8605-17e5c79d2c26",
+    "turn_status": "completed",
+    "turn_error": null
+  },
+  "receipt": {
+    "path": "receipts/AUX-R3-MAC-HOST-PREP-INSTALL.attempt-1.blocked.json",
+    "sha256": "sha256:9f5bbe512cabf0eb6da4e54a232107e388a1702d32ae506b9c4e0b47853776de",
+    "protocol_match": true,
+    "status_match": true,
+    "task_identity_match": true,
+    "source_binding_match": true
+  },
+  "artifact_verification": {
+    "artifact_root": "/Users/spensermcconnell/.codex/auxiliary-host-prep/019fd9ed-4067-7922-8034-da8abbc8717e",
+    "declared_artifact_count": 15,
+    "files_present": 15,
+    "sha256_matches": 15,
+    "sha256_mismatches": 0
+  },
+  "source": {
+    "commit": "d8a65fc8890dd37584aaeac2984c906188e5f06e",
+    "tree": "d8f25cc993f264f0c67fe3e00180eb393e41b2e3",
+    "target_ref": "refs/heads/feat/internal-host-orchestrator-world-dispatch-bootstrap",
+    "live_remote": "d8a65fc8890dd37584aaeac2984c906188e5f06e",
+    "worktree_clean": true,
+    "protected_checkout_clean": true
+  },
+  "completed_preparation": {
+    "host_prefix": "/Users/spensermcconnell/.substrate",
+    "owner_uid": 501,
+    "mode_before": "0755",
+    "mode_after": "0700",
+    "content_inventory_before_sha256": "sha256:949cc866f1d8007a5f6e33a3c8f2085aad1c771a4b9bf82f7d6fe9bf1311c3d5",
+    "content_inventory_after_sha256": "sha256:949cc866f1d8007a5f6e33a3c8f2085aad1c771a4b9bf82f7d6fe9bf1311c3d5",
+    "contents_preserved": true,
+    "lima_instance": "substrate",
+    "lima_status": "Running",
+    "guest_sudo_noninteractive": true,
+    "guest_user_in_substrate_group": true
+  },
+  "installation": {
+    "canonical_command": "env PATH=/opt/homebrew/bin:$PATH scripts/substrate/dev-install-substrate.sh --prefix /Users/spensermcconnell/.substrate --profile release",
+    "exit_status": 101,
+    "failed_before_install": true,
+    "installed_host_binary_present": false,
+    "guest_world_service_unit_present": false,
+    "guest_world_service_binary_present": false,
+    "guest_socket_present": false,
+    "host_forward_socket_present": false,
+    "host_ready": false
+  },
+  "source_blockers": [
+    {
+      "kind": "macos_default_bash_incompatibility",
+      "verified": true,
+      "detail": "The canonical installer uses dynamic-FD syntax unsupported by the default macOS Bash 3.2 and exits 127 at exec {context_fd}."
+    },
+    {
+      "kind": "published_source_compile_failure",
+      "verified": true,
+      "detail": "The Bash-5 canonical install reaches Cargo but the shell crate fails with exactly 11 Rust errors before installation."
+    },
+    {
+      "kind": "published_source_pairing_ticket_stub",
+      "verified": true,
+      "detail": "issue_lima_guest_pairing_ticket_v1 validates the request and then unconditionally returns an error."
+    },
+    {
+      "kind": "published_source_fixed_project_id",
+      "verified": true,
+      "detail": "validate_r3_native_evidence.py requires historical project ID 2ccb802f-301c-4af4-9bd5-51d22808f0a2 instead of the bound local project ID."
+    }
+  ],
+  "sudo_state": {
+    "sentinel_path": "/etc/sudoers.d/substrate-r3-mac-evidence",
+    "recorded_pre_state_sha256": "sha256:52105fc35b3128daf23f3e0f84ad09f791cb5ad1a26922fca3a8784e24bf6be8",
+    "observed_metadata": {
+      "uid": 0,
+      "gid": 0,
+      "mode": "0440",
+      "size": 71,
+      "mtime_epoch": 1786065688
+    },
+    "metadata_unchanged_from_pre_dispatch": true,
+    "post_receipt_content_hash_independently_readable": false,
+    "host_sudo_noninteractive_current": false,
+    "note": "The cached host sudo credential is no longer available; sudo -n currently requires a password. This is an additional readiness prerequisite after source correction."
+  },
+  "disposition": {
+    "advance": false,
+    "official_evidence_dispatch_allowed": false,
+    "official_evidence_dispatched": false,
+    "source_correction_required": true,
+    "fresh_install_task_required_after_source_correction": true,
+    "task_archived": false,
+    "worktree_preserved": true,
+    "worktree": "/Users/spensermcconnell/.codex/worktrees/abc3/substrate"
+  }
+}

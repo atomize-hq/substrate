@@ -45,29 +45,31 @@
     }
   ],
   "last_blocker": {
-    "status": "BLOCKED_CONTRADICTION",
-    "evidence_id": "EVIDENCE:R3-MAC-IMP-01",
-    "attempt": 2,
-    "thread_id": "019fd9d2-5cea-74e1-b442-2b97a69656cc",
+    "status": "BLOCKED_SOURCE_CORRECTION",
+    "task_class": "general_auxiliary_host_preparation",
+    "attempt": 1,
+    "thread_id": "019fd9ed-4067-7922-8034-da8abbc8717e",
     "host_id": "local",
-    "dispatch_nonce": "61f37af30a2a6d5e4aec55ead3875f9d027d44d5dabd1f39a260dc656029752a",
-    "receipt_path": "receipts/EVIDENCE-R3-MAC-IMP-01.attempt-2.blocked.json",
-    "verification_path": "receipts/EVIDENCE-R3-MAC-IMP-01.attempt-2.blocked.verification.json",
-    "artifact_path": "/Users/spensermcconnell/.codex/evidence/substrate-a1-1d-5r3-mac-20260806-41f97e1c570d/EVIDENCE-R3-MAC-IMP-01/61f37af30a2a6d5e4aec55ead3875f9d027d44d5dabd1f39a260dc656029752a/r3-mac-imp-01-attempt-2-preflight-artifact.json",
-    "summary": "Native evidence cannot proceed because the validator rejects the bound local project identity, the selected private home is mode 0755 instead of 0700, and signed guest-ticket issuance is unimplemented.",
-    "contradictions": [
-      "scripts/ci/validate_r3_native_evidence.py requires historical product project ID 2ccb802f-301c-4af4-9bd5-51d22808f0a2 instead of the bound local project ID local-b2016f8a311fef93149e42eaec4d704d",
-      "/Users/spensermcconnell/.substrate is owner-501 mode 0755 while the private-home contract requires owner-only mode 0700 and forbids automatic repair",
-      "issue_lima_guest_pairing_ticket_v1 unconditionally errors, so the required signed guest-ticket issuance path is unavailable"
+    "dispatch_nonce": "5fa439de8a75a37f6c31b4cc7f758fc8e0d556f86e840d7bd7d48297c3f12e42",
+    "receipt_path": "receipts/AUX-R3-MAC-HOST-PREP-INSTALL.attempt-1.blocked.json",
+    "verification_path": "receipts/AUX-R3-MAC-HOST-PREP-INSTALL.attempt-1.blocked.verification.json",
+    "artifact_root": "/Users/spensermcconnell/.codex/auxiliary-host-prep/019fd9ed-4067-7922-8034-da8abbc8717e",
+    "summary": "The host prefix is repaired to owner-501 mode 0700, but canonical installation fails before install because the exact published source is not macOS-installable or evidence-ready.",
+    "source_blockers": [
+      "the canonical installer is incompatible with default macOS Bash 3.2 dynamic-FD syntax",
+      "with Bash 5, the published shell crate fails compilation with 11 Rust errors",
+      "issue_lima_guest_pairing_ticket_v1 unconditionally errors instead of issuing the required signed guest ticket",
+      "validate_r3_native_evidence.py requires the historical remote project ID instead of the bound local project ID"
     ],
-    "requires_published_product_or_control_correction": true,
-    "fresh_evidence_attempt_required_after_correction": true,
-    "worktree": "/Users/spensermcconnell/.codex/worktrees/46c9/substrate",
+    "requires_published_source_correction": true,
+    "fresh_install_task_required_after_correction": true,
+    "fresh_evidence_attempt_required_after_successful_install": true,
+    "worktree": "/Users/spensermcconnell/.codex/worktrees/abc3/substrate",
     "worktree_preserved": true,
     "task_archived": false,
     "advance": false
   },
-  "current_authority_amendment": "authority-amendments/0004-agent-operated-native-evidence.json",
+  "current_authority_amendment": "authority-amendments/0005-general-macos-host-prep-install.json",
   "evidence_attempt": 2,
   "retry_authority": {
     "evidence_id": "EVIDENCE:R3-MAC-IMP-01",
@@ -80,7 +82,7 @@
     "guest_sudo_noninteractive_verified": true
   },
   "auxiliary_host_preparation": {
-    "status": "RUNNING",
+    "status": "BLOCKED_SOURCE_CORRECTION",
     "task_class": "general_auxiliary_host_preparation",
     "official_increment_or_evidence": false,
     "attempt": 1,
@@ -111,6 +113,12 @@
       "sha256": "61d99190f680d3738fa824348e671e8eb84b2729bf31952ef16031c6ba24d903",
       "verified": true
     },
+    "receipt_path": "receipts/AUX-R3-MAC-HOST-PREP-INSTALL.attempt-1.blocked.json",
+    "receipt_sha256": "sha256:9f5bbe512cabf0eb6da4e54a232107e388a1702d32ae506b9c4e0b47853776de",
+    "verification_path": "receipts/AUX-R3-MAC-HOST-PREP-INSTALL.attempt-1.blocked.verification.json",
+    "host_prefix_repaired": true,
+    "canonical_install_completed": false,
+    "current_host_sudo_noninteractive": false,
     "official_evidence_dispatch_allowed": false
   }
 }
