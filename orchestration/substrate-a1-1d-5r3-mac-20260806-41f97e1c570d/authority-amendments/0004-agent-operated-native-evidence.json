@@ -1,0 +1,49 @@
+{
+  "protocol": "codex.top-level-orchestration-authority-amendment.v1",
+  "orchestration_id": "substrate-a1-1d-5r3-mac-20260806-41f97e1c570d",
+  "amendment_id": "0004-agent-operated-native-evidence",
+  "authorized_at_utc": "2026-08-07T01:22:00Z",
+  "scope": "EVIDENCE:R3-MAC-IMP-01 attempt 2 only",
+  "authority": {
+    "fresh_task": true,
+    "fresh_nonce": true,
+    "fresh_worktree": true,
+    "source_commit": "d8a65fc8890dd37584aaeac2984c906188e5f06e",
+    "source_tree": "d8f25cc993f264f0c67fe3e00180eb393e41b2e3",
+    "target_ref": "refs/heads/feat/internal-host-orchestrator-world-dispatch-bootstrap",
+    "agent_derives_install_bootstrap_context": true,
+    "agent_derives_platform_bootstrap_mapping": true,
+    "agent_operates_host_and_guest_ptys": true,
+    "agent_enters_literal_pairing_confirmation": true,
+    "additional_user_interaction_required": false,
+    "model": "gpt-5.6-terra",
+    "reasoning": "xhigh"
+  },
+  "derivation_contract": {
+    "install_bootstrap_context": "Derive canonically from the installed/selected host prefix and the current account-database account/UID using the repository InstallBootstrapContextV1 implementation or its exact public resolver; no user-supplied carrier is required.",
+    "platform_bootstrap_mapping": "Bind the canonical selected Lima instance substrate and derive the mapping from its stable observed machine ID, account-database guest account/UID/home, account-derived Lima control root, and exact host/guest sockets using PlatformBootstrapMappingV1; no user-supplied mapping is required.",
+    "authority_record": "Record that the human user explicitly delegated the terminal interaction to the evidence agent. The agent must use real controlling PTYs and literal confirmation and must not falsely claim that the user typed the confirmation."
+  },
+  "privilege_authority": {
+    "host_sudo_noninteractive_verified": true,
+    "guest_sudo_noninteractive_verified": true,
+    "sudoers_path": "/etc/sudoers.d/substrate-r3-mac-evidence",
+    "sudoers_posture": "preexisting_authorized_sentinel_preserve_unchanged",
+    "agent_may_use_sudo_within_packet": true,
+    "agent_may_modify_sudoers": false,
+    "agent_may_remove_sudoers": false
+  },
+  "predecessor_disposition": {
+    "attempt": 1,
+    "thread_id": "019fd9ad-3edc-7c52-b107-ecc814f1c97d",
+    "status": "BLOCKED_PLATFORM_HANDOFF_REQUIRED",
+    "artifact_is_native_evidence": false,
+    "task_and_worktree_preserved": true
+  },
+  "boundaries": {
+    "read_only_repository": true,
+    "external_artifacts_only": true,
+    "mac_closeout_not_authorized_by_this_amendment": true,
+    "win_unix_final_native_gates_forbidden": true
+  }
+}

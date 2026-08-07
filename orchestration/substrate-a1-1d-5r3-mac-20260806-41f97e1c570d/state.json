@@ -1,7 +1,7 @@
 {
   "protocol": "codex.top-level-orchestration-state.v1",
   "orchestration_id": "substrate-a1-1d-5r3-mac-20260806-41f97e1c570d",
-  "status": "BLOCKED",
+  "status": "READY",
   "dispatch_authorized": true,
   "publication_mode": "remote",
   "remote": "origin",
@@ -59,5 +59,17 @@
     "worktree_preserved": true,
     "task_archived": false,
     "advance": false
+  },
+  "current_authority_amendment": "authority-amendments/0004-agent-operated-native-evidence.json",
+  "evidence_attempt": 2,
+  "retry_authority": {
+    "evidence_id": "EVIDENCE:R3-MAC-IMP-01",
+    "attempt": 2,
+    "dispatch_nonce": "61f37af30a2a6d5e4aec55ead3875f9d027d44d5dabd1f39a260dc656029752a",
+    "agent_derives_ih_pm": true,
+    "agent_operates_ptys": true,
+    "additional_user_interaction_required": false,
+    "host_sudo_noninteractive_verified": true,
+    "guest_sudo_noninteractive_verified": true
   }
 }
