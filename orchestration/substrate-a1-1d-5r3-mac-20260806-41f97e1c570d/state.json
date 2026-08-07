@@ -45,31 +45,25 @@
     }
   ],
   "last_blocker": {
-    "status": "BLOCKED_SOURCE_CORRECTION",
-    "task_class": "general_auxiliary_host_preparation",
+    "status": "BLOCKED_P1",
+    "task_class": "general_macos_source_correction",
     "attempt": 1,
-    "thread_id": "019fd9ed-4067-7922-8034-da8abbc8717e",
+    "thread_id": "019fd9fe-670c-7253-bf60-86f78cd373b5",
     "host_id": "local",
-    "dispatch_nonce": "5fa439de8a75a37f6c31b4cc7f758fc8e0d556f86e840d7bd7d48297c3f12e42",
-    "receipt_path": "receipts/AUX-R3-MAC-HOST-PREP-INSTALL.attempt-1.blocked.json",
-    "verification_path": "receipts/AUX-R3-MAC-HOST-PREP-INSTALL.attempt-1.blocked.verification.json",
-    "artifact_root": "/Users/spensermcconnell/.codex/auxiliary-host-prep/019fd9ed-4067-7922-8034-da8abbc8717e",
-    "summary": "The host prefix is repaired to owner-501 mode 0700, but canonical installation fails before install because the exact published source is not macOS-installable or evidence-ready.",
-    "source_blockers": [
-      "the canonical installer is incompatible with default macOS Bash 3.2 dynamic-FD syntax",
-      "with Bash 5, the published shell crate fails compilation with 11 Rust errors",
-      "issue_lima_guest_pairing_ticket_v1 unconditionally errors instead of issuing the required signed guest ticket",
-      "validate_r3_native_evidence.py requires the historical remote project ID instead of the bound local project ID"
-    ],
-    "requires_published_source_correction": true,
-    "fresh_install_task_required_after_correction": true,
-    "fresh_evidence_attempt_required_after_successful_install": true,
-    "worktree": "/Users/spensermcconnell/.codex/worktrees/abc3/substrate",
+    "dispatch_nonce": "d7c49c63813094f35052883eb0a2964d28ce2df44d2c422664ea69c7c5f7072c",
+    "receipt_path": "receipts/AUX-R3-MAC-SOURCE-CORRECTION.attempt-1.blocked.json",
+    "verification_path": "receipts/AUX-R3-MAC-SOURCE-CORRECTION.attempt-1.blocked.verification.json",
+    "review_path": "/tmp/substrate-aux-source-correction-019fd9fe-670c-7253-bf60-86f78cd373b5/ticket-authority-discovery-review.md",
+    "review_sha256": "sha256:9223ec21429d28452b01b950e60f2d833993675e6043819eeca16571a93aaa57",
+    "summary": "The signed macOS guest-ticket issuer requires coordinated R3 MAC Keychain/XPC, typed ticket/host-record, client/consumer, and native disposable regression authority.",
+    "authority_resolution": "authority-amendments/0007-r3-mac-pairing-protocol-correction.json",
+    "continuation_authorized": true,
+    "worktree": "/Users/spensermcconnell/.codex/worktrees/60cc/substrate",
     "worktree_preserved": true,
     "task_archived": false,
     "advance": false
   },
-  "current_authority_amendment": "authority-amendments/0006-macos-source-correction.json",
+  "current_authority_amendment": "authority-amendments/0007-r3-mac-pairing-protocol-correction.json",
   "evidence_attempt": 2,
   "retry_authority": {
     "evidence_id": "EVIDENCE:R3-MAC-IMP-01",
@@ -122,7 +116,7 @@
     "official_evidence_dispatch_allowed": false
   },
   "auxiliary_source_correction": {
-    "status": "RUNNING",
+    "status": "READY_TO_CONTINUE",
     "task_class": "general_macos_source_correction",
     "official_increment_or_evidence": false,
     "attempt": 1,
@@ -154,6 +148,16 @@
       "verified": true
     },
     "publication_required": true,
+    "blocked_receipt_path": "receipts/AUX-R3-MAC-SOURCE-CORRECTION.attempt-1.blocked.json",
+    "blocked_receipt_sha256": "sha256:746e72aa5ac8cc3695614e832aa63b02695fab43a65521f7bfaa6ca00cbc782f",
+    "blocked_verification_path": "receipts/AUX-R3-MAC-SOURCE-CORRECTION.attempt-1.blocked.verification.json",
+    "blocked_review_sha256": "sha256:9223ec21429d28452b01b950e60f2d833993675e6043819eeca16571a93aaa57",
+    "preserved_tracked_diff_sha256": "sha256:cd80c2d89b8e870fb302ccb7cb8fb0d7ed8684b418d4e32c9c44f9e77846603d",
+    "continuation_authority": "authority-amendments/0007-r3-mac-pairing-protocol-correction.json",
+    "continuation_authority_sha256": "sha256:5d8e82b102f21d8e584a17fb979f8507ef9a9629e3ee831fcd4753dcee34d44a",
+    "continuation_nonce": "e347bf1023f0193e5cfe204e86df65f0f9cb688cd554fb4d46f28479e49dc9a2",
+    "continuation_prompt_path": "increments/AUX-R3-MAC-SOURCE-CORRECTION.attempt-1.continuation-0007-prompt.md",
+    "continuation_prompt_sha256": "sha256:6785790656b4749f9d4802d2cf6ea6f3fac0d5482e5298bf7bba2bd9e3b0e6ca",
     "install_retry_dispatch_allowed": false,
     "official_evidence_dispatch_allowed": false
   }

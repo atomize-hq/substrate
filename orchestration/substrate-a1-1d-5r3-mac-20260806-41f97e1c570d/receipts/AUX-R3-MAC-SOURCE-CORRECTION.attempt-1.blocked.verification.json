@@ -1,0 +1,85 @@
+{
+  "protocol": "codex.auxiliary-source-correction-verification.v1",
+  "orchestration_id": "substrate-a1-1d-5r3-mac-20260806-41f97e1c570d",
+  "status": "BLOCKED_P1",
+  "verified": true,
+  "verified_at_utc": "2026-08-07T02:31:46Z",
+  "correlation": {
+    "thread_id": "019fd9fe-670c-7253-bf60-86f78cd373b5",
+    "host_id": "local",
+    "dispatch_nonce": "d7c49c63813094f35052883eb0a2964d28ce2df44d2c422664ea69c7c5f7072c",
+    "binding_match": true
+  },
+  "terminal_barrier": {
+    "thread_status": "idle",
+    "turn_id": "019fd9ff-6a5c-7302-b061-48781af24af6",
+    "turn_status": "completed",
+    "turn_error": null
+  },
+  "receipt": {
+    "path": "receipts/AUX-R3-MAC-SOURCE-CORRECTION.attempt-1.blocked.json",
+    "sha256": "sha256:746e72aa5ac8cc3695614e832aa63b02695fab43a65521f7bfaa6ca00cbc782f",
+    "protocol_match": true,
+    "task_identity_match": true,
+    "base_match": true
+  },
+  "repository": {
+    "worktree": "/Users/spensermcconnell/.codex/worktrees/60cc/substrate",
+    "head": "d8a65fc8890dd37584aaeac2984c906188e5f06e",
+    "tree": "d8f25cc993f264f0c67fe3e00180eb393e41b2e3",
+    "live_remote": "d8a65fc8890dd37584aaeac2984c906188e5f06e",
+    "protected_checkout_clean": true,
+    "worktree_clean": false,
+    "staged_path_count": 0,
+    "tracked_changed_path_count": 13,
+    "untracked_path_count": 2,
+    "tracked_diff_sha256": "sha256:cd80c2d89b8e870fb302ccb7cb8fb0d7ed8684b418d4e32c9c44f9e77846603d",
+    "untracked_paths": [
+      {
+        "path": "tests/installers/dev_install_bash32_fd_regression.sh",
+        "sha256": "sha256:353c3ef2d9d1f9ca1db663a401eb9133554c2368b9c9c59ce9033af71da79ba1"
+      },
+      {
+        "path": "tests/mac/dev_install_compile_surface_r3.sh",
+        "sha256": "sha256:0402cb717d1fa6b38e65e2d9fcd70e43feea2d296dded9576edb7fd5e07e149c"
+      }
+    ],
+    "worktree_preserved": true,
+    "task_archived": false
+  },
+  "partial_corrections": {
+    "default_macos_bash": {
+      "present": true,
+      "independent_regression_rerun": "PASS"
+    },
+    "macos_shell_compile": {
+      "present": true,
+      "independent_compile_surface_rerun": "PASS"
+    },
+    "expected_project_id_binding": {
+      "present": true,
+      "trusted_expected_argument_required": true
+    },
+    "signed_guest_ticket_issuer": {
+      "present": false,
+      "blocked": true
+    }
+  },
+  "review": {
+    "record_path": "/tmp/substrate-aux-source-correction-019fd9fe-670c-7253-bf60-86f78cd373b5/ticket-authority-discovery-review.md",
+    "record_sha256": "sha256:9223ec21429d28452b01b950e60f2d833993675e6043819eeca16571a93aaa57",
+    "terminal": "BLOCKED_P1",
+    "p1": 1,
+    "p2": 0,
+    "finding_valid": true,
+    "finding_summary": "A safe issuer requires coordinated macOS Keychain/XPC, typed ticket/host-record, consumer, client, and one-use state authority rather than a narrow stub replacement."
+  },
+  "disposition": {
+    "advance_to_install": false,
+    "advance_to_official_evidence": false,
+    "publication_occurred": false,
+    "preserve_same_worktree": true,
+    "additional_mac_pairing_protocol_authority_required": true,
+    "eligible_for_meta_corridor_adjudication": true
+  }
+}

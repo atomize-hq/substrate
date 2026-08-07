@@ -1,0 +1,88 @@
+{
+  "protocol": "codex.auxiliary-source-correction-receipt.v1",
+  "status": "BLOCKED",
+  "task": {
+    "thread_id": "019fd9fe-670c-7253-bf60-86f78cd373b5",
+    "host_id": "local",
+    "dispatch_nonce": "d7c49c63813094f35052883eb0a2964d28ce2df44d2c422664ea69c7c5f7072c",
+    "return_thread_id": "019fd8c3-b12c-7e73-919f-898600ab0f64",
+    "return_host_id": "local"
+  },
+  "expected_base": {
+    "commit": "d8a65fc8890dd37584aaeac2984c906188e5f06e",
+    "tree": "d8f25cc993f264f0c67fe3e00180eb393e41b2e3",
+    "target_ref": "refs/heads/feat/internal-host-orchestrator-world-dispatch-bootstrap"
+  },
+  "live_remote": {
+    "remote": "origin",
+    "target_ref": "refs/heads/feat/internal-host-orchestrator-world-dispatch-bootstrap",
+    "commit": "d8a65fc8890dd37584aaeac2984c906188e5f06e",
+    "equals_expected_base": true
+  },
+  "preserved_worktree": {
+    "path": "/Users/spensermcconnell/.codex/worktrees/60cc/substrate",
+    "head": "d8a65fc8890dd37584aaeac2984c906188e5f06e",
+    "tree": "d8f25cc993f264f0c67fe3e00180eb393e41b2e3",
+    "clean": false,
+    "staged_paths": [],
+    "tracked_changed_files": [
+      "crates/shell/src/builtins/world_deps/mod.rs",
+      "crates/shell/src/execution/agent_runtime/mod.rs",
+      "crates/shell/src/execution/agent_runtime/state_store.rs",
+      "crates/shell/src/execution/managed_lifecycle/linux_client.rs",
+      "crates/shell/src/execution/orchestrator_world_dispatch.rs",
+      "crates/shell/src/execution/platform/macos.rs",
+      "crates/shell/src/repl/async_repl.rs",
+      "llm-last-mile/runtime-refactor/03-phase-slice-map.md",
+      "llm-last-mile/runtime-refactor/04-contracts-and-gates.md",
+      "llm-last-mile/runtime-refactor/05-debug-regression-ledger.md",
+      "scripts/ci/test_validate_r3_native_evidence.py",
+      "scripts/ci/validate_r3_native_evidence.py",
+      "scripts/substrate/dev-install-substrate.sh",
+      "tests/installers/dev_install_bash32_fd_regression.sh",
+      "tests/mac/dev_install_compile_surface_r3.sh"
+    ],
+    "inventory_path": "/tmp/substrate-aux-source-correction-019fd9fe-670c-7253-bf60-86f78cd373b5/block-preflight.txt"
+  },
+  "partial_blocker_dispositions": {
+    "default_macos_bash": "Corrected locally with a Bash-3.2-compatible FD fallback and isolated regression, uncommitted.",
+    "macos_shell_compile": "The reported eleven compilation errors are corrected locally; installer-equivalent cargo checks passed, uncommitted.",
+    "expected_project_id_binding": "Corrected locally with required trusted --expected-product-project-id input; historical Linux validation and fail-closed tests passed, uncommitted.",
+    "signed_guest_ticket_issuer": "UNRESOLVED P1: no genuine narrow implementation exists without broader R3 MAC protocol/key authority."
+  },
+  "verification": {
+    "passed": [
+      "/bin/bash tests/installers/dev_install_bash32_fd_regression.sh",
+      "tests/mac/dev_install_compile_surface_r3.sh",
+      "cargo fmt --all -- --check",
+      "git diff --check",
+      "python3 -m unittest -v scripts.ci.test_validate_r3_native_evidence (12 passed)",
+      "make r3-native-evidence-validator-test (12 passed)",
+      "validator py_compile and direct historical Linux/missing/mismatch binding checks"
+    ],
+    "inconclusive_or_blocked": [
+      "Targeted shell library test was blocked before execution by 53 pre-existing/unrelated macOS test-fixture compilation errors.",
+      "No real-host install, Keychain, Lima, or official R3 evidence action was run."
+    ]
+  },
+  "review": {
+    "terminal": "BLOCKED_P1",
+    "discovery_reviewer": "/root/ticket_authority_review",
+    "record_path": "/tmp/substrate-aux-source-correction-019fd9fe-670c-7253-bf60-86f78cd373b5/ticket-authority-discovery-review.md",
+    "record_sha256": "sha256:9223ec21429d28452b01b950e60f2d833993675e6043819eeca16571a93aaa57",
+    "p1": 1,
+    "p2": 0,
+    "p3_p4_disposition": "not reached; P1 is terminal"
+  },
+  "blocker": {
+    "summary": "The signed macOS guest-ticket issuer cannot be implemented safely as a narrow source correction.",
+    "details": "Fresh independent review found no System Keychain/non-exportable P-256 signing key or key-bound protected state; no typed trusted PM/machine/artifact/expiry/reservation inputs; no signed generation-CAS/consume-retry host record; insufficient ticket/key-state validation; and a caller-supplied ticket bypass. Replacing only the stub would fabricate or accept caller-controlled authority.",
+    "required_authority": "A fresh, explicitly scoped R3 MAC pairing-protocol increment authorizing coordinated changes to common ticket and host-record contracts, the macOS Security/Keychain/XPC issuer and consumer, the macOS client/control surface, and real native Keychain/XPC/guest one-use regression evidence. It must supersede the source-only/non-R3 restriction before mutating this preserved worktree.",
+    "prohibited_actions_observed": [
+      "No commit, push, rebase, reset, clean, host installation, Keychain/Lima mutation, or official evidence artifact mutation occurred.",
+      "No successor was dispatched."
+    ]
+  },
+  "requested_successor": "AUX-R3-MAC-HOST-PREP-INSTALL-RETRY",
+  "dispatch_authority_for_successor": "none"
+}
