@@ -1,0 +1,33 @@
+{
+  "protocol": "codex.orchestration-authority-amendment.v1",
+  "orchestration_id": "substrate-a1-1d-5r3-mac-20260806-41f97e1c570d",
+  "amendment_id": "0022-r4-p3-inventory-transcription",
+  "authority_source": "meta adjudication of a common same-corridor control-pack omission under the original R4 conditional inventory authority and the user-defined P3/P4 tracking rule",
+  "increment": "AUX-R3-MAC-EVIDENCE-RECOVERY-R4",
+  "continuation_nonce": "7248430e5c8dbbc79b54a44ae45b017323fd33138c5097703a5d19a10a4c8e77",
+  "task_thread_id": "019fdd64-c189-7020-872f-c334fb49d502",
+  "task_host_id": "local",
+  "worktree": "/Users/spensermcconnell/.codex/worktrees/858f/substrate",
+  "published_product_commit": "fd4bf60ac53e1bf66060b199edf3891b4bc66b55",
+  "published_product_tree": "6344b49af892770e0bfe8d9ed74d17936730f8a2",
+  "target_ref": "refs/heads/feat/internal-host-orchestrator-world-dispatch-bootstrap",
+  "authorized_change": {
+    "path": "llm-last-mile/runtime-refactor/06-review-finding-inventory.md",
+    "operation": "append exactly one mechanical RR-RF-0005 row transcribing P3-R4-CLOSURE-RESPONSE-METADATA as accepted nonblocking debt",
+    "priority": "P3",
+    "status": "accepted",
+    "semantic_change": false,
+    "product_remediation": false,
+    "review_cycle": false
+  },
+  "publication_exception": "Authorize one additional normal fast-forward control-metadata commit directly on the published R4 product commit. This records required inventory state and does not alter the frozen reviewed implementation subject or review record.",
+  "hard_exclusions": [
+    "any product, test, manifest, lockfile, review artifact, or other control-pack edit",
+    "remediating or reclassifying the P3",
+    "starting a new review cycle",
+    "R5 or R6 work",
+    "native actions",
+    "reset, clean, rebase, merge, amend, force-push, or worktree archival"
+  ],
+  "terminal_successor": "AUX-R3-MAC-EVIDENCE-RECOVERY-R5"
+}

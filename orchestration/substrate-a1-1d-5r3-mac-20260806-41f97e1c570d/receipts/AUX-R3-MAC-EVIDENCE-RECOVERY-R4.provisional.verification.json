@@ -1,0 +1,43 @@
+{
+  "protocol": "codex.top-level-task-receipt-verification.v1",
+  "orchestration_id": "substrate-a1-1d-5r3-mac-20260806-41f97e1c570d",
+  "increment": "AUX-R3-MAC-EVIDENCE-RECOVERY-R4",
+  "verified_at_utc": "2026-08-07T19:13:10Z",
+  "terminal_barrier": {
+    "thread_id": "019fdd64-c189-7020-872f-c334fb49d502",
+    "host_id": "local",
+    "turn_id": "019fdd66-37ad-7922-a5b4-52977d534899",
+    "status": "completed",
+    "thread_status": "idle"
+  },
+  "publication": {
+    "commit": "fd4bf60ac53e1bf66060b199edf3891b4bc66b55",
+    "tree": "6344b49af892770e0bfe8d9ed74d17936730f8a2",
+    "sole_parent": "b12cb6c6e2dc326b4150291ef30676171df34f58",
+    "live_remote_match": true,
+    "task_head_index_clean": true,
+    "ahead": 0,
+    "behind": 0,
+    "changed_files_exact": true
+  },
+  "review": {
+    "record_sha256_match": true,
+    "record_validator": "VALID",
+    "terminal_p1_p2": "CLEAN",
+    "subject_fingerprint_recomputed": "sha256:efd2f5b317b53cb79e4738f46f2633d0403e6d182f11339cc36ab708690ecc52",
+    "subject_fingerprint_algorithm": "SHA-256 of the exact expected-base-to-product-commit diff for the six implementation/test paths",
+    "subject_fingerprint_match": true,
+    "valid_nonblocking_finding": "P3-R4-CLOSURE-RESPONSE-METADATA"
+  },
+  "contradiction": {
+    "status": "NONADVANCING_INVENTORY_CORRECTION_REQUIRED",
+    "reason": "The valid new P3 is recorded in the R4 review artifacts but is absent from the authoritative llm-last-mile/runtime-refactor/06-review-finding-inventory.md.",
+    "authority": "The original R4 contract conditionally authorized the inventory path, and the meta authority permits a mechanical same-corridor fence correction. R5 may not dispatch until the entry is durably published."
+  },
+  "task_preservation": {
+    "worktree": "/Users/spensermcconnell/.codex/worktrees/858f/substrate",
+    "archived": false,
+    "preserved": true
+  },
+  "verdict": "PROVISIONAL_SUCCESS_NOT_ACCEPTED"
+}
