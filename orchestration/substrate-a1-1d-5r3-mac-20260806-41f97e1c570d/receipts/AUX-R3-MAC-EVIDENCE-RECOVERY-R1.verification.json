@@ -1,0 +1,93 @@
+{
+  "protocol": "codex.top-level-task-receipt-verification.v1",
+  "orchestration_id": "substrate-a1-1d-5r3-mac-20260806-41f97e1c570d",
+  "increment": "AUX-R3-MAC-EVIDENCE-RECOVERY-R1",
+  "verified_at_utc": "2026-08-07T15:37:41Z",
+  "raw_receipt_path": "receipts/AUX-R3-MAC-EVIDENCE-RECOVERY-R1.raw.json",
+  "raw_receipt_sha256": "sha256:ca722dfddc6036991c13b3516b9fee852c6188a2c56c77b0c8fc5c2117d96a07",
+  "canonical_receipt_path": "receipts/AUX-R3-MAC-EVIDENCE-RECOVERY-R1.json",
+  "canonical_receipt_sha256": "sha256:d05441caa0ece70485b407e9d052e69a71748078d9727f860cf99746007d1222",
+  "schema_reconciliation": {
+    "raw_validate_receipt": "VALID",
+    "raw_jsonschema": "NONCANONICAL_ADDITIONAL_PROPERTIES",
+    "removed_top_level_fields": [
+      "checks",
+      "impact",
+      "skill_application"
+    ],
+    "semantic_fields_changed": false,
+    "canonical_validate_receipt": "VALID",
+    "canonical_jsonschema": "VALID"
+  },
+  "correlation": {
+    "dispatch_nonce_match": true,
+    "increment_match": true,
+    "thread_id_match": true,
+    "host_id_match": true,
+    "expected_base_match": true,
+    "target_ref_match": true
+  },
+  "terminal_barrier": {
+    "thread_id": "019fdccb-4ac3-7232-bc2e-4204b7b777ae",
+    "host_id": "local",
+    "turn_id": "019fdccc-3bf1-7e50-88f3-c66bce931835",
+    "status": "completed",
+    "thread_status": "idle"
+  },
+  "publication": {
+    "mode": "remote",
+    "expected_base": "d4bd729de8d344dfc567aaa62203838f68c2c895",
+    "expected_base_tree": "3d5005d38c83b68c0a9813c10cbe6cb11996aed0",
+    "landed_commit": "bb098b6e265a4b6cadc4b7ca908c8b6ccf59f2b9",
+    "landed_tree": "688ae2860d99d6d5cf1019e0d3ba27c7cc26b6cc",
+    "sole_parent": "d4bd729de8d344dfc567aaa62203838f68c2c895",
+    "live_remote": "bb098b6e265a4b6cadc4b7ca908c8b6ccf59f2b9",
+    "fast_forward": true,
+    "ahead": 0,
+    "behind": 0
+  },
+  "changed_files": [
+    "llm-last-mile/runtime-refactor/review-control/r3-mac-evidence-recovery-r1-review-allowlist-evidence.md",
+    "llm-last-mile/runtime-refactor/review-control/r3-mac-evidence-recovery-r1-review-authority-security.md",
+    "llm-last-mile/runtime-refactor/review-control/r3-mac-evidence-recovery-r1-review-cycle-record.json",
+    "llm-last-mile/runtime-refactor/review-control/r3-mac-evidence-recovery-r1-review-lifecycle-convergence.md",
+    "scripts/substrate/dev-install-substrate.sh",
+    "tests/installers/dev_install_bash32_fd_regression.sh"
+  ],
+  "changed_files_exact": true,
+  "review": {
+    "record_sha256": "sha256:220b6ec0a7ace70fa0cb1c38c7a2a4fbd5b12edfbf6352097206f56687616f40",
+    "validator": "VALID",
+    "terminal": "CLEAN",
+    "p1": 0,
+    "p2": 0,
+    "subject_fingerprint_recomputed": "sha256:5b7e23174e01586b21ea6407d92b17fde992443779aba3505a1157417b6c22ec",
+    "subject_fingerprint_match": true,
+    "lens_sha256": {
+      "authority_security": "sha256:101e0097d5134088c019f89ebec0c5366704876f487280b448b388477c9cf17d",
+      "lifecycle_convergence": "sha256:e30daccc4b43b0ebd4365dbb5387219dacfdd038726d30f9d46771cc8da2c876",
+      "allowlist_evidence": "sha256:7f6e691d31816969eb3eab3861ae131c20257018a9e953f3f3d281ccafd7791c"
+    },
+    "p3_p4_adjudication": "P3-R1-LIFECYCLE-001 was corrected inside the already-authorized test path during the consolidated P2 remediation pass. It did not trigger or extend the causal cascade, added no path/symbol authority, and closure found no remaining P3/P4. Accepted under bounded meta authority with this explicit process-deviation record; no inventory entry remains unresolved."
+  },
+  "independent_checks": {
+    "bash32_regression": "PASS",
+    "bash_syntax": "PASS",
+    "diff_check": "PASS",
+    "task_worktree_clean": true,
+    "protected_checkout_tracked_clean": true,
+    "donor_tracked_diff_sha256": "sha256:39682fd4415a00ae4099580135a687d3e11858f62f84e9ef6ff3771bafd4b54c",
+    "donor_r1_test_sha256": "sha256:2de2da832cbb38c1722d2075ffcef781d7bb9d23a76318cfd6d3b54fee0b0664",
+    "donor_preserved": true
+  },
+  "successor": {
+    "value": "AUTHORITY_REQUIRED:AUX-R3-MAC-EVIDENCE-RECOVERY-R2",
+    "dispatched": false
+  },
+  "task_preservation": {
+    "worktree": "/Users/spensermcconnell/.codex/worktrees/8fd3/substrate",
+    "archived": false,
+    "preserved": true
+  },
+  "verdict": "ACCEPTED_LANDED_CLEAN"
+}

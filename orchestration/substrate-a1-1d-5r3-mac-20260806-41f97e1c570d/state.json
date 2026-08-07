@@ -1,8 +1,8 @@
 {
   "protocol": "codex.top-level-orchestration-state.v1",
   "orchestration_id": "substrate-a1-1d-5r3-mac-20260806-41f97e1c570d",
-  "status": "RUNNING",
-  "dispatch_authorized": true,
+  "status": "BLOCKED",
+  "dispatch_authorized": false,
   "publication_mode": "remote",
   "remote": "origin",
   "remote_observation": null,
@@ -27,36 +27,16 @@
       "before_increment": "A1.1d-5R3-MAC-CLOSEOUT"
     }
   ],
-  "cursor": 2,
+  "cursor": 3,
   "expected_base": {
-    "commit": "d4bd729de8d344dfc567aaa62203838f68c2c895",
-    "tree": "3d5005d38c83b68c0a9813c10cbe6cb11996aed0"
+    "commit": "bb098b6e265a4b6cadc4b7ca908c8b6ccf59f2b9",
+    "tree": "688ae2860d99d6d5cf1019e0d3ba27c7cc26b6cc"
   },
   "meta": {
     "thread_id": "019fd8c3-b12c-7e73-919f-898600ab0f64",
     "host_id": "local"
   },
-  "active_dispatch": {
-    "increment": "AUX-R3-MAC-EVIDENCE-RECOVERY-R1",
-    "thread_id": "019fdccb-4ac3-7232-bc2e-4204b7b777ae",
-    "host_id": "local",
-    "worktree": "/Users/spensermcconnell/.codex/worktrees/8fd3/substrate",
-    "dispatch_nonce": "3db435048a170d726093482541effdb41b1f930bd2cd6d627048b285eacc15ab",
-    "expected_base": {
-      "commit": "d4bd729de8d344dfc567aaa62203838f68c2c895",
-      "tree": "3d5005d38c83b68c0a9813c10cbe6cb11996aed0"
-    },
-    "target_ref": "refs/heads/feat/internal-host-orchestrator-world-dispatch-bootstrap",
-    "publication_mode": "remote",
-    "project_id": "local-b2016f8a311fef93149e42eaec4d704d",
-    "project_path": "/Users/spensermcconnell/__Active_Code/atomize-hq/substrate",
-    "prompt_path": "increments/AUX-R3-MAC-EVIDENCE-RECOVERY-R1.prompt.md",
-    "binding_path": "increments/AUX-R3-MAC-EVIDENCE-RECOVERY-R1.binding.json",
-    "skill_hydration_path": "increments/AUX-R3-MAC-EVIDENCE-RECOVERY-R1.skill-hydration.json",
-    "model": "gpt-5.6-terra",
-    "reasoning": "xhigh",
-    "binding_sent_at_utc": "2026-08-07T15:16:48Z"
-  },
+  "active_dispatch": null,
   "active_evidence_dispatches": [],
   "verified_evidence": [],
   "completed": [
@@ -79,9 +59,31 @@
       "verification_path": "receipts/AUX-R3-MAC-EVIDENCE-RECOVERY-PLAN.verification.json",
       "source_thread_id": "019fdc95-705b-7cd0-92a3-8980c09c8193",
       "source_host_id": "local"
+    },
+    {
+      "increment": "AUX-R3-MAC-EVIDENCE-RECOVERY-R1",
+      "commit": "bb098b6e265a4b6cadc4b7ca908c8b6ccf59f2b9",
+      "tree": "688ae2860d99d6d5cf1019e0d3ba27c7cc26b6cc",
+      "receipt_status": "LANDED_CLEAN",
+      "receipt_path": "receipts/AUX-R3-MAC-EVIDENCE-RECOVERY-R1.json",
+      "verification_path": "receipts/AUX-R3-MAC-EVIDENCE-RECOVERY-R1.verification.json",
+      "source_thread_id": "019fdccb-4ac3-7232-bc2e-4204b7b777ae",
+      "source_host_id": "local"
     }
   ],
-  "last_blocker": null,
+  "last_blocker": {
+    "status": "AUTHORITY_REQUIRED",
+    "task_class": "r3_mac_evidence_recovery_r2",
+    "completed_increment": "AUX-R3-MAC-EVIDENCE-RECOVERY-R1",
+    "completed_commit": "bb098b6e265a4b6cadc4b7ca908c8b6ccf59f2b9",
+    "completed_tree": "688ae2860d99d6d5cf1019e0d3ba27c7cc26b6cc",
+    "receipt_path": "receipts/AUX-R3-MAC-EVIDENCE-RECOVERY-R1.json",
+    "verification_path": "receipts/AUX-R3-MAC-EVIDENCE-RECOVERY-R1.verification.json",
+    "summary": "R1 landed CLEAN and verified. Fresh explicit authority is required before defining or dispatching R2.",
+    "continuation_authorized": false,
+    "successor": "AUTHORITY_REQUIRED:AUX-R3-MAC-EVIDENCE-RECOVERY-R2",
+    "advance": false
+  },
   "current_authority_amendment": "authority-amendments/0010-r3-mac-evidence-recovery-r1.json",
   "evidence_attempt": 2,
   "retry_authority": {
@@ -251,7 +253,7 @@
     "successor_dispatched": true
   },
   "auxiliary_recovery_implementation": {
-    "status": "RUNNING",
+    "status": "LANDED_CLEAN",
     "sequence": [
       "AUX-R3-MAC-EVIDENCE-RECOVERY-R1",
       "AUX-R3-MAC-EVIDENCE-RECOVERY-R2",
@@ -260,7 +262,7 @@
       "AUX-R3-MAC-EVIDENCE-RECOVERY-R5",
       "AUX-R3-MAC-EVIDENCE-RECOVERY-R6"
     ],
-    "cursor": 0,
+    "cursor": 1,
     "authorized_increment": "AUX-R3-MAC-EVIDENCE-RECOVERY-R1",
     "later_packets_require_fresh_authority": true,
     "dispatch_nonce": "3db435048a170d726093482541effdb41b1f930bd2cd6d627048b285eacc15ab",
@@ -286,6 +288,20 @@
     "skill_hydration_path": "increments/AUX-R3-MAC-EVIDENCE-RECOVERY-R1.skill-hydration.json",
     "model": "gpt-5.6-terra",
     "reasoning": "xhigh",
-    "binding_sent_at_utc": "2026-08-07T15:16:48Z"
+    "binding_sent_at_utc": "2026-08-07T15:16:48Z",
+    "receipt_path": "receipts/AUX-R3-MAC-EVIDENCE-RECOVERY-R1.json",
+    "receipt_sha256": "sha256:d05441caa0ece70485b407e9d052e69a71748078d9727f860cf99746007d1222",
+    "verification_path": "receipts/AUX-R3-MAC-EVIDENCE-RECOVERY-R1.verification.json",
+    "landed": {
+      "commit": "bb098b6e265a4b6cadc4b7ca908c8b6ccf59f2b9",
+      "tree": "688ae2860d99d6d5cf1019e0d3ba27c7cc26b6cc",
+      "target_ref": "refs/heads/feat/internal-host-orchestrator-world-dispatch-bootstrap",
+      "live_remote": "bb098b6e265a4b6cadc4b7ca908c8b6ccf59f2b9"
+    },
+    "review_terminal": "CLEAN",
+    "subject_fingerprint": "sha256:5b7e23174e01586b21ea6407d92b17fde992443779aba3505a1157417b6c22ec",
+    "worktree_preserved": true,
+    "task_archived": false,
+    "successor_dispatched": false
   }
 }

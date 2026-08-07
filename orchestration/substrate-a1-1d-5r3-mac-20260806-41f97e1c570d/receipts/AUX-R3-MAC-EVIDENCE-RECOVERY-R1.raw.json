@@ -1,0 +1,77 @@
+{
+  "protocol": "codex.top-level-task-receipt.v1",
+  "orchestration_id": "substrate-a1-1d-5r3-mac-20260806-41f97e1c570d",
+  "dispatch_nonce": "3db435048a170d726093482541effdb41b1f930bd2cd6d627048b285eacc15ab",
+  "increment": "AUX-R3-MAC-EVIDENCE-RECOVERY-R1",
+  "status": "LANDED_CLEAN",
+  "increment_task": {
+    "thread_id": "019fdccb-4ac3-7232-bc2e-4204b7b777ae",
+    "host_id": "local"
+  },
+  "expected_base": {
+    "commit": "d4bd729de8d344dfc567aaa62203838f68c2c895",
+    "tree": "3d5005d38c83b68c0a9813c10cbe6cb11996aed0"
+  },
+  "landed": {
+    "commit": "bb098b6e265a4b6cadc4b7ca908c8b6ccf59f2b9",
+    "tree": "688ae2860d99d6d5cf1019e0d3ba27c7cc26b6cc",
+    "target_ref": "refs/heads/feat/internal-host-orchestrator-world-dispatch-bootstrap",
+    "live_remote": "bb098b6e265a4b6cadc4b7ca908c8b6ccf59f2b9"
+  },
+  "subject_fingerprint": "sha256:5b7e23174e01586b21ea6407d92b17fde992443779aba3505a1157417b6c22ec",
+  "changed_files": [
+    "llm-last-mile/runtime-refactor/review-control/r3-mac-evidence-recovery-r1-review-allowlist-evidence.md",
+    "llm-last-mile/runtime-refactor/review-control/r3-mac-evidence-recovery-r1-review-authority-security.md",
+    "llm-last-mile/runtime-refactor/review-control/r3-mac-evidence-recovery-r1-review-cycle-record.json",
+    "llm-last-mile/runtime-refactor/review-control/r3-mac-evidence-recovery-r1-review-lifecycle-convergence.md",
+    "scripts/substrate/dev-install-substrate.sh",
+    "tests/installers/dev_install_bash32_fd_regression.sh"
+  ],
+  "review": {
+    "packet_id": "AUX-R3-MAC-EVIDENCE-RECOVERY-R1",
+    "record_path": "/Users/spensermcconnell/.codex/worktrees/8fd3/substrate/llm-last-mile/runtime-refactor/review-control/r3-mac-evidence-recovery-r1-review-cycle-record.json",
+    "record_sha256": "sha256:220b6ec0a7ace70fa0cb1c38c7a2a4fbd5b12edfbf6352097206f56687616f40",
+    "validated": true,
+    "terminal": "CLEAN",
+    "p1": 0,
+    "p2": 0,
+    "p3_p4_disposition": "P3-R1-LIFECYCLE-001 fixed inside the authorized test fence; no review-inventory change."
+  },
+  "verification": {
+    "required_checks_passed": true,
+    "allowlist_passed": true,
+    "change_detection_passed": true,
+    "checkout_clean": true,
+    "ahead": 0,
+    "behind": 0
+  },
+  "checks": [
+    "TDD RED: /bin/bash tests/installers/dev_install_bash32_fd_regression.sh failed at the exact base with Bash 3.2 `exec: {context_fd}: not found` (exit 127 inside fixture).",
+    "GREEN: /bin/bash tests/installers/dev_install_bash32_fd_regression.sh passed after the final test-subject change.",
+    "/bin/bash -n scripts/substrate/dev-install-substrate.sh passed.",
+    "git diff --check and staged diff check passed; exact six-path allowlist passed; changed-byte secret/private-data and trailing-whitespace scans were clean.",
+    "Manual diff confirmed no build/copy, Windows, Linux-runtime, lifecycle, native, Keychain, XPC, Lima, selector, pairing, or inventory surface changed.",
+    "Review-cycle validator passed discovery, `--next-cycle closure`, and complete closure validation.",
+    "GitNexus detect_changes was degraded because this task worktree lacks the declared substrate-current index and the available 60cc index does not index the shell symbol; it returned low risk with zero changed symbols/processes. Manual exact-base caller/diff review supplied the required shell analysis.",
+    "Immediately before commit/push, live origin target equaled expected base/tree. Post-push live remote equals landed commit; direct parent is expected base; remote-vs-HEAD ahead/behind is 0/0; worktree/index are clean."
+  ],
+  "impact": {
+    "gitnexus": "degraded/UNKNOWN for resolve_install_bootstrap_context",
+    "manual_direct_callers": [
+      "scripts/substrate/dev-install-substrate.sh:1973"
+    ],
+    "affected_process": "dev-install bootstrap-context flow only",
+    "risk": "manual bounded R1 descriptor surface; no HIGH or CRITICAL result"
+  },
+  "skill_application": [
+    ".agents/skills/using-agent-skills/SKILL.md selected the required workflows.",
+    ".agents/skills/orchestrate-top-level-tasks/SKILL.md enforced identity, exact remote base, one receipt, and no successor dispatch.",
+    ".agents/skills/source-driven-development/SKILL.md grounded Bash 3.2 redirection behavior in the GNU Bash 3.2 reference.",
+    ".agents/skills/test-driven-development/SKILL.md required the recorded RED then GREEN isolated regression.",
+    ".agents/skills/incremental-implementation/SKILL.md kept the work to one two-path descriptor slice.",
+    ".agents/skills/debugging-and-error-recovery/SKILL.md localized and corrected fixture normalization and FD-identity proof defects.",
+    ".agents/skills/code-review-and-quality/SKILL.md required the fresh three-lens discovery and independent closure review.",
+    ".agents/skills/git-workflow-and-versioning/SKILL.md enforced one scoped conventional commit and clean publication."
+  ],
+  "next_increment": "AUTHORITY_REQUIRED:AUX-R3-MAC-EVIDENCE-RECOVERY-R2"
+}
