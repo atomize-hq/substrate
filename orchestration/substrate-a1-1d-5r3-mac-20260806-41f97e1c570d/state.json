@@ -55,7 +55,7 @@
     "verification_path": "receipts/AUX-R3-MAC-SOURCE-CORRECTION.attempt-1.scope-freeze-0008.blocked.verification.json",
     "review_path": "/tmp/substrate-aux-source-correction-019fd9fe-670c-7253-bf60-86f78cd373b5/ticket-authority-discovery-review.md",
     "review_sha256": "sha256:9223ec21429d28452b01b950e60f2d833993675e6043819eeca16571a93aaa57",
-    "summary": "The scope ledger is complete and the subject is preserved unchanged; publication remains blocked on explicit same-PM-bound transport/TTY-channel and trusted mapped-lifecycle submission decisions.",
+    "summary": "An independent read-only audit confirmed the ledger with corrections, three P1s, and three P2 scope/classification findings; publication remains blocked on explicit same-PM-bound transport/TTY-channel and trusted mapped-lifecycle submission decisions.",
     "authority_resolution": "authority-amendments/0008-r3-mac-source-correction-scope-freeze.json",
     "continuation_authorized": false,
     "worktree": "/Users/spensermcconnell/.codex/worktrees/60cc/substrate",
@@ -174,6 +174,18 @@
     "scope_freeze_verification_path": "receipts/AUX-R3-MAC-SOURCE-CORRECTION.attempt-1.scope-freeze-0008.blocked.verification.json",
     "scope_freeze_verification_sha256": "sha256:74ec1950e9fd91332f0a3cd405aa3ace8bdabf37c1379ebbdf0b1cd6c6944546",
     "scope_freeze_terminal_status": "BLOCKED_SCOPE_EXPANSION",
+    "independent_scope_audit": {
+      "agent": "/root/audit_source_scope_ledger_v2",
+      "model": "gpt-5.6-terra",
+      "reasoning": "xhigh",
+      "mode": "read_only",
+      "verdict": "LEDGER_CONFIRMED_WITH_CORRECTIONS",
+      "p1": 3,
+      "p2": 3,
+      "report_path": "audits/AUX-R3-MAC-SOURCE-CORRECTION.scope-ledger-independent-audit.md",
+      "report_sha256": "sha256:cbf9253eb279515f59268b60a695c498382850fe78a0c12dd006f46bf61daa23",
+      "recommended_boundary": "Retain blockers 1, 2, and 4; remove at least the unapproved lima-stdio-v1/exclusive-channel surface, or conservatively remove all amendment-0007 pairing hunks before a newly authorized design."
+    },
     "worktree_preserved": true,
     "task_archived": false,
     "scope_freeze_snapshot": {
