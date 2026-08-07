@@ -1,7 +1,7 @@
 {
   "protocol": "codex.top-level-orchestration-state.v1",
   "orchestration_id": "substrate-a1-1d-5r3-mac-20260806-41f97e1c570d",
-  "status": "READY",
+  "status": "RUNNING",
   "dispatch_authorized": true,
   "publication_mode": "remote",
   "remote": "origin",
@@ -36,7 +36,26 @@
     "thread_id": "019fd8c3-b12c-7e73-919f-898600ab0f64",
     "host_id": "local"
   },
-  "active_dispatch": null,
+  "active_dispatch": {
+    "increment": "AUX-R3-MAC-EVIDENCE-RECOVERY-R1",
+    "thread_id": "019fdccb-4ac3-7232-bc2e-4204b7b777ae",
+    "host_id": "local",
+    "worktree": "/Users/spensermcconnell/.codex/worktrees/8fd3/substrate",
+    "dispatch_nonce": "3db435048a170d726093482541effdb41b1f930bd2cd6d627048b285eacc15ab",
+    "expected_base": {
+      "commit": "d4bd729de8d344dfc567aaa62203838f68c2c895",
+      "tree": "3d5005d38c83b68c0a9813c10cbe6cb11996aed0"
+    },
+    "target_ref": "refs/heads/feat/internal-host-orchestrator-world-dispatch-bootstrap",
+    "publication_mode": "remote",
+    "project_id": "local-b2016f8a311fef93149e42eaec4d704d",
+    "project_path": "/Users/spensermcconnell/__Active_Code/atomize-hq/substrate",
+    "prompt_path": "increments/AUX-R3-MAC-EVIDENCE-RECOVERY-R1.prompt.md",
+    "binding_path": "increments/AUX-R3-MAC-EVIDENCE-RECOVERY-R1.binding.json",
+    "skill_hydration_path": "increments/AUX-R3-MAC-EVIDENCE-RECOVERY-R1.skill-hydration.json",
+    "model": "gpt-5.6-terra",
+    "reasoning": "xhigh"
+  },
   "active_evidence_dispatches": [],
   "verified_evidence": [],
   "completed": [
@@ -228,10 +247,10 @@
     "worktree_preserved": true,
     "task_archived": false,
     "next_increment": "AUTHORITY_REQUIRED:AUX-R3-MAC-EVIDENCE-RECOVERY-IMPLEMENTATION",
-    "successor_dispatched": false
+    "successor_dispatched": true
   },
   "auxiliary_recovery_implementation": {
-    "status": "READY",
+    "status": "RUNNING",
     "sequence": [
       "AUX-R3-MAC-EVIDENCE-RECOVERY-R1",
       "AUX-R3-MAC-EVIDENCE-RECOVERY-R2",
@@ -252,6 +271,19 @@
     "next_increment": "AUTHORITY_REQUIRED:AUX-R3-MAC-EVIDENCE-RECOVERY-R2",
     "donor_worktree": "/Users/spensermcconnell/.codex/worktrees/60cc/substrate",
     "donor_mutation_authorized": false,
-    "task_archiving_authorized": false
+    "task_archiving_authorized": false,
+    "thread_id": "019fdccb-4ac3-7232-bc2e-4204b7b777ae",
+    "host_id": "local",
+    "worktree": "/Users/spensermcconnell/.codex/worktrees/8fd3/substrate",
+    "predispatch_path": "increments/AUX-R3-MAC-EVIDENCE-RECOVERY-R1.predispatch.json",
+    "variables_path": "increments/AUX-R3-MAC-EVIDENCE-RECOVERY-R1.variables.json",
+    "prompt_path": "increments/AUX-R3-MAC-EVIDENCE-RECOVERY-R1.prompt.md",
+    "prompt_sha256": "sha256:f25fa2992ee8381ffc446ac742a681c17203c279c7fe8b0793919ad67df6f8ab",
+    "binding_path": "increments/AUX-R3-MAC-EVIDENCE-RECOVERY-R1.binding.json",
+    "binding_prompt_path": "increments/AUX-R3-MAC-EVIDENCE-RECOVERY-R1.binding-prompt.md",
+    "binding_prompt_sha256": "sha256:cd99908cf55af5b925ee0518b9e89cb06948d705c6691a2a7749e364b635b68a",
+    "skill_hydration_path": "increments/AUX-R3-MAC-EVIDENCE-RECOVERY-R1.skill-hydration.json",
+    "model": "gpt-5.6-terra",
+    "reasoning": "xhigh"
   }
 }
