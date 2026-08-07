@@ -1,0 +1,47 @@
+{
+  "protocol": "codex.orchestration-authority-amendment.v1",
+  "orchestration_id": "substrate-a1-1d-5r3-mac-20260806-41f97e1c570d",
+  "amendment_id": "0005-general-macos-host-prep-install",
+  "authorized_at_utc": "2026-08-07T01:52:34Z",
+  "authority_source": "user",
+  "purpose": "Dispatch one fresh general top-level macOS host-preparation and complete-install task outside the official R3 increment/evidence sequence, then leave official EVIDENCE:R3-MAC-IMP-01 undispatched until that task is terminal and independently verified.",
+  "dispatch_nonce": "5fa439de8a75a37f6c31b4cc7f758fc8e0d556f86e840d7bd7d48297c3f12e42",
+  "source": {
+    "publication_mode": "remote",
+    "remote": "origin",
+    "target_ref": "refs/heads/feat/internal-host-orchestrator-world-dispatch-bootstrap",
+    "commit": "d8a65fc8890dd37584aaeac2984c906188e5f06e",
+    "tree": "d8f25cc993f264f0c67fe3e00180eb393e41b2e3"
+  },
+  "task_class": "general_auxiliary_host_preparation",
+  "official_increment_or_evidence": false,
+  "authorized_actions": [
+    "derive the exact macOS install and Lima mapping from published repository truth and live host state",
+    "inventory and preserve before-state for Substrate-owned host, Lima guest, LaunchDaemon, helper, Keychain, socket, known-hosts, and service surfaces",
+    "use the already-authorized host and guest noninteractive sudo paths",
+    "manually repair ownership, mode, ACL, and other permission defects on the canonical Substrate-owned host prefix and Substrate-owned guest roots, including making /Users/spensermcconnell/.substrate owner-501 mode 0700 when safe",
+    "build and install from the exact published source using the repository's canonical install, macOS lifecycle, and Lima scripts",
+    "install or update Substrate-owned binaries, publisher helper, LaunchDaemon, Lima guest artifacts, units, sockets, mappings, and related Substrate-owned state needed for the later native evidence run",
+    "start, stop, restart, or reload only Substrate-owned host and guest services and the selected Lima instance substrate",
+    "run complete non-evidence installation, doctor, readiness, permission, mapping, service, and smoke checks",
+    "leave the successful installed Substrate state in place for the later official evidence task"
+  ],
+  "forbidden_actions": [
+    "modify, stage, commit, or push product repository bytes",
+    "mutate the protected saved checkout /Users/spensermcconnell/__Active_Code/atomize-hq/substrate",
+    "run or claim official EVIDENCE:R3-MAC-IMP-01",
+    "create an official R3 native evidence artifact or receipt",
+    "bypass or weaken project-identity, private-home, pairing-ticket, code-signing, XPC, mapping, restoration, or validator checks",
+    "fabricate successful capability where the exact published source is incomplete",
+    "delete unrelated user data, unrelated Lima instances, unrelated Keychain items, or unrelated system services",
+    "edit or remove /etc/sudoers.d/substrate-r3-mac-evidence"
+  ],
+  "known_conditions": [
+    "the exact published validator hard-codes historical project ID 2ccb802f-301c-4af4-9bd5-51d22808f0a2 while the native project is local-b2016f8a311fef93149e42eaec4d704d",
+    "/Users/spensermcconnell/.substrate is currently owner-501 mode 0755 while the private-home contract requires 0700",
+    "issue_lima_guest_pairing_ticket_v1 in the exact published source currently returns an unconditional error after request validation",
+    "host sudo -n and limactl shell substrate sudo -n were independently verified available before dispatch"
+  ],
+  "execution_rule": "Complete every safe independent host/system preparation and installation action even if a separate published-source defect remains. Return success only if the host is genuinely ready for a fresh official evidence task without further user or system preparation. Otherwise return a precise non-advancing blocker after completing all independent safe preparation.",
+  "successor_rule": "Do not auto-dispatch official EVIDENCE:R3-MAC-IMP-01. The meta task must independently verify the auxiliary receipt and live host state before a fresh official evidence dispatch."
+}
