@@ -1,0 +1,55 @@
+{
+  "protocol": "codex.meta-authority-amendment.v1",
+  "orchestration_id": "substrate-a1-1d-5r3-mac-20260806-41f97e1c570d",
+  "amendment_id": "0046-r3-mac-prestage-evidence-blocker-correction",
+  "issued_at_utc": "2026-08-08T16:05:53Z",
+  "applies_to": "AUX-R3-MAC-PRESTAGE-EVIDENCE-BLOCKER-CORRECTION",
+  "task_thread_id": "019fdfa4-ba96-70e0-b68d-1d0a4cf32a83",
+  "task_host_id": "local",
+  "task_worktree": "/Users/spensermcconnell/.codex/worktrees/2f78/substrate",
+  "dispatch_nonce": "0ae5e61c6cd21581afb861057bcd9789273e9f81926616716cee809006cec58d",
+  "expected_base": {
+    "remote": "origin",
+    "target_ref": "refs/heads/feat/internal-host-orchestrator-world-dispatch-bootstrap",
+    "commit": "a06b3fd26ceee4ece7e5bd1481981755eafcedb5",
+    "tree": "f4c396d0e28a43405a9a2b1d49a450d6df545c84"
+  },
+  "classification": "bounded MAC-only source correction for validated evidence attempt-9 blocker",
+  "authority_basis": {
+    "explicit_user_authority_to_save_the_non_selected_proposal_and_complete_evidence_prerequisites": true,
+    "standing_user_small_dispatch_error_adjudication_authority": true,
+    "validated_attempt_9_blocker": true,
+    "existing_clean_correction_task_reuse_explicitly_authorized": true,
+    "r1_through_r6_remain_closed": true
+  },
+  "design_disposition": {
+    "path": "decisions/0046-r3-mac-prestage-plan-disposition.json",
+    "effect": "The expansive bundle, Keychain-locator, transport, and generic-scheduler proposal is retained only as a non-selected design record and provides no implementation authority."
+  },
+  "objective": "Land one minimal reviewed source correction that produces and retains the four existing AArch64 Linux artifacts before Stage-1, removes only the unsupported world artifact role, and connects the canonical installer to the already-landed direct-bootstrap and closed Stage-1/post-PM path.",
+  "contract": "increments/AUX-R3-MAC-PRESTAGE-EVIDENCE-BLOCKER-CORRECTION.contract.md",
+  "authorized_actions": [
+    "edit only the contract allowlist and symbols necessary for the objective",
+    "run pre-edit impact analysis with exact manual fallback",
+    "use TDD RED then GREEN and external locked/offline AArch64 build proof",
+    "use fresh independent causal reviewers",
+    "publish exactly one normal fast-forward commit only after terminal CLEAN",
+    "return one codex.top-level-task-receipt.v1 as the final tool action"
+  ],
+  "prohibited_actions": [
+    "reopen or redesign R1-R6",
+    "new binary target, world alias, generic artifact selector, caller path, manual prefix copy, or Cargo manifest/lockfile change",
+    "new Keychain locator, authority family, transport, endpoint, principal, pairing flow, generic scheduler, or post-PM action semantic",
+    "Windows, WSL, ordinary Linux-host behavior, native installation/evidence, closeout, successor dispatch, or task archival",
+    "merge, rebase, reset, clean, force push, or protected checkout mutation"
+  ],
+  "blocker_policy": "Adjudicate only clerical, test-fixture, and exact in-fence dispatch errors. Return a blocked receipt for any new authority model, security-boundary change, additional role/action, platform mutation, or unresolved P1/P2.",
+  "terminal_requirements": {
+    "success_status": "LANDED_CLEAN",
+    "next_increment": "EVIDENCE:R3-MAC-IMP-01",
+    "return_meta_thread_id": "019fd8c3-b12c-7e73-919f-898600ab0f64",
+    "return_meta_host_id": "local",
+    "send_receipt_as_final_tool_action": true,
+    "successor_dispatch_prohibited": true
+  }
+}

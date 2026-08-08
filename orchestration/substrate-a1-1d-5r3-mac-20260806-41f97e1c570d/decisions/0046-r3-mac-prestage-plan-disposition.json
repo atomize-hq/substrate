@@ -1,0 +1,49 @@
+{
+  "protocol": "codex.meta-design-disposition.v1",
+  "orchestration_id": "substrate-a1-1d-5r3-mac-20260806-41f97e1c570d",
+  "decision_id": "0046-r3-mac-prestage-plan-disposition",
+  "issued_at_utc": "2026-08-08T16:05:53Z",
+  "source_packet": "AUX-R3-MAC-PRESTAGE-ARTIFACT-ROUTE-PLAN",
+  "source_receipt_status": "BLOCKED_CONTRADICTION",
+  "disposition": "retained_non_selected_design_record",
+  "current_corridor": "EVIDENCE:R3-MAC-IMP-01 blocker remediation only",
+  "accepted_facts": [
+    "R1 through R6 remain closed and are not reopened by this correction.",
+    "The current executable artifact set contains exactly four existing Cargo binaries: substrate-lifecycle-linux, world-service, substrate-gateway, and substrate.",
+    "The current mac.lima.guest-binary(world) role names /usr/local/bin/world even though the world package has no binary target and no current installer or release producer was found.",
+    "The canonical installer lacks a complete pre-Stage-1 production and staging route for the required existing Linux artifacts.",
+    "The canonical installer does not currently connect the already-landed direct publisher bootstrap result to the fixed lima-warm Stage-1 path.",
+    "Evidence attempt 9 restored all native state and did not begin native mutation."
+  ],
+  "selected_direction": [
+    "Use the already-landed R5 and R6 authority, manifest, direct-bootstrap, Stage-1, and closed post-PM request mechanisms.",
+    "Build and stage only the four existing Cargo binaries; do not create, alias, or rename a binary target.",
+    "Remove only the unsupported mac.lima.guest-binary(world) artifact role and its /usr/local/bin/world manifestation after exact source and consumer verification; preserve the world crate, world CLI concept, and unrelated world behavior.",
+    "Wire the canonical installer to the existing direct publisher bootstrap and execute only the closed signed Stage-1 and post-PM requests already returned by the landed implementation.",
+    "Make only the minimum existing-contract adjustment required to bind the four fixed artifacts; do not introduce a new authority model."
+  ],
+  "non_selected_proposals": [
+    {
+      "proposal": "new LimaGuestArtifactBundleV1 authority type",
+      "disposition": "deferred_option_not_committed_work",
+      "revisit_only_if": "the existing manifest and install provenance cannot bind the four fixed artifacts without weakening an invariant"
+    },
+    {
+      "proposal": "new Keychain Stage-1 locator or reusable carrier",
+      "disposition": "rejected_for_current_corridor",
+      "revisit_only_if": "an independently reviewed threat model proves the landed direct-bootstrap capsule cannot safely carry the existing request"
+    },
+    {
+      "proposal": "new transport, endpoint, selector, generic scheduler, or caller-chosen artifact path",
+      "disposition": "rejected",
+      "revisit_only_if": "a separately authorized future architecture packet exists"
+    },
+    {
+      "proposal": "direct, FD3, and XPC Unix-principal equality hardening",
+      "disposition": "independent_security_hypothesis",
+      "revisit_only_if": "exact live-path audit confirms a missing R5 or R6 invariant; it is not implicit authority in the evidence correction"
+    }
+  ],
+  "not_a_backlog_commitment": true,
+  "preservation_rule": "Keep this record as rationale and audit input. It does not authorize implementation of any non-selected proposal."
+}
