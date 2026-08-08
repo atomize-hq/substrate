@@ -117,7 +117,7 @@
     }
   ],
   "last_blocker": null,
-  "current_authority_amendment": "authority-amendments/0033-r5-review-artifact-whitespace-gate.json",
+  "current_authority_amendment": "authority-amendments/0034-r6-dual-session-guest-pairing.json",
   "evidence_attempt": 2,
   "retry_authority": {
     "evidence_id": "EVIDENCE:R3-MAC-IMP-01",
@@ -298,8 +298,8 @@
     "cursor": 7,
     "authorized_increment": "AUX-R3-MAC-EVIDENCE-RECOVERY-R6",
     "later_packets_require_fresh_authority": true,
-    "dispatch_nonce": "e480367f5a8308d8ee73f97eb7734c80bd49e37a31c3a70a6e663668d622e70e",
-    "authority_amendment": "authority-amendments/0033-r5-review-artifact-whitespace-gate.json",
+    "dispatch_nonce": "1b9fe0a5eee31553d83daa75ccdde591ea5a4b797a81f14c3f3d3d839bc9cd70",
+    "authority_amendment": "authority-amendments/0034-r6-dual-session-guest-pairing.json",
     "expected_base": {
       "commit": "a9626bc10a1737416c1d8f7f48630850118f3e6a",
       "tree": "3f7cdf20125a847a3dfaa472d3797759b5cf6737"
@@ -311,7 +311,7 @@
     "thread_id": "019fddab-1dd2-7570-9bd3-7f3841ce0283",
     "host_id": "local",
     "worktree": "/Users/spensermcconnell/.codex/worktrees/686b/substrate",
-    "predispatch_path": "increments/AUX-R3-MAC-EVIDENCE-RECOVERY-R5.predispatch.json",
+    "predispatch_path": "increments/AUX-R3-MAC-EVIDENCE-RECOVERY-R6.predispatch.json",
     "variables_path": "increments/AUX-R3-MAC-EVIDENCE-RECOVERY-R5.variables.json",
     "prompt_path": "increments/AUX-R3-MAC-EVIDENCE-RECOVERY-R5.prompt.md",
     "prompt_sha256": "sha256:c81dfc6e8c0182dd039634202229d5cf410e184e5b3f565dbcaada17e1ee6ee0",
@@ -571,7 +571,7 @@
     "continuation_nonce": "b48b65d2ede214b5c02350259ba2b32fe9e2bdacee279b7f85a3e5de10ee2dd4",
     "continuation_prompt_path": "increments/AUX-R3-MAC-EVIDENCE-RECOVERY-R5.correction-01.continuation-0033-prompt.md",
     "future_same_packet_continuation_allowed": true,
-    "authority_amendment_sha256": "sha256:aa8fe57473f21df61951ac5f0cb14998b8b8e2a8d273f09874b6a5333451d28b",
+    "authority_amendment_sha256": "sha256:345595b4324bfd3ab6162de8aa1a423487f883cd37b10aa83335e5a0132e4547",
     "continuation_prompt_sha256": "sha256:1b066993e0deb67f5e05cca6de2110a43254bab8509e22696dca46afe1f1c7dd",
     "continuation_prepared_at_utc": "2026-08-08T00:38:31Z",
     "blocked_receipt_path": "receipts/AUX-R3-MAC-EVIDENCE-RECOVERY-R5.correction-01.continuation-0032.blocked.raw.json",
@@ -807,7 +807,10 @@
     "review_record_path": "llm-last-mile/runtime-refactor/review-control/r3-mac-evidence-recovery-r5-correction-01-review-cycle-record.json",
     "staged_path_count": 23,
     "cached_binary_diff_sha256": "sha256:1a5d227ee9d0734e4fbadf56fd4292a3f3040d18d205a9e93b383e23404bc334",
-    "canonical_receipt_path": "receipts/AUX-R3-MAC-EVIDENCE-RECOVERY-R5.canonical.json"
+    "canonical_receipt_path": "receipts/AUX-R3-MAC-EVIDENCE-RECOVERY-R5.canonical.json",
+    "contract_path": "increments/AUX-R3-MAC-EVIDENCE-RECOVERY-R6.contract.md",
+    "initial_prompt_path": "increments/AUX-R3-MAC-EVIDENCE-RECOVERY-R6.initial-prompt.md",
+    "prepared_at_utc": "2026-08-08T00:46:25Z"
   },
   "standing_successor_authority": {
     "source_amendment": "authority-amendments/0011-r3-mac-evidence-recovery-r2-and-standing-successors.json",

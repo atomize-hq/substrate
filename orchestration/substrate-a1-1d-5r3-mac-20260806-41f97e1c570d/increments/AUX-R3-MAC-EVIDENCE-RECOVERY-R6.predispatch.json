@@ -1,0 +1,34 @@
+{
+  "protocol": "codex.top-level-task-predispatch.v1",
+  "orchestration_id": "substrate-a1-1d-5r3-mac-20260806-41f97e1c570d",
+  "increment": "AUX-R3-MAC-EVIDENCE-RECOVERY-R6",
+  "attempt": 1,
+  "dispatch_nonce": "1b9fe0a5eee31553d83daa75ccdde591ea5a4b797a81f14c3f3d3d839bc9cd70",
+  "authority_amendment": "authority-amendments/0034-r6-dual-session-guest-pairing.json",
+  "project_id": "local-b2016f8a311fef93149e42eaec4d704d",
+  "project_host_id": "local",
+  "project_path": "/Users/spensermcconnell/__Active_Code/atomize-hq/substrate",
+  "publication_mode": "remote",
+  "remote": "origin",
+  "target_ref": "refs/heads/feat/internal-host-orchestrator-world-dispatch-bootstrap",
+  "expected_base": {
+    "commit": "a9626bc10a1737416c1d8f7f48630850118f3e6a",
+    "tree": "3f7cdf20125a847a3dfaa472d3797759b5cf6737"
+  },
+  "live_remote": "a9626bc10a1737416c1d8f7f48630850118f3e6a",
+  "terminal_predecessor": {
+    "increment": "AUX-R3-MAC-EVIDENCE-RECOVERY-R5",
+    "thread_id": "019fddab-1dd2-7570-9bd3-7f3841ce0283",
+    "status": "LANDED_CLEAN",
+    "terminal_review": "CLEAN",
+    "commit": "a9626bc10a1737416c1d8f7f48630850118f3e6a"
+  },
+  "contract_path": "increments/AUX-R3-MAC-EVIDENCE-RECOVERY-R6.contract.md",
+  "initial_prompt_path": "increments/AUX-R3-MAC-EVIDENCE-RECOVERY-R6.initial-prompt.md",
+  "gitnexus_analyze_forbidden": true,
+  "mac_only_policy": "authority-amendments/0016-r3-mac-only-platform-proof.json",
+  "created_at_utc": "2026-08-08T00:46:25Z",
+  "authority_amendment_sha256": "sha256:345595b4324bfd3ab6162de8aa1a423487f883cd37b10aa83335e5a0132e4547",
+  "contract_sha256": "sha256:9f264105bfbc2d46206dc9b34a3d7570dbfa0a538d97400a64b9142908863334",
+  "initial_prompt_sha256": "sha256:f6cca9a4b753c7552c5ee1f1d96f04b7d59f40aebac72574062bd37d8fc21a94"
+}

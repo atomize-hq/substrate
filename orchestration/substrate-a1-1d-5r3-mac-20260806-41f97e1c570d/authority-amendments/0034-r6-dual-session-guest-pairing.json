@@ -1,0 +1,50 @@
+{
+  "protocol": "codex.orchestration-authority-amendment.v1",
+  "orchestration_id": "substrate-a1-1d-5r3-mac-20260806-41f97e1c570d",
+  "amendment_id": "0034-r6-dual-session-guest-pairing",
+  "authority_source": "standing successor authority 0011 after independent acceptance of R5 LANDED_CLEAN with terminal review CLEAN",
+  "authorized_increment": "AUX-R3-MAC-EVIDENCE-RECOVERY-R6",
+  "dispatch_nonce": "1b9fe0a5eee31553d83daa75ccdde591ea5a4b797a81f14c3f3d3d839bc9cd70",
+  "expected_base_commit": "a9626bc10a1737416c1d8f7f48630850118f3e6a",
+  "expected_base_tree": "3f7cdf20125a847a3dfaa472d3797759b5cf6737",
+  "target_ref": "refs/heads/feat/internal-host-orchestrator-world-dispatch-bootstrap",
+  "publication_mode": "remote",
+  "scope": [
+    "implement only the R6 PM-bound dual-session guest-pairing packet from the landed recovery plan",
+    "use exactly one PM-bound data session and one distinct PM-bound operator-TTY session with one shared immutable binding and no third session",
+    "discard the donor one-stdio protocol and every unlisted selector, transport, endpoint, principal, command, symbol, path, or hunk",
+    "complete packet review plus the final combined R1-R6 recovery review and publish one normal fast-forward commit only if both are terminal CLEAN"
+  ],
+  "platform_proof_override": {
+    "source": "authority-amendments/0016-r3-mac-only-platform-proof.json",
+    "linux_target_compile_blocking": false,
+    "windows_target_compile_blocking": false,
+    "cross_toolchain_provisioning_required": false,
+    "required": [
+      "native arm64 macOS and x86_64-apple-darwin checks for packet-owned surfaces",
+      "Linux guest-only source/build checks available on macOS without making ordinary Linux host behavior mutable",
+      "byte-identical hashes for forbidden Windows/WSL paths",
+      "Linux-body differential for shared or Linux-named paths",
+      "positive macOS cfg and exact path/symbol proof"
+    ]
+  },
+  "review": {
+    "model": "gpt-5.6-terra",
+    "reasoning": "xhigh",
+    "sequence": "one discovery review or same-subject burst, one different fresh closure review, and at most two causally eligible supplemental cycles",
+    "remediate": ["P1", "P2"],
+    "record_only": ["P3", "P4"],
+    "terminal": "CLEAN"
+  },
+  "hard_exclusions": [
+    "native installation, Keychain, XPC, Lima, code-signing, pairing, or evidence actions",
+    "direct SSH, VSock, TCP, alternate transport, generic session broker, stdio alias, or third session",
+    "ordinary Linux host provider behavior",
+    "Windows behavior",
+    "R5 rewrites except a blocker found by the final combined review, which must return for explicit meta adjudication",
+    "official EVIDENCE:R3-MAC-IMP-01 execution or successor dispatch"
+  ],
+  "successor": "EVIDENCE:R3-MAC-IMP-01",
+  "successor_dispatch_authorized": false,
+  "created_at_utc": "2026-08-08T00:46:25Z"
+}
