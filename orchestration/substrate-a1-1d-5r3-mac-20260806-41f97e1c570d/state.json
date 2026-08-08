@@ -163,7 +163,7 @@
     "required_authority": "A narrow reviewed MAC-only source correction for canonical pre-Stage-1 Linux artifact staging, then a fresh evidence attempt.",
     "advance": false
   },
-  "current_authority_amendment": "authority-amendments/0044-r3-mac-evidence-attempt-9-source-retry.json",
+  "current_authority_amendment": "authority-amendments/0045-r3-mac-prestage-artifact-route-plan.json",
   "evidence_attempt": 9,
   "retry_authority": {
     "evidence_id": "EVIDENCE:R3-MAC-IMP-01",
@@ -1059,12 +1059,13 @@
   ],
   "last_adjudicated_blocker": {
     "increment": "EVIDENCE:R3-MAC-IMP-01",
-    "attempt": 8,
-    "classification": "narrow MAC canonical-installer HOME provenance source correction",
-    "authority_path": "authority-amendments/0042-r3-mac-limactl-home-provenance-source-correction.json",
-    "authority_sha256": "sha256:815ed0977d5affb77560fb63de0e5474e2f0f7e2db7aeeefd3ca34bb9d164fbe",
-    "adjudicated_at_utc": "2026-08-08T13:44:04Z",
-    "evidence_successor_held": true
+    "attempt": 9,
+    "classification": "pre-Stage-1 Linux guest artifact route architecture correction required",
+    "authority_path": "authority-amendments/0045-r3-mac-prestage-artifact-route-plan.json",
+    "authority_sha256": "sha256:2f88a293e5c0b39865532b09e4ce0165ee81db1cd82555b04bea87e8de759098",
+    "adjudicated_at_utc": "2026-08-08T14:35:50Z",
+    "evidence_successor_held": true,
+    "planning_only": true
   },
   "mac_only_platform_proof_policy": {
     "source_amendment": "authority-amendments/0016-r3-mac-only-platform-proof.json",
@@ -1365,5 +1366,30 @@
     "verification_sha256": "sha256:f6b1736ca998b30bda0f801f5e7af6cbdcbd960fb301383190e8b1173bb7c0d9",
     "external_manifest_sha256": "sha256:a1fbe070e3869a43dcc80704b72bdc7982307463fcf2b2e189a5cb611f319398",
     "verified_at_utc": "2026-08-08T14:10:09Z"
+  },
+  "auxiliary_prestage_artifact_route_planning": {
+    "status": "PREPARED",
+    "packet_id": "AUX-R3-MAC-PRESTAGE-ARTIFACT-ROUTE-PLAN",
+    "thread_id": "019fdfa4-ba96-70e0-b68d-1d0a4cf32a83",
+    "host_id": "local",
+    "worktree": "/Users/spensermcconnell/.codex/worktrees/2f78/substrate",
+    "dispatch_nonce": "2f49b83ec6bc31fd4da0830fad86aa9c165e999f135c48dadb8a23a8c464d4af",
+    "expected_base": {
+      "commit": "a06b3fd26ceee4ece7e5bd1481981755eafcedb5",
+      "tree": "f4c396d0e28a43405a9a2b1d49a450d6df545c84",
+      "target_ref": "refs/heads/feat/internal-host-orchestrator-world-dispatch-bootstrap",
+      "live_remote": "a06b3fd26ceee4ece7e5bd1481981755eafcedb5"
+    },
+    "authority_amendment_path": "authority-amendments/0045-r3-mac-prestage-artifact-route-plan.json",
+    "authority_amendment_sha256": "sha256:2f88a293e5c0b39865532b09e4ce0165ee81db1cd82555b04bea87e8de759098",
+    "contract_path": "increments/AUX-R3-MAC-PRESTAGE-ARTIFACT-ROUTE-PLAN.contract.md",
+    "contract_sha256": "sha256:b11699d688bef2562683dbbda835ed5f01af98466100bbdcd393ea549948e4bd",
+    "prompt_path": "increments/AUX-R3-MAC-PRESTAGE-ARTIFACT-ROUTE-PLAN.continuation-prompt.md",
+    "prompt_sha256": "sha256:751167d24fa9b7bfc8b77786b924b758813911ca272e52eb5617fc375a236d74",
+    "read_only": true,
+    "source_edits_authorized": false,
+    "native_actions_authorized": false,
+    "successor_dispatch_authorized": false,
+    "task_archiving_authorized": false
   }
 }

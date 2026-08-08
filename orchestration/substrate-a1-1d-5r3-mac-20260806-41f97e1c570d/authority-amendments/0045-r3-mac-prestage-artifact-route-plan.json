@@ -1,0 +1,70 @@
+{
+  "protocol": "codex.meta-authority-amendment.v1",
+  "orchestration_id": "substrate-a1-1d-5r3-mac-20260806-41f97e1c570d",
+  "amendment_id": "0045-r3-mac-prestage-artifact-route-plan",
+  "issued_at_utc": "2026-08-08T14:35:38Z",
+  "applies_to": "AUX-R3-MAC-PRESTAGE-ARTIFACT-ROUTE-PLAN",
+  "task_thread_id": "019fdfa4-ba96-70e0-b68d-1d0a4cf32a83",
+  "task_host_id": "local",
+  "task_worktree": "/Users/spensermcconnell/.codex/worktrees/2f78/substrate",
+  "dispatch_nonce": "2f49b83ec6bc31fd4da0830fad86aa9c165e999f135c48dadb8a23a8c464d4af",
+  "expected_base": {
+    "remote": "origin",
+    "target_ref": "refs/heads/feat/internal-host-orchestrator-world-dispatch-bootstrap",
+    "commit": "a06b3fd26ceee4ece7e5bd1481981755eafcedb5",
+    "tree": "f4c396d0e28a43405a9a2b1d49a450d6df545c84"
+  },
+  "classification": "read-only MAC-only source-correction architecture planning after validated evidence attempt 9 blocker",
+  "authority_basis": {
+    "standing_user_blocker_adjudication_authority": true,
+    "attempt_9_receipt_and_artifact_independently_validated": true,
+    "reuse_existing_clean_source_correction_task": true,
+    "no_product_or_control_source_edit_authorized": true
+  },
+  "objective": "Derive one minimal, implementable, control-pack-consistent contract for canonical manifest-bound pre-Stage-1 Linux guest artifact production, retention, and admission, without changing source or native state.",
+  "mandatory_questions": [
+    "Reconcile the current installer-to-publisher-bootstrap-to-Stage-1 ordering and name the exact source-owned call sequence.",
+    "Distinguish the host macOS executor evidence currently constructed as ExecutorBuildEvidenceV1 from the externally built Linux guest executor and runtime artifacts; do not overload or fabricate either identity.",
+    "Re-derive the exact required artifact role set. In particular, determine the disposition of mac.lima.guest-binary(world), because the current Cargo graph exposes world only as a library and no world binary target.",
+    "Define the closed typed bundle, fixed roles, source/build/toolchain/digest/physical-identity joins, no-follow staging, atomicity, retry, rollback, and root-owned retained provenance needed before Stage-1.",
+    "Define how the canonical installer obtains or produces the external artifacts without a generic path selector and how direct publisher-bootstrap returns the signed Stage-1 authorization before lima-warm consumes it.",
+    "Produce the exact implementation path/symbol fence, TDD matrix, causal review gates, and evidence retry command sequence."
+  ],
+  "required_invariants": [
+    "MAC-only correction; no Windows, WSL, or ordinary Linux-host behavior changes.",
+    "Linux changes, if any, are limited to the exact aarch64 Lima guest artifact build/entrypoint closure and must not change ordinary Linux-host lifecycle behavior.",
+    "No generic artifact selector, caller-chosen role/path, manual prefix copy, ambient discovery, alternate endpoint, transport, principal, instance, or bootstrap route.",
+    "External builds remain nonce-scoped, exact-source, locked/offline, target-bound, and outside the attached source mirror; staged prefix files are fixed-role regular no-follow artifacts with digest and physical-identity joins.",
+    "The current singular ExecutorBuildEvidenceV1 must not silently stand for both the host macOS executor and multiple Linux guest artifacts.",
+    "Do not invent a world executable or alias another binary under that role; either prove its real source/consumer and producer or propose an explicit reviewed role-set correction.",
+    "The canonical installer, direct publisher bootstrap, signed Stage-1 authorization, and lima-warm ordering must be executable without a trust gap or circular prerequisite.",
+    "No product, test, runtime-refactor, review-control, Cargo, lockfile, or orchestration source edit in this planning packet."
+  ],
+  "authorized_actions": [
+    "read exact source and runtime-refactor control pack",
+    "read attempt-9 artifact, receipt, discovery, and blocker records",
+    "run GitNexus read-only queries/impact with manual exact-source fallback",
+    "run cargo metadata and non-mutating external-target feasibility probes in a nonce-scoped temporary directory",
+    "spawn fresh read-only reviewers for authority/security, lifecycle/convergence, and allowlist/evidence review",
+    "return one structured planning receipt to meta"
+  ],
+  "prohibited_actions": [
+    "any repository edit, stage, commit, push, reset, clean, rebase, merge, archive, or target-ref mutation",
+    "installer execution, prefix staging, /Library, Keychain, launchd, Lima, sudoers, known_hosts, code-signing, pairing, lifecycle, retirement, native evidence, or closeout mutation",
+    "manual copying of the attempt-9 external executor artifact into the prefix",
+    "successor dispatch or evidence attempt 10"
+  ],
+  "review": {
+    "required": "fresh read-only three-lens audit of the proposed implementation contract",
+    "models": "gpt-5.6-terra",
+    "reasoning": "xhigh",
+    "terminal": "PLANNED_CLEAN only if no unresolved P1/P2 contradiction remains"
+  },
+  "terminal_requirements": {
+    "receipt_protocol": "codex.auxiliary-source-correction-plan-receipt.v1",
+    "return_meta_thread_id": "019fd8c3-b12c-7e73-919f-898600ab0f64",
+    "return_meta_host_id": "local",
+    "send_receipt_as_final_tool_action": true,
+    "successor_dispatch_prohibited": true
+  }
+}
