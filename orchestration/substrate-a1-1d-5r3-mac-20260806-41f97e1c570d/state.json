@@ -157,6 +157,14 @@
     "host_sudo_verified": true,
     "host_sudo_verification_path": "increments/EVIDENCE-R3-MAC-IMP-01.attempt-5.predispatch.json",
     "official_evidence_retry_held": false,
+    "dispatch_prepared": true,
+    "dispatch_nonce": "8f013a2e345b2639b09a2c6c3cc3de787bc914c51ee31132c3a0e274422ff54a",
+    "contract_path": "increments/EVIDENCE-R3-MAC-IMP-01.attempt-5.contract.md",
+    "contract_sha256": "sha256:5c02e52f9fed70bfcd1960289756d3c3909d6277c531c78602b91ec35022e0ca",
+    "prompt_path": "increments/EVIDENCE-R3-MAC-IMP-01.attempt-5.initial-prompt.md",
+    "prompt_sha256": "sha256:73419c75bcadf9914a085a203a2203da0a683a939a6376e8f7bff895e4f78ae2",
+    "variables_path": "increments/EVIDENCE-R3-MAC-IMP-01.attempt-5.variables.json",
+    "variables_sha256": "sha256:9c1413cf7267c8df51987f67ebd7361c6e219073ea2c191ad374ce73d2002bbc",
     "task_archiving_authorized": false
   },
   "auxiliary_host_preparation": {
