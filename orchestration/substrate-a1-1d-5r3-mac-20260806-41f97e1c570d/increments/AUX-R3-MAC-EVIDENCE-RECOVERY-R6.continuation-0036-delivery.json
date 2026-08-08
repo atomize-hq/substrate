@@ -1,0 +1,21 @@
+{
+  "protocol": "codex.top-level-task-continuation-delivery.v1",
+  "orchestration_id": "substrate-a1-1d-5r3-mac-20260806-41f97e1c570d",
+  "increment": "AUX-R3-MAC-EVIDENCE-RECOVERY-R6",
+  "packet_id": "AUX-R3-MAC-EVIDENCE-RECOVERY-R6-CORRECTION-01",
+  "original_dispatch_nonce": "1b9fe0a5eee31553d83daa75ccdde591ea5a4b797a81f14c3f3d3d839bc9cd70",
+  "continuation_nonce": "01b6223453c9a0466c6e2f5f171989bc1f79373557a2902be57344460578b477",
+  "thread_id": "019fded7-05c4-7c61-9f7d-5fc456bcda6d",
+  "host_id": "local",
+  "turn_id": "019fdf31-c0f6-70f2-977f-385a857c587e",
+  "wait_cursor": "72bc6338-004b-44ac-9181-551e0e60ffb5:5",
+  "thread_status": "active",
+  "turn_status": "inProgress",
+  "authority_path": "authority-amendments/0036-r6-direct-tty-proof-retry-correction.json",
+  "authority_sha256": "sha256:0efd2a9be850672fb3c909806ccc54bdac3bd5b6f3bbf34383f8feec3aeae27d",
+  "prompt_path": "increments/AUX-R3-MAC-EVIDENCE-RECOVERY-R6.continuation-0036-prompt.md",
+  "prompt_sha256": "sha256:d8c8d533b00b9990085c21b3db148b9c4836bb65d1bc1dd70f662fa31b56405f",
+  "model": "gpt-5.6-terra",
+  "reasoning": "xhigh",
+  "sent_at_utc": "2026-08-08T02:27:04Z"
+}
