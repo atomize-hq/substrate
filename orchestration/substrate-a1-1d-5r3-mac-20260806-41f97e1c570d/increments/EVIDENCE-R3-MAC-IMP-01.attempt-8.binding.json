@@ -1,0 +1,47 @@
+{
+  "protocol": "codex.top-level-evidence-continuation-binding.v1",
+  "orchestration_id": "substrate-a1-1d-5r3-mac-20260806-41f97e1c570d",
+  "evidence_id": "EVIDENCE:R3-MAC-IMP-01",
+  "attempt": 8,
+  "allocation": 2,
+  "dispatch_nonce": "8c5f7e13d8f10d0e6744518a0b79bb4d575d4a6cb26483f2005fef8172c72fa2",
+  "task": {
+    "thread_id": "019fe162-c98c-7c82-94d0-155d6cab5122",
+    "host_id": "local",
+    "worktree": "/Users/spensermcconnell/.codex/worktrees/1626/substrate"
+  },
+  "source": {
+    "remote": "origin",
+    "target_ref": "refs/heads/feat/internal-host-orchestrator-world-dispatch-bootstrap",
+    "commit": "1126b907df6e38043e9071da222f6c6a377b341c",
+    "tree": "3a29fa323a8b9099d894c11d98cc085ecf4807c5",
+    "live_remote": "1126b907df6e38043e9071da222f6c6a377b341c",
+    "publication_mode": "remote"
+  },
+  "skill_suite": {
+    "skill_count": 25,
+    "file_count": 54,
+    "sha256": "e3de93f358594033ed59696a9624d2d0ac2fd0c2aa7ddf4a532810a05b262282"
+  },
+  "contract_path": "increments/EVIDENCE-R3-MAC-IMP-01.attempt-8.contract.md",
+  "contract_sha256": "sha256:6dfe42fdb25e3a74e2932e1cfb62b3062e98177c2c0fa39518da1620f46e6823",
+  "continuation_prompt_path": "increments/EVIDENCE-R3-MAC-IMP-01.attempt-8.continuation-prompt.md",
+  "continuation_prompt_sha256": "sha256:c5a79685be3dbc44e0bbb0bccc376f984b87937a2a27cf7ed22beccd706c56e2",
+  "variables_path": "increments/EVIDENCE-R3-MAC-IMP-01.attempt-8.variables.json",
+  "variables_sha256": "sha256:0e9381ee113a571873cd2a54b5bb55d15bc5665a70aa2f4509b7ee4adfa3e1c1",
+  "predispatch_path": "increments/EVIDENCE-R3-MAC-IMP-01.attempt-8.predispatch.json",
+  "predispatch_sha256": "sha256:d7354769f0f167a1a9e96584b2880ab78e4bde51743eb4ffedb154c5176a88b2",
+  "authority_amendments": [
+    {
+      "path": "authority-amendments/0040-r3-mac-canonical-installer-target-output.json",
+      "sha256": "sha256:cdaaa4ad590d4a110dd8ae5b03c36ac4833abd64e92e0e0ad055826d78495c14"
+    },
+    {
+      "path": "authority-amendments/0041-r3-mac-canonical-installer-fixed-path-retry.json",
+      "sha256": "sha256:3eb4250e6995c6dd91614778b7d448dc74b680e199a47d2e754330cdd0eeed38"
+    }
+  ],
+  "bound_at_utc": "2026-08-08T13:21:49Z",
+  "start_authorized": true,
+  "task_archiving_authorized": false
+}

@@ -1,7 +1,7 @@
 {
   "protocol": "codex.top-level-orchestration-state.v1",
   "orchestration_id": "substrate-a1-1d-5r3-mac-20260806-41f97e1c570d",
-  "status": "BLOCKED",
+  "status": "EVIDENCE_RUNNING",
   "dispatch_authorized": true,
   "publication_mode": "remote",
   "remote": "origin",
@@ -38,7 +38,55 @@
     "host_id": "local"
   },
   "active_dispatch": null,
-  "active_evidence_dispatches": [],
+  "active_evidence_dispatches": [
+    {
+      "evidence_id": "EVIDENCE:R3-MAC-IMP-01",
+      "attempt": 8,
+      "allocation": 2,
+      "platform": "macos",
+      "project_id": "local-b2016f8a311fef93149e42eaec4d704d",
+      "project_path": "/Users/spensermcconnell/__Active_Code/atomize-hq/substrate",
+      "thread_id": "019fe162-c98c-7c82-94d0-155d6cab5122",
+      "host_id": "local",
+      "worktree": "/Users/spensermcconnell/.codex/worktrees/1626/substrate",
+      "dispatch_nonce": "8c5f7e13d8f10d0e6744518a0b79bb4d575d4a6cb26483f2005fef8172c72fa2",
+      "source": {
+        "remote": "origin",
+        "target_ref": "refs/heads/feat/internal-host-orchestrator-world-dispatch-bootstrap",
+        "commit": "1126b907df6e38043e9071da222f6c6a377b341c",
+        "tree": "3a29fa323a8b9099d894c11d98cc085ecf4807c5",
+        "live_remote": "1126b907df6e38043e9071da222f6c6a377b341c",
+        "publication_mode": "remote"
+      },
+      "contract_path": "increments/EVIDENCE-R3-MAC-IMP-01.attempt-8.contract.md",
+      "contract_sha256": "sha256:6dfe42fdb25e3a74e2932e1cfb62b3062e98177c2c0fa39518da1620f46e6823",
+      "continuation_prompt_path": "increments/EVIDENCE-R3-MAC-IMP-01.attempt-8.continuation-prompt.md",
+      "continuation_prompt_sha256": "sha256:c5a79685be3dbc44e0bbb0bccc376f984b87937a2a27cf7ed22beccd706c56e2",
+      "binding_path": "increments/EVIDENCE-R3-MAC-IMP-01.attempt-8.binding.json",
+      "binding_sha256": "sha256:50782e88c2e959b3562118946560c6ba75ae699cbf99a23d719949e2512d983c",
+      "predispatch_path": "increments/EVIDENCE-R3-MAC-IMP-01.attempt-8.predispatch.json",
+      "predispatch_sha256": "sha256:d7354769f0f167a1a9e96584b2880ab78e4bde51743eb4ffedb154c5176a88b2",
+      "authority_amendments": [
+        {
+          "path": "authority-amendments/0040-r3-mac-canonical-installer-target-output.json",
+          "sha256": "sha256:cdaaa4ad590d4a110dd8ae5b03c36ac4833abd64e92e0e0ad055826d78495c14"
+        },
+        {
+          "path": "authority-amendments/0041-r3-mac-canonical-installer-fixed-path-retry.json",
+          "sha256": "sha256:3eb4250e6995c6dd91614778b7d448dc74b680e199a47d2e754330cdd0eeed38"
+        }
+      ],
+      "skill_suite_sha256": "e3de93f358594033ed59696a9624d2d0ac2fd0c2aa7ddf4a532810a05b262282",
+      "attached_source_mirror": "/Users/spensermcconnell/.codex/evidence/substrate-a1-1d-5r3-mac-20260806-41f97e1c570d/AUX-R3-MAC-EVIDENCE-PLATFORM-PREREQUISITE-PREP/11c27a5ee57be5b99a3c7457c4f511b14b5747ee4b2b0492874a416d5fab02a3/source/substrate",
+      "canonical_installer_path": "/usr/local/bin:/Users/spensermcconnell/.cargo/bin:/opt/homebrew/bin:/usr/bin:/bin:/usr/sbin:/sbin",
+      "fixed_limactl": "/usr/local/bin/limactl",
+      "artifact_root": "/Users/spensermcconnell/.codex/evidence/substrate-a1-1d-5r3-mac-20260806-41f97e1c570d/EVIDENCE-R3-MAC-IMP-01/8c5f7e13d8f10d0e6744518a0b79bb4d575d4a6cb26483f2005fef8172c72fa2",
+      "task_archiving_authorized": false,
+      "thread_status": "dispatch_prepared",
+      "turn_status": "not_started",
+      "prepared_at_utc": "2026-08-08T13:21:49Z"
+    }
+  ],
   "verified_evidence": [],
   "completed": [
     {
@@ -151,8 +199,8 @@
     "required_authority": "Fresh nonce-bound retry using the already-required fixed PATH from installer process start; no source correction or new platform authority required.",
     "advance": false
   },
-  "current_authority_amendment": "authority-amendments/0040-r3-mac-canonical-installer-target-output.json",
-  "evidence_attempt": 7,
+  "current_authority_amendment": "authority-amendments/0041-r3-mac-canonical-installer-fixed-path-retry.json",
+  "evidence_attempt": 8,
   "retry_authority": {
     "evidence_id": "EVIDENCE:R3-MAC-IMP-01",
     "completed_attempt": 7,
@@ -165,18 +213,18 @@
     "host_sudo_durable_nopasswd_required": true,
     "host_sudo_verified": true,
     "host_sudo_verification_path": "increments/EVIDENCE-R3-MAC-IMP-01.attempt-5.predispatch.json",
-    "official_evidence_retry_held": true,
+    "official_evidence_retry_held": false,
     "auxiliary_platform_preparation_required": true,
     "attempt_5_receipt_path": "receipts/EVIDENCE-R3-MAC-IMP-01.attempt-5.blocked.json",
     "attempt_5_verification_path": "receipts/EVIDENCE-R3-MAC-IMP-01.attempt-5.blocked.verification.json",
     "dispatch_prepared": true,
-    "dispatch_nonce": "17400ca095c68fafd4db02f4da09aac2e2bb17dd03542ebfb331875e3cd13498",
-    "contract_path": "increments/EVIDENCE-R3-MAC-IMP-01.attempt-7.contract.md",
-    "contract_sha256": "sha256:72a097e0821e5b5049dafb3ec6a4ab5d37626899549b016be09ebb1611971354",
+    "dispatch_nonce": "8c5f7e13d8f10d0e6744518a0b79bb4d575d4a6cb26483f2005fef8172c72fa2",
+    "contract_path": "increments/EVIDENCE-R3-MAC-IMP-01.attempt-8.contract.md",
+    "contract_sha256": "sha256:6dfe42fdb25e3a74e2932e1cfb62b3062e98177c2c0fa39518da1620f46e6823",
     "prompt_path": "increments/EVIDENCE-R3-MAC-IMP-01.attempt-6.initial-prompt.md",
     "prompt_sha256": "sha256:0012766a20683f2d79ea804663efd3a5d34cb30bdf952d0aea5feae5d266a7e2",
-    "variables_path": "increments/EVIDENCE-R3-MAC-IMP-01.attempt-7.variables.json",
-    "variables_sha256": "sha256:66caa30e8f53553369e1050720f44ba17c4baeffdbb1335b186068743b5a2cd8",
+    "variables_path": "increments/EVIDENCE-R3-MAC-IMP-01.attempt-8.variables.json",
+    "variables_sha256": "sha256:0e9381ee113a571873cd2a54b5bb55d15bc5665a70aa2f4509b7ee4adfa3e1c1",
     "task_archiving_authorized": false,
     "auxiliary_platform_preparation_running": false,
     "auxiliary_platform_preparation_completed": true,
@@ -255,7 +303,25 @@
     "attempt_7_verification_sha256": "sha256:93dc6c332d41586b1cb0d3b7e2d2ab275997594a9341db2c8483648d22575fd2",
     "attempt_7_artifact_sha256": "sha256:460968ba15fb23179fbb9ddaad18533ab589f409dccf64c06f6a429f5c5a960a",
     "attempt_7_restoration_exact": true,
-    "attempt_8_path_selection_correction_required": true
+    "attempt_8_path_selection_correction_required": false,
+    "attempt_8_dispatch_prepared": true,
+    "attempt_8_dispatch_nonce": "8c5f7e13d8f10d0e6744518a0b79bb4d575d4a6cb26483f2005fef8172c72fa2",
+    "attempt_8_contract_path": "increments/EVIDENCE-R3-MAC-IMP-01.attempt-8.contract.md",
+    "attempt_8_contract_sha256": "sha256:6dfe42fdb25e3a74e2932e1cfb62b3062e98177c2c0fa39518da1620f46e6823",
+    "attempt_8_continuation_prompt_path": "increments/EVIDENCE-R3-MAC-IMP-01.attempt-8.continuation-prompt.md",
+    "attempt_8_continuation_prompt_sha256": "sha256:c5a79685be3dbc44e0bbb0bccc376f984b87937a2a27cf7ed22beccd706c56e2",
+    "attempt_8_variables_path": "increments/EVIDENCE-R3-MAC-IMP-01.attempt-8.variables.json",
+    "attempt_8_variables_sha256": "sha256:0e9381ee113a571873cd2a54b5bb55d15bc5665a70aa2f4509b7ee4adfa3e1c1",
+    "attempt_8_predispatch_path": "increments/EVIDENCE-R3-MAC-IMP-01.attempt-8.predispatch.json",
+    "attempt_8_predispatch_sha256": "sha256:d7354769f0f167a1a9e96584b2880ab78e4bde51743eb4ffedb154c5176a88b2",
+    "attempt_8_binding_path": "increments/EVIDENCE-R3-MAC-IMP-01.attempt-8.binding.json",
+    "attempt_8_binding_sha256": "sha256:50782e88c2e959b3562118946560c6ba75ae699cbf99a23d719949e2512d983c",
+    "attempt_8_task_thread_id": "019fe162-c98c-7c82-94d0-155d6cab5122",
+    "attempt_8_task_host_id": "local",
+    "attempt_8_task_worktree": "/Users/spensermcconnell/.codex/worktrees/1626/substrate",
+    "attempt_8_authority_amendment_path": "authority-amendments/0041-r3-mac-canonical-installer-fixed-path-retry.json",
+    "attempt_8_authority_amendment_sha256": "sha256:3eb4250e6995c6dd91614778b7d448dc74b680e199a47d2e754330cdd0eeed38",
+    "attempt_8_path_selection_correction_applied": true
   },
   "auxiliary_host_preparation": {
     "status": "BLOCKED_SOURCE_CORRECTION",
@@ -1007,11 +1073,11 @@
   ],
   "last_adjudicated_blocker": {
     "increment": "EVIDENCE:R3-MAC-IMP-01",
-    "attempt": 6,
-    "classification": "bounded canonical-installer target-output contract correction",
-    "authority_path": "authority-amendments/0040-r3-mac-canonical-installer-target-output.json",
-    "authority_sha256": "sha256:cdaaa4ad590d4a110dd8ae5b03c36ac4833abd64e92e0e0ad055826d78495c14",
-    "adjudicated_at_utc": "2026-08-08T13:01:11Z",
+    "attempt": 7,
+    "classification": "fresh retry with exact canonical-installer process PATH; no scope expansion",
+    "authority_path": "authority-amendments/0041-r3-mac-canonical-installer-fixed-path-retry.json",
+    "authority_sha256": "sha256:3eb4250e6995c6dd91614778b7d448dc74b680e199a47d2e754330cdd0eeed38",
+    "adjudicated_at_utc": "2026-08-08T13:21:49Z",
     "evidence_successor_held": true
   },
   "mac_only_platform_proof_policy": {
@@ -1160,16 +1226,54 @@
     "artifact_manifest_sha256": "sha256:a58ca455cf1aa564d7d8628a0b6a44d49eda28af9fb6ac24ac67e31ee3d31a9b",
     "verified_at_utc": "2026-08-08T12:35:08Z"
   },
-  "active_evidence": null,
-  "blocker": {
-    "status": "BLOCKED_NATIVE_EVIDENCE",
+  "active_evidence": {
     "evidence_id": "EVIDENCE:R3-MAC-IMP-01",
-    "attempt": 7,
-    "summary": "Canonical installer was started with an invocation PATH that resolved the ambient Homebrew limactl instead of the fixed /usr/local/bin image; ambient image was not executed and restoration is exact.",
-    "receipt_path": "receipts/EVIDENCE-R3-MAC-IMP-01.attempt-7.blocked.json",
-    "verification_path": "receipts/EVIDENCE-R3-MAC-IMP-01.attempt-7.blocked.verification.json",
-    "required_authority": "Fresh nonce-bound retry using the already-required fixed PATH from installer process start; no source correction or new platform authority required."
+    "attempt": 8,
+    "allocation": 2,
+    "platform": "macos",
+    "project_id": "local-b2016f8a311fef93149e42eaec4d704d",
+    "project_path": "/Users/spensermcconnell/__Active_Code/atomize-hq/substrate",
+    "thread_id": "019fe162-c98c-7c82-94d0-155d6cab5122",
+    "host_id": "local",
+    "worktree": "/Users/spensermcconnell/.codex/worktrees/1626/substrate",
+    "dispatch_nonce": "8c5f7e13d8f10d0e6744518a0b79bb4d575d4a6cb26483f2005fef8172c72fa2",
+    "source": {
+      "remote": "origin",
+      "target_ref": "refs/heads/feat/internal-host-orchestrator-world-dispatch-bootstrap",
+      "commit": "1126b907df6e38043e9071da222f6c6a377b341c",
+      "tree": "3a29fa323a8b9099d894c11d98cc085ecf4807c5",
+      "live_remote": "1126b907df6e38043e9071da222f6c6a377b341c",
+      "publication_mode": "remote"
+    },
+    "contract_path": "increments/EVIDENCE-R3-MAC-IMP-01.attempt-8.contract.md",
+    "contract_sha256": "sha256:6dfe42fdb25e3a74e2932e1cfb62b3062e98177c2c0fa39518da1620f46e6823",
+    "continuation_prompt_path": "increments/EVIDENCE-R3-MAC-IMP-01.attempt-8.continuation-prompt.md",
+    "continuation_prompt_sha256": "sha256:c5a79685be3dbc44e0bbb0bccc376f984b87937a2a27cf7ed22beccd706c56e2",
+    "binding_path": "increments/EVIDENCE-R3-MAC-IMP-01.attempt-8.binding.json",
+    "binding_sha256": "sha256:50782e88c2e959b3562118946560c6ba75ae699cbf99a23d719949e2512d983c",
+    "predispatch_path": "increments/EVIDENCE-R3-MAC-IMP-01.attempt-8.predispatch.json",
+    "predispatch_sha256": "sha256:d7354769f0f167a1a9e96584b2880ab78e4bde51743eb4ffedb154c5176a88b2",
+    "authority_amendments": [
+      {
+        "path": "authority-amendments/0040-r3-mac-canonical-installer-target-output.json",
+        "sha256": "sha256:cdaaa4ad590d4a110dd8ae5b03c36ac4833abd64e92e0e0ad055826d78495c14"
+      },
+      {
+        "path": "authority-amendments/0041-r3-mac-canonical-installer-fixed-path-retry.json",
+        "sha256": "sha256:3eb4250e6995c6dd91614778b7d448dc74b680e199a47d2e754330cdd0eeed38"
+      }
+    ],
+    "skill_suite_sha256": "e3de93f358594033ed59696a9624d2d0ac2fd0c2aa7ddf4a532810a05b262282",
+    "attached_source_mirror": "/Users/spensermcconnell/.codex/evidence/substrate-a1-1d-5r3-mac-20260806-41f97e1c570d/AUX-R3-MAC-EVIDENCE-PLATFORM-PREREQUISITE-PREP/11c27a5ee57be5b99a3c7457c4f511b14b5747ee4b2b0492874a416d5fab02a3/source/substrate",
+    "canonical_installer_path": "/usr/local/bin:/Users/spensermcconnell/.cargo/bin:/opt/homebrew/bin:/usr/bin:/bin:/usr/sbin:/sbin",
+    "fixed_limactl": "/usr/local/bin/limactl",
+    "artifact_root": "/Users/spensermcconnell/.codex/evidence/substrate-a1-1d-5r3-mac-20260806-41f97e1c570d/EVIDENCE-R3-MAC-IMP-01/8c5f7e13d8f10d0e6744518a0b79bb4d575d4a6cb26483f2005fef8172c72fa2",
+    "task_archiving_authorized": false,
+    "thread_status": "dispatch_prepared",
+    "turn_status": "not_started",
+    "prepared_at_utc": "2026-08-08T13:21:49Z"
   },
+  "blocker": null,
   "evidence_attempt_history": [
     {
       "evidence_id": "EVIDENCE:R3-MAC-IMP-01",

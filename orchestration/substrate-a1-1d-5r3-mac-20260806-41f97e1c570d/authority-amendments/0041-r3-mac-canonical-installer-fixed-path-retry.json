@@ -1,0 +1,62 @@
+{
+  "protocol": "codex.meta-authority-amendment.v1",
+  "orchestration_id": "substrate-a1-1d-5r3-mac-20260806-41f97e1c570d",
+  "amendment_id": "0041-r3-mac-canonical-installer-fixed-path-retry",
+  "issued_at_utc": "2026-08-08T13:20:41Z",
+  "applies_to": "EVIDENCE:R3-MAC-IMP-01 attempt-8",
+  "task_thread_id": "019fe162-c98c-7c82-94d0-155d6cab5122",
+  "task_host_id": "local",
+  "task_worktree": "/Users/spensermcconnell/.codex/worktrees/1626/substrate",
+  "dispatch_nonce": "8c5f7e13d8f10d0e6744518a0b79bb4d575d4a6cb26483f2005fef8172c72fa2",
+  "source": {
+    "publication_mode": "remote",
+    "remote": "origin",
+    "target_ref": "refs/heads/feat/internal-host-orchestrator-world-dispatch-bootstrap",
+    "commit": "1126b907df6e38043e9071da222f6c6a377b341c",
+    "tree": "3a29fa323a8b9099d894c11d98cc085ecf4807c5"
+  },
+  "classification": "fresh evidence retry invocation correction; no scope expansion",
+  "authority_basis": {
+    "standing_user_blocker_adjudication_authority": true,
+    "same_task_continuation_authorized": true,
+    "attempt_7_restoration_exact": true,
+    "source_or_platform_correction_required": false
+  },
+  "required_installer_invocation": {
+    "working_directory": "/Users/spensermcconnell/.codex/evidence/substrate-a1-1d-5r3-mac-20260806-41f97e1c570d/AUX-R3-MAC-EVIDENCE-PLATFORM-PREREQUISITE-PREP/11c27a5ee57be5b99a3c7457c4f511b14b5747ee4b2b0492874a416d5fab02a3/source/substrate",
+    "executable": "/opt/homebrew/bin/bash",
+    "script": "scripts/substrate/dev-install-substrate.sh",
+    "environment": {
+      "PATH": "/usr/local/bin:/Users/spensermcconnell/.cargo/bin:/opt/homebrew/bin:/usr/bin:/bin:/usr/sbin:/sbin",
+      "CARGO_TARGET_DIR": "MUST_BE_UNSET",
+      "HOME": "/Users/spensermcconnell"
+    },
+    "preflight_assertions": [
+      "/bin/bash -c type -P limactl equals /usr/local/bin/limactl under the exact environment",
+      "type -P cargo equals /Users/spensermcconnell/.cargo/bin/cargo",
+      "type -P rustc equals /Users/spensermcconnell/.cargo/bin/rustc",
+      "type -P bash equals /opt/homebrew/bin/bash",
+      "/usr/local/bin/limactl retains the fixed no-follow identity"
+    ],
+    "execution_rule": "The exact environment must be applied to the installer process itself from exec start, not only to earlier preflight commands or child lifecycle commands."
+  },
+  "retained_authority": [
+    "0040 canonical installer mirror target exception remains in force",
+    "all attempt-7 MAC-only, direct-TTY, restoration, source, sentinel, and successor fences remain in force"
+  ],
+  "prohibited_actions": [
+    "ambient PATH inheritance for the canonical installer",
+    "invoking /opt/homebrew/bin/limactl",
+    "source edit or installer substitution",
+    "reuse of attempt-7 blocked artifact as clean evidence",
+    "MAC-CLOSEOUT or successor dispatch before validated EVIDENCE_CLEAN",
+    "task or worktree archival"
+  ],
+  "terminal_requirements": {
+    "fresh_attempt_nonce_required": true,
+    "full_packet_restart_from_premutation_baseline": true,
+    "exact_restoration_required": true,
+    "return_meta_thread_id": "019fd8c3-b12c-7e73-919f-898600ab0f64",
+    "successor_held_until_validated_clean_evidence": true
+  }
+}
