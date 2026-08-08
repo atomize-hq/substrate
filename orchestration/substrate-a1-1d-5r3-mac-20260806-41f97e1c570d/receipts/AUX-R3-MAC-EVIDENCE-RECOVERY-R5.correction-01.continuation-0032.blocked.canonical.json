@@ -1,0 +1,22 @@
+{
+  "protocol": "codex.top-level-task-receipt.v1",
+  "orchestration_id": "substrate-a1-1d-5r3-mac-20260806-41f97e1c570d",
+  "dispatch_nonce": "e480367f5a8308d8ee73f97eb7734c80bd49e37a31c3a70a6e663668d622e70e",
+  "increment": "AUX-R3-MAC-EVIDENCE-RECOVERY-R5",
+  "status": "BLOCKED_CONTRADICTION",
+  "increment_task": {
+    "thread_id": "019fddab-1dd2-7570-9bd3-7f3841ce0283",
+    "host_id": "local"
+  },
+  "expected_base": {
+    "commit": "05d655fa1458a276f179d12057cbda772cc51eb6",
+    "tree": "845694f733fccbfcd3703957bf4976da0ed59b40"
+  },
+  "blocker": {
+    "summary": "The CLEAN R5 correction subject is staged, but diff-check reports review-metadata trailing whitespace.",
+    "details": "Independent verification found the receipt under-reported the exact set: three immutable original R5 review Markdown files and three mutable correction-01 review Markdown files contain trailing spaces. The four original artifacts retain their authority-bound hashes; the three new correction lens files may receive mechanical whitespace cleanup without changing the product subject or reopening review. The staged 23-path subject is preserved; remote/base unchanged; no commit/push/native/R6 action occurred.",
+    "required_authority": "Preserve all four original R5 review artifacts byte-for-byte and waive diff-check only for their exact paths/hashes. Mechanically remove trailing whitespace from the three new correction review Markdown files, revalidate the correction record, and require scoped diff-check for every non-immutable path.",
+    "handoff_prompt": "Resume the same staged R5 correction worktree under continuation 0033. Do not unstage/reset/clean. Remove only trailing whitespace from the three correction-01 review Markdown lens files; keep the original four R5 review artifacts exact. Revalidate the new CLEAN record, run scoped diff-check excluding only the exact immutable original four, verify their hashes, then commit/push the complete 23-path subject if all other gates remain green. Do not dispatch R6."
+  },
+  "next_increment": "AUX-R3-MAC-EVIDENCE-RECOVERY-R6"
+}

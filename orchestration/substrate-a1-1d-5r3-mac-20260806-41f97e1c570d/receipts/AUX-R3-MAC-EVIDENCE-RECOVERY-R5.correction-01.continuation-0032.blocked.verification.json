@@ -1,0 +1,55 @@
+{
+  "protocol": "codex.top-level-task-receipt-verification.v1",
+  "orchestration_id": "substrate-a1-1d-5r3-mac-20260806-41f97e1c570d",
+  "increment": "AUX-R3-MAC-EVIDENCE-RECOVERY-R5",
+  "packet_id": "AUX-R3-MAC-EVIDENCE-RECOVERY-R5-CORRECTION-01",
+  "continuation_nonce": "4ebe6614bf0515a5100e3d1598ddc3d51480de18ae8bbda650fa12c8916e674f",
+  "verified_at_utc": "2026-08-08T00:38:31Z",
+  "raw_receipt_path": "receipts/AUX-R3-MAC-EVIDENCE-RECOVERY-R5.correction-01.continuation-0032.blocked.raw.json",
+  "canonical_receipt_path": "receipts/AUX-R3-MAC-EVIDENCE-RECOVERY-R5.correction-01.continuation-0032.blocked.canonical.json",
+  "terminal_barrier": {
+    "thread_id": "019fddab-1dd2-7570-9bd3-7f3841ce0283",
+    "host_id": "local",
+    "turn_id": "019fde8b-1bde-7801-8daf-8d32bb065115",
+    "status": "completed",
+    "thread_status": "idle",
+    "cursor": "02c3d9a2-cefa-4c23-ab5f-aab2a1493429:17"
+  },
+  "independent_observation": {
+    "worktree": "/Users/spensermcconnell/.codex/worktrees/686b/substrate",
+    "head": "05d655fa1458a276f179d12057cbda772cc51eb6",
+    "head_tree": "845694f733fccbfcd3703957bf4976da0ed59b40",
+    "index_tree": "6b8e4300d39d960b1b9c0b849b56d018c9a0ba8e",
+    "live_remote": "05d655fa1458a276f179d12057cbda772cc51eb6",
+    "status_entry_count": 23,
+    "staged_paths": 23,
+    "unstaged_paths": 0,
+    "cached_binary_diff_sha256": "sha256:1a5d227ee9d0734e4fbadf56fd4292a3f3040d18d205a9e93b383e23404bc334"
+  },
+  "review_verification": {
+    "record_path": "llm-last-mile/runtime-refactor/review-control/r3-mac-evidence-recovery-r5-correction-01-review-cycle-record.json",
+    "record_sha256": "sha256:2e0695c0fd3d5c282d85628ab54c5c4df342a7c71025ca356e633f33ce38a5f6",
+    "validator": "VALID",
+    "terminal": "CLEAN"
+  },
+  "immutable_prior_artifacts": {
+    "llm-last-mile/runtime-refactor/review-control/r3-mac-evidence-recovery-r5-review-allowlist-evidence.md": "sha256:d816b0e02ee9881c7ed4bf630cea31e53b2d9a34b047d0142455ae3d7d0f9396",
+    "llm-last-mile/runtime-refactor/review-control/r3-mac-evidence-recovery-r5-review-authority-security.md": "sha256:648cd48bbfef59c7c72c1e0616f95bd06971f02d22d3b8e7b49ab35de88d0d52",
+    "llm-last-mile/runtime-refactor/review-control/r3-mac-evidence-recovery-r5-review-lifecycle-convergence.md": "sha256:65c947ae63db721ed02dd7dfe6e783103f9d38d94a555ea6b2a53b9d8e89310a",
+    "llm-last-mile/runtime-refactor/review-control/r3-mac-evidence-recovery-r5-review-cycle-record.json": "sha256:db01b433cde39ed5ec8bd6a8ffbc628105a60f6ff2315edbd38501f25847eced"
+  },
+  "repo_truth_correction": {
+    "receipt_claim_complete": false,
+    "additional_trailing_whitespace_paths": [
+      "llm-last-mile/runtime-refactor/review-control/r3-mac-evidence-recovery-r5-correction-01-review-allowlist-evidence.md",
+      "llm-last-mile/runtime-refactor/review-control/r3-mac-evidence-recovery-r5-correction-01-review-authority-security.md",
+      "llm-last-mile/runtime-refactor/review-control/r3-mac-evidence-recovery-r5-correction-01-review-lifecycle-convergence.md"
+    ],
+    "mechanical_cleanup_allowed": true,
+    "product_subject_change": false,
+    "review_reopen_required": false
+  },
+  "verdict": "ACCEPTED_NON_ADVANCING_BLOCK_AND_ADJUDICATED_FOR_SCOPED_PUBLICATION_GATE",
+  "raw_receipt_sha256": "sha256:366a8359f5bfbfe0631f9b51ce7514cd7f088737769a55984ea80f2a3b4eb7b9",
+  "canonical_receipt_sha256": "sha256:49dceb7ebba42375546afc0cfa9e1c06c2dd5acdf3921558fc23e463592822e2"
+}

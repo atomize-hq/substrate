@@ -1,0 +1,41 @@
+{
+  "schema": "codex.top-level-task-receipt.v1",
+  "status": "BLOCKED_CONTRADICTION",
+  "increment": "AUX-R3-MAC-EVIDENCE-RECOVERY-R5",
+  "packet_id": "AUX-R3-MAC-EVIDENCE-RECOVERY-R5-CORRECTION-01",
+  "original_dispatch_nonce": "e480367f5a8308d8ee73f97eb7734c80bd49e37a31c3a70a6e663668d622e70e",
+  "correction_continuation_nonce": "4ebe6614bf0515a5100e3d1598ddc3d51480de18ae8bbda650fa12c8916e674f",
+  "increment_task_thread_id": "019fddab-1dd2-7570-9bd3-7f3841ce0283",
+  "increment_task_host_id": "local",
+  "expected_base_commit": "05d655fa1458a276f179d12057cbda772cc51eb6",
+  "expected_base_tree": "845694f733fccbfcd3703957bf4976da0ed59b40",
+  "publication": {
+    "mode": "remote",
+    "remote": "origin",
+    "target_ref": "refs/heads/feat/internal-host-orchestrator-world-dispatch-bootstrap",
+    "live_remote_at_stop": "05d655fa1458a276f179d12057cbda772cc51eb6",
+    "published": false
+  },
+  "subject_fingerprint": "sha256:a7a1d181d2baa53cb0a914be3a999681e39588d56dce627c963ce686f61d94db",
+  "review": {
+    "correction_record": "llm-last-mile/runtime-refactor/review-control/r3-mac-evidence-recovery-r5-correction-01-review-cycle-record.json",
+    "correction_record_sha256": "sha256:2e0695c0fd3d5c282d85628ab54c5c4df342a7c71025ca356e633f33ce38a5f6",
+    "validation": "VALID",
+    "final_cycle": "supplemental-causal-2",
+    "final_verdict": "CLEAN",
+    "finding_disposition": "All correction P1/P2 findings remediated; final fresh supplemental-causal-2 review found no direct/unmasked P1/P2."
+  },
+  "contradiction": {
+    "gate": "git diff --cached --check",
+    "evidence": "Staging the complete exact 23-path subject reports trailing whitespace in the immutable original R5 review Markdown artifacts.",
+    "required_authority": "Choose a precise disposition for immutable original review metadata versus diff-check."
+  },
+  "preserved_state": {
+    "worktree": "/Users/spensermcconnell/.codex/worktrees/686b/substrate",
+    "status_entries": 23,
+    "staged_paths": 23,
+    "unstaged_product_changes_after_stage": 0,
+    "note": "No commit, push, reset, clean, rebase, archive, donor mutation, native action, or R6 work occurred."
+  },
+  "next_increment": "AUX-R3-MAC-EVIDENCE-RECOVERY-R6"
+}

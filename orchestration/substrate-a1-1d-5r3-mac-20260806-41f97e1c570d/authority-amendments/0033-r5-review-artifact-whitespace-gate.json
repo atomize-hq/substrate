@@ -1,0 +1,49 @@
+{
+  "protocol": "codex.orchestration-authority-amendment.v1",
+  "orchestration_id": "substrate-a1-1d-5r3-mac-20260806-41f97e1c570d",
+  "amendment_id": "0033-r5-review-artifact-whitespace-gate",
+  "authority_source": "meta authority for a typical publication-gate contradiction inside the R5 MAC corridor",
+  "authorized_increment": "AUX-R3-MAC-EVIDENCE-RECOVERY-R5",
+  "corrective_packet_id": "AUX-R3-MAC-EVIDENCE-RECOVERY-R5-CORRECTION-01",
+  "existing_task": {
+    "thread_id": "019fddab-1dd2-7570-9bd3-7f3841ce0283",
+    "host_id": "local",
+    "worktree": "/Users/spensermcconnell/.codex/worktrees/686b/substrate",
+    "original_dispatch_nonce": "e480367f5a8308d8ee73f97eb7734c80bd49e37a31c3a70a6e663668d622e70e",
+    "prior_continuation_nonce": "4ebe6614bf0515a5100e3d1598ddc3d51480de18ae8bbda650fa12c8916e674f",
+    "continuation_nonce": "b48b65d2ede214b5c02350259ba2b32fe9e2bdacee279b7f85a3e5de10ee2dd4",
+    "staged_path_count": 23,
+    "unstaged_path_count": 0,
+    "cached_binary_diff_sha256": "sha256:1a5d227ee9d0734e4fbadf56fd4292a3f3040d18d205a9e93b383e23404bc334",
+    "subject_fingerprint": "sha256:a7a1d181d2baa53cb0a914be3a999681e39588d56dce627c963ce686f61d94db",
+    "clean_review_record_sha256": "sha256:2e0695c0fd3d5c282d85628ab54c5c4df342a7c71025ca356e633f33ce38a5f6"
+  },
+  "decision": "Preserve the four original R5 review artifacts at their exact authority-bound hashes and waive whitespace checking only for those exact paths. Mechanically remove trailing whitespace from the three new correction-01 review Markdown lens files, stage their corrected bytes, and keep diff-check mandatory for every other path.",
+  "immutable_exceptions": {
+    "llm-last-mile/runtime-refactor/review-control/r3-mac-evidence-recovery-r5-review-allowlist-evidence.md": "sha256:d816b0e02ee9881c7ed4bf630cea31e53b2d9a34b047d0142455ae3d7d0f9396",
+    "llm-last-mile/runtime-refactor/review-control/r3-mac-evidence-recovery-r5-review-authority-security.md": "sha256:648cd48bbfef59c7c72c1e0616f95bd06971f02d22d3b8e7b49ab35de88d0d52",
+    "llm-last-mile/runtime-refactor/review-control/r3-mac-evidence-recovery-r5-review-lifecycle-convergence.md": "sha256:65c947ae63db721ed02dd7dfe6e783103f9d38d94a555ea6b2a53b9d8e89310a",
+    "llm-last-mile/runtime-refactor/review-control/r3-mac-evidence-recovery-r5-review-cycle-record.json": "sha256:db01b433cde39ed5ec8bd6a8ffbc628105a60f6ff2315edbd38501f25847eced"
+  },
+  "mechanical_cleanup_paths": [
+    "llm-last-mile/runtime-refactor/review-control/r3-mac-evidence-recovery-r5-correction-01-review-allowlist-evidence.md",
+    "llm-last-mile/runtime-refactor/review-control/r3-mac-evidence-recovery-r5-correction-01-review-authority-security.md",
+    "llm-last-mile/runtime-refactor/review-control/r3-mac-evidence-recovery-r5-correction-01-review-lifecycle-convergence.md"
+  ],
+  "required_publication_gate": {
+    "immutable_hash_gate": "All four exact hashes must match immediately before commit and after commit.",
+    "scoped_diff_check": "git diff --cached --check over the full staged subject excluding only the four immutable paths must pass. The three correction files are not excluded.",
+    "correction_review": "New correction record remains VALID and CLEAN after mechanical metadata cleanup; product/test subject fingerprint remains unchanged.",
+    "full_diff_disposition": "A full diff-check failure is accepted only when every reported line belongs to the three immutable original Markdown files and their hashes match. Any other reported path blocks.",
+    "publication": "If all prior gates remain green, commit/push the complete 23-path subject as the single R5 fast-forward landing."
+  },
+  "review": "No new causal cycle is required for whitespace-only edits to review metadata; do not change findings, verdicts, subject fingerprints or product/test bytes.",
+  "hard_exclusions": [
+    "editing any original R5 review artifact",
+    "semantic edits to correction review metadata",
+    "product/test changes",
+    "unstaging/reset/clean/rebase/archive",
+    "native action or R6 work"
+  ],
+  "terminal_successor": "AUX-R3-MAC-EVIDENCE-RECOVERY-R6"
+}
