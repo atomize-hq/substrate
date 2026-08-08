@@ -57,7 +57,12 @@
     "authority_amendment_sha256": "sha256:6bd998d38beb552233b6360ac7c02c482a7c2c096ea6c6bbb6e09ba5f6c222d4",
     "prompt_path": "increments/AUX-R3-MAC-PRESTAGE-EVIDENCE-BLOCKER-CORRECTION.fixed-install-sequence-continuation.md",
     "prompt_sha256": "sha256:89dcc543df76a5e65e613126d0c7989c8dd72b461502e8305f8373304e678bcc",
-    "next_increment": "EVIDENCE:R3-MAC-IMP-01"
+    "next_increment": "EVIDENCE:R3-MAC-IMP-01",
+    "turn_id": "019fe3bf-e34a-7053-93b5-052d8bc585c5",
+    "wait_cursor": "09d2deac-230c-42d0-9957-94f004124fa0:95",
+    "thread_status": "active",
+    "turn_status": "in_progress",
+    "continuation_sent_at_utc": "2026-08-08T23:41:25Z"
   },
   "active_evidence_dispatches": [],
   "verified_evidence": [],
@@ -1450,13 +1455,13 @@
     "task_archiving_authorized": false,
     "native_actions_authorized": false,
     "successor_dispatch_authorized": false,
-    "turn_id": "019fe221-4928-7e31-9543-5a7d168da19d",
-    "wait_cursor": "09d2deac-230c-42d0-9957-94f004124fa0:92",
+    "turn_id": "019fe3bf-e34a-7053-93b5-052d8bc585c5",
+    "wait_cursor": "09d2deac-230c-42d0-9957-94f004124fa0:95",
     "delivery_path": "increments/AUX-R3-MAC-PRESTAGE-EVIDENCE-BLOCKER-CORRECTION.delivery.json",
     "dispatched_at_utc": "2026-08-08T16:07:50Z",
     "terminal": false,
-    "thread_status": "idle",
-    "turn_status": "pending",
+    "thread_status": "active",
+    "turn_status": "in_progress",
     "receipt_path": "receipts/AUX-R3-MAC-PRESTAGE-EVIDENCE-BLOCKER-CORRECTION.blocked.json",
     "receipt_sha256": "sha256:146a79c2fea7f2519e657a7fdd3f9e480a519eda08650865813ef03282fa2fce",
     "verification_path": "receipts/AUX-R3-MAC-PRESTAGE-EVIDENCE-BLOCKER-CORRECTION.blocked.verification.json",
@@ -1474,6 +1479,7 @@
     "fixed_install_sequence_amendment_sha256": "sha256:6bd998d38beb552233b6360ac7c02c482a7c2c096ea6c6bbb6e09ba5f6c222d4",
     "fixed_install_sequence_prompt_path": "increments/AUX-R3-MAC-PRESTAGE-EVIDENCE-BLOCKER-CORRECTION.fixed-install-sequence-continuation.md",
     "fixed_install_sequence_prompt_sha256": "sha256:89dcc543df76a5e65e613126d0c7989c8dd72b461502e8305f8373304e678bcc",
-    "continuation_authorized_at_utc": "2026-08-08T23:39:55Z"
+    "continuation_authorized_at_utc": "2026-08-08T23:39:55Z",
+    "continuation_sent_at_utc": "2026-08-08T23:41:25Z"
   }
 }
