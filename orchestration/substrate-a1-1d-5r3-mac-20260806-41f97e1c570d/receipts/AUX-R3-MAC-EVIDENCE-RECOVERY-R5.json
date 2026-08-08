@@ -1,0 +1,73 @@
+{
+  "schema": "codex.top-level-task-receipt.v1",
+  "status": "LANDED_CLEAN",
+  "increment": "AUX-R3-MAC-EVIDENCE-RECOVERY-R5",
+  "packet_id": "AUX-R3-MAC-EVIDENCE-RECOVERY-R5-CORRECTION-01",
+  "original_dispatch_nonce": "e480367f5a8308d8ee73f97eb7734c80bd49e37a31c3a70a6e663668d622e70e",
+  "correction_continuation_nonce": "4ebe6614bf0515a5100e3d1598ddc3d51480de18ae8bbda650fa12c8916e674f",
+  "continuation_nonce": "b48b65d2ede214b5c02350259ba2b32fe9e2bdacee279b7f85a3e5de10ee2dd4",
+  "increment_task_thread_id": "019fddab-1dd2-7570-9bd3-7f3841ce0283",
+  "increment_task_host_id": "local",
+  "expected_base_commit": "05d655fa1458a276f179d12057cbda772cc51eb6",
+  "expected_base_tree": "845694f733fccbfcd3703957bf4976da0ed59b40",
+  "publication": {
+    "mode": "remote",
+    "remote": "origin",
+    "target_ref": "refs/heads/feat/internal-host-orchestrator-world-dispatch-bootstrap",
+    "commit": "a9626bc10a1737416c1d8f7f48630850118f3e6a",
+    "tree": "3f7cdf20125a847a3dfaa472d3797759b5cf6737",
+    "fast_forward_parent": "05d655fa1458a276f179d12057cbda772cc51eb6",
+    "live_remote_verified": "a9626bc10a1737416c1d8f7f48630850118f3e6a"
+  },
+  "subject_fingerprint": "sha256:a7a1d181d2baa53cb0a914be3a999681e39588d56dce627c963ce686f61d94db",
+  "changed_paths": [
+    "crates/common/src/lib.rs",
+    "crates/common/src/managed_artifact.rs",
+    "crates/shell/src/execution/managed_lifecycle.rs",
+    "crates/shell/src/execution/managed_lifecycle/macos_client.rs",
+    "crates/shell/src/execution/mod.rs",
+    "crates/shell/src/lib.rs",
+    "crates/shell/tests/managed_lifecycle_v1.rs",
+    "llm-last-mile/runtime-refactor/review-control/r3-mac-evidence-recovery-r5-correction-01-review-allowlist-evidence.md",
+    "llm-last-mile/runtime-refactor/review-control/r3-mac-evidence-recovery-r5-correction-01-review-authority-security.md",
+    "llm-last-mile/runtime-refactor/review-control/r3-mac-evidence-recovery-r5-correction-01-review-cycle-record.json",
+    "llm-last-mile/runtime-refactor/review-control/r3-mac-evidence-recovery-r5-correction-01-review-lifecycle-convergence.md",
+    "llm-last-mile/runtime-refactor/review-control/r3-mac-evidence-recovery-r5-review-allowlist-evidence.md",
+    "llm-last-mile/runtime-refactor/review-control/r3-mac-evidence-recovery-r5-review-authority-security.md",
+    "llm-last-mile/runtime-refactor/review-control/r3-mac-evidence-recovery-r5-review-cycle-record.json",
+    "llm-last-mile/runtime-refactor/review-control/r3-mac-evidence-recovery-r5-review-lifecycle-convergence.md",
+    "scripts/mac/lima-lifecycle.sh",
+    "scripts/mac/lima-stop.sh",
+    "scripts/mac/lima-warm.sh",
+    "scripts/substrate/dev-install-substrate.sh",
+    "src/bin/substrate-lifecycle-control.rs",
+    "src/bin/substrate-lifecycle-macos.rs",
+    "tests/installers/dev_install_bash32_fd_regression.sh",
+    "tests/mac/lifecycle_r3.sh"
+  ],
+  "review": {
+    "correction_record": "llm-last-mile/runtime-refactor/review-control/r3-mac-evidence-recovery-r5-correction-01-review-cycle-record.json",
+    "correction_record_sha256": "sha256:2e0695c0fd3d5c282d85628ab54c5c4df342a7c71025ca356e633f33ce38a5f6",
+    "validation": "VALID CLEAN",
+    "final_cycle": "supplemental-causal-2",
+    "finding_disposition": "All correction P1/P2 remediated; fresh final supplemental-causal-2 review CLEAN with no direct/unmasked P1/P2."
+  },
+  "checks": {
+    "deterministic_proof_log_sha256": "sha256:53c5456af77cc6541ebab36ee0430b7ab27d4793c411b4424e63b05c340a9d05",
+    "passed": [
+      "cargo test -p substrate-common --lib mac",
+      "cargo test -p shell --test managed_lifecycle_v1",
+      "cargo test --bin substrate-lifecycle-macos",
+      "cargo check --bin substrate-lifecycle-control --bin substrate-lifecycle-macos",
+      "cargo check --target x86_64-apple-darwin --bin substrate-lifecycle-control --bin substrate-lifecycle-macos",
+      "bash tests/mac/lifecycle_r3.sh",
+      "bash tests/installers/dev_install_bash32_fd_regression.sh",
+      "cargo fmt --all -- --check",
+      "full staged git diff --check excluding only four immutable original review paths",
+      "allowlist/inventory, product-subject fingerprint, secret scan, static MAC-only containment, base/tree/ancestry/remote, post-push cleanliness"
+    ],
+    "change_detection": "GitNexus unavailable; exact manual fallback completed."
+  },
+  "clean_status": true,
+  "next_increment": "AUX-R3-MAC-EVIDENCE-RECOVERY-R6"
+}

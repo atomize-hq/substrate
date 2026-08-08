@@ -1,0 +1,66 @@
+{
+  "protocol": "codex.top-level-task-receipt.v1",
+  "orchestration_id": "substrate-a1-1d-5r3-mac-20260806-41f97e1c570d",
+  "dispatch_nonce": "e480367f5a8308d8ee73f97eb7734c80bd49e37a31c3a70a6e663668d622e70e",
+  "increment": "AUX-R3-MAC-EVIDENCE-RECOVERY-R5",
+  "status": "LANDED_CLEAN",
+  "increment_task": {
+    "thread_id": "019fddab-1dd2-7570-9bd3-7f3841ce0283",
+    "host_id": "local"
+  },
+  "expected_base": {
+    "commit": "05d655fa1458a276f179d12057cbda772cc51eb6",
+    "tree": "845694f733fccbfcd3703957bf4976da0ed59b40"
+  },
+  "landed": {
+    "commit": "a9626bc10a1737416c1d8f7f48630850118f3e6a",
+    "tree": "3f7cdf20125a847a3dfaa472d3797759b5cf6737",
+    "target_ref": "refs/heads/feat/internal-host-orchestrator-world-dispatch-bootstrap",
+    "live_remote": "a9626bc10a1737416c1d8f7f48630850118f3e6a"
+  },
+  "subject_fingerprint": "sha256:a7a1d181d2baa53cb0a914be3a999681e39588d56dce627c963ce686f61d94db",
+  "changed_files": [
+    "crates/common/src/lib.rs",
+    "crates/common/src/managed_artifact.rs",
+    "crates/shell/src/execution/managed_lifecycle.rs",
+    "crates/shell/src/execution/managed_lifecycle/macos_client.rs",
+    "crates/shell/src/execution/mod.rs",
+    "crates/shell/src/lib.rs",
+    "crates/shell/tests/managed_lifecycle_v1.rs",
+    "llm-last-mile/runtime-refactor/review-control/r3-mac-evidence-recovery-r5-correction-01-review-allowlist-evidence.md",
+    "llm-last-mile/runtime-refactor/review-control/r3-mac-evidence-recovery-r5-correction-01-review-authority-security.md",
+    "llm-last-mile/runtime-refactor/review-control/r3-mac-evidence-recovery-r5-correction-01-review-cycle-record.json",
+    "llm-last-mile/runtime-refactor/review-control/r3-mac-evidence-recovery-r5-correction-01-review-lifecycle-convergence.md",
+    "llm-last-mile/runtime-refactor/review-control/r3-mac-evidence-recovery-r5-review-allowlist-evidence.md",
+    "llm-last-mile/runtime-refactor/review-control/r3-mac-evidence-recovery-r5-review-authority-security.md",
+    "llm-last-mile/runtime-refactor/review-control/r3-mac-evidence-recovery-r5-review-cycle-record.json",
+    "llm-last-mile/runtime-refactor/review-control/r3-mac-evidence-recovery-r5-review-lifecycle-convergence.md",
+    "scripts/mac/lima-lifecycle.sh",
+    "scripts/mac/lima-stop.sh",
+    "scripts/mac/lima-warm.sh",
+    "scripts/substrate/dev-install-substrate.sh",
+    "src/bin/substrate-lifecycle-control.rs",
+    "src/bin/substrate-lifecycle-macos.rs",
+    "tests/installers/dev_install_bash32_fd_regression.sh",
+    "tests/mac/lifecycle_r3.sh"
+  ],
+  "review": {
+    "packet_id": "AUX-R3-MAC-EVIDENCE-RECOVERY-R5-CORRECTION-01",
+    "record_path": "/Users/spensermcconnell/.codex/worktrees/686b/substrate/llm-last-mile/runtime-refactor/review-control/r3-mac-evidence-recovery-r5-correction-01-review-cycle-record.json",
+    "record_sha256": "sha256:2e0695c0fd3d5c282d85628ab54c5c4df342a7c71025ca356e633f33ce38a5f6",
+    "validated": true,
+    "terminal": "CLEAN",
+    "p1": 0,
+    "p2": 0,
+    "p3_p4_disposition": "No correction P3/P4 requiring inventory change."
+  },
+  "verification": {
+    "required_checks_passed": true,
+    "allowlist_passed": true,
+    "change_detection_passed": true,
+    "checkout_clean": true,
+    "ahead": 0,
+    "behind": 0
+  },
+  "next_increment": "AUX-R3-MAC-EVIDENCE-RECOVERY-R6"
+}

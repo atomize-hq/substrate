@@ -1,0 +1,41 @@
+{
+  "protocol": "codex.top-level-task-receipt-verification.v1",
+  "orchestration_id": "substrate-a1-1d-5r3-mac-20260806-41f97e1c570d",
+  "increment": "AUX-R3-MAC-EVIDENCE-RECOVERY-R5",
+  "packet_id": "AUX-R3-MAC-EVIDENCE-RECOVERY-R5-CORRECTION-01",
+  "verified_at_utc": "2026-08-08T00:42:48Z",
+  "raw_receipt_path": "receipts/AUX-R3-MAC-EVIDENCE-RECOVERY-R5.json",
+  "canonical_receipt_path": "receipts/AUX-R3-MAC-EVIDENCE-RECOVERY-R5.canonical.json",
+  "terminal_barrier": {
+    "thread_id": "019fddab-1dd2-7570-9bd3-7f3841ce0283",
+    "host_id": "local",
+    "turn_id": "019fdecf-0af3-7e32-8f7a-b7e78b85ce08",
+    "status": "completed",
+    "thread_status": "idle",
+    "cursor": "02c3d9a2-cefa-4c23-ab5f-aab2a1493429:19"
+  },
+  "publication": {
+    "live_remote": "a9626bc10a1737416c1d8f7f48630850118f3e6a",
+    "commit": "a9626bc10a1737416c1d8f7f48630850118f3e6a",
+    "tree": "3f7cdf20125a847a3dfaa472d3797759b5cf6737",
+    "sole_parent": "05d655fa1458a276f179d12057cbda772cc51eb6",
+    "ancestor_verified": true,
+    "changed_file_union_exact": true,
+    "worktree_clean": true,
+    "ahead": 0,
+    "behind": 0,
+    "protected_checkout_clean": true
+  },
+  "review": {
+    "record_path": "llm-last-mile/runtime-refactor/review-control/r3-mac-evidence-recovery-r5-correction-01-review-cycle-record.json",
+    "record_sha256": "sha256:2e0695c0fd3d5c282d85628ab54c5c4df342a7c71025ca356e633f33ce38a5f6",
+    "validator": "VALID",
+    "terminal": "CLEAN",
+    "open_p1": 0,
+    "open_p2": 0
+  },
+  "immutable_original_review_hashes_verified": true,
+  "verdict": "VERIFIED_LANDED_CLEAN",
+  "raw_receipt_sha256": "sha256:836a58004f778d297e0e96c1ff90c936081144e2009ac9788f620806987d663a",
+  "canonical_receipt_sha256": "sha256:762388af7610c013010d170f25b2a4f26df2e33d0a1a5bde871abe4eb77dbecd"
+}
