@@ -1,0 +1,49 @@
+{
+  "protocol": "codex.top-level-evidence-continuation-authority.v1",
+  "orchestration_id": "substrate-a1-1d-5r3-mac-20260806-41f97e1c570d",
+  "evidence_id": "EVIDENCE:R3-MAC-IMP-01",
+  "attempt": 4,
+  "dispatch_nonce": "4469a78c46eb54658328a420ac888e93ffc60d53fe472b97def8f94ea2ef0225",
+  "evidence_task": {
+    "thread_id": "019fdf7f-c7d6-7112-9cda-a05db972da7f",
+    "host_id": "local",
+    "worktree": "/Users/spensermcconnell/.codex/worktrees/fa11/substrate"
+  },
+  "source": {
+    "publication_mode": "remote",
+    "remote": "origin",
+    "target_ref": "refs/heads/feat/internal-host-orchestrator-world-dispatch-bootstrap",
+    "commit": "3d6b2eb1b02b1a24a1e055d12e5cbdb9b0312774",
+    "tree": "d59cac92405f06024cfcde0a2c22a4cf1255c3d7",
+    "live_remote": "3d6b2eb1b02b1a24a1e055d12e5cbdb9b0312774"
+  },
+  "project": {
+    "id": "local-b2016f8a311fef93149e42eaec4d704d",
+    "path": "/Users/spensermcconnell/__Active_Code/atomize-hq/substrate",
+    "host_id": "local"
+  },
+  "superseded_attempt": {
+    "attempt": 3,
+    "dispatch_nonce": "7c83b749b2360596d88553c24c52d89bdbfc7e2024170712b7d248e6b6ae31b7",
+    "status": "BLOCKED_PLATFORM_HANDOFF_REQUIRED",
+    "artifact_is_diagnostic_only": true
+  },
+  "platform_reauthorization": {
+    "user_reported_command": "/usr/bin/sudo -v && /usr/bin/sudo -n true",
+    "user_reported_success": true,
+    "meta_reverified_command": "/usr/bin/sudo -n true",
+    "meta_reverified_exit": 0,
+    "sentinel_path": "/etc/sudoers.d/substrate-r3-mac-evidence",
+    "sentinel_observation": "root:wheel 0440",
+    "verified_at_utc": "2026-08-08T04:07:02Z"
+  },
+  "authority": {
+    "resume_same_task": true,
+    "complete_native_run": true,
+    "agent_derives_ih_pm": true,
+    "agent_operates_real_terminal_and_guest_tty": true,
+    "additional_user_interaction_required": false,
+    "task_archiving_authorized": false,
+    "successor_authorized": false
+  }
+}
