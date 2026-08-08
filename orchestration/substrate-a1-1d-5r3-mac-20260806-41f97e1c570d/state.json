@@ -1,7 +1,7 @@
 {
   "protocol": "codex.top-level-orchestration-state.v1",
   "orchestration_id": "substrate-a1-1d-5r3-mac-20260806-41f97e1c570d",
-  "status": "DISPATCHING",
+  "status": "RUNNING",
   "dispatch_authorized": true,
   "publication_mode": "remote",
   "remote": "origin",
@@ -59,7 +59,13 @@
     "skill_hydration_sha256": "sha256:e3de93f358594033ed59696a9624d2d0ac2fd0c2aa7ddf4a532810a05b262282",
     "model": "gpt-5.6-terra",
     "reasoning": "xhigh",
-    "authority_persisted_at_utc": "2026-08-08T00:49:20Z"
+    "authority_persisted_at_utc": "2026-08-08T00:49:20Z",
+    "status": "RUNNING",
+    "binding_sent_at_utc": "2026-08-08T00:49:13Z",
+    "delivery_path": "increments/AUX-R3-MAC-EVIDENCE-RECOVERY-R6.delivery.json",
+    "delivery_sha256": "sha256:a4d854928a1a24a2d818932db959ea76e53e178625fed857be09ebe2b1f02d9d",
+    "turn_id": "019fded8-6adb-7223-9a64-322e71a00c59",
+    "wait_cursor": "72bc6338-004b-44ac-9181-551e0e60ffb5:1"
   },
   "active_evidence_dispatches": [],
   "verified_evidence": [],
@@ -310,7 +316,7 @@
     "successor_dispatched": true
   },
   "auxiliary_recovery_implementation": {
-    "status": "DISPATCHING",
+    "status": "RUNNING",
     "sequence": [
       "AUX-R3-MAC-EVIDENCE-RECOVERY-R1",
       "AUX-R3-MAC-EVIDENCE-RECOVERY-R2",
@@ -345,7 +351,7 @@
     "skill_hydration_path": "increments/AUX-R3-MAC-EVIDENCE-RECOVERY-R6.skill-hydration.json",
     "model": "gpt-5.6-terra",
     "reasoning": "xhigh",
-    "binding_sent_at_utc": "2026-08-07T19:21:45.949072Z",
+    "binding_sent_at_utc": "2026-08-08T00:49:13Z",
     "receipt_path": "receipts/AUX-R3-MAC-EVIDENCE-RECOVERY-R5.json",
     "receipt_sha256": "sha256:836a58004f778d297e0e96c1ff90c936081144e2009ac9788f620806987d663a",
     "verification_path": "receipts/AUX-R3-MAC-EVIDENCE-RECOVERY-R5.verification.json",
@@ -834,7 +840,11 @@
     "canonical_receipt_path": "receipts/AUX-R3-MAC-EVIDENCE-RECOVERY-R5.canonical.json",
     "contract_path": "increments/AUX-R3-MAC-EVIDENCE-RECOVERY-R6.contract.md",
     "initial_prompt_path": "increments/AUX-R3-MAC-EVIDENCE-RECOVERY-R6.initial-prompt.md",
-    "prepared_at_utc": "2026-08-08T00:46:25Z"
+    "prepared_at_utc": "2026-08-08T00:46:25Z",
+    "delivery_path": "increments/AUX-R3-MAC-EVIDENCE-RECOVERY-R6.delivery.json",
+    "delivery_sha256": "sha256:a4d854928a1a24a2d818932db959ea76e53e178625fed857be09ebe2b1f02d9d",
+    "turn_id": "019fded8-6adb-7223-9a64-322e71a00c59",
+    "wait_cursor": "72bc6338-004b-44ac-9181-551e0e60ffb5:1"
   },
   "standing_successor_authority": {
     "source_amendment": "authority-amendments/0011-r3-mac-evidence-recovery-r2-and-standing-successors.json",

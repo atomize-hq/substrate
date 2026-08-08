@@ -1,0 +1,16 @@
+{
+  "protocol": "codex.top-level-task-dispatch-delivery.v1",
+  "orchestration_id": "substrate-a1-1d-5r3-mac-20260806-41f97e1c570d",
+  "increment": "AUX-R3-MAC-EVIDENCE-RECOVERY-R6",
+  "dispatch_nonce": "1b9fe0a5eee31553d83daa75ccdde591ea5a4b797a81f14c3f3d3d839bc9cd70",
+  "thread_id": "019fded7-05c4-7c61-9f7d-5fc456bcda6d",
+  "host_id": "local",
+  "turn_id": "019fded8-6adb-7223-9a64-322e71a00c59",
+  "wait_cursor": "72bc6338-004b-44ac-9181-551e0e60ffb5:1",
+  "thread_status": "active",
+  "turn_status": "inProgress",
+  "binding_prompt_path": "increments/AUX-R3-MAC-EVIDENCE-RECOVERY-R6.binding-prompt.md",
+  "binding_prompt_sha256": "sha256:c26edc1e274f6a098f919c23328e8cb64c802cde62c343cac072d4da1790e9ef",
+  "binding_sent_at_utc": "2026-08-08T00:49:13Z",
+  "verified_at_utc": "2026-08-08T00:49:14Z"
+}
