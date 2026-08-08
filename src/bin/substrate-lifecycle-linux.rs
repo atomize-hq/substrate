@@ -112,14 +112,14 @@ unsafe extern "C" {
         optval: *mut core::ffi::c_void,
         optlen: *mut u32,
     ) -> i32;
-    fn open(path: *const i8, flags: i32, mode: u32) -> i32;
-    fn openat(dirfd: i32, path: *const i8, flags: i32, mode: u32) -> i32;
+    fn open(path: *const core::ffi::c_char, flags: i32, mode: u32) -> i32;
+    fn openat(dirfd: i32, path: *const core::ffi::c_char, flags: i32, mode: u32) -> i32;
     fn flock(fd: i32, operation: i32) -> i32;
     fn linkat(
         olddirfd: i32,
-        oldpath: *const i8,
+        oldpath: *const core::ffi::c_char,
         newdirfd: i32,
-        newpath: *const i8,
+        newpath: *const core::ffi::c_char,
         flags: i32,
     ) -> i32;
     fn isatty(fd: i32) -> i32;
