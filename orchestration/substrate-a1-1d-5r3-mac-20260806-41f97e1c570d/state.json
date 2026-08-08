@@ -82,9 +82,14 @@
       "fixed_limactl": "/usr/local/bin/limactl",
       "artifact_root": "/Users/spensermcconnell/.codex/evidence/substrate-a1-1d-5r3-mac-20260806-41f97e1c570d/EVIDENCE-R3-MAC-IMP-01/8c5f7e13d8f10d0e6744518a0b79bb4d575d4a6cb26483f2005fef8172c72fa2",
       "task_archiving_authorized": false,
-      "thread_status": "dispatch_prepared",
-      "turn_status": "not_started",
-      "prepared_at_utc": "2026-08-08T13:21:49Z"
+      "thread_status": "active",
+      "turn_status": "inProgress",
+      "prepared_at_utc": "2026-08-08T13:21:49Z",
+      "delivery_path": "increments/EVIDENCE-R3-MAC-IMP-01.attempt-8.delivery.json",
+      "delivery_sha256": "sha256:4dd139b16df12d8041f458e618d4292609779ecc03614fb10ed59b67bd4af310",
+      "turn_id": "019fe189-dca8-7512-99d3-7604cc5f3bee",
+      "wait_cursor": "4bb095d6-02e8-4040-8ba7-3b07fc37362f:6",
+      "sent_at_utc": "2026-08-08T13:22:37Z"
     }
   ],
   "verified_evidence": [],
@@ -321,7 +326,12 @@
     "attempt_8_task_worktree": "/Users/spensermcconnell/.codex/worktrees/1626/substrate",
     "attempt_8_authority_amendment_path": "authority-amendments/0041-r3-mac-canonical-installer-fixed-path-retry.json",
     "attempt_8_authority_amendment_sha256": "sha256:3eb4250e6995c6dd91614778b7d448dc74b680e199a47d2e754330cdd0eeed38",
-    "attempt_8_path_selection_correction_applied": true
+    "attempt_8_path_selection_correction_applied": true,
+    "attempt_8_delivery_path": "increments/EVIDENCE-R3-MAC-IMP-01.attempt-8.delivery.json",
+    "attempt_8_delivery_sha256": "sha256:4dd139b16df12d8041f458e618d4292609779ecc03614fb10ed59b67bd4af310",
+    "attempt_8_turn_id": "019fe189-dca8-7512-99d3-7604cc5f3bee",
+    "attempt_8_wait_cursor": "4bb095d6-02e8-4040-8ba7-3b07fc37362f:6",
+    "attempt_8_sent_at_utc": "2026-08-08T13:22:37Z"
   },
   "auxiliary_host_preparation": {
     "status": "BLOCKED_SOURCE_CORRECTION",
@@ -1269,9 +1279,14 @@
     "fixed_limactl": "/usr/local/bin/limactl",
     "artifact_root": "/Users/spensermcconnell/.codex/evidence/substrate-a1-1d-5r3-mac-20260806-41f97e1c570d/EVIDENCE-R3-MAC-IMP-01/8c5f7e13d8f10d0e6744518a0b79bb4d575d4a6cb26483f2005fef8172c72fa2",
     "task_archiving_authorized": false,
-    "thread_status": "dispatch_prepared",
-    "turn_status": "not_started",
-    "prepared_at_utc": "2026-08-08T13:21:49Z"
+    "thread_status": "active",
+    "turn_status": "inProgress",
+    "prepared_at_utc": "2026-08-08T13:21:49Z",
+    "delivery_path": "increments/EVIDENCE-R3-MAC-IMP-01.attempt-8.delivery.json",
+    "delivery_sha256": "sha256:4dd139b16df12d8041f458e618d4292609779ecc03614fb10ed59b67bd4af310",
+    "turn_id": "019fe189-dca8-7512-99d3-7604cc5f3bee",
+    "wait_cursor": "4bb095d6-02e8-4040-8ba7-3b07fc37362f:6",
+    "sent_at_utc": "2026-08-08T13:22:37Z"
   },
   "blocker": null,
   "evidence_attempt_history": [
