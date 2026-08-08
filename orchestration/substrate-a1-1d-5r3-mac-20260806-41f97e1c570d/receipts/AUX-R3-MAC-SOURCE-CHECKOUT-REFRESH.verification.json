@@ -1,0 +1,58 @@
+{
+  "protocol": "codex.meta-auxiliary-source-checkout-refresh-verification.v1",
+  "orchestration_id": "substrate-a1-1d-5r3-mac-20260806-41f97e1c570d",
+  "packet": "AUX-R3-MAC-SOURCE-CHECKOUT-REFRESH",
+  "dispatch_nonce": "2d8c4c920d22e32e72c951edc1b52f74198f6d85764b9900d201d2e06cdb8bc3",
+  "verified": true,
+  "status": "READY_VERIFIED",
+  "terminal_barrier": {
+    "thread_id": "019fe147-e300-72c2-a394-a53f43185ceb",
+    "host_id": "local",
+    "turn_id": "019fe1b2-0579-78f2-91d4-1fafe7ebd94f",
+    "thread_status": "idle",
+    "turn_status": "completed",
+    "wait_cursor": "48c07936-b6f1-47e2-93d3-faf543564a82:7"
+  },
+  "receipt": {
+    "path": "receipts/AUX-R3-MAC-SOURCE-CHECKOUT-REFRESH.json",
+    "sha256": "sha256:e07b357b966b60c8c6d53b6096c034f6f794fb4b09ecdba4a18fb0790744d62f",
+    "protocol": "codex.auxiliary-source-checkout-refresh-receipt.v1",
+    "status": "READY"
+  },
+  "external_manifest": {
+    "path": "/Users/spensermcconnell/.codex/evidence/substrate-a1-1d-5r3-mac-20260806-41f97e1c570d/AUX-R3-MAC-EVIDENCE-PLATFORM-PREREQUISITE-PREP/2d8c4c920d22e32e72c951edc1b52f74198f6d85764b9900d201d2e06cdb8bc3/auxiliary-source-checkout-refresh-artifact-manifest.json",
+    "sha256": "sha256:a1fbe070e3869a43dcc80704b72bdc7982307463fcf2b2e189a5cb611f319398",
+    "entries": 19,
+    "all_digests_verified": true
+  },
+  "independent_source_verification": {
+    "live_remote": "a06b3fd26ceee4ece7e5bd1481981755eafcedb5",
+    "target_ref": "refs/heads/feat/internal-host-orchestrator-world-dispatch-bootstrap",
+    "from_is_ancestor_of_to": true,
+    "attached_mirror_head": "a06b3fd26ceee4ece7e5bd1481981755eafcedb5",
+    "attached_mirror_tree": "f4c396d0e28a43405a9a2b1d49a450d6df545c84",
+    "attached_mirror_symbolic_head": "refs/heads/feat/internal-host-orchestrator-world-dispatch-bootstrap",
+    "attached_mirror_clean": true,
+    "attached_mirror_target_absent": true,
+    "evidence_checkout_head": "a06b3fd26ceee4ece7e5bd1481981755eafcedb5",
+    "evidence_checkout_tree": "f4c396d0e28a43405a9a2b1d49a450d6df545c84",
+    "evidence_checkout_detached": true,
+    "evidence_checkout_clean": true
+  },
+  "independent_platform_verification": {
+    "fixed_limactl_sha256": "sha256:c126697daa485aff79552a34413e14c0e2efd43675845bee1a152f31845f1455",
+    "fixed_limactl_owner_group_mode": "root:wheel 0555",
+    "fixed_limactl_regular_single_link": true,
+    "canonical_instance_absent": true,
+    "canonical_control_root_absent": true,
+    "sudo_noninteractive": true,
+    "sudoers_sha256": "sha256:f4f85d5b2674a6505d84ee75de0a3cc8bc883bace01733bcab3b5fbd6efd4f0d",
+    "sudoers_owner_group_mode": "root:wheel 0440",
+    "protected_checkout_unchanged": true,
+    "prep_task_worktree_unchanged": true
+  },
+  "prohibited_actions_absent": true,
+  "official_evidence_run": false,
+  "successor": "EVIDENCE:R3-MAC-IMP-01 attempt 9",
+  "verified_at_utc": "2026-08-08T14:10:09Z"
+}
