@@ -30,5 +30,17 @@
   "created_at_utc": "2026-08-08T00:46:25Z",
   "authority_amendment_sha256": "sha256:345595b4324bfd3ab6162de8aa1a423487f883cd37b10aa83335e5a0132e4547",
   "contract_sha256": "sha256:9f264105bfbc2d46206dc9b34a3d7570dbfa0a538d97400a64b9142908863334",
-  "initial_prompt_sha256": "sha256:f6cca9a4b753c7552c5ee1f1d96f04b7d59f40aebac72574062bd37d8fc21a94"
+  "initial_prompt_sha256": "sha256:f6cca9a4b753c7552c5ee1f1d96f04b7d59f40aebac72574062bd37d8fc21a94",
+  "thread_id": "019fded7-05c4-7c61-9f7d-5fc456bcda6d",
+  "host_id": "local",
+  "worktree": "/Users/spensermcconnell/.codex/worktrees/1bd8/substrate",
+  "worktree_head": "a9626bc10a1737416c1d8f7f48630850118f3e6a",
+  "worktree_tree": "3f7cdf20125a847a3dfaa472d3797759b5cf6737",
+  "worktree_index_tree": "3f7cdf20125a847a3dfaa472d3797759b5cf6737",
+  "worktree_clean": true,
+  "skill_hydration_path": "increments/AUX-R3-MAC-EVIDENCE-RECOVERY-R6.skill-hydration.json",
+  "prompt_path": "increments/AUX-R3-MAC-EVIDENCE-RECOVERY-R6.prompt.md",
+  "prompt_sha256": "sha256:30356f18efc92cd54b16019bee37bc58adfeb52ffa4fa3cd0a0f5eeaed643dfd",
+  "binding_path": "increments/AUX-R3-MAC-EVIDENCE-RECOVERY-R6.binding.json",
+  "binding_prompt_path": "increments/AUX-R3-MAC-EVIDENCE-RECOVERY-R6.binding-prompt.md"
 }
