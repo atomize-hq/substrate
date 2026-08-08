@@ -1,7 +1,7 @@
 {
   "protocol": "codex.top-level-orchestration-state.v1",
   "orchestration_id": "substrate-a1-1d-5r3-mac-20260806-41f97e1c570d",
-  "status": "READY",
+  "status": "EVIDENCE_RUNNING",
   "dispatch_authorized": true,
   "publication_mode": "remote",
   "remote": "origin",
@@ -38,7 +38,31 @@
     "host_id": "local"
   },
   "active_dispatch": null,
-  "active_evidence_dispatches": [],
+  "active_evidence_dispatches": [
+    {
+      "evidence_id": "EVIDENCE:R3-MAC-IMP-01",
+      "attempt": 5,
+      "platform": "macos",
+      "project_id": "local-b2016f8a311fef93149e42eaec4d704d",
+      "project_path": "/Users/spensermcconnell/__Active_Code/atomize-hq/substrate",
+      "thread_id": "019fe147-e300-72c2-a394-a53f43185ceb",
+      "host_id": "local",
+      "worktree": "/Users/spensermcconnell/.codex/worktrees/b4fe/substrate",
+      "dispatch_nonce": "8f013a2e345b2639b09a2c6c3cc3de787bc914c51ee31132c3a0e274422ff54a",
+      "source": {
+        "publication_mode": "remote",
+        "remote": "origin",
+        "target_ref": "refs/heads/feat/internal-host-orchestrator-world-dispatch-bootstrap",
+        "commit": "1126b907df6e38043e9071da222f6c6a377b341c",
+        "tree": "3a29fa323a8b9099d894c11d98cc085ecf4807c5",
+        "live_remote": "1126b907df6e38043e9071da222f6c6a377b341c"
+      },
+      "binding_path": "increments/EVIDENCE-R3-MAC-IMP-01.attempt-5.binding.json",
+      "binding_prompt_path": "increments/EVIDENCE-R3-MAC-IMP-01.attempt-5.binding-prompt.md",
+      "skill_hydration_path": "increments/EVIDENCE-R3-MAC-IMP-01.attempt-5.skill-hydration.json",
+      "task_archiving_authorized": false
+    }
+  ],
   "verified_evidence": [],
   "completed": [
     {
@@ -143,7 +167,7 @@
   ],
   "last_blocker": null,
   "current_authority_amendment": "authority-amendments/0038-r3-mac-aarch64-guest-compile-correction.json",
-  "evidence_attempt": 4,
+  "evidence_attempt": 5,
   "retry_authority": {
     "evidence_id": "EVIDENCE:R3-MAC-IMP-01",
     "completed_attempt": 4,

@@ -1,0 +1,13 @@
+{
+  "protocol": "codex.worktree-skill-hydration.v1",
+  "task_thread_id": "019fe147-e300-72c2-a394-a53f43185ceb",
+  "task_host_id": "local",
+  "task_worktree": "/Users/spensermcconnell/.codex/worktrees/b4fe/substrate",
+  "source": "/Users/spensermcconnell/.codex/worktrees/eb49/substrate/.agents/skills",
+  "target": "/Users/spensermcconnell/.codex/worktrees/b4fe/substrate/.agents/skills",
+  "skill_count": 25,
+  "file_count": 54,
+  "sha256": "e3de93f358594033ed59696a9624d2d0ac2fd0c2aa7ddf4a532810a05b262282",
+  "verified": true,
+  "checkout_status_after_hydration": "clean"
+}
