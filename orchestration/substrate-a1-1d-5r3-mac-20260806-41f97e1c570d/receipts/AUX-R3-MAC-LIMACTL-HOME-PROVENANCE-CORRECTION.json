@@ -1,0 +1,80 @@
+{
+  "schema": "codex.top-level-task-receipt.v1",
+  "status": "LANDED_CLEAN",
+  "increment_task_thread_id": "019fdfa4-ba96-70e0-b68d-1d0a4cf32a83",
+  "increment_task_host_id": "local",
+  "orchestration_id": "substrate-a1-1d-5r3-mac-20260806-41f97e1c570d",
+  "packet_id": "AUX-R3-MAC-LIMACTL-HOME-PROVENANCE-CORRECTION",
+  "dispatch_nonce": "f2776d7aa9dd669dd9ff2a885ee50536ac9c01da991257d806850cb8be82a19b",
+  "worktree": "/Users/spensermcconnell/.codex/worktrees/2f78/substrate",
+  "publication": {
+    "mode": "remote",
+    "remote": "origin",
+    "ref": "refs/heads/feat/internal-host-orchestrator-world-dispatch-bootstrap",
+    "expected_base": "1126b907df6e38043e9071da222f6c6a377b341c",
+    "expected_tree": "3a29fa323a8b9099d894c11d98cc085ecf4807c5",
+    "required_ancestor": "270f6e55e1a94b7e2f9b2667e605980d2e50579c",
+    "landed_commit": "a06b3fd26ceee4ece7e5bd1481981755eafcedb5",
+    "landed_tree": "f4c396d0e28a43405a9a2b1d49a450d6df545c84",
+    "commit_subject": "fix: set root-controlled HOME for limactl provenance",
+    "push": "normal fast-forward",
+    "remote_before_push": "1126b907df6e38043e9071da222f6c6a377b341c",
+    "live_remote_after_push": "a06b3fd26ceee4ece7e5bd1481981755eafcedb5",
+    "divergence": "0/0"
+  },
+  "changed_paths": [
+    "llm-last-mile/runtime-refactor/review-control/r3-mac-limactl-home-provenance-correction-review-allowlist-evidence.md",
+    "llm-last-mile/runtime-refactor/review-control/r3-mac-limactl-home-provenance-correction-review-authority-security.md",
+    "llm-last-mile/runtime-refactor/review-control/r3-mac-limactl-home-provenance-correction-review-cycle-record.json",
+    "llm-last-mile/runtime-refactor/review-control/r3-mac-limactl-home-provenance-correction-review-lifecycle-convergence.md",
+    "scripts/substrate/dev-install-substrate.sh",
+    "tests/mac/dev_install_limactl_provenance_home_r3.sh"
+  ],
+  "subject": {
+    "fingerprint": "sha256:e74ede1d8c3a795591c5c3b3f7567441c8add1e4dfa035979e5dbd0e31946a7b",
+    "canonicalization": "SHA-256 of lexically sorted LF lines <SHA-256 content digest><two spaces><repository-relative path> for the two product/test paths",
+    "content_digests": {
+      "scripts/substrate/dev-install-substrate.sh": "09b4a559ac8a9decebfce06a8ff73c2e6c7fcc9dcc9dc8054346ae232ec67109",
+      "tests/mac/dev_install_limactl_provenance_home_r3.sh": "b9de79a02d30b9440d9976907b2ba4c1db9ab3823548b5f07d2ec804000eefa8"
+    }
+  },
+  "correction": {
+    "summary": "The privileged fixed-limactl --version probe retains env -i and fixed PATH, validates /var/empty as root-controlled, and supplies HOME=/var/empty; all fixed image and provenance joins remain unchanged.",
+    "no_native_actions": "No real installer, publisher, Lima lifecycle, Keychain, launchd, /Library, sudoers, known_hosts, or official evidence action ran."
+  },
+  "checks": [
+    "read-only fixed-image missing-HOME RED and HOME=/var/empty GREEN",
+    "bash syntax",
+    "base RED regression",
+    "focused GREEN regression",
+    "dev_install_bash32_fd_regression",
+    "lifecycle_r3",
+    "cargo fmt",
+    "git diff --check"
+  ],
+  "review": {
+    "record": "llm-last-mile/runtime-refactor/review-control/r3-mac-limactl-home-provenance-correction-review-cycle-record.json",
+    "record_sha256": "sha256:3492c57eb42cf968623449c96acc7ddf2ccf99a06f0f84f431af15cddd76e4f7",
+    "validation": "VALID",
+    "disposition": "complete / closure-1 clean / P1=0 P2=0 P3=0 P4=0"
+  },
+  "change_detection": {
+    "gitnexus": "degraded exact-worktree index unavailable",
+    "manual": "caller/callee, privileged provenance, cfg/gate, exact diff, allowlist, platform byte, and secret scans passed"
+  },
+  "containment": {
+    "allowlist": "exact six paths",
+    "source_symbol": "only publish_mac_publisher_install_provenance_v1 changed",
+    "platform": "Windows/WSL/ordinary Linux product bytes unchanged",
+    "secrets": "clean"
+  },
+  "final_state": {
+    "live_remote_equals_landed": true,
+    "tracking_ref_equals_landed": true,
+    "clean_worktree": true,
+    "clean_index": true,
+    "required_ancestor_present": true
+  },
+  "next_increment": "EVIDENCE:R3-MAC-IMP-01",
+  "successor_dispatched": false
+}

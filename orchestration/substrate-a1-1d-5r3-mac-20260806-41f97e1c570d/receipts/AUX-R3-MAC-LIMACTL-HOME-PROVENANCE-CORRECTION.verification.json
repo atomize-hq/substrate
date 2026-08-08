@@ -1,0 +1,26 @@
+{
+  "protocol": "codex.meta-task-receipt-verification.v1",
+  "orchestration_id": "substrate-a1-1d-5r3-mac-20260806-41f97e1c570d",
+  "packet_id": "AUX-R3-MAC-LIMACTL-HOME-PROVENANCE-CORRECTION",
+  "receipt_path": "receipts/AUX-R3-MAC-LIMACTL-HOME-PROVENANCE-CORRECTION.json",
+  "receipt_sha256": "sha256:c65976836da7537b3f1ef5be797a8e40ccab26916dc6efce46b6dbdca5e443f3",
+  "source": {
+    "expected_base": "1126b907df6e38043e9071da222f6c6a377b341c",
+    "landed_commit": "a06b3fd26ceee4ece7e5bd1481981755eafcedb5",
+    "landed_tree": "f4c396d0e28a43405a9a2b1d49a450d6df545c84",
+    "direct_parent_verified": true,
+    "live_remote_verified": true,
+    "normal_fast_forward_verified": true
+  },
+  "changed_path_inventory_exact": true,
+  "subject_fingerprint_recomputed": "sha256:e74ede1d8c3a795591c5c3b3f7567441c8add1e4dfa035979e5dbd0e31946a7b",
+  "subject_fingerprint_matches": true,
+  "review_record_sha256": "sha256:3492c57eb42cf968623449c96acc7ddf2ccf99a06f0f84f431af15cddd76e4f7",
+  "review_record_validator": "VALID",
+  "terminal_review_clean": true,
+  "task_worktree_and_index_clean": true,
+  "remote_divergence": "0/0",
+  "manual_source_diff": "Only /var/empty validation and HOME=/var/empty on fixed env-i limactl version probe plus focused test.",
+  "successor_not_dispatched": true,
+  "verified_at_utc": "2026-08-08T14:01:30Z"
+}

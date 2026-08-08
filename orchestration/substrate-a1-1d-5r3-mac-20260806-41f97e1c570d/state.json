@@ -1,7 +1,7 @@
 {
   "protocol": "codex.top-level-orchestration-state.v1",
   "orchestration_id": "substrate-a1-1d-5r3-mac-20260806-41f97e1c570d",
-  "status": "IMPLEMENTATION_RUNNING",
+  "status": "EVIDENCE_PREPARATION_REQUIRED",
   "dispatch_authorized": true,
   "publication_mode": "remote",
   "remote": "origin",
@@ -30,42 +30,14 @@
   ],
   "cursor": 9,
   "expected_base": {
-    "commit": "1126b907df6e38043e9071da222f6c6a377b341c",
-    "tree": "3a29fa323a8b9099d894c11d98cc085ecf4807c5"
+    "commit": "a06b3fd26ceee4ece7e5bd1481981755eafcedb5",
+    "tree": "f4c396d0e28a43405a9a2b1d49a450d6df545c84"
   },
   "meta": {
     "thread_id": "019fd8c3-b12c-7e73-919f-898600ab0f64",
     "host_id": "local"
   },
-  "active_dispatch": {
-    "increment": "AUX-R3-MAC-LIMACTL-HOME-PROVENANCE-CORRECTION",
-    "packet_id": "AUX-R3-MAC-LIMACTL-HOME-PROVENANCE-CORRECTION",
-    "thread_id": "019fdfa4-ba96-70e0-b68d-1d0a4cf32a83",
-    "host_id": "local",
-    "worktree": "/Users/spensermcconnell/.codex/worktrees/2f78/substrate",
-    "dispatch_nonce": "f2776d7aa9dd669dd9ff2a885ee50536ac9c01da991257d806850cb8be82a19b",
-    "expected_base": {
-      "commit": "1126b907df6e38043e9071da222f6c6a377b341c",
-      "tree": "3a29fa323a8b9099d894c11d98cc085ecf4807c5",
-      "target_ref": "refs/heads/feat/internal-host-orchestrator-world-dispatch-bootstrap",
-      "live_remote": "1126b907df6e38043e9071da222f6c6a377b341c"
-    },
-    "contract_path": "increments/AUX-R3-MAC-LIMACTL-HOME-PROVENANCE-CORRECTION.contract.md",
-    "contract_sha256": "sha256:44201afa00d934254835f42af6fe0c378633d1bfbcbb1ec77fe1302e83073f77",
-    "prompt_path": "increments/AUX-R3-MAC-LIMACTL-HOME-PROVENANCE-CORRECTION.continuation-prompt.md",
-    "prompt_sha256": "sha256:7f9024dd25cde824e5345954d29980c168c440770e3396e80cd015910fc9cb09",
-    "authority_amendment_path": "authority-amendments/0042-r3-mac-limactl-home-provenance-source-correction.json",
-    "authority_amendment_sha256": "sha256:815ed0977d5affb77560fb63de0e5474e2f0f7e2db7aeeefd3ca34bb9d164fbe",
-    "task_archiving_authorized": false,
-    "thread_status": "active",
-    "turn_status": "inProgress",
-    "prepared_at_utc": "2026-08-08T13:44:04Z",
-    "delivery_path": "increments/AUX-R3-MAC-LIMACTL-HOME-PROVENANCE-CORRECTION.delivery.json",
-    "delivery_sha256": "sha256:ed2b9e746a53ed619ac6ccca6fb20c0780479568dd1f7cac186a550afc32772a",
-    "turn_id": "019fe19e-6475-7632-aebc-02a379b8bc02",
-    "wait_cursor": "09d2deac-230c-42d0-9957-94f004124fa0:5",
-    "sent_at_utc": "2026-08-08T13:44:56Z"
-  },
+  "active_dispatch": null,
   "active_evidence_dispatches": [],
   "verified_evidence": [],
   "completed": [
@@ -167,6 +139,17 @@
       "verification_path": "receipts/AUX-R3-MAC-AARCH64-GUEST-COMPILE-CORRECTION.verification.json",
       "source_thread_id": "019fdfa4-ba96-70e0-b68d-1d0a4cf32a83",
       "source_host_id": "local"
+    },
+    {
+      "increment": "AUX-R3-MAC-LIMACTL-HOME-PROVENANCE-CORRECTION",
+      "status": "LANDED_CLEAN",
+      "commit": "a06b3fd26ceee4ece7e5bd1481981755eafcedb5",
+      "tree": "f4c396d0e28a43405a9a2b1d49a450d6df545c84",
+      "receipt_path": "receipts/AUX-R3-MAC-LIMACTL-HOME-PROVENANCE-CORRECTION.json",
+      "receipt_sha256": "sha256:c65976836da7537b3f1ef5be797a8e40ccab26916dc6efce46b6dbdca5e443f3",
+      "verification_path": "receipts/AUX-R3-MAC-LIMACTL-HOME-PROVENANCE-CORRECTION.verification.json",
+      "verification_sha256": "sha256:657021ba8aefe2b3a89ced63c56b4addeb878e07b0aee8bdce889eee38dd6565",
+      "next_increment": "EVIDENCE:R3-MAC-IMP-01"
     }
   ],
   "last_blocker": {
@@ -186,9 +169,9 @@
     "completed_attempt": 8,
     "next_attempt": 9,
     "fresh_nonce_required": true,
-    "source_correction_required": true,
-    "source_commit": "1126b907df6e38043e9071da222f6c6a377b341c",
-    "source_tree": "3a29fa323a8b9099d894c11d98cc085ecf4807c5",
+    "source_correction_required": false,
+    "source_commit": "a06b3fd26ceee4ece7e5bd1481981755eafcedb5",
+    "source_tree": "f4c396d0e28a43405a9a2b1d49a450d6df545c84",
     "host_sudo_noninteractive_required": true,
     "host_sudo_durable_nopasswd_required": true,
     "host_sudo_verified": true,
@@ -312,7 +295,8 @@
     "attempt_8_verification_path": "receipts/EVIDENCE-R3-MAC-IMP-01.attempt-8.blocked.verification.json",
     "attempt_8_verification_sha256": "sha256:f81978f0c6fd20e4588478ff1fc1ceb3a5012202035924ee623dba94824c5730",
     "attempt_8_artifact_sha256": "sha256:8fc9e44b8ca99e2c58e2d0fa110f86cd8257acd37f835073d00ac6b8c9dbde25",
-    "attempt_8_restoration_exact": true
+    "attempt_8_restoration_exact": true,
+    "attached_source_mirror_refresh_required": true
   },
   "auxiliary_host_preparation": {
     "status": "BLOCKED_SOURCE_CORRECTION",
@@ -1086,15 +1070,11 @@
     "cross_platform_remediation_authorized": false
   },
   "last_verified_receipt": {
-    "increment": "AUX-R3-MAC-AARCH64-GUEST-COMPILE-CORRECTION",
-    "packet_id": "AUX-R3-MAC-AARCH64-GUEST-COMPILE-CORRECTION",
-    "status": "LANDED_CLEAN",
-    "receipt_path": "receipts/AUX-R3-MAC-AARCH64-GUEST-COMPILE-CORRECTION.json",
-    "canonical_receipt_path": "receipts/AUX-R3-MAC-AARCH64-GUEST-COMPILE-CORRECTION.canonical.json",
-    "verification_path": "receipts/AUX-R3-MAC-AARCH64-GUEST-COMPILE-CORRECTION.verification.json",
-    "commit": "1126b907df6e38043e9071da222f6c6a377b341c",
-    "tree": "3a29fa323a8b9099d894c11d98cc085ecf4807c5",
-    "verified_at_utc": "2026-08-08T04:59:46Z"
+    "increment": "AUX-R3-MAC-LIMACTL-HOME-PROVENANCE-CORRECTION",
+    "path": "receipts/AUX-R3-MAC-LIMACTL-HOME-PROVENANCE-CORRECTION.json",
+    "sha256": "sha256:c65976836da7537b3f1ef5be797a8e40ccab26916dc6efce46b6dbdca5e443f3",
+    "verification_path": "receipts/AUX-R3-MAC-LIMACTL-HOME-PROVENANCE-CORRECTION.verification.json",
+    "verification_sha256": "sha256:657021ba8aefe2b3a89ced63c56b4addeb878e07b0aee8bdce889eee38dd6565"
   },
   "auxiliary_platform_preparation": {
     "status": "BLOCKED_SOURCE_COMPILE_CLOSURE",
@@ -1275,7 +1255,7 @@
     }
   ],
   "auxiliary_lima_provenance_correction": {
-    "status": "IMPLEMENTATION_RUNNING",
+    "status": "LANDED_CLEAN",
     "increment": "AUX-R3-MAC-LIMACTL-HOME-PROVENANCE-CORRECTION",
     "packet_id": "AUX-R3-MAC-LIMACTL-HOME-PROVENANCE-CORRECTION",
     "thread_id": "019fdfa4-ba96-70e0-b68d-1d0a4cf32a83",
@@ -1295,13 +1275,19 @@
     "authority_amendment_path": "authority-amendments/0042-r3-mac-limactl-home-provenance-source-correction.json",
     "authority_amendment_sha256": "sha256:815ed0977d5affb77560fb63de0e5474e2f0f7e2db7aeeefd3ca34bb9d164fbe",
     "task_archiving_authorized": false,
-    "thread_status": "active",
-    "turn_status": "inProgress",
+    "thread_status": "idle",
+    "turn_status": "completed",
     "prepared_at_utc": "2026-08-08T13:44:04Z",
     "delivery_path": "increments/AUX-R3-MAC-LIMACTL-HOME-PROVENANCE-CORRECTION.delivery.json",
     "delivery_sha256": "sha256:ed2b9e746a53ed619ac6ccca6fb20c0780479568dd1f7cac186a550afc32772a",
     "turn_id": "019fe19e-6475-7632-aebc-02a379b8bc02",
-    "wait_cursor": "09d2deac-230c-42d0-9957-94f004124fa0:5",
-    "sent_at_utc": "2026-08-08T13:44:56Z"
+    "wait_cursor": "09d2deac-230c-42d0-9957-94f004124fa0:6",
+    "sent_at_utc": "2026-08-08T13:44:56Z",
+    "landed_commit": "a06b3fd26ceee4ece7e5bd1481981755eafcedb5",
+    "landed_tree": "f4c396d0e28a43405a9a2b1d49a450d6df545c84",
+    "receipt_path": "receipts/AUX-R3-MAC-LIMACTL-HOME-PROVENANCE-CORRECTION.json",
+    "receipt_sha256": "sha256:c65976836da7537b3f1ef5be797a8e40ccab26916dc6efce46b6dbdca5e443f3",
+    "verification_path": "receipts/AUX-R3-MAC-LIMACTL-HOME-PROVENANCE-CORRECTION.verification.json",
+    "verification_sha256": "sha256:657021ba8aefe2b3a89ced63c56b4addeb878e07b0aee8bdce889eee38dd6565"
   }
 }
