@@ -1,0 +1,84 @@
+{
+  "protocol": "codex.meta-authority-amendment.v1",
+  "orchestration_id": "substrate-a1-1d-5r3-mac-20260806-41f97e1c570d",
+  "amendment_id": "0039-r3-mac-evidence-platform-prerequisite-prep",
+  "issued_at_utc": "2026-08-08T12:22:27Z",
+  "applies_to": "AUX-R3-MAC-EVIDENCE-PLATFORM-PREREQUISITE-PREP",
+  "task_thread_id": "019fe147-e300-72c2-a394-a53f43185ceb",
+  "task_host_id": "local",
+  "task_worktree": "/Users/spensermcconnell/.codex/worktrees/b4fe/substrate",
+  "dispatch_nonce": "11c27a5ee57be5b99a3c7457c4f511b14b5747ee4b2b0492874a416d5fab02a3",
+  "source": {
+    "remote": "origin",
+    "target_ref": "refs/heads/feat/internal-host-orchestrator-world-dispatch-bootstrap",
+    "commit": "1126b907df6e38043e9071da222f6c6a377b341c",
+    "tree": "3a29fa323a8b9099d894c11d98cc085ecf4807c5"
+  },
+  "classification": "general auxiliary native-platform preparation outside official evidence",
+  "authority_basis": {
+    "meta_typical_blocker_authority": true,
+    "prior_user_host_cleanup_authority": "The user explicitly authorized a complete macOS Substrate removal/install preparation and later authorized continuing existing tasks with bounded changes.",
+    "scope": "R3 MAC evidence prerequisites only"
+  },
+  "authorized_actions": {
+    "immutable_limactl": {
+      "source_path": "/opt/homebrew/Cellar/lima/2.1.1/bin/limactl",
+      "source_sha256": "sha256:c126697daa485aff79552a34413e14c0e2efd43675845bee1a152f31845f1455",
+      "source_cdhash": "b49590ab735afa18681b5423b8224e84462de04e",
+      "destination_path": "/usr/local/bin/limactl",
+      "destination_owner_group_mode": "root:wheel 0555",
+      "requirements": [
+        "destination is absent before creation or already byte-identical with the exact required root-owned immutable identity",
+        "copy preserves the embedded code signature and version 2.1.1",
+        "every destination path segment is root-owned and not group/other writable",
+        "destination is a single-link regular file and never a symlink",
+        "a controlled PATH beginning /usr/local/bin makes Bash type -P resolve the destination"
+      ]
+    },
+    "canonical_instance_cleanup": {
+      "instance_name": "substrate",
+      "pre_observation": "Running unmanifested pre-R3 collision",
+      "authorized": true,
+      "requirements": [
+        "capture exact limactl JSON, configuration, machine identity, guest account, state-directory identity, and the full all-instance inventory externally before mutation",
+        "verify the selected instance name is exactly substrate and no other Lima instance is selected or changed",
+        "stop and delete only the exact substrate instance using the fixed Lima 2.1.1 tool",
+        "verify the instance and its exact control directory are absent afterward",
+        "do not represent this external administrative cleanup as an R3 lifecycle receipt or native evidence"
+      ]
+    },
+    "attached_source_mirror": {
+      "destination_root": "/Users/spensermcconnell/.codex/evidence/substrate-a1-1d-5r3-mac-20260806-41f97e1c570d/AUX-R3-MAC-EVIDENCE-PLATFORM-PREREQUISITE-PREP/11c27a5ee57be5b99a3c7457c4f511b14b5747ee4b2b0492874a416d5fab02a3/source/substrate",
+      "remote_url": "https://github.com/atomize-hq/substrate.git",
+      "required_ref": "refs/heads/feat/internal-host-orchestrator-world-dispatch-bootstrap",
+      "required_commit": "1126b907df6e38043e9071da222f6c6a377b341c",
+      "required_tree": "3a29fa323a8b9099d894c11d98cc085ecf4807c5",
+      "requirements": [
+        "create a fresh standalone clone outside every protected or task checkout",
+        "attach HEAD to the exact required local branch ref",
+        "verify origin and live remote, direct commit/tree equality, ancestry, clean index, and zero untracked paths",
+        "do not build, install, or create evidence artifacts inside the source mirror",
+        "preserve the source mirror for a fresh official evidence attempt"
+      ]
+    }
+  },
+  "prohibited_actions": [
+    "any product/control/review source edit, stage, commit, push, reset, clean, rebase, or branch mutation in an existing checkout",
+    "any mutation of the protected checkout or meta worktree",
+    "any Lima instance other than the exact canonical substrate instance",
+    "official EVIDENCE:R3-MAC-IMP-01 execution or success claim",
+    "Substrate dev install, code signing, publisher bootstrap, Keychain, LaunchDaemon, pairing, lifecycle, retirement, or closeout",
+    "sudoers sentinel mutation",
+    "Windows, UNIX, Linux-host, or successor work",
+    "task or worktree archival"
+  ],
+  "terminal_requirements": {
+    "receipt_protocol": "codex.auxiliary-platform-prep-receipt.v1",
+    "return_meta_thread_id": "019fd8c3-b12c-7e73-919f-898600ab0f64",
+    "record_external_pre_and_post_state": true,
+    "verify_source_checkouts_clean": true,
+    "verify_sudoers_sentinel_unchanged": true,
+    "verify_no_other_lima_instance_changed": true,
+    "official_evidence_successor_held": true
+  }
+}

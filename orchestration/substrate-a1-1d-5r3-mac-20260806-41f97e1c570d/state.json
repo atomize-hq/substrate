@@ -150,7 +150,7 @@
     "summary": "The exact source is clean, but native mutation is blocked by the Homebrew symlinked user-owned limactl path, a running unmanifested canonical substrate Lima instance, and detached-worktree installer provenance.",
     "advance": false
   },
-  "current_authority_amendment": "authority-amendments/0038-r3-mac-aarch64-guest-compile-correction.json",
+  "current_authority_amendment": "authority-amendments/0039-r3-mac-evidence-platform-prerequisite-prep.json",
   "evidence_attempt": 5,
   "retry_authority": {
     "evidence_id": "EVIDENCE:R3-MAC-IMP-01",
@@ -176,7 +176,8 @@
     "prompt_sha256": "sha256:73419c75bcadf9914a085a203a2203da0a683a939a6376e8f7bff895e4f78ae2",
     "variables_path": "increments/EVIDENCE-R3-MAC-IMP-01.attempt-5.variables.json",
     "variables_sha256": "sha256:9c1413cf7267c8df51987f67ebd7361c6e219073ea2c191ad374ce73d2002bbc",
-    "task_archiving_authorized": false
+    "task_archiving_authorized": false,
+    "auxiliary_platform_preparation_running": true
   },
   "auxiliary_host_preparation": {
     "status": "BLOCKED_SOURCE_CORRECTION",
@@ -1042,5 +1043,30 @@
     "subject_fingerprint": "sha256:352cb9bb6961425847c8709f89b14adc633496aaacebe0040b0224878b9cef38",
     "review_record_sha256": "sha256:83ec9c6a1670091cb3db18e3d56e91dfd5a3b6b3f5ff21f26812dc21a03e452c",
     "verified_at_utc": "2026-08-08T04:59:46Z"
+  },
+  "auxiliary_evidence_platform_preparation": {
+    "status": "RUNNING",
+    "task_class": "general_auxiliary_native_platform_preparation",
+    "official_increment_or_evidence": false,
+    "packet": "AUX-R3-MAC-EVIDENCE-PLATFORM-PREREQUISITE-PREP",
+    "dispatch_nonce": "11c27a5ee57be5b99a3c7457c4f511b14b5747ee4b2b0492874a416d5fab02a3",
+    "thread_id": "019fe147-e300-72c2-a394-a53f43185ceb",
+    "host_id": "local",
+    "worktree": "/Users/spensermcconnell/.codex/worktrees/b4fe/substrate",
+    "authority_amendment": "authority-amendments/0039-r3-mac-evidence-platform-prerequisite-prep.json",
+    "authority_amendment_sha256": "sha256:f8979938b6e2aa29fa9d0a945d619747bfc7f706a9ad33a0d688681810440ad8",
+    "prompt_path": "increments/AUX-R3-MAC-EVIDENCE-PLATFORM-PREREQUISITE-PREP.prompt.md",
+    "prompt_sha256": "sha256:3be815ed98f8599f5e5beb40b0e963cb9c57b7ec88cc41690330c38acb75865c",
+    "source": {
+      "commit": "1126b907df6e38043e9071da222f6c6a377b341c",
+      "tree": "3a29fa323a8b9099d894c11d98cc085ecf4807c5",
+      "target_ref": "refs/heads/feat/internal-host-orchestrator-world-dispatch-bootstrap",
+      "live_remote": "1126b907df6e38043e9071da222f6c6a377b341c"
+    },
+    "external_root": "/Users/spensermcconnell/.codex/evidence/substrate-a1-1d-5r3-mac-20260806-41f97e1c570d/AUX-R3-MAC-EVIDENCE-PLATFORM-PREREQUISITE-PREP/11c27a5ee57be5b99a3c7457c4f511b14b5747ee4b2b0492874a416d5fab02a3",
+    "attached_source_mirror": "/Users/spensermcconnell/.codex/evidence/substrate-a1-1d-5r3-mac-20260806-41f97e1c570d/AUX-R3-MAC-EVIDENCE-PLATFORM-PREREQUISITE-PREP/11c27a5ee57be5b99a3c7457c4f511b14b5747ee4b2b0492874a416d5fab02a3/source/substrate",
+    "official_evidence_dispatch_allowed": false,
+    "task_archiving_authorized": false,
+    "prepared_at_utc": "2026-08-08T12:24:44.386657Z"
   }
 }
