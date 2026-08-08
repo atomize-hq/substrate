@@ -1419,7 +1419,7 @@
     "decision_record_sha256": "sha256:999e12636a50a94bfc39fae9cd8d0397d902d5edaeb456e923f3d0a272505065"
   },
   "auxiliary_prestage_evidence_blocker_correction": {
-    "status": "DISPATCHING",
+    "status": "RUNNING",
     "packet_id": "AUX-R3-MAC-PRESTAGE-EVIDENCE-BLOCKER-CORRECTION",
     "thread_id": "019fdfa4-ba96-70e0-b68d-1d0a4cf32a83",
     "host_id": "local",
@@ -1442,6 +1442,10 @@
     "skills_sha256": "sha256:e3de93f358594033ed59696a9624d2d0ac2fd0c2aa7ddf4a532810a05b262282",
     "task_archiving_authorized": false,
     "native_actions_authorized": false,
-    "successor_dispatch_authorized": false
+    "successor_dispatch_authorized": false,
+    "turn_id": "019fe221-4928-7e31-9543-5a7d168da19d",
+    "wait_cursor": "09d2deac-230c-42d0-9957-94f004124fa0:58",
+    "delivery_path": "increments/AUX-R3-MAC-PRESTAGE-EVIDENCE-BLOCKER-CORRECTION.delivery.json",
+    "dispatched_at_utc": "2026-08-08T16:07:50Z"
   }
 }

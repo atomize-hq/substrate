@@ -1,0 +1,15 @@
+{
+  "protocol": "codex.meta-dispatch-delivery.v1",
+  "orchestration_id": "substrate-a1-1d-5r3-mac-20260806-41f97e1c570d",
+  "increment": "AUX-R3-MAC-PRESTAGE-EVIDENCE-BLOCKER-CORRECTION",
+  "dispatch_nonce": "0ae5e61c6cd21581afb861057bcd9789273e9f81926616716cee809006cec58d",
+  "task_thread_id": "019fdfa4-ba96-70e0-b68d-1d0a4cf32a83",
+  "task_host_id": "local",
+  "task_worktree": "/Users/spensermcconnell/.codex/worktrees/2f78/substrate",
+  "turn_id": "019fe221-4928-7e31-9543-5a7d168da19d",
+  "wait_cursor": "09d2deac-230c-42d0-9957-94f004124fa0:58",
+  "sent_at_utc": "2026-08-08T16:07:50Z",
+  "prompt_path": "increments/AUX-R3-MAC-PRESTAGE-EVIDENCE-BLOCKER-CORRECTION.continuation-prompt.md",
+  "prompt_sha256": "sha256:cf0fdd6aa1cac73e2f4555a09dbd7f5c4f90636b51b6bb77d89b576e8e406491",
+  "delivery_accepted": true
+}
