@@ -60,6 +60,12 @@
       "binding_path": "increments/EVIDENCE-R3-MAC-IMP-01.attempt-5.binding.json",
       "binding_prompt_path": "increments/EVIDENCE-R3-MAC-IMP-01.attempt-5.binding-prompt.md",
       "skill_hydration_path": "increments/EVIDENCE-R3-MAC-IMP-01.attempt-5.skill-hydration.json",
+      "delivery_path": "increments/EVIDENCE-R3-MAC-IMP-01.attempt-5.delivery.json",
+      "turn_id": "019fe148-f287-7360-976d-bbdb1fd17853",
+      "wait_cursor": "48c07936-b6f1-47e2-93d3-faf543564a82:1",
+      "thread_status": "active",
+      "turn_status": "inProgress",
+      "binding_sent_at_utc": "2026-08-08T12:11:36Z",
       "task_archiving_authorized": false
     }
   ],
