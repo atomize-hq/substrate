@@ -1,0 +1,49 @@
+{
+  "schema_version": 1,
+  "packet_id": "AUX-R3-MAC-LIMACTL-HOME-PROVENANCE-CORRECTION",
+  "status": "complete",
+  "stop_reason": null,
+  "cycles": [
+    {
+      "cycle_id": "discovery-1",
+      "kind": "discovery",
+      "subject_fingerprint": "sha256:0b1c7f989cfd3dbb7b1864262413c6df01df10bf7affbb60c716ce08aa27bcc8",
+      "trigger_cycle_id": null,
+      "trigger_finding_ids": [],
+      "causal_evidence_refs": [],
+      "review_refs": [
+        "llm-last-mile/runtime-refactor/review-control/r3-mac-limactl-home-provenance-correction-review-authority-security.md",
+        "llm-last-mile/runtime-refactor/review-control/r3-mac-limactl-home-provenance-correction-review-lifecycle-convergence.md",
+        "llm-last-mile/runtime-refactor/review-control/r3-mac-limactl-home-provenance-correction-review-allowlist-evidence.md"
+      ],
+      "verdict": "findings",
+      "findings": [
+        {
+          "finding_id": "P1-R3-MAC-LIMACTL-SUBJECT-FINGERPRINT-UNBOUND",
+          "priority": "P1"
+        },
+        {
+          "finding_id": "P3-R3-MAC-LIMACTL-HOME-GUARD-STATIC-FALLTHROUGH",
+          "priority": "P3"
+        }
+      ]
+    },
+    {
+      "cycle_id": "closure-1",
+      "kind": "closure",
+      "subject_fingerprint": "sha256:e74ede1d8c3a795591c5c3b3f7567441c8add1e4dfa035979e5dbd0e31946a7b",
+      "trigger_cycle_id": "discovery-1",
+      "trigger_finding_ids": [
+        "P1-R3-MAC-LIMACTL-SUBJECT-FINGERPRINT-UNBOUND"
+      ],
+      "causal_evidence_refs": [],
+      "review_refs": [
+        "llm-last-mile/runtime-refactor/review-control/r3-mac-limactl-home-provenance-correction-review-authority-security.md",
+        "llm-last-mile/runtime-refactor/review-control/r3-mac-limactl-home-provenance-correction-review-lifecycle-convergence.md",
+        "llm-last-mile/runtime-refactor/review-control/r3-mac-limactl-home-provenance-correction-review-allowlist-evidence.md"
+      ],
+      "verdict": "clean",
+      "findings": []
+    }
+  ]
+}

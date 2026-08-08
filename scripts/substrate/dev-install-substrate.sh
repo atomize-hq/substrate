@@ -1837,6 +1837,14 @@ require_root_owned_immutable_path() {
   done
 }
 require_root_owned_immutable_path "$limactl_path"
+test -d /var/empty && test ! -L /var/empty || {
+  printf "privileged limactl HOME is absent or linked: /var/empty\n" >&2; exit 1;
+}
+limactl_home_owner="$(stat -f '%u' /var/empty)"
+limactl_home_mode="$(stat -f '%Lp' /var/empty)"
+test "$limactl_home_owner" -eq 0 && test $((0$limactl_home_mode & 022)) -eq 0 || {
+  printf "privileged limactl HOME is not root-controlled state: /var/empty\n" >&2; exit 1;
+}
 install -d -o root -g wheel -m 0755 /Library/PrivilegedHelperTools
 install -d -o root -g wheel -m 0755 /Library/LaunchDaemons
 install -d -o root -g wheel -m 0755 "/Library/Application Support/Substrate"
@@ -1856,7 +1864,7 @@ executor_requirement="$(requirement "$executor_path")"
 lima_requirement="$(requirement "$limactl_path")"
 test "${#control_cdhash}" -eq 40 && test "${#executor_cdhash}" -eq 40 && test "${#lima_cdhash}" -eq 40
 test -n "$control_requirement" && test -n "$executor_requirement" && test -n "$lima_requirement"
-lima_version="$(env -i PATH=/usr/bin:/bin:/usr/sbin:/sbin "$limactl_path" --version)"
+lima_version="$(env -i PATH=/usr/bin:/bin:/usr/sbin:/sbin HOME=/var/empty "$limactl_path" --version)"
 test -n "$lima_version"
 plist_sha="$(sha "$plist_path")"
 tmp="${provenance_path}.tmp.$$"
