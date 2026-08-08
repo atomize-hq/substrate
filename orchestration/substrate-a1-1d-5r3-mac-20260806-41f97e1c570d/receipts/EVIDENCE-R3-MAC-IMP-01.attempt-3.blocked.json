@@ -1,0 +1,48 @@
+{
+  "protocol": "codex.top-level-evidence-receipt.v1",
+  "orchestration_id": "substrate-a1-1d-5r3-mac-20260806-41f97e1c570d",
+  "dispatch_nonce": "7c83b749b2360596d88553c24c52d89bdbfc7e2024170712b7d248e6b6ae31b7",
+  "evidence_id": "EVIDENCE:R3-MAC-IMP-01",
+  "status": "BLOCKED_PLATFORM_HANDOFF_REQUIRED",
+  "platform": "macos",
+  "evidence_task": {
+    "thread_id": "019fdf7f-c7d6-7112-9cda-a05db972da7f",
+    "host_id": "local"
+  },
+  "source": {
+    "publication_mode": "remote",
+    "commit": "3d6b2eb1b02b1a24a1e055d12e5cbdb9b0312774",
+    "tree": "d59cac92405f06024cfcde0a2c22a4cf1255c3d7",
+    "target_ref": "refs/heads/feat/internal-host-orchestrator-world-dispatch-bootstrap",
+    "live_remote": "3d6b2eb1b02b1a24a1e055d12e5cbdb9b0312774"
+  },
+  "environment": {
+    "host_id": "local",
+    "os_version": "macOS 15.7.7 (24G720)",
+    "project_id": "local-b2016f8a311fef93149e42eaec4d704d",
+    "project_path": "/Users/spensermcconnell/__Active_Code/atomize-hq/substrate",
+    "tool_versions": {
+      "architecture": "arm64",
+      "cargo": "1.89.0",
+      "limactl": "2.1.1",
+      "python": "3.11.9",
+      "rustc": "1.89.0",
+      "ssh": "OpenSSH_9.9p2"
+    }
+  },
+  "prohibited_actions_confirmed": true,
+  "checkout_unchanged": true,
+  "blocker": {
+    "summary": "The required host noninteractive sudo prerequisite is unavailable.",
+    "details": "`/usr/bin/sudo -n true` exited 1 and emitted `sudo: a password is required`. Guest `sudo -n true` through the canonical selected `substrate` Lima instance exited 0, but the contract requires both host and guest success before any mutation. Source HEAD/tree/live remote were all 3d6b2eb1b02b1a24a1e055d12e5cbdb9b0312774/d59cac92405f06024cfcde0a2c22a4cf1255c3d7. Canonical IH/PM derivation and two equal guest machine-ID observations completed. No build, code-sign, install, publisher bootstrap, pairing, lifecycle, intent probe, retirement, or restoration action ran; source checkout final state is clean and remote-equal. Full facts are in /Users/spensermcconnell/.codex/evidence/substrate-a1-1d-5r3-mac-20260806-41f97e1c570d/EVIDENCE-R3-MAC-IMP-01/7c83b749b2360596d88553c24c52d89bdbfc7e2024170712b7d248e6b6ae31b7/artifacts/r3-mac-imp-01-blocked-preflight.json.",
+    "required_authority": "A platform administrator must restore the pre-existing root-owned sudoers authorization so `/usr/bin/sudo -n true` succeeds for UID 501, without this evidence task modifying/removing/replacing `/etc/sudoers.d/substrate-r3-mac-evidence`.",
+    "handoff_prompt": "On local macOS, first independently verify the existing `/etc/sudoers.d/substrate-r3-mac-evidence` authorization sentinel and make host `/usr/bin/sudo -n true` succeed for spensermcconnell (UID 501) without altering it from an evidence task. Then dispatch a fresh nonce-bound EVIDENCE:R3-MAC-IMP-01 attempt at the same remote-equal source commit/tree/ref, rerun source/project/prefix/IH/PM/Lima/baseline checks, and only then execute the complete native packet. Do not accept this blocked preflight as native evidence and do not run MAC-CLOSEOUT."
+  },
+  "evidence": {
+    "artifact_path": "/Users/spensermcconnell/.codex/evidence/substrate-a1-1d-5r3-mac-20260806-41f97e1c570d/EVIDENCE-R3-MAC-IMP-01/7c83b749b2360596d88553c24c52d89bdbfc7e2024170712b7d248e6b6ae31b7/artifacts/r3-mac-imp-01-blocked-preflight.json",
+    "artifact_sha256": "sha256:18da1356e439ef46cea91198b89a5b1a1fd396227223e07531e6967426d9e228",
+    "gates": [
+      "canonical-source-binding"
+    ]
+  }
+}

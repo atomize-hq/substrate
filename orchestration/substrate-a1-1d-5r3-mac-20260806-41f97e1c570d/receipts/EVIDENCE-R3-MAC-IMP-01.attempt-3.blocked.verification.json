@@ -1,0 +1,60 @@
+{
+  "protocol": "codex.top-level-evidence-block-verification.v1",
+  "orchestration_id": "substrate-a1-1d-5r3-mac-20260806-41f97e1c570d",
+  "evidence_id": "EVIDENCE:R3-MAC-IMP-01",
+  "attempt": 3,
+  "status": "BLOCKED_PLATFORM_HANDOFF_REQUIRED",
+  "verified": true,
+  "verified_at_utc": "2026-08-08T04:02:27Z",
+  "correlation": {
+    "dispatch_nonce": "7c83b749b2360596d88553c24c52d89bdbfc7e2024170712b7d248e6b6ae31b7",
+    "thread_id": "019fdf7f-c7d6-7112-9cda-a05db972da7f",
+    "host_id": "local",
+    "project_id": "local-b2016f8a311fef93149e42eaec4d704d",
+    "project_path": "/Users/spensermcconnell/__Active_Code/atomize-hq/substrate"
+  },
+  "terminal_barrier": {
+    "thread_status": "idle",
+    "turn_id": "019fdf81-d324-72b0-9693-b01b5766c734",
+    "turn_status": "completed",
+    "turn_error": null,
+    "cursor": "eef0a650-ca4c-4b37-a47e-a18ddf99807a:3"
+  },
+  "source": {
+    "commit": "3d6b2eb1b02b1a24a1e055d12e5cbdb9b0312774",
+    "tree": "d59cac92405f06024cfcde0a2c22a4cf1255c3d7",
+    "target_ref": "refs/heads/feat/internal-host-orchestrator-world-dispatch-bootstrap",
+    "live_remote": "3d6b2eb1b02b1a24a1e055d12e5cbdb9b0312774",
+    "evidence_worktree_clean": true,
+    "protected_checkout_clean": true
+  },
+  "receipt": {
+    "path": "receipts/EVIDENCE-R3-MAC-IMP-01.attempt-3.blocked.json",
+    "sha256": "sha256:95998912682b5823dd51a468cffae8d980c313da2aab74d4fcca80d22212e0cd",
+    "validator_result": "VALID evidence receipt EVIDENCE:R3-MAC-IMP-01 status=BLOCKED_PLATFORM_HANDOFF_REQUIRED"
+  },
+  "artifact": {
+    "path": "/Users/spensermcconnell/.codex/evidence/substrate-a1-1d-5r3-mac-20260806-41f97e1c570d/EVIDENCE-R3-MAC-IMP-01/7c83b749b2360596d88553c24c52d89bdbfc7e2024170712b7d248e6b6ae31b7/artifacts/r3-mac-imp-01-blocked-preflight.json",
+    "sha256": "sha256:18da1356e439ef46cea91198b89a5b1a1fd396227223e07531e6967426d9e228",
+    "validator_result": "VALID",
+    "result_status": "BLOCKED_PLATFORM_HANDOFF_REQUIRED",
+    "restoration_exact": true,
+    "native_evidence_satisfied": false
+  },
+  "platform_observation": {
+    "sudoers_sentinel": "/etc/sudoers.d/substrate-r3-mac-evidence",
+    "sentinel_owner_group_mode": "root:wheel 0440",
+    "host_sudo_noninteractive_exit": 1,
+    "host_sudo_stderr": "sudo: a password is required",
+    "guest_sudo_noninteractive_exit": 0
+  },
+  "disposition": {
+    "advance": false,
+    "mac_closeout_authorized": false,
+    "fresh_nonce_required": true,
+    "same_task_may_resume_after_platform_reauthorization": true,
+    "task_archived": false,
+    "worktree_preserved": true,
+    "worktree": "/Users/spensermcconnell/.codex/worktrees/fa11/substrate"
+  }
+}
