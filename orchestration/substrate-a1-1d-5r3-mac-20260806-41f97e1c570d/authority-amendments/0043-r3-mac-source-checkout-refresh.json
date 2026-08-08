@@ -1,0 +1,81 @@
+{
+  "protocol": "codex.meta-authority-amendment.v1",
+  "orchestration_id": "substrate-a1-1d-5r3-mac-20260806-41f97e1c570d",
+  "amendment_id": "0043-r3-mac-source-checkout-refresh",
+  "issued_at_utc": "2026-08-08T14:04:15Z",
+  "applies_to": "AUX-R3-MAC-SOURCE-CHECKOUT-REFRESH",
+  "task_thread_id": "019fe147-e300-72c2-a394-a53f43185ceb",
+  "task_host_id": "local",
+  "task_worktree": "/Users/spensermcconnell/.codex/worktrees/b4fe/substrate",
+  "dispatch_nonce": "2d8c4c920d22e32e72c951edc1b52f74198f6d85764b9900d201d2e06cdb8bc3",
+  "classification": "general auxiliary source-checkout preparation outside official evidence",
+  "authority_basis": {
+    "standing_user_blocker_adjudication_authority": true,
+    "prior_source_correction_landed_clean": true,
+    "same_auxiliary_prep_task_continuation_authorized": true,
+    "reason": "The official evidence source and installer mirror must both equal the newly published source correction before a fresh attempt can bind safely."
+  },
+  "source_transition": {
+    "remote": "origin",
+    "target_ref": "refs/heads/feat/internal-host-orchestrator-world-dispatch-bootstrap",
+    "from_commit": "1126b907df6e38043e9071da222f6c6a377b341c",
+    "from_tree": "3a29fa323a8b9099d894c11d98cc085ecf4807c5",
+    "to_commit": "a06b3fd26ceee4ece7e5bd1481981755eafcedb5",
+    "to_tree": "f4c396d0e28a43405a9a2b1d49a450d6df545c84",
+    "fast_forward_ancestry_verified": true
+  },
+  "authorized_checkout_updates": [
+    {
+      "role": "attached canonical-installer source mirror",
+      "path": "/Users/spensermcconnell/.codex/evidence/substrate-a1-1d-5r3-mac-20260806-41f97e1c570d/AUX-R3-MAC-EVIDENCE-PLATFORM-PREREQUISITE-PREP/11c27a5ee57be5b99a3c7457c4f511b14b5747ee4b2b0492874a416d5fab02a3/source/substrate",
+      "required_pre_head": "1126b907df6e38043e9071da222f6c6a377b341c",
+      "required_pre_tree": "3a29fa323a8b9099d894c11d98cc085ecf4807c5",
+      "required_symbolic_head": "refs/heads/feat/internal-host-orchestrator-world-dispatch-bootstrap",
+      "authorized_operation": "fetch exactly the target ref and advance its current attached branch only by git merge --ff-only to the exact to_commit",
+      "required_post_head": "a06b3fd26ceee4ece7e5bd1481981755eafcedb5",
+      "required_post_tree": "f4c396d0e28a43405a9a2b1d49a450d6df545c84"
+    },
+    {
+      "role": "idle official-evidence identity and audit checkout",
+      "path": "/Users/spensermcconnell/.codex/worktrees/1626/substrate",
+      "required_pre_head": "1126b907df6e38043e9071da222f6c6a377b341c",
+      "required_pre_tree": "3a29fa323a8b9099d894c11d98cc085ecf4807c5",
+      "required_symbolic_head": "detached",
+      "authorized_operation": "fetch exactly the target ref and switch the already-detached clean checkout to detached exact to_commit; no branch creation or ref movement",
+      "required_post_head": "a06b3fd26ceee4ece7e5bd1481981755eafcedb5",
+      "required_post_tree": "f4c396d0e28a43405a9a2b1d49a450d6df545c84"
+    }
+  ],
+  "preconditions": [
+    "Both named checkouts are clean with zero staged, modified, or untracked paths and exactly match their required pre-head/pre-tree/ref posture.",
+    "The live remote target equals the exact to_commit and to_tree.",
+    "The from_commit is an ancestor of the to_commit.",
+    "The attached mirror target path is absent.",
+    "The evidence task is idle and will not act concurrently.",
+    "The protected checkout and meta checkout are not mutation targets."
+  ],
+  "required_postconditions": [
+    "Both named checkouts equal the exact to_commit and to_tree.",
+    "The mirror remains attached to the exact target branch; the evidence checkout remains detached.",
+    "Both named checkouts have clean index/worktree and zero untracked paths.",
+    "The attached mirror target path remains absent.",
+    "The live remote still equals the to_commit.",
+    "The fixed /usr/local/bin/limactl identity, absent canonical substrate instance, and sudoers sentinel are read-only reverified unchanged.",
+    "The auxiliary preparation task worktree remains byte-clean at its original head/tree."
+  ],
+  "prohibited_actions": [
+    "any source edit, stage, commit, push, reset, clean, rebase, merge other than the exact attached-mirror fast-forward, force operation, new branch, tag, or remote mutation",
+    "any mutation of the protected checkout, meta checkout, or auxiliary preparation task worktree",
+    "any build, installer, code-signing, Lima lifecycle, Keychain, launchd, sudoers, known-hosts, prefix, or official evidence action",
+    "any Windows, WSL, ordinary Linux-host, closeout, or successor work",
+    "task or worktree archival"
+  ],
+  "terminal_requirements": {
+    "receipt_protocol": "codex.auxiliary-source-checkout-refresh-receipt.v1",
+    "return_meta_thread_id": "019fd8c3-b12c-7e73-919f-898600ab0f64",
+    "return_meta_host_id": "local",
+    "send_receipt_as_final_tool_action": true,
+    "official_evidence_successor_held": true,
+    "next_action_after_verified_ready": "fresh nonce-bound EVIDENCE:R3-MAC-IMP-01 attempt 9"
+  }
+}

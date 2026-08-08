@@ -1,7 +1,7 @@
 {
   "protocol": "codex.top-level-orchestration-state.v1",
   "orchestration_id": "substrate-a1-1d-5r3-mac-20260806-41f97e1c570d",
-  "status": "EVIDENCE_PREPARATION_REQUIRED",
+  "status": "EVIDENCE_PREPARATION_RUNNING",
   "dispatch_authorized": true,
   "publication_mode": "remote",
   "remote": "origin",
@@ -162,7 +162,7 @@
     "required_authority": "A narrow reviewed source correction for the privileged limactl --version environment, then a fresh evidence attempt.",
     "advance": false
   },
-  "current_authority_amendment": "authority-amendments/0042-r3-mac-limactl-home-provenance-source-correction.json",
+  "current_authority_amendment": "authority-amendments/0043-r3-mac-source-checkout-refresh.json",
   "evidence_attempt": 8,
   "retry_authority": {
     "evidence_id": "EVIDENCE:R3-MAC-IMP-01",
@@ -1289,5 +1289,27 @@
     "receipt_sha256": "sha256:c65976836da7537b3f1ef5be797a8e40ccab26916dc6efce46b6dbdca5e443f3",
     "verification_path": "receipts/AUX-R3-MAC-LIMACTL-HOME-PROVENANCE-CORRECTION.verification.json",
     "verification_sha256": "sha256:657021ba8aefe2b3a89ced63c56b4addeb878e07b0aee8bdce889eee38dd6565"
+  },
+  "auxiliary_source_checkout_refresh": {
+    "status": "RUNNING",
+    "packet": "AUX-R3-MAC-SOURCE-CHECKOUT-REFRESH",
+    "dispatch_nonce": "2d8c4c920d22e32e72c951edc1b52f74198f6d85764b9900d201d2e06cdb8bc3",
+    "thread_id": "019fe147-e300-72c2-a394-a53f43185ceb",
+    "host_id": "local",
+    "worktree": "/Users/spensermcconnell/.codex/worktrees/b4fe/substrate",
+    "authority_amendment": "authority-amendments/0043-r3-mac-source-checkout-refresh.json",
+    "authority_amendment_sha256": "sha256:62ae8b3aec5cb677b3cef28f7e53bd31328d4b4c10b5dac297ff85a8d2e5e940",
+    "prompt_path": "increments/AUX-R3-MAC-SOURCE-CHECKOUT-REFRESH.prompt.md",
+    "prompt_sha256": "sha256:6f9698dbb7d7188501e1c1f9d27e1690b97d208aef5860e652fa3fafe6294234",
+    "predispatch_path": "increments/AUX-R3-MAC-SOURCE-CHECKOUT-REFRESH.predispatch.json",
+    "predispatch_sha256": "sha256:5e9f6b6a242c2ca24b3368a73a784ff977ea3c62a62c40ac574c46459d8a6f3d",
+    "from_commit": "1126b907df6e38043e9071da222f6c6a377b341c",
+    "from_tree": "3a29fa323a8b9099d894c11d98cc085ecf4807c5",
+    "to_commit": "a06b3fd26ceee4ece7e5bd1481981755eafcedb5",
+    "to_tree": "f4c396d0e28a43405a9a2b1d49a450d6df545c84",
+    "attached_mirror": "/Users/spensermcconnell/.codex/evidence/substrate-a1-1d-5r3-mac-20260806-41f97e1c570d/AUX-R3-MAC-EVIDENCE-PLATFORM-PREREQUISITE-PREP/11c27a5ee57be5b99a3c7457c4f511b14b5747ee4b2b0492874a416d5fab02a3/source/substrate",
+    "evidence_checkout": "/Users/spensermcconnell/.codex/worktrees/1626/substrate",
+    "task_archiving_authorized": false,
+    "prepared_at_utc": "2026-08-08T14:05:40Z"
   }
 }
