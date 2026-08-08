@@ -1,7 +1,7 @@
 {
   "protocol": "codex.top-level-orchestration-state.v1",
   "orchestration_id": "substrate-a1-1d-5r3-mac-20260806-41f97e1c570d",
-  "status": "BLOCKED",
+  "status": "RUNNING",
   "dispatch_authorized": true,
   "publication_mode": "remote",
   "remote": "origin",
@@ -19,6 +19,7 @@
     "AUX-R3-MAC-EVIDENCE-RECOVERY-R6",
     "AUX-R3-MAC-AARCH64-GUEST-COMPILE-CORRECTION",
     "AUX-R3-MAC-LIMACTL-HOME-PROVENANCE-CORRECTION",
+    "AUX-R3-MAC-PRESTAGE-EVIDENCE-BLOCKER-CORRECTION",
     "A1.1d-5R3-MAC-CLOSEOUT"
   ],
   "required_evidence": [
@@ -38,7 +39,22 @@
     "thread_id": "019fd8c3-b12c-7e73-919f-898600ab0f64",
     "host_id": "local"
   },
-  "active_dispatch": null,
+  "active_dispatch": {
+    "increment": "AUX-R3-MAC-PRESTAGE-EVIDENCE-BLOCKER-CORRECTION",
+    "packet_id": "AUX-R3-MAC-PRESTAGE-EVIDENCE-BLOCKER-CORRECTION",
+    "thread_id": "019fdfa4-ba96-70e0-b68d-1d0a4cf32a83",
+    "host_id": "local",
+    "worktree": "/Users/spensermcconnell/.codex/worktrees/2f78/substrate",
+    "dispatch_nonce": "0ae5e61c6cd21581afb861057bcd9789273e9f81926616716cee809006cec58d",
+    "expected_base": {
+      "commit": "a06b3fd26ceee4ece7e5bd1481981755eafcedb5",
+      "tree": "f4c396d0e28a43405a9a2b1d49a450d6df545c84",
+      "target_ref": "refs/heads/feat/internal-host-orchestrator-world-dispatch-bootstrap",
+      "live_remote": "a06b3fd26ceee4ece7e5bd1481981755eafcedb5"
+    },
+    "publication_mode": "remote",
+    "next_increment": "EVIDENCE:R3-MAC-IMP-01"
+  },
   "active_evidence_dispatches": [],
   "verified_evidence": [],
   "completed": [
@@ -163,7 +179,7 @@
     "required_authority": "A narrow reviewed MAC-only source correction for canonical pre-Stage-1 Linux artifact staging, then a fresh evidence attempt.",
     "advance": false
   },
-  "current_authority_amendment": "authority-amendments/0045-r3-mac-prestage-artifact-route-plan.json",
+  "current_authority_amendment": "authority-amendments/0046-r3-mac-prestage-evidence-blocker-correction.json",
   "evidence_attempt": 9,
   "retry_authority": {
     "evidence_id": "EVIDENCE:R3-MAC-IMP-01",
@@ -1368,7 +1384,7 @@
     "verified_at_utc": "2026-08-08T14:10:09Z"
   },
   "auxiliary_prestage_artifact_route_planning": {
-    "status": "RUNNING",
+    "status": "BLOCKED_CONTRADICTION",
     "packet_id": "AUX-R3-MAC-PRESTAGE-ARTIFACT-ROUTE-PLAN",
     "thread_id": "019fdfa4-ba96-70e0-b68d-1d0a4cf32a83",
     "host_id": "local",
@@ -1394,6 +1410,38 @@
     "source_edits_authorized": false,
     "native_actions_authorized": false,
     "successor_dispatch_authorized": false,
-    "task_archiving_authorized": false
+    "task_archiving_authorized": false,
+    "terminal": true,
+    "terminal_at_utc": "2026-08-08T16:05:53Z",
+    "repository_mutations": 0,
+    "native_actions": 0,
+    "decision_record_path": "decisions/0046-r3-mac-prestage-plan-disposition.json",
+    "decision_record_sha256": "sha256:999e12636a50a94bfc39fae9cd8d0397d902d5edaeb456e923f3d0a272505065"
+  },
+  "auxiliary_prestage_evidence_blocker_correction": {
+    "status": "DISPATCHING",
+    "packet_id": "AUX-R3-MAC-PRESTAGE-EVIDENCE-BLOCKER-CORRECTION",
+    "thread_id": "019fdfa4-ba96-70e0-b68d-1d0a4cf32a83",
+    "host_id": "local",
+    "worktree": "/Users/spensermcconnell/.codex/worktrees/2f78/substrate",
+    "dispatch_nonce": "0ae5e61c6cd21581afb861057bcd9789273e9f81926616716cee809006cec58d",
+    "expected_base": {
+      "commit": "a06b3fd26ceee4ece7e5bd1481981755eafcedb5",
+      "tree": "f4c396d0e28a43405a9a2b1d49a450d6df545c84",
+      "target_ref": "refs/heads/feat/internal-host-orchestrator-world-dispatch-bootstrap",
+      "live_remote": "a06b3fd26ceee4ece7e5bd1481981755eafcedb5"
+    },
+    "authority_amendment_path": "authority-amendments/0046-r3-mac-prestage-evidence-blocker-correction.json",
+    "authority_amendment_sha256": "sha256:9e432e44743666a008086993eed505063999fa4573da6df1cc015e521f32aa77",
+    "contract_path": "increments/AUX-R3-MAC-PRESTAGE-EVIDENCE-BLOCKER-CORRECTION.contract.md",
+    "contract_sha256": "sha256:b3715b6f2ac2258afe10d903e64fa4b063238d44d640e1bd6d22a89730834e8a",
+    "prompt_path": "increments/AUX-R3-MAC-PRESTAGE-EVIDENCE-BLOCKER-CORRECTION.continuation-prompt.md",
+    "prompt_sha256": "sha256:cf0fdd6aa1cac73e2f4555a09dbd7f5c4f90636b51b6bb77d89b576e8e406491",
+    "decision_record_path": "decisions/0046-r3-mac-prestage-plan-disposition.json",
+    "decision_record_sha256": "sha256:999e12636a50a94bfc39fae9cd8d0397d902d5edaeb456e923f3d0a272505065",
+    "skills_sha256": "sha256:e3de93f358594033ed59696a9624d2d0ac2fd0c2aa7ddf4a532810a05b262282",
+    "task_archiving_authorized": false,
+    "native_actions_authorized": false,
+    "successor_dispatch_authorized": false
   }
 }
