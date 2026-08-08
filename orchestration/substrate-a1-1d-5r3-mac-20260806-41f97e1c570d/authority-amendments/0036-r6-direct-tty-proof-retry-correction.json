@@ -1,0 +1,127 @@
+{
+  "protocol": "codex.orchestration-authority-amendment.v1",
+  "orchestration_id": "substrate-a1-1d-5r3-mac-20260806-41f97e1c570d",
+  "amendment_id": "0036-r6-direct-tty-proof-retry-correction",
+  "authority_source": "Meta adjudication under the user-authorized R3 MAC typical-blocker authority and same-task continuation policy. This correction remains entirely inside R6 and resolves the incompatibility independently confirmed by the R6 discovery review.",
+  "applies_to": "AUX-R3-MAC-EVIDENCE-RECOVERY-R6",
+  "correction_packet_id": "AUX-R3-MAC-EVIDENCE-RECOVERY-R6-CORRECTION-01",
+  "original_dispatch_nonce": "1b9fe0a5eee31553d83daa75ccdde591ea5a4b797a81f14c3f3d3d839bc9cd70",
+  "continuation_nonce": "01b6223453c9a0466c6e2f5f171989bc1f79373557a2902be57344460578b477",
+  "task": {
+    "thread_id": "019fded7-05c4-7c61-9f7d-5fc456bcda6d",
+    "host_id": "local",
+    "worktree": "/Users/spensermcconnell/.codex/worktrees/1bd8/substrate",
+    "preserve_current_subject": true
+  },
+  "expected_base": {
+    "commit": "a9626bc10a1737416c1d8f7f48630850118f3e6a",
+    "tree": "3f7cdf20125a847a3dfaa472d3797759b5cf6737",
+    "target_ref": "refs/heads/feat/internal-host-orchestrator-world-dispatch-bootstrap"
+  },
+  "reviewed_subject": {
+    "fingerprint": "sha256:018791e14303b553d10286933aba6f911b41b3ad3247cf7bb3aa76092ff51462",
+    "record": "llm-last-mile/runtime-refactor/review-control/r3-mac-evidence-recovery-r6-review-cycle-record.json",
+    "record_sha256": "sha256:12f9659045852167a8d0a6f89471f88b20237a691474c881f110cdde3d1f4485",
+    "status": "bounded_stop",
+    "stop_reason": "authority_required",
+    "disposition": "Accepted as an independently validated, non-advancing discovery review. Its ten P1/P2 findings are mandatory correction inputs. The four original R6 review artifacts remain immutable lineage evidence."
+  },
+  "architecture_decision": {
+    "summary": "Use one control-spawned, direct-terminal operator session and one separate typed data session. No program relays operator bytes. The operator creates one immutable, non-reusable guest proof record; the data session must validate that record before it can publish intent.",
+    "operator_launch": [
+      "The existing ticket-issue response may be extended with one signed GuestPublisherPairingOperatorLaunchV1 capability bound to the admitted PM instance, immutable shared binding, distinct operator session ID, pairing nonce, initial host-record generation, expiry, exact measured limactl absolute path and digest, exact fixed guest executable path and digest, and exact fixed operator command.",
+      "The capability is issued only after current R5/R6 XPC, audit-token, Keychain, PM, source, staged-artifact, and record admission. It contains no ticket, transcript, confirmation value, caller path, arbitrary argv, environment, transport selector, or command selector.",
+      "substrate-lifecycle-control verifies the signed capability and remeasures the fixed limactl executable before spawning the exact command itself. Its stdin, stdout, and stderr are direct duplicated /dev/tty descriptors. No Stdio::piped operator child, byte-copy loop, terminal FD transfer to XPC, or synthetic confirmation is permitted.",
+      "The exact guest command may receive one signed canonical operator-binding envelope as a fixed base64url argument. This narrowly supersedes the earlier operator start-frame rule. The envelope contains binding metadata only, is not a selector, and carries no ticket, transcript, key material, or confirmation input. Forged or changed envelopes have no authority and fail validation.",
+      "Remove the operator_tty XPC file descriptor, all public *_with_terminal_v1 APIs, open_mac_xpc_channel_with_terminal_v1, and the XPC operator-terminal relay operation. No replacement generic public terminal API is authorized."
+    ],
+    "guest_operator_proof": [
+      "The fixed guest operator command opens only its controlling /dev/tty. It displays scope labels and prompts only; it must not display or derive the fingerprint, challenge ID, challenge, or literal from ticket/data state.",
+      "It disables terminal echo while reading the three complete values, restores the prior termios state on every success/error/Drop path, and accepts those values only from the guest controlling TTY.",
+      "It computes the non-reusable confirmation commitment from the manually entered values plus the immutable session binding and atomically creates exactly one no-follow GuestPublisherPairingOperatorProofV1 at a fixed binding-derived guest location. The proof stores only canonical binding/session identity, the commitment, timestamps, and terminal observation; it never stores reusable input values.",
+      "This exact proof-file creation is the sole newly authorized operator-session mutation and supersedes the earlier no-guest-mutation wording only for this one record. It adds no file/path selector and is preserved as evidence."
+    ],
+    "data_session": [
+      "The separate PM-bound data session starts only after the operator child terminates successfully. It receives the signed ticket and typed data frames through its own pipe, never operator bytes.",
+      "Before intent publication it opens the fixed no-follow operator proof, validates its full shared binding, distinct operator session identity, nonce, initial generation, expiry, and commitment against the signed ticket, and then records that proof digest in the generation-CAS host record.",
+      "The data session may recompute the expected commitment only to verify the independently created operator proof. It must not derive, synthesize, persist, or substitute a commitment when the proof is absent, stale, mismatched, replayed, or malformed.",
+      "Only after verified operator proof may the data session publish guest intent and continue typed Hello, transcript, and anchor processing."
+    ],
+    "record_and_retry": [
+      "Keep immutable binding.host_record_generation as the initial generation and a separate mutable expected/current generation for every CAS and rejoin. Never require the post-CAS current generation to equal the immutable initial generation.",
+      "Loss before verified operator proof plus guest intent closes and preserves the attempt. A retry allocates new data/operator session IDs, pairing nonce, challenge, ticket, and record; it never reuses guest_state_root_prepared or an old proof.",
+      "After intent durability, exact rejoin uses the same binding and current generation and permits only byte-identical durable replay within the existing transition table.",
+      "An exact retry after a consumed marker must return the prior terminal result idempotently when ticket, binding, proof, transcript, anchor, and marker are byte-identical. Any alternate replay rejects without mutation.",
+      "Use one expiry boundary everywhere: now >= expires_at is expired. An expired active record returns EXPIRED_PRESERVED without mutation or replacement issuance in that call. A later explicit fresh-attempt call may allocate new authority only after preserving the expired record."
+    ],
+    "projection": [
+      "The host control terminal is the sole display source of the complete fingerprint, challenge ID, challenge, and literal.",
+      "Guest output is limited to fixed prompts and a terminal success/failure status. No wholesale PTY-output projection, ticket-derived confirmation display, proof commitment display, or reusable value logging is allowed."
+    ]
+  },
+  "authorized_surface": {
+    "production_paths": [
+      "crates/common/src/lib.rs",
+      "crates/common/src/managed_artifact.rs",
+      "crates/shell/src/execution/managed_lifecycle.rs",
+      "crates/shell/src/execution/managed_lifecycle/macos_client.rs",
+      "src/bin/substrate-lifecycle-control.rs",
+      "src/bin/substrate-lifecycle-linux.rs",
+      "src/bin/substrate-lifecycle-macos.rs"
+    ],
+    "test_paths": [
+      "crates/shell/tests/managed_lifecycle_v1.rs",
+      "tests/mac/lifecycle_r3.sh"
+    ],
+    "new_internal_contracts": [
+      "GuestPublisherPairingOperatorLaunchV1 and exact canonical/signature/validation helpers",
+      "GuestPublisherPairingOperatorProofV1 and exact canonical/no-follow/validation helpers",
+      "minimum private direct-terminal launch, termios guard, proof persistence, proof validation, generation, retry, consume, and expiry helpers directly reachable from existing R6 symbols"
+    ],
+    "api_limit": "No new generic public API. Existing issue/data APIs may return or carry the typed launch/proof fields needed across the binary/library boundary. Remove the broad public terminal-FD APIs. If Rust visibility requires a narrow exported typed launch-capability verifier, it must be named in the ledger, accept no selector or FD, and be the sole exception.",
+    "review_paths": [
+      "llm-last-mile/runtime-refactor/review-control/r3-mac-evidence-recovery-r6-correction-01-review-authority-security.md",
+      "llm-last-mile/runtime-refactor/review-control/r3-mac-evidence-recovery-r6-correction-01-review-lifecycle-convergence.md",
+      "llm-last-mile/runtime-refactor/review-control/r3-mac-evidence-recovery-r6-correction-01-review-allowlist-evidence.md",
+      "llm-last-mile/runtime-refactor/review-control/r3-mac-evidence-recovery-r6-correction-01-review-cycle-record.json"
+    ]
+  },
+  "mandatory_finding_inputs": [
+    "P1-R6-OPERATOR-TTY-PIPE-RELAY",
+    "P1-R6-DATA-DERIVED-CONFIRMATION",
+    "P1-R6-REJOIN-GENERATION-MISMATCH",
+    "P1-R6-PREINTENT-REUSE",
+    "P1-R6-CONSUME-RETRY-NONIDEMPOTENT",
+    "P1-R6-EXPIRY-MUTATION",
+    "P2-R6-UNAUTHORIZED-PUBLIC-TERMINAL-API",
+    "P2-R6-EXPIRY-EQUALITY",
+    "P2-R6-CONFIRMATION-PROJECTION",
+    "P2-R6-PROOF-GAPS"
+  ],
+  "required_proof": [
+    "No operator terminal FD appears in XPC and no *_with_terminal_v1/open_mac_xpc_channel_with_terminal_v1 symbol remains.",
+    "The operator child uses direct /dev/tty-backed stdin/stdout/stderr, never Stdio::piped, and no source byte-relay loop exists.",
+    "Only a signed binding envelope, never confirmation values, reaches the operator through its fixed argv; arbitrary/mutated envelopes reject.",
+    "The operator proof is created only after guest-TTY input with echo disabled and restored; missing/non-controlling TTY, EOF, signal, timeout, and Drop paths leave no reusable input and fail closed.",
+    "Data-session intent publication is impossible without a valid independent proof; data/ticket values alone cannot construct authority.",
+    "Initial versus current generation, pre-intent loss fresh-attempt IDs, idempotent consume retry, now==expires, expired no-mutation, session swap, third session, altered proof, and selector negatives are executable tests rather than lexical assertions only.",
+    "MAC-only native and x86_64-apple-darwin deterministic checks pass; Linux/Windows are static hash/cfg containment only under amendment 0016."
+  ],
+  "review": {
+    "packet_id": "AUX-R3-MAC-EVIDENCE-RECOVERY-R6-CORRECTION-01",
+    "original_discovery_record": "immutable lineage input",
+    "sequence": "After deterministic remediation, run a fresh correction discovery or same-subject three-lens burst, remediate valid P1/P2, then a different fresh closure reviewer; at most two causally justified supplemental cycles; CLEAN terminates.",
+    "model": "gpt-5.6-terra",
+    "reasoning": "xhigh",
+    "combined_audit": "The correction reviewers must re-run the combined R1-R6 audit over d4bd729de8d344dfc567aaa62203838f68c2c895..candidate. Earlier packets remain read-only."
+  },
+  "hard_limits": [
+    "No reset, clean, rebase, archive, donor copy, or loss of the preserved subject.",
+    "No new transport, endpoint, third session, generic broker, caller selector, direct SSH, VSock, TCP, or arbitrary limactl/instance/guest command.",
+    "No R1-R5 product remediation, ordinary Linux-host provider behavior, Windows/WSL behavior, or frozen wrapper changes.",
+    "No install, code-sign, Keychain mutation, XPC service mutation, Lima mutation, pairing execution, or official evidence action.",
+    "Do not dispatch EVIDENCE:R3-MAC-IMP-01; only meta may do so after independently verifying LANDED_CLEAN."
+  ],
+  "successor_on_clean": "EVIDENCE:R3-MAC-IMP-01",
+  "successor_dispatch_authorized": false
+}

@@ -1,0 +1,21 @@
+{
+  "protocol": "codex.top-level-task-receipt.v1",
+  "orchestration_id": "substrate-a1-1d-5r3-mac-20260806-41f97e1c570d",
+  "dispatch_nonce": "1b9fe0a5eee31553d83daa75ccdde591ea5a4b797a81f14c3f3d3d839bc9cd70",
+  "increment": "AUX-R3-MAC-EVIDENCE-RECOVERY-R6",
+  "status": "BLOCKED_CONTRADICTION",
+  "increment_task": {
+    "thread_id": "019fded7-05c4-7c61-9f7d-5fc456bcda6d",
+    "host_id": "local"
+  },
+  "expected_base": {
+    "commit": "a9626bc10a1737416c1d8f7f48630850118f3e6a",
+    "tree": "3f7cdf20125a847a3dfaa472d3797759b5cf6737"
+  },
+  "blocker": {
+    "summary": "The operator confirmation design pipes and projects terminal bytes, allowing data-derived authority, while generation/retry/expiry semantics remain inconsistent.",
+    "required_authority": "A revised same-R6 direct-terminal architecture and exact retry/expiry/API correction fence.",
+    "handoff_prompt": "Preserve the existing R6 worktree and resume only under amendment 0036. Do not dispatch evidence."
+  },
+  "next_increment": "EVIDENCE:R3-MAC-IMP-01"
+}

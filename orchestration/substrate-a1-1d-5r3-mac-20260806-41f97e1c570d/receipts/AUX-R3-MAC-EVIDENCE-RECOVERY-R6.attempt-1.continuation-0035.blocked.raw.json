@@ -1,0 +1,131 @@
+{
+  "schema": "codex.top-level-task-receipt.v1",
+  "status": "BLOCKED_CONTRADICTION",
+  "orchestration_id": "substrate-a1-1d-5r3-mac-20260806-41f97e1c570d",
+  "increment": "AUX-R3-MAC-EVIDENCE-RECOVERY-R6",
+  "original_dispatch_nonce": "1b9fe0a5eee31553d83daa75ccdde591ea5a4b797a81f14c3f3d3d839bc9cd70",
+  "continuation_nonce": "b718215391e000b0fb0a74927d8e8e224d659c8a42934dcec561a134a590020e",
+  "increment_task": {
+    "thread_id": "019fded7-05c4-7c61-9f7d-5fc456bcda6d",
+    "host_id": "local",
+    "worktree": "/Users/spensermcconnell/.codex/worktrees/1bd8/substrate"
+  },
+  "expected_base": {
+    "commit": "a9626bc10a1737416c1d8f7f48630850118f3e6a",
+    "tree": "3f7cdf20125a847a3dfaa472d3797759b5cf6737"
+  },
+  "live_remote": {
+    "remote": "origin",
+    "ref": "refs/heads/feat/internal-host-orchestrator-world-dispatch-bootstrap",
+    "commit": "a9626bc10a1737416c1d8f7f48630850118f3e6a"
+  },
+  "authority_amendment": {
+    "path": "authority-amendments/0035-r6-closed-session-wiring-fence.json",
+    "sha256": "sha256:5d540701bcd947d3c565539a03cb0395ddcc5d2eda7bcff64664c717a17c849b"
+  },
+  "subject_fingerprint": "sha256:018791e14303b553d10286933aba6f911b41b3ad3247cf7bb3aa76092ff51462",
+  "changed_paths": [
+    "crates/common/src/lib.rs",
+    "crates/common/src/managed_artifact.rs",
+    "crates/shell/src/execution/managed_lifecycle.rs",
+    "crates/shell/src/execution/managed_lifecycle/macos_client.rs",
+    "crates/shell/tests/managed_lifecycle_v1.rs",
+    "src/bin/substrate-lifecycle-control.rs",
+    "src/bin/substrate-lifecycle-linux.rs",
+    "src/bin/substrate-lifecycle-macos.rs",
+    "tests/mac/lifecycle_r3.sh",
+    "llm-last-mile/runtime-refactor/review-control/r3-mac-evidence-recovery-r6-review-authority-security.md",
+    "llm-last-mile/runtime-refactor/review-control/r3-mac-evidence-recovery-r6-review-lifecycle-convergence.md",
+    "llm-last-mile/runtime-refactor/review-control/r3-mac-evidence-recovery-r6-review-allowlist-evidence.md",
+    "llm-last-mile/runtime-refactor/review-control/r3-mac-evidence-recovery-r6-review-cycle-record.json"
+  ],
+  "review": {
+    "record": "llm-last-mile/runtime-refactor/review-control/r3-mac-evidence-recovery-r6-review-cycle-record.json",
+    "record_sha256": "sha256:12f9659045852167a8d0a6f89471f88b20237a691474c881f110cdde3d1f4485",
+    "validated": true,
+    "status": "bounded_stop",
+    "stop_reason": "authority_required",
+    "cycle": "discovery-1",
+    "findings": [
+      {
+        "id": "P1-R6-OPERATOR-TTY-PIPE-RELAY",
+        "priority": "P1",
+        "evidence": "macOS relays the retained host terminal through the operator child stdin pipe instead of direct guest-TTY-only input."
+      },
+      {
+        "id": "P1-R6-DATA-DERIVED-CONFIRMATION",
+        "priority": "P1",
+        "evidence": "The data branch derives commitment from ticket and binding values before independently proving TTY entry."
+      },
+      {
+        "id": "P1-R6-REJOIN-GENERATION-MISMATCH",
+        "priority": "P1",
+        "evidence": "The immutable binding generation is reused as the mutable current generation after CAS."
+      },
+      {
+        "id": "P1-R6-PREINTENT-REUSE",
+        "priority": "P1",
+        "evidence": "Pre-intent loss can reuse guest_state_root_prepared instead of allocating a fresh two-session attempt."
+      },
+      {
+        "id": "P1-R6-CONSUME-RETRY-NONIDEMPOTENT",
+        "priority": "P1",
+        "evidence": "The guest consumed marker rejects the exact retry that the host recovery path admits."
+      },
+      {
+        "id": "P1-R6-EXPIRY-MUTATION",
+        "priority": "P1",
+        "evidence": "An expired active record falls through to replacement issuance instead of immutable preservation."
+      },
+      {
+        "id": "P2-R6-UNAUTHORIZED-PUBLIC-TERMINAL-API",
+        "priority": "P2",
+        "evidence": "Broad public terminal-FD APIs exceed the minimum private-helper fence."
+      },
+      {
+        "id": "P2-R6-EXPIRY-EQUALITY",
+        "priority": "P2",
+        "evidence": "The guest accepts now equal to expires while canonical host validation rejects it."
+      },
+      {
+        "id": "P2-R6-CONFIRMATION-PROJECTION",
+        "priority": "P2",
+        "evidence": "Guest PTY output is wholesale relayed and terminal input lacks echo suppression."
+      },
+      {
+        "id": "P2-R6-PROOF-GAPS",
+        "priority": "P2",
+        "evidence": "Existing static tests do not execute the required loss, replay, terminal, selector, and expiry boundaries."
+      }
+    ]
+  },
+  "combined_r1_r6_audit": {
+    "result": "NOT_CLEAN due only to R6 in-fence findings",
+    "external_r1_r5_p1_p2": []
+  },
+  "checks": {
+    "format": true,
+    "diff_check": true,
+    "native_and_cross_macos_compile": true,
+    "focused_tests": true,
+    "mac_only_containment": true,
+    "native_actions": false,
+    "publication": false
+  },
+  "preservation": {
+    "head": "a9626bc10a1737416c1d8f7f48630850118f3e6a",
+    "tree": "3f7cdf20125a847a3dfaa472d3797759b5cf6737",
+    "index_tree": "3f7cdf20125a847a3dfaa472d3797759b5cf6737",
+    "status_entries": 13,
+    "staged_paths": 0,
+    "worktree_preserved": true,
+    "task_archived": false
+  },
+  "blocker": {
+    "summary": "The operator confirmation design pipes and projects terminal bytes, allowing data-derived authority, while generation/retry/expiry semantics remain inconsistent.",
+    "required_authority": "A revised same-R6 direct-terminal architecture and exact retry/expiry/API correction fence.",
+    "handoff_prompt": "Preserve the existing R6 worktree and resume only under amendment 0036. Do not dispatch evidence."
+  },
+  "next_increment": "EVIDENCE:R3-MAC-IMP-01",
+  "next_increment_dispatched": false
+}
