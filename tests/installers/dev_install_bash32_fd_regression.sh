@@ -42,6 +42,7 @@ FAKE_SUBSTRATE_ARGV="${WORK_ROOT}/fake-substrate.argv"
 FAKE_SUBSTRATE_ENV="${WORK_ROOT}/fake-substrate.env"
 FAKE_SUBSTRATE_FD="${WORK_ROOT}/fake-substrate.fd"
 FAKE_CARGO_ARGV="${WORK_ROOT}/fake-cargo.argv"
+FAKE_PRIVILEGED_LOG="${WORK_ROOT}/fake-privileged.log"
 CALLER_FD_SENTINEL="${WORK_ROOT}/caller-owned-fd-sentinel"
 
 cleanup() {
@@ -52,6 +53,8 @@ trap cleanup EXIT
 
 mkdir -p \
   "${FIXTURE_REPO}/scripts/substrate" \
+  "${FIXTURE_REPO}/scripts/mac" \
+  "${FIXTURE_REPO}/llm-last-mile/runtime-refactor/review-control" \
   "${FIXTURE_REPO}/config" \
   "${FIXTURE_PREFIX}" \
   "${FIXTURE_TMPDIR}" \
@@ -59,7 +62,11 @@ mkdir -p \
 cp "${SOURCE_INSTALLER}" "${FIXTURE_INSTALLER}"
 cp "${REPO_ROOT}/scripts/substrate/world-deps.yaml" \
   "${FIXTURE_REPO}/scripts/substrate/world-deps.yaml"
+cp "${REPO_ROOT}/scripts/mac/com.substrate.lifecycle.publisher.v1.plist" \
+  "${FIXTURE_REPO}/scripts/mac/com.substrate.lifecycle.publisher.v1.plist"
 cp -R "${REPO_ROOT}/config/." "${FIXTURE_REPO}/config/"
+cp "${REPO_ROOT}/llm-last-mile/runtime-refactor/review-control/r3-mac-evidence-recovery-r5-review-cycle-record.json" \
+  "${FIXTURE_REPO}/llm-last-mile/runtime-refactor/review-control/r3-mac-evidence-recovery-r5-review-cycle-record.json"
 chmod 0755 "${FIXTURE_INSTALLER}"
 
 cat >"${FIXTURE_BIN_DIR}/cargo" <<'FAKE_CARGO'
@@ -131,6 +138,44 @@ chmod 0755 \
   "${FAKE_SUBSTRATE_PATH%/substrate}/substrate-lifecycle-macos"
 FAKE_CARGO
 chmod 0755 "${FIXTURE_BIN_DIR}/cargo"
+
+# The fixture proves the installer requests the fixed privileged publication without invoking
+# sudo or writing any host /Library state. The production dispatcher keeps its scrubbed absolute
+# tool paths; only this PATH-local fake observes and accepts the test invocation.
+cat >"${FIXTURE_BIN_DIR}/sudo" <<'FAKE_SUDO'
+#!/bin/bash
+set -euo pipefail
+
+: "${FAKE_PRIVILEGED_LOG:?}"
+printf '%s\n' "$*" >>"${FAKE_PRIVILEGED_LOG}"
+exit 0
+FAKE_SUDO
+chmod 0755 "${FIXTURE_BIN_DIR}/sudo"
+
+cat >"${FIXTURE_BIN_DIR}/limactl" <<'FAKE_LIMACTL'
+#!/bin/bash
+set -euo pipefail
+
+if [[ "${1-}" == "--version" ]]; then
+  printf '%s\n' 'limactl version fixture'
+  exit 0
+fi
+exit 64
+FAKE_LIMACTL
+chmod 0755 "${FIXTURE_BIN_DIR}/limactl"
+
+cat >"${FIXTURE_BIN_DIR}/git" <<'FAKE_GIT'
+#!/bin/bash
+set -euo pipefail
+
+case "${1-}:${2-}" in
+  rev-parse:HEAD) printf '%040d\n' 1 ;;
+  'rev-parse:HEAD^{tree}') printf '%040d\n' 2 ;;
+  symbolic-ref:-q) printf '%s\n' 'refs/heads/r5-fixture' ;;
+  *) exit 64 ;;
+esac
+FAKE_GIT
+chmod 0755 "${FIXTURE_BIN_DIR}/git"
 
 cat >"${FIXTURE_BIN_DIR}/cp" <<'FAKE_CP'
 #!/bin/bash
@@ -235,6 +280,7 @@ run_fixture_installer() {
     FAKE_SUBSTRATE_ENV="${FAKE_SUBSTRATE_ENV}" \
     FAKE_SUBSTRATE_FD="${FAKE_SUBSTRATE_FD}" \
     FAKE_CARGO_ARGV="${FAKE_CARGO_ARGV}" \
+    FAKE_PRIVILEGED_LOG="${FAKE_PRIVILEGED_LOG}" \
     FAKE_SUBSTRATE_CALLER_FD_SENTINEL="${CALLER_FD_SENTINEL}" \
     FAKE_FAIL_MAC_COPY_BINARY="${fail_copy_binary}" \
     FAKE_FAIL_MAC_MANIFEST_ONCE="${fail_manifest_once}" \
@@ -342,6 +388,18 @@ cmp -s "${WORK_ROOT}/expected-cargo.argv" "${FAKE_CARGO_ARGV}" \
   || fail "installer did not build exactly the macOS lifecycle binaries"
 
 assert_mac_pair_converged "${FIXTURE_PREFIX}" primary
+grep -Fq -- 'mac-publisher-install-provenance' "${FAKE_PRIVILEGED_LOG}" \
+  || fail "fixture installer did not request fixed root install-provenance publication"
+# This fixture intentionally does not invoke sudo.  Pin the fixed source-to-root-copy
+# verification contract so a shell-only regression cannot drop the pre-elevation digest join.
+for required in \
+  'executor_expected_sha="${14}"' \
+  'test "$(sha "$executor_path")" = "$executor_expected_sha"' \
+  'privileged executor copy does not match pre-elevation digest' \
+  '"${control_src_sha}" "${control_src_identity}" "${executor_src_sha}" "${executor_src_identity}"'; do
+  grep -Fq -- "${required}" "${SOURCE_INSTALLER}" \
+    || fail "installer lost fixed provenance source/copy integrity guard: ${required}"
+done
 
 COPY_FAILURE_PREFIX="${WORK_ROOT}/copy-failure-prefix"
 COPY_FAILURE_MARKER="${WORK_ROOT}/copy-failure.marker"

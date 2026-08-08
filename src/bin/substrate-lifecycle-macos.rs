@@ -11,20 +11,45 @@ use sha2::{Digest, Sha256};
 use std::fs;
 use std::io::{Read as _, Write as _};
 #[cfg(target_os = "macos")]
-use std::os::fd::AsRawFd;
+use std::os::fd::{AsRawFd, FromRawFd};
 #[cfg(target_os = "macos")]
-use std::os::unix::fs::{MetadataExt, OpenOptionsExt};
+use std::os::unix::ffi::OsStringExt;
+#[cfg(target_os = "macos")]
+use std::os::unix::fs::{MetadataExt, OpenOptionsExt, PermissionsExt};
 use std::path::{Path, PathBuf};
-use std::time::{SystemTime, UNIX_EPOCH};
+use std::process::{Command, Stdio};
+use std::time::{Duration, SystemTime, UNIX_EPOCH};
 use substrate_common::{
-    canonical_lifecycle_publisher_protected_state_v1, canonical_mac_publisher_control_authority_v1,
-    parse_p256_spki_der_v1, validate_guest_publisher_pairing_ticket_v1,
-    validate_lifecycle_publisher_protected_state_v1, validate_lima_stage_one_authorization_v1,
-    validate_mac_publisher_control_authority_v1, validate_managed_lifecycle_publisher_request_v1,
+    canonical_action_receipt_bytes_v1, canonical_action_receipt_index_bytes_v1,
+    canonical_lifecycle_publisher_protected_state_v1, canonical_lifecycle_signature_payload_v1,
+    canonical_mac_lima_stage_one_capsule_v1, canonical_mac_publisher_bootstrap_attempt_locator_v1,
+    canonical_mac_publisher_control_admission_v1, canonical_mac_publisher_install_provenance_v1,
+    canonical_managed_manifest_head_v1, canonical_manifest_bytes_v1, lifecycle_anchor_sha256_v1,
+    mac_publisher_bootstrap_request_sha256_v1, mac_publisher_control_authority_sha256_v1,
+    managed_action_prepared_record_sha256_v1, parse_p256_spki_der_v1,
+    parse_publisher_bootstrap_authorization_v1, publisher_bootstrap_authorization_sha256_v1,
+    validate_guest_publisher_pairing_ticket_v1, validate_lifecycle_publisher_protected_state_v1,
+    validate_lima_stage_one_authorization_v1, validate_lima_stage_one_observation_v1,
+    validate_mac_lima_stage_one_capsule_v1, validate_mac_publisher_bootstrap_attempt_locator_v1,
+    validate_mac_publisher_control_admission_v1, validate_mac_publisher_install_provenance_v1,
+    validate_managed_action_receipt_signature_v1, validate_managed_lifecycle_publisher_request_v1,
     validate_publisher_bootstrap_authorization_v1, verify_p256_p1363_low_s_v1,
-    GuestPublisherPairingTicketV1, LifecyclePublisherProtectedStateV1, LimaStageOneAuthorizationV1,
-    MacPublisherControlAuthorityV1, ManagedArtifactIdentityV1, ManagedLifecyclePublisherRequestV1,
-    PublisherBootstrapAuthorizationV1,
+    GuestPublisherPairingTicketV1, LifecyclePublisherAnchorV1, LifecyclePublisherProtectedStateV1,
+    LifecycleSignatureV1, LimaStageOneAuthorizationV1, LimaStageOneObservationV1,
+    MacLimaStageOneCapsuleV1, MacLimaStageOneSuccessorTemplateV1,
+    MacPublisherBootstrapAttemptLocatorV1, MacPublisherBootstrapRequestV1,
+    MacPublisherControlAdmissionV1, MacPublisherControlAuthorityV1,
+    MacPublisherInstallProvenanceV1, ManagedActionPreparedRecordV1, ManagedActionReceiptIndexV1,
+    ManagedActionReceiptV1, ManagedActionV1, ManagedArtifactDispositionV1, ManagedArtifactEntryV1,
+    ManagedArtifactIdentityV1, ManagedArtifactManifestV1, ManagedArtifactRoleV1,
+    ManagedExecutorIdentityV1, ManagedLifecyclePublisherRequestV1, ManagedLifecycleStateV1,
+    ManagedManifestHeadV1, PublisherBootstrapAuthorizationV1,
+};
+use substrate_shell::{
+    complete_mac_lima_stage_one_transition_v1, resume_action_receipt_commit_v1,
+    validate_mapped_lifecycle_control_request_v1, InstallBootstrapContextCarrierV1,
+    ManagedLifecycleControlRequestV1, MappedLifecycleTagV1, PlatformBootstrapMappingV1,
+    PlatformPrincipalV1,
 };
 
 const MAC_MACH_SERVICE_V1: &str = "com.substrate.lifecycle.publisher.v1";
@@ -33,7 +58,34 @@ const MAC_CONTROL_DESIGNATED_REQUIREMENT_V1: &str =
     "anchor apple generic and identifier \"com.substrate.lifecycle.publisher.v1\"";
 const MAC_KEYCHAIN_SERVICE_V1: &str = "com.substrate.lifecycle.v1";
 const MAC_CONTROL_ADMISSION_ACCOUNT_V1: &str = "mac-control-admission-authority.v1";
+const MAC_BOOTSTRAP_PROVENANCE_PATH_V1: &str =
+    "/Library/Application Support/Substrate/lifecycle/bootstrap-provenance.v1.json";
 const MAX_MAC_XPC_FRAME_BYTES_V1: usize = 1024 * 1024;
+const MAC_BOOTSTRAP_FRAME_FINISH_TIMEOUT_V1: Duration = Duration::from_secs(5);
+/// Lifecycle effects may take materially longer than the bounded FD3 bootstrap frame.  This
+/// is still a fixed executor-owned ceiling, never a caller supplied timeout.
+const MAC_LIMA_EFFECT_TIMEOUT_V1: Duration = Duration::from_secs(300);
+const MAC_LIMA_STAGE_ONE_PROFILE_TEMPLATE_ALGORITHM_V1: &str =
+    "substrate.mac-lima-stage-one-profile-template";
+const MAC_LIMA_STAGE_ONE_PROFILE_TEMPLATE_VERSION_V1: u32 = 1;
+const MAC_LIMA_STAGE_ONE_MARKER_PATH_V1: &str =
+    "/var/lib/substrate/.substrate-lima-stage-one-marker.v1";
+// This deliberately contains only an attempt/capsule marker and fixed Lima profile constants.
+// It neither stages project bytes nor installs packages, DNS, publisher, world, or forwarding
+// components. Dynamic data are rendered by `render_mac_lima_stage_one_profile_v1` only after the
+// signed Stage-1 authorization was derived from retained state.
+const MAC_LIMA_STAGE_ONE_PROFILE_TEMPLATE_V1: &str = r#"arch: "aarch64"
+minimumLimaVersion: "1.0.0"
+provision:
+  - mode: system
+    script: |
+      umask 077
+      mkdir -p /var/lib/substrate
+      chown root:root /var/lib/substrate
+      chmod 0700 /var/lib/substrate
+      printf '%s\n' "__SUBSTRATE_STAGE_ONE_MARKER__" > /var/lib/substrate/.substrate-lima-stage-one-marker.v1
+      chmod 0600 /var/lib/substrate/.substrate-lima-stage-one-marker.v1
+"#;
 
 /// Fixed state projections owned by the designated macOS lifecycle publisher.
 #[derive(Debug, Clone)]
@@ -50,9 +102,22 @@ pub struct MacLifecyclePublisherServiceV1 {
 }
 
 fn main() -> Result<()> {
-    let operation = std::env::args()
-        .nth(1)
+    let mut args = std::env::args();
+    let _program = args.next();
+    let operation = args
+        .next()
         .ok_or_else(|| anyhow::anyhow!("missing macOS lifecycle operation"))?;
+    if operation == "--publisher-bootstrap-fd" {
+        if args.next().as_deref() != Some("3") || args.next().is_some() {
+            bail!("publisher bootstrap accepts exactly --publisher-bootstrap-fd 3");
+        }
+        // This branch precedes all ordinary stdin handling.  Its sole input is the retained
+        // SOCK_SEQPACKET peer inherited at descriptor 3.
+        return consume_publisher_bootstrap_fd3_v1(3);
+    }
+    if args.next().is_some() {
+        bail!("macOS lifecycle operation has unexpected arguments");
+    }
     if operation == "run-publisher" {
         // launchd invokes this operation without an untrusted stdin request. It must remain in
         // the fixed Mach-service listener rather than falling through to a one-shot stdio relay.
@@ -65,7 +130,7 @@ fn main() -> Result<()> {
     std::io::stdin()
         .read_to_end(&mut input)
         .context("read macOS lifecycle executor input")?;
-    let executor = MacManagedArtifactExecutorV1 {
+    let _executor = MacManagedArtifactExecutorV1 {
         state_root: PathBuf::from(MAC_STATE_ROOT_V1),
         protected_state: PathBuf::from(MAC_STATE_ROOT_V1).join("current-anchor.v1.json"),
         pairing_root: PathBuf::from(MAC_STATE_ROOT_V1).join("guest-pairings"),
@@ -73,7 +138,7 @@ fn main() -> Result<()> {
     let response = match operation.as_str() {
         // These are fixed XPC client relays only. They never run the action locally: the
         // launchd-owned listener below is the sole request handler and peer-attestation point.
-        "bootstrap-publisher" | "submit-request" | "issue-guest-ticket" | "lima-action" => {
+        "stage-one-create" | "post-pm-action" => {
             relay_mac_xpc_publisher_request_v1(operation.as_str(), &input)?
         }
         other => bail!("unknown macOS lifecycle operation {other}"),
@@ -84,9 +149,2581 @@ fn main() -> Result<()> {
     Ok(())
 }
 
+/// Consume exactly one bounded direct-bootstrap frame from the peer retained on FD3.
+///
+/// The native admission layer owns the SO_PEERCRED-equivalent peer/image/build/terminal joins;
+/// this entrypoint deliberately has neither a stdin fallback nor a second-frame retry path.
+fn consume_publisher_bootstrap_fd3_v1(fd: i32) -> Result<()> {
+    #[cfg(target_os = "macos")]
+    {
+        use std::os::unix::net::UnixDatagram;
+
+        if fd != 3 {
+            bail!("publisher bootstrap must use descriptor 3");
+        }
+        mac_require_seqpacket_channel_v1(fd)?;
+        // This kernel observation precedes every untrusted authorization decode.
+        let peer = mac_bootstrap_peer_identity_v1(fd)?;
+        let provenance = mac_load_retained_bootstrap_provenance_v1()?;
+        // The peer's kernel PID and its retained executable are admitted before any authority
+        // bytes are decoded.  Decoded bytes can only further constrain this fixed record.
+        mac_attest_bootstrap_control_peer_predecode_v1(&peer, &provenance)?;
+        // SAFETY: this entrypoint takes sole ownership of the verified FD3 endpoint.
+        let socket = unsafe { UnixDatagram::from_raw_fd(fd) };
+        let frame = mac_read_single_seqpacket_frame_v1(&socket)?;
+        let fresh_authorization = parse_publisher_bootstrap_authorization_v1(&frame)
+            .context("decode canonical direct bootstrap authorization")?;
+        mac_attest_bootstrap_authorization_to_provenance_v1(&fresh_authorization, &provenance)?;
+        mac_attest_running_executor_image_v1(&fresh_authorization, &provenance)?;
+        // The FD3 authority remains one-shot.  A repeat direct command supplies only another
+        // IH-derived authorization to reach this retained locator; the original complete
+        // authorization is reconstructed in memory from fixed facts and never serialized.
+        let (authorization, locator) =
+            mac_open_or_allocate_bootstrap_attempt_locator_v1(&fresh_authorization, &provenance)?;
+        let response = if locator.terminal_state == "Completed" {
+            mac_validate_completed_bootstrap_attempt_locator_joins_v1(&locator)?;
+            mac_decode_attempt_locator_response_v1(&locator)?
+        } else {
+            let response =
+                bootstrap_mac_publisher_from_authorized_fd3_v1(&authorization, &provenance)?;
+            let _ = mac_complete_bootstrap_attempt_locator_v1(&locator, &authorization, &response)?;
+            response
+        };
+        mac_send_single_seqpacket_frame_v1(
+            &socket,
+            &canonical_bootstrap_json_bytes_v1(&response)
+                .context("encode bounded bootstrap response")?,
+        )
+    }
+    #[cfg(not(target_os = "macos"))]
+    {
+        let _ = fd;
+        bail!("publisher bootstrap FD3 entrypoint is available only on macOS")
+    }
+}
+
+#[cfg(target_os = "macos")]
+#[derive(Debug, Clone, Copy)]
+struct MacBootstrapPeerIdentityV1 {
+    pid: libc::pid_t,
+    uid: libc::uid_t,
+    gid: libc::gid_t,
+}
+
+/// Refuse a stream, datagram, replacement descriptor, or any transport other than the retained
+/// one-shot AF_UNIX SOCK_SEQPACKET channel.
+#[cfg(target_os = "macos")]
+fn mac_require_seqpacket_channel_v1(fd: i32) -> Result<()> {
+    let mut socket_type = 0_i32;
+    let mut socket_type_len = std::mem::size_of::<i32>() as libc::socklen_t;
+    // SAFETY: getsockopt writes exactly one integer into the supplied fixed-size buffer.
+    if unsafe {
+        libc::getsockopt(
+            fd,
+            libc::SOL_SOCKET,
+            libc::SO_TYPE,
+            (&mut socket_type as *mut i32).cast(),
+            &mut socket_type_len,
+        )
+    } != 0
+    {
+        return Err(std::io::Error::last_os_error())
+            .context("inspect retained bootstrap FD3 socket type");
+    }
+    if socket_type_len as usize != std::mem::size_of::<i32>() || socket_type != libc::SOCK_SEQPACKET
+    {
+        bail!("retained bootstrap FD3 is not SOCK_SEQPACKET");
+    }
+    Ok(())
+}
+
+/// Obtain the direct peer from Darwin kernel credentials and prove it retains this controlling
+/// terminal's session before an authorization payload is decoded.
+#[cfg(target_os = "macos")]
+fn mac_bootstrap_peer_identity_v1(fd: i32) -> Result<MacBootstrapPeerIdentityV1> {
+    let mut uid = 0 as libc::uid_t;
+    let mut gid = 0 as libc::gid_t;
+    // SAFETY: getpeereid obtains AF_UNIX peer credentials from the kernel.
+    if unsafe { libc::getpeereid(fd, &mut uid, &mut gid) } != 0 {
+        return Err(std::io::Error::last_os_error())
+            .context("read retained bootstrap FD3 peer credentials");
+    }
+    let mut pid = 0 as libc::pid_t;
+    let mut pid_len = std::mem::size_of::<libc::pid_t>() as libc::socklen_t;
+    // SAFETY: LOCAL_PEERPID returns the endpoint PID owned by the kernel, never JSON.
+    if unsafe {
+        libc::getsockopt(
+            fd,
+            libc::SOL_LOCAL,
+            libc::LOCAL_PEERPID,
+            (&mut pid as *mut libc::pid_t).cast(),
+            &mut pid_len,
+        )
+    } != 0
+    {
+        return Err(std::io::Error::last_os_error())
+            .context("read retained bootstrap FD3 peer PID");
+    }
+    if pid_len as usize != std::mem::size_of::<libc::pid_t>() || pid <= 1 {
+        bail!("retained bootstrap FD3 has no kernel-owned peer PID");
+    }
+    let tty = fs::OpenOptions::new()
+        .read(true)
+        .open("/dev/tty")
+        .context("open retained controlling terminal for bootstrap join")?;
+    // SAFETY: these calls read kernel-owned session identifiers for retained descriptors/PIDs.
+    let terminal_session = unsafe { libc::tcgetsid(tty.as_raw_fd()) };
+    let peer_session = unsafe { libc::getsid(pid) };
+    if terminal_session <= 0 || peer_session <= 0 || terminal_session != peer_session {
+        bail!("retained bootstrap FD3 peer does not control the confirmed terminal session");
+    }
+    Ok(MacBootstrapPeerIdentityV1 { pid, uid, gid })
+}
+
+#[cfg(target_os = "macos")]
+fn mac_read_single_seqpacket_frame_v1(
+    socket: &std::os::unix::net::UnixDatagram,
+) -> Result<Vec<u8>> {
+    let original_timeout = socket
+        .read_timeout()
+        .context("read retained bootstrap FD3 timeout")?;
+    socket
+        .set_read_timeout(Some(MAC_BOOTSTRAP_FRAME_FINISH_TIMEOUT_V1))
+        .context("set retained bootstrap FD3 frame timeout")?;
+    let bounded = (|| -> Result<Vec<u8>> {
+        let mut frame = vec![0_u8; MAX_MAC_XPC_FRAME_BYTES_V1 + 1];
+        let received = socket
+            .recv(&mut frame)
+            .context("receive retained bootstrap FD3 authorization frame")?;
+        if received == 0 || received > MAX_MAC_XPC_FRAME_BYTES_V1 {
+            bail!("retained bootstrap FD3 frame is absent or oversized");
+        }
+        frame.truncate(received);
+        let mut trailing = [0_u8; 1];
+        match socket.recv(&mut trailing) {
+            Ok(0) => Ok(frame),
+            Ok(_) => bail!("retained bootstrap FD3 carried a second frame"),
+            Err(error)
+                if matches!(
+                    error.kind(),
+                    std::io::ErrorKind::TimedOut | std::io::ErrorKind::WouldBlock
+                ) =>
+            {
+                bail!("retained bootstrap FD3 did not terminate its one-frame request")
+            }
+            Err(error) => Err(error).context("verify retained bootstrap FD3 frame boundary"),
+        }
+    })();
+    socket
+        .set_read_timeout(original_timeout)
+        .context("restore retained bootstrap FD3 timeout")?;
+    bounded
+}
+
+#[cfg(target_os = "macos")]
+fn mac_send_single_seqpacket_frame_v1(
+    socket: &std::os::unix::net::UnixDatagram,
+    response: &[u8],
+) -> Result<()> {
+    if response.is_empty() || response.len() > MAX_MAC_XPC_FRAME_BYTES_V1 {
+        bail!("retained bootstrap FD3 response is absent or oversized");
+    }
+    if socket
+        .send(response)
+        .context("send retained bootstrap FD3 response")?
+        != response.len()
+    {
+        bail!("retained bootstrap FD3 response was truncated");
+    }
+    // SAFETY: FD3 is private to this one response and must not become a reusable channel.
+    if unsafe { libc::shutdown(socket.as_raw_fd(), libc::SHUT_WR) } != 0 {
+        return Err(std::io::Error::last_os_error())
+            .context("finish retained bootstrap FD3 response");
+    }
+    Ok(())
+}
+
+#[cfg(target_os = "macos")]
+fn mac_attest_bootstrap_control_peer_predecode_v1(
+    peer: &MacBootstrapPeerIdentityV1,
+    provenance: &MacPublisherInstallProvenanceV1,
+) -> Result<()> {
+    if peer.uid == 0 && peer.gid == 0 {
+        bail!("retained bootstrap FD3 refuses a root-originated control peer");
+    }
+    let executable = mac_kernel_peer_executable_path_v1(peer.pid)?;
+    let image = mac_measure_bootstrap_image_v1(&executable)?;
+    let path_after = mac_kernel_peer_executable_path_v1(peer.pid)?;
+    if executable != path_after
+        || image.artifact_sha256 != provenance.control_image.artifact_sha256
+        || image.artifact_identity != provenance.control_image.physical_identity
+        || image.code_identity != provenance.control_image.code_identity
+    {
+        bail!("retained bootstrap FD3 peer image changed or does not join retained provenance");
+    }
+    mac_system_keychain_ffi_v1::verify_process_designated_requirement(
+        peer.pid,
+        &provenance.control_authority.designated_requirement,
+    )
+}
+
+#[cfg(target_os = "macos")]
+fn mac_attest_bootstrap_authorization_to_provenance_v1(
+    authorization: &PublisherBootstrapAuthorizationV1,
+    provenance: &MacPublisherInstallProvenanceV1,
+) -> Result<()> {
+    validate_publisher_bootstrap_authorization_v1(authorization)?;
+    let authority = authorization
+        .mac_control_authority
+        .as_ref()
+        .ok_or_else(|| anyhow::anyhow!("bootstrap authorization lacks mac control authority"))?;
+    if *authority != provenance.control_authority
+        || authorization.source_commit != provenance.source_commit
+        || authorization.source_tree != provenance.source_tree
+        || authorization.source_ref != provenance.source_ref
+        || authorization.host_context_commitment != provenance.host_context_commitment
+    {
+        bail!("decoded bootstrap authority does not further constrain retained provenance");
+    }
+    Ok(())
+}
+
+#[cfg(target_os = "macos")]
+fn mac_attest_running_executor_image_v1(
+    authorization: &PublisherBootstrapAuthorizationV1,
+    provenance: &MacPublisherInstallProvenanceV1,
+) -> Result<()> {
+    let evidence = &authorization.executor_build_evidence;
+    if evidence.source_commit != authorization.source_commit
+        || evidence.source_tree != authorization.source_tree
+        || evidence.source_ref != authorization.source_ref
+    {
+        bail!("executor build evidence does not join bootstrap authorization source identity");
+    }
+    let path = std::env::current_exe().context("resolve fixed bootstrap executor image")?;
+    let image = mac_measure_bootstrap_image_v1(&path)?;
+    if image.artifact_sha256 != evidence.artifact_sha256
+        || image.artifact_identity != evidence.artifact_identity
+        || evidence.code_identity.as_deref() != Some(image.code_identity.as_str())
+        || image.artifact_sha256 != provenance.executor_image.artifact_sha256
+        || image.artifact_identity != provenance.executor_image.physical_identity
+        || image.code_identity != provenance.executor_image.code_identity
+    {
+        bail!("running bootstrap executor image does not join published build evidence");
+    }
+    Ok(())
+}
+
+#[cfg(target_os = "macos")]
+struct MacMeasuredBootstrapImageV1 {
+    artifact_sha256: String,
+    artifact_identity: String,
+    code_identity: String,
+}
+
+#[cfg(target_os = "macos")]
+fn mac_measure_bootstrap_image_v1(path: &Path) -> Result<MacMeasuredBootstrapImageV1> {
+    let file = fs::OpenOptions::new()
+        .read(true)
+        .custom_flags(libc::O_CLOEXEC | libc::O_NOFOLLOW)
+        .open(path)
+        .with_context(|| {
+            format!(
+                "open bootstrap image without following links {}",
+                path.display()
+            )
+        })?;
+    let metadata = file
+        .metadata()
+        .with_context(|| format!("inspect bootstrap image {}", path.display()))?;
+    if !metadata.file_type().is_file() || metadata.nlink() != 1 {
+        bail!("bootstrap image must be one retained regular-file identity");
+    }
+    let mut reader = file;
+    let mut digest = Sha256::new();
+    let mut buffer = [0_u8; 64 * 1024];
+    loop {
+        let count = reader
+            .read(&mut buffer)
+            .context("hash retained bootstrap image")?;
+        if count == 0 {
+            break;
+        }
+        digest.update(&buffer[..count]);
+    }
+    let output = std::process::Command::new("/usr/bin/codesign")
+        .arg("-d")
+        .arg("-vvv")
+        .arg("--")
+        .arg(path)
+        .output()
+        .context("measure retained bootstrap image CodeDirectory identity")?;
+    if !output.status.success() {
+        bail!("retained bootstrap image CodeDirectory measurement failed");
+    }
+    let retained_after = reader
+        .metadata()
+        .context("reinspect retained bootstrap image descriptor")?;
+    let path_after = fs::metadata(path)
+        .with_context(|| format!("reinspect bootstrap image path {}", path.display()))?;
+    if retained_after.dev() != metadata.dev()
+        || retained_after.ino() != metadata.ino()
+        || path_after.dev() != metadata.dev()
+        || path_after.ino() != metadata.ino()
+    {
+        bail!("bootstrap image identity changed during retained hash/code measurement");
+    }
+    let diagnostics = String::from_utf8_lossy(&output.stderr);
+    let cdhash = diagnostics
+        .lines()
+        .find_map(|line| line.strip_prefix("CDHash="))
+        .filter(|value| {
+            value.len() == 40
+                && value
+                    .bytes()
+                    .all(|byte| byte.is_ascii_hexdigit() && !byte.is_ascii_uppercase())
+        })
+        .ok_or_else(|| anyhow::anyhow!("retained bootstrap image has no canonical CDHash"))?;
+    Ok(MacMeasuredBootstrapImageV1 {
+        artifact_sha256: format!("{:x}", digest.finalize()),
+        artifact_identity: format!("dev:{}:ino:{}", metadata.dev(), metadata.ino()),
+        code_identity: format!("cdhash:{cdhash}"),
+    })
+}
+
+/// The privileged Stage-1 effect may execute only a tool published below a root-owned,
+/// non-writable, no-follow path chain.  Hashing the final regular file alone is not sufficient:
+/// otherwise a caller-controlled parent can replace the pathname between measurement and spawn.
+#[cfg(target_os = "macos")]
+fn mac_require_root_owned_immutable_tool_path_v1(path: &Path) -> Result<()> {
+    if !path.is_absolute() {
+        bail!("retained limactl tool path is not absolute");
+    }
+    let mut current = PathBuf::from("/");
+    let mut saw_regular_file = false;
+    for component in path.components() {
+        match component {
+            std::path::Component::RootDir => continue,
+            std::path::Component::Normal(segment) => current.push(segment),
+            _ => bail!("retained limactl tool path is not a canonical absolute identity"),
+        }
+        let metadata = fs::symlink_metadata(&current).with_context(|| {
+            format!(
+                "inspect retained limactl path segment {}",
+                current.display()
+            )
+        })?;
+        if metadata.file_type().is_symlink() || metadata.uid() != 0 || metadata.mode() & 0o022 != 0
+        {
+            bail!("retained limactl path segment is not root-owned immutable no-follow state");
+        }
+        if current == path {
+            if !metadata.file_type().is_file() || metadata.nlink() != 1 {
+                bail!("retained limactl tool is not one root-owned regular-file identity");
+            }
+            saw_regular_file = true;
+        } else if !metadata.is_dir() {
+            bail!("retained limactl path parent is not a directory");
+        }
+    }
+    if !saw_regular_file {
+        bail!("retained limactl tool path has no regular-file terminal identity");
+    }
+    Ok(())
+}
+
+#[cfg(target_os = "macos")]
+fn mac_measure_root_owned_immutable_lima_tool_v1(
+    path: &Path,
+) -> Result<MacMeasuredBootstrapImageV1> {
+    mac_require_root_owned_immutable_tool_path_v1(path)?;
+    let first = mac_measure_bootstrap_image_v1(path)?;
+    mac_require_root_owned_immutable_tool_path_v1(path)?;
+    let second = mac_measure_bootstrap_image_v1(path)?;
+    if first.artifact_sha256 != second.artifact_sha256
+        || first.artifact_identity != second.artifact_identity
+        || first.code_identity != second.code_identity
+    {
+        bail!("retained limactl identity changed during no-follow measurement");
+    }
+    Ok(first)
+}
+
+/// Resolve the FD3 peer executable through Darwin's kernel process table rather than an
+/// authorization field.  The caller re-observes this path after descriptor hashing to make a
+/// peer exec/identity race preserving-first.
+#[cfg(target_os = "macos")]
+fn mac_kernel_peer_executable_path_v1(pid: libc::pid_t) -> Result<PathBuf> {
+    // PROC_PIDPATHINFO_MAXSIZE is the Darwin ABI fixed 4096-byte path buffer. Keep the constant
+    // local because older libc crate releases do not expose it on every supported SDK.
+    let mut bytes = vec![0_u8; 4096];
+    // SAFETY: proc_pidpath writes at most the fixed buffer length for the kernel-owned PID.
+    let length = unsafe { proc_pidpath(pid, bytes.as_mut_ptr().cast(), bytes.len() as u32) };
+    if length <= 0 || length as usize >= bytes.len() {
+        return Err(std::io::Error::last_os_error())
+            .context("resolve retained bootstrap FD3 peer executable from kernel PID");
+    }
+    bytes.truncate(length as usize);
+    let path = std::ffi::OsString::from_vec(bytes);
+    let path = PathBuf::from(path);
+    if !path.is_absolute() {
+        bail!("kernel peer executable path is not absolute");
+    }
+    Ok(path)
+}
+
+/// Read the fixed root-owned bootstrap provenance through a no-follow descriptor.  This is
+/// intentionally duplicated at the privilege boundary so an untrusted FD3 frame is never used
+/// to select the retained record.
+#[cfg(target_os = "macos")]
+fn mac_load_retained_bootstrap_provenance_v1() -> Result<MacPublisherInstallProvenanceV1> {
+    let path = Path::new(MAC_BOOTSTRAP_PROVENANCE_PATH_V1);
+    let parent = path
+        .parent()
+        .ok_or_else(|| anyhow::anyhow!("fixed bootstrap provenance has no parent"))?;
+    let parent_metadata = fs::symlink_metadata(parent).with_context(|| {
+        format!(
+            "inspect fixed bootstrap provenance parent {}",
+            parent.display()
+        )
+    })?;
+    if !parent_metadata.is_dir()
+        || parent_metadata.uid() != 0
+        || parent_metadata.gid() != 0
+        || parent_metadata.mode() & 0o022 != 0
+    {
+        bail!("fixed bootstrap provenance parent is not root-owned no-follow identity");
+    }
+    let mut file = fs::OpenOptions::new()
+        .read(true)
+        .custom_flags(libc::O_CLOEXEC | libc::O_NOFOLLOW)
+        .open(path)
+        .with_context(|| format!("open fixed bootstrap provenance {}", path.display()))?;
+    let metadata = file
+        .metadata()
+        .context("inspect fixed bootstrap provenance")?;
+    if !metadata.is_file()
+        || metadata.nlink() != 1
+        || metadata.uid() != 0
+        || metadata.gid() != 0
+        || metadata.mode() & 0o777 != 0o444
+    {
+        bail!("fixed bootstrap provenance is not root:wheel 0444 regular file");
+    }
+    let mut bytes = Vec::new();
+    file.read_to_end(&mut bytes)
+        .context("read fixed bootstrap provenance")?;
+    let path_after =
+        fs::symlink_metadata(path).context("reinspect fixed bootstrap provenance path")?;
+    if path_after.dev() != metadata.dev() || path_after.ino() != metadata.ino() {
+        bail!("fixed bootstrap provenance changed during descriptor read");
+    }
+    let provenance: MacPublisherInstallProvenanceV1 =
+        serde_json::from_slice(&bytes).context("decode fixed bootstrap provenance")?;
+    validate_mac_publisher_install_provenance_v1(&provenance)?;
+    if canonical_mac_publisher_install_provenance_v1(&provenance)? != bytes {
+        bail!("fixed bootstrap provenance is not canonical");
+    }
+    Ok(provenance)
+}
+
+fn canonical_bootstrap_json_bytes_v1(value: &Value) -> Result<Vec<u8>> {
+    fn write_value(value: &Value, output: &mut String) -> Result<()> {
+        match value {
+            Value::Null => output.push_str("null"),
+            Value::Bool(value) => output.push_str(if *value { "true" } else { "false" }),
+            Value::Number(value) if value.is_i64() || value.is_u64() => {
+                output.push_str(&value.to_string())
+            }
+            Value::Number(_) => bail!("bootstrap canonical JSON rejects non-integer number"),
+            Value::String(value) => output.push_str(
+                &serde_json::to_string(value).context("encode bootstrap canonical JSON string")?,
+            ),
+            Value::Array(values) => {
+                output.push('[');
+                for (index, value) in values.iter().enumerate() {
+                    if index != 0 {
+                        output.push(',');
+                    }
+                    write_value(value, output)?;
+                }
+                output.push(']');
+            }
+            Value::Object(values) => {
+                let mut keys: Vec<_> = values.keys().collect();
+                keys.sort_unstable();
+                output.push('{');
+                for (index, key) in keys.into_iter().enumerate() {
+                    if index != 0 {
+                        output.push(',');
+                    }
+                    output.push_str(
+                        &serde_json::to_string(key)
+                            .context("encode bootstrap canonical JSON object key")?,
+                    );
+                    output.push(':');
+                    write_value(
+                        values.get(key).ok_or_else(|| {
+                            anyhow::anyhow!("bootstrap canonical JSON key vanished")
+                        })?,
+                        output,
+                    )?;
+                }
+                output.push('}');
+            }
+        }
+        Ok(())
+    }
+
+    let mut output = String::new();
+    write_value(value, &mut output)?;
+    Ok(output.into_bytes())
+}
+
+fn sha256_hex_bootstrap_v1(bytes: &[u8]) -> String {
+    format!("{:x}", Sha256::digest(bytes))
+}
+
+fn mac_bootstrap_evidence_sha256_v1(
+    authorization: &PublisherBootstrapAuthorizationV1,
+) -> Result<String> {
+    Ok(sha256_hex_bootstrap_v1(&canonical_bootstrap_json_bytes_v1(
+        &serde_json::to_value(&authorization.executor_build_evidence)
+            .context("serialize bootstrap executor evidence")?,
+    )?))
+}
+
+fn mac_keychain_bootstrap_intent_account_v1(scope_id: &str) -> Result<String> {
+    mac_keychain_account_v1(scope_id, "publisher-bootstrap-intent")
+}
+
+/// The locator account is selected solely from retained authority facts.  It is intentionally
+/// not scope-addressed: the scope is the value recovered *from* this fixed-key record, never a
+/// caller parameter or an ambient project/VM discovery result.
+fn mac_keychain_bootstrap_attempt_locator_account_v1(attempt_key_sha256: &str) -> Result<String> {
+    if attempt_key_sha256.len() != 64
+        || !attempt_key_sha256
+            .bytes()
+            .all(|byte| byte.is_ascii_hexdigit() && !byte.is_ascii_uppercase())
+    {
+        bail!("bootstrap attempt locator key is not a canonical SHA-256 digest");
+    }
+    Ok(format!(
+        "mac-publisher-bootstrap-attempt-locator-v1:{attempt_key_sha256}"
+    ))
+}
+
+fn mac_bootstrap_attempt_key_v1(
+    authorization: &PublisherBootstrapAuthorizationV1,
+    provenance: &MacPublisherInstallProvenanceV1,
+) -> Result<(String, String, String)> {
+    let request = MacPublisherBootstrapRequestV1 {
+        install_bootstrap_context_v1: authorization.install_bootstrap_context_v1.clone(),
+    };
+    let request_sha256 = mac_publisher_bootstrap_request_sha256_v1(&request)?;
+    let provenance_sha256 =
+        sha256_hex_bootstrap_v1(&canonical_mac_publisher_install_provenance_v1(provenance)?);
+    let manifest = authorization
+        .pre_pm_manifest
+        .as_ref()
+        .ok_or_else(|| anyhow::anyhow!("bootstrap attempt has no retained pre-PM manifest"))?;
+    let mut key_material = Vec::new();
+    for value in [
+        "SUBSTRATE-R5-MAC-BOOTSTRAP-ATTEMPT-LOCATOR-V1",
+        authorization.authority_domain.as_str(),
+        authorization.host_context_commitment.as_str(),
+        authorization.requester_principal.as_str(),
+        manifest.selected_host_prefix.as_str(),
+        provenance_sha256.as_str(),
+        authorization.source_commit.as_str(),
+        authorization.source_tree.as_str(),
+        authorization.source_ref.as_str(),
+        request_sha256.as_str(),
+    ] {
+        key_material.extend_from_slice(value.as_bytes());
+        key_material.push(0);
+    }
+    Ok((
+        sha256_hex_bootstrap_v1(&key_material),
+        request_sha256,
+        provenance_sha256,
+    ))
+}
+
+fn mac_deterministic_bootstrap_component_id_v1(
+    scope_id: &str,
+    attempt_id: &str,
+    role: &str,
+) -> String {
+    let mut digest = Sha256::new();
+    digest.update(b"SUBSTRATE-R5-MAC-BOOTSTRAP-COMPONENT-V1\0");
+    digest.update(scope_id.as_bytes());
+    digest.update([0]);
+    digest.update(attempt_id.as_bytes());
+    digest.update([0]);
+    digest.update(role.as_bytes());
+    let mut bytes: [u8; 16] = digest.finalize()[..16]
+        .try_into()
+        .expect("SHA-256 prefix has sixteen bytes");
+    bytes[6] = (bytes[6] & 0x0f) | 0x70;
+    bytes[8] = (bytes[8] & 0x3f) | 0x80;
+    format!(
+        "{:02x}{:02x}{:02x}{:02x}-{:02x}{:02x}-{:02x}{:02x}-{:02x}{:02x}-{:02x}{:02x}{:02x}{:02x}{:02x}{:02x}",
+        bytes[0], bytes[1], bytes[2], bytes[3], bytes[4], bytes[5], bytes[6], bytes[7],
+        bytes[8], bytes[9], bytes[10], bytes[11], bytes[12], bytes[13], bytes[14], bytes[15]
+    )
+}
+
+/// Materialize the original authorization from the retained locator and a freshly attested FD3
+/// derivation.  Only fixed allocation fields change; a final digest comparison rejects any
+/// changed image, provenance, carrier, source, component, or manifest byte.
+fn mac_reconstruct_bootstrap_authorization_from_locator_v1(
+    fresh: &PublisherBootstrapAuthorizationV1,
+    locator: &MacPublisherBootstrapAttemptLocatorV1,
+) -> Result<PublisherBootstrapAuthorizationV1> {
+    let mut restored = fresh.clone();
+    let mut manifest = restored
+        .pre_pm_manifest
+        .clone()
+        .ok_or_else(|| anyhow::anyhow!("fresh bootstrap authorization lacks pre-PM manifest"))?;
+    manifest.manifest_id = format!("m1:{}:1", locator.scope_id);
+    manifest.installation_id = locator.scope_id.clone();
+    manifest.attempt_id = locator.attempt_id.clone();
+    manifest.created_at_unix_ns = locator.issued_at_unix_ns;
+    manifest.manifest_sha256 = substrate_common::managed_artifact_manifest_sha256_v1(&manifest)?;
+    if manifest.manifest_sha256 != locator.pre_pm_manifest_sha256 {
+        bail!("bootstrap attempt locator pre-PM manifest identity does not reconstruct");
+    }
+    restored.scope_id = locator.scope_id.clone();
+    restored.manifest_generation = 1;
+    restored.manifest_sha256 = manifest.manifest_sha256.clone();
+    restored.pre_pm_manifest = Some(manifest);
+    restored.attempt_nonce = locator.attempt_id.clone();
+    restored.issued_at_unix_ns = locator.issued_at_unix_ns;
+    restored.expires_at_unix_ns = locator.expires_at_unix_ns;
+    let mut prior_ids = std::collections::BTreeMap::new();
+    for component in &fresh.components {
+        prior_ids.insert(component.component_id.clone(), component.role.0.clone());
+    }
+    let mut role_ids = std::collections::BTreeMap::new();
+    for component in &fresh.components {
+        role_ids.insert(
+            component.role.0.clone(),
+            mac_deterministic_bootstrap_component_id_v1(
+                &locator.scope_id,
+                &locator.attempt_id,
+                &component.role.0,
+            ),
+        );
+    }
+    for component in &mut restored.components {
+        component.component_id = role_ids
+            .get(&component.role.0)
+            .cloned()
+            .ok_or_else(|| anyhow::anyhow!("bootstrap component role vanished during retry"))?;
+        component.target_identity =
+            substrate_common::derive_publisher_bootstrap_component_target_v1(
+                &component.role,
+                &locator.scope_id,
+            )?;
+        component.dependency_component_ids = component
+            .dependency_component_ids
+            .iter()
+            .map(|old| {
+                let role = prior_ids.get(old).ok_or_else(|| {
+                    anyhow::anyhow!("bootstrap component dependency is not a retained role")
+                })?;
+                role_ids.get(role).cloned().ok_or_else(|| {
+                    anyhow::anyhow!("bootstrap component dependency role is not reconstructible")
+                })
+            })
+            .collect::<Result<Vec<_>>>()?;
+    }
+    validate_publisher_bootstrap_authorization_v1(&restored)?;
+    if publisher_bootstrap_authorization_sha256_v1(&restored)?
+        != locator.bootstrap_authorization_sha256
+    {
+        bail!("bootstrap attempt locator authorization digest does not reconstruct");
+    }
+    Ok(restored)
+}
+
+fn mac_open_or_allocate_bootstrap_attempt_locator_v1(
+    fresh: &PublisherBootstrapAuthorizationV1,
+    provenance: &MacPublisherInstallProvenanceV1,
+) -> Result<(
+    PublisherBootstrapAuthorizationV1,
+    MacPublisherBootstrapAttemptLocatorV1,
+)> {
+    let (attempt_key_sha256, request_sha256, provenance_sha256) =
+        mac_bootstrap_attempt_key_v1(fresh, provenance)?;
+    let account = mac_keychain_bootstrap_attempt_locator_account_v1(&attempt_key_sha256)?;
+    let _guard = mac_keychain_durable_cas_guard_v1(&account)?;
+    let observed = mac_keychain_read_item_v1(MAC_KEYCHAIN_SERVICE_V1, &account)?;
+    let locator = match observed {
+        Some(bytes) => {
+            let locator: MacPublisherBootstrapAttemptLocatorV1 =
+                serde_json::from_slice(&bytes).context("decode bootstrap attempt locator")?;
+            validate_mac_publisher_bootstrap_attempt_locator_v1(&locator)?;
+            if canonical_mac_publisher_bootstrap_attempt_locator_v1(&locator)? != bytes
+                || locator.attempt_key_sha256 != attempt_key_sha256
+                || locator.bootstrap_request_sha256 != request_sha256
+                || locator.authority_domain != fresh.authority_domain
+                || locator.host_context_commitment != fresh.host_context_commitment
+                || locator.requester_principal != fresh.requester_principal
+                || locator.install_provenance_sha256 != provenance_sha256
+                || locator.source_commit != fresh.source_commit
+                || locator.source_tree != fresh.source_tree
+                || locator.source_ref != fresh.source_ref
+                || fresh
+                    .pre_pm_manifest
+                    .as_ref()
+                    .map(|manifest| manifest.selected_host_prefix.as_str())
+                    != Some(locator.selected_host_prefix.as_str())
+            {
+                bail!("bootstrap attempt locator does not exact-join retained direct authority");
+            }
+            if locator.terminal_state != "Completed"
+                && locator.expires_at_unix_ns <= mac_now_unix_ns_v1()?
+            {
+                bail!("incomplete bootstrap attempt locator has expired; preserving state");
+            }
+            locator
+        }
+        None => {
+            let authorization_sha256 = publisher_bootstrap_authorization_sha256_v1(fresh)?;
+            let manifest = fresh.pre_pm_manifest.as_ref().ok_or_else(|| {
+                anyhow::anyhow!("fresh bootstrap authorization lacks pre-PM manifest")
+            })?;
+            let locator = MacPublisherBootstrapAttemptLocatorV1 {
+                schema_owner: "substrate.mac-publisher-bootstrap-attempt-locator".to_string(),
+                schema_version: 1,
+                attempt_key_sha256,
+                authority_domain: fresh.authority_domain.clone(),
+                host_context_commitment: fresh.host_context_commitment.clone(),
+                requester_principal: fresh.requester_principal.clone(),
+                selected_host_prefix: manifest.selected_host_prefix.clone(),
+                install_provenance_sha256: provenance_sha256,
+                source_commit: fresh.source_commit.clone(),
+                source_tree: fresh.source_tree.clone(),
+                source_ref: fresh.source_ref.clone(),
+                scope_id: fresh.scope_id.clone(),
+                attempt_id: fresh.attempt_nonce.clone(),
+                issued_at_unix_ns: fresh.issued_at_unix_ns,
+                expires_at_unix_ns: fresh.expires_at_unix_ns,
+                bootstrap_request_sha256: request_sha256,
+                bootstrap_authorization_sha256: authorization_sha256,
+                pre_pm_manifest_sha256: manifest.manifest_sha256.clone(),
+                initial_anchor_sha256: None,
+                protected_state_sha256: None,
+                capsule_sha256: None,
+                terminal_state: "Allocated".to_string(),
+                canonical_response_b64: None,
+                locator_revision: 1,
+            };
+            let bytes = canonical_mac_publisher_bootstrap_attempt_locator_v1(&locator)?;
+            mac_keychain_compare_and_swap_item_v1(MAC_KEYCHAIN_SERVICE_V1, &account, None, &bytes)?;
+            locator
+        }
+    };
+    let authorization = if locator.scope_id == fresh.scope_id
+        && locator.attempt_id == fresh.attempt_nonce
+        && locator.issued_at_unix_ns == fresh.issued_at_unix_ns
+        && locator.expires_at_unix_ns == fresh.expires_at_unix_ns
+    {
+        if publisher_bootstrap_authorization_sha256_v1(fresh)?
+            != locator.bootstrap_authorization_sha256
+        {
+            bail!("fresh bootstrap authorization conflicts with allocated locator");
+        }
+        fresh.clone()
+    } else {
+        mac_reconstruct_bootstrap_authorization_from_locator_v1(fresh, &locator)?
+    };
+    Ok((authorization, locator))
+}
+
+/// A completed locator is only a bounded-response replay if its retained original bootstrap
+/// state is still exactly present.  It never converts a missing, advanced, or substituted
+/// capsule/anchor into reusable direct-bootstrap authority.
+fn mac_validate_completed_bootstrap_attempt_locator_joins_v1(
+    locator: &MacPublisherBootstrapAttemptLocatorV1,
+) -> Result<()> {
+    if locator.terminal_state != "Completed" {
+        bail!("bootstrap attempt locator is not completed");
+    }
+    let expected_anchor = locator
+        .initial_anchor_sha256
+        .as_deref()
+        .ok_or_else(|| anyhow::anyhow!("completed bootstrap locator lacks initial anchor join"))?;
+    let expected_state = locator
+        .protected_state_sha256
+        .as_deref()
+        .ok_or_else(|| anyhow::anyhow!("completed bootstrap locator lacks protected-state join"))?;
+    let expected_capsule = locator
+        .capsule_sha256
+        .as_deref()
+        .ok_or_else(|| anyhow::anyhow!("completed bootstrap locator lacks capsule join"))?;
+    let state = open_system_keychain_protected_state_for_scope_v1(&locator.scope_id)?
+        .ok_or_else(|| anyhow::anyhow!("completed bootstrap locator has no protected state"))?;
+    if lifecycle_anchor_sha256_v1(&state.current_anchor)? != expected_anchor
+        || sha256_hex_bootstrap_v1(&canonical_lifecycle_publisher_protected_state_v1(&state)?)
+            != expected_state
+    {
+        bail!("completed bootstrap locator protected state no longer exact-joins");
+    }
+    let capsule = open_mac_lima_stage_one_capsule_v1(&locator.scope_id)?
+        .ok_or_else(|| anyhow::anyhow!("completed bootstrap locator has no Stage-1 capsule"))?;
+    if sha256_hex_bootstrap_v1(&canonical_mac_lima_stage_one_capsule_v1(&capsule)?)
+        != expected_capsule
+    {
+        bail!("completed bootstrap locator Stage-1 capsule no longer exact-joins");
+    }
+    Ok(())
+}
+
+fn mac_decode_attempt_locator_response_v1(
+    locator: &MacPublisherBootstrapAttemptLocatorV1,
+) -> Result<Value> {
+    if locator.terminal_state != "Completed" {
+        bail!("bootstrap attempt locator is not completed");
+    }
+    let encoded = locator
+        .canonical_response_b64
+        .as_deref()
+        .ok_or_else(|| anyhow::anyhow!("completed bootstrap attempt locator lacks response"))?;
+    let bytes = mac_base64url_decode_v1(encoded)?;
+    let value: Value =
+        serde_json::from_slice(&bytes).context("decode retained bootstrap response")?;
+    if canonical_bootstrap_json_bytes_v1(&value)? != bytes {
+        bail!("retained bootstrap response is not canonical");
+    }
+    Ok(value)
+}
+
+fn mac_complete_bootstrap_attempt_locator_v1(
+    locator: &MacPublisherBootstrapAttemptLocatorV1,
+    authorization: &PublisherBootstrapAuthorizationV1,
+    response: &Value,
+) -> Result<MacPublisherBootstrapAttemptLocatorV1> {
+    if locator.terminal_state == "Completed" {
+        let retained = mac_decode_attempt_locator_response_v1(locator)?;
+        if retained != *response {
+            bail!("completed bootstrap attempt locator response is not an exact retry");
+        }
+        return Ok(locator.clone());
+    }
+    if locator.terminal_state != "Allocated" {
+        bail!("bootstrap attempt locator is preserving-blocked");
+    }
+    let state = open_system_keychain_protected_state_for_scope_v1(&authorization.scope_id)?
+        .ok_or_else(|| anyhow::anyhow!("completed bootstrap has no protected state"))?;
+    let capsule = open_mac_lima_stage_one_capsule_v1(&authorization.scope_id)?
+        .ok_or_else(|| anyhow::anyhow!("completed bootstrap has no Stage-1 capsule"))?;
+    let response_bytes = canonical_bootstrap_json_bytes_v1(response)?;
+    let next = MacPublisherBootstrapAttemptLocatorV1 {
+        terminal_state: "Completed".to_string(),
+        canonical_response_b64: Some(base64url_encode_mac_v1(&response_bytes)),
+        initial_anchor_sha256: Some(lifecycle_anchor_sha256_v1(&state.current_anchor)?),
+        protected_state_sha256: Some(sha256_hex_bootstrap_v1(
+            &canonical_lifecycle_publisher_protected_state_v1(&state)?,
+        )),
+        capsule_sha256: Some(sha256_hex_bootstrap_v1(
+            &canonical_mac_lima_stage_one_capsule_v1(&capsule)?,
+        )),
+        locator_revision: locator
+            .locator_revision
+            .checked_add(1)
+            .ok_or_else(|| anyhow::anyhow!("bootstrap attempt locator revision overflow"))?,
+        ..locator.clone()
+    };
+    let account = mac_keychain_bootstrap_attempt_locator_account_v1(&next.attempt_key_sha256)?;
+    let current = canonical_mac_publisher_bootstrap_attempt_locator_v1(locator)?;
+    let bytes = canonical_mac_publisher_bootstrap_attempt_locator_v1(&next)?;
+    let _guard = mac_keychain_durable_cas_guard_v1(&account)?;
+    if mac_keychain_read_item_v1(MAC_KEYCHAIN_SERVICE_V1, &account)?.as_deref()
+        != Some(current.as_slice())
+    {
+        bail!("bootstrap attempt locator compare-and-swap conflict");
+    }
+    mac_keychain_compare_and_swap_item_v1(
+        MAC_KEYCHAIN_SERVICE_V1,
+        &account,
+        Some(&current),
+        &bytes,
+    )?;
+    Ok(next)
+}
+
+fn mac_bootstrap_intent_value_v1(
+    authorization: &PublisherBootstrapAuthorizationV1,
+    authorization_sha256: &str,
+    control_authority_sha256: &str,
+    executor_evidence_sha256: &str,
+    state: &str,
+    key_spki_sha256: Option<&str>,
+) -> Value {
+    json!({
+        "schema_owner": "substrate.mac-publisher-bootstrap-intent",
+        "schema_version": 1,
+        "scope_id": authorization.scope_id,
+        "authority_domain": authorization.authority_domain,
+        "host_context_commitment": authorization.host_context_commitment,
+        "platform_mapping_commitment": authorization.platform_mapping_commitment,
+        "manifest_generation": authorization.manifest_generation,
+        "manifest_sha256": authorization.manifest_sha256,
+        "requester_principal": authorization.requester_principal,
+        "attempt_nonce": authorization.attempt_nonce,
+        "authorization_sha256": authorization_sha256,
+        "control_authority_sha256": control_authority_sha256,
+        "executor_evidence_sha256": executor_evidence_sha256,
+        "key_spki_sha256": key_spki_sha256,
+        "state": state,
+    })
+}
+
+struct MacBootstrapIntentObservationV1 {
+    bytes: Vec<u8>,
+    state: String,
+    key_spki_sha256: Option<String>,
+}
+
+fn mac_parse_bootstrap_intent_v1(
+    bytes: &[u8],
+    authorization: &PublisherBootstrapAuthorizationV1,
+    authorization_sha256: &str,
+    control_authority_sha256: &str,
+    executor_evidence_sha256: &str,
+) -> Result<MacBootstrapIntentObservationV1> {
+    let value: Value =
+        serde_json::from_slice(bytes).context("decode System Keychain bootstrap intent")?;
+    if canonical_bootstrap_json_bytes_v1(&value)? != bytes {
+        bail!("System Keychain bootstrap intent is not canonical");
+    }
+    let object = value
+        .as_object()
+        .ok_or_else(|| anyhow::anyhow!("System Keychain bootstrap intent is not an object"))?;
+    let state = object
+        .get("state")
+        .and_then(Value::as_str)
+        .ok_or_else(|| anyhow::anyhow!("System Keychain bootstrap intent lacks state"))?;
+    if !matches!(state, "Prepared" | "Completed") {
+        bail!("System Keychain bootstrap intent has an unknown state");
+    }
+    let key_spki_sha256 = match object.get("key_spki_sha256") {
+        Some(Value::Null) => None,
+        Some(Value::String(value))
+            if value.len() == 64
+                && value
+                    .bytes()
+                    .all(|byte| byte.is_ascii_hexdigit() && !byte.is_ascii_uppercase()) =>
+        {
+            Some(value.clone())
+        }
+        _ => bail!("System Keychain bootstrap intent key binding is invalid"),
+    };
+    if state == "Completed" && key_spki_sha256.is_none() {
+        bail!("completed System Keychain bootstrap intent lacks its key binding");
+    }
+    let expected = canonical_bootstrap_json_bytes_v1(&mac_bootstrap_intent_value_v1(
+        authorization,
+        authorization_sha256,
+        control_authority_sha256,
+        executor_evidence_sha256,
+        state,
+        key_spki_sha256.as_deref(),
+    ))?;
+    if bytes != expected {
+        bail!("System Keychain bootstrap intent does not exact-join authorization");
+    }
+    Ok(MacBootstrapIntentObservationV1 {
+        bytes: bytes.to_vec(),
+        state: state.to_string(),
+        key_spki_sha256,
+    })
+}
+
+fn mac_create_or_open_bootstrap_intent_v1(
+    authorization: &PublisherBootstrapAuthorizationV1,
+    authorization_sha256: &str,
+    control_authority_sha256: &str,
+    executor_evidence_sha256: &str,
+) -> Result<MacBootstrapIntentObservationV1> {
+    let account = mac_keychain_bootstrap_intent_account_v1(&authorization.scope_id)?;
+    let initial = canonical_bootstrap_json_bytes_v1(&mac_bootstrap_intent_value_v1(
+        authorization,
+        authorization_sha256,
+        control_authority_sha256,
+        executor_evidence_sha256,
+        "Prepared",
+        None,
+    ))?;
+    let _guard = mac_keychain_durable_cas_guard_v1(&account)?;
+    let observed = mac_keychain_read_item_v1(MAC_KEYCHAIN_SERVICE_V1, &account)?;
+    let bytes = match observed {
+        Some(bytes) => bytes,
+        None => {
+            mac_keychain_compare_and_swap_item_v1(
+                MAC_KEYCHAIN_SERVICE_V1,
+                &account,
+                None,
+                &initial,
+            )?;
+            initial
+        }
+    };
+    mac_parse_bootstrap_intent_v1(
+        &bytes,
+        authorization,
+        authorization_sha256,
+        control_authority_sha256,
+        executor_evidence_sha256,
+    )
+}
+
+fn mac_transition_bootstrap_intent_v1(
+    authorization: &PublisherBootstrapAuthorizationV1,
+    authorization_sha256: &str,
+    control_authority_sha256: &str,
+    executor_evidence_sha256: &str,
+    current: &MacBootstrapIntentObservationV1,
+    next_state: &str,
+    key_spki_sha256: &str,
+) -> Result<MacBootstrapIntentObservationV1> {
+    let account = mac_keychain_bootstrap_intent_account_v1(&authorization.scope_id)?;
+    let next = canonical_bootstrap_json_bytes_v1(&mac_bootstrap_intent_value_v1(
+        authorization,
+        authorization_sha256,
+        control_authority_sha256,
+        executor_evidence_sha256,
+        next_state,
+        Some(key_spki_sha256),
+    ))?;
+    if current.bytes == next {
+        return mac_parse_bootstrap_intent_v1(
+            &next,
+            authorization,
+            authorization_sha256,
+            control_authority_sha256,
+            executor_evidence_sha256,
+        );
+    }
+    let _guard = mac_keychain_durable_cas_guard_v1(&account)?;
+    if mac_keychain_read_item_v1(MAC_KEYCHAIN_SERVICE_V1, &account)?.as_deref()
+        != Some(current.bytes.as_slice())
+    {
+        bail!("System Keychain bootstrap intent compare-and-swap conflict");
+    }
+    mac_keychain_compare_and_swap_item_v1(
+        MAC_KEYCHAIN_SERVICE_V1,
+        &account,
+        Some(&current.bytes),
+        &next,
+    )?;
+    mac_parse_bootstrap_intent_v1(
+        &next,
+        authorization,
+        authorization_sha256,
+        control_authority_sha256,
+        executor_evidence_sha256,
+    )
+}
+
+fn mac_preflight_control_admission_authority_v1(
+    authority: &MacPublisherControlAuthorityV1,
+    authorization_sha256: &str,
+    manifest_generation: u64,
+    manifest_sha256: &str,
+    current_state: Option<&LifecyclePublisherProtectedStateV1>,
+) -> Result<()> {
+    let _guard = mac_keychain_durable_cas_guard_v1(MAC_CONTROL_ADMISSION_ACCOUNT_V1)?;
+    let Some(bytes) =
+        mac_keychain_read_item_v1(MAC_KEYCHAIN_SERVICE_V1, MAC_CONTROL_ADMISSION_ACCOUNT_V1)?
+    else {
+        return Ok(());
+    };
+    let existing: MacPublisherControlAdmissionV1 =
+        serde_json::from_slice(&bytes).context("decode fixed control-admission authority")?;
+    validate_mac_publisher_control_admission_v1(&existing)?;
+    if canonical_mac_publisher_control_admission_v1(&existing)? != bytes
+        || existing.control_authority != *authority
+        || existing.bootstrap_authorization_sha256 != authorization_sha256
+        || existing.manifest_generation != manifest_generation
+        || existing.manifest_sha256 != manifest_sha256
+    {
+        bail!("fixed control-admission authority conflicts with bootstrap authorization");
+    }
+    let state = current_state.ok_or_else(|| {
+        anyhow::anyhow!("control admission exists without the current protected state")
+    })?;
+    if existing.scope_id != state.current_anchor.scope_id
+        || existing.current_anchor_sha256 != lifecycle_anchor_sha256_v1(&state.current_anchor)?
+        || existing.state_revision != state.state_revision
+    {
+        bail!("fixed control admission does not join the current protected state");
+    }
+    Ok(())
+}
+
+fn persist_mac_control_admission_authority_v1(
+    admission: &MacPublisherControlAdmissionV1,
+) -> Result<()> {
+    let canonical = canonical_mac_publisher_control_admission_v1(admission)?;
+    let _guard = mac_keychain_durable_cas_guard_v1(MAC_CONTROL_ADMISSION_ACCOUNT_V1)?;
+    let current =
+        mac_keychain_read_item_v1(MAC_KEYCHAIN_SERVICE_V1, MAC_CONTROL_ADMISSION_ACCOUNT_V1)?;
+    if let Some(bytes) = current {
+        let existing: MacPublisherControlAdmissionV1 =
+            serde_json::from_slice(&bytes).context("decode fixed control-admission authority")?;
+        if canonical_mac_publisher_control_admission_v1(&existing)? != bytes || bytes != canonical {
+            bail!("fixed control-admission authority is not an exact retry");
+        }
+        return Ok(());
+    }
+    mac_keychain_compare_and_swap_item_v1(
+        MAC_KEYCHAIN_SERVICE_V1,
+        MAC_CONTROL_ADMISSION_ACCOUNT_V1,
+        None,
+        &canonical,
+    )
+}
+
+/// Advance the one fixed control-admission record only after the signed anchor/protected-state
+/// CAS has succeeded. The scope, control authority, and bootstrap digest are immutable; only the
+/// exact manifest/anchor/revision projection may advance with that same transaction.
+fn replace_mac_control_admission_authority_v1(next: &MacPublisherControlAdmissionV1) -> Result<()> {
+    let next_bytes = canonical_mac_publisher_control_admission_v1(next)?;
+    let _guard = mac_keychain_durable_cas_guard_v1(MAC_CONTROL_ADMISSION_ACCOUNT_V1)?;
+    let current =
+        mac_keychain_read_item_v1(MAC_KEYCHAIN_SERVICE_V1, MAC_CONTROL_ADMISSION_ACCOUNT_V1)?
+            .ok_or_else(|| anyhow::anyhow!("macOS Stage-1 has no prior control admission"))?;
+    let existing: MacPublisherControlAdmissionV1 =
+        serde_json::from_slice(&current).context("decode prior fixed control admission")?;
+    validate_mac_publisher_control_admission_v1(&existing)?;
+    if canonical_mac_publisher_control_admission_v1(&existing)? == current && existing == *next {
+        // The protected-state CAS may have committed immediately before a process loss.  An
+        // exact successor admission is already the required durable projection, not a second
+        // transition.
+        return Ok(());
+    }
+    let next_revision = existing
+        .state_revision
+        .checked_add(1)
+        .ok_or_else(|| anyhow::anyhow!("macOS control-admission revision overflow"))?;
+    let cross_generation =
+        existing.manifest_generation.checked_add(1) == Some(next.manifest_generation);
+    let same_generation = existing.manifest_generation == next.manifest_generation
+        && existing.manifest_sha256 == next.manifest_sha256;
+    if canonical_mac_publisher_control_admission_v1(&existing)? != current
+        || existing.scope_id != next.scope_id
+        || existing.control_authority != next.control_authority
+        || existing.bootstrap_authorization_sha256 != next.bootstrap_authorization_sha256
+        || (!cross_generation && !same_generation)
+        || next.state_revision != next_revision
+    {
+        bail!("macOS control admission cannot advance from a mismatched predecessor");
+    }
+    mac_keychain_compare_and_swap_item_v1(
+        MAC_KEYCHAIN_SERVICE_V1,
+        MAC_CONTROL_ADMISSION_ACCOUNT_V1,
+        Some(&current),
+        &next_bytes,
+    )
+}
+
+fn mac_system_keychain_p256_key_exists_v1(scope_id: &str) -> Result<bool> {
+    let key_tag = mac_keychain_signing_key_tag_v1(scope_id)?;
+    #[cfg(target_os = "macos")]
+    {
+        mac_system_keychain_ffi_v1::p256_key_exists(&key_tag)
+    }
+    #[cfg(not(target_os = "macos"))]
+    {
+        let _ = key_tag;
+        bail!("System Keychain P-256 key is unavailable off macOS")
+    }
+}
+
+fn mac_ensure_system_keychain_p256_spki_der_v1(scope_id: &str) -> Result<Vec<u8>> {
+    let key_tag = mac_keychain_signing_key_tag_v1(scope_id)?;
+    #[cfg(target_os = "macos")]
+    {
+        export_mac_p256_spki_der_v1(&mac_system_keychain_ffi_v1::ensure_p256_spki_der(&key_tag)?)
+    }
+    #[cfg(not(target_os = "macos"))]
+    {
+        let _ = key_tag;
+        bail!("System Keychain P-256 key is unavailable off macOS")
+    }
+}
+
+fn mac_system_keychain_sign_p1363_low_s_v1(scope_id: &str, payload: &[u8]) -> Result<Vec<u8>> {
+    if payload.is_empty() {
+        bail!("bootstrap lifecycle signing payload is empty");
+    }
+    let key_tag = mac_keychain_signing_key_tag_v1(scope_id)?;
+    #[cfg(target_os = "macos")]
+    {
+        let der = mac_system_keychain_ffi_v1::sign_p256_message(&key_tag, payload)?;
+        Ok(mac_p256_der_signature_to_p1363_low_s_v1(&der)?.to_vec())
+    }
+    #[cfg(not(target_os = "macos"))]
+    {
+        let _ = (key_tag, payload);
+        bail!("System Keychain P-256 signing is unavailable off macOS")
+    }
+}
+
+fn mac_executor_identity_from_bootstrap_evidence_v1(
+    authorization: &PublisherBootstrapAuthorizationV1,
+) -> ManagedExecutorIdentityV1 {
+    let evidence = &authorization.executor_build_evidence;
+    ManagedExecutorIdentityV1 {
+        source_commit: evidence.source_commit.clone(),
+        source_tree: evidence.source_tree.clone(),
+        source_ref: evidence.source_ref.clone(),
+        target_triple: evidence.target_triple.clone(),
+        artifact_sha256: evidence.artifact_sha256.clone(),
+        artifact_path: "/Library/PrivilegedHelperTools/com.substrate.lifecycle.publisher.v1"
+            .to_string(),
+        toolchain: None,
+        code_identity: evidence
+            .code_identity
+            .as_ref()
+            .map(|value| Value::String(value.clone())),
+    }
+}
+
+fn mac_sign_initial_lifecycle_anchor_v1(
+    scope_id: &str,
+    anchor: &LifecyclePublisherAnchorV1,
+) -> Result<LifecycleSignatureV1> {
+    let spki_der = mac_open_system_keychain_p256_spki_der_v1(scope_id)?;
+    let public_key = base64url_encode_mac_v1(&spki_der);
+    let unsigned = LifecyclePublisherAnchorV1 {
+        signature: LifecycleSignatureV1 {
+            algorithm: "ecdsa-p256-sha256-p1363-low-s-v1".to_string(),
+            public_key: public_key.clone(),
+            signature: String::new(),
+        },
+        ..anchor.clone()
+    };
+    let payload = canonical_lifecycle_signature_payload_v1(&unsigned.schema_owner, &unsigned)?;
+    Ok(LifecycleSignatureV1 {
+        algorithm: "ecdsa-p256-sha256-p1363-low-s-v1".to_string(),
+        public_key,
+        signature: base64url_encode_mac_v1(&mac_system_keychain_sign_p1363_low_s_v1(
+            scope_id, &payload,
+        )?),
+    })
+}
+
+fn build_initial_mac_publisher_protected_state_v1(
+    authorization: &PublisherBootstrapAuthorizationV1,
+    authorization_sha256: &str,
+) -> Result<LifecyclePublisherProtectedStateV1> {
+    let mut anchor = LifecyclePublisherAnchorV1 {
+        schema_owner: "substrate.lifecycle-publisher-anchor".to_string(),
+        schema_version: 1,
+        authority_domain: authorization.authority_domain.clone(),
+        host_context_commitment: authorization.host_context_commitment.clone(),
+        platform_mapping_commitment: authorization.platform_mapping_commitment.clone(),
+        scope_id: authorization.scope_id.clone(),
+        manifest_generation: authorization.manifest_generation,
+        manifest_sha256: authorization.manifest_sha256.clone(),
+        action_receipt_index_revision: 0,
+        action_receipt_index_sha256: "0".repeat(64),
+        head_sha256: "0".repeat(64),
+        previous_anchor_sha256: None,
+        request_sha256: authorization_sha256.to_string(),
+        requester_principal: authorization.requester_principal.clone(),
+        attempt_nonce: authorization.attempt_nonce.clone(),
+        executor_identity: mac_executor_identity_from_bootstrap_evidence_v1(authorization),
+        signature: LifecycleSignatureV1 {
+            algorithm: "ecdsa-p256-sha256-p1363-low-s-v1".to_string(),
+            public_key: String::new(),
+            signature: String::new(),
+        },
+    };
+    anchor.signature = mac_sign_initial_lifecycle_anchor_v1(&authorization.scope_id, &anchor)?;
+    let state = LifecyclePublisherProtectedStateV1 {
+        schema_owner: "substrate.lifecycle-publisher-protected-state".to_string(),
+        schema_version: 1,
+        current_anchor: anchor,
+        counter: 0,
+        prepared_record: None,
+        previous_protected_state_sha256: None,
+        state_revision: 0,
+    };
+    validate_lifecycle_publisher_protected_state_v1(&state)?;
+    Ok(state)
+}
+
+fn validate_existing_initial_publisher_state_v1(
+    state: &LifecyclePublisherProtectedStateV1,
+    authorization: &PublisherBootstrapAuthorizationV1,
+    authorization_sha256: &str,
+    key_spki_sha256: &str,
+) -> Result<()> {
+    validate_lifecycle_publisher_protected_state_v1(state)?;
+    let anchor = &state.current_anchor;
+    if state.counter != 0
+        || state.state_revision != 0
+        || state.prepared_record.is_some()
+        || state.previous_protected_state_sha256.is_some()
+        || anchor.authority_domain != authorization.authority_domain
+        || anchor.scope_id != authorization.scope_id
+        || anchor.host_context_commitment != authorization.host_context_commitment
+        || anchor.platform_mapping_commitment != authorization.platform_mapping_commitment
+        || anchor.manifest_generation != authorization.manifest_generation
+        || anchor.manifest_sha256 != authorization.manifest_sha256
+        || anchor.request_sha256 != authorization_sha256
+        || anchor.requester_principal != authorization.requester_principal
+        || anchor.attempt_nonce != authorization.attempt_nonce
+        || anchor.executor_identity
+            != mac_executor_identity_from_bootstrap_evidence_v1(authorization)
+        || anchor.action_receipt_index_revision != 0
+        || anchor.action_receipt_index_sha256 != "0".repeat(64)
+        || anchor.head_sha256 != "0".repeat(64)
+        || anchor.previous_anchor_sha256.is_some()
+    {
+        bail!("existing protected state does not exact-join initial bootstrap authorization");
+    }
+    let spki = mac_open_system_keychain_p256_spki_der_v1(&authorization.scope_id)?;
+    if sha256_hex_bootstrap_v1(&spki) != key_spki_sha256
+        || anchor.signature.algorithm != "ecdsa-p256-sha256-p1363-low-s-v1"
+        || anchor.signature.public_key != base64url_encode_mac_v1(&spki)
+    {
+        bail!("existing protected state does not join bootstrap key intent");
+    }
+    Ok(())
+}
+
+fn validate_direct_greenfield_bootstrap_authorization_v1(
+    authorization: &PublisherBootstrapAuthorizationV1,
+) -> Result<()> {
+    validate_publisher_bootstrap_authorization_v1(authorization)?;
+    if authorization.expires_at_unix_ns <= mac_now_unix_ns_v1()? {
+        bail!("direct bootstrap authorization has expired before FD3 admission");
+    }
+    if authorization.authority_domain != "mac_host_shared"
+        || !authorization.publisher_expected_absent
+    {
+        bail!("direct bootstrap requires an absent mac_host_shared publisher authorization");
+    }
+    if authorization.platform_mapping_commitment.is_none() && authorization.manifest_generation != 1
+    {
+        bail!("pre-PM direct bootstrap requires the exact generation-one manifest identity");
+    }
+    Ok(())
+}
+
+fn mac_lima_stage_one_profile_template_sha256_v1() -> String {
+    sha256_hex_bootstrap_v1(MAC_LIMA_STAGE_ONE_PROFILE_TEMPLATE_V1.as_bytes())
+}
+
+fn render_mac_lima_stage_one_profile_v1(attempt_id: &str, capsule_digest: &str) -> Result<Vec<u8>> {
+    mac_require_uuid_v7_component_v1(attempt_id, "Lima Stage-1 profile attempt")?;
+    if capsule_digest.len() != 64
+        || !capsule_digest
+            .bytes()
+            .all(|byte| byte.is_ascii_hexdigit() && !byte.is_ascii_uppercase())
+    {
+        bail!("Lima Stage-1 profile requires a canonical capsule digest");
+    }
+    if !MAC_LIMA_STAGE_ONE_PROFILE_TEMPLATE_V1.contains(MAC_LIMA_STAGE_ONE_MARKER_PATH_V1) {
+        bail!("embedded Lima Stage-1 profile does not retain the fixed marker path");
+    }
+    let marker = format!("attempt_id={attempt_id}\ncapsule_sha256={capsule_digest}");
+    Ok(MAC_LIMA_STAGE_ONE_PROFILE_TEMPLATE_V1
+        .replace("__SUBSTRATE_STAGE_ONE_MARKER__", &marker)
+        .into_bytes())
+}
+
+fn mac_lima_stage_one_instance_entry_v1(scope_id: &str) -> ManagedArtifactEntryV1 {
+    ManagedArtifactEntryV1 {
+        object_id: scope_id.to_string(),
+        logical_role: ManagedArtifactRoleV1("mac.lima.instance".to_string()),
+        object_type: "lima-instance".to_string(),
+        identity: ManagedArtifactIdentityV1 {
+            scope_id: scope_id.to_string(),
+            parent_identity: "lima".to_string(),
+            name_identity: "substrate".to_string(),
+            physical_identity: "lima:substrate".to_string(),
+            metadata: None,
+        },
+        disposition: ManagedArtifactDispositionV1::Created,
+        bytes_or_target: None,
+        owner: None,
+        group_name: None,
+        mode: None,
+        acl_or_security: None,
+        service_or_platform_state: None,
+        before_state: json!({"instance": "absent"}),
+        intended_after_state: json!({"instance": "Running"}),
+        restoration_state: json!({"instance": "absent"}),
+        dependency_object_ids: Vec::new(),
+        subtree_members: Vec::new(),
+        lifecycle_state: ManagedLifecycleStateV1::ManifestDurable,
+        last_durable_transition: None,
+        error_class: None,
+    }
+}
+
+fn mac_post_pm_action_literal_v1(action: ManagedActionV1) -> &'static str {
+    match action {
+        ManagedActionV1::Create => "create",
+        ManagedActionV1::Replace => "replace",
+        ManagedActionV1::Remove => "remove",
+        ManagedActionV1::Restore => "restore",
+        ManagedActionV1::Enable => "enable",
+        ManagedActionV1::Disable => "disable",
+        ManagedActionV1::Start => "start",
+        ManagedActionV1::Stop => "stop",
+    }
+}
+
+/// The post-PM table is intentionally materialized here, not inferred from a prefix, CLI
+/// selector, request payload, or caller-provided command.  A manifest contains one entry per
+/// fixed role and one signed planned receipt per fixed role/action row.
+fn mac_lima_post_pm_role_rows_v1(
+    principal: &str,
+) -> Vec<(String, &'static str, String, Vec<ManagedActionV1>)> {
+    let replace = vec![
+        ManagedActionV1::Create,
+        ManagedActionV1::Replace,
+        ManagedActionV1::Remove,
+        ManagedActionV1::Restore,
+    ];
+    let create_remove_restore = vec![
+        ManagedActionV1::Create,
+        ManagedActionV1::Remove,
+        ManagedActionV1::Restore,
+    ];
+    let mut rows = vec![
+        (
+            "mac.lima.staged-workspace".to_string(),
+            "directory",
+            "/var/lib/substrate/staged-workspace/current".to_string(),
+            replace.clone(),
+        ),
+        (
+            "mac.lima.layout-sentinel".to_string(),
+            "regular-file",
+            "/etc/substrate-lima-layout".to_string(),
+            replace.clone(),
+        ),
+        (
+            "mac.lima.publisher-executor".to_string(),
+            "regular-file",
+            "/usr/libexec/substrate/substrate-lifecycle-linux".to_string(),
+            replace.clone(),
+        ),
+        (
+            "mac.host.known-hosts-entry".to_string(),
+            "known-hosts-entry",
+            "__KNOWN_HOSTS__".to_string(),
+            replace.clone(),
+        ),
+        (
+            "mac.lima.guest-group".to_string(),
+            "group",
+            "substrate".to_string(),
+            create_remove_restore.clone(),
+        ),
+        (
+            "mac.lima.guest-private-home".to_string(),
+            "directory",
+            format!("/home/{principal}"),
+            create_remove_restore.clone(),
+        ),
+        (
+            "mac.lima.publisher-state-directory".to_string(),
+            "directory",
+            "/var/lib/substrate/.substrate-lifecycle-v1/publisher".to_string(),
+            vec![ManagedActionV1::Create, ManagedActionV1::Remove],
+        ),
+        (
+            "mac.lima.publisher-service-unit".to_string(),
+            "regular-file",
+            "/etc/systemd/system/substrate-lifecycle-publisher-v1.service".to_string(),
+            vec![ManagedActionV1::Create, ManagedActionV1::Restore],
+        ),
+        (
+            "mac.lima.publisher-socket-unit".to_string(),
+            "regular-file",
+            "/etc/systemd/system/substrate-lifecycle-publisher-v1.socket".to_string(),
+            vec![ManagedActionV1::Create, ManagedActionV1::Restore],
+        ),
+        (
+            "mac.lima.publisher-signing-key".to_string(),
+            "regular-file",
+            "/var/lib/substrate/.substrate-lifecycle-v1/publisher/signing-key.v1".to_string(),
+            vec![ManagedActionV1::Create],
+        ),
+        (
+            "mac.lima.publisher-current-anchor".to_string(),
+            "regular-file",
+            "/var/lib/substrate/.substrate-lifecycle-v1/publisher/current-anchor.v1.json"
+                .to_string(),
+            vec![ManagedActionV1::Create, ManagedActionV1::Replace],
+        ),
+        (
+            "mac.lima.publisher-bootstrap-intent".to_string(),
+            "regular-file",
+            "/var/lib/substrate/.substrate-lifecycle-bootstrap-intent-v1".to_string(),
+            vec![ManagedActionV1::Create, ManagedActionV1::Replace],
+        ),
+    ];
+    for (kind, target) in [
+        (
+            "substrate-world-service",
+            "/usr/local/bin/substrate-world-service",
+        ),
+        ("substrate-gateway", "/usr/local/bin/substrate-gateway"),
+        ("substrate", "/usr/local/bin/substrate"),
+        ("world", "/usr/local/bin/world"),
+    ] {
+        rows.push((
+            format!("mac.lima.guest-binary({kind})"),
+            "regular-file",
+            target.to_string(),
+            replace.clone(),
+        ));
+    }
+    for kind in ["service", "socket"] {
+        rows.push((
+            format!("mac.lima.guest-unit({kind})"),
+            "regular-file",
+            format!("/etc/systemd/system/substrate-world-service.{kind}"),
+            replace.clone(),
+        ));
+        rows.push((
+            format!("mac.lima.guest-service-state({kind})"),
+            "service-state",
+            format!("substrate-world-service.{kind}"),
+            vec![
+                ManagedActionV1::Enable,
+                ManagedActionV1::Disable,
+                ManagedActionV1::Start,
+                ManagedActionV1::Stop,
+                ManagedActionV1::Restore,
+            ],
+        ));
+    }
+    for target in [
+        "/run/substrate",
+        "/run/substrate/substrate-gateway-runtime",
+        "/var/lib/substrate",
+        "/var/lib/substrate/.substrate-lifecycle-v1",
+        "/var/lib/substrate/staged-workspace",
+        "/usr/libexec/substrate",
+    ] {
+        rows.push((
+            format!("mac.lima.guest-directory({target})"),
+            "directory",
+            target.to_string(),
+            create_remove_restore.clone(),
+        ));
+    }
+    rows.push((
+        format!("mac.lima.guest-membership({principal})"),
+        "group-membership",
+        principal.to_string(),
+        create_remove_restore,
+    ));
+    rows
+}
+
+/// A byte artifact is accepted only from the retained prefix path derived by the signed
+/// manifest.  This mapping has no caller input and deliberately excludes the old guest relay.
+fn mac_post_pm_artifact_source_path_v1(prefix: &str, role: &str) -> Option<String> {
+    let normalized = prefix.trim_end_matches('/');
+    let name = match role {
+        "mac.lima.guest-binary(substrate-world-service)" => "world-service",
+        "mac.lima.guest-binary(substrate-gateway)" => "substrate-gateway",
+        "mac.lima.guest-binary(substrate)" => "substrate",
+        "mac.lima.guest-binary(world)" => "world",
+        "mac.lima.publisher-executor" => "substrate-lifecycle-linux",
+        _ => return None,
+    };
+    Some(format!("{normalized}/bin/linux/{name}"))
+}
+
+#[cfg(target_os = "macos")]
+fn mac_measure_post_pm_artifact_source_v1(path: &Path) -> Result<(String, String)> {
+    let metadata = fs::symlink_metadata(path)
+        .with_context(|| format!("inspect retained post-PM artifact {}", path.display()))?;
+    if !metadata.file_type().is_file() || metadata.file_type().is_symlink() {
+        bail!("retained post-PM artifact is absent, linked, or not a regular file");
+    }
+    let mut reader = fs::OpenOptions::new()
+        .read(true)
+        .custom_flags(libc::O_CLOEXEC | libc::O_NOFOLLOW)
+        .open(path)
+        .with_context(|| format!("open retained post-PM artifact {}", path.display()))?;
+    let opened = reader
+        .metadata()
+        .context("inspect retained post-PM artifact descriptor")?;
+    if opened.dev() != metadata.dev() || opened.ino() != metadata.ino() {
+        bail!("retained post-PM artifact changed before descriptor measurement");
+    }
+    let mut bytes = Vec::new();
+    reader
+        .read_to_end(&mut bytes)
+        .context("read retained post-PM artifact descriptor")?;
+    let after = fs::symlink_metadata(path)
+        .with_context(|| format!("reinspect retained post-PM artifact {}", path.display()))?;
+    if after.file_type().is_symlink()
+        || after.dev() != metadata.dev()
+        || after.ino() != metadata.ino()
+    {
+        bail!("retained post-PM artifact changed during descriptor measurement");
+    }
+    Ok((
+        sha256_hex_bootstrap_v1(&bytes),
+        format!("dev:{}:ino:{}", opened.dev(), opened.ino()),
+    ))
+}
+
+#[cfg(not(target_os = "macos"))]
+fn mac_measure_post_pm_artifact_source_v1(_path: &Path) -> Result<(String, String)> {
+    bail!("retained macOS post-PM artifact measurement is unavailable off macOS")
+}
+
+fn mac_lima_post_pm_entry_v1(
+    scope_id: &str,
+    prefix: &str,
+    role: String,
+    object_type: &str,
+    physical_identity: String,
+) -> Result<ManagedArtifactEntryV1> {
+    let object_id = mac_deterministic_bootstrap_component_id_v1(scope_id, scope_id, &role);
+    let (bytes_or_target, metadata) =
+        if let Some(source_path) = mac_post_pm_artifact_source_path_v1(prefix, &role) {
+            let (artifact_sha256, source_identity) =
+                mac_measure_post_pm_artifact_source_v1(Path::new(&source_path))?;
+            (
+                Some(artifact_sha256),
+                Some(json!({
+                    "artifact_source_path": source_path,
+                    "artifact_source_physical_identity": source_identity,
+                    "artifact_source_kind": "retained-prefix-linux-artifact"
+                })),
+            )
+        } else {
+            (None, None)
+        };
+    Ok(ManagedArtifactEntryV1 {
+        object_id,
+        logical_role: ManagedArtifactRoleV1(role.clone()),
+        object_type: object_type.to_string(),
+        identity: ManagedArtifactIdentityV1 {
+            scope_id: scope_id.to_string(),
+            parent_identity: "mac-lima-fixed-role-table".to_string(),
+            name_identity: role,
+            physical_identity,
+            metadata,
+        },
+        disposition: ManagedArtifactDispositionV1::Created,
+        bytes_or_target,
+        owner: None,
+        group_name: None,
+        mode: None,
+        acl_or_security: None,
+        service_or_platform_state: None,
+        before_state: json!({"kind": "manifest-bound"}),
+        intended_after_state: json!({"kind": "managed"}),
+        restoration_state: json!({"kind": "preserve"}),
+        dependency_object_ids: Vec::new(),
+        subtree_members: Vec::new(),
+        lifecycle_state: ManagedLifecycleStateV1::ManifestDurable,
+        last_durable_transition: None,
+        error_class: None,
+    })
+}
+
+fn mac_lima_closed_post_pm_entries_v1(
+    scope_id: &str,
+    prefix: &str,
+    principal: &str,
+) -> Result<Vec<ManagedArtifactEntryV1>> {
+    let mut entries = vec![mac_lima_stage_one_instance_entry_v1(scope_id)];
+    for (role, object_type, physical_identity, _) in mac_lima_post_pm_role_rows_v1(principal) {
+        let physical_identity = if physical_identity == "__KNOWN_HOSTS__" {
+            format!("{}/lima_known_hosts", prefix.trim_end_matches('/'))
+        } else {
+            physical_identity
+        };
+        entries.push(mac_lima_post_pm_entry_v1(
+            scope_id,
+            prefix,
+            role,
+            object_type,
+            physical_identity,
+        )?);
+    }
+    Ok(entries)
+}
+
+fn mac_lima_closed_post_pm_receipt_plan_v1(
+    scope_id: &str,
+    attempt_id: &str,
+    principal: &str,
+    entries: &[ManagedArtifactEntryV1],
+) -> Result<Vec<Value>> {
+    let mut planned = Vec::new();
+    let instance = entries
+        .iter()
+        .find(|entry| entry.logical_role.0 == "mac.lima.instance")
+        .ok_or_else(|| anyhow::anyhow!("closed post-PM manifest lacks instance entry"))?;
+    // Stage-1 is the one cross-generation action. The ordinary rows below are same-generation.
+    planned.push(json!({
+        "receipt_id": scope_id,
+        "receipt_relative_path": format!("receipts/2/receipt.{scope_id}.json"),
+        "entry_id": instance.object_id,
+        "action": "create",
+        "attempt_id": attempt_id,
+    }));
+    // Stage-1 Create is the sole cross-generation instance receipt. Every ordinary instance
+    // action is planned in the same generation as the complete post-PM manifest so typed stop
+    // and recovery never synthesize an unplanned receipt.
+    for action in [
+        ManagedActionV1::Start,
+        ManagedActionV1::Stop,
+        ManagedActionV1::Remove,
+        ManagedActionV1::Restore,
+    ] {
+        let receipt_id = mac_deterministic_bootstrap_component_id_v1(
+            scope_id,
+            attempt_id,
+            &format!(
+                "post-pm:mac.lima.instance:{}",
+                mac_post_pm_action_literal_v1(action)
+            ),
+        );
+        planned.push(json!({
+            "receipt_id": receipt_id,
+            "receipt_relative_path": format!("receipts/2/receipt.{receipt_id}.json"),
+            "entry_id": instance.object_id,
+            "action": mac_post_pm_action_literal_v1(action),
+            "attempt_id": attempt_id,
+        }));
+    }
+    for (role, _, _, actions) in mac_lima_post_pm_role_rows_v1(principal) {
+        let entry = entries
+            .iter()
+            .find(|entry| entry.logical_role.0 == role)
+            .ok_or_else(|| anyhow::anyhow!("closed post-PM manifest misses role {role}"))?;
+        for action in actions {
+            let receipt_id = mac_deterministic_bootstrap_component_id_v1(
+                scope_id,
+                attempt_id,
+                &format!("post-pm:{role}:{}", mac_post_pm_action_literal_v1(action)),
+            );
+            planned.push(json!({
+                "receipt_id": receipt_id,
+                "receipt_relative_path": format!("receipts/2/receipt.{receipt_id}.json"),
+                "entry_id": entry.object_id,
+                "action": mac_post_pm_action_literal_v1(action),
+                "attempt_id": attempt_id,
+            }));
+        }
+    }
+    Ok(planned)
+}
+
+fn mac_account_home_for_stage_one_v1(carrier: &InstallBootstrapContextCarrierV1) -> Result<String> {
+    let PlatformPrincipalV1::Unix { account, uid } = &carrier.context.intended_host_principal
+    else {
+        bail!("macOS Stage-1 requires a UNIX IH principal");
+    };
+    if account.is_empty() || *uid == 0 {
+        bail!("macOS Stage-1 IH principal is invalid");
+    }
+    // The retained IH fixes account+UID. The fixed privileged executor re-observes the account
+    // database rather than trusting HOME/LIMA_HOME inherited from the caller or launchd.
+    let account = std::ffi::CString::new(account.as_str()).context("encode Stage-1 account")?;
+    // SAFETY: getpwnam reads the local account database for this fixed, validated account name.
+    let passwd = unsafe { libc::getpwnam(account.as_ptr()) };
+    if passwd.is_null() {
+        bail!("macOS Stage-1 IH account is absent from the local account database");
+    }
+    // SAFETY: `passwd` is non-null for the immediate read guaranteed by getpwnam.
+    let passwd = unsafe { &*passwd };
+    if passwd.pw_uid != *uid || passwd.pw_dir.is_null() {
+        bail!("macOS Stage-1 account database does not exact-join IH principal");
+    }
+    // SAFETY: pw_dir is a NUL-terminated passwd field owned by libc for this immediate read.
+    let home = unsafe { std::ffi::CStr::from_ptr(passwd.pw_dir) }
+        .to_str()
+        .context("decode Stage-1 account home")?;
+    if !home.starts_with('/') || home.contains(['\0', '\n', '\r']) {
+        bail!("macOS Stage-1 account home is not an exact absolute path");
+    }
+    Ok(home.to_string())
+}
+
+fn sign_mac_lima_stage_one_authorization_v1(
+    scope_id: &str,
+    authorization: &LimaStageOneAuthorizationV1,
+) -> Result<LifecycleSignatureV1> {
+    let spki_der = mac_open_system_keychain_p256_spki_der_v1(scope_id)?;
+    let public_key = base64url_encode_mac_v1(&spki_der);
+    let unsigned = LimaStageOneAuthorizationV1 {
+        signature: LifecycleSignatureV1 {
+            algorithm: "ecdsa-p256-sha256-p1363-low-s-v1".to_string(),
+            public_key: public_key.clone(),
+            signature: String::new(),
+        },
+        ..authorization.clone()
+    };
+    let payload = canonical_lifecycle_signature_payload_v1(&unsigned.schema_owner, &unsigned)?;
+    Ok(LifecycleSignatureV1 {
+        algorithm: "ecdsa-p256-sha256-p1363-low-s-v1".to_string(),
+        public_key,
+        signature: base64url_encode_mac_v1(&mac_system_keychain_sign_p1363_low_s_v1(
+            scope_id, &payload,
+        )?),
+    })
+}
+
+fn derive_mac_lima_stage_one_authorization_v1(
+    authorization: &PublisherBootstrapAuthorizationV1,
+    authorization_sha256: &str,
+    protected_state: &LifecyclePublisherProtectedStateV1,
+    provenance: &MacPublisherInstallProvenanceV1,
+) -> Result<LimaStageOneAuthorizationV1> {
+    let pre_pm_manifest = authorization
+        .pre_pm_manifest
+        .as_ref()
+        .ok_or_else(|| anyhow::anyhow!("direct bootstrap authorization lacks pre-PM manifest"))?;
+    let carrier =
+        InstallBootstrapContextCarrierV1::decode(&authorization.install_bootstrap_context_v1)
+            .context("decode retained direct-bootstrap IH carrier")?;
+    if carrier.host_context_commitment != authorization.host_context_commitment
+        || carrier.context.selected_host_prefix != pre_pm_manifest.selected_host_prefix
+        || pre_pm_manifest.selected_host_prefix != provenance.selected_host_prefix
+        || pre_pm_manifest.manifest_sha256 != authorization.manifest_sha256
+        || protected_state.current_anchor.manifest_sha256 != authorization.manifest_sha256
+        || protected_state.current_anchor.manifest_generation != 1
+        || protected_state.counter != 0
+        || protected_state.state_revision != 0
+        || provenance.profile_template_algorithm != MAC_LIMA_STAGE_ONE_PROFILE_TEMPLATE_ALGORITHM_V1
+        || provenance.profile_template_version != MAC_LIMA_STAGE_ONE_PROFILE_TEMPLATE_VERSION_V1
+        || provenance.profile_template_sha256 != mac_lima_stage_one_profile_template_sha256_v1()
+    {
+        bail!("retained Stage-1 inputs do not exact-join initial bootstrap authority");
+    }
+    let home = mac_account_home_for_stage_one_v1(&carrier)?;
+    let control_root = format!("{home}/.lima");
+    let rendered_profile =
+        render_mac_lima_stage_one_profile_v1(&authorization.attempt_nonce, authorization_sha256)?;
+    let rendered_profile_sha256 = sha256_hex_bootstrap_v1(&rendered_profile);
+    let receipt_id = authorization.scope_id.clone();
+    let mut stage_one = LimaStageOneAuthorizationV1 {
+        schema_owner: "substrate.lima-stage-one-authorization".to_string(),
+        schema_version: 1,
+        host_context_commitment: authorization.host_context_commitment.clone(),
+        lima_control_root_identity: control_root.clone(),
+        instance_name: "substrate".to_string(),
+        profile_sha256: rendered_profile_sha256.clone(),
+        expected_absent: true,
+        source_commit: authorization.source_commit.clone(),
+        source_tree: authorization.source_tree.clone(),
+        source_ref: authorization.source_ref.clone(),
+        executor_receipt_sha256: authorization_sha256.to_string(),
+        requester_principal: authorization.requester_principal.clone(),
+        attempt_id: authorization.attempt_nonce.clone(),
+        nonce: authorization.attempt_nonce.clone(),
+        expires_at_unix_ns: authorization.expires_at_unix_ns,
+        rendered_profile_b64: base64url_encode_mac_v1(&rendered_profile),
+        rendered_profile_sha256: rendered_profile_sha256.clone(),
+        successor_template: MacLimaStageOneSuccessorTemplateV1 {
+            schema_owner: "substrate.mac-lima-stage-one-successor-template".to_string(),
+            schema_version: 1,
+            derivation_algorithm:
+                "mac_lima_stage_one_successor_template_v1_platform_mapping_then_manifest"
+                    .to_string(),
+            profile_template_algorithm: MAC_LIMA_STAGE_ONE_PROFILE_TEMPLATE_ALGORITHM_V1
+                .to_string(),
+            profile_template_version: MAC_LIMA_STAGE_ONE_PROFILE_TEMPLATE_VERSION_V1,
+            profile_template_sha256: provenance.profile_template_sha256.clone(),
+            current_pre_pm_manifest_generation: 1,
+            current_pre_pm_manifest_sha256: authorization.manifest_sha256.clone(),
+            current_anchor_sha256: lifecycle_anchor_sha256_v1(&protected_state.current_anchor)?,
+            current_anchor_counter: 0,
+            next_manifest_generation: 2,
+            previous_manifest_sha256: authorization.manifest_sha256.clone(),
+            host_context_commitment: authorization.host_context_commitment.clone(),
+            scope_id: authorization.scope_id.clone(),
+            installation_id: authorization.scope_id.clone(),
+            intended_principal: authorization.requester_principal.clone(),
+            selected_host_prefix: pre_pm_manifest.selected_host_prefix.clone(),
+            host_platform_control_root: control_root,
+            instance_name: "substrate".to_string(),
+            profile_sha256: rendered_profile_sha256,
+            source_commit: authorization.source_commit.clone(),
+            source_tree: authorization.source_tree.clone(),
+            source_ref: authorization.source_ref.clone(),
+            executor_build_evidence: authorization.executor_build_evidence.clone(),
+            attempt_id: authorization.attempt_nonce.clone(),
+            nonce: authorization.attempt_nonce.clone(),
+            expires_at_unix_ns: authorization.expires_at_unix_ns,
+            manifest_created_at_unix_ns: authorization.issued_at_unix_ns,
+            manifest_lifecycle_state: ManagedLifecycleStateV1::ManifestDurable,
+            ordered_non_machine_entries: mac_lima_closed_post_pm_entries_v1(
+                &authorization.scope_id,
+                &pre_pm_manifest.selected_host_prefix,
+                &authorization.requester_principal,
+            )?,
+            planned_receipt_id: receipt_id.clone(),
+            planned_receipt_relative_path: format!("receipts/2/receipt.{receipt_id}.json"),
+            post_effect_observation_slots: vec!["guest_machine_id".to_string()],
+        },
+        signature: LifecycleSignatureV1 {
+            algorithm: "ecdsa-p256-sha256-p1363-low-s-v1".to_string(),
+            public_key: String::new(),
+            signature: String::new(),
+        },
+    };
+    stage_one.signature =
+        sign_mac_lima_stage_one_authorization_v1(&authorization.scope_id, &stage_one)?;
+    validate_lima_stage_one_authorization_v1(&stage_one)?;
+    if stage_one.signature.public_key != protected_state.current_anchor.signature.public_key {
+        bail!("Stage-1 authorization signer does not exact-join the initial anchor key");
+    }
+    Ok(stage_one)
+}
+
+/// Create the first signed anchor or resume only an exact Prepared/Completed direct-bootstrap
+/// transaction. Every mismatch leaves the Keychain, retained channel, and protected state intact.
+fn bootstrap_mac_publisher_from_authorized_fd3_v1(
+    authorization: &PublisherBootstrapAuthorizationV1,
+    provenance: &MacPublisherInstallProvenanceV1,
+) -> Result<Value> {
+    validate_direct_greenfield_bootstrap_authorization_v1(authorization)?;
+    let control_authority = authorization
+        .mac_control_authority
+        .as_ref()
+        .ok_or_else(|| anyhow::anyhow!("direct bootstrap authorization lacks control authority"))?;
+    let authorization_sha256 = publisher_bootstrap_authorization_sha256_v1(authorization)?;
+    let control_authority_sha256 = mac_publisher_control_authority_sha256_v1(control_authority)?;
+    let executor_evidence_sha256 = mac_bootstrap_evidence_sha256_v1(authorization)?;
+    let state_before =
+        read_system_keychain_protected_state_for_scope_unbound_v1(&authorization.scope_id)?;
+    mac_preflight_control_admission_authority_v1(
+        control_authority,
+        &authorization_sha256,
+        authorization.manifest_generation,
+        &authorization.manifest_sha256,
+        state_before.as_ref(),
+    )?;
+    let mut intent = mac_create_or_open_bootstrap_intent_v1(
+        authorization,
+        &authorization_sha256,
+        &control_authority_sha256,
+        &executor_evidence_sha256,
+    )?;
+    if intent.state == "Completed" && state_before.is_none() {
+        bail!("completed bootstrap intent has no matching protected state");
+    }
+
+    let key_spki_sha256 = match intent.key_spki_sha256.as_deref() {
+        Some(expected) => {
+            if !mac_system_keychain_p256_key_exists_v1(&authorization.scope_id)? {
+                bail!("bootstrap intent names a missing non-exportable P-256 key");
+            }
+            let spki = mac_open_system_keychain_p256_spki_der_v1(&authorization.scope_id)?;
+            if sha256_hex_bootstrap_v1(&spki) != expected {
+                bail!("bootstrap intent P-256 key does not exact-join its recorded SPKI digest");
+            }
+            expected.to_string()
+        }
+        None => {
+            if state_before.is_some() {
+                bail!("protected state exists without a key-bound bootstrap intent");
+            }
+            if mac_system_keychain_p256_key_exists_v1(&authorization.scope_id)? {
+                bail!("bootstrap refuses to adopt an orphaned non-exportable P-256 key");
+            }
+            let spki = mac_ensure_system_keychain_p256_spki_der_v1(&authorization.scope_id)?;
+            let digest = sha256_hex_bootstrap_v1(&spki);
+            intent = mac_transition_bootstrap_intent_v1(
+                authorization,
+                &authorization_sha256,
+                &control_authority_sha256,
+                &executor_evidence_sha256,
+                &intent,
+                "Prepared",
+                &digest,
+            )?;
+            digest
+        }
+    };
+
+    let state = match state_before {
+        Some(existing) => {
+            validate_existing_initial_publisher_state_v1(
+                &existing,
+                authorization,
+                &authorization_sha256,
+                &key_spki_sha256,
+            )?;
+            existing
+        }
+        None => {
+            let initial = build_initial_mac_publisher_protected_state_v1(
+                authorization,
+                &authorization_sha256,
+            )?;
+            let executor = MacManagedArtifactExecutorV1 {
+                state_root: PathBuf::from(MAC_STATE_ROOT_V1),
+                protected_state: PathBuf::from(MAC_STATE_ROOT_V1).join("current-anchor.v1.json"),
+                pairing_root: PathBuf::from(MAC_STATE_ROOT_V1).join("guest-pairings"),
+            };
+            compare_and_swap_mac_publisher_protected_state_v1(&executor, None, &initial)?;
+            initial
+        }
+    };
+
+    let admission = MacPublisherControlAdmissionV1 {
+        schema_owner: "substrate.mac-publisher-control-admission".to_string(),
+        schema_version: 1,
+        scope_id: authorization.scope_id.clone(),
+        control_authority: control_authority.clone(),
+        bootstrap_authorization_sha256: authorization_sha256.clone(),
+        manifest_generation: authorization.manifest_generation,
+        manifest_sha256: authorization.manifest_sha256.clone(),
+        current_anchor_sha256: lifecycle_anchor_sha256_v1(&state.current_anchor)?,
+        state_revision: state.state_revision,
+    };
+    persist_mac_control_admission_authority_v1(&admission)?;
+    if mac_verified_control_admission_v1()? != admission {
+        bail!("fixed control-admission authority does not match protected bootstrap authorization");
+    }
+    let stage_one = derive_mac_lima_stage_one_authorization_v1(
+        authorization,
+        &authorization_sha256,
+        &state,
+        provenance,
+    )?;
+    let install_provenance_sha256 =
+        sha256_hex_bootstrap_v1(&canonical_mac_publisher_install_provenance_v1(provenance)?);
+    let initial_capsule = MacLimaStageOneCapsuleV1 {
+        schema_owner: "substrate.mac-lima-stage-one-capsule".to_string(),
+        schema_version: 1,
+        scope_id: authorization.scope_id.clone(),
+        state: "Issued".to_string(),
+        capsule_revision: 1,
+        install_provenance_sha256,
+        bootstrap_authorization_sha256: authorization_sha256.clone(),
+        pre_pm_manifest: authorization
+            .pre_pm_manifest
+            .clone()
+            .ok_or_else(|| anyhow::anyhow!("initial Stage-1 capsule lacks pre-PM manifest"))?,
+        initial_anchor_sha256: lifecycle_anchor_sha256_v1(&state.current_anchor)?,
+        initial_anchor_counter: state.counter,
+        prepared_protected_state_sha256: None,
+        stage_one_authorization: stage_one.clone(),
+        rendered_profile_file_identity: None,
+        observation: None,
+    };
+    match open_mac_lima_stage_one_capsule_v1(&authorization.scope_id)? {
+        Some(existing) => {
+            if existing.install_provenance_sha256 != initial_capsule.install_provenance_sha256
+                || existing.bootstrap_authorization_sha256
+                    != initial_capsule.bootstrap_authorization_sha256
+                || existing.pre_pm_manifest != initial_capsule.pre_pm_manifest
+                || existing.initial_anchor_sha256 != initial_capsule.initial_anchor_sha256
+                || existing.initial_anchor_counter != initial_capsule.initial_anchor_counter
+                || existing.stage_one_authorization != initial_capsule.stage_one_authorization
+                || existing.state == "PreservingBlocked"
+            {
+                bail!("existing Lima Stage-1 capsule does not exact-join direct bootstrap state");
+            }
+        }
+        None => compare_and_swap_mac_lima_stage_one_capsule_v1(None, &initial_capsule)?,
+    }
+    if intent.state != "Completed" {
+        intent = mac_transition_bootstrap_intent_v1(
+            authorization,
+            &authorization_sha256,
+            &control_authority_sha256,
+            &executor_evidence_sha256,
+            &intent,
+            "Completed",
+            &key_spki_sha256,
+        )?;
+    }
+    if intent.state != "Completed" {
+        bail!("bootstrap intent did not reach its completed terminal state");
+    }
+    Ok(json!({
+        "status": "bootstrapped",
+        "scope_id": authorization.scope_id,
+        "manifest_generation": authorization.manifest_generation,
+        "manifest_sha256": authorization.manifest_sha256,
+        "authorization_sha256": authorization_sha256,
+        "anchor_sha256": lifecycle_anchor_sha256_v1(&state.current_anchor)?,
+        "lima_stage_one_authorization_v1": stage_one,
+        "bootstrap_channel_bound": true,
+    }))
+}
+
+/// Security.framework returns X9.62 DER. The stored anchor uses exactly P-256 P1363 low-S.
+fn mac_p256_der_signature_to_p1363_low_s_v1(der: &[u8]) -> Result<[u8; 64]> {
+    let mut cursor = 0usize;
+    if der.get(cursor) != Some(&0x30) {
+        bail!("System Keychain P-256 signature is not a DER sequence");
+    }
+    cursor += 1;
+    let sequence_length = mac_read_der_length_v1(der, &mut cursor)?;
+    if sequence_length != der.len().saturating_sub(cursor) {
+        bail!("System Keychain P-256 signature has a non-canonical sequence length");
+    }
+    let r = mac_read_der_positive_integer_v1(der, &mut cursor)?;
+    let s = mac_read_der_positive_integer_v1(der, &mut cursor)?;
+    if cursor != der.len() {
+        bail!("System Keychain P-256 signature has trailing DER bytes");
+    }
+    let mut output = [0_u8; 64];
+    mac_write_p256_scalar_v1(r, &mut output[..32])?;
+    mac_write_p256_scalar_v1(s, &mut output[32..])?;
+    if mac_be_gt_v1(&output[32..], &MAC_P256_ORDER_HALF_V1) {
+        let low_s = mac_be_subtract_v1(&MAC_P256_ORDER_V1, &output[32..])?;
+        output[32..].copy_from_slice(&low_s);
+    }
+    if output[..32].iter().all(|byte| *byte == 0) || output[32..].iter().all(|byte| *byte == 0) {
+        bail!("System Keychain P-256 signature has a zero scalar");
+    }
+    Ok(output)
+}
+
+const MAC_P256_ORDER_V1: [u8; 32] = [
+    0xff, 0xff, 0xff, 0xff, 0x00, 0x00, 0x00, 0x00, 0xff, 0xff, 0xff, 0xff, 0xff, 0xff, 0xff, 0xff,
+    0xbc, 0xe6, 0xfa, 0xad, 0xa7, 0x17, 0x9e, 0x84, 0xf3, 0xb9, 0xca, 0xc2, 0xfc, 0x63, 0x25, 0x51,
+];
+const MAC_P256_ORDER_HALF_V1: [u8; 32] = [
+    0x7f, 0xff, 0xff, 0xff, 0x80, 0x00, 0x00, 0x00, 0x7f, 0xff, 0xff, 0xff, 0xff, 0xff, 0xff, 0xff,
+    0xde, 0x73, 0x7d, 0x56, 0xd3, 0x8b, 0xcf, 0x42, 0x79, 0xdc, 0xf2, 0x36, 0xb3, 0x15, 0xec, 0xa8,
+];
+
+fn mac_read_der_length_v1(der: &[u8], cursor: &mut usize) -> Result<usize> {
+    let first = *der
+        .get(*cursor)
+        .ok_or_else(|| anyhow::anyhow!("System Keychain P-256 DER length is truncated"))?;
+    *cursor += 1;
+    if first < 0x80 {
+        return Ok(usize::from(first));
+    }
+    let count = usize::from(first & 0x7f);
+    if count == 0 || count > std::mem::size_of::<usize>() || der.len() < *cursor + count {
+        bail!("System Keychain P-256 DER length is not canonical");
+    }
+    if der[*cursor] == 0 {
+        bail!("System Keychain P-256 DER length has leading zero");
+    }
+    let mut length = 0usize;
+    for byte in &der[*cursor..*cursor + count] {
+        length = (length << 8) | usize::from(*byte);
+    }
+    *cursor += count;
+    if length < 0x80 {
+        bail!("System Keychain P-256 DER uses non-canonical long length");
+    }
+    Ok(length)
+}
+
+fn mac_read_der_positive_integer_v1<'a>(der: &'a [u8], cursor: &mut usize) -> Result<&'a [u8]> {
+    if der.get(*cursor) != Some(&0x02) {
+        bail!("System Keychain P-256 DER signature omits an integer");
+    }
+    *cursor += 1;
+    let length = mac_read_der_length_v1(der, cursor)?;
+    if length == 0 || der.len() < *cursor + length {
+        bail!("System Keychain P-256 DER integer is truncated");
+    }
+    let integer = &der[*cursor..*cursor + length];
+    *cursor += length;
+    if integer[0] & 0x80 != 0 || (integer.len() > 1 && integer[0] == 0 && integer[1] & 0x80 == 0) {
+        bail!("System Keychain P-256 DER integer is not canonical positive encoding");
+    }
+    Ok(integer)
+}
+
+fn mac_write_p256_scalar_v1(integer: &[u8], destination: &mut [u8]) -> Result<()> {
+    let integer = integer.strip_prefix(&[0]).unwrap_or(integer);
+    if integer.is_empty() || integer.len() > destination.len() {
+        bail!("System Keychain P-256 DER integer exceeds scalar width");
+    }
+    destination.fill(0);
+    let offset = destination.len() - integer.len();
+    destination[offset..].copy_from_slice(integer);
+    if !mac_be_gt_v1(&MAC_P256_ORDER_V1, destination) {
+        bail!("System Keychain P-256 DER scalar is outside P-256 order");
+    }
+    Ok(())
+}
+
+fn mac_be_gt_v1(left: &[u8], right: &[u8]) -> bool {
+    left.iter()
+        .zip(right)
+        .find_map(|(left, right)| (left != right).then_some(left > right))
+        .unwrap_or(false)
+}
+
+fn mac_be_subtract_v1(left: &[u8; 32], right: &[u8]) -> Result<[u8; 32]> {
+    if right.len() != left.len() || !mac_be_gt_v1(left, right) {
+        bail!("System Keychain P-256 scalar subtraction underflow");
+    }
+    let mut output = [0_u8; 32];
+    let mut borrow = 0_i16;
+    for index in (0..left.len()).rev() {
+        let difference = i16::from(left[index]) - i16::from(right[index]) - borrow;
+        if difference < 0 {
+            output[index] = (difference + 256) as u8;
+            borrow = 1;
+        } else {
+            output[index] = difference as u8;
+            borrow = 0;
+        }
+    }
+    if borrow != 0 {
+        bail!("System Keychain P-256 scalar subtraction borrowed past P-256 order");
+    }
+    Ok(output)
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    fn correction_post_pm_entry_v1(
+        role: &str,
+        object_type: &str,
+        target: &str,
+    ) -> ManagedArtifactEntryV1 {
+        let source_metadata =
+            mac_post_pm_artifact_source_path_v1("/opt/substrate", role).map(|source_path| {
+                json!({
+                    "artifact_source_path": source_path,
+                    "artifact_source_physical_identity": "dev:1:ino:2",
+                    "artifact_source_kind": "retained-prefix-linux-artifact"
+                })
+            });
+        ManagedArtifactEntryV1 {
+            object_id: format!("entry-{}", sha256_hex_bootstrap_v1(role.as_bytes())),
+            logical_role: ManagedArtifactRoleV1(role.to_string()),
+            object_type: object_type.to_string(),
+            identity: ManagedArtifactIdentityV1 {
+                scope_id: "018f3e4a-7b2c-7c91-8a6f-2e1d5c4b3a90".to_string(),
+                parent_identity: "test-parent".to_string(),
+                name_identity: if role == "mac.lima.guest-private-home" {
+                    "alice".to_string()
+                } else {
+                    role.to_string()
+                },
+                physical_identity: target.to_string(),
+                metadata: source_metadata,
+            },
+            disposition: ManagedArtifactDispositionV1::Created,
+            bytes_or_target: mac_post_pm_artifact_source_path_v1("/opt/substrate", role).map(
+                |_| "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa".to_string(),
+            ),
+            owner: None,
+            group_name: None,
+            mode: None,
+            acl_or_security: None,
+            service_or_platform_state: None,
+            before_state: json!({"kind":"test"}),
+            intended_after_state: json!({"kind":"test"}),
+            restoration_state: json!({"kind":"test"}),
+            dependency_object_ids: Vec::new(),
+            subtree_members: Vec::new(),
+            lifecycle_state: ManagedLifecycleStateV1::ManifestDurable,
+            last_durable_transition: None,
+            error_class: None,
+        }
+    }
+
+    #[test]
+    fn correction_post_pm_instance_receipt_plans_are_exhaustive_and_create_is_sole_cross_generation(
+    ) {
+        let scope = "018f3e4a-7b2c-7c91-8a6f-2e1d5c4b3a90";
+        let attempt = "018f3e4a-7b2c-7c91-8a6f-2e1d5c4b3a91";
+        let mut entries = vec![mac_lima_stage_one_instance_entry_v1(scope)];
+        for (role, object_type, target, _) in mac_lima_post_pm_role_rows_v1("alice") {
+            entries.push(correction_post_pm_entry_v1(&role, object_type, &target));
+        }
+        let plans = mac_lima_closed_post_pm_receipt_plan_v1(scope, attempt, "alice", &entries)
+            .expect("closed receipt plans");
+        let instance: Vec<_> = plans
+            .iter()
+            .filter(|plan| plan.get("entry_id").and_then(Value::as_str) == Some(scope))
+            .collect();
+        assert_eq!(
+            instance.len(),
+            5,
+            "Create plus Start/Stop/Remove/Restore only"
+        );
+        let actions: Vec<_> = instance
+            .iter()
+            .map(|plan| plan["action"].as_str().unwrap())
+            .collect();
+        assert_eq!(
+            actions,
+            vec!["create", "start", "stop", "remove", "restore"]
+        );
+        assert!(plans.iter().all(|plan| plan["receipt_relative_path"]
+            .as_str()
+            .unwrap()
+            .starts_with("receipts/2/receipt.")));
+        assert!(!actions.contains(&"replace"));
+        assert!(!closed_mac_role_action_v1(
+            "mac.lima.instance",
+            ManagedActionV1::Create
+        ));
+    }
+
+    #[test]
+    fn correction_post_pm_classifier_is_recoverable_across_each_journal_boundary() {
+        assert_eq!(
+            classify_mac_post_pm_transaction_v1(7, 7, true, false, false, None).unwrap(),
+            MacPostPmTransactionClassV1::New
+        );
+        assert_eq!(
+            classify_mac_post_pm_transaction_v1(7, 8, true, true, false, Some("Prepared")).unwrap(),
+            MacPostPmTransactionClassV1::PreparedRetry
+        );
+        assert_eq!(
+            classify_mac_post_pm_transaction_v1(7, 8, true, true, false, Some("EffectStarted"))
+                .unwrap(),
+            MacPostPmTransactionClassV1::EffectStartedRetry
+        );
+        assert_eq!(
+            classify_mac_post_pm_transaction_v1(7, 8, true, true, false, Some("EffectObserved"))
+                .unwrap(),
+            MacPostPmTransactionClassV1::EffectObservedRetry
+        );
+        assert_eq!(
+            classify_mac_post_pm_transaction_v1(7, 8, false, false, true, None).unwrap(),
+            MacPostPmTransactionClassV1::CompletedRetry
+        );
+        assert!(
+            classify_mac_post_pm_transaction_v1(7, 9, true, true, false, Some("Prepared")).is_err()
+        );
+        assert!(classify_mac_post_pm_transaction_v1(7, 7, false, false, false, None).is_err());
+        assert!(
+            classify_mac_post_pm_transaction_v1(7, 8, true, true, false, Some("Completed"))
+                .is_err()
+        );
+        assert_eq!(
+            mac_post_pm_effect_retry_decision_v1(MacPostPmEffectObservationStateV1::Before)
+                .unwrap(),
+            true
+        );
+        assert_eq!(
+            mac_post_pm_effect_retry_decision_v1(MacPostPmEffectObservationStateV1::After).unwrap(),
+            false
+        );
+        assert!(
+            mac_post_pm_effect_retry_decision_v1(MacPostPmEffectObservationStateV1::Ambiguous)
+                .is_err()
+        );
+        assert!(
+            mac_require_post_pm_after_state_v1(MacPostPmEffectObservationStateV1::After).is_ok()
+        );
+        assert!(
+            mac_require_post_pm_after_state_v1(MacPostPmEffectObservationStateV1::Before).is_err()
+        );
+        assert!(
+            mac_require_post_pm_after_state_v1(MacPostPmEffectObservationStateV1::Ambiguous)
+                .is_err()
+        );
+
+        let membership = "mac.lima.guest-membership(alice)";
+        let group = correction_post_pm_entry_v1("mac.lima.guest-group", "group", "substrate");
+        let create_group = mac_post_pm_effect_plan_v1(
+            &group,
+            ManagedActionV1::Create,
+            membership,
+            "/opt/substrate",
+        )
+        .unwrap();
+        assert_eq!(
+            mac_classify_post_pm_probe_v1(&create_group, true, Some(0), "substrate:x:1:\n")
+                .unwrap(),
+            MacPostPmEffectObservationStateV1::After
+        );
+        assert_eq!(
+            mac_classify_post_pm_probe_v1(&create_group, false, Some(2), "").unwrap(),
+            MacPostPmEffectObservationStateV1::Before
+        );
+        let stop_service = mac_post_pm_effect_plan_v1(
+            &correction_post_pm_entry_v1(
+                "mac.lima.guest-service-state(service)",
+                "service-state",
+                "substrate-world-service.service",
+            ),
+            ManagedActionV1::Stop,
+            membership,
+            "/opt/substrate",
+        )
+        .unwrap();
+        assert_eq!(
+            mac_classify_post_pm_probe_v1(&stop_service, false, Some(3), "inactive").unwrap(),
+            MacPostPmEffectObservationStateV1::After
+        );
+        assert_eq!(
+            mac_classify_post_pm_probe_v1(&stop_service, true, Some(0), "active\n").unwrap(),
+            MacPostPmEffectObservationStateV1::Before
+        );
+        assert_eq!(
+            mac_classify_post_pm_probe_v1(&stop_service, false, Some(3), "failed").unwrap(),
+            MacPostPmEffectObservationStateV1::Ambiguous
+        );
+    }
+
+    #[test]
+    fn correction_post_pm_journal_binds_prepared_request_and_observation_boundaries() {
+        let digest = "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa";
+        for state in ["Prepared", "EffectStarted", "Completed"] {
+            let journal = MacPostPmAttemptJournalV1 {
+                schema_owner: "substrate.mac-post-pm-attempt-journal".to_string(),
+                schema_version: 1,
+                receipt_id: "receipt-closed".to_string(),
+                request_sha256: digest.to_string(),
+                prepared_record_sha256: digest.to_string(),
+                state: state.to_string(),
+                effect_observation: None,
+            };
+            assert!(!canonical_mac_post_pm_attempt_journal_v1(&journal)
+                .unwrap()
+                .is_empty());
+        }
+        let observed = MacPostPmAttemptJournalV1 {
+            schema_owner: "substrate.mac-post-pm-attempt-journal".to_string(),
+            schema_version: 1,
+            receipt_id: "receipt-closed".to_string(),
+            request_sha256: digest.to_string(),
+            prepared_record_sha256: digest.to_string(),
+            state: "EffectObserved".to_string(),
+            effect_observation: Some(json!({"after":"exact"})),
+        };
+        assert!(!canonical_mac_post_pm_attempt_journal_v1(&observed)
+            .unwrap()
+            .is_empty());
+        let mut missing_observation = observed.clone();
+        missing_observation.effect_observation = None;
+        assert!(canonical_mac_post_pm_attempt_journal_v1(&missing_observation).is_err());
+        let mut mismatched_request = observed;
+        mismatched_request.request_sha256 = "bad".to_string();
+        assert!(canonical_mac_post_pm_attempt_journal_v1(&mismatched_request).is_err());
+    }
+
+    #[test]
+    fn correction_post_pm_effect_planner_is_exhaustive_literal_and_has_no_guest_relay() {
+        let membership = "mac.lima.guest-membership(alice)";
+        for (role, object_type, target, actions) in mac_lima_post_pm_role_rows_v1("alice") {
+            let entry = correction_post_pm_entry_v1(&role, object_type, &target);
+            for action in actions.iter().copied() {
+                let plan = mac_post_pm_effect_plan_v1(&entry, action, membership, "/opt/substrate")
+                    .expect("every accepted closed row has one fixed effect plan");
+                assert_eq!(plan.role, role);
+                assert_eq!(plan.action, action);
+                assert!(!plan.primitives.is_empty());
+                assert!(!format!("{plan:?}").contains(&["r5", "post", "pm"].join("-")));
+                assert!(
+                    !format!("{plan:?}").contains(&["substrate-lifecycle-linux", "r5"].join(" "))
+                );
+            }
+            for action in [
+                ManagedActionV1::Create,
+                ManagedActionV1::Replace,
+                ManagedActionV1::Remove,
+                ManagedActionV1::Restore,
+                ManagedActionV1::Enable,
+                ManagedActionV1::Disable,
+                ManagedActionV1::Start,
+                ManagedActionV1::Stop,
+            ] {
+                if !actions.contains(&action) {
+                    assert!(
+                        mac_post_pm_effect_plan_v1(&entry, action, membership, "/opt/substrate")
+                            .is_err(),
+                        "unlisted role/action unexpectedly planned: {role}/{action:?}"
+                    );
+                }
+            }
+        }
+        for action in [ManagedActionV1::Create, ManagedActionV1::Replace] {
+            let entry =
+                correction_post_pm_entry_v1("mac.lima.instance", "lima-instance", "lima:substrate");
+            assert!(
+                mac_post_pm_effect_plan_v1(&entry, action, membership, "/opt/substrate").is_err()
+            );
+        }
+        let binary = correction_post_pm_entry_v1(
+            "mac.lima.guest-binary(substrate-world-service)",
+            "regular-file",
+            "/usr/local/bin/substrate-world-service",
+        );
+        let plan = mac_post_pm_effect_plan_v1(
+            &binary,
+            ManagedActionV1::Create,
+            membership,
+            "/opt/substrate",
+        )
+        .expect("bound artifact plan");
+        assert!(
+            matches!(plan.primitives.first(), Some(MacPostPmEffectPrimitiveV1::Artifact { source_path, source_sha256, source_identity, guest_target_path, mode, .. }) if source_path == "/opt/substrate/bin/linux/world-service" && source_sha256.len() == 64 && source_identity == "dev:1:ino:2" && guest_target_path == "/usr/local/bin/substrate-world-service" && mode == "0755")
+        );
+        assert!(
+            matches!(plan.target_integrity.as_ref(), Some(MacPostPmTargetIntegrityV1 { path, kind, sha256: Some(sha256), owner, group, mode }) if path == "/usr/local/bin/substrate-world-service" && *kind == "regular file" && sha256.len() == 64 && owner == "root" && group == "root" && mode == "0755")
+        );
+        let private_home = correction_post_pm_entry_v1(
+            "mac.lima.guest-private-home",
+            "directory",
+            "/home/alice/.substrate",
+        );
+        let directory_plan = mac_post_pm_effect_plan_v1(
+            &private_home,
+            ManagedActionV1::Create,
+            membership,
+            "/opt/substrate",
+        )
+        .expect("bound private-home directory plan");
+        assert!(
+            matches!(directory_plan.target_integrity.as_ref(), Some(MacPostPmTargetIntegrityV1 { path, kind, sha256: None, owner, group, mode }) if path == "/home/alice/.substrate" && *kind == "directory" && owner == "alice" && group == "substrate" && mode == "0700")
+        );
+        let publisher_unit = correction_post_pm_entry_v1(
+            "mac.lima.publisher-service-unit",
+            "regular-file",
+            "/etc/systemd/system/substrate-publisher.service",
+        );
+        let publisher_plan = mac_post_pm_effect_plan_v1(
+            &publisher_unit,
+            ManagedActionV1::Create,
+            membership,
+            "/opt/substrate",
+        )
+        .expect("bound publisher unit plan");
+        assert!(
+            matches!(publisher_plan.target_integrity.as_ref(), Some(MacPostPmTargetIntegrityV1 { kind, sha256: Some(sha256), owner, group, mode, .. }) if *kind == "regular file" && sha256.len() == 64 && owner == "root" && group == "root" && mode == "0600")
+        );
+        let mut mismatched = binary.clone();
+        mismatched.identity.metadata = Some(
+            json!({"artifact_source_path":"/tmp/untrusted","artifact_source_physical_identity":"dev:1:ino:2","artifact_source_kind":"retained-prefix-linux-artifact"}),
+        );
+        assert!(mac_post_pm_effect_plan_v1(
+            &mismatched,
+            ManagedActionV1::Create,
+            membership,
+            "/opt/substrate"
+        )
+        .is_err());
+    }
 
     #[test]
     fn r4_fixed_keychain_accounts_and_xpc_admission_reject_substitution() {
@@ -140,265 +2777,3365 @@ pub fn join_mac_role_identity_v1(identity: &ManagedArtifactIdentityV1) -> Result
 /// the publisher opens any mutable lifecycle state.  The shell validates the same compact wire
 /// form, but the privileged listener repeats the join so a direct XPC client cannot bypass it.
 fn validate_mac_mapped_action_authority_v1(request: &Value) -> Result<()> {
-    let object = request
-        .as_object()
-        .ok_or_else(|| anyhow::anyhow!("mapped macOS action must be an object"))?;
-    let action = required_mac_action_field_v1(object, "action")?;
-    if !matches!(
-        action,
-        "ensure-vm-ready"
-            | "stage-workspace"
-            | "install-guest-artifacts"
-            | "configure-guest"
-            | "stop"
-            | "destroy-vm"
-            | "restore-guest"
-            | "retire-test-publisher"
-    ) {
-        bail!("mapped macOS action is not in the fixed lifecycle allowlist");
-    }
-    let install_prefix = required_mac_action_field_v1(object, "install_prefix")?;
-    if !install_prefix.starts_with('/')
-        || install_prefix == "/"
-        || install_prefix.contains(['\0', '\n', '\r'])
-    {
-        bail!("mapped macOS action has an invalid install prefix");
-    }
-    let carrier = required_mac_action_field_v1(object, "install_bootstrap_context_v1")?;
-    let mapping = required_mac_action_field_v1(object, "platform_bootstrap_mapping_v1")?;
-    let (host_context_commitment, instance_name, control_root) =
-        validate_mac_carrier_mapping_join_v1(install_prefix, carrier, mapping)?;
-
-    let publisher_request: ManagedLifecyclePublisherRequestV1 =
-        serde_json::from_value(object.get("publisher_request_v1").cloned().ok_or_else(|| {
-            anyhow::anyhow!("mapped macOS action is missing publisher_request_v1")
-        })?)
-        .context("decode canonical mapped publisher request")?;
-    validate_managed_lifecycle_publisher_request_v1(&publisher_request)?;
-    join_mac_role_identity_v1(&publisher_request.object_identity)?;
-    if publisher_request.host_context_commitment != host_context_commitment {
-        bail!("mapped publisher request does not join the carrier commitment");
-    }
-    if publisher_request.platform_mapping_commitment.is_none() {
-        bail!("mapped publisher request is missing its platform mapping commitment");
-    }
-
-    let evidence = object
-        .get("executor_build_evidence")
-        .and_then(Value::as_object)
-        .ok_or_else(|| anyhow::anyhow!("mapped macOS action is missing ExecutorBuildEvidenceV1"))?;
-    let exact_schema = evidence.get("schema_owner").and_then(Value::as_str)
-        == Some("substrate.executor-build-evidence")
-        && evidence.get("schema_version").and_then(Value::as_u64) == Some(1);
-    let exact_digests = ["source_commit", "source_tree"].iter().all(|key| {
-        evidence
-            .get(*key)
-            .and_then(Value::as_str)
-            .is_some_and(|value| {
-                value.len() == 40 && value.bytes().all(|byte| byte.is_ascii_hexdigit())
-            })
-    }) && evidence
-        .get("artifact_sha256")
-        .and_then(Value::as_str)
-        .is_some_and(|value| {
-            value.len() == 64 && value.bytes().all(|byte| byte.is_ascii_hexdigit())
-        });
-    if !exact_schema || !exact_digests {
-        bail!("mapped macOS action has no exact ExecutorBuildEvidenceV1 join");
-    }
-    let expected_executor = &publisher_request.expected_executor_build;
-    if evidence.get("source_commit").and_then(Value::as_str)
-        != Some(expected_executor.source_commit.as_str())
-        || evidence.get("source_tree").and_then(Value::as_str)
-            != Some(expected_executor.source_tree.as_str())
-        || evidence.get("source_ref").and_then(Value::as_str)
-            != Some(expected_executor.source_ref.as_str())
-        || evidence.get("artifact_sha256").and_then(Value::as_str)
-            != Some(expected_executor.artifact_sha256.as_str())
-        || evidence.get("target_triple").and_then(Value::as_str)
-            != Some(expected_executor.target_triple.as_str())
-    {
-        bail!("mapped macOS action evidence does not join the publisher role request");
-    }
-
-    let stage_one: LimaStageOneAuthorizationV1 = serde_json::from_value(
-        object
-            .get("lima_stage_one_authorization_v1")
-            .cloned()
-            .filter(|value| !value.is_null())
-            .ok_or_else(|| {
-                anyhow::anyhow!("mapped lifecycle mutation is missing LimaStageOneAuthorizationV1")
-            })?,
-    )
-    .context("decode LimaStageOneAuthorizationV1")?;
-    validate_lima_stage_one_authorization_v1(&stage_one)?;
-    if !stage_one.expected_absent
-        || stage_one.host_context_commitment != host_context_commitment
-        || stage_one.instance_name != instance_name
-        || stage_one.lima_control_root_identity != control_root
-        || stage_one.source_commit != expected_executor.source_commit
-        || stage_one.source_tree != expected_executor.source_tree
-        || stage_one.source_ref != expected_executor.source_ref
-    {
-        bail!("LimaStageOneAuthorizationV1 does not join the exact mapped lifecycle authority");
+    let control: ManagedLifecycleControlRequestV1 = serde_json::from_value(request.clone())
+        .context("decode closed mapped lifecycle request")?;
+    let tag = validate_mapped_lifecycle_control_request_v1(&control)?;
+    match tag {
+        MappedLifecycleTagV1::StageOneCreate => {
+            let stage_one = control
+                .lima_stage_one_authorization_v1
+                .ok_or_else(|| anyhow::anyhow!("Stage-1 branch lacks its authorization"))?;
+            if !stage_one.expected_absent {
+                bail!("Stage-1 branch does not prove the selected instance is absent");
+            }
+        }
+        MappedLifecycleTagV1::PostPmAction => {
+            let publisher_request = control
+                .publisher_request
+                .ok_or_else(|| anyhow::anyhow!("post-PM branch lacks its publisher request"))?;
+            validate_managed_lifecycle_publisher_request_v1(&publisher_request)?;
+            join_mac_role_identity_v1(&publisher_request.object_identity)?;
+            if !closed_mac_role_action_v1(&publisher_request.role.0, publisher_request.action) {
+                bail!("post-PM role/action is outside the closed macOS lifecycle map");
+            }
+        }
     }
     Ok(())
 }
 
-fn required_mac_action_field_v1<'a>(
-    object: &'a serde_json::Map<String, Value>,
-    key: &str,
-) -> Result<&'a str> {
-    object
-        .get(key)
-        .and_then(Value::as_str)
-        .filter(|value| !value.is_empty() && !value.contains(['\0', '\n', '\r']))
-        .ok_or_else(|| anyhow::anyhow!("mapped macOS action is missing exact {key}"))
+fn closed_mac_role_action_v1(role: &str, action: ManagedActionV1) -> bool {
+    let create_replace_remove_restore = matches!(
+        action,
+        ManagedActionV1::Create
+            | ManagedActionV1::Replace
+            | ManagedActionV1::Remove
+            | ManagedActionV1::Restore
+    );
+    let create_remove_restore = matches!(
+        action,
+        ManagedActionV1::Create | ManagedActionV1::Remove | ManagedActionV1::Restore
+    );
+    match role {
+        "mac.lima.instance" => matches!(
+            action,
+            ManagedActionV1::Start
+                | ManagedActionV1::Stop
+                | ManagedActionV1::Remove
+                | ManagedActionV1::Restore
+        ),
+        "mac.lima.staged-workspace"
+        | "mac.lima.layout-sentinel"
+        | "mac.lima.publisher-executor"
+        | "mac.host.known-hosts-entry" => create_replace_remove_restore,
+        "mac.lima.guest-group" | "mac.lima.guest-private-home" => create_remove_restore,
+        "mac.lima.publisher-state-directory" => {
+            matches!(action, ManagedActionV1::Create | ManagedActionV1::Remove)
+        }
+        "mac.lima.publisher-service-unit" | "mac.lima.publisher-socket-unit" => {
+            matches!(action, ManagedActionV1::Create | ManagedActionV1::Restore)
+        }
+        "mac.lima.publisher-signing-key" => matches!(action, ManagedActionV1::Create),
+        "mac.lima.publisher-current-anchor" | "mac.lima.publisher-bootstrap-intent" => {
+            matches!(action, ManagedActionV1::Create | ManagedActionV1::Replace)
+        }
+        _ if role.starts_with("mac.lima.guest-binary(")
+            || role.starts_with("mac.lima.guest-unit(") =>
+        {
+            create_replace_remove_restore
+        }
+        _ if role.starts_with("mac.lima.guest-directory(")
+            || role.starts_with("mac.lima.guest-membership(") =>
+        {
+            create_remove_restore
+        }
+        _ if role.starts_with("mac.lima.guest-service-state(") => matches!(
+            action,
+            ManagedActionV1::Enable
+                | ManagedActionV1::Disable
+                | ManagedActionV1::Start
+                | ManagedActionV1::Stop
+                | ManagedActionV1::Restore
+        ),
+        _ => false,
+    }
 }
 
-fn decode_base64url_v1(encoded: &str) -> Result<Vec<u8>> {
-    if encoded.is_empty() || encoded.len() % 4 == 1 || encoded.contains('=') {
-        bail!("mapped lifecycle field is not canonical base64url");
+/// Materialize the sole allowed post-effect fact into a full MAC Lima mapping and manifest.  The
+/// The verified observation tuple contributes only machine/account/home facts; transport,
+/// receipt plan, entries, source/build identity, and manifest time all come from the signed
+/// Stage-1 template. This is intentionally not a generic mapper and has no caller-selected
+/// paths or role/action.
+fn derive_mac_lima_stage_one_successor_manifest_v1(
+    stage_one: &LimaStageOneAuthorizationV1,
+    carrier: &InstallBootstrapContextCarrierV1,
+    observation: &LimaStageOneObservationV1,
+) -> Result<(PlatformBootstrapMappingV1, ManagedArtifactManifestV1)> {
+    validate_lima_stage_one_authorization_v1(stage_one)?;
+    validate_lima_stage_one_observation_v1(observation)?;
+    let template = &stage_one.successor_template;
+    let (principal, _host_uid) = match &carrier.context.intended_host_principal {
+        PlatformPrincipalV1::Unix { account, uid } if account == &template.intended_principal => {
+            (account.as_str(), *uid)
+        }
+        _ => bail!("Stage-1 template does not exact-join the carrier principal"),
+    };
+    if carrier.host_context_commitment != template.host_context_commitment
+        || carrier.context.selected_host_prefix != template.selected_host_prefix
+        || observation.instance_name != template.instance_name
+        || observation.guest_account != principal
+    {
+        bail!("Stage-1 template does not exact-join the retained IH carrier");
     }
-    let mut accumulator = 0_u32;
-    let mut bits = 0_u8;
-    let mut decoded = Vec::new();
-    for byte in encoded.bytes() {
-        let value = match byte {
-            b'A'..=b'Z' => byte - b'A',
-            b'a'..=b'z' => byte - b'a' + 26,
-            b'0'..=b'9' => byte - b'0' + 52,
-            b'-' => 62,
-            b'_' => 63,
-            _ => bail!("mapped lifecycle field is not canonical base64url"),
-        };
-        accumulator = (accumulator << 6) | u32::from(value);
-        bits += 6;
-        while bits >= 8 {
-            bits -= 8;
-            decoded.push(((accumulator >> bits) & 0xff) as u8);
+    // The complete kernel-observed tuple is retained in the receipt.  Only its verified
+    // machine/account/home values participate in the canonical PM mapping; nothing caller
+    // supplied is allowed to influence this derivation.
+    let realized_home = format!("{}/.substrate", observation.guest_home);
+    let transport_host = format!("{}/sock/agent.sock", template.selected_host_prefix);
+    let mapping = PlatformBootstrapMappingV1::new_lima(
+        carrier,
+        &template.instance_name,
+        &observation.guest_machine_id,
+        &template.host_platform_control_root,
+        &realized_home,
+        principal,
+        observation.guest_uid,
+        &transport_host,
+        "/run/substrate.sock",
+    )
+    .context("derive canonical post-effect Lima mapping")?;
+    let encoded_mapping = mapping
+        .encode(carrier)
+        .context("encode canonical post-effect Lima mapping")?;
+    let mapping_commitment = format!("{:x}", Sha256::digest(encoded_mapping.as_bytes()));
+    if !template
+        .ordered_non_machine_entries
+        .iter()
+        .any(|entry| entry.logical_role.0 == "mac.lima.instance")
+    {
+        bail!("Stage-1 template lacks its exact mac.lima.instance entry");
+    }
+    let mut manifest = ManagedArtifactManifestV1 {
+        schema_owner: "substrate.managed-artifact-manifest".to_string(),
+        schema_version: 1,
+        manifest_id: format!(
+            "m1:{}:{}",
+            template.installation_id, template.next_manifest_generation
+        ),
+        manifest_sha256: String::new(),
+        host_context_commitment: template.host_context_commitment.clone(),
+        selected_host_prefix: template.selected_host_prefix.clone(),
+        intended_principal: template.intended_principal.clone(),
+        platform_kind: "mac_lima".to_string(),
+        platform_mapping_commitment: Some(mapping_commitment),
+        authority_domain: "mac_host_shared".to_string(),
+        installation_id: template.installation_id.clone(),
+        attempt_id: template.attempt_id.clone(),
+        manifest_generation: template.next_manifest_generation,
+        created_at_unix_ns: template.manifest_created_at_unix_ns,
+        lifecycle_state: ManagedLifecycleStateV1::ManifestDurable,
+        previous_manifest_sha256: Some(template.previous_manifest_sha256.clone()),
+        entries: template.ordered_non_machine_entries.clone(),
+        planned_action_receipts: mac_lima_closed_post_pm_receipt_plan_v1(
+            &template.scope_id,
+            &template.attempt_id,
+            &template.intended_principal,
+            &template.ordered_non_machine_entries,
+        )?,
+    };
+    manifest.manifest_sha256 = substrate_common::managed_artifact_manifest_sha256_v1(&manifest)?;
+    substrate_common::canonical_manifest_bytes_v1(&manifest)
+        .context("validate fully derived Stage-1 PM manifest")?;
+    Ok((mapping, manifest))
+}
+
+/// Derive the closed ordinary post-PM request set only after the executor has durably completed
+/// the Stage-1 N-to-N+1 transition. These are ordinary `post_pm_action` requests, not a field
+/// of or authority delegated from the Stage-1 authorization: their mapping commitment, source
+/// anchor, manifest, counter, principal, and attempt are all read from the durable successor
+/// state and cannot exist before the selected create.
+///
+/// The shell may select one returned opaque request only by exact role/action/identity equality
+/// with its pre-existing typed request seed.  It never computes a mapping commitment, chooses an
+/// anchor, or rebinds any authority field itself.
+#[cfg(target_os = "macos")]
+fn mac_issue_closed_post_pm_requests_after_stage_one_v1(
+    carrier: &InstallBootstrapContextCarrierV1,
+    mapping: &PlatformBootstrapMappingV1,
+    manifest: &ManagedArtifactManifestV1,
+    state: &LifecyclePublisherProtectedStateV1,
+) -> Result<Vec<ManagedLifecyclePublisherRequestV1>> {
+    let canonical_mapping = mapping
+        .encode(carrier)
+        .context("encode successor mapping for closed post-PM requests")?;
+    let mapping_commitment = format!("{:x}", Sha256::digest(canonical_mapping.as_bytes()));
+    let PlatformPrincipalV1::Unix { account, .. } = &mapping.realized_principal else {
+        bail!("Stage-1 successor mapping lacks a UNIX principal");
+    };
+    let anchor_sha256 = lifecycle_anchor_sha256_v1(&state.current_anchor)?;
+    if manifest.authority_domain != "mac_host_shared"
+        || manifest.platform_kind != "mac_lima"
+        || manifest.host_context_commitment != carrier.host_context_commitment
+        || manifest.platform_mapping_commitment.as_deref() != Some(mapping_commitment.as_str())
+        || manifest.manifest_generation != state.current_anchor.manifest_generation
+        || manifest.manifest_sha256 != state.current_anchor.manifest_sha256
+        || manifest.installation_id != state.current_anchor.scope_id
+        || state.current_anchor.authority_domain != "mac_host_shared"
+        || state.current_anchor.host_context_commitment != carrier.host_context_commitment
+        || state.current_anchor.platform_mapping_commitment.as_deref()
+            != Some(mapping_commitment.as_str())
+        || account != &state.current_anchor.requester_principal
+        || state.current_anchor.attempt_nonce.is_empty()
+        || state.prepared_record.is_some()
+    {
+        bail!("Stage-1 successor cannot issue a closed post-PM request set");
+    }
+
+    let mut rows = vec![(
+        "mac.lima.instance".to_string(),
+        vec![
+            ManagedActionV1::Start,
+            ManagedActionV1::Stop,
+            ManagedActionV1::Remove,
+            ManagedActionV1::Restore,
+        ],
+    )];
+    rows.extend(
+        mac_lima_post_pm_role_rows_v1(&state.current_anchor.requester_principal)
+            .into_iter()
+            .map(|(role, _, _, actions)| (role, actions)),
+    );
+
+    let mut requests = Vec::new();
+    for (role, actions) in rows {
+        let entry = manifest
+            .entries
+            .iter()
+            .find(|entry| entry.logical_role.0 == role)
+            .ok_or_else(|| anyhow::anyhow!("Stage-1 successor manifest is missing {role}"))?;
+        for action in actions {
+            if !closed_mac_role_action_v1(&role, action) {
+                bail!("Stage-1 successor attempted an unlisted post-PM request");
+            }
+            let request = ManagedLifecyclePublisherRequestV1 {
+                host_context_commitment: carrier.host_context_commitment.clone(),
+                platform_mapping_commitment: Some(mapping_commitment.clone()),
+                scope_id: state.current_anchor.scope_id.clone(),
+                current_anchor_counter: state.counter,
+                current_anchor_sha256: anchor_sha256.clone(),
+                manifest_generation: manifest.manifest_generation,
+                manifest_sha256: manifest.manifest_sha256.clone(),
+                role: entry.logical_role.clone(),
+                action,
+                object_identity: entry.identity.clone(),
+                requester_principal: state.current_anchor.requester_principal.clone(),
+                attempt_nonce: state.current_anchor.attempt_nonce.clone(),
+                expected_executor_build: state.current_anchor.executor_identity.clone(),
+            };
+            validate_managed_lifecycle_publisher_request_v1(&request)?;
+            mac_post_pm_planned_receipt_v1(manifest, entry, &request)?;
+            requests.push(request);
         }
     }
-    if bits != 0 && (accumulator & ((1_u32 << bits) - 1)) != 0 {
-        bail!("mapped lifecycle base64url has non-canonical trailing bits");
+    if requests.is_empty() {
+        bail!("Stage-1 successor has no closed post-PM request set");
     }
-    Ok(decoded)
+    Ok(requests)
 }
 
-fn parse_exact_mac_lines_v1(encoded: &str, keys: &[&str]) -> Result<Vec<String>> {
-    let decoded = String::from_utf8(decode_base64url_v1(encoded)?)
-        .context("mapped lifecycle field is not UTF-8")?;
-    if !decoded.ends_with('\n') || decoded.contains('\r') || decoded.contains('\0') {
-        bail!("mapped lifecycle field is not canonical line data");
-    }
-    let lines: Vec<_> = decoded[..decoded.len() - 1].split('\n').collect();
-    if lines.len() != keys.len() {
-        bail!("mapped lifecycle field has an unexpected line count");
-    }
-    keys.iter()
-        .zip(lines)
-        .map(|(key, line)| {
-            line.strip_prefix(&format!("{key}="))
-                .filter(|value| !value.contains('='))
-                .map(str::to_owned)
-                .ok_or_else(|| {
-                    anyhow::anyhow!("mapped lifecycle field has a non-canonical {key} line")
-                })
-        })
-        .collect()
+fn mac_stage_one_profile_path_v1(
+    executor: &MacManagedArtifactExecutorV1,
+    scope_id: &str,
+    attempt_id: &str,
+) -> Result<PathBuf> {
+    mac_require_uuid_v7_component_v1(scope_id, "Stage-1 profile scope")?;
+    mac_require_uuid_v7_component_v1(attempt_id, "Stage-1 profile attempt")?;
+    Ok(executor
+        .state_root
+        .join("stage-one-profiles")
+        .join(scope_id)
+        .join(format!("{attempt_id}.yaml")))
 }
 
-fn validate_mac_carrier_mapping_join_v1(
-    install_prefix: &str,
-    carrier: &str,
-    mapping: &str,
-) -> Result<(String, String, String)> {
-    let carrier_values = parse_exact_mac_lines_v1(
-        carrier,
-        &[
-            "domain",
-            "version",
-            "selected_host_prefix",
-            "host_substrate_home",
-            "host_substrate_root",
-            "principal_kind",
-            "principal_account",
-            "principal_uid",
-            "host_context_commitment",
-        ],
+fn mac_write_stage_one_profile_absent_or_exact_v1(
+    executor: &MacManagedArtifactExecutorV1,
+    stage_one: &LimaStageOneAuthorizationV1,
+) -> Result<String> {
+    let profile = render_mac_lima_stage_one_profile_v1(
+        &stage_one.attempt_id,
+        &stage_one.executor_receipt_sha256,
     )?;
-    let carrier_commitment_input = format!(
-        "domain={}\nversion={}\nselected_host_prefix={}\nhost_substrate_home={}\nhost_substrate_root={}\nprincipal_kind={}\nprincipal_account={}\nprincipal_uid={}\n",
-        carrier_values[0],
-        carrier_values[1],
-        carrier_values[2],
-        carrier_values[3],
-        carrier_values[4],
-        carrier_values[5],
-        carrier_values[6],
-        carrier_values[7],
-    );
-    let calculated_carrier_commitment =
-        format!("{:x}", Sha256::digest(carrier_commitment_input.as_bytes()));
-    if carrier_values[0] != "substrate.install_bootstrap_context"
-        || carrier_values[1] != "1"
-        || carrier_values[5] != "unix"
-        || decode_base64url_v1(&carrier_values[2])? != install_prefix.as_bytes()
-        || decode_base64url_v1(&carrier_values[3])? != install_prefix.as_bytes()
-        || decode_base64url_v1(&carrier_values[4])? != install_prefix.as_bytes()
-        || String::from_utf8(decode_base64url_v1(&carrier_values[6])?)?.is_empty()
-        || carrier_values[7]
-            .parse::<u64>()
+    if base64url_encode_mac_v1(&profile) != stage_one.rendered_profile_b64
+        || sha256_hex_bootstrap_v1(&profile) != stage_one.rendered_profile_sha256
+        || stage_one.profile_sha256 != stage_one.rendered_profile_sha256
+    {
+        bail!("Stage-1 authorization rendered profile does not re-render exactly");
+    }
+    let path = mac_stage_one_profile_path_v1(
+        executor,
+        &stage_one.successor_template.scope_id,
+        &stage_one.attempt_id,
+    )?;
+    let parent = path
+        .parent()
+        .ok_or_else(|| anyhow::anyhow!("Stage-1 profile path has no fixed parent"))?;
+    fs::create_dir_all(parent)
+        .with_context(|| format!("create fixed Stage-1 profile parent {}", parent.display()))?;
+    fs::set_permissions(parent, fs::Permissions::from_mode(0o700))
+        .with_context(|| format!("harden fixed Stage-1 profile parent {}", parent.display()))?;
+    let parent_metadata = fs::symlink_metadata(parent)
+        .with_context(|| format!("inspect fixed Stage-1 profile parent {}", parent.display()))?;
+    if !parent_metadata.file_type().is_dir()
+        || parent_metadata.uid() != 0
+        || parent_metadata.gid() != 0
+        || parent_metadata.mode() & 0o777 != 0o700
+    {
+        bail!("Stage-1 profile parent is not a root-owned private directory");
+    }
+    let result = (|| -> Result<String> {
+        let file = fs::OpenOptions::new()
+            .write(true)
+            .create_new(true)
+            .mode(0o600)
+            .custom_flags(libc::O_CLOEXEC | libc::O_NOFOLLOW)
+            .open(&path);
+        match file {
+            Ok(mut file) => {
+                file.write_all(&profile)
+                    .context("write fixed Stage-1 profile")?;
+                file.sync_all().context("fsync fixed Stage-1 profile")?;
+            }
+            Err(error) if error.kind() == std::io::ErrorKind::AlreadyExists => {
+                let mut existing = fs::OpenOptions::new()
+                    .read(true)
+                    .custom_flags(libc::O_CLOEXEC | libc::O_NOFOLLOW)
+                    .open(&path)
+                    .context("open existing fixed Stage-1 profile no-follow")?;
+                let metadata = existing
+                    .metadata()
+                    .context("stat existing Stage-1 profile")?;
+                if !metadata.is_file()
+                    || metadata.nlink() != 1
+                    || metadata.uid() != 0
+                    || metadata.gid() != 0
+                    || metadata.mode() & 0o777 != 0o600
+                {
+                    bail!("existing Stage-1 profile is not one retained regular file");
+                }
+                let mut bytes = Vec::new();
+                existing
+                    .read_to_end(&mut bytes)
+                    .context("read existing fixed Stage-1 profile")?;
+                if bytes != profile {
+                    bail!("existing Stage-1 profile is not an exact retry");
+                }
+            }
+            Err(error) => return Err(error).context("create fixed Stage-1 profile no-follow"),
+        }
+        let metadata = fs::symlink_metadata(&path)
+            .with_context(|| format!("reinspect Stage-1 profile {}", path.display()))?;
+        if !metadata.file_type().is_file()
+            || metadata.nlink() != 1
+            || metadata.uid() != 0
+            || metadata.gid() != 0
+            || metadata.mode() & 0o777 != 0o600
+        {
+            bail!("Stage-1 profile identity changed or is not regular after fsync");
+        }
+        fs::OpenOptions::new()
+            .read(true)
+            .custom_flags(libc::O_CLOEXEC | libc::O_NOFOLLOW | libc::O_DIRECTORY)
+            .open(parent)
+            .context("open fixed Stage-1 profile parent")?
+            .sync_all()
+            .context("fsync fixed Stage-1 profile parent")?;
+        Ok(format!("dev:{}:ino:{}", metadata.dev(), metadata.ino()))
+    })();
+    result
+}
+
+#[derive(Debug, Clone, PartialEq, Eq)]
+enum MacFixedLimaCommandOutcomeV1 {
+    Success(String),
+    /// A child exit is kept distinct from spawn, timeout, UTF-8, and transport errors so a
+    /// recovery observer cannot turn an infrastructure failure into a safe replay decision.
+    NonZero {
+        code: Option<i32>,
+        stdout: String,
+        stderr: String,
+    },
+}
+
+fn mac_run_fixed_lima_command_outcome_v1(
+    tool: &Path,
+    home: &str,
+    lima_home: &str,
+    arguments: &[&str],
+) -> Result<MacFixedLimaCommandOutcomeV1> {
+    if !tool.is_absolute() || !home.starts_with('/') || !lima_home.starts_with('/') {
+        bail!("fixed Lima command has a noncanonical retained path/environment");
+    }
+    #[cfg(target_os = "macos")]
+    mac_require_root_owned_immutable_tool_path_v1(tool)?;
+    let tool_parent = tool
+        .parent()
+        .ok_or_else(|| anyhow::anyhow!("retained limactl has no parent"))?;
+    let path = format!("{}:/usr/bin:/bin:/usr/sbin:/sbin", tool_parent.display());
+    let mut command = Command::new(tool);
+    command
+        .args(arguments)
+        .env_clear()
+        .env("HOME", home)
+        .env("LIMA_HOME", lima_home)
+        .env("PATH", path)
+        .stdin(Stdio::null())
+        .stdout(Stdio::piped())
+        .stderr(Stdio::piped());
+    let mut child = command.spawn().with_context(|| {
+        format!(
+            "spawn exact retained limactl command {}",
+            arguments.join(" ")
+        )
+    })?;
+    let started = std::time::Instant::now();
+    loop {
+        if child
+            .try_wait()
+            .context("poll exact retained limactl command")?
+            .is_some()
+        {
+            let output = child
+                .wait_with_output()
+                .context("collect exact retained limactl command")?;
+            if !output.status.success() {
+                return Ok(MacFixedLimaCommandOutcomeV1::NonZero {
+                    code: output.status.code(),
+                    stdout: String::from_utf8_lossy(&output.stdout).trim().to_string(),
+                    stderr: String::from_utf8_lossy(&output.stderr).trim().to_string(),
+                });
+            }
+            return Ok(MacFixedLimaCommandOutcomeV1::Success(
+                String::from_utf8(output.stdout)
+                    .context("fixed retained limactl output is not UTF-8")?,
+            ));
+        }
+        if started.elapsed() >= MAC_LIMA_EFFECT_TIMEOUT_V1 {
+            let _ = child.kill();
+            let _ = child.wait();
+            bail!("fixed retained limactl command timed out preserving first");
+        }
+        std::thread::sleep(Duration::from_millis(10));
+    }
+}
+
+fn mac_run_fixed_lima_command_v1(
+    tool: &Path,
+    home: &str,
+    lima_home: &str,
+    arguments: &[&str],
+) -> Result<String> {
+    match mac_run_fixed_lima_command_outcome_v1(tool, home, lima_home, arguments)? {
+        MacFixedLimaCommandOutcomeV1::Success(output) => Ok(output),
+        MacFixedLimaCommandOutcomeV1::NonZero { code, stderr, .. } => {
+            bail!("fixed retained limactl command exited nonzero ({code:?}): {stderr}")
+        }
+    }
+}
+
+fn mac_parse_fixed_lima_list_v1(output: &str, instance_name: &str) -> Result<Option<String>> {
+    let value: Value = serde_json::from_str(output).context("decode fixed limactl list JSON")?;
+    let values = value
+        .as_array()
+        .ok_or_else(|| anyhow::anyhow!("fixed limactl list must be a JSON array"))?;
+    let mut found = None;
+    for value in values {
+        let object = value
+            .as_object()
+            .ok_or_else(|| anyhow::anyhow!("fixed limactl list row must be an object"))?;
+        let name = object
+            .get("name")
+            .and_then(Value::as_str)
+            .ok_or_else(|| anyhow::anyhow!("fixed limactl row lacks name"))?;
+        if name == instance_name {
+            let status = object
+                .get("status")
+                .and_then(Value::as_str)
+                .ok_or_else(|| anyhow::anyhow!("fixed limactl instance row lacks status"))?;
+            if found.replace(status.to_string()).is_some() {
+                bail!("fixed limactl list has an ambiguous selected instance");
+            }
+        }
+    }
+    Ok(found)
+}
+
+fn mac_parse_stage_one_observation_v1(
+    output: &str,
+    stage_one: &LimaStageOneAuthorizationV1,
+) -> Result<LimaStageOneObservationV1> {
+    let lines: Vec<_> = output.lines().collect();
+    if lines.len() != 6 || output.contains('\r') || !output.ends_with('\n') {
+        bail!("fixed Lima Stage-1 observation has a noncanonical line frame");
+    }
+    let values: Vec<_> = [
+        "attempt_id=",
+        "capsule_sha256=",
+        "guest_machine_id=",
+        "guest_account=",
+        "guest_uid=",
+        "guest_home=",
+    ]
+    .iter()
+    .zip(lines)
+    .map(|(prefix, line)| {
+        line.strip_prefix(prefix)
+            .filter(|value| !value.is_empty() && !value.contains(['\0', '\n', '\r']))
+            .map(str::to_string)
+            .ok_or_else(|| anyhow::anyhow!("fixed Lima Stage-1 observation line is malformed"))
+    })
+    .collect::<Result<_>>()?;
+    let observation = LimaStageOneObservationV1 {
+        instance_name: stage_one.instance_name.clone(),
+        instance_status: "Running".to_string(),
+        guest_machine_id: values[2].clone(),
+        marker_attempt_id: values[0].clone(),
+        marker_capsule_sha256: values[1].clone(),
+        guest_account: values[3].clone(),
+        guest_uid: values[4]
+            .parse::<u32>()
             .ok()
-            .filter(|value| *value > 0)
-            .is_none()
-        || carrier_values[8] != calculated_carrier_commitment
+            .filter(|uid| *uid > 0)
+            .ok_or_else(|| anyhow::anyhow!("fixed Lima Stage-1 observation UID is invalid"))?,
+        guest_home: values[5].clone(),
+    };
+    validate_lima_stage_one_observation_v1(&observation)?;
+    if observation.marker_attempt_id != stage_one.attempt_id
+        || observation.marker_capsule_sha256 != stage_one.executor_receipt_sha256
+        || observation.guest_account != stage_one.requester_principal
     {
-        bail!("mapped macOS action has an invalid canonical carrier");
+        bail!("fixed Lima Stage-1 observation does not join its signed authorization");
     }
-    let mapping_values = parse_exact_mac_lines_v1(
-        mapping,
-        &[
-            "domain",
-            "version",
-            "host_context_commitment",
-            "platform_kind",
-            "instance_name",
-            "guest_machine_id",
-            "host_platform_control_root",
-            "realized_substrate_home",
-            "realized_principal_account",
-            "realized_principal_uid",
-            "transport_kind",
-            "transport_host",
-            "transport_guest_socket",
-        ],
+    Ok(observation)
+}
+
+fn sign_mac_prepared_record_v1(
+    scope_id: &str,
+    record: &ManagedActionPreparedRecordV1,
+) -> Result<LifecycleSignatureV1> {
+    let public_key = base64url_encode_mac_v1(&mac_open_system_keychain_p256_spki_der_v1(scope_id)?);
+    let unsigned = ManagedActionPreparedRecordV1 {
+        signature: LifecycleSignatureV1 {
+            algorithm: "ecdsa-p256-sha256-p1363-low-s-v1".to_string(),
+            public_key: public_key.clone(),
+            signature: String::new(),
+        },
+        ..record.clone()
+    };
+    let payload = canonical_lifecycle_signature_payload_v1(&unsigned.schema_owner, &unsigned)?;
+    Ok(LifecycleSignatureV1 {
+        algorithm: "ecdsa-p256-sha256-p1363-low-s-v1".to_string(),
+        public_key,
+        signature: base64url_encode_mac_v1(&mac_system_keychain_sign_p1363_low_s_v1(
+            scope_id, &payload,
+        )?),
+    })
+}
+
+fn sign_mac_action_receipt_v1(
+    scope_id: &str,
+    receipt: &ManagedActionReceiptV1,
+) -> Result<LifecycleSignatureV1> {
+    let public_key = base64url_encode_mac_v1(&mac_open_system_keychain_p256_spki_der_v1(scope_id)?);
+    let unsigned = ManagedActionReceiptV1 {
+        signature: LifecycleSignatureV1 {
+            algorithm: "ecdsa-p256-sha256-p1363-low-s-v1".to_string(),
+            public_key: public_key.clone(),
+            signature: String::new(),
+        },
+        ..receipt.clone()
+    };
+    let payload = canonical_lifecycle_signature_payload_v1(&unsigned.schema_owner, &unsigned)?;
+    Ok(LifecycleSignatureV1 {
+        algorithm: "ecdsa-p256-sha256-p1363-low-s-v1".to_string(),
+        public_key,
+        signature: base64url_encode_mac_v1(&mac_system_keychain_sign_p1363_low_s_v1(
+            scope_id, &payload,
+        )?),
+    })
+}
+
+/// Reuse the one durable Stage-1 receipt across a retry that was interrupted after publication
+/// but before the successor protected-state CAS.  Re-signing would make a random-nonce ECDSA
+/// implementation turn an otherwise exact retry into a different receipt byte stream.
+#[cfg(target_os = "macos")]
+fn load_or_sign_mac_lima_stage_one_receipt_v1(
+    executor: &MacManagedArtifactExecutorV1,
+    scope_id: &str,
+    unsigned: ManagedActionReceiptV1,
+) -> Result<ManagedActionReceiptV1> {
+    let receipt_path = executor.state_root.join(&unsigned.receipt_relative_path);
+    match fs::symlink_metadata(&receipt_path) {
+        Ok(_) => {
+            let bytes = mac_read_stage_one_transition_artifact_no_follow_v1(
+                executor,
+                &unsigned.receipt_relative_path,
+            )?;
+            let receipt: ManagedActionReceiptV1 =
+                serde_json::from_slice(&bytes).context("decode retained Stage-1 receipt")?;
+            validate_managed_action_receipt_signature_v1(&receipt)?;
+            if canonical_action_receipt_bytes_v1(&receipt)? != bytes {
+                bail!("retained Stage-1 receipt is not canonical");
+            }
+            let mut retained_unsigned = receipt.clone();
+            retained_unsigned.signature.signature.clear();
+            if retained_unsigned != unsigned {
+                bail!("retained Stage-1 receipt is not an exact retry");
+            }
+            Ok(receipt)
+        }
+        Err(error) if error.kind() == std::io::ErrorKind::NotFound => {
+            let mut receipt = unsigned;
+            receipt.signature = sign_mac_action_receipt_v1(scope_id, &receipt)?;
+            Ok(receipt)
+        }
+        Err(error) => Err(error).context("inspect retained Stage-1 receipt path"),
+    }
+}
+
+fn prepare_mac_lima_stage_one_transition_v1(
+    executor: &MacManagedArtifactExecutorV1,
+    stage_one: &LimaStageOneAuthorizationV1,
+    capsule: &MacLimaStageOneCapsuleV1,
+) -> Result<LifecyclePublisherProtectedStateV1> {
+    let state = open_system_keychain_protected_state_for_scope_v1(&capsule.scope_id)?
+        .ok_or_else(|| anyhow::anyhow!("Lima Stage-1 has no protected publisher state"))?;
+    if state.current_anchor.manifest_generation != 1
+        || state.current_anchor.manifest_sha256 != capsule.pre_pm_manifest.manifest_sha256
+        || lifecycle_anchor_sha256_v1(&state.current_anchor)? != capsule.initial_anchor_sha256
+        || state.current_anchor.signature.public_key != stage_one.signature.public_key
+    {
+        bail!("Lima Stage-1 protected state does not exact-join its capsule and signer");
+    }
+    if let Some(prepared) = &state.prepared_record {
+        if prepared.receipt_id != stage_one.successor_template.planned_receipt_id
+            || prepared.receipt_relative_path
+                != stage_one.successor_template.planned_receipt_relative_path
+            || prepared.entry_id != capsule.scope_id
+            || prepared.action != ManagedActionV1::Create
+            || prepared.attempt_id != stage_one.attempt_id
+            || prepared.request_sha256 != capsule.bootstrap_authorization_sha256
+        {
+            bail!("existing Stage-1 prepared record does not exact-join capsule authority");
+        }
+        return Ok(state);
+    }
+    if state.counter != capsule.initial_anchor_counter {
+        bail!("Stage-1 protected counter is not the initial capsule counter");
+    }
+    let allocated_counter = state
+        .counter
+        .checked_add(1)
+        .ok_or_else(|| anyhow::anyhow!("Stage-1 action counter overflow"))?;
+    let mut prepared = ManagedActionPreparedRecordV1 {
+        schema_owner: "substrate.managed-action-prepared-record".to_string(),
+        schema_version: 1,
+        authority_domain: "mac_host_shared".to_string(),
+        scope_id: capsule.scope_id.clone(),
+        installation_id: capsule.scope_id.clone(),
+        manifest_generation: state.current_anchor.manifest_generation,
+        manifest_sha256: state.current_anchor.manifest_sha256.clone(),
+        receipt_id: stage_one.successor_template.planned_receipt_id.clone(),
+        receipt_relative_path: stage_one
+            .successor_template
+            .planned_receipt_relative_path
+            .clone(),
+        entry_id: capsule.scope_id.clone(),
+        action: ManagedActionV1::Create,
+        attempt_id: stage_one.attempt_id.clone(),
+        request_sha256: capsule.bootstrap_authorization_sha256.clone(),
+        before_observation: json!({
+            "source_anchor_sha256": capsule.initial_anchor_sha256,
+            "pre_pm_manifest_sha256": capsule.pre_pm_manifest.manifest_sha256,
+            "instance": "absent"
+        }),
+        executor_identity: state.current_anchor.executor_identity.clone(),
+        allocated_counter,
+        previous_record_sha256: None,
+        state: "Prepared".to_string(),
+        signature: LifecycleSignatureV1 {
+            algorithm: "ecdsa-p256-sha256-p1363-low-s-v1".to_string(),
+            public_key: String::new(),
+            signature: String::new(),
+        },
+    };
+    prepared.signature = sign_mac_prepared_record_v1(&capsule.scope_id, &prepared)?;
+    let next = LifecyclePublisherProtectedStateV1 {
+        counter: allocated_counter,
+        prepared_record: Some(prepared),
+        ..state.clone()
+    };
+    compare_and_swap_mac_publisher_protected_state_v1(executor, Some(&state), &next)?;
+    Ok(next)
+}
+
+/// Read a durable Stage-1 transition artifact only from the fixed publisher state root.  Every
+/// path segment is retained root-owned state, and the final object is opened through its own
+/// descriptor before its canonical bytes are used to resume a post-CAS transition.
+#[cfg(target_os = "macos")]
+fn mac_read_stage_one_transition_artifact_no_follow_v1(
+    executor: &MacManagedArtifactExecutorV1,
+    relative_path: &str,
+) -> Result<Vec<u8>> {
+    let relative = Path::new(relative_path);
+    if relative.is_absolute()
+        || relative_path.is_empty()
+        || relative
+            .components()
+            .any(|component| !matches!(component, std::path::Component::Normal(_)))
+    {
+        bail!("Stage-1 transition artifact path is not a closed relative path");
+    }
+    let root_metadata = fs::symlink_metadata(&executor.state_root).with_context(|| {
+        format!(
+            "inspect fixed Stage-1 transition root {}",
+            executor.state_root.display()
+        )
+    })?;
+    if !root_metadata.file_type().is_dir()
+        || root_metadata.uid() != 0
+        || root_metadata.gid() != 0
+        || root_metadata.mode() & 0o022 != 0
+    {
+        bail!("Stage-1 transition root is not a root-owned private directory");
+    }
+    let mut retained_parent = executor.state_root.clone();
+    let components: Vec<_> = relative.components().collect();
+    for component in &components[..components.len().saturating_sub(1)] {
+        retained_parent.push(component.as_os_str());
+        let metadata = fs::symlink_metadata(&retained_parent).with_context(|| {
+            format!(
+                "inspect retained Stage-1 transition parent {}",
+                retained_parent.display()
+            )
+        })?;
+        if !metadata.file_type().is_dir()
+            || metadata.uid() != 0
+            || metadata.gid() != 0
+            || metadata.mode() & 0o022 != 0
+        {
+            bail!("Stage-1 transition artifact parent is not retained root-owned state");
+        }
+    }
+    let path = executor.state_root.join(relative);
+    let mut file = fs::OpenOptions::new()
+        .read(true)
+        .custom_flags(libc::O_CLOEXEC | libc::O_NOFOLLOW)
+        .open(&path)
+        .with_context(|| {
+            format!(
+                "open retained Stage-1 transition artifact {}",
+                path.display()
+            )
+        })?;
+    let metadata = file
+        .metadata()
+        .with_context(|| format!("inspect retained Stage-1 artifact {}", path.display()))?;
+    if !metadata.file_type().is_file()
+        || metadata.nlink() != 1
+        || metadata.uid() != 0
+        || metadata.gid() != 0
+        || metadata.mode() & 0o022 != 0
+    {
+        bail!("Stage-1 transition artifact is not one retained root-owned regular file");
+    }
+    let mut bytes = Vec::new();
+    file.read_to_end(&mut bytes)
+        .context("read retained Stage-1 transition artifact")?;
+    let path_after = fs::symlink_metadata(&path)
+        .with_context(|| format!("reinspect retained Stage-1 artifact {}", path.display()))?;
+    if path_after.dev() != metadata.dev() || path_after.ino() != metadata.ino() {
+        bail!("Stage-1 transition artifact changed during descriptor read");
+    }
+    Ok(bytes)
+}
+
+/// Finish only the durable tail left after the Stage-1 protected-state CAS.  This is deliberately
+/// separate from the generic same-manifest receipt path: it refuses to re-run the Lima effect and
+/// accepts a successor only when the capsule, receipt/index/head, signed anchor, and fixed
+/// admission record describe the one exact N-to-N+1 transition.
+#[cfg(target_os = "macos")]
+fn resume_mac_lima_stage_one_after_protected_state_cas_v1(
+    executor: &MacManagedArtifactExecutorV1,
+    stage_one: &LimaStageOneAuthorizationV1,
+    carrier: &InstallBootstrapContextCarrierV1,
+    capsule: &MacLimaStageOneCapsuleV1,
+) -> Result<Option<Value>> {
+    if !matches!(capsule.state.as_str(), "InstanceObserved" | "Completed") {
+        return Ok(None);
+    }
+    let observation = capsule
+        .observation
+        .as_ref()
+        .ok_or_else(|| anyhow::anyhow!("observed Stage-1 capsule lacks its observation"))?;
+    let prepared_state_sha256 = capsule
+        .prepared_protected_state_sha256
+        .as_deref()
+        .ok_or_else(|| {
+            anyhow::anyhow!("observed Stage-1 capsule lacks its sealed prepared state")
+        })?;
+    let (mapping, next_manifest) =
+        derive_mac_lima_stage_one_successor_manifest_v1(stage_one, carrier, observation)?;
+    let state = open_system_keychain_protected_state_for_scope_v1(&capsule.scope_id)?
+        .ok_or_else(|| anyhow::anyhow!("observed Stage-1 capsule has no protected state"))?;
+    if state.current_anchor.manifest_generation == capsule.pre_pm_manifest.manifest_generation
+        && state.current_anchor.manifest_sha256 == capsule.pre_pm_manifest.manifest_sha256
+        && lifecycle_anchor_sha256_v1(&state.current_anchor)? == capsule.initial_anchor_sha256
+    {
+        // The cross-generation CAS has not happened. The ordinary Stage-1 runner may continue
+        // from the retained observation, but it must first prove the prepared snapshot below.
+        if state.prepared_record.is_none()
+            || sha256_hex_bootstrap_v1(&canonical_lifecycle_publisher_protected_state_v1(&state)?)
+                != prepared_state_sha256
+        {
+            bail!("observed Stage-1 capsule does not exact-join its retained prepared state");
+        }
+        return Ok(None);
+    }
+    if state.current_anchor.authority_domain != "mac_host_shared"
+        || state.current_anchor.scope_id != capsule.scope_id
+        || state.current_anchor.host_context_commitment != next_manifest.host_context_commitment
+        || state.current_anchor.platform_mapping_commitment
+            != next_manifest.platform_mapping_commitment
+        || state.current_anchor.manifest_generation != next_manifest.manifest_generation
+        || state.current_anchor.manifest_sha256 != next_manifest.manifest_sha256
+        || state.current_anchor.previous_anchor_sha256.as_deref()
+            != Some(capsule.initial_anchor_sha256.as_str())
+        || state.current_anchor.request_sha256 != capsule.bootstrap_authorization_sha256
+        || state.current_anchor.requester_principal != stage_one.requester_principal
+        || state.current_anchor.attempt_nonce != stage_one.attempt_id
+        || state.current_anchor.signature.public_key != stage_one.signature.public_key
+        || state.counter
+            != capsule
+                .initial_anchor_counter
+                .checked_add(1)
+                .ok_or_else(|| anyhow::anyhow!("Stage-1 resume counter overflow"))?
+        || state.prepared_record.is_some()
+        || state.state_revision != 1
+        || state.previous_protected_state_sha256.as_deref() != Some(prepared_state_sha256)
+    {
+        bail!("observed Stage-1 successor state is not the exact post-CAS transition");
+    }
+
+    let manifest_path = format!("manifest.{}.json", next_manifest.manifest_generation);
+    let manifest_bytes =
+        mac_read_stage_one_transition_artifact_no_follow_v1(executor, &manifest_path)?;
+    if manifest_bytes != canonical_manifest_bytes_v1(&next_manifest)?.bytes {
+        bail!("durable Stage-1 successor manifest is not the exact derived manifest");
+    }
+    let receipt_bytes = mac_read_stage_one_transition_artifact_no_follow_v1(
+        executor,
+        &stage_one.successor_template.planned_receipt_relative_path,
     )?;
-    let instance_name = String::from_utf8(decode_base64url_v1(&mapping_values[4])?)
-        .context("mapped instance name is not UTF-8")?;
-    let control_root = String::from_utf8(decode_base64url_v1(&mapping_values[6])?)
-        .context("mapped control root is not UTF-8")?;
-    let transport_host = String::from_utf8(decode_base64url_v1(&mapping_values[11])?)
-        .context("mapped transport host is not UTF-8")?;
-    let transport_guest = String::from_utf8(decode_base64url_v1(&mapping_values[12])?)
-        .context("mapped transport guest socket is not UTF-8")?;
-    if mapping_values[0] != "substrate.platform_bootstrap_mapping"
-        || mapping_values[1] != "1"
-        || mapping_values[2] != carrier_values[8]
-        || mapping_values[3] != "lima"
-        || instance_name.is_empty()
-        || mapping_values[5].len() != 32
-        || !mapping_values[5]
-            .bytes()
-            .all(|byte| byte.is_ascii_hexdigit())
-        || control_root.is_empty()
-        || mapping_values[10] != "lima"
-        || transport_host != format!("{install_prefix}/sock/agent.sock")
-        || transport_guest != "/run/substrate.sock"
+    let receipt: ManagedActionReceiptV1 =
+        serde_json::from_slice(&receipt_bytes).context("decode durable Stage-1 receipt")?;
+    validate_managed_action_receipt_signature_v1(&receipt)?;
+    if canonical_action_receipt_bytes_v1(&receipt)? != receipt_bytes
+        || receipt.authority_domain != "mac_host_shared"
+        || receipt.scope_id != capsule.scope_id
+        || receipt.installation_id != capsule.scope_id
+        || receipt.manifest_generation != next_manifest.manifest_generation
+        || receipt.manifest_sha256 != next_manifest.manifest_sha256
+        || receipt.receipt_id != stage_one.successor_template.planned_receipt_id
+        || receipt.receipt_relative_path
+            != stage_one.successor_template.planned_receipt_relative_path
+        || receipt.entry_id != capsule.scope_id
+        || receipt.action != ManagedActionV1::Create
+        || receipt.attempt_id != stage_one.attempt_id
+        || receipt.request_sha256 != capsule.bootstrap_authorization_sha256
+        || receipt.allocated_counter != state.counter
+        || receipt.effect_observation
+            != serde_json::to_value(observation).context("encode retained Stage-1 observation")?
+        || receipt.post_observation != json!({"manifest_sha256": next_manifest.manifest_sha256})
+        || receipt.executor_identity != state.current_anchor.executor_identity
+        || receipt.signature.public_key != stage_one.signature.public_key
     {
-        bail!("mapped macOS action has an invalid canonical mapping");
+        bail!("durable Stage-1 receipt does not exact-join successor state and observation");
     }
-    Ok((carrier_values[8].clone(), instance_name, control_root))
+
+    let index_path = format!(
+        "action-receipts.{}.v1.json",
+        next_manifest.manifest_generation
+    );
+    let index_bytes = mac_read_stage_one_transition_artifact_no_follow_v1(executor, &index_path)?;
+    let index: ManagedActionReceiptIndexV1 =
+        serde_json::from_slice(&index_bytes).context("decode durable Stage-1 receipt index")?;
+    let canonical_index = canonical_action_receipt_index_bytes_v1(&index)?;
+    let receipt_sha256 = sha256_hex_bootstrap_v1(&receipt_bytes);
+    if canonical_index != index_bytes
+        || index.authority_domain != "mac_host_shared"
+        || index.scope_id != capsule.scope_id
+        || index.manifest_generation != next_manifest.manifest_generation
+        || index.manifest_sha256 != next_manifest.manifest_sha256
+        || index.index_revision != 1
+        || index.entries.len() != 1
+        || index.entries[0].receipt_id != receipt.receipt_id
+        || index.entries[0].entry_id != receipt.entry_id
+        || index.entries[0].action != receipt.action
+        || index.entries[0].attempt_id != receipt.attempt_id
+        || index.entries[0].receipt_relative_path != receipt.receipt_relative_path
+        || index.entries[0].canonical_byte_length != receipt_bytes.len() as u64
+        || index.entries[0].receipt_artifact_sha256 != receipt_sha256
+        || index.entries[0].prepared_record_sha256 != receipt.prepared_record_sha256
+        || sha256_hex_bootstrap_v1(&canonical_index)
+            != state.current_anchor.action_receipt_index_sha256
+    {
+        bail!("durable Stage-1 receipt index does not exact-join successor receipt");
+    }
+    let head_bytes = mac_read_stage_one_transition_artifact_no_follow_v1(executor, "head.v1.json")?;
+    let head: ManagedManifestHeadV1 =
+        serde_json::from_slice(&head_bytes).context("decode durable Stage-1 manifest head")?;
+    if canonical_managed_manifest_head_v1(&head)? != head_bytes
+        || head.scope_id != capsule.scope_id
+        || head.manifest_generation != next_manifest.manifest_generation
+        || head.manifest_sha256 != next_manifest.manifest_sha256
+        || head.action_receipt_index_revision != index.index_revision
+        || head.action_receipt_index_sha256 != state.current_anchor.action_receipt_index_sha256
+        || sha256_hex_bootstrap_v1(&head_bytes) != state.current_anchor.head_sha256
+    {
+        bail!("durable Stage-1 manifest head does not exact-join successor anchor");
+    }
+
+    let admission_bytes =
+        mac_keychain_read_item_v1(MAC_KEYCHAIN_SERVICE_V1, MAC_CONTROL_ADMISSION_ACCOUNT_V1)?
+            .ok_or_else(|| anyhow::anyhow!("Stage-1 successor has no control admission"))?;
+    let admission: MacPublisherControlAdmissionV1 = serde_json::from_slice(&admission_bytes)
+        .context("decode retained Stage-1 control admission")?;
+    validate_mac_publisher_control_admission_v1(&admission)?;
+    if canonical_mac_publisher_control_admission_v1(&admission)? != admission_bytes
+        || admission.scope_id != capsule.scope_id
+        || admission.bootstrap_authorization_sha256 != capsule.bootstrap_authorization_sha256
+    {
+        bail!("Stage-1 retained control admission does not join its capsule");
+    }
+    let next_admission = MacPublisherControlAdmissionV1 {
+        schema_owner: "substrate.mac-publisher-control-admission".to_string(),
+        schema_version: 1,
+        scope_id: capsule.scope_id.clone(),
+        control_authority: admission.control_authority.clone(),
+        bootstrap_authorization_sha256: capsule.bootstrap_authorization_sha256.clone(),
+        manifest_generation: next_manifest.manifest_generation,
+        manifest_sha256: next_manifest.manifest_sha256.clone(),
+        current_anchor_sha256: lifecycle_anchor_sha256_v1(&state.current_anchor)?,
+        state_revision: state.state_revision,
+    };
+    if admission != next_admission {
+        if admission.manifest_generation != capsule.pre_pm_manifest.manifest_generation
+            || admission.manifest_sha256 != capsule.pre_pm_manifest.manifest_sha256
+            || admission.current_anchor_sha256 != capsule.initial_anchor_sha256
+            || admission.state_revision != 0
+        {
+            bail!("Stage-1 control admission is neither the source nor successor projection");
+        }
+        replace_mac_control_admission_authority_v1(&next_admission)?;
+    }
+    if mac_keychain_read_item_v1(MAC_KEYCHAIN_SERVICE_V1, MAC_CONTROL_ADMISSION_ACCOUNT_V1)?
+        .as_deref()
+        != Some(canonical_mac_publisher_control_admission_v1(&next_admission)?.as_slice())
+    {
+        bail!("Stage-1 successor control admission did not durably advance");
+    }
+    if capsule.state == "InstanceObserved" {
+        let completed = MacLimaStageOneCapsuleV1 {
+            state: "Completed".to_string(),
+            capsule_revision: capsule
+                .capsule_revision
+                .checked_add(1)
+                .ok_or_else(|| anyhow::anyhow!("Stage-1 capsule revision overflow"))?,
+            ..capsule.clone()
+        };
+        compare_and_swap_mac_lima_stage_one_capsule_v1(Some(capsule), &completed)?;
+    }
+    let post_pm_requests =
+        serde_json::to_value(mac_issue_closed_post_pm_requests_after_stage_one_v1(
+            carrier,
+            &mapping,
+            &next_manifest,
+            &state,
+        )?)
+        .context("encode closed Stage-1 successor post-PM request set")?;
+    Ok(Some(json!({
+        "status": "completed",
+        "receipt": receipt,
+        "platform_bootstrap_mapping_v1": mapping.encode(carrier)?,
+        "post_pm_requests_v1": post_pm_requests,
+        "manifest_generation": next_manifest.manifest_generation,
+        "manifest_sha256": next_manifest.manifest_sha256,
+    })))
+}
+
+#[cfg(target_os = "macos")]
+fn execute_closed_mac_lima_stage_one_effect_v1(
+    executor: &MacManagedArtifactExecutorV1,
+    stage_one: &LimaStageOneAuthorizationV1,
+    carrier: &InstallBootstrapContextCarrierV1,
+) -> Result<Value> {
+    let provenance = mac_load_retained_bootstrap_provenance_v1()?;
+    let mut capsule =
+        open_mac_lima_stage_one_capsule_v1(&stage_one.successor_template.scope_id)?
+            .ok_or_else(|| anyhow::anyhow!("Stage-1 authorization has no retained capsule"))?;
+    let result = (|| -> Result<Value> {
+        if capsule.stage_one_authorization != *stage_one
+            || capsule.state == "PreservingBlocked"
+            || capsule.install_provenance_sha256
+                != sha256_hex_bootstrap_v1(&canonical_mac_publisher_install_provenance_v1(
+                    &provenance,
+                )?)
+        {
+            bail!("Stage-1 authorization/capsule/provenance does not exact-join");
+        }
+        if let Some(response) = resume_mac_lima_stage_one_after_protected_state_cas_v1(
+            executor, stage_one, carrier, &capsule,
+        )? {
+            return Ok(response);
+        }
+        if capsule.state == "Completed" {
+            bail!("completed Stage-1 capsule has no exact durable successor observation");
+        }
+        let profile_identity = mac_write_stage_one_profile_absent_or_exact_v1(executor, stage_one)?;
+        if capsule.state == "Issued" {
+            let next = MacLimaStageOneCapsuleV1 {
+                state: "Prepared".to_string(),
+                capsule_revision: capsule
+                    .capsule_revision
+                    .checked_add(1)
+                    .ok_or_else(|| anyhow::anyhow!("Stage-1 capsule revision overflow"))?,
+                rendered_profile_file_identity: Some(profile_identity.clone()),
+                ..capsule.clone()
+            };
+            compare_and_swap_mac_lima_stage_one_capsule_v1(Some(&capsule), &next)?;
+            capsule = next;
+        } else if capsule.rendered_profile_file_identity.as_deref()
+            != Some(profile_identity.as_str())
+        {
+            bail!("Stage-1 rendered profile identity is not an exact retry");
+        }
+        let protected_state =
+            prepare_mac_lima_stage_one_transition_v1(executor, stage_one, &capsule)?;
+        let prepared_state_sha256 = sha256_hex_bootstrap_v1(
+            &canonical_lifecycle_publisher_protected_state_v1(&protected_state)?,
+        );
+        if matches!(capsule.state.as_str(), "EffectStarted" | "InstanceObserved")
+            && capsule.prepared_protected_state_sha256.as_deref()
+                != Some(prepared_state_sha256.as_str())
+        {
+            bail!("Stage-1 capsule does not exact-join its retained prepared state");
+        }
+        let home = mac_account_home_for_stage_one_v1(carrier)?;
+        if stage_one.lima_control_root_identity != format!("{home}/.lima") {
+            bail!("Stage-1 control root is not exactly account-derived");
+        }
+        let tool = Path::new(&provenance.lima_tool.absolute_path);
+        let measured_tool = mac_measure_root_owned_immutable_lima_tool_v1(tool)?;
+        if measured_tool.artifact_sha256 != provenance.lima_tool.image.artifact_sha256
+            || measured_tool.artifact_identity != provenance.lima_tool.image.physical_identity
+            || measured_tool.code_identity != provenance.lima_tool.image.code_identity
+        {
+            bail!("retained limactl image changed or does not join install provenance");
+        }
+        let before = mac_parse_fixed_lima_list_v1(
+            &mac_run_fixed_lima_command_v1(
+                tool,
+                &home,
+                &stage_one.lima_control_root_identity,
+                &["list", &stage_one.instance_name, "--json"],
+            )?,
+            &stage_one.instance_name,
+        )?;
+        if capsule.state == "Prepared" && before.is_some() {
+            bail!("selected Stage-1 instance is pre-existing before the absent-create effect");
+        }
+        if capsule.state == "InstanceObserved" && before.as_deref() != Some("Running") {
+            bail!("observed Stage-1 instance no longer has its exact running identity");
+        }
+        if capsule.state == "Prepared" {
+            let next = MacLimaStageOneCapsuleV1 {
+                state: "EffectStarted".to_string(),
+                capsule_revision: capsule
+                    .capsule_revision
+                    .checked_add(1)
+                    .ok_or_else(|| anyhow::anyhow!("Stage-1 capsule revision overflow"))?,
+                prepared_protected_state_sha256: Some(prepared_state_sha256),
+                ..capsule.clone()
+            };
+            compare_and_swap_mac_lima_stage_one_capsule_v1(Some(&capsule), &next)?;
+            capsule = next;
+        }
+        if before.is_none() {
+            if stage_one.expires_at_unix_ns <= mac_now_unix_ns_v1()? {
+                bail!("Stage-1 authorization expired before the selected absent-instance effect");
+            }
+            let profile =
+                mac_stage_one_profile_path_v1(executor, &capsule.scope_id, &stage_one.attempt_id)?;
+            let profile = profile
+                .to_str()
+                .ok_or_else(|| anyhow::anyhow!("fixed Stage-1 profile path is not UTF-8"))?;
+            let _ = mac_run_fixed_lima_command_v1(
+                tool,
+                &home,
+                &stage_one.lima_control_root_identity,
+                &[
+                    "start",
+                    "--tty=false",
+                    "--name",
+                    &stage_one.instance_name,
+                    profile,
+                ],
+            )?;
+        } else if before.as_deref() != Some("Running") {
+            bail!("selected Stage-1 instance is pre-existing with an unknown status");
+        }
+        let after_first = mac_parse_fixed_lima_list_v1(
+            &mac_run_fixed_lima_command_v1(
+                tool,
+                &home,
+                &stage_one.lima_control_root_identity,
+                &["list", &stage_one.instance_name, "--json"],
+            )?,
+            &stage_one.instance_name,
+        )?;
+        let after_second = mac_parse_fixed_lima_list_v1(
+            &mac_run_fixed_lima_command_v1(
+                tool,
+                &home,
+                &stage_one.lima_control_root_identity,
+                &["list", &stage_one.instance_name, "--json"],
+            )?,
+            &stage_one.instance_name,
+        )?;
+        if after_first.as_deref() != Some("Running") || after_first != after_second {
+            bail!("selected Stage-1 instance is not stably running after effect");
+        }
+        const OBSERVATION_COMMAND: &str = "set -eu; cat /var/lib/substrate/.substrate-lima-stage-one-marker.v1; printf 'guest_machine_id='; cat /etc/machine-id; printf '\\n'; printf 'guest_account='; id -un; printf '\\n'; printf 'guest_uid='; id -u; printf '\\n'; printf 'guest_home='; getent passwd \"$(id -un)\" | cut -d: -f6";
+        let observed_first = mac_parse_stage_one_observation_v1(
+            &mac_run_fixed_lima_command_v1(
+                tool,
+                &home,
+                &stage_one.lima_control_root_identity,
+                &[
+                    "shell",
+                    &stage_one.instance_name,
+                    "--",
+                    "/bin/sh",
+                    "-c",
+                    OBSERVATION_COMMAND,
+                ],
+            )?,
+            stage_one,
+        )?;
+        let observed_second = mac_parse_stage_one_observation_v1(
+            &mac_run_fixed_lima_command_v1(
+                tool,
+                &home,
+                &stage_one.lima_control_root_identity,
+                &[
+                    "shell",
+                    &stage_one.instance_name,
+                    "--",
+                    "/bin/sh",
+                    "-c",
+                    OBSERVATION_COMMAND,
+                ],
+            )?,
+            stage_one,
+        )?;
+        if observed_first != observed_second {
+            bail!("Stage-1 guest observation changed across required re-observation");
+        }
+        let observation = observed_first;
+        if capsule.state == "EffectStarted" {
+            let next = MacLimaStageOneCapsuleV1 {
+                state: "InstanceObserved".to_string(),
+                capsule_revision: capsule
+                    .capsule_revision
+                    .checked_add(1)
+                    .ok_or_else(|| anyhow::anyhow!("Stage-1 capsule revision overflow"))?,
+                observation: Some(observation.clone()),
+                ..capsule.clone()
+            };
+            compare_and_swap_mac_lima_stage_one_capsule_v1(Some(&capsule), &next)?;
+            capsule = next;
+        } else if capsule.observation.as_ref() != Some(&observation) {
+            bail!("Stage-1 observed capsule state is not an exact retry");
+        }
+        let (mapping, next_manifest) =
+            derive_mac_lima_stage_one_successor_manifest_v1(stage_one, carrier, &observation)?;
+        let prepared = protected_state
+            .prepared_record
+            .as_ref()
+            .ok_or_else(|| anyhow::anyhow!("Stage-1 protected state has no prepared record"))?;
+        let receipt = ManagedActionReceiptV1 {
+            schema_owner: "substrate.managed-action-receipt".to_string(),
+            schema_version: 1,
+            authority_domain: "mac_host_shared".to_string(),
+            scope_id: capsule.scope_id.clone(),
+            installation_id: capsule.scope_id.clone(),
+            manifest_generation: next_manifest.manifest_generation,
+            manifest_sha256: next_manifest.manifest_sha256.clone(),
+            receipt_id: prepared.receipt_id.clone(),
+            receipt_relative_path: prepared.receipt_relative_path.clone(),
+            entry_id: prepared.entry_id.clone(),
+            action: ManagedActionV1::Create,
+            attempt_id: prepared.attempt_id.clone(),
+            prepared_record_sha256: managed_action_prepared_record_sha256_v1(prepared)?,
+            allocated_counter: prepared.allocated_counter,
+            request_sha256: prepared.request_sha256.clone(),
+            pre_observation: prepared.before_observation.clone(),
+            effect_observation: serde_json::to_value(&observation)
+                .context("encode Stage-1 observation")?,
+            post_observation: json!({"manifest_sha256": next_manifest.manifest_sha256}),
+            restoration_status: None,
+            error_class: None,
+            executor_identity: prepared.executor_identity.clone(),
+            signature: LifecycleSignatureV1 {
+                algorithm: prepared.signature.algorithm.clone(),
+                public_key: prepared.signature.public_key.clone(),
+                signature: String::new(),
+            },
+        };
+        let receipt =
+            load_or_sign_mac_lima_stage_one_receipt_v1(executor, &capsule.scope_id, receipt)?;
+        let head = complete_mac_lima_stage_one_transition_v1(
+            &executor.state_root,
+            &protected_state,
+            capsule.pre_pm_manifest.manifest_generation,
+            &capsule.pre_pm_manifest.manifest_sha256,
+            &next_manifest,
+            &receipt,
+        )?;
+        let previous_anchor_sha256 = lifecycle_anchor_sha256_v1(&protected_state.current_anchor)?;
+        let mut next_anchor = LifecyclePublisherAnchorV1 {
+            schema_owner: "substrate.lifecycle-publisher-anchor".to_string(),
+            schema_version: 1,
+            authority_domain: "mac_host_shared".to_string(),
+            host_context_commitment: next_manifest.host_context_commitment.clone(),
+            platform_mapping_commitment: next_manifest.platform_mapping_commitment.clone(),
+            scope_id: capsule.scope_id.clone(),
+            manifest_generation: next_manifest.manifest_generation,
+            manifest_sha256: next_manifest.manifest_sha256.clone(),
+            action_receipt_index_revision: head.action_receipt_index_revision,
+            action_receipt_index_sha256: head.action_receipt_index_sha256.clone(),
+            head_sha256: sha256_hex_bootstrap_v1(&canonical_managed_manifest_head_v1(&head)?),
+            previous_anchor_sha256: Some(previous_anchor_sha256),
+            request_sha256: capsule.bootstrap_authorization_sha256.clone(),
+            requester_principal: stage_one.requester_principal.clone(),
+            attempt_nonce: stage_one.attempt_id.clone(),
+            executor_identity: prepared.executor_identity.clone(),
+            signature: LifecycleSignatureV1 {
+                algorithm: "ecdsa-p256-sha256-p1363-low-s-v1".to_string(),
+                public_key: String::new(),
+                signature: String::new(),
+            },
+        };
+        next_anchor.signature =
+            mac_sign_initial_lifecycle_anchor_v1(&capsule.scope_id, &next_anchor)?;
+        let next_state = LifecyclePublisherProtectedStateV1 {
+            schema_owner: "substrate.lifecycle-publisher-protected-state".to_string(),
+            schema_version: 1,
+            current_anchor: next_anchor,
+            counter: prepared.allocated_counter,
+            prepared_record: None,
+            previous_protected_state_sha256: Some(sha256_hex_bootstrap_v1(
+                &canonical_lifecycle_publisher_protected_state_v1(&protected_state)?,
+            )),
+            state_revision: protected_state
+                .state_revision
+                .checked_add(1)
+                .ok_or_else(|| anyhow::anyhow!("Stage-1 protected state revision overflow"))?,
+        };
+        compare_and_swap_mac_publisher_protected_state_v1(
+            executor,
+            Some(&protected_state),
+            &next_state,
+        )?;
+        let admission = MacPublisherControlAdmissionV1 {
+            schema_owner: "substrate.mac-publisher-control-admission".to_string(),
+            schema_version: 1,
+            scope_id: capsule.scope_id.clone(),
+            control_authority: mac_verified_control_authority_v1()?,
+            bootstrap_authorization_sha256: capsule.bootstrap_authorization_sha256.clone(),
+            manifest_generation: next_manifest.manifest_generation,
+            manifest_sha256: next_manifest.manifest_sha256.clone(),
+            current_anchor_sha256: lifecycle_anchor_sha256_v1(&next_state.current_anchor)?,
+            state_revision: next_state.state_revision,
+        };
+        replace_mac_control_admission_authority_v1(&admission)?;
+        let completed = MacLimaStageOneCapsuleV1 {
+            state: "Completed".to_string(),
+            capsule_revision: capsule
+                .capsule_revision
+                .checked_add(1)
+                .ok_or_else(|| anyhow::anyhow!("Stage-1 capsule revision overflow"))?,
+            ..capsule.clone()
+        };
+        compare_and_swap_mac_lima_stage_one_capsule_v1(Some(&capsule), &completed)?;
+        let post_pm_requests =
+            serde_json::to_value(mac_issue_closed_post_pm_requests_after_stage_one_v1(
+                carrier,
+                &mapping,
+                &next_manifest,
+                &next_state,
+            )?)
+            .context("encode closed Stage-1 successor post-PM request set")?;
+        Ok(json!({
+            "status": "completed",
+            "receipt": receipt,
+            "platform_bootstrap_mapping_v1": mapping.encode(carrier)?,
+            "post_pm_requests_v1": post_pm_requests,
+            "manifest_generation": next_manifest.manifest_generation,
+            "manifest_sha256": next_manifest.manifest_sha256,
+        }))
+    })();
+    result
+}
+
+#[cfg(not(target_os = "macos"))]
+fn execute_closed_mac_lima_stage_one_effect_v1(
+    _executor: &MacManagedArtifactExecutorV1,
+    _stage_one: &LimaStageOneAuthorizationV1,
+    _carrier: &InstallBootstrapContextCarrierV1,
+) -> Result<Value> {
+    bail!("closed Lima Stage-1 effect is available only on macOS")
+}
+
+/// The only state classifications that may advance a closed ordinary post-PM transaction.
+/// This deliberately separates a stale completed observation from a source-anchor retry that
+/// owns the retained prepared record; neither path can allocate a second counter.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+enum MacPostPmTransactionClassV1 {
+    New,
+    PreparedRetry,
+    EffectStartedRetry,
+    EffectObservedRetry,
+    CompletedRetry,
+}
+
+/// Classify post-PM recovery before the normal current-counter gate.  The caller supplies only
+/// facts already recomputed from the protected state, signed prepared record, exact request, and
+/// retained attempt journal; no caller retry selector exists.
+fn classify_mac_post_pm_transaction_v1(
+    request_counter: u64,
+    state_counter: u64,
+    source_anchor_matches: bool,
+    prepared_matches: bool,
+    completed_matches: bool,
+    journal_state: Option<&str>,
+) -> Result<MacPostPmTransactionClassV1> {
+    if completed_matches {
+        if request_counter.checked_add(1) != Some(state_counter) || prepared_matches {
+            bail!("completed post-PM retry does not exact-join its advanced state");
+        }
+        return Ok(MacPostPmTransactionClassV1::CompletedRetry);
+    }
+    if !source_anchor_matches {
+        bail!("post-PM request does not join its retained source anchor");
+    }
+    if prepared_matches {
+        if request_counter.checked_add(1) != Some(state_counter) {
+            bail!("prepared post-PM retry counter is not exactly one allocated action");
+        }
+        return match journal_state.unwrap_or("Prepared") {
+            "Prepared" => Ok(MacPostPmTransactionClassV1::PreparedRetry),
+            "EffectStarted" => Ok(MacPostPmTransactionClassV1::EffectStartedRetry),
+            "EffectObserved" => Ok(MacPostPmTransactionClassV1::EffectObservedRetry),
+            "Completed" => bail!("completed post-PM journal has no advanced protected state"),
+            _ => bail!("post-PM journal state is not closed"),
+        };
+    }
+    if journal_state.is_some() || request_counter != state_counter {
+        bail!("post-PM request is neither new nor an exact retained retry");
+    }
+    Ok(MacPostPmTransactionClassV1::New)
+}
+
+#[derive(Debug, Clone, PartialEq)]
+struct MacPostPmAttemptJournalV1 {
+    schema_owner: String,
+    schema_version: u32,
+    receipt_id: String,
+    request_sha256: String,
+    prepared_record_sha256: String,
+    state: String,
+    effect_observation: Option<Value>,
+}
+
+fn canonical_mac_post_pm_attempt_journal_v1(
+    journal: &MacPostPmAttemptJournalV1,
+) -> Result<Vec<u8>> {
+    if journal.schema_owner != "substrate.mac-post-pm-attempt-journal"
+        || journal.schema_version != 1
+        || journal.receipt_id.is_empty()
+        || journal.request_sha256.len() != 64
+        || journal.prepared_record_sha256.len() != 64
+        || !matches!(
+            journal.state.as_str(),
+            "Prepared" | "EffectStarted" | "EffectObserved" | "Completed"
+        )
+        || (journal.state == "EffectObserved" && journal.effect_observation.is_none())
+        || (journal.state != "EffectObserved" && journal.effect_observation.is_some())
+    {
+        bail!("post-PM attempt journal is not a canonical closed record");
+    }
+    canonical_bootstrap_json_bytes_v1(&json!({
+        "schema_owner": journal.schema_owner,
+        "schema_version": journal.schema_version,
+        "receipt_id": journal.receipt_id,
+        "request_sha256": journal.request_sha256,
+        "prepared_record_sha256": journal.prepared_record_sha256,
+        "state": journal.state,
+        "effect_observation": journal.effect_observation,
+    }))
+}
+
+#[cfg(target_os = "macos")]
+fn mac_post_pm_journal_relative_path_for_receipt_v1(
+    receipt_id: &str,
+    state: &str,
+) -> Result<String> {
+    if receipt_id.is_empty()
+        || receipt_id.contains('/')
+        || receipt_id.contains('\\')
+        || !matches!(
+            state,
+            "Prepared" | "EffectStarted" | "EffectObserved" | "Completed"
+        )
+    {
+        bail!("post-PM journal path is not closed");
+    }
+    Ok(format!("post-pm-attempts/{}/{state}.v1.json", receipt_id))
+}
+
+#[cfg(target_os = "macos")]
+fn mac_post_pm_journal_relative_path_v1(
+    prepared: &ManagedActionPreparedRecordV1,
+    state: &str,
+) -> Result<String> {
+    mac_post_pm_journal_relative_path_for_receipt_v1(&prepared.receipt_id, state)
+}
+
+#[cfg(target_os = "macos")]
+fn mac_decode_post_pm_attempt_journal_v1(bytes: &[u8]) -> Result<MacPostPmAttemptJournalV1> {
+    let value: Value = serde_json::from_slice(bytes).context("decode post-PM attempt journal")?;
+    let object = value
+        .as_object()
+        .ok_or_else(|| anyhow::anyhow!("post-PM attempt journal must be an object"))?;
+    let expected = [
+        "schema_owner",
+        "schema_version",
+        "receipt_id",
+        "request_sha256",
+        "prepared_record_sha256",
+        "state",
+        "effect_observation",
+    ];
+    if object.len() != expected.len() || expected.iter().any(|field| !object.contains_key(*field)) {
+        bail!("post-PM attempt journal has an unknown or missing field");
+    }
+    let journal = MacPostPmAttemptJournalV1 {
+        schema_owner: object
+            .get("schema_owner")
+            .and_then(Value::as_str)
+            .ok_or_else(|| anyhow::anyhow!("post-PM journal lacks schema_owner"))?
+            .to_string(),
+        schema_version: object
+            .get("schema_version")
+            .and_then(Value::as_u64)
+            .ok_or_else(|| anyhow::anyhow!("post-PM journal lacks schema_version"))?
+            .try_into()
+            .context("post-PM journal schema_version overflows u32")?,
+        receipt_id: object
+            .get("receipt_id")
+            .and_then(Value::as_str)
+            .ok_or_else(|| anyhow::anyhow!("post-PM journal lacks receipt_id"))?
+            .to_string(),
+        request_sha256: object
+            .get("request_sha256")
+            .and_then(Value::as_str)
+            .ok_or_else(|| anyhow::anyhow!("post-PM journal lacks request_sha256"))?
+            .to_string(),
+        prepared_record_sha256: object
+            .get("prepared_record_sha256")
+            .and_then(Value::as_str)
+            .ok_or_else(|| anyhow::anyhow!("post-PM journal lacks prepared_record_sha256"))?
+            .to_string(),
+        state: object
+            .get("state")
+            .and_then(Value::as_str)
+            .ok_or_else(|| anyhow::anyhow!("post-PM journal lacks state"))?
+            .to_string(),
+        effect_observation: match object.get("effect_observation") {
+            Some(Value::Null) => None,
+            Some(value) => Some(value.clone()),
+            None => bail!("post-PM journal lacks effect_observation"),
+        },
+    };
+    if canonical_mac_post_pm_attempt_journal_v1(&journal)? != bytes {
+        bail!("post-PM attempt journal is not canonical");
+    }
+    Ok(journal)
+}
+
+#[cfg(target_os = "macos")]
+fn mac_ensure_post_pm_journal_directory_v1(
+    executor: &MacManagedArtifactExecutorV1,
+    prepared: &ManagedActionPreparedRecordV1,
+) -> Result<PathBuf> {
+    let root =
+        fs::symlink_metadata(&executor.state_root).context("inspect fixed post-PM state root")?;
+    if !root.file_type().is_dir() || root.uid() != 0 || root.gid() != 0 || root.mode() & 0o022 != 0
+    {
+        bail!("post-PM state root is not root-owned no-follow state");
+    }
+    let root_relative = executor.state_root.join("post-pm-attempts");
+    let attempt_dir = root_relative.join(&prepared.receipt_id);
+    for path in [&root_relative, &attempt_dir] {
+        match fs::create_dir(path) {
+            Ok(()) => {
+                fs::set_permissions(path, fs::Permissions::from_mode(0o700)).with_context(|| {
+                    format!("set post-PM journal directory mode {}", path.display())
+                })?
+            }
+            Err(error) if error.kind() == std::io::ErrorKind::AlreadyExists => {}
+            Err(error) => {
+                return Err(error).with_context(|| {
+                    format!("create post-PM journal directory {}", path.display())
+                })
+            }
+        }
+        let metadata = fs::symlink_metadata(path)
+            .with_context(|| format!("inspect post-PM journal directory {}", path.display()))?;
+        if !metadata.file_type().is_dir()
+            || metadata.uid() != 0
+            || metadata.gid() != 0
+            || metadata.mode() & 0o022 != 0
+        {
+            bail!("post-PM journal directory is not root-owned no-follow state");
+        }
+    }
+    Ok(attempt_dir)
+}
+
+#[cfg(target_os = "macos")]
+fn mac_persist_post_pm_journal_state_absent_or_exact_v1(
+    executor: &MacManagedArtifactExecutorV1,
+    prepared: &ManagedActionPreparedRecordV1,
+    state: &str,
+    effect_observation: Option<Value>,
+) -> Result<MacPostPmAttemptJournalV1> {
+    let prepared_sha256 = managed_action_prepared_record_sha256_v1(prepared)?;
+    let journal = MacPostPmAttemptJournalV1 {
+        schema_owner: "substrate.mac-post-pm-attempt-journal".to_string(),
+        schema_version: 1,
+        receipt_id: prepared.receipt_id.clone(),
+        request_sha256: prepared.request_sha256.clone(),
+        prepared_record_sha256: prepared_sha256,
+        state: state.to_string(),
+        effect_observation,
+    };
+    let bytes = canonical_mac_post_pm_attempt_journal_v1(&journal)?;
+    let attempt_dir = mac_ensure_post_pm_journal_directory_v1(executor, prepared)?;
+    let relative = mac_post_pm_journal_relative_path_v1(prepared, state)?;
+    let path = executor.state_root.join(&relative);
+    if path.parent() != Some(attempt_dir.as_path()) {
+        bail!("post-PM journal path escaped its retained attempt directory");
+    }
+    match fs::OpenOptions::new()
+        .write(true)
+        .create_new(true)
+        .mode(0o600)
+        .custom_flags(libc::O_CLOEXEC | libc::O_NOFOLLOW)
+        .open(&path)
+    {
+        Ok(mut file) => {
+            file.write_all(&bytes)
+                .context("write post-PM journal state")?;
+            file.sync_all().context("fsync post-PM journal state")?;
+        }
+        Err(error) if error.kind() == std::io::ErrorKind::AlreadyExists => {
+            let existing =
+                mac_read_stage_one_transition_artifact_no_follow_v1(executor, &relative)?;
+            if existing != bytes {
+                bail!("post-PM journal state conflicts with retained authority");
+            }
+        }
+        Err(error) => return Err(error).context("create no-follow post-PM journal state"),
+    }
+    fs::OpenOptions::new()
+        .read(true)
+        .custom_flags(libc::O_CLOEXEC | libc::O_NOFOLLOW | libc::O_DIRECTORY)
+        .open(&attempt_dir)
+        .context("open post-PM journal attempt directory")?
+        .sync_all()
+        .context("fsync post-PM journal attempt directory")?;
+    Ok(journal)
+}
+
+/// The final journal marker is deliberately repaired from the already signed durable receipt
+/// after a state/admission CAS.  A crash in that narrow tail must converge to Completed rather
+/// than leave an otherwise exact retry at EffectObserved forever.
+#[cfg(target_os = "macos")]
+fn mac_persist_completed_post_pm_journal_from_receipt_v1(
+    executor: &MacManagedArtifactExecutorV1,
+    receipt: &ManagedActionReceiptV1,
+) -> Result<()> {
+    let journal = MacPostPmAttemptJournalV1 {
+        schema_owner: "substrate.mac-post-pm-attempt-journal".to_string(),
+        schema_version: 1,
+        receipt_id: receipt.receipt_id.clone(),
+        request_sha256: receipt.request_sha256.clone(),
+        prepared_record_sha256: receipt.prepared_record_sha256.clone(),
+        state: "Completed".to_string(),
+        effect_observation: None,
+    };
+    let bytes = canonical_mac_post_pm_attempt_journal_v1(&journal)?;
+    let relative =
+        mac_post_pm_journal_relative_path_for_receipt_v1(&receipt.receipt_id, "Completed")?;
+    let path = executor.state_root.join(&relative);
+    let parent = path
+        .parent()
+        .ok_or_else(|| anyhow::anyhow!("completed post-PM journal has no retained parent"))?;
+    let parent_metadata = fs::symlink_metadata(parent).with_context(|| {
+        format!(
+            "inspect completed post-PM journal parent {}",
+            parent.display()
+        )
+    })?;
+    if !parent_metadata.file_type().is_dir()
+        || parent_metadata.uid() != 0
+        || parent_metadata.gid() != 0
+        || parent_metadata.mode() & 0o022 != 0
+    {
+        bail!("completed post-PM journal parent is not retained root-owned state");
+    }
+    match fs::OpenOptions::new()
+        .write(true)
+        .create_new(true)
+        .mode(0o600)
+        .custom_flags(libc::O_CLOEXEC | libc::O_NOFOLLOW)
+        .open(&path)
+    {
+        Ok(mut file) => {
+            file.write_all(&bytes)
+                .context("write completed post-PM journal")?;
+            file.sync_all().context("fsync completed post-PM journal")?;
+        }
+        Err(error) if error.kind() == std::io::ErrorKind::AlreadyExists => {
+            if mac_read_stage_one_transition_artifact_no_follow_v1(executor, &relative)? != bytes {
+                bail!("completed post-PM journal conflicts with durable receipt");
+            }
+        }
+        Err(error) => return Err(error).context("create completed post-PM journal"),
+    }
+    fs::OpenOptions::new()
+        .read(true)
+        .custom_flags(libc::O_CLOEXEC | libc::O_NOFOLLOW | libc::O_DIRECTORY)
+        .open(parent)
+        .context("open completed post-PM journal parent")?
+        .sync_all()
+        .context("fsync completed post-PM journal parent")
+}
+
+#[cfg(target_os = "macos")]
+fn mac_open_post_pm_attempt_journal_v1(
+    executor: &MacManagedArtifactExecutorV1,
+    prepared: &ManagedActionPreparedRecordV1,
+) -> Result<Option<MacPostPmAttemptJournalV1>> {
+    let expected_prepared_sha256 = managed_action_prepared_record_sha256_v1(prepared)?;
+    let states = ["Completed", "EffectObserved", "EffectStarted", "Prepared"];
+    let mut highest: Option<MacPostPmAttemptJournalV1> = None;
+    for state in states {
+        let relative = mac_post_pm_journal_relative_path_v1(prepared, state)?;
+        let path = executor.state_root.join(&relative);
+        match fs::symlink_metadata(&path) {
+            Ok(_) => {
+                let bytes =
+                    mac_read_stage_one_transition_artifact_no_follow_v1(executor, &relative)?;
+                let journal = mac_decode_post_pm_attempt_journal_v1(&bytes)?;
+                if journal.receipt_id != prepared.receipt_id
+                    || journal.request_sha256 != prepared.request_sha256
+                    || journal.prepared_record_sha256 != expected_prepared_sha256
+                    || journal.state != state
+                {
+                    bail!("post-PM journal does not exact-join retained prepared authority");
+                }
+                if highest.is_some() {
+                    // The later state is the recovery frontier; every lower state is still
+                    // retained as immutable history and was checked above for the same joins.
+                    continue;
+                }
+                highest = Some(journal);
+            }
+            Err(error) if error.kind() == std::io::ErrorKind::NotFound => {}
+            Err(error) => return Err(error).context("inspect post-PM journal state"),
+        }
+    }
+    Ok(highest)
+}
+
+#[cfg(target_os = "macos")]
+fn mac_open_or_create_post_pm_attempt_journal_v1(
+    executor: &MacManagedArtifactExecutorV1,
+    prepared: &ManagedActionPreparedRecordV1,
+) -> Result<MacPostPmAttemptJournalV1> {
+    match mac_open_post_pm_attempt_journal_v1(executor, prepared)? {
+        Some(journal) => Ok(journal),
+        None => mac_persist_post_pm_journal_state_absent_or_exact_v1(
+            executor, prepared, "Prepared", None,
+        ),
+    }
+}
+
+#[cfg(target_os = "macos")]
+fn mac_post_pm_planned_receipt_v1(
+    manifest: &ManagedArtifactManifestV1,
+    entry: &ManagedArtifactEntryV1,
+    request: &ManagedLifecyclePublisherRequestV1,
+) -> Result<(String, String)> {
+    let action = mac_post_pm_action_literal_v1(request.action);
+    let planned = manifest
+        .planned_action_receipts
+        .iter()
+        .filter_map(Value::as_object)
+        .find(|planned| {
+            planned.get("entry_id").and_then(Value::as_str) == Some(entry.object_id.as_str())
+                && planned.get("action").and_then(Value::as_str) == Some(action)
+                && planned.get("attempt_id").and_then(Value::as_str)
+                    == Some(request.attempt_nonce.as_str())
+        })
+        .ok_or_else(|| {
+            anyhow::anyhow!("post-PM request has no exact signed manifest receipt plan")
+        })?;
+    let receipt_id = planned
+        .get("receipt_id")
+        .and_then(Value::as_str)
+        .ok_or_else(|| anyhow::anyhow!("post-PM plan lacks receipt_id"))?;
+    let receipt_relative_path = planned
+        .get("receipt_relative_path")
+        .and_then(Value::as_str)
+        .ok_or_else(|| anyhow::anyhow!("post-PM plan lacks receipt_relative_path"))?;
+    if receipt_id.is_empty()
+        || receipt_relative_path
+            != format!(
+                "receipts/{}/receipt.{receipt_id}.json",
+                manifest.manifest_generation
+            )
+    {
+        bail!("post-PM plan does not retain its canonical receipt identity");
+    }
+    Ok((receipt_id.to_string(), receipt_relative_path.to_string()))
+}
+
+#[cfg(target_os = "macos")]
+fn mac_load_or_sign_post_pm_receipt_v1(
+    executor: &MacManagedArtifactExecutorV1,
+    scope_id: &str,
+    unsigned: ManagedActionReceiptV1,
+) -> Result<ManagedActionReceiptV1> {
+    let receipt_path = executor.state_root.join(&unsigned.receipt_relative_path);
+    match fs::symlink_metadata(&receipt_path) {
+        Ok(_) => {
+            let bytes = mac_read_stage_one_transition_artifact_no_follow_v1(
+                executor,
+                &unsigned.receipt_relative_path,
+            )?;
+            let receipt: ManagedActionReceiptV1 =
+                serde_json::from_slice(&bytes).context("decode retained post-PM receipt")?;
+            validate_managed_action_receipt_signature_v1(&receipt)?;
+            if canonical_action_receipt_bytes_v1(&receipt)? != bytes {
+                bail!("retained post-PM receipt is not canonical");
+            }
+            let mut retained_unsigned = receipt.clone();
+            retained_unsigned.signature.signature.clear();
+            // The canonical unsigned retry request has an empty signature shell.  Its public
+            // key is authenticated above as part of the retained signed receipt, but is not a
+            // caller-selected unsigned field.
+            retained_unsigned.signature.public_key.clear();
+            if retained_unsigned != unsigned {
+                bail!("retained post-PM receipt is not an exact retry");
+            }
+            Ok(receipt)
+        }
+        Err(error) if error.kind() == std::io::ErrorKind::NotFound => {
+            let mut receipt = unsigned;
+            receipt.signature = sign_mac_action_receipt_v1(scope_id, &receipt)?;
+            Ok(receipt)
+        }
+        Err(error) => Err(error).context("inspect retained post-PM receipt path"),
+    }
+}
+
+/// Return only a prior durable receipt for an exact post-PM retry.  This runs before the
+/// prepared/effect path: once the anchor/state CAS has advanced, the original request is stale
+/// for new work and may only observe the receipt it already committed.
+#[cfg(target_os = "macos")]
+fn mac_open_exact_completed_post_pm_receipt_v1(
+    executor: &MacManagedArtifactExecutorV1,
+    receipt_relative_path: &str,
+    receipt_id: &str,
+    manifest: &ManagedArtifactManifestV1,
+    entry: &ManagedArtifactEntryV1,
+    request: &ManagedLifecyclePublisherRequestV1,
+    request_sha256: &str,
+    source_anchor_sha256: &str,
+    completed_state: &LifecyclePublisherProtectedStateV1,
+) -> Result<ManagedActionReceiptV1> {
+    let bytes =
+        mac_read_stage_one_transition_artifact_no_follow_v1(executor, receipt_relative_path)?;
+    let receipt: ManagedActionReceiptV1 =
+        serde_json::from_slice(&bytes).context("decode retained completed post-PM receipt")?;
+    validate_managed_action_receipt_signature_v1(&receipt)?;
+    if canonical_action_receipt_bytes_v1(&receipt)? != bytes
+        || receipt.authority_domain != manifest.authority_domain
+        || receipt.scope_id != request.scope_id
+        || receipt.installation_id != request.scope_id
+        || receipt.manifest_generation != manifest.manifest_generation
+        || receipt.manifest_sha256 != manifest.manifest_sha256
+        || receipt.receipt_id != receipt_id
+        || receipt.receipt_relative_path != receipt_relative_path
+        || receipt.entry_id != entry.object_id
+        || receipt.action != request.action
+        || receipt.attempt_id != request.attempt_nonce
+        || receipt.request_sha256 != request_sha256
+        || receipt.allocated_counter != completed_state.counter
+        || completed_state
+            .current_anchor
+            .previous_anchor_sha256
+            .as_deref()
+            != Some(source_anchor_sha256)
+        || completed_state.current_anchor.request_sha256 != request_sha256
+        || completed_state.prepared_record.is_some()
+        || receipt.signature.public_key != completed_state.current_anchor.signature.public_key
+    {
+        bail!("completed post-PM receipt does not exact-join retained state and request");
+    }
+    Ok(receipt)
+}
+
+#[derive(Debug, Clone, PartialEq, Eq)]
+enum MacPostPmEffectPrimitiveV1 {
+    /// Exact limactl argv for an instance transition; no guest executable is involved.
+    Lima(Vec<String>),
+    /// A literal executable and argv below an existing guest image. The caller never selects it.
+    Guest(Vec<String>),
+    /// A measured retained-prefix byte artifact copied through limactl and installed by a fixed
+    /// guest executable. The source digest and physical identity are signed in the manifest.
+    Artifact {
+        source_path: String,
+        source_sha256: String,
+        source_identity: String,
+        guest_staging_path: String,
+        guest_target_path: String,
+        mode: String,
+    },
+    /// A fixed byte sequence staged under the root-owned lifecycle state root before copy.
+    Embedded {
+        label: &'static str,
+        bytes: &'static [u8],
+        guest_staging_path: String,
+        guest_target_path: String,
+        mode: String,
+    },
+    /// Host known-host state is never routed through a guest relay. It is observed on its retained
+    /// no-follow descriptor and never replaced or unlinked by this packet.
+    HostKnownHosts {
+        path: String,
+        action: ManagedActionV1,
+    },
+}
+
+#[derive(Debug, Clone, PartialEq, Eq)]
+struct MacPostPmEffectPlanV1 {
+    role: String,
+    action: ManagedActionV1,
+    primitives: Vec<MacPostPmEffectPrimitiveV1>,
+    /// The observation is an exact read-only guest command, not a caller command or generic
+    /// selector. A retry may only use this vector to decide Before/After/Ambiguous.
+    observation_argv: Vec<String>,
+    /// Whether successful observation proves the action's after-state. This is inverted for
+    /// fixed remove/disable probes, which must not confuse a nonzero result with ambiguity.
+    after_observation_success: bool,
+    /// Targets that have a durable filesystem projection are complete only after the guest
+    /// target has its exact object kind, owner, group, and mode. Byte-bearing projections also
+    /// require their exact digest. Existence alone is never a receipt boundary.
+    target_integrity: Option<MacPostPmTargetIntegrityV1>,
+}
+
+#[derive(Debug, Clone, PartialEq, Eq)]
+struct MacPostPmTargetIntegrityV1 {
+    path: String,
+    /// GNU `stat %F` spelling emitted by the fixed guest observation command.  In particular a
+    /// symlink is not accepted as either a regular file or a directory target.
+    kind: &'static str,
+    /// Directories have no byte digest; byte artifacts always retain one exact canonical digest.
+    sha256: Option<String>,
+    owner: String,
+    group: String,
+    mode: String,
+}
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+enum MacPostPmEffectObservationStateV1 {
+    Before,
+    After,
+    Ambiguous,
+}
+
+/// The recovery decision is deliberately pure so every kill boundary is testable without a
+/// native effect. `Before` is the only state that can execute the original idempotent primitive;
+/// `After` must complete the durable receipt without replay and `Ambiguous` is preserving-first.
+fn mac_post_pm_effect_retry_decision_v1(
+    observation: MacPostPmEffectObservationStateV1,
+) -> Result<bool> {
+    match observation {
+        MacPostPmEffectObservationStateV1::Before => Ok(true),
+        MacPostPmEffectObservationStateV1::After => Ok(false),
+        MacPostPmEffectObservationStateV1::Ambiguous => {
+            bail!("post-PM effect observation is ambiguous; preserving first")
+        }
+    }
+}
+
+/// A fresh effect and a replay share the same terminal rule: only an independently observed
+/// after-state may cross the receipt boundary.  Before and ambiguous observations preserve the
+/// prepared/journal state for bounded recovery instead of manufacturing a receipt.
+fn mac_require_post_pm_after_state_v1(state: MacPostPmEffectObservationStateV1) -> Result<()> {
+    match state {
+        MacPostPmEffectObservationStateV1::After => Ok(()),
+        MacPostPmEffectObservationStateV1::Before => {
+            bail!("post-PM effect did not reach the exact after-state")
+        }
+        MacPostPmEffectObservationStateV1::Ambiguous => {
+            bail!("post-PM effect after-state is ambiguous; preserving first")
+        }
+    }
+}
+
+/// Classify only the closed observation programs emitted by the fixed effect planner.  Exit
+/// status is evidence only for the explicitly enumerated `test`, `getent`, and `systemctl`
+/// probes; every other nonzero/spawn/timeout condition is ambiguous and cannot trigger replay.
+fn mac_classify_post_pm_probe_v1(
+    plan: &MacPostPmEffectPlanV1,
+    exited_successfully: bool,
+    exit_code: Option<i32>,
+    output: &str,
+) -> Result<MacPostPmEffectObservationStateV1> {
+    let program = plan.observation_argv.first().map(String::as_str);
+    if plan.role == "mac.lima.instance" {
+        if !exited_successfully {
+            return Ok(MacPostPmEffectObservationStateV1::Ambiguous);
+        }
+        let listed = mac_parse_fixed_lima_list_v1(output, "substrate")?;
+        return Ok(match plan.action {
+            ManagedActionV1::Remove if listed.is_none() => MacPostPmEffectObservationStateV1::After,
+            ManagedActionV1::Start | ManagedActionV1::Restore
+                if listed.as_deref() == Some("Running") =>
+            {
+                MacPostPmEffectObservationStateV1::After
+            }
+            ManagedActionV1::Stop if listed.as_deref() == Some("Stopped") => {
+                MacPostPmEffectObservationStateV1::After
+            }
+            ManagedActionV1::Remove
+            | ManagedActionV1::Start
+            | ManagedActionV1::Stop
+            | ManagedActionV1::Restore => MacPostPmEffectObservationStateV1::Before,
+            _ => MacPostPmEffectObservationStateV1::Ambiguous,
+        });
+    }
+    match program {
+        Some("/usr/bin/test") if exited_successfully => Ok(if plan.after_observation_success {
+            MacPostPmEffectObservationStateV1::After
+        } else {
+            MacPostPmEffectObservationStateV1::Before
+        }),
+        Some("/usr/bin/test") if exit_code == Some(1) => Ok(if plan.after_observation_success {
+            MacPostPmEffectObservationStateV1::Before
+        } else {
+            MacPostPmEffectObservationStateV1::After
+        }),
+        Some("/usr/bin/getent") => {
+            let exact_group = output.lines().count() == 1 && output.starts_with("substrate:");
+            match (plan.action, exited_successfully, exit_code, exact_group) {
+                (ManagedActionV1::Create | ManagedActionV1::Restore, true, _, true) => {
+                    Ok(MacPostPmEffectObservationStateV1::After)
+                }
+                (ManagedActionV1::Create | ManagedActionV1::Restore, false, Some(2), false) => {
+                    Ok(MacPostPmEffectObservationStateV1::Before)
+                }
+                (ManagedActionV1::Remove, true, _, true) => {
+                    Ok(MacPostPmEffectObservationStateV1::Before)
+                }
+                (ManagedActionV1::Remove, false, Some(2), false) => {
+                    Ok(MacPostPmEffectObservationStateV1::After)
+                }
+                _ => Ok(MacPostPmEffectObservationStateV1::Ambiguous),
+            }
+        }
+        Some("/usr/bin/id") if exited_successfully => {
+            let has_group = output.split_whitespace().any(|group| group == "substrate");
+            Ok(match (plan.action, has_group) {
+                (ManagedActionV1::Create | ManagedActionV1::Restore, true) => {
+                    MacPostPmEffectObservationStateV1::After
+                }
+                (ManagedActionV1::Create | ManagedActionV1::Restore, false) => {
+                    MacPostPmEffectObservationStateV1::Before
+                }
+                (ManagedActionV1::Remove, true) => MacPostPmEffectObservationStateV1::Before,
+                (ManagedActionV1::Remove, false) => MacPostPmEffectObservationStateV1::After,
+                _ => MacPostPmEffectObservationStateV1::Ambiguous,
+            })
+        }
+        Some("/usr/bin/systemctl") => {
+            let value = output.trim();
+            let state = match plan.action {
+                ManagedActionV1::Enable if exited_successfully && value == "enabled" => {
+                    MacPostPmEffectObservationStateV1::After
+                }
+                ManagedActionV1::Enable if exit_code == Some(1) && value == "disabled" => {
+                    MacPostPmEffectObservationStateV1::Before
+                }
+                ManagedActionV1::Disable if exited_successfully && value == "enabled" => {
+                    MacPostPmEffectObservationStateV1::Before
+                }
+                ManagedActionV1::Disable if exit_code == Some(1) && value == "disabled" => {
+                    MacPostPmEffectObservationStateV1::After
+                }
+                ManagedActionV1::Start | ManagedActionV1::Restore
+                    if exited_successfully && value == "active" =>
+                {
+                    MacPostPmEffectObservationStateV1::After
+                }
+                ManagedActionV1::Start | ManagedActionV1::Restore
+                    if exit_code == Some(3) && value == "inactive" =>
+                {
+                    MacPostPmEffectObservationStateV1::Before
+                }
+                ManagedActionV1::Stop if exited_successfully && value == "active" => {
+                    MacPostPmEffectObservationStateV1::Before
+                }
+                ManagedActionV1::Stop if exit_code == Some(3) && value == "inactive" => {
+                    MacPostPmEffectObservationStateV1::After
+                }
+                _ => MacPostPmEffectObservationStateV1::Ambiguous,
+            };
+            Ok(state)
+        }
+        _ => Ok(MacPostPmEffectObservationStateV1::Ambiguous),
+    }
+}
+
+fn mac_post_pm_artifact_binding_v1(
+    entry: &ManagedArtifactEntryV1,
+    selected_host_prefix: &str,
+) -> Result<(String, String, String)> {
+    let expected_source =
+        mac_post_pm_artifact_source_path_v1(selected_host_prefix, &entry.logical_role.0)
+            .ok_or_else(|| anyhow::anyhow!("post-PM role has no retained byte-artifact source"))?;
+    let digest = entry
+        .bytes_or_target
+        .as_deref()
+        .ok_or_else(|| anyhow::anyhow!("post-PM byte artifact lacks a signed digest"))?;
+    if digest.len() != 64
+        || !digest
+            .bytes()
+            .all(|byte| byte.is_ascii_hexdigit() && !byte.is_ascii_uppercase())
+    {
+        bail!("post-PM byte artifact digest is not canonical SHA-256");
+    }
+    let metadata = entry
+        .identity
+        .metadata
+        .as_ref()
+        .and_then(Value::as_object)
+        .ok_or_else(|| anyhow::anyhow!("post-PM byte artifact lacks retained source metadata"))?;
+    let source_path = metadata
+        .get("artifact_source_path")
+        .and_then(Value::as_str)
+        .ok_or_else(|| anyhow::anyhow!("post-PM byte artifact lacks source path"))?;
+    let source_identity = metadata
+        .get("artifact_source_physical_identity")
+        .and_then(Value::as_str)
+        .ok_or_else(|| anyhow::anyhow!("post-PM byte artifact lacks source identity"))?;
+    let source_kind = metadata
+        .get("artifact_source_kind")
+        .and_then(Value::as_str)
+        .ok_or_else(|| anyhow::anyhow!("post-PM byte artifact lacks source kind"))?;
+    if source_path != expected_source
+        || source_kind != "retained-prefix-linux-artifact"
+        || source_identity.is_empty()
+        || source_identity.contains(['\0', '\n', '\r'])
+    {
+        bail!("post-PM byte artifact does not exact-join its retained manifest source");
+    }
+    Ok((
+        source_path.to_string(),
+        digest.to_string(),
+        source_identity.to_string(),
+    ))
+}
+
+fn mac_post_pm_effect_plan_v1(
+    entry: &ManagedArtifactEntryV1,
+    action: ManagedActionV1,
+    membership_role: &str,
+    selected_host_prefix: &str,
+) -> Result<MacPostPmEffectPlanV1> {
+    let role = entry.logical_role.0.as_str();
+    if !closed_mac_role_action_v1(role, action) {
+        bail!("post-PM role/action has no closed executor effect plan");
+    }
+    let target = entry.identity.physical_identity.clone();
+    let guest_observe_exists = |target: &str| {
+        vec![
+            "/usr/bin/test".to_string(),
+            "-e".to_string(),
+            target.to_string(),
+        ]
+    };
+    let guest_observe_absent = |target: &str| {
+        vec![
+            "/usr/bin/test".to_string(),
+            "!".to_string(),
+            "-e".to_string(),
+            target.to_string(),
+        ]
+    };
+    let mut plan = MacPostPmEffectPlanV1 {
+        role: role.to_string(),
+        action,
+        primitives: Vec::new(),
+        observation_argv: guest_observe_exists(&target),
+        after_observation_success: true,
+        target_integrity: None,
+    };
+    match (role, action) {
+        ("mac.lima.instance", ManagedActionV1::Start | ManagedActionV1::Restore) => {
+            plan.primitives.push(MacPostPmEffectPrimitiveV1::Lima(vec![
+                "start".to_string(),
+                "--tty=false".to_string(),
+                "substrate".to_string(),
+            ]));
+            plan.observation_argv = vec![
+                "list".to_string(),
+                "substrate".to_string(),
+                "--json".to_string(),
+            ];
+        }
+        ("mac.lima.instance", ManagedActionV1::Stop) => {
+            plan.primitives.push(MacPostPmEffectPrimitiveV1::Lima(vec![
+                "stop".to_string(),
+                "substrate".to_string(),
+            ]));
+            plan.observation_argv = vec![
+                "list".to_string(),
+                "substrate".to_string(),
+                "--json".to_string(),
+            ];
+        }
+        ("mac.lima.instance", ManagedActionV1::Remove) => {
+            plan.primitives.push(MacPostPmEffectPrimitiveV1::Lima(vec![
+                "delete".to_string(),
+                "substrate".to_string(),
+            ]));
+            plan.observation_argv = vec![
+                "list".to_string(),
+                "substrate".to_string(),
+                "--json".to_string(),
+            ];
+        }
+        (
+            "mac.host.known-hosts-entry",
+            action @ (ManagedActionV1::Create
+            | ManagedActionV1::Replace
+            | ManagedActionV1::Remove
+            | ManagedActionV1::Restore),
+        ) => {
+            plan.primitives
+                .push(MacPostPmEffectPrimitiveV1::HostKnownHosts {
+                    path: target,
+                    action,
+                });
+            plan.observation_argv = Vec::new();
+        }
+        (
+            role @ ("mac.lima.guest-binary(substrate-world-service)"
+            | "mac.lima.guest-binary(substrate-gateway)"
+            | "mac.lima.guest-binary(substrate)"
+            | "mac.lima.guest-binary(world)"
+            | "mac.lima.publisher-executor"),
+            action
+            @ (ManagedActionV1::Create | ManagedActionV1::Replace | ManagedActionV1::Restore),
+        ) => {
+            let (source_path, source_sha256, source_identity) =
+                mac_post_pm_artifact_binding_v1(entry, selected_host_prefix)?;
+            let staging = format!(
+                "/var/lib/substrate/.substrate-lifecycle-v1/staged/{}.bin",
+                entry.object_id
+            );
+            plan.primitives.push(MacPostPmEffectPrimitiveV1::Artifact {
+                source_path,
+                source_sha256: source_sha256.clone(),
+                source_identity,
+                guest_staging_path: staging,
+                guest_target_path: target.clone(),
+                mode: "0755".to_string(),
+            });
+            plan.target_integrity = Some(MacPostPmTargetIntegrityV1 {
+                path: target.clone(),
+                kind: "regular file",
+                sha256: Some(source_sha256),
+                owner: "root".to_string(),
+                group: "root".to_string(),
+                mode: "0755".to_string(),
+            });
+            plan.observation_argv = guest_observe_exists(&target);
+            let _ = role;
+            let _ = action;
+        }
+        (
+            role @ ("mac.lima.guest-binary(substrate-world-service)"
+            | "mac.lima.guest-binary(substrate-gateway)"
+            | "mac.lima.guest-binary(substrate)"
+            | "mac.lima.guest-binary(world)"
+            | "mac.lima.publisher-executor"),
+            ManagedActionV1::Remove,
+        ) => {
+            plan.primitives.push(MacPostPmEffectPrimitiveV1::Guest(vec![
+                "/bin/rm".to_string(),
+                "-f".to_string(),
+                "--".to_string(),
+                target.clone(),
+            ]));
+            plan.observation_argv = guest_observe_absent(&target);
+            let _ = role;
+        }
+        (
+            role @ ("mac.lima.guest-unit(service)" | "mac.lima.guest-unit(socket)"),
+            action
+            @ (ManagedActionV1::Create | ManagedActionV1::Replace | ManagedActionV1::Restore),
+        ) => {
+            let bytes: &'static [u8] = match role {
+                "mac.lima.guest-unit(service)" => b"[Unit]\nDescription=Substrate World Service\n[Service]\nExecStart=/usr/local/bin/substrate-world-service\n",
+                "mac.lima.guest-unit(socket)" => b"[Unit]\nDescription=Substrate World Service Socket\n[Socket]\nListenStream=/run/substrate.sock\n",
+                _ => unreachable!(),
+            };
+            let staging = format!(
+                "/var/lib/substrate/.substrate-lifecycle-v1/staged/{}.unit",
+                entry.object_id
+            );
+            plan.primitives.push(MacPostPmEffectPrimitiveV1::Embedded {
+                label: if role.ends_with("(service)") {
+                    "guest-service-unit"
+                } else {
+                    "guest-socket-unit"
+                },
+                bytes,
+                guest_staging_path: staging,
+                guest_target_path: target.clone(),
+                mode: "0644".to_string(),
+            });
+            plan.target_integrity = Some(MacPostPmTargetIntegrityV1 {
+                path: target.clone(),
+                kind: "regular file",
+                sha256: Some(sha256_hex_bootstrap_v1(bytes)),
+                owner: "root".to_string(),
+                group: "root".to_string(),
+                mode: "0644".to_string(),
+            });
+            plan.observation_argv = guest_observe_exists(&target);
+            let _ = action;
+        }
+        (
+            "mac.lima.guest-unit(service)" | "mac.lima.guest-unit(socket)",
+            ManagedActionV1::Remove,
+        ) => {
+            plan.primitives.push(MacPostPmEffectPrimitiveV1::Guest(vec![
+                "/bin/rm".to_string(),
+                "-f".to_string(),
+                "--".to_string(),
+                target.clone(),
+            ]));
+            plan.observation_argv = guest_observe_absent(&target);
+        }
+        (
+            role @ ("mac.lima.staged-workspace"
+            | "mac.lima.guest-directory(/run/substrate)"
+            | "mac.lima.guest-directory(/run/substrate/substrate-gateway-runtime)"
+            | "mac.lima.guest-directory(/var/lib/substrate)"
+            | "mac.lima.guest-directory(/var/lib/substrate/.substrate-lifecycle-v1)"
+            | "mac.lima.guest-directory(/var/lib/substrate/staged-workspace)"
+            | "mac.lima.guest-directory(/usr/libexec/substrate)"
+            | "mac.lima.guest-private-home"
+            | "mac.lima.publisher-state-directory"),
+            action
+            @ (ManagedActionV1::Create | ManagedActionV1::Replace | ManagedActionV1::Restore),
+        ) => {
+            let (owner, group, mode) = if role == "mac.lima.guest-private-home" {
+                let principal = membership_role
+                    .strip_prefix("mac.lima.guest-membership(")
+                    .and_then(|value| value.strip_suffix(')'))
+                    .ok_or_else(|| anyhow::anyhow!("post-PM membership role is not canonical"))?;
+                (principal, "substrate", "0700")
+            } else {
+                ("root", "root", "0750")
+            };
+            plan.primitives.push(MacPostPmEffectPrimitiveV1::Guest(vec![
+                "/usr/bin/install".to_string(),
+                "-d".to_string(),
+                "-o".to_string(),
+                owner.to_string(),
+                "-g".to_string(),
+                group.to_string(),
+                "-m".to_string(),
+                mode.to_string(),
+                "--".to_string(),
+                target.clone(),
+            ]));
+            plan.target_integrity = Some(MacPostPmTargetIntegrityV1 {
+                path: target.clone(),
+                kind: "directory",
+                sha256: None,
+                owner: owner.to_string(),
+                group: group.to_string(),
+                mode: mode.to_string(),
+            });
+            plan.observation_argv = guest_observe_exists(&target);
+            let _ = action;
+        }
+        (
+            "mac.lima.staged-workspace"
+            | "mac.lima.guest-directory(/run/substrate)"
+            | "mac.lima.guest-directory(/run/substrate/substrate-gateway-runtime)"
+            | "mac.lima.guest-directory(/var/lib/substrate)"
+            | "mac.lima.guest-directory(/var/lib/substrate/.substrate-lifecycle-v1)"
+            | "mac.lima.guest-directory(/var/lib/substrate/staged-workspace)"
+            | "mac.lima.guest-directory(/usr/libexec/substrate)"
+            | "mac.lima.guest-private-home"
+            | "mac.lima.publisher-state-directory",
+            ManagedActionV1::Remove,
+        ) => {
+            plan.primitives.push(MacPostPmEffectPrimitiveV1::Guest(vec![
+                "/bin/rm".to_string(),
+                "-rf".to_string(),
+                "--".to_string(),
+                target.clone(),
+            ]));
+            plan.observation_argv = guest_observe_absent(&target);
+        }
+        ("mac.lima.guest-group", ManagedActionV1::Create | ManagedActionV1::Restore) => {
+            plan.primitives.push(MacPostPmEffectPrimitiveV1::Guest(vec![
+                "/usr/sbin/groupadd".to_string(),
+                "--system".to_string(),
+                "substrate".to_string(),
+            ]));
+            plan.observation_argv = vec![
+                "/usr/bin/getent".to_string(),
+                "group".to_string(),
+                "substrate".to_string(),
+            ];
+        }
+        ("mac.lima.guest-group", ManagedActionV1::Remove) => {
+            plan.after_observation_success = false;
+            plan.primitives.push(MacPostPmEffectPrimitiveV1::Guest(vec![
+                "/usr/sbin/groupdel".to_string(),
+                "substrate".to_string(),
+            ]));
+            plan.observation_argv = vec![
+                "/usr/bin/getent".to_string(),
+                "group".to_string(),
+                "substrate".to_string(),
+            ];
+        }
+        (role, ManagedActionV1::Create | ManagedActionV1::Restore) if role == membership_role => {
+            let principal = role
+                .trim_start_matches("mac.lima.guest-membership(")
+                .trim_end_matches(')');
+            plan.primitives.push(MacPostPmEffectPrimitiveV1::Guest(vec![
+                "/usr/sbin/usermod".to_string(),
+                "-a".to_string(),
+                "-G".to_string(),
+                "substrate".to_string(),
+                principal.to_string(),
+            ]));
+            plan.observation_argv = vec![
+                "/usr/bin/id".to_string(),
+                "-nG".to_string(),
+                principal.to_string(),
+            ];
+        }
+        (role, ManagedActionV1::Remove) if role == membership_role => {
+            let principal = role
+                .trim_start_matches("mac.lima.guest-membership(")
+                .trim_end_matches(')');
+            plan.primitives.push(MacPostPmEffectPrimitiveV1::Guest(vec![
+                "/usr/bin/gpasswd".to_string(),
+                "-d".to_string(),
+                principal.to_string(),
+                "substrate".to_string(),
+            ]));
+            plan.observation_argv = vec![
+                "/usr/bin/id".to_string(),
+                "-nG".to_string(),
+                principal.to_string(),
+            ];
+        }
+        (
+            role @ ("mac.lima.layout-sentinel"
+            | "mac.lima.publisher-service-unit"
+            | "mac.lima.publisher-socket-unit"
+            | "mac.lima.publisher-signing-key"
+            | "mac.lima.publisher-current-anchor"
+            | "mac.lima.publisher-bootstrap-intent"),
+            action
+            @ (ManagedActionV1::Create | ManagedActionV1::Replace | ManagedActionV1::Restore),
+        ) => {
+            let bytes: &'static [u8] = match role {
+                "mac.lima.layout-sentinel" => b"substrate-lima-layout-v1\n",
+                "mac.lima.publisher-service-unit" => b"[Service]\nType=oneshot\n",
+                "mac.lima.publisher-socket-unit" => {
+                    b"[Socket]\nListenStream=/run/substrate-publisher.sock\n"
+                }
+                "mac.lima.publisher-signing-key" => {
+                    b"substrate-publisher-key-placeholder-forbidden-export\n"
+                }
+                "mac.lima.publisher-current-anchor" => b"{}\n",
+                "mac.lima.publisher-bootstrap-intent" => b"{}\n",
+                _ => unreachable!(),
+            };
+            let staging = format!(
+                "/var/lib/substrate/.substrate-lifecycle-v1/staged/{}.fixed",
+                entry.object_id
+            );
+            plan.primitives.push(MacPostPmEffectPrimitiveV1::Embedded {
+                label: "fixed-publisher-artifact",
+                bytes,
+                guest_staging_path: staging,
+                guest_target_path: target.clone(),
+                mode: "0600".to_string(),
+            });
+            plan.target_integrity = Some(MacPostPmTargetIntegrityV1 {
+                path: target.clone(),
+                kind: "regular file",
+                sha256: Some(sha256_hex_bootstrap_v1(bytes)),
+                owner: "root".to_string(),
+                group: "root".to_string(),
+                mode: "0600".to_string(),
+            });
+            plan.observation_argv = guest_observe_exists(&target);
+            let _ = action;
+        }
+        (
+            "mac.lima.layout-sentinel"
+            | "mac.lima.publisher-service-unit"
+            | "mac.lima.publisher-socket-unit"
+            | "mac.lima.publisher-current-anchor"
+            | "mac.lima.publisher-bootstrap-intent",
+            ManagedActionV1::Remove,
+        ) => {
+            plan.primitives.push(MacPostPmEffectPrimitiveV1::Guest(vec![
+                "/bin/rm".to_string(),
+                "-f".to_string(),
+                "--".to_string(),
+                target.clone(),
+            ]));
+            plan.observation_argv = guest_observe_absent(&target);
+        }
+        (
+            role @ ("mac.lima.guest-service-state(service)"
+            | "mac.lima.guest-service-state(socket)"),
+            action,
+        ) => {
+            let unit = if role.ends_with("(service)") {
+                "substrate-world-service.service"
+            } else {
+                "substrate-world-service.socket"
+            };
+            let verb = match action {
+                ManagedActionV1::Enable => "enable",
+                ManagedActionV1::Disable => "disable",
+                ManagedActionV1::Start => "start",
+                ManagedActionV1::Stop => "stop",
+                ManagedActionV1::Restore => "restart",
+                _ => bail!("guest service-state action has no fixed verb"),
+            };
+            plan.primitives.push(MacPostPmEffectPrimitiveV1::Guest(vec![
+                "/usr/bin/systemctl".to_string(),
+                verb.to_string(),
+                unit.to_string(),
+            ]));
+            plan.observation_argv = match action {
+                ManagedActionV1::Enable | ManagedActionV1::Disable => vec![
+                    "/usr/bin/systemctl".to_string(),
+                    "is-enabled".to_string(),
+                    unit.to_string(),
+                ],
+                ManagedActionV1::Start | ManagedActionV1::Stop | ManagedActionV1::Restore => vec![
+                    "/usr/bin/systemctl".to_string(),
+                    "is-active".to_string(),
+                    unit.to_string(),
+                ],
+                _ => unreachable!(),
+            };
+        }
+        _ => bail!("post-PM role/action has no exhaustive fixed primitive"),
+    }
+    Ok(plan)
+}
+
+#[cfg(target_os = "macos")]
+fn mac_run_fixed_lima_command_owned_v1(
+    tool: &Path,
+    home: &str,
+    lima_home: &str,
+    arguments: &[String],
+) -> Result<String> {
+    let borrowed: Vec<&str> = arguments.iter().map(String::as_str).collect();
+    mac_run_fixed_lima_command_v1(tool, home, lima_home, &borrowed)
+}
+
+#[cfg(target_os = "macos")]
+fn mac_run_fixed_lima_command_owned_outcome_v1(
+    tool: &Path,
+    home: &str,
+    lima_home: &str,
+    arguments: &[String],
+) -> Result<MacFixedLimaCommandOutcomeV1> {
+    let borrowed: Vec<&str> = arguments.iter().map(String::as_str).collect();
+    mac_run_fixed_lima_command_outcome_v1(tool, home, lima_home, &borrowed)
+}
+
+#[cfg(target_os = "macos")]
+fn mac_write_post_pm_embedded_artifact_absent_or_exact_v1(
+    executor: &MacManagedArtifactExecutorV1,
+    prepared: &ManagedActionPreparedRecordV1,
+    label: &str,
+    bytes: &[u8],
+) -> Result<PathBuf> {
+    let digest = sha256_hex_bootstrap_v1(bytes);
+    let dir = executor
+        .state_root
+        .join("post-pm-artifacts")
+        .join(&prepared.receipt_id);
+    fs::create_dir_all(&dir).context("create retained post-PM artifact directory")?;
+    fs::set_permissions(&dir, fs::Permissions::from_mode(0o700))
+        .context("harden retained post-PM artifact directory")?;
+    let metadata = fs::symlink_metadata(&dir).context("inspect post-PM artifact directory")?;
+    if !metadata.file_type().is_dir()
+        || metadata.uid() != 0
+        || metadata.gid() != 0
+        || metadata.mode() & 0o777 != 0o700
+    {
+        bail!("post-PM embedded artifact directory is not root-owned no-follow state");
+    }
+    let path = dir.join(format!("{label}.{digest}.bin"));
+    match fs::OpenOptions::new()
+        .write(true)
+        .create_new(true)
+        .mode(0o600)
+        .custom_flags(libc::O_CLOEXEC | libc::O_NOFOLLOW)
+        .open(&path)
+    {
+        Ok(mut file) => {
+            file.write_all(bytes)
+                .context("write retained embedded post-PM artifact")?;
+            file.sync_all()
+                .context("fsync retained embedded post-PM artifact")?;
+        }
+        Err(error) if error.kind() == std::io::ErrorKind::AlreadyExists => {
+            let mut file = fs::OpenOptions::new()
+                .read(true)
+                .custom_flags(libc::O_CLOEXEC | libc::O_NOFOLLOW)
+                .open(&path)
+                .context("open retained embedded post-PM artifact")?;
+            let mut existing = Vec::new();
+            file.read_to_end(&mut existing)
+                .context("read retained embedded post-PM artifact")?;
+            if existing != bytes {
+                bail!("retained embedded post-PM artifact is not an exact retry");
+            }
+        }
+        Err(error) => return Err(error).context("create retained embedded post-PM artifact"),
+    }
+    Ok(path)
+}
+
+/// Copy a manifest-bound prefix artifact into the root-owned attempt store before handing a
+/// pathname to `limactl`.  The privileged executor reads the source through one no-follow
+/// descriptor, verifies both retained identity bindings, and then copies only the immutable
+/// staged bytes.  A mutable prefix path is therefore never reopened by a guest copy command.
+#[cfg(target_os = "macos")]
+fn mac_stage_measured_post_pm_artifact_absent_or_exact_v1(
+    executor: &MacManagedArtifactExecutorV1,
+    prepared: &ManagedActionPreparedRecordV1,
+    source_path: &Path,
+    expected_sha256: &str,
+    expected_identity: &str,
+) -> Result<PathBuf> {
+    let before = fs::symlink_metadata(source_path).with_context(|| {
+        format!(
+            "inspect retained post-PM artifact {}",
+            source_path.display()
+        )
+    })?;
+    if !before.file_type().is_file() || before.file_type().is_symlink() {
+        bail!("retained post-PM artifact is absent, linked, or not a regular file");
+    }
+    let mut source = fs::OpenOptions::new()
+        .read(true)
+        .custom_flags(libc::O_CLOEXEC | libc::O_NOFOLLOW)
+        .open(source_path)
+        .with_context(|| format!("open retained post-PM artifact {}", source_path.display()))?;
+    let opened = source
+        .metadata()
+        .context("inspect retained post-PM artifact descriptor")?;
+    let observed_identity = format!("dev:{}:ino:{}", opened.dev(), opened.ino());
+    if opened.dev() != before.dev()
+        || opened.ino() != before.ino()
+        || observed_identity != expected_identity
+    {
+        bail!("retained post-PM artifact changed before descriptor staging");
+    }
+    let mut bytes = Vec::new();
+    source
+        .read_to_end(&mut bytes)
+        .context("read retained post-PM artifact descriptor")?;
+    let after = fs::symlink_metadata(source_path).with_context(|| {
+        format!(
+            "reinspect retained post-PM artifact {}",
+            source_path.display()
+        )
+    })?;
+    if after.file_type().is_symlink()
+        || after.dev() != before.dev()
+        || after.ino() != before.ino()
+        || sha256_hex_bootstrap_v1(&bytes) != expected_sha256
+    {
+        bail!("retained post-PM artifact changed or mismatched its signed binding");
+    }
+    mac_write_post_pm_embedded_artifact_absent_or_exact_v1(
+        executor,
+        prepared,
+        &format!("measured-artifact-{}", prepared.entry_id),
+        &bytes,
+    )
+}
+
+#[cfg(target_os = "macos")]
+fn mac_observe_host_known_hosts_no_follow_v1(
+    path: &Path,
+    action: ManagedActionV1,
+) -> Result<Value> {
+    let metadata = fs::symlink_metadata(path).with_context(|| {
+        format!(
+            "inspect retained known-hosts predecessor {}",
+            path.display()
+        )
+    })?;
+    if !metadata.file_type().is_file() || metadata.file_type().is_symlink() {
+        bail!("known-hosts predecessor is not a retained regular no-follow file");
+    }
+    let mut file = fs::OpenOptions::new()
+        .read(true)
+        .custom_flags(libc::O_CLOEXEC | libc::O_NOFOLLOW)
+        .open(path)
+        .with_context(|| format!("open retained known-hosts predecessor {}", path.display()))?;
+    let opened = file
+        .metadata()
+        .context("stat retained known-hosts descriptor")?;
+    if opened.dev() != metadata.dev() || opened.ino() != metadata.ino() {
+        bail!("known-hosts predecessor changed before descriptor observation");
+    }
+    let mut bytes = Vec::new();
+    file.read_to_end(&mut bytes)
+        .context("read retained known-hosts descriptor")?;
+    let after = fs::symlink_metadata(path).context("reinspect retained known-hosts predecessor")?;
+    if after.file_type().is_symlink()
+        || after.dev() != metadata.dev()
+        || after.ino() != metadata.ino()
+    {
+        bail!("known-hosts predecessor changed during descriptor observation");
+    }
+    // This R5 closure never replaces or unlinks an SSH/UDS predecessor.  The closed
+    // known-hosts action therefore attests the exact retained descriptor for *every* typed
+    // action, including Remove; the successor may only consume this preserved identity, never
+    // treat a disappeared/replaced pathname as an after-state.
+    Ok(
+        json!({"known_hosts_sha256": sha256_hex_bootstrap_v1(&bytes), "physical_identity": format!("dev:{}:ino:{}", opened.dev(), opened.ino()), "requested_action": mac_post_pm_action_literal_v1(action), "preserved": true}),
+    )
+}
+
+#[cfg(target_os = "macos")]
+fn mac_execute_post_pm_effect_plan_v1(
+    executor: &MacManagedArtifactExecutorV1,
+    prepared: &ManagedActionPreparedRecordV1,
+    tool: &Path,
+    home: &str,
+    lima_home: &str,
+    plan: &MacPostPmEffectPlanV1,
+) -> Result<Value> {
+    let mut output_digests = Vec::new();
+    for primitive in &plan.primitives {
+        match primitive {
+            MacPostPmEffectPrimitiveV1::Lima(arguments) => {
+                output_digests.push(sha256_hex_bootstrap_v1(
+                    mac_run_fixed_lima_command_owned_v1(tool, home, lima_home, arguments)?
+                        .as_bytes(),
+                ))
+            }
+            MacPostPmEffectPrimitiveV1::Guest(arguments) => {
+                let mut exact = vec![
+                    "shell".to_string(),
+                    "substrate".to_string(),
+                    "--".to_string(),
+                ];
+                exact.extend(arguments.iter().cloned());
+                output_digests.push(sha256_hex_bootstrap_v1(
+                    mac_run_fixed_lima_command_owned_v1(tool, home, lima_home, &exact)?.as_bytes(),
+                ));
+            }
+            MacPostPmEffectPrimitiveV1::Artifact {
+                source_path,
+                source_sha256,
+                source_identity,
+                guest_staging_path,
+                guest_target_path,
+                mode,
+            } => {
+                let staged = mac_stage_measured_post_pm_artifact_absent_or_exact_v1(
+                    executor,
+                    prepared,
+                    Path::new(source_path),
+                    source_sha256,
+                    source_identity,
+                )?;
+                let copy = vec![
+                    "copy".to_string(),
+                    staged.display().to_string(),
+                    format!("substrate:{guest_staging_path}"),
+                ];
+                output_digests.push(sha256_hex_bootstrap_v1(
+                    mac_run_fixed_lima_command_owned_v1(tool, home, lima_home, &copy)?.as_bytes(),
+                ));
+                let install = vec![
+                    "shell".to_string(),
+                    "substrate".to_string(),
+                    "--".to_string(),
+                    "/usr/bin/install".to_string(),
+                    "-o".to_string(),
+                    "root".to_string(),
+                    "-g".to_string(),
+                    "root".to_string(),
+                    "-m".to_string(),
+                    mode.clone(),
+                    "--".to_string(),
+                    guest_staging_path.clone(),
+                    guest_target_path.clone(),
+                ];
+                output_digests.push(sha256_hex_bootstrap_v1(
+                    mac_run_fixed_lima_command_owned_v1(tool, home, lima_home, &install)?
+                        .as_bytes(),
+                ));
+            }
+            MacPostPmEffectPrimitiveV1::Embedded {
+                label,
+                bytes,
+                guest_staging_path,
+                guest_target_path,
+                mode,
+            } => {
+                let source = mac_write_post_pm_embedded_artifact_absent_or_exact_v1(
+                    executor, prepared, label, bytes,
+                )?;
+                let copy = vec![
+                    "copy".to_string(),
+                    source.display().to_string(),
+                    format!("substrate:{guest_staging_path}"),
+                ];
+                output_digests.push(sha256_hex_bootstrap_v1(
+                    mac_run_fixed_lima_command_owned_v1(tool, home, lima_home, &copy)?.as_bytes(),
+                ));
+                let install = vec![
+                    "shell".to_string(),
+                    "substrate".to_string(),
+                    "--".to_string(),
+                    "/usr/bin/install".to_string(),
+                    "-o".to_string(),
+                    "root".to_string(),
+                    "-g".to_string(),
+                    "root".to_string(),
+                    "-m".to_string(),
+                    mode.clone(),
+                    "--".to_string(),
+                    guest_staging_path.clone(),
+                    guest_target_path.clone(),
+                ];
+                output_digests.push(sha256_hex_bootstrap_v1(
+                    mac_run_fixed_lima_command_owned_v1(tool, home, lima_home, &install)?
+                        .as_bytes(),
+                ));
+            }
+            MacPostPmEffectPrimitiveV1::HostKnownHosts { path, action } => {
+                output_digests.push(sha256_hex_bootstrap_v1(&canonical_bootstrap_json_bytes_v1(
+                    &mac_observe_host_known_hosts_no_follow_v1(Path::new(path), *action)?,
+                )?));
+            }
+        }
+    }
+    Ok(json!({
+        "effect_plan": {"role": plan.role, "action": mac_post_pm_action_literal_v1(plan.action)},
+        "primitive_output_sha256": output_digests,
+    }))
+}
+
+/// Read only the exact action-specific observation after an interrupted effect. It never invokes
+/// a relay, opens a caller-selected command, or repeats a mutation.
+#[cfg(target_os = "macos")]
+fn mac_observe_closed_post_pm_effect_v1(
+    tool: &Path,
+    home: &str,
+    lima_home: &str,
+    plan: &MacPostPmEffectPlanV1,
+) -> Result<(MacPostPmEffectObservationStateV1, Value)> {
+    if let Some(MacPostPmEffectPrimitiveV1::HostKnownHosts { path, action }) =
+        plan.primitives.first()
+    {
+        let observed = mac_observe_host_known_hosts_no_follow_v1(Path::new(path), *action)?;
+        return Ok((
+            MacPostPmEffectObservationStateV1::After,
+            json!({
+                "known_hosts_descriptor": observed,
+                "role": plan.role,
+                "action": mac_post_pm_action_literal_v1(plan.action),
+            }),
+        ));
+    }
+    if plan.observation_argv.is_empty() {
+        bail!("post-PM effect plan has no retry-safe observation");
+    }
+    let run_guest_observation = |argv: &[String]| -> Result<MacFixedLimaCommandOutcomeV1> {
+        if argv.first().is_some_and(|value| value == "list") {
+            return mac_run_fixed_lima_command_owned_outcome_v1(tool, home, lima_home, argv);
+        }
+        let mut exact = vec![
+            "shell".to_string(),
+            "substrate".to_string(),
+            "--".to_string(),
+        ];
+        exact.extend(argv.iter().cloned());
+        mac_run_fixed_lima_command_owned_outcome_v1(tool, home, lima_home, &exact)
+    };
+
+    if let Some(target) = &plan.target_integrity {
+        let exists = run_guest_observation(&vec![
+            "/usr/bin/test".to_string(),
+            "-e".to_string(),
+            "--".to_string(),
+            target.path.clone(),
+        ])?;
+        match exists {
+            MacFixedLimaCommandOutcomeV1::NonZero { code: Some(1), .. } => {
+                return Ok((
+                    MacPostPmEffectObservationStateV1::Before,
+                    json!({"target": target.path, "state": "absent"}),
+                ));
+            }
+            MacFixedLimaCommandOutcomeV1::NonZero { code, stderr, .. } => {
+                return Ok((
+                    MacPostPmEffectObservationStateV1::Ambiguous,
+                    json!({"target": target.path, "probe_exit": code, "probe_stderr_sha256": sha256_hex_bootstrap_v1(stderr.as_bytes())}),
+                ));
+            }
+            MacFixedLimaCommandOutcomeV1::Success(_) => {}
+        }
+        let stat = match run_guest_observation(&vec![
+            "/usr/bin/stat".to_string(),
+            "-c".to_string(),
+            "%F:%U:%G:%a".to_string(),
+            "--".to_string(),
+            target.path.clone(),
+        ])? {
+            MacFixedLimaCommandOutcomeV1::Success(value) => value,
+            MacFixedLimaCommandOutcomeV1::NonZero { code, stderr, .. } => {
+                return Ok((
+                    MacPostPmEffectObservationStateV1::Ambiguous,
+                    json!({"target": target.path, "stat_exit": code, "stat_stderr_sha256": sha256_hex_bootstrap_v1(stderr.as_bytes())}),
+                ));
+            }
+        };
+        let expected_stat = format!(
+            "{}:{}:{}:{}\n",
+            target.kind,
+            target.owner,
+            target.group,
+            target.mode.trim_start_matches('0')
+        );
+        if stat != expected_stat {
+            return Ok((
+                MacPostPmEffectObservationStateV1::Ambiguous,
+                json!({"target": target.path, "stat_output_sha256": sha256_hex_bootstrap_v1(stat.as_bytes())}),
+            ));
+        }
+        if let Some(expected_digest) = target.sha256.as_deref() {
+            let digest = match run_guest_observation(&vec![
+                "/usr/bin/sha256sum".to_string(),
+                "--".to_string(),
+                target.path.clone(),
+            ])? {
+                MacFixedLimaCommandOutcomeV1::Success(value) => value,
+                MacFixedLimaCommandOutcomeV1::NonZero { code, stderr, .. } => {
+                    return Ok((
+                        MacPostPmEffectObservationStateV1::Ambiguous,
+                        json!({"target": target.path, "digest_exit": code, "digest_stderr_sha256": sha256_hex_bootstrap_v1(stderr.as_bytes())}),
+                    ));
+                }
+            };
+            let mut digest_parts = digest.split_whitespace();
+            let observed_digest = digest_parts.next();
+            let observed_path = digest_parts.next();
+            if observed_digest != Some(expected_digest)
+                || observed_path != Some(target.path.as_str())
+                || digest_parts.next().is_some()
+            {
+                return Ok((
+                    MacPostPmEffectObservationStateV1::Ambiguous,
+                    json!({"target": target.path, "digest_output_sha256": sha256_hex_bootstrap_v1(digest.as_bytes())}),
+                ));
+            }
+        }
+        return Ok((
+            MacPostPmEffectObservationStateV1::After,
+            json!({
+                "target": target.path,
+                "kind": target.kind,
+                "sha256": target.sha256,
+                "owner": target.owner,
+                "group": target.group,
+                "mode": target.mode,
+            }),
+        ));
+    }
+
+    let (exited_successfully, exit_code, output, stderr) =
+        match run_guest_observation(&plan.observation_argv)? {
+            MacFixedLimaCommandOutcomeV1::Success(output) => (true, Some(0), output, String::new()),
+            MacFixedLimaCommandOutcomeV1::NonZero {
+                code,
+                stdout,
+                stderr,
+            } => (false, code, stdout, stderr),
+        };
+    let state = mac_classify_post_pm_probe_v1(plan, exited_successfully, exit_code, &output)?;
+    Ok((
+        state,
+        json!({"retry_observation_sha256": sha256_hex_bootstrap_v1(output.as_bytes()), "retry_observation_exit": exit_code, "retry_observation_stderr_sha256": sha256_hex_bootstrap_v1(stderr.as_bytes()), "role": plan.role, "action": mac_post_pm_action_literal_v1(plan.action)}),
+    ))
+}
+
+#[cfg(target_os = "macos")]
+fn mac_execute_closed_post_pm_effect_v1(
+    executor: &MacManagedArtifactExecutorV1,
+    prepared: &ManagedActionPreparedRecordV1,
+    tool: &Path,
+    home: &str,
+    lima_home: &str,
+    entry: &ManagedArtifactEntryV1,
+    action: ManagedActionV1,
+    membership_role: &str,
+    selected_host_prefix: &str,
+) -> Result<Value> {
+    let plan = mac_post_pm_effect_plan_v1(entry, action, membership_role, selected_host_prefix)?;
+    mac_execute_post_pm_effect_plan_v1(executor, prepared, tool, home, lima_home, &plan)
+}
+#[cfg(target_os = "macos")]
+fn execute_mac_post_pm_action_v1(
+    executor: &MacManagedArtifactExecutorV1,
+    control: &ManagedLifecycleControlRequestV1,
+) -> Result<Value> {
+    let publisher_request = control
+        .publisher_request
+        .as_ref()
+        .ok_or_else(|| anyhow::anyhow!("post-PM transaction lacks publisher request"))?;
+    let carrier = InstallBootstrapContextCarrierV1::decode(
+        control
+            .install_bootstrap_context_v1
+            .as_deref()
+            .ok_or_else(|| anyhow::anyhow!("post-PM transaction lacks IH carrier"))?,
+    )?;
+    let mapping = PlatformBootstrapMappingV1::decode(
+        control
+            .platform_bootstrap_mapping_v1
+            .as_deref()
+            .ok_or_else(|| anyhow::anyhow!("post-PM transaction lacks mapping"))?,
+        &carrier,
+    )?;
+    let request_sha256 = sha256_hex_bootstrap_v1(&canonical_bootstrap_json_bytes_v1(
+        &serde_json::to_value(publisher_request).context("serialize exact post-PM request")?,
+    )?);
+    let admission = mac_verified_control_admission_v1()?;
+    let state = open_system_keychain_protected_state_for_scope_v1(&publisher_request.scope_id)?
+        .ok_or_else(|| anyhow::anyhow!("post-PM transaction lacks protected state"))?;
+    let anchor = &state.current_anchor;
+    let source_anchor_sha256 = publisher_request.current_anchor_sha256.clone();
+    let current_anchor_sha256 = lifecycle_anchor_sha256_v1(anchor)?;
+    let source_anchor_matches = publisher_request.scope_id == admission.scope_id
+        && publisher_request.scope_id == anchor.scope_id
+        && publisher_request.host_context_commitment == anchor.host_context_commitment
+        && publisher_request.platform_mapping_commitment == anchor.platform_mapping_commitment
+        && source_anchor_sha256 == current_anchor_sha256
+        && publisher_request.manifest_generation == anchor.manifest_generation
+        && publisher_request.manifest_sha256 == anchor.manifest_sha256
+        && publisher_request.expected_executor_build == anchor.executor_identity;
+    // A stale source-anchor request may be observed only after its own signed receipt and state
+    // CAS have advanced exactly one counter. All pre-CAS retry states retain the source anchor.
+    let completed_retry = publisher_request.scope_id == admission.scope_id
+        && publisher_request.scope_id == anchor.scope_id
+        && publisher_request.host_context_commitment == anchor.host_context_commitment
+        && publisher_request.platform_mapping_commitment == anchor.platform_mapping_commitment
+        && publisher_request.manifest_generation == anchor.manifest_generation
+        && publisher_request.manifest_sha256 == anchor.manifest_sha256
+        && publisher_request.expected_executor_build == anchor.executor_identity
+        && anchor.previous_anchor_sha256.as_deref() == Some(source_anchor_sha256.as_str())
+        && anchor.request_sha256 == request_sha256
+        && state.prepared_record.is_none();
+    let manifest_path = format!("manifest.{}.json", anchor.manifest_generation);
+    let manifest_bytes =
+        mac_read_stage_one_transition_artifact_no_follow_v1(executor, &manifest_path)?;
+    let manifest: ManagedArtifactManifestV1 =
+        serde_json::from_slice(&manifest_bytes).context("decode current post-PM manifest")?;
+    if canonical_manifest_bytes_v1(&manifest)?.bytes != manifest_bytes
+        || manifest.manifest_sha256 != anchor.manifest_sha256
+        || manifest.platform_mapping_commitment != anchor.platform_mapping_commitment
+        || manifest.host_context_commitment != carrier.host_context_commitment
+        || manifest.selected_host_prefix != carrier.context.selected_host_prefix
+    {
+        bail!("post-PM manifest does not exact-join anchor, mapping, and IH");
+    }
+    let entry = manifest
+        .entries
+        .iter()
+        .find(|entry| {
+            entry.logical_role == publisher_request.role
+                && entry.identity == publisher_request.object_identity
+        })
+        .ok_or_else(|| anyhow::anyhow!("post-PM request does not name an exact manifest entry"))?;
+    if !closed_mac_role_action_v1(&publisher_request.role.0, publisher_request.action) {
+        bail!("post-PM request role/action is outside the closed executor map");
+    }
+    let (receipt_id, receipt_relative_path) =
+        mac_post_pm_planned_receipt_v1(&manifest, entry, publisher_request)?;
+    let prepared_matches = state.prepared_record.as_ref().is_some_and(|prepared| {
+        prepared.receipt_id == receipt_id
+            && prepared.receipt_relative_path == receipt_relative_path
+            && prepared.entry_id == entry.object_id
+            && prepared.action == publisher_request.action
+            && prepared.attempt_id == publisher_request.attempt_nonce
+            && prepared.request_sha256 == request_sha256
+            && prepared.manifest_generation == manifest.manifest_generation
+            && prepared.manifest_sha256 == manifest.manifest_sha256
+            && prepared.executor_identity == anchor.executor_identity
+    });
+    let retained_journal = if prepared_matches {
+        mac_open_post_pm_attempt_journal_v1(
+            executor,
+            state
+                .prepared_record
+                .as_ref()
+                .ok_or_else(|| anyhow::anyhow!("matched post-PM prepared record disappeared"))?,
+        )?
+    } else {
+        None
+    };
+    let transaction_class = classify_mac_post_pm_transaction_v1(
+        publisher_request.current_anchor_counter,
+        state.counter,
+        source_anchor_matches,
+        prepared_matches,
+        completed_retry,
+        retained_journal
+            .as_ref()
+            .map(|journal| journal.state.as_str()),
+    )?;
+    if transaction_class == MacPostPmTransactionClassV1::CompletedRetry {
+        let receipt = mac_open_exact_completed_post_pm_receipt_v1(
+            executor,
+            &receipt_relative_path,
+            &receipt_id,
+            &manifest,
+            entry,
+            publisher_request,
+            &request_sha256,
+            &source_anchor_sha256,
+            &state,
+        )?;
+        mac_persist_completed_post_pm_journal_from_receipt_v1(executor, &receipt)?;
+        return Ok(json!({
+            "status": "completed-retry",
+            "receipt": receipt,
+            "manifest_generation": manifest.manifest_generation,
+            "manifest_sha256": manifest.manifest_sha256,
+        }));
+    }
+    let prepared_state = if transaction_class == MacPostPmTransactionClassV1::New {
+        let allocated_counter = state
+            .counter
+            .checked_add(1)
+            .ok_or_else(|| anyhow::anyhow!("post-PM action counter overflow"))?;
+        let mut prepared = ManagedActionPreparedRecordV1 {
+            schema_owner: "substrate.managed-action-prepared-record".to_string(),
+            schema_version: 1,
+            authority_domain: manifest.authority_domain.clone(),
+            scope_id: publisher_request.scope_id.clone(),
+            installation_id: publisher_request.scope_id.clone(),
+            manifest_generation: manifest.manifest_generation,
+            manifest_sha256: manifest.manifest_sha256.clone(),
+            receipt_id: receipt_id.clone(),
+            receipt_relative_path: receipt_relative_path.clone(),
+            entry_id: entry.object_id.clone(),
+            action: publisher_request.action,
+            attempt_id: publisher_request.attempt_nonce.clone(),
+            request_sha256: request_sha256.clone(),
+            before_observation: json!({"anchor_sha256": lifecycle_anchor_sha256_v1(anchor)?, "role": publisher_request.role.0, "action": mac_post_pm_action_literal_v1(publisher_request.action)}),
+            executor_identity: anchor.executor_identity.clone(),
+            allocated_counter,
+            previous_record_sha256: None,
+            state: "Prepared".to_string(),
+            signature: LifecycleSignatureV1 {
+                algorithm: "ecdsa-p256-sha256-p1363-low-s-v1".to_string(),
+                public_key: String::new(),
+                signature: String::new(),
+            },
+        };
+        prepared.signature = sign_mac_prepared_record_v1(&publisher_request.scope_id, &prepared)?;
+        let next = LifecyclePublisherProtectedStateV1 {
+            counter: allocated_counter,
+            prepared_record: Some(prepared),
+            ..state.clone()
+        };
+        compare_and_swap_mac_publisher_protected_state_v1(executor, Some(&state), &next)?;
+        next
+    } else {
+        // The classifier has already proved this is the exact signed prepared record under the
+        // unchanged source anchor. It must not increment the counter or allocate another receipt.
+        state.clone()
+    };
+    let prepared = prepared_state
+        .prepared_record
+        .as_ref()
+        .ok_or_else(|| anyhow::anyhow!("post-PM prepared state is absent"))?;
+    let provenance = mac_load_retained_bootstrap_provenance_v1()?;
+    let tool = Path::new(&provenance.lima_tool.absolute_path);
+    let measured_tool = mac_measure_root_owned_immutable_lima_tool_v1(tool)?;
+    if measured_tool.artifact_sha256 != provenance.lima_tool.image.artifact_sha256
+        || measured_tool.artifact_identity != provenance.lima_tool.image.physical_identity
+        || measured_tool.code_identity != provenance.lima_tool.image.code_identity
+        || anchor.executor_identity.source_commit != provenance.source_commit
+        || anchor.executor_identity.source_tree != provenance.source_tree
+        || anchor.executor_identity.source_ref != provenance.source_ref
+    {
+        bail!("post-PM tool/provenance does not exact-join anchor");
+    }
+    let home = mac_account_home_for_stage_one_v1(&carrier)?;
+    if control.host_platform_control_root.as_deref()
+        != Some(mapping.host_platform_control_root.as_str())
+        || mapping.host_platform_control_root != format!("{home}/.lima")
+    {
+        bail!("post-PM mapping control root is not account-derived");
+    }
+    let journal = retained_journal.unwrap_or(mac_open_or_create_post_pm_attempt_journal_v1(
+        executor, prepared,
+    )?);
+    let membership_role = format!(
+        "mac.lima.guest-membership({})",
+        publisher_request.requester_principal
+    );
+    // Plan the closed primitive before a journal can advance. The same signed entry/action plan
+    // is used for a new effect and for an exact EffectStarted retry; a retry cannot substitute a
+    // command, target, artifact, or role.
+    let effect_plan = mac_post_pm_effect_plan_v1(
+        entry,
+        publisher_request.action,
+        &membership_role,
+        &manifest.selected_host_prefix,
+    )?;
+    let effect_observation = match journal.state.as_str() {
+        "Prepared" => {
+            mac_persist_post_pm_journal_state_absent_or_exact_v1(
+                executor,
+                prepared,
+                "EffectStarted",
+                None,
+            )?;
+            let mutation = mac_execute_closed_post_pm_effect_v1(
+                executor,
+                prepared,
+                tool,
+                &home,
+                &mapping.host_platform_control_root,
+                entry,
+                publisher_request.action,
+                &membership_role,
+                &manifest.selected_host_prefix,
+            )?;
+            let (state_after_effect, observed) = mac_observe_closed_post_pm_effect_v1(
+                tool,
+                &home,
+                &mapping.host_platform_control_root,
+                &effect_plan,
+            )?;
+            mac_require_post_pm_after_state_v1(state_after_effect)?;
+            let observation = json!({"mutation": mutation, "after": observed});
+            mac_persist_post_pm_journal_state_absent_or_exact_v1(
+                executor,
+                prepared,
+                "EffectObserved",
+                Some(observation.clone()),
+            )?;
+            observation
+        }
+        "EffectStarted" => {
+            // The no-follow journal proves exactly which prepared record crossed the effect
+            // boundary. Observe before replay: an after-state completes; only an exact
+            // before-state may execute the same plan once; every other result preserves state.
+            let (observation_state, observed) = mac_observe_closed_post_pm_effect_v1(
+                tool,
+                &home,
+                &mapping.host_platform_control_root,
+                &effect_plan,
+            )?;
+            let replay = mac_post_pm_effect_retry_decision_v1(observation_state)?;
+            let observation = if replay {
+                let mutation = mac_execute_post_pm_effect_plan_v1(
+                    executor,
+                    prepared,
+                    tool,
+                    &home,
+                    &mapping.host_platform_control_root,
+                    &effect_plan,
+                )?;
+                let (after_replay, observed_after_replay) = mac_observe_closed_post_pm_effect_v1(
+                    tool,
+                    &home,
+                    &mapping.host_platform_control_root,
+                    &effect_plan,
+                )?;
+                mac_require_post_pm_after_state_v1(after_replay)?;
+                json!({"mutation": mutation, "after": observed_after_replay})
+            } else {
+                observed
+            };
+            mac_persist_post_pm_journal_state_absent_or_exact_v1(
+                executor,
+                prepared,
+                "EffectObserved",
+                Some(observation.clone()),
+            )?;
+            observation
+        }
+        "EffectObserved" => journal.effect_observation.ok_or_else(|| {
+            anyhow::anyhow!("observed post-PM journal lacks its exact observation")
+        })?,
+        "Completed" => bail!("completed post-PM journal has no advanced state retry"),
+        _ => bail!("post-PM journal state is not closed"),
+    };
+    let unsigned = ManagedActionReceiptV1 {
+        schema_owner: "substrate.managed-action-receipt".to_string(),
+        schema_version: 1,
+        authority_domain: manifest.authority_domain.clone(),
+        scope_id: publisher_request.scope_id.clone(),
+        installation_id: publisher_request.scope_id.clone(),
+        manifest_generation: manifest.manifest_generation,
+        manifest_sha256: manifest.manifest_sha256.clone(),
+        receipt_id: receipt_id.clone(),
+        receipt_relative_path: receipt_relative_path.clone(),
+        entry_id: entry.object_id.clone(),
+        action: publisher_request.action,
+        attempt_id: publisher_request.attempt_nonce.clone(),
+        prepared_record_sha256: managed_action_prepared_record_sha256_v1(prepared)?,
+        allocated_counter: prepared.allocated_counter,
+        request_sha256: request_sha256.clone(),
+        pre_observation: prepared.before_observation.clone(),
+        effect_observation,
+        post_observation: json!({"manifest_sha256": manifest.manifest_sha256, "entry_id": entry.object_id}),
+        restoration_status: None,
+        error_class: None,
+        executor_identity: anchor.executor_identity.clone(),
+        signature: LifecycleSignatureV1 {
+            algorithm: "ecdsa-p256-sha256-p1363-low-s-v1".to_string(),
+            public_key: String::new(),
+            signature: String::new(),
+        },
+    };
+    let receipt =
+        mac_load_or_sign_post_pm_receipt_v1(executor, &publisher_request.scope_id, unsigned)?;
+    let head = resume_action_receipt_commit_v1(
+        &executor.state_root,
+        &manifest,
+        &prepared_state,
+        &receipt,
+    )?;
+    let mut next_anchor = LifecyclePublisherAnchorV1 {
+        action_receipt_index_revision: head.action_receipt_index_revision,
+        action_receipt_index_sha256: head.action_receipt_index_sha256.clone(),
+        head_sha256: sha256_hex_bootstrap_v1(&canonical_managed_manifest_head_v1(&head)?),
+        previous_anchor_sha256: Some(lifecycle_anchor_sha256_v1(anchor)?),
+        request_sha256,
+        requester_principal: publisher_request.requester_principal.clone(),
+        attempt_nonce: publisher_request.attempt_nonce.clone(),
+        signature: LifecycleSignatureV1 {
+            algorithm: "ecdsa-p256-sha256-p1363-low-s-v1".to_string(),
+            public_key: String::new(),
+            signature: String::new(),
+        },
+        ..anchor.clone()
+    };
+    next_anchor.signature =
+        mac_sign_initial_lifecycle_anchor_v1(&publisher_request.scope_id, &next_anchor)?;
+    let next_state = LifecyclePublisherProtectedStateV1 {
+        current_anchor: next_anchor.clone(),
+        counter: prepared.allocated_counter,
+        prepared_record: None,
+        previous_protected_state_sha256: Some(sha256_hex_bootstrap_v1(
+            &canonical_lifecycle_publisher_protected_state_v1(&prepared_state)?,
+        )),
+        state_revision: prepared_state
+            .state_revision
+            .checked_add(1)
+            .ok_or_else(|| anyhow::anyhow!("post-PM state revision overflow"))?,
+        ..prepared_state.clone()
+    };
+    compare_and_swap_mac_publisher_protected_state_v1(
+        executor,
+        Some(&prepared_state),
+        &next_state,
+    )?;
+    let next_admission = MacPublisherControlAdmissionV1 {
+        manifest_generation: manifest.manifest_generation,
+        manifest_sha256: manifest.manifest_sha256.clone(),
+        current_anchor_sha256: lifecycle_anchor_sha256_v1(&next_anchor)?,
+        state_revision: next_state.state_revision,
+        ..admission
+    };
+    replace_mac_control_admission_authority_v1(&next_admission)?;
+    mac_persist_completed_post_pm_journal_from_receipt_v1(executor, &receipt)?;
+    Ok(
+        json!({"status": "completed", "receipt": receipt, "manifest_generation": manifest.manifest_generation, "manifest_sha256": manifest.manifest_sha256}),
+    )
+}
+
+#[cfg(not(target_os = "macos"))]
+fn execute_mac_post_pm_action_v1(
+    _executor: &MacManagedArtifactExecutorV1,
+    _control: &ManagedLifecycleControlRequestV1,
+) -> Result<Value> {
+    bail!("closed macOS post-PM transaction is available only on macOS")
 }
 
 /// Execute only an XPC-authorized, carrier/mapping/role-joined mapped action.
@@ -408,19 +6145,29 @@ pub fn execute_mac_managed_action_v1(
     audit_token: &[u32; 8],
 ) -> Result<Value> {
     attest_mac_xpc_audit_token_v1(audit_token)?;
+    // Decode only after fixed XPC audit-token/designated-requirement admission. The mapped
+    // decoder closes all legacy/raw fields before any state, profile, or Lima operation opens.
+    let control: ManagedLifecycleControlRequestV1 = serde_json::from_value(request.clone())
+        .context("decode exact mapped macOS lifecycle control request")?;
+    let tag = validate_mapped_lifecycle_control_request_v1(&control)?;
     validate_mac_mapped_action_authority_v1(request)?;
-    open_mac_lifecycle_capsule_v1(executor)?;
-    let receipt = json!({
-        "schema_owner": "substrate.mac-lifecycle-action-receipt",
-        "schema_version": 1,
-        "status": "prepared",
-        "xpc_attestation": {
-            "mach_service": MAC_MACH_SERVICE_V1,
-            "audit_token_bound": true
+    match tag {
+        MappedLifecycleTagV1::StageOneCreate => {
+            let stage_one = control
+                .lima_stage_one_authorization_v1
+                .as_ref()
+                .ok_or_else(|| anyhow::anyhow!("closed Stage-1 control lacks authorization"))?;
+            let carrier = InstallBootstrapContextCarrierV1::decode(
+                control
+                    .install_bootstrap_context_v1
+                    .as_deref()
+                    .ok_or_else(|| anyhow::anyhow!("closed Stage-1 control lacks IH carrier"))?,
+            )
+            .context("decode closed Stage-1 IH carrier")?;
+            execute_closed_mac_lima_stage_one_effect_v1(executor, stage_one, &carrier)
         }
-    });
-    publish_mac_action_receipt_v1(executor, &receipt)?;
-    Ok(receipt)
+        MappedLifecycleTagV1::PostPmAction => execute_mac_post_pm_action_v1(executor, &control),
+    }
 }
 
 /// Restore only state represented by a publisher receipt; unknown state is preserved for handoff.
@@ -437,16 +6184,14 @@ pub fn restore_mac_managed_role_v1(
     Ok(json!({"status": "restored", "receipt": receipt}))
 }
 
-/// Publish a receipt with an external-file and parent-directory fsync boundary.
+/// Reject the retired single-file receipt shortcut. Authoritative R5 actions publish through the
+/// prepared/receipt/index/head/anchor transaction; a caller cannot overwrite or consult a
+/// `last-action` projection.
 pub fn publish_mac_action_receipt_v1(
-    executor: &MacManagedArtifactExecutorV1,
-    receipt: &Value,
+    _executor: &MacManagedArtifactExecutorV1,
+    _receipt: &Value,
 ) -> Result<()> {
-    let path = executor.state_root.join("last-action-receipt.v1.json");
-    mac_atomic_file_ffi_v1(
-        &path,
-        &serde_json::to_vec(receipt).context("encode macOS action receipt")?,
-    )
+    bail!("single-file macOS action receipt shortcut is not authoritative in R5")
 }
 
 /// The minimum durable record which binds a prior Lima Stage-1 authorization to a host ticket.
@@ -555,6 +6300,15 @@ fn mac_keychain_durable_cas_guard_v1(account: &str) -> Result<MacKeychainCasGuar
         }
         let root = Path::new(MAC_STATE_ROOT_V1);
         fs::create_dir_all(root).context("create fixed macOS Keychain CAS root")?;
+        let root_metadata =
+            fs::symlink_metadata(root).context("inspect fixed macOS Keychain CAS root")?;
+        if !root_metadata.file_type().is_dir()
+            || root_metadata.uid() != 0
+            || root_metadata.gid() != 0
+            || root_metadata.mode() & 0o022 != 0
+        {
+            bail!("macOS Keychain CAS root is not retained root-owned state");
+        }
         let lock_path = root.join(format!(
             "keychain-cas-{:x}.lock",
             Sha256::digest(account.as_bytes())
@@ -625,6 +6379,120 @@ fn mac_keychain_stage_one_record_account_v1(scope_id: &str) -> Result<String> {
     mac_keychain_account_v1(scope_id, "lima-guest-pairing-stage-one")
 }
 
+fn mac_keychain_stage_one_capsule_account_v1(scope_id: &str) -> Result<String> {
+    mac_keychain_account_v1(scope_id, "lima-stage-one-capsule")
+}
+
+fn open_mac_lima_stage_one_capsule_v1(scope_id: &str) -> Result<Option<MacLimaStageOneCapsuleV1>> {
+    let account = mac_keychain_stage_one_capsule_account_v1(scope_id)?;
+    let Some(bytes) = mac_keychain_read_item_v1(MAC_KEYCHAIN_SERVICE_V1, &account)? else {
+        return Ok(None);
+    };
+    let capsule: MacLimaStageOneCapsuleV1 =
+        serde_json::from_slice(&bytes).context("decode protected Lima Stage-1 capsule")?;
+    validate_mac_lima_stage_one_capsule_v1(&capsule)?;
+    if capsule.scope_id != scope_id || canonical_mac_lima_stage_one_capsule_v1(&capsule)? != bytes {
+        bail!("protected Lima Stage-1 capsule does not match its fixed Keychain account");
+    }
+    Ok(Some(capsule))
+}
+
+fn stage_one_capsule_transition_is_exact_v1(
+    current: &MacLimaStageOneCapsuleV1,
+    next: &MacLimaStageOneCapsuleV1,
+) -> Result<()> {
+    validate_mac_lima_stage_one_capsule_v1(current)?;
+    validate_mac_lima_stage_one_capsule_v1(next)?;
+    if current.scope_id != next.scope_id
+        || current.install_provenance_sha256 != next.install_provenance_sha256
+        || current.bootstrap_authorization_sha256 != next.bootstrap_authorization_sha256
+        || current.pre_pm_manifest != next.pre_pm_manifest
+        || current.initial_anchor_sha256 != next.initial_anchor_sha256
+        || current.initial_anchor_counter != next.initial_anchor_counter
+        || current.stage_one_authorization != next.stage_one_authorization
+        || next.capsule_revision
+            != current
+                .capsule_revision
+                .checked_add(1)
+                .ok_or_else(|| anyhow::anyhow!("Lima Stage-1 capsule revision overflow"))?
+    {
+        bail!("Lima Stage-1 capsule transition alters immutable authority or revision");
+    }
+    match (current.state.as_str(), next.state.as_str()) {
+        ("Prepared", "EffectStarted")
+            if current.prepared_protected_state_sha256.is_none()
+                && next.prepared_protected_state_sha256.is_some() => {}
+        _ if current.prepared_protected_state_sha256 == next.prepared_protected_state_sha256 => {}
+        _ => bail!("Lima Stage-1 capsule transition alters its sealed prepared-state digest"),
+    }
+    let allowed = matches!(
+        (current.state.as_str(), next.state.as_str()),
+        ("Issued", "Prepared")
+            | ("Prepared", "EffectStarted")
+            | ("EffectStarted", "InstanceObserved")
+            | ("InstanceObserved", "Completed")
+            | ("Issued", "PreservingBlocked")
+            | ("Prepared", "PreservingBlocked")
+            | ("EffectStarted", "PreservingBlocked")
+            | ("InstanceObserved", "PreservingBlocked")
+    );
+    if !allowed {
+        bail!("Lima Stage-1 capsule has an invalid preserving transition");
+    }
+    match next.state.as_str() {
+        "Issued" => {
+            if next.rendered_profile_file_identity.is_some() || next.observation.is_some() {
+                bail!("issued Lima Stage-1 capsule has post-issue state");
+            }
+        }
+        "Prepared" | "EffectStarted" => {
+            if next.rendered_profile_file_identity.is_none() || next.observation.is_some() {
+                bail!("prepared Lima Stage-1 capsule has invalid profile/observation state");
+            }
+        }
+        "InstanceObserved" | "Completed" => {
+            if next.rendered_profile_file_identity.is_none() || next.observation.is_none() {
+                bail!("observed Lima Stage-1 capsule lacks profile or observation");
+            }
+        }
+        "PreservingBlocked" => {}
+        _ => unreachable!(),
+    }
+    Ok(())
+}
+
+fn compare_and_swap_mac_lima_stage_one_capsule_v1(
+    current: Option<&MacLimaStageOneCapsuleV1>,
+    next: &MacLimaStageOneCapsuleV1,
+) -> Result<()> {
+    validate_mac_lima_stage_one_capsule_v1(next)?;
+    if let Some(current) = current {
+        stage_one_capsule_transition_is_exact_v1(current, next)?;
+    } else if next.state != "Issued"
+        || next.capsule_revision != 1
+        || next.rendered_profile_file_identity.is_some()
+        || next.observation.is_some()
+    {
+        bail!("initial Lima Stage-1 capsule must be exactly issued revision one");
+    }
+    let account = mac_keychain_stage_one_capsule_account_v1(&next.scope_id)?;
+    let _guard = mac_keychain_durable_cas_guard_v1(&account)?;
+    let observed = mac_keychain_read_item_v1(MAC_KEYCHAIN_SERVICE_V1, &account)?;
+    let expected = current
+        .map(canonical_mac_lima_stage_one_capsule_v1)
+        .transpose()?;
+    if observed.as_deref() != expected.as_deref() {
+        bail!("Lima Stage-1 capsule compare-and-swap conflict");
+    }
+    let next = canonical_mac_lima_stage_one_capsule_v1(next)?;
+    mac_keychain_compare_and_swap_item_v1(
+        MAC_KEYCHAIN_SERVICE_V1,
+        &account,
+        expected.as_deref(),
+        &next,
+    )
+}
+
 fn mac_keychain_read_item_v1(service: &str, account: &str) -> Result<Option<Vec<u8>>> {
     if service != MAC_KEYCHAIN_SERVICE_V1 || account.is_empty() || account.contains('\0') {
         bail!("System Keychain item address is not fixed");
@@ -685,6 +6553,59 @@ fn base64url_encode_mac_v1(bytes: &[u8]) -> String {
     output
 }
 
+fn mac_base64url_decode_v1(value: &str) -> Result<Vec<u8>> {
+    fn sextet(byte: u8) -> Option<u8> {
+        match byte {
+            b'A'..=b'Z' => Some(byte - b'A'),
+            b'a'..=b'z' => Some(byte - b'a' + 26),
+            b'0'..=b'9' => Some(byte - b'0' + 52),
+            b'-' => Some(62),
+            b'_' => Some(63),
+            _ => None,
+        }
+    }
+    if value.is_empty() || value.len() % 4 == 1 {
+        bail!("retained bootstrap response is not canonical base64url");
+    }
+    let mut output = Vec::with_capacity(value.len() * 3 / 4);
+    for chunk in value.as_bytes().chunks(4) {
+        let first = sextet(chunk[0]).ok_or_else(|| anyhow::anyhow!("invalid base64url byte"))?;
+        let second = sextet(
+            *chunk
+                .get(1)
+                .ok_or_else(|| anyhow::anyhow!("truncated base64url"))?,
+        )
+        .ok_or_else(|| anyhow::anyhow!("invalid base64url byte"))?;
+        let third = match chunk.get(2).copied() {
+            Some(byte) => {
+                Some(sextet(byte).ok_or_else(|| anyhow::anyhow!("invalid base64url byte"))?)
+            }
+            None => None,
+        };
+        let fourth = match chunk.get(3).copied() {
+            Some(byte) => {
+                Some(sextet(byte).ok_or_else(|| anyhow::anyhow!("invalid base64url byte"))?)
+            }
+            None => None,
+        };
+        output.push((first << 2) | (second >> 4));
+        if let Some(third) = third {
+            output.push((second << 4) | (third >> 2));
+            if let Some(fourth) = fourth {
+                output.push((third << 6) | fourth);
+            } else if third & 0x03 != 0 {
+                bail!("retained bootstrap response has non-canonical base64url tail");
+            }
+        } else if second & 0x0f != 0 {
+            bail!("retained bootstrap response has non-canonical base64url tail");
+        }
+    }
+    if base64url_encode_mac_v1(&output) != value {
+        bail!("retained bootstrap response is not canonical base64url");
+    }
+    Ok(output)
+}
+
 fn mac_open_system_keychain_p256_spki_der_v1(scope_id: &str) -> Result<Vec<u8>> {
     let key_tag = mac_keychain_signing_key_tag_v1(scope_id)?;
     #[cfg(target_os = "macos")]
@@ -705,18 +6626,95 @@ fn mac_verified_control_peer_requirement_v1() -> Result<String> {
 }
 
 fn mac_verified_control_authority_v1() -> Result<MacPublisherControlAuthorityV1> {
+    Ok(mac_verified_control_admission_v1()?.control_authority)
+}
+
+/// Derive the *only* admissible control-admission repair: the current signed protected state is
+/// exactly one committed successor of the retained admission.  This is pure so a crash between
+/// protected-state and admission CASes is testable without accepting a rollback, a skipped
+/// revision, or an arbitrary listener-side mutation.
+fn mac_exact_control_admission_successor_v1(
+    existing: &MacPublisherControlAdmissionV1,
+    state: &LifecyclePublisherProtectedStateV1,
+) -> Result<Option<MacPublisherControlAdmissionV1>> {
+    validate_mac_publisher_control_admission_v1(existing)?;
+    validate_lifecycle_publisher_protected_state_v1(state)?;
+    let anchor = &state.current_anchor;
+    let retained_signer = base64url_encode_mac_v1(&mac_open_system_keychain_p256_spki_der_v1(
+        &existing.scope_id,
+    )?);
+    let next_revision = existing
+        .state_revision
+        .checked_add(1)
+        .ok_or_else(|| anyhow::anyhow!("control-admission successor revision overflow"))?;
+    if state.counter == 0 {
+        bail!("control-admission successor cannot have counter zero");
+    }
+    let cross_generation =
+        existing.manifest_generation.checked_add(1) == Some(anchor.manifest_generation);
+    let same_generation = existing.manifest_generation == anchor.manifest_generation
+        && existing.manifest_sha256 == anchor.manifest_sha256;
+    if anchor.scope_id != existing.scope_id
+        || state.prepared_record.is_some()
+        || state.state_revision != next_revision
+        || anchor.previous_anchor_sha256.as_deref() != Some(existing.current_anchor_sha256.as_str())
+        || anchor.signature.public_key != retained_signer
+        || (!cross_generation && !same_generation)
+    {
+        return Ok(None);
+    }
+    Ok(Some(MacPublisherControlAdmissionV1 {
+        manifest_generation: anchor.manifest_generation,
+        manifest_sha256: anchor.manifest_sha256.clone(),
+        current_anchor_sha256: lifecycle_anchor_sha256_v1(anchor)?,
+        state_revision: state.state_revision,
+        ..existing.clone()
+    }))
+}
+
+/// Load the fixed global admission only when it exact-joins the current canonical protected
+/// state and signed anchor.  Both listener startup and every XPC request take this path before
+/// decoding caller data, so a stale/rolled-back admission record is terminal rather than a
+/// fallback to a bare designated requirement.
+fn mac_verified_control_admission_v1() -> Result<MacPublisherControlAdmissionV1> {
     let bytes =
         mac_keychain_read_item_v1(MAC_KEYCHAIN_SERVICE_V1, MAC_CONTROL_ADMISSION_ACCOUNT_V1)?
             .ok_or_else(|| {
                 anyhow::anyhow!("macOS XPC listener has no fixed admission authority")
             })?;
-    let authority: MacPublisherControlAuthorityV1 =
+    let mut admission: MacPublisherControlAdmissionV1 =
         serde_json::from_slice(&bytes).context("decode fixed macOS XPC admission authority")?;
-    validate_mac_publisher_control_authority_v1(&authority)?;
-    if canonical_mac_publisher_control_authority_v1(&authority)? != bytes {
+    validate_mac_publisher_control_admission_v1(&admission)?;
+    if canonical_mac_publisher_control_admission_v1(&admission)? != bytes {
         bail!("fixed macOS XPC admission authority is not canonical");
     }
-    Ok(authority)
+    let state = open_system_keychain_protected_state_for_scope_v1(&admission.scope_id)?
+        .ok_or_else(|| anyhow::anyhow!("macOS XPC admission has no current protected state"))?;
+    let anchor = &state.current_anchor;
+    if anchor.scope_id != admission.scope_id
+        || anchor.manifest_generation != admission.manifest_generation
+        || anchor.manifest_sha256 != admission.manifest_sha256
+        || lifecycle_anchor_sha256_v1(anchor)? != admission.current_anchor_sha256
+        || state.state_revision != admission.state_revision
+    {
+        let repaired =
+            mac_exact_control_admission_successor_v1(&admission, &state)?.ok_or_else(|| {
+                anyhow::anyhow!(
+                    "macOS XPC admission does not exact-join current anchor and state revision"
+                )
+            })?;
+        // No request is decoded on this path. The helper has proven that the signed current
+        // anchor is exactly one committed successor of the retained global admission.
+        replace_mac_control_admission_authority_v1(&repaired)?;
+        let reread =
+            mac_keychain_read_item_v1(MAC_KEYCHAIN_SERVICE_V1, MAC_CONTROL_ADMISSION_ACCOUNT_V1)?
+                .ok_or_else(|| anyhow::anyhow!("repaired macOS XPC admission disappeared"))?;
+        if reread != canonical_mac_publisher_control_admission_v1(&repaired)? {
+            bail!("repaired macOS XPC admission did not durably exact-join successor state");
+        }
+        admission = repaired;
+    }
+    Ok(admission)
 }
 
 fn attest_mac_xpc_control_image_v1(
@@ -1137,10 +7135,8 @@ pub fn close_lima_stage_one_intent_v1(intent: &Value) -> Result<Value> {
 /// Relay a fixed-size request to the launchd-owned Mach service. This is not an executor
 /// operation: a direct command can only send an XPC request and cannot mutate publisher state.
 fn relay_mac_xpc_publisher_request_v1(operation: &str, request: &[u8]) -> Result<Value> {
-    if !matches!(
-        operation,
-        "bootstrap-publisher" | "submit-request" | "issue-guest-ticket" | "lima-action"
-    ) || request.is_empty()
+    if !matches!(operation, "stage-one-create" | "post-pm-action")
+        || request.is_empty()
         || request.len() > MAX_MAC_XPC_FRAME_BYTES_V1
     {
         bail!("invalid fixed macOS XPC publisher request")
@@ -1215,6 +7211,7 @@ mod mac_system_keychain_ffi_v1 {
     const ERR_SEC_SUCCESS: OsStatus = 0;
     const ERR_SEC_DUPLICATE_ITEM: OsStatus = -25299;
     const ERR_SEC_ITEM_NOT_FOUND: OsStatus = -25300;
+    const K_CF_NUMBER_SINT64: i32 = 4;
 
     struct OwnedCf(Vec<CfType>);
 
@@ -1259,6 +7256,18 @@ mod mac_system_keychain_ffi_v1 {
         let result = CFDataCreate(kCFAllocatorDefault, value.as_ptr(), value.len() as isize);
         if result.is_null() {
             bail!("allocate System Keychain data");
+        }
+        Ok(owned.hold(result).cast())
+    }
+
+    unsafe fn cf_number_i64(owned: &mut OwnedCf, value: i64) -> Result<CfType> {
+        let result = CFNumberCreate(
+            kCFAllocatorDefault,
+            K_CF_NUMBER_SINT64,
+            (&value as *const i64).cast(),
+        );
+        if result.is_null() {
+            bail!("allocate System Keychain numeric parameter");
         }
         Ok(owned.hold(result).cast())
     }
@@ -1404,6 +7413,44 @@ mod mac_system_keychain_ffi_v1 {
         Ok(result.cast())
     }
 
+    unsafe fn ensure_private_key(owned: &mut OwnedCf, key_tag: &[u8]) -> Result<SecKey> {
+        match open_private_key(owned, key_tag) {
+            Ok(key) => Ok(key),
+            Err(error) if error.to_string().contains("is absent") => {
+                let tag = cf_data(owned, key_tag)?;
+                let bits = cf_number_i64(owned, 256)?;
+                let private_attributes = dictionary(
+                    owned,
+                    &[
+                        (kSecAttrIsPermanent, kCFBooleanTrue),
+                        (kSecAttrIsExtractable, kCFBooleanFalse),
+                        (kSecAttrApplicationTag, tag),
+                    ],
+                )?;
+                let parameters = dictionary(
+                    owned,
+                    &[
+                        (kSecAttrKeyType, kSecAttrKeyTypeECSECPrimeRandom),
+                        (kSecAttrKeySizeInBits, bits),
+                        (kSecPrivateKeyAttrs, private_attributes.cast()),
+                        (kSecUseSystemKeychain, kCFBooleanTrue),
+                    ],
+                )?;
+                let mut error_ref: CfType = ptr::null();
+                let key = SecKeyCreateRandomKey(parameters, &mut error_ref);
+                if !error_ref.is_null() {
+                    owned.hold(error_ref);
+                }
+                if key.is_null() {
+                    bail!("create System Keychain non-exportable P-256 key failed");
+                }
+                owned.hold(key);
+                Ok(key)
+            }
+            Err(error) => Err(error),
+        }
+    }
+
     unsafe fn spki_for_private_key(owned: &mut OwnedCf, private_key: SecKey) -> Result<Vec<u8>> {
         let public_key = SecKeyCopyPublicKey(private_key);
         if public_key.is_null() {
@@ -1441,6 +7488,53 @@ mod mac_system_keychain_ffi_v1 {
         }
     }
 
+    pub(super) fn p256_key_exists(key_tag: &[u8]) -> Result<bool> {
+        unsafe {
+            let mut owned = OwnedCf::new();
+            match open_private_key(&mut owned, key_tag) {
+                Ok(_) => Ok(true),
+                Err(error) if error.to_string().contains("is absent") => Ok(false),
+                Err(error) => Err(error),
+            }
+        }
+    }
+
+    pub(super) fn ensure_p256_spki_der(key_tag: &[u8]) -> Result<Vec<u8>> {
+        unsafe {
+            let mut owned = OwnedCf::new();
+            let key = ensure_private_key(&mut owned, key_tag)?;
+            spki_for_private_key(&mut owned, key)
+        }
+    }
+
+    pub(super) fn sign_p256_message(key_tag: &[u8], payload: &[u8]) -> Result<Vec<u8>> {
+        unsafe {
+            let mut owned = OwnedCf::new();
+            let key = open_private_key(&mut owned, key_tag)?;
+            let payload = cf_data(&mut owned, payload)?;
+            let mut error: CfType = ptr::null();
+            let signature = SecKeyCreateSignature(
+                key,
+                kSecKeyAlgorithmECDSASignatureMessageX962SHA256,
+                payload.cast(),
+                &mut error,
+            );
+            if !error.is_null() {
+                owned.hold(error);
+            }
+            if signature.is_null() {
+                bail!("System Keychain P-256 signing failed");
+            }
+            owned.hold(signature);
+            let length = CFDataGetLength(signature);
+            let bytes = CFDataGetBytePtr(signature);
+            if length <= 0 || bytes.is_null() {
+                bail!("System Keychain P-256 signature is empty");
+            }
+            Ok(std::slice::from_raw_parts(bytes, length as usize).to_vec())
+        }
+    }
+
     /// Verify the code identity bound by XPC to this exact incoming message.  Security creates
     /// the `SecCode` from the message's kernel-provided audit token, so this never resolves a
     /// mutable executable path by PID.
@@ -1475,6 +7569,42 @@ mod mac_system_keychain_ffi_v1 {
         }
     }
 
+    /// Resolve the direct channel peer through its kernel-owned PID and verify its exact
+    /// designated requirement without opening any caller-selected executable pathname.
+    pub(super) fn verify_process_designated_requirement(
+        pid: libc::pid_t,
+        designated_requirement: &str,
+    ) -> Result<()> {
+        if pid <= 1 || designated_requirement.is_empty() || designated_requirement.contains('\0') {
+            bail!("bootstrap control peer requirement input is invalid");
+        }
+        unsafe {
+            let mut owned = OwnedCf::new();
+            let pid_number = cf_number_i64(&mut owned, i64::from(pid))?;
+            let attributes = dictionary(&mut owned, &[(kSecGuestAttributePid, pid_number)])?;
+            let mut code: CfType = ptr::null();
+            let status =
+                SecCodeCopyGuestWithAttributes(ptr::null(), attributes.cast(), 0, &mut code);
+            if status != ERR_SEC_SUCCESS || code.is_null() {
+                bail!("resolve retained bootstrap control peer code failed with OSStatus {status}");
+            }
+            owned.hold(code);
+            let requirement_text = cf_string(&mut owned, designated_requirement)?;
+            let mut requirement: SecRequirement = ptr::null();
+            let status = SecRequirementCreateWithString(requirement_text, 0, &mut requirement);
+            if status != ERR_SEC_SUCCESS || requirement.is_null() {
+                bail!(
+                    "compile retained bootstrap control requirement failed with OSStatus {status}"
+                );
+            }
+            owned.hold(requirement);
+            if SecCodeCheckValidity(code, 0, requirement) != ERR_SEC_SUCCESS {
+                bail!("retained bootstrap control peer fails exact designated requirement");
+            }
+            Ok(())
+        }
+    }
+
     #[link(name = "Security", kind = "framework")]
     unsafe extern "C" {
         static kSecClass: CfType;
@@ -1485,6 +7615,11 @@ mod mac_system_keychain_ffi_v1 {
         static kSecAttrApplicationTag: CfType;
         static kSecAttrKeyClass: CfType;
         static kSecAttrKeyClassPrivate: CfType;
+        static kSecAttrKeyType: CfType;
+        static kSecAttrKeyTypeECSECPrimeRandom: CfType;
+        static kSecAttrKeySizeInBits: CfType;
+        static kSecPrivateKeyAttrs: CfType;
+        static kSecAttrIsPermanent: CfType;
         static kSecAttrIsExtractable: CfType;
         static kSecValueData: CfType;
         static kSecReturnData: CfType;
@@ -1492,9 +7627,12 @@ mod mac_system_keychain_ffi_v1 {
         static kSecMatchLimit: CfType;
         static kSecMatchLimitOne: CfType;
         static kSecUseSystemKeychain: CfType;
+        static kSecKeyAlgorithmECDSASignatureMessageX962SHA256: CfType;
+        static kSecGuestAttributePid: CfType;
         fn SecItemCopyMatching(query: CfType, result: *mut CfType) -> OsStatus;
         fn SecItemAdd(attributes: CfType, result: *mut CfType) -> OsStatus;
         fn SecItemUpdate(query: CfType, attributes: CfType) -> OsStatus;
+        fn SecKeyCreateRandomKey(parameters: CfType, error: *mut CfType) -> SecKey;
         fn SecRequirementCreateWithString(
             text: CfType,
             flags: u32,
@@ -1510,6 +7648,18 @@ mod mac_system_keychain_ffi_v1 {
         fn SecKeyCopyPublicKey(key: SecKey) -> SecKey;
         fn SecKeyCopyAttributes(key: SecKey) -> CfType;
         fn SecKeyCopyExternalRepresentation(key: SecKey, error: *mut CfType) -> CfData;
+        fn SecKeyCreateSignature(
+            key: SecKey,
+            algorithm: CfType,
+            data_to_sign: CfData,
+            error: *mut CfType,
+        ) -> CfData;
+        fn SecCodeCopyGuestWithAttributes(
+            host: CfType,
+            attributes: CfType,
+            flags: u32,
+            guest: *mut CfType,
+        ) -> OsStatus;
     }
 
     #[link(name = "CoreFoundation", kind = "framework")]
@@ -1528,6 +7678,7 @@ mod mac_system_keychain_ffi_v1 {
         fn CFDataCreate(allocator: CfType, bytes: *const u8, length: isize) -> CfData;
         fn CFDataGetLength(data: CfData) -> isize;
         fn CFDataGetBytePtr(data: CfData) -> *const u8;
+        fn CFNumberCreate(allocator: CfType, number_type: i32, value_ptr: *const c_void) -> CfType;
         fn CFDictionaryCreateMutable(
             allocator: CfType,
             capacity: isize,
@@ -1707,21 +7858,7 @@ mod mac_xpc_listener_ffi_v1 {
             pairing_root: PathBuf::from(MAC_STATE_ROOT_V1).join("guest-pairings"),
         };
         let mut response = match operation {
-            "bootstrap-publisher" => bootstrap_mac_publisher_v1(
-                &executor,
-                &serde_json::from_slice(request).context("decode XPC bootstrap authorization")?,
-                &audit_token,
-            )?,
-            "submit-request" => handle_mac_publisher_request_v1(
-                &executor,
-                &serde_json::from_slice(request).context("decode XPC publisher request")?,
-                &audit_token,
-            )?,
-            "issue-guest-ticket" => issue_lima_guest_pairing_ticket_v1(
-                &executor,
-                &serde_json::from_slice(request).context("decode XPC pairing request")?,
-            )?,
-            "lima-action" => execute_mac_managed_action_v1(
+            "stage-one-create" | "post-pm-action" => execute_mac_managed_action_v1(
                 &executor,
                 &serde_json::from_slice(request).context("decode XPC mapped Lima action")?,
                 &audit_token,
@@ -1735,7 +7872,12 @@ mod mac_xpc_listener_ffi_v1 {
             "xpc_attestation".to_string(),
             json!({
                 "mach_service": MAC_MACH_SERVICE_V1,
-                "peer_code_requirement": MAC_CONTROL_DESIGNATED_REQUIREMENT_V1,
+                // The accepted control image is measured against the retained install
+                // provenance before the request is decoded.  Return that exact retained
+                // requirement, rather than a generic identifier-only requirement, so the
+                // caller cannot mistake a differently signed control binary for the peer
+                // that XPC admitted.
+                "peer_code_requirement": authority.designated_requirement,
                 "audit_token_bound": true
             }),
         );
@@ -1877,4 +8019,12 @@ unsafe extern "C" {
     fn xpc_get_type(object: *mut core::ffi::c_void) -> *const core::ffi::c_void;
     fn xpc_release(object: *mut core::ffi::c_void);
     fn dispatch_main() -> !;
+}
+
+/// Darwin kernel process-path query used only to resolve the already kernel-attested FD3 peer.
+/// This is a platform system library, not a new transport or dependency.
+#[cfg(target_os = "macos")]
+#[link(name = "proc")]
+unsafe extern "C" {
+    fn proc_pidpath(pid: libc::pid_t, buffer: *mut core::ffi::c_void, buffer_size: u32) -> i32;
 }

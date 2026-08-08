@@ -1,479 +1,464 @@
 #!/usr/bin/env bash
-# Non-native A1.1d-5R3-MAC contract fixture. It uses only a disposable stdin mock.
+# Non-native R5 MAC lifecycle fixture.  It performs static contract checks only: it never opens
+# XPC, runs an elevated helper, touches Lima, or mutates a socket/known-hosts/Keychain artifact.
 set -euo pipefail
 
 REPO_ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")/../.." && pwd)"
-LIFECYCLE="${REPO_ROOT}/scripts/mac/lima-lifecycle.sh"
-WARM="${REPO_ROOT}/scripts/mac/lima-warm.sh"
-STOP="${REPO_ROOT}/scripts/mac/lima-stop.sh"
-SOCKET_UNIT="${REPO_ROOT}/scripts/mac/lima/units/substrate-world-service.socket"
-MAC_CLIENT="${REPO_ROOT}/crates/shell/src/execution/managed_lifecycle/macos_client.rs"
-MAC_EXECUTOR="${REPO_ROOT}/src/bin/substrate-lifecycle-macos.rs"
-MAC_PLIST="${REPO_ROOT}/scripts/mac/com.substrate.lifecycle.publisher.v1.plist"
 
-fail() {
-    printf 'lifecycle_r3.sh: %s\n' "$*" >&2
-    exit 1
+bash -n "${REPO_ROOT}/scripts/mac/lima-lifecycle.sh"
+bash -n "${REPO_ROOT}/scripts/mac/lima-warm.sh"
+bash -n "${REPO_ROOT}/scripts/mac/lima-stop.sh"
+
+python3 - "${REPO_ROOT}" <<'PY'
+from pathlib import Path
+import re
+import sys
+
+root = Path(sys.argv[1])
+paths = {
+    'wrapper': root / 'scripts/mac/lima-lifecycle.sh',
+    'warm': root / 'scripts/mac/lima-warm.sh',
+    'stop': root / 'scripts/mac/lima-stop.sh',
+    'control': root / 'src/bin/substrate-lifecycle-control.rs',
+    'executor': root / 'src/bin/substrate-lifecycle-macos.rs',
+    'client': root / 'crates/shell/src/execution/managed_lifecycle/macos_client.rs',
+    'managed': root / 'crates/shell/src/execution/managed_lifecycle.rs',
+    'common': root / 'crates/common/src/managed_artifact.rs',
+    'installer': root / 'scripts/substrate/dev-install-substrate.sh',
 }
+source = {name: path.read_text() for name, path in paths.items()}
 
-require_text() {
-    local path="$1" text="$2"
-    grep -Fq -- "${text}" "${path}" || fail "${path#"${REPO_ROOT}/"} is missing ${text}"
-}
+def fail(message):
+    raise SystemExit(f'lifecycle_r3.sh: {message}')
 
-for function_name in \
-    main MacManagedArtifactExecutorV1 open_mac_lifecycle_capsule_v1 join_mac_role_identity_v1 \
-    execute_mac_managed_action_v1 restore_mac_managed_role_v1 publish_mac_action_receipt_v1 \
-    MacLifecyclePublisherServiceV1 open_system_keychain_protected_state_v1 \
-    compare_and_swap_mac_publisher_protected_state_v1 bootstrap_mac_publisher_v1 \
-    export_mac_p256_spki_der_v1 normalize_mac_p256_signature_p1363_low_s_v1 \
-    resume_mac_publisher_bootstrap_v1 run_mac_xpc_publisher_v1 accept_mac_xpc_connection_v1 \
-    attest_mac_xpc_audit_token_v1 verify_mac_control_designated_requirement_v1 \
-    handle_mac_publisher_request_v1 issue_lima_guest_pairing_ticket_v1 \
-    consume_lima_guest_pairing_ticket_v1 open_mac_guest_pairing_record_v1 \
-    compare_and_swap_mac_guest_pairing_record_v1 prove_lima_guest_reservation_unused_v1 \
-    commit_lima_guest_reservation_unused_acknowledgement_v1 retire_mac_test_publisher_v1 \
-    publish_lima_stage_one_intent_v1 attach_lima_stage_one_machine_identity_v1 \
-    close_lima_stage_one_intent_v1 mac_xpc_listener_ffi_v1 mac_audit_token_ffi_v1 \
-    mac_security_key_ffi_v1 mac_keychain_anchor_ffi_v1 mac_atomic_file_ffi_v1; do
-    require_text "${MAC_EXECUTOR}" "${function_name}"
-done
-for function_name in bootstrap_publisher_v1 submit_publisher_request_v1 open_mac_xpc_channel_v1 \
-    attest_mac_publisher_response_v1 issue_guest_publisher_pairing_ticket_v1; do
-    require_text "${MAC_CLIENT}" "${function_name}"
-done
-if grep -Eq 'SUBSTRATE_(LIFECYCLE_TEST_MODE|MAC_LIFECYCLE_EXECUTOR|MAC_NATIVE_EVIDENCE)' "${LIFECYCLE}" "${MAC_EXECUTOR}"; then
-    fail 'production MAC lifecycle introduces an ambient executor or evidence selector'
-fi
-require_text "${MAC_CLIENT}" 'com.substrate.lifecycle.publisher.v1'
-require_text "${MAC_CLIENT}" 'xpc_connection_send_message_with_reply_sync'
-if grep -Fq 'Command::new' "${MAC_CLIENT}"; then
-    fail 'macOS publisher client retains a direct helper subprocess relay'
-fi
-require_text "${MAC_EXECUTOR}" '"run-publisher"'
-require_text "${MAC_EXECUTOR}" 'run_mac_xpc_publisher_v1(&service)'
-require_text "${MAC_EXECUTOR}" 'xpc_connection_get_audit_token'
-require_text "${MAC_EXECUTOR}" 'dispatch_peer_request(peer, event)'
-require_text "${MAC_EXECUTOR}" '"audit_token_bound": true'
-require_text "${MAC_PLIST}" '<key>MachServices</key>'
-require_text "${MAC_PLIST}" '<string>run-publisher</string>'
-require_text "${MAC_PLIST}" '<key>com.substrate.lifecycle.publisher.v1</key>'
+def require(name, text):
+    if text not in source[name]:
+        fail(f'{paths[name].relative_to(root)} is missing {text}')
 
-python3 - "${MAC_EXECUTOR}" <<'PY'
-from pathlib import Path
-import sys
+def function_body(text, name):
+    match = re.search(rf'(?ms)^{re.escape(name)}\(\) \{{\n.*?(?=^[A-Za-z_][A-Za-z0-9_]*\(\) \{{|^if \[\[|\Z)', text)
+    if not match:
+        fail(f'missing named caller function {name}')
+    return match.group(0)
 
-source = Path(sys.argv[1]).read_text()
-peer_dispatch = source.index('unsafe fn dispatch_peer_request(')
-peer_token = source.index('let audit_token = mac_audit_token_ffi_v1(peer)?;', peer_dispatch)
-accepted = source.index('accept_mac_xpc_connection_v1(&service, &audit_token)?;', peer_dispatch)
-operation = source.index('let operation = xpc_dictionary_get_string(', peer_dispatch)
-if not peer_token < accepted < operation:
-    raise SystemExit('XPC publisher reads a request before binding the accepted peer audit token')
-listener_peer = source.index('let peer = (*(block as *mut PeerBlockV1)).peer;')
-listener_dispatch = source.index('let result = dispatch_peer_request(peer, event);', listener_peer)
-if listener_peer > listener_dispatch:
-    raise SystemExit('XPC publisher does not dispatch the listener-owned peer')
-audit_helper = source[source.index('pub fn attest_mac_xpc_audit_token_v1'):source.index('pub fn verify_mac_control_designated_requirement_v1')]
-if 'std::process::id' in audit_helper:
-    raise SystemExit('XPC audit attestation falls back to the publisher process PID')
+# The shell membrane has exactly the two ordinary tags and no direct/bootstrap or raw selector.
+wrapper = source['wrapper']
+if 'lima-action' in wrapper or 'PublisherBootstrapAuthorizationV1' in wrapper:
+    fail('wrapper exposes a raw or direct-bootstrap authority path')
+require('wrapper', 'submit-mapped-lifecycle-v1')
+for tag in ('stage_one_create', 'post_pm_action'):
+    require('wrapper', tag)
+if 'case "${TAG}" in' not in wrapper or '        *) printf' not in wrapper:
+    fail('wrapper does not reject an unlisted tag')
+for text in ('"current_anchor_counter"', 'set(request) != required'):
+    require('wrapper', text)
 
-def accepts_peer_audit_token(words):
-    return any(words) and words[5] != 0
+# Ordinary client XPC operations are fixed, while the direct bootstrap remains a separate FD3
+# exchange. Legacy generic bootstrap/publisher/pairing relays are fail-closed, not compatibility
+# operations.
+client = source['client']
+for text in ('submit_stage_one_absent_instance_create_v1',
+             'submit_post_pm_managed_action_v1',
+             'open_mac_xpc_channel_v1',
+             'attest_mac_publisher_response_v1',
+             'libc::AF_UNIX', 'libc::SOCK_SEQPACKET', 'libc::FD_CLOEXEC',
+             'canonical_publisher_bootstrap_authorization_v1',
+             '"/usr/bin/sudo"', '--publisher-bootstrap-fd', '.arg("3")'):
+    require('client', text)
+for legacy in ('"bootstrap-publisher"', '"submit-request"', '"issue-guest-ticket"', '"lima-action"'):
+    if legacy in client:
+        fail(f'client retains generic legacy operation {legacy}')
+xpc_open = client[client.index('pub fn open_mac_xpc_channel_v1'):client.index('/// Verify the fixed publisher service')]
+if '"stage-one-create" | "post-pm-action"' not in xpc_open:
+    fail('client XPC operation decoder is not exactly two closed branches')
 
-assert not accepts_peer_audit_token([0] * 8)
-assert not accepts_peer_audit_token([1, 0, 0, 0, 0, 0, 0, 0])
-assert accepts_peer_audit_token([1, 0, 0, 0, 0, 501, 0, 0])
+# Direct bootstrap dispatch occurs before stdin and the executor accepts only FD3 canonical bytes.
+control = source['control']
+if control.index('"publisher-bootstrap" =>') > control.index('"submit-mapped-lifecycle-v1" =>'):
+    fail('control dispatches ordinary stdin before hidden direct bootstrap')
+direct = control[control.index('pub fn publisher_bootstrap_direct_interactive_v1'):control.index('pub fn guest_publisher_pairing_direct_interactive_v1')]
+if 'submit_mapped_lifecycle_v1' in direct:
+    fail('direct bootstrap falls back to an ordinary mapped submit route')
+require('control', 'deliver_retained_publisher_bootstrap_authorization_v1')
+require('control', 'read_exact_publisher_bootstrap_request_from_stdin_v1')
+require('control', 'parse_mac_publisher_bootstrap_request_v1')
+
+executor = source['executor']
+if executor.index('if operation == "--publisher-bootstrap-fd"') > executor.index('read_to_end(&mut input)'):
+    fail('executor reads stdin before exact FD3 bootstrap dispatch')
+for text in ('consume_publisher_bootstrap_fd3_v1', 'getpeereid', 'LOCAL_PEERPID',
+             'parse_publisher_bootstrap_authorization_v1', 'descriptor 3',
+             'mac_attest_running_executor_image_v1', 'SecKeyCreateRandomKey',
+             'mac_transition_bootstrap_intent_v1', 'manifest_generation: authorization.manifest_generation',
+             'manifest_sha256: authorization.manifest_sha256.clone()',
+             'mac_attest_bootstrap_control_peer_predecode_v1',
+             'mac_kernel_peer_executable_path_v1', 'proc_pidpath',
+             'MacPublisherControlAdmissionV1', 'mac_verified_control_admission_v1',
+             'derive_mac_lima_stage_one_successor_manifest_v1',
+             'MacLimaStageOneCapsuleV1', 'render_mac_lima_stage_one_profile_v1',
+             'execute_closed_mac_lima_stage_one_effect_v1',
+             'resume_mac_lima_stage_one_after_protected_state_cas_v1',
+             '"platform_bootstrap_mapping_v1": mapping.encode(carrier)?',
+             'mac_read_stage_one_transition_artifact_no_follow_v1',
+             'load_or_sign_mac_lima_stage_one_receipt_v1',
+             'mac_require_root_owned_immutable_tool_path_v1',
+             'mac_measure_root_owned_immutable_lima_tool_v1',
+             'limactl', 'EffectStarted', 'InstanceObserved', 'PreservingBlocked'):
+    require('executor', text)
+for text in ('MacPublisherBootstrapAttemptLocatorV1',
+             'mac_open_or_allocate_bootstrap_attempt_locator_v1',
+             'mac_reconstruct_bootstrap_authorization_from_locator_v1',
+             'mac_complete_bootstrap_attempt_locator_v1',
+             'mac_validate_completed_bootstrap_attempt_locator_joins_v1',
+             'completed bootstrap locator protected state no longer exact-joins',
+             'completed bootstrap locator Stage-1 capsule no longer exact-joins',
+             'mac_keychain_bootstrap_attempt_locator_account_v1',
+             'bootstrap attempt locator authorization digest does not reconstruct',
+             'incomplete bootstrap attempt locator has expired; preserving state',
+             'canonical_response_b64'):
+    require('executor', text)
+# Correction-01: every ordinary post-PM request is recoverable from a signed prepared CAS,
+# and the privileged executor has a closed literal plan rather than an R6-owned guest relay.
+for text in ('execute_mac_post_pm_action_v1',
+             'mac_execute_closed_post_pm_effect_v1',
+             'mac_post_pm_planned_receipt_v1',
+             'mac_lima_closed_post_pm_receipt_plan_v1',
+             'post-pm:mac.lima.instance:',
+             'classify_mac_post_pm_transaction_v1',
+             'MacPostPmTransactionClassV1',
+             'mac_open_or_create_post_pm_attempt_journal_v1',
+             'mac_persist_post_pm_journal_state_absent_or_exact_v1',
+             'post-pm-attempts/',
+             'EffectStarted', 'EffectObserved', 'Completed',
+             'mac_post_pm_effect_plan_v1',
+             'MacPostPmEffectPrimitiveV1',
+             'mac_post_pm_artifact_binding_v1',
+             'mac_measure_post_pm_artifact_source_v1',
+             'mac_stage_measured_post_pm_artifact_absent_or_exact_v1',
+             'mac_persist_completed_post_pm_journal_from_receipt_v1',
+             'mac_exact_control_admission_successor_v1',
+             'MacFixedLimaCommandOutcomeV1',
+             'MAC_LIMA_EFFECT_TIMEOUT_V1',
+             'mac_observe_closed_post_pm_effect_v1',
+             'mac_post_pm_effect_retry_decision_v1',
+             'mac_require_post_pm_after_state_v1',
+             'MacPostPmTargetIntegrityV1',
+             'kind: "regular file"',
+             'kind: "directory"',
+             '"%F:%U:%G:%a".to_string()',
+             'post-PM effect observation is ambiguous; preserving first',
+             'resume_action_receipt_commit_v1',
+             'replace_mac_control_admission_authority_v1',
+             'mac_open_exact_completed_post_pm_receipt_v1',
+             'completed-retry'):
+    require('executor', text)
+for forbidden in ('r5-post' + '-pm', 'mac_mark_post_pm_effect_started_v1',
+                  'closed post-PM transaction requires its exact authoritative receipt pipeline'):
+    if forbidden in executor:
+        fail(f'executor retains forbidden post-PM relay/stop {forbidden}')
+artifact_exec_start = executor.index('fn mac_execute_post_pm_effect_plan_v1')
+artifact_exec_end = executor.index('\n/// Read only the exact action-specific observation', artifact_exec_start)
+artifact_exec = executor[artifact_exec_start:artifact_exec_end]
+if 'mac_stage_measured_post_pm_artifact_absent_or_exact_v1' not in artifact_exec or \
+   'staged.display().to_string()' not in artifact_exec or 'source_path.clone()' in artifact_exec:
+    fail('post-PM artifact copy can reopen a mutable prefix source instead of retained staged bytes')
+target_observer_start = executor.index('fn mac_observe_closed_post_pm_effect_v1')
+target_observer_end = executor.index('\n#[cfg(target_os = "macos")]\nfn mac_execute_closed_post_pm_effect_v1', target_observer_start)
+target_observer = executor[target_observer_start:target_observer_end]
+for text in ('target.kind', 'target.sha256.as_deref()', '"%F:%U:%G:%a"', '"/usr/bin/stat"'):
+    if text not in target_observer:
+        fail('post-PM target observer does not require exact type/metadata integrity')
+# The Rust fixture executes the pure receipt-plan, state-classification, retry-decision, and
+# exhaustive literal effect-plan helpers; the shell check keeps their proof hooks from regressing
+# into a lexical-only assertion.
+for text in ('correction_post_pm_instance_receipt_plans_are_exhaustive_and_create_is_sole_cross_generation',
+             'correction_post_pm_classifier_is_recoverable_across_each_journal_boundary',
+             'correction_post_pm_journal_binds_prepared_request_and_observation_boundaries',
+             'correction_post_pm_effect_planner_is_exhaustive_literal_and_has_no_guest_relay',
+             'MacPostPmTransactionClassV1::EffectStartedRetry',
+             'MacPostPmEffectObservationStateV1::Ambiguous',
+             'mac_require_post_pm_after_state_v1'):
+    require('executor', text)
+for text in ('direct bootstrap authorization has expired before FD3 admission',
+             'Stage-1 authorization expired before the selected absent-instance effect'):
+    require('executor', text)
+issuer_start = executor.index('fn mac_issue_closed_post_pm_requests_after_stage_one_v1')
+issuer_end = executor.index('\nfn mac_stage_one_profile_path_v1', issuer_start)
+issuer = executor[issuer_start:issuer_end]
+for text in ('state.current_anchor.requester_principal',
+             'state.current_anchor.attempt_nonce', 'state.current_anchor.executor_identity',
+             'mac_post_pm_planned_receipt_v1'):
+    if text not in issuer:
+        fail('Stage-1 successor post-PM request issue does not derive from durable successor state')
+if 'stage_one.' in issuer:
+    fail('Stage-1 authorization is improperly retained as post-PM authority')
+if 'last-action-receipt.v1.json' in executor:
+    fail('executor retains the overwriteable last-action receipt shortcut')
+resume_start = executor.index('fn resume_mac_lima_stage_one_after_protected_state_cas_v1')
+resume_end = executor.index('\n#[cfg(target_os = "macos")]\nfn execute_closed_mac_lima_stage_one_effect_v1', resume_start)
+resume = executor[resume_start:resume_end]
+for text in ('canonical_lifecycle_publisher_protected_state_v1',
+             'canonical_action_receipt_bytes_v1',
+             'canonical_action_receipt_index_bytes_v1',
+             'canonical_managed_manifest_head_v1',
+             'replace_mac_control_admission_authority_v1',
+             'prepared_protected_state_sha256'):
+    if text not in resume:
+        fail(f'Stage-1 post-CAS resume does not retain {text}')
+if 'mac_run_fixed_lima_command_v1' in resume:
+    fail('Stage-1 post-CAS resume can re-run the Lima effect')
+receipt_retry_start = executor.index('fn load_or_sign_mac_lima_stage_one_receipt_v1')
+receipt_retry_end = executor.index('\nfn prepare_mac_lima_stage_one_transition_v1', receipt_retry_start)
+receipt_retry = executor[receipt_retry_start:receipt_retry_end]
+for text in ('canonical_action_receipt_bytes_v1',
+             'validate_managed_action_receipt_signature_v1',
+             'retained Stage-1 receipt is not an exact retry'):
+    if text not in receipt_retry:
+        fail(f'Stage-1 receipt retry does not preserve exact signed bytes: {text}')
+effect_start = executor.index('fn execute_closed_mac_lima_stage_one_effect_v1')
+resume_call = executor.index('resume_mac_lima_stage_one_after_protected_state_cas_v1', effect_start)
+profile_write = executor.index('mac_write_stage_one_profile_absent_or_exact_v1', effect_start)
+if resume_call > profile_write:
+    fail('Stage-1 post-CAS resume rewrites effect input before proving durable completion')
+
+# The common authorization binds macOS control identity only for mac_host_shared and carries the
+# canonical digest required for exact retry/anchor joining.
+common = source['common']
+for text in ('pub mac_control_authority: Option<MacPublisherControlAuthorityV1>',
+             'pub manifest_generation: u64', 'pub manifest_sha256: String',
+             'publisher_bootstrap_authorization_sha256_v1',
+             'publisher bootstrap manifest_generation must be positive',
+             'publisher bootstrap manifest_sha256',
+             'mac_host_shared bootstrap authorization requires mac_control_authority',
+             'mac_control_authority does not join authorization source identity',
+             'mac_control_authority does not join authorization executor build',
+             'mac_control_authority is valid only for mac_host_shared'):
+    require('common', text)
+for text in ('pub struct MacPublisherBootstrapRequestV1',
+             'pub install_bootstrap_context_v1: String',
+             'pub struct MacPublisherBootstrapAttemptLocatorV1',
+             'mac_publisher_bootstrap_attempt_locator_sha256_v1',
+             'validate_mac_publisher_bootstrap_attempt_locator_v1',
+             'pub pre_pm_manifest: Option<ManagedArtifactManifestV1>',
+             'pub struct MacPublisherInstallProvenanceV1',
+             'pub struct MacLimaStageOneCapsuleV1',
+             'pub prepared_protected_state_sha256: Option<String>',
+             'pub struct LimaStageOneObservationV1',
+             'canonical_mac_lima_stage_one_capsule_v1'):
+    require('common', text)
+for text in ('pub struct MacLimaStageOneSuccessorTemplateV1',
+             'current_pre_pm_manifest_generation', 'current_anchor_counter',
+             'post_effect_observation_slots', 'guest_machine_id',
+             'validate_mac_lima_stage_one_successor_template_v1'):
+    require('common', text)
+protected_start = common.index('pub struct LifecyclePublisherProtectedStateV1')
+protected_end = common.index('\n}\n', protected_start)
+if 'mac_control_authority' in common[protected_start:protected_end]:
+    fail('R5 illegally extends LifecyclePublisherProtectedStateV1')
+if 'manifest_generation' in common[protected_start:protected_end] or 'manifest_sha256' in common[protected_start:protected_end]:
+    fail('R5 illegally extends LifecyclePublisherProtectedStateV1 with manifest identity')
+
+# Both privileged and control decoders repeat the same closed tag/role fence.
+managed = source['managed']
+for text in ('MappedLifecycleTagV1', 'closed_mapped_mac_role_action_v1',
+             'InstallBootstrapContextCarrierV1::decode',
+             'PlatformBootstrapMappingV1::decode',
+             'post_pm_action must not carry LimaStageOneAuthorizationV1',
+             'complete_mac_lima_stage_one_transition_v1',
+             'Stage-1 receipt does not complete the exact signed pre-PM to PM transition'):
+    require('managed', text)
+for text in ('validate_mac_mapped_action_authority_v1', 'closed_mac_role_action_v1',
+             'audit_token = mac_audit_token_ffi_v1(peer)?'):
+    require('executor', text)
+
+# Exact listed callers use no direct Lima primitive and select the correct tag without passing a
+# Stage-1 authorization on post-PM requests.
+warm = source['warm']
+stage_one = function_body(warm, 'ensure_vm_ready')
+if 'lima-lifecycle.sh" stage_one_create' not in stage_one or '--lima-stage-one-authorization-v1' not in stage_one:
+    fail('ensure_vm_ready is not the sole Stage-1 mapped caller')
+if '--platform-bootstrap-mapping-v1' in stage_one or '--publisher-request-v1' in stage_one:
+    fail('ensure_vm_ready forwards a post-PM mapping or request into Stage-1')
+if 'stage_response="$(' not in stage_one or 'adopt_stage_one_mapping_response_v1 "${stage_response}"' not in stage_one:
+    fail('ensure_vm_ready does not retain the finalized mapping returned by Stage-1')
+adopted_mapping = function_body(warm, 'adopt_stage_one_mapping_response_v1')
+for text in ('RESPONSE_KEYS', 'platform_bootstrap_mapping_v1', 'post_pm_requests_v1',
+             'SEED_EXACT_KEYS', 'audit_token_bound',
+             'Caller mapping does not exactly match the Stage-1 successor mapping',
+             'PLATFORM_BOOTSTRAP_MAPPING_V1="${adopted_mapping}"',
+             'PUBLISHER_REQUEST_V1="${adopted_request}"'):
+    if text not in adopted_mapping:
+        fail('Stage-1 mapping adoption is not closed to the attested completed response')
+for name in ('destroy_vm', 'stage_workspace', 'ensure_substrate_group', 'install_agent_from_host',
+             'install_cli_from_host', 'install_gateway_from_host', 'install_guest_binaries',
+             'bootstrap_guest_private_home', 'write_systemd_units', 'enable_socket_activation',
+             'write_layout_sentinel', 'configure_guest'):
+    body = function_body(warm, name)
+    if 'lima-lifecycle.sh" post_pm_action' not in body:
+        fail(f'{name} is not a post_pm_action caller')
+    if '--lima-stage-one-authorization-v1' in body or re.search(r'\blimactl\b', body):
+        fail(f'{name} retains Stage-1 or direct Lima authority')
+    if name == 'configure_guest' and any(raw in body for raw in (
+        'observe_lima_mapping_v1', 'verify_lima_mapping_v1', 'current_layout_version',
+        'socket_summary', 'linger_guidance',
+    )):
+        fail('configure_guest reaches a raw guest observation or projection helper')
+
+stop = source['stop']
+for name in ('resolve_lima_stop_authority_v1', 'invoke_mapped_lima_stop_v1'):
+    require('stop', f'{name}()')
+if 'post_pm_action' not in stop or '--lima-stage-one-authorization-v1 "${LIMA_STAGE_ONE_AUTHORIZATION_V1}"' in stop:
+    fail('lima-stop is not a Stage-1-free mapped post-PM call')
+if re.search(r'(?<![A-Za-z0-9_])limactl(?![A-Za-z0-9_])', stop):
+    fail('lima-stop retains a direct destructive Lima primitive')
+
+installer = source['installer']
+for text in ('publish_mac_publisher_install_provenance_v1',
+             'bootstrap-provenance.v1.json', 'root:wheel 0444',
+             'substrate.mac-publisher-install-provenance', 'profile_template_sha256',
+             '/Library/PrivilegedHelperTools/com.substrate.lifecycle.publisher.v1',
+             '/Library/LaunchDaemons/com.substrate.lifecycle.publisher.v1.plist',
+             'require_root_owned_immutable_path',
+             'control_expected_sha', 'executor_expected_sha',
+             'privileged executor copy does not match pre-elevation digest',
+             'retained limactl path segment is not root-owned immutable state',
+             'absent-or-exact semantics'):
+    require('installer', text)
+
+print('A1.1d-5R3-MAC non-native lifecycle fixture: PASS')
 PY
 
-python3 - "${MAC_EXECUTOR}" <<'PY'
-from pathlib import Path
-import sys
-
-source = Path(sys.argv[1]).read_text()
-
-def body(name, following):
-    start = source.index(name)
-    end = source.index(following, start)
-    return source[start:end]
-
-for literal in (
-    'MAC_KEYCHAIN_SERVICE_V1: &str = "com.substrate.lifecycle.v1"',
-    'MAC_CONTROL_ADMISSION_ACCOUNT_V1: &str = "mac-control-admission-authority.v1"',
-    'kSecUseSystemKeychain',
-    'kSecAttrIsExtractable',
-    '!= kCFBooleanFalse',
-    'SecKeyCopyExternalRepresentation(public_key',
-):
-    if literal not in source:
-        raise SystemExit(f'R4 System Keychain foundation is missing {literal}')
-
-unscoped_open = body(
-    'pub fn open_system_keychain_protected_state_v1',
-    '/// Compare-and-swap protected state',
-)
-if 'exact scope-bound System Keychain account' not in unscoped_open or 'fs::read' in unscoped_open:
-    raise SystemExit('R4 protected-state open is not scope-bound System Keychain only')
-
-listener = body('unsafe extern "C" fn listener_event', 'unsafe extern "C" fn peer_event')
-admission = listener.index('mac_verified_control_peer_requirement_v1()')
-peer_requirement = listener.index('xpc_connection_set_peer_code_signing_requirement')
-if admission > peer_requirement:
-    raise SystemExit('R4 XPC listener sets peer requirement before loading fixed Keychain authority')
-authority_validator = Path(sys.argv[1].replace('src/bin/substrate-lifecycle-macos.rs', 'crates/common/src/managed_artifact.rs')).read_text()
-authority_start = authority_validator.index('pub fn validate_mac_publisher_control_authority_v1')
-authority_end = authority_validator.index('\n/// Encode the fixed macOS XPC-control admission record', authority_start)
-authority = authority_validator[authority_start:authority_end]
-if ('CONTROL_REQUIREMENT_PREFIX' not in authority
-        or 'and cdhash H\\"' not in authority
-        or 'control_cdhash.len() != 40' not in authority):
-    raise SystemExit('R4 XPC authority does not pin the exact lifecycle-control CodeDirectory hash')
-if ('LISTENER_BLOCK_DESCRIPTOR_V1' not in source
-        or 'size: std::mem::size_of::<BlockV1>()' not in source
-        or 'PEER_BLOCK_DESCRIPTOR_V1' not in source
-        or 'size: std::mem::size_of::<PeerBlockV1>()' not in source):
-    raise SystemExit('R4 XPC Block descriptors do not match their captured layout')
-if ('xpc_connection_set_peer_code_signing_requirement(event, requirement.as_ptr()) != 0'
-        not in listener
-        or 'xpc_connection_cancel(event)' not in listener):
-    raise SystemExit('R4 XPC listener activates a peer after peer-requirement setup failure')
-
-dispatch = body('unsafe fn dispatch_peer_request', '\n    }\n}')
-audit = dispatch.index('let audit_token = mac_audit_token_ffi_v1(peer)?;')
-accepted = dispatch.index('accept_mac_xpc_connection_v1(&service, &audit_token)?;')
-control_image = dispatch.index('attest_mac_xpc_control_image_v1(event, &authority)?;')
-decode = dispatch.index('xpc_dictionary_get_string(event')
-if not audit < accepted < control_image < decode:
-    raise SystemExit('R4 XPC request decodes bytes before actual peer and exact artifact admission')
-if 'proc_pidpath' in source:
-    raise SystemExit('R4 XPC control-image admission resolves a mutable executable path by PID')
-for required in ('SecRequirementCreateWithString', 'SecCodeCreateWithXPCMessage', 'SecCodeCheckValidity'):
-    if required not in source:
-        raise SystemExit(f'R4 XPC control-image admission is missing {required}')
-
-issuer = body('pub fn issue_lima_guest_pairing_ticket_v1', '/// Consume one signed ticket')
-stage_open = issuer.index('open_mac_lima_guest_pairing_stage_one_record_v1')
-state_open = issuer.index('read_system_keychain_protected_state_for_scope_unbound_v1')
-stage_validate = issuer.index('validate_mac_lima_guest_pairing_stage_one_record_for_issue_v1')
-key_binding = issuer.index('validate_system_keychain_protected_state_key_binding_v1')
-if not stage_open < state_open < stage_validate < key_binding:
-    raise SystemExit('R4 ticket issuer does not validate Stage-1 joins before binding the signing key')
-if 'R5 typed issue contract' not in issuer:
-    raise SystemExit('R4 ticket issuer does not fail closed without the separately authorized typed input')
-
-for forbidden in (
-    'lima-stdio-v1',
-    'GuestPublisherPairingGuestChannelV1',
-    'GuestPublisherPairingIssueRequestV1',
-    'MacPublisherXpcOperationV1',
-):
-    if forbidden in source:
-        raise SystemExit(f'R4 source introduces forbidden channel or generic issue surface: {forbidden}')
-PY
-
-python3 - "${MAC_EXECUTOR}" "${MAC_CLIENT}" "${REPO_ROOT}/crates/world-mac-lima/src/forwarding.rs" <<'PY'
-from pathlib import Path
-import sys
-
-executor, client, forwarding = map(lambda value: Path(value).read_text(), sys.argv[1:])
-carrier_start = executor.index('fn validate_mac_carrier_mapping_join_v1(')
-carrier_end = executor.index('\n/// Execute only an XPC-authorized', carrier_start)
-carrier = executor[carrier_start:carrier_end]
-if 'Sha256::digest(carrier_commitment_input.as_bytes())' not in carrier:
-    raise SystemExit('privileged mapped action does not recompute the canonical carrier commitment')
-if carrier.index('calculated_carrier_commitment') > carrier.index('if carrier_values[0] !='):
-    raise SystemExit('carrier commitment comparison is not reached before privileged action validation')
-
-bootstrap_start = client.index('pub fn bootstrap_publisher_v1(')
-bootstrap_end = client.index('\npub fn submit_publisher_request_v1(', bootstrap_start)
-if 'attest_mac_publisher_response_v1(&response)?' not in client[bootstrap_start:bootstrap_end]:
-    raise SystemExit('bootstrap client accepts an unattested publisher response')
-
-socket_start = forwarding.index('fn remove_exact_mapped_ssh_socket_v1(')
-socket_end = forwarding.index('\nfn restore_exact_mapped_known_hosts_entry_v1(', socket_start)
-socket_cleanup = forwarding[socket_start:socket_end]
-if 'std::fs::remove_file' in socket_cleanup:
-    raise SystemExit('mapped SSH teardown path-unlinks after a separately checked identity')
-known_start = socket_end
-known_end = forwarding.index('\nfn mapped_ssh_attempt_v1(', known_start)
-known_cleanup = forwarding[known_start:known_end]
-if 'custom_flags(O_NOFOLLOW_V1)' not in known_cleanup or 'file.write_all' not in known_cleanup:
-    raise SystemExit('known-host restoration does not write through a verified no-follow descriptor')
-capture_start = forwarding.index('pub fn record_mapped_known_hosts_entry_v1(')
-capture_end = forwarding.index('\n/// Restore the recorded A-local', capture_start)
-capture = forwarding[capture_start:capture_end]
-if 'custom_flags(O_NOFOLLOW_V1 | O_NONBLOCK_V1)' not in capture or 'file.read_to_end' not in capture:
-    raise SystemExit('known-host snapshot does not capture bytes and identity through one no-follow descriptor')
-if 'std::fs::read' in capture:
-    raise SystemExit('known-host snapshot still reads by pathname after an identity observation')
-PY
-
-for function_name in \
-    load_mapped_lifecycle_v1 invoke_mac_lifecycle_executor install_mapped_lima_state_v1 \
-    restore_mapped_lima_state_v1 install_mac_publisher_v1 bootstrap_lima_guest_publisher_v1 \
-    retain_lima_guest_bootstrap_channel_v1 display_lima_guest_pairing_challenge_v1 \
-    join_lima_guest_bootstrap_transcript_v1 record_lima_guest_pre_state_v1 \
-    install_exact_guest_artifacts_v1 persist_lima_guest_unused_proof_v1 \
-    acknowledge_lima_guest_unused_proof_v1 restore_lima_guest_state_v1 \
-    retire_lima_guest_test_publisher_v1 main; do
-    require_text "${LIFECYCLE}" "${function_name}()"
-done
-
-if grep -Eq '^PartOf=' "${SOCKET_UNIT}"; then
-    fail 'socket unit retains a service propagation relationship'
-fi
-if grep -Eq '(^|[^[:alnum:]_])limactl([[:space:]]|$)' "${STOP}"; then
-    fail 'lima-stop retains a direct destructive Lima primitive'
-fi
-if grep -Fq 'list substrate' "${STOP}"; then
-    fail 'lima-stop retains a default instance selection'
-fi
-
-python3 - "${WARM}" <<'PY'
+# Execute the closed Stage-1 response adoption helper against a canonical completed response and
+# a one-field tamper. This is a parser-only fixture: it does not invoke the control binary, XPC,
+# Lima, or any native lifecycle action.
+mapping_fixture="$(mktemp -d)"
+trap 'rm -rf "${mapping_fixture}"' EXIT
+python3 - "${REPO_ROOT}/scripts/mac/lima-warm.sh" "${mapping_fixture}/adopt-stage-one-mapping" <<'PY'
 from pathlib import Path
 import re
 import sys
 
 source = Path(sys.argv[1]).read_text()
-required = (
-    'destroy_vm', 'ensure_vm_ready', 'ensure_substrate_group', 'stage_workspace',
-    'install_agent_from_host', 'install_cli_from_host', 'install_gateway_from_host',
-    'build_missing_components_inside_vm', 'install_guest_binaries',
-    'bootstrap_guest_private_home', 'write_systemd_units', 'enable_socket_activation',
-    'write_layout_sentinel', 'configure_guest',
+match = re.search(
+    r'(?ms)^adopt_stage_one_mapping_response_v1\(\) \{\n.*?(?=^[A-Za-z_][A-Za-z0-9_]*\(\) \{|\Z)',
+    source,
 )
-for name in required:
-    match = re.search(rf'(?ms)^{name}\(\) \{{\n.*?(?=^[A-Za-z_][A-Za-z0-9_]*\(\) \{{|^if \[\[|\Z)', source)
-    if not match:
-        raise SystemExit(f'missing named lifecycle function {name}')
-    body = match.group(0)
-    if name == 'build_missing_components_inside_vm':
-        for forbidden in ('apt-get', 'rustup', 'cargo build', 'fix_dns'):
-            if forbidden in body:
-                raise SystemExit(f'{name} retains prohibited {forbidden}')
-    elif name != 'configure_guest' and name not in ('destroy_vm', 'ensure_vm_ready', 'stage_workspace'):
-        if 'lima-lifecycle.sh' not in body and 'tombstoned' not in body:
-            raise SystemExit(f'{name} is not delegated to the mapped executor')
-    if name in ('destroy_vm', 'stage_workspace', 'configure_guest'):
-        if 'lima-lifecycle.sh' not in body:
-            raise SystemExit(f'{name} does not use the mapped executor')
-    if name == 'ensure_vm_ready':
-        if 'lima-lifecycle.sh' not in body or 'ensure-vm-ready' not in body:
-            raise SystemExit('ensure_vm_ready does not delegate the selected R2 Stage-1 path')
-        if 'LIMA_STAGE_ONE_AUTHORIZATION_V1' not in body:
-            raise SystemExit('ensure_vm_ready does not bind LimaStageOneAuthorizationV1')
-    if re.search(r'\blimactl\b', body):
-        raise SystemExit(f'{name} retains direct Lima mutation')
-
-configure = re.search(r'(?ms)^configure_guest\(\) \{\n.*?(?=^if \[\[)', source).group(0)
-if configure.count('lima-lifecycle.sh') != 1:
-    raise SystemExit('configure_guest must make one mapped lifecycle request')
-if 'OBSERVED_PLATFORM_MAPPING_V1' not in configure:
-    raise SystemExit('configure_guest does not bind the observed selected mapping')
+if not match:
+    raise SystemExit('missing Stage-1 mapping adoption helper')
+Path(sys.argv[2]).write_text(
+    '#!/usr/bin/env bash\n'
+    'set -euo pipefail\n'
+    'fatal() { printf "%s\\n" "$1" >&2; exit 1; }\n'
+    'INSTALL_BOOTSTRAP_COMMITMENT="$1"\n'
+    'PLATFORM_BOOTSTRAP_MAPPING_V1="$2"\n'
+    'PUBLISHER_REQUEST_V1="$3"\n'
+    + match.group(0)
+    + '\nadopt_stage_one_mapping_response_v1 "$4"\nprintf "%s\\n%s" "${PLATFORM_BOOTSTRAP_MAPPING_V1}" "${PUBLISHER_REQUEST_V1}"\n'
+)
 PY
-
-workdir="$(mktemp -d)"
-trap 'rm -rf "${workdir}"' EXIT
-mock="${workdir}/executor"
-test_lifecycle="${workdir}/lima-lifecycle.sh"
-received="${workdir}/received.json"
-called="${workdir}/called"
-cat >"${mock}" <<'MOCK'
-#!/usr/bin/env bash
-set -euo pipefail
-[[ "$1" == "lima-action" ]]
-touch "${SUBSTRATE_TEST_CALLED:?}"
-cat >"${SUBSTRATE_TEST_RECEIVED:?}"
-printf '{"xpc_attestation":{"mach_service":"com.substrate.lifecycle.publisher.v1","caller_pid":0}}\n'
-MOCK
-chmod +x "${mock}"
-python3 - "${LIFECYCLE}" "${test_lifecycle}" "${mock}" <<'TEST_COPY'
-from pathlib import Path
-import sys
-source, destination, mock = map(Path, sys.argv[1:])
-text = source.read_text()
-needle = '/Library/PrivilegedHelperTools/com.substrate.lifecycle.publisher.v1'
-if text.count(needle) != 1:
-    raise SystemExit('unexpected fixed executor literal count')
-destination.write_text(text.replace(needle, str(mock)))
-destination.chmod(0o755)
-TEST_COPY
-
-VALUES="$(python3 - <<'FIXTURE_VALUES'
+chmod 700 "${mapping_fixture}/adopt-stage-one-mapping"
+stage_mapping_fixture="$(python3 - <<'PY'
 import base64
+import copy
 import hashlib
 import json
 
-prefix = '/tmp/substrate-r3'
 def b64(value):
     return base64.urlsafe_b64encode(value.encode()).rstrip(b'=').decode()
-carrier_lines = [
-    'domain=substrate.install_bootstrap_context', 'version=1',
-    f'selected_host_prefix={b64(prefix)}', f'host_substrate_home={b64(prefix)}',
-    f'host_substrate_root={b64(prefix)}', 'principal_kind=unix',
-    f'principal_account={b64("fixture")}', 'principal_uid=501',
-]
-commitment = hashlib.sha256(('\n'.join(carrier_lines) + '\n').encode()).hexdigest()
-carrier = '\n'.join(carrier_lines + [f'host_context_commitment={commitment}']) + '\n'
-mapping = '\n'.join([
-    'domain=substrate.platform_bootstrap_mapping', 'version=1',
-    f'host_context_commitment={commitment}', 'platform_kind=lima',
-    f'instance_name={b64("substrate")}', 'guest_machine_id=0123456789abcdef0123456789abcdef',
-    f'host_platform_control_root={b64("/Users/fixture/.lima")}',
-    f'realized_substrate_home={b64("/home/fixture/.substrate")}',
-    f'realized_principal_account={b64("fixture")}', 'realized_principal_uid=501',
-    'transport_kind=lima', f'transport_host={b64(prefix + "/sock/agent.sock")}',
+
+commitment = 'a' * 64
+lines = (
+    'domain=substrate.platform_bootstrap_mapping',
+    'version=1',
+    f'host_context_commitment={commitment}',
+    'platform_kind=lima',
+    f'instance_name={b64("substrate")}',
+    'guest_machine_id=' + 'b' * 32,
+    f'host_platform_control_root={b64("/Users/alice/.lima")}',
+    f'realized_substrate_home={b64("/home/alice/.substrate")}',
+    f'realized_principal_account={b64("alice")}',
+    'realized_principal_uid=501',
+    'transport_kind=lima',
+    f'transport_host={b64("/tmp/substrate.sock")}',
     f'transport_guest_socket={b64("/run/substrate.sock")}',
-]) + '\n'
-evidence = {
-    'schema_owner': 'substrate.executor-build-evidence', 'schema_version': 1,
-    'source_commit': 'a' * 40, 'source_tree': 'b' * 40, 'source_ref': 'refs/heads/mock',
-    'artifact_sha256': '0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef',
-    'artifact_identity': 'mock-host-executor', 'target_triple': 'aarch64-apple-darwin',
-    'tool_versions': {'fixture': 'non-executing'},
-}
-publisher_request = {
+)
+mapping = b64('\n'.join(lines) + '\n')
+candidate = {
     'host_context_commitment': commitment,
-    'platform_mapping_commitment': 'c' * 64,
-    'scope_id': '018f0000-0000-7000-8000-000000000001',
+    'platform_mapping_commitment': hashlib.sha256(mapping.encode('ascii')).hexdigest(),
+    'scope_id': '018f1234-5678-7abc-8def-0123456789ab',
     'current_anchor_counter': 1,
-    'current_anchor_sha256': 'c' * 64,
-    'manifest_generation': 1,
-    'manifest_sha256': 'd' * 64,
-    'role': 'mac.lima.instance',
+    'current_anchor_sha256': 'd' * 64,
+    'manifest_generation': 2,
+    'manifest_sha256': 'c' * 64,
+    'role': 'mac.lima.layout-sentinel',
     'action': 'create',
     'object_identity': {
-        'scope_id': '018f0000-0000-7000-8000-000000000001',
-        'parent_identity': 'fixture-parent',
-        'name_identity': 'fixture-name',
-        'physical_identity': 'fixture-physical',
+        'scope_id': '018f1234-5678-7abc-8def-0123456789ab',
+        'parent_identity': 'mac-lima-fixed-role-table',
+        'name_identity': 'mac.lima.layout-sentinel',
+        'physical_identity': '/etc/substrate-lima-layout',
     },
-    'requester_principal': 'fixture',
-    'attempt_nonce': 'fixture-attempt',
+    'requester_principal': 'alice',
+    'attempt_nonce': '018f1234-5678-7abc-8def-0123456789ac',
     'expected_executor_build': {
-        'source_commit': evidence['source_commit'],
-        'source_tree': evidence['source_tree'],
-        'source_ref': evidence['source_ref'],
-        'target_triple': evidence['target_triple'],
-        'artifact_sha256': evidence['artifact_sha256'],
-        'artifact_path': '/fixture/substrate-lifecycle-macos',
+        'source_commit': 'a' * 40,
+        'source_tree': 'b' * 40,
+        'source_ref': 'refs/heads/r5-fixture',
+        'target_triple': 'aarch64-apple-darwin',
+        'artifact_sha256': 'e' * 64,
+        'artifact_path': '/Library/PrivilegedHelperTools/com.substrate.lifecycle.publisher.v1',
     },
 }
-stage_one = {
-    'schema_owner': 'substrate.lima-stage-one-authorization',
-    'schema_version': 1,
-    'host_context_commitment': commitment,
-    'lima_control_root_identity': '/Users/fixture/.lima',
-    'instance_name': 'substrate',
-    'profile_sha256': 'e' * 64,
-    'expected_absent': True,
-    'source_commit': evidence['source_commit'],
-    'source_tree': evidence['source_tree'],
-    'source_ref': evidence['source_ref'],
-    'executor_receipt_sha256': 'f' * 64,
-    'requester_principal': 'fixture',
-    'attempt_id': '018f0000-0000-7000-8000-000000000002',
-    'nonce': '018f0000-0000-7000-8000-000000000003',
-    'expires_at_unix_ns': 999999999999999999,
-    'signature': {'algorithm': 'fixture', 'public_key': 'fixture', 'signature': 'fixture'},
+seed = copy.deepcopy(candidate)
+seed.update({
+    'platform_mapping_commitment': 'f' * 64,
+    'current_anchor_counter': 0,
+    'current_anchor_sha256': '1' * 64,
+    'manifest_generation': 1,
+    'manifest_sha256': '2' * 64,
+})
+response = {
+    'status': 'completed',
+    'receipt': {},
+    'platform_bootstrap_mapping_v1': mapping,
+    'post_pm_requests_v1': [candidate],
+    'manifest_generation': 2,
+    'manifest_sha256': 'c' * 64,
+    'xpc_attestation': {
+        'mach_service': 'com.substrate.lifecycle.publisher.v1',
+        'audit_token_bound': True,
+    },
 }
-print(b64(carrier))
-print(b64(mapping))
-print(json.dumps(evidence, separators=(',', ':')))
-print(json.dumps(publisher_request, separators=(',', ':')))
-print(json.dumps(stage_one, separators=(',', ':')))
-FIXTURE_VALUES
+print(mapping)
+print(json.dumps(response, separators=(',', ':')))
+print(json.dumps(seed, separators=(',', ':')))
+print(json.dumps(candidate, sort_keys=True, separators=(',', ':')))
+PY
 )"
-CARRIER="$(printf '%s\n' "${VALUES}" | sed -n '1p')"
-MAPPING="$(printf '%s\n' "${VALUES}" | sed -n '2p')"
-EVIDENCE="$(printf '%s\n' "${VALUES}" | sed -n '3p')"
-PUBLISHER_REQUEST="$(printf '%s\n' "${VALUES}" | sed -n '4p')"
-STAGE_ONE="$(printf '%s\n' "${VALUES}" | sed -n '5p')"
-
-# Missing evidence must stop before even a disposable-copy mock can be invoked.
-if SUBSTRATE_TEST_CALLED="${called}" \
-    SUBSTRATE_TEST_RECEIVED="${received}" \
-    "${test_lifecycle}" stop \
-        --install-prefix /tmp/substrate-r3 \
-        --install-bootstrap-context-v1 "${CARRIER}" \
-        --platform-bootstrap-mapping-v1 "${MAPPING}" \
-        --publisher-request-v1 "${PUBLISHER_REQUEST}" \
-        --lima-stage-one-authorization-v1 "${STAGE_ONE}" >/dev/null 2>&1; then
-    fail 'lifecycle accepted missing ExecutorBuildEvidenceV1'
+stage_mapping="$(sed -n '1p' <<<"${stage_mapping_fixture}")"
+stage_response="$(sed -n '2p' <<<"${stage_mapping_fixture}")"
+stage_seed="$(sed -n '3p' <<<"${stage_mapping_fixture}")"
+expected_request="$(sed -n '4p' <<<"${stage_mapping_fixture}")"
+adopted_response="$("${mapping_fixture}/adopt-stage-one-mapping" "$(printf 'a%.0s' {1..64})" '' "${stage_seed}" "${stage_response}")"
+adopted_mapping="$(sed -n '1p' <<<"${adopted_response}")"
+adopted_request="$(sed -n '2p' <<<"${adopted_response}")"
+[[ "${adopted_mapping}" == "${stage_mapping}" ]] || fail 'canonical Stage-1 response mapping was not adopted'
+[[ "${adopted_request}" == "${expected_request}" ]] || fail 'canonical Stage-1 response did not replace the stale post-PM request'
+tampered_response="${stage_response/\"manifest_generation\":2/\"manifest_generation\":1}"
+if "${mapping_fixture}/adopt-stage-one-mapping" "$(printf 'a%.0s' {1..64})" '' "${stage_seed}" "${tampered_response}" >/dev/null 2>&1; then
+    fail 'non-successor Stage-1 response mapping was accepted'
 fi
-[[ ! -e "${called}" ]] || fail 'missing evidence reached the mock executor'
-
-# Replaced or malformed authority must be rejected before any executor dispatch.
-for invalid_kind in mapping evidence publisher stage-one; do
-    rm -f "${called}" "${received}"
-    invalid_mapping="${MAPPING}"
-    invalid_evidence="${EVIDENCE}"
-    invalid_publisher_request="${PUBLISHER_REQUEST}"
-    invalid_stage_one="${STAGE_ONE}"
-    if [[ "${invalid_kind}" == mapping ]]; then
-        invalid_mapping='not-base64url'
-    elif [[ "${invalid_kind}" == evidence ]]; then
-        invalid_evidence='{"schema_owner":"wrong"}'
-    elif [[ "${invalid_kind}" == publisher ]]; then
-        invalid_publisher_request='{"host_context_commitment":"wrong"}'
-    else
-        invalid_stage_one='{"schema_owner":"wrong"}'
-    fi
-    if SUBSTRATE_TEST_CALLED="${called}" \
-        SUBSTRATE_TEST_RECEIVED="${received}" \
-        "${test_lifecycle}" stop \
-            --install-prefix /tmp/substrate-r3 \
-            --install-bootstrap-context-v1 "${CARRIER}" \
-            --platform-bootstrap-mapping-v1 "${invalid_mapping}" \
-            --executor-build-evidence-v1 "${invalid_evidence}" \
-            --publisher-request-v1 "${invalid_publisher_request}" \
-            --lima-stage-one-authorization-v1 "${invalid_stage_one}" >/dev/null 2>&1; then
-        fail "lifecycle accepted malformed ${invalid_kind} authority"
-    fi
-    [[ ! -e "${called}" ]] || fail "malformed ${invalid_kind} reached the mock executor"
-done
-
-SUBSTRATE_TEST_CALLED="${called}" \
-SUBSTRATE_TEST_RECEIVED="${received}" \
-    "${test_lifecycle}" stop \
-        --install-prefix /tmp/substrate-r3 \
-        --install-bootstrap-context-v1 "${CARRIER}" \
-        --platform-bootstrap-mapping-v1 "${MAPPING}" \
-        --executor-build-evidence-v1 "${EVIDENCE}" \
-        --publisher-request-v1 "${PUBLISHER_REQUEST}" \
-        --lima-stage-one-authorization-v1 "${STAGE_ONE}" \
-        >/dev/null
-
-python3 - "${received}" "${CARRIER}" "${MAPPING}" "${EVIDENCE}" "${PUBLISHER_REQUEST}" "${STAGE_ONE}" <<'PY'
+ambiguous_response="$(python3 - "${stage_response}" <<'PY'
 import json
 import sys
-record = json.load(open(sys.argv[1]))
-assert record == {
-    'action': 'stop',
-    'install_prefix': '/tmp/substrate-r3',
-    'install_bootstrap_context_v1': sys.argv[2],
-    'platform_bootstrap_mapping_v1': sys.argv[3],
-    'executor_build_evidence': json.loads(sys.argv[4]),
-    'publisher_request_v1': json.loads(sys.argv[5]),
-    'lima_stage_one_authorization_v1': json.loads(sys.argv[6]),
-}
+
+response = json.loads(sys.argv[1])
+response['post_pm_requests_v1'].append(response['post_pm_requests_v1'][0])
+print(json.dumps(response, separators=(',', ':')))
 PY
-
-# Stage-one authority is mandatory for every mapped mutation and must stop before dispatch.
-rm -f "${called}" "${received}"
-if SUBSTRATE_TEST_CALLED="${called}" \
-    SUBSTRATE_TEST_RECEIVED="${received}" \
-    "${test_lifecycle}" stop \
-        --install-prefix /tmp/substrate-r3 \
-        --install-bootstrap-context-v1 "${CARRIER}" \
-        --platform-bootstrap-mapping-v1 "${MAPPING}" \
-        --executor-build-evidence-v1 "${EVIDENCE}" \
-        --publisher-request-v1 "${PUBLISHER_REQUEST}" >/dev/null 2>&1; then
-    fail 'lifecycle accepted a mutation without LimaStageOneAuthorizationV1'
+)"
+if "${mapping_fixture}/adopt-stage-one-mapping" "$(printf 'a%.0s' {1..64})" '' "${stage_seed}" "${ambiguous_response}" >/dev/null 2>&1; then
+    fail 'ambiguous Stage-1 successor post-PM request set was accepted'
 fi
-[[ ! -e "${called}" ]] || fail 'missing Stage-1 authority reached the mock executor'
-
-bash -n "${LIFECYCLE}"
-bash -n "${WARM}"
-bash -n "${STOP}"
-printf 'A1.1d-5R3-MAC non-native lifecycle fixture: PASS\n'
+printf 'A1.1d-5R3-MAC Stage-1 mapping/request adoption fixture: PASS\n'

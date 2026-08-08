@@ -1,0 +1,145 @@
+{
+  "schema_version": 1,
+  "packet_id": "AUX-R3-MAC-EVIDENCE-RECOVERY-R5",
+  "status": "bounded_stop",
+  "stop_reason": "budget_exhausted",
+  "cycles": [
+    {
+      "cycle_id": "discovery-1",
+      "kind": "discovery",
+      "subject_fingerprint": "sha256:a69dce04d313466f15f5c2284fe60fe4531a9f946ec53f9aca7f0b181e8c9147",
+      "trigger_cycle_id": null,
+      "trigger_finding_ids": [],
+      "causal_evidence_refs": [],
+      "review_refs": [
+        "llm-last-mile/runtime-refactor/review-control/r3-mac-evidence-recovery-r5-review-authority-security.md",
+        "llm-last-mile/runtime-refactor/review-control/r3-mac-evidence-recovery-r5-review-lifecycle-convergence.md",
+        "llm-last-mile/runtime-refactor/review-control/r3-mac-evidence-recovery-r5-review-allowlist-evidence.md"
+      ],
+      "verdict": "findings",
+      "findings": [
+        {
+          "finding_id": "P1-R5-DIRECT-SEED-NO-RETAINED-TRUST-ROOT",
+          "priority": "P1"
+        },
+        {
+          "finding_id": "P1-R5-FD3-PEER-TOFU-IMAGE-BINDING",
+          "priority": "P1"
+        },
+        {
+          "finding_id": "P1-R5-XPC-ADMISSION-NO-ANCHOR-JOIN",
+          "priority": "P1"
+        },
+        {
+          "finding_id": "P1-R5-STAGE1-NO-PM-MANIFEST-ANCHOR-ADVANCE",
+          "priority": "P1"
+        },
+        {
+          "finding_id": "P1-R5-ORDINARY-CLOSED-SHAPE-AND-JOINS",
+          "priority": "P1"
+        },
+        {
+          "finding_id": "P1-R5-NONAUTHORITATIVE-ACTION-RECEIPT",
+          "priority": "P1"
+        },
+        {
+          "finding_id": "P2-R5-FD3-FRAME-AND-RESPONSE-PROOF",
+          "priority": "P2"
+        }
+      ]
+    },
+    {
+      "cycle_id": "closure-1",
+      "kind": "closure",
+      "subject_fingerprint": "sha256:6b87f94d7f74289020a70990f94dc7c13baf131637564e488c07dbe549a2b7dc",
+      "trigger_cycle_id": "discovery-1",
+      "trigger_finding_ids": [
+        "P1-R5-DIRECT-SEED-NO-RETAINED-TRUST-ROOT",
+        "P1-R5-FD3-PEER-TOFU-IMAGE-BINDING",
+        "P1-R5-XPC-ADMISSION-NO-ANCHOR-JOIN",
+        "P1-R5-STAGE1-NO-PM-MANIFEST-ANCHOR-ADVANCE",
+        "P1-R5-ORDINARY-CLOSED-SHAPE-AND-JOINS",
+        "P1-R5-NONAUTHORITATIVE-ACTION-RECEIPT",
+        "P2-R5-FD3-FRAME-AND-RESPONSE-PROOF"
+      ],
+      "causal_evidence_refs": [],
+      "review_refs": [
+        "llm-last-mile/runtime-refactor/review-control/r3-mac-evidence-recovery-r5-review-authority-security.md",
+        "llm-last-mile/runtime-refactor/review-control/r3-mac-evidence-recovery-r5-review-lifecycle-convergence.md",
+        "llm-last-mile/runtime-refactor/review-control/r3-mac-evidence-recovery-r5-review-allowlist-evidence.md"
+      ],
+      "verdict": "findings",
+      "findings": [
+        {
+          "finding_id": "P1-R5-IH-ONLY-RANDOMIZED-DIRECT-BOOTSTRAP-RETRY",
+          "priority": "P1"
+        },
+        {
+          "finding_id": "P2-R5-RAW-WARM-SESSION",
+          "priority": "P2"
+        }
+      ]
+    },
+    {
+      "cycle_id": "supplemental-causal-1",
+      "kind": "supplemental_causal",
+      "subject_fingerprint": "sha256:f3cd94a1c5e7de3dd531c30add61f8976d69fbacdad9db3b267364b201a4a5ab",
+      "trigger_cycle_id": "closure-1",
+      "trigger_finding_ids": [
+        "P1-R5-IH-ONLY-RANDOMIZED-DIRECT-BOOTSTRAP-RETRY",
+        "P2-R5-RAW-WARM-SESSION"
+      ],
+      "causal_evidence_refs": [
+        "scripts/mac/lima-warm.sh: removing configure_guest raw observation/projection calls makes post_pm_action the only normal continuation and exposes its missing authoritative transaction"
+      ],
+      "review_refs": [
+        "llm-last-mile/runtime-refactor/review-control/r3-mac-evidence-recovery-r5-review-authority-security.md",
+        "llm-last-mile/runtime-refactor/review-control/r3-mac-evidence-recovery-r5-review-lifecycle-convergence.md",
+        "llm-last-mile/runtime-refactor/review-control/r3-mac-evidence-recovery-r5-review-allowlist-evidence.md"
+      ],
+      "verdict": "findings",
+      "findings": [
+        {
+          "finding_id": "P1-R5-POST-PM-NO-AUTHORITATIVE-TRANSACTION",
+          "priority": "P1"
+        }
+      ]
+    },
+    {
+      "cycle_id": "supplemental-causal-2",
+      "kind": "supplemental_causal",
+      "subject_fingerprint": "sha256:d1f4e28e5bd3ca3ccb66e981397698e527403a647ce2103021debdae5a67007d",
+      "trigger_cycle_id": "supplemental-causal-1",
+      "trigger_finding_ids": [
+        "P1-R5-POST-PM-NO-AUTHORITATIVE-TRANSACTION"
+      ],
+      "causal_evidence_refs": [
+        "0031 authority bound the retained IH-only locator remediation and the ordinary post-PM prepared/effect/receipt/index/head/anchor/state/admission transaction to the prior post-PM finding; the final review found the three directly unmasked transaction defects."
+      ],
+      "review_refs": [
+        "llm-last-mile/runtime-refactor/review-control/r3-mac-evidence-recovery-r5-review-authority-security.md",
+        "llm-last-mile/runtime-refactor/review-control/r3-mac-evidence-recovery-r5-review-lifecycle-convergence.md",
+        "llm-last-mile/runtime-refactor/review-control/r3-mac-evidence-recovery-r5-review-allowlist-evidence.md"
+      ],
+      "verdict": "findings",
+      "findings": [
+        {
+          "finding_id": "P1-R5-POST-PM-INSTANCE-RECEIPT-PLAN-GAP",
+          "priority": "P1"
+        },
+        {
+          "finding_id": "P1-R5-POST-PM-PREPARED-CAS-UNRECOVERABLE",
+          "priority": "P1"
+        },
+        {
+          "finding_id": "P1-R5-POST-PM-GUEST-EXECUTOR-CIRCULAR-BOOTSTRAP",
+          "priority": "P1"
+        },
+        {
+          "finding_id": "P2-R5-POST-PM-EXECUTOR-TRANSACTION-PROOF-GAP",
+          "priority": "P2"
+        }
+      ]
+    }
+  ]
+}

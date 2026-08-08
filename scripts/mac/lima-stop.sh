@@ -21,19 +21,18 @@ while [[ $# -gt 0 ]]; do
 done
 
 resolve_lima_stop_authority_v1() {
-    [[ -n "${INSTALL_PREFIX}" && -n "${INSTALL_BOOTSTRAP_CONTEXT_V1}" && -n "${PLATFORM_BOOTSTRAP_MAPPING_V1}" && -n "${EXECUTOR_BUILD_EVIDENCE_V1}" && -n "${PUBLISHER_REQUEST_V1}" && -n "${LIMA_STAGE_ONE_AUTHORIZATION_V1}" ]] || {
-        printf '%s\n' 'mapped Lima stop requires prefix, carrier, mapping, role request, ExecutorBuildEvidenceV1, and LimaStageOneAuthorizationV1' >&2; return 1;
+    [[ -n "${INSTALL_PREFIX}" && -n "${INSTALL_BOOTSTRAP_CONTEXT_V1}" && -n "${PLATFORM_BOOTSTRAP_MAPPING_V1}" && -n "${EXECUTOR_BUILD_EVIDENCE_V1}" && -n "${PUBLISHER_REQUEST_V1}" && -z "${LIMA_STAGE_ONE_AUTHORIZATION_V1}" ]] || {
+        printf '%s\n' 'mapped Lima stop requires prefix, carrier, mapping, canonical role request, and ExecutorBuildEvidenceV1 without LimaStageOneAuthorizationV1' >&2; return 1;
     }
 }
 
 invoke_mapped_lima_stop_v1() {
-    "$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)/lima-lifecycle.sh" stop \
+    "$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)/lima-lifecycle.sh" post_pm_action \
         --install-prefix "${INSTALL_PREFIX}" \
         --install-bootstrap-context-v1 "${INSTALL_BOOTSTRAP_CONTEXT_V1}" \
         --platform-bootstrap-mapping-v1 "${PLATFORM_BOOTSTRAP_MAPPING_V1}" \
         --executor-build-evidence-v1 "${EXECUTOR_BUILD_EVIDENCE_V1}" \
-        --publisher-request-v1 "${PUBLISHER_REQUEST_V1}" \
-        --lima-stage-one-authorization-v1 "${LIMA_STAGE_ONE_AUTHORIZATION_V1}"
+        --publisher-request-v1 "${PUBLISHER_REQUEST_V1}"
 }
 
 resolve_lima_stop_authority_v1

@@ -1484,7 +1484,6 @@ find_linux_substrate_cli() {
 find_linux_world_service_elf() {
   local root="$1"
   local target_dir="$2"
-  local candidate
   candidate="$(find_linux_world_service "${root}" "${target_dir}")" || return 1
   local file_type
   file_type="$(file -b "${candidate}" 2>/dev/null || true)"
@@ -1711,6 +1710,203 @@ stage_managed_mac_control_binary_copy() {
     return 1
   fi
   log "Copied immutable ${label} into ${dest}"
+}
+
+# Publish the one root-owned install-time provenance record only after the prefix control binary
+# and managed-copy list are durable. The direct bootstrap never consults this checkout, PATH,
+# Git, or a caller value; it opens this fixed root:wheel 0444 record and remeasures the recorded
+# images/tool itself. This installer path is the sole producer and uses absent-or-exact semantics.
+publish_mac_publisher_install_provenance_v1() {
+  local control_src="$1"
+  local executor_src="$2"
+  local managed_manifest="$3"
+  local source_commit
+  local source_tree
+  local source_ref
+  local review_path="${REPO_ROOT}/llm-last-mile/runtime-refactor/review-control/r3-mac-evidence-recovery-r5-review-cycle-record.json"
+  local review_sha
+  local limactl_path=""
+  local candidate
+  local control_src_sha
+  local control_src_identity
+  local executor_src_sha
+  local executor_src_identity
+  local profile_template_sha256="c423a7c9233f695b0c8eba2c9d25d5323344e74f9893ba67ce61ecce378661bc"
+  local launch_daemon_src="${REPO_ROOT}/scripts/mac/com.substrate.lifecycle.publisher.v1.plist"
+
+  [[ -f "${control_src}" && ! -L "${control_src}" && -x "${control_src}" ]] \
+    || fatal "macOS lifecycle control managed copy is not durable"
+  [[ -f "${executor_src}" && ! -L "${executor_src}" && -x "${executor_src}" ]] \
+    || fatal "macOS lifecycle executor managed copy is not durable"
+  [[ -f "${managed_manifest}" ]] \
+    || fatal "macOS lifecycle managed-copy record is absent"
+  grep -Fxq -- "${control_src}" "${managed_manifest}" \
+    || fatal "macOS lifecycle control is not recorded as a managed copy"
+  grep -Fxq -- "${executor_src}" "${managed_manifest}" \
+    || fatal "macOS lifecycle executor is not recorded as a managed copy"
+  [[ -f "${launch_daemon_src}" && ! -L "${launch_daemon_src}" ]] \
+    || fatal "fixed macOS lifecycle LaunchDaemon source is absent or linked"
+  [[ -f "${review_path}" && ! -L "${review_path}" ]] \
+    || fatal "R5 review record is absent or linked"
+
+  # Bind the user-prefix copies before privilege elevation.  The privileged side receives these
+  # exact source digests/identities, rechecks them, and verifies the copied root helper before
+  # provenance is derived; it must never silently bless a path swapped between check and install.
+  control_src_sha="$(shasum -a 256 -- "${control_src}" | awk '{print $1}')" \
+    || fatal "cannot measure macOS lifecycle control source"
+  control_src_identity="$(stat -f 'dev:%d:ino:%i' -- "${control_src}")" \
+    || fatal "cannot identify macOS lifecycle control source"
+  executor_src_sha="$(shasum -a 256 -- "${executor_src}" | awk '{print $1}')" \
+    || fatal "cannot measure macOS lifecycle executor source"
+  executor_src_identity="$(stat -f 'dev:%d:ino:%i' -- "${executor_src}")" \
+    || fatal "cannot identify macOS lifecycle executor source"
+  [[ "${control_src_sha}" =~ ^[0-9a-f]{64}$ && "${executor_src_sha}" =~ ^[0-9a-f]{64}$ && \
+     "${control_src_identity}" == dev:*:ino:* && "${executor_src_identity}" == dev:*:ino:* ]] \
+    || fatal "macOS lifecycle source measurement is not canonical"
+
+  source_commit="$(git rev-parse HEAD)" || fatal "cannot resolve installer source commit"
+  source_tree="$(git rev-parse HEAD^{tree})" || fatal "cannot resolve installer source tree"
+  source_ref="$(git symbolic-ref -q HEAD || printf '%s' detached)"
+  review_sha="$(shasum -a 256 "${review_path}" | awk '{print $1}')" \
+    || fatal "cannot measure R5 review record"
+  limactl_path="$(type -P -- limactl 2>/dev/null || true)"
+  [[ -n "${limactl_path}" && -f "${limactl_path}" && ! -L "${limactl_path}" && -x "${limactl_path}" ]] \
+    || fatal "installer cannot resolve one fixed no-follow limactl image for macOS publisher provenance"
+
+  run_privileged sh -ceu '
+set -eu
+PATH=/usr/bin:/bin:/usr/sbin:/sbin
+export PATH
+control_src="$1"
+executor_src="$2"
+plist_src="$3"
+limactl_path="$4"
+source_commit="$5"
+source_tree="$6"
+source_ref="$7"
+review_sha="$8"
+host_context_commitment="$9"
+selected_prefix="${10}"
+profile_template_sha256="${11}"
+control_expected_sha="${12}"
+control_expected_identity="${13}"
+executor_expected_sha="${14}"
+executor_expected_identity="${15}"
+provenance_path="/Library/Application Support/Substrate/lifecycle/bootstrap-provenance.v1.json"
+executor_path="/Library/PrivilegedHelperTools/com.substrate.lifecycle.publisher.v1"
+plist_path="/Library/LaunchDaemons/com.substrate.lifecycle.publisher.v1.plist"
+for path in "$control_src" "$executor_src" "$plist_src" "$limactl_path"; do
+  test -f "$path" && test ! -L "$path" || { printf "retained install input is linked or absent: %s\n" "$path" >&2; exit 1; }
+done
+sha() { shasum -a 256 "$1" | awk "{print \$1}"; }
+identity() { stat -f "dev:%d:ino:%i" "$1"; }
+test "$(sha "$control_src")" = "$control_expected_sha" && \
+  test "$(identity "$control_src")" = "$control_expected_identity" || {
+    printf "retained control source changed before privileged provenance copy\n" >&2; exit 1;
+  }
+test "$(sha "$executor_src")" = "$executor_expected_sha" && \
+  test "$(identity "$executor_src")" = "$executor_expected_identity" || {
+    printf "retained executor source changed before privileged provenance copy\n" >&2; exit 1;
+  }
+require_root_owned_immutable_path() {
+  retained_path="$1"
+  case "$retained_path" in
+    /*) ;;
+    *) printf "retained limactl path is not absolute\n" >&2; exit 1 ;;
+  esac
+  candidate="$retained_path"
+  while :; do
+    test -e "$candidate" && test ! -L "$candidate" || {
+      printf "retained limactl path segment is linked or absent: %s\n" "$candidate" >&2
+      exit 1
+    }
+    owner="$(stat -f '%u' "$candidate")"
+    mode="$(stat -f '%Lp' "$candidate")"
+    test "$owner" -eq 0 && test $((0$mode & 022)) -eq 0 || {
+      printf "retained limactl path segment is not root-owned immutable state: %s\n" "$candidate" >&2
+      exit 1
+    }
+    if test "$candidate" = "$retained_path"; then
+      test -f "$candidate" || { printf "retained limactl is not a regular file\n" >&2; exit 1; }
+    else
+      test -d "$candidate" || { printf "retained limactl parent is not a directory\n" >&2; exit 1; }
+    fi
+    test "$candidate" = / && break
+    candidate="${candidate%/*}"
+    test -n "$candidate" || candidate=/
+  done
+}
+require_root_owned_immutable_path "$limactl_path"
+install -d -o root -g wheel -m 0755 /Library/PrivilegedHelperTools
+install -d -o root -g wheel -m 0755 /Library/LaunchDaemons
+install -d -o root -g wheel -m 0755 "/Library/Application Support/Substrate"
+install -d -o root -g wheel -m 0755 "/Library/Application Support/Substrate/lifecycle"
+install -o root -g wheel -m 0755 "$executor_src" "$executor_path"
+install -o root -g wheel -m 0644 "$plist_src" "$plist_path"
+test "$(sha "$executor_path")" = "$executor_expected_sha" || {
+  printf "privileged executor copy does not match pre-elevation digest\n" >&2; exit 1;
+}
+cdhash() { codesign -d -vvv -- "$1" 2>&1 | sed -n "s/^CDHash=//p" | head -n 1; }
+requirement() { codesign -dr - -- "$1" 2>&1 | sed -n "s/^designated => //p" | head -n 1; }
+control_cdhash="$(cdhash "$control_src")"
+executor_cdhash="$(cdhash "$executor_path")"
+lima_cdhash="$(cdhash "$limactl_path")"
+control_requirement="anchor apple generic and identifier \"com.substrate.lifecycle.publisher.v1\" and cdhash H\"${control_cdhash}\""
+executor_requirement="$(requirement "$executor_path")"
+lima_requirement="$(requirement "$limactl_path")"
+test "${#control_cdhash}" -eq 40 && test "${#executor_cdhash}" -eq 40 && test "${#lima_cdhash}" -eq 40
+test -n "$control_requirement" && test -n "$executor_requirement" && test -n "$lima_requirement"
+lima_version="$(env -i PATH=/usr/bin:/bin:/usr/sbin:/sbin "$limactl_path" --version)"
+test -n "$lima_version"
+plist_sha="$(sha "$plist_path")"
+tmp="${provenance_path}.tmp.$$"
+python3 - "$tmp" "$source_commit" "$source_tree" "$source_ref" "$review_sha" "$host_context_commitment" "$selected_prefix" \
+  "$control_expected_sha" "$control_expected_identity" "$control_cdhash" "$control_requirement" \
+  "$(sha "$executor_path")" "$(identity "$executor_path")" "$executor_cdhash" "$executor_requirement" \
+  "$plist_sha" "$limactl_path" "$(sha "$limactl_path")" "$(identity "$limactl_path")" "$lima_cdhash" "$lima_requirement" "$lima_version" "$profile_template_sha256" <<"PY"
+import json
+import sys
+(
+    output, source_commit, source_tree, source_ref, review_sha, hcc, prefix,
+    control_sha, control_identity, control_cdhash, control_requirement,
+    executor_sha, executor_identity, executor_cdhash, executor_requirement,
+    plist_sha, lima_path, lima_sha, lima_identity, lima_cdhash, lima_requirement,
+    lima_version, profile_template_sha,
+) = sys.argv[1:]
+target = "aarch64-apple-darwin"
+def image(sha, identity, cdhash, requirement):
+    return {"target_triple": target, "artifact_sha256": sha, "physical_identity": identity, "code_identity": "cdhash:" + cdhash, "code_requirement": requirement}
+record = {
+    "schema_owner": "substrate.mac-publisher-install-provenance", "schema_version": 1,
+    "source_commit": source_commit, "source_tree": source_tree, "source_ref": source_ref,
+    "review_record_sha256": review_sha, "host_context_commitment": hcc, "selected_host_prefix": prefix,
+    "control_authority": {"schema_owner": "substrate.mac-publisher-control-authority", "schema_version": 1, "control_binary": "substrate-lifecycle-control", "source_commit": source_commit, "source_tree": source_tree, "source_ref": source_ref, "target_triple": target, "artifact_sha256": control_sha, "designated_requirement": control_requirement},
+    "control_image": image(control_sha, control_identity, control_cdhash, control_requirement),
+    "executor_image": image(executor_sha, executor_identity, executor_cdhash, executor_requirement),
+    "launch_daemon_plist_sha256": plist_sha,
+    "lima_tool": {"absolute_path": lima_path, "image": image(lima_sha, lima_identity, lima_cdhash, lima_requirement), "version": lima_version},
+    "profile_template_algorithm": "substrate.mac-lima-stage-one-profile-template", "profile_template_version": 1, "profile_template_sha256": profile_template_sha,
+}
+with open(output, "w", encoding="utf-8", newline="") as fh:
+    fh.write(json.dumps(record, sort_keys=True, separators=(",", ":"), ensure_ascii=True))
+PY
+chown root:wheel "$tmp"
+chmod 0444 "$tmp"
+sync "$tmp"
+if test -e "$provenance_path" || test -L "$provenance_path"; then
+  test -f "$provenance_path" && test ! -L "$provenance_path" || { rm -f "$tmp"; exit 1; }
+  cmp -s "$tmp" "$provenance_path" || { rm -f "$tmp"; exit 1; }
+  rm -f "$tmp"
+else
+  mv "$tmp" "$provenance_path"
+fi
+sync "$(dirname "$provenance_path")"
+' mac-publisher-install-provenance \
+    "${control_src}" "${executor_src}" "${launch_daemon_src}" "${limactl_path}" \
+    "${source_commit}" "${source_tree}" "${source_ref}" "${review_sha}" \
+    "${INSTALL_BOOTSTRAP_COMMITMENT}" "${PREFIX}" "${profile_template_sha256}" \
+    "${control_src_sha}" "${control_src_identity}" "${executor_src_sha}" "${executor_src_identity}" \
+    || fatal "failed to publish root-owned exact macOS publisher install provenance"
 }
 
 clear_managed_prefix_linux_binary_cache() {
@@ -2174,6 +2370,10 @@ if [[ "${IS_MAC}" -eq 1 ]]; then
       "${src}" "${BIN_DIR}/${binary}" "${REPO_ROOT}" \
       "${MANAGED_MAC_CONTROL_BINARIES_PATH}" "macOS ${binary}"
   done
+  publish_mac_publisher_install_provenance_v1 \
+    "${BIN_DIR}/substrate-lifecycle-control" \
+    "${BIN_DIR}/substrate-lifecycle-macos" \
+    "${MANAGED_MAC_CONTROL_BINARIES_PATH}"
 fi
 
 # Provide substrate-world-service alias so CLI discovery works without extra config.

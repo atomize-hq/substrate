@@ -16,12 +16,16 @@ use substrate_common::{
     commit_action_receipt_index_to_head_v1, compare_and_swap_action_receipt_index_v1,
     managed_action_prepared_record_sha256_v1, parse_and_validate_manifest_v1,
     validate_lifecycle_publisher_protected_state_v1, validate_managed_action_receipt_signature_v1,
-    validate_managed_lifecycle_publisher_request_v1, validate_publisher_bootstrap_authorization_v1,
-    CanonicalManifestBytesV1, GuestPublisherPairingTicketV1, LifecyclePublisherProtectedStateV1,
-    ManagedActionReceiptIndexEntryV1, ManagedActionReceiptIndexV1, ManagedActionReceiptV1,
-    ManagedActionV1, ManagedArtifactManifestV1, ManagedLifecyclePublisherRequestV1,
-    ManagedLifecycleStateV1, ManagedManifestHeadV1, ManagedSharedClaimsV1,
-    PublisherBootstrapAuthorizationV1,
+    validate_managed_lifecycle_publisher_request_v1, CanonicalManifestBytesV1,
+    ExecutorBuildEvidenceV1, GuestPublisherPairingTicketV1, LifecyclePublisherProtectedStateV1,
+    LimaStageOneAuthorizationV1, MacPublisherBootstrapRequestV1, ManagedActionReceiptIndexEntryV1,
+    ManagedActionReceiptIndexV1, ManagedActionReceiptV1, ManagedActionV1,
+    ManagedArtifactManifestV1, ManagedLifecyclePublisherRequestV1, ManagedLifecycleStateV1,
+    ManagedManifestHeadV1, ManagedSharedClaimsV1, PublisherBootstrapAuthorizationV1,
+};
+use transport_api_types::{
+    InstallBootstrapContextCarrierV1, PlatformBootstrapMappingV1, PlatformInstanceIdentityV1,
+    PlatformPrincipalV1,
 };
 
 const MANIFEST_HEAD_FILENAME_V1: &str = "head.v1.json";
@@ -30,11 +34,30 @@ const MANIFEST_CAPSULE_DIRECTORY_V1: &str = ".substrate-lifecycle-v1";
 const PROVIDER_UNAVAILABLE_KIND_V1: &str = "provider_unavailable";
 
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]
+pub enum MappedLifecycleTagV1 {
+    #[serde(rename = "stage_one_create")]
+    StageOneCreate,
+    #[serde(rename = "post_pm_action")]
+    PostPmAction,
+}
+
+/// The only ordinary control payload accepted by the R5 mapped-lifecycle bridge.
+///
+/// Legacy fields remain solely to decode and preserve pre-R5 records inside the existing shell
+/// crate.  The control binary admits only a request with one of the two `tag` values below and
+/// never dispatches those legacy fields as a compatibility route.
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]
 #[serde(deny_unknown_fields)]
 pub struct ManagedLifecycleControlRequestV1 {
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub tag: Option<MappedLifecycleTagV1>,
+    #[serde(default)]
     pub authority_domain: String,
+    #[serde(default)]
     pub scope_id: String,
+    #[serde(default)]
     pub selected_host_prefix: String,
+    #[serde(default)]
     pub requester_principal: String,
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub host_context_commitment: Option<String>,
@@ -51,7 +74,13 @@ pub struct ManagedLifecycleControlRequestV1 {
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub publisher_request: Option<ManagedLifecyclePublisherRequestV1>,
     #[serde(default, skip_serializing_if = "Option::is_none")]
-    pub bootstrap_authorization: Option<PublisherBootstrapAuthorizationV1>,
+    pub install_bootstrap_context_v1: Option<String>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub platform_bootstrap_mapping_v1: Option<String>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub executor_build_evidence: Option<ExecutorBuildEvidenceV1>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub lima_stage_one_authorization_v1: Option<LimaStageOneAuthorizationV1>,
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub pairing_ticket: Option<GuestPublisherPairingTicketV1>,
 }
@@ -317,32 +346,406 @@ pub fn resume_action_receipt_commit_v1(
     Ok(next_head)
 }
 
-pub fn issue_publisher_bootstrap_authorization_v1(
+/// Complete the one R5-only Lima Stage-1 cross-generation transition.
+///
+/// The ordinary receipt validator intentionally remains same-manifest: its use here would make
+/// a pre-PM anchor appear to authorize a fabricated post-PM mapping.  This narrowly scoped
+/// completer instead verifies `N -> N+1`, publishes the PM manifest's empty index/head first,
+/// then publishes its single signed receipt/index/head with absent-or-exact writes.  The caller
+/// performs the immediately following signed-anchor and protected-state Keychain CAS.
+pub fn complete_mac_lima_stage_one_transition_v1(
+    capsule_root: &Path,
+    source_protected_state: &LifecyclePublisherProtectedStateV1,
+    source_manifest_generation: u64,
+    source_manifest_sha256: &str,
+    next_manifest: &ManagedArtifactManifestV1,
+    receipt: &ManagedActionReceiptV1,
+) -> Result<ManagedManifestHeadV1> {
+    validate_lifecycle_publisher_protected_state_v1(source_protected_state)?;
+    let prepared = required_prepared_record(source_protected_state)?;
+    let source_anchor = &source_protected_state.current_anchor;
+    if source_anchor.authority_domain != "mac_host_shared"
+        || source_anchor.platform_mapping_commitment.is_some()
+        || source_anchor.manifest_generation != source_manifest_generation
+        || source_anchor.manifest_sha256 != source_manifest_sha256
+        || next_manifest.authority_domain != "mac_host_shared"
+        || next_manifest.platform_kind != "mac_lima"
+        || next_manifest.platform_mapping_commitment.is_none()
+        || next_manifest.manifest_generation
+            != source_manifest_generation
+                .checked_add(1)
+                .ok_or_else(|| anyhow!("Stage-1 manifest generation overflow"))?
+        || next_manifest.previous_manifest_sha256.as_deref() != Some(source_manifest_sha256)
+        || next_manifest.host_context_commitment != source_anchor.host_context_commitment
+        || prepared.manifest_generation != source_manifest_generation
+        || prepared.manifest_sha256 != source_manifest_sha256
+        // The durable prepared-state CAS has already advanced `counter` exactly once from the
+        // pre-PM anchor state and Common validates `prepared.allocated_counter == counter`.
+        // Requiring another increment here would make the stated N -> N+1 transition
+        // unsatisfiable and would invite a second effect allocation on retry.
+        || prepared.allocated_counter != source_protected_state.counter
+        || receipt.manifest_generation != next_manifest.manifest_generation
+        || receipt.manifest_sha256 != next_manifest.manifest_sha256
+        || receipt.allocated_counter != prepared.allocated_counter
+        || receipt.prepared_record_sha256 != managed_action_prepared_record_sha256_v1(prepared)?
+        || receipt.scope_id != source_anchor.scope_id
+        || receipt.installation_id != source_anchor.scope_id
+        || receipt.authority_domain != source_anchor.authority_domain
+        || receipt.attempt_id != prepared.attempt_id
+        || receipt.request_sha256 != prepared.request_sha256
+        || receipt.executor_identity != prepared.executor_identity
+        || receipt.signature.algorithm != prepared.signature.algorithm
+        || receipt.signature.public_key != prepared.signature.public_key
+    {
+        bail!("Stage-1 receipt does not complete the exact signed pre-PM to PM transition");
+    }
+    validate_managed_action_receipt_signature_v1(receipt)?;
+    ensure_receipt_matches_manifest_plan(next_manifest, receipt)?;
+
+    // This creates only the generation-N+1 manifest, empty index, and empty head. Any existing
+    // byte must be canonical-identical; a mismatched partial transition is never repaired.
+    publish_manifest_v1(capsule_root, next_manifest)?;
+    let receipt_bytes = canonical_action_receipt_bytes_v1(receipt)?;
+    let receipt_path = capsule_root.join(&receipt.receipt_relative_path);
+    if !receipt_path.starts_with(capsule_root) {
+        bail!("Stage-1 receipt path escapes the lifecycle capsule");
+    }
+    if let Some(parent) = receipt_path.parent() {
+        fs::create_dir_all(parent)
+            .with_context(|| format!("create Stage-1 receipt parent {}", parent.display()))?;
+    }
+    write_bytes_if_absent_or_equal(&receipt_path, &receipt_bytes)
+        .with_context(|| format!("publish Stage-1 receipt {}", receipt_path.display()))?;
+
+    let current_index = load_or_initialize_index_for_manifest(capsule_root, next_manifest)?;
+    let next_index = match current_index
+        .entries
+        .iter()
+        .find(|entry| entry.receipt_id == receipt.receipt_id)
+    {
+        Some(existing) => {
+            ensure_index_entry_matches_receipt(existing, &receipt_path, receipt)?;
+            current_index.clone()
+        }
+        None => {
+            if !current_index.entries.is_empty() || current_index.index_revision != 0 {
+                bail!(
+                    "Stage-1 generation-N+1 receipt index is not the required empty initial index"
+                );
+            }
+            let mut next = current_index.clone();
+            next.index_revision = 1;
+            next.previous_index_sha256 = Some(lower_hex(&Sha256::digest(
+                canonical_action_receipt_index_bytes_v1(&current_index)?,
+            )));
+            next.entries
+                .push(build_receipt_index_entry(&receipt_path, receipt)?);
+            compare_and_swap_action_receipt_index_v1(&current_index, &next)?;
+            publish_action_receipt_index_v1(capsule_root, &next)?;
+            next
+        }
+    };
+    let current_head = load_required_head(capsule_root)?;
+    ensure_head_matches_manifest(&current_head, next_manifest)?;
+    if head_matches_index(&current_head, &next_index)? {
+        return Ok(current_head);
+    }
+    if current_head.action_receipt_index_revision != 0 {
+        bail!("Stage-1 generation-N+1 head is not the required empty initial head");
+    }
+    let next_head = commit_action_receipt_index_to_head_v1(&current_head, &next_index)?;
+    compare_and_swap_head_v1(capsule_root, Some(&current_head), &next_head)?;
+    Ok(next_head)
+}
+
+/// Reject all ordinary payloads except the two closed mapped-lifecycle tags before a client/XPC
+/// operation.  Publisher bootstrap authorization deliberately has no representation here.
+pub fn validate_mapped_lifecycle_control_request_v1(
     request: &ManagedLifecycleControlRequestV1,
-) -> Result<PublisherBootstrapAuthorizationV1> {
-    let authorization = request
-        .bootstrap_authorization
+) -> Result<MappedLifecycleTagV1> {
+    let tag = request
+        .tag
+        .clone()
+        .ok_or_else(|| anyhow!("ordinary mapped lifecycle request has no closed tag"))?;
+    let carrier = InstallBootstrapContextCarrierV1::decode(
+        request
+            .install_bootstrap_context_v1
+            .as_deref()
+            .ok_or_else(|| anyhow!("mapped lifecycle request is missing its carrier"))?,
+    )
+    .context("decode exact InstallBootstrapContextCarrierV1")?;
+    let evidence = request
+        .executor_build_evidence
         .as_ref()
-        .ok_or_else(|| anyhow!("bootstrap_authorization is required"))?;
-    validate_publisher_bootstrap_authorization_v1(authorization)?;
-    if authorization.authority_domain != request.authority_domain {
-        bail!("bootstrap authorization authority_domain does not match control request");
+        .ok_or_else(|| anyhow!("mapped lifecycle request is missing its build evidence"))?;
+    validate_mapped_mac_executor_build_evidence_v1(evidence)?;
+    if request.manifest.is_some()
+        || request.action_receipt.is_some()
+        || request.publisher_protected_state.is_some()
+        || request.pairing_ticket.is_some()
+    {
+        bail!("ordinary mapped lifecycle request carries a forbidden legacy authority field");
     }
-    if authorization.scope_id != request.scope_id {
-        bail!("bootstrap authorization scope_id does not match control request");
-    }
-    if authorization.requester_principal != request.requester_principal {
-        bail!("bootstrap authorization requester_principal does not match control request");
-    }
-    if authorization.platform_mapping_commitment != request.platform_mapping_commitment {
-        bail!("bootstrap authorization platform_mapping_commitment does not match control request");
-    }
-    if let Some(host_context_commitment) = request.host_context_commitment.as_ref() {
-        if authorization.host_context_commitment != *host_context_commitment {
-            bail!("bootstrap authorization host_context_commitment does not match control request");
+    match tag {
+        MappedLifecycleTagV1::StageOneCreate => {
+            if request.publisher_request.is_some()
+                || request.platform_bootstrap_mapping_v1.is_some()
+                || request.platform_mapping_commitment.is_some()
+                || request.host_platform_control_root.is_some()
+            {
+                bail!("stage_one_create must remain the sole pre-PM authority and cannot carry PM or publisher fields");
+            }
+            let stage_one = request
+                .lima_stage_one_authorization_v1
+                .as_ref()
+                .ok_or_else(|| {
+                    anyhow!("stage_one_create is missing LimaStageOneAuthorizationV1")
+                })?;
+            substrate_common::validate_lima_stage_one_authorization_v1(stage_one)?;
+            if !stage_one.expected_absent
+                || stage_one.host_context_commitment != carrier.host_context_commitment
+                || stage_one.source_commit != evidence.source_commit
+                || stage_one.source_tree != evidence.source_tree
+                || stage_one.source_ref != evidence.source_ref
+                || stage_one.successor_template.executor_build_evidence != *evidence
+                || stage_one.successor_template.selected_host_prefix
+                    != carrier.context.selected_host_prefix
+            {
+                bail!("stage_one_create does not join the exact pre-PM IH, template, and build evidence");
+            }
+            if request.authority_domain.is_empty() {
+                // The closed wrapper deliberately supplies no duplicate caller-selected domain.
+            } else if request.authority_domain != "mac_host_shared" {
+                bail!("stage_one_create has a conflicting authority domain");
+            }
+            for (value, expected, field) in [
+                (
+                    request.scope_id.as_str(),
+                    stage_one.successor_template.scope_id.as_str(),
+                    "scope_id",
+                ),
+                (
+                    request.selected_host_prefix.as_str(),
+                    stage_one.successor_template.selected_host_prefix.as_str(),
+                    "selected_host_prefix",
+                ),
+                (
+                    request.requester_principal.as_str(),
+                    stage_one.successor_template.intended_principal.as_str(),
+                    "requester_principal",
+                ),
+            ] {
+                if !value.is_empty() && value != expected {
+                    bail!("stage_one_create {field} conflicts with its signed pre-PM template");
+                }
+            }
+            if let Some(commitment) = &request.host_context_commitment {
+                if commitment != &carrier.host_context_commitment {
+                    bail!("stage_one_create host_context_commitment conflicts with its IH carrier");
+                }
+            }
+        }
+        MappedLifecycleTagV1::PostPmAction => {
+            let publisher_request = request.publisher_request.as_ref().ok_or_else(|| {
+                anyhow!("post_pm_action is missing its canonical publisher request")
+            })?;
+            validate_managed_lifecycle_publisher_request_v1(publisher_request)?;
+            if request.lima_stage_one_authorization_v1.is_some() {
+                bail!("post_pm_action must not carry LimaStageOneAuthorizationV1");
+            }
+            let mapping = PlatformBootstrapMappingV1::decode(
+                request
+                    .platform_bootstrap_mapping_v1
+                    .as_deref()
+                    .ok_or_else(|| anyhow!("post_pm_action is missing its finalized mapping"))?,
+                &carrier,
+            )
+            .context("decode exact post-PM PlatformBootstrapMappingV1")?;
+            let canonical_mapping = mapping
+                .encode(&carrier)
+                .context("re-encode exact post-PM PlatformBootstrapMappingV1")?;
+            let mapping_commitment = format!("{:x}", Sha256::digest(canonical_mapping.as_bytes()));
+            if request.platform_mapping_commitment.as_deref() != Some(mapping_commitment.as_str())
+                || publisher_request.platform_mapping_commitment.as_deref()
+                    != Some(mapping_commitment.as_str())
+            {
+                bail!(
+                    "post_pm_action mapping commitment does not bind the exact finalized mapping"
+                );
+            }
+            let PlatformInstanceIdentityV1::Lima { .. } = &mapping.platform_instance else {
+                bail!("post_pm_action does not name a finalized Lima mapping");
+            };
+            if publisher_request.host_context_commitment != carrier.host_context_commitment
+                || publisher_request.expected_executor_build.source_commit != evidence.source_commit
+                || publisher_request.expected_executor_build.source_tree != evidence.source_tree
+                || publisher_request.expected_executor_build.source_ref != evidence.source_ref
+                || publisher_request.expected_executor_build.target_triple != evidence.target_triple
+                || publisher_request.expected_executor_build.artifact_sha256
+                    != evidence.artifact_sha256
+            {
+                bail!("post_pm_action does not join carrier, mapping, and build evidence");
+            }
+            if request
+                .host_context_commitment
+                .as_deref()
+                .is_some_and(|value| value != carrier.host_context_commitment)
+                || (!request.scope_id.is_empty() && request.scope_id != publisher_request.scope_id)
+                || (!request.selected_host_prefix.is_empty()
+                    && request.selected_host_prefix != carrier.context.selected_host_prefix)
+                || (!request.requester_principal.is_empty()
+                    && request.requester_principal != publisher_request.requester_principal)
+                || request
+                    .host_platform_control_root
+                    .as_deref()
+                    .is_some_and(|value| value != mapping.host_platform_control_root)
+            {
+                bail!("post_pm_action top-level fields conflict with canonical carrier/mapping/request joins");
+            }
+            let PlatformPrincipalV1::Unix { account, .. } = &mapping.realized_principal else {
+                bail!("post_pm_action mapping does not retain a UNIX principal");
+            };
+            if account != &publisher_request.requester_principal {
+                bail!("post_pm_action requester principal does not join finalized mapping");
+            }
+            if !closed_mapped_mac_role_action_v1(
+                &publisher_request.role.0,
+                publisher_request.action,
+            ) {
+                bail!("post_pm_action role/action is outside the closed MAC map");
+            }
         }
     }
-    Ok(authorization.clone())
+    Ok(tag)
+}
+
+/// Validate the exact build fields carried by the R4 `ExecutorBuildEvidenceV1` wire form.
+///
+/// The common validator is deliberately private to its bootstrap authorization API, so the R5
+/// ordinary bridge repeats the same structural fence instead of accepting an untyped JSON value.
+fn validate_mapped_mac_executor_build_evidence_v1(
+    evidence: &ExecutorBuildEvidenceV1,
+) -> Result<()> {
+    if evidence.schema_owner != "substrate.executor-build-evidence"
+        || evidence.schema_version != 1
+        || !is_lower_hex_v1(&evidence.source_commit, 40)
+        || !is_lower_hex_v1(&evidence.source_tree, 40)
+        || !is_lower_hex_v1(&evidence.artifact_sha256, 64)
+        || evidence.source_ref.is_empty()
+        || evidence.artifact_identity.is_empty()
+        || evidence.target_triple != "aarch64-apple-darwin"
+        || [
+            &evidence.source_ref,
+            &evidence.artifact_identity,
+            &evidence.target_triple,
+        ]
+        .iter()
+        .any(|value| value.contains(['\0', '\n', '\r']))
+    {
+        bail!("mapped lifecycle request has no exact ExecutorBuildEvidenceV1 join");
+    }
+    Ok(())
+}
+
+fn is_lower_hex_v1(value: &str, length: usize) -> bool {
+    value.len() == length
+        && value
+            .bytes()
+            .all(|byte| byte.is_ascii_hexdigit() && !byte.is_ascii_uppercase())
+}
+
+/// The ordinary request map is intentionally narrower than the common role registry. The latter
+/// includes bootstrap endpoints, forwarding, and guest-pairing rows which cannot become R5
+/// caller authority merely because they have a well-formed common role syntax.
+fn closed_mapped_mac_role_action_v1(role: &str, action: ManagedActionV1) -> bool {
+    let create_replace_remove_restore = matches!(
+        action,
+        ManagedActionV1::Create
+            | ManagedActionV1::Replace
+            | ManagedActionV1::Remove
+            | ManagedActionV1::Restore
+    );
+    let create_remove_restore = matches!(
+        action,
+        ManagedActionV1::Create | ManagedActionV1::Remove | ManagedActionV1::Restore
+    );
+    match role {
+        "mac.lima.instance" => matches!(
+            action,
+            ManagedActionV1::Start
+                | ManagedActionV1::Stop
+                | ManagedActionV1::Remove
+                | ManagedActionV1::Restore
+        ),
+        "mac.lima.staged-workspace"
+        | "mac.lima.layout-sentinel"
+        | "mac.lima.publisher-executor"
+        | "mac.host.known-hosts-entry" => create_replace_remove_restore,
+        "mac.lima.guest-group" | "mac.lima.guest-private-home" => create_remove_restore,
+        "mac.lima.publisher-state-directory" => {
+            matches!(action, ManagedActionV1::Create | ManagedActionV1::Remove)
+        }
+        "mac.lima.publisher-service-unit" | "mac.lima.publisher-socket-unit" => {
+            matches!(action, ManagedActionV1::Create | ManagedActionV1::Restore)
+        }
+        "mac.lima.publisher-signing-key" => matches!(action, ManagedActionV1::Create),
+        "mac.lima.publisher-current-anchor" | "mac.lima.publisher-bootstrap-intent" => {
+            matches!(action, ManagedActionV1::Create | ManagedActionV1::Replace)
+        }
+        _ if role.starts_with("mac.lima.guest-binary(")
+            || role.starts_with("mac.lima.guest-unit(") =>
+        {
+            create_replace_remove_restore
+        }
+        _ if role.starts_with("mac.lima.guest-directory(")
+            || role.starts_with("mac.lima.guest-membership(") =>
+        {
+            create_remove_restore
+        }
+        _ if role.starts_with("mac.lima.guest-service-state(") => matches!(
+            action,
+            ManagedActionV1::Enable
+                | ManagedActionV1::Disable
+                | ManagedActionV1::Start
+                | ManagedActionV1::Stop
+                | ManagedActionV1::Restore
+        ),
+        _ => false,
+    }
+}
+
+/// The hidden direct command passes one already-decoded canonical seed after terminal
+/// confirmation. On macOS the retained-state issuer derives the authorization in memory and this
+/// function gives it exactly one FD3 seqpacket delivery opportunity.
+pub fn deliver_retained_publisher_bootstrap_authorization_v1(
+    request: &MacPublisherBootstrapRequestV1,
+) -> Result<Value> {
+    #[cfg(target_os = "macos")]
+    {
+        let authorization =
+            macos_client::derive_retained_publisher_bootstrap_authorization_v1(request)?;
+        return macos_client::send_publisher_bootstrap_authorization_fd3_v1(&authorization);
+    }
+    #[cfg(not(target_os = "macos"))]
+    {
+        let _ = request;
+        Err(provider_unavailable_error(
+            "macos",
+            "deliver_retained_publisher_bootstrap_authorization_v1",
+        ))
+    }
+}
+
+pub fn submit_stage_one_absent_instance_create_v1(
+    request: &ManagedLifecycleControlRequestV1,
+) -> Result<Value> {
+    macos_client::submit_stage_one_absent_instance_create_v1(request)
+}
+
+pub fn submit_post_pm_managed_action_v1(
+    request: &ManagedLifecycleControlRequestV1,
+) -> Result<Value> {
+    macos_client::submit_post_pm_managed_action_v1(request)
 }
 
 pub fn open_publisher_bootstrap_channel_v1(

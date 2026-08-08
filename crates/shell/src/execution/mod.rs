@@ -59,12 +59,14 @@ pub(crate) use workspace::find_workspace_root;
 pub(crate) use workspace_cmd::handle_workspace_command;
 
 pub use managed_lifecycle::{
-    compare_and_swap_head_v1, derive_lifecycle_capsule_locator_v1,
-    issue_publisher_bootstrap_authorization_v1, load_manifest_v1,
-    open_publisher_bootstrap_channel_v1, open_trusted_lifecycle_capsule_v1,
+    compare_and_swap_head_v1, complete_mac_lima_stage_one_transition_v1,
+    deliver_retained_publisher_bootstrap_authorization_v1, derive_lifecycle_capsule_locator_v1,
+    load_manifest_v1, open_publisher_bootstrap_channel_v1, open_trusted_lifecycle_capsule_v1,
     publish_action_receipt_index_v1, publish_manifest_v1, resume_action_receipt_commit_v1,
-    transition_manifest_v1, update_shared_claims_v1, validate_publisher_response_v1,
-    LifecyclePublisherClientV1, ManagedLifecycleControlRequestV1,
+    submit_post_pm_managed_action_v1, submit_stage_one_absent_instance_create_v1,
+    transition_manifest_v1, update_shared_claims_v1, validate_mapped_lifecycle_control_request_v1,
+    validate_publisher_response_v1, LifecyclePublisherClientV1, ManagedLifecycleControlRequestV1,
+    MappedLifecycleTagV1,
 };
 pub(crate) use manager::{
     configure_child_shell_env, configure_manager_init, current_platform, log_manager_init_event,

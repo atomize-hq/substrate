@@ -5,15 +5,16 @@ use std::io::{self, BufRead, BufReader, Read, Write};
 use std::path::Path;
 use substrate_common::{
     canonical_guest_publisher_pairing_ticket_v1, lifecycle_anchor_sha256_v1,
-    validate_guest_publisher_pairing_ticket_v1, validate_lifecycle_publisher_protected_state_v1,
+    parse_mac_publisher_bootstrap_request_v1, validate_guest_publisher_pairing_ticket_v1,
+    validate_lifecycle_publisher_protected_state_v1,
     validate_managed_lifecycle_publisher_request_v1, LifecyclePublisherProtectedStateV1,
-    ManagedActionV1, ManagedArtifactManifestV1, ManagedLifecyclePublisherRequestV1,
-    ManagedManifestHeadV1,
+    MacPublisherBootstrapRequestV1, ManagedActionV1, ManagedArtifactManifestV1,
+    ManagedLifecyclePublisherRequestV1, ManagedManifestHeadV1,
 };
 use substrate_shell::{
     derive_lifecycle_capsule_locator_v1, open_publisher_bootstrap_channel_v1, publish_manifest_v1,
-    resume_action_receipt_commit_v1, validate_publisher_response_v1,
-    ManagedLifecycleControlRequestV1,
+    resume_action_receipt_commit_v1, validate_mapped_lifecycle_control_request_v1,
+    validate_publisher_response_v1, ManagedLifecycleControlRequestV1, MappedLifecycleTagV1,
 };
 
 const BOOTSTRAP_CONFIRMATION_LITERAL_V1: &str = "CREATE EXACT SUBSTRATE LIFECYCLE PUBLISHER";
@@ -73,16 +74,33 @@ where
 pub fn publisher_bootstrap_direct_interactive_v1<R, W>(
     reader: &mut R,
     writer: &mut W,
-    request: &ManagedLifecycleControlRequestV1,
+    request: MacPublisherBootstrapRequestV1,
 ) -> Result<Value>
 where
     R: BufRead,
     W: Write,
 {
-    let authorization = substrate_shell::issue_publisher_bootstrap_authorization_v1(request)?;
     read_exact_bootstrap_confirmation_v1(reader, writer)?;
-    let client = open_publisher_bootstrap_channel_v1(&authorization.authority_domain)?;
-    client.bootstrap_publisher_v1(&authorization)
+    // The closed request is untrusted derivation input, never authorization. After the literal
+    // controlling-terminal confirmation, the retained direct path recomputes all authority in
+    // memory and gives it exactly one FD3 delivery opportunity.
+    substrate_shell::deliver_retained_publisher_bootstrap_authorization_v1(&request)
+}
+
+/// Decode the one hidden direct-bootstrap request. It is deliberately separate from the ordinary
+/// mapped request decoder and contains only the exact IH carrier; no tag, manifest, source,
+/// profile, action, PM, or authority field can enter this path.
+fn read_exact_publisher_bootstrap_request_from_stdin_v1() -> Result<MacPublisherBootstrapRequestV1>
+{
+    let mut bytes = Vec::new();
+    io::stdin()
+        .read_to_end(&mut bytes)
+        .context("read one direct bootstrap request from stdin")?;
+    if bytes.is_empty() {
+        bail!("direct bootstrap request is absent");
+    }
+    parse_mac_publisher_bootstrap_request_v1(&bytes)
+        .context("decode canonical closed direct bootstrap request")
 }
 
 pub fn guest_publisher_pairing_direct_interactive_v1<W>(
@@ -348,6 +366,19 @@ pub fn submit_managed_lifecycle_request_v1(
     Ok(response)
 }
 
+/// Submit exactly one of the two ordinary R5 mapped-lifecycle branches.  The tag decoder runs
+/// before any platform client/XPC action; wrapper callers cannot select a raw operation.
+pub fn submit_mapped_lifecycle_v1(request: ManagedLifecycleControlRequestV1) -> Result<Value> {
+    match validate_mapped_lifecycle_control_request_v1(&request)? {
+        MappedLifecycleTagV1::StageOneCreate => {
+            substrate_shell::submit_stage_one_absent_instance_create_v1(&request)
+        }
+        MappedLifecycleTagV1::PostPmAction => {
+            substrate_shell::submit_post_pm_managed_action_v1(&request)
+        }
+    }
+}
+
 fn read_request_from_stdin_v1() -> Result<ManagedLifecycleControlRequestV1> {
     let mut buffer = Vec::new();
     io::stdin()
@@ -404,7 +435,7 @@ fn open_controlling_terminal_writer_v1() -> Result<std::fs::File> {
 }
 
 fn usage_error_v1() -> Result<()> {
-    bail!("usage: substrate-lifecycle-control <submit|publisher-bootstrap|guest-publisher-pairing>")
+    bail!("usage: substrate-lifecycle-control <submit-mapped-lifecycle-v1|publisher-bootstrap>")
 }
 
 fn main_impl_v1() -> Result<()> {
@@ -417,26 +448,25 @@ fn main_impl_v1() -> Result<()> {
         return usage_error_v1();
     }
 
-    let request = read_request_from_stdin_v1()?;
     match command.as_str() {
-        "submit" => {
-            let response = submit_managed_lifecycle_request_v1(request)?;
-            print_json_line_v1(&response)?;
-        }
         "publisher-bootstrap" => {
+            // This branch is deliberately before ordinary mapped stdin handling. It admits one
+            // canonical *seed* only; the complete bootstrap authorization remains
+            // nonserialized and only travels in one FD3 seqpacket frame.
+            let request = read_exact_publisher_bootstrap_request_from_stdin_v1()?;
             let mut tty_reader = open_controlling_terminal_reader_v1()?;
             let mut tty_writer = open_controlling_terminal_writer_v1()?;
             let response = publisher_bootstrap_direct_interactive_v1(
                 &mut tty_reader,
                 &mut tty_writer,
-                &request,
+                request,
             )?;
             print_json_line_v1(&response)?;
         }
-        "guest-publisher-pairing" => {
-            let mut tty_writer = open_controlling_terminal_writer_v1()?;
-            let ticket = guest_publisher_pairing_direct_interactive_v1(&mut tty_writer, &request)?;
-            print_ticket_v1(&ticket)?;
+        "submit-mapped-lifecycle-v1" => {
+            let request = read_request_from_stdin_v1()?;
+            let response = submit_mapped_lifecycle_v1(request)?;
+            print_json_line_v1(&response)?;
         }
         _ => return usage_error_v1(),
     }

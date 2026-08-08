@@ -1,763 +1,461 @@
-use assert_cmd::Command;
-use serde_json::{json, Value};
+use serde_json::json;
 use sha2::{Digest, Sha256};
-use std::collections::BTreeMap;
-use std::fs;
-use std::io::Cursor;
-use std::path::{Path, PathBuf};
 use substrate_common::{
-    lifecycle_anchor_sha256_v1, managed_action_prepared_record_sha256_v1,
-    sign_lifecycle_anchor_for_test_v1, sign_managed_action_prepared_record_for_test_v1,
-    sign_managed_action_receipt_for_test_v1, GuestPublisherPairingChallengeV1,
-    GuestPublisherPairingTicketV1, LifecyclePublisherAnchorV1, LifecyclePublisherProtectedStateV1,
-    LifecycleSignatureV1, ManagedActionPreparedRecordV1, ManagedActionReceiptV1, ManagedActionV1,
-    ManagedArtifactIdentityV1, ManagedArtifactManifestV1, ManagedArtifactRoleV1,
-    ManagedExecutorIdentityV1, ManagedLifecyclePublisherRequestV1, ManagedLifecycleStateV1,
+    ExecutorBuildEvidenceV1, LifecycleSignatureV1, LimaStageOneAuthorizationV1, ManagedActionV1,
+    ManagedArtifactIdentityV1, ManagedArtifactRoleV1, ManagedExecutorIdentityV1,
+    ManagedLifecyclePublisherRequestV1,
 };
-use substrate_shell::ManagedLifecycleControlRequestV1;
-use tempfile::tempdir;
+use substrate_shell::{
+    validate_mapped_lifecycle_control_request_v1, ManagedLifecycleControlRequestV1,
+    MappedLifecycleTagV1,
+};
+use transport_api_types::{
+    InstallBootstrapContextCarrierV1, InstallBootstrapContextV1, PlatformBootstrapMappingV1,
+};
 
 #[allow(dead_code)]
 #[path = "../../../src/bin/substrate-lifecycle-control.rs"]
 mod substrate_lifecycle_control;
 
-#[path = "common.rs"]
-mod common;
+const SCOPE_ID: &str = "018f3e4a-7b2c-7c91-8a6f-2e1d5c4b3a90";
 
-fn control_binary_path() -> PathBuf {
-    common::ensure_substrate_built();
-    let binary_name = if cfg!(windows) {
-        "substrate-lifecycle-control.exe"
-    } else {
-        "substrate-lifecycle-control"
-    };
-    if let Ok(workspace_dir) = std::env::var("CARGO_WORKSPACE_DIR") {
-        PathBuf::from(workspace_dir)
-            .join("target")
-            .join("debug")
-            .join(binary_name)
-    } else {
-        PathBuf::from(env!("CARGO_MANIFEST_DIR"))
-            .join("../../target/debug")
-            .join(binary_name)
-    }
-}
-
-fn sample_manifest(selected_host_prefix: &Path) -> ManagedArtifactManifestV1 {
-    let selected_host_prefix = selected_host_prefix.display().to_string();
-    let mut manifest = ManagedArtifactManifestV1 {
-        schema_owner: "substrate.managed-artifact-manifest".to_string(),
-        schema_version: 1,
-        manifest_id: "m1:018f3e4a-7b2c-7c91-8a6f-2e1d5c4b3a90:1".to_string(),
-        manifest_sha256: String::new(),
-        host_context_commitment: "1".repeat(64),
-        selected_host_prefix: selected_host_prefix.clone(),
-        intended_principal: "alice:1000".to_string(),
-        platform_kind: "unix".to_string(),
-        platform_mapping_commitment: None,
-        authority_domain: "unix_a_local".to_string(),
-        installation_id: "018f3e4a-7b2c-7c91-8a6f-2e1d5c4b3a90".to_string(),
-        attempt_id: "018f3e4a-7b2c-7c91-8a6f-2e1d5c4b3a91".to_string(),
-        manifest_generation: 1,
-        created_at_unix_ns: 1,
-        lifecycle_state: ManagedLifecycleStateV1::ManifestDurable,
-        previous_manifest_sha256: None,
-        entries: vec![substrate_common::ManagedArtifactEntryV1 {
-            object_id: "entry-1".to_string(),
-            logical_role: ManagedArtifactRoleV1("unix.prefix.projection(config.yaml)".to_string()),
-            object_type: "regular-file".to_string(),
-            identity: ManagedArtifactIdentityV1 {
-                scope_id: "018f3e4a-7b2c-7c91-8a6f-2e1d5c4b3a90".to_string(),
-                parent_identity: selected_host_prefix.clone(),
-                name_identity: "config.yaml".to_string(),
-                physical_identity: format!("{selected_host_prefix}/config.yaml"),
-                metadata: None,
-            },
-            disposition: substrate_common::ManagedArtifactDispositionV1::Created,
-            bytes_or_target: Some("f".repeat(64)),
-            owner: Some("alice".to_string()),
-            group_name: None,
-            mode: Some("0600".to_string()),
-            acl_or_security: None,
-            service_or_platform_state: None,
-            before_state: Value::Null,
-            intended_after_state: Value::Null,
-            restoration_state: Value::Null,
-            dependency_object_ids: Vec::new(),
-            subtree_members: Vec::new(),
-            lifecycle_state: ManagedLifecycleStateV1::ManifestDurable,
-            last_durable_transition: Some("ManifestDurable".to_string()),
-            error_class: None,
-        }],
-        planned_action_receipts: vec![json!({
-            "receipt_id": "018f3e4a-7b2c-7c91-8a6f-2e1d5c4b3a92",
-            "entry_id": "entry-1",
-            "action": "create",
-            "attempt_id": "018f3e4a-7b2c-7c91-8a6f-2e1d5c4b3a93",
-            "receipt_relative_path": "receipts/1/receipt.018f3e4a-7b2c-7c91-8a6f-2e1d5c4b3a92.json"
-        })],
-    };
-    manifest.manifest_sha256 = manifest_digest_v1(&manifest);
-    manifest
-}
-
-fn manifest_digest_v1(manifest: &ManagedArtifactManifestV1) -> String {
-    let mut value = serde_json::to_value(manifest).expect("serialize manifest");
-    value
-        .as_object_mut()
-        .expect("manifest object")
-        .remove("manifest_sha256");
-    lower_hex(&Sha256::digest(canonical_json_value_to_vec(&value)))
-}
-
-fn canonical_json_value_to_vec(value: &Value) -> Vec<u8> {
-    let mut output = Vec::new();
-    encode_json_value(value, &mut output);
-    output
-}
-
-fn encode_json_value(value: &Value, output: &mut Vec<u8>) {
-    match value {
-        Value::Null => output.extend_from_slice(b"null"),
-        Value::Bool(true) => output.extend_from_slice(b"true"),
-        Value::Bool(false) => output.extend_from_slice(b"false"),
-        Value::Number(number) => output.extend_from_slice(number.to_string().as_bytes()),
-        Value::String(string) => output.extend_from_slice(
-            serde_json::to_string(string)
-                .expect("encode string")
-                .as_bytes(),
-        ),
-        Value::Array(array) => {
-            output.push(b'[');
-            for (index, item) in array.iter().enumerate() {
-                if index > 0 {
-                    output.push(b',');
-                }
-                encode_json_value(item, output);
-            }
-            output.push(b']');
-        }
-        Value::Object(object) => {
-            output.push(b'{');
-            let mut first = true;
-            let sorted: BTreeMap<_, _> = object.iter().collect();
-            for (key, item) in sorted {
-                if !first {
-                    output.push(b',');
-                }
-                first = false;
-                output
-                    .extend_from_slice(serde_json::to_string(key).expect("encode key").as_bytes());
-                output.push(b':');
-                encode_json_value(item, output);
-            }
-            output.push(b'}');
-        }
-    }
-}
-
-fn lower_hex(bytes: &[u8]) -> String {
-    use std::fmt::Write as _;
-
-    let mut output = String::with_capacity(bytes.len() * 2);
-    for byte in bytes {
-        let _ = write!(output, "{byte:02x}");
-    }
-    output
-}
-
-fn sample_pairing_ticket() -> GuestPublisherPairingTicketV1 {
-    GuestPublisherPairingTicketV1 {
-        schema_owner: "substrate.guest-publisher-pairing-ticket".to_string(),
-        schema_version: 1,
-        challenge: GuestPublisherPairingChallengeV1 {
-            schema_owner: "substrate.guest-publisher-pairing-challenge".to_string(),
-            schema_version: 1,
-            challenge_id: "018f3e4a-7b2c-7c91-8a6f-2e1d5c4b3a99".to_string(),
-            challenge: "challenge-value".to_string(),
-            expires_at_unix_ns: 42,
-            host_key_fingerprint_sha256: "7".repeat(64),
-            current_anchor_sha256: "8".repeat(64),
-            host_context_commitment: "9".repeat(64),
-            platform_mapping_commitment: Some("a".repeat(64)),
-            guest_machine_identity: "machine-1".to_string(),
-            source_commit: "b".repeat(40),
-            source_tree: "c".repeat(40),
-            source_ref: "refs/heads/test".to_string(),
-            executor_build_evidence_sha256: "d".repeat(64),
-            guest_component_commitment_sha256: "e".repeat(64),
-        },
-        signer_spki_der: "spki".to_string(),
-        current_anchor: LifecyclePublisherAnchorV1 {
-            schema_owner: "substrate.lifecycle-publisher-anchor".to_string(),
-            schema_version: 1,
-            authority_domain: "mac_host_shared".to_string(),
-            host_context_commitment: "1".repeat(64),
-            platform_mapping_commitment: Some("2".repeat(64)),
-            scope_id: "scope-1".to_string(),
-            manifest_generation: 1,
-            manifest_sha256: "3".repeat(64),
-            action_receipt_index_revision: 0,
-            action_receipt_index_sha256: "4".repeat(64),
-            head_sha256: "5".repeat(64),
-            previous_anchor_sha256: None,
-            request_sha256: "6".repeat(64),
-            requester_principal: "alice".to_string(),
-            attempt_nonce: "018f3e4a-7b2c-7c91-8a6f-2e1d5c4b3a95".to_string(),
-            executor_identity: ManagedExecutorIdentityV1 {
-                source_commit: "a".repeat(40),
-                source_tree: "b".repeat(40),
-                source_ref: "refs/heads/test".to_string(),
-                target_triple: "x86_64-unknown-linux-gnu".to_string(),
-                artifact_sha256: "c".repeat(64),
-                artifact_path: "/tmp/substrate-lifecycle-linux".to_string(),
-                toolchain: Some("rustc 1.89.0".to_string()),
-                code_identity: None,
-            },
-            signature: LifecycleSignatureV1 {
-                algorithm: "ed25519-v1".to_string(),
-                public_key: "public-key".to_string(),
-                signature: "signature".to_string(),
-            },
-        },
-        current_anchor_sha256: "f".repeat(64),
-        challenge_sha256: "0".repeat(64),
-        host_generation: 1,
-        host_counter: 1,
-        guest_test_retirement_commitment: None,
-        signature: LifecycleSignatureV1 {
-            algorithm: "ecdsa-p256-sha256-p1363-low-s-v1".to_string(),
-            public_key: "public-key".to_string(),
-            signature: "signature".to_string(),
-        },
-    }
-}
-
-fn sample_prepared_record(manifest: &ManagedArtifactManifestV1) -> ManagedActionPreparedRecordV1 {
-    let mut record = ManagedActionPreparedRecordV1 {
-        schema_owner: "substrate.managed-action-prepared-record".to_string(),
-        schema_version: 1,
-        authority_domain: manifest.authority_domain.clone(),
-        scope_id: manifest.installation_id.clone(),
-        installation_id: manifest.installation_id.clone(),
-        manifest_generation: manifest.manifest_generation,
-        manifest_sha256: manifest.manifest_sha256.clone(),
-        receipt_id: "018f3e4a-7b2c-7c91-8a6f-2e1d5c4b3a92".to_string(),
-        receipt_relative_path: "receipts/1/receipt.018f3e4a-7b2c-7c91-8a6f-2e1d5c4b3a92.json"
-            .to_string(),
-        entry_id: "entry-1".to_string(),
-        action: ManagedActionV1::Create,
-        attempt_id: "018f3e4a-7b2c-7c91-8a6f-2e1d5c4b3a93".to_string(),
-        request_sha256: "e".repeat(64),
-        before_observation: Value::Object(serde_json::Map::new()),
-        executor_identity: ManagedExecutorIdentityV1 {
-            source_commit: "a".repeat(40),
-            source_tree: "b".repeat(40),
-            source_ref: "refs/heads/test".to_string(),
-            target_triple: "x86_64-unknown-linux-gnu".to_string(),
-            artifact_sha256: "c".repeat(64),
-            artifact_path: "/tmp/substrate-lifecycle-linux".to_string(),
-            toolchain: Some("rustc 1.89.0".to_string()),
-            code_identity: None,
-        },
-        allocated_counter: 1,
-        previous_record_sha256: None,
-        state: "Prepared".to_string(),
-        signature: LifecycleSignatureV1 {
-            algorithm: "ed25519-v1".to_string(),
-            public_key: String::new(),
-            signature: String::new(),
-        },
-    };
-    sign_managed_action_prepared_record_for_test_v1(&mut record).unwrap();
-    record
-}
-
-fn sample_protected_state(
-    manifest: &ManagedArtifactManifestV1,
-    prepared_record: &ManagedActionPreparedRecordV1,
-) -> LifecyclePublisherProtectedStateV1 {
-    let mut anchor = LifecyclePublisherAnchorV1 {
-        schema_owner: "substrate.lifecycle-publisher-anchor".to_string(),
-        schema_version: 1,
-        authority_domain: manifest.authority_domain.clone(),
-        platform_mapping_commitment: None,
-        host_context_commitment: manifest.host_context_commitment.clone(),
-        scope_id: manifest.installation_id.clone(),
-        manifest_generation: manifest.manifest_generation,
-        manifest_sha256: manifest.manifest_sha256.clone(),
-        action_receipt_index_revision: 0,
-        action_receipt_index_sha256: "4".repeat(64),
-        head_sha256: "5".repeat(64),
-        previous_anchor_sha256: None,
-        request_sha256: prepared_record.request_sha256.clone(),
-        requester_principal: manifest.intended_principal.clone(),
-        attempt_nonce: "018f3e4a-7b2c-7c91-8a6f-2e1d5c4b3a95".to_string(),
-        executor_identity: ManagedExecutorIdentityV1 {
-            source_commit: prepared_record.executor_identity.source_commit.clone(),
-            source_tree: prepared_record.executor_identity.source_tree.clone(),
-            source_ref: prepared_record.executor_identity.source_ref.clone(),
-            target_triple: prepared_record.executor_identity.target_triple.clone(),
-            artifact_sha256: prepared_record.executor_identity.artifact_sha256.clone(),
-            artifact_path: prepared_record.executor_identity.artifact_path.clone(),
-            toolchain: prepared_record.executor_identity.toolchain.clone(),
-            code_identity: prepared_record.executor_identity.code_identity.clone(),
-        },
-        signature: LifecycleSignatureV1 {
-            algorithm: "ed25519-v1".to_string(),
-            public_key: String::new(),
-            signature: String::new(),
-        },
-    };
-    sign_lifecycle_anchor_for_test_v1(&mut anchor).unwrap();
-    LifecyclePublisherProtectedStateV1 {
-        schema_owner: "substrate.lifecycle-publisher-protected-state".to_string(),
-        schema_version: 1,
-        current_anchor: anchor,
-        counter: prepared_record.allocated_counter,
-        prepared_record: Some(prepared_record.clone()),
-        previous_protected_state_sha256: None,
-        state_revision: 1,
-    }
-}
-
-fn sample_publisher_request(
-    manifest: &ManagedArtifactManifestV1,
-    protected_state: &LifecyclePublisherProtectedStateV1,
-) -> ManagedLifecyclePublisherRequestV1 {
-    ManagedLifecyclePublisherRequestV1 {
-        host_context_commitment: manifest.host_context_commitment.clone(),
-        platform_mapping_commitment: manifest.platform_mapping_commitment.clone(),
-        scope_id: manifest.installation_id.clone(),
-        current_anchor_counter: protected_state.counter,
-        current_anchor_sha256: lifecycle_anchor_sha256_v1(&protected_state.current_anchor).unwrap(),
-        manifest_generation: manifest.manifest_generation,
-        manifest_sha256: manifest.manifest_sha256.clone(),
-        role: ManagedArtifactRoleV1("unix.prefix.projection(config.yaml)".to_string()),
-        action: ManagedActionV1::Create,
-        object_identity: ManagedArtifactIdentityV1 {
-            scope_id: manifest.installation_id.clone(),
-            parent_identity: manifest.selected_host_prefix.clone(),
-            name_identity: "config.yaml".to_string(),
-            physical_identity: format!("{}/config.yaml", manifest.selected_host_prefix),
-            metadata: None,
-        },
-        requester_principal: manifest.intended_principal.clone(),
-        attempt_nonce: "nonce-1".to_string(),
-        expected_executor_build: protected_state
-            .prepared_record
-            .as_ref()
-            .unwrap()
-            .executor_identity
-            .clone(),
-    }
-}
-
-fn sample_receipt(
-    manifest: &ManagedArtifactManifestV1,
-    prepared_record: &ManagedActionPreparedRecordV1,
-) -> ManagedActionReceiptV1 {
-    let mut receipt = ManagedActionReceiptV1 {
-        schema_owner: "substrate.managed-action-receipt".to_string(),
-        schema_version: 1,
-        authority_domain: manifest.authority_domain.clone(),
-        scope_id: manifest.installation_id.clone(),
-        installation_id: manifest.installation_id.clone(),
-        manifest_generation: manifest.manifest_generation,
-        manifest_sha256: manifest.manifest_sha256.clone(),
-        receipt_id: "018f3e4a-7b2c-7c91-8a6f-2e1d5c4b3a92".to_string(),
-        receipt_relative_path: "receipts/1/receipt.018f3e4a-7b2c-7c91-8a6f-2e1d5c4b3a92.json"
-            .to_string(),
-        entry_id: "entry-1".to_string(),
-        action: ManagedActionV1::Create,
-        attempt_id: "018f3e4a-7b2c-7c91-8a6f-2e1d5c4b3a93".to_string(),
-        prepared_record_sha256: managed_action_prepared_record_sha256_v1(prepared_record).unwrap(),
-        allocated_counter: prepared_record.allocated_counter,
-        request_sha256: prepared_record.request_sha256.clone(),
-        pre_observation: Value::Object(serde_json::Map::new()),
-        effect_observation: Value::Object(serde_json::Map::new()),
-        post_observation: Value::Object(serde_json::Map::new()),
-        restoration_status: None,
-        error_class: None,
-        executor_identity: prepared_record.executor_identity.clone(),
-        signature: LifecycleSignatureV1 {
-            algorithm: "ed25519-v1".to_string(),
-            public_key: String::new(),
-            signature: String::new(),
-        },
-    };
-    sign_managed_action_receipt_for_test_v1(&mut receipt).unwrap();
-    receipt
-}
-
-#[test]
-fn submit_command_publishes_manifest_and_reports_capsule_root() {
-    let temp = tempdir().expect("tempdir");
-    let manifest = sample_manifest(temp.path());
-    let request = json!({
-        "authority_domain": "unix_a_local",
-        "scope_id": manifest.installation_id,
-        "selected_host_prefix": temp.path().display().to_string(),
-        "requester_principal": "alice:1000",
-        "manifest": manifest,
-    });
-
-    let assert = Command::new(control_binary_path())
-        .arg("submit")
-        .write_stdin(serde_json::to_vec(&request).expect("request bytes"))
-        .assert()
-        .success();
-
-    let output = String::from_utf8(assert.get_output().stdout.clone()).expect("stdout utf8");
-    let response: Value = serde_json::from_str(output.trim()).expect("response JSON");
-    let capsule_root = temp.path().join(".substrate-lifecycle-v1");
-    let expected_capsule_root = capsule_root.display().to_string();
-    assert_eq!(
-        response["capsule_root"].as_str(),
-        Some(expected_capsule_root.as_str())
-    );
-    assert_eq!(response["manifest"]["generation"].as_u64(), Some(1));
-    let manifest_path = capsule_root.join("manifest.1.json");
-    assert!(
-        manifest_path.exists(),
-        "manifest must be published to the lifecycle capsule"
-    );
-    let manifest_json: Value =
-        serde_json::from_slice(&fs::read(&manifest_path).expect("read published manifest"))
-            .expect("published manifest JSON");
-    assert_eq!(
-        manifest_json["manifest_sha256"].as_str(),
-        response["manifest"]["manifest_sha256"].as_str()
-    );
-}
-
-#[test]
-fn submit_command_resumes_receipt_commit_from_persisted_manifest() {
-    let temp = tempdir().expect("tempdir");
-    let manifest = sample_manifest(temp.path());
-    let prepared_record = sample_prepared_record(&manifest);
-    let protected_state = sample_protected_state(&manifest, &prepared_record);
-    let receipt = sample_receipt(&manifest, &prepared_record);
-
-    let publish_request = json!({
-        "authority_domain": "unix_a_local",
-        "scope_id": manifest.installation_id,
-        "selected_host_prefix": temp.path().display().to_string(),
-        "requester_principal": "alice:1000",
-        "manifest": manifest,
-    });
-    Command::new(control_binary_path())
-        .arg("submit")
-        .write_stdin(serde_json::to_vec(&publish_request).expect("publish request bytes"))
-        .assert()
-        .success();
-
-    let resume_request = json!({
-        "authority_domain": "unix_a_local",
-        "scope_id": receipt.installation_id,
-        "selected_host_prefix": temp.path().display().to_string(),
-        "requester_principal": "alice:1000",
-        "publisher_protected_state": protected_state,
-        "action_receipt": receipt,
-    });
-
-    let assert = Command::new(control_binary_path())
-        .arg("submit")
-        .write_stdin(serde_json::to_vec(&resume_request).expect("resume request bytes"))
-        .assert()
-        .success();
-    let output = String::from_utf8(assert.get_output().stdout.clone()).expect("stdout utf8");
-    let response: Value = serde_json::from_str(output.trim()).expect("response JSON");
-    assert_eq!(
-        response["action_receipt_head"]["action_receipt_index_revision"].as_u64(),
-        Some(1)
-    );
-
-    let retry_assert = Command::new(control_binary_path())
-        .arg("submit")
-        .write_stdin(serde_json::to_vec(&resume_request).expect("retry request bytes"))
-        .assert()
-        .success();
-    let retry_output =
-        String::from_utf8(retry_assert.get_output().stdout.clone()).expect("retry stdout utf8");
-    let retry_response: Value =
-        serde_json::from_str(retry_output.trim()).expect("retry response JSON");
-    assert_eq!(
-        retry_response["action_receipt_head"],
-        response["action_receipt_head"]
-    );
-}
-
-#[test]
-fn submit_command_exact_retry_with_manifest_and_receipt_is_idempotent() {
-    let temp = tempdir().expect("tempdir");
-    let manifest = sample_manifest(temp.path());
-    let prepared_record = sample_prepared_record(&manifest);
-    let protected_state = sample_protected_state(&manifest, &prepared_record);
-    let receipt = sample_receipt(&manifest, &prepared_record);
-    let request = json!({
-        "authority_domain": "unix_a_local",
-        "scope_id": manifest.installation_id,
-        "selected_host_prefix": temp.path().display().to_string(),
-        "requester_principal": "alice:1000",
-        "manifest": manifest,
-        "publisher_protected_state": protected_state,
-        "action_receipt": receipt,
-    });
-
-    let first = Command::new(control_binary_path())
-        .arg("submit")
-        .write_stdin(serde_json::to_vec(&request).expect("first request bytes"))
-        .assert()
-        .success();
-    let first_output = String::from_utf8(first.get_output().stdout.clone()).expect("stdout utf8");
-    let first_response: Value = serde_json::from_str(first_output.trim()).expect("response JSON");
-
-    let second = Command::new(control_binary_path())
-        .arg("submit")
-        .write_stdin(serde_json::to_vec(&request).expect("second request bytes"))
-        .assert()
-        .success();
-    let second_output =
-        String::from_utf8(second.get_output().stdout.clone()).expect("second stdout utf8");
-    let second_response: Value =
-        serde_json::from_str(second_output.trim()).expect("second response JSON");
-
-    assert_eq!(
-        second_response["action_receipt_head"],
-        first_response["action_receipt_head"]
-    );
-}
-
-#[test]
-fn submit_command_rejects_cross_prefix_manifest_envelope() {
-    let temp = tempdir().expect("tempdir");
-    let mut manifest = sample_manifest(Path::new("/tmp/substrate"));
-    manifest.manifest_sha256 = manifest_digest_v1(&manifest);
-    let request = json!({
-        "authority_domain": "unix_a_local",
-        "scope_id": manifest.installation_id,
-        "selected_host_prefix": temp.path().display().to_string(),
-        "requester_principal": "alice:1000",
-        "manifest": manifest,
-    });
-
-    let assert = Command::new(control_binary_path())
-        .arg("submit")
-        .write_stdin(serde_json::to_vec(&request).expect("request bytes"))
-        .assert()
-        .failure();
-    let stderr = String::from_utf8(assert.get_output().stderr.clone()).expect("stderr utf8");
-    assert!(stderr.contains("manifest selected_host_prefix does not match"));
-}
-
-#[test]
-fn submit_command_rejects_publisher_request_with_mismatched_principal() {
-    let temp = tempdir().expect("tempdir");
-    let manifest = sample_manifest(temp.path());
-    let prepared_record = sample_prepared_record(&manifest);
-    let protected_state = sample_protected_state(&manifest, &prepared_record);
-    let publish_request = json!({
-        "authority_domain": "unix_a_local",
-        "scope_id": manifest.installation_id,
-        "selected_host_prefix": temp.path().display().to_string(),
-        "requester_principal": "alice:1000",
-        "manifest": manifest,
-    });
-    Command::new(control_binary_path())
-        .arg("submit")
-        .write_stdin(serde_json::to_vec(&publish_request).expect("publish request bytes"))
-        .assert()
-        .success();
-
-    let mut publisher_request = sample_publisher_request(&manifest, &protected_state);
-    publisher_request.requester_principal = "bob:1000".to_string();
-
-    let request = json!({
-        "authority_domain": "unix_a_local",
-        "scope_id": manifest.installation_id,
-        "selected_host_prefix": temp.path().display().to_string(),
-        "requester_principal": "alice:1000",
-        "publisher_protected_state": protected_state,
-        "publisher_request": publisher_request,
-    });
-    let assert = Command::new(control_binary_path())
-        .arg("submit")
-        .write_stdin(serde_json::to_vec(&request).expect("request bytes"))
-        .assert()
-        .failure();
-    let stderr = String::from_utf8(assert.get_output().stderr.clone()).expect("stderr utf8");
-    assert!(stderr.contains("publisher_request requester_principal does not match"));
-}
-
-#[test]
-fn submit_command_rejects_receipt_with_mismatched_scope() {
-    let temp = tempdir().expect("tempdir");
-    let manifest = sample_manifest(temp.path());
-    let prepared_record = sample_prepared_record(&manifest);
-    let protected_state = sample_protected_state(&manifest, &prepared_record);
-    let publish_request = json!({
-        "authority_domain": "unix_a_local",
-        "scope_id": manifest.installation_id,
-        "selected_host_prefix": temp.path().display().to_string(),
-        "requester_principal": "alice:1000",
-        "manifest": manifest,
-    });
-    Command::new(control_binary_path())
-        .arg("submit")
-        .write_stdin(serde_json::to_vec(&publish_request).expect("publish request bytes"))
-        .assert()
-        .success();
-
-    let mut receipt = sample_receipt(&manifest, &prepared_record);
-    receipt.scope_id = "018f3e4a-7b2c-7c91-8a6f-2e1d5c4b3a98".to_string();
-    receipt.installation_id = receipt.scope_id.clone();
-    sign_managed_action_receipt_for_test_v1(&mut receipt).unwrap();
-
-    let request = json!({
-        "authority_domain": "unix_a_local",
-        "scope_id": manifest.installation_id,
-        "selected_host_prefix": temp.path().display().to_string(),
-        "requester_principal": "alice:1000",
-        "publisher_protected_state": protected_state,
-        "action_receipt": receipt,
-    });
-    let assert = Command::new(control_binary_path())
-        .arg("submit")
-        .write_stdin(serde_json::to_vec(&request).expect("request bytes"))
-        .assert()
-        .failure();
-    let stderr = String::from_utf8(assert.get_output().stderr.clone()).expect("stderr utf8");
-    assert!(stderr.contains("scope_id does not match"));
-}
-
-#[test]
-fn submit_command_rejects_publisher_request_with_mismatched_anchor_digest() {
-    let temp = tempdir().expect("tempdir");
-    let manifest = sample_manifest(temp.path());
-    let prepared_record = sample_prepared_record(&manifest);
-    let protected_state = sample_protected_state(&manifest, &prepared_record);
-    let publish_request = json!({
-        "authority_domain": "unix_a_local",
-        "scope_id": manifest.installation_id,
-        "selected_host_prefix": temp.path().display().to_string(),
-        "requester_principal": "alice:1000",
-        "manifest": manifest,
-    });
-    Command::new(control_binary_path())
-        .arg("submit")
-        .write_stdin(serde_json::to_vec(&publish_request).expect("publish request bytes"))
-        .assert()
-        .success();
-
-    let mut publisher_request = sample_publisher_request(&manifest, &protected_state);
-    publisher_request.current_anchor_sha256 = "f".repeat(64);
-
-    let request = json!({
-        "authority_domain": "unix_a_local",
-        "scope_id": manifest.installation_id,
-        "selected_host_prefix": temp.path().display().to_string(),
-        "requester_principal": "alice:1000",
-        "publisher_protected_state": protected_state,
-        "publisher_request": publisher_request,
-    });
-    let assert = Command::new(control_binary_path())
-        .arg("submit")
-        .write_stdin(serde_json::to_vec(&request).expect("request bytes"))
-        .assert()
-        .failure();
-    let stderr = String::from_utf8(assert.get_output().stderr.clone()).expect("stderr utf8");
-    assert!(stderr.contains("current_anchor_sha256 does not match"));
-}
-
-#[test]
-fn submit_command_rejects_linux_system_until_platform_packet() {
-    let temp = tempdir().expect("tempdir");
-    let mut manifest = sample_manifest(temp.path());
-    manifest.authority_domain = "linux_system".to_string();
-    manifest.manifest_sha256 = manifest_digest_v1(&manifest);
-    let request = json!({
-        "authority_domain": "linux_system",
-        "scope_id": manifest.installation_id,
-        "selected_host_prefix": temp.path().display().to_string(),
-        "requester_principal": "alice:1000",
-        "manifest": manifest,
-    });
-    let assert = Command::new(control_binary_path())
-        .arg("submit")
-        .write_stdin(serde_json::to_vec(&request).expect("request bytes"))
-        .assert()
-        .failure();
-    let stderr = String::from_utf8(assert.get_output().stderr.clone()).expect("stderr utf8");
-    assert!(stderr.contains("dedicated platform packet lands"));
-}
-
-#[test]
-fn bootstrap_confirmation_requires_exact_literal() {
-    let mut accepted_input = Cursor::new(b"CREATE EXACT SUBSTRATE LIFECYCLE PUBLISHER\n".to_vec());
-    let mut accepted_output = Vec::new();
-    substrate_lifecycle_control::read_exact_bootstrap_confirmation_v1(
-        &mut accepted_input,
-        &mut accepted_output,
+fn exact_carrier_and_mapping_v1() -> (String, String, String, String) {
+    let carrier = InstallBootstrapContextCarrierV1::from_context(
+        InstallBootstrapContextV1::new_unix("/tmp/substrate-r5", "fixture", 501)
+            .expect("fixture carrier context"),
     )
-    .expect("accept exact literal");
-    let prompt = String::from_utf8(accepted_output).expect("prompt utf8");
-    assert!(prompt.contains("CREATE EXACT SUBSTRATE LIFECYCLE PUBLISHER"));
-
-    let mut rejected_input = Cursor::new(b"WRONG\n".to_vec());
-    let mut rejected_output = Vec::new();
-    let error = substrate_lifecycle_control::read_exact_bootstrap_confirmation_v1(
-        &mut rejected_input,
-        &mut rejected_output,
+    .expect("fixture carrier");
+    let mapping = PlatformBootstrapMappingV1::new_lima(
+        &carrier,
+        "substrate",
+        "0123456789abcdef0123456789abcdef",
+        "/Users/fixture/.lima",
+        "/home/fixture/.substrate",
+        "fixture",
+        501,
+        "/tmp/substrate-r5/sock/agent.sock",
+        "/run/substrate.sock",
     )
-    .expect_err("reject mismatched literal");
-    assert!(error.to_string().contains("literal mismatch"));
+    .expect("fixture Lima mapping");
+    let encoded_mapping = mapping.encode(&carrier).expect("encode mapping");
+    let mapping_commitment = format!("{:x}", Sha256::digest(encoded_mapping.as_bytes()));
+    (
+        carrier.encode().expect("encode carrier"),
+        encoded_mapping,
+        carrier.host_context_commitment,
+        mapping_commitment,
+    )
 }
 
-#[test]
-fn display_guest_pairing_challenge_writes_fingerprint_challenge_and_literal() {
-    let ticket = sample_pairing_ticket();
-    let mut output = Vec::new();
-    substrate_lifecycle_control::display_guest_pairing_challenge_v1(&mut output, &ticket)
-        .expect("display guest pairing challenge");
-    let text = String::from_utf8(output).expect("output utf8");
-    assert!(text.contains(&ticket.challenge.host_key_fingerprint_sha256));
-    assert!(text.contains(&ticket.challenge.challenge_id));
-    assert!(text.contains(&ticket.challenge.challenge));
-    assert!(text.contains("PAIR EXACT SUBSTRATE GUEST PUBLISHER"));
+fn exact_build_evidence_v1() -> ExecutorBuildEvidenceV1 {
+    ExecutorBuildEvidenceV1 {
+        schema_owner: "substrate.executor-build-evidence".to_string(),
+        schema_version: 1,
+        source_commit: "a".repeat(40),
+        source_tree: "b".repeat(40),
+        source_ref: "refs/heads/r5-fixture".to_string(),
+        artifact_sha256: "c".repeat(64),
+        artifact_identity: "substrate-lifecycle-macos".to_string(),
+        target_triple: "aarch64-apple-darwin".to_string(),
+        tool_versions: Default::default(),
+        code_identity: None,
+    }
 }
 
-#[test]
-fn guest_pairing_direct_interactive_reports_provider_unavailable_without_ticket() {
-    let manifest = sample_manifest(Path::new("/tmp/substrate"));
-    let prepared_record = sample_prepared_record(&manifest);
-    let request = ManagedLifecycleControlRequestV1 {
-        authority_domain: "linux_system".to_string(),
-        scope_id: "scope-1".to_string(),
-        selected_host_prefix: "/tmp/substrate".to_string(),
-        requester_principal: "alice".to_string(),
-        host_context_commitment: None,
-        platform_mapping_commitment: None,
-        host_platform_control_root: None,
+fn post_pm_request_v1(role: &str, action: ManagedActionV1) -> ManagedLifecycleControlRequestV1 {
+    let (carrier, mapping, commitment, mapping_commitment) = exact_carrier_and_mapping_v1();
+    let evidence = exact_build_evidence_v1();
+    ManagedLifecycleControlRequestV1 {
+        tag: Some(MappedLifecycleTagV1::PostPmAction),
+        authority_domain: "mac_lima_guest".to_string(),
+        scope_id: SCOPE_ID.to_string(),
+        selected_host_prefix: "/tmp/substrate-r5".to_string(),
+        requester_principal: "fixture".to_string(),
+        host_context_commitment: Some(commitment.clone()),
+        platform_mapping_commitment: Some(mapping_commitment.clone()),
+        host_platform_control_root: Some("/Users/fixture/.lima".to_string()),
         manifest: None,
         action_receipt: None,
         publisher_protected_state: None,
-        publisher_request: Some(sample_publisher_request(
-            &manifest,
-            &sample_protected_state(&manifest, &prepared_record),
-        )),
-        bootstrap_authorization: None,
+        publisher_request: Some(ManagedLifecyclePublisherRequestV1 {
+            host_context_commitment: commitment,
+            platform_mapping_commitment: Some(mapping_commitment),
+            scope_id: SCOPE_ID.to_string(),
+            current_anchor_counter: 1,
+            current_anchor_sha256: "e".repeat(64),
+            manifest_generation: 1,
+            manifest_sha256: "f".repeat(64),
+            role: ManagedArtifactRoleV1(role.to_string()),
+            action,
+            object_identity: ManagedArtifactIdentityV1 {
+                scope_id: SCOPE_ID.to_string(),
+                parent_identity: "fixture-parent".to_string(),
+                name_identity: "fixture-name".to_string(),
+                physical_identity: "fixture-physical".to_string(),
+                metadata: None,
+            },
+            requester_principal: "fixture".to_string(),
+            attempt_nonce: "fixture-attempt".to_string(),
+            expected_executor_build: ManagedExecutorIdentityV1 {
+                source_commit: evidence.source_commit.clone(),
+                source_tree: evidence.source_tree.clone(),
+                source_ref: evidence.source_ref.clone(),
+                target_triple: evidence.target_triple.clone(),
+                artifact_sha256: evidence.artifact_sha256.clone(),
+                artifact_path:
+                    "/Library/PrivilegedHelperTools/com.substrate.lifecycle.publisher.v1"
+                        .to_string(),
+                toolchain: None,
+                code_identity: None,
+            },
+        }),
+        install_bootstrap_context_v1: Some(carrier),
+        platform_bootstrap_mapping_v1: Some(mapping),
+        executor_build_evidence: Some(evidence),
+        lima_stage_one_authorization_v1: None,
         pairing_ticket: None,
+    }
+}
+
+fn all_closed_post_pm_pairs_v1() -> Vec<(String, ManagedActionV1)> {
+    let mut pairs = Vec::new();
+    let mut add = |roles: Vec<String>, actions: &[ManagedActionV1]| {
+        for role in roles {
+            for action in actions {
+                pairs.push((role.clone(), *action));
+            }
+        }
     };
-    let mut output = Vec::new();
-    let error = substrate_lifecycle_control::guest_publisher_pairing_direct_interactive_v1(
-        &mut output,
-        &request,
-    )
-    .expect_err("provider unavailable");
-    assert!(error.to_string().contains("provider_unavailable"));
-    assert!(
-        output.is_empty(),
-        "no challenge should be written when ticket issuance fails"
+    add(
+        vec!["mac.lima.instance".to_string()],
+        &[
+            ManagedActionV1::Start,
+            ManagedActionV1::Stop,
+            ManagedActionV1::Remove,
+            ManagedActionV1::Restore,
+        ],
     );
+    add(
+        vec![
+            "mac.lima.staged-workspace".to_string(),
+            "mac.lima.layout-sentinel".to_string(),
+            "mac.lima.publisher-executor".to_string(),
+            "mac.host.known-hosts-entry".to_string(),
+            "mac.lima.guest-binary(substrate-world-service)".to_string(),
+            "mac.lima.guest-binary(substrate-gateway)".to_string(),
+            "mac.lima.guest-binary(substrate)".to_string(),
+            "mac.lima.guest-binary(world)".to_string(),
+            "mac.lima.guest-unit(service)".to_string(),
+            "mac.lima.guest-unit(socket)".to_string(),
+        ],
+        &[
+            ManagedActionV1::Create,
+            ManagedActionV1::Replace,
+            ManagedActionV1::Remove,
+            ManagedActionV1::Restore,
+        ],
+    );
+    add(
+        vec![
+            "mac.lima.guest-group".to_string(),
+            "mac.lima.guest-private-home".to_string(),
+            "mac.lima.guest-directory(/run/substrate)".to_string(),
+            "mac.lima.guest-directory(/run/substrate/substrate-gateway-runtime)".to_string(),
+            "mac.lima.guest-directory(/var/lib/substrate)".to_string(),
+            "mac.lima.guest-directory(/var/lib/substrate/.substrate-lifecycle-v1)".to_string(),
+            "mac.lima.guest-directory(/var/lib/substrate/staged-workspace)".to_string(),
+            "mac.lima.guest-directory(/usr/libexec/substrate)".to_string(),
+            "mac.lima.guest-membership(fixture)".to_string(),
+        ],
+        &[
+            ManagedActionV1::Create,
+            ManagedActionV1::Remove,
+            ManagedActionV1::Restore,
+        ],
+    );
+    add(
+        vec!["mac.lima.publisher-state-directory".to_string()],
+        &[ManagedActionV1::Create, ManagedActionV1::Remove],
+    );
+    add(
+        vec![
+            "mac.lima.publisher-service-unit".to_string(),
+            "mac.lima.publisher-socket-unit".to_string(),
+        ],
+        &[ManagedActionV1::Create, ManagedActionV1::Restore],
+    );
+    add(
+        vec!["mac.lima.publisher-signing-key".to_string()],
+        &[ManagedActionV1::Create],
+    );
+    add(
+        vec![
+            "mac.lima.publisher-current-anchor".to_string(),
+            "mac.lima.publisher-bootstrap-intent".to_string(),
+        ],
+        &[ManagedActionV1::Create, ManagedActionV1::Replace],
+    );
+    add(
+        vec![
+            "mac.lima.guest-service-state(service)".to_string(),
+            "mac.lima.guest-service-state(socket)".to_string(),
+        ],
+        &[
+            ManagedActionV1::Enable,
+            ManagedActionV1::Disable,
+            ManagedActionV1::Start,
+            ManagedActionV1::Stop,
+            ManagedActionV1::Restore,
+        ],
+    );
+    pairs
+}
+
+#[test]
+fn mapped_lifecycle_decoder_accepts_only_two_tags() {
+    for tag in ["stage_one_create", "post_pm_action"] {
+        let decoded: ManagedLifecycleControlRequestV1 =
+            serde_json::from_value(json!({"tag": tag})).expect("the two ordinary tags must decode");
+        assert_eq!(decoded.tag.is_some(), true);
+    }
+    for tag in [
+        "publisher_bootstrap_direct_interactive",
+        "lima-action",
+        "unknown",
+    ] {
+        assert!(
+            serde_json::from_value::<ManagedLifecycleControlRequestV1>(json!({"tag": tag}))
+                .is_err(),
+            "{tag} must reject before any client/XPC effect"
+        );
+    }
+}
+
+#[test]
+fn post_pm_enumerates_every_closed_mac_role_action_pair() {
+    let pairs = all_closed_post_pm_pairs_v1();
+    assert!(!pairs.is_empty());
+    for (role, action) in pairs {
+        validate_mapped_lifecycle_control_request_v1(&post_pm_request_v1(&role, action))
+            .unwrap_or_else(|error| panic!("closed pair {role}/{action:?} rejected: {error:#}"));
+    }
+
+    let mut bad_top_level = post_pm_request_v1("mac.lima.instance", ManagedActionV1::Start);
+    bad_top_level.platform_mapping_commitment = Some("d".repeat(64));
+    assert!(
+        validate_mapped_lifecycle_control_request_v1(&bad_top_level).is_err(),
+        "the top-level mapping commitment must bind the exact canonical mapping"
+    );
+
+    let mut bad_publisher = post_pm_request_v1("mac.lima.instance", ManagedActionV1::Start);
+    bad_publisher
+        .publisher_request
+        .as_mut()
+        .expect("fixture request")
+        .platform_mapping_commitment = Some("d".repeat(64));
+    assert!(
+        validate_mapped_lifecycle_control_request_v1(&bad_publisher).is_err(),
+        "the canonical publisher request mapping commitment must bind the exact canonical mapping"
+    );
+}
+
+#[test]
+fn post_pm_rejects_generated_unlisted_pairs_and_stage_one_reuse() {
+    let actions = [
+        ManagedActionV1::Create,
+        ManagedActionV1::Replace,
+        ManagedActionV1::Remove,
+        ManagedActionV1::Restore,
+        ManagedActionV1::Enable,
+        ManagedActionV1::Disable,
+        ManagedActionV1::Start,
+        ManagedActionV1::Stop,
+    ];
+    for role in [
+        "mac.publisher.executor",
+        "mac.publisher.mach-service",
+        "mac.publisher.service-state",
+        "mac.lima.publisher-endpoint",
+        "mac.lima.publisher-service-state(service)",
+        "mac.lima.guest-socket",
+        "mac.host.forward-socket",
+        "mac.host.ssh-forwarder",
+        "mac.lima.guest-binary(unlisted)",
+        "mac.lima.guest-directory(/tmp/unlisted)",
+        "unlisted.role",
+    ] {
+        for action in actions {
+            assert!(
+                validate_mapped_lifecycle_control_request_v1(&post_pm_request_v1(role, action))
+                    .is_err(),
+                "unlisted pair {role}/{action:?} must fail before XPC"
+            );
+        }
+    }
+
+    let mut stage = post_pm_request_v1("mac.lima.instance", ManagedActionV1::Start);
+    stage.tag = Some(MappedLifecycleTagV1::StageOneCreate);
+    assert!(validate_mapped_lifecycle_control_request_v1(&stage).is_err());
+
+    let mut post_with_stage = post_pm_request_v1("mac.lima.instance", ManagedActionV1::Stop);
+    post_with_stage.lima_stage_one_authorization_v1 = Some(LimaStageOneAuthorizationV1 {
+        schema_owner: "wrong".to_string(),
+        schema_version: 0,
+        host_context_commitment: "invalid".to_string(),
+        lima_control_root_identity: "invalid".to_string(),
+        instance_name: "invalid".to_string(),
+        profile_sha256: "invalid".to_string(),
+        expected_absent: false,
+        source_commit: "invalid".to_string(),
+        source_tree: "invalid".to_string(),
+        source_ref: "invalid".to_string(),
+        executor_receipt_sha256: "invalid".to_string(),
+        requester_principal: "invalid".to_string(),
+        attempt_id: "invalid".to_string(),
+        nonce: "invalid".to_string(),
+        expires_at_unix_ns: 0,
+        rendered_profile_b64: "e30".to_string(),
+        rendered_profile_sha256: "44136fa355b3678a1146ad16f7e8649e94fb4fc21fe77e8310c060f61caaff8a"
+            .to_string(),
+        successor_template: serde_json::from_value(json!({
+            "schema_owner": "substrate.mac-lima-stage-one-successor-template",
+            "schema_version": 1,
+            "derivation_algorithm": "mac_lima_stage_one_successor_template_v1_platform_mapping_then_manifest",
+            "current_pre_pm_manifest_generation": 1,
+            "current_pre_pm_manifest_sha256": "f".repeat(64),
+            "current_anchor_sha256": "b".repeat(64),
+            "current_anchor_counter": 0,
+            "next_manifest_generation": 2,
+            "previous_manifest_sha256": "f".repeat(64),
+            "host_context_commitment": "e".repeat(64),
+            "scope_id": SCOPE_ID,
+            "installation_id": SCOPE_ID,
+            "intended_principal": "fixture",
+            "selected_host_prefix": "/tmp/substrate-r5",
+            "host_platform_control_root": "/Users/fixture/.lima",
+            "instance_name": "substrate",
+            "profile_sha256": "a".repeat(64),
+            "source_commit": "a".repeat(40),
+            "source_tree": "b".repeat(40),
+            "source_ref": "refs/heads/r5-fixture",
+            "executor_build_evidence": {
+                "schema_owner": "substrate.executor-build-evidence",
+                "schema_version": 1,
+                "source_commit": "a".repeat(40),
+                "source_tree": "b".repeat(40),
+                "source_ref": "refs/heads/r5-fixture",
+                "artifact_sha256": "c".repeat(64),
+                "artifact_identity": "substrate-lifecycle-macos",
+                "target_triple": "aarch64-apple-darwin",
+                "tool_versions": {},
+                "code_identity": null
+            },
+            "attempt_id": "018f3e4a-7b2c-7c91-8a6f-2e1d5c4b3a91",
+            "nonce": "018f3e4a-7b2c-7c91-8a6f-2e1d5c4b3a92",
+            "expires_at_unix_ns": 2,
+            "manifest_created_at_unix_ns": 1,
+            "manifest_lifecycle_state": "manifest_durable",
+            "profile_template_algorithm": "substrate.mac-lima-stage-one-profile-template",
+            "profile_template_version": 1,
+            "profile_template_sha256": "d".repeat(64),
+            "ordered_non_machine_entries": [],
+            "planned_receipt_id": "stage-one-fixture",
+            "planned_receipt_relative_path": "receipts/2/stage-one-fixture.json",
+            "post_effect_observation_slots": ["guest_machine_id"]
+        })).expect("stage-one successor template fixture shape"),
+        signature: LifecycleSignatureV1 {
+            algorithm: "invalid".to_string(),
+            public_key: "invalid".to_string(),
+            signature: "invalid".to_string(),
+        },
+    });
+    assert!(validate_mapped_lifecycle_control_request_v1(&post_with_stage).is_err());
+}
+
+#[test]
+fn direct_bootstrap_dispatch_is_pre_stdin_and_fd3_only() {
+    let control = include_str!("../../../src/bin/substrate-lifecycle-control.rs");
+    let bootstrap_dispatch = control
+        .find("\"publisher-bootstrap\" =>")
+        .expect("hidden direct bootstrap dispatch");
+    let stdin_dispatch = control
+        .find("\"submit-mapped-lifecycle-v1\" =>")
+        .expect("ordinary stdin dispatch");
+    assert!(bootstrap_dispatch < stdin_dispatch);
+    let direct = &control[control
+        .find("pub fn publisher_bootstrap_direct_interactive_v1")
+        .expect("direct bootstrap function")
+        ..control
+            .find("pub fn guest_publisher_pairing_direct_interactive_v1")
+            .expect("next legacy function")];
+    assert!(direct.contains("deliver_retained_publisher_bootstrap_authorization_v1"));
+    assert!(direct.contains("MacPublisherBootstrapRequestV1"));
+    assert!(!direct.contains("ManagedLifecycleControlRequestV1"));
+    assert!(control.contains("read_exact_publisher_bootstrap_request_from_stdin_v1"));
+    assert!(control.contains("parse_mac_publisher_bootstrap_request_v1"));
+    assert!(control.contains("contains only the exact IH carrier"));
+    assert!(!control.contains("read_exact_publisher_bootstrap_seed_from_stdin_v1"));
+
+    let client = include_str!("../src/execution/managed_lifecycle/macos_client.rs");
+    assert!(client.contains("libc::AF_UNIX"));
+    assert!(client.contains("libc::SOCK_SEQPACKET"));
+    assert!(client.contains("libc::FD_CLOEXEC"));
+    assert!(client.contains("--publisher-bootstrap-fd"));
+    assert!(client.contains(".arg(\"3\")"));
+    assert!(client.contains("canonical_publisher_bootstrap_authorization_v1"));
+    assert!(client.contains("measure_bootstrap_image_v1"));
+    assert!(client.contains("measure_codesign_cdhash_v1"));
+    assert!(client.contains("control and executor artifacts must be distinct"));
+
+    let executor = include_str!("../../../src/bin/substrate-lifecycle-macos.rs");
+    let fd_dispatch = executor
+        .find("if operation == \"--publisher-bootstrap-fd\"")
+        .expect("FD3 entrypoint");
+    let stdin_read = executor
+        .find("read_to_end(&mut input)")
+        .expect("ordinary stdin read");
+    assert!(fd_dispatch < stdin_read);
+    assert!(executor.contains("getpeereid"));
+    assert!(executor.contains("parse_publisher_bootstrap_authorization_v1"));
+    assert!(executor.contains("MacLimaStageOneCapsuleV1"));
+    assert!(executor.contains("prepared_protected_state_sha256"));
+    assert!(executor.contains("derive_mac_lima_stage_one_authorization_v1"));
+    assert!(executor.contains("render_mac_lima_stage_one_profile_v1"));
+    assert!(executor.contains("mac_run_fixed_lima_command_v1"));
+    assert!(executor.contains("LimaStageOneObservationV1"));
+    assert!(executor.contains("EffectStarted"));
+    assert!(executor.contains("InstanceObserved"));
+    assert!(executor.contains("PreservingBlocked"));
+    assert!(executor.contains("bootstrap-intent"));
+    assert!(executor.contains("Prepared"));
+    assert!(executor.contains("Completed"));
+    assert!(executor.contains("mac_ensure_system_keychain_p256_spki_der_v1"));
+    assert!(executor.contains("SecKeyCreateRandomKey"));
+    assert!(executor.contains("mac_transition_bootstrap_intent_v1"));
+    assert!(executor.contains("manifest_generation: authorization.manifest_generation"));
+    assert!(executor.contains("manifest_sha256: authorization.manifest_sha256.clone()"));
+    assert!(executor.contains("mac_attest_running_executor_image_v1"));
+    assert!(executor.contains("LOCAL_PEERPID"));
+    assert!(executor.contains("publisher_bootstrap_authorization_sha256_v1"));
+    let resume = &executor[executor
+        .find("fn resume_mac_lima_stage_one_after_protected_state_cas_v1")
+        .expect("Stage-1 post-CAS resume")
+        ..executor
+            .find("fn execute_closed_mac_lima_stage_one_effect_v1")
+            .expect("Stage-1 effect")];
+    assert!(resume.contains("mac_read_stage_one_transition_artifact_no_follow_v1"));
+    assert!(resume.contains("canonical_action_receipt_index_bytes_v1"));
+    assert!(resume.contains("replace_mac_control_admission_authority_v1"));
+    assert!(
+        !resume.contains("mac_run_fixed_lima_command_v1"),
+        "a durable post-CAS retry must not repeat the Lima effect"
+    );
+    let receipt_retry = &executor[executor
+        .find("fn load_or_sign_mac_lima_stage_one_receipt_v1")
+        .expect("Stage-1 receipt retry")
+        ..executor
+            .find("fn prepare_mac_lima_stage_one_transition_v1")
+            .expect("Stage-1 prepare")];
+    assert!(receipt_retry.contains("retained Stage-1 receipt is not an exact retry"));
+    assert!(receipt_retry.contains("validate_managed_action_receipt_signature_v1"));
 }

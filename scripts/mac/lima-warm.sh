@@ -834,29 +834,178 @@ wait_for_running() {
 
 destroy_vm() {
     # The typed publisher owns destruction and exact before-state restoration.
-    "${SCRIPT_DIR}/lima-lifecycle.sh" destroy-vm \
+    "${SCRIPT_DIR}/lima-lifecycle.sh" post_pm_action \
         --install-prefix "${INSTALL_PREFIX_RAW}" \
         --install-bootstrap-context-v1 "${INSTALL_BOOTSTRAP_CONTEXT_V1}" \
         --platform-bootstrap-mapping-v1 "${PLATFORM_BOOTSTRAP_MAPPING_V1}" \
         --executor-build-evidence-v1 "${EXECUTOR_BUILD_EVIDENCE_V1}" \
-        --publisher-request-v1 "${PUBLISHER_REQUEST_V1}" \
-        --lima-stage-one-authorization-v1 "${LIMA_STAGE_ONE_AUTHORIZATION_V1}"
+        --publisher-request-v1 "${PUBLISHER_REQUEST_V1}"
 }
 
 current_layout_version() {
     limactl shell "${VM_NAME}" sudo -n cat "${LAYOUT_SENTINEL}" 2>/dev/null || true
 }
 
+adopt_stage_one_mapping_response_v1() {
+    # The only post-PM mapping and request this wrapper may retain are the canonical successor
+    # values returned by the attested Stage-1 XPC response. An argv mapping may only agree with
+    # the returned mapping. The caller's pre-PM request is an untrusted typed selector seed; the
+    # shell replaces it with one opaque executor-issued canonical request and never binds a map,
+    # manifest, counter, anchor, or build field itself.
+    local stage_response="$1"
+    local prior_mapping="${PLATFORM_BOOTSTRAP_MAPPING_V1}"
+    local adoption_file adopted_mapping adopted_request unexpected_frame
+
+    adoption_file="$(mktemp)" || fatal "Unable to allocate Stage-1 response frame storage."
+    if ! python3 - "${INSTALL_BOOTSTRAP_COMMITMENT}" "${stage_response}" "${PUBLISHER_REQUEST_V1}" >"${adoption_file}" <<'PY'
+import base64
+import hashlib
+import json
+import re
+import sys
+
+commitment, raw_response, raw_seed = sys.argv[1:]
+MAPPING_KEYS = (
+    "domain", "version", "host_context_commitment", "platform_kind", "instance_name",
+    "guest_machine_id", "host_platform_control_root", "realized_substrate_home",
+    "realized_principal_account", "realized_principal_uid", "transport_kind",
+    "transport_host", "transport_guest_socket",
+)
+RESPONSE_KEYS = {
+    "status", "receipt", "platform_bootstrap_mapping_v1", "post_pm_requests_v1",
+    "manifest_generation", "manifest_sha256", "xpc_attestation",
+}
+REQUEST_KEYS = {
+    "host_context_commitment", "platform_mapping_commitment", "scope_id",
+    "current_anchor_counter", "current_anchor_sha256", "manifest_generation",
+    "manifest_sha256", "role", "action", "object_identity", "requester_principal",
+    "attempt_nonce", "expected_executor_build",
+}
+SEED_EXACT_KEYS = {
+    "host_context_commitment", "scope_id", "role", "action", "object_identity",
+    "requester_principal", "attempt_nonce", "expected_executor_build",
+}
+
+def fail():
+    raise ValueError("invalid Stage-1 lifecycle response")
+
+def b64(raw):
+    if not isinstance(raw, str) or not raw or not re.fullmatch(r"[A-Za-z0-9_-]+", raw):
+        fail()
+    decoded = base64.urlsafe_b64decode(raw.encode("ascii") + b"=" * ((-len(raw)) % 4))
+    if base64.urlsafe_b64encode(decoded).rstrip(b"=").decode("ascii") != raw:
+        fail()
+    return decoded
+
+def canonical(value):
+    return json.dumps(value, sort_keys=True, separators=(",", ":"), ensure_ascii=False)
+
+try:
+    if not re.fullmatch(r"[0-9a-f]{64}", commitment):
+        fail()
+    response = json.loads(raw_response)
+    seed = json.loads(raw_seed)
+    if not isinstance(response, dict) or set(response) != RESPONSE_KEYS:
+        fail()
+    if not isinstance(seed, dict) or set(seed) != REQUEST_KEYS:
+        fail()
+    if response["status"] != "completed" or not isinstance(response["receipt"], dict):
+        fail()
+    if not isinstance(response["manifest_generation"], int) or response["manifest_generation"] < 2:
+        fail()
+    if not isinstance(response["manifest_sha256"], str) or not re.fullmatch(r"[0-9a-f]{64}", response["manifest_sha256"]):
+        fail()
+    xpc = response["xpc_attestation"]
+    if not isinstance(xpc, dict) or xpc.get("mach_service") != "com.substrate.lifecycle.publisher.v1" or xpc.get("audit_token_bound") is not True:
+        fail()
+    mapping = response["platform_bootstrap_mapping_v1"]
+    mapping_bytes = b64(mapping)
+    lines = mapping_bytes.decode("ascii").splitlines()
+    if len(lines) != len(MAPPING_KEYS) or mapping_bytes != ("\n".join(lines) + "\n").encode("ascii"):
+        fail()
+    values = {}
+    for expected, line in zip(MAPPING_KEYS, lines):
+        if line.count("=") != 1:
+            fail()
+        key, value = line.split("=", 1)
+        if key != expected:
+            fail()
+        values[key] = value
+    if values["domain"] != "substrate.platform_bootstrap_mapping" or values["version"] != "1":
+        fail()
+    if values["host_context_commitment"] != commitment or values["platform_kind"] != "lima" or values["transport_kind"] != "lima":
+        fail()
+    if not re.fullmatch(r"[0-9a-f]{32}", values["guest_machine_id"]):
+        fail()
+    if not re.fullmatch(r"0|[1-9][0-9]*", values["realized_principal_uid"]):
+        fail()
+    for key in ("instance_name", "host_platform_control_root", "realized_substrate_home", "realized_principal_account", "transport_host", "transport_guest_socket"):
+        decoded = b64(values[key]).decode("utf-8")
+        if not decoded or any(ch in decoded for ch in "\0\r\n"):
+            fail()
+    mapping_commitment = hashlib.sha256(mapping.encode("ascii")).hexdigest()
+    candidates = response["post_pm_requests_v1"]
+    if not isinstance(candidates, list) or not candidates:
+        fail()
+    selected = []
+    canonical_candidates = set()
+    for candidate in candidates:
+        if not isinstance(candidate, dict) or set(candidate) != REQUEST_KEYS:
+            fail()
+        encoded = canonical(candidate)
+        if encoded in canonical_candidates:
+            fail()
+        canonical_candidates.add(encoded)
+        if (candidate["host_context_commitment"] != commitment
+                or candidate["platform_mapping_commitment"] != mapping_commitment
+                or candidate["manifest_generation"] != response["manifest_generation"]
+                or candidate["manifest_sha256"] != response["manifest_sha256"]):
+            fail()
+        if all(candidate[field] == seed[field] for field in SEED_EXACT_KEYS):
+            selected.append(candidate)
+    if len(selected) != 1:
+        fail()
+    selected = selected[0]
+    sys.stdout.buffer.write(mapping.encode("ascii") + b"\0")
+    sys.stdout.buffer.write(canonical(selected).encode("utf-8") + b"\0")
+except Exception:
+    raise SystemExit("invalid Stage-1 lifecycle response")
+PY
+    then
+        rm -f "${adoption_file}"
+        fatal "Stage-1 response did not contain one exact finalized mapping and post-PM request."
+    fi
+    exec 3<"${adoption_file}"
+    IFS= read -r -d '' adopted_mapping <&3 || { exec 3<&-; rm -f "${adoption_file}"; fatal "Stage-1 response omitted the finalized mapping."; }
+    IFS= read -r -d '' adopted_request <&3 || { exec 3<&-; rm -f "${adoption_file}"; fatal "Stage-1 response omitted the exact post-PM request."; }
+    if IFS= read -r -d '' unexpected_frame <&3; then
+        exec 3<&-
+        rm -f "${adoption_file}"
+        fatal "Stage-1 response emitted an unexpected extra authority frame."
+    fi
+    exec 3<&-
+    rm -f "${adoption_file}"
+    [[ -n "${adopted_mapping}" && -n "${adopted_request}" ]] \
+        || fatal "Stage-1 response omitted finalized lifecycle authority."
+    [[ -z "${prior_mapping}" || "${prior_mapping}" == "${adopted_mapping}" ]] \
+        || fatal "Caller mapping does not exactly match the Stage-1 successor mapping."
+    PLATFORM_BOOTSTRAP_MAPPING_V1="${adopted_mapping}"
+    PUBLISHER_REQUEST_V1="${adopted_request}"
+}
+
 ensure_vm_ready() {
-    # No shell-selected VM is started or created here. The mapped executor receives the exact
-    # signed Stage-1 authorization and validates it against the carrier/mapping before any action.
-    "${SCRIPT_DIR}/lima-lifecycle.sh" ensure-vm-ready \
+    # No shell-selected VM is started or created here. The signed Stage-1 authorization is the
+    # sole pre-PM mapping authority. The executor-owned Stage-1 transition returns its durable
+    # finalized mapping only after it observed the selected machine identity and advanced the
+    # anchor; retain that exact response rather than accepting a caller-selected mapping.
+    local stage_response
+    stage_response="$("${SCRIPT_DIR}/lima-lifecycle.sh" stage_one_create \
         --install-prefix "${INSTALL_PREFIX_RAW}" \
         --install-bootstrap-context-v1 "${INSTALL_BOOTSTRAP_CONTEXT_V1}" \
-        --platform-bootstrap-mapping-v1 "${PLATFORM_BOOTSTRAP_MAPPING_V1}" \
         --executor-build-evidence-v1 "${EXECUTOR_BUILD_EVIDENCE_V1}" \
-        --publisher-request-v1 "${PUBLISHER_REQUEST_V1}" \
-        --lima-stage-one-authorization-v1 "${LIMA_STAGE_ONE_AUTHORIZATION_V1}"
+        --lima-stage-one-authorization-v1 "${LIMA_STAGE_ONE_AUTHORIZATION_V1}")" \
+        || fatal "Stage-1 mapped lifecycle create did not return a completed response."
+    adopt_stage_one_mapping_response_v1 "${stage_response}"
 }
 
 host_git_head() {
@@ -882,13 +1031,12 @@ create_stage_manifest() {
 
 stage_workspace() {
     # The selected manifest and exact guest artifact transaction are executor-only.
-    "${SCRIPT_DIR}/lima-lifecycle.sh" stage-workspace \
+    "${SCRIPT_DIR}/lima-lifecycle.sh" post_pm_action \
         --install-prefix "${INSTALL_PREFIX_RAW}" \
         --install-bootstrap-context-v1 "${INSTALL_BOOTSTRAP_CONTEXT_V1}" \
         --platform-bootstrap-mapping-v1 "${PLATFORM_BOOTSTRAP_MAPPING_V1}" \
         --executor-build-evidence-v1 "${EXECUTOR_BUILD_EVIDENCE_V1}" \
-        --publisher-request-v1 "${PUBLISHER_REQUEST_V1}" \
-        --lima-stage-one-authorization-v1 "${LIMA_STAGE_ONE_AUTHORIZATION_V1}"
+        --publisher-request-v1 "${PUBLISHER_REQUEST_V1}"
 }
 
 verify_staged_workspace() {
@@ -921,13 +1069,12 @@ EOF
 
 ensure_substrate_group() {
     # Membership mutation is part of the one mapped guest lifecycle transaction.
-    "${SCRIPT_DIR}/lima-lifecycle.sh" configure-guest \
+    "${SCRIPT_DIR}/lima-lifecycle.sh" post_pm_action \
         --install-prefix "${INSTALL_PREFIX_RAW}" \
         --install-bootstrap-context-v1 "${INSTALL_BOOTSTRAP_CONTEXT_V1}" \
         --platform-bootstrap-mapping-v1 "${PLATFORM_BOOTSTRAP_MAPPING_V1}" \
         --executor-build-evidence-v1 "${EXECUTOR_BUILD_EVIDENCE_V1}" \
-        --publisher-request-v1 "${PUBLISHER_REQUEST_V1}" \
-        --lima-stage-one-authorization-v1 "${LIMA_STAGE_ONE_AUTHORIZATION_V1}"
+        --publisher-request-v1 "${PUBLISHER_REQUEST_V1}"
 }
 
 host_agent_candidate() {
@@ -955,13 +1102,12 @@ host_agent_candidate() {
 
 install_agent_from_host() {
     # Host-to-guest artifact ingress is accepted only through ExecutorBuildEvidenceV1.
-    "${SCRIPT_DIR}/lima-lifecycle.sh" install-guest-artifacts \
+    "${SCRIPT_DIR}/lima-lifecycle.sh" post_pm_action \
         --install-prefix "${INSTALL_PREFIX_RAW}" \
         --install-bootstrap-context-v1 "${INSTALL_BOOTSTRAP_CONTEXT_V1}" \
         --platform-bootstrap-mapping-v1 "${PLATFORM_BOOTSTRAP_MAPPING_V1}" \
         --executor-build-evidence-v1 "${EXECUTOR_BUILD_EVIDENCE_V1}" \
-        --publisher-request-v1 "${PUBLISHER_REQUEST_V1}" \
-        --lima-stage-one-authorization-v1 "${LIMA_STAGE_ONE_AUTHORIZATION_V1}"
+        --publisher-request-v1 "${PUBLISHER_REQUEST_V1}"
 }
 
 host_cli_candidate() {
@@ -990,13 +1136,12 @@ host_cli_candidate() {
 
 install_cli_from_host() {
     # Host-to-guest artifact ingress is accepted only through ExecutorBuildEvidenceV1.
-    "${SCRIPT_DIR}/lima-lifecycle.sh" install-guest-artifacts \
+    "${SCRIPT_DIR}/lima-lifecycle.sh" post_pm_action \
         --install-prefix "${INSTALL_PREFIX_RAW}" \
         --install-bootstrap-context-v1 "${INSTALL_BOOTSTRAP_CONTEXT_V1}" \
         --platform-bootstrap-mapping-v1 "${PLATFORM_BOOTSTRAP_MAPPING_V1}" \
         --executor-build-evidence-v1 "${EXECUTOR_BUILD_EVIDENCE_V1}" \
-        --publisher-request-v1 "${PUBLISHER_REQUEST_V1}" \
-        --lima-stage-one-authorization-v1 "${LIMA_STAGE_ONE_AUTHORIZATION_V1}"
+        --publisher-request-v1 "${PUBLISHER_REQUEST_V1}"
 }
 
 host_gateway_candidate() {
@@ -1024,13 +1169,12 @@ host_gateway_candidate() {
 
 install_gateway_from_host() {
     # Host-to-guest artifact ingress is accepted only through ExecutorBuildEvidenceV1.
-    "${SCRIPT_DIR}/lima-lifecycle.sh" install-guest-artifacts \
+    "${SCRIPT_DIR}/lima-lifecycle.sh" post_pm_action \
         --install-prefix "${INSTALL_PREFIX_RAW}" \
         --install-bootstrap-context-v1 "${INSTALL_BOOTSTRAP_CONTEXT_V1}" \
         --platform-bootstrap-mapping-v1 "${PLATFORM_BOOTSTRAP_MAPPING_V1}" \
         --executor-build-evidence-v1 "${EXECUTOR_BUILD_EVIDENCE_V1}" \
-        --publisher-request-v1 "${PUBLISHER_REQUEST_V1}" \
-        --lima-stage-one-authorization-v1 "${LIMA_STAGE_ONE_AUTHORIZATION_V1}"
+        --publisher-request-v1 "${PUBLISHER_REQUEST_V1}"
 }
 
 build_missing_components_inside_vm() {
@@ -1051,13 +1195,12 @@ run_guest_cargo_build() {
 
 install_guest_binaries() {
     # No guest toolchain fallback is permitted; artifact validation and installation are one transaction.
-    "${SCRIPT_DIR}/lima-lifecycle.sh" install-guest-artifacts \
+    "${SCRIPT_DIR}/lima-lifecycle.sh" post_pm_action \
         --install-prefix "${INSTALL_PREFIX_RAW}" \
         --install-bootstrap-context-v1 "${INSTALL_BOOTSTRAP_CONTEXT_V1}" \
         --platform-bootstrap-mapping-v1 "${PLATFORM_BOOTSTRAP_MAPPING_V1}" \
         --executor-build-evidence-v1 "${EXECUTOR_BUILD_EVIDENCE_V1}" \
-        --publisher-request-v1 "${PUBLISHER_REQUEST_V1}" \
-        --lima-stage-one-authorization-v1 "${LIMA_STAGE_ONE_AUTHORIZATION_V1}"
+        --publisher-request-v1 "${PUBLISHER_REQUEST_V1}"
 }
 
 verify_guest_binaries() {
@@ -1070,13 +1213,12 @@ EOF
 
 bootstrap_guest_private_home() {
     # Private-home creation/restoration belongs to the mapped executor receipt.
-    "${SCRIPT_DIR}/lima-lifecycle.sh" configure-guest \
+    "${SCRIPT_DIR}/lima-lifecycle.sh" post_pm_action \
         --install-prefix "${INSTALL_PREFIX_RAW}" \
         --install-bootstrap-context-v1 "${INSTALL_BOOTSTRAP_CONTEXT_V1}" \
         --platform-bootstrap-mapping-v1 "${PLATFORM_BOOTSTRAP_MAPPING_V1}" \
         --executor-build-evidence-v1 "${EXECUTOR_BUILD_EVIDENCE_V1}" \
-        --publisher-request-v1 "${PUBLISHER_REQUEST_V1}" \
-        --lima-stage-one-authorization-v1 "${LIMA_STAGE_ONE_AUTHORIZATION_V1}"
+        --publisher-request-v1 "${PUBLISHER_REQUEST_V1}"
 }
 
 write_systemd_units() {
@@ -1107,24 +1249,22 @@ write_systemd_units() {
         true
 
     # Exact unit installation is coupled to the mapped receipt and socket identity.
-    "${SCRIPT_DIR}/lima-lifecycle.sh" configure-guest \
+    "${SCRIPT_DIR}/lima-lifecycle.sh" post_pm_action \
         --install-prefix "${INSTALL_PREFIX_RAW}" \
         --install-bootstrap-context-v1 "${INSTALL_BOOTSTRAP_CONTEXT_V1}" \
         --platform-bootstrap-mapping-v1 "${PLATFORM_BOOTSTRAP_MAPPING_V1}" \
         --executor-build-evidence-v1 "${EXECUTOR_BUILD_EVIDENCE_V1}" \
-        --publisher-request-v1 "${PUBLISHER_REQUEST_V1}" \
-        --lima-stage-one-authorization-v1 "${LIMA_STAGE_ONE_AUTHORIZATION_V1}"
+        --publisher-request-v1 "${PUBLISHER_REQUEST_V1}"
 }
 
 enable_socket_activation() {
     # Service/socket state is prepared and restored only by the mapped executor.
-    "${SCRIPT_DIR}/lima-lifecycle.sh" configure-guest \
+    "${SCRIPT_DIR}/lima-lifecycle.sh" post_pm_action \
         --install-prefix "${INSTALL_PREFIX_RAW}" \
         --install-bootstrap-context-v1 "${INSTALL_BOOTSTRAP_CONTEXT_V1}" \
         --platform-bootstrap-mapping-v1 "${PLATFORM_BOOTSTRAP_MAPPING_V1}" \
         --executor-build-evidence-v1 "${EXECUTOR_BUILD_EVIDENCE_V1}" \
-        --publisher-request-v1 "${PUBLISHER_REQUEST_V1}" \
-        --lima-stage-one-authorization-v1 "${LIMA_STAGE_ONE_AUTHORIZATION_V1}"
+        --publisher-request-v1 "${PUBLISHER_REQUEST_V1}"
 }
 
 socket_summary() {
@@ -1142,13 +1282,12 @@ socket_summary() {
 
 write_layout_sentinel() {
     # Layout-sentinel mutation is part of the mapped executor transaction.
-    "${SCRIPT_DIR}/lima-lifecycle.sh" configure-guest \
+    "${SCRIPT_DIR}/lima-lifecycle.sh" post_pm_action \
         --install-prefix "${INSTALL_PREFIX_RAW}" \
         --install-bootstrap-context-v1 "${INSTALL_BOOTSTRAP_CONTEXT_V1}" \
         --platform-bootstrap-mapping-v1 "${PLATFORM_BOOTSTRAP_MAPPING_V1}" \
         --executor-build-evidence-v1 "${EXECUTOR_BUILD_EVIDENCE_V1}" \
-        --publisher-request-v1 "${PUBLISHER_REQUEST_V1}" \
-        --lima-stage-one-authorization-v1 "${LIMA_STAGE_ONE_AUTHORIZATION_V1}"
+        --publisher-request-v1 "${PUBLISHER_REQUEST_V1}"
 }
 
 linger_guidance() {
@@ -1163,31 +1302,18 @@ linger_guidance() {
 }
 
 configure_guest() {
-    local layout
+    # The ordinary shell never reopens a guest shell to inspect or project state. The completed
+    # PlatformBootstrapMappingV1 and canonical publisher request are independently validated by
+    # the closed post-PM bridge before the executor can observe anything.
+    [[ -n "${PLATFORM_BOOTSTRAP_MAPPING_V1}" && -n "${PUBLISHER_REQUEST_V1}" ]] \
+        || fatal "Mapped post-PM authority is incomplete."
 
-    observe_lima_mapping_v1
-    verify_lima_mapping_v1
-    [[ -n "${OBSERVED_PLATFORM_MAPPING_V1}" ]] || fatal "Verified Lima mapping record is empty."
-
-    layout="$(current_layout_version)"
-    if [[ "${layout}" != "${LAYOUT_VERSION}" ]]; then
-        fatal "Lima VM layout (${layout:-missing}) does not match ${LAYOUT_VERSION}; R3 lifecycle reconciliation is required before guest projection."
-    fi
-    [[ "${PLATFORM_BOOTSTRAP_MAPPING_V1}" == "${OBSERVED_PLATFORM_MAPPING_V1}" ]] \
-        || fatal "Supplied PlatformBootstrapMappingV1 does not equal the observed selected mapping."
-
-    # This is the sole mutable guest-projection request. The executor receives the selected
-    # mapping, PM carrier, and exact artifact evidence and owns prepare/receipt/restore.
-    "${SCRIPT_DIR}/lima-lifecycle.sh" configure-guest \
+    "${SCRIPT_DIR}/lima-lifecycle.sh" post_pm_action \
         --install-prefix "${INSTALL_PREFIX_RAW}" \
         --install-bootstrap-context-v1 "${INSTALL_BOOTSTRAP_CONTEXT_V1}" \
         --platform-bootstrap-mapping-v1 "${PLATFORM_BOOTSTRAP_MAPPING_V1}" \
         --executor-build-evidence-v1 "${EXECUTOR_BUILD_EVIDENCE_V1}" \
-        --publisher-request-v1 "${PUBLISHER_REQUEST_V1}" \
-        --lima-stage-one-authorization-v1 "${LIMA_STAGE_ONE_AUTHORIZATION_V1}"
-
-    socket_summary
-    linger_guidance "${OBSERVED_GUEST_ACCOUNT}"
+        --publisher-request-v1 "${PUBLISHER_REQUEST_V1}"
 }
 
 if [[ ${HELP_REQUESTED} -eq 1 ]]; then

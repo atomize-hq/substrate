@@ -1,0 +1,143 @@
+{
+  "schema_version": 1,
+  "packet_id": "AUX-R3-MAC-EVIDENCE-RECOVERY-R5-CORRECTION-01",
+  "status": "complete",
+  "stop_reason": null,
+  "cycles": [
+    {
+      "cycle_id": "discovery-1",
+      "kind": "discovery",
+      "subject_fingerprint": "sha256:fed39d93a3fd411bf186373e17d4f3a00c3d7a231814f815fac060492c737cf1",
+      "trigger_cycle_id": null,
+      "trigger_finding_ids": [],
+      "causal_evidence_refs": [],
+      "review_refs": [
+        "llm-last-mile/runtime-refactor/review-control/r3-mac-evidence-recovery-r5-correction-01-review-authority-security.md",
+        "llm-last-mile/runtime-refactor/review-control/r3-mac-evidence-recovery-r5-correction-01-review-lifecycle-convergence.md",
+        "llm-last-mile/runtime-refactor/review-control/r3-mac-evidence-recovery-r5-correction-01-review-allowlist-evidence.md"
+      ],
+      "verdict": "findings",
+      "findings": [
+        {
+          "finding_id": "P1-R5-C01-INSTALL-PROVENANCE-TOCTOU",
+          "priority": "P1"
+        },
+        {
+          "finding_id": "P1-R5-C01-POST-PM-ARTIFACT-COPY-TOCTOU",
+          "priority": "P1"
+        },
+        {
+          "finding_id": "P1-R5-C01-POST-PM-AFTER-OBSERVATION",
+          "priority": "P1"
+        },
+        {
+          "finding_id": "P1-R5-C01-POST-PM-OBSERVATION-AMBIGUITY",
+          "priority": "P1"
+        },
+        {
+          "finding_id": "P1-R5-C01-POST-PM-RECEIPT-RETRY-SIGNATURE",
+          "priority": "P1"
+        },
+        {
+          "finding_id": "P1-R5-C01-ADMISSION-TRANSITION-RECOVERY",
+          "priority": "P1"
+        },
+        {
+          "finding_id": "P1-R5-C01-KNOWN-HOSTS-REMOVE-STRANDING",
+          "priority": "P1"
+        },
+        {
+          "finding_id": "P2-R5-C01-LIMA-EFFECT-TIMEOUT",
+          "priority": "P2"
+        },
+        {
+          "finding_id": "P2-R5-C01-STAGE1-MAPPING-RETURN",
+          "priority": "P2"
+        },
+        {
+          "finding_id": "P2-R5-C01-COMPLETION-JOURNAL-CONVERGENCE",
+          "priority": "P2"
+        }
+      ]
+    },
+    {
+      "cycle_id": "closure-1",
+      "kind": "closure",
+      "subject_fingerprint": "sha256:eb3eeafd1f74382067ece8f04cd0f1df93f03c8bd2ab921c42f570f68f3ecfd6",
+      "trigger_cycle_id": "discovery-1",
+      "trigger_finding_ids": [
+        "P1-R5-C01-INSTALL-PROVENANCE-TOCTOU",
+        "P1-R5-C01-POST-PM-ARTIFACT-COPY-TOCTOU",
+        "P1-R5-C01-POST-PM-AFTER-OBSERVATION",
+        "P1-R5-C01-POST-PM-OBSERVATION-AMBIGUITY",
+        "P1-R5-C01-POST-PM-RECEIPT-RETRY-SIGNATURE",
+        "P1-R5-C01-ADMISSION-TRANSITION-RECOVERY",
+        "P1-R5-C01-KNOWN-HOSTS-REMOVE-STRANDING",
+        "P2-R5-C01-LIMA-EFFECT-TIMEOUT",
+        "P2-R5-C01-STAGE1-MAPPING-RETURN",
+        "P2-R5-C01-COMPLETION-JOURNAL-CONVERGENCE"
+      ],
+      "causal_evidence_refs": [],
+      "review_refs": [
+        "llm-last-mile/runtime-refactor/review-control/r3-mac-evidence-recovery-r5-correction-01-review-authority-security.md",
+        "llm-last-mile/runtime-refactor/review-control/r3-mac-evidence-recovery-r5-correction-01-review-lifecycle-convergence.md",
+        "llm-last-mile/runtime-refactor/review-control/r3-mac-evidence-recovery-r5-correction-01-review-allowlist-evidence.md"
+      ],
+      "verdict": "findings",
+      "findings": [
+        {
+          "finding_id": "P1-R5-C01-GENERIC-TARGET-AFTER-STATE",
+          "priority": "P1"
+        },
+        {
+          "finding_id": "P2-R5-C01-STAGE1-MAPPING-ADOPTION",
+          "priority": "P2"
+        }
+      ]
+    },
+    {
+      "cycle_id": "supplemental-causal-1",
+      "kind": "supplemental_causal",
+      "subject_fingerprint": "sha256:bf8607b7b9ee027be8badda0fb9deaa04918fbb026bfcbd4b26f6ecc061c8a22",
+      "trigger_cycle_id": "closure-1",
+      "trigger_finding_ids": [
+        "P1-R5-C01-GENERIC-TARGET-AFTER-STATE",
+        "P2-R5-C01-STAGE1-MAPPING-ADOPTION"
+      ],
+      "causal_evidence_refs": [
+        "closure-1 mapping-adoption remediation made the normal first-run post-PM request binding path observable."
+      ],
+      "review_refs": [
+        "llm-last-mile/runtime-refactor/review-control/r3-mac-evidence-recovery-r5-correction-01-review-authority-security.md",
+        "llm-last-mile/runtime-refactor/review-control/r3-mac-evidence-recovery-r5-correction-01-review-lifecycle-convergence.md",
+        "llm-last-mile/runtime-refactor/review-control/r3-mac-evidence-recovery-r5-correction-01-review-allowlist-evidence.md"
+      ],
+      "verdict": "findings",
+      "findings": [
+        {
+          "finding_id": "P2-R5-C01-FIRST-RUN-POST-PM-REQUEST-BINDING",
+          "priority": "P2"
+        }
+      ]
+    },
+    {
+      "cycle_id": "supplemental-causal-2",
+      "kind": "supplemental_causal",
+      "subject_fingerprint": "sha256:a7a1d181d2baa53cb0a914be3a999681e39588d56dce627c963ce686f61d94db",
+      "trigger_cycle_id": "supplemental-causal-1",
+      "trigger_finding_ids": [
+        "P2-R5-C01-FIRST-RUN-POST-PM-REQUEST-BINDING"
+      ],
+      "causal_evidence_refs": [
+        "The supplemental-causal-1 first-run binding remediation changed the returned Stage-1 successor authority handoff and required final causal review."
+      ],
+      "review_refs": [
+        "llm-last-mile/runtime-refactor/review-control/r3-mac-evidence-recovery-r5-correction-01-review-authority-security.md",
+        "llm-last-mile/runtime-refactor/review-control/r3-mac-evidence-recovery-r5-correction-01-review-lifecycle-convergence.md",
+        "llm-last-mile/runtime-refactor/review-control/r3-mac-evidence-recovery-r5-correction-01-review-allowlist-evidence.md"
+      ],
+      "verdict": "clean",
+      "findings": []
+    }
+  ]
+}

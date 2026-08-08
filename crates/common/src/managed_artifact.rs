@@ -23,6 +23,9 @@ const LIFECYCLE_PUBLISHER_PROTECTED_STATE_OWNER_V1: &str =
 const LIFECYCLE_SIGNATURE_PREFIX_V1: &[u8] = b"SUBSTRATE-LIFECYCLE-SIGNATURE-V1\0";
 const LIMA_STAGE_ONE_SCHEMA_OWNER_V1: &str = "substrate.lima-stage-one-authorization";
 const MAC_PUBLISHER_CONTROL_AUTHORITY_OWNER_V1: &str = "substrate.mac-publisher-control-authority";
+const MAC_PUBLISHER_INSTALL_PROVENANCE_OWNER_V1: &str =
+    "substrate.mac-publisher-install-provenance";
+const MAC_PUBLISHER_CONTROL_ADMISSION_OWNER_V1: &str = "substrate.mac-publisher-control-admission";
 
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]
 #[serde(rename_all = "snake_case")]
@@ -363,6 +366,72 @@ pub struct MacPublisherControlAuthorityV1 {
     pub designated_requirement: String,
 }
 
+/// Descriptor-measured identity for one fixed executable retained by the macOS bootstrap
+/// provenance record.  This deliberately records the identity of the opened regular file rather
+/// than a caller-selected pathname.
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]
+#[serde(deny_unknown_fields)]
+pub struct MacPublisherBootstrapImageProvenanceV1 {
+    pub target_triple: String,
+    pub artifact_sha256: String,
+    pub physical_identity: String,
+    /// Measured CodeDirectory identity (currently the canonical `cdhash:<lower-hex>` form).
+    /// This is distinct from the designated requirement below: the former binds the measured
+    /// opened image while the latter is the policy used for peer admission.
+    pub code_identity: String,
+    pub code_requirement: String,
+}
+
+/// Identity of the one installer-recorded `limactl` executable.  The Stage-1 executor opens this
+/// exact absolute path no-follow before it builds its fixed, selector-free command line.
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]
+#[serde(deny_unknown_fields)]
+pub struct MacLimaToolProvenanceV1 {
+    pub absolute_path: String,
+    pub image: MacPublisherBootstrapImageProvenanceV1,
+    pub version: String,
+}
+
+/// Root-owned install-time source of truth for direct macOS publisher bootstrap. It contains
+/// *only* facts durable when the installer finishes: no scope, attempt, manifest, or PM value is
+/// allowed here. The direct bootstrap creates those per-scope facts later in its FD3 transaction.
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]
+#[serde(deny_unknown_fields)]
+pub struct MacPublisherInstallProvenanceV1 {
+    pub schema_owner: String,
+    pub schema_version: u32,
+    pub source_commit: String,
+    pub source_tree: String,
+    pub source_ref: String,
+    pub review_record_sha256: String,
+    pub host_context_commitment: String,
+    pub selected_host_prefix: String,
+    pub control_authority: MacPublisherControlAuthorityV1,
+    pub control_image: MacPublisherBootstrapImageProvenanceV1,
+    pub executor_image: MacPublisherBootstrapImageProvenanceV1,
+    pub launch_daemon_plist_sha256: String,
+    pub lima_tool: MacLimaToolProvenanceV1,
+    pub profile_template_algorithm: String,
+    pub profile_template_version: u32,
+    pub profile_template_sha256: String,
+}
+
+/// Fixed global Keychain admission record.  It binds a measured peer to the current signed
+/// anchor and protected-state revision before any XPC request bytes can be decoded.
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]
+#[serde(deny_unknown_fields)]
+pub struct MacPublisherControlAdmissionV1 {
+    pub schema_owner: String,
+    pub schema_version: u32,
+    pub scope_id: String,
+    pub control_authority: MacPublisherControlAuthorityV1,
+    pub bootstrap_authorization_sha256: String,
+    pub manifest_generation: u64,
+    pub manifest_sha256: String,
+    pub current_anchor_sha256: String,
+    pub state_revision: u64,
+}
+
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]
 #[serde(deny_unknown_fields)]
 pub struct GuestPublisherRetirementReservationV1 {
@@ -394,22 +463,85 @@ pub struct PublisherBootstrapAuthorizationV1 {
     pub authority_domain: String,
     pub scope_id: String,
     pub host_context_commitment: String,
+    /// The exact canonical IH carrier used only within the retained direct-bootstrap FD3
+    /// authorization. It is never accepted by the ordinary mapped request decoder.
+    pub install_bootstrap_context_v1: String,
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub platform_mapping_commitment: Option<String>,
     pub requester_principal: String,
     pub source_commit: String,
     pub source_tree: String,
     pub source_ref: String,
+    /// The exact canonical manifest identity copied into the first signed anchor. These fields
+    /// travel only in the direct FD3 authorization; the seed/manifest bytes never do.
+    pub manifest_generation: u64,
+    pub manifest_sha256: String,
+    /// The full canonical generation-one pre-PM manifest. This exists only in the direct FD3
+    /// authorization and binds the initial anchor to durable capsule bytes without asking a
+    /// caller to provide a manifest seed.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub pre_pm_manifest: Option<ManagedArtifactManifestV1>,
     pub issued_at_unix_ns: u64,
     pub expires_at_unix_ns: u64,
     pub attempt_nonce: String,
     pub publisher_expected_absent: bool,
     pub executor_build_evidence: ExecutorBuildEvidenceV1,
+    /// Required only for the macOS host publisher. It binds the immutable control image and
+    /// designated requirement before the fixed XPC service may admit any peer.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub mac_control_authority: Option<MacPublisherControlAuthorityV1>,
     #[serde(default)]
     pub components: Vec<PublisherBootstrapComponentV1>,
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub test_retirement_commitment: Option<PublisherTestRetirementCommitmentV1>,
     pub confirmation: String,
+}
+
+/// The hidden direct-bootstrap stdin request. Its sole field is the exact IH carrier; every
+/// source/build/profile/manifest/action authority is constructed from retained install evidence.
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]
+#[serde(deny_unknown_fields)]
+pub struct MacPublisherBootstrapRequestV1 {
+    pub install_bootstrap_context_v1: String,
+}
+
+/// A fixed-key, scope-independent System-Keychain locator for the one direct macOS bootstrap
+/// attempt selected by an IH-only request.  This deliberately retains only stable joins and the
+/// bounded public response: it never stores the complete FD3 authorization or creates a caller
+/// supplied retry locator.
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]
+#[serde(deny_unknown_fields)]
+pub struct MacPublisherBootstrapAttemptLocatorV1 {
+    pub schema_owner: String,
+    pub schema_version: u32,
+    pub attempt_key_sha256: String,
+    pub authority_domain: String,
+    pub host_context_commitment: String,
+    pub requester_principal: String,
+    pub selected_host_prefix: String,
+    pub install_provenance_sha256: String,
+    pub source_commit: String,
+    pub source_tree: String,
+    pub source_ref: String,
+    pub scope_id: String,
+    pub attempt_id: String,
+    pub issued_at_unix_ns: u64,
+    pub expires_at_unix_ns: u64,
+    pub bootstrap_request_sha256: String,
+    pub bootstrap_authorization_sha256: String,
+    pub pre_pm_manifest_sha256: String,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub initial_anchor_sha256: Option<String>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub protected_state_sha256: Option<String>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub capsule_sha256: Option<String>,
+    /// `Allocated` is recoverable before the first key/capsule effect. `Completed` carries one
+    /// canonical public response. `PreservingBlocked` intentionally cannot be retried blindly.
+    pub terminal_state: String,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub canonical_response_b64: Option<String>,
+    pub locator_revision: u64,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]
@@ -697,7 +829,96 @@ pub struct LimaStageOneAuthorizationV1 {
     pub attempt_id: String,
     pub nonce: String,
     pub expires_at_unix_ns: u64,
+    pub rendered_profile_b64: String,
+    pub rendered_profile_sha256: String,
+    /// The one signed pre-effect source for a post-create PM manifest.  It deliberately contains
+    /// no fabricated mapping commitment, machine identifier, or complete post-PM manifest.
+    pub successor_template: MacLimaStageOneSuccessorTemplateV1,
     pub signature: LifecycleSignatureV1,
+}
+
+/// The exact post-effect observation admitted to the Stage-1 transition. No caller-provided
+/// mapping or machine value can substitute for this executor-owned tuple.
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]
+#[serde(deny_unknown_fields)]
+pub struct LimaStageOneObservationV1 {
+    pub instance_name: String,
+    pub instance_status: String,
+    pub guest_machine_id: String,
+    pub marker_attempt_id: String,
+    pub marker_capsule_sha256: String,
+    pub guest_account: String,
+    pub guest_uid: u32,
+    pub guest_home: String,
+}
+
+/// Durable per-scope transition state for the one Stage-1 effect. The System-Keychain account is
+/// fixed from the scope and the record is absent-or-exact/CAS only; it is not a reusable request.
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]
+#[serde(deny_unknown_fields)]
+pub struct MacLimaStageOneCapsuleV1 {
+    pub schema_owner: String,
+    pub schema_version: u32,
+    pub scope_id: String,
+    pub state: String,
+    pub capsule_revision: u64,
+    pub install_provenance_sha256: String,
+    pub bootstrap_authorization_sha256: String,
+    pub pre_pm_manifest: ManagedArtifactManifestV1,
+    pub initial_anchor_sha256: String,
+    pub initial_anchor_counter: u64,
+    /// Digest of the exact prepared protected-state snapshot which was sealed before the
+    /// executor could begin the one allowed Lima effect.  It makes a crash after the successor
+    /// state CAS distinguishable from a still-pending effect without re-running the effect.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub prepared_protected_state_sha256: Option<String>,
+    pub stage_one_authorization: LimaStageOneAuthorizationV1,
+    pub rendered_profile_file_identity: Option<String>,
+    pub observation: Option<LimaStageOneObservationV1>,
+}
+
+/// Signed, pre-effect-only inputs to the Stage-1 successor derivation.  The privileged executor
+/// adds precisely one observed value (`guest_machine_id`) after the selected absent-instance
+/// effect and uses the repository's canonical Lima mapping constructor to materialize the full
+/// PM-bound manifest.
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]
+#[serde(deny_unknown_fields)]
+pub struct MacLimaStageOneSuccessorTemplateV1 {
+    pub schema_owner: String,
+    pub schema_version: u32,
+    pub derivation_algorithm: String,
+    pub current_pre_pm_manifest_generation: u64,
+    pub current_pre_pm_manifest_sha256: String,
+    pub current_anchor_sha256: String,
+    pub current_anchor_counter: u64,
+    pub next_manifest_generation: u64,
+    pub previous_manifest_sha256: String,
+    pub host_context_commitment: String,
+    pub scope_id: String,
+    pub installation_id: String,
+    pub intended_principal: String,
+    pub selected_host_prefix: String,
+    pub host_platform_control_root: String,
+    pub instance_name: String,
+    pub profile_sha256: String,
+    pub source_commit: String,
+    pub source_tree: String,
+    pub source_ref: String,
+    pub executor_build_evidence: ExecutorBuildEvidenceV1,
+    pub attempt_id: String,
+    pub nonce: String,
+    pub expires_at_unix_ns: u64,
+    pub manifest_created_at_unix_ns: u64,
+    pub manifest_lifecycle_state: ManagedLifecycleStateV1,
+    pub profile_template_algorithm: String,
+    pub profile_template_version: u32,
+    pub profile_template_sha256: String,
+    #[serde(default)]
+    pub ordered_non_machine_entries: Vec<ManagedArtifactEntryV1>,
+    pub planned_receipt_id: String,
+    pub planned_receipt_relative_path: String,
+    #[serde(default)]
+    pub post_effect_observation_slots: Vec<String>,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]
@@ -751,6 +972,13 @@ pub fn canonical_manifest_bytes_v1(
     })
 }
 
+/// Compute the canonical manifest identity without accepting it as caller authority.  Builders
+/// use this only while materializing a manifest from already-signed inputs, then immediately
+/// validate the completed manifest through [`canonical_manifest_bytes_v1`].
+pub fn managed_artifact_manifest_sha256_v1(manifest: &ManagedArtifactManifestV1) -> Result<String> {
+    manifest_digest_v1(manifest)
+}
+
 pub fn validate_managed_lifecycle_publisher_request_v1(
     request: &ManagedLifecyclePublisherRequestV1,
 ) -> Result<()> {
@@ -792,6 +1020,39 @@ pub fn canonical_publisher_bootstrap_authorization_v1(
 ) -> Result<Vec<u8>> {
     validate_publisher_bootstrap_authorization_v1(authorization)?;
     canonical_json_to_vec(authorization).context("encode bootstrap authorization")
+}
+
+pub fn mac_publisher_bootstrap_request_sha256_v1(
+    request: &MacPublisherBootstrapRequestV1,
+) -> Result<String> {
+    Ok(lower_hex(&Sha256::digest(
+        canonical_mac_publisher_bootstrap_request_v1(request)?,
+    )))
+}
+
+pub fn canonical_mac_publisher_bootstrap_attempt_locator_v1(
+    locator: &MacPublisherBootstrapAttemptLocatorV1,
+) -> Result<Vec<u8>> {
+    validate_mac_publisher_bootstrap_attempt_locator_v1(locator)?;
+    canonical_json_to_vec(locator).context("encode canonical macOS bootstrap attempt locator")
+}
+
+pub fn mac_publisher_bootstrap_attempt_locator_sha256_v1(
+    locator: &MacPublisherBootstrapAttemptLocatorV1,
+) -> Result<String> {
+    Ok(lower_hex(&Sha256::digest(
+        canonical_mac_publisher_bootstrap_attempt_locator_v1(locator)?,
+    )))
+}
+
+/// Hash the validated canonical bootstrap authorization for the existing signed-anchor retry
+/// binding. The digest never becomes a caller-supplied bootstrap carrier.
+pub fn publisher_bootstrap_authorization_sha256_v1(
+    authorization: &PublisherBootstrapAuthorizationV1,
+) -> Result<String> {
+    Ok(lower_hex(&Sha256::digest(
+        canonical_publisher_bootstrap_authorization_v1(authorization)?,
+    )))
 }
 
 pub fn canonical_publisher_bootstrap_core_v1(
@@ -935,6 +1196,12 @@ pub fn canonical_action_receipt_index_bytes_v1(
 ) -> Result<Vec<u8>> {
     validate_action_receipt_index_v1(index)?;
     canonical_json_to_vec(index).context("encode action receipt index")
+}
+
+/// Encode the durable manifest head used by the signed publisher anchor.
+pub fn canonical_managed_manifest_head_v1(head: &ManagedManifestHeadV1) -> Result<Vec<u8>> {
+    validate_manifest_head_v1(head)?;
+    canonical_json_to_vec(head).context("encode managed manifest head")
 }
 
 pub fn compare_and_swap_action_receipt_index_v1(
@@ -1140,10 +1407,9 @@ pub fn validate_mac_publisher_control_authority_v1(
         "macOS control authority source_tree",
     )?;
     require_nonempty_no_nul(&authority.source_ref, "macOS control authority source_ref")?;
-    require_nonempty_no_nul(
-        &authority.target_triple,
-        "macOS control authority target_triple",
-    )?;
+    if authority.target_triple != "aarch64-apple-darwin" {
+        bail!("macOS control authority target_triple must be aarch64-apple-darwin");
+    }
     require_hex_digest(
         &authority.artifact_sha256,
         "macOS control authority artifact_sha256",
@@ -1191,6 +1457,177 @@ pub fn mac_publisher_control_authority_sha256_v1(
     Ok(lower_hex(&Sha256::digest(
         canonical_mac_publisher_control_authority_v1(authority)?,
     )))
+}
+
+/// Validate an opened-image provenance projection without accepting a path or a caller-selected
+/// transport.  The control/executor independently remeasure these values through no-follow file
+/// descriptors before they use the record.
+pub fn validate_mac_publisher_bootstrap_image_provenance_v1(
+    image: &MacPublisherBootstrapImageProvenanceV1,
+) -> Result<()> {
+    require_nonempty_no_nul(&image.target_triple, "macOS bootstrap image target_triple")?;
+    require_hex_digest(
+        &image.artifact_sha256,
+        "macOS bootstrap image artifact_sha256",
+    )?;
+    require_nonempty_no_nul(
+        &image.physical_identity,
+        "macOS bootstrap image physical_identity",
+    )?;
+    if !image
+        .code_identity
+        .strip_prefix("cdhash:")
+        .is_some_and(|value| {
+            value.len() == 40
+                && value
+                    .bytes()
+                    .all(|byte| byte.is_ascii_digit() || (b'a'..=b'f').contains(&byte))
+        })
+    {
+        bail!("macOS bootstrap image code_identity must be a canonical CDHash");
+    }
+    require_nonempty_no_nul(
+        &image.code_requirement,
+        "macOS bootstrap image code_requirement",
+    )?;
+    Ok(())
+}
+
+/// Validate the fixed retained MAC bootstrap provenance record.
+pub fn validate_mac_publisher_install_provenance_v1(
+    provenance: &MacPublisherInstallProvenanceV1,
+) -> Result<()> {
+    require_schema(
+        &provenance.schema_owner,
+        provenance.schema_version,
+        MAC_PUBLISHER_INSTALL_PROVENANCE_OWNER_V1,
+        1,
+    )?;
+    require_git_oid(
+        &provenance.source_commit,
+        "macOS bootstrap provenance source_commit",
+    )?;
+    require_git_oid(
+        &provenance.source_tree,
+        "macOS bootstrap provenance source_tree",
+    )?;
+    require_nonempty_no_nul(
+        &provenance.source_ref,
+        "macOS bootstrap provenance source_ref",
+    )?;
+    require_hex_digest(
+        &provenance.review_record_sha256,
+        "macOS bootstrap provenance review_record_sha256",
+    )?;
+    require_hex_digest(
+        &provenance.host_context_commitment,
+        "macOS bootstrap provenance host_context_commitment",
+    )?;
+    require_nonempty_no_nul(
+        &provenance.selected_host_prefix,
+        "macOS install provenance selected_host_prefix",
+    )?;
+    if !provenance.selected_host_prefix.starts_with('/') {
+        bail!("macOS install provenance selected_host_prefix must be absolute");
+    }
+    validate_mac_publisher_control_authority_v1(&provenance.control_authority)?;
+    if provenance.control_authority.source_commit != provenance.source_commit
+        || provenance.control_authority.source_tree != provenance.source_tree
+        || provenance.control_authority.source_ref != provenance.source_ref
+    {
+        bail!("macOS bootstrap provenance control authority does not join source identity");
+    }
+    validate_mac_publisher_bootstrap_image_provenance_v1(&provenance.control_image)?;
+    validate_mac_publisher_bootstrap_image_provenance_v1(&provenance.executor_image)?;
+    if provenance.control_image.target_triple != provenance.control_authority.target_triple
+        || provenance.control_image.artifact_sha256 != provenance.control_authority.artifact_sha256
+        || provenance.control_image.code_requirement
+            != provenance.control_authority.designated_requirement
+        || provenance.executor_image.target_triple != provenance.control_authority.target_triple
+        || provenance.lima_tool.image.target_triple != provenance.control_authority.target_triple
+    {
+        bail!("macOS bootstrap provenance image identities do not join control authority");
+    }
+    if provenance.control_image.artifact_sha256 == provenance.executor_image.artifact_sha256
+        || provenance.control_image.physical_identity == provenance.executor_image.physical_identity
+        || provenance.control_image.code_requirement == provenance.executor_image.code_requirement
+    {
+        bail!("macOS bootstrap provenance must retain independently measured control and executor images");
+    }
+    require_hex_digest(
+        &provenance.launch_daemon_plist_sha256,
+        "macOS install provenance launch_daemon_plist_sha256",
+    )?;
+    require_nonempty_no_nul(
+        &provenance.lima_tool.absolute_path,
+        "macOS install provenance limactl absolute_path",
+    )?;
+    if !provenance.lima_tool.absolute_path.starts_with('/')
+        || provenance
+            .lima_tool
+            .absolute_path
+            .contains(['\0', '\n', '\r'])
+    {
+        bail!("macOS install provenance limactl path must be absolute");
+    }
+    validate_mac_publisher_bootstrap_image_provenance_v1(&provenance.lima_tool.image)?;
+    require_nonempty_no_nul(
+        &provenance.lima_tool.version,
+        "macOS install provenance limactl version",
+    )?;
+    if provenance.profile_template_algorithm != "substrate.mac-lima-stage-one-profile-template"
+        || provenance.profile_template_version != 1
+    {
+        bail!("macOS install provenance profile template algorithm/version mismatch");
+    }
+    require_hex_digest(
+        &provenance.profile_template_sha256,
+        "macOS install provenance profile_template_sha256",
+    )?;
+    Ok(())
+}
+
+pub fn canonical_mac_publisher_install_provenance_v1(
+    provenance: &MacPublisherInstallProvenanceV1,
+) -> Result<Vec<u8>> {
+    validate_mac_publisher_install_provenance_v1(provenance)?;
+    canonical_json_to_vec(provenance).context("encode macOS install provenance")
+}
+
+pub fn validate_mac_publisher_control_admission_v1(
+    admission: &MacPublisherControlAdmissionV1,
+) -> Result<()> {
+    require_schema(
+        &admission.schema_owner,
+        admission.schema_version,
+        MAC_PUBLISHER_CONTROL_ADMISSION_OWNER_V1,
+        1,
+    )?;
+    require_uuid_v7(&admission.scope_id, "macOS control admission scope_id")?;
+    validate_mac_publisher_control_authority_v1(&admission.control_authority)?;
+    require_hex_digest(
+        &admission.bootstrap_authorization_sha256,
+        "macOS control admission bootstrap_authorization_sha256",
+    )?;
+    if admission.manifest_generation == 0 {
+        bail!("macOS control admission manifest_generation must be positive");
+    }
+    require_hex_digest(
+        &admission.manifest_sha256,
+        "macOS control admission manifest_sha256",
+    )?;
+    require_hex_digest(
+        &admission.current_anchor_sha256,
+        "macOS control admission current_anchor_sha256",
+    )?;
+    Ok(())
+}
+
+pub fn canonical_mac_publisher_control_admission_v1(
+    admission: &MacPublisherControlAdmissionV1,
+) -> Result<Vec<u8>> {
+    validate_mac_publisher_control_admission_v1(admission)?;
+    canonical_json_to_vec(admission).context("encode macOS control admission")
 }
 
 pub fn validate_guest_publisher_pairing_ticket_v1(
@@ -1489,6 +1926,170 @@ pub fn parse_publisher_bootstrap_authorization_v1(
     Ok(authorization)
 }
 
+pub fn canonical_mac_publisher_bootstrap_request_v1(
+    request: &MacPublisherBootstrapRequestV1,
+) -> Result<Vec<u8>> {
+    if request.install_bootstrap_context_v1.is_empty()
+        || request
+            .install_bootstrap_context_v1
+            .contains(['\0', '\n', '\r'])
+    {
+        bail!("macOS publisher bootstrap request has no exact IH carrier");
+    }
+    canonical_json_to_vec(request).context("encode macOS publisher bootstrap request")
+}
+
+pub fn parse_mac_publisher_bootstrap_request_v1(
+    bytes: &[u8],
+) -> Result<MacPublisherBootstrapRequestV1> {
+    let request: MacPublisherBootstrapRequestV1 = canonical_json_from_slice(bytes)
+        .context("macOS publisher bootstrap request is not canonical v1 JSON")?;
+    canonical_mac_publisher_bootstrap_request_v1(&request)?;
+    Ok(request)
+}
+
+/// Return the canonical bytes for the fixed per-scope Stage-1 capsule before its Keychain CAS.
+pub fn canonical_mac_lima_stage_one_capsule_v1(
+    capsule: &MacLimaStageOneCapsuleV1,
+) -> Result<Vec<u8>> {
+    validate_mac_lima_stage_one_capsule_v1(capsule)?;
+    canonical_json_to_vec(capsule).context("encode canonical macOS Lima Stage-1 capsule")
+}
+
+pub fn validate_mac_publisher_bootstrap_attempt_locator_v1(
+    locator: &MacPublisherBootstrapAttemptLocatorV1,
+) -> Result<()> {
+    require_schema(
+        &locator.schema_owner,
+        locator.schema_version,
+        "substrate.mac-publisher-bootstrap-attempt-locator",
+        1,
+    )?;
+    require_hex_digest(
+        &locator.attempt_key_sha256,
+        "bootstrap attempt locator attempt_key_sha256",
+    )?;
+    if locator.authority_domain != "mac_host_shared" {
+        bail!("bootstrap attempt locator authority_domain must be mac_host_shared");
+    }
+    require_hex_digest(
+        &locator.host_context_commitment,
+        "bootstrap attempt locator host_context_commitment",
+    )?;
+    require_nonempty_no_nul(
+        &locator.requester_principal,
+        "bootstrap attempt locator requester_principal",
+    )?;
+    require_nonempty_no_nul(
+        &locator.selected_host_prefix,
+        "bootstrap attempt locator selected_host_prefix",
+    )?;
+    if !locator.selected_host_prefix.starts_with('/') {
+        bail!("bootstrap attempt locator selected_host_prefix must be absolute");
+    }
+    require_hex_digest(
+        &locator.install_provenance_sha256,
+        "bootstrap attempt locator install_provenance_sha256",
+    )?;
+    require_git_oid(
+        &locator.source_commit,
+        "bootstrap attempt locator source_commit",
+    )?;
+    require_git_oid(
+        &locator.source_tree,
+        "bootstrap attempt locator source_tree",
+    )?;
+    require_nonempty_no_nul(&locator.source_ref, "bootstrap attempt locator source_ref")?;
+    require_uuid_v7(&locator.scope_id, "bootstrap attempt locator scope_id")?;
+    require_uuid_v7(&locator.attempt_id, "bootstrap attempt locator attempt_id")?;
+    if locator.expires_at_unix_ns <= locator.issued_at_unix_ns {
+        bail!("bootstrap attempt locator expiry must follow issue time");
+    }
+    for (value, field) in [
+        (
+            &locator.bootstrap_request_sha256,
+            "bootstrap_request_sha256",
+        ),
+        (
+            &locator.bootstrap_authorization_sha256,
+            "bootstrap_authorization_sha256",
+        ),
+        (&locator.pre_pm_manifest_sha256, "pre_pm_manifest_sha256"),
+    ] {
+        require_hex_digest(value, field)?;
+    }
+    if let Some(value) = &locator.initial_anchor_sha256 {
+        require_hex_digest(value, "initial_anchor_sha256")?;
+    }
+    for (value, field) in [
+        (&locator.protected_state_sha256, "protected_state_sha256"),
+        (&locator.capsule_sha256, "capsule_sha256"),
+    ] {
+        if let Some(value) = value {
+            require_hex_digest(value, field)?;
+        }
+    }
+    if locator.locator_revision == 0 {
+        bail!("bootstrap attempt locator revision must be positive");
+    }
+    match locator.terminal_state.as_str() {
+        "Allocated" => {
+            if locator.canonical_response_b64.is_some()
+                || locator.initial_anchor_sha256.is_some()
+                || locator.protected_state_sha256.is_some()
+                || locator.capsule_sha256.is_some()
+            {
+                bail!("allocated bootstrap attempt locator must not retain a response");
+            }
+        }
+        "Completed" => {
+            let response = locator.canonical_response_b64.as_deref().ok_or_else(|| {
+                anyhow!("completed bootstrap attempt locator lacks canonical response")
+            })?;
+            let bytes = decode_base64url(response, "bootstrap attempt locator response")?;
+            let value: Value = serde_json::from_slice(&bytes)
+                .context("decode bootstrap attempt locator response")?;
+            if !value.is_object() || canonical_json_to_vec(&value)? != bytes {
+                bail!("bootstrap attempt locator response is not canonical object JSON");
+            }
+            fn contains_forbidden_authorization_carrier(value: &Value) -> bool {
+                match value {
+                    Value::Object(object) => object.iter().any(|(key, value)| {
+                        matches!(
+                            key.as_str(),
+                            "publisher_bootstrap_authorization"
+                                | "publisher_bootstrap_authorization_v1"
+                                | "complete_authorization"
+                        ) || contains_forbidden_authorization_carrier(value)
+                    }),
+                    Value::Array(values) => {
+                        values.iter().any(contains_forbidden_authorization_carrier)
+                    }
+                    _ => false,
+                }
+            }
+            if contains_forbidden_authorization_carrier(&value) {
+                bail!("bootstrap attempt locator response must not serialize authorization");
+            }
+            if locator.initial_anchor_sha256.is_none()
+                || locator.protected_state_sha256.is_none()
+                || locator.capsule_sha256.is_none()
+            {
+                bail!(
+                    "completed bootstrap attempt locator lacks durable anchor/state/capsule joins"
+                );
+            }
+        }
+        "PreservingBlocked" => {
+            if locator.canonical_response_b64.is_some() {
+                bail!("blocked bootstrap attempt locator must not retain a success response");
+            }
+        }
+        _ => bail!("bootstrap attempt locator has an unknown terminal state"),
+    }
+    Ok(())
+}
+
 pub fn validate_publisher_bootstrap_authorization_v1(
     authorization: &PublisherBootstrapAuthorizationV1,
 ) -> Result<()> {
@@ -1503,6 +2104,10 @@ pub fn validate_publisher_bootstrap_authorization_v1(
     require_hex_digest(
         &authorization.host_context_commitment,
         "publisher bootstrap host_context_commitment",
+    )?;
+    require_nonempty_no_nul(
+        &authorization.install_bootstrap_context_v1,
+        "publisher bootstrap exact IH carrier",
     )?;
     if let Some(commitment) = &authorization.platform_mapping_commitment {
         require_hex_digest(
@@ -1519,6 +2124,13 @@ pub fn validate_publisher_bootstrap_authorization_v1(
         "publisher bootstrap source_tree",
     )?;
     require_nonempty_no_nul(&authorization.source_ref, "publisher bootstrap source_ref")?;
+    if authorization.manifest_generation == 0 {
+        bail!("publisher bootstrap manifest_generation must be positive");
+    }
+    require_hex_digest(
+        &authorization.manifest_sha256,
+        "publisher bootstrap manifest_sha256",
+    )?;
     require_nonempty_no_nul(
         &authorization.requester_principal,
         "publisher bootstrap requester_principal",
@@ -1531,6 +2143,77 @@ pub fn validate_publisher_bootstrap_authorization_v1(
         bail!("publisher bootstrap authorization expiry must follow issue time");
     }
     validate_executor_build_evidence_v1(&authorization.executor_build_evidence)?;
+    if authorization.executor_build_evidence.source_commit != authorization.source_commit
+        || authorization.executor_build_evidence.source_tree != authorization.source_tree
+        || authorization.executor_build_evidence.source_ref != authorization.source_ref
+    {
+        bail!("publisher bootstrap executor build evidence does not join authorization source identity");
+    }
+    match (
+        authorization.authority_domain.as_str(),
+        authorization.mac_control_authority.as_ref(),
+    ) {
+        ("mac_host_shared", Some(control_authority)) => {
+            validate_mac_publisher_control_authority_v1(control_authority)?;
+            if control_authority.source_commit != authorization.source_commit
+                || control_authority.source_tree != authorization.source_tree
+                || control_authority.source_ref != authorization.source_ref
+            {
+                bail!("mac_control_authority does not join authorization source identity");
+            }
+            if control_authority.target_triple
+                != authorization.executor_build_evidence.target_triple
+            {
+                bail!("mac_control_authority does not join authorization executor build");
+            }
+        }
+        ("mac_host_shared", None) => {
+            bail!("mac_host_shared bootstrap authorization requires mac_control_authority");
+        }
+        (_, Some(_)) => {
+            bail!(
+                "mac_control_authority is valid only for mac_host_shared bootstrap authorization"
+            );
+        }
+        (_, None) => {}
+    }
+    if authorization.authority_domain == "mac_host_shared"
+        && authorization.platform_mapping_commitment.is_none()
+        && (!authorization.publisher_expected_absent || authorization.manifest_generation != 1)
+    {
+        bail!(
+            "pre-PM mac_host_shared bootstrap authorization requires absent publisher and generation one"
+        );
+    }
+    match (
+        authorization.authority_domain.as_str(),
+        authorization.publisher_expected_absent,
+        authorization.pre_pm_manifest.as_ref(),
+    ) {
+        ("mac_host_shared", true, Some(manifest)) => {
+            canonical_manifest_bytes_v1(manifest)?;
+            if manifest.authority_domain != "mac_host_shared"
+                || manifest.platform_kind != "mac_lima"
+                || manifest.platform_mapping_commitment.is_some()
+                || manifest.manifest_generation != 1
+                || manifest.manifest_generation != authorization.manifest_generation
+                || manifest.manifest_sha256 != authorization.manifest_sha256
+                || manifest.host_context_commitment != authorization.host_context_commitment
+                || manifest.installation_id != authorization.scope_id
+                || manifest.intended_principal != authorization.requester_principal
+                || manifest.attempt_id != authorization.attempt_nonce
+            {
+                bail!("mac_host_shared bootstrap authorization pre-PM manifest does not exact-join authorization");
+            }
+        }
+        ("mac_host_shared", true, None) => {
+            bail!("mac_host_shared absent bootstrap authorization requires its canonical pre-PM manifest");
+        }
+        (_, _, Some(_)) => {
+            bail!("pre_pm_manifest is valid only for an absent mac_host_shared bootstrap authorization");
+        }
+        _ => {}
+    }
     let confirmation = authorization.confirmation.as_str();
     if confirmation != "CREATE EXACT SUBSTRATE LIFECYCLE PUBLISHER" {
         bail!("publisher bootstrap confirmation literal mismatch");
@@ -1678,7 +2361,7 @@ pub fn validate_complete_publisher_bootstrap_component_set_v1(
     }
     let scope_id = infer_scope_id_from_components(components)?;
     let mut component_ids = BTreeSet::new();
-    let mut targets = BTreeSet::new();
+    let mut targets = BTreeMap::new();
     for component in components {
         if !component_ids.insert(component.component_id.clone()) {
             bail!("publisher bootstrap component IDs must be unique");
@@ -1688,8 +2371,16 @@ pub fn validate_complete_publisher_bootstrap_component_set_v1(
         if derived_target != component.target_identity {
             bail!("publisher bootstrap component target does not match derived target");
         }
-        if !targets.insert(derived_target) {
-            bail!("publisher bootstrap component targets must be unique");
+        if let Some(existing_role) =
+            targets.insert(derived_target.clone(), component.role.0.as_str())
+        {
+            let shared_mac_service_target = matches!(
+                (existing_role, component.role.0.as_str()),
+                ("MacMachService", "MacServiceState") | ("MacServiceState", "MacMachService")
+            );
+            if !shared_mac_service_target {
+                bail!("publisher bootstrap component targets must be unique");
+            }
         }
         if !component
             .dependency_component_ids
@@ -1741,11 +2432,289 @@ pub fn validate_lima_stage_one_authorization_v1(
     )?;
     require_uuid_v7(&authorization.attempt_id, "Lima stage-one attempt_id")?;
     require_uuid_v7(&authorization.nonce, "Lima stage-one nonce")?;
+    let rendered_profile = decode_base64url(
+        &authorization.rendered_profile_b64,
+        "Lima stage-one rendered_profile_b64",
+    )?;
+    if rendered_profile.is_empty()
+        || lower_hex(&Sha256::digest(&rendered_profile)) != authorization.rendered_profile_sha256
+    {
+        bail!("Lima stage-one rendered profile does not match canonical digest");
+    }
+    require_hex_digest(
+        &authorization.rendered_profile_sha256,
+        "Lima stage-one rendered_profile_sha256",
+    )?;
+    validate_mac_lima_stage_one_successor_template_v1(
+        &authorization.successor_template,
+        authorization,
+    )?;
     verify_lifecycle_signature_v1(
         &authorization.schema_owner,
         authorization,
         &authorization.signature,
     )
+}
+
+/// Validate the closed pre-effect Stage-1 template.  This is intentionally separate from
+/// `ManagedArtifactManifestV1`: constructing a PM mapping/manifest before the selected create
+/// would fabricate the only machine-derived observation the template permits after the effect.
+pub fn validate_mac_lima_stage_one_successor_template_v1(
+    template: &MacLimaStageOneSuccessorTemplateV1,
+    authorization: &LimaStageOneAuthorizationV1,
+) -> Result<()> {
+    require_schema(
+        &template.schema_owner,
+        template.schema_version,
+        "substrate.mac-lima-stage-one-successor-template",
+        1,
+    )?;
+    if template.derivation_algorithm
+        != "mac_lima_stage_one_successor_template_v1_platform_mapping_then_manifest"
+    {
+        bail!("Lima Stage-1 successor template has an unknown derivation algorithm");
+    }
+    if template.profile_template_algorithm != "substrate.mac-lima-stage-one-profile-template"
+        || template.profile_template_version != 1
+    {
+        bail!("Lima Stage-1 successor template profile algorithm/version mismatch");
+    }
+    require_hex_digest(
+        &template.profile_template_sha256,
+        "Lima Stage-1 successor template profile_template_sha256",
+    )?;
+    if template.current_pre_pm_manifest_generation == 0
+        || template.next_manifest_generation
+            != template
+                .current_pre_pm_manifest_generation
+                .checked_add(1)
+                .ok_or_else(|| anyhow!("Lima Stage-1 successor template generation overflow"))?
+        || template.manifest_lifecycle_state != ManagedLifecycleStateV1::ManifestDurable
+        || template.manifest_created_at_unix_ns == 0
+    {
+        bail!("Lima Stage-1 successor template has an invalid manifest generation/time policy");
+    }
+    for (value, field) in [
+        (
+            &template.current_pre_pm_manifest_sha256,
+            "Lima Stage-1 current_pre_pm_manifest_sha256",
+        ),
+        (
+            &template.current_anchor_sha256,
+            "Lima Stage-1 current_anchor_sha256",
+        ),
+        (
+            &template.previous_manifest_sha256,
+            "Lima Stage-1 previous_manifest_sha256",
+        ),
+        (
+            &template.host_context_commitment,
+            "Lima Stage-1 template host_context_commitment",
+        ),
+        (
+            &template.profile_sha256,
+            "Lima Stage-1 template profile_sha256",
+        ),
+    ] {
+        require_hex_digest(value, field)?;
+    }
+    if template.previous_manifest_sha256 != template.current_pre_pm_manifest_sha256
+        || template.host_context_commitment != authorization.host_context_commitment
+        || template.scope_id != template.installation_id
+        || template.instance_name != authorization.instance_name
+        || template.profile_sha256 != authorization.profile_sha256
+        || template.source_commit != authorization.source_commit
+        || template.source_tree != authorization.source_tree
+        || template.source_ref != authorization.source_ref
+        || template.attempt_id != authorization.attempt_id
+        || template.nonce != authorization.nonce
+        || template.expires_at_unix_ns != authorization.expires_at_unix_ns
+        || template.intended_principal != authorization.requester_principal
+    {
+        bail!("Lima Stage-1 successor template does not exact-join its signed authorization");
+    }
+    require_uuid_v7(&template.scope_id, "Lima Stage-1 template scope_id")?;
+    require_uuid_v7(
+        &template.installation_id,
+        "Lima Stage-1 template installation_id",
+    )?;
+    require_nonempty_no_nul(
+        &template.intended_principal,
+        "Lima Stage-1 template intended_principal",
+    )?;
+    require_nonempty_no_nul(
+        &template.selected_host_prefix,
+        "Lima Stage-1 template selected_host_prefix",
+    )?;
+    require_nonempty_no_nul(
+        &template.host_platform_control_root,
+        "Lima Stage-1 template host_platform_control_root",
+    )?;
+    require_nonempty_no_nul(
+        &template.instance_name,
+        "Lima Stage-1 template instance_name",
+    )?;
+    validate_executor_build_evidence_v1(&template.executor_build_evidence)?;
+    if template.executor_build_evidence.source_commit != template.source_commit
+        || template.executor_build_evidence.source_tree != template.source_tree
+        || template.executor_build_evidence.source_ref != template.source_ref
+    {
+        bail!("Lima Stage-1 template executor build evidence does not join source identity");
+    }
+    if template.planned_receipt_id.is_empty()
+        || template.planned_receipt_id.contains(['\0', '\n', '\r'])
+        || !template
+            .planned_receipt_relative_path
+            .starts_with("receipts/")
+        || template
+            .planned_receipt_relative_path
+            .contains(['\0', '\n', '\r'])
+        || template.post_effect_observation_slots.len() != 1
+        || template
+            .post_effect_observation_slots
+            .first()
+            .map(String::as_str)
+            != Some("guest_machine_id")
+    {
+        bail!("Lima Stage-1 template must name one receipt and only guest_machine_id observation");
+    }
+    let mut entry_ids = BTreeSet::new();
+    for entry in &template.ordered_non_machine_entries {
+        // Full role/identity validation runs after the single machine observation is joined into
+        // the derived manifest.  Before the effect there is intentionally no PM mapping against
+        // which the MAC role identity can be validated; still reject empty/duplicate ordering
+        // identifiers at the signed template boundary.
+        require_nonempty_no_nul(&entry.object_id, "Lima Stage-1 template entry object_id")?;
+        if !entry_ids.insert(entry.object_id.clone()) {
+            bail!("Lima Stage-1 template entries must be ordered with unique object IDs");
+        }
+    }
+    Ok(())
+}
+
+pub fn validate_lima_stage_one_observation_v1(
+    observation: &LimaStageOneObservationV1,
+) -> Result<()> {
+    require_nonempty_no_nul(
+        &observation.instance_name,
+        "Lima Stage-1 observation instance_name",
+    )?;
+    if observation.instance_status != "Running" {
+        bail!("Lima Stage-1 observation instance_status must be Running");
+    }
+    if observation.guest_machine_id.len() != 32
+        || !observation
+            .guest_machine_id
+            .bytes()
+            .all(|byte| byte.is_ascii_digit() || (b'a'..=b'f').contains(&byte))
+    {
+        bail!("Lima Stage-1 observation guest_machine_id must be 128-bit lowercase hex");
+    }
+    require_uuid_v7(
+        &observation.marker_attempt_id,
+        "Lima Stage-1 observation marker_attempt_id",
+    )?;
+    require_hex_digest(
+        &observation.marker_capsule_sha256,
+        "Lima Stage-1 observation marker_capsule_sha256",
+    )?;
+    require_nonempty_no_nul(
+        &observation.guest_account,
+        "Lima Stage-1 observation guest_account",
+    )?;
+    if observation.guest_uid == 0 {
+        bail!("Lima Stage-1 observation guest_uid must be positive");
+    }
+    require_nonempty_no_nul(
+        &observation.guest_home,
+        "Lima Stage-1 observation guest_home",
+    )?;
+    if !observation.guest_home.starts_with('/') {
+        bail!("Lima Stage-1 observation guest_home must be absolute");
+    }
+    Ok(())
+}
+
+pub fn validate_mac_lima_stage_one_capsule_v1(capsule: &MacLimaStageOneCapsuleV1) -> Result<()> {
+    require_schema(
+        &capsule.schema_owner,
+        capsule.schema_version,
+        "substrate.mac-lima-stage-one-capsule",
+        1,
+    )?;
+    require_uuid_v7(&capsule.scope_id, "Lima Stage-1 capsule scope_id")?;
+    if !matches!(
+        capsule.state.as_str(),
+        "Issued"
+            | "Prepared"
+            | "EffectStarted"
+            | "InstanceObserved"
+            | "Completed"
+            | "PreservingBlocked"
+    ) {
+        bail!("Lima Stage-1 capsule state is not closed");
+    }
+    require_hex_digest(
+        &capsule.install_provenance_sha256,
+        "Lima Stage-1 capsule install_provenance_sha256",
+    )?;
+    require_hex_digest(
+        &capsule.bootstrap_authorization_sha256,
+        "Lima Stage-1 capsule bootstrap_authorization_sha256",
+    )?;
+    canonical_manifest_bytes_v1(&capsule.pre_pm_manifest)?;
+    validate_lima_stage_one_authorization_v1(&capsule.stage_one_authorization)?;
+    let stage = &capsule.stage_one_authorization;
+    if capsule.scope_id != stage.successor_template.scope_id
+        || capsule.pre_pm_manifest.manifest_generation != 1
+        || capsule.pre_pm_manifest.manifest_sha256
+            != stage.successor_template.current_pre_pm_manifest_sha256
+        || capsule.pre_pm_manifest.host_context_commitment != stage.host_context_commitment
+        || capsule.pre_pm_manifest.installation_id != capsule.scope_id
+        || stage.executor_receipt_sha256 != capsule.bootstrap_authorization_sha256
+        || capsule.initial_anchor_sha256 != stage.successor_template.current_anchor_sha256
+        || capsule.initial_anchor_counter != stage.successor_template.current_anchor_counter
+    {
+        bail!("Lima Stage-1 capsule does not exact-join authorization/template/initial anchor");
+    }
+    if let Some(file_identity) = &capsule.rendered_profile_file_identity {
+        require_nonempty_no_nul(
+            file_identity,
+            "Lima Stage-1 capsule rendered_profile_file_identity",
+        )?;
+    }
+    if let Some(prepared_state_sha256) = &capsule.prepared_protected_state_sha256 {
+        require_hex_digest(
+            prepared_state_sha256,
+            "Lima Stage-1 capsule prepared_protected_state_sha256",
+        )?;
+    }
+    if matches!(capsule.state.as_str(), "Issued" | "Prepared")
+        && capsule.prepared_protected_state_sha256.is_some()
+    {
+        bail!("pre-effect Lima Stage-1 capsule cannot carry a prepared-state digest");
+    }
+    if matches!(
+        capsule.state.as_str(),
+        "EffectStarted" | "InstanceObserved" | "Completed"
+    ) && capsule.prepared_protected_state_sha256.is_none()
+    {
+        bail!("effect-capable Lima Stage-1 capsule lacks its prepared-state digest");
+    }
+    if let Some(observation) = &capsule.observation {
+        validate_lima_stage_one_observation_v1(observation)?;
+        if observation.instance_name != stage.instance_name
+            || observation.marker_attempt_id != stage.attempt_id
+        {
+            bail!("Lima Stage-1 capsule observation does not exact-join signed authorization");
+        }
+    }
+    if matches!(capsule.state.as_str(), "InstanceObserved" | "Completed")
+        && capsule.observation.is_none()
+    {
+        bail!("observed/completed Lima Stage-1 capsule requires its exact observation");
+    }
+    Ok(())
 }
 
 fn validate_manifest_v1(manifest: &ManagedArtifactManifestV1) -> Result<()> {
@@ -1800,7 +2769,17 @@ fn validate_manifest_v1(manifest: &ManagedArtifactManifestV1) -> Result<()> {
     if manifest.authority_domain == "mac_host_shared"
         && manifest.platform_mapping_commitment.is_none()
     {
-        bail!("mac_host_shared manifests require platform_mapping_commitment");
+        let exact_pre_pm_bootstrap_manifest = manifest.platform_kind == "mac_lima"
+            && manifest.manifest_generation == 1
+            && manifest.previous_manifest_sha256.is_none()
+            && manifest.lifecycle_state == ManagedLifecycleStateV1::ManifestDurable
+            && manifest.entries.is_empty()
+            && manifest.planned_action_receipts.is_empty();
+        if !exact_pre_pm_bootstrap_manifest {
+            bail!(
+                "mac_host_shared manifests require platform_mapping_commitment except the exact empty generation-one pre-PM bootstrap manifest"
+            );
+        }
     }
     let digest = manifest_digest_v1(manifest)?;
     if digest != manifest.manifest_sha256 {
@@ -2033,7 +3012,15 @@ fn validate_role_authority_domain_v1(
         | ParsedManagedRole::WindowsWslPublisherBootstrapIntent
         | ParsedManagedRole::WindowsWslPublisherServiceState(_) => "windows_wsl_guest",
     };
-    if manifest.authority_domain != expected_domain {
+    // R5's signed generation-N+1 `mac_host_shared/mac_lima` manifest is the sole host anchor
+    // for the immediately following guest projections.  Those projected entries retain their
+    // `mac_lima_guest` logical-role identity, but never become a separate authority domain or
+    // request channel.  No other cross-domain manifest composition is permitted.
+    let mac_lima_host_anchor_projection = expected_domain == "mac_lima_guest"
+        && manifest.authority_domain == "mac_host_shared"
+        && manifest.platform_kind == "mac_lima"
+        && manifest.platform_mapping_commitment.is_some();
+    if manifest.authority_domain != expected_domain && !mac_lima_host_anchor_projection {
         bail!("manifest entry authority_domain does not match logical_role");
     }
     Ok(())
@@ -4963,5 +5950,534 @@ mod tests {
             code_identity: None,
         };
         validate_executor_build_evidence_v1(&evidence).expect("evidence");
+    }
+
+    fn mac_bootstrap_authorization_with_bound_control_v1() -> PublisherBootstrapAuthorizationV1 {
+        let scope_id = "018f3e4a-7b2c-7c91-8a6f-2e1d5c4b3a90".to_string();
+        let mut pre_pm_manifest = sample_manifest();
+        pre_pm_manifest.manifest_id = format!("m1:{scope_id}:1");
+        pre_pm_manifest.authority_domain = "mac_host_shared".to_string();
+        pre_pm_manifest.platform_kind = "mac_lima".to_string();
+        pre_pm_manifest.platform_mapping_commitment = None;
+        pre_pm_manifest.installation_id = scope_id.clone();
+        pre_pm_manifest.attempt_id = "018f3e4a-7b2c-7c91-8a6f-2e1d5c4b3a91".to_string();
+        pre_pm_manifest.intended_principal = "alice".to_string();
+        pre_pm_manifest.manifest_generation = 1;
+        pre_pm_manifest.previous_manifest_sha256 = None;
+        pre_pm_manifest.entries.clear();
+        pre_pm_manifest.planned_action_receipts.clear();
+        pre_pm_manifest.manifest_sha256 =
+            manifest_digest_v1(&pre_pm_manifest).expect("canonical pre-PM manifest digest");
+        PublisherBootstrapAuthorizationV1 {
+            schema_owner: "substrate.publisher-bootstrap-authorization".to_string(),
+            schema_version: 1,
+            authority_domain: "mac_host_shared".to_string(),
+            scope_id: scope_id.clone(),
+            host_context_commitment: "1".repeat(64),
+            install_bootstrap_context_v1: "fixture-carrier".to_string(),
+            platform_mapping_commitment: None,
+            requester_principal: "alice".to_string(),
+            source_commit: "a".repeat(40),
+            source_tree: "b".repeat(40),
+            source_ref: "refs/heads/test".to_string(),
+            manifest_generation: 1,
+            manifest_sha256: pre_pm_manifest.manifest_sha256.clone(),
+            pre_pm_manifest: Some(pre_pm_manifest),
+            issued_at_unix_ns: 1,
+            expires_at_unix_ns: 2,
+            attempt_nonce: "018f3e4a-7b2c-7c91-8a6f-2e1d5c4b3a91".to_string(),
+            publisher_expected_absent: true,
+            executor_build_evidence: ExecutorBuildEvidenceV1 {
+                schema_owner: "substrate.executor-build-evidence".to_string(),
+                schema_version: 1,
+                source_commit: "a".repeat(40),
+                source_tree: "b".repeat(40),
+                source_ref: "refs/heads/test".to_string(),
+                artifact_sha256: "4".repeat(64),
+                artifact_identity: "inode:123".to_string(),
+                target_triple: "aarch64-apple-darwin".to_string(),
+                tool_versions: BTreeMap::new(),
+                code_identity: None,
+            },
+            mac_control_authority: Some(MacPublisherControlAuthorityV1 {
+                schema_owner: MAC_PUBLISHER_CONTROL_AUTHORITY_OWNER_V1.to_string(),
+                schema_version: 1,
+                control_binary: "substrate-lifecycle-control".to_string(),
+                source_commit: "a".repeat(40),
+                source_tree: "b".repeat(40),
+                source_ref: "refs/heads/test".to_string(),
+                target_triple: "aarch64-apple-darwin".to_string(),
+                artifact_sha256: "3".repeat(64),
+                designated_requirement: concat!(
+                    "anchor apple generic and identifier \"com.substrate.lifecycle.publisher.v1\" ",
+                    "and cdhash H\"0123456789abcdef0123456789abcdef01234567\""
+                )
+                .to_string(),
+            }),
+            components: vec![PublisherBootstrapComponentV1 {
+                component_id: "018f3e4a-7b2c-7c91-8a6f-2e1d5c4b3a92".to_string(),
+                role: PublisherBootstrapComponentRoleV1("MacProtectedState".to_string()),
+                target_identity: format!("{scope_id}:current-anchor"),
+                object_type: "keychain-record".to_string(),
+                expected_before: Value::Object(Map::new()),
+                source_artifact_sha256: None,
+                source_signature_sha256: None,
+                owner: None,
+                group_name: None,
+                mode: None,
+                acl_or_security: None,
+                code_requirement: None,
+                dependency_component_ids: Vec::new(),
+                durability_method: "keychain_cas".to_string(),
+            }],
+            test_retirement_commitment: None,
+            confirmation: "CREATE EXACT SUBSTRATE LIFECYCLE PUBLISHER".to_string(),
+        }
+    }
+
+    fn mac_install_provenance_fixture_v1() -> MacPublisherInstallProvenanceV1 {
+        let authorization = mac_bootstrap_authorization_with_bound_control_v1();
+        let control_authority = authorization
+            .mac_control_authority
+            .expect("fixture mac control authority");
+        let image = |artifact_sha256: String,
+                     physical_identity: &str,
+                     code_identity: &str,
+                     code_requirement: String| {
+            MacPublisherBootstrapImageProvenanceV1 {
+                target_triple: "aarch64-apple-darwin".to_string(),
+                artifact_sha256,
+                physical_identity: physical_identity.to_string(),
+                code_identity: code_identity.to_string(),
+                code_requirement,
+            }
+        };
+        MacPublisherInstallProvenanceV1 {
+            schema_owner: MAC_PUBLISHER_INSTALL_PROVENANCE_OWNER_V1.to_string(),
+            schema_version: 1,
+            source_commit: control_authority.source_commit.clone(),
+            source_tree: control_authority.source_tree.clone(),
+            source_ref: control_authority.source_ref.clone(),
+            review_record_sha256: "a".repeat(64),
+            host_context_commitment: "b".repeat(64),
+            selected_host_prefix: "/tmp/substrate-r5".to_string(),
+            control_image: image(
+                control_authority.artifact_sha256.clone(),
+                "dev:1:ino:10",
+                "cdhash:0123456789abcdef0123456789abcdef01234567",
+                control_authority.designated_requirement.clone(),
+            ),
+            executor_image: image(
+                "c".repeat(64),
+                "dev:1:ino:11",
+                "cdhash:1111111111111111111111111111111111111111",
+                "identifier substrate-lifecycle-macos".to_string(),
+            ),
+            launch_daemon_plist_sha256: "d".repeat(64),
+            lima_tool: MacLimaToolProvenanceV1 {
+                absolute_path: "/usr/local/bin/limactl".to_string(),
+                image: image(
+                    "e".repeat(64),
+                    "dev:1:ino:12",
+                    "cdhash:2222222222222222222222222222222222222222",
+                    "identifier io.lima-vm.lima".to_string(),
+                ),
+                version: "limactl 1.0.0".to_string(),
+            },
+            profile_template_algorithm: "substrate.mac-lima-stage-one-profile-template".to_string(),
+            profile_template_version: 1,
+            profile_template_sha256: "f".repeat(64),
+            control_authority,
+        }
+    }
+
+    #[test]
+    fn mac_install_provenance_and_direct_request_are_closed_and_canonical() {
+        let provenance = mac_install_provenance_fixture_v1();
+        let canonical = canonical_mac_publisher_install_provenance_v1(&provenance)
+            .expect("canonical install provenance");
+        let decoded: MacPublisherInstallProvenanceV1 =
+            serde_json::from_slice(&canonical).expect("decode canonical install provenance");
+        assert_eq!(decoded, provenance);
+
+        let mut relative_prefix = provenance.clone();
+        relative_prefix.selected_host_prefix = "relative/prefix".to_string();
+        assert!(validate_mac_publisher_install_provenance_v1(&relative_prefix).is_err());
+
+        let mut wrong_tool_target = provenance.clone();
+        wrong_tool_target.lima_tool.image.target_triple = "x86_64-apple-darwin".to_string();
+        assert!(validate_mac_publisher_install_provenance_v1(&wrong_tool_target).is_err());
+
+        let request = MacPublisherBootstrapRequestV1 {
+            install_bootstrap_context_v1: "fixture-carrier".to_string(),
+        };
+        let request_bytes = canonical_mac_publisher_bootstrap_request_v1(&request)
+            .expect("canonical direct bootstrap request");
+        assert_eq!(
+            parse_mac_publisher_bootstrap_request_v1(&request_bytes)
+                .expect("parse canonical direct bootstrap request"),
+            request
+        );
+        let mut unknown_request = serde_json::to_value(&request).expect("encode request");
+        unknown_request.as_object_mut().unwrap().insert(
+            "manifest_generation".to_string(),
+            Value::Number(1_u64.into()),
+        );
+        assert!(serde_json::from_value::<MacPublisherBootstrapRequestV1>(unknown_request).is_err());
+        assert!(parse_mac_publisher_bootstrap_request_v1(
+            br#"{"install_bootstrap_context_v1":"fixture-carrier","scope_id":"caller-selected"}"#
+        )
+        .is_err());
+    }
+
+    #[test]
+    fn mac_bootstrap_attempt_locator_is_canonical_closed_and_fail_closed() {
+        let request = MacPublisherBootstrapRequestV1 {
+            install_bootstrap_context_v1: "fixture-carrier".to_string(),
+        };
+        let request_sha256 =
+            mac_publisher_bootstrap_request_sha256_v1(&request).expect("direct request digest");
+        let locator = MacPublisherBootstrapAttemptLocatorV1 {
+            schema_owner: "substrate.mac-publisher-bootstrap-attempt-locator".to_string(),
+            schema_version: 1,
+            attempt_key_sha256: "1".repeat(64),
+            authority_domain: "mac_host_shared".to_string(),
+            host_context_commitment: "2".repeat(64),
+            requester_principal: "alice".to_string(),
+            selected_host_prefix: "/tmp/substrate-r5".to_string(),
+            install_provenance_sha256: "3".repeat(64),
+            source_commit: "a".repeat(40),
+            source_tree: "b".repeat(40),
+            source_ref: "refs/heads/test".to_string(),
+            scope_id: "018f3e4a-7b2c-7c91-8a6f-2e1d5c4b3a90".to_string(),
+            attempt_id: "018f3e4a-7b2c-7c91-8a6f-2e1d5c4b3a91".to_string(),
+            issued_at_unix_ns: 1,
+            expires_at_unix_ns: 2,
+            bootstrap_request_sha256: request_sha256,
+            bootstrap_authorization_sha256: "4".repeat(64),
+            pre_pm_manifest_sha256: "5".repeat(64),
+            initial_anchor_sha256: Some("6".repeat(64)),
+            protected_state_sha256: Some("7".repeat(64)),
+            capsule_sha256: Some("8".repeat(64)),
+            terminal_state: "Completed".to_string(),
+            canonical_response_b64: Some(URL_SAFE_NO_PAD.encode(br#"{"ok":true}"#)),
+            locator_revision: 2,
+        };
+        let canonical = canonical_mac_publisher_bootstrap_attempt_locator_v1(&locator)
+            .expect("canonical completed locator");
+        let decoded: MacPublisherBootstrapAttemptLocatorV1 =
+            serde_json::from_slice(&canonical).expect("decode canonical locator");
+        assert_eq!(decoded, locator);
+        assert_eq!(
+            mac_publisher_bootstrap_attempt_locator_sha256_v1(&locator).unwrap(),
+            lower_hex(&Sha256::digest(canonical))
+        );
+
+        let mut serialized_authority = locator.clone();
+        serialized_authority.canonical_response_b64 = Some(
+            URL_SAFE_NO_PAD
+                .encode(br#"{"publisher_bootstrap_authorization":{"scope_id":"caller-carried"}}"#),
+        );
+        assert!(
+            canonical_mac_publisher_bootstrap_attempt_locator_v1(&serialized_authority).is_err()
+        );
+
+        let mut incomplete = locator.clone();
+        incomplete.terminal_state = "Allocated".to_string();
+        incomplete.initial_anchor_sha256 = None;
+        incomplete.protected_state_sha256 = None;
+        incomplete.capsule_sha256 = None;
+        incomplete.canonical_response_b64 = None;
+        incomplete.locator_revision = 1;
+        assert!(canonical_mac_publisher_bootstrap_attempt_locator_v1(&incomplete).is_ok());
+        incomplete.canonical_response_b64 = Some(URL_SAFE_NO_PAD.encode(br#"{"ok":true}"#));
+        assert!(canonical_mac_publisher_bootstrap_attempt_locator_v1(&incomplete).is_err());
+
+        let mut unknown = serde_json::to_value(locator).unwrap();
+        unknown
+            .as_object_mut()
+            .unwrap()
+            .insert("complete_authorization".to_string(), Value::Null);
+        assert!(serde_json::from_value::<MacPublisherBootstrapAttemptLocatorV1>(unknown).is_err());
+    }
+
+    #[test]
+    fn mac_bootstrap_authority_is_required_joined_canonical_and_closed() {
+        let authorization = mac_bootstrap_authorization_with_bound_control_v1();
+        let canonical = canonical_publisher_bootstrap_authorization_v1(&authorization)
+            .expect("canonical mac bootstrap authorization");
+        assert_eq!(
+            parse_publisher_bootstrap_authorization_v1(&canonical).unwrap(),
+            authorization
+        );
+
+        let mut missing = authorization.clone();
+        missing.mac_control_authority = None;
+        assert!(validate_publisher_bootstrap_authorization_v1(&missing)
+            .unwrap_err()
+            .to_string()
+            .contains("requires mac_control_authority"));
+
+        let mut mismatched = authorization.clone();
+        mismatched
+            .mac_control_authority
+            .as_mut()
+            .unwrap()
+            .source_tree = "c".repeat(40);
+        assert!(validate_publisher_bootstrap_authorization_v1(&mismatched)
+            .unwrap_err()
+            .to_string()
+            .contains("does not join authorization"));
+
+        assert_ne!(
+            authorization
+                .mac_control_authority
+                .as_ref()
+                .unwrap()
+                .artifact_sha256,
+            authorization.executor_build_evidence.artifact_sha256,
+            "control and executor artifacts are independently measured"
+        );
+
+        let mut non_mac = authorization.clone();
+        non_mac.authority_domain = "linux_system".to_string();
+        let non_mac_error = validate_publisher_bootstrap_authorization_v1(&non_mac).unwrap_err();
+        assert!(
+            non_mac_error
+                .to_string()
+                .contains("valid only for mac_host_shared"),
+            "{non_mac_error:#}"
+        );
+
+        let mut unknown = serde_json::to_value(authorization).unwrap();
+        unknown.as_object_mut().unwrap().insert(
+            "unrecognized_bootstrap_authority".to_string(),
+            Value::Bool(true),
+        );
+        assert!(serde_json::from_value::<PublisherBootstrapAuthorizationV1>(unknown).is_err());
+    }
+
+    #[test]
+    fn mac_bootstrap_manifest_identity_is_required_canonical_and_digest_bound() {
+        let authorization = mac_bootstrap_authorization_with_bound_control_v1();
+        let digest = publisher_bootstrap_authorization_sha256_v1(&authorization)
+            .expect("authorization digest");
+
+        let mut next_generation = authorization.clone();
+        next_generation.manifest_generation = 2;
+        next_generation.pre_pm_manifest = None;
+        next_generation.publisher_expected_absent = false;
+        next_generation.platform_mapping_commitment = Some("2".repeat(64));
+        assert_ne!(
+            publisher_bootstrap_authorization_sha256_v1(&next_generation).unwrap(),
+            digest,
+            "the anchor retry digest must bind the manifest generation"
+        );
+
+        let mut next_digest = authorization.clone();
+        next_digest.manifest_sha256 = "f".repeat(64);
+        next_digest.pre_pm_manifest = None;
+        next_digest.publisher_expected_absent = false;
+        next_digest.platform_mapping_commitment = Some("2".repeat(64));
+        assert_ne!(
+            publisher_bootstrap_authorization_sha256_v1(&next_digest).unwrap(),
+            digest,
+            "the anchor retry digest must bind the manifest digest"
+        );
+
+        let mut zero_generation = authorization.clone();
+        zero_generation.manifest_generation = 0;
+        assert!(
+            validate_publisher_bootstrap_authorization_v1(&zero_generation)
+                .unwrap_err()
+                .to_string()
+                .contains("manifest_generation")
+        );
+
+        let mut malformed_digest = authorization.clone();
+        malformed_digest.manifest_sha256 = "BAD".to_string();
+        assert!(
+            validate_publisher_bootstrap_authorization_v1(&malformed_digest)
+                .unwrap_err()
+                .to_string()
+                .contains("manifest_sha256")
+        );
+
+        let mut source_mismatch = authorization.clone();
+        source_mismatch.executor_build_evidence.source_ref = "refs/heads/other".to_string();
+        assert!(
+            validate_publisher_bootstrap_authorization_v1(&source_mismatch)
+                .unwrap_err()
+                .to_string()
+                .contains("executor build evidence does not join authorization source identity")
+        );
+
+        let mut invalid_pre_pm = authorization.clone();
+        invalid_pre_pm.platform_mapping_commitment = None;
+        invalid_pre_pm.manifest_generation = 2;
+        assert!(
+            validate_publisher_bootstrap_authorization_v1(&invalid_pre_pm)
+                .unwrap_err()
+                .to_string()
+                .contains("pre-PM mac_host_shared")
+        );
+        let mut valid_pre_pm_shape = authorization.clone();
+        valid_pre_pm_shape.platform_mapping_commitment = None;
+        validate_publisher_bootstrap_authorization_v1(&valid_pre_pm_shape)
+            .expect("generation-one absent authorization may carry the pre-PM form");
+
+        let mut missing = serde_json::to_value(&authorization).unwrap();
+        missing
+            .as_object_mut()
+            .unwrap()
+            .remove("manifest_generation");
+        assert!(serde_json::from_value::<PublisherBootstrapAuthorizationV1>(missing).is_err());
+    }
+
+    #[test]
+    fn mac_pre_pm_manifest_exception_is_exactly_empty_generation_one_durable() {
+        fn redigest(manifest: &mut ManagedArtifactManifestV1) {
+            manifest.manifest_sha256 = manifest_digest_v1(manifest).expect("manifest digest");
+        }
+
+        let mut manifest = sample_manifest();
+        manifest.manifest_id = format!("m1:{}:1", manifest.installation_id);
+        manifest.authority_domain = "mac_host_shared".to_string();
+        manifest.platform_kind = "mac_lima".to_string();
+        manifest.platform_mapping_commitment = None;
+        manifest.manifest_generation = 1;
+        manifest.lifecycle_state = ManagedLifecycleStateV1::ManifestDurable;
+        manifest.previous_manifest_sha256 = None;
+        manifest.entries.clear();
+        manifest.planned_action_receipts.clear();
+        redigest(&mut manifest);
+        validate_manifest_v1(&manifest).expect("exact greenfield pre-PM manifest");
+
+        let mut wrong_generation = manifest.clone();
+        wrong_generation.manifest_generation = 2;
+        wrong_generation.manifest_id = format!("m1:{}:2", wrong_generation.installation_id);
+        redigest(&mut wrong_generation);
+        assert!(validate_manifest_v1(&wrong_generation).is_err());
+
+        let mut prior = manifest.clone();
+        prior.previous_manifest_sha256 = Some("a".repeat(64));
+        redigest(&mut prior);
+        assert!(validate_manifest_v1(&prior).is_err());
+
+        let mut wrong_state = manifest.clone();
+        wrong_state.lifecycle_state = ManagedLifecycleStateV1::ManifestPrepared;
+        redigest(&mut wrong_state);
+        assert!(validate_manifest_v1(&wrong_state).is_err());
+
+        let mut post_pm = manifest.clone();
+        post_pm.platform_mapping_commitment = Some("b".repeat(64));
+        redigest(&mut post_pm);
+        validate_manifest_v1(&post_pm).expect("a full PM-bound manifest remains valid");
+    }
+
+    #[test]
+    fn mac_lima_stage_one_successor_template_is_pre_effect_closed_and_allows_anchor_counter_zero() {
+        let scope_id = "018f3e4a-7b2c-7c91-8a6f-2e1d5c4b3a90".to_string();
+        let attempt_id = "018f3e4a-7b2c-7c91-8a6f-2e1d5c4b3a91".to_string();
+        let nonce = "018f3e4a-7b2c-7c91-8a6f-2e1d5c4b3a92".to_string();
+        let evidence = ExecutorBuildEvidenceV1 {
+            schema_owner: "substrate.executor-build-evidence".to_string(),
+            schema_version: 1,
+            source_commit: "a".repeat(40),
+            source_tree: "b".repeat(40),
+            source_ref: "refs/heads/r5-fixture".to_string(),
+            artifact_sha256: "c".repeat(64),
+            artifact_identity: "executor-fixture".to_string(),
+            target_triple: "aarch64-apple-darwin".to_string(),
+            tool_versions: BTreeMap::new(),
+            code_identity: Some("cdhash:0123456789abcdef0123456789abcdef01234567".to_string()),
+        };
+        let authorization = LimaStageOneAuthorizationV1 {
+            schema_owner: LIMA_STAGE_ONE_SCHEMA_OWNER_V1.to_string(),
+            schema_version: 1,
+            host_context_commitment: "d".repeat(64),
+            lima_control_root_identity: "/Users/fixture/.lima".to_string(),
+            instance_name: "substrate".to_string(),
+            profile_sha256: "e".repeat(64),
+            expected_absent: true,
+            source_commit: evidence.source_commit.clone(),
+            source_tree: evidence.source_tree.clone(),
+            source_ref: evidence.source_ref.clone(),
+            executor_receipt_sha256: "f".repeat(64),
+            requester_principal: "fixture".to_string(),
+            attempt_id: attempt_id.clone(),
+            nonce: nonce.clone(),
+            expires_at_unix_ns: 42,
+            rendered_profile_b64: URL_SAFE_NO_PAD.encode(b"{}"),
+            rendered_profile_sha256: lower_hex(&Sha256::digest(b"{}")),
+            successor_template: MacLimaStageOneSuccessorTemplateV1 {
+                schema_owner: "substrate.mac-lima-stage-one-successor-template".to_string(),
+                schema_version: 1,
+                derivation_algorithm:
+                    "mac_lima_stage_one_successor_template_v1_platform_mapping_then_manifest"
+                        .to_string(),
+                profile_template_algorithm: "substrate.mac-lima-stage-one-profile-template"
+                    .to_string(),
+                profile_template_version: 1,
+                profile_template_sha256: "0".repeat(64),
+                current_pre_pm_manifest_generation: 1,
+                current_pre_pm_manifest_sha256: "1".repeat(64),
+                current_anchor_sha256: "2".repeat(64),
+                current_anchor_counter: 0,
+                next_manifest_generation: 2,
+                previous_manifest_sha256: "1".repeat(64),
+                host_context_commitment: "d".repeat(64),
+                scope_id: scope_id.clone(),
+                installation_id: scope_id,
+                intended_principal: "fixture".to_string(),
+                selected_host_prefix: "/tmp/substrate-r5".to_string(),
+                host_platform_control_root: "/Users/fixture/.lima".to_string(),
+                instance_name: "substrate".to_string(),
+                profile_sha256: "e".repeat(64),
+                source_commit: evidence.source_commit.clone(),
+                source_tree: evidence.source_tree.clone(),
+                source_ref: evidence.source_ref.clone(),
+                executor_build_evidence: evidence,
+                attempt_id,
+                nonce,
+                expires_at_unix_ns: 42,
+                manifest_created_at_unix_ns: 1,
+                manifest_lifecycle_state: ManagedLifecycleStateV1::ManifestDurable,
+                ordered_non_machine_entries: Vec::new(),
+                planned_receipt_id: "stage-one-receipt".to_string(),
+                planned_receipt_relative_path: "receipts/2/stage-one-receipt.json".to_string(),
+                post_effect_observation_slots: vec!["guest_machine_id".to_string()],
+            },
+            signature: LifecycleSignatureV1 {
+                algorithm: "ed25519-v1".to_string(),
+                public_key: "fixture".to_string(),
+                signature: "fixture".to_string(),
+            },
+        };
+        validate_mac_lima_stage_one_successor_template_v1(
+            &authorization.successor_template,
+            &authorization,
+        )
+        .expect("counter zero is a valid initial signed pre-PM anchor counter");
+
+        let mut placeholder = authorization.successor_template.clone();
+        placeholder.post_effect_observation_slots =
+            vec!["guest_machine_id".to_string(), "other".to_string()];
+        assert!(
+            validate_mac_lima_stage_one_successor_template_v1(&placeholder, &authorization)
+                .is_err()
+        );
+        placeholder = authorization.successor_template.clone();
+        placeholder.next_manifest_generation = 3;
+        assert!(
+            validate_mac_lima_stage_one_successor_template_v1(&placeholder, &authorization)
+                .is_err()
+        );
+        placeholder = authorization.successor_template.clone();
+        placeholder.previous_manifest_sha256 = "3".repeat(64);
+        assert!(
+            validate_mac_lima_stage_one_successor_template_v1(&placeholder, &authorization)
+                .is_err()
+        );
     }
 }
