@@ -1,0 +1,81 @@
+{
+  "protocol": "codex.meta-authority-amendment.v1",
+  "orchestration_id": "substrate-a1-1d-5r3-mac-20260806-41f97e1c570d",
+  "amendment_id": "0042-r3-mac-limactl-home-provenance-source-correction",
+  "issued_at_utc": "2026-08-08T13:44:04Z",
+  "applies_to": "AUX-R3-MAC-LIMACTL-HOME-PROVENANCE-CORRECTION",
+  "task_thread_id": "019fdfa4-ba96-70e0-b68d-1d0a4cf32a83",
+  "task_host_id": "local",
+  "task_worktree": "/Users/spensermcconnell/.codex/worktrees/2f78/substrate",
+  "dispatch_nonce": "f2776d7aa9dd669dd9ff2a885ee50536ac9c01da991257d806850cb8be82a19b",
+  "expected_base": {
+    "remote": "origin",
+    "target_ref": "refs/heads/feat/internal-host-orchestrator-world-dispatch-bootstrap",
+    "commit": "1126b907df6e38043e9071da222f6c6a377b341c",
+    "tree": "3a29fa323a8b9099d894c11d98cc085ecf4807c5"
+  },
+  "classification": "narrow MAC-only canonical-installer source correction after validated native blocker",
+  "authority_basis": {
+    "standing_user_blocker_adjudication_authority": true,
+    "source_correction_required_by_validated_attempt_8": true,
+    "reuse_existing_clean_source_correction_task": true,
+    "fresh_review_budget_authorized": true
+  },
+  "objective": "Make the fixed no-follow limactl --version provenance measurement run in a sanitized privileged environment with a defined root-controlled non-user HOME, without weakening fixed-image identity, env scrubbing, source provenance, or macOS-only containment.",
+  "required_invariants": [
+    "Retain env -i and the fixed absolute limactl_path selected and validated before privilege elevation.",
+    "Supply a defined root-controlled, non-user-writable HOME for only the privileged limactl --version probe; do not forward caller HOME or ambient configuration.",
+    "Prefer /var/empty if validated as the exact root-controlled empty home; any different choice requires review evidence proving equal or stronger isolation.",
+    "Keep the privileged PATH fixed to /usr/bin:/bin:/usr/sbin:/sbin.",
+    "Do not change Lima selection, endpoints, instance names, transports, principals, Keychain/XPC, pairing, lifecycle semantics, or non-macOS behavior.",
+    "Add deterministic behavioral regression that fails on the exact base when HOME is absent and proves ambient/user HOME is not inherited.",
+    "Retain the amendment-0040 installer target-output contract and amendment-0041 installer-start PATH contract unchanged."
+  ],
+  "authorized_paths": [
+    "scripts/substrate/dev-install-substrate.sh",
+    "tests/installers/dev_install_bash32_fd_regression.sh",
+    "tests/mac/lifecycle_r3.sh",
+    "tests/mac/dev_install_limactl_provenance_home_r3.sh",
+    "llm-last-mile/runtime-refactor/review-control/r3-mac-limactl-home-provenance-correction-review-authority-security.md",
+    "llm-last-mile/runtime-refactor/review-control/r3-mac-limactl-home-provenance-correction-review-lifecycle-convergence.md",
+    "llm-last-mile/runtime-refactor/review-control/r3-mac-limactl-home-provenance-correction-review-allowlist-evidence.md",
+    "llm-last-mile/runtime-refactor/review-control/r3-mac-limactl-home-provenance-correction-review-cycle-record.json",
+    "llm-last-mile/runtime-refactor/06-review-finding-inventory.md"
+  ],
+  "conditional_path_rules": {
+    "tests/mac/dev_install_limactl_provenance_home_r3.sh": "optional new focused regression; create only if stronger than extending the existing two fixtures",
+    "llm-last-mile/runtime-refactor/06-review-finding-inventory.md": "edit only for a valid accepted P3/P4 finding with stable ID and evidence; otherwise byte-identical"
+  },
+  "review_budget": {
+    "discovery": "one fresh three-lens discovery cycle",
+    "closure": "one fresh different closure reviewer",
+    "supplemental_causal_cycles_max": 2,
+    "models": "gpt-5.6-terra",
+    "reasoning": "xhigh",
+    "terminal_clean_required": true
+  },
+  "prohibited_actions": [
+    "any path outside the authorized fence",
+    "running the canonical installer against the real prefix or mutating /Library, Keychain, launchd, Lima, sudoers, or known_hosts",
+    "official evidence execution or artifact mutation",
+    "Windows/WSL or ordinary Linux behavior changes",
+    "generic environment forwarding, caller HOME, alternate limactl, wrapper/substitution, endpoint, selector, or transport",
+    "reset, clean, rebase, protected-checkout mutation, task/worktree archival, MAC-CLOSEOUT, or successor dispatch"
+  ],
+  "publication": {
+    "mode": "remote",
+    "remote": "origin",
+    "target_ref": "refs/heads/feat/internal-host-orchestrator-world-dispatch-bootstrap",
+    "normal_fast_forward_only": true,
+    "single_scoped_commit": true,
+    "requires_live_remote_equal_expected_base_before_push": true
+  },
+  "terminal_requirements": {
+    "receipt_protocol": "codex.top-level-task-receipt.v1",
+    "return_meta_thread_id": "019fd8c3-b12c-7e73-919f-898600ab0f64",
+    "return_meta_host_id": "local",
+    "send_receipt_as_final_tool_action": true,
+    "next_increment": "EVIDENCE:R3-MAC-IMP-01",
+    "successor_dispatch_prohibited": true
+  }
+}

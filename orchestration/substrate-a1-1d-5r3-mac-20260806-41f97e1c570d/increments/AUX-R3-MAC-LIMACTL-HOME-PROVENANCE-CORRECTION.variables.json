@@ -1,0 +1,18 @@
+{
+  "ORCHESTRATION_ID": "substrate-a1-1d-5r3-mac-20260806-41f97e1c570d",
+  "PACKET_ID": "AUX-R3-MAC-LIMACTL-HOME-PROVENANCE-CORRECTION",
+  "DISPATCH_NONCE": "f2776d7aa9dd669dd9ff2a885ee50536ac9c01da991257d806850cb8be82a19b",
+  "TASK_THREAD_ID": "019fdfa4-ba96-70e0-b68d-1d0a4cf32a83",
+  "TASK_HOST_ID": "local",
+  "TASK_WORKTREE": "/Users/spensermcconnell/.codex/worktrees/2f78/substrate",
+  "REMOTE": "origin",
+  "TARGET_REF": "refs/heads/feat/internal-host-orchestrator-world-dispatch-bootstrap",
+  "EXPECTED_BASE_COMMIT": "1126b907df6e38043e9071da222f6c6a377b341c",
+  "EXPECTED_BASE_TREE": "3a29fa323a8b9099d894c11d98cc085ecf4807c5",
+  "CONTRACT_PATH": "increments/AUX-R3-MAC-LIMACTL-HOME-PROVENANCE-CORRECTION.contract.md",
+  "CONTRACT_SHA256": "sha256:44201afa00d934254835f42af6fe0c378633d1bfbcbb1ec77fe1302e83073f77",
+  "AUTHORITY_AMENDMENT_PATH": "authority-amendments/0042-r3-mac-limactl-home-provenance-source-correction.json",
+  "AUTHORITY_AMENDMENT_SHA256": "sha256:815ed0977d5affb77560fb63de0e5474e2f0f7e2db7aeeefd3ca34bb9d164fbe",
+  "RETURN_THREAD_ID": "019fd8c3-b12c-7e73-919f-898600ab0f64",
+  "RETURN_HOST_ID": "local"
+}

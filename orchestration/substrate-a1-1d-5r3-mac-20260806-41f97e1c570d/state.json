@@ -1,7 +1,7 @@
 {
   "protocol": "codex.top-level-orchestration-state.v1",
   "orchestration_id": "substrate-a1-1d-5r3-mac-20260806-41f97e1c570d",
-  "status": "BLOCKED",
+  "status": "IMPLEMENTATION_RUNNING",
   "dispatch_authorized": true,
   "publication_mode": "remote",
   "remote": "origin",
@@ -37,7 +37,30 @@
     "thread_id": "019fd8c3-b12c-7e73-919f-898600ab0f64",
     "host_id": "local"
   },
-  "active_dispatch": null,
+  "active_dispatch": {
+    "increment": "AUX-R3-MAC-LIMACTL-HOME-PROVENANCE-CORRECTION",
+    "packet_id": "AUX-R3-MAC-LIMACTL-HOME-PROVENANCE-CORRECTION",
+    "thread_id": "019fdfa4-ba96-70e0-b68d-1d0a4cf32a83",
+    "host_id": "local",
+    "worktree": "/Users/spensermcconnell/.codex/worktrees/2f78/substrate",
+    "dispatch_nonce": "f2776d7aa9dd669dd9ff2a885ee50536ac9c01da991257d806850cb8be82a19b",
+    "expected_base": {
+      "commit": "1126b907df6e38043e9071da222f6c6a377b341c",
+      "tree": "3a29fa323a8b9099d894c11d98cc085ecf4807c5",
+      "target_ref": "refs/heads/feat/internal-host-orchestrator-world-dispatch-bootstrap",
+      "live_remote": "1126b907df6e38043e9071da222f6c6a377b341c"
+    },
+    "contract_path": "increments/AUX-R3-MAC-LIMACTL-HOME-PROVENANCE-CORRECTION.contract.md",
+    "contract_sha256": "sha256:44201afa00d934254835f42af6fe0c378633d1bfbcbb1ec77fe1302e83073f77",
+    "prompt_path": "increments/AUX-R3-MAC-LIMACTL-HOME-PROVENANCE-CORRECTION.continuation-prompt.md",
+    "prompt_sha256": "sha256:7f9024dd25cde824e5345954d29980c168c440770e3396e80cd015910fc9cb09",
+    "authority_amendment_path": "authority-amendments/0042-r3-mac-limactl-home-provenance-source-correction.json",
+    "authority_amendment_sha256": "sha256:815ed0977d5affb77560fb63de0e5474e2f0f7e2db7aeeefd3ca34bb9d164fbe",
+    "task_archiving_authorized": false,
+    "thread_status": "dispatch_prepared",
+    "turn_status": "not_started",
+    "prepared_at_utc": "2026-08-08T13:44:04Z"
+  },
   "active_evidence_dispatches": [],
   "verified_evidence": [],
   "completed": [
@@ -151,7 +174,7 @@
     "required_authority": "A narrow reviewed source correction for the privileged limactl --version environment, then a fresh evidence attempt.",
     "advance": false
   },
-  "current_authority_amendment": "authority-amendments/0041-r3-mac-canonical-installer-fixed-path-retry.json",
+  "current_authority_amendment": "authority-amendments/0042-r3-mac-limactl-home-provenance-source-correction.json",
   "evidence_attempt": 8,
   "retry_authority": {
     "evidence_id": "EVIDENCE:R3-MAC-IMP-01",
@@ -1036,11 +1059,11 @@
   ],
   "last_adjudicated_blocker": {
     "increment": "EVIDENCE:R3-MAC-IMP-01",
-    "attempt": 7,
-    "classification": "fresh retry with exact canonical-installer process PATH; no scope expansion",
-    "authority_path": "authority-amendments/0041-r3-mac-canonical-installer-fixed-path-retry.json",
-    "authority_sha256": "sha256:3eb4250e6995c6dd91614778b7d448dc74b680e199a47d2e754330cdd0eeed38",
-    "adjudicated_at_utc": "2026-08-08T13:21:49Z",
+    "attempt": 8,
+    "classification": "narrow MAC canonical-installer HOME provenance source correction",
+    "authority_path": "authority-amendments/0042-r3-mac-limactl-home-provenance-source-correction.json",
+    "authority_sha256": "sha256:815ed0977d5affb77560fb63de0e5474e2f0f7e2db7aeeefd3ca34bb9d164fbe",
+    "adjudicated_at_utc": "2026-08-08T13:44:04Z",
     "evidence_successor_held": true
   },
   "mac_only_platform_proof_policy": {
@@ -1190,15 +1213,7 @@
     "verified_at_utc": "2026-08-08T12:35:08Z"
   },
   "active_evidence": null,
-  "blocker": {
-    "status": "BLOCKED_NATIVE_EVIDENCE",
-    "evidence_id": "EVIDENCE:R3-MAC-IMP-01",
-    "attempt": 8,
-    "summary": "The canonical installer privileged provenance subprocess invokes the fixed limactl under env -i without HOME, causing Lima 2.1.1 to panic before provenance publication.",
-    "receipt_path": "receipts/EVIDENCE-R3-MAC-IMP-01.attempt-8.blocked.json",
-    "verification_path": "receipts/EVIDENCE-R3-MAC-IMP-01.attempt-8.blocked.verification.json",
-    "required_authority": "A narrow reviewed source correction for the privileged limactl --version environment, then a fresh evidence attempt."
-  },
+  "blocker": null,
   "evidence_attempt_history": [
     {
       "evidence_id": "EVIDENCE:R3-MAC-IMP-01",
@@ -1253,5 +1268,30 @@
       "worktree_preserved": true,
       "task_archiving_authorized": false
     }
-  ]
+  ],
+  "auxiliary_lima_provenance_correction": {
+    "status": "DISPATCH_PREPARED",
+    "increment": "AUX-R3-MAC-LIMACTL-HOME-PROVENANCE-CORRECTION",
+    "packet_id": "AUX-R3-MAC-LIMACTL-HOME-PROVENANCE-CORRECTION",
+    "thread_id": "019fdfa4-ba96-70e0-b68d-1d0a4cf32a83",
+    "host_id": "local",
+    "worktree": "/Users/spensermcconnell/.codex/worktrees/2f78/substrate",
+    "dispatch_nonce": "f2776d7aa9dd669dd9ff2a885ee50536ac9c01da991257d806850cb8be82a19b",
+    "expected_base": {
+      "commit": "1126b907df6e38043e9071da222f6c6a377b341c",
+      "tree": "3a29fa323a8b9099d894c11d98cc085ecf4807c5",
+      "target_ref": "refs/heads/feat/internal-host-orchestrator-world-dispatch-bootstrap",
+      "live_remote": "1126b907df6e38043e9071da222f6c6a377b341c"
+    },
+    "contract_path": "increments/AUX-R3-MAC-LIMACTL-HOME-PROVENANCE-CORRECTION.contract.md",
+    "contract_sha256": "sha256:44201afa00d934254835f42af6fe0c378633d1bfbcbb1ec77fe1302e83073f77",
+    "prompt_path": "increments/AUX-R3-MAC-LIMACTL-HOME-PROVENANCE-CORRECTION.continuation-prompt.md",
+    "prompt_sha256": "sha256:7f9024dd25cde824e5345954d29980c168c440770e3396e80cd015910fc9cb09",
+    "authority_amendment_path": "authority-amendments/0042-r3-mac-limactl-home-provenance-source-correction.json",
+    "authority_amendment_sha256": "sha256:815ed0977d5affb77560fb63de0e5474e2f0f7e2db7aeeefd3ca34bb9d164fbe",
+    "task_archiving_authorized": false,
+    "thread_status": "dispatch_prepared",
+    "turn_status": "not_started",
+    "prepared_at_utc": "2026-08-08T13:44:04Z"
+  }
 }

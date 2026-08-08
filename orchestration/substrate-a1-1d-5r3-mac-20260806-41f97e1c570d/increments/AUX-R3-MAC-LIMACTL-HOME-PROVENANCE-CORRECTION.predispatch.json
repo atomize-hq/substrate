@@ -1,0 +1,36 @@
+{
+  "protocol": "codex.top-level-task-predispatch.v1",
+  "orchestration_id": "substrate-a1-1d-5r3-mac-20260806-41f97e1c570d",
+  "packet_id": "AUX-R3-MAC-LIMACTL-HOME-PROVENANCE-CORRECTION",
+  "dispatch_nonce": "f2776d7aa9dd669dd9ff2a885ee50536ac9c01da991257d806850cb8be82a19b",
+  "task": {
+    "thread_id": "019fdfa4-ba96-70e0-b68d-1d0a4cf32a83",
+    "host_id": "local",
+    "worktree": "/Users/spensermcconnell/.codex/worktrees/2f78/substrate"
+  },
+  "expected_base": {
+    "commit": "1126b907df6e38043e9071da222f6c6a377b341c",
+    "tree": "3a29fa323a8b9099d894c11d98cc085ecf4807c5",
+    "target_ref": "refs/heads/feat/internal-host-orchestrator-world-dispatch-bootstrap",
+    "live_remote": "1126b907df6e38043e9071da222f6c6a377b341c"
+  },
+  "contract_path": "increments/AUX-R3-MAC-LIMACTL-HOME-PROVENANCE-CORRECTION.contract.md",
+  "contract_sha256": "sha256:44201afa00d934254835f42af6fe0c378633d1bfbcbb1ec77fe1302e83073f77",
+  "prompt_path": "increments/AUX-R3-MAC-LIMACTL-HOME-PROVENANCE-CORRECTION.continuation-prompt.md",
+  "prompt_sha256": "sha256:7f9024dd25cde824e5345954d29980c168c440770e3396e80cd015910fc9cb09",
+  "authority_amendment_path": "authority-amendments/0042-r3-mac-limactl-home-provenance-source-correction.json",
+  "authority_amendment_sha256": "sha256:815ed0977d5affb77560fb63de0e5474e2f0f7e2db7aeeefd3ca34bb9d164fbe",
+  "skill_suite": {
+    "skill_count": 25,
+    "file_count": 54,
+    "sha256": "e3de93f358594033ed59696a9624d2d0ac2fd0c2aa7ddf4a532810a05b262282"
+  },
+  "verified": {
+    "worktree_head_tree_clean": true,
+    "live_remote_equal": true,
+    "attempt_8_receipt_artifact_valid": true,
+    "attempt_8_restoration_exact": true
+  },
+  "prepared_at_utc": "2026-08-08T13:44:04Z",
+  "task_archiving_authorized": false
+}
