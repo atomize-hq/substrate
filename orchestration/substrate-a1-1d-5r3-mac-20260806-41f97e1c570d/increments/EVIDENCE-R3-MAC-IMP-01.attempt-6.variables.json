@@ -1,0 +1,16 @@
+{
+  "ORCHESTRATION_ID": "substrate-a1-1d-5r3-mac-20260806-41f97e1c570d",
+  "DISPATCH_NONCE": "23ef4a6b818804802dcf7dc1c3f2527700322b0094798b4ae84d0bf0da2abb92",
+  "META_THREAD_ID": "019fd8c3-b12c-7e73-919f-898600ab0f64",
+  "META_HOST_ID": "local",
+  "EVIDENCE_ID": "EVIDENCE:R3-MAC-IMP-01",
+  "PLATFORM": "macos",
+  "REMOTE": "origin",
+  "TARGET_REF": "refs/heads/feat/internal-host-orchestrator-world-dispatch-bootstrap",
+  "EXPECTED_BASE_COMMIT": "1126b907df6e38043e9071da222f6c6a377b341c",
+  "EXPECTED_BASE_TREE": "3a29fa323a8b9099d894c11d98cc085ecf4807c5",
+  "PROJECT_PATH": "/Users/spensermcconnell/__Active_Code/atomize-hq/substrate",
+  "PROJECT_ID": "local-b2016f8a311fef93149e42eaec4d704d",
+  "PROJECT_HOST_ID": "local",
+  "EVIDENCE_CONTRACT_PATH": "increments/EVIDENCE-R3-MAC-IMP-01.attempt-6.contract.md"
+}
