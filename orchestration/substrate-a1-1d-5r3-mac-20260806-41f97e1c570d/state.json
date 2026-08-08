@@ -67,9 +67,16 @@
       "binding_sha256": "sha256:1d35e4f6c87993351dc5f4af3c9bb9412ae1bf45e241abf37fa3ad24721d2401",
       "authority_amendment_path": "authority-amendments/0044-r3-mac-evidence-attempt-9-source-retry.json",
       "authority_amendment_sha256": "sha256:a901c9299e10504faa0c1480d799b223dd3d7c37ef6138bc99e8365c8618c572",
-      "status": "BOUND_READY_TO_SEND",
+      "status": "RUNNING",
       "task_archiving_authorized": false,
-      "prepared_at_utc": "2026-08-08T14:12:40Z"
+      "prepared_at_utc": "2026-08-08T14:12:40Z",
+      "delivery_path": "increments/EVIDENCE-R3-MAC-IMP-01.attempt-9.delivery.json",
+      "delivery_sha256": "sha256:a986e747d253567761d1e8842b83bac2d357af76996e8fca47c0c2393bad064c",
+      "turn_id": "019fe1b9-3001-7223-bc65-862e54a1a8b9",
+      "wait_cursor": "4bb095d6-02e8-4040-8ba7-3b07fc37362f:8",
+      "thread_status": "active",
+      "turn_status": "inProgress",
+      "sent_at_utc": "2026-08-08T14:14:17Z"
     }
   ],
   "verified_evidence": [],
@@ -331,7 +338,11 @@
     "attempt_8_restoration_exact": true,
     "attached_source_mirror_refresh_required": false,
     "attached_source_mirror_source_commit": "a06b3fd26ceee4ece7e5bd1481981755eafcedb5",
-    "attached_source_mirror_source_tree": "f4c396d0e28a43405a9a2b1d49a450d6df545c84"
+    "attached_source_mirror_source_tree": "f4c396d0e28a43405a9a2b1d49a450d6df545c84",
+    "attempt_9_delivery_path": "increments/EVIDENCE-R3-MAC-IMP-01.attempt-9.delivery.json",
+    "attempt_9_delivery_sha256": "sha256:a986e747d253567761d1e8842b83bac2d357af76996e8fca47c0c2393bad064c",
+    "attempt_9_turn_id": "019fe1b9-3001-7223-bc65-862e54a1a8b9",
+    "attempt_9_wait_cursor": "4bb095d6-02e8-4040-8ba7-3b07fc37362f:8"
   },
   "auxiliary_host_preparation": {
     "status": "BLOCKED_SOURCE_CORRECTION",
@@ -1262,9 +1273,16 @@
     "binding_sha256": "sha256:1d35e4f6c87993351dc5f4af3c9bb9412ae1bf45e241abf37fa3ad24721d2401",
     "authority_amendment_path": "authority-amendments/0044-r3-mac-evidence-attempt-9-source-retry.json",
     "authority_amendment_sha256": "sha256:a901c9299e10504faa0c1480d799b223dd3d7c37ef6138bc99e8365c8618c572",
-    "status": "BOUND_READY_TO_SEND",
+    "status": "RUNNING",
     "task_archiving_authorized": false,
-    "prepared_at_utc": "2026-08-08T14:12:40Z"
+    "prepared_at_utc": "2026-08-08T14:12:40Z",
+    "delivery_path": "increments/EVIDENCE-R3-MAC-IMP-01.attempt-9.delivery.json",
+    "delivery_sha256": "sha256:a986e747d253567761d1e8842b83bac2d357af76996e8fca47c0c2393bad064c",
+    "turn_id": "019fe1b9-3001-7223-bc65-862e54a1a8b9",
+    "wait_cursor": "4bb095d6-02e8-4040-8ba7-3b07fc37362f:8",
+    "thread_status": "active",
+    "turn_status": "inProgress",
+    "sent_at_utc": "2026-08-08T14:14:17Z"
   },
   "blocker": null,
   "evidence_attempt_history": [
