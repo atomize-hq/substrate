@@ -1,0 +1,40 @@
+{
+  "protocol": "codex.top-level-task-receipt-verification.v1",
+  "orchestration_id": "substrate-a1-1d-5r3-mac-20260806-41f97e1c570d",
+  "increment": "AUX-R3-MAC-EVIDENCE-RECOVERY-R6",
+  "attempt": 1,
+  "verified_at_utc": "2026-08-08T00:57:29Z",
+  "raw_receipt_path": "receipts/AUX-R3-MAC-EVIDENCE-RECOVERY-R6.attempt-1.blocked.raw.json",
+  "canonical_receipt_path": "receipts/AUX-R3-MAC-EVIDENCE-RECOVERY-R6.attempt-1.blocked.canonical.json",
+  "terminal_barrier": {
+    "thread_id": "019fded7-05c4-7c61-9f7d-5fc456bcda6d",
+    "host_id": "local",
+    "turn_id": "019fded8-6adb-7223-9a64-322e71a00c59",
+    "status": "completed",
+    "thread_status": "idle",
+    "cursor": "72bc6338-004b-44ac-9181-551e0e60ffb5:2"
+  },
+  "independent_observation": {
+    "worktree": "/Users/spensermcconnell/.codex/worktrees/1bd8/substrate",
+    "head": "a9626bc10a1737416c1d8f7f48630850118f3e6a",
+    "head_tree": "3f7cdf20125a847a3dfaa472d3797759b5cf6737",
+    "index_tree": "3f7cdf20125a847a3dfaa472d3797759b5cf6737",
+    "live_remote": "a9626bc10a1737416c1d8f7f48630850118f3e6a",
+    "staged_paths": 0,
+    "status_entry_count": 0,
+    "changed_paths": [],
+    "protected_checkout_clean": true
+  },
+  "repo_truth_classification": {
+    "same_packet_correction": true,
+    "owning_paths_already_authorized": true,
+    "omitted_symbols_required_by_completion_claim": true,
+    "new_transport_or_principal": false,
+    "two_fixed_tags_are_protocol_discriminants": true,
+    "review_started": false
+  },
+  "verdict": "ACCEPTED_NON_ADVANCING_BLOCK_AND_ADJUDICATED_FOR_SAME_TASK_CONTINUATION",
+  "raw_receipt_sha256": "sha256:6300354cbfcf9b305de9588fac1fd22250e8da3ed84887ff834e071cdba7b3e4",
+  "canonical_receipt_sha256": "sha256:e43f55f485c3fc48bc4229302bf08b0dee3f4ef935152a875b14e40f00a37183",
+  "authority_amendment": "authority-amendments/0035-r6-closed-session-wiring-fence.json"
+}

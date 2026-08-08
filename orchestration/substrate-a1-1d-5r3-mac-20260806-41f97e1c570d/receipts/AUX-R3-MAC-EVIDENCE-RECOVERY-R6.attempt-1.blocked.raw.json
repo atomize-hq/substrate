@@ -1,0 +1,60 @@
+{
+  "schema": "codex.top-level-task-receipt.v1",
+  "status": "BLOCKED_SCOPE_EXPANSION",
+  "increment": "AUX-R3-MAC-EVIDENCE-RECOVERY-R6",
+  "packet_id": "AUX-R3-MAC-EVIDENCE-RECOVERY-R6",
+  "orchestration_id": "substrate-a1-1d-5r3-mac-20260806-41f97e1c570d",
+  "dispatch_nonce": "1b9fe0a5eee31553d83daa75ccdde591ea5a4b797a81f14c3f3d3d839bc9cd70",
+  "increment_task_thread_id": "019fded7-05c4-7c61-9f7d-5fc456bcda6d",
+  "increment_task_host_id": "local",
+  "task_worktree": "/Users/spensermcconnell/.codex/worktrees/1bd8/substrate",
+  "expected_base_commit": "a9626bc10a1737416c1d8f7f48630850118f3e6a",
+  "expected_base_tree": "3f7cdf20125a847a3dfaa472d3797759b5cf6737",
+  "required_ancestor": "270f6e55e1a94b7e2f9b2667e605980d2e50579c",
+  "live_remote": {
+    "remote": "origin",
+    "ref": "refs/heads/feat/internal-host-orchestrator-world-dispatch-bootstrap",
+    "commit": "a9626bc10a1737416c1d8f7f48630850118f3e6a"
+  },
+  "preflight": {
+    "head": "a9626bc10a1737416c1d8f7f48630850118f3e6a",
+    "tree": "3f7cdf20125a847a3dfaa472d3797759b5cf6737",
+    "required_ancestor_is_ancestor": true,
+    "worktree_clean": true,
+    "skill_suite": {
+      "skill_count": 25,
+      "file_count": 54,
+      "sha256": "e3de93f358594033ed59696a9624d2d0ac2fd0c2aa7ddf4a532810a05b262282"
+    }
+  },
+  "changed_paths": [],
+  "checks": {
+    "implementation_checks_run": false,
+    "reason": "The R6 source contract cannot be implemented without an authority amendment; no code was changed.",
+    "gitnexus": {
+      "index": "No current-worktree index exists; the available exact-base index predates required R5 symbols.",
+      "manual_caller_analysis": [
+        "GuestPublisherPairingHostRecordV1 and helpers have no live production path.",
+        "The control R6 function is dead code and the CLI exposes only R5 commands.",
+        "The Linux guest CLI retains caller-selected pairing inputs and linux_system anchor construction."
+      ]
+    }
+  },
+  "blocker": {
+    "type": "scope_and_symbol_fence_contradiction",
+    "summary": "R6 completion requires closed decoder, CLI, XPC/listener, and Linux guest-boundary symbols omitted from its named symbol fence.",
+    "required_authority": "Name the omitted symbols and clarify that the two fixed R6 tags are protocol discriminants rather than new transport selectors.",
+    "continuation_prompt": "Resume the same clean R6 task only after an exact same-packet fence amendment; do not begin evidence."
+  },
+  "reviews": {
+    "r6_review": "not started",
+    "combined_r1_r6_audit": "not started"
+  },
+  "publication": {
+    "attempted": false,
+    "commit": null,
+    "push": null,
+    "worktree_clean": true
+  },
+  "next_increment": null
+}
