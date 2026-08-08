@@ -1,0 +1,41 @@
+{
+  "protocol": "codex.top-level-evidence-predispatch.v1",
+  "orchestration_id": "substrate-a1-1d-5r3-mac-20260806-41f97e1c570d",
+  "evidence_id": "EVIDENCE:R3-MAC-IMP-01",
+  "attempt": 7,
+  "allocation": 2,
+  "dispatch_nonce": "17400ca095c68fafd4db02f4da09aac2e2bb17dd03542ebfb331875e3cd13498",
+  "task": {
+    "thread_id": "019fe162-c98c-7c82-94d0-155d6cab5122",
+    "host_id": "local",
+    "worktree": "/Users/spensermcconnell/.codex/worktrees/1626/substrate"
+  },
+  "source": {
+    "remote": "origin",
+    "target_ref": "refs/heads/feat/internal-host-orchestrator-world-dispatch-bootstrap",
+    "commit": "1126b907df6e38043e9071da222f6c6a377b341c",
+    "tree": "3a29fa323a8b9099d894c11d98cc085ecf4807c5",
+    "live_remote": "1126b907df6e38043e9071da222f6c6a377b341c"
+  },
+  "contract_path": "increments/EVIDENCE-R3-MAC-IMP-01.attempt-7.contract.md",
+  "contract_sha256": "sha256:72a097e0821e5b5049dafb3ec6a4ab5d37626899549b016be09ebb1611971354",
+  "continuation_prompt_path": "increments/EVIDENCE-R3-MAC-IMP-01.attempt-7.continuation-prompt.md",
+  "continuation_prompt_sha256": "sha256:249dab036a50ca2cd9853bcc6fc14431ff77bd23e81a7de588f589df68ec77ff",
+  "authority_amendment_path": "authority-amendments/0040-r3-mac-canonical-installer-target-output.json",
+  "authority_amendment_sha256": "sha256:cdaaa4ad590d4a110dd8ae5b03c36ac4833abd64e92e0e0ad055826d78495c14",
+  "verified_at_utc": "2026-08-08T12:58:55Z",
+  "checks": {
+    "task_head_tree_clean": true,
+    "attached_mirror_head_tree_ref_clean": true,
+    "attached_mirror_target_absent": true,
+    "live_remote_equal": true,
+    "host_sudo_noninteractive": true,
+    "fixed_limactl_sha256": "sha256:c126697daa485aff79552a34413e14c0e2efd43675845bee1a152f31845f1455",
+    "fixed_limactl_owner_group_mode": "root:wheel 0555",
+    "fixed_limactl_no_follow_regular_single_link": true,
+    "canonical_instance_absent": true,
+    "canonical_control_directory_absent": true
+  },
+  "artifact_root": "/Users/spensermcconnell/.codex/evidence/substrate-a1-1d-5r3-mac-20260806-41f97e1c570d/EVIDENCE-R3-MAC-IMP-01/17400ca095c68fafd4db02f4da09aac2e2bb17dd03542ebfb331875e3cd13498",
+  "task_archiving_authorized": false
+}

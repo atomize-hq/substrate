@@ -1,0 +1,78 @@
+{
+  "protocol": "codex.meta-authority-amendment.v1",
+  "orchestration_id": "substrate-a1-1d-5r3-mac-20260806-41f97e1c570d",
+  "amendment_id": "0040-r3-mac-canonical-installer-target-output",
+  "issued_at_utc": "2026-08-08T12:57:51Z",
+  "applies_to": "EVIDENCE:R3-MAC-IMP-01 attempt-7",
+  "task_thread_id": "019fe162-c98c-7c82-94d0-155d6cab5122",
+  "task_host_id": "local",
+  "task_worktree": "/Users/spensermcconnell/.codex/worktrees/1626/substrate",
+  "dispatch_nonce": "17400ca095c68fafd4db02f4da09aac2e2bb17dd03542ebfb331875e3cd13498",
+  "source": {
+    "publication_mode": "remote",
+    "remote": "origin",
+    "target_ref": "refs/heads/feat/internal-host-orchestrator-world-dispatch-bootstrap",
+    "commit": "1126b907df6e38043e9071da222f6c6a377b341c",
+    "tree": "3a29fa323a8b9099d894c11d98cc085ecf4807c5"
+  },
+  "classification": "bounded official-evidence contract correction; canonical installer output only",
+  "authority_basis": {
+    "standing_user_blocker_adjudication_authority": true,
+    "same_task_continuation_authorized": true,
+    "reason": "Attempt 6 proved the unmodified canonical installer requires REPO_ROOT/target/<profile>; permitting that installer-owned ignored output is narrower than a source correction or ad hoc substitute."
+  },
+  "attached_source_mirror": {
+    "path": "/Users/spensermcconnell/.codex/evidence/substrate-a1-1d-5r3-mac-20260806-41f97e1c570d/AUX-R3-MAC-EVIDENCE-PLATFORM-PREREQUISITE-PREP/11c27a5ee57be5b99a3c7457c4f511b14b5747ee4b2b0492874a416d5fab02a3/source/substrate",
+    "symbolic_head": "refs/heads/feat/internal-host-orchestrator-world-dispatch-bootstrap",
+    "commit": "1126b907df6e38043e9071da222f6c6a377b341c",
+    "tree": "3a29fa323a8b9099d894c11d98cc085ecf4807c5",
+    "permitted_output_root": "/Users/spensermcconnell/.codex/evidence/substrate-a1-1d-5r3-mac-20260806-41f97e1c570d/AUX-R3-MAC-EVIDENCE-PLATFORM-PREREQUISITE-PREP/11c27a5ee57be5b99a3c7457c4f511b14b5747ee4b2b0492874a416d5fab02a3/source/substrate/target"
+  },
+  "authorized_actions": [
+    "Reverify the attached mirror is exact, remote-equal, tracked-clean, has zero non-ignored untracked paths, and its target path is absent before the canonical install.",
+    "Invoke only the unmodified repository canonical dev installer from the attached mirror with the packet-defined arguments and controlled PATH.",
+    "Permit Cargo and the canonical installer to create ignored build output only below the exact real-directory path <attached-mirror>/target.",
+    "Use the installer-created host binaries from that exact target tree for the canonical install, staging, code-signing, and native evidence actions already authorized by the evidence packet.",
+    "Capture no-follow path-component identity, owner, device, inode, mode, and a bounded manifest/digest record for the task-created target tree before use and before removal.",
+    "After all installer/build child processes are stopped and all required artifact digests are captured, remove only the exact task-created target tree using no-follow identity checks and prove it is absent.",
+    "Prove the attached mirror again has the exact branch/ref, commit, tree, tracked cleanliness, zero non-ignored untracked paths, and absent target path at terminal restoration."
+  ],
+  "output_fence": {
+    "precondition": "target is absent; otherwise stop before native mutation",
+    "path_kind": "real directory beneath the exact attached mirror; never a symlink or alternate mount",
+    "owner_uid": 501,
+    "allowed_repository_side_effects": [
+      "ignored target/ tree only"
+    ],
+    "tracked_source_mutation_allowed": false,
+    "other_untracked_or_ignored_output_allowed": false,
+    "canonical_installer_copy_or_edit_allowed": false,
+    "cargo_target_dir_override_for_canonical_installer_allowed": false,
+    "assigned_task_checkout_mutation_allowed": false,
+    "protected_checkout_mutation_allowed": false
+  },
+  "retained_requirements": [
+    "The separately required AArch64 Linux guest executor build remains nonce-scoped and external with the exact provisioned linker wrapper.",
+    "Every non-installer artifact, command log, capture, receipt, and final native evidence artifact remains outside all repository checkouts.",
+    "The official packet must re-run source/platform/IH/absence/baseline gates, then execute Stage-1, derive PM, and complete the full native lifecycle/restoration proof.",
+    "The sudoers sentinel and fixed root-owned Lima executable remain byte-identical.",
+    "No user interaction is required; the evidence agent operates the direct controlling TTYs under prior delegated authority."
+  ],
+  "prohibited_actions": [
+    "editing, copying, patching, wrapping, or substituting the canonical installer",
+    "writing build output to the assigned task checkout, protected checkout, meta checkout, or any source path other than the exact attached-mirror target tree",
+    "retaining the target tree after terminal restoration",
+    "source stage, commit, push, reset, clean, rebase, branch switch, or publication",
+    "broad deletion or cleanup outside the exact pre-absent task-created target tree",
+    "MAC-CLOSEOUT, Windows/UNIX work, successor dispatch, or task/worktree archival"
+  ],
+  "terminal_requirements": {
+    "receipt_protocol": "codex.top-level-evidence-receipt.v1",
+    "return_meta_thread_id": "019fd8c3-b12c-7e73-919f-898600ab0f64",
+    "fresh_attempt_nonce_required": true,
+    "full_native_artifact_validation_required": true,
+    "target_restoration_to_absence_required": true,
+    "source_remote_and_checkout_parity_required": true,
+    "successor_held_until_validated_clean_evidence": true
+  }
+}
