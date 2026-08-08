@@ -72,7 +72,14 @@
       "fixed_limactl": "/usr/local/bin/limactl",
       "task_archiving_authorized": false,
       "initial_turn_id": "019fe162-cd6d-7442-a50b-cf10d60d7c73",
-      "initial_wait_cursor": "4bb095d6-02e8-4040-8ba7-3b07fc37362f:1"
+      "initial_wait_cursor": "4bb095d6-02e8-4040-8ba7-3b07fc37362f:1",
+      "delivery_path": "increments/EVIDENCE-R3-MAC-IMP-01.attempt-6.delivery.json",
+      "delivery_sha256": "sha256:ebdc92e96660f0013f5aab0f9a8a9c82c5350260959d7b73044355f028c42266",
+      "turn_id": "019fe164-57bd-7072-92de-324bbe30bed4",
+      "wait_cursor": "4bb095d6-02e8-4040-8ba7-3b07fc37362f:2",
+      "thread_status": "active",
+      "turn_status": "inProgress",
+      "binding_sent_at_utc": "2026-08-08T12:41:17Z"
     }
   ],
   "verified_evidence": [],
@@ -205,13 +212,13 @@
     "attempt_5_receipt_path": "receipts/EVIDENCE-R3-MAC-IMP-01.attempt-5.blocked.json",
     "attempt_5_verification_path": "receipts/EVIDENCE-R3-MAC-IMP-01.attempt-5.blocked.verification.json",
     "dispatch_prepared": true,
-    "dispatch_nonce": "8f013a2e345b2639b09a2c6c3cc3de787bc914c51ee31132c3a0e274422ff54a",
-    "contract_path": "increments/EVIDENCE-R3-MAC-IMP-01.attempt-5.contract.md",
-    "contract_sha256": "sha256:5c02e52f9fed70bfcd1960289756d3c3909d6277c531c78602b91ec35022e0ca",
-    "prompt_path": "increments/EVIDENCE-R3-MAC-IMP-01.attempt-5.initial-prompt.md",
-    "prompt_sha256": "sha256:73419c75bcadf9914a085a203a2203da0a683a939a6376e8f7bff895e4f78ae2",
-    "variables_path": "increments/EVIDENCE-R3-MAC-IMP-01.attempt-5.variables.json",
-    "variables_sha256": "sha256:9c1413cf7267c8df51987f67ebd7361c6e219073ea2c191ad374ce73d2002bbc",
+    "dispatch_nonce": "c75137fee9e57e4a28ce730956b670c4c625330463a7c85b35d4b87605521f13",
+    "contract_path": "increments/EVIDENCE-R3-MAC-IMP-01.attempt-6.contract.md",
+    "contract_sha256": "sha256:74cc1068f7e1011dadab6fa041ec7fe7936b9b2bcb708edbaf34e6db08b609bd",
+    "prompt_path": "increments/EVIDENCE-R3-MAC-IMP-01.attempt-6.initial-prompt.md",
+    "prompt_sha256": "sha256:0012766a20683f2d79ea804663efd3a5d34cb30bdf952d0aea5feae5d266a7e2",
+    "variables_path": "increments/EVIDENCE-R3-MAC-IMP-01.attempt-6.variables.json",
+    "variables_sha256": "sha256:a06d97d427d20ecf3f543e3e0e6bcb6c5c3af7dd6f3179041f5cd5e476c376ee",
     "task_archiving_authorized": false,
     "auxiliary_platform_preparation_running": false,
     "auxiliary_platform_preparation_completed": true,
@@ -250,7 +257,12 @@
     "attempt_6_binding_prompt_path": "increments/EVIDENCE-R3-MAC-IMP-01.attempt-6.binding-prompt.md",
     "attempt_6_binding_prompt_sha256": "sha256:b771947d236948afa038af9f664d0dd594eac3ef1341a8a4801a78fe94ee288b",
     "attempt_6_skill_hydration_path": "increments/EVIDENCE-R3-MAC-IMP-01.attempt-6.skill-hydration.json",
-    "attempt_6_skill_hydration_record_sha256": "sha256:3675cf29348af74528105d5d2281d978fa0fa0f6de6f5b2f0741b9694a81f285"
+    "attempt_6_skill_hydration_record_sha256": "sha256:3675cf29348af74528105d5d2281d978fa0fa0f6de6f5b2f0741b9694a81f285",
+    "attempt_6_delivery_path": "increments/EVIDENCE-R3-MAC-IMP-01.attempt-6.delivery.json",
+    "attempt_6_delivery_sha256": "sha256:ebdc92e96660f0013f5aab0f9a8a9c82c5350260959d7b73044355f028c42266",
+    "attempt_6_turn_id": "019fe164-57bd-7072-92de-324bbe30bed4",
+    "attempt_6_wait_cursor": "4bb095d6-02e8-4040-8ba7-3b07fc37362f:2",
+    "attempt_6_binding_sent_at_utc": "2026-08-08T12:41:17Z"
   },
   "auxiliary_host_preparation": {
     "status": "BLOCKED_SOURCE_CORRECTION",
@@ -1188,7 +1200,14 @@
     "fixed_limactl": "/usr/local/bin/limactl",
     "task_archiving_authorized": false,
     "initial_turn_id": "019fe162-cd6d-7442-a50b-cf10d60d7c73",
-    "initial_wait_cursor": "4bb095d6-02e8-4040-8ba7-3b07fc37362f:1"
+    "initial_wait_cursor": "4bb095d6-02e8-4040-8ba7-3b07fc37362f:1",
+    "delivery_path": "increments/EVIDENCE-R3-MAC-IMP-01.attempt-6.delivery.json",
+    "delivery_sha256": "sha256:ebdc92e96660f0013f5aab0f9a8a9c82c5350260959d7b73044355f028c42266",
+    "turn_id": "019fe164-57bd-7072-92de-324bbe30bed4",
+    "wait_cursor": "4bb095d6-02e8-4040-8ba7-3b07fc37362f:2",
+    "thread_status": "active",
+    "turn_status": "inProgress",
+    "binding_sent_at_utc": "2026-08-08T12:41:17Z"
   },
   "blocker": null
 }
