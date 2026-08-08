@@ -147,7 +147,7 @@
     "pending_dispatch": {
       "evidence_id": "EVIDENCE:R3-MAC-IMP-01",
       "attempt": 3,
-      "status": "PENDING_TASK_CREATION",
+      "status": "PENDING_BINDING_DELIVERY",
       "platform": "macos",
       "project_id": "local-b2016f8a311fef93149e42eaec4d704d",
       "project_path": "/Users/spensermcconnell/__Active_Code/atomize-hq/substrate",
@@ -166,7 +166,16 @@
       "prompt_path": "increments/EVIDENCE-R3-MAC-IMP-01.attempt-3.initial-prompt.md",
       "prompt_sha256": "sha256:4de1fac05360d5a90c19b8fdae38c6e082e55162e6586c09d76ad1ce099d1aad",
       "variables_path": "increments/EVIDENCE-R3-MAC-IMP-01.attempt-3.variables.json",
-      "task_archiving_authorized": false
+      "task_archiving_authorized": false,
+      "thread_id": "019fdf7f-c7d6-7112-9cda-a05db972da7f",
+      "task_host_id": "local",
+      "task_worktree": "/Users/spensermcconnell/.codex/worktrees/fa11/substrate",
+      "binding_path": "increments/EVIDENCE-R3-MAC-IMP-01.attempt-3.binding.json",
+      "binding_prompt_path": "increments/EVIDENCE-R3-MAC-IMP-01.attempt-3.binding-prompt.md",
+      "binding_prompt_sha256": "sha256:c0f15b2d658a512f23a8a72f35caeee219d7031665a2a8bc8309d6531c43eea2",
+      "skill_hydration_path": "increments/EVIDENCE-R3-MAC-IMP-01.attempt-3.skill-hydration.json",
+      "skill_hydration_sha256": "e3de93f358594033ed59696a9624d2d0ac2fd0c2aa7ddf4a532810a05b262282",
+      "created_at_utc": "2026-08-08T03:53:37Z"
     }
   },
   "auxiliary_host_preparation": {

@@ -1,0 +1,40 @@
+{
+  "protocol": "codex.top-level-evidence-binding.v1",
+  "orchestration_id": "substrate-a1-1d-5r3-mac-20260806-41f97e1c570d",
+  "evidence_id": "EVIDENCE:R3-MAC-IMP-01",
+  "attempt": 3,
+  "dispatch_nonce": "7c83b749b2360596d88553c24c52d89bdbfc7e2024170712b7d248e6b6ae31b7",
+  "evidence_task": {
+    "thread_id": "019fdf7f-c7d6-7112-9cda-a05db972da7f",
+    "host_id": "local",
+    "worktree": "/Users/spensermcconnell/.codex/worktrees/fa11/substrate"
+  },
+  "meta": {
+    "thread_id": "019fd8c3-b12c-7e73-919f-898600ab0f64",
+    "host_id": "local"
+  },
+  "source": {
+    "publication_mode": "remote",
+    "remote": "origin",
+    "target_ref": "refs/heads/feat/internal-host-orchestrator-world-dispatch-bootstrap",
+    "commit": "3d6b2eb1b02b1a24a1e055d12e5cbdb9b0312774",
+    "tree": "d59cac92405f06024cfcde0a2c22a4cf1255c3d7",
+    "live_remote": "3d6b2eb1b02b1a24a1e055d12e5cbdb9b0312774"
+  },
+  "project": {
+    "id": "local-b2016f8a311fef93149e42eaec4d704d",
+    "path": "/Users/spensermcconnell/__Active_Code/atomize-hq/substrate",
+    "host_id": "local",
+    "platform": "macos"
+  },
+  "checkout_clean": true,
+  "contract_path": "increments/EVIDENCE-R3-MAC-IMP-01.attempt-3.contract.md",
+  "contract_sha256": "sha256:eb47075895160ad66a82f62f651de077f2a14f73b77f24ef61b22c75ef4a9cb9",
+  "prompt_path": "increments/EVIDENCE-R3-MAC-IMP-01.attempt-3.initial-prompt.md",
+  "prompt_sha256": "sha256:4de1fac05360d5a90c19b8fdae38c6e082e55162e6586c09d76ad1ce099d1aad",
+  "skill_hydration_path": "increments/EVIDENCE-R3-MAC-IMP-01.attempt-3.skill-hydration.json",
+  "skill_hydration_sha256": "e3de93f358594033ed59696a9624d2d0ac2fd0c2aa7ddf4a532810a05b262282",
+  "model": "gpt-5.6-terra",
+  "reasoning": "xhigh",
+  "start_authorized": true
+}
