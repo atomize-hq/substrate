@@ -1,0 +1,18 @@
+{
+  "protocol": "codex.top-level-evidence-dispatch-delivery.v1",
+  "orchestration_id": "substrate-a1-1d-5r3-mac-20260806-41f97e1c570d",
+  "evidence_id": "EVIDENCE:R3-MAC-IMP-01",
+  "attempt": 3,
+  "dispatch_nonce": "7c83b749b2360596d88553c24c52d89bdbfc7e2024170712b7d248e6b6ae31b7",
+  "thread_id": "019fdf7f-c7d6-7112-9cda-a05db972da7f",
+  "host_id": "local",
+  "task_worktree": "/Users/spensermcconnell/.codex/worktrees/fa11/substrate",
+  "turn_id": "019fdf81-d324-72b0-9693-b01b5766c734",
+  "wait_cursor": "eef0a650-ca4c-4b37-a47e-a18ddf99807a:2",
+  "thread_status": "active",
+  "turn_status": "inProgress",
+  "binding_prompt_path": "increments/EVIDENCE-R3-MAC-IMP-01.attempt-3.binding-prompt.md",
+  "binding_prompt_sha256": "sha256:c0f15b2d658a512f23a8a72f35caeee219d7031665a2a8bc8309d6531c43eea2",
+  "binding_sent_at_utc": "2026-08-08T03:55:07Z",
+  "verified_at_utc": "2026-08-08T03:55:07Z"
+}
