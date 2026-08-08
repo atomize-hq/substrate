@@ -1,0 +1,16 @@
+{
+  "protocol": "codex.auxiliary-platform-prep-dispatch-delivery.v1",
+  "orchestration_id": "substrate-a1-1d-5r3-mac-20260806-41f97e1c570d",
+  "packet": "AUX-R3-MAC-AARCH64-TOOLCHAIN-PREP",
+  "dispatch_nonce": "d514db6915877692c799086ce6c96daad6bcd0417d87a1bdf9ba44c2c578da53",
+  "thread_id": "019fdf7f-c7d6-7112-9cda-a05db972da7f",
+  "host_id": "local",
+  "task_worktree": "/Users/spensermcconnell/.codex/worktrees/fa11/substrate",
+  "turn_id": "019fdf9b-aeff-7ec1-adc3-b12b3fa2d19d",
+  "wait_cursor": "eef0a650-ca4c-4b37-a47e-a18ddf99807a:6",
+  "thread_status": "active",
+  "turn_status": "inProgress",
+  "prompt_path": "increments/AUX-R3-MAC-AARCH64-TOOLCHAIN-PREP.attempt-1.prompt.md",
+  "prompt_sha256": "sha256:ff7105e026b4ae7f8c2ce022c01dd31535a667aa597845a42102f92d9f8d479c",
+  "sent_at_utc": "2026-08-08T04:22:57Z"
+}

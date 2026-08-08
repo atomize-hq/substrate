@@ -938,7 +938,7 @@
     "verified_at_utc": "2026-08-08T03:51:11Z"
   },
   "auxiliary_platform_preparation": {
-    "status": "PENDING_DELIVERY",
+    "status": "RUNNING",
     "task_class": "general_auxiliary_platform_preparation",
     "official_increment_or_evidence": false,
     "packet": "AUX-R3-MAC-AARCH64-TOOLCHAIN-PREP",
@@ -958,6 +958,12 @@
       "live_remote": "3d6b2eb1b02b1a24a1e055d12e5cbdb9b0312774"
     },
     "official_evidence_dispatch_allowed": false,
-    "task_archiving_authorized": false
+    "task_archiving_authorized": false,
+    "delivery_path": "increments/AUX-R3-MAC-AARCH64-TOOLCHAIN-PREP.attempt-1.delivery.json",
+    "turn_id": "019fdf9b-aeff-7ec1-adc3-b12b3fa2d19d",
+    "wait_cursor": "eef0a650-ca4c-4b37-a47e-a18ddf99807a:6",
+    "thread_status": "active",
+    "turn_status": "inProgress",
+    "sent_at_utc": "2026-08-08T04:22:57Z"
   }
 }
