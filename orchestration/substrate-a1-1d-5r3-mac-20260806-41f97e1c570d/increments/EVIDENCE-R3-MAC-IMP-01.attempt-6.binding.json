@@ -1,0 +1,38 @@
+{
+  "protocol": "codex.top-level-evidence-binding.v1",
+  "orchestration_id": "substrate-a1-1d-5r3-mac-20260806-41f97e1c570d",
+  "evidence_id": "EVIDENCE:R3-MAC-IMP-01",
+  "attempt": 6,
+  "allocation": 2,
+  "dispatch_nonce": "c75137fee9e57e4a28ce730956b670c4c625330463a7c85b35d4b87605521f13",
+  "thread_id": "019fe162-c98c-7c82-94d0-155d6cab5122",
+  "host_id": "local",
+  "worktree": "/Users/spensermcconnell/.codex/worktrees/1626/substrate",
+  "source": {
+    "remote": "origin",
+    "target_ref": "refs/heads/feat/internal-host-orchestrator-world-dispatch-bootstrap",
+    "commit": "1126b907df6e38043e9071da222f6c6a377b341c",
+    "tree": "3a29fa323a8b9099d894c11d98cc085ecf4807c5",
+    "live_remote": "1126b907df6e38043e9071da222f6c6a377b341c"
+  },
+  "project": {
+    "project_id": "local-b2016f8a311fef93149e42eaec4d704d",
+    "project_path": "/Users/spensermcconnell/__Active_Code/atomize-hq/substrate",
+    "host_id": "local"
+  },
+  "skill_hydration": {
+    "path": "increments/EVIDENCE-R3-MAC-IMP-01.attempt-6.skill-hydration.json",
+    "skill_count": 25,
+    "file_count": 54,
+    "sha256": "e3de93f358594033ed59696a9624d2d0ac2fd0c2aa7ddf4a532810a05b262282"
+  },
+  "initial_turn": {
+    "turn_id": "019fe162-cd6d-7442-a50b-cf10d60d7c73",
+    "wait_cursor": "4bb095d6-02e8-4040-8ba7-3b07fc37362f:1",
+    "status": "completed"
+  },
+  "model": "gpt-5.6-terra",
+  "reasoning": "xhigh",
+  "start_authorized": true,
+  "task_archiving_authorized": false
+}
