@@ -1,7 +1,7 @@
 {
   "protocol": "codex.top-level-orchestration-state.v1",
   "orchestration_id": "substrate-a1-1d-5r3-mac-20260806-41f97e1c570d",
-  "status": "BLOCKED",
+  "status": "RUNNING",
   "dispatch_authorized": true,
   "publication_mode": "remote",
   "remote": "origin",
@@ -39,7 +39,26 @@
     "thread_id": "019fd8c3-b12c-7e73-919f-898600ab0f64",
     "host_id": "local"
   },
-  "active_dispatch": null,
+  "active_dispatch": {
+    "increment": "AUX-R3-MAC-PRESTAGE-EVIDENCE-BLOCKER-CORRECTION",
+    "packet_id": "AUX-R3-MAC-PRESTAGE-EVIDENCE-BLOCKER-CORRECTION-FIXED-INSTALL-SEQUENCE",
+    "thread_id": "019fdfa4-ba96-70e0-b68d-1d0a4cf32a83",
+    "host_id": "local",
+    "worktree": "/Users/spensermcconnell/.codex/worktrees/2f78/substrate",
+    "original_dispatch_nonce": "0ae5e61c6cd21581afb861057bcd9789273e9f81926616716cee809006cec58d",
+    "continuation_nonce": "543448d57169010ad5c3537c650d6d1d8d8510b05c91d45efa1cdb7f40e415a6",
+    "expected_base": {
+      "commit": "a06b3fd26ceee4ece7e5bd1481981755eafcedb5",
+      "tree": "f4c396d0e28a43405a9a2b1d49a450d6df545c84",
+      "target_ref": "refs/heads/feat/internal-host-orchestrator-world-dispatch-bootstrap",
+      "live_remote": "a06b3fd26ceee4ece7e5bd1481981755eafcedb5"
+    },
+    "authority_amendment_path": "authority-amendments/0047-r3-mac-fixed-install-sequence.json",
+    "authority_amendment_sha256": "sha256:6bd998d38beb552233b6360ac7c02c482a7c2c096ea6c6bbb6e09ba5f6c222d4",
+    "prompt_path": "increments/AUX-R3-MAC-PRESTAGE-EVIDENCE-BLOCKER-CORRECTION.fixed-install-sequence-continuation.md",
+    "prompt_sha256": "sha256:89dcc543df76a5e65e613126d0c7989c8dd72b461502e8305f8373304e678bcc",
+    "next_increment": "EVIDENCE:R3-MAC-IMP-01"
+  },
   "active_evidence_dispatches": [],
   "verified_evidence": [],
   "completed": [
@@ -165,7 +184,7 @@
     "required_authority": "Define an authenticated closed non-caller-selected installation post-PM sequence, or explicitly authorize a different R5/R6-compatible selector/issuer change, including its exact action set, ordering, retry law, and review fence.",
     "advance": false
   },
-  "current_authority_amendment": "authority-amendments/0046-r3-mac-prestage-evidence-blocker-correction.json",
+  "current_authority_amendment": "authority-amendments/0047-r3-mac-fixed-install-sequence.json",
   "evidence_attempt": 9,
   "retry_authority": {
     "evidence_id": "EVIDENCE:R3-MAC-IMP-01",
@@ -310,7 +329,7 @@
     "attempt_9_receipt_sha256": "sha256:8205c07fc87ce3dd71cced0db10939941fa273f384e4918604fe68fb3d7feb96",
     "attempt_9_verification_path": "receipts/EVIDENCE-R3-MAC-IMP-01.attempt-9.blocked.verification.json",
     "attempt_9_verification_sha256": "sha256:ce183950dc1187953580aa90356acc9e7e8b191eb93cd4fe87f6cf436d970f94",
-    "prestage_install_sequence_authority_required": true
+    "prestage_install_sequence_authority_required": false
   },
   "auxiliary_host_preparation": {
     "status": "BLOCKED_SOURCE_CORRECTION",
@@ -1407,7 +1426,7 @@
     "decision_record_sha256": "sha256:999e12636a50a94bfc39fae9cd8d0397d902d5edaeb456e923f3d0a272505065"
   },
   "auxiliary_prestage_evidence_blocker_correction": {
-    "status": "BLOCKED_CONTRADICTION",
+    "status": "RUNNING",
     "packet_id": "AUX-R3-MAC-PRESTAGE-EVIDENCE-BLOCKER-CORRECTION",
     "thread_id": "019fdfa4-ba96-70e0-b68d-1d0a4cf32a83",
     "host_id": "local",
@@ -1435,9 +1454,9 @@
     "wait_cursor": "09d2deac-230c-42d0-9957-94f004124fa0:92",
     "delivery_path": "increments/AUX-R3-MAC-PRESTAGE-EVIDENCE-BLOCKER-CORRECTION.delivery.json",
     "dispatched_at_utc": "2026-08-08T16:07:50Z",
-    "terminal": true,
+    "terminal": false,
     "thread_status": "idle",
-    "turn_status": "completed",
+    "turn_status": "pending",
     "receipt_path": "receipts/AUX-R3-MAC-PRESTAGE-EVIDENCE-BLOCKER-CORRECTION.blocked.json",
     "receipt_sha256": "sha256:146a79c2fea7f2519e657a7fdd3f9e480a519eda08650865813ef03282fa2fce",
     "verification_path": "receipts/AUX-R3-MAC-PRESTAGE-EVIDENCE-BLOCKER-CORRECTION.blocked.verification.json",
@@ -1448,6 +1467,13 @@
     "publication": false,
     "native_actions": false,
     "evidence_retry_dispatched": false,
-    "blocked_at_utc": "2026-08-08T16:18:18Z"
+    "blocked_at_utc": "2026-08-08T16:18:18Z",
+    "fixed_install_sequence_authorized": true,
+    "continuation_nonce": "543448d57169010ad5c3537c650d6d1d8d8510b05c91d45efa1cdb7f40e415a6",
+    "fixed_install_sequence_amendment_path": "authority-amendments/0047-r3-mac-fixed-install-sequence.json",
+    "fixed_install_sequence_amendment_sha256": "sha256:6bd998d38beb552233b6360ac7c02c482a7c2c096ea6c6bbb6e09ba5f6c222d4",
+    "fixed_install_sequence_prompt_path": "increments/AUX-R3-MAC-PRESTAGE-EVIDENCE-BLOCKER-CORRECTION.fixed-install-sequence-continuation.md",
+    "fixed_install_sequence_prompt_sha256": "sha256:89dcc543df76a5e65e613126d0c7989c8dd72b461502e8305f8373304e678bcc",
+    "continuation_authorized_at_utc": "2026-08-08T23:39:55Z"
   }
 }

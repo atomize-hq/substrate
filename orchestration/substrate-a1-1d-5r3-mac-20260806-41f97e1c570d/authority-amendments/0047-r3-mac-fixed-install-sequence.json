@@ -1,0 +1,66 @@
+{
+  "protocol": "codex.meta-authority-amendment.v1",
+  "orchestration_id": "substrate-a1-1d-5r3-mac-20260806-41f97e1c570d",
+  "amendment_id": "0047-r3-mac-fixed-install-sequence",
+  "issued_at_utc": "2026-08-08T23:39:55Z",
+  "applies_to": "AUX-R3-MAC-PRESTAGE-EVIDENCE-BLOCKER-CORRECTION",
+  "task_thread_id": "019fdfa4-ba96-70e0-b68d-1d0a4cf32a83",
+  "task_host_id": "local",
+  "task_worktree": "/Users/spensermcconnell/.codex/worktrees/2f78/substrate",
+  "original_dispatch_nonce": "0ae5e61c6cd21581afb861057bcd9789273e9f81926616716cee809006cec58d",
+  "continuation_nonce": "543448d57169010ad5c3537c650d6d1d8d8510b05c91d45efa1cdb7f40e415a6",
+  "expected_base": {
+    "remote": "origin",
+    "target_ref": "refs/heads/feat/internal-host-orchestrator-world-dispatch-bootstrap",
+    "commit": "a06b3fd26ceee4ece7e5bd1481981755eafcedb5",
+    "tree": "f4c396d0e28a43405a9a2b1d49a450d6df545c84"
+  },
+  "preserved_subject": {
+    "only_path": "tests/mac/prestage_artifact_route_r3.sh",
+    "sha256": "sha256:8b9a06fd7f71568034d8ef9054c2a1384bdbe19e6b04cebbda51a94462784013",
+    "production_edits": false
+  },
+  "authority_basis": {
+    "explicit_user_authorization": "Authorize the privileged macOS executor to derive and execute one fixed install-only post-PM sequence from the signed Stage-1 manifest\u2014no caller selector, and never Stop, Remove, or Restore. Retries resume through durable receipts.",
+    "existing_canonical_macos_install_method": true,
+    "r1_through_r6_remain_closed": true
+  },
+  "correction": {
+    "supersedes_contract_item": 7,
+    "catalogue_disposition": "post_pm_requests_v1 remains an exhaustive ordinary-action catalogue and MUST NOT be executed as an ordered installation plan",
+    "authorized_install_sequence": "The privileged macOS executor may privately derive one fixed install-only sequence from the signed Stage-1 successor manifest and protected state. The caller supplies no role, action, index, seed, subset, ordering, or selector.",
+    "allowed_effects": "Only forward installation effects already required by the canonical macOS installer: Create for fixed absent material/configuration roles, followed only by the fixed Enable/Start transitions required for existing socket/service activation.",
+    "forbidden_effects": [
+      "Stop",
+      "Remove",
+      "Restore",
+      "generic Replace repair",
+      "catalogue traversal",
+      "caller-selected action or role"
+    ],
+    "retry_law": "Every step is protected-state/manifest/plan identity bound and durably receipted. An exact retry replays completed receipts and resumes only the next unambiguously prepared or absent step. Missing, mismatched, ambiguous, expired, or unreceipted state preserves and stops.",
+    "completion": "The plan is complete only when the existing canonical installer postconditions hold for the four already-authorized Linux binaries, fixed guest configuration, units, and socket/service activation."
+  },
+  "implementation_authority": [
+    "continue in the existing task and preserved worktree",
+    "edit only the existing 0046 contract allowlist and review metadata fence",
+    "replace the erroneous execute-catalogue assumption with the executor-private fixed install plan",
+    "retain exactly four existing Linux binaries and remove only the unsupported world artifact role",
+    "run TDD, deterministic MAC/AArch64 proof, fresh causal review, and normal fast-forward publication when CLEAN"
+  ],
+  "prohibited_actions": [
+    "new binary target or additional binary build",
+    "new caller selector, generic scheduler, action broker, transport, endpoint, Keychain locator, pairing flow, or principal model",
+    "Stop, Remove, Restore, destructive catalogue traversal, or ambient repair in the install plan",
+    "Windows, WSL, ordinary Linux-host changes, native evidence, closeout, successor dispatch, or task archival",
+    "scope expansion outside the 0046 path fence without another explicit authority stop"
+  ],
+  "blocker_policy": "Adjudicate clerical and exact in-fence test/dispatch issues. Pause and return a blocked receipt for any genuine new authority/security/platform contradiction or unresolved P1/P2.",
+  "terminal_requirements": {
+    "success_status": "LANDED_CLEAN",
+    "next_increment": "EVIDENCE:R3-MAC-IMP-01",
+    "successor_dispatch_prohibited": true,
+    "return_meta_thread_id": "019fd8c3-b12c-7e73-919f-898600ab0f64",
+    "return_meta_host_id": "local"
+  }
+}
