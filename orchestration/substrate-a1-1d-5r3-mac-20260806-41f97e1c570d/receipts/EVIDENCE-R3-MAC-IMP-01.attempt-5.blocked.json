@@ -1,0 +1,63 @@
+{
+  "protocol": "codex.top-level-evidence-receipt.v1",
+  "orchestration_id": "substrate-a1-1d-5r3-mac-20260806-41f97e1c570d",
+  "dispatch_nonce": "8f013a2e345b2639b09a2c6c3cc3de787bc914c51ee31132c3a0e274422ff54a",
+  "evidence_id": "EVIDENCE:R3-MAC-IMP-01",
+  "status": "BLOCKED_PLATFORM_HANDOFF_REQUIRED",
+  "platform": "macos",
+  "evidence_task": {
+    "thread_id": "019fe147-e300-72c2-a394-a53f43185ceb",
+    "host_id": "local"
+  },
+  "source": {
+    "publication_mode": "remote",
+    "remote": "origin",
+    "target_ref": "refs/heads/feat/internal-host-orchestrator-world-dispatch-bootstrap",
+    "commit": "1126b907df6e38043e9071da222f6c6a377b341c",
+    "tree": "3a29fa323a8b9099d894c11d98cc085ecf4807c5",
+    "live_remote": "1126b907df6e38043e9071da222f6c6a377b341c"
+  },
+  "environment": {
+    "host_id": "local",
+    "project_id": "local-b2016f8a311fef93149e42eaec4d704d",
+    "project_path": "/Users/spensermcconnell/__Active_Code/atomize-hq/substrate",
+    "task_worktree": "/Users/spensermcconnell/.codex/worktrees/b4fe/substrate",
+    "os": "macOS 15.7.7 (24G720) arm64",
+    "principal": "spensermcconnell (uid 501)",
+    "tools": [
+      "rustc 1.89.0",
+      "cargo 1.89.0",
+      "Zig 0.16.0",
+      "Lima 2.1.1",
+      "OpenSSH 9.9p2"
+    ],
+    "host_sudo_noninteractive": true,
+    "guest_sudo_noninteractive": true,
+    "prefix": "/Users/spensermcconnell/.substrate owner=501 mode=0700"
+  },
+  "checkout_unchanged": true,
+  "prohibited_actions_confirmed": true,
+  "gates": [],
+  "evidence": {
+    "kind": "pre-mutation-platform-handoff-not-native-evidence",
+    "artifact_path": "/Users/spensermcconnell/.codex/evidence/substrate-a1-1d-5r3-mac-20260806-41f97e1c570d/EVIDENCE-R3-MAC-IMP-01/8f013a2e345b2639b09a2c6c3cc3de787bc914c51ee31132c3a0e274422ff54a/r3-mac-imp-01-platform-handoff.json",
+    "artifact_sha256": "sha256:9c7503c5b4e1f9f291d39d96b4208ac9099b2112393175e2ace558fad56e9fbf",
+    "native_artifact_created": false,
+    "native_artifact_validator_run": false,
+    "reason": "The native success artifact is inapplicable to this blocked pre-mutation attempt; no static evidence substitution was made."
+  },
+  "blocker": {
+    "summary": "Pre-mutation MAC platform prerequisites contradict the only landed packet path; native mutation did not begin.",
+    "details": "Bash type -P resolves limactl to /opt/homebrew/bin/limactl, a uid-501 admin-owned symbolic link to ../Cellar/lima/2.1.1/bin/limactl; the landed installer requires a no-follow root-owned immutable fixed image. The canonical substrate Lima instance is already Running and unmarked while the sole Stage-1 authorization requires it to be absent before create and forbids adoption/deletion of this state. The exact clean task checkout is detached; the landed installer would record source_ref=detached, conflicting with the dispatch-bound target ref required by the native artifact validator.",
+    "restoration": {
+      "native_mutations_run": false,
+      "repository_mutations_run": false,
+      "checkout_head_tree_clean_preserved": true,
+      "live_remote_preserved": true,
+      "sudoers_sentinel_preserved_sha256": "sha256:f4f85d5b2674a6505d84ee75de0a3cc8bc883bace01733bcab3b5fbd6efd4f0d"
+    },
+    "required_authority": "Provide a source-compatible immutable limactl installation, an authorized recorded disposition for the existing canonical instance, and an exact clean checkout whose canonical installer provenance is the bound ref. These changes must be authorized outside this evidence task.",
+    "continuation_handoff": "/Users/spensermcconnell/.codex/evidence/substrate-a1-1d-5r3-mac-20260806-41f97e1c570d/EVIDENCE-R3-MAC-IMP-01/8f013a2e345b2639b09a2c6c3cc3de787bc914c51ee31132c3a0e274422ff54a/r3-mac-imp-01-platform-handoff.json",
+    "handoff_prompt": "Start a fresh, bound MAC evidence attempt only after controlling authority has provided a Bash type -P limactl path that satisfies the landed root-owned no-follow immutable predicate, established an authorized source-compatible disposition for the existing canonical substrate instance without this attempt mutating it, and supplied an exact clean checkout attached to refs/heads/feat/internal-host-orchestrator-world-dispatch-bootstrap so the canonical installer records the dispatch-bound ref. Reverify all bindings, sudo, baseline, and restoration plan before any native mutation."
+  }
+}

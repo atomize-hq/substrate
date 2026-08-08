@@ -1,0 +1,59 @@
+{
+  "protocol": "codex.top-level-evidence-receipt-verification.v1",
+  "orchestration_id": "substrate-a1-1d-5r3-mac-20260806-41f97e1c570d",
+  "evidence_id": "EVIDENCE:R3-MAC-IMP-01",
+  "attempt": 5,
+  "status": "BLOCKED_PLATFORM_HANDOFF_REQUIRED",
+  "verified": true,
+  "verified_at_utc": "2026-08-08T12:21:21Z",
+  "terminal_barrier": {
+    "thread_id": "019fe147-e300-72c2-a394-a53f43185ceb",
+    "host_id": "local",
+    "worktree": "/Users/spensermcconnell/.codex/worktrees/b4fe/substrate",
+    "turn_id": "019fe148-f287-7360-976d-bbdb1fd17853",
+    "cursor": "48c07936-b6f1-47e2-93d3-faf543564a82:2",
+    "thread_status": "idle",
+    "turn_status": "completed"
+  },
+  "receipt": {
+    "path": "receipts/EVIDENCE-R3-MAC-IMP-01.attempt-5.blocked.json",
+    "sha256": "sha256:d636fa4eae82fe683d95e70e0bff6352b3de777f567b371a0b94f4a914869431",
+    "validator": "VALID"
+  },
+  "source": {
+    "commit": "1126b907df6e38043e9071da222f6c6a377b341c",
+    "tree": "3a29fa323a8b9099d894c11d98cc085ecf4807c5",
+    "live_remote": "1126b907df6e38043e9071da222f6c6a377b341c",
+    "task_head": "1126b907df6e38043e9071da222f6c6a377b341c",
+    "task_tree": "3a29fa323a8b9099d894c11d98cc085ecf4807c5",
+    "task_index_tree": "3a29fa323a8b9099d894c11d98cc085ecf4807c5",
+    "task_worktree_clean": true,
+    "protected_checkout_clean": true
+  },
+  "artifact": {
+    "path": "/Users/spensermcconnell/.codex/evidence/substrate-a1-1d-5r3-mac-20260806-41f97e1c570d/EVIDENCE-R3-MAC-IMP-01/8f013a2e345b2639b09a2c6c3cc3de787bc914c51ee31132c3a0e274422ff54a/r3-mac-imp-01-platform-handoff.json",
+    "sha256": "sha256:9c7503c5b4e1f9f291d39d96b4208ac9099b2112393175e2ace558fad56e9fbf",
+    "json_valid": true,
+    "native_evidence": false
+  },
+  "independent_blocker_observation": {
+    "limactl_path": "/opt/homebrew/bin/limactl",
+    "limactl_path_is_symlink": true,
+    "limactl_path_owner_uid": 501,
+    "limactl_real_path": "/opt/homebrew/Cellar/lima/2.1.1/bin/limactl",
+    "limactl_real_owner_uid": 501,
+    "canonical_instance": "substrate",
+    "canonical_instance_status": "Running",
+    "task_checkout_ref": "detached",
+    "sudoers_sentinel_sha256": "sha256:f4f85d5b2674a6505d84ee75de0a3cc8bc883bace01733bcab3b5fbd6efd4f0d",
+    "native_mutation_observed": false
+  },
+  "disposition": {
+    "advance": false,
+    "official_evidence_satisfied": false,
+    "auxiliary_platform_preparation_required": true,
+    "next_official_attempt": 6,
+    "task_archived": false,
+    "task_worktree_preserved": true
+  }
+}
