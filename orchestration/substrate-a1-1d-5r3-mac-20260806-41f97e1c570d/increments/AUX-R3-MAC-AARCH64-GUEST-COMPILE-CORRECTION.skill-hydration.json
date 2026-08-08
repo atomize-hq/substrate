@@ -1,0 +1,9 @@
+{
+  "protocol": "codex.repository-local-skill-hydration.v1",
+  "source": "/Users/spensermcconnell/.codex/worktrees/eb49/substrate/.agents/skills",
+  "target": "/Users/spensermcconnell/.codex/worktrees/2f78/substrate/.agents/skills",
+  "skill_count": 25,
+  "file_count": 54,
+  "sha256": "e3de93f358594033ed59696a9624d2d0ac2fd0c2aa7ddf4a532810a05b262282",
+  "verified": true
+}

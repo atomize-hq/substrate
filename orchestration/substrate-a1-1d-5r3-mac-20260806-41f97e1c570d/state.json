@@ -965,7 +965,7 @@
     "linker_installed": true
   },
   "auxiliary_guest_compile_correction": {
-    "status": "PENDING_TASK_CREATION",
+    "status": "PENDING_BINDING_DELIVERY",
     "packet": "AUX-R3-MAC-AARCH64-GUEST-COMPILE-CORRECTION",
     "dispatch_nonce": "7c15251a50d1f1f9326a43027c009ad73e003931ebb9bf6fe6f723eb07050f65",
     "authority_amendment": "authority-amendments/0038-r3-mac-aarch64-guest-compile-correction.json",
@@ -981,6 +981,20 @@
     },
     "publication_mode": "remote",
     "next_increment": "EVIDENCE:R3-MAC-IMP-01",
-    "task_archiving_authorized": false
+    "task_archiving_authorized": false,
+    "thread_id": "019fdfa4-ba96-70e0-b68d-1d0a4cf32a83",
+    "host_id": "local",
+    "worktree": "/Users/spensermcconnell/.codex/worktrees/2f78/substrate",
+    "variables_path": "increments/AUX-R3-MAC-AARCH64-GUEST-COMPILE-CORRECTION.variables.json",
+    "prompt_path": "increments/AUX-R3-MAC-AARCH64-GUEST-COMPILE-CORRECTION.initial-prompt.md",
+    "prompt_sha256": "sha256:fd816a28e024e5a809450ab86e3e202f1703447a74104f0eb05283049b2cb54d",
+    "binding_path": "increments/AUX-R3-MAC-AARCH64-GUEST-COMPILE-CORRECTION.binding.json",
+    "binding_prompt_path": "increments/AUX-R3-MAC-AARCH64-GUEST-COMPILE-CORRECTION.binding-prompt.md",
+    "binding_prompt_sha256": "sha256:907cd933bfd079ba0c7ca556cf96149aa7eb322652d80ae3b8c6974544755e31",
+    "skill_hydration_path": "increments/AUX-R3-MAC-AARCH64-GUEST-COMPILE-CORRECTION.skill-hydration.json",
+    "skill_hydration_sha256": "e3de93f358594033ed59696a9624d2d0ac2fd0c2aa7ddf4a532810a05b262282",
+    "initial_turn_id": "019fdfa4-bd66-74a0-a4c8-2189a29e9d9a",
+    "initial_wait_cursor": "09d2deac-230c-42d0-9957-94f004124fa0:1",
+    "created_at_utc": "2026-08-08T04:35:14Z"
   }
 }

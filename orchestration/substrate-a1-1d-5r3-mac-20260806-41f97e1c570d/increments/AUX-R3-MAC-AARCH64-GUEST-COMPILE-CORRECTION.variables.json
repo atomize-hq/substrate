@@ -1,0 +1,20 @@
+{
+  "ORCHESTRATION_ID": "substrate-a1-1d-5r3-mac-20260806-41f97e1c570d",
+  "DISPATCH_NONCE": "7c15251a50d1f1f9326a43027c009ad73e003931ebb9bf6fe6f723eb07050f65",
+  "META_THREAD_ID": "019fd8c3-b12c-7e73-919f-898600ab0f64",
+  "META_HOST_ID": "local",
+  "INCREMENT": "AUX-R3-MAC-AARCH64-GUEST-COMPILE-CORRECTION",
+  "PACKET_ID": "AUX-R3-MAC-AARCH64-GUEST-COMPILE-CORRECTION",
+  "NEXT_INCREMENT": "EVIDENCE:R3-MAC-IMP-01",
+  "WORKING_DIRECTORY": "/Users/spensermcconnell/.codex/worktrees/2f78/substrate",
+  "PROTECTED_CHECKOUTS": [
+    "/Users/spensermcconnell/__Active_Code/atomize-hq/substrate",
+    "/Users/spensermcconnell/.codex/worktrees/eb49/substrate",
+    "/Users/spensermcconnell/.codex/worktrees/fa11/substrate"
+  ],
+  "REMOTE": "origin",
+  "TARGET_REF": "refs/heads/feat/internal-host-orchestrator-world-dispatch-bootstrap",
+  "EXPECTED_BASE_COMMIT": "3d6b2eb1b02b1a24a1e055d12e5cbdb9b0312774",
+  "EXPECTED_BASE_TREE": "d59cac92405f06024cfcde0a2c22a4cf1255c3d7",
+  "REQUIRED_ANCESTOR": "270f6e55e1a94b7e2f9b2667e605980d2e50579c"
+}

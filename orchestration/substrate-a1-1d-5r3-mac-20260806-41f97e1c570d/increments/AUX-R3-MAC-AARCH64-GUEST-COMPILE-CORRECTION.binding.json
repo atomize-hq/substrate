@@ -1,0 +1,25 @@
+{
+  "protocol": "codex.top-level-task-binding.v1",
+  "orchestration_id": "substrate-a1-1d-5r3-mac-20260806-41f97e1c570d",
+  "increment": "AUX-R3-MAC-AARCH64-GUEST-COMPILE-CORRECTION",
+  "packet_id": "AUX-R3-MAC-AARCH64-GUEST-COMPILE-CORRECTION",
+  "dispatch_nonce": "7c15251a50d1f1f9326a43027c009ad73e003931ebb9bf6fe6f723eb07050f65",
+  "thread_id": "019fdfa4-ba96-70e0-b68d-1d0a4cf32a83",
+  "host_id": "local",
+  "worktree": "/Users/spensermcconnell/.codex/worktrees/2f78/substrate",
+  "expected_base": {
+    "commit": "3d6b2eb1b02b1a24a1e055d12e5cbdb9b0312774",
+    "tree": "d59cac92405f06024cfcde0a2c22a4cf1255c3d7"
+  },
+  "target_ref": "refs/heads/feat/internal-host-orchestrator-world-dispatch-bootstrap",
+  "authority_amendment": "0038-r3-mac-aarch64-guest-compile-correction",
+  "contract_path": "increments/AUX-R3-MAC-AARCH64-GUEST-COMPILE-CORRECTION.contract.md",
+  "prompt_path": "increments/AUX-R3-MAC-AARCH64-GUEST-COMPILE-CORRECTION.initial-prompt.md",
+  "variables_path": "increments/AUX-R3-MAC-AARCH64-GUEST-COMPILE-CORRECTION.variables.json",
+  "skill_hydration_path": "increments/AUX-R3-MAC-AARCH64-GUEST-COMPILE-CORRECTION.skill-hydration.json",
+  "skill_hydration_sha256": "e3de93f358594033ed59696a9624d2d0ac2fd0c2aa7ddf4a532810a05b262282",
+  "model": "gpt-5.6-terra",
+  "reasoning": "xhigh",
+  "start_authorized": true,
+  "bound_at_utc": "2026-08-08T04:35:14Z"
+}
