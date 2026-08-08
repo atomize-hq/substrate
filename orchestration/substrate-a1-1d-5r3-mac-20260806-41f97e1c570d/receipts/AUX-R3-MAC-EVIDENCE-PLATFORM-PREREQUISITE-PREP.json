@@ -1,0 +1,229 @@
+{
+  "attached_exact_source_mirror": {
+    "ancestry_expected_equals_remote": true,
+    "generated_packet_artifacts_inside_mirror": false,
+    "head": "1126b907df6e38043e9071da222f6c6a377b341c",
+    "index_clean": true,
+    "live_remote": "1126b907df6e38043e9071da222f6c6a377b341c",
+    "origin_url": "https://github.com/atomize-hq/substrate.git",
+    "path": "/Users/spensermcconnell/.codex/evidence/substrate-a1-1d-5r3-mac-20260806-41f97e1c570d/AUX-R3-MAC-EVIDENCE-PLATFORM-PREREQUISITE-PREP/11c27a5ee57be5b99a3c7457c4f511b14b5747ee4b2b0492874a416d5fab02a3/source/substrate",
+    "records": [
+      {
+        "path": "/Users/spensermcconnell/.codex/evidence/substrate-a1-1d-5r3-mac-20260806-41f97e1c570d/AUX-R3-MAC-EVIDENCE-PLATFORM-PREREQUISITE-PREP/11c27a5ee57be5b99a3c7457c4f511b14b5747ee4b2b0492874a416d5fab02a3/action-3-attached-source-mirror/mirror-verification.txt",
+        "sha256": "sha256:393d08f3f3968fbb405158d8cff87db32cf7d69b22012daff7163c9a3d44fc6d"
+      },
+      {
+        "path": "/Users/spensermcconnell/.codex/evidence/substrate-a1-1d-5r3-mac-20260806-41f97e1c570d/AUX-R3-MAC-EVIDENCE-PLATFORM-PREREQUISITE-PREP/11c27a5ee57be5b99a3c7457c4f511b14b5747ee4b2b0492874a416d5fab02a3/action-3-attached-source-mirror/digests.txt",
+        "sha256": "sha256:c2b1e1d6da960490bc4b4f8297b2ea13952b6304024306f8f890db640c81c456"
+      }
+    ],
+    "remote_tracking": "1126b907df6e38043e9071da222f6c6a377b341c",
+    "symbolic_head": "refs/heads/feat/internal-host-orchestrator-world-dispatch-bootstrap",
+    "tree": "3a29fa323a8b9099d894c11d98cc085ecf4807c5",
+    "untracked_paths": 0
+  },
+  "authority_amendment": {
+    "captured_copy": {
+      "path": "/Users/spensermcconnell/.codex/evidence/substrate-a1-1d-5r3-mac-20260806-41f97e1c570d/AUX-R3-MAC-EVIDENCE-PLATFORM-PREREQUISITE-PREP/11c27a5ee57be5b99a3c7457c4f511b14b5747ee4b2b0492874a416d5fab02a3/authority/0039-r3-mac-evidence-platform-prerequisite-prep.json",
+      "sha256": "sha256:f8979938b6e2aa29fa9d0a945d619747bfc7f706a9ad33a0d688681810440ad8"
+    },
+    "path": "/Users/spensermcconnell/.codex/worktrees/eb49/substrate/orchestration/substrate-a1-1d-5r3-mac-20260806-41f97e1c570d/authority-amendments/0039-r3-mac-evidence-platform-prerequisite-prep.json",
+    "sha256": "sha256:f8979938b6e2aa29fa9d0a945d619747bfc7f706a9ad33a0d688681810440ad8",
+    "verified": true
+  },
+  "canonical_lima_collision_cleanup": {
+    "action": "Stopped exactly substrate, proved Stopped, then deleted exactly substrate with --force --yes using only the fixed /usr/local/bin/limactl.",
+    "after": {
+      "after_names": [],
+      "before_names": [
+        "substrate"
+      ],
+      "control_directory_absence": {
+        "path": "/Users/spensermcconnell/.codex/evidence/substrate-a1-1d-5r3-mac-20260806-41f97e1c570d/AUX-R3-MAC-EVIDENCE-PLATFORM-PREREQUISITE-PREP/11c27a5ee57be5b99a3c7457c4f511b14b5747ee4b2b0492874a416d5fab02a3/action-2-lima-collision-cleanup/control-directory-absence-after.txt",
+        "sha256": "sha256:296a960da64be1a4bef18e32239984c1e8dae8cd1c65c6a61aaf842da9c4b9e8"
+      },
+      "full_inventory": {
+        "path": "/Users/spensermcconnell/.codex/evidence/substrate-a1-1d-5r3-mac-20260806-41f97e1c570d/AUX-R3-MAC-EVIDENCE-PLATFORM-PREREQUISITE-PREP/11c27a5ee57be5b99a3c7457c4f511b14b5747ee4b2b0492874a416d5fab02a3/action-2-lima-collision-cleanup/all-instances-after.json",
+        "sha256": "sha256:e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+      },
+      "other_instances_unchanged": true,
+      "parity_record": {
+        "path": "/Users/spensermcconnell/.codex/evidence/substrate-a1-1d-5r3-mac-20260806-41f97e1c570d/AUX-R3-MAC-EVIDENCE-PLATFORM-PREREQUISITE-PREP/11c27a5ee57be5b99a3c7457c4f511b14b5747ee4b2b0492874a416d5fab02a3/action-2-lima-collision-cleanup/post-delete-parity.json",
+        "sha256": "sha256:58b5400f328024bfc75f06d49f609ce6c781fcbf9b1b561aa20bceed25d50e56"
+      },
+      "substrate_absent": true
+    },
+    "before": {
+      "bounded_metadata_hashes": {
+        "path": "/Users/spensermcconnell/.codex/evidence/substrate-a1-1d-5r3-mac-20260806-41f97e1c570d/AUX-R3-MAC-EVIDENCE-PLATFORM-PREREQUISITE-PREP/11c27a5ee57be5b99a3c7457c4f511b14b5747ee4b2b0492874a416d5fab02a3/action-2-lima-collision-cleanup/bounded-control-metadata-hashes-before.json",
+        "sha256": "sha256:37501607fc2aff7634f0154e75135fe31fef122834c414c3a2767d03e22a85ae"
+      },
+      "control_directory": "/Users/spensermcconnell/.lima/substrate",
+      "driver_pid": 38228,
+      "full_inventory": {
+        "path": "/Users/spensermcconnell/.codex/evidence/substrate-a1-1d-5r3-mac-20260806-41f97e1c570d/AUX-R3-MAC-EVIDENCE-PLATFORM-PREREQUISITE-PREP/11c27a5ee57be5b99a3c7457c4f511b14b5747ee4b2b0492874a416d5fab02a3/action-2-lima-collision-cleanup/all-instances-before.json",
+        "sha256": "sha256:4dfbd11a48dbb38cc2ddf8b3a80410950ee9700dda266d9ba8592a27ec658703"
+      },
+      "guest_identity": {
+        "path": "/Users/spensermcconnell/.codex/evidence/substrate-a1-1d-5r3-mac-20260806-41f97e1c570d/AUX-R3-MAC-EVIDENCE-PLATFORM-PREREQUISITE-PREP/11c27a5ee57be5b99a3c7457c4f511b14b5747ee4b2b0492874a416d5fab02a3/action-2-lima-collision-cleanup/guest-identity-before.txt",
+        "sha256": "sha256:d7ff999c694927300361651bd6600dab34a4a3ac52c4fe1328839b1e4f6503cf"
+      },
+      "host_agent_pid": 38228,
+      "ownership_proof": {
+        "path": "/Users/spensermcconnell/.codex/evidence/substrate-a1-1d-5r3-mac-20260806-41f97e1c570d/AUX-R3-MAC-EVIDENCE-PLATFORM-PREREQUISITE-PREP/11c27a5ee57be5b99a3c7457c4f511b14b5747ee4b2b0492874a416d5fab02a3/action-2-lima-collision-cleanup/collision-ownership-proof.txt",
+        "sha256": "sha256:5bb887f27052efb7e75a9ac844860f012aacfbeb90a42ed7e27761c7c87e1970"
+      },
+      "r3_evidence_owned": false,
+      "selected_instance": {
+        "path": "/Users/spensermcconnell/.codex/evidence/substrate-a1-1d-5r3-mac-20260806-41f97e1c570d/AUX-R3-MAC-EVIDENCE-PLATFORM-PREREQUISITE-PREP/11c27a5ee57be5b99a3c7457c4f511b14b5747ee4b2b0492874a416d5fab02a3/action-2-lima-collision-cleanup/substrate-before.json",
+        "sha256": "sha256:4dfbd11a48dbb38cc2ddf8b3a80410950ee9700dda266d9ba8592a27ec658703"
+      },
+      "selected_name": "substrate",
+      "selected_protected": false,
+      "selected_status": "Running",
+      "state_directory_identity": {
+        "path": "/Users/spensermcconnell/.codex/evidence/substrate-a1-1d-5r3-mac-20260806-41f97e1c570d/AUX-R3-MAC-EVIDENCE-PLATFORM-PREREQUISITE-PREP/11c27a5ee57be5b99a3c7457c4f511b14b5747ee4b2b0492874a416d5fab02a3/action-2-lima-collision-cleanup/control-directory-identity-before.txt",
+        "sha256": "sha256:db279db95ccee1d7e067c3713100efcb81497b3e9c0bd0f9485f868c8f359b83"
+      },
+      "state_directory_listing": {
+        "path": "/Users/spensermcconnell/.codex/evidence/substrate-a1-1d-5r3-mac-20260806-41f97e1c570d/AUX-R3-MAC-EVIDENCE-PLATFORM-PREREQUISITE-PREP/11c27a5ee57be5b99a3c7457c4f511b14b5747ee4b2b0492874a416d5fab02a3/action-2-lima-collision-cleanup/control-directory-listing-before.txt",
+        "sha256": "sha256:eae40d1c8ec4abbac01538108e34878b52ab8e6c2ff9c1a423c2aabaf1dc788d"
+      },
+      "unmanifested_pre_r3_collision": true
+    },
+    "tool": "/usr/local/bin/limactl"
+  },
+  "checkout_and_sentinel_final_state": {
+    "final_revalidation": {
+      "path": "/Users/spensermcconnell/.codex/evidence/substrate-a1-1d-5r3-mac-20260806-41f97e1c570d/AUX-R3-MAC-EVIDENCE-PLATFORM-PREREQUISITE-PREP/11c27a5ee57be5b99a3c7457c4f511b14b5747ee4b2b0492874a416d5fab02a3/final-revalidation.txt",
+      "sha256": "sha256:215fa1f0fb1103bc144399c1d359169dbd9ad08a0d066c79d01e287652dacae3"
+    },
+    "meta_checkout": {
+      "branch_ref": "refs/heads/feat/r3-mac-meta-orchestration-41f97e1c570d",
+      "clean": true,
+      "head": "d409a6706ec86840aad729c5f8929091eb70144c",
+      "live_target": "1126b907df6e38043e9071da222f6c6a377b341c",
+      "path": "/Users/spensermcconnell/.codex/worktrees/eb49/substrate",
+      "tree": "91e0797bef8a4cb746b88421b737b4293e3593ae"
+    },
+    "protected_checkout": {
+      "branch_ref": "refs/heads/feat/internal-host-orchestrator-world-dispatch-bootstrap",
+      "clean": true,
+      "head": "270f6e55e1a94b7e2f9b2667e605980d2e50579c",
+      "live_target": "1126b907df6e38043e9071da222f6c6a377b341c",
+      "path": "/Users/spensermcconnell/__Active_Code/atomize-hq/substrate",
+      "tree": "acef6844c15d17aba8cfd18d2fc7ef88d9c3420b"
+    },
+    "sudoers_sentinel": {
+      "mode": "0440",
+      "owner_group": "root:wheel",
+      "path": "/etc/sudoers.d/substrate-r3-mac-evidence",
+      "sha256": "sha256:f4f85d5b2674a6505d84ee75de0a3cc8bc883bace01733bcab3b5fbd6efd4f0d",
+      "unchanged": true
+    },
+    "task_checkout": {
+      "branch_ref": "detached",
+      "clean": true,
+      "head": "1126b907df6e38043e9071da222f6c6a377b341c",
+      "live_target": "1126b907df6e38043e9071da222f6c6a377b341c",
+      "tree": "3a29fa323a8b9099d894c11d98cc085ecf4807c5"
+    }
+  },
+  "dispatch_nonce": "11c27a5ee57be5b99a3c7457c4f511b14b5747ee4b2b0492874a416d5fab02a3",
+  "external_artifact_manifest": {
+    "files_listed": 52,
+    "path": "/Users/spensermcconnell/.codex/evidence/substrate-a1-1d-5r3-mac-20260806-41f97e1c570d/AUX-R3-MAC-EVIDENCE-PLATFORM-PREREQUISITE-PREP/11c27a5ee57be5b99a3c7457c4f511b14b5747ee4b2b0492874a416d5fab02a3/auxiliary-platform-prep-artifact-manifest.json",
+    "sha256": "sha256:a58ca455cf1aa564d7d8628a0b6a44d49eda28af9fb6ac24ac67e31ee3d31a9b"
+  },
+  "fixed_limactl_installation": {
+    "destination": {
+      "atomic_same_directory_create": "install temporary regular file then same-directory hard-link into an absent destination; remove temporary link after creation",
+      "cdhash": "b49590ab735afa18681b5423b8224e84462de04e",
+      "codesign_verified": true,
+      "controlled_bash_type_P": "/usr/local/bin/limactl",
+      "mode": "0555",
+      "nlink": 1,
+      "no_follow_regular_file": true,
+      "owner_group": "root:wheel",
+      "path": "/usr/local/bin/limactl",
+      "path_components_root_owned_not_group_or_other_writable": true,
+      "sha256": "sha256:c126697daa485aff79552a34413e14c0e2efd43675845bee1a152f31845f1455",
+      "type": "Regular File",
+      "version": "limactl version 2.1.1"
+    },
+    "prestate": "destination absent",
+    "records": [
+      {
+        "path": "/Users/spensermcconnell/.codex/evidence/substrate-a1-1d-5r3-mac-20260806-41f97e1c570d/AUX-R3-MAC-EVIDENCE-PLATFORM-PREREQUISITE-PREP/11c27a5ee57be5b99a3c7457c4f511b14b5747ee4b2b0492874a416d5fab02a3/action-1-fixed-limactl/installation.log",
+        "sha256": "sha256:bb0d879bc5a5e252e06087564f87d670160a5b7fd937f0fcbd176ede91b6625d"
+      },
+      {
+        "path": "/Users/spensermcconnell/.codex/evidence/substrate-a1-1d-5r3-mac-20260806-41f97e1c570d/AUX-R3-MAC-EVIDENCE-PLATFORM-PREREQUISITE-PREP/11c27a5ee57be5b99a3c7457c4f511b14b5747ee4b2b0492874a416d5fab02a3/action-1-fixed-limactl/digests.txt",
+        "sha256": "sha256:17ce9049dde6611766441270da8fd0e73ce3ca508c32e56730e07a8fe59df1c4"
+      },
+      {
+        "path": "/Users/spensermcconnell/.codex/evidence/substrate-a1-1d-5r3-mac-20260806-41f97e1c570d/AUX-R3-MAC-EVIDENCE-PLATFORM-PREREQUISITE-PREP/11c27a5ee57be5b99a3c7457c4f511b14b5747ee4b2b0492874a416d5fab02a3/final-revalidation.txt",
+        "sha256": "sha256:215fa1f0fb1103bc144399c1d359169dbd9ad08a0d066c79d01e287652dacae3"
+      }
+    ],
+    "source": {
+      "cdhash": "b49590ab735afa18681b5423b8224e84462de04e",
+      "nlink": 1,
+      "path": "/opt/homebrew/Cellar/lima/2.1.1/bin/limactl",
+      "sha256": "sha256:c126697daa485aff79552a34413e14c0e2efd43675845bee1a152f31845f1455",
+      "symlink": false,
+      "type": "Regular File",
+      "version": "limactl version 2.1.1"
+    }
+  },
+  "fresh_attempt_handoff": {
+    "prompt": "A fresh, separately authorized EVIDENCE:R3-MAC-IMP-01 attempt may use the attached exact-source mirror, the root-owned no-follow /usr/local/bin/limactl selected by controlled PATH, and the absent canonical substrate Lima instance. It must rebind its own identity and nonce, reverify all source/platform state, derive IH/PM, and execute the complete official packet. This auxiliary receipt is not native evidence and does not open MAC-CLOSEOUT or any successor.",
+    "status": "READY_FOR_FRESH_OFFICIAL_EVIDENCE_AUTHORITY_ONLY"
+  },
+  "orchestration_id": "substrate-a1-1d-5r3-mac-20260806-41f97e1c570d",
+  "packet": "AUX-R3-MAC-EVIDENCE-PLATFORM-PREREQUISITE-PREP",
+  "prohibited_actions": {
+    "dev_install_or_codesigning_run": false,
+    "non_substrate_lima_instance_mutation": false,
+    "official_EVIDENCE_R3_MAC_IMP_01_run": false,
+    "product_or_control_source_mutation": false,
+    "publisher_keychain_xpc_launchdaemon_pairing_lifecycle_retirement_closeout_run": false,
+    "stage_commit_push_reset_clean_rebase_or_target_ref_mutation": false,
+    "sudoers_sentinel_mutation": false,
+    "task_or_worktree_archival": false,
+    "windows_unix_linux_host_or_successor_work": false
+  },
+  "protocol": "codex.auxiliary-platform-prep-receipt.v1",
+  "receipt_validation": {
+    "path": "/Users/spensermcconnell/.codex/evidence/substrate-a1-1d-5r3-mac-20260806-41f97e1c570d/AUX-R3-MAC-EVIDENCE-PLATFORM-PREREQUISITE-PREP/11c27a5ee57be5b99a3c7457c4f511b14b5747ee4b2b0492874a416d5fab02a3/receipt-validation.txt",
+    "result": "VALID codex.auxiliary-platform-prep-receipt.v1 status=READY",
+    "sha256": "sha256:8b340682cbc2390490d0fef016390be5f2bb991c1de6dd4e8308904bdcfec992"
+  },
+  "return_meta": {
+    "host_id": "local",
+    "thread_id": "019fd8c3-b12c-7e73-919f-898600ab0f64"
+  },
+  "skills": {
+    "check_record": {
+      "path": "/Users/spensermcconnell/.codex/evidence/substrate-a1-1d-5r3-mac-20260806-41f97e1c570d/AUX-R3-MAC-EVIDENCE-PLATFORM-PREREQUISITE-PREP/11c27a5ee57be5b99a3c7457c4f511b14b5747ee4b2b0492874a416d5fab02a3/skills/hydrate-check.txt",
+      "sha256": "sha256:0ba8fa62ee36cb7858719a609dec1973f6e705f66a8006801db1a1fc0b69fb51"
+    },
+    "file_count": 54,
+    "hydrated_suite_verified": true,
+    "sha256": "sha256:e3de93f358594033ed59696a9624d2d0ac2fd0c2aa7ddf4a532810a05b262282",
+    "skill_count": 25
+  },
+  "source": {
+    "commit": "1126b907df6e38043e9071da222f6c6a377b341c",
+    "live_remote": "1126b907df6e38043e9071da222f6c6a377b341c",
+    "remote": "origin",
+    "target_ref": "refs/heads/feat/internal-host-orchestrator-world-dispatch-bootstrap",
+    "tree": "3a29fa323a8b9099d894c11d98cc085ecf4807c5"
+  },
+  "status": "READY",
+  "task": {
+    "host_id": "local",
+    "thread_id": "019fe147-e300-72c2-a394-a53f43185ceb",
+    "worktree": "/Users/spensermcconnell/.codex/worktrees/b4fe/substrate"
+  }
+}

@@ -164,7 +164,7 @@
     "host_sudo_durable_nopasswd_required": true,
     "host_sudo_verified": true,
     "host_sudo_verification_path": "increments/EVIDENCE-R3-MAC-IMP-01.attempt-5.predispatch.json",
-    "official_evidence_retry_held": true,
+    "official_evidence_retry_held": false,
     "auxiliary_platform_preparation_required": true,
     "attempt_5_receipt_path": "receipts/EVIDENCE-R3-MAC-IMP-01.attempt-5.blocked.json",
     "attempt_5_verification_path": "receipts/EVIDENCE-R3-MAC-IMP-01.attempt-5.blocked.verification.json",
@@ -177,7 +177,9 @@
     "variables_path": "increments/EVIDENCE-R3-MAC-IMP-01.attempt-5.variables.json",
     "variables_sha256": "sha256:9c1413cf7267c8df51987f67ebd7361c6e219073ea2c191ad374ce73d2002bbc",
     "task_archiving_authorized": false,
-    "auxiliary_platform_preparation_running": true
+    "auxiliary_platform_preparation_running": false,
+    "auxiliary_platform_preparation_completed": true,
+    "auxiliary_platform_preparation_verification_path": "receipts/AUX-R3-MAC-EVIDENCE-PLATFORM-PREREQUISITE-PREP.verification.json"
   },
   "auxiliary_host_preparation": {
     "status": "BLOCKED_SOURCE_CORRECTION",
@@ -1045,7 +1047,7 @@
     "verified_at_utc": "2026-08-08T04:59:46Z"
   },
   "auxiliary_evidence_platform_preparation": {
-    "status": "RUNNING",
+    "status": "READY_VERIFIED",
     "task_class": "general_auxiliary_native_platform_preparation",
     "official_increment_or_evidence": false,
     "packet": "AUX-R3-MAC-EVIDENCE-PLATFORM-PREREQUISITE-PREP",
@@ -1065,15 +1067,21 @@
     },
     "external_root": "/Users/spensermcconnell/.codex/evidence/substrate-a1-1d-5r3-mac-20260806-41f97e1c570d/AUX-R3-MAC-EVIDENCE-PLATFORM-PREREQUISITE-PREP/11c27a5ee57be5b99a3c7457c4f511b14b5747ee4b2b0492874a416d5fab02a3",
     "attached_source_mirror": "/Users/spensermcconnell/.codex/evidence/substrate-a1-1d-5r3-mac-20260806-41f97e1c570d/AUX-R3-MAC-EVIDENCE-PLATFORM-PREREQUISITE-PREP/11c27a5ee57be5b99a3c7457c4f511b14b5747ee4b2b0492874a416d5fab02a3/source/substrate",
-    "official_evidence_dispatch_allowed": false,
+    "official_evidence_dispatch_allowed": true,
     "task_archiving_authorized": false,
     "prepared_at_utc": "2026-08-08T12:24:44.386657Z",
     "delivery_path": "increments/AUX-R3-MAC-EVIDENCE-PLATFORM-PREREQUISITE-PREP.delivery.json",
     "delivery_sha256": "sha256:37c5ab62bbb9a8a1bb24512b86129d4da63a88fdbd709980910346b0ed7867c5",
     "turn_id": "019fe155-aa42-7cf0-b6e9-3b17df2df3f9",
-    "wait_cursor": "48c07936-b6f1-47e2-93d3-faf543564a82:3",
-    "thread_status": "active",
-    "turn_status": "inProgress",
-    "sent_at_utc": "2026-08-08T12:25:15Z"
+    "wait_cursor": "48c07936-b6f1-47e2-93d3-faf543564a82:5",
+    "thread_status": "idle",
+    "turn_status": "completed",
+    "sent_at_utc": "2026-08-08T12:25:15Z",
+    "receipt_path": "receipts/AUX-R3-MAC-EVIDENCE-PLATFORM-PREREQUISITE-PREP.json",
+    "receipt_sha256": "sha256:12ab2e9015c7ce4369625ed845ce6b78708a85ad142b7821e76d6be361729fa0",
+    "verification_path": "receipts/AUX-R3-MAC-EVIDENCE-PLATFORM-PREREQUISITE-PREP.verification.json",
+    "verification_sha256": "sha256:5b4144e84b42a0d05bbe2a78ccad6292d33ce2a0d473a50d5bdbcd6a106c9a28",
+    "artifact_manifest_sha256": "sha256:a58ca455cf1aa564d7d8628a0b6a44d49eda28af9fb6ac24ac67e31ee3d31a9b",
+    "verified_at_utc": "2026-08-08T12:35:08Z"
   }
 }

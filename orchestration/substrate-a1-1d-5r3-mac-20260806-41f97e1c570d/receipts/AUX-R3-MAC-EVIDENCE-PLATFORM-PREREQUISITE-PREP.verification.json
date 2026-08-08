@@ -1,0 +1,44 @@
+{
+  "protocol": "codex.meta-auxiliary-platform-prep-verification.v1",
+  "orchestration_id": "substrate-a1-1d-5r3-mac-20260806-41f97e1c570d",
+  "packet": "AUX-R3-MAC-EVIDENCE-PLATFORM-PREREQUISITE-PREP",
+  "dispatch_nonce": "11c27a5ee57be5b99a3c7457c4f511b14b5747ee4b2b0492874a416d5fab02a3",
+  "status": "READY_VERIFIED",
+  "receipt_path": "receipts/AUX-R3-MAC-EVIDENCE-PLATFORM-PREREQUISITE-PREP.json",
+  "receipt_sha256": "sha256:12ab2e9015c7ce4369625ed845ce6b78708a85ad142b7821e76d6be361729fa0",
+  "artifact_manifest_path": "/Users/spensermcconnell/.codex/evidence/substrate-a1-1d-5r3-mac-20260806-41f97e1c570d/AUX-R3-MAC-EVIDENCE-PLATFORM-PREREQUISITE-PREP/11c27a5ee57be5b99a3c7457c4f511b14b5747ee4b2b0492874a416d5fab02a3/auxiliary-platform-prep-artifact-manifest.json",
+  "artifact_manifest_sha256": "sha256:a58ca455cf1aa564d7d8628a0b6a44d49eda28af9fb6ac24ac67e31ee3d31a9b",
+  "artifact_manifest_file_count": 52,
+  "task_terminal_barrier": {
+    "thread_id": "019fe147-e300-72c2-a394-a53f43185ceb",
+    "host_id": "local",
+    "turn_id": "019fe155-aa42-7cf0-b6e9-3b17df2df3f9",
+    "wait_cursor": "48c07936-b6f1-47e2-93d3-faf543564a82:5",
+    "thread_status": "idle",
+    "turn_status": "completed"
+  },
+  "independent_checks": {
+    "receipt_identity_and_semantics": true,
+    "all_manifest_files_exist_and_match_sha256": true,
+    "fixed_limactl_root_wheel_0555_single_link_regular_no_follow": true,
+    "fixed_limactl_sha256_cdhash_and_version": true,
+    "controlled_path_resolves_fixed_limactl": true,
+    "canonical_substrate_instance_absent": true,
+    "canonical_control_directory_absent": true,
+    "other_lima_instances_unchanged": true,
+    "attached_mirror_ref_commit_tree_remote_and_cleanliness": true,
+    "task_protected_and_meta_checkouts_clean": true,
+    "live_remote_equals_bound_commit": true,
+    "sudoers_sentinel_owner_mode_sha256_unchanged": true,
+    "host_sudo_noninteractive": true
+  },
+  "source": {
+    "target_ref": "refs/heads/feat/internal-host-orchestrator-world-dispatch-bootstrap",
+    "commit": "1126b907df6e38043e9071da222f6c6a377b341c",
+    "tree": "3a29fa323a8b9099d894c11d98cc085ecf4807c5"
+  },
+  "attached_source_mirror": "/Users/spensermcconnell/.codex/evidence/substrate-a1-1d-5r3-mac-20260806-41f97e1c570d/AUX-R3-MAC-EVIDENCE-PLATFORM-PREREQUISITE-PREP/11c27a5ee57be5b99a3c7457c4f511b14b5747ee4b2b0492874a416d5fab02a3/source/substrate",
+  "official_evidence_executed": false,
+  "official_evidence_attempt_6_authorized_to_dispatch": true,
+  "verified_at_utc": "2026-08-08T12:35:08Z"
+}
