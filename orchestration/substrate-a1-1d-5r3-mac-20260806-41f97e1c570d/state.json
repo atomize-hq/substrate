@@ -1368,7 +1368,7 @@
     "verified_at_utc": "2026-08-08T14:10:09Z"
   },
   "auxiliary_prestage_artifact_route_planning": {
-    "status": "PREPARED",
+    "status": "RUNNING",
     "packet_id": "AUX-R3-MAC-PRESTAGE-ARTIFACT-ROUTE-PLAN",
     "thread_id": "019fdfa4-ba96-70e0-b68d-1d0a4cf32a83",
     "host_id": "local",
@@ -1386,6 +1386,10 @@
     "contract_sha256": "sha256:b11699d688bef2562683dbbda835ed5f01af98466100bbdcd393ea549948e4bd",
     "prompt_path": "increments/AUX-R3-MAC-PRESTAGE-ARTIFACT-ROUTE-PLAN.continuation-prompt.md",
     "prompt_sha256": "sha256:751167d24fa9b7bfc8b77786b924b758813911ca272e52eb5617fc375a236d74",
+    "delivery_path": "increments/AUX-R3-MAC-PRESTAGE-ARTIFACT-ROUTE-PLAN.delivery.json",
+    "turn_id": "019fe1ce-c1e3-7240-a570-6fc659fb502a",
+    "wait_cursor": "09d2deac-230c-42d0-9957-94f004124fa0:7",
+    "dispatched_at_utc": "2026-08-08T14:37:31Z",
     "read_only": true,
     "source_edits_authorized": false,
     "native_actions_authorized": false,
