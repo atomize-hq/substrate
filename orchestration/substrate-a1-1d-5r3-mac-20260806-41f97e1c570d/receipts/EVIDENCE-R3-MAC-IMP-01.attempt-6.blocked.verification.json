@@ -1,0 +1,41 @@
+{
+  "protocol": "codex.meta-evidence-verification.v1",
+  "orchestration_id": "substrate-a1-1d-5r3-mac-20260806-41f97e1c570d",
+  "evidence_id": "EVIDENCE:R3-MAC-IMP-01",
+  "attempt": 6,
+  "dispatch_nonce": "c75137fee9e57e4a28ce730956b670c4c625330463a7c85b35d4b87605521f13",
+  "status": "BLOCKED_PLATFORM_HANDOFF_REQUIRED_VERIFIED",
+  "receipt_path": "receipts/EVIDENCE-R3-MAC-IMP-01.attempt-6.blocked.json",
+  "receipt_sha256": "sha256:62b83ecc5120308101342fc5237c27788ae6b7ee5a42fb1afbc94d96c4166516",
+  "artifact_path": "/Users/spensermcconnell/.codex/evidence/substrate-a1-1d-5r3-mac-20260806-41f97e1c570d/EVIDENCE-R3-MAC-IMP-01/c75137fee9e57e4a28ce730956b670c4c625330463a7c85b35d4b87605521f13/artifacts/r3-mac-imp-01-native-evidence.json",
+  "artifact_sha256": "sha256:aa00a6934f0ee73f1cc3633cc978909a11bdccab242c60bcefb111afb0051ace",
+  "task_terminal_barrier": {
+    "thread_id": "019fe162-c98c-7c82-94d0-155d6cab5122",
+    "host_id": "local",
+    "turn_id": "019fe164-57bd-7072-92de-324bbe30bed4",
+    "wait_cursor": "4bb095d6-02e8-4040-8ba7-3b07fc37362f:3",
+    "thread_status": "idle",
+    "turn_status": "completed"
+  },
+  "validators": {
+    "evidence_receipt": "VALID",
+    "native_artifact": "VALID"
+  },
+  "independent_checks": {
+    "receipt_identity_nonce_task_source": true,
+    "artifact_digest": true,
+    "task_checkout_clean_exact_source": true,
+    "attached_mirror_clean_exact_source_ref": true,
+    "live_remote_equal": true,
+    "canonical_instance_and_control_directory_absent": true,
+    "fixed_limactl_unchanged": true,
+    "sudoers_sentinel_unchanged_and_sudo_noninteractive": true,
+    "restoration_parity": true
+  },
+  "disposition": {
+    "advances_native_gate": false,
+    "mac_closeout_dispatch_allowed": false,
+    "bounded_contract_amendment_permitted": true
+  },
+  "verified_at_utc": "2026-08-08T12:55:31Z"
+}
