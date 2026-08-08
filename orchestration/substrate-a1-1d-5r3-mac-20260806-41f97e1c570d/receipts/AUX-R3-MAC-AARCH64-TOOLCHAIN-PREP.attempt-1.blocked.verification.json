@@ -1,0 +1,51 @@
+{
+  "protocol": "codex.auxiliary-platform-prep-verification.v1",
+  "orchestration_id": "substrate-a1-1d-5r3-mac-20260806-41f97e1c570d",
+  "packet": "AUX-R3-MAC-AARCH64-TOOLCHAIN-PREP",
+  "status": "BLOCKED_SOURCE_COMPILE_CLOSURE",
+  "verified": true,
+  "verified_at_utc": "2026-08-08T04:29:59Z",
+  "task": {
+    "thread_id": "019fdf7f-c7d6-7112-9cda-a05db972da7f",
+    "host_id": "local",
+    "worktree": "/Users/spensermcconnell/.codex/worktrees/fa11/substrate",
+    "turn_id": "019fdf9b-aeff-7ec1-adc3-b12b3fa2d19d",
+    "cursor": "eef0a650-ca4c-4b37-a47e-a18ddf99807a:7",
+    "thread_status": "idle",
+    "turn_status": "completed"
+  },
+  "receipt": {
+    "path": "receipts/AUX-R3-MAC-AARCH64-TOOLCHAIN-PREP.attempt-1.blocked.json",
+    "sha256": "sha256:d2122d5171206f7a3b7baead370854a84a2c77334ee14650492f796b7e4eb4dd",
+    "external_source_path": "/Users/spensermcconnell/.codex/evidence/substrate-a1-1d-5r3-mac-20260806-41f97e1c570d/AUX-R3-MAC-AARCH64-TOOLCHAIN-PREP/d514db6915877692c799086ce6c96daad6bcd0417d87a1bdf9ba44c2c578da53/receipt.json",
+    "self_validation_log_sha256": "sha256:4791786a76c56f78e4b538f0a7aa707629eff9661328a36ccc4022255f16c506"
+  },
+  "source": {
+    "commit": "3d6b2eb1b02b1a24a1e055d12e5cbdb9b0312774",
+    "tree": "d59cac92405f06024cfcde0a2c22a4cf1255c3d7",
+    "live_remote": "3d6b2eb1b02b1a24a1e055d12e5cbdb9b0312774",
+    "task_worktree_clean": true,
+    "protected_checkout_clean": true
+  },
+  "platform_prerequisites": {
+    "rust_target_installed": true,
+    "rust_target": "aarch64-unknown-linux-gnu",
+    "zig_installed": true,
+    "zig_version": "0.16.0",
+    "external_linker_wrapper_verified": true,
+    "elf_probe": "ELF64 AArch64 GNU/Linux"
+  },
+  "build_failure": {
+    "log_path": "/Users/spensermcconnell/.codex/evidence/substrate-a1-1d-5r3-mac-20260806-41f97e1c570d/AUX-R3-MAC-AARCH64-TOOLCHAIN-PREP/d514db6915877692c799086ce6c96daad6bcd0417d87a1bdf9ba44c2c578da53/commands/009-exact-source-locked-offline-build-retry.txt",
+    "log_sha256": "sha256:ea44662029a4281709fdac47745455bf0686bb1f61c4ec599a03cc060d5d3586",
+    "error": "four E0308 target-dependent C character pointer mismatches in src/bin/substrate-lifecycle-linux.rs",
+    "source_correction_required": true
+  },
+  "disposition": {
+    "official_evidence_ready": false,
+    "product_source_correction_required": true,
+    "next_packet": "AUX-R3-MAC-AARCH64-GUEST-COMPILE-CORRECTION",
+    "evidence_task_archived": false,
+    "evidence_worktree_preserved": true
+  }
+}

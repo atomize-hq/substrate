@@ -129,19 +129,13 @@
     }
   ],
   "last_blocker": {
-    "status": "BLOCKED_PLATFORM_HANDOFF_REQUIRED",
+    "status": "BLOCKED_SOURCE_COMPILE_CLOSURE",
+    "packet": "AUX-R3-MAC-AARCH64-TOOLCHAIN-PREP",
     "evidence_id": "EVIDENCE:R3-MAC-IMP-01",
     "attempt": 4,
-    "thread_id": "019fdf7f-c7d6-7112-9cda-a05db972da7f",
-    "host_id": "local",
-    "dispatch_nonce": "4469a78c46eb54658328a420ac888e93ffc60d53fe472b97def8f94ea2ef0225",
-    "receipt_path": "receipts/EVIDENCE-R3-MAC-IMP-01.attempt-4.blocked.json",
-    "verification_path": "receipts/EVIDENCE-R3-MAC-IMP-01.attempt-4.blocked.verification.json",
-    "artifact_path": "/Users/spensermcconnell/.codex/evidence/substrate-a1-1d-5r3-mac-20260806-41f97e1c570d/EVIDENCE-R3-MAC-IMP-01/4469a78c46eb54658328a420ac888e93ffc60d53fe472b97def8f94ea2ef0225/artifact.json",
-    "summary": "The exact aarch64 Linux guest executor build lacks its Rust standard-library target and a compatible cross linker on the macOS host.",
-    "worktree": "/Users/spensermcconnell/.codex/worktrees/fa11/substrate",
-    "worktree_preserved": true,
-    "task_archived": false,
+    "receipt_path": "receipts/AUX-R3-MAC-AARCH64-TOOLCHAIN-PREP.attempt-1.blocked.json",
+    "verification_path": "receipts/AUX-R3-MAC-AARCH64-TOOLCHAIN-PREP.attempt-1.blocked.verification.json",
+    "summary": "The required Rust target and linker are ready, but the exact aarch64 Linux guest executor source fails four target-dependent C char pointer type checks.",
     "advance": false
   },
   "current_authority_amendment": "authority-amendments/0036-r6-direct-tty-proof-retry-correction.json",
@@ -151,7 +145,7 @@
     "completed_attempt": 4,
     "next_attempt": 5,
     "fresh_nonce_required": true,
-    "platform_prep_required": true,
+    "source_correction_required": true,
     "official_evidence_retry_held": true,
     "task_archiving_authorized": false
   },
@@ -938,7 +932,7 @@
     "verified_at_utc": "2026-08-08T03:51:11Z"
   },
   "auxiliary_platform_preparation": {
-    "status": "RUNNING",
+    "status": "BLOCKED_SOURCE_COMPILE_CLOSURE",
     "task_class": "general_auxiliary_platform_preparation",
     "official_increment_or_evidence": false,
     "packet": "AUX-R3-MAC-AARCH64-TOOLCHAIN-PREP",
@@ -964,6 +958,29 @@
     "wait_cursor": "eef0a650-ca4c-4b37-a47e-a18ddf99807a:6",
     "thread_status": "active",
     "turn_status": "inProgress",
-    "sent_at_utc": "2026-08-08T04:22:57Z"
+    "sent_at_utc": "2026-08-08T04:22:57Z",
+    "receipt_path": "receipts/AUX-R3-MAC-AARCH64-TOOLCHAIN-PREP.attempt-1.blocked.json",
+    "verification_path": "receipts/AUX-R3-MAC-AARCH64-TOOLCHAIN-PREP.attempt-1.blocked.verification.json",
+    "rust_target_installed": true,
+    "linker_installed": true
+  },
+  "auxiliary_guest_compile_correction": {
+    "status": "PENDING_TASK_CREATION",
+    "packet": "AUX-R3-MAC-AARCH64-GUEST-COMPILE-CORRECTION",
+    "dispatch_nonce": "7c15251a50d1f1f9326a43027c009ad73e003931ebb9bf6fe6f723eb07050f65",
+    "authority_amendment": "authority-amendments/0038-r3-mac-aarch64-guest-compile-correction.json",
+    "authority_amendment_sha256": "sha256:555153c8ee8739febb9187eff58e9eaa7b82ee57b045d8c58aec8be513e92210",
+    "contract_path": "increments/AUX-R3-MAC-AARCH64-GUEST-COMPILE-CORRECTION.contract.md",
+    "contract_sha256": "sha256:f33c0d1f7169f2f608ec69f40b11f51c8a20fe10a97173f75d0514f5c8525d67",
+    "source": {
+      "publication_mode": "remote",
+      "commit": "3d6b2eb1b02b1a24a1e055d12e5cbdb9b0312774",
+      "tree": "d59cac92405f06024cfcde0a2c22a4cf1255c3d7",
+      "target_ref": "refs/heads/feat/internal-host-orchestrator-world-dispatch-bootstrap",
+      "live_remote": "3d6b2eb1b02b1a24a1e055d12e5cbdb9b0312774"
+    },
+    "publication_mode": "remote",
+    "next_increment": "EVIDENCE:R3-MAC-IMP-01",
+    "task_archiving_authorized": false
   }
 }

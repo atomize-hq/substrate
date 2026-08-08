@@ -1,0 +1,60 @@
+{
+  "protocol": "codex.meta-authority-amendment.v1",
+  "amendment_id": "0038-r3-mac-aarch64-guest-compile-correction",
+  "orchestration_id": "substrate-a1-1d-5r3-mac-20260806-41f97e1c570d",
+  "issued_at_utc": "2026-08-08T04:29:59Z",
+  "packet": "AUX-R3-MAC-AARCH64-GUEST-COMPILE-CORRECTION",
+  "dispatch_nonce": "7c15251a50d1f1f9326a43027c009ad73e003931ebb9bf6fe6f723eb07050f65",
+  "source_block": {
+    "packet": "AUX-R3-MAC-AARCH64-TOOLCHAIN-PREP",
+    "status": "BLOCKED_SOURCE_COMPILE_CLOSURE",
+    "receipt_path": "receipts/AUX-R3-MAC-AARCH64-TOOLCHAIN-PREP.attempt-1.blocked.json",
+    "receipt_sha256": "sha256:d2122d5171206f7a3b7baead370854a84a2c77334ee14650492f796b7e4eb4dd"
+  },
+  "expected_base": {
+    "commit": "3d6b2eb1b02b1a24a1e055d12e5cbdb9b0312774",
+    "tree": "d59cac92405f06024cfcde0a2c22a4cf1255c3d7",
+    "remote": "origin",
+    "target_ref": "refs/heads/feat/internal-host-orchestrator-world-dispatch-bootstrap"
+  },
+  "authorized_scope": {
+    "description": "Correct only the target-dependent C char pointer declarations/usages that prevent the R3 MAC aarch64 Lima guest executor from compiling, add one focused MAC evidence recovery compile regression, and publish validated review metadata.",
+    "product_paths": [
+      "src/bin/substrate-lifecycle-linux.rs"
+    ],
+    "test_paths": [
+      "tests/mac/aarch64_guest_compile_r3.sh"
+    ],
+    "review_paths": [
+      "llm-last-mile/runtime-refactor/review-control/r3-mac-aarch64-guest-compile-correction-review-allowlist-evidence.md",
+      "llm-last-mile/runtime-refactor/review-control/r3-mac-aarch64-guest-compile-correction-review-authority-security.md",
+      "llm-last-mile/runtime-refactor/review-control/r3-mac-aarch64-guest-compile-correction-review-cycle-record.json",
+      "llm-last-mile/runtime-refactor/review-control/r3-mac-aarch64-guest-compile-correction-review-lifecycle-convergence.md"
+    ],
+    "symbol_fence": [
+      "Linux extern C open path pointer type",
+      "Linux extern C openat path pointer type",
+      "Linux extern C linkat oldpath/newpath pointer types"
+    ]
+  },
+  "forbidden_scope": [
+    "ordinary Linux lifecycle behavior changes",
+    "Windows or WSL changes",
+    "macOS host executor, XPC, Keychain, pairing, lifecycle, installer, or control-contract changes",
+    "Cargo manifest, lockfile, repository Cargo configuration, generated context, or control-pack edits",
+    "native host/guest mutation, installation, official evidence, or successor work"
+  ],
+  "review_authority": {
+    "model": "gpt-5.6-terra",
+    "reasoning": "xhigh",
+    "sequence": "one fresh discovery review or same-subject burst, then one different fresh closure review, with at most two supplemental causal cycles only for directly caused or unmasked P1/P2",
+    "p1_p2": "remediate",
+    "p3_p4": "record only"
+  },
+  "publication": {
+    "mode": "remote",
+    "one_normal_fast_forward_commit": true,
+    "next_increment": "EVIDENCE:R3-MAC-IMP-01",
+    "successor_dispatch_authorized": false
+  }
+}
