@@ -1,7 +1,7 @@
 {
   "protocol": "codex.top-level-orchestration-state.v1",
   "orchestration_id": "substrate-a1-1d-5r3-mac-20260806-41f97e1c570d",
-  "status": "EVIDENCE_RUNNING",
+  "status": "BLOCKED",
   "dispatch_authorized": true,
   "publication_mode": "remote",
   "remote": "origin",
@@ -18,17 +18,18 @@
     "AUX-R3-MAC-EVIDENCE-RECOVERY-R5",
     "AUX-R3-MAC-EVIDENCE-RECOVERY-R6",
     "AUX-R3-MAC-AARCH64-GUEST-COMPILE-CORRECTION",
+    "AUX-R3-MAC-LIMACTL-HOME-PROVENANCE-CORRECTION",
     "A1.1d-5R3-MAC-CLOSEOUT"
   ],
   "required_evidence": [
     {
       "evidence_id": "EVIDENCE:R3-MAC-IMP-01",
       "platform": "macos",
-      "after_increment": "AUX-R3-MAC-AARCH64-GUEST-COMPILE-CORRECTION",
+      "after_increment": "AUX-R3-MAC-LIMACTL-HOME-PROVENANCE-CORRECTION",
       "before_increment": "A1.1d-5R3-MAC-CLOSEOUT"
     }
   ],
-  "cursor": 9,
+  "cursor": 10,
   "expected_base": {
     "commit": "a06b3fd26ceee4ece7e5bd1481981755eafcedb5",
     "tree": "f4c396d0e28a43405a9a2b1d49a450d6df545c84"
@@ -38,47 +39,7 @@
     "host_id": "local"
   },
   "active_dispatch": null,
-  "active_evidence_dispatches": [
-    {
-      "evidence_id": "EVIDENCE:R3-MAC-IMP-01",
-      "attempt": 9,
-      "allocation": 2,
-      "dispatch_nonce": "12a0f9442772518e2d665f0b7ac3bf26f4ac38a5562ce97bb1eed98cf7eabf3b",
-      "thread_id": "019fe162-c98c-7c82-94d0-155d6cab5122",
-      "host_id": "local",
-      "worktree": "/Users/spensermcconnell/.codex/worktrees/1626/substrate",
-      "source": {
-        "publication_mode": "remote",
-        "remote": "origin",
-        "target_ref": "refs/heads/feat/internal-host-orchestrator-world-dispatch-bootstrap",
-        "commit": "a06b3fd26ceee4ece7e5bd1481981755eafcedb5",
-        "tree": "f4c396d0e28a43405a9a2b1d49a450d6df545c84",
-        "live_remote": "a06b3fd26ceee4ece7e5bd1481981755eafcedb5"
-      },
-      "contract_path": "increments/EVIDENCE-R3-MAC-IMP-01.attempt-9.contract.md",
-      "contract_sha256": "sha256:a1fe714219d39c4ffe12b059822ff3438a5fe26b4fcd9fab7dca2aad3bb2159d",
-      "continuation_prompt_path": "increments/EVIDENCE-R3-MAC-IMP-01.attempt-9.continuation-prompt.md",
-      "continuation_prompt_sha256": "sha256:a259738728db557320c825e790eb025b3df627d2de961cf76056aaacd3e98db5",
-      "variables_path": "increments/EVIDENCE-R3-MAC-IMP-01.attempt-9.variables.json",
-      "variables_sha256": "sha256:ac2efb8e3ba23a0a805ba5317a75fe332161dd5541dd9fe6eb936655ad8f77f0",
-      "predispatch_path": "increments/EVIDENCE-R3-MAC-IMP-01.attempt-9.predispatch.json",
-      "predispatch_sha256": "sha256:59bb265e4234afa3bc2191c6dcf693f9c6374c5f7ba416b64b305895c15ffd26",
-      "binding_path": "increments/EVIDENCE-R3-MAC-IMP-01.attempt-9.binding.json",
-      "binding_sha256": "sha256:1d35e4f6c87993351dc5f4af3c9bb9412ae1bf45e241abf37fa3ad24721d2401",
-      "authority_amendment_path": "authority-amendments/0044-r3-mac-evidence-attempt-9-source-retry.json",
-      "authority_amendment_sha256": "sha256:a901c9299e10504faa0c1480d799b223dd3d7c37ef6138bc99e8365c8618c572",
-      "status": "RUNNING",
-      "task_archiving_authorized": false,
-      "prepared_at_utc": "2026-08-08T14:12:40Z",
-      "delivery_path": "increments/EVIDENCE-R3-MAC-IMP-01.attempt-9.delivery.json",
-      "delivery_sha256": "sha256:a986e747d253567761d1e8842b83bac2d357af76996e8fca47c0c2393bad064c",
-      "turn_id": "019fe1b9-3001-7223-bc65-862e54a1a8b9",
-      "wait_cursor": "4bb095d6-02e8-4040-8ba7-3b07fc37362f:8",
-      "thread_status": "active",
-      "turn_status": "inProgress",
-      "sent_at_utc": "2026-08-08T14:14:17Z"
-    }
-  ],
+  "active_evidence_dispatches": [],
   "verified_evidence": [],
   "completed": [
     {
@@ -193,34 +154,34 @@
     }
   ],
   "last_blocker": {
-    "status": "BLOCKED_NATIVE_EVIDENCE",
+    "status": "BLOCKED_PLATFORM_HANDOFF_REQUIRED",
     "evidence_id": "EVIDENCE:R3-MAC-IMP-01",
-    "attempt": 8,
-    "summary": "The canonical installer privileged provenance subprocess invokes the fixed limactl under env -i without HOME, causing Lima 2.1.1 to panic before provenance publication.",
-    "receipt_path": "receipts/EVIDENCE-R3-MAC-IMP-01.attempt-8.blocked.json",
-    "verification_path": "receipts/EVIDENCE-R3-MAC-IMP-01.attempt-8.blocked.verification.json",
-    "required_authority": "A narrow reviewed source correction for the privileged limactl --version environment, then a fresh evidence attempt.",
+    "attempt": 9,
+    "summary": "The canonical source has no authorized manifest-bound route to stage the five required retained Linux artifacts before Stage-1.",
+    "receipt_path": "receipts/EVIDENCE-R3-MAC-IMP-01.attempt-9.blocked.json",
+    "verification_path": "receipts/EVIDENCE-R3-MAC-IMP-01.attempt-9.blocked.verification.json",
+    "required_authority": "A narrow reviewed MAC-only source correction for canonical pre-Stage-1 Linux artifact staging, then a fresh evidence attempt.",
     "advance": false
   },
   "current_authority_amendment": "authority-amendments/0044-r3-mac-evidence-attempt-9-source-retry.json",
   "evidence_attempt": 9,
   "retry_authority": {
     "evidence_id": "EVIDENCE:R3-MAC-IMP-01",
-    "completed_attempt": 8,
-    "next_attempt": 9,
+    "completed_attempt": 9,
+    "next_attempt": 10,
     "fresh_nonce_required": true,
-    "source_correction_required": false,
+    "source_correction_required": true,
     "source_commit": "a06b3fd26ceee4ece7e5bd1481981755eafcedb5",
     "source_tree": "f4c396d0e28a43405a9a2b1d49a450d6df545c84",
     "host_sudo_noninteractive_required": true,
     "host_sudo_durable_nopasswd_required": true,
     "host_sudo_verified": true,
     "host_sudo_verification_path": "increments/EVIDENCE-R3-MAC-IMP-01.attempt-5.predispatch.json",
-    "official_evidence_retry_held": false,
+    "official_evidence_retry_held": true,
     "auxiliary_platform_preparation_required": true,
     "attempt_5_receipt_path": "receipts/EVIDENCE-R3-MAC-IMP-01.attempt-5.blocked.json",
     "attempt_5_verification_path": "receipts/EVIDENCE-R3-MAC-IMP-01.attempt-5.blocked.verification.json",
-    "dispatch_prepared": true,
+    "dispatch_prepared": false,
     "dispatch_nonce": "12a0f9442772518e2d665f0b7ac3bf26f4ac38a5562ce97bb1eed98cf7eabf3b",
     "contract_path": "increments/EVIDENCE-R3-MAC-IMP-01.attempt-9.contract.md",
     "contract_sha256": "sha256:a1fe714219d39c4ffe12b059822ff3438a5fe26b4fcd9fab7dca2aad3bb2159d",
@@ -342,7 +303,11 @@
     "attempt_9_delivery_path": "increments/EVIDENCE-R3-MAC-IMP-01.attempt-9.delivery.json",
     "attempt_9_delivery_sha256": "sha256:a986e747d253567761d1e8842b83bac2d357af76996e8fca47c0c2393bad064c",
     "attempt_9_turn_id": "019fe1b9-3001-7223-bc65-862e54a1a8b9",
-    "attempt_9_wait_cursor": "4bb095d6-02e8-4040-8ba7-3b07fc37362f:8"
+    "attempt_9_wait_cursor": "4bb095d6-02e8-4040-8ba7-3b07fc37362f:8",
+    "attempt_9_receipt_path": "receipts/EVIDENCE-R3-MAC-IMP-01.attempt-9.blocked.json",
+    "attempt_9_receipt_sha256": "sha256:8205c07fc87ce3dd71cced0db10939941fa273f384e4918604fe68fb3d7feb96",
+    "attempt_9_verification_path": "receipts/EVIDENCE-R3-MAC-IMP-01.attempt-9.blocked.verification.json",
+    "attempt_9_verification_sha256": "sha256:ce183950dc1187953580aa90356acc9e7e8b191eb93cd4fe87f6cf436d970f94"
   },
   "auxiliary_host_preparation": {
     "status": "BLOCKED_SOURCE_CORRECTION",
@@ -1116,11 +1081,11 @@
     "cross_platform_remediation_authorized": false
   },
   "last_verified_receipt": {
-    "increment": "AUX-R3-MAC-LIMACTL-HOME-PROVENANCE-CORRECTION",
-    "path": "receipts/AUX-R3-MAC-LIMACTL-HOME-PROVENANCE-CORRECTION.json",
-    "sha256": "sha256:c65976836da7537b3f1ef5be797a8e40ccab26916dc6efce46b6dbdca5e443f3",
-    "verification_path": "receipts/AUX-R3-MAC-LIMACTL-HOME-PROVENANCE-CORRECTION.verification.json",
-    "verification_sha256": "sha256:657021ba8aefe2b3a89ced63c56b4addeb878e07b0aee8bdce889eee38dd6565"
+    "increment": "EVIDENCE:R3-MAC-IMP-01.attempt-9",
+    "path": "receipts/EVIDENCE-R3-MAC-IMP-01.attempt-9.blocked.json",
+    "sha256": "sha256:8205c07fc87ce3dd71cced0db10939941fa273f384e4918604fe68fb3d7feb96",
+    "verification_path": "receipts/EVIDENCE-R3-MAC-IMP-01.attempt-9.blocked.verification.json",
+    "verification_sha256": "sha256:ce183950dc1187953580aa90356acc9e7e8b191eb93cd4fe87f6cf436d970f94"
   },
   "auxiliary_platform_preparation": {
     "status": "BLOCKED_SOURCE_COMPILE_CLOSURE",
@@ -1245,46 +1210,17 @@
     "source_refresh_receipt": "receipts/AUX-R3-MAC-SOURCE-CHECKOUT-REFRESH.json",
     "source_refresh_verification": "receipts/AUX-R3-MAC-SOURCE-CHECKOUT-REFRESH.verification.json"
   },
-  "active_evidence": {
+  "active_evidence": null,
+  "blocker": {
+    "status": "BLOCKED_PLATFORM_HANDOFF_REQUIRED",
     "evidence_id": "EVIDENCE:R3-MAC-IMP-01",
     "attempt": 9,
-    "allocation": 2,
-    "dispatch_nonce": "12a0f9442772518e2d665f0b7ac3bf26f4ac38a5562ce97bb1eed98cf7eabf3b",
-    "thread_id": "019fe162-c98c-7c82-94d0-155d6cab5122",
-    "host_id": "local",
-    "worktree": "/Users/spensermcconnell/.codex/worktrees/1626/substrate",
-    "source": {
-      "publication_mode": "remote",
-      "remote": "origin",
-      "target_ref": "refs/heads/feat/internal-host-orchestrator-world-dispatch-bootstrap",
-      "commit": "a06b3fd26ceee4ece7e5bd1481981755eafcedb5",
-      "tree": "f4c396d0e28a43405a9a2b1d49a450d6df545c84",
-      "live_remote": "a06b3fd26ceee4ece7e5bd1481981755eafcedb5"
-    },
-    "contract_path": "increments/EVIDENCE-R3-MAC-IMP-01.attempt-9.contract.md",
-    "contract_sha256": "sha256:a1fe714219d39c4ffe12b059822ff3438a5fe26b4fcd9fab7dca2aad3bb2159d",
-    "continuation_prompt_path": "increments/EVIDENCE-R3-MAC-IMP-01.attempt-9.continuation-prompt.md",
-    "continuation_prompt_sha256": "sha256:a259738728db557320c825e790eb025b3df627d2de961cf76056aaacd3e98db5",
-    "variables_path": "increments/EVIDENCE-R3-MAC-IMP-01.attempt-9.variables.json",
-    "variables_sha256": "sha256:ac2efb8e3ba23a0a805ba5317a75fe332161dd5541dd9fe6eb936655ad8f77f0",
-    "predispatch_path": "increments/EVIDENCE-R3-MAC-IMP-01.attempt-9.predispatch.json",
-    "predispatch_sha256": "sha256:59bb265e4234afa3bc2191c6dcf693f9c6374c5f7ba416b64b305895c15ffd26",
-    "binding_path": "increments/EVIDENCE-R3-MAC-IMP-01.attempt-9.binding.json",
-    "binding_sha256": "sha256:1d35e4f6c87993351dc5f4af3c9bb9412ae1bf45e241abf37fa3ad24721d2401",
-    "authority_amendment_path": "authority-amendments/0044-r3-mac-evidence-attempt-9-source-retry.json",
-    "authority_amendment_sha256": "sha256:a901c9299e10504faa0c1480d799b223dd3d7c37ef6138bc99e8365c8618c572",
-    "status": "RUNNING",
-    "task_archiving_authorized": false,
-    "prepared_at_utc": "2026-08-08T14:12:40Z",
-    "delivery_path": "increments/EVIDENCE-R3-MAC-IMP-01.attempt-9.delivery.json",
-    "delivery_sha256": "sha256:a986e747d253567761d1e8842b83bac2d357af76996e8fca47c0c2393bad064c",
-    "turn_id": "019fe1b9-3001-7223-bc65-862e54a1a8b9",
-    "wait_cursor": "4bb095d6-02e8-4040-8ba7-3b07fc37362f:8",
-    "thread_status": "active",
-    "turn_status": "inProgress",
-    "sent_at_utc": "2026-08-08T14:14:17Z"
+    "summary": "The canonical source has no authorized manifest-bound route to stage the five required retained Linux artifacts before Stage-1.",
+    "receipt_path": "receipts/EVIDENCE-R3-MAC-IMP-01.attempt-9.blocked.json",
+    "verification_path": "receipts/EVIDENCE-R3-MAC-IMP-01.attempt-9.blocked.verification.json",
+    "required_authority": "A narrow reviewed MAC-only source correction for canonical pre-Stage-1 Linux artifact staging, then a fresh evidence attempt.",
+    "advance": false
   },
-  "blocker": null,
   "evidence_attempt_history": [
     {
       "evidence_id": "EVIDENCE:R3-MAC-IMP-01",
@@ -1336,6 +1272,25 @@
       "verification_sha256": "sha256:f81978f0c6fd20e4588478ff1fc1ceb3a5012202035924ee623dba94824c5730",
       "artifact_sha256": "sha256:8fc9e44b8ca99e2c58e2d0fa110f86cd8257acd37f835073d00ac6b8c9dbde25",
       "restoration_exact": true,
+      "worktree_preserved": true,
+      "task_archiving_authorized": false
+    },
+    {
+      "evidence_id": "EVIDENCE:R3-MAC-IMP-01",
+      "attempt": 9,
+      "allocation": 2,
+      "status": "BLOCKED_PLATFORM_HANDOFF_REQUIRED",
+      "dispatch_nonce": "12a0f9442772518e2d665f0b7ac3bf26f4ac38a5562ce97bb1eed98cf7eabf3b",
+      "thread_id": "019fe162-c98c-7c82-94d0-155d6cab5122",
+      "host_id": "local",
+      "worktree": "/Users/spensermcconnell/.codex/worktrees/1626/substrate",
+      "receipt_path": "receipts/EVIDENCE-R3-MAC-IMP-01.attempt-9.blocked.json",
+      "receipt_sha256": "sha256:8205c07fc87ce3dd71cced0db10939941fa273f384e4918604fe68fb3d7feb96",
+      "verification_path": "receipts/EVIDENCE-R3-MAC-IMP-01.attempt-9.blocked.verification.json",
+      "verification_sha256": "sha256:ce183950dc1187953580aa90356acc9e7e8b191eb93cd4fe87f6cf436d970f94",
+      "artifact_sha256": "sha256:8aada728476a5fbfe8f833d19388671e82740fa1c1afb6fb0bd4d5fd89ea0d75",
+      "restoration_exact": true,
+      "native_mutation_started": false,
       "worktree_preserved": true,
       "task_archiving_authorized": false
     }
