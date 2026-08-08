@@ -181,17 +181,32 @@
     "auxiliary_platform_preparation_completed": true,
     "auxiliary_platform_preparation_verification_path": "receipts/AUX-R3-MAC-EVIDENCE-PLATFORM-PREREQUISITE-PREP.verification.json",
     "attempt_6_dispatch_prepared": true,
-    "attempt_6_dispatch_nonce": "23ef4a6b818804802dcf7dc1c3f2527700322b0094798b4ae84d0bf0da2abb92",
+    "attempt_6_dispatch_nonce": "c75137fee9e57e4a28ce730956b670c4c625330463a7c85b35d4b87605521f13",
     "attempt_6_contract_path": "increments/EVIDENCE-R3-MAC-IMP-01.attempt-6.contract.md",
-    "attempt_6_contract_sha256": "sha256:b0443a22c6d3de127635dec378c7fcfef82d284461565e0b1c66e65408fc2551",
+    "attempt_6_contract_sha256": "sha256:74cc1068f7e1011dadab6fa041ec7fe7936b9b2bcb708edbaf34e6db08b609bd",
     "attempt_6_prompt_path": "increments/EVIDENCE-R3-MAC-IMP-01.attempt-6.initial-prompt.md",
-    "attempt_6_prompt_sha256": "sha256:beb3d9a8056da7c11fcf212a6f07805ea17e60e3af902c5929efb46a109b72ad",
+    "attempt_6_prompt_sha256": "sha256:0012766a20683f2d79ea804663efd3a5d34cb30bdf952d0aea5feae5d266a7e2",
     "attempt_6_variables_path": "increments/EVIDENCE-R3-MAC-IMP-01.attempt-6.variables.json",
-    "attempt_6_variables_sha256": "sha256:1978ff768450e70276170d5ac18816fd69f5c01dc697b89cb28705e2dcb70903",
+    "attempt_6_variables_sha256": "sha256:a06d97d427d20ecf3f543e3e0e6bcb6c5c3af7dd6f3179041f5cd5e476c376ee",
     "attempt_6_predispatch_path": "increments/EVIDENCE-R3-MAC-IMP-01.attempt-6.predispatch.json",
-    "attempt_6_predispatch_sha256": "sha256:1902077ed25bd4387999010ca3e8ab3df93859efc5f4a1d802314637ec15615a",
+    "attempt_6_predispatch_sha256": "sha256:d1f77015bf4ebe70dda1bec31992794781e286a69b6b807a998b9c03291e4eea",
     "attached_source_mirror": "/Users/spensermcconnell/.codex/evidence/substrate-a1-1d-5r3-mac-20260806-41f97e1c570d/AUX-R3-MAC-EVIDENCE-PLATFORM-PREREQUISITE-PREP/11c27a5ee57be5b99a3c7457c4f511b14b5747ee4b2b0492874a416d5fab02a3/source/substrate",
-    "fixed_limactl": "/usr/local/bin/limactl"
+    "fixed_limactl": "/usr/local/bin/limactl",
+    "attempt_6_rejected_allocations": [
+      {
+        "allocation": 1,
+        "dispatch_nonce": "23ef4a6b818804802dcf7dc1c3f2527700322b0094798b4ae84d0bf0da2abb92",
+        "thread_id": "019fe161-7318-7283-b180-7a2dfa2a79a4",
+        "host_id": "local",
+        "worktree": "/Users/spensermcconnell/.codex/worktrees/3c07/substrate",
+        "status": "REJECTED_BEFORE_IDENTITY_BINDING",
+        "observed_head": "270f6e55e1a94b7e2f9b2667e605980d2e50579c",
+        "observed_tree": "acef6844c15d17aba8cfd18d2fc7ef88d9c3420b",
+        "worktree_preserved": true,
+        "task_archiving_authorized": false,
+        "record_path": "increments/EVIDENCE-R3-MAC-IMP-01.attempt-6.allocation-1.rejected.json"
+      }
+    ]
   },
   "auxiliary_host_preparation": {
     "status": "BLOCKED_SOURCE_CORRECTION",

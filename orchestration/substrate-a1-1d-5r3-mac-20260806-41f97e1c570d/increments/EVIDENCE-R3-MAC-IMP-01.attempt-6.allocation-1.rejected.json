@@ -1,0 +1,22 @@
+{
+  "protocol": "codex.top-level-evidence-allocation-rejection.v1",
+  "orchestration_id": "substrate-a1-1d-5r3-mac-20260806-41f97e1c570d",
+  "evidence_id": "EVIDENCE:R3-MAC-IMP-01",
+  "attempt": 6,
+  "allocation": 1,
+  "dispatch_nonce": "23ef4a6b818804802dcf7dc1c3f2527700322b0094798b4ae84d0bf0da2abb92",
+  "thread_id": "019fe161-7318-7283-b180-7a2dfa2a79a4",
+  "host_id": "local",
+  "worktree": "/Users/spensermcconnell/.codex/worktrees/3c07/substrate",
+  "status": "REJECTED_BEFORE_IDENTITY_BINDING",
+  "reason": "create_thread resolved the protected checkout's stale local target branch at 270f6e55e1a94b7e2f9b2667e605980d2e50579c rather than the live remote target at 1126b907df6e38043e9071da222f6c6a377b341c",
+  "observed_head": "270f6e55e1a94b7e2f9b2667e605980d2e50579c",
+  "observed_tree": "acef6844c15d17aba8cfd18d2fc7ef88d9c3420b",
+  "worktree_clean": true,
+  "skills_hydrated": false,
+  "identity_binding_sent": false,
+  "evidence_authority_granted": false,
+  "native_or_repository_actions_run": false,
+  "task_archiving_authorized": false,
+  "preserve_unarchived": true
+}

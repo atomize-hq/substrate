@@ -9,7 +9,7 @@ This prompt is self-contained. It does not depend on a skill installed on this p
 DISPATCH IDENTITY
 
 - orchestration_id: substrate-a1-1d-5r3-mac-20260806-41f97e1c570d
-- dispatch_nonce: 23ef4a6b818804802dcf7dc1c3f2527700322b0094798b4ae84d0bf0da2abb92
+- dispatch_nonce: c75137fee9e57e4a28ce730956b670c4c625330463a7c85b35d4b87605521f13
 - meta_thread_id: 019fd8c3-b12c-7e73-919f-898600ab0f64
 - meta_host_id: local
 - evidence_id: EVIDENCE:R3-MAC-IMP-01
@@ -44,7 +44,7 @@ EVIDENCE CONTRACT
 
 - Orchestration: `substrate-a1-1d-5r3-mac-20260806-41f97e1c570d`.
 - Evidence ID: `EVIDENCE:R3-MAC-IMP-01`.
-- Dispatch nonce: `23ef4a6b818804802dcf7dc1c3f2527700322b0094798b4ae84d0bf0da2abb92`.
+- Dispatch nonce: `c75137fee9e57e4a28ce730956b670c4c625330463a7c85b35d4b87605521f13`.
 - Platform: native supported macOS on host `local`.
 - Saved project: `local-b2016f8a311fef93149e42eaec4d704d` at
   `/Users/spensermcconnell/__Active_Code/atomize-hq/substrate`.
@@ -126,7 +126,7 @@ commit, push, merge, rebase, reset, clean, switch, or create any evidence byte i
 worktree, attached mirror, protected checkout, or any other repository checkout. Put build outputs,
 staging, captures, receipts, and the final artifact under an external attempt-6 nonce-scoped
 directory such as
-`/Users/spensermcconnell/.codex/evidence/substrate-a1-1d-5r3-mac-20260806-41f97e1c570d/EVIDENCE-R3-MAC-IMP-01/23ef4a6b818804802dcf7dc1c3f2527700322b0094798b4ae84d0bf0da2abb92/`.
+`/Users/spensermcconnell/.codex/evidence/substrate-a1-1d-5r3-mac-20260806-41f97e1c570d/EVIDENCE-R3-MAC-IMP-01/c75137fee9e57e4a28ce730956b670c4c625330463a7c85b35d4b87605521f13/`.
 Use external Cargo/build/temp roots so native collection does not dirty the checkout.
 
 No product publication is allowed. The later MAC-CLOSEOUT task alone may copy the validated
