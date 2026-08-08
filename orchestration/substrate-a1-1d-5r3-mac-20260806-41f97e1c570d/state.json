@@ -1067,6 +1067,13 @@
     "attached_source_mirror": "/Users/spensermcconnell/.codex/evidence/substrate-a1-1d-5r3-mac-20260806-41f97e1c570d/AUX-R3-MAC-EVIDENCE-PLATFORM-PREREQUISITE-PREP/11c27a5ee57be5b99a3c7457c4f511b14b5747ee4b2b0492874a416d5fab02a3/source/substrate",
     "official_evidence_dispatch_allowed": false,
     "task_archiving_authorized": false,
-    "prepared_at_utc": "2026-08-08T12:24:44.386657Z"
+    "prepared_at_utc": "2026-08-08T12:24:44.386657Z",
+    "delivery_path": "increments/AUX-R3-MAC-EVIDENCE-PLATFORM-PREREQUISITE-PREP.delivery.json",
+    "delivery_sha256": "sha256:37c5ab62bbb9a8a1bb24512b86129d4da63a88fdbd709980910346b0ed7867c5",
+    "turn_id": "019fe155-aa42-7cf0-b6e9-3b17df2df3f9",
+    "wait_cursor": "48c07936-b6f1-47e2-93d3-faf543564a82:3",
+    "thread_status": "active",
+    "turn_status": "inProgress",
+    "sent_at_utc": "2026-08-08T12:25:15Z"
   }
 }
