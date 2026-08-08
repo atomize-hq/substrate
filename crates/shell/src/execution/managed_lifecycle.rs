@@ -15,13 +15,15 @@ use substrate_common::{
     canonical_action_receipt_index_bytes_v1, canonical_manifest_bytes_v1,
     commit_action_receipt_index_to_head_v1, compare_and_swap_action_receipt_index_v1,
     managed_action_prepared_record_sha256_v1, parse_and_validate_manifest_v1,
-    validate_lifecycle_publisher_protected_state_v1, validate_managed_action_receipt_signature_v1,
-    validate_managed_lifecycle_publisher_request_v1, CanonicalManifestBytesV1,
-    ExecutorBuildEvidenceV1, GuestPublisherPairingTicketV1, LifecyclePublisherProtectedStateV1,
-    LimaStageOneAuthorizationV1, MacPublisherBootstrapRequestV1, ManagedActionReceiptIndexEntryV1,
-    ManagedActionReceiptIndexV1, ManagedActionReceiptV1, ManagedActionV1,
-    ManagedArtifactManifestV1, ManagedLifecyclePublisherRequestV1, ManagedLifecycleStateV1,
-    ManagedManifestHeadV1, ManagedSharedClaimsV1, PublisherBootstrapAuthorizationV1,
+    validate_guest_publisher_pairing_session_binding_v1,
+    validate_guest_publisher_pairing_ticket_v1, validate_lifecycle_publisher_protected_state_v1,
+    validate_managed_action_receipt_signature_v1, validate_managed_lifecycle_publisher_request_v1,
+    CanonicalManifestBytesV1, ExecutorBuildEvidenceV1, GuestPublisherPairingSessionBindingV1,
+    GuestPublisherPairingTicketV1, LifecyclePublisherProtectedStateV1, LimaStageOneAuthorizationV1,
+    MacPublisherBootstrapRequestV1, ManagedActionReceiptIndexEntryV1, ManagedActionReceiptIndexV1,
+    ManagedActionReceiptV1, ManagedActionV1, ManagedArtifactManifestV1,
+    ManagedLifecyclePublisherRequestV1, ManagedLifecycleStateV1, ManagedManifestHeadV1,
+    ManagedSharedClaimsV1, PublisherBootstrapAuthorizationV1,
 };
 use transport_api_types::{
     InstallBootstrapContextCarrierV1, PlatformBootstrapMappingV1, PlatformInstanceIdentityV1,
@@ -39,6 +41,8 @@ pub enum MappedLifecycleTagV1 {
     StageOneCreate,
     #[serde(rename = "post_pm_action")]
     PostPmAction,
+    #[serde(rename = "guest_pairing_data_session")]
+    GuestPairingDataSession,
 }
 
 /// The only ordinary control payload accepted by the R5 mapped-lifecycle bridge.
@@ -83,6 +87,16 @@ pub struct ManagedLifecycleControlRequestV1 {
     pub lima_stage_one_authorization_v1: Option<LimaStageOneAuthorizationV1>,
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub pairing_ticket: Option<GuestPublisherPairingTicketV1>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub pairing_session_binding_v1: Option<GuestPublisherPairingSessionBindingV1>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub pairing_host_record_generation: Option<u64>,
+    /// The current protected-record generation required for this operation.  The adjacent
+    /// `pairing_host_record_generation` remains the immutable generation in the session binding.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub pairing_record_expected_generation_v1: Option<u64>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub pairing_host_record_sha256: Option<String>,
 }
 
 pub trait LifecyclePublisherClientV1: Send + Sync {
@@ -458,8 +472,8 @@ pub fn complete_mac_lima_stage_one_transition_v1(
     Ok(next_head)
 }
 
-/// Reject all ordinary payloads except the two closed mapped-lifecycle tags before a client/XPC
-/// operation.  Publisher bootstrap authorization deliberately has no representation here.
+/// Reject ordinary payloads except closed mapped-lifecycle tags before a client/XPC operation.
+/// Publisher bootstrap authorization and direct-only R6 operator TTY admission have no representation here.
 pub fn validate_mapped_lifecycle_control_request_v1(
     request: &ManagedLifecycleControlRequestV1,
 ) -> Result<MappedLifecycleTagV1> {
@@ -482,12 +496,19 @@ pub fn validate_mapped_lifecycle_control_request_v1(
     if request.manifest.is_some()
         || request.action_receipt.is_some()
         || request.publisher_protected_state.is_some()
-        || request.pairing_ticket.is_some()
     {
         bail!("ordinary mapped lifecycle request carries a forbidden legacy authority field");
     }
     match tag {
         MappedLifecycleTagV1::StageOneCreate => {
+            if request.pairing_ticket.is_some()
+                || request.pairing_session_binding_v1.is_some()
+                || request.pairing_host_record_generation.is_some()
+                || request.pairing_record_expected_generation_v1.is_some()
+                || request.pairing_host_record_sha256.is_some()
+            {
+                bail!("stage_one_create must not carry R6 pairing authority");
+            }
             if request.publisher_request.is_some()
                 || request.platform_bootstrap_mapping_v1.is_some()
                 || request.platform_mapping_commitment.is_some()
@@ -546,6 +567,14 @@ pub fn validate_mapped_lifecycle_control_request_v1(
             }
         }
         MappedLifecycleTagV1::PostPmAction => {
+            if request.pairing_ticket.is_some()
+                || request.pairing_session_binding_v1.is_some()
+                || request.pairing_host_record_generation.is_some()
+                || request.pairing_record_expected_generation_v1.is_some()
+                || request.pairing_host_record_sha256.is_some()
+            {
+                bail!("post_pm_action must not carry R6 pairing authority");
+            }
             let publisher_request = request.publisher_request.as_ref().ok_or_else(|| {
                 anyhow!("post_pm_action is missing its canonical publisher request")
             })?;
@@ -615,8 +644,153 @@ pub fn validate_mapped_lifecycle_control_request_v1(
                 bail!("post_pm_action role/action is outside the closed MAC map");
             }
         }
+        MappedLifecycleTagV1::GuestPairingDataSession => {
+            validate_r6_pairing_control_request_v1(request, &tag, &carrier, evidence)?;
+        }
     }
     Ok(tag)
+}
+
+/// Validate one internally constructed R6 session request.  The tag is a closed protocol
+/// discriminant: this function accepts no operation, transport, command, or caller-owned record.
+fn validate_r6_pairing_control_request_v1(
+    request: &ManagedLifecycleControlRequestV1,
+    tag: &MappedLifecycleTagV1,
+    carrier: &InstallBootstrapContextCarrierV1,
+    evidence: &ExecutorBuildEvidenceV1,
+) -> Result<()> {
+    if request.publisher_request.is_some()
+        || request.lima_stage_one_authorization_v1.is_some()
+        || request.manifest.is_some()
+        || request.action_receipt.is_some()
+        || request.publisher_protected_state.is_some()
+    {
+        bail!("R6 pairing session request carries forbidden generic lifecycle authority");
+    }
+    if request.authority_domain != "mac_lima_guest" {
+        bail!("R6 pairing session request must use the fixed mac_lima_guest authority");
+    }
+    let issue_data_session = matches!(tag, MappedLifecycleTagV1::GuestPairingDataSession)
+        && request.pairing_session_binding_v1.is_none()
+        && request.pairing_host_record_generation.is_none()
+        && request.pairing_record_expected_generation_v1.is_none()
+        && request.pairing_host_record_sha256.is_none()
+        && request.pairing_ticket.is_none();
+    // This is not an operator transport or caller-controlled status: the hidden direct control
+    // uses this ticket-less, fully record-bound form only to record its own fixed operator-child
+    // failure. It carries no observation text, terminal bytes, selector, or authority material.
+    let operator_failure_observation = matches!(tag, MappedLifecycleTagV1::GuestPairingDataSession)
+        && request.pairing_ticket.is_none()
+        && request.pairing_session_binding_v1.is_some()
+        && request.pairing_host_record_generation.is_some()
+        && request.pairing_record_expected_generation_v1.is_some()
+        && request.pairing_host_record_sha256.is_some();
+    if !issue_data_session
+        && !operator_failure_observation
+        && (request.pairing_session_binding_v1.is_none()
+            || request.pairing_host_record_generation.is_none()
+            || request.pairing_record_expected_generation_v1.is_none()
+            || request.pairing_host_record_sha256.is_none())
+    {
+        bail!("R6 pairing session request must carry a complete immutable record binding");
+    }
+    let mapping = PlatformBootstrapMappingV1::decode(
+        request
+            .platform_bootstrap_mapping_v1
+            .as_deref()
+            .ok_or_else(|| anyhow!("R6 pairing session request is missing finalized mapping"))?,
+        carrier,
+    )
+    .context("decode exact R6 PlatformBootstrapMappingV1")?;
+    let canonical_mapping = mapping
+        .encode(carrier)
+        .context("re-encode exact R6 PlatformBootstrapMappingV1")?;
+    let mapping_commitment = format!("{:x}", Sha256::digest(canonical_mapping.as_bytes()));
+    if !matches!(
+        &mapping.platform_instance,
+        PlatformInstanceIdentityV1::Lima { .. }
+    ) || request.platform_mapping_commitment.as_deref() != Some(mapping_commitment.as_str())
+    {
+        bail!("R6 pairing session does not bind the exact finalized Lima mapping");
+    }
+    if request.scope_id.is_empty()
+        || request.selected_host_prefix != carrier.context.selected_host_prefix
+        || request.requester_principal.is_empty()
+        || request.host_context_commitment.as_deref()
+            != Some(carrier.host_context_commitment.as_str())
+        || request.host_platform_control_root.as_deref()
+            != Some(mapping.host_platform_control_root.as_str())
+    {
+        bail!("R6 pairing session does not join exact PM, source, and artifact identity");
+    }
+    let PlatformPrincipalV1::Unix { account, .. } = &mapping.realized_principal else {
+        bail!("R6 pairing session mapping does not retain a UNIX principal");
+    };
+    if &request.requester_principal != account {
+        bail!("R6 pairing session principal does not join the finalized mapping");
+    }
+    if issue_data_session {
+        return Ok(());
+    }
+    let binding = request
+        .pairing_session_binding_v1
+        .as_ref()
+        .expect("complete binding checked above");
+    validate_guest_publisher_pairing_session_binding_v1(binding)?;
+    let record_generation = request
+        .pairing_host_record_generation
+        .expect("complete generation checked above");
+    if record_generation != binding.host_record_generation {
+        bail!("R6 pairing session record generation does not match immutable binding");
+    }
+    if request
+        .pairing_record_expected_generation_v1
+        .expect("complete current generation checked above")
+        == 0
+    {
+        bail!("R6 pairing session expected record generation must be positive");
+    }
+    let record_sha256 = request
+        .pairing_host_record_sha256
+        .as_deref()
+        .expect("complete record digest checked above");
+    if !is_lower_hex_v1(record_sha256, 64) {
+        bail!("R6 pairing session record digest is not canonical");
+    }
+    if binding.platform_mapping_commitment.as_deref() != Some(mapping_commitment.as_str())
+        || request.scope_id != binding.scope_id
+        || binding.source_commit != evidence.source_commit
+        || binding.source_tree != evidence.source_tree
+        || binding.source_ref != evidence.source_ref
+        || binding.staged_executor_sha256 != evidence.artifact_sha256
+    {
+        bail!("R6 pairing session immutable binding does not join PM, source, and artifact");
+    }
+    match tag {
+        MappedLifecycleTagV1::GuestPairingDataSession => {
+            if operator_failure_observation {
+                return Ok(());
+            }
+            let ticket = request
+                .pairing_ticket
+                .as_ref()
+                .ok_or_else(|| anyhow!("R6 data session is missing its signed ticket"))?;
+            validate_guest_publisher_pairing_ticket_v1(ticket)?;
+            if ticket.current_anchor.scope_id != binding.scope_id
+                || ticket.challenge.challenge_id != binding.ticket_challenge_id
+                || ticket.challenge.guest_machine_identity != binding.guest_machine_identity
+                || ticket.challenge.source_commit != binding.source_commit
+                || ticket.challenge.source_tree != binding.source_tree
+                || ticket.challenge.source_ref != binding.source_ref
+                || ticket.challenge.executor_build_evidence_sha256 != binding.staged_executor_sha256
+                || ticket.host_generation != binding.host_record_generation
+            {
+                bail!("R6 data session ticket does not match immutable binding");
+            }
+        }
+        _ => bail!("R6 session validator received a non-data tag"),
+    }
+    Ok(())
 }
 
 /// Validate the exact build fields carried by the R4 `ExecutorBuildEvidenceV1` wire form.
@@ -746,6 +920,18 @@ pub fn submit_post_pm_managed_action_v1(
     request: &ManagedLifecycleControlRequestV1,
 ) -> Result<Value> {
     macos_client::submit_post_pm_managed_action_v1(request)
+}
+
+/// Relay the only ticket/frame-bearing R6 child after its closed-tag validation.
+pub fn submit_guest_pairing_data_session_v1(
+    request: &ManagedLifecycleControlRequestV1,
+) -> Result<Value> {
+    if validate_mapped_lifecycle_control_request_v1(request)?
+        != MappedLifecycleTagV1::GuestPairingDataSession
+    {
+        bail!("R6 data-session relay received a non-data tag");
+    }
+    macos_client::submit_guest_pairing_data_session_v1(request)
 }
 
 pub fn open_publisher_bootstrap_channel_v1(

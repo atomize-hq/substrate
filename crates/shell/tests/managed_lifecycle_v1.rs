@@ -114,6 +114,10 @@ fn post_pm_request_v1(role: &str, action: ManagedActionV1) -> ManagedLifecycleCo
         executor_build_evidence: Some(evidence),
         lima_stage_one_authorization_v1: None,
         pairing_ticket: None,
+        pairing_session_binding_v1: None,
+        pairing_host_record_generation: None,
+        pairing_record_expected_generation_v1: None,
+        pairing_host_record_sha256: None,
     }
 }
 
@@ -227,6 +231,108 @@ fn mapped_lifecycle_decoder_accepts_only_two_tags() {
             serde_json::from_value::<ManagedLifecycleControlRequestV1>(json!({"tag": tag}))
                 .is_err(),
             "{tag} must reject before any client/XPC effect"
+        );
+    }
+}
+
+#[test]
+fn r6_dual_session_tags_are_fixed_and_not_ordinary_admission() {
+    let data: MappedLifecycleTagV1 = serde_json::from_value(json!("guest_pairing_data_session"))
+        .expect("R6 data session tag remains a typed protocol discriminant");
+    assert!(
+        serde_json::from_value::<MappedLifecycleTagV1>(json!("guest_pairing_operator_tty_session"))
+            .is_err(),
+        "the direct-only operator tag must not decode through the public mapped request"
+    );
+
+    {
+        let request = ManagedLifecycleControlRequestV1 {
+            tag: Some(data),
+            authority_domain: String::new(),
+            scope_id: String::new(),
+            selected_host_prefix: String::new(),
+            requester_principal: String::new(),
+            host_context_commitment: None,
+            platform_mapping_commitment: None,
+            host_platform_control_root: None,
+            manifest: None,
+            action_receipt: None,
+            publisher_protected_state: None,
+            publisher_request: None,
+            install_bootstrap_context_v1: None,
+            platform_bootstrap_mapping_v1: None,
+            executor_build_evidence: None,
+            lima_stage_one_authorization_v1: None,
+            pairing_ticket: None,
+            pairing_session_binding_v1: None,
+            pairing_host_record_generation: None,
+            pairing_record_expected_generation_v1: None,
+            pairing_host_record_sha256: None,
+        };
+        assert!(validate_mapped_lifecycle_control_request_v1(&request).is_err());
+    }
+}
+
+#[test]
+fn r6_correction_uses_direct_terminal_launch_and_independent_proof() {
+    let control = include_str!("../../../src/bin/substrate-lifecycle-control.rs");
+    let client = include_str!("../src/execution/managed_lifecycle/macos_client.rs");
+    let macos = include_str!("../../../src/bin/substrate-lifecycle-macos.rs");
+    let linux = include_str!("../../../src/bin/substrate-lifecycle-linux.rs");
+
+    for text in [
+        "GuestPublisherPairingOperatorLaunchV1",
+        "validate_guest_publisher_pairing_operator_launch",
+        "direct duplicated /dev/tty",
+        "guest-pairing-operator-tty-session-v1",
+    ] {
+        assert!(
+            control.contains(text),
+            "direct R6 control launch lacks {text}"
+        );
+    }
+    for forbidden in [
+        "with_terminal_v1",
+        "open_mac_xpc_channel_with_terminal_v1",
+        "guest-pairing-operator-tty-session",
+        "xpc_dictionary_set_fd",
+    ] {
+        assert!(
+            !client.contains(forbidden),
+            "macOS client retains forbidden R6 terminal relay {forbidden}"
+        );
+    }
+    for text in [
+        "R6_DATA_FRAME_TIMEOUT_V1",
+        "persist_r6_guest_pairing_failure_observation_v1",
+        "active_r6_record_exactly_rejoins_issue_v1",
+        "GuestPublisherPairingOperatorLaunchV1",
+    ] {
+        assert!(macos.contains(text), "macOS R6 correction lacks {text}");
+    }
+    for forbidden in [
+        "operator_tty\".as_ptr()",
+        "xpc_dictionary_get_fd",
+        "relay raw retained terminal input",
+        "relay fixed R6 guest PTY output",
+        "guest_state_root_prepared",
+    ] {
+        assert!(
+            !macos.contains(forbidden) && !linux.contains(forbidden),
+            "R6 retains forbidden {forbidden} authority channel"
+        );
+    }
+    for text in [
+        "measure_r6_installed_guest_executor_v1",
+        "R6 running guest executor digest does not match the staged binding",
+        "R6TerminalEchoGuardV1",
+        "GuestPublisherPairingOperatorProofV1",
+        "validate_guest_publisher_pairing_operator_proof",
+        "validate_r6_operator_proof_before_intent_v1",
+    ] {
+        assert!(
+            linux.contains(text),
+            "Lima guest R6 correction lacks {text}"
         );
     }
 }

@@ -2,26 +2,33 @@ use anyhow::{anyhow, bail, Context, Result};
 use serde_json::{json, Value};
 use std::ffi::CString;
 use std::fs::{self, File, OpenOptions};
-use std::io::{Read, Write};
+use std::io::{BufRead, BufReader, Read, Write};
 use std::net::Shutdown;
 use std::os::fd::{AsRawFd, FromRawFd, IntoRawFd, OwnedFd, RawFd};
-use std::os::unix::fs::{FileTypeExt, OpenOptionsExt, PermissionsExt};
+use std::os::unix::fs::{FileTypeExt, MetadataExt, OpenOptionsExt, PermissionsExt};
 use std::os::unix::net::{UnixDatagram, UnixListener, UnixStream};
 use std::path::{Path, PathBuf};
 use std::process::{Command, Stdio};
-use std::time::Duration;
+use std::time::{Duration, Instant};
 use substrate_common::{
-    canonical_action_receipt_bytes_v1, canonical_guest_publisher_pairing_ticket_v1,
-    canonical_lifecycle_publisher_protected_state_v1, canonical_lifecycle_signature_payload_v1,
-    canonical_managed_action_prepared_record_v1, lifecycle_anchor_sha256_v1,
-    managed_action_prepared_record_sha256_v1, parse_p256_spki_der_v1,
+    canonical_action_receipt_bytes_v1, canonical_guest_publisher_pairing_operator_proof_v1,
+    canonical_guest_publisher_pairing_session_binding_v1,
+    canonical_guest_publisher_pairing_ticket_v1, canonical_lifecycle_publisher_protected_state_v1,
+    canonical_lifecycle_signature_payload_v1, canonical_managed_action_prepared_record_v1,
+    guest_publisher_pairing_operator_launch_sha256_v1,
+    guest_publisher_pairing_operator_proof_sha256_v1, lifecycle_anchor_sha256_v1,
+    managed_action_prepared_record_sha256_v1,
+    parse_and_validate_guest_publisher_pairing_operator_launch_v1,
+    parse_and_validate_guest_publisher_pairing_operator_proof_v1, parse_p256_spki_der_v1,
     validate_guest_publisher_pairing_ticket_v1, validate_lifecycle_publisher_protected_state_v1,
     validate_managed_action_receipt_signature_v1, validate_managed_lifecycle_publisher_request_v1,
     validate_publisher_bootstrap_authorization_v1, verify_lifecycle_signature_v1,
     verify_p256_p1363_low_s_v1, ExecutorBuildEvidenceV1, GuestPublisherBootstrapHelloV1,
     GuestPublisherBootstrapTranscriptV1, GuestPublisherPairingGuestIntentV1,
-    GuestPublisherPairingTicketV1, LifecyclePublisherAnchorV1, LifecyclePublisherProtectedStateV1,
-    LifecycleSignatureV1, ManagedActionPreparedRecordV1, ManagedActionReceiptV1, ManagedActionV1,
+    GuestPublisherPairingOperatorLaunchV1, GuestPublisherPairingOperatorProofV1,
+    GuestPublisherPairingSessionBindingV1, GuestPublisherPairingTicketV1,
+    LifecyclePublisherAnchorV1, LifecyclePublisherProtectedStateV1, LifecycleSignatureV1,
+    ManagedActionPreparedRecordV1, ManagedActionReceiptV1, ManagedActionV1,
     ManagedArtifactIdentityV1, ManagedExecutorIdentityV1, ManagedLifecyclePublisherRequestV1,
     PublisherBootstrapAuthorizationV1,
 };
@@ -39,6 +46,13 @@ const DEFAULT_WORLD_SOCKET_UNIT: &str = "substrate-world-service.socket";
 const DEFAULT_LIFECYCLE_SERVICE_UNIT: &str = "substrate-lifecycle-publisher-v1.service";
 const DEFAULT_LIFECYCLE_SOCKET_UNIT: &str = "substrate-lifecycle-publisher-v1.socket";
 const GUEST_PAIRING_LITERAL_V1: &str = "PAIR EXACT SUBSTRATE GUEST PUBLISHER";
+const R6_OPERATOR_PROOF_LEAF_V1: &str = "operator-proof.v1.json";
+const R6_CONSUMPTION_MARKER_LEAF_V1: &str = "consumed.marker.v1.json";
+const R6_CONSUMPTION_MARKER_SCHEMA_OWNER_V1: &str =
+    "substrate.guest-publisher-pairing-consumption-marker";
+const R6_OPERATOR_INPUT_TIMEOUT_V1: Duration = Duration::from_secs(60);
+const R6_OPERATOR_PROOF_SCHEMA_OWNER_V1: &str = "substrate.guest-publisher-pairing-operator-proof";
+const R6_OPERATOR_PROOF_TERMINAL_OBSERVATION_V1: &str = "guest-controlling-tty-confirmed-v1";
 const PUBLISHER_PROBE_TIMEOUT_V1: Duration = Duration::from_secs(1);
 const PUBLISHER_PING_SCHEMA_OWNER_V1: &str = "substrate.lifecycle-publisher-ping";
 const PUBLISHER_PING_RESPONSE_SCHEMA_OWNER_V1: &str = "substrate.lifecycle-publisher-ping-response";
@@ -56,10 +70,12 @@ const SO_TYPE_V1: i32 = 3;
 const SO_PEERCRED_V1: i32 = 17;
 const SHUT_WR_V1: i32 = 1;
 const STDIN_FILENO_V1: RawFd = 0;
+const R6_LIMA_STAGE_ONE_MARKER_PATH_V1: &str =
+    "/var/lib/substrate/.substrate-lima-stage-one-marker.v1";
 const O_CLOEXEC_V1: i32 = 0o2000000;
 const O_DIRECTORY_V1: i32 = 0o200000;
 const O_NOFOLLOW_V1: i32 = 0o400000;
-const O_PATH_V1: i32 = 0o10000000;
+const O_RDONLY_V1: i32 = 0;
 const O_RDWR_V1: i32 = 0o2;
 const O_TMPFILE_V1: i32 = 0o20000000 | O_DIRECTORY_V1;
 const AT_EMPTY_PATH_V1: i32 = 0x1000;
@@ -97,6 +113,7 @@ unsafe extern "C" {
         optlen: *mut u32,
     ) -> i32;
     fn open(path: *const i8, flags: i32, mode: u32) -> i32;
+    fn openat(dirfd: i32, path: *const i8, flags: i32, mode: u32) -> i32;
     fn flock(fd: i32, operation: i32) -> i32;
     fn linkat(
         olddirfd: i32,
@@ -161,6 +178,19 @@ struct PublisherAttemptLockV1 {
     _file: File,
 }
 
+/// Immutable, create-only terminal evidence. It is deliberately hashes-only so neither operator
+/// input nor a reusable proof value can be recovered from the consumed marker.
+#[derive(Debug, Clone, PartialEq, Eq)]
+struct R6GuestPairingConsumptionMarkerV1 {
+    schema_owner: String,
+    schema_version: u32,
+    ticket_sha256: String,
+    binding_sha256: String,
+    operator_proof_sha256: String,
+    transcript_sha256: String,
+    anchor_sha256: String,
+}
+
 impl LinuxManagedArtifactExecutorV1 {
     fn new(
         state_root: Option<PathBuf>,
@@ -189,7 +219,7 @@ impl LinuxManagedArtifactExecutorV1 {
 
 fn usage_error_v1() -> Result<()> {
     bail!(
-        "usage: substrate-lifecycle-linux <bootstrap-publisher|run-publisher|submit-request|relay-request|begin-guest-bootstrap|commit-guest-bootstrap|retire-test-publisher|service-state>"
+        "usage: substrate-lifecycle-linux <bootstrap-publisher|run-publisher|submit-request|relay-request|guest-pairing-data-session-v1|guest-pairing-operator-tty-session-v1|retire-test-publisher|service-state>"
     )
 }
 
@@ -204,6 +234,49 @@ fn main_impl_v1() -> Result<()> {
         return usage_error_v1();
     };
 
+    if command == "guest-pairing-data-session-v1" {
+        // The data child accepts no caller-selected argument or selector. State root and artifact
+        // identity are fixed from the installed guest layout; ticket frames remain private data
+        // evidence, never manual-input authority.
+        if args.next().is_some() {
+            bail!("R6 data guest entrypoint accepts no caller-selected argument or selector");
+        }
+        let executor = LinuxManagedArtifactExecutorV1::new(
+            None,
+            None,
+            Some(PathBuf::from("/dev/tty")),
+            TransportKindV1::SeqPacket,
+        );
+        run_pm_bound_guest_pairing_data_session_v1(&executor)?;
+        return Ok(());
+    }
+    if command == "guest-pairing-operator-tty-session-v1" {
+        // The sole argument is a signed canonical launch envelope. It is fixed capability data,
+        // not a selector, ticket, transcript, confirmation value, path, or command input.
+        let launch_arg = args.next().ok_or_else(|| {
+            anyhow!("R6 operator TTY entrypoint requires one signed launch envelope")
+        })?;
+        if args.next().is_some() {
+            bail!("R6 operator TTY entrypoint accepts exactly one signed launch envelope");
+        }
+        let launch = launch_arg
+            .strip_prefix("--operator-launch-v1=")
+            .filter(|value| !value.is_empty())
+            .ok_or_else(|| {
+                anyhow!(
+                    "R6 operator TTY entrypoint requires --operator-launch-v1=<canonical-base64url>"
+                )
+            })?;
+        let executor = LinuxManagedArtifactExecutorV1::new(
+            None,
+            None,
+            Some(PathBuf::from("/dev/tty")),
+            TransportKindV1::SeqPacket,
+        );
+        run_pm_bound_guest_pairing_operator_tty_session_v1(&executor, launch)?;
+        return Ok(());
+    }
+
     let mut state_root: Option<PathBuf> = None;
     let mut endpoint_path: Option<PathBuf> = None;
     let mut tty_path: Option<PathBuf> = None;
@@ -213,8 +286,6 @@ fn main_impl_v1() -> Result<()> {
     let mut relay_fd: Option<RawFd> = None;
     let mut service_unit_name: Option<String> = None;
     let mut service_action: Option<String> = None;
-    let mut ticket_path: Option<PathBuf> = None;
-    let mut transcript_path: Option<PathBuf> = None;
 
     while let Some(arg) = args.next() {
         match arg.as_str() {
@@ -294,18 +365,6 @@ fn main_impl_v1() -> Result<()> {
                     .ok_or_else(|| anyhow!("--action requires a value"))?;
                 service_action = Some(value);
             }
-            "--ticket-file" => {
-                let value = args
-                    .next()
-                    .ok_or_else(|| anyhow!("--ticket-file requires a value"))?;
-                ticket_path = Some(PathBuf::from(value));
-            }
-            "--transcript-file" => {
-                let value = args
-                    .next()
-                    .ok_or_else(|| anyhow!("--transcript-file requires a value"))?;
-                transcript_path = Some(PathBuf::from(value));
-            }
             other => bail!("unknown argument {other}"),
         }
     }
@@ -345,18 +404,9 @@ fn main_impl_v1() -> Result<()> {
             let fd = relay_fd.ok_or_else(|| anyhow!("relay-request requires --relay-fd"))?;
             relay_linux_publisher_request_v1(&executor, fd)?;
         }
-        "begin-guest-bootstrap" => {
-            let ticket = load_ticket_input_v1(ticket_path.as_deref())?;
-            let hello = begin_guest_publisher_bootstrap_v1(&executor, &ticket, kill_point)?;
-            print_json_line_v1(&serde_json::to_value(hello).context("serialize hello")?)?;
-        }
-        "commit-guest-bootstrap" => {
-            let ticket = load_ticket_input_v1(ticket_path.as_deref())?;
-            let transcript = load_transcript_input_v1(transcript_path.as_deref())?;
-            let anchor =
-                commit_guest_publisher_bootstrap_v1(&executor, &ticket, &transcript, kill_point)?;
-            print_json_line_v1(&serde_json::to_value(anchor).context("serialize anchor")?)?;
-        }
+        "begin-guest-bootstrap" | "commit-guest-bootstrap" => bail!(
+            "generic guest pairing commands are unreachable; use the fixed PM-bound R6 entrypoints"
+        ),
         "retire-test-publisher" => {
             retire_linux_test_publisher_v1(&executor)?;
             print_json_line_v1(&json!({"retired": true, "state_root": executor.state_root}))?;
@@ -382,25 +432,457 @@ fn print_json_line_v1(value: &Value) -> Result<()> {
     Ok(())
 }
 
-fn load_ticket_input_v1(path: Option<&Path>) -> Result<GuestPublisherPairingTicketV1> {
-    let bytes = if let Some(path) = path {
-        fs::read(path).with_context(|| format!("read ticket {}", path.display()))?
-    } else {
-        read_bytes_from_stdin_v1()?
-    };
-    let ticket: GuestPublisherPairingTicketV1 =
-        serde_json::from_slice(&bytes).context("decode pairing ticket")?;
-    validate_guest_publisher_pairing_ticket_v1(&ticket)?;
-    Ok(ticket)
+/// Admit the one PM-bound data child from its private typed start frame. No confirmation is read
+/// here: it may derive the expected digest only to verify the immutable proof independently
+/// created by the direct operator child before any intent mutation.
+fn run_pm_bound_guest_pairing_data_session_v1(
+    executor: &LinuxManagedArtifactExecutorV1,
+) -> Result<()> {
+    let stdin = std::io::stdin();
+    let mut input = BufReader::new(stdin.lock());
+    let (ticket, binding) = parse_r6_data_start_frame_v1(&read_r6_data_frame_v1(&mut input)?)?;
+    validate_r6_guest_pairing_binding_v1(executor, &ticket, &binding)?;
+    require_current_guest_pairing_ticket_v1(&ticket)?;
+    require_r6_pm_bound_lima_guest_v1(&binding)?;
+    if ticket.current_anchor.authority_domain != "mac_host_shared" {
+        bail!("R6 guest data session accepts only a macOS PM-bound ticket");
+    }
+    let (operator_proof, operator_proof_sha256) =
+        validate_r6_operator_proof_before_intent_v1(executor, &ticket, &binding)?;
+    print_json_line_v1(&json!({
+        "kind":"operator_proof",
+        "proof":operator_proof,
+        "operator_proof_sha256":operator_proof_sha256,
+    }))?;
+    parse_r6_operator_proof_accepted_ack_v1(
+        &read_r6_data_frame_v1(&mut input)?,
+        &operator_proof_sha256,
+    )?;
+    require_current_guest_pairing_ticket_v1(&ticket)?;
+    let intent = publish_guest_pairing_intent_v1(executor, &ticket, &binding)?;
+    require_current_guest_pairing_ticket_v1(&ticket)?;
+    let hello = emit_guest_publisher_bootstrap_hello_v1(executor, &ticket, &intent)?;
+    substrate_common::validate_guest_publisher_bootstrap_hello_v1(&ticket, &binding, &hello)?;
+    print_json_line_v1(&json!({"kind":"hello","hello":hello}))?;
+
+    let transcript = parse_r6_transcript_frame_v1(&read_r6_data_frame_v1(&mut input)?)?;
+    substrate_common::validate_guest_publisher_bootstrap_transcript_v1(
+        &ticket,
+        &binding,
+        &hello,
+        &transcript,
+    )?;
+    require_current_guest_pairing_ticket_v1(&ticket)?;
+    let durable_intent = persist_r6_guest_pairing_transcript_v1(
+        executor,
+        &ticket,
+        &binding,
+        &intent,
+        &hello,
+        &transcript,
+    )?;
+    require_current_guest_pairing_ticket_v1(&ticket)?;
+    let anchor = prepare_r6_guest_publisher_anchor_v1(
+        executor,
+        &ticket,
+        &binding,
+        &durable_intent,
+        &transcript,
+    )?;
+    print_json_line_v1(&json!({"kind":"guest_anchor","anchor":anchor}))?;
+    let accepted_anchor = parse_r6_guest_anchor_ack_v1(&read_r6_data_frame_v1(&mut input)?)?;
+    if accepted_anchor != anchor {
+        bail!("R6 data session received a substituted guest-anchor acknowledgement");
+    }
+    let committed = commit_guest_publisher_bootstrap_v1(
+        executor,
+        &ticket,
+        &binding,
+        &transcript,
+        &accepted_anchor,
+        &operator_proof_sha256,
+    )?;
+    if committed != anchor {
+        bail!("R6 data session commit changed its signed guest anchor");
+    }
+    print_json_line_v1(
+        &json!({"kind":"ticket_consumed","guest_anchor_sha256":sha256_hex_bytes_v1(&canonical_json_bytes_of_v1(serde_json::to_value(&anchor).context("serialize R6 guest anchor")?)?)?}),
+    )?;
+    Ok(())
 }
 
-fn load_transcript_input_v1(path: Option<&Path>) -> Result<GuestPublisherBootstrapTranscriptV1> {
-    let bytes = if let Some(path) = path {
-        fs::read(path).with_context(|| format!("read transcript {}", path.display()))?
-    } else {
-        read_bytes_from_stdin_v1()?
-    };
-    serde_json::from_slice(&bytes).context("decode bootstrap transcript")
+fn read_r6_data_frame_v1(reader: &mut impl BufRead) -> Result<Vec<u8>> {
+    let mut frame = String::new();
+    let bytes = reader
+        .read_line(&mut frame)
+        .context("read one R6 data-session frame")?;
+    if bytes == 0 {
+        bail!("R6 data session closed before its next typed frame");
+    }
+    if bytes > MAX_FRAME_BYTES || !frame.ends_with('\n') {
+        bail!("R6 data session frame is not one bounded newline-delimited frame");
+    }
+    Ok(frame.into_bytes())
+}
+
+/// Decode the sole fixed base64url launch argument. The host control process validated the
+/// signature against its retained ticket/record before direct execution; the guest rejects any
+/// noncanonical or selector-bearing envelope before opening its terminal.
+fn parse_r6_operator_launch_argument_v1(
+    encoded: &str,
+) -> Result<GuestPublisherPairingOperatorLaunchV1> {
+    let bytes = base64url_decode_v1(encoded).context("decode R6 operator launch envelope")?;
+    parse_and_validate_guest_publisher_pairing_operator_launch_v1(&bytes)
+        .context("validate R6 operator launch envelope")
+}
+
+/// The direct guest operator opens only its own controlling `/dev/tty`, creates exactly one
+/// immutable proof, and never returns confirmation material through stdin/stdout transport.
+fn run_pm_bound_guest_pairing_operator_tty_session_v1(
+    executor: &LinuxManagedArtifactExecutorV1,
+    encoded_launch: &str,
+) -> Result<()> {
+    let launch = parse_r6_operator_launch_argument_v1(encoded_launch)?;
+    let binding = &launch.binding;
+    if launch.fixed_operator_command != "guest-pairing-operator-tty-session-v1" {
+        bail!("R6 operator launch command is not the fixed guest operator entrypoint");
+    }
+    if executor.state_root != PathBuf::from(DEFAULT_STATE_ROOT)
+        || executor.executor_path != PathBuf::from(DEFAULT_EXECUTOR_PATH)
+        || executor.tty_path != PathBuf::from("/dev/tty")
+    {
+        bail!("R6 operator proof does not have the fixed guest layout");
+    }
+    require_r6_pm_bound_lima_guest_v1(&binding)?;
+    require_r6_not_expired_at_v1(launch.expires_at_unix_ns, "operator launch")?;
+    let commitment = read_r6_operator_tty_confirmation_commitment_v1(executor, &binding)?;
+    require_r6_not_expired_at_v1(launch.expires_at_unix_ns, "operator launch")?;
+    persist_r6_guest_operator_proof_v1(executor, &launch, &commitment)
+}
+
+/// Refuse ordinary Linux-host use before any R6 guest state is opened.  The fixed Stage-1 marker
+/// and the machine identity observed by the retained macOS PM are both required; no caller
+/// option, environment value, or transport selector participates in this admission.
+fn require_r6_pm_bound_lima_guest_v1(
+    binding: &GuestPublisherPairingSessionBindingV1,
+) -> Result<()> {
+    let marker = Path::new(R6_LIMA_STAGE_ONE_MARKER_PATH_V1);
+    let metadata = fs::symlink_metadata(marker)
+        .with_context(|| format!("inspect fixed Lima Stage-1 marker {}", marker.display()))?;
+    if !metadata.file_type().is_file() || metadata.uid() != 0 || metadata.mode() & 0o022 != 0 {
+        bail!("R6 guest pairing requires the retained root-owned Lima Stage-1 marker");
+    }
+    let marker_text = fs::read_to_string(marker).context("read fixed Lima Stage-1 marker")?;
+    if !marker_text.contains("attempt_id=") || !marker_text.contains("capsule_sha256=") {
+        bail!("R6 guest pairing Stage-1 marker is not canonical");
+    }
+    let machine_identity =
+        fs::read_to_string("/etc/machine-id").context("read fixed guest machine identity")?;
+    if machine_identity.trim_end_matches(['\r', '\n']) != binding.guest_machine_identity {
+        bail!("R6 guest pairing is not running in the bound Lima guest machine");
+    }
+    measure_r6_installed_guest_executor_v1(binding)?;
+    Ok(())
+}
+
+/// Measure the executable actually running this guest-only entrypoint.  A fixed pathname is not
+/// enough: Stage-1 bound the installed artifact digest, so replacement after Stage-1 must reject
+/// before intent, Hello, TTY input, or guest mutation.
+fn measure_r6_installed_guest_executor_v1(
+    binding: &GuestPublisherPairingSessionBindingV1,
+) -> Result<()> {
+    let running = fs::read_link("/proc/self/exe").context("resolve running R6 guest executor")?;
+    if running != PathBuf::from(DEFAULT_EXECUTOR_PATH) {
+        bail!("R6 guest pairing is not running the fixed installed executor path");
+    }
+    let metadata = fs::symlink_metadata(&running)
+        .with_context(|| format!("inspect fixed R6 guest executor {}", running.display()))?;
+    if !metadata.file_type().is_file() || metadata.uid() != 0 || metadata.mode() & 0o022 != 0 {
+        bail!("R6 guest executor is not a retained root-owned immutable regular file");
+    }
+    let bytes = fs::read(&running)
+        .with_context(|| format!("measure fixed R6 guest executor {}", running.display()))?;
+    if sha256_hex_bytes_v1(&bytes)? != binding.staged_executor_sha256 {
+        bail!("R6 running guest executor digest does not match the staged binding");
+    }
+    Ok(())
+}
+
+fn parse_r6_data_start_frame_v1(
+    bytes: &[u8],
+) -> Result<(
+    GuestPublisherPairingTicketV1,
+    GuestPublisherPairingSessionBindingV1,
+)> {
+    let value: Value = serde_json::from_slice(bytes).context("decode one R6 data-session frame")?;
+    let object = value
+        .as_object()
+        .ok_or_else(|| anyhow!("R6 data-session frame must be an object"))?;
+    if object.len() != 3 || object.get("kind").and_then(Value::as_str) != Some("ticket") {
+        bail!("R6 data session accepts only one exact typed ticket frame");
+    }
+    let ticket = serde_json::from_value(
+        object
+            .get("ticket")
+            .cloned()
+            .ok_or_else(|| anyhow!("R6 data frame lacks ticket"))?,
+    )
+    .context("decode R6 data frame ticket")?;
+    let binding = serde_json::from_value(
+        object
+            .get("binding")
+            .cloned()
+            .ok_or_else(|| anyhow!("R6 data frame lacks binding"))?,
+    )
+    .context("decode R6 data frame binding")?;
+    Ok((ticket, binding))
+}
+
+/// The host data session acknowledges only after it has validated the typed proof against the
+/// signed ticket/full host record and committed the proof digest by generation-CAS.
+fn parse_r6_operator_proof_accepted_ack_v1(bytes: &[u8], expected_sha256: &str) -> Result<()> {
+    let value: Value =
+        serde_json::from_slice(bytes).context("decode R6 operator-proof acknowledgement")?;
+    let object = value
+        .as_object()
+        .ok_or_else(|| anyhow!("R6 operator-proof acknowledgement must be an object"))?;
+    if object.len() != 2
+        || object.get("kind").and_then(Value::as_str) != Some("operator_proof_accepted")
+        || object.get("operator_proof_sha256").and_then(Value::as_str) != Some(expected_sha256)
+    {
+        bail!("R6 data session rejects a substituted operator-proof acknowledgement");
+    }
+    Ok(())
+}
+
+fn parse_r6_transcript_frame_v1(bytes: &[u8]) -> Result<GuestPublisherBootstrapTranscriptV1> {
+    let value: Value = serde_json::from_slice(bytes).context("decode one R6 transcript frame")?;
+    let object = value
+        .as_object()
+        .ok_or_else(|| anyhow!("R6 transcript frame must be an object"))?;
+    if object.len() != 2 || object.get("kind").and_then(Value::as_str) != Some("transcript") {
+        bail!("R6 data session accepts only one signed transcript frame after Hello");
+    }
+    serde_json::from_value(
+        object
+            .get("transcript")
+            .cloned()
+            .ok_or_else(|| anyhow!("R6 transcript frame lacks transcript"))?,
+    )
+    .context("decode signed R6 transcript")
+}
+
+fn parse_r6_guest_anchor_ack_v1(bytes: &[u8]) -> Result<LifecyclePublisherAnchorV1> {
+    let value: Value =
+        serde_json::from_slice(bytes).context("decode R6 guest-anchor acknowledgement")?;
+    let object = value
+        .as_object()
+        .ok_or_else(|| anyhow!("R6 guest-anchor acknowledgement must be an object"))?;
+    if object.len() != 2 || object.get("kind").and_then(Value::as_str) != Some("guest_anchor") {
+        bail!("R6 data session accepts only an exact guest-anchor acknowledgement");
+    }
+    serde_json::from_value(
+        object
+            .get("anchor")
+            .cloned()
+            .ok_or_else(|| anyhow!("R6 guest-anchor acknowledgement lacks anchor"))?,
+    )
+    .context("decode R6 guest-anchor acknowledgement")
+}
+
+fn validate_r6_guest_pairing_binding_v1(
+    executor: &LinuxManagedArtifactExecutorV1,
+    ticket: &GuestPublisherPairingTicketV1,
+    binding: &GuestPublisherPairingSessionBindingV1,
+) -> Result<()> {
+    validate_guest_publisher_pairing_ticket_v1(ticket)?;
+    substrate_common::validate_guest_publisher_pairing_session_binding_v1(binding)?;
+    if executor.state_root != PathBuf::from(DEFAULT_STATE_ROOT)
+        || executor.executor_path != PathBuf::from(DEFAULT_EXECUTOR_PATH)
+        || ticket.current_anchor.scope_id != binding.scope_id
+        || ticket.challenge.platform_mapping_commitment != binding.platform_mapping_commitment
+        || ticket.challenge.guest_machine_identity != binding.guest_machine_identity
+        || ticket.challenge.source_commit != binding.source_commit
+        || ticket.challenge.source_tree != binding.source_tree
+        || ticket.challenge.source_ref != binding.source_ref
+        || ticket.challenge.executor_build_evidence_sha256 != binding.staged_executor_sha256
+        || ticket.challenge.challenge_id != binding.ticket_challenge_id
+        || ticket.host_generation != binding.host_record_generation
+    {
+        bail!("R6 guest data frame does not exact-join fixed layout and immutable binding");
+    }
+    Ok(())
+}
+
+fn read_r6_operator_tty_confirmation_commitment_v1(
+    executor: &LinuxManagedArtifactExecutorV1,
+    binding: &GuestPublisherPairingSessionBindingV1,
+) -> Result<String> {
+    let (mut reader, mut writer) = open_guest_controlling_tty_v1(executor)?;
+    writeln!(writer, "TICKET_SCOPE {}", binding.scope_id)
+        .context("write R6 operator-TTY bound scope")?;
+    // The complete fingerprint, challenge ID, challenge, and literal are intentionally *not*
+    // displayed here: the retained attested host control terminal is their sole display source.
+    writeln!(
+        writer,
+        "Enter the full fingerprint, challenge, and literal from the retained host control terminal on three lines."
+    )
+    .context("write R6 operator-TTY prompt")?;
+    writer.flush().context("flush R6 operator-TTY prompt")?;
+    let mut echo_guard = R6TerminalEchoGuardV1::new(reader.as_raw_fd())?;
+    echo_guard.disable_echo()?;
+    let result = (|| -> Result<String> {
+        let fingerprint = read_r6_operator_tty_line_v1(&mut reader, "fingerprint")?;
+        let challenge = read_r6_operator_tty_line_v1(&mut reader, "challenge")?;
+        let literal = read_r6_operator_tty_line_v1(&mut reader, "literal")?;
+        if literal != GUEST_PAIRING_LITERAL_V1
+            || fingerprint.is_empty()
+            || challenge.is_empty()
+            || fingerprint.contains('\0')
+            || challenge.contains('\0')
+        {
+            bail!("R6 operator-TTY confirmation literal or values are invalid");
+        }
+        sha256_hex_bytes_v1(
+            format!(
+                "{}:{}:{}:{}",
+                binding.pairing_session_nonce, fingerprint, challenge, literal
+            )
+            .as_bytes(),
+        )
+    })();
+    echo_guard.restore()?;
+    result
+}
+
+/// Private RAII restoration guard for the direct guest controlling terminal. No input value is
+/// retained in the guard, and `Drop` restores the saved settings on every `?`/unwind path.
+struct R6TerminalEchoGuardV1 {
+    fd: RawFd,
+    original: libc::termios,
+    restored: bool,
+}
+
+impl R6TerminalEchoGuardV1 {
+    fn new(fd: RawFd) -> Result<Self> {
+        let mut original: libc::termios = unsafe { std::mem::zeroed() };
+        // SAFETY: `original` is valid writable termios storage and `fd` was admitted as a TTY.
+        if unsafe { libc::tcgetattr(fd, &mut original as *mut libc::termios) } != 0 {
+            return Err(std::io::Error::last_os_error()).context("read guest TTY termios");
+        }
+        Ok(Self {
+            fd,
+            original,
+            restored: false,
+        })
+    }
+
+    fn disable_echo(&mut self) -> Result<()> {
+        let mut no_echo = self.original;
+        no_echo.c_lflag &= !libc::ECHO;
+        // SAFETY: `no_echo` is a valid termios value copied from tcgetattr for this descriptor.
+        if unsafe { libc::tcsetattr(self.fd, libc::TCSANOW, &no_echo as *const libc::termios) } != 0
+        {
+            return Err(std::io::Error::last_os_error()).context("disable guest TTY echo");
+        }
+        Ok(())
+    }
+
+    fn restore(&mut self) -> Result<()> {
+        if self.restored {
+            return Ok(());
+        }
+        // SAFETY: `original` is the exact value captured from this descriptor before mutation.
+        if unsafe {
+            libc::tcsetattr(
+                self.fd,
+                libc::TCSANOW,
+                &self.original as *const libc::termios,
+            )
+        } != 0
+        {
+            return Err(std::io::Error::last_os_error()).context("restore guest TTY echo");
+        }
+        self.restored = true;
+        Ok(())
+    }
+}
+
+impl Drop for R6TerminalEchoGuardV1 {
+    fn drop(&mut self) {
+        if !self.restored {
+            // SAFETY: best-effort restoration uses the termios snapshot captured for this fd.
+            let _ = unsafe {
+                libc::tcsetattr(
+                    self.fd,
+                    libc::TCSANOW,
+                    &self.original as *const libc::termios,
+                )
+            };
+        }
+    }
+}
+
+/// Read one direct-TTY line without `BufReader` prefetch, so the per-line deadline cannot lose
+/// bytes already buffered for the next prompt. EOF, signal interruption, and timeout all fail
+/// before an operator proof can be persisted.
+fn read_r6_operator_tty_line_v1(reader: &mut File, label: &str) -> Result<String> {
+    read_r6_operator_tty_line_with_timeout_v1(reader, label, R6_OPERATOR_INPUT_TIMEOUT_V1)
+}
+
+/// Keep the production deadline fixed while letting the focused non-native proof exercise an
+/// immediate expiry without sleeping or opening any guest/native resource.
+fn read_r6_operator_tty_line_with_timeout_v1(
+    reader: &mut File,
+    label: &str,
+    timeout: Duration,
+) -> Result<String> {
+    let deadline = Instant::now() + timeout;
+    let mut bytes = Vec::with_capacity(128);
+    loop {
+        let remaining = deadline.saturating_duration_since(Instant::now());
+        if remaining.is_zero() {
+            bail!("R6 operator-TTY {label} timed out");
+        }
+        let timeout_ms = remaining.as_millis().min(i32::MAX as u128) as i32;
+        let mut poll_fd = libc::pollfd {
+            fd: reader.as_raw_fd(),
+            events: libc::POLLIN,
+            revents: 0,
+        };
+        // SAFETY: poll_fd points to one initialized pollfd and the timeout is bounded.
+        let ready = unsafe { libc::poll(&mut poll_fd as *mut libc::pollfd, 1, timeout_ms) };
+        if ready < 0 {
+            return Err(std::io::Error::last_os_error())
+                .with_context(|| format!("wait for R6 operator-TTY {label}"));
+        }
+        if ready == 0 {
+            bail!("R6 operator-TTY {label} timed out");
+        }
+        if poll_fd.revents & (libc::POLLERR | libc::POLLHUP | libc::POLLNVAL) != 0 {
+            bail!("R6 operator-TTY {label} closed before exact confirmation");
+        }
+        let mut byte = [0_u8; 1];
+        let count = reader
+            .read(&mut byte)
+            .with_context(|| format!("read R6 operator-TTY {label}"))?;
+        if count == 0 {
+            bail!("R6 operator-TTY {label} closed before exact confirmation");
+        }
+        if byte[0] == b'\n' {
+            break;
+        }
+        if bytes.len() >= 4095 {
+            bail!("R6 operator-TTY confirmation line is not bounded");
+        }
+        bytes.push(byte[0]);
+    }
+    let mut value = String::from_utf8(bytes)
+        .with_context(|| format!("R6 operator-TTY {label} is not UTF-8"))?;
+    if value.ends_with('\r') {
+        value.pop();
+    }
+    Ok(value)
 }
 
 fn load_json_file_v1(path: &Path, label: &str) -> Result<Value> {
@@ -547,23 +1029,31 @@ fn current_bootstrap_intent_path_v1(executor: &LinuxManagedArtifactExecutorV1) -
 }
 
 fn require_current_guest_pairing_ticket_v1(ticket: &GuestPublisherPairingTicketV1) -> Result<()> {
-    if unix_now_ns_v1()? > ticket.challenge.expires_at_unix_ns {
-        bail!("guest pairing ticket expired");
+    require_r6_not_expired_at_v1(ticket.challenge.expires_at_unix_ns, "guest pairing ticket")
+}
+
+/// R6 has one expiry boundary everywhere: equality is already expired. Callers must perform this
+/// check immediately before every mutable transition, leaving an expired active record preserved.
+fn require_r6_not_expired_at_v1(expires_at_unix_ns: u64, label: &str) -> Result<()> {
+    require_r6_not_expired_at_now_v1(unix_now_ns_v1()?, expires_at_unix_ns, label)
+}
+
+fn require_r6_not_expired_at_now_v1(
+    now_unix_ns: u64,
+    expires_at_unix_ns: u64,
+    label: &str,
+) -> Result<()> {
+    if now_unix_ns >= expires_at_unix_ns {
+        bail!("{label} expired");
     }
     Ok(())
 }
 
 fn require_committable_guest_pairing_ticket_v1(
     ticket: &GuestPublisherPairingTicketV1,
-    hello: &GuestPublisherBootstrapHelloV1,
+    _hello: &GuestPublisherBootstrapHelloV1,
 ) -> Result<()> {
-    if unix_now_ns_v1()? <= ticket.challenge.expires_at_unix_ns {
-        return Ok(());
-    }
-    if hello.intent_published_at_unix_ns > ticket.challenge.expires_at_unix_ns {
-        bail!("guest pairing ticket expired before the durable hello was published");
-    }
-    Ok(())
+    require_current_guest_pairing_ticket_v1(ticket)
 }
 
 fn path_exists_or_symlink_v1(path: &Path) -> Result<bool> {
@@ -2058,48 +2548,13 @@ fn persist_protected_state_v1(
 }
 
 fn begin_guest_publisher_bootstrap_v1(
-    executor: &LinuxManagedArtifactExecutorV1,
-    ticket: &GuestPublisherPairingTicketV1,
-    kill_point: KillPointV1,
+    _executor: &LinuxManagedArtifactExecutorV1,
+    _ticket: &GuestPublisherPairingTicketV1,
+    _kill_point: KillPointV1,
 ) -> Result<GuestPublisherBootstrapHelloV1> {
-    verify_guest_publisher_pairing_ticket_v1(ticket)?;
-    if guest_consumption_marker_path_v1(executor, &ticket.challenge.challenge_id).exists() {
-        bail!("guest pairing challenge already reached a consumed terminal state");
-    }
-    let intent_path = guest_intent_path_v1(executor, &ticket.challenge.challenge_id);
-    let hello_path = guest_bootstrap_hello_path_v1(executor, &ticket.challenge.challenge_id);
-    let intent = if path_exists_or_symlink_v1(&intent_path)? {
-        publish_guest_pairing_intent_v1(executor, ticket)?
-    } else {
-        if path_exists_or_symlink_v1(&hello_path)? {
-            bail!(
-                "guest bootstrap hello exists without a durable guest pairing intent: {}",
-                hello_path.display()
-            );
-        }
-        require_current_guest_pairing_ticket_v1(ticket)?;
-        let _ = open_guest_controlling_tty_v1(executor)?;
-        let confirmation = read_guest_publisher_pairing_confirmation_v1(executor, ticket)?;
-        if confirmation
-            != format!(
-                "{}\n{}\n{}",
-                ticket.challenge.host_key_fingerprint_sha256,
-                ticket.challenge.challenge,
-                GUEST_PAIRING_LITERAL_V1
-            )
-        {
-            bail!("guest pairing confirmation literal mismatch");
-        }
-        publish_guest_pairing_intent_v1(executor, ticket)?
-    };
-    if kill_point == KillPointV1::Intent {
-        std::process::exit(101);
-    }
-    let hello = emit_guest_publisher_bootstrap_hello_v1(executor, ticket, &intent)?;
-    if kill_point == KillPointV1::Hello {
-        std::process::exit(102);
-    }
-    Ok(hello)
+    bail!(
+        "generic guest bootstrap is unreachable without the exact PM-bound R6 data and operator-TTY sessions"
+    )
 }
 
 fn open_guest_controlling_tty_v1(
@@ -2129,35 +2584,109 @@ fn open_guest_controlling_tty_v1(
     Ok((reader, writer))
 }
 
-fn read_guest_publisher_pairing_confirmation_v1(
+fn guest_operator_proof_path_v1(
+    executor: &LinuxManagedArtifactExecutorV1,
+    binding: &GuestPublisherPairingSessionBindingV1,
+) -> PathBuf {
+    guest_artifact_directory_v1(executor, &binding.ticket_challenge_id)
+        .join(R6_OPERATOR_PROOF_LEAF_V1)
+}
+
+fn expected_r6_operator_proof_commitment_v1(
+    ticket: &GuestPublisherPairingTicketV1,
+    binding: &GuestPublisherPairingSessionBindingV1,
+) -> Result<String> {
+    // This is verification-only: the data child never persists or substitutes this value when an
+    // independently created proof is absent, stale, malformed, or mismatched.
+    sha256_hex_bytes_v1(
+        format!(
+            "{}:{}:{}:{}",
+            binding.pairing_session_nonce,
+            ticket.challenge.host_key_fingerprint_sha256,
+            ticket.challenge.challenge,
+            GUEST_PAIRING_LITERAL_V1,
+        )
+        .as_bytes(),
+    )
+}
+
+fn persist_r6_guest_operator_proof_v1(
+    executor: &LinuxManagedArtifactExecutorV1,
+    launch: &GuestPublisherPairingOperatorLaunchV1,
+    confirmation_commitment: &str,
+) -> Result<()> {
+    require_r6_not_expired_at_v1(launch.expires_at_unix_ns, "operator launch")?;
+    let operator_launch_sha256 = guest_publisher_pairing_operator_launch_sha256_v1(launch)
+        .context("digest exact signed R6 operator launch")?;
+    let proof = GuestPublisherPairingOperatorProofV1 {
+        schema_owner: R6_OPERATOR_PROOF_SCHEMA_OWNER_V1.to_string(),
+        schema_version: 1,
+        binding: launch.binding.clone(),
+        operator_session_id: launch.operator_session_id.clone(),
+        operator_launch_sha256,
+        confirmation_commitment: confirmation_commitment.to_string(),
+        created_at_unix_ns: unix_now_ns_v1()?,
+        expires_at_unix_ns: launch.expires_at_unix_ns,
+        terminal_observation: R6_OPERATOR_PROOF_TERMINAL_OBSERVATION_V1.to_string(),
+    };
+    require_r6_operator_proof_launch_digest_v1(&proof, launch)?;
+    require_r6_not_expired_at_v1(proof.expires_at_unix_ns, "operator proof")?;
+    let bytes = canonical_guest_publisher_pairing_operator_proof_v1(&proof)?;
+    let path = guest_operator_proof_path_v1(executor, &launch.binding);
+    create_nofollow_immutable_file_v1(&path, &bytes, 0o600)
+        .context("persist one immutable R6 guest operator proof")
+}
+
+/// A proof must retain the digest of the exact canonical signed launch that created it. The host
+/// repeats this check against its immutable record before its proof-generation CAS; this local
+/// check prevents a mutated launch/signature/digest from being persisted as operator evidence.
+fn require_r6_operator_proof_launch_digest_v1(
+    proof: &GuestPublisherPairingOperatorProofV1,
+    launch: &GuestPublisherPairingOperatorLaunchV1,
+) -> Result<()> {
+    let expected = guest_publisher_pairing_operator_launch_sha256_v1(launch)
+        .context("digest exact signed R6 operator launch")?;
+    if proof.operator_launch_sha256 != expected {
+        bail!("R6 operator proof launch digest does not match its signed launch envelope");
+    }
+    Ok(())
+}
+
+fn load_r6_guest_operator_proof_v1(
+    executor: &LinuxManagedArtifactExecutorV1,
+    binding: &GuestPublisherPairingSessionBindingV1,
+) -> Result<GuestPublisherPairingOperatorProofV1> {
+    let path = guest_operator_proof_path_v1(executor, binding);
+    let bytes = read_nofollow_regular_file_v1(&path)
+        .with_context(|| format!("open fixed R6 operator proof {}", path.display()))?;
+    parse_and_validate_guest_publisher_pairing_operator_proof_v1(&bytes)
+        .context("validate fixed R6 operator proof")
+}
+
+/// The data child can derive the expected commitment only to compare it with an independently
+/// created, no-follow-read proof. No code path may create an intent if this validation fails.
+fn validate_r6_operator_proof_before_intent_v1(
     executor: &LinuxManagedArtifactExecutorV1,
     ticket: &GuestPublisherPairingTicketV1,
-) -> Result<String> {
-    let (mut reader, mut writer) = open_guest_controlling_tty_v1(executor)?;
-    writeln!(
-        writer,
-        "HOST_KEY_FINGERPRINT_SHA256 {}",
-        ticket.challenge.host_key_fingerprint_sha256
-    )
-    .context("write pairing fingerprint")?;
-    writeln!(writer, "CHALLENGE {}", ticket.challenge.challenge)
-        .context("write pairing challenge")?;
-    writeln!(writer, "LITERAL {}", GUEST_PAIRING_LITERAL_V1).context("write pairing literal")?;
-    writer.flush().context("flush pairing prompt")?;
-
-    let mut bytes = Vec::new();
-    let mut chunk = [0u8; 4096];
-    loop {
-        match reader.read(&mut chunk) {
-            Ok(0) => break,
-            Ok(read_len) => bytes.extend_from_slice(&chunk[..read_len]),
-            Err(error) if error.raw_os_error() == Some(5) => break,
-            Err(error) => return Err(error).context("read pairing confirmation"),
-        }
+    binding: &GuestPublisherPairingSessionBindingV1,
+) -> Result<(GuestPublisherPairingOperatorProofV1, String)> {
+    require_current_guest_pairing_ticket_v1(ticket)?;
+    let proof = load_r6_guest_operator_proof_v1(executor, binding)?;
+    if proof.binding != *binding
+        || proof.binding.ticket_challenge_id != ticket.challenge.challenge_id
+        || proof.binding.host_record_generation != ticket.host_generation
+        || proof.expires_at_unix_ns != ticket.challenge.expires_at_unix_ns
+    {
+        bail!("R6 operator proof does not exact-join the data ticket and immutable binding");
     }
-    let text = String::from_utf8(bytes).context("pairing confirmation was not UTF-8")?;
-    let normalized = text.replace("\r\n", "\n").replace('\r', "\n");
-    Ok(normalized.trim_end_matches('\n').to_string())
+    require_r6_not_expired_at_v1(proof.expires_at_unix_ns, "operator proof")?;
+    let expected_commitment = expected_r6_operator_proof_commitment_v1(ticket, binding)?;
+    if proof.confirmation_commitment != expected_commitment {
+        bail!("R6 operator proof commitment does not match the signed ticket");
+    }
+    let proof_sha256 = guest_publisher_pairing_operator_proof_sha256_v1(&proof)
+        .context("digest validated R6 operator proof")?;
+    Ok((proof, proof_sha256))
 }
 
 fn verify_guest_publisher_pairing_ticket_v1(ticket: &GuestPublisherPairingTicketV1) -> Result<()> {
@@ -2232,30 +2761,19 @@ fn emit_guest_publisher_bootstrap_hello_v1(
 fn publish_guest_pairing_intent_v1(
     executor: &LinuxManagedArtifactExecutorV1,
     ticket: &GuestPublisherPairingTicketV1,
+    binding: &GuestPublisherPairingSessionBindingV1,
 ) -> Result<GuestPublisherPairingGuestIntentV1> {
+    validate_r6_guest_pairing_binding_v1(executor, ticket, binding)?;
+    require_current_guest_pairing_ticket_v1(ticket)?;
     open_guest_pairing_intent_parent_v1(executor)?;
     let ticket_sha256 = sha256_hex_bytes_v1(&canonical_guest_publisher_pairing_ticket_v1(ticket)?)?;
-    let confirmation_commitment = sha256_hex_bytes_v1(
-        format!(
-            "{}:{}:{}",
-            ticket.challenge.host_key_fingerprint_sha256,
-            ticket.challenge.challenge,
-            GUEST_PAIRING_LITERAL_V1
-        )
-        .as_bytes(),
-    )?;
     let intent_path = guest_intent_path_v1(executor, &ticket.challenge.challenge_id);
     if path_exists_or_symlink_v1(&intent_path)? {
         let intent = resume_guest_publisher_pairing_v1(executor, &ticket.challenge.challenge_id)?;
         let signing_key_path = guest_signing_key_path_v1(executor, &ticket.challenge.challenge_id);
         require_existing_linux_signing_key_v1(&signing_key_path)?;
         let public_key = derive_public_key_v1(&signing_key_path)?;
-        validate_resumable_guest_pairing_intent_v1(
-            ticket,
-            &intent,
-            &confirmation_commitment,
-            &public_key,
-        )?;
+        validate_resumable_guest_pairing_intent_v1(ticket, binding, &intent, &public_key)?;
         return Ok(intent);
     }
     let signing_key_path = guest_signing_key_path_v1(executor, &ticket.challenge.challenge_id);
@@ -2274,13 +2792,12 @@ fn publish_guest_pairing_intent_v1(
         scope_id: ticket.current_anchor.scope_id.clone(),
         challenge_id: ticket.challenge.challenge_id.clone(),
         ticket_sha256,
-        confirmation_commitment,
         guest_machine_identity: ticket.challenge.guest_machine_identity.clone(),
         guest_artifact_sha256: ticket.challenge.executor_build_evidence_sha256.clone(),
         seed: sha256_hex_bytes_v1(ticket.challenge.challenge.as_bytes())?,
         public_key: public_key.clone(),
         public_key_sha256: sha256_hex_bytes_v1(&base64url_decode_v1(&public_key)?)?,
-        nonce: sha256_hex_bytes_v1(ticket.challenge.challenge_id.as_bytes())?,
+        nonce: binding.pairing_session_nonce.clone(),
         guest_test_retirement_commitment: ticket.guest_test_retirement_commitment.clone(),
         transcript: None,
         hello: None,
@@ -2318,11 +2835,24 @@ fn publish_guest_pairing_intent_otmpfile_v1(
 
 fn validate_resumable_guest_pairing_intent_v1(
     ticket: &GuestPublisherPairingTicketV1,
+    binding: &GuestPublisherPairingSessionBindingV1,
     intent: &GuestPublisherPairingGuestIntentV1,
-    confirmation_commitment: &str,
     public_key: &str,
 ) -> Result<()> {
     let ticket_sha256 = sha256_hex_bytes_v1(&canonical_guest_publisher_pairing_ticket_v1(ticket)?)?;
+    substrate_common::validate_guest_publisher_pairing_session_binding_v1(binding)?;
+    if ticket.current_anchor.scope_id != binding.scope_id
+        || ticket.challenge.platform_mapping_commitment != binding.platform_mapping_commitment
+        || ticket.challenge.guest_machine_identity != binding.guest_machine_identity
+        || ticket.challenge.source_commit != binding.source_commit
+        || ticket.challenge.source_tree != binding.source_tree
+        || ticket.challenge.source_ref != binding.source_ref
+        || ticket.challenge.executor_build_evidence_sha256 != binding.staged_executor_sha256
+        || ticket.challenge.challenge_id != binding.ticket_challenge_id
+        || ticket.host_generation != binding.host_record_generation
+    {
+        bail!("durable guest pairing intent does not join immutable binding");
+    }
     if intent.scope_id != ticket.current_anchor.scope_id
         || intent.challenge_id != ticket.challenge.challenge_id
     {
@@ -2330,11 +2860,6 @@ fn validate_resumable_guest_pairing_intent_v1(
     }
     if intent.ticket_sha256 != ticket_sha256 {
         bail!("durable guest pairing intent ticket_sha256 does not match the supplied ticket");
-    }
-    if intent.confirmation_commitment != confirmation_commitment {
-        bail!(
-            "durable guest pairing intent confirmation_commitment does not match the supplied ticket"
-        );
     }
     if intent.guest_machine_identity != ticket.challenge.guest_machine_identity {
         bail!("durable guest pairing intent machine identity does not match the supplied ticket");
@@ -2348,8 +2873,8 @@ fn validate_resumable_guest_pairing_intent_v1(
     if intent.public_key_sha256 != sha256_hex_bytes_v1(&base64url_decode_v1(public_key)?)? {
         bail!("durable guest pairing intent public_key_sha256 does not match its public key");
     }
-    if intent.nonce != sha256_hex_bytes_v1(ticket.challenge.challenge_id.as_bytes())? {
-        bail!("durable guest pairing intent nonce does not match the supplied ticket");
+    if intent.nonce != binding.pairing_session_nonce {
+        bail!("durable guest pairing intent nonce does not match immutable binding");
     }
     if intent.seed != sha256_hex_bytes_v1(ticket.challenge.challenge.as_bytes())? {
         bail!("durable guest pairing intent seed does not match the supplied ticket");
@@ -2583,80 +3108,81 @@ fn verify_guest_publisher_bootstrap_transcript_v1(
         .context("verify guest bootstrap transcript signature")
 }
 
-fn join_guest_host_consumption_v1(
-    executor: &LinuxManagedArtifactExecutorV1,
-    challenge_id: &str,
-) -> Result<()> {
-    let marker = guest_consumption_marker_path_v1(executor, challenge_id);
-    ensure_guest_artifact_directory_v1(executor, challenge_id)?;
-    atomic_write_file_v1(&marker, b"consumed", 0o600)?;
-    Ok(())
-}
-
-fn commit_guest_publisher_bootstrap_v1(
+/// Persist only the exact transcript that the host signed after it validated the guest Hello.
+/// This helper is reachable solely from the fixed R6 data-session state machine.
+fn persist_r6_guest_pairing_transcript_v1(
     executor: &LinuxManagedArtifactExecutorV1,
     ticket: &GuestPublisherPairingTicketV1,
+    binding: &GuestPublisherPairingSessionBindingV1,
+    intent: &GuestPublisherPairingGuestIntentV1,
+    hello: &GuestPublisherBootstrapHelloV1,
     transcript: &GuestPublisherBootstrapTranscriptV1,
-    kill_point: KillPointV1,
-) -> Result<LifecyclePublisherAnchorV1> {
-    let intent = resume_guest_publisher_pairing_v1(executor, &ticket.challenge.challenge_id)?;
-    if guest_consumption_marker_path_v1(executor, &ticket.challenge.challenge_id).exists() {
-        bail!("guest pairing challenge already reached a consumed terminal state");
-    }
-    let hello_path = guest_bootstrap_hello_path_v1(executor, &ticket.challenge.challenge_id);
-    let hello: GuestPublisherBootstrapHelloV1 = serde_json::from_slice(
-        &fs::read(&hello_path).with_context(|| format!("read {}", hello_path.display()))?,
-    )
-    .context("decode persisted guest bootstrap hello")?;
-    verify_guest_publisher_bootstrap_transcript_v1(ticket, &intent, &hello, transcript)?;
-    require_committable_guest_pairing_ticket_v1(ticket, &hello)?;
-    if intent.challenge_id != ticket.challenge.challenge_id
-        || intent.scope_id != ticket.current_anchor.scope_id
+) -> Result<GuestPublisherPairingGuestIntentV1> {
+    validate_r6_guest_pairing_binding_v1(executor, ticket, binding)?;
+    substrate_common::validate_guest_publisher_bootstrap_transcript_v1(
+        ticket, binding, hello, transcript,
+    )?;
+    verify_guest_publisher_bootstrap_transcript_v1(ticket, intent, hello, transcript)?;
+    if intent
+        .transcript
+        .as_ref()
+        .is_some_and(|saved| saved != transcript)
     {
-        bail!("guest pairing intent does not match the supplied ticket");
-    }
-    if kill_point == KillPointV1::Transcript {
-        std::process::exit(103);
+        bail!("R6 guest data session rejects an alternate transcript replay");
     }
     let mut durable_intent = intent.clone();
+    durable_intent.hello = Some(hello.clone());
     durable_intent.transcript = Some(transcript.clone());
     durable_intent.state = "TranscriptDurable".to_string();
-    let durable_intent =
-        persist_guest_pairing_intent_v1(executor, &ticket.challenge.challenge_id, &durable_intent)?;
+    persist_guest_pairing_intent_v1(executor, &ticket.challenge.challenge_id, &durable_intent)
+}
 
-    let current_state = open_linux_publisher_protected_state_v1(executor)?;
-    let current_anchor_sha256 = lifecycle_anchor_sha256_v1(&current_state.current_anchor)?;
+/// Build, but do not consume, the one signed guest anchor.  The host must first CAS the exact
+/// anchor digest into its protected R6 record and echo the same frame back before this guest
+/// commits the terminal consumption marker.
+fn prepare_r6_guest_publisher_anchor_v1(
+    executor: &LinuxManagedArtifactExecutorV1,
+    ticket: &GuestPublisherPairingTicketV1,
+    binding: &GuestPublisherPairingSessionBindingV1,
+    durable_intent: &GuestPublisherPairingGuestIntentV1,
+    transcript: &GuestPublisherBootstrapTranscriptV1,
+) -> Result<LifecyclePublisherAnchorV1> {
+    validate_r6_guest_pairing_binding_v1(executor, ticket, binding)?;
+    let hello = durable_intent
+        .hello
+        .as_ref()
+        .ok_or_else(|| anyhow!("R6 durable guest intent lacks Hello"))?;
+    if durable_intent.transcript.as_ref() != Some(transcript) {
+        bail!("R6 durable guest intent transcript does not match the data-session frame");
+    }
+    verify_guest_publisher_bootstrap_transcript_v1(ticket, durable_intent, hello, transcript)?;
     let guest_key_path = ensure_guest_signing_key_matches_durable_intent_v1(
         executor,
         &ticket.challenge.challenge_id,
-        &durable_intent,
+        durable_intent,
     )?;
-    fs::create_dir_all(&executor.publisher_directory)
-        .with_context(|| format!("create {}", executor.publisher_directory.display()))?;
-    set_mode_v1(&executor.publisher_directory, 0o700)?;
-
     let mut anchor = LifecyclePublisherAnchorV1 {
         schema_owner: "substrate.lifecycle-publisher-anchor".to_string(),
         schema_version: 1,
-        authority_domain: "linux_system".to_string(),
+        authority_domain: "mac_lima_guest".to_string(),
         host_context_commitment: ticket.challenge.host_context_commitment.clone(),
         platform_mapping_commitment: ticket.challenge.platform_mapping_commitment.clone(),
-        scope_id: ticket.current_anchor.scope_id.clone(),
-        manifest_generation: 1,
+        scope_id: binding.scope_id.clone(),
+        manifest_generation: ticket.current_anchor.manifest_generation,
         manifest_sha256: ticket.current_anchor.manifest_sha256.clone(),
-        action_receipt_index_revision: 0,
+        action_receipt_index_revision: ticket.current_anchor.action_receipt_index_revision,
         action_receipt_index_sha256: ticket.current_anchor.action_receipt_index_sha256.clone(),
         head_sha256: ticket.current_anchor.head_sha256.clone(),
         previous_anchor_sha256: Some(ticket.current_anchor_sha256.clone()),
         request_sha256: ticket.challenge_sha256.clone(),
-        requester_principal: "guest-bootstrap".to_string(),
-        attempt_nonce: ticket.challenge.challenge_id.clone(),
+        requester_principal: "r6-pm-bound-lima-guest".to_string(),
+        attempt_nonce: binding.pairing_session_nonce.clone(),
         executor_identity: ManagedExecutorIdentityV1 {
-            source_commit: ticket.challenge.source_commit.clone(),
-            source_tree: ticket.challenge.source_tree.clone(),
-            source_ref: ticket.challenge.source_ref.clone(),
-            target_triple: std::env::consts::ARCH.to_string(),
-            artifact_sha256: durable_intent.guest_artifact_sha256.clone(),
+            source_commit: binding.source_commit.clone(),
+            source_tree: binding.source_tree.clone(),
+            source_ref: binding.source_ref.clone(),
+            target_triple: current_target_triple_v1()?,
+            artifact_sha256: binding.staged_executor_sha256.clone(),
             artifact_path: executor.executor_path.display().to_string(),
             toolchain: None,
             code_identity: None,
@@ -2670,59 +3196,189 @@ fn commit_guest_publisher_bootstrap_v1(
     anchor.signature = sign_linux_struct_v1(
         &guest_key_path,
         &anchor.schema_owner,
-        serde_json::to_value(&anchor).context("serialize guest lifecycle anchor")?,
+        serde_json::to_value(&anchor).context("serialize R6 guest lifecycle anchor")?,
     )?;
     if anchor.signature.public_key != durable_intent.public_key {
-        bail!("guest lifecycle anchor key does not match the durable guest pairing intent");
+        bail!("R6 guest anchor key does not match the durable intent");
     }
-
-    let state = LifecyclePublisherProtectedStateV1 {
-        schema_owner: "substrate.lifecycle-publisher-protected-state".to_string(),
-        schema_version: 1,
-        current_anchor: anchor.clone(),
-        counter: 1,
-        prepared_record: None,
-        previous_protected_state_sha256: None,
-        state_revision: 1,
-    };
-    let expected_state_sha256 =
-        sha256_hex_bytes_v1(&canonical_lifecycle_publisher_protected_state_v1(&state)?)?;
-    let final_key_path = executor.signing_key_path.clone();
-    if current_anchor_sha256 == ticket.current_anchor_sha256 {
-        ensure_existing_signing_key_matches_public_key_v1(
-            &final_key_path,
-            &current_state.current_anchor.signature.public_key,
-            "existing publisher signing key does not exact-join the ticket current anchor",
-        )?;
-        materialize_guest_signing_key_v1(&guest_key_path, &final_key_path)?;
-        compare_and_swap_linux_publisher_protected_state_v1(executor, &current_state, &state)?;
-    } else {
-        let current_state_sha256 = sha256_hex_bytes_v1(
-            &canonical_lifecycle_publisher_protected_state_v1(&current_state)?,
-        )?;
-        if current_state_sha256 != expected_state_sha256 {
-            bail!("existing publisher protected state does not exact-join the durable guest bootstrap transcript");
-        }
-        let guest_key_sha256 = signing_key_sha256_v1(&guest_key_path)?;
-        require_existing_linux_signing_key_v1(&final_key_path)?;
-        let final_key_sha256 = signing_key_sha256_v1(&final_key_path)?;
-        if final_key_sha256 != guest_key_sha256 {
-            bail!("existing publisher signing key does not exact-join the durable guest pairing intent");
-        }
-    }
-    anchor.signature = sign_linux_struct_v1(
-        &final_key_path,
-        &anchor.schema_owner,
-        serde_json::to_value(&anchor).context("serialize guest lifecycle anchor")?,
-    )?;
-    if anchor.signature.public_key != durable_intent.public_key {
-        bail!("guest lifecycle anchor key does not match the durable guest pairing intent");
-    }
-    if kill_point == KillPointV1::Commit {
-        std::process::exit(104);
-    }
-    join_guest_host_consumption_v1(executor, &ticket.challenge.challenge_id)?;
     Ok(anchor)
+}
+
+fn r6_consumption_marker_v1(
+    ticket: &GuestPublisherPairingTicketV1,
+    binding: &GuestPublisherPairingSessionBindingV1,
+    operator_proof_sha256: &str,
+    transcript: &GuestPublisherBootstrapTranscriptV1,
+    anchor: &LifecyclePublisherAnchorV1,
+) -> Result<R6GuestPairingConsumptionMarkerV1> {
+    let ticket_sha256 = sha256_hex_bytes_v1(&canonical_guest_publisher_pairing_ticket_v1(ticket)?)?;
+    let binding_sha256 = sha256_hex_bytes_v1(
+        &canonical_guest_publisher_pairing_session_binding_v1(binding)?,
+    )?;
+    let transcript_sha256 = sha256_hex_bytes_v1(&canonical_json_bytes_of_v1(
+        serde_json::to_value(transcript).context("serialize R6 transcript for marker")?,
+    )?)?;
+    Ok(R6GuestPairingConsumptionMarkerV1 {
+        schema_owner: R6_CONSUMPTION_MARKER_SCHEMA_OWNER_V1.to_string(),
+        schema_version: 1,
+        ticket_sha256,
+        binding_sha256,
+        operator_proof_sha256: operator_proof_sha256.to_string(),
+        transcript_sha256,
+        anchor_sha256: lifecycle_anchor_sha256_v1(anchor)?,
+    })
+}
+
+fn validate_r6_consumption_marker_v1(marker: &R6GuestPairingConsumptionMarkerV1) -> Result<()> {
+    if marker.schema_owner != R6_CONSUMPTION_MARKER_SCHEMA_OWNER_V1
+        || marker.schema_version != 1
+        || [
+            &marker.ticket_sha256,
+            &marker.binding_sha256,
+            &marker.operator_proof_sha256,
+            &marker.transcript_sha256,
+            &marker.anchor_sha256,
+        ]
+        .iter()
+        .any(|value| {
+            value.len() != 64
+                || !value
+                    .bytes()
+                    .all(|byte| byte.is_ascii_hexdigit() && !byte.is_ascii_uppercase())
+        })
+    {
+        bail!("R6 consumed marker is not canonical");
+    }
+    Ok(())
+}
+
+fn r6_consumption_marker_value_v1(marker: &R6GuestPairingConsumptionMarkerV1) -> Result<Value> {
+    validate_r6_consumption_marker_v1(marker)?;
+    Ok(json!({
+        "schema_owner": marker.schema_owner,
+        "schema_version": marker.schema_version,
+        "ticket_sha256": marker.ticket_sha256,
+        "binding_sha256": marker.binding_sha256,
+        "operator_proof_sha256": marker.operator_proof_sha256,
+        "transcript_sha256": marker.transcript_sha256,
+        "anchor_sha256": marker.anchor_sha256,
+    }))
+}
+
+fn canonical_r6_consumption_marker_v1(
+    marker: &R6GuestPairingConsumptionMarkerV1,
+) -> Result<Vec<u8>> {
+    canonical_json_bytes_of_v1(r6_consumption_marker_value_v1(marker)?)
+}
+
+fn parse_r6_consumption_marker_v1(bytes: &[u8]) -> Result<R6GuestPairingConsumptionMarkerV1> {
+    let value: Value = serde_json::from_slice(bytes).context("decode R6 consumed marker")?;
+    let object = value
+        .as_object()
+        .ok_or_else(|| anyhow!("R6 consumed marker must be an object"))?;
+    if object.len() != 7 {
+        bail!("R6 consumed marker contains an unknown or missing field");
+    }
+    let string = |field: &str| -> Result<String> {
+        object
+            .get(field)
+            .and_then(Value::as_str)
+            .map(ToOwned::to_owned)
+            .ok_or_else(|| anyhow!("R6 consumed marker lacks string field {field}"))
+    };
+    let schema_version = object
+        .get("schema_version")
+        .and_then(Value::as_u64)
+        .and_then(|value| u32::try_from(value).ok())
+        .ok_or_else(|| anyhow!("R6 consumed marker lacks u32 schema_version"))?;
+    let marker = R6GuestPairingConsumptionMarkerV1 {
+        schema_owner: string("schema_owner")?,
+        schema_version,
+        ticket_sha256: string("ticket_sha256")?,
+        binding_sha256: string("binding_sha256")?,
+        operator_proof_sha256: string("operator_proof_sha256")?,
+        transcript_sha256: string("transcript_sha256")?,
+        anchor_sha256: string("anchor_sha256")?,
+    };
+    validate_r6_consumption_marker_v1(&marker)?;
+    if canonical_r6_consumption_marker_v1(&marker)? != bytes {
+        bail!("R6 consumed marker is not exact canonical bytes");
+    }
+    Ok(marker)
+}
+
+fn load_r6_consumption_marker_v1(path: &Path) -> Result<Option<R6GuestPairingConsumptionMarkerV1>> {
+    let bytes = match read_nofollow_regular_file_v1(path) {
+        Ok(bytes) => bytes,
+        Err(error) if probe_error_kind_v1(&error) == Some(std::io::ErrorKind::NotFound) => {
+            return Ok(None)
+        }
+        Err(error) => return Err(error).with_context(|| format!("open {}", path.display())),
+    };
+    Ok(Some(parse_r6_consumption_marker_v1(&bytes)?))
+}
+
+fn join_guest_host_consumption_v1(
+    executor: &LinuxManagedArtifactExecutorV1,
+    challenge_id: &str,
+    marker: &R6GuestPairingConsumptionMarkerV1,
+) -> Result<()> {
+    let path = guest_consumption_marker_path_v1(executor, challenge_id);
+    let bytes = canonical_r6_consumption_marker_v1(marker)?;
+    create_nofollow_immutable_file_v1(&path, &bytes, 0o600)
+        .context("create one immutable R6 consumed marker")
+}
+
+fn commit_guest_publisher_bootstrap_v1(
+    executor: &LinuxManagedArtifactExecutorV1,
+    ticket: &GuestPublisherPairingTicketV1,
+    binding: &GuestPublisherPairingSessionBindingV1,
+    transcript: &GuestPublisherBootstrapTranscriptV1,
+    acknowledged_anchor: &LifecyclePublisherAnchorV1,
+    operator_proof_sha256: &str,
+) -> Result<LifecyclePublisherAnchorV1> {
+    validate_r6_guest_pairing_binding_v1(executor, ticket, binding)?;
+    let durable_intent =
+        resume_guest_publisher_pairing_v1(executor, &ticket.challenge.challenge_id)?;
+    let expected_anchor = prepare_r6_guest_publisher_anchor_v1(
+        executor,
+        ticket,
+        binding,
+        &durable_intent,
+        transcript,
+    )?;
+    if &expected_anchor != acknowledged_anchor {
+        bail!("R6 guest anchor acknowledgement is not the exact prepared signed anchor");
+    }
+    let expected_marker = r6_consumption_marker_v1(
+        ticket,
+        binding,
+        operator_proof_sha256,
+        transcript,
+        &expected_anchor,
+    )?;
+    let marker_path = guest_consumption_marker_path_v1(executor, &ticket.challenge.challenge_id);
+    if let Some(saved_marker) = load_r6_consumption_marker_v1(&marker_path)? {
+        if saved_marker == expected_marker {
+            return Ok(expected_anchor);
+        }
+        bail!("R6 consumed marker rejects a non-identical retry");
+    }
+    require_current_guest_pairing_ticket_v1(ticket)?;
+    match join_guest_host_consumption_v1(executor, &ticket.challenge.challenge_id, &expected_marker)
+    {
+        Ok(()) => Ok(expected_anchor),
+        Err(error) if probe_error_kind_v1(&error) == Some(std::io::ErrorKind::AlreadyExists) => {
+            let saved_marker = load_r6_consumption_marker_v1(&marker_path)?
+                .ok_or_else(|| anyhow!("R6 consumed marker disappeared after create race"))?;
+            if saved_marker == expected_marker {
+                Ok(expected_anchor)
+            } else {
+                bail!("R6 consumed marker rejects a non-identical retry")
+            }
+        }
+        Err(error) => Err(error),
+    }
 }
 
 fn retire_linux_test_publisher_v1(executor: &LinuxManagedArtifactExecutorV1) -> Result<()> {
@@ -2915,7 +3571,7 @@ fn guest_consumption_marker_path_v1(
     executor: &LinuxManagedArtifactExecutorV1,
     challenge_id: &str,
 ) -> PathBuf {
-    guest_artifact_directory_v1(executor, challenge_id).join("consumed.marker")
+    guest_artifact_directory_v1(executor, challenge_id).join(R6_CONSUMPTION_MARKER_LEAF_V1)
 }
 
 fn guest_intent_leaf_v1(challenge_id: &str) -> String {
@@ -3360,13 +4016,14 @@ fn linux_peer_credentials_v1(fd: RawFd) -> Result<UCredV1> {
 }
 
 fn linux_openat2_nofollow_v1(path: &Path) -> Result<File> {
+    ensure_nofollow_ancestor_chain_v1(path)?;
     let c_path = CString::new(path.as_os_str().as_encoded_bytes())
         .with_context(|| format!("path contains NUL: {}", path.display()))?;
     // SAFETY: open is called with fixed flags and a NUL-terminated path.
     let fd = unsafe {
         open(
             c_path.as_ptr(),
-            O_PATH_V1 | O_DIRECTORY_V1 | O_CLOEXEC_V1 | O_NOFOLLOW_V1,
+            O_RDONLY_V1 | O_DIRECTORY_V1 | O_CLOEXEC_V1 | O_NOFOLLOW_V1,
             0,
         )
     };
@@ -3380,19 +4037,24 @@ fn linux_openat2_nofollow_v1(path: &Path) -> Result<File> {
 
 fn linux_otmpfile_linkat_v1(parent: &Path, leaf: &str, bytes: &[u8], mode: u32) -> Result<()> {
     let parent_file = linux_openat2_nofollow_v1(parent)?;
-    let c_parent = CString::new(parent.as_os_str().as_encoded_bytes())
-        .with_context(|| format!("path contains NUL: {}", parent.display()))?;
-    // SAFETY: open is called against a validated directory path with O_TMPFILE.
+    if Path::new(leaf).components().count() != 1
+        || Path::new(leaf).file_name().and_then(|value| value.to_str()) != Some(leaf)
+    {
+        bail!("immutable file leaf is not one fixed path component: {leaf}");
+    }
+    let c_dot = CString::new(".").expect("dot CString");
+    // SAFETY: openat resolves "." beneath the already no-follow-opened parent descriptor.
     let tmp_fd = unsafe {
-        open(
-            c_parent.as_ptr(),
+        openat(
+            parent_file.as_raw_fd(),
+            c_dot.as_ptr(),
             O_TMPFILE_V1 | O_RDWR_V1 | O_CLOEXEC_V1,
             mode,
         )
     };
     if tmp_fd < 0 {
         return Err(std::io::Error::last_os_error())
-            .with_context(|| format!("open O_TMPFILE under {}", parent.display()));
+            .with_context(|| format!("openat O_TMPFILE under {}", parent.display()));
     }
     // SAFETY: tmp_fd is a fresh descriptor returned by open.
     let mut tmp_file = unsafe { File::from_raw_fd(tmp_fd) };
@@ -3419,7 +4081,55 @@ fn linux_otmpfile_linkat_v1(parent: &Path, leaf: &str, bytes: &[u8], mode: u32) 
             .with_context(|| format!("link O_TMPFILE into {}/{}", parent.display(), leaf));
     }
     drop(tmp_file);
-    linux_fsync_parent_v1(&parent.join(leaf))
+    parent_file
+        .sync_all()
+        .with_context(|| format!("fsync no-follow parent {}", parent.display()))
+}
+
+fn read_nofollow_regular_file_v1(path: &Path) -> Result<Vec<u8>> {
+    ensure_nofollow_ancestor_chain_v1(path)?;
+    let c_path = CString::new(path.as_os_str().as_encoded_bytes())
+        .with_context(|| format!("path contains NUL: {}", path.display()))?;
+    // SAFETY: open is called with fixed read-only/no-follow flags and a NUL-terminated path.
+    let fd = unsafe {
+        open(
+            c_path.as_ptr(),
+            O_RDONLY_V1 | O_CLOEXEC_V1 | O_NOFOLLOW_V1,
+            0,
+        )
+    };
+    if fd < 0 {
+        return Err(std::io::Error::last_os_error())
+            .with_context(|| format!("open no-follow file {}", path.display()));
+    }
+    // SAFETY: fd is a freshly returned owned descriptor.
+    let mut file = unsafe { File::from_raw_fd(fd) };
+    if !file
+        .metadata()
+        .with_context(|| format!("metadata no-follow file {}", path.display()))?
+        .file_type()
+        .is_file()
+    {
+        bail!("no-follow path is not a regular file: {}", path.display());
+    }
+    let mut bytes = Vec::new();
+    file.read_to_end(&mut bytes)
+        .with_context(|| format!("read no-follow file {}", path.display()))?;
+    Ok(bytes)
+}
+
+fn create_nofollow_immutable_file_v1(path: &Path, bytes: &[u8], mode: u32) -> Result<()> {
+    let parent = path
+        .parent()
+        .ok_or_else(|| anyhow!("path {} has no parent", path.display()))?;
+    ensure_nofollow_ancestor_chain_v1(parent)?;
+    fs::create_dir_all(parent).with_context(|| format!("create {}", parent.display()))?;
+    ensure_nofollow_ancestor_chain_v1(parent)?;
+    let leaf = path
+        .file_name()
+        .and_then(|leaf| leaf.to_str())
+        .ok_or_else(|| anyhow!("path {} has no file name", path.display()))?;
+    linux_otmpfile_linkat_v1(parent, leaf, bytes, mode)
 }
 
 fn linux_fsync_parent_v1(path: &Path) -> Result<()> {
@@ -4174,5 +4884,287 @@ mod tests {
         let error = read_frame_from_fd_v1(right.as_raw_fd()).unwrap_err();
         worker.join().unwrap();
         assert!(error.to_string().contains("more than one frame"));
+    }
+
+    fn open_r6_test_pty_v1() -> Result<(File, File)> {
+        let mut master = -1;
+        let mut slave = -1;
+        // SAFETY: openpty allocates two fresh descriptors; no name, termios, or window-size
+        // buffers are supplied and each descriptor is owned by the returned File exactly once.
+        let rc = unsafe {
+            libc::openpty(
+                &mut master as *mut libc::c_int,
+                &mut slave as *mut libc::c_int,
+                std::ptr::null_mut(),
+                std::ptr::null_mut(),
+                std::ptr::null_mut(),
+            )
+        };
+        if rc != 0 {
+            return Err(std::io::Error::last_os_error()).context("open focused R6 test pty");
+        }
+        // SAFETY: both FDs are freshly allocated by openpty above.
+        Ok(unsafe { (File::from_raw_fd(master), File::from_raw_fd(slave)) })
+    }
+
+    #[test]
+    fn r6_operator_tty_rejects_pipe_and_noncontrolling_input_and_restores_echo() {
+        let mut pipe_fds = [-1_i32; 2];
+        // SAFETY: pipe writes exactly two descriptors into the initialized output array.
+        assert_eq!(unsafe { libc::pipe(pipe_fds.as_mut_ptr()) }, 0);
+        // SAFETY: each descriptor is fresh from pipe and is owned exactly once by these Files.
+        let mut pipe_reader = unsafe { File::from_raw_fd(pipe_fds[0]) };
+        let pipe_writer = unsafe { File::from_raw_fd(pipe_fds[1]) };
+        drop(pipe_writer);
+        let pipe_error = read_r6_operator_tty_line_v1(&mut pipe_reader, "piped")
+            .expect_err("a piped/EOF confirmation must fail closed");
+        assert!(pipe_error
+            .to_string()
+            .contains("closed before exact confirmation"));
+        let timeout_error =
+            read_r6_operator_tty_line_with_timeout_v1(&mut pipe_reader, "timeout", Duration::ZERO)
+                .expect_err("an expired input deadline must fail before any input is read");
+        assert!(timeout_error.to_string().contains("timed out"));
+
+        let noncontrolling = LinuxManagedArtifactExecutorV1::new(
+            None,
+            None,
+            Some(PathBuf::from("/dev/null")),
+            TransportKindV1::SeqPacket,
+        );
+        assert!(open_guest_controlling_tty_v1(&noncontrolling).is_err());
+
+        let (_master, slave) = open_r6_test_pty_v1().expect("focused test pseudo-terminal");
+        let fd = slave.as_raw_fd();
+        let mut original: libc::termios = unsafe { std::mem::zeroed() };
+        // SAFETY: fd belongs to the live pseudo-terminal slave and original is writable.
+        assert_eq!(
+            unsafe { libc::tcgetattr(fd, &mut original as *mut libc::termios) },
+            0
+        );
+        {
+            let mut guard = R6TerminalEchoGuardV1::new(fd).expect("TTY echo guard");
+            guard
+                .disable_echo()
+                .expect("disable echo for exact confirmation");
+            let mut muted: libc::termios = unsafe { std::mem::zeroed() };
+            // SAFETY: fd and muted are valid for a read-only termios query.
+            assert_eq!(
+                unsafe { libc::tcgetattr(fd, &mut muted as *mut libc::termios) },
+                0
+            );
+            assert_eq!(
+                muted.c_lflag & libc::ECHO,
+                0,
+                "echo must be disabled while reading"
+            );
+            // Drop without explicit restore exercises the error/Drop restoration path.
+        }
+        let mut restored: libc::termios = unsafe { std::mem::zeroed() };
+        // SAFETY: fd and restored are valid for a read-only termios query.
+        assert_eq!(
+            unsafe { libc::tcgetattr(fd, &mut restored as *mut libc::termios) },
+            0
+        );
+        assert_eq!(
+            restored.c_lflag & libc::ECHO,
+            original.c_lflag & libc::ECHO,
+            "Drop must restore the original echo bit"
+        );
+    }
+
+    #[test]
+    fn r6_guest_entrypoints_close_host_routes_and_measure_installed_artifact() {
+        let source = include_str!("substrate-lifecycle-linux.rs");
+        for text in [
+            "guest-pairing-data-session-v1",
+            "guest-pairing-operator-tty-session-v1",
+            "R6 data guest entrypoint accepts no caller-selected argument or selector",
+            "--operator-launch-v1=<canonical-base64url>",
+            "measure_r6_installed_guest_executor_v1",
+            "R6 running guest executor digest does not match the staged binding",
+            "R6 operator-TTY confirmation line is not bounded",
+            "generic guest pairing commands are unreachable",
+        ] {
+            assert!(
+                source.contains(text),
+                "R6 Linux guest boundary lacks {text}"
+            );
+        }
+        for forbidden in [
+            "--state-root".to_string(),
+            "--tty-path".to_string(),
+            "--transport".to_string(),
+            ["host", "-confirmed"].concat(),
+        ] {
+            let start = source
+                .find("guest-pairing-data-session-v1")
+                .expect("fixed R6 guest entrypoint");
+            let end = source[start..]
+                .find("let mut state_root:")
+                .map(|offset| start + offset)
+                .expect("ordinary Linux host decoder follows R6 entrypoint");
+            assert!(
+                !source[start..end].contains(&forbidden),
+                "R6 guest entrypoint accepts forbidden {forbidden}"
+            );
+        }
+    }
+
+    #[test]
+    fn r6_operator_proof_path_is_direct_tty_only_and_data_proof_gated() {
+        let source = include_str!("substrate-lifecycle-linux.rs");
+        for required in [
+            "guest-pairing-operator-tty-session-v1",
+            "--operator-launch-v1=",
+            "parse_r6_operator_launch_argument_v1",
+            "R6TerminalEchoGuardV1",
+            "persist_r6_guest_operator_proof_v1",
+            "guest_publisher_pairing_operator_launch_sha256_v1",
+            "require_r6_operator_proof_launch_digest_v1",
+            "load_r6_guest_operator_proof_v1",
+            "validate_r6_operator_proof_before_intent_v1",
+            "R6_OPERATOR_PROOF_LEAF_V1",
+            "R6_CONSUMPTION_MARKER_SCHEMA_OWNER_V1",
+        ] {
+            assert!(
+                source.contains(required),
+                "R6 correction source fence lacks {required}"
+            );
+        }
+        let operator_start = source
+            .find("fn run_pm_bound_guest_pairing_operator_tty_session_v1")
+            .expect("fixed R6 operator TTY session");
+        let operator_end = source[operator_start..]
+            .find("fn require_r6_pm_bound_lima_guest_v1")
+            .map(|offset| operator_start + offset)
+            .expect("operator session boundary");
+        let operator = &source[operator_start..operator_end];
+        for forbidden in [
+            "read_r6_data_frame_v1",
+            "confirmation_commitment\": commitment",
+        ] {
+            assert!(
+                !operator.contains(forbidden),
+                "direct operator session retains forbidden {forbidden}"
+            );
+        }
+
+        let data_start = source
+            .find("fn run_pm_bound_guest_pairing_data_session_v1")
+            .expect("fixed R6 data session");
+        let data_end = source[data_start..]
+            .find("fn read_r6_data_frame_v1")
+            .map(|offset| data_start + offset)
+            .expect("data session boundary");
+        let data = &source[data_start..data_end];
+        let proof_validation = data
+            .find("validate_r6_operator_proof_before_intent_v1")
+            .expect("data validates independent proof");
+        let publish = data
+            .find("publish_guest_pairing_intent_v1")
+            .expect("data may publish intent");
+        assert!(
+            proof_validation < publish,
+            "data may not publish intent before validating independent operator proof"
+        );
+        assert!(
+            !data.contains("ticket.challenge.host_key_fingerprint_sha256"),
+            "data session must not derive authority from ticket confirmation material"
+        );
+    }
+
+    #[test]
+    fn r6_expiry_equality_and_consumed_marker_are_exact() {
+        assert!(require_r6_not_expired_at_now_v1(10, 10, "test").is_err());
+        assert!(require_r6_not_expired_at_now_v1(11, 10, "test").is_err());
+        assert!(require_r6_not_expired_at_now_v1(9, 10, "test").is_ok());
+
+        let marker = R6GuestPairingConsumptionMarkerV1 {
+            schema_owner: R6_CONSUMPTION_MARKER_SCHEMA_OWNER_V1.to_string(),
+            schema_version: 1,
+            ticket_sha256: "a".repeat(64),
+            binding_sha256: "b".repeat(64),
+            operator_proof_sha256: "c".repeat(64),
+            transcript_sha256: "d".repeat(64),
+            anchor_sha256: "e".repeat(64),
+        };
+        let bytes = canonical_r6_consumption_marker_v1(&marker).unwrap();
+        let decoded = parse_r6_consumption_marker_v1(&bytes).unwrap();
+        assert_eq!(
+            decoded, marker,
+            "exact marker retry retains terminal identity"
+        );
+
+        let mut altered = marker.clone();
+        altered.operator_proof_sha256 = "f".repeat(64);
+        assert_ne!(
+            altered, marker,
+            "mutated proof must not be an idempotent retry"
+        );
+    }
+
+    fn r6_test_operator_launch_v1() -> GuestPublisherPairingOperatorLaunchV1 {
+        let binding = GuestPublisherPairingSessionBindingV1 {
+            schema_owner: "substrate.guest-publisher-pairing-session-binding".to_string(),
+            schema_version: 1,
+            scope_id: "018f0000-0000-7000-8000-000000000001".to_string(),
+            platform_mapping_commitment: Some("a".repeat(64)),
+            guest_machine_identity: "r6-test-guest".to_string(),
+            source_commit: "b".repeat(40),
+            source_tree: "c".repeat(40),
+            source_ref: "refs/heads/r6-test".to_string(),
+            staged_executor_sha256: "d".repeat(64),
+            stage_one_record_sha256: "e".repeat(64),
+            ticket_challenge_id: "018f0000-0000-7000-8000-000000000002".to_string(),
+            host_record_generation: 1,
+            pairing_session_nonce: "f".repeat(64),
+        };
+        GuestPublisherPairingOperatorLaunchV1 {
+            schema_owner: "substrate.guest-publisher-pairing-operator-launch".to_string(),
+            schema_version: 1,
+            binding: binding.clone(),
+            operator_session_id: "1".repeat(64),
+            admitted_instance_name: "substrate-r6-test".to_string(),
+            expires_at_unix_ns: 2,
+            limactl_absolute_path: "/usr/bin/limactl".to_string(),
+            limactl_sha256: "2".repeat(64),
+            guest_executable_path: DEFAULT_EXECUTOR_PATH.to_string(),
+            guest_executable_sha256: binding.staged_executor_sha256,
+            fixed_operator_command: "guest-pairing-operator-tty-session-v1".to_string(),
+            signature: base64url_encode_v1(&[0_u8; 64]),
+        }
+    }
+
+    #[test]
+    fn r6_operator_proof_binds_the_exact_signed_launch_digest() {
+        let launch = r6_test_operator_launch_v1();
+        let launch_sha256 = guest_publisher_pairing_operator_launch_sha256_v1(&launch).unwrap();
+        let proof = GuestPublisherPairingOperatorProofV1 {
+            schema_owner: R6_OPERATOR_PROOF_SCHEMA_OWNER_V1.to_string(),
+            schema_version: 1,
+            binding: launch.binding.clone(),
+            operator_session_id: launch.operator_session_id.clone(),
+            operator_launch_sha256: launch_sha256,
+            confirmation_commitment: "3".repeat(64),
+            created_at_unix_ns: 1,
+            expires_at_unix_ns: launch.expires_at_unix_ns,
+            terminal_observation: R6_OPERATOR_PROOF_TERMINAL_OBSERVATION_V1.to_string(),
+        };
+        require_r6_operator_proof_launch_digest_v1(&proof, &launch).unwrap();
+
+        let mut mutated_signature = launch.clone();
+        mutated_signature.signature = base64url_encode_v1(&[1_u8; 64]);
+        assert!(
+            require_r6_operator_proof_launch_digest_v1(&proof, &mutated_signature).is_err(),
+            "a proof for the admitted launch cannot be reused with a mutated signature"
+        );
+
+        let mut mutated_digest = proof.clone();
+        mutated_digest.operator_launch_sha256 = "4".repeat(64);
+        assert!(
+            require_r6_operator_proof_launch_digest_v1(&mutated_digest, &launch).is_err(),
+            "a mutated launch digest cannot produce host-admissible proof evidence"
+        );
     }
 }

@@ -52,25 +52,35 @@ if 'case "${TAG}" in' not in wrapper or '        *) printf' not in wrapper:
     fail('wrapper does not reject an unlisted tag')
 for text in ('"current_anchor_counter"', 'set(request) != required'):
     require('wrapper', text)
+wrapper_tags = re.findall(r'^\s*(stage_one_create|post_pm_action)\)\s+invoke_mac_lifecycle_control_v1', wrapper, re.MULTILINE)
+if sorted(set(wrapper_tags)) != ['post_pm_action', 'stage_one_create'] \
+        or 'guest_pairing_data_session' in wrapper \
+        or 'guest_pairing_operator_tty_session' in wrapper:
+    fail('ordinary R5 wrapper exposes an R6 tag or more than its exact two branches')
 
-# Ordinary client XPC operations are fixed, while the direct bootstrap remains a separate FD3
-# exchange. Legacy generic bootstrap/publisher/pairing relays are fail-closed, not compatibility
-# operations.
+# Ordinary client XPC operations are fixed.  R6 moves the independent operator session
+# completely out of the public shell/XPC surface; only its data child has a typed relay.
 client = source['client']
 for text in ('submit_stage_one_absent_instance_create_v1',
              'submit_post_pm_managed_action_v1',
+             'submit_guest_pairing_data_session_v1',
              'open_mac_xpc_channel_v1',
              'attest_mac_publisher_response_v1',
              'libc::AF_UNIX', 'libc::SOCK_SEQPACKET', 'libc::FD_CLOEXEC',
              'canonical_publisher_bootstrap_authorization_v1',
              '"/usr/bin/sudo"', '--publisher-bootstrap-fd', '.arg("3")'):
     require('client', text)
-for legacy in ('"bootstrap-publisher"', '"submit-request"', '"issue-guest-ticket"', '"lima-action"'):
+for legacy in ('"bootstrap-publisher"', '"submit-request"', '"issue-guest-ticket"',
+               '"lima-action"', 'guest-pairing-operator-tty-session',
+               'with_terminal_v1', 'xpc_dictionary_set_fd'):
     if legacy in client:
-        fail(f'client retains generic legacy operation {legacy}')
+        fail(f'client retains generic or operator-terminal relay {legacy}')
 xpc_open = client[client.index('pub fn open_mac_xpc_channel_v1'):client.index('/// Verify the fixed publisher service')]
-if '"stage-one-create" | "post-pm-action"' not in xpc_open:
-    fail('client XPC operation decoder is not exactly two closed branches')
+for operation in ('"stage-one-create"', '"post-pm-action"', '"guest-pairing-data-session"'):
+    if operation not in xpc_open:
+        fail(f'client XPC operation decoder is missing fixed operation {operation}')
+if 'submit_closed_guest_pairing_session_v1' not in client:
+    fail('client has no typed closed R6 data relay helper')
 
 # Direct bootstrap dispatch occurs before stdin and the executor accepts only FD3 canonical bytes.
 control = source['control']
@@ -82,6 +92,23 @@ if 'submit_mapped_lifecycle_v1' in direct:
 require('control', 'deliver_retained_publisher_bootstrap_authorization_v1')
 require('control', 'read_exact_publisher_bootstrap_request_from_stdin_v1')
 require('control', 'parse_mac_publisher_bootstrap_request_v1')
+for text in ('guest-publisher-pairing-direct-interactive-v1',
+             'R6 pairing protocol tags are accepted only by the hidden direct-interactive path',
+             'issue_lima_guest_pairing_ticket_v1',
+             'advance_lima_guest_pairing_record_v1',
+             'display_guest_pairing_challenge_v1',
+             'GuestPublisherPairingOperatorLaunchV1',
+             'validate_guest_publisher_pairing_operator_launch_against_ticket_at_v1',
+             'direct duplicated /dev/tty', '--tty=true',
+             'guest-pairing-operator-tty-session-v1',
+             'DirectOperatorChildGuardV1'):
+    require('control', text)
+for forbidden in ('consume_lima_guest_pairing_ticket_v1', 'with_terminal_v1',
+                  'submit_guest_pairing_operator_tty_session_v1'):
+    if forbidden in control:
+        fail(f'control retains forbidden operator relay {forbidden}')
+if control.index('"guest-publisher-pairing-direct-interactive-v1" =>') > control.index('"submit-mapped-lifecycle-v1" =>'):
+    fail('R6 direct pairing is dispatched after ordinary mapped stdin')
 
 executor = source['executor']
 if executor.index('if operation == "--publisher-bootstrap-fd"') > executor.index('read_to_end(&mut input)'):
@@ -105,6 +132,23 @@ for text in ('consume_publisher_bootstrap_fd3_v1', 'getpeereid', 'LOCAL_PEERPID'
              'mac_measure_root_owned_immutable_lima_tool_v1',
              'limactl', 'EffectStarted', 'InstanceObserved', 'PreservingBlocked'):
     require('executor', text)
+for text in ('"guest-pairing-data-session"',
+             'execute_mac_guest_pairing_session_v1',
+             'issue_lima_guest_pairing_ticket_v1',
+             'advance_lima_guest_pairing_record_v1',
+             'open_pm_bound_guest_pairing_data_session_v1',
+             'mac_guest_pairing_record_account_v1',
+             'GuestPublisherPairingOperatorLaunchV1',
+             'GuestPublisherPairingOperatorProofV1',
+             'operator_proof_verified',
+             'operator_proof_accepted'):
+    require('executor', text)
+for forbidden in ('consume_lima_guest_pairing_ticket_v1',
+                  'open_pm_bound_guest_pairing_operator_tty_session_v1',
+                  'operator_tty_session.confirmation_commitment'):
+    if forbidden in executor:
+        fail(f'privileged executor retains forbidden R6 operator relay {forbidden}')
+require('executor', '"guest-pairing-data-session" => MappedLifecycleTagV1::GuestPairingDataSession')
 for text in ('MacPublisherBootstrapAttemptLocatorV1',
              'mac_open_or_allocate_bootstrap_attempt_locator_v1',
              'mac_reconstruct_bootstrap_authorization_from_locator_v1',
@@ -270,6 +314,57 @@ for text in ('MappedLifecycleTagV1', 'closed_mapped_mac_role_action_v1',
 for text in ('validate_mac_mapped_action_authority_v1', 'closed_mac_role_action_v1',
              'audit_token = mac_audit_token_ffi_v1(peer)?'):
     require('executor', text)
+for text in ('pairing_record_expected_generation_v1',
+             'fixed macOS XPC operation does not match its closed protocol tag',
+             'persist_r6_guest_pairing_record_transition_v1',
+             'validate_guest_publisher_bootstrap_hello_v1',
+             'validate_guest_publisher_bootstrap_transcript_v1',
+             '"ticket_consumed"',
+             'guest-anchor-accepted',
+             'R6_DATA_FRAME_TIMEOUT_V1',
+             'operator_proof_verified',
+             'validate_guest_publisher_pairing_operator_proof_against_ticket_at_v1',
+             'R6 data child exceeded its fixed frame deadline'):
+    require('executor', text)
+for forbidden in ('guest_state_root_prepared', 'confirmation_bound',
+                  'xpc_dictionary_get_fd', 'relay raw retained terminal input',
+                  'relay fixed R6 guest PTY output'):
+    if forbidden in executor:
+        fail(f'R6 executor retains forbidden relay/state {forbidden}')
+for forbidden in ('binding FD3 pipe', 'response FD4 pipe', 'host-confirmed'):
+    if forbidden in source['executor']:
+        fail(f'R6 executor retains forbidden {forbidden}')
+for text in ('pairing_record_expected_generation_v1',
+             'R6 pairing session expected record generation must be positive'):
+    require('managed', text)
+
+linux = (root / 'src/bin/substrate-lifecycle-linux.rs').read_text()
+for text in ('guest-pairing-data-session-v1', 'guest-pairing-operator-tty-session-v1',
+             'R6 data guest entrypoint accepts no caller-selected argument or selector',
+             'R6 operator TTY entrypoint accepts exactly one signed launch envelope',
+             'generic guest pairing commands are unreachable',
+             'run_pm_bound_guest_pairing_data_session_v1',
+             'run_pm_bound_guest_pairing_operator_tty_session_v1',
+             'read_r6_operator_tty_confirmation_commitment_v1',
+             'R6TerminalEchoGuardV1',
+             'require_r6_pm_bound_lima_guest_v1',
+             'require_current_guest_pairing_ticket_v1',
+             'R6_LIMA_STAGE_ONE_MARKER_PATH_V1',
+             'parse_r6_operator_launch_argument_v1',
+             'measure_r6_installed_guest_executor_v1',
+             'R6 running guest executor digest does not match the staged binding',
+             'persist_r6_guest_pairing_transcript_v1',
+             'prepare_r6_guest_publisher_anchor_v1',
+             'R6 data session received a substituted guest-anchor acknowledgement',
+             'validate_r6_operator_proof_before_intent_v1',
+             'GUEST_PAIRING_LITERAL_V1'):
+    if text not in linux:
+        fail(f'Linux guest R6 boundary is missing {text}')
+r6_start = linux.index('if command == "guest-pairing-data-session-v1"')
+r6_end = linux.index('let mut state_root:', r6_start)
+for forbidden in ('--state-root', '--tty-path', '--transport', '--ticket-file', '--transcript-file'):
+    if forbidden in linux[r6_start:r6_end]:
+        fail(f'R6 guest entrypoint accepts caller-selected {forbidden}')
 
 # Exact listed callers use no direct Lima primitive and select the correct tag without passing a
 # Stage-1 authorization on post-PM requests.

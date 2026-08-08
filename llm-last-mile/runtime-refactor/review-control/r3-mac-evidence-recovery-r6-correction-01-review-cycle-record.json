@@ -1,0 +1,54 @@
+{
+  "schema_version": 1,
+  "packet_id": "AUX-R3-MAC-EVIDENCE-RECOVERY-R6-CORRECTION-01",
+  "status": "complete",
+  "stop_reason": null,
+  "cycles": [
+    {
+      "cycle_id": "discovery-1",
+      "kind": "discovery",
+      "subject_fingerprint": "sha256:018791e14303b553d10286933aba6f911b41b3ad3247cf7bb3aa76092ff51462",
+      "trigger_cycle_id": null,
+      "trigger_finding_ids": [],
+      "causal_evidence_refs": [],
+      "review_refs": [
+        "llm-last-mile/runtime-refactor/review-control/r3-mac-evidence-recovery-r6-correction-01-review-authority-security.md",
+        "llm-last-mile/runtime-refactor/review-control/r3-mac-evidence-recovery-r6-correction-01-review-lifecycle-convergence.md",
+        "llm-last-mile/runtime-refactor/review-control/r3-mac-evidence-recovery-r6-correction-01-review-allowlist-evidence.md"
+      ],
+      "verdict": "findings",
+      "findings": [
+        {"finding_id": "P1-R6-CORR-EXPIRED-ACTIVE-REPLACEMENT", "priority": "P1"},
+        {"finding_id": "P1-R6-CORR-OPERATOR-FAILURE-NOT-DURABLE", "priority": "P1"},
+        {"finding_id": "P2-R6-CORR-PRIVATE-OPERATOR-TAG-ABSENT", "priority": "P2"},
+        {"finding_id": "P2-R6-CORR-EXECUTABLE-RECOVERY-PROOF", "priority": "P2"},
+        {"finding_id": "P1-R6-CORR-FRESH-ATTEMPT-EXPIRY", "priority": "P1"},
+        {"finding_id": "P1-R6-CORR-PROGRESSED-EXPIRY-PRESERVATION", "priority": "P1"},
+        {"finding_id": "P2-R6-CORR-THIRD-SESSION-PROOF", "priority": "P2"}
+      ]
+    },
+    {
+      "cycle_id": "closure-1",
+      "kind": "closure",
+      "subject_fingerprint": "sha256:6333a3f395b164ad484f31ad64786cb81a3ca47a0394be16bc6ee904cfdb89ce",
+      "trigger_cycle_id": "discovery-1",
+      "trigger_finding_ids": [
+        "P1-R6-CORR-EXPIRED-ACTIVE-REPLACEMENT",
+        "P1-R6-CORR-OPERATOR-FAILURE-NOT-DURABLE",
+        "P2-R6-CORR-PRIVATE-OPERATOR-TAG-ABSENT",
+        "P2-R6-CORR-EXECUTABLE-RECOVERY-PROOF",
+        "P1-R6-CORR-FRESH-ATTEMPT-EXPIRY",
+        "P1-R6-CORR-PROGRESSED-EXPIRY-PRESERVATION",
+        "P2-R6-CORR-THIRD-SESSION-PROOF"
+      ],
+      "causal_evidence_refs": [],
+      "review_refs": [
+        "llm-last-mile/runtime-refactor/review-control/r3-mac-evidence-recovery-r6-correction-01-review-authority-security.md",
+        "llm-last-mile/runtime-refactor/review-control/r3-mac-evidence-recovery-r6-correction-01-review-lifecycle-convergence.md",
+        "llm-last-mile/runtime-refactor/review-control/r3-mac-evidence-recovery-r6-correction-01-review-allowlist-evidence.md"
+      ],
+      "verdict": "clean",
+      "findings": []
+    }
+  ]
+}

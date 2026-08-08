@@ -22,7 +22,7 @@ use substrate_common::{
 };
 use transport_api_types::InstallBootstrapContextCarrierV1;
 
-use super::ManagedLifecycleControlRequestV1;
+use super::{ManagedLifecycleControlRequestV1, MappedLifecycleTagV1};
 const MAC_MACH_SERVICE_V1: &str = "com.substrate.lifecycle.publisher.v1";
 #[cfg(target_os = "macos")]
 const MAC_BOOTSTRAP_PROVENANCE_PATH_V1: &str =
@@ -57,6 +57,31 @@ pub fn submit_post_pm_managed_action_v1(
     let response = open_mac_xpc_channel_v1("post-pm-action", &bytes)?;
     attest_mac_publisher_response_v1(&response)?;
     serde_json::from_slice(&response).context("decode macOS post-PM mapped response")
+}
+
+/// Relay the only R6 ticket/frame-bearing child through its fixed XPC operation.
+pub fn submit_guest_pairing_data_session_v1(
+    request: &ManagedLifecycleControlRequestV1,
+) -> Result<Value> {
+    submit_closed_guest_pairing_session_v1(
+        request,
+        MappedLifecycleTagV1::GuestPairingDataSession,
+        "guest-pairing-data-session",
+    )
+}
+
+fn submit_closed_guest_pairing_session_v1(
+    request: &ManagedLifecycleControlRequestV1,
+    expected_tag: MappedLifecycleTagV1,
+    operation: &str,
+) -> Result<Value> {
+    if request.tag.as_ref() != Some(&expected_tag) {
+        bail!("R6 fixed XPC pairing relay received the wrong protocol tag");
+    }
+    let bytes = serde_json::to_vec(request).context("encode closed R6 macOS pairing request")?;
+    let response = open_mac_xpc_channel_v1(operation, &bytes)?;
+    attest_mac_publisher_response_v1(&response)?;
+    serde_json::from_slice(&response).context("decode closed R6 macOS pairing response")
 }
 
 /// Derive the one nonserialized bootstrap authorization after terminal confirmation.
@@ -709,7 +734,10 @@ pub fn issue_guest_publisher_pairing_ticket_v1(
 /// No executable, socket, environment value, or transport can be supplied by the caller. The
 /// service validates the peer's code requirement before its handler accepts a publisher request.
 pub fn open_mac_xpc_channel_v1(operation: &str, request: &[u8]) -> Result<Vec<u8>> {
-    if !matches!(operation, "stage-one-create" | "post-pm-action") {
+    if !matches!(
+        operation,
+        "stage-one-create" | "post-pm-action" | "guest-pairing-data-session"
+    ) {
         bail!("unknown fixed macOS XPC publisher operation {operation}");
     }
     if request.is_empty() || request.len() > 1024 * 1024 {
