@@ -1,0 +1,41 @@
+{
+  "protocol": "codex.meta-authority-amendment.v1",
+  "amendment_id": "0037-r3-mac-aarch64-guest-build-toolchain-prep",
+  "orchestration_id": "substrate-a1-1d-5r3-mac-20260806-41f97e1c570d",
+  "issued_at_utc": "2026-08-08T04:20:35Z",
+  "scope": "AUX-R3-MAC-AARCH64-TOOLCHAIN-PREP",
+  "source_block": {
+    "evidence_id": "EVIDENCE:R3-MAC-IMP-01",
+    "attempt": 4,
+    "status": "BLOCKED_PLATFORM_HANDOFF_REQUIRED",
+    "receipt_path": "receipts/EVIDENCE-R3-MAC-IMP-01.attempt-4.blocked.json",
+    "verification_path": "receipts/EVIDENCE-R3-MAC-IMP-01.attempt-4.blocked.verification.json"
+  },
+  "task_binding": {
+    "thread_id": "019fdf7f-c7d6-7112-9cda-a05db972da7f",
+    "host_id": "local",
+    "worktree": "/Users/spensermcconnell/.codex/worktrees/fa11/substrate",
+    "dispatch_nonce": "d514db6915877692c799086ce6c96daad6bcd0417d87a1bdf9ba44c2c578da53"
+  },
+  "authorized_actions": [
+    "install the official aarch64-unknown-linux-gnu Rust standard-library target for the active Rust 1.89.0 toolchain",
+    "install one compatible aarch64 Linux GNU cross-link capability on this macOS host, preferring Homebrew Zig plus an external fixed aarch64-linux-gnu wrapper when no compatible cross GCC is already present",
+    "create toolchain wrappers and build outputs only outside repository checkouts",
+    "run the exact locked offline substrate-lifecycle-linux aarch64-unknown-linux-gnu build as a prerequisite proof",
+    "inspect the produced binary to prove Linux ELF64 AArch64 identity",
+    "retain the installed host build prerequisites for the immediately following official evidence retry"
+  ],
+  "prohibited_actions": [
+    "edit any repository checkout",
+    "edit Cargo manifests or repository Cargo configuration",
+    "run dev-install, code-signing, publisher bootstrap, guest pairing, lifecycle, intent, retirement, or official native evidence",
+    "mutate Lima, Keychain, launchd, known-hosts, product prefixes, or the sudoers sentinel",
+    "commit, push, publish, archive the task, dispatch a successor, or begin MAC-CLOSEOUT"
+  ],
+  "completion": {
+    "receipt_protocol": "codex.auxiliary-platform-prep-receipt.v1",
+    "return_thread_id": "019fd8c3-b12c-7e73-919f-898600ab0f64",
+    "return_host_id": "local",
+    "fresh_official_evidence_nonce_required": true
+  }
+}

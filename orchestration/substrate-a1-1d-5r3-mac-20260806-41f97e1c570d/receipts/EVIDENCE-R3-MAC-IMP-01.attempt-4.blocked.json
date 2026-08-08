@@ -1,0 +1,52 @@
+{
+  "protocol": "codex.top-level-evidence-receipt.v1",
+  "orchestration_id": "substrate-a1-1d-5r3-mac-20260806-41f97e1c570d",
+  "dispatch_nonce": "4469a78c46eb54658328a420ac888e93ffc60d53fe472b97def8f94ea2ef0225",
+  "evidence_id": "EVIDENCE:R3-MAC-IMP-01",
+  "status": "BLOCKED_PLATFORM_HANDOFF_REQUIRED",
+  "platform": "macos",
+  "evidence_task": {
+    "thread_id": "019fdf7f-c7d6-7112-9cda-a05db972da7f",
+    "host_id": "local"
+  },
+  "source": {
+    "publication_mode": "remote",
+    "commit": "3d6b2eb1b02b1a24a1e055d12e5cbdb9b0312774",
+    "tree": "d59cac92405f06024cfcde0a2c22a4cf1255c3d7",
+    "target_ref": "refs/heads/feat/internal-host-orchestrator-world-dispatch-bootstrap",
+    "live_remote": "3d6b2eb1b02b1a24a1e055d12e5cbdb9b0312774"
+  },
+  "environment": {
+    "host_id": "local",
+    "project_id": "local-b2016f8a311fef93149e42eaec4d704d",
+    "project_path": "/Users/spensermcconnell/__Active_Code/atomize-hq/substrate",
+    "os_version": "macOS 15.7.7 (arm64)",
+    "tool_versions": {
+      "rustc": "1.89.0",
+      "cargo": "1.89.0",
+      "limactl": "2.1.1",
+      "bash": "5.3.9",
+      "python": "3.9.6"
+    }
+  },
+  "evidence": {
+    "artifact_path": "/Users/spensermcconnell/.codex/evidence/substrate-a1-1d-5r3-mac-20260806-41f97e1c570d/EVIDENCE-R3-MAC-IMP-01/4469a78c46eb54658328a420ac888e93ffc60d53fe472b97def8f94ea2ef0225/artifact.json",
+    "artifact_sha256": "sha256:962e16a7334615d147ac58a4573e2947dcfdfcd266d38e4c72196961a31b20a8",
+    "gates": [
+      "canonical-ih-pm",
+      "external-guest-build-attempt",
+      "restoration-parity",
+      "source-remote-binding"
+    ],
+    "artifact_validation": "VALID"
+  },
+  "prohibited_actions_confirmed": true,
+  "checkout_unchanged": true,
+  "gated_successor": "AUTHORITY_REQUIRED:A1.1d-5R3-MAC-CLOSEOUT",
+  "blocker": {
+    "summary": "Required Linux guest executor build cannot proceed because the selected aarch64 Lima guest requires the absent aarch64-unknown-linux-gnu Rust target; no compatible aarch64 Linux cross linker is installed.",
+    "details": "The canonical exact-source external build ran cargo build --locked --offline --target aarch64-unknown-linux-gnu --bin substrate-lifecycle-linux and exited 101 with rustc E0463 for missing std/core. rustup target list --installed omits that target, rustc target-libdir is absent, and aarch64-unknown-linux-gnu-gcc, aarch64-linux-gnu-gcc, and zig are absent. This occurred before dev-install, signing, publisher bootstrap, guest pairing, lifecycle, intent, retirement, or any product mutation. Canonical IH/PM, Lima, sudo, source/remote, prefix, and baseline/restoration parity were reverified.",
+    "required_authority": "An authorized platform-prerequisite change must install aarch64-unknown-linux-gnu Rust standard-library support and a compatible aarch64 Linux linker/cross toolchain, followed by a fresh evidence nonce/attempt.",
+    "handoff_prompt": "On local macOS, provision the missing aarch64-unknown-linux-gnu Rust target and compatible linker under explicit platform authority; retain the protected sudoers sentinel unchanged; then dispatch a fresh EVIDENCE:R3-MAC-IMP-01 nonce to rerun the entire packet from source binding."
+  }
+}

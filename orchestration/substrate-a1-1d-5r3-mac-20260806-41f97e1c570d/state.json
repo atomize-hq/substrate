@@ -1,7 +1,7 @@
 {
   "protocol": "codex.top-level-orchestration-state.v1",
   "orchestration_id": "substrate-a1-1d-5r3-mac-20260806-41f97e1c570d",
-  "status": "EVIDENCE_RUNNING",
+  "status": "BLOCKED",
   "dispatch_authorized": true,
   "publication_mode": "remote",
   "remote": "origin",
@@ -37,43 +37,7 @@
     "host_id": "local"
   },
   "active_dispatch": null,
-  "active_evidence_dispatches": [
-    {
-      "evidence_id": "EVIDENCE:R3-MAC-IMP-01",
-      "attempt": 4,
-      "status": "RUNNING",
-      "platform": "macos",
-      "project_id": "local-b2016f8a311fef93149e42eaec4d704d",
-      "project_path": "/Users/spensermcconnell/__Active_Code/atomize-hq/substrate",
-      "host_id": "local",
-      "dispatch_nonce": "4469a78c46eb54658328a420ac888e93ffc60d53fe472b97def8f94ea2ef0225",
-      "thread_id": "019fdf7f-c7d6-7112-9cda-a05db972da7f",
-      "task_host_id": "local",
-      "task_worktree": "/Users/spensermcconnell/.codex/worktrees/fa11/substrate",
-      "source": {
-        "publication_mode": "remote",
-        "remote": "origin",
-        "target_ref": "refs/heads/feat/internal-host-orchestrator-world-dispatch-bootstrap",
-        "commit": "3d6b2eb1b02b1a24a1e055d12e5cbdb9b0312774",
-        "tree": "d59cac92405f06024cfcde0a2c22a4cf1255c3d7",
-        "live_remote": "3d6b2eb1b02b1a24a1e055d12e5cbdb9b0312774"
-      },
-      "authority_path": "increments/EVIDENCE-R3-MAC-IMP-01.attempt-4.continuation-authority.json",
-      "authority_sha256": "sha256:66aff7dda4815c5195cced67c6852c1204c454390ff03f5c44e140698f220902",
-      "binding_prompt_path": "increments/EVIDENCE-R3-MAC-IMP-01.attempt-4.continuation-prompt.md",
-      "binding_prompt_sha256": "sha256:3bdb60546255ef4e6ef45448964d9f9fa770b2c1bde94e29d8ada23b55e65952",
-      "task_archiving_authorized": false,
-      "worktree": "/Users/spensermcconnell/.codex/worktrees/fa11/substrate",
-      "model": "gpt-5.6-terra",
-      "reasoning": "xhigh",
-      "turn_id": "019fdf8e-7f07-7cb2-9f46-f90ae55f2a46",
-      "wait_cursor": "eef0a650-ca4c-4b37-a47e-a18ddf99807a:4",
-      "thread_status": "active",
-      "turn_status": "inProgress",
-      "delivery_path": "increments/EVIDENCE-R3-MAC-IMP-01.attempt-4.delivery.json",
-      "binding_sent_at_utc": "2026-08-08T04:08:29Z"
-    }
-  ],
+  "active_evidence_dispatches": [],
   "verified_evidence": [],
   "completed": [
     {
@@ -167,17 +131,14 @@
   "last_blocker": {
     "status": "BLOCKED_PLATFORM_HANDOFF_REQUIRED",
     "evidence_id": "EVIDENCE:R3-MAC-IMP-01",
-    "attempt": 3,
+    "attempt": 4,
     "thread_id": "019fdf7f-c7d6-7112-9cda-a05db972da7f",
     "host_id": "local",
-    "dispatch_nonce": "7c83b749b2360596d88553c24c52d89bdbfc7e2024170712b7d248e6b6ae31b7",
-    "receipt_path": "receipts/EVIDENCE-R3-MAC-IMP-01.attempt-3.blocked.json",
-    "verification_path": "receipts/EVIDENCE-R3-MAC-IMP-01.attempt-3.blocked.verification.json",
-    "artifact_path": "/Users/spensermcconnell/.codex/evidence/substrate-a1-1d-5r3-mac-20260806-41f97e1c570d/EVIDENCE-R3-MAC-IMP-01/7c83b749b2360596d88553c24c52d89bdbfc7e2024170712b7d248e6b6ae31b7/artifacts/r3-mac-imp-01-blocked-preflight.json",
-    "summary": "Host noninteractive sudo authorization expired or is unavailable; guest sudo and all read-only canonical preflight checks passed.",
-    "required_platform_action": "Refresh host sudo authorization so /usr/bin/sudo -n true succeeds for UID 501 without changing the evidence task's source checkout or sudoers sentinel.",
-    "fresh_nonce_required": true,
-    "same_task_may_resume": true,
+    "dispatch_nonce": "4469a78c46eb54658328a420ac888e93ffc60d53fe472b97def8f94ea2ef0225",
+    "receipt_path": "receipts/EVIDENCE-R3-MAC-IMP-01.attempt-4.blocked.json",
+    "verification_path": "receipts/EVIDENCE-R3-MAC-IMP-01.attempt-4.blocked.verification.json",
+    "artifact_path": "/Users/spensermcconnell/.codex/evidence/substrate-a1-1d-5r3-mac-20260806-41f97e1c570d/EVIDENCE-R3-MAC-IMP-01/4469a78c46eb54658328a420ac888e93ffc60d53fe472b97def8f94ea2ef0225/artifact.json",
+    "summary": "The exact aarch64 Linux guest executor build lacks its Rust standard-library target and a compatible cross linker on the macOS host.",
     "worktree": "/Users/spensermcconnell/.codex/worktrees/fa11/substrate",
     "worktree_preserved": true,
     "task_archived": false,
@@ -187,16 +148,12 @@
   "evidence_attempt": 4,
   "retry_authority": {
     "evidence_id": "EVIDENCE:R3-MAC-IMP-01",
-    "attempt": 4,
-    "dispatch_nonce": "4469a78c46eb54658328a420ac888e93ffc60d53fe472b97def8f94ea2ef0225",
-    "source_commit": "3d6b2eb1b02b1a24a1e055d12e5cbdb9b0312774",
-    "source_tree": "d59cac92405f06024cfcde0a2c22a4cf1255c3d7",
-    "host_sudo_noninteractive_verified": true,
-    "host_sudo_verified_at_utc": "2026-08-08T04:07:02Z",
-    "guest_sudo_must_be_reverified": true,
-    "agent_derives_ih_pm": true,
-    "agent_operates_real_terminal_and_guest_tty": true,
-    "additional_user_interaction_required": false
+    "completed_attempt": 4,
+    "next_attempt": 5,
+    "fresh_nonce_required": true,
+    "platform_prep_required": true,
+    "official_evidence_retry_held": true,
+    "task_archiving_authorized": false
   },
   "auxiliary_host_preparation": {
     "status": "BLOCKED_SOURCE_CORRECTION",
@@ -979,5 +936,28 @@
     "commit": "3d6b2eb1b02b1a24a1e055d12e5cbdb9b0312774",
     "tree": "d59cac92405f06024cfcde0a2c22a4cf1255c3d7",
     "verified_at_utc": "2026-08-08T03:51:11Z"
+  },
+  "auxiliary_platform_preparation": {
+    "status": "PENDING_DELIVERY",
+    "task_class": "general_auxiliary_platform_preparation",
+    "official_increment_or_evidence": false,
+    "packet": "AUX-R3-MAC-AARCH64-TOOLCHAIN-PREP",
+    "attempt": 1,
+    "dispatch_nonce": "d514db6915877692c799086ce6c96daad6bcd0417d87a1bdf9ba44c2c578da53",
+    "thread_id": "019fdf7f-c7d6-7112-9cda-a05db972da7f",
+    "host_id": "local",
+    "worktree": "/Users/spensermcconnell/.codex/worktrees/fa11/substrate",
+    "authority_amendment": "authority-amendments/0037-r3-mac-aarch64-guest-build-toolchain-prep.json",
+    "authority_amendment_sha256": "sha256:fe658f8e081e5cfe4e5a1ea0e97a4137bd09c59f0d3c872aebd176638a76054c",
+    "prompt_path": "increments/AUX-R3-MAC-AARCH64-TOOLCHAIN-PREP.attempt-1.prompt.md",
+    "prompt_sha256": "sha256:ff7105e026b4ae7f8c2ce022c01dd31535a667aa597845a42102f92d9f8d479c",
+    "source": {
+      "commit": "3d6b2eb1b02b1a24a1e055d12e5cbdb9b0312774",
+      "tree": "d59cac92405f06024cfcde0a2c22a4cf1255c3d7",
+      "target_ref": "refs/heads/feat/internal-host-orchestrator-world-dispatch-bootstrap",
+      "live_remote": "3d6b2eb1b02b1a24a1e055d12e5cbdb9b0312774"
+    },
+    "official_evidence_dispatch_allowed": false,
+    "task_archiving_authorized": false
   }
 }

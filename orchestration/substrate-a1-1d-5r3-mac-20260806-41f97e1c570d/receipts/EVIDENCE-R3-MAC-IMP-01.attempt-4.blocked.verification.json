@@ -1,0 +1,61 @@
+{
+  "protocol": "codex.top-level-evidence-block-verification.v1",
+  "orchestration_id": "substrate-a1-1d-5r3-mac-20260806-41f97e1c570d",
+  "evidence_id": "EVIDENCE:R3-MAC-IMP-01",
+  "attempt": 4,
+  "status": "BLOCKED_PLATFORM_HANDOFF_REQUIRED",
+  "verified": true,
+  "verified_at_utc": "2026-08-08T04:20:35Z",
+  "correlation": {
+    "dispatch_nonce": "4469a78c46eb54658328a420ac888e93ffc60d53fe472b97def8f94ea2ef0225",
+    "thread_id": "019fdf7f-c7d6-7112-9cda-a05db972da7f",
+    "host_id": "local",
+    "project_id": "local-b2016f8a311fef93149e42eaec4d704d",
+    "project_path": "/Users/spensermcconnell/__Active_Code/atomize-hq/substrate"
+  },
+  "terminal_barrier": {
+    "thread_status": "idle",
+    "turn_id": "019fdf8e-7f07-7cb2-9f46-f90ae55f2a46",
+    "turn_status": "completed",
+    "turn_error": null,
+    "cursor": "eef0a650-ca4c-4b37-a47e-a18ddf99807a:5"
+  },
+  "source": {
+    "commit": "3d6b2eb1b02b1a24a1e055d12e5cbdb9b0312774",
+    "tree": "d59cac92405f06024cfcde0a2c22a4cf1255c3d7",
+    "target_ref": "refs/heads/feat/internal-host-orchestrator-world-dispatch-bootstrap",
+    "live_remote": "3d6b2eb1b02b1a24a1e055d12e5cbdb9b0312774",
+    "evidence_worktree_clean": true,
+    "protected_checkout_clean": true
+  },
+  "receipt": {
+    "path": "receipts/EVIDENCE-R3-MAC-IMP-01.attempt-4.blocked.json",
+    "sha256": "sha256:597572734551eb796bbe72bf3997bb6b2ee3327b8f557f071e01dcc644b5ef5d",
+    "validator_result": "VALID evidence receipt EVIDENCE:R3-MAC-IMP-01 status=BLOCKED_PLATFORM_HANDOFF_REQUIRED"
+  },
+  "artifact": {
+    "path": "/Users/spensermcconnell/.codex/evidence/substrate-a1-1d-5r3-mac-20260806-41f97e1c570d/EVIDENCE-R3-MAC-IMP-01/4469a78c46eb54658328a420ac888e93ffc60d53fe472b97def8f94ea2ef0225/artifact.json",
+    "sha256": "sha256:962e16a7334615d147ac58a4573e2947dcfdfcd266d38e4c72196961a31b20a8",
+    "validator_result": "VALID",
+    "result_status": "BLOCKED_PLATFORM_HANDOFF_REQUIRED",
+    "restoration_exact": true,
+    "native_evidence_satisfied": false
+  },
+  "blocker_classification": {
+    "type": "missing_mac_host_cross_build_prerequisite",
+    "rust_target": "aarch64-unknown-linux-gnu",
+    "rust_target_installed": false,
+    "compatible_linker_installed": false,
+    "within_mac_evidence_corridor": true,
+    "product_source_correction_required": false
+  },
+  "disposition": {
+    "advance": false,
+    "mac_closeout_authorized": false,
+    "fresh_evidence_nonce_required_after_prep": true,
+    "same_task_may_perform_bounded_platform_prep": true,
+    "task_archived": false,
+    "worktree_preserved": true,
+    "worktree": "/Users/spensermcconnell/.codex/worktrees/fa11/substrate"
+  }
+}
