@@ -1,0 +1,42 @@
+{
+  "protocol": "codex.top-level-evidence-predispatch.v1",
+  "orchestration_id": "substrate-a1-1d-5r3-mac-20260806-41f97e1c570d",
+  "evidence_id": "EVIDENCE:R3-MAC-IMP-01",
+  "attempt": 5,
+  "verified_at_utc": "2026-08-08T12:08:17Z",
+  "source": {
+    "remote": "origin",
+    "target_ref": "refs/heads/feat/internal-host-orchestrator-world-dispatch-bootstrap",
+    "commit": "1126b907df6e38043e9071da222f6c6a377b341c",
+    "tree": "3a29fa323a8b9099d894c11d98cc085ecf4807c5",
+    "live_remote": "1126b907df6e38043e9071da222f6c6a377b341c",
+    "protected_checkout_clean": true
+  },
+  "host_sudo": {
+    "cache_invalidations": 2,
+    "command": "/usr/bin/sudo -k && /usr/bin/sudo -n true",
+    "status": "PASS",
+    "sentinel_path": "/etc/sudoers.d/substrate-r3-mac-evidence",
+    "sentinel_owner": "root",
+    "sentinel_group": "wheel",
+    "sentinel_mode": "0440",
+    "sentinel_sha256": "sha256:f4f85d5b2674a6505d84ee75de0a3cc8bc883bace01733bcab3b5fbd6efd4f0d",
+    "sentinel_rule": "spensermcconnell ALL=(ALL) NOPASSWD: ALL",
+    "durable_noninteractive_authorization_verified": true
+  },
+  "aarch64_guest_toolchain": {
+    "rust_toolchain": "1.89.0-aarch64-apple-darwin",
+    "rust_target": "aarch64-unknown-linux-gnu",
+    "target_libdir": "/Users/spensermcconnell/.rustup/toolchains/1.89.0-aarch64-apple-darwin/lib/rustlib/aarch64-unknown-linux-gnu/lib",
+    "zig_path": "/opt/homebrew/opt/zig/bin/zig",
+    "zig_version": "0.16.0",
+    "linker_wrapper": "/Users/spensermcconnell/.codex/evidence/substrate-a1-1d-5r3-mac-20260806-41f97e1c570d/AUX-R3-MAC-AARCH64-TOOLCHAIN-PREP/d514db6915877692c799086ce6c96daad6bcd0417d87a1bdf9ba44c2c578da53/linker/aarch64-linux-gnu-zig-cc",
+    "source_compile_correction_commit": "1126b907df6e38043e9071da222f6c6a377b341c"
+  },
+  "disposition": {
+    "official_evidence_attempt_5_dispatch_ready": true,
+    "fresh_nonce_required": true,
+    "user_interaction_required_during_evidence": false,
+    "sudoers_mutation_by_evidence_task_allowed": false
+  }
+}

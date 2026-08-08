@@ -1,7 +1,7 @@
 {
   "protocol": "codex.top-level-orchestration-state.v1",
   "orchestration_id": "substrate-a1-1d-5r3-mac-20260806-41f97e1c570d",
-  "status": "BLOCKED",
+  "status": "READY",
   "dispatch_authorized": true,
   "publication_mode": "remote",
   "remote": "origin",
@@ -141,15 +141,7 @@
       "source_host_id": "local"
     }
   ],
-  "last_blocker": {
-    "status": "BLOCKED_PLATFORM_HANDOFF_REQUIRED",
-    "packet": "EVIDENCE:R3-MAC-IMP-01-PREDISPATCH",
-    "evidence_id": "EVIDENCE:R3-MAC-IMP-01",
-    "next_attempt": 5,
-    "verification_path": "receipts/AUX-R3-MAC-AARCH64-GUEST-COMPILE-CORRECTION.verification.json",
-    "summary": "The source and AArch64 guest build closure are clean, but /usr/bin/sudo -n true currently requires a password; official evidence attempt 5 remains held until durable noninteractive host sudo is independently verified.",
-    "advance": false
-  },
+  "last_blocker": null,
   "current_authority_amendment": "authority-amendments/0038-r3-mac-aarch64-guest-compile-correction.json",
   "evidence_attempt": 4,
   "retry_authority": {
@@ -162,8 +154,9 @@
     "source_tree": "3a29fa323a8b9099d894c11d98cc085ecf4807c5",
     "host_sudo_noninteractive_required": true,
     "host_sudo_durable_nopasswd_required": true,
-    "host_sudo_verified": false,
-    "official_evidence_retry_held": true,
+    "host_sudo_verified": true,
+    "host_sudo_verification_path": "increments/EVIDENCE-R3-MAC-IMP-01.attempt-5.predispatch.json",
+    "official_evidence_retry_held": false,
     "task_archiving_authorized": false
   },
   "auxiliary_host_preparation": {
