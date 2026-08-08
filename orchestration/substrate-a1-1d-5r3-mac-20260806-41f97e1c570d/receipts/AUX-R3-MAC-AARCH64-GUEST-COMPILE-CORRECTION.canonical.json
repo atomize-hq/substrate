@@ -1,0 +1,76 @@
+{
+  "protocol": "codex.top-level-task-receipt.v1",
+  "orchestration_id": "substrate-a1-1d-5r3-mac-20260806-41f97e1c570d",
+  "dispatch_nonce": "7c15251a50d1f1f9326a43027c009ad73e003931ebb9bf6fe6f723eb07050f65",
+  "increment": "AUX-R3-MAC-AARCH64-GUEST-COMPILE-CORRECTION",
+  "packet_id": "AUX-R3-MAC-AARCH64-GUEST-COMPILE-CORRECTION",
+  "status": "LANDED_CLEAN",
+  "increment_task": {
+    "thread_id": "019fdfa4-ba96-70e0-b68d-1d0a4cf32a83",
+    "host_id": "local"
+  },
+  "expected_base": {
+    "commit": "3d6b2eb1b02b1a24a1e055d12e5cbdb9b0312774",
+    "tree": "d59cac92405f06024cfcde0a2c22a4cf1255c3d7"
+  },
+  "landed": {
+    "commit": "1126b907df6e38043e9071da222f6c6a377b341c",
+    "tree": "3a29fa323a8b9099d894c11d98cc085ecf4807c5",
+    "target_ref": "refs/heads/feat/internal-host-orchestrator-world-dispatch-bootstrap",
+    "live_remote": "1126b907df6e38043e9071da222f6c6a377b341c"
+  },
+  "changed_files": [
+    "llm-last-mile/runtime-refactor/review-control/r3-mac-aarch64-guest-compile-correction-review-allowlist-evidence.md",
+    "llm-last-mile/runtime-refactor/review-control/r3-mac-aarch64-guest-compile-correction-review-authority-security.md",
+    "llm-last-mile/runtime-refactor/review-control/r3-mac-aarch64-guest-compile-correction-review-cycle-record.json",
+    "llm-last-mile/runtime-refactor/review-control/r3-mac-aarch64-guest-compile-correction-review-lifecycle-convergence.md",
+    "src/bin/substrate-lifecycle-linux.rs",
+    "tests/mac/aarch64_guest_compile_r3.sh"
+  ],
+  "subject_fingerprint": "sha256:352cb9bb6961425847c8709f89b14adc633496aaacebe0040b0224878b9cef38",
+  "review": {
+    "packet_id": "AUX-R3-MAC-AARCH64-GUEST-COMPILE-CORRECTION",
+    "record_path": "/Users/spensermcconnell/.codex/worktrees/2f78/substrate/llm-last-mile/runtime-refactor/review-control/r3-mac-aarch64-guest-compile-correction-review-cycle-record.json",
+    "record_sha256": "sha256:83ec9c6a1670091cb3db18e3d56e91dfd5a3b6b3f5ff21f26812dc21a03e452c",
+    "validated": true,
+    "terminal": "CLEAN",
+    "p1": 0,
+    "p2": 0,
+    "p3_p4_disposition": "none"
+  },
+  "checks": {
+    "hydrated_skill_suite": "25 skills / 54 files / sha256:e3de93f358594033ed59696a9624d2d0ac2fd0c2aa7ddf4a532810a05b262282",
+    "impact_analysis": "GitNexus exact-worktree index unavailable; required impacts for open/openat/linkat and pre-commit detect_changes were attempted against substrate-current, then manual caller/callee, FFI ABI, cfg, execution-path, and full base-blob fallback found LOW contained risk",
+    "red_regression": "tests/mac/aarch64_guest_compile_r3.sh expect-base-failure archived exact base externally and reproduced exactly four E0308 diagnostics",
+    "target_check": "cargo check --locked --offline --target aarch64-unknown-linux-gnu --bin substrate-lifecycle-linux passed with external target directory and nonce-scoped linker wrapper",
+    "target_build": "cargo build --locked --offline --target aarch64-unknown-linux-gnu --bin substrate-lifecycle-linux passed with external target directory and explicit nonce-scoped linker wrapper",
+    "artifact": {
+      "path": "/var/folders/2x/5mqqp02j36v079m96nx8fjs00000gn/T/substrate-r3-mac-aarch64-proof.0ALtdm/target/aarch64-unknown-linux-gnu/debug/substrate-lifecycle-linux",
+      "format": "ELF 64-bit LSB pie executable, ARM aarch64, GNU/Linux",
+      "sha256": "49663dfc155a36c8e42b30f0e31f6677258b67f9920370b0f30c1d9aee4dfecf"
+    },
+    "focused_regression": "tests/mac/aarch64_guest_compile_r3.sh check passed",
+    "focused_r6_guest_entrypoint": "tests/mac/lifecycle_r3.sh passed",
+    "formatting": "cargo fmt --all -- --check passed",
+    "diff_check": "git diff --check and staged diff check passed",
+    "containment": "four corrected declaration fields only; all 1803 other base-tracked paths byte-identical; macOS-host and Windows/WSL product paths byte-identical",
+    "secret_scan": "changed-byte scan clean"
+  },
+  "change_detection": {
+    "gitnexus": "degraded: substrate-current absent from index registry; npx gitnexus analyze was not run because it could rewrite tracked AGENTS.md or CLAUDE.md",
+    "manual_fallback": "exact six-path allowlist, source normalization, whole-base blob comparison, changed-byte secret scan, and committed-path inventory passed",
+    "passed": true
+  },
+  "verification": {
+    "required_checks_passed": true,
+    "allowlist_passed": true,
+    "change_detection_passed": true,
+    "checkout_clean": true,
+    "ahead": 0,
+    "behind": 0,
+    "remote_before_publication": "3d6b2eb1b02b1a24a1e055d12e5cbdb9b0312774",
+    "remote_after_publication": "1126b907df6e38043e9071da222f6c6a377b341c",
+    "normal_fast_forward_push": true
+  },
+  "next_increment": "EVIDENCE:R3-MAC-IMP-01"
+}

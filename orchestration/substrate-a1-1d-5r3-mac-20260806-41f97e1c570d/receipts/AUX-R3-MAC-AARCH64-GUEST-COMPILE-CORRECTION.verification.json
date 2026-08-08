@@ -1,0 +1,65 @@
+{
+  "protocol": "codex.top-level-task-receipt-verification.v1",
+  "orchestration_id": "substrate-a1-1d-5r3-mac-20260806-41f97e1c570d",
+  "increment": "AUX-R3-MAC-AARCH64-GUEST-COMPILE-CORRECTION",
+  "verified_at_utc": "2026-08-08T04:59:46Z",
+  "raw_receipt_path": "receipts/AUX-R3-MAC-AARCH64-GUEST-COMPILE-CORRECTION.json",
+  "canonical_receipt_path": "receipts/AUX-R3-MAC-AARCH64-GUEST-COMPILE-CORRECTION.canonical.json",
+  "terminal_barrier": {
+    "thread_id": "019fdfa4-ba96-70e0-b68d-1d0a4cf32a83",
+    "host_id": "local",
+    "turn_id": "019fdfa7-c360-7413-b83e-d992495f4c37",
+    "status": "completed",
+    "thread_status": "idle",
+    "cursor": "09d2deac-230c-42d0-9957-94f004124fa0:3"
+  },
+  "independent_observation": {
+    "worktree": "/Users/spensermcconnell/.codex/worktrees/2f78/substrate",
+    "head": "1126b907df6e38043e9071da222f6c6a377b341c",
+    "head_tree": "3a29fa323a8b9099d894c11d98cc085ecf4807c5",
+    "index_tree": "3a29fa323a8b9099d894c11d98cc085ecf4807c5",
+    "live_remote": "1126b907df6e38043e9071da222f6c6a377b341c",
+    "direct_parent": "3d6b2eb1b02b1a24a1e055d12e5cbdb9b0312774",
+    "staged_paths": 0,
+    "status_entry_count": 0,
+    "changed_files": [
+      "llm-last-mile/runtime-refactor/review-control/r3-mac-aarch64-guest-compile-correction-review-allowlist-evidence.md",
+      "llm-last-mile/runtime-refactor/review-control/r3-mac-aarch64-guest-compile-correction-review-authority-security.md",
+      "llm-last-mile/runtime-refactor/review-control/r3-mac-aarch64-guest-compile-correction-review-cycle-record.json",
+      "llm-last-mile/runtime-refactor/review-control/r3-mac-aarch64-guest-compile-correction-review-lifecycle-convergence.md",
+      "src/bin/substrate-lifecycle-linux.rs",
+      "tests/mac/aarch64_guest_compile_r3.sh"
+    ],
+    "protected_checkout_clean": true,
+    "remote_divergence": "0/0"
+  },
+  "proof": {
+    "subject_fingerprint_verified": "sha256:352cb9bb6961425847c8709f89b14adc633496aaacebe0040b0224878b9cef38",
+    "review_record_sha256_verified": "sha256:83ec9c6a1670091cb3db18e3d56e91dfd5a3b6b3f5ff21f26812dc21a03e452c",
+    "review_record_validator": "VALID",
+    "review_terminal": "CLEAN",
+    "open_p1": 0,
+    "open_p2": 0,
+    "commit_tree_verified": true,
+    "fast_forward_direct_parent_verified": true,
+    "exact_changed_file_inventory_verified": true,
+    "next_increment_verified": "EVIDENCE:R3-MAC-IMP-01"
+  },
+  "predispatch_platform_gate": {
+    "host_sudo_noninteractive": false,
+    "command": "/usr/bin/sudo -n true",
+    "exit_status": 1,
+    "stderr": "sudo: a password is required",
+    "evidence_attempt_5_held": true
+  },
+  "disposition": {
+    "verdict": "VERIFIED_LANDED_CLEAN",
+    "source_correction_satisfied": true,
+    "official_evidence_ready": false,
+    "remaining_blocker": "durable host noninteractive sudo authorization",
+    "task_archived": false,
+    "task_worktree_preserved": true
+  },
+  "raw_receipt_sha256": "sha256:d4f9ec800c2b6d892fdc6aad7d37a4289f326ac853df1d871adf4360847db7f6",
+  "canonical_receipt_sha256": "sha256:d4f9ec800c2b6d892fdc6aad7d37a4289f326ac853df1d871adf4360847db7f6"
+}

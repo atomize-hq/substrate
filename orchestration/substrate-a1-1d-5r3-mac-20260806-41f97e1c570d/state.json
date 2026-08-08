@@ -17,20 +17,21 @@
     "AUX-R3-MAC-EVIDENCE-RECOVERY-R4",
     "AUX-R3-MAC-EVIDENCE-RECOVERY-R5",
     "AUX-R3-MAC-EVIDENCE-RECOVERY-R6",
+    "AUX-R3-MAC-AARCH64-GUEST-COMPILE-CORRECTION",
     "A1.1d-5R3-MAC-CLOSEOUT"
   ],
   "required_evidence": [
     {
       "evidence_id": "EVIDENCE:R3-MAC-IMP-01",
       "platform": "macos",
-      "after_increment": "AUX-R3-MAC-EVIDENCE-RECOVERY-R6",
+      "after_increment": "AUX-R3-MAC-AARCH64-GUEST-COMPILE-CORRECTION",
       "before_increment": "A1.1d-5R3-MAC-CLOSEOUT"
     }
   ],
-  "cursor": 8,
+  "cursor": 9,
   "expected_base": {
-    "commit": "3d6b2eb1b02b1a24a1e055d12e5cbdb9b0312774",
-    "tree": "d59cac92405f06024cfcde0a2c22a4cf1255c3d7"
+    "commit": "1126b907df6e38043e9071da222f6c6a377b341c",
+    "tree": "3a29fa323a8b9099d894c11d98cc085ecf4807c5"
   },
   "meta": {
     "thread_id": "019fd8c3-b12c-7e73-919f-898600ab0f64",
@@ -126,26 +127,42 @@
       "verification_path": "receipts/AUX-R3-MAC-EVIDENCE-RECOVERY-R6.verification.json",
       "source_thread_id": "019fded7-05c4-7c61-9f7d-5fc456bcda6d",
       "source_host_id": "local"
+    },
+    {
+      "increment": "AUX-R3-MAC-AARCH64-GUEST-COMPILE-CORRECTION",
+      "packet_id": "AUX-R3-MAC-AARCH64-GUEST-COMPILE-CORRECTION",
+      "commit": "1126b907df6e38043e9071da222f6c6a377b341c",
+      "tree": "3a29fa323a8b9099d894c11d98cc085ecf4807c5",
+      "receipt_status": "LANDED_CLEAN",
+      "receipt_path": "receipts/AUX-R3-MAC-AARCH64-GUEST-COMPILE-CORRECTION.json",
+      "canonical_receipt_path": "receipts/AUX-R3-MAC-AARCH64-GUEST-COMPILE-CORRECTION.canonical.json",
+      "verification_path": "receipts/AUX-R3-MAC-AARCH64-GUEST-COMPILE-CORRECTION.verification.json",
+      "source_thread_id": "019fdfa4-ba96-70e0-b68d-1d0a4cf32a83",
+      "source_host_id": "local"
     }
   ],
   "last_blocker": {
-    "status": "BLOCKED_SOURCE_COMPILE_CLOSURE",
-    "packet": "AUX-R3-MAC-AARCH64-TOOLCHAIN-PREP",
+    "status": "BLOCKED_PLATFORM_HANDOFF_REQUIRED",
+    "packet": "EVIDENCE:R3-MAC-IMP-01-PREDISPATCH",
     "evidence_id": "EVIDENCE:R3-MAC-IMP-01",
-    "attempt": 4,
-    "receipt_path": "receipts/AUX-R3-MAC-AARCH64-TOOLCHAIN-PREP.attempt-1.blocked.json",
-    "verification_path": "receipts/AUX-R3-MAC-AARCH64-TOOLCHAIN-PREP.attempt-1.blocked.verification.json",
-    "summary": "The required Rust target and linker are ready, but the exact aarch64 Linux guest executor source fails four target-dependent C char pointer type checks.",
+    "next_attempt": 5,
+    "verification_path": "receipts/AUX-R3-MAC-AARCH64-GUEST-COMPILE-CORRECTION.verification.json",
+    "summary": "The source and AArch64 guest build closure are clean, but /usr/bin/sudo -n true currently requires a password; official evidence attempt 5 remains held until durable noninteractive host sudo is independently verified.",
     "advance": false
   },
-  "current_authority_amendment": "authority-amendments/0036-r6-direct-tty-proof-retry-correction.json",
+  "current_authority_amendment": "authority-amendments/0038-r3-mac-aarch64-guest-compile-correction.json",
   "evidence_attempt": 4,
   "retry_authority": {
     "evidence_id": "EVIDENCE:R3-MAC-IMP-01",
     "completed_attempt": 4,
     "next_attempt": 5,
     "fresh_nonce_required": true,
-    "source_correction_required": true,
+    "source_correction_required": false,
+    "source_commit": "1126b907df6e38043e9071da222f6c6a377b341c",
+    "source_tree": "3a29fa323a8b9099d894c11d98cc085ecf4807c5",
+    "host_sudo_noninteractive_required": true,
+    "host_sudo_durable_nopasswd_required": true,
+    "host_sudo_verified": false,
     "official_evidence_retry_held": true,
     "task_archiving_authorized": false
   },
@@ -921,15 +938,15 @@
     "cross_platform_remediation_authorized": false
   },
   "last_verified_receipt": {
-    "increment": "AUX-R3-MAC-EVIDENCE-RECOVERY-R6",
-    "packet_id": "AUX-R3-MAC-EVIDENCE-RECOVERY-R6-CORRECTION-01",
+    "increment": "AUX-R3-MAC-AARCH64-GUEST-COMPILE-CORRECTION",
+    "packet_id": "AUX-R3-MAC-AARCH64-GUEST-COMPILE-CORRECTION",
     "status": "LANDED_CLEAN",
-    "receipt_path": "receipts/AUX-R3-MAC-EVIDENCE-RECOVERY-R6.json",
-    "canonical_receipt_path": "receipts/AUX-R3-MAC-EVIDENCE-RECOVERY-R6.canonical.json",
-    "verification_path": "receipts/AUX-R3-MAC-EVIDENCE-RECOVERY-R6.verification.json",
-    "commit": "3d6b2eb1b02b1a24a1e055d12e5cbdb9b0312774",
-    "tree": "d59cac92405f06024cfcde0a2c22a4cf1255c3d7",
-    "verified_at_utc": "2026-08-08T03:51:11Z"
+    "receipt_path": "receipts/AUX-R3-MAC-AARCH64-GUEST-COMPILE-CORRECTION.json",
+    "canonical_receipt_path": "receipts/AUX-R3-MAC-AARCH64-GUEST-COMPILE-CORRECTION.canonical.json",
+    "verification_path": "receipts/AUX-R3-MAC-AARCH64-GUEST-COMPILE-CORRECTION.verification.json",
+    "commit": "1126b907df6e38043e9071da222f6c6a377b341c",
+    "tree": "3a29fa323a8b9099d894c11d98cc085ecf4807c5",
+    "verified_at_utc": "2026-08-08T04:59:46Z"
   },
   "auxiliary_platform_preparation": {
     "status": "BLOCKED_SOURCE_COMPILE_CLOSURE",
@@ -965,7 +982,7 @@
     "linker_installed": true
   },
   "auxiliary_guest_compile_correction": {
-    "status": "RUNNING",
+    "status": "LANDED_CLEAN",
     "packet": "AUX-R3-MAC-AARCH64-GUEST-COMPILE-CORRECTION",
     "dispatch_nonce": "7c15251a50d1f1f9326a43027c009ad73e003931ebb9bf6fe6f723eb07050f65",
     "authority_amendment": "authority-amendments/0038-r3-mac-aarch64-guest-compile-correction.json",
@@ -998,9 +1015,20 @@
     "created_at_utc": "2026-08-08T04:35:14Z",
     "delivery_path": "increments/AUX-R3-MAC-AARCH64-GUEST-COMPILE-CORRECTION.delivery.json",
     "turn_id": "019fdfa7-c360-7413-b83e-d992495f4c37",
-    "wait_cursor": "09d2deac-230c-42d0-9957-94f004124fa0:2",
-    "thread_status": "active",
-    "turn_status": "inProgress",
-    "binding_sent_at_utc": "2026-08-08T04:36:11Z"
+    "wait_cursor": "09d2deac-230c-42d0-9957-94f004124fa0:3",
+    "thread_status": "idle",
+    "turn_status": "completed",
+    "binding_sent_at_utc": "2026-08-08T04:36:11Z",
+    "receipt_path": "receipts/AUX-R3-MAC-AARCH64-GUEST-COMPILE-CORRECTION.json",
+    "canonical_receipt_path": "receipts/AUX-R3-MAC-AARCH64-GUEST-COMPILE-CORRECTION.canonical.json",
+    "verification_path": "receipts/AUX-R3-MAC-AARCH64-GUEST-COMPILE-CORRECTION.verification.json",
+    "landed": {
+      "commit": "1126b907df6e38043e9071da222f6c6a377b341c",
+      "tree": "3a29fa323a8b9099d894c11d98cc085ecf4807c5",
+      "live_remote": "1126b907df6e38043e9071da222f6c6a377b341c"
+    },
+    "subject_fingerprint": "sha256:352cb9bb6961425847c8709f89b14adc633496aaacebe0040b0224878b9cef38",
+    "review_record_sha256": "sha256:83ec9c6a1670091cb3db18e3d56e91dfd5a3b6b3f5ff21f26812dc21a03e452c",
+    "verified_at_utc": "2026-08-08T04:59:46Z"
   }
 }
