@@ -1,0 +1,53 @@
+{
+  "protocol": "codex.meta-task-receipt-verification.v1",
+  "orchestration_id": "substrate-a1-1d-5r3-mac-20260806-41f97e1c570d",
+  "increment": "AUX-R3-MAC-PRESTAGE-EVIDENCE-BLOCKER-CORRECTION",
+  "receipt_path": "receipts/AUX-R3-MAC-PRESTAGE-EVIDENCE-BLOCKER-CORRECTION.blocked.json",
+  "receipt_sha256": "sha256:146a79c2fea7f2519e657a7fdd3f9e480a519eda08650865813ef03282fa2fce",
+  "receipt_status": "BLOCKED_CONTRADICTION",
+  "receipt_identity_matches_dispatch": true,
+  "source_binding": {
+    "head": "a06b3fd26ceee4ece7e5bd1481981755eafcedb5",
+    "tree": "f4c396d0e28a43405a9a2b1d49a450d6df545c84",
+    "live_remote": "a06b3fd26ceee4ece7e5bd1481981755eafcedb5",
+    "exact": true
+  },
+  "preserved_task_worktree": {
+    "path": "/Users/spensermcconnell/.codex/worktrees/2f78/substrate",
+    "tracked_changes": 0,
+    "untracked_paths": [
+      "tests/mac/prestage_artifact_route_r3.sh"
+    ],
+    "untracked_sha256": {
+      "tests/mac/prestage_artifact_route_r3.sh": "sha256:8b9a06fd7f71568034d8ef9054c2a1384bdbe19e6b04cebbda51a94462784013"
+    },
+    "production_edits": false,
+    "commit_or_push": false,
+    "native_or_evidence_actions": false
+  },
+  "independent_source_verification": {
+    "stage_one_response_kind": "exhaustive closed future-action catalogue",
+    "issuer_requires_preexisting_typed_seed_selection": true,
+    "catalogue_contains_instance_actions": [
+      "Start",
+      "Stop",
+      "Remove",
+      "Restore"
+    ],
+    "wrapper_selects_exactly_one_request_by_seed": true,
+    "canonical_installer_supplies_seed": false,
+    "execute_all_is_safe_install_sequence": false
+  },
+  "blocker_classification": "Stage-1 exhaustive-catalogue versus executable-install-sequence authority contradiction",
+  "adjudication": "VALID_BLOCKED; a new narrowly scoped authority decision must define an authenticated closed non-caller-selected install sequence or an explicitly authorized selector/issuer change. Evidence attempt 10 remains held.",
+  "advance": false,
+  "thread_terminal": {
+    "thread_id": "019fdfa4-ba96-70e0-b68d-1d0a4cf32a83",
+    "host_id": "local",
+    "turn_id": "019fe221-4928-7e31-9543-5a7d168da19d",
+    "wait_cursor": "09d2deac-230c-42d0-9957-94f004124fa0:92",
+    "thread_status": "idle",
+    "turn_status": "completed"
+  },
+  "verified_at_utc": "2026-08-08T16:18:18Z"
+}

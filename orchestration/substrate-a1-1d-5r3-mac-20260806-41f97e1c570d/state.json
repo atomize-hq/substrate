@@ -1,7 +1,7 @@
 {
   "protocol": "codex.top-level-orchestration-state.v1",
   "orchestration_id": "substrate-a1-1d-5r3-mac-20260806-41f97e1c570d",
-  "status": "RUNNING",
+  "status": "BLOCKED",
   "dispatch_authorized": true,
   "publication_mode": "remote",
   "remote": "origin",
@@ -39,22 +39,7 @@
     "thread_id": "019fd8c3-b12c-7e73-919f-898600ab0f64",
     "host_id": "local"
   },
-  "active_dispatch": {
-    "increment": "AUX-R3-MAC-PRESTAGE-EVIDENCE-BLOCKER-CORRECTION",
-    "packet_id": "AUX-R3-MAC-PRESTAGE-EVIDENCE-BLOCKER-CORRECTION",
-    "thread_id": "019fdfa4-ba96-70e0-b68d-1d0a4cf32a83",
-    "host_id": "local",
-    "worktree": "/Users/spensermcconnell/.codex/worktrees/2f78/substrate",
-    "dispatch_nonce": "0ae5e61c6cd21581afb861057bcd9789273e9f81926616716cee809006cec58d",
-    "expected_base": {
-      "commit": "a06b3fd26ceee4ece7e5bd1481981755eafcedb5",
-      "tree": "f4c396d0e28a43405a9a2b1d49a450d6df545c84",
-      "target_ref": "refs/heads/feat/internal-host-orchestrator-world-dispatch-bootstrap",
-      "live_remote": "a06b3fd26ceee4ece7e5bd1481981755eafcedb5"
-    },
-    "publication_mode": "remote",
-    "next_increment": "EVIDENCE:R3-MAC-IMP-01"
-  },
+  "active_dispatch": null,
   "active_evidence_dispatches": [],
   "verified_evidence": [],
   "completed": [
@@ -170,13 +155,14 @@
     }
   ],
   "last_blocker": {
-    "status": "BLOCKED_PLATFORM_HANDOFF_REQUIRED",
-    "evidence_id": "EVIDENCE:R3-MAC-IMP-01",
-    "attempt": 9,
-    "summary": "The canonical source has no authorized manifest-bound route to stage the five required retained Linux artifacts before Stage-1.",
-    "receipt_path": "receipts/EVIDENCE-R3-MAC-IMP-01.attempt-9.blocked.json",
-    "verification_path": "receipts/EVIDENCE-R3-MAC-IMP-01.attempt-9.blocked.verification.json",
-    "required_authority": "A narrow reviewed MAC-only source correction for canonical pre-Stage-1 Linux artifact staging, then a fresh evidence attempt.",
+    "status": "BLOCKED_CONTRADICTION",
+    "increment": "AUX-R3-MAC-PRESTAGE-EVIDENCE-BLOCKER-CORRECTION",
+    "summary": "The Stage-1 response is an exhaustive future-action catalogue, not a safe executable installation sequence; the only landed selector is caller-seeded and the installer has no authorized seed.",
+    "receipt_path": "receipts/AUX-R3-MAC-PRESTAGE-EVIDENCE-BLOCKER-CORRECTION.blocked.json",
+    "receipt_sha256": "sha256:146a79c2fea7f2519e657a7fdd3f9e480a519eda08650865813ef03282fa2fce",
+    "verification_path": "receipts/AUX-R3-MAC-PRESTAGE-EVIDENCE-BLOCKER-CORRECTION.blocked.verification.json",
+    "verification_sha256": "sha256:e3a35cd9220ffdaa3fa520c6f26c9c96f8774e42178e71b51b175c39b8f72bcf",
+    "required_authority": "Define an authenticated closed non-caller-selected installation post-PM sequence, or explicitly authorize a different R5/R6-compatible selector/issuer change, including its exact action set, ordering, retry law, and review fence.",
     "advance": false
   },
   "current_authority_amendment": "authority-amendments/0046-r3-mac-prestage-evidence-blocker-correction.json",
@@ -323,7 +309,8 @@
     "attempt_9_receipt_path": "receipts/EVIDENCE-R3-MAC-IMP-01.attempt-9.blocked.json",
     "attempt_9_receipt_sha256": "sha256:8205c07fc87ce3dd71cced0db10939941fa273f384e4918604fe68fb3d7feb96",
     "attempt_9_verification_path": "receipts/EVIDENCE-R3-MAC-IMP-01.attempt-9.blocked.verification.json",
-    "attempt_9_verification_sha256": "sha256:ce183950dc1187953580aa90356acc9e7e8b191eb93cd4fe87f6cf436d970f94"
+    "attempt_9_verification_sha256": "sha256:ce183950dc1187953580aa90356acc9e7e8b191eb93cd4fe87f6cf436d970f94",
+    "prestage_install_sequence_authority_required": true
   },
   "auxiliary_host_preparation": {
     "status": "BLOCKED_SOURCE_CORRECTION",
@@ -1229,13 +1216,14 @@
   },
   "active_evidence": null,
   "blocker": {
-    "status": "BLOCKED_PLATFORM_HANDOFF_REQUIRED",
-    "evidence_id": "EVIDENCE:R3-MAC-IMP-01",
-    "attempt": 9,
-    "summary": "The canonical source has no authorized manifest-bound route to stage the five required retained Linux artifacts before Stage-1.",
-    "receipt_path": "receipts/EVIDENCE-R3-MAC-IMP-01.attempt-9.blocked.json",
-    "verification_path": "receipts/EVIDENCE-R3-MAC-IMP-01.attempt-9.blocked.verification.json",
-    "required_authority": "A narrow reviewed MAC-only source correction for canonical pre-Stage-1 Linux artifact staging, then a fresh evidence attempt.",
+    "status": "BLOCKED_CONTRADICTION",
+    "increment": "AUX-R3-MAC-PRESTAGE-EVIDENCE-BLOCKER-CORRECTION",
+    "summary": "The Stage-1 response is an exhaustive future-action catalogue, not a safe executable installation sequence; the only landed selector is caller-seeded and the installer has no authorized seed.",
+    "receipt_path": "receipts/AUX-R3-MAC-PRESTAGE-EVIDENCE-BLOCKER-CORRECTION.blocked.json",
+    "receipt_sha256": "sha256:146a79c2fea7f2519e657a7fdd3f9e480a519eda08650865813ef03282fa2fce",
+    "verification_path": "receipts/AUX-R3-MAC-PRESTAGE-EVIDENCE-BLOCKER-CORRECTION.blocked.verification.json",
+    "verification_sha256": "sha256:e3a35cd9220ffdaa3fa520c6f26c9c96f8774e42178e71b51b175c39b8f72bcf",
+    "required_authority": "Define an authenticated closed non-caller-selected installation post-PM sequence, or explicitly authorize a different R5/R6-compatible selector/issuer change, including its exact action set, ordering, retry law, and review fence.",
     "advance": false
   },
   "evidence_attempt_history": [
@@ -1419,7 +1407,7 @@
     "decision_record_sha256": "sha256:999e12636a50a94bfc39fae9cd8d0397d902d5edaeb456e923f3d0a272505065"
   },
   "auxiliary_prestage_evidence_blocker_correction": {
-    "status": "RUNNING",
+    "status": "BLOCKED_CONTRADICTION",
     "packet_id": "AUX-R3-MAC-PRESTAGE-EVIDENCE-BLOCKER-CORRECTION",
     "thread_id": "019fdfa4-ba96-70e0-b68d-1d0a4cf32a83",
     "host_id": "local",
@@ -1444,8 +1432,22 @@
     "native_actions_authorized": false,
     "successor_dispatch_authorized": false,
     "turn_id": "019fe221-4928-7e31-9543-5a7d168da19d",
-    "wait_cursor": "09d2deac-230c-42d0-9957-94f004124fa0:58",
+    "wait_cursor": "09d2deac-230c-42d0-9957-94f004124fa0:92",
     "delivery_path": "increments/AUX-R3-MAC-PRESTAGE-EVIDENCE-BLOCKER-CORRECTION.delivery.json",
-    "dispatched_at_utc": "2026-08-08T16:07:50Z"
+    "dispatched_at_utc": "2026-08-08T16:07:50Z",
+    "terminal": true,
+    "thread_status": "idle",
+    "turn_status": "completed",
+    "receipt_path": "receipts/AUX-R3-MAC-PRESTAGE-EVIDENCE-BLOCKER-CORRECTION.blocked.json",
+    "receipt_sha256": "sha256:146a79c2fea7f2519e657a7fdd3f9e480a519eda08650865813ef03282fa2fce",
+    "verification_path": "receipts/AUX-R3-MAC-PRESTAGE-EVIDENCE-BLOCKER-CORRECTION.blocked.verification.json",
+    "verification_sha256": "sha256:e3a35cd9220ffdaa3fa520c6f26c9c96f8774e42178e71b51b175c39b8f72bcf",
+    "red_regression_path": "tests/mac/prestage_artifact_route_r3.sh",
+    "red_regression_sha256": "sha256:8b9a06fd7f71568034d8ef9054c2a1384bdbe19e6b04cebbda51a94462784013",
+    "production_edits": false,
+    "publication": false,
+    "native_actions": false,
+    "evidence_retry_dispatched": false,
+    "blocked_at_utc": "2026-08-08T16:18:18Z"
   }
 }

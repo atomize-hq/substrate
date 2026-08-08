@@ -1,0 +1,88 @@
+{
+  "protocol": "codex.top-level-task-receipt.v1",
+  "orchestration_id": "substrate-a1-1d-5r3-mac-20260806-41f97e1c570d",
+  "dispatch_nonce": "0ae5e61c6cd21581afb861057bcd9789273e9f81926616716cee809006cec58d",
+  "increment": "AUX-R3-MAC-PRESTAGE-EVIDENCE-BLOCKER-CORRECTION",
+  "status": "BLOCKED_CONTRADICTION",
+  "increment_task": {
+    "thread_id": "019fdfa4-ba96-70e0-b68d-1d0a4cf32a83",
+    "host_id": "local",
+    "worktree": "/Users/spensermcconnell/.codex/worktrees/2f78/substrate"
+  },
+  "expected_base": {
+    "remote": "origin",
+    "target_ref": "refs/heads/feat/internal-host-orchestrator-world-dispatch-bootstrap",
+    "commit": "a06b3fd26ceee4ece7e5bd1481981755eafcedb5",
+    "tree": "f4c396d0e28a43405a9a2b1d49a450d6df545c84",
+    "required_ancestor": "270f6e55e1a94b7e2f9b2667e605980d2e50579c"
+  },
+  "authority_inputs": {
+    "contract_sha256": "sha256:b3715b6f2ac2258afe10d903e64fa4b063238d44d640e1bd6d22a89730834e8a",
+    "amendment_sha256": "sha256:9e432e44743666a008086993eed505063999fa4573da6df1cc015e521f32aa77",
+    "non_selected_design_record_sha256": "sha256:999e12636a50a94bfc39fae9cd8d0397d902d5edaeb456e923f3d0a272505065",
+    "skill_suite": "25 skills / 54 files / sha256:e3de93f358594033ed59696a9624d2d0ac2fd0c2aa7ddf4a532810a05b262282"
+  },
+  "preflight": {
+    "head": "a06b3fd26ceee4ece7e5bd1481981755eafcedb5",
+    "tree": "f4c396d0e28a43405a9a2b1d49a450d6df545c84",
+    "live_remote": "a06b3fd26ceee4ece7e5bd1481981755eafcedb5",
+    "ancestor_verified": true,
+    "gitnexus": "degraded: exact task worktree was not indexed; no npx analysis was run because it could rewrite protected tracked agent-context files",
+    "manual_analysis": "completed exact caller/callee, cfg, manifest, receipt, retry, and platform tracing for the fixed artifact/Stage-1/post-PM closure"
+  },
+  "blocker": {
+    "summary": "The landed Stage-1 result is an exhaustive future-action catalogue, not an install execution sequence. The only existing wrapper mechanism intentionally selects exactly one returned request using a caller-provided pre-PM role/action/identity seed. The canonical installer has no such seed, and the contract forbids both a selector and a new action semantic.",
+    "evidence": [
+      {
+        "path": "src/bin/substrate-lifecycle-macos.rs",
+        "lines": "3313-3316",
+        "fact": "The issuer documentation states that the shell may select one returned opaque request only by equality with its pre-existing typed request seed."
+      },
+      {
+        "path": "src/bin/substrate-lifecycle-macos.rs",
+        "lines": "3350-3393",
+        "fact": "Every Stage-1 response includes mac.lima.instance Start, Stop, Remove, and Restore, then every allowed action for every closed post-PM role."
+      },
+      {
+        "path": "scripts/mac/lima-warm.sh",
+        "lines": "80-84,114-126,171-173",
+        "fact": "The current wrapper requires caller-supplied --publisher-request-v1 before mutation."
+      },
+      {
+        "path": "scripts/mac/lima-warm.sh",
+        "lines": "850-993",
+        "fact": "The response adoption code selects exactly one candidate by comparing it with that caller-provided seed and rejects absence or ambiguity."
+      },
+      {
+        "path": "scripts/substrate/dev-install-substrate.sh",
+        "fact": "The canonical macOS installer supplies neither a post-PM request seed nor an installation-specific action sequence."
+      }
+    ],
+    "unsafe_non_solution": "Executing all returned requests in order would issue Start, Stop, Remove, and Restore for the selected Lima instance before the guest-role rows. It is not an executable installation route; it is an unauthorized destructive lifecycle traversal.",
+    "contract_collision": "Contract item 7 requires execution of the returned list in canonical order but prohibits a request selector, action, role, generic scheduler, or new action semantic. Producing a safe subset would require precisely the prohibited selection/semantic authority.",
+    "required_authority": "A new narrowly scoped authority decision that defines an authenticated, closed, non-caller-selected installation post-PM sequence (or explicitly authorizes a different R5/R6-compatible selector/issuer change), with its exact action set, retry behavior, and review fence. The expansive non-selected bundle/Keychain/transport proposal remains out of scope.",
+    "handoff_prompt": "Preserve /Users/spensermcconnell/.codex/worktrees/2f78/substrate exactly as-is. Do not reset, clean, commit, push, run native actions, or dispatch evidence. Resume only under a new amendment that resolves the Stage-1 exhaustive-catalogue versus executable-install-sequence contradiction. Reuse the bound identity, reverify base/remote, and either authorize an exact signed install sequence or reject the corridor; do not infer a role/action selector."
+  },
+  "tdd": {
+    "red_regression_added": "tests/mac/prestage_artifact_route_r3.sh",
+    "red_command": "tests/mac/prestage_artifact_route_r3.sh",
+    "red_result": "exit 1: installer is missing required closed prestage route fragment: build_and_stage_mac_aarch64_lima_artifacts_v1()",
+    "no_production_edits": true
+  },
+  "preservation": {
+    "changed_files": [
+      "tests/mac/prestage_artifact_route_r3.sh"
+    ],
+    "changed_file_sha256": {
+      "tests/mac/prestage_artifact_route_r3.sh": "8b9a06fd7f71568034d8ef9054c2a1384bdbe19e6b04cebbda51a94462784013"
+    },
+    "commit_created": false,
+    "push_attempted": false,
+    "native_actions_run": false,
+    "evidence_run": false,
+    "worktree_clean": false,
+    "reason_not_clean": "authorized RED regression source is intentionally preserved for the continuation; no production byte was edited"
+  },
+  "next_increment": "EVIDENCE:R3-MAC-IMP-01",
+  "successor_dispatch": "prohibited pending new authority"
+}
