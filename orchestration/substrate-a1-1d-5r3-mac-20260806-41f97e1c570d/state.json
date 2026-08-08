@@ -965,7 +965,7 @@
     "linker_installed": true
   },
   "auxiliary_guest_compile_correction": {
-    "status": "PENDING_BINDING_DELIVERY",
+    "status": "RUNNING",
     "packet": "AUX-R3-MAC-AARCH64-GUEST-COMPILE-CORRECTION",
     "dispatch_nonce": "7c15251a50d1f1f9326a43027c009ad73e003931ebb9bf6fe6f723eb07050f65",
     "authority_amendment": "authority-amendments/0038-r3-mac-aarch64-guest-compile-correction.json",
@@ -995,6 +995,12 @@
     "skill_hydration_sha256": "e3de93f358594033ed59696a9624d2d0ac2fd0c2aa7ddf4a532810a05b262282",
     "initial_turn_id": "019fdfa4-bd66-74a0-a4c8-2189a29e9d9a",
     "initial_wait_cursor": "09d2deac-230c-42d0-9957-94f004124fa0:1",
-    "created_at_utc": "2026-08-08T04:35:14Z"
+    "created_at_utc": "2026-08-08T04:35:14Z",
+    "delivery_path": "increments/AUX-R3-MAC-AARCH64-GUEST-COMPILE-CORRECTION.delivery.json",
+    "turn_id": "019fdfa7-c360-7413-b83e-d992495f4c37",
+    "wait_cursor": "09d2deac-230c-42d0-9957-94f004124fa0:2",
+    "thread_status": "active",
+    "turn_status": "inProgress",
+    "binding_sent_at_utc": "2026-08-08T04:36:11Z"
   }
 }
