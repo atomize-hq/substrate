@@ -1310,6 +1310,13 @@
     "attached_mirror": "/Users/spensermcconnell/.codex/evidence/substrate-a1-1d-5r3-mac-20260806-41f97e1c570d/AUX-R3-MAC-EVIDENCE-PLATFORM-PREREQUISITE-PREP/11c27a5ee57be5b99a3c7457c4f511b14b5747ee4b2b0492874a416d5fab02a3/source/substrate",
     "evidence_checkout": "/Users/spensermcconnell/.codex/worktrees/1626/substrate",
     "task_archiving_authorized": false,
-    "prepared_at_utc": "2026-08-08T14:05:40Z"
+    "prepared_at_utc": "2026-08-08T14:05:40Z",
+    "delivery_path": "increments/AUX-R3-MAC-SOURCE-CHECKOUT-REFRESH.delivery.json",
+    "delivery_sha256": "sha256:b017918fe1ccea88107d913cb2ace031d55c6c1611f74b5d4352ba428af1b9a6",
+    "turn_id": "019fe1b2-0579-78f2-91d4-1fafe7ebd94f",
+    "wait_cursor": "48c07936-b6f1-47e2-93d3-faf543564a82:6",
+    "thread_status": "active",
+    "turn_status": "inProgress",
+    "sent_at_utc": "2026-08-08T14:06:25Z"
   }
 }
