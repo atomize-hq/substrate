@@ -1,0 +1,78 @@
+{
+  "protocol": "codex.meta-authority-amendment.v1",
+  "orchestration_id": "substrate-a1-1d-5r3-mac-20260806-41f97e1c570d",
+  "amendment_id": "0044-r3-mac-evidence-attempt-9-source-retry",
+  "issued_at_utc": "2026-08-08T14:10:38Z",
+  "applies_to": "EVIDENCE:R3-MAC-IMP-01 attempt-9",
+  "task_thread_id": "019fe162-c98c-7c82-94d0-155d6cab5122",
+  "task_host_id": "local",
+  "task_worktree": "/Users/spensermcconnell/.codex/worktrees/1626/substrate",
+  "dispatch_nonce": "12a0f9442772518e2d665f0b7ac3bf26f4ac38a5562ce97bb1eed98cf7eabf3b",
+  "source": {
+    "publication_mode": "remote",
+    "remote": "origin",
+    "target_ref": "refs/heads/feat/internal-host-orchestrator-world-dispatch-bootstrap",
+    "commit": "a06b3fd26ceee4ece7e5bd1481981755eafcedb5",
+    "tree": "f4c396d0e28a43405a9a2b1d49a450d6df545c84",
+    "live_remote": "a06b3fd26ceee4ece7e5bd1481981755eafcedb5"
+  },
+  "classification": "fresh official MAC evidence retry after reviewed source correction and verified checkout refresh",
+  "authority_basis": {
+    "standing_user_clean-successor_dispatch_authority": true,
+    "standing_user_blocker_adjudication_authority": true,
+    "attempt_8_artifact_and_receipt_validated": true,
+    "attempt_8_restoration_exact": true,
+    "source_correction_landed_and_reviewed_clean": true,
+    "source_checkouts_refreshed_and_verified_ready": true
+  },
+  "retained_authority": [
+    {
+      "amendment": "0040-r3-mac-canonical-installer-target-output",
+      "sha256": "sha256:cdaaa4ad590d4a110dd8ae5b03c36ac4833abd64e92e0e0ad055826d78495c14",
+      "effect": "The unmodified canonical installer alone may create the exact attached-mirror target tree, which must return to absence."
+    },
+    {
+      "amendment": "0041-r3-mac-canonical-installer-fixed-path-retry",
+      "sha256": "sha256:3eb4250e6995c6dd91614778b7d448dc74b680e199a47d2e754330cdd0eeed38",
+      "effect": "The installer process starts with the exact fixed PATH and CARGO_TARGET_DIR unset."
+    },
+    {
+      "amendment": "0042-r3-mac-limactl-home-provenance-source-correction",
+      "sha256": "sha256:815ed0977d5affb77560fb63de0e5474e2f0f7e2db7aeeefd3ca34bb9d164fbe",
+      "effect": "The published source validates root-controlled /var/empty and supplies HOME=/var/empty only to the env-scrubbed fixed limactl provenance probe."
+    },
+    {
+      "amendment": "0043-r3-mac-source-checkout-refresh",
+      "sha256": "sha256:62ae8b3aec5cb677b3cef28f7e53bd31328d4b4c10b5dac297ff85a8d2e5e940",
+      "effect": "The attached installer mirror and idle evidence checkout are exact, clean, and bound to the new published source."
+    }
+  ],
+  "objective": "Restart and execute the complete EVIDENCE:R3-MAC-IMP-01 native packet from a fresh pre-mutation baseline using the corrected canonical installer source, then return only validated clean evidence or an exact restored blocker.",
+  "required_attempt_9_gates": [
+    "Rebind task, nonce, source commit/tree/ref/live remote, project, attached mirror, and hydrated skills before any action.",
+    "Reverify host sudo, fixed Lima identity, absent canonical instance/control root, prefix, publisher/Keychain/launchd baseline, known-hosts, and every restoration sentinel.",
+    "Run the focused landed HOME provenance regression or equivalent exact-source proof before the canonical installer.",
+    "Invoke the canonical installer from its first instruction with the amendment-0041 literal environment; do not execute /opt/homebrew/bin/limactl.",
+    "Exercise the full install, Stage-1 and PM derivation, direct-TTY pairing, lifecycle, retirement, restoration, artifact validation, and receipt validation sequence.",
+    "On success, the artifact terminal status is EVIDENCE_CLEAN and the gated successor is AUTHORITY_REQUIRED:A1.1d-5R3-MAC-CLOSEOUT.",
+    "On any failure, restore every recorded surface exactly before returning a blocked receipt."
+  ],
+  "prohibited_actions": [
+    "source edit, stage, commit, push, branch/ref mutation, reset, clean, rebase, or installer substitution",
+    "repository output outside the exact temporary attached-mirror target exception",
+    "ambient or Homebrew limactl selection, caller HOME forwarding into the privileged provenance probe, or weakened fixed-image validation",
+    "non-TTY/file/environment confirmation bypass, user-interaction request, alternate endpoint/transport/instance/principal/prefix, or unowned instance mutation",
+    "sudoers sentinel mutation, unrelated Keychain/launchd/known-hosts/home/network/VM mutation, broad kill, or path-existence-only unlink",
+    "MAC-CLOSEOUT, Windows/WSL/ordinary Linux-host work, successor dispatch, task archival, or worktree disposal"
+  ],
+  "terminal_requirements": {
+    "receipt_protocol": "codex.top-level-evidence-receipt.v1",
+    "return_meta_thread_id": "019fd8c3-b12c-7e73-919f-898600ab0f64",
+    "return_meta_host_id": "local",
+    "send_receipt_as_final_tool_action": true,
+    "full_native_artifact_validation_required": true,
+    "exact_restoration_required": true,
+    "successor_held_until_meta_validates_evidence_clean": true,
+    "task_archiving_authorized": false
+  }
+}

@@ -1,0 +1,81 @@
+{
+  "protocol": "codex.top-level-evidence-predispatch.v1",
+  "orchestration_id": "substrate-a1-1d-5r3-mac-20260806-41f97e1c570d",
+  "evidence_id": "EVIDENCE:R3-MAC-IMP-01",
+  "attempt": 9,
+  "allocation": 2,
+  "dispatch_nonce": "12a0f9442772518e2d665f0b7ac3bf26f4ac38a5562ce97bb1eed98cf7eabf3b",
+  "task": {
+    "thread_id": "019fe162-c98c-7c82-94d0-155d6cab5122",
+    "host_id": "local",
+    "worktree": "/Users/spensermcconnell/.codex/worktrees/1626/substrate",
+    "status": "idle"
+  },
+  "source": {
+    "publication_mode": "remote",
+    "remote": "origin",
+    "target_ref": "refs/heads/feat/internal-host-orchestrator-world-dispatch-bootstrap",
+    "commit": "a06b3fd26ceee4ece7e5bd1481981755eafcedb5",
+    "tree": "f4c396d0e28a43405a9a2b1d49a450d6df545c84",
+    "live_remote": "a06b3fd26ceee4ece7e5bd1481981755eafcedb5"
+  },
+  "attached_mirror": {
+    "path": "/Users/spensermcconnell/.codex/evidence/substrate-a1-1d-5r3-mac-20260806-41f97e1c570d/AUX-R3-MAC-EVIDENCE-PLATFORM-PREREQUISITE-PREP/11c27a5ee57be5b99a3c7457c4f511b14b5747ee4b2b0492874a416d5fab02a3/source/substrate",
+    "head": "a06b3fd26ceee4ece7e5bd1481981755eafcedb5",
+    "tree": "f4c396d0e28a43405a9a2b1d49a450d6df545c84",
+    "symbolic_head": "refs/heads/feat/internal-host-orchestrator-world-dispatch-bootstrap",
+    "clean": true,
+    "target_absent": true
+  },
+  "platform": {
+    "fixed_limactl_sha256": "sha256:c126697daa485aff79552a34413e14c0e2efd43675845bee1a152f31845f1455",
+    "canonical_instance_absent": true,
+    "sudo_noninteractive": true,
+    "sudoers_sha256": "sha256:f4f85d5b2674a6505d84ee75de0a3cc8bc883bace01733bcab3b5fbd6efd4f0d"
+  },
+  "skill_suite": {
+    "skill_count": 25,
+    "file_count": 54,
+    "sha256": "e3de93f358594033ed59696a9624d2d0ac2fd0c2aa7ddf4a532810a05b262282",
+    "verified": true
+  },
+  "contract": {
+    "path": "increments/EVIDENCE-R3-MAC-IMP-01.attempt-9.contract.md",
+    "sha256": "sha256:a1fe714219d39c4ffe12b059822ff3438a5fe26b4fcd9fab7dca2aad3bb2159d"
+  },
+  "authority_amendments": [
+    {
+      "id": "0040",
+      "sha256": "sha256:cdaaa4ad590d4a110dd8ae5b03c36ac4833abd64e92e0e0ad055826d78495c14"
+    },
+    {
+      "id": "0041",
+      "sha256": "sha256:3eb4250e6995c6dd91614778b7d448dc74b680e199a47d2e754330cdd0eeed38"
+    },
+    {
+      "id": "0042",
+      "sha256": "sha256:815ed0977d5affb77560fb63de0e5474e2f0f7e2db7aeeefd3ca34bb9d164fbe"
+    },
+    {
+      "id": "0043",
+      "sha256": "sha256:62ae8b3aec5cb677b3cef28f7e53bd31328d4b4c10b5dac297ff85a8d2e5e940"
+    },
+    {
+      "id": "0044",
+      "sha256": "sha256:a901c9299e10504faa0c1480d799b223dd3d7c37ef6138bc99e8365c8618c572"
+    }
+  ],
+  "prior_attempt": {
+    "attempt": 8,
+    "status": "BLOCKED_NATIVE_EVIDENCE",
+    "restoration_exact": true,
+    "receipt_path": "receipts/EVIDENCE-R3-MAC-IMP-01.attempt-8.blocked.json",
+    "verification_path": "receipts/EVIDENCE-R3-MAC-IMP-01.attempt-8.blocked.verification.json"
+  },
+  "source_refresh": {
+    "receipt_path": "receipts/AUX-R3-MAC-SOURCE-CHECKOUT-REFRESH.json",
+    "verification_path": "receipts/AUX-R3-MAC-SOURCE-CHECKOUT-REFRESH.verification.json",
+    "status": "READY_VERIFIED"
+  },
+  "prepared_at_utc": "2026-08-08T14:12:40Z"
+}
