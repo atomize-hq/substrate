@@ -1,0 +1,55 @@
+{
+  "blocker": {
+    "details": "The direct, unmodified attached-mirror installer was invoked with CARGO_TARGET_DIR unset. It built only in the amendment-0040-authorized mirror target and staged prefix files, then its provenance preflight resolved /opt/homebrew/bin/limactl due to the supplied invocation PATH. The ambient binary was not executed. The task-created prefix paths and exact target were descriptor-safely removed. Final audit proves assigned checkout and mirror clean, mirror target absent, prefix metadata/content parity exact, remote equal, canonical Lima/control root absent, publisher components absent, and sudo sentinel/fixed limactl identities unchanged. No pairing, guest bootstrap, lifecycle, retirement, or product smoke was reached.",
+    "required_authority": "A fresh evidence dispatch is required to retry the complete packet with the fixed /usr/local/bin/limactl first in PATH from installer start; do not reuse this blocked attempt artifact as clean evidence.",
+    "summary": "BLOCKED_NATIVE_EVIDENCE after an invocation-path provenance failure in the canonical installer; restoration is exact."
+  },
+  "checkout_unchanged": true,
+  "dispatch_nonce": "17400ca095c68fafd4db02f4da09aac2e2bb17dd03542ebfb331875e3cd13498",
+  "environment": {
+    "host_id": "local",
+    "os_version": "macOS 15.7.7 (24G720) arm64",
+    "project_id": "local-b2016f8a311fef93149e42eaec4d704d",
+    "project_path": "/Users/spensermcconnell/__Active_Code/atomize-hq/substrate",
+    "tool_versions": {
+      "cargo": "cargo 1.89.0",
+      "guest_target": "aarch64-unknown-linux-gnu",
+      "kernel": "Darwin 24.6.0",
+      "limactl": "2.1.1",
+      "macos": "15.7.7 (24G720)",
+      "rust": "rustc 1.89.0",
+      "ssh": "OpenSSH_9.9p2",
+      "zig": "0.16.0"
+    }
+  },
+  "evidence": {
+    "artifact_path": "/Users/spensermcconnell/.codex/evidence/substrate-a1-1d-5r3-mac-20260806-41f97e1c570d/EVIDENCE-R3-MAC-IMP-01/17400ca095c68fafd4db02f4da09aac2e2bb17dd03542ebfb331875e3cd13498/artifact/EVIDENCE-R3-MAC-IMP-01.attempt-7.artifact.json",
+    "artifact_sha256": "sha256:460968ba15fb23179fbb9ddaad18533ab589f409dccf64c06f6a429f5c5a960a",
+    "gates": [
+      "AARCH64_GUEST_EXECUTOR_BUILD_PASSED",
+      "CANONICAL_INSTALLER_PATH_SELECTION_BLOCKED",
+      "CANONICAL_INSTALLER_TARGET_EXCEPTION_EXERCISED",
+      "CHECKOUT_AND_MIRROR_RESTORATION_PASSED",
+      "HOST_RESTORATION_PARITY_PASSED",
+      "IH_CANONICALLY_DERIVED",
+      "SOURCE_REMOTE_EQUAL"
+    ]
+  },
+  "evidence_id": "EVIDENCE:R3-MAC-IMP-01",
+  "evidence_task": {
+    "host_id": "local",
+    "thread_id": "019fe162-c98c-7c82-94d0-155d6cab5122"
+  },
+  "orchestration_id": "substrate-a1-1d-5r3-mac-20260806-41f97e1c570d",
+  "platform": "macos",
+  "prohibited_actions_confirmed": true,
+  "protocol": "codex.top-level-evidence-receipt.v1",
+  "source": {
+    "commit": "1126b907df6e38043e9071da222f6c6a377b341c",
+    "live_remote": "1126b907df6e38043e9071da222f6c6a377b341c",
+    "publication_mode": "remote",
+    "target_ref": "refs/heads/feat/internal-host-orchestrator-world-dispatch-bootstrap",
+    "tree": "3a29fa323a8b9099d894c11d98cc085ecf4807c5"
+  },
+  "status": "BLOCKED_NATIVE_EVIDENCE"
+}
