@@ -1,7 +1,7 @@
 {
   "protocol": "codex.top-level-orchestration-state.v1",
   "orchestration_id": "substrate-a1-1d-5r3-mac-20260806-41f97e1c570d",
-  "status": "RUNNING",
+  "status": "READY",
   "dispatch_authorized": true,
   "publication_mode": "remote",
   "remote": "origin",
@@ -27,66 +27,16 @@
       "before_increment": "A1.1d-5R3-MAC-CLOSEOUT"
     }
   ],
-  "cursor": 7,
+  "cursor": 8,
   "expected_base": {
-    "commit": "a9626bc10a1737416c1d8f7f48630850118f3e6a",
-    "tree": "3f7cdf20125a847a3dfaa472d3797759b5cf6737"
+    "commit": "3d6b2eb1b02b1a24a1e055d12e5cbdb9b0312774",
+    "tree": "d59cac92405f06024cfcde0a2c22a4cf1255c3d7"
   },
   "meta": {
     "thread_id": "019fd8c3-b12c-7e73-919f-898600ab0f64",
     "host_id": "local"
   },
-  "active_dispatch": {
-    "increment": "AUX-R3-MAC-EVIDENCE-RECOVERY-R6",
-    "thread_id": "019fded7-05c4-7c61-9f7d-5fc456bcda6d",
-    "host_id": "local",
-    "worktree": "/Users/spensermcconnell/.codex/worktrees/1bd8/substrate",
-    "dispatch_nonce": "1b9fe0a5eee31553d83daa75ccdde591ea5a4b797a81f14c3f3d3d839bc9cd70",
-    "expected_base": {
-      "commit": "a9626bc10a1737416c1d8f7f48630850118f3e6a",
-      "tree": "3f7cdf20125a847a3dfaa472d3797759b5cf6737"
-    },
-    "target_ref": "refs/heads/feat/internal-host-orchestrator-world-dispatch-bootstrap",
-    "publication_mode": "remote",
-    "project_id": "local-b2016f8a311fef93149e42eaec4d704d",
-    "project_path": "/Users/spensermcconnell/__Active_Code/atomize-hq/substrate",
-    "prompt_path": "increments/AUX-R3-MAC-EVIDENCE-RECOVERY-R6.prompt.md",
-    "prompt_sha256": "sha256:30356f18efc92cd54b16019bee37bc58adfeb52ffa4fa3cd0a0f5eeaed643dfd",
-    "binding_path": "increments/AUX-R3-MAC-EVIDENCE-RECOVERY-R6.binding.json",
-    "binding_prompt_path": "increments/AUX-R3-MAC-EVIDENCE-RECOVERY-R6.binding-prompt.md",
-    "binding_prompt_sha256": "sha256:c26edc1e274f6a098f919c23328e8cb64c802cde62c343cac072d4da1790e9ef",
-    "skill_hydration_path": "increments/AUX-R3-MAC-EVIDENCE-RECOVERY-R6.skill-hydration.json",
-    "skill_hydration_sha256": "sha256:e3de93f358594033ed59696a9624d2d0ac2fd0c2aa7ddf4a532810a05b262282",
-    "model": "gpt-5.6-terra",
-    "reasoning": "xhigh",
-    "authority_persisted_at_utc": "2026-08-08T00:49:20Z",
-    "status": "RUNNING_CONTINUATION",
-    "binding_sent_at_utc": "2026-08-08T00:49:13Z",
-    "delivery_path": "increments/AUX-R3-MAC-EVIDENCE-RECOVERY-R6.delivery.json",
-    "delivery_sha256": "sha256:a4d854928a1a24a2d818932db959ea76e53e178625fed857be09ebe2b1f02d9d",
-    "turn_id": "019fded8-6adb-7223-9a64-322e71a00c59",
-    "wait_cursor": "72bc6338-004b-44ac-9181-551e0e60ffb5:1",
-    "continuation": 2,
-    "continuation_nonce": "01b6223453c9a0466c6e2f5f171989bc1f79373557a2902be57344460578b477",
-    "continuation_authority_path": "authority-amendments/0036-r6-direct-tty-proof-retry-correction.json",
-    "continuation_authority_sha256": "sha256:0efd2a9be850672fb3c909806ccc54bdac3bd5b6f3bbf34383f8feec3aeae27d",
-    "continuation_prompt_path": "increments/AUX-R3-MAC-EVIDENCE-RECOVERY-R6.continuation-0036-prompt.md",
-    "continuation_prompt_sha256": "sha256:d8c8d533b00b9990085c21b3db148b9c4836bb65d1bc1dd70f662fa31b56405f",
-    "blocked_receipt_path": "receipts/AUX-R3-MAC-EVIDENCE-RECOVERY-R6.attempt-1.continuation-0035.blocked.raw.json",
-    "blocked_verification_path": "receipts/AUX-R3-MAC-EVIDENCE-RECOVERY-R6.attempt-1.continuation-0035.blocked.verification.json",
-    "blocked_verification_sha256": "sha256:40d41cd2e153a886bc50951978724d6d5124390e945011f4b62123a6c82df803",
-    "preserved_status_entry_count": 13,
-    "continuation_prepared_at_utc": "2026-08-08T02:26:31Z",
-    "continuation_sent_at_utc": "2026-08-08T02:27:04Z",
-    "continuation_delivery_path": "increments/AUX-R3-MAC-EVIDENCE-RECOVERY-R6.continuation-0036-delivery.json",
-    "continuation_delivery_sha256": "sha256:55e643b1c1dd27d1b8da8d7aaa08bb598b1db6b2d5a4f14d0855d5ae6df9bc8e",
-    "continuation_turn_id": "019fdf31-c0f6-70f2-977f-385a857c587e",
-    "continuation_wait_cursor": "72bc6338-004b-44ac-9181-551e0e60ffb5:5",
-    "correction_packet_id": "AUX-R3-MAC-EVIDENCE-RECOVERY-R6-CORRECTION-01",
-    "preserved_subject_fingerprint": "sha256:018791e14303b553d10286933aba6f911b41b3ad3247cf7bb3aa76092ff51462",
-    "review_record_path": "llm-last-mile/runtime-refactor/review-control/r3-mac-evidence-recovery-r6-review-cycle-record.json",
-    "review_record_sha256": "sha256:12f9659045852167a8d0a6f89471f88b20237a691474c881f110cdde3d1f4485"
-  },
+  "active_dispatch": null,
   "active_evidence_dispatches": [],
   "verified_evidence": [],
   "completed": [
@@ -164,28 +114,60 @@
       "verification_path": "receipts/AUX-R3-MAC-EVIDENCE-RECOVERY-R5.verification.json",
       "source_thread_id": "019fddab-1dd2-7570-9bd3-7f3841ce0283",
       "source_host_id": "local"
+    },
+    {
+      "increment": "AUX-R3-MAC-EVIDENCE-RECOVERY-R6",
+      "packet_id": "AUX-R3-MAC-EVIDENCE-RECOVERY-R6-CORRECTION-01",
+      "commit": "3d6b2eb1b02b1a24a1e055d12e5cbdb9b0312774",
+      "tree": "d59cac92405f06024cfcde0a2c22a4cf1255c3d7",
+      "receipt_status": "LANDED_CLEAN",
+      "receipt_path": "receipts/AUX-R3-MAC-EVIDENCE-RECOVERY-R6.json",
+      "canonical_receipt_path": "receipts/AUX-R3-MAC-EVIDENCE-RECOVERY-R6.canonical.json",
+      "verification_path": "receipts/AUX-R3-MAC-EVIDENCE-RECOVERY-R6.verification.json",
+      "source_thread_id": "019fded7-05c4-7c61-9f7d-5fc456bcda6d",
+      "source_host_id": "local"
     }
   ],
-  "last_blocker": {
-    "increment": "AUX-R3-MAC-EVIDENCE-RECOVERY-R6",
-    "status": "BLOCKED_CONTRADICTION",
-    "receipt_path": "receipts/AUX-R3-MAC-EVIDENCE-RECOVERY-R6.attempt-1.continuation-0035.blocked.raw.json",
-    "verification_path": "receipts/AUX-R3-MAC-EVIDENCE-RECOVERY-R6.attempt-1.continuation-0035.blocked.verification.json",
-    "summary": "The operator confirmation design pipes and projects terminal bytes, allowing data-derived authority, while generation/retry/expiry semantics remain inconsistent.",
-    "worktree_preserved": true,
-    "adjudicated": true
-  },
+  "last_blocker": null,
   "current_authority_amendment": "authority-amendments/0036-r6-direct-tty-proof-retry-correction.json",
-  "evidence_attempt": 2,
+  "evidence_attempt": 3,
   "retry_authority": {
     "evidence_id": "EVIDENCE:R3-MAC-IMP-01",
-    "attempt": 2,
-    "dispatch_nonce": "61f37af30a2a6d5e4aec55ead3875f9d027d44d5dabd1f39a260dc656029752a",
+    "attempt": 3,
+    "dispatch_nonce": "7c83b749b2360596d88553c24c52d89bdbfc7e2024170712b7d248e6b6ae31b7",
+    "source_commit": "3d6b2eb1b02b1a24a1e055d12e5cbdb9b0312774",
+    "source_tree": "d59cac92405f06024cfcde0a2c22a4cf1255c3d7",
     "agent_derives_ih_pm": true,
-    "agent_operates_ptys": true,
+    "agent_operates_real_terminal_and_guest_tty": true,
     "additional_user_interaction_required": false,
-    "host_sudo_noninteractive_verified": true,
-    "guest_sudo_noninteractive_verified": true
+    "expected_product_project_id": "local-b2016f8a311fef93149e42eaec4d704d",
+    "r6_direct_terminal_required": true,
+    "host_sudo_must_be_reverified": true,
+    "guest_sudo_must_be_reverified": true,
+    "pending_dispatch": {
+      "evidence_id": "EVIDENCE:R3-MAC-IMP-01",
+      "attempt": 3,
+      "status": "PENDING_TASK_CREATION",
+      "platform": "macos",
+      "project_id": "local-b2016f8a311fef93149e42eaec4d704d",
+      "project_path": "/Users/spensermcconnell/__Active_Code/atomize-hq/substrate",
+      "host_id": "local",
+      "dispatch_nonce": "7c83b749b2360596d88553c24c52d89bdbfc7e2024170712b7d248e6b6ae31b7",
+      "source": {
+        "publication_mode": "remote",
+        "commit": "3d6b2eb1b02b1a24a1e055d12e5cbdb9b0312774",
+        "tree": "d59cac92405f06024cfcde0a2c22a4cf1255c3d7",
+        "remote": "origin",
+        "target_ref": "refs/heads/feat/internal-host-orchestrator-world-dispatch-bootstrap",
+        "live_remote": "3d6b2eb1b02b1a24a1e055d12e5cbdb9b0312774"
+      },
+      "contract_path": "increments/EVIDENCE-R3-MAC-IMP-01.attempt-3.contract.md",
+      "contract_sha256": "sha256:eb47075895160ad66a82f62f651de077f2a14f73b77f24ef61b22c75ef4a9cb9",
+      "prompt_path": "increments/EVIDENCE-R3-MAC-IMP-01.attempt-3.initial-prompt.md",
+      "prompt_sha256": "sha256:4de1fac05360d5a90c19b8fdae38c6e082e55162e6586c09d76ad1ce099d1aad",
+      "variables_path": "increments/EVIDENCE-R3-MAC-IMP-01.attempt-3.variables.json",
+      "task_archiving_authorized": false
+    }
   },
   "auxiliary_host_preparation": {
     "status": "BLOCKED_SOURCE_CORRECTION",
@@ -344,7 +326,7 @@
     "successor_dispatched": true
   },
   "auxiliary_recovery_implementation": {
-    "status": "RUNNING_CONTINUATION",
+    "status": "COMPLETE",
     "sequence": [
       "AUX-R3-MAC-EVIDENCE-RECOVERY-R1",
       "AUX-R3-MAC-EVIDENCE-RECOVERY-R2",
@@ -353,7 +335,7 @@
       "AUX-R3-MAC-EVIDENCE-RECOVERY-R5",
       "AUX-R3-MAC-EVIDENCE-RECOVERY-R6"
     ],
-    "cursor": 7,
+    "cursor": 8,
     "authorized_increment": "AUX-R3-MAC-EVIDENCE-RECOVERY-R6",
     "later_packets_require_fresh_authority": true,
     "dispatch_nonce": "1b9fe0a5eee31553d83daa75ccdde591ea5a4b797a81f14c3f3d3d839bc9cd70",
@@ -362,7 +344,7 @@
       "commit": "a9626bc10a1737416c1d8f7f48630850118f3e6a",
       "tree": "3f7cdf20125a847a3dfaa472d3797759b5cf6737"
     },
-    "next_increment": "AUX-R3-MAC-EVIDENCE-RECOVERY-R6",
+    "next_increment": "EVIDENCE:R3-MAC-IMP-01",
     "donor_worktree": "/Users/spensermcconnell/.codex/worktrees/60cc/substrate",
     "donor_mutation_authorized": false,
     "task_archiving_authorized": false,
@@ -380,17 +362,17 @@
     "model": "gpt-5.6-terra",
     "reasoning": "xhigh",
     "binding_sent_at_utc": "2026-08-08T00:49:13Z",
-    "receipt_path": "receipts/AUX-R3-MAC-EVIDENCE-RECOVERY-R5.json",
+    "receipt_path": "receipts/AUX-R3-MAC-EVIDENCE-RECOVERY-R6.json",
     "receipt_sha256": "sha256:836a58004f778d297e0e96c1ff90c936081144e2009ac9788f620806987d663a",
-    "verification_path": "receipts/AUX-R3-MAC-EVIDENCE-RECOVERY-R5.verification.json",
+    "verification_path": "receipts/AUX-R3-MAC-EVIDENCE-RECOVERY-R6.verification.json",
     "landed": {
-      "commit": "a9626bc10a1737416c1d8f7f48630850118f3e6a",
-      "tree": "3f7cdf20125a847a3dfaa472d3797759b5cf6737",
+      "commit": "3d6b2eb1b02b1a24a1e055d12e5cbdb9b0312774",
+      "tree": "d59cac92405f06024cfcde0a2c22a4cf1255c3d7",
       "target_ref": "refs/heads/feat/internal-host-orchestrator-world-dispatch-bootstrap",
-      "live_remote": "a9626bc10a1737416c1d8f7f48630850118f3e6a"
+      "live_remote": "3d6b2eb1b02b1a24a1e055d12e5cbdb9b0312774"
     },
     "review_terminal": "CLEAN",
-    "subject_fingerprint": "sha256:a7a1d181d2baa53cb0a914be3a999681e39588d56dce627c963ce686f61d94db",
+    "subject_fingerprint": "sha256:6333a3f395b164ad484f31ad64786cb81a3ca47a0394be16bc6ee904cfdb89ce",
     "worktree_preserved": true,
     "task_archived": false,
     "successor_dispatched": false,
@@ -885,7 +867,7 @@
     "review_record_path": "llm-last-mile/runtime-refactor/review-control/r3-mac-evidence-recovery-r6-correction-01-review-cycle-record.json",
     "staged_path_count": 23,
     "cached_binary_diff_sha256": "sha256:1a5d227ee9d0734e4fbadf56fd4292a3f3040d18d205a9e93b383e23404bc334",
-    "canonical_receipt_path": "receipts/AUX-R3-MAC-EVIDENCE-RECOVERY-R5.canonical.json",
+    "canonical_receipt_path": "receipts/AUX-R3-MAC-EVIDENCE-RECOVERY-R6.canonical.json",
     "contract_path": "increments/AUX-R3-MAC-EVIDENCE-RECOVERY-R6.contract.md",
     "initial_prompt_path": "increments/AUX-R3-MAC-EVIDENCE-RECOVERY-R6.initial-prompt.md",
     "prepared_at_utc": "2026-08-08T00:46:25Z",
@@ -959,13 +941,14 @@
     "cross_platform_remediation_authorized": false
   },
   "last_verified_receipt": {
-    "increment": "AUX-R3-MAC-EVIDENCE-RECOVERY-R5",
+    "increment": "AUX-R3-MAC-EVIDENCE-RECOVERY-R6",
+    "packet_id": "AUX-R3-MAC-EVIDENCE-RECOVERY-R6-CORRECTION-01",
     "status": "LANDED_CLEAN",
-    "receipt_path": "receipts/AUX-R3-MAC-EVIDENCE-RECOVERY-R5.json",
-    "canonical_receipt_path": "receipts/AUX-R3-MAC-EVIDENCE-RECOVERY-R5.canonical.json",
-    "verification_path": "receipts/AUX-R3-MAC-EVIDENCE-RECOVERY-R5.verification.json",
-    "commit": "a9626bc10a1737416c1d8f7f48630850118f3e6a",
-    "tree": "3f7cdf20125a847a3dfaa472d3797759b5cf6737",
-    "verified_at_utc": "2026-08-08T00:42:48Z"
+    "receipt_path": "receipts/AUX-R3-MAC-EVIDENCE-RECOVERY-R6.json",
+    "canonical_receipt_path": "receipts/AUX-R3-MAC-EVIDENCE-RECOVERY-R6.canonical.json",
+    "verification_path": "receipts/AUX-R3-MAC-EVIDENCE-RECOVERY-R6.verification.json",
+    "commit": "3d6b2eb1b02b1a24a1e055d12e5cbdb9b0312774",
+    "tree": "d59cac92405f06024cfcde0a2c22a4cf1255c3d7",
+    "verified_at_utc": "2026-08-08T03:51:11Z"
   }
 }

@@ -1,0 +1,61 @@
+{
+  "protocol": "codex.top-level-task-receipt-verification.v1",
+  "orchestration_id": "substrate-a1-1d-5r3-mac-20260806-41f97e1c570d",
+  "increment": "AUX-R3-MAC-EVIDENCE-RECOVERY-R6-CORRECTION-01",
+  "verified_at_utc": "2026-08-08T03:51:11Z",
+  "raw_receipt_path": "receipts/AUX-R3-MAC-EVIDENCE-RECOVERY-R6.json",
+  "canonical_receipt_path": "receipts/AUX-R3-MAC-EVIDENCE-RECOVERY-R6.canonical.json",
+  "terminal_barrier": {
+    "thread_id": "019fded7-05c4-7c61-9f7d-5fc456bcda6d",
+    "host_id": "local",
+    "turn_id": "019fdf31-c0f6-70f2-977f-385a857c587e",
+    "status": "completed",
+    "thread_status": "idle",
+    "cursor": "72bc6338-004b-44ac-9181-551e0e60ffb5:6"
+  },
+  "independent_observation": {
+    "worktree": "/Users/spensermcconnell/.codex/worktrees/1bd8/substrate",
+    "head": "3d6b2eb1b02b1a24a1e055d12e5cbdb9b0312774",
+    "head_tree": "d59cac92405f06024cfcde0a2c22a4cf1255c3d7",
+    "index_tree": "d59cac92405f06024cfcde0a2c22a4cf1255c3d7",
+    "live_remote": "3d6b2eb1b02b1a24a1e055d12e5cbdb9b0312774",
+    "direct_parent": "a9626bc10a1737416c1d8f7f48630850118f3e6a",
+    "staged_paths": 0,
+    "status_entry_count": 0,
+    "changed_files": [
+      "crates/common/src/lib.rs",
+      "crates/common/src/managed_artifact.rs",
+      "crates/shell/src/execution/managed_lifecycle.rs",
+      "crates/shell/src/execution/managed_lifecycle/macos_client.rs",
+      "crates/shell/tests/managed_lifecycle_v1.rs",
+      "llm-last-mile/runtime-refactor/review-control/r3-mac-evidence-recovery-r6-correction-01-review-allowlist-evidence.md",
+      "llm-last-mile/runtime-refactor/review-control/r3-mac-evidence-recovery-r6-correction-01-review-authority-security.md",
+      "llm-last-mile/runtime-refactor/review-control/r3-mac-evidence-recovery-r6-correction-01-review-cycle-record.json",
+      "llm-last-mile/runtime-refactor/review-control/r3-mac-evidence-recovery-r6-correction-01-review-lifecycle-convergence.md",
+      "llm-last-mile/runtime-refactor/review-control/r3-mac-evidence-recovery-r6-review-allowlist-evidence.md",
+      "llm-last-mile/runtime-refactor/review-control/r3-mac-evidence-recovery-r6-review-authority-security.md",
+      "llm-last-mile/runtime-refactor/review-control/r3-mac-evidence-recovery-r6-review-cycle-record.json",
+      "llm-last-mile/runtime-refactor/review-control/r3-mac-evidence-recovery-r6-review-lifecycle-convergence.md",
+      "src/bin/substrate-lifecycle-control.rs",
+      "src/bin/substrate-lifecycle-linux.rs",
+      "src/bin/substrate-lifecycle-macos.rs",
+      "tests/mac/lifecycle_r3.sh"
+    ],
+    "protected_checkout_clean": true,
+    "remote_divergence": "0/0"
+  },
+  "proof": {
+    "subject_fingerprint_verified": "sha256:6333a3f395b164ad484f31ad64786cb81a3ca47a0394be16bc6ee904cfdb89ce",
+    "review_record_sha256_verified": "sha256:57cba1fd1d4496c806761c4ba764c00a88e8853ac56e7dbbcfca1efe72e8f4a8",
+    "review_record_validator": "VALID",
+    "review_terminal": "CLEAN",
+    "open_p1": 0,
+    "open_p2": 0,
+    "commit_tree_verified": true,
+    "fast_forward_direct_parent_verified": true,
+    "exact_changed_file_inventory_verified": true
+  },
+  "verdict": "VERIFIED_LANDED_CLEAN_AND_EVIDENCE_PREDECESSOR_SATISFIED",
+  "raw_receipt_sha256": "sha256:68d1c2376f40df719c79f64464d79e8ffdf1335eaf69d7ae7bb2f5ae794bc9a3",
+  "canonical_receipt_sha256": "sha256:68d1c2376f40df719c79f64464d79e8ffdf1335eaf69d7ae7bb2f5ae794bc9a3"
+}
