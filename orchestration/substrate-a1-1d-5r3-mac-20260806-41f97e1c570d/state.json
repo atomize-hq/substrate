@@ -57,9 +57,14 @@
     "authority_amendment_path": "authority-amendments/0042-r3-mac-limactl-home-provenance-source-correction.json",
     "authority_amendment_sha256": "sha256:815ed0977d5affb77560fb63de0e5474e2f0f7e2db7aeeefd3ca34bb9d164fbe",
     "task_archiving_authorized": false,
-    "thread_status": "dispatch_prepared",
-    "turn_status": "not_started",
-    "prepared_at_utc": "2026-08-08T13:44:04Z"
+    "thread_status": "active",
+    "turn_status": "inProgress",
+    "prepared_at_utc": "2026-08-08T13:44:04Z",
+    "delivery_path": "increments/AUX-R3-MAC-LIMACTL-HOME-PROVENANCE-CORRECTION.delivery.json",
+    "delivery_sha256": "sha256:ed2b9e746a53ed619ac6ccca6fb20c0780479568dd1f7cac186a550afc32772a",
+    "turn_id": "019fe19e-6475-7632-aebc-02a379b8bc02",
+    "wait_cursor": "09d2deac-230c-42d0-9957-94f004124fa0:5",
+    "sent_at_utc": "2026-08-08T13:44:56Z"
   },
   "active_evidence_dispatches": [],
   "verified_evidence": [],
@@ -1270,7 +1275,7 @@
     }
   ],
   "auxiliary_lima_provenance_correction": {
-    "status": "DISPATCH_PREPARED",
+    "status": "IMPLEMENTATION_RUNNING",
     "increment": "AUX-R3-MAC-LIMACTL-HOME-PROVENANCE-CORRECTION",
     "packet_id": "AUX-R3-MAC-LIMACTL-HOME-PROVENANCE-CORRECTION",
     "thread_id": "019fdfa4-ba96-70e0-b68d-1d0a4cf32a83",
@@ -1290,8 +1295,13 @@
     "authority_amendment_path": "authority-amendments/0042-r3-mac-limactl-home-provenance-source-correction.json",
     "authority_amendment_sha256": "sha256:815ed0977d5affb77560fb63de0e5474e2f0f7e2db7aeeefd3ca34bb9d164fbe",
     "task_archiving_authorized": false,
-    "thread_status": "dispatch_prepared",
-    "turn_status": "not_started",
-    "prepared_at_utc": "2026-08-08T13:44:04Z"
+    "thread_status": "active",
+    "turn_status": "inProgress",
+    "prepared_at_utc": "2026-08-08T13:44:04Z",
+    "delivery_path": "increments/AUX-R3-MAC-LIMACTL-HOME-PROVENANCE-CORRECTION.delivery.json",
+    "delivery_sha256": "sha256:ed2b9e746a53ed619ac6ccca6fb20c0780479568dd1f7cac186a550afc32772a",
+    "turn_id": "019fe19e-6475-7632-aebc-02a379b8bc02",
+    "wait_cursor": "09d2deac-230c-42d0-9957-94f004124fa0:5",
+    "sent_at_utc": "2026-08-08T13:44:56Z"
   }
 }

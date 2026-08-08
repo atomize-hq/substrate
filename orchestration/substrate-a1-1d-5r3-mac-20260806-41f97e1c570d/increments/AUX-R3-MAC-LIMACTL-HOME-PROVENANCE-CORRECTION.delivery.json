@@ -1,0 +1,17 @@
+{
+  "protocol": "codex.top-level-task-dispatch-delivery.v1",
+  "orchestration_id": "substrate-a1-1d-5r3-mac-20260806-41f97e1c570d",
+  "packet_id": "AUX-R3-MAC-LIMACTL-HOME-PROVENANCE-CORRECTION",
+  "dispatch_nonce": "f2776d7aa9dd669dd9ff2a885ee50536ac9c01da991257d806850cb8be82a19b",
+  "thread_id": "019fdfa4-ba96-70e0-b68d-1d0a4cf32a83",
+  "host_id": "local",
+  "task_worktree": "/Users/spensermcconnell/.codex/worktrees/2f78/substrate",
+  "turn_id": "019fe19e-6475-7632-aebc-02a379b8bc02",
+  "wait_cursor": "09d2deac-230c-42d0-9957-94f004124fa0:5",
+  "thread_status": "active",
+  "turn_status": "inProgress",
+  "prompt_path": "increments/AUX-R3-MAC-LIMACTL-HOME-PROVENANCE-CORRECTION.continuation-prompt.md",
+  "prompt_sha256": "sha256:7f9024dd25cde824e5345954d29980c168c440770e3396e80cd015910fc9cb09",
+  "sent_at_utc": "2026-08-08T13:44:56Z",
+  "task_archiving_authorized": false
+}
