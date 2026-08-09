@@ -1739,7 +1739,11 @@ build_and_stage_mac_aarch64_lima_artifacts_v1() {
   linker_wrapper="${external_root}/aarch64-linux-gnu-zig-cc"
   cat > "${linker_wrapper}" <<EOF
 #!/usr/bin/env bash
-exec "${zig}" cc -target aarch64-linux-gnu "\$@"
+linker_args=()
+for arg in "\$@"; do
+  [[ "\${arg}" == "--target=aarch64-unknown-linux-gnu" ]] || linker_args+=("\${arg}")
+done
+exec "${zig}" cc -target aarch64-linux-gnu "\${linker_args[@]}"
 EOF
   chmod 0700 "${linker_wrapper}" || fatal "cannot harden fixed AArch64 linker wrapper"
 

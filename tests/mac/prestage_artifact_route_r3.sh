@@ -9,6 +9,73 @@ COMMON="${REPO_ROOT}/crates/common/src/managed_artifact.rs"
 EXECUTOR="${REPO_ROOT}/src/bin/substrate-lifecycle-macos.rs"
 CONTRACTS="${REPO_ROOT}/llm-last-mile/runtime-refactor/04-contracts-and-gates.md"
 
+WORK_ROOT="$(mktemp -d "${TMPDIR:-/tmp}/substrate-prestage-artifact-route.XXXXXX")"
+cleanup() {
+    rm -rf -- "${WORK_ROOT}"
+}
+trap cleanup EXIT
+
+FAKE_ZIG="${WORK_ROOT}/zig"
+CAPTURE="${WORK_ROOT}/zig-args"
+GENERATOR="${WORK_ROOT}/generate-linker-wrapper.sh"
+LINKER_WRAPPER="${WORK_ROOT}/aarch64-linux-gnu-zig-cc"
+
+cat > "${FAKE_ZIG}" <<'EOF'
+#!/usr/bin/env bash
+set -euo pipefail
+printf '%s\0' "$@" > "${CAPTURE:?}"
+EOF
+chmod 0700 "${FAKE_ZIG}"
+
+cat > "${GENERATOR}" <<'EOF'
+#!/usr/bin/env bash
+set -euo pipefail
+zig="$1"
+linker_wrapper="$2"
+EOF
+python3 - "${INSTALLER}" >> "${GENERATOR}" <<'PY'
+from pathlib import Path
+import sys
+
+source = Path(sys.argv[1]).read_text(encoding="utf-8")
+start = source.index('  cat > "${linker_wrapper}" <<EOF\n')
+end = source.index('\nEOF\n', start) + len('\nEOF\n')
+sys.stdout.write(source[start:end])
+PY
+chmod 0700 "${GENERATOR}"
+"${GENERATOR}" "${FAKE_ZIG}" "${LINKER_WRAPPER}"
+chmod 0700 "${LINKER_WRAPPER}"
+
+CAPTURE="${CAPTURE}" "${LINKER_WRAPPER}" \
+    --target=aarch64-unknown-linux-gnu \
+    "source file.c" \
+    --target=aarch64-unknown-linux-gnu-extra \
+    --target aarch64-unknown-linux-gnu \
+    "-Wl,-rpath,/tmp/path with spaces" \
+    ""
+
+python3 - "${CAPTURE}" <<'PY'
+from pathlib import Path
+import sys
+
+captured = Path(sys.argv[1]).read_bytes().split(b"\0")
+if captured[-1:] == [b""]:
+    captured.pop()
+expected = [
+    b"cc",
+    b"-target",
+    b"aarch64-linux-gnu",
+    b"source file.c",
+    b"--target=aarch64-unknown-linux-gnu-extra",
+    b"--target",
+    b"aarch64-unknown-linux-gnu",
+    b"-Wl,-rpath,/tmp/path with spaces",
+    b"",
+]
+if captured != expected:
+    raise SystemExit(f"generated Zig wrapper forwarded unexpected arguments: {captured!r}")
+PY
+
 if [[ ! -x "${LIFECYCLE}" ]]; then
     echo "lima lifecycle dispatcher must remain executable for lima-warm and lima-stop" >&2
     exit 1
