@@ -41,22 +41,26 @@ def function_body(text, name):
         fail(f'missing named caller function {name}')
     return match.group(0)
 
-# The shell membrane has exactly the two ordinary tags and no direct/bootstrap or raw selector.
+# The fixed-install membrane has one signed Stage-1 branch and preserves the existing, separately
+# validated ordinary post-PM branch for lima-stop.  The installer/warm route can use only the
+# Stage-1 branch; it cannot select a catalogue request or a post-PM role/action.
 wrapper = source['wrapper']
 if 'lima-action' in wrapper or 'PublisherBootstrapAuthorizationV1' in wrapper:
     fail('wrapper exposes a raw or direct-bootstrap authority path')
 require('wrapper', 'submit-mapped-lifecycle-v1')
-for tag in ('stage_one_create', 'post_pm_action'):
-    require('wrapper', tag)
-if 'case "${TAG}" in' not in wrapper or '        *) printf' not in wrapper:
-    fail('wrapper does not reject an unlisted tag')
-for text in ('"current_anchor_counter"', 'set(request) != required'):
+require('wrapper', 'stage_one_create')
+require('wrapper', 'post_pm_action')
+require('wrapper', 'stage_value["successor_template"]["executor_build_evidence"]')
+for text in ('case "${TAG}" in', 'stage_one_create|post_pm_action)',
+             '--publisher-request-v1)', '--platform-bootstrap-mapping-v1)',
+             '--executor-build-evidence-v1)', 'if tag == "stage_one_create":',
+             'if tag == "post_pm_action":'):
     require('wrapper', text)
-wrapper_tags = re.findall(r'^\s*(stage_one_create|post_pm_action)\)\s+invoke_mac_lifecycle_control_v1', wrapper, re.MULTILINE)
-if sorted(set(wrapper_tags)) != ['post_pm_action', 'stage_one_create'] \
-        or 'guest_pairing_data_session' in wrapper \
-        or 'guest_pairing_operator_tty_session' in wrapper:
-    fail('ordinary R5 wrapper exposes an R6 tag or more than its exact two branches')
+if '[[ "${TAG}" == "stage_one_create" ]]' in wrapper or \
+        'guest_pairing_data_session' in wrapper or 'guest_pairing_operator_tty_session' in wrapper:
+    fail('wrapper admits an unlisted lifecycle tag')
+if 'mac.lima.guest-binary(world)' in wrapper or 'post_pm_requests_v1' in wrapper:
+    fail('wrapper admits the removed world role or catalogue traversal')
 
 # Ordinary client XPC operations are fixed.  R6 moves the independent operator session
 # completely out of the public shell/XPC surface; only its data child has a typed relay.
@@ -265,6 +269,46 @@ profile_write = executor.index('mac_write_stage_one_profile_absent_or_exact_v1',
 if resume_call > profile_write:
     fail('Stage-1 post-CAS resume rewrites effect input before proving durable completion')
 
+# A private fixed install advances the protected anchor once per durable receipt.  The ordinary
+# catalogue remains available to lima-stop, so its opaque requests must be reissued only from the
+# final current anchor, in both the normal and post-CAS-resume Stage-1 paths.
+refresh_start = executor.index('fn mac_refresh_closed_post_pm_requests_after_fixed_install_v1')
+refresh_end = executor.index('\n#[cfg(not(target_os = "macos"))]', refresh_start)
+refresh = executor[refresh_start:refresh_end]
+for text in ('open_system_keychain_protected_state_for_scope_v1',
+             'mac_issue_closed_post_pm_requests_after_stage_one_v1',
+             'fixed install final protected state does not exact-join',
+             'post_pm_requests_v1'):
+    if text not in refresh:
+        fail('fixed-install post-PM refresh is missing its current-anchor proof')
+stage_runner_start = executor.index('fn execute_closed_mac_lima_stage_one_effect_v1')
+stage_runner_end = executor.index('\n#[cfg(not(target_os = "macos"))]\nfn execute_closed_mac_lima_stage_one_effect_v1', stage_runner_start)
+stage_runner = executor[stage_runner_start:stage_runner_end]
+if stage_runner.count('mac_execute_fixed_install_sequence_v1') != 2 \
+        or stage_runner.count('mac_refresh_closed_post_pm_requests_after_fixed_install_v1') != 2 \
+        or 'mac_issue_closed_post_pm_requests_after_stage_one_v1(' in stage_runner:
+    fail('Stage-1 normal/resume paths do not refresh ordinary requests after the private install')
+fixed_start = executor.index('fn mac_execute_fixed_install_sequence_v1')
+fixed_end = executor.index('\n#[cfg(target_os = "macos")]\nfn execute_mac_post_pm_action_with_policy_v1', fixed_start)
+fixed = executor[fixed_start:fixed_end]
+for text in ('index.authority_domain != "mac_host_shared"',
+             'index.scope_id != capsule.scope_id',
+             'sha256_hex_bootstrap_v1(&canonical_index)',
+             'head.v1.json'):
+    if text not in fixed:
+        fail('fixed install receipts do not exact-join the current protected-state anchor')
+for text in ('let next_anchor_revision = state',
+             '.action_receipt_index_revision\n            .checked_add(1)',
+             'index.previous_index_sha256.as_deref()',
+             'head.previous_head_sha256.as_deref()',
+             'fixed install retry tail is not the exact next planned receipt',
+             'fixed install recovery has a mismatched prepared counter',
+             'current_anchor_counter: state.current_anchor.action_receipt_index_revision'):
+    if text not in fixed:
+        fail('fixed install does not recover the exact one-receipt-ahead prepared tail')
+if 'current_anchor_counter: state.counter' in fixed:
+    fail('fixed install derives a recovery request counter from mutable prepared state')
+
 # The common authorization binds macOS control identity only for mac_host_shared and carries the
 # canonical digest required for exact retry/anchor joining.
 common = source['common']
@@ -366,38 +410,37 @@ for forbidden in ('--state-root', '--tty-path', '--transport', '--ticket-file', 
     if forbidden in linux[r6_start:r6_end]:
         fail(f'R6 guest entrypoint accepts caller-selected {forbidden}')
 
-# Exact listed callers use no direct Lima primitive and select the correct tag without passing a
-# Stage-1 authorization on post-PM requests.
+# The warm wrapper can submit only the signed Stage-1 effect. The completion response is a
+# terminal boundary: the executor privately consumes the fixed forward-only installation plan.
 warm = source['warm']
 stage_one = function_body(warm, 'ensure_vm_ready')
 if 'lima-lifecycle.sh" stage_one_create' not in stage_one or '--lima-stage-one-authorization-v1' not in stage_one:
     fail('ensure_vm_ready is not the sole Stage-1 mapped caller')
-if '--platform-bootstrap-mapping-v1' in stage_one or '--publisher-request-v1' in stage_one:
-    fail('ensure_vm_ready forwards a post-PM mapping or request into Stage-1')
-if 'stage_response="$(' not in stage_one or 'adopt_stage_one_mapping_response_v1 "${stage_response}"' not in stage_one:
-    fail('ensure_vm_ready does not retain the finalized mapping returned by Stage-1')
-adopted_mapping = function_body(warm, 'adopt_stage_one_mapping_response_v1')
-for text in ('RESPONSE_KEYS', 'platform_bootstrap_mapping_v1', 'post_pm_requests_v1',
-             'SEED_EXACT_KEYS', 'audit_token_bound',
-             'Caller mapping does not exactly match the Stage-1 successor mapping',
-             'PLATFORM_BOOTSTRAP_MAPPING_V1="${adopted_mapping}"',
-             'PUBLISHER_REQUEST_V1="${adopted_request}"'):
-    if text not in adopted_mapping:
-        fail('Stage-1 mapping adoption is not closed to the attested completed response')
-for name in ('destroy_vm', 'stage_workspace', 'ensure_substrate_group', 'install_agent_from_host',
-             'install_cli_from_host', 'install_gateway_from_host', 'install_guest_binaries',
-             'bootstrap_guest_private_home', 'write_systemd_units', 'enable_socket_activation',
-             'write_layout_sentinel', 'configure_guest'):
-    body = function_body(warm, name)
-    if 'lima-lifecycle.sh" post_pm_action' not in body:
-        fail(f'{name} is not a post_pm_action caller')
-    if '--lima-stage-one-authorization-v1' in body or re.search(r'\blimactl\b', body):
-        fail(f'{name} retains Stage-1 or direct Lima authority')
-    if name == 'configure_guest' and any(raw in body for raw in (
-        'observe_lima_mapping_v1', 'verify_lima_mapping_v1', 'current_layout_version',
-        'socket_summary', 'linger_guidance',
-    )):
-        fail('configure_guest reaches a raw guest observation or projection helper')
+if any(selector in stage_one for selector in (
+    '--platform-bootstrap-mapping-v1', '--publisher-request-v1', '--executor-build-evidence-v1',
+    'post_pm_action',
+)):
+    fail('ensure_vm_ready forwards a caller-selected post-PM input into Stage-1')
+if 'stage_response="$(' not in stage_one or 'validate_stage_one_completion_response_v1 "${stage_response}"' not in stage_one:
+    fail('ensure_vm_ready does not verify the terminal Stage-1 completion response')
+completion = function_body(warm, 'validate_stage_one_completion_response_v1')
+for text in ('post_pm_requests_v1 remains a catalogue', 'fixed installation sequence',
+             'The privileged executor owns', '"status"', '"receipt"',
+             '"manifest_generation"', '"manifest_sha256"', '"xpc_attestation"'):
+    if text not in completion:
+        fail('Stage-1 completion validation is not fixed to the completed executor response')
+if any(forbidden in warm for forbidden in (
+    'adopt_stage_one_mapping_response_v1', 'PUBLISHER_REQUEST_V1',
+    'PLATFORM_BOOTSTRAP_MAPPING_V1', 'EXECUTOR_BUILD_EVIDENCE_V1',
+    'lima-lifecycle.sh" post_pm_action',
+)):
+    fail('warm wrapper retains a caller-selected ordinary post-PM path')
+configure = function_body(warm, 'configure_guest')
+if any(raw in configure for raw in (
+    'observe_lima_mapping_v1', 'verify_lima_mapping_v1', 'current_layout_version',
+    'socket_summary', 'linger_guidance', 'limactl',
+)):
+    fail('configure_guest reaches a raw guest observation or projection helper')
 
 stop = source['stop']
 for name in ('resolve_lima_stop_authority_v1', 'invoke_mapped_lima_stop_v1'):
@@ -423,137 +466,39 @@ for text in ('publish_mac_publisher_install_provenance_v1',
 print('A1.1d-5R3-MAC non-native lifecycle fixture: PASS')
 PY
 
-# Execute the closed Stage-1 response adoption helper against a canonical completed response and
-# a one-field tamper. This is a parser-only fixture: it does not invoke the control binary, XPC,
-# Lima, or any native lifecycle action.
-mapping_fixture="$(mktemp -d)"
-trap 'rm -rf "${mapping_fixture}"' EXIT
-python3 - "${REPO_ROOT}/scripts/mac/lima-warm.sh" "${mapping_fixture}/adopt-stage-one-mapping" <<'PY'
+
+# Execute the fixed Stage-1 completion parser against a canonical completed response and two
+# one-field tamper cases. This parser-only fixture does not invoke XPC, Lima, or any native action.
+completion_fixture="$(mktemp -d)"
+trap 'rm -rf "${completion_fixture}"' EXIT
+python3 - "${REPO_ROOT}/scripts/mac/lima-warm.sh" "${completion_fixture}/validate-stage-one-completion" <<'PY'
 from pathlib import Path
 import re
 import sys
 
 source = Path(sys.argv[1]).read_text()
 match = re.search(
-    r'(?ms)^adopt_stage_one_mapping_response_v1\(\) \{\n.*?(?=^[A-Za-z_][A-Za-z0-9_]*\(\) \{|\Z)',
+    r'(?ms)^validate_stage_one_completion_response_v1\(\) \{\n.*?(?=^[A-Za-z_][A-Za-z0-9_]*\(\) \{|\Z)',
     source,
 )
 if not match:
-    raise SystemExit('missing Stage-1 mapping adoption helper')
+    raise SystemExit('missing fixed Stage-1 completion validator')
 Path(sys.argv[2]).write_text(
     '#!/usr/bin/env bash\n'
     'set -euo pipefail\n'
     'fatal() { printf "%s\\n" "$1" >&2; exit 1; }\n'
-    'INSTALL_BOOTSTRAP_COMMITMENT="$1"\n'
-    'PLATFORM_BOOTSTRAP_MAPPING_V1="$2"\n'
-    'PUBLISHER_REQUEST_V1="$3"\n'
     + match.group(0)
-    + '\nadopt_stage_one_mapping_response_v1 "$4"\nprintf "%s\\n%s" "${PLATFORM_BOOTSTRAP_MAPPING_V1}" "${PUBLISHER_REQUEST_V1}"\n'
+    + '\nvalidate_stage_one_completion_response_v1 "$1"\n'
 )
 PY
-chmod 700 "${mapping_fixture}/adopt-stage-one-mapping"
-stage_mapping_fixture="$(python3 - <<'PY'
-import base64
-import copy
-import hashlib
-import json
-
-def b64(value):
-    return base64.urlsafe_b64encode(value.encode()).rstrip(b'=').decode()
-
-commitment = 'a' * 64
-lines = (
-    'domain=substrate.platform_bootstrap_mapping',
-    'version=1',
-    f'host_context_commitment={commitment}',
-    'platform_kind=lima',
-    f'instance_name={b64("substrate")}',
-    'guest_machine_id=' + 'b' * 32,
-    f'host_platform_control_root={b64("/Users/alice/.lima")}',
-    f'realized_substrate_home={b64("/home/alice/.substrate")}',
-    f'realized_principal_account={b64("alice")}',
-    'realized_principal_uid=501',
-    'transport_kind=lima',
-    f'transport_host={b64("/tmp/substrate.sock")}',
-    f'transport_guest_socket={b64("/run/substrate.sock")}',
-)
-mapping = b64('\n'.join(lines) + '\n')
-candidate = {
-    'host_context_commitment': commitment,
-    'platform_mapping_commitment': hashlib.sha256(mapping.encode('ascii')).hexdigest(),
-    'scope_id': '018f1234-5678-7abc-8def-0123456789ab',
-    'current_anchor_counter': 1,
-    'current_anchor_sha256': 'd' * 64,
-    'manifest_generation': 2,
-    'manifest_sha256': 'c' * 64,
-    'role': 'mac.lima.layout-sentinel',
-    'action': 'create',
-    'object_identity': {
-        'scope_id': '018f1234-5678-7abc-8def-0123456789ab',
-        'parent_identity': 'mac-lima-fixed-role-table',
-        'name_identity': 'mac.lima.layout-sentinel',
-        'physical_identity': '/etc/substrate-lima-layout',
-    },
-    'requester_principal': 'alice',
-    'attempt_nonce': '018f1234-5678-7abc-8def-0123456789ac',
-    'expected_executor_build': {
-        'source_commit': 'a' * 40,
-        'source_tree': 'b' * 40,
-        'source_ref': 'refs/heads/r5-fixture',
-        'target_triple': 'aarch64-apple-darwin',
-        'artifact_sha256': 'e' * 64,
-        'artifact_path': '/Library/PrivilegedHelperTools/com.substrate.lifecycle.publisher.v1',
-    },
-}
-seed = copy.deepcopy(candidate)
-seed.update({
-    'platform_mapping_commitment': 'f' * 64,
-    'current_anchor_counter': 0,
-    'current_anchor_sha256': '1' * 64,
-    'manifest_generation': 1,
-    'manifest_sha256': '2' * 64,
-})
-response = {
-    'status': 'completed',
-    'receipt': {},
-    'platform_bootstrap_mapping_v1': mapping,
-    'post_pm_requests_v1': [candidate],
-    'manifest_generation': 2,
-    'manifest_sha256': 'c' * 64,
-    'xpc_attestation': {
-        'mach_service': 'com.substrate.lifecycle.publisher.v1',
-        'audit_token_bound': True,
-    },
-}
-print(mapping)
-print(json.dumps(response, separators=(',', ':')))
-print(json.dumps(seed, separators=(',', ':')))
-print(json.dumps(candidate, sort_keys=True, separators=(',', ':')))
-PY
-)"
-stage_mapping="$(sed -n '1p' <<<"${stage_mapping_fixture}")"
-stage_response="$(sed -n '2p' <<<"${stage_mapping_fixture}")"
-stage_seed="$(sed -n '3p' <<<"${stage_mapping_fixture}")"
-expected_request="$(sed -n '4p' <<<"${stage_mapping_fixture}")"
-adopted_response="$("${mapping_fixture}/adopt-stage-one-mapping" "$(printf 'a%.0s' {1..64})" '' "${stage_seed}" "${stage_response}")"
-adopted_mapping="$(sed -n '1p' <<<"${adopted_response}")"
-adopted_request="$(sed -n '2p' <<<"${adopted_response}")"
-[[ "${adopted_mapping}" == "${stage_mapping}" ]] || fail 'canonical Stage-1 response mapping was not adopted'
-[[ "${adopted_request}" == "${expected_request}" ]] || fail 'canonical Stage-1 response did not replace the stale post-PM request'
-tampered_response="${stage_response/\"manifest_generation\":2/\"manifest_generation\":1}"
-if "${mapping_fixture}/adopt-stage-one-mapping" "$(printf 'a%.0s' {1..64})" '' "${stage_seed}" "${tampered_response}" >/dev/null 2>&1; then
-    fail 'non-successor Stage-1 response mapping was accepted'
-fi
-ambiguous_response="$(python3 - "${stage_response}" <<'PY'
-import json
-import sys
-
-response = json.loads(sys.argv[1])
-response['post_pm_requests_v1'].append(response['post_pm_requests_v1'][0])
-print(json.dumps(response, separators=(',', ':')))
-PY
-)"
-if "${mapping_fixture}/adopt-stage-one-mapping" "$(printf 'a%.0s' {1..64})" '' "${stage_seed}" "${ambiguous_response}" >/dev/null 2>&1; then
-    fail 'ambiguous Stage-1 successor post-PM request set was accepted'
-fi
-printf 'A1.1d-5R3-MAC Stage-1 mapping/request adoption fixture: PASS\n'
+chmod 700 "${completion_fixture}/validate-stage-one-completion"
+canonical_completion_response='{"status":"completed","receipt":{},"manifest_generation":2,"manifest_sha256":"aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa","xpc_attestation":{"mach_service":"com.substrate.lifecycle.publisher.v1","audit_token_bound":true}}'
+"${completion_fixture}/validate-stage-one-completion" "${canonical_completion_response}"
+for tampered in \
+    "${canonical_completion_response/\"status\":\"completed\"/\"status\":\"prepared\"}" \
+    "${canonical_completion_response/\"audit_token_bound\":true/\"audit_token_bound\":false}"; do
+    if "${completion_fixture}/validate-stage-one-completion" "${tampered}" >/dev/null 2>&1; then
+        fail 'fixed Stage-1 completion validator accepted a tampered terminal response'
+    fi
+done
+printf 'A1.1d-5R3-MAC fixed Stage-1 completion fixture: PASS\n'

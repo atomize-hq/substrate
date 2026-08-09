@@ -1782,7 +1782,6 @@ fn mac_lima_post_pm_role_rows_v1(
         ),
         ("substrate-gateway", "/usr/local/bin/substrate-gateway"),
         ("substrate", "/usr/local/bin/substrate"),
-        ("world", "/usr/local/bin/world"),
     ] {
         rows.push((
             format!("mac.lima.guest-binary({kind})"),
@@ -1843,7 +1842,6 @@ fn mac_post_pm_artifact_source_path_v1(prefix: &str, role: &str) -> Option<Strin
         "mac.lima.guest-binary(substrate-world-service)" => "world-service",
         "mac.lima.guest-binary(substrate-gateway)" => "substrate-gateway",
         "mac.lima.guest-binary(substrate)" => "substrate",
-        "mac.lima.guest-binary(world)" => "world",
         "mac.lima.publisher-executor" => "substrate-lifecycle-linux",
         _ => return None,
     };
@@ -1964,6 +1962,69 @@ fn mac_lima_closed_post_pm_entries_v1(
         )?);
     }
     Ok(entries)
+}
+
+/// Re-measure the closed prefix bundle while materializing the signed successor manifest.  The
+/// root provenance fixes the package/build facts; the manifest binds the exact no-follow bytes
+/// and physical identity used by the later guest copy.  A changed, missing, linked, reordered,
+/// or additional artifact cannot become a Stage-1 successor fact.
+fn validate_mac_lima_retained_artifacts_against_provenance_v1(
+    provenance: &MacPublisherInstallProvenanceV1,
+    entries: &[ManagedArtifactEntryV1],
+) -> Result<()> {
+    for artifact in &provenance.retained_linux_artifacts {
+        let entry = entries
+            .iter()
+            .find(|entry| entry.logical_role.0 == artifact.logical_role)
+            .ok_or_else(|| {
+                anyhow::anyhow!("retained Linux provenance role is missing from Stage-1 manifest")
+            })?;
+        let source_path = format!(
+            "{}/{}",
+            provenance.selected_host_prefix.trim_end_matches('/'),
+            artifact.retained_relative_path
+        );
+        let (digest, physical_identity) =
+            mac_measure_post_pm_artifact_source_v1(Path::new(&source_path))?;
+        let metadata = entry
+            .identity
+            .metadata
+            .as_ref()
+            .and_then(Value::as_object)
+            .ok_or_else(|| {
+                anyhow::anyhow!("retained Linux manifest entry lacks artifact metadata")
+            })?;
+        if entry.bytes_or_target.as_deref() != Some(artifact.artifact_sha256.as_str())
+            || digest != artifact.artifact_sha256
+            || physical_identity != artifact.physical_identity
+            || metadata.get("artifact_source_path").and_then(Value::as_str)
+                != Some(source_path.as_str())
+            || metadata
+                .get("artifact_source_physical_identity")
+                .and_then(Value::as_str)
+                != Some(artifact.physical_identity.as_str())
+            || metadata.get("artifact_source_kind").and_then(Value::as_str)
+                != Some("retained-prefix-linux-artifact")
+        {
+            bail!(
+                "retained Linux artifact does not exact-join root provenance and signed manifest"
+            );
+        }
+    }
+    let byte_entries = entries
+        .iter()
+        .filter(|entry| {
+            mac_post_pm_artifact_source_path_v1(
+                &provenance.selected_host_prefix,
+                &entry.logical_role.0,
+            )
+            .is_some()
+        })
+        .count();
+    if byte_entries != provenance.retained_linux_artifacts.len() {
+        bail!("Stage-1 manifest has an unexpected retained Linux artifact role");
+    }
+    Ok(())
 }
 
 fn mac_lima_closed_post_pm_receipt_plan_v1(
@@ -2121,6 +2182,15 @@ fn derive_mac_lima_stage_one_authorization_v1(
         render_mac_lima_stage_one_profile_v1(&authorization.attempt_nonce, authorization_sha256)?;
     let rendered_profile_sha256 = sha256_hex_bootstrap_v1(&rendered_profile);
     let receipt_id = authorization.scope_id.clone();
+    let ordered_non_machine_entries = mac_lima_closed_post_pm_entries_v1(
+        &authorization.scope_id,
+        &pre_pm_manifest.selected_host_prefix,
+        &authorization.requester_principal,
+    )?;
+    validate_mac_lima_retained_artifacts_against_provenance_v1(
+        provenance,
+        &ordered_non_machine_entries,
+    )?;
     let mut stage_one = LimaStageOneAuthorizationV1 {
         schema_owner: "substrate.lima-stage-one-authorization".to_string(),
         schema_version: 1,
@@ -2172,11 +2242,7 @@ fn derive_mac_lima_stage_one_authorization_v1(
             expires_at_unix_ns: authorization.expires_at_unix_ns,
             manifest_created_at_unix_ns: authorization.issued_at_unix_ns,
             manifest_lifecycle_state: ManagedLifecycleStateV1::ManifestDurable,
-            ordered_non_machine_entries: mac_lima_closed_post_pm_entries_v1(
-                &authorization.scope_id,
-                &pre_pm_manifest.selected_host_prefix,
-                &authorization.requester_principal,
-            )?,
+            ordered_non_machine_entries,
             planned_receipt_id: receipt_id.clone(),
             planned_receipt_relative_path: format!("receipts/2/receipt.{receipt_id}.json"),
             post_effect_observation_slots: vec!["guest_machine_id".to_string()],
@@ -3195,11 +3261,11 @@ fn closed_mac_role_action_v1(role: &str, action: ManagedActionV1) -> bool {
         "mac.lima.publisher-current-anchor" | "mac.lima.publisher-bootstrap-intent" => {
             matches!(action, ManagedActionV1::Create | ManagedActionV1::Replace)
         }
-        _ if role.starts_with("mac.lima.guest-binary(")
-            || role.starts_with("mac.lima.guest-unit(") =>
-        {
-            create_replace_remove_restore
-        }
+        "mac.lima.guest-binary(substrate-world-service)"
+        | "mac.lima.guest-binary(substrate-gateway)"
+        | "mac.lima.guest-binary(substrate)"
+        | "mac.lima.guest-unit(service)"
+        | "mac.lima.guest-unit(socket)" => create_replace_remove_restore,
         _ if role.starts_with("mac.lima.guest-directory(")
             || role.starts_with("mac.lima.guest-membership(") =>
         {
@@ -4111,22 +4177,79 @@ fn resume_mac_lima_stage_one_after_protected_state_cas_v1(
         };
         compare_and_swap_mac_lima_stage_one_capsule_v1(Some(capsule), &completed)?;
     }
-    let post_pm_requests =
-        serde_json::to_value(mac_issue_closed_post_pm_requests_after_stage_one_v1(
-            carrier,
-            &mapping,
-            &next_manifest,
-            &state,
-        )?)
-        .context("encode closed Stage-1 successor post-PM request set")?;
     Ok(Some(json!({
         "status": "completed",
         "receipt": receipt,
         "platform_bootstrap_mapping_v1": mapping.encode(carrier)?,
-        "post_pm_requests_v1": post_pm_requests,
         "manifest_generation": next_manifest.manifest_generation,
         "manifest_sha256": next_manifest.manifest_sha256,
     })))
+}
+
+/// Reissue the ordinary post-PM catalogue only after the executor-private fixed install has
+/// committed every one of its durable forward receipts.  The returned requests must bind the
+/// actual final anchor, never the transient Stage-1 successor captured before private effects.
+#[cfg(target_os = "macos")]
+fn mac_refresh_closed_post_pm_requests_after_fixed_install_v1(
+    executor: &MacManagedArtifactExecutorV1,
+    stage_one: &LimaStageOneAuthorizationV1,
+    carrier: &InstallBootstrapContextCarrierV1,
+    mut response: Value,
+) -> Result<Value> {
+    let capsule = open_mac_lima_stage_one_capsule_v1(&stage_one.successor_template.scope_id)?
+        .ok_or_else(|| anyhow::anyhow!("fixed install response has no retained Stage-1 capsule"))?;
+    if capsule.state != "Completed" || capsule.stage_one_authorization != *stage_one {
+        bail!("fixed install response has no completed exact Stage-1 capsule");
+    }
+    let observation = capsule
+        .observation
+        .as_ref()
+        .ok_or_else(|| anyhow::anyhow!("fixed install response lacks a retained observation"))?;
+    let (mapping, manifest) =
+        derive_mac_lima_stage_one_successor_manifest_v1(stage_one, carrier, observation)?;
+    let encoded_mapping = mapping
+        .encode(carrier)
+        .context("encode fixed install final mapping")?;
+    let mapping_commitment = format!("{:x}", Sha256::digest(encoded_mapping.as_bytes()));
+    let state = open_system_keychain_protected_state_for_scope_v1(&capsule.scope_id)?
+        .ok_or_else(|| anyhow::anyhow!("fixed install response has no final protected state"))?;
+    if state.current_anchor.authority_domain != "mac_host_shared"
+        || state.current_anchor.scope_id != capsule.scope_id
+        || state.current_anchor.host_context_commitment != carrier.host_context_commitment
+        || state.current_anchor.platform_mapping_commitment.as_deref()
+            != Some(mapping_commitment.as_str())
+        || state.current_anchor.manifest_generation != manifest.manifest_generation
+        || state.current_anchor.manifest_sha256 != manifest.manifest_sha256
+        || state.current_anchor.requester_principal != stage_one.requester_principal
+        || state.current_anchor.attempt_nonce != stage_one.attempt_id
+        || state.prepared_record.is_some()
+    {
+        bail!(
+            "fixed install final protected state does not exact-join its signed Stage-1 successor"
+        );
+    }
+    let object = response
+        .as_object_mut()
+        .ok_or_else(|| anyhow::anyhow!("fixed install completion response is not an object"))?;
+    if object.get("status").and_then(Value::as_str) != Some("completed")
+        || object.get("manifest_generation").and_then(Value::as_u64)
+            != Some(manifest.manifest_generation)
+        || object.get("manifest_sha256").and_then(Value::as_str)
+            != Some(manifest.manifest_sha256.as_str())
+        || object
+            .get("platform_bootstrap_mapping_v1")
+            .and_then(Value::as_str)
+            != Some(encoded_mapping.as_str())
+        || object.contains_key("post_pm_requests_v1")
+    {
+        bail!("fixed install completion response is not the exact pre-catalogue projection");
+    }
+    let post_pm_requests = serde_json::to_value(
+        mac_issue_closed_post_pm_requests_after_stage_one_v1(carrier, &mapping, &manifest, &state)?,
+    )
+    .context("encode final-anchor closed post-PM request set")?;
+    object.insert("post_pm_requests_v1".to_string(), post_pm_requests);
+    Ok(response)
 }
 
 #[cfg(target_os = "macos")]
@@ -4152,7 +4275,10 @@ fn execute_closed_mac_lima_stage_one_effect_v1(
         if let Some(response) = resume_mac_lima_stage_one_after_protected_state_cas_v1(
             executor, stage_one, carrier, &capsule,
         )? {
-            return Ok(response);
+            mac_execute_fixed_install_sequence_v1(executor, stage_one, carrier)?;
+            return mac_refresh_closed_post_pm_requests_after_fixed_install_v1(
+                executor, stage_one, carrier, response,
+            );
         }
         if capsule.state == "Completed" {
             bail!("completed Stage-1 capsule has no exact durable successor observation");
@@ -4434,22 +4560,19 @@ fn execute_closed_mac_lima_stage_one_effect_v1(
             ..capsule.clone()
         };
         compare_and_swap_mac_lima_stage_one_capsule_v1(Some(&capsule), &completed)?;
-        let post_pm_requests =
-            serde_json::to_value(mac_issue_closed_post_pm_requests_after_stage_one_v1(
-                carrier,
-                &mapping,
-                &next_manifest,
-                &next_state,
-            )?)
-            .context("encode closed Stage-1 successor post-PM request set")?;
-        Ok(json!({
-            "status": "completed",
-            "receipt": receipt,
-            "platform_bootstrap_mapping_v1": mapping.encode(carrier)?,
-            "post_pm_requests_v1": post_pm_requests,
-            "manifest_generation": next_manifest.manifest_generation,
-            "manifest_sha256": next_manifest.manifest_sha256,
-        }))
+        mac_execute_fixed_install_sequence_v1(executor, stage_one, carrier)?;
+        mac_refresh_closed_post_pm_requests_after_fixed_install_v1(
+            executor,
+            stage_one,
+            carrier,
+            json!({
+                "status": "completed",
+                "receipt": receipt,
+                "platform_bootstrap_mapping_v1": mapping.encode(carrier)?,
+                "manifest_generation": next_manifest.manifest_generation,
+                "manifest_sha256": next_manifest.manifest_sha256,
+            }),
+        )
     })();
     result
 }
@@ -5326,7 +5449,6 @@ fn mac_post_pm_effect_plan_v1(
             role @ ("mac.lima.guest-binary(substrate-world-service)"
             | "mac.lima.guest-binary(substrate-gateway)"
             | "mac.lima.guest-binary(substrate)"
-            | "mac.lima.guest-binary(world)"
             | "mac.lima.publisher-executor"),
             action
             @ (ManagedActionV1::Create | ManagedActionV1::Replace | ManagedActionV1::Restore),
@@ -5361,7 +5483,6 @@ fn mac_post_pm_effect_plan_v1(
             role @ ("mac.lima.guest-binary(substrate-world-service)"
             | "mac.lima.guest-binary(substrate-gateway)"
             | "mac.lima.guest-binary(substrate)"
-            | "mac.lima.guest-binary(world)"
             | "mac.lima.publisher-executor"),
             ManagedActionV1::Remove,
         ) => {
@@ -6111,10 +6232,445 @@ fn mac_execute_closed_post_pm_effect_v1(
     let plan = mac_post_pm_effect_plan_v1(entry, action, membership_role, selected_host_prefix)?;
     mac_execute_post_pm_effect_plan_v1(executor, prepared, tool, home, lima_home, &plan)
 }
+
+/// The installer-only plan is deliberately literal rather than a traversal of
+/// `post_pm_requests_v1`.  It contains only material Create effects plus the socket activation
+/// required by the existing units; the Stage-1 profile already owns `/var/lib/substrate`, and
+/// the preserved known-hosts observation is not an installation mutation.
 #[cfg(target_os = "macos")]
-fn execute_mac_post_pm_action_v1(
+fn mac_fixed_install_steps_v1(principal: &str) -> Vec<(String, ManagedActionV1)> {
+    vec![
+        ("mac.lima.guest-group".to_string(), ManagedActionV1::Create),
+        (
+            "mac.lima.guest-directory(/var/lib/substrate/.substrate-lifecycle-v1)".to_string(),
+            ManagedActionV1::Create,
+        ),
+        (
+            "mac.lima.guest-directory(/var/lib/substrate/staged-workspace)".to_string(),
+            ManagedActionV1::Create,
+        ),
+        (
+            "mac.lima.guest-directory(/usr/libexec/substrate)".to_string(),
+            ManagedActionV1::Create,
+        ),
+        (
+            "mac.lima.guest-directory(/run/substrate)".to_string(),
+            ManagedActionV1::Create,
+        ),
+        (
+            "mac.lima.guest-directory(/run/substrate/substrate-gateway-runtime)".to_string(),
+            ManagedActionV1::Create,
+        ),
+        (
+            "mac.lima.guest-private-home".to_string(),
+            ManagedActionV1::Create,
+        ),
+        (
+            format!("mac.lima.guest-membership({principal})"),
+            ManagedActionV1::Create,
+        ),
+        (
+            "mac.lima.staged-workspace".to_string(),
+            ManagedActionV1::Create,
+        ),
+        (
+            "mac.lima.publisher-state-directory".to_string(),
+            ManagedActionV1::Create,
+        ),
+        (
+            "mac.lima.publisher-executor".to_string(),
+            ManagedActionV1::Create,
+        ),
+        (
+            "mac.lima.guest-binary(substrate-world-service)".to_string(),
+            ManagedActionV1::Create,
+        ),
+        (
+            "mac.lima.guest-binary(substrate-gateway)".to_string(),
+            ManagedActionV1::Create,
+        ),
+        (
+            "mac.lima.guest-binary(substrate)".to_string(),
+            ManagedActionV1::Create,
+        ),
+        (
+            "mac.lima.layout-sentinel".to_string(),
+            ManagedActionV1::Create,
+        ),
+        (
+            "mac.lima.publisher-service-unit".to_string(),
+            ManagedActionV1::Create,
+        ),
+        (
+            "mac.lima.publisher-socket-unit".to_string(),
+            ManagedActionV1::Create,
+        ),
+        (
+            "mac.lima.publisher-signing-key".to_string(),
+            ManagedActionV1::Create,
+        ),
+        (
+            "mac.lima.publisher-current-anchor".to_string(),
+            ManagedActionV1::Create,
+        ),
+        (
+            "mac.lima.publisher-bootstrap-intent".to_string(),
+            ManagedActionV1::Create,
+        ),
+        (
+            "mac.lima.guest-unit(service)".to_string(),
+            ManagedActionV1::Create,
+        ),
+        (
+            "mac.lima.guest-unit(socket)".to_string(),
+            ManagedActionV1::Create,
+        ),
+        (
+            "mac.lima.guest-service-state(socket)".to_string(),
+            ManagedActionV1::Enable,
+        ),
+        (
+            "mac.lima.guest-service-state(socket)".to_string(),
+            ManagedActionV1::Start,
+        ),
+    ]
+}
+
+#[cfg(target_os = "macos")]
+fn mac_fixed_install_planned_receipt_v1(
+    manifest: &ManagedArtifactManifestV1,
+    entry: &ManagedArtifactEntryV1,
+    action: ManagedActionV1,
+    attempt_id: &str,
+) -> Result<(String, String)> {
+    let action = mac_post_pm_action_literal_v1(action);
+    let planned = manifest
+        .planned_action_receipts
+        .iter()
+        .filter_map(Value::as_object)
+        .find(|planned| {
+            planned.get("entry_id").and_then(Value::as_str) == Some(entry.object_id.as_str())
+                && planned.get("action").and_then(Value::as_str) == Some(action)
+                && planned.get("attempt_id").and_then(Value::as_str) == Some(attempt_id)
+        })
+        .ok_or_else(|| {
+            anyhow::anyhow!("fixed install step lacks a signed manifest receipt plan")
+        })?;
+    let receipt_id = planned
+        .get("receipt_id")
+        .and_then(Value::as_str)
+        .ok_or_else(|| anyhow::anyhow!("fixed install plan lacks receipt_id"))?;
+    let receipt_relative_path = planned
+        .get("receipt_relative_path")
+        .and_then(Value::as_str)
+        .ok_or_else(|| anyhow::anyhow!("fixed install plan lacks receipt path"))?;
+    if receipt_relative_path
+        != format!(
+            "receipts/{}/receipt.{receipt_id}.json",
+            manifest.manifest_generation
+        )
+    {
+        bail!("fixed install plan has a noncanonical receipt path");
+    }
+    Ok((receipt_id.to_string(), receipt_relative_path.to_string()))
+}
+
+#[cfg(target_os = "macos")]
+fn mac_validate_fixed_install_completed_receipt_v1(
+    executor: &MacManagedArtifactExecutorV1,
+    manifest: &ManagedArtifactManifestV1,
+    index_entry: &substrate_common::ManagedActionReceiptIndexEntryV1,
+    entry: &ManagedArtifactEntryV1,
+    action: ManagedActionV1,
+    attempt_id: &str,
+) -> Result<()> {
+    let (receipt_id, receipt_relative_path) =
+        mac_fixed_install_planned_receipt_v1(manifest, entry, action, attempt_id)?;
+    if index_entry.receipt_id != receipt_id
+        || index_entry.receipt_relative_path != receipt_relative_path
+        || index_entry.entry_id != entry.object_id
+        || index_entry.action != action
+        || index_entry.attempt_id != attempt_id
+    {
+        bail!("fixed install receipt index is not the exact plan prefix");
+    }
+    let bytes =
+        mac_read_stage_one_transition_artifact_no_follow_v1(executor, &receipt_relative_path)?;
+    let receipt: ManagedActionReceiptV1 =
+        serde_json::from_slice(&bytes).context("decode fixed install completed receipt")?;
+    validate_managed_action_receipt_signature_v1(&receipt)?;
+    if canonical_action_receipt_bytes_v1(&receipt)? != bytes
+        || receipt.authority_domain != manifest.authority_domain
+        || receipt.scope_id != manifest.installation_id
+        || receipt.installation_id != manifest.installation_id
+        || receipt.manifest_generation != manifest.manifest_generation
+        || receipt.manifest_sha256 != manifest.manifest_sha256
+        || receipt.receipt_id != receipt_id
+        || receipt.receipt_relative_path != receipt_relative_path
+        || receipt.entry_id != entry.object_id
+        || receipt.action != action
+        || receipt.attempt_id != attempt_id
+    {
+        bail!("fixed install completed receipt does not exact-join its plan");
+    }
+    Ok(())
+}
+
+#[cfg(target_os = "macos")]
+fn mac_execute_fixed_install_sequence_v1(
+    executor: &MacManagedArtifactExecutorV1,
+    stage_one: &LimaStageOneAuthorizationV1,
+    carrier: &InstallBootstrapContextCarrierV1,
+) -> Result<()> {
+    let capsule = open_mac_lima_stage_one_capsule_v1(&stage_one.successor_template.scope_id)?
+        .ok_or_else(|| anyhow::anyhow!("fixed install has no retained Stage-1 capsule"))?;
+    if capsule.state != "Completed" || capsule.stage_one_authorization != *stage_one {
+        bail!("fixed install has no completed exact Stage-1 capsule");
+    }
+    let observation = capsule
+        .observation
+        .as_ref()
+        .ok_or_else(|| anyhow::anyhow!("fixed install lacks a retained Stage-1 observation"))?;
+    let (mapping, expected_manifest) =
+        derive_mac_lima_stage_one_successor_manifest_v1(stage_one, carrier, observation)?;
+    let encoded_carrier = carrier
+        .encode()
+        .context("encode fixed install IH carrier")?;
+    let encoded_mapping = mapping
+        .encode(carrier)
+        .context("encode fixed install successor mapping")?;
+    let mapping_commitment = format!("{:x}", Sha256::digest(encoded_mapping.as_bytes()));
+    let steps = mac_fixed_install_steps_v1(&stage_one.requester_principal);
+    if steps.iter().any(|(role, action)| {
+        !matches!(action, ManagedActionV1::Create)
+            && !(role == "mac.lima.guest-service-state(socket)"
+                && matches!(action, ManagedActionV1::Enable | ManagedActionV1::Start))
+    }) {
+        bail!("fixed install plan contains a forbidden ordinary post-PM action");
+    }
+
+    loop {
+        let state = open_system_keychain_protected_state_for_scope_v1(&capsule.scope_id)?
+            .ok_or_else(|| anyhow::anyhow!("fixed install lacks protected state"))?;
+        if state.current_anchor.manifest_generation != expected_manifest.manifest_generation
+            || state.current_anchor.manifest_sha256 != expected_manifest.manifest_sha256
+            || state.current_anchor.platform_mapping_commitment.as_deref()
+                != Some(mapping_commitment.as_str())
+            || state.current_anchor.requester_principal != stage_one.requester_principal
+            || state.current_anchor.attempt_nonce != stage_one.attempt_id
+        {
+            bail!("fixed install protected state does not exact-join the signed Stage-1 successor");
+        }
+        let manifest_path = format!("manifest.{}.json", state.current_anchor.manifest_generation);
+        let manifest_bytes =
+            mac_read_stage_one_transition_artifact_no_follow_v1(executor, &manifest_path)?;
+        let manifest: ManagedArtifactManifestV1 =
+            serde_json::from_slice(&manifest_bytes).context("decode fixed install manifest")?;
+        if canonical_manifest_bytes_v1(&manifest)?.bytes != manifest_bytes
+            || manifest != expected_manifest
+        {
+            bail!("fixed install manifest does not exact-join signed Stage-1 successor");
+        }
+        let index_path = format!("action-receipts.{}.v1.json", manifest.manifest_generation);
+        let index_bytes =
+            mac_read_stage_one_transition_artifact_no_follow_v1(executor, &index_path)?;
+        let index: ManagedActionReceiptIndexV1 =
+            serde_json::from_slice(&index_bytes).context("decode fixed install receipt index")?;
+        let canonical_index = canonical_action_receipt_index_bytes_v1(&index)?;
+        let index_sha256 = sha256_hex_bootstrap_v1(&canonical_index);
+        if canonical_index != index_bytes
+            || index.authority_domain != "mac_host_shared"
+            || index.scope_id != capsule.scope_id
+            || index.manifest_generation != manifest.manifest_generation
+            || index.manifest_sha256 != manifest.manifest_sha256
+            || index.entries.is_empty()
+        {
+            bail!("fixed install receipt index is not canonical for the signed Stage-1 successor");
+        }
+        let anchor_entry_count =
+            usize::try_from(state.current_anchor.action_receipt_index_revision)
+                .context("fixed install anchor receipt revision does not fit this platform")?;
+        if anchor_entry_count == 0 {
+            bail!("fixed install protected state has no durable Stage-1 receipt prefix");
+        }
+        let head_bytes =
+            mac_read_stage_one_transition_artifact_no_follow_v1(executor, "head.v1.json")?;
+        let head: ManagedManifestHeadV1 =
+            serde_json::from_slice(&head_bytes).context("decode fixed install manifest head")?;
+        if canonical_managed_manifest_head_v1(&head)? != head_bytes
+            || head.scope_id != capsule.scope_id
+            || head.manifest_generation != manifest.manifest_generation
+            || head.manifest_sha256 != manifest.manifest_sha256
+        {
+            bail!("fixed install manifest head is not canonical for the signed Stage-1 successor");
+        }
+        // A receipt/index/head may have been durably published immediately before the protected
+        // state CAS.  Admit only the current anchor prefix, or that exact next prepared tail;
+        // the latter is replayed through the existing idempotent post-PM transaction before the
+        // next fixed step is considered.
+        let anchor_bound_prefix = index.index_revision
+            == state.current_anchor.action_receipt_index_revision
+            && index_sha256 == state.current_anchor.action_receipt_index_sha256
+            && index.entries.len() == anchor_entry_count
+            && head.action_receipt_index_revision
+                == state.current_anchor.action_receipt_index_revision
+            && head.action_receipt_index_sha256 == state.current_anchor.action_receipt_index_sha256
+            && sha256_hex_bootstrap_v1(&head_bytes) == state.current_anchor.head_sha256;
+        let next_anchor_revision = state
+            .current_anchor
+            .action_receipt_index_revision
+            .checked_add(1)
+            .ok_or_else(|| anyhow::anyhow!("fixed install receipt revision overflow"))?;
+        let exact_one_receipt_ahead_prepared_tail = state.prepared_record.is_some()
+            && index.index_revision == next_anchor_revision
+            && index.entries.len()
+                == anchor_entry_count.checked_add(1).ok_or_else(|| {
+                    anyhow::anyhow!("fixed install receipt prefix length overflow")
+                })?
+            && index.previous_index_sha256.as_deref()
+                == Some(state.current_anchor.action_receipt_index_sha256.as_str())
+            && head.action_receipt_index_revision == next_anchor_revision
+            && head.action_receipt_index_sha256 == index_sha256
+            && head.previous_head_sha256.as_deref()
+                == Some(state.current_anchor.head_sha256.as_str());
+        if !anchor_bound_prefix && !exact_one_receipt_ahead_prepared_tail {
+            bail!("fixed install receipt index/head is neither the current anchor prefix nor one exact prepared tail");
+        }
+        if anchor_entry_count > steps.len() + 1 || index.entries.len() > steps.len() + 1 {
+            bail!("fixed install receipt index contains an action outside its fixed plan");
+        }
+        let stage_one_entry = manifest
+            .entries
+            .iter()
+            .find(|entry| entry.logical_role.0 == "mac.lima.instance")
+            .ok_or_else(|| anyhow::anyhow!("fixed install manifest lacks its Stage-1 instance"))?;
+        mac_validate_fixed_install_completed_receipt_v1(
+            executor,
+            &manifest,
+            &index.entries[0],
+            stage_one_entry,
+            ManagedActionV1::Create,
+            &stage_one.attempt_id,
+        )?;
+        let completed = anchor_entry_count - 1;
+        for (offset, (role, action)) in steps.iter().take(completed).enumerate() {
+            let Some(index_entry) = index.entries.get(offset + 1) else {
+                bail!("fixed install current-anchor prefix omits a required receipt");
+            };
+            let entry = manifest
+                .entries
+                .iter()
+                .find(|entry| entry.logical_role.0 == *role)
+                .ok_or_else(|| anyhow::anyhow!("fixed install manifest misses a required role"))?;
+            mac_validate_fixed_install_completed_receipt_v1(
+                executor,
+                &manifest,
+                index_entry,
+                entry,
+                *action,
+                &stage_one.attempt_id,
+            )?;
+        }
+        if completed == steps.len() {
+            if state.prepared_record.is_some() {
+                bail!("fixed install completed receipt index retains an ambiguous prepared state");
+            }
+            return Ok(());
+        }
+        let (role, action) = &steps[completed];
+        let entry = manifest
+            .entries
+            .iter()
+            .find(|entry| entry.logical_role.0 == *role)
+            .ok_or_else(|| {
+                anyhow::anyhow!("fixed install manifest misses its next required role")
+            })?;
+        let (receipt_id, receipt_relative_path) =
+            mac_fixed_install_planned_receipt_v1(&manifest, entry, *action, &stage_one.attempt_id)?;
+        if let Some(prepared) = &state.prepared_record {
+            if state.counter != next_anchor_revision || prepared.allocated_counter != state.counter
+            {
+                bail!("fixed install recovery has a mismatched prepared counter");
+            }
+            if prepared.receipt_id != receipt_id
+                || prepared.receipt_relative_path != receipt_relative_path
+                || prepared.entry_id != entry.object_id
+                || prepared.action != *action
+                || prepared.attempt_id != stage_one.attempt_id
+            {
+                bail!("fixed install retry has an ambiguous prepared step");
+            }
+            if exact_one_receipt_ahead_prepared_tail {
+                let tail = index.entries.get(anchor_entry_count).ok_or_else(|| {
+                    anyhow::anyhow!("fixed install one-receipt-ahead index lacks its exact tail")
+                })?;
+                mac_validate_fixed_install_completed_receipt_v1(
+                    executor,
+                    &manifest,
+                    tail,
+                    entry,
+                    *action,
+                    &stage_one.attempt_id,
+                )?;
+                if tail.prepared_record_sha256
+                    != managed_action_prepared_record_sha256_v1(prepared)?
+                    || tail.allocated_counter != prepared.allocated_counter
+                {
+                    bail!("fixed install retry tail is not the exact next planned receipt");
+                }
+            }
+        } else if state.counter != state.current_anchor.action_receipt_index_revision {
+            bail!("fixed install current anchor has a mismatched durable counter");
+        }
+        let publisher_request = ManagedLifecyclePublisherRequestV1 {
+            host_context_commitment: carrier.host_context_commitment.clone(),
+            platform_mapping_commitment: Some(mapping_commitment.clone()),
+            scope_id: state.current_anchor.scope_id.clone(),
+            current_anchor_counter: state.current_anchor.action_receipt_index_revision,
+            current_anchor_sha256: lifecycle_anchor_sha256_v1(&state.current_anchor)?,
+            manifest_generation: manifest.manifest_generation,
+            manifest_sha256: manifest.manifest_sha256.clone(),
+            role: entry.logical_role.clone(),
+            action: *action,
+            object_identity: entry.identity.clone(),
+            requester_principal: state.current_anchor.requester_principal.clone(),
+            attempt_nonce: state.current_anchor.attempt_nonce.clone(),
+            expected_executor_build: state.current_anchor.executor_identity.clone(),
+        };
+        let control = ManagedLifecycleControlRequestV1 {
+            tag: Some(MappedLifecycleTagV1::PostPmAction),
+            authority_domain: String::new(),
+            scope_id: String::new(),
+            selected_host_prefix: String::new(),
+            requester_principal: String::new(),
+            host_context_commitment: Some(carrier.host_context_commitment.clone()),
+            platform_mapping_commitment: Some(mapping_commitment.clone()),
+            host_platform_control_root: Some(mapping.host_platform_control_root.clone()),
+            manifest: None,
+            action_receipt: None,
+            publisher_protected_state: None,
+            publisher_request: Some(publisher_request),
+            install_bootstrap_context_v1: Some(encoded_carrier.clone()),
+            platform_bootstrap_mapping_v1: Some(encoded_mapping.clone()),
+            executor_build_evidence: Some(
+                stage_one.successor_template.executor_build_evidence.clone(),
+            ),
+            lima_stage_one_authorization_v1: None,
+            pairing_ticket: None,
+            pairing_session_binding_v1: None,
+            pairing_host_record_generation: None,
+            pairing_record_expected_generation_v1: None,
+            pairing_host_record_sha256: None,
+        };
+        let _ = execute_mac_post_pm_action_with_policy_v1(executor, &control, true)?;
+    }
+}
+
+#[cfg(target_os = "macos")]
+fn execute_mac_post_pm_action_with_policy_v1(
     executor: &MacManagedArtifactExecutorV1,
     control: &ManagedLifecycleControlRequestV1,
+    require_absent_before_first_effect: bool,
 ) -> Result<Value> {
     let publisher_request = control
         .publisher_request
@@ -6324,6 +6880,17 @@ fn execute_mac_post_pm_action_v1(
     )?;
     let effect_observation = match journal.state.as_str() {
         "Prepared" => {
+            if require_absent_before_first_effect {
+                let (before_state, _) = mac_observe_closed_post_pm_effect_v1(
+                    tool,
+                    &home,
+                    &mapping.host_platform_control_root,
+                    &effect_plan,
+                )?;
+                if before_state != MacPostPmEffectObservationStateV1::Before {
+                    bail!("fixed install step is not in its exact absent before-state");
+                }
+            }
             mac_persist_post_pm_journal_state_absent_or_exact_v1(
                 executor,
                 prepared,
@@ -6485,6 +7052,14 @@ fn execute_mac_post_pm_action_v1(
     Ok(
         json!({"status": "completed", "receipt": receipt, "manifest_generation": manifest.manifest_generation, "manifest_sha256": manifest.manifest_sha256}),
     )
+}
+
+#[cfg(target_os = "macos")]
+fn execute_mac_post_pm_action_v1(
+    executor: &MacManagedArtifactExecutorV1,
+    control: &ManagedLifecycleControlRequestV1,
+) -> Result<Value> {
+    execute_mac_post_pm_action_with_policy_v1(executor, control, false)
 }
 
 #[cfg(not(target_os = "macos"))]

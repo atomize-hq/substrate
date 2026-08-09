@@ -42,6 +42,8 @@ FAKE_SUBSTRATE_ARGV="${WORK_ROOT}/fake-substrate.argv"
 FAKE_SUBSTRATE_ENV="${WORK_ROOT}/fake-substrate.env"
 FAKE_SUBSTRATE_FD="${WORK_ROOT}/fake-substrate.fd"
 FAKE_CARGO_ARGV="${WORK_ROOT}/fake-cargo.argv"
+FAKE_AARCH64_CARGO_ARGV="${WORK_ROOT}/fake-aarch64-cargo.argv"
+FAKE_AARCH64_CARGO_TARGET_DIR="${WORK_ROOT}/fake-aarch64-cargo-target-dir"
 FAKE_PRIVILEGED_LOG="${WORK_ROOT}/fake-privileged.log"
 CALLER_FD_SENTINEL="${WORK_ROOT}/caller-owned-fd-sentinel"
 
@@ -65,6 +67,7 @@ cp "${REPO_ROOT}/scripts/substrate/world-deps.yaml" \
 cp "${REPO_ROOT}/scripts/mac/com.substrate.lifecycle.publisher.v1.plist" \
   "${FIXTURE_REPO}/scripts/mac/com.substrate.lifecycle.publisher.v1.plist"
 cp -R "${REPO_ROOT}/config/." "${FIXTURE_REPO}/config/"
+cp "${REPO_ROOT}/Cargo.lock" "${FIXTURE_REPO}/Cargo.lock"
 cp "${REPO_ROOT}/llm-last-mile/runtime-refactor/review-control/r3-mac-evidence-recovery-r5-review-cycle-record.json" \
   "${FIXTURE_REPO}/llm-last-mile/runtime-refactor/review-control/r3-mac-evidence-recovery-r5-review-cycle-record.json"
 chmod 0755 "${FIXTURE_INSTALLER}"
@@ -78,12 +81,31 @@ set -euo pipefail
 : "${FAKE_SUBSTRATE_ENV:?}"
 : "${FAKE_SUBSTRATE_FD:?}"
 : "${FAKE_CARGO_ARGV:?}"
+: "${FAKE_AARCH64_CARGO_ARGV:?}"
+: "${FAKE_AARCH64_CARGO_TARGET_DIR:?}"
 
-{
-  for argument in "$@"; do
-    printf '%s\n' "${argument}"
-  done
-} >"${FAKE_CARGO_ARGV}"
+previous=""
+is_aarch64=0
+for argument in "$@"; do
+  if [[ "${previous}" == "--target" && "${argument}" == "aarch64-unknown-linux-gnu" ]]; then
+    is_aarch64=1
+  fi
+  previous="${argument}"
+done
+
+if [[ "${is_aarch64}" -eq 1 ]]; then
+  {
+    for argument in "$@"; do
+      printf '%s\n' "${argument}"
+    done
+  } >"${FAKE_AARCH64_CARGO_ARGV}"
+else
+  {
+    for argument in "$@"; do
+      printf '%s\n' "${argument}"
+    done
+  } >"${FAKE_CARGO_ARGV}"
+fi
 
 mkdir -p "$(dirname "${FAKE_SUBSTRATE_PATH}")"
 cat >"${FAKE_SUBSTRATE_PATH}" <<'FAKE_SUBSTRATE'
@@ -136,8 +158,51 @@ cp "${FAKE_SUBSTRATE_PATH}" "${FAKE_SUBSTRATE_PATH%/substrate}/substrate-lifecyc
 chmod 0755 \
   "${FAKE_SUBSTRATE_PATH%/substrate}/substrate-lifecycle-control" \
   "${FAKE_SUBSTRATE_PATH%/substrate}/substrate-lifecycle-macos"
+
+if [[ "${is_aarch64}" -eq 1 ]]; then
+  : "${CARGO_TARGET_DIR:?}"
+  printf '%s\n' "${CARGO_TARGET_DIR}" >"${FAKE_AARCH64_CARGO_TARGET_DIR}"
+  fake_cross_root="${CARGO_TARGET_DIR}/aarch64-unknown-linux-gnu/release"
+  mkdir -p "${fake_cross_root}"
+  for fake_cross_binary in substrate-lifecycle-linux world-service substrate-gateway substrate; do
+    printf '#!/bin/bash\nexit 0\n' >"${fake_cross_root}/${fake_cross_binary}"
+    chmod 0755 "${fake_cross_root}/${fake_cross_binary}"
+  done
+fi
 FAKE_CARGO
 chmod 0755 "${FIXTURE_BIN_DIR}/cargo"
+
+cat >"${FIXTURE_BIN_DIR}/file" <<'FAKE_FILE'
+#!/bin/bash
+set -euo pipefail
+
+last=""
+for argument in "$@"; do
+  last="${argument}"
+done
+case "${last}" in
+  */aarch64-unknown-linux-gnu/release/substrate-lifecycle-linux|\
+  */aarch64-unknown-linux-gnu/release/world-service|\
+  */aarch64-unknown-linux-gnu/release/substrate-gateway|\
+  */aarch64-unknown-linux-gnu/release/substrate)
+    printf '%s\n' 'ELF 64-bit LSB executable, ARM aarch64'
+    ;;
+  *) exec /usr/bin/file "$@" ;;
+esac
+FAKE_FILE
+chmod 0755 "${FIXTURE_BIN_DIR}/file"
+
+cat >"${FIXTURE_BIN_DIR}/rustc" <<'FAKE_RUSTC'
+#!/bin/bash
+set -euo pipefail
+
+if [[ "${1-}" == "--version" ]]; then
+  printf '%s\n' 'rustc 1.89.0 (fixture)'
+  exit 0
+fi
+exit 64
+FAKE_RUSTC
+chmod 0755 "${FIXTURE_BIN_DIR}/rustc"
 
 # The fixture proves the installer requests the fixed privileged publication without invoking
 # sudo or writing any host /Library state. The production dispatcher keeps its scrubbed absolute
@@ -268,18 +333,21 @@ run_fixture_installer() {
   local fail_manifest_once="$5"
   local failure_marker="$6"
   local fail_manifest_read_once="${7-}"
+  local fixture_tmpdir="${8:-${FIXTURE_TMPDIR}}"
   local manifest_path="${install_prefix}/.dev-install-managed/mac-control-binaries.txt"
 
   env -i \
     PATH="${FIXTURE_BIN_DIR}:${PATH}" \
     HOME="${install_prefix}/caller-home" \
-    TMPDIR="${FIXTURE_TMPDIR}" \
+    TMPDIR="${fixture_tmpdir}" \
     CARGO_TARGET_DIR="${FIXTURE_REPO}/target" \
     FAKE_SUBSTRATE_PATH="${FAKE_SUBSTRATE_PATH}" \
     FAKE_SUBSTRATE_ARGV="${FAKE_SUBSTRATE_ARGV}" \
     FAKE_SUBSTRATE_ENV="${FAKE_SUBSTRATE_ENV}" \
     FAKE_SUBSTRATE_FD="${FAKE_SUBSTRATE_FD}" \
     FAKE_CARGO_ARGV="${FAKE_CARGO_ARGV}" \
+    FAKE_AARCH64_CARGO_ARGV="${FAKE_AARCH64_CARGO_ARGV}" \
+    FAKE_AARCH64_CARGO_TARGET_DIR="${FAKE_AARCH64_CARGO_TARGET_DIR}" \
     FAKE_PRIVILEGED_LOG="${FAKE_PRIVILEGED_LOG}" \
     FAKE_SUBSTRATE_CALLER_FD_SENTINEL="${CALLER_FD_SENTINEL}" \
     FAKE_FAIL_MAC_COPY_BINARY="${fail_copy_binary}" \
@@ -329,6 +397,48 @@ EOF
   cmp -s "${expected_manifest}" "${install_prefix}/.dev-install-managed/mac-control-binaries.txt" \
     || fail "${label}: macOS lifecycle binaries were not recorded exactly as managed copies"
   assert_no_mac_copy_temps "${install_prefix}"
+}
+
+assert_mac_lima_bundle_converged() {
+  local install_prefix="$1"
+  local label="$2"
+  local bundle="${install_prefix}/bin/linux"
+  local binary
+  local observed_count
+
+  [[ -d "${bundle}" && ! -L "${bundle}" ]] \
+    || fail "${label}: fixed AArch64 Linux bundle is absent or linked"
+  for binary in substrate-lifecycle-linux world-service substrate-gateway substrate; do
+    [[ -f "${bundle}/${binary}" && ! -L "${bundle}/${binary}" && -x "${bundle}/${binary}" ]] \
+      || fail "${label}: retained ${binary} is not a regular executable"
+    [[ "$(stat -f '%Lp' "${bundle}/${binary}")" == "755" ]] \
+      || fail "${label}: retained ${binary} mode is not 0755"
+  done
+  observed_count="$(find "${bundle}" -mindepth 1 -maxdepth 1 -type f | wc -l | tr -d '[:space:]')"
+  [[ "${observed_count}" == "4" ]] \
+    || fail "${label}: retained Linux bundle does not contain exactly four files"
+}
+
+seed_exact_mac_lima_bundle_v1() {
+  local install_prefix="$1"
+  local bundle="${install_prefix}/bin/linux"
+  local binary
+
+  mkdir -p "${bundle}"
+  for binary in substrate-lifecycle-linux world-service substrate-gateway substrate; do
+    printf '#!/bin/bash\nexit 0\n' >"${bundle}/${binary}"
+    chmod 0755 "${bundle}/${binary}"
+  done
+}
+
+bundle_content_manifest_v1() {
+  local bundle="$1"
+  local entry
+
+  find "${bundle}" -mindepth 1 -maxdepth 1 -type f -print | LC_ALL=C sort | while IFS= read -r entry; do
+    printf '%s %s %s\n' "$(basename "${entry}")" "$(stat -f '%Lp' "${entry}")" \
+      "$(shasum -a 256 -- "${entry}" | awk '{print $1}')"
+  done
 }
 
 printf 'caller-owned-fd-sentinel\n' >"${CALLER_FD_SENTINEL}"
@@ -387,7 +497,35 @@ EXPECTED_CARGO
 cmp -s "${WORK_ROOT}/expected-cargo.argv" "${FAKE_CARGO_ARGV}" \
   || fail "installer did not build exactly the macOS lifecycle binaries"
 
+cat >"${WORK_ROOT}/expected-aarch64-cargo.argv" <<'EXPECTED_AARCH64_CARGO'
+build
+--locked
+--offline
+--target
+aarch64-unknown-linux-gnu
+--release
+-p
+substrate
+--bin
+substrate-lifecycle-linux
+-p
+world-service
+--bin
+world-service
+-p
+substrate-gateway
+--bin
+substrate-gateway
+-p
+substrate
+--bin
+substrate
+EXPECTED_AARCH64_CARGO
+cmp -s "${WORK_ROOT}/expected-aarch64-cargo.argv" "${FAKE_AARCH64_CARGO_ARGV}" \
+  || fail "installer did not make the fixed four-binary AArch64 build"
+
 assert_mac_pair_converged "${FIXTURE_PREFIX}" primary
+assert_mac_lima_bundle_converged "${FIXTURE_PREFIX}" primary
 grep -Fq -- 'mac-publisher-install-provenance' "${FAKE_PRIVILEGED_LOG}" \
   || fail "fixture installer did not request fixed root install-provenance publication"
 # This fixture intentionally does not invoke sudo.  Pin the fixed source-to-root-copy
@@ -420,6 +558,7 @@ if ! run_fixture_installer "${COPY_FAILURE_PREFIX}" "${COPY_FAILURE_CARRIER}" \
   fail "copy failure retry did not converge"
 fi
 assert_mac_pair_converged "${COPY_FAILURE_PREFIX}" copy-failure-retry
+assert_mac_lima_bundle_converged "${COPY_FAILURE_PREFIX}" copy-failure-retry
 
 MANIFEST_FAILURE_PREFIX="${WORK_ROOT}/manifest-failure-prefix"
 MANIFEST_FAILURE_MARKER="${WORK_ROOT}/manifest-failure.marker"
@@ -440,6 +579,7 @@ if ! run_fixture_installer "${MANIFEST_FAILURE_PREFIX}" "${MANIFEST_FAILURE_CARR
   fail "manifest failure retry did not converge"
 fi
 assert_mac_pair_converged "${MANIFEST_FAILURE_PREFIX}" manifest-failure-retry
+assert_mac_lima_bundle_converged "${MANIFEST_FAILURE_PREFIX}" manifest-failure-retry
 
 PAIR_FAILURE_PREFIX="${WORK_ROOT}/pair-failure-prefix"
 PAIR_FAILURE_MARKER="${WORK_ROOT}/pair-failure.marker"
@@ -463,6 +603,7 @@ if ! run_fixture_installer "${PAIR_FAILURE_PREFIX}" "${PAIR_FAILURE_CARRIER}" \
   fail "second-pair-member failure retry did not converge"
 fi
 assert_mac_pair_converged "${PAIR_FAILURE_PREFIX}" pair-failure-retry
+assert_mac_lima_bundle_converged "${PAIR_FAILURE_PREFIX}" pair-failure-retry
 
 MANIFEST_READ_FAILURE_PREFIX="${WORK_ROOT}/manifest-read-failure-prefix"
 MANIFEST_READ_FAILURE_MARKER="${WORK_ROOT}/manifest-read-failure.marker"
@@ -473,6 +614,7 @@ if ! run_fixture_installer "${MANIFEST_READ_FAILURE_PREFIX}" "${MANIFEST_READ_FA
   fail "manifest read failure fixture initial install did not converge"
 fi
 assert_mac_pair_converged "${MANIFEST_READ_FAILURE_PREFIX}" manifest-read-failure-initial
+assert_mac_lima_bundle_converged "${MANIFEST_READ_FAILURE_PREFIX}" manifest-read-failure-initial
 if run_fixture_installer "${MANIFEST_READ_FAILURE_PREFIX}" "${MANIFEST_READ_FAILURE_CARRIER}" \
   manifest-read-failure-control "" "" "${MANIFEST_READ_FAILURE_MARKER}" 1; then
   fail "fixture managed-manifest read failure unexpectedly succeeded"
@@ -480,12 +622,81 @@ fi
 [[ -f "${MANIFEST_READ_FAILURE_MARKER}" ]] \
   || fail "fixture did not inject managed-manifest read failure"
 assert_mac_pair_converged "${MANIFEST_READ_FAILURE_PREFIX}" manifest-read-failure-preserved
+assert_mac_lima_bundle_converged "${MANIFEST_READ_FAILURE_PREFIX}" manifest-read-failure-preserved
 if ! run_fixture_installer "${MANIFEST_READ_FAILURE_PREFIX}" "${MANIFEST_READ_FAILURE_CARRIER}" \
   manifest-read-failure-retry "" "" ""; then
   sed -n '1,160p' "${WORK_ROOT}/manifest-read-failure-retry.err" >&2
   fail "managed-manifest read failure retry did not converge"
 fi
 assert_mac_pair_converged "${MANIFEST_READ_FAILURE_PREFIX}" manifest-read-failure-retry
+assert_mac_lima_bundle_converged "${MANIFEST_READ_FAILURE_PREFIX}" manifest-read-failure-retry
+
+# The fixed build root cannot be redirected into a checkout through caller TMPDIR.  The fake cargo
+# records the actual CARGO_TARGET_DIR so this is a direct boundary check, not a lexical source test.
+REPO_TMPDIR="${FIXTURE_REPO}/caller-controlled-tmp"
+REPO_TMPDIR_PREFIX="${WORK_ROOT}/repo-tmpdir-prefix"
+REPO_TMPDIR_CARRIER="$(bootstrap_carrier_for_prefix "${REPO_TMPDIR_PREFIX}")"
+mkdir -p "${REPO_TMPDIR}"
+if ! run_fixture_installer "${REPO_TMPDIR_PREFIX}" "${REPO_TMPDIR_CARRIER}" \
+  repo-tmpdir-boundary "" "" "" "" "${REPO_TMPDIR}"; then
+  sed -n '1,160p' "${WORK_ROOT}/repo-tmpdir-boundary.err" >&2
+  fail "repo TMPDIR boundary fixture did not converge through the fixed external build root"
+fi
+[[ -f "${FAKE_AARCH64_CARGO_TARGET_DIR}" ]] \
+  || fail "repo TMPDIR boundary fixture did not record the AArch64 build root"
+if [[ "$(<"${FAKE_AARCH64_CARGO_TARGET_DIR}")" == "${FIXTURE_REPO}"/* ]]; then
+  fail "caller-controlled repo TMPDIR redirected AArch64 build output into the checkout"
+fi
+if find "${REPO_TMPDIR}" -mindepth 1 -print -quit | grep -q .; then
+  find "${REPO_TMPDIR}" -mindepth 1 -maxdepth 1 -print >&2
+  fail "caller-controlled repo TMPDIR retained an AArch64 build artifact"
+fi
+assert_mac_lima_bundle_converged "${REPO_TMPDIR_PREFIX}" repo-tmpdir-boundary
+
+# A partial, unknown, or mismatched retained bundle is not an authority source. Each attempt
+# must fail before changing the caller-provided bundle bytes; a subsequent exact retry is allowed
+# only when the complete four-file bundle was already published atomically.
+PARTIAL_BUNDLE_PREFIX="${WORK_ROOT}/partial-bundle-prefix"
+PARTIAL_BUNDLE_CARRIER="$(bootstrap_carrier_for_prefix "${PARTIAL_BUNDLE_PREFIX}")"
+mkdir -p "${PARTIAL_BUNDLE_PREFIX}/bin/linux"
+printf 'partial-retained-artifact\n' >"${PARTIAL_BUNDLE_PREFIX}/bin/linux/substrate"
+chmod 0755 "${PARTIAL_BUNDLE_PREFIX}/bin/linux/substrate"
+bundle_content_manifest_v1 "${PARTIAL_BUNDLE_PREFIX}/bin/linux" >"${WORK_ROOT}/partial-bundle.before"
+if run_fixture_installer "${PARTIAL_BUNDLE_PREFIX}" "${PARTIAL_BUNDLE_CARRIER}" \
+  partial-bundle-rejected "" "" ""; then
+  fail "partial retained Linux bundle was incorrectly accepted"
+fi
+bundle_content_manifest_v1 "${PARTIAL_BUNDLE_PREFIX}/bin/linux" >"${WORK_ROOT}/partial-bundle.after"
+cmp -s "${WORK_ROOT}/partial-bundle.before" "${WORK_ROOT}/partial-bundle.after" \
+  || fail "partial retained Linux bundle changed after fail-closed rejection"
+
+UNKNOWN_BUNDLE_PREFIX="${WORK_ROOT}/unknown-bundle-prefix"
+UNKNOWN_BUNDLE_CARRIER="$(bootstrap_carrier_for_prefix "${UNKNOWN_BUNDLE_PREFIX}")"
+seed_exact_mac_lima_bundle_v1 "${UNKNOWN_BUNDLE_PREFIX}"
+printf 'unknown-retained-artifact\n' >"${UNKNOWN_BUNDLE_PREFIX}/bin/linux/unexpected"
+chmod 0755 "${UNKNOWN_BUNDLE_PREFIX}/bin/linux/unexpected"
+bundle_content_manifest_v1 "${UNKNOWN_BUNDLE_PREFIX}/bin/linux" >"${WORK_ROOT}/unknown-bundle.before"
+if run_fixture_installer "${UNKNOWN_BUNDLE_PREFIX}" "${UNKNOWN_BUNDLE_CARRIER}" \
+  unknown-bundle-rejected "" "" ""; then
+  fail "unknown retained Linux bundle entry was incorrectly accepted"
+fi
+bundle_content_manifest_v1 "${UNKNOWN_BUNDLE_PREFIX}/bin/linux" >"${WORK_ROOT}/unknown-bundle.after"
+cmp -s "${WORK_ROOT}/unknown-bundle.before" "${WORK_ROOT}/unknown-bundle.after" \
+  || fail "unknown retained Linux bundle changed after fail-closed rejection"
+
+MISMATCH_BUNDLE_PREFIX="${WORK_ROOT}/mismatch-bundle-prefix"
+MISMATCH_BUNDLE_CARRIER="$(bootstrap_carrier_for_prefix "${MISMATCH_BUNDLE_PREFIX}")"
+seed_exact_mac_lima_bundle_v1 "${MISMATCH_BUNDLE_PREFIX}"
+printf 'substituted-world-service\n' >"${MISMATCH_BUNDLE_PREFIX}/bin/linux/world-service"
+chmod 0755 "${MISMATCH_BUNDLE_PREFIX}/bin/linux/world-service"
+bundle_content_manifest_v1 "${MISMATCH_BUNDLE_PREFIX}/bin/linux" >"${WORK_ROOT}/mismatch-bundle.before"
+if run_fixture_installer "${MISMATCH_BUNDLE_PREFIX}" "${MISMATCH_BUNDLE_CARRIER}" \
+  mismatch-bundle-rejected "" "" ""; then
+  fail "mismatched retained Linux bundle was incorrectly accepted"
+fi
+bundle_content_manifest_v1 "${MISMATCH_BUNDLE_PREFIX}/bin/linux" >"${WORK_ROOT}/mismatch-bundle.after"
+cmp -s "${WORK_ROOT}/mismatch-bundle.before" "${WORK_ROOT}/mismatch-bundle.after" \
+  || fail "mismatched retained Linux bundle changed after fail-closed rejection"
 
 UNMANAGED_PREFIX="${WORK_ROOT}/unmanaged-prefix"
 UNMANAGED_CARRIER="$(bootstrap_carrier_for_prefix "${UNMANAGED_PREFIX}")"

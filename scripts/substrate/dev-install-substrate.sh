@@ -1712,6 +1712,96 @@ stage_managed_mac_control_binary_copy() {
   log "Copied immutable ${label} into ${dest}"
 }
 
+# The macOS installer owns exactly one closed AArch64/Linux bundle before it admits direct
+# bootstrap.  Build roots and linker wrappers are external to every checkout; only the four
+# no-follow, mode-0755 outputs are atomically retained below the selected prefix.  A retry either
+# finds the exact complete bundle or fails before replacing anything -- it never treats a partial
+# or caller-selected prefix file as an authority source.
+build_and_stage_mac_aarch64_lima_artifacts_v1() {
+  [[ "${IS_MAC}" -eq 1 ]] || return 0
+
+  local zig="/opt/homebrew/opt/zig/bin/zig"
+  local target="aarch64-unknown-linux-gnu"
+  local build_command="cargo build --locked --offline --target aarch64-unknown-linux-gnu --release -p substrate --bin substrate-lifecycle-linux -p world-service --bin world-service -p substrate-gateway --bin substrate-gateway -p substrate --bin substrate"
+  local bundle_dir="${BIN_DIR}/linux"
+  local external_root linker_wrapper artifact_stage toolchain cargo_lock
+  local name source digest existing_digest mode file_type
+  local -a names=(substrate-lifecycle-linux world-service substrate-gateway substrate)
+
+  [[ -x "${zig}" && ! -L "${zig}" ]] || fatal "fixed macOS AArch64 Zig compiler is absent or linked: ${zig}"
+  [[ -f "${REPO_ROOT}/Cargo.lock" && ! -L "${REPO_ROOT}/Cargo.lock" ]] || fatal "Cargo.lock is absent or linked"
+  toolchain="$(rustc --version)" || fatal "cannot determine fixed Rust toolchain"
+  [[ "${toolchain}" == rustc\ 1.89.0\ * ]] || fatal "macOS AArch64 staging requires rustc 1.89.0"
+  cargo_lock="$(shasum -a 256 -- "${REPO_ROOT}/Cargo.lock" | awk '{print $1}')" || fatal "cannot hash Cargo.lock"
+  [[ "${cargo_lock}" =~ ^[0-9a-f]{64}$ ]] || fatal "Cargo.lock digest is not canonical"
+
+  external_root="$(mktemp -d "/private/tmp/substrate-mac-aarch64-build.XXXXXX")" || fatal "cannot allocate external AArch64 build root"
+  linker_wrapper="${external_root}/aarch64-linux-gnu-zig-cc"
+  cat > "${linker_wrapper}" <<EOF
+#!/usr/bin/env bash
+exec "${zig}" cc -target aarch64-linux-gnu "\$@"
+EOF
+  chmod 0700 "${linker_wrapper}" || fatal "cannot harden fixed AArch64 linker wrapper"
+
+  log "Building the fixed macOS Lima AArch64 Linux artifact bundle..."
+  CARGO_TARGET_DIR="${external_root}/target" \
+  CARGO_TARGET_AARCH64_UNKNOWN_LINUX_GNU_LINKER="${linker_wrapper}" \
+  CC_aarch64_unknown_linux_gnu="${linker_wrapper}" \
+    cargo build --locked --offline --target "${target}" --release \
+      -p substrate --bin substrate-lifecycle-linux \
+      -p world-service --bin world-service \
+      -p substrate-gateway --bin substrate-gateway \
+      -p substrate --bin substrate \
+    || fatal "fixed macOS AArch64 Linux artifact build failed"
+
+  for name in "${names[@]}"; do
+    source="${external_root}/target/${target}/release/${name}"
+    [[ -f "${source}" && ! -L "${source}" && -x "${source}" ]] || fatal "fixed AArch64 build omitted ${name}"
+    file_type="$(LC_ALL=C file -b -- "${source}" 2>/dev/null || true)"
+    [[ "${file_type}" == *ELF* && ( "${file_type}" == *aarch64* || "${file_type}" == *AArch64* ) ]] \
+      || fatal "fixed AArch64 build produced a non-Linux-AArch64 ${name}"
+  done
+
+  if [[ -e "${bundle_dir}" || -L "${bundle_dir}" ]]; then
+    [[ -d "${bundle_dir}" && ! -L "${bundle_dir}" ]] || fatal "retained Linux bundle path is linked or not a directory"
+    for name in "${names[@]}"; do
+      source="${external_root}/target/${target}/release/${name}"
+      digest="$(shasum -a 256 -- "${source}" | awk '{print $1}')" || fatal "cannot hash fixed ${name}"
+      [[ -f "${bundle_dir}/${name}" && ! -L "${bundle_dir}/${name}" && -x "${bundle_dir}/${name}" ]] \
+        || fatal "retained Linux bundle is incomplete at ${bundle_dir}/${name}"
+      mode="$(stat -f '%Lp' -- "${bundle_dir}/${name}")" || fatal "cannot inspect retained ${name} mode"
+      existing_digest="$(shasum -a 256 -- "${bundle_dir}/${name}" | awk '{print $1}')" || fatal "cannot hash retained ${name}"
+      [[ "${mode}" == "755" && "${existing_digest}" == "${digest}" ]] \
+        || fatal "retained Linux bundle contains a mismatched prior ${name}"
+    done
+    for source in "${bundle_dir}"/*; do
+      [[ -f "${source}" && ! -L "${source}" ]] || fatal "retained Linux bundle contains an unknown entry"
+      name="$(basename "${source}")"
+      case "${name}" in
+        substrate-lifecycle-linux|world-service|substrate-gateway|substrate) ;;
+        *) fatal "retained Linux bundle contains an unknown entry: ${name}" ;;
+      esac
+    done
+    rm -rf -- "${external_root}"
+    return 0
+  fi
+
+  artifact_stage="$(mktemp -d "${BIN_DIR}/.linux-stage.XXXXXX")" || fatal "cannot allocate atomic retained Linux bundle staging"
+  for name in "${names[@]}"; do
+    source="${external_root}/target/${target}/release/${name}"
+    cp -- "${source}" "${artifact_stage}/${name}" || fatal "cannot stage fixed ${name}"
+    chmod 0755 "${artifact_stage}/${name}" || fatal "cannot set retained ${name} mode"
+    [[ -f "${artifact_stage}/${name}" && ! -L "${artifact_stage}/${name}" ]] || fatal "staged ${name} is linked or not regular"
+    mode="$(stat -f '%Lp' -- "${artifact_stage}/${name}")" || fatal "cannot inspect staged ${name} mode"
+    digest="$(shasum -a 256 -- "${source}" | awk '{print $1}')" || fatal "cannot hash fixed ${name}"
+    existing_digest="$(shasum -a 256 -- "${artifact_stage}/${name}" | awk '{print $1}')" || fatal "cannot hash staged ${name}"
+    [[ "${mode}" == "755" && "${existing_digest}" == "${digest}" ]] || fatal "staged ${name} failed exact verification"
+  done
+  mv "${artifact_stage}" "${bundle_dir}" || fatal "cannot atomically publish retained Linux bundle"
+  rm -rf -- "${external_root}"
+  log "Published the exact four-artifact macOS Lima AArch64 Linux bundle."
+}
+
 # Publish the one root-owned install-time provenance record only after the prefix control binary
 # and managed-copy list are durable. The direct bootstrap never consults this checkout, PATH,
 # Git, or a caller value; it opens this fixed root:wheel 0444 record and remeasures the recorded
@@ -1720,6 +1810,7 @@ publish_mac_publisher_install_provenance_v1() {
   local control_src="$1"
   local executor_src="$2"
   local managed_manifest="$3"
+  local retained_linux_bundle="$4"
   local source_commit
   local source_tree
   local source_ref
@@ -1731,6 +1822,15 @@ publish_mac_publisher_install_provenance_v1() {
   local control_src_identity
   local executor_src_sha
   local executor_src_identity
+  local cargo_lock_sha
+  local rust_toolchain
+  local fixed_build_command="cargo build --locked --offline --target aarch64-unknown-linux-gnu --release -p substrate --bin substrate-lifecycle-linux -p world-service --bin world-service -p substrate-gateway --bin substrate-gateway -p substrate --bin substrate"
+  local retained_substrate_lifecycle_sha retained_substrate_lifecycle_identity
+  local retained_world_service_sha retained_world_service_identity
+  local retained_gateway_sha retained_gateway_identity
+  local retained_substrate_sha retained_substrate_identity
+  local retained_spec retained_name retained_sha_var retained_identity_var retained_path
+  local retained_digest retained_identity
   local profile_template_sha256="c423a7c9233f695b0c8eba2c9d25d5323344e74f9893ba67ce61ecce378661bc"
   local launch_daemon_src="${REPO_ROOT}/scripts/mac/com.substrate.lifecycle.publisher.v1.plist"
 
@@ -1748,6 +1848,31 @@ publish_mac_publisher_install_provenance_v1() {
     || fatal "fixed macOS lifecycle LaunchDaemon source is absent or linked"
   [[ -f "${review_path}" && ! -L "${review_path}" ]] \
     || fatal "R5 review record is absent or linked"
+  [[ -d "${retained_linux_bundle}" && ! -L "${retained_linux_bundle}" ]] \
+    || fatal "retained macOS Lima Linux bundle is absent or linked"
+  cargo_lock_sha="$(shasum -a 256 -- "${REPO_ROOT}/Cargo.lock" | awk '{print $1}')" \
+    || fatal "cannot measure Cargo.lock for retained Linux bundle"
+  rust_toolchain="$(rustc --version)" || fatal "cannot measure Rust toolchain for retained Linux bundle"
+  [[ "${cargo_lock_sha}" =~ ^[0-9a-f]{64} && "${rust_toolchain}" == rustc\ 1.89.0\ * ]] \
+    || fatal "retained Linux bundle build provenance is not canonical"
+  for retained_spec in \
+    "substrate-lifecycle-linux:retained_substrate_lifecycle_sha:retained_substrate_lifecycle_identity" \
+    "world-service:retained_world_service_sha:retained_world_service_identity" \
+    "substrate-gateway:retained_gateway_sha:retained_gateway_identity" \
+    "substrate:retained_substrate_sha:retained_substrate_identity"; do
+    IFS=':' read -r retained_name retained_sha_var retained_identity_var <<<"${retained_spec}"
+    retained_path="${retained_linux_bundle}/${retained_name}"
+    [[ -f "${retained_path}" && ! -L "${retained_path}" && -x "${retained_path}" ]] \
+      || fatal "retained Linux bundle member is absent or linked: ${retained_name}"
+    [[ "$(stat -f '%Lp' -- "${retained_path}")" == "755" ]] \
+      || fatal "retained Linux bundle member mode is not 0755: ${retained_name}"
+    retained_digest="$(shasum -a 256 -- "${retained_path}" | awk '{print $1}')" \
+      || fatal "cannot measure retained Linux bundle member: ${retained_name}"
+    retained_identity="$(stat -f 'dev:%d:ino:%i' -- "${retained_path}")" \
+      || fatal "cannot identify retained Linux bundle member: ${retained_name}"
+    printf -v "${retained_sha_var}" '%s' "${retained_digest}"
+    printf -v "${retained_identity_var}" '%s' "${retained_identity}"
+  done
 
   # Bind the user-prefix copies before privilege elevation.  The privileged side receives these
   # exact source digests/identities, rechecks them, and verifies the copied root helper before
@@ -1792,6 +1917,18 @@ control_expected_sha="${12}"
 control_expected_identity="${13}"
 executor_expected_sha="${14}"
 executor_expected_identity="${15}"
+retained_linux_bundle="${16}"
+cargo_lock_sha="${17}"
+rust_toolchain="${18}"
+fixed_build_command="${19}"
+retained_substrate_lifecycle_sha="${20}"
+retained_substrate_lifecycle_identity="${21}"
+retained_world_service_sha="${22}"
+retained_world_service_identity="${23}"
+retained_gateway_sha="${24}"
+retained_gateway_identity="${25}"
+retained_substrate_sha="${26}"
+retained_substrate_identity="${27}"
 provenance_path="/Library/Application Support/Substrate/lifecycle/bootstrap-provenance.v1.json"
 executor_path="/Library/PrivilegedHelperTools/com.substrate.lifecycle.publisher.v1"
 plist_path="/Library/LaunchDaemons/com.substrate.lifecycle.publisher.v1.plist"
@@ -1800,6 +1937,28 @@ for path in "$control_src" "$executor_src" "$plist_src" "$limactl_path"; do
 done
 sha() { shasum -a 256 "$1" | awk "{print \$1}"; }
 identity() { stat -f "dev:%d:ino:%i" "$1"; }
+test -d "$retained_linux_bundle" && test ! -L "$retained_linux_bundle" || {
+  printf "retained Linux bundle is absent or linked\n" >&2; exit 1;
+}
+measure_retained_linux_artifact() {
+  name="$1"
+  expected_sha="$2"
+  expected_identity="$3"
+  candidate="$retained_linux_bundle/$name"
+  test -f "$candidate" && test ! -L "$candidate" && test -x "$candidate" || {
+    printf "retained Linux artifact is absent or linked: %s\n" "$name" >&2; exit 1;
+  }
+  test "$(stat -f '%Lp' "$candidate")" = 755 || {
+    printf "retained Linux artifact mode is not 0755: %s\n" "$name" >&2; exit 1;
+  }
+  test "$(sha "$candidate")" = "$expected_sha" && test "$(identity "$candidate")" = "$expected_identity" || {
+    printf "retained Linux artifact changed before root provenance publication: %s\n" "$name" >&2; exit 1;
+  }
+}
+measure_retained_linux_artifact substrate-lifecycle-linux "$retained_substrate_lifecycle_sha" "$retained_substrate_lifecycle_identity"
+measure_retained_linux_artifact world-service "$retained_world_service_sha" "$retained_world_service_identity"
+measure_retained_linux_artifact substrate-gateway "$retained_gateway_sha" "$retained_gateway_identity"
+measure_retained_linux_artifact substrate "$retained_substrate_sha" "$retained_substrate_identity"
 test "$(sha "$control_src")" = "$control_expected_sha" && \
   test "$(identity "$control_src")" = "$control_expected_identity" || {
     printf "retained control source changed before privileged provenance copy\n" >&2; exit 1;
@@ -1871,7 +2030,12 @@ tmp="${provenance_path}.tmp.$$"
 python3 - "$tmp" "$source_commit" "$source_tree" "$source_ref" "$review_sha" "$host_context_commitment" "$selected_prefix" \
   "$control_expected_sha" "$control_expected_identity" "$control_cdhash" "$control_requirement" \
   "$(sha "$executor_path")" "$(identity "$executor_path")" "$executor_cdhash" "$executor_requirement" \
-  "$plist_sha" "$limactl_path" "$(sha "$limactl_path")" "$(identity "$limactl_path")" "$lima_cdhash" "$lima_requirement" "$lima_version" "$profile_template_sha256" <<"PY"
+  "$plist_sha" "$limactl_path" "$(sha "$limactl_path")" "$(identity "$limactl_path")" "$lima_cdhash" "$lima_requirement" "$lima_version" "$profile_template_sha256" \
+  "$cargo_lock_sha" "$rust_toolchain" "$fixed_build_command" \
+  "$retained_substrate_lifecycle_sha" "$retained_substrate_lifecycle_identity" \
+  "$retained_world_service_sha" "$retained_world_service_identity" \
+  "$retained_gateway_sha" "$retained_gateway_identity" \
+  "$retained_substrate_sha" "$retained_substrate_identity" <<"PY"
 import json
 import sys
 (
@@ -1879,13 +2043,15 @@ import sys
     control_sha, control_identity, control_cdhash, control_requirement,
     executor_sha, executor_identity, executor_cdhash, executor_requirement,
     plist_sha, lima_path, lima_sha, lima_identity, lima_cdhash, lima_requirement,
-    lima_version, profile_template_sha,
+    lima_version, profile_template_sha, cargo_lock_sha, rust_toolchain, build_command,
+    lifecycle_sha, lifecycle_identity, world_service_sha, world_service_identity,
+    gateway_sha, gateway_identity, substrate_sha, substrate_identity,
 ) = sys.argv[1:]
 target = "aarch64-apple-darwin"
 def image(sha, identity, cdhash, requirement):
     return {"target_triple": target, "artifact_sha256": sha, "physical_identity": identity, "code_identity": "cdhash:" + cdhash, "code_requirement": requirement}
 record = {
-    "schema_owner": "substrate.mac-publisher-install-provenance", "schema_version": 1,
+    "schema_owner": "substrate.mac-publisher-install-provenance", "schema_version": 2,
     "source_commit": source_commit, "source_tree": source_tree, "source_ref": source_ref,
     "review_record_sha256": review_sha, "host_context_commitment": hcc, "selected_host_prefix": prefix,
     "control_authority": {"schema_owner": "substrate.mac-publisher-control-authority", "schema_version": 1, "control_binary": "substrate-lifecycle-control", "source_commit": source_commit, "source_tree": source_tree, "source_ref": source_ref, "target_triple": target, "artifact_sha256": control_sha, "designated_requirement": control_requirement},
@@ -1893,6 +2059,12 @@ record = {
     "executor_image": image(executor_sha, executor_identity, executor_cdhash, executor_requirement),
     "launch_daemon_plist_sha256": plist_sha,
     "lima_tool": {"absolute_path": lima_path, "image": image(lima_sha, lima_identity, lima_cdhash, lima_requirement), "version": lima_version},
+    "retained_linux_artifacts": [
+        {"logical_role": "mac.lima.publisher-executor", "retained_relative_path": "bin/linux/substrate-lifecycle-linux", "cargo_package": "substrate", "cargo_binary": "substrate-lifecycle-linux", "target_triple": "aarch64-unknown-linux-gnu", "cargo_lock_sha256": cargo_lock_sha, "toolchain": rust_toolchain, "build_command": build_command, "artifact_sha256": lifecycle_sha, "physical_identity": lifecycle_identity, "mode": "0755"},
+        {"logical_role": "mac.lima.guest-binary(substrate-world-service)", "retained_relative_path": "bin/linux/world-service", "cargo_package": "world-service", "cargo_binary": "world-service", "target_triple": "aarch64-unknown-linux-gnu", "cargo_lock_sha256": cargo_lock_sha, "toolchain": rust_toolchain, "build_command": build_command, "artifact_sha256": world_service_sha, "physical_identity": world_service_identity, "mode": "0755"},
+        {"logical_role": "mac.lima.guest-binary(substrate-gateway)", "retained_relative_path": "bin/linux/substrate-gateway", "cargo_package": "substrate-gateway", "cargo_binary": "substrate-gateway", "target_triple": "aarch64-unknown-linux-gnu", "cargo_lock_sha256": cargo_lock_sha, "toolchain": rust_toolchain, "build_command": build_command, "artifact_sha256": gateway_sha, "physical_identity": gateway_identity, "mode": "0755"},
+        {"logical_role": "mac.lima.guest-binary(substrate)", "retained_relative_path": "bin/linux/substrate", "cargo_package": "substrate", "cargo_binary": "substrate", "target_triple": "aarch64-unknown-linux-gnu", "cargo_lock_sha256": cargo_lock_sha, "toolchain": rust_toolchain, "build_command": build_command, "artifact_sha256": substrate_sha, "physical_identity": substrate_identity, "mode": "0755"},
+    ],
     "profile_template_algorithm": "substrate.mac-lima-stage-one-profile-template", "profile_template_version": 1, "profile_template_sha256": profile_template_sha,
 }
 with open(output, "w", encoding="utf-8", newline="") as fh:
@@ -1914,6 +2086,11 @@ sync "$(dirname "$provenance_path")"
     "${source_commit}" "${source_tree}" "${source_ref}" "${review_sha}" \
     "${INSTALL_BOOTSTRAP_COMMITMENT}" "${PREFIX}" "${profile_template_sha256}" \
     "${control_src_sha}" "${control_src_identity}" "${executor_src_sha}" "${executor_src_identity}" \
+    "${retained_linux_bundle}" "${cargo_lock_sha}" "${rust_toolchain}" "${fixed_build_command}" \
+    "${retained_substrate_lifecycle_sha}" "${retained_substrate_lifecycle_identity}" \
+    "${retained_world_service_sha}" "${retained_world_service_identity}" \
+    "${retained_gateway_sha}" "${retained_gateway_identity}" \
+    "${retained_substrate_sha}" "${retained_substrate_identity}" \
     || fatal "failed to publish root-owned exact macOS publisher install provenance"
 }
 
@@ -2000,7 +2177,10 @@ stage_dev_world_runtime_bundle() {
   local scripts_mac_dir="${prefix_root%/}/scripts/mac"
   local scripts_mac_lima_dir="${scripts_mac_dir}/lima"
   local bin_linux_dir="${prefix_root%/}/bin/linux"
-  mkdir -p "${scripts_substrate_dir}" "${scripts_mac_dir}" "${scripts_mac_lima_dir}" "${bin_linux_dir}"
+  mkdir -p "${scripts_substrate_dir}" "${scripts_mac_dir}" "${scripts_mac_lima_dir}"
+  if [[ "${IS_MAC}" -ne 1 ]]; then
+    mkdir -p "${bin_linux_dir}"
+  fi
 
   local -a script_pairs=(
     "${repo_root}/scripts/substrate/world-enable.sh:${scripts_substrate_dir}/world-enable.sh"
@@ -2016,6 +2196,12 @@ stage_dev_world_runtime_bundle() {
     dest="${pair#*:}"
     stage_managed_bundle_symlink "${src}" "${dest}" "${repo_root}" "${MANAGED_MAC_LINUX_BINARIES_PATH}" "runtime bundle artifact"
   done
+
+  # macOS owns the closed copied AArch64 bundle before direct bootstrap.  This older developer
+  # convenience bridge must not create, replace, or symlink anything below bin/linux there.
+  if [[ "${IS_MAC}" -eq 1 ]]; then
+    return 0
+  fi
 
   local linux_cli
   linux_cli="$(find_linux_substrate_cli "${repo_root}" "${target_dir}")" || true
@@ -2313,7 +2499,9 @@ MANAGED_MAC_LINUX_BINARIES_PATH="${MANAGED_STATE_DIR}/mac-linux-binaries.txt"
 MANAGED_MAC_CONTROL_BINARIES_PATH="${MANAGED_STATE_DIR}/mac-control-binaries.txt"
 
 mkdir -p "${PREFIX}" "${BIN_DIR}" "${VERSION_CONFIG_DIR}"
-clear_managed_prefix_linux_binary_cache
+if [[ "${IS_LINUX}" -eq 1 ]]; then
+  clear_managed_prefix_linux_binary_cache
+fi
 
 # Stage config assets to mirror the production bundle layout.
 if [[ -d "${REPO_ROOT}/config" ]]; then
@@ -2371,6 +2559,7 @@ for binary in substrate substrate-shim substrate-forwarder host-proxy world-serv
 done
 
 if [[ "${IS_MAC}" -eq 1 ]]; then
+  build_and_stage_mac_aarch64_lima_artifacts_v1
   mkdir -p "${MANAGED_STATE_DIR}"
   for binary in substrate-lifecycle-control substrate-lifecycle-macos; do
     src="${REPO_ROOT}/target/${TARGET_DIR}/${binary}"
@@ -2381,7 +2570,8 @@ if [[ "${IS_MAC}" -eq 1 ]]; then
   publish_mac_publisher_install_provenance_v1 \
     "${BIN_DIR}/substrate-lifecycle-control" \
     "${BIN_DIR}/substrate-lifecycle-macos" \
-    "${MANAGED_MAC_CONTROL_BINARIES_PATH}"
+    "${MANAGED_MAC_CONTROL_BINARIES_PATH}" \
+    "${BIN_DIR}/linux"
 fi
 
 # Provide substrate-world-service alias so CLI discovery works without extra config.
@@ -2498,6 +2688,49 @@ elif [[ "${WORLD_ENABLED}" -eq 1 && "${IS_MAC}" -eq 1 ]]; then
   if [[ ! -x "${LIMA_WARM}" ]]; then
     fatal "Expected Lima warm helper at ${LIMA_WARM}"
   fi
+  bootstrap_request="$(python3 - "${INSTALL_BOOTSTRAP_CONTEXT_V1}" <<'PY'
+import json
+import sys
+print(json.dumps({"install_bootstrap_context_v1": sys.argv[1]}, sort_keys=True, separators=(",", ":")))
+PY
+)" || fatal "cannot encode the closed direct publisher-bootstrap request"
+  bootstrap_response="$(printf '%s' "${bootstrap_request}" | "${BIN_DIR}/substrate-lifecycle-control" publisher-bootstrap)" \
+    || fatal "direct publisher-bootstrap did not produce a signed Stage-1 result"
+  stage_one_authorization="$(python3 - "${bootstrap_response}" <<'PY'
+import json
+import re
+import sys
+
+try:
+    response = json.loads(sys.argv[1])
+    required = {
+        "status", "scope_id", "manifest_generation", "manifest_sha256",
+        "authorization_sha256", "anchor_sha256", "lima_stage_one_authorization_v1",
+        "bootstrap_channel_bound", "xpc_attestation",
+    }
+    if not isinstance(response, dict) or set(response) != required:
+        raise ValueError()
+    stage = response["lima_stage_one_authorization_v1"]
+    attestation = response["xpc_attestation"]
+    if (response["status"] != "bootstrapped" or response["bootstrap_channel_bound"] is not True
+            or not isinstance(stage, dict)
+            or stage.get("schema_owner") != "substrate.lima-stage-one-authorization"
+            or stage.get("schema_version") != 1
+            or stage.get("expected_absent") is not True
+            or not isinstance(attestation, dict)
+            or attestation.get("mach_service") != "com.substrate.lifecycle.publisher.v1"
+            or attestation.get("audit_token_bound") is not True):
+        raise ValueError()
+    if not isinstance(response["scope_id"], str) or not re.fullmatch(r"[0-9a-f]{8}-[0-9a-f]{4}-7[0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}", response["scope_id"]):
+        raise ValueError()
+    for field in ("manifest_sha256", "authorization_sha256", "anchor_sha256"):
+        if not isinstance(response[field], str) or not re.fullmatch(r"[0-9a-f]{64}", response[field]):
+            raise ValueError()
+    print(json.dumps(stage, sort_keys=True, separators=(",", ":")))
+except Exception:
+    raise SystemExit("invalid direct publisher-bootstrap response")
+PY
+)" || fatal "direct publisher-bootstrap returned an invalid Stage-1 result"
   lima_warm_env=(LIMA_BUILD_PROFILE="${PROFILE}")
   if [[ "${ENABLE_WORLD_NETFILTER}" -eq 1 ]]; then
     lima_warm_env+=(SUBSTRATE_WORLD_NETFILTER_ENABLE=1)
@@ -2511,68 +2744,19 @@ elif [[ "${WORLD_ENABLED}" -eq 1 && "${IS_MAC}" -eq 1 ]]; then
       "${LIMA_WARM}" \
       --install-prefix "${PREFIX}" \
       --install-bootstrap-context-v1 "${INSTALL_BOOTSTRAP_CONTEXT_V1}" \
+      --lima-stage-one-authorization-v1 "${stage_one_authorization}" \
       "${REPO_ROOT}"
   )
 
-  cache_ok=1
-  vm_name="${SUBSTRATE_LIMA_VM_NAME:-substrate}"
-  # The managed host socket is backend-owned and may not exist until the first
-  # routed proof bootstraps forwarding under this prefix. Keep the legacy link
-  # best-effort; missing it here is no longer a provisioning failure.
-  HOME="${INSTALL_BOOTSTRAP_ACCOUNT_HOME}" link_prefix_lima_socket || true
-  copy_spec=""
-  vm_path=""
-  dest_path=""
-  label=""
-  copy_required=""
-  for copy_spec in \
-    "/usr/local/bin/substrate|${BIN_DIR}/linux/substrate|substrate CLI|optional" \
-    "/usr/local/bin/substrate-world-service|${BIN_DIR}/linux/world-service|world-service|required" \
-    "/usr/local/bin/substrate-gateway|${BIN_DIR}/linux/substrate-gateway|substrate-gateway|required"; do
-    IFS='|' read -r vm_path dest_path label copy_required <<<"${copy_spec}"
-    mkdir -p "$(dirname "${dest_path}")"
-    if [[ -e "${dest_path}" || -L "${dest_path}" ]]; then
-      if path_is_managed_bundle_entry "${dest_path}" "${PREFIX}" "${MANAGED_MAC_LINUX_BINARIES_PATH}"; then
-        rm -f "${dest_path}"
-      else
-        fatal "Refusing to overwrite unmanaged ${label} at ${dest_path}"
-      fi
-    fi
-
-    if ! env HOME="${INSTALL_BOOTSTRAP_ACCOUNT_HOME}" LIMA_HOME="${lima_home}" \
-      limactl copy "${vm_name}:${vm_path}" "${dest_path}"; then
-      if [[ "${copy_required}" == "optional" ]]; then
-        warn "Linux ${label} was not cached from Lima; continuing because routed diagnostics can fall back to the host CLI on macOS."
-      else
-        warn "Failed to copy Linux ${label} from Lima into ${dest_path}"
-        cache_ok=0
-      fi
-      continue
-    fi
-
-    chmod 0755 "${dest_path}" 2>/dev/null || true
-    if ! is_linux_elf "${dest_path}"; then
-      warn "Copied Linux ${label} at ${dest_path} is not a Linux ELF"
-      rm -f "${dest_path}"
-      if [[ "${copy_required}" == "required" ]]; then
-        cache_ok=0
-      fi
-      continue
-    fi
-
-    record_managed_prefix_linux_binary "${dest_path}"
-    log "Cached Linux ${label} into ${dest_path}"
-  done
-
-  if [[ "${cache_ok}" -eq 0 ]] || ! verify_prefix_linux_bundle world-service substrate-gateway; then
+  if ! verify_prefix_linux_bundle substrate-lifecycle-linux world-service substrate-gateway substrate; then
     fail_closed_world_provisioning_for_runtime_request \
-      "the macOS Lima guest binary bundle cache or verification step failed." \
+      "the pre-Stage-1 macOS Linux artifact bundle verification step failed." \
       "Fix Lima provisioning and rerun the dev install, or omit --provision-agent-runtime."
     WORLD_ENABLED=0
     write_install_metadata "${WORLD_ENABLED}"
     write_env_sh_script "${WORLD_ENABLED}"
     write_manager_env_script "${WORLD_ENABLED}"
-    warn "macOS dev-install did not produce a reusable Linux guest-binary bundle under ${BIN_DIR}/linux."
+    warn "macOS dev-install did not retain the exact pre-Stage-1 Linux artifact bundle under ${BIN_DIR}/linux."
     warn "World has been disabled in ${INSTALL_CONFIG_PATH} to avoid confusing runtime failures. Re-run dev-install after fixing Lima provisioning."
   fi
 fi

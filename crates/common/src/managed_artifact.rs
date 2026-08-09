@@ -413,6 +413,25 @@ pub struct MacLimaToolProvenanceV1 {
     pub version: String,
 }
 
+/// Install-time provenance for one of the four fixed Linux artifacts consumed by the macOS
+/// Lima publisher.  The installer is the sole producer: neither a caller nor a warm-up wrapper
+/// can choose the role, source path, package, binary, or build invocation.
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]
+#[serde(deny_unknown_fields)]
+pub struct MacLimaRetainedArtifactProvenanceV1 {
+    pub logical_role: String,
+    pub retained_relative_path: String,
+    pub cargo_package: String,
+    pub cargo_binary: String,
+    pub target_triple: String,
+    pub cargo_lock_sha256: String,
+    pub toolchain: String,
+    pub build_command: String,
+    pub artifact_sha256: String,
+    pub physical_identity: String,
+    pub mode: String,
+}
+
 /// Root-owned install-time source of truth for direct macOS publisher bootstrap. It contains
 /// *only* facts durable when the installer finishes: no scope, attempt, manifest, or PM value is
 /// allowed here. The direct bootstrap creates those per-scope facts later in its FD3 transaction.
@@ -432,6 +451,7 @@ pub struct MacPublisherInstallProvenanceV1 {
     pub executor_image: MacPublisherBootstrapImageProvenanceV1,
     pub launch_daemon_plist_sha256: String,
     pub lima_tool: MacLimaToolProvenanceV1,
+    pub retained_linux_artifacts: Vec<MacLimaRetainedArtifactProvenanceV1>,
     pub profile_template_algorithm: String,
     pub profile_template_version: u32,
     pub profile_template_sha256: String,
@@ -1616,6 +1636,54 @@ pub fn validate_mac_publisher_bootstrap_image_provenance_v1(
     Ok(())
 }
 
+/// Validate the one closed, installer-owned retained Linux bundle.  Keep this table literal:
+/// accepting a prefix, a caller-provided list, or a package discovery result here would recreate
+/// the artifact-selection surface this record is intended to close.
+pub fn validate_mac_lima_retained_artifact_provenance_v1(
+    artifact: &MacLimaRetainedArtifactProvenanceV1,
+    expected_role: &str,
+    expected_relative_path: &str,
+    expected_package: &str,
+    expected_binary: &str,
+) -> Result<()> {
+    if artifact.logical_role != expected_role
+        || artifact.retained_relative_path != expected_relative_path
+        || artifact.cargo_package != expected_package
+        || artifact.cargo_binary != expected_binary
+        || artifact.target_triple != "aarch64-unknown-linux-gnu"
+        || artifact.mode != "0755"
+    {
+        bail!("macOS retained Linux artifact does not match the fixed role table");
+    }
+    require_hex_digest(
+        &artifact.cargo_lock_sha256,
+        "macOS retained Linux artifact Cargo.lock SHA-256",
+    )?;
+    require_hex_digest(
+        &artifact.artifact_sha256,
+        "macOS retained Linux artifact SHA-256",
+    )?;
+    if !artifact.toolchain.starts_with("rustc 1.89.0 ")
+        || artifact.build_command != "cargo build --locked --offline --target aarch64-unknown-linux-gnu --release -p substrate --bin substrate-lifecycle-linux -p world-service --bin world-service -p substrate-gateway --bin substrate-gateway -p substrate --bin substrate"
+    {
+        bail!("macOS retained Linux artifact does not record the fixed cross-build invocation");
+    }
+    require_nonempty_no_nul(
+        &artifact.physical_identity,
+        "macOS retained Linux artifact physical identity",
+    )?;
+    if artifact.retained_relative_path.starts_with('/')
+        || artifact.retained_relative_path.contains(['\0', '\n', '\r'])
+        || artifact
+            .retained_relative_path
+            .split('/')
+            .any(|part| part.is_empty() || part == "." || part == "..")
+    {
+        bail!("macOS retained Linux artifact path is not a normalized relative path");
+    }
+    Ok(())
+}
+
 /// Validate the fixed retained MAC bootstrap provenance record.
 pub fn validate_mac_publisher_install_provenance_v1(
     provenance: &MacPublisherInstallProvenanceV1,
@@ -1624,7 +1692,7 @@ pub fn validate_mac_publisher_install_provenance_v1(
         &provenance.schema_owner,
         provenance.schema_version,
         MAC_PUBLISHER_INSTALL_PROVENANCE_OWNER_V1,
-        1,
+        2,
     )?;
     require_git_oid(
         &provenance.source_commit,
@@ -1698,6 +1766,48 @@ pub fn validate_mac_publisher_install_provenance_v1(
         &provenance.lima_tool.version,
         "macOS install provenance limactl version",
     )?;
+    let expected_artifacts = [
+        (
+            "mac.lima.publisher-executor",
+            "bin/linux/substrate-lifecycle-linux",
+            "substrate",
+            "substrate-lifecycle-linux",
+        ),
+        (
+            "mac.lima.guest-binary(substrate-world-service)",
+            "bin/linux/world-service",
+            "world-service",
+            "world-service",
+        ),
+        (
+            "mac.lima.guest-binary(substrate-gateway)",
+            "bin/linux/substrate-gateway",
+            "substrate-gateway",
+            "substrate-gateway",
+        ),
+        (
+            "mac.lima.guest-binary(substrate)",
+            "bin/linux/substrate",
+            "substrate",
+            "substrate",
+        ),
+    ];
+    if provenance.retained_linux_artifacts.len() != expected_artifacts.len() {
+        bail!("macOS install provenance must retain exactly four Linux artifacts");
+    }
+    for (artifact, (role, relative_path, package, binary)) in provenance
+        .retained_linux_artifacts
+        .iter()
+        .zip(expected_artifacts)
+    {
+        validate_mac_lima_retained_artifact_provenance_v1(
+            artifact,
+            role,
+            relative_path,
+            package,
+            binary,
+        )?;
+    }
     if provenance.profile_template_algorithm != "substrate.mac-lima-stage-one-profile-template"
         || provenance.profile_template_version != 1
     {
@@ -4351,7 +4461,6 @@ fn expected_manifest_entry_target_v1(
             "substrate-world-service" => "/usr/local/bin/substrate-world-service".to_string(),
             "substrate-gateway" => "/usr/local/bin/substrate-gateway".to_string(),
             "substrate" => "/usr/local/bin/substrate".to_string(),
-            "world" => "/usr/local/bin/world".to_string(),
             _ => unreachable!(),
         }),
         ParsedManagedRole::MacLimaGuestUnit(kind) => Some(format!(
@@ -5265,12 +5374,7 @@ fn parse_managed_role(value: &str) -> Result<ParsedManagedRole> {
     } else if let Some(kind) = parse_single_argument(value, "mac.lima.guest-binary")? {
         validate_one_of(
             &kind,
-            &[
-                "substrate-world-service",
-                "substrate-gateway",
-                "substrate",
-                "world",
-            ],
+            &["substrate-world-service", "substrate-gateway", "substrate"],
             "mac.lima.guest-binary kind",
         )?;
         ParsedManagedRole::MacLimaGuestBinary(kind)
@@ -7522,7 +7626,7 @@ mod tests {
         };
         MacPublisherInstallProvenanceV1 {
             schema_owner: MAC_PUBLISHER_INSTALL_PROVENANCE_OWNER_V1.to_string(),
-            schema_version: 1,
+            schema_version: 2,
             source_commit: control_authority.source_commit.clone(),
             source_tree: control_authority.source_tree.clone(),
             source_ref: control_authority.source_ref.clone(),
@@ -7552,6 +7656,60 @@ mod tests {
                 ),
                 version: "limactl 1.0.0".to_string(),
             },
+            retained_linux_artifacts: vec![
+                MacLimaRetainedArtifactProvenanceV1 {
+                    logical_role: "mac.lima.publisher-executor".to_string(),
+                    retained_relative_path: "bin/linux/substrate-lifecycle-linux".to_string(),
+                    cargo_package: "substrate".to_string(),
+                    cargo_binary: "substrate-lifecycle-linux".to_string(),
+                    target_triple: "aarch64-unknown-linux-gnu".to_string(),
+                    cargo_lock_sha256: "1".repeat(64),
+                    toolchain: "rustc 1.89.0 (fixture)".to_string(),
+                    build_command: "cargo build --locked --offline --target aarch64-unknown-linux-gnu --release -p substrate --bin substrate-lifecycle-linux -p world-service --bin world-service -p substrate-gateway --bin substrate-gateway -p substrate --bin substrate".to_string(),
+                    artifact_sha256: "2".repeat(64),
+                    physical_identity: "dev:1:ino:20".to_string(),
+                    mode: "0755".to_string(),
+                },
+                MacLimaRetainedArtifactProvenanceV1 {
+                    logical_role: "mac.lima.guest-binary(substrate-world-service)".to_string(),
+                    retained_relative_path: "bin/linux/world-service".to_string(),
+                    cargo_package: "world-service".to_string(),
+                    cargo_binary: "world-service".to_string(),
+                    target_triple: "aarch64-unknown-linux-gnu".to_string(),
+                    cargo_lock_sha256: "1".repeat(64),
+                    toolchain: "rustc 1.89.0 (fixture)".to_string(),
+                    build_command: "cargo build --locked --offline --target aarch64-unknown-linux-gnu --release -p substrate --bin substrate-lifecycle-linux -p world-service --bin world-service -p substrate-gateway --bin substrate-gateway -p substrate --bin substrate".to_string(),
+                    artifact_sha256: "3".repeat(64),
+                    physical_identity: "dev:1:ino:21".to_string(),
+                    mode: "0755".to_string(),
+                },
+                MacLimaRetainedArtifactProvenanceV1 {
+                    logical_role: "mac.lima.guest-binary(substrate-gateway)".to_string(),
+                    retained_relative_path: "bin/linux/substrate-gateway".to_string(),
+                    cargo_package: "substrate-gateway".to_string(),
+                    cargo_binary: "substrate-gateway".to_string(),
+                    target_triple: "aarch64-unknown-linux-gnu".to_string(),
+                    cargo_lock_sha256: "1".repeat(64),
+                    toolchain: "rustc 1.89.0 (fixture)".to_string(),
+                    build_command: "cargo build --locked --offline --target aarch64-unknown-linux-gnu --release -p substrate --bin substrate-lifecycle-linux -p world-service --bin world-service -p substrate-gateway --bin substrate-gateway -p substrate --bin substrate".to_string(),
+                    artifact_sha256: "4".repeat(64),
+                    physical_identity: "dev:1:ino:22".to_string(),
+                    mode: "0755".to_string(),
+                },
+                MacLimaRetainedArtifactProvenanceV1 {
+                    logical_role: "mac.lima.guest-binary(substrate)".to_string(),
+                    retained_relative_path: "bin/linux/substrate".to_string(),
+                    cargo_package: "substrate".to_string(),
+                    cargo_binary: "substrate".to_string(),
+                    target_triple: "aarch64-unknown-linux-gnu".to_string(),
+                    cargo_lock_sha256: "1".repeat(64),
+                    toolchain: "rustc 1.89.0 (fixture)".to_string(),
+                    build_command: "cargo build --locked --offline --target aarch64-unknown-linux-gnu --release -p substrate --bin substrate-lifecycle-linux -p world-service --bin world-service -p substrate-gateway --bin substrate-gateway -p substrate --bin substrate".to_string(),
+                    artifact_sha256: "5".repeat(64),
+                    physical_identity: "dev:1:ino:23".to_string(),
+                    mode: "0755".to_string(),
+                },
+            ],
             profile_template_algorithm: "substrate.mac-lima-stage-one-profile-template".to_string(),
             profile_template_version: 1,
             profile_template_sha256: "f".repeat(64),

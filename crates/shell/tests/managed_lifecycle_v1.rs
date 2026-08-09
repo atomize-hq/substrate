@@ -148,7 +148,6 @@ fn all_closed_post_pm_pairs_v1() -> Vec<(String, ManagedActionV1)> {
             "mac.lima.guest-binary(substrate-world-service)".to_string(),
             "mac.lima.guest-binary(substrate-gateway)".to_string(),
             "mac.lima.guest-binary(substrate)".to_string(),
-            "mac.lima.guest-binary(world)".to_string(),
             "mac.lima.guest-unit(service)".to_string(),
             "mac.lima.guest-unit(socket)".to_string(),
         ],
@@ -387,6 +386,7 @@ fn post_pm_rejects_generated_unlisted_pairs_and_stage_one_reuse() {
         "mac.host.forward-socket",
         "mac.host.ssh-forwarder",
         "mac.lima.guest-binary(unlisted)",
+        "mac.lima.guest-binary(world)",
         "mac.lima.guest-directory(/tmp/unlisted)",
         "unlisted.role",
     ] {

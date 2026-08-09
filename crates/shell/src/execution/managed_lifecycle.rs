@@ -866,11 +866,11 @@ fn closed_mapped_mac_role_action_v1(role: &str, action: ManagedActionV1) -> bool
         "mac.lima.publisher-current-anchor" | "mac.lima.publisher-bootstrap-intent" => {
             matches!(action, ManagedActionV1::Create | ManagedActionV1::Replace)
         }
-        _ if role.starts_with("mac.lima.guest-binary(")
-            || role.starts_with("mac.lima.guest-unit(") =>
-        {
-            create_replace_remove_restore
-        }
+        "mac.lima.guest-binary(substrate-world-service)"
+        | "mac.lima.guest-binary(substrate-gateway)"
+        | "mac.lima.guest-binary(substrate)"
+        | "mac.lima.guest-unit(service)"
+        | "mac.lima.guest-unit(socket)" => create_replace_remove_restore,
         _ if role.starts_with("mac.lima.guest-directory(")
             || role.starts_with("mac.lima.guest-membership(") =>
         {

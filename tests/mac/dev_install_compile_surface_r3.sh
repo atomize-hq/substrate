@@ -81,15 +81,39 @@ if helper.count('rm -f "${binary_tmp}" "${manifest_tmp}"') < 5:
 if helper.index('mv "${manifest_tmp}" "${manifest_path}"') > helper.index('mv "${binary_tmp}" "${dest}"'):
     raise SystemExit("managed macOS fixed-copy helper must publish the manifest before replacing the destination")
 
-expected_copy_loop = '''if [[ "${IS_MAC}" -eq 1 ]]; then
+for required in (
+    'build_and_stage_mac_aarch64_lima_artifacts_v1() {',
+    'local target="aarch64-unknown-linux-gnu"',
+    'cargo build --locked --offline --target "${target}" --release',
+    'CARGO_TARGET_DIR="${external_root}/target"',
+    'CARGO_TARGET_AARCH64_UNKNOWN_LINUX_GNU_LINKER="${linker_wrapper}"',
+    'CC_aarch64_unknown_linux_gnu="${linker_wrapper}"',
+    'substrate-lifecycle-linux', 'world-service', 'substrate-gateway',
+    'artifact_stage="$(mktemp -d "${BIN_DIR}/.linux-stage.XXXXXX")"',
+    'mv "${artifact_stage}" "${bundle_dir}"',
+    'retained Linux artifact mode is not 0755',
+    'publish_mac_publisher_install_provenance_v1',
+    '"${BIN_DIR}/linux"',
+):
+    if required not in source:
+        raise SystemExit(f"canonical macOS AArch64 retention route is missing {required}")
+
+expected_mac_install_branch = r'''if [[ "${IS_MAC}" -eq 1 ]]; then
+  build_and_stage_mac_aarch64_lima_artifacts_v1
   mkdir -p "${MANAGED_STATE_DIR}"
   for binary in substrate-lifecycle-control substrate-lifecycle-macos; do
     src="${REPO_ROOT}/target/${TARGET_DIR}/${binary}"
-    stage_managed_mac_control_binary_copy \\
-      "${src}" "${BIN_DIR}/${binary}" "${REPO_ROOT}" \\
+    stage_managed_mac_control_binary_copy \
+      "${src}" "${BIN_DIR}/${binary}" "${REPO_ROOT}" \
       "${MANAGED_MAC_CONTROL_BINARIES_PATH}" "macOS ${binary}"
   done
+  publish_mac_publisher_install_provenance_v1 \
+    "${BIN_DIR}/substrate-lifecycle-control" \
+    "${BIN_DIR}/substrate-lifecycle-macos" \
+    "${MANAGED_MAC_CONTROL_BINARIES_PATH}" \
+    "${BIN_DIR}/linux"
 fi'''
-if expected_copy_loop not in source:
-    raise SystemExit("canonical macOS fixed managed-copy branch is not the exact R2 pair")
+if expected_mac_install_branch not in source:
+    raise SystemExit("canonical macOS build/stage/control/provenance order is not fixed")
+
 PY

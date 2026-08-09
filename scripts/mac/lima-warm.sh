@@ -28,9 +28,6 @@ INSTALL_PREFIX_RAW=""
 INSTALL_PREFIX_DECLARED=0
 INSTALL_BOOTSTRAP_CONTEXT_V1=""
 INSTALL_BOOTSTRAP_CONTEXT_DECLARED=0
-PLATFORM_BOOTSTRAP_MAPPING_V1=""
-EXECUTOR_BUILD_EVIDENCE_V1=""
-PUBLISHER_REQUEST_V1=""
 LIMA_STAGE_ONE_AUTHORIZATION_V1=""
 INSTALL_BOOTSTRAP_COMMITMENT=""
 INSTALL_BOOTSTRAP_ACCOUNT=""
@@ -78,9 +75,6 @@ override use.
 Options:
   --check-only      Report the current Lima VM status without creating or provisioning it
   --install-prefix  Bind the helper to one host install prefix
-  --platform-bootstrap-mapping-v1  Bind the exact selected Lima mapping
-  --executor-build-evidence-v1  Require the exact non-executing executor artifact evidence
-  --publisher-request-v1  Bind the exact managed role/action request
   --lima-stage-one-authorization-v1  Bind the signed Stage-1 create/start authority
   -h, --help        Show this help text
 
@@ -109,21 +103,6 @@ while [[ $# -gt 0 ]]; do
             [[ -n "$2" ]] || fatal "Empty value for --install-bootstrap-context-v1"
             INSTALL_BOOTSTRAP_CONTEXT_V1="$2"
             INSTALL_BOOTSTRAP_CONTEXT_DECLARED=1
-            shift 2
-            ;;
-        --platform-bootstrap-mapping-v1)
-            [[ $# -ge 2 && -z "${PLATFORM_BOOTSTRAP_MAPPING_V1}" && -n "$2" ]] || fatal "Invalid --platform-bootstrap-mapping-v1"
-            PLATFORM_BOOTSTRAP_MAPPING_V1="$2"
-            shift 2
-            ;;
-        --executor-build-evidence-v1)
-            [[ $# -ge 2 && -z "${EXECUTOR_BUILD_EVIDENCE_V1}" && -n "$2" ]] || fatal "Invalid --executor-build-evidence-v1"
-            EXECUTOR_BUILD_EVIDENCE_V1="$2"
-            shift 2
-            ;;
-        --publisher-request-v1)
-            [[ $# -ge 2 && -z "${PUBLISHER_REQUEST_V1}" && -n "$2" ]] || fatal "Invalid --publisher-request-v1"
-            PUBLISHER_REQUEST_V1="$2"
             shift 2
             ;;
         --lima-stage-one-authorization-v1)
@@ -169,7 +148,6 @@ require_cmd() {
 }
 
 require_mapped_lifecycle_authority_v1() {
-    [[ -n "${PUBLISHER_REQUEST_V1}" ]] || fatal "R3 lifecycle mutation requires an exact managed publisher request."
     [[ -n "${LIMA_STAGE_ONE_AUTHORIZATION_V1}" ]] || fatal "R3 warm mutation requires LimaStageOneAuthorizationV1."
 }
 
@@ -832,488 +810,57 @@ wait_for_running() {
     fatal "Lima VM '${VM_NAME}' did not reach Running state within ${WAIT_TIMEOUT} seconds."
 }
 
-destroy_vm() {
-    # The typed publisher owns destruction and exact before-state restoration.
-    "${SCRIPT_DIR}/lima-lifecycle.sh" post_pm_action \
-        --install-prefix "${INSTALL_PREFIX_RAW}" \
-        --install-bootstrap-context-v1 "${INSTALL_BOOTSTRAP_CONTEXT_V1}" \
-        --platform-bootstrap-mapping-v1 "${PLATFORM_BOOTSTRAP_MAPPING_V1}" \
-        --executor-build-evidence-v1 "${EXECUTOR_BUILD_EVIDENCE_V1}" \
-        --publisher-request-v1 "${PUBLISHER_REQUEST_V1}"
-}
-
 current_layout_version() {
     limactl shell "${VM_NAME}" sudo -n cat "${LAYOUT_SENTINEL}" 2>/dev/null || true
 }
 
-adopt_stage_one_mapping_response_v1() {
-    # The only post-PM mapping and request this wrapper may retain are the canonical successor
-    # values returned by the attested Stage-1 XPC response. An argv mapping may only agree with
-    # the returned mapping. The caller's pre-PM request is an untrusted typed selector seed; the
-    # shell replaces it with one opaque executor-issued canonical request and never binds a map,
-    # manifest, counter, anchor, or build field itself.
+validate_stage_one_completion_response_v1() {
+    # post_pm_requests_v1 remains a catalogue for ordinary later actions. This wrapper does
+    # not read, select, forward, or iterate it. The privileged executor owns and has already
+    # completed its one fixed installation sequence before this success response is returned.
     local stage_response="$1"
-    local prior_mapping="${PLATFORM_BOOTSTRAP_MAPPING_V1}"
-    local adoption_file adopted_mapping adopted_request unexpected_frame
-
-    adoption_file="$(mktemp)" || fatal "Unable to allocate Stage-1 response frame storage."
-    if ! python3 - "${INSTALL_BOOTSTRAP_COMMITMENT}" "${stage_response}" "${PUBLISHER_REQUEST_V1}" >"${adoption_file}" <<'PY'
-import base64
-import hashlib
+    python3 - "${stage_response}" <<'PY'
 import json
 import re
 import sys
 
-commitment, raw_response, raw_seed = sys.argv[1:]
-MAPPING_KEYS = (
-    "domain", "version", "host_context_commitment", "platform_kind", "instance_name",
-    "guest_machine_id", "host_platform_control_root", "realized_substrate_home",
-    "realized_principal_account", "realized_principal_uid", "transport_kind",
-    "transport_host", "transport_guest_socket",
-)
-RESPONSE_KEYS = {
-    "status", "receipt", "platform_bootstrap_mapping_v1", "post_pm_requests_v1",
-    "manifest_generation", "manifest_sha256", "xpc_attestation",
-}
-REQUEST_KEYS = {
-    "host_context_commitment", "platform_mapping_commitment", "scope_id",
-    "current_anchor_counter", "current_anchor_sha256", "manifest_generation",
-    "manifest_sha256", "role", "action", "object_identity", "requester_principal",
-    "attempt_nonce", "expected_executor_build",
-}
-SEED_EXACT_KEYS = {
-    "host_context_commitment", "scope_id", "role", "action", "object_identity",
-    "requester_principal", "attempt_nonce", "expected_executor_build",
-}
-
-def fail():
-    raise ValueError("invalid Stage-1 lifecycle response")
-
-def b64(raw):
-    if not isinstance(raw, str) or not raw or not re.fullmatch(r"[A-Za-z0-9_-]+", raw):
-        fail()
-    decoded = base64.urlsafe_b64decode(raw.encode("ascii") + b"=" * ((-len(raw)) % 4))
-    if base64.urlsafe_b64encode(decoded).rstrip(b"=").decode("ascii") != raw:
-        fail()
-    return decoded
-
-def canonical(value):
-    return json.dumps(value, sort_keys=True, separators=(",", ":"), ensure_ascii=False)
-
 try:
-    if not re.fullmatch(r"[0-9a-f]{64}", commitment):
-        fail()
-    response = json.loads(raw_response)
-    seed = json.loads(raw_seed)
-    if not isinstance(response, dict) or set(response) != RESPONSE_KEYS:
-        fail()
-    if not isinstance(seed, dict) or set(seed) != REQUEST_KEYS:
-        fail()
-    if response["status"] != "completed" or not isinstance(response["receipt"], dict):
-        fail()
-    if not isinstance(response["manifest_generation"], int) or response["manifest_generation"] < 2:
-        fail()
-    if not isinstance(response["manifest_sha256"], str) or not re.fullmatch(r"[0-9a-f]{64}", response["manifest_sha256"]):
-        fail()
-    xpc = response["xpc_attestation"]
+    response = json.loads(sys.argv[1])
+    if not isinstance(response, dict):
+        raise ValueError()
+    if response.get("status") != "completed" or not isinstance(response.get("receipt"), dict):
+        raise ValueError()
+    if not isinstance(response.get("manifest_generation"), int) or response["manifest_generation"] < 2:
+        raise ValueError()
+    if not isinstance(response.get("manifest_sha256"), str) or not re.fullmatch(r"[0-9a-f]{64}", response["manifest_sha256"]):
+        raise ValueError()
+    xpc = response.get("xpc_attestation")
     if not isinstance(xpc, dict) or xpc.get("mach_service") != "com.substrate.lifecycle.publisher.v1" or xpc.get("audit_token_bound") is not True:
-        fail()
-    mapping = response["platform_bootstrap_mapping_v1"]
-    mapping_bytes = b64(mapping)
-    lines = mapping_bytes.decode("ascii").splitlines()
-    if len(lines) != len(MAPPING_KEYS) or mapping_bytes != ("\n".join(lines) + "\n").encode("ascii"):
-        fail()
-    values = {}
-    for expected, line in zip(MAPPING_KEYS, lines):
-        if line.count("=") != 1:
-            fail()
-        key, value = line.split("=", 1)
-        if key != expected:
-            fail()
-        values[key] = value
-    if values["domain"] != "substrate.platform_bootstrap_mapping" or values["version"] != "1":
-        fail()
-    if values["host_context_commitment"] != commitment or values["platform_kind"] != "lima" or values["transport_kind"] != "lima":
-        fail()
-    if not re.fullmatch(r"[0-9a-f]{32}", values["guest_machine_id"]):
-        fail()
-    if not re.fullmatch(r"0|[1-9][0-9]*", values["realized_principal_uid"]):
-        fail()
-    for key in ("instance_name", "host_platform_control_root", "realized_substrate_home", "realized_principal_account", "transport_host", "transport_guest_socket"):
-        decoded = b64(values[key]).decode("utf-8")
-        if not decoded or any(ch in decoded for ch in "\0\r\n"):
-            fail()
-    mapping_commitment = hashlib.sha256(mapping.encode("ascii")).hexdigest()
-    candidates = response["post_pm_requests_v1"]
-    if not isinstance(candidates, list) or not candidates:
-        fail()
-    selected = []
-    canonical_candidates = set()
-    for candidate in candidates:
-        if not isinstance(candidate, dict) or set(candidate) != REQUEST_KEYS:
-            fail()
-        encoded = canonical(candidate)
-        if encoded in canonical_candidates:
-            fail()
-        canonical_candidates.add(encoded)
-        if (candidate["host_context_commitment"] != commitment
-                or candidate["platform_mapping_commitment"] != mapping_commitment
-                or candidate["manifest_generation"] != response["manifest_generation"]
-                or candidate["manifest_sha256"] != response["manifest_sha256"]):
-            fail()
-        if all(candidate[field] == seed[field] for field in SEED_EXACT_KEYS):
-            selected.append(candidate)
-    if len(selected) != 1:
-        fail()
-    selected = selected[0]
-    sys.stdout.buffer.write(mapping.encode("ascii") + b"\0")
-    sys.stdout.buffer.write(canonical(selected).encode("utf-8") + b"\0")
+        raise ValueError()
 except Exception:
-    raise SystemExit("invalid Stage-1 lifecycle response")
+    raise SystemExit("invalid fixed Stage-1 completion response")
 PY
-    then
-        rm -f "${adoption_file}"
-        fatal "Stage-1 response did not contain one exact finalized mapping and post-PM request."
-    fi
-    exec 3<"${adoption_file}"
-    IFS= read -r -d '' adopted_mapping <&3 || { exec 3<&-; rm -f "${adoption_file}"; fatal "Stage-1 response omitted the finalized mapping."; }
-    IFS= read -r -d '' adopted_request <&3 || { exec 3<&-; rm -f "${adoption_file}"; fatal "Stage-1 response omitted the exact post-PM request."; }
-    if IFS= read -r -d '' unexpected_frame <&3; then
-        exec 3<&-
-        rm -f "${adoption_file}"
-        fatal "Stage-1 response emitted an unexpected extra authority frame."
-    fi
-    exec 3<&-
-    rm -f "${adoption_file}"
-    [[ -n "${adopted_mapping}" && -n "${adopted_request}" ]] \
-        || fatal "Stage-1 response omitted finalized lifecycle authority."
-    [[ -z "${prior_mapping}" || "${prior_mapping}" == "${adopted_mapping}" ]] \
-        || fatal "Caller mapping does not exactly match the Stage-1 successor mapping."
-    PLATFORM_BOOTSTRAP_MAPPING_V1="${adopted_mapping}"
-    PUBLISHER_REQUEST_V1="${adopted_request}"
 }
 
 ensure_vm_ready() {
-    # No shell-selected VM is started or created here. The signed Stage-1 authorization is the
-    # sole pre-PM mapping authority. The executor-owned Stage-1 transition returns its durable
-    # finalized mapping only after it observed the selected machine identity and advanced the
-    # anchor; retain that exact response rather than accepting a caller-selected mapping.
+    # The signed Stage-1 authorization is the sole shell input.  The privileged executor owns
+    # both the Stage-1 effect and the fixed post-PM install sequence; this wrapper receives no
+    # role/action seed, mapping, catalogue order, or selector.
     local stage_response
     stage_response="$("${SCRIPT_DIR}/lima-lifecycle.sh" stage_one_create \
         --install-prefix "${INSTALL_PREFIX_RAW}" \
         --install-bootstrap-context-v1 "${INSTALL_BOOTSTRAP_CONTEXT_V1}" \
-        --executor-build-evidence-v1 "${EXECUTOR_BUILD_EVIDENCE_V1}" \
         --lima-stage-one-authorization-v1 "${LIMA_STAGE_ONE_AUTHORIZATION_V1}")" \
         || fatal "Stage-1 mapped lifecycle create did not return a completed response."
-    adopt_stage_one_mapping_response_v1 "${stage_response}"
-}
-
-host_git_head() {
-    if ! command -v git >/dev/null 2>&1; then
-        return
-    fi
-    git -C "${PROJECT_PATH}" rev-parse HEAD 2>/dev/null || true
-}
-
-create_stage_manifest() {
-    local manifest_path git_head
-    manifest_path="$(mktemp)"
-    git_head="$(host_git_head)"
-    {
-        printf 'project_path=%s\n' "${PROJECT_PATH}"
-        printf 'project_basename=%s\n' "$(basename "${PROJECT_PATH}")"
-        if [[ -n "${git_head}" ]]; then
-            printf 'git_head=%s\n' "${git_head}"
-        fi
-    } > "${manifest_path}"
-    printf '%s\n' "${manifest_path}"
-}
-
-stage_workspace() {
-    # The selected manifest and exact guest artifact transaction are executor-only.
-    "${SCRIPT_DIR}/lima-lifecycle.sh" post_pm_action \
-        --install-prefix "${INSTALL_PREFIX_RAW}" \
-        --install-bootstrap-context-v1 "${INSTALL_BOOTSTRAP_CONTEXT_V1}" \
-        --platform-bootstrap-mapping-v1 "${PLATFORM_BOOTSTRAP_MAPPING_V1}" \
-        --executor-build-evidence-v1 "${EXECUTOR_BUILD_EVIDENCE_V1}" \
-        --publisher-request-v1 "${PUBLISHER_REQUEST_V1}"
-}
-
-verify_staged_workspace() {
-    local expected_git_head expect_cargo_sources
-    expected_git_head="$(host_git_head)"
-    expect_cargo_sources=0
-    if [[ -f "${PROJECT_PATH}/Cargo.toml" ]]; then
-        expect_cargo_sources=1
-    fi
-    limactl shell "${VM_NAME}" sudo -n env \
-        STAGED_WORKSPACE_CURRENT="${STAGED_WORKSPACE_CURRENT}" \
-        STAGED_WORKSPACE_MANIFEST_NAME="${STAGED_WORKSPACE_MANIFEST_NAME}" \
-        EXPECTED_PROJECT_PATH="${PROJECT_PATH}" \
-        EXPECTED_GIT_HEAD="${expected_git_head}" \
-        EXPECT_CARGO_SOURCES="${expect_cargo_sources}" \
-        bash <<'EOF'
-set -euo pipefail
-manifest="${STAGED_WORKSPACE_CURRENT}/${STAGED_WORKSPACE_MANIFEST_NAME}"
-test -d "${STAGED_WORKSPACE_CURRENT}"
-test -f "${manifest}"
-grep -Fqx "project_path=${EXPECTED_PROJECT_PATH}" "${manifest}"
-if [[ -n "${EXPECTED_GIT_HEAD}" ]]; then
-    grep -Fqx "git_head=${EXPECTED_GIT_HEAD}" "${manifest}"
-fi
-if [[ "${EXPECT_CARGO_SOURCES}" == "1" ]]; then
-    test -f "${STAGED_WORKSPACE_CURRENT}/Cargo.toml"
-fi
-EOF
-}
-
-ensure_substrate_group() {
-    # Membership mutation is part of the one mapped guest lifecycle transaction.
-    "${SCRIPT_DIR}/lima-lifecycle.sh" post_pm_action \
-        --install-prefix "${INSTALL_PREFIX_RAW}" \
-        --install-bootstrap-context-v1 "${INSTALL_BOOTSTRAP_CONTEXT_V1}" \
-        --platform-bootstrap-mapping-v1 "${PLATFORM_BOOTSTRAP_MAPPING_V1}" \
-        --executor-build-evidence-v1 "${EXECUTOR_BUILD_EVIDENCE_V1}" \
-        --publisher-request-v1 "${PUBLISHER_REQUEST_V1}"
-}
-
-host_agent_candidate() {
-    local base="${PROJECT_PATH}"
-    local candidates=(
-        "${base}/bin/linux/world-service"
-        "${base}/bin/world-service-linux"
-        "${base}/bin/world-service"
-        "${base}/target/release/world-service"
-        "${base}/target/debug/world-service"
-    )
-    local path
-    for path in "${candidates[@]}"; do
-        if [[ -f "${path}" ]]; then
-            local file_type
-            file_type="$(file -b "${path}" 2>/dev/null || true)"
-            if echo "${file_type}" | grep -qi "ELF"; then
-                printf '%s\n' "${path}"
-                return 0
-            fi
-        fi
-    done
-    return 1
-}
-
-install_agent_from_host() {
-    # Host-to-guest artifact ingress is accepted only through ExecutorBuildEvidenceV1.
-    "${SCRIPT_DIR}/lima-lifecycle.sh" post_pm_action \
-        --install-prefix "${INSTALL_PREFIX_RAW}" \
-        --install-bootstrap-context-v1 "${INSTALL_BOOTSTRAP_CONTEXT_V1}" \
-        --platform-bootstrap-mapping-v1 "${PLATFORM_BOOTSTRAP_MAPPING_V1}" \
-        --executor-build-evidence-v1 "${EXECUTOR_BUILD_EVIDENCE_V1}" \
-        --publisher-request-v1 "${PUBLISHER_REQUEST_V1}"
-}
-
-host_cli_candidate() {
-    local base="${PROJECT_PATH}"
-    local candidates=(
-        "${base}/bin/linux/substrate"
-        "${base}/bin/substrate-linux"
-        "${base}/bin/substrate"
-        "${base}/target/aarch64-unknown-linux-gnu/${BUILD_PROFILE}/substrate"
-        "${base}/target/x86_64-unknown-linux-gnu/${BUILD_PROFILE}/substrate"
-        "${base}/target/${BUILD_PROFILE}/substrate"
-    )
-    local path
-    for path in "${candidates[@]}"; do
-        if [[ -f "${path}" ]]; then
-            local file_type
-            file_type="$(file -b "${path}" 2>/dev/null || true)"
-            if echo "${file_type}" | grep -qi "ELF"; then
-                printf '%s\n' "${path}"
-                return 0
-            fi
-        fi
-    done
-    return 1
-}
-
-install_cli_from_host() {
-    # Host-to-guest artifact ingress is accepted only through ExecutorBuildEvidenceV1.
-    "${SCRIPT_DIR}/lima-lifecycle.sh" post_pm_action \
-        --install-prefix "${INSTALL_PREFIX_RAW}" \
-        --install-bootstrap-context-v1 "${INSTALL_BOOTSTRAP_CONTEXT_V1}" \
-        --platform-bootstrap-mapping-v1 "${PLATFORM_BOOTSTRAP_MAPPING_V1}" \
-        --executor-build-evidence-v1 "${EXECUTOR_BUILD_EVIDENCE_V1}" \
-        --publisher-request-v1 "${PUBLISHER_REQUEST_V1}"
-}
-
-host_gateway_candidate() {
-    local base="${PROJECT_PATH}"
-    local candidates=(
-        "${base}/bin/linux/substrate-gateway"
-        "${base}/bin/substrate-gateway-linux"
-        "${base}/bin/substrate-gateway"
-        "${base}/target/release/substrate-gateway"
-        "${base}/target/debug/substrate-gateway"
-    )
-    local path
-    for path in "${candidates[@]}"; do
-        if [[ -f "${path}" ]]; then
-            local file_type
-            file_type="$(file -b "${path}" 2>/dev/null || true)"
-            if echo "${file_type}" | grep -qi "ELF"; then
-                printf '%s\n' "${path}"
-                return 0
-            fi
-        fi
-    done
-    return 1
-}
-
-install_gateway_from_host() {
-    # Host-to-guest artifact ingress is accepted only through ExecutorBuildEvidenceV1.
-    "${SCRIPT_DIR}/lima-lifecycle.sh" post_pm_action \
-        --install-prefix "${INSTALL_PREFIX_RAW}" \
-        --install-bootstrap-context-v1 "${INSTALL_BOOTSTRAP_CONTEXT_V1}" \
-        --platform-bootstrap-mapping-v1 "${PLATFORM_BOOTSTRAP_MAPPING_V1}" \
-        --executor-build-evidence-v1 "${EXECUTOR_BUILD_EVIDENCE_V1}" \
-        --publisher-request-v1 "${PUBLISHER_REQUEST_V1}"
-}
-
-build_missing_components_inside_vm() {
-    fatal "In-guest DNS, package, Rustup, Cargo, and build remediation is tombstoned; provide exact ExecutorBuildEvidenceV1 artifacts."
-}
-
-fix_dns() {
-    fatal "Guest DNS mutation is tombstoned by the R3 mapped lifecycle executor."
-}
-
-ensure_cargo() {
-    fatal "Guest package, Rustup, and Cargo remediation is tombstoned by the R3 mapped lifecycle executor."
-}
-
-run_guest_cargo_build() {
-    fatal "Guest Cargo build is tombstoned; exact executor-built artifacts are required."
-}
-
-install_guest_binaries() {
-    # No guest toolchain fallback is permitted; artifact validation and installation are one transaction.
-    "${SCRIPT_DIR}/lima-lifecycle.sh" post_pm_action \
-        --install-prefix "${INSTALL_PREFIX_RAW}" \
-        --install-bootstrap-context-v1 "${INSTALL_BOOTSTRAP_CONTEXT_V1}" \
-        --platform-bootstrap-mapping-v1 "${PLATFORM_BOOTSTRAP_MAPPING_V1}" \
-        --executor-build-evidence-v1 "${EXECUTOR_BUILD_EVIDENCE_V1}" \
-        --publisher-request-v1 "${PUBLISHER_REQUEST_V1}"
-}
-
-verify_guest_binaries() {
-    limactl shell "${VM_NAME}" bash <<'EOF'
-set -euo pipefail
-test -x /usr/local/bin/substrate-world-service
-test -x /usr/local/bin/substrate-gateway
-EOF
-}
-
-bootstrap_guest_private_home() {
-    # Private-home creation/restoration belongs to the mapped executor receipt.
-    "${SCRIPT_DIR}/lima-lifecycle.sh" post_pm_action \
-        --install-prefix "${INSTALL_PREFIX_RAW}" \
-        --install-bootstrap-context-v1 "${INSTALL_BOOTSTRAP_CONTEXT_V1}" \
-        --platform-bootstrap-mapping-v1 "${PLATFORM_BOOTSTRAP_MAPPING_V1}" \
-        --executor-build-evidence-v1 "${EXECUTOR_BUILD_EVIDENCE_V1}" \
-        --publisher-request-v1 "${PUBLISHER_REQUEST_V1}"
-}
-
-write_systemd_units() {
-    local guest_substrate_home="$1"
-    # Preserve the pre-request projection guard: the executor never receives an unsafe
-    # systemd-rendered field, even in a sourceable/static fixture invocation.
-    for projected_unit_value in \
-        "${guest_substrate_home}" \
-        "${INSTALL_BOOTSTRAP_COMMITMENT}" \
-        "${VM_NAME}" \
-        "${HOST_PLATFORM_CONTROL_ROOT}" \
-        "${OBSERVED_TRANSPORT_HOST}" \
-        "${OBSERVED_TRANSPORT_GUEST_SOCKET}"; do
-        case "${projected_unit_value}" in
-            *\"*|*%*|*\\*)
-                fatal "Verified guest unit projection contains a systemd-unsafe character."
-                ;;
-        esac
-    done
-    # Keep the exact rendered-unit projection bindings visible to the mapped-executor request.
-    # This no-op is intentionally after validation: it preserves the R2 projection contract
-    # without creating a unit or mutating guest service/socket state in the shell.
-    SUBSTRATE_INSTALL_HOST_CONTEXT_COMMITMENT="${INSTALL_BOOTSTRAP_COMMITMENT}" \
-    SUBSTRATE_LIMA_INSTANCE_NAME="${VM_NAME}" \
-    SUBSTRATE_LIMA_HOST_PLATFORM_CONTROL_ROOT="${HOST_PLATFORM_CONTROL_ROOT}" \
-    SUBSTRATE_LIMA_HOST_SOCKET="${OBSERVED_TRANSPORT_HOST}" \
-    SUBSTRATE_LIMA_GUEST_SOCKET="${OBSERVED_TRANSPORT_GUEST_SOCKET}" \
-        true
-
-    # Exact unit installation is coupled to the mapped receipt and socket identity.
-    "${SCRIPT_DIR}/lima-lifecycle.sh" post_pm_action \
-        --install-prefix "${INSTALL_PREFIX_RAW}" \
-        --install-bootstrap-context-v1 "${INSTALL_BOOTSTRAP_CONTEXT_V1}" \
-        --platform-bootstrap-mapping-v1 "${PLATFORM_BOOTSTRAP_MAPPING_V1}" \
-        --executor-build-evidence-v1 "${EXECUTOR_BUILD_EVIDENCE_V1}" \
-        --publisher-request-v1 "${PUBLISHER_REQUEST_V1}"
-}
-
-enable_socket_activation() {
-    # Service/socket state is prepared and restored only by the mapped executor.
-    "${SCRIPT_DIR}/lima-lifecycle.sh" post_pm_action \
-        --install-prefix "${INSTALL_PREFIX_RAW}" \
-        --install-bootstrap-context-v1 "${INSTALL_BOOTSTRAP_CONTEXT_V1}" \
-        --platform-bootstrap-mapping-v1 "${PLATFORM_BOOTSTRAP_MAPPING_V1}" \
-        --executor-build-evidence-v1 "${EXECUTOR_BUILD_EVIDENCE_V1}" \
-        --publisher-request-v1 "${PUBLISHER_REQUEST_V1}"
-}
-
-socket_summary() {
-    local meta
-    meta="$(limactl shell "${VM_NAME}" sudo stat -c '%U:%G %a' /run/substrate.sock 2>/dev/null || true)"
-    if [[ -n "${meta}" ]]; then
-        log "Agent socket perms: ${meta} (expected root:substrate 660)"
-        if [[ "${meta}" != "root:substrate 660" ]]; then
-            warn "Socket permissions differ from expected root:substrate 660."
-        fi
-    else
-        warn "Unable to read /run/substrate.sock metadata."
-    fi
-}
-
-write_layout_sentinel() {
-    # Layout-sentinel mutation is part of the mapped executor transaction.
-    "${SCRIPT_DIR}/lima-lifecycle.sh" post_pm_action \
-        --install-prefix "${INSTALL_PREFIX_RAW}" \
-        --install-bootstrap-context-v1 "${INSTALL_BOOTSTRAP_CONTEXT_V1}" \
-        --platform-bootstrap-mapping-v1 "${PLATFORM_BOOTSTRAP_MAPPING_V1}" \
-        --executor-build-evidence-v1 "${EXECUTOR_BUILD_EVIDENCE_V1}" \
-        --publisher-request-v1 "${PUBLISHER_REQUEST_V1}"
-}
-
-linger_guidance() {
-    local vm_user="$1"
-    local linger
-    linger="$(limactl shell "${VM_NAME}" sudo -n loginctl show-user "${vm_user}" -p Linger 2>/dev/null | cut -d= -f2 || true)"
-    if [[ "${linger}" != "yes" ]]; then
-        warn "loginctl lingering for ${vm_user} is ${linger:-unknown}. Rerun \`substrate world enable\` (or this degraded-but-supported helper) after correcting it. Breakglass guest-admin repair: run 'limactl shell ${VM_NAME} sudo loginctl enable-linger ${vm_user}' so socket activation survives logout."
-    else
-        log "loginctl lingering already enabled for ${vm_user}."
-    fi
+    validate_stage_one_completion_response_v1 "${stage_response}" \
+        || fatal "fixed Stage-1 completion response was invalid."
 }
 
 configure_guest() {
-    # The ordinary shell never reopens a guest shell to inspect or project state. The completed
-    # PlatformBootstrapMappingV1 and canonical publisher request are independently validated by
-    # the closed post-PM bridge before the executor can observe anything.
-    [[ -n "${PLATFORM_BOOTSTRAP_MAPPING_V1}" && -n "${PUBLISHER_REQUEST_V1}" ]] \
-        || fatal "Mapped post-PM authority is incomplete."
-
-    "${SCRIPT_DIR}/lima-lifecycle.sh" post_pm_action \
-        --install-prefix "${INSTALL_PREFIX_RAW}" \
-        --install-bootstrap-context-v1 "${INSTALL_BOOTSTRAP_CONTEXT_V1}" \
-        --platform-bootstrap-mapping-v1 "${PLATFORM_BOOTSTRAP_MAPPING_V1}" \
-        --executor-build-evidence-v1 "${EXECUTOR_BUILD_EVIDENCE_V1}" \
-        --publisher-request-v1 "${PUBLISHER_REQUEST_V1}"
+    # A completion response from `ensure_vm_ready` is the terminal install boundary.  The warm
+    # wrapper performs no ordinary post-PM action; therefore no shell path can execute the
+    # exhaustive catalogue or turn caller input into an installation selector.
+    [[ -n "${LIMA_STAGE_ONE_AUTHORIZATION_V1}" ]] || fatal "fixed Stage-1 authority is absent."
 }
 
 if [[ ${HELP_REQUESTED} -eq 1 ]]; then

@@ -1,0 +1,84 @@
+{
+  "schema_version": 1,
+  "packet_id": "AUX-R3-MAC-PRESTAGE-EVIDENCE-BLOCKER-CORRECTION",
+  "status": "complete",
+  "stop_reason": null,
+  "cycles": [
+    {
+      "cycle_id": "discovery-1",
+      "kind": "discovery",
+      "subject_fingerprint": "sha256:a5eb1269ba6b73379219ecf67d5afd2b9e9902a40748e2a3a33bbd3b31f65e35",
+      "trigger_cycle_id": null,
+      "trigger_finding_ids": [],
+      "causal_evidence_refs": [],
+      "review_refs": [
+        "r3-mac-prestage-evidence-blocker-correction-review-authority-security.md",
+        "r3-mac-prestage-evidence-blocker-correction-review-lifecycle-convergence.md",
+        "r3-mac-prestage-evidence-blocker-correction-review-allowlist-evidence.md"
+      ],
+      "verdict": "findings",
+      "findings": [
+        {"finding_id": "P1-LC-01", "priority": "P1"},
+        {"finding_id": "P2-AL-01", "priority": "P2"},
+        {"finding_id": "P2-AL-02", "priority": "P2"}
+      ]
+    },
+    {
+      "cycle_id": "closure-1",
+      "kind": "closure",
+      "subject_fingerprint": "sha256:acaabdc12351dd1418dab875db20d464638710f179d9567ab980c4cc4ec391da",
+      "trigger_cycle_id": "discovery-1",
+      "trigger_finding_ids": ["P1-LC-01", "P2-AL-01", "P2-AL-02"],
+      "causal_evidence_refs": [],
+      "review_refs": [
+        "r3-mac-prestage-evidence-blocker-correction-review-authority-security.md",
+        "r3-mac-prestage-evidence-blocker-correction-review-lifecycle-convergence.md"
+      ],
+      "verdict": "findings",
+      "findings": [
+        {"finding_id": "CLOSURE-P1-01", "priority": "P1"},
+        {"finding_id": "CLOSURE-P1-02", "priority": "P1"}
+      ]
+    },
+    {
+      "cycle_id": "supplemental-causal-1",
+      "kind": "supplemental_causal",
+      "subject_fingerprint": "sha256:54d828336207006039abb8007380183c30274a21a28006f841497155f64a2efc",
+      "trigger_cycle_id": "closure-1",
+      "trigger_finding_ids": ["CLOSURE-P1-01", "CLOSURE-P1-02"],
+      "causal_evidence_refs": [
+        "src/bin/substrate-lifecycle-macos.rs:6420-6637",
+        "tests/mac/lifecycle_r3.sh",
+        "tests/mac/prestage_artifact_route_r3.sh"
+      ],
+      "review_refs": [
+        "r3-mac-prestage-evidence-blocker-correction-review-lifecycle-convergence.md",
+        "r3-mac-prestage-evidence-blocker-correction-review-allowlist-evidence.md"
+      ],
+      "verdict": "findings",
+      "findings": [
+        {"finding_id": "P1-SUP-RECEIPT-ANCHOR", "priority": "P1"}
+      ]
+    },
+    {
+      "cycle_id": "supplemental-causal-2",
+      "kind": "supplemental_causal",
+      "subject_fingerprint": "sha256:414537800707e8c90904ea38cb375540f74fa1a1f7aa08b6ae96ed84eb7638f9",
+      "trigger_cycle_id": "supplemental-causal-1",
+      "trigger_finding_ids": ["P1-SUP-RECEIPT-ANCHOR"],
+      "causal_evidence_refs": [
+        "src/bin/substrate-lifecycle-macos.rs:6470-6640",
+        "tests/mac/lifecycle_r3.sh",
+        "tests/mac/prestage_artifact_route_r3.sh",
+        "scripts/mac/lima-lifecycle.sh"
+      ],
+      "review_refs": [
+        "r3-mac-prestage-evidence-blocker-correction-review-authority-security.md",
+        "r3-mac-prestage-evidence-blocker-correction-review-lifecycle-convergence.md",
+        "r3-mac-prestage-evidence-blocker-correction-review-allowlist-evidence.md"
+      ],
+      "verdict": "clean",
+      "findings": []
+    }
+  ]
+}
