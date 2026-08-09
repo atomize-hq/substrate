@@ -1,7 +1,7 @@
 {
   "protocol": "codex.top-level-orchestration-state.v1",
   "orchestration_id": "substrate-a1-1d-5r3-mac-20260806-41f97e1c570d",
-  "status": "READY",
+  "status": "DISPATCHING",
   "dispatch_authorized": true,
   "publication_mode": "remote",
   "remote": "origin",
@@ -1488,5 +1488,27 @@
     "reconciliation_path": "receipts/AUX-R3-MAC-PRESTAGE-EVIDENCE-BLOCKER-CORRECTION.reconciliation.json",
     "reconciliation_sha256": "sha256:e98292837b0e395dd42346638832f98c9dee0b0707a8551c5e54176b91daf96c",
     "verified_at_utc": "2026-08-09T01:09:46Z"
+  },
+  "auxiliary_source_checkout_refresh_fixed_install": {
+    "status": "PREPARED",
+    "packet": "AUX-R3-MAC-SOURCE-CHECKOUT-REFRESH-02",
+    "dispatch_nonce": "2155591546ae59480816ef128669c99f6cafeb31369e9aa2e34b3ef8aa08c116",
+    "thread_id": "019fe147-e300-72c2-a394-a53f43185ceb",
+    "host_id": "local",
+    "worktree": "/Users/spensermcconnell/.codex/worktrees/b4fe/substrate",
+    "authority_amendment": "authority-amendments/0048-r3-mac-fixed-install-source-checkout-refresh.json",
+    "authority_amendment_sha256": "sha256:ed278102cb7f12efbffae67575722c41685fa262a9654b423da07f8c19e45bf6",
+    "prompt_path": "increments/AUX-R3-MAC-SOURCE-CHECKOUT-REFRESH-02.prompt.md",
+    "prompt_sha256": "sha256:047f4462eb6e5f83246c8c97ca5143f8f718ac92718bcab9c43f8937482be024",
+    "predispatch_path": "increments/AUX-R3-MAC-SOURCE-CHECKOUT-REFRESH-02.predispatch.json",
+    "predispatch_sha256": "sha256:cbeff5a9b8f478532b2d96e56cefcbcfbd49e0dba415bccd3887b209f0391b01",
+    "from_commit": "a06b3fd26ceee4ece7e5bd1481981755eafcedb5",
+    "from_tree": "f4c396d0e28a43405a9a2b1d49a450d6df545c84",
+    "to_commit": "2511eea6e93bbdc6d24069356aa42064cd760305",
+    "to_tree": "f9441d449321c31693b2238c3a33abdb222dd9dc",
+    "attached_mirror": "/Users/spensermcconnell/.codex/evidence/substrate-a1-1d-5r3-mac-20260806-41f97e1c570d/AUX-R3-MAC-EVIDENCE-PLATFORM-PREREQUISITE-PREP/11c27a5ee57be5b99a3c7457c4f511b14b5747ee4b2b0492874a416d5fab02a3/source/substrate",
+    "evidence_checkout": "/Users/spensermcconnell/.codex/worktrees/1626/substrate",
+    "task_archiving_authorized": false,
+    "prepared_at_utc": "2026-08-09T01:11:11Z"
   }
 }
