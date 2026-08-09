@@ -1,0 +1,26 @@
+{
+  "schema": "codex.top-level-task-receipt.v1",
+  "status": "LANDED_CLEAN",
+  "reconciliation": {
+    "requested": "AUX-R3-MAC-PRESTAGE-EVIDENCE-BLOCKER-CORRECTION subject-fingerprint reconciliation",
+    "result": "NO_CHANGE_REQUIRED",
+    "commit": "2511eea6e93bbdc6d24069356aa42064cd760305",
+    "tree": "f9441d449321c31693b2238c3a33abdb222dd9dc",
+    "non_review_paths": 13,
+    "stated_canonical_definition": "SHA-256 of LC_ALL=C sorted complete LF-terminated '<content-sha256>  <repo-relative-path>' lines",
+    "committed_blob_calculation": "sha256:414537800707e8c90904ea38cb375540f74fa1a1f7aa08b6ae96ed84eb7638f9",
+    "persisted_receipt_and_cycle_value": "sha256:414537800707e8c90904ea38cb375540f74fa1a1f7aa08b6ae96ed84eb7638f9",
+    "alternate_path_order_calculation": "sha256:815b7b3ca1a32d6158adcd5a32ec1db10ebb7f1f510350601efde882efc8081e",
+    "cause": "The alternate value is produced by preserving repository-path order before hashing. It is not LC_ALL=C sorting of the complete digest-and-path lines, which sorts by the leading content SHA-256 and yields the persisted value.",
+    "evidence": {
+      "committed_blobs_equal_worktree_bytes": true,
+      "review_record": "llm-last-mile/runtime-refactor/review-control/r3-mac-prestage-evidence-blocker-correction-review-cycle-record.json",
+      "review_cycle_validation": "VALID",
+      "remote_ref": "refs/heads/feat/internal-host-orchestrator-world-dispatch-bootstrap",
+      "remote_equals_commit": true,
+      "worktree_and_index_clean": true
+    }
+  },
+  "next_increment": "EVIDENCE:R3-MAC-IMP-01",
+  "note": "No product, test, review-metadata, commit, or remote byte was changed during reconciliation; evidence was not dispatched."
+}

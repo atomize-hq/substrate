@@ -1,0 +1,106 @@
+{
+  "schema": "codex.top-level-task-receipt.v1",
+  "status": "LANDED_CLEAN",
+  "task_identity": {
+    "increment_task_thread_id": "019fdfa4-ba96-70e0-b68d-1d0a4cf32a83",
+    "increment_task_host_id": "local",
+    "worktree": "/Users/spensermcconnell/.codex/worktrees/2f78/substrate",
+    "orchestration_id": "substrate-a1-1d-5r3-mac-20260806-41f97e1c570d",
+    "packet_id": "AUX-R3-MAC-PRESTAGE-EVIDENCE-BLOCKER-CORRECTION",
+    "continuation_nonce": "543448d57169010ad5c3537c650d6d1d8d8510b05c91d45efa1cdb7f40e415a6",
+    "authority_amendment": "0047-r3-mac-fixed-install-sequence.json",
+    "authority_sha256": "6bd998d38beb552233b6360ac7c02c482a7c2c096ea6c6bbb6e09ba5f6c222d4"
+  },
+  "publication": {
+    "mode": "remote",
+    "remote": "origin",
+    "ref": "refs/heads/feat/internal-host-orchestrator-world-dispatch-bootstrap",
+    "expected_base": "a06b3fd26ceee4ece7e5bd1481981755eafcedb5",
+    "expected_base_tree": "f4c396d0e28a43405a9a2b1d49a450d6df545c84",
+    "landed_commit": "2511eea6e93bbdc6d24069356aa42064cd760305",
+    "landed_tree": "f9441d449321c31693b2238c3a33abdb222dd9dc",
+    "remote_equals_landed": true,
+    "divergence": "0/0",
+    "commit_message": "fix(mac): close fixed Lima install receipt recovery"
+  },
+  "changed_files": [
+    "crates/common/src/lib.rs",
+    "crates/common/src/managed_artifact.rs",
+    "crates/shell/src/execution/managed_lifecycle.rs",
+    "crates/shell/tests/managed_lifecycle_v1.rs",
+    "llm-last-mile/runtime-refactor/04-contracts-and-gates.md",
+    "llm-last-mile/runtime-refactor/review-control/r3-mac-prestage-evidence-blocker-correction-review-allowlist-evidence.md",
+    "llm-last-mile/runtime-refactor/review-control/r3-mac-prestage-evidence-blocker-correction-review-authority-security.md",
+    "llm-last-mile/runtime-refactor/review-control/r3-mac-prestage-evidence-blocker-correction-review-cycle-record.json",
+    "llm-last-mile/runtime-refactor/review-control/r3-mac-prestage-evidence-blocker-correction-review-lifecycle-convergence.md",
+    "scripts/mac/lima-lifecycle.sh",
+    "scripts/mac/lima-warm.sh",
+    "scripts/substrate/dev-install-substrate.sh",
+    "src/bin/substrate-lifecycle-macos.rs",
+    "tests/installers/dev_install_bash32_fd_regression.sh",
+    "tests/mac/dev_install_compile_surface_r3.sh",
+    "tests/mac/lifecycle_r3.sh",
+    "tests/mac/prestage_artifact_route_r3.sh"
+  ],
+  "subject_fingerprint": {
+    "canonical_definition": "SHA-256 of LC_ALL=C sorted complete LF-terminated '<content-sha256>  <repo-relative-path>' lines for the 13 non-review subject paths",
+    "value": "sha256:414537800707e8c90904ea38cb375540f74fa1a1f7aa08b6ae96ed84eb7638f9"
+  },
+  "review": {
+    "disposition": "CLEAN",
+    "open_p1": 0,
+    "open_p2": 0,
+    "cycles": [
+      "discovery-1",
+      "closure-1",
+      "supplemental-causal-1",
+      "supplemental-causal-2"
+    ],
+    "record": "llm-last-mile/runtime-refactor/review-control/r3-mac-prestage-evidence-blocker-correction-review-cycle-record.json",
+    "record_sha256": "72c5ce738b7a7a22d77e668289ae0241ed57dc62fa64e3bee366a8d2cb68ca37",
+    "validator": "validate_review_cycle.py: VALID",
+    "note": "The final independent reviewer found and then rechecked the contract-authorized exact clerical executable-bit remediation; final C4 verdict CLEAN. Requested gpt-5.4 Extra High was unavailable, so reviewers recorded default-runtime use."
+  },
+  "checks": {
+    "focused": [
+      "tests/mac/prestage_artifact_route_r3.sh PASS",
+      "tests/mac/lifecycle_r3.sh PASS",
+      "tests/mac/dev_install_compile_surface_r3.sh PASS",
+      "tests/installers/dev_install_bash32_fd_regression.sh PASS under Bash 3.2",
+      "cargo test --locked --offline -p substrate --bin substrate-lifecycle-macos: 10 passed",
+      "cargo test --locked --offline -p shell --test managed_lifecycle_v1: 6 passed",
+      "cargo test --locked --offline -p substrate-common --lib: 86 passed",
+      "cargo check --locked --offline -p substrate-common -p shell --lib PASS",
+      "cargo check --locked --offline -p substrate --bin substrate-lifecycle-macos PASS",
+      "cargo fmt --all -- --check PASS",
+      "git diff --check PASS"
+    ],
+    "aarch64_external_proof": {
+      "path": "/Users/spensermcconnell/.codex/evidence/substrate-a1-1d-5r3-mac-20260806-41f97e1c570d/AUX-R3-MAC-PRESTAGE-EVIDENCE-BLOCKER-CORRECTION/fixedseq-final-aarch64-proof.xfnruy",
+      "target": "aarch64-unknown-linux-gnu",
+      "rust": "1.89.0",
+      "command_result": "locked/offline check plus release builds for exactly substrate-lifecycle-linux, world-service, substrate-gateway, substrate: PASS",
+      "elf64_aarch64_sha256": {
+        "substrate-lifecycle-linux": "e74736109dd58a9ad1bf36cfc47f90588d8f66859ceb433a8480888e22527bc0",
+        "world-service": "5546cd720329858f37ee92dc910a00cf3a2f243803f6a065907ad771edefd14d",
+        "substrate-gateway": "39beca555391d82a6654e018dd77130f79b553ba3d783067289d34534e5d2625",
+        "substrate": "78f7bb409f9ee42ea9b6fbb72333f9490b762cc0c97ec97c2177831622a49d78"
+      }
+    }
+  },
+  "change_detection": {
+    "gitnexus": "degraded: GitNexus repository substrate-current is unavailable for this exact task worktree; upstream impact and pre-commit detect_changes both returned repository-not-found",
+    "manual": "caller/callee, FFI/ABI/cfg/manifest/retry/platform review completed; exact 17-path allowlist, non-review 13-path subject fingerprint, Cargo metadata four-binary/no-world proof, external-build boundary, added-byte secret scan, and frozen Windows/WSL/Linux host paths all PASS"
+  },
+  "containment": {
+    "fixed_install": "private literal sequence only: fixed Create effects plus existing socket Enable/Start; no caller selector, catalogue traversal, Stop, Remove, Restore, generic repair, new target, authority, transport, or lifecycle action",
+    "receipt_recovery": "only canonical current-anchor prefix or one exact canonical prepared tail is admitted; tail is replayed through existing idempotent post-PM policy executor before re-read",
+    "platform": "Windows/WSL, Linux host, Cargo manifests/lockfile, and src/bin/substrate-lifecycle-linux.rs byte-identical to base",
+    "native_actions": "not run; no installer, prefix, Library, Keychain, launchd, Lima, sudoers, known_hosts, official evidence, or successor dispatch was executed"
+  },
+  "clean_status": {
+    "worktree": true,
+    "index": true
+  },
+  "next_increment": "EVIDENCE:R3-MAC-IMP-01"
+}

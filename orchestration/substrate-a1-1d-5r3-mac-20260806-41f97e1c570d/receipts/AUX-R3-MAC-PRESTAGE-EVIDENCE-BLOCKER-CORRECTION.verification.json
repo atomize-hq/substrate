@@ -1,0 +1,38 @@
+{
+  "protocol": "codex.meta-task-receipt-verification.v1",
+  "orchestration_id": "substrate-a1-1d-5r3-mac-20260806-41f97e1c570d",
+  "packet_id": "AUX-R3-MAC-PRESTAGE-EVIDENCE-BLOCKER-CORRECTION",
+  "receipt_path": "receipts/AUX-R3-MAC-PRESTAGE-EVIDENCE-BLOCKER-CORRECTION.json",
+  "receipt_sha256": "sha256:6aa517abccd17d54fa87d94cfb8fe516816a8d5d64f5c9279978826634db02be",
+  "reconciliation_path": "receipts/AUX-R3-MAC-PRESTAGE-EVIDENCE-BLOCKER-CORRECTION.reconciliation.json",
+  "reconciliation_sha256": "sha256:e98292837b0e395dd42346638832f98c9dee0b0707a8551c5e54176b91daf96c",
+  "task_terminal_barrier": {
+    "thread_id": "019fdfa4-ba96-70e0-b68d-1d0a4cf32a83",
+    "host_id": "local",
+    "status": "idle",
+    "turn_id": "019fe40e-00fa-76f1-a757-8a588c764816",
+    "turn_status": "completed",
+    "wait_cursor": "09d2deac-230c-42d0-9957-94f004124fa0:371"
+  },
+  "source": {
+    "expected_base": "a06b3fd26ceee4ece7e5bd1481981755eafcedb5",
+    "landed_commit": "2511eea6e93bbdc6d24069356aa42064cd760305",
+    "landed_tree": "f9441d449321c31693b2238c3a33abdb222dd9dc",
+    "direct_parent_verified": true,
+    "live_remote_verified": true,
+    "normal_fast_forward_verified": true
+  },
+  "changed_path_inventory_exact": true,
+  "subject_fingerprint_recomputed": "sha256:414537800707e8c90904ea38cb375540f74fa1a1f7aa08b6ae96ed84eb7638f9",
+  "subject_fingerprint_matches": true,
+  "subject_fingerprint_reconciliation": "NO_CHANGE_REQUIRED; complete digest-and-path lines sort by leading content digest",
+  "review_record_sha256": "sha256:72c5ce738b7a7a22d77e668289ae0241ed57dc62fa64e3bee366a8d2cb68ca37",
+  "review_record_validator": "VALID",
+  "terminal_review_clean": true,
+  "open_p1": 0,
+  "open_p2": 0,
+  "task_worktree_and_index_clean": true,
+  "remote_divergence": "0/0",
+  "successor_not_dispatched_at_verification": true,
+  "verified_at_utc": "2026-08-09T01:09:46Z"
+}

@@ -1,7 +1,7 @@
 {
   "protocol": "codex.top-level-orchestration-state.v1",
   "orchestration_id": "substrate-a1-1d-5r3-mac-20260806-41f97e1c570d",
-  "status": "RUNNING",
+  "status": "READY",
   "dispatch_authorized": true,
   "publication_mode": "remote",
   "remote": "origin",
@@ -26,44 +26,20 @@
     {
       "evidence_id": "EVIDENCE:R3-MAC-IMP-01",
       "platform": "macos",
-      "after_increment": "AUX-R3-MAC-LIMACTL-HOME-PROVENANCE-CORRECTION",
+      "after_increment": "AUX-R3-MAC-PRESTAGE-EVIDENCE-BLOCKER-CORRECTION",
       "before_increment": "A1.1d-5R3-MAC-CLOSEOUT"
     }
   ],
-  "cursor": 10,
+  "cursor": 11,
   "expected_base": {
-    "commit": "a06b3fd26ceee4ece7e5bd1481981755eafcedb5",
-    "tree": "f4c396d0e28a43405a9a2b1d49a450d6df545c84"
+    "commit": "2511eea6e93bbdc6d24069356aa42064cd760305",
+    "tree": "f9441d449321c31693b2238c3a33abdb222dd9dc"
   },
   "meta": {
     "thread_id": "019fd8c3-b12c-7e73-919f-898600ab0f64",
     "host_id": "local"
   },
-  "active_dispatch": {
-    "increment": "AUX-R3-MAC-PRESTAGE-EVIDENCE-BLOCKER-CORRECTION",
-    "packet_id": "AUX-R3-MAC-PRESTAGE-EVIDENCE-BLOCKER-CORRECTION-FIXED-INSTALL-SEQUENCE",
-    "thread_id": "019fdfa4-ba96-70e0-b68d-1d0a4cf32a83",
-    "host_id": "local",
-    "worktree": "/Users/spensermcconnell/.codex/worktrees/2f78/substrate",
-    "original_dispatch_nonce": "0ae5e61c6cd21581afb861057bcd9789273e9f81926616716cee809006cec58d",
-    "continuation_nonce": "543448d57169010ad5c3537c650d6d1d8d8510b05c91d45efa1cdb7f40e415a6",
-    "expected_base": {
-      "commit": "a06b3fd26ceee4ece7e5bd1481981755eafcedb5",
-      "tree": "f4c396d0e28a43405a9a2b1d49a450d6df545c84",
-      "target_ref": "refs/heads/feat/internal-host-orchestrator-world-dispatch-bootstrap",
-      "live_remote": "a06b3fd26ceee4ece7e5bd1481981755eafcedb5"
-    },
-    "authority_amendment_path": "authority-amendments/0047-r3-mac-fixed-install-sequence.json",
-    "authority_amendment_sha256": "sha256:6bd998d38beb552233b6360ac7c02c482a7c2c096ea6c6bbb6e09ba5f6c222d4",
-    "prompt_path": "increments/AUX-R3-MAC-PRESTAGE-EVIDENCE-BLOCKER-CORRECTION.fixed-install-sequence-continuation.md",
-    "prompt_sha256": "sha256:89dcc543df76a5e65e613126d0c7989c8dd72b461502e8305f8373304e678bcc",
-    "next_increment": "EVIDENCE:R3-MAC-IMP-01",
-    "turn_id": "019fe3bf-e34a-7053-93b5-052d8bc585c5",
-    "wait_cursor": "09d2deac-230c-42d0-9957-94f004124fa0:95",
-    "thread_status": "active",
-    "turn_status": "in_progress",
-    "continuation_sent_at_utc": "2026-08-08T23:41:25Z"
-  },
+  "active_dispatch": null,
   "active_evidence_dispatches": [],
   "verified_evidence": [],
   "completed": [
@@ -176,6 +152,22 @@
       "verification_path": "receipts/AUX-R3-MAC-LIMACTL-HOME-PROVENANCE-CORRECTION.verification.json",
       "verification_sha256": "sha256:657021ba8aefe2b3a89ced63c56b4addeb878e07b0aee8bdce889eee38dd6565",
       "next_increment": "EVIDENCE:R3-MAC-IMP-01"
+    },
+    {
+      "increment": "AUX-R3-MAC-PRESTAGE-EVIDENCE-BLOCKER-CORRECTION",
+      "packet_id": "AUX-R3-MAC-PRESTAGE-EVIDENCE-BLOCKER-CORRECTION",
+      "status": "LANDED_CLEAN",
+      "commit": "2511eea6e93bbdc6d24069356aa42064cd760305",
+      "tree": "f9441d449321c31693b2238c3a33abdb222dd9dc",
+      "receipt_path": "receipts/AUX-R3-MAC-PRESTAGE-EVIDENCE-BLOCKER-CORRECTION.json",
+      "receipt_sha256": "sha256:6aa517abccd17d54fa87d94cfb8fe516816a8d5d64f5c9279978826634db02be",
+      "reconciliation_path": "receipts/AUX-R3-MAC-PRESTAGE-EVIDENCE-BLOCKER-CORRECTION.reconciliation.json",
+      "reconciliation_sha256": "sha256:e98292837b0e395dd42346638832f98c9dee0b0707a8551c5e54176b91daf96c",
+      "verification_path": "receipts/AUX-R3-MAC-PRESTAGE-EVIDENCE-BLOCKER-CORRECTION.verification.json",
+      "verification_sha256": "sha256:787726eb85a2c7a6e5670ae4ec3f484621707b74280700bb96aa5c0fbee42ecc",
+      "source_thread_id": "019fdfa4-ba96-70e0-b68d-1d0a4cf32a83",
+      "source_host_id": "local",
+      "next_increment": "EVIDENCE:R3-MAC-IMP-01"
     }
   ],
   "last_blocker": {
@@ -187,7 +179,10 @@
     "verification_path": "receipts/AUX-R3-MAC-PRESTAGE-EVIDENCE-BLOCKER-CORRECTION.blocked.verification.json",
     "verification_sha256": "sha256:e3a35cd9220ffdaa3fa520c6f26c9c96f8774e42178e71b51b175c39b8f72bcf",
     "required_authority": "Define an authenticated closed non-caller-selected installation post-PM sequence, or explicitly authorize a different R5/R6-compatible selector/issuer change, including its exact action set, ordering, retry law, and review fence.",
-    "advance": false
+    "advance": false,
+    "resolved": true,
+    "resolved_by_commit": "2511eea6e93bbdc6d24069356aa42064cd760305",
+    "resolved_at_utc": "2026-08-09T01:09:46Z"
   },
   "current_authority_amendment": "authority-amendments/0047-r3-mac-fixed-install-sequence.json",
   "evidence_attempt": 9,
@@ -196,9 +191,9 @@
     "completed_attempt": 9,
     "next_attempt": 10,
     "fresh_nonce_required": true,
-    "source_correction_required": true,
-    "source_commit": "a06b3fd26ceee4ece7e5bd1481981755eafcedb5",
-    "source_tree": "f4c396d0e28a43405a9a2b1d49a450d6df545c84",
+    "source_correction_required": false,
+    "source_commit": "2511eea6e93bbdc6d24069356aa42064cd760305",
+    "source_tree": "f9441d449321c31693b2238c3a33abdb222dd9dc",
     "host_sudo_noninteractive_required": true,
     "host_sudo_durable_nopasswd_required": true,
     "host_sudo_verified": true,
@@ -208,9 +203,9 @@
     "attempt_5_receipt_path": "receipts/EVIDENCE-R3-MAC-IMP-01.attempt-5.blocked.json",
     "attempt_5_verification_path": "receipts/EVIDENCE-R3-MAC-IMP-01.attempt-5.blocked.verification.json",
     "dispatch_prepared": false,
-    "dispatch_nonce": "12a0f9442772518e2d665f0b7ac3bf26f4ac38a5562ce97bb1eed98cf7eabf3b",
-    "contract_path": "increments/EVIDENCE-R3-MAC-IMP-01.attempt-9.contract.md",
-    "contract_sha256": "sha256:a1fe714219d39c4ffe12b059822ff3438a5fe26b4fcd9fab7dca2aad3bb2159d",
+    "dispatch_nonce": null,
+    "contract_path": null,
+    "contract_sha256": null,
     "prompt_path": "increments/EVIDENCE-R3-MAC-IMP-01.attempt-6.initial-prompt.md",
     "prompt_sha256": "sha256:0012766a20683f2d79ea804663efd3a5d34cb30bdf952d0aea5feae5d266a7e2",
     "variables_path": "increments/EVIDENCE-R3-MAC-IMP-01.attempt-8.variables.json",
@@ -334,7 +329,9 @@
     "attempt_9_receipt_sha256": "sha256:8205c07fc87ce3dd71cced0db10939941fa273f384e4918604fe68fb3d7feb96",
     "attempt_9_verification_path": "receipts/EVIDENCE-R3-MAC-IMP-01.attempt-9.blocked.verification.json",
     "attempt_9_verification_sha256": "sha256:ce183950dc1187953580aa90356acc9e7e8b191eb93cd4fe87f6cf436d970f94",
-    "prestage_install_sequence_authority_required": false
+    "prestage_install_sequence_authority_required": false,
+    "source_refresh_required": true,
+    "source_refresh_verified": false
   },
   "auxiliary_host_preparation": {
     "status": "BLOCKED_SOURCE_CORRECTION",
@@ -1109,11 +1106,15 @@
     "cross_platform_remediation_authorized": false
   },
   "last_verified_receipt": {
-    "increment": "EVIDENCE:R3-MAC-IMP-01.attempt-9",
-    "path": "receipts/EVIDENCE-R3-MAC-IMP-01.attempt-9.blocked.json",
-    "sha256": "sha256:8205c07fc87ce3dd71cced0db10939941fa273f384e4918604fe68fb3d7feb96",
-    "verification_path": "receipts/EVIDENCE-R3-MAC-IMP-01.attempt-9.blocked.verification.json",
-    "verification_sha256": "sha256:ce183950dc1187953580aa90356acc9e7e8b191eb93cd4fe87f6cf436d970f94"
+    "increment": "AUX-R3-MAC-PRESTAGE-EVIDENCE-BLOCKER-CORRECTION",
+    "status": "LANDED_CLEAN",
+    "receipt_path": "receipts/AUX-R3-MAC-PRESTAGE-EVIDENCE-BLOCKER-CORRECTION.json",
+    "receipt_sha256": "sha256:6aa517abccd17d54fa87d94cfb8fe516816a8d5d64f5c9279978826634db02be",
+    "verification_path": "receipts/AUX-R3-MAC-PRESTAGE-EVIDENCE-BLOCKER-CORRECTION.verification.json",
+    "verification_sha256": "sha256:787726eb85a2c7a6e5670ae4ec3f484621707b74280700bb96aa5c0fbee42ecc",
+    "landed_commit": "2511eea6e93bbdc6d24069356aa42064cd760305",
+    "landed_tree": "f9441d449321c31693b2238c3a33abdb222dd9dc",
+    "verified_at_utc": "2026-08-09T01:09:46Z"
   },
   "auxiliary_platform_preparation": {
     "status": "BLOCKED_SOURCE_COMPILE_CLOSURE",
@@ -1431,7 +1432,7 @@
     "decision_record_sha256": "sha256:999e12636a50a94bfc39fae9cd8d0397d902d5edaeb456e923f3d0a272505065"
   },
   "auxiliary_prestage_evidence_blocker_correction": {
-    "status": "RUNNING",
+    "status": "LANDED_CLEAN",
     "packet_id": "AUX-R3-MAC-PRESTAGE-EVIDENCE-BLOCKER-CORRECTION",
     "thread_id": "019fdfa4-ba96-70e0-b68d-1d0a4cf32a83",
     "host_id": "local",
@@ -1456,16 +1457,16 @@
     "native_actions_authorized": false,
     "successor_dispatch_authorized": false,
     "turn_id": "019fe3bf-e34a-7053-93b5-052d8bc585c5",
-    "wait_cursor": "09d2deac-230c-42d0-9957-94f004124fa0:95",
+    "wait_cursor": "09d2deac-230c-42d0-9957-94f004124fa0:371",
     "delivery_path": "increments/AUX-R3-MAC-PRESTAGE-EVIDENCE-BLOCKER-CORRECTION.delivery.json",
     "dispatched_at_utc": "2026-08-08T16:07:50Z",
-    "terminal": false,
-    "thread_status": "active",
-    "turn_status": "in_progress",
-    "receipt_path": "receipts/AUX-R3-MAC-PRESTAGE-EVIDENCE-BLOCKER-CORRECTION.blocked.json",
-    "receipt_sha256": "sha256:146a79c2fea7f2519e657a7fdd3f9e480a519eda08650865813ef03282fa2fce",
-    "verification_path": "receipts/AUX-R3-MAC-PRESTAGE-EVIDENCE-BLOCKER-CORRECTION.blocked.verification.json",
-    "verification_sha256": "sha256:e3a35cd9220ffdaa3fa520c6f26c9c96f8774e42178e71b51b175c39b8f72bcf",
+    "terminal": true,
+    "thread_status": "idle",
+    "turn_status": "completed",
+    "receipt_path": "receipts/AUX-R3-MAC-PRESTAGE-EVIDENCE-BLOCKER-CORRECTION.json",
+    "receipt_sha256": "sha256:6aa517abccd17d54fa87d94cfb8fe516816a8d5d64f5c9279978826634db02be",
+    "verification_path": "receipts/AUX-R3-MAC-PRESTAGE-EVIDENCE-BLOCKER-CORRECTION.verification.json",
+    "verification_sha256": "sha256:787726eb85a2c7a6e5670ae4ec3f484621707b74280700bb96aa5c0fbee42ecc",
     "red_regression_path": "tests/mac/prestage_artifact_route_r3.sh",
     "red_regression_sha256": "sha256:8b9a06fd7f71568034d8ef9054c2a1384bdbe19e6b04cebbda51a94462784013",
     "production_edits": false,
@@ -1480,6 +1481,12 @@
     "fixed_install_sequence_prompt_path": "increments/AUX-R3-MAC-PRESTAGE-EVIDENCE-BLOCKER-CORRECTION.fixed-install-sequence-continuation.md",
     "fixed_install_sequence_prompt_sha256": "sha256:89dcc543df76a5e65e613126d0c7989c8dd72b461502e8305f8373304e678bcc",
     "continuation_authorized_at_utc": "2026-08-08T23:39:55Z",
-    "continuation_sent_at_utc": "2026-08-08T23:41:25Z"
+    "continuation_sent_at_utc": "2026-08-08T23:41:25Z",
+    "terminal_turn_id": "019fe40e-00fa-76f1-a757-8a588c764816",
+    "landed_commit": "2511eea6e93bbdc6d24069356aa42064cd760305",
+    "landed_tree": "f9441d449321c31693b2238c3a33abdb222dd9dc",
+    "reconciliation_path": "receipts/AUX-R3-MAC-PRESTAGE-EVIDENCE-BLOCKER-CORRECTION.reconciliation.json",
+    "reconciliation_sha256": "sha256:e98292837b0e395dd42346638832f98c9dee0b0707a8551c5e54176b91daf96c",
+    "verified_at_utc": "2026-08-09T01:09:46Z"
   }
 }
