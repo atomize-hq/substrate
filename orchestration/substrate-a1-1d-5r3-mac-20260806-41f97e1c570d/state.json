@@ -1,7 +1,7 @@
 {
   "protocol": "codex.top-level-orchestration-state.v1",
   "orchestration_id": "substrate-a1-1d-5r3-mac-20260806-41f97e1c570d",
-  "status": "DISPATCHING",
+  "status": "EVIDENCE_RUNNING",
   "dispatch_authorized": true,
   "publication_mode": "remote",
   "remote": "origin",
@@ -67,9 +67,16 @@
       "authority_amendment_sha256": "sha256:9f59f1da89c8d69b88ed8d23b3eb6072c3801565bd6f49a33a699e126918e2b9",
       "prompt_path": "increments/EVIDENCE-R3-MAC-IMP-01.attempt-10.continuation-prompt.md",
       "prompt_sha256": "sha256:5b26daa9df0fc4522db299c3d94392e716334e56bdb3e169a7db84b7f336de83",
-      "status": "PREPARED",
+      "status": "RUNNING",
       "task_archiving_authorized": false,
-      "prepared_at_utc": "2026-08-09T01:16:28Z"
+      "prepared_at_utc": "2026-08-09T01:16:28Z",
+      "turn_id": "019fe418-a5fb-74c0-a54a-ace479e16bec",
+      "wait_cursor": "4bb095d6-02e8-4040-8ba7-3b07fc37362f:11",
+      "thread_status": "active",
+      "turn_status": "in_progress",
+      "delivery_path": "increments/EVIDENCE-R3-MAC-IMP-01.attempt-10.delivery.json",
+      "delivery_sha256": "sha256:c6b61532ed656bc662548b4b2de87055126a615d99df6588930a055f111f6d64",
+      "sent_at_utc": "2026-08-09T01:17:53Z"
     }
   ],
   "verified_evidence": [],
@@ -366,7 +373,10 @@
     "source_refresh_receipt_path": "receipts/AUX-R3-MAC-SOURCE-CHECKOUT-REFRESH-02.json",
     "source_refresh_verification_path": "receipts/AUX-R3-MAC-SOURCE-CHECKOUT-REFRESH-02.verification.json",
     "predispatch_path": "increments/EVIDENCE-R3-MAC-IMP-01.attempt-10.predispatch.json",
-    "predispatch_sha256": "sha256:69cb7ee624f82a6b3238c21d1f2a85915aaf780be3784da19b6f5da481711d74"
+    "predispatch_sha256": "sha256:69cb7ee624f82a6b3238c21d1f2a85915aaf780be3784da19b6f5da481711d74",
+    "attempt_10_dispatch_prepared": true,
+    "attempt_10_delivery_path": "increments/EVIDENCE-R3-MAC-IMP-01.attempt-10.delivery.json",
+    "attempt_10_delivery_sha256": "sha256:c6b61532ed656bc662548b4b2de87055126a615d99df6588930a055f111f6d64"
   },
   "auxiliary_host_preparation": {
     "status": "BLOCKED_SOURCE_CORRECTION",
@@ -1300,9 +1310,16 @@
     "authority_amendment_sha256": "sha256:9f59f1da89c8d69b88ed8d23b3eb6072c3801565bd6f49a33a699e126918e2b9",
     "prompt_path": "increments/EVIDENCE-R3-MAC-IMP-01.attempt-10.continuation-prompt.md",
     "prompt_sha256": "sha256:5b26daa9df0fc4522db299c3d94392e716334e56bdb3e169a7db84b7f336de83",
-    "status": "PREPARED",
+    "status": "RUNNING",
     "task_archiving_authorized": false,
-    "prepared_at_utc": "2026-08-09T01:16:28Z"
+    "prepared_at_utc": "2026-08-09T01:16:28Z",
+    "turn_id": "019fe418-a5fb-74c0-a54a-ace479e16bec",
+    "wait_cursor": "4bb095d6-02e8-4040-8ba7-3b07fc37362f:11",
+    "thread_status": "active",
+    "turn_status": "in_progress",
+    "delivery_path": "increments/EVIDENCE-R3-MAC-IMP-01.attempt-10.delivery.json",
+    "delivery_sha256": "sha256:c6b61532ed656bc662548b4b2de87055126a615d99df6588930a055f111f6d64",
+    "sent_at_utc": "2026-08-09T01:17:53Z"
   },
   "blocker": {
     "status": "BLOCKED_CONTRADICTION",
