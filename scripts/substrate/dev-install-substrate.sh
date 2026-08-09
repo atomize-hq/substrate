@@ -2028,13 +2028,30 @@ test "$(sha "$executor_path")" = "$executor_expected_sha" || {
   printf "privileged executor copy does not match pre-elevation digest\n" >&2; exit 1;
 }
 cdhash() { codesign -d -vvv -- "$1" 2>&1 | sed -n "s/^CDHash=//p" | head -n 1; }
-requirement() { codesign -dr - -- "$1" 2>&1 | sed -n "s/^designated => //p" | head -n 1; }
+designated_requirement() { codesign -d -r- -- "$1" 2>&1 | sed -n "s/^designated => //p" | head -n 1; }
+canonical_code_requirement() {
+  image_path="$1"
+  measured_cdhash="$2"
+  test "${#measured_cdhash}" -eq 40 && test -z "$(printf "%s" "$measured_cdhash" | tr -d "0-9a-f")" || {
+    printf "cannot derive a canonical code requirement from the measured CDHash: %s\n" "$image_path" >&2
+    return 1
+  }
+  image_requirement="$(designated_requirement "$image_path")"
+  if test -z "$image_requirement"; then
+    image_requirement="cdhash H\"${measured_cdhash}\""
+  fi
+  codesign --verify --strict "-R=${image_requirement}" -- "$image_path" >/dev/null 2>&1 || {
+    printf "code requirement does not match the exact signed image: %s\n" "$image_path" >&2
+    return 1
+  }
+  printf "%s\n" "$image_requirement"
+}
 control_cdhash="$(cdhash "$control_src")"
 executor_cdhash="$(cdhash "$executor_path")"
 lima_cdhash="$(cdhash "$limactl_path")"
 control_requirement="anchor apple generic and identifier \"com.substrate.lifecycle.publisher.v1\" and cdhash H\"${control_cdhash}\""
-executor_requirement="$(requirement "$executor_path")"
-lima_requirement="$(requirement "$limactl_path")"
+executor_requirement="$(canonical_code_requirement "$executor_path" "$executor_cdhash")"
+lima_requirement="$(canonical_code_requirement "$limactl_path" "$lima_cdhash")"
 test "${#control_cdhash}" -eq 40 && test "${#executor_cdhash}" -eq 40 && test "${#lima_cdhash}" -eq 40
 test -n "$control_requirement" && test -n "$executor_requirement" && test -n "$lima_requirement"
 lima_version="$(/usr/bin/sudo -u "#${installer_uid}" -- /usr/bin/env -i PATH=/usr/bin:/bin:/usr/sbin:/sbin HOME=/var/empty "$limactl_path" --version)"
