@@ -1,0 +1,41 @@
+{
+  "protocol": "codex.meta-evidence-receipt-verification.v1",
+  "orchestration_id": "substrate-a1-1d-5r3-mac-20260806-41f97e1c570d",
+  "evidence_id": "EVIDENCE:R3-MAC-IMP-01",
+  "attempt": 10,
+  "dispatch_nonce": "0a7b308d484582037972c5dface88dcfb9e7443ef343c799c4e177504a836ce8",
+  "receipt_path": "receipts/EVIDENCE-R3-MAC-IMP-01.attempt-10.blocked.json",
+  "receipt_sha256": "sha256:7e63e1ebdd42a565d1b7886e09fb640753b13cf2521006ed94c6964b58004f1c",
+  "task_terminal_barrier": {
+    "thread_id": "019fe162-c98c-7c82-94d0-155d6cab5122",
+    "host_id": "local",
+    "status": "idle",
+    "turn_id": "019fe418-a5fb-74c0-a54a-ace479e16bec",
+    "turn_status": "completed",
+    "wait_cursor": "4bb095d6-02e8-4040-8ba7-3b07fc37362f:105"
+  },
+  "source": {
+    "commit": "2511eea6e93bbdc6d24069356aa42064cd760305",
+    "tree": "f9441d449321c31693b2238c3a33abdb222dd9dc",
+    "live_remote_verified": true,
+    "task_checkout_clean_verified": true,
+    "attached_mirror_clean_verified": true,
+    "mirror_target_absent": true
+  },
+  "artifact": {
+    "path": "/Users/spensermcconnell/.codex/evidence/substrate-a1-1d-5r3-mac-20260806-41f97e1c570d/EVIDENCE-R3-MAC-IMP-01/0a7b308d484582037972c5dface88dcfb9e7443ef343c799c4e177504a836ce8/EVIDENCE-R3-MAC-IMP-01.attempt-10.artifact.json",
+    "sha256": "sha256:c0a4644890b9341c4693dde1f0d13b76e1073a45a14194947366d4bb46bad898",
+    "validator": "VALID"
+  },
+  "receipt_validator": "VALID evidence receipt EVIDENCE:R3-MAC-IMP-01 status=BLOCKED_NATIVE_EVIDENCE",
+  "restoration": {
+    "prefix_restoration_semantic_exact": true,
+    "final_source_integrity_exact": true,
+    "canonical_instance_and_control_root_absent": true,
+    "sudo_noninteractive": true
+  },
+  "blocker_classification": "LEGITIMATE_SOURCE_COMPILE_CLOSURE",
+  "blocker": "The canonical installer-generated AArch64 build invocation passes a Rust target triple to Zig/ring in a form rejected as UnknownOperatingSystem before Stage-1.",
+  "successor_not_dispatched": true,
+  "verified_at_utc": "2026-08-09T01:41:35Z"
+}
