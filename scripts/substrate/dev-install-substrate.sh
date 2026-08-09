@@ -1933,9 +1933,19 @@ retained_gateway_sha="${24}"
 retained_gateway_identity="${25}"
 retained_substrate_sha="${26}"
 retained_substrate_identity="${27}"
+installer_account="${28}"
+installer_uid="${29}"
 provenance_path="/Library/Application Support/Substrate/lifecycle/bootstrap-provenance.v1.json"
 executor_path="/Library/PrivilegedHelperTools/com.substrate.lifecycle.publisher.v1"
 plist_path="/Library/LaunchDaemons/com.substrate.lifecycle.publisher.v1.plist"
+case "$installer_uid" in
+  ""|*[!0-9]*) printf "bound installer UID is not canonical\n" >&2; exit 1 ;;
+esac
+test "$installer_uid" -ne 0 || { printf "bound installer UID must be non-root\n" >&2; exit 1; }
+test "$(/usr/bin/id -u "$installer_account")" = "$installer_uid" && \
+  test "$(/usr/bin/id -un "$installer_uid")" = "$installer_account" || {
+    printf "bound installer account and UID do not resolve to one principal\n" >&2; exit 1;
+  }
 for path in "$control_src" "$executor_src" "$plist_src" "$limactl_path"; do
   test -f "$path" && test ! -L "$path" || { printf "retained install input is linked or absent: %s\n" "$path" >&2; exit 1; }
 done
@@ -2027,7 +2037,7 @@ executor_requirement="$(requirement "$executor_path")"
 lima_requirement="$(requirement "$limactl_path")"
 test "${#control_cdhash}" -eq 40 && test "${#executor_cdhash}" -eq 40 && test "${#lima_cdhash}" -eq 40
 test -n "$control_requirement" && test -n "$executor_requirement" && test -n "$lima_requirement"
-lima_version="$(env -i PATH=/usr/bin:/bin:/usr/sbin:/sbin HOME=/var/empty "$limactl_path" --version)"
+lima_version="$(/usr/bin/sudo -u "#${installer_uid}" -- /usr/bin/env -i PATH=/usr/bin:/bin:/usr/sbin:/sbin HOME=/var/empty "$limactl_path" --version)"
 test -n "$lima_version"
 plist_sha="$(sha "$plist_path")"
 tmp="${provenance_path}.tmp.$$"
@@ -2095,6 +2105,7 @@ sync "$(dirname "$provenance_path")"
     "${retained_world_service_sha}" "${retained_world_service_identity}" \
     "${retained_gateway_sha}" "${retained_gateway_identity}" \
     "${retained_substrate_sha}" "${retained_substrate_identity}" \
+    "${INSTALL_BOOTSTRAP_ACCOUNT}" "${INSTALL_BOOTSTRAP_UID}" \
     || fatal "failed to publish root-owned exact macOS publisher install provenance"
 }
 
