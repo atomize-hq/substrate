@@ -1067,7 +1067,8 @@ fn main_impl_v1() -> Result<()> {
         "publisher-bootstrap" => {
             // This branch is deliberately before ordinary mapped stdin handling. It admits one
             // canonical *seed* only; the complete bootstrap authorization remains
-            // nonserialized and only travels in one FD3 seqpacket frame.
+            // nonserialized and only travels through the retained FD3 transport: one Linux
+            // seqpacket frame or one Darwin stream document delimited by EOF.
             let request = read_exact_publisher_bootstrap_request_from_stdin_v1()?;
             let mut tty_reader = open_controlling_terminal_reader_v1()?;
             let mut tty_writer = open_controlling_terminal_writer_v1()?;

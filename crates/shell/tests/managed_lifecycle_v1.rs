@@ -504,8 +504,16 @@ fn direct_bootstrap_dispatch_is_pre_stdin_and_fd3_only() {
 
     let client = include_str!("../src/execution/managed_lifecycle/macos_client.rs");
     assert!(client.contains("libc::AF_UNIX"));
-    assert!(client.contains("libc::SOCK_SEQPACKET"));
+    assert!(client.contains("libc::SOCK_STREAM"));
+    assert!(!client.contains("libc::SOCK_SEQPACKET"));
     assert!(client.contains("libc::FD_CLOEXEC"));
+    assert!(client.contains("libc::SO_NOSIGPIPE"));
+    assert!(client.contains("libc::MSG_DONTWAIT"));
+    assert!(client.contains("libc::SHUT_WR"));
+    assert!(client.contains("OwnedFd::from_raw_fd"));
+    assert!(client.contains("parse_canonical_direct_bootstrap_response_v1"));
+    assert!(client.contains("bootstrap_channel_bound"));
+    assert!(client.contains("RetainedBootstrapChildGuardV1"));
     assert!(client.contains("--publisher-bootstrap-fd"));
     assert!(client.contains(".arg(\"3\")"));
     assert!(client.contains("canonical_publisher_bootstrap_authorization_v1"));
@@ -521,6 +529,30 @@ fn direct_bootstrap_dispatch_is_pre_stdin_and_fd3_only() {
         .find("read_to_end(&mut input)")
         .expect("ordinary stdin read");
     assert!(fd_dispatch < stdin_read);
+    let fd3_consumer = &executor[executor
+        .find("fn consume_publisher_bootstrap_fd3_v1")
+        .expect("FD3 consumer")
+        ..executor
+            .find("struct MacBootstrapPeerIdentityV1")
+            .expect("FD3 peer identity")];
+    let fd_check = fd3_consumer.find("if fd != 3").expect("exact FD3 check");
+    let cloexec = fd3_consumer
+        .find("mac_rearm_bootstrap_fd3_cloexec_v1(fd)?")
+        .expect("FD3 CLOEXEC re-arm");
+    let socket_type = fd3_consumer
+        .find("mac_require_stream_channel_v1(fd)?")
+        .expect("FD3 stream check");
+    let peer = fd3_consumer
+        .find("mac_bootstrap_peer_identity_v1")
+        .expect("FD3 peer check");
+    let decode = fd3_consumer
+        .find("parse_publisher_bootstrap_authorization_v1")
+        .expect("FD3 canonical decode");
+    assert!(fd_check < cloexec && cloexec < socket_type && socket_type < peer && peer < decode);
+    assert!(executor.contains("libc::SOCK_STREAM"));
+    assert!(executor.contains("libc::SO_NOSIGPIPE"));
+    assert!(executor.contains("mac_read_single_stream_document_v1"));
+    assert!(executor.contains("mac_send_single_stream_document_v1"));
     assert!(executor.contains("getpeereid"));
     assert!(executor.contains("parse_publisher_bootstrap_authorization_v1"));
     assert!(executor.contains("MacLimaStageOneCapsuleV1"));
@@ -543,6 +575,24 @@ fn direct_bootstrap_dispatch_is_pre_stdin_and_fd3_only() {
     assert!(executor.contains("mac_attest_running_executor_image_v1"));
     assert!(executor.contains("LOCAL_PEERPID"));
     assert!(executor.contains("publisher_bootstrap_authorization_sha256_v1"));
+
+    let installer = include_str!("../../../scripts/substrate/dev-install-substrate.sh");
+    let direct_parser_start = installer
+        .find("stage_one_authorization=\"$(python3 - \"${bootstrap_response}\" <<'PY'")
+        .expect("direct response parser");
+    let direct_parser_end = installer[direct_parser_start..]
+        .find("direct publisher-bootstrap returned an invalid Stage-1 result")
+        .map(|offset| direct_parser_start + offset)
+        .expect("direct response parser end");
+    let direct_parser = &installer[direct_parser_start..direct_parser_end];
+    assert!(direct_parser.contains("bootstrap_channel_bound"));
+    assert!(!direct_parser.contains("xpc_attestation"));
+    assert!(!direct_parser.contains("audit_token_bound"));
+    let xpc_attestation = &client[client
+        .find("pub fn attest_mac_publisher_response_v1")
+        .expect("XPC attestation validator")..];
+    assert!(xpc_attestation.contains("xpc_attestation"));
+    assert!(xpc_attestation.contains("audit_token_bound"));
     let resume = &executor[executor
         .find("fn resume_mac_lima_stage_one_after_protected_state_cas_v1")
         .expect("Stage-1 post-CAS resume")

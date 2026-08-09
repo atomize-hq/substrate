@@ -70,10 +70,15 @@ for text in ('submit_stage_one_absent_instance_create_v1',
              'submit_guest_pairing_data_session_v1',
              'open_mac_xpc_channel_v1',
              'attest_mac_publisher_response_v1',
-             'libc::AF_UNIX', 'libc::SOCK_SEQPACKET', 'libc::FD_CLOEXEC',
+             'libc::AF_UNIX', 'libc::SOCK_STREAM', 'libc::FD_CLOEXEC',
+             'libc::SO_NOSIGPIPE', 'libc::MSG_DONTWAIT', 'libc::SHUT_WR',
+             'OwnedFd::from_raw_fd', 'RetainedBootstrapChildGuardV1',
+             'parse_canonical_direct_bootstrap_response_v1', 'bootstrap_channel_bound',
              'canonical_publisher_bootstrap_authorization_v1',
              '"/usr/bin/sudo"', '--publisher-bootstrap-fd', '.arg("3")'):
     require('client', text)
+if 'libc::SOCK_SEQPACKET' in client:
+    fail('Darwin direct-bootstrap client still selects SOCK_SEQPACKET')
 for legacy in ('"bootstrap-publisher"', '"submit-request"', '"issue-guest-ticket"',
                '"lima-action"', 'guest-pairing-operator-tty-session',
                'with_terminal_v1', 'xpc_dictionary_set_fd'):
@@ -117,8 +122,18 @@ if control.index('"guest-publisher-pairing-direct-interactive-v1" =>') > control
 executor = source['executor']
 if executor.index('if operation == "--publisher-bootstrap-fd"') > executor.index('read_to_end(&mut input)'):
     fail('executor reads stdin before exact FD3 bootstrap dispatch')
+fd3_consumer = executor[executor.index('fn consume_publisher_bootstrap_fd3_v1'):executor.index('struct MacBootstrapPeerIdentityV1')]
+fd_check = fd3_consumer.index('if fd != 3')
+cloexec = fd3_consumer.index('mac_rearm_bootstrap_fd3_cloexec_v1(fd)?')
+socket_type = fd3_consumer.index('mac_require_stream_channel_v1(fd)?')
+peer_check = fd3_consumer.index('mac_bootstrap_peer_identity_v1')
+decode = fd3_consumer.index('parse_publisher_bootstrap_authorization_v1')
+if not fd_check < cloexec < socket_type < peer_check < decode:
+    fail('executor does not re-arm FD3 CLOEXEC before socket/peer/decode work')
 for text in ('consume_publisher_bootstrap_fd3_v1', 'getpeereid', 'LOCAL_PEERPID',
              'parse_publisher_bootstrap_authorization_v1', 'descriptor 3',
+             'libc::SOCK_STREAM', 'libc::SO_NOSIGPIPE', 'libc::MSG_DONTWAIT',
+             'mac_read_single_stream_document_v1', 'mac_send_single_stream_document_v1',
              'mac_attest_running_executor_image_v1', 'SecKeyCreateRandomKey',
              'mac_transition_bootstrap_intent_v1', 'manifest_generation: authorization.manifest_generation',
              'manifest_sha256: authorization.manifest_sha256.clone()',
@@ -136,6 +151,19 @@ for text in ('consume_publisher_bootstrap_fd3_v1', 'getpeereid', 'LOCAL_PEERPID'
              'mac_measure_root_owned_immutable_lima_tool_v1',
              'limactl', 'EffectStarted', 'InstanceObserved', 'PreservingBlocked'):
     require('executor', text)
+
+installer = source['installer']
+parser_start = installer.index('stage_one_authorization="$(python3 - "${bootstrap_response}" <<\'PY\'')
+parser_end = installer.index('direct publisher-bootstrap returned an invalid Stage-1 result', parser_start)
+direct_response_parser = installer[parser_start:parser_end]
+if 'bootstrap_channel_bound' not in direct_response_parser:
+    fail('installer direct-response parser does not require bootstrap_channel_bound')
+if 'xpc_attestation' in direct_response_parser or 'audit_token_bound' in direct_response_parser:
+    fail('installer direct-response parser fabricates an XPC-attestation requirement')
+xpc_validator = client[client.index('pub fn attest_mac_publisher_response_v1'):]
+for text in ('xpc_attestation', 'audit_token_bound'):
+    if text not in xpc_validator:
+        fail(f'actual XPC response validator no longer requires {text}')
 for text in ('"guest-pairing-data-session"',
              'execute_mac_guest_pairing_session_v1',
              'issue_lima_guest_pairing_ticket_v1',

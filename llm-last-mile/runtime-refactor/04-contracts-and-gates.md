@@ -9294,10 +9294,13 @@ artifact, and immediately delivers the authorization on the bootstrap channel be
 writes the authorization to a file, environment variable, generated projection, script output,
 or reusable carrier. Scripts and ordinary product commands cannot issue or replay it.
 
-Bootstrap elevation and first delivery are closed. Linux and macOS control create an
-`AF_UNIX` `SOCK_SEQPACKET|SOCK_CLOEXEC` socketpair, retain the client end, place only the peer on
-descriptor 3, and invoke the exact verified platform executor through `/usr/bin/sudo -C 4 --`
-with an empty supplemental environment and `--publisher-bootstrap-fd 3`; the elevated executor
+Bootstrap elevation and first delivery are closed. Linux control creates an `AF_UNIX`
+`SOCK_SEQPACKET|SOCK_CLOEXEC` socketpair. macOS control creates an `AF_UNIX SOCK_STREAM`
+socketpair and sets `FD_CLOEXEC` plus `SO_NOSIGPIPE` on both endpoints before spawn. Each retains
+the client end, places only the peer on descriptor 3, and invokes the exact verified platform
+executor through `/usr/bin/sudo -C 4 --` with an empty supplemental environment and
+`--publisher-bootstrap-fd 3`; the macOS executor immediately re-arms `FD_CLOEXEC` on inherited
+FD3 before socket, peer, image, terminal, codesign, or decode work. The elevated executor
 joins `SO_PEERCRED`, the retained requester PID/executable identity, the executor file identity/
 digest, and the invoking terminal session. Windows control creates a nonce-named bootstrap pipe
 with a DACL containing only SYSTEM and the committed requester SID, then uses `ShellExecuteExW`
@@ -9305,10 +9308,12 @@ with `runas` for the exact verified executor and the pipe name plus nonce; the e
 impersonates the pipe client, joins SID and `GetNamedPipeClientProcessId`, and verifies both images
 through retained handles, `GetFileInformationByHandleEx`, SHA-256/build-evidence equality, and
 exact DACL. Authenticode may be recorded when a later release supplies it but is not bootstrap
-authority. One canonical JSON request and response, each at most 1 MiB, is exchanged;
-Unix preserves message boundaries and Windows uses an unsigned little-endian 32-bit byte length.
-EOF, a second frame, truncation, unknown peer, executable replacement, or consent cancellation
-leaves all state unchanged.
+authority. One canonical JSON request and response, each nonempty and at most 1 MiB, is exchanged.
+Linux preserves message boundaries, macOS uses bounded EOF framing with `shutdown(SHUT_WR)` only
+after each complete document, and Windows uses an unsigned little-endian 32-bit byte length.
+Empty, premature/disconnected EOF, timeout/trickle, trailing/concatenated JSON, a second frame,
+truncation, unknown peer, executable replacement, or consent cancellation leaves all state
+unchanged; an ambiguous partial exchange is never automatically resent.
 
 The first host-bootstrap durable record is never placed under a publisher directory that the same
 bootstrap has not yet created. Linux uses only the already-enumerated `/var/lib/substrate` state

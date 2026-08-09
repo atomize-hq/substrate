@@ -27,6 +27,10 @@ const MAC_MACH_SERVICE_V1: &str = "com.substrate.lifecycle.publisher.v1";
 #[cfg(target_os = "macos")]
 const MAC_BOOTSTRAP_PROVENANCE_PATH_V1: &str =
     "/Library/Application Support/Substrate/lifecycle/bootstrap-provenance.v1.json";
+#[cfg(target_os = "macos")]
+const MAC_BOOTSTRAP_FD3_MAX_BYTES_V1: usize = 1024 * 1024;
+#[cfg(target_os = "macos")]
+const MAC_BOOTSTRAP_FD3_TIMEOUT_V1: std::time::Duration = std::time::Duration::from_secs(5);
 
 pub fn bootstrap_publisher_v1(_authorization: &PublisherBootstrapAuthorizationV1) -> Result<Value> {
     bail!(
@@ -524,43 +528,40 @@ fn lower_hex_v1(bytes: &[u8]) -> String {
     output
 }
 
-/// Create the already-specified AF_UNIX seqpacket channel, retain one endpoint, pass only the
-/// peer as FD3 to the exact elevated executor, and exchange exactly one bounded frame each way.
+/// Create the Darwin AF_UNIX stream channel, retain one endpoint, pass only the peer as FD3 to the
+/// exact elevated executor, and exchange one bounded EOF-delimited canonical document each way.
 #[cfg(target_os = "macos")]
 pub fn send_publisher_bootstrap_authorization_fd3_v1(
     authorization: &PublisherBootstrapAuthorizationV1,
 ) -> Result<Value> {
-    use std::os::fd::{AsRawFd, FromRawFd};
+    use std::os::fd::{AsRawFd, FromRawFd, OwnedFd};
     use std::os::unix::process::CommandExt;
     use std::process::Command;
     use substrate_common::canonical_publisher_bootstrap_authorization_v1;
 
     let request = canonical_publisher_bootstrap_authorization_v1(authorization)
         .context("canonicalize direct bootstrap authorization")?;
-    if request.is_empty() || request.len() > 1024 * 1024 {
+    if request.is_empty() || request.len() > MAC_BOOTSTRAP_FD3_MAX_BYTES_V1 {
         bail!("direct bootstrap authorization has an invalid frame size");
     }
 
     let mut pair = [-1; 2];
-    // SAFETY: socketpair initializes both entries on success and neither descriptor escapes
-    // except through the exact dup2-to-FD3 child setup below.
-    if unsafe { libc::socketpair(libc::AF_UNIX, libc::SOCK_SEQPACKET, 0, pair.as_mut_ptr()) } != 0 {
-        return Err(std::io::Error::last_os_error()).context("create bootstrap seqpacket pair");
+    // SAFETY: socketpair initializes both entries on success. Ownership transfers immediately
+    // to OwnedFd below, before any later fallible operation.
+    if unsafe { libc::socketpair(libc::AF_UNIX, libc::SOCK_STREAM, 0, pair.as_mut_ptr()) } != 0 {
+        return Err(std::io::Error::last_os_error()).context("create bootstrap stream pair");
     }
-    // Darwin has no SOCK_CLOEXEC socket type bit.  Apply the documented
-    // SOCK_SEQPACKET|SOCK_CLOEXEC invariant before either descriptor can cross an exec boundary.
-    for descriptor in pair {
-        if unsafe { libc::fcntl(descriptor, libc::F_SETFD, libc::FD_CLOEXEC) } != 0 {
-            unsafe {
-                libc::close(pair[0]);
-                libc::close(pair[1]);
-            }
-            return Err(std::io::Error::last_os_error()).context("set bootstrap socket CLOEXEC");
-        }
-    }
+    // SAFETY: socketpair returned two distinct, live descriptors owned only by this function.
+    let retained = unsafe { OwnedFd::from_raw_fd(pair[0]) };
+    // SAFETY: ownership of the second live socketpair descriptor is likewise unique.
+    let peer = unsafe { OwnedFd::from_raw_fd(pair[1]) };
+    set_retained_bootstrap_fd_cloexec_v1(retained.as_raw_fd())?;
+    set_retained_bootstrap_fd_cloexec_v1(peer.as_raw_fd())?;
+    set_retained_bootstrap_no_sigpipe_v1(retained.as_raw_fd())?;
+    set_retained_bootstrap_no_sigpipe_v1(peer.as_raw_fd())?;
 
-    let retained_fd = pair[0];
-    let peer_fd = pair[1];
+    let retained_fd = retained.as_raw_fd();
+    let peer_fd = peer.as_raw_fd();
     let mut command = Command::new("/usr/bin/sudo");
     command
         .arg("-C")
@@ -590,137 +591,299 @@ pub fn send_publisher_bootstrap_authorization_fd3_v1(
             Ok(())
         });
     }
-    let mut child = command
+    let child = command
         .spawn()
         .context("launch exact elevated bootstrap executor")?;
-    // SAFETY: the child inherited its duped peer; this process retains only its endpoint.
-    unsafe { libc::close(peer_fd) };
-    // SAFETY: from_raw_fd transfers sole ownership of retained_fd into File for deterministic
-    // close on every send/recv/wait error path.
-    let retained = unsafe { std::fs::File::from_raw_fd(retained_fd) };
-    let sent = unsafe {
-        libc::send(
-            retained.as_raw_fd(),
-            request.as_ptr().cast(),
-            request.len(),
-            0,
-        )
-    };
-    if sent != request.len() as isize {
-        terminate_retained_bootstrap_child_v1(&mut child);
-        bail!("direct bootstrap authorization did not send one complete FD3 frame");
-    }
-    // The executor treats EOF after this one seqpacket frame as part of the fixed protocol.
-    // It may still return its single bounded response on the retained read half.
+    let mut child = RetainedBootstrapChildGuardV1::new(child);
+    // The child has its duped peer. The parent must retain only its endpoint from this point.
+    drop(peer);
+
+    write_retained_bootstrap_stream_v1(
+        retained.as_raw_fd(),
+        &request,
+        std::time::Instant::now() + MAC_BOOTSTRAP_FD3_TIMEOUT_V1,
+        "direct bootstrap authorization",
+    )?;
+    // EOF is the sole request boundary. It is emitted only after every canonical byte was sent.
     if unsafe { libc::shutdown(retained.as_raw_fd(), libc::SHUT_WR) } != 0 {
-        terminate_retained_bootstrap_child_v1(&mut child);
         return Err(std::io::Error::last_os_error())
             .context("terminate direct bootstrap authorization frame");
     }
-    // A retained direct channel cannot wait indefinitely: loss of the helper, a hung response,
-    // or an extra frame is preserving-first.  Stop the exact child and leave its prepared
-    // Keychain transaction for an exact retry rather than treating an ambiguous exchange as a
-    // successful bootstrap.
-    if let Err(error) =
-        wait_for_retained_bootstrap_fd3_event_v1(retained.as_raw_fd(), "direct bootstrap response")
-    {
-        terminate_retained_bootstrap_child_v1(&mut child);
-        return Err(error);
-    }
-    let mut response = vec![0u8; 1024 * 1024];
-    let received = unsafe {
-        libc::recv(
-            retained.as_raw_fd(),
-            response.as_mut_ptr().cast(),
-            response.len(),
-            0,
-        )
-    };
-    if received <= 0 || received as usize >= response.len() {
-        terminate_retained_bootstrap_child_v1(&mut child);
-        bail!("direct bootstrap executor returned no bounded response frame");
-    }
-    response.truncate(received as usize);
-    if let Err(error) = wait_for_retained_bootstrap_fd3_event_v1(
+    let response_deadline = std::time::Instant::now() + MAC_BOOTSTRAP_FD3_TIMEOUT_V1;
+    let response = read_retained_bootstrap_stream_v1(
         retained.as_raw_fd(),
-        "direct bootstrap response EOF",
-    ) {
-        terminate_retained_bootstrap_child_v1(&mut child);
-        return Err(error);
-    }
-    let mut trailing = [0u8; 1];
-    let finish = unsafe {
-        libc::recv(
-            retained.as_raw_fd(),
-            trailing.as_mut_ptr().cast(),
-            trailing.len(),
-            0,
-        )
-    };
-    if finish != 0 {
-        terminate_retained_bootstrap_child_v1(&mut child);
-        bail!("direct bootstrap executor response did not terminate after one frame");
-    }
-    if let Err(error) = wait_for_retained_bootstrap_child_v1(&mut child) {
-        terminate_retained_bootstrap_child_v1(&mut child);
-        return Err(error);
-    }
-    serde_json::from_slice(&response).context("decode direct bootstrap FD3 response")
+        response_deadline,
+        "direct bootstrap response",
+    )?;
+    let response = parse_canonical_direct_bootstrap_response_v1(&response)?;
+    child.wait_for_success_v1(response_deadline)?;
+    Ok(response)
 }
 
-/// Wait for one event on the retained FD3 response half.  No timeout is a valid direct-bootstrap
-/// outcome: the executor must either return its one response frame and EOF or leave the durable
-/// intent for a preserving exact retry.
 #[cfg(target_os = "macos")]
-fn wait_for_retained_bootstrap_fd3_event_v1(fd: i32, phase: &str) -> Result<()> {
-    let mut poll_fd = libc::pollfd {
-        fd,
-        events: libc::POLLIN,
-        revents: 0,
-    };
-    let ready = unsafe { libc::poll(&mut poll_fd, 1, 5_000) };
-    if ready == 0 {
-        bail!("{phase} timed out")
+fn set_retained_bootstrap_fd_cloexec_v1(fd: i32) -> Result<()> {
+    let flags = unsafe { libc::fcntl(fd, libc::F_GETFD) };
+    if flags < 0 {
+        return Err(std::io::Error::last_os_error()).context("read bootstrap socket flags");
     }
-    if ready < 0 {
-        return Err(std::io::Error::last_os_error()).with_context(|| format!("wait for {phase}"));
-    }
-    if poll_fd.revents & libc::POLLNVAL != 0 || poll_fd.revents & libc::POLLERR != 0 {
-        bail!("{phase} retained FD3 channel failed")
-    }
-    if poll_fd.revents & (libc::POLLIN | libc::POLLHUP) == 0 {
-        bail!("{phase} retained FD3 channel has no readable boundary")
+    if unsafe { libc::fcntl(fd, libc::F_SETFD, flags | libc::FD_CLOEXEC) } != 0 {
+        return Err(std::io::Error::last_os_error()).context("set bootstrap socket CLOEXEC");
     }
     Ok(())
 }
 
-/// Bound child completion on every direct FD3 path.  Killing a nonresponsive helper does not
-/// replace/delete/adopt its durable state; the executor's Prepared intent is the only retry
-/// authority and will be exact-joined by a later invocation.
 #[cfg(target_os = "macos")]
-fn wait_for_retained_bootstrap_child_v1(child: &mut std::process::Child) -> Result<()> {
-    let deadline = std::time::Instant::now() + std::time::Duration::from_secs(5);
+fn set_retained_bootstrap_no_sigpipe_v1(fd: i32) -> Result<()> {
+    let enabled = 1_i32;
+    if unsafe {
+        libc::setsockopt(
+            fd,
+            libc::SOL_SOCKET,
+            libc::SO_NOSIGPIPE,
+            (&enabled as *const i32).cast(),
+            std::mem::size_of::<i32>() as libc::socklen_t,
+        )
+    } != 0
+    {
+        return Err(std::io::Error::last_os_error()).context("set retained bootstrap SO_NOSIGPIPE");
+    }
+    Ok(())
+}
+
+#[cfg(target_os = "macos")]
+fn wait_for_retained_bootstrap_fd3_event_v1(
+    fd: i32,
+    events: i16,
+    deadline: std::time::Instant,
+    phase: &str,
+) -> Result<()> {
     loop {
-        match child
-            .try_wait()
-            .context("observe exact elevated bootstrap executor")?
-        {
-            Some(status) if status.success() => return Ok(()),
-            Some(_) => bail!("exact elevated bootstrap executor failed"),
-            None if std::time::Instant::now() >= deadline => {
-                let _ = child.kill();
-                let _ = child.wait();
-                bail!("exact elevated bootstrap executor did not terminate after its response")
+        let now = std::time::Instant::now();
+        if now >= deadline {
+            bail!("{phase} timed out");
+        }
+        let timeout_ms = deadline
+            .saturating_duration_since(now)
+            .as_millis()
+            .saturating_add(1)
+            .min(i32::MAX as u128) as i32;
+        let mut poll_fd = libc::pollfd {
+            fd,
+            events,
+            revents: 0,
+        };
+        let ready = unsafe { libc::poll(&mut poll_fd, 1, timeout_ms) };
+        if ready == 0 {
+            bail!("{phase} timed out");
+        }
+        if ready < 0 {
+            let error = std::io::Error::last_os_error();
+            if error.kind() == std::io::ErrorKind::Interrupted {
+                continue;
             }
-            None => std::thread::sleep(std::time::Duration::from_millis(10)),
+            return Err(error).with_context(|| format!("wait for {phase}"));
+        }
+        if poll_fd.revents & (libc::POLLNVAL | libc::POLLERR) != 0 {
+            bail!("{phase} retained FD3 channel failed");
+        }
+        if poll_fd.revents & events != 0
+            || (events == libc::POLLIN && poll_fd.revents & libc::POLLHUP != 0)
+        {
+            return Ok(());
+        }
+        if poll_fd.revents & libc::POLLHUP != 0 {
+            bail!("{phase} retained FD3 channel disconnected");
         }
     }
 }
 
 #[cfg(target_os = "macos")]
-fn terminate_retained_bootstrap_child_v1(child: &mut std::process::Child) {
-    let _ = child.kill();
-    let _ = child.wait();
+fn write_retained_bootstrap_stream_v1(
+    fd: i32,
+    bytes: &[u8],
+    deadline: std::time::Instant,
+    phase: &str,
+) -> Result<()> {
+    let mut written = 0usize;
+    while written < bytes.len() {
+        wait_for_retained_bootstrap_fd3_event_v1(fd, libc::POLLOUT, deadline, phase)?;
+        let count = unsafe {
+            libc::send(
+                fd,
+                bytes[written..].as_ptr().cast(),
+                bytes.len() - written,
+                libc::MSG_DONTWAIT,
+            )
+        };
+        if count > 0 {
+            written += count as usize;
+            continue;
+        }
+        if count == 0 {
+            bail!("{phase} made no forward progress");
+        }
+        let error = std::io::Error::last_os_error();
+        if matches!(
+            error.kind(),
+            std::io::ErrorKind::Interrupted | std::io::ErrorKind::WouldBlock
+        ) {
+            continue;
+        }
+        return Err(error).with_context(|| format!("write {phase}"));
+    }
+    Ok(())
+}
+
+#[cfg(target_os = "macos")]
+fn read_retained_bootstrap_stream_v1(
+    fd: i32,
+    deadline: std::time::Instant,
+    phase: &str,
+) -> Result<Vec<u8>> {
+    let mut bytes = Vec::with_capacity(MAC_BOOTSTRAP_FD3_MAX_BYTES_V1);
+    let mut buffer = [0_u8; 16 * 1024];
+    loop {
+        wait_for_retained_bootstrap_fd3_event_v1(fd, libc::POLLIN, deadline, phase)?;
+        let remaining = MAC_BOOTSTRAP_FD3_MAX_BYTES_V1 - bytes.len();
+        let capacity = if remaining == 0 {
+            1
+        } else {
+            remaining.min(buffer.len())
+        };
+        let count =
+            unsafe { libc::recv(fd, buffer.as_mut_ptr().cast(), capacity, libc::MSG_DONTWAIT) };
+        if count == 0 {
+            if bytes.is_empty() {
+                bail!("{phase} was empty");
+            }
+            return Ok(bytes);
+        }
+        if count > 0 {
+            if remaining == 0 {
+                bail!("{phase} exceeded the 1 MiB bound");
+            }
+            bytes.extend_from_slice(&buffer[..count as usize]);
+            continue;
+        }
+        let error = std::io::Error::last_os_error();
+        if matches!(
+            error.kind(),
+            std::io::ErrorKind::Interrupted | std::io::ErrorKind::WouldBlock
+        ) {
+            continue;
+        }
+        return Err(error).with_context(|| format!("read {phase}"));
+    }
+}
+
+#[cfg(target_os = "macos")]
+fn parse_canonical_direct_bootstrap_response_v1(bytes: &[u8]) -> Result<Value> {
+    fn write_value(value: &Value, output: &mut String) -> Result<()> {
+        match value {
+            Value::Null => output.push_str("null"),
+            Value::Bool(value) => output.push_str(if *value { "true" } else { "false" }),
+            Value::Number(value) if value.is_i64() || value.is_u64() => {
+                output.push_str(&value.to_string())
+            }
+            Value::Number(_) => bail!("direct bootstrap response contains a non-integer number"),
+            Value::String(value) => output.push_str(
+                &serde_json::to_string(value).context("encode direct bootstrap response string")?,
+            ),
+            Value::Array(values) => {
+                output.push('[');
+                for (index, value) in values.iter().enumerate() {
+                    if index != 0 {
+                        output.push(',');
+                    }
+                    write_value(value, output)?;
+                }
+                output.push(']');
+            }
+            Value::Object(values) => {
+                output.push('{');
+                let mut entries: Vec<_> = values.iter().collect();
+                entries.sort_by(|left, right| left.0.as_bytes().cmp(right.0.as_bytes()));
+                for (index, (key, value)) in entries.into_iter().enumerate() {
+                    if index != 0 {
+                        output.push(',');
+                    }
+                    output.push_str(
+                        &serde_json::to_string(key)
+                            .context("encode direct bootstrap response key")?,
+                    );
+                    output.push(':');
+                    write_value(value, output)?;
+                }
+                output.push('}');
+            }
+        }
+        Ok(())
+    }
+
+    let value: Value =
+        serde_json::from_slice(bytes).context("decode direct bootstrap FD3 response")?;
+    let mut canonical = String::new();
+    write_value(&value, &mut canonical)?;
+    if canonical.as_bytes() != bytes {
+        bail!("direct bootstrap FD3 response is not canonical JSON");
+    }
+    if value
+        .as_object()
+        .and_then(|object| object.get("bootstrap_channel_bound"))
+        .and_then(Value::as_bool)
+        != Some(true)
+    {
+        bail!("direct bootstrap FD3 response is not bound to the bootstrap channel");
+    }
+    Ok(value)
+}
+
+/// Kill and reap the exact elevated child on every incomplete exchange.  Its durable Prepared
+/// intent remains the only retry authority; the direct channel is never automatically resent.
+#[cfg(target_os = "macos")]
+struct RetainedBootstrapChildGuardV1 {
+    child: Option<std::process::Child>,
+}
+
+#[cfg(target_os = "macos")]
+impl RetainedBootstrapChildGuardV1 {
+    fn new(child: std::process::Child) -> Self {
+        Self { child: Some(child) }
+    }
+
+    fn wait_for_success_v1(&mut self, deadline: std::time::Instant) -> Result<()> {
+        loop {
+            let observed = self
+                .child
+                .as_mut()
+                .expect("retained bootstrap child guard is live")
+                .try_wait()
+                .context("observe exact elevated bootstrap executor")?;
+            match observed {
+                Some(status) => {
+                    self.child.take();
+                    if status.success() {
+                        return Ok(());
+                    }
+                    bail!("exact elevated bootstrap executor failed");
+                }
+                None if std::time::Instant::now() >= deadline => {
+                    bail!("exact elevated bootstrap executor did not terminate after its response")
+                }
+                None => std::thread::sleep(std::time::Duration::from_millis(10)),
+            }
+        }
+    }
+}
+
+#[cfg(target_os = "macos")]
+impl Drop for RetainedBootstrapChildGuardV1 {
+    fn drop(&mut self) {
+        if let Some(mut child) = self.child.take() {
+            let _ = child.kill();
+            let _ = child.wait();
+        }
+    }
 }
 
 pub fn issue_guest_publisher_pairing_ticket_v1(

@@ -209,7 +209,7 @@ fn main() -> Result<()> {
             bail!("publisher bootstrap accepts exactly --publisher-bootstrap-fd 3");
         }
         // This branch precedes all ordinary stdin handling.  Its sole input is the retained
-        // SOCK_SEQPACKET peer inherited at descriptor 3.
+        // SOCK_STREAM peer inherited at descriptor 3.
         return consume_publisher_bootstrap_fd3_v1(3);
     }
     if args.next().is_some() {
@@ -249,28 +249,36 @@ fn main() -> Result<()> {
     Ok(())
 }
 
-/// Consume exactly one bounded direct-bootstrap frame from the peer retained on FD3.
+/// Consume exactly one bounded EOF-delimited direct-bootstrap document from the peer on FD3.
 ///
 /// The native admission layer owns the SO_PEERCRED-equivalent peer/image/build/terminal joins;
 /// this entrypoint deliberately has neither a stdin fallback nor a second-frame retry path.
 fn consume_publisher_bootstrap_fd3_v1(fd: i32) -> Result<()> {
     #[cfg(target_os = "macos")]
     {
-        use std::os::unix::net::UnixDatagram;
+        use std::os::unix::net::UnixStream;
 
         if fd != 3 {
             bail!("publisher bootstrap must use descriptor 3");
         }
-        mac_require_seqpacket_channel_v1(fd)?;
+        // Re-arm close-on-exec before socket inspection, peer/image/terminal work, JSON decode,
+        // codesign, or any later child exec. Sudo cleared this flag only for its fixed FD3 handoff.
+        mac_rearm_bootstrap_fd3_cloexec_v1(fd)?;
+        mac_require_stream_channel_v1(fd)?;
+        mac_set_bootstrap_no_sigpipe_v1(fd)?;
+        // SAFETY: this entrypoint now takes sole ownership of the verified inherited FD3.
+        let socket = unsafe { UnixStream::from_raw_fd(fd) };
         // This kernel observation precedes every untrusted authorization decode.
-        let peer = mac_bootstrap_peer_identity_v1(fd)?;
+        let peer = mac_bootstrap_peer_identity_v1(socket.as_raw_fd())?;
         let provenance = mac_load_retained_bootstrap_provenance_v1()?;
         // The peer's kernel PID and its retained executable are admitted before any authority
         // bytes are decoded.  Decoded bytes can only further constrain this fixed record.
         mac_attest_bootstrap_control_peer_predecode_v1(&peer, &provenance)?;
-        // SAFETY: this entrypoint takes sole ownership of the verified FD3 endpoint.
-        let socket = unsafe { UnixDatagram::from_raw_fd(fd) };
-        let frame = mac_read_single_seqpacket_frame_v1(&socket)?;
+        let frame = mac_read_single_stream_document_v1(
+            &socket,
+            Instant::now() + MAC_BOOTSTRAP_FRAME_FINISH_TIMEOUT_V1,
+            "retained bootstrap FD3 authorization",
+        )?;
         let fresh_authorization = parse_publisher_bootstrap_authorization_v1(&frame)
             .context("decode canonical direct bootstrap authorization")?;
         mac_attest_bootstrap_authorization_to_provenance_v1(&fresh_authorization, &provenance)?;
@@ -289,10 +297,11 @@ fn consume_publisher_bootstrap_fd3_v1(fd: i32) -> Result<()> {
             let _ = mac_complete_bootstrap_attempt_locator_v1(&locator, &authorization, &response)?;
             response
         };
-        mac_send_single_seqpacket_frame_v1(
+        mac_send_single_stream_document_v1(
             &socket,
             &canonical_bootstrap_json_bytes_v1(&response)
                 .context("encode bounded bootstrap response")?,
+            Instant::now() + MAC_BOOTSTRAP_FRAME_FINISH_TIMEOUT_V1,
         )
     }
     #[cfg(not(target_os = "macos"))]
@@ -310,10 +319,24 @@ struct MacBootstrapPeerIdentityV1 {
     gid: libc::gid_t,
 }
 
-/// Refuse a stream, datagram, replacement descriptor, or any transport other than the retained
-/// one-shot AF_UNIX SOCK_SEQPACKET channel.
 #[cfg(target_os = "macos")]
-fn mac_require_seqpacket_channel_v1(fd: i32) -> Result<()> {
+fn mac_rearm_bootstrap_fd3_cloexec_v1(fd: i32) -> Result<()> {
+    let flags = unsafe { libc::fcntl(fd, libc::F_GETFD) };
+    if flags < 0 {
+        return Err(std::io::Error::last_os_error())
+            .context("read retained bootstrap FD3 descriptor flags");
+    }
+    if unsafe { libc::fcntl(fd, libc::F_SETFD, flags | libc::FD_CLOEXEC) } != 0 {
+        return Err(std::io::Error::last_os_error())
+            .context("re-arm retained bootstrap FD3 CLOEXEC");
+    }
+    Ok(())
+}
+
+/// Refuse a datagram, seqpacket, replacement descriptor, or any transport other than the
+/// one-shot Darwin AF_UNIX SOCK_STREAM channel.
+#[cfg(target_os = "macos")]
+fn mac_require_stream_channel_v1(fd: i32) -> Result<()> {
     let mut socket_type = 0_i32;
     let mut socket_type_len = std::mem::size_of::<i32>() as libc::socklen_t;
     // SAFETY: getsockopt writes exactly one integer into the supplied fixed-size buffer.
@@ -330,9 +353,27 @@ fn mac_require_seqpacket_channel_v1(fd: i32) -> Result<()> {
         return Err(std::io::Error::last_os_error())
             .context("inspect retained bootstrap FD3 socket type");
     }
-    if socket_type_len as usize != std::mem::size_of::<i32>() || socket_type != libc::SOCK_SEQPACKET
+    if socket_type_len as usize != std::mem::size_of::<i32>() || socket_type != libc::SOCK_STREAM {
+        bail!("retained bootstrap FD3 is not SOCK_STREAM");
+    }
+    Ok(())
+}
+
+#[cfg(target_os = "macos")]
+fn mac_set_bootstrap_no_sigpipe_v1(fd: i32) -> Result<()> {
+    let enabled = 1_i32;
+    if unsafe {
+        libc::setsockopt(
+            fd,
+            libc::SOL_SOCKET,
+            libc::SO_NOSIGPIPE,
+            (&enabled as *const i32).cast(),
+            std::mem::size_of::<i32>() as libc::socklen_t,
+        )
+    } != 0
     {
-        bail!("retained bootstrap FD3 is not SOCK_SEQPACKET");
+        return Err(std::io::Error::last_os_error())
+            .context("set retained bootstrap FD3 SO_NOSIGPIPE");
     }
     Ok(())
 }
@@ -381,61 +422,142 @@ fn mac_bootstrap_peer_identity_v1(fd: i32) -> Result<MacBootstrapPeerIdentityV1>
 }
 
 #[cfg(target_os = "macos")]
-fn mac_read_single_seqpacket_frame_v1(
-    socket: &std::os::unix::net::UnixDatagram,
-) -> Result<Vec<u8>> {
-    let original_timeout = socket
-        .read_timeout()
-        .context("read retained bootstrap FD3 timeout")?;
-    socket
-        .set_read_timeout(Some(MAC_BOOTSTRAP_FRAME_FINISH_TIMEOUT_V1))
-        .context("set retained bootstrap FD3 frame timeout")?;
-    let bounded = (|| -> Result<Vec<u8>> {
-        let mut frame = vec![0_u8; MAX_MAC_XPC_FRAME_BYTES_V1 + 1];
-        let received = socket
-            .recv(&mut frame)
-            .context("receive retained bootstrap FD3 authorization frame")?;
-        if received == 0 || received > MAX_MAC_XPC_FRAME_BYTES_V1 {
-            bail!("retained bootstrap FD3 frame is absent or oversized");
+fn mac_wait_bootstrap_fd3_event_v1(
+    fd: i32,
+    events: i16,
+    deadline: Instant,
+    phase: &str,
+) -> Result<()> {
+    loop {
+        let now = Instant::now();
+        if now >= deadline {
+            bail!("{phase} timed out");
         }
-        frame.truncate(received);
-        let mut trailing = [0_u8; 1];
-        match socket.recv(&mut trailing) {
-            Ok(0) => Ok(frame),
-            Ok(_) => bail!("retained bootstrap FD3 carried a second frame"),
-            Err(error)
-                if matches!(
-                    error.kind(),
-                    std::io::ErrorKind::TimedOut | std::io::ErrorKind::WouldBlock
-                ) =>
-            {
-                bail!("retained bootstrap FD3 did not terminate its one-frame request")
+        let timeout_ms = deadline
+            .saturating_duration_since(now)
+            .as_millis()
+            .saturating_add(1)
+            .min(i32::MAX as u128) as i32;
+        let mut poll_fd = libc::pollfd {
+            fd,
+            events,
+            revents: 0,
+        };
+        let ready = unsafe { libc::poll(&mut poll_fd, 1, timeout_ms) };
+        if ready == 0 {
+            bail!("{phase} timed out");
+        }
+        if ready < 0 {
+            let error = std::io::Error::last_os_error();
+            if error.kind() == std::io::ErrorKind::Interrupted {
+                continue;
             }
-            Err(error) => Err(error).context("verify retained bootstrap FD3 frame boundary"),
+            return Err(error).with_context(|| format!("wait for {phase}"));
         }
-    })();
-    socket
-        .set_read_timeout(original_timeout)
-        .context("restore retained bootstrap FD3 timeout")?;
-    bounded
+        if poll_fd.revents & (libc::POLLNVAL | libc::POLLERR) != 0 {
+            bail!("{phase} retained FD3 channel failed");
+        }
+        if poll_fd.revents & events != 0
+            || (events == libc::POLLIN && poll_fd.revents & libc::POLLHUP != 0)
+        {
+            return Ok(());
+        }
+        if poll_fd.revents & libc::POLLHUP != 0 {
+            bail!("{phase} retained FD3 channel disconnected");
+        }
+    }
 }
 
 #[cfg(target_os = "macos")]
-fn mac_send_single_seqpacket_frame_v1(
-    socket: &std::os::unix::net::UnixDatagram,
+fn mac_read_single_stream_document_v1(
+    socket: &std::os::unix::net::UnixStream,
+    deadline: Instant,
+    phase: &str,
+) -> Result<Vec<u8>> {
+    let mut bytes = Vec::with_capacity(MAX_MAC_XPC_FRAME_BYTES_V1);
+    let mut buffer = [0_u8; 16 * 1024];
+    loop {
+        mac_wait_bootstrap_fd3_event_v1(socket.as_raw_fd(), libc::POLLIN, deadline, phase)?;
+        let remaining = MAX_MAC_XPC_FRAME_BYTES_V1 - bytes.len();
+        let capacity = if remaining == 0 {
+            1
+        } else {
+            remaining.min(buffer.len())
+        };
+        let count = unsafe {
+            libc::recv(
+                socket.as_raw_fd(),
+                buffer.as_mut_ptr().cast(),
+                capacity,
+                libc::MSG_DONTWAIT,
+            )
+        };
+        if count == 0 {
+            if bytes.is_empty() {
+                bail!("{phase} was empty");
+            }
+            return Ok(bytes);
+        }
+        if count > 0 {
+            if remaining == 0 {
+                bail!("{phase} exceeded the 1 MiB bound");
+            }
+            bytes.extend_from_slice(&buffer[..count as usize]);
+            continue;
+        }
+        let error = std::io::Error::last_os_error();
+        if matches!(
+            error.kind(),
+            std::io::ErrorKind::Interrupted | std::io::ErrorKind::WouldBlock
+        ) {
+            continue;
+        }
+        return Err(error).with_context(|| format!("read {phase}"));
+    }
+}
+
+#[cfg(target_os = "macos")]
+fn mac_send_single_stream_document_v1(
+    socket: &std::os::unix::net::UnixStream,
     response: &[u8],
+    deadline: Instant,
 ) -> Result<()> {
     if response.is_empty() || response.len() > MAX_MAC_XPC_FRAME_BYTES_V1 {
         bail!("retained bootstrap FD3 response is absent or oversized");
     }
-    if socket
-        .send(response)
-        .context("send retained bootstrap FD3 response")?
-        != response.len()
-    {
-        bail!("retained bootstrap FD3 response was truncated");
+    let mut written = 0usize;
+    while written < response.len() {
+        mac_wait_bootstrap_fd3_event_v1(
+            socket.as_raw_fd(),
+            libc::POLLOUT,
+            deadline,
+            "retained bootstrap FD3 response",
+        )?;
+        let count = unsafe {
+            libc::send(
+                socket.as_raw_fd(),
+                response[written..].as_ptr().cast(),
+                response.len() - written,
+                libc::MSG_DONTWAIT,
+            )
+        };
+        if count > 0 {
+            written += count as usize;
+            continue;
+        }
+        if count == 0 {
+            bail!("retained bootstrap FD3 response made no forward progress");
+        }
+        let error = std::io::Error::last_os_error();
+        if matches!(
+            error.kind(),
+            std::io::ErrorKind::Interrupted | std::io::ErrorKind::WouldBlock
+        ) {
+            continue;
+        }
+        return Err(error).context("send retained bootstrap FD3 response");
     }
-    // SAFETY: FD3 is private to this one response and must not become a reusable channel.
+    // EOF is the sole response boundary and follows every canonical response byte.
     if unsafe { libc::shutdown(socket.as_raw_fd(), libc::SHUT_WR) } != 0 {
         return Err(std::io::Error::last_os_error())
             .context("finish retained bootstrap FD3 response");
@@ -2564,6 +2686,71 @@ fn mac_be_subtract_v1(left: &[u8; 32], right: &[u8]) -> Result<[u8; 32]> {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[cfg(target_os = "macos")]
+    #[test]
+    fn retained_bootstrap_stream_helpers_use_real_eof_framing() {
+        use std::os::fd::AsRawFd;
+        use std::os::unix::net::UnixStream;
+
+        let (reader, writer) = UnixStream::pair().expect("Darwin stream pair");
+        mac_rearm_bootstrap_fd3_cloexec_v1(reader.as_raw_fd()).expect("re-arm CLOEXEC");
+        mac_require_stream_channel_v1(reader.as_raw_fd()).expect("require SOCK_STREAM");
+        mac_set_bootstrap_no_sigpipe_v1(reader.as_raw_fd()).expect("reader SO_NOSIGPIPE");
+        mac_set_bootstrap_no_sigpipe_v1(writer.as_raw_fd()).expect("writer SO_NOSIGPIPE");
+        let flags = unsafe { libc::fcntl(reader.as_raw_fd(), libc::F_GETFD) };
+        assert_ne!(flags & libc::FD_CLOEXEC, 0, "executor must re-arm CLOEXEC");
+
+        let response = br#"{"bootstrap_channel_bound":true}"#.to_vec();
+        let expected = response.clone();
+        let sender = std::thread::spawn(move || {
+            mac_send_single_stream_document_v1(
+                &writer,
+                &response,
+                Instant::now() + Duration::from_secs(2),
+            )
+            .expect("send canonical response and EOF");
+        });
+        let observed = mac_read_single_stream_document_v1(
+            &reader,
+            Instant::now() + Duration::from_secs(2),
+            "executor Rust regression response",
+        )
+        .expect("read response through EOF");
+        sender.join().expect("sender thread");
+        assert_eq!(observed, expected);
+    }
+
+    #[cfg(target_os = "macos")]
+    #[test]
+    fn retained_bootstrap_stream_reader_accepts_exact_bound_and_rejects_plus_one() {
+        use std::io::Write;
+        use std::net::Shutdown;
+        use std::os::unix::net::UnixStream;
+
+        fn exchange(bytes: Vec<u8>) -> Result<Vec<u8>> {
+            let (reader, mut writer) = UnixStream::pair().context("Darwin stream pair")?;
+            let sender = std::thread::spawn(move || -> Result<()> {
+                writer.write_all(&bytes).context("write bound regression")?;
+                writer
+                    .shutdown(Shutdown::Write)
+                    .context("finish bound regression")
+            });
+            let result = mac_read_single_stream_document_v1(
+                &reader,
+                Instant::now() + Duration::from_secs(5),
+                "executor bound regression",
+            );
+            sender.join().expect("bound sender thread")?;
+            result
+        }
+
+        assert_eq!(
+            exchange(vec![b'x'; MAX_MAC_XPC_FRAME_BYTES_V1]).expect("exact 1 MiB"),
+            vec![b'x'; MAX_MAC_XPC_FRAME_BYTES_V1]
+        );
+        assert!(exchange(vec![b'x'; MAX_MAC_XPC_FRAME_BYTES_V1 + 1]).is_err());
+    }
 
     fn correction_post_pm_entry_v1(
         role: &str,

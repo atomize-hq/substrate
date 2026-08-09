@@ -890,7 +890,7 @@ fn closed_mapped_mac_role_action_v1(role: &str, action: ManagedActionV1) -> bool
 
 /// The hidden direct command passes one already-decoded canonical seed after terminal
 /// confirmation. On macOS the retained-state issuer derives the authorization in memory and this
-/// function gives it exactly one FD3 seqpacket delivery opportunity.
+/// function gives it exactly one Darwin FD3 stream/EOF delivery opportunity.
 pub fn deliver_retained_publisher_bootstrap_authorization_v1(
     request: &MacPublisherBootstrapRequestV1,
 ) -> Result<Value> {

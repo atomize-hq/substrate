@@ -2738,20 +2738,16 @@ try:
     required = {
         "status", "scope_id", "manifest_generation", "manifest_sha256",
         "authorization_sha256", "anchor_sha256", "lima_stage_one_authorization_v1",
-        "bootstrap_channel_bound", "xpc_attestation",
+        "bootstrap_channel_bound",
     }
     if not isinstance(response, dict) or set(response) != required:
         raise ValueError()
     stage = response["lima_stage_one_authorization_v1"]
-    attestation = response["xpc_attestation"]
     if (response["status"] != "bootstrapped" or response["bootstrap_channel_bound"] is not True
             or not isinstance(stage, dict)
             or stage.get("schema_owner") != "substrate.lima-stage-one-authorization"
             or stage.get("schema_version") != 1
-            or stage.get("expected_absent") is not True
-            or not isinstance(attestation, dict)
-            or attestation.get("mach_service") != "com.substrate.lifecycle.publisher.v1"
-            or attestation.get("audit_token_bound") is not True):
+            or stage.get("expected_absent") is not True):
         raise ValueError()
     if not isinstance(response["scope_id"], str) or not re.fullmatch(r"[0-9a-f]{8}-[0-9a-f]{4}-7[0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}", response["scope_id"]):
         raise ValueError()
