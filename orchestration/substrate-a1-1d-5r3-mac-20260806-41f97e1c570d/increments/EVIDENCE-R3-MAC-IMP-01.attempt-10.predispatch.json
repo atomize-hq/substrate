@@ -1,0 +1,64 @@
+{
+  "protocol": "codex.top-level-evidence-predispatch.v1",
+  "orchestration_id": "substrate-a1-1d-5r3-mac-20260806-41f97e1c570d",
+  "evidence_id": "EVIDENCE:R3-MAC-IMP-01",
+  "attempt": 10,
+  "allocation": 3,
+  "dispatch_nonce": "0a7b308d484582037972c5dface88dcfb9e7443ef343c799c4e177504a836ce8",
+  "task": {
+    "thread_id": "019fe162-c98c-7c82-94d0-155d6cab5122",
+    "host_id": "local",
+    "worktree": "/Users/spensermcconnell/.codex/worktrees/1626/substrate",
+    "status": "idle/notLoaded"
+  },
+  "source": {
+    "publication_mode": "remote",
+    "remote": "origin",
+    "target_ref": "refs/heads/feat/internal-host-orchestrator-world-dispatch-bootstrap",
+    "commit": "2511eea6e93bbdc6d24069356aa42064cd760305",
+    "tree": "f9441d449321c31693b2238c3a33abdb222dd9dc",
+    "live_remote": "2511eea6e93bbdc6d24069356aa42064cd760305"
+  },
+  "attached_mirror": {
+    "path": "/Users/spensermcconnell/.codex/evidence/substrate-a1-1d-5r3-mac-20260806-41f97e1c570d/AUX-R3-MAC-EVIDENCE-PLATFORM-PREREQUISITE-PREP/11c27a5ee57be5b99a3c7457c4f511b14b5747ee4b2b0492874a416d5fab02a3/source/substrate",
+    "head": "2511eea6e93bbdc6d24069356aa42064cd760305",
+    "tree": "f9441d449321c31693b2238c3a33abdb222dd9dc",
+    "symbolic_head": "refs/heads/feat/internal-host-orchestrator-world-dispatch-bootstrap",
+    "clean": true,
+    "target_absent": true
+  },
+  "platform": {
+    "fixed_limactl_sha256": "sha256:c126697daa485aff79552a34413e14c0e2efd43675845bee1a152f31845f1455",
+    "canonical_instance_absent": true,
+    "sudo_noninteractive": true,
+    "sudoers_sha256": "sha256:f4f85d5b2674a6505d84ee75de0a3cc8bc883bace01733bcab3b5fbd6efd4f0d"
+  },
+  "skill_suite": {
+    "skill_count": 25,
+    "file_count": 54,
+    "sha256": "e3de93f358594033ed59696a9624d2d0ac2fd0c2aa7ddf4a532810a05b262282",
+    "verified": true
+  },
+  "contract": {
+    "path": "increments/EVIDENCE-R3-MAC-IMP-01.attempt-10.contract.md",
+    "sha256": "sha256:0b1d2daaed9f2428e3eeea10d4323269b5fbf5816bfd26a023b22592181edcac"
+  },
+  "authority_amendment": {
+    "path": "authority-amendments/0049-r3-mac-evidence-attempt-10-fixed-install-retry.json",
+    "sha256": "sha256:9f59f1da89c8d69b88ed8d23b3eb6072c3801565bd6f49a33a699e126918e2b9"
+  },
+  "source_refresh": {
+    "receipt_path": "receipts/AUX-R3-MAC-SOURCE-CHECKOUT-REFRESH-02.json",
+    "receipt_sha256": "sha256:f114327cce88c0784d86b9e56147e75e082b9060d68ed1ee285c56ae4f16d3a4",
+    "verification_path": "receipts/AUX-R3-MAC-SOURCE-CHECKOUT-REFRESH-02.verification.json",
+    "status": "READY_VERIFIED"
+  },
+  "prior_attempt": {
+    "attempt": 9,
+    "status": "BLOCKED_PLATFORM_HANDOFF_REQUIRED",
+    "restoration_exact": true,
+    "receipt_path": "receipts/EVIDENCE-R3-MAC-IMP-01.attempt-9.blocked.json",
+    "verification_path": "receipts/EVIDENCE-R3-MAC-IMP-01.attempt-9.blocked.verification.json"
+  },
+  "prepared_at_utc": "2026-08-09T01:16:28Z"
+}

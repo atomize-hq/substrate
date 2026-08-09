@@ -1,0 +1,86 @@
+{
+  "protocol": "codex.meta-authority-amendment.v1",
+  "orchestration_id": "substrate-a1-1d-5r3-mac-20260806-41f97e1c570d",
+  "amendment_id": "0049-r3-mac-evidence-attempt-10-fixed-install-retry",
+  "issued_at_utc": "2026-08-09T01:16:28Z",
+  "applies_to": "EVIDENCE:R3-MAC-IMP-01",
+  "attempt": 10,
+  "allocation": 3,
+  "task_thread_id": "019fe162-c98c-7c82-94d0-155d6cab5122",
+  "task_host_id": "local",
+  "task_worktree": "/Users/spensermcconnell/.codex/worktrees/1626/substrate",
+  "dispatch_nonce": "0a7b308d484582037972c5dface88dcfb9e7443ef343c799c4e177504a836ce8",
+  "authority_basis": {
+    "standing_user_successor_authority_after_clean_review": true,
+    "user_directive_to_complete_next_steps_needed_for_evidence": true,
+    "small_dispatch_adjudication_authorized": true,
+    "prestage_fixed_install_correction_landed_clean": true,
+    "source_refresh_verified_ready": true,
+    "reason": "Attempt 9 stopped before native mutation on the missing pre-Stage-1 artifact/install route. The reviewed source now provides that exact closed route and a private fixed install-only sequence."
+  },
+  "source": {
+    "publication_mode": "remote",
+    "remote": "origin",
+    "target_ref": "refs/heads/feat/internal-host-orchestrator-world-dispatch-bootstrap",
+    "commit": "2511eea6e93bbdc6d24069356aa42064cd760305",
+    "tree": "f9441d449321c31693b2238c3a33abdb222dd9dc",
+    "live_remote": "2511eea6e93bbdc6d24069356aa42064cd760305"
+  },
+  "retained_authority": [
+    {
+      "id": "0040-r3-mac-canonical-installer-target-output",
+      "sha256": "sha256:cdaaa4ad590d4a110dd8ae5b03c36ac4833abd64e92e0e0ad055826d78495c14"
+    },
+    {
+      "id": "0041-r3-mac-canonical-installer-fixed-path-retry",
+      "sha256": "sha256:3eb4250e6995c6dd91614778b7d448dc74b680e199a47d2e754330cdd0eeed38"
+    },
+    {
+      "id": "0042-r3-mac-limactl-home-provenance-source-correction",
+      "sha256": "sha256:815ed0977d5affb77560fb63de0e5474e2f0f7e2db7aeeefd3ca34bb9d164fbe"
+    },
+    {
+      "id": "0047-r3-mac-fixed-install-sequence",
+      "sha256": "sha256:6bd998d38beb552233b6360ac7c02c482a7c2c096ea6c6bbb6e09ba5f6c222d4"
+    },
+    {
+      "id": "0048-r3-mac-fixed-install-source-checkout-refresh",
+      "sha256": "sha256:ed278102cb7f12efbffae67575722c41685fa262a9654b423da07f8c19e45bf6"
+    }
+  ],
+  "authorized_retry": {
+    "restart_complete_packet": true,
+    "canonical_installer_mirror": "/Users/spensermcconnell/.codex/evidence/substrate-a1-1d-5r3-mac-20260806-41f97e1c570d/AUX-R3-MAC-EVIDENCE-PLATFORM-PREREQUISITE-PREP/11c27a5ee57be5b99a3c7457c4f511b14b5747ee4b2b0492874a416d5fab02a3/source/substrate",
+    "external_artifact_root": "/Users/spensermcconnell/.codex/evidence/substrate-a1-1d-5r3-mac-20260806-41f97e1c570d/EVIDENCE-R3-MAC-IMP-01/0a7b308d484582037972c5dface88dcfb9e7443ef343c799c4e177504a836ce8",
+    "agent_operated_direct_terminal": true,
+    "canonical_installer_target_exception": true,
+    "fixed_install_sequence": "Use only the landed private literal install sequence derived by the privileged macOS executor from the signed Stage-1 manifest. No caller selector or catalogue traversal.",
+    "artifact_roles": "Exactly the four existing source-defined AArch64 Linux artifact roles; no world binary target and no new binary target.",
+    "retry_semantics": "Resume only through landed durable prepared/receipt/index/head/anchor policy. Never run Stop, Remove, Restore, or a generic action scheduler."
+  },
+  "preconditions": [
+    "Evidence task is idle, clean, detached at the exact source commit/tree, and its hydrated skill digest is verified.",
+    "Attached canonical-installer mirror is clean, attached to the target branch at the exact source commit/tree, with target absent.",
+    "Live remote equals the source commit and the prior checkpoint is its ancestor.",
+    "Fixed root-owned limactl, absent canonical instance/control root, durable sudo, and sudoers sentinel verify unchanged."
+  ],
+  "prohibited_actions": [
+    "source edit, stage, commit, push, branch/ref mutation, reset, clean, rebase, force, stash, or task archival",
+    "manual prefix staging, alternate artifact ingress, new Cargo target, caller-selected action, catalogue traversal, Stop, Remove, Restore, generic scheduler, alternate transport/endpoint/principal/instance/prefix",
+    "Windows, WSL, ordinary Linux-host, MAC-CLOSEOUT, or successor work",
+    "sudoers mutation or unowned/unrelated platform mutation"
+  ],
+  "terminal_requirements": {
+    "receipt_protocol": "codex.top-level-evidence-receipt.v1",
+    "clean_status": "EVIDENCE_CLEAN",
+    "blocked_statuses": [
+      "BLOCKED_PLATFORM_HANDOFF_REQUIRED",
+      "BLOCKED_NATIVE_EVIDENCE"
+    ],
+    "return_meta_thread_id": "019fd8c3-b12c-7e73-919f-898600ab0f64",
+    "return_meta_host_id": "local",
+    "send_receipt_as_final_tool_action": true,
+    "gated_successor": "AUTHORITY_REQUIRED:A1.1d-5R3-MAC-CLOSEOUT",
+    "successor_dispatch_authorized": false
+  }
+}
