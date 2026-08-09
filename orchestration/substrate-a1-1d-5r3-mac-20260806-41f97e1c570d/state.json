@@ -1,7 +1,7 @@
 {
   "protocol": "codex.top-level-orchestration-state.v1",
   "orchestration_id": "substrate-a1-1d-5r3-mac-20260806-41f97e1c570d",
-  "status": "RUNNING",
+  "status": "READY",
   "dispatch_authorized": true,
   "publication_mode": "remote",
   "remote": "origin",
@@ -330,8 +330,10 @@
     "attempt_9_verification_path": "receipts/EVIDENCE-R3-MAC-IMP-01.attempt-9.blocked.verification.json",
     "attempt_9_verification_sha256": "sha256:ce183950dc1187953580aa90356acc9e7e8b191eb93cd4fe87f6cf436d970f94",
     "prestage_install_sequence_authority_required": false,
-    "source_refresh_required": true,
-    "source_refresh_verified": false
+    "source_refresh_required": false,
+    "source_refresh_verified": true,
+    "source_refresh_receipt_path": "receipts/AUX-R3-MAC-SOURCE-CHECKOUT-REFRESH-02.json",
+    "source_refresh_verification_path": "receipts/AUX-R3-MAC-SOURCE-CHECKOUT-REFRESH-02.verification.json"
   },
   "auxiliary_host_preparation": {
     "status": "BLOCKED_SOURCE_CORRECTION",
@@ -1490,7 +1492,7 @@
     "verified_at_utc": "2026-08-09T01:09:46Z"
   },
   "auxiliary_source_checkout_refresh_fixed_install": {
-    "status": "RUNNING",
+    "status": "READY_VERIFIED",
     "packet": "AUX-R3-MAC-SOURCE-CHECKOUT-REFRESH-02",
     "dispatch_nonce": "2155591546ae59480816ef128669c99f6cafeb31369e9aa2e34b3ef8aa08c116",
     "thread_id": "019fe147-e300-72c2-a394-a53f43185ceb",
@@ -1513,9 +1515,15 @@
     "delivery_path": "increments/AUX-R3-MAC-SOURCE-CHECKOUT-REFRESH-02.delivery.json",
     "delivery_sha256": "sha256:131f532a8fc02022037c7d6f437bdceb37c1231328533618a2e22ab7293e7b89",
     "turn_id": "019fe413-7b98-78e0-b20a-deb8f53a3e78",
-    "wait_cursor": "48c07936-b6f1-47e2-93d3-faf543564a82:9",
-    "thread_status": "active",
-    "turn_status": "in_progress",
-    "sent_at_utc": "2026-08-09T01:12:02Z"
+    "wait_cursor": "48c07936-b6f1-47e2-93d3-faf543564a82:17",
+    "thread_status": "idle",
+    "turn_status": "completed",
+    "sent_at_utc": "2026-08-09T01:12:02Z",
+    "receipt_path": "receipts/AUX-R3-MAC-SOURCE-CHECKOUT-REFRESH-02.json",
+    "receipt_sha256": "sha256:f114327cce88c0784d86b9e56147e75e082b9060d68ed1ee285c56ae4f16d3a4",
+    "verification_path": "receipts/AUX-R3-MAC-SOURCE-CHECKOUT-REFRESH-02.verification.json",
+    "verification_sha256": "sha256:5e3a6ce5ba28dd0d93c7c63e52affdd18ce3edaf7eea22edf8dc668c4466be39",
+    "external_manifest_sha256": "sha256:04c68c13f11ac27c91a4914843291d65474d4f863342897e1169181f5bbcc703",
+    "verified_at_utc": "2026-08-09T01:14:53Z"
   }
 }

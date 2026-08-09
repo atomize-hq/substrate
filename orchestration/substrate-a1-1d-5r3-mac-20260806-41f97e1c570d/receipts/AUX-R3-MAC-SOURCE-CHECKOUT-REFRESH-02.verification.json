@@ -1,0 +1,42 @@
+{
+  "protocol": "codex.meta-auxiliary-source-checkout-refresh-verification.v1",
+  "orchestration_id": "substrate-a1-1d-5r3-mac-20260806-41f97e1c570d",
+  "packet": "AUX-R3-MAC-SOURCE-CHECKOUT-REFRESH-02",
+  "dispatch_nonce": "2155591546ae59480816ef128669c99f6cafeb31369e9aa2e34b3ef8aa08c116",
+  "receipt_path": "receipts/AUX-R3-MAC-SOURCE-CHECKOUT-REFRESH-02.json",
+  "receipt_sha256": "sha256:f114327cce88c0784d86b9e56147e75e082b9060d68ed1ee285c56ae4f16d3a4",
+  "task_terminal_barrier": {
+    "thread_id": "019fe147-e300-72c2-a394-a53f43185ceb",
+    "host_id": "local",
+    "status": "idle",
+    "turn_id": "019fe413-7b98-78e0-b20a-deb8f53a3e78",
+    "turn_status": "completed",
+    "wait_cursor": "48c07936-b6f1-47e2-93d3-faf543564a82:17"
+  },
+  "source_transition": {
+    "from_commit": "a06b3fd26ceee4ece7e5bd1481981755eafcedb5",
+    "from_tree": "f4c396d0e28a43405a9a2b1d49a450d6df545c84",
+    "to_commit": "2511eea6e93bbdc6d24069356aa42064cd760305",
+    "to_tree": "f9441d449321c31693b2238c3a33abdb222dd9dc",
+    "live_remote_verified": true,
+    "fast_forward_verified": true
+  },
+  "attached_mirror": {
+    "head_tree_ref_clean_verified": true,
+    "target_absent": true
+  },
+  "evidence_checkout": {
+    "head_tree_detached_clean_verified": true
+  },
+  "platform": {
+    "fixed_limactl_verified": true,
+    "canonical_instance_and_control_root_absent": true,
+    "sudoers_verified": true,
+    "host_sudo_noninteractive": true
+  },
+  "external_manifest_path": "/Users/spensermcconnell/.codex/evidence/substrate-a1-1d-5r3-mac-20260806-41f97e1c570d/AUX-R3-MAC-EVIDENCE-PLATFORM-PREREQUISITE-PREP/2155591546ae59480816ef128669c99f6cafeb31369e9aa2e34b3ef8aa08c116/auxiliary-source-checkout-refresh-artifact-manifest.json",
+  "external_manifest_sha256": "sha256:04c68c13f11ac27c91a4914843291d65474d4f863342897e1169181f5bbcc703",
+  "external_receipt_validation": "VALID codex.auxiliary-source-checkout-refresh-receipt.v1 status=READY",
+  "prohibited_actions_confirmed_absent": true,
+  "verified_at_utc": "2026-08-09T01:14:53Z"
+}
