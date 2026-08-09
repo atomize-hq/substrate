@@ -1,7 +1,7 @@
 {
   "protocol": "codex.top-level-orchestration-state.v1",
   "orchestration_id": "substrate-a1-1d-5r3-mac-20260806-41f97e1c570d",
-  "status": "DISPATCHING",
+  "status": "RUNNING",
   "dispatch_authorized": true,
   "publication_mode": "remote",
   "remote": "origin",
@@ -1490,7 +1490,7 @@
     "verified_at_utc": "2026-08-09T01:09:46Z"
   },
   "auxiliary_source_checkout_refresh_fixed_install": {
-    "status": "PREPARED",
+    "status": "RUNNING",
     "packet": "AUX-R3-MAC-SOURCE-CHECKOUT-REFRESH-02",
     "dispatch_nonce": "2155591546ae59480816ef128669c99f6cafeb31369e9aa2e34b3ef8aa08c116",
     "thread_id": "019fe147-e300-72c2-a394-a53f43185ceb",
@@ -1509,6 +1509,13 @@
     "attached_mirror": "/Users/spensermcconnell/.codex/evidence/substrate-a1-1d-5r3-mac-20260806-41f97e1c570d/AUX-R3-MAC-EVIDENCE-PLATFORM-PREREQUISITE-PREP/11c27a5ee57be5b99a3c7457c4f511b14b5747ee4b2b0492874a416d5fab02a3/source/substrate",
     "evidence_checkout": "/Users/spensermcconnell/.codex/worktrees/1626/substrate",
     "task_archiving_authorized": false,
-    "prepared_at_utc": "2026-08-09T01:11:11Z"
+    "prepared_at_utc": "2026-08-09T01:11:11Z",
+    "delivery_path": "increments/AUX-R3-MAC-SOURCE-CHECKOUT-REFRESH-02.delivery.json",
+    "delivery_sha256": "sha256:131f532a8fc02022037c7d6f437bdceb37c1231328533618a2e22ab7293e7b89",
+    "turn_id": "019fe413-7b98-78e0-b20a-deb8f53a3e78",
+    "wait_cursor": "48c07936-b6f1-47e2-93d3-faf543564a82:9",
+    "thread_status": "active",
+    "turn_status": "in_progress",
+    "sent_at_utc": "2026-08-09T01:12:02Z"
   }
 }
