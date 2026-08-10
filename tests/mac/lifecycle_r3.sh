@@ -165,6 +165,34 @@ if 'ERR_SEC_DUPLICATE_ITEM' not in keychain_ffi or 'ambiguous' not in keychain_f
 if 'SecKeyCopyExternalRepresentation(private_key' in keychain_ffi:
     fail('product signer path exports private key bytes')
 
+# System Keychain generic-password reads retain the explicit one-keychain route and no-UI policy,
+# but a data-only default-match query returns scalar CFData.  MatchLimitAll changes that result
+# shape and is rejected by the System Keychain, so this exact read path must not reintroduce it.
+generic_query_start = keychain_ffi.index('unsafe fn generic_search_query')
+generic_query_end = keychain_ffi.index('\n    unsafe fn generic_add_dictionary', generic_query_start)
+generic_query = keychain_ffi[generic_query_start:generic_query_end]
+for text in ('(kSecClass, kSecClassGenericPassword)', '(kSecAttrService, service)',
+             '(kSecAttrAccount, account)', '(kSecMatchSearchList, search_list)',
+             '(kSecUseAuthenticationUI, kSecUseAuthenticationUIFail)',
+             'if return_data', '(kSecReturnData, kCFBooleanTrue)'):
+    if text not in generic_query:
+        fail(f'generic-password read query lost required {text}')
+for forbidden in ('kSecMatchLimit', 'kSecMatchLimitAll'):
+    if forbidden in generic_query:
+        fail(f'generic-password read query retains forbidden {forbidden}')
+
+generic_read_start = keychain_ffi.index('pub(super) fn read_generic_password')
+generic_read_end = keychain_ffi.index('\n    pub(super) fn compare_and_swap_generic_password',
+                                      generic_read_start)
+generic_read = keychain_ffi[generic_read_start:generic_read_end]
+for text in ('CFGetTypeID(result) != CFDataGetTypeID()',
+             'CFDataGetLength(result.cast())', 'CFDataGetBytePtr(result.cast())'):
+    if text not in generic_read:
+        fail(f'generic-password read does not require scalar CFData: missing {text}')
+for forbidden in ('CFArrayGetTypeID', 'CFArrayGetCount', 'CFArrayGetValueAtIndex'):
+    if forbidden in generic_read:
+        fail(f'generic-password read retains forbidden CFArray result handling: {forbidden}')
+
 retire_start = executor.index('pub fn retire_mac_system_keychain_software_signer_v1')
 retire_end = executor.index('\nfn mac_verified_control_peer_requirement_v1', retire_start)
 retire = executor[retire_start:retire_end]

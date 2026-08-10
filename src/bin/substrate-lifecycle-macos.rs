@@ -9900,7 +9900,6 @@ mod mac_system_keychain_ffi_v1 {
         ];
         if return_data {
             entries.push((kSecReturnData, kCFBooleanTrue));
-            entries.push((kSecMatchLimit, kSecMatchLimitAll));
         }
         dictionary(owned, &entries)
     }
@@ -9937,21 +9936,11 @@ mod mac_system_keychain_ffi_v1 {
                 ERR_SEC_ITEM_NOT_FOUND => Ok(None),
                 ERR_SEC_SUCCESS if !result.is_null() => {
                     owned.hold(result);
-                    if CFGetTypeID(result) != CFArrayGetTypeID() {
-                        bail!("System Keychain returned a non-array item result");
-                    }
-                    let count = CFArrayGetCount(result);
-                    if count != 1 {
-                        bail!(
-                            "System Keychain generic-password identity is ambiguous ({count} matches)"
-                        );
-                    }
-                    let data = CFArrayGetValueAtIndex(result, 0);
-                    if data.is_null() || CFGetTypeID(data) != CFDataGetTypeID() {
+                    if CFGetTypeID(result) != CFDataGetTypeID() {
                         bail!("System Keychain returned non-data item bytes");
                     }
-                    let length = CFDataGetLength(data.cast());
-                    let bytes = CFDataGetBytePtr(data.cast());
+                    let length = CFDataGetLength(result.cast());
+                    let bytes = CFDataGetBytePtr(result.cast());
                     if length < 0 || bytes.is_null() {
                         bail!("System Keychain returned invalid item data");
                     }
