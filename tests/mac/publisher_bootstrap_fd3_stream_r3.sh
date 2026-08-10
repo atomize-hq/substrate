@@ -39,9 +39,10 @@ helpers = source[start:end]
 preamble = r'''
 use anyhow::{bail, Context, Result};
 use serde_json::Value;
+use std::io::Write;
 use std::os::fd::AsRawFd;
 use std::os::unix::net::UnixStream;
-use std::process::Command;
+use std::process::{Command, Stdio};
 use std::time::{Duration, Instant};
 
 const MAC_BOOTSTRAP_FD3_MAX_BYTES_V1: usize = 1024 * 1024;
@@ -57,7 +58,11 @@ fn pair_v1() -> Result<(UnixStream, UnixStream)> {
     Ok((left, right))
 }
 
-fn send_and_read_v1(chunks: Vec<Vec<u8>>, timeout: Duration) -> Result<Vec<u8>> {
+fn send_and_read_v1(
+    chunks: Vec<Vec<u8>>,
+    production_timeout: Duration,
+    transfer_timeout: Duration,
+) -> Result<Vec<u8>> {
     let (reader, writer) = pair_v1()?;
     let sender = std::thread::spawn(move || -> Result<()> {
         for chunk in chunks {
@@ -75,27 +80,130 @@ fn send_and_read_v1(chunks: Vec<Vec<u8>>, timeout: Duration) -> Result<Vec<u8>> 
     });
     let result = read_retained_bootstrap_stream_v1(
         reader.as_raw_fd(),
-        Instant::now() + timeout,
+        Instant::now() + production_timeout,
+        transfer_timeout,
         "Rust regression read",
+        || {},
     );
     sender.join().expect("Rust regression sender panicked")?;
     result
 }
 
-fn assert_reaped_v1(pid: libc::pid_t) -> Result<()> {
-    let kill_result = unsafe { libc::kill(pid, 0) };
-    if kill_result == 0 || std::io::Error::last_os_error().raw_os_error() != Some(libc::ESRCH) {
-        bail!("guarded child still exists after error cleanup");
+/// Exercise the exact product reader with short, deterministic writer delays. Writer errors are
+/// expected when a deadline closes the reader before a deliberately late chunk arrives.
+fn scheduled_read_v1(
+    schedule: Vec<(Duration, Vec<u8>)>,
+    production_timeout: Duration,
+    transfer_timeout: Duration,
+    eof_delay: Duration,
+) -> Result<Vec<u8>> {
+    let (reader, writer) = pair_v1()?;
+    let sender = std::thread::spawn(move || {
+        for (delay, chunk) in schedule {
+            std::thread::sleep(delay);
+            if write_retained_bootstrap_stream_v1(
+                writer.as_raw_fd(),
+                &chunk,
+                Instant::now() + Duration::from_secs(1),
+                "scheduled Rust regression write",
+            )
+            .is_err()
+            {
+                return;
+            }
+        }
+        std::thread::sleep(eof_delay);
+        let _ = unsafe { libc::shutdown(writer.as_raw_fd(), libc::SHUT_WR) };
+    });
+    let result = read_retained_bootstrap_stream_v1(
+        reader.as_raw_fd(),
+        Instant::now() + production_timeout,
+        transfer_timeout,
+        "scheduled Rust regression read",
+        || {},
+    );
+    sender.join().expect("scheduled Rust regression sender panicked");
+    result
+}
+
+fn blocked_milestone_sink_does_not_delay_reader_v1() -> Result<()> {
+    let (sender, receiver) = std::sync::mpsc::sync_channel(1);
+    let (sink_started_sender, sink_started_receiver) = std::sync::mpsc::channel();
+    let (release_sender, release_receiver) = std::sync::mpsc::channel();
+    let worker = std::thread::spawn(move || {
+        let mut first = true;
+        run_retained_bootstrap_milestone_sink_v1(receiver, move |_| {
+            if first {
+                first = false;
+                sink_started_sender
+                    .send(())
+                    .expect("signal blocked milestone sink");
+                release_receiver
+                    .recv()
+                    .expect("release blocked milestone sink");
+            }
+        });
+    });
+    try_enqueue_retained_bootstrap_milestone_v1(&sender, "first".to_string());
+    sink_started_receiver
+        .recv_timeout(Duration::from_secs(1))
+        .context("wait for blocked milestone sink")?;
+    try_enqueue_retained_bootstrap_milestone_v1(&sender, "fills queue".to_string());
+
+    let started = Instant::now();
+    try_enqueue_retained_bootstrap_milestone_v1(&sender, "must drop".to_string());
+    let (reader, writer) = pair_v1()?;
+    unsafe { libc::shutdown(writer.as_raw_fd(), libc::SHUT_WR) };
+    if read_retained_bootstrap_stream_v1(
+        reader.as_raw_fd(),
+        Instant::now() + Duration::from_millis(100),
+        Duration::from_millis(50),
+        "blocked sink empty response",
+        || {},
+    )
+    .is_ok()
+    {
+        bail!("reader accepted empty response while milestone sink was blocked");
     }
+    if started.elapsed() > Duration::from_millis(500) {
+        bail!("full milestone queue delayed an immediate FD3 reader operation");
+    }
+    release_sender
+        .send(())
+        .context("release blocked milestone sink")?;
+    drop(sender);
+    worker.join().expect("blocked milestone worker panicked");
+    Ok(())
+}
+
+fn assert_child_reaped_exactly_once_v1(pid: libc::pid_t) -> Result<()> {
     let mut status = 0;
-    let wait_result = unsafe { libc::waitpid(pid, &mut status, libc::WNOHANG) };
-    if wait_result != -1 || std::io::Error::last_os_error().raw_os_error() != Some(libc::ECHILD) {
-        bail!("guarded child was killed but not reaped");
+    if unsafe { libc::waitpid(pid, &mut status, libc::WNOHANG) } != -1
+        || std::io::Error::last_os_error().raw_os_error() != Some(libc::ECHILD)
+    {
+        bail!("a second wait unexpectedly observed the retained executor");
     }
     Ok(())
 }
 
+fn wait_for_detached_reaper_v1(pid: libc::pid_t) -> Result<()> {
+    let deadline = Instant::now() + Duration::from_secs(1);
+    loop {
+        if unsafe { libc::kill(pid, 0) } != 0 {
+            if std::io::Error::last_os_error().raw_os_error() == Some(libc::ESRCH) {
+                return Ok(());
+            }
+            bail!("detached child reaper observed an unexpected process error");
+        }
+        if Instant::now() >= deadline {
+            bail!("detached child reaper did not reap the completed executor");
+        }
+        std::thread::yield_now();
+    }
+}
+
 fn main() -> Result<()> {
+    initialize_retained_bootstrap_milestone_logger_v1();
     let diagnostic = retained_bootstrap_milestone_line_v1(
         "client.start",
         Duration::from_millis(17),
@@ -123,12 +231,142 @@ fn main() -> Result<()> {
         }
     }
 
+    let request_eof = Instant::now();
+    let old_shared_deadline = request_eof + Duration::from_millis(5);
+    let production_deadline = retained_bootstrap_response_production_deadline_v1(
+        request_eof,
+        Duration::from_millis(30),
+    );
+    let first_byte_after_old_shared_bound = request_eof + Duration::from_millis(6);
+    let (production_phase, selected_production_deadline) =
+        retained_bootstrap_response_read_deadline_v1(
+            production_deadline,
+            None,
+            Duration::from_millis(5),
+        );
+    if production_phase != RetainedBootstrapResponseReadPhaseV1::Production
+        || !retained_bootstrap_deadline_expired_v1(
+            first_byte_after_old_shared_bound,
+            old_shared_deadline,
+        )
+        || retained_bootstrap_deadline_expired_v1(
+            first_byte_after_old_shared_bound,
+            selected_production_deadline,
+        )
+        || !retained_bootstrap_deadline_expired_v1(
+            request_eof + Duration::from_millis(31),
+            selected_production_deadline,
+        )
+    {
+        bail!("response production deadline no longer differs from the legacy shared bound");
+    }
+    let first_byte = request_eof + Duration::from_millis(29);
+    let (transfer_phase, transfer_deadline) = retained_bootstrap_response_read_deadline_v1(
+        production_deadline,
+        Some(first_byte),
+        Duration::from_millis(5),
+    );
+    if transfer_phase != RetainedBootstrapResponseReadPhaseV1::Transfer
+        || !retained_bootstrap_deadline_expired_v1(
+            request_eof + Duration::from_millis(31),
+            production_deadline,
+        )
+        || retained_bootstrap_deadline_expired_v1(
+            request_eof + Duration::from_millis(33),
+            transfer_deadline,
+        )
+        || !retained_bootstrap_deadline_expired_v1(
+            request_eof + Duration::from_millis(35),
+            transfer_deadline,
+        )
+    {
+        bail!("response transfer deadline is not a fixed window from the first byte");
+    }
+    let ingress_deadline = retained_bootstrap_request_ingress_deadline_v1(
+        request_eof,
+        Duration::from_millis(5),
+    );
+    let child_exit_deadline = retained_bootstrap_child_exit_deadline_v1(
+        request_eof + Duration::from_millis(29),
+        Duration::from_millis(5),
+    );
+    if ingress_deadline != request_eof + Duration::from_millis(5)
+        || child_exit_deadline != request_eof + Duration::from_millis(34)
+    {
+        bail!("request ingress or child exit deadline was recombined with a response deadline");
+    }
+    blocked_milestone_sink_does_not_delay_reader_v1()?;
+
+    let delayed_first = scheduled_read_v1(
+        vec![(Duration::from_millis(90), b"delayed".to_vec())],
+        Duration::from_millis(250),
+        Duration::from_millis(100),
+        Duration::ZERO,
+    )?;
+    if delayed_first != b"delayed" {
+        bail!("actual reader rejected a first byte after the old bound but before production deadline");
+    }
+    let fresh_transfer = scheduled_read_v1(
+        vec![
+            (Duration::from_millis(100), b"first".to_vec()),
+            (Duration::from_millis(110), b"-complete".to_vec()),
+        ],
+        Duration::from_millis(160),
+        Duration::from_millis(160),
+        Duration::ZERO,
+    )?;
+    if fresh_transfer != b"first-complete" {
+        bail!("actual reader did not grant a fresh transfer window from the first byte");
+    }
+    if scheduled_read_v1(
+        vec![(Duration::from_millis(140), b"late".to_vec())],
+        Duration::from_millis(60),
+        Duration::from_millis(100),
+        Duration::ZERO,
+    )
+    .is_ok()
+    {
+        bail!("actual reader accepted a first byte after the production deadline");
+    }
+    if scheduled_read_v1(
+        vec![
+            (Duration::from_millis(20), b"a".to_vec()),
+            (Duration::from_millis(45), b"b".to_vec()),
+            (Duration::from_millis(45), b"c".to_vec()),
+        ],
+        Duration::from_millis(180),
+        Duration::from_millis(70),
+        Duration::ZERO,
+    )
+    .is_ok()
+    {
+        bail!("actual reader allowed trickled response bytes to extend the transfer deadline");
+    }
+    if scheduled_read_v1(
+        vec![(Duration::ZERO, b"partial".to_vec())],
+        Duration::from_millis(100),
+        Duration::from_millis(60),
+        Duration::from_millis(120),
+    )
+    .is_ok()
+    {
+        bail!("actual reader accepted a response without EOF");
+    }
+
     let canonical = br#"{"bootstrap_channel_bound":true,"status":"bootstrapped"}"#.to_vec();
     let fragments = canonical.iter().map(|byte| vec![*byte]).collect();
-    let fragmented = send_and_read_v1(fragments, Duration::from_secs(4))?;
+    let fragmented = send_and_read_v1(
+        fragments,
+        Duration::from_secs(4),
+        Duration::from_secs(4),
+    )?;
     parse_canonical_direct_bootstrap_response_v1(&fragmented)?;
 
-    let coalesced = send_and_read_v1(vec![canonical.clone()], Duration::from_secs(4))?;
+    let coalesced = send_and_read_v1(
+        vec![canonical.clone()],
+        Duration::from_secs(4),
+        Duration::from_secs(4),
+    )?;
     if coalesced != canonical {
         bail!("coalesced Rust stream changed bytes");
     }
@@ -143,11 +381,16 @@ fn main() -> Result<()> {
     }
 
     let exact = vec![b'x'; MAC_BOOTSTRAP_FD3_MAX_BYTES_V1];
-    if send_and_read_v1(vec![exact.clone()], Duration::from_secs(8))? != exact {
+    if send_and_read_v1(
+        vec![exact.clone()],
+        Duration::from_secs(8),
+        Duration::from_secs(8),
+    )? != exact {
         bail!("exact 1 MiB Rust frame changed bytes");
     }
     if send_and_read_v1(
         vec![vec![b'x'; MAC_BOOTSTRAP_FD3_MAX_BYTES_V1 + 1]],
+        Duration::from_secs(8),
         Duration::from_secs(8),
     )
     .is_ok()
@@ -160,38 +403,123 @@ fn main() -> Result<()> {
     if read_retained_bootstrap_stream_v1(
         empty_reader.as_raw_fd(),
         Instant::now() + Duration::from_secs(1),
+        Duration::from_secs(1),
         "empty Rust response",
+        || {},
     )
     .is_ok()
     {
         bail!("Rust frame reader accepted an empty response");
     }
 
+    let (disconnected_reader, disconnected_writer) = pair_v1()?;
+    drop(disconnected_writer);
+    if read_retained_bootstrap_stream_v1(
+        disconnected_reader.as_raw_fd(),
+        Instant::now() + Duration::from_secs(1),
+        Duration::from_secs(1),
+        "disconnected Rust response",
+        || {},
+    )
+    .is_ok()
+    {
+        bail!("Rust frame reader accepted an empty peer disconnect");
+    }
+
     let (timeout_reader, _timeout_writer) = pair_v1()?;
-    let child = Command::new("/bin/sleep")
-        .arg("30")
+    let reaper_sender = start_retained_bootstrap_child_reaper_v1()
+        .context("start harmless guard regression reaper before child launch")?;
+    let mut child = Command::new("/bin/sh")
+        .arg("-c")
+        .arg("IFS= read -r _")
+        .stdin(Stdio::piped())
         .spawn()
         .context("spawn harmless guard regression child")?;
     let pid = child.id() as libc::pid_t;
+    let mut child_stdin = child.stdin.take().context("retain guard regression stdin")?;
     {
-        let _guard = RetainedBootstrapChildGuardV1::new(child);
+        let mut guard = RetainedBootstrapChildGuardV1::new(child, reaper_sender);
         if read_retained_bootstrap_stream_v1(
             timeout_reader.as_raw_fd(),
             Instant::now() + Duration::from_millis(100),
+            Duration::from_millis(100),
             "missing EOF Rust response",
+            || {},
         )
         .is_ok()
         {
             bail!("Rust frame reader accepted a missing EOF");
         }
+        if guard.wait_for_success_v1(Instant::now())?
+            != RetainedBootstrapChildExitV1::TimedOut
+        {
+            bail!("child exit timeout was not independent from the response transfer deadline");
+        }
     }
-    assert_reaped_v1(pid)?;
+    if unsafe { libc::kill(pid, 0) } != 0 {
+        bail!("client timeout unexpectedly cancelled the harmless guard regression child");
+    }
+    child_stdin
+        .write_all(b"release\n")
+        .context("release harmless guard regression child")?;
+    drop(child_stdin);
+    wait_for_detached_reaper_v1(pid)?;
+    assert_child_reaped_exactly_once_v1(pid)?;
 
+    let reaper_sender = start_retained_bootstrap_child_reaper_v1()
+        .context("start harmless drop-handoff reaper before child launch")?;
+    let mut child = Command::new("/bin/sh")
+        .arg("-c")
+        .arg("IFS= read -r _")
+        .stdin(Stdio::piped())
+        .spawn()
+        .context("spawn harmless drop-handoff regression child")?;
+    let pid = child.id() as libc::pid_t;
+    let mut child_stdin = child
+        .stdin
+        .take()
+        .context("retain drop-handoff regression stdin")?;
+    drop(RetainedBootstrapChildGuardV1::new(child, reaper_sender));
+    if unsafe { libc::kill(pid, 0) } != 0 {
+        bail!("client drop handoff unexpectedly cancelled the harmless child");
+    }
+    child_stdin
+        .write_all(b"release\n")
+        .context("release harmless drop-handoff regression child")?;
+    drop(child_stdin);
+    wait_for_detached_reaper_v1(pid)?;
+    assert_child_reaped_exactly_once_v1(pid)?;
+
+    let reaper_sender = start_retained_bootstrap_child_reaper_v1()
+        .context("start successful guard reaper before child launch")?;
     let child = Command::new("/usr/bin/true")
         .spawn()
         .context("spawn successful guard regression child")?;
-    let mut guard = RetainedBootstrapChildGuardV1::new(child);
-    guard.wait_for_success_v1(Instant::now() + Duration::from_secs(2))?;
+    let pid = child.id() as libc::pid_t;
+    let mut guard = RetainedBootstrapChildGuardV1::new(child, reaper_sender);
+    if guard.wait_for_success_v1(Instant::now() + Duration::from_secs(2))?
+        != RetainedBootstrapChildExitV1::Reaped
+    {
+        bail!("successful guard did not report a reaped child");
+    }
+    drop(guard);
+    assert_child_reaped_exactly_once_v1(pid)?;
+
+    let reaper_sender = start_retained_bootstrap_child_reaper_v1()
+        .context("start failed guard reaper before child launch")?;
+    let child = Command::new("/usr/bin/false")
+        .spawn()
+        .context("spawn failed guard regression child")?;
+    let pid = child.id() as libc::pid_t;
+    let mut guard = RetainedBootstrapChildGuardV1::new(child, reaper_sender);
+    if guard
+        .wait_for_success_v1(Instant::now() + Duration::from_secs(2))
+        .is_ok()
+    {
+        bail!("failed guard did not report executor failure");
+    }
+    drop(guard);
+    assert_child_reaped_exactly_once_v1(pid)?;
 
     println!("publisher-bootstrap-fd3-stream-r3-rust-client: PASS");
     Ok(())
@@ -671,6 +999,142 @@ def source_shape_case(repo_root):
     for token in ("SO_NOSIGPIPE", "MSG_DONTWAIT", "SHUT_WR", "RetainedBootstrapChildGuardV1",
                   "parse_canonical_direct_bootstrap_response_v1"):
         require(token in client, f"client missing {token}")
+    for token in (
+        "MAC_BOOTSTRAP_FD3_REQUEST_INGRESS_TIMEOUT_V1",
+        "MAC_BOOTSTRAP_FD3_RESPONSE_PRODUCTION_TIMEOUT_V1",
+        "MAC_BOOTSTRAP_FD3_RESPONSE_TRANSFER_TIMEOUT_V1",
+        "MAC_BOOTSTRAP_FD3_CHILD_EXIT_TIMEOUT_V1",
+        "retained_bootstrap_request_ingress_deadline_v1",
+        "retained_bootstrap_response_production_deadline_v1",
+        "retained_bootstrap_response_transfer_deadline_v1",
+        "retained_bootstrap_child_exit_deadline_v1",
+        "RetainedBootstrapResponseReadPhaseV1",
+        "client.response.first_byte",
+        "client.child_exit.complete",
+        "client.child_exit.timeout",
+    ):
+        require(token in client, f"client missing distinct retained-FD3 deadline token {token}")
+    for constant, seconds in (
+        ("MAC_BOOTSTRAP_FD3_REQUEST_INGRESS_TIMEOUT_V1", 5),
+        ("MAC_BOOTSTRAP_FD3_RESPONSE_PRODUCTION_TIMEOUT_V1", 30),
+        ("MAC_BOOTSTRAP_FD3_RESPONSE_TRANSFER_TIMEOUT_V1", 5),
+        ("MAC_BOOTSTRAP_FD3_CHILD_EXIT_TIMEOUT_V1", 5),
+    ):
+        require(
+            f"const {constant}: std::time::Duration =\n    std::time::Duration::from_secs({seconds});" in client,
+            f"retained-FD3 deadline changed: {constant}",
+        )
+    require("MAC_BOOTSTRAP_FD3_TIMEOUT_V1" not in client,
+            "retained-FD3 deadlines collapsed back to one shared timeout")
+    require("child.kill()" not in client,
+            "client timeout must not hard-kill an in-flight executor")
+    child_reaper = client[
+        client.index("fn start_retained_bootstrap_child_reaper_v1"):
+        client.index("impl RetainedBootstrapChildGuardV1")
+    ]
+    child_guard_drop = client[
+        client.index("impl Drop for RetainedBootstrapChildGuardV1"):
+        client.index("mod retained_bootstrap_fd3_deadline_tests")
+    ]
+    require(
+        "std::sync::mpsc::channel" in child_reaper
+        and ".spawn(move ||" in child_reaper
+        and "run_retained_bootstrap_child_reaper_v1(receiver);" in child_reaper
+        and "loop {" in child_reaper
+        and "receiver.recv()" in child_reaper
+        and "child.wait()" in child_reaper
+        and ".join()" not in child_reaper
+        and "child.kill()" not in child_reaper
+        and ".send(child)" in child_reaper
+        and "handoff_retained_bootstrap_child_to_reaper_v1(&self.reaper_sender, child);" in child_guard_drop
+        and "None if std::time::Instant::now() >= deadline" in client
+        and client.index("start_retained_bootstrap_child_reaper_v1()")
+        < client.index("let child = command")
+        and client.index("handoff_retained_bootstrap_child_to_reaper_v1(&self.reaper_sender, child);")
+        < client.index("return Ok(RetainedBootstrapChildExitV1::TimedOut)"),
+        "timed-out retained executor is not handed to a prelaunch wait-only reaper",
+    )
+
+    client_dispatch = client[
+        client.index("pub fn send_publisher_bootstrap_authorization_fd3_v1"):
+        client.index("fn set_retained_bootstrap_fd_cloexec_v1")
+    ]
+    require(
+        client_dispatch.index("initialize_retained_bootstrap_milestone_logger_v1()")
+        < client_dispatch.index("let milestones_started"),
+        "client milestone sink is not initialized before protocol deadlines",
+    )
+    require(
+        client_dispatch.index("let request_eof_observed")
+        < client_dispatch.index("let response_production_deadline")
+        < client_dispatch.index('"client.request.eof"'),
+        "client production deadline is not armed at request EOF before diagnostics",
+    )
+    client_reader = client[
+        client.index("fn read_retained_bootstrap_stream_v1"):
+        client.index("fn parse_canonical_direct_bootstrap_response_v1")
+    ]
+    require(
+        client_reader.index(
+            "active_deadline = retained_bootstrap_response_transfer_deadline_v1"
+        ) < client_reader.index("on_first_response_byte()"),
+        "client transfer deadline is not armed before first-byte diagnostics",
+    )
+    client_logger = client[
+        client.index("const RETAINED_BOOTSTRAP_MILESTONE_QUEUE_CAPACITY_V1"):
+        client.index("fn set_retained_bootstrap_no_sigpipe_v1")
+    ]
+    client_emit = client[
+        client.index("fn emit_retained_bootstrap_milestone_v1"):
+        client.index("fn set_retained_bootstrap_no_sigpipe_v1")
+    ]
+    require(
+        "std::sync::mpsc::sync_channel" in client_logger
+        and "sender.try_send(line)" in client_logger
+        and "run_retained_bootstrap_milestone_sink_v1" in client_logger
+        and ".join()" not in client_logger
+        and "eprintln!" not in client_emit,
+        "client milestones can still block the FD3 protocol on stderr",
+    )
+
+    stage_one_milestones = (
+        "executor.stage_one.derive.start",
+        "executor.stage_one.input.preparation.start",
+        "executor.stage_one.input.preparation.end",
+        "executor.stage_one.signing_material.ready",
+        "executor.stage_one.signer.call.start",
+        "executor.stage_one.signer.p256.return",
+        "executor.stage_one.signer.call.end",
+    )
+    for milestone in stage_one_milestones:
+        for forbidden in ("request", "authorization", "keychain", "signature", "identity",
+                          "service", "account", "path", "sha256", "digest", "confirmation",
+                          "peer"):
+            require(forbidden not in milestone,
+                    f"Stage-1 milestone is material: {milestone}")
+    stage_one_derivation = executor[
+        executor.index("fn derive_mac_lima_stage_one_authorization_v1"):
+        executor.index("fn bootstrap_mac_publisher_from_authorized_fd3_v1")
+    ]
+    require(
+        stage_one_derivation.index("executor.stage_one.derive.start")
+        < stage_one_derivation.index("executor.stage_one.input.preparation.start")
+        < stage_one_derivation.index("executor.stage_one.input.preparation.end")
+        < stage_one_derivation.index("sign_mac_lima_stage_one_authorization_v1"),
+        "Stage-1 derive/input milestones are not ordered",
+    )
+    stage_one_signer = executor[
+        executor.index("fn sign_mac_lima_stage_one_authorization_v1"):
+        executor.index("fn derive_mac_lima_stage_one_authorization_v1")
+    ]
+    require(
+        stage_one_signer.index("executor.stage_one.signing_material.ready")
+        < stage_one_signer.index("executor.stage_one.signer.call.start")
+        < stage_one_signer.index("mac_system_keychain_sign_p1363_low_s_v1")
+        < stage_one_signer.index("executor.stage_one.signer.p256.return")
+        < stage_one_signer.index("executor.stage_one.signer.call.end"),
+        "Stage-1 signer milestones are not ordered",
+    )
 
     consumer = executor[
         executor.index("fn consume_publisher_bootstrap_fd3_v1"):
@@ -689,6 +1153,48 @@ def source_shape_case(repo_root):
     for token in ("libc::SOCK_STREAM", "libc::SO_NOSIGPIPE", "libc::MSG_DONTWAIT",
                   "mac_read_single_stream_document_v1", "mac_send_single_stream_document_v1"):
         require(token in executor, f"executor missing {token}")
+    require(
+        consumer.index("initialize_mac_bootstrap_milestone_logger_v1()")
+        < consumer.index("let milestones_started"),
+        "executor milestone sink is not initialized before protocol deadlines",
+    )
+    require(
+        consumer.index("let response_write_deadline")
+        < consumer.index('"executor.response.serialization.complete"')
+        < consumer.index("mac_send_single_stream_document_v1"),
+        "executor response deadline is not armed before response diagnostics",
+    )
+    executor_logger = executor[
+        executor.index("const MAC_BOOTSTRAP_MILESTONE_QUEUE_CAPACITY_V1"):
+        executor.index("struct MacBootstrapPeerIdentityV1")
+    ]
+    executor_emit = executor[
+        executor.index("fn emit_mac_bootstrap_milestone_v1"):
+        executor.index("struct MacBootstrapPeerIdentityV1")
+    ]
+    require(
+        "std::sync::mpsc::sync_channel" in executor_logger
+        and "sender.try_send(line)" in executor_logger
+        and "run_mac_bootstrap_milestone_sink_v1" in executor_logger
+        and ".join()" not in executor_logger
+        and "eprintln!" not in executor_emit,
+        "executor milestones can still block the FD3 protocol on stderr",
+    )
+    require(
+        '#[cfg(target_os = "macos")]\nfn emit_mac_bootstrap_milestone_v1' in executor
+        and '#[cfg(not(target_os = "macos"))]\nfn emit_mac_bootstrap_milestone_v1' in executor,
+        "executor milestone emitters are not cfg-symmetric",
+    )
+    non_macos_emit = executor[
+        executor.index('#[cfg(not(target_os = "macos"))]\nfn emit_mac_bootstrap_milestone_v1'):
+        executor.index("struct MacBootstrapPeerIdentityV1")
+    ]
+    require(
+        "let _ = (started, milestone);" in non_macos_emit
+        and "MAC_BOOTSTRAP_MILESTONE_SENDER_V1" not in non_macos_emit
+        and "try_enqueue_mac_bootstrap_milestone_v1" not in non_macos_emit,
+        "non-macOS milestone emitter references macOS-only logging state",
+    )
     require("SOCK_SEQPACKET" in linux_client and "SOCK_SEQPACKET_V1" in linux_executor,
             "Linux publisher seqpacket endpoints changed")
 

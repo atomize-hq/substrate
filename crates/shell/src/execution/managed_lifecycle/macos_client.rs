@@ -30,7 +30,17 @@ const MAC_BOOTSTRAP_PROVENANCE_PATH_V1: &str =
 #[cfg(target_os = "macos")]
 const MAC_BOOTSTRAP_FD3_MAX_BYTES_V1: usize = 1024 * 1024;
 #[cfg(target_os = "macos")]
-const MAC_BOOTSTRAP_FD3_TIMEOUT_V1: std::time::Duration = std::time::Duration::from_secs(5);
+const MAC_BOOTSTRAP_FD3_REQUEST_INGRESS_TIMEOUT_V1: std::time::Duration =
+    std::time::Duration::from_secs(5);
+#[cfg(target_os = "macos")]
+const MAC_BOOTSTRAP_FD3_RESPONSE_PRODUCTION_TIMEOUT_V1: std::time::Duration =
+    std::time::Duration::from_secs(30);
+#[cfg(target_os = "macos")]
+const MAC_BOOTSTRAP_FD3_RESPONSE_TRANSFER_TIMEOUT_V1: std::time::Duration =
+    std::time::Duration::from_secs(5);
+#[cfg(target_os = "macos")]
+const MAC_BOOTSTRAP_FD3_CHILD_EXIT_TIMEOUT_V1: std::time::Duration =
+    std::time::Duration::from_secs(5);
 
 pub fn bootstrap_publisher_v1(_authorization: &PublisherBootstrapAuthorizationV1) -> Result<Value> {
     bail!(
@@ -539,6 +549,7 @@ pub fn send_publisher_bootstrap_authorization_fd3_v1(
     use std::process::Command;
     use substrate_common::canonical_publisher_bootstrap_authorization_v1;
 
+    initialize_retained_bootstrap_milestone_logger_v1();
     let milestones_started = std::time::Instant::now();
     emit_retained_bootstrap_milestone_v1(milestones_started, "client.start");
     let request = canonical_publisher_bootstrap_authorization_v1(authorization)
@@ -593,17 +604,26 @@ pub fn send_publisher_bootstrap_authorization_fd3_v1(
             Ok(())
         });
     }
+    // Establish the wait-only reaper before creating the elevated child. If the worker cannot
+    // start, no child exists to leak; if it starts, the guard retains its sender until handoff.
+    let child_reaper_sender = start_retained_bootstrap_child_reaper_v1()
+        .context("start exact elevated bootstrap child reaper")?;
     let child = command
         .spawn()
         .context("launch exact elevated bootstrap executor")?;
-    let mut child = RetainedBootstrapChildGuardV1::new(child);
+    let mut child = RetainedBootstrapChildGuardV1::new(child, child_reaper_sender);
     // The child has its duped peer. The parent must retain only its endpoint from this point.
     drop(peer);
 
+    let request_ingress_started = std::time::Instant::now();
+    let request_ingress_deadline = retained_bootstrap_request_ingress_deadline_v1(
+        request_ingress_started,
+        MAC_BOOTSTRAP_FD3_REQUEST_INGRESS_TIMEOUT_V1,
+    );
     write_retained_bootstrap_stream_v1(
         retained.as_raw_fd(),
         &request,
-        std::time::Instant::now() + MAC_BOOTSTRAP_FD3_TIMEOUT_V1,
+        request_ingress_deadline,
         "direct bootstrap authorization",
     )
     .map_err(|error| {
@@ -612,26 +632,62 @@ pub fn send_publisher_bootstrap_authorization_fd3_v1(
     })?;
     emit_retained_bootstrap_milestone_v1(milestones_started, "client.write.complete");
     // EOF is the sole request boundary. It is emitted only after every canonical byte was sent.
+    if retained_bootstrap_deadline_expired_v1(std::time::Instant::now(), request_ingress_deadline) {
+        emit_retained_bootstrap_milestone_v1(
+            milestones_started,
+            "client.request_ingress.timeout_or_eof",
+        );
+        bail!("direct bootstrap authorization timed out before EOF");
+    }
     if unsafe { libc::shutdown(retained.as_raw_fd(), libc::SHUT_WR) } != 0 {
         return Err(std::io::Error::last_os_error())
             .context("terminate direct bootstrap authorization frame");
     }
+    let request_eof_observed = std::time::Instant::now();
+    let response_production_deadline = retained_bootstrap_response_production_deadline_v1(
+        request_eof_observed,
+        MAC_BOOTSTRAP_FD3_RESPONSE_PRODUCTION_TIMEOUT_V1,
+    );
     emit_retained_bootstrap_milestone_v1(milestones_started, "client.request.eof");
-    let response_deadline = std::time::Instant::now() + MAC_BOOTSTRAP_FD3_TIMEOUT_V1;
+    let mut response_first_byte_observed = false;
     let response = match read_retained_bootstrap_stream_v1(
         retained.as_raw_fd(),
-        response_deadline,
+        response_production_deadline,
+        MAC_BOOTSTRAP_FD3_RESPONSE_TRANSFER_TIMEOUT_V1,
         "direct bootstrap response",
+        || {
+            response_first_byte_observed = true;
+            emit_retained_bootstrap_milestone_v1(milestones_started, "client.response.first_byte");
+        },
     ) {
         Ok(response) => response,
         Err(error) => {
-            emit_retained_bootstrap_milestone_v1(milestones_started, "client.read.timeout_or_eof");
+            emit_retained_bootstrap_milestone_v1(
+                milestones_started,
+                if response_first_byte_observed {
+                    "client.response.transfer.timeout_or_eof"
+                } else {
+                    "client.response.production.timeout_or_eof"
+                },
+            );
             return Err(error);
         }
     };
-    emit_retained_bootstrap_milestone_v1(milestones_started, "client.read.eof");
+    emit_retained_bootstrap_milestone_v1(milestones_started, "client.response.eof");
     let response = parse_canonical_direct_bootstrap_response_v1(&response)?;
-    child.wait_for_success_v1(response_deadline)?;
+    let child_exit_deadline = retained_bootstrap_child_exit_deadline_v1(
+        std::time::Instant::now(),
+        MAC_BOOTSTRAP_FD3_CHILD_EXIT_TIMEOUT_V1,
+    );
+    match child.wait_for_success_v1(child_exit_deadline)? {
+        RetainedBootstrapChildExitV1::Reaped => {
+            emit_retained_bootstrap_milestone_v1(milestones_started, "client.child_exit.complete");
+        }
+        RetainedBootstrapChildExitV1::TimedOut => {
+            emit_retained_bootstrap_milestone_v1(milestones_started, "client.child_exit.timeout");
+            bail!("exact elevated bootstrap executor did not terminate after its response");
+        }
+    }
     Ok(response)
 }
 
@@ -648,6 +704,127 @@ fn set_retained_bootstrap_fd_cloexec_v1(fd: i32) -> Result<()> {
 }
 
 #[cfg(target_os = "macos")]
+fn retained_bootstrap_request_ingress_deadline_v1(
+    ingress_started: std::time::Instant,
+    timeout: std::time::Duration,
+) -> std::time::Instant {
+    ingress_started + timeout
+}
+
+#[cfg(target_os = "macos")]
+fn retained_bootstrap_response_production_deadline_v1(
+    request_eof_observed: std::time::Instant,
+    timeout: std::time::Duration,
+) -> std::time::Instant {
+    request_eof_observed + timeout
+}
+
+#[cfg(target_os = "macos")]
+fn retained_bootstrap_response_transfer_deadline_v1(
+    first_response_byte_observed: std::time::Instant,
+    timeout: std::time::Duration,
+) -> std::time::Instant {
+    first_response_byte_observed + timeout
+}
+
+#[cfg(target_os = "macos")]
+fn retained_bootstrap_child_exit_deadline_v1(
+    response_parsed: std::time::Instant,
+    timeout: std::time::Duration,
+) -> std::time::Instant {
+    response_parsed + timeout
+}
+
+#[cfg(target_os = "macos")]
+fn retained_bootstrap_deadline_expired_v1(
+    observed: std::time::Instant,
+    deadline: std::time::Instant,
+) -> bool {
+    observed >= deadline
+}
+
+#[cfg(target_os = "macos")]
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+enum RetainedBootstrapResponseReadPhaseV1 {
+    Production,
+    Transfer,
+}
+
+#[cfg(target_os = "macos")]
+fn retained_bootstrap_response_read_deadline_v1(
+    production_deadline: std::time::Instant,
+    first_response_byte_observed: Option<std::time::Instant>,
+    transfer_timeout: std::time::Duration,
+) -> (RetainedBootstrapResponseReadPhaseV1, std::time::Instant) {
+    match first_response_byte_observed {
+        Some(first_response_byte_observed) => (
+            RetainedBootstrapResponseReadPhaseV1::Transfer,
+            retained_bootstrap_response_transfer_deadline_v1(
+                first_response_byte_observed,
+                transfer_timeout,
+            ),
+        ),
+        None => (
+            RetainedBootstrapResponseReadPhaseV1::Production,
+            production_deadline,
+        ),
+    }
+}
+
+#[cfg(target_os = "macos")]
+const RETAINED_BOOTSTRAP_MILESTONE_QUEUE_CAPACITY_V1: usize = 32;
+
+#[cfg(target_os = "macos")]
+static RETAINED_BOOTSTRAP_MILESTONE_SENDER_V1: std::sync::OnceLock<
+    std::sync::mpsc::SyncSender<String>,
+> = std::sync::OnceLock::new();
+
+/// Start the best-effort diagnostic writer before the FD3 protocol deadlines begin.
+///
+/// The worker is deliberately detached: a blocked stderr pipe can only stall diagnostics, never
+/// the bootstrap exchange, child reaping, or process exit. Callers use `try_send` and drop a
+/// milestone when the bounded queue is full or the writer has disconnected.
+#[cfg(target_os = "macos")]
+fn initialize_retained_bootstrap_milestone_logger_v1() {
+    if RETAINED_BOOTSTRAP_MILESTONE_SENDER_V1.get().is_some() {
+        return;
+    }
+    let (sender, receiver) =
+        std::sync::mpsc::sync_channel(RETAINED_BOOTSTRAP_MILESTONE_QUEUE_CAPACITY_V1);
+    if std::thread::Builder::new()
+        .name("substrate-bootstrap-stderr".to_string())
+        .spawn(move || {
+            run_retained_bootstrap_milestone_sink_v1(receiver, |line| {
+                use std::io::Write as _;
+
+                let _ = std::io::stderr().write_all(line.as_bytes());
+            })
+        })
+        .is_ok()
+    {
+        let _ = RETAINED_BOOTSTRAP_MILESTONE_SENDER_V1.set(sender);
+    }
+}
+
+#[cfg(target_os = "macos")]
+fn run_retained_bootstrap_milestone_sink_v1(
+    receiver: std::sync::mpsc::Receiver<String>,
+    mut sink: impl FnMut(String),
+) {
+    while let Ok(line) = receiver.recv() {
+        sink(line);
+    }
+}
+
+#[cfg(target_os = "macos")]
+fn try_enqueue_retained_bootstrap_milestone_v1(
+    sender: &std::sync::mpsc::SyncSender<String>,
+    line: String,
+) {
+    let _ = sender.try_send(line);
+}
+
+#[cfg(target_os = "macos")]
 fn retained_bootstrap_milestone_line_v1(
     milestone: &'static str,
     elapsed: std::time::Duration,
@@ -660,10 +837,11 @@ fn retained_bootstrap_milestone_line_v1(
 
 #[cfg(target_os = "macos")]
 fn emit_retained_bootstrap_milestone_v1(started: std::time::Instant, milestone: &'static str) {
-    eprintln!(
-        "{}",
-        retained_bootstrap_milestone_line_v1(milestone, started.elapsed())
-    );
+    if let Some(sender) = RETAINED_BOOTSTRAP_MILESTONE_SENDER_V1.get() {
+        let mut line = retained_bootstrap_milestone_line_v1(milestone, started.elapsed());
+        line.push('\n');
+        try_enqueue_retained_bootstrap_milestone_v1(sender, line);
+    }
 }
 
 #[cfg(target_os = "macos")]
@@ -771,13 +949,30 @@ fn write_retained_bootstrap_stream_v1(
 #[cfg(target_os = "macos")]
 fn read_retained_bootstrap_stream_v1(
     fd: i32,
-    deadline: std::time::Instant,
+    production_deadline: std::time::Instant,
+    transfer_timeout: std::time::Duration,
     phase: &str,
+    mut on_first_response_byte: impl FnMut(),
 ) -> Result<Vec<u8>> {
     let mut bytes = Vec::with_capacity(MAC_BOOTSTRAP_FD3_MAX_BYTES_V1);
     let mut buffer = [0_u8; 16 * 1024];
+    let mut first_response_byte_observed = None;
+    let (mut read_phase, mut active_deadline) = retained_bootstrap_response_read_deadline_v1(
+        production_deadline,
+        first_response_byte_observed,
+        transfer_timeout,
+    );
     loop {
-        wait_for_retained_bootstrap_fd3_event_v1(fd, libc::POLLIN, deadline, phase)?;
+        let read_phase_name = match read_phase {
+            RetainedBootstrapResponseReadPhaseV1::Production => "first response byte",
+            RetainedBootstrapResponseReadPhaseV1::Transfer => "complete response frame",
+        };
+        wait_for_retained_bootstrap_fd3_event_v1(
+            fd,
+            libc::POLLIN,
+            active_deadline,
+            &format!("{phase} {read_phase_name}"),
+        )?;
         let remaining = MAC_BOOTSTRAP_FD3_MAX_BYTES_V1 - bytes.len();
         let capacity = if remaining == 0 {
             1
@@ -786,6 +981,10 @@ fn read_retained_bootstrap_stream_v1(
         };
         let count =
             unsafe { libc::recv(fd, buffer.as_mut_ptr().cast(), capacity, libc::MSG_DONTWAIT) };
+        let response_event_observed = std::time::Instant::now();
+        if retained_bootstrap_deadline_expired_v1(response_event_observed, active_deadline) {
+            bail!("{phase} {read_phase_name} timed out");
+        }
         if count == 0 {
             if bytes.is_empty() {
                 bail!("{phase} was empty");
@@ -797,6 +996,15 @@ fn read_retained_bootstrap_stream_v1(
                 bail!("{phase} exceeded the 1 MiB bound");
             }
             bytes.extend_from_slice(&buffer[..count as usize]);
+            if first_response_byte_observed.is_none() {
+                first_response_byte_observed = Some(response_event_observed);
+                active_deadline = retained_bootstrap_response_transfer_deadline_v1(
+                    response_event_observed,
+                    transfer_timeout,
+                );
+                read_phase = RetainedBootstrapResponseReadPhaseV1::Transfer;
+                on_first_response_byte();
+            }
             continue;
         }
         let error = std::io::Error::last_os_error();
@@ -872,20 +1080,87 @@ fn parse_canonical_direct_bootstrap_response_v1(bytes: &[u8]) -> Result<Value> {
     Ok(value)
 }
 
-/// Kill and reap the exact elevated child on every incomplete exchange.  Its durable Prepared
-/// intent remains the only retry authority; the direct channel is never automatically resent.
+/// Reap the exact elevated child after a successful response without treating a timeout as
+/// cancellation. Its durable Prepared intent remains the only retry authority; the direct
+/// channel is never automatically resent or used to hard-kill an in-flight transaction. If the
+/// direct exchange returns while the executor is still live, ownership moves to a detached
+/// reaper so its eventual exit cannot accumulate a zombie in the long-lived caller.
 #[cfg(target_os = "macos")]
 struct RetainedBootstrapChildGuardV1 {
     child: Option<std::process::Child>,
+    reaper_sender: std::sync::mpsc::Sender<std::process::Child>,
+}
+
+#[cfg(target_os = "macos")]
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+enum RetainedBootstrapChildExitV1 {
+    Reaped,
+    TimedOut,
+}
+
+/// Start the detached, wait-only child reaper before the elevated executor exists.
+///
+/// The worker owns its receiver and cannot exit while a guard retains a sender. Its loop never
+/// panics or cancels a child: every guard owns one sender and can hand off at most one child, so
+/// its wait is independent from every other direct-bootstrap exchange.
+#[cfg(target_os = "macos")]
+fn start_retained_bootstrap_child_reaper_v1(
+) -> std::io::Result<std::sync::mpsc::Sender<std::process::Child>> {
+    let (sender, receiver) = std::sync::mpsc::channel();
+    std::thread::Builder::new()
+        .name("substrate-bootstrap-child-reaper".to_string())
+        .spawn(move || {
+            run_retained_bootstrap_child_reaper_v1(receiver);
+        })
+        .map(|_| sender)
+}
+
+/// Wait-only detached reaper loop. It never exits while any guard retains a sender, which makes
+/// `Sender::send` available for every handoff. Every sender belongs to exactly one guard and that
+/// guard can send at most one child after taking it from its `Option`.
+#[cfg(target_os = "macos")]
+fn run_retained_bootstrap_child_reaper_v1(
+    receiver: std::sync::mpsc::Receiver<std::process::Child>,
+) {
+    loop {
+        match receiver.recv() {
+            Ok(mut child) => {
+                let _ = child.wait();
+            }
+            Err(_) => return,
+        }
+    }
+}
+
+/// Hand a still-running executor to the already-live wait-only worker without delaying return.
+#[cfg(target_os = "macos")]
+fn handoff_retained_bootstrap_child_to_reaper_v1(
+    reaper_sender: &std::sync::mpsc::Sender<std::process::Child>,
+    child: std::process::Child,
+) {
+    // The receiver cannot disconnect while this guard owns `reaper_sender`: its worker only exits
+    // after every sender is dropped and any queued children have been reaped.
+    reaper_sender
+        .send(child)
+        .expect("retained bootstrap child reaper stays live while a guard owns its sender");
 }
 
 #[cfg(target_os = "macos")]
 impl RetainedBootstrapChildGuardV1 {
-    fn new(child: std::process::Child) -> Self {
-        Self { child: Some(child) }
+    fn new(
+        child: std::process::Child,
+        reaper_sender: std::sync::mpsc::Sender<std::process::Child>,
+    ) -> Self {
+        Self {
+            child: Some(child),
+            reaper_sender,
+        }
     }
 
-    fn wait_for_success_v1(&mut self, deadline: std::time::Instant) -> Result<()> {
+    fn wait_for_success_v1(
+        &mut self,
+        deadline: std::time::Instant,
+    ) -> Result<RetainedBootstrapChildExitV1> {
         loop {
             let observed = self
                 .child
@@ -897,14 +1172,23 @@ impl RetainedBootstrapChildGuardV1 {
                 Some(status) => {
                     self.child.take();
                     if status.success() {
-                        return Ok(());
+                        return Ok(RetainedBootstrapChildExitV1::Reaped);
                     }
                     bail!("exact elevated bootstrap executor failed");
                 }
                 None if std::time::Instant::now() >= deadline => {
-                    bail!("exact elevated bootstrap executor did not terminate after its response")
+                    let child = self
+                        .child
+                        .take()
+                        .expect("retained bootstrap child guard is live");
+                    handoff_retained_bootstrap_child_to_reaper_v1(&self.reaper_sender, child);
+                    return Ok(RetainedBootstrapChildExitV1::TimedOut);
                 }
-                None => std::thread::sleep(std::time::Duration::from_millis(10)),
+                None => std::thread::sleep(
+                    deadline
+                        .saturating_duration_since(std::time::Instant::now())
+                        .min(std::time::Duration::from_millis(10)),
+                ),
             }
         }
     }
@@ -913,9 +1197,290 @@ impl RetainedBootstrapChildGuardV1 {
 #[cfg(target_os = "macos")]
 impl Drop for RetainedBootstrapChildGuardV1 {
     fn drop(&mut self) {
-        if let Some(mut child) = self.child.take() {
-            let _ = child.kill();
-            let _ = child.wait();
+        if let Some(child) = self.child.take() {
+            handoff_retained_bootstrap_child_to_reaper_v1(&self.reaper_sender, child);
+        }
+    }
+}
+
+#[cfg(all(test, target_os = "macos"))]
+mod retained_bootstrap_fd3_deadline_tests {
+    use super::*;
+    use std::io::Write;
+    use std::net::Shutdown;
+    use std::os::fd::AsRawFd;
+    use std::os::unix::net::UnixStream;
+    use std::process::{Command, Stdio};
+
+    fn assert_child_reaped_exactly_once_v1(pid: libc::pid_t) {
+        let mut status = 0;
+        assert_eq!(
+            unsafe { libc::waitpid(pid, &mut status, libc::WNOHANG) },
+            -1,
+            "a second wait unexpectedly observed the child"
+        );
+        assert_eq!(
+            std::io::Error::last_os_error().raw_os_error(),
+            Some(libc::ECHILD),
+            "a second wait did not report an already-reaped child"
+        );
+    }
+
+    fn wait_for_detached_reaper_v1(pid: libc::pid_t) {
+        let deadline = std::time::Instant::now() + std::time::Duration::from_secs(1);
+        loop {
+            if unsafe { libc::kill(pid, 0) } != 0 {
+                assert_eq!(
+                    std::io::Error::last_os_error().raw_os_error(),
+                    Some(libc::ESRCH),
+                    "child reaper observed an unexpected process error"
+                );
+                return;
+            }
+            assert!(
+                std::time::Instant::now() < deadline,
+                "detached child reaper did not reap the completed executor"
+            );
+            std::thread::yield_now();
+        }
+    }
+
+    #[test]
+    fn response_production_window_outlives_the_legacy_shared_bound() {
+        let request_eof = std::time::Instant::now();
+        let legacy_shared_deadline = request_eof + std::time::Duration::from_millis(5);
+        let production_deadline = retained_bootstrap_response_production_deadline_v1(
+            request_eof,
+            std::time::Duration::from_millis(30),
+        );
+        let first_byte_after_legacy_bound = request_eof + std::time::Duration::from_millis(6);
+        let (phase, selected_deadline) = retained_bootstrap_response_read_deadline_v1(
+            production_deadline,
+            None,
+            std::time::Duration::from_millis(5),
+        );
+
+        assert_eq!(phase, RetainedBootstrapResponseReadPhaseV1::Production);
+        assert!(retained_bootstrap_deadline_expired_v1(
+            first_byte_after_legacy_bound,
+            legacy_shared_deadline,
+        ));
+        assert!(!retained_bootstrap_deadline_expired_v1(
+            first_byte_after_legacy_bound,
+            selected_deadline,
+        ));
+        assert!(retained_bootstrap_deadline_expired_v1(
+            request_eof + std::time::Duration::from_millis(31),
+            selected_deadline,
+        ));
+    }
+
+    #[test]
+    fn response_transfer_window_starts_at_first_byte_and_never_slides() {
+        let request_eof = std::time::Instant::now();
+        let production_deadline = retained_bootstrap_response_production_deadline_v1(
+            request_eof,
+            std::time::Duration::from_millis(30),
+        );
+        let first_byte = request_eof + std::time::Duration::from_millis(29);
+        let transfer_timeout = std::time::Duration::from_millis(5);
+        let (phase, transfer_deadline) = retained_bootstrap_response_read_deadline_v1(
+            production_deadline,
+            Some(first_byte),
+            transfer_timeout,
+        );
+
+        assert_eq!(phase, RetainedBootstrapResponseReadPhaseV1::Transfer);
+        assert!(retained_bootstrap_deadline_expired_v1(
+            request_eof + std::time::Duration::from_millis(31),
+            production_deadline,
+        ));
+        assert!(!retained_bootstrap_deadline_expired_v1(
+            request_eof + std::time::Duration::from_millis(33),
+            transfer_deadline,
+        ));
+        assert!(retained_bootstrap_deadline_expired_v1(
+            request_eof + std::time::Duration::from_millis(35),
+            transfer_deadline,
+        ));
+    }
+
+    #[test]
+    fn response_reader_requires_nonempty_eof_delimited_frame() {
+        let (empty_reader, empty_writer) = UnixStream::pair().expect("Darwin empty stream pair");
+        empty_writer
+            .shutdown(Shutdown::Write)
+            .expect("finish empty response");
+        assert!(read_retained_bootstrap_stream_v1(
+            empty_reader.as_raw_fd(),
+            std::time::Instant::now() + std::time::Duration::from_millis(10),
+            std::time::Duration::ZERO,
+            "empty response",
+            || {},
+        )
+        .is_err());
+
+        let (disconnected_reader, disconnected_writer) =
+            UnixStream::pair().expect("Darwin disconnected stream pair");
+        drop(disconnected_writer);
+        assert!(read_retained_bootstrap_stream_v1(
+            disconnected_reader.as_raw_fd(),
+            std::time::Instant::now() + std::time::Duration::from_millis(10),
+            std::time::Duration::ZERO,
+            "disconnected response",
+            || {},
+        )
+        .is_err());
+
+        let (partial_reader, mut partial_writer) =
+            UnixStream::pair().expect("Darwin partial stream pair");
+        partial_writer
+            .write_all(b"{")
+            .expect("write partial response byte");
+        assert!(read_retained_bootstrap_stream_v1(
+            partial_reader.as_raw_fd(),
+            std::time::Instant::now() + std::time::Duration::from_millis(10),
+            std::time::Duration::ZERO,
+            "missing EOF response",
+            || {},
+        )
+        .is_err());
+    }
+
+    #[test]
+    fn child_exit_and_request_ingress_keep_their_own_deadlines() {
+        let start = std::time::Instant::now();
+        let ingress_deadline = retained_bootstrap_request_ingress_deadline_v1(
+            start,
+            MAC_BOOTSTRAP_FD3_REQUEST_INGRESS_TIMEOUT_V1,
+        );
+        let parsed_response = start + std::time::Duration::from_millis(29);
+        let child_exit_deadline = retained_bootstrap_child_exit_deadline_v1(
+            parsed_response,
+            std::time::Duration::from_millis(5),
+        );
+
+        assert_eq!(
+            MAC_BOOTSTRAP_FD3_REQUEST_INGRESS_TIMEOUT_V1,
+            std::time::Duration::from_secs(5),
+        );
+        assert_eq!(
+            MAC_BOOTSTRAP_FD3_RESPONSE_PRODUCTION_TIMEOUT_V1,
+            std::time::Duration::from_secs(30),
+        );
+        assert_eq!(
+            MAC_BOOTSTRAP_FD3_RESPONSE_TRANSFER_TIMEOUT_V1,
+            std::time::Duration::from_secs(5),
+        );
+        assert_eq!(
+            MAC_BOOTSTRAP_FD3_CHILD_EXIT_TIMEOUT_V1,
+            std::time::Duration::from_secs(5),
+        );
+        assert_ne!(
+            MAC_BOOTSTRAP_FD3_RESPONSE_PRODUCTION_TIMEOUT_V1,
+            MAC_BOOTSTRAP_FD3_RESPONSE_TRANSFER_TIMEOUT_V1,
+        );
+        assert_eq!(
+            ingress_deadline,
+            start + MAC_BOOTSTRAP_FD3_REQUEST_INGRESS_TIMEOUT_V1,
+        );
+        assert_eq!(
+            child_exit_deadline,
+            parsed_response + std::time::Duration::from_millis(5),
+        );
+        assert!(child_exit_deadline > parsed_response);
+    }
+
+    #[test]
+    fn child_timeout_handoff_never_kills_and_reaps_once_after_completion() {
+        let reaper_sender = start_retained_bootstrap_child_reaper_v1()
+            .expect("start retained executor reaper before child launch");
+        let mut child = Command::new("/bin/sh")
+            .arg("-c")
+            .arg("IFS= read -r _")
+            .stdin(Stdio::piped())
+            .spawn()
+            .expect("spawn harmless retained executor");
+        let pid = child.id() as libc::pid_t;
+        let mut child_stdin = child.stdin.take().expect("retain executor stdin");
+        {
+            let mut guard = RetainedBootstrapChildGuardV1::new(child, reaper_sender);
+            assert_eq!(
+                guard
+                    .wait_for_success_v1(std::time::Instant::now())
+                    .expect("observe still-running executor"),
+                RetainedBootstrapChildExitV1::TimedOut
+            );
+            assert!(
+                guard.child.is_none(),
+                "timed-out guard did not hand off its child to the detached reaper"
+            );
+        }
+        assert_eq!(
+            unsafe { libc::kill(pid, 0) },
+            0,
+            "detached handoff cancelled the still-running executor"
+        );
+        child_stdin
+            .write_all(b"release\n")
+            .expect("release harmless retained executor");
+        drop(child_stdin);
+        wait_for_detached_reaper_v1(pid);
+        assert_child_reaped_exactly_once_v1(pid);
+    }
+
+    #[test]
+    fn child_drop_handoff_never_kills_and_reaps_once_after_completion() {
+        let reaper_sender = start_retained_bootstrap_child_reaper_v1()
+            .expect("start retained executor reaper before child launch");
+        let mut child = Command::new("/bin/sh")
+            .arg("-c")
+            .arg("IFS= read -r _")
+            .stdin(Stdio::piped())
+            .spawn()
+            .expect("spawn harmless retained executor");
+        let pid = child.id() as libc::pid_t;
+        let mut child_stdin = child.stdin.take().expect("retain executor stdin");
+        drop(RetainedBootstrapChildGuardV1::new(child, reaper_sender));
+        assert_eq!(
+            unsafe { libc::kill(pid, 0) },
+            0,
+            "drop handoff cancelled the still-running executor"
+        );
+        child_stdin
+            .write_all(b"release\n")
+            .expect("release harmless retained executor");
+        drop(child_stdin);
+        wait_for_detached_reaper_v1(pid);
+        assert_child_reaped_exactly_once_v1(pid);
+    }
+
+    #[test]
+    fn terminal_try_wait_paths_reap_once_without_detached_handoff() {
+        for (program, should_succeed) in [("/usr/bin/true", true), ("/usr/bin/false", false)] {
+            let reaper_sender = start_retained_bootstrap_child_reaper_v1()
+                .expect("start retained executor reaper before child launch");
+            let child = Command::new(program)
+                .spawn()
+                .expect("spawn terminal retained executor");
+            let pid = child.id() as libc::pid_t;
+            let mut guard = RetainedBootstrapChildGuardV1::new(child, reaper_sender);
+            let result = guard
+                .wait_for_success_v1(std::time::Instant::now() + std::time::Duration::from_secs(1));
+            if should_succeed {
+                assert_eq!(
+                    result.expect("successful executor should be reaped"),
+                    RetainedBootstrapChildExitV1::Reaped
+                );
+            } else {
+                assert!(result.is_err(), "failed executor should report failure");
+            }
+            assert!(
+                guard.child.is_none(),
+                "terminal try_wait path retained a child for the drop handoff"
+            );
+            drop(guard);
+            assert_child_reaped_exactly_once_v1(pid);
         }
     }
 }

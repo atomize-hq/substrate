@@ -258,6 +258,7 @@ fn consume_publisher_bootstrap_fd3_v1(fd: i32) -> Result<()> {
     {
         use std::os::unix::net::UnixStream;
 
+        initialize_mac_bootstrap_milestone_logger_v1();
         let milestones_started = Instant::now();
         emit_mac_bootstrap_milestone_v1(milestones_started, "executor.fd3.received");
         if fd != 3 {
@@ -315,6 +316,7 @@ fn consume_publisher_bootstrap_fd3_v1(fd: i32) -> Result<()> {
         };
         let response = canonical_bootstrap_json_bytes_v1(&response)
             .context("encode bounded bootstrap response")?;
+        let response_write_deadline = Instant::now() + MAC_BOOTSTRAP_FRAME_FINISH_TIMEOUT_V1;
         emit_mac_bootstrap_milestone_v1(
             milestones_started,
             "executor.response.serialization.complete",
@@ -323,7 +325,7 @@ fn consume_publisher_bootstrap_fd3_v1(fd: i32) -> Result<()> {
         mac_send_single_stream_document_v1(
             &socket,
             &response,
-            Instant::now() + MAC_BOOTSTRAP_FRAME_FINISH_TIMEOUT_V1,
+            response_write_deadline,
             milestones_started,
         )
     }
@@ -341,11 +343,69 @@ fn mac_bootstrap_milestone_line_v1(milestone: &'static str, elapsed: Duration) -
     )
 }
 
+#[cfg(target_os = "macos")]
+const MAC_BOOTSTRAP_MILESTONE_QUEUE_CAPACITY_V1: usize = 32;
+
+#[cfg(target_os = "macos")]
+static MAC_BOOTSTRAP_MILESTONE_SENDER_V1: std::sync::OnceLock<std::sync::mpsc::SyncSender<String>> =
+    std::sync::OnceLock::new();
+
+/// Start the best-effort diagnostic writer before any direct-bootstrap phase deadline begins.
+///
+/// The worker is detached and never joined. A blocked stderr sink can stall only that worker;
+/// protocol handling, response EOF, and process exit drop diagnostics instead of waiting.
+#[cfg(target_os = "macos")]
+fn initialize_mac_bootstrap_milestone_logger_v1() {
+    if MAC_BOOTSTRAP_MILESTONE_SENDER_V1.get().is_some() {
+        return;
+    }
+    let (sender, receiver) =
+        std::sync::mpsc::sync_channel(MAC_BOOTSTRAP_MILESTONE_QUEUE_CAPACITY_V1);
+    if std::thread::Builder::new()
+        .name("substrate-bootstrap-stderr".to_string())
+        .spawn(move || {
+            run_mac_bootstrap_milestone_sink_v1(receiver, |line| {
+                use std::io::Write as _;
+
+                let _ = std::io::stderr().write_all(line.as_bytes());
+            })
+        })
+        .is_ok()
+    {
+        let _ = MAC_BOOTSTRAP_MILESTONE_SENDER_V1.set(sender);
+    }
+}
+
+#[cfg(target_os = "macos")]
+fn run_mac_bootstrap_milestone_sink_v1(
+    receiver: std::sync::mpsc::Receiver<String>,
+    mut sink: impl FnMut(String),
+) {
+    while let Ok(line) = receiver.recv() {
+        sink(line);
+    }
+}
+
+#[cfg(target_os = "macos")]
+fn try_enqueue_mac_bootstrap_milestone_v1(
+    sender: &std::sync::mpsc::SyncSender<String>,
+    line: String,
+) {
+    let _ = sender.try_send(line);
+}
+
+#[cfg(target_os = "macos")]
 fn emit_mac_bootstrap_milestone_v1(started: Instant, milestone: &'static str) {
-    eprintln!(
-        "{}",
-        mac_bootstrap_milestone_line_v1(milestone, started.elapsed())
-    );
+    if let Some(sender) = MAC_BOOTSTRAP_MILESTONE_SENDER_V1.get() {
+        let mut line = mac_bootstrap_milestone_line_v1(milestone, started.elapsed());
+        line.push('\n');
+        try_enqueue_mac_bootstrap_milestone_v1(sender, line);
+    }
+}
+
+#[cfg(not(target_os = "macos"))]
+fn emit_mac_bootstrap_milestone_v1(started: Instant, milestone: &'static str) {
+    let _ = (started, milestone);
 }
 
 #[cfg(target_os = "macos")]
@@ -2290,6 +2350,7 @@ fn mac_account_home_for_stage_one_v1(carrier: &InstallBootstrapContextCarrierV1)
 fn sign_mac_lima_stage_one_authorization_v1(
     scope_id: &str,
     authorization: &LimaStageOneAuthorizationV1,
+    milestones_started: Instant,
 ) -> Result<LifecycleSignatureV1> {
     let spki_der = mac_open_system_keychain_p256_spki_der_v1(scope_id)?;
     let public_key = base64url_encode_mac_v1(&spki_der);
@@ -2302,12 +2363,19 @@ fn sign_mac_lima_stage_one_authorization_v1(
         ..authorization.clone()
     };
     let payload = canonical_lifecycle_signature_payload_v1(&unsigned.schema_owner, &unsigned)?;
+    emit_mac_bootstrap_milestone_v1(
+        milestones_started,
+        "executor.stage_one.signing_material.ready",
+    );
+    emit_mac_bootstrap_milestone_v1(milestones_started, "executor.stage_one.signer.call.start");
+    let signature = mac_system_keychain_sign_p1363_low_s_v1(scope_id, &payload)?;
+    emit_mac_bootstrap_milestone_v1(milestones_started, "executor.stage_one.signer.p256.return");
+    let signature = base64url_encode_mac_v1(&signature);
+    emit_mac_bootstrap_milestone_v1(milestones_started, "executor.stage_one.signer.call.end");
     Ok(LifecycleSignatureV1 {
         algorithm: "ecdsa-p256-sha256-p1363-low-s-v1".to_string(),
         public_key,
-        signature: base64url_encode_mac_v1(&mac_system_keychain_sign_p1363_low_s_v1(
-            scope_id, &payload,
-        )?),
+        signature,
     })
 }
 
@@ -2316,7 +2384,13 @@ fn derive_mac_lima_stage_one_authorization_v1(
     authorization_sha256: &str,
     protected_state: &LifecyclePublisherProtectedStateV1,
     provenance: &MacPublisherInstallProvenanceV1,
+    milestones_started: Instant,
 ) -> Result<LimaStageOneAuthorizationV1> {
+    emit_mac_bootstrap_milestone_v1(milestones_started, "executor.stage_one.derive.start");
+    emit_mac_bootstrap_milestone_v1(
+        milestones_started,
+        "executor.stage_one.input.preparation.start",
+    );
     let pre_pm_manifest = authorization
         .pre_pm_manifest
         .as_ref()
@@ -2415,8 +2489,15 @@ fn derive_mac_lima_stage_one_authorization_v1(
             signature: String::new(),
         },
     };
-    stage_one.signature =
-        sign_mac_lima_stage_one_authorization_v1(&authorization.scope_id, &stage_one)?;
+    emit_mac_bootstrap_milestone_v1(
+        milestones_started,
+        "executor.stage_one.input.preparation.end",
+    );
+    stage_one.signature = sign_mac_lima_stage_one_authorization_v1(
+        &authorization.scope_id,
+        &stage_one,
+        milestones_started,
+    )?;
     validate_lima_stage_one_authorization_v1(&stage_one)?;
     if stage_one.signature.public_key != protected_state.current_anchor.signature.public_key {
         bail!("Stage-1 authorization signer does not exact-join the initial anchor key");
@@ -2541,6 +2622,7 @@ fn bootstrap_mac_publisher_from_authorized_fd3_v1(
         &authorization_sha256,
         &state,
         provenance,
+        milestones_started,
     )?;
     emit_mac_bootstrap_milestone_v1(milestones_started, "executor.stage_one.signing.complete");
     let install_provenance_sha256 =
