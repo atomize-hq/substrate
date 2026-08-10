@@ -2046,10 +2046,34 @@ canonical_code_requirement() {
   }
   printf "%s\n" "$image_requirement"
 }
+canonical_control_code_requirement() {
+  image_path="$1"
+  measured_cdhash="$2"
+  test "${#measured_cdhash}" -eq 40 && test -z "$(printf "%s" "$measured_cdhash" | tr -d "0-9a-f")" || {
+    printf "cannot derive a canonical control requirement from the measured CDHash: %s\n" "$image_path" >&2
+    return 1
+  }
+  adhoc_requirement="cdhash H\"${measured_cdhash}\""
+  production_requirement="anchor apple generic and identifier \"com.substrate.lifecycle.publisher.v1\" and cdhash H\"${measured_cdhash}\""
+  image_requirement="$(designated_requirement "$image_path")"
+  case "$image_requirement" in
+    "") image_requirement="$adhoc_requirement" ;;
+    "$adhoc_requirement"|"$production_requirement") ;;
+    *)
+      printf "control image designated requirement is not one of the two closed canonical forms: %s\n" "$image_path" >&2
+      return 1
+      ;;
+  esac
+  codesign --verify --strict "-R=${image_requirement}" -- "$image_path" >/dev/null 2>&1 || {
+    printf "control code requirement does not match the exact signed image: %s\n" "$image_path" >&2
+    return 1
+  }
+  printf "%s\n" "$image_requirement"
+}
 control_cdhash="$(cdhash "$control_src")"
 executor_cdhash="$(cdhash "$executor_path")"
 lima_cdhash="$(cdhash "$limactl_path")"
-control_requirement="anchor apple generic and identifier \"com.substrate.lifecycle.publisher.v1\" and cdhash H\"${control_cdhash}\""
+control_requirement="$(canonical_control_code_requirement "$control_src" "$control_cdhash")"
 executor_requirement="$(canonical_code_requirement "$executor_path" "$executor_cdhash")"
 lima_requirement="$(canonical_code_requirement "$limactl_path" "$lima_cdhash")"
 test "${#control_cdhash}" -eq 40 && test "${#executor_cdhash}" -eq 40 && test "${#lima_cdhash}" -eq 40

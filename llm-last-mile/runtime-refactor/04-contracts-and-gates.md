@@ -9550,7 +9550,13 @@ relay; the relay joins the original control peer through `SO_PEERCRED` and retai
 executor file identity. A relay cannot batch, rewrite, or persist a request. macOS accepts only XPC connections to
 Mach service `com.substrate.lifecycle.publisher.v1`, with an XPC dictionary containing exactly
 `protocol_version=1` and canonical `request_bytes`; it joins the audit-token euid and the control
-binary's exact designated code requirement. Windows accepts only
+binary's one closed code requirement: exactly `cdhash H"<40 lowercase hex>"` for an ad-hoc
+development/evidence image, or exactly `anchor apple generic and identifier
+"com.substrate.lifecycle.publisher.v1" and cdhash H"<40 lowercase hex>"` for a properly signed
+production image. In either form the embedded CDHash must exact-join the separately measured
+control image CodeDirectory identity, artifact SHA-256, physical identity, and retained
+source/provenance record before `SecCodeCheckValidity` admits the audited XPC or retained FD3 peer; no
+generic identifier-only, caller-supplied, or extra-clause requirement is authority. Windows accepts only
 `\\.\pipe\SubstrateLifecyclePublisherV1` with a protected SYSTEM-plus-committed-SID DACL, one
 little-endian-u32-framed canonical JSON request/response of at most 1 MiB, and joins impersonated
 client SID, `GetNamedPipeClientProcessId`, retained control-image handle/file identity, exact

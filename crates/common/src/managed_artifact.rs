@@ -1528,6 +1528,37 @@ pub fn canonical_guest_publisher_pairing_ticket_v1(
     canonical_json_to_vec(ticket).context("encode guest pairing ticket")
 }
 
+/// Return the CodeDirectory hash embedded in one of the two closed macOS control requirements.
+///
+/// An ad-hoc evidence control has no Apple signing anchor, so it is admitted only by its measured
+/// CodeDirectory hash.  A production control must additionally carry the fixed publisher
+/// identifier and the Apple generic anchor.  Callers that have the opened-image provenance must
+/// join the returned hash to its separately measured `code_identity`; this parser deliberately
+/// does not accept a generic identifier, a caller supplied clause, or any other codesign text.
+pub fn mac_publisher_control_requirement_cdhash_v1(requirement: &str) -> Result<&str> {
+    const AD_HOC_PREFIX: &str = "cdhash H\"";
+    const APPLE_PUBLISHER_PREFIX: &str =
+        "anchor apple generic and identifier \"com.substrate.lifecycle.publisher.v1\" and cdhash H\"";
+
+    let cdhash = requirement
+        .strip_prefix(AD_HOC_PREFIX)
+        .or_else(|| requirement.strip_prefix(APPLE_PUBLISHER_PREFIX))
+        .and_then(|value| value.strip_suffix('"'))
+        .ok_or_else(|| {
+            anyhow!(
+                "macOS control authority must use the exact CDHash or Apple-publisher-and-CDHash requirement form"
+            )
+        })?;
+    if cdhash.len() != 40
+        || !cdhash
+            .bytes()
+            .all(|byte| byte.is_ascii_digit() || (b'a'..=b'f').contains(&byte))
+    {
+        bail!("macOS control authority has an invalid fixed CodeDirectory hash");
+    }
+    Ok(cdhash)
+}
+
 /// Validate the one fixed macOS control identity committed before XPC service startup.
 pub fn validate_mac_publisher_control_authority_v1(
     authority: &MacPublisherControlAuthorityV1,
@@ -1561,27 +1592,10 @@ pub fn validate_mac_publisher_control_authority_v1(
         &authority.designated_requirement,
         "macOS control authority designated_requirement",
     )?;
-    const CONTROL_REQUIREMENT_PREFIX: &str =
-        "anchor apple generic and identifier \"com.substrate.lifecycle.publisher.v1\" and cdhash H\"";
-    let control_cdhash = authority
-        .designated_requirement
-        .strip_prefix(CONTROL_REQUIREMENT_PREFIX)
-        .and_then(|value| value.strip_suffix('"'))
-        .ok_or_else(|| {
-            anyhow!(
-                "macOS control authority must pin the fixed lifecycle-control identifier and CodeDirectory hash"
-            )
-        })?;
-    if control_cdhash.len() != 40
-        || !control_cdhash
-            .bytes()
-            .all(|byte| byte.is_ascii_hexdigit() && !byte.is_ascii_uppercase())
-    {
-        bail!("macOS control authority has an invalid fixed CodeDirectory hash");
-    }
     if authority.designated_requirement.len() > 4096 {
         bail!("macOS control authority designated_requirement is too long");
     }
+    let _ = mac_publisher_control_requirement_cdhash_v1(&authority.designated_requirement)?;
     Ok(())
 }
 
@@ -1730,10 +1744,19 @@ pub fn validate_mac_publisher_install_provenance_v1(
     }
     validate_mac_publisher_bootstrap_image_provenance_v1(&provenance.control_image)?;
     validate_mac_publisher_bootstrap_image_provenance_v1(&provenance.executor_image)?;
+    let control_requirement_cdhash = mac_publisher_control_requirement_cdhash_v1(
+        &provenance.control_authority.designated_requirement,
+    )?;
+    let control_image_cdhash = provenance
+        .control_image
+        .code_identity
+        .strip_prefix("cdhash:")
+        .ok_or_else(|| anyhow!("macOS control image has no canonical CodeDirectory hash"))?;
     if provenance.control_image.target_triple != provenance.control_authority.target_triple
         || provenance.control_image.artifact_sha256 != provenance.control_authority.artifact_sha256
         || provenance.control_image.code_requirement
             != provenance.control_authority.designated_requirement
+        || control_requirement_cdhash != control_image_cdhash
         || provenance.executor_image.target_triple != provenance.control_authority.target_triple
         || provenance.lima_tool.image.target_triple != provenance.control_authority.target_triple
     {
@@ -6968,7 +6991,8 @@ mod tests {
     }
 
     #[test]
-    fn mac_control_authority_is_canonical_and_rejects_nonfixed_requirements() {
+    fn mac_control_authority_accepts_only_two_canonical_requirement_forms() {
+        let cdhash = "0123456789abcdef0123456789abcdef01234567";
         let mut authority = MacPublisherControlAuthorityV1 {
             schema_owner: MAC_PUBLISHER_CONTROL_AUTHORITY_OWNER_V1.to_string(),
             schema_version: 1,
@@ -6978,11 +7002,9 @@ mod tests {
             source_ref: "refs/heads/test".to_string(),
             target_triple: "aarch64-apple-darwin".to_string(),
             artifact_sha256: "c".repeat(64),
-            designated_requirement: concat!(
-                "anchor apple generic and identifier \"com.substrate.lifecycle.publisher.v1\" ",
-                "and cdhash H\"0123456789abcdef0123456789abcdef01234567\""
-            )
-            .to_string(),
+            designated_requirement: format!(
+                "anchor apple generic and identifier \"com.substrate.lifecycle.publisher.v1\" and cdhash H\"{cdhash}\""
+            ),
         };
         let canonical = canonical_mac_publisher_control_authority_v1(&authority)
             .expect("canonical fixed control authority");
@@ -6990,9 +7012,31 @@ mod tests {
             mac_publisher_control_authority_sha256_v1(&authority).unwrap(),
             lower_hex(&Sha256::digest(canonical))
         );
+        assert_eq!(
+            mac_publisher_control_requirement_cdhash_v1(&authority.designated_requirement)
+                .expect("production requirement CDHash"),
+            cdhash
+        );
 
-        authority.designated_requirement = "identifier \"attacker\"".to_string();
-        assert!(validate_mac_publisher_control_authority_v1(&authority).is_err());
+        authority.designated_requirement = format!("cdhash H\"{cdhash}\"");
+        validate_mac_publisher_control_authority_v1(&authority)
+            .expect("ad-hoc CDHash requirement remains canonical");
+        assert_eq!(
+            mac_publisher_control_requirement_cdhash_v1(&authority.designated_requirement)
+                .expect("ad-hoc requirement CDHash"),
+            cdhash
+        );
+
+        for invalid_requirement in [
+            "identifier \"attacker\"".to_string(),
+            format!("cdhash H\"{}\"", cdhash.to_ascii_uppercase()),
+            format!("cdhash H\"{cdhash}\" and identifier \"attacker\""),
+            format!("anchor apple generic and identifier \"com.substrate.lifecycle.publisher.v1\" and cdhash H\"{cdhash}\" and certificate leaf[subject.CN] = \"attacker\""),
+            "cdhash H\"not-a-cdhash\"".to_string(),
+        ] {
+            authority.designated_requirement = invalid_requirement;
+            assert!(validate_mac_publisher_control_authority_v1(&authority).is_err());
+        }
     }
 
     #[test]
@@ -7733,6 +7777,11 @@ mod tests {
         let mut wrong_tool_target = provenance.clone();
         wrong_tool_target.lima_tool.image.target_triple = "x86_64-apple-darwin".to_string();
         assert!(validate_mac_publisher_install_provenance_v1(&wrong_tool_target).is_err());
+
+        let mut wrong_control_cdhash = provenance.clone();
+        wrong_control_cdhash.control_image.code_identity =
+            "cdhash:ffffffffffffffffffffffffffffffffffffffff".to_string();
+        assert!(validate_mac_publisher_install_provenance_v1(&wrong_control_cdhash).is_err());
 
         let request = MacPublisherBootstrapRequestV1 {
             install_bootstrap_context_v1: "fixture-carrier".to_string(),

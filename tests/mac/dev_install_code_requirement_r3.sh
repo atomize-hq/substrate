@@ -23,14 +23,22 @@ if [[ "${1-}" == "--expect-base-failure" ]]; then
 fi
 [[ $# -eq 0 ]] || fail "usage: ${0##*/} [--expect-base-failure]"
 
-for tool in /usr/bin/codesign /usr/bin/lipo /usr/bin/python3; do
+for tool in /usr/bin/clang /usr/bin/codesign /usr/bin/lipo /usr/bin/python3; do
   [[ -x "${tool}" ]] || fail "required macOS fixture tool is absent: ${tool}"
 done
 [[ -f "${INSTALLER_PATH}" && ! -L "${INSTALLER_PATH}" ]] \
   || fail "canonical installer is absent or linked"
 
 WORK_ROOT="$(mktemp -d "${TMPDIR:-/tmp}/substrate-code-requirement-r3.XXXXXX")"
+CONTROL_PID=""
+MISMATCH_PID=""
 cleanup() {
+  for pid in "${CONTROL_PID}" "${MISMATCH_PID}"; do
+    if [[ -n "${pid}" ]]; then
+      kill "${pid}" >/dev/null 2>&1 || true
+      wait "${pid}" >/dev/null 2>&1 || true
+    fi
+  done
   rm -rf -- "${WORK_ROOT}"
 }
 trap cleanup EXIT
@@ -40,8 +48,6 @@ if [[ "${MODE}" == "base-red" ]]; then
   SOURCE_PATH="${WORK_ROOT}/base-dev-install-substrate.sh"
   git -C "${REPO_ROOT}" show "${BASE_COMMIT}:scripts/substrate/dev-install-substrate.sh" >"${SOURCE_PATH}" \
     || fail "cannot read exact base installer ${BASE_COMMIT}"
-  git -C "${REPO_ROOT}" diff --quiet "${BASE_COMMIT}" -- crates/common/src/managed_artifact.rs \
-    || fail "bootstrap schema validator drifted from the exact base"
 fi
 
 make_adhoc_fixture() {
@@ -72,10 +78,10 @@ CONTROL_IMAGE="${WORK_ROOT}/control-image"
 EXECUTOR_IMAGE="${WORK_ROOT}/executor-image"
 LIMA_IMAGE="${WORK_ROOT}/limactl-image"
 MISMATCH_IMAGE="${WORK_ROOT}/mismatch-image"
-make_adhoc_fixture /bin/echo "${CONTROL_IMAGE}" "fixture.substrate.control"
+make_adhoc_fixture /bin/sleep "${CONTROL_IMAGE}" "fixture.substrate.control"
 make_adhoc_fixture /bin/cat "${EXECUTOR_IMAGE}" "fixture.substrate.executor"
 make_adhoc_fixture /usr/bin/true "${LIMA_IMAGE}" "fixture.substrate.limactl"
-make_adhoc_fixture /usr/bin/false "${MISMATCH_IMAGE}" "fixture.substrate.mismatch"
+make_adhoc_fixture /bin/sleep "${MISMATCH_IMAGE}" "fixture.substrate.mismatch"
 
 /usr/bin/python3 - "${SOURCE_PATH}" "${WORK_ROOT}/helpers.sh" "${WORK_ROOT}/producer.sh" <<'PY'
 from pathlib import Path
@@ -127,6 +133,121 @@ LIMA_REQUIREMENT="$(field lima_requirement)"
 for value in "${CONTROL_CDHASH}" "${EXECUTOR_CDHASH}" "${LIMA_CDHASH}"; do
   [[ "${value}" =~ ^[0-9a-f]{40}$ ]] || fail "producer emitted a non-canonical measured CDHash"
 done
+
+cat >"${WORK_ROOT}/verify-process-requirement.c" <<'C'
+#include <CoreFoundation/CoreFoundation.h>
+#include <Security/Security.h>
+
+#include <limits.h>
+#include <stdio.h>
+#include <stdlib.h>
+#include <string.h>
+
+int main(int argc, char **argv) {
+  if (argc != 4 || (strcmp(argv[3], "match") != 0 && strcmp(argv[3], "reject") != 0)) {
+    fprintf(stderr, "usage: %s PID REQUIREMENT match|reject\n", argv[0]);
+    return 64;
+  }
+  char *end = NULL;
+  long parsed_pid = strtol(argv[1], &end, 10);
+  if (end == argv[1] || *end != '\0' || parsed_pid <= 1 || parsed_pid > INT_MAX) {
+    fprintf(stderr, "PID is invalid\n");
+    return 64;
+  }
+  int pid = (int)parsed_pid;
+  CFNumberRef pid_number = CFNumberCreate(kCFAllocatorDefault, kCFNumberIntType, &pid);
+  if (pid_number == NULL) {
+    fprintf(stderr, "cannot create PID number\n");
+    return 2;
+  }
+  const void *keys[] = { kSecGuestAttributePid };
+  const void *values[] = { pid_number };
+  CFDictionaryRef attributes = CFDictionaryCreate(
+      kCFAllocatorDefault, keys, values, 1, &kCFTypeDictionaryKeyCallBacks,
+      &kCFTypeDictionaryValueCallBacks);
+  SecCodeRef code = NULL;
+  OSStatus status = SecCodeCopyGuestWithAttributes(NULL, attributes, kSecCSDefaultFlags, &code);
+  CFRelease(attributes);
+  CFRelease(pid_number);
+  if (status != errSecSuccess || code == NULL) {
+    fprintf(stderr, "SecCodeCopyGuestWithAttributes=%d\n", (int)status);
+    return 2;
+  }
+  CFStringRef requirement_text = CFStringCreateWithCString(
+      kCFAllocatorDefault, argv[2], kCFStringEncodingUTF8);
+  SecRequirementRef requirement = NULL;
+  status = requirement_text == NULL
+      ? errSecParam
+      : SecRequirementCreateWithString(requirement_text, kSecCSDefaultFlags, &requirement);
+  if (requirement_text != NULL) {
+    CFRelease(requirement_text);
+  }
+  if (status != errSecSuccess || requirement == NULL) {
+    fprintf(stderr, "SecRequirementCreateWithString=%d\n", (int)status);
+    CFRelease(code);
+    return 2;
+  }
+  status = SecCodeCheckValidity(code, kSecCSDefaultFlags, requirement);
+  CFRelease(requirement);
+  CFRelease(code);
+  int matched = status == errSecSuccess;
+  int expected = strcmp(argv[3], "match") == 0;
+  fprintf(stderr, "SecCodeCheckValidity=%d matched=%d\n", (int)status, matched);
+  return matched == expected ? 0 : 1;
+}
+C
+/usr/bin/clang -Wall -Wextra -Werror -framework CoreFoundation -framework Security \
+  -o "${WORK_ROOT}/verify-process-requirement" "${WORK_ROOT}/verify-process-requirement.c" \
+  || fail "cannot compile Security.framework live-process verifier"
+
+start_fixture_process() {
+  local image="$1"
+  "${image}" 30 >/dev/null 2>&1 &
+  local pid="$!"
+  sleep 1
+  kill -0 "${pid}" >/dev/null 2>&1 || fail "fixture process did not remain alive"
+  printf '%s\n' "${pid}"
+}
+
+verify_live_process_requirement() {
+  local pid="$1"
+  local requirement="$2"
+  local expected="$3"
+  "${WORK_ROOT}/verify-process-requirement" "${pid}" "${requirement}" "${expected}" \
+    >"${WORK_ROOT}/security-${expected}.out" \
+    2>"${WORK_ROOT}/security-${expected}.err" \
+    || fail "Security.framework live process requirement verification was not ${expected}"
+}
+
+CONTROL_PID="$(start_fixture_process "${CONTROL_IMAGE}")"
+LEGACY_CONTROL_REQUIREMENT="anchor apple generic and identifier \"com.substrate.lifecycle.publisher.v1\" and cdhash H\"${CONTROL_CDHASH}\""
+if [[ "${MODE}" == "base-red" ]]; then
+  [[ "${CONTROL_REQUIREMENT}" == "${LEGACY_CONTROL_REQUIREMENT}" ]] \
+    || fail "exact base did not emit the known hardcoded Apple-anchor control requirement"
+  if /usr/bin/codesign --verify --strict "-R=${CONTROL_REQUIREMENT}" -- "${CONTROL_IMAGE}" \
+    >"${WORK_ROOT}/base-control.out" 2>"${WORK_ROOT}/base-control.err"; then
+    fail "ad-hoc control unexpectedly satisfied exact-base hardcoded Apple-anchor requirement"
+  fi
+  verify_live_process_requirement "${CONTROL_PID}" "${CONTROL_REQUIREMENT}" reject
+  printf '[%s] PASS: exact base reproduces the ad-hoc control rejection under its hardcoded Apple-anchor requirement\n' "${SCRIPT_NAME}"
+  exit 0
+fi
+
+[[ "${CONTROL_REQUIREMENT}" == "cdhash H\"${CONTROL_CDHASH}\"" ]] \
+  || fail "ad-hoc control did not receive the exact canonical CDHash requirement"
+/usr/bin/codesign --verify --strict "-R=${CONTROL_REQUIREMENT}" -- "${CONTROL_IMAGE}" \
+  || fail "ad-hoc control CDHash requirement does not match the exact fixture image"
+verify_live_process_requirement "${CONTROL_PID}" "${CONTROL_REQUIREMENT}" match
+
+if [[ "${CONTROL_CDHASH: -1}" == "0" ]]; then
+  WRONG_CONTROL_CDHASH="${CONTROL_CDHASH:0:39}1"
+else
+  WRONG_CONTROL_CDHASH="${CONTROL_CDHASH:0:39}0"
+fi
+WRONG_CONTROL_REQUIREMENT="cdhash H\"${WRONG_CONTROL_CDHASH}\""
+verify_live_process_requirement "${CONTROL_PID}" "${WRONG_CONTROL_REQUIREMENT}" reject
+MISMATCH_PID="$(start_fixture_process "${MISMATCH_IMAGE}")"
+verify_live_process_requirement "${MISMATCH_PID}" "${CONTROL_REQUIREMENT}" reject
 
 cat >"${WORK_ROOT}/Cargo.toml" <<EOF
 [package]
@@ -255,21 +376,6 @@ record = {
 Path(output).write_text(json.dumps(record, sort_keys=True, separators=(",", ":")), encoding="utf-8")
 PY
 
-if [[ "${MODE}" == "base-red" ]]; then
-  [[ -n "${CONTROL_REQUIREMENT}" ]] || fail "exact base lost the control requirement"
-  [[ -z "${EXECUTOR_REQUIREMENT}" && -z "${LIMA_REQUIREMENT}" ]] \
-    || fail "exact base unexpectedly produced executor/limactl requirements"
-  if CARGO_TARGET_DIR="${WORK_ROOT}/target" cargo run --offline --quiet \
-    --manifest-path "${WORK_ROOT}/Cargo.toml" -- "${WORK_ROOT}/provenance.json" \
-    >"${WORK_ROOT}/schema.out" 2>"${WORK_ROOT}/schema.err"; then
-    fail "exact-base empty requirements unexpectedly passed bootstrap schema validation"
-  fi
-  grep -Fq -- 'macOS bootstrap image code_requirement must be non-empty' "${WORK_ROOT}/schema.err" \
-    || fail "exact-base schema rejection did not report the non-empty requirement invariant"
-  printf '[%s] PASS: exact base dynamically reproduced empty executor/limactl requirements and bootstrap rejection\n' "${SCRIPT_NAME}"
-  exit 0
-fi
-
 [[ "${EXECUTOR_REQUIREMENT}" =~ ^cdhash\ H\"[0-9a-f]{40}\"$ ]] \
   || fail "executor did not receive the canonical CDHash fallback requirement"
 [[ "${LIMA_REQUIREMENT}" =~ ^cdhash\ H\"[0-9a-f]{40}\"$ ]] \
@@ -289,6 +395,7 @@ measured_cdhash="$4"
 . "$helpers"
 case "$operation" in
   canonical) canonical_code_requirement "$image" "$measured_cdhash" ;;
+  control) canonical_control_code_requirement "$image" "$measured_cdhash" ;;
   *) exit 64 ;;
 esac
 SH
@@ -313,8 +420,53 @@ ACTUAL_EXPLICIT="$(PATH=/usr/bin:/bin:/usr/sbin:/sbin /bin/sh "${WORK_ROOT}/exer
 /usr/bin/codesign --verify --strict "-R=${ACTUAL_EXPLICIT}" -- /bin/echo \
   || fail "preserved designated requirement does not match its exact image"
 
+if PATH=/usr/bin:/bin:/usr/sbin:/sbin /bin/sh "${WORK_ROOT}/exercise-helper.sh" \
+  "${WORK_ROOT}/helpers.sh" control /bin/echo "${EXPLICIT_CDHASH}" \
+  >"${WORK_ROOT}/unexpected-control-requirement.out" \
+  2>"${WORK_ROOT}/unexpected-control-requirement.err"; then
+  fail "control producer accepted an arbitrary designated requirement"
+fi
+
 CARGO_TARGET_DIR="${WORK_ROOT}/target" cargo run --offline --quiet \
   --manifest-path "${WORK_ROOT}/Cargo.toml" -- "${WORK_ROOT}/provenance.json" \
   || fail "generated non-empty requirements failed bootstrap schema acceptance"
 
-printf '[%s] PASS: fallback requirements are image-bound, mismatches fail closed, explicit requirements are preserved, and bootstrap schema accepts the record\n' "${SCRIPT_NAME}"
+write_invalid_control_provenance() {
+  local variant="$1"
+  /usr/bin/python3 - "${WORK_ROOT}/provenance.json" "${WORK_ROOT}/provenance-${variant}.json" \
+    "${CONTROL_CDHASH}" "${variant}" <<'PY'
+import json
+from pathlib import Path
+import sys
+
+source, output, expected_cdhash, variant = sys.argv[1:]
+record = json.loads(Path(source).read_text(encoding="utf-8"))
+if variant == "wrong-cdhash":
+    replacement = "0" * 40 if expected_cdhash != "0" * 40 else "1" * 40
+    requirement = f'cdhash H"{replacement}"'
+elif variant == "uppercase":
+    requirement = f'cdhash H"{expected_cdhash.upper()}"'
+elif variant == "extra":
+    requirement = f'cdhash H"{expected_cdhash}" and identifier "attacker"'
+elif variant == "malformed":
+    requirement = 'identifier "com.substrate.lifecycle.publisher.v1"'
+else:
+    raise SystemExit(f"unknown invalid control-requirement variant: {variant}")
+record["control_authority"]["designated_requirement"] = requirement
+record["control_image"]["code_requirement"] = requirement
+Path(output).write_text(
+    json.dumps(record, sort_keys=True, separators=(",", ":")), encoding="utf-8"
+)
+PY
+}
+
+for variant in wrong-cdhash uppercase extra malformed; do
+  write_invalid_control_provenance "${variant}"
+  if CARGO_TARGET_DIR="${WORK_ROOT}/target" cargo run --offline --quiet \
+    --manifest-path "${WORK_ROOT}/Cargo.toml" -- "${WORK_ROOT}/provenance-${variant}.json" \
+    >"${WORK_ROOT}/schema-${variant}.out" 2>"${WORK_ROOT}/schema-${variant}.err"; then
+    fail "${variant} control requirement unexpectedly passed the closed provenance parser"
+  fi
+done
+
+printf '[%s] PASS: only the canonical ad-hoc CDHash control requirement passes live SecCodeCheckValidity; wrong hashes/images and malformed, uppercase, extra, or arbitrary requirements fail closed\n' "${SCRIPT_NAME}"

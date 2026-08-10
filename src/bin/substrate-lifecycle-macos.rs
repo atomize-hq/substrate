@@ -77,8 +77,6 @@ use substrate_shell::{
 
 const MAC_MACH_SERVICE_V1: &str = "com.substrate.lifecycle.publisher.v1";
 const MAC_STATE_ROOT_V1: &str = "/Library/Application Support/Substrate/lifecycle-v1";
-const MAC_CONTROL_DESIGNATED_REQUIREMENT_V1: &str =
-    "anchor apple generic and identifier \"com.substrate.lifecycle.publisher.v1\"";
 const MAC_KEYCHAIN_SERVICE_V1: &str = "com.substrate.lifecycle.v1";
 const MAC_CONTROL_ADMISSION_ACCOUNT_V1: &str = "mac-control-admission-authority.v1";
 const MAC_BOOTSTRAP_PROVENANCE_PATH_V1: &str =
@@ -10307,7 +10305,6 @@ mod mac_xpc_listener_ffi_v1 {
                 "error": error.to_string(),
                 "xpc_attestation": {
                     "mach_service": MAC_MACH_SERVICE_V1,
-                    "peer_code_requirement": MAC_CONTROL_DESIGNATED_REQUIREMENT_V1,
                     "audit_token_bound": false
                 }
             })),

@@ -13,12 +13,12 @@ use std::path::Path;
 #[cfg(target_os = "macos")]
 use std::process::Command;
 use substrate_common::{
-    canonical_mac_publisher_install_provenance_v1, validate_mac_publisher_install_provenance_v1,
-    validate_publisher_bootstrap_authorization_v1, ExecutorBuildEvidenceV1,
-    GuestPublisherPairingTicketV1, MacPublisherBootstrapRequestV1, MacPublisherInstallProvenanceV1,
-    ManagedArtifactEntryV1, ManagedArtifactManifestV1, ManagedLifecyclePublisherRequestV1,
-    ManagedLifecycleStateV1, PublisherBootstrapAuthorizationV1, PublisherBootstrapComponentRoleV1,
-    PublisherBootstrapComponentV1,
+    canonical_mac_publisher_install_provenance_v1, mac_publisher_control_requirement_cdhash_v1,
+    validate_mac_publisher_install_provenance_v1, validate_publisher_bootstrap_authorization_v1,
+    ExecutorBuildEvidenceV1, GuestPublisherPairingTicketV1, MacPublisherBootstrapRequestV1,
+    MacPublisherInstallProvenanceV1, ManagedArtifactEntryV1, ManagedArtifactManifestV1,
+    ManagedLifecyclePublisherRequestV1, ManagedLifecycleStateV1, PublisherBootstrapAuthorizationV1,
+    PublisherBootstrapComponentRoleV1, PublisherBootstrapComponentV1,
 };
 use transport_api_types::InstallBootstrapContextCarrierV1;
 
@@ -979,19 +979,8 @@ pub fn attest_mac_publisher_response_v1(response: &[u8]) -> Result<()> {
         .ok_or_else(|| {
             anyhow::anyhow!("macOS publisher response is missing peer_code_requirement")
         })?;
-    let cdhash = requirement
-        .strip_prefix(
-            "anchor apple generic and identifier \"com.substrate.lifecycle.publisher.v1\" and cdhash H\"",
-        )
-        .and_then(|value| value.strip_suffix('"'));
-    if !cdhash.is_some_and(|value| {
-        value.len() == 40
-            && value
-                .bytes()
-                .all(|byte| byte.is_ascii_digit() || (b'a'..=b'f').contains(&byte))
-    }) {
-        bail!("macOS publisher response has a noncanonical peer code requirement");
-    }
+    mac_publisher_control_requirement_cdhash_v1(requirement)
+        .context("macOS publisher response has a noncanonical peer code requirement")?;
     if attestation
         .get("audit_token_bound")
         .and_then(Value::as_bool)
@@ -1000,6 +989,46 @@ pub fn attest_mac_publisher_response_v1(response: &[u8]) -> Result<()> {
         bail!("macOS publisher response is missing accepted-peer audit-token binding");
     }
     Ok(())
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    fn response_with_requirement(requirement: &str) -> Vec<u8> {
+        serde_json::to_vec(&serde_json::json!({
+            "xpc_attestation": {
+                "mach_service": MAC_MACH_SERVICE_V1,
+                "peer_code_requirement": requirement,
+                "audit_token_bound": true,
+            }
+        }))
+        .expect("encode test publisher response")
+    }
+
+    #[test]
+    fn publisher_response_accepts_only_closed_control_requirement_forms() {
+        let cdhash = "0123456789abcdef0123456789abcdef01234567";
+        let ad_hoc = format!("cdhash H\"{cdhash}\"");
+        let production = format!(
+            "anchor apple generic and identifier \"com.substrate.lifecycle.publisher.v1\" and cdhash H\"{cdhash}\""
+        );
+        attest_mac_publisher_response_v1(&response_with_requirement(&ad_hoc))
+            .expect("ad-hoc control response");
+        attest_mac_publisher_response_v1(&response_with_requirement(&production))
+            .expect("Apple-publisher control response");
+
+        for invalid_requirement in [
+            format!("cdhash H\"{}\"", cdhash.to_ascii_uppercase()),
+            format!("cdhash H\"{cdhash}\" and identifier \"attacker\""),
+            "identifier \"com.substrate.lifecycle.publisher.v1\"".to_string(),
+        ] {
+            assert!(attest_mac_publisher_response_v1(&response_with_requirement(
+                &invalid_requirement
+            ))
+            .is_err());
+        }
+    }
 }
 
 #[cfg(target_os = "macos")]
