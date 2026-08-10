@@ -3657,3 +3657,34 @@ future recovery implementation receipt prerequisite.
 ## AUX-R3-MAC-EVIDENCE-RECOVERY-R3 recovery-current validator invocation (2026-08-07)
 
 `validate_r3_native_evidence.py <artifact> --expected-evidence-id <id> --expected-source-commit <oid> --expected-source-tree <tree> --expected-source-ref <ref> --expected-product-project-id <dispatch-bound-project-id> --expected-gated-successor <value>`
+
+## AUX-R3-MAC-SYSTEM-KEYCHAIN-SOFTWARE-SIGNER-CORRECTION regression ledger (2026-08-10)
+
+| Observation | Reproduced result | R3 contract consequence |
+|---|---|---|
+| Root LaunchDaemon exact-tag lookup through default, Data Protection Keychain, and Data Protection plus `SessionCreate` routes | all stopped before creation with OSStatus `-25291` (`errSecNotAvailable`); no key or UI was created | Secure Enclave/Data Protection is not an R3 product route and cannot justify a root-LaunchDaemon non-exportability claim |
+| Public explicit `/Library/Keychains/System.keychain` generic add/read/delete | root, scrubbed-environment probe opened and exact-path-verified the Keychain, round-tripped the exact service/account/data, deleted it, and proved `-25300` final absence with no UI | public `SecKeychainOpen`, add-only `kSecUseKeychain`, search-list scoping, UI-fail, and final-absence verification are the required routing pattern |
+| Public software P-256 creation in the explicit System Keychain | `SecKeyCreateRandomKey` created a permanent tagged P-256 key and signing worked, but private external representation succeeded even where the extractable attribute reported false | R3 uses a software P-256 key and explicitly accepts privileged-root export capability; code/tests/docs must not assert hardware backing or non-exportability |
+| Secure Enclave plus explicit legacy System-Keychain selection | public attempt failed with OSStatus `-50`, created nothing, and restored exact absence | no private API, implicit store, or Secure Enclave fallback is permitted |
+| Nonce-scoped public-route root-LaunchDaemon regression | `/Users/spensermcconnell/.codex/evidence/system-keychain-software-signer-correction/c708627e-system-keychain-20260810T151614Z-7c81ad4e/receipt.md` (`fef2ca75b601cf828653ecef584c4fbdb926386ba5f4e6b678dcff6ea03398ec`) records create, exact persisted-attribute reopen, restart/same-public-point sign/verify, expected 97-byte private export, exact deletion/`-25300` absence, and launchd/plist/process restoration; artifact manifest SHA-256 `1bc70bf1436427a07e577cdbcbc8a1430852c562d400eaffcba8d6efcc1a0032` | the final public route is headless and retry-safe on Apple Silicon; this bounded product-independent proof does not run or authorize product lifecycle, Lima, pairing, `EVIDENCE:R3-MAC-IMP-01`, or MAC closeout |
+
+The corrective regression first failed on private `kSecUseSystemKeychain`. It now requires the
+exact System-Keychain path constant and returned-path check; distinct add/search routing; UI-fail;
+all-match duplicate detection; exact service/tag/private-class/P-256-size/permanent/sign-capable
+validation; creation followed by exact reopen and SPKI comparison; no product private export; and
+retirement that refuses deletion while the protected wrapper survives, deletes only the exact tag,
+and verifies final absence. Missing, mismatched, duplicate, ambiguous, orphaned, or surviving-
+wrapper state is preserving-first. The signed wrapper/anchor, monotonic CAS, receipt/retry,
+audit-token/designated-requirement admission, canonical SPKI, P1363 low-S, and Apple-Silicon-only
+support boundary remain unchanged.
+
+Fresh causal discovery found that the first correction checked wrapper absence and then deleted the
+tag without sharing the wrapper CAS lock, allowing wrapper creation to cross retirement. The
+remediation moves key/SPKI validation under the exact current-anchor CAS lock for every protected
+wrapper write, holds that same lock across retirement's wrapper check/delete/final-absence
+sequence, and deletes through the validated key reference with public `kSecMatchItemList` rather
+than a second tag-wide query. The regression fixes the required lock order and item selector.
+
+Secure Enclave/Data Protection Keychain and a user LaunchAgent signer are deferred hardening only.
+They are not part of this increment, do not authorize `EVIDENCE:R3-MAC-IMP-01`, and do not imply an
+automatic successor dispatch. Intel/T2 remains out of scope.

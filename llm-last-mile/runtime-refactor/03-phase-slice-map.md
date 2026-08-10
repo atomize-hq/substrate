@@ -3203,3 +3203,34 @@ reviewed remote-equal receipt; no plan, donor, or partial R1–R5 receipt is an 
 ## AUX-R3-MAC-EVIDENCE-RECOVERY-R3 recovery-current validator invocation (2026-08-07)
 
 `validate_r3_native_evidence.py <artifact> --expected-evidence-id <id> --expected-source-commit <oid> --expected-source-tree <tree> --expected-source-ref <ref> --expected-product-project-id <dispatch-bound-project-id> --expected-gated-successor <value>`
+
+## AUX-R3-MAC-SYSTEM-KEYCHAIN-SOFTWARE-SIGNER-CORRECTION (2026-08-10)
+
+- **Bound predecessor:** the remote-equal R3 recovery checkpoint plus reviewed root-LaunchDaemon
+  probes showing `errSecNotAvailable` for default/Data-Protection Secure Enclave lookup,
+  successful explicit legacy System-Keychain operations, software P-256 persistence/signing with
+  private export capability, and rejection of Secure Enclave routing to the explicit legacy
+  System Keychain.
+- **Owned correction:** replace private `kSecUseSystemKeychain` and non-exportability assumptions
+  with one public-API software P-256 signer in the explicitly opened and path-verified
+  `/Library/Keychains/System.keychain`. Adds use `kSecUseKeychain`; searches and exact deletion use
+  a one-element `kSecMatchSearchList`; every applicable item operation fails rather than allows
+  authorization UI. Exact tag/service/type/size/permanence/signing/SPKI joins, duplicate and
+  mismatch preserving stops, signed wrapper/anchor, monotonic CAS, canonical P1363 low-S
+  signatures, receipts, and byte-identical retry remain mandatory.
+- **Threat posture:** sufficiently privileged root with System-Keychain access may export the
+  software private key. This matches the accepted Linux root-protected-key posture and must never
+  be described as Secure-Enclave-backed, hardware-backed, or non-exportable.
+- **Retirement:** a surviving protected wrapper blocks key deletion; otherwise only the exact tag
+  in the exact opened System Keychain may be deleted through the validated item reference, followed
+  by an exact final-absence check. Retirement and wrapper CAS share the exact current-anchor
+  durable lock from pre-key validation through terminal readback, so wrapper/key ownership cannot
+  cross between their checks. Ambiguity or mismatch preserves every remaining record.
+- **Excluded:** Intel/T2, user/default/ambient/file/environment/caller-selected stores,
+  software-file fallback, unsigned mode, product installation, Lima, pairing,
+  `EVIDENCE:R3-MAC-IMP-01`, and MAC closeout. Secure Enclave/Data Protection Keychain and a user
+  LaunchAgent signer are deferred hardening, not implied successor authority.
+- **Proof/publication:** focused static and Rust regressions, locked/offline Apple-Silicon macOS
+  build/tests, exact inventory/allowlist/secret/containment gates, fresh causal-cascading review,
+  and one normal fast-forward commit only. A clean correction returns
+  `next_increment=EVIDENCE:R3-MAC-IMP-01` with `successor_dispatched=false`.

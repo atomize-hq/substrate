@@ -8962,7 +8962,7 @@ The publisher mechanisms are closed and no software fallback is permitted:
 | Platform domain | Protected publisher and monotonic anchor | Trusted boundary and failure rule |
 |---|---|---|
 | Linux host and Linux guest | the root-owned typed Linux executor; Ed25519 key plus the complete `LifecyclePublisherProtectedStateV1` wrapper at fixed `current-anchor.v1.json` under `/var/lib/substrate/.substrate-lifecycle-v1/publisher/`, directory `0700`, files `0600`, opened no-follow from the root-owned chain | the invoking user is not the publisher; root, kernel, and the exact installed executor build are TCB. Missing/replaced key or wrapper, detached prepared digest, counter/revision rollback, non-root publisher, or unavailable durable fsync stops unchanged |
-| macOS host | root LaunchDaemon label `com.substrate.lifecycle.publisher.v1`; non-exportable P-256 signing key plus the complete protected-state wrapper in the System-Keychain item service `com.substrate.lifecycle.v1`, account `<scope-id>:current-anchor`; only the exact code-designated lifecycle executor may request signing | intended principal is only a client. Missing code signature/requirement, Keychain wrapper, daemon, counter/revision, or durable update stops unchanged; there is no user-keychain, detached prepared record, or unsigned fallback |
+| macOS host | root LaunchDaemon label `com.substrate.lifecycle.publisher.v1`; software P-256 signing key under exact tag `<scope-id>:signing-key` plus the complete protected-state wrapper in the explicitly opened legacy `/Library/Keychains/System.keychain`, service `com.substrate.lifecycle.v1`, account `<scope-id>:current-anchor`; only the exact code-designated lifecycle executor may request product signing | intended principal is only a client. A sufficiently privileged root process with System-Keychain access may export the private key. Missing code signature/requirement, exact Keychain identity, key, wrapper, daemon, counter/revision, or durable update stops unchanged; there is no default/user/file/ambient, detached prepared record, software-file, or unsigned fallback |
 | Windows host | LocalSystem service name `SubstrateLifecyclePublisherV1`; non-exportable P-256 key in the LocalMachine CNG key `SubstrateLifecyclePublisherV1`; complete protected-state wrapper at `HKLM\SOFTWARE\Substrate\LifecycleV1\Anchors\<scope-id>` with a protected SYSTEM-only write DACL | committed SID is only a client. Missing service/key/wrapper, wrong service image, DACL inheritance, detached prepared record, counter/revision rollback, or unavailable durable registry flush stops unchanged; there is no current-user/DPAPI/path fallback |
 | Lima or WSL guest | the Linux root publisher above, plus a host publisher record binding the exact PM mapping, guest machine identity, and guest anchor digest | both signatures/counters must join; either side missing, stale, or cross-instance stops unchanged |
 
@@ -8982,7 +8982,8 @@ Security/CNG APIs only sign or expose the public SPKI and never define a second 
 Linux publisher and disposable retirement-harness signatures use `ed25519-v1`; the harness
 commitment carries the exact raw public key. macOS and Windows host publisher tickets,
 transcripts, anchors, and publisher-signed retirement receipts use the P-256 variant and carry the
-exported public SPKI even though the private key is non-exportable. Every SPKI SHA-256 field is
+exported public SPKI. Windows retains its non-exportable CNG contract; the R3 macOS software key
+does not claim non-exportability from sufficiently privileged root. Every SPKI SHA-256 field is
 recomputed from those exact DER bytes. The retirement authorization and acknowledgement use the
 same precommitted harness Ed25519 key and fixed encoding; wrong key/algorithm/encoding or a valid
 signature over a different record kind is rejected.
@@ -9636,7 +9637,7 @@ other implicit file/object mutation is forbidden. An action not listed is a deco
 | `linux.publisher.service-state(kind)` | exact publisher service or socket unit | internal protected bootstrap/retirement state only; `kind=socket` precommits and receipts the fixed coupled `linux.publisher.endpoint`; service state cannot propagate to socket state | Enable, Disable, Start, Stop, Restore; not an ordinary caller request | LINUX |
 | `mac.publisher.executor` | fixed `/Library/PrivilegedHelperTools/com.substrate.lifecycle.publisher.v1` | root:wheel `0755`, exact designated requirement | Create, Replace, Restore | MAC |
 | `mac.publisher.plist` | fixed `/Library/LaunchDaemons/com.substrate.lifecycle.publisher.v1.plist` | root:wheel `0644`, fixed Mach-service declaration | Create, Restore | MAC |
-| `mac.publisher.signing-key` | System-Keychain service `com.substrate.lifecycle.v1`, account `<scope-id>:signing-key` | non-exportable P-256 key | Create | MAC |
+| `mac.publisher.signing-key` | explicitly opened `/Library/Keychains/System.keychain`; service label `com.substrate.lifecycle.v1`, exact application tag `<scope-id>:signing-key` | software P-256 private key; sufficiently privileged root may export it; canonical SPKI remains signed-state identity | Create | MAC |
 | `mac.publisher.current-anchor` | System-Keychain service `com.substrate.lifecycle.v1`, account `<scope-id>:current-anchor` | complete `LifecyclePublisherProtectedStateV1`; signed current anchor/counter plus optional full signed prepared record in one monotonic CAS | Create, Replace | MAC |
 | `mac.publisher.bootstrap-intent` | System-Keychain service `com.substrate.lifecycle.v1`, account `<scope-id>:bootstrap-intent` | protected exact host-bootstrap intent/state CAS | Create, Replace | MAC |
 | `mac.publisher.guest-pairing-record(challenge_id)` | System-Keychain service `com.substrate.lifecycle.v1`, account `<scope-id>:guest-pairing:<challenge-id>` | signed generation-CAS host record; terminal consumed record is retained | Create, Replace | MAC |
@@ -10197,3 +10198,34 @@ future reviewed remote-equal R1–R6 receipt may precede a fresh evidence dispat
 ## AUX-R3-MAC-EVIDENCE-RECOVERY-R3 recovery-current validator invocation (2026-08-07)
 
 `validate_r3_native_evidence.py <artifact> --expected-evidence-id <id> --expected-source-commit <oid> --expected-source-tree <tree> --expected-source-ref <ref> --expected-product-project-id <dispatch-bound-project-id> --expected-gated-successor <value>`
+
+## AUX-R3-MAC-SYSTEM-KEYCHAIN-SOFTWARE-SIGNER-CORRECTION (2026-08-10)
+
+The R3 macOS signer store is exactly the legacy System Keychain opened by public
+`SecKeychainOpen("/Library/Keychains/System.keychain")` and identity-checked with
+`SecKeychainGetPath`. `kSecUseKeychain` is add destination only. Every read, update, and deletion
+uses a one-element `kSecMatchSearchList`; every applicable item operation sets the public
+noninteractive UI-fail policy. Private `kSecUseSystemKeychain`, a default or ambient Keychain,
+user/file/environment/caller-selected stores, Data Protection Keychain, software-file fallback,
+and unsigned fallback are contract violations.
+
+The key is one permanent, sign-capable software P-256 private key with service label
+`com.substrate.lifecycle.v1` and exact application tag `<scope-id>:signing-key`. Zero exact-tag
+matches may create. Exactly one must validate its tag, label, private class, EC P-256 type and size,
+permanence, signing capability, canonical public point/SPKI, and equality with the SPKI recorded in
+the signed wrapper. More than one match, a wrong attribute, a missing key under an existing wrapper,
+an orphan under a new scope, create/reopen drift, or SPKI mismatch stops without regeneration.
+Product signing never exports private bytes, but the control pack explicitly accepts that
+sufficiently privileged root may export this software key.
+
+Retirement first requires the protected wrapper to be absent. It then reopens and revalidates the
+one exact key, deletes only the validated item reference through documented `kSecMatchItemList`
+within the exact one-keychain search list, and re-queries for final absence. Protected-wrapper CAS
+acquires the scope's current-anchor durable lock before key/SPKI validation and holds it through
+readback; retirement holds the same lock across wrapper absence, key validation, exact deletion,
+and final absence. Any lookup, identity, delete, or final-absence uncertainty preserves remaining
+state and stops. The fixed code-designated root LaunchDaemon, audit-token/peer admission, canonical P1363
+low-S signatures, signed protected wrapper, monotonic CAS, receipt/retry, and preserving-first
+joins are unchanged. Secure Enclave/Data Protection Keychain and a session-capable user
+LaunchAgent signer are explicitly deferred hardening and are not evidence or successor authority.
+Intel/T2 is not an R3 support target.

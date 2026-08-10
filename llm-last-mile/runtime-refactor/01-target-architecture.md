@@ -1435,6 +1435,32 @@ final bootstrap authorization and generation-one anchor. This one-way constructi
 cycle. Teardown rejects any later-created, substituted, core-mismatched, or non-byte-identical
 retirement authorization.
 
+### AUX-R3-MAC-SYSTEM-KEYCHAIN-SOFTWARE-SIGNER-CORRECTION (2026-08-10)
+
+The R3 macOS publisher remains the fixed, code-designated root LaunchDaemon, but its signer is one
+**software** P-256 private key stored in the explicitly opened legacy
+`/Library/Keychains/System.keychain`. The publisher verifies the path returned for that exact
+`SecKeychainRef`; uses `kSecUseKeychain` only to target adds and a one-element
+`kSecMatchSearchList` for reads, updates, and deletes; and forces noninteractive Security.framework
+operation. The canonical service is `com.substrate.lifecycle.v1`, and the exact scope-bound tag is
+`<scope-id>:signing-key`. Zero matches may create once. One match must revalidate its tag, service
+label, private P-256 type/size, permanent/signing attributes, and canonical SPKI. Duplicate,
+substituted, missing-under-wrapper, or SPKI-mismatched state preserves the wrapper and stops.
+Retirement refuses key deletion while the protected wrapper survives, deletes only the exact tag
+from that exact Keychain, and verifies final absence. Protected-wrapper CAS takes the exact
+`<scope-id>:current-anchor` durable lock before key/SPKI validation; retirement takes that same lock
+across wrapper-absence validation, validated-item-reference deletion, and final absence. The
+documented `kSecMatchItemList` selector prevents a post-validation tag-wide delete.
+
+This is an explicit R3 threat-posture change, not a hardware claim: a sufficiently privileged root
+process with System-Keychain access may export the private key. The security joins that remain
+authoritative are the fixed LaunchDaemon, audit-token/designated-requirement admission, canonical
+SPKI binding, P1363 low-S signatures, signed protected wrapper, monotonic CAS, receipt/retry joins,
+and preserving-first failures. There is no default, ambient, user, file, environment, caller-
+selected, unsigned, or software-file fallback. Secure Enclave/Data Protection Keychain and a
+session-capable user LaunchAgent signer are deferred hardening only; this correction does not
+authorize, claim, or dispatch either design.
+
 Publisher bootstrap itself is not inferred from installation bytes. A direct-interactive hidden
 control command verifies the published implementation receipt and executor, reads an exact terminal
 confirmation, and constructs one expiring `PublisherBootstrapAuthorizationV1` bound to IH/PM,

@@ -28,11 +28,16 @@ exact-base source subject for a future official `EVIDENCE:R3-MAC-IMP-01` attempt
    controlling historical evidence. Their two unresolved P1s are real: the one-stdio pairing model
    cannot provide the required independent guest TTY, and `lima-lifecycle.sh` sends `lima-action`
    to an executor that rejects it.
-5. The existing control pack requires the macOS System-Keychain non-exportable P-256 signer,
-   canonical SPKI DER/hash and P1363 low-S verification, audit-token-before-decode XPC admission,
-   Stage-1 joins, a PM/machine/source/artifact-bound one-use ticket, generation-CAS pairing records,
-   and independent host/guest terminal confirmation. It does **not** authorize raw helper bypasses
-   or prove that one child stdio stream is exclusive authority.
+5. The existing control pack requires the fixed root LaunchDaemon to use one software P-256 signer
+   in the explicitly opened legacy `/Library/Keychains/System.keychain`; a sufficiently privileged
+   root process may export its private material. Canonical SPKI DER/hash and P1363 low-S
+   verification, code-designated/audit-token-before-decode peer admission, signed wrapper and
+   generation-CAS joins, Stage-1 joins, a PM/machine/source/artifact-bound one-use ticket, and
+   independent host/guest terminal confirmation remain mandatory and preserving-first. It does
+   **not** authorize raw helper bypasses, a user-keychain, file-key, default/ambient store,
+   unsigned or alternate fallback, or prove that one child stdio stream is exclusive authority.
+   R3 supports Apple Silicon macOS only. Secure Enclave/Data Protection Keychain and a
+   user-LaunchAgent signer are deferred hardening, not current authority.
 
 ## Selected outcome
 
@@ -130,12 +135,18 @@ design.
 
 Retain only donor hunks that implement all of the following control-pack requirements:
 
-- System-Keychain service `com.substrate.lifecycle.v1` for the exact signing-key,
-  current-anchor, bootstrap-intent, and challenge-keyed pairing-record accounts;
-- non-exportable host P-256 signing, canonical SPKI DER export/hash, and canonical P1363 low-S
-  verification without a second wire representation;
-- fixed Mach service admission: actual peer audit token is read and admitted before any request
-  byte is decoded; the exact code-designated requirement and fixed control image are checked;
+- explicitly opened legacy `/Library/Keychains/System.keychain` with service
+  `com.substrate.lifecycle.v1` for the exact software P-256 signer, current-anchor,
+  bootstrap-intent, and challenge-keyed pairing-record identities; sufficiently privileged root
+  may export the private material, but product signing never exports it;
+- canonical SPKI DER export/hash and canonical P1363 low-S verification without a second wire
+  representation, plus signed-wrapper, generation-CAS, and preserving-first joins;
+- fixed root LaunchDaemon and Mach service admission: the actual peer audit token is read and
+  admitted before any request byte is decoded; the exact code-designated requirement and fixed
+  control image are checked;
+- no user-keychain, file-key, default/ambient store, unsigned, software-file, or alternate fallback;
+  Apple Silicon macOS only, with Secure Enclave/Data Protection Keychain and a user-LaunchAgent
+  signer remaining deferred hardening rather than current authority;
 - durable Stage-1 record/open/validation before ticket issue or mapped mutation;
 - canonical ticket issue, expiry, PM/machine/source/artifact/component binding, host-record
   generation-CAS, one-use consume/replay rejection, and evidence-only unused reservation/retirement

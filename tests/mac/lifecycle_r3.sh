@@ -25,6 +25,11 @@ paths = {
     'managed': root / 'crates/shell/src/execution/managed_lifecycle.rs',
     'common': root / 'crates/common/src/managed_artifact.rs',
     'installer': root / 'scripts/substrate/dev-install-substrate.sh',
+    'architecture': root / 'llm-last-mile/runtime-refactor/01-target-architecture.md',
+    'slice_map': root / 'llm-last-mile/runtime-refactor/03-phase-slice-map.md',
+    'contracts': root / 'llm-last-mile/runtime-refactor/04-contracts-and-gates.md',
+    'ledger': root / 'llm-last-mile/runtime-refactor/05-debug-regression-ledger.md',
+    'recovery_spec': root / 'llm-last-mile/runtime-refactor/r3-mac-evidence-recovery/SPEC.md',
 }
 source = {name: path.read_text() for name, path in paths.items()}
 
@@ -122,6 +127,85 @@ if control.index('"guest-publisher-pairing-direct-interactive-v1" =>') > control
 executor = source['executor']
 if executor.index('if operation == "--publisher-bootstrap-fd"') > executor.index('read_to_end(&mut input)'):
     fail('executor reads stdin before exact FD3 bootstrap dispatch')
+
+# The R3 signer is one software P-256 private key in the explicitly opened legacy System
+# Keychain.  Searches are scoped with kSecMatchSearchList; only adds use kSecUseKeychain.  No
+# private selector, ambient/default/user/file fallback, authorization UI, or non-exportability
+# assertion may re-enter this boundary.
+ffi_start = executor.index('mod mac_system_keychain_ffi_v1')
+ffi_end = executor.index('\n#[cfg(target_os = "macos")]\n#[repr(C)]\nstruct MacAuditTokenFfiV1', ffi_start)
+keychain_ffi = executor[ffi_start:ffi_end]
+for forbidden in ('kSecUse' + 'SystemKeychain', 'SecKeychainCopyDefault',
+                  'kSecUseDataProtectionKeychain', 'kSecAttrTokenIDSecureEnclave',
+                  'non-exportable P-256 key', 'not explicitly non-exportable'):
+    if forbidden in executor:
+        fail(f'macOS signer retains forbidden private/ambient/non-exportability path {forbidden}')
+for text in ('MAC_SYSTEM_KEYCHAIN_PATH_V1', '"/Library/Keychains/System.keychain"',
+             'SecKeychainOpen', 'SecKeychainGetPath',
+             'open_explicit_system_keychain', 'verify_explicit_system_keychain_path',
+             'kSecUseKeychain', 'kSecMatchSearchList',
+             'kSecUseAuthenticationUI', 'kSecUseAuthenticationUIFail',
+             'kSecMatchLimitAll', 'kSecReturnAttributes', 'kSecValueRef',
+             'CFArrayGetCount',
+             'exact_private_key_matches', 'validate_private_key_identity',
+             'retire_mac_system_keychain_software_signer_v1',
+             'refuses signer deletion while protected state survives',
+             'delete_p256_key_exact', 'SecItemDelete',
+             'verify final System Keychain P-256 key absence'):
+    if text not in keychain_ffi and text not in executor:
+        fail(f'explicit System-Keychain software signer is missing {text}')
+if keychain_ffi.count('kSecUseKeychain') < 3:
+    fail('explicit System-Keychain adds do not all name their destination keychain')
+if keychain_ffi.count('kSecMatchSearchList') < 2:
+    fail('System-Keychain reads/deletes can escape the one-keychain search list')
+if keychain_ffi.count('kSecUseAuthenticationUIFail') < 2:
+    fail('System-Keychain operations can use the default UI-permitting policy')
+if 'ERR_SEC_DUPLICATE_ITEM' not in keychain_ffi or 'ambiguous' not in keychain_ffi:
+    fail('System-Keychain signer does not preserve-first on duplicate/ambiguous keys')
+if 'SecKeyCopyExternalRepresentation(private_key' in keychain_ffi:
+    fail('product signer path exports private key bytes')
+
+retire_start = executor.index('pub fn retire_mac_system_keychain_software_signer_v1')
+retire_end = executor.index('\nfn mac_verified_control_peer_requirement_v1', retire_start)
+retire = executor[retire_start:retire_end]
+for earlier, later in (
+    ('mac_keychain_protected_state_account_v1', 'mac_keychain_durable_cas_guard_v1'),
+    ('mac_keychain_durable_cas_guard_v1',
+     'read_system_keychain_protected_state_for_scope_unbound_v1'),
+    ('read_system_keychain_protected_state_for_scope_unbound_v1', 'delete_p256_key_exact'),
+):
+    if earlier not in retire or later not in retire or retire.index(earlier) > retire.index(later):
+        fail('signer retirement is not serialized with protected-wrapper CAS')
+
+cas_start = executor.index('pub fn compare_and_swap_mac_publisher_protected_state_v1')
+cas_end = executor.index('\n/// Establish the designated service', cas_start)
+protected_cas = executor[cas_start:cas_end]
+if protected_cas.index('mac_keychain_durable_cas_guard_v1') > protected_cas.index(
+        'mac_open_system_keychain_p256_spki_der_v1'):
+    fail('protected-wrapper CAS validates the signer before taking the retirement lock')
+for text in ('kSecMatchItemList', 'exact_private_key_item_delete_query'):
+    if text not in keychain_ffi:
+        fail(f'exact signer retirement does not delete the validated item: missing {text}')
+for name in ('architecture', 'slice_map', 'contracts', 'ledger'):
+    require(name, 'AUX-R3-MAC-SYSTEM-KEYCHAIN-SOFTWARE-SIGNER-CORRECTION')
+for stale in (
+    'macOS host | root LaunchDaemon label `com.substrate.lifecycle.publisher.v1`; non-exportable',
+    '`mac.publisher.signing-key` | System-Keychain service `com.substrate.lifecycle.v1`, account `<scope-id>:signing-key` | non-exportable',
+    'exported public SPKI even though the private key is non-exportable',
+):
+    if stale in source['contracts']:
+        fail(f'R3 control pack retains stale macOS signer claim {stale}')
+for stale in ('System-Keychain non-exportable P-256 signer',
+              'non-exportable host P-256 signing'):
+    if stale in source['recovery_spec']:
+        fail(f'active R3 recovery specification retains stale signer claim {stale}')
+for required in ('explicitly opened legacy `/Library/Keychains/System.keychain`',
+                 'software P-256 signer', 'sufficiently privileged', 'root process may export',
+                 'fixed root LaunchDaemon', 'Apple Silicon macOS only',
+                 'Secure Enclave/Data Protection Keychain',
+                 'user-LaunchAgent signer', 'deferred hardening'):
+    require('recovery_spec', required)
+
 fd3_consumer = executor[executor.index('fn consume_publisher_bootstrap_fd3_v1'):executor.index('struct MacBootstrapPeerIdentityV1')]
 fd_check = fd3_consumer.index('if fd != 3')
 cloexec = fd3_consumer.index('mac_rearm_bootstrap_fd3_cloexec_v1(fd)?')

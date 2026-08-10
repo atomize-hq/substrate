@@ -78,6 +78,7 @@ use substrate_shell::{
 const MAC_MACH_SERVICE_V1: &str = "com.substrate.lifecycle.publisher.v1";
 const MAC_STATE_ROOT_V1: &str = "/Library/Application Support/Substrate/lifecycle-v1";
 const MAC_KEYCHAIN_SERVICE_V1: &str = "com.substrate.lifecycle.v1";
+const MAC_SYSTEM_KEYCHAIN_PATH_V1: &str = "/Library/Keychains/System.keychain";
 const MAC_CONTROL_ADMISSION_ACCOUNT_V1: &str = "mac-control-admission-authority.v1";
 const MAC_BOOTSTRAP_PROVENANCE_PATH_V1: &str =
     "/Library/Application Support/Substrate/lifecycle/bootstrap-provenance.v1.json";
@@ -2418,7 +2419,7 @@ fn bootstrap_mac_publisher_from_authorized_fd3_v1(
     let key_spki_sha256 = match intent.key_spki_sha256.as_deref() {
         Some(expected) => {
             if !mac_system_keychain_p256_key_exists_v1(&authorization.scope_id)? {
-                bail!("bootstrap intent names a missing non-exportable P-256 key");
+                bail!("bootstrap intent names a missing System Keychain software P-256 key");
             }
             let spki = mac_open_system_keychain_p256_spki_der_v1(&authorization.scope_id)?;
             if sha256_hex_bootstrap_v1(&spki) != expected {
@@ -2431,7 +2432,7 @@ fn bootstrap_mac_publisher_from_authorized_fd3_v1(
                 bail!("protected state exists without a key-bound bootstrap intent");
             }
             if mac_system_keychain_p256_key_exists_v1(&authorization.scope_id)? {
-                bail!("bootstrap refuses to adopt an orphaned non-exportable P-256 key");
+                bail!("bootstrap refuses to adopt an orphaned System Keychain software P-256 key");
             }
             let spki = mac_ensure_system_keychain_p256_spki_der_v1(&authorization.scope_id)?;
             let digest = sha256_hex_bootstrap_v1(&spki);
@@ -3080,6 +3081,11 @@ mod tests {
     fn r4_fixed_keychain_accounts_and_xpc_admission_reject_substitution() {
         let scope = "018f3e4a-7b2c-7c91-8a6f-2e1d5c4b3a90";
         assert_eq!(
+            MAC_SYSTEM_KEYCHAIN_PATH_V1,
+            "/Library/Keychains/System.keychain"
+        );
+        assert_eq!(MAC_KEYCHAIN_SERVICE_V1, "com.substrate.lifecycle.v1");
+        assert_eq!(
             mac_keychain_protected_state_account_v1(scope).unwrap(),
             "018f3e4a-7b2c-7c91-8a6f-2e1d5c4b3a90:current-anchor"
         );
@@ -3088,6 +3094,19 @@ mod tests {
             b"018f3e4a-7b2c-7c91-8a6f-2e1d5c4b3a90:signing-key"
         );
         assert!(mac_keychain_protected_state_account_v1("not-a-v7-uuid").is_err());
+        let source = include_str!("substrate-lifecycle-macos.rs");
+        for required in [
+            "SecKeychainOpen",
+            "SecKeychainGetPath",
+            "kSecUseKeychain",
+            "kSecMatchSearchList",
+            "kSecUseAuthenticationUIFail",
+            "reopened System Keychain software P-256 key changed SPKI identity",
+            "refuses signer deletion while protected state survives",
+        ] {
+            assert!(source.contains(required), "missing signer join {required}");
+        }
+        assert!(!source.contains(&["kSecUse", "SystemKeychain"].concat()));
         let service = MacLifecyclePublisherServiceV1 {
             mach_service: MAC_MACH_SERVICE_V1,
         };
@@ -7768,6 +7787,27 @@ fn mac_open_system_keychain_p256_spki_der_v1(scope_id: &str) -> Result<Vec<u8>> 
     }
 }
 
+/// Retire only the one exact software signer after its protected wrapper is already absent.
+/// Duplicate, substituted, missing-with-wrapper, delete, or final-absence uncertainty leaves all
+/// surviving lifecycle state untouched and stops.
+pub fn retire_mac_system_keychain_software_signer_v1(scope_id: &str) -> Result<()> {
+    let account = mac_keychain_protected_state_account_v1(scope_id)?;
+    let _guard = mac_keychain_durable_cas_guard_v1(&account)?;
+    let key_tag = mac_keychain_signing_key_tag_v1(scope_id)?;
+    if read_system_keychain_protected_state_for_scope_unbound_v1(scope_id)?.is_some() {
+        bail!("refuses signer deletion while protected state survives");
+    }
+    #[cfg(target_os = "macos")]
+    {
+        return mac_system_keychain_ffi_v1::delete_p256_key_exact(&key_tag);
+    }
+    #[cfg(not(target_os = "macos"))]
+    {
+        let _ = key_tag;
+        bail!("System Keychain P-256 retirement is unavailable off macOS")
+    }
+}
+
 fn mac_verified_control_peer_requirement_v1() -> Result<String> {
     Ok(mac_verified_control_authority_v1()?.designated_requirement)
 }
@@ -7922,7 +7962,7 @@ fn validate_system_keychain_protected_state_key_binding_v1(
     if state.current_anchor.signature.algorithm != "ecdsa-p256-sha256-p1363-low-s-v1"
         || state.current_anchor.signature.public_key != base64url_encode_mac_v1(&spki_der)
     {
-        bail!("System Keychain protected state is not bound to its non-exportable P-256 key");
+        bail!("System Keychain protected state is not bound to its retained P-256 signer");
     }
     Ok(())
 }
@@ -8025,14 +8065,14 @@ pub fn compare_and_swap_mac_publisher_protected_state_v1(
     if next.current_anchor.scope_id != scope_id {
         bail!("next protected state does not match the System Keychain scope");
     }
+    let account = mac_keychain_protected_state_account_v1(scope_id)?;
+    let _guard = mac_keychain_durable_cas_guard_v1(&account)?;
     let spki_der = mac_open_system_keychain_p256_spki_der_v1(scope_id)?;
     if next.current_anchor.signature.algorithm != "ecdsa-p256-sha256-p1363-low-s-v1"
         || next.current_anchor.signature.public_key != base64url_encode_mac_v1(&spki_der)
     {
         bail!("next protected state is not bound to its System Keychain P-256 key");
     }
-    let account = mac_keychain_protected_state_account_v1(scope_id)?;
-    let _guard = mac_keychain_durable_cas_guard_v1(&account)?;
     let observed = open_system_keychain_protected_state_for_scope_v1(scope_id)?;
     if observed.as_ref() != current {
         bail!("macOS publisher protected-state compare-and-swap conflict");
@@ -9687,11 +9727,13 @@ fn relay_mac_xpc_publisher_request_v1(operation: &str, request: &[u8]) -> Result
 }
 
 /// Direct System-Keychain/Security framework fence. It admits only fixed service/account/key-tag
-/// values prepared by the R4 helpers above; it exposes no private-key export operation.
+/// values prepared by the R4 helpers above and always opens the one legacy System Keychain by
+/// exact path. The P-256 signer is software-backed; this module never claims that root cannot
+/// export its private material and exposes no product private-key export operation.
 #[cfg(target_os = "macos")]
 mod mac_system_keychain_ffi_v1 {
     use super::*;
-    use std::ffi::c_void;
+    use std::ffi::{c_char, c_void, CString};
     use std::ptr;
 
     type CfType = *const c_void;
@@ -9699,6 +9741,7 @@ mod mac_system_keychain_ffi_v1 {
     type CfData = *const c_void;
     type SecCode = *const c_void;
     type SecKey = *const c_void;
+    type SecKeychain = *const c_void;
     type SecRequirement = *const c_void;
     type OsStatus = i32;
 
@@ -9706,6 +9749,7 @@ mod mac_system_keychain_ffi_v1 {
     const ERR_SEC_DUPLICATE_ITEM: OsStatus = -25299;
     const ERR_SEC_ITEM_NOT_FOUND: OsStatus = -25300;
     const K_CF_NUMBER_SINT64: i32 = 4;
+    const MAX_SYSTEM_KEYCHAIN_PATH_BYTES: usize = 1024;
 
     struct OwnedCf(Vec<CfType>);
 
@@ -9766,6 +9810,19 @@ mod mac_system_keychain_ffi_v1 {
         Ok(owned.hold(result).cast())
     }
 
+    unsafe fn cf_array(owned: &mut OwnedCf, values: &[CfType]) -> Result<CfType> {
+        let array = CFArrayCreate(
+            kCFAllocatorDefault,
+            values.as_ptr(),
+            values.len() as isize,
+            ptr::null(),
+        );
+        if array.is_null() {
+            bail!("allocate System Keychain search list");
+        }
+        Ok(owned.hold(array).cast())
+    }
+
     unsafe fn dictionary(
         owned: &mut OwnedCf,
         entries: &[(CfType, CfType)],
@@ -9786,38 +9843,115 @@ mod mac_system_keychain_ffi_v1 {
         Ok(dictionary)
     }
 
-    unsafe fn generic_query(
+    unsafe fn verify_explicit_system_keychain_path(keychain: SecKeychain) -> Result<()> {
+        let mut path = [0 as c_char; MAX_SYSTEM_KEYCHAIN_PATH_BYTES];
+        let mut path_length = u32::try_from(path.len()).context("bound System Keychain path")?;
+        let status = SecKeychainGetPath(keychain, &mut path_length, path.as_mut_ptr());
+        if status != ERR_SEC_SUCCESS {
+            bail!("read explicit System Keychain identity failed with OSStatus {status}");
+        }
+        let path_length = usize::try_from(path_length).context("decode System Keychain path")?;
+        if path_length >= path.len() {
+            bail!("explicit System Keychain returned an unterminated path");
+        }
+        let returned = std::slice::from_raw_parts(path.as_ptr().cast::<u8>(), path_length);
+        if returned != MAC_SYSTEM_KEYCHAIN_PATH_V1.as_bytes() || path[path_length] != 0 {
+            bail!("explicit System Keychain identity does not match its fixed path");
+        }
+        Ok(())
+    }
+
+    unsafe fn open_explicit_system_keychain(owned: &mut OwnedCf) -> Result<SecKeychain> {
+        let path = CString::new(MAC_SYSTEM_KEYCHAIN_PATH_V1)
+            .context("encode fixed System Keychain path")?;
+        let mut keychain: SecKeychain = ptr::null();
+        let status = SecKeychainOpen(path.as_ptr(), &mut keychain);
+        if status != ERR_SEC_SUCCESS || keychain.is_null() {
+            bail!("open explicit System Keychain failed with OSStatus {status}");
+        }
+        owned.hold(keychain);
+        verify_explicit_system_keychain_path(keychain)?;
+        Ok(keychain)
+    }
+
+    unsafe fn single_keychain_search_list(
         owned: &mut OwnedCf,
+        keychain: SecKeychain,
+    ) -> Result<CfType> {
+        cf_array(owned, &[keychain.cast()])
+    }
+
+    unsafe fn generic_search_query(
+        owned: &mut OwnedCf,
+        keychain: SecKeychain,
         service: &str,
         account: &str,
         return_data: bool,
     ) -> Result<CfMutableDictionary> {
         let service = cf_string(owned, service)?;
         let account = cf_string(owned, account)?;
+        let search_list = single_keychain_search_list(owned, keychain)?;
         let mut entries = vec![
             (kSecClass, kSecClassGenericPassword),
             (kSecAttrService, service),
             (kSecAttrAccount, account),
-            (kSecUseSystemKeychain, kCFBooleanTrue),
+            (kSecMatchSearchList, search_list),
+            (kSecUseAuthenticationUI, kSecUseAuthenticationUIFail),
         ];
         if return_data {
             entries.push((kSecReturnData, kCFBooleanTrue));
-            entries.push((kSecMatchLimit, kSecMatchLimitOne));
+            entries.push((kSecMatchLimit, kSecMatchLimitAll));
         }
         dictionary(owned, &entries)
+    }
+
+    unsafe fn generic_add_dictionary(
+        owned: &mut OwnedCf,
+        keychain: SecKeychain,
+        service: &str,
+        account: &str,
+        data: CfType,
+    ) -> Result<CfMutableDictionary> {
+        let service = cf_string(owned, service)?;
+        let account = cf_string(owned, account)?;
+        dictionary(
+            owned,
+            &[
+                (kSecClass, kSecClassGenericPassword),
+                (kSecAttrService, service),
+                (kSecAttrAccount, account),
+                (kSecUseKeychain, keychain.cast()),
+                (kSecUseAuthenticationUI, kSecUseAuthenticationUIFail),
+                (kSecValueData, data),
+            ],
+        )
     }
 
     pub(super) fn read_generic_password(service: &str, account: &str) -> Result<Option<Vec<u8>>> {
         unsafe {
             let mut owned = OwnedCf::new();
-            let query = generic_query(&mut owned, service, account, true)?;
+            let keychain = open_explicit_system_keychain(&mut owned)?;
+            let query = generic_search_query(&mut owned, keychain, service, account, true)?;
             let mut result: CfType = ptr::null();
             match SecItemCopyMatching(query, &mut result) {
                 ERR_SEC_ITEM_NOT_FOUND => Ok(None),
                 ERR_SEC_SUCCESS if !result.is_null() => {
                     owned.hold(result);
-                    let length = CFDataGetLength(result.cast());
-                    let bytes = CFDataGetBytePtr(result.cast());
+                    if CFGetTypeID(result) != CFArrayGetTypeID() {
+                        bail!("System Keychain returned a non-array item result");
+                    }
+                    let count = CFArrayGetCount(result);
+                    if count != 1 {
+                        bail!(
+                            "System Keychain generic-password identity is ambiguous ({count} matches)"
+                        );
+                    }
+                    let data = CFArrayGetValueAtIndex(result, 0);
+                    if data.is_null() || CFGetTypeID(data) != CFDataGetTypeID() {
+                        bail!("System Keychain returned non-data item bytes");
+                    }
+                    let length = CFDataGetLength(data.cast());
+                    let bytes = CFDataGetBytePtr(data.cast());
                     if length < 0 || bytes.is_null() {
                         bail!("System Keychain returned invalid item data");
                     }
@@ -9842,24 +9976,14 @@ mod mac_system_keychain_ffi_v1 {
         }
         unsafe {
             let mut owned = OwnedCf::new();
-            let query = generic_query(&mut owned, service, account, false)?;
+            let keychain = open_explicit_system_keychain(&mut owned)?;
+            let query = generic_search_query(&mut owned, keychain, service, account, false)?;
             let data = cf_data(&mut owned, next)?;
             let update = dictionary(&mut owned, &[(kSecValueData, data)])?;
             let status = if expected.is_some() {
                 SecItemUpdate(query, update)
             } else {
-                let service = cf_string(&mut owned, service)?;
-                let account = cf_string(&mut owned, account)?;
-                let add = dictionary(
-                    &mut owned,
-                    &[
-                        (kSecClass, kSecClassGenericPassword),
-                        (kSecAttrService, service),
-                        (kSecAttrAccount, account),
-                        (kSecUseSystemKeychain, kCFBooleanTrue),
-                        (kSecValueData, data),
-                    ],
-                )?;
+                let add = generic_add_dictionary(&mut owned, keychain, service, account, data)?;
                 SecItemAdd(add, ptr::null_mut())
             };
             if status == ERR_SEC_DUPLICATE_ITEM && expected.is_none() {
@@ -9875,73 +9999,238 @@ mod mac_system_keychain_ffi_v1 {
         Ok(())
     }
 
-    unsafe fn open_private_key(owned: &mut OwnedCf, key_tag: &[u8]) -> Result<SecKey> {
+    unsafe fn exact_private_key_query(
+        owned: &mut OwnedCf,
+        keychain: SecKeychain,
+        key_tag: &[u8],
+        return_refs: bool,
+    ) -> Result<CfMutableDictionary> {
         let tag = cf_data(owned, key_tag)?;
-        let query = dictionary(
+        let search_list = single_keychain_search_list(owned, keychain)?;
+        let mut entries = vec![
+            (kSecClass, kSecClassKey),
+            (kSecAttrApplicationTag, tag),
+            (kSecMatchSearchList, search_list),
+            (kSecUseAuthenticationUI, kSecUseAuthenticationUIFail),
+        ];
+        if return_refs {
+            entries.push((kSecReturnAttributes, kCFBooleanTrue));
+            entries.push((kSecReturnRef, kCFBooleanTrue));
+            entries.push((kSecMatchLimit, kSecMatchLimitAll));
+        }
+        dictionary(owned, &entries)
+    }
+
+    unsafe fn exact_private_key_item_delete_query(
+        owned: &mut OwnedCf,
+        keychain: SecKeychain,
+        key_tag: &[u8],
+        private_key: SecKey,
+    ) -> Result<CfMutableDictionary> {
+        let tag = cf_data(owned, key_tag)?;
+        let search_list = single_keychain_search_list(owned, keychain)?;
+        let item_list = cf_array(owned, &[private_key.cast()])?;
+        dictionary(
             owned,
             &[
                 (kSecClass, kSecClassKey),
                 (kSecAttrApplicationTag, tag),
-                (kSecAttrKeyClass, kSecAttrKeyClassPrivate),
-                (kSecReturnRef, kCFBooleanTrue),
-                (kSecUseSystemKeychain, kCFBooleanTrue),
+                (kSecMatchSearchList, search_list),
+                (kSecMatchItemList, item_list),
+                (kSecUseAuthenticationUI, kSecUseAuthenticationUIFail),
             ],
+        )
+    }
+
+    unsafe fn require_key_attribute(
+        attributes: CfType,
+        key: CfType,
+        expected: CfType,
+        label: &str,
+    ) -> Result<()> {
+        let observed = CFDictionaryGetValue(attributes, key);
+        if observed.is_null() || CFEqual(observed, expected) == 0 {
+            bail!("System Keychain lifecycle P-256 key has mismatched {label}");
+        }
+        Ok(())
+    }
+
+    unsafe fn validate_private_key_capabilities(
+        owned: &mut OwnedCf,
+        private_key: SecKey,
+    ) -> Result<()> {
+        let attributes = SecKeyCopyAttributes(private_key);
+        if attributes.is_null() {
+            bail!("System Keychain lifecycle P-256 key has no inspectable attributes");
+        }
+        owned.hold(attributes);
+        require_key_attribute(
+            attributes,
+            kSecAttrKeyClass,
+            kSecAttrKeyClassPrivate,
+            "private-key class",
         )?;
+        require_key_attribute(
+            attributes,
+            kSecAttrKeyType,
+            kSecAttrKeyTypeECSECPrimeRandom,
+            "P-256 key type",
+        )?;
+        require_key_attribute(
+            attributes,
+            kSecAttrIsPermanent,
+            kCFBooleanTrue,
+            "permanent-key state",
+        )?;
+        require_key_attribute(
+            attributes,
+            kSecAttrCanSign,
+            kCFBooleanTrue,
+            "signing capability",
+        )?;
+        let key_size = CFDictionaryGetValue(attributes, kSecAttrKeySizeInBits);
+        let mut key_size_bits = 0_i64;
+        if key_size.is_null()
+            || CFNumberGetValue(
+                key_size.cast(),
+                K_CF_NUMBER_SINT64,
+                (&mut key_size_bits as *mut i64).cast(),
+            ) == 0
+            || key_size_bits != 256
+        {
+            bail!("System Keychain lifecycle key is not exactly P-256");
+        }
+        Ok(())
+    }
+
+    unsafe fn validate_private_key_identity(
+        owned: &mut OwnedCf,
+        persisted_attributes: CfType,
+        private_key: SecKey,
+        key_tag: &[u8],
+    ) -> Result<()> {
+        let tag = cf_data(owned, key_tag)?;
+        let label = cf_string(owned, MAC_KEYCHAIN_SERVICE_V1)?;
+        require_key_attribute(
+            persisted_attributes,
+            kSecAttrApplicationTag,
+            tag,
+            "application tag",
+        )?;
+        require_key_attribute(persisted_attributes, kSecAttrLabel, label, "service label")?;
+        validate_private_key_capabilities(owned, private_key)
+    }
+
+    unsafe fn exact_private_key_matches(
+        owned: &mut OwnedCf,
+        keychain: SecKeychain,
+        key_tag: &[u8],
+    ) -> Result<Option<SecKey>> {
+        let query = exact_private_key_query(owned, keychain, key_tag, true)?;
         let mut result: CfType = ptr::null();
         let status = SecItemCopyMatching(query, &mut result);
         if status == ERR_SEC_ITEM_NOT_FOUND {
-            bail!("System Keychain lifecycle P-256 signing key is absent");
+            return Ok(None);
         }
         if status != ERR_SEC_SUCCESS || result.is_null() {
             bail!("open System Keychain lifecycle P-256 signing key failed with OSStatus {status}");
         }
         owned.hold(result);
-        let attributes = SecKeyCopyAttributes(result.cast());
-        if attributes.is_null() {
-            bail!("System Keychain lifecycle P-256 key has no inspectable attributes");
+        if CFGetTypeID(result) != CFArrayGetTypeID() {
+            bail!("System Keychain lifecycle key lookup returned a non-array result");
         }
-        owned.hold(attributes);
-        if CFDictionaryGetValue(attributes.cast(), kSecAttrIsExtractable) != kCFBooleanFalse {
-            bail!("System Keychain lifecycle P-256 key is not explicitly non-exportable");
+        let count = CFArrayGetCount(result);
+        if count != 1 {
+            bail!("System Keychain lifecycle key identity is ambiguous ({count} matches)");
         }
-        Ok(result.cast())
+        let match_result = CFArrayGetValueAtIndex(result, 0);
+        if match_result.is_null() || CFGetTypeID(match_result) != CFDictionaryGetTypeID() {
+            bail!("System Keychain lifecycle key lookup returned invalid attributes");
+        }
+        let key: SecKey = CFDictionaryGetValue(match_result, kSecValueRef).cast();
+        if key.is_null() {
+            bail!("System Keychain lifecycle key lookup returned a null key");
+        }
+        validate_private_key_identity(owned, match_result, key, key_tag)?;
+        Ok(Some(key))
+    }
+
+    unsafe fn open_private_key(owned: &mut OwnedCf, key_tag: &[u8]) -> Result<SecKey> {
+        let keychain = open_explicit_system_keychain(owned)?;
+        exact_private_key_matches(owned, keychain, key_tag)?
+            .ok_or_else(|| anyhow::anyhow!("System Keychain lifecycle P-256 signing key is absent"))
     }
 
     unsafe fn ensure_private_key(owned: &mut OwnedCf, key_tag: &[u8]) -> Result<SecKey> {
-        match open_private_key(owned, key_tag) {
-            Ok(key) => Ok(key),
-            Err(error) if error.to_string().contains("is absent") => {
-                let tag = cf_data(owned, key_tag)?;
-                let bits = cf_number_i64(owned, 256)?;
-                let private_attributes = dictionary(
-                    owned,
-                    &[
-                        (kSecAttrIsPermanent, kCFBooleanTrue),
-                        (kSecAttrIsExtractable, kCFBooleanFalse),
-                        (kSecAttrApplicationTag, tag),
-                    ],
-                )?;
-                let parameters = dictionary(
-                    owned,
-                    &[
-                        (kSecAttrKeyType, kSecAttrKeyTypeECSECPrimeRandom),
-                        (kSecAttrKeySizeInBits, bits),
-                        (kSecPrivateKeyAttrs, private_attributes.cast()),
-                        (kSecUseSystemKeychain, kCFBooleanTrue),
-                    ],
-                )?;
-                let mut error_ref: CfType = ptr::null();
-                let key = SecKeyCreateRandomKey(parameters, &mut error_ref);
-                if !error_ref.is_null() {
-                    owned.hold(error_ref);
-                }
-                if key.is_null() {
-                    bail!("create System Keychain non-exportable P-256 key failed");
-                }
-                owned.hold(key);
-                Ok(key)
+        let keychain = open_explicit_system_keychain(owned)?;
+        if let Some(key) = exact_private_key_matches(owned, keychain, key_tag)? {
+            return Ok(key);
+        }
+
+        let tag = cf_data(owned, key_tag)?;
+        let label = cf_string(owned, MAC_KEYCHAIN_SERVICE_V1)?;
+        let bits = cf_number_i64(owned, 256)?;
+        let private_attributes = dictionary(
+            owned,
+            &[
+                (kSecAttrIsPermanent, kCFBooleanTrue),
+                (kSecAttrApplicationTag, tag),
+                (kSecAttrLabel, label),
+                (kSecAttrCanSign, kCFBooleanTrue),
+            ],
+        )?;
+        let parameters = dictionary(
+            owned,
+            &[
+                (kSecAttrKeyType, kSecAttrKeyTypeECSECPrimeRandom),
+                (kSecAttrKeySizeInBits, bits),
+                (kSecPrivateKeyAttrs, private_attributes.cast()),
+                (kSecUseKeychain, keychain.cast()),
+                (kSecUseAuthenticationUI, kSecUseAuthenticationUIFail),
+            ],
+        )?;
+        let mut error_ref: CfType = ptr::null();
+        let created = SecKeyCreateRandomKey(parameters, &mut error_ref);
+        let error_code = if error_ref.is_null() {
+            0
+        } else {
+            let code = CFErrorGetCode(error_ref);
+            owned.hold(error_ref);
+            code
+        };
+        if created.is_null() {
+            bail!("create System Keychain software P-256 key failed with code {error_code}");
+        }
+        owned.hold(created);
+        validate_private_key_capabilities(owned, created)?;
+        let created_spki = spki_for_private_key(owned, created)?;
+        let reopened = exact_private_key_matches(owned, keychain, key_tag)?.ok_or_else(|| {
+            anyhow::anyhow!("created System Keychain software P-256 key did not reopen")
+        })?;
+        if spki_for_private_key(owned, reopened)? != created_spki {
+            bail!("reopened System Keychain software P-256 key changed SPKI identity");
+        }
+        Ok(reopened)
+    }
+
+    pub(super) fn delete_p256_key_exact(key_tag: &[u8]) -> Result<()> {
+        unsafe {
+            let mut owned = OwnedCf::new();
+            let keychain = open_explicit_system_keychain(&mut owned)?;
+            let Some(private_key) = exact_private_key_matches(&mut owned, keychain, key_tag)?
+            else {
+                return Ok(());
+            };
+            let query =
+                exact_private_key_item_delete_query(&mut owned, keychain, key_tag, private_key)?;
+            let status = SecItemDelete(query);
+            if status != ERR_SEC_SUCCESS {
+                bail!("delete exact System Keychain P-256 key failed with OSStatus {status}");
             }
-            Err(error) => Err(error),
+            if exact_private_key_matches(&mut owned, keychain, key_tag)?.is_some() {
+                bail!("verify final System Keychain P-256 key absence failed");
+            }
+            Ok(())
         }
     }
 
@@ -10106,6 +10395,7 @@ mod mac_system_keychain_ffi_v1 {
         static kSecClassKey: CfType;
         static kSecAttrService: CfType;
         static kSecAttrAccount: CfType;
+        static kSecAttrLabel: CfType;
         static kSecAttrApplicationTag: CfType;
         static kSecAttrKeyClass: CfType;
         static kSecAttrKeyClassPrivate: CfType;
@@ -10114,18 +10404,31 @@ mod mac_system_keychain_ffi_v1 {
         static kSecAttrKeySizeInBits: CfType;
         static kSecPrivateKeyAttrs: CfType;
         static kSecAttrIsPermanent: CfType;
-        static kSecAttrIsExtractable: CfType;
+        static kSecAttrCanSign: CfType;
         static kSecValueData: CfType;
+        static kSecValueRef: CfType;
         static kSecReturnData: CfType;
+        static kSecReturnAttributes: CfType;
         static kSecReturnRef: CfType;
+        static kSecMatchSearchList: CfType;
+        static kSecMatchItemList: CfType;
         static kSecMatchLimit: CfType;
-        static kSecMatchLimitOne: CfType;
-        static kSecUseSystemKeychain: CfType;
+        static kSecMatchLimitAll: CfType;
+        static kSecUseKeychain: CfType;
+        static kSecUseAuthenticationUI: CfType;
+        static kSecUseAuthenticationUIFail: CfType;
         static kSecKeyAlgorithmECDSASignatureMessageX962SHA256: CfType;
         static kSecGuestAttributePid: CfType;
+        fn SecKeychainOpen(path_name: *const c_char, keychain: *mut SecKeychain) -> OsStatus;
+        fn SecKeychainGetPath(
+            keychain: SecKeychain,
+            path_length: *mut u32,
+            path_name: *mut c_char,
+        ) -> OsStatus;
         fn SecItemCopyMatching(query: CfType, result: *mut CfType) -> OsStatus;
         fn SecItemAdd(attributes: CfType, result: *mut CfType) -> OsStatus;
         fn SecItemUpdate(query: CfType, attributes: CfType) -> OsStatus;
+        fn SecItemDelete(query: CfType) -> OsStatus;
         fn SecKeyCreateRandomKey(parameters: CfType, error: *mut CfType) -> SecKey;
         fn SecRequirementCreateWithString(
             text: CfType,
@@ -10160,8 +10463,10 @@ mod mac_system_keychain_ffi_v1 {
     unsafe extern "C" {
         static kCFAllocatorDefault: CfType;
         static kCFBooleanTrue: CfType;
-        static kCFBooleanFalse: CfType;
         fn CFRelease(value: CfType);
+        fn CFGetTypeID(value: CfType) -> usize;
+        fn CFEqual(left: CfType, right: CfType) -> u8;
+        fn CFErrorGetCode(error: CfType) -> isize;
         fn CFStringCreateWithBytes(
             allocator: CfType,
             bytes: *const u8,
@@ -10170,9 +10475,21 @@ mod mac_system_keychain_ffi_v1 {
             is_external_representation: u8,
         ) -> CfType;
         fn CFDataCreate(allocator: CfType, bytes: *const u8, length: isize) -> CfData;
+        fn CFDataGetTypeID() -> usize;
         fn CFDataGetLength(data: CfData) -> isize;
         fn CFDataGetBytePtr(data: CfData) -> *const u8;
+        fn CFDictionaryGetTypeID() -> usize;
         fn CFNumberCreate(allocator: CfType, number_type: i32, value_ptr: *const c_void) -> CfType;
+        fn CFNumberGetValue(number: CfType, number_type: i32, value_ptr: *mut c_void) -> u8;
+        fn CFArrayCreate(
+            allocator: CfType,
+            values: *const CfType,
+            count: isize,
+            callbacks: *const c_void,
+        ) -> CfType;
+        fn CFArrayGetTypeID() -> usize;
+        fn CFArrayGetCount(array: CfType) -> isize;
+        fn CFArrayGetValueAtIndex(array: CfType, index: isize) -> CfType;
         fn CFDictionaryCreateMutable(
             allocator: CfType,
             capacity: isize,

@@ -1,0 +1,70 @@
+{
+  "schema_version": 1,
+  "packet_id": "AUX-R3-MAC-SYSTEM-KEYCHAIN-SOFTWARE-SIGNER-CORRECTION",
+  "status": "complete",
+  "stop_reason": null,
+  "cycles": [
+    {
+      "cycle_id": "discovery-1",
+      "kind": "discovery",
+      "subject_fingerprint": "sha256:41befc0353221867731b20e078ce87d202f670752fbefc97d359e44ee2372625",
+      "trigger_cycle_id": null,
+      "trigger_finding_ids": [],
+      "causal_evidence_refs": [],
+      "review_refs": [
+        "llm-last-mile/runtime-refactor/review-control/r3-mac-system-keychain-software-signer-correction-review-authority-security.md",
+        "llm-last-mile/runtime-refactor/review-control/r3-mac-system-keychain-software-signer-correction-review-lifecycle-convergence.md",
+        "llm-last-mile/runtime-refactor/review-control/r3-mac-system-keychain-software-signer-correction-review-allowlist-evidence.md"
+      ],
+      "verdict": "findings",
+      "findings": [
+        {
+          "finding_id": "R3-MAC-SKC-P2-001",
+          "priority": "P2"
+        }
+      ]
+    },
+    {
+      "cycle_id": "closure-1",
+      "kind": "closure",
+      "subject_fingerprint": "sha256:66bfcff9a7360a574ef96e05871ef9ed4827ce7ff936dfc280a3f565e5f3fe4f",
+      "trigger_cycle_id": "discovery-1",
+      "trigger_finding_ids": [
+        "R3-MAC-SKC-P2-001"
+      ],
+      "causal_evidence_refs": [],
+      "review_refs": [
+        "llm-last-mile/runtime-refactor/review-control/r3-mac-system-keychain-software-signer-correction-review-authority-security.md",
+        "llm-last-mile/runtime-refactor/review-control/r3-mac-system-keychain-software-signer-correction-review-lifecycle-convergence.md",
+        "llm-last-mile/runtime-refactor/review-control/r3-mac-system-keychain-software-signer-correction-review-allowlist-evidence.md"
+      ],
+      "verdict": "findings",
+      "findings": [
+        {
+          "finding_id": "R3-MAC-SKC-P2-002",
+          "priority": "P2"
+        }
+      ]
+    },
+    {
+      "cycle_id": "supplemental-causal-1",
+      "kind": "supplemental_causal",
+      "subject_fingerprint": "sha256:a52b409b7cb151353c167709d49e16a528d61acf1213b0e3586646451dbaad42",
+      "trigger_cycle_id": "closure-1",
+      "trigger_finding_ids": [
+        "R3-MAC-SKC-P2-002"
+      ],
+      "causal_evidence_refs": [
+        "llm-last-mile/runtime-refactor/r3-mac-evidence-recovery/SPEC.md@sha256:f040fff9cd4ac5169ae6b61c6dbd5b45165de24388654724c02274d4ae6b76ee",
+        "tests/mac/lifecycle_r3.sh@sha256:13bcca03800ec92e0d3ba3968e8c09060314b194786cfb6aecf4f61cbbb17303"
+      ],
+      "review_refs": [
+        "llm-last-mile/runtime-refactor/review-control/r3-mac-system-keychain-software-signer-correction-review-authority-security.md",
+        "llm-last-mile/runtime-refactor/review-control/r3-mac-system-keychain-software-signer-correction-review-lifecycle-convergence.md",
+        "llm-last-mile/runtime-refactor/review-control/r3-mac-system-keychain-software-signer-correction-review-allowlist-evidence.md"
+      ],
+      "verdict": "clean",
+      "findings": []
+    }
+  ]
+}
