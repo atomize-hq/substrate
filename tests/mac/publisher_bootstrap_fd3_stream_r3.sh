@@ -96,6 +96,33 @@ fn assert_reaped_v1(pid: libc::pid_t) -> Result<()> {
 }
 
 fn main() -> Result<()> {
+    let diagnostic = retained_bootstrap_milestone_line_v1(
+        "client.start",
+        Duration::from_millis(17),
+    );
+    if diagnostic != "substrate.bootstrap.milestone=client.start elapsed_ms=17" {
+        bail!("client milestone diagnostic format changed");
+    }
+    emit_retained_bootstrap_milestone_v1(Instant::now(), "client.start");
+    for forbidden in [
+        "request",
+        "authorization",
+        "keychain",
+        "signature",
+        "identity",
+        "service",
+        "account",
+        "path",
+        "sha256",
+        "digest",
+        "confirmation",
+        "peer",
+    ] {
+        if diagnostic.contains(forbidden) {
+            bail!("client milestone diagnostic contains a forbidden field");
+        }
+    }
+
     let canonical = br#"{"bootstrap_channel_bound":true,"status":"bootstrapped"}"#.to_vec();
     let fragments = canonical.iter().map(|byte| vec![*byte]).collect();
     let fragmented = send_and_read_v1(fragments, Duration::from_secs(4))?;

@@ -84,6 +84,7 @@ const MAC_BOOTSTRAP_PROVENANCE_PATH_V1: &str =
     "/Library/Application Support/Substrate/lifecycle/bootstrap-provenance.v1.json";
 const MAX_MAC_XPC_FRAME_BYTES_V1: usize = 1024 * 1024;
 const MAC_BOOTSTRAP_FRAME_FINISH_TIMEOUT_V1: Duration = Duration::from_secs(5);
+const MAC_BOOTSTRAP_MILESTONE_PREFIX_V1: &str = "substrate.bootstrap.milestone";
 const R6_DATA_FRAME_TIMEOUT_V1: Duration = Duration::from_secs(30);
 const R6_DATA_CHILD_EXIT_TIMEOUT_V1: Duration = Duration::from_secs(30);
 // This is intentionally shorter than the retained Stage-1 admission. It permits a fresh R6
@@ -257,6 +258,8 @@ fn consume_publisher_bootstrap_fd3_v1(fd: i32) -> Result<()> {
     {
         use std::os::unix::net::UnixStream;
 
+        let milestones_started = Instant::now();
+        emit_mac_bootstrap_milestone_v1(milestones_started, "executor.fd3.received");
         if fd != 3 {
             bail!("publisher bootstrap must use descriptor 3");
         }
@@ -282,25 +285,46 @@ fn consume_publisher_bootstrap_fd3_v1(fd: i32) -> Result<()> {
             .context("decode canonical direct bootstrap authorization")?;
         mac_attest_bootstrap_authorization_to_provenance_v1(&fresh_authorization, &provenance)?;
         mac_attest_running_executor_image_v1(&fresh_authorization, &provenance)?;
+        emit_mac_bootstrap_milestone_v1(
+            milestones_started,
+            "executor.frame.provenance.peer.validation.complete",
+        );
         // The FD3 authority remains one-shot.  A repeat direct command supplies only another
         // IH-derived authorization to reach this retained locator; the original complete
         // authorization is reconstructed in memory from fixed facts and never serialized.
         let (authorization, locator) =
             mac_open_or_allocate_bootstrap_attempt_locator_v1(&fresh_authorization, &provenance)?;
+        emit_mac_bootstrap_milestone_v1(milestones_started, "executor.bootstrap_attempt.allocated");
         let response = if locator.terminal_state == "Completed" {
             mac_validate_completed_bootstrap_attempt_locator_joins_v1(&locator)?;
-            mac_decode_attempt_locator_response_v1(&locator)?
+            let response = mac_decode_attempt_locator_response_v1(&locator)?;
+            emit_mac_bootstrap_milestone_v1(milestones_started, "executor.locator.reread.complete");
+            response
         } else {
-            let response =
-                bootstrap_mac_publisher_from_authorized_fd3_v1(&authorization, &provenance)?;
+            let response = bootstrap_mac_publisher_from_authorized_fd3_v1(
+                &authorization,
+                &provenance,
+                milestones_started,
+            )?;
             let _ = mac_complete_bootstrap_attempt_locator_v1(&locator, &authorization, &response)?;
+            emit_mac_bootstrap_milestone_v1(
+                milestones_started,
+                "executor.locator.completion.complete",
+            );
             response
         };
+        let response = canonical_bootstrap_json_bytes_v1(&response)
+            .context("encode bounded bootstrap response")?;
+        emit_mac_bootstrap_milestone_v1(
+            milestones_started,
+            "executor.response.serialization.complete",
+        );
+        emit_mac_bootstrap_milestone_v1(milestones_started, "executor.response.write.start");
         mac_send_single_stream_document_v1(
             &socket,
-            &canonical_bootstrap_json_bytes_v1(&response)
-                .context("encode bounded bootstrap response")?,
+            &response,
             Instant::now() + MAC_BOOTSTRAP_FRAME_FINISH_TIMEOUT_V1,
+            milestones_started,
         )
     }
     #[cfg(not(target_os = "macos"))]
@@ -308,6 +332,20 @@ fn consume_publisher_bootstrap_fd3_v1(fd: i32) -> Result<()> {
         let _ = fd;
         bail!("publisher bootstrap FD3 entrypoint is available only on macOS")
     }
+}
+
+fn mac_bootstrap_milestone_line_v1(milestone: &'static str, elapsed: Duration) -> String {
+    format!(
+        "{MAC_BOOTSTRAP_MILESTONE_PREFIX_V1}={milestone} elapsed_ms={}",
+        elapsed.as_millis()
+    )
+}
+
+fn emit_mac_bootstrap_milestone_v1(started: Instant, milestone: &'static str) {
+    eprintln!(
+        "{}",
+        mac_bootstrap_milestone_line_v1(milestone, started.elapsed())
+    );
 }
 
 #[cfg(target_os = "macos")]
@@ -520,6 +558,7 @@ fn mac_send_single_stream_document_v1(
     socket: &std::os::unix::net::UnixStream,
     response: &[u8],
     deadline: Instant,
+    milestones_started: Instant,
 ) -> Result<()> {
     if response.is_empty() || response.len() > MAX_MAC_XPC_FRAME_BYTES_V1 {
         bail!("retained bootstrap FD3 response is absent or oversized");
@@ -556,11 +595,13 @@ fn mac_send_single_stream_document_v1(
         }
         return Err(error).context("send retained bootstrap FD3 response");
     }
+    emit_mac_bootstrap_milestone_v1(milestones_started, "executor.response.write.end");
     // EOF is the sole response boundary and follows every canonical response byte.
     if unsafe { libc::shutdown(socket.as_raw_fd(), libc::SHUT_WR) } != 0 {
         return Err(std::io::Error::last_os_error())
             .context("finish retained bootstrap FD3 response");
     }
+    emit_mac_bootstrap_milestone_v1(milestones_started, "executor.response.eof");
     Ok(())
 }
 
@@ -2388,6 +2429,7 @@ fn derive_mac_lima_stage_one_authorization_v1(
 fn bootstrap_mac_publisher_from_authorized_fd3_v1(
     authorization: &PublisherBootstrapAuthorizationV1,
     provenance: &MacPublisherInstallProvenanceV1,
+    milestones_started: Instant,
 ) -> Result<Value> {
     validate_direct_greenfield_bootstrap_authorization_v1(authorization)?;
     let control_authority = authorization
@@ -2412,6 +2454,7 @@ fn bootstrap_mac_publisher_from_authorized_fd3_v1(
         &control_authority_sha256,
         &executor_evidence_sha256,
     )?;
+    emit_mac_bootstrap_milestone_v1(milestones_started, "executor.intent.ready");
     if intent.state == "Completed" && state_before.is_none() {
         bail!("completed bootstrap intent has no matching protected state");
     }
@@ -2448,6 +2491,7 @@ fn bootstrap_mac_publisher_from_authorized_fd3_v1(
             digest
         }
     };
+    emit_mac_bootstrap_milestone_v1(milestones_started, "executor.key.ready");
 
     let state = match state_before {
         Some(existing) => {
@@ -2473,6 +2517,8 @@ fn bootstrap_mac_publisher_from_authorized_fd3_v1(
             initial
         }
     };
+    emit_mac_bootstrap_milestone_v1(milestones_started, "executor.anchor.ready");
+    emit_mac_bootstrap_milestone_v1(milestones_started, "executor.protected_state.ready");
 
     let admission = MacPublisherControlAdmissionV1 {
         schema_owner: "substrate.mac-publisher-control-admission".to_string(),
@@ -2489,12 +2535,14 @@ fn bootstrap_mac_publisher_from_authorized_fd3_v1(
     if mac_verified_control_admission_v1()? != admission {
         bail!("fixed control-admission authority does not match protected bootstrap authorization");
     }
+    emit_mac_bootstrap_milestone_v1(milestones_started, "executor.admission.complete");
     let stage_one = derive_mac_lima_stage_one_authorization_v1(
         authorization,
         &authorization_sha256,
         &state,
         provenance,
     )?;
+    emit_mac_bootstrap_milestone_v1(milestones_started, "executor.stage_one.signing.complete");
     let install_provenance_sha256 =
         sha256_hex_bootstrap_v1(&canonical_mac_publisher_install_provenance_v1(provenance)?);
     let initial_capsule = MacLimaStageOneCapsuleV1 {
@@ -2532,6 +2580,7 @@ fn bootstrap_mac_publisher_from_authorized_fd3_v1(
         }
         None => compare_and_swap_mac_lima_stage_one_capsule_v1(None, &initial_capsule)?,
     }
+    emit_mac_bootstrap_milestone_v1(milestones_started, "executor.capsule.persistence.complete");
     if intent.state != "Completed" {
         intent = mac_transition_bootstrap_intent_v1(
             authorization,
@@ -2707,6 +2756,7 @@ mod tests {
                 &writer,
                 &response,
                 Instant::now() + Duration::from_secs(2),
+                Instant::now(),
             )
             .expect("send canonical response and EOF");
         });
@@ -2718,6 +2768,35 @@ mod tests {
         .expect("read response through EOF");
         sender.join().expect("sender thread");
         assert_eq!(observed, expected);
+    }
+
+    #[test]
+    fn bootstrap_milestones_are_non_material_stderr_diagnostics() {
+        let line =
+            mac_bootstrap_milestone_line_v1("executor.fd3.received", Duration::from_millis(23));
+        assert_eq!(
+            line,
+            "substrate.bootstrap.milestone=executor.fd3.received elapsed_ms=23"
+        );
+        for forbidden in [
+            "request",
+            "authorization",
+            "keychain",
+            "signature",
+            "identity",
+            "service",
+            "account",
+            "path",
+            "sha256",
+            "digest",
+            "confirmation",
+            "peer",
+        ] {
+            assert!(
+                !line.contains(forbidden),
+                "milestone diagnostic includes forbidden field {forbidden}"
+            );
+        }
     }
 
     #[cfg(target_os = "macos")]

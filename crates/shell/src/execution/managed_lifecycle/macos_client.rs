@@ -539,6 +539,8 @@ pub fn send_publisher_bootstrap_authorization_fd3_v1(
     use std::process::Command;
     use substrate_common::canonical_publisher_bootstrap_authorization_v1;
 
+    let milestones_started = std::time::Instant::now();
+    emit_retained_bootstrap_milestone_v1(milestones_started, "client.start");
     let request = canonical_publisher_bootstrap_authorization_v1(authorization)
         .context("canonicalize direct bootstrap authorization")?;
     if request.is_empty() || request.len() > MAC_BOOTSTRAP_FD3_MAX_BYTES_V1 {
@@ -603,18 +605,31 @@ pub fn send_publisher_bootstrap_authorization_fd3_v1(
         &request,
         std::time::Instant::now() + MAC_BOOTSTRAP_FD3_TIMEOUT_V1,
         "direct bootstrap authorization",
-    )?;
+    )
+    .map_err(|error| {
+        emit_retained_bootstrap_milestone_v1(milestones_started, "client.write.timeout_or_eof");
+        error
+    })?;
+    emit_retained_bootstrap_milestone_v1(milestones_started, "client.write.complete");
     // EOF is the sole request boundary. It is emitted only after every canonical byte was sent.
     if unsafe { libc::shutdown(retained.as_raw_fd(), libc::SHUT_WR) } != 0 {
         return Err(std::io::Error::last_os_error())
             .context("terminate direct bootstrap authorization frame");
     }
+    emit_retained_bootstrap_milestone_v1(milestones_started, "client.request.eof");
     let response_deadline = std::time::Instant::now() + MAC_BOOTSTRAP_FD3_TIMEOUT_V1;
-    let response = read_retained_bootstrap_stream_v1(
+    let response = match read_retained_bootstrap_stream_v1(
         retained.as_raw_fd(),
         response_deadline,
         "direct bootstrap response",
-    )?;
+    ) {
+        Ok(response) => response,
+        Err(error) => {
+            emit_retained_bootstrap_milestone_v1(milestones_started, "client.read.timeout_or_eof");
+            return Err(error);
+        }
+    };
+    emit_retained_bootstrap_milestone_v1(milestones_started, "client.read.eof");
     let response = parse_canonical_direct_bootstrap_response_v1(&response)?;
     child.wait_for_success_v1(response_deadline)?;
     Ok(response)
@@ -630,6 +645,25 @@ fn set_retained_bootstrap_fd_cloexec_v1(fd: i32) -> Result<()> {
         return Err(std::io::Error::last_os_error()).context("set bootstrap socket CLOEXEC");
     }
     Ok(())
+}
+
+#[cfg(target_os = "macos")]
+fn retained_bootstrap_milestone_line_v1(
+    milestone: &'static str,
+    elapsed: std::time::Duration,
+) -> String {
+    format!(
+        "substrate.bootstrap.milestone={milestone} elapsed_ms={}",
+        elapsed.as_millis()
+    )
+}
+
+#[cfg(target_os = "macos")]
+fn emit_retained_bootstrap_milestone_v1(started: std::time::Instant, milestone: &'static str) {
+    eprintln!(
+        "{}",
+        retained_bootstrap_milestone_line_v1(milestone, started.elapsed())
+    );
 }
 
 #[cfg(target_os = "macos")]
