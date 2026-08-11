@@ -24,6 +24,7 @@ use transport_api_types::InstallBootstrapContextCarrierV1;
 
 use super::{ManagedLifecycleControlRequestV1, MappedLifecycleTagV1};
 const MAC_MACH_SERVICE_V1: &str = "com.substrate.lifecycle.publisher.v1";
+const MAX_MAC_XPC_FRAME_BYTES_V1: usize = 1024 * 1024;
 #[cfg(target_os = "macos")]
 const MAC_BOOTSTRAP_PROVENANCE_PATH_V1: &str =
     "/Library/Application Support/Substrate/lifecycle/bootstrap-provenance.v1.json";
@@ -1547,6 +1548,90 @@ unsafe extern "C" fn ignore_mac_xpc_event_v1(
 ) {
 }
 
+/// The reply object and its bounded `response` field are classified separately so XPC transport
+/// errors cannot be misreported as publisher protocol frames.
+#[derive(Clone, Copy, Debug, Eq, PartialEq)]
+enum MacXpcReplyObjectV1 {
+    ConnectionInvalid,
+    ConnectionInterrupted,
+    PeerCodeSigningRequirementRejected,
+    Dictionary,
+    UnexpectedXpcType,
+}
+
+#[derive(Clone, Copy, Debug, Eq, PartialEq)]
+enum MacXpcReplyDataV1 {
+    Missing,
+    Present(usize),
+}
+
+#[derive(Clone, Copy, Debug, Eq, PartialEq)]
+enum MacXpcReplyClassificationV1 {
+    ConnectionInvalid,
+    ConnectionInterrupted,
+    PeerCodeSigningRequirementRejected,
+    UnexpectedXpcType,
+    DictionaryMissingResponse,
+    DictionaryEmptyResponse,
+    DictionaryOversizedResponse,
+    DictionaryResponse,
+}
+
+impl MacXpcReplyClassificationV1 {
+    const fn label(self) -> &'static str {
+        match self {
+            Self::ConnectionInvalid => "connection-invalid",
+            Self::ConnectionInterrupted => "connection-interrupted",
+            Self::PeerCodeSigningRequirementRejected => "peer-code-signing-requirement-rejected",
+            Self::UnexpectedXpcType => "unexpected-xpc-type",
+            Self::DictionaryMissingResponse => "dictionary-missing-response",
+            Self::DictionaryEmptyResponse => "dictionary-empty-response",
+            Self::DictionaryOversizedResponse => "dictionary-oversized-response",
+            Self::DictionaryResponse => "dictionary-response",
+        }
+    }
+}
+
+fn classify_mac_xpc_reply_v1(
+    object: MacXpcReplyObjectV1,
+    data: MacXpcReplyDataV1,
+    max_frame_bytes: usize,
+) -> MacXpcReplyClassificationV1 {
+    match object {
+        MacXpcReplyObjectV1::ConnectionInvalid => MacXpcReplyClassificationV1::ConnectionInvalid,
+        MacXpcReplyObjectV1::ConnectionInterrupted => {
+            MacXpcReplyClassificationV1::ConnectionInterrupted
+        }
+        MacXpcReplyObjectV1::PeerCodeSigningRequirementRejected => {
+            MacXpcReplyClassificationV1::PeerCodeSigningRequirementRejected
+        }
+        MacXpcReplyObjectV1::UnexpectedXpcType => MacXpcReplyClassificationV1::UnexpectedXpcType,
+        MacXpcReplyObjectV1::Dictionary => match data {
+            MacXpcReplyDataV1::Missing => MacXpcReplyClassificationV1::DictionaryMissingResponse,
+            MacXpcReplyDataV1::Present(0) => MacXpcReplyClassificationV1::DictionaryEmptyResponse,
+            MacXpcReplyDataV1::Present(length) if length > max_frame_bytes => {
+                MacXpcReplyClassificationV1::DictionaryOversizedResponse
+            }
+            MacXpcReplyDataV1::Present(_) => MacXpcReplyClassificationV1::DictionaryResponse,
+        },
+    }
+}
+
+#[cfg(target_os = "macos")]
+unsafe fn mac_xpc_reply_object_v1(reply: *mut core::ffi::c_void) -> MacXpcReplyObjectV1 {
+    if reply == std::ptr::addr_of!(_xpc_error_connection_invalid).cast_mut() {
+        MacXpcReplyObjectV1::ConnectionInvalid
+    } else if reply == std::ptr::addr_of!(_xpc_error_connection_interrupted).cast_mut() {
+        MacXpcReplyObjectV1::ConnectionInterrupted
+    } else if reply == std::ptr::addr_of!(_xpc_error_peer_code_signing_requirement).cast_mut() {
+        MacXpcReplyObjectV1::PeerCodeSigningRequirementRejected
+    } else if xpc_get_type(reply) == std::ptr::addr_of!(_xpc_type_dictionary).cast() {
+        MacXpcReplyObjectV1::Dictionary
+    } else {
+        MacXpcReplyObjectV1::UnexpectedXpcType
+    }
+}
+
 /// Open exactly the fixed privileged Mach XPC service and return one bounded reply frame.
 ///
 /// No executable, socket, environment value, or transport can be supplied by the caller. The
@@ -1558,7 +1643,7 @@ pub fn open_mac_xpc_channel_v1(operation: &str, request: &[u8]) -> Result<Vec<u8
     ) {
         bail!("unknown fixed macOS XPC publisher operation {operation}");
     }
-    if request.is_empty() || request.len() > 1024 * 1024 {
+    if request.is_empty() || request.len() > MAX_MAC_XPC_FRAME_BYTES_V1 {
         bail!("macOS XPC publisher request has an invalid frame size");
     }
     #[cfg(target_os = "macos")]
@@ -1598,11 +1683,33 @@ pub fn open_mac_xpc_channel_v1(operation: &str, request: &[u8]) -> Result<Vec<u8
         if reply.is_null() {
             bail!("fixed macOS XPC publisher returned no reply");
         }
+        let object = mac_xpc_reply_object_v1(reply);
+        if object != MacXpcReplyObjectV1::Dictionary {
+            let classification = classify_mac_xpc_reply_v1(
+                object,
+                MacXpcReplyDataV1::Missing,
+                MAX_MAC_XPC_FRAME_BYTES_V1,
+            );
+            xpc_release(reply);
+            bail!(
+                "fixed macOS XPC publisher reply classification: {}",
+                classification.label()
+            );
+        }
         let mut length = 0usize;
         let bytes = xpc_dictionary_get_data(reply, c"response".as_ptr(), &mut length);
-        if bytes.is_null() || length == 0 || length > 1024 * 1024 {
+        let data = if bytes.is_null() {
+            MacXpcReplyDataV1::Missing
+        } else {
+            MacXpcReplyDataV1::Present(length)
+        };
+        let classification = classify_mac_xpc_reply_v1(object, data, MAX_MAC_XPC_FRAME_BYTES_V1);
+        if classification != MacXpcReplyClassificationV1::DictionaryResponse {
             xpc_release(reply);
-            bail!("fixed macOS XPC publisher returned an invalid reply frame");
+            bail!(
+                "fixed macOS XPC publisher reply classification: {}",
+                classification.label()
+            );
         }
         let response = std::slice::from_raw_parts(bytes.cast::<u8>(), length).to_vec();
         xpc_release(reply);
@@ -1685,12 +1792,72 @@ mod tests {
             .is_err());
         }
     }
+
+    #[test]
+    fn mac_xpc_reply_classifier_is_fail_closed_and_bounded() {
+        const MAX_FRAME_BYTES: usize = 8;
+        use MacXpcReplyClassificationV1 as Classification;
+        use MacXpcReplyDataV1 as Data;
+        use MacXpcReplyObjectV1 as Object;
+
+        for (object, data, expected) in [
+            (
+                Object::ConnectionInvalid,
+                Data::Missing,
+                Classification::ConnectionInvalid,
+            ),
+            (
+                Object::ConnectionInterrupted,
+                Data::Missing,
+                Classification::ConnectionInterrupted,
+            ),
+            (
+                Object::PeerCodeSigningRequirementRejected,
+                Data::Missing,
+                Classification::PeerCodeSigningRequirementRejected,
+            ),
+            (
+                Object::UnexpectedXpcType,
+                Data::Missing,
+                Classification::UnexpectedXpcType,
+            ),
+            (
+                Object::Dictionary,
+                Data::Missing,
+                Classification::DictionaryMissingResponse,
+            ),
+            (
+                Object::Dictionary,
+                Data::Present(0),
+                Classification::DictionaryEmptyResponse,
+            ),
+            (
+                Object::Dictionary,
+                Data::Present(MAX_FRAME_BYTES + 1),
+                Classification::DictionaryOversizedResponse,
+            ),
+            (
+                Object::Dictionary,
+                Data::Present(MAX_FRAME_BYTES),
+                Classification::DictionaryResponse,
+            ),
+        ] {
+            assert_eq!(
+                classify_mac_xpc_reply_v1(object, data, MAX_FRAME_BYTES),
+                expected
+            );
+        }
+    }
 }
 
 #[cfg(target_os = "macos")]
 #[link(name = "System")]
 unsafe extern "C" {
     static mut _NSConcreteStackBlock: [*mut core::ffi::c_void; 32];
+    static _xpc_type_dictionary: core::ffi::c_void;
+    static _xpc_error_connection_invalid: core::ffi::c_void;
+    static _xpc_error_connection_interrupted: core::ffi::c_void;
+    static _xpc_error_peer_code_signing_requirement: core::ffi::c_void;
     fn _Block_copy(block: *const core::ffi::c_void) -> *mut core::ffi::c_void;
     fn _Block_release(block: *const core::ffi::c_void);
     fn xpc_connection_create_mach_service(
@@ -1708,6 +1875,7 @@ unsafe extern "C" {
         connection: *mut core::ffi::c_void,
         message: *mut core::ffi::c_void,
     ) -> *mut core::ffi::c_void;
+    fn xpc_get_type(object: *mut core::ffi::c_void) -> *const core::ffi::c_void;
     fn xpc_dictionary_create_empty() -> *mut core::ffi::c_void;
     fn xpc_dictionary_set_string(
         dictionary: *mut core::ffi::c_void,
