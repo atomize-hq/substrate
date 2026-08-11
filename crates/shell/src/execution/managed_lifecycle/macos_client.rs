@@ -58,10 +58,15 @@ pub fn submit_publisher_request_v1(_request: &ManagedLifecyclePublisherRequestV1
 pub fn submit_stage_one_absent_instance_create_v1(
     request: &ManagedLifecycleControlRequestV1,
 ) -> Result<Value> {
+    let signed_requirement = &request
+        .lima_stage_one_authorization_v1
+        .as_ref()
+        .ok_or_else(|| anyhow::anyhow!("macOS Stage-1 request lacks signed authorization"))?
+        .peer_code_requirement;
     let bytes = serde_json::to_vec(request).context("encode macOS Stage-1 mapped request")?;
     let response = open_mac_xpc_channel_v1("stage-one-create", &bytes)?;
-    attest_mac_publisher_response_v1(&response)?;
-    serde_json::from_slice(&response).context("decode macOS Stage-1 mapped response")
+    attest_mac_stage_one_publisher_response_v1(&response, signed_requirement)?;
+    decode_authenticated_mac_publisher_response_v1(&response, "macOS Stage-1 mapped response")
 }
 
 /// Submit one canonical post-PM role/action request.  The fixed operation is not caller chosen.
@@ -71,7 +76,7 @@ pub fn submit_post_pm_managed_action_v1(
     let bytes = serde_json::to_vec(request).context("encode macOS post-PM mapped request")?;
     let response = open_mac_xpc_channel_v1("post-pm-action", &bytes)?;
     attest_mac_publisher_response_v1(&response)?;
-    serde_json::from_slice(&response).context("decode macOS post-PM mapped response")
+    decode_authenticated_mac_publisher_response_v1(&response, "macOS post-PM mapped response")
 }
 
 /// Relay the only R6 ticket/frame-bearing child through its fixed XPC operation.
@@ -96,7 +101,7 @@ fn submit_closed_guest_pairing_session_v1(
     let bytes = serde_json::to_vec(request).context("encode closed R6 macOS pairing request")?;
     let response = open_mac_xpc_channel_v1(operation, &bytes)?;
     attest_mac_publisher_response_v1(&response)?;
-    serde_json::from_slice(&response).context("decode closed R6 macOS pairing response")
+    decode_authenticated_mac_publisher_response_v1(&response, "closed R6 macOS pairing response")
 }
 
 /// Derive the one nonserialized bootstrap authorization after terminal confirmation.
@@ -1721,8 +1726,7 @@ pub fn open_mac_xpc_channel_v1(operation: &str, request: &[u8]) -> Result<Vec<u8
     }
 }
 
-/// Verify the fixed publisher service and XPC-enforced designated peer requirement in its reply.
-pub fn attest_mac_publisher_response_v1(response: &[u8]) -> Result<()> {
+fn mac_publisher_response_peer_requirement_v1(response: &[u8]) -> Result<String> {
     let value: Value =
         serde_json::from_slice(response).context("decode macOS publisher attestation")?;
     let attestation = value
@@ -1751,7 +1755,42 @@ pub fn attest_mac_publisher_response_v1(response: &[u8]) -> Result<()> {
     {
         bail!("macOS publisher response is missing accepted-peer audit-token binding");
     }
+    Ok(requirement.to_string())
+}
+
+/// Verify the fixed publisher service and XPC-enforced designated peer requirement in its reply.
+pub fn attest_mac_publisher_response_v1(response: &[u8]) -> Result<()> {
+    mac_publisher_response_peer_requirement_v1(response)?;
     Ok(())
+}
+
+/// Bind a Stage-1 response to the exact control requirement carried by the signed authorization.
+fn attest_mac_stage_one_publisher_response_v1(
+    response: &[u8],
+    signed_requirement: &str,
+) -> Result<()> {
+    mac_publisher_control_requirement_cdhash_v1(signed_requirement)
+        .context("signed Stage-1 authorization has a noncanonical peer code requirement")?;
+    let observed_requirement = mac_publisher_response_peer_requirement_v1(response)?;
+    if observed_requirement != signed_requirement {
+        bail!("macOS publisher response does not exact-join signed Stage-1 peer code requirement");
+    }
+    Ok(())
+}
+
+fn decode_authenticated_mac_publisher_response_v1(
+    response: &[u8],
+    response_name: &str,
+) -> Result<Value> {
+    let value: Value =
+        serde_json::from_slice(response).with_context(|| format!("decode {response_name}"))?;
+    if value.get("status").and_then(Value::as_str) == Some("rejected") {
+        let error = value.get("error").and_then(Value::as_str).ok_or_else(|| {
+            anyhow::anyhow!("authenticated {response_name} rejection is missing its error")
+        })?;
+        bail!("authenticated {response_name} rejected request: {error}");
+    }
+    Ok(value)
 }
 
 #[cfg(test)]
@@ -1791,6 +1830,47 @@ mod tests {
             ))
             .is_err());
         }
+    }
+
+    #[test]
+    fn stage_one_response_requires_exact_signed_peer_requirement() {
+        let signed_requirement = "cdhash H\"0123456789abcdef0123456789abcdef01234567\"";
+        let substituted_requirement = "cdhash H\"89abcdef0123456789abcdef0123456789abcdef\"";
+
+        attest_mac_stage_one_publisher_response_v1(
+            &response_with_requirement(signed_requirement),
+            signed_requirement,
+        )
+        .expect("the authenticated response must exact-join signed Stage-1 authority");
+        assert!(attest_mac_stage_one_publisher_response_v1(
+            &response_with_requirement(substituted_requirement),
+            signed_requirement,
+        )
+        .is_err());
+    }
+
+    #[test]
+    fn authenticated_rejection_is_returned_as_an_error() {
+        let requirement = "cdhash H\"0123456789abcdef0123456789abcdef01234567\"";
+        let response = serde_json::to_vec(&serde_json::json!({
+            "status": "rejected",
+            "error": "protected state is stale",
+            "xpc_attestation": {
+                "mach_service": MAC_MACH_SERVICE_V1,
+                "peer_code_requirement": requirement,
+                "audit_token_bound": true,
+            }
+        }))
+        .expect("encode authenticated rejection");
+
+        attest_mac_stage_one_publisher_response_v1(&response, requirement)
+            .expect("authenticated rejection retains exact peer authority");
+        let error = decode_authenticated_mac_publisher_response_v1(
+            &response,
+            "macOS Stage-1 mapped response",
+        )
+        .expect_err("an authenticated rejection must not become a successful CLI response");
+        assert!(error.to_string().contains("protected state is stale"));
     }
 
     #[test]

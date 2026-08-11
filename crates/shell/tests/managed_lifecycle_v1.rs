@@ -459,6 +459,7 @@ fn post_pm_rejects_generated_unlisted_pairs_and_stage_one_reuse() {
         source_ref: "invalid".to_string(),
         executor_receipt_sha256: "invalid".to_string(),
         requester_principal: "invalid".to_string(),
+        peer_code_requirement: "invalid".to_string(),
         attempt_id: "invalid".to_string(),
         nonce: "invalid".to_string(),
         expires_at_unix_ns: 0,
@@ -1118,6 +1119,7 @@ fn native_mac_publisher_service_demand_admits_control_before_stale_state_rejecti
         "connection-interrupted",
         "peer-code-signing-requirement",
         "malformed-frame",
+        "missing peer_code_requirement",
     ] {
         assert!(
             !diagnostics.contains(transport_failure),
@@ -1125,14 +1127,7 @@ fn native_mac_publisher_service_demand_admits_control_before_stale_state_rejecti
         );
     }
     assert!(
-        diagnostics.contains("audit-token")
-            || diagnostics.contains("protected")
-            // The publisher's rejection envelope deliberately reports audit_token_bound=false;
-            // the client then refuses that envelope before surfacing its protected-state error.
-            // A bounded dictionary reached only after the launchd listener's peer requirement
-            // admitted this exact installed control image, while the transport failures above
-            // prove this was neither absence nor peer-code rejection.
-            || diagnostics.contains("missing peer_code_requirement"),
+        diagnostics.contains("audit-token") || diagnostics.contains("protected"),
         "native proof did not reach admitted protected-state rejection: {diagnostics}"
     );
 }

@@ -49,18 +49,19 @@ use substrate_common::{
     validate_lifecycle_publisher_protected_state_v1, validate_lima_stage_one_authorization_v1,
     validate_lima_stage_one_observation_v1, validate_mac_lima_stage_one_capsule_v1,
     validate_mac_publisher_bootstrap_attempt_locator_v1,
-    validate_mac_publisher_control_admission_v1, validate_mac_publisher_install_provenance_v1,
-    validate_managed_action_receipt_signature_v1, validate_managed_lifecycle_publisher_request_v1,
-    validate_publisher_bootstrap_authorization_v1, verify_p256_p1363_low_s_v1,
-    ExecutorBuildEvidenceV1, GuestPublisherBootstrapHelloV1, GuestPublisherBootstrapTranscriptV1,
-    GuestPublisherPairingChallengeV1, GuestPublisherPairingDataSessionV1,
-    GuestPublisherPairingHostRecordV1, GuestPublisherPairingOperatorLaunchV1,
-    GuestPublisherPairingOperatorProofV1, GuestPublisherPairingOperatorTtySessionV1,
-    GuestPublisherPairingSessionBindingV1, GuestPublisherPairingTicketV1,
-    LifecyclePublisherAnchorV1, LifecyclePublisherProtectedStateV1, LifecycleSignatureV1,
-    LimaStageOneAuthorizationV1, LimaStageOneObservationV1, MacLimaStageOneCapsuleV1,
-    MacLimaStageOneSuccessorTemplateV1, MacPublisherBootstrapAttemptLocatorV1,
-    MacPublisherBootstrapRequestV1, MacPublisherControlAdmissionV1, MacPublisherControlAuthorityV1,
+    validate_mac_publisher_control_admission_v1, validate_mac_publisher_control_authority_v1,
+    validate_mac_publisher_install_provenance_v1, validate_managed_action_receipt_signature_v1,
+    validate_managed_lifecycle_publisher_request_v1, validate_publisher_bootstrap_authorization_v1,
+    verify_p256_p1363_low_s_v1, ExecutorBuildEvidenceV1, GuestPublisherBootstrapHelloV1,
+    GuestPublisherBootstrapTranscriptV1, GuestPublisherPairingChallengeV1,
+    GuestPublisherPairingDataSessionV1, GuestPublisherPairingHostRecordV1,
+    GuestPublisherPairingOperatorLaunchV1, GuestPublisherPairingOperatorProofV1,
+    GuestPublisherPairingOperatorTtySessionV1, GuestPublisherPairingSessionBindingV1,
+    GuestPublisherPairingTicketV1, LifecyclePublisherAnchorV1, LifecyclePublisherProtectedStateV1,
+    LifecycleSignatureV1, LimaStageOneAuthorizationV1, LimaStageOneObservationV1,
+    MacLimaStageOneCapsuleV1, MacLimaStageOneSuccessorTemplateV1,
+    MacPublisherBootstrapAttemptLocatorV1, MacPublisherBootstrapRequestV1,
+    MacPublisherControlAdmissionV1, MacPublisherControlAuthorityV1,
     MacPublisherInstallProvenanceV1, MacPublisherServiceFileIdentityV1,
     MacPublisherServiceFilesObservationV1, MacPublisherServiceInstallDecisionV1,
     MacPublisherServiceRecordObservationV1, MacPublisherServiceRegistrationObservationV1,
@@ -3451,6 +3452,10 @@ fn derive_mac_lima_stage_one_authorization_v1(
         .pre_pm_manifest
         .as_ref()
         .ok_or_else(|| anyhow::anyhow!("direct bootstrap authorization lacks pre-PM manifest"))?;
+    let control_authority = authorization
+        .mac_control_authority
+        .as_ref()
+        .ok_or_else(|| anyhow::anyhow!("direct bootstrap authorization lacks control authority"))?;
     let carrier =
         InstallBootstrapContextCarrierV1::decode(&authorization.install_bootstrap_context_v1)
             .context("decode retained direct-bootstrap IH carrier")?;
@@ -3462,6 +3467,7 @@ fn derive_mac_lima_stage_one_authorization_v1(
         || protected_state.current_anchor.manifest_generation != 1
         || protected_state.counter != 0
         || protected_state.state_revision != 0
+        || control_authority != &provenance.control_authority
         || provenance.profile_template_algorithm != MAC_LIMA_STAGE_ONE_PROFILE_TEMPLATE_ALGORITHM_V1
         || provenance.profile_template_version != MAC_LIMA_STAGE_ONE_PROFILE_TEMPLATE_VERSION_V1
         || provenance.profile_template_sha256 != mac_lima_stage_one_profile_template_sha256_v1()
@@ -3496,6 +3502,7 @@ fn derive_mac_lima_stage_one_authorization_v1(
         source_ref: authorization.source_ref.clone(),
         executor_receipt_sha256: authorization_sha256.to_string(),
         requester_principal: authorization.requester_principal.clone(),
+        peer_code_requirement: control_authority.designated_requirement.clone(),
         attempt_id: authorization.attempt_nonce.clone(),
         nonce: authorization.attempt_nonce.clone(),
         expires_at_unix_ns: authorization.expires_at_unix_ns,
@@ -3876,6 +3883,44 @@ fn mac_be_subtract_v1(left: &[u8; 32], right: &[u8]) -> Result<[u8; 32]> {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn authenticated_xpc_rejection_retains_exact_peer_authority() {
+        let authority = MacPublisherControlAuthorityV1 {
+            schema_owner: "substrate.mac-publisher-control-authority".to_string(),
+            schema_version: 1,
+            control_binary: "substrate-lifecycle-control".to_string(),
+            source_commit: "a".repeat(40),
+            source_tree: "b".repeat(40),
+            source_ref: "refs/heads/test".to_string(),
+            target_triple: "aarch64-apple-darwin".to_string(),
+            artifact_sha256: "c".repeat(64),
+            designated_requirement: "cdhash H\"0123456789abcdef0123456789abcdef01234567\""
+                .to_string(),
+        };
+        let response = authenticated_mac_publisher_response_v1(
+            Err(anyhow::anyhow!("protected state is stale")),
+            &authority,
+        )
+        .expect("authenticated rejection response");
+
+        assert_eq!(
+            response.get("status").and_then(Value::as_str),
+            Some("rejected")
+        );
+        assert_eq!(
+            response
+                .pointer("/xpc_attestation/peer_code_requirement")
+                .and_then(Value::as_str),
+            Some(authority.designated_requirement.as_str())
+        );
+        assert_eq!(
+            response
+                .pointer("/xpc_attestation/audit_token_bound")
+                .and_then(Value::as_bool),
+            Some(true)
+        );
+    }
 
     #[cfg(target_os = "macos")]
     #[test]
@@ -12309,6 +12354,35 @@ struct MacAuditTokenFfiV1 {
     values: [u32; 8],
 }
 
+/// Attach the exact retained peer authority to any response produced after audit-token,
+/// designated-requirement, and opened-image admission. Pre-admission failures never call this
+/// helper and therefore cannot claim an authenticated peer binding.
+fn authenticated_mac_publisher_response_v1(
+    result: Result<Value>,
+    authority: &MacPublisherControlAuthorityV1,
+) -> Result<Value> {
+    validate_mac_publisher_control_authority_v1(authority)?;
+    let mut response = match result {
+        Ok(response) => response,
+        Err(error) => json!({
+            "status": "rejected",
+            "error": error.to_string(),
+        }),
+    };
+    let object = response
+        .as_object_mut()
+        .ok_or_else(|| anyhow::anyhow!("macOS XPC publisher response must be an object"))?;
+    object.insert(
+        "xpc_attestation".to_string(),
+        json!({
+            "mach_service": MAC_MACH_SERVICE_V1,
+            "peer_code_requirement": authority.designated_requirement,
+            "audit_token_bound": true,
+        }),
+    );
+    Ok(response)
+}
+
 #[cfg(target_os = "macos")]
 mod mac_xpc_listener_ffi_v1 {
     use super::*;
@@ -12464,55 +12538,53 @@ mod mac_xpc_listener_ffi_v1 {
         accept_mac_xpc_connection_v1(&service, &audit_token)?;
         let authority = mac_verified_control_authority_v1()?;
         attest_mac_xpc_control_image_v1(event, &authority)?;
-        let operation = xpc_dictionary_get_string(event, c"operation".as_ptr());
-        if operation.is_null() {
-            bail!("fixed macOS XPC request is missing operation");
-        }
-        let operation = std::ffi::CStr::from_ptr(operation)
-            .to_str()
-            .context("decode fixed macOS XPC operation")?;
-        let mut length = 0usize;
-        let bytes = xpc_dictionary_get_data(event, c"request".as_ptr(), &mut length);
-        if bytes.is_null() || length == 0 || length > MAX_MAC_XPC_FRAME_BYTES_V1 {
-            bail!("fixed macOS XPC request has invalid bytes");
-        }
-        let request = std::slice::from_raw_parts(bytes.cast::<u8>(), length);
-        let executor = MacManagedArtifactExecutorV1 {
-            state_root: PathBuf::from(MAC_STATE_ROOT_V1),
-            protected_state: PathBuf::from(MAC_STATE_ROOT_V1).join("current-anchor.v1.json"),
-            pairing_root: PathBuf::from(MAC_STATE_ROOT_V1).join("guest-pairings"),
-        };
-        let control: ManagedLifecycleControlRequestV1 =
-            serde_json::from_slice(request).context("decode XPC mapped Lima action")?;
-        let expected_tag = match operation {
-            "stage-one-create" => MappedLifecycleTagV1::StageOneCreate,
-            "post-pm-action" => MappedLifecycleTagV1::PostPmAction,
-            "guest-pairing-data-session" => MappedLifecycleTagV1::GuestPairingDataSession,
-            _ => bail!("unknown fixed macOS XPC operation"),
-        };
-        if control.tag.as_ref() != Some(&expected_tag) {
-            bail!("fixed macOS XPC operation does not match its closed protocol tag");
-        }
-        let control_value =
-            serde_json::to_value(&control).context("re-encode closed XPC control request")?;
-        let mut response = execute_mac_managed_action_v1(&executor, &control_value, &audit_token)?;
-        let object = response
-            .as_object_mut()
-            .ok_or_else(|| anyhow::anyhow!("macOS XPC publisher response must be an object"))?;
-        object.insert(
-            "xpc_attestation".to_string(),
-            json!({
-                "mach_service": MAC_MACH_SERVICE_V1,
-                // The accepted control image is measured against the retained install
-                // provenance before the request is decoded.  Return that exact retained
-                // requirement, rather than a generic identifier-only requirement, so the
-                // caller cannot mistake a differently signed control binary for the peer
-                // that XPC admitted.
-                "peer_code_requirement": authority.designated_requirement,
-                "audit_token_bound": true
-            }),
-        );
-        Ok(response)
+        let result = (|| -> Result<Value> {
+            let operation = xpc_dictionary_get_string(event, c"operation".as_ptr());
+            if operation.is_null() {
+                bail!("fixed macOS XPC request is missing operation");
+            }
+            let operation = std::ffi::CStr::from_ptr(operation)
+                .to_str()
+                .context("decode fixed macOS XPC operation")?;
+            let mut length = 0usize;
+            let bytes = xpc_dictionary_get_data(event, c"request".as_ptr(), &mut length);
+            if bytes.is_null() || length == 0 || length > MAX_MAC_XPC_FRAME_BYTES_V1 {
+                bail!("fixed macOS XPC request has invalid bytes");
+            }
+            let request = std::slice::from_raw_parts(bytes.cast::<u8>(), length);
+            let executor = MacManagedArtifactExecutorV1 {
+                state_root: PathBuf::from(MAC_STATE_ROOT_V1),
+                protected_state: PathBuf::from(MAC_STATE_ROOT_V1).join("current-anchor.v1.json"),
+                pairing_root: PathBuf::from(MAC_STATE_ROOT_V1).join("guest-pairings"),
+            };
+            let control: ManagedLifecycleControlRequestV1 =
+                serde_json::from_slice(request).context("decode XPC mapped Lima action")?;
+            let expected_tag = match operation {
+                "stage-one-create" => MappedLifecycleTagV1::StageOneCreate,
+                "post-pm-action" => MappedLifecycleTagV1::PostPmAction,
+                "guest-pairing-data-session" => MappedLifecycleTagV1::GuestPairingDataSession,
+                _ => bail!("unknown fixed macOS XPC operation"),
+            };
+            let validated_tag = validate_mapped_lifecycle_control_request_v1(&control)?;
+            if validated_tag != expected_tag {
+                bail!("fixed macOS XPC operation does not match its closed protocol tag");
+            }
+            if validated_tag == MappedLifecycleTagV1::StageOneCreate {
+                let stage_one = control
+                    .lima_stage_one_authorization_v1
+                    .as_ref()
+                    .ok_or_else(|| anyhow::anyhow!("closed Stage-1 control lacks authorization"))?;
+                if stage_one.peer_code_requirement != authority.designated_requirement {
+                    bail!(
+                        "signed Stage-1 peer requirement does not exact-join retained XPC authority"
+                    );
+                }
+            }
+            let control_value =
+                serde_json::to_value(&control).context("re-encode closed XPC control request")?;
+            execute_mac_managed_action_v1(&executor, &control_value, &audit_token)
+        })();
+        authenticated_mac_publisher_response_v1(result, &authority)
     }
 }
 

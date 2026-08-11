@@ -1128,6 +1128,10 @@ pub struct LimaStageOneAuthorizationV1 {
     pub source_ref: String,
     pub executor_receipt_sha256: String,
     pub requester_principal: String,
+    /// Exact retained control requirement that the XPC response must report after peer and
+    /// audit-token admission. This is signed with the rest of the Stage-1 authorization; the
+    /// caller cannot substitute a requirement observed from an unauthenticated response.
+    pub peer_code_requirement: String,
     pub attempt_id: String,
     pub nonce: String,
     pub expires_at_unix_ns: u64,
@@ -3775,6 +3779,15 @@ pub fn validate_lima_stage_one_authorization_v1(
         &authorization.executor_receipt_sha256,
         "Lima stage-one executor_receipt_sha256",
     )?;
+    require_nonempty_no_nul(
+        &authorization.peer_code_requirement,
+        "Lima stage-one peer_code_requirement",
+    )?;
+    if authorization.peer_code_requirement.len() > 4096 {
+        bail!("Lima stage-one peer_code_requirement is too long");
+    }
+    mac_publisher_control_requirement_cdhash_v1(&authorization.peer_code_requirement)
+        .context("Lima stage-one peer_code_requirement is not canonical")?;
     require_uuid_v7(&authorization.attempt_id, "Lima stage-one attempt_id")?;
     require_uuid_v7(&authorization.nonce, "Lima stage-one nonce")?;
     let rendered_profile = decode_base64url(
@@ -8421,6 +8434,8 @@ mod tests {
             source_ref: evidence.source_ref.clone(),
             executor_receipt_sha256: "f".repeat(64),
             requester_principal: "fixture".to_string(),
+            peer_code_requirement: "cdhash H\"0123456789abcdef0123456789abcdef01234567\""
+                .to_string(),
             attempt_id: attempt_id.clone(),
             nonce: nonce.clone(),
             expires_at_unix_ns: 42,
@@ -8475,6 +8490,17 @@ mod tests {
             &authorization,
         )
         .expect("counter zero is a valid initial signed pre-PM anchor counter");
+
+        let mut unsigned_value =
+            serde_json::to_value(&authorization).expect("serialize Stage-1 fixture");
+        unsigned_value
+            .as_object_mut()
+            .expect("Stage-1 object")
+            .remove("peer_code_requirement");
+        assert!(
+            serde_json::from_value::<LimaStageOneAuthorizationV1>(unsigned_value).is_err(),
+            "the signed Stage-1 schema must require its exact XPC peer requirement"
+        );
 
         let mut placeholder = authorization.successor_template.clone();
         placeholder.post_effect_observation_slots =
