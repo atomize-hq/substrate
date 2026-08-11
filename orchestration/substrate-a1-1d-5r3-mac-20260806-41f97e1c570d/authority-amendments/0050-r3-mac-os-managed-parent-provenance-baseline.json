@@ -1,0 +1,72 @@
+{
+  "protocol": "codex.meta-authority-amendment.v1",
+  "orchestration_id": "substrate-a1-1d-5r3-mac-20260806-41f97e1c570d",
+  "amendment_id": "0050-r3-mac-os-managed-parent-provenance-baseline",
+  "issued_at_utc": "2026-08-11T19:44:50Z",
+  "applies_to": "EVIDENCE:R3-MAC-IMP-01",
+  "authority_basis": {
+    "explicit_platform_owner_adjudication": true,
+    "explicit_user_authorization": "ok, please go ahead and do that now",
+    "reason": "macOS replaced the opaque com.apple.provenance value on three pre-existing system parent directories. Subsequent root xattr write/remove operations returned success while macOS retained or reassigned the current value, so historical-byte restoration is neither reliable nor an honest task-owned restoration claim."
+  },
+  "source_checkpoint": {
+    "publication_mode": "remote",
+    "remote": "origin",
+    "target_ref": "refs/heads/feat/internal-host-orchestrator-world-dispatch-bootstrap",
+    "commit": "1ef956ab4fe6fd1c128c26f458bdd92d7d0ca338",
+    "tree": "789c144f2b988f9de021a73ed6cda5afe4467782"
+  },
+  "evidence_basis": {
+    "blocked_attempt_nonce": "ed0de14bb0162937c2447b998920f40c367e326a774316c2d656c521c35b5224",
+    "blocked_attempt_source_commit": "cf1ad2de776cc10c27ee5daa1da3924b68b91201",
+    "artifact_sha256": "sha256:467cb3e031b88ec6e081a13c7bfa08bc28b75fb459bc2df8e9425dfd6f26971d",
+    "receipt_sha256": "sha256:e5c8cfec395a9d9d8c9771cf969261fed8156df98ccfe4c23a0b56cdf21d44dc",
+    "restoration_manifest_sha256": "sha256:8b4a528278341b1fd7d78962d42ddc37eae927d1fd99c649a3a4c41956d7091d",
+    "finding": "All task-owned product state was retired, but restoration_exact was false solely because com.apple.provenance differed on three pre-existing system parent directories after an attempted timestamp repair."
+  },
+  "accepted_platform_baseline": {
+    "field": "com.apple.provenance",
+    "classification": "opaque OS-managed observation",
+    "raw_value_base64": "AQIAg4FCSds54eo=",
+    "raw_value_hex": "01020083814249db39e1ea",
+    "paths": [
+      "/Library/PrivilegedHelperTools",
+      "/Library/LaunchDaemons",
+      "/Library/Keychains"
+    ],
+    "effective_rule": "A fresh evidence attempt records the value observed at its pre-mutation baseline. For these exact parent paths only, com.apple.provenance and parent timestamps are record-only OS-managed observations and are excluded from task-owned restoration equality."
+  },
+  "mandatory_restoration_scope": {
+    "still_exact": [
+      "all task-created or task-modified descendants of the three parent directories",
+      "publisher helper, plist, provenance, launchd label, Mach service, processes, and sockets",
+      "bounded logical lifecycle records and signer material in the System Keychain",
+      "selected prefix and ambient Substrate prefix state",
+      "Lima instance and control-root state",
+      "known_hosts, protected sudoers files, fixed limactl, source checkout, attached mirror, and live remote binding",
+      "parent directory type, owner, group, mode, ACLs, flags, and every extended attribute other than com.apple.provenance"
+    ],
+    "not_authorized": [
+      "a blanket exclusion of extended attributes or filesystem metadata",
+      "rebaselining or ignoring any task-owned descendant",
+      "weakening logical Keychain record deletion or signer absence checks",
+      "claiming opaque System.keychain database bytes are task-owned restoration evidence"
+    ]
+  },
+  "prohibited_parent_repair_actions": [
+    "touch or timestamp restoration on the three exact parent directories",
+    "xattr write, remove, copy, or replay on the three exact parent directories",
+    "SetFile or equivalent metadata repair on the three exact parent directories",
+    "any attempt to synthesize or restore a historical com.apple.provenance value"
+  ],
+  "future_evidence_requirements": [
+    "Capture the three parent identities, security-relevant metadata, timestamps, and com.apple.provenance values before native mutation.",
+    "Never mutate a parent merely to repair timestamp or com.apple.provenance parity.",
+    "Report any observed parent timestamp or provenance transition without converting it into task-owned restoration failure.",
+    "Fail closed on any parent type, ownership, mode, ACL, flags, unexpected extended attribute, or descendant mismatch.",
+    "Use a fresh absent nonce-scoped selected prefix and preserve exact task-owned restoration.",
+    "This amendment does not authorize an evidence dispatch or MAC-CLOSEOUT."
+  ],
+  "gated_successor": "AUTHORITY_REQUIRED:A1.1d-5R3-MAC-CLOSEOUT",
+  "successor_dispatch_authorized": false
+}
