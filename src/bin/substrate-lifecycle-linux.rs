@@ -2068,6 +2068,7 @@ fn build_prepared_record_v1(
         installation_id: request.scope_id.clone(),
         manifest_generation: request.manifest_generation,
         manifest_sha256: request.manifest_sha256.clone(),
+        receipt_manifest_generation: None,
         receipt_id,
         receipt_relative_path: relative_receipt,
         entry_id: request.attempt_nonce.clone(),

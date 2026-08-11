@@ -5518,6 +5518,7 @@ fn prepare_mac_lima_stage_one_transition_v1(
         installation_id: capsule.scope_id.clone(),
         manifest_generation: state.current_anchor.manifest_generation,
         manifest_sha256: state.current_anchor.manifest_sha256.clone(),
+        receipt_manifest_generation: Some(stage_one.successor_template.next_manifest_generation),
         receipt_id: stage_one.successor_template.planned_receipt_id.clone(),
         receipt_relative_path: stage_one
             .successor_template
@@ -8478,6 +8479,7 @@ fn execute_mac_post_pm_action_with_policy_v1(
             installation_id: publisher_request.scope_id.clone(),
             manifest_generation: manifest.manifest_generation,
             manifest_sha256: manifest.manifest_sha256.clone(),
+            receipt_manifest_generation: None,
             receipt_id: receipt_id.clone(),
             receipt_relative_path: receipt_relative_path.clone(),
             entry_id: entry.object_id.clone(),

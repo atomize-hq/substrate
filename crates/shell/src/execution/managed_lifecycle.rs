@@ -1772,6 +1772,7 @@ mod tests {
             installation_id: manifest.installation_id.clone(),
             manifest_generation: manifest.manifest_generation,
             manifest_sha256: manifest.manifest_sha256.clone(),
+            receipt_manifest_generation: None,
             receipt_id: "018f3e4a-7b2c-7c91-8a6f-2e1d5c4b3a92".to_string(),
             receipt_relative_path: "receipts/1/receipt.018f3e4a-7b2c-7c91-8a6f-2e1d5c4b3a92.json"
                 .to_string(),

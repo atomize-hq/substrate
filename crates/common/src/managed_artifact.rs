@@ -168,6 +168,10 @@ pub struct ManagedActionPreparedRecordV1 {
     pub installation_id: String,
     pub manifest_generation: u64,
     pub manifest_sha256: String,
+    /// Receipt namespace for the one signed macOS Lima Stage-1 N-to-N+1 transition.
+    /// Ordinary prepared records omit this field and remain same-manifest.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub receipt_manifest_generation: Option<u64>,
     pub receipt_id: String,
     pub receipt_relative_path: String,
     pub entry_id: String,
@@ -1425,6 +1429,17 @@ pub fn validate_lifecycle_publisher_protected_state_v1(
         }
         if record.manifest_sha256 != state.current_anchor.manifest_sha256 {
             bail!("prepared record manifest_sha256 must match the protected-state anchor");
+        }
+        if record.receipt_manifest_generation.is_some() {
+            let source_anchor_sha256 = lifecycle_anchor_sha256_v1(&state.current_anchor)?;
+            if record
+                .before_observation
+                .get("source_anchor_sha256")
+                .and_then(Value::as_str)
+                != Some(source_anchor_sha256.as_str())
+            {
+                bail!("Stage-1 prepared record must bind the exact source anchor");
+            }
         }
         if record.signature.algorithm != state.current_anchor.signature.algorithm
             || record.signature.public_key != state.current_anchor.signature.public_key
@@ -5055,10 +5070,46 @@ fn validate_prepared_record_v1(record: &ManagedActionPreparedRecordV1) -> Result
     require_uuid_v7(&record.attempt_id, "prepared record attempt_id")?;
     require_hex_digest(&record.manifest_sha256, "prepared record manifest_sha256")?;
     require_hex_digest(&record.request_sha256, "prepared record request_sha256")?;
+    let receipt_manifest_generation = match record.receipt_manifest_generation {
+        None => record.manifest_generation,
+        Some(receipt_manifest_generation) => {
+            let expected_receipt_generation = record
+                .manifest_generation
+                .checked_add(1)
+                .ok_or_else(|| anyhow!("prepared record receipt generation overflow"))?;
+            let before = record.before_observation.as_object().ok_or_else(|| {
+                anyhow!("cross-generation prepared record requires a Stage-1 observation")
+            })?;
+            let source_anchor_sha256 = before
+                .get("source_anchor_sha256")
+                .and_then(Value::as_str)
+                .ok_or_else(|| {
+                anyhow!("Stage-1 prepared record lacks its source anchor digest")
+            })?;
+            require_hex_digest(
+                source_anchor_sha256,
+                "cross-generation prepared record source_anchor_sha256",
+            )?;
+            if receipt_manifest_generation != expected_receipt_generation
+                || record.authority_domain != "mac_host_shared"
+                || record.entry_id != record.scope_id
+                || record.action != ManagedActionV1::Create
+                || before.len() != 3
+                || before.get("pre_pm_manifest_sha256").and_then(Value::as_str)
+                    != Some(record.manifest_sha256.as_str())
+                || before.get("instance").and_then(Value::as_str) != Some("absent")
+            {
+                bail!(
+                    "receipt_manifest_generation is reserved for the exact macOS Lima Stage-1 N-to-N+1 transition"
+                );
+            }
+            receipt_manifest_generation
+        }
+    };
     validate_receipt_relative_path(
         &record.receipt_relative_path,
         &record.receipt_id,
-        record.manifest_generation,
+        receipt_manifest_generation,
     )?;
     validate_executor_identity_v1(&record.executor_identity)?;
     if let Some(previous) = &record.previous_record_sha256 {
@@ -7843,6 +7894,129 @@ mod tests {
             .expect("valid P-256 protected state");
         state.current_anchor.signature.public_key = URL_SAFE_NO_PAD.encode([0x30_u8, 0x00]);
         assert!(validate_lifecycle_publisher_protected_state_v1(&state).is_err());
+    }
+
+    #[test]
+    fn prepared_record_allows_only_exact_signed_stage_one_successor_receipt_namespace() {
+        let scope_id = "018f3e4a-7b2c-7c91-8a6f-2e1d5c4b3a90".to_string();
+        let receipt_id = "018f3e4a-7b2c-7c91-8a6f-2e1d5c4b3a91".to_string();
+        let manifest_sha256 = "d".repeat(64);
+        let mut prepared = ManagedActionPreparedRecordV1 {
+            schema_owner: ACTION_PREPARED_RECORD_OWNER_V1.to_string(),
+            schema_version: 1,
+            authority_domain: "mac_host_shared".to_string(),
+            scope_id: scope_id.clone(),
+            installation_id: scope_id.clone(),
+            manifest_generation: 7,
+            manifest_sha256: manifest_sha256.clone(),
+            receipt_manifest_generation: Some(8),
+            receipt_id: receipt_id.clone(),
+            receipt_relative_path: format!("receipts/8/receipt.{receipt_id}.json"),
+            entry_id: scope_id.clone(),
+            action: ManagedActionV1::Create,
+            attempt_id: "018f3e4a-7b2c-7c91-8a6f-2e1d5c4b3a92".to_string(),
+            request_sha256: "e".repeat(64),
+            before_observation: serde_json::json!({
+                "source_anchor_sha256": "f".repeat(64),
+                "pre_pm_manifest_sha256": manifest_sha256,
+                "instance": "absent",
+            }),
+            executor_identity: sample_executor_identity(),
+            allocated_counter: 1,
+            previous_record_sha256: None,
+            state: "Prepared".to_string(),
+            signature: sample_signature(),
+        };
+        sign_managed_action_prepared_record_for_test_v1(&mut prepared).unwrap();
+
+        let mut anchor = LifecyclePublisherAnchorV1 {
+            schema_owner: "substrate.lifecycle-publisher-anchor".to_string(),
+            schema_version: 1,
+            authority_domain: prepared.authority_domain.clone(),
+            host_context_commitment: "1".repeat(64),
+            platform_mapping_commitment: None,
+            scope_id: scope_id.clone(),
+            manifest_generation: prepared.manifest_generation,
+            manifest_sha256: prepared.manifest_sha256.clone(),
+            action_receipt_index_revision: 0,
+            action_receipt_index_sha256: "2".repeat(64),
+            head_sha256: "3".repeat(64),
+            previous_anchor_sha256: None,
+            request_sha256: prepared.request_sha256.clone(),
+            requester_principal: "fixture".to_string(),
+            attempt_nonce: prepared.attempt_id.clone(),
+            executor_identity: prepared.executor_identity.clone(),
+            signature: sample_signature(),
+        };
+        sign_lifecycle_anchor_for_test_v1(&mut anchor).unwrap();
+        prepared.before_observation["source_anchor_sha256"] =
+            Value::String(lifecycle_anchor_sha256_v1(&anchor).unwrap());
+        sign_managed_action_prepared_record_for_test_v1(&mut prepared).unwrap();
+        let protected_state = LifecyclePublisherProtectedStateV1 {
+            schema_owner: LIFECYCLE_PUBLISHER_PROTECTED_STATE_OWNER_V1.to_string(),
+            schema_version: 1,
+            current_anchor: anchor,
+            counter: prepared.allocated_counter,
+            prepared_record: Some(prepared.clone()),
+            previous_protected_state_sha256: None,
+            state_revision: 1,
+        };
+        validate_lifecycle_publisher_protected_state_v1(&protected_state)
+            .expect("signed Stage-1 N-to-N+1 receipt namespace must retain source anchor identity");
+
+        let mut wrong_source_anchor = prepared.clone();
+        wrong_source_anchor.before_observation["source_anchor_sha256"] =
+            Value::String("0".repeat(64));
+        sign_managed_action_prepared_record_for_test_v1(&mut wrong_source_anchor).unwrap();
+        let mut wrong_source_state = protected_state.clone();
+        wrong_source_state.prepared_record = Some(wrong_source_anchor);
+        assert!(
+            validate_lifecycle_publisher_protected_state_v1(&wrong_source_state)
+                .expect_err("Stage-1 must bind its exact source anchor")
+                .to_string()
+                .contains("exact source anchor")
+        );
+
+        let mut ordinary = prepared.clone();
+        ordinary.receipt_manifest_generation = None;
+        ordinary.receipt_relative_path = format!("receipts/7/receipt.{receipt_id}.json");
+        sign_managed_action_prepared_record_for_test_v1(&mut ordinary).unwrap();
+        let ordinary_bytes = canonical_managed_action_prepared_record_v1(&ordinary)
+            .expect("ordinary prepared records remain valid and same-generation");
+        assert!(!ordinary_bytes
+            .windows(b"receipt_manifest_generation".len())
+            .any(|window| window == b"receipt_manifest_generation"));
+
+        let mut ordinary_mismatch = ordinary;
+        ordinary_mismatch.receipt_relative_path = format!("receipts/8/receipt.{receipt_id}.json");
+        sign_managed_action_prepared_record_for_test_v1(&mut ordinary_mismatch).unwrap();
+        assert!(
+            canonical_managed_action_prepared_record_v1(&ordinary_mismatch)
+                .expect_err("ordinary records remain same-generation")
+                .to_string()
+                .contains("canonical receipt filename")
+        );
+
+        let mut arbitrary_transition = prepared.clone();
+        arbitrary_transition.authority_domain = "unix_a_local".to_string();
+        sign_managed_action_prepared_record_for_test_v1(&mut arbitrary_transition).unwrap();
+        assert!(
+            canonical_managed_action_prepared_record_v1(&arbitrary_transition)
+                .expect_err("cross-generation receipt namespaces are Stage-1-only")
+                .to_string()
+                .contains("reserved for the exact macOS Lima Stage-1")
+        );
+
+        let mut skipped_generation = prepared;
+        skipped_generation.receipt_manifest_generation = Some(9);
+        skipped_generation.receipt_relative_path = format!("receipts/9/receipt.{receipt_id}.json");
+        sign_managed_action_prepared_record_for_test_v1(&mut skipped_generation).unwrap();
+        assert!(
+            canonical_managed_action_prepared_record_v1(&skipped_generation)
+                .expect_err("Stage-1 may advance exactly one generation")
+                .to_string()
+                .contains("reserved for the exact macOS Lima Stage-1")
+        );
     }
 
     #[test]

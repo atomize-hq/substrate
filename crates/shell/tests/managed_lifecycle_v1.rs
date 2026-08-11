@@ -657,6 +657,17 @@ fn direct_bootstrap_dispatch_is_pre_stdin_and_fd3_only() {
             .expect("Stage-1 prepare")];
     assert!(receipt_retry.contains("retained Stage-1 receipt is not an exact retry"));
     assert!(receipt_retry.contains("validate_managed_action_receipt_signature_v1"));
+    let prepare = &executor[executor
+        .find("fn prepare_mac_lima_stage_one_transition_v1")
+        .expect("Stage-1 prepare")
+        ..executor
+            .find("fn mac_read_stage_one_transition_artifact_no_follow_v1")
+            .expect("Stage-1 retained artifact reader")];
+    assert!(prepare.contains("manifest_generation: state.current_anchor.manifest_generation"));
+    assert!(prepare.contains("manifest_sha256: state.current_anchor.manifest_sha256.clone()"));
+    assert!(prepare.contains(
+        "receipt_manifest_generation: Some(stage_one.successor_template.next_manifest_generation)"
+    ));
 }
 
 #[test]
