@@ -29,15 +29,18 @@ use substrate_common::{
     canonical_lifecycle_signature_payload_v1, canonical_mac_lima_stage_one_capsule_v1,
     canonical_mac_publisher_bootstrap_attempt_locator_v1,
     canonical_mac_publisher_control_admission_v1, canonical_mac_publisher_install_provenance_v1,
-    canonical_managed_manifest_head_v1, canonical_manifest_bytes_v1,
+    canonical_mac_publisher_service_state_record_v1, canonical_managed_manifest_head_v1,
+    canonical_manifest_bytes_v1, classify_mac_publisher_service_install_v1,
+    classify_mac_publisher_service_retirement_v1,
     compare_and_swap_guest_publisher_pairing_host_record_v1,
     guest_publisher_bootstrap_hello_public_key_sha256_v1,
     guest_publisher_bootstrap_hello_sha256_v1, guest_publisher_pairing_operator_launch_sha256_v1,
     guest_publisher_pairing_operator_proof_sha256_v1, lifecycle_anchor_sha256_v1,
     mac_publisher_bootstrap_request_sha256_v1, mac_publisher_control_authority_sha256_v1,
-    managed_action_prepared_record_sha256_v1, parse_p256_spki_der_v1,
-    parse_publisher_bootstrap_authorization_v1, publisher_bootstrap_authorization_sha256_v1,
-    validate_guest_publisher_bootstrap_hello_v1, validate_guest_publisher_bootstrap_transcript_v1,
+    mac_publisher_service_state_record_sha256_v1, managed_action_prepared_record_sha256_v1,
+    parse_p256_spki_der_v1, parse_publisher_bootstrap_authorization_v1,
+    publisher_bootstrap_authorization_sha256_v1, validate_guest_publisher_bootstrap_hello_v1,
+    validate_guest_publisher_bootstrap_transcript_v1,
     validate_guest_publisher_pairing_host_record_v1,
     validate_guest_publisher_pairing_operator_launch_against_ticket_and_host_record_at_v1,
     validate_guest_publisher_pairing_operator_proof_against_ticket_at_v1,
@@ -58,7 +61,11 @@ use substrate_common::{
     LimaStageOneAuthorizationV1, LimaStageOneObservationV1, MacLimaStageOneCapsuleV1,
     MacLimaStageOneSuccessorTemplateV1, MacPublisherBootstrapAttemptLocatorV1,
     MacPublisherBootstrapRequestV1, MacPublisherControlAdmissionV1, MacPublisherControlAuthorityV1,
-    MacPublisherInstallProvenanceV1, ManagedActionPreparedRecordV1, ManagedActionReceiptIndexV1,
+    MacPublisherInstallProvenanceV1, MacPublisherServiceFileIdentityV1,
+    MacPublisherServiceFilesObservationV1, MacPublisherServiceInstallDecisionV1,
+    MacPublisherServiceRecordObservationV1, MacPublisherServiceRegistrationObservationV1,
+    MacPublisherServiceRetirementDecisionV1, MacPublisherServiceStatePhaseV1,
+    MacPublisherServiceStateRecordV1, ManagedActionPreparedRecordV1, ManagedActionReceiptIndexV1,
     ManagedActionReceiptV1, ManagedActionV1, ManagedArtifactDispositionV1, ManagedArtifactEntryV1,
     ManagedArtifactIdentityV1, ManagedArtifactManifestV1, ManagedArtifactRoleV1,
     ManagedExecutorIdentityV1, ManagedLifecyclePublisherRequestV1, ManagedLifecycleStateV1,
@@ -82,6 +89,14 @@ const MAC_SYSTEM_KEYCHAIN_PATH_V1: &str = "/Library/Keychains/System.keychain";
 const MAC_CONTROL_ADMISSION_ACCOUNT_V1: &str = "mac-control-admission-authority.v1";
 const MAC_BOOTSTRAP_PROVENANCE_PATH_V1: &str =
     "/Library/Application Support/Substrate/lifecycle/bootstrap-provenance.v1.json";
+const MAC_PUBLISHER_HELPER_PATH_V1: &str =
+    "/Library/PrivilegedHelperTools/com.substrate.lifecycle.publisher.v1";
+const MAC_PUBLISHER_PLIST_PATH_V1: &str =
+    "/Library/LaunchDaemons/com.substrate.lifecycle.publisher.v1.plist";
+const MAC_PUBLISHER_SERVICE_TARGET_V1: &str = "system/com.substrate.lifecycle.publisher.v1";
+const MAC_PUBLISHER_SERVICE_STATE_ACCOUNT_SUFFIX_V1: &str = "publisher-service-state";
+const MAC_PUBLISHER_PLIST_BYTES_V1: &[u8] =
+    include_bytes!("../../scripts/mac/com.substrate.lifecycle.publisher.v1.plist");
 const MAX_MAC_XPC_FRAME_BYTES_V1: usize = 1024 * 1024;
 const MAC_BOOTSTRAP_FRAME_FINISH_TIMEOUT_V1: Duration = Duration::from_secs(5);
 const MAC_BOOTSTRAP_MILESTONE_PREFIX_V1: &str = "substrate.bootstrap.milestone";
@@ -212,6 +227,24 @@ fn main() -> Result<()> {
         // SOCK_STREAM peer inherited at descriptor 3.
         return consume_publisher_bootstrap_fd3_v1(3);
     }
+    if matches!(
+        operation.as_str(),
+        "--publisher-service-state-install-fd" | "--publisher-service-state-retire-fd"
+    ) {
+        if args.next().as_deref() != Some("3") || args.next().is_some() {
+            bail!("publisher service-state operation accepts exactly retained descriptor 3");
+        }
+        mac_attest_closed_service_state_fd3_v1(3)?;
+        let response = if operation == "--publisher-service-state-install-fd" {
+            execute_closed_mac_publisher_service_state_install_v1()?
+        } else {
+            execute_closed_mac_publisher_service_state_retirement_v1()?
+        };
+        std::io::stdout()
+            .write_all(&canonical_bootstrap_json_bytes_v1(&response)?)
+            .context("write closed publisher service-state response")?;
+        return Ok(());
+    }
     if args.next().is_some() {
         bail!("macOS lifecycle operation has unexpected arguments");
     }
@@ -247,6 +280,37 @@ fn main() -> Result<()> {
         .write_all(&serde_json::to_vec(&response).context("encode lifecycle response")?)
         .context("write macOS lifecycle executor response")?;
     Ok(())
+}
+
+#[cfg(target_os = "macos")]
+fn mac_attest_closed_service_state_fd3_v1(fd: i32) -> Result<()> {
+    use std::os::unix::net::UnixStream;
+
+    if fd != 3 {
+        bail!("publisher service-state peer must use descriptor 3");
+    }
+    mac_rearm_bootstrap_fd3_cloexec_v1(fd)?;
+    mac_require_stream_channel_v1(fd)?;
+    mac_set_bootstrap_no_sigpipe_v1(fd)?;
+    // SAFETY: the closed service-state entrypoint takes sole ownership of verified FD3.
+    let mut socket = unsafe { UnixStream::from_raw_fd(fd) };
+    socket
+        .set_read_timeout(Some(MAC_BOOTSTRAP_FRAME_FINISH_TIMEOUT_V1))
+        .context("bound closed service-state peer EOF observation")?;
+    let peer = mac_bootstrap_peer_identity_v1(socket.as_raw_fd())?;
+    let provenance = mac_load_retained_bootstrap_provenance_v1()?;
+    mac_attest_bootstrap_control_peer_predecode_v1(&peer, &provenance)?;
+    let mut forbidden = [0_u8; 1];
+    match socket.read(&mut forbidden) {
+        Ok(0) => Ok(()),
+        Ok(_) => bail!("publisher service-state peer sent forbidden caller data"),
+        Err(error) => Err(error).context("observe closed publisher service-state peer EOF"),
+    }
+}
+
+#[cfg(not(target_os = "macos"))]
+fn mac_attest_closed_service_state_fd3_v1(_fd: i32) -> Result<()> {
+    bail!("publisher service-state peer attestation is unavailable off macOS")
 }
 
 /// Consume exactly one bounded EOF-delimited direct-bootstrap document from the peer on FD3.
@@ -1006,6 +1070,978 @@ fn sha256_hex_bootstrap_v1(bytes: &[u8]) -> String {
     format!("{:x}", Sha256::digest(bytes))
 }
 
+#[cfg(target_os = "macos")]
+#[derive(Debug, Clone)]
+struct MacPublisherInstalledArtifactsV1 {
+    helper: MacPublisherServiceFileIdentityV1,
+    plist: MacPublisherServiceFileIdentityV1,
+    provenance: MacPublisherServiceFileIdentityV1,
+    provenance_record: MacPublisherInstallProvenanceV1,
+}
+
+#[cfg(target_os = "macos")]
+fn mac_require_service_state_root_v1() -> Result<()> {
+    // SAFETY: geteuid has no preconditions and does not mutate process state.
+    if unsafe { libc::geteuid() } != 0 {
+        bail!("publisher service-state transition requires the privileged executor")
+    }
+    Ok(())
+}
+
+#[cfg(target_os = "macos")]
+fn mac_fixed_path_exists_v1(path: &Path) -> Result<bool> {
+    match fs::symlink_metadata(path) {
+        Ok(_) => Ok(true),
+        Err(error) if error.kind() == std::io::ErrorKind::NotFound => Ok(false),
+        Err(error) => Err(error).with_context(|| format!("inspect fixed path {}", path.display())),
+    }
+}
+
+#[cfg(target_os = "macos")]
+fn mac_measure_fixed_service_file_v1(
+    path: &Path,
+    required_mode: u32,
+) -> Result<(MacPublisherServiceFileIdentityV1, Vec<u8>)> {
+    mac_require_root_owned_immutable_tool_path_v1(path)?;
+    let mut file = fs::OpenOptions::new()
+        .read(true)
+        .custom_flags(libc::O_CLOEXEC | libc::O_NOFOLLOW)
+        .open(path)
+        .with_context(|| format!("open fixed service file {}", path.display()))?;
+    let metadata = file
+        .metadata()
+        .with_context(|| format!("inspect fixed service file {}", path.display()))?;
+    if !metadata.file_type().is_file()
+        || metadata.nlink() != 1
+        || metadata.uid() != 0
+        || metadata.gid() != 0
+        || metadata.mode() & 0o777 != required_mode
+    {
+        bail!(
+            "fixed service file is not exact root:wheel {:04o} state: {}",
+            required_mode,
+            path.display()
+        );
+    }
+    let mut bytes = Vec::new();
+    file.read_to_end(&mut bytes)
+        .with_context(|| format!("read fixed service file {}", path.display()))?;
+    let after = fs::symlink_metadata(path)
+        .with_context(|| format!("reinspect fixed service file {}", path.display()))?;
+    if after.dev() != metadata.dev()
+        || after.ino() != metadata.ino()
+        || after.uid() != metadata.uid()
+        || after.gid() != metadata.gid()
+        || after.mode() != metadata.mode()
+    {
+        bail!("fixed service file identity changed during measurement");
+    }
+    Ok((
+        MacPublisherServiceFileIdentityV1 {
+            path: path.display().to_string(),
+            artifact_sha256: sha256_hex_bootstrap_v1(&bytes),
+            physical_identity: format!("dev:{}:ino:{}", metadata.dev(), metadata.ino()),
+            owner_uid: metadata.uid(),
+            group_gid: metadata.gid(),
+            mode: format!("{:04o}", metadata.mode() & 0o777),
+            code_identity: None,
+            code_requirement: None,
+        },
+        bytes,
+    ))
+}
+
+#[cfg(target_os = "macos")]
+fn mac_observe_publisher_service_files_v1() -> Result<(
+    MacPublisherServiceFilesObservationV1,
+    Option<MacPublisherInstalledArtifactsV1>,
+)> {
+    let helper_path = Path::new(MAC_PUBLISHER_HELPER_PATH_V1);
+    let plist_path = Path::new(MAC_PUBLISHER_PLIST_PATH_V1);
+    let provenance_path = Path::new(MAC_BOOTSTRAP_PROVENANCE_PATH_V1);
+    let present = [
+        mac_fixed_path_exists_v1(helper_path)?,
+        mac_fixed_path_exists_v1(plist_path)?,
+        mac_fixed_path_exists_v1(provenance_path)?,
+    ];
+    if present.iter().all(|value| !value) {
+        return Ok((MacPublisherServiceFilesObservationV1::Absent, None));
+    }
+    if !present.iter().all(|value| *value) {
+        return Ok((MacPublisherServiceFilesObservationV1::Ambiguous, None));
+    }
+
+    let (mut helper, _) = mac_measure_fixed_service_file_v1(helper_path, 0o755)?;
+    let (plist, plist_bytes) = mac_measure_fixed_service_file_v1(plist_path, 0o644)?;
+    let (provenance_identity, provenance_bytes) =
+        mac_measure_fixed_service_file_v1(provenance_path, 0o444)?;
+    let provenance_record: MacPublisherInstallProvenanceV1 =
+        serde_json::from_slice(&provenance_bytes)
+            .context("decode fixed publisher install provenance")?;
+    validate_mac_publisher_install_provenance_v1(&provenance_record)?;
+    if canonical_mac_publisher_install_provenance_v1(&provenance_record)? != provenance_bytes {
+        bail!("fixed publisher install provenance is not canonical");
+    }
+    if plist_bytes != MAC_PUBLISHER_PLIST_BYTES_V1
+        || plist.artifact_sha256 != provenance_record.launch_daemon_plist_sha256
+    {
+        bail!("fixed publisher plist does not exact-match the compiled installed artifact");
+    }
+    let measured_helper = mac_measure_bootstrap_image_v1(helper_path)?;
+    if measured_helper.artifact_sha256 != helper.artifact_sha256
+        || measured_helper.artifact_identity != helper.physical_identity
+        || measured_helper.artifact_sha256 != provenance_record.executor_image.artifact_sha256
+        || measured_helper.artifact_identity != provenance_record.executor_image.physical_identity
+        || measured_helper.code_identity != provenance_record.executor_image.code_identity
+    {
+        bail!("fixed publisher helper does not exact-match install provenance");
+    }
+    let verification = Command::new("/usr/bin/codesign")
+        .arg("--verify")
+        .arg("--strict")
+        .arg(format!(
+            "-R={}",
+            provenance_record.executor_image.code_requirement
+        ))
+        .arg("--")
+        .arg(helper_path)
+        .env_clear()
+        .stdin(Stdio::null())
+        .stdout(Stdio::null())
+        .stderr(Stdio::null())
+        .status()
+        .context("verify fixed publisher helper code requirement")?;
+    if !verification.success() {
+        bail!("fixed publisher helper fails its retained code requirement");
+    }
+    helper.code_identity = Some(measured_helper.code_identity);
+    helper.code_requirement = Some(provenance_record.executor_image.code_requirement.clone());
+    Ok((
+        MacPublisherServiceFilesObservationV1::Exact,
+        Some(MacPublisherInstalledArtifactsV1 {
+            helper,
+            plist,
+            provenance: provenance_identity,
+            provenance_record,
+        }),
+    ))
+}
+
+#[cfg(target_os = "macos")]
+fn mac_classify_publisher_registration_exit_v1(
+    status: &std::process::ExitStatus,
+) -> MacPublisherServiceRegistrationObservationV1 {
+    if status.success() {
+        MacPublisherServiceRegistrationObservationV1::Registered
+    } else if status.code() == Some(113) {
+        MacPublisherServiceRegistrationObservationV1::Absent
+    } else {
+        MacPublisherServiceRegistrationObservationV1::Indeterminate
+    }
+}
+
+#[cfg(target_os = "macos")]
+fn mac_observe_publisher_registration_v1() -> MacPublisherServiceRegistrationObservationV1 {
+    let domain = Command::new("/bin/launchctl")
+        .arg("print")
+        .arg("system")
+        .env_clear()
+        .stdin(Stdio::null())
+        .stdout(Stdio::null())
+        .stderr(Stdio::null())
+        .status();
+    if !matches!(domain, Ok(status) if status.success()) {
+        return MacPublisherServiceRegistrationObservationV1::Indeterminate;
+    }
+    match Command::new("/bin/launchctl")
+        .arg("print")
+        .arg(MAC_PUBLISHER_SERVICE_TARGET_V1)
+        .env_clear()
+        .stdin(Stdio::null())
+        .stdout(Stdio::null())
+        .stderr(Stdio::null())
+        .status()
+    {
+        Ok(status) => mac_classify_publisher_registration_exit_v1(&status),
+        _ => MacPublisherServiceRegistrationObservationV1::Indeterminate,
+    }
+}
+
+#[cfg(target_os = "macos")]
+fn mac_publisher_service_state_account_v1(scope_id: &str) -> Result<String> {
+    mac_keychain_account_v1(scope_id, MAC_PUBLISHER_SERVICE_STATE_ACCOUNT_SUFFIX_V1)
+}
+
+#[cfg(target_os = "macos")]
+fn mac_read_publisher_service_state_record_v1(
+    scope_id: &str,
+) -> Result<Option<(MacPublisherServiceStateRecordV1, Vec<u8>)>> {
+    let account = mac_publisher_service_state_account_v1(scope_id)?;
+    let Some(bytes) = mac_keychain_read_item_v1(MAC_KEYCHAIN_SERVICE_V1, &account)? else {
+        return Ok(None);
+    };
+    let record: MacPublisherServiceStateRecordV1 = serde_json::from_slice(&bytes)
+        .context("decode protected publisher service-state record")?;
+    if record.scope_id != scope_id
+        || canonical_mac_publisher_service_state_record_v1(&record)? != bytes
+    {
+        bail!("protected publisher service-state record is not canonical for its fixed account");
+    }
+    Ok(Some((record, bytes)))
+}
+
+#[cfg(target_os = "macos")]
+fn mac_cas_publisher_service_state_record_v1(
+    scope_id: &str,
+    expected: Option<&[u8]>,
+    next: &MacPublisherServiceStateRecordV1,
+) -> Result<Vec<u8>> {
+    let account = mac_publisher_service_state_account_v1(scope_id)?;
+    let observed = mac_keychain_read_item_v1(MAC_KEYCHAIN_SERVICE_V1, &account)?;
+    if observed.as_deref() != expected {
+        bail!("publisher service-state compare-and-swap conflict");
+    }
+    let bytes = canonical_mac_publisher_service_state_record_v1(next)?;
+    mac_keychain_compare_and_swap_item_v1(MAC_KEYCHAIN_SERVICE_V1, &account, expected, &bytes)?;
+    if mac_keychain_read_item_v1(MAC_KEYCHAIN_SERVICE_V1, &account)?.as_deref()
+        != Some(bytes.as_slice())
+    {
+        bail!("publisher service-state CAS did not durably read back");
+    }
+    Ok(bytes)
+}
+
+#[cfg(target_os = "macos")]
+fn mac_publisher_service_static_record_matches_v1(
+    record: &MacPublisherServiceStateRecordV1,
+    expected: &MacPublisherServiceStateRecordV1,
+) -> bool {
+    record.schema_owner == expected.schema_owner
+        && record.schema_version == expected.schema_version
+        && record.scope_id == expected.scope_id
+        && record.bootstrap_authorization_sha256 == expected.bootstrap_authorization_sha256
+        && record.bootstrap_intent_sha256 == expected.bootstrap_intent_sha256
+        && record.initial_anchor_sha256 == expected.initial_anchor_sha256
+        && record.protected_state_sha256 == expected.protected_state_sha256
+        && record.stage_one_capsule_sha256 == expected.stage_one_capsule_sha256
+        && record.install_provenance_sha256 == expected.install_provenance_sha256
+        && record.bootstrap_attempt_locator_account == expected.bootstrap_attempt_locator_account
+        && record.service_label == expected.service_label
+        && record.launchd_domain == expected.launchd_domain
+        && record.program_arguments == expected.program_arguments
+        && record.mach_services == expected.mach_services
+        && record.helper == expected.helper
+        && record.plist == expected.plist
+        && record.provenance == expected.provenance
+}
+
+#[cfg(target_os = "macos")]
+fn mac_build_publisher_install_precommit_v1(
+    admission: &MacPublisherControlAdmissionV1,
+    state: &LifecyclePublisherProtectedStateV1,
+    capsule: &MacLimaStageOneCapsuleV1,
+    artifacts: &MacPublisherInstalledArtifactsV1,
+) -> Result<MacPublisherServiceStateRecordV1> {
+    let provenance_sha256 = sha256_hex_bootstrap_v1(
+        &canonical_mac_publisher_install_provenance_v1(&artifacts.provenance_record)?,
+    );
+    if artifacts.provenance_record.control_authority != admission.control_authority
+        || admission.bootstrap_authorization_sha256 != capsule.bootstrap_authorization_sha256
+        || capsule.install_provenance_sha256 != provenance_sha256
+        || capsule.scope_id != admission.scope_id
+        || capsule.state != "Issued"
+        || capsule.capsule_revision != 1
+        || capsule.initial_anchor_counter != 0
+        || capsule.initial_anchor_sha256 != admission.current_anchor_sha256
+        || state.counter != 0
+        || state.state_revision != admission.state_revision
+        || state.prepared_record.is_some()
+        || state.previous_protected_state_sha256.is_some()
+        || lifecycle_anchor_sha256_v1(&state.current_anchor)? != admission.current_anchor_sha256
+    {
+        bail!("publisher service install does not exact-join signed Stage-1 bootstrap state");
+    }
+    if capsule.stage_one_authorization.expires_at_unix_ns <= mac_now_unix_ns_v1()? {
+        bail!("publisher service install Stage-1 authority has expired");
+    }
+    let control_authority_sha256 =
+        mac_publisher_control_authority_sha256_v1(&admission.control_authority)?;
+    let executor_evidence_sha256 = sha256_hex_bootstrap_v1(&canonical_bootstrap_json_bytes_v1(
+        &serde_json::to_value(
+            &capsule
+                .stage_one_authorization
+                .successor_template
+                .executor_build_evidence,
+        )
+        .context("encode retained Stage-1 executor evidence")?,
+    )?);
+    let key_spki_sha256 = sha256_hex_bootstrap_v1(&mac_open_system_keychain_p256_spki_der_v1(
+        &admission.scope_id,
+    )?);
+    let intent = canonical_bootstrap_json_bytes_v1(&json!({
+        "schema_owner": "substrate.mac-publisher-bootstrap-intent",
+        "schema_version": 1,
+        "scope_id": admission.scope_id,
+        "authority_domain": state.current_anchor.authority_domain,
+        "host_context_commitment": state.current_anchor.host_context_commitment,
+        "platform_mapping_commitment": state.current_anchor.platform_mapping_commitment,
+        "manifest_generation": admission.manifest_generation,
+        "manifest_sha256": admission.manifest_sha256,
+        "requester_principal": state.current_anchor.requester_principal,
+        "attempt_nonce": state.current_anchor.attempt_nonce,
+        "authorization_sha256": admission.bootstrap_authorization_sha256,
+        "control_authority_sha256": control_authority_sha256,
+        "executor_evidence_sha256": executor_evidence_sha256,
+        "key_spki_sha256": key_spki_sha256,
+        "state": "Completed",
+    }))?;
+    let intent_account = mac_keychain_bootstrap_intent_account_v1(&admission.scope_id)?;
+    if mac_keychain_read_item_v1(MAC_KEYCHAIN_SERVICE_V1, &intent_account)?.as_deref()
+        != Some(intent.as_slice())
+    {
+        bail!("publisher service install has no exact completed bootstrap intent");
+    }
+    Ok(MacPublisherServiceStateRecordV1 {
+        schema_owner: "substrate.mac-publisher-service-state".to_string(),
+        schema_version: 1,
+        scope_id: admission.scope_id.clone(),
+        bootstrap_authorization_sha256: admission.bootstrap_authorization_sha256.clone(),
+        bootstrap_intent_sha256: sha256_hex_bootstrap_v1(&intent),
+        initial_anchor_sha256: admission.current_anchor_sha256.clone(),
+        protected_state_sha256: sha256_hex_bootstrap_v1(
+            &canonical_lifecycle_publisher_protected_state_v1(state)?,
+        ),
+        stage_one_capsule_sha256: sha256_hex_bootstrap_v1(
+            &canonical_mac_lima_stage_one_capsule_v1(capsule)?,
+        ),
+        install_provenance_sha256: provenance_sha256,
+        bootstrap_attempt_locator_account: admission.bootstrap_attempt_locator_account.clone(),
+        service_label: MAC_MACH_SERVICE_V1.to_string(),
+        launchd_domain: "system".to_string(),
+        program_arguments: vec![
+            MAC_PUBLISHER_HELPER_PATH_V1.to_string(),
+            "run-publisher".to_string(),
+        ],
+        mach_services: vec![MAC_MACH_SERVICE_V1.to_string()],
+        helper: artifacts.helper.clone(),
+        plist: artifacts.plist.clone(),
+        provenance: artifacts.provenance.clone(),
+        phase: MacPublisherServiceStatePhaseV1::InstallPrecommitted,
+        registration_observed: false,
+        files_observed_present: true,
+        record_revision: 1,
+        retirement_delete_cursor: 0,
+        previous_record_sha256: None,
+    })
+}
+
+#[cfg(target_os = "macos")]
+fn mac_service_record_observation_v1(
+    record: Option<&MacPublisherServiceStateRecordV1>,
+    expected: Option<&MacPublisherServiceStateRecordV1>,
+) -> MacPublisherServiceRecordObservationV1 {
+    let Some(record) = record else {
+        return if expected.is_some() {
+            MacPublisherServiceRecordObservationV1::InstallIntentMatching
+        } else {
+            MacPublisherServiceRecordObservationV1::None
+        };
+    };
+    if expected
+        .is_some_and(|expected| !mac_publisher_service_static_record_matches_v1(record, expected))
+    {
+        return MacPublisherServiceRecordObservationV1::Mismatched;
+    }
+    match record.phase {
+        MacPublisherServiceStatePhaseV1::InstallPrecommitted => {
+            MacPublisherServiceRecordObservationV1::InstallPrecommittedMatching
+        }
+        MacPublisherServiceStatePhaseV1::Installed => {
+            MacPublisherServiceRecordObservationV1::InstalledMatching
+        }
+        MacPublisherServiceStatePhaseV1::RetirementPrecommitted => {
+            MacPublisherServiceRecordObservationV1::RetirementPrecommittedMatching
+        }
+        MacPublisherServiceStatePhaseV1::Retired => {
+            MacPublisherServiceRecordObservationV1::RetiredMatching
+        }
+    }
+}
+
+#[cfg(target_os = "macos")]
+fn mac_transition_publisher_service_record_v1(
+    current: &MacPublisherServiceStateRecordV1,
+    phase: MacPublisherServiceStatePhaseV1,
+) -> Result<MacPublisherServiceStateRecordV1> {
+    canonical_mac_publisher_service_state_record_v1(current)?;
+    let transition_is_valid = matches!(
+        (current.phase, current.retirement_delete_cursor, phase),
+        (
+            MacPublisherServiceStatePhaseV1::InstallPrecommitted,
+            0,
+            MacPublisherServiceStatePhaseV1::Installed
+        ) | (
+            MacPublisherServiceStatePhaseV1::Installed,
+            0,
+            MacPublisherServiceStatePhaseV1::RetirementPrecommitted
+        ) | (
+            MacPublisherServiceStatePhaseV1::RetirementPrecommitted,
+            3,
+            MacPublisherServiceStatePhaseV1::Retired
+        )
+    );
+    if !transition_is_valid {
+        bail!("publisher service-state phase transition is invalid");
+    }
+    let (registered, present) = match phase {
+        MacPublisherServiceStatePhaseV1::Installed
+        | MacPublisherServiceStatePhaseV1::RetirementPrecommitted => (true, true),
+        MacPublisherServiceStatePhaseV1::Retired => (false, false),
+        MacPublisherServiceStatePhaseV1::InstallPrecommitted => {
+            bail!("publisher service-state cannot transition back to install precommit")
+        }
+    };
+    Ok(MacPublisherServiceStateRecordV1 {
+        phase,
+        registration_observed: registered,
+        files_observed_present: present,
+        record_revision: current
+            .record_revision
+            .checked_add(1)
+            .ok_or_else(|| anyhow::anyhow!("publisher service-state revision overflow"))?,
+        previous_record_sha256: Some(mac_publisher_service_state_record_sha256_v1(current)?),
+        ..current.clone()
+    })
+}
+
+#[cfg(target_os = "macos")]
+fn mac_service_state_response_v1(
+    status: &str,
+    record: &MacPublisherServiceStateRecordV1,
+) -> Result<Value> {
+    Ok(json!({
+        "launchd_domain": "system",
+        "record_sha256": mac_publisher_service_state_record_sha256_v1(record)?,
+        "service_label": MAC_MACH_SERVICE_V1,
+        "status": status,
+    }))
+}
+
+#[cfg(target_os = "macos")]
+fn mac_revalidate_publisher_service_record_authority_v1(
+    admission: &MacPublisherControlAdmissionV1,
+    record: &MacPublisherServiceStateRecordV1,
+) -> Result<()> {
+    if record.scope_id != admission.scope_id
+        || record.bootstrap_authorization_sha256 != admission.bootstrap_authorization_sha256
+        || record.bootstrap_attempt_locator_account != admission.bootstrap_attempt_locator_account
+    {
+        bail!("publisher service receipt does not join the current protected admission");
+    }
+    let locator = mac_read_bootstrap_attempt_locator_by_account_v1(
+        &record.bootstrap_attempt_locator_account,
+    )?;
+    if locator.terminal_state != "Completed"
+        || locator.scope_id != record.scope_id
+        || locator.bootstrap_authorization_sha256 != record.bootstrap_authorization_sha256
+        || locator.install_provenance_sha256 != record.install_provenance_sha256
+        || locator.initial_anchor_sha256.as_deref() != Some(record.initial_anchor_sha256.as_str())
+        || locator.protected_state_sha256.as_deref() != Some(record.protected_state_sha256.as_str())
+        || locator.capsule_sha256.as_deref() != Some(record.stage_one_capsule_sha256.as_str())
+    {
+        bail!("publisher service receipt does not exact-join its completed bootstrap locator");
+    }
+    let capsule = open_mac_lima_stage_one_capsule_v1(&record.scope_id)?.ok_or_else(|| {
+        anyhow::anyhow!("publisher service receipt has no retained Stage-1 capsule")
+    })?;
+    let initial_capsule = MacLimaStageOneCapsuleV1 {
+        state: "Issued".to_string(),
+        capsule_revision: 1,
+        prepared_protected_state_sha256: None,
+        rendered_profile_file_identity: None,
+        observation: None,
+        ..capsule.clone()
+    };
+    if sha256_hex_bootstrap_v1(&canonical_mac_lima_stage_one_capsule_v1(&initial_capsule)?)
+        != record.stage_one_capsule_sha256
+        || capsule.scope_id != record.scope_id
+        || capsule.bootstrap_authorization_sha256 != record.bootstrap_authorization_sha256
+        || capsule.install_provenance_sha256 != record.install_provenance_sha256
+        || capsule.initial_anchor_sha256 != record.initial_anchor_sha256
+        || capsule.pre_pm_manifest.manifest_sha256 != locator.pre_pm_manifest_sha256
+        || capsule.stage_one_authorization.requester_principal != locator.requester_principal
+        || capsule.stage_one_authorization.attempt_id != locator.attempt_id
+        || capsule.stage_one_authorization.source_commit != locator.source_commit
+        || capsule.stage_one_authorization.source_tree != locator.source_tree
+        || capsule.stage_one_authorization.source_ref != locator.source_ref
+    {
+        bail!("publisher service retained Stage-1 capsule does not reconstruct its signed initial state");
+    }
+    let intent_account = mac_keychain_bootstrap_intent_account_v1(&record.scope_id)?;
+    let intent =
+        mac_keychain_read_item_v1(MAC_KEYCHAIN_SERVICE_V1, &intent_account)?.ok_or_else(|| {
+            anyhow::anyhow!("publisher service receipt has no retained bootstrap intent")
+        })?;
+    let control_authority_sha256 =
+        mac_publisher_control_authority_sha256_v1(&admission.control_authority)?;
+    let executor_evidence_sha256 =
+        sha256_hex_bootstrap_v1(&canonical_bootstrap_json_bytes_v1(&serde_json::to_value(
+            &capsule
+                .stage_one_authorization
+                .successor_template
+                .executor_build_evidence,
+        )?)?);
+    let key_spki_sha256 = sha256_hex_bootstrap_v1(&mac_open_system_keychain_p256_spki_der_v1(
+        &record.scope_id,
+    )?);
+    let expected_intent = canonical_bootstrap_json_bytes_v1(&json!({
+        "schema_owner": "substrate.mac-publisher-bootstrap-intent",
+        "schema_version": 1,
+        "scope_id": record.scope_id,
+        "authority_domain": locator.authority_domain,
+        "host_context_commitment": locator.host_context_commitment,
+        "platform_mapping_commitment": capsule.pre_pm_manifest.platform_mapping_commitment,
+        "manifest_generation": capsule.pre_pm_manifest.manifest_generation,
+        "manifest_sha256": capsule.pre_pm_manifest.manifest_sha256,
+        "requester_principal": locator.requester_principal,
+        "attempt_nonce": locator.attempt_id,
+        "authorization_sha256": record.bootstrap_authorization_sha256,
+        "control_authority_sha256": control_authority_sha256,
+        "executor_evidence_sha256": executor_evidence_sha256,
+        "key_spki_sha256": key_spki_sha256,
+        "state": "Completed",
+    }))?;
+    if intent != expected_intent
+        || sha256_hex_bootstrap_v1(&intent) != record.bootstrap_intent_sha256
+    {
+        bail!("publisher service receipt does not exact-join its completed bootstrap intent");
+    }
+    Ok(())
+}
+
+#[cfg(target_os = "macos")]
+fn mac_launchctl_bootstrap_publisher_v1() -> Result<std::process::ExitStatus> {
+    Command::new("/bin/launchctl")
+        .arg("bootstrap")
+        .arg("system")
+        .arg(MAC_PUBLISHER_PLIST_PATH_V1)
+        .env_clear()
+        .stdin(Stdio::null())
+        .stdout(Stdio::null())
+        .stderr(Stdio::null())
+        .status()
+        .context("execute fixed system-domain publisher bootstrap")
+}
+
+#[cfg(target_os = "macos")]
+fn execute_closed_mac_publisher_service_state_install_v1() -> Result<Value> {
+    mac_require_service_state_root_v1()?;
+    let admission = mac_verified_control_admission_v1()?;
+    let (files, artifacts) = mac_observe_publisher_service_files_v1()?;
+    let artifacts = artifacts
+        .as_ref()
+        .ok_or_else(|| anyhow::anyhow!("publisher service install fixed files are not exact"))?;
+    let account = mac_publisher_service_state_account_v1(&admission.scope_id)?;
+    let _guard = mac_keychain_durable_cas_guard_v1(&account)?;
+    let observed = mac_read_publisher_service_state_record_v1(&admission.scope_id)?;
+    let registration = mac_observe_publisher_registration_v1();
+    if let Some((record, _)) = &observed {
+        mac_revalidate_publisher_service_record_authority_v1(&admission, record)?;
+        let provenance_sha256 = sha256_hex_bootstrap_v1(
+            &canonical_mac_publisher_install_provenance_v1(&artifacts.provenance_record)?,
+        );
+        if record.bootstrap_authorization_sha256 != admission.bootstrap_authorization_sha256
+            || record.helper != artifacts.helper
+            || record.plist != artifacts.plist
+            || record.provenance != artifacts.provenance
+            || record.install_provenance_sha256 != provenance_sha256
+        {
+            bail!("publisher service receipt does not exact-join retained files and authority");
+        }
+        let retained_observation = mac_service_record_observation_v1(Some(record), None);
+        match classify_mac_publisher_service_install_v1(registration, files, retained_observation) {
+            MacPublisherServiceInstallDecisionV1::IdempotentSuccess => {
+                return mac_service_state_response_v1("installed", record)
+            }
+            MacPublisherServiceInstallDecisionV1::BootstrapFromPrecommit => {}
+            _ => {
+                bail!(
+                    "publisher service retained receipt is preserving-blocked: registration={registration:?} files={files:?} record={retained_observation:?}"
+                )
+            }
+        }
+    } else if registration != MacPublisherServiceRegistrationObservationV1::Absent {
+        bail!("publisher service without a receipt is not definitely absent: {registration:?}");
+    }
+
+    let state = open_system_keychain_protected_state_for_scope_v1(&admission.scope_id)?
+        .ok_or_else(|| anyhow::anyhow!("publisher service install has no protected state"))?;
+    let capsule = open_mac_lima_stage_one_capsule_v1(&admission.scope_id)?
+        .ok_or_else(|| anyhow::anyhow!("publisher service install has no Stage-1 capsule"))?;
+    let expected =
+        mac_build_publisher_install_precommit_v1(&admission, &state, &capsule, artifacts)?;
+    let record_observation =
+        mac_service_record_observation_v1(observed.as_ref().map(|value| &value.0), Some(&expected));
+    let decision =
+        classify_mac_publisher_service_install_v1(registration, files, record_observation);
+    let precommit = match decision {
+        MacPublisherServiceInstallDecisionV1::PrecommitAndBootstrap => {
+            mac_cas_publisher_service_state_record_v1(&admission.scope_id, None, &expected)?;
+            expected
+        }
+        MacPublisherServiceInstallDecisionV1::BootstrapFromPrecommit => observed
+            .as_ref()
+            .ok_or_else(|| anyhow::anyhow!("publisher service precommit disappeared"))?
+            .0
+            .clone(),
+        MacPublisherServiceInstallDecisionV1::IdempotentSuccess => {
+            return mac_service_state_response_v1(
+                "installed",
+                &observed
+                    .as_ref()
+                    .ok_or_else(|| anyhow::anyhow!("publisher service receipt disappeared"))?
+                    .0,
+            )
+        }
+        MacPublisherServiceInstallDecisionV1::PreserveAndStop => {
+            bail!(
+                "publisher service install prestate is preserving-blocked: registration={registration:?} files={files:?} record={record_observation:?}"
+            )
+        }
+    };
+
+    let (rechecked_files, rechecked_artifacts) = mac_observe_publisher_service_files_v1()?;
+    if rechecked_files != MacPublisherServiceFilesObservationV1::Exact
+        || rechecked_artifacts.as_ref().is_none_or(|value| {
+            value.helper != precommit.helper
+                || value.plist != precommit.plist
+                || value.provenance != precommit.provenance
+        })
+    {
+        bail!("publisher service fixed files changed after precommit");
+    }
+    let effect = mac_launchctl_bootstrap_publisher_v1()?;
+    let registration_after = mac_observe_publisher_registration_v1();
+    if !effect.success()
+        || registration_after != MacPublisherServiceRegistrationObservationV1::Registered
+    {
+        bail!(
+            "publisher service bootstrap did not reach a committable observation; preserving precommit: exit={effect:?} registration={registration_after:?}"
+        );
+    }
+    let (files_after, artifacts_after) = mac_observe_publisher_service_files_v1()?;
+    if files_after != MacPublisherServiceFilesObservationV1::Exact
+        || artifacts_after.as_ref().is_none_or(|value| {
+            value.helper != precommit.helper
+                || value.plist != precommit.plist
+                || value.provenance != precommit.provenance
+        })
+    {
+        bail!("publisher service files changed after observed bootstrap effect");
+    }
+    let installed = mac_transition_publisher_service_record_v1(
+        &precommit,
+        MacPublisherServiceStatePhaseV1::Installed,
+    )?;
+    let precommit_bytes = canonical_mac_publisher_service_state_record_v1(&precommit)?;
+    mac_cas_publisher_service_state_record_v1(
+        &admission.scope_id,
+        Some(&precommit_bytes),
+        &installed,
+    )?;
+    mac_service_state_response_v1("installed", &installed)
+}
+
+#[cfg(target_os = "macos")]
+fn mac_launchctl_bootout_publisher_v1() -> Result<std::process::ExitStatus> {
+    Command::new("/bin/launchctl")
+        .arg("bootout")
+        .arg(MAC_PUBLISHER_SERVICE_TARGET_V1)
+        .env_clear()
+        .stdin(Stdio::null())
+        .stdout(Stdio::null())
+        .stderr(Stdio::null())
+        .status()
+        .context("execute fixed system-domain publisher bootout")
+}
+
+#[cfg(target_os = "macos")]
+fn mac_revalidate_publisher_retirement_files_v1(
+    record: &MacPublisherServiceStateRecordV1,
+) -> Result<[bool; 3]> {
+    canonical_mac_publisher_service_state_record_v1(record)?;
+    if record.phase != MacPublisherServiceStatePhaseV1::RetirementPrecommitted {
+        bail!("publisher service file retirement lacks its protected precommit");
+    }
+    let paths = [
+        Path::new(MAC_PUBLISHER_PLIST_PATH_V1),
+        Path::new(MAC_PUBLISHER_HELPER_PATH_V1),
+        Path::new(MAC_BOOTSTRAP_PROVENANCE_PATH_V1),
+    ];
+    let mut present = [false; 3];
+    for (index, path) in paths.iter().enumerate() {
+        present[index] = mac_fixed_path_exists_v1(path)?;
+        if !present[index] {
+            if index >= usize::from(record.retirement_delete_cursor) {
+                bail!(
+                    "publisher service retirement found an absent file before protected deletion authorization: {}",
+                    path.display()
+                );
+            }
+            continue;
+        }
+        match index {
+            0 => {
+                let (identity, bytes) = mac_measure_fixed_service_file_v1(path, 0o644)?;
+                if identity != record.plist || bytes != MAC_PUBLISHER_PLIST_BYTES_V1 {
+                    bail!("publisher service retirement refuses a mismatched fixed plist");
+                }
+            }
+            1 => {
+                let (mut identity, _) = mac_measure_fixed_service_file_v1(path, 0o755)?;
+                let measured = mac_measure_bootstrap_image_v1(path)?;
+                identity.code_identity = Some(measured.code_identity);
+                identity.code_requirement = record.helper.code_requirement.clone();
+                if measured.artifact_sha256 != identity.artifact_sha256
+                    || measured.artifact_identity != identity.physical_identity
+                    || identity != record.helper
+                {
+                    bail!("publisher service retirement refuses a mismatched fixed helper");
+                }
+                let requirement = record.helper.code_requirement.as_ref().ok_or_else(|| {
+                    anyhow::anyhow!("publisher service receipt has no helper code requirement")
+                })?;
+                let verification = Command::new("/usr/bin/codesign")
+                    .arg("--verify")
+                    .arg("--strict")
+                    .arg(format!("-R={requirement}"))
+                    .arg("--")
+                    .arg(path)
+                    .env_clear()
+                    .stdin(Stdio::null())
+                    .stdout(Stdio::null())
+                    .stderr(Stdio::null())
+                    .status()
+                    .context("reverify receipted publisher helper code requirement")?;
+                if !verification.success() {
+                    bail!(
+                        "publisher service retirement helper fails its receipted code requirement"
+                    );
+                }
+            }
+            2 => {
+                let (identity, bytes) = mac_measure_fixed_service_file_v1(path, 0o444)?;
+                let provenance: MacPublisherInstallProvenanceV1 = serde_json::from_slice(&bytes)
+                    .context("decode receipted install provenance")?;
+                validate_mac_publisher_install_provenance_v1(&provenance)?;
+                let canonical = canonical_mac_publisher_install_provenance_v1(&provenance)?;
+                if identity != record.provenance
+                    || canonical != bytes
+                    || sha256_hex_bootstrap_v1(&canonical) != record.install_provenance_sha256
+                    || provenance.launch_daemon_plist_sha256 != record.plist.artifact_sha256
+                    || provenance.executor_image.artifact_sha256 != record.helper.artifact_sha256
+                    || provenance.executor_image.physical_identity
+                        != record.helper.physical_identity
+                    || Some(&provenance.executor_image.code_identity)
+                        != record.helper.code_identity.as_ref()
+                    || Some(&provenance.executor_image.code_requirement)
+                        != record.helper.code_requirement.as_ref()
+                {
+                    bail!("publisher service retirement refuses mismatched install provenance");
+                }
+            }
+            _ => unreachable!("fixed publisher retirement path index"),
+        }
+    }
+    Ok(present)
+}
+
+#[cfg(target_os = "macos")]
+fn mac_advance_publisher_retirement_cursor_v1(
+    current: &MacPublisherServiceStateRecordV1,
+) -> Result<MacPublisherServiceStateRecordV1> {
+    canonical_mac_publisher_service_state_record_v1(current)?;
+    if current.phase != MacPublisherServiceStatePhaseV1::RetirementPrecommitted
+        || current.retirement_delete_cursor >= 3
+    {
+        bail!("publisher service retirement cursor cannot advance");
+    }
+    Ok(MacPublisherServiceStateRecordV1 {
+        record_revision: current
+            .record_revision
+            .checked_add(1)
+            .ok_or_else(|| anyhow::anyhow!("publisher service-state revision overflow"))?,
+        retirement_delete_cursor: current.retirement_delete_cursor + 1,
+        previous_record_sha256: Some(mac_publisher_service_state_record_sha256_v1(current)?),
+        ..current.clone()
+    })
+}
+
+#[cfg(target_os = "macos")]
+fn mac_resume_exact_publisher_service_file_retirement_v1(
+    scope_id: &str,
+    current: &mut MacPublisherServiceStateRecordV1,
+    record_bytes: &mut Vec<u8>,
+) -> Result<()> {
+    let paths = [
+        MAC_PUBLISHER_PLIST_PATH_V1,
+        MAC_PUBLISHER_HELPER_PATH_V1,
+        MAC_BOOTSTRAP_PROVENANCE_PATH_V1,
+    ];
+    for (index, path) in paths.iter().enumerate() {
+        mac_revalidate_publisher_retirement_files_v1(current)?;
+        if usize::from(current.retirement_delete_cursor) == index {
+            let next = mac_advance_publisher_retirement_cursor_v1(current)?;
+            *record_bytes = mac_cas_publisher_service_state_record_v1(
+                scope_id,
+                Some(record_bytes.as_slice()),
+                &next,
+            )?;
+            *current = next;
+        } else if usize::from(current.retirement_delete_cursor) < index {
+            bail!("publisher service retirement cursor skipped a fixed path");
+        }
+        let rechecked = mac_revalidate_publisher_retirement_files_v1(current)?;
+        if rechecked[index] {
+            fs::remove_file(path).with_context(|| format!("remove exact receipted file {path}"))?;
+            let parent = Path::new(path)
+                .parent()
+                .ok_or_else(|| anyhow::anyhow!("fixed receipted file has no parent"))?;
+            fs::File::open(parent)
+                .with_context(|| format!("open receipted file parent {}", parent.display()))?
+                .sync_all()
+                .with_context(|| format!("sync receipted file parent {}", parent.display()))?;
+        }
+    }
+    if current.retirement_delete_cursor != 3
+        || mac_revalidate_publisher_retirement_files_v1(current)? != [false; 3]
+    {
+        bail!("publisher service retirement did not prove all receipted files absent");
+    }
+    Ok(())
+}
+
+#[cfg(target_os = "macos")]
+fn execute_closed_mac_publisher_service_state_retirement_v1() -> Result<Value> {
+    mac_require_service_state_root_v1()?;
+    let admission = mac_verified_control_admission_v1()?;
+    let account = mac_publisher_service_state_account_v1(&admission.scope_id)?;
+    let _guard = mac_keychain_durable_cas_guard_v1(&account)?;
+    let observed = mac_read_publisher_service_state_record_v1(&admission.scope_id)?;
+    let (record, mut record_bytes) = observed
+        .ok_or_else(|| anyhow::anyhow!("publisher service retirement has no committed receipt"))?;
+    if record.bootstrap_authorization_sha256 != admission.bootstrap_authorization_sha256 {
+        bail!("publisher service retirement receipt does not join retained authority");
+    }
+    mac_revalidate_publisher_service_record_authority_v1(&admission, &record)?;
+    let (files, artifacts) = mac_observe_publisher_service_files_v1()?;
+    let record_observation = match files {
+        MacPublisherServiceFilesObservationV1::Exact => {
+            let artifacts = artifacts.as_ref().ok_or_else(|| {
+                anyhow::anyhow!("publisher service exact file observation lost identities")
+            })?;
+            if artifacts.helper != record.helper
+                || artifacts.plist != record.plist
+                || artifacts.provenance != record.provenance
+                || sha256_hex_bootstrap_v1(&canonical_mac_publisher_install_provenance_v1(
+                    &artifacts.provenance_record,
+                )?) != record.install_provenance_sha256
+            {
+                MacPublisherServiceRecordObservationV1::Mismatched
+            } else {
+                mac_service_record_observation_v1(Some(&record), None)
+            }
+        }
+        _ => mac_service_record_observation_v1(Some(&record), None),
+    };
+    let registration = mac_observe_publisher_registration_v1();
+    let decision = if record.phase == MacPublisherServiceStatePhaseV1::RetirementPrecommitted
+        && registration == MacPublisherServiceRegistrationObservationV1::Absent
+    {
+        MacPublisherServiceRetirementDecisionV1::DeleteExactFiles
+    } else if record.phase == MacPublisherServiceStatePhaseV1::RetirementPrecommitted
+        && record.retirement_delete_cursor != 0
+    {
+        MacPublisherServiceRetirementDecisionV1::PreserveAndStop
+    } else {
+        classify_mac_publisher_service_retirement_v1(registration, files, record_observation)
+    };
+    let mut current = record;
+    match decision {
+        MacPublisherServiceRetirementDecisionV1::PrecommitAndBootout => {
+            let next = mac_transition_publisher_service_record_v1(
+                &current,
+                MacPublisherServiceStatePhaseV1::RetirementPrecommitted,
+            )?;
+            record_bytes = mac_cas_publisher_service_state_record_v1(
+                &admission.scope_id,
+                Some(&record_bytes),
+                &next,
+            )?;
+            current = next;
+            let effect = mac_launchctl_bootout_publisher_v1()?;
+            if !effect.success() {
+                bail!(
+                    "publisher service bootout failed; preserving retirement precommit: {effect:?}"
+                );
+            }
+        }
+        MacPublisherServiceRetirementDecisionV1::BootoutFromPrecommit => {
+            let effect = mac_launchctl_bootout_publisher_v1()?;
+            if !effect.success() {
+                bail!(
+                    "publisher service bootout failed; preserving retirement precommit: {effect:?}"
+                );
+            }
+        }
+        MacPublisherServiceRetirementDecisionV1::DeleteExactFiles
+        | MacPublisherServiceRetirementDecisionV1::CommitRetired => {}
+        MacPublisherServiceRetirementDecisionV1::IdempotentSuccess => {
+            return mac_service_state_response_v1("retired", &current)
+        }
+        MacPublisherServiceRetirementDecisionV1::PreserveAndStop => {
+            bail!(
+                "publisher service retirement prestate is preserving-blocked: registration={registration:?} files={files:?} record={record_observation:?}"
+            )
+        }
+    }
+
+    let registration_after = mac_observe_publisher_registration_v1();
+    if registration_after != MacPublisherServiceRegistrationObservationV1::Absent {
+        bail!(
+            "publisher service bootout has no definite absent observation: {registration_after:?}"
+        );
+    }
+    mac_resume_exact_publisher_service_file_retirement_v1(
+        &admission.scope_id,
+        &mut current,
+        &mut record_bytes,
+    )?;
+    let (files_final, _) = mac_observe_publisher_service_files_v1()?;
+    if files_final != MacPublisherServiceFilesObservationV1::Absent
+        || mac_observe_publisher_registration_v1()
+            != MacPublisherServiceRegistrationObservationV1::Absent
+    {
+        bail!("publisher service retirement final absence proof failed");
+    }
+    let retired = mac_transition_publisher_service_record_v1(
+        &current,
+        MacPublisherServiceStatePhaseV1::Retired,
+    )?;
+    mac_cas_publisher_service_state_record_v1(&admission.scope_id, Some(&record_bytes), &retired)?;
+    mac_service_state_response_v1("retired", &retired)
+}
+
+#[cfg(not(target_os = "macos"))]
+fn execute_closed_mac_publisher_service_state_install_v1() -> Result<Value> {
+    bail!("publisher service-state install is unavailable off macOS")
+}
+
+#[cfg(not(target_os = "macos"))]
+fn execute_closed_mac_publisher_service_state_retirement_v1() -> Result<Value> {
+    bail!("publisher service-state retirement is unavailable off macOS")
+}
+
 fn mac_bootstrap_evidence_sha256_v1(
     authorization: &PublisherBootstrapAuthorizationV1,
 ) -> Result<String> {
@@ -1033,6 +2069,23 @@ fn mac_keychain_bootstrap_attempt_locator_account_v1(attempt_key_sha256: &str) -
     Ok(format!(
         "mac-publisher-bootstrap-attempt-locator-v1:{attempt_key_sha256}"
     ))
+}
+
+fn mac_read_bootstrap_attempt_locator_by_account_v1(
+    account: &str,
+) -> Result<MacPublisherBootstrapAttemptLocatorV1> {
+    let bytes = mac_keychain_read_item_v1(MAC_KEYCHAIN_SERVICE_V1, account)?
+        .ok_or_else(|| anyhow::anyhow!("publisher service receipt has no bootstrap locator"))?;
+    let locator: MacPublisherBootstrapAttemptLocatorV1 =
+        serde_json::from_slice(&bytes).context("decode publisher service bootstrap locator")?;
+    validate_mac_publisher_bootstrap_attempt_locator_v1(&locator)?;
+    if canonical_mac_publisher_bootstrap_attempt_locator_v1(&locator)? != bytes
+        || mac_keychain_bootstrap_attempt_locator_account_v1(&locator.attempt_key_sha256)?
+            != account
+    {
+        bail!("publisher service bootstrap locator does not match its protected account");
+    }
+    Ok(locator)
 }
 
 fn mac_bootstrap_attempt_key_v1(
@@ -1554,6 +2607,7 @@ fn mac_transition_bootstrap_intent_v1(
 fn mac_preflight_control_admission_authority_v1(
     authority: &MacPublisherControlAuthorityV1,
     authorization_sha256: &str,
+    bootstrap_attempt_locator_account: &str,
     manifest_generation: u64,
     manifest_sha256: &str,
     current_state: Option<&LifecyclePublisherProtectedStateV1>,
@@ -1570,6 +2624,7 @@ fn mac_preflight_control_admission_authority_v1(
     if canonical_mac_publisher_control_admission_v1(&existing)? != bytes
         || existing.control_authority != *authority
         || existing.bootstrap_authorization_sha256 != authorization_sha256
+        || existing.bootstrap_attempt_locator_account != bootstrap_attempt_locator_account
         || existing.manifest_generation != manifest_generation
         || existing.manifest_sha256 != manifest_sha256
     {
@@ -1640,6 +2695,7 @@ fn replace_mac_control_admission_authority_v1(next: &MacPublisherControlAdmissio
         || existing.scope_id != next.scope_id
         || existing.control_authority != next.control_authority
         || existing.bootstrap_authorization_sha256 != next.bootstrap_authorization_sha256
+        || existing.bootstrap_attempt_locator_account != next.bootstrap_attempt_locator_account
         || (!cross_generation && !same_generation)
         || next.state_revision != next_revision
     {
@@ -2520,11 +3576,15 @@ fn bootstrap_mac_publisher_from_authorized_fd3_v1(
     let authorization_sha256 = publisher_bootstrap_authorization_sha256_v1(authorization)?;
     let control_authority_sha256 = mac_publisher_control_authority_sha256_v1(control_authority)?;
     let executor_evidence_sha256 = mac_bootstrap_evidence_sha256_v1(authorization)?;
+    let (attempt_key_sha256, _, _) = mac_bootstrap_attempt_key_v1(authorization, provenance)?;
+    let bootstrap_attempt_locator_account =
+        mac_keychain_bootstrap_attempt_locator_account_v1(&attempt_key_sha256)?;
     let state_before =
         read_system_keychain_protected_state_for_scope_unbound_v1(&authorization.scope_id)?;
     mac_preflight_control_admission_authority_v1(
         control_authority,
         &authorization_sha256,
+        &bootstrap_attempt_locator_account,
         authorization.manifest_generation,
         &authorization.manifest_sha256,
         state_before.as_ref(),
@@ -2600,13 +3660,13 @@ fn bootstrap_mac_publisher_from_authorized_fd3_v1(
     };
     emit_mac_bootstrap_milestone_v1(milestones_started, "executor.anchor.ready");
     emit_mac_bootstrap_milestone_v1(milestones_started, "executor.protected_state.ready");
-
     let admission = MacPublisherControlAdmissionV1 {
         schema_owner: "substrate.mac-publisher-control-admission".to_string(),
         schema_version: 1,
         scope_id: authorization.scope_id.clone(),
         control_authority: control_authority.clone(),
         bootstrap_authorization_sha256: authorization_sha256.clone(),
+        bootstrap_attempt_locator_account,
         manifest_generation: authorization.manifest_generation,
         manifest_sha256: authorization.manifest_sha256.clone(),
         current_anchor_sha256: lifecycle_anchor_sha256_v1(&state.current_anchor)?,
@@ -2987,6 +4047,35 @@ mod tests {
                 expected
             );
         }
+    }
+
+    #[cfg(target_os = "macos")]
+    #[test]
+    fn launchctl_print_exit_classifier_preserves_non_not_found_failures() {
+        use std::os::unix::process::ExitStatusExt as _;
+
+        assert_eq!(
+            mac_classify_publisher_registration_exit_v1(&std::process::ExitStatus::from_raw(0)),
+            MacPublisherServiceRegistrationObservationV1::Registered
+        );
+        assert_eq!(
+            mac_classify_publisher_registration_exit_v1(&std::process::ExitStatus::from_raw(
+                113 << 8
+            )),
+            MacPublisherServiceRegistrationObservationV1::Absent
+        );
+        for code in [1, 64, 69, 70, 78, 112, 114, 255] {
+            assert_eq!(
+                mac_classify_publisher_registration_exit_v1(&std::process::ExitStatus::from_raw(
+                    code << 8
+                )),
+                MacPublisherServiceRegistrationObservationV1::Indeterminate
+            );
+        }
+        assert_eq!(
+            mac_classify_publisher_registration_exit_v1(&std::process::ExitStatus::from_raw(9)),
+            MacPublisherServiceRegistrationObservationV1::Indeterminate
+        );
     }
 
     #[cfg(target_os = "macos")]
@@ -4663,6 +5752,7 @@ fn resume_mac_lima_stage_one_after_protected_state_cas_v1(
         scope_id: capsule.scope_id.clone(),
         control_authority: admission.control_authority.clone(),
         bootstrap_authorization_sha256: capsule.bootstrap_authorization_sha256.clone(),
+        bootstrap_attempt_locator_account: admission.bootstrap_attempt_locator_account.clone(),
         manifest_generation: next_manifest.manifest_generation,
         manifest_sha256: next_manifest.manifest_sha256.clone(),
         current_anchor_sha256: lifecycle_anchor_sha256_v1(&state.current_anchor)?,
@@ -5057,12 +6147,28 @@ fn execute_closed_mac_lima_stage_one_effect_v1(
             Some(&protected_state),
             &next_state,
         )?;
+        let prior_admission_bytes =
+            mac_keychain_read_item_v1(MAC_KEYCHAIN_SERVICE_V1, MAC_CONTROL_ADMISSION_ACCOUNT_V1)?
+                .ok_or_else(|| {
+                anyhow::anyhow!("Stage-1 transition has no retained control admission")
+            })?;
+        let prior_admission: MacPublisherControlAdmissionV1 =
+            serde_json::from_slice(&prior_admission_bytes)
+                .context("decode Stage-1 retained control admission")?;
+        if canonical_mac_publisher_control_admission_v1(&prior_admission)? != prior_admission_bytes
+            || prior_admission.scope_id != capsule.scope_id
+            || prior_admission.bootstrap_authorization_sha256
+                != capsule.bootstrap_authorization_sha256
+        {
+            bail!("Stage-1 retained control admission changed before successor projection");
+        }
         let admission = MacPublisherControlAdmissionV1 {
             schema_owner: "substrate.mac-publisher-control-admission".to_string(),
             schema_version: 1,
             scope_id: capsule.scope_id.clone(),
             control_authority: mac_verified_control_authority_v1()?,
             bootstrap_authorization_sha256: capsule.bootstrap_authorization_sha256.clone(),
+            bootstrap_attempt_locator_account: prior_admission.bootstrap_attempt_locator_account,
             manifest_generation: next_manifest.manifest_generation,
             manifest_sha256: next_manifest.manifest_sha256.clone(),
             current_anchor_sha256: lifecycle_anchor_sha256_v1(&next_state.current_anchor)?,
@@ -10144,13 +11250,6 @@ struct MacXpcTestBlockV1 {
 }
 
 #[cfg(all(test, target_os = "macos"))]
-#[repr(C)]
-struct MacXpcTestPeerBlockV1 {
-    block: MacXpcTestBlockV1,
-    peer: *mut core::ffi::c_void,
-}
-
-#[cfg(all(test, target_os = "macos"))]
 static MAC_XPC_TEST_LISTENER_BLOCK_DESCRIPTOR_V1: MacXpcTestBlockDescriptorV1 =
     MacXpcTestBlockDescriptorV1 {
         reserved: 0,
@@ -10161,7 +11260,7 @@ static MAC_XPC_TEST_LISTENER_BLOCK_DESCRIPTOR_V1: MacXpcTestBlockDescriptorV1 =
 static MAC_XPC_TEST_PEER_BLOCK_DESCRIPTOR_V1: MacXpcTestBlockDescriptorV1 =
     MacXpcTestBlockDescriptorV1 {
         reserved: 0,
-        size: std::mem::size_of::<MacXpcTestPeerBlockV1>(),
+        size: std::mem::size_of::<MacXpcTestBlockV1>(),
     };
 
 #[cfg(all(test, target_os = "macos"))]
@@ -10188,17 +11287,17 @@ unsafe extern "C" fn mac_xpc_test_listener_event_v1(
     if event.is_null() || xpc_get_type(event) != std::ptr::addr_of!(_xpc_type_connection).cast() {
         return;
     }
-    let mut peer_block = MacXpcTestPeerBlockV1 {
-        block: mac_xpc_test_block_v1(
-            mac_xpc_test_peer_event_v1,
-            &MAC_XPC_TEST_PEER_BLOCK_DESCRIPTOR_V1,
-        ),
-        peer: event,
-    };
-    xpc_connection_set_event_handler(
-        event,
-        (&mut peer_block.block as *mut MacXpcTestBlockV1).cast(),
+    let mut peer_block = mac_xpc_test_block_v1(
+        mac_xpc_test_peer_event_v1,
+        &MAC_XPC_TEST_PEER_BLOCK_DESCRIPTOR_V1,
     );
+    let owned = _Block_copy((&mut peer_block as *mut MacXpcTestBlockV1).cast());
+    if owned.is_null() {
+        xpc_connection_cancel(event);
+        return;
+    }
+    xpc_connection_set_event_handler(event, owned);
+    _Block_release(owned);
     xpc_connection_activate(event);
 }
 
@@ -10213,7 +11312,7 @@ unsafe extern "C" fn mac_xpc_test_peer_event_v1(
     {
         return;
     }
-    let peer = (*(block as *mut MacXpcTestPeerBlockV1)).peer;
+    let peer = xpc_dictionary_get_remote_connection(event);
     let response = xpc_dictionary_create_reply(event);
     if peer.is_null() || response.is_null() {
         return;
@@ -10239,10 +11338,14 @@ unsafe fn probe_unprivileged_healthy_xpc_listener_v1() -> Result<Vec<u8>> {
         mac_xpc_test_listener_event_v1,
         &MAC_XPC_TEST_LISTENER_BLOCK_DESCRIPTOR_V1,
     );
-    xpc_connection_set_event_handler(
-        listener,
-        (&mut listener_block as *mut MacXpcTestBlockV1).cast(),
-    );
+    let owned = _Block_copy((&mut listener_block as *mut MacXpcTestBlockV1).cast());
+    if owned.is_null() {
+        xpc_connection_cancel(listener);
+        xpc_release(listener);
+        bail!("copy ephemeral XPC listener block");
+    }
+    xpc_connection_set_event_handler(listener, owned);
+    _Block_release(owned);
     xpc_connection_activate(listener);
     let endpoint = xpc_endpoint_create(listener);
     if endpoint.is_null() {
@@ -11225,12 +12328,6 @@ mod mac_xpc_listener_ffi_v1 {
         descriptor: *const BlockDescriptorV1,
     }
 
-    #[repr(C)]
-    struct PeerBlockV1 {
-        block: BlockV1,
-        peer: *mut core::ffi::c_void,
-    }
-
     static LISTENER_BLOCK_DESCRIPTOR_V1: BlockDescriptorV1 = BlockDescriptorV1 {
         reserved: 0,
         size: std::mem::size_of::<BlockV1>(),
@@ -11238,11 +12335,13 @@ mod mac_xpc_listener_ffi_v1 {
 
     static PEER_BLOCK_DESCRIPTOR_V1: BlockDescriptorV1 = BlockDescriptorV1 {
         reserved: 0,
-        size: std::mem::size_of::<PeerBlockV1>(),
+        size: std::mem::size_of::<BlockV1>(),
     };
 
     pub(super) unsafe fn peer_audit_token(peer: *mut core::ffi::c_void) -> [u32; 8] {
-        xpc_connection_get_audit_token(peer).values
+        let mut token = MacAuditTokenFfiV1 { values: [0; 8] };
+        xpc_connection_get_audit_token(peer, &mut token);
+        token.values
     }
 
     unsafe fn block_v1(
@@ -11258,6 +12357,19 @@ mod mac_xpc_listener_ffi_v1 {
         }
     }
 
+    unsafe fn install_event_handler_v1(
+        connection: *mut core::ffi::c_void,
+        block: *mut BlockV1,
+    ) -> bool {
+        let owned = _Block_copy(block.cast());
+        if owned.is_null() {
+            return false;
+        }
+        xpc_connection_set_event_handler(connection, owned);
+        _Block_release(owned);
+        true
+    }
+
     pub(super) unsafe fn run(service: &str) -> Result<()> {
         use std::ffi::CString;
         const XPC_CONNECTION_MACH_SERVICE_LISTENER_V1: u64 = 1 << 0;
@@ -11271,7 +12383,11 @@ mod mac_xpc_listener_ffi_v1 {
             bail!("unable to create fixed macOS XPC listener");
         }
         let mut listener_block = block_v1(listener_event, &LISTENER_BLOCK_DESCRIPTOR_V1);
-        xpc_connection_set_event_handler(listener, (&mut listener_block as *mut BlockV1).cast());
+        if !install_event_handler_v1(listener, &mut listener_block) {
+            xpc_connection_cancel(listener);
+            xpc_release(listener);
+            bail!("copy fixed macOS XPC listener block");
+        }
         xpc_connection_activate(listener);
         dispatch_main();
     }
@@ -11291,14 +12407,14 @@ mod mac_xpc_listener_ffi_v1 {
             xpc_connection_cancel(event);
             return;
         }
-        let mut peer_block = PeerBlockV1 {
-            block: block_v1(peer_event, &PEER_BLOCK_DESCRIPTOR_V1),
-            peer: event,
-        };
-        xpc_connection_set_event_handler(event, (&mut peer_block.block as *mut BlockV1).cast());
+        let mut peer_block = block_v1(peer_event, &PEER_BLOCK_DESCRIPTOR_V1);
+        if !install_event_handler_v1(event, &mut peer_block) {
+            xpc_connection_cancel(event);
+            return;
+        }
         xpc_connection_activate(event);
-        // XPC copies the stack block when registering the handler. The peer is retained by XPC
-        // until it is invalid, so no caller-controlled pointer crosses this boundary.
+        // The registered block captures no connection pointer. Each dictionary carries its
+        // XPC-owned remote connection, so the handler never outlives a raw stack capture.
     }
 
     unsafe extern "C" fn peer_event(block: *mut BlockV1, event: *mut core::ffi::c_void) {
@@ -11308,7 +12424,7 @@ mod mac_xpc_listener_ffi_v1 {
         {
             return;
         }
-        let peer = (*(block as *mut PeerBlockV1)).peer;
+        let peer = xpc_dictionary_get_remote_connection(event);
         let response = xpc_dictionary_create_reply(event);
         if peer.is_null() || response.is_null() {
             return;
@@ -11512,7 +12628,10 @@ unsafe extern "C" {
         connection: *mut core::ffi::c_void,
         requirement: *const core::ffi::c_char,
     ) -> i32;
-    fn xpc_connection_get_audit_token(connection: *mut core::ffi::c_void) -> MacAuditTokenFfiV1;
+    fn xpc_connection_get_audit_token(
+        connection: *mut core::ffi::c_void,
+        token: *mut MacAuditTokenFfiV1,
+    );
     fn xpc_connection_activate(connection: *mut core::ffi::c_void);
     fn xpc_connection_cancel(connection: *mut core::ffi::c_void);
     fn xpc_connection_send_message(
@@ -11525,6 +12644,9 @@ unsafe extern "C" {
     ) -> *mut core::ffi::c_void;
     fn xpc_dictionary_create_empty() -> *mut core::ffi::c_void;
     fn xpc_dictionary_create_reply(message: *mut core::ffi::c_void) -> *mut core::ffi::c_void;
+    fn xpc_dictionary_get_remote_connection(
+        dictionary: *mut core::ffi::c_void,
+    ) -> *mut core::ffi::c_void;
     #[cfg(test)]
     fn xpc_endpoint_create(connection: *mut core::ffi::c_void) -> *mut core::ffi::c_void;
     fn xpc_dictionary_set_string(

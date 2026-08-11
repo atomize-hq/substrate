@@ -1826,6 +1826,8 @@ publish_mac_publisher_install_provenance_v1() {
   local control_src_identity
   local executor_src_sha
   local executor_src_identity
+  local plist_src_sha
+  local plist_src_identity
   local cargo_lock_sha
   local rust_toolchain
   local fixed_build_command="cargo build --locked --offline --target aarch64-unknown-linux-gnu --release -p substrate --bin substrate-lifecycle-linux -p world-service --bin world-service -p substrate-gateway --bin substrate-gateway -p substrate --bin substrate"
@@ -1889,8 +1891,14 @@ publish_mac_publisher_install_provenance_v1() {
     || fatal "cannot measure macOS lifecycle executor source"
   executor_src_identity="$(stat -f 'dev:%d:ino:%i' -- "${executor_src}")" \
     || fatal "cannot identify macOS lifecycle executor source"
+  plist_src_sha="$(shasum -a 256 -- "${launch_daemon_src}" | awk '{print $1}')" \
+    || fatal "cannot measure macOS lifecycle LaunchDaemon source"
+  plist_src_identity="$(stat -f 'dev:%d:ino:%i' -- "${launch_daemon_src}")" \
+    || fatal "cannot identify macOS lifecycle LaunchDaemon source"
   [[ "${control_src_sha}" =~ ^[0-9a-f]{64}$ && "${executor_src_sha}" =~ ^[0-9a-f]{64}$ && \
-     "${control_src_identity}" == dev:*:ino:* && "${executor_src_identity}" == dev:*:ino:* ]] \
+     "${plist_src_sha}" =~ ^[0-9a-f]{64}$ && \
+     "${control_src_identity}" == dev:*:ino:* && "${executor_src_identity}" == dev:*:ino:* && \
+     "${plist_src_identity}" == dev:*:ino:* ]] \
     || fatal "macOS lifecycle source measurement is not canonical"
 
   source_commit="$(git rev-parse HEAD)" || fatal "cannot resolve installer source commit"
@@ -1935,6 +1943,8 @@ retained_substrate_sha="${26}"
 retained_substrate_identity="${27}"
 installer_account="${28}"
 installer_uid="${29}"
+plist_expected_sha="${30}"
+plist_expected_identity="${31}"
 provenance_path="/Library/Application Support/Substrate/lifecycle/bootstrap-provenance.v1.json"
 executor_path="/Library/PrivilegedHelperTools/com.substrate.lifecycle.publisher.v1"
 plist_path="/Library/LaunchDaemons/com.substrate.lifecycle.publisher.v1.plist"
@@ -1981,6 +1991,10 @@ test "$(sha "$executor_src")" = "$executor_expected_sha" && \
   test "$(identity "$executor_src")" = "$executor_expected_identity" || {
     printf "retained executor source changed before privileged provenance copy\n" >&2; exit 1;
   }
+test "$(sha "$plist_src")" = "$plist_expected_sha" && \
+  test "$(identity "$plist_src")" = "$plist_expected_identity" || {
+    printf "retained LaunchDaemon source changed before privileged publication\n" >&2; exit 1;
+  }
 require_root_owned_immutable_path() {
   retained_path="$1"
   case "$retained_path" in
@@ -2018,12 +2032,60 @@ limactl_home_mode="$(stat -f '%Lp' /var/empty)"
 test "$limactl_home_owner" -eq 0 && test $((0$limactl_home_mode & 022)) -eq 0 || {
   printf "privileged limactl HOME is not root-controlled state: /var/empty\n" >&2; exit 1;
 }
-install -d -o root -g wheel -m 0755 /Library/PrivilegedHelperTools
-install -d -o root -g wheel -m 0755 /Library/LaunchDaemons
-install -d -o root -g wheel -m 0755 "/Library/Application Support/Substrate"
-install -d -o root -g wheel -m 0755 "/Library/Application Support/Substrate/lifecycle"
-install -o root -g wheel -m 0755 "$executor_src" "$executor_path"
-install -o root -g wheel -m 0644 "$plist_src" "$plist_path"
+fixed_present_count=0
+for fixed_path in "$executor_path" "$plist_path" "$provenance_path"; do
+  if test -e "$fixed_path" || test -L "$fixed_path"; then
+    fixed_present_count=$((fixed_present_count + 1))
+  fi
+done
+test "$fixed_present_count" -eq 0 || test "$fixed_present_count" -eq 3 || {
+  printf "publisher fixed paths are a partial ambiguous prestate; preserving all state\n" >&2
+  exit 1
+}
+if test "$fixed_present_count" -eq 0; then
+  "$control_src" publisher-service-state-preflight-absent >/dev/null || {
+    printf "fresh publisher file publication requires a definitely absent system service\n" >&2
+    exit 1
+  }
+fi
+ensure_root_directory() {
+  directory="$1"
+  required_mode="$2"
+  if test -e "$directory" || test -L "$directory"; then
+    test -d "$directory" && test ! -L "$directory" && \
+      test "$(stat -f '%u' "$directory")" -eq 0 && \
+      test "$(stat -f '%g' "$directory")" -eq 0 && \
+      test "$(stat -f '%Lp' "$directory")" = "$required_mode" || {
+        printf "publisher fixed directory is foreign or mismatched: %s\n" "$directory" >&2
+        exit 1
+      }
+  else
+    install -d -o root -g wheel -m "0$required_mode" "$directory"
+  fi
+}
+ensure_root_directory /Library/PrivilegedHelperTools 755
+ensure_root_directory /Library/LaunchDaemons 755
+ensure_root_directory "/Library/Application Support/Substrate" 755
+ensure_root_directory "/Library/Application Support/Substrate/lifecycle" 755
+if test "$fixed_present_count" -eq 0; then
+  install -o root -g wheel -m 0755 "$executor_src" "$executor_path"
+  install -o root -g wheel -m 0644 "$plist_src" "$plist_path"
+else
+  for fixed_spec in "$executor_path:$executor_expected_sha:755" "$plist_path:$plist_expected_sha:644"; do
+    IFS=: read -r fixed_path fixed_sha fixed_mode <<EOF
+$fixed_spec
+EOF
+    test -f "$fixed_path" && test ! -L "$fixed_path" && \
+      test "$(stat -f '%l' "$fixed_path")" -eq 1 && \
+      test "$(stat -f '%u' "$fixed_path")" -eq 0 && \
+      test "$(stat -f '%g' "$fixed_path")" -eq 0 && \
+      test "$(stat -f '%Lp' "$fixed_path")" = "$fixed_mode" && \
+      test "$(sha "$fixed_path")" = "$fixed_sha" || {
+        printf "publisher fixed file is foreign or mismatched: %s\n" "$fixed_path" >&2
+        exit 1
+      }
+  done
+fi
 test "$(sha "$executor_path")" = "$executor_expected_sha" || {
   printf "privileged executor copy does not match pre-elevation digest\n" >&2; exit 1;
 }
@@ -2147,6 +2209,7 @@ sync "$(dirname "$provenance_path")"
     "${retained_gateway_sha}" "${retained_gateway_identity}" \
     "${retained_substrate_sha}" "${retained_substrate_identity}" \
     "${INSTALL_BOOTSTRAP_ACCOUNT}" "${INSTALL_BOOTSTRAP_UID}" \
+    "${plist_src_sha}" "${plist_src_identity}" \
     || fatal "failed to publish root-owned exact macOS publisher install provenance"
 }
 
@@ -2783,6 +2846,28 @@ except Exception:
     raise SystemExit("invalid direct publisher-bootstrap response")
 PY
 )" || fatal "direct publisher-bootstrap returned an invalid Stage-1 result"
+  publisher_service_state_response="$("${BIN_DIR}/substrate-lifecycle-control" publisher-service-state-install)" \
+    || fatal "closed publisher service-state install did not register the fixed system service"
+  python3 - "${publisher_service_state_response}" <<'PY' >/dev/null || \
+    fatal "closed publisher service-state install returned a non-canonical result"
+import json
+import re
+import sys
+
+try:
+    response = json.loads(sys.argv[1])
+    required = {"launchd_domain", "record_sha256", "service_label", "status"}
+    if not isinstance(response, dict) or set(response) != required:
+        raise ValueError()
+    if (response["launchd_domain"] != "system"
+            or response["service_label"] != "com.substrate.lifecycle.publisher.v1"
+            or response["status"] != "installed"
+            or not isinstance(response["record_sha256"], str)
+            or not re.fullmatch(r"[0-9a-f]{64}", response["record_sha256"])):
+        raise ValueError()
+except Exception:
+    raise SystemExit(1)
+PY
   lima_warm_env=(LIMA_BUILD_PROFILE="${PROFILE}")
   if [[ "${ENABLE_WORLD_NETFILTER}" -eq 1 ]]; then
     lima_warm_env+=(SUBSTRATE_WORLD_NETFILTER_ENABLE=1)

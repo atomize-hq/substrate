@@ -457,6 +457,164 @@ pub struct MacPublisherInstallProvenanceV1 {
     pub profile_template_sha256: String,
 }
 
+/// One descriptor-measured fixed file owned by the closed macOS publisher service transition.
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]
+#[serde(deny_unknown_fields)]
+pub struct MacPublisherServiceFileIdentityV1 {
+    pub path: String,
+    pub artifact_sha256: String,
+    pub physical_identity: String,
+    pub owner_uid: u32,
+    pub group_gid: u32,
+    pub mode: String,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub code_identity: Option<String>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub code_requirement: Option<String>,
+}
+
+/// Durable phase of the fixed system-domain launchd registration transaction.
+#[derive(Debug, Clone, Copy, Serialize, Deserialize, PartialEq, Eq)]
+#[serde(rename_all = "snake_case")]
+pub enum MacPublisherServiceStatePhaseV1 {
+    InstallPrecommitted,
+    Installed,
+    RetirementPrecommitted,
+    Retired,
+}
+
+/// Protected CAS/receipt for the one fixed macOS publisher LaunchDaemon.
+///
+/// The record deliberately contains no action, command, label selector, domain selector, or path
+/// selector. Every such value is validated against the compiled fixed operation before use.
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]
+#[serde(deny_unknown_fields)]
+pub struct MacPublisherServiceStateRecordV1 {
+    pub schema_owner: String,
+    pub schema_version: u32,
+    pub scope_id: String,
+    pub bootstrap_authorization_sha256: String,
+    pub bootstrap_intent_sha256: String,
+    pub initial_anchor_sha256: String,
+    pub protected_state_sha256: String,
+    pub stage_one_capsule_sha256: String,
+    pub install_provenance_sha256: String,
+    pub bootstrap_attempt_locator_account: String,
+    pub service_label: String,
+    pub launchd_domain: String,
+    pub program_arguments: Vec<String>,
+    pub mach_services: Vec<String>,
+    pub helper: MacPublisherServiceFileIdentityV1,
+    pub plist: MacPublisherServiceFileIdentityV1,
+    pub provenance: MacPublisherServiceFileIdentityV1,
+    pub phase: MacPublisherServiceStatePhaseV1,
+    pub registration_observed: bool,
+    pub files_observed_present: bool,
+    pub record_revision: u64,
+    /// Number of fixed retirement paths whose absence has been durably authorized in the
+    /// protected CAS chain. The executor advances this cursor before unlinking each fixed path.
+    pub retirement_delete_cursor: u8,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub previous_record_sha256: Option<String>,
+}
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum MacPublisherServiceRegistrationObservationV1 {
+    Absent,
+    Registered,
+    Indeterminate,
+}
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum MacPublisherServiceFilesObservationV1 {
+    Absent,
+    Exact,
+    Ambiguous,
+}
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum MacPublisherServiceRecordObservationV1 {
+    None,
+    InstallIntentMatching,
+    InstallPrecommittedMatching,
+    InstalledMatching,
+    RetirementPrecommittedMatching,
+    RetiredMatching,
+    Mismatched,
+}
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum MacPublisherServiceInstallDecisionV1 {
+    PrecommitAndBootstrap,
+    BootstrapFromPrecommit,
+    IdempotentSuccess,
+    PreserveAndStop,
+}
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum MacPublisherServiceRetirementDecisionV1 {
+    PrecommitAndBootout,
+    BootoutFromPrecommit,
+    DeleteExactFiles,
+    CommitRetired,
+    IdempotentSuccess,
+    PreserveAndStop,
+}
+
+pub fn classify_mac_publisher_service_install_v1(
+    registration: MacPublisherServiceRegistrationObservationV1,
+    files: MacPublisherServiceFilesObservationV1,
+    record: MacPublisherServiceRecordObservationV1,
+) -> MacPublisherServiceInstallDecisionV1 {
+    use MacPublisherServiceFilesObservationV1 as Files;
+    use MacPublisherServiceInstallDecisionV1 as Decision;
+    use MacPublisherServiceRecordObservationV1 as Record;
+    use MacPublisherServiceRegistrationObservationV1 as Registration;
+
+    match (registration, files, record) {
+        (Registration::Absent, Files::Exact, Record::InstallIntentMatching) => {
+            Decision::PrecommitAndBootstrap
+        }
+        (Registration::Absent, Files::Exact, Record::InstallPrecommittedMatching) => {
+            Decision::BootstrapFromPrecommit
+        }
+        (Registration::Registered, Files::Exact, Record::InstalledMatching) => {
+            Decision::IdempotentSuccess
+        }
+        _ => Decision::PreserveAndStop,
+    }
+}
+
+pub fn classify_mac_publisher_service_retirement_v1(
+    registration: MacPublisherServiceRegistrationObservationV1,
+    files: MacPublisherServiceFilesObservationV1,
+    record: MacPublisherServiceRecordObservationV1,
+) -> MacPublisherServiceRetirementDecisionV1 {
+    use MacPublisherServiceFilesObservationV1 as Files;
+    use MacPublisherServiceRecordObservationV1 as Record;
+    use MacPublisherServiceRegistrationObservationV1 as Registration;
+    use MacPublisherServiceRetirementDecisionV1 as Decision;
+
+    match (registration, files, record) {
+        (Registration::Registered, Files::Exact, Record::InstalledMatching) => {
+            Decision::PrecommitAndBootout
+        }
+        (Registration::Registered, Files::Exact, Record::RetirementPrecommittedMatching) => {
+            Decision::BootoutFromPrecommit
+        }
+        (Registration::Absent, Files::Exact, Record::RetirementPrecommittedMatching) => {
+            Decision::DeleteExactFiles
+        }
+        (Registration::Absent, Files::Absent, Record::RetirementPrecommittedMatching) => {
+            Decision::CommitRetired
+        }
+        (Registration::Absent, Files::Absent, Record::RetiredMatching) => {
+            Decision::IdempotentSuccess
+        }
+        _ => Decision::PreserveAndStop,
+    }
+}
+
 /// Fixed global Keychain admission record.  It binds a measured peer to the current signed
 /// anchor and protected-state revision before any XPC request bytes can be decoded.
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]
@@ -467,6 +625,7 @@ pub struct MacPublisherControlAdmissionV1 {
     pub scope_id: String,
     pub control_authority: MacPublisherControlAuthorityV1,
     pub bootstrap_authorization_sha256: String,
+    pub bootstrap_attempt_locator_account: String,
     pub manifest_generation: u64,
     pub manifest_sha256: String,
     pub current_anchor_sha256: String,
@@ -1865,6 +2024,9 @@ pub fn validate_mac_publisher_control_admission_v1(
         &admission.bootstrap_authorization_sha256,
         "macOS control admission bootstrap_authorization_sha256",
     )?;
+    validate_mac_publisher_bootstrap_locator_account_v1(
+        &admission.bootstrap_attempt_locator_account,
+    )?;
     if admission.manifest_generation == 0 {
         bail!("macOS control admission manifest_generation must be positive");
     }
@@ -1877,6 +2039,14 @@ pub fn validate_mac_publisher_control_admission_v1(
         "macOS control admission current_anchor_sha256",
     )?;
     Ok(())
+}
+
+fn validate_mac_publisher_bootstrap_locator_account_v1(account: &str) -> Result<()> {
+    const PREFIX: &str = "mac-publisher-bootstrap-attempt-locator-v1:";
+    let digest = account
+        .strip_prefix(PREFIX)
+        .ok_or_else(|| anyhow!("macOS bootstrap locator account has a non-fixed prefix"))?;
+    require_hex_digest(digest, "macOS bootstrap locator account digest")
 }
 
 pub fn canonical_mac_publisher_control_admission_v1(
@@ -2941,6 +3111,177 @@ pub fn canonical_mac_publisher_bootstrap_request_v1(
         bail!("macOS publisher bootstrap request has no exact IH carrier");
     }
     canonical_json_to_vec(request).context("encode macOS publisher bootstrap request")
+}
+
+pub fn canonical_mac_publisher_service_state_record_v1(
+    record: &MacPublisherServiceStateRecordV1,
+) -> Result<Vec<u8>> {
+    validate_mac_publisher_service_state_record_v1(record)?;
+    canonical_json_to_vec(record).context("encode macOS publisher service-state record")
+}
+
+pub fn mac_publisher_service_state_record_sha256_v1(
+    record: &MacPublisherServiceStateRecordV1,
+) -> Result<String> {
+    Ok(lower_hex(&Sha256::digest(
+        canonical_mac_publisher_service_state_record_v1(record)?,
+    )))
+}
+
+pub fn validate_mac_publisher_service_state_record_v1(
+    record: &MacPublisherServiceStateRecordV1,
+) -> Result<()> {
+    require_schema(
+        &record.schema_owner,
+        record.schema_version,
+        "substrate.mac-publisher-service-state",
+        1,
+    )?;
+    require_uuid_v7(&record.scope_id, "macOS publisher service-state scope_id")?;
+    for (value, field) in [
+        (
+            &record.bootstrap_authorization_sha256,
+            "bootstrap_authorization_sha256",
+        ),
+        (&record.bootstrap_intent_sha256, "bootstrap_intent_sha256"),
+        (&record.initial_anchor_sha256, "initial_anchor_sha256"),
+        (&record.protected_state_sha256, "protected_state_sha256"),
+        (&record.stage_one_capsule_sha256, "stage_one_capsule_sha256"),
+        (
+            &record.install_provenance_sha256,
+            "install_provenance_sha256",
+        ),
+    ] {
+        require_hex_digest(value, field)?;
+    }
+    validate_mac_publisher_bootstrap_locator_account_v1(&record.bootstrap_attempt_locator_account)?;
+    const LABEL: &str = "com.substrate.lifecycle.publisher.v1";
+    const HELPER: &str = "/Library/PrivilegedHelperTools/com.substrate.lifecycle.publisher.v1";
+    const PLIST: &str = "/Library/LaunchDaemons/com.substrate.lifecycle.publisher.v1.plist";
+    const PROVENANCE: &str =
+        "/Library/Application Support/Substrate/lifecycle/bootstrap-provenance.v1.json";
+    if record.service_label != LABEL
+        || record.launchd_domain != "system"
+        || record.program_arguments != [HELPER.to_string(), "run-publisher".to_string()]
+        || record.mach_services != [LABEL.to_string()]
+        || record.helper.path != HELPER
+        || record.plist.path != PLIST
+        || record.provenance.path != PROVENANCE
+    {
+        bail!("macOS publisher service-state record contains a non-fixed launchd identity");
+    }
+    validate_mac_publisher_service_file_identity_v1(
+        &record.helper,
+        "0755",
+        true,
+        "publisher helper",
+    )?;
+    validate_mac_publisher_service_file_identity_v1(
+        &record.plist,
+        "0644",
+        false,
+        "publisher plist",
+    )?;
+    validate_mac_publisher_service_file_identity_v1(
+        &record.provenance,
+        "0444",
+        false,
+        "publisher provenance",
+    )?;
+    if let Some(previous) = &record.previous_record_sha256 {
+        require_hex_digest(previous, "service-state previous_record_sha256")?;
+    }
+    let (expected_revision, expected_cursor, expected_observation, require_previous) =
+        match record.phase {
+            MacPublisherServiceStatePhaseV1::InstallPrecommitted => (1, 0, (false, true), false),
+            MacPublisherServiceStatePhaseV1::Installed => (2, 0, (true, true), true),
+            MacPublisherServiceStatePhaseV1::RetirementPrecommitted => {
+                if record.retirement_delete_cursor > 3 {
+                    bail!("macOS publisher service-state retirement cursor is invalid");
+                }
+                (
+                    3 + u64::from(record.retirement_delete_cursor),
+                    record.retirement_delete_cursor,
+                    (true, true),
+                    true,
+                )
+            }
+            MacPublisherServiceStatePhaseV1::Retired => (7, 3, (false, false), true),
+        };
+    if record.record_revision != expected_revision
+        || record.retirement_delete_cursor != expected_cursor
+        || record.previous_record_sha256.is_some() != require_previous
+    {
+        bail!("macOS publisher service-state phase and revision chain conflict");
+    };
+    if (record.registration_observed, record.files_observed_present) != expected_observation {
+        bail!("macOS publisher service-state phase and observations conflict");
+    }
+    let mut expected = record.clone();
+    expected.phase = MacPublisherServiceStatePhaseV1::InstallPrecommitted;
+    expected.registration_observed = false;
+    expected.files_observed_present = true;
+    expected.record_revision = 1;
+    expected.retirement_delete_cursor = 0;
+    expected.previous_record_sha256 = None;
+    let target_revision = record.record_revision;
+    while expected.record_revision < target_revision {
+        let previous = lower_hex(&Sha256::digest(canonical_json_to_vec(&expected)?));
+        expected.record_revision += 1;
+        expected.previous_record_sha256 = Some(previous);
+        match expected.record_revision {
+            2 => {
+                expected.phase = MacPublisherServiceStatePhaseV1::Installed;
+                expected.registration_observed = true;
+            }
+            3..=6 => {
+                expected.phase = MacPublisherServiceStatePhaseV1::RetirementPrecommitted;
+                expected.retirement_delete_cursor = (expected.record_revision - 3) as u8;
+            }
+            7 => {
+                expected.phase = MacPublisherServiceStatePhaseV1::Retired;
+                expected.registration_observed = false;
+                expected.files_observed_present = false;
+                expected.retirement_delete_cursor = 3;
+            }
+            _ => bail!("macOS publisher service-state revision is outside the fixed chain"),
+        }
+    }
+    if expected != *record {
+        bail!("macOS publisher service-state predecessor hash chain is invalid");
+    }
+    Ok(())
+}
+
+fn validate_mac_publisher_service_file_identity_v1(
+    identity: &MacPublisherServiceFileIdentityV1,
+    expected_mode: &str,
+    require_code_identity: bool,
+    field: &str,
+) -> Result<()> {
+    require_hex_digest(
+        &identity.artifact_sha256,
+        &format!("{field} artifact_sha256"),
+    )?;
+    require_nonempty_no_nul(
+        &identity.physical_identity,
+        &format!("{field} physical_identity"),
+    )?;
+    if identity.owner_uid != 0 || identity.group_gid != 0 || identity.mode != expected_mode {
+        bail!("{field} is not the fixed root:wheel mode");
+    }
+    if require_code_identity {
+        for (value, name) in [
+            (identity.code_identity.as_deref(), "code_identity"),
+            (identity.code_requirement.as_deref(), "code_requirement"),
+        ] {
+            let value = value.ok_or_else(|| anyhow!("{field} lacks {name}"))?;
+            require_nonempty_no_nul(value, &format!("{field} {name}"))?;
+        }
+    } else if identity.code_identity.is_some() || identity.code_requirement.is_some() {
+        bail!("{field} must not carry executable code identity");
+    }
+    Ok(())
 }
 
 pub fn parse_mac_publisher_bootstrap_request_v1(

@@ -49,6 +49,11 @@ use substrate_shell::{
 
 const BOOTSTRAP_CONFIRMATION_LITERAL_V1: &str = "CREATE EXACT SUBSTRATE LIFECYCLE PUBLISHER";
 const GUEST_PAIRING_LITERAL_V1: &str = "PAIR EXACT SUBSTRATE GUEST PUBLISHER";
+#[cfg(target_os = "macos")]
+const MAC_PUBLISHER_HELPER_PATH_V1: &str =
+    "/Library/PrivilegedHelperTools/com.substrate.lifecycle.publisher.v1";
+#[cfg(target_os = "macos")]
+const MAC_PUBLISHER_SERVICE_LABEL_V1: &str = "com.substrate.lifecycle.publisher.v1";
 
 pub fn read_exact_bootstrap_confirmation_v1<R, W>(reader: &mut R, writer: &mut W) -> Result<()>
 where
@@ -1049,8 +1054,184 @@ fn open_controlling_terminal_duplex_v1() -> Result<std::fs::File> {
         .with_context(|| format!("open retained controlling terminal at {path}"))
 }
 
+#[cfg(target_os = "macos")]
+fn execute_closed_mac_publisher_service_state_v1(
+    executor_operation: &'static str,
+    expected_status: &'static str,
+) -> Result<Value> {
+    use std::os::fd::{AsRawFd, FromRawFd, OwnedFd};
+    use std::os::unix::process::CommandExt;
+
+    if !matches!(
+        (executor_operation, expected_status),
+        ("--publisher-service-state-install-fd", "installed")
+            | ("--publisher-service-state-retire-fd", "retired")
+    ) {
+        bail!("publisher service-state route is not one of its two fixed operations");
+    }
+    let mut pair = [-1; 2];
+    // SAFETY: socketpair initializes both descriptors on success and ownership transfers below.
+    if unsafe { libc::socketpair(libc::AF_UNIX, libc::SOCK_STREAM, 0, pair.as_mut_ptr()) } != 0 {
+        return Err(std::io::Error::last_os_error())
+            .context("create closed publisher service-state stream pair");
+    }
+    // SAFETY: both descriptors are distinct and solely owned after successful socketpair.
+    let retained = unsafe { OwnedFd::from_raw_fd(pair[0]) };
+    // SAFETY: ownership of the peer descriptor is likewise unique.
+    let peer = unsafe { OwnedFd::from_raw_fd(pair[1]) };
+    for fd in [retained.as_raw_fd(), peer.as_raw_fd()] {
+        // SAFETY: fcntl operates on a live descriptor owned by this function.
+        let flags = unsafe { libc::fcntl(fd, libc::F_GETFD) };
+        if flags < 0
+            // SAFETY: F_SETFD has no pointer argument and the descriptor remains live.
+            || unsafe { libc::fcntl(fd, libc::F_SETFD, flags | libc::FD_CLOEXEC) } != 0
+        {
+            return Err(std::io::Error::last_os_error())
+                .context("harden closed publisher service-state descriptor");
+        }
+    }
+    let retained_fd = retained.as_raw_fd();
+    let peer_fd = peer.as_raw_fd();
+    let mut command = Command::new("/usr/bin/sudo");
+    command
+        .arg("-C")
+        .arg("4")
+        .arg("--")
+        .arg(MAC_PUBLISHER_HELPER_PATH_V1)
+        .arg(executor_operation)
+        .arg("3")
+        .env_clear()
+        .stdin(Stdio::null())
+        .stdout(Stdio::piped())
+        .stderr(Stdio::inherit());
+    // SAFETY: this hook performs only async-signal-safe descriptor operations before exec.
+    unsafe {
+        command.pre_exec(move || {
+            if libc::dup2(peer_fd, 3) != 3 {
+                return Err(std::io::Error::last_os_error());
+            }
+            let flags = libc::fcntl(3, libc::F_GETFD);
+            if flags < 0 || libc::fcntl(3, libc::F_SETFD, flags & !libc::FD_CLOEXEC) != 0 {
+                return Err(std::io::Error::last_os_error());
+            }
+            if retained_fd != 3 {
+                libc::close(retained_fd);
+            }
+            if peer_fd != 3 {
+                libc::close(peer_fd);
+            }
+            Ok(())
+        });
+    }
+    let mut child = command
+        .spawn()
+        .context("launch exact elevated publisher service-state executor")?;
+    drop(peer);
+    // SAFETY: immediate EOF is the only input; no label, path, domain, action, or data is sent.
+    if unsafe { libc::shutdown(retained.as_raw_fd(), libc::SHUT_WR) } != 0 {
+        let _ = child.kill();
+        let _ = child.wait();
+        return Err(std::io::Error::last_os_error())
+            .context("close publisher service-state request direction");
+    }
+    let deadline = Instant::now() + Duration::from_secs(60);
+    let status = loop {
+        if let Some(status) = child
+            .try_wait()
+            .context("poll elevated publisher service-state executor")?
+        {
+            break status;
+        }
+        if Instant::now() >= deadline {
+            let _ = child.kill();
+            let _ = child.wait();
+            bail!("elevated publisher service-state executor exceeded fixed deadline");
+        }
+        std::thread::sleep(Duration::from_millis(20));
+    };
+    let mut bytes = Vec::new();
+    child
+        .stdout
+        .take()
+        .ok_or_else(|| anyhow!("publisher service-state executor stdout was not retained"))?
+        .read_to_end(&mut bytes)
+        .context("read closed publisher service-state response")?;
+    if !status.success() {
+        bail!("elevated publisher service-state executor failed with {status}");
+    }
+    let response: Value =
+        serde_json::from_slice(&bytes).context("decode closed publisher service-state response")?;
+    let object = response
+        .as_object()
+        .ok_or_else(|| anyhow!("publisher service-state response is not an object"))?;
+    if object.len() != 4
+        || object.get("status").and_then(Value::as_str) != Some(expected_status)
+        || object.get("launchd_domain").and_then(Value::as_str) != Some("system")
+        || object.get("service_label").and_then(Value::as_str)
+            != Some(MAC_PUBLISHER_SERVICE_LABEL_V1)
+        || !object
+            .get("record_sha256")
+            .and_then(Value::as_str)
+            .is_some_and(|value| {
+                value.len() == 64
+                    && value
+                        .bytes()
+                        .all(|byte| byte.is_ascii_digit() || (b'a'..=b'f').contains(&byte))
+            })
+    {
+        bail!("publisher service-state response is not the exact closed result");
+    }
+    Ok(response)
+}
+
+#[cfg(target_os = "macos")]
+fn execute_closed_mac_publisher_service_state_install_v1() -> Result<Value> {
+    execute_closed_mac_publisher_service_state_v1(
+        "--publisher-service-state-install-fd",
+        "installed",
+    )
+}
+
+#[cfg(target_os = "macos")]
+fn execute_closed_mac_publisher_service_state_retirement_v1() -> Result<Value> {
+    execute_closed_mac_publisher_service_state_v1("--publisher-service-state-retire-fd", "retired")
+}
+
+#[cfg(target_os = "macos")]
+fn observe_fixed_mac_publisher_service_absent_v1() -> Result<Value> {
+    let domain = Command::new("/bin/launchctl")
+        .arg("print")
+        .arg("system")
+        .env_clear()
+        .stdin(Stdio::null())
+        .stdout(Stdio::null())
+        .stderr(Stdio::null())
+        .status()
+        .context("observe fixed system launchd domain")?;
+    if !domain.success() {
+        bail!("fixed system launchd domain observation is indeterminate");
+    }
+    let service = Command::new("/bin/launchctl")
+        .arg("print")
+        .arg("system/com.substrate.lifecycle.publisher.v1")
+        .env_clear()
+        .stdin(Stdio::null())
+        .stdout(Stdio::null())
+        .stderr(Stdio::null())
+        .status()
+        .context("observe fixed publisher service registration")?;
+    if service.success() || service.code() != Some(113) {
+        bail!("fixed publisher service is registered or indeterminate");
+    }
+    Ok(json!({
+        "launchd_domain": "system",
+        "service_label": MAC_PUBLISHER_SERVICE_LABEL_V1,
+        "status": "absent",
+    }))
+}
+
 fn usage_error_v1() -> Result<()> {
-    bail!("usage: substrate-lifecycle-control <submit-mapped-lifecycle-v1|publisher-bootstrap>")
+    bail!("usage: substrate-lifecycle-control <submit-mapped-lifecycle-v1|publisher-bootstrap|publisher-service-state-preflight-absent|publisher-service-state-install|publisher-service-state-retire>")
 }
 
 fn main_impl_v1() -> Result<()> {
@@ -1064,6 +1245,24 @@ fn main_impl_v1() -> Result<()> {
     }
 
     match command.as_str() {
+        "publisher-service-state-preflight-absent" => {
+            #[cfg(target_os = "macos")]
+            print_json_line_v1(&observe_fixed_mac_publisher_service_absent_v1()?)?;
+            #[cfg(not(target_os = "macos"))]
+            bail!("publisher service-state preflight is available only on macOS");
+        }
+        "publisher-service-state-install" => {
+            #[cfg(target_os = "macos")]
+            print_json_line_v1(&execute_closed_mac_publisher_service_state_install_v1()?)?;
+            #[cfg(not(target_os = "macos"))]
+            bail!("publisher service-state install is available only on macOS");
+        }
+        "publisher-service-state-retire" => {
+            #[cfg(target_os = "macos")]
+            print_json_line_v1(&execute_closed_mac_publisher_service_state_retirement_v1()?)?;
+            #[cfg(not(target_os = "macos"))]
+            bail!("publisher service-state retirement is available only on macOS");
+        }
         "publisher-bootstrap" => {
             // This branch is deliberately before ordinary mapped stdin handling. It admits one
             // canonical *seed* only; the complete bootstrap authorization remains

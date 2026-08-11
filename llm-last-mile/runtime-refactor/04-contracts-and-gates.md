@@ -9643,6 +9643,30 @@ other implicit file/object mutation is forbidden. An action not listed is a deco
 | `mac.publisher.guest-pairing-record(challenge_id)` | System-Keychain service `com.substrate.lifecycle.v1`, account `<scope-id>:guest-pairing:<challenge-id>` | signed generation-CAS host record; terminal consumed record is retained | Create, Replace | MAC |
 | `mac.publisher.mach-service` | fixed `com.substrate.lifecycle.publisher.v1` | non-requestable observed XPC endpoint from fixed plist; owned only by protected publisher bootstrap/retirement service-state transition | none; bootstrap/retirement coupled observation only | MAC |
 | `mac.publisher.service-state` | exact LaunchDaemon `com.substrate.lifecycle.publisher.v1` | internal protected bootstrap/retirement state precommitting and receipting the fixed coupled `mac.publisher.mach-service` | Enable, Disable, Start, Stop, Restore; not an ordinary caller request | MAC |
+
+The macOS installer realizes `mac.publisher.service-state` only after the retained-FD3 direct
+publisher bootstrap has completed and before the first mapped-lifecycle XPC request. The control
+binary sends no serialized request: it passes an EOF-only retained stream through the existing
+fixed `sudo -C 4` executor boundary, and the helper admits the kernel-observed control peer against
+the installed provenance before selecting one of two compiled operations. Installation accepts
+only the exact root:wheel helper, plist, and provenance identities, exact compiled plist bytes,
+completed bootstrap intent, signed initial anchor, and issued Stage-1 capsule. It CAS-precommits the
+fixed System-Keychain service-state record, executes exactly `/bin/launchctl bootstrap system
+/Library/LaunchDaemons/com.substrate.lifecycle.publisher.v1.plist`, observes the definite presence
+of `system/com.substrate.lifecycle.publisher.v1`, remeasures all files, and only then commits the
+installed receipt. `launchctl print` is used only as a success/non-success presence observation;
+its body is never parsed as structured service identity. A registered service with only a
+precommit is an effect-visible/CAS gap and is preserved rather than adopted. The idempotent state
+is registered plus an exact committed receipt plus the exact receipted files; absence with a
+committed installed receipt, an indeterminate observation, or any foreign/partial identity stops.
+
+Retirement CAS-precommits an intent against that exact receipt, executes exactly `/bin/launchctl
+bootout system/com.substrate.lifecycle.publisher.v1`, proves definite absence, deletes only the
+three exact receipted fixed files, proves service and files absent, and finally commits `retired`.
+An interrupted precommit may retry the fixed bootout or continue exact deletion only from the
+corresponding observed state. Foreign, mismatched, ambiguous, or unreceipted state is never
+removed. Neither transition uses `kickstart`, a caller-supplied label/domain/path/action, or a
+generic service-manager API.
 | `mac.lima.instance` | fixed R2-selected instance plus finalized PM machine identity; Create additionally requires its exact protected `LimaStageOneAuthorizationV1` | Lima instance; pre-existing disposition is never removed | Create, Start, Stop, Remove, Restore | MAC |
 | `mac.lima.staged-workspace` | guest fixed `/var/lib/substrate/staged-workspace/current` | closed guest tree; depends on exact PM instance | Create, Replace, Remove, Restore | MAC |
 | `mac.lima.guest-binary(kind)` | guest fixed `/usr/local/bin/substrate-world-service`, `/usr/local/bin/substrate-gateway`, or `/usr/local/bin/substrate` | regular file; depends on mapped instance | Create, Replace, Remove, Restore | MAC |

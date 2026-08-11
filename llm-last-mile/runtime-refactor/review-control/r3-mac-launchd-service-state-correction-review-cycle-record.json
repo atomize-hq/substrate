@@ -1,0 +1,89 @@
+{
+  "schema_version": 1,
+  "packet_id": "AUX-R3-MAC-LAUNCHD-SERVICE-STATE-CORRECTION",
+  "status": "complete",
+  "stop_reason": null,
+  "cycles": [
+    {
+      "cycle_id": "discovery-1",
+      "kind": "discovery",
+      "subject_fingerprint": "sha256:067debad07a4db9d7e52fc09a1447f38bc449129f0c6bc2b70149e973d16296c",
+      "trigger_cycle_id": null,
+      "trigger_finding_ids": [],
+      "causal_evidence_refs": [],
+      "review_refs": [
+        "llm-last-mile/runtime-refactor/review-control/r3-mac-launchd-service-state-correction-review-authority-security.md",
+        "llm-last-mile/runtime-refactor/review-control/r3-mac-launchd-service-state-correction-review-lifecycle-convergence.md",
+        "llm-last-mile/runtime-refactor/review-control/r3-mac-launchd-service-state-correction-review-allowlist-evidence.md"
+      ],
+      "verdict": "findings",
+      "findings": [
+        {
+          "finding_id": "AUX-R3-MAC-LAUNCHD-001",
+          "priority": "P2"
+        },
+        {
+          "finding_id": "AUX-R3-MAC-LAUNCHD-002",
+          "priority": "P2"
+        },
+        {
+          "finding_id": "AUX-R3-MAC-LAUNCHD-003",
+          "priority": "P2"
+        },
+        {
+          "finding_id": "AUX-R3-MAC-LAUNCHD-004",
+          "priority": "P2"
+        },
+        {
+          "finding_id": "AUX-R3-MAC-LAUNCHD-005",
+          "priority": "P2"
+        }
+      ]
+    },
+    {
+      "cycle_id": "closure-1",
+      "kind": "closure",
+      "subject_fingerprint": "sha256:4324888c23f95cdb77b9b1a7461ea308e2a4c3075285deeb1a8327512e2abc34",
+      "trigger_cycle_id": "discovery-1",
+      "trigger_finding_ids": [
+        "AUX-R3-MAC-LAUNCHD-001",
+        "AUX-R3-MAC-LAUNCHD-002",
+        "AUX-R3-MAC-LAUNCHD-003",
+        "AUX-R3-MAC-LAUNCHD-004",
+        "AUX-R3-MAC-LAUNCHD-005"
+      ],
+      "causal_evidence_refs": [],
+      "review_refs": [
+        "llm-last-mile/runtime-refactor/review-control/r3-mac-launchd-service-state-correction-review-authority-security.md",
+        "llm-last-mile/runtime-refactor/review-control/r3-mac-launchd-service-state-correction-review-lifecycle-convergence.md",
+        "llm-last-mile/runtime-refactor/review-control/r3-mac-launchd-service-state-correction-review-allowlist-evidence.md"
+      ],
+      "verdict": "findings",
+      "findings": [
+        {
+          "finding_id": "AUX-R3-MAC-LAUNCHD-006",
+          "priority": "P2"
+        }
+      ]
+    },
+    {
+      "cycle_id": "supplemental-causal-1",
+      "kind": "supplemental_causal",
+      "subject_fingerprint": "sha256:b9dee2fe0beb155838a4a9267ed914090629c6aafa73d675f67cc863c182e5ce",
+      "trigger_cycle_id": "closure-1",
+      "trigger_finding_ids": [
+        "AUX-R3-MAC-LAUNCHD-006"
+      ],
+      "causal_evidence_refs": [
+        "llm-last-mile/runtime-refactor/review-control/r3-mac-launchd-service-state-correction-review-authority-security.md#closure"
+      ],
+      "review_refs": [
+        "llm-last-mile/runtime-refactor/review-control/r3-mac-launchd-service-state-correction-review-authority-security.md",
+        "llm-last-mile/runtime-refactor/review-control/r3-mac-launchd-service-state-correction-review-lifecycle-convergence.md",
+        "llm-last-mile/runtime-refactor/review-control/r3-mac-launchd-service-state-correction-review-allowlist-evidence.md"
+      ],
+      "verdict": "clean",
+      "findings": []
+    }
+  ]
+}

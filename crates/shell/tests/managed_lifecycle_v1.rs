@@ -657,3 +657,482 @@ fn direct_bootstrap_dispatch_is_pre_stdin_and_fd3_only() {
     assert!(receipt_retry.contains("retained Stage-1 receipt is not an exact retry"));
     assert!(receipt_retry.contains("validate_managed_action_receipt_signature_v1"));
 }
+
+#[test]
+fn mac_publisher_service_state_retry_matrix_is_preserving_first() {
+    use substrate_common::{
+        classify_mac_publisher_service_install_v1, classify_mac_publisher_service_retirement_v1,
+        MacPublisherServiceFilesObservationV1 as Files,
+        MacPublisherServiceInstallDecisionV1 as Install,
+        MacPublisherServiceRecordObservationV1 as Record,
+        MacPublisherServiceRegistrationObservationV1 as Registration,
+        MacPublisherServiceRetirementDecisionV1 as Retire,
+    };
+
+    assert_eq!(
+        classify_mac_publisher_service_install_v1(
+            Registration::Absent,
+            Files::Exact,
+            Record::InstallIntentMatching,
+        ),
+        Install::PrecommitAndBootstrap,
+    );
+    assert_eq!(
+        classify_mac_publisher_service_install_v1(
+            Registration::Absent,
+            Files::Exact,
+            Record::InstallPrecommittedMatching,
+        ),
+        Install::BootstrapFromPrecommit,
+    );
+    assert_eq!(
+        classify_mac_publisher_service_install_v1(
+            Registration::Registered,
+            Files::Exact,
+            Record::InstalledMatching,
+        ),
+        Install::IdempotentSuccess,
+    );
+    for (registration, files, record) in [
+        (
+            Registration::Registered,
+            Files::Exact,
+            Record::InstallPrecommittedMatching,
+        ),
+        (
+            Registration::Absent,
+            Files::Exact,
+            Record::InstalledMatching,
+        ),
+        (Registration::Absent, Files::Exact, Record::None),
+        (
+            Registration::Absent,
+            Files::Ambiguous,
+            Record::InstallIntentMatching,
+        ),
+        (
+            Registration::Indeterminate,
+            Files::Exact,
+            Record::InstalledMatching,
+        ),
+        (Registration::Registered, Files::Exact, Record::Mismatched),
+    ] {
+        assert_eq!(
+            classify_mac_publisher_service_install_v1(registration, files, record),
+            Install::PreserveAndStop,
+        );
+    }
+
+    assert_eq!(
+        classify_mac_publisher_service_retirement_v1(
+            Registration::Registered,
+            Files::Exact,
+            Record::InstalledMatching,
+        ),
+        Retire::PrecommitAndBootout,
+    );
+    assert_eq!(
+        classify_mac_publisher_service_retirement_v1(
+            Registration::Registered,
+            Files::Exact,
+            Record::RetirementPrecommittedMatching,
+        ),
+        Retire::BootoutFromPrecommit,
+    );
+    assert_eq!(
+        classify_mac_publisher_service_retirement_v1(
+            Registration::Absent,
+            Files::Exact,
+            Record::RetirementPrecommittedMatching,
+        ),
+        Retire::DeleteExactFiles,
+    );
+    assert_eq!(
+        classify_mac_publisher_service_retirement_v1(
+            Registration::Absent,
+            Files::Absent,
+            Record::RetirementPrecommittedMatching,
+        ),
+        Retire::CommitRetired,
+    );
+    assert_eq!(
+        classify_mac_publisher_service_retirement_v1(
+            Registration::Absent,
+            Files::Absent,
+            Record::RetiredMatching,
+        ),
+        Retire::IdempotentSuccess,
+    );
+    for (registration, files, record) in [
+        (Registration::Registered, Files::Exact, Record::None),
+        (
+            Registration::Registered,
+            Files::Ambiguous,
+            Record::InstalledMatching,
+        ),
+        (
+            Registration::Indeterminate,
+            Files::Exact,
+            Record::InstalledMatching,
+        ),
+        (
+            Registration::Absent,
+            Files::Exact,
+            Record::InstalledMatching,
+        ),
+        (Registration::Registered, Files::Exact, Record::Mismatched),
+    ] {
+        assert_eq!(
+            classify_mac_publisher_service_retirement_v1(registration, files, record),
+            Retire::PreserveAndStop,
+        );
+    }
+}
+
+#[test]
+fn mac_publisher_service_state_record_is_canonical_and_closed() {
+    use substrate_common::{
+        canonical_mac_publisher_service_state_record_v1,
+        mac_publisher_service_state_record_sha256_v1, MacPublisherServiceFileIdentityV1,
+        MacPublisherServiceStatePhaseV1, MacPublisherServiceStateRecordV1,
+    };
+
+    let record = MacPublisherServiceStateRecordV1 {
+        schema_owner: "substrate.mac-publisher-service-state".to_string(),
+        schema_version: 1,
+        scope_id: SCOPE_ID.to_string(),
+        bootstrap_authorization_sha256: "a".repeat(64),
+        bootstrap_intent_sha256: "9".repeat(64),
+        initial_anchor_sha256: "b".repeat(64),
+        protected_state_sha256: "c".repeat(64),
+        stage_one_capsule_sha256: "d".repeat(64),
+        install_provenance_sha256: "e".repeat(64),
+        bootstrap_attempt_locator_account: "mac-publisher-bootstrap-attempt-locator-v1:"
+            .to_string()
+            + &"8".repeat(64),
+        service_label: "com.substrate.lifecycle.publisher.v1".to_string(),
+        launchd_domain: "system".to_string(),
+        program_arguments: vec![
+            "/Library/PrivilegedHelperTools/com.substrate.lifecycle.publisher.v1".to_string(),
+            "run-publisher".to_string(),
+        ],
+        mach_services: vec!["com.substrate.lifecycle.publisher.v1".to_string()],
+        helper: MacPublisherServiceFileIdentityV1 {
+            path: "/Library/PrivilegedHelperTools/com.substrate.lifecycle.publisher.v1".to_string(),
+            artifact_sha256: "f".repeat(64),
+            physical_identity: "dev:1:ino:2".to_string(),
+            owner_uid: 0,
+            group_gid: 0,
+            mode: "0755".to_string(),
+            code_identity: Some("cdhash:0123456789abcdef0123456789abcdef01234567".to_string()),
+            code_requirement: Some(
+                "cdhash H\"0123456789abcdef0123456789abcdef01234567\"".to_string(),
+            ),
+        },
+        plist: MacPublisherServiceFileIdentityV1 {
+            path: "/Library/LaunchDaemons/com.substrate.lifecycle.publisher.v1.plist".to_string(),
+            artifact_sha256: "0".repeat(64),
+            physical_identity: "dev:1:ino:3".to_string(),
+            owner_uid: 0,
+            group_gid: 0,
+            mode: "0644".to_string(),
+            code_identity: None,
+            code_requirement: None,
+        },
+        provenance: MacPublisherServiceFileIdentityV1 {
+            path: "/Library/Application Support/Substrate/lifecycle/bootstrap-provenance.v1.json"
+                .to_string(),
+            artifact_sha256: "1".repeat(64),
+            physical_identity: "dev:1:ino:4".to_string(),
+            owner_uid: 0,
+            group_gid: 0,
+            mode: "0444".to_string(),
+            code_identity: None,
+            code_requirement: None,
+        },
+        phase: MacPublisherServiceStatePhaseV1::InstallPrecommitted,
+        registration_observed: false,
+        files_observed_present: true,
+        record_revision: 1,
+        retirement_delete_cursor: 0,
+        previous_record_sha256: None,
+    };
+    let canonical = canonical_mac_publisher_service_state_record_v1(&record)
+        .expect("canonical service-state record");
+    let decoded: MacPublisherServiceStateRecordV1 =
+        serde_json::from_slice(&canonical).expect("decode canonical record");
+    assert_eq!(decoded, record);
+
+    let installed = MacPublisherServiceStateRecordV1 {
+        phase: MacPublisherServiceStatePhaseV1::Installed,
+        registration_observed: true,
+        record_revision: 2,
+        previous_record_sha256: Some(
+            mac_publisher_service_state_record_sha256_v1(&record).expect("precommit digest"),
+        ),
+        ..record.clone()
+    };
+    canonical_mac_publisher_service_state_record_v1(&installed).expect("installed revision two");
+    let mut predecessor = installed.clone();
+    for cursor in 0_u8..=3 {
+        let retirement = MacPublisherServiceStateRecordV1 {
+            phase: MacPublisherServiceStatePhaseV1::RetirementPrecommitted,
+            record_revision: 3 + u64::from(cursor),
+            retirement_delete_cursor: cursor,
+            previous_record_sha256: Some(
+                mac_publisher_service_state_record_sha256_v1(&predecessor)
+                    .expect("retirement predecessor digest"),
+            ),
+            ..installed.clone()
+        };
+        canonical_mac_publisher_service_state_record_v1(&retirement)
+            .expect("exact retirement cursor revision");
+        predecessor = retirement;
+    }
+    let retired = MacPublisherServiceStateRecordV1 {
+        phase: MacPublisherServiceStatePhaseV1::Retired,
+        registration_observed: false,
+        files_observed_present: false,
+        record_revision: 7,
+        retirement_delete_cursor: 3,
+        previous_record_sha256: Some(
+            mac_publisher_service_state_record_sha256_v1(&predecessor)
+                .expect("retired predecessor digest"),
+        ),
+        ..installed.clone()
+    };
+    canonical_mac_publisher_service_state_record_v1(&retired).expect("retired revision seven");
+
+    for invalid in [
+        MacPublisherServiceStateRecordV1 {
+            service_label: "foreign.label".to_string(),
+            ..record.clone()
+        },
+        MacPublisherServiceStateRecordV1 {
+            launchd_domain: "user/501".to_string(),
+            ..record.clone()
+        },
+        MacPublisherServiceStateRecordV1 {
+            program_arguments: vec!["/bin/sh".to_string(), "-c".to_string()],
+            ..record.clone()
+        },
+        MacPublisherServiceStateRecordV1 {
+            mach_services: vec!["foreign.mach-service".to_string()],
+            ..record.clone()
+        },
+        MacPublisherServiceStateRecordV1 {
+            helper: MacPublisherServiceFileIdentityV1 {
+                path: "/tmp/foreign-helper".to_string(),
+                ..record.helper.clone()
+            },
+            ..record.clone()
+        },
+        MacPublisherServiceStateRecordV1 {
+            bootstrap_intent_sha256: "stale".to_string(),
+            ..record.clone()
+        },
+        MacPublisherServiceStateRecordV1 {
+            bootstrap_attempt_locator_account: "caller-selected".to_string(),
+            ..record.clone()
+        },
+        MacPublisherServiceStateRecordV1 {
+            registration_observed: true,
+            ..record.clone()
+        },
+        MacPublisherServiceStateRecordV1 {
+            phase: MacPublisherServiceStatePhaseV1::Installed,
+            registration_observed: true,
+            record_revision: 1,
+            ..record.clone()
+        },
+        MacPublisherServiceStateRecordV1 {
+            phase: MacPublisherServiceStatePhaseV1::Installed,
+            registration_observed: true,
+            record_revision: 2,
+            previous_record_sha256: Some("2".repeat(64)),
+            ..record.clone()
+        },
+        MacPublisherServiceStateRecordV1 {
+            phase: MacPublisherServiceStatePhaseV1::RetirementPrecommitted,
+            registration_observed: true,
+            record_revision: 4,
+            retirement_delete_cursor: 0,
+            previous_record_sha256: Some("2".repeat(64)),
+            ..record.clone()
+        },
+        MacPublisherServiceStateRecordV1 {
+            phase: MacPublisherServiceStatePhaseV1::Retired,
+            registration_observed: false,
+            files_observed_present: false,
+            record_revision: 7,
+            retirement_delete_cursor: 2,
+            previous_record_sha256: Some("2".repeat(64)),
+            ..record.clone()
+        },
+    ] {
+        assert!(canonical_mac_publisher_service_state_record_v1(&invalid).is_err());
+    }
+
+    let mut unknown = serde_json::to_value(&record).expect("serialize fixture record");
+    unknown
+        .as_object_mut()
+        .expect("record object")
+        .insert("action".to_string(), json!("arbitrary-launchctl"));
+    assert!(serde_json::from_value::<MacPublisherServiceStateRecordV1>(unknown).is_err());
+}
+
+#[test]
+#[ignore = "bounded native macOS launchd demand proof; requires disposable installed state"]
+fn native_mac_publisher_service_demand_admits_control_before_stale_state_rejection() {
+    if !cfg!(target_os = "macos") {
+        return;
+    }
+    let prefix = std::env::var("SUBSTRATE_R3_NATIVE_PREFIX").expect("native proof prefix");
+    let carrier_encoded =
+        std::env::var("SUBSTRATE_R3_NATIVE_CARRIER").expect("native proof carrier");
+    let bootstrap: serde_json::Value = serde_json::from_str(
+        &std::env::var("SUBSTRATE_R3_NATIVE_BOOTSTRAP_RESPONSE")
+            .expect("native proof bootstrap response"),
+    )
+    .expect("decode native bootstrap response");
+    let stage: LimaStageOneAuthorizationV1 = serde_json::from_value(
+        bootstrap
+            .get("lima_stage_one_authorization_v1")
+            .cloned()
+            .expect("native Stage-1 authorization"),
+    )
+    .expect("decode native Stage-1 authorization");
+    let carrier = InstallBootstrapContextCarrierV1::decode(&carrier_encoded)
+        .expect("decode native proof carrier");
+    let mapping = PlatformBootstrapMappingV1::new_lima(
+        &carrier,
+        "substrate-r3-service-proof-never-create",
+        "0123456789abcdef0123456789abcdef",
+        &format!("{prefix}/proof-lima-control"),
+        "/home/proof/.substrate",
+        "proof",
+        501,
+        &format!("{prefix}/proof-agent.sock"),
+        "/run/substrate-proof.sock",
+    )
+    .expect("construct inert native proof mapping");
+    let mapping_encoded = mapping
+        .encode(&carrier)
+        .expect("encode inert proof mapping");
+    let mapping_commitment = format!("{:x}", Sha256::digest(mapping_encoded.as_bytes()));
+    let evidence = stage.successor_template.executor_build_evidence.clone();
+    let scope_id = stage.successor_template.scope_id.clone();
+    let requester = "proof".to_string();
+    let publisher_request = ManagedLifecyclePublisherRequestV1 {
+        host_context_commitment: carrier.host_context_commitment.clone(),
+        platform_mapping_commitment: Some(mapping_commitment.clone()),
+        scope_id: scope_id.clone(),
+        current_anchor_counter: 0,
+        // Deliberately stale but structurally valid: peer admission and request decode occur, then
+        // the protected state join rejects before any Lima effect can be selected.
+        current_anchor_sha256: "0".repeat(64),
+        manifest_generation: bootstrap["manifest_generation"]
+            .as_u64()
+            .expect("native manifest generation"),
+        manifest_sha256: bootstrap["manifest_sha256"]
+            .as_str()
+            .expect("native manifest digest")
+            .to_string(),
+        role: ManagedArtifactRoleV1("mac.lima.instance".to_string()),
+        action: ManagedActionV1::Start,
+        object_identity: ManagedArtifactIdentityV1 {
+            scope_id: scope_id.clone(),
+            parent_identity: "native-proof-no-effect-parent".to_string(),
+            name_identity: "substrate-r3-service-proof-never-create".to_string(),
+            physical_identity: "native-proof-no-effect-identity".to_string(),
+            metadata: None,
+        },
+        requester_principal: requester.clone(),
+        attempt_nonce: "native-proof-stale-state".to_string(),
+        expected_executor_build: ManagedExecutorIdentityV1 {
+            source_commit: evidence.source_commit.clone(),
+            source_tree: evidence.source_tree.clone(),
+            source_ref: evidence.source_ref.clone(),
+            target_triple: evidence.target_triple.clone(),
+            artifact_sha256: evidence.artifact_sha256.clone(),
+            artifact_path: "/Library/PrivilegedHelperTools/com.substrate.lifecycle.publisher.v1"
+                .to_string(),
+            toolchain: None,
+            code_identity: evidence
+                .code_identity
+                .clone()
+                .map(serde_json::Value::String),
+        },
+    };
+    let request = ManagedLifecycleControlRequestV1 {
+        tag: Some(MappedLifecycleTagV1::PostPmAction),
+        authority_domain: "mac_lima_guest".to_string(),
+        scope_id,
+        selected_host_prefix: carrier.context.selected_host_prefix.clone(),
+        requester_principal: requester,
+        host_context_commitment: Some(carrier.host_context_commitment.clone()),
+        platform_mapping_commitment: Some(mapping_commitment),
+        host_platform_control_root: Some(mapping.host_platform_control_root.clone()),
+        manifest: None,
+        action_receipt: None,
+        publisher_protected_state: None,
+        publisher_request: Some(publisher_request),
+        install_bootstrap_context_v1: Some(carrier_encoded),
+        platform_bootstrap_mapping_v1: Some(mapping_encoded),
+        executor_build_evidence: Some(evidence),
+        lima_stage_one_authorization_v1: None,
+        pairing_ticket: None,
+        pairing_session_binding_v1: None,
+        pairing_host_record_generation: None,
+        pairing_record_expected_generation_v1: None,
+        pairing_host_record_sha256: None,
+    };
+    validate_mapped_lifecycle_control_request_v1(&request)
+        .expect("native proof request is structurally admitted before protected-state rejection");
+    let request_bytes = serde_json::to_vec(&request).expect("encode native proof request");
+    if let Ok(path) = std::env::var("SUBSTRATE_R3_NATIVE_REQUEST_OUT") {
+        std::fs::write(path, &request_bytes).expect("write native proof request fixture");
+    }
+    let mut child = std::process::Command::new(format!("{prefix}/bin/substrate-lifecycle-control"))
+        .arg("submit-mapped-lifecycle-v1")
+        .stdin(std::process::Stdio::piped())
+        .stdout(std::process::Stdio::piped())
+        .stderr(std::process::Stdio::piped())
+        .spawn()
+        .expect("spawn installed native proof control");
+    use std::io::Write as _;
+    child
+        .stdin
+        .take()
+        .expect("native proof control stdin")
+        .write_all(&request_bytes)
+        .expect("write native proof control request");
+    let output = child.wait_with_output().expect("wait native proof control");
+    assert!(
+        !output.status.success(),
+        "stale protected-state request must reject"
+    );
+    let diagnostics = String::from_utf8_lossy(&output.stderr);
+    for transport_failure in [
+        "connection-invalid",
+        "connection-interrupted",
+        "peer-code-signing-requirement",
+        "malformed-frame",
+    ] {
+        assert!(
+            !diagnostics.contains(transport_failure),
+            "control peer was not admitted through demand activation: {diagnostics}"
+        );
+    }
+    assert!(
+        diagnostics.contains("audit-token")
+            || diagnostics.contains("protected")
+            // The publisher's rejection envelope deliberately reports audit_token_bound=false;
+            // the client then refuses that envelope before surfacing its protected-state error.
+            // A bounded dictionary reached only after the launchd listener's peer requirement
+            // admitted this exact installed control image, while the transport failures above
+            // prove this was neither absence nor peer-code rejection.
+            || diagnostics.contains("missing peer_code_requirement"),
+        "native proof did not reach admitted protected-state rejection: {diagnostics}"
+    );
+}
