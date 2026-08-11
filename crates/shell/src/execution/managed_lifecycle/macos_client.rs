@@ -1491,6 +1491,62 @@ pub fn issue_guest_publisher_pairing_ticket_v1(
     bail!("guest publisher pairing is not part of the R5 MAC control bridge")
 }
 
+#[cfg(target_os = "macos")]
+#[repr(C)]
+struct MacXpcNoCaptureEventHandlerBlockV1 {
+    isa: *mut core::ffi::c_void,
+    flags: i32,
+    reserved: i32,
+    invoke: unsafe extern "C" fn(*mut MacXpcNoCaptureEventHandlerBlockV1, *mut core::ffi::c_void),
+    descriptor: *const MacXpcNoCaptureEventHandlerBlockDescriptorV1,
+}
+
+#[cfg(target_os = "macos")]
+#[repr(C)]
+struct MacXpcNoCaptureEventHandlerBlockDescriptorV1 {
+    reserved: usize,
+    size: usize,
+}
+
+#[cfg(target_os = "macos")]
+static MAC_XPC_NO_CAPTURE_EVENT_HANDLER_BLOCK_DESCRIPTOR_V1:
+    MacXpcNoCaptureEventHandlerBlockDescriptorV1 = MacXpcNoCaptureEventHandlerBlockDescriptorV1 {
+    reserved: 0,
+    size: std::mem::size_of::<MacXpcNoCaptureEventHandlerBlockV1>(),
+};
+
+/// Register a valid Blocks-ABI event handler before an XPC connection becomes active.
+///
+/// The handler deliberately captures nothing and ignores asynchronous connection errors because
+/// this synchronous client obtains its one result through the reply object. `_Block_copy` makes
+/// a heap-owned handler for registration; XPC retains its own copy before this function releases
+/// ours, so later cancellation cannot invoke a stack-lifetime handler.
+#[cfg(target_os = "macos")]
+unsafe fn install_mac_xpc_no_capture_event_handler_v1(connection: *mut core::ffi::c_void) {
+    let mut stack_block = MacXpcNoCaptureEventHandlerBlockV1 {
+        isa: std::ptr::addr_of_mut!(_NSConcreteStackBlock).cast(),
+        flags: 0,
+        reserved: 0,
+        invoke: ignore_mac_xpc_event_v1,
+        descriptor: &MAC_XPC_NO_CAPTURE_EVENT_HANDLER_BLOCK_DESCRIPTOR_V1,
+    };
+    let owned_block =
+        _Block_copy((&mut stack_block as *mut MacXpcNoCaptureEventHandlerBlockV1).cast());
+    assert!(
+        !owned_block.is_null(),
+        "copy macOS XPC no-capture event handler"
+    );
+    xpc_connection_set_event_handler(connection, owned_block);
+    _Block_release(owned_block);
+}
+
+#[cfg(target_os = "macos")]
+unsafe extern "C" fn ignore_mac_xpc_event_v1(
+    _block: *mut MacXpcNoCaptureEventHandlerBlockV1,
+    _event: *mut core::ffi::c_void,
+) {
+}
+
 /// Open exactly the fixed privileged Mach XPC service and return one bounded reply frame.
 ///
 /// No executable, socket, environment value, or transport can be supplied by the caller. The
@@ -1520,6 +1576,7 @@ pub fn open_mac_xpc_channel_v1(operation: &str, request: &[u8]) -> Result<Vec<u8
         if connection.is_null() {
             bail!("open fixed macOS XPC publisher service");
         }
+        install_mac_xpc_no_capture_event_handler_v1(connection);
         xpc_connection_activate(connection);
         let message = xpc_dictionary_create_empty();
         if message.is_null() {
@@ -1633,11 +1690,18 @@ mod tests {
 #[cfg(target_os = "macos")]
 #[link(name = "System")]
 unsafe extern "C" {
+    static mut _NSConcreteStackBlock: [*mut core::ffi::c_void; 32];
+    fn _Block_copy(block: *const core::ffi::c_void) -> *mut core::ffi::c_void;
+    fn _Block_release(block: *const core::ffi::c_void);
     fn xpc_connection_create_mach_service(
         name: *const core::ffi::c_char,
         target_queue: *mut core::ffi::c_void,
         flags: u64,
     ) -> *mut core::ffi::c_void;
+    fn xpc_connection_set_event_handler(
+        connection: *mut core::ffi::c_void,
+        handler: *mut core::ffi::c_void,
+    );
     fn xpc_connection_activate(connection: *mut core::ffi::c_void);
     fn xpc_connection_cancel(connection: *mut core::ffi::c_void);
     fn xpc_connection_send_message_with_reply_sync(

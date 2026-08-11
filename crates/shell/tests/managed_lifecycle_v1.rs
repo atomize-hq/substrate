@@ -337,6 +337,48 @@ fn r6_correction_uses_direct_terminal_launch_and_independent_proof() {
 }
 
 #[test]
+fn mac_xpc_clients_register_a_no_capture_handler_before_activation() {
+    let client = include_str!("../src/execution/managed_lifecycle/macos_client.rs");
+    let executor = include_str!("../../../src/bin/substrate-lifecycle-macos.rs");
+
+    let client_open = &client[client
+        .find("pub fn open_mac_xpc_channel_v1")
+        .expect("macOS shell XPC client")
+        ..client
+            .find("/// Verify the fixed publisher service")
+            .expect("macOS shell XPC attestation boundary")];
+    let executor_relay = &executor[executor
+        .find("fn relay_mac_xpc_publisher_request_v1")
+        .expect("macOS lifecycle XPC relay")
+        ..executor
+            .find("/// Direct System-Keychain/Security framework fence")
+            .expect("macOS lifecycle XPC relay boundary")];
+
+    for (name, source, full_source) in [
+        ("shell XPC client", client_open, client),
+        ("lifecycle XPC relay", executor_relay, executor),
+    ] {
+        let handler = source
+            .find("install_mac_xpc_no_capture_event_handler_v1")
+            .unwrap_or_else(|| panic!("{name} does not install a no-capture XPC handler"));
+        let activation = source
+            .find("xpc_connection_activate(connection)")
+            .unwrap_or_else(|| panic!("{name} does not activate its XPC connection"));
+        assert!(
+            handler < activation,
+            "{name} activates the XPC connection before registering its event handler"
+        );
+        assert!(
+            full_source.contains("_Block_copy(")
+                && full_source
+                    .contains("xpc_connection_set_event_handler(connection, owned_block)")
+                && full_source.contains("_Block_release(owned_block)"),
+            "{name} does not make the handler's Blocks-ABI copy/release lifetime explicit"
+        );
+    }
+}
+
+#[test]
 fn post_pm_enumerates_every_closed_mac_role_action_pair() {
     let pairs = all_closed_post_pm_pairs_v1();
     assert!(!pairs.is_empty());

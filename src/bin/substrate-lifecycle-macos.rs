@@ -2883,6 +2883,58 @@ mod tests {
 
     #[cfg(target_os = "macos")]
     #[test]
+    fn xpc_missing_service_child_reports_connection_invalid_without_sigtrap() {
+        const CHILD_ENV: &str = "SUBSTRATE_XPC_HANDLER_REGRESSION_CHILD_V1";
+        const TEST_NAME: &str =
+            "tests::xpc_missing_service_child_reports_connection_invalid_without_sigtrap";
+
+        if std::env::var_os(CHILD_ENV).is_some() {
+            let unique_service = format!(
+                "com.substrate.xpc-handler-regression.{}.{}",
+                std::process::id(),
+                SystemTime::now()
+                    .duration_since(UNIX_EPOCH)
+                    .expect("system clock after UNIX epoch")
+                    .as_nanos()
+            );
+            let service = std::ffi::CString::new(unique_service)
+                .expect("unique missing-service XPC probe name has no NUL");
+            assert_eq!(
+                unsafe { probe_unprivileged_missing_xpc_service_v1(&service) }
+                    .expect("missing unprivileged service returns a structured XPC error"),
+                MacXpcMissingServiceProbeV1::ConnectionInvalid
+            );
+            return;
+        }
+
+        let mut child =
+            Command::new(std::env::current_exe().expect("resolve lifecycle test binary"))
+                .args(["--exact", TEST_NAME, "--nocapture"])
+                .env(CHILD_ENV, "1")
+                .spawn()
+                .expect("spawn isolated XPC handler regression child");
+        let deadline = Instant::now() + Duration::from_secs(5);
+        let status = loop {
+            if let Some(status) = child.try_wait().expect("poll XPC handler regression child") {
+                break status;
+            }
+            if Instant::now() >= deadline {
+                child
+                    .kill()
+                    .expect("stop timed-out XPC handler regression child");
+                let _ = child.wait();
+                panic!("XPC handler regression child timed out");
+            }
+            std::thread::sleep(Duration::from_millis(10));
+        };
+        assert!(
+            status.success(),
+            "XPC handler regression child terminated abnormally: {status}"
+        );
+    }
+
+    #[cfg(target_os = "macos")]
+    #[test]
     fn retained_bootstrap_stream_reader_accepts_exact_bound_and_rejects_plus_one() {
         use std::io::Write;
         use std::net::Shutdown;
@@ -9827,6 +9879,103 @@ pub fn close_lima_stage_one_intent_v1(intent: &Value) -> Result<Value> {
     Ok(json!({"state": "Closed", "intent": intent}))
 }
 
+#[cfg(target_os = "macos")]
+#[repr(C)]
+struct MacXpcNoCaptureEventHandlerBlockV1 {
+    isa: *mut core::ffi::c_void,
+    flags: i32,
+    reserved: i32,
+    invoke: unsafe extern "C" fn(*mut MacXpcNoCaptureEventHandlerBlockV1, *mut core::ffi::c_void),
+    descriptor: *const MacXpcNoCaptureEventHandlerBlockDescriptorV1,
+}
+
+#[cfg(target_os = "macos")]
+#[repr(C)]
+struct MacXpcNoCaptureEventHandlerBlockDescriptorV1 {
+    reserved: usize,
+    size: usize,
+}
+
+#[cfg(target_os = "macos")]
+static MAC_XPC_NO_CAPTURE_EVENT_HANDLER_BLOCK_DESCRIPTOR_V1:
+    MacXpcNoCaptureEventHandlerBlockDescriptorV1 = MacXpcNoCaptureEventHandlerBlockDescriptorV1 {
+    reserved: 0,
+    size: std::mem::size_of::<MacXpcNoCaptureEventHandlerBlockV1>(),
+};
+
+/// Register a valid Blocks-ABI event handler before an XPC connection becomes active.
+///
+/// This synchronous relay deliberately ignores asynchronous connection errors because its reply
+/// object carries the request result. `_Block_copy` takes the no-capture stack block to the heap;
+/// XPC retains its own copy during registration, and the temporary ownership is released before
+/// cancellation can schedule the final event.
+#[cfg(target_os = "macos")]
+unsafe fn install_mac_xpc_no_capture_event_handler_v1(connection: *mut core::ffi::c_void) {
+    let mut stack_block = MacXpcNoCaptureEventHandlerBlockV1 {
+        isa: std::ptr::addr_of_mut!(_NSConcreteStackBlock).cast(),
+        flags: 0,
+        reserved: 0,
+        invoke: ignore_mac_xpc_event_v1,
+        descriptor: &MAC_XPC_NO_CAPTURE_EVENT_HANDLER_BLOCK_DESCRIPTOR_V1,
+    };
+    let owned_block =
+        _Block_copy((&mut stack_block as *mut MacXpcNoCaptureEventHandlerBlockV1).cast());
+    assert!(
+        !owned_block.is_null(),
+        "copy macOS XPC no-capture event handler"
+    );
+    xpc_connection_set_event_handler(connection, owned_block);
+    _Block_release(owned_block);
+}
+
+#[cfg(target_os = "macos")]
+unsafe extern "C" fn ignore_mac_xpc_event_v1(
+    _block: *mut MacXpcNoCaptureEventHandlerBlockV1,
+    _event: *mut core::ffi::c_void,
+) {
+}
+
+#[cfg(all(test, target_os = "macos"))]
+#[derive(Debug, Eq, PartialEq)]
+enum MacXpcMissingServiceProbeV1 {
+    ConnectionInvalid,
+}
+
+/// Exercise the same handler-registration path against a service name that cannot be privileged
+/// or resolve to the Substrate publisher. This exists only for the child-process regression.
+#[cfg(all(test, target_os = "macos"))]
+unsafe fn probe_unprivileged_missing_xpc_service_v1(
+    service: &std::ffi::CStr,
+) -> Result<MacXpcMissingServiceProbeV1> {
+    let connection = xpc_connection_create_mach_service(service.as_ptr(), std::ptr::null_mut(), 0);
+    if connection.is_null() {
+        bail!("open unprivileged missing-service XPC probe");
+    }
+    install_mac_xpc_no_capture_event_handler_v1(connection);
+    xpc_connection_activate(connection);
+
+    let message = xpc_dictionary_create_empty();
+    if message.is_null() {
+        xpc_connection_cancel(connection);
+        xpc_release(connection);
+        bail!("create unprivileged missing-service XPC probe request");
+    }
+    let reply = xpc_connection_send_message_with_reply_sync(connection, message);
+    xpc_release(message);
+    xpc_connection_cancel(connection);
+    xpc_release(connection);
+    if reply.is_null() {
+        bail!("unprivileged missing-service XPC probe returned no structured reply");
+    }
+    let is_connection_invalid =
+        reply == std::ptr::addr_of!(_xpc_error_connection_invalid).cast_mut();
+    xpc_release(reply);
+    if !is_connection_invalid {
+        bail!("unprivileged missing-service XPC probe returned an unexpected reply");
+    }
+    Ok(MacXpcMissingServiceProbeV1::ConnectionInvalid)
+}
+
 /// Relay a fixed-size request to the launchd-owned Mach service. This is not an executor
 /// operation: a direct command can only send an XPC request and cannot mutate publisher state.
 fn relay_mac_xpc_publisher_request_v1(operation: &str, request: &[u8]) -> Result<Value> {
@@ -9850,6 +9999,7 @@ fn relay_mac_xpc_publisher_request_v1(operation: &str, request: &[u8]) -> Result
         if connection.is_null() {
             bail!("open fixed macOS XPC publisher client");
         }
+        install_mac_xpc_no_capture_event_handler_v1(connection);
         xpc_connection_activate(connection);
         let message = xpc_dictionary_create_empty();
         if message.is_null() {
@@ -10936,6 +11086,10 @@ unsafe extern "C" {
     static mut _NSConcreteStackBlock: [*mut core::ffi::c_void; 32];
     static _xpc_type_connection: core::ffi::c_void;
     static _xpc_type_dictionary: core::ffi::c_void;
+    #[cfg(test)]
+    static _xpc_error_connection_invalid: core::ffi::c_void;
+    fn _Block_copy(block: *const core::ffi::c_void) -> *mut core::ffi::c_void;
+    fn _Block_release(block: *const core::ffi::c_void);
     fn xpc_connection_create_mach_service(
         name: *const core::ffi::c_char,
         target_queue: *mut core::ffi::c_void,
