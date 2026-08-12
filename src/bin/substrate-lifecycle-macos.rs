@@ -130,7 +130,7 @@ const MAC_LIMA_STAGE_ONE_MARKER_PATH_V1: &str =
 // The marker is deliberately root-private. Lima's default guest principal owns the control
 // session, so only this one fixed read crosses sudo; the machine/account/UID/home observations
 // remain bound to the non-root guest principal.
-const MAC_LIMA_STAGE_ONE_OBSERVATION_COMMAND_V1: &str = "set -eu; /usr/bin/sudo -n /bin/cat /var/lib/substrate/.substrate-lima-stage-one-marker.v1; printf 'guest_machine_id='; cat /etc/machine-id; printf '\\n'; printf 'guest_account='; id -un; printf '\\n'; printf 'guest_uid='; id -u; printf '\\n'; printf 'guest_home='; getent passwd \"$(id -un)\" | cut -d: -f6";
+const MAC_LIMA_STAGE_ONE_OBSERVATION_COMMAND_V1: &str = "set -eu; /usr/bin/sudo -n /bin/cat /var/lib/substrate/.substrate-lima-stage-one-marker.v1; printf 'guest_machine_id=%s\\nguest_account=%s\\nguest_uid=%s\\nguest_home=%s\\n' \"$(cat /etc/machine-id)\" \"$(id -un)\" \"$(id -u)\" \"$(getent passwd \"$(id -un)\" | cut -d: -f6)\"";
 // This deliberately contains only an attempt/capsule marker and fixed Lima profile constants.
 // It neither stages project bytes nor installs packages, DNS, publisher, world, or forwarding
 // components. Dynamic data are rendered by `render_mac_lima_stage_one_profile_v1` only after the
@@ -4340,6 +4340,16 @@ mod tests {
         assert!(!MAC_LIMA_STAGE_ONE_OBSERVATION_COMMAND_V1.contains("sudo -n id"));
         assert!(!MAC_LIMA_STAGE_ONE_OBSERVATION_COMMAND_V1.contains("sudo -n getent"));
         assert!(!MAC_LIMA_STAGE_ONE_OBSERVATION_COMMAND_V1.contains(['\0', '\n', '\r']));
+        assert_eq!(
+            MAC_LIMA_STAGE_ONE_OBSERVATION_COMMAND_V1
+                .matches("printf '")
+                .count(),
+            1,
+            "the four guest fields must be emitted by one canonical printf frame"
+        );
+        assert!(MAC_LIMA_STAGE_ONE_OBSERVATION_COMMAND_V1.contains(
+            "printf 'guest_machine_id=%s\\nguest_account=%s\\nguest_uid=%s\\nguest_home=%s\\n'"
+        ));
 
         let installer = include_str!("../../scripts/substrate/dev-install-substrate.sh");
         let pinned_digest = format!(
