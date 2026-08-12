@@ -133,6 +133,9 @@ const MAC_LIMA_STAGE_ONE_MARKER_PATH_V1: &str =
 // signed Stage-1 authorization was derived from retained state.
 const MAC_LIMA_STAGE_ONE_PROFILE_TEMPLATE_V1: &str = r#"arch: "aarch64"
 minimumLimaVersion: "1.0.0"
+images:
+  - location: "https://cloud-images.ubuntu.com/releases/24.04/release/ubuntu-24.04-server-cloudimg-arm64.img"
+    arch: "aarch64"
 provision:
   - mode: system
     script: |
@@ -4260,6 +4263,9 @@ mod tests {
         );
 
         assert!(profile.contains(&marker_command));
+        assert!(profile.contains(
+            "images:\n  - location: \"https://cloud-images.ubuntu.com/releases/24.04/release/ubuntu-24.04-server-cloudimg-arm64.img\"\n    arch: \"aarch64\""
+        ));
         assert!(!profile.contains("\ncapsule_sha256="));
         assert!(!profile.contains("__SUBSTRATE_STAGE_ONE_"));
 

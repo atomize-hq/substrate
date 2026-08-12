@@ -1837,7 +1837,7 @@ publish_mac_publisher_install_provenance_v1() {
   local retained_substrate_sha retained_substrate_identity
   local retained_spec retained_name retained_sha_var retained_identity_var retained_path
   local retained_digest retained_identity
-  local profile_template_sha256="560178a5de3b32fe2628d2ab6c6f7036e8f024509dfc5d9e9cc995c2f7df9559"
+  local profile_template_sha256="e3bf3ea4a42b2752a05f163ffd0d97c15b37965bad23ae3d678f9203e5e4b543"
   local launch_daemon_src="${REPO_ROOT}/scripts/mac/com.substrate.lifecycle.publisher.v1.plist"
 
   [[ -f "${control_src}" && ! -L "${control_src}" && -x "${control_src}" ]] \
