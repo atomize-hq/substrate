@@ -4217,7 +4217,7 @@ mod tests {
     }
 
     #[test]
-    fn lima_list_all_probe_accepts_exact_empty_absence_and_filters_by_name() {
+    fn lima_list_all_probe_accepts_exact_json_lines_and_filters_by_name() {
         assert_eq!(MAC_LIMA_LIST_ALL_ARGUMENTS_V1, ["list", "--json"]);
         assert_eq!(
             mac_parse_fixed_lima_list_v1("", "substrate").expect("empty inventory is absence"),
@@ -4225,13 +4225,70 @@ mod tests {
         );
         assert_eq!(
             mac_parse_fixed_lima_list_v1(
-                r#"[{"name":"other","status":"Running"},{"name":"substrate","status":"Stopped"}]"#,
+                concat!(
+                    "{\"name\":\"other\",\"status\":\"Running\"}\n",
+                    "{\"name\":\"substrate\",\"status\":\"Stopped\"}\n",
+                ),
                 "substrate",
             )
-            .expect("full inventory filters the exact instance"),
+            .expect("JSON Lines inventory filters the exact instance"),
             Some("Stopped".to_string())
         );
+        assert_eq!(
+            mac_parse_fixed_lima_list_v1(
+                "{\"name\":\"substrate\",\"status\":\"Running\"}\n",
+                "substrate",
+            )
+            .expect("single-row JSON Lines inventory is accepted"),
+            Some("Running".to_string())
+        );
+        assert_eq!(
+            mac_parse_fixed_lima_list_v1(
+                "{\"name\":\"other\",\"status\":\"Running\"}\n",
+                "substrate",
+            )
+            .expect("inventory without the selected instance is absence"),
+            None
+        );
+    }
+
+    #[test]
+    fn lima_list_all_probe_rejects_noncanonical_or_ambiguous_json_lines() {
         assert!(mac_parse_fixed_lima_list_v1("\n", "substrate").is_err());
+        assert!(mac_parse_fixed_lima_list_v1(
+            "{\"name\":\"substrate\",\"status\":\"Running\"}",
+            "substrate",
+        )
+        .is_err());
+        assert!(mac_parse_fixed_lima_list_v1(
+            "{\"name\":\"substrate\",\"status\":\"Running\"}\r\n",
+            "substrate",
+        )
+        .is_err());
+        assert!(mac_parse_fixed_lima_list_v1(
+            concat!("{\"name\":\"substrate\",\"status\":\"Running\"}\n", "\n",),
+            "substrate",
+        )
+        .is_err());
+        assert!(mac_parse_fixed_lima_list_v1(
+            "[{\"name\":\"substrate\",\"status\":\"Running\"}]\n",
+            "substrate",
+        )
+        .is_err());
+        assert!(mac_parse_fixed_lima_list_v1("{\"name\":\"substrate\"}\n", "substrate",).is_err());
+        assert!(mac_parse_fixed_lima_list_v1(
+            "{\"name\":\"substrate\",\"status\":7}\n",
+            "substrate",
+        )
+        .is_err());
+        assert!(mac_parse_fixed_lima_list_v1(
+            concat!(
+                "{\"name\":\"substrate\",\"status\":\"Running\"}\n",
+                "{\"name\":\"substrate\",\"status\":\"Stopped\"}\n",
+            ),
+            "substrate",
+        )
+        .is_err());
         for action in [
             ManagedActionV1::Start,
             ManagedActionV1::Stop,
@@ -6960,24 +7017,30 @@ fn mac_parse_fixed_lima_list_v1(output: &str, instance_name: &str) -> Result<Opt
     if output.is_empty() {
         return Ok(None);
     }
-    let value: Value = serde_json::from_str(output).context("decode fixed limactl list JSON")?;
-    let values = value
-        .as_array()
-        .ok_or_else(|| anyhow::anyhow!("fixed limactl list must be a JSON array"))?;
+    if output.contains('\r') || !output.ends_with('\n') {
+        bail!("fixed limactl list has a noncanonical JSON Lines frame");
+    }
     let mut found = None;
-    for value in values {
-        let object = value
-            .as_object()
-            .ok_or_else(|| anyhow::anyhow!("fixed limactl list row must be an object"))?;
+    for (index, line) in output.lines().enumerate() {
+        if line.is_empty() {
+            bail!("fixed limactl list JSON Lines row {} is empty", index + 1);
+        }
+        let value: Value = serde_json::from_str(line)
+            .with_context(|| format!("decode fixed limactl list JSON Lines row {}", index + 1))?;
+        let object = value.as_object().ok_or_else(|| {
+            anyhow::anyhow!("fixed limactl list row {} must be an object", index + 1)
+        })?;
         let name = object
             .get("name")
             .and_then(Value::as_str)
-            .ok_or_else(|| anyhow::anyhow!("fixed limactl row lacks name"))?;
+            .filter(|name| !name.is_empty())
+            .ok_or_else(|| anyhow::anyhow!("fixed limactl row {} lacks name", index + 1))?;
+        let status = object
+            .get("status")
+            .and_then(Value::as_str)
+            .filter(|status| !status.is_empty())
+            .ok_or_else(|| anyhow::anyhow!("fixed limactl row {} lacks status", index + 1))?;
         if name == instance_name {
-            let status = object
-                .get("status")
-                .and_then(Value::as_str)
-                .ok_or_else(|| anyhow::anyhow!("fixed limactl instance row lacks status"))?;
             if found.replace(status.to_string()).is_some() {
                 bail!("fixed limactl list has an ambiguous selected instance");
             }
