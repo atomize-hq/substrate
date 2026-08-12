@@ -4262,6 +4262,16 @@ mod tests {
         assert!(profile.contains(&marker_command));
         assert!(!profile.contains("\ncapsule_sha256="));
         assert!(!profile.contains("__SUBSTRATE_STAGE_ONE_"));
+
+        let installer = include_str!("../../scripts/substrate/dev-install-substrate.sh");
+        let pinned_digest = format!(
+            "local profile_template_sha256=\"{}\"",
+            mac_lima_stage_one_profile_template_sha256_v1()
+        );
+        assert!(
+            installer.contains(&pinned_digest),
+            "canonical installer profile digest drifted from the runtime template"
+        );
     }
 
     #[cfg(target_os = "macos")]
