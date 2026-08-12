@@ -127,6 +127,10 @@ const MAC_LIMA_STAGE_ONE_PROFILE_TEMPLATE_ALGORITHM_V1: &str =
 const MAC_LIMA_STAGE_ONE_PROFILE_TEMPLATE_VERSION_V1: u32 = 1;
 const MAC_LIMA_STAGE_ONE_MARKER_PATH_V1: &str =
     "/var/lib/substrate/.substrate-lima-stage-one-marker.v1";
+// The marker is deliberately root-private. Lima's default guest principal owns the control
+// session, so only this one fixed read crosses sudo; the machine/account/UID/home observations
+// remain bound to the non-root guest principal.
+const MAC_LIMA_STAGE_ONE_OBSERVATION_COMMAND_V1: &str = "set -eu; /usr/bin/sudo -n /bin/cat /var/lib/substrate/.substrate-lima-stage-one-marker.v1; printf 'guest_machine_id='; cat /etc/machine-id; printf '\n'; printf 'guest_account='; id -un; printf '\n'; printf 'guest_uid='; id -u; printf '\n'; printf 'guest_home='; getent passwd \"$(id -un)\" | cut -d: -f6";
 // This deliberately contains only an attempt/capsule marker and fixed Lima profile constants.
 // It neither stages project bytes nor installs packages, DNS, publisher, world, or forwarding
 // components. Dynamic data are rendered by `render_mac_lima_stage_one_profile_v1` only after the
@@ -4325,6 +4329,16 @@ mod tests {
         ));
         assert!(!profile.contains("\ncapsule_sha256="));
         assert!(!profile.contains("__SUBSTRATE_STAGE_ONE_"));
+        assert!(profile.contains("chown root:root /var/lib/substrate"));
+        assert!(profile.contains("chmod 0700 /var/lib/substrate"));
+        assert!(
+            profile.contains("chmod 0600 /var/lib/substrate/.substrate-lima-stage-one-marker.v1")
+        );
+        assert!(MAC_LIMA_STAGE_ONE_OBSERVATION_COMMAND_V1.starts_with(
+            "set -eu; /usr/bin/sudo -n /bin/cat /var/lib/substrate/.substrate-lima-stage-one-marker.v1;"
+        ));
+        assert!(!MAC_LIMA_STAGE_ONE_OBSERVATION_COMMAND_V1.contains("sudo -n id"));
+        assert!(!MAC_LIMA_STAGE_ONE_OBSERVATION_COMMAND_V1.contains("sudo -n getent"));
 
         let installer = include_str!("../../scripts/substrate/dev-install-substrate.sh");
         let pinned_digest = format!(
@@ -7766,7 +7780,6 @@ fn execute_closed_mac_lima_stage_one_effect_v1(
         if after_first.as_deref() != Some("Running") || after_first != after_second {
             bail!("selected Stage-1 instance is not stably running after effect");
         }
-        const OBSERVATION_COMMAND: &str = "set -eu; cat /var/lib/substrate/.substrate-lima-stage-one-marker.v1; printf 'guest_machine_id='; cat /etc/machine-id; printf '\\n'; printf 'guest_account='; id -un; printf '\\n'; printf 'guest_uid='; id -u; printf '\\n'; printf 'guest_home='; getent passwd \"$(id -un)\" | cut -d: -f6";
         let observed_first = mac_parse_stage_one_observation_v1(
             &mac_run_fixed_lima_command_v1(
                 tool,
@@ -7779,7 +7792,7 @@ fn execute_closed_mac_lima_stage_one_effect_v1(
                     "--",
                     "/bin/sh",
                     "-c",
-                    OBSERVATION_COMMAND,
+                    MAC_LIMA_STAGE_ONE_OBSERVATION_COMMAND_V1,
                 ],
                 None,
             )?,
@@ -7797,7 +7810,7 @@ fn execute_closed_mac_lima_stage_one_effect_v1(
                     "--",
                     "/bin/sh",
                     "-c",
-                    OBSERVATION_COMMAND,
+                    MAC_LIMA_STAGE_ONE_OBSERVATION_COMMAND_V1,
                 ],
                 None,
             )?,
