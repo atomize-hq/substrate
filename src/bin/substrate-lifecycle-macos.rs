@@ -4211,6 +4211,39 @@ mod tests {
         assert!(first < later, "the causal child failure must remain first");
     }
 
+    #[test]
+    fn lima_list_all_probe_accepts_exact_empty_absence_and_filters_by_name() {
+        assert_eq!(MAC_LIMA_LIST_ALL_ARGUMENTS_V1, ["list", "--json"]);
+        assert_eq!(
+            mac_parse_fixed_lima_list_v1("", "substrate").expect("empty inventory is absence"),
+            None
+        );
+        assert_eq!(
+            mac_parse_fixed_lima_list_v1(
+                r#"[{"name":"other","status":"Running"},{"name":"substrate","status":"Stopped"}]"#,
+                "substrate",
+            )
+            .expect("full inventory filters the exact instance"),
+            Some("Stopped".to_string())
+        );
+        assert!(mac_parse_fixed_lima_list_v1("\n", "substrate").is_err());
+        for action in [
+            ManagedActionV1::Start,
+            ManagedActionV1::Stop,
+            ManagedActionV1::Remove,
+            ManagedActionV1::Restore,
+        ] {
+            let plan = mac_post_pm_effect_plan_v1(
+                &correction_post_pm_entry_v1("mac.lima.instance", "instance", "substrate"),
+                action,
+                "mac.lima.guest-membership(alice)",
+                "/opt/substrate",
+            )
+            .expect("closed Lima instance plan");
+            assert_eq!(plan.observation_argv, ["list", "--json"]);
+        }
+    }
+
     #[cfg(target_os = "macos")]
     #[test]
     fn r6_nonzero_exit_preserves_first_when_post_validation_also_fails() {
@@ -6885,7 +6918,12 @@ fn mac_run_fixed_lima_command_v1(
     }
 }
 
+const MAC_LIMA_LIST_ALL_ARGUMENTS_V1: [&str; 2] = ["list", "--json"];
+
 fn mac_parse_fixed_lima_list_v1(output: &str, instance_name: &str) -> Result<Option<String>> {
+    if output.is_empty() {
+        return Ok(None);
+    }
     let value: Value = serde_json::from_str(output).context("decode fixed limactl list JSON")?;
     let values = value
         .as_array()
@@ -7556,7 +7594,7 @@ fn execute_closed_mac_lima_stage_one_effect_v1(
                 carrier,
                 &principal,
                 &stage_one.lima_control_root_identity,
-                &["list", &stage_one.instance_name, "--json"],
+                &MAC_LIMA_LIST_ALL_ARGUMENTS_V1,
                 None,
             )?,
             &stage_one.instance_name,
@@ -7610,7 +7648,7 @@ fn execute_closed_mac_lima_stage_one_effect_v1(
                 carrier,
                 &principal,
                 &stage_one.lima_control_root_identity,
-                &["list", &stage_one.instance_name, "--json"],
+                &MAC_LIMA_LIST_ALL_ARGUMENTS_V1,
                 None,
             )?,
             &stage_one.instance_name,
@@ -7621,7 +7659,7 @@ fn execute_closed_mac_lima_stage_one_effect_v1(
                 carrier,
                 &principal,
                 &stage_one.lima_control_root_identity,
-                &["list", &stage_one.instance_name, "--json"],
+                &MAC_LIMA_LIST_ALL_ARGUMENTS_V1,
                 None,
             )?,
             &stage_one.instance_name,
@@ -8655,33 +8693,21 @@ fn mac_post_pm_effect_plan_v1(
                 "--tty=false".to_string(),
                 "substrate".to_string(),
             ]));
-            plan.observation_argv = vec![
-                "list".to_string(),
-                "substrate".to_string(),
-                "--json".to_string(),
-            ];
+            plan.observation_argv = vec!["list".to_string(), "--json".to_string()];
         }
         ("mac.lima.instance", ManagedActionV1::Stop) => {
             plan.primitives.push(MacPostPmEffectPrimitiveV1::Lima(vec![
                 "stop".to_string(),
                 "substrate".to_string(),
             ]));
-            plan.observation_argv = vec![
-                "list".to_string(),
-                "substrate".to_string(),
-                "--json".to_string(),
-            ];
+            plan.observation_argv = vec!["list".to_string(), "--json".to_string()];
         }
         ("mac.lima.instance", ManagedActionV1::Remove) => {
             plan.primitives.push(MacPostPmEffectPrimitiveV1::Lima(vec![
                 "delete".to_string(),
                 "substrate".to_string(),
             ]));
-            plan.observation_argv = vec![
-                "list".to_string(),
-                "substrate".to_string(),
-                "--json".to_string(),
-            ];
+            plan.observation_argv = vec!["list".to_string(), "--json".to_string()];
         }
         (
             "mac.host.known-hosts-entry",
