@@ -9,13 +9,15 @@ use anyhow::{bail, Context, Result};
 use serde_json::{json, Value};
 use sha2::{Digest, Sha256};
 use std::fs;
-use std::io::{BufRead, BufReader, Read as _, Write as _};
+use std::io::{BufRead, BufReader, Read as _, Seek as _, SeekFrom, Write as _};
 #[cfg(target_os = "macos")]
 use std::os::fd::{AsRawFd, FromRawFd};
 #[cfg(target_os = "macos")]
 use std::os::unix::ffi::OsStringExt;
 #[cfg(target_os = "macos")]
-use std::os::unix::fs::{MetadataExt, OpenOptionsExt, PermissionsExt};
+use std::os::unix::fs::{FileExt as _, MetadataExt, OpenOptionsExt, PermissionsExt};
+#[cfg(target_os = "macos")]
+use std::os::unix::process::CommandExt as _;
 use std::path::{Path, PathBuf};
 #[cfg(target_os = "macos")]
 use std::process::{Child, ExitStatus};
@@ -110,6 +112,16 @@ const R6_PAIRING_TICKET_LIFETIME_NS_V1: u64 = 60 * 1_000_000_000;
 /// Lifecycle effects may take materially longer than the bounded FD3 bootstrap frame.  This
 /// is still a fixed executor-owned ceiling, never a caller supplied timeout.
 const MAC_LIMA_EFFECT_TIMEOUT_V1: Duration = Duration::from_secs(300);
+const MAC_LIMA_TOOL_PATH_V1: &str = "/usr/local/bin/limactl";
+const MAC_LIMA_CHILD_PATH_V1: &str = "/usr/local/bin:/usr/bin:/bin:/usr/sbin:/sbin";
+const MAC_LIMA_PROFILE_CHILD_PATH_V1: &str = "/dev/fd/3";
+const MAC_LIMA_PROFILE_CHILD_FD_V1: libc::c_int = 3;
+const MAC_LIMA_COPY_CHILD_PATH_V1: &str = "/dev/fd/4";
+const MAC_LIMA_COPY_CHILD_FD_V1: libc::c_int = 4;
+const MAC_LIMA_ROOT_INPUT_MAX_BYTES_V1: u64 = 256 * 1024 * 1024;
+const MAC_LIMA_CHILD_FD_SCAN_LIMIT_V1: libc::c_long = 1_048_576;
+const MAC_LIMA_OWNERSHIP_MAX_ENTRIES_V1: usize = 100_000;
+const MAC_LIMA_OWNERSHIP_MAX_DEPTH_V1: usize = 64;
 const MAC_LIMA_STAGE_ONE_PROFILE_TEMPLATE_ALGORITHM_V1: &str =
     "substrate.mac-lima-stage-one-profile-template";
 const MAC_LIMA_STAGE_ONE_PROFILE_TEMPLATE_VERSION_V1: u32 = 1;
@@ -146,18 +158,42 @@ pub struct MacLifecyclePublisherServiceV1 {
     mach_service: &'static str,
 }
 
+/// Account-database identity used for every retained publisher-side `limactl` child. The IH
+/// carrier binds account+UID; the local account database supplies the exact primary GID and home.
+/// Every spawn re-resolves the same tuple before dropping root credentials.
+#[derive(Debug, Clone, PartialEq, Eq)]
+struct MacLimaPrincipalV1 {
+    account: String,
+    uid: libc::uid_t,
+    gid: libc::gid_t,
+    home: String,
+}
+
 /// Own a fixed retained `limactl shell` child until its exact frame protocol reaches a terminal
 /// status.  Any decode/CAS/Drop boundary kills and reaps the child rather than leaving a guest
 /// process able to continue after the host rejected its state transition.
 #[cfg(target_os = "macos")]
 struct R6RetainedLimaChildGuardV1 {
     child: Option<Child>,
+    carrier: InstallBootstrapContextCarrierV1,
+    principal: MacLimaPrincipalV1,
+    lima_home: String,
 }
 
 #[cfg(target_os = "macos")]
 impl R6RetainedLimaChildGuardV1 {
-    fn new(child: Child) -> Self {
-        Self { child: Some(child) }
+    fn new(
+        child: Child,
+        carrier: &InstallBootstrapContextCarrierV1,
+        principal: &MacLimaPrincipalV1,
+        lima_home: &str,
+    ) -> Self {
+        Self {
+            child: Some(child),
+            carrier: carrier.clone(),
+            principal: principal.clone(),
+            lima_home: lima_home.to_string(),
+        }
     }
 
     fn finish(&mut self) -> Result<ExitStatus> {
@@ -174,13 +210,36 @@ impl R6RetainedLimaChildGuardV1 {
                 // `try_wait` has reaped the child; dropping the now-empty guard must not kill a
                 // reused PID. Keep ownership until this successful terminal observation.
                 self.child.take();
-                return Ok(status);
+                let post_validation = mac_validate_lima_after_command_v1(
+                    &self.carrier,
+                    &self.principal,
+                    &self.lima_home,
+                );
+                return mac_join_r6_exit_status_and_post_validation_v1(status, post_validation);
             }
             if Instant::now() >= deadline {
                 bail!("R6 data child exceeded its fixed terminal exit deadline");
             }
             std::thread::sleep(Duration::from_millis(20));
         }
+    }
+}
+
+/// Preserve the R6 child's causal nonzero status when terminal Lima-state validation also
+/// fails. The caller still receives an ordinary nonzero `ExitStatus` when validation succeeds,
+/// so its existing closed-protocol error remains authoritative in that single-failure case.
+#[cfg(target_os = "macos")]
+fn mac_join_r6_exit_status_and_post_validation_v1(
+    status: ExitStatus,
+    post_validation: Result<()>,
+) -> Result<ExitStatus> {
+    match (status.success(), post_validation) {
+        (_, Ok(())) => Ok(status),
+        (true, Err(validation_error)) => Err(validation_error),
+        (false, Err(validation_error)) => bail!(
+            "fixed retained R6 Lima child exited nonzero ({:?}); post-command validation also failed: {validation_error:#}",
+            status.code()
+        ),
     }
 }
 
@@ -210,6 +269,9 @@ impl Drop for R6RetainedLimaChildGuardV1 {
         if let Some(mut child) = self.child.take() {
             let _ = child.kill();
             let _ = child.wait();
+            let _ = mac_revalidate_lima_principal_v1(&self.carrier, &self.principal);
+            let _ = mac_verify_lima_control_state_ownership_v1(&self.principal, &self.lima_home);
+            let _ = mac_require_absent_lima_owner_overlays_v1(&self.principal, &self.lima_home);
         }
     }
 }
@@ -3373,35 +3435,184 @@ fn mac_lima_closed_post_pm_receipt_plan_v1(
     Ok(planned)
 }
 
-fn mac_account_home_for_stage_one_v1(carrier: &InstallBootstrapContextCarrierV1) -> Result<String> {
+fn mac_require_canonical_absolute_home_v1(home: &str) -> Result<()> {
+    if home.is_empty() || home == "/" || home.contains(['\0', '\n', '\r']) {
+        bail!("macOS Lima principal home is empty, root, or contains control bytes");
+    }
+    let path = Path::new(home);
+    if !path.is_absolute() {
+        bail!("macOS Lima principal home is not absolute");
+    }
+    let mut reconstructed = PathBuf::from("/");
+    let mut normal_components = 0usize;
+    for component in path.components() {
+        match component {
+            std::path::Component::RootDir => {}
+            std::path::Component::Normal(segment) => {
+                reconstructed.push(segment);
+                normal_components = normal_components
+                    .checked_add(1)
+                    .ok_or_else(|| anyhow::anyhow!("macOS Lima home component overflow"))?;
+            }
+            _ => bail!("macOS Lima principal home is not a canonical absolute path"),
+        }
+    }
+    if normal_components == 0 || reconstructed.as_os_str() != path.as_os_str() {
+        bail!("macOS Lima principal home is not a canonical absolute path");
+    }
+    Ok(())
+}
+
+fn mac_join_lima_principal_v1(
+    carrier: &InstallBootstrapContextCarrierV1,
+    observed_account: &str,
+    uid: libc::uid_t,
+    gid: libc::gid_t,
+    home: &str,
+) -> Result<MacLimaPrincipalV1> {
+    carrier
+        .validate()
+        .context("validate retained IH carrier before Lima principal join")?;
+    let PlatformPrincipalV1::Unix {
+        account,
+        uid: carrier_uid,
+    } = &carrier.context.intended_host_principal
+    else {
+        bail!("macOS Lima execution requires a UNIX IH principal");
+    };
+    if account != observed_account || *carrier_uid != uid || uid == 0 || gid == 0 {
+        bail!("macOS Lima account database does not exact-join non-root IH principal");
+    }
+    mac_require_canonical_absolute_home_v1(home)?;
+    Ok(MacLimaPrincipalV1 {
+        account: account.clone(),
+        uid,
+        gid,
+        home: home.to_string(),
+    })
+}
+
+fn mac_passwd_buffer_len_v1() -> Result<usize> {
+    // SAFETY: sysconf has no pointer arguments and only reads the process configuration.
+    let configured = unsafe { libc::sysconf(libc::_SC_GETPW_R_SIZE_MAX) };
+    let size = if configured > 0 {
+        usize::try_from(configured).context("macOS passwd buffer length overflow")?
+    } else {
+        16 * 1024
+    };
+    if !(1024..=1024 * 1024).contains(&size) {
+        bail!("macOS passwd buffer length is outside the fixed safety bound");
+    }
+    Ok(size)
+}
+
+fn mac_resolve_lima_principal_v1(
+    carrier: &InstallBootstrapContextCarrierV1,
+) -> Result<MacLimaPrincipalV1> {
+    carrier
+        .validate()
+        .context("validate retained IH carrier before account resolution")?;
     let PlatformPrincipalV1::Unix { account, uid } = &carrier.context.intended_host_principal
     else {
-        bail!("macOS Stage-1 requires a UNIX IH principal");
+        bail!("macOS Lima execution requires a UNIX IH principal");
     };
     if account.is_empty() || *uid == 0 {
-        bail!("macOS Stage-1 IH principal is invalid");
+        bail!("macOS Lima IH principal is empty or UID 0");
     }
-    // The retained IH fixes account+UID. The fixed privileged executor re-observes the account
-    // database rather than trusting HOME/LIMA_HOME inherited from the caller or launchd.
-    let account = std::ffi::CString::new(account.as_str()).context("encode Stage-1 account")?;
-    // SAFETY: getpwnam reads the local account database for this fixed, validated account name.
-    let passwd = unsafe { libc::getpwnam(account.as_ptr()) };
-    if passwd.is_null() {
-        bail!("macOS Stage-1 IH account is absent from the local account database");
+    let account_c =
+        std::ffi::CString::new(account.as_str()).context("encode retained macOS Lima account")?;
+    let mut name_record = std::mem::MaybeUninit::<libc::passwd>::uninit();
+    let mut name_result = std::ptr::null_mut();
+    let mut name_buffer = vec![0_u8; mac_passwd_buffer_len_v1()?];
+    // SAFETY: each pointer references writable storage for the duration of the reentrant lookup.
+    let name_status = unsafe {
+        libc::getpwnam_r(
+            account_c.as_ptr(),
+            name_record.as_mut_ptr(),
+            name_buffer.as_mut_ptr().cast(),
+            name_buffer.len(),
+            &mut name_result,
+        )
+    };
+    if name_status != 0 {
+        return Err(std::io::Error::from_raw_os_error(name_status))
+            .context("resolve retained macOS Lima account by name");
     }
-    // SAFETY: `passwd` is non-null for the immediate read guaranteed by getpwnam.
-    let passwd = unsafe { &*passwd };
-    if passwd.pw_uid != *uid || passwd.pw_dir.is_null() {
-        bail!("macOS Stage-1 account database does not exact-join IH principal");
+    if name_result.is_null() {
+        bail!("macOS Lima IH account is absent from the local account database");
     }
-    // SAFETY: pw_dir is a NUL-terminated passwd field owned by libc for this immediate read.
-    let home = unsafe { std::ffi::CStr::from_ptr(passwd.pw_dir) }
+    // SAFETY: a non-null result means getpwnam_r initialized the caller-owned record.
+    let name_record = unsafe { name_record.assume_init() };
+    if name_record.pw_name.is_null() || name_record.pw_dir.is_null() {
+        bail!("macOS Lima account record lacks name or home");
+    }
+    // SAFETY: both strings live in name_buffer until this function returns.
+    let observed_account = unsafe { std::ffi::CStr::from_ptr(name_record.pw_name) }
         .to_str()
-        .context("decode Stage-1 account home")?;
-    if !home.starts_with('/') || home.contains(['\0', '\n', '\r']) {
-        bail!("macOS Stage-1 account home is not an exact absolute path");
+        .context("decode macOS Lima account name")?;
+    // SAFETY: pw_dir is likewise NUL-terminated within the retained lookup buffer.
+    let observed_home = unsafe { std::ffi::CStr::from_ptr(name_record.pw_dir) }
+        .to_str()
+        .context("decode macOS Lima account home")?;
+    let principal = mac_join_lima_principal_v1(
+        carrier,
+        observed_account,
+        name_record.pw_uid,
+        name_record.pw_gid,
+        observed_home,
+    )?;
+
+    let mut uid_record = std::mem::MaybeUninit::<libc::passwd>::uninit();
+    let mut uid_result = std::ptr::null_mut();
+    let mut uid_buffer = vec![0_u8; mac_passwd_buffer_len_v1()?];
+    // SAFETY: each pointer references writable storage for the duration of the reentrant lookup.
+    let uid_status = unsafe {
+        libc::getpwuid_r(
+            principal.uid,
+            uid_record.as_mut_ptr(),
+            uid_buffer.as_mut_ptr().cast(),
+            uid_buffer.len(),
+            &mut uid_result,
+        )
+    };
+    if uid_status != 0 {
+        return Err(std::io::Error::from_raw_os_error(uid_status))
+            .context("resolve retained macOS Lima account by UID");
     }
-    Ok(home.to_string())
+    if uid_result.is_null() {
+        bail!("macOS Lima IH UID is absent from the local account database");
+    }
+    // SAFETY: a non-null result means getpwuid_r initialized the caller-owned record.
+    let uid_record = unsafe { uid_record.assume_init() };
+    if uid_record.pw_name.is_null() || uid_record.pw_dir.is_null() {
+        bail!("macOS Lima UID record lacks name or home");
+    }
+    // SAFETY: both strings live in uid_buffer until the exact-join checks complete.
+    let uid_account = unsafe { std::ffi::CStr::from_ptr(uid_record.pw_name) }
+        .to_str()
+        .context("decode macOS Lima UID account")?;
+    // SAFETY: pw_dir is NUL-terminated within the retained UID lookup buffer.
+    let uid_home = unsafe { std::ffi::CStr::from_ptr(uid_record.pw_dir) }
+        .to_str()
+        .context("decode macOS Lima UID home")?;
+    if uid_account != principal.account
+        || uid_record.pw_uid != principal.uid
+        || uid_record.pw_gid != principal.gid
+        || uid_home != principal.home
+    {
+        bail!("macOS Lima name/UID account records do not exact-join");
+    }
+    Ok(principal)
+}
+
+fn mac_revalidate_lima_principal_v1(
+    carrier: &InstallBootstrapContextCarrierV1,
+    principal: &MacLimaPrincipalV1,
+) -> Result<()> {
+    if mac_resolve_lima_principal_v1(carrier)? != *principal {
+        bail!("macOS Lima principal identity drifted after initial account resolution");
+    }
+    Ok(())
 }
 
 fn sign_mac_lima_stage_one_authorization_v1(
@@ -3474,8 +3685,12 @@ fn derive_mac_lima_stage_one_authorization_v1(
     {
         bail!("retained Stage-1 inputs do not exact-join initial bootstrap authority");
     }
-    let home = mac_account_home_for_stage_one_v1(&carrier)?;
-    let control_root = format!("{home}/.lima");
+    let principal = mac_resolve_lima_principal_v1(&carrier)?;
+    let control_root = Path::new(&principal.home)
+        .join(".lima")
+        .to_str()
+        .ok_or_else(|| anyhow::anyhow!("macOS Lima control root is not UTF-8"))?
+        .to_string();
     let rendered_profile =
         render_mac_lima_stage_one_profile_v1(&authorization.attempt_nonce, authorization_sha256)?;
     let rendered_profile_sha256 = sha256_hex_bootstrap_v1(&rendered_profile);
@@ -3883,6 +4098,810 @@ fn mac_be_subtract_v1(left: &[u8; 32], right: &[u8]) -> Result<[u8; 32]> {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    fn lima_test_carrier(account: &str, uid: u32) -> InstallBootstrapContextCarrierV1 {
+        let selected = base64url_encode_mac_v1(b"/tmp/substrate-lima-principal-runner-test");
+        let account = base64url_encode_mac_v1(account.as_bytes());
+        let commitment_input = format!(
+            "domain=substrate.install_bootstrap_context\nversion=1\nselected_host_prefix={selected}\nhost_substrate_home={selected}\nhost_substrate_root={selected}\nprincipal_kind=unix\nprincipal_account={account}\nprincipal_uid={uid}\n"
+        );
+        let commitment = sha256_hex_bootstrap_v1(commitment_input.as_bytes());
+        let record = format!("{commitment_input}host_context_commitment={commitment}\n");
+        InstallBootstrapContextCarrierV1::decode(&base64url_encode_mac_v1(record.as_bytes()))
+            .expect("committed Lima principal test carrier")
+    }
+
+    #[test]
+    fn lima_principal_join_rejects_account_uid_gid_and_home_substitution() {
+        let carrier = lima_test_carrier("alice", 501);
+        assert_eq!(
+            mac_join_lima_principal_v1(&carrier, "alice", 501, 20, "/Users/alice")
+                .expect("exact non-root account join"),
+            MacLimaPrincipalV1 {
+                account: "alice".to_string(),
+                uid: 501,
+                gid: 20,
+                home: "/Users/alice".to_string(),
+            }
+        );
+        for (account, uid, gid, home) in [
+            ("mallory", 501, 20, "/Users/alice"),
+            ("alice", 502, 20, "/Users/alice"),
+            ("alice", 0, 20, "/Users/alice"),
+            ("alice", 501, 0, "/Users/alice"),
+            ("alice", 501, 20, "/Users/alice/../mallory"),
+            ("alice", 501, 20, "/Users//alice"),
+            ("alice", 501, 20, "/"),
+        ] {
+            assert!(
+                mac_join_lima_principal_v1(&carrier, account, uid, gid, home).is_err(),
+                "substituted principal unexpectedly joined: {account}/{uid}/{gid}/{home}"
+            );
+        }
+    }
+
+    #[test]
+    fn lima_profile_fd_is_admitted_only_for_the_closed_stage_one_start_plan() {
+        let profile = MacLimaInheritedInputV1 {
+            role: MacLimaInheritedInputRoleV1::StageOneProfile,
+            path: PathBuf::from("/dev/null"),
+            identity: "dev:1:ino:2".to_string(),
+            sha256: "a".repeat(64),
+            size: 0,
+            file: fs::File::open("/dev/null").expect("test profile descriptor"),
+        };
+        let start = [
+            "start",
+            "--tty=false",
+            "--name",
+            "substrate-test",
+            MAC_LIMA_PROFILE_CHILD_PATH_V1,
+        ];
+        assert!(mac_validate_fixed_lima_argument_plan_v1(&start, Some(&profile)).is_ok());
+        assert!(mac_validate_fixed_lima_argument_plan_v1(&start, None).is_err());
+        assert!(mac_validate_fixed_lima_argument_plan_v1(
+            &[
+                "start",
+                "--tty=false",
+                "--name",
+                "../escape",
+                MAC_LIMA_PROFILE_CHILD_PATH_V1
+            ],
+            Some(&profile),
+        )
+        .is_err());
+        assert!(
+            mac_validate_fixed_lima_argument_plan_v1(&["unknown", "substrate"], None,).is_err()
+        );
+        let copy_source = MacLimaInheritedInputV1 {
+            role: MacLimaInheritedInputRoleV1::PostPmCopySource,
+            path: PathBuf::from("/dev/null"),
+            identity: "dev:1:ino:3".to_string(),
+            sha256: "b".repeat(64),
+            size: 0,
+            file: fs::File::open("/dev/null").expect("test copy descriptor"),
+        };
+        let copy = [
+            "copy",
+            MAC_LIMA_COPY_CHILD_PATH_V1,
+            "substrate:/var/lib/substrate/.substrate-lifecycle-v1/staged/test.bin",
+        ];
+        assert!(mac_validate_fixed_lima_argument_plan_v1(&copy, Some(&copy_source)).is_ok());
+        assert!(mac_validate_fixed_lima_argument_plan_v1(&copy, None).is_err());
+        assert!(mac_validate_fixed_lima_argument_plan_v1(&start, Some(&copy_source)).is_err());
+    }
+
+    #[test]
+    fn lima_nonzero_outcome_preserves_first_when_post_validation_also_fails() {
+        let result = mac_join_fixed_lima_outcome_and_post_validation_v1(
+            Ok(MacFixedLimaCommandOutcomeV1::NonZero {
+                code: Some(77),
+                stdout: "partial output".to_string(),
+                stderr: "first child failure".to_string(),
+            }),
+            Err(anyhow::anyhow!("later owner-overlay drift")),
+        );
+        let error = format!("{:#}", result.expect_err("dual failure must be rejected"));
+        let first = error
+            .find("fixed retained limactl command exited nonzero (Some(77)): first child failure")
+            .expect("nonzero status and stderr are preserved first");
+        let later = error
+            .find("post-command validation also failed: later owner-overlay drift")
+            .expect("post-command validation failure is appended");
+        assert!(first < later, "the causal child failure must remain first");
+    }
+
+    #[cfg(target_os = "macos")]
+    #[test]
+    fn r6_nonzero_exit_preserves_first_when_post_validation_also_fails() {
+        use std::os::unix::process::ExitStatusExt as _;
+
+        let result = mac_join_r6_exit_status_and_post_validation_v1(
+            ExitStatus::from_raw(91 << 8),
+            Err(anyhow::anyhow!("later R6 owner-overlay drift")),
+        );
+        let error = format!("{:#}", result.expect_err("dual failure must be rejected"));
+        let first = error
+            .find("fixed retained R6 Lima child exited nonzero (Some(91))")
+            .expect("R6 nonzero status is preserved first");
+        let later = error
+            .find("post-command validation also failed: later R6 owner-overlay drift")
+            .expect("R6 post-command validation failure is appended");
+        assert!(
+            first < later,
+            "the causal R6 child failure must remain first"
+        );
+    }
+
+    #[cfg(target_os = "macos")]
+    #[test]
+    fn lima_owner_overlay_drift_is_absent_only_and_no_follow() {
+        let uid = unsafe { libc::getuid() };
+        assert_ne!(uid, 0, "ordinary non-root test runner required");
+        let gid = unsafe { libc::getgid() };
+        let root = std::env::temp_dir().join(format!(
+            "substrate-lima-owner-overlay-test-{}",
+            std::process::id()
+        ));
+        struct Cleanup(PathBuf);
+        impl Drop for Cleanup {
+            fn drop(&mut self) {
+                let _ = fs::remove_dir_all(&self.0);
+            }
+        }
+        let cleanup = Cleanup(root.clone());
+        let lima_home = root.join(".lima");
+        let config = lima_home.join("_config");
+        fs::create_dir_all(&config).expect("create owner overlay fixture");
+        for directory in [&root, &lima_home, &config] {
+            fs::set_permissions(directory, fs::Permissions::from_mode(0o700))
+                .expect("harden owner overlay fixture directory");
+        }
+        let principal = MacLimaPrincipalV1 {
+            account: "test-owner".to_string(),
+            uid,
+            gid,
+            home: root.to_str().expect("UTF-8 overlay test home").to_string(),
+        };
+        assert!(mac_require_absent_lima_owner_overlays_v1(
+            &principal,
+            lima_home.to_str().expect("UTF-8 Lima test root")
+        )
+        .is_ok());
+        for insecure_mode in [0o770, 0o707] {
+            for directory in [&root, &lima_home, &config] {
+                fs::set_permissions(directory, fs::Permissions::from_mode(insecure_mode))
+                    .expect("make one owner overlay directory externally writable");
+                assert!(
+                    mac_require_absent_lima_owner_overlays_v1(
+                        &principal,
+                        lima_home.to_str().expect("UTF-8 Lima test root")
+                    )
+                    .is_err(),
+                    "mode {insecure_mode:o} owner overlay directory was accepted: {}",
+                    directory.display()
+                );
+                fs::set_permissions(directory, fs::Permissions::from_mode(0o700))
+                    .expect("reharden owner overlay fixture directory");
+            }
+        }
+        let default = config.join("default.yaml");
+        fs::write(&default, b"cpus: 99\n").expect("write owner default overlay fixture");
+        assert!(mac_require_absent_lima_owner_overlays_v1(
+            &principal,
+            lima_home.to_str().expect("UTF-8 Lima test root")
+        )
+        .is_err());
+        fs::remove_file(&default).expect("remove owner default overlay fixture");
+        let override_path = config.join("override.yaml");
+        std::os::unix::fs::symlink("missing-target", &override_path)
+            .expect("create dangling owner override fixture");
+        assert!(mac_require_absent_lima_owner_overlays_v1(
+            &principal,
+            lima_home.to_str().expect("UTF-8 Lima test root")
+        )
+        .is_err());
+        drop(cleanup);
+    }
+
+    #[cfg(target_os = "macos")]
+    #[test]
+    #[ignore = "bounded root-only credential/FD proof; run the built test binary through sudo"]
+    fn live_lima_principal_child_drops_root_groups_and_reads_only_profile_fd() {
+        assert_eq!(unsafe { libc::geteuid() }, 0, "root test launcher required");
+        let account = std::env::var("SUDO_USER").expect("sudo must retain SUDO_USER");
+        let uid: u32 = std::env::var("SUDO_UID")
+            .expect("sudo must retain SUDO_UID")
+            .parse()
+            .expect("numeric SUDO_UID");
+        assert_ne!(uid, 0, "test must target the invoking non-root user");
+        let carrier = lima_test_carrier(&account, uid);
+        let principal = mac_resolve_lima_principal_v1(&carrier)
+            .expect("resolve invoking user's exact account tuple");
+
+        struct Cleanup(PathBuf);
+        impl Drop for Cleanup {
+            fn drop(&mut self) {
+                let _ = fs::remove_dir_all(&self.0);
+            }
+        }
+        let root = PathBuf::from(format!(
+            "/private/tmp/substrate-lima-principal-runner-test-{}",
+            std::process::id()
+        ));
+        let cleanup = Cleanup(root.clone());
+        let _ = fs::remove_dir_all(&root);
+        fs::create_dir(&root).expect("create root-owned runner test directory");
+        fs::set_permissions(&root, fs::Permissions::from_mode(0o755))
+            .expect("make fake tool directory traversable");
+        let ownership_home = root.join("ownership-home");
+        let ownership_lima = ownership_home.join(".lima");
+        fs::create_dir(&ownership_home).expect("create ownership test home");
+        fs::create_dir(&ownership_lima).expect("create root-owned Lima rejection fixture");
+        let ownership_principal = MacLimaPrincipalV1 {
+            home: ownership_home
+                .to_str()
+                .expect("UTF-8 ownership test home")
+                .to_string(),
+            ..principal.clone()
+        };
+        assert!(mac_verify_lima_control_state_ownership_v1(
+            &ownership_principal,
+            ownership_lima.to_str().expect("UTF-8 ownership Lima root")
+        )
+        .is_err());
+        let ownership_lima_c = std::ffi::CString::new(
+            ownership_lima
+                .to_str()
+                .expect("NUL-free ownership Lima root"),
+        )
+        .expect("encode ownership Lima root");
+        assert_eq!(
+            unsafe {
+                libc::chown(
+                    ownership_lima_c.as_ptr(),
+                    ownership_principal.uid,
+                    ownership_principal.gid,
+                )
+            },
+            0
+        );
+        assert!(mac_verify_lima_control_state_ownership_v1(
+            &ownership_principal,
+            ownership_lima.to_str().expect("UTF-8 ownership Lima root")
+        )
+        .is_ok());
+        let output_dir = root.join("output");
+        fs::create_dir(&output_dir).expect("create child output directory");
+        let output_c = std::ffi::CString::new(output_dir.to_str().expect("UTF-8 output path"))
+            .expect("NUL-free output path");
+        assert_eq!(
+            unsafe { libc::chown(output_c.as_ptr(), principal.uid, principal.gid) },
+            0
+        );
+        fs::set_permissions(&output_dir, fs::Permissions::from_mode(0o700))
+            .expect("harden child output directory");
+        let proof_home = root.join("isolated-principal-home");
+        fs::create_dir(&proof_home).expect("create isolated principal home");
+        let proof_home_c =
+            std::ffi::CString::new(proof_home.to_str().expect("UTF-8 isolated principal home"))
+                .expect("NUL-free isolated principal home");
+        assert_eq!(
+            unsafe { libc::chown(proof_home_c.as_ptr(), principal.uid, principal.gid) },
+            0
+        );
+        fs::set_permissions(&proof_home, fs::Permissions::from_mode(0o700))
+            .expect("harden isolated principal home");
+        let proof_principal = MacLimaPrincipalV1 {
+            home: proof_home
+                .to_str()
+                .expect("UTF-8 isolated principal home")
+                .to_string(),
+            ..principal.clone()
+        };
+        let lima_home = proof_home
+            .join(".lima")
+            .to_str()
+            .expect("UTF-8 isolated Lima home")
+            .to_string();
+        let root_group_sentinel = root.join("root-group-only");
+        fs::write(&root_group_sentinel, b"root group must not survive\n")
+            .expect("write root-group sentinel");
+        let root_group_sentinel_c = std::ffi::CString::new(
+            root_group_sentinel
+                .to_str()
+                .expect("UTF-8 root-group sentinel"),
+        )
+        .expect("encode root-group sentinel");
+        assert_eq!(
+            unsafe { libc::chown(root_group_sentinel_c.as_ptr(), 0, 0) },
+            0
+        );
+        fs::set_permissions(&root_group_sentinel, fs::Permissions::from_mode(0o040))
+            .expect("restrict sentinel to the root primary group");
+
+        let profile_bytes = b"arch: aarch64\nminimumLimaVersion: 1.0.0\nimages:\n  - location: https://example.invalid/substrate-lima-proof.img\n    arch: aarch64\n";
+        let profile_path = root.join("profile.yaml");
+        fs::write(&profile_path, profile_bytes).expect("write root profile fixture");
+        fs::set_permissions(&profile_path, fs::Permissions::from_mode(0o444))
+            .expect("harden root profile fixture");
+        let profile_file = fs::OpenOptions::new()
+            .read(true)
+            .custom_flags(libc::O_CLOEXEC | libc::O_NOFOLLOW)
+            .open(&profile_path)
+            .expect("open retained root profile fixture");
+        let profile_metadata = profile_file.metadata().expect("stat profile fixture");
+        let mut profile = MacLimaInheritedInputV1 {
+            role: MacLimaInheritedInputRoleV1::StageOneProfile,
+            path: profile_path.clone(),
+            identity: format!(
+                "dev:{}:ino:{}",
+                profile_metadata.dev(),
+                profile_metadata.ino()
+            ),
+            sha256: sha256_hex_bootstrap_v1(profile_bytes),
+            size: profile_metadata.len(),
+            file: profile_file,
+        };
+        let retained_fd = profile.file.as_raw_fd();
+
+        let copy_bytes = b"root-private post-PM copy bytes\n";
+        let copy_path = root.join("post-pm-copy.bin");
+        fs::write(&copy_path, copy_bytes).expect("write root copy fixture");
+        fs::set_permissions(&copy_path, fs::Permissions::from_mode(0o444))
+            .expect("freeze root copy fixture");
+        let copy_metadata = fs::symlink_metadata(&copy_path).expect("stat copy fixture");
+        let copy_source = mac_open_root_private_lima_input_v1(
+            &copy_path,
+            MacLimaInheritedInputRoleV1::PostPmCopySource,
+            &sha256_hex_bootstrap_v1(copy_bytes),
+            copy_bytes.len() as u64,
+        )
+        .expect("retain exact root-private copy fixture");
+        assert_eq!(copy_source.size, copy_metadata.len());
+        let copy_retained_fd = copy_source.file.as_raw_fd();
+
+        let unrelated_path = root.join("unrelated-root-descriptor");
+        fs::write(&unrelated_path, b"must not cross exec\n")
+            .expect("write unrelated descriptor fixture");
+        let unrelated = fs::File::open(&unrelated_path).expect("open unrelated root descriptor");
+        let unrelated_fd = unrelated.as_raw_fd();
+        let unrelated_flags = unsafe { libc::fcntl(unrelated_fd, libc::F_GETFD) };
+        assert!(unrelated_flags >= 0);
+        assert_eq!(
+            unsafe {
+                libc::fcntl(
+                    unrelated_fd,
+                    libc::F_SETFD,
+                    unrelated_flags & !libc::FD_CLOEXEC,
+                )
+            },
+            0,
+            "deliberately make the unrelated root descriptor inheritable"
+        );
+
+        let output_path = output_dir.join("child-owned");
+        let copy_output_path = output_dir.join("copy-child-owned");
+        let fake_source = root.join("fake-limactl.c");
+        let fake = root.join("limactl");
+        let fake_program = r#"
+#include <errno.h>
+#include <fcntl.h>
+#include <stdio.h>
+#include <stdlib.h>
+#include <string.h>
+#include <sys/stat.h>
+#include <sys/types.h>
+#include <unistd.h>
+
+extern char **environ;
+
+int main(int argc, char **argv) {
+    if (geteuid() == 0) {
+        fputs("limactl: must not run as the root user\n", stderr);
+        return 91;
+    }
+    int start_mode = argc == 6 && strcmp(argv[1], "start") == 0;
+    int copy_mode = argc == 4 && strcmp(argv[1], "copy") == 0;
+    if (!start_mode && !copy_mode) return 92;
+    int nonzero_mode = start_mode && strcmp(argv[4], "nonzero-proof") == 0;
+    int disconnect_mode = start_mode && strcmp(argv[4], "disconnect-proof") == 0;
+    int drift_default_mode = start_mode && strcmp(argv[4], "drift-default-proof") == 0;
+    int drift_override_mode = start_mode && strcmp(argv[4], "drift-override-proof") == 0;
+    int timeout_mode = copy_mode && strstr(argv[3], "/timeout-proof.bin") != NULL;
+    gid_t groups[128];
+    int group_count = getgroups(128, groups);
+    if (group_count < 0) return 93;
+    printf("uid=%u\n", (unsigned)getuid());
+    printf("euid=%u\n", (unsigned)geteuid());
+    printf("gid=%u\n", (unsigned)getgid());
+    printf("egid=%u\n", (unsigned)getegid());
+    fputs("groups=", stdout);
+    for (int index = 0; index < group_count; index++) {
+        printf("%s%u", index == 0 ? "" : " ", (unsigned)groups[index]);
+    }
+    fputc('\n', stdout);
+    int home_count = 0;
+    int lima_home_count = 0;
+    int path_count = 0;
+    for (char **entry = environ; *entry != NULL; entry++) {
+        if (strncmp(*entry, "HOME=", 5) == 0) home_count++;
+        else if (strncmp(*entry, "LIMA_HOME=", 10) == 0) lima_home_count++;
+        else if (strncmp(*entry, "PATH=", 5) == 0) path_count++;
+        else {
+            fprintf(stderr, "unexpected environment key: %s\n", *entry);
+            return 102;
+        }
+    }
+    if (home_count != 1 || lima_home_count != 1 || path_count != 1) return 103;
+    if (getenv("HOME") == NULL || getenv("LIMA_HOME") == NULL || getenv("PATH") == NULL) return 104;
+    printf("HOME=%s\n", getenv("HOME"));
+    printf("LIMA_HOME=%s\n", getenv("LIMA_HOME"));
+    printf("PATH=%s\n", getenv("PATH"));
+    fputs("environment=exact\n", stdout);
+    errno = 0;
+    int root_group = open("__ROOT_GROUP_SENTINEL__", O_RDONLY);
+    if (root_group >= 0) return 98;
+    if (errno != EACCES) return 99;
+    fputs("root_group_access=denied\n", stdout);
+    errno = 0;
+    if (fcntl(__UNRELATED_FD__, F_GETFD) >= 0 || errno != EBADF) return 100;
+    fputs("unrelated_fd=closed\n", stdout);
+    int source_fd = start_mode ? 3 : 4;
+    int flags = fcntl(source_fd, F_GETFD);
+    if (flags < 0 || (flags & FD_CLOEXEC) != 0) return 94;
+    int status_flags = fcntl(source_fd, F_GETFL);
+    if (status_flags < 0 || (status_flags & O_ACCMODE) != O_RDONLY) return 101;
+    int source = open(start_mode ? argv[5] : argv[2], O_RDONLY);
+    if (source < 0) return 95;
+    fputs(start_mode ? "profile_hex=" : "copy_hex=", stdout);
+    unsigned char buffer[256];
+    ssize_t count;
+    while ((count = read(source, buffer, sizeof(buffer))) > 0) {
+        for (ssize_t index = 0; index < count; index++) printf("%02x", buffer[index]);
+    }
+    if (count < 0 || close(source) != 0) return 96;
+    fputc('\n', stdout);
+    if (nonzero_mode) {
+        fputs("first inherited-input child failure\n", stderr);
+        return 77;
+    }
+    if (timeout_mode || disconnect_mode) {
+        sleep(30);
+        return 0;
+    }
+    if (drift_default_mode || drift_override_mode) {
+        char config[4096];
+        char overlay[4096];
+        const char *lima_home = getenv("LIMA_HOME");
+        if (mkdir(lima_home, 0700) != 0 && errno != EEXIST) return 105;
+        if (snprintf(config, sizeof(config), "%s/_config", lima_home) >= (int)sizeof(config)) return 106;
+        if (mkdir(config, 0700) != 0 && errno != EEXIST) return 107;
+        if (snprintf(overlay, sizeof(overlay), "%s/%s", config,
+                     drift_default_mode ? "default.yaml" : "override.yaml") >= (int)sizeof(overlay)) return 108;
+        int drift = open(overlay, O_WRONLY | O_CREAT | O_EXCL, 0600);
+        if (drift < 0 || write(drift, "cpus: 99\n", 9) != 9 || close(drift) != 0) return 109;
+        return 0;
+    }
+    int output = open(start_mode ? "__OUTPUT_PATH__" : "__COPY_OUTPUT_PATH__",
+                      O_WRONLY | O_CREAT | (start_mode ? O_EXCL : O_TRUNC), 0600);
+    if (output < 0 || close(output) != 0) return 97;
+    return 0;
+}
+"#
+        .replace(
+            "__OUTPUT_PATH__",
+            output_path.to_str().expect("UTF-8 output path"),
+        )
+        .replace(
+            "__COPY_OUTPUT_PATH__",
+            copy_output_path.to_str().expect("UTF-8 copy output path"),
+        )
+        .replace("__UNRELATED_FD__", &unrelated_fd.to_string())
+        .replace(
+            "__ROOT_GROUP_SENTINEL__",
+            root_group_sentinel
+                .to_str()
+                .expect("UTF-8 root-group sentinel"),
+        );
+        fs::write(&fake_source, fake_program).expect("write fake limactl source");
+        let compiled = Command::new("/usr/bin/clang")
+            .args(["-Wall", "-Wextra", "-Werror", "-O2", "-o"])
+            .arg(&fake)
+            .arg(&fake_source)
+            .output()
+            .expect("compile direct fake limactl");
+        assert!(
+            compiled.status.success(),
+            "{}",
+            String::from_utf8_lossy(&compiled.stderr)
+        );
+
+        let baseline = Command::new(&fake)
+            .env_clear()
+            .env("HOME", &proof_principal.home)
+            .env("LIMA_HOME", &lima_home)
+            .env("PATH", MAC_LIMA_CHILD_PATH_V1)
+            .output()
+            .expect("run root-refusal RED baseline");
+        assert_eq!(baseline.status.code(), Some(91));
+        assert!(String::from_utf8_lossy(&baseline.stderr)
+            .contains("limactl: must not run as the root user"));
+
+        let arguments = [
+            "start",
+            "--tty=false",
+            "--name",
+            "substrate-test",
+            MAC_LIMA_PROFILE_CHILD_PATH_V1,
+        ];
+        mac_validate_fixed_lima_argument_plan_v1(&arguments, Some(&profile))
+            .expect("closed profile plan");
+        mac_verify_lima_inherited_input_descriptor_v1(&profile)
+            .expect("exact root-opened profile fixture");
+        let output = mac_spawn_fixed_lima_child_after_validation_v1(
+            &fake,
+            &proof_principal,
+            &lima_home,
+            &arguments,
+            Some(&profile),
+            MacFixedLimaChildIoV1::Captured,
+        )
+        .expect("spawn principal-bound fake limactl")
+        .wait_with_output()
+        .expect("collect principal-bound fake limactl");
+        assert!(
+            output.status.success(),
+            "status={:?}; stdout={:?}; stderr={:?}",
+            output.status.code(),
+            String::from_utf8_lossy(&output.stdout),
+            String::from_utf8_lossy(&output.stderr),
+        );
+        let output = String::from_utf8(output.stdout).expect("UTF-8 fake limactl output");
+        assert!(output.contains(&format!("uid={}\n", principal.uid)));
+        assert!(output.contains(&format!("euid={}\n", principal.uid)));
+        assert!(output.contains(&format!("gid={}\n", principal.gid)));
+        assert!(output.contains(&format!("egid={}\n", principal.gid)));
+        let groups = output
+            .lines()
+            .find_map(|line| line.strip_prefix("groups="))
+            .expect("fake limactl groups output");
+        assert!(!groups.split_whitespace().any(|group| group == "0"));
+        assert!(output.contains("root_group_access=denied\n"));
+        assert!(output.contains("unrelated_fd=closed\n"));
+        assert!(output.contains(&format!("HOME={}\n", proof_principal.home)));
+        assert!(output.contains(&format!("LIMA_HOME={lima_home}\n")));
+        assert!(output.contains(&format!("PATH={MAC_LIMA_CHILD_PATH_V1}\n")));
+        assert!(output.contains("environment=exact\n"));
+        let profile_hex = profile_bytes
+            .iter()
+            .map(|byte| format!("{byte:02x}"))
+            .collect::<String>();
+        assert!(output.contains(&format!("profile_hex={profile_hex}\n")));
+        let child_output = fs::symlink_metadata(&output_path).expect("child-created output");
+        assert_eq!(child_output.uid(), principal.uid);
+        assert_ne!(child_output.uid(), 0);
+        profile
+            .file
+            .seek(SeekFrom::Start(0))
+            .expect("rewind profile before real limactl validation proof");
+        let validation = mac_spawn_fixed_lima_child_after_validation_v1(
+            Path::new(MAC_LIMA_TOOL_PATH_V1),
+            &proof_principal,
+            output_dir.to_str().expect("UTF-8 validation Lima home"),
+            &["validate", MAC_LIMA_PROFILE_CHILD_PATH_V1],
+            Some(&profile),
+            MacFixedLimaChildIoV1::Captured,
+        )
+        .expect("spawn real limactl validation-only FD proof")
+        .wait_with_output()
+        .expect("collect real limactl validation-only FD proof");
+        assert!(
+            validation.status.success(),
+            "real limactl could not validate the inherited profile FD: {}",
+            String::from_utf8_lossy(&validation.stderr)
+        );
+        assert_eq!(
+            fs::read_dir(&output_dir)
+                .expect("inspect validation-only Lima home")
+                .count(),
+            1,
+            "limactl validate unexpectedly mutated its isolated LIMA_HOME"
+        );
+
+        let copy_arguments = [
+            "copy",
+            MAC_LIMA_COPY_CHILD_PATH_V1,
+            "substrate:/var/lib/substrate/.substrate-lifecycle-v1/staged/live-proof.bin",
+        ];
+        mac_validate_fixed_lima_argument_plan_v1(&copy_arguments, Some(&copy_source))
+            .expect("closed post-PM copy plan");
+        for attempt in 1..=2 {
+            let child = mac_spawn_fixed_lima_child_after_validation_v1(
+                &fake,
+                &proof_principal,
+                &lima_home,
+                &copy_arguments,
+                Some(&copy_source),
+                MacFixedLimaChildIoV1::Captured,
+            )
+            .expect("spawn principal-bound fake copy");
+            let pid = child.id() as libc::pid_t;
+            let outcome = mac_collect_fixed_lima_child_outcome_v1(child, Duration::from_secs(5))
+                .expect("collect bounded fake copy");
+            let MacFixedLimaCommandOutcomeV1::Success(copy_output) = outcome else {
+                panic!("fake copy attempt {attempt} exited nonzero");
+            };
+            let copy_hex = copy_bytes
+                .iter()
+                .map(|byte| format!("{byte:02x}"))
+                .collect::<String>();
+            assert!(copy_output.contains(&format!("copy_hex={copy_hex}\n")));
+            assert!(copy_output.contains("unrelated_fd=closed\n"));
+            assert_eq!(
+                unsafe { libc::kill(pid, 0) },
+                -1,
+                "copy child was not reaped"
+            );
+        }
+        let copy_child_output =
+            fs::symlink_metadata(&copy_output_path).expect("copy child-created output");
+        assert_eq!(copy_child_output.uid(), principal.uid);
+        assert_ne!(copy_child_output.uid(), 0);
+
+        let replacement_path = root.join("same-byte-replacement.bin");
+        let replacement_old_path = root.join("same-byte-replacement.retained.bin");
+        fs::write(&replacement_path, copy_bytes).expect("write retained replacement fixture");
+        fs::set_permissions(&replacement_path, fs::Permissions::from_mode(0o444))
+            .expect("freeze retained replacement fixture");
+        let replacement_source = mac_open_root_private_lima_input_v1(
+            &replacement_path,
+            MacLimaInheritedInputRoleV1::PostPmCopySource,
+            &sha256_hex_bootstrap_v1(copy_bytes),
+            copy_bytes.len() as u64,
+        )
+        .expect("retain original replacement fixture identity");
+        fs::rename(&replacement_path, &replacement_old_path)
+            .expect("preserve retained inode under a different path");
+        fs::write(&replacement_path, copy_bytes).expect("write same-byte replacement inode");
+        fs::set_permissions(&replacement_path, fs::Permissions::from_mode(0o444))
+            .expect("freeze same-byte replacement inode");
+        let replacement_error = mac_spawn_fixed_lima_child_after_validation_v1(
+            &fake,
+            &proof_principal,
+            &lima_home,
+            &copy_arguments,
+            Some(&replacement_source),
+            MacFixedLimaChildIoV1::Captured,
+        )
+        .expect_err("same-byte replacement inode must be denied");
+        assert!(format!("{replacement_error:#}")
+            .contains("fresh per-spawn Lima input changed retained physical identity"));
+
+        for (instance, leaf) in [
+            ("drift-default-proof", "default.yaml"),
+            ("drift-override-proof", "override.yaml"),
+        ] {
+            let drift_arguments = [
+                "start",
+                "--tty=false",
+                "--name",
+                instance,
+                MAC_LIMA_PROFILE_CHILD_PATH_V1,
+            ];
+            let child = mac_spawn_fixed_lima_child_after_validation_v1(
+                &fake,
+                &proof_principal,
+                &lima_home,
+                &drift_arguments,
+                Some(&profile),
+                MacFixedLimaChildIoV1::Captured,
+            )
+            .expect("spawn child-induced owner-overlay drift proof");
+            let outcome = mac_collect_fixed_lima_child_outcome_v1(child, Duration::from_secs(5));
+            let rejection = mac_join_fixed_lima_outcome_and_post_validation_v1(
+                outcome,
+                mac_validate_lima_post_effect_state_v1(&proof_principal, &lima_home),
+            )
+            .expect_err("post-command owner-overlay drift must reject success");
+            assert!(format!("{rejection:#}").contains("must be absent"));
+            fs::remove_file(Path::new(&lima_home).join("_config").join(leaf))
+                .expect("remove isolated drift fixture");
+        }
+        fs::remove_dir(Path::new(&lima_home).join("_config"))
+            .expect("remove isolated overlay directory");
+        fs::remove_dir(&lima_home).expect("remove isolated Lima home");
+
+        let nonzero_arguments = [
+            "start",
+            "--tty=false",
+            "--name",
+            "nonzero-proof",
+            MAC_LIMA_PROFILE_CHILD_PATH_V1,
+        ];
+        let nonzero_child = mac_spawn_fixed_lima_child_after_validation_v1(
+            &fake,
+            &proof_principal,
+            &lima_home,
+            &nonzero_arguments,
+            Some(&profile),
+            MacFixedLimaChildIoV1::Captured,
+        )
+        .expect("spawn bounded nonzero proof");
+        let nonzero_pid = nonzero_child.id() as libc::pid_t;
+        assert!(matches!(
+            mac_collect_fixed_lima_child_outcome_v1(nonzero_child, Duration::from_secs(5))
+                .expect("collect bounded nonzero proof"),
+            MacFixedLimaCommandOutcomeV1::NonZero { code: Some(77), .. }
+        ));
+        assert_eq!(
+            unsafe { libc::kill(nonzero_pid, 0) },
+            -1,
+            "nonzero child was not reaped"
+        );
+
+        let timeout_arguments = [
+            "copy",
+            MAC_LIMA_COPY_CHILD_PATH_V1,
+            "substrate:/var/lib/substrate/.substrate-lifecycle-v1/staged/timeout-proof.bin",
+        ];
+        let timeout_child = mac_spawn_fixed_lima_child_after_validation_v1(
+            &fake,
+            &proof_principal,
+            &lima_home,
+            &timeout_arguments,
+            Some(&copy_source),
+            MacFixedLimaChildIoV1::Captured,
+        )
+        .expect("spawn bounded timeout proof");
+        let timeout_pid = timeout_child.id() as libc::pid_t;
+        assert!(
+            mac_collect_fixed_lima_child_outcome_v1(timeout_child, Duration::from_millis(50))
+                .is_err()
+        );
+        assert_eq!(
+            unsafe { libc::kill(timeout_pid, 0) },
+            -1,
+            "timed-out child was not killed and reaped"
+        );
+
+        let disconnect_arguments = [
+            "start",
+            "--tty=false",
+            "--name",
+            "disconnect-proof",
+            MAC_LIMA_PROFILE_CHILD_PATH_V1,
+        ];
+        let disconnect_child = mac_spawn_fixed_lima_child_after_validation_v1(
+            &fake,
+            &proof_principal,
+            &lima_home,
+            &disconnect_arguments,
+            Some(&profile),
+            MacFixedLimaChildIoV1::Streaming,
+        )
+        .expect("spawn bounded disconnect proof");
+        let disconnect_pid = disconnect_child.id() as libc::pid_t;
+        drop(R6RetainedLimaChildGuardV1::new(
+            disconnect_child,
+            &carrier,
+            &proof_principal,
+            &lima_home,
+        ));
+        assert_eq!(
+            unsafe { libc::kill(disconnect_pid, 0) },
+            -1,
+            "disconnected stream child was not killed and reaped"
+        );
+
+        drop(profile);
+        assert_eq!(unsafe { libc::fcntl(retained_fd, libc::F_GETFD) }, -1);
+        drop(copy_source);
+        assert_eq!(unsafe { libc::fcntl(copy_retained_fd, libc::F_GETFD) }, -1);
+        drop(unrelated);
+        assert_eq!(unsafe { libc::fcntl(unrelated_fd, libc::F_GETFD) }, -1);
+        drop(cleanup);
+    }
 
     #[test]
     fn authenticated_xpc_rejection_retains_exact_peer_authority() {
@@ -5131,10 +6150,26 @@ fn mac_stage_one_profile_path_v1(
         .join(format!("{attempt_id}.yaml")))
 }
 
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+enum MacLimaInheritedInputRoleV1 {
+    StageOneProfile,
+    PostPmCopySource,
+}
+
+#[derive(Debug)]
+struct MacLimaInheritedInputV1 {
+    role: MacLimaInheritedInputRoleV1,
+    path: PathBuf,
+    identity: String,
+    sha256: String,
+    size: u64,
+    file: fs::File,
+}
+
 fn mac_write_stage_one_profile_absent_or_exact_v1(
     executor: &MacManagedArtifactExecutorV1,
     stage_one: &LimaStageOneAuthorizationV1,
-) -> Result<String> {
+) -> Result<MacLimaInheritedInputV1> {
     let profile = render_mac_lima_stage_one_profile_v1(
         &stage_one.attempt_id,
         &stage_one.executor_receipt_sha256,
@@ -5144,6 +6179,9 @@ fn mac_write_stage_one_profile_absent_or_exact_v1(
         || stage_one.profile_sha256 != stage_one.rendered_profile_sha256
     {
         bail!("Stage-1 authorization rendered profile does not re-render exactly");
+    }
+    if profile.len() as u64 > MAC_LIMA_ROOT_INPUT_MAX_BYTES_V1 {
+        bail!("Stage-1 profile exceeds the fixed inherited-input size bound");
     }
     let path = mac_stage_one_profile_path_v1(
         executor,
@@ -5166,10 +6204,14 @@ fn mac_write_stage_one_profile_absent_or_exact_v1(
     {
         bail!("Stage-1 profile parent is not a root-owned private directory");
     }
-    let result = (|| -> Result<String> {
+    let result = (|| -> Result<MacLimaInheritedInputV1> {
         let file = fs::OpenOptions::new()
             .write(true)
             .create_new(true)
+            // Create privately, then freeze the exact descriptor to root-owned read-only mode.
+            // The read bit for the child principal is necessary because macOS /dev/fd reopens
+            // the inherited descriptor with ordinary access checks; the private 0700 parent
+            // keeps the pathname unavailable and the child can never mutate the root-owned file.
             .mode(0o600)
             .custom_flags(libc::O_CLOEXEC | libc::O_NOFOLLOW)
             .open(&path);
@@ -5178,6 +6220,10 @@ fn mac_write_stage_one_profile_absent_or_exact_v1(
                 file.write_all(&profile)
                     .context("write fixed Stage-1 profile")?;
                 file.sync_all().context("fsync fixed Stage-1 profile")?;
+                file.set_permissions(fs::Permissions::from_mode(0o444))
+                    .context("freeze new Stage-1 profile read-only")?;
+                file.sync_all()
+                    .context("fsync frozen new Stage-1 profile")?;
             }
             Err(error) if error.kind() == std::io::ErrorKind::AlreadyExists => {
                 let mut existing = fs::OpenOptions::new()
@@ -5192,7 +6238,8 @@ fn mac_write_stage_one_profile_absent_or_exact_v1(
                     || metadata.nlink() != 1
                     || metadata.uid() != 0
                     || metadata.gid() != 0
-                    || metadata.mode() & 0o777 != 0o600
+                    || !matches!(metadata.mode() & 0o777, 0o600 | 0o444)
+                    || metadata.len() != profile.len() as u64
                 {
                     bail!("existing Stage-1 profile is not one retained regular file");
                 }
@@ -5203,6 +6250,12 @@ fn mac_write_stage_one_profile_absent_or_exact_v1(
                 if bytes != profile {
                     bail!("existing Stage-1 profile is not an exact retry");
                 }
+                existing
+                    .set_permissions(fs::Permissions::from_mode(0o444))
+                    .context("freeze exact-retry Stage-1 profile read-only")?;
+                existing
+                    .sync_all()
+                    .context("fsync frozen exact-retry Stage-1 profile")?;
             }
             Err(error) => return Err(error).context("create fixed Stage-1 profile no-follow"),
         }
@@ -5212,7 +6265,8 @@ fn mac_write_stage_one_profile_absent_or_exact_v1(
             || metadata.nlink() != 1
             || metadata.uid() != 0
             || metadata.gid() != 0
-            || metadata.mode() & 0o777 != 0o600
+            || metadata.mode() & 0o777 != 0o444
+            || metadata.len() != profile.len() as u64
         {
             bail!("Stage-1 profile identity changed or is not regular after fsync");
         }
@@ -5223,7 +6277,57 @@ fn mac_write_stage_one_profile_absent_or_exact_v1(
             .context("open fixed Stage-1 profile parent")?
             .sync_all()
             .context("fsync fixed Stage-1 profile parent")?;
-        Ok(format!("dev:{}:ino:{}", metadata.dev(), metadata.ino()))
+        let mut retained = fs::OpenOptions::new()
+            .read(true)
+            .custom_flags(libc::O_CLOEXEC | libc::O_NOFOLLOW)
+            .open(&path)
+            .context("retain fixed Stage-1 profile read descriptor")?;
+        let retained_metadata = retained
+            .metadata()
+            .context("inspect retained Stage-1 profile descriptor")?;
+        if !retained_metadata.file_type().is_file()
+            || retained_metadata.nlink() != 1
+            || retained_metadata.uid() != 0
+            || retained_metadata.gid() != 0
+            || retained_metadata.mode() & 0o777 != 0o444
+            || retained_metadata.len() != profile.len() as u64
+            || retained_metadata.dev() != metadata.dev()
+            || retained_metadata.ino() != metadata.ino()
+        {
+            bail!("retained Stage-1 profile descriptor changed identity or authority");
+        }
+        let mut retained_bytes = Vec::new();
+        retained
+            .read_to_end(&mut retained_bytes)
+            .context("read retained Stage-1 profile descriptor")?;
+        if retained_bytes != profile
+            || sha256_hex_bootstrap_v1(&retained_bytes) != stage_one.rendered_profile_sha256
+        {
+            bail!("retained Stage-1 profile descriptor does not exact-join signed bytes");
+        }
+        retained
+            .seek(SeekFrom::Start(0))
+            .context("rewind retained Stage-1 profile descriptor")?;
+        let descriptor_flags = unsafe { libc::fcntl(retained.as_raw_fd(), libc::F_GETFD) };
+        if descriptor_flags < 0 || descriptor_flags & libc::FD_CLOEXEC == 0 {
+            bail!("retained Stage-1 profile descriptor is not parent-CLOEXEC");
+        }
+        let path_after = fs::symlink_metadata(&path)
+            .context("reinspect retained Stage-1 profile path after descriptor verification")?;
+        if path_after.dev() != retained_metadata.dev()
+            || path_after.ino() != retained_metadata.ino()
+            || path_after.file_type().is_symlink()
+        {
+            bail!("Stage-1 profile path changed after retained descriptor verification");
+        }
+        Ok(MacLimaInheritedInputV1 {
+            role: MacLimaInheritedInputRoleV1::StageOneProfile,
+            path: path.clone(),
+            identity: format!("dev:{}:ino:{}", metadata.dev(), metadata.ino()),
+            sha256: stage_one.rendered_profile_sha256.clone(),
+            size: retained_metadata.len(),
+            file: retained,
+        })
     })();
     result
 }
@@ -5240,60 +6344,516 @@ enum MacFixedLimaCommandOutcomeV1 {
     },
 }
 
-fn mac_run_fixed_lima_command_outcome_v1(
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+enum MacFixedLimaChildIoV1 {
+    Captured,
+    Streaming,
+}
+
+fn mac_validate_fixed_lima_argument_plan_v1(
+    arguments: &[&str],
+    inherited_input: Option<&MacLimaInheritedInputV1>,
+) -> Result<()> {
+    if arguments.is_empty()
+        || !matches!(
+            arguments[0],
+            "list" | "start" | "stop" | "delete" | "shell" | "copy"
+        )
+        || arguments
+            .iter()
+            .any(|argument| argument.is_empty() || argument.contains(['\0', '\n', '\r']))
+    {
+        bail!("fixed Lima command argument plan is empty, unknown, or noncanonical");
+    }
+    match inherited_input.map(|input| input.role) {
+        Some(MacLimaInheritedInputRoleV1::StageOneProfile) => {
+            if arguments.len() != 5
+                || arguments[0] != "start"
+                || arguments[1] != "--tty=false"
+                || arguments[2] != "--name"
+                || arguments[3].starts_with('-')
+                || arguments[3].contains('/')
+                || arguments[4] != MAC_LIMA_PROFILE_CHILD_PATH_V1
+            {
+                bail!("Stage-1 profile descriptor is not bound to the one closed start plan");
+            }
+        }
+        Some(MacLimaInheritedInputRoleV1::PostPmCopySource) => {
+            if arguments.len() != 3
+                || arguments[0] != "copy"
+                || arguments[1] != MAC_LIMA_COPY_CHILD_PATH_V1
+                || !arguments[2]
+                    .starts_with("substrate:/var/lib/substrate/.substrate-lifecycle-v1/staged/")
+                || arguments[2].contains("..")
+            {
+                bail!("post-PM copy descriptor is not bound to the one closed guest staging plan");
+            }
+        }
+        None => {
+            if arguments.contains(&MAC_LIMA_PROFILE_CHILD_PATH_V1)
+                || arguments.contains(&MAC_LIMA_COPY_CHILD_PATH_V1)
+            {
+                bail!("fixed Lima command references an inherited FD without a retained file");
+            }
+        }
+    }
+    Ok(())
+}
+
+/// Detect owner-side Lima configuration drift on the supported same-user path. The hardened
+/// same-user Lima contract does not claim a privilege boundary against the owning host user, so
+/// this pre/post check is intentionally not described as race-free against that owner. It does
+/// make the normal supported path deterministic and fail closed whenever either implicit Lima
+/// overlay exists or the `_config` path cannot be inspected unambiguously without following a
+/// leaf link.
+fn mac_require_absent_lima_owner_overlays_v1(
+    principal: &MacLimaPrincipalV1,
+    lima_home: &str,
+) -> Result<()> {
+    let expected = Path::new(&principal.home).join(".lima");
+    if expected.to_str() != Some(lima_home) {
+        bail!("fixed Lima overlay root does not exact-join the account home");
+    }
+    let require_same_user_directory = |path: &Path, label: &str| -> Result<()> {
+        let metadata = fs::symlink_metadata(path)
+            .with_context(|| format!("inspect same-user Lima {label} {}", path.display()))?;
+        if !metadata.file_type().is_dir()
+            || metadata.file_type().is_symlink()
+            || metadata.uid() != principal.uid
+            || metadata.uid() == 0
+            || metadata.mode() & 0o022 != 0
+        {
+            bail!(
+                "same-user Lima {label} is linked, misowned, or writable by another local principal"
+            );
+        }
+        Ok(())
+    };
+    require_same_user_directory(Path::new(&principal.home), "account home")?;
+    match fs::symlink_metadata(expected.as_path()) {
+        Err(error) if error.kind() == std::io::ErrorKind::NotFound => return Ok(()),
+        Err(error) => return Err(error).context("inspect same-user Lima control directory"),
+        Ok(_) => require_same_user_directory(expected.as_path(), "control directory")?,
+    }
+    let config = expected.join("_config");
+    match fs::symlink_metadata(&config) {
+        Err(error) if error.kind() == std::io::ErrorKind::NotFound => return Ok(()),
+        Err(error) => {
+            return Err(error).with_context(|| {
+                format!(
+                    "inspect same-user Lima overlay directory {}",
+                    config.display()
+                )
+            })
+        }
+        Ok(_) => require_same_user_directory(config.as_path(), "overlay directory")?,
+    }
+    for leaf in ["default.yaml", "override.yaml"] {
+        let path = config.join(leaf);
+        match fs::symlink_metadata(&path) {
+            Err(error) if error.kind() == std::io::ErrorKind::NotFound => {}
+            Err(error) => {
+                return Err(error).with_context(|| {
+                    format!("inspect same-user Lima owner overlay {}", path.display())
+                })
+            }
+            Ok(_) => bail!("same-user Lima owner overlay {leaf} must be absent"),
+        }
+    }
+    Ok(())
+}
+
+fn mac_verify_lima_control_state_ownership_v1(
+    principal: &MacLimaPrincipalV1,
+    lima_home: &str,
+) -> Result<()> {
+    let expected = Path::new(&principal.home).join(".lima");
+    if expected.to_str() != Some(lima_home) {
+        bail!("fixed Lima control root does not exact-join the account home");
+    }
+    let root = Path::new(lima_home);
+    match fs::symlink_metadata(root) {
+        Ok(metadata) => {
+            if !metadata.file_type().is_dir()
+                || metadata.file_type().is_symlink()
+                || metadata.uid() != principal.uid
+                || metadata.uid() == 0
+            {
+                bail!("Lima control root is not owned by the exact intended non-root principal");
+            }
+        }
+        Err(error) if error.kind() == std::io::ErrorKind::NotFound => return Ok(()),
+        Err(error) => return Err(error).context("inspect fixed Lima control root ownership"),
+    }
+
+    let mut pending = vec![(root.to_path_buf(), 0usize)];
+    let mut observed = 0usize;
+    while let Some((directory, depth)) = pending.pop() {
+        if depth > MAC_LIMA_OWNERSHIP_MAX_DEPTH_V1 {
+            bail!("Lima control-state ownership walk exceeded its fixed depth bound");
+        }
+        for entry in fs::read_dir(&directory)
+            .with_context(|| format!("read Lima control-state directory {}", directory.display()))?
+        {
+            let entry = entry.context("read Lima control-state entry")?;
+            observed = observed
+                .checked_add(1)
+                .ok_or_else(|| anyhow::anyhow!("Lima ownership entry counter overflow"))?;
+            if observed > MAC_LIMA_OWNERSHIP_MAX_ENTRIES_V1 {
+                bail!("Lima control-state ownership walk exceeded its fixed entry bound");
+            }
+            let metadata = fs::symlink_metadata(entry.path()).with_context(|| {
+                format!(
+                    "inspect Lima control-state entry {}",
+                    entry.path().display()
+                )
+            })?;
+            if metadata.uid() != principal.uid || metadata.uid() == 0 {
+                bail!("Lima control-state entry is not owned by the intended non-root principal");
+            }
+            if metadata.file_type().is_dir() && !metadata.file_type().is_symlink() {
+                pending.push((entry.path(), depth + 1));
+            }
+        }
+    }
+    Ok(())
+}
+
+fn mac_verify_lima_inherited_input_descriptor_v1(
+    inherited_input: &MacLimaInheritedInputV1,
+) -> Result<()> {
+    let metadata = inherited_input
+        .file
+        .metadata()
+        .context("inspect retained Lima input before child inheritance")?;
+    if !metadata.file_type().is_file()
+        || metadata.nlink() != 1
+        || metadata.uid() != 0
+        || metadata.gid() != 0
+        || metadata.mode() & 0o777 != 0o444
+        || metadata.len() != inherited_input.size
+        || metadata.len() > MAC_LIMA_ROOT_INPUT_MAX_BYTES_V1
+        || inherited_input.identity != format!("dev:{}:ino:{}", metadata.dev(), metadata.ino())
+    {
+        bail!("retained Lima input descriptor no longer has its exact root identity and size");
+    }
+    let mut digest = Sha256::new();
+    let mut offset = 0u64;
+    let mut buffer = [0u8; 16 * 1024];
+    loop {
+        let count = inherited_input
+            .file
+            .read_at(&mut buffer, offset)
+            .context("hash retained Lima input descriptor")?;
+        if count == 0 {
+            break;
+        }
+        digest.update(&buffer[..count]);
+        offset = offset
+            .checked_add(count as u64)
+            .ok_or_else(|| anyhow::anyhow!("retained Lima input descriptor length overflow"))?;
+    }
+    if offset != inherited_input.size
+        || format!("{:x}", digest.finalize()) != inherited_input.sha256
+    {
+        bail!("retained Lima input descriptor no longer exact-joins signed bytes through EOF");
+    }
+    let flags = unsafe { libc::fcntl(inherited_input.file.as_raw_fd(), libc::F_GETFD) };
+    if flags < 0 || flags & libc::FD_CLOEXEC == 0 {
+        bail!("retained Lima input descriptor lost parent CLOEXEC");
+    }
+    let status_flags = unsafe { libc::fcntl(inherited_input.file.as_raw_fd(), libc::F_GETFL) };
+    if status_flags < 0 || status_flags & libc::O_ACCMODE != libc::O_RDONLY {
+        bail!("retained Lima input descriptor is not read-only");
+    }
+    Ok(())
+}
+
+/// Configure the single post-validation child primitive. Production callers reach this only
+/// through `mac_spawn_fixed_lima_child_v1`; the split permits a root-only regression test to
+/// exercise the actual credential/FD transition with a harmless fake image.
+#[cfg(target_os = "macos")]
+fn mac_spawn_fixed_lima_child_after_validation_v1(
     tool: &Path,
-    home: &str,
+    principal: &MacLimaPrincipalV1,
     lima_home: &str,
     arguments: &[&str],
-) -> Result<MacFixedLimaCommandOutcomeV1> {
-    if !tool.is_absolute() || !home.starts_with('/') || !lima_home.starts_with('/') {
-        bail!("fixed Lima command has a noncanonical retained path/environment");
+    inherited_input: Option<&MacLimaInheritedInputV1>,
+    io: MacFixedLimaChildIoV1,
+) -> Result<Child> {
+    let path = MAC_LIMA_CHILD_PATH_V1;
+    // A fresh no-follow open gives each child an independent file description and offset. This
+    // is required for exact retry/EOF behavior: `/dev/fd/N` duplicates the child's inherited
+    // description, so reusing the long-lived retained description would let one read consume the
+    // next retry's offset.
+    let child_input = inherited_input
+        .map(|input| {
+            let child_input = mac_open_root_private_lima_input_v1(
+                &input.path,
+                input.role,
+                &input.sha256,
+                input.size,
+            )?;
+            if child_input.identity != input.identity {
+                bail!("fresh per-spawn Lima input changed retained physical identity");
+            }
+            Ok(child_input)
+        })
+        .transpose()?;
+    let inherited_fd = child_input.as_ref().map(|input| input.file.as_raw_fd());
+    let child_fd = child_input.as_ref().map(|input| match input.role {
+        MacLimaInheritedInputRoleV1::StageOneProfile => MAC_LIMA_PROFILE_CHILD_FD_V1,
+        MacLimaInheritedInputRoleV1::PostPmCopySource => MAC_LIMA_COPY_CHILD_FD_V1,
+    });
+    let fd_scan_limit = unsafe { libc::sysconf(libc::_SC_OPEN_MAX) };
+    if !(MAC_LIMA_COPY_CHILD_FD_V1 as libc::c_long..=MAC_LIMA_CHILD_FD_SCAN_LIMIT_V1)
+        .contains(&fd_scan_limit)
+    {
+        bail!("macOS child descriptor table exceeds the fixed inheritance scan bound");
     }
-    #[cfg(target_os = "macos")]
-    mac_require_root_owned_immutable_tool_path_v1(tool)?;
-    let tool_parent = tool
-        .parent()
-        .ok_or_else(|| anyhow::anyhow!("retained limactl has no parent"))?;
-    let path = format!("{}:/usr/bin:/bin:/usr/sbin:/sbin", tool_parent.display());
+    let uid = principal.uid;
+    let gid = principal.gid;
     let mut command = Command::new(tool);
     command
         .args(arguments)
         .env_clear()
-        .env("HOME", home)
+        .env("HOME", &principal.home)
         .env("LIMA_HOME", lima_home)
-        .env("PATH", path)
-        .stdin(Stdio::null())
-        .stdout(Stdio::piped())
-        .stderr(Stdio::piped());
-    let mut child = command.spawn().with_context(|| {
+        .env("PATH", path);
+    match io {
+        MacFixedLimaChildIoV1::Captured => {
+            command
+                .stdin(Stdio::null())
+                .stdout(Stdio::piped())
+                .stderr(Stdio::piped());
+        }
+        MacFixedLimaChildIoV1::Streaming => {
+            command
+                .stdin(Stdio::piped())
+                .stdout(Stdio::piped())
+                .stderr(Stdio::inherit());
+        }
+    }
+    // SAFETY: this child-only hook performs only async-signal-safe credential and descriptor
+    // syscalls. Supplementary groups are cleared while still root, then primary GID and UID are
+    // set in that order. Every descriptor above stderr is made close-on-exec except the one
+    // role-bound inherited input at FD 3 or FD 4; this includes unrelated publisher descriptors
+    // and preserves Rust's internal exec-error pipe until exec itself.
+    unsafe {
+        command.pre_exec(move || {
+            if libc::setgroups(0, std::ptr::null()) != 0 {
+                return Err(std::io::Error::last_os_error());
+            }
+            if libc::setgid(gid) != 0 {
+                return Err(std::io::Error::last_os_error());
+            }
+            if libc::setuid(uid) != 0 {
+                return Err(std::io::Error::last_os_error());
+            }
+            if let (Some(inherited_fd), Some(child_fd)) = (inherited_fd, child_fd) {
+                if inherited_fd != child_fd && libc::dup2(inherited_fd, child_fd) != child_fd {
+                    return Err(std::io::Error::last_os_error());
+                }
+            }
+            for descriptor in 3..fd_scan_limit as libc::c_int {
+                if Some(descriptor) == child_fd {
+                    continue;
+                }
+                let flags = libc::fcntl(descriptor, libc::F_GETFD);
+                if flags >= 0 {
+                    if libc::fcntl(descriptor, libc::F_SETFD, flags | libc::FD_CLOEXEC) != 0 {
+                        return Err(std::io::Error::last_os_error());
+                    }
+                } else if std::io::Error::last_os_error().raw_os_error() != Some(libc::EBADF) {
+                    return Err(std::io::Error::last_os_error());
+                }
+            }
+            if let Some(child_fd) = child_fd {
+                let flags = libc::fcntl(child_fd, libc::F_GETFD);
+                if flags < 0 || libc::fcntl(child_fd, libc::F_SETFD, flags & !libc::FD_CLOEXEC) != 0
+                {
+                    return Err(std::io::Error::last_os_error());
+                }
+            }
+            Ok(())
+        });
+    }
+    command.spawn().with_context(|| {
         format!(
-            "spawn exact retained limactl command {}",
+            "spawn exact retained principal-bound limactl command {}",
             arguments.join(" ")
         )
-    })?;
-    let started = std::time::Instant::now();
+    })
+}
+
+#[cfg(target_os = "macos")]
+fn mac_spawn_fixed_lima_child_v1(
+    tool: &Path,
+    carrier: &InstallBootstrapContextCarrierV1,
+    principal: &MacLimaPrincipalV1,
+    lima_home: &str,
+    arguments: &[&str],
+    inherited_input: Option<&MacLimaInheritedInputV1>,
+    io: MacFixedLimaChildIoV1,
+) -> Result<Child> {
+    if unsafe { libc::getuid() } != 0 || unsafe { libc::geteuid() } != 0 {
+        bail!("privileged macOS Lima publisher is not running with root authority");
+    }
+    if tool != Path::new(MAC_LIMA_TOOL_PATH_V1) {
+        bail!("retained limactl path is not the fixed /usr/local/bin image");
+    }
+    mac_require_root_owned_immutable_tool_path_v1(tool)?;
+    mac_revalidate_lima_principal_v1(carrier, principal)?;
+    mac_verify_lima_control_state_ownership_v1(principal, lima_home)?;
+    mac_require_absent_lima_owner_overlays_v1(principal, lima_home)?;
+    mac_validate_fixed_lima_argument_plan_v1(arguments, inherited_input)?;
+    if let Some(inherited_input) = inherited_input {
+        mac_verify_lima_inherited_input_descriptor_v1(inherited_input)?;
+    }
+    mac_spawn_fixed_lima_child_after_validation_v1(
+        tool,
+        principal,
+        lima_home,
+        arguments,
+        inherited_input,
+        io,
+    )
+}
+
+#[cfg(target_os = "macos")]
+fn mac_spawn_fixed_lima_stream_child_v1(
+    tool: &Path,
+    carrier: &InstallBootstrapContextCarrierV1,
+    principal: &MacLimaPrincipalV1,
+    lima_home: &str,
+    arguments: &[&str],
+) -> Result<R6RetainedLimaChildGuardV1> {
+    let child = mac_spawn_fixed_lima_child_v1(
+        tool,
+        carrier,
+        principal,
+        lima_home,
+        arguments,
+        None,
+        MacFixedLimaChildIoV1::Streaming,
+    )?;
+    Ok(R6RetainedLimaChildGuardV1::new(
+        child, carrier, principal, lima_home,
+    ))
+}
+
+fn mac_run_fixed_lima_command_outcome_v1(
+    tool: &Path,
+    carrier: &InstallBootstrapContextCarrierV1,
+    principal: &MacLimaPrincipalV1,
+    lima_home: &str,
+    arguments: &[&str],
+    inherited_input: Option<&MacLimaInheritedInputV1>,
+) -> Result<MacFixedLimaCommandOutcomeV1> {
+    #[cfg(not(target_os = "macos"))]
+    {
+        let _ = (
+            tool,
+            carrier,
+            principal,
+            lima_home,
+            arguments,
+            inherited_input,
+        );
+        bail!("fixed Lima command runner is available only on macOS");
+    }
+    #[cfg(target_os = "macos")]
+    let child = mac_spawn_fixed_lima_child_v1(
+        tool,
+        carrier,
+        principal,
+        lima_home,
+        arguments,
+        inherited_input,
+        MacFixedLimaChildIoV1::Captured,
+    )?;
+    #[cfg(target_os = "macos")]
+    let outcome = mac_collect_fixed_lima_child_outcome_v1(child, MAC_LIMA_EFFECT_TIMEOUT_V1);
+    #[cfg(target_os = "macos")]
+    let post_validation = mac_validate_lima_after_command_v1(carrier, principal, lima_home);
+    #[cfg(target_os = "macos")]
+    mac_join_fixed_lima_outcome_and_post_validation_v1(outcome, post_validation)
+}
+
+fn mac_validate_lima_after_command_v1(
+    carrier: &InstallBootstrapContextCarrierV1,
+    principal: &MacLimaPrincipalV1,
+    lima_home: &str,
+) -> Result<()> {
+    mac_revalidate_lima_principal_v1(carrier, principal)?;
+    mac_validate_lima_post_effect_state_v1(principal, lima_home)
+}
+
+fn mac_validate_lima_post_effect_state_v1(
+    principal: &MacLimaPrincipalV1,
+    lima_home: &str,
+) -> Result<()> {
+    mac_verify_lima_control_state_ownership_v1(principal, lima_home)?;
+    mac_require_absent_lima_owner_overlays_v1(principal, lima_home)?;
+    Ok(())
+}
+
+fn mac_join_fixed_lima_outcome_and_post_validation_v1(
+    outcome: Result<MacFixedLimaCommandOutcomeV1>,
+    post_validation: Result<()>,
+) -> Result<MacFixedLimaCommandOutcomeV1> {
+    match (outcome, post_validation) {
+        (Ok(outcome), Ok(())) => Ok(outcome),
+        (
+            Ok(MacFixedLimaCommandOutcomeV1::NonZero {
+                code,
+                stderr,
+                stdout: _,
+            }),
+            Err(validation_error),
+        ) => bail!(
+            "fixed retained limactl command exited nonzero ({code:?}): {stderr}; post-command validation also failed: {validation_error:#}"
+        ),
+        (Ok(MacFixedLimaCommandOutcomeV1::Success(_)), Err(error)) => Err(error),
+        (Err(error), Ok(())) => Err(error),
+        (Err(effect_error), Err(validation_error)) => bail!(
+            "fixed retained limactl command failed preserving first: {effect_error:#}; post-command validation also failed: {validation_error:#}"
+        ),
+    }
+}
+
+#[cfg(target_os = "macos")]
+fn mac_collect_fixed_lima_child_outcome_v1(
+    mut child: Child,
+    timeout: Duration,
+) -> Result<MacFixedLimaCommandOutcomeV1> {
+    let started = Instant::now();
     loop {
-        if child
-            .try_wait()
-            .context("poll exact retained limactl command")?
-            .is_some()
-        {
-            let output = child
-                .wait_with_output()
-                .context("collect exact retained limactl command")?;
-            if !output.status.success() {
-                return Ok(MacFixedLimaCommandOutcomeV1::NonZero {
-                    code: output.status.code(),
-                    stdout: String::from_utf8_lossy(&output.stdout).trim().to_string(),
-                    stderr: String::from_utf8_lossy(&output.stderr).trim().to_string(),
-                });
+        match child.try_wait() {
+            Ok(Some(_)) => {
+                let output = child
+                    .wait_with_output()
+                    .context("collect exact retained limactl command")?;
+                if !output.status.success() {
+                    return Ok(MacFixedLimaCommandOutcomeV1::NonZero {
+                        code: output.status.code(),
+                        stdout: String::from_utf8_lossy(&output.stdout).trim().to_string(),
+                        stderr: String::from_utf8_lossy(&output.stderr).trim().to_string(),
+                    });
+                }
+                return Ok(MacFixedLimaCommandOutcomeV1::Success(
+                    String::from_utf8(output.stdout)
+                        .context("fixed retained limactl output is not UTF-8")?,
+                ));
             }
-            return Ok(MacFixedLimaCommandOutcomeV1::Success(
-                String::from_utf8(output.stdout)
-                    .context("fixed retained limactl output is not UTF-8")?,
-            ));
+            Ok(None) => {}
+            Err(error) => {
+                let _ = child.kill();
+                let _ = child.wait();
+                return Err(error).context("poll exact retained limactl command");
+            }
         }
-        if started.elapsed() >= MAC_LIMA_EFFECT_TIMEOUT_V1 {
+        if started.elapsed() >= timeout {
             let _ = child.kill();
             let _ = child.wait();
             bail!("fixed retained limactl command timed out preserving first");
@@ -5304,11 +6864,20 @@ fn mac_run_fixed_lima_command_outcome_v1(
 
 fn mac_run_fixed_lima_command_v1(
     tool: &Path,
-    home: &str,
+    carrier: &InstallBootstrapContextCarrierV1,
+    principal: &MacLimaPrincipalV1,
     lima_home: &str,
     arguments: &[&str],
+    inherited_input: Option<&MacLimaInheritedInputV1>,
 ) -> Result<String> {
-    match mac_run_fixed_lima_command_outcome_v1(tool, home, lima_home, arguments)? {
+    match mac_run_fixed_lima_command_outcome_v1(
+        tool,
+        carrier,
+        principal,
+        lima_home,
+        arguments,
+        inherited_input,
+    )? {
         MacFixedLimaCommandOutcomeV1::Success(output) => Ok(output),
         MacFixedLimaCommandOutcomeV1::NonZero { code, stderr, .. } => {
             bail!("fixed retained limactl command exited nonzero ({code:?}): {stderr}")
@@ -5937,7 +7506,8 @@ fn execute_closed_mac_lima_stage_one_effect_v1(
         if capsule.state == "Completed" {
             bail!("completed Stage-1 capsule has no exact durable successor observation");
         }
-        let profile_identity = mac_write_stage_one_profile_absent_or_exact_v1(executor, stage_one)?;
+        let profile = mac_write_stage_one_profile_absent_or_exact_v1(executor, stage_one)?;
+        let profile_identity = profile.identity.clone();
         if capsule.state == "Issued" {
             let next = MacLimaStageOneCapsuleV1 {
                 state: "Prepared".to_string(),
@@ -5966,8 +7536,10 @@ fn execute_closed_mac_lima_stage_one_effect_v1(
         {
             bail!("Stage-1 capsule does not exact-join its retained prepared state");
         }
-        let home = mac_account_home_for_stage_one_v1(carrier)?;
-        if stage_one.lima_control_root_identity != format!("{home}/.lima") {
+        let principal = mac_resolve_lima_principal_v1(carrier)?;
+        if Path::new(&principal.home).join(".lima").to_str()
+            != Some(stage_one.lima_control_root_identity.as_str())
+        {
             bail!("Stage-1 control root is not exactly account-derived");
         }
         let tool = Path::new(&provenance.lima_tool.absolute_path);
@@ -5981,9 +7553,11 @@ fn execute_closed_mac_lima_stage_one_effect_v1(
         let before = mac_parse_fixed_lima_list_v1(
             &mac_run_fixed_lima_command_v1(
                 tool,
-                &home,
+                carrier,
+                &principal,
                 &stage_one.lima_control_root_identity,
                 &["list", &stage_one.instance_name, "--json"],
+                None,
             )?,
             &stage_one.instance_name,
         )?;
@@ -6010,41 +7584,45 @@ fn execute_closed_mac_lima_stage_one_effect_v1(
             if stage_one.expires_at_unix_ns <= mac_now_unix_ns_v1()? {
                 bail!("Stage-1 authorization expired before the selected absent-instance effect");
             }
-            let profile =
-                mac_stage_one_profile_path_v1(executor, &capsule.scope_id, &stage_one.attempt_id)?;
-            let profile = profile
-                .to_str()
-                .ok_or_else(|| anyhow::anyhow!("fixed Stage-1 profile path is not UTF-8"))?;
             let _ = mac_run_fixed_lima_command_v1(
                 tool,
-                &home,
+                carrier,
+                &principal,
                 &stage_one.lima_control_root_identity,
                 &[
                     "start",
                     "--tty=false",
                     "--name",
                     &stage_one.instance_name,
-                    profile,
+                    MAC_LIMA_PROFILE_CHILD_PATH_V1,
                 ],
+                Some(&profile),
             )?;
         } else if before.as_deref() != Some("Running") {
             bail!("selected Stage-1 instance is pre-existing with an unknown status");
         }
+        // The child inherited only a dup of the read-only descriptor. Close the publisher copy
+        // before any later list/observation child so the profile FD has one bounded lifetime.
+        drop(profile);
         let after_first = mac_parse_fixed_lima_list_v1(
             &mac_run_fixed_lima_command_v1(
                 tool,
-                &home,
+                carrier,
+                &principal,
                 &stage_one.lima_control_root_identity,
                 &["list", &stage_one.instance_name, "--json"],
+                None,
             )?,
             &stage_one.instance_name,
         )?;
         let after_second = mac_parse_fixed_lima_list_v1(
             &mac_run_fixed_lima_command_v1(
                 tool,
-                &home,
+                carrier,
+                &principal,
                 &stage_one.lima_control_root_identity,
                 &["list", &stage_one.instance_name, "--json"],
+                None,
             )?,
             &stage_one.instance_name,
         )?;
@@ -6055,7 +7633,8 @@ fn execute_closed_mac_lima_stage_one_effect_v1(
         let observed_first = mac_parse_stage_one_observation_v1(
             &mac_run_fixed_lima_command_v1(
                 tool,
-                &home,
+                carrier,
+                &principal,
                 &stage_one.lima_control_root_identity,
                 &[
                     "shell",
@@ -6065,13 +7644,15 @@ fn execute_closed_mac_lima_stage_one_effect_v1(
                     "-c",
                     OBSERVATION_COMMAND,
                 ],
+                None,
             )?,
             stage_one,
         )?;
         let observed_second = mac_parse_stage_one_observation_v1(
             &mac_run_fixed_lima_command_v1(
                 tool,
-                &home,
+                carrier,
+                &principal,
                 &stage_one.lima_control_root_identity,
                 &[
                     "shell",
@@ -6081,6 +7662,7 @@ fn execute_closed_mac_lima_stage_one_effect_v1(
                     "-c",
                     OBSERVATION_COMMAND,
                 ],
+                None,
             )?,
             stage_one,
         )?;
@@ -7441,23 +9023,49 @@ fn mac_post_pm_effect_plan_v1(
 #[cfg(target_os = "macos")]
 fn mac_run_fixed_lima_command_owned_v1(
     tool: &Path,
-    home: &str,
+    carrier: &InstallBootstrapContextCarrierV1,
+    principal: &MacLimaPrincipalV1,
     lima_home: &str,
     arguments: &[String],
 ) -> Result<String> {
     let borrowed: Vec<&str> = arguments.iter().map(String::as_str).collect();
-    mac_run_fixed_lima_command_v1(tool, home, lima_home, &borrowed)
+    mac_run_fixed_lima_command_v1(tool, carrier, principal, lima_home, &borrowed, None)
 }
 
 #[cfg(target_os = "macos")]
 fn mac_run_fixed_lima_command_owned_outcome_v1(
     tool: &Path,
-    home: &str,
+    carrier: &InstallBootstrapContextCarrierV1,
+    principal: &MacLimaPrincipalV1,
     lima_home: &str,
     arguments: &[String],
 ) -> Result<MacFixedLimaCommandOutcomeV1> {
     let borrowed: Vec<&str> = arguments.iter().map(String::as_str).collect();
-    mac_run_fixed_lima_command_outcome_v1(tool, home, lima_home, &borrowed)
+    mac_run_fixed_lima_command_outcome_v1(tool, carrier, principal, lima_home, &borrowed, None)
+}
+
+#[cfg(target_os = "macos")]
+fn mac_run_fixed_lima_copy_source_v1(
+    tool: &Path,
+    carrier: &InstallBootstrapContextCarrierV1,
+    principal: &MacLimaPrincipalV1,
+    lima_home: &str,
+    guest_staging_path: &str,
+    source: &MacLimaInheritedInputV1,
+) -> Result<String> {
+    if source.role != MacLimaInheritedInputRoleV1::PostPmCopySource {
+        bail!("post-PM copy runner received the wrong inherited-input role");
+    }
+    let target = format!("substrate:{guest_staging_path}");
+    let arguments = ["copy", MAC_LIMA_COPY_CHILD_PATH_V1, target.as_str()];
+    mac_run_fixed_lima_command_v1(
+        tool,
+        carrier,
+        principal,
+        lima_home,
+        &arguments,
+        Some(source),
+    )
 }
 
 #[cfg(target_os = "macos")]
@@ -7466,7 +9074,10 @@ fn mac_write_post_pm_embedded_artifact_absent_or_exact_v1(
     prepared: &ManagedActionPreparedRecordV1,
     label: &str,
     bytes: &[u8],
-) -> Result<PathBuf> {
+) -> Result<MacLimaInheritedInputV1> {
+    if bytes.len() as u64 > MAC_LIMA_ROOT_INPUT_MAX_BYTES_V1 {
+        bail!("retained post-PM input exceeds the fixed inherited-input size bound");
+    }
     let digest = sha256_hex_bootstrap_v1(bytes);
     let dir = executor
         .state_root
@@ -7496,6 +9107,10 @@ fn mac_write_post_pm_embedded_artifact_absent_or_exact_v1(
                 .context("write retained embedded post-PM artifact")?;
             file.sync_all()
                 .context("fsync retained embedded post-PM artifact")?;
+            file.set_permissions(fs::Permissions::from_mode(0o444))
+                .context("freeze new embedded post-PM artifact read-only")?;
+            file.sync_all()
+                .context("fsync frozen embedded post-PM artifact")?;
         }
         Err(error) if error.kind() == std::io::ErrorKind::AlreadyExists => {
             let mut file = fs::OpenOptions::new()
@@ -7503,16 +9118,106 @@ fn mac_write_post_pm_embedded_artifact_absent_or_exact_v1(
                 .custom_flags(libc::O_CLOEXEC | libc::O_NOFOLLOW)
                 .open(&path)
                 .context("open retained embedded post-PM artifact")?;
+            let metadata = file
+                .metadata()
+                .context("inspect retained embedded post-PM artifact")?;
+            if !metadata.is_file()
+                || metadata.nlink() != 1
+                || metadata.uid() != 0
+                || metadata.gid() != 0
+                || !matches!(metadata.mode() & 0o777, 0o600 | 0o444)
+                || metadata.len() != bytes.len() as u64
+            {
+                bail!("retained embedded post-PM artifact is not one exact root file");
+            }
             let mut existing = Vec::new();
-            file.read_to_end(&mut existing)
+            std::io::Read::by_ref(&mut file)
+                .take(MAC_LIMA_ROOT_INPUT_MAX_BYTES_V1 + 1)
+                .read_to_end(&mut existing)
                 .context("read retained embedded post-PM artifact")?;
             if existing != bytes {
                 bail!("retained embedded post-PM artifact is not an exact retry");
             }
+            file.set_permissions(fs::Permissions::from_mode(0o444))
+                .context("freeze exact-retry embedded post-PM artifact read-only")?;
+            file.sync_all()
+                .context("fsync frozen exact-retry embedded post-PM artifact")?;
         }
         Err(error) => return Err(error).context("create retained embedded post-PM artifact"),
     }
-    Ok(path)
+    fs::OpenOptions::new()
+        .read(true)
+        .custom_flags(libc::O_CLOEXEC | libc::O_NOFOLLOW | libc::O_DIRECTORY)
+        .open(&dir)
+        .context("open retained post-PM artifact directory")?
+        .sync_all()
+        .context("fsync retained post-PM artifact directory")?;
+    mac_open_root_private_lima_input_v1(
+        &path,
+        MacLimaInheritedInputRoleV1::PostPmCopySource,
+        &digest,
+        bytes.len() as u64,
+    )
+}
+
+#[cfg(target_os = "macos")]
+fn mac_open_root_private_lima_input_v1(
+    path: &Path,
+    role: MacLimaInheritedInputRoleV1,
+    expected_sha256: &str,
+    expected_size: u64,
+) -> Result<MacLimaInheritedInputV1> {
+    if expected_size > MAC_LIMA_ROOT_INPUT_MAX_BYTES_V1 {
+        bail!("root-private Lima input exceeds the fixed size bound");
+    }
+    let before = fs::symlink_metadata(path)
+        .with_context(|| format!("inspect root-private Lima input {}", path.display()))?;
+    if !before.file_type().is_file()
+        || before.file_type().is_symlink()
+        || before.nlink() != 1
+        || before.uid() != 0
+        || before.gid() != 0
+        || before.mode() & 0o777 != 0o444
+        || before.len() != expected_size
+    {
+        bail!("root-private Lima input is not one exact root-owned read-only file");
+    }
+    let retained = fs::OpenOptions::new()
+        .read(true)
+        .custom_flags(libc::O_CLOEXEC | libc::O_NOFOLLOW)
+        .open(path)
+        .with_context(|| format!("open root-private Lima input {} no-follow", path.display()))?;
+    let opened = retained
+        .metadata()
+        .context("inspect retained root-private Lima input descriptor")?;
+    if opened.dev() != before.dev()
+        || opened.ino() != before.ino()
+        || opened.nlink() != 1
+        || opened.uid() != 0
+        || opened.gid() != 0
+        || opened.mode() & 0o777 != 0o444
+        || opened.len() != expected_size
+    {
+        bail!("root-private Lima input changed before descriptor retention");
+    }
+    let inherited_input = MacLimaInheritedInputV1 {
+        role,
+        path: path.to_path_buf(),
+        identity: format!("dev:{}:ino:{}", opened.dev(), opened.ino()),
+        sha256: expected_sha256.to_string(),
+        size: expected_size,
+        file: retained,
+    };
+    mac_verify_lima_inherited_input_descriptor_v1(&inherited_input)?;
+    let after = fs::symlink_metadata(path).context("reinspect root-private Lima input path")?;
+    if after.file_type().is_symlink()
+        || after.dev() != before.dev()
+        || after.ino() != before.ino()
+        || after.nlink() != 1
+    {
+        bail!("root-private Lima input path changed after descriptor verification");
+    }
+    Ok(inherited_input)
 }
 
 /// Copy a manifest-bound prefix artifact into the root-owned attempt store before handing a
@@ -7526,15 +9231,23 @@ fn mac_stage_measured_post_pm_artifact_absent_or_exact_v1(
     source_path: &Path,
     expected_sha256: &str,
     expected_identity: &str,
-) -> Result<PathBuf> {
+) -> Result<MacLimaInheritedInputV1> {
     let before = fs::symlink_metadata(source_path).with_context(|| {
         format!(
             "inspect retained post-PM artifact {}",
             source_path.display()
         )
     })?;
-    if !before.file_type().is_file() || before.file_type().is_symlink() {
-        bail!("retained post-PM artifact is absent, linked, or not a regular file");
+    if !before.file_type().is_file()
+        || before.file_type().is_symlink()
+        || before.nlink() != 1
+        || before.uid() != 0
+        || before.gid() != 0
+        || before.mode() & 0o400 == 0
+        || before.mode() & 0o022 != 0
+        || before.len() > MAC_LIMA_ROOT_INPUT_MAX_BYTES_V1
+    {
+        bail!("retained post-PM artifact is not one bounded root-owned immutable regular file");
     }
     let mut source = fs::OpenOptions::new()
         .read(true)
@@ -7547,12 +9260,18 @@ fn mac_stage_measured_post_pm_artifact_absent_or_exact_v1(
     let observed_identity = format!("dev:{}:ino:{}", opened.dev(), opened.ino());
     if opened.dev() != before.dev()
         || opened.ino() != before.ino()
+        || opened.nlink() != 1
+        || opened.uid() != 0
+        || opened.gid() != 0
+        || opened.mode() & 0o777 != before.mode() & 0o777
+        || opened.len() != before.len()
         || observed_identity != expected_identity
     {
         bail!("retained post-PM artifact changed before descriptor staging");
     }
     let mut bytes = Vec::new();
-    source
+    std::io::Read::by_ref(&mut source)
+        .take(MAC_LIMA_ROOT_INPUT_MAX_BYTES_V1 + 1)
         .read_to_end(&mut bytes)
         .context("read retained post-PM artifact descriptor")?;
     let after = fs::symlink_metadata(source_path).with_context(|| {
@@ -7564,6 +9283,12 @@ fn mac_stage_measured_post_pm_artifact_absent_or_exact_v1(
     if after.file_type().is_symlink()
         || after.dev() != before.dev()
         || after.ino() != before.ino()
+        || after.nlink() != 1
+        || after.uid() != 0
+        || after.gid() != 0
+        || after.mode() & 0o777 != before.mode() & 0o777
+        || after.len() != before.len()
+        || bytes.len() as u64 != before.len()
         || sha256_hex_bootstrap_v1(&bytes) != expected_sha256
     {
         bail!("retained post-PM artifact changed or mismatched its signed binding");
@@ -7625,7 +9350,8 @@ fn mac_execute_post_pm_effect_plan_v1(
     executor: &MacManagedArtifactExecutorV1,
     prepared: &ManagedActionPreparedRecordV1,
     tool: &Path,
-    home: &str,
+    carrier: &InstallBootstrapContextCarrierV1,
+    principal: &MacLimaPrincipalV1,
     lima_home: &str,
     plan: &MacPostPmEffectPlanV1,
 ) -> Result<Value> {
@@ -7634,8 +9360,10 @@ fn mac_execute_post_pm_effect_plan_v1(
         match primitive {
             MacPostPmEffectPrimitiveV1::Lima(arguments) => {
                 output_digests.push(sha256_hex_bootstrap_v1(
-                    mac_run_fixed_lima_command_owned_v1(tool, home, lima_home, arguments)?
-                        .as_bytes(),
+                    mac_run_fixed_lima_command_owned_v1(
+                        tool, carrier, principal, lima_home, arguments,
+                    )?
+                    .as_bytes(),
                 ))
             }
             MacPostPmEffectPrimitiveV1::Guest(arguments) => {
@@ -7646,7 +9374,10 @@ fn mac_execute_post_pm_effect_plan_v1(
                 ];
                 exact.extend(arguments.iter().cloned());
                 output_digests.push(sha256_hex_bootstrap_v1(
-                    mac_run_fixed_lima_command_owned_v1(tool, home, lima_home, &exact)?.as_bytes(),
+                    mac_run_fixed_lima_command_owned_v1(
+                        tool, carrier, principal, lima_home, &exact,
+                    )?
+                    .as_bytes(),
                 ));
             }
             MacPostPmEffectPrimitiveV1::Artifact {
@@ -7664,13 +9395,16 @@ fn mac_execute_post_pm_effect_plan_v1(
                     source_sha256,
                     source_identity,
                 )?;
-                let copy = vec![
-                    "copy".to_string(),
-                    staged.display().to_string(),
-                    format!("substrate:{guest_staging_path}"),
-                ];
                 output_digests.push(sha256_hex_bootstrap_v1(
-                    mac_run_fixed_lima_command_owned_v1(tool, home, lima_home, &copy)?.as_bytes(),
+                    mac_run_fixed_lima_copy_source_v1(
+                        tool,
+                        carrier,
+                        principal,
+                        lima_home,
+                        guest_staging_path,
+                        &staged,
+                    )?
+                    .as_bytes(),
                 ));
                 let install = vec![
                     "shell".to_string(),
@@ -7688,8 +9422,10 @@ fn mac_execute_post_pm_effect_plan_v1(
                     guest_target_path.clone(),
                 ];
                 output_digests.push(sha256_hex_bootstrap_v1(
-                    mac_run_fixed_lima_command_owned_v1(tool, home, lima_home, &install)?
-                        .as_bytes(),
+                    mac_run_fixed_lima_command_owned_v1(
+                        tool, carrier, principal, lima_home, &install,
+                    )?
+                    .as_bytes(),
                 ));
             }
             MacPostPmEffectPrimitiveV1::Embedded {
@@ -7702,13 +9438,16 @@ fn mac_execute_post_pm_effect_plan_v1(
                 let source = mac_write_post_pm_embedded_artifact_absent_or_exact_v1(
                     executor, prepared, label, bytes,
                 )?;
-                let copy = vec![
-                    "copy".to_string(),
-                    source.display().to_string(),
-                    format!("substrate:{guest_staging_path}"),
-                ];
                 output_digests.push(sha256_hex_bootstrap_v1(
-                    mac_run_fixed_lima_command_owned_v1(tool, home, lima_home, &copy)?.as_bytes(),
+                    mac_run_fixed_lima_copy_source_v1(
+                        tool,
+                        carrier,
+                        principal,
+                        lima_home,
+                        guest_staging_path,
+                        &source,
+                    )?
+                    .as_bytes(),
                 ));
                 let install = vec![
                     "shell".to_string(),
@@ -7726,8 +9465,10 @@ fn mac_execute_post_pm_effect_plan_v1(
                     guest_target_path.clone(),
                 ];
                 output_digests.push(sha256_hex_bootstrap_v1(
-                    mac_run_fixed_lima_command_owned_v1(tool, home, lima_home, &install)?
-                        .as_bytes(),
+                    mac_run_fixed_lima_command_owned_v1(
+                        tool, carrier, principal, lima_home, &install,
+                    )?
+                    .as_bytes(),
                 ));
             }
             MacPostPmEffectPrimitiveV1::HostKnownHosts { path, action } => {
@@ -7748,7 +9489,8 @@ fn mac_execute_post_pm_effect_plan_v1(
 #[cfg(target_os = "macos")]
 fn mac_observe_closed_post_pm_effect_v1(
     tool: &Path,
-    home: &str,
+    carrier: &InstallBootstrapContextCarrierV1,
+    principal: &MacLimaPrincipalV1,
     lima_home: &str,
     plan: &MacPostPmEffectPlanV1,
 ) -> Result<(MacPostPmEffectObservationStateV1, Value)> {
@@ -7770,7 +9512,9 @@ fn mac_observe_closed_post_pm_effect_v1(
     }
     let run_guest_observation = |argv: &[String]| -> Result<MacFixedLimaCommandOutcomeV1> {
         if argv.first().is_some_and(|value| value == "list") {
-            return mac_run_fixed_lima_command_owned_outcome_v1(tool, home, lima_home, argv);
+            return mac_run_fixed_lima_command_owned_outcome_v1(
+                tool, carrier, principal, lima_home, argv,
+            );
         }
         let mut exact = vec![
             "shell".to_string(),
@@ -7778,7 +9522,7 @@ fn mac_observe_closed_post_pm_effect_v1(
             "--".to_string(),
         ];
         exact.extend(argv.iter().cloned());
-        mac_run_fixed_lima_command_owned_outcome_v1(tool, home, lima_home, &exact)
+        mac_run_fixed_lima_command_owned_outcome_v1(tool, carrier, principal, lima_home, &exact)
     };
 
     if let Some(target) = &plan.target_integrity {
@@ -7892,7 +9636,8 @@ fn mac_execute_closed_post_pm_effect_v1(
     executor: &MacManagedArtifactExecutorV1,
     prepared: &ManagedActionPreparedRecordV1,
     tool: &Path,
-    home: &str,
+    carrier: &InstallBootstrapContextCarrierV1,
+    principal: &MacLimaPrincipalV1,
     lima_home: &str,
     entry: &ManagedArtifactEntryV1,
     action: ManagedActionV1,
@@ -7900,7 +9645,9 @@ fn mac_execute_closed_post_pm_effect_v1(
     selected_host_prefix: &str,
 ) -> Result<Value> {
     let plan = mac_post_pm_effect_plan_v1(entry, action, membership_role, selected_host_prefix)?;
-    mac_execute_post_pm_effect_plan_v1(executor, prepared, tool, home, lima_home, &plan)
+    mac_execute_post_pm_effect_plan_v1(
+        executor, prepared, tool, carrier, principal, lima_home, &plan,
+    )
 }
 
 /// The installer-only plan is deliberately literal rather than a traversal of
@@ -8526,10 +10273,11 @@ fn execute_mac_post_pm_action_with_policy_v1(
     {
         bail!("post-PM tool/provenance does not exact-join anchor");
     }
-    let home = mac_account_home_for_stage_one_v1(&carrier)?;
+    let principal = mac_resolve_lima_principal_v1(&carrier)?;
     if control.host_platform_control_root.as_deref()
         != Some(mapping.host_platform_control_root.as_str())
-        || mapping.host_platform_control_root != format!("{home}/.lima")
+        || Path::new(&principal.home).join(".lima").to_str()
+            != Some(mapping.host_platform_control_root.as_str())
     {
         bail!("post-PM mapping control root is not account-derived");
     }
@@ -8554,7 +10302,8 @@ fn execute_mac_post_pm_action_with_policy_v1(
             if require_absent_before_first_effect {
                 let (before_state, _) = mac_observe_closed_post_pm_effect_v1(
                     tool,
-                    &home,
+                    &carrier,
+                    &principal,
                     &mapping.host_platform_control_root,
                     &effect_plan,
                 )?;
@@ -8572,7 +10321,8 @@ fn execute_mac_post_pm_action_with_policy_v1(
                 executor,
                 prepared,
                 tool,
-                &home,
+                &carrier,
+                &principal,
                 &mapping.host_platform_control_root,
                 entry,
                 publisher_request.action,
@@ -8581,7 +10331,8 @@ fn execute_mac_post_pm_action_with_policy_v1(
             )?;
             let (state_after_effect, observed) = mac_observe_closed_post_pm_effect_v1(
                 tool,
-                &home,
+                &carrier,
+                &principal,
                 &mapping.host_platform_control_root,
                 &effect_plan,
             )?;
@@ -8601,7 +10352,8 @@ fn execute_mac_post_pm_action_with_policy_v1(
             // before-state may execute the same plan once; every other result preserves state.
             let (observation_state, observed) = mac_observe_closed_post_pm_effect_v1(
                 tool,
-                &home,
+                &carrier,
+                &principal,
                 &mapping.host_platform_control_root,
                 &effect_plan,
             )?;
@@ -8611,13 +10363,15 @@ fn execute_mac_post_pm_action_with_policy_v1(
                     executor,
                     prepared,
                     tool,
-                    &home,
+                    &carrier,
+                    &principal,
                     &mapping.host_platform_control_root,
                     &effect_plan,
                 )?;
                 let (after_replay, observed_after_replay) = mac_observe_closed_post_pm_effect_v1(
                     tool,
-                    &home,
+                    &carrier,
+                    &principal,
                     &mapping.host_platform_control_root,
                     &effect_plan,
                 )?;
@@ -10623,8 +12377,10 @@ fn open_pm_bound_guest_pairing_data_session_v1(
                 .as_deref()
                 .ok_or_else(|| anyhow::anyhow!("R6 data session has no IH carrier"))?,
         )?;
-        let home = mac_account_home_for_stage_one_v1(&carrier)?;
-        if stage_one.stage_one.lima_control_root_identity != format!("{home}/.lima") {
+        let principal = mac_resolve_lima_principal_v1(&carrier)?;
+        if Path::new(&principal.home).join(".lima").to_str()
+            != Some(stage_one.stage_one.lima_control_root_identity.as_str())
+        {
             bail!("R6 data session Lima root is not account-derived");
         }
         let provenance = mac_load_retained_bootstrap_provenance_v1()?;
@@ -10636,30 +12392,19 @@ fn open_pm_bound_guest_pairing_data_session_v1(
         {
             bail!("R6 data session retained limactl identity changed");
         }
-        let child = Command::new(tool)
-            .args([
+        let mut child = mac_spawn_fixed_lima_stream_child_v1(
+            tool,
+            &carrier,
+            &principal,
+            &stage_one.stage_one.lima_control_root_identity,
+            &[
                 "shell",
                 stage_one.stage_one.instance_name.as_str(),
                 "--",
                 "/usr/libexec/substrate/substrate-lifecycle-linux",
                 "guest-pairing-data-session-v1",
-            ])
-            .env_clear()
-            .env("HOME", &home)
-            .env("LIMA_HOME", &stage_one.stage_one.lima_control_root_identity)
-            .env(
-                "PATH",
-                format!(
-                    "{}:/usr/bin:/bin:/usr/sbin:/sbin",
-                    tool.parent().expect("absolute tool").display()
-                ),
-            )
-            .stdin(Stdio::piped())
-            .stdout(Stdio::piped())
-            .stderr(Stdio::inherit())
-            .spawn()
-            .context("spawn fixed retained R6 data limactl child")?;
-        let mut child = R6RetainedLimaChildGuardV1::new(child);
+            ],
+        )?;
         let ticket_frame = json!({
             "kind":"ticket",
             "ticket":record.ticket,

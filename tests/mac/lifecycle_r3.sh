@@ -348,8 +348,9 @@ artifact_exec_start = executor.index('fn mac_execute_post_pm_effect_plan_v1')
 artifact_exec_end = executor.index('\n/// Read only the exact action-specific observation', artifact_exec_start)
 artifact_exec = executor[artifact_exec_start:artifact_exec_end]
 if 'mac_stage_measured_post_pm_artifact_absent_or_exact_v1' not in artifact_exec or \
-   'staged.display().to_string()' not in artifact_exec or 'source_path.clone()' in artifact_exec:
-    fail('post-PM artifact copy can reopen a mutable prefix source instead of retained staged bytes')
+   'mac_run_fixed_lima_copy_source_v1' not in artifact_exec or \
+   'staged.display().to_string()' in artifact_exec or 'source_path.clone()' in artifact_exec:
+    fail('post-PM artifact copy can bypass the retained inherited-FD source')
 target_observer_start = executor.index('fn mac_observe_closed_post_pm_effect_v1')
 target_observer_end = executor.index('\n#[cfg(target_os = "macos")]\nfn mac_execute_closed_post_pm_effect_v1', target_observer_start)
 target_observer = executor[target_observer_start:target_observer_end]

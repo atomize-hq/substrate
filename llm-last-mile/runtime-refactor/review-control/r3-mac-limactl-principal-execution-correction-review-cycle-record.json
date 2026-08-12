@@ -1,0 +1,73 @@
+{
+  "schema_version": 1,
+  "packet_id": "AUX-R3-MAC-LIMACTL-PRINCIPAL-EXECUTION-CORRECTION",
+  "status": "complete",
+  "stop_reason": null,
+  "cycles": [
+    {
+      "cycle_id": "discovery-1",
+      "kind": "discovery",
+      "subject_fingerprint": "sha256:da3084d6ff3749fe233404b216f79b0e3ff54e6f98fe2c65f139c612c03a063c",
+      "trigger_cycle_id": null,
+      "trigger_finding_ids": [],
+      "causal_evidence_refs": [],
+      "review_refs": [
+        "llm-last-mile/runtime-refactor/review-control/r3-mac-limactl-principal-execution-correction-review-authority-security.md",
+        "llm-last-mile/runtime-refactor/review-control/r3-mac-limactl-principal-execution-correction-review-lifecycle-convergence.md",
+        "llm-last-mile/runtime-refactor/review-control/r3-mac-limactl-principal-execution-correction-review-allowlist-evidence.md"
+      ],
+      "verdict": "findings",
+      "findings": [
+        { "finding_id": "P2-R3-MAC-INPUT-PHYSICAL-IDENTITY-DISCONTINUITY", "priority": "P2" },
+        { "finding_id": "P2-R3-MAC-NONZERO-POSTVALIDATION-PRESERVING-FIRST", "priority": "P2" },
+        { "finding_id": "P2-R3-MAC-OVERLAY-PATH-WRITABILITY", "priority": "P2" },
+        { "finding_id": "P2-R3-MAC-OVERLAY-POSTCHECK-PROOF", "priority": "P2" },
+        { "finding_id": "P2-R3-MAC-EXACT-ENVIRONMENT-PROOF", "priority": "P2" },
+        { "finding_id": "P2-R3-MAC-INHERITED-FD-FAILURE-CLEANUP-PROOF", "priority": "P2" }
+      ]
+    },
+    {
+      "cycle_id": "closure-1",
+      "kind": "closure",
+      "subject_fingerprint": "sha256:d0189f6fc6e4190aca943033c055ca54fc4ba2e94a33f087832f7ba7ae36bcc1",
+      "trigger_cycle_id": "discovery-1",
+      "trigger_finding_ids": [
+        "P2-R3-MAC-INPUT-PHYSICAL-IDENTITY-DISCONTINUITY",
+        "P2-R3-MAC-NONZERO-POSTVALIDATION-PRESERVING-FIRST",
+        "P2-R3-MAC-OVERLAY-PATH-WRITABILITY",
+        "P2-R3-MAC-OVERLAY-POSTCHECK-PROOF",
+        "P2-R3-MAC-EXACT-ENVIRONMENT-PROOF",
+        "P2-R3-MAC-INHERITED-FD-FAILURE-CLEANUP-PROOF"
+      ],
+      "causal_evidence_refs": [],
+      "review_refs": [
+        "llm-last-mile/runtime-refactor/review-control/r3-mac-limactl-principal-execution-correction-review-authority-security.md",
+        "llm-last-mile/runtime-refactor/review-control/r3-mac-limactl-principal-execution-correction-review-lifecycle-convergence.md",
+        "llm-last-mile/runtime-refactor/review-control/r3-mac-limactl-principal-execution-correction-review-allowlist-evidence.md"
+      ],
+      "verdict": "findings",
+      "findings": [
+        { "finding_id": "P2-R3-MAC-R6-NONZERO-POSTVALIDATION-PRESERVING-FIRST", "priority": "P2" }
+      ]
+    },
+    {
+      "cycle_id": "supplemental-causal-1",
+      "kind": "supplemental_causal",
+      "subject_fingerprint": "sha256:de7e47a4445345653f6506a28cb51242f304a2e39faff21bede048748cbc894f",
+      "trigger_cycle_id": "closure-1",
+      "trigger_finding_ids": [
+        "P2-R3-MAC-R6-NONZERO-POSTVALIDATION-PRESERVING-FIRST"
+      ],
+      "causal_evidence_refs": [
+        "closure-1-remediation:r6-preserving-first-exit-status-and-post-validation"
+      ],
+      "review_refs": [
+        "llm-last-mile/runtime-refactor/review-control/r3-mac-limactl-principal-execution-correction-review-authority-security.md",
+        "llm-last-mile/runtime-refactor/review-control/r3-mac-limactl-principal-execution-correction-review-lifecycle-convergence.md",
+        "llm-last-mile/runtime-refactor/review-control/r3-mac-limactl-principal-execution-correction-review-allowlist-evidence.md"
+      ],
+      "verdict": "clean",
+      "findings": []
+    }
+  ]
+}
