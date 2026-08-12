@@ -140,7 +140,7 @@ provision:
       mkdir -p /var/lib/substrate
       chown root:root /var/lib/substrate
       chmod 0700 /var/lib/substrate
-      printf '%s\n' "__SUBSTRATE_STAGE_ONE_MARKER__" > /var/lib/substrate/.substrate-lima-stage-one-marker.v1
+      printf '%s\n' "__SUBSTRATE_STAGE_ONE_ATTEMPT_MARKER__" "__SUBSTRATE_STAGE_ONE_CAPSULE_MARKER__" > /var/lib/substrate/.substrate-lima-stage-one-marker.v1
       chmod 0600 /var/lib/substrate/.substrate-lima-stage-one-marker.v1
 "#;
 
@@ -2975,9 +2975,11 @@ fn render_mac_lima_stage_one_profile_v1(attempt_id: &str, capsule_digest: &str) 
     if !MAC_LIMA_STAGE_ONE_PROFILE_TEMPLATE_V1.contains(MAC_LIMA_STAGE_ONE_MARKER_PATH_V1) {
         bail!("embedded Lima Stage-1 profile does not retain the fixed marker path");
     }
-    let marker = format!("attempt_id={attempt_id}\ncapsule_sha256={capsule_digest}");
+    let attempt_marker = format!("attempt_id={attempt_id}");
+    let capsule_marker = format!("capsule_sha256={capsule_digest}");
     Ok(MAC_LIMA_STAGE_ONE_PROFILE_TEMPLATE_V1
-        .replace("__SUBSTRATE_STAGE_ONE_MARKER__", &marker)
+        .replace("__SUBSTRATE_STAGE_ONE_ATTEMPT_MARKER__", &attempt_marker)
+        .replace("__SUBSTRATE_STAGE_ONE_CAPSULE_MARKER__", &capsule_marker)
         .into_bytes())
 }
 
@@ -4242,6 +4244,24 @@ mod tests {
             .expect("closed Lima instance plan");
             assert_eq!(plan.observation_argv, ["list", "--json"]);
         }
+    }
+
+    #[test]
+    fn lima_stage_one_profile_keeps_both_marker_values_on_one_yaml_script_line() {
+        let attempt_id = "018f3e4a-7b2c-7c91-8a6f-2e1d5c4b3a90";
+        let capsule_digest = "a".repeat(64);
+        let profile = String::from_utf8(
+            render_mac_lima_stage_one_profile_v1(attempt_id, &capsule_digest)
+                .expect("render canonical Stage-1 profile"),
+        )
+        .expect("rendered Stage-1 profile is UTF-8");
+        let marker_command = format!(
+            "      printf '%s\\n' \"attempt_id={attempt_id}\" \"capsule_sha256={capsule_digest}\" > {MAC_LIMA_STAGE_ONE_MARKER_PATH_V1}"
+        );
+
+        assert!(profile.contains(&marker_command));
+        assert!(!profile.contains("\ncapsule_sha256="));
+        assert!(!profile.contains("__SUBSTRATE_STAGE_ONE_"));
     }
 
     #[cfg(target_os = "macos")]
