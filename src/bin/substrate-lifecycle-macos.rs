@@ -4548,6 +4548,30 @@ mod tests {
         let mut altered_measurement = measurement;
         altered_measurement[1] = "caller-instance";
         assert!(mac_validate_fixed_lima_argument_plan_v1(&altered_measurement, None).is_err());
+        let readiness = vec![
+            "shell".to_string(),
+            "substrate".to_string(),
+            "--".to_string(),
+            "/bin/sh".to_string(),
+            "-ceu".to_string(),
+            MAC_LIMA_WORLD_SERVICE_READINESS_SCRIPT_V1.to_string(),
+            "--".to_string(),
+            "a".repeat(64),
+            "b".repeat(64),
+        ];
+        let readiness_borrowed: Vec<&str> = readiness.iter().map(String::as_str).collect();
+        assert!(mac_validate_fixed_lima_argument_plan_v1(&readiness_borrowed, None).is_ok());
+        let mut altered_readiness = readiness.clone();
+        altered_readiness[3] = "/bin/bash".to_string();
+        let altered_readiness: Vec<&str> = altered_readiness.iter().map(String::as_str).collect();
+        assert!(mac_validate_fixed_lima_argument_plan_v1(&altered_readiness, None).is_err());
+        let mut altered_readiness_digest = readiness;
+        altered_readiness_digest[7] = "A".repeat(64);
+        let altered_readiness_digest: Vec<&str> = altered_readiness_digest
+            .iter()
+            .map(String::as_str)
+            .collect();
+        assert!(mac_validate_fixed_lima_argument_plan_v1(&altered_readiness_digest, None).is_err());
         assert_eq!(
             mac_target_link_probe_argv_v1("/root/private"),
             ["/usr/bin/test", "-L", "/root/private"]
@@ -6679,6 +6703,14 @@ printf '%s' "$ENDPOINT_CODE"
             service_start.observation_argv[2],
             MAC_LIMA_WORLD_SERVICE_READINESS_SCRIPT_V1
         );
+        let mut fixed_readiness = vec![
+            "shell".to_string(),
+            "substrate".to_string(),
+            "--".to_string(),
+        ];
+        fixed_readiness.extend(service_start.observation_argv.iter().cloned());
+        let fixed_readiness: Vec<&str> = fixed_readiness.iter().map(String::as_str).collect();
+        assert!(mac_validate_fixed_lima_argument_plan_v1(&fixed_readiness, None).is_ok());
         for required in [
             "systemctl is-enabled substrate-world-service.socket",
             "systemctl is-active substrate-world-service.socket",
@@ -8043,13 +8075,14 @@ fn mac_validate_fixed_lima_argument_plan_v1(
             argument.is_empty()
                 || argument.contains(['\0', '\r'])
                 || (argument.contains('\n')
-                    && !(index == 8
+                    && !((index == 8
                         && matches!(
                             *argument,
                             MAC_LIMA_POST_PM_STDIN_TRANSFER_SCRIPT_V1
                                 | MAC_LIMA_POST_PM_ATOMIC_PUBLISH_SCRIPT_V1
                                 | MAC_LIMA_R6_INSTALLED_EXECUTOR_MEASURE_SCRIPT_V1
-                        )))
+                        ))
+                        || (index == 5 && *argument == MAC_LIMA_WORLD_SERVICE_READINESS_SCRIPT_V1)))
         })
     {
         bail!("fixed Lima command argument plan is empty, unknown, or noncanonical");
@@ -8158,6 +8191,29 @@ fn mac_validate_fixed_lima_argument_plan_v1(
                         ])
             {
                 bail!("fixed Lima R6 measurement arguments are not the closed plan");
+            }
+            if arguments.contains(&MAC_LIMA_WORLD_SERVICE_READINESS_SCRIPT_V1)
+                && (arguments.len() != 9
+                    || arguments[0..7]
+                        != [
+                            "shell",
+                            "substrate",
+                            "--",
+                            "/bin/sh",
+                            "-ceu",
+                            MAC_LIMA_WORLD_SERVICE_READINESS_SCRIPT_V1,
+                            "--",
+                        ]
+                    || arguments[7].len() != 64
+                    || !arguments[7]
+                        .bytes()
+                        .all(|byte| byte.is_ascii_hexdigit() && !byte.is_ascii_uppercase())
+                    || arguments[8].len() != 64
+                    || !arguments[8]
+                        .bytes()
+                        .all(|byte| byte.is_ascii_hexdigit() && !byte.is_ascii_uppercase()))
+            {
+                bail!("fixed Lima world service readiness arguments are not the closed plan");
             }
         }
     }
