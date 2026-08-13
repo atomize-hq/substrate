@@ -899,12 +899,12 @@ try:
             or continuation.get("guest_executor_identity") != predecessor.get("guest_executor_identity")
             or continuation.get("fixed_install_parent_anchor_sha256") != predecessor.get("fixed_install_parent_anchor_sha256")):
         raise ValueError()
-    issued = predecessor.get("issued_at_unix_ns")
-    expires = predecessor.get("expires_at_unix_ns")
+    issued = predecessor.get("prepared_at_unix_ns")
+    expires = predecessor.get("prepare_expires_at_unix_ns")
     if (not isinstance(issued, int) or not isinstance(expires, int)
             or expires - issued != 300_000_000_000
-            or continuation.get("issued_at_unix_ns") != issued
-            or continuation.get("expires_at_unix_ns") != expires):
+            or continuation.get("prepared_at_unix_ns") != issued
+            or continuation.get("prepare_expires_at_unix_ns") != expires):
         raise ValueError()
     host_identity = predecessor.get("producer_host_identity")
     guest_identity = predecessor.get("guest_executor_identity")

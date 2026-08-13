@@ -582,6 +582,12 @@ for text in ('post_pm_requests_v1 remains a catalogue', 'fixed installation sequ
              '"r6_pairing_command_v1"', '"r6_pairing_seed_v1"'):
     if text not in completion:
         fail('Stage-1 completion validation is not fixed to the completed executor response')
+for field in ('prepared_at_unix_ns', 'prepare_expires_at_unix_ns'):
+    if f'pub {field}: u64' not in source['common'] or f'.get("{field}")' not in completion:
+        fail(f'Stage-1 completion validation does not use the serialized R6 field {field}')
+for stale_field in ('issued_at_unix_ns', 'expires_at_unix_ns'):
+    if f'.get("{stale_field}")' in completion:
+        fail(f'Stage-1 completion validation retains stale R6 field {stale_field}')
 if any(forbidden in warm for forbidden in (
     'adopt_stage_one_mapping_response_v1', 'PUBLISHER_REQUEST_V1',
     'PLATFORM_BOOTSTRAP_MAPPING_V1', 'EXECUTOR_BUILD_EVIDENCE_V1',
@@ -688,8 +694,8 @@ predecessor = {
     "fixed_install_parent_anchor_sha256": "6" * 64,
     "predecessor_id": "018f3e4a-7b2c-7c91-8a6f-2e1d5c4b3a91",
     "predecessor_generation": 1,
-    "issued_at_unix_ns": 1_000,
-    "expires_at_unix_ns": 300_000_001_000,
+    "prepared_at_unix_ns": 1_000,
+    "prepare_expires_at_unix_ns": 300_000_001_000,
     "signature": signature,
 }
 continuation = {
@@ -707,8 +713,8 @@ continuation = {
     "platform_mapping_commitment": mapping_digest,
     "guest_machine_identity": "guest-machine",
     "guest_executor_identity": guest,
-    "issued_at_unix_ns": 1_000,
-    "expires_at_unix_ns": 300_000_001_000,
+    "prepared_at_unix_ns": 1_000,
+    "prepare_expires_at_unix_ns": 300_000_001_000,
     "auto_run": False,
     "signature": signature,
 }
@@ -751,9 +757,12 @@ print(json.dumps(response, sort_keys=True, separators=(",", ":")))
 PY
 )"
 "${completion_fixture}/validate-stage-one-completion" "${canonical_completion_response}"
+legacy_timestamp_response="${canonical_completion_response//\"prepared_at_unix_ns\"/\"issued_at_unix_ns\"}"
+legacy_timestamp_response="${legacy_timestamp_response//\"prepare_expires_at_unix_ns\"/\"expires_at_unix_ns\"}"
 for tampered in \
     "${canonical_completion_response/\"status\":\"completed\"/\"status\":\"prepared\"}" \
-    "${canonical_completion_response/\"audit_token_bound\":true/\"audit_token_bound\":false}"; do
+    "${canonical_completion_response/\"audit_token_bound\":true/\"audit_token_bound\":false}" \
+    "${legacy_timestamp_response}"; do
     if "${completion_fixture}/validate-stage-one-completion" "${tampered}" >/dev/null 2>&1; then
         fail 'fixed Stage-1 completion validator accepted a tampered terminal response'
     fi
