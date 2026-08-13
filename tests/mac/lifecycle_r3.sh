@@ -588,6 +588,11 @@ for field in ('prepared_at_unix_ns', 'prepare_expires_at_unix_ns'):
 for stale_field in ('issued_at_unix_ns', 'expires_at_unix_ns'):
     if f'.get("{stale_field}")' in completion:
         fail(f'Stage-1 completion validation retains stale R6 field {stale_field}')
+continuation_emitter = function_body(warm, 'emit_r6_pairing_continuation_v1')
+if '${INSTALL_PREFIX_RAW}/bin/substrate-lifecycle-control' not in continuation_emitter:
+    fail('R6 continuation emitter does not use the admitted raw install prefix')
+if re.search(r'\$\{INSTALL_PREFIX\}', continuation_emitter):
+    fail('R6 continuation emitter retains the undefined INSTALL_PREFIX alias')
 if any(forbidden in warm for forbidden in (
     'adopt_stage_one_mapping_response_v1', 'PUBLISHER_REQUEST_V1',
     'PLATFORM_BOOTSTRAP_MAPPING_V1', 'EXECUTOR_BUILD_EVIDENCE_V1',
@@ -793,7 +798,7 @@ if not match:
 Path(sys.argv[2]).write_text(
     '#!/usr/bin/env bash\n'
     'set -euo pipefail\n'
-    'INSTALL_PREFIX=/opt/substrate\n'
+    'INSTALL_PREFIX_RAW=/opt/substrate\n'
     + match.group(0)
     + '\nemit_r6_pairing_continuation_v1 "$1"\n'
 )

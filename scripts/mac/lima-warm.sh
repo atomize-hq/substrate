@@ -936,7 +936,7 @@ emit_r6_pairing_continuation_v1() {
     # select anything from post_pm_requests_v1. The operator may explicitly feed the exact seed
     # to the one fixed control command after installation returns.
     local stage_response="$1"
-    python3 - "${stage_response}" "${INSTALL_PREFIX}/bin/substrate-lifecycle-control" <<'PY'
+    python3 - "${stage_response}" "${INSTALL_PREFIX_RAW}/bin/substrate-lifecycle-control" <<'PY'
 import json
 import sys
 
