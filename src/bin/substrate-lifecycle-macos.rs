@@ -4518,6 +4518,17 @@ mod tests {
         );
         let atomic_borrowed: Vec<&str> = atomic.iter().map(String::as_str).collect();
         assert!(mac_validate_fixed_lima_argument_plan_v1(&atomic_borrowed, None).is_ok());
+        let private_atomic = mac_fixed_lima_atomic_publish_arguments_v1(
+            "/var/lib/substrate/.substrate-lifecycle-v1/staged/1/r/private-blob",
+            "/etc/substrate-lima-layout",
+            &"c".repeat(64),
+            "0600",
+            &"d".repeat(64),
+            false,
+        );
+        let private_atomic_borrowed: Vec<&str> =
+            private_atomic.iter().map(String::as_str).collect();
+        assert!(mac_validate_fixed_lima_argument_plan_v1(&private_atomic_borrowed, None).is_ok());
         let mut altered_atomic = atomic;
         altered_atomic[8] = "print('caller selected')".to_string();
         let altered_atomic: Vec<&str> = altered_atomic.iter().map(String::as_str).collect();
@@ -8124,7 +8135,7 @@ fn mac_validate_fixed_lima_argument_plan_v1(
                     || !arguments[10].starts_with('/')
                     || arguments[11].len() != 64
                     || !arguments[11].bytes().all(|byte| byte.is_ascii_hexdigit())
-                    || !matches!(arguments[12], "0444" | "0644" | "0755")
+                    || !matches!(arguments[12], "0444" | "0600" | "0644" | "0755")
                     || arguments[13].len() != 64
                     || !arguments[13].bytes().all(|byte| byte.is_ascii_hexdigit())
                     || !matches!(arguments[14], "create" | "replace"))
