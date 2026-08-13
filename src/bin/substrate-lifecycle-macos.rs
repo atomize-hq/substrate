@@ -6241,10 +6241,21 @@ int main(int argc, char **argv) {
                 &start_service,
                 false,
                 Some(20),
-                "substrate-world-service-before-v1\n",
+                "substrate-world-service-before-v1",
             )
             .unwrap(),
             MacPostPmEffectObservationStateV1::Before
+        );
+        assert_eq!(
+            mac_classify_post_pm_probe_v1(
+                &start_service,
+                false,
+                Some(20),
+                "substrate-world-service-before-v1\n",
+            )
+            .unwrap(),
+            MacPostPmEffectObservationStateV1::Ambiguous,
+            "nonzero Lima output must match the collector's exact trimmed form"
         );
         for code in [1, 41, 45, 47] {
             assert_eq!(
@@ -11379,7 +11390,7 @@ fn mac_classify_post_pm_probe_v1(
             Ok(
                 if exited_successfully && output == "substrate-world-service-ready-v1\n" {
                     MacPostPmEffectObservationStateV1::After
-                } else if exit_code == Some(20) && output == "substrate-world-service-before-v1\n" {
+                } else if exit_code == Some(20) && output == "substrate-world-service-before-v1" {
                     MacPostPmEffectObservationStateV1::Before
                 } else {
                     MacPostPmEffectObservationStateV1::Ambiguous
