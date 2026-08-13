@@ -27,32 +27,39 @@ use substrate_common::{
     canonical_action_receipt_bytes_v1, canonical_action_receipt_index_bytes_v1,
     canonical_guest_publisher_pairing_host_record_v1,
     canonical_guest_publisher_pairing_operator_launch_signature_payload_v1,
+    canonical_guest_publisher_pairing_operator_launch_v1,
     canonical_guest_publisher_pairing_ticket_v1, canonical_lifecycle_publisher_protected_state_v1,
-    canonical_lifecycle_signature_payload_v1, canonical_mac_lima_stage_one_capsule_v1,
-    canonical_mac_publisher_bootstrap_attempt_locator_v1,
+    canonical_lifecycle_signature_payload_v1, canonical_lima_stage_one_authorization_v1,
+    canonical_mac_lima_stage_one_capsule_v1, canonical_mac_publisher_bootstrap_attempt_locator_v1,
     canonical_mac_publisher_control_admission_v1, canonical_mac_publisher_install_provenance_v1,
-    canonical_mac_publisher_service_state_record_v1, canonical_managed_manifest_head_v1,
+    canonical_mac_publisher_service_state_record_v1, canonical_mac_r6_pairing_continuation_v1,
+    canonical_mac_r6_pairing_predecessor_v1, canonical_managed_manifest_head_v1,
     canonical_manifest_bytes_v1, classify_mac_publisher_service_install_v1,
     classify_mac_publisher_service_retirement_v1,
+    compare_and_swap_guest_publisher_pairing_host_record_recovery_v1,
     compare_and_swap_guest_publisher_pairing_host_record_v1,
     guest_publisher_bootstrap_hello_public_key_sha256_v1,
     guest_publisher_bootstrap_hello_sha256_v1, guest_publisher_pairing_operator_launch_sha256_v1,
     guest_publisher_pairing_operator_proof_sha256_v1, lifecycle_anchor_sha256_v1,
     mac_publisher_bootstrap_request_sha256_v1, mac_publisher_control_authority_sha256_v1,
     mac_publisher_service_state_record_sha256_v1, managed_action_prepared_record_sha256_v1,
-    parse_p256_spki_der_v1, parse_publisher_bootstrap_authorization_v1,
-    publisher_bootstrap_authorization_sha256_v1, validate_guest_publisher_bootstrap_hello_v1,
-    validate_guest_publisher_bootstrap_transcript_v1,
+    parse_and_validate_guest_publisher_pairing_operator_launch_v1, parse_p256_spki_der_v1,
+    parse_publisher_bootstrap_authorization_v1, publisher_bootstrap_authorization_sha256_v1,
+    validate_guest_publisher_bootstrap_hello_v1, validate_guest_publisher_bootstrap_transcript_v1,
     validate_guest_publisher_pairing_host_record_v1,
     validate_guest_publisher_pairing_operator_launch_against_ticket_and_host_record_at_v1,
     validate_guest_publisher_pairing_operator_proof_against_ticket_at_v1,
+    validate_guest_publisher_pairing_operator_proof_against_ticket_v1,
     validate_guest_publisher_pairing_session_binding_v1,
     validate_guest_publisher_pairing_ticket_at_v1, validate_guest_publisher_pairing_ticket_v1,
     validate_lifecycle_publisher_protected_state_v1, validate_lima_stage_one_authorization_v1,
     validate_lima_stage_one_observation_v1, validate_mac_lima_stage_one_capsule_v1,
     validate_mac_publisher_bootstrap_attempt_locator_v1,
     validate_mac_publisher_control_admission_v1, validate_mac_publisher_control_authority_v1,
-    validate_mac_publisher_install_provenance_v1, validate_managed_action_receipt_signature_v1,
+    validate_mac_publisher_install_provenance_v1, validate_mac_r6_pairing_continuation_v1,
+    validate_mac_r6_pairing_host_record_identities_v1,
+    validate_mac_r6_pairing_operator_launch_identities_v1, validate_mac_r6_pairing_predecessor_v1,
+    validate_mac_r6_pairing_ticket_identities_v1, validate_managed_action_receipt_signature_v1,
     validate_managed_lifecycle_publisher_request_v1, validate_publisher_bootstrap_authorization_v1,
     verify_p256_p1363_low_s_v1, ExecutorBuildEvidenceV1, GuestPublisherBootstrapHelloV1,
     GuestPublisherBootstrapTranscriptV1, GuestPublisherPairingChallengeV1,
@@ -68,15 +75,18 @@ use substrate_common::{
     MacPublisherServiceFilesObservationV1, MacPublisherServiceInstallDecisionV1,
     MacPublisherServiceRecordObservationV1, MacPublisherServiceRegistrationObservationV1,
     MacPublisherServiceRetirementDecisionV1, MacPublisherServiceStatePhaseV1,
-    MacPublisherServiceStateRecordV1, ManagedActionPreparedRecordV1, ManagedActionReceiptIndexV1,
-    ManagedActionReceiptV1, ManagedActionV1, ManagedArtifactDispositionV1, ManagedArtifactEntryV1,
-    ManagedArtifactIdentityV1, ManagedArtifactManifestV1, ManagedArtifactRoleV1,
-    ManagedExecutorIdentityV1, ManagedLifecyclePublisherRequestV1, ManagedLifecycleStateV1,
-    ManagedManifestHeadV1, PublisherBootstrapAuthorizationV1,
-    GUEST_PUBLISHER_PAIRING_OPERATOR_FIXED_COMMAND_V1,
+    MacPublisherServiceStateRecordV1, MacR6GuestAarch64ElfIdentityV1, MacR6HostMachOIdentityV1,
+    MacR6PairingContinuationV1, MacR6PairingPredecessorV1, ManagedActionPreparedRecordV1,
+    ManagedActionReceiptIndexV1, ManagedActionReceiptV1, ManagedActionV1,
+    ManagedArtifactDispositionV1, ManagedArtifactEntryV1, ManagedArtifactIdentityV1,
+    ManagedArtifactManifestV1, ManagedArtifactRoleV1, ManagedExecutorIdentityV1,
+    ManagedLifecyclePublisherRequestV1, ManagedLifecycleStateV1, ManagedManifestHeadV1,
+    PublisherBootstrapAuthorizationV1, GUEST_PUBLISHER_PAIRING_OPERATOR_FIXED_COMMAND_V1,
     GUEST_PUBLISHER_PAIRING_OPERATOR_GUEST_EXECUTABLE_PATH_V1,
     GUEST_PUBLISHER_PAIRING_OPERATOR_LAUNCH_SCHEMA_OWNER_V1,
     GUEST_PUBLISHER_PAIRING_OPERATOR_LAUNCH_SCHEMA_VERSION_V1,
+    MAC_R6_PAIRING_CONTINUATION_SIGNATURE_DOMAIN_V1,
+    MAC_R6_PAIRING_PREDECESSOR_SIGNATURE_DOMAIN_V1,
 };
 use substrate_shell::{
     complete_mac_lima_stage_one_transition_v1, resume_action_receipt_commit_v1,
@@ -105,10 +115,13 @@ const MAC_BOOTSTRAP_FRAME_FINISH_TIMEOUT_V1: Duration = Duration::from_secs(5);
 const MAC_BOOTSTRAP_MILESTONE_PREFIX_V1: &str = "substrate.bootstrap.milestone";
 const R6_DATA_FRAME_TIMEOUT_V1: Duration = Duration::from_secs(30);
 const R6_DATA_CHILD_EXIT_TIMEOUT_V1: Duration = Duration::from_secs(30);
-// This is intentionally shorter than the retained Stage-1 admission. It permits a fresh R6
-// pre-intent retry while the unchanged PM/Stage-1 authority remains valid, but never extends
-// beyond that authority.
-const R6_PAIRING_TICKET_LIFETIME_NS_V1: u64 = 60 * 1_000_000_000;
+// R6 is a new pairing-only authority derived from a completed install, never a Stage-1 renewal.
+const R6_PAIRING_TICKET_LIFETIME_NS_V1: u64 = 300 * 1_000_000_000;
+// Signed R6 documents are prepared into distinct durable Keychain accounts. Their validity
+// begins only after this fixed commit lead, so predecessor, continuation, and Available-state
+// CAS all complete before any of the exact 300-second admission window can be consumed.
+const R6_PAIRING_PREPARE_LEAD_NS_V1: u64 = 10 * 1_000_000_000;
+const R6_PAIRING_CONTINUATION_COMMAND_V1: &str = "guest-publisher-pairing-direct-interactive-v1";
 /// Lifecycle effects may take materially longer than the bounded FD3 bootstrap frame.  This
 /// is still a fixed executor-owned ceiling, never a caller supplied timeout.
 const MAC_LIMA_EFFECT_TIMEOUT_V1: Duration = Duration::from_secs(300);
@@ -116,8 +129,225 @@ const MAC_LIMA_TOOL_PATH_V1: &str = "/usr/local/bin/limactl";
 const MAC_LIMA_CHILD_PATH_V1: &str = "/usr/local/bin:/usr/bin:/bin:/usr/sbin:/sbin";
 const MAC_LIMA_PROFILE_CHILD_PATH_V1: &str = "/dev/fd/3";
 const MAC_LIMA_PROFILE_CHILD_FD_V1: libc::c_int = 3;
-const MAC_LIMA_COPY_CHILD_PATH_V1: &str = "/dev/fd/4";
-const MAC_LIMA_COPY_CHILD_FD_V1: libc::c_int = 4;
+const MAC_LIMA_POST_PM_STAGING_ROOT_V1: &str = "/var/lib/substrate/.substrate-lifecycle-v1/staged";
+// The descriptor-bound source is streamed into a same-directory temporary object and published
+// atomically. A partial temp from interruption is either proven exact and completed, or removed
+// only after no-follow root-owned verification. The final generation key is never written directly.
+const MAC_LIMA_POST_PM_STDIN_TRANSFER_SCRIPT_V1: &str = r#"import hashlib, os, stat, sys
+target, expected_sha, expected_size = sys.argv[1], sys.argv[2], int(sys.argv[3])
+root = '/var/lib/substrate/.substrate-lifecycle-v1/staged/'
+if not target.startswith(root) or '\x00' in target or '/..' in target:
+    raise SystemExit(91)
+parent, leaf = os.path.split(target)
+if not leaf or leaf in ('.', '..'):
+    raise SystemExit(91)
+os.makedirs(parent, mode=0o700, exist_ok=True)
+for component in (root.rstrip('/'), parent):
+    meta = os.lstat(component)
+    if not stat.S_ISDIR(meta.st_mode) or stat.S_ISLNK(meta.st_mode) or meta.st_uid != 0 or meta.st_gid != 0:
+        raise SystemExit(92)
+    os.chmod(component, 0o700)
+dirfd = os.open(parent, os.O_RDONLY | os.O_DIRECTORY | os.O_NOFOLLOW | os.O_CLOEXEC)
+def read_exact(name, required_mode):
+    fd = os.open(name, os.O_RDONLY | os.O_NOFOLLOW | os.O_CLOEXEC, dir_fd=dirfd)
+    try:
+        meta = os.fstat(fd)
+        digest = hashlib.sha256()
+        size = 0
+        while True:
+            block = os.read(fd, 1024 * 1024)
+            if not block: break
+            size += len(block); digest.update(block)
+        if (not stat.S_ISREG(meta.st_mode) or meta.st_nlink != 1 or meta.st_uid != 0
+                or meta.st_gid != 0 or stat.S_IMODE(meta.st_mode) != required_mode
+                or size != expected_size or digest.hexdigest() != expected_sha):
+            raise SystemExit(93)
+    finally:
+        os.close(fd)
+try:
+    try:
+        read_exact(leaf, 0o444)
+        final_exists = True
+    except FileNotFoundError:
+        final_exists = False
+    if final_exists:
+        digest = hashlib.sha256(); size = 0
+        while True:
+            block = sys.stdin.buffer.read(1024 * 1024)
+            if not block: break
+            size += len(block); digest.update(block)
+        if size != expected_size or digest.hexdigest() != expected_sha:
+            raise SystemExit(95)
+    else:
+        temp = leaf + '.partial'
+        try:
+            tempfd = os.open(temp, os.O_WRONLY | os.O_CREAT | os.O_EXCL | os.O_NOFOLLOW | os.O_CLOEXEC, 0o600, dir_fd=dirfd)
+        except FileExistsError:
+            tempfd = os.open(temp, os.O_RDONLY | os.O_NOFOLLOW | os.O_CLOEXEC, dir_fd=dirfd)
+            meta = os.fstat(tempfd)
+            os.close(tempfd)
+            if not stat.S_ISREG(meta.st_mode) or meta.st_nlink != 1 or meta.st_uid != 0 or meta.st_gid != 0:
+                raise SystemExit(94)
+            os.unlink(temp, dir_fd=dirfd)
+            tempfd = os.open(temp, os.O_WRONLY | os.O_CREAT | os.O_EXCL | os.O_NOFOLLOW | os.O_CLOEXEC, 0o600, dir_fd=dirfd)
+        digest = hashlib.sha256(); size = 0
+        with os.fdopen(tempfd, 'wb', closefd=True) as output:
+            while True:
+                block = sys.stdin.buffer.read(1024 * 1024)
+                if not block: break
+                size += len(block); digest.update(block); output.write(block)
+            output.flush(); os.fchown(output.fileno(), 0, 0); os.fchmod(output.fileno(), 0o444); os.fsync(output.fileno())
+        if size != expected_size or digest.hexdigest() != expected_sha:
+            os.unlink(temp, dir_fd=dirfd); os.fsync(dirfd); raise SystemExit(95)
+        read_exact(temp, 0o444)
+        os.replace(temp, leaf, src_dir_fd=dirfd, dst_dir_fd=dirfd)
+        os.fsync(dirfd)
+        read_exact(leaf, 0o444)
+finally:
+    os.close(dirfd)
+"#;
+
+// Publish one already-verified generation blob into a final guest path using a same-filesystem
+// temp, file fsync, atomic replacement, directory fsync, and final no-follow verification.
+const MAC_LIMA_POST_PM_ATOMIC_PUBLISH_SCRIPT_V1: &str = r#"import hashlib, os, stat, sys
+source, target, expected_sha, mode_text, generation_key, replace_text = sys.argv[1:]
+mode = int(mode_text, 8); replace = replace_text == 'replace'
+if (not target.startswith('/') or '\x00' in target or '/..' in target
+        or not generation_key or any(c not in '0123456789abcdef' for c in generation_key)):
+    raise SystemExit(101)
+parent, leaf = os.path.split(target)
+parent_meta = os.lstat(parent)
+if not stat.S_ISDIR(parent_meta.st_mode) or stat.S_ISLNK(parent_meta.st_mode):
+    raise SystemExit(102)
+dirfd = os.open(parent, os.O_RDONLY | os.O_DIRECTORY | os.O_NOFOLLOW | os.O_CLOEXEC)
+def digest_fd(fd):
+    os.lseek(fd, 0, os.SEEK_SET); digest = hashlib.sha256(); size = 0
+    while True:
+        block = os.read(fd, 1024 * 1024)
+        if not block: break
+        size += len(block); digest.update(block)
+    return size, digest.hexdigest()
+sourcefd = os.open(source, os.O_RDONLY | os.O_NOFOLLOW | os.O_CLOEXEC)
+try:
+    smeta = os.fstat(sourcefd)
+    source_size, source_sha = digest_fd(sourcefd)
+    if (not stat.S_ISREG(smeta.st_mode) or smeta.st_nlink != 1 or smeta.st_uid != 0
+            or smeta.st_gid != 0 or stat.S_IMODE(smeta.st_mode) != 0o444 or source_sha != expected_sha):
+        raise SystemExit(103)
+    try:
+        finalfd = os.open(leaf, os.O_RDONLY | os.O_NOFOLLOW | os.O_CLOEXEC, dir_fd=dirfd)
+    except FileNotFoundError:
+        finalfd = None
+    if finalfd is not None:
+        try:
+            meta = os.fstat(finalfd); size, digest = digest_fd(finalfd)
+            if (stat.S_ISREG(meta.st_mode) and meta.st_nlink == 1 and meta.st_uid == 0
+                    and meta.st_gid == 0 and stat.S_IMODE(meta.st_mode) == mode
+                    and size == source_size and digest == expected_sha):
+                os.fsync(finalfd); os.fsync(dirfd); raise SystemExit(0)
+            if not replace:
+                raise SystemExit(104)
+        finally:
+            os.close(finalfd)
+    temp = f'.{leaf}.substrate-r3-{generation_key}.partial'
+    try:
+        tempfd = os.open(temp, os.O_WRONLY | os.O_CREAT | os.O_EXCL | os.O_NOFOLLOW | os.O_CLOEXEC, 0o600, dir_fd=dirfd)
+    except FileExistsError:
+        stale = os.open(temp, os.O_RDONLY | os.O_NOFOLLOW | os.O_CLOEXEC, dir_fd=dirfd)
+        stale_meta = os.fstat(stale); os.close(stale)
+        if not stat.S_ISREG(stale_meta.st_mode) or stale_meta.st_nlink != 1 or stale_meta.st_uid != 0 or stale_meta.st_gid != 0:
+            raise SystemExit(105)
+        os.unlink(temp, dir_fd=dirfd)
+        tempfd = os.open(temp, os.O_WRONLY | os.O_CREAT | os.O_EXCL | os.O_NOFOLLOW | os.O_CLOEXEC, 0o600, dir_fd=dirfd)
+    os.lseek(sourcefd, 0, os.SEEK_SET)
+    with os.fdopen(tempfd, 'wb', closefd=True) as output:
+        while True:
+            block = os.read(sourcefd, 1024 * 1024)
+            if not block: break
+            output.write(block)
+        output.flush(); os.fchown(output.fileno(), 0, 0); os.fchmod(output.fileno(), mode); os.fsync(output.fileno())
+    verifyfd = os.open(temp, os.O_RDONLY | os.O_NOFOLLOW | os.O_CLOEXEC, dir_fd=dirfd)
+    try:
+        meta = os.fstat(verifyfd); size, digest = digest_fd(verifyfd)
+        if (not stat.S_ISREG(meta.st_mode) or meta.st_nlink != 1 or meta.st_uid != 0 or meta.st_gid != 0
+                or stat.S_IMODE(meta.st_mode) != mode or size != source_size or digest != expected_sha):
+            raise SystemExit(106)
+    finally:
+        os.close(verifyfd)
+    os.replace(temp, leaf, src_dir_fd=dirfd, dst_dir_fd=dirfd); os.fsync(dirfd)
+    finalfd = os.open(leaf, os.O_RDONLY | os.O_NOFOLLOW | os.O_CLOEXEC, dir_fd=dirfd)
+    try:
+        meta = os.fstat(finalfd); size, digest = digest_fd(finalfd)
+        if (not stat.S_ISREG(meta.st_mode) or meta.st_nlink != 1 or meta.st_uid != 0 or meta.st_gid != 0
+                or stat.S_IMODE(meta.st_mode) != mode or size != source_size or digest != expected_sha):
+            raise SystemExit(107)
+        os.fsync(finalfd)
+    finally:
+        os.close(finalfd)
+    os.fsync(dirfd)
+finally:
+    os.close(sourcefd); os.close(dirfd)
+"#;
+
+// Freshly measure the fixed installed guest publisher executor through a no-follow descriptor.
+// The host independently exact-joins this canonical observation to the signed manifest before it
+// can create any R6 predecessor.
+const MAC_LIMA_R6_INSTALLED_EXECUTOR_MEASURE_SCRIPT_V1: &str = r#"import hashlib, json, os, stat
+path = '/usr/libexec/substrate/substrate-lifecycle-linux'
+fd = os.open(path, os.O_RDONLY | os.O_NOFOLLOW | os.O_CLOEXEC)
+try:
+    meta = os.fstat(fd)
+    if (not stat.S_ISREG(meta.st_mode) or meta.st_nlink != 1 or meta.st_uid != 0
+            or meta.st_gid != 0 or stat.S_IMODE(meta.st_mode) != 0o755):
+        raise SystemExit(111)
+    digest = hashlib.sha256(); size = 0; header = b''
+    while True:
+        block = os.read(fd, 1024 * 1024)
+        if not block: break
+        if len(header) < 20: header += block[:20-len(header)]
+        size += len(block); digest.update(block)
+    if len(header) < 20 or header[:6] != b'\x7fELF\x02\x01' or header[18:20] != b'\xb7\x00':
+        raise SystemExit(112)
+    print(json.dumps({'architecture':'AArch64','object_format':'ELF','sha256':digest.hexdigest(),
+        'size':size,'target_triple':'aarch64-unknown-linux-gnu'}, sort_keys=True,
+        separators=(',', ':')))
+finally:
+    os.close(fd)
+"#;
+
+const MAC_LIMA_WORLD_SERVICE_READINESS_SCRIPT_V1: &str = r#"set -u
+service_sha="$1"
+socket_sha="$2"
+service_observed=$(/usr/bin/sha256sum /etc/systemd/system/substrate-world-service.service 2>/dev/null | /usr/bin/awk '{print $1}') || exit 41
+socket_observed=$(/usr/bin/sha256sum /etc/systemd/system/substrate-world-service.socket 2>/dev/null | /usr/bin/awk '{print $1}') || exit 41
+/usr/bin/test "$service_observed" = "$service_sha" || exit 41
+/usr/bin/test "$socket_observed" = "$socket_sha" || exit 41
+/usr/bin/test "$(/usr/bin/systemctl is-enabled substrate-world-service.socket 2>/dev/null)" = enabled || exit 42
+/usr/bin/test "$(/usr/bin/systemctl show -p FragmentPath --value substrate-world-service.socket 2>/dev/null)" = /etc/systemd/system/substrate-world-service.socket || exit 43
+/usr/bin/test "$(/usr/bin/systemctl show -p FragmentPath --value substrate-world-service.service 2>/dev/null)" = /etc/systemd/system/substrate-world-service.service || exit 43
+socket_state=$(/usr/bin/systemctl is-active substrate-world-service.socket 2>/dev/null || true)
+service_state=$(/usr/bin/systemctl is-active substrate-world-service.service 2>/dev/null || true)
+if /usr/bin/test "$socket_state" != active || /usr/bin/test "$service_state" != active; then
+  case "$socket_state:$service_state" in
+    active:inactive|inactive:active|inactive:inactive) ;;
+    *) exit 44 ;;
+  esac
+  printf '%s\n' substrate-world-service-before-v1
+  exit 20
+fi
+# Both units must already be active before the endpoint is touched. The readiness observer never
+# demand-activates the service; the fixed Start effect owns socket+service convergence together.
+code=$(/usr/bin/curl --silent --show-error --max-time 5 --output /dev/null --write-out '%{http_code}' --unix-socket /run/substrate.sock http://localhost/v1/execute 2>/dev/null) || exit 45
+/usr/bin/test "$code" = 405 || exit 45
+/usr/bin/test "$(/usr/bin/systemctl is-active substrate-world-service.socket 2>/dev/null)" = active || exit 46
+/usr/bin/test "$(/usr/bin/systemctl is-active substrate-world-service.service 2>/dev/null)" = active || exit 46
+/usr/bin/test ! -L /run/substrate.sock || exit 47
+/usr/bin/test -S /run/substrate.sock || exit 47
+/usr/bin/test "$(/usr/bin/stat -c '%U:%G:%a' /run/substrate.sock 2>/dev/null)" = root:substrate:660 || exit 47
+/usr/bin/test -d /run/substrate || exit 48
+/usr/bin/test "$(/usr/bin/stat -c '%U:%G:%a' /run/substrate 2>/dev/null)" = root:substrate:750 || exit 48
+printf '%s\n' substrate-world-service-ready-v1
+"#;
 const MAC_LIMA_ROOT_INPUT_MAX_BYTES_V1: u64 = 256 * 1024 * 1024;
 const MAC_LIMA_CHILD_FD_SCAN_LIMIT_V1: libc::c_long = 1_048_576;
 const MAC_LIMA_OWNERSHIP_MAX_ENTRIES_V1: usize = 100_000;
@@ -3084,7 +3314,7 @@ fn mac_lima_post_pm_role_rows_v1(
         (
             "mac.lima.guest-private-home".to_string(),
             "directory",
-            format!("/home/{principal}"),
+            "__OBSERVED_GUEST_SUBSTRATE_HOME__".to_string(),
             create_remove_restore.clone(),
         ),
         (
@@ -3199,7 +3429,7 @@ fn mac_post_pm_artifact_source_path_v1(prefix: &str, role: &str) -> Option<Strin
 }
 
 #[cfg(target_os = "macos")]
-fn mac_measure_post_pm_artifact_source_v1(path: &Path) -> Result<(String, String)> {
+fn mac_measure_post_pm_artifact_source_v1(path: &Path) -> Result<(String, String, u64)> {
     let metadata = fs::symlink_metadata(path)
         .with_context(|| format!("inspect retained post-PM artifact {}", path.display()))?;
     if !metadata.file_type().is_file() || metadata.file_type().is_symlink() {
@@ -3228,14 +3458,23 @@ fn mac_measure_post_pm_artifact_source_v1(path: &Path) -> Result<(String, String
     {
         bail!("retained post-PM artifact changed during descriptor measurement");
     }
+    if bytes.len() < 20
+        || &bytes[..4] != b"\x7fELF"
+        || bytes[4] != 2
+        || bytes[5] != 1
+        || u16::from_le_bytes([bytes[18], bytes[19]]) != 183
+    {
+        bail!("retained post-PM artifact is not an AArch64 ELF64 little-endian image");
+    }
     Ok((
         sha256_hex_bootstrap_v1(&bytes),
         format!("dev:{}:ino:{}", opened.dev(), opened.ino()),
+        bytes.len() as u64,
     ))
 }
 
 #[cfg(not(target_os = "macos"))]
-fn mac_measure_post_pm_artifact_source_v1(_path: &Path) -> Result<(String, String)> {
+fn mac_measure_post_pm_artifact_source_v1(_path: &Path) -> Result<(String, String, u64)> {
     bail!("retained macOS post-PM artifact measurement is unavailable off macOS")
 }
 
@@ -3249,14 +3488,18 @@ fn mac_lima_post_pm_entry_v1(
     let object_id = mac_deterministic_bootstrap_component_id_v1(scope_id, scope_id, &role);
     let (bytes_or_target, metadata) =
         if let Some(source_path) = mac_post_pm_artifact_source_path_v1(prefix, &role) {
-            let (artifact_sha256, source_identity) =
+            let (artifact_sha256, source_identity, artifact_size) =
                 mac_measure_post_pm_artifact_source_v1(Path::new(&source_path))?;
             (
                 Some(artifact_sha256),
                 Some(json!({
                     "artifact_source_path": source_path,
                     "artifact_source_physical_identity": source_identity,
-                    "artifact_source_kind": "retained-prefix-linux-artifact"
+                    "artifact_source_kind": "retained-prefix-linux-artifact",
+                    "artifact_object_format": "ELF",
+                    "artifact_architecture": "AArch64",
+                    "artifact_target_triple": "aarch64-unknown-linux-gnu",
+                    "artifact_size": artifact_size,
                 })),
             )
         } else {
@@ -3334,7 +3577,7 @@ fn validate_mac_lima_retained_artifacts_against_provenance_v1(
             provenance.selected_host_prefix.trim_end_matches('/'),
             artifact.retained_relative_path
         );
-        let (digest, physical_identity) =
+        let (digest, physical_identity, artifact_size) =
             mac_measure_post_pm_artifact_source_v1(Path::new(&source_path))?;
         let metadata = entry
             .identity
@@ -3355,6 +3598,19 @@ fn validate_mac_lima_retained_artifacts_against_provenance_v1(
                 != Some(artifact.physical_identity.as_str())
             || metadata.get("artifact_source_kind").and_then(Value::as_str)
                 != Some("retained-prefix-linux-artifact")
+            || metadata
+                .get("artifact_object_format")
+                .and_then(Value::as_str)
+                != Some("ELF")
+            || metadata
+                .get("artifact_architecture")
+                .and_then(Value::as_str)
+                != Some("AArch64")
+            || metadata
+                .get("artifact_target_triple")
+                .and_then(Value::as_str)
+                != Some("aarch64-unknown-linux-gnu")
+            || metadata.get("artifact_size").and_then(Value::as_u64) != Some(artifact_size)
         {
             bail!(
                 "retained Linux artifact does not exact-join root provenance and signed manifest"
@@ -4120,6 +4376,22 @@ mod tests {
             .expect("committed Lima principal test carrier")
     }
 
+    fn lima_test_mapping() -> PlatformBootstrapMappingV1 {
+        let carrier = lima_test_carrier("alice", 501);
+        PlatformBootstrapMappingV1::new_lima(
+            &carrier,
+            "substrate",
+            "0123456789abcdef0123456789abcdef",
+            "/Users/alice/.lima",
+            "/home/alice/.substrate",
+            "alice",
+            1000,
+            "/tmp/substrate-lima-principal-runner-test/sock/agent.sock",
+            "/run/substrate.sock",
+        )
+        .expect("canonical Lima test mapping")
+    }
+
     #[test]
     fn lima_principal_join_rejects_account_uid_gid_and_home_substitution() {
         let carrier = lima_test_carrier("alice", 501);
@@ -4183,21 +4455,339 @@ mod tests {
             mac_validate_fixed_lima_argument_plan_v1(&["unknown", "substrate"], None,).is_err()
         );
         let copy_source = MacLimaInheritedInputV1 {
-            role: MacLimaInheritedInputRoleV1::PostPmCopySource,
+            role: MacLimaInheritedInputRoleV1::PostPmStdinSource,
             path: PathBuf::from("/dev/null"),
             identity: "dev:1:ino:3".to_string(),
             sha256: "b".repeat(64),
             size: 0,
             file: fs::File::open("/dev/null").expect("test copy descriptor"),
         };
-        let copy = [
-            "copy",
-            MAC_LIMA_COPY_CHILD_PATH_V1,
-            "substrate:/var/lib/substrate/.substrate-lifecycle-v1/staged/test.bin",
-        ];
-        assert!(mac_validate_fixed_lima_argument_plan_v1(&copy, Some(&copy_source)).is_ok());
-        assert!(mac_validate_fixed_lima_argument_plan_v1(&copy, None).is_err());
+        let transfer = mac_fixed_lima_stdin_transfer_arguments_v1(
+            "/var/lib/substrate/.substrate-lifecycle-v1/staged/test.bin",
+            &copy_source,
+        );
+        let transfer_borrowed: Vec<&str> = transfer.iter().map(String::as_str).collect();
+        assert!(
+            mac_validate_fixed_lima_argument_plan_v1(&transfer_borrowed, Some(&copy_source))
+                .is_ok()
+        );
+        assert!(mac_validate_fixed_lima_argument_plan_v1(&transfer_borrowed, None).is_err());
         assert!(mac_validate_fixed_lima_argument_plan_v1(&start, Some(&copy_source)).is_err());
+        for (index, replacement) in [
+            (8, "echo caller-script"),
+            (
+                9,
+                "/var/lib/substrate/.substrate-lifecycle-v1/staged/../escape",
+            ),
+            (
+                10,
+                "cccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccc",
+            ),
+            (11, "1"),
+        ] {
+            let mut tampered = transfer.clone();
+            tampered[index] = replacement.to_string();
+            let tampered: Vec<&str> = tampered.iter().map(String::as_str).collect();
+            assert!(
+                mac_validate_fixed_lima_argument_plan_v1(&tampered, Some(&copy_source)).is_err()
+            );
+        }
+        assert_eq!(
+            mac_fixed_privileged_guest_shell_argv_v1(&[
+                "/usr/bin/systemctl".to_string(),
+                "daemon-reload".to_string(),
+            ]),
+            [
+                "shell",
+                "substrate",
+                "--",
+                "/usr/bin/sudo",
+                "-n",
+                "--",
+                "/usr/bin/systemctl",
+                "daemon-reload",
+            ]
+        );
+        let atomic = mac_fixed_lima_atomic_publish_arguments_v1(
+            "/var/lib/substrate/.substrate-lifecycle-v1/staged/1/r/blob",
+            "/usr/libexec/substrate/substrate-lifecycle-linux",
+            &"a".repeat(64),
+            "0755",
+            &"b".repeat(64),
+            false,
+        );
+        let atomic_borrowed: Vec<&str> = atomic.iter().map(String::as_str).collect();
+        assert!(mac_validate_fixed_lima_argument_plan_v1(&atomic_borrowed, None).is_ok());
+        let mut altered_atomic = atomic;
+        altered_atomic[8] = "print('caller selected')".to_string();
+        let altered_atomic: Vec<&str> = altered_atomic.iter().map(String::as_str).collect();
+        assert!(mac_validate_fixed_lima_argument_plan_v1(&altered_atomic, None).is_err());
+        let measurement = [
+            "shell",
+            "substrate",
+            "--",
+            "/usr/bin/sudo",
+            "-n",
+            "--",
+            "/usr/bin/python3",
+            "-c",
+            MAC_LIMA_R6_INSTALLED_EXECUTOR_MEASURE_SCRIPT_V1,
+        ];
+        assert!(mac_validate_fixed_lima_argument_plan_v1(&measurement, None).is_ok());
+        let mut altered_measurement = measurement;
+        altered_measurement[1] = "caller-instance";
+        assert!(mac_validate_fixed_lima_argument_plan_v1(&altered_measurement, None).is_err());
+        assert_eq!(
+            mac_target_link_probe_argv_v1("/root/private"),
+            ["/usr/bin/test", "-L", "/root/private"]
+        );
+        assert_eq!(
+            mac_target_exists_probe_argv_v1("/root/private"),
+            ["/usr/bin/test", "-e", "/root/private"]
+        );
+    }
+
+    #[test]
+    fn fixed_lima_effects_reject_partial_or_absent_root_authority() {
+        assert!(mac_require_privileged_fixed_lima_owner_v1(0, 0).is_ok());
+        for (real_uid, effective_uid) in [(501, 501), (0, 501), (501, 0)] {
+            assert!(
+                mac_require_privileged_fixed_lima_owner_v1(real_uid, effective_uid).is_err(),
+                "partial privilege unexpectedly admitted: {real_uid}/{effective_uid}"
+            );
+        }
+    }
+
+    #[test]
+    fn r6_prepared_window_preserves_the_full_validity_after_commit_lead() {
+        let prepare_now = 77;
+        let (issued_at, expires_at) =
+            derive_r6_pairing_prepared_window_v1(prepare_now).expect("derive prepared R6 window");
+        assert_eq!(issued_at - prepare_now, R6_PAIRING_PREPARE_LEAD_NS_V1);
+        assert_eq!(expires_at - issued_at, R6_PAIRING_TICKET_LIFETIME_NS_V1);
+        assert!(prepare_now < issued_at);
+        assert!(derive_r6_pairing_prepared_window_v1(u64::MAX).is_err());
+
+        let activated_at = 1_000;
+        let activation_expires = activated_at + R6_PAIRING_TICKET_LIFETIME_NS_V1;
+        assert_eq!(
+            mac_r6_pairing_activation_disposition_v1(
+                activated_at,
+                activation_expires,
+                activated_at - 1,
+            )
+            .unwrap(),
+            MacR6PairingActivationDispositionV1::PromoteAvailable,
+            "recovery before the future activation boundary preserves the complete interval"
+        );
+        assert_eq!(
+            mac_r6_pairing_activation_disposition_v1(
+                activated_at,
+                activation_expires,
+                activated_at,
+            )
+            .unwrap(),
+            MacR6PairingActivationDispositionV1::MissedActivation,
+            "Available publication at the not-before would lose part of the exact window"
+        );
+        assert!(mac_r6_pairing_activation_disposition_v1(
+            activated_at,
+            activation_expires - 1,
+            activated_at,
+        )
+        .is_err());
+
+        let available = test_r6_available_predecessor_state_v1();
+        let tombstone =
+            derive_mac_r6_pairing_missed_activation_tombstone_v1(&available, issued_at, issued_at)
+                .expect("late Available CAS is atomically tombstoned");
+        assert_eq!(tombstone.state, "Superseded");
+        let (replacement_issued, replacement_expires) =
+            derive_r6_pairing_prepared_window_v1(issued_at)
+                .expect("replacement receives a fresh prepare lead");
+        assert!(replacement_issued > issued_at);
+        assert_eq!(
+            replacement_expires - replacement_issued,
+            R6_PAIRING_TICKET_LIFETIME_NS_V1
+        );
+        let source = include_str!("substrate-lifecycle-macos.rs");
+        let ensure_start = source
+            .rfind("fn ensure_mac_r6_pairing_predecessor_v1")
+            .expect("bounded R6 producer");
+        let ensure_end = source[ensure_start..]
+            .find("fn mac_refresh_closed_post_pm_requests_after_fixed_install_v1")
+            .map(|offset| ensure_start + offset)
+            .expect("R6 producer boundary");
+        let producer = &source[ensure_start..ensure_end];
+        assert!(producer.contains("for regeneration_attempt in 0..=1"));
+        assert!(producer.contains("R6 replacement also missed activation; preserved"));
+        assert!(producer.contains("R6 orphan regeneration budget is exhausted"));
+        let activation_boundary = producer
+            .rfind("let activation_account")
+            .expect("signed activation CAS boundary");
+        let state_publication = producer[activation_boundary..]
+            .find("&state_account")
+            .map(|offset| activation_boundary + offset)
+            .expect("Available state CAS after activation");
+        assert!(
+            activation_boundary < state_publication,
+            "prepared documents and signed activation must precede Available publication"
+        );
+        assert!(
+            !producer.contains("return ensure_mac_r6_pairing_predecessor_v1("),
+            "missed activation regeneration must be bounded and nonrecursive"
+        );
+    }
+
+    #[test]
+    fn r6_rotation_commitment_is_the_complete_stage_one_record_not_predecessor_only() {
+        let predecessor_only = br#"{"predecessor":{"generation":1}}"#;
+        let complete_stage_one = br#"{"continuation":{"generation":1},"predecessor":{"generation":1},"predecessor_state":{"state":"Available"},"stage_one":{"state":"Completed"}}"#;
+        let active_commitment = mac_r6_pairing_stage_one_commitment_bytes_v1(complete_stage_one);
+        assert_eq!(
+            active_commitment,
+            mac_r6_pairing_stage_one_commitment_bytes_v1(complete_stage_one)
+        );
+        assert_ne!(
+            active_commitment,
+            mac_r6_pairing_stage_one_commitment_bytes_v1(predecessor_only),
+            "expired-unused rotation must not compare a full-record binding to a predecessor-only hash"
+        );
+
+        let predecessor = json!({"generation": 1, "sha256": "a"});
+        let continuation = json!({"generation": 1, "sha256": "b"});
+        let predecessor_state = json!({"state": "Available", "revision": 1});
+        let stage_one = json!({"authorization": "c", "state": "Completed"});
+        let canonical = canonical_mac_lima_guest_pairing_stage_one_bundle_v1(
+            &predecessor,
+            &continuation,
+            &predecessor_state,
+            &stage_one,
+        )
+        .expect("canonical complete Stage-1 bundle");
+        for mutated in [
+            canonical_mac_lima_guest_pairing_stage_one_bundle_v1(
+                &json!({"generation": 2, "sha256": "a"}),
+                &continuation,
+                &predecessor_state,
+                &stage_one,
+            )
+            .unwrap(),
+            canonical_mac_lima_guest_pairing_stage_one_bundle_v1(
+                &predecessor,
+                &json!({"generation": 1, "sha256": "changed"}),
+                &predecessor_state,
+                &stage_one,
+            )
+            .unwrap(),
+            canonical_mac_lima_guest_pairing_stage_one_bundle_v1(
+                &predecessor,
+                &continuation,
+                &json!({"state": "Consumed", "revision": 2}),
+                &stage_one,
+            )
+            .unwrap(),
+            canonical_mac_lima_guest_pairing_stage_one_bundle_v1(
+                &predecessor,
+                &continuation,
+                &predecessor_state,
+                &json!({"authorization": "changed", "state": "Completed"}),
+            )
+            .unwrap(),
+        ] {
+            assert_ne!(
+                mac_r6_pairing_stage_one_commitment_bytes_v1(&canonical),
+                mac_r6_pairing_stage_one_commitment_bytes_v1(&mutated),
+                "every predecessor, continuation, state, and Stage-1 authorization mutation must change the production commitment"
+            );
+        }
+    }
+
+    #[cfg(target_os = "macos")]
+    #[test]
+    fn atomic_host_publication_recovers_partial_temp_without_partial_final() {
+        let root = std::env::temp_dir().join(format!(
+            "substrate-r6-atomic-publish-{}-{}",
+            std::process::id(),
+            mac_now_unix_ns_v1().expect("test clock")
+        ));
+        fs::create_dir(&root).expect("create atomic publication test root");
+        fs::set_permissions(&root, fs::Permissions::from_mode(0o700))
+            .expect("harden atomic publication test root");
+        let uid = unsafe { libc::getuid() };
+        let gid = unsafe { libc::getgid() };
+        let path = root.join("journal.json");
+        let bytes = b"complete durable journal\n";
+        let digest = sha256_hex_bootstrap_v1(bytes);
+        let temp = root.join(format!(".journal.json.substrate-{digest}.partial"));
+        fs::write(&temp, b"interrupted").expect("write interrupted temp fixture");
+        fs::set_permissions(&temp, fs::Permissions::from_mode(0o600))
+            .expect("harden interrupted temp fixture");
+
+        mac_publish_immutable_file_atomic_no_replace_v1(
+            &path,
+            bytes,
+            0o600,
+            uid,
+            gid,
+            "atomic publication test",
+        )
+        .expect("recover interrupted temp and publish exact final");
+        assert_eq!(fs::read(&path).expect("read exact final"), bytes);
+        assert!(!temp.exists());
+        mac_publish_immutable_file_atomic_no_replace_v1(
+            &path,
+            bytes,
+            0o600,
+            uid,
+            gid,
+            "atomic publication test",
+        )
+        .expect("exact publication retry");
+        assert!(mac_publish_immutable_file_atomic_no_replace_v1(
+            &path,
+            b"conflicting durable journal\n",
+            0o600,
+            uid,
+            gid,
+            "atomic publication test",
+        )
+        .is_err());
+        assert_eq!(fs::read(&path).expect("conflict preserved final"), bytes);
+
+        for (name, mode) in [("journal-linked.json", 0o600), ("artifact-linked", 0o444)] {
+            let linked_path = root.join(name);
+            let linked_digest = sha256_hex_bootstrap_v1(bytes);
+            let linked_temp = root.join(format!(".{name}.substrate-{linked_digest}.partial"));
+            fs::write(&linked_temp, bytes).expect("write complete linked temp");
+            fs::set_permissions(&linked_temp, fs::Permissions::from_mode(mode))
+                .expect("freeze linked temp mode");
+            fs::hard_link(&linked_temp, &linked_path)
+                .expect("simulate crash after atomic hard-link publication");
+            assert_eq!(
+                fs::metadata(&linked_path)
+                    .expect("linked final metadata")
+                    .nlink(),
+                2
+            );
+            mac_publish_immutable_file_atomic_no_replace_v1(
+                &linked_path,
+                bytes,
+                mode,
+                uid,
+                gid,
+                "linked crash recovery test",
+            )
+            .expect("same-inode final plus temp converges");
+            assert!(!linked_temp.exists());
+            assert_eq!(
+                fs::metadata(&linked_path)
+                    .expect("recovered final metadata")
+                    .nlink(),
+                1
+            );
+        }
+        fs::remove_dir_all(&root).expect("remove atomic publication test root");
     }
 
     #[test]
@@ -4304,6 +4894,7 @@ mod tests {
                 action,
                 "mac.lima.guest-membership(alice)",
                 "/opt/substrate",
+                None,
             )
             .expect("closed Lima instance plan");
             assert_eq!(plan.observation_argv, ["list", "--json"]);
@@ -4604,7 +5195,7 @@ mod tests {
         let copy_metadata = fs::symlink_metadata(&copy_path).expect("stat copy fixture");
         let copy_source = mac_open_root_private_lima_input_v1(
             &copy_path,
-            MacLimaInheritedInputRoleV1::PostPmCopySource,
+            MacLimaInheritedInputRoleV1::PostPmStdinSource,
             &sha256_hex_bootstrap_v1(copy_bytes),
             copy_bytes.len() as u64,
         )
@@ -4653,13 +5244,13 @@ int main(int argc, char **argv) {
         return 91;
     }
     int start_mode = argc == 6 && strcmp(argv[1], "start") == 0;
-    int copy_mode = argc == 4 && strcmp(argv[1], "copy") == 0;
+    int copy_mode = argc == 14 && strcmp(argv[1], "shell") == 0;
     if (!start_mode && !copy_mode) return 92;
     int nonzero_mode = start_mode && strcmp(argv[4], "nonzero-proof") == 0;
     int disconnect_mode = start_mode && strcmp(argv[4], "disconnect-proof") == 0;
     int drift_default_mode = start_mode && strcmp(argv[4], "drift-default-proof") == 0;
     int drift_override_mode = start_mode && strcmp(argv[4], "drift-override-proof") == 0;
-    int timeout_mode = copy_mode && strstr(argv[3], "/timeout-proof.bin") != NULL;
+    int timeout_mode = copy_mode && strstr(argv[11], "/timeout-proof.bin") != NULL;
     gid_t groups[128];
     int group_count = getgroups(128, groups);
     if (group_count < 0) return 93;
@@ -4698,12 +5289,12 @@ int main(int argc, char **argv) {
     errno = 0;
     if (fcntl(__UNRELATED_FD__, F_GETFD) >= 0 || errno != EBADF) return 100;
     fputs("unrelated_fd=closed\n", stdout);
-    int source_fd = start_mode ? 3 : 4;
+    int source_fd = start_mode ? 3 : 0;
     int flags = fcntl(source_fd, F_GETFD);
     if (flags < 0 || (flags & FD_CLOEXEC) != 0) return 94;
     int status_flags = fcntl(source_fd, F_GETFL);
     if (status_flags < 0 || (status_flags & O_ACCMODE) != O_RDONLY) return 101;
-    int source = open(start_mode ? argv[5] : argv[2], O_RDONLY);
+    int source = start_mode ? open(argv[5], O_RDONLY) : dup(STDIN_FILENO);
     if (source < 0) return 95;
     fputs(start_mode ? "profile_hex=" : "copy_hex=", stdout);
     unsigned char buffer[256];
@@ -4860,19 +5451,20 @@ int main(int argc, char **argv) {
             "limactl validate unexpectedly mutated its isolated LIMA_HOME"
         );
 
-        let copy_arguments = [
-            "copy",
-            MAC_LIMA_COPY_CHILD_PATH_V1,
-            "substrate:/var/lib/substrate/.substrate-lifecycle-v1/staged/live-proof.bin",
-        ];
-        mac_validate_fixed_lima_argument_plan_v1(&copy_arguments, Some(&copy_source))
-            .expect("closed post-PM copy plan");
+        let copy_arguments = mac_fixed_lima_stdin_transfer_arguments_v1(
+            "/var/lib/substrate/.substrate-lifecycle-v1/staged/live-proof.bin",
+            &copy_source,
+        );
+        let copy_arguments_borrowed: Vec<&str> =
+            copy_arguments.iter().map(String::as_str).collect();
+        mac_validate_fixed_lima_argument_plan_v1(&copy_arguments_borrowed, Some(&copy_source))
+            .expect("closed post-PM stdin plan");
         for attempt in 1..=2 {
             let child = mac_spawn_fixed_lima_child_after_validation_v1(
                 &fake,
                 &proof_principal,
                 &lima_home,
-                &copy_arguments,
+                &copy_arguments_borrowed,
                 Some(&copy_source),
                 MacFixedLimaChildIoV1::Captured,
             )
@@ -4907,7 +5499,7 @@ int main(int argc, char **argv) {
             .expect("freeze retained replacement fixture");
         let replacement_source = mac_open_root_private_lima_input_v1(
             &replacement_path,
-            MacLimaInheritedInputRoleV1::PostPmCopySource,
+            MacLimaInheritedInputRoleV1::PostPmStdinSource,
             &sha256_hex_bootstrap_v1(copy_bytes),
             copy_bytes.len() as u64,
         )
@@ -4921,7 +5513,7 @@ int main(int argc, char **argv) {
             &fake,
             &proof_principal,
             &lima_home,
-            &copy_arguments,
+            &copy_arguments_borrowed,
             Some(&replacement_source),
             MacFixedLimaChildIoV1::Captured,
         )
@@ -4991,16 +5583,17 @@ int main(int argc, char **argv) {
             "nonzero child was not reaped"
         );
 
-        let timeout_arguments = [
-            "copy",
-            MAC_LIMA_COPY_CHILD_PATH_V1,
-            "substrate:/var/lib/substrate/.substrate-lifecycle-v1/staged/timeout-proof.bin",
-        ];
+        let timeout_arguments = mac_fixed_lima_stdin_transfer_arguments_v1(
+            "/var/lib/substrate/.substrate-lifecycle-v1/staged/timeout-proof.bin",
+            &copy_source,
+        );
+        let timeout_arguments_borrowed: Vec<&str> =
+            timeout_arguments.iter().map(String::as_str).collect();
         let timeout_child = mac_spawn_fixed_lima_child_after_validation_v1(
             &fake,
             &proof_principal,
             &lima_home,
-            &timeout_arguments,
+            &timeout_arguments_borrowed,
             Some(&copy_source),
             MacFixedLimaChildIoV1::Captured,
         )
@@ -5501,6 +6094,36 @@ int main(int argc, char **argv) {
             mac_post_pm_effect_retry_decision_v1(MacPostPmEffectObservationStateV1::Ambiguous)
                 .is_err()
         );
+        assert_eq!(
+            mac_prepared_first_effect_decision_v1(
+                "mac.lima.guest-service-state(service)",
+                ManagedActionV1::Start,
+                MacPostPmEffectObservationStateV1::Before,
+            )
+            .unwrap(),
+            MacPreparedFirstEffectDecisionV1::Execute
+        );
+        assert_eq!(
+            mac_prepared_first_effect_decision_v1(
+                "mac.lima.guest-service-state(service)",
+                ManagedActionV1::Start,
+                MacPostPmEffectObservationStateV1::After,
+            )
+            .unwrap(),
+            MacPreparedFirstEffectDecisionV1::ConvergeExactAfter
+        );
+        assert!(mac_prepared_first_effect_decision_v1(
+            "mac.lima.guest-service-state(socket)",
+            ManagedActionV1::Start,
+            MacPostPmEffectObservationStateV1::After,
+        )
+        .is_err());
+        assert!(mac_prepared_first_effect_decision_v1(
+            "mac.lima.guest-service-state(service)",
+            ManagedActionV1::Start,
+            MacPostPmEffectObservationStateV1::Ambiguous,
+        )
+        .is_err());
         assert!(
             mac_require_post_pm_after_state_v1(MacPostPmEffectObservationStateV1::After).is_ok()
         );
@@ -5519,6 +6142,7 @@ int main(int argc, char **argv) {
             ManagedActionV1::Create,
             membership,
             "/opt/substrate",
+            None,
         )
         .unwrap();
         assert_eq!(
@@ -5539,6 +6163,7 @@ int main(int argc, char **argv) {
             ManagedActionV1::Stop,
             membership,
             "/opt/substrate",
+            None,
         )
         .unwrap();
         assert_eq!(
@@ -5552,6 +6177,276 @@ int main(int argc, char **argv) {
         assert_eq!(
             mac_classify_post_pm_probe_v1(&stop_service, false, Some(3), "failed").unwrap(),
             MacPostPmEffectObservationStateV1::Ambiguous
+        );
+
+        let start_service = mac_post_pm_effect_plan_v1(
+            &correction_post_pm_entry_v1(
+                "mac.lima.guest-service-state(service)",
+                "service-state",
+                "substrate-world-service.service",
+            ),
+            ManagedActionV1::Start,
+            membership,
+            "/opt/substrate",
+            Some(&lima_test_mapping()),
+        )
+        .unwrap();
+        assert_eq!(
+            mac_classify_post_pm_probe_v1(
+                &start_service,
+                true,
+                Some(0),
+                "substrate-world-service-ready-v1\n",
+            )
+            .unwrap(),
+            MacPostPmEffectObservationStateV1::After
+        );
+        assert_eq!(
+            mac_classify_post_pm_probe_v1(
+                &start_service,
+                false,
+                Some(20),
+                "substrate-world-service-before-v1\n",
+            )
+            .unwrap(),
+            MacPostPmEffectObservationStateV1::Before
+        );
+        for code in [1, 41, 45, 47] {
+            assert_eq!(
+                mac_classify_post_pm_probe_v1(&start_service, false, Some(code), "").unwrap(),
+                MacPostPmEffectObservationStateV1::Ambiguous,
+                "arbitrary nonzero readiness exit {code} must preserve first"
+            );
+        }
+    }
+
+    fn write_readiness_adapter_v1(path: &Path, body: &str) {
+        fs::write(path, body).expect("write deterministic readiness adapter");
+        let mut permissions = fs::metadata(path).expect("adapter metadata").permissions();
+        permissions.set_mode(0o755);
+        fs::set_permissions(path, permissions).expect("make readiness adapter executable");
+    }
+
+    #[allow(clippy::too_many_arguments)]
+    fn run_embedded_world_service_readiness_v1(
+        socket_active: &str,
+        service_active: &str,
+        fragment_identity: bool,
+        socket_metadata: &str,
+        endpoint_exit: i32,
+        endpoint_code: &str,
+        corrupt_unit_hash: bool,
+    ) -> (Option<i32>, String, bool) {
+        let temp = PathBuf::from("/tmp").join(format!(
+            "sr6-{}-{}",
+            std::process::id(),
+            mac_now_unix_ns_v1().expect("readiness test clock")
+        ));
+        fs::create_dir(&temp).expect("readiness adapter tempdir");
+        let service_unit = temp.join("substrate-world-service.service");
+        let socket_unit = temp.join("substrate-world-service.socket");
+        let runtime_dir = temp.join("run/substrate");
+        let socket_path = temp.join("run/substrate.sock");
+        fs::create_dir_all(&runtime_dir).expect("readiness runtime dir");
+        fs::write(&service_unit, b"service-v1\n").expect("service unit fixture");
+        fs::write(&socket_unit, b"socket-v1\n").expect("socket unit fixture");
+        let _socket =
+            std::os::unix::net::UnixListener::bind(&socket_path).expect("readiness socket fixture");
+        let service_sha = if corrupt_unit_hash {
+            "0".repeat(64)
+        } else {
+            sha256_hex_bootstrap_v1(b"service-v1\n")
+        };
+        let socket_sha = sha256_hex_bootstrap_v1(b"socket-v1\n");
+
+        let adapter_root = temp.join("adapters");
+        fs::create_dir(&adapter_root).expect("readiness adapter directory");
+        let sha256sum = adapter_root.join("sha256sum");
+        let systemctl = adapter_root.join("systemctl");
+        let stat = adapter_root.join("stat");
+        let curl = adapter_root.join("curl");
+        let curl_marker = temp.join("curl-called");
+        write_readiness_adapter_v1(
+            &sha256sum,
+            "#!/bin/sh\nexec /usr/bin/shasum -a 256 -- \"$1\"\n",
+        );
+        write_readiness_adapter_v1(
+            &systemctl,
+            r#"#!/bin/sh
+case "$1:$2:$3:$4:$5" in
+  is-enabled:substrate-world-service.socket:::) printf '%s\n' enabled ;;
+  is-active:substrate-world-service.socket:::) printf '%s\n' "$SOCKET_ACTIVE" ;;
+  is-active:substrate-world-service.service:::) printf '%s\n' "$SERVICE_ACTIVE" ;;
+  show:-p:FragmentPath:--value:substrate-world-service.socket) printf '%s\n' "$SOCKET_FRAGMENT" ;;
+  show:-p:FragmentPath:--value:substrate-world-service.service) printf '%s\n' "$SERVICE_FRAGMENT" ;;
+  *) exit 91 ;;
+esac
+"#,
+        );
+        write_readiness_adapter_v1(
+            &stat,
+            r#"#!/bin/sh
+last=''
+for value in "$@"; do last="$value"; done
+if test "$last" = "$SOCKET_PATH"; then
+  printf '%s\n' "$SOCKET_METADATA"
+elif test "$last" = "$RUNTIME_DIR"; then
+  printf '%s\n' root:substrate:750
+else
+  exit 92
+fi
+"#,
+        );
+        write_readiness_adapter_v1(
+            &curl,
+            r#"#!/bin/sh
+: > "$CURL_MARKER"
+test "$ENDPOINT_EXIT" = 0 || exit "$ENDPOINT_EXIT"
+printf '%s' "$ENDPOINT_CODE"
+"#,
+        );
+
+        let script = MAC_LIMA_WORLD_SERVICE_READINESS_SCRIPT_V1
+            .replace("/usr/bin/sha256sum", &sha256sum.display().to_string())
+            .replace("/usr/bin/systemctl", &systemctl.display().to_string())
+            .replace("/usr/bin/stat", &stat.display().to_string())
+            .replace("/usr/bin/curl", &curl.display().to_string())
+            .replace("/usr/bin/test", "/bin/test")
+            .replace(
+                "/etc/systemd/system/substrate-world-service.service",
+                &service_unit.display().to_string(),
+            )
+            .replace(
+                "/etc/systemd/system/substrate-world-service.socket",
+                &socket_unit.display().to_string(),
+            )
+            .replace("/run/substrate.sock", "__SUBSTRATE_TEST_SOCKET__")
+            .replace("/run/substrate", &runtime_dir.display().to_string())
+            .replace(
+                "__SUBSTRATE_TEST_SOCKET__",
+                &socket_path.display().to_string(),
+            );
+        let socket_fragment = if fragment_identity {
+            socket_unit.clone()
+        } else {
+            temp.join("wrong.socket")
+        };
+        let output = Command::new("/bin/sh")
+            .arg("-c")
+            .arg(script)
+            .arg("readiness-v1")
+            .arg(&service_sha)
+            .arg(&socket_sha)
+            .env("SERVICE_UNIT", &service_unit)
+            .env("SOCKET_UNIT", &socket_unit)
+            .env("SOCKET_ACTIVE", socket_active)
+            .env("SERVICE_ACTIVE", service_active)
+            .env("SOCKET_FRAGMENT", socket_fragment)
+            .env("SERVICE_FRAGMENT", &service_unit)
+            .env("SOCKET_PATH", &socket_path)
+            .env("RUNTIME_DIR", &runtime_dir)
+            .env("SOCKET_METADATA", socket_metadata)
+            .env("CURL_MARKER", &curl_marker)
+            .env("ENDPOINT_EXIT", endpoint_exit.to_string())
+            .env("ENDPOINT_CODE", endpoint_code)
+            .output()
+            .expect("execute embedded readiness observer");
+        let result = (
+            output.status.code(),
+            String::from_utf8(output.stdout).expect("readiness stdout"),
+            curl_marker.exists(),
+        );
+        drop(_socket);
+        fs::remove_dir_all(&temp).expect("remove readiness adapter tempdir");
+        result
+    }
+
+    #[test]
+    fn embedded_world_service_readiness_observer_executes_reboot_and_failure_boundaries() {
+        assert_eq!(
+            run_embedded_world_service_readiness_v1(
+                "active",
+                "active",
+                true,
+                "root:substrate:660",
+                0,
+                "405",
+                false,
+            ),
+            (
+                Some(0),
+                "substrate-world-service-ready-v1\n".to_string(),
+                true,
+            )
+        );
+        assert_eq!(
+            run_embedded_world_service_readiness_v1(
+                "active",
+                "inactive",
+                true,
+                "root:substrate:660",
+                0,
+                "405",
+                false,
+            ),
+            (
+                Some(20),
+                "substrate-world-service-before-v1\n".to_string(),
+                false,
+            ),
+            "the observer must not demand-activate the service after reboot"
+        );
+        assert_eq!(
+            run_embedded_world_service_readiness_v1(
+                "active",
+                "active",
+                false,
+                "root:substrate:660",
+                0,
+                "405",
+                false,
+            )
+            .0,
+            Some(43)
+        );
+        assert_eq!(
+            run_embedded_world_service_readiness_v1(
+                "active",
+                "active",
+                true,
+                "root:root:666",
+                0,
+                "405",
+                false,
+            )
+            .0,
+            Some(47)
+        );
+        assert_eq!(
+            run_embedded_world_service_readiness_v1(
+                "active",
+                "active",
+                true,
+                "root:substrate:660",
+                7,
+                "000",
+                false,
+            )
+            .0,
+            Some(45)
+        );
+        assert_eq!(
+            run_embedded_world_service_readiness_v1(
+                "active",
+                "active",
+                true,
+                "root:substrate:660",
+                0,
+                "405",
+                true,
+            )
+            .0,
+            Some(41)
         );
     }
 
@@ -5595,11 +6490,18 @@ int main(int argc, char **argv) {
     #[test]
     fn correction_post_pm_effect_planner_is_exhaustive_literal_and_has_no_guest_relay() {
         let membership = "mac.lima.guest-membership(alice)";
+        let mapping = lima_test_mapping();
         for (role, object_type, target, actions) in mac_lima_post_pm_role_rows_v1("alice") {
             let entry = correction_post_pm_entry_v1(&role, object_type, &target);
             for action in actions.iter().copied() {
-                let plan = mac_post_pm_effect_plan_v1(&entry, action, membership, "/opt/substrate")
-                    .expect("every accepted closed row has one fixed effect plan");
+                let plan = mac_post_pm_effect_plan_v1(
+                    &entry,
+                    action,
+                    membership,
+                    "/opt/substrate",
+                    Some(&mapping),
+                )
+                .expect("every accepted closed row has one fixed effect plan");
                 assert_eq!(plan.role, role);
                 assert_eq!(plan.action, action);
                 assert!(!plan.primitives.is_empty());
@@ -5620,8 +6522,14 @@ int main(int argc, char **argv) {
             ] {
                 if !actions.contains(&action) {
                     assert!(
-                        mac_post_pm_effect_plan_v1(&entry, action, membership, "/opt/substrate")
-                            .is_err(),
+                        mac_post_pm_effect_plan_v1(
+                            &entry,
+                            action,
+                            membership,
+                            "/opt/substrate",
+                            Some(&mapping),
+                        )
+                        .is_err(),
                         "unlisted role/action unexpectedly planned: {role}/{action:?}"
                     );
                 }
@@ -5630,9 +6538,14 @@ int main(int argc, char **argv) {
         for action in [ManagedActionV1::Create, ManagedActionV1::Replace] {
             let entry =
                 correction_post_pm_entry_v1("mac.lima.instance", "lima-instance", "lima:substrate");
-            assert!(
-                mac_post_pm_effect_plan_v1(&entry, action, membership, "/opt/substrate").is_err()
-            );
+            assert!(mac_post_pm_effect_plan_v1(
+                &entry,
+                action,
+                membership,
+                "/opt/substrate",
+                Some(&mapping),
+            )
+            .is_err());
         }
         let binary = correction_post_pm_entry_v1(
             "mac.lima.guest-binary(substrate-world-service)",
@@ -5644,6 +6557,7 @@ int main(int argc, char **argv) {
             ManagedActionV1::Create,
             membership,
             "/opt/substrate",
+            None,
         )
         .expect("bound artifact plan");
         assert!(
@@ -5662,6 +6576,7 @@ int main(int argc, char **argv) {
             ManagedActionV1::Create,
             membership,
             "/opt/substrate",
+            None,
         )
         .expect("bound private-home directory plan");
         assert!(
@@ -5677,11 +6592,111 @@ int main(int argc, char **argv) {
             ManagedActionV1::Create,
             membership,
             "/opt/substrate",
+            None,
         )
         .expect("bound publisher unit plan");
         assert!(
-            matches!(publisher_plan.target_integrity.as_ref(), Some(MacPostPmTargetIntegrityV1 { kind, sha256: Some(sha256), owner, group, mode, .. }) if *kind == "regular file" && sha256.len() == 64 && owner == "root" && group == "root" && mode == "0600")
+            matches!(publisher_plan.target_integrity.as_ref(), Some(MacPostPmTargetIntegrityV1 { kind, sha256: Some(sha256), owner, group, mode, .. }) if *kind == "regular file" && sha256.len() == 64 && owner == "root" && group == "root" && mode == "0644")
         );
+        assert!(matches!(
+            publisher_plan.primitives.first(),
+            Some(MacPostPmEffectPrimitiveV1::Embedded { bytes, .. })
+                if bytes == include_bytes!("../../scripts/linux/substrate-lifecycle-publisher-v1.service")
+                    && bytes.windows(9).any(|window| window == b"[Install]")
+        ));
+        let world_service = correction_post_pm_entry_v1(
+            "mac.lima.guest-unit(service)",
+            "regular-file",
+            "/etc/systemd/system/substrate-world-service.service",
+        );
+        let world_service_plan = mac_post_pm_effect_plan_v1(
+            &world_service,
+            ManagedActionV1::Create,
+            membership,
+            "/opt/substrate",
+            Some(&mapping),
+        )
+        .expect("rendered world service unit plan");
+        assert!(matches!(
+            world_service_plan.primitives.first(),
+            Some(MacPostPmEffectPrimitiveV1::Embedded { bytes, .. })
+                if String::from_utf8_lossy(bytes).contains("SUBSTRATE_INSTALL_HOST_CONTEXT_COMMITMENT=")
+                    && String::from_utf8_lossy(bytes).contains("SUBSTRATE_LIMA_INSTANCE_NAME=substrate")
+                    && String::from_utf8_lossy(bytes).contains("[Install]")
+                    && !String::from_utf8_lossy(bytes).contains("${")
+        ));
+        let socket_enable = mac_post_pm_effect_plan_v1(
+            &correction_post_pm_entry_v1(
+                "mac.lima.guest-service-state(socket)",
+                "service-state",
+                "substrate-world-service.socket",
+            ),
+            ManagedActionV1::Enable,
+            membership,
+            "/opt/substrate",
+            None,
+        )
+        .expect("socket enable plan");
+        assert!(matches!(
+            socket_enable.primitives.as_slice(),
+            [
+                MacPostPmEffectPrimitiveV1::PrivilegedGuest(reload),
+                MacPostPmEffectPrimitiveV1::PrivilegedGuest(enable),
+            ] if reload == &["/usr/bin/systemctl", "daemon-reload"]
+                && enable == &["/usr/bin/systemctl", "enable", "substrate-world-service.socket"]
+        ));
+        let service_start = mac_post_pm_effect_plan_v1(
+            &correction_post_pm_entry_v1(
+                "mac.lima.guest-service-state(service)",
+                "service-state",
+                "substrate-world-service.service",
+            ),
+            ManagedActionV1::Start,
+            membership,
+            "/opt/substrate",
+            Some(&mapping),
+        )
+        .expect("combined socket/service readiness plan");
+        assert!(matches!(
+            service_start.primitives.as_slice(),
+            [MacPostPmEffectPrimitiveV1::PrivilegedGuest(start)]
+                if start == &["/usr/bin/systemctl", "start",
+                    "substrate-world-service.socket", "substrate-world-service.service"]
+        ));
+        assert_eq!(service_start.observation_argv[0], "/bin/sh");
+        assert_eq!(
+            service_start.observation_argv[2],
+            MAC_LIMA_WORLD_SERVICE_READINESS_SCRIPT_V1
+        );
+        for required in [
+            "systemctl is-enabled substrate-world-service.socket",
+            "systemctl is-active substrate-world-service.socket",
+            "systemctl is-active substrate-world-service.service",
+            "stat -c '%U:%G:%a' /run/substrate.sock",
+            "--unix-socket /run/substrate.sock http://localhost/v1/execute",
+        ] {
+            assert!(MAC_LIMA_WORLD_SERVICE_READINESS_SCRIPT_V1.contains(required));
+        }
+        assert_eq!(
+            mac_systemd_quoted_field_v1("/home/alice smith/.substrate", "guest home", true)
+                .expect("quoted systemd path accepts spaces"),
+            "/home/alice smith/.substrate"
+        );
+        assert!(
+            mac_systemd_quoted_field_v1("/home/alice\tsmith/.substrate", "guest home", true,)
+                .is_err()
+        );
+        let fixed_steps = mac_fixed_install_steps_v1("alice");
+        assert!(fixed_steps.ends_with(&[
+            (
+                "mac.lima.guest-service-state(socket)".to_string(),
+                ManagedActionV1::Enable,
+            ),
+            (
+                "mac.lima.guest-service-state(service)".to_string(),
+                ManagedActionV1::Start,
+            ),
+        ]));
         let mut mismatched = binary.clone();
         mismatched.identity.metadata = Some(
             json!({"artifact_source_path":"/tmp/untrusted","artifact_source_physical_identity":"dev:1:ino:2","artifact_source_kind":"retained-prefix-linux-artifact"}),
@@ -5690,7 +6705,8 @@ int main(int argc, char **argv) {
             &mismatched,
             ManagedActionV1::Create,
             membership,
-            "/opt/substrate"
+            "/opt/substrate",
+            None,
         )
         .is_err());
     }
@@ -5852,16 +6868,16 @@ int main(int argc, char **argv) {
         // Equality is expired. The initial issue path must retain the existing record unchanged;
         // only an exact full-record retry may enter allocation.
         let expires_at_unix_ns = 41;
+        let continuation_issued_at = 1_000;
+        let continuation_expires_at = continuation_issued_at + R6_PAIRING_TICKET_LIFETIME_NS_V1;
         let first_ticket_expiry =
-            derive_r6_pairing_ticket_expiry_v1(1_000 * R6_PAIRING_TICKET_LIFETIME_NS_V1, 1)
-                .expect("unexpired Stage-1 derives a bounded R6 ticket expiry");
-        assert!(first_ticket_expiry > 1);
-        let replacement_ticket_expiry = derive_r6_pairing_ticket_expiry_v1(
-            1_000 * R6_PAIRING_TICKET_LIFETIME_NS_V1,
-            first_ticket_expiry,
-        )
-        .expect("the still-valid Stage-1 admits a fresh post-expiry ticket");
-        assert!(replacement_ticket_expiry > first_ticket_expiry);
+            derive_r6_pairing_ticket_expiry_v1(continuation_expires_at, continuation_issued_at)
+                .expect("live continuation derives a bounded R6 ticket expiry");
+        assert_eq!(first_ticket_expiry, continuation_expires_at);
+        let replacement_ticket_expiry =
+            derive_r6_pairing_ticket_expiry_v1(continuation_expires_at, continuation_issued_at + 1)
+                .expect("the still-live continuation admits an in-window retry");
+        assert_eq!(replacement_ticket_expiry, continuation_expires_at);
         assert!(
             derive_r6_pairing_ticket_expiry_v1(first_ticket_expiry, first_ticket_expiry,).is_err()
         );
@@ -5979,6 +6995,352 @@ int main(int argc, char **argv) {
             .expect("completed failure is idempotently preserved"),
             None
         );
+        assert_eq!(
+            plan_r6_pre_intent_failure_v1(
+                "operator_proof_verified",
+                false,
+                false,
+                true,
+                "data-session-closed-or-cancelled",
+            )
+            .expect("effect-visible failure is preserving"),
+            None
+        );
+    }
+
+    fn test_r6_available_predecessor_state_v1() -> MacR6PairingPredecessorStateV1 {
+        MacR6PairingPredecessorStateV1 {
+            schema_owner: "substrate.mac-r6-pairing-predecessor-state".to_string(),
+            schema_version: 1,
+            scope_id: "018f3e4a-7b2c-7c91-8a6f-2e1d5c4b3a90".to_string(),
+            predecessor_id: "018f3e4a-7b2c-7c91-8a6f-2e1d5c4b3a91".to_string(),
+            predecessor_generation: 1,
+            predecessor_sha256: "1".repeat(64),
+            fixed_install_parent_anchor_sha256: "2".repeat(64),
+            committed_predecessor_state_sha256: "3".repeat(64),
+            state: "Available".to_string(),
+            state_revision: 1,
+            pairing_attempt_id: None,
+            effect_admitted_at_unix_ns: None,
+            consumed_record_sha256: None,
+            previous_state_sha256: None,
+        }
+    }
+
+    #[test]
+    fn r6_predecessor_state_machine_is_strictly_available_prepared_started_consumed() {
+        let available = test_r6_available_predecessor_state_v1();
+        let attempt = "018f3e4a-7b2c-7c91-8a6f-2e1d5c4b3a92";
+        let prepared = derive_mac_r6_pairing_predecessor_state_transition_v1(
+            &available,
+            "PairingEffectPrepared",
+            Some(attempt),
+            None,
+            None,
+        )
+        .expect("Available prepares exactly one pairing effect");
+        let started = derive_mac_r6_pairing_predecessor_state_transition_v1(
+            &prepared,
+            "PairingEffectStarted",
+            Some(attempt),
+            Some(50),
+            None,
+        )
+        .expect("prepared effect admits one timestamped durable start");
+        assert_eq!(started.state, "PairingEffectStarted");
+        assert_eq!(started.effect_admitted_at_unix_ns, Some(50));
+        let consumed = derive_mac_r6_pairing_predecessor_state_transition_v1(
+            &started,
+            "Consumed",
+            Some(attempt),
+            Some(50),
+            Some(&"4".repeat(64)),
+        )
+        .expect("started effect admits exact consumption");
+        assert_eq!(consumed.state, "Consumed");
+        assert_eq!(
+            mac_r6_pairing_initial_available_state_v1(&available),
+            mac_r6_pairing_initial_available_state_v1(&prepared),
+            "effect preparation must not rewrite the complete immutable Stage-1 bundle commitment"
+        );
+        assert_eq!(
+            mac_r6_pairing_initial_available_state_v1(&available),
+            mac_r6_pairing_initial_available_state_v1(&started),
+            "effect start must not rewrite the complete immutable Stage-1 bundle commitment"
+        );
+        assert_eq!(
+            mac_r6_pairing_initial_available_state_v1(&available),
+            mac_r6_pairing_initial_available_state_v1(&consumed),
+            "consumption must not rewrite the complete immutable Stage-1 bundle commitment"
+        );
+        assert!(derive_mac_r6_pairing_predecessor_state_transition_v1(
+            &consumed,
+            "Available",
+            Some(attempt),
+            None,
+            None,
+        )
+        .is_err());
+        assert!(derive_mac_r6_pairing_predecessor_state_transition_v1(
+            &started,
+            "Available",
+            Some(attempt),
+            None,
+            None,
+        )
+        .is_err());
+
+        let rolled_back = derive_mac_r6_pairing_predecessor_state_transition_v1(
+            &prepared,
+            "Available",
+            Some(attempt),
+            None,
+            None,
+        )
+        .expect("unstarted preparation can be preserved after expiry");
+        assert_eq!(rolled_back.state, "Available");
+        assert!(rolled_back.pairing_attempt_id.is_none());
+
+        assert!(derive_mac_r6_pairing_expired_unused_tombstone_v1(&available, 101, 100).is_err());
+        let tombstone = derive_mac_r6_pairing_expired_unused_tombstone_v1(&available, 100, 100)
+            .expect("equality at expiry supersedes an unused Available generation");
+        assert_eq!(tombstone.state, "Superseded");
+        assert_eq!(tombstone.state_revision, 2);
+        assert_eq!(
+            tombstone.previous_state_sha256,
+            Some(sha256_hex_bootstrap_v1(
+                &canonical_mac_r6_pairing_predecessor_state_v1(&available).unwrap()
+            ))
+        );
+        assert!(derive_mac_r6_pairing_expired_unused_tombstone_v1(&started, 100, 100).is_err());
+        assert!(derive_mac_r6_pairing_expired_unused_tombstone_v1(&prepared, 100, 100).is_err());
+        assert!(derive_mac_r6_pairing_expired_unused_tombstone_v1(&consumed, 100, 100).is_err());
+        assert!(derive_mac_r6_pairing_missed_activation_tombstone_v1(&started, 100, 100).is_err());
+    }
+
+    #[test]
+    fn r6_effect_admission_uses_only_the_signed_activation_clock() {
+        let challenge = "018f3e4a-7b2c-7c91-8a6f-2e1d5c4b3a91";
+        let issued = 100;
+        let expires = issued + R6_PAIRING_TICKET_LIFETIME_NS_V1;
+        assert!(classify_r6_effect_admission_v1(
+            "Available",
+            None,
+            None,
+            challenge,
+            issued,
+            expires,
+            issued - 1,
+        )
+        .is_err());
+        assert_eq!(
+            classify_r6_effect_admission_v1(
+                "Available",
+                None,
+                None,
+                challenge,
+                issued,
+                expires,
+                issued,
+            )
+            .unwrap(),
+            R6EffectAdmissionDecisionV1::Prepare
+        );
+        assert_eq!(
+            classify_r6_effect_admission_v1(
+                "PairingEffectPrepared",
+                Some(challenge),
+                None,
+                challenge,
+                issued,
+                expires,
+                expires - 1,
+            )
+            .unwrap(),
+            R6EffectAdmissionDecisionV1::Start {
+                effect_admitted_at_unix_ns: expires - 1,
+            }
+        );
+        assert_eq!(
+            classify_r6_effect_admission_v1(
+                "PairingEffectPrepared",
+                Some(challenge),
+                None,
+                challenge,
+                issued,
+                expires,
+                expires,
+            )
+            .unwrap(),
+            R6EffectAdmissionDecisionV1::RollBackPreparedExpired
+        );
+        assert_eq!(
+            classify_r6_effect_admission_v1(
+                "PairingEffectStarted",
+                Some(challenge),
+                Some(expires - 1),
+                challenge,
+                issued,
+                expires,
+                expires + 1,
+            )
+            .unwrap(),
+            R6EffectAdmissionDecisionV1::RecoverStarted {
+                effect_admitted_at_unix_ns: expires - 1,
+            }
+        );
+    }
+
+    #[test]
+    fn r6_active_pointer_consumption_rejects_live_or_effect_visible_attempts() {
+        let expires = 400;
+        assert!(classify_r6_active_pointer_consumption_v1(
+            "sessions_opened",
+            false,
+            None,
+            expires,
+            "Available",
+            None,
+            None,
+            expires,
+        )
+        .is_ok());
+        for result in [
+            classify_r6_active_pointer_consumption_v1(
+                "sessions_opened",
+                false,
+                None,
+                expires,
+                "Available",
+                None,
+                None,
+                expires - 1,
+            ),
+            classify_r6_active_pointer_consumption_v1(
+                "operator_proof_verified",
+                true,
+                Some(399),
+                expires,
+                "PairingEffectStarted",
+                Some("attempt"),
+                Some(399),
+                expires,
+            ),
+            classify_r6_active_pointer_consumption_v1(
+                "ticket_consumed",
+                true,
+                Some(399),
+                expires,
+                "Consumed",
+                Some("attempt"),
+                Some(399),
+                expires,
+            ),
+        ] {
+            assert!(result.is_err());
+        }
+
+        let pointer = MacR6ConsumedActivePointerV1 {
+            schema_owner: "substrate.mac-r6-consumed-active-pointer".to_string(),
+            schema_version: 1,
+            scope_id: "018f3e4a-7b2c-7c91-8a6f-2e1d5c4b3a90".to_string(),
+            challenge_id: "018f3e4a-7b2c-7c91-8a6f-2e1d5c4b3a91".to_string(),
+            host_record_sha256: "1".repeat(64),
+            predecessor_id: "018f3e4a-7b2c-7c91-8a6f-2e1d5c4b3a92".to_string(),
+            predecessor_generation: 2,
+            stage_one_record_sha256: "2".repeat(64),
+            consumed_reason: "expired-unused-active-pointer-consumed".to_string(),
+        };
+        let bytes = canonical_mac_r6_consumed_active_pointer_v1(&pointer).unwrap();
+        assert_eq!(
+            parse_mac_r6_active_pointer_state_v1(&pointer.scope_id, &bytes).unwrap(),
+            MacR6ActivePointerStateV1::Consumed(pointer.clone())
+        );
+        let raw = format!("{}\n", pointer.challenge_id);
+        assert_eq!(
+            parse_mac_r6_active_pointer_state_v1(&pointer.scope_id, raw.as_bytes()).unwrap(),
+            MacR6ActivePointerStateV1::Active(pointer.challenge_id.clone())
+        );
+        let mut substituted = pointer;
+        substituted.host_record_sha256 = "3".repeat(64);
+        assert_ne!(
+            canonical_mac_r6_consumed_active_pointer_v1(&substituted).unwrap(),
+            bytes
+        );
+    }
+
+    #[test]
+    fn expired_r6_advance_distinguishes_prepared_from_effect_started_recovery() {
+        let challenge = "018f3e4a-7b2c-7c91-8a6f-2e1d5c4b3a91";
+        assert_eq!(
+            classify_r6_expired_advance_v1("Available", None, challenge, "sessions_opened", false,)
+                .expect("expired unused prepared record allocates fresh authority"),
+            R6ExpiredAdvanceDispositionV1::AllocateFresh
+        );
+        assert_eq!(
+            classify_r6_expired_advance_v1(
+                "PairingEffectStarted",
+                Some(challenge),
+                challenge,
+                "operator_proof_verified",
+                true,
+            )
+            .expect("expired started effect remains recoverable"),
+            R6ExpiredAdvanceDispositionV1::RecoverStarted
+        );
+        assert_eq!(
+            classify_r6_expired_advance_v1(
+                "Consumed",
+                Some(challenge),
+                challenge,
+                "ticket_consumed",
+                true,
+            )
+            .expect("expired consumed effect replays its original receipt"),
+            R6ExpiredAdvanceDispositionV1::ReplayConsumed
+        );
+        assert!(classify_r6_expired_advance_v1(
+            "PairingEffectStarted",
+            Some("018f3e4a-7b2c-7c91-8a6f-2e1d5c4b3aff"),
+            challenge,
+            "operator_proof_verified",
+            true,
+        )
+        .is_err());
+    }
+
+    #[test]
+    fn r6_issue_replay_never_starts_an_available_predecessor() {
+        let challenge = "018f3e4a-7b2c-7c91-8a6f-2e1d5c4b3a91";
+        assert_eq!(
+            plan_r6_issue_predecessor_rejoin_v1("Available", None, challenge, "sessions_opened",)
+                .expect("lost issue response exact replay"),
+            R6IssuePredecessorRejoinPlanV1::ReplayExactLaunch
+        );
+        assert!(plan_r6_issue_predecessor_rejoin_v1(
+            "Available",
+            None,
+            challenge,
+            "operator_proof_verified",
+        )
+        .is_err());
+        assert_eq!(
+            plan_r6_issue_predecessor_rejoin_v1(
+                "PairingEffectStarted",
+                Some(challenge),
+                challenge,
+                "operator_proof_verified",
+            )
+            .expect("post-proof replay"),
+            R6IssuePredecessorRejoinPlanV1::ReplayPostProof
+        );
+        assert!(plan_r6_issue_predecessor_rejoin_v1(
+            "PairingEffectStarted",
+            Some("another-attempt"),
+            challenge,
+            "sessions_opened",
+        )
+        .is_err());
     }
 }
 
@@ -6017,6 +7379,7 @@ fn validate_mac_mapped_action_authority_v1(request: &Value) -> Result<()> {
     let tag = validate_mapped_lifecycle_control_request_v1(&control)?;
     match tag {
         MappedLifecycleTagV1::StageOneCreate => {
+            mac_reject_unauthorized_world_netfilter_v1()?;
             let stage_one = control
                 .lima_stage_one_authorization_v1
                 .ok_or_else(|| anyhow::anyhow!("Stage-1 branch lacks its authorization"))?;
@@ -6187,6 +7550,25 @@ fn derive_mac_lima_stage_one_successor_manifest_v1(
             &template.ordered_non_machine_entries,
         )?,
     };
+    let managed_home_entry = manifest
+        .entries
+        .iter_mut()
+        .find(|entry| entry.logical_role.0 == "mac.lima.guest-private-home")
+        .ok_or_else(|| anyhow::anyhow!("Stage-1 successor lacks managed guest home role"))?;
+    if managed_home_entry.identity.physical_identity != "__OBSERVED_GUEST_SUBSTRATE_HOME__" {
+        bail!("Stage-1 managed guest home template is not observation-bound");
+    }
+    managed_home_entry.identity.physical_identity = realized_home.clone();
+    managed_home_entry.identity.metadata = Some(json!({
+        "observed_guest_home": observation.guest_home,
+        "managed_guest_substrate_home": realized_home,
+    }));
+    manifest.planned_action_receipts = mac_lima_closed_post_pm_receipt_plan_v1(
+        &template.scope_id,
+        &template.attempt_id,
+        &template.intended_principal,
+        &manifest.entries,
+    )?;
     manifest.manifest_sha256 = substrate_common::managed_artifact_manifest_sha256_v1(&manifest)?;
     substrate_common::canonical_manifest_bytes_v1(&manifest)
         .context("validate fully derived Stage-1 PM manifest")?;
@@ -6304,7 +7686,7 @@ fn mac_stage_one_profile_path_v1(
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 enum MacLimaInheritedInputRoleV1 {
     StageOneProfile,
-    PostPmCopySource,
+    PostPmStdinSource,
 }
 
 #[derive(Debug)]
@@ -6315,6 +7697,191 @@ struct MacLimaInheritedInputV1 {
     sha256: String,
     size: u64,
     file: fs::File,
+}
+
+/// Publish one immutable host artifact without ever exposing partial bytes at the final path.
+/// The content-addressed temp is on the same filesystem; `hard_link` supplies atomic no-replace
+/// publication, followed by temp unlink and directory fsync. Exact temp/final states converge
+/// after interruption, while any conflicting final is preserved and rejected.
+#[cfg(target_os = "macos")]
+fn mac_publish_immutable_file_atomic_no_replace_v1(
+    path: &Path,
+    bytes: &[u8],
+    final_mode: u32,
+    expected_uid: u32,
+    expected_gid: u32,
+    label: &str,
+) -> Result<()> {
+    let parent = path
+        .parent()
+        .ok_or_else(|| anyhow::anyhow!("{label} path has no parent"))?;
+    let parent_metadata = fs::symlink_metadata(parent)
+        .with_context(|| format!("inspect {label} parent {}", parent.display()))?;
+    if !parent_metadata.file_type().is_dir()
+        || parent_metadata.file_type().is_symlink()
+        || parent_metadata.uid() != expected_uid
+        || parent_metadata.gid() != expected_gid
+        || parent_metadata.mode() & 0o022 != 0
+    {
+        bail!("{label} parent is not the expected private directory");
+    }
+    let leaf = path
+        .file_name()
+        .and_then(|value| value.to_str())
+        .ok_or_else(|| anyhow::anyhow!("{label} final name is not canonical UTF-8"))?;
+    let digest = sha256_hex_bootstrap_v1(bytes);
+    let temp = parent.join(format!(".{leaf}.substrate-{digest}.partial"));
+
+    let read_exact_with_nlinks = |candidate: &Path,
+                                  accepted_modes: &[u32],
+                                  accepted_nlinks: &[u64]|
+     -> Result<Option<u32>> {
+        let mut file = match fs::OpenOptions::new()
+            .read(true)
+            .custom_flags(libc::O_CLOEXEC | libc::O_NOFOLLOW)
+            .open(candidate)
+        {
+            Ok(file) => file,
+            Err(error) if error.kind() == std::io::ErrorKind::NotFound => return Ok(None),
+            Err(error) => return Err(error).with_context(|| format!("open {label} no-follow")),
+        };
+        let metadata = file
+            .metadata()
+            .with_context(|| format!("inspect {label} descriptor"))?;
+        let mode = metadata.mode() & 0o777;
+        if !metadata.is_file()
+            || !accepted_nlinks.contains(&metadata.nlink())
+            || metadata.uid() != expected_uid
+            || metadata.gid() != expected_gid
+            || !accepted_modes.contains(&mode)
+            || metadata.len() != bytes.len() as u64
+        {
+            bail!("{label} is not one exact retained regular file");
+        }
+        let mut observed = Vec::with_capacity(bytes.len());
+        file.read_to_end(&mut observed)
+            .with_context(|| format!("read {label} descriptor"))?;
+        if observed != bytes {
+            bail!("{label} bytes conflict with retained authority");
+        }
+        Ok(Some(mode))
+    };
+    let read_exact = |candidate: &Path, accepted_modes: &[u32]| -> Result<Option<u32>> {
+        read_exact_with_nlinks(candidate, accepted_modes, &[1])
+    };
+
+    // `hard_link(temp, final)` is the atomic no-replace point. A crash immediately afterwards
+    // leaves two names for the same inode. Authenticate that exact crash state before unlinking
+    // only the content-addressed temp; a different inode is handled by the ordinary stale-temp
+    // path below and can never weaken the final-file checks.
+    if let (Ok(final_metadata), Ok(temp_metadata)) =
+        (fs::symlink_metadata(path), fs::symlink_metadata(&temp))
+    {
+        if final_metadata.file_type().is_file()
+            && !final_metadata.file_type().is_symlink()
+            && temp_metadata.file_type().is_file()
+            && !temp_metadata.file_type().is_symlink()
+            && final_metadata.dev() == temp_metadata.dev()
+            && final_metadata.ino() == temp_metadata.ino()
+        {
+            if final_metadata.nlink() != 2
+                || temp_metadata.nlink() != 2
+                || final_metadata.uid() != expected_uid
+                || final_metadata.gid() != expected_gid
+                || temp_metadata.uid() != expected_uid
+                || temp_metadata.gid() != expected_gid
+            {
+                bail!("{label} interrupted publication has unsafe linked metadata");
+            }
+            read_exact_with_nlinks(path, &[final_mode], &[2])?;
+            read_exact_with_nlinks(&temp, &[final_mode], &[2])?;
+            fs::remove_file(&temp)
+                .with_context(|| format!("unlink recovered linked {label} temp"))?;
+        }
+    }
+
+    if let Some(mode) = read_exact(path, &[final_mode, 0o600])? {
+        if mode != final_mode {
+            fs::set_permissions(path, fs::Permissions::from_mode(final_mode))
+                .with_context(|| format!("finish exact {label} final mode"))?;
+            fs::File::open(path)
+                .with_context(|| format!("reopen exact {label} final"))?
+                .sync_all()
+                .with_context(|| format!("fsync exact {label} final"))?;
+        }
+        if fs::symlink_metadata(&temp).is_ok() {
+            // The root-owned private parent makes this fixed content-addressed temp the only
+            // removable recovery object. Reject a link/special file before removing it.
+            let temp_metadata = fs::symlink_metadata(&temp)
+                .with_context(|| format!("inspect stale {label} temp"))?;
+            if !temp_metadata.file_type().is_file()
+                || temp_metadata.file_type().is_symlink()
+                || temp_metadata.nlink() != 1
+                || temp_metadata.uid() != expected_uid
+                || temp_metadata.gid() != expected_gid
+            {
+                bail!("{label} temp recovery object is unsafe");
+            }
+            fs::remove_file(&temp).with_context(|| format!("remove stale {label} temp"))?;
+        }
+    } else {
+        let mut temp_ready = false;
+        match read_exact(&temp, &[final_mode]) {
+            Ok(Some(_)) => temp_ready = true,
+            Ok(None) => {}
+            Err(_) => {
+                let metadata = fs::symlink_metadata(&temp)
+                    .with_context(|| format!("inspect interrupted {label} temp"))?;
+                if !metadata.file_type().is_file()
+                    || metadata.file_type().is_symlink()
+                    || metadata.nlink() != 1
+                    || metadata.uid() != expected_uid
+                    || metadata.gid() != expected_gid
+                {
+                    bail!("{label} interrupted temp is unsafe");
+                }
+                fs::remove_file(&temp)
+                    .with_context(|| format!("remove interrupted {label} temp"))?;
+            }
+        }
+        if !temp_ready {
+            let mut file = fs::OpenOptions::new()
+                .write(true)
+                .create_new(true)
+                .mode(0o600)
+                .custom_flags(libc::O_CLOEXEC | libc::O_NOFOLLOW)
+                .open(&temp)
+                .with_context(|| format!("create same-directory {label} temp"))?;
+            file.write_all(bytes)
+                .with_context(|| format!("write complete {label} temp"))?;
+            file.sync_all()
+                .with_context(|| format!("fsync complete {label} temp"))?;
+            file.set_permissions(fs::Permissions::from_mode(final_mode))
+                .with_context(|| format!("set {label} temp final mode"))?;
+            file.sync_all()
+                .with_context(|| format!("fsync frozen {label} temp"))?;
+        }
+        read_exact(&temp, &[final_mode])?;
+        match fs::hard_link(&temp, path) {
+            Ok(()) => {}
+            Err(error) if error.kind() == std::io::ErrorKind::AlreadyExists => {
+                read_exact(path, &[final_mode])?;
+            }
+            Err(error) => return Err(error).with_context(|| format!("publish {label} no-replace")),
+        }
+        fs::remove_file(&temp).with_context(|| format!("unlink published {label} temp"))?;
+    }
+    fs::OpenOptions::new()
+        .read(true)
+        .custom_flags(libc::O_CLOEXEC | libc::O_NOFOLLOW | libc::O_DIRECTORY)
+        .open(parent)
+        .with_context(|| format!("open {label} parent for fsync"))?
+        .sync_all()
+        .with_context(|| format!("fsync {label} parent"))?;
+    if read_exact(path, &[final_mode])?.is_none() {
+        bail!("{label} final publication disappeared");
+    }
+    Ok(())
 }
 
 fn mac_write_stage_one_profile_absent_or_exact_v1(
@@ -6356,60 +7923,14 @@ fn mac_write_stage_one_profile_absent_or_exact_v1(
         bail!("Stage-1 profile parent is not a root-owned private directory");
     }
     let result = (|| -> Result<MacLimaInheritedInputV1> {
-        let file = fs::OpenOptions::new()
-            .write(true)
-            .create_new(true)
-            // Create privately, then freeze the exact descriptor to root-owned read-only mode.
-            // The read bit for the child principal is necessary because macOS /dev/fd reopens
-            // the inherited descriptor with ordinary access checks; the private 0700 parent
-            // keeps the pathname unavailable and the child can never mutate the root-owned file.
-            .mode(0o600)
-            .custom_flags(libc::O_CLOEXEC | libc::O_NOFOLLOW)
-            .open(&path);
-        match file {
-            Ok(mut file) => {
-                file.write_all(&profile)
-                    .context("write fixed Stage-1 profile")?;
-                file.sync_all().context("fsync fixed Stage-1 profile")?;
-                file.set_permissions(fs::Permissions::from_mode(0o444))
-                    .context("freeze new Stage-1 profile read-only")?;
-                file.sync_all()
-                    .context("fsync frozen new Stage-1 profile")?;
-            }
-            Err(error) if error.kind() == std::io::ErrorKind::AlreadyExists => {
-                let mut existing = fs::OpenOptions::new()
-                    .read(true)
-                    .custom_flags(libc::O_CLOEXEC | libc::O_NOFOLLOW)
-                    .open(&path)
-                    .context("open existing fixed Stage-1 profile no-follow")?;
-                let metadata = existing
-                    .metadata()
-                    .context("stat existing Stage-1 profile")?;
-                if !metadata.is_file()
-                    || metadata.nlink() != 1
-                    || metadata.uid() != 0
-                    || metadata.gid() != 0
-                    || !matches!(metadata.mode() & 0o777, 0o600 | 0o444)
-                    || metadata.len() != profile.len() as u64
-                {
-                    bail!("existing Stage-1 profile is not one retained regular file");
-                }
-                let mut bytes = Vec::new();
-                existing
-                    .read_to_end(&mut bytes)
-                    .context("read existing fixed Stage-1 profile")?;
-                if bytes != profile {
-                    bail!("existing Stage-1 profile is not an exact retry");
-                }
-                existing
-                    .set_permissions(fs::Permissions::from_mode(0o444))
-                    .context("freeze exact-retry Stage-1 profile read-only")?;
-                existing
-                    .sync_all()
-                    .context("fsync frozen exact-retry Stage-1 profile")?;
-            }
-            Err(error) => return Err(error).context("create fixed Stage-1 profile no-follow"),
-        }
+        mac_publish_immutable_file_atomic_no_replace_v1(
+            &path,
+            &profile,
+            0o444,
+            0,
+            0,
+            "Stage-1 profile",
+        )?;
         let metadata = fs::symlink_metadata(&path)
             .with_context(|| format!("reinspect Stage-1 profile {}", path.display()))?;
         if !metadata.file_type().is_file()
@@ -6506,13 +8027,19 @@ fn mac_validate_fixed_lima_argument_plan_v1(
     inherited_input: Option<&MacLimaInheritedInputV1>,
 ) -> Result<()> {
     if arguments.is_empty()
-        || !matches!(
-            arguments[0],
-            "list" | "start" | "stop" | "delete" | "shell" | "copy"
-        )
-        || arguments
-            .iter()
-            .any(|argument| argument.is_empty() || argument.contains(['\0', '\n', '\r']))
+        || !matches!(arguments[0], "list" | "start" | "stop" | "delete" | "shell")
+        || arguments.iter().enumerate().any(|(index, argument)| {
+            argument.is_empty()
+                || argument.contains(['\0', '\r'])
+                || (argument.contains('\n')
+                    && !(index == 8
+                        && matches!(
+                            *argument,
+                            MAC_LIMA_POST_PM_STDIN_TRANSFER_SCRIPT_V1
+                                | MAC_LIMA_POST_PM_ATOMIC_PUBLISH_SCRIPT_V1
+                                | MAC_LIMA_R6_INSTALLED_EXECUTOR_MEASURE_SCRIPT_V1
+                        )))
+        })
     {
         bail!("fixed Lima command argument plan is empty, unknown, or noncanonical");
     }
@@ -6529,22 +8056,97 @@ fn mac_validate_fixed_lima_argument_plan_v1(
                 bail!("Stage-1 profile descriptor is not bound to the one closed start plan");
             }
         }
-        Some(MacLimaInheritedInputRoleV1::PostPmCopySource) => {
-            if arguments.len() != 3
-                || arguments[0] != "copy"
-                || arguments[1] != MAC_LIMA_COPY_CHILD_PATH_V1
-                || !arguments[2]
-                    .starts_with("substrate:/var/lib/substrate/.substrate-lifecycle-v1/staged/")
-                || arguments[2].contains("..")
+        Some(MacLimaInheritedInputRoleV1::PostPmStdinSource) => {
+            let expected_target_prefix = format!("{MAC_LIMA_POST_PM_STAGING_ROOT_V1}/");
+            if arguments.len() != 12
+                || arguments[0..9]
+                    != [
+                        "shell",
+                        "substrate",
+                        "--",
+                        "/usr/bin/sudo",
+                        "-n",
+                        "--",
+                        "/usr/bin/python3",
+                        "-c",
+                        MAC_LIMA_POST_PM_STDIN_TRANSFER_SCRIPT_V1,
+                    ]
+                || !arguments[9].starts_with(&expected_target_prefix)
+                || arguments[9].contains("..")
+                || arguments[9].contains(['\0', '\n', '\r'])
+                || arguments[10] != inherited_input.expect("matched input").sha256
+                || arguments[11] != inherited_input.expect("matched input").size.to_string()
             {
-                bail!("post-PM copy descriptor is not bound to the one closed guest staging plan");
+                bail!("post-PM stdin descriptor is not bound to the one closed guest staging plan");
             }
         }
         None => {
             if arguments.contains(&MAC_LIMA_PROFILE_CHILD_PATH_V1)
-                || arguments.contains(&MAC_LIMA_COPY_CHILD_PATH_V1)
+                || arguments.contains(&MAC_LIMA_POST_PM_STDIN_TRANSFER_SCRIPT_V1)
             {
                 bail!("fixed Lima command references an inherited FD without a retained file");
+            }
+            if arguments.len() >= 8
+                && arguments[0..8]
+                    == [
+                        "shell",
+                        "substrate",
+                        "--",
+                        "/usr/bin/sudo",
+                        "-n",
+                        "--",
+                        "/usr/bin/python3",
+                        "-c",
+                    ]
+                && !matches!(
+                    arguments.get(8).copied(),
+                    Some(MAC_LIMA_POST_PM_ATOMIC_PUBLISH_SCRIPT_V1)
+                        | Some(MAC_LIMA_R6_INSTALLED_EXECUTOR_MEASURE_SCRIPT_V1)
+                )
+            {
+                bail!("fixed Lima Python command is not an executor-owned plan");
+            }
+            if arguments.contains(&MAC_LIMA_POST_PM_ATOMIC_PUBLISH_SCRIPT_V1)
+                && (arguments.len() != 15
+                    || arguments[0..9]
+                        != [
+                            "shell",
+                            "substrate",
+                            "--",
+                            "/usr/bin/sudo",
+                            "-n",
+                            "--",
+                            "/usr/bin/python3",
+                            "-c",
+                            MAC_LIMA_POST_PM_ATOMIC_PUBLISH_SCRIPT_V1,
+                        ]
+                    || !arguments[9].starts_with(MAC_LIMA_POST_PM_STAGING_ROOT_V1)
+                    || !arguments[10].starts_with('/')
+                    || arguments[11].len() != 64
+                    || !arguments[11].bytes().all(|byte| byte.is_ascii_hexdigit())
+                    || !matches!(arguments[12], "0444" | "0644" | "0755")
+                    || arguments[13].len() != 64
+                    || !arguments[13].bytes().all(|byte| byte.is_ascii_hexdigit())
+                    || !matches!(arguments[14], "create" | "replace"))
+            {
+                bail!("fixed Lima atomic publisher arguments are not the closed plan");
+            }
+            if arguments.contains(&MAC_LIMA_R6_INSTALLED_EXECUTOR_MEASURE_SCRIPT_V1)
+                && (arguments.len() != 9
+                    || arguments
+                        != [
+                            "shell",
+                            "substrate",
+                            "--",
+                            "/usr/bin/sudo",
+                            "-n",
+                            "--",
+                            "/usr/bin/python3",
+                            "-c",
+                            MAC_LIMA_R6_INSTALLED_EXECUTOR_MEASURE_SCRIPT_V1,
+                        ])
+            {
+                bail!("fixed Lima R6 measurement arguments are not the closed plan");
             }
         }
     }
@@ -6751,13 +8353,23 @@ fn mac_spawn_fixed_lima_child_after_validation_v1(
             Ok(child_input)
         })
         .transpose()?;
-    let inherited_fd = child_input.as_ref().map(|input| input.file.as_raw_fd());
-    let child_fd = child_input.as_ref().map(|input| match input.role {
-        MacLimaInheritedInputRoleV1::StageOneProfile => MAC_LIMA_PROFILE_CHILD_FD_V1,
-        MacLimaInheritedInputRoleV1::PostPmCopySource => MAC_LIMA_COPY_CHILD_FD_V1,
-    });
+    let inherited_fd = child_input
+        .as_ref()
+        .filter(|input| input.role == MacLimaInheritedInputRoleV1::StageOneProfile)
+        .map(|input| input.file.as_raw_fd());
+    let child_fd = inherited_fd.map(|_| MAC_LIMA_PROFILE_CHILD_FD_V1);
+    let child_stdin = child_input
+        .as_ref()
+        .filter(|input| input.role == MacLimaInheritedInputRoleV1::PostPmStdinSource)
+        .map(|input| {
+            input
+                .file
+                .try_clone()
+                .context("clone post-PM stdin descriptor")
+        })
+        .transpose()?;
     let fd_scan_limit = unsafe { libc::sysconf(libc::_SC_OPEN_MAX) };
-    if !(MAC_LIMA_COPY_CHILD_FD_V1 as libc::c_long..=MAC_LIMA_CHILD_FD_SCAN_LIMIT_V1)
+    if !(MAC_LIMA_PROFILE_CHILD_FD_V1 as libc::c_long..=MAC_LIMA_CHILD_FD_SCAN_LIMIT_V1)
         .contains(&fd_scan_limit)
     {
         bail!("macOS child descriptor table exceeds the fixed inheritance scan bound");
@@ -6771,14 +8383,17 @@ fn mac_spawn_fixed_lima_child_after_validation_v1(
         .env("HOME", &principal.home)
         .env("LIMA_HOME", lima_home)
         .env("PATH", path);
-    match io {
-        MacFixedLimaChildIoV1::Captured => {
+    match (io, child_stdin) {
+        (MacFixedLimaChildIoV1::Captured, child_stdin) => {
             command
-                .stdin(Stdio::null())
+                .stdin(child_stdin.map_or_else(Stdio::null, Stdio::from))
                 .stdout(Stdio::piped())
                 .stderr(Stdio::piped());
         }
-        MacFixedLimaChildIoV1::Streaming => {
+        (MacFixedLimaChildIoV1::Streaming, Some(_)) => {
+            bail!("post-PM stdin transfer cannot use the streaming control protocol");
+        }
+        (MacFixedLimaChildIoV1::Streaming, None) => {
             command
                 .stdin(Stdio::piped())
                 .stdout(Stdio::piped())
@@ -6788,8 +8403,8 @@ fn mac_spawn_fixed_lima_child_after_validation_v1(
     // SAFETY: this child-only hook performs only async-signal-safe credential and descriptor
     // syscalls. Supplementary groups are cleared while still root, then primary GID and UID are
     // set in that order. Every descriptor above stderr is made close-on-exec except the one
-    // role-bound inherited input at FD 3 or FD 4; this includes unrelated publisher descriptors
-    // and preserves Rust's internal exec-error pipe until exec itself.
+    // Stage-1 profile at FD 3; post-PM bytes travel on stdin. This includes unrelated publisher
+    // descriptors and preserves Rust's internal exec-error pipe until exec itself.
     unsafe {
         command.pre_exec(move || {
             if libc::setgroups(0, std::ptr::null()) != 0 {
@@ -6847,9 +8462,9 @@ fn mac_spawn_fixed_lima_child_v1(
     inherited_input: Option<&MacLimaInheritedInputV1>,
     io: MacFixedLimaChildIoV1,
 ) -> Result<Child> {
-    if unsafe { libc::getuid() } != 0 || unsafe { libc::geteuid() } != 0 {
-        bail!("privileged macOS Lima publisher is not running with root authority");
-    }
+    mac_require_privileged_fixed_lima_owner_v1(unsafe { libc::getuid() }, unsafe {
+        libc::geteuid()
+    })?;
     if tool != Path::new(MAC_LIMA_TOOL_PATH_V1) {
         bail!("retained limactl path is not the fixed /usr/local/bin image");
     }
@@ -6869,6 +8484,13 @@ fn mac_spawn_fixed_lima_child_v1(
         inherited_input,
         io,
     )
+}
+
+fn mac_require_privileged_fixed_lima_owner_v1(real_uid: u32, effective_uid: u32) -> Result<()> {
+    if real_uid != 0 || effective_uid != 0 {
+        bail!("privileged macOS Lima publisher is not running with root authority");
+    }
+    Ok(())
 }
 
 #[cfg(target_os = "macos")]
@@ -7121,6 +8743,66 @@ fn mac_parse_stage_one_observation_v1(
         bail!("fixed Lima Stage-1 observation does not join its signed authorization");
     }
     Ok(observation)
+}
+
+#[cfg(target_os = "macos")]
+fn mac_reobserve_completed_stage_one_v1(
+    carrier: &InstallBootstrapContextCarrierV1,
+    stage_one: &LimaStageOneAuthorizationV1,
+    expected: &LimaStageOneObservationV1,
+) -> Result<LimaStageOneObservationV1> {
+    let provenance = mac_load_retained_bootstrap_provenance_v1()?;
+    let tool = Path::new(&provenance.lima_tool.absolute_path);
+    let measured = mac_measure_root_owned_immutable_lima_tool_v1(tool)?;
+    if measured.artifact_sha256 != provenance.lima_tool.image.artifact_sha256
+        || measured.artifact_identity != provenance.lima_tool.image.physical_identity
+        || measured.code_identity != provenance.lima_tool.image.code_identity
+    {
+        bail!("R6 replacement re-observation limactl identity changed");
+    }
+    let principal = mac_resolve_lima_principal_v1(carrier)?;
+    let list_once = || {
+        mac_parse_fixed_lima_list_v1(
+            &mac_run_fixed_lima_command_v1(
+                tool,
+                carrier,
+                &principal,
+                &stage_one.lima_control_root_identity,
+                &MAC_LIMA_LIST_ALL_ARGUMENTS_V1,
+                None,
+            )?,
+            &stage_one.instance_name,
+        )
+    };
+    if list_once()?.as_deref() != Some("Running") || list_once()?.as_deref() != Some("Running") {
+        bail!("R6 replacement Stage-1 instance is not stably running");
+    }
+    let observe_once = || {
+        mac_parse_stage_one_observation_v1(
+            &mac_run_fixed_lima_command_v1(
+                tool,
+                carrier,
+                &principal,
+                &stage_one.lima_control_root_identity,
+                &[
+                    "shell",
+                    &stage_one.instance_name,
+                    "--",
+                    "/bin/sh",
+                    "-c",
+                    MAC_LIMA_STAGE_ONE_OBSERVATION_COMMAND_V1,
+                ],
+                None,
+            )?,
+            stage_one,
+        )
+    };
+    let first = observe_once()?;
+    let second = observe_once()?;
+    if first != second || first != *expected {
+        bail!("R6 replacement guest observation changed since completed Stage-1");
+    }
+    Ok(first)
 }
 
 fn sign_mac_prepared_record_v1(
@@ -7571,6 +9253,843 @@ fn resume_mac_lima_stage_one_after_protected_state_cas_v1(
     })))
 }
 
+fn mac_sign_r6_pairing_predecessor_v1(
+    scope_id: &str,
+    predecessor: &MacR6PairingPredecessorV1,
+) -> Result<LifecycleSignatureV1> {
+    let spki_der = mac_open_system_keychain_p256_spki_der_v1(scope_id)?;
+    let public_key = base64url_encode_mac_v1(&spki_der);
+    let unsigned = MacR6PairingPredecessorV1 {
+        signature: LifecycleSignatureV1 {
+            algorithm: "ecdsa-p256-sha256-p1363-low-s-v1".to_string(),
+            public_key: public_key.clone(),
+            signature: String::new(),
+        },
+        ..predecessor.clone()
+    };
+    let payload = canonical_lifecycle_signature_payload_v1(
+        MAC_R6_PAIRING_PREDECESSOR_SIGNATURE_DOMAIN_V1,
+        &unsigned,
+    )?;
+    Ok(LifecycleSignatureV1 {
+        algorithm: "ecdsa-p256-sha256-p1363-low-s-v1".to_string(),
+        public_key,
+        signature: base64url_encode_mac_v1(&mac_system_keychain_sign_p1363_low_s_v1(
+            scope_id, &payload,
+        )?),
+    })
+}
+
+fn mac_sign_r6_pairing_continuation_v1(
+    scope_id: &str,
+    continuation: &MacR6PairingContinuationV1,
+) -> Result<LifecycleSignatureV1> {
+    let spki_der = mac_open_system_keychain_p256_spki_der_v1(scope_id)?;
+    let public_key = base64url_encode_mac_v1(&spki_der);
+    let unsigned = MacR6PairingContinuationV1 {
+        signature: LifecycleSignatureV1 {
+            algorithm: "ecdsa-p256-sha256-p1363-low-s-v1".to_string(),
+            public_key: public_key.clone(),
+            signature: String::new(),
+        },
+        ..continuation.clone()
+    };
+    let payload = canonical_lifecycle_signature_payload_v1(
+        MAC_R6_PAIRING_CONTINUATION_SIGNATURE_DOMAIN_V1,
+        &unsigned,
+    )?;
+    Ok(LifecycleSignatureV1 {
+        algorithm: "ecdsa-p256-sha256-p1363-low-s-v1".to_string(),
+        public_key,
+        signature: base64url_encode_mac_v1(&mac_system_keychain_sign_p1363_low_s_v1(
+            scope_id, &payload,
+        )?),
+    })
+}
+
+fn mac_r6_pairing_predecessor_exact_install_binding_v1(
+    predecessor: &MacR6PairingPredecessorV1,
+    expected: &MacR6PairingPredecessorV1,
+) -> bool {
+    predecessor.scope_id == expected.scope_id
+        && predecessor.producer_host_identity == expected.producer_host_identity
+        && predecessor.signer_spki_sha256 == expected.signer_spki_sha256
+        && predecessor.stage_one_admission_sha256 == expected.stage_one_admission_sha256
+        && predecessor.fixed_install_receipt_set_sha256 == expected.fixed_install_receipt_set_sha256
+        && predecessor.manifest_sha256 == expected.manifest_sha256
+        && predecessor.platform_mapping_commitment == expected.platform_mapping_commitment
+        && predecessor.guest_machine_identity == expected.guest_machine_identity
+        && predecessor.observed_guest_home == expected.observed_guest_home
+        && predecessor.managed_guest_substrate_home == expected.managed_guest_substrate_home
+        && predecessor.guest_executor_identity == expected.guest_executor_identity
+        && predecessor.fixed_install_parent_anchor_sha256
+            == expected.fixed_install_parent_anchor_sha256
+}
+
+fn mac_open_r6_pairing_predecessor_document_v1(
+    scope_id: &str,
+    generation: u64,
+) -> Result<Option<(MacR6PairingPredecessorV1, Vec<u8>)>> {
+    let account = mac_keychain_r6_pairing_predecessor_account_v1(scope_id, generation)?;
+    let Some(bytes) = mac_keychain_read_item_v1(MAC_KEYCHAIN_SERVICE_V1, &account)? else {
+        return Ok(None);
+    };
+    let predecessor: MacR6PairingPredecessorV1 =
+        serde_json::from_slice(&bytes).context("decode protected R6 predecessor document")?;
+    if predecessor.scope_id != scope_id
+        || predecessor.predecessor_generation != generation
+        || canonical_mac_r6_pairing_predecessor_v1(&predecessor)? != bytes
+    {
+        bail!("protected R6 predecessor does not match its generation account");
+    }
+    Ok(Some((predecessor, bytes)))
+}
+
+fn mac_open_r6_pairing_continuation_document_v1(
+    predecessor: &MacR6PairingPredecessorV1,
+) -> Result<Option<(MacR6PairingContinuationV1, Vec<u8>)>> {
+    let account = mac_keychain_r6_pairing_continuation_account_v1(
+        &predecessor.scope_id,
+        predecessor.predecessor_generation,
+    )?;
+    let Some(bytes) = mac_keychain_read_item_v1(MAC_KEYCHAIN_SERVICE_V1, &account)? else {
+        return Ok(None);
+    };
+    let continuation: MacR6PairingContinuationV1 =
+        serde_json::from_slice(&bytes).context("decode protected R6 continuation document")?;
+    if canonical_mac_r6_pairing_continuation_v1(&continuation, predecessor)? != bytes {
+        bail!("protected R6 continuation does not match its generation account");
+    }
+    Ok(Some((continuation, bytes)))
+}
+
+/// Canonical commitment carried by every R6 ticket/binding. This is always the complete signed
+/// Stage-1 bundle, never the predecessor document alone.
+fn mac_r6_pairing_stage_one_commitment_v1(
+    record: &MacLimaGuestPairingStageOneRecordV1,
+) -> Result<String> {
+    validate_mac_lima_guest_pairing_stage_one_record_v1(record)?;
+    // The commitment covers the entire immutable issue bundle, including the exact initial
+    // Available-state CAS. Later PairingEffectStarted/Consumed revisions must not rewrite this
+    // ticket identity, so reconstruct revision 1 rather than hashing mutable current state.
+    let initial_available_state =
+        mac_r6_pairing_initial_available_state_v1(&record.predecessor_state);
+    let immutable_bundle = MacLimaGuestPairingStageOneRecordV1 {
+        predecessor: record.predecessor.clone(),
+        continuation: record.continuation.clone(),
+        predecessor_state: initial_available_state,
+        stage_one: record.stage_one.clone(),
+    };
+    Ok(mac_r6_pairing_stage_one_commitment_bytes_v1(
+        &canonical_mac_lima_guest_pairing_stage_one_record_v1(&immutable_bundle)?,
+    ))
+}
+
+fn mac_r6_pairing_initial_available_state_v1(
+    current: &MacR6PairingPredecessorStateV1,
+) -> MacR6PairingPredecessorStateV1 {
+    MacR6PairingPredecessorStateV1 {
+        state: "Available".to_string(),
+        state_revision: 1,
+        pairing_attempt_id: None,
+        effect_admitted_at_unix_ns: None,
+        consumed_record_sha256: None,
+        previous_state_sha256: None,
+        ..current.clone()
+    }
+}
+
+fn mac_r6_pairing_available_state_for_predecessor_v1(
+    predecessor: &MacR6PairingPredecessorV1,
+) -> Result<MacR6PairingPredecessorStateV1> {
+    let predecessor_sha256 =
+        sha256_hex_bootstrap_v1(&canonical_mac_r6_pairing_predecessor_v1(predecessor)?);
+    let receipt = MacR6PairingPredecessorCasReceiptV1 {
+        schema_owner: "substrate.mac-r6-pairing-predecessor-cas-receipt".to_string(),
+        schema_version: 1,
+        scope_id: predecessor.scope_id.clone(),
+        predecessor_id: predecessor.predecessor_id.clone(),
+        predecessor_generation: predecessor.predecessor_generation,
+        predecessor_sha256: predecessor_sha256.clone(),
+        fixed_install_parent_anchor_sha256: predecessor.fixed_install_parent_anchor_sha256.clone(),
+        admitted_state: "Available".to_string(),
+        admitted_state_revision: 1,
+    };
+    let state = MacR6PairingPredecessorStateV1 {
+        schema_owner: "substrate.mac-r6-pairing-predecessor-state".to_string(),
+        schema_version: 1,
+        scope_id: predecessor.scope_id.clone(),
+        predecessor_id: predecessor.predecessor_id.clone(),
+        predecessor_generation: predecessor.predecessor_generation,
+        predecessor_sha256,
+        fixed_install_parent_anchor_sha256: predecessor.fixed_install_parent_anchor_sha256.clone(),
+        committed_predecessor_state_sha256: sha256_hex_bootstrap_v1(
+            &canonical_mac_r6_pairing_predecessor_cas_receipt_v1(&receipt)?,
+        ),
+        state: "Available".to_string(),
+        state_revision: 1,
+        pairing_attempt_id: None,
+        effect_admitted_at_unix_ns: None,
+        consumed_record_sha256: None,
+        previous_state_sha256: None,
+    };
+    canonical_mac_r6_pairing_predecessor_state_v1(&state)?;
+    Ok(state)
+}
+
+fn mac_r6_pairing_stage_one_commitment_bytes_v1(canonical_record_bytes: &[u8]) -> String {
+    sha256_hex_bootstrap_v1(canonical_record_bytes)
+}
+
+/// Dedicated protected producer for `mac.r6.pairing-predecessor.ensure-v1`. It is callable only
+/// after fixed-install receipts and exact service readiness have converged. A same-generation
+/// retry returns the already persisted signed bytes; only an expired unused Available generation
+/// may acquire a tombstone and be replaced.
+#[cfg(target_os = "macos")]
+fn ensure_mac_r6_pairing_predecessor_v1(
+    executor: &MacManagedArtifactExecutorV1,
+    stage_one: &LimaStageOneAuthorizationV1,
+    carrier: &InstallBootstrapContextCarrierV1,
+    mapping: &PlatformBootstrapMappingV1,
+    manifest: &ManagedArtifactManifestV1,
+    state: &LifecyclePublisherProtectedStateV1,
+    observation: &LimaStageOneObservationV1,
+    guest_executor_identity: &MacR6GuestAarch64ElfIdentityV1,
+) -> Result<(MacR6PairingPredecessorV1, MacR6PairingContinuationV1)> {
+    for regeneration_attempt in 0..=1 {
+        match prepare_mac_r6_pairing_predecessor_generation_v1(
+            executor,
+            stage_one,
+            carrier,
+            mapping,
+            manifest,
+            state,
+            observation,
+            guest_executor_identity,
+        )? {
+            MacR6PairingGenerationOutcomeV1::Ready(predecessor, continuation) => {
+                return Ok((predecessor, continuation));
+            }
+            MacR6PairingGenerationOutcomeV1::MissedActivation if regeneration_attempt == 0 => {}
+            MacR6PairingGenerationOutcomeV1::MissedActivation => {
+                bail!("R6 replacement also missed activation; preserved for explicit recovery")
+            }
+        }
+    }
+    unreachable!("bounded R6 generation loop has exactly two attempts")
+}
+
+#[cfg(target_os = "macos")]
+enum MacR6PairingGenerationOutcomeV1 {
+    Ready(MacR6PairingPredecessorV1, MacR6PairingContinuationV1),
+    MissedActivation,
+}
+
+#[cfg(target_os = "macos")]
+fn prepare_mac_r6_pairing_predecessor_generation_v1(
+    executor: &MacManagedArtifactExecutorV1,
+    stage_one: &LimaStageOneAuthorizationV1,
+    carrier: &InstallBootstrapContextCarrierV1,
+    mapping: &PlatformBootstrapMappingV1,
+    manifest: &ManagedArtifactManifestV1,
+    state: &LifecyclePublisherProtectedStateV1,
+    observation: &LimaStageOneObservationV1,
+    guest_executor_identity: &MacR6GuestAarch64ElfIdentityV1,
+) -> Result<MacR6PairingGenerationOutcomeV1> {
+    let encoded_mapping = mapping
+        .encode(carrier)
+        .context("re-encode R6 predecessor platform mapping")?;
+    let mapping_commitment = sha256_hex_bootstrap_v1(encoded_mapping.as_bytes());
+    let guest_entry = manifest
+        .entries
+        .iter()
+        .find(|entry| entry.logical_role.0 == "mac.lima.publisher-executor")
+        .ok_or_else(|| anyhow::anyhow!("fixed install manifest lacks the R6 guest executor"))?;
+    if guest_executor_identity.logical_role != guest_entry.logical_role.0
+        || guest_executor_identity.manifest_sha256 != manifest.manifest_sha256
+        || Some(guest_executor_identity.sha256.as_str()) != guest_entry.bytes_or_target.as_deref()
+    {
+        bail!("R6 producer lacks a fresh installed executor measurement");
+    }
+    let fixed_install_parent_anchor_sha256 = lifecycle_anchor_sha256_v1(&state.current_anchor)?;
+    let spki_der = mac_open_system_keychain_p256_spki_der_v1(&state.current_anchor.scope_id)?;
+    let signer_spki_sha256 = sha256_hex_bootstrap_v1(&spki_der);
+    let prepare_now_unix_ns = mac_now_unix_ns_v1()?;
+    let (prepared_at_unix_ns, prepare_expires_at_unix_ns) =
+        derive_r6_pairing_prepared_window_v1(prepare_now_unix_ns)?;
+    let placeholder_signature = LifecycleSignatureV1 {
+        algorithm: "ecdsa-p256-sha256-p1363-low-s-v1".to_string(),
+        public_key: base64url_encode_mac_v1(&spki_der),
+        signature: String::new(),
+    };
+    let desired_binding = MacR6PairingPredecessorV1 {
+        schema_owner: "substrate.mac-r6-pairing-predecessor".to_string(),
+        schema_version: 1,
+        signature_domain: MAC_R6_PAIRING_PREDECESSOR_SIGNATURE_DOMAIN_V1.to_string(),
+        pairing_scope: "pairing-only".to_string(),
+        scope_id: state.current_anchor.scope_id.clone(),
+        producer_host_identity: MacR6HostMachOIdentityV1 {
+            object_format: "Mach-O".to_string(),
+            executor_build_evidence: stage_one.successor_template.executor_build_evidence.clone(),
+        },
+        signer_spki_sha256,
+        stage_one_admission_sha256: sha256_hex_bootstrap_v1(
+            &canonical_lima_stage_one_authorization_v1(stage_one)?,
+        ),
+        fixed_install_receipt_set_sha256: state.current_anchor.action_receipt_index_sha256.clone(),
+        manifest_sha256: manifest.manifest_sha256.clone(),
+        platform_mapping_commitment: mapping_commitment,
+        guest_machine_identity: observation.guest_machine_id.clone(),
+        observed_guest_home: observation.guest_home.clone(),
+        managed_guest_substrate_home: format!(
+            "{}/.substrate",
+            observation.guest_home.trim_end_matches('/')
+        ),
+        guest_executor_identity: guest_executor_identity.clone(),
+        fixed_install_parent_anchor_sha256,
+        predecessor_id: "00000000-0000-7000-8000-000000000000".to_string(),
+        predecessor_generation: 1,
+        prepared_at_unix_ns,
+        prepare_expires_at_unix_ns,
+        previous_predecessor_sha256: None,
+        signature: placeholder_signature,
+    };
+    if desired_binding
+        .producer_host_identity
+        .executor_build_evidence
+        .artifact_sha256
+        == desired_binding.guest_executor_identity.sha256
+    {
+        bail!("R6 producer Mach-O identity was conflated with the guest AArch64 ELF digest");
+    }
+
+    let state_account =
+        mac_keychain_r6_pairing_predecessor_state_account_v1(&desired_binding.scope_id)?;
+    let state_guard = mac_keychain_durable_cas_guard_v1(&state_account)?;
+    let observed_state = open_mac_r6_pairing_predecessor_state_v1(&desired_binding.scope_id)?;
+    let (generation, previous_predecessor_sha256, expected_state_bytes) = if let Some((
+        current_state,
+        current_state_bytes,
+    )) =
+        observed_state.as_ref()
+    {
+        let (current_predecessor, _) = mac_open_r6_pairing_predecessor_document_v1(
+            &desired_binding.scope_id,
+            current_state.predecessor_generation,
+        )?
+        .ok_or_else(|| anyhow::anyhow!("R6 predecessor state lost its immutable document"))?;
+        if !mac_r6_pairing_predecessor_exact_install_binding_v1(
+            &current_predecessor,
+            &desired_binding,
+        ) {
+            bail!("R6 predecessor does not exact-join the completed fixed install");
+        }
+        let missed_activation_account = mac_keychain_r6_pairing_missed_activation_account_v1(
+            &desired_binding.scope_id,
+            current_state.predecessor_generation,
+        )?;
+        if let Some(missed_activation_bytes) =
+            mac_keychain_read_item_v1(MAC_KEYCHAIN_SERVICE_V1, &missed_activation_account)?
+        {
+            let expected_tombstone = if current_state.state == "Available" {
+                let current_continuation =
+                    mac_open_r6_pairing_continuation_document_v1(&current_predecessor)?
+                        .ok_or_else(|| anyhow::anyhow!("missed R6 activation lacks continuation"))?
+                        .0;
+                let activation = open_mac_r6_pairing_activation_record_v1(
+                    &current_predecessor,
+                    &current_continuation,
+                    current_state,
+                    stage_one,
+                )?
+                .ok_or_else(|| anyhow::anyhow!("missed R6 activation lacks activation record"))?
+                .0;
+                derive_mac_r6_pairing_missed_activation_tombstone_v1(
+                    current_state,
+                    activation.issued_at_unix_ns,
+                    activation.issued_at_unix_ns,
+                )?
+            } else if current_state.state == "Superseded" {
+                current_state.clone()
+            } else {
+                bail!("R6 missed-activation marker conflicts with effect-visible state");
+            };
+            let expected_tombstone_bytes =
+                canonical_mac_r6_pairing_predecessor_state_v1(&expected_tombstone)?;
+            let tombstone_account = mac_keychain_r6_pairing_tombstone_account_v1(
+                &desired_binding.scope_id,
+                current_state.predecessor_generation,
+            )?;
+            if missed_activation_bytes != expected_tombstone_bytes
+                || mac_keychain_read_item_v1(MAC_KEYCHAIN_SERVICE_V1, &tombstone_account)?
+                    .as_deref()
+                    != Some(expected_tombstone_bytes.as_slice())
+            {
+                bail!("R6 missed-activation marker is not the exact tombstone");
+            }
+            if current_state.state == "Available" {
+                compare_and_swap_mac_r6_pairing_predecessor_state_v1(
+                    current_state,
+                    &expected_tombstone,
+                )?;
+                drop(state_guard);
+                return Ok(MacR6PairingGenerationOutcomeV1::MissedActivation);
+            }
+        }
+        if current_state.state == "Superseded" {
+            let tombstone_account = mac_keychain_r6_pairing_tombstone_account_v1(
+                &desired_binding.scope_id,
+                current_state.predecessor_generation,
+            )?;
+            let tombstone_bytes = canonical_mac_r6_pairing_predecessor_state_v1(current_state)?;
+            if mac_keychain_read_item_v1(MAC_KEYCHAIN_SERVICE_V1, &tombstone_account)?.as_deref()
+                != Some(tombstone_bytes.as_slice())
+                || mac_open_r6_pairing_continuation_document_v1(&current_predecessor)?.is_none()
+                || open_active_mac_guest_pairing_record_v1(executor, &desired_binding.scope_id)?
+                    .is_some()
+            {
+                bail!("superseded R6 predecessor is not an exact unused tombstone");
+            }
+            let missed_activation_account = mac_keychain_r6_pairing_missed_activation_account_v1(
+                &desired_binding.scope_id,
+                current_state.predecessor_generation,
+            )?;
+            if mac_keychain_read_item_v1(MAC_KEYCHAIN_SERVICE_V1, &missed_activation_account)?
+                .as_deref()
+                == Some(tombstone_bytes.as_slice())
+                && current_state.predecessor_generation > 1
+            {
+                let previous_missed_account = mac_keychain_r6_pairing_missed_activation_account_v1(
+                    &desired_binding.scope_id,
+                    current_state.predecessor_generation - 1,
+                )?;
+                if mac_keychain_read_item_v1(MAC_KEYCHAIN_SERVICE_V1, &previous_missed_account)?
+                    .is_some()
+                {
+                    bail!("R6 missed-activation regeneration budget is exhausted; preserving tombstone");
+                }
+            }
+            (
+                current_state
+                    .predecessor_generation
+                    .checked_add(1)
+                    .ok_or_else(|| anyhow::anyhow!("R6 predecessor generation overflow"))?,
+                Some(sha256_hex_bootstrap_v1(
+                    &canonical_mac_r6_pairing_predecessor_v1(&current_predecessor)?,
+                )),
+                Some(current_state_bytes.clone()),
+            )
+        } else if current_state.state != "Available" || {
+            let current_continuation =
+                mac_open_r6_pairing_continuation_document_v1(&current_predecessor)?
+                    .ok_or_else(|| anyhow::anyhow!("Available R6 predecessor lacks continuation"))?
+                    .0;
+            open_mac_r6_pairing_activation_record_v1(
+                &current_predecessor,
+                &current_continuation,
+                current_state,
+                stage_one,
+            )?
+            .ok_or_else(|| anyhow::anyhow!("Available R6 predecessor lacks activation"))?
+            .0
+            .expires_at_unix_ns
+                > prepare_now_unix_ns
+        } {
+            if let Some((continuation, _)) =
+                mac_open_r6_pairing_continuation_document_v1(&current_predecessor)?
+            {
+                validate_mac_lima_guest_pairing_stage_one_record_v1(
+                    &MacLimaGuestPairingStageOneRecordV1 {
+                        predecessor: current_predecessor.clone(),
+                        continuation: continuation.clone(),
+                        predecessor_state: current_state.clone(),
+                        stage_one: stage_one.clone(),
+                    },
+                )?;
+                return Ok(MacR6PairingGenerationOutcomeV1::Ready(
+                    current_predecessor,
+                    continuation,
+                ));
+            }
+            if current_state.state != "Available" {
+                bail!("effect-started R6 predecessor has no continuation document");
+            }
+            (
+                current_state.predecessor_generation,
+                current_predecessor.previous_predecessor_sha256.clone(),
+                Some(current_state_bytes.clone()),
+            )
+        } else {
+            if open_active_mac_guest_pairing_record_v1(executor, &desired_binding.scope_id)?
+                .is_some()
+            {
+                bail!(
+                    "expired Available R6 predecessor requires the exact consumed-pointer transaction"
+                );
+            }
+            let current_continuation =
+                mac_open_r6_pairing_continuation_document_v1(&current_predecessor)?
+                    .ok_or_else(|| anyhow::anyhow!("expired R6 predecessor lacks continuation"))?
+                    .0;
+            let activation = open_mac_r6_pairing_activation_record_v1(
+                &current_predecessor,
+                &current_continuation,
+                current_state,
+                stage_one,
+            )?
+            .ok_or_else(|| anyhow::anyhow!("expired R6 predecessor lacks activation"))?
+            .0;
+            let tombstone = derive_mac_r6_pairing_expired_unused_tombstone_v1(
+                current_state,
+                activation.expires_at_unix_ns,
+                prepare_now_unix_ns,
+            )?;
+            let tombstone_bytes = canonical_mac_r6_pairing_predecessor_state_v1(&tombstone)?;
+            let tombstone_account = mac_keychain_r6_pairing_tombstone_account_v1(
+                &desired_binding.scope_id,
+                current_state.predecessor_generation,
+            )?;
+            match mac_keychain_read_item_v1(MAC_KEYCHAIN_SERVICE_V1, &tombstone_account)? {
+                Some(existing) if existing == tombstone_bytes => {}
+                Some(_) => bail!("R6 predecessor tombstone account conflicts"),
+                None => mac_keychain_compare_and_swap_item_v1(
+                    MAC_KEYCHAIN_SERVICE_V1,
+                    &tombstone_account,
+                    None,
+                    &tombstone_bytes,
+                )?,
+            }
+            (
+                current_state
+                    .predecessor_generation
+                    .checked_add(1)
+                    .ok_or_else(|| anyhow::anyhow!("R6 predecessor generation overflow"))?,
+                Some(sha256_hex_bootstrap_v1(
+                    &canonical_mac_r6_pairing_predecessor_v1(&current_predecessor)?,
+                )),
+                Some(current_state_bytes.clone()),
+            )
+        }
+    } else {
+        // A crash can leave the immutable predecessor account behind before the first
+        // Available-state CAS. Recover a still-live orphan in place. Preserve an expired
+        // orphan under an immutable tombstone and advance the hash-linked generation rather
+        // than repeatedly returning an already-expired continuation. Walk the chain so the
+        // same rule remains convergent across repeated crashes before the state CAS.
+        let mut orphan_generation = 1_u64;
+        let mut orphan_previous_sha256: Option<String> = None;
+        let mut superseded_orphans = 0_u8;
+        loop {
+            let Some((orphan, orphan_bytes)) = mac_open_r6_pairing_predecessor_document_v1(
+                &desired_binding.scope_id,
+                orphan_generation,
+            )?
+            else {
+                break (orphan_generation, orphan_previous_sha256, None);
+            };
+            if !mac_r6_pairing_predecessor_exact_install_binding_v1(&orphan, &desired_binding)
+                || orphan.previous_predecessor_sha256 != orphan_previous_sha256
+            {
+                bail!("orphan R6 predecessor conflicts with the fixed-install generation chain");
+            }
+            let orphan_continuation = mac_open_r6_pairing_continuation_document_v1(&orphan)?
+                .ok_or_else(|| {
+                    anyhow::anyhow!("orphan R6 predecessor lacks its durable continuation")
+                })?;
+            let orphan_available_state =
+                mac_r6_pairing_available_state_for_predecessor_v1(&orphan)?;
+            let orphan_activation = open_mac_r6_pairing_activation_record_v1(
+                &orphan,
+                &orphan_continuation.0,
+                &orphan_available_state,
+                stage_one,
+            )?;
+            // No activation means the fully prepared bytes may still be atomically activated.
+            // A committed activation retains its full interval; only an interval already missed
+            // before Available promotion is tombstoned and charged against the retry budget.
+            if orphan_activation
+                .as_ref()
+                .is_none_or(|(activation, _)| prepare_now_unix_ns < activation.issued_at_unix_ns)
+            {
+                break (orphan_generation, orphan_previous_sha256, None);
+            }
+            if open_active_mac_guest_pairing_record_v1(executor, &desired_binding.scope_id)?
+                .is_some()
+            {
+                bail!("expired orphan R6 predecessor has an active pairing record");
+            }
+            if superseded_orphans == 1 {
+                bail!("R6 orphan regeneration budget is exhausted; preserving immutable chain");
+            }
+
+            let orphan_sha256 = sha256_hex_bootstrap_v1(&orphan_bytes);
+            let receipt = MacR6PairingPredecessorCasReceiptV1 {
+                schema_owner: "substrate.mac-r6-pairing-predecessor-cas-receipt".to_string(),
+                schema_version: 1,
+                scope_id: orphan.scope_id.clone(),
+                predecessor_id: orphan.predecessor_id.clone(),
+                predecessor_generation: orphan.predecessor_generation,
+                predecessor_sha256: orphan_sha256.clone(),
+                fixed_install_parent_anchor_sha256: orphan
+                    .fixed_install_parent_anchor_sha256
+                    .clone(),
+                admitted_state: "Available".to_string(),
+                admitted_state_revision: 1,
+            };
+            let tombstone = MacR6PairingPredecessorStateV1 {
+                schema_owner: "substrate.mac-r6-pairing-predecessor-state".to_string(),
+                schema_version: 1,
+                scope_id: orphan.scope_id.clone(),
+                predecessor_id: orphan.predecessor_id.clone(),
+                predecessor_generation: orphan.predecessor_generation,
+                predecessor_sha256: orphan_sha256.clone(),
+                fixed_install_parent_anchor_sha256: orphan
+                    .fixed_install_parent_anchor_sha256
+                    .clone(),
+                committed_predecessor_state_sha256: sha256_hex_bootstrap_v1(
+                    &canonical_mac_r6_pairing_predecessor_cas_receipt_v1(&receipt)?,
+                ),
+                state: "Superseded".to_string(),
+                state_revision: 1,
+                pairing_attempt_id: None,
+                effect_admitted_at_unix_ns: None,
+                consumed_record_sha256: None,
+                previous_state_sha256: None,
+            };
+            let tombstone_bytes = canonical_mac_r6_pairing_predecessor_state_v1(&tombstone)?;
+            let tombstone_account = mac_keychain_r6_pairing_tombstone_account_v1(
+                &desired_binding.scope_id,
+                orphan_generation,
+            )?;
+            match mac_keychain_read_item_v1(MAC_KEYCHAIN_SERVICE_V1, &tombstone_account)? {
+                Some(existing) if existing == tombstone_bytes => {}
+                Some(_) => bail!("orphan R6 predecessor tombstone account conflicts"),
+                None => mac_keychain_compare_and_swap_item_v1(
+                    MAC_KEYCHAIN_SERVICE_V1,
+                    &tombstone_account,
+                    None,
+                    &tombstone_bytes,
+                )?,
+            }
+            let missed_activation_account = mac_keychain_r6_pairing_missed_activation_account_v1(
+                &desired_binding.scope_id,
+                orphan_generation,
+            )?;
+            match mac_keychain_read_item_v1(MAC_KEYCHAIN_SERVICE_V1, &missed_activation_account)? {
+                Some(existing) if existing == tombstone_bytes => {}
+                Some(_) => bail!("orphan R6 missed-activation marker conflicts"),
+                None => mac_keychain_compare_and_swap_item_v1(
+                    MAC_KEYCHAIN_SERVICE_V1,
+                    &missed_activation_account,
+                    None,
+                    &tombstone_bytes,
+                )?,
+            }
+            orphan_previous_sha256 = Some(orphan_sha256);
+            superseded_orphans += 1;
+            orphan_generation = orphan_generation
+                .checked_add(1)
+                .ok_or_else(|| anyhow::anyhow!("R6 predecessor generation overflow"))?;
+        }
+    };
+
+    let predecessor_account =
+        mac_keychain_r6_pairing_predecessor_account_v1(&desired_binding.scope_id, generation)?;
+    let predecessor = if let Some((existing, _)) =
+        mac_open_r6_pairing_predecessor_document_v1(&desired_binding.scope_id, generation)?
+    {
+        if !mac_r6_pairing_predecessor_exact_install_binding_v1(&existing, &desired_binding)
+            || existing.previous_predecessor_sha256 != previous_predecessor_sha256
+        {
+            bail!("R6 predecessor recovery document conflicts with fixed-install binding");
+        }
+        existing
+    } else {
+        let random = mac_fresh_pairing_entropy_v1()?;
+        let mut next = MacR6PairingPredecessorV1 {
+            predecessor_id: mac_fresh_pairing_challenge_id_v1(&random)?,
+            predecessor_generation: generation,
+            previous_predecessor_sha256,
+            ..desired_binding
+        };
+        next.signature = mac_sign_r6_pairing_predecessor_v1(&next.scope_id, &next)?;
+        let bytes = canonical_mac_r6_pairing_predecessor_v1(&next)?;
+        mac_keychain_compare_and_swap_item_v1(
+            MAC_KEYCHAIN_SERVICE_V1,
+            &predecessor_account,
+            None,
+            &bytes,
+        )?;
+        next
+    };
+    let predecessor_sha256 =
+        sha256_hex_bootstrap_v1(&canonical_mac_r6_pairing_predecessor_v1(&predecessor)?);
+    let predecessor_state = mac_r6_pairing_available_state_for_predecessor_v1(&predecessor)?;
+    let committed_predecessor_state_sha256 =
+        predecessor_state.committed_predecessor_state_sha256.clone();
+    let predecessor_state_bytes =
+        canonical_mac_r6_pairing_predecessor_state_v1(&predecessor_state)?;
+    let continuation =
+        if let Some((existing, _)) = mac_open_r6_pairing_continuation_document_v1(&predecessor)? {
+            existing
+        } else {
+            let mut next = MacR6PairingContinuationV1 {
+                schema_owner: "substrate.mac-r6-pairing-continuation".to_string(),
+                schema_version: 1,
+                signature_domain: MAC_R6_PAIRING_CONTINUATION_SIGNATURE_DOMAIN_V1.to_string(),
+                pairing_scope: "pairing-only".to_string(),
+                scope_id: predecessor.scope_id.clone(),
+                predecessor_id: predecessor.predecessor_id.clone(),
+                predecessor_generation: predecessor.predecessor_generation,
+                predecessor_sha256,
+                fixed_install_parent_anchor_sha256: predecessor
+                    .fixed_install_parent_anchor_sha256
+                    .clone(),
+                committed_predecessor_state_sha256,
+                manifest_sha256: predecessor.manifest_sha256.clone(),
+                platform_mapping_commitment: predecessor.platform_mapping_commitment.clone(),
+                guest_machine_identity: predecessor.guest_machine_identity.clone(),
+                guest_executor_identity: predecessor.guest_executor_identity.clone(),
+                prepared_at_unix_ns: predecessor.prepared_at_unix_ns,
+                prepare_expires_at_unix_ns: predecessor.prepare_expires_at_unix_ns,
+                auto_run: false,
+                signature: LifecycleSignatureV1 {
+                    algorithm: "ecdsa-p256-sha256-p1363-low-s-v1".to_string(),
+                    public_key: predecessor.signature.public_key.clone(),
+                    signature: String::new(),
+                },
+            };
+            next.signature = mac_sign_r6_pairing_continuation_v1(&next.scope_id, &next)?;
+            let bytes = canonical_mac_r6_pairing_continuation_v1(&next, &predecessor)?;
+            let account = mac_keychain_r6_pairing_continuation_account_v1(
+                &next.scope_id,
+                next.predecessor_generation,
+            )?;
+            mac_keychain_compare_and_swap_item_v1(MAC_KEYCHAIN_SERVICE_V1, &account, None, &bytes)?;
+            next
+        };
+    // Both signed documents are durable preparation material. The following single protected
+    // activation-record CAS is the sole effective-time boundary and commits their complete
+    // digests before the generation can be observed as Available.
+    let activation_account = mac_keychain_r6_pairing_activation_account_v1(
+        &predecessor.scope_id,
+        predecessor.predecessor_generation,
+    )?;
+    let activation = if let Some((existing, _)) = open_mac_r6_pairing_activation_record_v1(
+        &predecessor,
+        &continuation,
+        &predecessor_state,
+        stage_one,
+    )? {
+        existing
+    } else {
+        // This is sampled only after the predecessor and continuation are durable and the exact
+        // initial-state and Stage-1 bytes are canonical. A fixed future activation boundary gives
+        // the Available state its complete 300-second half-open window even though the activation
+        // record itself must be durable before the Available CAS. Preparation timestamps remain
+        // inert metadata.
+        let issued_at_unix_ns = mac_now_unix_ns_v1()?
+            .checked_add(R6_PAIRING_PREPARE_LEAD_NS_V1)
+            .ok_or_else(|| anyhow::anyhow!("R6 activation issue time overflow"))?;
+        let mut next = MacR6PairingActivationRecordV1 {
+            schema_owner: "substrate.mac-r6-pairing-activation".to_string(),
+            schema_version: 1,
+            scope_id: predecessor.scope_id.clone(),
+            predecessor_id: predecessor.predecessor_id.clone(),
+            predecessor_generation: predecessor.predecessor_generation,
+            predecessor_sha256: sha256_hex_bootstrap_v1(&canonical_mac_r6_pairing_predecessor_v1(
+                &predecessor,
+            )?),
+            continuation_sha256: sha256_hex_bootstrap_v1(
+                &canonical_mac_r6_pairing_continuation_v1(&continuation, &predecessor)?,
+            ),
+            predecessor_state_sha256: sha256_hex_bootstrap_v1(&predecessor_state_bytes),
+            stage_one_sha256: sha256_hex_bootstrap_v1(&canonical_lima_stage_one_authorization_v1(
+                stage_one,
+            )?),
+            issued_at_unix_ns,
+            expires_at_unix_ns: issued_at_unix_ns
+                .checked_add(R6_PAIRING_TICKET_LIFETIME_NS_V1)
+                .ok_or_else(|| anyhow::anyhow!("R6 activation expiry overflow"))?,
+            signature: LifecycleSignatureV1 {
+                algorithm: "ecdsa-p256-sha256-p1363-low-s-v1".to_string(),
+                public_key: predecessor.signature.public_key.clone(),
+                signature: String::new(),
+            },
+        };
+        next.signature = mac_sign_r6_pairing_activation_record_v1(&next.scope_id, &next)?;
+        let bytes = canonical_mac_r6_pairing_activation_record_v1(&next)?;
+        mac_keychain_compare_and_swap_item_v1(
+            MAC_KEYCHAIN_SERVICE_V1,
+            &activation_account,
+            None,
+            &bytes,
+        )?;
+        next
+    };
+    mac_keychain_compare_and_swap_item_v1(
+        MAC_KEYCHAIN_SERVICE_V1,
+        &state_account,
+        expected_state_bytes.as_deref(),
+        &predecessor_state_bytes,
+    )?;
+    let committed_at_unix_ns = mac_now_unix_ns_v1()?;
+    if mac_r6_pairing_activation_disposition_v1(
+        activation.issued_at_unix_ns,
+        activation.expires_at_unix_ns,
+        committed_at_unix_ns,
+    )? == MacR6PairingActivationDispositionV1::MissedActivation
+    {
+        let tombstone = derive_mac_r6_pairing_missed_activation_tombstone_v1(
+            &predecessor_state,
+            activation.issued_at_unix_ns,
+            committed_at_unix_ns,
+        )?;
+        let tombstone_bytes = canonical_mac_r6_pairing_predecessor_state_v1(&tombstone)?;
+        let tombstone_account = mac_keychain_r6_pairing_tombstone_account_v1(
+            &predecessor.scope_id,
+            predecessor.predecessor_generation,
+        )?;
+        match mac_keychain_read_item_v1(MAC_KEYCHAIN_SERVICE_V1, &tombstone_account)? {
+            Some(existing) if existing == tombstone_bytes => {}
+            Some(_) => bail!("late R6 predecessor tombstone account conflicts"),
+            None => mac_keychain_compare_and_swap_item_v1(
+                MAC_KEYCHAIN_SERVICE_V1,
+                &tombstone_account,
+                None,
+                &tombstone_bytes,
+            )?,
+        }
+        let missed_activation_account = mac_keychain_r6_pairing_missed_activation_account_v1(
+            &predecessor.scope_id,
+            predecessor.predecessor_generation,
+        )?;
+        match mac_keychain_read_item_v1(MAC_KEYCHAIN_SERVICE_V1, &missed_activation_account)? {
+            Some(existing) if existing == tombstone_bytes => {}
+            Some(_) => bail!("late R6 missed-activation marker conflicts"),
+            None => mac_keychain_compare_and_swap_item_v1(
+                MAC_KEYCHAIN_SERVICE_V1,
+                &missed_activation_account,
+                None,
+                &tombstone_bytes,
+            )?,
+        }
+        compare_and_swap_mac_r6_pairing_predecessor_state_v1(&predecessor_state, &tombstone)?;
+        drop(state_guard);
+        return Ok(MacR6PairingGenerationOutcomeV1::MissedActivation);
+    }
+    validate_mac_lima_guest_pairing_stage_one_record_v1(&MacLimaGuestPairingStageOneRecordV1 {
+        predecessor: predecessor.clone(),
+        continuation: continuation.clone(),
+        predecessor_state,
+        stage_one: stage_one.clone(),
+    })?;
+    Ok(MacR6PairingGenerationOutcomeV1::Ready(
+        predecessor,
+        continuation,
+    ))
+}
+
 /// Reissue the ordinary post-PM catalogue only after the executor-private fixed install has
 /// committed every one of its durable forward receipts.  The returned requests must bind the
 /// actual final anchor, never the transient Stage-1 successor captured before private effects.
@@ -7596,6 +10115,10 @@ fn mac_refresh_closed_post_pm_requests_after_fixed_install_v1(
         .encode(carrier)
         .context("encode fixed install final mapping")?;
     let mapping_commitment = format!("{:x}", Sha256::digest(encoded_mapping.as_bytes()));
+    // Hold the exact protected-anchor account from this fresh recheck through immutable
+    // predecessor/continuation publication and their state CAS.
+    let protected_state_account = mac_keychain_protected_state_account_v1(&capsule.scope_id)?;
+    let protected_state_guard = mac_keychain_durable_cas_guard_v1(&protected_state_account)?;
     let state = open_system_keychain_protected_state_for_scope_v1(&capsule.scope_id)?
         .ok_or_else(|| anyhow::anyhow!("fixed install response has no final protected state"))?;
     if state.current_anchor.authority_domain != "mac_host_shared"
@@ -7629,11 +10152,71 @@ fn mac_refresh_closed_post_pm_requests_after_fixed_install_v1(
     {
         bail!("fixed install completion response is not the exact pre-catalogue projection");
     }
-    let post_pm_requests = serde_json::to_value(
-        mac_issue_closed_post_pm_requests_after_stage_one_v1(carrier, &mapping, &manifest, &state)?,
-    )
-    .context("encode final-anchor closed post-PM request set")?;
-    object.insert("post_pm_requests_v1".to_string(), post_pm_requests);
+    let post_pm_requests =
+        mac_issue_closed_post_pm_requests_after_stage_one_v1(carrier, &mapping, &manifest, &state)?;
+    let pairing_request = post_pm_requests
+        .iter()
+        .find(|request| {
+            request.role.0 == "mac.lima.publisher-executor"
+                && request.action == ManagedActionV1::Create
+        })
+        .cloned()
+        .ok_or_else(|| anyhow::anyhow!("final post-PM catalogue lacks the fixed R6 seed role"))?;
+    let guest_executor_identity =
+        mac_measure_fixed_guest_r6_executor_v1(carrier, &mapping, &manifest)?;
+    let (r6_predecessor, r6_continuation) = ensure_mac_r6_pairing_predecessor_v1(
+        executor,
+        stage_one,
+        carrier,
+        &mapping,
+        &manifest,
+        &state,
+        observation,
+        &guest_executor_identity,
+    )?;
+    drop(protected_state_guard);
+    let r6_seed = ManagedLifecycleControlRequestV1 {
+        tag: Some(MappedLifecycleTagV1::PostPmAction),
+        authority_domain: "mac_host_shared".to_string(),
+        scope_id: capsule.scope_id.clone(),
+        selected_host_prefix: stage_one.successor_template.selected_host_prefix.clone(),
+        requester_principal: stage_one.requester_principal.clone(),
+        host_context_commitment: Some(carrier.host_context_commitment.clone()),
+        platform_mapping_commitment: Some(mapping_commitment),
+        host_platform_control_root: Some(mapping.host_platform_control_root.clone()),
+        manifest: None,
+        action_receipt: None,
+        publisher_protected_state: None,
+        publisher_request: Some(pairing_request),
+        install_bootstrap_context_v1: Some(
+            carrier.encode().context("encode final R6 seed carrier")?,
+        ),
+        platform_bootstrap_mapping_v1: Some(encoded_mapping),
+        executor_build_evidence: Some(stage_one.successor_template.executor_build_evidence.clone()),
+        lima_stage_one_authorization_v1: None,
+        pairing_ticket: None,
+        pairing_session_binding_v1: None,
+        pairing_host_record_generation: None,
+        pairing_record_expected_generation_v1: None,
+        pairing_host_record_sha256: None,
+        r6_pairing_predecessor_v1: Some(r6_predecessor),
+        r6_pairing_continuation_v1: Some(r6_continuation),
+    };
+    validate_mapped_lifecycle_control_request_v1(&r6_seed)
+        .context("validate final R6 pairing continuation seed")?;
+    object.insert(
+        "post_pm_requests_v1".to_string(),
+        serde_json::to_value(post_pm_requests)
+            .context("encode final-anchor closed post-PM request set")?,
+    );
+    object.insert(
+        "r6_pairing_command_v1".to_string(),
+        Value::String(R6_PAIRING_CONTINUATION_COMMAND_V1.to_string()),
+    );
+    object.insert(
+        "r6_pairing_seed_v1".to_string(),
+        serde_json::to_value(r6_seed).context("encode final R6 pairing continuation seed")?,
+    );
     Ok(response)
 }
 
@@ -7729,6 +10312,12 @@ fn execute_closed_mac_lima_stage_one_effect_v1(
         if capsule.state == "InstanceObserved" && before.as_deref() != Some("Running") {
             bail!("observed Stage-1 instance no longer has its exact running identity");
         }
+        if capsule.state == "Prepared"
+            && before.is_none()
+            && stage_one.expires_at_unix_ns <= mac_now_unix_ns_v1()?
+        {
+            bail!("Stage-1 authorization expired before fixed-install effect admission");
+        }
         if capsule.state == "Prepared" {
             let next = MacLimaStageOneCapsuleV1 {
                 state: "EffectStarted".to_string(),
@@ -7743,9 +10332,8 @@ fn execute_closed_mac_lima_stage_one_effect_v1(
             capsule = next;
         }
         if before.is_none() {
-            if stage_one.expires_at_unix_ns <= mac_now_unix_ns_v1()? {
-                bail!("Stage-1 authorization expired before the selected absent-instance effect");
-            }
+            // EffectStarted is the durable admission boundary. Expiry blocks only a new
+            // admission above; it never revokes deterministic convergence of this exact effect.
             let _ = mac_run_fixed_lima_command_v1(
                 tool,
                 carrier,
@@ -8240,34 +10828,14 @@ fn mac_persist_post_pm_journal_state_absent_or_exact_v1(
     if path.parent() != Some(attempt_dir.as_path()) {
         bail!("post-PM journal path escaped its retained attempt directory");
     }
-    match fs::OpenOptions::new()
-        .write(true)
-        .create_new(true)
-        .mode(0o600)
-        .custom_flags(libc::O_CLOEXEC | libc::O_NOFOLLOW)
-        .open(&path)
-    {
-        Ok(mut file) => {
-            file.write_all(&bytes)
-                .context("write post-PM journal state")?;
-            file.sync_all().context("fsync post-PM journal state")?;
-        }
-        Err(error) if error.kind() == std::io::ErrorKind::AlreadyExists => {
-            let existing =
-                mac_read_stage_one_transition_artifact_no_follow_v1(executor, &relative)?;
-            if existing != bytes {
-                bail!("post-PM journal state conflicts with retained authority");
-            }
-        }
-        Err(error) => return Err(error).context("create no-follow post-PM journal state"),
-    }
-    fs::OpenOptions::new()
-        .read(true)
-        .custom_flags(libc::O_CLOEXEC | libc::O_NOFOLLOW | libc::O_DIRECTORY)
-        .open(&attempt_dir)
-        .context("open post-PM journal attempt directory")?
-        .sync_all()
-        .context("fsync post-PM journal attempt directory")?;
+    mac_publish_immutable_file_atomic_no_replace_v1(
+        &path,
+        &bytes,
+        0o600,
+        0,
+        0,
+        "post-PM journal state",
+    )?;
     Ok(journal)
 }
 
@@ -8308,32 +10876,14 @@ fn mac_persist_completed_post_pm_journal_from_receipt_v1(
     {
         bail!("completed post-PM journal parent is not retained root-owned state");
     }
-    match fs::OpenOptions::new()
-        .write(true)
-        .create_new(true)
-        .mode(0o600)
-        .custom_flags(libc::O_CLOEXEC | libc::O_NOFOLLOW)
-        .open(&path)
-    {
-        Ok(mut file) => {
-            file.write_all(&bytes)
-                .context("write completed post-PM journal")?;
-            file.sync_all().context("fsync completed post-PM journal")?;
-        }
-        Err(error) if error.kind() == std::io::ErrorKind::AlreadyExists => {
-            if mac_read_stage_one_transition_artifact_no_follow_v1(executor, &relative)? != bytes {
-                bail!("completed post-PM journal conflicts with durable receipt");
-            }
-        }
-        Err(error) => return Err(error).context("create completed post-PM journal"),
-    }
-    fs::OpenOptions::new()
-        .read(true)
-        .custom_flags(libc::O_CLOEXEC | libc::O_NOFOLLOW | libc::O_DIRECTORY)
-        .open(parent)
-        .context("open completed post-PM journal parent")?
-        .sync_all()
-        .context("fsync completed post-PM journal parent")
+    mac_publish_immutable_file_atomic_no_replace_v1(
+        &path,
+        &bytes,
+        0o600,
+        0,
+        0,
+        "completed post-PM journal",
+    )
 }
 
 #[cfg(target_os = "macos")]
@@ -8516,23 +11066,22 @@ fn mac_open_exact_completed_post_pm_receipt_v1(
 enum MacPostPmEffectPrimitiveV1 {
     /// Exact limactl argv for an instance transition; no guest executable is involved.
     Lima(Vec<String>),
-    /// A literal executable and argv below an existing guest image. The caller never selects it.
-    Guest(Vec<String>),
+    /// A literal privileged executable and argv below an existing guest image. The executor
+    /// supplies the one fixed `sudo -n --` transition; the caller never selects either layer.
+    PrivilegedGuest(Vec<String>),
     /// A measured retained-prefix byte artifact copied through limactl and installed by a fixed
     /// guest executable. The source digest and physical identity are signed in the manifest.
     Artifact {
         source_path: String,
         source_sha256: String,
         source_identity: String,
-        guest_staging_path: String,
         guest_target_path: String,
         mode: String,
     },
     /// A fixed byte sequence staged under the root-owned lifecycle state root before copy.
     Embedded {
         label: &'static str,
-        bytes: &'static [u8],
-        guest_staging_path: String,
+        bytes: Vec<u8>,
         guest_target_path: String,
         mode: String,
     },
@@ -8579,6 +11128,38 @@ enum MacPostPmEffectObservationStateV1 {
     Before,
     After,
     Ambiguous,
+}
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+enum MacPreparedFirstEffectDecisionV1 {
+    Execute,
+    ConvergeExactAfter,
+}
+
+/// Classify recovery from the narrow crash window after a prepared fixed-install Start may have
+/// been completed by socket demand activation or reboot, but before its journal advanced. Only
+/// the exact service Start owns this recovery exception; every other role/action remains
+/// absent-before-first-effect.
+fn mac_prepared_first_effect_decision_v1(
+    role: &str,
+    action: ManagedActionV1,
+    observation: MacPostPmEffectObservationStateV1,
+) -> Result<MacPreparedFirstEffectDecisionV1> {
+    match observation {
+        MacPostPmEffectObservationStateV1::Before => Ok(MacPreparedFirstEffectDecisionV1::Execute),
+        MacPostPmEffectObservationStateV1::After
+            if role == "mac.lima.guest-service-state(service)"
+                && action == ManagedActionV1::Start =>
+        {
+            Ok(MacPreparedFirstEffectDecisionV1::ConvergeExactAfter)
+        }
+        MacPostPmEffectObservationStateV1::After => {
+            bail!("fixed install non-Start step is unexpectedly already After")
+        }
+        MacPostPmEffectObservationStateV1::Ambiguous => {
+            bail!("fixed install Prepared recovery is ambiguous; preserving state")
+        }
+    }
 }
 
 /// The recovery decision is deliberately pure so every kill boundary is testable without a
@@ -8721,6 +11302,23 @@ fn mac_classify_post_pm_probe_v1(
             };
             Ok(state)
         }
+        Some("/bin/sh")
+            if plan.role == "mac.lima.guest-service-state(service)"
+                && matches!(
+                    plan.action,
+                    ManagedActionV1::Start | ManagedActionV1::Restore
+                ) =>
+        {
+            Ok(
+                if exited_successfully && output == "substrate-world-service-ready-v1\n" {
+                    MacPostPmEffectObservationStateV1::After
+                } else if exit_code == Some(20) && output == "substrate-world-service-before-v1\n" {
+                    MacPostPmEffectObservationStateV1::Before
+                } else {
+                    MacPostPmEffectObservationStateV1::Ambiguous
+                },
+            )
+        }
         _ => Ok(MacPostPmEffectObservationStateV1::Ambiguous),
     }
 }
@@ -8775,11 +11373,118 @@ fn mac_post_pm_artifact_binding_v1(
     ))
 }
 
+fn mac_systemd_quoted_field_v1(value: &str, label: &str, allow_spaces: bool) -> Result<String> {
+    if value.is_empty()
+        || value.bytes().any(|byte| byte.is_ascii_control())
+        || (!allow_spaces && value.bytes().any(|byte| byte.is_ascii_whitespace()))
+    {
+        bail!("fixed Lima unit mapping has noncanonical {label}");
+    }
+    Ok(value
+        .replace('\\', "\\\\")
+        .replace('"', "\\\"")
+        .replace('%', "%%"))
+}
+
+fn mac_reject_unauthorized_world_netfilter_v1() -> Result<()> {
+    for name in ["SUBSTRATE_WORLD_NETFILTER_ENABLE", "WORLD_NETFILTER_ENABLE"] {
+        if std::env::var_os(name).is_some() {
+            bail!("macOS world netfilter is not authorized for the fixed R3 install path");
+        }
+    }
+    Ok(())
+}
+
+fn mac_render_world_service_unit_v1(mapping: &PlatformBootstrapMappingV1) -> Result<Vec<u8>> {
+    mac_reject_unauthorized_world_netfilter_v1()?;
+    let encoded = serde_json::to_value(mapping).context("encode fixed Lima unit mapping")?;
+    let instance = encoded
+        .get("platform_instance")
+        .and_then(Value::as_object)
+        .ok_or_else(|| anyhow::anyhow!("fixed Lima unit mapping lacks platform instance"))?;
+    let transport = encoded
+        .get("realized_transport")
+        .and_then(Value::as_object)
+        .ok_or_else(|| anyhow::anyhow!("fixed Lima unit mapping lacks transport"))?;
+    if instance.get("kind").and_then(Value::as_str) != Some("lima")
+        || transport.get("kind").and_then(Value::as_str) != Some("lima")
+    {
+        bail!("fixed macOS world service unit requires a Lima mapping");
+    }
+    let required = |value: Option<&Value>, label: &str, allow_spaces: bool| -> Result<String> {
+        let value = value
+            .and_then(Value::as_str)
+            .ok_or_else(|| anyhow::anyhow!("fixed Lima unit mapping lacks {label}"))?;
+        mac_systemd_quoted_field_v1(value, label, allow_spaces)
+    };
+    let replacements = [
+        (
+            "${SUBSTRATE_GUEST_HOME}",
+            required(
+                Some(&encoded["realized_substrate_home"]),
+                "guest home",
+                true,
+            )?,
+        ),
+        (
+            "${SUBSTRATE_INSTALL_HOST_CONTEXT_COMMITMENT}",
+            required(
+                Some(&encoded["host_context_commitment"]),
+                "host context commitment",
+                false,
+            )?,
+        ),
+        (
+            "${SUBSTRATE_LIMA_INSTANCE_NAME}",
+            required(instance.get("vm_name"), "instance name", false)?,
+        ),
+        (
+            "${SUBSTRATE_LIMA_HOST_PLATFORM_CONTROL_ROOT}",
+            required(
+                Some(&encoded["host_platform_control_root"]),
+                "host platform control root",
+                true,
+            )?,
+        ),
+        (
+            "${SUBSTRATE_LIMA_HOST_SOCKET}",
+            required(transport.get("host_socket"), "host socket", true)?,
+        ),
+        (
+            "${SUBSTRATE_LIMA_GUEST_SOCKET}",
+            required(transport.get("guest_socket"), "guest socket", true)?,
+        ),
+        ("${WORLD_NETFILTER_ENV}", String::new()),
+    ];
+    let mut rendered =
+        include_str!("../../scripts/mac/lima/units/substrate-world-service.service.tmpl")
+            .replace(
+                "Environment=SUBSTRATE_HOME=${SUBSTRATE_GUEST_HOME}",
+                "Environment=\"SUBSTRATE_HOME=${SUBSTRATE_GUEST_HOME}\"",
+            )
+            .replace(
+                "ReadWritePaths=${SUBSTRATE_GUEST_HOME} ",
+                "ReadWritePaths=\"${SUBSTRATE_GUEST_HOME}\" ",
+            )
+            .replace(
+                "RuntimeDirectory=substrate",
+                "RuntimeDirectory=substrate substrate/substrate-gateway-runtime",
+            );
+    for (placeholder, value) in replacements {
+        rendered = rendered.replace(placeholder, &value);
+    }
+    if rendered.contains("${") {
+        bail!("fixed Lima world service unit retained an unresolved placeholder");
+    }
+    Ok(rendered.into_bytes())
+}
+
 fn mac_post_pm_effect_plan_v1(
     entry: &ManagedArtifactEntryV1,
     action: ManagedActionV1,
     membership_role: &str,
     selected_host_prefix: &str,
+    mapping: Option<&PlatformBootstrapMappingV1>,
 ) -> Result<MacPostPmEffectPlanV1> {
     let role = entry.logical_role.0.as_str();
     if !closed_mac_role_action_v1(role, action) {
@@ -8856,15 +11561,10 @@ fn mac_post_pm_effect_plan_v1(
         ) => {
             let (source_path, source_sha256, source_identity) =
                 mac_post_pm_artifact_binding_v1(entry, selected_host_prefix)?;
-            let staging = format!(
-                "/var/lib/substrate/.substrate-lifecycle-v1/staged/{}.bin",
-                entry.object_id
-            );
             plan.primitives.push(MacPostPmEffectPrimitiveV1::Artifact {
                 source_path,
                 source_sha256: source_sha256.clone(),
                 source_identity,
-                guest_staging_path: staging,
                 guest_target_path: target.clone(),
                 mode: "0755".to_string(),
             });
@@ -8887,12 +11587,13 @@ fn mac_post_pm_effect_plan_v1(
             | "mac.lima.publisher-executor"),
             ManagedActionV1::Remove,
         ) => {
-            plan.primitives.push(MacPostPmEffectPrimitiveV1::Guest(vec![
-                "/bin/rm".to_string(),
-                "-f".to_string(),
-                "--".to_string(),
-                target.clone(),
-            ]));
+            plan.primitives
+                .push(MacPostPmEffectPrimitiveV1::PrivilegedGuest(vec![
+                    "/bin/rm".to_string(),
+                    "-f".to_string(),
+                    "--".to_string(),
+                    target.clone(),
+                ]));
             plan.observation_argv = guest_observe_absent(&target);
             let _ = role;
         }
@@ -8901,30 +11602,32 @@ fn mac_post_pm_effect_plan_v1(
             action
             @ (ManagedActionV1::Create | ManagedActionV1::Replace | ManagedActionV1::Restore),
         ) => {
-            let bytes: &'static [u8] = match role {
-                "mac.lima.guest-unit(service)" => b"[Unit]\nDescription=Substrate World Service\n[Service]\nExecStart=/usr/local/bin/substrate-world-service\n",
-                "mac.lima.guest-unit(socket)" => b"[Unit]\nDescription=Substrate World Service Socket\n[Socket]\nListenStream=/run/substrate.sock\n",
+            let bytes = match role {
+                "mac.lima.guest-unit(service)" => {
+                    mac_render_world_service_unit_v1(mapping.ok_or_else(|| {
+                        anyhow::anyhow!("world service unit plan lacks its admitted Lima mapping")
+                    })?)?
+                }
+                "mac.lima.guest-unit(socket)" => {
+                    include_bytes!("../../scripts/mac/lima/units/substrate-world-service.socket")
+                        .to_vec()
+                }
                 _ => unreachable!(),
             };
-            let staging = format!(
-                "/var/lib/substrate/.substrate-lifecycle-v1/staged/{}.unit",
-                entry.object_id
-            );
             plan.primitives.push(MacPostPmEffectPrimitiveV1::Embedded {
                 label: if role.ends_with("(service)") {
                     "guest-service-unit"
                 } else {
                     "guest-socket-unit"
                 },
-                bytes,
-                guest_staging_path: staging,
+                bytes: bytes.clone(),
                 guest_target_path: target.clone(),
                 mode: "0644".to_string(),
             });
             plan.target_integrity = Some(MacPostPmTargetIntegrityV1 {
                 path: target.clone(),
                 kind: "regular file",
-                sha256: Some(sha256_hex_bootstrap_v1(bytes)),
+                sha256: Some(sha256_hex_bootstrap_v1(&bytes)),
                 owner: "root".to_string(),
                 group: "root".to_string(),
                 mode: "0644".to_string(),
@@ -8936,12 +11639,13 @@ fn mac_post_pm_effect_plan_v1(
             "mac.lima.guest-unit(service)" | "mac.lima.guest-unit(socket)",
             ManagedActionV1::Remove,
         ) => {
-            plan.primitives.push(MacPostPmEffectPrimitiveV1::Guest(vec![
-                "/bin/rm".to_string(),
-                "-f".to_string(),
-                "--".to_string(),
-                target.clone(),
-            ]));
+            plan.primitives
+                .push(MacPostPmEffectPrimitiveV1::PrivilegedGuest(vec![
+                    "/bin/rm".to_string(),
+                    "-f".to_string(),
+                    "--".to_string(),
+                    target.clone(),
+                ]));
             plan.observation_argv = guest_observe_absent(&target);
         }
         (
@@ -8966,18 +11670,19 @@ fn mac_post_pm_effect_plan_v1(
             } else {
                 ("root", "root", "0750")
             };
-            plan.primitives.push(MacPostPmEffectPrimitiveV1::Guest(vec![
-                "/usr/bin/install".to_string(),
-                "-d".to_string(),
-                "-o".to_string(),
-                owner.to_string(),
-                "-g".to_string(),
-                group.to_string(),
-                "-m".to_string(),
-                mode.to_string(),
-                "--".to_string(),
-                target.clone(),
-            ]));
+            plan.primitives
+                .push(MacPostPmEffectPrimitiveV1::PrivilegedGuest(vec![
+                    "/usr/bin/install".to_string(),
+                    "-d".to_string(),
+                    "-o".to_string(),
+                    owner.to_string(),
+                    "-g".to_string(),
+                    group.to_string(),
+                    "-m".to_string(),
+                    mode.to_string(),
+                    "--".to_string(),
+                    target.clone(),
+                ]));
             plan.target_integrity = Some(MacPostPmTargetIntegrityV1 {
                 path: target.clone(),
                 kind: "directory",
@@ -9001,20 +11706,22 @@ fn mac_post_pm_effect_plan_v1(
             | "mac.lima.publisher-state-directory",
             ManagedActionV1::Remove,
         ) => {
-            plan.primitives.push(MacPostPmEffectPrimitiveV1::Guest(vec![
-                "/bin/rm".to_string(),
-                "-rf".to_string(),
-                "--".to_string(),
-                target.clone(),
-            ]));
+            plan.primitives
+                .push(MacPostPmEffectPrimitiveV1::PrivilegedGuest(vec![
+                    "/bin/rm".to_string(),
+                    "-rf".to_string(),
+                    "--".to_string(),
+                    target.clone(),
+                ]));
             plan.observation_argv = guest_observe_absent(&target);
         }
         ("mac.lima.guest-group", ManagedActionV1::Create | ManagedActionV1::Restore) => {
-            plan.primitives.push(MacPostPmEffectPrimitiveV1::Guest(vec![
-                "/usr/sbin/groupadd".to_string(),
-                "--system".to_string(),
-                "substrate".to_string(),
-            ]));
+            plan.primitives
+                .push(MacPostPmEffectPrimitiveV1::PrivilegedGuest(vec![
+                    "/usr/sbin/groupadd".to_string(),
+                    "--system".to_string(),
+                    "substrate".to_string(),
+                ]));
             plan.observation_argv = vec![
                 "/usr/bin/getent".to_string(),
                 "group".to_string(),
@@ -9023,10 +11730,11 @@ fn mac_post_pm_effect_plan_v1(
         }
         ("mac.lima.guest-group", ManagedActionV1::Remove) => {
             plan.after_observation_success = false;
-            plan.primitives.push(MacPostPmEffectPrimitiveV1::Guest(vec![
-                "/usr/sbin/groupdel".to_string(),
-                "substrate".to_string(),
-            ]));
+            plan.primitives
+                .push(MacPostPmEffectPrimitiveV1::PrivilegedGuest(vec![
+                    "/usr/sbin/groupdel".to_string(),
+                    "substrate".to_string(),
+                ]));
             plan.observation_argv = vec![
                 "/usr/bin/getent".to_string(),
                 "group".to_string(),
@@ -9037,13 +11745,14 @@ fn mac_post_pm_effect_plan_v1(
             let principal = role
                 .trim_start_matches("mac.lima.guest-membership(")
                 .trim_end_matches(')');
-            plan.primitives.push(MacPostPmEffectPrimitiveV1::Guest(vec![
-                "/usr/sbin/usermod".to_string(),
-                "-a".to_string(),
-                "-G".to_string(),
-                "substrate".to_string(),
-                principal.to_string(),
-            ]));
+            plan.primitives
+                .push(MacPostPmEffectPrimitiveV1::PrivilegedGuest(vec![
+                    "/usr/sbin/usermod".to_string(),
+                    "-a".to_string(),
+                    "-G".to_string(),
+                    "substrate".to_string(),
+                    principal.to_string(),
+                ]));
             plan.observation_argv = vec![
                 "/usr/bin/id".to_string(),
                 "-nG".to_string(),
@@ -9054,12 +11763,13 @@ fn mac_post_pm_effect_plan_v1(
             let principal = role
                 .trim_start_matches("mac.lima.guest-membership(")
                 .trim_end_matches(')');
-            plan.primitives.push(MacPostPmEffectPrimitiveV1::Guest(vec![
-                "/usr/bin/gpasswd".to_string(),
-                "-d".to_string(),
-                principal.to_string(),
-                "substrate".to_string(),
-            ]));
+            plan.primitives
+                .push(MacPostPmEffectPrimitiveV1::PrivilegedGuest(vec![
+                    "/usr/bin/gpasswd".to_string(),
+                    "-d".to_string(),
+                    principal.to_string(),
+                    "substrate".to_string(),
+                ]));
             plan.observation_argv = vec![
                 "/usr/bin/id".to_string(),
                 "-nG".to_string(),
@@ -9076,37 +11786,41 @@ fn mac_post_pm_effect_plan_v1(
             action
             @ (ManagedActionV1::Create | ManagedActionV1::Replace | ManagedActionV1::Restore),
         ) => {
-            let bytes: &'static [u8] = match role {
-                "mac.lima.layout-sentinel" => b"substrate-lima-layout-v1\n",
-                "mac.lima.publisher-service-unit" => b"[Service]\nType=oneshot\n",
+            let bytes = match role {
+                "mac.lima.layout-sentinel" => b"substrate-lima-layout-v1\n".to_vec(),
+                "mac.lima.publisher-service-unit" => {
+                    include_bytes!("../../scripts/linux/substrate-lifecycle-publisher-v1.service")
+                        .to_vec()
+                }
                 "mac.lima.publisher-socket-unit" => {
-                    b"[Socket]\nListenStream=/run/substrate-publisher.sock\n"
+                    include_bytes!("../../scripts/linux/substrate-lifecycle-publisher-v1.socket")
+                        .to_vec()
                 }
                 "mac.lima.publisher-signing-key" => {
-                    b"substrate-publisher-key-placeholder-forbidden-export\n"
+                    b"substrate-publisher-key-placeholder-forbidden-export\n".to_vec()
                 }
-                "mac.lima.publisher-current-anchor" => b"{}\n",
-                "mac.lima.publisher-bootstrap-intent" => b"{}\n",
+                "mac.lima.publisher-current-anchor" => b"{}\n".to_vec(),
+                "mac.lima.publisher-bootstrap-intent" => b"{}\n".to_vec(),
                 _ => unreachable!(),
             };
-            let staging = format!(
-                "/var/lib/substrate/.substrate-lifecycle-v1/staged/{}.fixed",
-                entry.object_id
+            let is_unit = matches!(
+                role,
+                "mac.lima.publisher-service-unit" | "mac.lima.publisher-socket-unit"
             );
+            let mode = if is_unit { "0644" } else { "0600" };
             plan.primitives.push(MacPostPmEffectPrimitiveV1::Embedded {
                 label: "fixed-publisher-artifact",
-                bytes,
-                guest_staging_path: staging,
+                bytes: bytes.clone(),
                 guest_target_path: target.clone(),
-                mode: "0600".to_string(),
+                mode: mode.to_string(),
             });
             plan.target_integrity = Some(MacPostPmTargetIntegrityV1 {
                 path: target.clone(),
                 kind: "regular file",
-                sha256: Some(sha256_hex_bootstrap_v1(bytes)),
+                sha256: Some(sha256_hex_bootstrap_v1(&bytes)),
                 owner: "root".to_string(),
                 group: "root".to_string(),
-                mode: "0600".to_string(),
+                mode: mode.to_string(),
             });
             plan.observation_argv = guest_observe_exists(&target);
             let _ = action;
@@ -9119,12 +11833,13 @@ fn mac_post_pm_effect_plan_v1(
             | "mac.lima.publisher-bootstrap-intent",
             ManagedActionV1::Remove,
         ) => {
-            plan.primitives.push(MacPostPmEffectPrimitiveV1::Guest(vec![
-                "/bin/rm".to_string(),
-                "-f".to_string(),
-                "--".to_string(),
-                target.clone(),
-            ]));
+            plan.primitives
+                .push(MacPostPmEffectPrimitiveV1::PrivilegedGuest(vec![
+                    "/bin/rm".to_string(),
+                    "-f".to_string(),
+                    "--".to_string(),
+                    target.clone(),
+                ]));
             plan.observation_argv = guest_observe_absent(&target);
         }
         (
@@ -9145,24 +11860,66 @@ fn mac_post_pm_effect_plan_v1(
                 ManagedActionV1::Restore => "restart",
                 _ => bail!("guest service-state action has no fixed verb"),
             };
-            plan.primitives.push(MacPostPmEffectPrimitiveV1::Guest(vec![
-                "/usr/bin/systemctl".to_string(),
-                verb.to_string(),
-                unit.to_string(),
-            ]));
-            plan.observation_argv = match action {
-                ManagedActionV1::Enable | ManagedActionV1::Disable => vec![
-                    "/usr/bin/systemctl".to_string(),
-                    "is-enabled".to_string(),
-                    unit.to_string(),
-                ],
-                ManagedActionV1::Start | ManagedActionV1::Stop | ManagedActionV1::Restore => vec![
-                    "/usr/bin/systemctl".to_string(),
-                    "is-active".to_string(),
-                    unit.to_string(),
-                ],
-                _ => unreachable!(),
-            };
+            if role == "mac.lima.guest-service-state(socket)" && action == ManagedActionV1::Enable {
+                // Reload is joined to socket Enable rather than unit-file creation. If a crash
+                // lands between reload and enable, the disabled observation safely replays both;
+                // once enabled, both effects are known to have completed.
+                plan.primitives
+                    .push(MacPostPmEffectPrimitiveV1::PrivilegedGuest(vec![
+                        "/usr/bin/systemctl".to_string(),
+                        "daemon-reload".to_string(),
+                    ]));
+            }
+            if role == "mac.lima.guest-service-state(service)"
+                && matches!(action, ManagedActionV1::Start | ManagedActionV1::Restore)
+            {
+                // Socket and service activation are one convergent effect. No successful socket
+                // receipt can expose an activatable endpoint before the service transaction owns
+                // the protocol-level readiness proof.
+                plan.primitives
+                    .push(MacPostPmEffectPrimitiveV1::PrivilegedGuest(vec![
+                        "/usr/bin/systemctl".to_string(),
+                        "start".to_string(),
+                        "substrate-world-service.socket".to_string(),
+                        "substrate-world-service.service".to_string(),
+                    ]));
+                plan.observation_argv = vec![
+                    "/bin/sh".to_string(),
+                    "-ceu".to_string(),
+                    MAC_LIMA_WORLD_SERVICE_READINESS_SCRIPT_V1.to_string(),
+                    "--".to_string(),
+                    sha256_hex_bootstrap_v1(&mac_render_world_service_unit_v1(
+                        mapping.ok_or_else(|| {
+                            anyhow::anyhow!("world service readiness lacks admitted mapping")
+                        })?,
+                    )?),
+                    sha256_hex_bootstrap_v1(include_bytes!(
+                        "../../scripts/mac/lima/units/substrate-world-service.socket"
+                    )),
+                ];
+            } else {
+                plan.primitives
+                    .push(MacPostPmEffectPrimitiveV1::PrivilegedGuest(vec![
+                        "/usr/bin/systemctl".to_string(),
+                        verb.to_string(),
+                        unit.to_string(),
+                    ]));
+                plan.observation_argv = match action {
+                    ManagedActionV1::Enable | ManagedActionV1::Disable => vec![
+                        "/usr/bin/systemctl".to_string(),
+                        "is-enabled".to_string(),
+                        unit.to_string(),
+                    ],
+                    ManagedActionV1::Start | ManagedActionV1::Stop | ManagedActionV1::Restore => {
+                        vec![
+                            "/usr/bin/systemctl".to_string(),
+                            "is-active".to_string(),
+                            unit.to_string(),
+                        ]
+                    }
+                    _ => unreachable!(),
+                };
+            }
         }
         _ => bail!("post-PM role/action has no exhaustive fixed primitive"),
     }
@@ -9193,8 +11950,57 @@ fn mac_run_fixed_lima_command_owned_outcome_v1(
     mac_run_fixed_lima_command_outcome_v1(tool, carrier, principal, lima_home, &borrowed, None)
 }
 
+fn mac_fixed_privileged_guest_shell_argv_v1(arguments: &[String]) -> Vec<String> {
+    let mut exact = vec![
+        "shell".to_string(),
+        "substrate".to_string(),
+        "--".to_string(),
+        "/usr/bin/sudo".to_string(),
+        "-n".to_string(),
+        "--".to_string(),
+    ];
+    exact.extend(arguments.iter().cloned());
+    exact
+}
+
+fn mac_target_link_probe_argv_v1(path: &str) -> [String; 3] {
+    [
+        "/usr/bin/test".to_string(),
+        "-L".to_string(),
+        path.to_string(),
+    ]
+}
+
+fn mac_target_exists_probe_argv_v1(path: &str) -> [String; 3] {
+    [
+        "/usr/bin/test".to_string(),
+        "-e".to_string(),
+        path.to_string(),
+    ]
+}
+
+fn mac_fixed_lima_stdin_transfer_arguments_v1(
+    guest_staging_path: &str,
+    source: &MacLimaInheritedInputV1,
+) -> Vec<String> {
+    vec![
+        "shell".to_string(),
+        "substrate".to_string(),
+        "--".to_string(),
+        "/usr/bin/sudo".to_string(),
+        "-n".to_string(),
+        "--".to_string(),
+        "/usr/bin/python3".to_string(),
+        "-c".to_string(),
+        MAC_LIMA_POST_PM_STDIN_TRANSFER_SCRIPT_V1.to_string(),
+        guest_staging_path.to_string(),
+        source.sha256.clone(),
+        source.size.to_string(),
+    ]
+}
+
 #[cfg(target_os = "macos")]
-fn mac_run_fixed_lima_copy_source_v1(
+fn mac_run_fixed_lima_stdin_source_v1(
     tool: &Path,
     carrier: &InstallBootstrapContextCarrierV1,
     principal: &MacLimaPrincipalV1,
@@ -9202,19 +12008,66 @@ fn mac_run_fixed_lima_copy_source_v1(
     guest_staging_path: &str,
     source: &MacLimaInheritedInputV1,
 ) -> Result<String> {
-    if source.role != MacLimaInheritedInputRoleV1::PostPmCopySource {
-        bail!("post-PM copy runner received the wrong inherited-input role");
+    if source.role != MacLimaInheritedInputRoleV1::PostPmStdinSource {
+        bail!("post-PM stdin runner received the wrong inherited-input role");
     }
-    let target = format!("substrate:{guest_staging_path}");
-    let arguments = ["copy", MAC_LIMA_COPY_CHILD_PATH_V1, target.as_str()];
-    mac_run_fixed_lima_command_v1(
-        tool,
-        carrier,
-        principal,
-        lima_home,
-        &arguments,
-        Some(source),
-    )
+    let arguments = mac_fixed_lima_stdin_transfer_arguments_v1(guest_staging_path, source);
+    let borrowed: Vec<&str> = arguments.iter().map(String::as_str).collect();
+    mac_run_fixed_lima_command_v1(tool, carrier, principal, lima_home, &borrowed, Some(source))
+}
+
+fn mac_post_pm_generation_key_v1(
+    prepared: &ManagedActionPreparedRecordV1,
+    role: &str,
+    digest: &str,
+) -> Result<String> {
+    if digest.len() != 64
+        || !digest
+            .bytes()
+            .all(|byte| byte.is_ascii_hexdigit() && !byte.is_ascii_uppercase())
+    {
+        bail!("post-PM generation key requires a canonical artifact digest");
+    }
+    Ok(sha256_hex_bootstrap_v1(
+        format!(
+            "{}\0{}\0{}\0{}\0{}",
+            prepared.manifest_generation, prepared.receipt_id, prepared.entry_id, role, digest
+        )
+        .as_bytes(),
+    ))
+}
+
+fn mac_post_pm_generation_staging_path_v1(
+    prepared: &ManagedActionPreparedRecordV1,
+    role: &str,
+    digest: &str,
+) -> Result<String> {
+    let key = mac_post_pm_generation_key_v1(prepared, role, digest)?;
+    Ok(format!(
+        "{MAC_LIMA_POST_PM_STAGING_ROOT_V1}/{}/{}/{key}.blob",
+        prepared.manifest_generation, prepared.receipt_id
+    ))
+}
+
+fn mac_fixed_lima_atomic_publish_arguments_v1(
+    source: &str,
+    target: &str,
+    digest: &str,
+    mode: &str,
+    generation_key: &str,
+    allow_replace: bool,
+) -> Vec<String> {
+    mac_fixed_privileged_guest_shell_argv_v1(&[
+        "/usr/bin/python3".to_string(),
+        "-c".to_string(),
+        MAC_LIMA_POST_PM_ATOMIC_PUBLISH_SCRIPT_V1.to_string(),
+        source.to_string(),
+        target.to_string(),
+        digest.to_string(),
+        mode.to_string(),
+        generation_key.to_string(),
+        if allow_replace { "replace" } else { "create" }.to_string(),
+    ])
 }
 
 #[cfg(target_os = "macos")]
@@ -9244,66 +12097,17 @@ fn mac_write_post_pm_embedded_artifact_absent_or_exact_v1(
         bail!("post-PM embedded artifact directory is not root-owned no-follow state");
     }
     let path = dir.join(format!("{label}.{digest}.bin"));
-    match fs::OpenOptions::new()
-        .write(true)
-        .create_new(true)
-        .mode(0o600)
-        .custom_flags(libc::O_CLOEXEC | libc::O_NOFOLLOW)
-        .open(&path)
-    {
-        Ok(mut file) => {
-            file.write_all(bytes)
-                .context("write retained embedded post-PM artifact")?;
-            file.sync_all()
-                .context("fsync retained embedded post-PM artifact")?;
-            file.set_permissions(fs::Permissions::from_mode(0o444))
-                .context("freeze new embedded post-PM artifact read-only")?;
-            file.sync_all()
-                .context("fsync frozen embedded post-PM artifact")?;
-        }
-        Err(error) if error.kind() == std::io::ErrorKind::AlreadyExists => {
-            let mut file = fs::OpenOptions::new()
-                .read(true)
-                .custom_flags(libc::O_CLOEXEC | libc::O_NOFOLLOW)
-                .open(&path)
-                .context("open retained embedded post-PM artifact")?;
-            let metadata = file
-                .metadata()
-                .context("inspect retained embedded post-PM artifact")?;
-            if !metadata.is_file()
-                || metadata.nlink() != 1
-                || metadata.uid() != 0
-                || metadata.gid() != 0
-                || !matches!(metadata.mode() & 0o777, 0o600 | 0o444)
-                || metadata.len() != bytes.len() as u64
-            {
-                bail!("retained embedded post-PM artifact is not one exact root file");
-            }
-            let mut existing = Vec::new();
-            std::io::Read::by_ref(&mut file)
-                .take(MAC_LIMA_ROOT_INPUT_MAX_BYTES_V1 + 1)
-                .read_to_end(&mut existing)
-                .context("read retained embedded post-PM artifact")?;
-            if existing != bytes {
-                bail!("retained embedded post-PM artifact is not an exact retry");
-            }
-            file.set_permissions(fs::Permissions::from_mode(0o444))
-                .context("freeze exact-retry embedded post-PM artifact read-only")?;
-            file.sync_all()
-                .context("fsync frozen exact-retry embedded post-PM artifact")?;
-        }
-        Err(error) => return Err(error).context("create retained embedded post-PM artifact"),
-    }
-    fs::OpenOptions::new()
-        .read(true)
-        .custom_flags(libc::O_CLOEXEC | libc::O_NOFOLLOW | libc::O_DIRECTORY)
-        .open(&dir)
-        .context("open retained post-PM artifact directory")?
-        .sync_all()
-        .context("fsync retained post-PM artifact directory")?;
+    mac_publish_immutable_file_atomic_no_replace_v1(
+        &path,
+        bytes,
+        0o444,
+        0,
+        0,
+        "retained embedded post-PM artifact",
+    )?;
     mac_open_root_private_lima_input_v1(
         &path,
-        MacLimaInheritedInputRoleV1::PostPmCopySource,
+        MacLimaInheritedInputRoleV1::PostPmStdinSource,
         &digest,
         bytes.len() as u64,
     )
@@ -9515,13 +12319,8 @@ fn mac_execute_post_pm_effect_plan_v1(
                     .as_bytes(),
                 ))
             }
-            MacPostPmEffectPrimitiveV1::Guest(arguments) => {
-                let mut exact = vec![
-                    "shell".to_string(),
-                    "substrate".to_string(),
-                    "--".to_string(),
-                ];
-                exact.extend(arguments.iter().cloned());
+            MacPostPmEffectPrimitiveV1::PrivilegedGuest(arguments) => {
+                let exact = mac_fixed_privileged_guest_shell_argv_v1(arguments);
                 output_digests.push(sha256_hex_bootstrap_v1(
                     mac_run_fixed_lima_command_owned_v1(
                         tool, carrier, principal, lima_home, &exact,
@@ -9533,9 +12332,9 @@ fn mac_execute_post_pm_effect_plan_v1(
                 source_path,
                 source_sha256,
                 source_identity,
-                guest_staging_path,
                 guest_target_path,
                 mode,
+                ..
             } => {
                 let staged = mac_stage_measured_post_pm_artifact_absent_or_exact_v1(
                     executor,
@@ -9544,32 +12343,29 @@ fn mac_execute_post_pm_effect_plan_v1(
                     source_sha256,
                     source_identity,
                 )?;
+                let guest_staging_path =
+                    mac_post_pm_generation_staging_path_v1(prepared, &plan.role, source_sha256)?;
                 output_digests.push(sha256_hex_bootstrap_v1(
-                    mac_run_fixed_lima_copy_source_v1(
+                    mac_run_fixed_lima_stdin_source_v1(
                         tool,
                         carrier,
                         principal,
                         lima_home,
-                        guest_staging_path,
+                        &guest_staging_path,
                         &staged,
                     )?
                     .as_bytes(),
                 ));
-                let install = vec![
-                    "shell".to_string(),
-                    "substrate".to_string(),
-                    "--".to_string(),
-                    "/usr/bin/install".to_string(),
-                    "-o".to_string(),
-                    "root".to_string(),
-                    "-g".to_string(),
-                    "root".to_string(),
-                    "-m".to_string(),
-                    mode.clone(),
-                    "--".to_string(),
-                    guest_staging_path.clone(),
-                    guest_target_path.clone(),
-                ];
+                let generation_key =
+                    mac_post_pm_generation_key_v1(prepared, &plan.role, source_sha256)?;
+                let install = mac_fixed_lima_atomic_publish_arguments_v1(
+                    &guest_staging_path,
+                    guest_target_path,
+                    source_sha256,
+                    mode,
+                    &generation_key,
+                    plan.action != ManagedActionV1::Create,
+                );
                 output_digests.push(sha256_hex_bootstrap_v1(
                     mac_run_fixed_lima_command_owned_v1(
                         tool, carrier, principal, lima_home, &install,
@@ -9580,39 +12376,36 @@ fn mac_execute_post_pm_effect_plan_v1(
             MacPostPmEffectPrimitiveV1::Embedded {
                 label,
                 bytes,
-                guest_staging_path,
                 guest_target_path,
                 mode,
+                ..
             } => {
                 let source = mac_write_post_pm_embedded_artifact_absent_or_exact_v1(
                     executor, prepared, label, bytes,
                 )?;
+                let digest = sha256_hex_bootstrap_v1(bytes);
+                let guest_staging_path =
+                    mac_post_pm_generation_staging_path_v1(prepared, &plan.role, &digest)?;
                 output_digests.push(sha256_hex_bootstrap_v1(
-                    mac_run_fixed_lima_copy_source_v1(
+                    mac_run_fixed_lima_stdin_source_v1(
                         tool,
                         carrier,
                         principal,
                         lima_home,
-                        guest_staging_path,
+                        &guest_staging_path,
                         &source,
                     )?
                     .as_bytes(),
                 ));
-                let install = vec![
-                    "shell".to_string(),
-                    "substrate".to_string(),
-                    "--".to_string(),
-                    "/usr/bin/install".to_string(),
-                    "-o".to_string(),
-                    "root".to_string(),
-                    "-g".to_string(),
-                    "root".to_string(),
-                    "-m".to_string(),
-                    mode.clone(),
-                    "--".to_string(),
-                    guest_staging_path.clone(),
-                    guest_target_path.clone(),
-                ];
+                let generation_key = mac_post_pm_generation_key_v1(prepared, &plan.role, &digest)?;
+                let install = mac_fixed_lima_atomic_publish_arguments_v1(
+                    &guest_staging_path,
+                    guest_target_path,
+                    &digest,
+                    mode,
+                    &generation_key,
+                    plan.action != ManagedActionV1::Create,
+                );
                 output_digests.push(sha256_hex_bootstrap_v1(
                     mac_run_fixed_lima_command_owned_v1(
                         tool, carrier, principal, lima_home, &install,
@@ -9673,14 +12466,32 @@ fn mac_observe_closed_post_pm_effect_v1(
         exact.extend(argv.iter().cloned());
         mac_run_fixed_lima_command_owned_outcome_v1(tool, carrier, principal, lima_home, &exact)
     };
+    let run_privileged_guest_observation =
+        |argv: &[String]| -> Result<MacFixedLimaCommandOutcomeV1> {
+            let exact = mac_fixed_privileged_guest_shell_argv_v1(argv);
+            mac_run_fixed_lima_command_owned_outcome_v1(tool, carrier, principal, lima_home, &exact)
+        };
 
     if let Some(target) = &plan.target_integrity {
-        let exists = run_guest_observation(&vec![
-            "/usr/bin/test".to_string(),
-            "-e".to_string(),
-            "--".to_string(),
-            target.path.clone(),
-        ])?;
+        let linked =
+            run_privileged_guest_observation(&mac_target_link_probe_argv_v1(&target.path))?;
+        match linked {
+            MacFixedLimaCommandOutcomeV1::Success(_) => {
+                return Ok((
+                    MacPostPmEffectObservationStateV1::Ambiguous,
+                    json!({"target": target.path, "state": "linked"}),
+                ));
+            }
+            MacFixedLimaCommandOutcomeV1::NonZero { code: Some(1), .. } => {}
+            MacFixedLimaCommandOutcomeV1::NonZero { code, stderr, .. } => {
+                return Ok((
+                    MacPostPmEffectObservationStateV1::Ambiguous,
+                    json!({"target": target.path, "link_probe_exit": code, "link_probe_stderr_sha256": sha256_hex_bootstrap_v1(stderr.as_bytes())}),
+                ));
+            }
+        }
+        let exists =
+            run_privileged_guest_observation(&mac_target_exists_probe_argv_v1(&target.path))?;
         match exists {
             MacFixedLimaCommandOutcomeV1::NonZero { code: Some(1), .. } => {
                 return Ok((
@@ -9696,7 +12507,7 @@ fn mac_observe_closed_post_pm_effect_v1(
             }
             MacFixedLimaCommandOutcomeV1::Success(_) => {}
         }
-        let stat = match run_guest_observation(&vec![
+        let stat = match run_privileged_guest_observation(&[
             "/usr/bin/stat".to_string(),
             "-c".to_string(),
             "%F:%U:%G:%a".to_string(),
@@ -9725,7 +12536,7 @@ fn mac_observe_closed_post_pm_effect_v1(
             ));
         }
         if let Some(expected_digest) = target.sha256.as_deref() {
-            let digest = match run_guest_observation(&vec![
+            let digest = match run_privileged_guest_observation(&[
                 "/usr/bin/sha256sum".to_string(),
                 "--".to_string(),
                 target.path.clone(),
@@ -9792,8 +12603,15 @@ fn mac_execute_closed_post_pm_effect_v1(
     action: ManagedActionV1,
     membership_role: &str,
     selected_host_prefix: &str,
+    mapping: &PlatformBootstrapMappingV1,
 ) -> Result<Value> {
-    let plan = mac_post_pm_effect_plan_v1(entry, action, membership_role, selected_host_prefix)?;
+    let plan = mac_post_pm_effect_plan_v1(
+        entry,
+        action,
+        membership_role,
+        selected_host_prefix,
+        Some(mapping),
+    )?;
     mac_execute_post_pm_effect_plan_v1(
         executor, prepared, tool, carrier, principal, lima_home, &plan,
     )
@@ -9896,7 +12714,7 @@ fn mac_fixed_install_steps_v1(principal: &str) -> Vec<(String, ManagedActionV1)>
             ManagedActionV1::Enable,
         ),
         (
-            "mac.lima.guest-service-state(socket)".to_string(),
+            "mac.lima.guest-service-state(service)".to_string(),
             ManagedActionV1::Start,
         ),
     ]
@@ -9983,6 +12801,185 @@ fn mac_validate_fixed_install_completed_receipt_v1(
 }
 
 #[cfg(target_os = "macos")]
+fn mac_revalidate_fixed_install_readiness_v1(
+    carrier: &InstallBootstrapContextCarrierV1,
+    mapping: &PlatformBootstrapMappingV1,
+    manifest: &ManagedArtifactManifestV1,
+) -> Result<Value> {
+    let provenance = mac_load_retained_bootstrap_provenance_v1()?;
+    let tool = Path::new(&provenance.lima_tool.absolute_path);
+    let measured = mac_measure_root_owned_immutable_lima_tool_v1(tool)?;
+    if measured.artifact_sha256 != provenance.lima_tool.image.artifact_sha256
+        || measured.artifact_identity != provenance.lima_tool.image.physical_identity
+        || measured.code_identity != provenance.lima_tool.image.code_identity
+    {
+        bail!("fixed install readiness limactl identity changed");
+    }
+    let principal = mac_resolve_lima_principal_v1(carrier)?;
+    let entry = manifest
+        .entries
+        .iter()
+        .find(|entry| entry.logical_role.0 == "mac.lima.guest-service-state(service)")
+        .ok_or_else(|| anyhow::anyhow!("fixed install readiness lacks service-state role"))?;
+    let plan = mac_post_pm_effect_plan_v1(
+        entry,
+        ManagedActionV1::Start,
+        &format!("mac.lima.guest-membership({})", principal.account),
+        &manifest.selected_host_prefix,
+        Some(mapping),
+    )?;
+    let (observed_state, mut observation) = mac_observe_closed_post_pm_effect_v1(
+        tool,
+        carrier,
+        &principal,
+        &mapping.host_platform_control_root,
+        &plan,
+    )?;
+    match observed_state {
+        MacPostPmEffectObservationStateV1::After => {}
+        MacPostPmEffectObservationStateV1::Ambiguous => {
+            bail!("fixed install readiness is ambiguous; preserving before remediation")
+        }
+        MacPostPmEffectObservationStateV1::Before => {
+            for primitive in &plan.primitives {
+                let arguments = match primitive {
+                    MacPostPmEffectPrimitiveV1::Lima(arguments) => arguments.clone(),
+                    MacPostPmEffectPrimitiveV1::PrivilegedGuest(arguments) => {
+                        mac_fixed_privileged_guest_shell_argv_v1(arguments)
+                    }
+                    _ => bail!(
+                        "fixed install readiness remediation contains a non-command primitive"
+                    ),
+                };
+                mac_run_fixed_lima_command_owned_v1(
+                    tool,
+                    carrier,
+                    &principal,
+                    &mapping.host_platform_control_root,
+                    &arguments,
+                )?;
+            }
+            let (converged, converged_observation) = mac_observe_closed_post_pm_effect_v1(
+                tool,
+                carrier,
+                &principal,
+                &mapping.host_platform_control_root,
+                &plan,
+            )?;
+            mac_require_post_pm_after_state_v1(converged)?;
+            observation = converged_observation;
+        }
+    }
+    Ok(observation)
+}
+
+#[cfg(target_os = "macos")]
+fn mac_measure_fixed_guest_r6_executor_v1(
+    carrier: &InstallBootstrapContextCarrierV1,
+    mapping: &PlatformBootstrapMappingV1,
+    manifest: &ManagedArtifactManifestV1,
+) -> Result<MacR6GuestAarch64ElfIdentityV1> {
+    let provenance = mac_load_retained_bootstrap_provenance_v1()?;
+    let tool = Path::new(&provenance.lima_tool.absolute_path);
+    let measured_tool = mac_measure_root_owned_immutable_lima_tool_v1(tool)?;
+    if measured_tool.artifact_sha256 != provenance.lima_tool.image.artifact_sha256
+        || measured_tool.artifact_identity != provenance.lima_tool.image.physical_identity
+        || measured_tool.code_identity != provenance.lima_tool.image.code_identity
+    {
+        bail!("R6 installed-executor measurement limactl identity changed");
+    }
+    let principal = mac_resolve_lima_principal_v1(carrier)?;
+    let arguments = [
+        "shell",
+        "substrate",
+        "--",
+        "/usr/bin/sudo",
+        "-n",
+        "--",
+        "/usr/bin/python3",
+        "-c",
+        MAC_LIMA_R6_INSTALLED_EXECUTOR_MEASURE_SCRIPT_V1,
+    ];
+    let output = mac_run_fixed_lima_command_v1(
+        tool,
+        carrier,
+        &principal,
+        &mapping.host_platform_control_root,
+        &arguments,
+        None,
+    )?;
+    let value: Value = serde_json::from_str(output.trim())
+        .context("decode fixed installed R6 executor observation")?;
+    let object = value
+        .as_object()
+        .ok_or_else(|| anyhow::anyhow!("R6 installed executor observation is not an object"))?;
+    if object.len() != 5 {
+        bail!("R6 installed executor observation contains unrecognized fields");
+    }
+    let guest_entry = manifest
+        .entries
+        .iter()
+        .find(|entry| entry.logical_role.0 == "mac.lima.publisher-executor")
+        .ok_or_else(|| anyhow::anyhow!("fixed install manifest lacks the R6 guest executor"))?;
+    let metadata = guest_entry
+        .identity
+        .metadata
+        .as_ref()
+        .and_then(Value::as_object)
+        .ok_or_else(|| anyhow::anyhow!("R6 guest executor has no typed metadata"))?;
+    let identity = MacR6GuestAarch64ElfIdentityV1 {
+        logical_role: guest_entry.logical_role.0.clone(),
+        object_format: object
+            .get("object_format")
+            .and_then(Value::as_str)
+            .unwrap_or_default()
+            .to_string(),
+        architecture: object
+            .get("architecture")
+            .and_then(Value::as_str)
+            .unwrap_or_default()
+            .to_string(),
+        target_triple: object
+            .get("target_triple")
+            .and_then(Value::as_str)
+            .unwrap_or_default()
+            .to_string(),
+        sha256: object
+            .get("sha256")
+            .and_then(Value::as_str)
+            .unwrap_or_default()
+            .to_string(),
+        size: object
+            .get("size")
+            .and_then(Value::as_u64)
+            .unwrap_or_default(),
+        manifest_sha256: manifest.manifest_sha256.clone(),
+    };
+    if identity.logical_role != "mac.lima.publisher-executor"
+        || identity.object_format != "ELF"
+        || identity.architecture != "AArch64"
+        || identity.target_triple != "aarch64-unknown-linux-gnu"
+        || Some(identity.sha256.as_str()) != guest_entry.bytes_or_target.as_deref()
+        || metadata
+            .get("artifact_object_format")
+            .and_then(Value::as_str)
+            != Some(identity.object_format.as_str())
+        || metadata
+            .get("artifact_architecture")
+            .and_then(Value::as_str)
+            != Some(identity.architecture.as_str())
+        || metadata
+            .get("artifact_target_triple")
+            .and_then(Value::as_str)
+            != Some(identity.target_triple.as_str())
+        || metadata.get("artifact_size").and_then(Value::as_u64) != Some(identity.size)
+    {
+        bail!("fresh installed R6 executor measurement does not exact-join manifest identity");
+    }
+    Ok(identity)
+}
+
+#[cfg(target_os = "macos")]
 fn mac_execute_fixed_install_sequence_v1(
     executor: &MacManagedArtifactExecutorV1,
     stage_one: &LimaStageOneAuthorizationV1,
@@ -10009,8 +13006,16 @@ fn mac_execute_fixed_install_sequence_v1(
     let steps = mac_fixed_install_steps_v1(&stage_one.requester_principal);
     if steps.iter().any(|(role, action)| {
         !matches!(action, ManagedActionV1::Create)
-            && !(role == "mac.lima.guest-service-state(socket)"
-                && matches!(action, ManagedActionV1::Enable | ManagedActionV1::Start))
+            && !matches!(
+                (role.as_str(), action),
+                (
+                    "mac.lima.guest-service-state(socket)",
+                    ManagedActionV1::Enable
+                ) | (
+                    "mac.lima.guest-service-state(service)",
+                    ManagedActionV1::Start
+                )
+            )
     }) {
         bail!("fixed install plan contains a forbidden ordinary post-PM action");
     }
@@ -10141,6 +13146,7 @@ fn mac_execute_fixed_install_sequence_v1(
             if state.prepared_record.is_some() {
                 bail!("fixed install completed receipt index retains an ambiguous prepared state");
             }
+            mac_revalidate_fixed_install_readiness_v1(carrier, &mapping, &manifest)?;
             return Ok(());
         }
         let (role, action) = &steps[completed];
@@ -10227,6 +13233,8 @@ fn mac_execute_fixed_install_sequence_v1(
             pairing_host_record_generation: None,
             pairing_record_expected_generation_v1: None,
             pairing_host_record_sha256: None,
+            r6_pairing_predecessor_v1: None,
+            r6_pairing_continuation_v1: None,
         };
         let _ = execute_mac_post_pm_action_with_policy_v1(executor, &control, true)?;
     }
@@ -10445,48 +13453,67 @@ fn execute_mac_post_pm_action_with_policy_v1(
         publisher_request.action,
         &membership_role,
         &manifest.selected_host_prefix,
+        Some(&mapping),
     )?;
     let effect_observation = match journal.state.as_str() {
         "Prepared" => {
-            if require_absent_before_first_effect {
-                let (before_state, _) = mac_observe_closed_post_pm_effect_v1(
+            let exact_after_recovery = if require_absent_before_first_effect {
+                let (before_state, before_observation) = mac_observe_closed_post_pm_effect_v1(
                     tool,
                     &carrier,
                     &principal,
                     &mapping.host_platform_control_root,
                     &effect_plan,
                 )?;
-                if before_state != MacPostPmEffectObservationStateV1::Before {
-                    bail!("fixed install step is not in its exact absent before-state");
+                match mac_prepared_first_effect_decision_v1(
+                    &entry.logical_role.0,
+                    publisher_request.action,
+                    before_state,
+                )? {
+                    MacPreparedFirstEffectDecisionV1::Execute => None,
+                    MacPreparedFirstEffectDecisionV1::ConvergeExactAfter => {
+                        // A reboot/socket activation may complete the exact fixed Start after the
+                        // Prepared record but before its journal advances. The strict observer has
+                        // rechecked unit hashes, FragmentPath, socket metadata, and endpoint proof;
+                        // converge this same prepared effect without issuing another mutation.
+                        Some(before_observation)
+                    }
                 }
-            }
+            } else {
+                None
+            };
             mac_persist_post_pm_journal_state_absent_or_exact_v1(
                 executor,
                 prepared,
                 "EffectStarted",
                 None,
             )?;
-            let mutation = mac_execute_closed_post_pm_effect_v1(
-                executor,
-                prepared,
-                tool,
-                &carrier,
-                &principal,
-                &mapping.host_platform_control_root,
-                entry,
-                publisher_request.action,
-                &membership_role,
-                &manifest.selected_host_prefix,
-            )?;
-            let (state_after_effect, observed) = mac_observe_closed_post_pm_effect_v1(
-                tool,
-                &carrier,
-                &principal,
-                &mapping.host_platform_control_root,
-                &effect_plan,
-            )?;
-            mac_require_post_pm_after_state_v1(state_after_effect)?;
-            let observation = json!({"mutation": mutation, "after": observed});
+            let observation = if let Some(observed) = exact_after_recovery {
+                json!({"mutation":{"recovered_exact_after":true}, "after": observed})
+            } else {
+                let mutation = mac_execute_closed_post_pm_effect_v1(
+                    executor,
+                    prepared,
+                    tool,
+                    &carrier,
+                    &principal,
+                    &mapping.host_platform_control_root,
+                    entry,
+                    publisher_request.action,
+                    &membership_role,
+                    &manifest.selected_host_prefix,
+                    &mapping,
+                )?;
+                let (state_after_effect, observed) = mac_observe_closed_post_pm_effect_v1(
+                    tool,
+                    &carrier,
+                    &principal,
+                    &mapping.host_platform_control_root,
+                    &effect_plan,
+                )?;
+                mac_require_post_pm_after_state_v1(state_after_effect)?;
+                json!({"mutation": mutation, "after": observed})
+            };
             mac_persist_post_pm_journal_state_absent_or_exact_v1(
                 executor,
                 prepared,
@@ -10730,86 +13757,148 @@ pub fn publish_mac_action_receipt_v1(
     bail!("single-file macOS action receipt shortcut is not authoritative in R5")
 }
 
-/// The minimum durable record which binds a prior Lima Stage-1 authorization to a host ticket.
-///
-/// It deliberately contains no channel, peer-frame, or mapped-action state. R4 only consumes a
-/// record already written by an independently authorized predecessor; it does not create a guest
-/// or invoke Lima.
+/// Protected, generation-addressed state for the dedicated R6 predecessor producer. The signed
+/// predecessor and continuation are immutable; only this CAS record advances through the closed
+/// pairing state machine.
+#[derive(Debug, Clone, PartialEq, Eq)]
+struct MacR6PairingPredecessorStateV1 {
+    schema_owner: String,
+    schema_version: u32,
+    scope_id: String,
+    predecessor_id: String,
+    predecessor_generation: u64,
+    predecessor_sha256: String,
+    fixed_install_parent_anchor_sha256: String,
+    committed_predecessor_state_sha256: String,
+    state: String,
+    state_revision: u64,
+    pairing_attempt_id: Option<String>,
+    effect_admitted_at_unix_ns: Option<u64>,
+    consumed_record_sha256: Option<String>,
+    previous_state_sha256: Option<String>,
+}
+
+/// Atomic activation boundary for a fully durable predecessor/continuation pair. The signed
+/// documents are preparation material; this protected signed record defines their sole future
+/// 300-second interval and is committed before the state can be observed as Available.
+#[derive(Debug, Clone, PartialEq, Eq)]
+struct MacR6PairingActivationRecordV1 {
+    schema_owner: String,
+    schema_version: u32,
+    scope_id: String,
+    predecessor_id: String,
+    predecessor_generation: u64,
+    predecessor_sha256: String,
+    continuation_sha256: String,
+    predecessor_state_sha256: String,
+    stage_one_sha256: String,
+    issued_at_unix_ns: u64,
+    expires_at_unix_ns: u64,
+    signature: LifecycleSignatureV1,
+}
+
+/// Durable scope-index tombstone for one exact expired unused active record. Replacements may
+/// overwrite this marker, but may never overwrite a live challenge pointer directly.
+#[derive(Debug, Clone, PartialEq, Eq)]
+struct MacR6ConsumedActivePointerV1 {
+    schema_owner: String,
+    schema_version: u32,
+    scope_id: String,
+    challenge_id: String,
+    host_record_sha256: String,
+    predecessor_id: String,
+    predecessor_generation: u64,
+    stage_one_record_sha256: String,
+    consumed_reason: String,
+}
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+enum MacR6PairingActivationDispositionV1 {
+    PromoteAvailable,
+    MissedActivation,
+}
+
+/// Decide the state-CAS side of the two-phase generation activation. The signed activation has a
+/// fixed future not-before; Available must be durable before that boundary so the generation gets
+/// its complete exact 300-second half-open interval. Keeping this decision pure makes delays and
+/// process death between document durability, activation, and state publication testable.
+fn mac_r6_pairing_activation_disposition_v1(
+    issued_at_unix_ns: u64,
+    expires_at_unix_ns: u64,
+    observed_at_unix_ns: u64,
+) -> Result<MacR6PairingActivationDispositionV1> {
+    if expires_at_unix_ns
+        != issued_at_unix_ns
+            .checked_add(R6_PAIRING_TICKET_LIFETIME_NS_V1)
+            .ok_or_else(|| anyhow::anyhow!("R6 activation expiry overflow"))?
+    {
+        bail!("R6 activation does not carry the exact full validity interval");
+    }
+    if observed_at_unix_ns < issued_at_unix_ns {
+        Ok(MacR6PairingActivationDispositionV1::PromoteAvailable)
+    } else {
+        Ok(MacR6PairingActivationDispositionV1::MissedActivation)
+    }
+}
+
+/// Immutable receipt for the successful Available-state CAS. Its digest is the post-CAS anchor
+/// carried by the continuation without making the mutable state record self-referential.
+#[derive(Debug, Clone, PartialEq, Eq)]
+struct MacR6PairingPredecessorCasReceiptV1 {
+    schema_owner: String,
+    schema_version: u32,
+    scope_id: String,
+    predecessor_id: String,
+    predecessor_generation: u64,
+    predecessor_sha256: String,
+    fixed_install_parent_anchor_sha256: String,
+    admitted_state: String,
+    admitted_state_revision: u64,
+}
+
+/// Exact protected predecessor bundle consumed by ticket issue. Stage-1 remains a retained input
+/// for the fixed Lima selector only; it is not the pairing authority or expiry source.
 #[derive(Debug, Clone)]
 struct MacLimaGuestPairingStageOneRecordV1 {
-    scope_id: String,
+    predecessor: MacR6PairingPredecessorV1,
+    continuation: MacR6PairingContinuationV1,
+    predecessor_state: MacR6PairingPredecessorStateV1,
     stage_one: LimaStageOneAuthorizationV1,
-    guest_machine_identity: String,
-    staged_executor_sha256: String,
-    record_generation: u64,
 }
 
-fn parse_mac_lima_guest_pairing_stage_one_record_v1(
-    value: &Value,
-) -> Result<MacLimaGuestPairingStageOneRecordV1> {
-    let object = value
-        .as_object()
-        .ok_or_else(|| anyhow::anyhow!("protected Lima Stage-1 record must be an object"))?;
-    const KEYS: [&str; 7] = [
-        "schema_owner",
-        "schema_version",
-        "scope_id",
-        "stage_one",
-        "guest_machine_identity",
-        "staged_executor_sha256",
-        "record_generation",
-    ];
-    if object.len() != KEYS.len() || KEYS.iter().any(|key| !object.contains_key(*key)) {
-        bail!("protected Lima Stage-1 record has unknown or missing fields");
-    }
-    if object.get("schema_owner").and_then(Value::as_str)
-        != Some("substrate.mac-lima-guest-pairing-stage-one-record")
-        || object.get("schema_version").and_then(Value::as_u64) != Some(1)
+fn canonical_mac_r6_pairing_predecessor_cas_receipt_v1(
+    receipt: &MacR6PairingPredecessorCasReceiptV1,
+) -> Result<Vec<u8>> {
+    if receipt.schema_owner != "substrate.mac-r6-pairing-predecessor-cas-receipt"
+        || receipt.schema_version != 1
+        || receipt.admitted_state != "Available"
+        || receipt.admitted_state_revision != 1
     {
-        bail!("protected Lima Stage-1 record schema mismatch");
+        bail!("R6 predecessor CAS receipt schema or admitted state is invalid");
     }
-    Ok(MacLimaGuestPairingStageOneRecordV1 {
-        scope_id: object
-            .get("scope_id")
-            .and_then(Value::as_str)
-            .ok_or_else(|| anyhow::anyhow!("protected Lima Stage-1 record scope is invalid"))?
-            .to_string(),
-        stage_one: serde_json::from_value(
-            object.get("stage_one").cloned().ok_or_else(|| {
-                anyhow::anyhow!("protected Lima Stage-1 record lacks authorization")
-            })?,
-        )
-        .context("decode protected Lima Stage-1 authorization")?,
-        guest_machine_identity: object
-            .get("guest_machine_identity")
-            .and_then(Value::as_str)
-            .ok_or_else(|| anyhow::anyhow!("protected Lima Stage-1 machine identity is invalid"))?
-            .to_string(),
-        staged_executor_sha256: object
-            .get("staged_executor_sha256")
-            .and_then(Value::as_str)
-            .ok_or_else(|| anyhow::anyhow!("protected Lima Stage-1 artifact digest is invalid"))?
-            .to_string(),
-        record_generation: object
-            .get("record_generation")
-            .and_then(Value::as_u64)
-            .ok_or_else(|| anyhow::anyhow!("protected Lima Stage-1 generation is invalid"))?,
-    })
-}
-
-fn canonical_mac_lima_guest_pairing_stage_one_record_value_v1(
-    record: &MacLimaGuestPairingStageOneRecordV1,
-) -> Result<Value> {
-    Ok(json!({
-        "schema_owner": "substrate.mac-lima-guest-pairing-stage-one-record",
-        "schema_version": 1,
-        "scope_id": record.scope_id,
-        "stage_one": serde_json::to_value(&record.stage_one)
-            .context("encode protected Lima Stage-1 authorization")?,
-        "guest_machine_identity": record.guest_machine_identity,
-        "staged_executor_sha256": record.staged_executor_sha256,
-        "record_generation": record.record_generation,
+    mac_require_uuid_v7_component_v1(&receipt.scope_id, "R6 predecessor CAS receipt scope")?;
+    mac_require_uuid_v7_component_v1(&receipt.predecessor_id, "R6 predecessor CAS receipt ID")?;
+    if receipt.predecessor_generation == 0 {
+        bail!("R6 predecessor CAS receipt generation is invalid");
+    }
+    for digest in [
+        &receipt.predecessor_sha256,
+        &receipt.fixed_install_parent_anchor_sha256,
+    ] {
+        require_lower_hex_digest_mac_v1(digest, "R6 predecessor CAS receipt digest")?;
+    }
+    serde_json::to_vec(&json!({
+        "schema_owner": receipt.schema_owner,
+        "schema_version": receipt.schema_version,
+        "scope_id": receipt.scope_id,
+        "predecessor_id": receipt.predecessor_id,
+        "predecessor_generation": receipt.predecessor_generation,
+        "predecessor_sha256": receipt.predecessor_sha256,
+        "fixed_install_parent_anchor_sha256": receipt.fixed_install_parent_anchor_sha256,
+        "admitted_state": receipt.admitted_state,
+        "admitted_state_revision": receipt.admitted_state_revision,
     }))
+    .context("encode canonical R6 predecessor CAS receipt")
 }
 
 #[cfg(target_os = "macos")]
@@ -10911,8 +14000,69 @@ fn mac_keychain_signing_key_tag_v1(scope_id: &str) -> Result<Vec<u8>> {
     Ok(mac_keychain_account_v1(scope_id, "signing-key")?.into_bytes())
 }
 
-fn mac_keychain_stage_one_record_account_v1(scope_id: &str) -> Result<String> {
-    mac_keychain_account_v1(scope_id, "lima-guest-pairing-stage-one")
+fn mac_keychain_r6_pairing_predecessor_state_account_v1(scope_id: &str) -> Result<String> {
+    mac_keychain_account_v1(scope_id, "r6-pairing-predecessor-state")
+}
+
+fn mac_keychain_r6_pairing_predecessor_account_v1(
+    scope_id: &str,
+    generation: u64,
+) -> Result<String> {
+    if generation == 0 {
+        bail!("R6 predecessor account generation is invalid");
+    }
+    mac_keychain_account_v1(scope_id, &format!("r6-pairing-predecessor-{generation}"))
+}
+
+fn mac_keychain_r6_pairing_continuation_account_v1(
+    scope_id: &str,
+    generation: u64,
+) -> Result<String> {
+    if generation == 0 {
+        bail!("R6 continuation account generation is invalid");
+    }
+    mac_keychain_account_v1(scope_id, &format!("r6-pairing-continuation-{generation}"))
+}
+
+fn mac_keychain_r6_pairing_tombstone_account_v1(scope_id: &str, generation: u64) -> Result<String> {
+    if generation == 0 {
+        bail!("R6 tombstone account generation is invalid");
+    }
+    mac_keychain_account_v1(scope_id, &format!("r6-pairing-tombstone-{generation}"))
+}
+
+fn mac_keychain_r6_pairing_missed_activation_account_v1(
+    scope_id: &str,
+    generation: u64,
+) -> Result<String> {
+    if generation == 0 {
+        bail!("R6 missed-activation account generation is invalid");
+    }
+    mac_keychain_account_v1(
+        scope_id,
+        &format!("r6-pairing-missed-activation-{generation}"),
+    )
+}
+
+fn mac_keychain_r6_pairing_activation_account_v1(
+    scope_id: &str,
+    generation: u64,
+) -> Result<String> {
+    if generation == 0 {
+        bail!("R6 activation account generation is invalid");
+    }
+    mac_keychain_account_v1(scope_id, &format!("r6-pairing-activation-{generation}"))
+}
+
+fn mac_keychain_r6_pairing_operator_launch_account_v1(
+    scope_id: &str,
+    challenge_id: &str,
+) -> Result<String> {
+    mac_require_uuid_v7_component_v1(challenge_id, "R6 operator launch challenge")?;
+    mac_keychain_account_v1(
+        scope_id,
+        &format!("r6-pairing-operator-launch-{challenge_id}"),
+    )
 }
 
 fn mac_keychain_stage_one_capsule_account_v1(scope_id: &str) -> Result<String> {
@@ -11341,47 +14491,653 @@ fn canonical_mac_lima_guest_pairing_stage_one_record_v1(
     record: &MacLimaGuestPairingStageOneRecordV1,
 ) -> Result<Vec<u8>> {
     validate_mac_lima_guest_pairing_stage_one_record_v1(record)?;
-    serde_json::to_vec(&canonical_mac_lima_guest_pairing_stage_one_record_value_v1(
-        record,
-    )?)
-    .context("encode canonical protected Lima Stage-1 record")
+    // This is the production commitment payload. It must include every immutable component,
+    // rather than delegating to the predecessor-only canonicalizer.
+    let predecessor = serde_json::to_value(&record.predecessor)
+        .context("encode R6 predecessor for complete bundle")?;
+    let continuation = serde_json::to_value(&record.continuation)
+        .context("encode R6 continuation for complete bundle")?;
+    let predecessor_state: Value = serde_json::from_slice(
+        &canonical_mac_r6_pairing_predecessor_state_v1(&record.predecessor_state)?,
+    )
+    .context("decode canonical R6 predecessor state for complete bundle")?;
+    let stage_one = serde_json::to_value(&record.stage_one)
+        .context("encode R6 Stage-1 authorization for complete bundle")?;
+    canonical_mac_lima_guest_pairing_stage_one_bundle_v1(
+        &predecessor,
+        &continuation,
+        &predecessor_state,
+        &stage_one,
+    )
+}
+
+fn canonical_mac_lima_guest_pairing_stage_one_bundle_v1(
+    predecessor: &Value,
+    continuation: &Value,
+    predecessor_state: &Value,
+    stage_one: &Value,
+) -> Result<Vec<u8>> {
+    serde_json::to_vec(&json!({
+        "continuation": continuation,
+        "predecessor": predecessor,
+        "predecessor_state": predecessor_state,
+        "stage_one": stage_one,
+    }))
+    .context("encode complete canonical R6 Stage-1 bundle")
+}
+
+fn require_lower_hex_digest_mac_v1(value: &str, label: &str) -> Result<()> {
+    if value.len() != 64
+        || !value
+            .bytes()
+            .all(|byte| byte.is_ascii_hexdigit() && !byte.is_ascii_uppercase())
+    {
+        bail!("{label} must be a lowercase SHA-256 digest");
+    }
+    Ok(())
+}
+
+fn canonical_mac_r6_pairing_predecessor_state_v1(
+    state: &MacR6PairingPredecessorStateV1,
+) -> Result<Vec<u8>> {
+    if state.schema_owner != "substrate.mac-r6-pairing-predecessor-state"
+        || state.schema_version != 1
+        || state.predecessor_generation == 0
+        || state.state_revision == 0
+    {
+        bail!("R6 predecessor state schema, generation, or revision is invalid");
+    }
+    mac_require_uuid_v7_component_v1(&state.scope_id, "R6 predecessor state scope")?;
+    mac_require_uuid_v7_component_v1(&state.predecessor_id, "R6 predecessor state ID")?;
+    for digest in [
+        &state.predecessor_sha256,
+        &state.fixed_install_parent_anchor_sha256,
+        &state.committed_predecessor_state_sha256,
+    ] {
+        require_lower_hex_digest_mac_v1(digest, "R6 predecessor state digest")?;
+    }
+    if state.state_revision == 1 && state.previous_state_sha256.is_some()
+        || state.state_revision > 1 && state.previous_state_sha256.is_none()
+    {
+        bail!("R6 predecessor state previous-state chain is invalid");
+    }
+    if let Some(previous) = &state.previous_state_sha256 {
+        require_lower_hex_digest_mac_v1(previous, "R6 predecessor previous state")?;
+    }
+    match state.state.as_str() {
+        "Available"
+            if state.pairing_attempt_id.is_none()
+                && state.effect_admitted_at_unix_ns.is_none()
+                && state.consumed_record_sha256.is_none() => {}
+        "PairingEffectPrepared"
+            if state.pairing_attempt_id.is_some()
+                && state.effect_admitted_at_unix_ns.is_none()
+                && state.consumed_record_sha256.is_none() => {}
+        "PairingEffectStarted"
+            if state.pairing_attempt_id.is_some()
+                && state.effect_admitted_at_unix_ns.is_some()
+                && state.consumed_record_sha256.is_none() => {}
+        "Consumed"
+            if state.pairing_attempt_id.is_some()
+                && state.effect_admitted_at_unix_ns.is_some()
+                && state.consumed_record_sha256.is_some() => {}
+        "Superseded"
+            if state.pairing_attempt_id.is_none()
+                && state.effect_admitted_at_unix_ns.is_none()
+                && state.consumed_record_sha256.is_none() => {}
+        _ => bail!("R6 predecessor state phase or evidence is invalid"),
+    }
+    if let Some(attempt_id) = &state.pairing_attempt_id {
+        mac_require_uuid_v7_component_v1(attempt_id, "R6 predecessor pairing attempt")?;
+    }
+    if let Some(consumed) = &state.consumed_record_sha256 {
+        require_lower_hex_digest_mac_v1(consumed, "R6 consumed pairing record")?;
+    }
+    if state.effect_admitted_at_unix_ns == Some(0) {
+        bail!("R6 predecessor durable effect admission time is invalid");
+    }
+    serde_json::to_vec(&json!({
+        "schema_owner": state.schema_owner,
+        "schema_version": state.schema_version,
+        "scope_id": state.scope_id,
+        "predecessor_id": state.predecessor_id,
+        "predecessor_generation": state.predecessor_generation,
+        "predecessor_sha256": state.predecessor_sha256,
+        "fixed_install_parent_anchor_sha256": state.fixed_install_parent_anchor_sha256,
+        "committed_predecessor_state_sha256": state.committed_predecessor_state_sha256,
+        "state": state.state,
+        "state_revision": state.state_revision,
+        "pairing_attempt_id": state.pairing_attempt_id,
+        "effect_admitted_at_unix_ns": state.effect_admitted_at_unix_ns,
+        "consumed_record_sha256": state.consumed_record_sha256,
+        "previous_state_sha256": state.previous_state_sha256,
+    }))
+    .context("encode canonical R6 predecessor state")
+}
+
+fn parse_optional_string_field_mac_v1(
+    object: &serde_json::Map<String, Value>,
+    key: &str,
+) -> Result<Option<String>> {
+    match object.get(key) {
+        Some(Value::Null) => Ok(None),
+        Some(Value::String(value)) => Ok(Some(value.clone())),
+        _ => bail!("R6 predecessor state field {key} is invalid"),
+    }
+}
+
+fn parse_mac_r6_pairing_predecessor_state_v1(
+    bytes: &[u8],
+) -> Result<MacR6PairingPredecessorStateV1> {
+    let value: Value =
+        serde_json::from_slice(bytes).context("decode protected R6 predecessor state JSON")?;
+    let object = value
+        .as_object()
+        .ok_or_else(|| anyhow::anyhow!("protected R6 predecessor state is not an object"))?;
+    const KEYS: [&str; 14] = [
+        "schema_owner",
+        "schema_version",
+        "scope_id",
+        "predecessor_id",
+        "predecessor_generation",
+        "predecessor_sha256",
+        "fixed_install_parent_anchor_sha256",
+        "committed_predecessor_state_sha256",
+        "state",
+        "state_revision",
+        "pairing_attempt_id",
+        "effect_admitted_at_unix_ns",
+        "consumed_record_sha256",
+        "previous_state_sha256",
+    ];
+    if object.len() != KEYS.len() || KEYS.iter().any(|key| !object.contains_key(*key)) {
+        bail!("protected R6 predecessor state has unknown or missing fields");
+    }
+    let string = |key: &str| -> Result<String> {
+        object
+            .get(key)
+            .and_then(Value::as_str)
+            .map(str::to_string)
+            .ok_or_else(|| anyhow::anyhow!("R6 predecessor state field {key} is invalid"))
+    };
+    Ok(MacR6PairingPredecessorStateV1 {
+        schema_owner: string("schema_owner")?,
+        schema_version: u32::try_from(
+            object
+                .get("schema_version")
+                .and_then(Value::as_u64)
+                .ok_or_else(|| anyhow::anyhow!("R6 predecessor state version is invalid"))?,
+        )
+        .context("R6 predecessor state version exceeds u32")?,
+        scope_id: string("scope_id")?,
+        predecessor_id: string("predecessor_id")?,
+        predecessor_generation: object
+            .get("predecessor_generation")
+            .and_then(Value::as_u64)
+            .ok_or_else(|| anyhow::anyhow!("R6 predecessor state generation is invalid"))?,
+        predecessor_sha256: string("predecessor_sha256")?,
+        fixed_install_parent_anchor_sha256: string("fixed_install_parent_anchor_sha256")?,
+        committed_predecessor_state_sha256: string("committed_predecessor_state_sha256")?,
+        state: string("state")?,
+        state_revision: object
+            .get("state_revision")
+            .and_then(Value::as_u64)
+            .ok_or_else(|| anyhow::anyhow!("R6 predecessor state revision is invalid"))?,
+        pairing_attempt_id: parse_optional_string_field_mac_v1(object, "pairing_attempt_id")?,
+        effect_admitted_at_unix_ns: match object.get("effect_admitted_at_unix_ns") {
+            Some(Value::Null) => None,
+            Some(Value::Number(value)) => Some(value.as_u64().ok_or_else(|| {
+                anyhow::anyhow!("R6 predecessor state effect admission time is invalid")
+            })?),
+            _ => bail!("R6 predecessor state effect admission time is invalid"),
+        },
+        consumed_record_sha256: parse_optional_string_field_mac_v1(
+            object,
+            "consumed_record_sha256",
+        )?,
+        previous_state_sha256: parse_optional_string_field_mac_v1(object, "previous_state_sha256")?,
+    })
 }
 
 fn validate_mac_lima_guest_pairing_stage_one_record_v1(
     record: &MacLimaGuestPairingStageOneRecordV1,
 ) -> Result<()> {
-    mac_require_uuid_v7_component_v1(&record.scope_id, "protected Lima Stage-1 scope")?;
+    validate_mac_r6_pairing_predecessor_v1(&record.predecessor)?;
+    validate_mac_r6_pairing_continuation_v1(&record.continuation, &record.predecessor)?;
     validate_lima_stage_one_authorization_v1(&record.stage_one)?;
-    if !record.stage_one.expected_absent
-        || record.guest_machine_identity.is_empty()
-        || record.guest_machine_identity.contains(['\0', '\n', '\r'])
-        || record.staged_executor_sha256.len() != 64
-        || !record
-            .staged_executor_sha256
-            .bytes()
-            .all(|byte| byte.is_ascii_hexdigit() && !byte.is_ascii_uppercase())
-        || record.record_generation == 0
+    let state_bytes = canonical_mac_r6_pairing_predecessor_state_v1(&record.predecessor_state)?;
+    let predecessor_sha256 = sha256_hex_bootstrap_v1(&canonical_mac_r6_pairing_predecessor_v1(
+        &record.predecessor,
+    )?);
+    let receipt = MacR6PairingPredecessorCasReceiptV1 {
+        schema_owner: "substrate.mac-r6-pairing-predecessor-cas-receipt".to_string(),
+        schema_version: 1,
+        scope_id: record.predecessor.scope_id.clone(),
+        predecessor_id: record.predecessor.predecessor_id.clone(),
+        predecessor_generation: record.predecessor.predecessor_generation,
+        predecessor_sha256: predecessor_sha256.clone(),
+        fixed_install_parent_anchor_sha256: record
+            .predecessor
+            .fixed_install_parent_anchor_sha256
+            .clone(),
+        admitted_state: "Available".to_string(),
+        admitted_state_revision: 1,
+    };
+    let receipt_sha256 = sha256_hex_bootstrap_v1(
+        &canonical_mac_r6_pairing_predecessor_cas_receipt_v1(&receipt)?,
+    );
+    if record.predecessor_state.scope_id != record.predecessor.scope_id
+        || record.predecessor_state.predecessor_id != record.predecessor.predecessor_id
+        || record.predecessor_state.predecessor_generation
+            != record.predecessor.predecessor_generation
+        || record.predecessor_state.predecessor_sha256 != predecessor_sha256
+        || record.predecessor_state.fixed_install_parent_anchor_sha256
+            != record.predecessor.fixed_install_parent_anchor_sha256
+        || record.predecessor_state.committed_predecessor_state_sha256 != receipt_sha256
+        || record.continuation.committed_predecessor_state_sha256 != receipt_sha256
+        || record.stage_one.successor_template.scope_id != record.predecessor.scope_id
+        || !record.stage_one.expected_absent
+        || state_bytes.is_empty()
     {
-        bail!("protected Lima Stage-1 record is malformed");
+        bail!("protected R6 predecessor bundle is malformed or not exact-joined");
     }
     Ok(())
+}
+
+fn canonical_mac_r6_pairing_activation_record_v1(
+    record: &MacR6PairingActivationRecordV1,
+) -> Result<Vec<u8>> {
+    if record.schema_owner != "substrate.mac-r6-pairing-activation"
+        || record.schema_version != 1
+        || record.predecessor_generation == 0
+    {
+        bail!("R6 activation record schema is invalid");
+    }
+    mac_r6_pairing_activation_disposition_v1(
+        record.issued_at_unix_ns,
+        record.expires_at_unix_ns,
+        record.issued_at_unix_ns,
+    )?;
+    mac_require_uuid_v7_component_v1(&record.scope_id, "R6 activation scope")?;
+    mac_require_uuid_v7_component_v1(&record.predecessor_id, "R6 activation predecessor")?;
+    require_lower_hex_digest_mac_v1(&record.predecessor_sha256, "R6 activation predecessor")?;
+    require_lower_hex_digest_mac_v1(&record.continuation_sha256, "R6 activation continuation")?;
+    require_lower_hex_digest_mac_v1(
+        &record.predecessor_state_sha256,
+        "R6 activation predecessor state",
+    )?;
+    require_lower_hex_digest_mac_v1(&record.stage_one_sha256, "R6 activation Stage-1")?;
+    if record.signature.algorithm != "ecdsa-p256-sha256-p1363-low-s-v1" {
+        bail!("R6 activation record signer algorithm is invalid");
+    }
+    let value = mac_r6_pairing_activation_record_value_v1(record);
+    substrate_common::verify_lifecycle_signature_v1(
+        &record.schema_owner,
+        &value,
+        &record.signature,
+    )?;
+    serde_json::to_vec(&value).context("encode canonical R6 activation record")
+}
+
+fn mac_r6_pairing_activation_record_value_v1(record: &MacR6PairingActivationRecordV1) -> Value {
+    json!({
+        "schema_owner": record.schema_owner,
+        "schema_version": record.schema_version,
+        "scope_id": record.scope_id,
+        "predecessor_id": record.predecessor_id,
+        "predecessor_generation": record.predecessor_generation,
+        "predecessor_sha256": record.predecessor_sha256,
+        "continuation_sha256": record.continuation_sha256,
+        "predecessor_state_sha256": record.predecessor_state_sha256,
+        "stage_one_sha256": record.stage_one_sha256,
+        "issued_at_unix_ns": record.issued_at_unix_ns,
+        "expires_at_unix_ns": record.expires_at_unix_ns,
+        "signature": record.signature,
+    })
+}
+
+fn mac_sign_r6_pairing_activation_record_v1(
+    scope_id: &str,
+    record: &MacR6PairingActivationRecordV1,
+) -> Result<LifecycleSignatureV1> {
+    let spki_der = mac_open_system_keychain_p256_spki_der_v1(scope_id)?;
+    let public_key = base64url_encode_mac_v1(&spki_der);
+    let unsigned = MacR6PairingActivationRecordV1 {
+        signature: LifecycleSignatureV1 {
+            algorithm: "ecdsa-p256-sha256-p1363-low-s-v1".to_string(),
+            public_key: public_key.clone(),
+            signature: String::new(),
+        },
+        ..record.clone()
+    };
+    let payload = canonical_lifecycle_signature_payload_v1(
+        &unsigned.schema_owner,
+        &mac_r6_pairing_activation_record_value_v1(&unsigned),
+    )?;
+    Ok(LifecycleSignatureV1 {
+        algorithm: "ecdsa-p256-sha256-p1363-low-s-v1".to_string(),
+        public_key,
+        signature: base64url_encode_mac_v1(&mac_system_keychain_sign_p1363_low_s_v1(
+            scope_id, &payload,
+        )?),
+    })
+}
+
+fn open_mac_r6_pairing_activation_record_v1(
+    predecessor: &MacR6PairingPredecessorV1,
+    continuation: &MacR6PairingContinuationV1,
+    predecessor_state: &MacR6PairingPredecessorStateV1,
+    stage_one: &LimaStageOneAuthorizationV1,
+) -> Result<Option<(MacR6PairingActivationRecordV1, Vec<u8>)>> {
+    let account = mac_keychain_r6_pairing_activation_account_v1(
+        &predecessor.scope_id,
+        predecessor.predecessor_generation,
+    )?;
+    let Some(bytes) = mac_keychain_read_item_v1(MAC_KEYCHAIN_SERVICE_V1, &account)? else {
+        return Ok(None);
+    };
+    let value: Value =
+        serde_json::from_slice(&bytes).context("decode protected R6 activation record")?;
+    let object = value
+        .as_object()
+        .ok_or_else(|| anyhow::anyhow!("protected R6 activation record is not an object"))?;
+    if object.len() != 12 {
+        bail!("protected R6 activation record has unknown or missing fields");
+    }
+    let string = |field: &str| -> Result<String> {
+        object
+            .get(field)
+            .and_then(Value::as_str)
+            .map(ToOwned::to_owned)
+            .ok_or_else(|| anyhow::anyhow!("R6 activation record lacks string field {field}"))
+    };
+    let u64_field = |field: &str| -> Result<u64> {
+        object
+            .get(field)
+            .and_then(Value::as_u64)
+            .ok_or_else(|| anyhow::anyhow!("R6 activation record lacks u64 field {field}"))
+    };
+    let record = MacR6PairingActivationRecordV1 {
+        schema_owner: string("schema_owner")?,
+        schema_version: u32::try_from(u64_field("schema_version")?)
+            .context("R6 activation schema version overflow")?,
+        scope_id: string("scope_id")?,
+        predecessor_id: string("predecessor_id")?,
+        predecessor_generation: u64_field("predecessor_generation")?,
+        predecessor_sha256: string("predecessor_sha256")?,
+        continuation_sha256: string("continuation_sha256")?,
+        predecessor_state_sha256: string("predecessor_state_sha256")?,
+        stage_one_sha256: string("stage_one_sha256")?,
+        issued_at_unix_ns: u64_field("issued_at_unix_ns")?,
+        expires_at_unix_ns: u64_field("expires_at_unix_ns")?,
+        signature: serde_json::from_value(
+            object
+                .get("signature")
+                .cloned()
+                .ok_or_else(|| anyhow::anyhow!("R6 activation record lacks signature"))?,
+        )
+        .context("decode R6 activation signature")?,
+    };
+    if canonical_mac_r6_pairing_activation_record_v1(&record)? != bytes
+        || record.scope_id != predecessor.scope_id
+        || record.predecessor_id != predecessor.predecessor_id
+        || record.predecessor_generation != predecessor.predecessor_generation
+        || record.predecessor_sha256
+            != sha256_hex_bootstrap_v1(&canonical_mac_r6_pairing_predecessor_v1(predecessor)?)
+        || record.continuation_sha256
+            != sha256_hex_bootstrap_v1(&canonical_mac_r6_pairing_continuation_v1(
+                continuation,
+                predecessor,
+            )?)
+        || record.predecessor_state_sha256
+            != sha256_hex_bootstrap_v1(&canonical_mac_r6_pairing_predecessor_state_v1(
+                &mac_r6_pairing_initial_available_state_v1(predecessor_state),
+            )?)
+        || record.stage_one_sha256
+            != sha256_hex_bootstrap_v1(&canonical_lima_stage_one_authorization_v1(stage_one)?)
+        || record.signature.public_key != predecessor.signature.public_key
+    {
+        bail!("protected R6 activation record does not exact-bind prepared documents");
+    }
+    Ok(Some((record, bytes)))
+}
+
+fn open_mac_r6_pairing_predecessor_state_v1(
+    scope_id: &str,
+) -> Result<Option<(MacR6PairingPredecessorStateV1, Vec<u8>)>> {
+    let account = mac_keychain_r6_pairing_predecessor_state_account_v1(scope_id)?;
+    let Some(bytes) = mac_keychain_read_item_v1(MAC_KEYCHAIN_SERVICE_V1, &account)? else {
+        return Ok(None);
+    };
+    let state = parse_mac_r6_pairing_predecessor_state_v1(&bytes)?;
+    if state.scope_id != scope_id || canonical_mac_r6_pairing_predecessor_state_v1(&state)? != bytes
+    {
+        bail!("protected R6 predecessor state does not match its exact account");
+    }
+    Ok(Some((state, bytes)))
+}
+
+/// Derive the only producer-side replacement transition. PairingEffectStarted and Consumed are
+/// deliberately excluded: expiry can replace only an unused Available predecessor, and equality
+/// at the deadline is expired under the half-open validity interval.
+fn derive_mac_r6_pairing_expired_unused_tombstone_v1(
+    current: &MacR6PairingPredecessorStateV1,
+    expires_at_unix_ns: u64,
+    now_unix_ns: u64,
+) -> Result<MacR6PairingPredecessorStateV1> {
+    if current.state != "Available" || now_unix_ns < expires_at_unix_ns {
+        bail!("R6 predecessor replacement requires an expired unused Available generation");
+    }
+    let current_bytes = canonical_mac_r6_pairing_predecessor_state_v1(current)?;
+    let tombstone = MacR6PairingPredecessorStateV1 {
+        state: "Superseded".to_string(),
+        state_revision: current
+            .state_revision
+            .checked_add(1)
+            .ok_or_else(|| anyhow::anyhow!("R6 predecessor tombstone revision overflow"))?,
+        pairing_attempt_id: None,
+        effect_admitted_at_unix_ns: None,
+        consumed_record_sha256: None,
+        previous_state_sha256: Some(sha256_hex_bootstrap_v1(&current_bytes)),
+        ..current.clone()
+    };
+    canonical_mac_r6_pairing_predecessor_state_v1(&tombstone)?;
+    Ok(tombstone)
+}
+
+fn derive_mac_r6_pairing_missed_activation_tombstone_v1(
+    current: &MacR6PairingPredecessorStateV1,
+    issued_at_unix_ns: u64,
+    committed_at_unix_ns: u64,
+) -> Result<MacR6PairingPredecessorStateV1> {
+    if current.state != "Available" || committed_at_unix_ns < issued_at_unix_ns {
+        bail!("R6 missed-activation tombstone requires a late Available commit");
+    }
+    let current_bytes = canonical_mac_r6_pairing_predecessor_state_v1(current)?;
+    let tombstone = MacR6PairingPredecessorStateV1 {
+        state: "Superseded".to_string(),
+        state_revision: current
+            .state_revision
+            .checked_add(1)
+            .ok_or_else(|| anyhow::anyhow!("R6 missed-activation revision overflow"))?,
+        pairing_attempt_id: None,
+        effect_admitted_at_unix_ns: None,
+        consumed_record_sha256: None,
+        previous_state_sha256: Some(sha256_hex_bootstrap_v1(&current_bytes)),
+        ..current.clone()
+    };
+    canonical_mac_r6_pairing_predecessor_state_v1(&tombstone)?;
+    Ok(tombstone)
+}
+
+fn derive_mac_r6_pairing_predecessor_state_transition_v1(
+    current: &MacR6PairingPredecessorStateV1,
+    next_state: &str,
+    pairing_attempt_id: Option<&str>,
+    effect_admitted_at_unix_ns: Option<u64>,
+    consumed_record_sha256: Option<&str>,
+) -> Result<MacR6PairingPredecessorStateV1> {
+    let allowed = matches!(
+        (current.state.as_str(), next_state),
+        ("Available", "PairingEffectPrepared")
+            | ("PairingEffectPrepared", "PairingEffectStarted")
+            | ("PairingEffectPrepared", "Available")
+            | ("PairingEffectStarted", "Consumed")
+    );
+    if !allowed {
+        bail!("R6 predecessor state transition is not in the closed state machine");
+    }
+    if matches!(
+        current.state.as_str(),
+        "PairingEffectPrepared" | "PairingEffectStarted"
+    ) && pairing_attempt_id != current.pairing_attempt_id.as_deref()
+    {
+        bail!("R6 predecessor transition changed its admitted pairing attempt");
+    }
+    let current_bytes = canonical_mac_r6_pairing_predecessor_state_v1(current)?;
+    let (next_attempt, next_admitted_at, next_consumed) =
+        match next_state {
+            "PairingEffectPrepared" => (
+                Some(
+                    pairing_attempt_id
+                        .ok_or_else(|| anyhow::anyhow!("R6 effect preparation lacks attempt ID"))?
+                        .to_string(),
+                ),
+                None,
+                None,
+            ),
+            "PairingEffectStarted" => (
+                current.pairing_attempt_id.clone(),
+                Some(effect_admitted_at_unix_ns.ok_or_else(|| {
+                    anyhow::anyhow!("R6 effect start lacks durable admission time")
+                })?),
+                None,
+            ),
+            "Consumed" => (
+                current.pairing_attempt_id.clone(),
+                current.effect_admitted_at_unix_ns,
+                Some(
+                    consumed_record_sha256
+                        .ok_or_else(|| anyhow::anyhow!("R6 consumption lacks record digest"))?
+                        .to_string(),
+                ),
+            ),
+            "Available" => (None, None, None),
+            _ => unreachable!(),
+        };
+    let next = MacR6PairingPredecessorStateV1 {
+        state: next_state.to_string(),
+        state_revision: current
+            .state_revision
+            .checked_add(1)
+            .ok_or_else(|| anyhow::anyhow!("R6 predecessor state revision overflow"))?,
+        pairing_attempt_id: next_attempt,
+        effect_admitted_at_unix_ns: next_admitted_at,
+        consumed_record_sha256: next_consumed,
+        previous_state_sha256: Some(sha256_hex_bootstrap_v1(&current_bytes)),
+        ..current.clone()
+    };
+    canonical_mac_r6_pairing_predecessor_state_v1(&next)?;
+    Ok(next)
+}
+
+fn compare_and_swap_mac_r6_pairing_predecessor_state_v1(
+    current: &MacR6PairingPredecessorStateV1,
+    next: &MacR6PairingPredecessorStateV1,
+) -> Result<()> {
+    let account = mac_keychain_r6_pairing_predecessor_state_account_v1(&current.scope_id)?;
+    let observed = open_mac_r6_pairing_predecessor_state_v1(&current.scope_id)?
+        .ok_or_else(|| anyhow::anyhow!("R6 predecessor state disappeared before CAS"))?;
+    if observed.0 != *current {
+        bail!("R6 predecessor state compare-and-swap conflict");
+    }
+    let current_bytes = canonical_mac_r6_pairing_predecessor_state_v1(current)?;
+    let next_bytes = canonical_mac_r6_pairing_predecessor_state_v1(next)?;
+    mac_keychain_compare_and_swap_item_v1(
+        MAC_KEYCHAIN_SERVICE_V1,
+        &account,
+        Some(&current_bytes),
+        &next_bytes,
+    )
+}
+
+fn persist_mac_r6_pairing_predecessor_state_transition_v1(
+    scope_id: &str,
+    predecessor_id: &str,
+    predecessor_generation: u64,
+    next_state: &str,
+    pairing_attempt_id: Option<&str>,
+    effect_admitted_at_unix_ns: Option<u64>,
+    consumed_record_sha256: Option<&str>,
+) -> Result<MacR6PairingPredecessorStateV1> {
+    let account = mac_keychain_r6_pairing_predecessor_state_account_v1(scope_id)?;
+    let _guard = mac_keychain_durable_cas_guard_v1(&account)?;
+    let current = open_mac_r6_pairing_predecessor_state_v1(scope_id)?
+        .ok_or_else(|| anyhow::anyhow!("R6 predecessor state is absent"))?
+        .0;
+    if current.predecessor_id != predecessor_id
+        || current.predecessor_generation != predecessor_generation
+    {
+        bail!("R6 predecessor state transition crosses a generation");
+    }
+    let next = derive_mac_r6_pairing_predecessor_state_transition_v1(
+        &current,
+        next_state,
+        pairing_attempt_id,
+        effect_admitted_at_unix_ns,
+        consumed_record_sha256,
+    )?;
+    compare_and_swap_mac_r6_pairing_predecessor_state_v1(&current, &next)?;
+    Ok(next)
 }
 
 fn open_mac_lima_guest_pairing_stage_one_record_v1(
     scope_id: &str,
 ) -> Result<Option<MacLimaGuestPairingStageOneRecordV1>> {
-    let account = mac_keychain_stage_one_record_account_v1(scope_id)?;
-    let Some(bytes) = mac_keychain_read_item_v1(MAC_KEYCHAIN_SERVICE_V1, &account)? else {
+    let Some((predecessor_state, _)) = open_mac_r6_pairing_predecessor_state_v1(scope_id)? else {
         return Ok(None);
     };
-    let value: Value =
-        serde_json::from_slice(&bytes).context("decode protected Lima Stage-1 record")?;
-    let record = parse_mac_lima_guest_pairing_stage_one_record_v1(&value)?;
-    if record.scope_id != scope_id
-        || canonical_mac_lima_guest_pairing_stage_one_record_v1(&record)? != bytes
-    {
-        bail!("protected Lima Stage-1 record does not match its exact account");
+    if predecessor_state.state == "Superseded" {
+        bail!("active R6 predecessor state cannot be a superseded tombstone");
     }
+    let predecessor_account = mac_keychain_r6_pairing_predecessor_account_v1(
+        scope_id,
+        predecessor_state.predecessor_generation,
+    )?;
+    let predecessor_bytes =
+        mac_keychain_read_item_v1(MAC_KEYCHAIN_SERVICE_V1, &predecessor_account)?
+            .ok_or_else(|| anyhow::anyhow!("protected R6 predecessor state has no document"))?;
+    let predecessor: MacR6PairingPredecessorV1 = serde_json::from_slice(&predecessor_bytes)
+        .context("decode protected R6 pairing predecessor")?;
+    if canonical_mac_r6_pairing_predecessor_v1(&predecessor)? != predecessor_bytes {
+        bail!("protected R6 predecessor document is not canonical");
+    }
+    let continuation_account = mac_keychain_r6_pairing_continuation_account_v1(
+        scope_id,
+        predecessor_state.predecessor_generation,
+    )?;
+    let continuation_bytes =
+        mac_keychain_read_item_v1(MAC_KEYCHAIN_SERVICE_V1, &continuation_account)?
+            .ok_or_else(|| anyhow::anyhow!("protected R6 predecessor state has no continuation"))?;
+    let continuation: MacR6PairingContinuationV1 = serde_json::from_slice(&continuation_bytes)
+        .context("decode protected R6 pairing continuation")?;
+    if canonical_mac_r6_pairing_continuation_v1(&continuation, &predecessor)? != continuation_bytes
+    {
+        bail!("protected R6 continuation document is not canonical");
+    }
+    let capsule = open_mac_lima_stage_one_capsule_v1(scope_id)?.ok_or_else(|| {
+        anyhow::anyhow!("protected R6 predecessor has no retained Stage-1 capsule")
+    })?;
+    if capsule.state != "Completed" {
+        bail!("protected R6 predecessor Stage-1 capsule is not completed");
+    }
+    let record = MacLimaGuestPairingStageOneRecordV1 {
+        predecessor,
+        continuation,
+        predecessor_state,
+        stage_one: capsule.stage_one_authorization,
+    };
+    validate_mac_lima_guest_pairing_stage_one_record_v1(&record)?;
     Ok(Some(record))
 }
 
@@ -11392,25 +15148,154 @@ fn mac_now_unix_ns_v1() -> Result<u64> {
     u64::try_from(duration.as_nanos()).context("macOS Stage-1 clock exceeds u64 nanoseconds")
 }
 
+fn derive_r6_pairing_prepared_window_v1(prepare_now_unix_ns: u64) -> Result<(u64, u64)> {
+    let issued_at_unix_ns = prepare_now_unix_ns
+        .checked_add(R6_PAIRING_PREPARE_LEAD_NS_V1)
+        .ok_or_else(|| anyhow::anyhow!("R6 predecessor activation overflow"))?;
+    let expires_at_unix_ns = issued_at_unix_ns
+        .checked_add(R6_PAIRING_TICKET_LIFETIME_NS_V1)
+        .ok_or_else(|| anyhow::anyhow!("R6 predecessor expiry overflow"))?;
+    Ok((issued_at_unix_ns, expires_at_unix_ns))
+}
+
 fn validate_mac_lima_guest_pairing_stage_one_record_for_issue_v1(
     record: &MacLimaGuestPairingStageOneRecordV1,
     protected_state: &LifecyclePublisherProtectedStateV1,
 ) -> Result<()> {
     validate_mac_lima_guest_pairing_stage_one_record_v1(record)?;
     validate_lifecycle_publisher_protected_state_v1(protected_state)?;
-    if record.stage_one.expires_at_unix_ns <= mac_now_unix_ns_v1()? {
-        bail!("protected Lima Stage-1 authorization has expired");
-    }
     let anchor = &protected_state.current_anchor;
-    if record.stage_one.host_context_commitment != anchor.host_context_commitment
-        || record.stage_one.source_commit != anchor.executor_identity.source_commit
-        || record.stage_one.source_tree != anchor.executor_identity.source_tree
-        || record.stage_one.source_ref != anchor.executor_identity.source_ref
-        || record.staged_executor_sha256 != anchor.executor_identity.artifact_sha256
+    if record
+        .predecessor
+        .producer_host_identity
+        .executor_build_evidence
+        .source_commit
+        != anchor.executor_identity.source_commit
+        || record
+            .predecessor
+            .producer_host_identity
+            .executor_build_evidence
+            .source_tree
+            != anchor.executor_identity.source_tree
+        || record
+            .predecessor
+            .producer_host_identity
+            .executor_build_evidence
+            .source_ref
+            != anchor.executor_identity.source_ref
+        || record
+            .predecessor
+            .producer_host_identity
+            .executor_build_evidence
+            .artifact_sha256
+            != anchor.executor_identity.artifact_sha256
+        || record.predecessor.fixed_install_parent_anchor_sha256
+            != lifecycle_anchor_sha256_v1(anchor)?
     {
-        bail!("protected Lima Stage-1 record does not join the protected host anchor");
+        bail!("protected R6 predecessor does not join the protected host anchor");
     }
     Ok(())
+}
+
+/// Rotate only an expired unused predecessor through the dedicated fixed-install producer. The
+/// old signed documents are accepted here solely as structural replacement evidence; they are
+/// never admitted to ticket creation or any pairing effect.
+fn replace_expired_unused_r6_predecessor_for_issue_v1(
+    executor: &MacManagedArtifactExecutorV1,
+    control: &ManagedLifecycleControlRequestV1,
+    stage_one: &MacLimaGuestPairingStageOneRecordV1,
+    protected_state: &LifecyclePublisherProtectedStateV1,
+) -> Result<Value> {
+    let activation = open_mac_r6_pairing_activation_record_v1(
+        &stage_one.predecessor,
+        &stage_one.continuation,
+        &stage_one.predecessor_state,
+        &stage_one.stage_one,
+    )?
+    .ok_or_else(|| anyhow::anyhow!("R6 predecessor replacement lacks activation"))?
+    .0;
+    if stage_one.predecessor_state.state != "Available"
+        || mac_now_unix_ns_v1()? < activation.expires_at_unix_ns
+    {
+        bail!("R6 predecessor replacement requires an expired unused Available generation");
+    }
+    #[cfg(target_os = "macos")]
+    {
+        let carrier = InstallBootstrapContextCarrierV1::decode(
+            control
+                .install_bootstrap_context_v1
+                .as_deref()
+                .ok_or_else(|| anyhow::anyhow!("R6 predecessor replacement lacks IH carrier"))?,
+        )?;
+        let mapping = PlatformBootstrapMappingV1::decode(
+            control
+                .platform_bootstrap_mapping_v1
+                .as_deref()
+                .ok_or_else(|| anyhow::anyhow!("R6 predecessor replacement lacks mapping"))?,
+            &carrier,
+        )?;
+        let capsule = open_mac_lima_stage_one_capsule_v1(&control.scope_id)?
+            .ok_or_else(|| anyhow::anyhow!("R6 predecessor replacement lacks Stage-1 capsule"))?;
+        if capsule.state != "Completed" || capsule.stage_one_authorization != stage_one.stage_one {
+            bail!("R6 predecessor replacement does not exact-join completed Stage-1");
+        }
+        let retained_observation = capsule.observation.as_ref().ok_or_else(|| {
+            anyhow::anyhow!("R6 predecessor replacement lacks retained observation")
+        })?;
+        let observation = mac_reobserve_completed_stage_one_v1(
+            &carrier,
+            &stage_one.stage_one,
+            retained_observation,
+        )?;
+        let (derived_mapping, manifest) = derive_mac_lima_stage_one_successor_manifest_v1(
+            &stage_one.stage_one,
+            &carrier,
+            &observation,
+        )?;
+        if derived_mapping != mapping {
+            bail!("R6 predecessor replacement mapping changed since fixed install");
+        }
+        let _readiness = mac_revalidate_fixed_install_readiness_v1(&carrier, &mapping, &manifest)?;
+        let guest_executor_identity =
+            mac_measure_fixed_guest_r6_executor_v1(&carrier, &mapping, &manifest)?;
+        let protected_state_account = mac_keychain_protected_state_account_v1(&control.scope_id)?;
+        let protected_state_guard = mac_keychain_durable_cas_guard_v1(&protected_state_account)?;
+        let reobserved_protected_state = open_system_keychain_protected_state_for_scope_v1(
+            &control.scope_id,
+        )?
+        .ok_or_else(|| anyhow::anyhow!("R6 predecessor replacement lost protected host state"))?;
+        if &reobserved_protected_state != protected_state {
+            bail!("R6 predecessor replacement protected anchor changed during live reobservation");
+        }
+        validate_mac_lima_guest_pairing_stage_one_record_for_issue_v1(
+            stage_one,
+            &reobserved_protected_state,
+        )?;
+        let (predecessor, continuation) = ensure_mac_r6_pairing_predecessor_v1(
+            executor,
+            &stage_one.stage_one,
+            &carrier,
+            &mapping,
+            &manifest,
+            &reobserved_protected_state,
+            &observation,
+            &guest_executor_identity,
+        )?;
+        if predecessor.predecessor_generation <= stage_one.predecessor.predecessor_generation {
+            bail!("R6 expired predecessor replacement did not advance generation");
+        }
+        drop(protected_state_guard);
+        return Ok(json!({
+            "status": "predecessor_replaced",
+            "r6_pairing_predecessor_v1": predecessor,
+            "r6_pairing_continuation_v1": continuation,
+        }));
+    }
+    #[cfg(not(target_os = "macos"))]
+    {
+        let _ = (executor, control, protected_state);
+        bail!("R6 predecessor replacement is available only on macOS")
+    }
 }
 
 /// Open the protected publisher state and reject malformed or substituted records.
@@ -11596,15 +15481,15 @@ fn r6_ticket_is_expired_at_v1(expires_at_unix_ns: u64, now_unix_ns: u64) -> bool
 }
 
 fn derive_r6_pairing_ticket_expiry_v1(
-    stage_one_expires_at_unix_ns: u64,
+    activation_expires_at_unix_ns: u64,
     now_unix_ns: u64,
 ) -> Result<u64> {
     let r6_deadline = now_unix_ns
         .checked_add(R6_PAIRING_TICKET_LIFETIME_NS_V1)
         .ok_or_else(|| anyhow::anyhow!("R6 ticket expiry overflow"))?;
-    let expires_at_unix_ns = stage_one_expires_at_unix_ns.min(r6_deadline);
+    let expires_at_unix_ns = activation_expires_at_unix_ns.min(r6_deadline);
     if expires_at_unix_ns <= now_unix_ns {
-        bail!("R6 ticket cannot outlive the expired Stage-1 authority");
+        bail!("R6 ticket cannot outlive the expired signed activation");
     }
     Ok(expires_at_unix_ns)
 }
@@ -11687,13 +15572,72 @@ fn issue_lima_guest_pairing_fresh_attempt_v1(
     issue_lima_guest_pairing_ticket_inner_v1(executor, &initial_control, Some(expired_record))
 }
 
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+enum R6IssuePredecessorRejoinPlanV1 {
+    ReplayExactLaunch,
+    ReplayPostProof,
+    RepairConsumed,
+    AlreadyConsumed,
+}
+
+fn plan_r6_issue_predecessor_rejoin_v1(
+    predecessor_state: &str,
+    admitted_attempt_id: Option<&str>,
+    challenge_id: &str,
+    record_state: &str,
+) -> Result<R6IssuePredecessorRejoinPlanV1> {
+    match (predecessor_state, record_state) {
+        ("Available", "sessions_opened") => Ok(R6IssuePredecessorRejoinPlanV1::ReplayExactLaunch),
+        ("PairingEffectStarted", "sessions_opened")
+            if admitted_attempt_id == Some(challenge_id) =>
+        {
+            Ok(R6IssuePredecessorRejoinPlanV1::ReplayPostProof)
+        }
+        ("PairingEffectStarted", "ticket_consumed")
+            if admitted_attempt_id == Some(challenge_id) =>
+        {
+            Ok(R6IssuePredecessorRejoinPlanV1::RepairConsumed)
+        }
+        ("PairingEffectStarted", _)
+            if admitted_attempt_id == Some(challenge_id)
+                && matches!(
+                    record_state,
+                    "operator_proof_verified"
+                        | "guest_state_root_durable"
+                        | "hello_durable"
+                        | "transcript_durable"
+                ) =>
+        {
+            Ok(R6IssuePredecessorRejoinPlanV1::ReplayPostProof)
+        }
+        ("Consumed", "ticket_consumed") if admitted_attempt_id == Some(challenge_id) => {
+            Ok(R6IssuePredecessorRejoinPlanV1::AlreadyConsumed)
+        }
+        _ => bail!("R6 active record conflicts with predecessor state"),
+    }
+}
+
 fn issue_lima_guest_pairing_ticket_inner_v1(
     executor: &MacManagedArtifactExecutorV1,
     control: &ManagedLifecycleControlRequestV1,
     fresh_attempt: Option<&GuestPublisherPairingHostRecordV1>,
 ) -> Result<Value> {
+    let predecessor_state_account =
+        mac_keychain_r6_pairing_predecessor_state_account_v1(&control.scope_id)?;
+    let predecessor_state_guard = mac_keychain_durable_cas_guard_v1(&predecessor_state_account)?;
     let stage_one = open_mac_lima_guest_pairing_stage_one_record_v1(&control.scope_id)?
-        .ok_or_else(|| anyhow::anyhow!("macOS ticket issue has no protected Stage-1 record"))?;
+        .ok_or_else(|| anyhow::anyhow!("macOS ticket issue has no protected R6 predecessor"))?;
+    let activation = open_mac_r6_pairing_activation_record_v1(
+        &stage_one.predecessor,
+        &stage_one.continuation,
+        &stage_one.predecessor_state,
+        &stage_one.stage_one,
+    )?
+    .ok_or_else(|| anyhow::anyhow!("macOS ticket issue has no committed R6 activation"))?
+    .0;
+    if mac_now_unix_ns_v1()? < activation.issued_at_unix_ns {
+        bail!("macOS ticket issue precedes the signed R6 activation boundary");
+    }
     let protected_state = open_system_keychain_protected_state_for_scope_v1(&control.scope_id)?
         .ok_or_else(|| anyhow::anyhow!("macOS ticket issue has no protected host state"))?;
     validate_mac_lima_guest_pairing_stage_one_record_for_issue_v1(&stage_one, &protected_state)?;
@@ -11711,68 +15655,233 @@ fn issue_lima_guest_pairing_ticket_inner_v1(
         || evidence.source_tree != anchor.executor_identity.source_tree
         || evidence.source_ref != anchor.executor_identity.source_ref
         || evidence.artifact_sha256 != anchor.executor_identity.artifact_sha256
-        || stage_one.scope_id != anchor.scope_id
-        || stage_one.staged_executor_sha256 != evidence.artifact_sha256
+        || stage_one.predecessor.scope_id != anchor.scope_id
     {
-        bail!("R6 ticket issue does not exact-join PM, Stage-1, and protected host state");
+        bail!("R6 ticket issue does not exact-join PM and protected host state");
+    }
+    let requested_predecessor = control
+        .r6_pairing_predecessor_v1
+        .as_ref()
+        .ok_or_else(|| anyhow::anyhow!("R6 ticket issue lacks predecessor"))?;
+    let requested_continuation = control
+        .r6_pairing_continuation_v1
+        .as_ref()
+        .ok_or_else(|| anyhow::anyhow!("R6 ticket issue lacks continuation"))?;
+    if requested_predecessor != &stage_one.predecessor
+        || requested_continuation != &stage_one.continuation
+    {
+        // A replacement response can be lost after the dedicated producer commits. Authenticate
+        // the old expired generation structurally, then replay only the exact direct successor;
+        // the old continuation is never accepted for ticket creation or effect admission.
+        validate_mac_r6_pairing_continuation_v1(requested_continuation, requested_predecessor)?;
+        let requested_initial_state =
+            mac_r6_pairing_available_state_for_predecessor_v1(requested_predecessor)?;
+        let requested_activation = open_mac_r6_pairing_activation_record_v1(
+            requested_predecessor,
+            requested_continuation,
+            &requested_initial_state,
+            &stage_one.stage_one,
+        )?
+        .ok_or_else(|| anyhow::anyhow!("requested replaced predecessor lacks activation"))?
+        .0;
+        let requested_sha256 = sha256_hex_bootstrap_v1(&canonical_mac_r6_pairing_predecessor_v1(
+            requested_predecessor,
+        )?);
+        if mac_now_unix_ns_v1()? < requested_activation.expires_at_unix_ns
+            || stage_one.predecessor.predecessor_generation
+                != requested_predecessor
+                    .predecessor_generation
+                    .checked_add(1)
+                    .ok_or_else(|| anyhow::anyhow!("R6 predecessor generation overflow"))?
+            || stage_one.predecessor.previous_predecessor_sha256.as_deref()
+                != Some(requested_sha256.as_str())
+            || stage_one.predecessor.fixed_install_parent_anchor_sha256
+                != requested_predecessor.fixed_install_parent_anchor_sha256
+            || stage_one.predecessor.manifest_sha256 != requested_predecessor.manifest_sha256
+            || stage_one.predecessor.platform_mapping_commitment
+                != requested_predecessor.platform_mapping_commitment
+            || stage_one.predecessor.guest_machine_identity
+                != requested_predecessor.guest_machine_identity
+            || stage_one.predecessor.guest_executor_identity
+                != requested_predecessor.guest_executor_identity
+            || stage_one.predecessor_state.state != "Available"
+        {
+            bail!("R6 ticket issue does not exact-join the current replacement chain");
+        }
+        return Ok(json!({
+            "status": "predecessor_replaced",
+            "r6_pairing_predecessor_v1": stage_one.predecessor,
+            "r6_pairing_continuation_v1": stage_one.continuation,
+        }));
+    }
+    if requested_predecessor != &stage_one.predecessor
+        || requested_continuation != &stage_one.continuation
+    {
+        bail!("R6 ticket issue does not exact-join PM, predecessor, and protected host state");
     }
 
     // Serialize active-attempt selection, per-challenge record creation, and pointer update for
     // this scope. A second initial issue must observe the first attempt rather than minting a
     // parallel live ticket/nonce that can advance by a stale ticket lookup.
     let active_account = mac_active_guest_pairing_record_account_v1(&control.scope_id)?;
-    let _active_attempt_guard = mac_keychain_durable_cas_guard_v1(&active_account)?;
+    let active_attempt_guard = mac_keychain_durable_cas_guard_v1(&active_account)?;
     let mut superseded_pre_intent_attempt = None;
     if let Some(record) = open_active_mac_guest_pairing_record_v1(executor, &control.scope_id)? {
-        let durable_rejoin = active_r6_record_exactly_rejoins_issue_v1(
-            &record,
-            &stage_one,
-            &protected_state,
-            control,
-            evidence,
-        )?;
-        let now_unix_ns = r6_now_unix_ns_v1()?;
-        let expired =
-            validate_guest_publisher_pairing_ticket_at_v1(&record.ticket, now_unix_ns).is_err();
-        if !expired && durable_rejoin {
-            return r6_pairing_issue_response_v1(&record, None, None);
-        }
-        // Equality at expiry leaves this record byte-identical: no close/resume/CAS touches its
-        // evidence. The ordinary issue call returns this preserved record. Only the separately
-        // full-record `fresh_attempt` form below may allocate replacement authority.
-        if expired {
-            match classify_r6_expired_active_issue_v1(&record, fresh_attempt, now_unix_ns)? {
-                R6ExpiredActiveIssueDispositionV1::Preserve => {
-                    return r6_pairing_issue_response_v1(&record, None, Some("expired_preserved"));
+        let current_stage_one_commitment = mac_r6_pairing_stage_one_commitment_v1(&stage_one)?;
+        let superseded_closed_pointer = record.binding.stage_one_record_sha256
+            != current_stage_one_commitment
+            && (record.state == "pre_intent_closed"
+                || (record.state == "sessions_opened"
+                    && record.operator_proof_sha256.is_none()
+                    && validate_guest_publisher_pairing_ticket_at_v1(
+                        &record.ticket,
+                        r6_now_unix_ns_v1()?,
+                    )
+                    .is_err()));
+        if superseded_closed_pointer {
+            bail!("R6 stale active challenge lacks the exact consumed-pointer transaction");
+        } else {
+            let durable_rejoin = active_r6_record_exactly_rejoins_issue_v1(
+                &record,
+                &stage_one,
+                &protected_state,
+                control,
+                evidence,
+            )?;
+            let now_unix_ns = r6_now_unix_ns_v1()?;
+            let expired =
+                validate_guest_publisher_pairing_ticket_at_v1(&record.ticket, now_unix_ns).is_err();
+            if !expired && durable_rejoin {
+                let plan = plan_r6_issue_predecessor_rejoin_v1(
+                    &stage_one.predecessor_state.state,
+                    stage_one.predecessor_state.pairing_attempt_id.as_deref(),
+                    &record.ticket.challenge.challenge_id,
+                    &record.state,
+                )?;
+                if plan == R6IssuePredecessorRejoinPlanV1::RepairConsumed {
+                    let record_sha256 = sha256_hex_bootstrap_v1(
+                        &canonical_guest_publisher_pairing_host_record_v1(&record)?,
+                    );
+                    let next = derive_mac_r6_pairing_predecessor_state_transition_v1(
+                        &stage_one.predecessor_state,
+                        "Consumed",
+                        Some(&record.ticket.challenge.challenge_id),
+                        stage_one.predecessor_state.effect_admitted_at_unix_ns,
+                        Some(&record_sha256),
+                    )?;
+                    compare_and_swap_mac_r6_pairing_predecessor_state_v1(
+                        &stage_one.predecessor_state,
+                        &next,
+                    )?;
                 }
-                R6ExpiredActiveIssueDispositionV1::AllocateFresh => {
-                    superseded_pre_intent_attempt =
-                        Some((record.ticket.clone(), record.binding.clone()));
+                let retained_launch = if plan == R6IssuePredecessorRejoinPlanV1::ReplayExactLaunch {
+                    Some(open_r6_operator_launch_exact_v1(
+                        &control.scope_id,
+                        &record,
+                    )?)
+                } else {
+                    None
+                };
+                return r6_pairing_issue_response_v1(&record, retained_launch.as_ref(), None);
+            }
+            if expired && durable_rejoin && stage_one.predecessor_state.state != "Available" {
+                let plan = plan_r6_issue_predecessor_rejoin_v1(
+                    &stage_one.predecessor_state.state,
+                    stage_one.predecessor_state.pairing_attempt_id.as_deref(),
+                    &record.ticket.challenge.challenge_id,
+                    &record.state,
+                )?;
+                if plan == R6IssuePredecessorRejoinPlanV1::RepairConsumed {
+                    let record_sha256 = sha256_hex_bootstrap_v1(
+                        &canonical_guest_publisher_pairing_host_record_v1(&record)?,
+                    );
+                    let next = derive_mac_r6_pairing_predecessor_state_transition_v1(
+                        &stage_one.predecessor_state,
+                        "Consumed",
+                        Some(&record.ticket.challenge.challenge_id),
+                        stage_one.predecessor_state.effect_admitted_at_unix_ns,
+                        Some(&record_sha256),
+                    )?;
+                    compare_and_swap_mac_r6_pairing_predecessor_state_v1(
+                        &stage_one.predecessor_state,
+                        &next,
+                    )?;
+                }
+                // The elapsed deadline cannot revoke or replace an effect which has already
+                // crossed PairingEffectStarted. Never replay the now-expired launch capability;
+                // return only the exact durable record needed to converge that admitted effect.
+                return r6_pairing_issue_response_v1(
+                    &record,
+                    None,
+                    Some("expired_effect_recovery"),
+                );
+            }
+            // Equality at expiry leaves this record byte-identical: no close/resume/CAS touches its
+            // evidence. The ordinary issue call returns this preserved record. Only the separately
+            // full-record `fresh_attempt` form below may allocate replacement authority.
+            if expired {
+                match classify_r6_expired_active_issue_v1(&record, fresh_attempt, now_unix_ns)? {
+                    R6ExpiredActiveIssueDispositionV1::Preserve => {
+                        return r6_pairing_issue_response_v1(
+                            &record,
+                            None,
+                            Some("expired_preserved"),
+                        );
+                    }
+                    R6ExpiredActiveIssueDispositionV1::AllocateFresh => {
+                        consume_expired_unused_active_pointer_v1(
+                            executor,
+                            &control.scope_id,
+                            &record,
+                            &stage_one,
+                            now_unix_ns,
+                        )?;
+                        superseded_pre_intent_attempt =
+                            Some((record.ticket.clone(), record.binding.clone()));
+                    }
                 }
             }
+            if !expired && record.state == "sessions_opened" {
+                // A repeated initial issue cannot replay a pre-proof ticket/nonce. Close this exact
+                // pre-intent attempt, then create a wholly fresh logical retry below.
+                persist_r6_guest_pairing_failure_observation_v1(
+                    executor,
+                    control,
+                    &record,
+                    false,
+                    "operator-session-closed-before-proof-admission",
+                )?;
+            }
+            if record.state == "pre_intent_closed"
+                && stage_one.predecessor_state.state == "PairingEffectStarted"
+            {
+                bail!("R6 pre-intent closure conflicts with a guest-visible pairing effect");
+            }
         }
-        if !expired && record.state == "sessions_opened" {
-            // A repeated initial issue cannot replay a pre-proof ticket/nonce. Close this exact
-            // pre-intent attempt, then create a wholly fresh logical retry below.
-            persist_r6_guest_pairing_failure_observation_v1(
-                executor,
-                control,
-                &record,
-                false,
-                "operator-session-closed-before-proof-admission",
-            )?;
-        }
+    }
+
+    if stage_one.predecessor_state.state != "Available" {
+        bail!("R6 predecessor is not Available for a new pairing effect");
+    }
+    if mac_now_unix_ns_v1()? >= activation.expires_at_unix_ns {
+        // The dedicated producer owns the same predecessor-state account. Release both issue-side
+        // guards before entering it; replacement revalidates the full state after live observation
+        // and never recursively acquires either account.
+        drop(active_attempt_guard);
+        drop(predecessor_state_guard);
+        return replace_expired_unused_r6_predecessor_for_issue_v1(
+            executor,
+            control,
+            &stage_one,
+            &protected_state,
+        );
     }
 
     let random = mac_fresh_pairing_entropy_v1()?;
     let pairing_session_nonce = sha256_hex_bootstrap_v1(&random);
-    let ticket_expires_at_unix_ns = derive_r6_pairing_ticket_expiry_v1(
-        stage_one.stage_one.expires_at_unix_ns,
-        r6_now_unix_ns_v1()?,
-    )?;
-    let stage_one_record_sha256 = sha256_hex_bootstrap_v1(
-        &canonical_mac_lima_guest_pairing_stage_one_record_v1(&stage_one)?,
-    );
+    let ticket_expires_at_unix_ns =
+        derive_r6_pairing_ticket_expiry_v1(activation.expires_at_unix_ns, r6_now_unix_ns_v1()?)?;
+    let stage_one_record_sha256 = mac_r6_pairing_stage_one_commitment_v1(&stage_one)?;
     let signer_spki_bytes = mac_open_system_keychain_p256_spki_der_v1(&control.scope_id)?;
     let signer_spki_der = base64url_encode_mac_v1(&signer_spki_bytes);
     let challenge = GuestPublisherPairingChallengeV1 {
@@ -11785,14 +15894,16 @@ fn issue_lima_guest_pairing_ticket_inner_v1(
         current_anchor_sha256: lifecycle_anchor_sha256_v1(anchor)?,
         host_context_commitment: anchor.host_context_commitment.clone(),
         platform_mapping_commitment: anchor.platform_mapping_commitment.clone(),
-        guest_machine_identity: stage_one.guest_machine_identity.clone(),
+        guest_machine_identity: stage_one.predecessor.guest_machine_identity.clone(),
         source_commit: anchor.executor_identity.source_commit.clone(),
         source_tree: anchor.executor_identity.source_tree.clone(),
         source_ref: anchor.executor_identity.source_ref.clone(),
         executor_build_evidence_sha256: anchor.executor_identity.artifact_sha256.clone(),
-        guest_component_commitment_sha256: sha256_hex_bootstrap_v1(
-            stage_one.stage_one.rendered_profile_sha256.as_bytes(),
-        ),
+        guest_component_commitment_sha256: stage_one
+            .predecessor
+            .guest_executor_identity
+            .sha256
+            .clone(),
     };
     let mut ticket = GuestPublisherPairingTicketV1 {
         schema_owner: "substrate.guest-publisher-pairing-ticket".to_string(),
@@ -11815,16 +15926,21 @@ fn issue_lima_guest_pairing_ticket_inner_v1(
     };
     ticket.signature = mac_sign_guest_publisher_pairing_ticket_v1(&control.scope_id, &ticket)?;
     validate_guest_publisher_pairing_ticket_v1(&ticket)?;
+    validate_mac_r6_pairing_ticket_identities_v1(
+        &ticket,
+        &stage_one.predecessor.producer_host_identity,
+        &stage_one.predecessor.guest_executor_identity,
+    )?;
     let binding = GuestPublisherPairingSessionBindingV1 {
         schema_owner: "substrate.guest-publisher-pairing-session-binding".to_string(),
         schema_version: 1,
         scope_id: anchor.scope_id.clone(),
         platform_mapping_commitment: anchor.platform_mapping_commitment.clone(),
-        guest_machine_identity: stage_one.guest_machine_identity.clone(),
+        guest_machine_identity: stage_one.predecessor.guest_machine_identity.clone(),
         source_commit: anchor.executor_identity.source_commit.clone(),
         source_tree: anchor.executor_identity.source_tree.clone(),
         source_ref: anchor.executor_identity.source_ref.clone(),
-        staged_executor_sha256: stage_one.staged_executor_sha256.clone(),
+        staged_executor_sha256: stage_one.predecessor.guest_executor_identity.sha256.clone(),
         stage_one_record_sha256,
         ticket_challenge_id: ticket.challenge.challenge_id.clone(),
         host_record_generation: ticket.host_generation,
@@ -11891,6 +16007,7 @@ fn issue_lima_guest_pairing_ticket_inner_v1(
         },
         operator_launch_sha256,
         operator_proof_sha256: None,
+        effect_admitted_at_unix_ns: None,
         record_generation: binding.host_record_generation,
         state: "sessions_opened".to_string(),
         previous_record_sha256: None,
@@ -11902,6 +16019,11 @@ fn issue_lima_guest_pairing_ticket_inner_v1(
     };
     record.signature = mac_sign_guest_publisher_pairing_record_v1(&control.scope_id, &record)?;
     validate_guest_publisher_pairing_host_record_v1(&record)?;
+    validate_mac_r6_pairing_host_record_identities_v1(
+        &record,
+        &stage_one.predecessor.producer_host_identity,
+        &stage_one.predecessor.guest_executor_identity,
+    )?;
     validate_r6_operator_launch_digest_before_pre_intent_v1(
         &record.operator_launch_sha256,
         &operator_launch,
@@ -11912,10 +16034,17 @@ fn issue_lima_guest_pairing_ticket_inner_v1(
         &operator_launch,
         r6_now_unix_ns_v1()?,
     )?;
+    validate_mac_r6_pairing_operator_launch_identities_v1(
+        &record,
+        &operator_launch,
+        &stage_one.predecessor.producer_host_identity,
+        &stage_one.predecessor.guest_executor_identity,
+    )?;
     // `>= expires` is a no-mutation boundary, including the interval consumed by record signing
     // and capability construction above. Do not mint an already-expired initial record.
     validate_guest_publisher_pairing_ticket_at_v1(&ticket, r6_now_unix_ns_v1()?)
         .context("R6 initial pairing ticket expired before protected record CAS")?;
+    persist_r6_operator_launch_exact_v1(&control.scope_id, &record, &operator_launch)?;
     compare_and_swap_mac_guest_pairing_record_v1(
         executor,
         &ticket.challenge.challenge_id,
@@ -11929,6 +16058,37 @@ fn issue_lima_guest_pairing_ticket_inner_v1(
 /// Start exactly the PM-bound data child. It receives the signed ticket on its one bounded stdin
 /// frame, then must return a separately persisted and host-validated operator proof before the
 /// host accepts any guest intent or Hello.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+enum R6ExpiredAdvanceDispositionV1 {
+    AllocateFresh,
+    RecoverStarted,
+    ReplayConsumed,
+}
+
+fn classify_r6_expired_advance_v1(
+    predecessor_state: &str,
+    predecessor_attempt_id: Option<&str>,
+    challenge_id: &str,
+    record_state: &str,
+    operator_proof_present: bool,
+) -> Result<R6ExpiredAdvanceDispositionV1> {
+    match predecessor_state {
+        "Available" if record_state == "sessions_opened" && !operator_proof_present => {
+            Ok(R6ExpiredAdvanceDispositionV1::AllocateFresh)
+        }
+        "PairingEffectStarted" if predecessor_attempt_id == Some(challenge_id) => {
+            Ok(R6ExpiredAdvanceDispositionV1::RecoverStarted)
+        }
+        "Consumed"
+            if predecessor_attempt_id == Some(challenge_id)
+                && record_state == "ticket_consumed" =>
+        {
+            Ok(R6ExpiredAdvanceDispositionV1::ReplayConsumed)
+        }
+        _ => bail!("expired R6 authority cannot start a new effect or cross its admitted attempt"),
+    }
+}
+
 pub fn advance_lima_guest_pairing_record_v1(
     executor: &MacManagedArtifactExecutorV1,
     control: &ManagedLifecycleControlRequestV1,
@@ -11941,10 +16101,49 @@ pub fn advance_lima_guest_pairing_record_v1(
         .as_ref()
         .ok_or_else(|| anyhow::anyhow!("R6 data-session advance lacks ticket"))?;
     let record = load_exact_r6_pairing_record_v1(executor, control, ticket)?;
-    if validate_guest_publisher_pairing_ticket_at_v1(ticket, r6_now_unix_ns_v1()?).is_err() {
-        // This complete ticket/binding/generation/digest request is the explicit fresh-attempt
-        // form; it is never an expired transport resume and cannot mutate the preserved record.
-        return issue_lima_guest_pairing_fresh_attempt_v1(executor, control, &record);
+    let predecessor_state = open_mac_r6_pairing_predecessor_state_v1(&control.scope_id)?
+        .ok_or_else(|| anyhow::anyhow!("R6 data-session advance has no predecessor state"))?
+        .0;
+    let challenge_id = ticket.challenge.challenge_id.as_str();
+    let expired =
+        validate_guest_publisher_pairing_ticket_at_v1(ticket, r6_now_unix_ns_v1()?).is_err();
+    if expired {
+        match classify_r6_expired_advance_v1(
+            &predecessor_state.state,
+            predecessor_state.pairing_attempt_id.as_deref(),
+            challenge_id,
+            &record.state,
+            record.operator_proof_sha256.is_some(),
+        )? {
+            R6ExpiredAdvanceDispositionV1::AllocateFresh => {
+                // No pairing effect was admitted. Only this case may allocate fresh authority.
+                return issue_lima_guest_pairing_fresh_attempt_v1(executor, control, &record);
+            }
+            R6ExpiredAdvanceDispositionV1::RecoverStarted => {}
+            // Reopen the exact typed handshake. A host Consumed CAS alone cannot prove that the
+            // guest received the anchor ACK and made its immutable consumed marker durable.
+            R6ExpiredAdvanceDispositionV1::ReplayConsumed => {}
+        }
+    }
+    if record.state == "ticket_consumed" {
+        if predecessor_state.state == "PairingEffectStarted"
+            && predecessor_state.pairing_attempt_id.as_deref() == Some(challenge_id)
+        {
+            let record_sha256 = sha256_hex_bootstrap_v1(
+                &canonical_guest_publisher_pairing_host_record_v1(&record)?,
+            );
+            persist_mac_r6_pairing_predecessor_state_transition_v1(
+                &control.scope_id,
+                &predecessor_state.predecessor_id,
+                predecessor_state.predecessor_generation,
+                "Consumed",
+                Some(challenge_id),
+                predecessor_state.effect_admitted_at_unix_ns,
+                Some(&record_sha256),
+            )?;
+        }
+        // Continue into the exact replay handshake below; only its guest marker acknowledgement
+        // authorizes returning the original host receipt.
     }
     let record = match record.state.as_str() {
         "sessions_opened"
@@ -11970,6 +16169,13 @@ pub fn advance_lima_guest_pairing_record_v1(
             return Err(error);
         }
     };
+    r6_pairing_consumed_response_v1(&completed)
+}
+
+fn r6_pairing_consumed_response_v1(completed: &GuestPublisherPairingHostRecordV1) -> Result<Value> {
+    if completed.state != "ticket_consumed" {
+        bail!("R6 consumed response requires the durable terminal host record");
+    }
     Ok(json!({
         "status": "ticket_consumed",
         "session_id": completed.data_session.session_id,
@@ -12009,6 +16215,160 @@ fn record_r6_direct_operator_failure_v1(
     Ok(json!({"status":"pre_intent_closed"}))
 }
 
+/// Admit the pairing effect only after the independently signed operator proof has validated.
+/// Issue/replay alone leaves an unused predecessor Available. A crash after this CAS but before
+/// the host-record CAS is recovered by accepting only the same challenge ID on retry.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+enum R6EffectAdmissionDecisionV1 {
+    Prepare,
+    Start { effect_admitted_at_unix_ns: u64 },
+    RecoverStarted { effect_admitted_at_unix_ns: u64 },
+    RejectFreshExpired,
+    RollBackPreparedExpired,
+}
+
+fn classify_r6_effect_admission_v1(
+    state: &str,
+    state_attempt_id: Option<&str>,
+    state_effect_admitted_at_unix_ns: Option<u64>,
+    challenge_id: &str,
+    activation_issued_at_unix_ns: u64,
+    activation_expires_at_unix_ns: u64,
+    observed_at_unix_ns: u64,
+) -> Result<R6EffectAdmissionDecisionV1> {
+    mac_r6_pairing_activation_disposition_v1(
+        activation_issued_at_unix_ns,
+        activation_expires_at_unix_ns,
+        activation_issued_at_unix_ns,
+    )?;
+    match state {
+        "Available" if state_attempt_id.is_none() && state_effect_admitted_at_unix_ns.is_none() => {
+            if observed_at_unix_ns >= activation_expires_at_unix_ns {
+                Ok(R6EffectAdmissionDecisionV1::RejectFreshExpired)
+            } else if observed_at_unix_ns < activation_issued_at_unix_ns {
+                bail!("R6 effect admission precedes its signed activation")
+            } else {
+                Ok(R6EffectAdmissionDecisionV1::Prepare)
+            }
+        }
+        "PairingEffectPrepared"
+            if state_attempt_id == Some(challenge_id)
+                && state_effect_admitted_at_unix_ns.is_none() =>
+        {
+            if observed_at_unix_ns >= activation_expires_at_unix_ns {
+                Ok(R6EffectAdmissionDecisionV1::RollBackPreparedExpired)
+            } else if observed_at_unix_ns < activation_issued_at_unix_ns {
+                bail!("R6 prepared effect precedes its signed activation")
+            } else {
+                Ok(R6EffectAdmissionDecisionV1::Start {
+                    effect_admitted_at_unix_ns: observed_at_unix_ns,
+                })
+            }
+        }
+        "PairingEffectStarted" if state_attempt_id == Some(challenge_id) => {
+            let effect_admitted_at_unix_ns = state_effect_admitted_at_unix_ns
+                .ok_or_else(|| anyhow::anyhow!("R6 started effect lacks durable admission time"))?;
+            if effect_admitted_at_unix_ns < activation_issued_at_unix_ns
+                || effect_admitted_at_unix_ns >= activation_expires_at_unix_ns
+            {
+                bail!("R6 started effect admission is outside signed activation")
+            }
+            Ok(R6EffectAdmissionDecisionV1::RecoverStarted {
+                effect_admitted_at_unix_ns,
+            })
+        }
+        _ => bail!("R6 operator proof conflicts with predecessor admission state"),
+    }
+}
+
+fn admit_r6_predecessor_effect_after_operator_proof_v1(
+    control: &ManagedLifecycleControlRequestV1,
+    current: &GuestPublisherPairingHostRecordV1,
+) -> Result<u64> {
+    let predecessor = control
+        .r6_pairing_predecessor_v1
+        .as_ref()
+        .ok_or_else(|| anyhow::anyhow!("R6 operator proof lacks predecessor"))?;
+    let account = mac_keychain_r6_pairing_predecessor_state_account_v1(&control.scope_id)?;
+    let _guard = mac_keychain_durable_cas_guard_v1(&account)?;
+    let stage_one = open_mac_lima_guest_pairing_stage_one_record_v1(&control.scope_id)?
+        .ok_or_else(|| anyhow::anyhow!("R6 operator proof has no predecessor state"))?;
+    let mut state = stage_one.predecessor_state.clone();
+    if state.predecessor_id != predecessor.predecessor_id
+        || state.predecessor_generation != predecessor.predecessor_generation
+        || stage_one.predecessor != *predecessor
+    {
+        bail!("R6 operator proof crosses predecessor generation");
+    }
+    let activation = open_mac_r6_pairing_activation_record_v1(
+        &stage_one.predecessor,
+        &stage_one.continuation,
+        &state,
+        &stage_one.stage_one,
+    )?
+    .ok_or_else(|| anyhow::anyhow!("R6 operator proof has no signed activation"))?
+    .0;
+    let challenge_id = current.ticket.challenge.challenge_id.as_str();
+    loop {
+        let observed_at_unix_ns = r6_now_unix_ns_v1()?;
+        match classify_r6_effect_admission_v1(
+            &state.state,
+            state.pairing_attempt_id.as_deref(),
+            state.effect_admitted_at_unix_ns,
+            challenge_id,
+            activation.issued_at_unix_ns,
+            activation.expires_at_unix_ns,
+            observed_at_unix_ns,
+        )? {
+            R6EffectAdmissionDecisionV1::Prepare => {
+                // The clock sample above is immediately before the only fresh-admission CAS.
+                // This state is not effect-recoverable and cannot authorize a guest ACK.
+                let prepared = derive_mac_r6_pairing_predecessor_state_transition_v1(
+                    &state,
+                    "PairingEffectPrepared",
+                    Some(challenge_id),
+                    None,
+                    None,
+                )?;
+                compare_and_swap_mac_r6_pairing_predecessor_state_v1(&state, &prepared)?;
+                state = prepared;
+            }
+            R6EffectAdmissionDecisionV1::Start {
+                effect_admitted_at_unix_ns,
+            } => {
+                // PairingEffectPrepared is already durable, so this observed timestamp is the
+                // actual durable admission boundary. Persist it in Started before acknowledging.
+                let started = derive_mac_r6_pairing_predecessor_state_transition_v1(
+                    &state,
+                    "PairingEffectStarted",
+                    Some(challenge_id),
+                    Some(effect_admitted_at_unix_ns),
+                    None,
+                )?;
+                compare_and_swap_mac_r6_pairing_predecessor_state_v1(&state, &started)?;
+                return Ok(effect_admitted_at_unix_ns);
+            }
+            R6EffectAdmissionDecisionV1::RecoverStarted {
+                effect_admitted_at_unix_ns,
+            } => return Ok(effect_admitted_at_unix_ns),
+            R6EffectAdmissionDecisionV1::RejectFreshExpired => {
+                bail!("R6 operator proof reached fresh admission at or after activation expiry")
+            }
+            R6EffectAdmissionDecisionV1::RollBackPreparedExpired => {
+                let preserved = derive_mac_r6_pairing_predecessor_state_transition_v1(
+                    &state,
+                    "Available",
+                    Some(challenge_id),
+                    None,
+                    None,
+                )?;
+                compare_and_swap_mac_r6_pairing_predecessor_state_v1(&state, &preserved)?;
+                bail!("R6 prepared effect expired before durable admission and was preserved")
+            }
+        }
+    }
+}
+
 /// Commit one in-memory R6 transition through both the common transition validator and the
 /// protected Keychain CAS.  All callers construct only the fixed transition-table successor.
 fn persist_r6_guest_pairing_record_transition_v1(
@@ -12017,6 +16377,35 @@ fn persist_r6_guest_pairing_record_transition_v1(
     current: &GuestPublisherPairingHostRecordV1,
     mut next: GuestPublisherPairingHostRecordV1,
 ) -> Result<GuestPublisherPairingHostRecordV1> {
+    let predecessor = control
+        .r6_pairing_predecessor_v1
+        .as_ref()
+        .ok_or_else(|| anyhow::anyhow!("R6 transition lacks predecessor"))?;
+    let predecessor_account =
+        mac_keychain_r6_pairing_predecessor_state_account_v1(&control.scope_id)?;
+    let predecessor_guard = mac_keychain_durable_cas_guard_v1(&predecessor_account)?;
+    let predecessor_state = open_mac_r6_pairing_predecessor_state_v1(&control.scope_id)?
+        .ok_or_else(|| anyhow::anyhow!("R6 transition has no predecessor state"))?
+        .0;
+    if predecessor_state.predecessor_id != predecessor.predecessor_id
+        || predecessor_state.predecessor_generation != predecessor.predecessor_generation
+    {
+        bail!("R6 transition crosses predecessor generation");
+    }
+    let admitted_effect_recovery = matches!(
+        predecessor_state.state.as_str(),
+        "PairingEffectStarted" | "Consumed"
+    ) && predecessor_state.pairing_attempt_id.as_deref()
+        == Some(current.ticket.challenge.challenge_id.as_str());
+    if next.state == "pre_intent_closed" && predecessor_state.state != "Available" {
+        bail!("R6 effect-visible pairing state cannot be closed as pre-intent");
+    }
+    if next.state != "pre_intent_closed"
+        && predecessor_state.state != "Available"
+        && !admitted_effect_recovery
+    {
+        bail!("R6 transition does not exact-join its admitted predecessor effect");
+    }
     next.record_generation = current
         .record_generation
         .checked_add(1)
@@ -12025,13 +16414,47 @@ fn persist_r6_guest_pairing_record_transition_v1(
         &canonical_guest_publisher_pairing_host_record_v1(current)?,
     ));
     next.signature = mac_sign_guest_publisher_pairing_record_v1(&control.scope_id, &next)?;
-    compare_and_swap_guest_publisher_pairing_host_record_v1(current, &next)?;
-    compare_and_swap_mac_guest_pairing_record_v1(
+    if admitted_effect_recovery {
+        compare_and_swap_guest_publisher_pairing_host_record_recovery_v1(
+            current,
+            &next,
+            &current.ticket.challenge.challenge_id,
+        )?;
+    } else {
+        compare_and_swap_guest_publisher_pairing_host_record_v1(current, &next)?;
+    }
+    compare_and_swap_mac_guest_pairing_record_with_mode_v1(
         executor,
         &current.ticket.challenge.challenge_id,
         Some(current),
         &next,
+        admitted_effect_recovery,
     )?;
+    // The consumed predecessor update acquires this same account lock. Release it only after the
+    // exact host-record CAS so the admission/recovery mode cannot change under the transition.
+    drop(predecessor_guard);
+    if next.state == "ticket_consumed" {
+        let consumed_record_sha256 =
+            sha256_hex_bootstrap_v1(&canonical_guest_publisher_pairing_host_record_v1(&next)?);
+        persist_mac_r6_pairing_predecessor_state_transition_v1(
+            &control.scope_id,
+            control
+                .r6_pairing_predecessor_v1
+                .as_ref()
+                .ok_or_else(|| anyhow::anyhow!("R6 transition lacks predecessor"))?
+                .predecessor_id
+                .as_str(),
+            control
+                .r6_pairing_predecessor_v1
+                .as_ref()
+                .expect("checked predecessor")
+                .predecessor_generation,
+            "Consumed",
+            Some(&current.ticket.challenge.challenge_id),
+            current.effect_admitted_at_unix_ns,
+            Some(&consumed_record_sha256),
+        )?;
+    }
     Ok(next)
 }
 
@@ -12051,7 +16474,7 @@ fn plan_r6_pre_intent_failure_v1(
     data_session: bool,
     observation: &str,
 ) -> Result<Option<R6PreIntentFailurePlanV1>> {
-    if !matches!(current_state, "sessions_opened" | "operator_proof_verified")
+    if current_state != "sessions_opened"
         || data_failure_observation
         || operator_failure_observation
     {
@@ -12102,7 +16525,7 @@ fn persist_r6_guest_pairing_failure_observation_v1(
     };
     *target = Some(plan.observation.to_string());
     next.state = "pre_intent_closed".to_string();
-    let _ = persist_r6_guest_pairing_record_transition_v1(executor, control, &current, next)?;
+    let _ = persist_r6_guest_pairing_record_transition_v1(executor, control, current, next)?;
     Ok(())
 }
 
@@ -12135,6 +16558,22 @@ pub fn compare_and_swap_mac_guest_pairing_record_v1(
     current: Option<&GuestPublisherPairingHostRecordV1>,
     next: &GuestPublisherPairingHostRecordV1,
 ) -> Result<()> {
+    compare_and_swap_mac_guest_pairing_record_with_mode_v1(
+        _executor,
+        challenge_id,
+        current,
+        next,
+        false,
+    )
+}
+
+fn compare_and_swap_mac_guest_pairing_record_with_mode_v1(
+    _executor: &MacManagedArtifactExecutorV1,
+    challenge_id: &str,
+    current: Option<&GuestPublisherPairingHostRecordV1>,
+    next: &GuestPublisherPairingHostRecordV1,
+    admitted_effect_recovery: bool,
+) -> Result<()> {
     validate_guest_publisher_pairing_host_record_v1(next)?;
     if next.ticket.challenge.challenge_id != challenge_id {
         bail!("next R6 guest pairing record does not match challenge account");
@@ -12146,7 +16585,15 @@ pub fn compare_and_swap_mac_guest_pairing_record_v1(
         bail!("macOS R6 guest pairing record compare-and-swap conflict");
     }
     if let Some(current) = current {
-        compare_and_swap_guest_publisher_pairing_host_record_v1(current, next)?;
+        if admitted_effect_recovery {
+            compare_and_swap_guest_publisher_pairing_host_record_recovery_v1(
+                current,
+                next,
+                challenge_id,
+            )?;
+        } else {
+            compare_and_swap_guest_publisher_pairing_host_record_v1(current, next)?;
+        }
     }
     let expected = current
         .map(canonical_guest_publisher_pairing_host_record_v1)
@@ -12171,6 +16618,112 @@ fn mac_active_guest_pairing_record_account_v1(scope_id: &str) -> Result<String> 
     mac_keychain_account_v1(scope_id, "guest-pairing-r6-active-record")
 }
 
+fn canonical_mac_r6_consumed_active_pointer_v1(
+    pointer: &MacR6ConsumedActivePointerV1,
+) -> Result<Vec<u8>> {
+    if pointer.schema_owner != "substrate.mac-r6-consumed-active-pointer"
+        || pointer.schema_version != 1
+        || pointer.predecessor_generation == 0
+        || pointer.consumed_reason != "expired-unused-active-pointer-consumed"
+    {
+        bail!("R6 consumed active pointer schema is invalid");
+    }
+    mac_require_uuid_v7_component_v1(&pointer.scope_id, "R6 consumed pointer scope")?;
+    mac_require_uuid_v7_component_v1(&pointer.challenge_id, "R6 consumed pointer challenge")?;
+    mac_require_uuid_v7_component_v1(&pointer.predecessor_id, "R6 consumed pointer predecessor")?;
+    require_lower_hex_digest_mac_v1(
+        &pointer.host_record_sha256,
+        "R6 consumed pointer host record",
+    )?;
+    require_lower_hex_digest_mac_v1(
+        &pointer.stage_one_record_sha256,
+        "R6 consumed pointer Stage-1 record",
+    )?;
+    serde_json::to_vec(&json!({
+        "schema_owner": pointer.schema_owner,
+        "schema_version": pointer.schema_version,
+        "scope_id": pointer.scope_id,
+        "challenge_id": pointer.challenge_id,
+        "host_record_sha256": pointer.host_record_sha256,
+        "predecessor_id": pointer.predecessor_id,
+        "predecessor_generation": pointer.predecessor_generation,
+        "stage_one_record_sha256": pointer.stage_one_record_sha256,
+        "consumed_reason": pointer.consumed_reason,
+    }))
+    .context("encode canonical R6 consumed active pointer")
+}
+
+fn parse_mac_r6_consumed_active_pointer_v1(bytes: &[u8]) -> Result<MacR6ConsumedActivePointerV1> {
+    let value: Value =
+        serde_json::from_slice(bytes).context("decode R6 consumed active pointer")?;
+    let object = value
+        .as_object()
+        .ok_or_else(|| anyhow::anyhow!("R6 consumed active pointer must be an object"))?;
+    if object.len() != 9 {
+        bail!("R6 consumed active pointer has an open field set");
+    }
+    let string = |field: &str| -> Result<String> {
+        object
+            .get(field)
+            .and_then(Value::as_str)
+            .map(ToOwned::to_owned)
+            .ok_or_else(|| anyhow::anyhow!("R6 consumed active pointer lacks {field}"))
+    };
+    let pointer = MacR6ConsumedActivePointerV1 {
+        schema_owner: string("schema_owner")?,
+        schema_version: u32::try_from(
+            object
+                .get("schema_version")
+                .and_then(Value::as_u64)
+                .ok_or_else(|| anyhow::anyhow!("R6 consumed pointer lacks schema version"))?,
+        )
+        .context("R6 consumed pointer schema version overflow")?,
+        scope_id: string("scope_id")?,
+        challenge_id: string("challenge_id")?,
+        host_record_sha256: string("host_record_sha256")?,
+        predecessor_id: string("predecessor_id")?,
+        predecessor_generation: object
+            .get("predecessor_generation")
+            .and_then(Value::as_u64)
+            .ok_or_else(|| anyhow::anyhow!("R6 consumed pointer lacks predecessor generation"))?,
+        stage_one_record_sha256: string("stage_one_record_sha256")?,
+        consumed_reason: string("consumed_reason")?,
+    };
+    if canonical_mac_r6_consumed_active_pointer_v1(&pointer)? != bytes {
+        bail!("R6 consumed active pointer is not canonical");
+    }
+    Ok(pointer)
+}
+
+#[derive(Debug, Clone, PartialEq, Eq)]
+enum MacR6ActivePointerStateV1 {
+    Active(String),
+    Consumed(MacR6ConsumedActivePointerV1),
+}
+
+fn parse_mac_r6_active_pointer_state_v1(
+    scope_id: &str,
+    bytes: &[u8],
+) -> Result<MacR6ActivePointerStateV1> {
+    if bytes.first() == Some(&b'{') {
+        let pointer = parse_mac_r6_consumed_active_pointer_v1(bytes)?;
+        if pointer.scope_id != scope_id {
+            bail!("R6 consumed active pointer crosses a protected scope");
+        }
+        return Ok(MacR6ActivePointerStateV1::Consumed(pointer));
+    }
+    let challenge_id =
+        std::str::from_utf8(bytes).context("decode fixed R6 active pairing record challenge")?;
+    let challenge_id = challenge_id.strip_suffix('\n').ok_or_else(|| {
+        anyhow::anyhow!("R6 active pairing challenge pointer lacks its canonical terminator")
+    })?;
+    if format!("{challenge_id}\n").as_bytes() != bytes {
+        bail!("R6 active pairing challenge pointer is not canonical");
+    }
+    mac_require_uuid_v7_component_v1(challenge_id, "R6 active pairing challenge ID")?;
+    Ok(MacR6ActivePointerStateV1::Active(challenge_id.to_string()))
+}
+
 fn open_active_mac_guest_pairing_record_v1(
     executor: &MacManagedArtifactExecutorV1,
     scope_id: &str,
@@ -12179,16 +16732,120 @@ fn open_active_mac_guest_pairing_record_v1(
     let Some(bytes) = mac_keychain_read_item_v1(MAC_KEYCHAIN_SERVICE_V1, &account)? else {
         return Ok(None);
     };
-    let challenge_id = std::str::from_utf8(&bytes)
-        .context("decode fixed R6 active pairing record challenge")?
-        .trim_end_matches('\n');
-    mac_require_uuid_v7_component_v1(challenge_id, "R6 active pairing challenge ID")?;
-    let record = open_mac_guest_pairing_record_v1(executor, challenge_id)?
+    let pointer = parse_mac_r6_active_pointer_state_v1(scope_id, &bytes)?;
+    let (challenge_id, consumed_pointer) = match pointer {
+        MacR6ActivePointerStateV1::Active(challenge_id) => (challenge_id, None),
+        MacR6ActivePointerStateV1::Consumed(pointer) => {
+            (pointer.challenge_id.clone(), Some(pointer))
+        }
+    };
+    let record = open_mac_guest_pairing_record_v1(executor, &challenge_id)?
         .ok_or_else(|| anyhow::anyhow!("R6 active pairing record index has no protected record"))?;
     if record.binding.scope_id != scope_id || record.ticket.current_anchor.scope_id != scope_id {
         bail!("R6 active pairing record index crosses a protected scope");
     }
+    if let Some(pointer) = consumed_pointer {
+        let record_sha256 =
+            sha256_hex_bootstrap_v1(&canonical_guest_publisher_pairing_host_record_v1(&record)?);
+        let predecessor =
+            mac_open_r6_pairing_predecessor_document_v1(scope_id, pointer.predecessor_generation)?
+                .ok_or_else(|| {
+                    anyhow::anyhow!("R6 consumed pointer lost its predecessor document")
+                })?
+                .0;
+        if pointer.host_record_sha256 != record_sha256
+            || pointer.stage_one_record_sha256 != record.binding.stage_one_record_sha256
+            || pointer.predecessor_id != predecessor.predecessor_id
+        {
+            bail!("R6 consumed active pointer does not exact-bind its protected record");
+        }
+        return Ok(None);
+    }
     Ok(Some(record))
+}
+
+fn classify_r6_active_pointer_consumption_v1(
+    record_state: &str,
+    has_operator_proof: bool,
+    effect_admitted_at_unix_ns: Option<u64>,
+    ticket_expires_at_unix_ns: u64,
+    predecessor_state: &str,
+    predecessor_attempt_id: Option<&str>,
+    predecessor_effect_admitted_at_unix_ns: Option<u64>,
+    now_unix_ns: u64,
+) -> Result<()> {
+    if record_state != "sessions_opened"
+        || has_operator_proof
+        || effect_admitted_at_unix_ns.is_some()
+        || now_unix_ns < ticket_expires_at_unix_ns
+        || predecessor_state != "Available"
+        || predecessor_attempt_id.is_some()
+        || predecessor_effect_admitted_at_unix_ns.is_some()
+    {
+        bail!("R6 active pointer consumption requires an exact expired unused attempt");
+    }
+    Ok(())
+}
+
+fn consume_expired_unused_active_pointer_v1(
+    executor: &MacManagedArtifactExecutorV1,
+    scope_id: &str,
+    record: &GuestPublisherPairingHostRecordV1,
+    stage_one: &MacLimaGuestPairingStageOneRecordV1,
+    now_unix_ns: u64,
+) -> Result<()> {
+    validate_guest_publisher_pairing_host_record_v1(record)?;
+    classify_r6_active_pointer_consumption_v1(
+        &record.state,
+        record.operator_proof_sha256.is_some(),
+        record.effect_admitted_at_unix_ns,
+        record.ticket.challenge.expires_at_unix_ns,
+        &stage_one.predecessor_state.state,
+        stage_one.predecessor_state.pairing_attempt_id.as_deref(),
+        stage_one.predecessor_state.effect_admitted_at_unix_ns,
+        now_unix_ns,
+    )?;
+    if record.binding.scope_id != scope_id
+        || record.ticket.current_anchor.scope_id != scope_id
+        || record.binding.stage_one_record_sha256
+            != mac_r6_pairing_stage_one_commitment_v1(stage_one)?
+    {
+        bail!("R6 active pointer consumption does not exact-join scope and Stage-1");
+    }
+    let account = mac_active_guest_pairing_record_account_v1(scope_id)?;
+    let observed = mac_keychain_read_item_v1(MAC_KEYCHAIN_SERVICE_V1, &account)?
+        .ok_or_else(|| anyhow::anyhow!("R6 active pointer disappeared before consumption"))?;
+    match parse_mac_r6_active_pointer_state_v1(scope_id, &observed)? {
+        MacR6ActivePointerStateV1::Active(challenge_id)
+            if challenge_id == record.ticket.challenge.challenge_id => {}
+        _ => bail!("R6 active pointer consumption lost the exact old challenge"),
+    }
+    let pointer = MacR6ConsumedActivePointerV1 {
+        schema_owner: "substrate.mac-r6-consumed-active-pointer".to_string(),
+        schema_version: 1,
+        scope_id: scope_id.to_string(),
+        challenge_id: record.ticket.challenge.challenge_id.clone(),
+        host_record_sha256: sha256_hex_bootstrap_v1(
+            &canonical_guest_publisher_pairing_host_record_v1(record)?,
+        ),
+        predecessor_id: stage_one.predecessor.predecessor_id.clone(),
+        predecessor_generation: stage_one.predecessor.predecessor_generation,
+        stage_one_record_sha256: record.binding.stage_one_record_sha256.clone(),
+        consumed_reason: "expired-unused-active-pointer-consumed".to_string(),
+    };
+    let next = canonical_mac_r6_consumed_active_pointer_v1(&pointer)?;
+    mac_keychain_compare_and_swap_item_v1(
+        MAC_KEYCHAIN_SERVICE_V1,
+        &account,
+        Some(&observed),
+        &next,
+    )?;
+    // Reopen the record through the consumed marker before allowing predecessor replacement or a
+    // new ticket. This proves the marker binds the same immutable host record after its CAS.
+    if open_active_mac_guest_pairing_record_v1(executor, scope_id)?.is_some() {
+        bail!("R6 consumed active pointer remained effect-visible after CAS");
+    }
+    Ok(())
 }
 
 fn set_active_mac_guest_pairing_record_v1(
@@ -12205,6 +16862,19 @@ fn set_active_mac_guest_pairing_record_v1(
     // challenge-record CAS, and pointer update, so a concurrent initial issuer cannot overwrite
     // the pointer after independently minting a second live record.
     let observed = mac_keychain_read_item_v1(MAC_KEYCHAIN_SERVICE_V1, &account)?;
+    if let Some(bytes) = observed.as_deref() {
+        match parse_mac_r6_active_pointer_state_v1(scope_id, bytes)? {
+            MacR6ActivePointerStateV1::Active(challenge_id)
+                if challenge_id == record.ticket.challenge.challenge_id =>
+            {
+                return Ok(())
+            }
+            MacR6ActivePointerStateV1::Active(_) => {
+                bail!("R6 active pairing pointer cannot overwrite a live challenge")
+            }
+            MacR6ActivePointerStateV1::Consumed(_) => {}
+        }
+    }
     let next = format!("{}\n", record.ticket.challenge.challenge_id);
     mac_keychain_compare_and_swap_item_v1(
         MAC_KEYCHAIN_SERVICE_V1,
@@ -12212,6 +16882,79 @@ fn set_active_mac_guest_pairing_record_v1(
         observed.as_deref(),
         next.as_bytes(),
     )
+}
+
+/// Retain the exact signed launch bytes before the host record that commits their digest can be
+/// published. A lost issue response is therefore replayed byte-for-byte and never re-signed.
+fn persist_r6_operator_launch_exact_v1(
+    scope_id: &str,
+    record: &GuestPublisherPairingHostRecordV1,
+    launch: &GuestPublisherPairingOperatorLaunchV1,
+) -> Result<()> {
+    validate_guest_publisher_pairing_operator_launch_against_ticket_and_host_record_at_v1(
+        &record.ticket,
+        record,
+        launch,
+        r6_now_unix_ns_v1()?,
+    )?;
+    let stage_one = open_mac_lima_guest_pairing_stage_one_record_v1(scope_id)?
+        .ok_or_else(|| anyhow::anyhow!("R6 retained launch has no protected predecessor"))?;
+    validate_mac_r6_pairing_operator_launch_identities_v1(
+        record,
+        launch,
+        &stage_one.predecessor.producer_host_identity,
+        &stage_one.predecessor.guest_executor_identity,
+    )?;
+    let bytes = canonical_guest_publisher_pairing_operator_launch_v1(launch)?;
+    if sha256_hex_bootstrap_v1(&bytes) != record.operator_launch_sha256 {
+        bail!("R6 retained operator launch does not match the host-record digest");
+    }
+    let account = mac_keychain_r6_pairing_operator_launch_account_v1(
+        scope_id,
+        &record.ticket.challenge.challenge_id,
+    )?;
+    let _guard = mac_keychain_durable_cas_guard_v1(&account)?;
+    match mac_keychain_read_item_v1(MAC_KEYCHAIN_SERVICE_V1, &account)? {
+        Some(existing) if existing == bytes => Ok(()),
+        Some(_) => bail!("R6 retained operator launch account conflicts"),
+        None => {
+            mac_keychain_compare_and_swap_item_v1(MAC_KEYCHAIN_SERVICE_V1, &account, None, &bytes)
+        }
+    }
+}
+
+fn open_r6_operator_launch_exact_v1(
+    scope_id: &str,
+    record: &GuestPublisherPairingHostRecordV1,
+) -> Result<GuestPublisherPairingOperatorLaunchV1> {
+    let account = mac_keychain_r6_pairing_operator_launch_account_v1(
+        scope_id,
+        &record.ticket.challenge.challenge_id,
+    )?;
+    let bytes = mac_keychain_read_item_v1(MAC_KEYCHAIN_SERVICE_V1, &account)?
+        .ok_or_else(|| anyhow::anyhow!("R6 host record has no retained operator launch"))?;
+    if sha256_hex_bootstrap_v1(&bytes) != record.operator_launch_sha256 {
+        bail!("R6 retained operator launch digest does not match its host record");
+    }
+    let launch = parse_and_validate_guest_publisher_pairing_operator_launch_v1(&bytes)?;
+    if canonical_guest_publisher_pairing_operator_launch_v1(&launch)? != bytes {
+        bail!("R6 retained operator launch bytes are not canonical");
+    }
+    validate_guest_publisher_pairing_operator_launch_against_ticket_and_host_record_at_v1(
+        &record.ticket,
+        record,
+        &launch,
+        r6_now_unix_ns_v1()?,
+    )?;
+    let stage_one = open_mac_lima_guest_pairing_stage_one_record_v1(scope_id)?
+        .ok_or_else(|| anyhow::anyhow!("R6 replayed launch has no protected predecessor"))?;
+    validate_mac_r6_pairing_operator_launch_identities_v1(
+        record,
+        &launch,
+        &stage_one.predecessor.producer_host_identity,
+        &stage_one.predecessor.guest_executor_identity,
+    )?;
+    Ok(launch)
 }
 
 fn r6_pairing_issue_response_v1(
@@ -12249,19 +16992,21 @@ fn active_r6_record_exactly_rejoins_issue_v1(
     control: &ManagedLifecycleControlRequestV1,
     evidence: &ExecutorBuildEvidenceV1,
 ) -> Result<bool> {
-    validate_guest_publisher_pairing_host_record_v1(record)?;
-    let stage_one_sha256 = sha256_hex_bootstrap_v1(
-        &canonical_mac_lima_guest_pairing_stage_one_record_v1(stage_one)?,
-    );
+    validate_mac_r6_pairing_host_record_identities_v1(
+        record,
+        &stage_one.predecessor.producer_host_identity,
+        &stage_one.predecessor.guest_executor_identity,
+    )?;
+    let stage_one_sha256 = mac_r6_pairing_stage_one_commitment_v1(stage_one)?;
     let anchor = &protected_state.current_anchor;
     if record.binding.scope_id != control.scope_id
         || record.binding.platform_mapping_commitment != anchor.platform_mapping_commitment
-        || record.binding.guest_machine_identity != stage_one.guest_machine_identity
+        || record.binding.guest_machine_identity != stage_one.predecessor.guest_machine_identity
         || record.binding.source_commit != evidence.source_commit
         || record.binding.source_tree != evidence.source_tree
         || record.binding.source_ref != evidence.source_ref
-        || record.binding.staged_executor_sha256 != evidence.artifact_sha256
-        || record.binding.staged_executor_sha256 != stage_one.staged_executor_sha256
+        || record.binding.staged_executor_sha256
+            != stage_one.predecessor.guest_executor_identity.sha256
         || record.binding.stage_one_record_sha256 != stage_one_sha256
         || record.ticket.current_anchor != *anchor
         || record.ticket.current_anchor_sha256 != lifecycle_anchor_sha256_v1(anchor)?
@@ -12273,7 +17018,8 @@ fn active_r6_record_exactly_rejoins_issue_v1(
     }
     Ok(matches!(
         record.state.as_str(),
-        "operator_proof_verified"
+        "sessions_opened"
+            | "operator_proof_verified"
             | "guest_state_root_durable"
             | "hello_durable"
             | "transcript_durable"
@@ -12313,9 +17059,10 @@ fn mac_issue_r6_operator_launch_v1(
             bail!("R6 direct operator launch retained limactl identity changed");
         }
         if stage_one.stage_one.instance_name.is_empty()
-            || stage_one.scope_id != binding.scope_id
-            || stage_one.guest_machine_identity != binding.guest_machine_identity
-            || stage_one.staged_executor_sha256 != binding.staged_executor_sha256
+            || stage_one.predecessor.scope_id != binding.scope_id
+            || stage_one.predecessor.guest_machine_identity != binding.guest_machine_identity
+            || stage_one.predecessor.guest_executor_identity.sha256
+                != binding.staged_executor_sha256
         {
             bail!("R6 direct operator launch does not exact-join Stage-1 admission");
         }
@@ -12484,6 +17231,15 @@ fn load_exact_r6_pairing_record_by_challenge_v1(
         .ok_or_else(|| anyhow::anyhow!("R6 session request is missing immutable binding"))?;
     let record = open_mac_guest_pairing_record_v1(executor, challenge_id)?
         .ok_or_else(|| anyhow::anyhow!("R6 session has no protected host record"))?;
+    let predecessor = control
+        .r6_pairing_predecessor_v1
+        .as_ref()
+        .ok_or_else(|| anyhow::anyhow!("R6 session has no typed predecessor identities"))?;
+    validate_mac_r6_pairing_host_record_identities_v1(
+        &record,
+        &predecessor.producer_host_identity,
+        &predecessor.guest_executor_identity,
+    )?;
     let record_sha256 =
         sha256_hex_bootstrap_v1(&canonical_guest_publisher_pairing_host_record_v1(&record)?);
     if record.binding != *binding
@@ -12508,15 +17264,17 @@ fn open_pm_bound_guest_pairing_data_session_v1(
     record: &GuestPublisherPairingHostRecordV1,
 ) -> Result<GuestPublisherPairingHostRecordV1> {
     let stage_one = open_mac_lima_guest_pairing_stage_one_record_v1(&control.scope_id)?
-        .ok_or_else(|| anyhow::anyhow!("R6 data session has no protected Stage-1 record"))?;
-    if stage_one.guest_machine_identity != record.binding.guest_machine_identity
-        || stage_one.staged_executor_sha256 != record.binding.staged_executor_sha256
-        || stage_one.scope_id != record.binding.scope_id
-        || sha256_hex_bootstrap_v1(&canonical_mac_lima_guest_pairing_stage_one_record_v1(
-            &stage_one,
-        )?) != record.binding.stage_one_record_sha256
+        .ok_or_else(|| anyhow::anyhow!("R6 data session has no protected predecessor"))?;
+    if stage_one.predecessor.guest_machine_identity != record.binding.guest_machine_identity
+        || stage_one.predecessor.guest_executor_identity.sha256
+            != record.binding.staged_executor_sha256
+        || stage_one.predecessor.scope_id != record.binding.scope_id
+        || control.r6_pairing_predecessor_v1.as_ref() != Some(&stage_one.predecessor)
+        || control.r6_pairing_continuation_v1.as_ref() != Some(&stage_one.continuation)
+        || mac_r6_pairing_stage_one_commitment_v1(&stage_one)?
+            != record.binding.stage_one_record_sha256
     {
-        bail!("R6 data session Stage-1 record does not match immutable binding");
+        bail!("R6 data session predecessor does not match immutable binding");
     }
     #[cfg(target_os = "macos")]
     {
@@ -12590,12 +17348,16 @@ fn open_pm_bound_guest_pairing_data_session_v1(
             .operator_proof_sha256
             .as_deref()
             .ok_or_else(|| anyhow::anyhow!("R6 operator proof admission lacks durable digest"))?;
+        let effect_admitted_at_unix_ns = current.effect_admitted_at_unix_ns.ok_or_else(|| {
+            anyhow::anyhow!("R6 operator proof admission lacks durable effect timestamp")
+        })?;
         writeln!(
             stdin,
             "{}",
             serde_json::to_string(&json!({
                 "kind":"operator_proof_accepted",
                 "operator_proof_sha256":admitted_proof_sha256,
+                "effect_admitted_at_unix_ns":effect_admitted_at_unix_ns,
             }))?
         )
         .context("acknowledge exact R6 operator proof")?;
@@ -12829,13 +17591,30 @@ fn accept_r6_operator_proof_before_intent_v1(
 ) -> Result<GuestPublisherPairingHostRecordV1> {
     let expected_commitment =
         r6_operator_proof_expected_commitment_v1(&current.ticket, &current.binding)?;
-    validate_guest_publisher_pairing_operator_proof_against_ticket_at_v1(
-        &current.ticket,
-        current,
-        proof,
-        &expected_commitment,
-        r6_now_unix_ns_v1()?,
-    )?;
+    let predecessor_state = open_mac_r6_pairing_predecessor_state_v1(&control.scope_id)?
+        .ok_or_else(|| anyhow::anyhow!("R6 operator proof has no predecessor state"))?
+        .0;
+    match predecessor_state.state.as_str() {
+        "Available" => validate_guest_publisher_pairing_operator_proof_against_ticket_at_v1(
+            &current.ticket,
+            current,
+            proof,
+            &expected_commitment,
+            r6_now_unix_ns_v1()?,
+        )?,
+        "PairingEffectPrepared" | "PairingEffectStarted" | "Consumed"
+            if predecessor_state.pairing_attempt_id.as_deref()
+                == Some(current.ticket.challenge.challenge_id.as_str()) =>
+        {
+            validate_guest_publisher_pairing_operator_proof_against_ticket_v1(
+                &current.ticket,
+                current,
+                proof,
+                &expected_commitment,
+            )?
+        }
+        _ => bail!("R6 operator proof cannot cross the admitted predecessor effect"),
+    }
     let proof_sha256 = guest_publisher_pairing_operator_proof_sha256_v1(proof)?;
     if declared_proof_sha256 != proof_sha256 {
         bail!("R6 data child operator proof digest does not match canonical proof");
@@ -12846,12 +17625,15 @@ fn accept_r6_operator_proof_before_intent_v1(
     if current.state != "sessions_opened" || current.operator_proof_sha256.is_some() {
         bail!("R6 operator proof is not admissible for this protected record state");
     }
+    let effect_admitted_at_unix_ns =
+        admit_r6_predecessor_effect_after_operator_proof_v1(control, current)?;
     let mut next = current.clone();
     next.state = "operator_proof_verified".to_string();
     next.operator_tty_session.state = "closed".to_string();
     next.operator_tty_session.ended_observation =
         Some("operator-child-exited-successfully".to_string());
     next.operator_proof_sha256 = Some(proof_sha256);
+    next.effect_admitted_at_unix_ns = Some(effect_admitted_at_unix_ns);
     persist_r6_guest_pairing_record_transition_v1(executor, control, current, next)
 }
 
@@ -14534,23 +19316,24 @@ pub fn mac_atomic_file_ffi_v1(path: &Path, bytes: &[u8]) -> Result<()> {
         .ok_or_else(|| anyhow::anyhow!("macOS lifecycle path has no parent"))?;
     fs::create_dir_all(parent)
         .with_context(|| format!("create receipt parent {}", parent.display()))?;
-    let temporary = parent.join(format!(
-        ".{}.tmp",
-        path.file_name()
-            .and_then(|v| v.to_str())
-            .unwrap_or("receipt")
-    ));
-    fs::write(&temporary, bytes)
-        .with_context(|| format!("write temporary receipt {}", temporary.display()))?;
-    fs::File::open(&temporary)?
-        .sync_all()
-        .context("fsync temporary macOS lifecycle receipt")?;
-    fs::rename(&temporary, path)
-        .with_context(|| format!("publish macOS lifecycle receipt {}", path.display()))?;
-    fs::File::open(parent)?
-        .sync_all()
-        .context("fsync macOS lifecycle receipt parent")?;
-    Ok(())
+    #[cfg(target_os = "macos")]
+    {
+        let metadata =
+            fs::symlink_metadata(parent).context("inspect macOS lifecycle receipt parent")?;
+        return mac_publish_immutable_file_atomic_no_replace_v1(
+            path,
+            bytes,
+            0o600,
+            metadata.uid(),
+            metadata.gid(),
+            "macOS lifecycle receipt",
+        );
+    }
+    #[cfg(not(target_os = "macos"))]
+    {
+        let _ = bytes;
+        bail!("macOS lifecycle atomic publication is unavailable off macOS")
+    }
 }
 
 #[cfg(target_os = "macos")]

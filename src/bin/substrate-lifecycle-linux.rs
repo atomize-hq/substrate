@@ -442,7 +442,6 @@ fn run_pm_bound_guest_pairing_data_session_v1(
     let mut input = BufReader::new(stdin.lock());
     let (ticket, binding) = parse_r6_data_start_frame_v1(&read_r6_data_frame_v1(&mut input)?)?;
     validate_r6_guest_pairing_binding_v1(executor, &ticket, &binding)?;
-    require_current_guest_pairing_ticket_v1(&ticket)?;
     require_r6_pm_bound_lima_guest_v1(&binding)?;
     if ticket.current_anchor.authority_domain != "mac_host_shared" {
         bail!("R6 guest data session accepts only a macOS PM-bound ticket");
@@ -454,14 +453,22 @@ fn run_pm_bound_guest_pairing_data_session_v1(
         "proof":operator_proof,
         "operator_proof_sha256":operator_proof_sha256,
     }))?;
-    parse_r6_operator_proof_accepted_ack_v1(
+    let effect_admitted_at_unix_ns = parse_r6_operator_proof_accepted_ack_v1(
         &read_r6_data_frame_v1(&mut input)?,
         &operator_proof_sha256,
+        ticket.challenge.expires_at_unix_ns,
     )?;
-    require_current_guest_pairing_ticket_v1(&ticket)?;
+    // The host sends this acknowledgement only after it has structurally validated this exact
+    // proof and durably crossed Available -> PairingEffectPrepared -> PairingEffectStarted. From
+    // this point onward expiry cannot revoke the admitted effect; retries converge the same
+    // ticket/binding/proof instead of minting or accepting new authority.
     let intent = publish_guest_pairing_intent_v1(executor, &ticket, &binding)?;
-    require_current_guest_pairing_ticket_v1(&ticket)?;
-    let hello = emit_guest_publisher_bootstrap_hello_v1(executor, &ticket, &intent)?;
+    let hello = emit_guest_publisher_bootstrap_hello_v1(
+        executor,
+        &ticket,
+        &intent,
+        effect_admitted_at_unix_ns,
+    )?;
     substrate_common::validate_guest_publisher_bootstrap_hello_v1(&ticket, &binding, &hello)?;
     print_json_line_v1(&json!({"kind":"hello","hello":hello}))?;
 
@@ -472,7 +479,6 @@ fn run_pm_bound_guest_pairing_data_session_v1(
         &hello,
         &transcript,
     )?;
-    require_current_guest_pairing_ticket_v1(&ticket)?;
     let durable_intent = persist_r6_guest_pairing_transcript_v1(
         executor,
         &ticket,
@@ -481,7 +487,6 @@ fn run_pm_bound_guest_pairing_data_session_v1(
         &hello,
         &transcript,
     )?;
-    require_current_guest_pairing_ticket_v1(&ticket)?;
     let anchor = prepare_r6_guest_publisher_anchor_v1(
         executor,
         &ticket,
@@ -505,9 +510,7 @@ fn run_pm_bound_guest_pairing_data_session_v1(
     if committed != anchor {
         bail!("R6 data session commit changed its signed guest anchor");
     }
-    print_json_line_v1(
-        &json!({"kind":"ticket_consumed","guest_anchor_sha256":sha256_hex_bytes_v1(&canonical_json_bytes_of_v1(serde_json::to_value(&anchor).context("serialize R6 guest anchor")?)?)?}),
-    )?;
+    print_json_line_v1(&r6_guest_ticket_consumed_response_v1(&anchor)?)?;
     Ok(())
 }
 
@@ -640,19 +643,30 @@ fn parse_r6_data_start_frame_v1(
 
 /// The host data session acknowledges only after it has validated the typed proof against the
 /// signed ticket/full host record and committed the proof digest by generation-CAS.
-fn parse_r6_operator_proof_accepted_ack_v1(bytes: &[u8], expected_sha256: &str) -> Result<()> {
+fn parse_r6_operator_proof_accepted_ack_v1(
+    bytes: &[u8],
+    expected_sha256: &str,
+    ticket_expires_at_unix_ns: u64,
+) -> Result<u64> {
     let value: Value =
         serde_json::from_slice(bytes).context("decode R6 operator-proof acknowledgement")?;
     let object = value
         .as_object()
         .ok_or_else(|| anyhow!("R6 operator-proof acknowledgement must be an object"))?;
-    if object.len() != 2
+    if object.len() != 3
         || object.get("kind").and_then(Value::as_str) != Some("operator_proof_accepted")
         || object.get("operator_proof_sha256").and_then(Value::as_str) != Some(expected_sha256)
     {
         bail!("R6 data session rejects a substituted operator-proof acknowledgement");
     }
-    Ok(())
+    let effect_admitted_at_unix_ns = object
+        .get("effect_admitted_at_unix_ns")
+        .and_then(Value::as_u64)
+        .ok_or_else(|| anyhow!("R6 operator-proof acknowledgement lacks admission time"))?;
+    if effect_admitted_at_unix_ns == 0 || effect_admitted_at_unix_ns >= ticket_expires_at_unix_ns {
+        bail!("R6 operator-proof acknowledgement admission time is outside ticket authority");
+    }
+    Ok(effect_admitted_at_unix_ns)
 }
 
 fn parse_r6_transcript_frame_v1(bytes: &[u8]) -> Result<GuestPublisherBootstrapTranscriptV1> {
@@ -697,6 +711,7 @@ fn validate_r6_guest_pairing_binding_v1(
 ) -> Result<()> {
     validate_guest_publisher_pairing_ticket_v1(ticket)?;
     substrate_common::validate_guest_publisher_pairing_session_binding_v1(binding)?;
+    require_r6_ticket_guest_artifact_binding_v1(ticket, binding)?;
     if executor.state_root != PathBuf::from(DEFAULT_STATE_ROOT)
         || executor.executor_path != PathBuf::from(DEFAULT_EXECUTOR_PATH)
         || ticket.current_anchor.scope_id != binding.scope_id
@@ -705,11 +720,38 @@ fn validate_r6_guest_pairing_binding_v1(
         || ticket.challenge.source_commit != binding.source_commit
         || ticket.challenge.source_tree != binding.source_tree
         || ticket.challenge.source_ref != binding.source_ref
-        || ticket.challenge.executor_build_evidence_sha256 != binding.staged_executor_sha256
         || ticket.challenge.challenge_id != binding.ticket_challenge_id
         || ticket.host_generation != binding.host_record_generation
     {
         bail!("R6 guest data frame does not exact-join fixed layout and immutable binding");
+    }
+    Ok(())
+}
+
+/// The legacy wire challenge carries two deliberately separate digests. The host-control Mach-O
+/// digest authenticates the retained macOS owner; only the guest component commitment may bind
+/// the installed Lima AArch64 ELF and all guest intent/transcript state.
+fn require_r6_ticket_guest_artifact_binding_v1(
+    ticket: &GuestPublisherPairingTicketV1,
+    binding: &GuestPublisherPairingSessionBindingV1,
+) -> Result<()> {
+    require_r6_distinct_guest_artifact_binding_fields_v1(
+        &ticket.challenge.executor_build_evidence_sha256,
+        &ticket.challenge.guest_component_commitment_sha256,
+        &binding.staged_executor_sha256,
+    )
+}
+
+fn require_r6_distinct_guest_artifact_binding_fields_v1(
+    host_macho_sha256: &str,
+    guest_elf_sha256: &str,
+    staged_guest_sha256: &str,
+) -> Result<()> {
+    if host_macho_sha256 == guest_elf_sha256 {
+        bail!("R6 host Mach-O and guest AArch64 ELF digests were cross-substituted");
+    }
+    if guest_elf_sha256 != staged_guest_sha256 {
+        bail!("R6 guest AArch64 ELF digest does not match the immutable session binding");
     }
     Ok(())
 }
@@ -2671,7 +2713,6 @@ fn validate_r6_operator_proof_before_intent_v1(
     ticket: &GuestPublisherPairingTicketV1,
     binding: &GuestPublisherPairingSessionBindingV1,
 ) -> Result<(GuestPublisherPairingOperatorProofV1, String)> {
-    require_current_guest_pairing_ticket_v1(ticket)?;
     let proof = load_r6_guest_operator_proof_v1(executor, binding)?;
     if proof.binding != *binding
         || proof.binding.ticket_challenge_id != ticket.challenge.challenge_id
@@ -2680,7 +2721,6 @@ fn validate_r6_operator_proof_before_intent_v1(
     {
         bail!("R6 operator proof does not exact-join the data ticket and immutable binding");
     }
-    require_r6_not_expired_at_v1(proof.expires_at_unix_ns, "operator proof")?;
     let expected_commitment = expected_r6_operator_proof_commitment_v1(ticket, binding)?;
     if proof.confirmation_commitment != expected_commitment {
         bail!("R6 operator proof commitment does not match the signed ticket");
@@ -2698,11 +2738,18 @@ fn emit_guest_publisher_bootstrap_hello_v1(
     executor: &LinuxManagedArtifactExecutorV1,
     ticket: &GuestPublisherPairingTicketV1,
     intent: &GuestPublisherPairingGuestIntentV1,
+    effect_admitted_at_unix_ns: u64,
 ) -> Result<GuestPublisherBootstrapHelloV1> {
     let hello_path = guest_bootstrap_hello_path_v1(executor, &ticket.challenge.challenge_id);
     if path_exists_or_symlink_v1(&hello_path)? {
         let hello = load_guest_bootstrap_hello_v1(&hello_path)?;
-        validate_guest_bootstrap_hello_resume_v1(executor, ticket, intent, &hello)?;
+        validate_guest_bootstrap_hello_resume_v1(
+            executor,
+            ticket,
+            intent,
+            &hello,
+            effect_admitted_at_unix_ns,
+        )?;
         if intent.hello.as_ref() != Some(&hello) {
             let mut durable_intent = intent.clone();
             durable_intent.hello = Some(hello.clone());
@@ -2723,6 +2770,10 @@ fn emit_guest_publisher_bootstrap_hello_v1(
         serde_json::to_value(&hello_source_intent).context("serialize guest pairing intent")?,
     )?;
     let intent_sha256 = sha256_hex_bytes_v1(&intent_bytes)?;
+    let intent_published_at_unix_ns = unix_now_ns_v1()?;
+    let recovery_observed_at_unix_ns = (intent_published_at_unix_ns
+        >= ticket.challenge.expires_at_unix_ns)
+        .then_some(intent_published_at_unix_ns);
     let mut hello = GuestPublisherBootstrapHelloV1 {
         schema_owner: "substrate.guest-publisher-bootstrap-hello".to_string(),
         schema_version: 1,
@@ -2731,7 +2782,9 @@ fn emit_guest_publisher_bootstrap_hello_v1(
         guest_test_retirement_commitment: ticket.guest_test_retirement_commitment.clone(),
         guest_machine_identity: ticket.challenge.guest_machine_identity.clone(),
         guest_artifact_sha256: intent.guest_artifact_sha256.clone(),
-        intent_published_at_unix_ns: unix_now_ns_v1()?,
+        effect_admitted_at_unix_ns,
+        intent_published_at_unix_ns,
+        recovery_observed_at_unix_ns,
         intent_parent_fsync_observed: true,
         nonce: intent.nonce.clone(),
         guest_public_key: intent.public_key.clone(),
@@ -2765,7 +2818,6 @@ fn publish_guest_pairing_intent_v1(
     binding: &GuestPublisherPairingSessionBindingV1,
 ) -> Result<GuestPublisherPairingGuestIntentV1> {
     validate_r6_guest_pairing_binding_v1(executor, ticket, binding)?;
-    require_current_guest_pairing_ticket_v1(ticket)?;
     open_guest_pairing_intent_parent_v1(executor)?;
     let ticket_sha256 = sha256_hex_bytes_v1(&canonical_guest_publisher_pairing_ticket_v1(ticket)?)?;
     let intent_path = guest_intent_path_v1(executor, &ticket.challenge.challenge_id);
@@ -2794,7 +2846,7 @@ fn publish_guest_pairing_intent_v1(
         challenge_id: ticket.challenge.challenge_id.clone(),
         ticket_sha256,
         guest_machine_identity: ticket.challenge.guest_machine_identity.clone(),
-        guest_artifact_sha256: ticket.challenge.executor_build_evidence_sha256.clone(),
+        guest_artifact_sha256: ticket.challenge.guest_component_commitment_sha256.clone(),
         seed: sha256_hex_bytes_v1(ticket.challenge.challenge.as_bytes())?,
         public_key: public_key.clone(),
         public_key_sha256: sha256_hex_bytes_v1(&base64url_decode_v1(&public_key)?)?,
@@ -2842,13 +2894,13 @@ fn validate_resumable_guest_pairing_intent_v1(
 ) -> Result<()> {
     let ticket_sha256 = sha256_hex_bytes_v1(&canonical_guest_publisher_pairing_ticket_v1(ticket)?)?;
     substrate_common::validate_guest_publisher_pairing_session_binding_v1(binding)?;
+    require_r6_ticket_guest_artifact_binding_v1(ticket, binding)?;
     if ticket.current_anchor.scope_id != binding.scope_id
         || ticket.challenge.platform_mapping_commitment != binding.platform_mapping_commitment
         || ticket.challenge.guest_machine_identity != binding.guest_machine_identity
         || ticket.challenge.source_commit != binding.source_commit
         || ticket.challenge.source_tree != binding.source_tree
         || ticket.challenge.source_ref != binding.source_ref
-        || ticket.challenge.executor_build_evidence_sha256 != binding.staged_executor_sha256
         || ticket.challenge.challenge_id != binding.ticket_challenge_id
         || ticket.host_generation != binding.host_record_generation
     {
@@ -2865,7 +2917,7 @@ fn validate_resumable_guest_pairing_intent_v1(
     if intent.guest_machine_identity != ticket.challenge.guest_machine_identity {
         bail!("durable guest pairing intent machine identity does not match the supplied ticket");
     }
-    if intent.guest_artifact_sha256 != ticket.challenge.executor_build_evidence_sha256 {
+    if intent.guest_artifact_sha256 != ticket.challenge.guest_component_commitment_sha256 {
         bail!("durable guest pairing intent executor digest does not match the supplied ticket");
     }
     if intent.public_key != public_key {
@@ -2924,6 +2976,7 @@ fn validate_guest_bootstrap_hello_resume_v1(
     ticket: &GuestPublisherPairingTicketV1,
     intent: &GuestPublisherPairingGuestIntentV1,
     hello: &GuestPublisherBootstrapHelloV1,
+    effect_admitted_at_unix_ns: u64,
 ) -> Result<()> {
     let ticket_sha256 = sha256_hex_bytes_v1(&canonical_guest_publisher_pairing_ticket_v1(ticket)?)?;
     if hello.ticket_sha256 != ticket_sha256 {
@@ -2941,6 +2994,7 @@ fn validate_guest_bootstrap_hello_resume_v1(
         || hello.guest_artifact_sha256 != intent.guest_artifact_sha256
         || hello.nonce != intent.nonce
         || hello.guest_public_key != intent.public_key
+        || hello.effect_admitted_at_unix_ns != effect_admitted_at_unix_ns
     {
         bail!("persisted guest bootstrap hello does not match the pairing intent");
     }
@@ -3358,28 +3412,72 @@ fn commit_guest_publisher_bootstrap_v1(
         transcript,
         &expected_anchor,
     )?;
-    let marker_path = guest_consumption_marker_path_v1(executor, &ticket.challenge.challenge_id);
+    commit_r6_guest_consumption_marker_v1(
+        executor,
+        &ticket.challenge.challenge_id,
+        &expected_marker,
+    )?;
+    Ok(expected_anchor)
+}
+
+/// Actual terminal guest commit primitive used by both first completion and replay. It creates
+/// or verifies exactly one immutable marker and therefore closes both host-Consumed crash windows
+/// without inventing a new receipt or authority timestamp.
+fn commit_r6_guest_consumption_marker_v1(
+    executor: &LinuxManagedArtifactExecutorV1,
+    challenge_id: &str,
+    expected_marker: &R6GuestPairingConsumptionMarkerV1,
+) -> Result<()> {
+    commit_r6_guest_consumption_marker_with_create_v1(
+        executor,
+        challenge_id,
+        expected_marker,
+        join_guest_host_consumption_v1,
+    )
+}
+
+fn commit_r6_guest_consumption_marker_with_create_v1<F>(
+    executor: &LinuxManagedArtifactExecutorV1,
+    challenge_id: &str,
+    expected_marker: &R6GuestPairingConsumptionMarkerV1,
+    create: F,
+) -> Result<()>
+where
+    F: FnOnce(
+        &LinuxManagedArtifactExecutorV1,
+        &str,
+        &R6GuestPairingConsumptionMarkerV1,
+    ) -> Result<()>,
+{
+    let marker_path = guest_consumption_marker_path_v1(executor, challenge_id);
     if let Some(saved_marker) = load_r6_consumption_marker_v1(&marker_path)? {
-        if saved_marker == expected_marker {
-            return Ok(expected_anchor);
+        if saved_marker == *expected_marker {
+            return Ok(());
         }
         bail!("R6 consumed marker rejects a non-identical retry");
     }
-    require_current_guest_pairing_ticket_v1(ticket)?;
-    match join_guest_host_consumption_v1(executor, &ticket.challenge.challenge_id, &expected_marker)
-    {
-        Ok(()) => Ok(expected_anchor),
+    match create(executor, challenge_id, expected_marker) {
+        Ok(()) => Ok(()),
         Err(error) if probe_error_kind_v1(&error) == Some(std::io::ErrorKind::AlreadyExists) => {
             let saved_marker = load_r6_consumption_marker_v1(&marker_path)?
                 .ok_or_else(|| anyhow!("R6 consumed marker disappeared after create race"))?;
-            if saved_marker == expected_marker {
-                Ok(expected_anchor)
+            if saved_marker == *expected_marker {
+                Ok(())
             } else {
                 bail!("R6 consumed marker rejects a non-identical retry")
             }
         }
         Err(error) => Err(error),
     }
+}
+
+fn r6_guest_ticket_consumed_response_v1(anchor: &LifecyclePublisherAnchorV1) -> Result<Value> {
+    Ok(json!({
+        "kind": "ticket_consumed",
+        "guest_anchor_sha256": sha256_hex_bytes_v1(&canonical_json_bytes_of_v1(
+            serde_json::to_value(anchor).context("serialize R6 guest anchor")?,
+        )?)?,
+    }))
 }
 
 fn retire_linux_test_publisher_v1(executor: &LinuxManagedArtifactExecutorV1) -> Result<()> {
@@ -5076,6 +5174,28 @@ mod tests {
     }
 
     #[test]
+    fn r6_operator_proof_ack_binds_the_durable_host_admission_time() {
+        let bytes = serde_json::to_vec(&json!({
+            "kind": "operator_proof_accepted",
+            "operator_proof_sha256": "a".repeat(64),
+            "effect_admitted_at_unix_ns": 99,
+        }))
+        .unwrap();
+        assert_eq!(
+            parse_r6_operator_proof_accepted_ack_v1(&bytes, &"a".repeat(64), 100).unwrap(),
+            99
+        );
+        assert!(parse_r6_operator_proof_accepted_ack_v1(&bytes, &"b".repeat(64), 100).is_err());
+        let at_expiry = serde_json::to_vec(&json!({
+            "kind": "operator_proof_accepted",
+            "operator_proof_sha256": "a".repeat(64),
+            "effect_admitted_at_unix_ns": 100,
+        }))
+        .unwrap();
+        assert!(parse_r6_operator_proof_accepted_ack_v1(&at_expiry, &"a".repeat(64), 100).is_err());
+    }
+
+    #[test]
     fn r6_expiry_equality_and_consumed_marker_are_exact() {
         assert!(require_r6_not_expired_at_now_v1(10, 10, "test").is_err());
         assert!(require_r6_not_expired_at_now_v1(11, 10, "test").is_err());
@@ -5103,6 +5223,128 @@ mod tests {
             altered, marker,
             "mutated proof must not be an idempotent retry"
         );
+
+        assert!(require_r6_distinct_guest_artifact_binding_fields_v1(
+            &"a".repeat(64),
+            &"b".repeat(64),
+            &"b".repeat(64),
+        )
+        .is_ok());
+        assert!(require_r6_distinct_guest_artifact_binding_fields_v1(
+            &"a".repeat(64),
+            &"a".repeat(64),
+            &"a".repeat(64),
+        )
+        .is_err());
+        assert!(require_r6_distinct_guest_artifact_binding_fields_v1(
+            &"a".repeat(64),
+            &"b".repeat(64),
+            &"c".repeat(64),
+        )
+        .is_err());
+
+        let source = include_str!("substrate-lifecycle-linux.rs");
+        let data_start = source
+            .find("fn run_pm_bound_guest_pairing_data_session_v1")
+            .expect("fixed data session");
+        let data_end = source[data_start..]
+            .find("fn read_r6_data_frame_v1")
+            .map(|offset| data_start + offset)
+            .expect("data session end");
+        assert!(
+            !source[data_start..data_end].contains("require_current_guest_pairing_ticket_v1"),
+            "an admitted data effect must converge structurally after expiry"
+        );
+        let operator_start = source
+            .find("fn run_pm_bound_guest_pairing_operator_tty_session_v1")
+            .expect("fixed operator session");
+        let operator_end = source[operator_start..]
+            .find("fn require_r6_pm_bound_lima_guest_v1")
+            .map(|offset| operator_start + offset)
+            .expect("operator session end");
+        assert!(
+            source[operator_start..operator_end]
+                .contains("require_r6_not_expired_at_v1(launch.expires_at_unix_ns"),
+            "a new operator effect must still reject expired authority"
+        );
+    }
+
+    #[test]
+    fn r6_consumed_crash_windows_execute_the_actual_guest_commit_and_replay() {
+        fn create_test_marker_v1(
+            executor: &LinuxManagedArtifactExecutorV1,
+            challenge_id: &str,
+            marker: &R6GuestPairingConsumptionMarkerV1,
+        ) -> Result<()> {
+            let path = guest_consumption_marker_path_v1(executor, challenge_id);
+            let mut file = OpenOptions::new()
+                .write(true)
+                .create_new(true)
+                .mode(0o600)
+                .open(&path)?;
+            file.write_all(&canonical_r6_consumption_marker_v1(marker)?)?;
+            file.sync_all()?;
+            File::open(path.parent().unwrap())?.sync_all()?;
+            Ok(())
+        }
+
+        let unique = unique_temp_path_v1("r6-consumed-recovery");
+        let root = std::env::temp_dir()
+            .canonicalize()
+            .unwrap()
+            .join(unique.file_name().unwrap());
+        let executor = LinuxManagedArtifactExecutorV1::new(
+            Some(root.clone()),
+            None,
+            None,
+            TransportKindV1::SeqPacket,
+        );
+        let challenge = "018f3e4a-7b2c-7c91-8a6f-2e1d5c4b3a97";
+        ensure_guest_artifact_directory_v1(&executor, challenge).unwrap();
+        let marker = R6GuestPairingConsumptionMarkerV1 {
+            schema_owner: R6_CONSUMPTION_MARKER_SCHEMA_OWNER_V1.to_string(),
+            schema_version: 1,
+            ticket_sha256: "a".repeat(64),
+            binding_sha256: "b".repeat(64),
+            operator_proof_sha256: "c".repeat(64),
+            transcript_sha256: "d".repeat(64),
+            anchor_sha256: "e".repeat(64),
+        };
+
+        // Models host Consumed CAS before its anchor ACK: the guest has no marker yet and the
+        // actual commit primitive must create it from the replayed exact receipt material.
+        commit_r6_guest_consumption_marker_with_create_v1(
+            &executor,
+            challenge,
+            &marker,
+            create_test_marker_v1,
+        )
+        .unwrap();
+        assert_eq!(
+            load_r6_consumption_marker_v1(&guest_consumption_marker_path_v1(&executor, challenge))
+                .unwrap(),
+            Some(marker.clone())
+        );
+
+        // Models the ACK-before-response crash: replay executes the same primitive and verifies
+        // the immutable marker rather than returning host-only success or creating new evidence.
+        commit_r6_guest_consumption_marker_with_create_v1(
+            &executor,
+            challenge,
+            &marker,
+            create_test_marker_v1,
+        )
+        .unwrap();
+        let mut substituted = marker.clone();
+        substituted.anchor_sha256 = "f".repeat(64);
+        assert!(commit_r6_guest_consumption_marker_with_create_v1(
+            &executor,
+            challenge,
+            &substituted,
+            create_test_marker_v1,
+        )
+        .is_err());
+        fs::remove_dir_all(root).unwrap();
     }
 
     fn r6_test_operator_launch_v1() -> GuestPublisherPairingOperatorLaunchV1 {

@@ -110,12 +110,25 @@ for text in (
     'mktemp -d "/private/tmp/substrate-mac-aarch64-build.XXXXXX"',
     "retained Linux bundle contains a mismatched prior",
     "mv \"${artifact_stage}\" \"${bundle_dir}\"",
+    "adopt_retained_linux_artifacts_transactionally()",
+    "os.O_NOFOLLOW",
+    "os.fchown(fd, 0, 0)",
+    "os.fchmod(fd, 0o755)",
+    "rollback_error",
+    "rollback verification mismatch",
+    "leaf.st_dev != after.st_dev or leaf.st_ino != after.st_ino",
     "retained_linux_artifacts",
     "publisher-bootstrap",
     "--lima-stage-one-authorization-v1 \"${stage_one_authorization}\"",
     "direct publisher-bootstrap returned an invalid Stage-1 result",
 ):
     require("installer", installer, text)
+adoption = installer[
+    installer.index("adopt_retained_linux_artifacts_transactionally()"):
+    installer.index("adopt_retained_linux_artifacts_transactionally\n", installer.index("adopt_retained_linux_artifacts_transactionally()"))
+]
+if adoption.index("mutated.append((path, fd, before))") > adoption.index("os.fchown(fd, 0, 0)"):
+    raise SystemExit("transactional adoption records rollback state after its first mutation")
 
 forbidden_selector = re.compile(r'--(?:artifact|role|path)(?:=|\b)')
 if forbidden_selector.search(installer):
@@ -126,6 +139,8 @@ for text in (
     "post_pm_requests_v1 remains a catalogue",
     "fixed installation sequence",
     "The privileged executor owns",
+    "emit_r6_pairing_continuation_v1()",
+    '"auto_run": False',
 ):
     require("lima-warm", warm, text)
 for selector in ("--publisher-request-v1)", "--platform-bootstrap-mapping-v1)", "--executor-build-evidence-v1)"):
@@ -208,7 +223,12 @@ for text in ('index.entries[0]', 'mac_validate_fixed_install_completed_receipt_v
     require("fixed macOS install executor", fixed_execute, text)
 if 'current_anchor_counter: state.counter' in fixed_execute:
     raise SystemExit("fixed macOS install recovery derives its source counter from mutable state")
-require("macOS lifecycle executor", executor, "fixed install step is not in its exact absent before-state")
+for text in (
+    "MacPreparedFirstEffectDecisionV1::ConvergeExactAfter",
+    "fixed install non-Start step is unexpectedly already After",
+    '"recovered_exact_after":true',
+):
+    require("macOS lifecycle executor", executor, text)
 for forbidden in ('post_pm_requests_v1', 'mac_issue_closed_post_pm_requests_after_stage_one_v1',
                   'ManagedActionV1::Stop', 'ManagedActionV1::Remove',
                   'ManagedActionV1::Restore', 'ManagedActionV1::Replace'):
@@ -224,3 +244,93 @@ for label, text in (
 
 print("AUX-R3-MAC prestage artifact route regression: PASS")
 PY
+
+# Execute the exact production adoption helper under an unprivileged UID/GID substitution. This
+# proves descriptor verification, all-role convergence, and rollback after an injected mid-set
+# failure rather than merely checking source tokens.
+python3 - "${INSTALLER}" "${WORK_ROOT}/adoption" <<'PY'
+from pathlib import Path
+import hashlib
+import os
+import re
+import stat
+import subprocess
+import sys
+
+source = Path(sys.argv[1]).read_text()
+root = Path(sys.argv[2])
+root.mkdir()
+match = re.search(
+    r"(?ms)^adopt_retained_linux_artifacts_transactionally\(\) \{.*?<<'PY'\n(.*?)\nPY\n\}",
+    source,
+)
+if not match:
+    raise SystemExit("cannot extract production transactional adoption helper")
+uid, gid = os.getuid(), os.getgid()
+program = match.group(1)
+program = program.replace("os.fchown(fd, 0, 0)", f"os.fchown(fd, {uid}, {gid})")
+program = program.replace("after.st_uid != 0", f"after.st_uid != {uid}")
+program = program.replace("after.st_gid != 0", f"after.st_gid != {gid}")
+
+def make_roles(prefix):
+    args = []
+    observations = []
+    for index in range(4):
+        path = root / f"{prefix}-role-{index}"
+        payload = f"role-{index}-payload\n".encode()
+        path.write_bytes(payload)
+        path.chmod(0o755)
+        before = path.stat()
+        args.extend([
+            str(path),
+            hashlib.sha256(payload).hexdigest(),
+            f"dev:{before.st_dev}:ino:{before.st_ino}",
+        ])
+        observations.append((path, before.st_dev, before.st_ino, before.st_uid, before.st_gid,
+                             stat.S_IMODE(before.st_mode), payload))
+    return args, observations
+
+args, observations = make_roles("success")
+subprocess.run([sys.executable, "-", *args], input=program, text=True, check=True)
+for path, device, inode, owner, group, mode, payload in observations:
+    after = path.stat()
+    if (after.st_dev, after.st_ino, after.st_uid, after.st_gid,
+            stat.S_IMODE(after.st_mode), path.read_bytes()) != (
+            device, inode, uid, gid, 0o755, payload):
+        raise SystemExit("production adoption helper did not converge an exact descriptor set")
+
+args, observations = make_roles("rollback")
+injected = program.replace(
+    "        os.fsync(fd)\n        after = os.fstat(fd)",
+    "        os.fsync(fd)\n        if path.endswith('role-2'):\n"
+    "            raise RuntimeError('injected adoption failure')\n"
+    "        after = os.fstat(fd)",
+    1,
+)
+failed = subprocess.run([sys.executable, "-", *args], input=injected, text=True,
+                        stdout=subprocess.PIPE, stderr=subprocess.PIPE)
+if failed.returncode == 0:
+    raise SystemExit("injected transactional adoption failure unexpectedly succeeded")
+for path, device, inode, owner, group, mode, payload in observations:
+    after = path.stat()
+    if (after.st_dev, after.st_ino, after.st_uid, after.st_gid,
+            stat.S_IMODE(after.st_mode), path.read_bytes()) != (
+            device, inode, owner, group, mode, payload):
+        raise SystemExit("production adoption helper did not restore exact rollback state")
+PY
+
+printf 'AUX-R3-MAC transactional adoption execution: PASS\n'
+
+netfilter_prefix="${WORK_ROOT}/netfilter-must-not-install"
+if "${INSTALLER}" --prefix "${netfilter_prefix}" --world-netfilter \
+    >"${WORK_ROOT}/netfilter.stdout" 2>"${WORK_ROOT}/netfilter.stderr"; then
+    echo 'macOS fixed installer accepted forbidden --world-netfilter' >&2
+    exit 1
+fi
+grep -Fq 'macOS --world-netfilter is not authorized for the fixed R3 install path' \
+    "${WORK_ROOT}/netfilter.stderr"
+if [[ -e "${netfilter_prefix}" ]]; then
+    echo 'macOS netfilter rejection occurred after install-prefix mutation' >&2
+    exit 1
+fi
+printf 'AUX-R3-MAC early netfilter rejection: PASS\n'

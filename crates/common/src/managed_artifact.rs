@@ -1,9 +1,12 @@
 use anyhow::{anyhow, bail, Context, Result};
 use base64::{engine::general_purpose::URL_SAFE_NO_PAD, Engine as _};
 use ed25519_dalek::{
-    Signature as Ed25519Signature, Signer as _, SigningKey as Ed25519SigningKey, Verifier as _,
-    VerifyingKey as Ed25519PublicKey,
+    Signature as Ed25519Signature, Verifier as _, VerifyingKey as Ed25519PublicKey,
 };
+#[cfg(test)]
+use ed25519_dalek::{Signer as _, SigningKey as Ed25519SigningKey};
+#[cfg(test)]
+use p256::ecdsa::SigningKey as P256SigningKey;
 use p256::ecdsa::{Signature as P256Signature, VerifyingKey as P256PublicKey};
 use p256::pkcs8::{DecodePublicKey, EncodePublicKey};
 use p256::PublicKey as P256PublicKeyDocument;
@@ -895,7 +898,9 @@ pub struct GuestPublisherPairingChallengeV1 {
     pub source_commit: String,
     pub source_tree: String,
     pub source_ref: String,
+    /// Host-control build digest. R6 validates this only against `MacR6HostMachOIdentityV1`.
     pub executor_build_evidence_sha256: String,
+    /// Signed guest component commitment. R6 binds this to the typed AArch64 ELF identity.
     pub guest_component_commitment_sha256: String,
 }
 
@@ -913,6 +918,87 @@ pub struct GuestPublisherPairingTicketV1 {
     pub host_counter: u64,
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub guest_test_retirement_commitment: Option<GuestPublisherTestRetirementCommitmentV1>,
+    pub signature: LifecycleSignatureV1,
+}
+
+pub const MAC_R6_PAIRING_PREDECESSOR_SIGNATURE_DOMAIN_V1: &str = "R6_PAIRING_PREDECESSOR_V1";
+pub const MAC_R6_PAIRING_CONTINUATION_SIGNATURE_DOMAIN_V1: &str = "R6_PAIRING_CONTINUATION_V1";
+pub const MAC_R6_PAIRING_PREPARE_WINDOW_NS_V1: u64 = 300_000_000_000;
+
+/// Typed identity of the privileged host producer. This is deliberately a Mach-O/code-signing
+/// domain and can never be substituted for a guest artifact digest.
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]
+#[serde(deny_unknown_fields)]
+pub struct MacR6HostMachOIdentityV1 {
+    pub object_format: String,
+    pub executor_build_evidence: ExecutorBuildEvidenceV1,
+}
+
+/// Typed identity of the manifest-bound guest pairing executor.
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]
+#[serde(deny_unknown_fields)]
+pub struct MacR6GuestAarch64ElfIdentityV1 {
+    pub logical_role: String,
+    pub object_format: String,
+    pub architecture: String,
+    pub target_triple: String,
+    pub sha256: String,
+    pub size: u64,
+    pub manifest_sha256: String,
+}
+
+/// Immutable signed preparation for exactly one pairing-only generation. Its timestamps are
+/// preparation metadata only; the protected activation record is the sole live time authority.
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]
+#[serde(deny_unknown_fields)]
+pub struct MacR6PairingPredecessorV1 {
+    pub schema_owner: String,
+    pub schema_version: u32,
+    pub signature_domain: String,
+    pub pairing_scope: String,
+    pub scope_id: String,
+    pub producer_host_identity: MacR6HostMachOIdentityV1,
+    pub signer_spki_sha256: String,
+    pub stage_one_admission_sha256: String,
+    pub fixed_install_receipt_set_sha256: String,
+    pub manifest_sha256: String,
+    pub platform_mapping_commitment: String,
+    pub guest_machine_identity: String,
+    pub observed_guest_home: String,
+    pub managed_guest_substrate_home: String,
+    pub guest_executor_identity: MacR6GuestAarch64ElfIdentityV1,
+    pub fixed_install_parent_anchor_sha256: String,
+    pub predecessor_id: String,
+    pub predecessor_generation: u64,
+    pub prepared_at_unix_ns: u64,
+    pub prepare_expires_at_unix_ns: u64,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub previous_predecessor_sha256: Option<String>,
+    pub signature: LifecycleSignatureV1,
+}
+
+/// Data-only, non-auto-running preparation bound to the exact committed predecessor CAS state.
+/// Its timestamps are inert preparation metadata and cannot admit a ticket or effect.
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]
+#[serde(deny_unknown_fields)]
+pub struct MacR6PairingContinuationV1 {
+    pub schema_owner: String,
+    pub schema_version: u32,
+    pub signature_domain: String,
+    pub pairing_scope: String,
+    pub scope_id: String,
+    pub predecessor_id: String,
+    pub predecessor_generation: u64,
+    pub predecessor_sha256: String,
+    pub fixed_install_parent_anchor_sha256: String,
+    pub committed_predecessor_state_sha256: String,
+    pub manifest_sha256: String,
+    pub platform_mapping_commitment: String,
+    pub guest_machine_identity: String,
+    pub guest_executor_identity: MacR6GuestAarch64ElfIdentityV1,
+    pub prepared_at_unix_ns: u64,
+    pub prepare_expires_at_unix_ns: u64,
+    pub auto_run: bool,
     pub signature: LifecycleSignatureV1,
 }
 
@@ -1035,6 +1121,10 @@ pub struct GuestPublisherPairingHostRecordV1 {
     pub operator_launch_sha256: String,
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub operator_proof_sha256: Option<String>,
+    /// Durable host admission time copied from the protected PairingEffectStarted state. It is
+    /// absent before proof admission and immutable for every recovery transition thereafter.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub effect_admitted_at_unix_ns: Option<u64>,
     pub record_generation: u64,
     pub state: String,
     #[serde(default, skip_serializing_if = "Option::is_none")]
@@ -1077,7 +1167,14 @@ pub struct GuestPublisherBootstrapHelloV1 {
     pub guest_test_retirement_commitment: Option<GuestPublisherTestRetirementCommitmentV1>,
     pub guest_machine_identity: String,
     pub guest_artifact_sha256: String,
+    /// Exact durable host admission time acknowledged after the protected predecessor crossed
+    /// PairingEffectStarted. It is not the earlier operator-proof creation time.
+    pub effect_admitted_at_unix_ns: u64,
     pub intent_published_at_unix_ns: u64,
+    /// Actual observation time for a post-expiry retry. It is absent for the original live
+    /// path and must never be substituted for the pre-expiry admission timestamp.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub recovery_observed_at_unix_ns: Option<u64>,
     pub intent_parent_fsync_observed: bool,
     pub nonce: String,
     pub guest_public_key: String,
@@ -1474,17 +1571,8 @@ pub fn validate_managed_action_receipt_signature_v1(
     verify_lifecycle_signature_v1(&receipt.schema_owner, receipt, &receipt.signature)
 }
 
-pub fn sign_managed_action_receipt_for_test_v1(receipt: &mut ManagedActionReceiptV1) -> Result<()> {
-    let signing_key = Ed25519SigningKey::from_bytes(&[9_u8; 32]);
-    receipt.signature.algorithm = "ed25519-v1".to_string();
-    receipt.signature.public_key = URL_SAFE_NO_PAD.encode(signing_key.verifying_key().as_bytes());
-    receipt.signature.signature.clear();
-    let payload = canonical_managed_action_receipt_signature_payload_v1(receipt)?;
-    receipt.signature.signature = URL_SAFE_NO_PAD.encode(signing_key.sign(&payload).to_bytes());
-    Ok(())
-}
-
-pub fn sign_managed_action_prepared_record_for_test_v1(
+#[cfg(test)]
+fn sign_managed_action_prepared_record_for_test_v1(
     record: &mut ManagedActionPreparedRecordV1,
 ) -> Result<()> {
     let signing_key = Ed25519SigningKey::from_bytes(&[9_u8; 32]);
@@ -1497,7 +1585,8 @@ pub fn sign_managed_action_prepared_record_for_test_v1(
     Ok(())
 }
 
-pub fn sign_lifecycle_anchor_for_test_v1(anchor: &mut LifecyclePublisherAnchorV1) -> Result<()> {
+#[cfg(test)]
+fn sign_lifecycle_anchor_for_test_v1(anchor: &mut LifecyclePublisherAnchorV1) -> Result<()> {
     let signing_key = Ed25519SigningKey::from_bytes(&[9_u8; 32]);
     anchor.signature.algorithm = "ed25519-v1".to_string();
     anchor.signature.public_key = URL_SAFE_NO_PAD.encode(signing_key.verifying_key().as_bytes());
@@ -2147,6 +2236,283 @@ pub fn validate_guest_publisher_pairing_ticket_at_v1(
     Ok(())
 }
 
+fn validate_mac_r6_host_macho_identity_v1(identity: &MacR6HostMachOIdentityV1) -> Result<()> {
+    if identity.object_format != "Mach-O" {
+        bail!("R6 producer host identity must be typed Mach-O");
+    }
+    validate_executor_build_evidence_v1(&identity.executor_build_evidence)?;
+    if !identity
+        .executor_build_evidence
+        .target_triple
+        .contains("apple-darwin")
+        || identity.executor_build_evidence.code_identity.is_none()
+    {
+        bail!("R6 producer host identity lacks a Darwin code identity");
+    }
+    Ok(())
+}
+
+pub fn validate_mac_r6_guest_aarch64_elf_identity_v1(
+    identity: &MacR6GuestAarch64ElfIdentityV1,
+) -> Result<()> {
+    if identity.logical_role != "mac.lima.publisher-executor"
+        || identity.object_format != "ELF"
+        || identity.architecture != "AArch64"
+        || identity.target_triple != "aarch64-unknown-linux-gnu"
+        || identity.size == 0
+    {
+        bail!("R6 guest executor identity is not the fixed AArch64 ELF role");
+    }
+    require_hex_digest(&identity.sha256, "R6 guest executor sha256")?;
+    require_hex_digest(
+        &identity.manifest_sha256,
+        "R6 guest executor manifest binding",
+    )
+}
+
+/// Join the legacy pairing-ticket wire envelope to the two distinct typed R6 identities. The
+/// ticket's existing build-evidence field is exclusively the host Mach-O digest; the guest ELF
+/// digest is supplied by the signed predecessor and must never be compared to that host field.
+pub fn validate_mac_r6_pairing_ticket_identities_v1(
+    ticket: &GuestPublisherPairingTicketV1,
+    host: &MacR6HostMachOIdentityV1,
+    guest: &MacR6GuestAarch64ElfIdentityV1,
+) -> Result<()> {
+    validate_guest_publisher_pairing_ticket_v1(ticket)?;
+    validate_mac_r6_host_macho_identity_v1(host)?;
+    validate_mac_r6_guest_aarch64_elf_identity_v1(guest)?;
+    let evidence = &host.executor_build_evidence;
+    if evidence.source_commit != ticket.challenge.source_commit
+        || evidence.source_tree != ticket.challenge.source_tree
+        || evidence.source_ref != ticket.challenge.source_ref
+        || evidence.artifact_sha256 != ticket.challenge.executor_build_evidence_sha256
+        || evidence.artifact_sha256 != ticket.current_anchor.executor_identity.artifact_sha256
+        || guest.sha256 != ticket.challenge.guest_component_commitment_sha256
+        || evidence.artifact_sha256 == guest.sha256
+    {
+        bail!("R6 ticket does not preserve distinct host Mach-O and guest ELF identities");
+    }
+    Ok(())
+}
+
+pub fn validate_mac_r6_pairing_session_binding_identities_v1(
+    binding: &GuestPublisherPairingSessionBindingV1,
+    ticket: &GuestPublisherPairingTicketV1,
+    host: &MacR6HostMachOIdentityV1,
+    guest: &MacR6GuestAarch64ElfIdentityV1,
+) -> Result<()> {
+    validate_mac_r6_pairing_ticket_identities_v1(ticket, host, guest)?;
+    validate_pairing_session_binding_against_ticket_v1(binding, ticket)?;
+    if binding.source_commit != host.executor_build_evidence.source_commit
+        || binding.source_tree != host.executor_build_evidence.source_tree
+        || binding.source_ref != host.executor_build_evidence.source_ref
+        || binding.staged_executor_sha256 != guest.sha256
+        || binding.staged_executor_sha256 == host.executor_build_evidence.artifact_sha256
+    {
+        bail!("R6 session binding substituted a host digest for the guest publisher identity");
+    }
+    Ok(())
+}
+
+pub fn validate_mac_r6_pairing_host_record_identities_v1(
+    record: &GuestPublisherPairingHostRecordV1,
+    host: &MacR6HostMachOIdentityV1,
+    guest: &MacR6GuestAarch64ElfIdentityV1,
+) -> Result<()> {
+    validate_guest_publisher_pairing_host_record_v1(record)?;
+    validate_mac_r6_pairing_session_binding_identities_v1(
+        &record.binding,
+        &record.ticket,
+        host,
+        guest,
+    )
+}
+
+pub fn validate_mac_r6_pairing_operator_launch_identities_v1(
+    record: &GuestPublisherPairingHostRecordV1,
+    launch: &GuestPublisherPairingOperatorLaunchV1,
+    host: &MacR6HostMachOIdentityV1,
+    guest: &MacR6GuestAarch64ElfIdentityV1,
+) -> Result<()> {
+    validate_mac_r6_pairing_host_record_identities_v1(record, host, guest)?;
+    validate_guest_publisher_pairing_operator_launch_against_ticket_and_host_record_v1(
+        &record.ticket,
+        record,
+        launch,
+    )?;
+    if launch.guest_executable_sha256 != guest.sha256
+        || launch.guest_executable_sha256 == host.executor_build_evidence.artifact_sha256
+    {
+        bail!("R6 operator launch substituted the host control image for the guest executable");
+    }
+    Ok(())
+}
+
+pub fn validate_mac_r6_pairing_predecessor_v1(
+    predecessor: &MacR6PairingPredecessorV1,
+) -> Result<()> {
+    require_schema(
+        &predecessor.schema_owner,
+        predecessor.schema_version,
+        "substrate.mac-r6-pairing-predecessor",
+        1,
+    )?;
+    if predecessor.signature_domain != MAC_R6_PAIRING_PREDECESSOR_SIGNATURE_DOMAIN_V1
+        || predecessor.pairing_scope != "pairing-only"
+    {
+        bail!("R6 predecessor has the wrong signature domain or scope");
+    }
+    require_uuid_v7(&predecessor.scope_id, "R6 predecessor scope")?;
+    require_uuid_v7(&predecessor.predecessor_id, "R6 predecessor ID")?;
+    if predecessor.predecessor_generation == 0
+        || predecessor.prepare_expires_at_unix_ns
+            != predecessor
+                .prepared_at_unix_ns
+                .checked_add(MAC_R6_PAIRING_PREPARE_WINDOW_NS_V1)
+                .ok_or_else(|| anyhow!("R6 predecessor preparation expiry overflow"))?
+    {
+        bail!("R6 predecessor generation or preparation metadata is invalid");
+    }
+    validate_mac_r6_host_macho_identity_v1(&predecessor.producer_host_identity)?;
+    validate_mac_r6_guest_aarch64_elf_identity_v1(&predecessor.guest_executor_identity)?;
+    if predecessor
+        .producer_host_identity
+        .executor_build_evidence
+        .artifact_sha256
+        == predecessor.guest_executor_identity.sha256
+    {
+        bail!("R6 host Mach-O and guest AArch64 ELF identities are conflated");
+    }
+    for (value, label) in [
+        (
+            &predecessor.signer_spki_sha256,
+            "R6 predecessor signer SPKI",
+        ),
+        (
+            &predecessor.stage_one_admission_sha256,
+            "R6 Stage-1 admission",
+        ),
+        (
+            &predecessor.fixed_install_receipt_set_sha256,
+            "R6 fixed-install receipt set",
+        ),
+        (&predecessor.manifest_sha256, "R6 predecessor manifest"),
+        (
+            &predecessor.platform_mapping_commitment,
+            "R6 predecessor mapping",
+        ),
+        (
+            &predecessor.fixed_install_parent_anchor_sha256,
+            "R6 fixed-install parent anchor",
+        ),
+    ] {
+        require_hex_digest(value, label)?;
+    }
+    if predecessor.guest_executor_identity.manifest_sha256 != predecessor.manifest_sha256 {
+        bail!("R6 guest executor identity does not bind the predecessor manifest");
+    }
+    require_nonempty_no_nul(
+        &predecessor.guest_machine_identity,
+        "R6 predecessor guest machine identity",
+    )?;
+    require_nonempty_no_nul(
+        &predecessor.observed_guest_home,
+        "R6 predecessor observed guest home",
+    )?;
+    require_nonempty_no_nul(
+        &predecessor.managed_guest_substrate_home,
+        "R6 predecessor managed guest home",
+    )?;
+    if predecessor.managed_guest_substrate_home
+        != format!(
+            "{}/.substrate",
+            predecessor.observed_guest_home.trim_end_matches('/')
+        )
+    {
+        bail!("R6 managed guest home is not observed home plus .substrate");
+    }
+    if let Some(previous) = &predecessor.previous_predecessor_sha256 {
+        require_hex_digest(previous, "R6 previous predecessor")?;
+    }
+    let spki = decode_base64url(
+        &predecessor.signature.public_key,
+        "R6 predecessor signer public key",
+    )?;
+    if lower_hex(&Sha256::digest(parse_p256_spki_der_v1(&spki)?)) != predecessor.signer_spki_sha256
+        || predecessor.signature.algorithm != "ecdsa-p256-sha256-p1363-low-s-v1"
+    {
+        bail!("R6 predecessor signature does not match its protected signer");
+    }
+    verify_lifecycle_signature_v1(
+        MAC_R6_PAIRING_PREDECESSOR_SIGNATURE_DOMAIN_V1,
+        predecessor,
+        &predecessor.signature,
+    )
+}
+
+pub fn canonical_mac_r6_pairing_predecessor_v1(
+    predecessor: &MacR6PairingPredecessorV1,
+) -> Result<Vec<u8>> {
+    validate_mac_r6_pairing_predecessor_v1(predecessor)?;
+    canonical_json_to_vec(predecessor).context("encode canonical R6 pairing predecessor")
+}
+
+pub fn validate_mac_r6_pairing_continuation_v1(
+    continuation: &MacR6PairingContinuationV1,
+    predecessor: &MacR6PairingPredecessorV1,
+) -> Result<()> {
+    validate_mac_r6_pairing_predecessor_v1(predecessor)?;
+    require_schema(
+        &continuation.schema_owner,
+        continuation.schema_version,
+        "substrate.mac-r6-pairing-continuation",
+        1,
+    )?;
+    if continuation.signature_domain != MAC_R6_PAIRING_CONTINUATION_SIGNATURE_DOMAIN_V1
+        || continuation.pairing_scope != "pairing-only"
+        || continuation.auto_run
+    {
+        bail!("R6 continuation has the wrong domain, scope, or auto-run policy");
+    }
+    require_hex_digest(
+        &continuation.committed_predecessor_state_sha256,
+        "R6 committed predecessor state",
+    )?;
+    let predecessor_sha256 = lower_hex(&Sha256::digest(canonical_mac_r6_pairing_predecessor_v1(
+        predecessor,
+    )?));
+    if continuation.scope_id != predecessor.scope_id
+        || continuation.predecessor_id != predecessor.predecessor_id
+        || continuation.predecessor_generation != predecessor.predecessor_generation
+        || continuation.predecessor_sha256 != predecessor_sha256
+        || continuation.fixed_install_parent_anchor_sha256
+            != predecessor.fixed_install_parent_anchor_sha256
+        || continuation.manifest_sha256 != predecessor.manifest_sha256
+        || continuation.platform_mapping_commitment != predecessor.platform_mapping_commitment
+        || continuation.guest_machine_identity != predecessor.guest_machine_identity
+        || continuation.guest_executor_identity != predecessor.guest_executor_identity
+        || continuation.prepared_at_unix_ns != predecessor.prepared_at_unix_ns
+        || continuation.prepare_expires_at_unix_ns != predecessor.prepare_expires_at_unix_ns
+        || continuation.signature.public_key != predecessor.signature.public_key
+        || continuation.signature.algorithm != "ecdsa-p256-sha256-p1363-low-s-v1"
+    {
+        bail!("R6 continuation does not exact-join its predecessor and two anchors");
+    }
+    verify_lifecycle_signature_v1(
+        MAC_R6_PAIRING_CONTINUATION_SIGNATURE_DOMAIN_V1,
+        continuation,
+        &continuation.signature,
+    )
+}
+
+pub fn canonical_mac_r6_pairing_continuation_v1(
+    continuation: &MacR6PairingContinuationV1,
+    predecessor: &MacR6PairingPredecessorV1,
+) -> Result<Vec<u8>> {
+    validate_mac_r6_pairing_continuation_v1(continuation, predecessor)?;
+    canonical_json_to_vec(continuation).context("encode canonical R6 pairing continuation")
+}
+
 /// Validate the immutable authority shared by the two PM-bound R6 sessions.
 pub fn validate_guest_publisher_pairing_session_binding_v1(
     binding: &GuestPublisherPairingSessionBindingV1,
@@ -2214,7 +2580,8 @@ fn validate_pairing_session_binding_against_ticket_v1(
         || binding.source_commit != ticket.challenge.source_commit
         || binding.source_tree != ticket.challenge.source_tree
         || binding.source_ref != ticket.challenge.source_ref
-        || binding.staged_executor_sha256 != ticket.challenge.executor_build_evidence_sha256
+        || (binding.staged_executor_sha256 != ticket.challenge.executor_build_evidence_sha256
+            && binding.staged_executor_sha256 != ticket.challenge.guest_component_commitment_sha256)
         || binding.ticket_challenge_id != ticket.challenge.challenge_id
         || binding.host_record_generation != ticket.host_generation
     {
@@ -2342,17 +2709,14 @@ pub fn parse_and_validate_guest_publisher_pairing_operator_launch_v1(
     Ok(launch)
 }
 
-/// Verify a direct-operator launch solely from the retained signed ticket.
-///
-/// This checks canonical structure, immutable ticket binding, expiry, and the ticket P-256 key.
-/// The protected-state owner separately joins the immutable binding generation to its current
-/// generation and digest before performing its host-record CAS.
-pub fn validate_guest_publisher_pairing_operator_launch_against_ticket_at_v1(
+/// Verify the immutable signature and bindings of a direct-operator launch without consulting a
+/// wall clock. This is only for recovery of an already-started pairing effect; new admissions
+/// must use [`validate_guest_publisher_pairing_operator_launch_against_ticket_at_v1`].
+pub fn validate_guest_publisher_pairing_operator_launch_against_ticket_v1(
     ticket: &GuestPublisherPairingTicketV1,
     launch: &GuestPublisherPairingOperatorLaunchV1,
-    now_unix_ns: u64,
 ) -> Result<()> {
-    validate_guest_publisher_pairing_ticket_at_v1(ticket, now_unix_ns)?;
+    validate_guest_publisher_pairing_ticket_v1(ticket)?;
     validate_guest_publisher_pairing_operator_launch_v1(launch)?;
     validate_pairing_session_binding_against_ticket_v1(&launch.binding, ticket)?;
     if launch.expires_at_unix_ns != ticket.challenge.expires_at_unix_ns {
@@ -2368,23 +2732,29 @@ pub fn validate_guest_publisher_pairing_operator_launch_against_ticket_at_v1(
     .context("verify signed guest pairing operator launch")
 }
 
+/// Verify a direct-operator launch solely from the retained signed ticket for a new effect
+/// admission. Expiry is deliberately enforced here, before the protected state may start.
+pub fn validate_guest_publisher_pairing_operator_launch_against_ticket_at_v1(
+    ticket: &GuestPublisherPairingTicketV1,
+    launch: &GuestPublisherPairingOperatorLaunchV1,
+    now_unix_ns: u64,
+) -> Result<()> {
+    validate_guest_publisher_pairing_ticket_at_v1(ticket, now_unix_ns)?;
+    validate_guest_publisher_pairing_operator_launch_against_ticket_v1(ticket, launch)
+}
+
 /// Verify a launch against the signed ticket plus the exact protected record which admitted it.
 ///
 /// New control-plane code that has only ticket and response bindings must use
 /// [`validate_guest_publisher_pairing_operator_launch_against_ticket_at_v1`] and then perform
 /// its own protected-record generation-CAS acknowledgement.
-pub fn validate_guest_publisher_pairing_operator_launch_against_ticket_and_host_record_at_v1(
+pub fn validate_guest_publisher_pairing_operator_launch_against_ticket_and_host_record_v1(
     ticket: &GuestPublisherPairingTicketV1,
     record: &GuestPublisherPairingHostRecordV1,
     launch: &GuestPublisherPairingOperatorLaunchV1,
-    now_unix_ns: u64,
 ) -> Result<()> {
     validate_guest_publisher_pairing_host_record_v1(record)?;
-    validate_guest_publisher_pairing_operator_launch_against_ticket_at_v1(
-        ticket,
-        launch,
-        now_unix_ns,
-    )?;
+    validate_guest_publisher_pairing_operator_launch_against_ticket_v1(ticket, launch)?;
     if record.ticket != *ticket
         || record.binding != launch.binding
         || launch.operator_session_id != record.operator_tty_session.session_id
@@ -2396,6 +2766,18 @@ pub fn validate_guest_publisher_pairing_operator_launch_against_ticket_and_host_
         bail!("pairing operator launch does not exact-join ticket and protected record");
     }
     Ok(())
+}
+
+pub fn validate_guest_publisher_pairing_operator_launch_against_ticket_and_host_record_at_v1(
+    ticket: &GuestPublisherPairingTicketV1,
+    record: &GuestPublisherPairingHostRecordV1,
+    launch: &GuestPublisherPairingOperatorLaunchV1,
+    now_unix_ns: u64,
+) -> Result<()> {
+    validate_guest_publisher_pairing_ticket_at_v1(ticket, now_unix_ns)?;
+    validate_guest_publisher_pairing_operator_launch_against_ticket_and_host_record_v1(
+        ticket, record, launch,
+    )
 }
 
 /// Validate one immutable proof before its canonical digest is admitted to the host record.
@@ -2461,14 +2843,13 @@ pub fn guest_publisher_pairing_operator_proof_sha256_v1(
 
 /// Validate a no-follow-read proof against the exact ticket and host record before intent can
 /// advance.  `expected_commitment` is a digest only; callers must not pass or retain input values.
-pub fn validate_guest_publisher_pairing_operator_proof_against_ticket_at_v1(
+pub fn validate_guest_publisher_pairing_operator_proof_against_ticket_v1(
     ticket: &GuestPublisherPairingTicketV1,
     record: &GuestPublisherPairingHostRecordV1,
     proof: &GuestPublisherPairingOperatorProofV1,
     expected_commitment: &str,
-    now_unix_ns: u64,
 ) -> Result<()> {
-    validate_guest_publisher_pairing_ticket_at_v1(ticket, now_unix_ns)?;
+    validate_guest_publisher_pairing_ticket_v1(ticket)?;
     validate_guest_publisher_pairing_host_record_v1(record)?;
     validate_guest_publisher_pairing_operator_proof_v1(proof)?;
     validate_pairing_session_binding_against_ticket_v1(&proof.binding, ticket)?;
@@ -2491,6 +2872,25 @@ pub fn validate_guest_publisher_pairing_operator_proof_against_ticket_at_v1(
         None if record.state == "sessions_opened" => Ok(()),
         None => bail!("pairing operator proof is not admissible in this record state"),
     }
+}
+
+/// Validate a proof before admitting a new pairing effect. Recovery of the exact already-started
+/// effect must use [`validate_guest_publisher_pairing_operator_proof_against_ticket_v1`] so elapsed
+/// wall time cannot replace an effect that may already be guest-visible.
+pub fn validate_guest_publisher_pairing_operator_proof_against_ticket_at_v1(
+    ticket: &GuestPublisherPairingTicketV1,
+    record: &GuestPublisherPairingHostRecordV1,
+    proof: &GuestPublisherPairingOperatorProofV1,
+    expected_commitment: &str,
+    now_unix_ns: u64,
+) -> Result<()> {
+    validate_guest_publisher_pairing_ticket_at_v1(ticket, now_unix_ns)?;
+    validate_guest_publisher_pairing_operator_proof_against_ticket_v1(
+        ticket,
+        record,
+        proof,
+        expected_commitment,
+    )
 }
 
 fn validate_pairing_observation_v1(value: &str, field: &str) -> Result<()> {
@@ -2545,10 +2945,21 @@ pub fn validate_guest_publisher_bootstrap_hello_v1(
         || hello.guest_machine_identity != binding.guest_machine_identity
         || hello.guest_artifact_sha256 != binding.staged_executor_sha256
         || hello.nonce != binding.pairing_session_nonce
-        || hello.intent_published_at_unix_ns >= ticket.challenge.expires_at_unix_ns
         || !hello.intent_parent_fsync_observed
     {
         bail!("guest pairing Hello does not exact-join the ticket and immutable binding");
+    }
+    if hello.effect_admitted_at_unix_ns >= ticket.challenge.expires_at_unix_ns {
+        bail!("guest pairing Hello was not bound to a pre-expiry admitted effect");
+    }
+    if hello.intent_published_at_unix_ns < ticket.challenge.expires_at_unix_ns {
+        if hello.recovery_observed_at_unix_ns.is_some()
+            || hello.effect_admitted_at_unix_ns > hello.intent_published_at_unix_ns
+        {
+            bail!("live guest pairing Hello carries invalid recovery timing");
+        }
+    } else if hello.recovery_observed_at_unix_ns != Some(hello.intent_published_at_unix_ns) {
+        bail!("post-expiry guest pairing Hello lacks its actual recovery observation time");
     }
     require_hex_digest(&hello.intent_sha256, "guest pairing Hello intent_sha256")?;
     require_nonempty_no_nul(
@@ -2779,11 +3190,24 @@ pub fn validate_guest_publisher_pairing_host_record_v1(
     if let Some(proof_sha256) = &record.operator_proof_sha256 {
         require_hex_digest(proof_sha256, "host pairing record operator_proof_sha256")?;
     }
+    if let Some(effect_admitted_at_unix_ns) = record.effect_admitted_at_unix_ns {
+        if effect_admitted_at_unix_ns == 0
+            || effect_admitted_at_unix_ns >= record.ticket.challenge.expires_at_unix_ns
+        {
+            bail!("host pairing record durable effect admission is outside ticket validity");
+        }
+    }
+    if let Some(hello) = &record.data_session.hello {
+        if record.effect_admitted_at_unix_ns != Some(hello.effect_admitted_at_unix_ns) {
+            bail!("guest Hello does not bind the durable host effect admission time");
+        }
+    }
     match record.state.as_str() {
         "sessions_opened" => {
             if record.data_session.state != "opened"
                 || record.operator_tty_session.state != "opened"
                 || record.operator_proof_sha256.is_some()
+                || record.effect_admitted_at_unix_ns.is_some()
             {
                 bail!("sessions_opened record has invalid session states");
             }
@@ -2810,6 +3234,7 @@ pub fn validate_guest_publisher_pairing_host_record_v1(
                 || record.data_session.state != "opened"
                 || record.operator_tty_session.state != "closed"
                 || record.operator_proof_sha256.is_none()
+                || record.effect_admitted_at_unix_ns.is_none()
             {
                 bail!("operator_proof_verified record has invalid generation or session states");
             }
@@ -2823,6 +3248,7 @@ pub fn validate_guest_publisher_pairing_host_record_v1(
                 || record.data_session.state != "guest_state_root_durable"
                 || record.operator_tty_session.state != "closed"
                 || record.operator_proof_sha256.is_none()
+                || record.effect_admitted_at_unix_ns.is_none()
             {
                 bail!("guest_state_root_durable record has invalid generation or session states");
             }
@@ -2836,6 +3262,7 @@ pub fn validate_guest_publisher_pairing_host_record_v1(
                 || record.data_session.state != "hello_durable"
                 || record.operator_tty_session.state != "closed"
                 || record.operator_proof_sha256.is_none()
+                || record.effect_admitted_at_unix_ns.is_none()
             {
                 bail!("hello_durable record has invalid generation or session states");
             }
@@ -2850,6 +3277,7 @@ pub fn validate_guest_publisher_pairing_host_record_v1(
                 || record.data_session.state != "transcript_durable"
                 || record.operator_tty_session.state != "closed"
                 || record.operator_proof_sha256.is_none()
+                || record.effect_admitted_at_unix_ns.is_none()
             {
                 bail!("transcript_durable record has invalid generation or session states");
             }
@@ -2866,6 +3294,7 @@ pub fn validate_guest_publisher_pairing_host_record_v1(
             if record.data_session.state != "ticket_consumed"
                 || record.operator_tty_session.state != "closed"
                 || record.operator_proof_sha256.is_none()
+                || record.effect_admitted_at_unix_ns.is_none()
             {
                 bail!("ticket_consumed record has invalid session states");
             }
@@ -2884,6 +3313,7 @@ pub fn validate_guest_publisher_pairing_host_record_v1(
                 )
                 || (record.data_session.failure_observation.is_none()
                     && record.operator_tty_session.failure_observation.is_none())
+                || record.effect_admitted_at_unix_ns.is_some()
             {
                 bail!("pre_intent_closed record has invalid generation or session states");
             }
@@ -2933,6 +3363,23 @@ pub fn compare_and_swap_guest_publisher_pairing_host_record_v1(
     compare_and_swap_guest_publisher_pairing_host_record_at_v1(current, next, now_unix_ns)
 }
 
+/// Validate a transition for the exact effect whose predecessor admission already crossed its
+/// durable boundary. Unlike the normal CAS, this is deliberately structural after expiry: it
+/// accepts no new challenge or session and requires the caller to supply the admitted challenge
+/// identity that it re-read from protected predecessor state.
+pub fn compare_and_swap_guest_publisher_pairing_host_record_recovery_v1(
+    current: &GuestPublisherPairingHostRecordV1,
+    next: &GuestPublisherPairingHostRecordV1,
+    admitted_challenge_id: &str,
+) -> Result<()> {
+    compare_and_swap_guest_publisher_pairing_host_record_internal_v1(
+        current,
+        next,
+        None,
+        Some(admitted_challenge_id),
+    )
+}
+
 /// Apply an R6 host-record transition at an explicit time. The durable owner invokes this before
 /// its protected-store CAS so expiry, replay, and substituted session state cannot mutate it.
 pub fn compare_and_swap_guest_publisher_pairing_host_record_at_v1(
@@ -2940,10 +3387,44 @@ pub fn compare_and_swap_guest_publisher_pairing_host_record_at_v1(
     next: &GuestPublisherPairingHostRecordV1,
     now_unix_ns: u64,
 ) -> Result<()> {
+    compare_and_swap_guest_publisher_pairing_host_record_internal_v1(
+        current,
+        next,
+        Some(now_unix_ns),
+        None,
+    )
+}
+
+fn compare_and_swap_guest_publisher_pairing_host_record_internal_v1(
+    current: &GuestPublisherPairingHostRecordV1,
+    next: &GuestPublisherPairingHostRecordV1,
+    live_now_unix_ns: Option<u64>,
+    admitted_challenge_id: Option<&str>,
+) -> Result<()> {
     validate_guest_publisher_pairing_host_record_v1(current)?;
     validate_guest_publisher_pairing_host_record_v1(next)?;
-    validate_guest_publisher_pairing_ticket_at_v1(&current.ticket, now_unix_ns)?;
-    validate_guest_publisher_pairing_ticket_at_v1(&next.ticket, now_unix_ns)?;
+    if let Some(now_unix_ns) = live_now_unix_ns {
+        validate_guest_publisher_pairing_ticket_at_v1(&current.ticket, now_unix_ns)?;
+        validate_guest_publisher_pairing_ticket_at_v1(&next.ticket, now_unix_ns)?;
+    } else {
+        let admitted_challenge_id = admitted_challenge_id
+            .ok_or_else(|| anyhow!("R6 recovery CAS lacks admitted challenge identity"))?;
+        if current.ticket.challenge.challenge_id != admitted_challenge_id
+            || next.ticket.challenge.challenge_id != admitted_challenge_id
+            || !matches!(
+                (current.state.as_str(), next.state.as_str()),
+                ("sessions_opened", "operator_proof_verified")
+                    | ("operator_proof_verified", "guest_state_root_durable")
+                    | ("guest_state_root_durable", "hello_durable")
+                    | ("hello_durable", "transcript_durable")
+                    | ("transcript_durable", "ticket_consumed")
+            )
+            || (current.state != "sessions_opened" && current.operator_proof_sha256.is_none())
+            || next.operator_proof_sha256.is_none()
+        {
+            bail!("R6 recovery CAS is not the exact admitted monotonic effect");
+        }
+    }
     if current == next {
         return Ok(());
     }
@@ -2963,6 +3444,16 @@ pub fn compare_and_swap_guest_publisher_pairing_host_record_at_v1(
             != next.operator_tty_session.started_observation
     {
         bail!("host pairing record transition changes immutable ticket bindings");
+    }
+    match (
+        current.effect_admitted_at_unix_ns,
+        next.effect_admitted_at_unix_ns,
+    ) {
+        (None, Some(_))
+            if current.state == "sessions_opened" && next.state == "operator_proof_verified" => {}
+        (None, None) => {}
+        (Some(current), Some(next)) if current == next => {}
+        _ => bail!("host pairing record transition changes durable effect admission time"),
     }
     let forward_transition = matches!(
         (current.state.as_str(), next.state.as_str()),
@@ -2987,6 +3478,7 @@ pub fn compare_and_swap_guest_publisher_pairing_host_record_at_v1(
         && current.data_session.ended_observation == next.data_session.ended_observation
         && current.operator_launch_sha256 == next.operator_launch_sha256
         && current.operator_proof_sha256 == next.operator_proof_sha256
+        && current.effect_admitted_at_unix_ns == next.effect_admitted_at_unix_ns
         && current.operator_tty_session.ended_observation
             == next.operator_tty_session.ended_observation
         && (current.data_session.failure_observation.is_none()
@@ -6576,7 +7068,6 @@ enum ParsedComponentRole {
 mod tests {
     use super::*;
     use ed25519_dalek::SigningKey as Ed25519SigningKey;
-    use p256::ecdsa::SigningKey as P256SigningKey;
     use std::collections::BTreeMap;
 
     fn sample_executor_identity() -> ManagedExecutorIdentityV1 {
@@ -6775,6 +7266,7 @@ mod tests {
             binding,
             operator_launch_sha256: "a".repeat(64),
             operator_proof_sha256,
+            effect_admitted_at_unix_ns: (state != "sessions_opened").then_some(1),
             record_generation,
             state: state.to_string(),
             previous_record_sha256,
@@ -6837,6 +7329,79 @@ mod tests {
     }
 
     #[test]
+    fn r6_ticket_record_and_launch_keep_host_macho_and_guest_elf_distinct() {
+        let (signing_key, ticket) = valid_mac_pairing_ticket_v1();
+        let host = MacR6HostMachOIdentityV1 {
+            object_format: "Mach-O".to_string(),
+            executor_build_evidence: ExecutorBuildEvidenceV1 {
+                schema_owner: "substrate.executor-build-evidence".to_string(),
+                schema_version: 1,
+                source_commit: ticket.challenge.source_commit.clone(),
+                source_tree: ticket.challenge.source_tree.clone(),
+                source_ref: ticket.challenge.source_ref.clone(),
+                artifact_sha256: ticket.challenge.executor_build_evidence_sha256.clone(),
+                artifact_identity: "host-control-macho".to_string(),
+                target_triple: "aarch64-apple-darwin".to_string(),
+                tool_versions: BTreeMap::new(),
+                code_identity: Some("cdhash:0123456789abcdef0123456789abcdef01234567".to_string()),
+            },
+        };
+        let guest = MacR6GuestAarch64ElfIdentityV1 {
+            logical_role: "mac.lima.publisher-executor".to_string(),
+            object_format: "ELF".to_string(),
+            architecture: "AArch64".to_string(),
+            target_triple: "aarch64-unknown-linux-gnu".to_string(),
+            sha256: ticket.challenge.guest_component_commitment_sha256.clone(),
+            size: 4096,
+            manifest_sha256: ticket.current_anchor.manifest_sha256.clone(),
+        };
+        validate_mac_r6_pairing_ticket_identities_v1(&ticket, &host, &guest)
+            .expect("ticket binds host evidence and a distinct signed guest commitment");
+
+        let mut record =
+            signed_mac_pairing_host_record_v1(&signing_key, ticket, 1, "sessions_opened", None);
+        record.binding.staged_executor_sha256 = guest.sha256.clone();
+        record.data_session.binding = record.binding.clone();
+        record.operator_tty_session.binding = record.binding.clone();
+        record.signature.signature =
+            sign_p256_record_v1(&signing_key, &record.schema_owner, &record);
+        let launch = signed_pairing_operator_launch_v1(&signing_key, &record);
+        record.operator_launch_sha256 =
+            guest_publisher_pairing_operator_launch_sha256_v1(&launch).expect("launch digest");
+        record.signature.signature =
+            sign_p256_record_v1(&signing_key, &record.schema_owner, &record);
+        validate_mac_r6_pairing_host_record_identities_v1(&record, &host, &guest)
+            .expect("host record retains the typed guest ELF digest");
+        validate_mac_r6_pairing_operator_launch_identities_v1(&record, &launch, &host, &guest)
+            .expect("operator launch executes only the typed guest ELF");
+
+        let mut conflated_guest = guest.clone();
+        conflated_guest.sha256 = host.executor_build_evidence.artifact_sha256.clone();
+        assert!(validate_mac_r6_pairing_ticket_identities_v1(
+            &record.ticket,
+            &host,
+            &conflated_guest,
+        )
+        .is_err());
+        let mut substituted_record = record;
+        substituted_record.binding.staged_executor_sha256 =
+            host.executor_build_evidence.artifact_sha256.clone();
+        substituted_record.data_session.binding = substituted_record.binding.clone();
+        substituted_record.operator_tty_session.binding = substituted_record.binding.clone();
+        substituted_record.signature.signature = sign_p256_record_v1(
+            &signing_key,
+            &substituted_record.schema_owner,
+            &substituted_record,
+        );
+        assert!(validate_mac_r6_pairing_host_record_identities_v1(
+            &substituted_record,
+            &host,
+            &guest,
+        )
+        .is_err());
+    }
+
+    #[test]
     fn r6_operator_launch_is_canonical_and_ticket_key_bound() {
         let (signing_key, ticket) = valid_mac_pairing_ticket_v1();
         let mut opened =
@@ -6867,6 +7432,12 @@ mod tests {
             1,
         )
         .expect("protected record binds the admitted operator session");
+        validate_guest_publisher_pairing_operator_launch_against_ticket_and_host_record_v1(
+            &opened.ticket,
+            &opened,
+            &launch,
+        )
+        .expect("structural launch recovery retains signature and exact bindings");
 
         let mut alternate_signed_launch = launch.clone();
         alternate_signed_launch.admitted_instance_name = "substrate-r6-alternate".to_string();
@@ -6959,7 +7530,6 @@ mod tests {
             )
             .is_err()
         );
-
         let proof_sha256 =
             guest_publisher_pairing_operator_proof_sha256_v1(&proof).expect("proof digest");
         let mut verified = opened.clone();
@@ -6971,6 +7541,7 @@ mod tests {
         verified.operator_tty_session.ended_observation =
             Some("operator-child-exited-successfully".to_string());
         verified.operator_proof_sha256 = Some(proof_sha256.clone());
+        verified.effect_admitted_at_unix_ns = Some(1);
         verified.signature.signature =
             sign_p256_record_v1(&signing_key, &verified.schema_owner, &verified);
         compare_and_swap_guest_publisher_pairing_host_record_at_v1(&opened, &verified, 1)
@@ -7022,6 +7593,14 @@ mod tests {
             )
             .is_err()
         );
+        validate_guest_publisher_pairing_operator_proof_against_ticket_v1(
+            &verified.ticket,
+            &verified,
+            &parse_and_validate_guest_publisher_pairing_operator_proof_v1(&canonical)
+                .expect("canonical proof remains parseable"),
+            &"f".repeat(64),
+        )
+        .expect("elapsed wall deadline does not revoke exact already-admitted proof recovery");
         assert!(
             validate_guest_publisher_pairing_operator_proof_against_ticket_at_v1(
                 &verified.ticket,
@@ -7548,7 +8127,7 @@ mod tests {
         assert!(compare_and_swap_guest_publisher_pairing_host_record_v1(&opened, &replay).is_err());
 
         let mut expired_ticket = ticket;
-        expired_ticket.challenge.expires_at_unix_ns = 1;
+        expired_ticket.challenge.expires_at_unix_ns = 2;
         expired_ticket.challenge_sha256 = lower_hex(&Sha256::digest(
             canonical_json_to_vec(&expired_ticket.challenge).unwrap(),
         ));
@@ -7573,9 +8152,23 @@ mod tests {
         assert!(compare_and_swap_guest_publisher_pairing_host_record_at_v1(
             &expired_opened,
             &expired_proof_verified,
-            1,
+            2,
         )
         .is_err());
+        compare_and_swap_guest_publisher_pairing_host_record_recovery_v1(
+            &expired_opened,
+            &expired_proof_verified,
+            &expired_proof_verified.ticket.challenge.challenge_id,
+        )
+        .expect("the exact admitted effect converges structurally after expiry");
+        assert!(
+            compare_and_swap_guest_publisher_pairing_host_record_recovery_v1(
+                &expired_opened,
+                &expired_proof_verified,
+                "018f3e4a-7b2c-7c91-8a6f-2e1d5c4b3aff",
+            )
+            .is_err()
+        );
     }
 
     #[test]
@@ -7621,7 +8214,9 @@ mod tests {
             guest_test_retirement_commitment: None,
             guest_machine_identity: ticket.challenge.guest_machine_identity.clone(),
             guest_artifact_sha256: ticket.challenge.executor_build_evidence_sha256.clone(),
+            effect_admitted_at_unix_ns: 1,
             intent_published_at_unix_ns: 1,
+            recovery_observed_at_unix_ns: None,
             intent_parent_fsync_observed: true,
             nonce: guest_root.binding.pairing_session_nonce.clone(),
             guest_public_key: guest_public_key.clone(),
@@ -7640,6 +8235,40 @@ mod tests {
         );
         validate_guest_publisher_bootstrap_hello_v1(&ticket, &guest_root.binding, &hello)
             .expect("host verifies signed exact guest Hello before persistence");
+
+        let mut recovered_hello = hello.clone();
+        recovered_hello.intent_published_at_unix_ns = ticket.challenge.expires_at_unix_ns;
+        recovered_hello.recovery_observed_at_unix_ns = Some(ticket.challenge.expires_at_unix_ns);
+        recovered_hello.signature.signature.clear();
+        recovered_hello.signature.signature = URL_SAFE_NO_PAD.encode(
+            guest_key
+                .sign(
+                    &canonical_lifecycle_signature_payload_v1(
+                        &recovered_hello.schema_owner,
+                        &recovered_hello,
+                    )
+                    .unwrap(),
+                )
+                .to_bytes(),
+        );
+        validate_guest_publisher_bootstrap_hello_v1(&ticket, &guest_root.binding, &recovered_hello)
+            .expect("post-expiry continuation retains original admission and actual recovery time");
+        let mut missing_recovery_observation = recovered_hello.clone();
+        missing_recovery_observation.recovery_observed_at_unix_ns = None;
+        assert!(validate_guest_publisher_bootstrap_hello_v1(
+            &ticket,
+            &guest_root.binding,
+            &missing_recovery_observation,
+        )
+        .is_err());
+        let mut forged_admission = recovered_hello.clone();
+        forged_admission.effect_admitted_at_unix_ns = ticket.challenge.expires_at_unix_ns;
+        assert!(validate_guest_publisher_bootstrap_hello_v1(
+            &ticket,
+            &guest_root.binding,
+            &forged_admission,
+        )
+        .is_err());
 
         let mut hello_durable = guest_root.clone();
         hello_durable.record_generation = 4;
@@ -7836,6 +8465,7 @@ mod tests {
             operator_tty_session,
             operator_launch_sha256: "a".repeat(64),
             operator_proof_sha256: None,
+            effect_admitted_at_unix_ns: None,
             record_generation: 1,
             state: "sessions_opened".to_string(),
             previous_record_sha256: None,
@@ -8694,6 +9324,280 @@ mod tests {
         assert!(
             validate_mac_lima_stage_one_successor_template_v1(&placeholder, &authorization)
                 .is_err()
+        );
+    }
+
+    fn valid_mac_r6_pairing_documents_v1() -> (
+        P256SigningKey,
+        MacR6PairingPredecessorV1,
+        MacR6PairingContinuationV1,
+    ) {
+        let signing_key = mac_pairing_signing_key_v1();
+        let spki_der = mac_pairing_spki_der_v1(&signing_key);
+        let public_key = URL_SAFE_NO_PAD.encode(&spki_der);
+        let host_evidence = ExecutorBuildEvidenceV1 {
+            schema_owner: "substrate.executor-build-evidence".to_string(),
+            schema_version: 1,
+            source_commit: "a".repeat(40),
+            source_tree: "b".repeat(40),
+            source_ref: "refs/heads/r6-fixture".to_string(),
+            artifact_sha256: "c".repeat(64),
+            artifact_identity: "host-macho-fixture".to_string(),
+            target_triple: "aarch64-apple-darwin".to_string(),
+            tool_versions: BTreeMap::new(),
+            code_identity: Some("cdhash:0123456789abcdef0123456789abcdef01234567".to_string()),
+        };
+        let mut predecessor = MacR6PairingPredecessorV1 {
+            schema_owner: "substrate.mac-r6-pairing-predecessor".to_string(),
+            schema_version: 1,
+            signature_domain: MAC_R6_PAIRING_PREDECESSOR_SIGNATURE_DOMAIN_V1.to_string(),
+            pairing_scope: "pairing-only".to_string(),
+            scope_id: "018f3e4a-7b2c-7c91-8a6f-2e1d5c4b3a90".to_string(),
+            producer_host_identity: MacR6HostMachOIdentityV1 {
+                object_format: "Mach-O".to_string(),
+                executor_build_evidence: host_evidence,
+            },
+            signer_spki_sha256: lower_hex(&Sha256::digest(&spki_der)),
+            stage_one_admission_sha256: "1".repeat(64),
+            fixed_install_receipt_set_sha256: "2".repeat(64),
+            manifest_sha256: "3".repeat(64),
+            platform_mapping_commitment: "4".repeat(64),
+            guest_machine_identity: "lima-machine-fixture".to_string(),
+            observed_guest_home: "/home/fixture principal".to_string(),
+            managed_guest_substrate_home: "/home/fixture principal/.substrate".to_string(),
+            guest_executor_identity: MacR6GuestAarch64ElfIdentityV1 {
+                logical_role: "mac.lima.publisher-executor".to_string(),
+                object_format: "ELF".to_string(),
+                architecture: "AArch64".to_string(),
+                target_triple: "aarch64-unknown-linux-gnu".to_string(),
+                sha256: "5".repeat(64),
+                size: 4096,
+                manifest_sha256: "3".repeat(64),
+            },
+            fixed_install_parent_anchor_sha256: "6".repeat(64),
+            predecessor_id: "018f3e4a-7b2c-7c91-8a6f-2e1d5c4b3a91".to_string(),
+            predecessor_generation: 1,
+            prepared_at_unix_ns: 1_000,
+            prepare_expires_at_unix_ns: 1_000 + MAC_R6_PAIRING_PREPARE_WINDOW_NS_V1,
+            previous_predecessor_sha256: None,
+            signature: LifecycleSignatureV1 {
+                algorithm: "ecdsa-p256-sha256-p1363-low-s-v1".to_string(),
+                public_key: public_key.clone(),
+                signature: String::new(),
+            },
+        };
+        predecessor.signature.signature = sign_p256_record_v1(
+            &signing_key,
+            MAC_R6_PAIRING_PREDECESSOR_SIGNATURE_DOMAIN_V1,
+            &predecessor,
+        );
+        let predecessor_sha256 = lower_hex(&Sha256::digest(
+            canonical_mac_r6_pairing_predecessor_v1(&predecessor).unwrap(),
+        ));
+        let mut continuation = MacR6PairingContinuationV1 {
+            schema_owner: "substrate.mac-r6-pairing-continuation".to_string(),
+            schema_version: 1,
+            signature_domain: MAC_R6_PAIRING_CONTINUATION_SIGNATURE_DOMAIN_V1.to_string(),
+            pairing_scope: "pairing-only".to_string(),
+            scope_id: predecessor.scope_id.clone(),
+            predecessor_id: predecessor.predecessor_id.clone(),
+            predecessor_generation: predecessor.predecessor_generation,
+            predecessor_sha256,
+            fixed_install_parent_anchor_sha256: predecessor
+                .fixed_install_parent_anchor_sha256
+                .clone(),
+            committed_predecessor_state_sha256: "7".repeat(64),
+            manifest_sha256: predecessor.manifest_sha256.clone(),
+            platform_mapping_commitment: predecessor.platform_mapping_commitment.clone(),
+            guest_machine_identity: predecessor.guest_machine_identity.clone(),
+            guest_executor_identity: predecessor.guest_executor_identity.clone(),
+            prepared_at_unix_ns: predecessor.prepared_at_unix_ns,
+            prepare_expires_at_unix_ns: predecessor.prepare_expires_at_unix_ns,
+            auto_run: false,
+            signature: LifecycleSignatureV1 {
+                algorithm: "ecdsa-p256-sha256-p1363-low-s-v1".to_string(),
+                public_key,
+                signature: String::new(),
+            },
+        };
+        continuation.signature.signature = sign_p256_record_v1(
+            &signing_key,
+            MAC_R6_PAIRING_CONTINUATION_SIGNATURE_DOMAIN_V1,
+            &continuation,
+        );
+        (signing_key, predecessor, continuation)
+    }
+
+    #[test]
+    fn mac_r6_pairing_documents_validate_real_signatures_and_inert_prepare_metadata() {
+        let (_, predecessor, continuation) = valid_mac_r6_pairing_documents_v1();
+        validate_mac_r6_pairing_predecessor_v1(&predecessor).unwrap();
+        validate_mac_r6_pairing_continuation_v1(&continuation, &predecessor).unwrap();
+        assert_eq!(
+            continuation.prepared_at_unix_ns,
+            predecessor.prepared_at_unix_ns
+        );
+        assert_eq!(
+            continuation.prepare_expires_at_unix_ns,
+            predecessor.prepare_expires_at_unix_ns
+        );
+    }
+
+    #[test]
+    fn mac_r6_pairing_predecessor_rejects_host_guest_digest_conflation() {
+        let (signing_key, mut predecessor, _) = valid_mac_r6_pairing_documents_v1();
+        predecessor.guest_executor_identity.sha256 = predecessor
+            .producer_host_identity
+            .executor_build_evidence
+            .artifact_sha256
+            .clone();
+        predecessor.signature.signature = sign_p256_record_v1(
+            &signing_key,
+            MAC_R6_PAIRING_PREDECESSOR_SIGNATURE_DOMAIN_V1,
+            &predecessor,
+        );
+        assert!(validate_mac_r6_pairing_predecessor_v1(&predecessor).is_err());
+    }
+
+    #[test]
+    fn mac_r6_pairing_predecessor_rejects_resigned_critical_field_mutations() {
+        let (signing_key, predecessor, _) = valid_mac_r6_pairing_documents_v1();
+        macro_rules! reject {
+            ($body:expr) => {{
+                let mut altered = predecessor.clone();
+                ($body)(&mut altered);
+                altered.signature.signature = sign_p256_record_v1(
+                    &signing_key,
+                    MAC_R6_PAIRING_PREDECESSOR_SIGNATURE_DOMAIN_V1,
+                    &altered,
+                );
+                assert!(validate_mac_r6_pairing_predecessor_v1(&altered).is_err());
+            }};
+        }
+        reject!(
+            |value: &mut MacR6PairingPredecessorV1| value.signature_domain =
+                "R6_WRONG_DOMAIN".to_string()
+        );
+        reject!(
+            |value: &mut MacR6PairingPredecessorV1| value.pairing_scope = "install".to_string()
+        );
+        reject!(|value: &mut MacR6PairingPredecessorV1| value
+            .producer_host_identity
+            .object_format = "ELF".to_string());
+        reject!(|value: &mut MacR6PairingPredecessorV1| value
+            .producer_host_identity
+            .executor_build_evidence
+            .target_triple =
+            "aarch64-unknown-linux-gnu".to_string());
+        reject!(|value: &mut MacR6PairingPredecessorV1| value.signer_spki_sha256 = "0".repeat(64));
+        reject!(
+            |value: &mut MacR6PairingPredecessorV1| value.stage_one_admission_sha256 =
+                "not-a-digest".to_string()
+        );
+        reject!(
+            |value: &mut MacR6PairingPredecessorV1| value.fixed_install_receipt_set_sha256 =
+                "not-a-digest".to_string()
+        );
+        reject!(|value: &mut MacR6PairingPredecessorV1| value.manifest_sha256 = "0".repeat(64));
+        reject!(
+            |value: &mut MacR6PairingPredecessorV1| value.platform_mapping_commitment =
+                "not-a-digest".to_string()
+        );
+        reject!(
+            |value: &mut MacR6PairingPredecessorV1| value.guest_machine_identity = String::new()
+        );
+        reject!(
+            |value: &mut MacR6PairingPredecessorV1| value.managed_guest_substrate_home =
+                "/substituted/.substrate".to_string()
+        );
+        reject!(|value: &mut MacR6PairingPredecessorV1| value
+            .guest_executor_identity
+            .logical_role =
+            "mac.lima.guest-binary(substrate)".to_string());
+        reject!(|value: &mut MacR6PairingPredecessorV1| value
+            .guest_executor_identity
+            .object_format = "Mach-O".to_string());
+        reject!(|value: &mut MacR6PairingPredecessorV1| value
+            .guest_executor_identity
+            .architecture = "x86_64".to_string());
+        reject!(|value: &mut MacR6PairingPredecessorV1| value
+            .guest_executor_identity
+            .target_triple =
+            "x86_64-unknown-linux-gnu".to_string());
+        reject!(|value: &mut MacR6PairingPredecessorV1| value.guest_executor_identity.size = 0);
+        reject!(|value: &mut MacR6PairingPredecessorV1| value
+            .guest_executor_identity
+            .manifest_sha256 = "8".repeat(64));
+        reject!(
+            |value: &mut MacR6PairingPredecessorV1| value.fixed_install_parent_anchor_sha256 =
+                "not-a-digest".to_string()
+        );
+        reject!(|value: &mut MacR6PairingPredecessorV1| value.predecessor_generation = 0);
+        reject!(|value: &mut MacR6PairingPredecessorV1| value.prepare_expires_at_unix_ns += 1);
+        reject!(
+            |value: &mut MacR6PairingPredecessorV1| value.previous_predecessor_sha256 =
+                Some("not-a-digest".to_string())
+        );
+        reject!(
+            |value: &mut MacR6PairingPredecessorV1| value.signature.algorithm = "wrong".to_string()
+        );
+    }
+
+    #[test]
+    fn mac_r6_pairing_continuation_rejects_resigned_join_and_prepare_metadata_mutations() {
+        let (signing_key, predecessor, continuation) = valid_mac_r6_pairing_documents_v1();
+        macro_rules! reject {
+            ($body:expr) => {{
+                let mut altered = continuation.clone();
+                ($body)(&mut altered);
+                altered.signature.signature = sign_p256_record_v1(
+                    &signing_key,
+                    MAC_R6_PAIRING_CONTINUATION_SIGNATURE_DOMAIN_V1,
+                    &altered,
+                );
+                assert!(validate_mac_r6_pairing_continuation_v1(&altered, &predecessor).is_err());
+            }};
+        }
+        reject!(
+            |value: &mut MacR6PairingContinuationV1| value.signature_domain =
+                "R6_WRONG_DOMAIN".to_string()
+        );
+        reject!(
+            |value: &mut MacR6PairingContinuationV1| value.pairing_scope = "install".to_string()
+        );
+        reject!(|value: &mut MacR6PairingContinuationV1| value.scope_id =
+            "018f3e4a-7b2c-7c91-8a6f-2e1d5c4b3a92".to_string());
+        reject!(
+            |value: &mut MacR6PairingContinuationV1| value.predecessor_id =
+                "018f3e4a-7b2c-7c91-8a6f-2e1d5c4b3a92".to_string()
+        );
+        reject!(|value: &mut MacR6PairingContinuationV1| value.predecessor_generation += 1);
+        reject!(|value: &mut MacR6PairingContinuationV1| value.predecessor_sha256 = "8".repeat(64));
+        reject!(|value: &mut MacR6PairingContinuationV1| value
+            .fixed_install_parent_anchor_sha256 =
+            "8".repeat(64));
+        reject!(|value: &mut MacR6PairingContinuationV1| value
+            .committed_predecessor_state_sha256 =
+            "not-a-digest".to_string());
+        reject!(|value: &mut MacR6PairingContinuationV1| value.manifest_sha256 = "8".repeat(64));
+        reject!(
+            |value: &mut MacR6PairingContinuationV1| value.platform_mapping_commitment =
+                "8".repeat(64)
+        );
+        reject!(
+            |value: &mut MacR6PairingContinuationV1| value.guest_machine_identity =
+                "substituted-machine".to_string()
+        );
+        reject!(
+            |value: &mut MacR6PairingContinuationV1| value.guest_executor_identity.sha256 =
+                "8".repeat(64)
+        );
+        reject!(|value: &mut MacR6PairingContinuationV1| value.prepared_at_unix_ns += 1);
+        reject!(|value: &mut MacR6PairingContinuationV1| value.prepare_expires_at_unix_ns -= 1);
+        reject!(|value: &mut MacR6PairingContinuationV1| value.auto_run = true);
+        reject!(
+            |value: &mut MacR6PairingContinuationV1| value.signature.public_key =
+                URL_SAFE_NO_PAD.encode([0_u8; 91])
         );
     }
 }

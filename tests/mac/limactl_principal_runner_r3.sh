@@ -31,14 +31,14 @@ required = [
     '.env("LIMA_HOME", lima_home)',
     '.env("PATH", path)',
     'const MAC_LIMA_PROFILE_CHILD_FD_V1: libc::c_int = 3;',
-    'const MAC_LIMA_COPY_CHILD_FD_V1: libc::c_int = 4;',
     '"/dev/fd/3"',
-    '"/dev/fd/4"',
     "libc::dup2(inherited_fd, child_fd)",
     "flags & !libc::FD_CLOEXEC",
     "fn mac_require_absent_lima_owner_overlays_v1(",
     "fn mac_verify_lima_inherited_input_descriptor_v1(",
-    "MacLimaInheritedInputRoleV1::PostPmCopySource",
+    "MacLimaInheritedInputRoleV1::PostPmStdinSource",
+    "MAC_LIMA_POST_PM_STDIN_TRANSFER_SCRIPT_V1",
+    "child_stdin.map_or_else(Stdio::null, Stdio::from)",
     "MAC_LIMA_ROOT_INPUT_MAX_BYTES_V1",
     "status_flags & libc::O_ACCMODE != libc::O_RDONLY",
     "for descriptor in 3..fd_scan_limit as libc::c_int",
@@ -48,6 +48,9 @@ required = [
 for token in required:
     if token not in source:
         raise SystemExit(f"missing principal-runner control: {token}")
+for forbidden in ('MAC_LIMA_COPY_CHILD_FD_V1', 'MAC_LIMA_COPY_CHILD_PATH_V1', '"/dev/fd/4"'):
+    if forbidden in source:
+        raise SystemExit(f"unsupported post-PM inherited-FD copy route remains: {forbidden}")
 
 resolver = source[source.index("fn mac_join_lima_principal_v1("):]
 resolver = resolver[:resolver.index("\nfn mac_revalidate_lima_principal_v1(")]
@@ -183,12 +186,12 @@ if '"start"' not in stage_one or "MAC_LIMA_PROFILE_CHILD_PATH_V1" not in stage_o
 post_pm = source[source.index("fn mac_execute_post_pm_effect_plan_v1("):]
 post_pm = post_pm[:post_pm.index("\n/// Read only the exact action-specific observation")]
 for token in [
-    "mac_run_fixed_lima_copy_source_v1(",
+    "mac_run_fixed_lima_stdin_source_v1(",
     "MacPostPmEffectPrimitiveV1::Artifact",
     "MacPostPmEffectPrimitiveV1::Embedded",
 ]:
     if token not in post_pm:
-        raise SystemExit(f"post-PM root-private copy bypasses inherited FD handoff: {token}")
+        raise SystemExit(f"post-PM root-private transfer bypasses inherited stdin handoff: {token}")
 if ".display().to_string()" in post_pm:
     raise SystemExit("post-PM copy exposes a root-private pathname to non-root limactl")
 

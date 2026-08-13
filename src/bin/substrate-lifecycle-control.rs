@@ -31,14 +31,17 @@ impl DirectGuestPublisherPairingSessionTagV1 {
 use std::time::{Duration, Instant, SystemTime, UNIX_EPOCH};
 use substrate_common::{
     canonical_guest_publisher_pairing_operator_launch_v1,
-    canonical_guest_publisher_pairing_ticket_v1, lifecycle_anchor_sha256_v1,
-    parse_mac_publisher_bootstrap_request_v1,
+    canonical_guest_publisher_pairing_ticket_v1, canonical_mac_r6_pairing_predecessor_v1,
+    lifecycle_anchor_sha256_v1, parse_mac_publisher_bootstrap_request_v1,
     validate_guest_publisher_pairing_operator_launch_against_ticket_at_v1,
-    validate_guest_publisher_pairing_ticket_v1, validate_lifecycle_publisher_protected_state_v1,
-    validate_managed_lifecycle_publisher_request_v1, GuestPublisherPairingOperatorLaunchV1,
-    GuestPublisherPairingSessionBindingV1, GuestPublisherPairingTicketV1,
-    LifecyclePublisherProtectedStateV1, MacPublisherBootstrapRequestV1, ManagedActionV1,
-    ManagedArtifactManifestV1, ManagedLifecyclePublisherRequestV1, ManagedManifestHeadV1,
+    validate_guest_publisher_pairing_ticket_at_v1, validate_guest_publisher_pairing_ticket_v1,
+    validate_lifecycle_publisher_protected_state_v1, validate_mac_r6_pairing_continuation_v1,
+    validate_mac_r6_pairing_predecessor_v1, validate_managed_lifecycle_publisher_request_v1,
+    GuestPublisherPairingOperatorLaunchV1, GuestPublisherPairingSessionBindingV1,
+    GuestPublisherPairingTicketV1, LifecyclePublisherProtectedStateV1,
+    MacPublisherBootstrapRequestV1, MacR6PairingContinuationV1, MacR6PairingPredecessorV1,
+    ManagedActionV1, ManagedArtifactManifestV1, ManagedLifecyclePublisherRequestV1,
+    ManagedManifestHeadV1,
 };
 use substrate_shell::execution::managed_lifecycle::submit_guest_pairing_data_session_v1;
 use substrate_shell::{
@@ -140,7 +143,7 @@ fn read_exact_publisher_bootstrap_request_from_stdin_v1() -> Result<MacPublisher
 
 pub fn guest_publisher_pairing_direct_interactive_v1<W>(
     writer: &mut W,
-    seed: ManagedLifecycleControlRequestV1,
+    mut seed: ManagedLifecycleControlRequestV1,
 ) -> Result<Value>
 where
     W: Write,
@@ -148,11 +151,15 @@ where
     if validate_mapped_lifecycle_control_request_v1(&seed)? != MappedLifecycleTagV1::PostPmAction {
         bail!("R6 direct pairing seed must be one admitted post-PM mapping");
     }
-    let mut issued = issue_lima_guest_pairing_ticket_v1(&seed)?;
+    let mut response = submit_lima_guest_pairing_issue_v1(&seed)?;
+    if apply_r6_predecessor_replacement_response_v1(&mut seed, &response)? {
+        response = submit_lima_guest_pairing_issue_v1(&seed)?;
+    }
+    let mut issued = decode_r6_pairing_issue_response_v1(response)?;
     if issued.4 == "expired_preserved" {
         // The first issue call is intentionally no-mutation evidence preservation. This second,
         // fully record-bound direct call is the distinct explicit fresh-attempt admission.
-        issued = issue_lima_guest_pairing_fresh_attempt_v1(
+        response = submit_lima_guest_pairing_fresh_attempt_v1(
             &seed,
             &issued.0,
             &issued.1,
@@ -160,6 +167,10 @@ where
             issued.2,
             &issued.3,
         )?;
+        if apply_r6_predecessor_replacement_response_v1(&mut seed, &response)? {
+            response = submit_lima_guest_pairing_issue_v1(&seed)?;
+        }
+        issued = decode_r6_pairing_issue_response_v1(response)?;
     }
     let (ticket, binding, record_generation, record_sha256, record_state, operator_launch) = issued;
     // Pre-intent closure is preserved evidence, never a displayable/reusable pairing challenge.
@@ -175,7 +186,9 @@ where
     // The retained host terminal is the only complete-value display source. The independent
     // operator child sees only the signed, canonical launch envelope and reads confirmation from
     // its own guest controlling TTY; the data child cannot begin before that child exits cleanly.
-    display_guest_pairing_challenge_v1(writer, &ticket)?;
+    if record_state != "expired_effect_recovery" {
+        display_guest_pairing_challenge_v1(writer, &ticket)?;
+    }
     let operator_observation = match record_state.as_str() {
         "sessions_opened" => {
             let launch = operator_launch.as_ref().ok_or_else(|| {
@@ -218,7 +231,10 @@ where
         | "guest_state_root_durable"
         | "hello_durable"
         | "transcript_durable"
-        | "ticket_consumed" => json!({"status":"operator_proof_already_durable"}),
+        | "ticket_consumed"
+        | "expired_effect_recovery" => {
+            json!({"status":"operator_proof_already_durable"})
+        }
         other => bail!(
             "R6 ticket issue response returned a non-rejoinable protected record state {other}"
         ),
@@ -251,6 +267,10 @@ pub fn issue_lima_guest_pairing_ticket_v1(
     String,
     Option<GuestPublisherPairingOperatorLaunchV1>,
 )> {
+    decode_r6_pairing_issue_response_v1(submit_lima_guest_pairing_issue_v1(seed)?)
+}
+
+fn submit_lima_guest_pairing_issue_v1(seed: &ManagedLifecycleControlRequestV1) -> Result<Value> {
     if DirectGuestPublisherPairingSessionTagV1::GuestPairingDataSession.wire_name()
         != "guest_pairing_data_session"
     {
@@ -261,28 +281,20 @@ pub fn issue_lima_guest_pairing_ticket_v1(
         MappedLifecycleTagV1::GuestPairingDataSession,
     );
     request.pairing_ticket = None;
-    let response = submit_guest_pairing_data_session_v1(&request)?;
-    decode_r6_pairing_issue_response_v1(response)
+    submit_guest_pairing_data_session_v1(&request)
 }
 
 /// Submit the one explicit fresh-attempt admission only after a first no-mutation expiry response.
 /// Full prior ticket/binding/generation/digest evidence makes this distinct from ordinary issue and
 /// data advance; it carries no selector, operator bytes, or mutable observation.
-fn issue_lima_guest_pairing_fresh_attempt_v1(
+fn submit_lima_guest_pairing_fresh_attempt_v1(
     seed: &ManagedLifecycleControlRequestV1,
     ticket: &GuestPublisherPairingTicketV1,
     binding: &GuestPublisherPairingSessionBindingV1,
     binding_record_generation: u64,
     current_record_generation: u64,
     current_record_sha256: &str,
-) -> Result<(
-    GuestPublisherPairingTicketV1,
-    GuestPublisherPairingSessionBindingV1,
-    u64,
-    String,
-    String,
-    Option<GuestPublisherPairingOperatorLaunchV1>,
-)> {
+) -> Result<Value> {
     let mut request = r6_pairing_request_from_admitted_seed_v1(
         seed,
         MappedLifecycleTagV1::GuestPairingDataSession,
@@ -292,7 +304,7 @@ fn issue_lima_guest_pairing_fresh_attempt_v1(
     request.pairing_host_record_generation = Some(binding_record_generation);
     request.pairing_record_expected_generation_v1 = Some(current_record_generation);
     request.pairing_host_record_sha256 = Some(current_record_sha256.to_string());
-    decode_r6_pairing_issue_response_v1(submit_guest_pairing_data_session_v1(&request)?)
+    submit_guest_pairing_data_session_v1(&request)
 }
 
 /// Close only the exact direct operator child failure. This ticket-less, complete-record form is
@@ -317,6 +329,68 @@ fn record_lima_guest_pairing_operator_failure_v1(
         bail!("R6 operator failure did not receive its fixed durable closure acknowledgement");
     }
     Ok(())
+}
+
+/// Replace only the exact expired predecessor chain returned by the protected dedicated producer.
+/// The response carries no ticket or effect capability; the caller must resubmit the closed seed.
+fn apply_r6_predecessor_replacement_response_v1(
+    seed: &mut ManagedLifecycleControlRequestV1,
+    response: &Value,
+) -> Result<bool> {
+    if response.get("status").and_then(Value::as_str) != Some("predecessor_replaced") {
+        return Ok(false);
+    }
+    let object = response
+        .as_object()
+        .ok_or_else(|| anyhow!("R6 predecessor replacement response is not an object"))?;
+    if object.len() != 3 {
+        bail!("R6 predecessor replacement response contains unrecognized fields");
+    }
+    let previous = seed
+        .r6_pairing_predecessor_v1
+        .as_ref()
+        .ok_or_else(|| anyhow!("R6 predecessor replacement has no previous seed"))?;
+    let predecessor: MacR6PairingPredecessorV1 = serde_json::from_value(
+        object
+            .get("r6_pairing_predecessor_v1")
+            .cloned()
+            .ok_or_else(|| anyhow!("R6 predecessor replacement lacks predecessor"))?,
+    )
+    .context("decode R6 replacement predecessor")?;
+    let continuation: MacR6PairingContinuationV1 = serde_json::from_value(
+        object
+            .get("r6_pairing_continuation_v1")
+            .cloned()
+            .ok_or_else(|| anyhow!("R6 predecessor replacement lacks continuation"))?,
+    )
+    .context("decode R6 replacement continuation")?;
+    validate_mac_r6_pairing_predecessor_v1(&predecessor)?;
+    validate_mac_r6_pairing_continuation_v1(&continuation, &predecessor)?;
+    let previous_sha256 = format!(
+        "{:x}",
+        Sha256::digest(canonical_mac_r6_pairing_predecessor_v1(previous)?)
+    );
+    if predecessor.scope_id != previous.scope_id
+        || predecessor.predecessor_generation
+            != previous
+                .predecessor_generation
+                .checked_add(1)
+                .ok_or_else(|| anyhow!("R6 predecessor generation overflow"))?
+        || predecessor.previous_predecessor_sha256.as_deref() != Some(previous_sha256.as_str())
+        || predecessor.fixed_install_parent_anchor_sha256
+            != previous.fixed_install_parent_anchor_sha256
+        || predecessor.manifest_sha256 != previous.manifest_sha256
+        || predecessor.platform_mapping_commitment != previous.platform_mapping_commitment
+        || predecessor.guest_machine_identity != previous.guest_machine_identity
+        || predecessor.guest_executor_identity != previous.guest_executor_identity
+    {
+        bail!("R6 predecessor replacement does not exact-join the expired generation");
+    }
+    seed.r6_pairing_predecessor_v1 = Some(predecessor);
+    seed.r6_pairing_continuation_v1 = Some(continuation);
+    validate_mapped_lifecycle_control_request_v1(seed)
+        .context("validate replacement R6 pairing seed")?;
+    Ok(true)
 }
 
 fn decode_r6_pairing_issue_response_v1(
@@ -373,6 +447,13 @@ fn decode_r6_pairing_issue_response_v1(
     {
         bail!("R6 ticket issue response does not carry an exact protected record binding");
     }
+    let ticket_is_expired = record_state == "expired_effect_recovery"
+        && validate_guest_publisher_pairing_ticket_at_v1(&ticket, r6_now_unix_ns_v1()?).is_err();
+    validate_r6_expired_effect_recovery_envelope_v1(
+        &record_state,
+        operator_launch.is_some(),
+        ticket_is_expired,
+    )?;
     match record_state.as_str() {
         "sessions_opened" => {
             let launch = operator_launch.as_ref().ok_or_else(|| {
@@ -401,6 +482,9 @@ fn decode_r6_pairing_issue_response_v1(
                 bail!("R6 rejoin issue response must not mint or relay an operator launch");
             }
         }
+        "expired_effect_recovery" => {
+            debug_assert!(operator_launch.is_none() && ticket_is_expired);
+        }
         other => bail!(
             "R6 ticket issue response returned a non-rejoinable protected record state {other}"
         ),
@@ -413,6 +497,18 @@ fn decode_r6_pairing_issue_response_v1(
         record_state,
         operator_launch,
     ))
+}
+
+fn validate_r6_expired_effect_recovery_envelope_v1(
+    record_state: &str,
+    operator_launch_present: bool,
+    ticket_is_expired: bool,
+) -> Result<()> {
+    if record_state == "expired_effect_recovery" && (operator_launch_present || !ticket_is_expired)
+    {
+        bail!("R6 expired-effect recovery must be expired and capability-free");
+    }
+    Ok(())
 }
 
 /// Advance only the data-session branch. Its ticket never enters an operator-TTY relay.
@@ -708,6 +804,8 @@ fn r6_pairing_request_from_admitted_seed_v1(
         pairing_host_record_generation: None,
         pairing_record_expected_generation_v1: None,
         pairing_host_record_sha256: None,
+        r6_pairing_predecessor_v1: seed.r6_pairing_predecessor_v1.clone(),
+        r6_pairing_continuation_v1: seed.r6_pairing_continuation_v1.clone(),
     }
 }
 
@@ -991,9 +1089,22 @@ fn read_exact_guest_pairing_seed_from_stdin_v1() -> Result<ManagedLifecycleContr
         || seed.pairing_host_record_generation.is_some()
         || seed.pairing_record_expected_generation_v1.is_some()
         || seed.pairing_host_record_sha256.is_some()
+        || seed.r6_pairing_predecessor_v1.is_none()
+        || seed.r6_pairing_continuation_v1.is_none()
     {
         bail!("hidden R6 direct pairing seed must contain only an ordinary closed post-PM request");
     }
+    validate_mapped_lifecycle_control_request_v1(&seed)
+        .context("validate hidden R6 continuation with the production mapped validator")?;
+    let predecessor = seed
+        .r6_pairing_predecessor_v1
+        .as_ref()
+        .ok_or_else(|| anyhow!("validated hidden R6 seed lost its predecessor"))?;
+    let continuation = seed
+        .r6_pairing_continuation_v1
+        .as_ref()
+        .ok_or_else(|| anyhow!("validated hidden R6 seed lost its continuation"))?;
+    substrate_common::validate_mac_r6_pairing_continuation_v1(continuation, predecessor)?;
     Ok(seed)
 }
 
@@ -1309,4 +1420,31 @@ fn main_impl_v1() -> Result<()> {
 fn main() -> Result<()> {
     let _ = env_logger::try_init();
     main_impl_v1()
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn expired_effect_recovery_is_the_only_expired_capability_free_control_state() {
+        assert!(validate_r6_expired_effect_recovery_envelope_v1(
+            "expired_effect_recovery",
+            false,
+            true,
+        )
+        .is_ok());
+        assert!(validate_r6_expired_effect_recovery_envelope_v1(
+            "expired_effect_recovery",
+            true,
+            true,
+        )
+        .is_err());
+        assert!(validate_r6_expired_effect_recovery_envelope_v1(
+            "expired_effect_recovery",
+            false,
+            false,
+        )
+        .is_err());
+    }
 }

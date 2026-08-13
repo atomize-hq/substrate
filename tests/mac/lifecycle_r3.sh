@@ -284,6 +284,11 @@ for text in ('"guest-pairing-data-session"',
              'mac_guest_pairing_record_account_v1',
              'GuestPublisherPairingOperatorLaunchV1',
              'GuestPublisherPairingOperatorProofV1',
+             'MacR6PairingActivationRecordV1',
+             'MacR6ConsumedActivePointerV1',
+             'consume_expired_unused_active_pointer_v1',
+             'PairingEffectPrepared',
+             'effect_admitted_at_unix_ns',
              'operator_proof_verified',
              'operator_proof_accepted'):
     require('executor', text)
@@ -348,15 +353,20 @@ artifact_exec_start = executor.index('fn mac_execute_post_pm_effect_plan_v1')
 artifact_exec_end = executor.index('\n/// Read only the exact action-specific observation', artifact_exec_start)
 artifact_exec = executor[artifact_exec_start:artifact_exec_end]
 if 'mac_stage_measured_post_pm_artifact_absent_or_exact_v1' not in artifact_exec or \
-   'mac_run_fixed_lima_copy_source_v1' not in artifact_exec or \
+   'mac_run_fixed_lima_stdin_source_v1' not in artifact_exec or \
    'staged.display().to_string()' in artifact_exec or 'source_path.clone()' in artifact_exec:
-    fail('post-PM artifact copy can bypass the retained inherited-FD source')
+    fail('post-PM artifact transfer can bypass the retained inherited-stdin source')
 target_observer_start = executor.index('fn mac_observe_closed_post_pm_effect_v1')
 target_observer_end = executor.index('\n#[cfg(target_os = "macos")]\nfn mac_execute_closed_post_pm_effect_v1', target_observer_start)
 target_observer = executor[target_observer_start:target_observer_end]
-for text in ('target.kind', 'target.sha256.as_deref()', '"%F:%U:%G:%a"', '"/usr/bin/stat"'):
+for text in ('target.kind', 'target.sha256.as_deref()', '"%F:%U:%G:%a"', '"/usr/bin/stat"',
+             'mac_target_link_probe_argv_v1', 'mac_target_exists_probe_argv_v1',
+             'mac_fixed_privileged_guest_shell_argv_v1'):
     if text not in target_observer:
         fail('post-PM target observer does not require exact type/metadata integrity')
+for text in ('fn mac_target_link_probe_argv_v1', '"-L".to_string()',
+             'fn mac_target_exists_probe_argv_v1', '"-e".to_string()'):
+    require('executor', text)
 # The Rust fixture executes the pure receipt-plan, state-classification, retry-decision, and
 # exhaustive literal effect-plan helpers; the shell check keeps their proof hooks from regressing
 # into a lexical-only assertion.
@@ -369,7 +379,7 @@ for text in ('correction_post_pm_instance_receipt_plans_are_exhaustive_and_creat
              'mac_require_post_pm_after_state_v1'):
     require('executor', text)
 for text in ('direct bootstrap authorization has expired before FD3 admission',
-             'Stage-1 authorization expired before the selected absent-instance effect'):
+             'Stage-1 authorization expired before fixed-install effect admission'):
     require('executor', text)
 issuer_start = executor.index('fn mac_issue_closed_post_pm_requests_after_stage_one_v1')
 issuer_end = executor.index('\nfn mac_stage_one_profile_path_v1', issuer_start)
@@ -419,7 +429,8 @@ refresh = executor[refresh_start:refresh_end]
 for text in ('open_system_keychain_protected_state_for_scope_v1',
              'mac_issue_closed_post_pm_requests_after_stage_one_v1',
              'fixed install final protected state does not exact-join',
-             'post_pm_requests_v1'):
+             'post_pm_requests_v1', 'r6_pairing_seed_v1',
+             'R6_PAIRING_CONTINUATION_COMMAND_V1'):
     if text not in refresh:
         fail('fixed-install post-PM refresh is missing its current-anchor proof')
 stage_runner_start = executor.index('fn execute_closed_mac_lima_stage_one_effect_v1')
@@ -567,7 +578,8 @@ if 'stage_response="$(' not in stage_one or 'validate_stage_one_completion_respo
 completion = function_body(warm, 'validate_stage_one_completion_response_v1')
 for text in ('post_pm_requests_v1 remains a catalogue', 'fixed installation sequence',
              'The privileged executor owns', '"status"', '"receipt"',
-             '"manifest_generation"', '"manifest_sha256"', '"xpc_attestation"'):
+             '"manifest_generation"', '"manifest_sha256"', '"xpc_attestation"',
+             '"r6_pairing_command_v1"', '"r6_pairing_seed_v1"'):
     if text not in completion:
         fail('Stage-1 completion validation is not fixed to the completed executor response')
 if any(forbidden in warm for forbidden in (
@@ -633,7 +645,111 @@ Path(sys.argv[2]).write_text(
 )
 PY
 chmod 700 "${completion_fixture}/validate-stage-one-completion"
-canonical_completion_response='{"status":"completed","receipt":{},"manifest_generation":2,"manifest_sha256":"aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa","xpc_attestation":{"mach_service":"com.substrate.lifecycle.publisher.v1","audit_token_bound":true}}'
+canonical_completion_response="$(python3 <<'PY'
+import json
+
+scope = "018f3e4a-7b2c-7c91-8a6f-2e1d5c4b3a90"
+host_digest = "b" * 64
+mapping_digest = "c" * 64
+manifest_digest = "a" * 64
+guest = {
+    "logical_role": "mac.lima.publisher-executor",
+    "object_format": "ELF",
+    "architecture": "AArch64",
+    "target_triple": "aarch64-unknown-linux-gnu",
+    "sha256": "5" * 64,
+    "size": 4096,
+    "manifest_sha256": manifest_digest,
+}
+signature = {
+    "algorithm": "ecdsa-p256-sha256-p1363-low-s-v1",
+    "public_key": "fixture-spki",
+    "signature": "fixture-signature",
+}
+predecessor = {
+    "schema_owner": "substrate.mac-r6-pairing-predecessor",
+    "schema_version": 1,
+    "signature_domain": "R6_PAIRING_PREDECESSOR_V1",
+    "pairing_scope": "pairing-only",
+    "scope_id": scope,
+    "producer_host_identity": {
+        "object_format": "Mach-O",
+        "executor_build_evidence": {"artifact_sha256": host_digest},
+    },
+    "signer_spki_sha256": "1" * 64,
+    "stage_one_admission_sha256": "2" * 64,
+    "fixed_install_receipt_set_sha256": "3" * 64,
+    "manifest_sha256": manifest_digest,
+    "platform_mapping_commitment": mapping_digest,
+    "guest_machine_identity": "guest-machine",
+    "observed_guest_home": "/home/alice smith",
+    "managed_guest_substrate_home": "/home/alice smith/.substrate",
+    "guest_executor_identity": guest,
+    "fixed_install_parent_anchor_sha256": "6" * 64,
+    "predecessor_id": "018f3e4a-7b2c-7c91-8a6f-2e1d5c4b3a91",
+    "predecessor_generation": 1,
+    "issued_at_unix_ns": 1_000,
+    "expires_at_unix_ns": 300_000_001_000,
+    "signature": signature,
+}
+continuation = {
+    "schema_owner": "substrate.mac-r6-pairing-continuation",
+    "schema_version": 1,
+    "signature_domain": "R6_PAIRING_CONTINUATION_V1",
+    "pairing_scope": "pairing-only",
+    "scope_id": scope,
+    "predecessor_id": predecessor["predecessor_id"],
+    "predecessor_generation": 1,
+    "predecessor_sha256": "7" * 64,
+    "fixed_install_parent_anchor_sha256": predecessor["fixed_install_parent_anchor_sha256"],
+    "committed_predecessor_state_sha256": "8" * 64,
+    "manifest_sha256": manifest_digest,
+    "platform_mapping_commitment": mapping_digest,
+    "guest_machine_identity": "guest-machine",
+    "guest_executor_identity": guest,
+    "issued_at_unix_ns": 1_000,
+    "expires_at_unix_ns": 300_000_001_000,
+    "auto_run": False,
+    "signature": signature,
+}
+request = {
+    "scope_id": scope,
+    "role": "mac.lima.publisher-executor",
+    "action": "create",
+    "host_context_commitment": host_digest,
+    "platform_mapping_commitment": mapping_digest,
+}
+response = {
+    "status": "completed",
+    "receipt": {},
+    "manifest_generation": 2,
+    "manifest_sha256": manifest_digest,
+    "xpc_attestation": {
+        "mach_service": "com.substrate.lifecycle.publisher.v1",
+        "audit_token_bound": True,
+    },
+    "post_pm_requests_v1": [request],
+    "r6_pairing_command_v1": "guest-publisher-pairing-direct-interactive-v1",
+    "r6_pairing_seed_v1": {
+        "tag": "post_pm_action",
+        "authority_domain": "mac_host_shared",
+        "scope_id": scope,
+        "selected_host_prefix": "/opt/substrate prefix",
+        "requester_principal": "alice",
+        "host_context_commitment": host_digest,
+        "platform_mapping_commitment": mapping_digest,
+        "host_platform_control_root": "/Users/alice/.lima",
+        "install_bootstrap_context_v1": "carrier",
+        "platform_bootstrap_mapping_v1": "mapping",
+        "executor_build_evidence": {"artifact_sha256": host_digest},
+        "publisher_request": request,
+        "r6_pairing_predecessor_v1": predecessor,
+        "r6_pairing_continuation_v1": continuation,
+    },
+}
+print(json.dumps(response, sort_keys=True, separators=(",", ":")))
+PY
+)"
 "${completion_fixture}/validate-stage-one-completion" "${canonical_completion_response}"
 for tampered in \
     "${canonical_completion_response/\"status\":\"completed\"/\"status\":\"prepared\"}" \
@@ -642,4 +758,161 @@ for tampered in \
         fail 'fixed Stage-1 completion validator accepted a tampered terminal response'
     fi
 done
+tampered_r6_seed="$(python3 - "${canonical_completion_response}" <<'PY'
+import json
+import sys
+value = json.loads(sys.argv[1])
+value["r6_pairing_seed_v1"]["publisher_request"]["action"] = "start"
+print(json.dumps(value, sort_keys=True, separators=(",", ":")))
+PY
+)"
+if "${completion_fixture}/validate-stage-one-completion" "${tampered_r6_seed}" >/dev/null 2>&1; then
+    fail 'fixed Stage-1 completion validator accepted a seed outside the exact catalogue'
+fi
+python3 - "${REPO_ROOT}/scripts/mac/lima-warm.sh" "${completion_fixture}/emit-r6-continuation" <<'PY'
+from pathlib import Path
+import re
+import sys
+
+source = Path(sys.argv[1]).read_text()
+match = re.search(
+    r'(?ms)^emit_r6_pairing_continuation_v1\(\) \{\n.*?(?=^[A-Za-z_][A-Za-z0-9_]*\(\) \{|\Z)',
+    source,
+)
+if not match:
+    raise SystemExit('missing fixed R6 continuation emitter')
+Path(sys.argv[2]).write_text(
+    '#!/usr/bin/env bash\n'
+    'set -euo pipefail\n'
+    'INSTALL_PREFIX=/opt/substrate\n'
+    + match.group(0)
+    + '\nemit_r6_pairing_continuation_v1 "$1"\n'
+)
+PY
+chmod 700 "${completion_fixture}/emit-r6-continuation"
+r6_boundary="$(${completion_fixture}/emit-r6-continuation "${canonical_completion_response}")"
+python3 - "${r6_boundary}" <<'PY'
+import json
+import sys
+
+prefix = "substrate.r6-pairing-continuation.v1 "
+if not sys.argv[1].startswith(prefix):
+    raise SystemExit("R6 continuation marker is not canonical")
+boundary = json.loads(sys.argv[1][len(prefix):])
+if (boundary.get("schema_owner") != "substrate.mac-r6-pairing-continuation"
+        or boundary.get("schema_version") != 1
+        or boundary.get("control_executable") != "/opt/substrate/bin/substrate-lifecycle-control"
+        or boundary.get("command") != "guest-publisher-pairing-direct-interactive-v1"
+        or boundary.get("auto_run") is not False
+        or boundary.get("stdin_seed_v1", {}).get("tag") != "post_pm_action"):
+    raise SystemExit("R6 continuation boundary is incomplete or auto-running")
+PY
+python3 - "${REPO_ROOT}/src/bin/substrate-lifecycle-macos.rs" "${completion_fixture}" <<'PY'
+from pathlib import Path
+import hashlib
+import json
+import os
+import re
+import subprocess
+import sys
+
+source = Path(sys.argv[1]).read_text()
+fixture = Path(sys.argv[2]) / "atomic-effect"
+fixture.mkdir()
+uid, gid = os.getuid(), os.getgid()
+
+def embedded(name):
+    match = re.search(rf'const {name}: &str = r#"(.*?)"#;', source, re.S)
+    if not match:
+        raise SystemExit(f"missing embedded script {name}")
+    return match.group(1)
+
+def unprivileged(script, fixed_root=None):
+    if fixed_root is not None:
+        script = script.replace(
+            "'/var/lib/substrate/.substrate-lifecycle-v1/staged/'",
+            repr(str(fixed_root) + "/"),
+        )
+    script = script.replace("meta.st_uid != 0", f"meta.st_uid != {uid}")
+    script = script.replace("meta.st_gid != 0", f"meta.st_gid != {gid}")
+    script = script.replace("meta.st_uid == 0", f"meta.st_uid == {uid}")
+    script = script.replace("meta.st_gid == 0", f"meta.st_gid == {gid}")
+    script = script.replace("smeta.st_uid != 0", f"smeta.st_uid != {uid}")
+    script = script.replace("smeta.st_gid != 0", f"smeta.st_gid != {gid}")
+    script = script.replace("stale_meta.st_uid != 0", f"stale_meta.st_uid != {uid}")
+    script = script.replace("stale_meta.st_gid != 0", f"stale_meta.st_gid != {gid}")
+    script = script.replace("os.fchown(output.fileno(), 0, 0)", f"os.fchown(output.fileno(), {uid}, {gid})")
+    return script
+
+staging_root = fixture / "staged"
+staging_root.mkdir(mode=0o700)
+transfer = unprivileged(embedded("MAC_LIMA_POST_PM_STDIN_TRANSFER_SCRIPT_V1"), staging_root)
+payload = b"descriptor-bound payload\n"
+digest = hashlib.sha256(payload).hexdigest()
+target = staging_root / "generation" / "blob"
+for _ in range(2):
+    subprocess.run(
+        [sys.executable, "-c", transfer, str(target), digest, str(len(payload))],
+        input=payload,
+        check=True,
+    )
+if target.read_bytes() != payload or (target.stat().st_mode & 0o777) != 0o444:
+    raise SystemExit("atomic stdin transfer did not converge exact bytes")
+target.unlink()
+partial = target.with_name(target.name + ".partial")
+partial.write_bytes(b"interrupted")
+subprocess.run(
+    [sys.executable, "-c", transfer, str(target), digest, str(len(payload))],
+    input=payload,
+    check=True,
+)
+if partial.exists() or target.read_bytes() != payload:
+    raise SystemExit("atomic stdin transfer did not recover interrupted temp")
+
+publish = unprivileged(embedded("MAC_LIMA_POST_PM_ATOMIC_PUBLISH_SCRIPT_V1"))
+final_parent = fixture / "final"
+final_parent.mkdir()
+final = final_parent / "artifact"
+generation_key = "a" * 64
+subprocess.run(
+    [sys.executable, "-c", publish, str(target), str(final), digest, "0755", generation_key, "create"],
+    check=True,
+)
+subprocess.run(
+    [sys.executable, "-c", publish, str(target), str(final), digest, "0755", generation_key, "create"],
+    check=True,
+)
+if final.read_bytes() != payload or (final.stat().st_mode & 0o777) != 0o755:
+    raise SystemExit("atomic publish did not converge exact final bytes")
+
+installed = fixture / "substrate-lifecycle-linux"
+elf = bytearray(64)
+elf[:6] = b"\x7fELF\x02\x01"
+elf[18:20] = b"\xb7\x00"
+elf.extend(b"fresh-installed-r6-executor")
+installed.write_bytes(elf)
+installed.chmod(0o755)
+measure = unprivileged(embedded("MAC_LIMA_R6_INSTALLED_EXECUTOR_MEASURE_SCRIPT_V1"))
+measure = measure.replace(
+    "'/usr/libexec/substrate/substrate-lifecycle-linux'",
+    repr(str(installed)),
+)
+observed = subprocess.run([sys.executable, "-c", measure], check=True,
+                          stdout=subprocess.PIPE, text=True).stdout.strip()
+identity = json.loads(observed)
+if identity != {
+    "architecture": "AArch64",
+    "object_format": "ELF",
+    "sha256": hashlib.sha256(elf).hexdigest(),
+    "size": len(elf),
+    "target_triple": "aarch64-unknown-linux-gnu",
+}:
+    raise SystemExit("installed R6 executor measurement did not emit exact identity")
+elf[18:20] = b"\x3e\x00"
+installed.write_bytes(elf)
+installed.chmod(0o755)
+if subprocess.run([sys.executable, "-c", measure], stdout=subprocess.PIPE,
+                  stderr=subprocess.PIPE).returncode == 0:
+    raise SystemExit("installed R6 executor measurement accepted non-AArch64 ELF")
+PY
 printf 'A1.1d-5R3-MAC fixed Stage-1 completion fixture: PASS\n'

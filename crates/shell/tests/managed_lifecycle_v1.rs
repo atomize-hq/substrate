@@ -1,9 +1,12 @@
 use serde_json::json;
 use sha2::{Digest, Sha256};
 use substrate_common::{
-    ExecutorBuildEvidenceV1, LifecycleSignatureV1, LimaStageOneAuthorizationV1, ManagedActionV1,
-    ManagedArtifactIdentityV1, ManagedArtifactRoleV1, ManagedExecutorIdentityV1,
-    ManagedLifecyclePublisherRequestV1,
+    ExecutorBuildEvidenceV1, LifecycleSignatureV1, LimaStageOneAuthorizationV1,
+    MacR6GuestAarch64ElfIdentityV1, MacR6HostMachOIdentityV1, MacR6PairingContinuationV1,
+    MacR6PairingPredecessorV1, ManagedActionV1, ManagedArtifactIdentityV1, ManagedArtifactRoleV1,
+    ManagedExecutorIdentityV1, ManagedLifecyclePublisherRequestV1,
+    MAC_R6_PAIRING_CONTINUATION_SIGNATURE_DOMAIN_V1,
+    MAC_R6_PAIRING_PREDECESSOR_SIGNATURE_DOMAIN_V1, MAC_R6_PAIRING_PREPARE_WINDOW_NS_V1,
 };
 use substrate_shell::{
     validate_mapped_lifecycle_control_request_v1, ManagedLifecycleControlRequestV1,
@@ -118,6 +121,8 @@ fn post_pm_request_v1(role: &str, action: ManagedActionV1) -> ManagedLifecycleCo
         pairing_host_record_generation: None,
         pairing_record_expected_generation_v1: None,
         pairing_host_record_sha256: None,
+        r6_pairing_predecessor_v1: None,
+        r6_pairing_continuation_v1: None,
     }
 }
 
@@ -267,9 +272,146 @@ fn r6_dual_session_tags_are_fixed_and_not_ordinary_admission() {
             pairing_host_record_generation: None,
             pairing_record_expected_generation_v1: None,
             pairing_host_record_sha256: None,
+            r6_pairing_predecessor_v1: None,
+            r6_pairing_continuation_v1: None,
         };
         assert!(validate_mapped_lifecycle_control_request_v1(&request).is_err());
     }
+}
+
+fn authentic_r6_mapped_seed_v1() -> ManagedLifecycleControlRequestV1 {
+    let (carrier, mapping, commitment, mapping_commitment) = exact_carrier_and_mapping_v1();
+    let mut evidence = exact_build_evidence_v1();
+    evidence.code_identity = Some("cdhash:0123456789abcdef0123456789abcdef01234567".to_string());
+    let guest_identity = MacR6GuestAarch64ElfIdentityV1 {
+        logical_role: "mac.lima.publisher-executor".to_string(),
+        object_format: "ELF".to_string(),
+        architecture: "AArch64".to_string(),
+        target_triple: "aarch64-unknown-linux-gnu".to_string(),
+        sha256: "5".repeat(64),
+        size: 4096,
+        manifest_sha256: "3".repeat(64),
+    };
+    let predecessor = MacR6PairingPredecessorV1 {
+        schema_owner: "substrate.mac-r6-pairing-predecessor".to_string(),
+        schema_version: 1,
+        signature_domain: MAC_R6_PAIRING_PREDECESSOR_SIGNATURE_DOMAIN_V1.to_string(),
+        pairing_scope: "pairing-only".to_string(),
+        scope_id: SCOPE_ID.to_string(),
+        producer_host_identity: MacR6HostMachOIdentityV1 {
+            object_format: "Mach-O".to_string(),
+            executor_build_evidence: evidence.clone(),
+        },
+        signer_spki_sha256:
+            "40f5ccec4350fd377f2d52ac92cac8cd175a3cef278890c33803812304b5a3e1"
+                .to_string(),
+        stage_one_admission_sha256: "1".repeat(64),
+        fixed_install_receipt_set_sha256: "2".repeat(64),
+        manifest_sha256: "3".repeat(64),
+        platform_mapping_commitment: mapping_commitment.clone(),
+        guest_machine_identity: "0123456789abcdef0123456789abcdef".to_string(),
+        observed_guest_home: "/home/fixture".to_string(),
+        managed_guest_substrate_home: "/home/fixture/.substrate".to_string(),
+        guest_executor_identity: guest_identity.clone(),
+        fixed_install_parent_anchor_sha256: "6".repeat(64),
+        predecessor_id: "018f3e4a-7b2c-7c91-8a6f-2e1d5c4b3a91".to_string(),
+        predecessor_generation: 1,
+        prepared_at_unix_ns: 1_000,
+        prepare_expires_at_unix_ns: 1_000 + MAC_R6_PAIRING_PREPARE_WINDOW_NS_V1,
+        previous_predecessor_sha256: None,
+        signature: LifecycleSignatureV1 {
+            algorithm: "ecdsa-p256-sha256-p1363-low-s-v1".to_string(),
+            public_key: "MFkwEwYHKoZIzj0CAQYIKoZIzj0DAQcDQgAEOtqxXWYla_Fc1xYDWz8EFETlEv7R3WTUunVZfSDjZvFUbSyQqD66ugFZUJnl8_-70zhMdJTeZ1n91eZe-unMZw".to_string(),
+            signature: "dMmICh1DIz77QXK4Jr29FjZ5hShSBYpNAdWhmeRMnFhq5Iu1Z2PKMjLVRcrsBJjJI1sMTuB2Xv9anuuap0cKmQ".to_string(),
+        },
+    };
+    let continuation = MacR6PairingContinuationV1 {
+        schema_owner: "substrate.mac-r6-pairing-continuation".to_string(),
+        schema_version: 1,
+        signature_domain: MAC_R6_PAIRING_CONTINUATION_SIGNATURE_DOMAIN_V1.to_string(),
+        pairing_scope: "pairing-only".to_string(),
+        scope_id: predecessor.scope_id.clone(),
+        predecessor_id: predecessor.predecessor_id.clone(),
+        predecessor_generation: predecessor.predecessor_generation,
+        predecessor_sha256:
+            "4110863fbaf8425f1e3df5a62cb6eef1e2450369edc882f52e3f7283211b9b4c"
+                .to_string(),
+        fixed_install_parent_anchor_sha256: predecessor.fixed_install_parent_anchor_sha256.clone(),
+        committed_predecessor_state_sha256: "8".repeat(64),
+        manifest_sha256: predecessor.manifest_sha256.clone(),
+        platform_mapping_commitment: mapping_commitment.clone(),
+        guest_machine_identity: predecessor.guest_machine_identity.clone(),
+        guest_executor_identity: guest_identity,
+        prepared_at_unix_ns: predecessor.prepared_at_unix_ns,
+        prepare_expires_at_unix_ns: predecessor.prepare_expires_at_unix_ns,
+        auto_run: false,
+        signature: LifecycleSignatureV1 {
+            algorithm: "ecdsa-p256-sha256-p1363-low-s-v1".to_string(),
+            public_key: "MFkwEwYHKoZIzj0CAQYIKoZIzj0DAQcDQgAEOtqxXWYla_Fc1xYDWz8EFETlEv7R3WTUunVZfSDjZvFUbSyQqD66ugFZUJnl8_-70zhMdJTeZ1n91eZe-unMZw".to_string(),
+            signature: "LTlwf4NtcoENLmuXYz1UEghmGrvhdcL8UTGUf9MJ1A1ubl9GmJT81CrrYGqJ5FncH-BwNF6dEayxwAv4xgHDeA".to_string(),
+        },
+    };
+    ManagedLifecycleControlRequestV1 {
+        tag: Some(MappedLifecycleTagV1::GuestPairingDataSession),
+        authority_domain: "mac_lima_guest".to_string(),
+        scope_id: SCOPE_ID.to_string(),
+        selected_host_prefix: "/tmp/substrate-r5".to_string(),
+        requester_principal: "fixture".to_string(),
+        host_context_commitment: Some(commitment),
+        platform_mapping_commitment: Some(mapping_commitment),
+        host_platform_control_root: Some("/Users/fixture/.lima".to_string()),
+        manifest: None,
+        action_receipt: None,
+        publisher_protected_state: None,
+        publisher_request: None,
+        install_bootstrap_context_v1: Some(carrier),
+        platform_bootstrap_mapping_v1: Some(mapping),
+        executor_build_evidence: Some(evidence),
+        lima_stage_one_authorization_v1: None,
+        pairing_ticket: None,
+        pairing_session_binding_v1: None,
+        pairing_host_record_generation: None,
+        pairing_record_expected_generation_v1: None,
+        pairing_host_record_sha256: None,
+        r6_pairing_predecessor_v1: Some(predecessor),
+        r6_pairing_continuation_v1: Some(continuation),
+    }
+}
+
+#[test]
+fn authentic_r6_mapped_seed_admits_typed_host_and_guest_identities() {
+    let request = authentic_r6_mapped_seed_v1();
+    validate_mapped_lifecycle_control_request_v1(&request)
+        .expect("real signed predecessor and continuation admit the production mapped R6 seed");
+
+    let mut host_as_guest = request.clone();
+    host_as_guest
+        .executor_build_evidence
+        .as_mut()
+        .expect("host evidence")
+        .artifact_sha256 = host_as_guest
+        .r6_pairing_predecessor_v1
+        .as_ref()
+        .expect("predecessor")
+        .guest_executor_identity
+        .sha256
+        .clone();
+    assert!(validate_mapped_lifecycle_control_request_v1(&host_as_guest).is_err());
+
+    let mut guest_as_host = request.clone();
+    let predecessor = guest_as_host
+        .r6_pairing_predecessor_v1
+        .as_mut()
+        .expect("predecessor");
+    predecessor.guest_executor_identity.sha256 = predecessor
+        .producer_host_identity
+        .executor_build_evidence
+        .artifact_sha256
+        .clone();
+    assert!(
+        validate_mapped_lifecycle_control_request_v1(&guest_as_host).is_err(),
+        "the authentic fixture must reject cross-domain digest substitution before mapping"
+    );
 }
 
 #[test]
@@ -1098,6 +1240,8 @@ fn native_mac_publisher_service_demand_admits_control_before_stale_state_rejecti
         pairing_host_record_generation: None,
         pairing_record_expected_generation_v1: None,
         pairing_host_record_sha256: None,
+        r6_pairing_predecessor_v1: None,
+        r6_pairing_continuation_v1: None,
     };
     validate_mapped_lifecycle_control_request_v1(&request)
         .expect("native proof request is structurally admitted before protected-state rejection");

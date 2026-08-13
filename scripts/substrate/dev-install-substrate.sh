@@ -1983,6 +1983,93 @@ measure_retained_linux_artifact substrate-lifecycle-linux "$retained_substrate_l
 measure_retained_linux_artifact world-service "$retained_world_service_sha" "$retained_world_service_identity"
 measure_retained_linux_artifact substrate-gateway "$retained_gateway_sha" "$retained_gateway_identity"
 measure_retained_linux_artifact substrate "$retained_substrate_sha" "$retained_substrate_identity"
+# The unprivileged build owns publication into the selected prefix. The privileged provenance
+# producer adopts the complete four-role set as one transaction: every descriptor is opened and
+# verified before the first mutation, and any failed adoption restores the exact prior uid/gid/mode
+# on every descriptor before provenance may be committed.
+adopt_retained_linux_artifacts_transactionally() {
+  /usr/bin/python3 - \
+    "$retained_linux_bundle/substrate-lifecycle-linux" "$retained_substrate_lifecycle_sha" "$retained_substrate_lifecycle_identity" \
+    "$retained_linux_bundle/world-service" "$retained_world_service_sha" "$retained_world_service_identity" \
+    "$retained_linux_bundle/substrate-gateway" "$retained_gateway_sha" "$retained_gateway_identity" \
+    "$retained_linux_bundle/substrate" "$retained_substrate_sha" "$retained_substrate_identity" <<'PY'
+import hashlib
+import os
+import stat
+import sys
+
+if len(sys.argv) != 13:
+    raise RuntimeError("root adoption requires exactly four retained Linux roles")
+
+specs = [tuple(sys.argv[index:index + 3]) for index in range(1, len(sys.argv), 3)]
+opened = []
+mutated = []
+
+def digest_fd(fd):
+    os.lseek(fd, 0, os.SEEK_SET)
+    digest = hashlib.sha256()
+    while True:
+        block = os.read(fd, 1024 * 1024)
+        if not block:
+            break
+        digest.update(block)
+    return digest.hexdigest()
+
+try:
+    flags = os.O_RDONLY | os.O_NOFOLLOW
+    if hasattr(os, "O_CLOEXEC"):
+        flags |= os.O_CLOEXEC
+    for path, expected_sha, expected_identity in specs:
+        fd = os.open(path, flags)
+        before = os.fstat(fd)
+        identity = f"dev:{before.st_dev}:ino:{before.st_ino}"
+        if (not stat.S_ISREG(before.st_mode) or before.st_nlink != 1
+                or stat.S_IMODE(before.st_mode) != 0o755
+                or identity != expected_identity or digest_fd(fd) != expected_sha):
+            os.close(fd)
+            raise RuntimeError("retained Linux artifact changed before transactional root adoption")
+        opened.append((path, expected_sha, fd, before))
+
+    for path, expected_sha, fd, before in opened:
+        # Record rollback authority before the first mutation. A failure between fchown and
+        # fchmod must restore this descriptor too, not only previously completed roles.
+        mutated.append((path, fd, before))
+        os.fchown(fd, 0, 0)
+        os.fchmod(fd, 0o755)
+        os.fsync(fd)
+        after = os.fstat(fd)
+        leaf = os.lstat(path)
+        if (after.st_dev != before.st_dev or after.st_ino != before.st_ino
+                or after.st_nlink != 1 or after.st_uid != 0 or after.st_gid != 0
+                or stat.S_IMODE(after.st_mode) != 0o755
+                or digest_fd(fd) != expected_sha or stat.S_ISLNK(leaf.st_mode)
+                or leaf.st_dev != after.st_dev or leaf.st_ino != after.st_ino):
+            raise RuntimeError("retained Linux artifact failed transactional root adoption")
+except Exception:
+    rollback_error = None
+    for path, fd, before in reversed(mutated):
+        try:
+            os.fchown(fd, before.st_uid, before.st_gid)
+            os.fchmod(fd, stat.S_IMODE(before.st_mode))
+            os.fsync(fd)
+            restored = os.fstat(fd)
+            leaf = os.lstat(path)
+            if (restored.st_uid != before.st_uid or restored.st_gid != before.st_gid
+                    or stat.S_IMODE(restored.st_mode) != stat.S_IMODE(before.st_mode)
+                    or restored.st_dev != before.st_dev or restored.st_ino != before.st_ino
+                    or leaf.st_dev != before.st_dev or leaf.st_ino != before.st_ino):
+                raise RuntimeError("rollback verification mismatch")
+        except Exception as error:
+            rollback_error = error
+    if rollback_error is not None:
+        raise RuntimeError("root adoption failed and exact rollback could not be proven") from rollback_error
+    raise
+finally:
+    for _, _, fd, _ in opened:
+        os.close(fd)
+PY
+}
+adopt_retained_linux_artifacts_transactionally
 test "$(sha "$control_src")" = "$control_expected_sha" && \
   test "$(identity "$control_src")" = "$control_expected_identity" || {
     printf "retained control source changed before privileged provenance copy\n" >&2; exit 1;
@@ -2541,6 +2628,10 @@ while [[ $# -gt 0 ]]; do
       ;;
   esac
 done
+
+if [[ "${IS_MAC}" -eq 1 && "${ENABLE_WORLD_NETFILTER}" -eq 1 ]]; then
+  fatal "macOS --world-netfilter is not authorized for the fixed R3 install path"
+fi
 
 resolve_install_bootstrap_context "${PREFIX_DECLARED}" "${PREFIX}" "${INSTALL_BOOTSTRAP_CONTEXT_V1}"
 

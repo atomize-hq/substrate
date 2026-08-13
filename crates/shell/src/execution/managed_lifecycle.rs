@@ -17,13 +17,15 @@ use substrate_common::{
     managed_action_prepared_record_sha256_v1, parse_and_validate_manifest_v1,
     validate_guest_publisher_pairing_session_binding_v1,
     validate_guest_publisher_pairing_ticket_v1, validate_lifecycle_publisher_protected_state_v1,
+    validate_mac_r6_pairing_session_binding_identities_v1,
     validate_managed_action_receipt_signature_v1, validate_managed_lifecycle_publisher_request_v1,
     CanonicalManifestBytesV1, ExecutorBuildEvidenceV1, GuestPublisherPairingSessionBindingV1,
     GuestPublisherPairingTicketV1, LifecyclePublisherProtectedStateV1, LimaStageOneAuthorizationV1,
-    MacPublisherBootstrapRequestV1, ManagedActionReceiptIndexEntryV1, ManagedActionReceiptIndexV1,
-    ManagedActionReceiptV1, ManagedActionV1, ManagedArtifactManifestV1,
-    ManagedLifecyclePublisherRequestV1, ManagedLifecycleStateV1, ManagedManifestHeadV1,
-    ManagedSharedClaimsV1, PublisherBootstrapAuthorizationV1,
+    MacPublisherBootstrapRequestV1, MacR6PairingContinuationV1, MacR6PairingPredecessorV1,
+    ManagedActionReceiptIndexEntryV1, ManagedActionReceiptIndexV1, ManagedActionReceiptV1,
+    ManagedActionV1, ManagedArtifactManifestV1, ManagedLifecyclePublisherRequestV1,
+    ManagedLifecycleStateV1, ManagedManifestHeadV1, ManagedSharedClaimsV1,
+    PublisherBootstrapAuthorizationV1,
 };
 use transport_api_types::{
     InstallBootstrapContextCarrierV1, PlatformBootstrapMappingV1, PlatformInstanceIdentityV1,
@@ -97,6 +99,10 @@ pub struct ManagedLifecycleControlRequestV1 {
     pub pairing_record_expected_generation_v1: Option<u64>,
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub pairing_host_record_sha256: Option<String>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub r6_pairing_predecessor_v1: Option<MacR6PairingPredecessorV1>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub r6_pairing_continuation_v1: Option<MacR6PairingContinuationV1>,
 }
 
 pub trait LifecyclePublisherClientV1: Send + Sync {
@@ -506,6 +512,8 @@ pub fn validate_mapped_lifecycle_control_request_v1(
                 || request.pairing_host_record_generation.is_some()
                 || request.pairing_record_expected_generation_v1.is_some()
                 || request.pairing_host_record_sha256.is_some()
+                || request.r6_pairing_predecessor_v1.is_some()
+                || request.r6_pairing_continuation_v1.is_some()
             {
                 bail!("stage_one_create must not carry R6 pairing authority");
             }
@@ -643,6 +651,29 @@ pub fn validate_mapped_lifecycle_control_request_v1(
             ) {
                 bail!("post_pm_action role/action is outside the closed MAC map");
             }
+            match (
+                request.r6_pairing_predecessor_v1.as_ref(),
+                request.r6_pairing_continuation_v1.as_ref(),
+            ) {
+                (None, None) => {}
+                (Some(predecessor), Some(continuation))
+                    if publisher_request.role.0 == "mac.lima.publisher-executor"
+                        && publisher_request.action == ManagedActionV1::Create =>
+                {
+                    substrate_common::validate_mac_r6_pairing_continuation_v1(
+                        continuation,
+                        predecessor,
+                    )?;
+                    if predecessor.scope_id != publisher_request.scope_id
+                        || predecessor.manifest_sha256 != publisher_request.manifest_sha256
+                        || predecessor.platform_mapping_commitment != mapping_commitment
+                        || predecessor.producer_host_identity.executor_build_evidence != *evidence
+                    {
+                        bail!("R6 continuation seed does not join the canonical post-PM request");
+                    }
+                }
+                _ => bail!("post_pm_action carries a partial or unauthorized R6 continuation"),
+            }
         }
         MappedLifecycleTagV1::GuestPairingDataSession => {
             validate_r6_pairing_control_request_v1(request, &tag, &carrier, evidence)?;
@@ -667,6 +698,15 @@ fn validate_r6_pairing_control_request_v1(
     {
         bail!("R6 pairing session request carries forbidden generic lifecycle authority");
     }
+    let predecessor = request
+        .r6_pairing_predecessor_v1
+        .as_ref()
+        .ok_or_else(|| anyhow!("R6 pairing session request lacks its signed predecessor"))?;
+    let continuation = request
+        .r6_pairing_continuation_v1
+        .as_ref()
+        .ok_or_else(|| anyhow!("R6 pairing session request lacks its signed continuation"))?;
+    substrate_common::validate_mac_r6_pairing_continuation_v1(continuation, predecessor)?;
     if request.authority_domain != "mac_lima_guest" {
         bail!("R6 pairing session request must use the fixed mac_lima_guest authority");
     }
@@ -723,6 +763,13 @@ fn validate_r6_pairing_control_request_v1(
     {
         bail!("R6 pairing session does not join exact PM, source, and artifact identity");
     }
+    if predecessor.scope_id != request.scope_id
+        || predecessor.platform_mapping_commitment != mapping_commitment
+        || predecessor.producer_host_identity.executor_build_evidence != *evidence
+        || continuation.scope_id != request.scope_id
+    {
+        bail!("R6 signed continuation does not exact-join the mapped session request");
+    }
     let PlatformPrincipalV1::Unix { account, .. } = &mapping.realized_principal else {
         bail!("R6 pairing session mapping does not retain a UNIX principal");
     };
@@ -762,7 +809,7 @@ fn validate_r6_pairing_control_request_v1(
         || binding.source_commit != evidence.source_commit
         || binding.source_tree != evidence.source_tree
         || binding.source_ref != evidence.source_ref
-        || binding.staged_executor_sha256 != evidence.artifact_sha256
+        || binding.staged_executor_sha256 != predecessor.guest_executor_identity.sha256
     {
         bail!("R6 pairing session immutable binding does not join PM, source, and artifact");
     }
@@ -776,13 +823,19 @@ fn validate_r6_pairing_control_request_v1(
                 .as_ref()
                 .ok_or_else(|| anyhow!("R6 data session is missing its signed ticket"))?;
             validate_guest_publisher_pairing_ticket_v1(ticket)?;
+            validate_mac_r6_pairing_session_binding_identities_v1(
+                binding,
+                ticket,
+                &predecessor.producer_host_identity,
+                &predecessor.guest_executor_identity,
+            )?;
             if ticket.current_anchor.scope_id != binding.scope_id
                 || ticket.challenge.challenge_id != binding.ticket_challenge_id
                 || ticket.challenge.guest_machine_identity != binding.guest_machine_identity
                 || ticket.challenge.source_commit != binding.source_commit
                 || ticket.challenge.source_tree != binding.source_tree
                 || ticket.challenge.source_ref != binding.source_ref
-                || ticket.challenge.executor_build_evidence_sha256 != binding.staged_executor_sha256
+                || ticket.challenge.executor_build_evidence_sha256 != evidence.artifact_sha256
                 || ticket.host_generation != binding.host_record_generation
             {
                 bail!("R6 data session ticket does not match immutable binding");
@@ -1681,10 +1734,8 @@ mod tests {
     use super::*;
     use serde_json::json;
     use substrate_common::{
-        managed_action_prepared_record_sha256_v1, sign_lifecycle_anchor_for_test_v1,
-        sign_managed_action_prepared_record_for_test_v1, sign_managed_action_receipt_for_test_v1,
-        LifecyclePublisherProtectedStateV1, LifecycleSignatureV1, ManagedActionPreparedRecordV1,
-        ManagedExecutorIdentityV1,
+        managed_action_prepared_record_sha256_v1, LifecyclePublisherProtectedStateV1,
+        LifecycleSignatureV1, ManagedActionPreparedRecordV1, ManagedExecutorIdentityV1,
     };
     use substrate_common::{ManagedArtifactIdentityV1, ManagedArtifactRoleV1};
     use tempfile::tempdir;
@@ -1791,7 +1842,8 @@ mod tests {
                 signature: String::new(),
             },
         };
-        sign_managed_action_prepared_record_for_test_v1(&mut record).unwrap();
+        record.signature.public_key = "_RckOFqgx1tk-3jNYC-h2ZH96_drE8WO1wLqyDXp9hg".to_string();
+        record.signature.signature = "ujNF0EyuSljDMxRfG6IjMxRHmC9ryiLhL2LaAVP0Zd07cujB3PW7HBqx3FtLCrjZpNRM7Bk_rVkwMD4mNLh4BA".to_string();
         record
     }
 
@@ -1822,7 +1874,8 @@ mod tests {
                 signature: String::new(),
             },
         };
-        sign_lifecycle_anchor_for_test_v1(&mut anchor).unwrap();
+        anchor.signature.public_key = "_RckOFqgx1tk-3jNYC-h2ZH96_drE8WO1wLqyDXp9hg".to_string();
+        anchor.signature.signature = "P3xV3R-cGGS0-6m0AnaVa4N3daaRk2gpEz6MJozl8WLAi9yGS4IxBkXoKcRGL1nnLLK0dTFzPqfyYLX8Z_AxCw".to_string();
         LifecyclePublisherProtectedStateV1 {
             schema_owner: "substrate.lifecycle-publisher-protected-state".to_string(),
             schema_version: 1,
@@ -1868,7 +1921,8 @@ mod tests {
                 signature: String::new(),
             },
         };
-        sign_managed_action_receipt_for_test_v1(&mut receipt).unwrap();
+        receipt.signature.public_key = "_RckOFqgx1tk-3jNYC-h2ZH96_drE8WO1wLqyDXp9hg".to_string();
+        receipt.signature.signature = "Ba64verH_EZhaCMM_CmTILF0F3Z0p1OHUODbusOvoufVxihMeWmRFiXR40M86vgcghk_U2UCpBAkA4EqsM4FDQ".to_string();
         receipt
     }
 

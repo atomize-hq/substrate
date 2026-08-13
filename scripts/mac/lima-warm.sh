@@ -815,9 +815,10 @@ current_layout_version() {
 }
 
 validate_stage_one_completion_response_v1() {
-    # post_pm_requests_v1 remains a catalogue for ordinary later actions. This wrapper does
-    # not read, select, forward, or iterate it. The privileged executor owns and has already
-    # completed its one fixed installation sequence before this success response is returned.
+    # post_pm_requests_v1 remains a catalogue for ordinary later actions. This wrapper reads it
+    # only to prove that the executor-selected R6 seed is one exact catalogue member; it never
+    # selects, forwards, or executes a catalogue action. The privileged executor owns and has
+    # already completed its one fixed installation sequence before this response is returned.
     local stage_response="$1"
     python3 - "${stage_response}" <<'PY'
 import json
@@ -837,8 +838,118 @@ try:
     xpc = response.get("xpc_attestation")
     if not isinstance(xpc, dict) or xpc.get("mach_service") != "com.substrate.lifecycle.publisher.v1" or xpc.get("audit_token_bound") is not True:
         raise ValueError()
+    if response.get("r6_pairing_command_v1") != "guest-publisher-pairing-direct-interactive-v1":
+        raise ValueError()
+    seed = response.get("r6_pairing_seed_v1")
+    if (not isinstance(seed, dict) or seed.get("tag") != "post_pm_action"
+            or seed.get("authority_domain") != "mac_host_shared"
+            or not isinstance(seed.get("scope_id"), str)
+            or not re.fullmatch(r"[0-9a-f]{8}-[0-9a-f]{4}-7[0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}", seed["scope_id"])
+            or not isinstance(seed.get("selected_host_prefix"), str)
+            or not seed["selected_host_prefix"].startswith("/")
+            or not isinstance(seed.get("requester_principal"), str)
+            or not seed["requester_principal"]):
+        raise ValueError()
+    request = seed.get("publisher_request")
+    if (not isinstance(request, dict)
+            or request.get("role") != "mac.lima.publisher-executor"
+            or request.get("action") != "create"):
+        raise ValueError()
+    catalogue = response.get("post_pm_requests_v1")
+    if not isinstance(catalogue, list) or request not in catalogue:
+        raise ValueError()
+    if any(field in seed for field in (
+            "pairing_ticket", "pairing_session_binding_v1",
+            "pairing_host_record_generation", "pairing_record_expected_generation_v1",
+            "pairing_host_record_sha256")):
+        raise ValueError()
+    for field in ("host_context_commitment", "platform_mapping_commitment"):
+        if not isinstance(seed.get(field), str) or not re.fullmatch(r"[0-9a-f]{64}", seed[field]):
+            raise ValueError()
+        if request.get(field) != seed[field]:
+            raise ValueError()
+    for field in ("host_platform_control_root", "install_bootstrap_context_v1",
+                  "platform_bootstrap_mapping_v1"):
+        if not isinstance(seed.get(field), str) or not seed[field]:
+            raise ValueError()
+    if not isinstance(seed.get("executor_build_evidence"), dict):
+        raise ValueError()
+    predecessor = seed.get("r6_pairing_predecessor_v1")
+    continuation = seed.get("r6_pairing_continuation_v1")
+    if not isinstance(predecessor, dict) or not isinstance(continuation, dict):
+        raise ValueError()
+    if (predecessor.get("schema_owner") != "substrate.mac-r6-pairing-predecessor"
+            or predecessor.get("schema_version") != 1
+            or predecessor.get("signature_domain") != "R6_PAIRING_PREDECESSOR_V1"
+            or predecessor.get("pairing_scope") != "pairing-only"
+            or predecessor.get("scope_id") != seed["scope_id"]):
+        raise ValueError()
+    if (continuation.get("schema_owner") != "substrate.mac-r6-pairing-continuation"
+            or continuation.get("schema_version") != 1
+            or continuation.get("signature_domain") != "R6_PAIRING_CONTINUATION_V1"
+            or continuation.get("pairing_scope") != "pairing-only"
+            or continuation.get("scope_id") != seed["scope_id"]
+            or continuation.get("auto_run") is not False):
+        raise ValueError()
+    if (continuation.get("predecessor_id") != predecessor.get("predecessor_id")
+            or continuation.get("predecessor_generation") != predecessor.get("predecessor_generation")
+            or continuation.get("manifest_sha256") != predecessor.get("manifest_sha256")
+            or continuation.get("platform_mapping_commitment") != predecessor.get("platform_mapping_commitment")
+            or continuation.get("guest_machine_identity") != predecessor.get("guest_machine_identity")
+            or continuation.get("guest_executor_identity") != predecessor.get("guest_executor_identity")
+            or continuation.get("fixed_install_parent_anchor_sha256") != predecessor.get("fixed_install_parent_anchor_sha256")):
+        raise ValueError()
+    issued = predecessor.get("issued_at_unix_ns")
+    expires = predecessor.get("expires_at_unix_ns")
+    if (not isinstance(issued, int) or not isinstance(expires, int)
+            or expires - issued != 300_000_000_000
+            or continuation.get("issued_at_unix_ns") != issued
+            or continuation.get("expires_at_unix_ns") != expires):
+        raise ValueError()
+    host_identity = predecessor.get("producer_host_identity")
+    guest_identity = predecessor.get("guest_executor_identity")
+    if (not isinstance(host_identity, dict) or host_identity.get("object_format") != "Mach-O"
+            or not isinstance(host_identity.get("executor_build_evidence"), dict)
+            or not isinstance(guest_identity, dict)
+            or guest_identity.get("logical_role") != "mac.lima.publisher-executor"
+            or guest_identity.get("object_format") != "ELF"
+            or guest_identity.get("architecture") != "AArch64"
+            or guest_identity.get("target_triple") != "aarch64-unknown-linux-gnu"
+            or guest_identity.get("sha256") == host_identity["executor_build_evidence"].get("artifact_sha256")):
+        raise ValueError()
+    if predecessor.get("managed_guest_substrate_home") != predecessor.get("observed_guest_home", "").rstrip("/") + "/.substrate":
+        raise ValueError()
+    for document in (predecessor, continuation):
+        signature = document.get("signature")
+        if (not isinstance(signature, dict)
+                or signature.get("algorithm") != "ecdsa-p256-sha256-p1363-low-s-v1"
+                or not isinstance(signature.get("public_key"), str) or not signature["public_key"]
+                or not isinstance(signature.get("signature"), str) or not signature["signature"]):
+            raise ValueError()
 except Exception:
     raise SystemExit("invalid fixed Stage-1 completion response")
+PY
+}
+
+emit_r6_pairing_continuation_v1() {
+    # This is a data-only handoff. It does not invoke the interactive command, open a TTY, or
+    # select anything from post_pm_requests_v1. The operator may explicitly feed the exact seed
+    # to the one fixed control command after installation returns.
+    local stage_response="$1"
+    python3 - "${stage_response}" "${INSTALL_PREFIX}/bin/substrate-lifecycle-control" <<'PY'
+import json
+import sys
+
+response = json.loads(sys.argv[1])
+boundary = {
+    "schema_owner": "substrate.mac-r6-pairing-continuation",
+    "schema_version": 1,
+    "control_executable": sys.argv[2],
+    "command": response["r6_pairing_command_v1"],
+    "stdin_seed_v1": response["r6_pairing_seed_v1"],
+    "auto_run": False,
+}
+print("substrate.r6-pairing-continuation.v1 " + json.dumps(boundary, sort_keys=True, separators=(",", ":")))
 PY
 }
 
@@ -854,6 +965,8 @@ ensure_vm_ready() {
         || fatal "Stage-1 mapped lifecycle create did not return a completed response."
     validate_stage_one_completion_response_v1 "${stage_response}" \
         || fatal "fixed Stage-1 completion response was invalid."
+    emit_r6_pairing_continuation_v1 "${stage_response}" \
+        || fatal "fixed R6 pairing continuation boundary could not be emitted."
 }
 
 configure_guest() {
