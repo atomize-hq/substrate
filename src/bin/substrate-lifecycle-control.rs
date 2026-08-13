@@ -333,6 +333,24 @@ fn record_lima_guest_pairing_operator_failure_v1(
 
 /// Replace only the exact expired predecessor chain returned by the protected dedicated producer.
 /// The response carries no ticket or effect capability; the caller must resubmit the closed seed.
+fn validate_r6_predecessor_replacement_response_field_set_v1(
+    object: &serde_json::Map<String, Value>,
+) -> Result<()> {
+    if object.len() != 4
+        || ![
+            "status",
+            "r6_pairing_predecessor_v1",
+            "r6_pairing_continuation_v1",
+            "xpc_attestation",
+        ]
+        .iter()
+        .all(|field| object.contains_key(*field))
+    {
+        bail!("R6 predecessor replacement response contains unrecognized fields");
+    }
+    Ok(())
+}
+
 fn apply_r6_predecessor_replacement_response_v1(
     seed: &mut ManagedLifecycleControlRequestV1,
     response: &Value,
@@ -343,9 +361,7 @@ fn apply_r6_predecessor_replacement_response_v1(
     let object = response
         .as_object()
         .ok_or_else(|| anyhow!("R6 predecessor replacement response is not an object"))?;
-    if object.len() != 3 {
-        bail!("R6 predecessor replacement response contains unrecognized fields");
-    }
+    validate_r6_predecessor_replacement_response_field_set_v1(object)?;
     let previous = seed
         .r6_pairing_predecessor_v1
         .as_ref()
@@ -1425,6 +1441,30 @@ fn main() -> Result<()> {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn r6_predecessor_replacement_requires_the_authenticated_response_field_set() {
+        let mut response = json!({
+            "status": "predecessor_replaced",
+            "r6_pairing_predecessor_v1": {},
+            "r6_pairing_continuation_v1": {},
+            "xpc_attestation": {
+                "mach_service": MAC_PUBLISHER_SERVICE_LABEL_V1,
+                "peer_code_requirement": "cdhash H\"0123456789abcdef0123456789abcdef01234567\"",
+                "audit_token_bound": true,
+            },
+        });
+        let object = response.as_object().expect("authenticated response object");
+        validate_r6_predecessor_replacement_response_field_set_v1(object)
+            .expect("the real authenticated response field set is admitted");
+
+        response
+            .as_object_mut()
+            .expect("authenticated response object")
+            .insert("unexpected".to_string(), Value::Null);
+        let object = response.as_object().expect("response with unknown field");
+        assert!(validate_r6_predecessor_replacement_response_field_set_v1(object).is_err());
+    }
 
     #[test]
     fn expired_effect_recovery_is_the_only_expired_capability_free_control_state() {
