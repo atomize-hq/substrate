@@ -3234,3 +3234,25 @@ reviewed remote-equal receipt; no plan, donor, or partial R1–R5 receipt is an 
   build/tests, exact inventory/allowlist/secret/containment gates, fresh causal-cascading review,
   and one normal fast-forward commit only. A clean correction returns
   `next_increment=EVIDENCE:R3-MAC-IMP-01` with `successor_dispatched=false`.
+
+## R3 macOS retirement/recovery serial-gate amendment (2026-08-13; docs-only)
+
+This amendment controls the next R3 macOS retirement/recovery sequence over any earlier wording that would move directly from the preserved failed attempt to prospective implementation or evidence. It records no implementation, experiment, recovery, cleanup, evidence, mirror refresh, or `MAC-CLOSEOUT` authority.
+
+- **Prospective direction:** Candidate D remains conditionally sound as the structure to close: a pre-baseline external evidence finalizer may execute one frozen terminal host-removal suffix only after external receipt/acknowledgement durability, protected-CAS binding, and durable successor acceptance. Its exact noninteractive delete-only signer capability is a mandatory experiment gate.
+- **Operational order:** Candidate C is mandatory. Exact preserved-orphan recovery and baseline parity precede final prospective contract closure and any prospective implementation.
+- **Separation:** the prospective V2 protocol and the precommit-less orphan lane share no authority, schema owner/version, route, executable, journal, parser, signature domain, idempotency key, or target decoder. Neither is product uninstall or generalized recovery.
+
+The serial gates are:
+
+1. **`R3-MAC-RETIRE-G0-FREEZE` — current stop.** Preserve the signer, failed-attempt roots/logs, prefix, publisher/Lima state, and mirror pin. The observed SecurityAgent contradiction remains unresolved. No live Keychain query or mutation is allowed.
+2. **`R3-MAC-RETIRE-G1-PLANNING-ACCEPTANCE`.** Explicitly accept the corrected external-durability, successor-acceptance, receipt-chronology, guest/host state machines, finalizer boundary, experiment plan, destructive-edge matrix, and closed stop states. This docs-only amendment does not self-accept or authorize effects.
+3. **`R3-MAC-RETIRE-G2-EXPERIMENT-AUTHORIZATION`.** A separate task must bind a rollback-safe disposable native-macOS environment, fresh surrogate identities, exact arms/repetitions, process/query UI controls, SecurityAgent observations, rollback, and receipt locations. It cannot touch the orphan or product state.
+4. **`R3-MAC-RETIRE-G3-EXPERIMENT-CLOSURE`.** Independent receipts prove exact rollback/baseline restoration and record two separate conclusions: creator-route no-UI behavior for recovery, and exact prospective-finalizer delete-only capability. The experiment grants no live authority.
+5. **`R3-MAC-RETIRE-G4-EXACT-RECOVERY-AUTHORIZATION`.** After G3, a new incident-specific authority binds exactly one old-attempt route, immutable target identity, executor/code identity, journal, UI posture, retry states, stop policy, and review wall. A one-prompt fallback requires an additional explicit exact authorization; it is never inferred.
+6. **`R3-MAC-RETIRE-G5-ORPHAN-PARITY`.** The separately authorized recovery, if any, produces a durable receipt and independently verified exact target-scope parity proof. Mirror movement is later and separately authorized; it cannot backfill parity.
+7. **`R3-MAC-RETIRE-G6-PROSPECTIVE-CONTRACT-CLOSURE`.** Only after G5, freeze the literal V2 owner/version values, canonical fields/signature domains, external-finalizer caller/route/endpoint/identities, capability evidence, exact component ledger/holdbacks, journal/CAS transfer, framing constants, and fault matrix in authoritative docs and golden vectors.
+8. **`R3-MAC-RETIRE-G7-PROSPECTIVE-IMPLEMENTATION-AUTHORIZATION`.** A later top-level task must name exact source/test path and symbol fences, review checks, landing authority, and stop conditions. It cannot implement recovery or authorize evidence.
+9. **`R3-MAC-RETIRE-G8-NATIVE-EVIDENCE`.** Only a later explicit operator authority may run one fresh evidence attempt. `MAC-CLOSEOUT` remains a distinct later gate.
+
+No gate dispatches, accepts, or authorizes its successor. A stop, blocked recovery, failed capability gate, or parity failure preserves the current state and does not permit schedule compression, cross-lane substitution, broader cleanup, or retrospective authority.

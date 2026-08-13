@@ -3,6 +3,10 @@
 Status: living document capturing near-term and upcoming work.
 Keep concise, actionable, and security-focused.
 
+## Top-priority deferred R3 publisher lifecycle/product-policy work
+
+- Outside the bounded R3 evidence-retirement and one preserved-orphan lane: design publisher upgrade/replacement across changing code identities; general authorized orphan recovery after partial or externally interrupted teardown; decide whether full-product uninstall may retire the final publisher/anchor; and define multi-install ownership and last-claim retirement rules. Do not fold these into the external evidence finalizer, the prospective V2 protocol, or the exact precommit-less recovery lane.
+
 ## Current Investigation
 
 - **Status/stop seam: fallback-only orchestration session with unknown posture and late world member registration**

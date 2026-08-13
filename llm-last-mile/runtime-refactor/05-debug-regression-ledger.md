@@ -3688,3 +3688,30 @@ than a second tag-wide query. The regression fixes the required lock order and i
 Secure Enclave/Data Protection Keychain and a user LaunchAgent signer are deferred hardening only.
 They are not part of this increment, do not authorize `EVIDENCE:R3-MAC-IMP-01`, and do not imply an
 automatic successor dispatch. Intel/T2 remains out of scope.
+
+## R3 macOS retirement/orphan planning observation ledger (2026-08-13; no run)
+
+This entry records bounded observations and empty future receipt slots only. It does not resolve the SecurityAgent cause, run an experiment, query or mutate the live signer, authorize recovery, implement V2 retirement, perform cleanup, refresh the evidence mirror, create native evidence, or authorize `MAC-CLOSEOUT`.
+
+| Observation | Current bounded record | Consequence |
+|---|---|---|
+| SecurityAgent contradiction | SecurityAgent appeared during two prior cleanup attempts despite query-level `kSecUseAuthenticationUIFail`. No credential or approval was supplied. The exact Security-framework suboperation requesting interaction is unresolved. | Query-level failure alone is not accepted as proof of a no-UI route. No prompt is expected or authorized by this ledger. |
+| Preserved precommit-less orphan | Scope `019ff983-39ca-7182-9db8-b86aa66fa443` remains bound to the failed attempt. External cleanup records report the publisher registration absent and fourteen exact lifecycle generic-password deletions with final absence. The P-256 signer was last observed as one exact item and was not re-queried by this docs task. | Do not recreate state, insert a retroactive V2 precommit, or use the prospective finalizer. Preserve signer and evidence pending separate authority. |
+| Disposable experiment | The rollback-safe native-macOS matrix for query-only suppression, fresh-process process-plus-query suppression, wrong identity, absent retry, and exact prospective-finalizer delete-only capability is pending and not run. | Creator-recovery and prospective-finalizer conclusions are separate and unknown. The plan grants no live authority. |
+
+Future evidence/hash slots are intentionally empty:
+
+| Slot | Status |
+|---|---|
+| Disposable experiment authorization ID/digest | `PENDING / NOT AUTHORIZED` |
+| Disposable experiment receipt and baseline-restoration manifest SHA-256 | `PENDING / NOT RUN` |
+| Creator-recovery no-UI conclusion receipt SHA-256 | `PENDING / NO CONCLUSION` |
+| Prospective-finalizer delete-only capability receipt SHA-256 | `PENDING / NO CONCLUSION` |
+| Exact orphan-recovery authorization ID/digest | `PENDING / NOT AUTHORIZED` |
+| Exact orphan-recovery receipt SHA-256 | `PENDING / NOT RUN` |
+| Exact orphan baseline-parity proof/acknowledgement SHA-256 | `PENDING / NOT RUN` |
+| Prospective V2 contract-closure digest | `PENDING / NOT CLOSED` |
+| Separate prospective implementation authority ID/digest | `PENDING / NOT AUTHORIZED` |
+| Native macOS evidence artifact/receipt SHA-256 | `PENDING / NOT RUN` |
+| Evidence-mirror refresh receipt SHA-256 | `PENDING / NOT AUTHORIZED` |
+| `MAC-CLOSEOUT` receipt SHA-256 | `PENDING / NOT AUTHORIZED` |
