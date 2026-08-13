@@ -318,6 +318,19 @@ finally:
 const MAC_LIMA_WORLD_SERVICE_READINESS_SCRIPT_V1: &str = r#"set -u
 service_sha="$1"
 socket_sha="$2"
+principal="$3"
+principal_uid="$4"
+/usr/bin/test "$principal_uid" != 0 || exit 49
+/usr/bin/test "$(/usr/bin/id -un 2>/dev/null)" = "$principal" || exit 49
+/usr/bin/test "$(/usr/bin/id -u 2>/dev/null)" = "$principal_uid" || exit 49
+fresh_principal=$(/usr/bin/printf '#%s' "$principal_uid") || exit 49
+/usr/bin/test "$(/usr/bin/sudo -n -u "$fresh_principal" -- /usr/bin/id -un 2>/dev/null)" = "$principal" || exit 49
+/usr/bin/test "$(/usr/bin/sudo -n -u "$fresh_principal" -- /usr/bin/id -u 2>/dev/null)" = "$principal_uid" || exit 49
+fresh_groups=$(/usr/bin/sudo -n -u "$fresh_principal" -- /usr/bin/id -nG 2>/dev/null) || exit 49
+case " $fresh_groups " in
+  *" substrate "*) ;;
+  *) exit 49 ;;
+esac
 service_observed=$(/usr/bin/sha256sum /etc/systemd/system/substrate-world-service.service 2>/dev/null | /usr/bin/awk '{print $1}') || exit 41
 socket_observed=$(/usr/bin/sha256sum /etc/systemd/system/substrate-world-service.socket 2>/dev/null | /usr/bin/awk '{print $1}') || exit 41
 /usr/bin/test "$service_observed" = "$service_sha" || exit 41
@@ -337,7 +350,7 @@ if /usr/bin/test "$socket_state" != active || /usr/bin/test "$service_state" != 
 fi
 # Both units must already be active before the endpoint is touched. The readiness observer never
 # demand-activates the service; the fixed Start effect owns socket+service convergence together.
-code=$(/usr/bin/curl --silent --show-error --max-time 5 --output /dev/null --write-out '%{http_code}' --unix-socket /run/substrate.sock http://localhost/v1/execute 2>/dev/null) || exit 45
+code=$(/usr/bin/sudo -n -u "$fresh_principal" -- /usr/bin/curl --silent --show-error --max-time 5 --output /dev/null --write-out '%{http_code}' --unix-socket /run/substrate.sock http://localhost/v1/execute 2>/dev/null) || exit 45
 /usr/bin/test "$code" = 405 || exit 45
 /usr/bin/test "$(/usr/bin/systemctl is-active substrate-world-service.socket 2>/dev/null)" = active || exit 46
 /usr/bin/test "$(/usr/bin/systemctl is-active substrate-world-service.service 2>/dev/null)" = active || exit 46
@@ -4558,6 +4571,8 @@ mod tests {
             "--".to_string(),
             "a".repeat(64),
             "b".repeat(64),
+            "alice".to_string(),
+            "1000".to_string(),
         ];
         let readiness_borrowed: Vec<&str> = readiness.iter().map(String::as_str).collect();
         assert!(mac_validate_fixed_lima_argument_plan_v1(&readiness_borrowed, None).is_ok());
@@ -4565,13 +4580,17 @@ mod tests {
         altered_readiness[3] = "/bin/bash".to_string();
         let altered_readiness: Vec<&str> = altered_readiness.iter().map(String::as_str).collect();
         assert!(mac_validate_fixed_lima_argument_plan_v1(&altered_readiness, None).is_err());
-        let mut altered_readiness_digest = readiness;
+        let mut altered_readiness_digest = readiness.clone();
         altered_readiness_digest[7] = "A".repeat(64);
         let altered_readiness_digest: Vec<&str> = altered_readiness_digest
             .iter()
             .map(String::as_str)
             .collect();
         assert!(mac_validate_fixed_lima_argument_plan_v1(&altered_readiness_digest, None).is_err());
+        let mut root_readiness = readiness;
+        root_readiness[10] = "0".to_string();
+        let root_readiness: Vec<&str> = root_readiness.iter().map(String::as_str).collect();
+        assert!(mac_validate_fixed_lima_argument_plan_v1(&root_readiness, None).is_err());
         assert_eq!(
             mac_target_link_probe_argv_v1("/root/private"),
             ["/usr/bin/test", "-L", "/root/private"]
@@ -6257,7 +6276,7 @@ int main(int argc, char **argv) {
             MacPostPmEffectObservationStateV1::Ambiguous,
             "nonzero Lima output must match the collector's exact trimmed form"
         );
-        for code in [1, 41, 45, 47] {
+        for code in [1, 41, 45, 47, 49] {
             assert_eq!(
                 mac_classify_post_pm_probe_v1(&start_service, false, Some(code), "").unwrap(),
                 MacPostPmEffectObservationStateV1::Ambiguous,
@@ -6282,6 +6301,7 @@ int main(int argc, char **argv) {
         endpoint_exit: i32,
         endpoint_code: &str,
         corrupt_unit_hash: bool,
+        fresh_groups: &str,
     ) -> (Option<i32>, String, bool) {
         let temp = PathBuf::from("/tmp").join(format!(
             "sr6-{}-{}",
@@ -6311,6 +6331,8 @@ int main(int argc, char **argv) {
         let systemctl = adapter_root.join("systemctl");
         let stat = adapter_root.join("stat");
         let curl = adapter_root.join("curl");
+        let sudo = adapter_root.join("sudo");
+        let id = adapter_root.join("id");
         let curl_marker = temp.join("curl-called");
         write_readiness_adapter_v1(
             &sha256sum,
@@ -6344,8 +6366,38 @@ fi
 "#,
         );
         write_readiness_adapter_v1(
+            &sudo,
+            r#"#!/bin/sh
+test "$1" = -n || exit 93
+test "$2" = -u || exit 93
+expected_principal=$(/usr/bin/printf '#%s' "$EXPECTED_UID") || exit 93
+test "$3" = "$expected_principal" || exit 93
+test "$4" = -- || exit 93
+shift 4
+READINESS_FRESH=1 exec "$@"
+"#,
+        );
+        write_readiness_adapter_v1(
+            &id,
+            r#"#!/bin/sh
+case "$1" in
+  -un) printf '%s\n' "$EXPECTED_PRINCIPAL" ;;
+  -u) printf '%s\n' "$EXPECTED_UID" ;;
+  -nG)
+    if test "${READINESS_FRESH:-0}" = 1; then
+      printf '%s\n' "$FRESH_GROUPS"
+    else
+      printf '%s\n' "$AMBIENT_GROUPS"
+    fi
+    ;;
+  *) exit 94 ;;
+esac
+"#,
+        );
+        write_readiness_adapter_v1(
             &curl,
             r#"#!/bin/sh
+test "${READINESS_FRESH:-0}" = 1 || exit 95
 : > "$CURL_MARKER"
 test "$ENDPOINT_EXIT" = 0 || exit "$ENDPOINT_EXIT"
 printf '%s' "$ENDPOINT_CODE"
@@ -6357,6 +6409,8 @@ printf '%s' "$ENDPOINT_CODE"
             .replace("/usr/bin/systemctl", &systemctl.display().to_string())
             .replace("/usr/bin/stat", &stat.display().to_string())
             .replace("/usr/bin/curl", &curl.display().to_string())
+            .replace("/usr/bin/sudo", &sudo.display().to_string())
+            .replace("/usr/bin/id", &id.display().to_string())
             .replace("/usr/bin/test", "/bin/test")
             .replace(
                 "/etc/systemd/system/substrate-world-service.service",
@@ -6383,6 +6437,8 @@ printf '%s' "$ENDPOINT_CODE"
             .arg("readiness-v1")
             .arg(&service_sha)
             .arg(&socket_sha)
+            .arg("alice")
+            .arg("1000")
             .env("SERVICE_UNIT", &service_unit)
             .env("SOCKET_UNIT", &socket_unit)
             .env("SOCKET_ACTIVE", socket_active)
@@ -6395,6 +6451,10 @@ printf '%s' "$ENDPOINT_CODE"
             .env("CURL_MARKER", &curl_marker)
             .env("ENDPOINT_EXIT", endpoint_exit.to_string())
             .env("ENDPOINT_CODE", endpoint_code)
+            .env("EXPECTED_PRINCIPAL", "alice")
+            .env("EXPECTED_UID", "1000")
+            .env("AMBIENT_GROUPS", "alice")
+            .env("FRESH_GROUPS", fresh_groups)
             .output()
             .expect("execute embedded readiness observer");
         let result = (
@@ -6418,6 +6478,7 @@ printf '%s' "$ENDPOINT_CODE"
                 0,
                 "405",
                 false,
+                "alice substrate",
             ),
             (
                 Some(0),
@@ -6434,6 +6495,7 @@ printf '%s' "$ENDPOINT_CODE"
                 0,
                 "405",
                 false,
+                "alice substrate",
             ),
             (
                 Some(20),
@@ -6451,6 +6513,7 @@ printf '%s' "$ENDPOINT_CODE"
                 0,
                 "405",
                 false,
+                "alice substrate",
             )
             .0,
             Some(43)
@@ -6464,6 +6527,7 @@ printf '%s' "$ENDPOINT_CODE"
                 0,
                 "405",
                 false,
+                "alice substrate",
             )
             .0,
             Some(47)
@@ -6477,6 +6541,7 @@ printf '%s' "$ENDPOINT_CODE"
                 7,
                 "000",
                 false,
+                "alice substrate",
             )
             .0,
             Some(45)
@@ -6490,9 +6555,24 @@ printf '%s' "$ENDPOINT_CODE"
                 0,
                 "405",
                 true,
+                "alice substrate",
             )
             .0,
             Some(41)
+        );
+        assert_eq!(
+            run_embedded_world_service_readiness_v1(
+                "active",
+                "active",
+                true,
+                "root:substrate:660",
+                0,
+                "405",
+                false,
+                "alice",
+            ),
+            (Some(49), String::new(), false),
+            "stale ambient groups are acceptable only when same-UID re-entry freshly realizes substrate membership"
         );
     }
 
@@ -6714,6 +6794,8 @@ printf '%s' "$ENDPOINT_CODE"
             service_start.observation_argv[2],
             MAC_LIMA_WORLD_SERVICE_READINESS_SCRIPT_V1
         );
+        assert_eq!(service_start.observation_argv[6], "alice");
+        assert_eq!(service_start.observation_argv[7], "1000");
         let mut fixed_readiness = vec![
             "shell".to_string(),
             "substrate".to_string(),
@@ -6726,11 +6808,29 @@ printf '%s' "$ENDPOINT_CODE"
             "systemctl is-enabled substrate-world-service.socket",
             "systemctl is-active substrate-world-service.socket",
             "systemctl is-active substrate-world-service.service",
+            "sudo -n -u \"$fresh_principal\" -- /usr/bin/id -nG",
             "stat -c '%U:%G:%a' /run/substrate.sock",
             "--unix-socket /run/substrate.sock http://localhost/v1/execute",
         ] {
             assert!(MAC_LIMA_WORLD_SERVICE_READINESS_SCRIPT_V1.contains(required));
         }
+        let mut mismatched_principal_mapping = mapping.clone();
+        mismatched_principal_mapping.realized_principal = PlatformPrincipalV1::Unix {
+            account: "mallory".to_string(),
+            uid: 1000,
+        };
+        assert!(mac_post_pm_effect_plan_v1(
+            &correction_post_pm_entry_v1(
+                "mac.lima.guest-service-state(service)",
+                "service-state",
+                "substrate-world-service.service",
+            ),
+            ManagedActionV1::Start,
+            membership,
+            "/opt/substrate",
+            Some(&mismatched_principal_mapping),
+        )
+        .is_err());
         assert_eq!(
             mac_systemd_quoted_field_v1("/home/alice smith/.substrate", "guest home", true)
                 .expect("quoted systemd path accepts spaces"),
@@ -8204,7 +8304,7 @@ fn mac_validate_fixed_lima_argument_plan_v1(
                 bail!("fixed Lima R6 measurement arguments are not the closed plan");
             }
             if arguments.contains(&MAC_LIMA_WORLD_SERVICE_READINESS_SCRIPT_V1)
-                && (arguments.len() != 9
+                && (arguments.len() != 11
                     || arguments[0..7]
                         != [
                             "shell",
@@ -8222,7 +8322,13 @@ fn mac_validate_fixed_lima_argument_plan_v1(
                     || arguments[8].len() != 64
                     || !arguments[8]
                         .bytes()
-                        .all(|byte| byte.is_ascii_hexdigit() && !byte.is_ascii_uppercase()))
+                        .all(|byte| byte.is_ascii_hexdigit() && !byte.is_ascii_uppercase())
+                    || arguments[9].starts_with('#')
+                    || arguments[10]
+                        .parse::<u32>()
+                        .ok()
+                        .filter(|uid| *uid > 0 && arguments[10] == uid.to_string())
+                        .is_none())
             {
                 bail!("fixed Lima world service readiness arguments are not the closed plan");
             }
@@ -11951,6 +12057,25 @@ fn mac_post_pm_effect_plan_v1(
             if role == "mac.lima.guest-service-state(service)"
                 && matches!(action, ManagedActionV1::Start | ManagedActionV1::Restore)
             {
+                let readiness_mapping = mapping.ok_or_else(|| {
+                    anyhow::anyhow!("world service readiness lacks admitted mapping")
+                })?;
+                let PlatformPrincipalV1::Unix {
+                    account: readiness_principal,
+                    uid: readiness_uid,
+                } = &readiness_mapping.realized_principal
+                else {
+                    bail!("world service readiness lacks an admitted UNIX principal");
+                };
+                let membership_principal = membership_role
+                    .strip_prefix("mac.lima.guest-membership(")
+                    .and_then(|value| value.strip_suffix(')'))
+                    .ok_or_else(|| {
+                        anyhow::anyhow!("world service readiness membership role is not canonical")
+                    })?;
+                if readiness_principal != membership_principal || *readiness_uid == 0 {
+                    bail!("world service readiness principal does not exact-join membership");
+                }
                 // Socket and service activation are one convergent effect. No successful socket
                 // receipt can expose an activatable endpoint before the service transaction owns
                 // the protocol-level readiness proof.
@@ -11966,14 +12091,12 @@ fn mac_post_pm_effect_plan_v1(
                     "-ceu".to_string(),
                     MAC_LIMA_WORLD_SERVICE_READINESS_SCRIPT_V1.to_string(),
                     "--".to_string(),
-                    sha256_hex_bootstrap_v1(&mac_render_world_service_unit_v1(
-                        mapping.ok_or_else(|| {
-                            anyhow::anyhow!("world service readiness lacks admitted mapping")
-                        })?,
-                    )?),
+                    sha256_hex_bootstrap_v1(&mac_render_world_service_unit_v1(readiness_mapping)?),
                     sha256_hex_bootstrap_v1(include_bytes!(
                         "../../scripts/mac/lima/units/substrate-world-service.socket"
                     )),
+                    readiness_principal.clone(),
+                    readiness_uid.to_string(),
                 ];
             } else {
                 plan.primitives
