@@ -83,6 +83,88 @@ syntax = subprocess.run(
 )
 if syntax.returncode != 0:
     raise SystemExit(f"generated recovery route is not valid zsh: {syntax.stderr!r}")
+route_bytes = synthetic_admin_block.read_bytes()
+route_text = route_bytes.decode("utf-8")
+if route_text.count("exec /usr/bin/sudo ") != 1 or route_text.count("/usr/bin/sudo ") != 1:
+    raise SystemExit("generated recovery route lacks one exact tail exec of sudo")
+if not route_text.startswith("set -u\nreadonly R3_SEALED_RECOVERY_LOADER="):
+    raise SystemExit("generated recovery route has an outer status-translating shell wrapper")
+if any(
+    forbidden in route_text
+    for forbidden in (
+        "r3_recovery_exit",
+        "readonly r3_recovery_exit=$?",
+        'exit "${r3_recovery_exit}"',
+        "SUCCESS_SENTINEL",
+        " install/rollback PASS",
+    )
+):
+    raise SystemExit("generated recovery route contains status capture, fallthrough, or PASS")
+tail_exec_offset = route_text.index("exec /usr/bin/sudo ")
+if route_text.find("\nexec ", tail_exec_offset + 1) != -1:
+    raise SystemExit("generated recovery route has a command after its sudo tail exec")
+
+# The correction must be deterministic for one sealed identity, and must not retain the digest of
+# the prior status-capturing route form.
+synthetic_admin_block_second = work_root / "synthetic-admin-block-second.txt"
+generated_second = subprocess.run(
+    [
+        sys.executable,
+        "-c",
+        generator_source,
+        str(synthetic_generator_source),
+        str(synthetic_admin_block_second),
+        "a" * 64,
+        str(os.getuid()),
+        str(os.getgid()),
+    ],
+    cwd="/",
+    env={"PATH": "/usr/bin:/bin:/usr/sbin:/sbin", "LANG": "C", "LC_ALL": "C", "TZ": "UTC"},
+    stdin=subprocess.DEVNULL,
+    stdout=subprocess.PIPE,
+    stderr=subprocess.PIPE,
+    check=False,
+)
+if generated_second.returncode != 0 or synthetic_admin_block_second.read_bytes() != route_bytes:
+    raise SystemExit("sealed recovery route generation is not deterministic")
+legacy_route_bytes = (
+    b"(\n"
+    + route_bytes.replace(b"exec /usr/bin/sudo ", b"/usr/bin/sudo ", 1)
+    + b"readonly r3_recovery_exit=$?\nexit \"${r3_recovery_exit}\"\n)\n"
+)
+if hashlib.sha256(route_bytes).digest() == hashlib.sha256(legacy_route_bytes).digest():
+    raise SystemExit("tail-exec correction did not change the recovery route digest")
+
+# An equivalent effect-free wrapper proves why tail exec is required. It invokes only synthetic
+# Python children in the temporary test root; it never contains or invokes sudo/root authority.
+synthetic_exec_wrapper = work_root / "synthetic-tail-exec.zsh"
+synthetic_exec_wrapper.write_text("#!/bin/zsh\nset -u\nexec \"$@\"\n")
+synthetic_exec_wrapper.chmod(0o500)
+
+
+def invoke_synthetic_wrapper(source):
+    return subprocess.run(
+        [str(synthetic_exec_wrapper), sys.executable, "-c", source],
+        cwd="/",
+        env={"PATH": "/usr/bin:/bin:/usr/sbin:/sbin", "LANG": "C", "LC_ALL": "C", "TZ": "UTC"},
+        stdin=subprocess.DEVNULL,
+        stdout=subprocess.PIPE,
+        stderr=subprocess.PIPE,
+        check=False,
+    )
+
+
+for expected_status in (0, 1, 78):
+    result = invoke_synthetic_wrapper(f"raise SystemExit({expected_status})")
+    if result.returncode != expected_status:
+        raise SystemExit(
+            f"synthetic tail-exec wrapper changed exit {expected_status} to {result.returncode}"
+        )
+result = invoke_synthetic_wrapper(
+    "import os,signal; os.kill(os.getpid(), signal.SIGTERM)"
+)
+if result.returncode != -signal.SIGTERM:
+    raise SystemExit("synthetic tail-exec wrapper converted SIGTERM to a numeric shell exit")
 
 
 def literal_assignment(name):

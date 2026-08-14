@@ -1407,17 +1407,13 @@ source_sha256 = hashlib.sha256(source_bytes).hexdigest()
 if source_sha256 in TERMINAL_EXECUTED_RECOVERY_SOURCE_SHA256S:
     raise SystemExit("refusing to reuse a terminal executed recovery source")
 identity_arguments = " ".join(str(value) for value in physical_identity(source_before))
-route = f'''(
-set -u
+route = f'''set -u
 readonly R3_SEALED_RECOVERY_LOADER={shlex.quote(SEALED_RECOVERY_LOADER)}
-/usr/bin/sudo /usr/bin/env -i PATH=/usr/bin:/bin:/usr/sbin:/sbin LANG=C LC_ALL=C TZ=UTC \\
+exec /usr/bin/sudo /usr/bin/env -i PATH=/usr/bin:/bin:/usr/sbin:/sbin LANG=C LC_ALL=C TZ=UTC \\
     R3_ROOT_INSTALL_AUTHORITY_SHA256={authority_sha256} \\
     /bin/zsh -c 'cd / && exec /usr/bin/python3 -c "$1" "${{@:2}}"' -- \\
     "${{R3_SEALED_RECOVERY_LOADER}}" \\
     {shlex.quote(source_path)} {source_sha256} {len(source_bytes)} {identity_arguments}
-readonly r3_recovery_exit=$?
-exit "${{r3_recovery_exit}}"
-)
 '''.encode("utf-8")
 route_sha256 = hashlib.sha256(route).hexdigest()
 if is_terminal_executed_recovery_route(route_sha256):
