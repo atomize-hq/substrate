@@ -62,8 +62,8 @@ use substrate_r3_macos_finalizer::experiment::freeze_manifest::{
     build_candidate_freeze_manifest_v2, build_candidate_freeze_supporting_manifests_v2,
     candidate_freeze_coordinator_provenance_input_v2, candidate_freeze_global_provenance_input_v2,
     expected_candidate_freeze_install_directories_v2, CandidateFreezeArtifactRoleV2,
-    CandidateFreezeManifestV2, CANDIDATE_FREEZE_INSTALLED_MANIFEST_PATH_V2,
-    CANDIDATE_FREEZE_MANIFEST_PATH_V2,
+    CandidateFreezeManifestV2, CANDIDATE_FREEZE_INSTALLED_ARTIFACT_MAX_BYTES_V2,
+    CANDIDATE_FREEZE_INSTALLED_MANIFEST_PATH_V2, CANDIDATE_FREEZE_MANIFEST_PATH_V2,
 };
 use substrate_r3_macos_finalizer::experiment::pre_effect::{
     build_global_pre_effect_packet_v2, global_nonce_absence_plan_v2, CreatorNativeArmReceiptV2,
@@ -143,6 +143,7 @@ const ROOT_DIRECTORY_MODE: libc::mode_t = libc::S_IFDIR | 0o700;
 const EXTERNAL_INPUT_MODE: libc::mode_t = libc::S_IFREG | 0o400;
 const POLL: Duration = Duration::from_millis(50);
 const MAX_CHILD_OUTPUT: usize = 1024 * 1024;
+const INSTALLED_ARTIFACT_MAX_BYTES: u64 = CANDIDATE_FREEZE_INSTALLED_ARTIFACT_MAX_BYTES_V2;
 const MAX_NATIVE_EVIDENCE_DOCUMENT: usize = 96 * 1024 * 1024;
 const SECURITYAGENT_ALERT_EXIT_CODE: i32 = 86;
 const PROCESS_STATUS_STOPPED_V2: u32 = 4;
@@ -10401,15 +10402,22 @@ fn reattest_root_install_identity(
             if root_install_physical_identity(&expected.path, &held)? != *expected {
                 bail!("live root-install file identity differs from completion evidence")
             }
-            if held.st_size < 0 || held.st_size as usize > MAX_CHILD_OUTPUT {
+            if expected.size > INSTALLED_ARTIFACT_MAX_BYTES {
                 bail!("installed root-install artifact exceeds its compiled read bound")
             }
-            let mut bytes = Vec::with_capacity(held.st_size as usize);
-            File::from(descriptor).read_to_end(&mut bytes)?;
+            let expected_size = usize::try_from(expected.size)
+                .context("installed root-install artifact size exceeds usize")?;
+            let mut bytes = Vec::with_capacity(expected_size);
+            let mut file = File::from(descriptor);
+            Read::by_ref(&mut file)
+                .take(expected.size + 1)
+                .read_to_end(&mut bytes)?;
+            let descriptor_after_read = fstat(file.as_raw_fd())?;
             let final_path =
                 lstat(path)?.context("root-install artifact disappeared during read")?;
-            if !same_stat(&held, &final_path)
-                || final_path.st_size != bytes.len() as libc::off_t
+            if !same_stat(&held, &descriptor_after_read)
+                || !same_stat(&descriptor_after_read, &final_path)
+                || bytes.len() != expected_size
                 || sha256_hex_v2(&bytes) != expected_sha256
             {
                 bail!("live root-install artifact bytes or identity differ from completion")
@@ -11900,6 +11908,117 @@ unsafe extern "C" {
 #[cfg(test)]
 mod tests {
     use super::*;
+    use std::fs::OpenOptions;
+    use std::os::unix::fs::OpenOptionsExt;
+
+    struct InstalledArtifactFixture {
+        root: PathBuf,
+        path: PathBuf,
+    }
+
+    impl InstalledArtifactFixture {
+        fn create(name: &str, bytes: &[u8]) -> Self {
+            let root = std::env::temp_dir().join(format!(
+                "substrate-r3-installed-artifact-{}-{name}",
+                std::process::id()
+            ));
+            let _ = std::fs::remove_dir_all(&root);
+            std::fs::create_dir(&root).expect("create installed-artifact test root");
+            let path = root.join("artifact");
+            let mut file = OpenOptions::new()
+                .write(true)
+                .create_new(true)
+                .mode(0o600)
+                .open(&path)
+                .expect("create installed-artifact test file");
+            file.write_all(bytes)
+                .expect("write installed-artifact fixture bytes");
+            file.sync_all()
+                .expect("sync installed-artifact fixture bytes");
+            Self { root, path }
+        }
+
+        fn identity(&self) -> RootInstallPhysicalIdentityV2 {
+            let observed = lstat(&self.path)
+                .expect("lstat installed-artifact fixture")
+                .expect("installed-artifact fixture is present");
+            root_install_physical_identity(
+                self.path.to_str().expect("fixture path is UTF-8"),
+                &observed,
+            )
+            .expect("build installed-artifact fixture identity")
+        }
+    }
+
+    impl Drop for InstalledArtifactFixture {
+        fn drop(&mut self) {
+            let _ = std::fs::remove_dir_all(&self.root);
+        }
+    }
+
+    #[test]
+    fn installed_artifact_read_uses_exact_manifest_size_not_child_document_bound() {
+        // Match the observed frozen experiment runner, proving that installed
+        // executable reads do not reuse the 1 MiB child-document ceiling.
+        let bytes = vec![0x5a; 7_212_192];
+        let fixture = InstalledArtifactFixture::create("multi-megabyte", &bytes);
+        let expected = fixture.identity();
+        assert!(expected.size > u64::try_from(MAX_CHILD_OUTPUT).unwrap());
+        reattest_root_install_identity(&expected, Some(&sha256_hex_v2(&bytes)))
+            .expect("multi-megabyte installed artifact remains within its distinct ceiling");
+    }
+
+    #[test]
+    fn installed_artifact_read_rejects_size_hash_and_ceiling_divergence() {
+        let original = vec![0x41; 64 * 1024];
+        let fixture = InstalledArtifactFixture::create("divergence", &original);
+        let original_identity = fixture.identity();
+
+        let mut mismatched_manifest_size = original_identity.clone();
+        mismatched_manifest_size.size += 1;
+        assert!(reattest_root_install_identity(
+            &mismatched_manifest_size,
+            Some(&sha256_hex_v2(&original)),
+        )
+        .is_err());
+
+        std::fs::write(&fixture.path, &original[..original.len() - 1])
+            .expect("truncate installed-artifact fixture");
+        assert!(reattest_root_install_identity(
+            &original_identity,
+            Some(&sha256_hex_v2(&original)),
+        )
+        .is_err());
+
+        std::fs::write(&fixture.path, vec![0x41; original.len() + 1])
+            .expect("grow installed-artifact fixture");
+        assert!(reattest_root_install_identity(
+            &original_identity,
+            Some(&sha256_hex_v2(&original)),
+        )
+        .is_err());
+
+        std::fs::write(&fixture.path, vec![0x42; original.len()])
+            .expect("substitute installed-artifact fixture bytes");
+        let substituted_identity = fixture.identity();
+        assert!(reattest_root_install_identity(
+            &substituted_identity,
+            Some(&sha256_hex_v2(&original)),
+        )
+        .is_err());
+
+        let ceiling = InstalledArtifactFixture::create("ceiling", &[]);
+        OpenOptions::new()
+            .write(true)
+            .open(&ceiling.path)
+            .expect("open sparse ceiling fixture")
+            .set_len(INSTALLED_ARTIFACT_MAX_BYTES + 1)
+            .expect("grow sparse ceiling fixture");
+        let ceiling_identity = ceiling.identity();
+        assert!(
+            reattest_root_install_identity(&ceiling_identity, Some(&sha256_hex_v2(&[]))).is_err()
+        );
+    }
 
     #[test]
     fn root_runner_surface_is_closed_and_distinct_from_acl_principals() {

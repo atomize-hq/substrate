@@ -60,6 +60,12 @@ pub const CANDIDATE_FREEZE_PRODUCT_SUPPORT_ROOT_V2: &str =
 pub const CANDIDATE_FREEZE_INSTALLED_SUPPORT_ROOT_V2: &str =
     "/Library/Application Support/Atomize/R3MacEvidenceFinalizer/v2";
 pub const CANDIDATE_FREEZE_INSTALLED_MANIFEST_PATH_V2: &str = "/Library/Application Support/Atomize/R3MacEvidenceFinalizer/v2/candidate-artifact-manifest.v2.json";
+/// Maximum byte length of one candidate artifact that may be installed and reattested.
+///
+/// This is deliberately distinct from the one-MiB control-document and child-output bounds. It
+/// admits the closed multi-megabyte Mach-O executables while keeping manifest-driven allocation
+/// bounded at every producer and consumer.
+pub const CANDIDATE_FREEZE_INSTALLED_ARTIFACT_MAX_BYTES_V2: u64 = 16 * 1024 * 1024;
 pub const CANDIDATE_FREEZE_COORDINATOR_BUILD_INPUTS_PATH_V2: &str = "/Users/spensermcconnell/Library/Application Support/Atomize/R3MacEvidenceFinalizer/experiments/019ffec6-95f6-7d30-80bc-8003ce27d5ba/candidate-freeze/coordinator-build-inputs.v2.json";
 pub const CANDIDATE_FREEZE_GLOBAL_BUILD_INPUTS_PATH_V2: &str = "/Users/spensermcconnell/Library/Application Support/Atomize/R3MacEvidenceFinalizer/experiments/019ffec6-95f6-7d30-80bc-8003ce27d5ba/candidate-freeze/global-build-inputs.v2.json";
 
@@ -251,6 +257,7 @@ impl CandidateFreezeArtifactEntryV2 {
             || self.gid != expected_role.intended_gid()
             || self.mode != expected_role.intended_mode()
             || self.size == 0
+            || self.size > CANDIDATE_FREEZE_INSTALLED_ARTIFACT_MAX_BYTES_V2
         {
             bail!("candidate artifact changed its fixed role, path, ownership, mode, or size")
         }
@@ -1317,6 +1324,51 @@ fn require_sha256(value: &str, label: &str) -> Result<()> {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    fn unsigned_artifact(
+        role: CandidateFreezeArtifactRoleV2,
+        size: u64,
+    ) -> CandidateFreezeArtifactEntryV2 {
+        CandidateFreezeArtifactEntryV2 {
+            role,
+            external_path: format!(
+                "{CANDIDATE_FREEZE_ARTIFACT_ROOT_V2}/artifacts/{}",
+                role.external_filename()
+            ),
+            intended_path: role.intended_path().to_owned(),
+            uid: role.intended_uid(),
+            gid: role.intended_gid(),
+            mode: role.intended_mode(),
+            size,
+            sha256: "00".repeat(32),
+            signing_identifier: None,
+            designated_requirement: None,
+            cdhash: None,
+            code_flags: None,
+            team_id: None,
+            entitlements_size: None,
+            entitlements_sha256: None,
+        }
+    }
+
+    #[test]
+    fn installed_artifact_schema_has_a_distinct_compiled_ceiling() {
+        assert!(
+            std::hint::black_box(CANDIDATE_FREEZE_INSTALLED_ARTIFACT_MAX_BYTES_V2) > 1024 * 1024
+        );
+        assert!(unsigned_artifact(
+            CandidateFreezeArtifactRoleV2::LaunchdPlist,
+            CANDIDATE_FREEZE_INSTALLED_ARTIFACT_MAX_BYTES_V2,
+        )
+        .validate(CandidateFreezeArtifactRoleV2::LaunchdPlist)
+        .is_ok());
+        assert!(unsigned_artifact(
+            CandidateFreezeArtifactRoleV2::LaunchdPlist,
+            CANDIDATE_FREEZE_INSTALLED_ARTIFACT_MAX_BYTES_V2 + 1,
+        )
+        .validate(CandidateFreezeArtifactRoleV2::LaunchdPlist)
+        .is_err());
+    }
 
     #[test]
     fn freeze_plan_is_closed_and_retains_only_external_evidence() {

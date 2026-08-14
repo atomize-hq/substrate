@@ -109,6 +109,7 @@ CODE_FLAGS = 0x12002
 MAX_DOCUMENT = 4 * 1024 * 1024
 MAX_PROCESS_SNAPSHOT = 256 * 1024
 MAX_RUNNER_CHILD_DOCUMENT = 1024 * 1024
+MAX_INSTALLED_ARTIFACT_BYTES = 16 * 1024 * 1024
 MAX_TERMINAL_RUNNER_ARCHIVE_BYTES = 64 * 1024 * 1024
 # A 64 MiB raw child archive expands to at most ~85.4 MiB in unpadded base64url.  The
 # remaining 42+ MiB is a closed envelope budget for the two <=4 MiB root-install claims,
@@ -430,6 +431,81 @@ def read_exact_file(
             os.close(descriptor)
     finally:
         os.close(parent)
+
+
+def read_exact_sized_file(
+    path: pathlib.Path,
+    expected_uid: int,
+    expected_gid: int,
+    expected_mode: int,
+    expected_size: int,
+    maximum_size: int,
+) -> tuple[bytes, os.stat_result]:
+    if (
+        not isinstance(expected_size, int)
+        or isinstance(expected_size, bool)
+        or expected_size < 0
+        or expected_size > maximum_size
+    ):
+        fail(f"file expected size exceeds its compiled read bound: {path}")
+    parent = open_directory_chain(path.parent)
+    try:
+        before = os.stat(path.name, dir_fd=parent, follow_symlinks=False)
+        descriptor = os.open(path.name, os.O_RDONLY | os.O_NOFOLLOW, dir_fd=parent)
+        try:
+            held = os.fstat(descriptor)
+            if not same_stat(before, held):
+                fail(f"file changed between pathname and descriptor: {path}")
+            if (
+                not stat.S_ISREG(held.st_mode)
+                or held.st_uid != expected_uid
+                or held.st_gid != expected_gid
+                or held.st_mode & 0o7777 != expected_mode
+                or held.st_nlink != 1
+                or held.st_size != expected_size
+            ):
+                fail(f"file physical identity or exact size changed: {path}")
+            data = bytearray()
+            while len(data) <= expected_size:
+                block = os.read(
+                    descriptor, min(1024 * 1024, expected_size + 1 - len(data))
+                )
+                if not block:
+                    break
+                data.extend(block)
+            descriptor_after = os.fstat(descriptor)
+            after = os.stat(path.name, dir_fd=parent, follow_symlinks=False)
+            if (
+                len(data) != expected_size
+                or not same_stat(held, descriptor_after)
+                or not same_stat(descriptor_after, after)
+            ):
+                fail(f"file changed or exceeded its exact expected size: {path}")
+            return bytes(data), held
+        finally:
+            os.close(descriptor)
+    finally:
+        os.close(parent)
+
+
+def read_bounded_exact_file(
+    path: pathlib.Path,
+    expected_uid: int,
+    expected_gid: int,
+    expected_mode: int,
+    maximum_size: int,
+) -> tuple[bytes, os.stat_result]:
+    observed = os.lstat(path)
+    if observed.st_size < 0 or observed.st_size > maximum_size:
+        fail(f"bounded file exceeds its compiled read ceiling: {path}")
+    return read_exact_sized_file(
+        path,
+        expected_uid,
+        expected_gid,
+        expected_mode,
+        observed.st_size,
+        maximum_size,
+    )
 
 
 def physical_identity(path: pathlib.Path, observed: os.stat_result) -> dict[str, Any]:
@@ -1478,6 +1554,7 @@ def verify_manifest_shape(manifest: dict[str, Any], manifest_bytes: bytes) -> No
             or entry.get("mode") != mode
             or not isinstance(entry.get("size"), int)
             or entry["size"] <= 0
+            or entry["size"] > MAX_INSTALLED_ARTIFACT_BYTES
             or not is_sha256(entry.get("sha256"))
             or entry.get("signing_identifier") != signing_identifier
         ):
@@ -1598,7 +1675,14 @@ def load_manifest() -> tuple[dict[str, Any], bytes]:
     if sha_bytes(input_bytes) != manifest.get("manifest_input_sha256"):
         fail("candidate manifest input bytes changed")
     for entry in manifest["artifacts"]:
-        data, _ = read_exact_file(pathlib.Path(entry["external_path"]), 501, 20, 0o400)
+        data, _ = read_exact_sized_file(
+            pathlib.Path(entry["external_path"]),
+            501,
+            20,
+            0o400,
+            entry["size"],
+            MAX_INSTALLED_ARTIFACT_BYTES,
+        )
         if len(data) != entry["size"] or sha_bytes(data) != entry["sha256"]:
             fail(f"external candidate artifact changed: {entry['role']}")
         if entry["signing_identifier"] is not None:
@@ -3125,7 +3209,12 @@ def publish_bytes_no_clobber(
 
 
 def install_bytes_prefix_recoverable(
-    source_bytes: bytes, path: pathlib.Path, uid: int, gid: int, mode: int
+    source_bytes: bytes,
+    path: pathlib.Path,
+    uid: int,
+    gid: int,
+    mode: int,
+    maximum_size: int,
 ) -> os.stat_result:
     """O_EXCL final-path install whose only recoverable incomplete state is an exact prefix.
 
@@ -3179,7 +3268,9 @@ def install_bytes_prefix_recoverable(
         os.fsync(parent)
     finally:
         os.close(parent)
-    data, observed = read_exact_file(path, uid, gid, mode)
+    data, observed = read_exact_sized_file(
+        path, uid, gid, mode, len(source_bytes), maximum_size
+    )
     if data != source_bytes:
         fail(f"installed file changed after prefix completion: {path}")
     return observed
@@ -3391,8 +3482,13 @@ def install_candidate(
     for entry in manifest["artifacts"]:
         if entry["role"] == "capability_manifest":
             continue
-        source, _ = read_exact_file(
-            pathlib.Path(entry["external_path"]), 501, 20, 0o400
+        source, _ = read_exact_sized_file(
+            pathlib.Path(entry["external_path"]),
+            501,
+            20,
+            0o400,
+            entry["size"],
+            MAX_INSTALLED_ARTIFACT_BYTES,
         )
         install_bytes_prefix_recoverable(
             source,
@@ -3400,6 +3496,7 @@ def install_candidate(
             entry["uid"],
             entry["gid"],
             entry["mode"],
+            MAX_INSTALLED_ARTIFACT_BYTES,
         )
         if entry["signing_identifier"] is not None:
             verify_code_identity(pathlib.Path(entry["intended_path"]), entry)
@@ -3412,6 +3509,7 @@ def install_candidate(
         0,
         0,
         0o400,
+        MAX_DOCUMENT,
     )
     # Re-measure after all child creation so the completion records the directory state presented
     # to the runner before its first Security call.
@@ -3441,8 +3539,13 @@ def installed_artifact_identities(manifest: dict[str, Any]) -> list[dict[str, An
     values = []
     for entry in manifest["artifacts"]:
         path = pathlib.Path(entry["intended_path"])
-        data, observed = read_exact_file(
-            path, entry["uid"], entry["gid"], entry["mode"]
+        data, observed = read_exact_sized_file(
+            path,
+            entry["uid"],
+            entry["gid"],
+            entry["mode"],
+            entry["size"],
+            MAX_INSTALLED_ARTIFACT_BYTES,
         )
         if len(data) != entry["size"] or sha_bytes(data) != entry["sha256"]:
             fail(f"installed artifact bytes changed: {entry['role']}")
@@ -3709,8 +3812,13 @@ def unlink_exact_file(path: pathlib.Path, expected: dict[str, Any]) -> None:
     except FileNotFoundError:
         require_durable_absence(path)
         return
-    data, observed = read_exact_file(
-        path, expected["uid"], expected["gid"], expected["mode"]
+    data, observed = read_exact_sized_file(
+        path,
+        expected["uid"],
+        expected["gid"],
+        expected["mode"],
+        expected["size"],
+        MAX_INSTALLED_ARTIFACT_BYTES,
     )
     if (
         sha_bytes(data) != expected["sha256"]

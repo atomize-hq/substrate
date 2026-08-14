@@ -200,6 +200,90 @@ module = importlib.util.module_from_spec(spec)
 spec.loader.exec_module(module)
 root = work / "durable-absence-pure-test.v2"
 root.mkdir(mode=0o700)
+
+if module.MAX_INSTALLED_ARTIFACT_BYTES <= module.MAX_RUNNER_CHILD_DOCUMENT:
+    raise SystemExit("installed-artifact ceiling reused the child-document bound")
+artifact = root / "multi-megabyte-installed-artifact"
+# Match the largest observed frozen executable exactly so the Python installer
+# regression exercises the same multi-megabyte size as the Rust reattestation.
+artifact_bytes = b"A" * 7_212_192
+artifact.write_bytes(artifact_bytes)
+artifact.chmod(0o400)
+data, _ = module.read_exact_sized_file(
+    artifact,
+    os.getuid(),
+    os.getgid(),
+    0o400,
+    len(artifact_bytes),
+    module.MAX_INSTALLED_ARTIFACT_BYTES,
+)
+if data != artifact_bytes:
+    raise SystemExit("multi-megabyte installed-artifact exact read changed bytes")
+for invalid_size in (len(artifact_bytes) - 1, len(artifact_bytes) + 1):
+    try:
+        module.read_exact_sized_file(
+            artifact,
+            os.getuid(),
+            os.getgid(),
+            0o400,
+            invalid_size,
+            module.MAX_INSTALLED_ARTIFACT_BYTES,
+        )
+    except module.Stop:
+        pass
+    else:
+        raise SystemExit("installed-artifact read accepted a size mismatch")
+artifact.chmod(0o600)
+artifact.write_bytes(artifact_bytes[:-1])
+artifact.chmod(0o400)
+try:
+    module.read_exact_sized_file(
+        artifact,
+        os.getuid(),
+        os.getgid(),
+        0o400,
+        len(artifact_bytes),
+        module.MAX_INSTALLED_ARTIFACT_BYTES,
+    )
+except module.Stop:
+    pass
+else:
+    raise SystemExit("installed-artifact read accepted truncation")
+artifact.chmod(0o600)
+artifact.write_bytes(artifact_bytes + b"B")
+artifact.chmod(0o400)
+try:
+    module.read_exact_sized_file(
+        artifact,
+        os.getuid(),
+        os.getgid(),
+        0o400,
+        len(artifact_bytes),
+        module.MAX_INSTALLED_ARTIFACT_BYTES,
+    )
+except module.Stop:
+    pass
+else:
+    raise SystemExit("installed-artifact read accepted growth")
+artifact.unlink()
+ceiling = root / "installed-artifact-ceiling-overflow"
+with ceiling.open("wb") as output:
+    output.truncate(module.MAX_INSTALLED_ARTIFACT_BYTES + 1)
+ceiling.chmod(0o400)
+try:
+    module.read_bounded_exact_file(
+        ceiling,
+        os.getuid(),
+        os.getgid(),
+        0o400,
+        module.MAX_INSTALLED_ARTIFACT_BYTES,
+    )
+except module.Stop:
+    pass
+else:
+    raise SystemExit("installed-artifact read accepted true ceiling overflow")
+ceiling.unlink()
+
 leaf = root / "closed-leaf"
 first = module.require_durable_absence(leaf)
 if not first or first["parent_fsync_return"] != 0:
