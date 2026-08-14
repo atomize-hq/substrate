@@ -19,10 +19,11 @@ import os
 import pathlib
 import pwd
 import re
+import signal
 import stat
 import subprocess
 import sys
-from typing import Any
+from typing import Any, NoReturn
 
 
 EXPERIMENT_ID = "019ffec6-95f6-7d30-80bc-8003ce27d5ba"
@@ -115,6 +116,7 @@ MAX_TERMINAL_RUNNER_ARCHIVE_BYTES = 64 * 1024 * 1024
 # remaining 42+ MiB is a closed envelope budget for the two <=4 MiB root-install claims,
 # the <=1 MiB terminal authorization/inventory, duplicated per-entry bindings, and schema data.
 MAX_TERMINAL_CLEANUP_CLAIM = 128 * 1024 * 1024
+SUCCESS_SENTINEL = "R3 sealed root install/rollback PASS"
 
 
 # role, external filename, intended path, uid, gid, mode, signing identifier
@@ -5201,7 +5203,7 @@ def verify_process_surface() -> str:
     return authority_sha256
 
 
-def main() -> int:
+def main() -> tuple[int, bool]:
     root_install_authority_sha256 = verify_process_surface()
     manifest, manifest_bytes = load_manifest()
     validate_root_install_authority(manifest, root_install_authority_sha256)
@@ -5221,19 +5223,22 @@ def main() -> int:
             manifest, manifest_bytes, root_install_authority_sha256
         )
         return (
-            86
-            if receipt["terminal_outcome_kind"]
-            in {
-                "root_operation_securityagent_alert",
-                "publisher_securityagent_alert",
-            }
-            else 78
+            (
+                86
+                if receipt["terminal_outcome_kind"]
+                in {
+                    "root_operation_securityagent_alert",
+                    "publisher_securityagent_alert",
+                }
+                else 78
+            ),
+            False,
         )
     if success_cleanup_present:
         complete_successful_admin_cleanup(
             manifest, manifest_bytes, root_install_authority_sha256
         )
-        return 0
+        return 0, True
     if not path_present(CLAIM_ROOT) and installed_state_present(manifest):
         fail(
             "installed candidate state exists without the retained root-install claims and "
@@ -5265,30 +5270,64 @@ def main() -> int:
             manifest, manifest_bytes, root_install_authority_sha256
         )
         return (
-            86
-            if receipt["terminal_outcome_kind"]
-            in {
-                "root_operation_securityagent_alert",
-                "publisher_securityagent_alert",
-            }
-            else 78
+            (
+                86
+                if receipt["terminal_outcome_kind"]
+                in {
+                    "root_operation_securityagent_alert",
+                    "publisher_securityagent_alert",
+                }
+                else 78
+            ),
+            False,
         )
     if path_present(NATIVE_EVIDENCE_CLEANUP_PATH):
         complete_successful_admin_cleanup(
             manifest, manifest_bytes, root_install_authority_sha256
         )
-        return result.returncode
+        return result.returncode, result.returncode == 0
     # The same exact reviewed block is the only permitted resume route. No installed byte or
     # root-install claim is removed until the runner has exported acknowledged evidence and
     # published the typed native cleanup authorization.
     if result.returncode == 0:
         fail("runner returned success without typed native cleanup authorization")
-    return result.returncode
+    return result.returncode, False
 
 
-if __name__ == "__main__":
+def propagate_route_exit(status: int, success_receipt_validated: bool) -> NoReturn:
+    """Exit exactly as the executed route did, emitting PASS only for validated success."""
+    if isinstance(status, bool) or not isinstance(status, int):
+        fail("executed route returned a non-integer status")
+    if status == 0:
+        if not success_receipt_validated:
+            fail("executed route returned success without a validated success receipt")
+        print(SUCCESS_SENTINEL, flush=True)
+        raise SystemExit(0)
+    if success_receipt_validated:
+        fail("validated success receipt accompanied a nonzero route status")
+    if status < 0:
+        signum = -status
+        if signum <= 0 or signum >= signal.NSIG:
+            fail("executed route returned an invalid terminating signal")
+        if signum not in {signal.SIGKILL, signal.SIGSTOP}:
+            signal.signal(signum, signal.SIG_DFL)
+        if hasattr(signal, "pthread_sigmask"):
+            signal.pthread_sigmask(signal.SIG_UNBLOCK, {signum})
+        os.kill(os.getpid(), signum)
+        os._exit(128 + signum)
+    if status > 255:
+        fail("executed route returned an out-of-range exit status")
+    raise SystemExit(status)
+
+
+def run_entrypoint() -> NoReturn:
     try:
-        raise SystemExit(main())
+        status, success_receipt_validated = main()
+        propagate_route_exit(status, success_receipt_validated)
     except Stop as error:
         print(f"R3 sealed root install/rollback stopped: {error}", file=sys.stderr)
         raise SystemExit(78) from error
+
+
+if __name__ == "__main__":
+    run_entrypoint()

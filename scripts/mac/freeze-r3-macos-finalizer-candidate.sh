@@ -1234,26 +1234,214 @@ readonly ROOT_INSTALL_AUTHORITY_SHA256="$(env -i "${freeze_driver_env[@]}" \
 [[ "${ROOT_INSTALL_AUTHORITY_SHA256}" =~ ^[0-9a-f]{64}$ ]] \
     || fail "root-install authority projection did not produce one SHA-256"
 
-# This is the only administrator command. Its root program is embedded byte-for-byte from the
-# frozen source closure; root never executes a user-owned repository script. The program creates
-# canonical preclaim/completion documents, installs only with no-clobber descriptor-relative
-# publication, invokes the exact runner from cwd=/ with an empty environment and stdin=/dev/null,
-# and is itself the closed resume/rollback route after an administrator-process crash.
+# This is the only administrator command. It seals the exact root program's physical identity,
+# length, and digest before publishing a route. At execution the root loader opens that source
+# exactly once with O_NOFOLLOW, hashes and compiles the one descriptor read, and executes those
+# same in-memory bytes. The route is the closed resume/rollback route after an administrator crash.
 readonly ROOT_INSTALL_SOURCE="scripts/mac/r3-macos-finalizer-root-install.py"
 [[ -f "${ROOT_INSTALL_SOURCE}" && ! -L "${ROOT_INSTALL_SOURCE}" ]] \
     || fail "sealed root-install source is not one regular repository file"
-if /usr/bin/grep -F 'R3_MAC_FINALIZER_ROOT_INSTALL_PY_V2' "${ROOT_INSTALL_SOURCE}" >/dev/null; then
-    fail "sealed root-install source contains its reviewed heredoc terminator"
-fi
-cat > "${ADMIN_BLOCK}" <<ROOT
-sudo /usr/bin/env -i PATH=/usr/bin:/bin:/usr/sbin:/sbin LANG=C LC_ALL=C TZ=UTC \
-    R3_ROOT_INSTALL_AUTHORITY_SHA256=${ROOT_INSTALL_AUTHORITY_SHA256} \
-    /bin/zsh -c 'cd / && exec /usr/bin/python3' <<'R3_MAC_FINALIZER_ROOT_INSTALL_PY_V2'
-ROOT
-cat "${ROOT_INSTALL_SOURCE}" >> "${ADMIN_BLOCK}"
-cat >> "${ADMIN_BLOCK}" <<'ROOT'
-R3_MAC_FINALIZER_ROOT_INSTALL_PY_V2
-ROOT
+# R3_SEALED_RECOVERY_ROUTE_GENERATOR_V1_BEGIN
+env -i PATH="${FIXED_PATH}" LANG=C LC_ALL=C TZ=UTC PYTHONDONTWRITEBYTECODE=1 \
+    "${PYTHON}" - \
+    "${REPOSITORY}/${ROOT_INSTALL_SOURCE}" \
+    "${ADMIN_BLOCK}" \
+    "${ROOT_INSTALL_AUTHORITY_SHA256}" \
+    "$(/usr/bin/id -u)" \
+    "$(/usr/bin/id -g)" <<'PY'
+import hashlib
+import os
+import shlex
+import stat
+import sys
+
+TERMINAL_EXECUTED_RECOVERY_ROUTE_SHA256S = frozenset(
+    {
+        "deea3cb3aaf05dd641936bdb98bcc2d3098504d64b455794af689cabe68cd76a",
+        "bd98dc77cfde7f6956f43845294edeb9da5879525def1bcef5d6c8a3133d839a",
+    }
+)
+TERMINAL_EXECUTED_RECOVERY_SOURCE_SHA256S = frozenset(
+    {
+        "4ae8266e919e0d202e785009695f61820467d73b3836adf9ac92741ac5624698",
+    }
+)
+
+
+def is_terminal_executed_recovery_route(route_sha256):
+    return route_sha256 in TERMINAL_EXECUTED_RECOVERY_ROUTE_SHA256S
+
+
+SEALED_RECOVERY_LOADER = r'''import hashlib
+import os
+import stat
+import sys
+
+if len(sys.argv) != 12:
+    raise SystemExit("sealed recovery loader received the wrong argument count")
+
+source_path = sys.argv[1]
+expected_sha256 = sys.argv[2]
+expected_size = int(sys.argv[3])
+expected_identity = tuple(int(value) for value in sys.argv[4:12])
+if expected_size < 1 or expected_size > 4 * 1024 * 1024:
+    raise SystemExit("sealed recovery source size is outside the closed bound")
+if len(expected_sha256) != 64 or any(
+    character not in "0123456789abcdef" for character in expected_sha256
+):
+    raise SystemExit("sealed recovery source SHA-256 is noncanonical")
+
+
+def identity(value):
+    return (
+        value.st_dev,
+        value.st_ino,
+        value.st_uid,
+        value.st_gid,
+        stat.S_IMODE(value.st_mode),
+        value.st_nlink,
+        value.st_mtime_ns,
+        value.st_ctime_ns,
+    )
+
+
+flags = os.O_RDONLY | os.O_NOFOLLOW
+if hasattr(os, "O_CLOEXEC"):
+    flags |= os.O_CLOEXEC
+fd = os.open(source_path, flags)
+try:
+    before = os.fstat(fd)
+    if not stat.S_ISREG(before.st_mode) or before.st_size != expected_size:
+        raise SystemExit("sealed recovery source is not the exact expected regular file")
+    if identity(before) != expected_identity:
+        raise SystemExit("sealed recovery source physical identity changed")
+    chunks = []
+    remaining = expected_size + 1
+    while remaining:
+        chunk = os.read(fd, min(131072, remaining))
+        if not chunk:
+            break
+        chunks.append(chunk)
+        remaining -= len(chunk)
+    after = os.fstat(fd)
+finally:
+    os.close(fd)
+
+if identity(after) != identity(before) or after.st_size != before.st_size:
+    raise SystemExit("sealed recovery source changed during its descriptor read")
+path_after = os.stat(source_path, follow_symlinks=False)
+if identity(path_after) != identity(before) or path_after.st_size != before.st_size:
+    raise SystemExit("sealed recovery source pathname identity changed")
+source_bytes = b"".join(chunks)
+if len(source_bytes) != expected_size:
+    raise SystemExit("sealed recovery source length changed")
+if hashlib.sha256(source_bytes).hexdigest() != expected_sha256:
+    raise SystemExit("sealed recovery source SHA-256 changed")
+
+sys.argv = [source_path]
+namespace = {
+    "__builtins__": __builtins__,
+    "__file__": source_path,
+    "__name__": "__main__",
+    "__package__": None,
+}
+compiled = compile(source_bytes, source_path, "exec", dont_inherit=True)
+exec(compiled, namespace, namespace)
+'''
+
+
+def physical_identity(value):
+    return (
+        value.st_dev,
+        value.st_ino,
+        value.st_uid,
+        value.st_gid,
+        stat.S_IMODE(value.st_mode),
+        value.st_nlink,
+        value.st_mtime_ns,
+        value.st_ctime_ns,
+    )
+
+
+source_path = sys.argv[1]
+admin_block = sys.argv[2]
+authority_sha256 = sys.argv[3]
+expected_uid = int(sys.argv[4])
+expected_gid = int(sys.argv[5])
+flags = os.O_RDONLY | os.O_NOFOLLOW
+if hasattr(os, "O_CLOEXEC"):
+    flags |= os.O_CLOEXEC
+source_fd = os.open(source_path, flags)
+try:
+    source_before = os.fstat(source_fd)
+    if (
+        not stat.S_ISREG(source_before.st_mode)
+        or source_before.st_uid != expected_uid
+        or source_before.st_gid != expected_gid
+        or stat.S_IMODE(source_before.st_mode) != 0o644
+        or source_before.st_nlink != 1
+        or source_before.st_size < 1
+        or source_before.st_size > 4 * 1024 * 1024
+    ):
+        raise SystemExit("root-install source physical identity is outside the closed plan")
+    source_chunks = []
+    remaining = source_before.st_size + 1
+    while remaining:
+        chunk = os.read(source_fd, min(131072, remaining))
+        if not chunk:
+            break
+        source_chunks.append(chunk)
+        remaining -= len(chunk)
+    source_after = os.fstat(source_fd)
+finally:
+    os.close(source_fd)
+if (
+    physical_identity(source_after) != physical_identity(source_before)
+    or source_after.st_size != source_before.st_size
+):
+    raise SystemExit("root-install source changed while sealing the recovery route")
+source_bytes = b"".join(source_chunks)
+if len(source_bytes) != source_before.st_size:
+    raise SystemExit("root-install source length changed while sealing the recovery route")
+source_sha256 = hashlib.sha256(source_bytes).hexdigest()
+if source_sha256 in TERMINAL_EXECUTED_RECOVERY_SOURCE_SHA256S:
+    raise SystemExit("refusing to reuse a terminal executed recovery source")
+identity_arguments = " ".join(str(value) for value in physical_identity(source_before))
+route = f'''(
+set -u
+readonly R3_SEALED_RECOVERY_LOADER={shlex.quote(SEALED_RECOVERY_LOADER)}
+/usr/bin/sudo /usr/bin/env -i PATH=/usr/bin:/bin:/usr/sbin:/sbin LANG=C LC_ALL=C TZ=UTC \\
+    R3_ROOT_INSTALL_AUTHORITY_SHA256={authority_sha256} \\
+    /bin/zsh -c 'cd / && exec /usr/bin/python3 -c "$1" "${{@:2}}"' -- \\
+    "${{R3_SEALED_RECOVERY_LOADER}}" \\
+    {shlex.quote(source_path)} {source_sha256} {len(source_bytes)} {identity_arguments}
+readonly r3_recovery_exit=$?
+exit "${{r3_recovery_exit}}"
+)
+'''.encode("utf-8")
+route_sha256 = hashlib.sha256(route).hexdigest()
+if is_terminal_executed_recovery_route(route_sha256):
+    raise SystemExit("refusing to regenerate a terminal executed recovery route")
+
+admin_flags = os.O_WRONLY | os.O_CREAT | os.O_EXCL | os.O_NOFOLLOW
+admin_fd = os.open(admin_block, admin_flags, 0o400)
+try:
+    offset = 0
+    while offset < len(route):
+        written = os.write(admin_fd, route[offset:])
+        if written <= 0:
+            raise SystemExit("reviewed recovery route write made no progress")
+        offset += written
+    os.fsync(admin_fd)
+finally:
+    os.close(admin_fd)
+parent_fd = os.open(os.path.dirname(admin_block), os.O_RDONLY | os.O_DIRECTORY)
+try:
+    os.fsync(parent_fd)
+finally:
+    os.close(parent_fd)
+PY
+# R3_SEALED_RECOVERY_ROUTE_GENERATOR_V1_END
 
 /bin/chmod 0400 "${ADMIN_BLOCK}"
 env -i "${freeze_driver_env[@]}" "${PYTHON}" "${DRIVER}" final
