@@ -64,6 +64,7 @@ members = [
     # "crates/trace",   # TODO: Implement after broker
     "crates/telemetry-lib",
     "crates/replay", "crates/forwarder", "crates/world-windows-wsl",
+    "tools/r3-macos-finalizer",
     "tools/version-bump",
 ]
 exclude = ["crates/substrate-graph"]
