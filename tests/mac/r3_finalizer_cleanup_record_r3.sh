@@ -3,7 +3,7 @@ set -euo pipefail
 
 SCRIPT_DIR="${0:A:h}"
 REPOSITORY="${SCRIPT_DIR:h:h}"
-PYTHON="/usr/bin/python3"
+FIXTURE="${SCRIPT_DIR}/fixtures/r3_finalizer_cleanup_record_actual_v2.json"
 WORK_ROOT="$(/usr/bin/mktemp -d "/private/tmp/substrate-r3-rcv-02.XXXXXX")"
 
 cleanup() {
@@ -17,20 +17,22 @@ env -i \
     LC_ALL=C \
     TZ=UTC \
     PYTHONDONTWRITEBYTECODE=1 \
-    "${PYTHON}" - \
+    /usr/bin/python3 - \
     "${REPOSITORY}/scripts/mac/r3-macos-finalizer-root-install.py" \
+    "${FIXTURE}" \
     "${WORK_ROOT}" <<'PY'
 import copy
-import errno
+import hashlib
 import importlib.util
+import json
 import os
 import pathlib
-import stat
 import sys
 
 
 source = pathlib.Path(sys.argv[1])
-root = pathlib.Path(sys.argv[2])
+fixture_path = pathlib.Path(sys.argv[2])
+root = pathlib.Path(sys.argv[3])
 spec = importlib.util.spec_from_file_location("r3_rcv_02_root_installer", source)
 module = importlib.util.module_from_spec(spec)
 spec.loader.exec_module(module)
@@ -44,26 +46,190 @@ def reject(call, label):
     raise SystemExit(f"cleanup-record regression accepted {label}")
 
 
-def bound_observation(probe, raw):
-    predicate_sha256 = module.document_sha256(probe)
-    raw_sha256 = module.document_sha256(raw)
-    return {
-        "predicate_sha256": predicate_sha256,
-        "raw_observation": raw,
-        "raw_observation_sha256": raw_sha256,
-        "observation_sha256": module.document_sha256(
-            [predicate_sha256, raw_sha256, probe["classification"]]
+# This immutable projection contains the exact 14 installed_artifacts objects serialized by the
+# preserved native completion.  It deliberately excludes the preclaim, process snapshots, and the
+# rest of the 565-KiB candidate manifest.  The source-document hashes and the projection hash make
+# the provenance and every retained byte independently reviewable.
+fixture_bytes = fixture_path.read_bytes()
+if hashlib.sha256(fixture_bytes).hexdigest() != (
+    "8e6aeaf410d5038da2d48288b1445da08a0a21c4d98442744fb6d8a5f925c6f3"
+):
+    raise SystemExit("actual cleanup-record fixture bytes changed")
+fixture = json.loads(fixture_bytes)
+if set(fixture) != {
+    "schema_owner",
+    "schema_version",
+    "source_completion_sha256",
+    "source_manifest_sha256",
+    "source_completion_installed_artifact_identity_set_sha256",
+    "projection_sha256",
+    "completion_outer_fields",
+    "installed_artifacts",
+    "manifest_artifact_authorities",
+}:
+    raise SystemExit("actual cleanup-record fixture changed its closed shape")
+if (
+    fixture["schema_owner"]
+    != "substrate.r3-macos-finalizer-cleanup-record-regression-fixture"
+    or fixture["schema_version"] != 1
+    or fixture["source_completion_sha256"]
+    != "429a1e1ba7b5a7ad077d0771a2de7f4290ba826c54717502d496517cf476025c"
+    or fixture["source_manifest_sha256"]
+    != "331756c8c4265b30c0b5647841aa1330844e3544d7603a557428be69c1cbc95c"
+):
+    raise SystemExit("actual cleanup-record fixture changed source provenance")
+projection = {
+    "completion_outer_fields": fixture["completion_outer_fields"],
+    "installed_artifacts": fixture["installed_artifacts"],
+    "manifest_artifact_authorities": fixture["manifest_artifact_authorities"],
+}
+if module.document_sha256(projection) != fixture["projection_sha256"]:
+    raise SystemExit("actual cleanup-record fixture changed its projection digest")
+if module.document_sha256(fixture["installed_artifacts"]) != fixture[
+    "source_completion_installed_artifact_identity_set_sha256"
+]:
+    raise SystemExit("actual installed-artifact set differs from the source completion")
+
+expected_completion_fields = {
+    "schema_owner",
+    "schema_version",
+    "experiment_id",
+    "sequence",
+    "preclaim_sha256",
+    "candidate_freeze_manifest_sha256",
+    "reviewed_admin_block_sha256",
+    "candidate_artifact_set_sha256",
+    "install_parent_directory_set_sha256",
+    "preinstall_absence_observation_set_sha256",
+    "rollback_plan_sha256",
+    "supporting_manifest_set_sha256",
+    "installed_directories",
+    "installed_directory_set_sha256",
+    "installed_artifacts",
+    "installed_artifact_identity_set_sha256",
+    "preclaim_leaf_identity",
+    "completion_leaf_lstat_return",
+    "completion_leaf_raw_errno",
+    "launchd_label_absence",
+    "endpoint_absence",
+    "install_complete",
+    "launchd_bootstrap_authorized",
+}
+if fixture["completion_outer_fields"] != sorted(expected_completion_fields):
+    raise SystemExit("actual completion outer shape differs from the canonical validator")
+
+artifacts = fixture["installed_artifacts"]
+authorities = fixture["manifest_artifact_authorities"]
+roles = [specification[0] for specification in module.ARTIFACT_SPECS]
+if (
+    len(artifacts) != 14
+    or len(authorities) != 14
+    or [artifact["role"] for artifact in artifacts] != roles
+    or [authority["role"] for authority in authorities] != roles
+):
+    raise SystemExit("actual completion changed its 14-role canonical order")
+for artifact, authority, specification in zip(
+    artifacts, authorities, module.ARTIFACT_SPECS
+):
+    if set(authority) != {
+        "role",
+        "intended_path",
+        "uid",
+        "gid",
+        "mode",
+        "size",
+        "sha256",
+    }:
+        raise SystemExit("manifest artifact projection changed its closed authority shape")
+    role, _, path, uid, gid, mode, _ = specification
+    if (
+        authority["role"] != role
+        or authority["intended_path"] != path
+        or authority["uid"] != uid
+        or authority["gid"] != gid
+        or authority["mode"] != mode
+    ):
+        raise SystemExit("manifest artifact projection differs from the compiled plan")
+    module.validate_root_install_artifact_identity(artifact, authority)
+
+
+def mutated_artifact(mutator):
+    artifact = copy.deepcopy(artifacts[0])
+    mutator(artifact)
+    return artifact
+
+
+reject(
+    lambda: module.validate_root_install_artifact_identity(
+        mutated_artifact(lambda value: value.__setitem__("unknown", True)),
+        authorities[0],
+    ),
+    "an outer installed-artifact field",
+)
+reject(
+    lambda: module.validate_root_install_artifact_identity(
+        mutated_artifact(
+            lambda value: value["physical_identity"].__setitem__("unknown", True)
         ),
-    }
+        authorities[0],
+    ),
+    "a nested physical-identity field",
+)
 
 
-artifact_path = root / "canonical-installed-artifact"
-artifact_bytes = b"r3-rcv-02-canonical-installed-artifact\n"
+def relocate_uid(value):
+    value["uid"] = value["physical_identity"].pop("uid")
+
+
+reject(
+    lambda: module.validate_root_install_artifact_identity(
+        mutated_artifact(relocate_uid), authorities[0]
+    ),
+    "a relocated physical-identity field",
+)
+for field, replacement in (
+    ("sha256", "f" * 64),
+    ("path", artifacts[1]["path"]),
+    ("role", artifacts[1]["role"]),
+):
+    reject(
+        lambda field=field, replacement=replacement: (
+            module.validate_root_install_artifact_identity(
+                mutated_artifact(
+                    lambda value: value.__setitem__(field, replacement)
+                ),
+                authorities[0],
+            )
+        ),
+        f"an installed-artifact {field} substitution",
+    )
+for field, replacement in (
+    ("size", artifacts[0]["physical_identity"]["size"] + 1),
+    ("mode", artifacts[0]["physical_identity"]["mode"] ^ 0o020),
+    ("path", artifacts[1]["physical_identity"]["path"]),
+):
+    reject(
+        lambda field=field, replacement=replacement: (
+            module.validate_root_install_artifact_identity(
+                mutated_artifact(
+                    lambda value: value["physical_identity"].__setitem__(
+                        field, replacement
+                    )
+                ),
+                authorities[0],
+            )
+        ),
+        f"an installed-artifact physical {field} substitution",
+    )
+
+# The live-object checks remain separate from the immutable 14-record gate above.  Every mutation
+# below is confined to this fresh /private/tmp root; no compiled native target is inspected.
+artifact_path = root / "temporary-installed-artifact"
+artifact_bytes = b"r3-rcv-02-temporary-installed-artifact\n"
 artifact_path.write_bytes(artifact_bytes)
 artifact_path.chmod(0o400)
 artifact_observed = os.lstat(artifact_path)
-artifact_identity = module.physical_identity(artifact_path, artifact_observed)
-artifact_manifest = {
+artifact_authority = {
     "role": "capability_manifest",
     "intended_path": str(artifact_path),
     "uid": artifact_observed.st_uid,
@@ -73,213 +239,28 @@ artifact_manifest = {
     "sha256": module.sha_bytes(artifact_bytes),
 }
 artifact_record = {
-    "role": artifact_manifest["role"],
-    "path": artifact_manifest["intended_path"],
-    "physical_identity": artifact_identity,
-    "sha256": artifact_manifest["sha256"],
+    "role": artifact_authority["role"],
+    "path": artifact_authority["intended_path"],
+    "physical_identity": module.physical_identity(artifact_path, artifact_observed),
+    "sha256": artifact_authority["sha256"],
     "executable_identity": None,
     "signing_posture": None,
 }
-
-# Exercise the exact serialized producer shape: identity facts live only in the nested
-# physical_identity object.  The outer object retains the role/path/hash/code bindings.
-artifact_record = module.parse_canonical(
-    module.canonical(artifact_record), "canonical installed-artifact fixture"
-)
-if any(field in artifact_record for field in ("uid", "gid", "mode", "size")):
-    raise SystemExit("canonical installed-artifact fixture relocated physical identity")
-module.validate_root_install_artifact_identity(artifact_record, artifact_manifest)
-
-module.ARTIFACT_SPECS = [
-    (
-        artifact_manifest["role"],
-        "canonical-installed-artifact",
-        artifact_manifest["intended_path"],
-        artifact_manifest["uid"],
-        artifact_manifest["gid"],
-        artifact_manifest["mode"],
-        None,
-    )
-]
-module.INSTALL_DIRECTORIES = []
-digest = "1" * 64
-manifest = {
-    "reviewed_admin_block_sha256": "2" * 64,
-    "artifact_set_sha256": "3" * 64,
-    "install_parent_directory_set_sha256": "4" * 64,
-    "preinstall_absence_observation_set_sha256": "5" * 64,
-    "rollback_plan_sha256": "6" * 64,
-    "source_hashes_manifest_sha256": digest,
-    "coordinator_build_input_manifest_sha256": digest,
-    "global_build_input_manifest_sha256": digest,
-    "coordinator_provenance_input_sha256": digest,
-    "global_provenance_input_sha256": digest,
-    "manifest_input_sha256": digest,
-    "artifacts": [artifact_manifest],
-}
-manifest_bytes = module.canonical(manifest)
-preclaim = {"schema_owner": "r3-rcv-02-canonical-preclaim-fixture"}
-launchd_probe = next(
-    probe for probe in module.absence_plan() if probe["kind"] == "launchd_label"
-)
-endpoint_probe = next(
-    probe for probe in module.absence_plan() if probe["kind"] == "unix_endpoint"
-)
-launchd_raw = {
-    "kind": "launchd_label",
-    "identity": launchd_probe["identity"],
-    "raw_exit_status": 113,
-    "stdout": module.raw_stream(b""),
-    "stderr": module.raw_stream(
-        (
-            "Bad request.\nCould not find service "
-            f'"{launchd_probe["identity"]}" in domain for system\n'
-        ).encode()
-    ),
-}
-endpoint_raw = {
-    "kind": "unix_endpoint",
-    "identity": endpoint_probe["identity"],
-    "lstat_return": -1,
-    "raw_errno": errno.ENOENT,
-    "stat_result": None,
-}
-completion = {
-    "schema_owner": "substrate.r3-macos-finalizer-root-install-completion",
-    "schema_version": 2,
-    "experiment_id": module.EXPERIMENT_ID,
-    "sequence": 2,
-    "preclaim_sha256": module.document_sha256(preclaim),
-    "candidate_freeze_manifest_sha256": module.sha_bytes(manifest_bytes),
-    "reviewed_admin_block_sha256": manifest["reviewed_admin_block_sha256"],
-    "candidate_artifact_set_sha256": manifest["artifact_set_sha256"],
-    "install_parent_directory_set_sha256": manifest[
-        "install_parent_directory_set_sha256"
-    ],
-    "preinstall_absence_observation_set_sha256": manifest[
-        "preinstall_absence_observation_set_sha256"
-    ],
-    "rollback_plan_sha256": manifest["rollback_plan_sha256"],
-    "supporting_manifest_set_sha256": module.supporting_manifest_set_sha256(manifest),
-    "installed_directories": [],
-    "installed_directory_set_sha256": module.document_sha256([]),
-    "installed_artifacts": [artifact_record],
-    "installed_artifact_identity_set_sha256": module.document_sha256(
-        [artifact_record]
-    ),
-    "preclaim_leaf_identity": artifact_identity,
-    "completion_leaf_lstat_return": -1,
-    "completion_leaf_raw_errno": errno.ENOENT,
-    "launchd_label_absence": bound_observation(launchd_probe, launchd_raw),
-    "endpoint_absence": bound_observation(endpoint_probe, endpoint_raw),
-    "install_complete": True,
-    "launchd_bootstrap_authorized": False,
-}
-completion = module.parse_canonical(
-    module.canonical(completion), "canonical root-install completion fixture"
-)
-module.validate_completion(completion, manifest, manifest_bytes, preclaim)
-
-
-def changed_artifact(mutator):
-    changed = copy.deepcopy(completion)
-    mutator(changed["installed_artifacts"][0])
-    changed["installed_artifact_identity_set_sha256"] = module.document_sha256(
-        changed["installed_artifacts"]
-    )
-    return changed
-
-
-changed = copy.deepcopy(completion)
-changed["unknown"] = True
-reject(
-    lambda: module.validate_completion(changed, manifest, manifest_bytes, preclaim),
-    "an outer completion field",
-)
-reject(
-    lambda: module.validate_completion(
-        changed_artifact(lambda artifact: artifact.__setitem__("unknown", True)),
-        manifest,
-        manifest_bytes,
-        preclaim,
-    ),
-    "an outer installed-artifact field",
-)
-reject(
-    lambda: module.validate_completion(
-        changed_artifact(
-            lambda artifact: artifact["physical_identity"].__setitem__("unknown", True)
-        ),
-        manifest,
-        manifest_bytes,
-        preclaim,
-    ),
-    "a nested physical-identity field",
-)
-
-
-def relocate_uid(artifact):
-    artifact["uid"] = artifact["physical_identity"].pop("uid")
-
-
-reject(
-    lambda: module.validate_completion(
-        changed_artifact(relocate_uid), manifest, manifest_bytes, preclaim
-    ),
-    "a relocated physical-identity field",
-)
-reject(
-    lambda: module.validate_completion(
-        changed_artifact(lambda artifact: artifact.__setitem__("sha256", "f" * 64)),
-        manifest,
-        manifest_bytes,
-        preclaim,
-    ),
-    "an installed-artifact hash substitution",
-)
-reject(
-    lambda: module.validate_completion(
-        changed_artifact(
-            lambda artifact: artifact["physical_identity"].__setitem__(
-                "size", artifact["physical_identity"]["size"] + 1
-            )
-        ),
-        manifest,
-        manifest_bytes,
-        preclaim,
-    ),
-    "an installed-artifact size substitution",
-)
-reject(
-    lambda: module.validate_completion(
-        changed_artifact(
-            lambda artifact: artifact["physical_identity"].__setitem__(
-                "mode", stat.S_IFREG | 0o600
-            )
-        ),
-        manifest,
-        manifest_bytes,
-        preclaim,
-    ),
-    "an installed-artifact mode substitution",
-)
-
-# Device/inode observations have no manifest-side value.  They are instead joined to the live
-# no-follow object by the cleanup consumer; a substituted observation must preserve the file.
 substituted = copy.deepcopy(artifact_record)
 substituted["physical_identity"]["inode"] += 1
 reject(
     lambda: module.unlink_exact_file(artifact_path, substituted),
-    "an installed-artifact physical identity substitution",
+    "an installed-artifact live physical identity substitution",
 )
 if not artifact_path.exists():
-    raise SystemExit("physical-identity substitution removed the installed artifact")
+    raise SystemExit("physical-identity substitution removed the temporary artifact")
 module.unlink_exact_file(artifact_path, artifact_record)
-if artifact_path.exists() or artifact_path.is_symlink():
-    raise SystemExit("canonical nested installed-artifact record did not remove its exact file")
 
-# Build the complete installed-manifest binding shape.  Its mode is intentionally permission-only
-# (0400), while physical_identity records the regular-file type plus 0400.
+manifest = {
+    "reviewed_admin_block_sha256": "2" * 64,
+    "artifacts": [artifact_authority],
+}
+manifest_bytes = module.canonical(manifest)
 installed_manifest = root / "candidate-artifact-manifest.v2.json"
 installed_manifest.write_bytes(manifest_bytes)
 installed_manifest.chmod(0o400)
@@ -324,16 +305,29 @@ global_exchange = root / "global-publisher-exchange"
 global_exchange.mkdir(mode=0o700)
 global_identity = module.physical_identity(global_exchange, os.lstat(global_exchange))
 module.GLOBAL_EXCHANGE = global_exchange
+module.ARTIFACT_SPECS = [
+    (
+        artifact_authority["role"],
+        "temporary-installed-artifact",
+        artifact_authority["intended_path"],
+        artifact_authority["uid"],
+        artifact_authority["gid"],
+        artifact_authority["mode"],
+        None,
+    )
+]
 module.INSTALL_DIRECTORIES = [(str(global_exchange), 501, 0, 0o700)]
-cleanup_completion = copy.deepcopy(completion)
-cleanup_completion["installed_directories"] = [global_identity]
+cleanup_completion = {
+    "installed_artifacts": [artifact_record],
+    "installed_directories": [global_identity],
+}
 original_read_exact_file = module.read_exact_file
 original_physical_identity = module.physical_identity
 
 
 def read_installed_manifest(path, expected_uid, expected_gid, expected_mode):
     if path != installed_manifest or expected_uid != 0 or expected_gid != 0:
-        raise SystemExit("cleanup regression escaped its installed-manifest path/owner fence")
+        raise SystemExit("temporary cleanup escaped its installed-manifest fence")
     return original_read_exact_file(
         path, installed_observed.st_uid, installed_observed.st_gid, expected_mode
     )
@@ -354,8 +348,8 @@ module.cleanup_installed_candidate(
     manifest, manifest_bytes, cleanup_completion, installed_manifest_record
 )
 if installed_manifest.exists() or installed_manifest.is_symlink():
-    raise SystemExit("permission-only installed-manifest record did not remove its exact file")
+    raise SystemExit("permission-only installed-manifest record was not accepted")
 
 global_exchange.rmdir()
-print("r3_rcv_02_cleanup_record_regression=PASS")
+print("r3_rcv_02_actual_cleanup_record_regression=PASS")
 PY
