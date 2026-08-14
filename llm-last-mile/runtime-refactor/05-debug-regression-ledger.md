@@ -3689,24 +3689,24 @@ Secure Enclave/Data Protection Keychain and a user LaunchAgent signer are deferr
 They are not part of this increment, do not authorize `EVIDENCE:R3-MAC-IMP-01`, and do not imply an
 automatic successor dispatch. Intel/T2 remains out of scope.
 
-## R3 macOS retirement/orphan planning observation ledger (2026-08-13; no run)
+## R3 macOS retirement/orphan planning and G2/G3 stop ledger (2026-08-13)
 
-This entry records bounded observations and empty future receipt slots only. It does not resolve the SecurityAgent cause, run an experiment, query or mutate the live signer, authorize recovery, implement V2 retirement, perform cleanup, refresh the evidence mirror, create native evidence, or authorize `MAC-CLOSEOUT`.
+This entry records bounded planning observations plus one independently reviewed G2 pre-effect stop. It does not resolve the SecurityAgent cause, run a native experiment arm, query or mutate the live signer, authorize recovery, implement V2 retirement, perform cleanup, refresh the evidence mirror, create native evidence, or authorize `MAC-CLOSEOUT`.
 
 | Observation | Current bounded record | Consequence |
 |---|---|---|
 | SecurityAgent contradiction | SecurityAgent appeared during two prior cleanup attempts despite query-level `kSecUseAuthenticationUIFail`. No credential or approval was supplied. The exact Security-framework suboperation requesting interaction is unresolved. | Query-level failure alone is not accepted as proof of a no-UI route. No prompt is expected or authorized by this ledger. |
 | Preserved precommit-less orphan | Scope `019ff983-39ca-7182-9db8-b86aa66fa443` remains bound to the failed attempt. External cleanup records report the publisher registration absent and fourteen exact lifecycle generic-password deletions with final absence. The P-256 signer was last observed as one exact item and was not re-queried by this docs task. | Do not recreate state, insert a retroactive V2 precommit, or use the prospective finalizer. Preserve signer and evidence pending separate authority. |
-| Disposable experiment | The rollback-safe native-macOS matrix for query-only suppression, fresh-process process-plus-query suppression, wrong identity, absent retry, and exact prospective-finalizer delete-only capability is pending and not run. | Creator-recovery and prospective-finalizer conclusions are separate and unknown. The plan grants no live authority. |
+| Disposable experiment | Task `R3-MAC-RETIRE-G2-G3-DISPOSABLE-EXPERIMENT` attempted to freeze the authorized packet and stopped before effects. The accepted contract does not yet bind the exact prospective-finalizer executable/code/privilege identity or the canonical delete-only `SecAccess` posture; inventing either is prohibited. The creator matrix also retains two executable-detail stops: prior-interaction-setting handling for the first-call process-deny arm and precommitted wrong-identity status classification. No experiment executable or surrogate was created and no native arm ran. | Creator-recovery and prospective-finalizer conclusions remain separate and are both `NOT_RUN`. Independent review accepted `RESTORED_BY_NO_EFFECT`; G3 is blocked and G4 remains unauthorized. See `docs/guidance/2026-08-13-r3-mac-g2-g3-disposable-experiment-pre-effect-stop.md`. |
 
-Future evidence/hash slots are intentionally empty:
+Future evidence/hash slots remain empty except for the bounded G2/G3 stop receipts:
 
 | Slot | Status |
 |---|---|
-| Disposable experiment authorization ID/digest | `PENDING / NOT AUTHORIZED` |
-| Disposable experiment receipt and baseline-restoration manifest SHA-256 | `PENDING / NOT RUN` |
-| Creator-recovery no-UI conclusion receipt SHA-256 | `PENDING / NO CONCLUSION` |
-| Prospective-finalizer delete-only capability receipt SHA-256 | `PENDING / NO CONCLUSION` |
+| Disposable experiment authorization ID/digest | `R3-MAC-RETIRE-G2-G3-DISPOSABLE-EXPERIMENT`; packet `a8a59811472e6c285ce12515559ca70848485dbbd9a6c1cfb1788d0571024d9d`; `BLOCKED PRE-EFFECT` |
+| Disposable experiment receipt and baseline-restoration manifest SHA-256 | stop receipt `08c26343e49c3698e689dcb81c4072085e730bd51595117f96cad33283647c0a`; restoration manifest `eb5e03fa9579247047101f6d75cfe05dc5360ea0e4999836855505757c584a8c`; independent review `3bcd7e87dfbad729c5eab27f8e3f7fa46fa79be5e7fd022c615fea22a18f24c6` (`PASS_RESTORED_BY_NO_EFFECT`) |
+| Creator-recovery no-UI conclusion receipt SHA-256 | `15134c8472fd032853f43fa816c96f43192a1b08250cdfe10a14a1769863b28c`; `NOT_RUN` |
+| Prospective-finalizer delete-only capability receipt SHA-256 | `a730696c4e24210fac9e3111e74379e5d3d3a10e0c91cb0239af363a19fd11a0`; `NOT_RUN` |
 | Exact orphan-recovery authorization ID/digest | `PENDING / NOT AUTHORIZED` |
 | Exact orphan-recovery receipt SHA-256 | `PENDING / NOT RUN` |
 | Exact orphan baseline-parity proof/acknowledgement SHA-256 | `PENDING / NOT RUN` |
