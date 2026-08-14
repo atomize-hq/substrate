@@ -106,6 +106,25 @@ FIXED_ENV = {
     "TZ": "UTC",
 }
 ROOT_INSTALL_AUTHORITY_ENV = "R3_ROOT_INSTALL_AUTHORITY_SHA256"
+PRE_SECURITY_RECOVERY_AUTHORITY_ENV = "R3_PRE_SECURITY_RECOVERY_AUTHORITY_SHA256"
+PRE_SECURITY_RECOVERY_PRESERVATION_ROOT = pathlib.Path(
+    "/Users/spensermcconnell/.codex/preservations/"
+    "substrate-r3-finalizer-bound-recovery-20260814T160000Z"
+)
+PRE_SECURITY_OPERATOR_AUTHORITY_PATH = (
+    PRE_SECURITY_RECOVERY_PRESERVATION_ROOT
+    / "pre-security-operator-authority.v2.json"
+)
+PRE_SECURITY_RECOVERY_ROOT = pathlib.Path(
+    "/private/var/db/"
+    "com.atomize.substrate.r3-macos-finalizer-pre-security-recovery-receipt.v2"
+)
+PRE_SECURITY_ADMIN_AUTHORIZATION_PATH = (
+    PRE_SECURITY_RECOVERY_ROOT / "pre-security-admin-cleanup-authorization.v2.json"
+)
+PRE_SECURITY_ADMIN_RESTORATION_RECEIPT_PATH = (
+    PRE_SECURITY_RECOVERY_ROOT / "pre-security-admin-restoration-receipt.v2.json"
+)
 EMPTY_SHA256 = hashlib.sha256(b"").hexdigest()
 CODE_FLAGS = 0x12002
 MAX_DOCUMENT = 4 * 1024 * 1024
@@ -1981,6 +2000,51 @@ def load_manifest() -> tuple[dict[str, Any], bytes]:
             fail(f"external candidate artifact changed: {entry['role']}")
         if entry["signing_identifier"] is not None:
             verify_code_identity(pathlib.Path(entry["external_path"]), entry)
+    return manifest, manifest_bytes
+
+
+def load_manifest_documents_only() -> tuple[dict[str, Any], bytes]:
+    """Revalidate the frozen document closure without entering the codesign surface."""
+    manifest_bytes, _ = read_exact_file(MANIFEST_PATH, 501, 20, 0o400)
+    manifest = parse_canonical(manifest_bytes, "candidate freeze manifest")
+    if not isinstance(manifest, dict):
+        fail("candidate freeze manifest is not an object")
+    verify_manifest_shape(manifest, manifest_bytes)
+    admin_bytes, _ = read_exact_file(ADMIN_BLOCK_PATH, 501, 20, 0o400)
+    if sha_bytes(admin_bytes) != manifest["reviewed_admin_block_sha256"]:
+        fail("reviewed administrator block differs from candidate manifest")
+    supporting = [
+        ("source_hashes_manifest_path", "source_hashes_manifest_sha256"),
+        (
+            "coordinator_build_input_manifest_path",
+            "coordinator_build_input_manifest_sha256",
+        ),
+        ("global_build_input_manifest_path", "global_build_input_manifest_sha256"),
+        ("coordinator_provenance_input_path", "coordinator_provenance_input_sha256"),
+        ("global_provenance_input_path", "global_provenance_input_sha256"),
+    ]
+    for path_field, digest_field in supporting:
+        value = manifest.get(path_field)
+        if not isinstance(value, str) or not value.startswith(str(FREEZE_ROOT) + "/"):
+            fail(f"supporting manifest path changed: {path_field}")
+        data, _ = read_exact_file(pathlib.Path(value), 501, 20, 0o400)
+        if sha_bytes(data) != manifest.get(digest_field):
+            fail(f"supporting manifest bytes changed: {path_field}")
+    input_path = FREEZE_ROOT / "candidate-manifest-input.v2.json"
+    input_bytes, _ = read_exact_file(input_path, 501, 20, 0o400)
+    if sha_bytes(input_bytes) != manifest.get("manifest_input_sha256"):
+        fail("candidate manifest input bytes changed")
+    for entry in manifest["artifacts"]:
+        data, _ = read_exact_sized_file(
+            pathlib.Path(entry["external_path"]),
+            501,
+            20,
+            0o400,
+            entry["size"],
+            MAX_INSTALLED_ARTIFACT_BYTES,
+        )
+        if len(data) != entry["size"] or sha_bytes(data) != entry["sha256"]:
+            fail(f"external candidate artifact changed: {entry['role']}")
     return manifest, manifest_bytes
 
 
@@ -5276,6 +5340,1262 @@ def complete_successful_admin_cleanup(
     )
 
 
+def pre_security_recovery_binding(value: dict[str, Any], field: str) -> str:
+    body = {key: item for key, item in value.items() if key != field}
+    domains = {
+        "operator_authority_sha256": (
+            "substrate.r3-macos-finalizer-pre-security-recovery-"
+            "operator-authority.v2"
+        ),
+        "authorization_sha256": (
+            "substrate.r3-macos-finalizer-pre-security-admin-"
+            "cleanup-authorization.v2"
+        ),
+        "restoration_sha256": (
+            "substrate.r3-macos-finalizer-pre-security-admin-restoration.v2"
+        ),
+    }
+    domain = domains.get(field)
+    if domain is None:
+        fail("pre-Security recovery requested an unknown document binding")
+    return document_sha256(
+        {
+            "domain": domain,
+            "authority" if field == "operator_authority_sha256" else "document": body,
+        }
+    )
+
+
+def validate_archived_preclaim_document(
+    value: Any, manifest: dict[str, Any], manifest_bytes: bytes
+) -> dict[str, Any]:
+    expected_fields = {
+        "schema_owner",
+        "schema_version",
+        "experiment_id",
+        "sequence",
+        "claim_root_path",
+        "preclaim_path",
+        "completion_path",
+        "private_ancestor_identity",
+        "private_tmp_ancestor_identity",
+        "claim_root_identity",
+        "candidate_freeze_manifest_sha256",
+        "reviewed_admin_block_sha256",
+        "candidate_artifact_set_sha256",
+        "install_parent_directory_set_sha256",
+        "preinstall_absence_observation_set_sha256",
+        "rollback_plan_sha256",
+        "supporting_manifest_set_sha256",
+        "live_absence_observations",
+        "live_absence_observation_set_sha256",
+        "preclaim_leaf_lstat_return",
+        "preclaim_leaf_raw_errno",
+        "completion_leaf_lstat_return",
+        "completion_leaf_raw_errno",
+        "pre_effects_authorized",
+    }
+    if not isinstance(value, dict) or set(value) != expected_fields:
+        fail("archived root-install preclaim changed its closed shape")
+    expected_observations = [
+        probe for probe in absence_plan() if probe["identity"] != str(CLAIM_ROOT)
+    ]
+    if (
+        value.get("schema_owner")
+        != "substrate.r3-macos-finalizer-root-install-preclaim"
+        or value.get("schema_version") != 2
+        or value.get("experiment_id") != EXPERIMENT_ID
+        or value.get("sequence") != 1
+        or value.get("claim_root_path") != str(CLAIM_ROOT)
+        or value.get("preclaim_path") != str(PRECLAIM_PATH)
+        or value.get("completion_path") != str(COMPLETION_PATH)
+        or value.get("candidate_freeze_manifest_sha256") != sha_bytes(manifest_bytes)
+        or value.get("reviewed_admin_block_sha256")
+        != manifest["reviewed_admin_block_sha256"]
+        or value.get("candidate_artifact_set_sha256")
+        != manifest["artifact_set_sha256"]
+        or value.get("install_parent_directory_set_sha256")
+        != manifest["install_parent_directory_set_sha256"]
+        or value.get("preinstall_absence_observation_set_sha256")
+        != manifest["preinstall_absence_observation_set_sha256"]
+        or value.get("rollback_plan_sha256") != manifest["rollback_plan_sha256"]
+        or value.get("supporting_manifest_set_sha256")
+        != supporting_manifest_set_sha256(manifest)
+        or value.get("live_absence_observation_set_sha256")
+        != document_sha256(value.get("live_absence_observations"))
+        or value.get("preclaim_leaf_lstat_return") != -1
+        or value.get("preclaim_leaf_raw_errno") != errno.ENOENT
+        or value.get("completion_leaf_lstat_return") != -1
+        or value.get("completion_leaf_raw_errno") != errno.ENOENT
+        or value.get("pre_effects_authorized") is not False
+    ):
+        fail("archived root-install preclaim changed its exact authority")
+    observations = value["live_absence_observations"]
+    if not isinstance(observations, list) or len(observations) != len(
+        expected_observations
+    ):
+        fail("archived root-install preclaim changed absence cardinality")
+    validate_live_observations(observations, expected_observations)
+    for field, path, uid, gid, mode in (
+        ("private_ancestor_identity", pathlib.Path("/private"), 0, 0, 0o755),
+        ("private_tmp_ancestor_identity", pathlib.Path("/private/tmp"), 0, 0, 0o1777),
+        ("claim_root_identity", CLAIM_ROOT, 0, 0, 0o700),
+    ):
+        identity = value[field]
+        if (
+            not isinstance(identity, dict)
+            or set(identity) != ROOT_INSTALL_PHYSICAL_IDENTITY_FIELDS
+            or identity.get("path") != str(path)
+            or identity.get("uid") != uid
+            or identity.get("gid") != gid
+            or identity.get("mode") != stat.S_IFDIR | mode
+            or any(
+                type(identity.get(key)) is not int
+                for key in ROOT_INSTALL_PHYSICAL_IDENTITY_FIELDS - {"path"}
+            )
+            or identity.get("inode", 0) <= 0
+            or identity.get("link_count", 0) < 2
+            or not 0 <= identity.get("modified_nanoseconds", -1) < 1_000_000_000
+        ):
+            fail(f"archived root-install preclaim changed {field}")
+    return value
+
+
+def validate_archived_root_install_claims(
+    value: Any, manifest: dict[str, Any], manifest_bytes: bytes
+) -> dict[str, Any]:
+    claims = validate_root_install_claims_binding_shape(
+        value, manifest, manifest_bytes
+    )
+    preclaim = validate_archived_preclaim_document(
+        claims["preclaim"], manifest, manifest_bytes
+    )
+    completion = claims["completion"]
+    validate_completion(completion, manifest, manifest_bytes, preclaim)
+    directories = completion["installed_directories"]
+    if not isinstance(directories, list) or len(directories) != len(
+        INSTALL_DIRECTORIES
+    ):
+        fail("archived root-install completion changed directory cardinality")
+    for identity, (path, uid, gid, mode) in zip(directories, INSTALL_DIRECTORIES):
+        if (
+            not isinstance(identity, dict)
+            or set(identity) != ROOT_INSTALL_PHYSICAL_IDENTITY_FIELDS
+            or identity.get("path") != path
+            or identity.get("uid") != uid
+            or identity.get("gid") != gid
+            or identity.get("mode") != stat.S_IFDIR | mode
+            or any(
+                type(identity.get(key)) is not int
+                for key in ROOT_INSTALL_PHYSICAL_IDENTITY_FIELDS - {"path"}
+            )
+            or identity.get("inode", 0) <= 0
+            or identity.get("link_count", 0) < 2
+            or not 0 <= identity.get("modified_nanoseconds", -1) < 1_000_000_000
+        ):
+            fail(f"archived root-install directory identity changed: {path}")
+    if completion["installed_directory_set_sha256"] != document_sha256(directories):
+        fail("archived root-install directory set digest changed")
+    return claims
+
+
+def load_pre_security_operator_authority(
+    manifest: dict[str, Any], manifest_bytes: bytes
+) -> tuple[dict[str, Any], bytes]:
+    authority_bytes, _ = read_bounded_exact_file(
+        PRE_SECURITY_OPERATOR_AUTHORITY_PATH, 501, 20, 0o400, MAX_DOCUMENT
+    )
+    authority = parse_canonical(authority_bytes, "pre-Security operator authority")
+    expected_fields = {
+        "schema_owner",
+        "schema_version",
+        "experiment_id",
+        "authority_kind",
+        "failed_command_path",
+        "failed_command_sha256",
+        "failed_command_terminal",
+        "failed_error",
+        "failed_attempt_state_path",
+        "failed_attempt_state_sha256",
+        "candidate_manifest_path",
+        "candidate_manifest_sha256",
+        "candidate_source_tree",
+        "runner_source_archive_path",
+        "runner_source_sha256",
+        "runner_source_byte_length",
+        "source_order_markers",
+        "source_order_offsets",
+        "cleanup_requested",
+        "security_framework_or_keychain_queries_authorized",
+        "native_experiment_effects_authorized",
+        "operator_authority_sha256",
+    }
+    if not isinstance(authority, dict) or set(authority) != expected_fields:
+        fail("pre-Security operator authority changed its closed shape")
+    if (
+        authority.get("schema_owner")
+        != "substrate.r3-macos-finalizer-pre-security-recovery-operator-authority"
+        or authority.get("schema_version") != 2
+        or authority.get("experiment_id") != EXPERIMENT_ID
+        or authority.get("authority_kind") != "failed_runner_before_first_security"
+        or authority.get("failed_command_path")
+        != "/Users/spensermcconnell/.codex/preservations/"
+        "substrate-r3-finalizer-proof-candidate-20260814T152247Z/"
+        "native-proof-two-repetitions.UNEXECUTED.sh"
+        or authority.get("failed_command_sha256")
+        != "d33e65a6444cbaa1bb5b9c9b3a0299e3fa4ec88693df95805be29dd32ce8ec06"
+        or authority.get("failed_command_terminal") is not True
+        or authority.get("failed_error")
+        != "Error: installed root-install artifact exceeds its compiled read bound"
+        or authority.get("failed_attempt_state_path")
+        != str(PRE_SECURITY_RECOVERY_PRESERVATION_ROOT / "failed-attempt-state.v1.json")
+        or authority.get("candidate_manifest_path") != str(MANIFEST_PATH)
+        or authority.get("candidate_manifest_sha256") != sha_bytes(manifest_bytes)
+        or authority.get("candidate_source_tree") != manifest["source_tree"]
+        or authority.get("runner_source_archive_path")
+        != str(PRE_SECURITY_RECOVERY_PRESERVATION_ROOT / "failed-candidate-runner.rs")
+        or type(authority.get("runner_source_byte_length")) is not int
+        or not 0 < authority["runner_source_byte_length"] <= MAX_DOCUMENT
+        or authority.get("cleanup_requested") is not True
+        or authority.get("security_framework_or_keychain_queries_authorized") is not False
+        or authority.get("native_experiment_effects_authorized") is not False
+        or authority.get("operator_authority_sha256")
+        != pre_security_recovery_binding(authority, "operator_authority_sha256")
+    ):
+        fail("pre-Security operator authority changed its exact failed-attempt binding")
+    command_bytes, _ = read_bounded_exact_file(
+        pathlib.Path(authority["failed_command_path"]), 501, 20, 0o400, MAX_DOCUMENT
+    )
+    attempt_bytes, _ = read_bounded_exact_file(
+        pathlib.Path(authority["failed_attempt_state_path"]),
+        501,
+        20,
+        0o400,
+        MAX_DOCUMENT,
+    )
+    if (
+        sha_bytes(command_bytes) != authority["failed_command_sha256"]
+        or sha_bytes(attempt_bytes) != authority["failed_attempt_state_sha256"]
+    ):
+        fail("pre-Security operator authority evidence bytes changed")
+    attempt = parse_canonical(attempt_bytes, "failed pre-Security attempt state")
+    if (
+        not isinstance(attempt, dict)
+        or attempt.get("schema")
+        != "substrate.r3-macos-finalizer-failed-attempt-state.v1"
+        or attempt.get("old_command_sha256") != authority["failed_command_sha256"]
+        or attempt.get("old_command_terminal") is not True
+        or attempt.get("candidate_manifest_sha256") != sha_bytes(manifest_bytes)
+        or attempt.get("source_tree") != manifest["source_tree"]
+        or attempt.get("security_framework_queried") is not False
+        or attempt.get("repetitions_started") is not False
+        or attempt.get("matching_processes") != []
+        or not isinstance(attempt.get("global_exchange"), dict)
+        or attempt["global_exchange"].get("children") != []
+        or not isinstance(attempt.get("launchd"), dict)
+        or attempt["launchd"].get("returncode") != 113
+        or not isinstance(attempt.get("installed_artifacts"), list)
+        or len(attempt["installed_artifacts"]) != len(ARTIFACT_SPECS) - 1
+    ):
+        fail("failed-attempt receipt does not prove the exact pre-Security stop")
+    runner_source, _ = read_exact_sized_file(
+        pathlib.Path(authority["runner_source_archive_path"]),
+        501,
+        20,
+        0o400,
+        authority["runner_source_byte_length"],
+        MAX_DOCUMENT,
+    )
+    source_hashes_bytes, _ = read_bounded_exact_file(
+        pathlib.Path(manifest["source_hashes_manifest_path"]),
+        501,
+        20,
+        0o400,
+        MAX_DOCUMENT,
+    )
+    source_hashes = parse_canonical(
+        source_hashes_bytes, "failed candidate source hashes"
+    )
+    if not isinstance(source_hashes, dict):
+        fail("failed candidate source hashes are not a canonical object")
+    runner_entries = [
+        entry
+        for entry in source_hashes.get("entries", [])
+        if isinstance(entry, dict)
+        and entry.get("repository_relative_path")
+        == "tools/r3-macos-signer-acl/src/runner.rs"
+    ]
+    if (
+        sha_bytes(source_hashes_bytes) != manifest["source_hashes_manifest_sha256"]
+        or source_hashes.get("source_tree") != manifest["source_tree"]
+        or len(runner_entries) != 1
+        or runner_entries[0].get("sha256") != authority["runner_source_sha256"]
+        or runner_entries[0].get("byte_length")
+        != authority["runner_source_byte_length"]
+        or sha_bytes(runner_source) != authority["runner_source_sha256"]
+    ):
+        fail("failed runner source archive differs from the frozen source identity")
+    expected_markers = {
+        "run_fixed_experiment_definition": "pub fn run_fixed_experiment() -> Result<()> {",
+        "load_candidate_freeze_authority_call": (
+            "let candidate_freeze_authority = load_candidate_freeze_authority()?;"
+        ),
+        "load_root_install_claims_call": (
+            "let root_install_claims = "
+            "load_root_install_claims(&candidate_freeze_authority.manifest)?;"
+        ),
+        "install_candidate_freeze_authority_call": (
+            "install_candidate_freeze_authority("
+            "candidate_freeze_authority.manifest.clone())?;"
+        ),
+        "acquire_activation_membrane_call": (
+            "let activation_membrane = acquire_activation_membrane_exclusive()?;"
+        ),
+        "prepare_runner_root_call": "prepare_runner_root()?;",
+        "first_security_call": (
+            "observe_root_operation_with_raw("
+            "NonInteractiveSecurity::establish_first, |alert| {"
+        ),
+        "load_root_install_claims_definition": "fn load_root_install_claims(",
+        "reattest_root_install_identity_call": (
+            "reattest_root_install_identity("
+            "&expected.physical_identity, Some(&expected.sha256))?;"
+        ),
+        "reattest_root_install_identity_definition": (
+            "fn reattest_root_install_identity("
+        ),
+        "failing_bound_error": (
+            "installed root-install artifact exceeds its compiled read bound"
+        ),
+    }
+    offsets = authority.get("source_order_offsets")
+    markers = authority.get("source_order_markers")
+    try:
+        runner_text = runner_source.decode("utf-8")
+        observed_offsets = {
+            name: runner_text.index(marker) for name, marker in expected_markers.items()
+        }
+    except (UnicodeDecodeError, ValueError) as error:
+        raise Stop("failed runner source lacks its reviewed source-order marker") from error
+    if markers != expected_markers or offsets != observed_offsets:
+        fail("failed runner source-order proof changed its exact markers or offsets")
+    if not (
+        offsets["run_fixed_experiment_definition"]
+        < offsets["load_candidate_freeze_authority_call"]
+        < offsets["load_root_install_claims_call"]
+        < offsets["install_candidate_freeze_authority_call"]
+        < offsets["acquire_activation_membrane_call"]
+        < offsets["prepare_runner_root_call"]
+        < offsets["first_security_call"]
+        and offsets["load_root_install_claims_definition"]
+        < offsets["reattest_root_install_identity_call"]
+        < offsets["reattest_root_install_identity_definition"]
+        < offsets["failing_bound_error"]
+    ):
+        fail("failed runner source no longer proves check-before-first-Security order")
+    return authority, authority_bytes
+
+
+def validate_historical_durable_absence(
+    value: Any, path: pathlib.Path
+) -> dict[str, Any] | None:
+    if value is None:
+        return None
+    expected_fields = {
+        "path",
+        "parent_path",
+        "parent_device",
+        "parent_inode",
+        "parent_uid",
+        "parent_gid",
+        "parent_mode",
+        "parent_fsync_return",
+        "child_fstatat_return",
+        "child_raw_errno",
+        "parent_reopened_same_stable_identity",
+    }
+    if (
+        not isinstance(value, dict)
+        or set(value) != expected_fields
+        or value.get("path") != str(path)
+        or value.get("parent_path") != str(path.parent)
+        or value.get("parent_fsync_return") != 0
+        or value.get("child_fstatat_return") != -1
+        or value.get("child_raw_errno") != errno.ENOENT
+        or value.get("parent_reopened_same_stable_identity") is not True
+        or any(
+            type(value.get(field)) is not int
+            for field in (
+                "parent_device",
+                "parent_inode",
+                "parent_uid",
+                "parent_gid",
+                "parent_mode",
+            )
+        )
+        or value.get("parent_inode", 0) <= 0
+        or not stat.S_ISDIR(value.get("parent_mode", 0))
+    ):
+        fail(f"historical durable absence changed: {path}")
+    return value
+
+
+def validate_pre_security_cleanup_observation(
+    value: Any,
+    manifest: dict[str, Any],
+    claims: dict[str, Any],
+    installed_manifest: dict[str, Any],
+) -> dict[str, Any]:
+    expected_fields = {
+        "root_install_claims_binding_sha256",
+        "installed_candidate_manifest_identity_sha256",
+        "installed_artifact_identity_set_sha256",
+        "empty_protocol_directories",
+        "empty_protocol_directory_set_sha256",
+        "later_protocol_absences",
+        "later_protocol_absence_set_sha256",
+        "launchd_label",
+        "launchctl_print_not_found_exit_status",
+        "launchctl_print_stdout",
+        "launchctl_print_stderr",
+        "matching_experiment_processes",
+        "process_snapshot_sha256",
+        "security_framework_or_keychain_queries_performed",
+        "native_experiment_effects_observed",
+        "repetitions_started",
+    }
+    if not isinstance(value, dict) or set(value) != expected_fields:
+        fail("pre-Security cleanup observation changed its closed shape")
+    empty_directories = value.get("empty_protocol_directories")
+    expected_directory_paths = (INBOX_ROOT, JOURNAL_ROOT, GLOBAL_EXCHANGE)
+    installed_directories = {
+        item["path"]: item for item in claims["completion"]["installed_directories"]
+    }
+    if not isinstance(empty_directories, list) or len(empty_directories) != len(
+        expected_directory_paths
+    ):
+        fail("pre-Security cleanup observation changed empty-directory cardinality")
+    for entry, path in zip(empty_directories, expected_directory_paths):
+        expected = installed_directories.get(str(path))
+        if (
+            not isinstance(entry, dict)
+            or set(entry) != {"identity", "children"}
+            or entry.get("children") != []
+            or entry.get("identity") != expected
+        ):
+            fail(f"pre-Security cleanup observation changed directory: {path}")
+    expected_absence_paths = list(
+        dict.fromkeys(
+            [
+                RUNNER_ROOT,
+                PUBLISHER_ROOT,
+                CREATOR_ROOT,
+                ENDPOINT_PATH,
+                REQUEST_PATH,
+                TERMINAL_PATH,
+                INBOX_ROOT.parent / "disposable-publisher-prepared-input.v2.json",
+                INBOX_ROOT.parent / "candidate-identity-packet.v2.json",
+                INBOX_ROOT.parent / "peer-control-identity-packet.v2.json",
+                TERMINAL_ADMIN_CLEANUP_AUTHORIZATION_PATH,
+                TERMINAL_ADMIN_CLEANUP_CLAIM_PATH,
+                TERMINAL_ADMIN_RESTORATION_RECEIPT_PATH,
+                ADMIN_RESTORATION_RECEIPT_PATH,
+                *(pathlib.Path(value) for value in terminal_cleanup_global_absence_paths()),
+            ]
+        )
+    )
+    absences = value.get("later_protocol_absences")
+    if not isinstance(absences, list) or len(absences) != len(expected_absence_paths):
+        fail("pre-Security cleanup observation changed later-absence cardinality")
+    for entry, path in zip(absences, expected_absence_paths):
+        if (
+            not isinstance(entry, dict)
+            or set(entry) != {"path", "lstat_return", "raw_errno", "durable_absence"}
+            or entry.get("path") != str(path)
+            or entry.get("lstat_return") != -1
+            or entry.get("raw_errno") != errno.ENOENT
+        ):
+            fail(f"pre-Security cleanup observation changed absence: {path}")
+        durable = validate_historical_durable_absence(
+            entry.get("durable_absence"), path
+        )
+        if path == ENDPOINT_PATH and durable is not None:
+            fail("pre-Security authority restored a socket durable-parent claim")
+    validate_launchctl_not_found_streams(
+        FINALIZER_LABEL,
+        value.get("launchctl_print_not_found_exit_status"),
+        value.get("launchctl_print_stdout"),
+        value.get("launchctl_print_stderr"),
+    )
+    if (
+        value.get("root_install_claims_binding_sha256") != document_sha256(claims)
+        or value.get("installed_candidate_manifest_identity_sha256")
+        != document_sha256(installed_manifest)
+        or value.get("installed_artifact_identity_set_sha256")
+        != claims["completion"]["installed_artifact_identity_set_sha256"]
+        or value.get("empty_protocol_directory_set_sha256")
+        != document_sha256(empty_directories)
+        or value.get("later_protocol_absence_set_sha256")
+        != document_sha256(absences)
+        or value.get("launchd_label") != FINALIZER_LABEL
+        or value.get("launchctl_print_not_found_exit_status") != 113
+        or value.get("matching_experiment_processes") != []
+        or not is_sha256(value.get("process_snapshot_sha256"))
+        or value.get("security_framework_or_keychain_queries_performed") is not False
+        or value.get("native_experiment_effects_observed") is not False
+        or value.get("repetitions_started") is not False
+    ):
+        fail("pre-Security cleanup observation changed its exact authority")
+    return value
+
+
+def validate_pre_security_admin_authorization(
+    value: Any,
+    manifest: dict[str, Any],
+    manifest_bytes: bytes,
+    operator: dict[str, Any],
+    operator_bytes: bytes,
+) -> dict[str, Any]:
+    expected_fields = {
+        "schema_owner",
+        "schema_version",
+        "experiment_id",
+        "authority_kind",
+        "authorization_path",
+        "operator_authority_file_sha256",
+        "operator_authority_sha256",
+        "candidate_freeze_manifest_sha256",
+        "root_install_claims",
+        "root_install_claims_binding_sha256",
+        "installed_candidate_manifest",
+        "installed_candidate_manifest_identity_sha256",
+        "pre_cleanup_observation",
+        "pre_cleanup_observation_sha256",
+        "rollback_plan_sha256",
+        "security_framework_or_keychain_queries_authorized",
+        "native_experiment_effects_authorized",
+        "admin_cleanup_authorized",
+        "authorization_sha256",
+    }
+    if not isinstance(value, dict) or set(value) != expected_fields:
+        fail("pre-Security admin authorization changed its closed shape")
+    claims = validate_archived_root_install_claims(
+        value.get("root_install_claims"), manifest, manifest_bytes
+    )
+    installed_manifest = validate_installed_candidate_manifest_binding(
+        value.get("installed_candidate_manifest"), manifest, manifest_bytes
+    )
+    observation = validate_pre_security_cleanup_observation(
+        value.get("pre_cleanup_observation"),
+        manifest,
+        claims,
+        installed_manifest,
+    )
+    if (
+        value.get("schema_owner")
+        != "substrate.r3-macos-finalizer-pre-security-admin-cleanup-authorization"
+        or value.get("schema_version") != 2
+        or value.get("experiment_id") != EXPERIMENT_ID
+        or value.get("authority_kind") != "failed_runner_before_first_security"
+        or value.get("authorization_path")
+        != str(PRE_SECURITY_ADMIN_AUTHORIZATION_PATH)
+        or value.get("operator_authority_file_sha256") != sha_bytes(operator_bytes)
+        or value.get("operator_authority_sha256")
+        != operator["operator_authority_sha256"]
+        or value.get("candidate_freeze_manifest_sha256") != sha_bytes(manifest_bytes)
+        or value.get("root_install_claims_binding_sha256")
+        != document_sha256(claims)
+        or value.get("installed_candidate_manifest_identity_sha256")
+        != document_sha256(installed_manifest)
+        or value.get("pre_cleanup_observation_sha256")
+        != document_sha256(observation)
+        or value.get("rollback_plan_sha256")
+        != claims["completion"]["rollback_plan_sha256"]
+        or value.get("security_framework_or_keychain_queries_authorized") is not False
+        or value.get("native_experiment_effects_authorized") is not False
+        or value.get("admin_cleanup_authorized") is not True
+        or value.get("authorization_sha256")
+        != pre_security_recovery_binding(value, "authorization_sha256")
+    ):
+        fail("pre-Security admin authorization changed its exact cleanup authority")
+    return value
+
+
+def pre_security_receipt_root_children() -> list[str]:
+    descriptor = open_directory_chain(PRE_SECURITY_RECOVERY_ROOT)
+    try:
+        before = os.fstat(descriptor)
+        if (
+            not stat.S_ISDIR(before.st_mode)
+            or before.st_uid != 0
+            or before.st_gid != 0
+            or before.st_mode & 0o7777 != 0o700
+            or before.st_nlink < 2
+        ):
+            fail("pre-Security recovery receipt root changed identity")
+        children = sorted(os.listdir(descriptor))
+        after = os.fstat(descriptor)
+        pathname_after = os.lstat(PRE_SECURITY_RECOVERY_ROOT)
+        if not same_stat(before, after) or not same_stat(before, pathname_after):
+            fail("pre-Security recovery receipt root changed during inventory")
+        return children
+    finally:
+        os.close(descriptor)
+
+
+def validate_pre_security_receipt_root_state() -> list[str]:
+    children = pre_security_receipt_root_children()
+    allowed = {
+        PRE_SECURITY_ADMIN_AUTHORIZATION_PATH.name,
+        PRE_SECURITY_ADMIN_RESTORATION_RECEIPT_PATH.name,
+        pending_path(PRE_SECURITY_ADMIN_RESTORATION_RECEIPT_PATH).name,
+    }
+    if PRE_SECURITY_ADMIN_AUTHORIZATION_PATH.name not in children:
+        fail("pre-Security recovery receipt root lacks its durable authorization")
+    unexpected = sorted(set(children) - allowed)
+    if unexpected:
+        fail(f"pre-Security recovery receipt root has alternate state: {unexpected}")
+    return children
+
+
+def load_pre_security_admin_authorization(
+    manifest: dict[str, Any], manifest_bytes: bytes, expected_file_sha256: str
+) -> tuple[
+    dict[str, Any],
+    bytes,
+    os.stat_result,
+    dict[str, Any],
+    bytes,
+]:
+    directory_identity(PRE_SECURITY_RECOVERY_ROOT, 0, 0, 0o700)
+    validate_pre_security_receipt_root_state()
+    operator, operator_bytes = load_pre_security_operator_authority(
+        manifest, manifest_bytes
+    )
+    authorization_bytes, authorization_observed = read_bounded_exact_file(
+        PRE_SECURITY_ADMIN_AUTHORIZATION_PATH, 0, 0, 0o444, MAX_DOCUMENT
+    )
+    if sha_bytes(authorization_bytes) != expected_file_sha256:
+        fail("pre-Security admin authorization differs from its sealed route digest")
+    authorization = validate_pre_security_admin_authorization(
+        parse_canonical(authorization_bytes, "pre-Security admin cleanup authorization"),
+        manifest,
+        manifest_bytes,
+        operator,
+        operator_bytes,
+    )
+    reopened_bytes, reopened_observed = read_bounded_exact_file(
+        PRE_SECURITY_ADMIN_AUTHORIZATION_PATH, 0, 0, 0o444, MAX_DOCUMENT
+    )
+    if (
+        reopened_bytes != authorization_bytes
+        or not same_stat(authorization_observed, reopened_observed)
+    ):
+        fail("pre-Security admin authorization changed across stable reopen")
+    return (
+        authorization,
+        authorization_bytes,
+        authorization_observed,
+        operator,
+        operator_bytes,
+    )
+
+
+def expected_pre_security_global_exchange(
+    claims: dict[str, Any],
+) -> dict[str, Any]:
+    values = [
+        value
+        for value in claims["completion"]["installed_directories"]
+        if value["path"] == str(GLOBAL_EXCHANGE)
+    ]
+    if len(values) != 1:
+        fail("pre-Security authorization lacks one retained global exchange identity")
+    return values[0]
+
+
+def observe_retained_global_exchange_empty(
+    expected_global: dict[str, Any],
+) -> dict[str, Any]:
+    descriptor = open_directory_chain(GLOBAL_EXCHANGE)
+    try:
+        before = os.fstat(descriptor)
+        observed_identity = {
+            key: physical_identity(GLOBAL_EXCHANGE, before)[key]
+            for key in ("path", "device", "inode", "uid", "gid", "mode")
+        }
+        if any(
+            observed_identity[key] != expected_global[key]
+            for key in observed_identity
+        ):
+            fail("retained global exchange changed its exact physical identity")
+        children_before = sorted(os.listdir(descriptor))
+        if children_before:
+            fail(
+                "retained global exchange is not empty before restoration receipt: "
+                f"{children_before}"
+            )
+        children_after = sorted(os.listdir(descriptor))
+        after = os.fstat(descriptor)
+        pathname_after = os.lstat(GLOBAL_EXCHANGE)
+        if (
+            children_after
+            or not same_stat(before, after)
+            or not same_stat(before, pathname_after)
+        ):
+            fail("retained global exchange changed during empty-state observation")
+        return {
+            "identity": observed_identity,
+            "children": [],
+            "children_sha256": document_sha256([]),
+        }
+    finally:
+        os.close(descriptor)
+
+
+def pre_security_admin_restoration_projection(
+    observation: dict[str, Any], manifest: dict[str, Any]
+) -> dict[str, Any]:
+    process_target_paths = sorted(
+        entry["intended_path"]
+        for entry in manifest["artifacts"]
+        if entry["signing_identifier"] is not None
+    )
+    process_absence = {
+        "target_paths": process_target_paths,
+        "matching_processes": observation["matching_experiment_processes"],
+    }
+    return {
+        "path_absences": observation["path_absences"],
+        "path_absence_set_sha256": observation["path_absence_set_sha256"],
+        "durable_absences": observation["durable_absences"],
+        "durable_absence_set_sha256": observation["durable_absence_set_sha256"],
+        "platform_managed_socket_absence": observation[
+            "platform_managed_socket_absence"
+        ],
+        "launchd_label": observation["launchd_label"],
+        "launchctl_print_not_found_exit_status": observation[
+            "launchctl_print_not_found_exit_status"
+        ],
+        "launchctl_print_stdout": observation["launchctl_print_stdout"],
+        "launchctl_print_stderr": observation["launchctl_print_stderr"],
+        "process_target_paths": process_target_paths,
+        "matching_experiment_processes": observation[
+            "matching_experiment_processes"
+        ],
+        "process_absence_observation_sha256": document_sha256(process_absence),
+        "global_exchange_stable_identity": observation[
+            "global_exchange_stable_identity"
+        ],
+    }
+
+
+def validate_pre_security_admin_restoration_projection(
+    observation: Any,
+    manifest: dict[str, Any],
+    expected_global: dict[str, Any],
+) -> dict[str, Any]:
+    expected_fields = {
+        "path_absences",
+        "path_absence_set_sha256",
+        "durable_absences",
+        "durable_absence_set_sha256",
+        "platform_managed_socket_absence",
+        "launchd_label",
+        "launchctl_print_not_found_exit_status",
+        "launchctl_print_stdout",
+        "launchctl_print_stderr",
+        "process_target_paths",
+        "matching_experiment_processes",
+        "process_absence_observation_sha256",
+        "global_exchange_stable_identity",
+    }
+    if not isinstance(observation, dict) or set(observation) != expected_fields:
+        fail("pre-Security admin restoration projection changed its closed shape")
+    expected_paths = admin_restoration_absence_paths(manifest)
+    expected_absences = [
+        {"path": path, "lstat_return": -1, "raw_errno": errno.ENOENT}
+        for path in expected_paths
+    ]
+    durability = observation.get("durable_absences")
+    target_paths = sorted(
+        entry["intended_path"]
+        for entry in manifest["artifacts"]
+        if entry["signing_identifier"] is not None
+    )
+    process_absence = {
+        "target_paths": target_paths,
+        "matching_processes": [],
+    }
+    if (
+        observation.get("path_absences") != expected_absences
+        or observation.get("path_absence_set_sha256")
+        != document_sha256(expected_absences)
+        or not isinstance(durability, list)
+        or observation.get("durable_absence_set_sha256")
+        != document_sha256(durability)
+        or observation.get("launchd_label") != FINALIZER_LABEL
+        or observation.get("launchctl_print_not_found_exit_status") != 113
+        or observation.get("process_target_paths") != target_paths
+        or observation.get("matching_experiment_processes") != []
+        or observation.get("process_absence_observation_sha256")
+        != document_sha256(process_absence)
+    ):
+        fail("pre-Security admin restoration projection changed exact evidence")
+    validate_platform_managed_socket_absence(
+        observation.get("platform_managed_socket_absence")
+    )
+    validate_raw_stream(
+        observation.get("launchctl_print_stdout"),
+        "pre-Security restoration launchctl stdout",
+    )
+    validate_raw_stream(
+        observation.get("launchctl_print_stderr"),
+        "pre-Security restoration launchctl stderr",
+    )
+    validate_launchctl_not_found_streams(
+        FINALIZER_LABEL,
+        observation["launchctl_print_not_found_exit_status"],
+        observation["launchctl_print_stdout"],
+        observation["launchctl_print_stderr"],
+    )
+    durable_paths = []
+    for item in durability:
+        path_value = item.get("path") if isinstance(item, dict) else None
+        if not isinstance(path_value, str) or path_value not in expected_paths:
+            fail("pre-Security restoration projection has an alternate durable absence")
+        path = pathlib.Path(path_value)
+        if validate_historical_durable_absence(item, path) is None:
+            fail("pre-Security restoration projection lost durable absence evidence")
+        durable_paths.append(str(path))
+    if len(durable_paths) != len(set(durable_paths)):
+        fail("pre-Security restoration projection duplicated a durable absence")
+    required_boundaries = {
+        "/Library/Application Support/Atomize",
+        str(JOURNAL_ROOT),
+        str(PUBLISHER_ROOT),
+        str(RUNNER_ROOT),
+        str(CREATOR_ROOT),
+        str(CLAIM_ROOT),
+    }
+    if not required_boundaries.issubset(set(durable_paths)):
+        fail("pre-Security restoration projection lacks a durable outer absence")
+    expected_stable_identity = {
+        key: expected_global[key]
+        for key in ("path", "device", "inode", "uid", "gid", "mode")
+    }
+    if observation.get("global_exchange_stable_identity") != expected_stable_identity:
+        fail("pre-Security restoration projection changed the retained exchange identity")
+    return observation
+
+
+def observe_pre_security_restoration_baseline(
+    manifest: dict[str, Any],
+    claims: dict[str, Any],
+    expected_global: dict[str, Any],
+) -> dict[str, Any]:
+    retained_before = observe_retained_global_exchange_empty(expected_global)
+    admin_observation = observe_admin_restoration_absence(manifest, expected_global)
+    validate_admin_restoration_receipt_observation(
+        admin_observation, manifest, claims, expected_global
+    )
+    projected_admin_observation = pre_security_admin_restoration_projection(
+        admin_observation, manifest
+    )
+    retained_after = observe_retained_global_exchange_empty(expected_global)
+    if retained_after != retained_before:
+        fail("retained global exchange changed across exact clean-baseline observation")
+    value = {
+        "admin_restoration_observation": projected_admin_observation,
+        "retained_global_exchange": retained_before,
+    }
+    validate_pre_security_restoration_observation(
+        value, manifest, claims, expected_global
+    )
+    return value
+
+
+def validate_pre_security_restoration_observation(
+    value: Any,
+    manifest: dict[str, Any],
+    claims: dict[str, Any],
+    expected_global: dict[str, Any],
+) -> dict[str, Any]:
+    if not isinstance(value, dict) or set(value) != {
+        "admin_restoration_observation",
+        "retained_global_exchange",
+    }:
+        fail("pre-Security restoration observation changed its closed shape")
+    validate_pre_security_admin_restoration_projection(
+        value["admin_restoration_observation"], manifest, expected_global
+    )
+    retained = value["retained_global_exchange"]
+    expected_stable_identity = {
+        key: expected_global[key]
+        for key in ("path", "device", "inode", "uid", "gid", "mode")
+    }
+    if (
+        not isinstance(retained, dict)
+        or set(retained) != {"identity", "children", "children_sha256"}
+        or retained.get("identity") != expected_stable_identity
+        or retained.get("children") != []
+        or retained.get("children_sha256") != document_sha256([])
+    ):
+        fail("pre-Security restoration changed the retained empty exchange")
+    return value
+
+
+def validate_pre_security_admin_restoration_receipt(
+    value: Any,
+    manifest: dict[str, Any],
+    manifest_bytes: bytes,
+    authorization: dict[str, Any],
+    authorization_bytes: bytes,
+    authorization_observed: os.stat_result,
+    operator: dict[str, Any],
+    operator_bytes: bytes,
+) -> dict[str, Any]:
+    expected_fields = {
+        "schema_owner",
+        "schema_version",
+        "experiment_id",
+        "receipt_path",
+        "operator_authority_file_sha256",
+        "operator_authority_sha256",
+        "failed_attempt_state_sha256",
+        "admin_cleanup_authorization_file_sha256",
+        "admin_cleanup_authorization_sha256",
+        "admin_cleanup_authorization_physical_identity_sha256",
+        "candidate_freeze_manifest_sha256",
+        "root_install_claims_binding_sha256",
+        "root_install_preclaim_sha256",
+        "root_install_completion_sha256",
+        "installed_candidate_manifest_identity_sha256",
+        "pre_cleanup_observation_sha256",
+        "native_evidence_pass",
+        "pre_security_failure_restored",
+        "security_framework_or_keychain_queries_performed",
+        "native_experiment_effects_performed",
+        "repetitions_started",
+        "observation",
+        "restoration_sha256",
+    }
+    if not isinstance(value, dict) or set(value) != expected_fields:
+        fail("pre-Security restoration receipt changed its closed shape")
+    claims = authorization["root_install_claims"]
+    expected_global = expected_pre_security_global_exchange(claims)
+    if (
+        value.get("schema_owner")
+        != "substrate.r3-macos-finalizer-pre-security-admin-restoration"
+        or value.get("schema_version") != 2
+        or value.get("experiment_id") != EXPERIMENT_ID
+        or value.get("receipt_path")
+        != str(PRE_SECURITY_ADMIN_RESTORATION_RECEIPT_PATH)
+        or value.get("operator_authority_file_sha256") != sha_bytes(operator_bytes)
+        or value.get("operator_authority_sha256")
+        != operator["operator_authority_sha256"]
+        or value.get("failed_attempt_state_sha256")
+        != operator["failed_attempt_state_sha256"]
+        or value.get("admin_cleanup_authorization_file_sha256")
+        != sha_bytes(authorization_bytes)
+        or value.get("admin_cleanup_authorization_sha256")
+        != authorization["authorization_sha256"]
+        or value.get("admin_cleanup_authorization_physical_identity_sha256")
+        != document_sha256(
+            physical_identity(
+                PRE_SECURITY_ADMIN_AUTHORIZATION_PATH, authorization_observed
+            )
+        )
+        or value.get("candidate_freeze_manifest_sha256") != sha_bytes(manifest_bytes)
+        or value.get("root_install_claims_binding_sha256")
+        != document_sha256(claims)
+        or value.get("root_install_preclaim_sha256")
+        != document_sha256(claims["preclaim"])
+        or value.get("root_install_completion_sha256")
+        != document_sha256(claims["completion"])
+        or value.get("installed_candidate_manifest_identity_sha256")
+        != authorization["installed_candidate_manifest_identity_sha256"]
+        or value.get("pre_cleanup_observation_sha256")
+        != authorization["pre_cleanup_observation_sha256"]
+        or value.get("native_evidence_pass") is not False
+        or value.get("pre_security_failure_restored") is not True
+        or value.get("security_framework_or_keychain_queries_performed") is not False
+        or value.get("native_experiment_effects_performed") is not False
+        or value.get("repetitions_started") is not False
+        or value.get("restoration_sha256")
+        != pre_security_recovery_binding(value, "restoration_sha256")
+    ):
+        fail("pre-Security restoration receipt changed its exact authority")
+    validate_pre_security_restoration_observation(
+        value.get("observation"), manifest, claims, expected_global
+    )
+    return value
+
+
+def build_pre_security_admin_restoration_receipt(
+    manifest: dict[str, Any],
+    manifest_bytes: bytes,
+    authorization: dict[str, Any],
+    authorization_bytes: bytes,
+    authorization_observed: os.stat_result,
+    operator: dict[str, Any],
+    operator_bytes: bytes,
+    observation: dict[str, Any],
+) -> dict[str, Any]:
+    claims = authorization["root_install_claims"]
+    value = {
+        "schema_owner": (
+            "substrate.r3-macos-finalizer-pre-security-admin-restoration"
+        ),
+        "schema_version": 2,
+        "experiment_id": EXPERIMENT_ID,
+        "receipt_path": str(PRE_SECURITY_ADMIN_RESTORATION_RECEIPT_PATH),
+        "operator_authority_file_sha256": sha_bytes(operator_bytes),
+        "operator_authority_sha256": operator["operator_authority_sha256"],
+        "failed_attempt_state_sha256": operator["failed_attempt_state_sha256"],
+        "admin_cleanup_authorization_file_sha256": sha_bytes(authorization_bytes),
+        "admin_cleanup_authorization_sha256": authorization[
+            "authorization_sha256"
+        ],
+        "admin_cleanup_authorization_physical_identity_sha256": document_sha256(
+            physical_identity(
+                PRE_SECURITY_ADMIN_AUTHORIZATION_PATH, authorization_observed
+            )
+        ),
+        "candidate_freeze_manifest_sha256": sha_bytes(manifest_bytes),
+        "root_install_claims_binding_sha256": document_sha256(claims),
+        "root_install_preclaim_sha256": document_sha256(claims["preclaim"]),
+        "root_install_completion_sha256": document_sha256(claims["completion"]),
+        "installed_candidate_manifest_identity_sha256": authorization[
+            "installed_candidate_manifest_identity_sha256"
+        ],
+        "pre_cleanup_observation_sha256": authorization[
+            "pre_cleanup_observation_sha256"
+        ],
+        "native_evidence_pass": False,
+        "pre_security_failure_restored": True,
+        "security_framework_or_keychain_queries_performed": False,
+        "native_experiment_effects_performed": False,
+        "repetitions_started": False,
+        "observation": observation,
+        "restoration_sha256": "",
+    }
+    value["restoration_sha256"] = pre_security_recovery_binding(
+        value, "restoration_sha256"
+    )
+    return validate_pre_security_admin_restoration_receipt(
+        value,
+        manifest,
+        manifest_bytes,
+        authorization,
+        authorization_bytes,
+        authorization_observed,
+        operator,
+        operator_bytes,
+    )
+
+
+def revalidate_pre_security_authorization_unchanged(
+    authorization_bytes: bytes, authorization_observed: os.stat_result
+) -> None:
+    reopened_bytes, reopened_observed = read_bounded_exact_file(
+        PRE_SECURITY_ADMIN_AUTHORIZATION_PATH, 0, 0, 0o444, MAX_DOCUMENT
+    )
+    if (
+        reopened_bytes != authorization_bytes
+        or not same_stat(authorization_observed, reopened_observed)
+    ):
+        fail("pre-Security admin authorization changed during receipt-only continuation")
+
+
+def read_complete_pre_security_receipt_residue(
+    manifest: dict[str, Any],
+    manifest_bytes: bytes,
+    authorization: dict[str, Any],
+    authorization_bytes: bytes,
+    authorization_observed: os.stat_result,
+    operator: dict[str, Any],
+    operator_bytes: bytes,
+) -> bytes | None:
+    temporary = pending_path(PRE_SECURITY_ADMIN_RESTORATION_RECEIPT_PATH)
+    if not path_present(temporary):
+        return None
+    parent = open_directory_chain(PRE_SECURITY_RECOVERY_ROOT)
+    try:
+        observed = os.stat(temporary.name, dir_fd=parent, follow_symlinks=False)
+        if (
+            not stat.S_ISREG(observed.st_mode)
+            or observed.st_uid != 0
+            or observed.st_gid != 0
+            or observed.st_mode & 0o7777 not in {0o400, 0o444}
+            or observed.st_nlink != 1
+            or observed.st_size < 0
+            or observed.st_size > MAX_DOCUMENT
+        ):
+            fail("pre-Security restoration temporary changed physical identity")
+        descriptor = os.open(
+            temporary.name, os.O_RDONLY | os.O_NOFOLLOW, dir_fd=parent
+        )
+        try:
+            held = os.fstat(descriptor)
+            if not same_stat(observed, held):
+                fail("pre-Security restoration temporary changed before read")
+            chunks = []
+            remaining = held.st_size
+            while remaining:
+                block = os.read(descriptor, min(131072, remaining))
+                if not block:
+                    break
+                chunks.append(block)
+                remaining -= len(block)
+            after = os.fstat(descriptor)
+        finally:
+            os.close(descriptor)
+        pathname_after = os.stat(
+            temporary.name, dir_fd=parent, follow_symlinks=False
+        )
+        if (
+            remaining
+            or not same_stat(held, after)
+            or not same_stat(held, pathname_after)
+        ):
+            fail("pre-Security restoration temporary changed during read")
+        data = b"".join(chunks)
+    finally:
+        os.close(parent)
+    try:
+        value = parse_canonical(data, "complete pre-Security restoration temporary")
+    except Stop:
+        return None
+    validate_pre_security_admin_restoration_receipt(
+        value,
+        manifest,
+        manifest_bytes,
+        authorization,
+        authorization_bytes,
+        authorization_observed,
+        operator,
+        operator_bytes,
+    )
+    return data
+
+
+def publish_or_validate_pre_security_admin_restoration_receipt(
+    manifest: dict[str, Any],
+    manifest_bytes: bytes,
+    expected_authorization_file_sha256: str,
+) -> dict[str, Any]:
+    (
+        authorization,
+        authorization_bytes,
+        authorization_observed,
+        operator,
+        operator_bytes,
+    ) = load_pre_security_admin_authorization(
+        manifest, manifest_bytes, expected_authorization_file_sha256
+    )
+    claims = authorization["root_install_claims"]
+    expected_global = expected_pre_security_global_exchange(claims)
+    observation = observe_pre_security_restoration_baseline(
+        manifest, claims, expected_global
+    )
+    receipt_present = path_present(PRE_SECURITY_ADMIN_RESTORATION_RECEIPT_PATH)
+    temporary = pending_path(PRE_SECURITY_ADMIN_RESTORATION_RECEIPT_PATH)
+    if receipt_present:
+        receipt_bytes, _ = read_bounded_exact_file(
+            PRE_SECURITY_ADMIN_RESTORATION_RECEIPT_PATH,
+            0,
+            0,
+            0o444,
+            MAX_DOCUMENT,
+        )
+        receipt = validate_pre_security_admin_restoration_receipt(
+            parse_canonical(receipt_bytes, "pre-Security admin restoration receipt"),
+            manifest,
+            manifest_bytes,
+            authorization,
+            authorization_bytes,
+            authorization_observed,
+            operator,
+            operator_bytes,
+        )
+        if path_present(temporary):
+            publish_bytes_no_clobber(
+                receipt_bytes,
+                PRE_SECURITY_ADMIN_RESTORATION_RECEIPT_PATH,
+                0,
+                0,
+                0o444,
+            )
+    else:
+        intended = build_pre_security_admin_restoration_receipt(
+            manifest,
+            manifest_bytes,
+            authorization,
+            authorization_bytes,
+            authorization_observed,
+            operator,
+            operator_bytes,
+            observation,
+        )
+        intended_bytes = canonical(intended)
+        residue_bytes = read_complete_pre_security_receipt_residue(
+            manifest,
+            manifest_bytes,
+            authorization,
+            authorization_bytes,
+            authorization_observed,
+            operator,
+            operator_bytes,
+        )
+        if residue_bytes is not None:
+            intended_bytes = residue_bytes
+        publish_bytes_no_clobber(
+            intended_bytes,
+            PRE_SECURITY_ADMIN_RESTORATION_RECEIPT_PATH,
+            0,
+            0,
+            0o444,
+        )
+        receipt_bytes, _ = read_bounded_exact_file(
+            PRE_SECURITY_ADMIN_RESTORATION_RECEIPT_PATH,
+            0,
+            0,
+            0o444,
+            MAX_DOCUMENT,
+        )
+        if receipt_bytes != intended_bytes:
+            fail("pre-Security restoration receipt changed after no-clobber publication")
+        receipt = validate_pre_security_admin_restoration_receipt(
+            parse_canonical(
+                receipt_bytes, "published pre-Security admin restoration receipt"
+            ),
+            manifest,
+            manifest_bytes,
+            authorization,
+            authorization_bytes,
+            authorization_observed,
+            operator,
+            operator_bytes,
+        )
+    revalidate_pre_security_authorization_unchanged(
+        authorization_bytes, authorization_observed
+    )
+    observe_pre_security_restoration_baseline(manifest, claims, expected_global)
+    revalidate_pre_security_authorization_unchanged(
+        authorization_bytes, authorization_observed
+    )
+    final_children = validate_pre_security_receipt_root_state()
+    if final_children != sorted(
+        [
+            PRE_SECURITY_ADMIN_AUTHORIZATION_PATH.name,
+            PRE_SECURITY_ADMIN_RESTORATION_RECEIPT_PATH.name,
+        ]
+    ):
+        fail("pre-Security restoration publication left nonterminal receipt residue")
+    return receipt
+
+
 def installed_state_present(manifest: dict[str, Any]) -> bool:
     installed_manifest = pathlib.Path(
         "/Library/Application Support/Atomize/R3MacEvidenceFinalizer/v2/"
@@ -5296,7 +6616,7 @@ def installed_state_present(manifest: dict[str, Any]) -> bool:
     )
 
 
-def verify_process_surface() -> str:
+def verify_process_surface() -> tuple[str, str]:
     if len(sys.argv) != 1:
         fail("sealed root installer accepts no arguments")
     if os.geteuid() != 0 or os.getegid() != 0 or pwd.getpwuid(0).pw_name != "root":
@@ -5306,9 +6626,17 @@ def verify_process_surface() -> str:
     if any(key.startswith("SUBSTRATE_") for key in os.environ):
         fail("sealed root installer rejects SUBSTRATE_* environment input")
     authority_keys = sorted(key for key in os.environ if key.startswith("R3_"))
-    if authority_keys != [ROOT_INSTALL_AUTHORITY_ENV]:
+    if authority_keys not in (
+        [ROOT_INSTALL_AUTHORITY_ENV],
+        [PRE_SECURITY_RECOVERY_AUTHORITY_ENV],
+    ):
         fail("sealed root installer received an alternate R3 authority input")
-    authority_sha256 = os.environ.get(ROOT_INSTALL_AUTHORITY_ENV)
+    authority_kind = (
+        "root_install"
+        if authority_keys == [ROOT_INSTALL_AUTHORITY_ENV]
+        else "pre_security_receipt_only"
+    )
+    authority_sha256 = os.environ.get(authority_keys[0])
     if not is_sha256(authority_sha256):
         fail("sealed root installer lacks one exact authority SHA-256")
     for key, value in FIXED_ENV.items():
@@ -5321,11 +6649,18 @@ def verify_process_surface() -> str:
     if dict(os.environ) != FIXED_ENV:
         fail("sealed root installer could not normalize its environment")
     os.umask(0o077)
-    return authority_sha256
+    return authority_kind, authority_sha256
 
 
 def main() -> tuple[int, bool]:
-    root_install_authority_sha256 = verify_process_surface()
+    authority_kind, authority_sha256 = verify_process_surface()
+    if authority_kind == "pre_security_receipt_only":
+        manifest, manifest_bytes = load_manifest_documents_only()
+        publish_or_validate_pre_security_admin_restoration_receipt(
+            manifest, manifest_bytes, authority_sha256
+        )
+        return 0, True
+    root_install_authority_sha256 = authority_sha256
     manifest, manifest_bytes = load_manifest()
     validate_root_install_authority(manifest, root_install_authority_sha256)
     terminal_cleanup_present = any(
