@@ -1,0 +1,47 @@
+[package]
+name = "substrate-r3-macos-signer-acl"
+version = "0.1.0"
+edition = "2021"
+rust-version = "1.89"
+publish = false
+
+[lib]
+name = "substrate_r3_macos_signer_acl"
+path = "src/lib.rs"
+
+[[bin]]
+name = "substrate-r3-macos-signer-acl-creator"
+path = "src/bin/creator_route.rs"
+
+[[bin]]
+name = "substrate-r3-macos-signer-acl-wrong-identity"
+path = "src/bin/wrong_identity.rs"
+
+[[bin]]
+name = "substrate-r3-macos-disposable-publisher"
+path = "src/bin/disposable_publisher.rs"
+
+[[bin]]
+name = "substrate-r3-macos-disposable-experiment-runner"
+path = "src/bin/experiment_runner.rs"
+
+[[bin]]
+name = "substrate-r3-macos-nobody-owner-probe"
+path = "src/bin/nobody_owner_probe.rs"
+
+[dependencies]
+anyhow = "1.0"
+base64 = "0.22"
+libc = "0.2"
+serde = { version = "1.0", features = ["derive"] }
+serde_json = "1.0"
+sha2 = "0.10"
+p256 = { version = "=0.13.2", default-features = false, features = ["ecdsa", "pkcs8", "std"] }
+substrate-common = { path = "../../crates/common" }
+substrate-r3-macos-finalizer = { path = "../r3-macos-finalizer" }
+
+[build-dependencies]
+sha2 = "0.10"
+
+# This bounded experiment crate intentionally is not added to Substrate's root workspace.
+[workspace]

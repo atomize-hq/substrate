@@ -8,12 +8,14 @@
 use anyhow::{bail, Context, Result};
 use serde_json::{json, Value};
 use sha2::{Digest, Sha256};
+use std::cell::RefCell;
+use std::collections::BTreeSet;
 use std::fs;
 use std::io::{BufRead, BufReader, Read as _, Seek as _, SeekFrom, Write as _};
 #[cfg(target_os = "macos")]
 use std::os::fd::{AsRawFd, FromRawFd};
 #[cfg(target_os = "macos")]
-use std::os::unix::ffi::OsStringExt;
+use std::os::unix::ffi::{OsStrExt, OsStringExt};
 #[cfg(target_os = "macos")]
 use std::os::unix::fs::{FileExt as _, MetadataExt, OpenOptionsExt, PermissionsExt};
 #[cfg(target_os = "macos")]
@@ -23,11 +25,59 @@ use std::path::{Path, PathBuf};
 use std::process::{Child, ExitStatus};
 use std::process::{Command, Stdio};
 use std::time::{Duration, Instant, SystemTime, UNIX_EPOCH};
+use substrate_common::macos_retirement_v2::{
+    canonical_bytes_v2, derive_frozen_finalization_intent_v2, derive_guest_effect_plan_v2,
+    derive_guest_to_host_successor_capsule_v2, derive_host_effect_plan_v2, document_sha256_v2,
+    encode_base64url_v2, guest_component_inventory_sha256_v2, guest_effect_recovery_decision_v2,
+    guest_quiesce_plan_sha256_v2, host_target_role_for_locator_v2, parse_canonical_v2,
+    signature_payload_v2, validate_finalization_request_v2, validate_guest_effects_response_v2,
+    validate_guest_handoff_capsule_v2, validate_guest_host_acceptance_v2,
+    validate_guest_journal_transition_v2, validate_guest_parity_host_binding_v2,
+    validate_guest_parity_proof_v2, validate_guest_retirement_bind_response_v2,
+    validate_guest_retirement_precommit_v2, validate_guest_retirement_prepare_response_v2,
+    validate_guest_terminal_bundle_v2, validate_guest_to_host_successor_capsule_v2,
+    validate_harness_acknowledgement_v2, validate_host_resource_locator_v2,
+    validate_launch_identity_v2, validate_process_executable_binding_v2,
+    validate_protected_cas_binding_v2, validate_publisher_pre_removal_receipt_v2,
+    ExecutableIdentityV2, FinalizationRequestV2, FixedFileRoleV2, GenericPasswordRoleV2,
+    GuestEffectObservationV2, GuestEffectRecoveryDecisionV2, GuestEffectRecoveryPhaseV2,
+    GuestEffectsResponseV2, GuestHandoffCapsuleV2, GuestHostAcceptanceV2, GuestJournalEventKindV2,
+    GuestJournalGenerationV2, GuestParityHostBindingV2, GuestParityProofV2,
+    GuestPreRemovalReceiptV2, GuestProtectedCasBindingV2, GuestResourceLocatorV2,
+    GuestRetirementAuthorityV2, GuestRetirementBindRequestV2, GuestRetirementBindResponseV2,
+    GuestRetirementPrecommitV2, GuestRetirementPrepareResponseV2, GuestRetirementStateV2,
+    GuestRetryStateV2, GuestTargetIdentityV2, GuestTargetRoleV2, GuestTerminalBundleV2,
+    GuestToHostSuccessorBindingV2, GuestToHostSuccessorCapsuleV2,
+    HarnessDurabilityAcknowledgementV2, HostResourceLocatorV2, HostRetirementStateV2,
+    HostTargetIdentityV2, HostTargetRoleV2, HostToFinalizerSuccessorCapsuleV2, LaunchIdentityV2,
+    LifecycleDirectoryRoleV2, LifecycleFileRoleV2, MacR3SignatureV2, PostPmArtifactLabelV2,
+    PostPmJournalStateV2, ProcessIdentityV2, ProtectedCasBindingV2, PublisherPreRemovalReceiptV2,
+    TargetSetKindV2, MAC_R3_COORDINATOR_INBOX_DIRECTORY_MODE_V2,
+    MAC_R3_COORDINATOR_INBOX_FILE_MODE_V2, MAC_R3_COORDINATOR_INBOX_GROUP_GID_V2,
+    MAC_R3_COORDINATOR_INBOX_OWNER_UID_V2, MAC_R3_COORDINATOR_INBOX_ROOT_V2,
+    MAC_R3_COORDINATOR_PATH_V2, MAC_R3_COORDINATOR_SIGNING_IDENTIFIER_V2,
+    MAC_R3_FINALIZER_JOURNAL_ROOT_V2, MAC_R3_FINALIZER_PATH_V2, MAC_R3_FINALIZER_PROTOCOL_OWNER_V2,
+    MAC_R3_FINALIZER_PROTOCOL_VERSION_V2, MAC_R3_FINALIZER_REQUEST_PATH_V2,
+    MAC_R3_FINALIZER_SIGNING_IDENTIFIER_V2, MAC_R3_GUEST_BIND_REQUEST_OWNER_V2,
+    MAC_R3_GUEST_EFFECTS_RESPONSE_OWNER_V2, MAC_R3_GUEST_EFFECTS_RESPONSE_SIGNATURE_DOMAIN_V2,
+    MAC_R3_GUEST_HOST_ACCEPTANCE_OWNER_V2, MAC_R3_GUEST_HOST_ACCEPTANCE_SIGNATURE_DOMAIN_V2,
+    MAC_R3_GUEST_JOURNAL_OWNER_V2, MAC_R3_GUEST_PARITY_HOST_BINDING_OWNER_V2,
+    MAC_R3_GUEST_PARITY_HOST_BINDING_SIGNATURE_DOMAIN_V2,
+    MAC_R3_GUEST_RETIREMENT_AUTHORITY_OWNER_V2,
+    MAC_R3_GUEST_RETIREMENT_AUTHORITY_SIGNATURE_DOMAIN_V2,
+    MAC_R3_GUEST_RETIREMENT_CAS_ACCOUNT_SUFFIX_V2, MAC_R3_GUEST_TERMINAL_BUNDLE_OWNER_V2,
+    MAC_R3_HOST_RECEIPT_OWNER_V2, MAC_R3_HOST_RECEIPT_SIGNATURE_DOMAIN_V2,
+    MAC_R3_MAX_HOST_TARGETS_V2, MAC_R3_PRODUCT_PUBLISHER_PATH_V2, MAC_R3_PROTECTED_CAS_OWNER_V2,
+    MAC_R3_PROTECTED_CAS_SIGNATURE_DOMAIN_V2, MAC_R3_R6_TERMINAL_ACK_ACCOUNT_SUFFIX_V2,
+    MAC_R3_RETIREMENT_CAS_ACCOUNT_SUFFIX_V2, MAC_R3_RETIREMENT_LATCH_ROOT_V2,
+    MAC_R3_RETIREMENT_RESOURCE_INDEX_ACCOUNT_SUFFIX_V2,
+};
 use substrate_common::{
     canonical_action_receipt_bytes_v1, canonical_action_receipt_index_bytes_v1,
     canonical_guest_publisher_pairing_host_record_v1,
     canonical_guest_publisher_pairing_operator_launch_signature_payload_v1,
     canonical_guest_publisher_pairing_operator_launch_v1,
+    canonical_guest_publisher_pairing_session_binding_v1,
     canonical_guest_publisher_pairing_ticket_v1, canonical_lifecycle_publisher_protected_state_v1,
     canonical_lifecycle_signature_payload_v1, canonical_lima_stage_one_authorization_v1,
     canonical_mac_lima_stage_one_capsule_v1, canonical_mac_publisher_bootstrap_attempt_locator_v1,
@@ -115,6 +165,34 @@ const MAC_BOOTSTRAP_FRAME_FINISH_TIMEOUT_V1: Duration = Duration::from_secs(5);
 const MAC_BOOTSTRAP_MILESTONE_PREFIX_V1: &str = "substrate.bootstrap.milestone";
 const R6_DATA_FRAME_TIMEOUT_V1: Duration = Duration::from_secs(30);
 const R6_DATA_CHILD_EXIT_TIMEOUT_V1: Duration = Duration::from_secs(30);
+const MAC_R6_TERMINAL_SUCCESSOR_ACK_SIGNATURE_DOMAIN_V2: &[u8] =
+    b"substrate.mac-r6-pairing-terminal-successor-acknowledgement.signature.v2\0";
+const MAC_RETIREMENT_RESOURCE_INDEX_SIGNATURE_DOMAIN_V2: &[u8] =
+    b"substrate.mac-retirement-resource-index.signature.v2\0";
+const MAC_RETIREMENT_QUIESCENCE_SIGNATURE_DOMAIN_V2: &[u8] =
+    b"substrate.mac-retirement-quiescence.signature.v2\0";
+const MAC_RETIREMENT_PRECOMMITTED_AUTHORITY_OWNER_V2: &str =
+    "substrate.mac-r3-prospective-host-retirement-authority";
+const MAC_RETIREMENT_AUTHORITY_DIRECTORY_V2: &str = "authority";
+const MAC_RETIREMENT_EXTERNAL_DIRECTORY_V2: &str = "external";
+const MAC_RETIREMENT_AUTHORITY_SUFFIX_V2: &str = ".host-retirement-authority.v2.json";
+const MAC_RETIREMENT_RECEIPT_SUFFIX_V2: &str = ".publisher-pre-removal-receipt.v2.json";
+const MAC_RETIREMENT_ACK_SUFFIX_V2: &str = ".harness-durability-acknowledgement.v2.json";
+const MAC_RETIREMENT_GUEST_TERMINAL_BUNDLE_SUFFIX_V2: &str = ".guest-terminal-bundle.v2.json";
+const MAC_GUEST_RETIREMENT_PRECOMMIT_SUFFIX_V2: &str = ".guest-retirement-precommit.v2.json";
+const MAC_GUEST_RETIREMENT_AUTHORITY_SUFFIX_V2: &str = ".guest-retirement-authority.v2.json";
+const MAC_GUEST_RETIREMENT_RECEIPT_SUFFIX_V2: &str = ".guest-pre-removal-receipt.v2.json";
+const MAC_GUEST_RETIREMENT_ACK_SUFFIX_V2: &str = ".guest-durability-acknowledgement.v2.json";
+const MAC_GUEST_RETIREMENT_HANDOFF_SUFFIX_V2: &str = ".guest-handoff-capsule.v2.json";
+const MAC_GUEST_RETIREMENT_ACCEPTANCE_SUFFIX_V2: &str = ".guest-host-acceptance.v2.json";
+const MAC_GUEST_RETIREMENT_EFFECTS_SUFFIX_V2: &str = ".guest-effects-response.v2.json";
+const MAC_GUEST_RETIREMENT_PARITY_SUFFIX_V2: &str = ".guest-parity-proof.v2.json";
+const MAC_GUEST_RETIREMENT_PARITY_BINDING_SUFFIX_V2: &str = ".guest-parity-host-binding.v2.json";
+const MAC_GUEST_RETIREMENT_JOURNAL_SUFFIX_V2: &str = ".guest-journal";
+const MAC_GUEST_RETIREMENT_EXECUTOR_PATH_V2: &str =
+    "/usr/libexec/substrate/substrate-lifecycle-linux";
+const MAC_RETIREMENT_EXTERNAL_FILE_MODE_V2: u32 = 0o400;
+const MAC_RETIREMENT_EXTERNAL_MAX_BYTES_V2: u64 = 1024 * 1024;
 // R6 is a new pairing-only authority derived from a completed install, never a Stage-1 renewal.
 const R6_PAIRING_TICKET_LIFETIME_NS_V1: u64 = 300 * 1_000_000_000;
 // Signed R6 documents are prepared into distinct durable Keychain accounts. Their validity
@@ -584,7 +662,7 @@ fn main() -> Result<()> {
     let response = match operation.as_str() {
         // These are fixed XPC client relays only. They never run the action locally: the
         // launchd-owned listener below is the sole request handler and peer-attestation point.
-        "stage-one-create" | "post-pm-action" => {
+        "stage-one-create" | "post-pm-action" | "prospective-retirement-v2" => {
             relay_mac_xpc_publisher_request_v1(operation.as_str(), &input)?
         }
         other => bail!("unknown macOS lifecycle operation {other}"),
@@ -3039,7 +3117,9 @@ fn mac_ensure_system_keychain_p256_spki_der_v1(scope_id: &str) -> Result<Vec<u8>
     let key_tag = mac_keychain_signing_key_tag_v1(scope_id)?;
     #[cfg(target_os = "macos")]
     {
-        export_mac_p256_spki_der_v1(&mac_system_keychain_ffi_v1::ensure_p256_spki_der(&key_tag)?)
+        export_mac_p256_spki_der_v1(&mac_system_keychain_ffi_v1::ensure_p256_spki_der(
+            scope_id, &key_tag,
+        )?)
     }
     #[cfg(not(target_os = "macos"))]
     {
@@ -7496,6 +7576,1780 @@ printf '%s' "$ENDPOINT_CODE"
         )
         .is_err());
     }
+
+    fn r6_terminal_successor_evidence_fixture_v2() -> MacR6TerminalSuccessorEvidenceV2 {
+        MacR6TerminalSuccessorEvidenceV2 {
+            scope_id: "018f3e4a-7b2c-7c91-8a6f-2e1d5c4b3a90".to_string(),
+            challenge_id: "018f3e4a-7b2c-7c91-8a6f-2e1d5c4b3a91".to_string(),
+            predecessor_id: "018f3e4a-7b2c-7c91-8a6f-2e1d5c4b3a92".to_string(),
+            predecessor_generation: 2,
+            terminal_generation: 9,
+            host_record_sha256: "1".repeat(64),
+            predecessor_consumed_state_sha256: "2".repeat(64),
+            guest_anchor_sha256: "3".repeat(64),
+            guest_anchor_acknowledgement_sha256: "4".repeat(64),
+            guest_consumption_marker_response_sha256: "5".repeat(64),
+            stage_one_record_sha256: "6".repeat(64),
+            stage_one_authorization_sha256: "7".repeat(64),
+            pairing_session_binding_sha256: "8".repeat(64),
+            signer_spki_sha256: "9".repeat(64),
+        }
+    }
+
+    fn r6_terminal_successor_acknowledgement_fixture_v2(
+    ) -> MacR6PairingTerminalSuccessorAcknowledgementV2 {
+        let evidence = r6_terminal_successor_evidence_fixture_v2();
+        let public_key = "MFkwEwYHKoZIzj0CAQYIKoZIzj0DAQcDQgAEOtqxXWYla_Fc1xYDWz8EFETlEv7R3WTUunVZfSDjZvFUbSyQqD66ugFZUJnl8_-70zhMdJTeZ1n91eZe-unMZw".to_string();
+        let mut evidence = evidence;
+        evidence.signer_spki_sha256 =
+            sha256_hex_bootstrap_v1(&mac_base64url_decode_v1(&public_key).unwrap());
+        MacR6PairingTerminalSuccessorAcknowledgementV2 {
+            schema_owner: "substrate.mac-r6-pairing-terminal-successor-acknowledgement".to_string(),
+            schema_version: 2,
+            successor_evidence_sha256: mac_r6_terminal_successor_evidence_sha256_v2(&evidence)
+                .unwrap(),
+            successor_evidence: evidence,
+            terminal_at_unix_ns: 1_000,
+            signature: LifecycleSignatureV1 {
+                algorithm: "ecdsa-p256-sha256-p1363-low-s-v1".to_string(),
+                public_key,
+                signature: base64url_encode_mac_v1(&[1_u8; 64]),
+            },
+        }
+    }
+
+    #[test]
+    fn r6_terminal_successor_crash_windows_rejoin_only_the_exact_digest() {
+        let acknowledgement = r6_terminal_successor_acknowledgement_fixture_v2();
+        let evidence = acknowledgement.successor_evidence.clone();
+        assert_eq!(
+            classify_mac_r6_terminal_successor_persistence_v2(
+                None,
+                &evidence,
+                &acknowledgement.signature.public_key,
+                900,
+            )
+            .expect("before-CAS crash remains creatable"),
+            MacR6TerminalSuccessorPersistenceDispositionV2::Create
+        );
+        assert_eq!(
+            classify_mac_r6_terminal_successor_persistence_v2(
+                Some(&acknowledgement),
+                &evidence,
+                &acknowledgement.signature.public_key,
+                900,
+            )
+            .expect("after-CAS crash rejoins immutable bytes"),
+            MacR6TerminalSuccessorPersistenceDispositionV2::RejoinExact
+        );
+
+        let mut alternate = evidence.clone();
+        alternate.guest_consumption_marker_response_sha256 = "a".repeat(64);
+        assert!(classify_mac_r6_terminal_successor_persistence_v2(
+            Some(&acknowledgement),
+            &alternate,
+            &acknowledgement.signature.public_key,
+            900,
+        )
+        .is_err());
+        assert!(classify_mac_r6_terminal_successor_persistence_v2(
+            Some(&acknowledgement),
+            &evidence,
+            &acknowledgement.signature.public_key,
+            1_001,
+        )
+        .is_err());
+    }
+
+    #[test]
+    fn r6_terminal_successor_schema_and_signature_domain_are_strict_v2() {
+        let acknowledgement = r6_terminal_successor_acknowledgement_fixture_v2();
+        let bytes =
+            canonical_mac_r6_pairing_terminal_successor_acknowledgement_v2(&acknowledgement)
+                .expect("canonical terminal successor acknowledgement");
+        let payload =
+            canonical_mac_r6_pairing_terminal_successor_signature_payload_v2(&acknowledgement)
+                .expect("distinct terminal successor signature payload");
+        assert!(payload.starts_with(MAC_R6_TERMINAL_SUCCESSOR_ACK_SIGNATURE_DOMAIN_V2));
+        assert!(!payload.starts_with(b"substrate.lifecycle-signature.v1"));
+
+        let mut value: Value = serde_json::from_slice(&bytes).unwrap();
+        value
+            .as_object_mut()
+            .unwrap()
+            .insert("unknown".to_string(), Value::Bool(true));
+        let unknown = canonical_bootstrap_json_bytes_v1(&value).unwrap();
+        assert!(format!(
+            "{:#}",
+            parse_and_validate_mac_r6_pairing_terminal_successor_acknowledgement_v2(&unknown)
+                .expect_err("unknown top-level field must fail before signature verification")
+        )
+        .contains("unknown or missing field"));
+
+        let whitespace = [b" ".as_slice(), bytes.as_slice()].concat();
+        assert!(format!(
+            "{:#}",
+            parse_and_validate_mac_r6_pairing_terminal_successor_acknowledgement_v2(&whitespace)
+                .expect_err("noncanonical bytes must fail before signature verification")
+        )
+        .contains("not canonical"));
+
+        let encoded = String::from_utf8(bytes).unwrap();
+        let duplicate = encoded.replacen(
+            '{',
+            "{\"schema_owner\":\"substrate.mac-r6-pairing-terminal-successor-acknowledgement\",",
+            1,
+        );
+        assert!(format!(
+            "{:#}",
+            parse_and_validate_mac_r6_pairing_terminal_successor_acknowledgement_v2(
+                duplicate.as_bytes()
+            )
+            .expect_err("duplicate field must fail before signature verification")
+        )
+        .contains("not canonical"));
+    }
+
+    #[test]
+    fn r6_terminal_successor_wire_and_account_identities_are_closed() {
+        let frame = json!({
+            "kind": "ticket_consumed",
+            "guest_anchor_sha256": "a".repeat(64),
+        });
+        assert_eq!(
+            canonical_r6_data_wire_frame_v2(&frame).unwrap(),
+            format!(
+                "{{\"guest_anchor_sha256\":\"{}\",\"kind\":\"ticket_consumed\"}}\n",
+                "a".repeat(64)
+            )
+            .into_bytes()
+        );
+        assert_eq!(
+            mac_keychain_r6_terminal_successor_acknowledgement_account_v2(
+                "018f3e4a-7b2c-7c91-8a6f-2e1d5c4b3a90"
+            )
+            .unwrap(),
+            "018f3e4a-7b2c-7c91-8a6f-2e1d5c4b3a90:r6-pairing-terminal-successor-acknowledgement-v2"
+        );
+        assert!(
+            mac_keychain_r6_terminal_successor_acknowledgement_account_v2("not-a-scope").is_err()
+        );
+    }
+
+    fn retirement_signer_identity_fixture_v2(
+        scope_id: &str,
+        public_key: &str,
+    ) -> MacProspectiveRetirementSignerIdentityV2 {
+        let access = mac_expected_prospective_signer_access_snapshot_v2(
+            b"publisher-trusted-application-v2",
+            b"finalizer-trusted-application-v2",
+        );
+        let access_control_sha256 = mac_prospective_signer_access_digest_v2(access).unwrap();
+        derive_mac_prospective_retirement_signer_identity_v2(
+            &mac_keychain_signing_key_tag_v1(scope_id).unwrap(),
+            MAC_KEYCHAIN_SERVICE_V1,
+            b"application-label-v2",
+            b"persistent-reference-v2",
+            &mac_base64url_decode_v1(public_key).unwrap(),
+            &access_control_sha256,
+        )
+        .unwrap()
+    }
+
+    fn retirement_resource_index_fixture_v2() -> MacRetirementResourceIndexV2 {
+        let acknowledgement = r6_terminal_successor_acknowledgement_fixture_v2();
+        let signer_identity = retirement_signer_identity_fixture_v2(
+            &acknowledgement.successor_evidence.scope_id,
+            &acknowledgement.signature.public_key,
+        );
+        let candidates = vec![
+            HostResourceLocatorV2::GenericPassword {
+                role: GenericPasswordRoleV2::CurrentAnchor,
+            },
+            HostResourceLocatorV2::KeychainCasLock {
+                account: GenericPasswordRoleV2::CurrentAnchor,
+            },
+            HostResourceLocatorV2::GenericPassword {
+                role: GenericPasswordRoleV2::RetirementCas,
+            },
+            HostResourceLocatorV2::KeychainCasLock {
+                account: GenericPasswordRoleV2::RetirementCas,
+            },
+            HostResourceLocatorV2::GenericPassword {
+                role: GenericPasswordRoleV2::GuestRetirementCas,
+            },
+            HostResourceLocatorV2::KeychainCasLock {
+                account: GenericPasswordRoleV2::GuestRetirementCas,
+            },
+            HostResourceLocatorV2::GenericPassword {
+                role: GenericPasswordRoleV2::R6TerminalAcknowledgement,
+            },
+            HostResourceLocatorV2::KeychainCasLock {
+                account: GenericPasswordRoleV2::R6TerminalAcknowledgement,
+            },
+            HostResourceLocatorV2::LifecycleFile {
+                role: LifecycleFileRoleV2::Head,
+            },
+            HostResourceLocatorV2::LifecycleTargetLock {
+                target: LifecycleFileRoleV2::Head,
+            },
+            HostResourceLocatorV2::LifecycleDirectory {
+                role: LifecycleDirectoryRoleV2::LifecycleRoot,
+            },
+        ];
+        let mut index = derive_mac_retirement_resource_index_append_v2(
+            &acknowledgement.successor_evidence.scope_id,
+            None,
+            &candidates,
+            &acknowledgement.signature.public_key,
+            &signer_identity,
+        )
+        .unwrap()
+        .expect("initial resource-index snapshot");
+        index.signature.signature = base64url_encode_mac_v1(&[1_u8; 64]);
+        index
+    }
+
+    fn retirement_quiesced_fixture_v2(
+        index: &MacRetirementResourceIndexV2,
+        acknowledgement: &MacR6PairingTerminalSuccessorAcknowledgementV2,
+    ) -> MacRetirementQuiescenceV2 {
+        let index_bytes = canonical_mac_retirement_resource_index_v2(index).unwrap();
+        let acknowledgement_bytes =
+            canonical_mac_r6_pairing_terminal_successor_acknowledgement_v2(acknowledgement)
+                .unwrap();
+        let mut prepared = derive_mac_retirement_quiescence_prepared_v2(
+            &index.scope_id,
+            index,
+            &index_bytes,
+            &acknowledgement_bytes,
+            1_000,
+        )
+        .unwrap();
+        prepared.signature.signature = base64url_encode_mac_v1(&[2_u8; 64]);
+        let prepared_bytes = canonical_mac_retirement_quiescence_v2(&prepared).unwrap();
+        let mut quiesced =
+            derive_mac_retirement_quiesced_v2(&prepared, &prepared_bytes, 2_000).unwrap();
+        quiesced.signature.signature = base64url_encode_mac_v1(&[3_u8; 64]);
+        quiesced
+    }
+
+    fn retirement_executable_identity_fixture_v2(
+        path: &str,
+        signing_identifier: &str,
+        byte: char,
+    ) -> ExecutableIdentityV2 {
+        ExecutableIdentityV2 {
+            source_commit: byte.to_string().repeat(40),
+            source_tree: "a".repeat(40),
+            source_hashes_sha256: byte.to_string().repeat(64),
+            build_inputs_sha256: "b".repeat(64),
+            executable_sha256: "c".repeat(64),
+            executable_size: 4_096,
+            intended_path: path.to_string(),
+            physical_identity_sha256: "d".repeat(64),
+            signing_identifier: signing_identifier.to_string(),
+            designated_requirement: format!("identifier \"{signing_identifier}\""),
+            cdhash: "e".repeat(40),
+        }
+    }
+
+    fn retirement_precommitted_authority_fixture_v2(
+        acknowledgement: &MacR6PairingTerminalSuccessorAcknowledgementV2,
+    ) -> MacRetirementPrecommittedAuthorityV2 {
+        let scope_id = acknowledgement.successor_evidence.scope_id.clone();
+        let finalizer_identity = retirement_executable_identity_fixture_v2(
+            MAC_R3_FINALIZER_PATH_V2,
+            MAC_R3_FINALIZER_SIGNING_IDENTIFIER_V2,
+            '1',
+        );
+        let coordinator_identity = retirement_executable_identity_fixture_v2(
+            MAC_R3_COORDINATOR_PATH_V2,
+            MAC_R3_COORDINATOR_SIGNING_IDENTIFIER_V2,
+            '2',
+        );
+        let coordinator_process = ProcessIdentityV2 {
+            effective_uid: 501,
+            effective_gid: 20,
+            canonical_account: "external-evidence-coordinator".to_string(),
+            pidversion_required: true,
+            process_start_identity_sha256: "3".repeat(64),
+            executable_identity_sha256: document_sha256_v2(&coordinator_identity).unwrap(),
+        };
+        let evidence = &acknowledgement.successor_evidence;
+        MacRetirementPrecommittedAuthorityV2 {
+            schema_owner: MAC_RETIREMENT_PRECOMMITTED_AUTHORITY_OWNER_V2.to_string(),
+            schema_version: MAC_R3_FINALIZER_PROTOCOL_VERSION_V2,
+            evidence_id: "EVIDENCE:R3-MAC-PROSPECTIVE-TEST".to_string(),
+            scope_id: scope_id.clone(),
+            issued_at_unix_ns: 1_000,
+            expires_at_unix_ns: 5_000,
+            candidate_packet_sha256: "4".repeat(64),
+            capability_digest: "5".repeat(64),
+            receipt_external_store_identity_sha256: "6".repeat(64),
+            harness_public_key: base64url_encode_mac_v1(&[7_u8; 32]),
+            finalizer_identity,
+            coordinator_identity,
+            coordinator_process,
+            launch_identity: LaunchIdentityV2 {
+                launchd_label: "com.atomize.substrate.r3-macos-evidence-finalizer.v2".to_string(),
+                launchd_plist_path:
+                    "/Library/LaunchDaemons/com.atomize.substrate.r3-macos-evidence-finalizer.v2.plist"
+                        .to_string(),
+                launchd_plist_sha256: "8".repeat(64),
+                endpoint:
+                    "/private/var/run/com.atomize.substrate.r3-macos-evidence-finalizer.v2.sock"
+                        .to_string(),
+                endpoint_owner_uid: 0,
+                endpoint_group_gid: 20,
+                endpoint_mode: "0660".to_string(),
+                launch_socket_name: "Listener".to_string(),
+                finalizer_effective_uid: 0,
+            },
+            guest_successor_capsule: GuestToHostSuccessorCapsuleV2 {
+                schema_owner: "substrate.r3-macos-guest-to-host-successor-capsule".to_string(),
+                schema_version: MAC_R3_FINALIZER_PROTOCOL_VERSION_V2,
+                evidence_id: "EVIDENCE:R3-MAC-PROSPECTIVE-TEST".to_string(),
+                scope_id,
+                handoff_request_digest: "0".repeat(64),
+                guest_handoff_capsule_sha256: "1".repeat(64),
+                guest_host_acceptance_sha256: "2".repeat(64),
+                guest_receipt_sha256: "9".repeat(64),
+                guest_acknowledgement_sha256: "a".repeat(64),
+                guest_protected_cas_head_sha256: "b".repeat(64),
+                guest_effect_plan_sha256: "3".repeat(64),
+                guest_effects_response_sha256: "c".repeat(64),
+                guest_parity_proof_sha256: "d".repeat(64),
+                guest_parity_host_binding_sha256: "4".repeat(64),
+                guest_journal_head_sha256: "5".repeat(64),
+                r6_predecessor_consumed_sha256: evidence
+                    .predecessor_consumed_state_sha256
+                    .clone(),
+                r6_terminal_host_record_sha256: evidence.host_record_sha256.clone(),
+                guest_anchor_acknowledgement_sha256: evidence
+                    .guest_anchor_acknowledgement_sha256
+                    .clone(),
+                guest_consumption_marker_acknowledgement_sha256: evidence
+                    .guest_consumption_marker_response_sha256
+                    .clone(),
+                retry_state_sha256: "e".repeat(64),
+            },
+            predecessor_journal_head_sha256: "f".repeat(64),
+            retry_state_sha256: "1".repeat(64),
+        }
+    }
+
+    fn retirement_pre_removal_receipt_fixture_v2() -> (
+        MacRetirementPrecommittedAuthorityV2,
+        PublisherPreRemovalReceiptV2,
+    ) {
+        let acknowledgement = r6_terminal_successor_acknowledgement_fixture_v2();
+        let index = retirement_resource_index_fixture_v2();
+        let index_bytes = canonical_mac_retirement_resource_index_v2(&index).unwrap();
+        let quiescence = retirement_quiesced_fixture_v2(&index, &acknowledgement);
+        let quiescence_bytes = canonical_mac_retirement_quiescence_v2(&quiescence).unwrap();
+        let acknowledgement_bytes =
+            canonical_mac_r6_pairing_terminal_successor_acknowledgement_v2(&acknowledgement)
+                .unwrap();
+        let locators = derive_mac_prospective_retirement_locator_ledger_v2(
+            &index.scope_id,
+            &index,
+            &index_bytes,
+            &quiescence,
+            &quiescence_bytes,
+            &acknowledgement,
+            &acknowledgement_bytes,
+        )
+        .unwrap()
+        .locators;
+        let target_ledger = locators
+            .into_iter()
+            .enumerate()
+            .map(|(index, locator)| HostTargetIdentityV2 {
+                ordinal: u16::try_from(index + 1).unwrap(),
+                role: host_target_role_for_locator_v2(&locator),
+                locator,
+                expected_before_sha256: format!("{:02x}", index + 1).repeat(32),
+            })
+            .collect();
+        let authority = retirement_precommitted_authority_fixture_v2(&acknowledgement);
+        let receipt = derive_mac_publisher_pre_removal_receipt_v2(
+            &authority,
+            &index,
+            &index_bytes,
+            &quiescence,
+            &quiescence_bytes,
+            &acknowledgement,
+            &acknowledgement_bytes,
+            target_ledger,
+        )
+        .unwrap();
+        (authority, receipt)
+    }
+
+    #[test]
+    fn retirement_resource_literals_match_the_frozen_finalizer_contract() {
+        let scope = "018f3e4a-7b2c-7c91-8a6f-2e1d5c4b3a90";
+        assert_eq!(
+            mac_keychain_retirement_resource_index_account_v2(scope).unwrap(),
+            "018f3e4a-7b2c-7c91-8a6f-2e1d5c4b3a90:retirement-resource-index-v2"
+        );
+        assert_eq!(
+            mac_keychain_retirement_cas_account_v2(scope).unwrap(),
+            "018f3e4a-7b2c-7c91-8a6f-2e1d5c4b3a90:retirement-cas-v2"
+        );
+        assert_eq!(
+            mac_keychain_r6_terminal_successor_acknowledgement_account_v2(scope).unwrap(),
+            "018f3e4a-7b2c-7c91-8a6f-2e1d5c4b3a90:r6-pairing-terminal-successor-acknowledgement-v2"
+        );
+        assert_eq!(
+            mac_retirement_terminal_latch_path_v2(scope).unwrap(),
+            PathBuf::from(
+                "/private/var/db/com.atomize.substrate.r3-macos-evidence-finalizer.v2/latches/018f3e4a-7b2c-7c91-8a6f-2e1d5c4b3a90.retirement-terminal.v2.latch"
+            )
+        );
+        assert_eq!(
+            mac_retirement_lifecycle_target_lock_path_v2(scope, &LifecycleFileRoleV2::Head)
+                .unwrap(),
+            PathBuf::from(
+                "/Library/Application Support/Substrate/lifecycle-v1/lifecycle-target-69a433008a596a05128a675a054b667d6a1be6aa96c8d19a25794b1df9ab94ab.lock"
+            )
+        );
+        assert_eq!(
+            mac_retirement_keychain_cas_lock_path_for_role_v2(
+                scope,
+                &GenericPasswordRoleV2::RetirementResourceIndex,
+            )
+            .unwrap(),
+            PathBuf::from(
+                "/Library/Application Support/Substrate/lifecycle-v1/keychain-cas-a3e7c3167123d1c70681f7f6a04b62fe812579fcf479f20fcdda1f129169e735.lock"
+            )
+        );
+    }
+
+    #[test]
+    fn prospective_signer_acl_posture_and_digest_match_the_finalizer_model() {
+        assert_eq!(
+            MAC_PUBLISHER_HELPER_PATH_V1,
+            "/Library/PrivilegedHelperTools/com.substrate.lifecycle.publisher.v1"
+        );
+        assert_eq!(
+            MAC_PUBLISHER_HELPER_PATH_V1,
+            MAC_R3_PRODUCT_PUBLISHER_PATH_V2
+        );
+        assert_eq!(
+            MAC_R3_FINALIZER_PATH_V2,
+            "/Library/PrivilegedHelperTools/com.atomize.substrate.r3-macos-evidence-finalizer.v2"
+        );
+        let mut snapshot = mac_expected_prospective_signer_access_snapshot_v2(
+            b"publisher-identity",
+            b"finalizer-identity",
+        );
+        let digest = mac_prospective_signer_access_digest_v2(snapshot.clone()).unwrap();
+        assert_eq!(
+            digest,
+            "a2cbdbd6905e44369e72cf45347a7f98b329d610a3d4df2f0d2fe659cba2a070"
+        );
+        mac_canonicalize_signer_access_snapshot_v2(&mut snapshot);
+        assert_eq!(snapshot.owner_uid, u32::MAX);
+        assert_eq!(snapshot.owner_gid, u32::MAX);
+        assert_eq!(snapshot.owner_type, 3);
+        assert_eq!(snapshot.entries.len(), 4);
+        assert!(snapshot
+            .entries
+            .iter()
+            .all(|entry| entry.prompt_selector == 0));
+        assert!(snapshot
+            .entries
+            .iter()
+            .flat_map(|entry| &entry.authorizations)
+            .all(|authorization| authorization != "any"));
+        let publisher = snapshot
+            .entries
+            .iter()
+            .find(|entry| entry.description == "publisher-sign-and-delete")
+            .unwrap();
+        assert_eq!(publisher.authorizations, ["delete", "sign"]);
+        assert_eq!(publisher.trusted_applications.len(), 1);
+        let finalizer = snapshot
+            .entries
+            .iter()
+            .find(|entry| entry.description == "finalizer-delete-only")
+            .unwrap();
+        assert_eq!(finalizer.authorizations, ["delete"]);
+        assert_eq!(finalizer.trusted_applications.len(), 1);
+        for description in ["deny-private-key-operations", "deny-owner-and-acl-mutation"] {
+            assert!(snapshot
+                .entries
+                .iter()
+                .find(|entry| entry.description == description)
+                .unwrap()
+                .trusted_applications
+                .is_empty());
+        }
+        assert_eq!(
+            digest,
+            sha256_hex_bootstrap_v1(
+                mac_signer_access_snapshot_json_v2(&snapshot)
+                    .unwrap()
+                    .as_bytes()
+            )
+        );
+        let mut wrong_owner = snapshot;
+        wrong_owner.owner_type = 1;
+        assert_ne!(
+            digest,
+            mac_prospective_signer_access_digest_v2(wrong_owner).unwrap()
+        );
+    }
+
+    fn prospective_signer_preparation_fixture_v2() -> MacProspectiveSignerPreparationV2 {
+        let publisher = b"publisher-identity";
+        let finalizer = b"finalizer-identity";
+        MacProspectiveSignerPreparationV2 {
+            schema_owner: MAC_SIGNER_PREPARATION_OWNER_V2.to_string(),
+            schema_version: 2,
+            scope_id: "018f3e4a-7b2c-7c91-8a6f-2e1d5c4b3a90".to_string(),
+            publisher_path: MAC_R3_PRODUCT_PUBLISHER_PATH_V2.to_string(),
+            finalizer_path: MAC_R3_FINALIZER_PATH_V2.to_string(),
+            publisher_trusted_application_sha256: sha256_hex_bootstrap_v1(publisher),
+            finalizer_trusted_application_sha256: sha256_hex_bootstrap_v1(finalizer),
+            signer_access_control_sha256: mac_prospective_signer_access_digest_v2(
+                mac_expected_prospective_signer_access_snapshot_v2(publisher, finalizer),
+            )
+            .unwrap(),
+            finalizer_executable_sha256: "1".repeat(64),
+            finalizer_physical_identity: "dev:1:ino:2".to_string(),
+            finalizer_code_identity: format!("cdhash:{}", "2".repeat(40)),
+            candidate_packet_sha256: "3".repeat(64),
+            capability_digest: "4".repeat(64),
+        }
+    }
+
+    #[test]
+    fn prospective_signer_preparation_is_fixed_canonical_and_fail_closed() {
+        let preparation = prospective_signer_preparation_fixture_v2();
+        assert_eq!(
+            mac_prospective_signer_preparation_path_v2(&preparation.scope_id).unwrap(),
+            PathBuf::from(
+                "/private/var/db/com.atomize.substrate.r3-macos-evidence-finalizer.v2/preparations/018f3e4a-7b2c-7c91-8a6f-2e1d5c4b3a90.signer-creation.v2.json"
+            )
+        );
+        let bytes = canonical_mac_prospective_signer_preparation_v2(&preparation).unwrap();
+        assert_eq!(
+            parse_canonical_mac_prospective_signer_preparation_v2(&bytes).unwrap(),
+            preparation
+        );
+        let mut substituted = preparation.clone();
+        substituted.finalizer_path = "/tmp/not-the-finalizer".to_string();
+        assert!(canonical_mac_prospective_signer_preparation_v2(&substituted).is_err());
+        let unknown = bytes
+            .strip_suffix(b"}")
+            .unwrap()
+            .iter()
+            .copied()
+            .chain(b",\"unknown\":true}".iter().copied())
+            .collect::<Vec<_>>();
+        assert!(parse_canonical_mac_prospective_signer_preparation_v2(&unknown).is_err());
+        let duplicate = String::from_utf8(bytes.clone()).unwrap().replacen(
+            "{",
+            &format!(
+                "{{\"schema_owner\":\"{}\",",
+                MAC_SIGNER_PREPARATION_OWNER_V2
+            ),
+            1,
+        );
+        assert!(
+            parse_canonical_mac_prospective_signer_preparation_v2(duplicate.as_bytes()).is_err()
+        );
+        let noncanonical = [b" ".as_slice(), bytes.as_slice()].concat();
+        assert!(parse_canonical_mac_prospective_signer_preparation_v2(&noncanonical).is_err());
+        assert_eq!(
+            MacSignerCreationPostureV2::LegacyIneligible,
+            MacSignerCreationPostureV2::LegacyIneligible
+        );
+    }
+
+    #[test]
+    fn prospective_signer_creation_is_direct_access_only_and_legacy_lookup_is_tolerant() {
+        let source = include_str!("substrate-lifecycle-macos.rs");
+        for required in [
+            "SecAccessCreateWithOwnerAndACL",
+            "SecACLCreateWithSimpleContents",
+            "SecACLUpdateAuthorizations",
+            "(kSecAttrAccess, access.cast())",
+            "MacSignerCreationPostureV2::LegacyIneligible",
+            "load_mac_signer_creation_posture_v2(scope_id)",
+            "prospective_copy_and_validate_access(owned, reopened)",
+            "open_prospective_retirement_signer_identity",
+        ] {
+            assert!(
+                source.contains(required),
+                "missing signer ACL seam {required}"
+            );
+        }
+        assert!(!source.contains(&["SecKeychainItem", "SetAccess"].concat()));
+        let legacy_lookup_body = source
+            .split("unsafe fn exact_private_key_matches")
+            .nth(1)
+            .unwrap()
+            .split("unsafe fn open_private_key")
+            .next()
+            .unwrap();
+        assert!(!legacy_lookup_body.contains("prospective_copy_and_validate_access"));
+        let creation_body = source
+            .rsplit("unsafe fn ensure_private_key")
+            .next()
+            .unwrap()
+            .split("pub(super) fn delete_p256_key_exact")
+            .next()
+            .unwrap();
+        assert!(
+            creation_body
+                .find("acquire_mac_retirement_activation_guard_v2(false)")
+                .unwrap()
+                < creation_body.find("exact_private_key_matches").unwrap(),
+            "preparation publication must serialize before the exact absent-key decision"
+        );
+        assert!(
+            creation_body.find("exact_private_key_matches").unwrap()
+                < creation_body
+                    .find("load_mac_signer_creation_posture_v2")
+                    .unwrap(),
+            "existing exact signer lookup must precede external preparation inspection"
+        );
+        let legacy_branch = creation_body
+            .split("MacSignerCreationPostureV2::LegacyIneligible")
+            .nth(1)
+            .unwrap()
+            .split("MacSignerCreationPostureV2::ProspectiveExact")
+            .next()
+            .unwrap();
+        for exact_legacy_attribute in [
+            "(kSecAttrIsPermanent, kCFBooleanTrue)",
+            "(kSecAttrApplicationTag, tag)",
+            "(kSecAttrLabel, label)",
+            "(kSecAttrCanSign, kCFBooleanTrue)",
+        ] {
+            assert!(legacy_branch.contains(exact_legacy_attribute));
+        }
+        assert!(!legacy_branch.contains("kSecAttrAccess"));
+        assert!(!legacy_branch.contains("kSecAttrIsSensitive"));
+        assert!(
+            creation_body
+                .find("load_mac_signer_creation_posture_v2")
+                .unwrap()
+                < creation_body.find("SecKeyCreateRandomKey").unwrap()
+        );
+    }
+
+    #[test]
+    fn retirement_resource_producer_inventory_covers_every_closed_dynamic_role() {
+        let challenge = "018f3e4a-7b2c-7c91-8a6f-2e1d5c4b3a91";
+        let receipt = "018f3e4a-7b2c-7c91-8a6f-2e1d5c4b3a92";
+        let attempt = "018f3e4a-7b2c-7c91-8a6f-2e1d5c4b3a93";
+        let entry = "018f3e4a-7b2c-7c91-8a6f-2e1d5c4b3a94";
+        let producers = vec![
+            MacRetirementResourceProducerV2::LifecycleCapsuleRoots,
+            MacRetirementResourceProducerV2::ControlAdmission,
+            MacRetirementResourceProducerV2::CurrentAnchor,
+            MacRetirementResourceProducerV2::PublisherServiceState,
+            MacRetirementResourceProducerV2::PublisherBootstrapIntent,
+            MacRetirementResourceProducerV2::BootstrapAttemptLocator {
+                attempt_key_sha256: "1".repeat(64),
+            },
+            MacRetirementResourceProducerV2::LimaStageOneCapsule,
+            MacRetirementResourceProducerV2::Manifest { generation: 2 },
+            MacRetirementResourceProducerV2::ReceiptIndex { generation: 2 },
+            MacRetirementResourceProducerV2::Head,
+            MacRetirementResourceProducerV2::Receipt {
+                generation: 2,
+                receipt_id: receipt.to_string(),
+            },
+            MacRetirementResourceProducerV2::StageOneProfile {
+                attempt_id: attempt.to_string(),
+            },
+            MacRetirementResourceProducerV2::PostPmJournal {
+                receipt_id: receipt.to_string(),
+                state: PostPmJournalStateV2::Prepared,
+            },
+            MacRetirementResourceProducerV2::PostPmArtifact {
+                receipt_id: receipt.to_string(),
+                label: PostPmArtifactLabelV2::MeasuredArtifact {
+                    entry_id: entry.to_string(),
+                },
+                sha256: "2".repeat(64),
+            },
+            MacRetirementResourceProducerV2::R6PredecessorState,
+            MacRetirementResourceProducerV2::R6Predecessor { generation: 2 },
+            MacRetirementResourceProducerV2::R6Continuation { generation: 2 },
+            MacRetirementResourceProducerV2::R6Activation { generation: 2 },
+            MacRetirementResourceProducerV2::R6Tombstone { generation: 1 },
+            MacRetirementResourceProducerV2::R6MissedActivation { generation: 1 },
+            MacRetirementResourceProducerV2::R6ActiveGuestRecord,
+            MacRetirementResourceProducerV2::R6GuestHostRecord {
+                challenge_id: challenge.to_string(),
+            },
+            MacRetirementResourceProducerV2::R6OperatorLaunch {
+                challenge_id: challenge.to_string(),
+            },
+            MacRetirementResourceProducerV2::R6TerminalAcknowledgement,
+            MacRetirementResourceProducerV2::RetirementQuiescenceCas,
+        ];
+        let mut locators = BTreeSet::new();
+        locators.extend([
+            HostResourceLocatorV2::GenericPassword {
+                role: GenericPasswordRoleV2::RetirementResourceIndex,
+            },
+            HostResourceLocatorV2::KeychainCasLock {
+                account: GenericPasswordRoleV2::RetirementResourceIndex,
+            },
+        ]);
+        for producer in producers {
+            locators.extend(mac_retirement_resource_locators_for_producer_v2(&producer).unwrap());
+        }
+        let expected_generic_roles = vec![
+            GenericPasswordRoleV2::ControlAdmission,
+            GenericPasswordRoleV2::CurrentAnchor,
+            GenericPasswordRoleV2::PublisherServiceState,
+            GenericPasswordRoleV2::PublisherBootstrapIntent,
+            GenericPasswordRoleV2::BootstrapAttemptLocator {
+                attempt_key_sha256: "1".repeat(64),
+            },
+            GenericPasswordRoleV2::LimaStageOneCapsule,
+            GenericPasswordRoleV2::R6PredecessorState,
+            GenericPasswordRoleV2::R6Predecessor { generation: 2 },
+            GenericPasswordRoleV2::R6Continuation { generation: 2 },
+            GenericPasswordRoleV2::R6Activation { generation: 2 },
+            GenericPasswordRoleV2::R6Tombstone { generation: 1 },
+            GenericPasswordRoleV2::R6MissedActivation { generation: 1 },
+            GenericPasswordRoleV2::R6ActiveGuestRecord,
+            GenericPasswordRoleV2::R6GuestHostRecord {
+                challenge_id: challenge.to_string(),
+            },
+            GenericPasswordRoleV2::R6OperatorLaunch {
+                challenge_id: challenge.to_string(),
+            },
+            GenericPasswordRoleV2::RetirementResourceIndex,
+            GenericPasswordRoleV2::RetirementCas,
+            GenericPasswordRoleV2::R6TerminalAcknowledgement,
+        ];
+        for role in expected_generic_roles {
+            assert!(
+                locators.contains(&HostResourceLocatorV2::GenericPassword { role: role.clone() })
+            );
+            assert!(locators.contains(&HostResourceLocatorV2::KeychainCasLock { account: role }));
+        }
+        assert!(
+            locators.contains(&HostResourceLocatorV2::LifecycleTargetLock {
+                target: LifecycleFileRoleV2::Head,
+            })
+        );
+        assert!(
+            locators.contains(&HostResourceLocatorV2::LifecycleDirectory {
+                role: LifecycleDirectoryRoleV2::LifecycleRoot,
+            })
+        );
+        assert!(
+            locators.contains(&HostResourceLocatorV2::LifecycleDirectory {
+                role: LifecycleDirectoryRoleV2::GuestPairingsRoot,
+            })
+        );
+    }
+
+    #[test]
+    fn retirement_resource_index_rejects_tamper_duplicates_and_reordering() {
+        let index = retirement_resource_index_fixture_v2();
+        let bytes = canonical_mac_retirement_resource_index_v2(&index).unwrap();
+        assert_eq!(
+            parse_canonical_mac_retirement_resource_index_v2(&bytes).unwrap(),
+            index
+        );
+        assert!(
+            canonical_mac_retirement_resource_index_signature_payload_v2(&index)
+                .unwrap()
+                .starts_with(MAC_RETIREMENT_RESOURCE_INDEX_SIGNATURE_DOMAIN_V2)
+        );
+        assert!(
+            !canonical_mac_retirement_resource_index_signature_payload_v2(&index)
+                .unwrap()
+                .starts_with(MAC_R6_TERMINAL_SUCCESSOR_ACK_SIGNATURE_DOMAIN_V2)
+        );
+
+        let mut reordered = index.clone();
+        reordered.entries.swap(2, 3);
+        assert!(validate_mac_retirement_resource_index_v2(&reordered, false).is_err());
+
+        let mut duplicate = index.clone();
+        duplicate.entries[3].locator = duplicate.entries[2].locator.clone();
+        let mut previous = None;
+        for (offset, entry) in duplicate.entries.iter_mut().enumerate() {
+            entry.ordinal = (offset + 1) as u32;
+            entry.previous_entry_sha256 = previous;
+            entry.entry_sha256 = mac_retirement_resource_index_entry_sha256_v2(entry).unwrap();
+            previous = Some(entry.entry_sha256.clone());
+        }
+        assert!(validate_mac_retirement_resource_index_v2(&duplicate, false).is_err());
+
+        let mut signer_substitution = index.clone();
+        signer_substitution.signer_identity.access_control_sha256 = "a".repeat(64);
+        assert!(validate_mac_retirement_resource_index_v2(&signer_substitution, false).is_err());
+
+        let mut value: Value = serde_json::from_slice(&bytes).unwrap();
+        value
+            .as_object_mut()
+            .unwrap()
+            .insert("unknown".to_string(), Value::Bool(true));
+        let unknown = canonical_bootstrap_json_bytes_v1(&value).unwrap();
+        assert!(format!(
+            "{:#}",
+            parse_canonical_mac_retirement_resource_index_v2(&unknown)
+                .expect_err("unknown resource-index field must fail")
+        )
+        .contains("unknown or missing field"));
+
+        let mut nested_unknown: Value = serde_json::from_slice(&bytes).unwrap();
+        nested_unknown
+            .get_mut("signer_identity")
+            .unwrap()
+            .as_object_mut()
+            .unwrap()
+            .insert(
+                "path".to_string(),
+                Value::String("/tmp/forbidden".to_string()),
+            );
+        assert!(format!(
+            "{:#}",
+            parse_canonical_mac_retirement_resource_index_v2(
+                &canonical_bootstrap_json_bytes_v1(&nested_unknown).unwrap()
+            )
+            .expect_err("unknown signer-identity field must fail")
+        )
+        .contains("unknown or missing field"));
+    }
+
+    #[test]
+    fn retirement_resource_index_same_locator_is_an_exact_noop_rejoin() {
+        let index = retirement_resource_index_fixture_v2();
+        let existing = index.entries[2].locator.clone();
+        assert!(derive_mac_retirement_resource_index_append_v2(
+            &index.scope_id,
+            Some(&index),
+            &[existing],
+            &index.signature.public_key,
+            &index.signer_identity,
+        )
+        .unwrap()
+        .is_none());
+        let next = derive_mac_retirement_resource_index_append_v2(
+            &index.scope_id,
+            Some(&index),
+            &[HostResourceLocatorV2::LifecycleDirectory {
+                role: LifecycleDirectoryRoleV2::GuestPairingsRoot,
+            }],
+            &index.signature.public_key,
+            &index.signer_identity,
+        )
+        .unwrap()
+        .expect("one new exact locator advances the append-only snapshot");
+        assert_eq!(next.revision, index.revision + 1);
+        assert_eq!(
+            next.previous_index_sha256,
+            Some(sha256_hex_bootstrap_v1(
+                &canonical_mac_retirement_resource_index_v2(&index).unwrap()
+            ))
+        );
+    }
+
+    #[test]
+    fn retirement_quiescence_blocks_new_admission_but_preserves_successor_retry() {
+        assert!(mac_retirement_admission_is_allowed_v2(
+            false,
+            None,
+            MacRetirementAdmissionClassV2::Ordinary,
+        )
+        .is_ok());
+        assert!(mac_retirement_admission_is_allowed_v2(
+            true,
+            None,
+            MacRetirementAdmissionClassV2::Ordinary,
+        )
+        .is_err());
+        let index = retirement_resource_index_fixture_v2();
+        let acknowledgement = r6_terminal_successor_acknowledgement_fixture_v2();
+        let quiesced = retirement_quiesced_fixture_v2(&index, &acknowledgement);
+        assert!(mac_retirement_admission_is_allowed_v2(
+            true,
+            Some(&quiesced),
+            MacRetirementAdmissionClassV2::Ordinary,
+        )
+        .is_err());
+        assert!(mac_retirement_admission_is_allowed_v2(
+            true,
+            Some(&quiesced),
+            MacRetirementAdmissionClassV2::SurvivingSuccessorHandoffOrRetry,
+        )
+        .is_ok());
+        assert!(
+            canonical_mac_retirement_quiescence_signature_payload_v2(&quiesced)
+                .unwrap()
+                .starts_with(MAC_RETIREMENT_QUIESCENCE_SIGNATURE_DOMAIN_V2)
+        );
+    }
+
+    #[test]
+    fn retirement_index_append_and_quiescence_use_one_cas_then_index_lock_order() {
+        let source = include_str!("substrate-lifecycle-macos.rs");
+        let guard_body = source
+            .rsplit("fn acquire_mac_retirement_cas_index_guards_v2")
+            .next()
+            .unwrap()
+            .split("fn mac_require_uuid_v7_component_v1")
+            .next()
+            .unwrap();
+        assert!(
+            guard_body.find("&cas_account").unwrap() < guard_body.find("&index_account").unwrap(),
+            "retirement locks must always acquire CAS before resource index"
+        );
+
+        let append_body = source
+            .rsplit("fn append_mac_retirement_resource_producers_v2")
+            .next()
+            .unwrap()
+            .split("fn append_mac_retirement_resource_producers_if_active_v2")
+            .next()
+            .unwrap();
+        assert_eq!(
+            append_body
+                .matches("acquire_mac_retirement_cas_index_guards_v2")
+                .count(),
+            1
+        );
+        assert!(
+            append_body
+                .find("mac_retirement_admission_holds_scope_v2")
+                .unwrap()
+                < append_body
+                    .find("acquire_mac_retirement_activation_guard_v2(false)")
+                    .unwrap()
+        );
+        let locked_append = append_body
+            .split("fn append_mac_retirement_resource_producers_with_locks_held_v2")
+            .nth(1)
+            .unwrap();
+        assert!(!locked_append.contains("acquire_mac_retirement_cas_index_guards_v2"));
+        assert!(!locked_append.contains("acquire_mac_retirement_activation_guard_v2"));
+        assert!(
+            append_body
+                .find("retirement resource index is immutable after quiescence preparation")
+                .unwrap()
+                < append_body
+                    .find("mac_ensure_retirement_lifecycle_target_lock_v2")
+                    .unwrap(),
+            "target-lock creation must remain behind the locked quiescence admission check"
+        );
+
+        for (name, terminator) in [
+            (
+                "prepare_mac_retirement_quiescence_v2",
+                "commit_mac_retirement_quiesced_v2",
+            ),
+            (
+                "commit_mac_retirement_quiesced_v2",
+                "mac_retirement_locator_sort_key_v2",
+            ),
+        ] {
+            let body = source
+                .rsplit(&format!("fn {name}"))
+                .next()
+                .unwrap()
+                .split(&format!("fn {terminator}"))
+                .next()
+                .unwrap();
+            assert_eq!(
+                body.matches("acquire_mac_retirement_cas_index_guards_v2")
+                    .count(),
+                1,
+                "{name} must share the one CAS-before-index acquisition path"
+            );
+            assert!(!body.contains("mac_keychain_durable_cas_guard_v1(&cas_account)"));
+            assert!(body.contains("acquire_mac_retirement_activation_guard_v2(true)"));
+        }
+
+        let admission_body = source
+            .rsplit("fn acquire_mac_retirement_admission_guard_v2")
+            .next()
+            .unwrap()
+            .split("fn prepare_mac_retirement_quiescence_v2")
+            .next()
+            .unwrap();
+        assert!(admission_body.contains("acquire_mac_retirement_activation_guard_v2(false)"));
+        assert!(admission_body.contains("MacRetirementAdmissionGuardV2::inactive(activation)"));
+        assert!(admission_body.contains("MacRetirementAdmissionGuardV2::activate"));
+    }
+
+    #[test]
+    fn guest_delete_crash_after_spawn_before_wait_cannot_reinvoke_from_target_presence() {
+        let source = include_str!("substrate-lifecycle-macos.rs");
+        let removal = source
+            .rsplit("fn remove_mac_guest_retirement_target_v2")
+            .next()
+            .unwrap()
+            .split("fn bind_mac_guest_retirement_parity_v2")
+            .next()
+            .unwrap();
+        let prepared = removal
+            .split("GuestJournalEventKindV2::EffectPrepared => {")
+            .nth(1)
+            .unwrap()
+            .split("GuestJournalEventKindV2::EffectInvoked => {")
+            .next()
+            .unwrap();
+        assert!(
+            prepared
+                .find("mac_append_guest_retirement_journal_v2")
+                .unwrap()
+                < prepared
+                    .find("mac_invoke_guest_retirement_effect_v2")
+                    .unwrap(),
+            "EffectInvoked must be durable before the external child can spawn"
+        );
+
+        let invoked_recovery = removal
+            .split("GuestJournalEventKindV2::EffectInvoked => {")
+            .nth(1)
+            .unwrap()
+            .split("GuestJournalEventKindV2::EffectObserved => {")
+            .next()
+            .unwrap();
+        assert!(invoked_recovery.contains("GuestEffectRecoveryDecisionV2::Preserve"));
+        assert!(invoked_recovery.contains("cannot prove the exact prior external child absent"));
+        assert!(!invoked_recovery.contains("mac_invoke_guest_retirement_effect_v2"));
+    }
+
+    #[test]
+    fn retirement_read_only_locator_export_is_closed_and_terminal_ordered() {
+        let index = retirement_resource_index_fixture_v2();
+        let index_bytes = canonical_mac_retirement_resource_index_v2(&index).unwrap();
+        let acknowledgement = r6_terminal_successor_acknowledgement_fixture_v2();
+        let acknowledgement_bytes =
+            canonical_mac_r6_pairing_terminal_successor_acknowledgement_v2(&acknowledgement)
+                .unwrap();
+        let quiesced = retirement_quiesced_fixture_v2(&index, &acknowledgement);
+        let quiesced_bytes = canonical_mac_retirement_quiescence_v2(&quiesced).unwrap();
+        let ledger = derive_mac_prospective_retirement_locator_ledger_v2(
+            &index.scope_id,
+            &index,
+            &index_bytes,
+            &quiesced,
+            &quiesced_bytes,
+            &acknowledgement,
+            &acknowledgement_bytes,
+        )
+        .unwrap();
+        assert_eq!(
+            ledger.locators.first(),
+            Some(&HostResourceLocatorV2::PublisherService)
+        );
+        assert_eq!(
+            ledger.locators.get(1),
+            Some(&HostResourceLocatorV2::PublisherEndpoint)
+        );
+        assert_eq!(
+            ledger.locators.last(),
+            Some(&HostResourceLocatorV2::RetirementTerminalLatch)
+        );
+        assert!(ledger.locators.windows(2).all(|pair| {
+            mac_retirement_locator_sort_key_v2(&pair[0]).unwrap()
+                <= mac_retirement_locator_sort_key_v2(&pair[1]).unwrap()
+        }));
+        assert_eq!(ledger.signer_identity, index.signer_identity);
+        assert_eq!(
+            ledger.signer_access_control_sha256,
+            index.signer_identity.access_control_sha256
+        );
+    }
+
+    #[test]
+    fn prospective_retirement_control_request_is_one_strict_closed_frame() {
+        let request = MacProspectiveRetirementControlRequestV2 {
+            schema_owner: "substrate.mac-prospective-retirement-control".to_string(),
+            schema_version: 2,
+            scope_id: "018f3e4a-7b2c-7c91-8a6f-2e1d5c4b3a90".to_string(),
+            action: MacProspectiveRetirementControlActionV2::PrepareQuiescence,
+        };
+        let bytes = canonical_mac_prospective_retirement_control_request_v2(&request).unwrap();
+        assert_eq!(
+            parse_canonical_mac_prospective_retirement_control_request_v2(&bytes).unwrap(),
+            request
+        );
+        let noncanonical = [b" ".as_slice(), bytes.as_slice()].concat();
+        assert!(
+            parse_canonical_mac_prospective_retirement_control_request_v2(&noncanonical).is_err()
+        );
+        let mut value: Value = serde_json::from_slice(&bytes).unwrap();
+        value.as_object_mut().unwrap().insert(
+            "path".to_string(),
+            Value::String("/tmp/forbidden".to_string()),
+        );
+        assert!(
+            parse_canonical_mac_prospective_retirement_control_request_v2(
+                &canonical_bootstrap_json_bytes_v1(&value).unwrap(),
+            )
+            .is_err()
+        );
+        let duplicate = String::from_utf8(bytes).unwrap().replacen(
+            '{',
+            "{\"action\":\"prepare_quiescence\",",
+            1,
+        );
+        assert!(
+            parse_canonical_mac_prospective_retirement_control_request_v2(duplicate.as_bytes(),)
+                .is_err()
+        );
+        assert!(MacProspectiveRetirementControlActionV2::parse("remove_path").is_err());
+    }
+
+    #[test]
+    fn prospective_retirement_precommit_is_fixed_canonical_and_path_closed() {
+        let acknowledgement = r6_terminal_successor_acknowledgement_fixture_v2();
+        let authority = retirement_precommitted_authority_fixture_v2(&acknowledgement);
+        let bytes = canonical_mac_retirement_precommitted_authority_v2(&authority).unwrap();
+        assert_eq!(
+            parse_canonical_mac_retirement_precommitted_authority_v2(&bytes).unwrap(),
+            authority
+        );
+        assert_eq!(
+            mac_retirement_precommitted_authority_path_v2(&authority.scope_id).unwrap(),
+            PathBuf::from(format!(
+                "{MAC_R3_FINALIZER_JOURNAL_ROOT_V2}/authority/{}.host-retirement-authority.v2.json",
+                authority.scope_id
+            ))
+        );
+        assert_eq!(
+            mac_retirement_external_receipt_path_v2(&authority.scope_id).unwrap(),
+            PathBuf::from(format!(
+                "{MAC_R3_FINALIZER_JOURNAL_ROOT_V2}/external/{}.publisher-pre-removal-receipt.v2.json",
+                authority.scope_id
+            ))
+        );
+        assert_eq!(
+            mac_retirement_external_acknowledgement_path_v2(&authority.scope_id).unwrap(),
+            PathBuf::from(format!(
+                "{MAC_R3_FINALIZER_JOURNAL_ROOT_V2}/external/{}.harness-durability-acknowledgement.v2.json",
+                authority.scope_id
+            ))
+        );
+
+        let mut unknown: Value = serde_json::from_slice(&bytes).unwrap();
+        unknown.as_object_mut().unwrap().insert(
+            "path".to_string(),
+            Value::String("/tmp/forbidden".to_string()),
+        );
+        assert!(parse_canonical_mac_retirement_precommitted_authority_v2(
+            &canonical_bootstrap_json_bytes_v1(&unknown).unwrap()
+        )
+        .is_err());
+        let duplicate = String::from_utf8(bytes.clone()).unwrap().replacen(
+            '{',
+            &format!(
+                "{{\"schema_owner\":\"{}\",",
+                MAC_RETIREMENT_PRECOMMITTED_AUTHORITY_OWNER_V2
+            ),
+            1,
+        );
+        assert!(
+            parse_canonical_mac_retirement_precommitted_authority_v2(duplicate.as_bytes()).is_err()
+        );
+        assert!(parse_canonical_mac_retirement_precommitted_authority_v2(
+            &[b" ".as_slice(), bytes.as_slice()].concat()
+        )
+        .is_err());
+    }
+
+    #[test]
+    fn prospective_receipt_producer_binds_exact_observations_and_effect_order() {
+        let (authority, receipt) = retirement_pre_removal_receipt_fixture_v2();
+        assert_eq!(receipt.scope_id, authority.scope_id);
+        assert_eq!(receipt.evidence_id, authority.evidence_id);
+        assert_eq!(
+            receipt.host_state,
+            HostRetirementStateV2::PreRemovalReceiptSigned
+        );
+        assert_eq!(receipt.target_set_kind, TargetSetKindV2::ProspectiveHost);
+        assert_eq!(
+            receipt.target_ledger_sha256,
+            document_sha256_v2(&receipt.target_ledger).unwrap()
+        );
+        assert_eq!(
+            receipt.effect_plan_sha256,
+            document_sha256_v2(
+                &derive_host_effect_plan_v2(
+                    TargetSetKindV2::ProspectiveHost,
+                    &receipt.target_ledger,
+                )
+                .unwrap()
+            )
+            .unwrap()
+        );
+        let current_lock = receipt
+            .target_ledger
+            .iter()
+            .find(|identity| identity.role == HostTargetRoleV2::CurrentAnchorLock)
+            .unwrap();
+        assert_eq!(
+            receipt.current_lock_identity_sha256,
+            current_lock.expected_before_sha256
+        );
+        assert_eq!(
+            receipt.target_ledger.first().unwrap().locator,
+            HostResourceLocatorV2::PublisherService
+        );
+        assert_eq!(
+            receipt.target_ledger.last().unwrap().locator,
+            HostResourceLocatorV2::RetirementTerminalLatch
+        );
+        assert_eq!(
+            receipt.protected_cas_generation, 2,
+            "receipt names the exact quiesced predecessor rather than claiming future absence"
+        );
+    }
+
+    #[test]
+    fn prospective_receipt_and_binding_crash_rejoin_reject_alternate_digests() {
+        let (_, receipt) = retirement_pre_removal_receipt_fixture_v2();
+        let mut durable_receipt = receipt.clone();
+        durable_receipt.signature.signature = base64url_encode_mac_v1(&[9_u8; 64]);
+        require_mac_pre_removal_receipt_same_state_rejoin_v2(&receipt, &durable_receipt)
+            .expect("crash after receipt publication rejoins exact signed state");
+        let mut alternate_receipt = durable_receipt.clone();
+        alternate_receipt.capability_digest = "a".repeat(64);
+        assert!(
+            require_mac_pre_removal_receipt_same_state_rejoin_v2(&receipt, &alternate_receipt)
+                .is_err()
+        );
+
+        let expected_binding = ProtectedCasBindingV2 {
+            schema_owner: MAC_R3_PROTECTED_CAS_OWNER_V2.to_string(),
+            schema_version: MAC_R3_FINALIZER_PROTOCOL_VERSION_V2,
+            signature_domain: MAC_R3_PROTECTED_CAS_SIGNATURE_DOMAIN_V2.to_string(),
+            evidence_id: receipt.evidence_id.clone(),
+            scope_id: receipt.scope_id.clone(),
+            generation: receipt.protected_cas_generation + 1,
+            predecessor_head_sha256: receipt.protected_cas_head_sha256.clone(),
+            receipt_sha256: document_sha256_v2(&durable_receipt).unwrap(),
+            acknowledgement_sha256: "b".repeat(64),
+            request_digest: "c".repeat(64),
+            target_ledger_sha256: receipt.target_ledger_sha256.clone(),
+            effect_plan_sha256: receipt.effect_plan_sha256.clone(),
+            guest_successor_capsule_sha256: receipt.guest_successor_capsule_sha256.clone(),
+            guest_parity_sha256: receipt.guest_parity_sha256.clone(),
+            current_lock_identity_sha256: receipt.current_lock_identity_sha256.clone(),
+            signer_access_control_sha256: receipt.signer_access_control_sha256.clone(),
+            signature: mac_r3_unsigned_publisher_signature_v2(&receipt.publisher_signer_spki_der),
+        };
+        let mut durable_binding = expected_binding.clone();
+        durable_binding.signature.signature = base64url_encode_mac_v1(&[8_u8; 64]);
+        require_mac_protected_cas_same_state_rejoin_v2(&expected_binding, &durable_binding)
+            .expect("crash after CAS replacement rejoins exact signed binding");
+        let mut alternate_binding = durable_binding;
+        alternate_binding.request_digest = "d".repeat(64);
+        assert!(require_mac_protected_cas_same_state_rejoin_v2(
+            &expected_binding,
+            &alternate_binding
+        )
+        .is_err());
+    }
+
+    #[test]
+    fn prospective_binding_and_request_freeze_one_digest_after_durable_ack() {
+        let (authority, mut receipt) = retirement_pre_removal_receipt_fixture_v2();
+        receipt.signature.signature = base64url_encode_mac_v1(&[9_u8; 64]);
+        let acknowledgement = HarnessDurabilityAcknowledgementV2 {
+            schema_owner: "substrate.r3-macos-receipt-durability-acknowledgement".to_string(),
+            schema_version: MAC_R3_FINALIZER_PROTOCOL_VERSION_V2,
+            signature_domain: "R3_MAC_RECEIPT_DURABILITY_ACKNOWLEDGEMENT_V2".to_string(),
+            evidence_id: receipt.evidence_id.clone(),
+            scope_id: receipt.scope_id.clone(),
+            receipt_sha256: document_sha256_v2(&receipt).unwrap(),
+            external_store_identity_sha256: authority
+                .receipt_external_store_identity_sha256
+                .clone(),
+            durable_observation_sha256: "a".repeat(64),
+            acknowledged_at_unix_ns: receipt.issued_at_unix_ns,
+            signature: MacR3SignatureV2 {
+                algorithm: "ed25519-v1".to_string(),
+                public_key: receipt.harness_public_key.clone(),
+                signature: base64url_encode_mac_v1(&[1_u8; 64]),
+            },
+        };
+        let (binding, request) = assemble_mac_protected_cas_binding_and_request_v2(
+            &authority,
+            &receipt,
+            &acknowledgement,
+            mac_r3_unsigned_publisher_signature_v2(&receipt.publisher_signer_spki_der),
+        )
+        .unwrap();
+        assert_eq!(binding.generation, receipt.protected_cas_generation + 1);
+        assert_eq!(
+            binding.predecessor_head_sha256,
+            receipt.protected_cas_head_sha256
+        );
+        assert_eq!(
+            binding.receipt_sha256,
+            document_sha256_v2(&receipt).unwrap()
+        );
+        assert_eq!(
+            binding.acknowledgement_sha256,
+            document_sha256_v2(&acknowledgement).unwrap()
+        );
+        assert_eq!(request.request_digest, binding.request_digest);
+        assert_eq!(
+            request.request_digest,
+            document_sha256_v2(&request.successor_capsule).unwrap()
+        );
+        let decoded_binding: ProtectedCasBindingV2 =
+            parse_canonical_v2(&mac_base64url_decode_v1(&request.protected_cas_binding).unwrap())
+                .unwrap();
+        assert_eq!(decoded_binding, binding);
+        assert_eq!(
+            request.successor_capsule.predecessor_journal_head_sha256,
+            authority.predecessor_journal_head_sha256
+        );
+        assert_eq!(
+            request.successor_capsule.retry_state_sha256,
+            authority.retry_state_sha256
+        );
+    }
+
+    #[test]
+    fn finalization_request_is_published_only_to_the_uid501_readable_fixed_inbox() {
+        assert_eq!(
+            MAC_R3_COORDINATOR_INBOX_ROOT_V2,
+            "/Library/Application Support/Atomize/R3MacEvidenceFinalizer/v2/inbox"
+        );
+        assert_eq!(
+            Path::new(MAC_R3_FINALIZER_REQUEST_PATH_V2).parent(),
+            Some(Path::new(MAC_R3_COORDINATOR_INBOX_ROOT_V2))
+        );
+        let source = include_str!("substrate-lifecycle-macos.rs");
+        let freeze_body = source
+            .rsplit_once("fn freeze_and_publish_mac_finalization_request_v2")
+            .unwrap()
+            .1
+            .split("fn refresh_mac_retirement_resource_index_before_quiescence_v2")
+            .next()
+            .unwrap();
+        assert!(freeze_body.contains("MAC_R3_COORDINATOR_INBOX_ROOT_V2"));
+        assert!(freeze_body.contains("mac_publish_immutable_file_atomic_no_replace_v1"));
+        assert!(freeze_body.contains("MAC_R3_COORDINATOR_INBOX_FILE_MODE_V2"));
+        assert!(freeze_body.contains("MAC_R3_COORDINATOR_INBOX_OWNER_UID_V2"));
+        assert!(freeze_body.contains("MAC_R3_COORDINATOR_INBOX_GROUP_GID_V2"));
+        assert_eq!(
+            freeze_body
+                .matches("mac_open_fixed_coordinator_inbox_root_v2")
+                .count(),
+            2
+        );
+        assert!(freeze_body.contains("inbox_before != inbox_after"));
+        assert!(source.contains("libc::O_NOFOLLOW | libc::O_DIRECTORY"));
+        assert_eq!(MAC_R3_COORDINATOR_INBOX_FILE_MODE_V2, 0o440);
+        assert_eq!(MAC_R3_COORDINATOR_INBOX_OWNER_UID_V2, 0);
+        assert_eq!(MAC_R3_COORDINATOR_INBOX_GROUP_GID_V2, 20);
+        assert!(!freeze_body.contains("mac_publish_fixed_retirement_external_file_v2"));
+    }
+
+    #[test]
+    fn prospective_producer_route_enforces_closed_durability_order() {
+        for (literal, action) in [
+            (
+                "sign_pre_removal_receipt",
+                MacProspectiveRetirementControlActionV2::SignPreRemovalReceipt,
+            ),
+            (
+                "bind_durable_acknowledgement",
+                MacProspectiveRetirementControlActionV2::BindDurableAcknowledgement,
+            ),
+            (
+                "freeze_finalization_request",
+                MacProspectiveRetirementControlActionV2::FreezeFinalizationRequest,
+            ),
+        ] {
+            assert_eq!(action.literal(), literal);
+            assert_eq!(
+                MacProspectiveRetirementControlActionV2::parse(literal).unwrap(),
+                action
+            );
+        }
+        let source = include_str!("substrate-lifecycle-macos.rs");
+        let receipt_body = source
+            .rsplit_once("fn sign_and_publish_mac_pre_removal_receipt_v2")
+            .unwrap()
+            .1
+            .split("fn bind_mac_durable_retirement_acknowledgement_v2")
+            .next()
+            .unwrap();
+        assert!(
+            receipt_body
+                .find("mac_observe_quiesced_host_target_ledger_v2")
+                .unwrap()
+                < receipt_body
+                    .find("mac_publish_fixed_retirement_external_file_v2")
+                    .unwrap()
+        );
+        assert!(receipt_body.contains("drop(observed)"));
+        let bind_body = source
+            .rsplit_once("fn bind_mac_durable_retirement_acknowledgement_v2")
+            .unwrap()
+            .1
+            .split("fn freeze_and_publish_mac_finalization_request_v2")
+            .next()
+            .unwrap();
+        assert!(
+            bind_body
+                .find("load_mac_external_harness_acknowledgement_v2")
+                .unwrap()
+                < bind_body
+                    .find("mac_keychain_compare_and_swap_item_v1")
+                    .unwrap()
+        );
+        assert!(bind_body.contains("MacRetirementProtectedCasStateV2::Binding(existing, _)"));
+        let freeze_body = source
+            .rsplit_once("fn freeze_and_publish_mac_finalization_request_v2")
+            .unwrap()
+            .1
+            .split("fn refresh_mac_retirement_resource_index_before_quiescence_v2")
+            .next()
+            .unwrap();
+        assert!(freeze_body
+            .contains("finalization request cannot freeze before acknowledgement CAS binding"));
+        assert!(freeze_body.contains("validate_finalization_request_v2"));
+        assert!(
+            !source.contains(&["MacProspectiveRetirementControlActionV2::", "Uninstall",].concat())
+        );
+        assert!(!source
+            .contains(&["MacProspectiveRetirementControlActionV2::", "RecoverOrphan",].concat()));
+    }
+
+    #[test]
+    fn prospective_retirement_route_and_greenfield_producer_hooks_are_reachable() {
+        let source = include_str!("substrate-lifecycle-macos.rs");
+        let required = [
+            ["if operation == ", "\"prospective-retirement-v2\"", " {"].concat(),
+            [
+                "parse_canonical_mac_prospective_retirement_control_request_v2",
+                "(request)?",
+            ]
+            .concat(),
+            [
+                "return execute_mac_prospective_retirement_control_v2",
+                "(&executor, &request);",
+            ]
+            .concat(),
+            [
+                "initialize_mac_retirement_resource_index_v2",
+                "(executor, &request.scope_id)",
+            ]
+            .concat(),
+            [
+                "refresh_mac_retirement_resource_index_before_quiescence_v2",
+                "(\n                executor,",
+            ]
+            .concat(),
+            [
+                "append_mac_retirement_resource_producers_if_active_v2",
+                "(\n        &stage_one.successor_template.scope_id",
+            ]
+            .concat(),
+            ["&[MacRetirementResourceProducerV2::", "PostPmJournal {"].concat(),
+            ["&[MacRetirementResourceProducerV2::", "PostPmArtifact {"].concat(),
+            [
+                "append_mac_r6_generation_resources_if_active_v2",
+                "(\n                    &predecessor.scope_id,",
+            ]
+            .concat(),
+            ["&[MacRetirementResourceProducerV2::", "R6GuestHostRecord {"].concat(),
+            ["&[MacRetirementResourceProducerV2::", "R6OperatorLaunch {"].concat(),
+            [
+                "&[MacRetirementResourceProducerV2::",
+                "R6TerminalAcknowledgement]",
+            ]
+            .concat(),
+        ];
+        for required in required {
+            assert!(
+                source.contains(&required),
+                "missing retirement hook {required}"
+            );
+        }
+        for forbidden in [
+            ["prospective-retirement-v2-", "uninstall"].concat(),
+            ["MacProspectiveRetirementControlActionV2::", "DeletePath"].concat(),
+            ["MacProspectiveRetirementControlActionV2::", "RunCommand"].concat(),
+        ] {
+            assert!(!source.contains(&forbidden));
+        }
+    }
+
+    #[test]
+    fn prospective_post_pm_artifact_labels_are_exhaustive_and_not_caller_open() {
+        let entry_id = "018f3e4a-7b2c-7c91-8a6f-2e1d5c4b3a94";
+        assert_eq!(
+            mac_post_pm_retirement_artifact_label_v2(&format!("measured-artifact-{entry_id}"))
+                .unwrap(),
+            PostPmArtifactLabelV2::MeasuredArtifact {
+                entry_id: entry_id.to_string(),
+            }
+        );
+        assert_eq!(
+            mac_post_pm_retirement_artifact_label_v2("guest-service-unit").unwrap(),
+            PostPmArtifactLabelV2::GuestServiceUnit
+        );
+        assert_eq!(
+            mac_post_pm_retirement_artifact_label_v2("guest-socket-unit").unwrap(),
+            PostPmArtifactLabelV2::GuestSocketUnit
+        );
+        assert_eq!(
+            mac_post_pm_retirement_artifact_label_v2("fixed-publisher-artifact").unwrap(),
+            PostPmArtifactLabelV2::FixedPublisherArtifact
+        );
+        assert!(mac_post_pm_retirement_artifact_label_v2("caller-selected").is_err());
+    }
+
+    #[test]
+    fn guest_retirement_lima_entrypoints_are_canonical_fixed_and_target_closed() {
+        let scope = "018f3e4a-7b2c-7c91-8a6f-2e1d5c4b3a90";
+        let challenge = "018f3e4a-7b2c-7c91-8a6f-2e1d5c4b3a91";
+        let bind = GuestRetirementBindRequestV2 {
+            schema_owner: MAC_R3_GUEST_BIND_REQUEST_OWNER_V2.to_string(),
+            schema_version: MAC_R3_FINALIZER_PROTOCOL_VERSION_V2,
+            evidence_id: "EVIDENCE:R3-GUEST-TEST".to_string(),
+            scope_id: scope.to_string(),
+            r6_challenge_id: challenge.to_string(),
+            guest_acknowledgement: base64url_encode_mac_v1(b"canonical-ack"),
+        };
+        let bind_argument = format!(
+            "--request-v2={}",
+            base64url_encode_mac_v1(&canonical_bytes_v2(&bind).unwrap())
+        );
+        let bind_route = vec![
+            "shell".to_string(),
+            "substrate".to_string(),
+            "--".to_string(),
+            "/usr/bin/sudo".to_string(),
+            "-n".to_string(),
+            "--".to_string(),
+            MAC_GUEST_RETIREMENT_EXECUTOR_PATH_V2.to_string(),
+            "guest-retirement-bind-v2".to_string(),
+            bind_argument,
+        ];
+        fn borrowed(values: &[String]) -> Vec<&str> {
+            values.iter().map(String::as_str).collect()
+        }
+        assert!(mac_validate_fixed_lima_argument_plan_v1(&borrowed(&bind_route), None).is_ok());
+
+        let authority = json!({
+            "schema_owner": MAC_R3_GUEST_RETIREMENT_AUTHORITY_OWNER_V2,
+            "schema_version": MAC_R3_FINALIZER_PROTOCOL_VERSION_V2,
+            "signature_domain": MAC_R3_GUEST_RETIREMENT_AUTHORITY_SIGNATURE_DOMAIN_V2,
+            "evidence_id": "EVIDENCE:R3-GUEST-TEST",
+            "scope_id": scope,
+            "r6_challenge_id": challenge,
+            "issued_at_unix_ns": 1,
+            "expires_at_unix_ns": 2,
+            "baseline_sha256": "01".repeat(32),
+            "before_observation_sha256": "02".repeat(32),
+            "component_inventory_sha256": "03".repeat(32),
+            "quiesce_plan_sha256": "04".repeat(32),
+            "target_ledger": [{
+                "ordinal": 1,
+                "role": "lima_instance",
+                "locator": "lima_instance",
+                "expected_before_sha256": "05".repeat(32),
+            }],
+            "target_ledger_sha256": "06".repeat(32),
+            "effect_plan_sha256": "07".repeat(32),
+            "r6_predecessor_consumed_sha256": "08".repeat(32),
+            "r6_terminal_host_record_sha256": "09".repeat(32),
+            "guest_anchor_acknowledgement_sha256": "0a".repeat(32),
+            "guest_consumption_marker_acknowledgement_sha256": "0b".repeat(32),
+            "guest_signer_public_key": "guest-key",
+            "harness_public_key": "harness-key",
+            "signature": {
+                "algorithm": "ecdsa-p256-sha256-p1363-low-s-v1",
+                "public_key": "host-key",
+                "signature": "host-signature",
+            },
+        });
+        let prepare_argument = format!(
+            "--request-v2={}",
+            base64url_encode_mac_v1(&canonical_bytes_v2(&authority).unwrap())
+        );
+        let mut prepare_route = bind_route.clone();
+        prepare_route[7] = "guest-retirement-prepare-v2".to_string();
+        prepare_route[8] = prepare_argument;
+        assert!(mac_validate_fixed_lima_argument_plan_v1(&borrowed(&prepare_route), None).is_ok());
+
+        for (index, replacement) in [
+            (1, "alternate-instance"),
+            (3, "/bin/sh"),
+            (6, "/tmp/caller-executor"),
+            (7, "guest-retirement-delete-v2"),
+        ] {
+            let mut substituted = bind_route.clone();
+            substituted[index] = replacement.to_string();
+            assert!(
+                mac_validate_fixed_lima_argument_plan_v1(&borrowed(&substituted), None).is_err(),
+                "substitution at argv {index} was accepted"
+            );
+        }
+        let mut extra = bind_route.clone();
+        extra.push("--path=/tmp/forbidden".to_string());
+        assert!(mac_validate_fixed_lima_argument_plan_v1(&borrowed(&extra), None).is_err());
+        let mut unknown: Value = serde_json::to_value(&bind).unwrap();
+        unknown.as_object_mut().unwrap().insert(
+            "path".to_string(),
+            Value::String("/tmp/forbidden".to_string()),
+        );
+        let mut widened = bind_route;
+        widened[8] = format!(
+            "--request-v2={}",
+            base64url_encode_mac_v1(&canonical_bytes_v2(&unknown).unwrap())
+        );
+        assert!(mac_validate_fixed_lima_argument_plan_v1(&borrowed(&widened), None).is_err());
+    }
+
+    #[test]
+    fn guest_retirement_control_and_external_paths_have_no_arbitrary_surface() {
+        for (literal, expected) in [
+            (
+                "prepare_guest_retirement",
+                MacProspectiveRetirementControlActionV2::PrepareGuestRetirement,
+            ),
+            (
+                "accept_guest_retirement",
+                MacProspectiveRetirementControlActionV2::AcceptGuestRetirement,
+            ),
+            (
+                "remove_guest",
+                MacProspectiveRetirementControlActionV2::RemoveGuest,
+            ),
+            (
+                "bind_guest_parity",
+                MacProspectiveRetirementControlActionV2::BindGuestParity,
+            ),
+        ] {
+            assert_eq!(
+                MacProspectiveRetirementControlActionV2::parse(literal).unwrap(),
+                expected
+            );
+            assert_eq!(expected.literal(), literal);
+        }
+        for forbidden in [
+            "delete_path",
+            "run_command",
+            "remove_instance",
+            "uninstall",
+            "recover_orphan",
+        ] {
+            assert!(MacProspectiveRetirementControlActionV2::parse(forbidden).is_err());
+        }
+        let scope = "018f3e4a-7b2c-7c91-8a6f-2e1d5c4b3a90";
+        assert!(mac_guest_retirement_external_path_v2(scope, ".caller-path").is_err());
+        assert!(mac_guest_retirement_journal_path_v2(scope, 7).is_err());
+        assert!(mac_guest_retirement_journal_path_v2(scope, 14).is_ok());
+        assert!(mac_guest_retirement_journal_path_v2(scope, 15).is_err());
+        assert!(mac_guest_retirement_journal_path_v2(scope, 8)
+            .unwrap()
+            .starts_with(Path::new(MAC_R3_FINALIZER_JOURNAL_ROOT_V2)));
+    }
+
+    #[test]
+    fn guest_retirement_source_preserves_acceptance_effect_and_parity_order() {
+        let source = include_str!("substrate-lifecycle-macos.rs");
+        let slice = |start: &str, end: &str| {
+            let from = source.find(start).expect("guest source start");
+            let tail = &source[from..];
+            let to = tail.find(end).expect("guest source end");
+            &tail[..to]
+        };
+        let acceptance = slice(
+            "\nfn accept_mac_guest_retirement_handoff_v2",
+            "\nfn mac_guest_retirement_instance_entry_v2",
+        );
+        let handoff_durable = acceptance
+            .find("mac_publish_fixed_retirement_external_absent_or_exact_v2")
+            .unwrap();
+        let cas_lock = acceptance
+            .find("mac_keychain_durable_cas_guard_v1")
+            .unwrap();
+        let cas_write = acceptance
+            .find("mac_keychain_compare_and_swap_item_v1")
+            .unwrap();
+        let host_accepted = acceptance
+            .find("mac_append_guest_retirement_journal_v2")
+            .unwrap();
+        assert!(handoff_durable < cas_lock && cas_lock < cas_write && cas_write < host_accepted);
+
+        let removal = slice(
+            "\nfn remove_mac_guest_retirement_target_v2",
+            "\nfn bind_mac_guest_retirement_parity_v2",
+        );
+        let prepared = removal
+            .find("GuestJournalEventKindV2::EffectPrepared")
+            .unwrap();
+        let invoked = removal
+            .match_indices("GuestJournalEventKindV2::EffectInvoked")
+            .map(|(index, _)| index)
+            .collect::<Vec<_>>();
+        let system_call = removal
+            .match_indices("mac_invoke_guest_retirement_effect_v2")
+            .map(|(index, _)| index)
+            .collect::<Vec<_>>();
+        let observed = removal
+            .match_indices("GuestJournalEventKindV2::EffectObserved")
+            .map(|(index, _)| index)
+            .collect::<Vec<_>>();
+        let removed = removal
+            .match_indices("GuestJournalEventKindV2::GuestRemoved")
+            .map(|(index, _)| index)
+            .collect::<Vec<_>>();
+        assert_eq!(invoked.len(), 2);
+        assert_eq!(system_call.len(), 1);
+        assert!(prepared < invoked[0] && invoked[0] < system_call[0]);
+        assert!(system_call[0] < invoked[1]);
+        assert_eq!(observed.len(), 4);
+        assert_eq!(removed.len(), 4);
+        assert!(system_call[0] < observed[0]);
+        assert!(observed[1] < removed[1]);
+        assert!(!removal.contains("match frames.len()"));
+        assert!(!removal.contains("frames[10]"));
+        assert!(!removal.contains("frames[11]"));
+        assert!(!removal.contains("Command::new"));
+        assert!(!removal.contains("caller"));
+
+        let parity = slice(
+            "\nfn bind_mac_guest_retirement_parity_v2",
+            "\n/// Reopen the externally durable terminal guest bundle",
+        );
+        let parity_load = parity.find("guest parity proof").unwrap();
+        let parity_durable = parity
+            .find("GuestJournalEventKindV2::ParityExternallyDurable")
+            .unwrap();
+        let cas = parity
+            .find("mac_keychain_compare_and_swap_item_v1")
+            .unwrap();
+        let parity_bound = parity
+            .find("GuestJournalEventKindV2::ParityHostBound")
+            .unwrap();
+        let terminal = parity.find("guest terminal bundle").unwrap();
+        assert!(
+            parity_load < parity_durable
+                && parity_durable < cas
+                && cas < parity_bound
+                && parity_bound < terminal
+        );
+    }
 }
 
 /// Open the fixed private lifecycle capsule after the caller has validated its typed authority.
@@ -7619,6 +9473,29 @@ fn closed_mac_role_action_v1(role: &str, action: ManagedActionV1) -> bool {
                 | ManagedActionV1::Restore
         ),
         _ => false,
+    }
+}
+
+fn mac_retirement_admission_class_for_control_v2(
+    control: &ManagedLifecycleControlRequestV1,
+) -> Result<MacRetirementAdmissionClassV2> {
+    match control.tag {
+        Some(MappedLifecycleTagV1::StageOneCreate | MappedLifecycleTagV1::PostPmAction) => {
+            Ok(MacRetirementAdmissionClassV2::Ordinary)
+        }
+        Some(MappedLifecycleTagV1::GuestPairingDataSession)
+            if control.pairing_session_binding_v1.is_some()
+                || control.pairing_host_record_generation.is_some()
+                || control.pairing_record_expected_generation_v1.is_some()
+                || control.pairing_host_record_sha256.is_some()
+                || control.pairing_ticket.is_some() =>
+        {
+            Ok(MacRetirementAdmissionClassV2::SurvivingSuccessorHandoffOrRetry)
+        }
+        Some(MappedLifecycleTagV1::GuestPairingDataSession) => {
+            Ok(MacRetirementAdmissionClassV2::Ordinary)
+        }
+        None => bail!("retirement admission classifier lacks a closed mapped tag"),
     }
 }
 
@@ -7853,6 +9730,85 @@ struct MacLimaInheritedInputV1 {
     file: fs::File,
 }
 
+#[cfg(target_os = "macos")]
+#[derive(Debug, Clone, PartialEq, Eq)]
+struct MacCoordinatorInboxDirectoryIdentityV2 {
+    path: PathBuf,
+    device: u64,
+    inode: u64,
+    owner_uid: u32,
+    owner_gid: u32,
+    mode: u32,
+}
+
+#[cfg(target_os = "macos")]
+fn mac_open_fixed_coordinator_inbox_root_v2(
+) -> Result<(fs::File, Vec<MacCoordinatorInboxDirectoryIdentityV2>)> {
+    let inbox = Path::new(MAC_R3_COORDINATOR_INBOX_ROOT_V2);
+    if !inbox.is_absolute() {
+        bail!("fixed coordinator inbox root is not absolute");
+    }
+    let mut current = fs::File::open("/").context("open filesystem root for coordinator inbox")?;
+    let mut current_path = PathBuf::from("/");
+    let mut identities = Vec::new();
+    for component in inbox.components() {
+        let std::path::Component::Normal(component) = component else {
+            if component == std::path::Component::RootDir {
+                continue;
+            }
+            bail!("fixed coordinator inbox contains a nonphysical component");
+        };
+        let name = std::ffi::CString::new(component.as_bytes())
+            .context("fixed coordinator inbox component contains NUL")?;
+        // SAFETY: current is a live directory descriptor, name is NUL-terminated, and every
+        // component is independently constrained to a no-follow directory open.
+        let fd = unsafe {
+            libc::openat(
+                current.as_raw_fd(),
+                name.as_ptr(),
+                libc::O_RDONLY | libc::O_CLOEXEC | libc::O_NOFOLLOW | libc::O_DIRECTORY,
+            )
+        };
+        if fd < 0 {
+            return Err(std::io::Error::last_os_error()).with_context(|| {
+                format!(
+                    "open fixed coordinator inbox component {}",
+                    component.to_string_lossy()
+                )
+            });
+        }
+        // SAFETY: successful openat transferred ownership of this descriptor.
+        let next = unsafe { fs::File::from_raw_fd(fd) };
+        current_path.push(component);
+        let metadata = next
+            .metadata()
+            .context("inspect fixed coordinator inbox directory descriptor")?;
+        let exact_root = current_path == inbox;
+        if !metadata.file_type().is_dir()
+            || metadata.uid() != MAC_R3_COORDINATOR_INBOX_OWNER_UID_V2
+            || metadata.mode() & 0o022 != 0
+            || (exact_root
+                && (metadata.gid() != MAC_R3_COORDINATOR_INBOX_GROUP_GID_V2
+                    || metadata.mode() & 0o7777 != MAC_R3_COORDINATOR_INBOX_DIRECTORY_MODE_V2))
+        {
+            bail!("fixed coordinator inbox ancestor is not exact root-owned no-follow state");
+        }
+        identities.push(MacCoordinatorInboxDirectoryIdentityV2 {
+            path: current_path.clone(),
+            device: metadata.dev(),
+            inode: metadata.ino(),
+            owner_uid: metadata.uid(),
+            owner_gid: metadata.gid(),
+            mode: metadata.mode(),
+        });
+        current = next;
+    }
+    if identities.last().map(|identity| identity.path.as_path()) != Some(inbox) {
+        bail!("fixed coordinator inbox walk did not terminate at its compiled root");
+    }
+    Ok((current, identities))
+}
+
 /// Publish one immutable host artifact without ever exposing partial bytes at the final path.
 /// The content-addressed temp is on the same filesystem; `hard_link` supplies atomic no-replace
 /// publication, followed by temp unlink and directory fsync. Exact temp/final states converge
@@ -8006,6 +9962,21 @@ fn mac_publish_immutable_file_atomic_no_replace_v1(
                 .custom_flags(libc::O_CLOEXEC | libc::O_NOFOLLOW)
                 .open(&temp)
                 .with_context(|| format!("create same-directory {label} temp"))?;
+            // The caller freezes both uid and gid. Do not rely on the publisher process's
+            // primary group or on a setgid parent when publishing coordinator-readable state.
+            // This descriptor is still the only name for a newly created inode, so changing its
+            // ownership here cannot race a path substitution.
+            if unsafe {
+                libc::fchown(
+                    file.as_raw_fd(),
+                    expected_uid as libc::uid_t,
+                    expected_gid as libc::gid_t,
+                )
+            } != 0
+            {
+                return Err(std::io::Error::last_os_error())
+                    .with_context(|| format!("set exact {label} temp ownership"));
+            }
             file.write_all(bytes)
                 .with_context(|| format!("write complete {label} temp"))?;
             file.sync_all()
@@ -8155,7 +10126,14 @@ fn mac_write_stage_one_profile_absent_or_exact_v1(
             file: retained,
         })
     })();
-    result
+    let result = result?;
+    append_mac_retirement_resource_producers_if_active_v2(
+        &stage_one.successor_template.scope_id,
+        &[MacRetirementResourceProducerV2::StageOneProfile {
+            attempt_id: stage_one.attempt_id.clone(),
+        }],
+    )?;
+    Ok(result)
 }
 
 #[derive(Debug, Clone, PartialEq, Eq)]
@@ -8236,6 +10214,44 @@ fn mac_validate_fixed_lima_argument_plan_v1(
             }
         }
         None => {
+            let has_guest_retirement_entrypoint = arguments.get(6).copied()
+                == Some(MAC_GUEST_RETIREMENT_EXECUTOR_PATH_V2)
+                || matches!(
+                    arguments.get(7).copied(),
+                    Some("guest-retirement-prepare-v2" | "guest-retirement-bind-v2")
+                );
+            if has_guest_retirement_entrypoint {
+                if arguments.len() != 9
+                    || arguments[0..7]
+                        != [
+                            "shell",
+                            "substrate",
+                            "--",
+                            "/usr/bin/sudo",
+                            "-n",
+                            "--",
+                            MAC_GUEST_RETIREMENT_EXECUTOR_PATH_V2,
+                        ]
+                    || !matches!(
+                        arguments[7],
+                        "guest-retirement-prepare-v2" | "guest-retirement-bind-v2"
+                    )
+                {
+                    bail!("guest retirement command is not the one fixed installed route");
+                }
+                let encoded = arguments[8]
+                    .strip_prefix("--request-v2=")
+                    .filter(|value| !value.is_empty())
+                    .ok_or_else(|| {
+                        anyhow::anyhow!("guest retirement command lacks its canonical request")
+                    })?;
+                let bytes = mac_base64url_decode_v1(encoded)?;
+                if arguments[7] == "guest-retirement-prepare-v2" {
+                    let _: GuestRetirementAuthorityV2 = parse_canonical_v2(&bytes)?;
+                } else {
+                    let _: GuestRetirementBindRequestV2 = parse_canonical_v2(&bytes)?;
+                }
+            }
             if arguments.contains(&MAC_LIMA_PROFILE_CHILD_PATH_V1)
                 || arguments.contains(&MAC_LIMA_POST_PM_STDIN_TRANSFER_SCRIPT_V1)
             {
@@ -9652,6 +11668,10 @@ fn ensure_mac_r6_pairing_predecessor_v1(
             guest_executor_identity,
         )? {
             MacR6PairingGenerationOutcomeV1::Ready(predecessor, continuation) => {
+                append_mac_r6_generation_resources_if_active_v2(
+                    &predecessor.scope_id,
+                    predecessor.predecessor_generation,
+                )?;
                 return Ok((predecessor, continuation));
             }
             MacR6PairingGenerationOutcomeV1::MissedActivation if regeneration_attempt == 0 => {}
@@ -11020,6 +13040,20 @@ fn mac_persist_post_pm_journal_state_absent_or_exact_v1(
         0,
         "post-PM journal state",
     )?;
+    let retirement_state = match state {
+        "Prepared" => PostPmJournalStateV2::Prepared,
+        "EffectStarted" => PostPmJournalStateV2::EffectStarted,
+        "EffectObserved" => PostPmJournalStateV2::EffectObserved,
+        "Completed" => PostPmJournalStateV2::Completed,
+        _ => bail!("post-PM journal state has no prospective retirement locator"),
+    };
+    append_mac_retirement_resource_producers_if_active_v2(
+        &prepared.scope_id,
+        &[MacRetirementResourceProducerV2::PostPmJournal {
+            receipt_id: prepared.receipt_id.clone(),
+            state: retirement_state,
+        }],
+    )?;
     Ok(journal)
 }
 
@@ -11067,6 +13101,13 @@ fn mac_persist_completed_post_pm_journal_from_receipt_v1(
         0,
         0,
         "completed post-PM journal",
+    )?;
+    append_mac_retirement_resource_producers_if_active_v2(
+        &receipt.scope_id,
+        &[MacRetirementResourceProducerV2::PostPmJournal {
+            receipt_id: receipt.receipt_id.clone(),
+            state: PostPmJournalStateV2::Completed,
+        }],
     )
 }
 
@@ -12271,6 +14312,21 @@ fn mac_fixed_lima_atomic_publish_arguments_v1(
     ])
 }
 
+fn mac_post_pm_retirement_artifact_label_v2(label: &str) -> Result<PostPmArtifactLabelV2> {
+    if let Some(entry_id) = label.strip_prefix("measured-artifact-") {
+        mac_require_uuid_v7_component_v1(entry_id, "retirement post-PM artifact entry")?;
+        return Ok(PostPmArtifactLabelV2::MeasuredArtifact {
+            entry_id: entry_id.to_string(),
+        });
+    }
+    match label {
+        "guest-service-unit" => Ok(PostPmArtifactLabelV2::GuestServiceUnit),
+        "guest-socket-unit" => Ok(PostPmArtifactLabelV2::GuestSocketUnit),
+        "fixed-publisher-artifact" => Ok(PostPmArtifactLabelV2::FixedPublisherArtifact),
+        _ => bail!("post-PM artifact label has no closed prospective retirement role"),
+    }
+}
+
 #[cfg(target_os = "macos")]
 fn mac_write_post_pm_embedded_artifact_absent_or_exact_v1(
     executor: &MacManagedArtifactExecutorV1,
@@ -12305,6 +14361,14 @@ fn mac_write_post_pm_embedded_artifact_absent_or_exact_v1(
         0,
         0,
         "retained embedded post-PM artifact",
+    )?;
+    append_mac_retirement_resource_producers_if_active_v2(
+        &prepared.scope_id,
+        &[MacRetirementResourceProducerV2::PostPmArtifact {
+            receipt_id: prepared.receipt_id.clone(),
+            label: mac_post_pm_retirement_artifact_label_v2(label)?,
+            sha256: digest.clone(),
+        }],
     )?;
     mac_open_root_private_lima_input_v1(
         &path,
@@ -13885,7 +15949,11 @@ pub fn execute_mac_managed_action_v1(
         .context("decode exact mapped macOS lifecycle control request")?;
     let tag = validate_mapped_lifecycle_control_request_v1(&control)?;
     validate_mac_mapped_action_authority_v1(request)?;
-    match tag {
+    let _retirement_admission_guard = acquire_mac_retirement_admission_guard_v2(
+        &control.scope_id,
+        mac_retirement_admission_class_for_control_v2(&control)?,
+    )?;
+    let response = match tag {
         MappedLifecycleTagV1::StageOneCreate => {
             let stage_one = control
                 .lima_stage_one_authorization_v1
@@ -13904,7 +15972,17 @@ pub fn execute_mac_managed_action_v1(
         MappedLifecycleTagV1::GuestPairingDataSession => {
             execute_mac_guest_pairing_session_v1(executor, &control, audit_token)
         }
+    }?;
+    let retirement_index_account =
+        mac_keychain_retirement_resource_index_account_v2(&control.scope_id)?;
+    if mac_keychain_read_item_v1(MAC_KEYCHAIN_SERVICE_V1, &retirement_index_account)?.is_some() {
+        let lifecycle_producers =
+            mac_current_authoritative_lifecycle_resource_producers_v2(executor, &control.scope_id)?;
+        if !lifecycle_producers.is_empty() {
+            append_mac_retirement_resource_producers_v2(&control.scope_id, &lifecycle_producers)?;
+        }
     }
+    Ok(response)
 }
 
 /// Dispatch the one data-only R6 tag after listener audit-token/image attestation and common
@@ -14067,6 +16145,768 @@ struct MacLimaGuestPairingStageOneRecordV1 {
     stage_one: LimaStageOneAuthorizationV1,
 }
 
+/// Frozen, deterministic facts proving that the host observed the exact surviving guest consume
+/// the R6 ticket. The two wire-frame digests name the acknowledgement sent to the guest and the
+/// guest's durable-consumption-marker response without retaining an arbitrary response surface.
+#[derive(Debug, Clone, PartialEq, Eq)]
+struct MacR6TerminalSuccessorEvidenceV2 {
+    scope_id: String,
+    challenge_id: String,
+    predecessor_id: String,
+    predecessor_generation: u64,
+    terminal_generation: u64,
+    host_record_sha256: String,
+    predecessor_consumed_state_sha256: String,
+    guest_anchor_sha256: String,
+    guest_anchor_acknowledgement_sha256: String,
+    guest_consumption_marker_response_sha256: String,
+    stage_one_record_sha256: String,
+    stage_one_authorization_sha256: String,
+    pairing_session_binding_sha256: String,
+    signer_spki_sha256: String,
+}
+
+/// Future-only R6 surviving-successor acknowledgement. It is a new V2 signature domain and never
+/// changes or widens the V1 lifecycle signature payload used by existing publisher records.
+#[derive(Debug, Clone, PartialEq, Eq)]
+struct MacR6PairingTerminalSuccessorAcknowledgementV2 {
+    schema_owner: String,
+    schema_version: u32,
+    successor_evidence: MacR6TerminalSuccessorEvidenceV2,
+    successor_evidence_sha256: String,
+    terminal_at_unix_ns: u64,
+    signature: LifecycleSignatureV1,
+}
+
+/// Closed producer identities for the prospective retirement resource index. Producers append
+/// these typed identities after their exact durable create/replace has succeeded; no path,
+/// Keychain account, suffix, or locator is supplied by a caller.
+#[derive(Debug, Clone, PartialEq, Eq)]
+enum MacRetirementResourceProducerV2 {
+    LifecycleCapsuleRoots,
+    ControlAdmission,
+    CurrentAnchor,
+    PublisherServiceState,
+    PublisherBootstrapIntent,
+    BootstrapAttemptLocator {
+        attempt_key_sha256: String,
+    },
+    LimaStageOneCapsule,
+    Manifest {
+        generation: u64,
+    },
+    ReceiptIndex {
+        generation: u64,
+    },
+    Head,
+    Receipt {
+        generation: u64,
+        receipt_id: String,
+    },
+    StageOneProfile {
+        attempt_id: String,
+    },
+    PostPmJournal {
+        receipt_id: String,
+        state: PostPmJournalStateV2,
+    },
+    PostPmArtifact {
+        receipt_id: String,
+        label: PostPmArtifactLabelV2,
+        sha256: String,
+    },
+    R6PredecessorState,
+    R6Predecessor {
+        generation: u64,
+    },
+    R6Continuation {
+        generation: u64,
+    },
+    R6Activation {
+        generation: u64,
+    },
+    R6Tombstone {
+        generation: u64,
+    },
+    R6MissedActivation {
+        generation: u64,
+    },
+    R6ActiveGuestRecord,
+    R6GuestHostRecord {
+        challenge_id: String,
+    },
+    R6OperatorLaunch {
+        challenge_id: String,
+    },
+    R6TerminalAcknowledgement,
+    GuestRetirementCas,
+    RetirementQuiescenceCas,
+}
+
+#[derive(Debug, Clone, PartialEq, Eq)]
+struct MacRetirementResourceIndexEntryV2 {
+    ordinal: u32,
+    locator: HostResourceLocatorV2,
+    previous_entry_sha256: Option<String>,
+    entry_sha256: String,
+}
+
+// Security.framework evaluates all selected process-subject bits conjunctively. UINT32_MAX is the
+// setuid/setgid syscall sentinel rather than a representable credential, and both bits are used
+// without kSecHonorRoot so no process can acquire owner authority through this subject.
+const MAC_SIGNER_UNMATCHABLE_OWNER_UID_V2: u32 = u32::MAX;
+const MAC_SIGNER_UNMATCHABLE_OWNER_GID_V2: u32 = u32::MAX;
+const MAC_SIGNER_OWNER_TYPE_USE_UID_AND_GID_V2: u32 = 3;
+const MAC_SIGNER_PROMPT_SELECTOR_NONE_V2: u16 = 0;
+const MAC_SIGNER_PUBLISHER_ACL_DESCRIPTION_V2: &str = "publisher-sign-and-delete";
+const MAC_SIGNER_FINALIZER_ACL_DESCRIPTION_V2: &str = "finalizer-delete-only";
+const MAC_SIGNER_PRIVATE_DENY_ACL_DESCRIPTION_V2: &str = "deny-private-key-operations";
+const MAC_SIGNER_OWNER_DENY_ACL_DESCRIPTION_V2: &str = "deny-owner-and-acl-mutation";
+const MAC_SIGNER_PREPARATION_OWNER_V2: &str = "substrate.r3-macos-prospective-signer-preparation";
+const MAC_SIGNER_PREPARATION_DIRECTORY_V2: &str = "preparations";
+const MAC_SIGNER_PREPARATION_SUFFIX_V2: &str = ".signer-creation.v2.json";
+const MAC_SIGNER_PREPARATION_MAX_BYTES_V2: u64 = 16 * 1024;
+
+#[derive(Debug, Clone, PartialEq, Eq)]
+struct MacProspectiveSignerPreparationV2 {
+    schema_owner: String,
+    schema_version: u32,
+    scope_id: String,
+    publisher_path: String,
+    finalizer_path: String,
+    publisher_trusted_application_sha256: String,
+    finalizer_trusted_application_sha256: String,
+    signer_access_control_sha256: String,
+    finalizer_executable_sha256: String,
+    finalizer_physical_identity: String,
+    finalizer_code_identity: String,
+    candidate_packet_sha256: String,
+    capability_digest: String,
+}
+
+#[derive(Debug, Clone, PartialEq, Eq)]
+struct MacRetirementPrecommittedAuthorityV2 {
+    schema_owner: String,
+    schema_version: u32,
+    evidence_id: String,
+    scope_id: String,
+    issued_at_unix_ns: u64,
+    expires_at_unix_ns: u64,
+    candidate_packet_sha256: String,
+    capability_digest: String,
+    receipt_external_store_identity_sha256: String,
+    harness_public_key: String,
+    finalizer_identity: ExecutableIdentityV2,
+    coordinator_identity: ExecutableIdentityV2,
+    coordinator_process: ProcessIdentityV2,
+    launch_identity: LaunchIdentityV2,
+    guest_successor_capsule: GuestToHostSuccessorCapsuleV2,
+    predecessor_journal_head_sha256: String,
+    retry_state_sha256: String,
+}
+
+#[cfg(target_os = "macos")]
+#[derive(Debug)]
+struct MacRetirementHeldLocksV2 {
+    files: Vec<(PathBuf, fs::File)>,
+}
+
+#[cfg(target_os = "macos")]
+#[derive(Debug)]
+struct MacObservedHostTargetLedgerV2 {
+    target_ledger: Vec<HostTargetIdentityV2>,
+    _held_locks: MacRetirementHeldLocksV2,
+}
+
+#[derive(Debug, Clone, PartialEq, Eq)]
+enum MacSignerCreationPostureV2 {
+    LegacyIneligible,
+    ProspectiveExact(MacProspectiveSignerPreparationV2),
+}
+
+#[derive(Debug, Clone, PartialEq, Eq)]
+enum MacRetirementProtectedCasStateV2 {
+    Quiescence(MacRetirementQuiescenceV2, Vec<u8>),
+    Binding(ProtectedCasBindingV2, Vec<u8>),
+}
+
+#[derive(Debug, Clone, PartialEq, Eq, PartialOrd, Ord)]
+struct MacSignerTrustedApplicationDigestV2 {
+    data_base64url: String,
+}
+
+#[derive(Debug, Clone, PartialEq, Eq, PartialOrd, Ord)]
+struct MacSignerAclEntrySnapshotV2 {
+    description: String,
+    prompt_selector: u16,
+    authorizations: Vec<String>,
+    trusted_applications: Vec<MacSignerTrustedApplicationDigestV2>,
+}
+
+#[derive(Debug, Clone, PartialEq, Eq)]
+struct MacSignerAccessSnapshotV2 {
+    owner_uid: u32,
+    owner_gid: u32,
+    owner_type: u32,
+    entries: Vec<MacSignerAclEntrySnapshotV2>,
+}
+
+/// Exact persisted signer identity shared with the prospective finalizer observation model. It
+/// contains no private-key bytes and hashes the persistent reference rather than exporting it.
+#[derive(Debug, Clone, PartialEq, Eq)]
+struct MacProspectiveRetirementSignerIdentityV2 {
+    application_tag_sha256: String,
+    label: String,
+    application_label_base64url: String,
+    persistent_reference_sha256: String,
+    public_spki_sha256: String,
+    access_control_sha256: String,
+    identity_sha256: String,
+}
+
+/// Signed append-only snapshot retained in the exact prospective resource-index Keychain item.
+/// `revision` equals the total entry count; each entry also forms its own predecessor hash chain.
+#[derive(Debug, Clone, PartialEq, Eq)]
+struct MacRetirementResourceIndexV2 {
+    schema_owner: String,
+    schema_version: u32,
+    scope_id: String,
+    revision: u64,
+    previous_index_sha256: Option<String>,
+    entries: Vec<MacRetirementResourceIndexEntryV2>,
+    signer_spki_sha256: String,
+    signer_access_control_sha256: String,
+    signer_identity: MacProspectiveRetirementSignerIdentityV2,
+    signature: LifecycleSignatureV1,
+}
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+enum MacRetirementQuiescenceStateV2 {
+    QuiescePrepared,
+    Quiesced,
+}
+
+impl MacRetirementQuiescenceStateV2 {
+    fn literal(self) -> &'static str {
+        match self {
+            Self::QuiescePrepared => "quiesce_prepared",
+            Self::Quiesced => "quiesced",
+        }
+    }
+
+    fn parse(value: &str) -> Result<Self> {
+        match value {
+            "quiesce_prepared" => Ok(Self::QuiescePrepared),
+            "quiesced" => Ok(Self::Quiesced),
+            _ => bail!("prospective retirement quiescence state is unknown"),
+        }
+    }
+}
+
+#[derive(Debug, Clone, PartialEq, Eq)]
+struct MacRetirementQuiescenceV2 {
+    schema_owner: String,
+    schema_version: u32,
+    scope_id: String,
+    generation: u64,
+    state: MacRetirementQuiescenceStateV2,
+    resource_index_revision: u64,
+    resource_index_sha256: String,
+    r6_terminal_acknowledgement_sha256: String,
+    prepared_at_unix_ns: u64,
+    quiesced_at_unix_ns: Option<u64>,
+    previous_record_sha256: Option<String>,
+    signer_spki_sha256: String,
+    signature: LifecycleSignatureV1,
+}
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+enum MacRetirementAdmissionClassV2 {
+    Ordinary,
+    SurvivingSuccessorHandoffOrRetry,
+}
+
+thread_local! {
+    /// A lexical witness only: the owning guard retains both kernel locks. This marker prevents
+    /// nested producer hooks in the same admitted call from reopening and deadlocking on flock.
+    static MAC_RETIREMENT_ADMISSION_SCOPE_V2: RefCell<Option<String>> = const { RefCell::new(None) };
+}
+
+/// The returned guard retains the retirement-CAS and resource-index account locks through the
+/// complete admitted operation. Quiescence therefore waits for already-admitted operations and
+/// prevents a new ordinary operation or producer append from crossing the durable barrier.
+struct MacRetirementAdmissionGuardV2 {
+    _activation: Option<MacRetirementActivationGuardV2>,
+    _guards: Option<MacRetirementCasIndexGuardsV2>,
+    scope_id: Option<String>,
+}
+
+impl MacRetirementAdmissionGuardV2 {
+    fn inactive(activation: Option<MacRetirementActivationGuardV2>) -> Self {
+        Self {
+            _activation: activation,
+            _guards: None,
+            scope_id: None,
+        }
+    }
+
+    fn activate(
+        scope_id: &str,
+        activation: MacRetirementActivationGuardV2,
+        guards: MacRetirementCasIndexGuardsV2,
+    ) -> Result<Self> {
+        MAC_RETIREMENT_ADMISSION_SCOPE_V2.with(|active| {
+            let mut active = active
+                .try_borrow_mut()
+                .map_err(|_| anyhow::anyhow!("retirement admission marker is already borrowed"))?;
+            if active.is_some() {
+                bail!("nested retirement admission is forbidden");
+            }
+            *active = Some(scope_id.to_string());
+            Ok(Self {
+                _activation: Some(activation),
+                _guards: Some(guards),
+                scope_id: Some(scope_id.to_string()),
+            })
+        })
+    }
+}
+
+impl Drop for MacRetirementAdmissionGuardV2 {
+    fn drop(&mut self) {
+        let Some(expected_scope) = self.scope_id.take() else {
+            return;
+        };
+        MAC_RETIREMENT_ADMISSION_SCOPE_V2.with(|active| {
+            let mut active = active.borrow_mut();
+            if active.as_deref() != Some(expected_scope.as_str()) {
+                std::process::abort();
+            }
+            *active = None;
+        });
+    }
+}
+
+fn mac_retirement_admission_holds_scope_v2(scope_id: &str) -> bool {
+    MAC_RETIREMENT_ADMISSION_SCOPE_V2.with(|active| active.borrow().as_deref() == Some(scope_id))
+}
+
+/// Holds the retirement CAS lock before the resource-index lock. Every path that may either
+/// freeze the index or append to it uses this one order so an append cannot cross quiescence.
+struct MacRetirementCasIndexGuardsV2 {
+    _cas: MacKeychainCasGuardV1,
+    _index: MacKeychainCasGuardV1,
+}
+
+#[cfg(target_os = "macos")]
+struct MacRetirementActivationGuardV2 {
+    root: fs::File,
+}
+
+#[cfg(not(target_os = "macos"))]
+struct MacRetirementActivationGuardV2;
+
+#[cfg(target_os = "macos")]
+impl Drop for MacRetirementActivationGuardV2 {
+    fn drop(&mut self) {
+        // SAFETY: this descriptor is owned by the guard and the lock is released only on drop.
+        let _ = unsafe { libc::flock(self.root.as_raw_fd(), libc::LOCK_UN) };
+    }
+}
+
+#[derive(Debug, Clone, PartialEq, Eq)]
+struct MacProspectiveRetirementLocatorLedgerV2 {
+    schema_owner: String,
+    schema_version: u32,
+    scope_id: String,
+    resource_index_revision: u64,
+    resource_index_sha256: String,
+    quiescence_sha256: String,
+    r6_terminal_acknowledgement_sha256: String,
+    signer_access_control_sha256: String,
+    signer_identity: MacProspectiveRetirementSignerIdentityV2,
+    locators: Vec<HostResourceLocatorV2>,
+}
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+enum MacProspectiveRetirementControlActionV2 {
+    PrepareGuestRetirement,
+    AcceptGuestRetirement,
+    RemoveGuest,
+    BindGuestParity,
+    InitializeResourceIndex,
+    PrepareQuiescence,
+    CommitQuiesced,
+    ExportLocatorLedger,
+    SignPreRemovalReceipt,
+    BindDurableAcknowledgement,
+    FreezeFinalizationRequest,
+}
+
+impl MacProspectiveRetirementControlActionV2 {
+    fn literal(self) -> &'static str {
+        match self {
+            Self::PrepareGuestRetirement => "prepare_guest_retirement",
+            Self::AcceptGuestRetirement => "accept_guest_retirement",
+            Self::RemoveGuest => "remove_guest",
+            Self::BindGuestParity => "bind_guest_parity",
+            Self::InitializeResourceIndex => "initialize_resource_index",
+            Self::PrepareQuiescence => "prepare_quiescence",
+            Self::CommitQuiesced => "commit_quiesced",
+            Self::ExportLocatorLedger => "export_locator_ledger",
+            Self::SignPreRemovalReceipt => "sign_pre_removal_receipt",
+            Self::BindDurableAcknowledgement => "bind_durable_acknowledgement",
+            Self::FreezeFinalizationRequest => "freeze_finalization_request",
+        }
+    }
+
+    fn parse(value: &str) -> Result<Self> {
+        match value {
+            "prepare_guest_retirement" => Ok(Self::PrepareGuestRetirement),
+            "accept_guest_retirement" => Ok(Self::AcceptGuestRetirement),
+            "remove_guest" => Ok(Self::RemoveGuest),
+            "bind_guest_parity" => Ok(Self::BindGuestParity),
+            "initialize_resource_index" => Ok(Self::InitializeResourceIndex),
+            "prepare_quiescence" => Ok(Self::PrepareQuiescence),
+            "commit_quiesced" => Ok(Self::CommitQuiesced),
+            "export_locator_ledger" => Ok(Self::ExportLocatorLedger),
+            "sign_pre_removal_receipt" => Ok(Self::SignPreRemovalReceipt),
+            "bind_durable_acknowledgement" => Ok(Self::BindDurableAcknowledgement),
+            "freeze_finalization_request" => Ok(Self::FreezeFinalizationRequest),
+            _ => bail!("prospective retirement control action is unknown"),
+        }
+    }
+}
+
+#[derive(Debug, Clone, PartialEq, Eq)]
+struct MacProspectiveRetirementControlRequestV2 {
+    schema_owner: String,
+    schema_version: u32,
+    scope_id: String,
+    action: MacProspectiveRetirementControlActionV2,
+}
+
+fn canonical_mac_prospective_retirement_control_request_v2(
+    request: &MacProspectiveRetirementControlRequestV2,
+) -> Result<Vec<u8>> {
+    if request.schema_owner != "substrate.mac-prospective-retirement-control"
+        || request.schema_version != 2
+    {
+        bail!("prospective retirement control request is not a closed V2 request");
+    }
+    mac_require_uuid_v7_component_v1(&request.scope_id, "prospective retirement control scope")?;
+    canonical_bootstrap_json_bytes_v1(&json!({
+        "action": request.action.literal(),
+        "schema_owner": request.schema_owner,
+        "schema_version": request.schema_version,
+        "scope_id": request.scope_id,
+    }))
+}
+
+fn parse_canonical_mac_prospective_retirement_control_request_v2(
+    bytes: &[u8],
+) -> Result<MacProspectiveRetirementControlRequestV2> {
+    let value: Value =
+        serde_json::from_slice(bytes).context("decode prospective retirement control request")?;
+    let object = value.as_object().ok_or_else(|| {
+        anyhow::anyhow!("prospective retirement control request is not an object")
+    })?;
+    if object.len() != 4
+        || !["action", "schema_owner", "schema_version", "scope_id"]
+            .iter()
+            .all(|field| object.contains_key(*field))
+    {
+        bail!("prospective retirement control request has unknown or missing fields");
+    }
+    let request = MacProspectiveRetirementControlRequestV2 {
+        schema_owner: object
+            .get("schema_owner")
+            .and_then(Value::as_str)
+            .ok_or_else(|| anyhow::anyhow!("prospective retirement control owner is absent"))?
+            .to_string(),
+        schema_version: object
+            .get("schema_version")
+            .and_then(Value::as_u64)
+            .and_then(|value| u32::try_from(value).ok())
+            .ok_or_else(|| anyhow::anyhow!("prospective retirement control version is absent"))?,
+        scope_id: object
+            .get("scope_id")
+            .and_then(Value::as_str)
+            .ok_or_else(|| anyhow::anyhow!("prospective retirement control scope is absent"))?
+            .to_string(),
+        action: MacProspectiveRetirementControlActionV2::parse(
+            object
+                .get("action")
+                .and_then(Value::as_str)
+                .ok_or_else(|| {
+                    anyhow::anyhow!("prospective retirement control action is absent")
+                })?,
+        )?,
+    };
+    if canonical_mac_prospective_retirement_control_request_v2(&request)? != bytes {
+        bail!("prospective retirement control request is not canonical JSON");
+    }
+    Ok(request)
+}
+
+fn canonical_mac_r6_terminal_successor_evidence_v2(
+    evidence: &MacR6TerminalSuccessorEvidenceV2,
+) -> Result<Vec<u8>> {
+    mac_require_uuid_v7_component_v1(&evidence.scope_id, "R6 terminal successor scope")?;
+    mac_require_uuid_v7_component_v1(&evidence.challenge_id, "R6 terminal successor challenge")?;
+    mac_require_uuid_v7_component_v1(
+        &evidence.predecessor_id,
+        "R6 terminal successor predecessor",
+    )?;
+    if evidence.predecessor_generation == 0 || evidence.terminal_generation == 0 {
+        bail!("R6 terminal successor generation is invalid");
+    }
+    for (digest, label) in [
+        (&evidence.host_record_sha256, "host record"),
+        (
+            &evidence.predecessor_consumed_state_sha256,
+            "Consumed predecessor state",
+        ),
+        (&evidence.guest_anchor_sha256, "guest anchor"),
+        (
+            &evidence.guest_anchor_acknowledgement_sha256,
+            "guest anchor acknowledgement",
+        ),
+        (
+            &evidence.guest_consumption_marker_response_sha256,
+            "guest consumption-marker response",
+        ),
+        (&evidence.stage_one_record_sha256, "Stage-1 record"),
+        (
+            &evidence.stage_one_authorization_sha256,
+            "Stage-1 authorization",
+        ),
+        (
+            &evidence.pairing_session_binding_sha256,
+            "pairing session binding",
+        ),
+        (&evidence.signer_spki_sha256, "signer SPKI"),
+    ] {
+        require_lower_hex_digest_mac_v1(digest, label)?;
+    }
+    canonical_bootstrap_json_bytes_v1(&json!({
+        "scope_id": evidence.scope_id,
+        "challenge_id": evidence.challenge_id,
+        "predecessor_id": evidence.predecessor_id,
+        "predecessor_generation": evidence.predecessor_generation,
+        "terminal_generation": evidence.terminal_generation,
+        "host_record_sha256": evidence.host_record_sha256,
+        "predecessor_consumed_state_sha256": evidence.predecessor_consumed_state_sha256,
+        "guest_anchor_sha256": evidence.guest_anchor_sha256,
+        "guest_anchor_acknowledgement_sha256": evidence.guest_anchor_acknowledgement_sha256,
+        "guest_consumption_marker_response_sha256": evidence.guest_consumption_marker_response_sha256,
+        "stage_one_record_sha256": evidence.stage_one_record_sha256,
+        "stage_one_authorization_sha256": evidence.stage_one_authorization_sha256,
+        "pairing_session_binding_sha256": evidence.pairing_session_binding_sha256,
+        "signer_spki_sha256": evidence.signer_spki_sha256,
+    }))
+}
+
+fn mac_r6_terminal_successor_evidence_sha256_v2(
+    evidence: &MacR6TerminalSuccessorEvidenceV2,
+) -> Result<String> {
+    Ok(sha256_hex_bootstrap_v1(
+        &canonical_mac_r6_terminal_successor_evidence_v2(evidence)?,
+    ))
+}
+
+fn canonical_mac_r6_pairing_terminal_successor_acknowledgement_body_v2(
+    acknowledgement: &MacR6PairingTerminalSuccessorAcknowledgementV2,
+    allow_unsigned: bool,
+) -> Result<Vec<u8>> {
+    if acknowledgement.schema_owner != "substrate.mac-r6-pairing-terminal-successor-acknowledgement"
+        || acknowledgement.schema_version != 2
+        || acknowledgement.terminal_at_unix_ns == 0
+        || acknowledgement.successor_evidence_sha256
+            != mac_r6_terminal_successor_evidence_sha256_v2(&acknowledgement.successor_evidence)?
+        || acknowledgement.signature.algorithm != "ecdsa-p256-sha256-p1363-low-s-v1"
+        || acknowledgement.signature.public_key.is_empty()
+        || (!allow_unsigned && acknowledgement.signature.signature.is_empty())
+        || (allow_unsigned && !acknowledgement.signature.signature.is_empty())
+    {
+        bail!("R6 terminal successor acknowledgement is not a closed V2 record");
+    }
+    canonical_bootstrap_json_bytes_v1(&json!({
+        "schema_owner": acknowledgement.schema_owner,
+        "schema_version": acknowledgement.schema_version,
+        "successor_evidence": serde_json::from_slice::<Value>(
+            &canonical_mac_r6_terminal_successor_evidence_v2(
+                &acknowledgement.successor_evidence,
+            )?
+        ).context("decode canonical R6 terminal successor evidence")?,
+        "successor_evidence_sha256": acknowledgement.successor_evidence_sha256,
+        "terminal_at_unix_ns": acknowledgement.terminal_at_unix_ns,
+        "signature": acknowledgement.signature,
+    }))
+}
+
+fn canonical_mac_r6_pairing_terminal_successor_acknowledgement_v2(
+    acknowledgement: &MacR6PairingTerminalSuccessorAcknowledgementV2,
+) -> Result<Vec<u8>> {
+    canonical_mac_r6_pairing_terminal_successor_acknowledgement_body_v2(acknowledgement, false)
+}
+
+fn canonical_mac_r6_pairing_terminal_successor_signature_payload_v2(
+    acknowledgement: &MacR6PairingTerminalSuccessorAcknowledgementV2,
+) -> Result<Vec<u8>> {
+    let unsigned = MacR6PairingTerminalSuccessorAcknowledgementV2 {
+        signature: LifecycleSignatureV1 {
+            algorithm: acknowledgement.signature.algorithm.clone(),
+            public_key: acknowledgement.signature.public_key.clone(),
+            signature: String::new(),
+        },
+        ..acknowledgement.clone()
+    };
+    let body =
+        canonical_mac_r6_pairing_terminal_successor_acknowledgement_body_v2(&unsigned, true)?;
+    let mut payload = Vec::with_capacity(
+        MAC_R6_TERMINAL_SUCCESSOR_ACK_SIGNATURE_DOMAIN_V2.len() + 8 + body.len(),
+    );
+    payload.extend_from_slice(MAC_R6_TERMINAL_SUCCESSOR_ACK_SIGNATURE_DOMAIN_V2);
+    payload.extend_from_slice(
+        &u64::try_from(body.len())
+            .context("bound R6 terminal successor signature payload")?
+            .to_be_bytes(),
+    );
+    payload.extend_from_slice(&body);
+    Ok(payload)
+}
+
+fn parse_mac_r6_terminal_successor_evidence_v2(
+    value: &Value,
+) -> Result<MacR6TerminalSuccessorEvidenceV2> {
+    let object = value
+        .as_object()
+        .ok_or_else(|| anyhow::anyhow!("R6 terminal successor evidence must be an object"))?;
+    let expected = [
+        "scope_id",
+        "challenge_id",
+        "predecessor_id",
+        "predecessor_generation",
+        "terminal_generation",
+        "host_record_sha256",
+        "predecessor_consumed_state_sha256",
+        "guest_anchor_sha256",
+        "guest_anchor_acknowledgement_sha256",
+        "guest_consumption_marker_response_sha256",
+        "stage_one_record_sha256",
+        "stage_one_authorization_sha256",
+        "pairing_session_binding_sha256",
+        "signer_spki_sha256",
+    ];
+    if object.len() != expected.len() || expected.iter().any(|field| !object.contains_key(*field)) {
+        bail!("R6 terminal successor evidence has an unknown or missing field");
+    }
+    let string = |field: &str| -> Result<String> {
+        object
+            .get(field)
+            .and_then(Value::as_str)
+            .map(ToOwned::to_owned)
+            .ok_or_else(|| anyhow::anyhow!("R6 terminal successor evidence lacks {field}"))
+    };
+    let u64_field = |field: &str| -> Result<u64> {
+        object
+            .get(field)
+            .and_then(Value::as_u64)
+            .ok_or_else(|| anyhow::anyhow!("R6 terminal successor evidence lacks {field}"))
+    };
+    let evidence = MacR6TerminalSuccessorEvidenceV2 {
+        scope_id: string("scope_id")?,
+        challenge_id: string("challenge_id")?,
+        predecessor_id: string("predecessor_id")?,
+        predecessor_generation: u64_field("predecessor_generation")?,
+        terminal_generation: u64_field("terminal_generation")?,
+        host_record_sha256: string("host_record_sha256")?,
+        predecessor_consumed_state_sha256: string("predecessor_consumed_state_sha256")?,
+        guest_anchor_sha256: string("guest_anchor_sha256")?,
+        guest_anchor_acknowledgement_sha256: string("guest_anchor_acknowledgement_sha256")?,
+        guest_consumption_marker_response_sha256: string(
+            "guest_consumption_marker_response_sha256",
+        )?,
+        stage_one_record_sha256: string("stage_one_record_sha256")?,
+        stage_one_authorization_sha256: string("stage_one_authorization_sha256")?,
+        pairing_session_binding_sha256: string("pairing_session_binding_sha256")?,
+        signer_spki_sha256: string("signer_spki_sha256")?,
+    };
+    if canonical_mac_r6_terminal_successor_evidence_v2(&evidence)?
+        != canonical_bootstrap_json_bytes_v1(value)?
+    {
+        bail!("R6 terminal successor evidence is not canonical");
+    }
+    Ok(evidence)
+}
+
+fn parse_and_validate_mac_r6_pairing_terminal_successor_acknowledgement_v2(
+    bytes: &[u8],
+) -> Result<MacR6PairingTerminalSuccessorAcknowledgementV2> {
+    let value: Value =
+        serde_json::from_slice(bytes).context("decode R6 terminal successor acknowledgement")?;
+    let object = value.as_object().ok_or_else(|| {
+        anyhow::anyhow!("R6 terminal successor acknowledgement must be an object")
+    })?;
+    let expected = [
+        "schema_owner",
+        "schema_version",
+        "successor_evidence",
+        "successor_evidence_sha256",
+        "terminal_at_unix_ns",
+        "signature",
+    ];
+    if object.len() != expected.len() || expected.iter().any(|field| !object.contains_key(*field)) {
+        bail!("R6 terminal successor acknowledgement has an unknown or missing field");
+    }
+    let acknowledgement = MacR6PairingTerminalSuccessorAcknowledgementV2 {
+        schema_owner: object
+            .get("schema_owner")
+            .and_then(Value::as_str)
+            .ok_or_else(|| anyhow::anyhow!("R6 terminal acknowledgement lacks schema_owner"))?
+            .to_string(),
+        schema_version: object
+            .get("schema_version")
+            .and_then(Value::as_u64)
+            .and_then(|value| u32::try_from(value).ok())
+            .ok_or_else(|| anyhow::anyhow!("R6 terminal acknowledgement lacks schema_version"))?,
+        successor_evidence: parse_mac_r6_terminal_successor_evidence_v2(
+            object.get("successor_evidence").ok_or_else(|| {
+                anyhow::anyhow!("R6 terminal acknowledgement lacks successor_evidence")
+            })?,
+        )?,
+        successor_evidence_sha256: object
+            .get("successor_evidence_sha256")
+            .and_then(Value::as_str)
+            .ok_or_else(|| {
+                anyhow::anyhow!("R6 terminal acknowledgement lacks successor evidence digest")
+            })?
+            .to_string(),
+        terminal_at_unix_ns: object
+            .get("terminal_at_unix_ns")
+            .and_then(Value::as_u64)
+            .ok_or_else(|| anyhow::anyhow!("R6 terminal acknowledgement lacks terminal time"))?,
+        signature: serde_json::from_value(
+            object
+                .get("signature")
+                .cloned()
+                .ok_or_else(|| anyhow::anyhow!("R6 terminal acknowledgement lacks signature"))?,
+        )
+        .context("decode R6 terminal acknowledgement signature")?,
+    };
+    if canonical_mac_r6_pairing_terminal_successor_acknowledgement_v2(&acknowledgement)? != bytes {
+        bail!("R6 terminal successor acknowledgement is not canonical");
+    }
+    let spki = mac_base64url_decode_v1(&acknowledgement.signature.public_key)?;
+    let signature = mac_base64url_decode_v1(&acknowledgement.signature.signature)?;
+    let payload =
+        canonical_mac_r6_pairing_terminal_successor_signature_payload_v2(&acknowledgement)?;
+    verify_p256_p1363_low_s_v1(&spki, &payload, &signature)
+        .context("verify R6 terminal successor acknowledgement signature")?;
+    Ok(acknowledgement)
+}
+
 fn canonical_mac_r6_pairing_predecessor_cas_receipt_v1(
     receipt: &MacR6PairingPredecessorCasReceiptV1,
 ) -> Result<Vec<u8>> {
@@ -14135,10 +16975,7 @@ fn mac_keychain_durable_cas_guard_v1(account: &str) -> Result<MacKeychainCasGuar
         {
             bail!("macOS Keychain CAS root is not retained root-owned state");
         }
-        let lock_path = root.join(format!(
-            "keychain-cas-{:x}.lock",
-            Sha256::digest(account.as_bytes())
-        ));
+        let lock_path = mac_retirement_keychain_cas_lock_path_v2(account)?;
         let file = fs::OpenOptions::new()
             .read(true)
             .write(true)
@@ -14164,6 +17001,103 @@ fn mac_keychain_durable_cas_guard_v1(account: &str) -> Result<MacKeychainCasGuar
     {
         let _ = account;
         bail!("macOS Keychain CAS is unavailable off macOS")
+    }
+}
+
+fn acquire_mac_retirement_cas_index_guards_v2(
+    scope_id: &str,
+) -> Result<MacRetirementCasIndexGuardsV2> {
+    let cas_account = mac_keychain_retirement_cas_account_v2(scope_id)?;
+    let index_account = mac_keychain_retirement_resource_index_account_v2(scope_id)?;
+    let cas = mac_keychain_durable_cas_guard_v1(&cas_account)?;
+    let index = mac_keychain_durable_cas_guard_v1(&index_account)?;
+    Ok(MacRetirementCasIndexGuardsV2 {
+        _cas: cas,
+        _index: index,
+    })
+}
+
+fn acquire_mac_retirement_activation_guard_v2(
+    exclusive: bool,
+) -> Result<Option<MacRetirementActivationGuardV2>> {
+    #[cfg(target_os = "macos")]
+    {
+        let root = Path::new(MAC_R3_FINALIZER_JOURNAL_ROOT_V2);
+        let first = match fs::symlink_metadata(root) {
+            Err(error) if error.kind() == std::io::ErrorKind::NotFound => return Ok(None),
+            Err(error) => return Err(error).context("inspect fixed retirement activation root"),
+            Ok(metadata) => metadata,
+        };
+        if !first.file_type().is_dir()
+            || first.uid() != 0
+            || first.gid() != 0
+            || first.mode() & 0o777 != 0o700
+        {
+            bail!("fixed retirement activation root is not root:wheel 0700 no-follow state");
+        }
+        let mut current = PathBuf::from("/");
+        for component in root.components() {
+            match component {
+                std::path::Component::RootDir => continue,
+                std::path::Component::Normal(segment) => current.push(segment),
+                _ => bail!("fixed retirement activation root is not canonical absolute state"),
+            }
+            let metadata = fs::symlink_metadata(&current).with_context(|| {
+                format!(
+                    "inspect fixed retirement activation ancestor {}",
+                    current.display()
+                )
+            })?;
+            if metadata.file_type().is_symlink()
+                || !metadata.file_type().is_dir()
+                || metadata.uid() != 0
+                || metadata.mode() & 0o022 != 0
+            {
+                bail!("fixed retirement activation ancestor is not root-owned no-follow state");
+            }
+        }
+        let file = fs::OpenOptions::new()
+            .read(true)
+            .custom_flags(libc::O_CLOEXEC | libc::O_NOFOLLOW | libc::O_DIRECTORY)
+            .open(root)
+            .context("open fixed retirement activation root")?;
+        let opened = file
+            .metadata()
+            .context("inspect fixed retirement activation descriptor")?;
+        if opened.dev() != first.dev()
+            || opened.ino() != first.ino()
+            || opened.uid() != first.uid()
+            || opened.gid() != first.gid()
+            || opened.mode() != first.mode()
+        {
+            bail!("fixed retirement activation identity drifted before lock");
+        }
+        // SAFETY: flock serializes the fixed evidence-infrastructure activation membrane.
+        let operation = if exclusive {
+            libc::LOCK_EX
+        } else {
+            libc::LOCK_SH
+        };
+        if unsafe { libc::flock(file.as_raw_fd(), operation) } != 0 {
+            return Err(std::io::Error::last_os_error())
+                .context("acquire fixed retirement activation lock");
+        }
+        let after = fs::symlink_metadata(root)
+            .context("reinspect fixed retirement activation root after lock")?;
+        if after.dev() != opened.dev()
+            || after.ino() != opened.ino()
+            || after.uid() != opened.uid()
+            || after.gid() != opened.gid()
+            || after.mode() != opened.mode()
+        {
+            bail!("fixed retirement activation identity drifted after lock");
+        }
+        return Ok(Some(MacRetirementActivationGuardV2 { root: file }));
+    }
+    #[cfg(not(target_os = "macos"))]
+    {
+        let _ = exclusive;
+        Ok(None)
     }
 }
 
@@ -14268,6 +17202,5145 @@ fn mac_keychain_r6_pairing_operator_launch_account_v1(
 
 fn mac_keychain_stage_one_capsule_account_v1(scope_id: &str) -> Result<String> {
     mac_keychain_account_v1(scope_id, "lima-stage-one-capsule")
+}
+
+fn mac_keychain_r6_terminal_successor_acknowledgement_account_v2(scope_id: &str) -> Result<String> {
+    mac_keychain_account_v1(scope_id, MAC_R3_R6_TERMINAL_ACK_ACCOUNT_SUFFIX_V2)
+}
+
+fn mac_keychain_retirement_resource_index_account_v2(scope_id: &str) -> Result<String> {
+    mac_keychain_account_v1(scope_id, MAC_R3_RETIREMENT_RESOURCE_INDEX_ACCOUNT_SUFFIX_V2)
+}
+
+fn mac_keychain_retirement_cas_account_v2(scope_id: &str) -> Result<String> {
+    mac_keychain_account_v1(scope_id, MAC_R3_RETIREMENT_CAS_ACCOUNT_SUFFIX_V2)
+}
+
+fn mac_keychain_guest_retirement_cas_account_v2(scope_id: &str) -> Result<String> {
+    mac_keychain_account_v1(scope_id, MAC_R3_GUEST_RETIREMENT_CAS_ACCOUNT_SUFFIX_V2)
+}
+
+fn mac_retirement_generic_password_account_v2(
+    scope_id: &str,
+    role: &GenericPasswordRoleV2,
+) -> Result<String> {
+    validate_host_resource_locator_v2(&HostResourceLocatorV2::GenericPassword {
+        role: role.clone(),
+    })?;
+    match role {
+        GenericPasswordRoleV2::ControlAdmission => Ok(MAC_CONTROL_ADMISSION_ACCOUNT_V1.to_string()),
+        GenericPasswordRoleV2::CurrentAnchor => mac_keychain_protected_state_account_v1(scope_id),
+        GenericPasswordRoleV2::PublisherServiceState => {
+            mac_publisher_service_state_account_v1(scope_id)
+        }
+        GenericPasswordRoleV2::PublisherBootstrapIntent => {
+            mac_keychain_bootstrap_intent_account_v1(scope_id)
+        }
+        GenericPasswordRoleV2::BootstrapAttemptLocator { attempt_key_sha256 } => {
+            mac_keychain_bootstrap_attempt_locator_account_v1(attempt_key_sha256)
+        }
+        GenericPasswordRoleV2::LimaStageOneCapsule => {
+            mac_keychain_stage_one_capsule_account_v1(scope_id)
+        }
+        GenericPasswordRoleV2::R6PredecessorState => {
+            mac_keychain_r6_pairing_predecessor_state_account_v1(scope_id)
+        }
+        GenericPasswordRoleV2::R6Predecessor { generation } => {
+            mac_keychain_r6_pairing_predecessor_account_v1(scope_id, *generation)
+        }
+        GenericPasswordRoleV2::R6Continuation { generation } => {
+            mac_keychain_r6_pairing_continuation_account_v1(scope_id, *generation)
+        }
+        GenericPasswordRoleV2::R6Activation { generation } => {
+            mac_keychain_r6_pairing_activation_account_v1(scope_id, *generation)
+        }
+        GenericPasswordRoleV2::R6Tombstone { generation } => {
+            mac_keychain_r6_pairing_tombstone_account_v1(scope_id, *generation)
+        }
+        GenericPasswordRoleV2::R6MissedActivation { generation } => {
+            mac_keychain_r6_pairing_missed_activation_account_v1(scope_id, *generation)
+        }
+        GenericPasswordRoleV2::R6ActiveGuestRecord => {
+            mac_active_guest_pairing_record_account_v1(scope_id)
+        }
+        GenericPasswordRoleV2::R6GuestHostRecord { challenge_id } => {
+            mac_guest_pairing_record_account_v1(challenge_id)
+        }
+        GenericPasswordRoleV2::R6OperatorLaunch { challenge_id } => {
+            mac_keychain_r6_pairing_operator_launch_account_v1(scope_id, challenge_id)
+        }
+        GenericPasswordRoleV2::GuestRetirementCas => {
+            mac_keychain_guest_retirement_cas_account_v2(scope_id)
+        }
+        GenericPasswordRoleV2::RetirementResourceIndex => {
+            mac_keychain_retirement_resource_index_account_v2(scope_id)
+        }
+        GenericPasswordRoleV2::RetirementCas => mac_keychain_retirement_cas_account_v2(scope_id),
+        GenericPasswordRoleV2::R6TerminalAcknowledgement => {
+            mac_keychain_r6_terminal_successor_acknowledgement_account_v2(scope_id)
+        }
+    }
+}
+
+#[cfg(test)]
+fn mac_retirement_keychain_cas_lock_path_for_role_v2(
+    scope_id: &str,
+    role: &GenericPasswordRoleV2,
+) -> Result<PathBuf> {
+    let account = mac_retirement_generic_password_account_v2(scope_id, role)?;
+    Ok(Path::new(MAC_STATE_ROOT_V1).join(format!(
+        "keychain-cas-{:x}.lock",
+        Sha256::digest(account.as_bytes())
+    )))
+}
+
+fn mac_retirement_lifecycle_file_path_v2(
+    scope_id: &str,
+    role: &LifecycleFileRoleV2,
+) -> Result<PathBuf> {
+    validate_host_resource_locator_v2(&HostResourceLocatorV2::LifecycleFile {
+        role: role.clone(),
+    })?;
+    let root = Path::new(MAC_STATE_ROOT_V1);
+    Ok(match role {
+        LifecycleFileRoleV2::Manifest { generation } => {
+            root.join(format!("manifest.{generation}.json"))
+        }
+        LifecycleFileRoleV2::ReceiptIndex { generation } => {
+            root.join(format!("action-receipts.{generation}.v1.json"))
+        }
+        LifecycleFileRoleV2::Head => root.join("head.v1.json"),
+        LifecycleFileRoleV2::Receipt {
+            generation,
+            receipt_id,
+        } => root
+            .join("receipts")
+            .join(generation.to_string())
+            .join(format!("receipt.{receipt_id}.json")),
+        LifecycleFileRoleV2::StageOneProfile { attempt_id } => root
+            .join("stage-one-profiles")
+            .join(scope_id)
+            .join(format!("{attempt_id}.yaml")),
+        LifecycleFileRoleV2::PostPmJournal { receipt_id, state } => {
+            root.join("post-pm-attempts").join(receipt_id).join(format!(
+                "{}.v1.json",
+                match state {
+                    PostPmJournalStateV2::Prepared => "Prepared",
+                    PostPmJournalStateV2::EffectStarted => "EffectStarted",
+                    PostPmJournalStateV2::EffectObserved => "EffectObserved",
+                    PostPmJournalStateV2::Completed => "Completed",
+                }
+            ))
+        }
+        LifecycleFileRoleV2::PostPmArtifact {
+            receipt_id,
+            label,
+            sha256,
+        } => {
+            let label = match label {
+                PostPmArtifactLabelV2::MeasuredArtifact { entry_id } => {
+                    format!("measured-artifact-{entry_id}")
+                }
+                PostPmArtifactLabelV2::GuestServiceUnit => "guest-service-unit".to_string(),
+                PostPmArtifactLabelV2::GuestSocketUnit => "guest-socket-unit".to_string(),
+                PostPmArtifactLabelV2::FixedPublisherArtifact => {
+                    "fixed-publisher-artifact".to_string()
+                }
+            };
+            root.join("post-pm-artifacts")
+                .join(receipt_id)
+                .join(format!("{label}.{sha256}.bin"))
+        }
+    })
+}
+
+fn mac_retirement_lifecycle_directory_path_v2(
+    scope_id: &str,
+    role: &LifecycleDirectoryRoleV2,
+) -> Result<PathBuf> {
+    mac_require_uuid_v7_component_v1(scope_id, "retirement lifecycle directory scope")?;
+    let root = Path::new(MAC_STATE_ROOT_V1);
+    Ok(match role {
+        LifecycleDirectoryRoleV2::ReceiptGeneration { generation } => {
+            root.join("receipts").join(generation.to_string())
+        }
+        LifecycleDirectoryRoleV2::ReceiptsRoot => root.join("receipts"),
+        LifecycleDirectoryRoleV2::StageOneScope => root.join("stage-one-profiles").join(scope_id),
+        LifecycleDirectoryRoleV2::StageOneProfilesRoot => root.join("stage-one-profiles"),
+        LifecycleDirectoryRoleV2::PostPmAttempt { receipt_id } => {
+            root.join("post-pm-attempts").join(receipt_id)
+        }
+        LifecycleDirectoryRoleV2::PostPmAttemptsRoot => root.join("post-pm-attempts"),
+        LifecycleDirectoryRoleV2::PostPmArtifact { receipt_id } => {
+            root.join("post-pm-artifacts").join(receipt_id)
+        }
+        LifecycleDirectoryRoleV2::PostPmArtifactsRoot => root.join("post-pm-artifacts"),
+        LifecycleDirectoryRoleV2::GuestPairingsRoot => root.join("guest-pairings"),
+        LifecycleDirectoryRoleV2::LifecycleRoot => root.to_path_buf(),
+    })
+}
+
+fn mac_retirement_lifecycle_target_lock_path_v2(
+    scope_id: &str,
+    role: &LifecycleFileRoleV2,
+) -> Result<PathBuf> {
+    if !matches!(
+        role,
+        LifecycleFileRoleV2::Manifest { .. }
+            | LifecycleFileRoleV2::ReceiptIndex { .. }
+            | LifecycleFileRoleV2::Head
+            | LifecycleFileRoleV2::Receipt { .. }
+    ) {
+        bail!("prospective lifecycle target has no retained target lock");
+    }
+    let target = mac_retirement_lifecycle_file_path_v2(scope_id, role)?;
+    let target = target
+        .to_str()
+        .ok_or_else(|| anyhow::anyhow!("prospective lifecycle target path is not UTF-8"))?;
+    Ok(Path::new(MAC_STATE_ROOT_V1).join(format!(
+        "lifecycle-target-{:x}.lock",
+        Sha256::digest(target.as_bytes())
+    )))
+}
+
+fn mac_retirement_terminal_latch_path_v2(scope_id: &str) -> Result<PathBuf> {
+    mac_require_uuid_v7_component_v1(scope_id, "retirement terminal latch scope")?;
+    Ok(Path::new(MAC_R3_RETIREMENT_LATCH_ROOT_V2)
+        .join(format!("{scope_id}.retirement-terminal.v2.latch")))
+}
+
+fn mac_retirement_keychain_cas_lock_path_v2(account: &str) -> Result<PathBuf> {
+    if account.is_empty() || account.contains('\0') {
+        bail!("retirement Keychain CAS-lock account is invalid");
+    }
+    Ok(Path::new(MAC_STATE_ROOT_V1).join(format!(
+        "keychain-cas-{:x}.lock",
+        Sha256::digest(account.as_bytes())
+    )))
+}
+
+fn mac_retirement_resource_locators_for_producer_v2(
+    producer: &MacRetirementResourceProducerV2,
+) -> Result<Vec<HostResourceLocatorV2>> {
+    use GenericPasswordRoleV2 as G;
+    use HostResourceLocatorV2 as L;
+    use LifecycleDirectoryRoleV2 as D;
+    use LifecycleFileRoleV2 as F;
+
+    let generic = |role: G| {
+        vec![
+            L::GenericPassword { role: role.clone() },
+            L::KeychainCasLock { account: role },
+        ]
+    };
+    let lifecycle_file = |role: F| {
+        let mut locators = vec![L::LifecycleFile { role: role.clone() }];
+        if matches!(
+            role,
+            F::Manifest { .. } | F::ReceiptIndex { .. } | F::Head | F::Receipt { .. }
+        ) {
+            locators.push(L::LifecycleTargetLock {
+                target: role.clone(),
+            });
+        }
+        match &role {
+            F::Receipt { generation, .. } => {
+                locators.push(L::LifecycleDirectory {
+                    role: D::ReceiptGeneration {
+                        generation: *generation,
+                    },
+                });
+                locators.push(L::LifecycleDirectory {
+                    role: D::ReceiptsRoot,
+                });
+            }
+            F::StageOneProfile { .. } => {
+                locators.push(L::LifecycleDirectory {
+                    role: D::StageOneScope,
+                });
+                locators.push(L::LifecycleDirectory {
+                    role: D::StageOneProfilesRoot,
+                });
+            }
+            F::PostPmJournal { receipt_id, .. } => {
+                locators.push(L::LifecycleDirectory {
+                    role: D::PostPmAttempt {
+                        receipt_id: receipt_id.clone(),
+                    },
+                });
+                locators.push(L::LifecycleDirectory {
+                    role: D::PostPmAttemptsRoot,
+                });
+            }
+            F::PostPmArtifact { receipt_id, .. } => {
+                locators.push(L::LifecycleDirectory {
+                    role: D::PostPmArtifact {
+                        receipt_id: receipt_id.clone(),
+                    },
+                });
+                locators.push(L::LifecycleDirectory {
+                    role: D::PostPmArtifactsRoot,
+                });
+            }
+            F::Manifest { .. } | F::ReceiptIndex { .. } | F::Head => {}
+        }
+        locators.push(L::LifecycleDirectory {
+            role: D::LifecycleRoot,
+        });
+        locators
+    };
+
+    let locators = match producer {
+        MacRetirementResourceProducerV2::LifecycleCapsuleRoots => vec![
+            L::LifecycleDirectory {
+                role: D::GuestPairingsRoot,
+            },
+            L::LifecycleDirectory {
+                role: D::LifecycleRoot,
+            },
+        ],
+        MacRetirementResourceProducerV2::ControlAdmission => generic(G::ControlAdmission),
+        MacRetirementResourceProducerV2::CurrentAnchor => generic(G::CurrentAnchor),
+        MacRetirementResourceProducerV2::PublisherServiceState => generic(G::PublisherServiceState),
+        MacRetirementResourceProducerV2::PublisherBootstrapIntent => {
+            generic(G::PublisherBootstrapIntent)
+        }
+        MacRetirementResourceProducerV2::BootstrapAttemptLocator { attempt_key_sha256 } => {
+            generic(G::BootstrapAttemptLocator {
+                attempt_key_sha256: attempt_key_sha256.clone(),
+            })
+        }
+        MacRetirementResourceProducerV2::LimaStageOneCapsule => generic(G::LimaStageOneCapsule),
+        MacRetirementResourceProducerV2::Manifest { generation } => lifecycle_file(F::Manifest {
+            generation: *generation,
+        }),
+        MacRetirementResourceProducerV2::ReceiptIndex { generation } => {
+            lifecycle_file(F::ReceiptIndex {
+                generation: *generation,
+            })
+        }
+        MacRetirementResourceProducerV2::Head => lifecycle_file(F::Head),
+        MacRetirementResourceProducerV2::Receipt {
+            generation,
+            receipt_id,
+        } => lifecycle_file(F::Receipt {
+            generation: *generation,
+            receipt_id: receipt_id.clone(),
+        }),
+        MacRetirementResourceProducerV2::StageOneProfile { attempt_id } => {
+            lifecycle_file(F::StageOneProfile {
+                attempt_id: attempt_id.clone(),
+            })
+        }
+        MacRetirementResourceProducerV2::PostPmJournal { receipt_id, state } => {
+            lifecycle_file(F::PostPmJournal {
+                receipt_id: receipt_id.clone(),
+                state: *state,
+            })
+        }
+        MacRetirementResourceProducerV2::PostPmArtifact {
+            receipt_id,
+            label,
+            sha256,
+        } => lifecycle_file(F::PostPmArtifact {
+            receipt_id: receipt_id.clone(),
+            label: label.clone(),
+            sha256: sha256.clone(),
+        }),
+        MacRetirementResourceProducerV2::R6PredecessorState => generic(G::R6PredecessorState),
+        MacRetirementResourceProducerV2::R6Predecessor { generation } => {
+            generic(G::R6Predecessor {
+                generation: *generation,
+            })
+        }
+        MacRetirementResourceProducerV2::R6Continuation { generation } => {
+            generic(G::R6Continuation {
+                generation: *generation,
+            })
+        }
+        MacRetirementResourceProducerV2::R6Activation { generation } => generic(G::R6Activation {
+            generation: *generation,
+        }),
+        MacRetirementResourceProducerV2::R6Tombstone { generation } => generic(G::R6Tombstone {
+            generation: *generation,
+        }),
+        MacRetirementResourceProducerV2::R6MissedActivation { generation } => {
+            generic(G::R6MissedActivation {
+                generation: *generation,
+            })
+        }
+        MacRetirementResourceProducerV2::R6ActiveGuestRecord => generic(G::R6ActiveGuestRecord),
+        MacRetirementResourceProducerV2::R6GuestHostRecord { challenge_id } => {
+            generic(G::R6GuestHostRecord {
+                challenge_id: challenge_id.clone(),
+            })
+        }
+        MacRetirementResourceProducerV2::R6OperatorLaunch { challenge_id } => {
+            generic(G::R6OperatorLaunch {
+                challenge_id: challenge_id.clone(),
+            })
+        }
+        MacRetirementResourceProducerV2::R6TerminalAcknowledgement => {
+            generic(G::R6TerminalAcknowledgement)
+        }
+        MacRetirementResourceProducerV2::GuestRetirementCas => generic(G::GuestRetirementCas),
+        MacRetirementResourceProducerV2::RetirementQuiescenceCas => generic(G::RetirementCas),
+    };
+    if locators.is_empty() || locators.len() > MAC_R3_MAX_HOST_TARGETS_V2 {
+        bail!("retirement resource producer expanded outside the closed bound");
+    }
+    let mut seen = BTreeSet::new();
+    for locator in &locators {
+        validate_host_resource_locator_v2(locator)?;
+        if !seen.insert(locator) {
+            bail!("retirement resource producer emitted a duplicate locator");
+        }
+    }
+    Ok(locators)
+}
+
+fn mac_prospective_signer_preparation_path_v2(scope_id: &str) -> Result<PathBuf> {
+    mac_require_uuid_v7_component_v1(scope_id, "prospective signer preparation scope")?;
+    Ok(Path::new(MAC_R3_FINALIZER_JOURNAL_ROOT_V2)
+        .join(MAC_SIGNER_PREPARATION_DIRECTORY_V2)
+        .join(format!("{scope_id}{MAC_SIGNER_PREPARATION_SUFFIX_V2}")))
+}
+
+fn mac_retirement_precommitted_authority_path_v2(scope_id: &str) -> Result<PathBuf> {
+    mac_require_uuid_v7_component_v1(scope_id, "precommitted retirement authority scope")?;
+    Ok(Path::new(MAC_R3_FINALIZER_JOURNAL_ROOT_V2)
+        .join(MAC_RETIREMENT_AUTHORITY_DIRECTORY_V2)
+        .join(format!("{scope_id}{MAC_RETIREMENT_AUTHORITY_SUFFIX_V2}")))
+}
+
+fn mac_retirement_external_receipt_path_v2(scope_id: &str) -> Result<PathBuf> {
+    mac_require_uuid_v7_component_v1(scope_id, "external retirement receipt scope")?;
+    Ok(Path::new(MAC_R3_FINALIZER_JOURNAL_ROOT_V2)
+        .join(MAC_RETIREMENT_EXTERNAL_DIRECTORY_V2)
+        .join(format!("{scope_id}{MAC_RETIREMENT_RECEIPT_SUFFIX_V2}")))
+}
+
+fn mac_retirement_external_acknowledgement_path_v2(scope_id: &str) -> Result<PathBuf> {
+    mac_require_uuid_v7_component_v1(scope_id, "external retirement acknowledgement scope")?;
+    Ok(Path::new(MAC_R3_FINALIZER_JOURNAL_ROOT_V2)
+        .join(MAC_RETIREMENT_EXTERNAL_DIRECTORY_V2)
+        .join(format!("{scope_id}{MAC_RETIREMENT_ACK_SUFFIX_V2}")))
+}
+
+fn mac_retirement_guest_terminal_bundle_path_v2(scope_id: &str) -> Result<PathBuf> {
+    mac_require_uuid_v7_component_v1(scope_id, "guest terminal bundle scope")?;
+    Ok(Path::new(MAC_R3_FINALIZER_JOURNAL_ROOT_V2)
+        .join(MAC_RETIREMENT_EXTERNAL_DIRECTORY_V2)
+        .join(format!(
+            "{scope_id}{MAC_RETIREMENT_GUEST_TERMINAL_BUNDLE_SUFFIX_V2}"
+        )))
+}
+
+fn mac_guest_retirement_external_path_v2(scope_id: &str, suffix: &str) -> Result<PathBuf> {
+    mac_require_uuid_v7_component_v1(scope_id, "guest retirement external scope")?;
+    if !matches!(
+        suffix,
+        MAC_GUEST_RETIREMENT_PRECOMMIT_SUFFIX_V2
+            | MAC_GUEST_RETIREMENT_AUTHORITY_SUFFIX_V2
+            | MAC_GUEST_RETIREMENT_RECEIPT_SUFFIX_V2
+            | MAC_GUEST_RETIREMENT_ACK_SUFFIX_V2
+            | MAC_GUEST_RETIREMENT_HANDOFF_SUFFIX_V2
+            | MAC_GUEST_RETIREMENT_ACCEPTANCE_SUFFIX_V2
+            | MAC_GUEST_RETIREMENT_EFFECTS_SUFFIX_V2
+            | MAC_GUEST_RETIREMENT_PARITY_SUFFIX_V2
+            | MAC_GUEST_RETIREMENT_PARITY_BINDING_SUFFIX_V2
+    ) {
+        bail!("guest retirement external artifact suffix is not closed");
+    }
+    Ok(Path::new(MAC_R3_FINALIZER_JOURNAL_ROOT_V2)
+        .join(MAC_RETIREMENT_EXTERNAL_DIRECTORY_V2)
+        .join(format!("{scope_id}{suffix}")))
+}
+
+fn mac_guest_retirement_journal_path_v2(scope_id: &str, generation: u64) -> Result<PathBuf> {
+    mac_require_uuid_v7_component_v1(scope_id, "guest retirement journal scope")?;
+    if !(8..=14).contains(&generation) {
+        bail!("surviving host may persist only guest journal generations 8 through 14");
+    }
+    Ok(Path::new(MAC_R3_FINALIZER_JOURNAL_ROOT_V2)
+        .join(MAC_RETIREMENT_EXTERNAL_DIRECTORY_V2)
+        .join(format!(
+            "{scope_id}{MAC_GUEST_RETIREMENT_JOURNAL_SUFFIX_V2}-{generation:02}.v2.json"
+        )))
+}
+
+fn validate_mac_retirement_precommitted_authority_v2(
+    authority: &MacRetirementPrecommittedAuthorityV2,
+) -> Result<()> {
+    if authority.schema_owner != MAC_RETIREMENT_PRECOMMITTED_AUTHORITY_OWNER_V2
+        || authority.schema_version != MAC_R3_FINALIZER_PROTOCOL_VERSION_V2
+        || authority.evidence_id.is_empty()
+        || authority.evidence_id.len() > 256
+        || authority
+            .evidence_id
+            .bytes()
+            .any(|byte| byte.is_ascii_control())
+        || authority.issued_at_unix_ns == 0
+        || authority.issued_at_unix_ns >= authority.expires_at_unix_ns
+    {
+        bail!("precommitted retirement authority header or validity window changed");
+    }
+    mac_require_uuid_v7_component_v1(&authority.scope_id, "precommitted retirement authority")?;
+    for (digest, label) in [
+        (&authority.candidate_packet_sha256, "candidate packet"),
+        (&authority.capability_digest, "candidate capability"),
+        (
+            &authority.receipt_external_store_identity_sha256,
+            "receipt external store identity",
+        ),
+        (
+            &authority.predecessor_journal_head_sha256,
+            "publisher predecessor journal head",
+        ),
+        (&authority.retry_state_sha256, "publisher retry state"),
+    ] {
+        require_lower_hex_digest_mac_v1(digest, label)?;
+    }
+    if mac_base64url_decode_v1(&authority.harness_public_key)?.len() != 32 {
+        bail!("precommitted retirement harness key is not one Ed25519 public key");
+    }
+    validate_guest_to_host_successor_capsule_v2(&authority.guest_successor_capsule)?;
+    if authority.guest_successor_capsule.scope_id != authority.scope_id {
+        bail!("precommitted guest successor capsule crosses its scope");
+    }
+    validate_process_executable_binding_v2(
+        &authority.coordinator_process,
+        &authority.coordinator_identity,
+        MAC_R3_COORDINATOR_PATH_V2,
+        MAC_R3_COORDINATOR_SIGNING_IDENTIFIER_V2,
+    )?;
+    substrate_common::macos_retirement_v2::validate_executable_identity_v2(
+        &authority.finalizer_identity,
+        MAC_R3_FINALIZER_PATH_V2,
+        MAC_R3_FINALIZER_SIGNING_IDENTIFIER_V2,
+    )?;
+    validate_launch_identity_v2(&authority.launch_identity)
+}
+
+fn canonical_mac_retirement_precommitted_authority_v2(
+    authority: &MacRetirementPrecommittedAuthorityV2,
+) -> Result<Vec<u8>> {
+    validate_mac_retirement_precommitted_authority_v2(authority)?;
+    canonical_bytes_v2(&json!({
+        "candidate_packet_sha256": authority.candidate_packet_sha256,
+        "capability_digest": authority.capability_digest,
+        "coordinator_identity": authority.coordinator_identity,
+        "coordinator_process": authority.coordinator_process,
+        "evidence_id": authority.evidence_id,
+        "expires_at_unix_ns": authority.expires_at_unix_ns,
+        "finalizer_identity": authority.finalizer_identity,
+        "guest_successor_capsule": authority.guest_successor_capsule,
+        "harness_public_key": authority.harness_public_key,
+        "issued_at_unix_ns": authority.issued_at_unix_ns,
+        "launch_identity": authority.launch_identity,
+        "predecessor_journal_head_sha256": authority.predecessor_journal_head_sha256,
+        "receipt_external_store_identity_sha256": authority.receipt_external_store_identity_sha256,
+        "retry_state_sha256": authority.retry_state_sha256,
+        "schema_owner": authority.schema_owner,
+        "schema_version": authority.schema_version,
+        "scope_id": authority.scope_id,
+    }))
+}
+
+fn parse_canonical_mac_retirement_precommitted_authority_v2(
+    bytes: &[u8],
+) -> Result<MacRetirementPrecommittedAuthorityV2> {
+    let value: Value = parse_canonical_v2(bytes)?;
+    let object = value
+        .as_object()
+        .ok_or_else(|| anyhow::anyhow!("precommitted retirement authority is not an object"))?;
+    let expected = [
+        "candidate_packet_sha256",
+        "capability_digest",
+        "coordinator_identity",
+        "coordinator_process",
+        "evidence_id",
+        "expires_at_unix_ns",
+        "finalizer_identity",
+        "guest_successor_capsule",
+        "harness_public_key",
+        "issued_at_unix_ns",
+        "launch_identity",
+        "predecessor_journal_head_sha256",
+        "receipt_external_store_identity_sha256",
+        "retry_state_sha256",
+        "schema_owner",
+        "schema_version",
+        "scope_id",
+    ];
+    if object.len() != expected.len() || expected.iter().any(|field| !object.contains_key(*field)) {
+        bail!("precommitted retirement authority has an unknown or missing field");
+    }
+    let text = |field: &str| -> Result<String> {
+        object
+            .get(field)
+            .and_then(Value::as_str)
+            .map(str::to_string)
+            .ok_or_else(|| anyhow::anyhow!("precommitted retirement authority lacks {field}"))
+    };
+    let u64_field = |field: &str| -> Result<u64> {
+        object
+            .get(field)
+            .and_then(Value::as_u64)
+            .ok_or_else(|| anyhow::anyhow!("precommitted retirement authority lacks {field}"))
+    };
+    let typed = |field: &str| -> Result<Value> {
+        object
+            .get(field)
+            .cloned()
+            .ok_or_else(|| anyhow::anyhow!("precommitted retirement authority lacks {field}"))
+    };
+    let authority = MacRetirementPrecommittedAuthorityV2 {
+        schema_owner: text("schema_owner")?,
+        schema_version: u32::try_from(u64_field("schema_version")?)
+            .context("precommitted retirement authority version overflows u32")?,
+        evidence_id: text("evidence_id")?,
+        scope_id: text("scope_id")?,
+        issued_at_unix_ns: u64_field("issued_at_unix_ns")?,
+        expires_at_unix_ns: u64_field("expires_at_unix_ns")?,
+        candidate_packet_sha256: text("candidate_packet_sha256")?,
+        capability_digest: text("capability_digest")?,
+        receipt_external_store_identity_sha256: text("receipt_external_store_identity_sha256")?,
+        harness_public_key: text("harness_public_key")?,
+        finalizer_identity: serde_json::from_value(typed("finalizer_identity")?)
+            .context("decode precommitted finalizer identity")?,
+        coordinator_identity: serde_json::from_value(typed("coordinator_identity")?)
+            .context("decode precommitted coordinator identity")?,
+        coordinator_process: serde_json::from_value(typed("coordinator_process")?)
+            .context("decode precommitted coordinator process")?,
+        launch_identity: serde_json::from_value(typed("launch_identity")?)
+            .context("decode precommitted launch identity")?,
+        guest_successor_capsule: serde_json::from_value(typed("guest_successor_capsule")?)
+            .context("decode precommitted guest successor capsule")?,
+        predecessor_journal_head_sha256: text("predecessor_journal_head_sha256")?,
+        retry_state_sha256: text("retry_state_sha256")?,
+    };
+    validate_mac_retirement_precommitted_authority_v2(&authority)?;
+    if canonical_mac_retirement_precommitted_authority_v2(&authority)? != bytes {
+        bail!("precommitted retirement authority is not canonical");
+    }
+    Ok(authority)
+}
+
+fn validate_mac_prospective_signer_preparation_v2(
+    preparation: &MacProspectiveSignerPreparationV2,
+) -> Result<()> {
+    if preparation.schema_owner != MAC_SIGNER_PREPARATION_OWNER_V2
+        || preparation.schema_version != 2
+        || preparation.publisher_path != MAC_R3_PRODUCT_PUBLISHER_PATH_V2
+        || preparation.finalizer_path != MAC_R3_FINALIZER_PATH_V2
+    {
+        bail!("prospective signer preparation header or fixed path changed");
+    }
+    mac_require_uuid_v7_component_v1(
+        &preparation.scope_id,
+        "prospective signer preparation scope",
+    )?;
+    for (digest, label) in [
+        (
+            &preparation.publisher_trusted_application_sha256,
+            "publisher trusted application",
+        ),
+        (
+            &preparation.finalizer_trusted_application_sha256,
+            "finalizer trusted application",
+        ),
+        (
+            &preparation.signer_access_control_sha256,
+            "prepared signer access control",
+        ),
+        (
+            &preparation.finalizer_executable_sha256,
+            "prepared finalizer executable",
+        ),
+        (
+            &preparation.candidate_packet_sha256,
+            "prepared candidate packet",
+        ),
+        (&preparation.capability_digest, "prepared capability"),
+    ] {
+        require_lower_hex_digest_mac_v1(digest, label)?;
+    }
+    let cdhash = preparation
+        .finalizer_code_identity
+        .strip_prefix("cdhash:")
+        .ok_or_else(|| anyhow::anyhow!("prepared finalizer code identity is not a CDHash"))?;
+    if cdhash.len() != 40
+        || !cdhash
+            .bytes()
+            .all(|byte| byte.is_ascii_hexdigit() && !byte.is_ascii_uppercase())
+        || preparation.finalizer_physical_identity.is_empty()
+        || preparation.finalizer_physical_identity.len() > 256
+        || preparation
+            .finalizer_physical_identity
+            .bytes()
+            .any(|byte| byte.is_ascii_control())
+    {
+        bail!("prospective signer preparation executable identity is invalid");
+    }
+    Ok(())
+}
+
+fn canonical_mac_prospective_signer_preparation_v2(
+    preparation: &MacProspectiveSignerPreparationV2,
+) -> Result<Vec<u8>> {
+    validate_mac_prospective_signer_preparation_v2(preparation)?;
+    canonical_bootstrap_json_bytes_v1(&json!({
+        "candidate_packet_sha256": preparation.candidate_packet_sha256,
+        "capability_digest": preparation.capability_digest,
+        "finalizer_code_identity": preparation.finalizer_code_identity,
+        "finalizer_executable_sha256": preparation.finalizer_executable_sha256,
+        "finalizer_path": preparation.finalizer_path,
+        "finalizer_physical_identity": preparation.finalizer_physical_identity,
+        "finalizer_trusted_application_sha256": preparation.finalizer_trusted_application_sha256,
+        "publisher_path": preparation.publisher_path,
+        "publisher_trusted_application_sha256": preparation.publisher_trusted_application_sha256,
+        "schema_owner": preparation.schema_owner,
+        "schema_version": preparation.schema_version,
+        "scope_id": preparation.scope_id,
+        "signer_access_control_sha256": preparation.signer_access_control_sha256,
+    }))
+}
+
+fn parse_canonical_mac_prospective_signer_preparation_v2(
+    bytes: &[u8],
+) -> Result<MacProspectiveSignerPreparationV2> {
+    let value: Value =
+        serde_json::from_slice(bytes).context("decode prospective signer preparation packet")?;
+    let object = value
+        .as_object()
+        .ok_or_else(|| anyhow::anyhow!("prospective signer preparation is not an object"))?;
+    let expected = [
+        "candidate_packet_sha256",
+        "capability_digest",
+        "finalizer_code_identity",
+        "finalizer_executable_sha256",
+        "finalizer_path",
+        "finalizer_physical_identity",
+        "finalizer_trusted_application_sha256",
+        "publisher_path",
+        "publisher_trusted_application_sha256",
+        "schema_owner",
+        "schema_version",
+        "scope_id",
+        "signer_access_control_sha256",
+    ];
+    if object.len() != expected.len() || expected.iter().any(|field| !object.contains_key(*field)) {
+        bail!("prospective signer preparation has an unknown or missing field");
+    }
+    let text = |field: &str| -> Result<String> {
+        object
+            .get(field)
+            .and_then(Value::as_str)
+            .map(str::to_string)
+            .ok_or_else(|| anyhow::anyhow!("prospective signer preparation lacks {field}"))
+    };
+    let preparation = MacProspectiveSignerPreparationV2 {
+        schema_owner: text("schema_owner")?,
+        schema_version: object
+            .get("schema_version")
+            .and_then(Value::as_u64)
+            .and_then(|value| u32::try_from(value).ok())
+            .ok_or_else(|| anyhow::anyhow!("prospective signer preparation lacks version"))?,
+        scope_id: text("scope_id")?,
+        publisher_path: text("publisher_path")?,
+        finalizer_path: text("finalizer_path")?,
+        publisher_trusted_application_sha256: text("publisher_trusted_application_sha256")?,
+        finalizer_trusted_application_sha256: text("finalizer_trusted_application_sha256")?,
+        signer_access_control_sha256: text("signer_access_control_sha256")?,
+        finalizer_executable_sha256: text("finalizer_executable_sha256")?,
+        finalizer_physical_identity: text("finalizer_physical_identity")?,
+        finalizer_code_identity: text("finalizer_code_identity")?,
+        candidate_packet_sha256: text("candidate_packet_sha256")?,
+        capability_digest: text("capability_digest")?,
+    };
+    if canonical_mac_prospective_signer_preparation_v2(&preparation)? != bytes {
+        bail!("prospective signer preparation is not canonical JSON");
+    }
+    Ok(preparation)
+}
+
+#[cfg(target_os = "macos")]
+fn load_mac_signer_creation_posture_v2(scope_id: &str) -> Result<MacSignerCreationPostureV2> {
+    let path = mac_prospective_signer_preparation_path_v2(scope_id)?;
+    match fs::symlink_metadata(&path) {
+        Err(error) if error.kind() == std::io::ErrorKind::NotFound => {
+            return Ok(MacSignerCreationPostureV2::LegacyIneligible)
+        }
+        Err(error) => {
+            return Err(error).with_context(|| {
+                format!(
+                    "inspect fixed prospective signer preparation {}",
+                    path.display()
+                )
+            })
+        }
+        Ok(_) => {}
+    }
+    mac_require_root_owned_immutable_tool_path_v1(&path)?;
+    let mut file = fs::OpenOptions::new()
+        .read(true)
+        .custom_flags(libc::O_CLOEXEC | libc::O_NOFOLLOW)
+        .open(&path)
+        .with_context(|| {
+            format!(
+                "open fixed prospective signer preparation {}",
+                path.display()
+            )
+        })?;
+    let metadata = file
+        .metadata()
+        .context("inspect fixed prospective signer preparation descriptor")?;
+    if !metadata.file_type().is_file()
+        || metadata.nlink() != 1
+        || metadata.uid() != 0
+        || metadata.gid() != 0
+        || metadata.mode() & 0o777 != 0o400
+        || metadata.len() == 0
+        || metadata.len() > MAC_SIGNER_PREPARATION_MAX_BYTES_V2
+    {
+        bail!("fixed prospective signer preparation is not root:wheel 0400 bounded state");
+    }
+    let mut bytes = Vec::with_capacity(metadata.len() as usize);
+    (&mut file)
+        .take(MAC_SIGNER_PREPARATION_MAX_BYTES_V2 + 1)
+        .read_to_end(&mut bytes)
+        .context("read fixed prospective signer preparation")?;
+    if bytes.len() as u64 != metadata.len() {
+        bail!("fixed prospective signer preparation length changed during read");
+    }
+    let path_after = fs::symlink_metadata(&path)
+        .context("reinspect fixed prospective signer preparation path")?;
+    if path_after.dev() != metadata.dev()
+        || path_after.ino() != metadata.ino()
+        || path_after.uid() != metadata.uid()
+        || path_after.gid() != metadata.gid()
+        || path_after.mode() != metadata.mode()
+        || path_after.len() != metadata.len()
+    {
+        bail!("fixed prospective signer preparation identity drifted during read");
+    }
+    let preparation = parse_canonical_mac_prospective_signer_preparation_v2(&bytes)?;
+    if preparation.scope_id != scope_id {
+        bail!("prospective signer preparation scope was substituted");
+    }
+    let measured =
+        mac_measure_root_owned_immutable_lima_tool_v1(Path::new(MAC_R3_FINALIZER_PATH_V2))?;
+    if preparation.finalizer_executable_sha256 != measured.artifact_sha256
+        || preparation.finalizer_physical_identity != measured.artifact_identity
+        || preparation.finalizer_code_identity != measured.code_identity
+    {
+        bail!("prospective signer preparation does not match the installed finalizer identity");
+    }
+    Ok(MacSignerCreationPostureV2::ProspectiveExact(preparation))
+}
+
+fn mac_load_fixed_retirement_external_file_v2(path: &Path, label: &str) -> Result<Vec<u8>> {
+    #[cfg(target_os = "macos")]
+    {
+        if !path.starts_with(Path::new(MAC_R3_FINALIZER_JOURNAL_ROOT_V2)) {
+            bail!("{label} path is outside the fixed finalizer infrastructure");
+        }
+        mac_require_root_owned_immutable_tool_path_v1(path)?;
+        let mut file = fs::OpenOptions::new()
+            .read(true)
+            .custom_flags(libc::O_CLOEXEC | libc::O_NOFOLLOW)
+            .open(path)
+            .with_context(|| format!("open fixed {label} {}", path.display()))?;
+        let metadata = file
+            .metadata()
+            .with_context(|| format!("inspect fixed {label} descriptor"))?;
+        if !metadata.file_type().is_file()
+            || metadata.nlink() != 1
+            || metadata.uid() != 0
+            || metadata.gid() != 0
+            || metadata.mode() & 0o777 != MAC_RETIREMENT_EXTERNAL_FILE_MODE_V2
+            || metadata.len() == 0
+            || metadata.len() > MAC_RETIREMENT_EXTERNAL_MAX_BYTES_V2
+        {
+            bail!("fixed {label} is not root:wheel 0400 bounded state");
+        }
+        let mut bytes = Vec::with_capacity(metadata.len() as usize);
+        (&mut file)
+            .take(MAC_RETIREMENT_EXTERNAL_MAX_BYTES_V2 + 1)
+            .read_to_end(&mut bytes)
+            .with_context(|| format!("read fixed {label}"))?;
+        if bytes.len() as u64 != metadata.len() {
+            bail!("fixed {label} length changed during read");
+        }
+        file.sync_all()
+            .with_context(|| format!("fsync fixed {label} descriptor"))?;
+        let path_after =
+            fs::symlink_metadata(path).with_context(|| format!("reinspect fixed {label} path"))?;
+        if path_after.dev() != metadata.dev()
+            || path_after.ino() != metadata.ino()
+            || path_after.uid() != metadata.uid()
+            || path_after.gid() != metadata.gid()
+            || path_after.mode() != metadata.mode()
+            || path_after.len() != metadata.len()
+        {
+            bail!("fixed {label} identity drifted during durable read");
+        }
+        fs::OpenOptions::new()
+            .read(true)
+            .custom_flags(libc::O_CLOEXEC | libc::O_NOFOLLOW | libc::O_DIRECTORY)
+            .open(
+                path.parent()
+                    .ok_or_else(|| anyhow::anyhow!("fixed {label} has no parent"))?,
+            )
+            .with_context(|| format!("open fixed {label} parent"))?
+            .sync_all()
+            .with_context(|| format!("fsync fixed {label} parent"))?;
+        return Ok(bytes);
+    }
+    #[cfg(not(target_os = "macos"))]
+    {
+        let _ = (path, label);
+        bail!("fixed retirement external files are unavailable off macOS")
+    }
+}
+
+fn mac_publish_fixed_retirement_external_file_v2(
+    path: &Path,
+    bytes: &[u8],
+    label: &str,
+) -> Result<()> {
+    if bytes.is_empty() || bytes.len() as u64 > MAC_RETIREMENT_EXTERNAL_MAX_BYTES_V2 {
+        bail!("fixed {label} bytes are outside the closed bound");
+    }
+    #[cfg(target_os = "macos")]
+    {
+        if !path.starts_with(Path::new(MAC_R3_FINALIZER_JOURNAL_ROOT_V2)) {
+            bail!("{label} path is outside the fixed finalizer infrastructure");
+        }
+        mac_publish_immutable_file_atomic_no_replace_v1(
+            path,
+            bytes,
+            MAC_RETIREMENT_EXTERNAL_FILE_MODE_V2,
+            0,
+            0,
+            label,
+        )?;
+        if mac_load_fixed_retirement_external_file_v2(path, label)? != bytes {
+            bail!("fixed {label} did not reopen as its exact durable bytes");
+        }
+        return Ok(());
+    }
+    #[cfg(not(target_os = "macos"))]
+    {
+        let _ = (path, label);
+        bail!("fixed retirement external publication is unavailable off macOS")
+    }
+}
+
+fn mac_expected_prospective_signer_access_snapshot_v2(
+    publisher_trusted_application_data: &[u8],
+    finalizer_trusted_application_data: &[u8],
+) -> MacSignerAccessSnapshotV2 {
+    MacSignerAccessSnapshotV2 {
+        owner_uid: MAC_SIGNER_UNMATCHABLE_OWNER_UID_V2,
+        owner_gid: MAC_SIGNER_UNMATCHABLE_OWNER_GID_V2,
+        owner_type: MAC_SIGNER_OWNER_TYPE_USE_UID_AND_GID_V2,
+        entries: vec![
+            MacSignerAclEntrySnapshotV2 {
+                description: MAC_SIGNER_PUBLISHER_ACL_DESCRIPTION_V2.to_string(),
+                prompt_selector: MAC_SIGNER_PROMPT_SELECTOR_NONE_V2,
+                authorizations: vec!["sign".to_string(), "delete".to_string()],
+                trusted_applications: vec![MacSignerTrustedApplicationDigestV2 {
+                    data_base64url: base64url_encode_mac_v1(publisher_trusted_application_data),
+                }],
+            },
+            MacSignerAclEntrySnapshotV2 {
+                description: MAC_SIGNER_FINALIZER_ACL_DESCRIPTION_V2.to_string(),
+                prompt_selector: MAC_SIGNER_PROMPT_SELECTOR_NONE_V2,
+                authorizations: vec!["delete".to_string()],
+                trusted_applications: vec![MacSignerTrustedApplicationDigestV2 {
+                    data_base64url: base64url_encode_mac_v1(finalizer_trusted_application_data),
+                }],
+            },
+            MacSignerAclEntrySnapshotV2 {
+                description: MAC_SIGNER_PRIVATE_DENY_ACL_DESCRIPTION_V2.to_string(),
+                prompt_selector: MAC_SIGNER_PROMPT_SELECTOR_NONE_V2,
+                authorizations: [
+                    "export_wrapped",
+                    "export_clear",
+                    "import_wrapped",
+                    "import_clear",
+                    "encrypt",
+                    "decrypt",
+                    "mac",
+                    "derive",
+                ]
+                .into_iter()
+                .map(str::to_string)
+                .collect(),
+                trusted_applications: Vec::new(),
+            },
+            MacSignerAclEntrySnapshotV2 {
+                description: MAC_SIGNER_OWNER_DENY_ACL_DESCRIPTION_V2.to_string(),
+                prompt_selector: MAC_SIGNER_PROMPT_SELECTOR_NONE_V2,
+                authorizations: ["change_acl", "change_owner"]
+                    .into_iter()
+                    .map(str::to_string)
+                    .collect(),
+                trusted_applications: Vec::new(),
+            },
+        ],
+    }
+}
+
+fn mac_canonicalize_signer_access_snapshot_v2(snapshot: &mut MacSignerAccessSnapshotV2) {
+    for entry in &mut snapshot.entries {
+        entry.authorizations.sort();
+        entry.trusted_applications.sort();
+    }
+    snapshot.entries.sort();
+}
+
+fn mac_signer_access_snapshot_json_v2(snapshot: &MacSignerAccessSnapshotV2) -> Result<String> {
+    let mut output = format!(
+        "{{\"owner_uid\":{},\"owner_gid\":{},\"owner_type\":{},\"entries\":[",
+        snapshot.owner_uid, snapshot.owner_gid, snapshot.owner_type
+    );
+    for (entry_index, entry) in snapshot.entries.iter().enumerate() {
+        if entry_index != 0 {
+            output.push(',');
+        }
+        output.push_str("{\"description\":");
+        output.push_str(
+            &serde_json::to_string(&entry.description)
+                .context("encode canonical SecACL description")?,
+        );
+        output.push_str(&format!(
+            ",\"prompt_selector\":{},\"authorizations\":",
+            entry.prompt_selector
+        ));
+        output.push_str(
+            &serde_json::to_string(&entry.authorizations)
+                .context("encode canonical SecACL authorizations")?,
+        );
+        output.push_str(",\"trusted_applications\":[");
+        for (application_index, application) in entry.trusted_applications.iter().enumerate() {
+            if application_index != 0 {
+                output.push(',');
+            }
+            output.push_str("{\"data_base64url\":");
+            output.push_str(
+                &serde_json::to_string(&application.data_base64url)
+                    .context("encode canonical trusted-application identity")?,
+            );
+            output.push('}');
+        }
+        output.push_str("]}");
+    }
+    output.push_str("]}");
+    Ok(output)
+}
+
+fn mac_prospective_signer_access_digest_v2(
+    mut snapshot: MacSignerAccessSnapshotV2,
+) -> Result<String> {
+    mac_canonicalize_signer_access_snapshot_v2(&mut snapshot);
+    // This exact struct field order and compact JSON encoding intentionally match the standalone
+    // ACL constructor and finalizer readback digest semantics.
+    let canonical = mac_signer_access_snapshot_json_v2(&snapshot)?;
+    Ok(sha256_hex_bootstrap_v1(canonical.as_bytes()))
+}
+
+fn derive_mac_prospective_retirement_signer_identity_v2(
+    application_tag: &[u8],
+    label: &str,
+    application_label: &[u8],
+    persistent_reference: &[u8],
+    public_spki: &[u8],
+    access_control_sha256: &str,
+) -> Result<MacProspectiveRetirementSignerIdentityV2> {
+    if label != MAC_KEYCHAIN_SERVICE_V1
+        || application_label.is_empty()
+        || persistent_reference.is_empty()
+    {
+        bail!("prospective signer persisted identity is incomplete");
+    }
+    parse_p256_spki_der_v1(public_spki)?;
+    require_lower_hex_digest_mac_v1(access_control_sha256, "signer access control")?;
+    let mut identity = MacProspectiveRetirementSignerIdentityV2 {
+        application_tag_sha256: sha256_hex_bootstrap_v1(application_tag),
+        label: label.to_string(),
+        application_label_base64url: base64url_encode_mac_v1(application_label),
+        persistent_reference_sha256: sha256_hex_bootstrap_v1(persistent_reference),
+        public_spki_sha256: sha256_hex_bootstrap_v1(public_spki),
+        access_control_sha256: access_control_sha256.to_string(),
+        identity_sha256: String::new(),
+    };
+    identity.identity_sha256 = sha256_hex_bootstrap_v1(&canonical_bootstrap_json_bytes_v1(
+        &mac_prospective_signer_identity_material_value_v2(&identity),
+    )?);
+    Ok(identity)
+}
+
+fn mac_prospective_signer_identity_material_value_v2(
+    identity: &MacProspectiveRetirementSignerIdentityV2,
+) -> Value {
+    json!({
+        "application_tag_sha256": identity.application_tag_sha256,
+        "label": identity.label,
+        "application_label_base64url": identity.application_label_base64url,
+        "persistent_reference_sha256": identity.persistent_reference_sha256,
+        "public_spki_sha256": identity.public_spki_sha256,
+        "access_control_sha256": identity.access_control_sha256,
+    })
+}
+
+fn mac_prospective_signer_identity_value_v2(
+    identity: &MacProspectiveRetirementSignerIdentityV2,
+) -> Value {
+    let mut value = mac_prospective_signer_identity_material_value_v2(identity);
+    value
+        .as_object_mut()
+        .expect("signer identity material is an object")
+        .insert(
+            "identity_sha256".to_string(),
+            Value::String(identity.identity_sha256.clone()),
+        );
+    value
+}
+
+fn parse_mac_prospective_signer_identity_value_v2(
+    value: &Value,
+) -> Result<MacProspectiveRetirementSignerIdentityV2> {
+    let object = value
+        .as_object()
+        .ok_or_else(|| anyhow::anyhow!("resource-index signer identity is not an object"))?;
+    let expected = [
+        "application_tag_sha256",
+        "label",
+        "application_label_base64url",
+        "persistent_reference_sha256",
+        "public_spki_sha256",
+        "access_control_sha256",
+        "identity_sha256",
+    ];
+    if object.len() != expected.len() || expected.iter().any(|field| !object.contains_key(*field)) {
+        bail!("resource-index signer identity has an unknown or missing field");
+    }
+    let text = |field: &str| -> Result<String> {
+        object
+            .get(field)
+            .and_then(Value::as_str)
+            .map(str::to_string)
+            .ok_or_else(|| anyhow::anyhow!("resource-index signer identity lacks {field}"))
+    };
+    Ok(MacProspectiveRetirementSignerIdentityV2 {
+        application_tag_sha256: text("application_tag_sha256")?,
+        label: text("label")?,
+        application_label_base64url: text("application_label_base64url")?,
+        persistent_reference_sha256: text("persistent_reference_sha256")?,
+        public_spki_sha256: text("public_spki_sha256")?,
+        access_control_sha256: text("access_control_sha256")?,
+        identity_sha256: text("identity_sha256")?,
+    })
+}
+
+fn validate_mac_prospective_retirement_signer_identity_v2(
+    scope_id: &str,
+    identity: &MacProspectiveRetirementSignerIdentityV2,
+) -> Result<()> {
+    let expected_tag = mac_keychain_signing_key_tag_v1(scope_id)?;
+    for (digest, label) in [
+        (&identity.application_tag_sha256, "signer application tag"),
+        (
+            &identity.persistent_reference_sha256,
+            "signer persistent reference",
+        ),
+        (&identity.public_spki_sha256, "signer public SPKI"),
+        (&identity.access_control_sha256, "signer access control"),
+        (&identity.identity_sha256, "signer identity"),
+    ] {
+        require_lower_hex_digest_mac_v1(digest, label)?;
+    }
+    if identity.application_tag_sha256 != sha256_hex_bootstrap_v1(&expected_tag)
+        || identity.label != MAC_KEYCHAIN_SERVICE_V1
+        || mac_base64url_decode_v1(&identity.application_label_base64url)?.is_empty()
+    {
+        bail!("prospective signer identity does not match its fixed product identity");
+    }
+    let expected_identity_sha256 = sha256_hex_bootstrap_v1(&canonical_bootstrap_json_bytes_v1(
+        &mac_prospective_signer_identity_material_value_v2(identity),
+    )?);
+    if identity.identity_sha256 != expected_identity_sha256 {
+        bail!("prospective signer identity digest changed");
+    }
+    Ok(())
+}
+
+fn canonical_mac_retirement_resource_index_entry_material_v2(
+    entry: &MacRetirementResourceIndexEntryV2,
+) -> Result<Vec<u8>> {
+    validate_host_resource_locator_v2(&entry.locator)?;
+    if entry.ordinal == 0 {
+        bail!("retirement resource index entry ordinal is zero");
+    }
+    if let Some(previous) = &entry.previous_entry_sha256 {
+        require_lower_hex_digest_mac_v1(previous, "resource-index predecessor entry")?;
+    }
+    canonical_bootstrap_json_bytes_v1(&json!({
+        "ordinal": entry.ordinal,
+        "locator": entry.locator,
+        "previous_entry_sha256": entry.previous_entry_sha256,
+    }))
+}
+
+fn mac_retirement_resource_index_entry_sha256_v2(
+    entry: &MacRetirementResourceIndexEntryV2,
+) -> Result<String> {
+    Ok(sha256_hex_bootstrap_v1(
+        &canonical_mac_retirement_resource_index_entry_material_v2(entry)?,
+    ))
+}
+
+fn validate_mac_retirement_resource_index_v2(
+    index: &MacRetirementResourceIndexV2,
+    allow_unsigned: bool,
+) -> Result<()> {
+    if index.schema_owner != "substrate.mac-retirement-resource-index"
+        || index.schema_version != 2
+        || index.revision == 0
+        || index.revision != index.entries.len() as u64
+        || index.entries.len() > MAC_R3_MAX_HOST_TARGETS_V2
+        || index.signature.algorithm != "ecdsa-p256-sha256-p1363-low-s-v1"
+        || index.signature.public_key.is_empty()
+        || (!allow_unsigned && index.signature.signature.is_empty())
+        || (allow_unsigned && !index.signature.signature.is_empty())
+    {
+        bail!("retirement resource index is not a closed V2 record");
+    }
+    mac_require_uuid_v7_component_v1(&index.scope_id, "retirement resource-index scope")?;
+    require_lower_hex_digest_mac_v1(&index.signer_spki_sha256, "resource-index signer SPKI")?;
+    require_lower_hex_digest_mac_v1(
+        &index.signer_access_control_sha256,
+        "resource-index signer access control",
+    )?;
+    validate_mac_prospective_retirement_signer_identity_v2(
+        &index.scope_id,
+        &index.signer_identity,
+    )?;
+    let signer_spki = mac_base64url_decode_v1(&index.signature.public_key)?;
+    if sha256_hex_bootstrap_v1(&signer_spki) != index.signer_spki_sha256
+        || index.signer_identity.public_spki_sha256 != index.signer_spki_sha256
+        || index.signer_identity.access_control_sha256 != index.signer_access_control_sha256
+    {
+        bail!("retirement resource index signer digest changed");
+    }
+    if let Some(previous) = &index.previous_index_sha256 {
+        require_lower_hex_digest_mac_v1(previous, "resource-index predecessor")?;
+    }
+    let expected_first = HostResourceLocatorV2::GenericPassword {
+        role: GenericPasswordRoleV2::RetirementResourceIndex,
+    };
+    let expected_second = HostResourceLocatorV2::KeychainCasLock {
+        account: GenericPasswordRoleV2::RetirementResourceIndex,
+    };
+    if index.entries.first().map(|entry| &entry.locator) != Some(&expected_first)
+        || index.entries.get(1).map(|entry| &entry.locator) != Some(&expected_second)
+    {
+        bail!("retirement resource index lacks its exact self-owned prefix");
+    }
+    let mut seen = BTreeSet::new();
+    let mut previous_entry_sha256: Option<String> = None;
+    for (offset, entry) in index.entries.iter().enumerate() {
+        if entry.ordinal != u32::try_from(offset + 1).expect("bounded resource index fits u32")
+            || entry.previous_entry_sha256 != previous_entry_sha256
+            || entry.entry_sha256 != mac_retirement_resource_index_entry_sha256_v2(entry)?
+            || !seen.insert(&entry.locator)
+            || matches!(
+                entry.locator,
+                HostResourceLocatorV2::DisposableCapabilityControl { .. }
+                    | HostResourceLocatorV2::DisposableProtectedWrapper
+                    | HostResourceLocatorV2::DisposableCurrentLock
+            )
+        {
+            bail!("retirement resource index entry order, chain, or uniqueness changed");
+        }
+        previous_entry_sha256 = Some(entry.entry_sha256.clone());
+    }
+    Ok(())
+}
+
+fn canonical_mac_retirement_resource_index_body_v2(
+    index: &MacRetirementResourceIndexV2,
+    allow_unsigned: bool,
+) -> Result<Vec<u8>> {
+    validate_mac_retirement_resource_index_v2(index, allow_unsigned)?;
+    let entries = index
+        .entries
+        .iter()
+        .map(|entry| {
+            Ok(json!({
+                "ordinal": entry.ordinal,
+                "locator": entry.locator,
+                "previous_entry_sha256": entry.previous_entry_sha256,
+                "entry_sha256": entry.entry_sha256,
+            }))
+        })
+        .collect::<Result<Vec<_>>>()?;
+    canonical_bootstrap_json_bytes_v1(&json!({
+        "schema_owner": index.schema_owner,
+        "schema_version": index.schema_version,
+        "scope_id": index.scope_id,
+        "revision": index.revision,
+        "previous_index_sha256": index.previous_index_sha256,
+        "entries": entries,
+        "signer_spki_sha256": index.signer_spki_sha256,
+        "signer_access_control_sha256": index.signer_access_control_sha256,
+        "signer_identity": mac_prospective_signer_identity_value_v2(&index.signer_identity),
+        "signature": index.signature,
+    }))
+}
+
+fn canonical_mac_retirement_resource_index_v2(
+    index: &MacRetirementResourceIndexV2,
+) -> Result<Vec<u8>> {
+    canonical_mac_retirement_resource_index_body_v2(index, false)
+}
+
+fn canonical_mac_retirement_resource_index_signature_payload_v2(
+    index: &MacRetirementResourceIndexV2,
+) -> Result<Vec<u8>> {
+    let unsigned = MacRetirementResourceIndexV2 {
+        signature: LifecycleSignatureV1 {
+            algorithm: index.signature.algorithm.clone(),
+            public_key: index.signature.public_key.clone(),
+            signature: String::new(),
+        },
+        ..index.clone()
+    };
+    let body = canonical_mac_retirement_resource_index_body_v2(&unsigned, true)?;
+    let mut payload = Vec::with_capacity(
+        MAC_RETIREMENT_RESOURCE_INDEX_SIGNATURE_DOMAIN_V2.len() + 8 + body.len(),
+    );
+    payload.extend_from_slice(MAC_RETIREMENT_RESOURCE_INDEX_SIGNATURE_DOMAIN_V2);
+    payload.extend_from_slice(
+        &u64::try_from(body.len())
+            .context("bound retirement resource-index signature payload")?
+            .to_be_bytes(),
+    );
+    payload.extend_from_slice(&body);
+    Ok(payload)
+}
+
+fn parse_canonical_mac_retirement_resource_index_v2(
+    bytes: &[u8],
+) -> Result<MacRetirementResourceIndexV2> {
+    let value: Value =
+        serde_json::from_slice(bytes).context("decode retirement resource index V2")?;
+    let object = value
+        .as_object()
+        .ok_or_else(|| anyhow::anyhow!("retirement resource index must be an object"))?;
+    let expected = [
+        "schema_owner",
+        "schema_version",
+        "scope_id",
+        "revision",
+        "previous_index_sha256",
+        "entries",
+        "signer_spki_sha256",
+        "signer_access_control_sha256",
+        "signer_identity",
+        "signature",
+    ];
+    if object.len() != expected.len() || expected.iter().any(|field| !object.contains_key(*field)) {
+        bail!("retirement resource index has an unknown or missing field");
+    }
+    let entries = object
+        .get("entries")
+        .and_then(Value::as_array)
+        .ok_or_else(|| anyhow::anyhow!("retirement resource index lacks entries"))?
+        .iter()
+        .map(|value| {
+            let entry = value.as_object().ok_or_else(|| {
+                anyhow::anyhow!("retirement resource index entry must be an object")
+            })?;
+            let expected = [
+                "ordinal",
+                "locator",
+                "previous_entry_sha256",
+                "entry_sha256",
+            ];
+            if entry.len() != expected.len()
+                || expected.iter().any(|field| !entry.contains_key(*field))
+            {
+                bail!("retirement resource index entry has an unknown or missing field");
+            }
+            Ok(MacRetirementResourceIndexEntryV2 {
+                ordinal: entry
+                    .get("ordinal")
+                    .and_then(Value::as_u64)
+                    .and_then(|value| u32::try_from(value).ok())
+                    .ok_or_else(|| anyhow::anyhow!("resource-index entry lacks ordinal"))?,
+                locator: serde_json::from_value(
+                    entry
+                        .get("locator")
+                        .cloned()
+                        .ok_or_else(|| anyhow::anyhow!("resource-index entry lacks locator"))?,
+                )
+                .context("decode typed resource-index locator")?,
+                previous_entry_sha256: match entry.get("previous_entry_sha256") {
+                    Some(Value::Null) => None,
+                    Some(Value::String(value)) => Some(value.clone()),
+                    _ => bail!("resource-index entry predecessor is not optional text"),
+                },
+                entry_sha256: entry
+                    .get("entry_sha256")
+                    .and_then(Value::as_str)
+                    .ok_or_else(|| anyhow::anyhow!("resource-index entry lacks digest"))?
+                    .to_string(),
+            })
+        })
+        .collect::<Result<Vec<_>>>()?;
+    let index = MacRetirementResourceIndexV2 {
+        schema_owner: object
+            .get("schema_owner")
+            .and_then(Value::as_str)
+            .ok_or_else(|| anyhow::anyhow!("resource index lacks schema owner"))?
+            .to_string(),
+        schema_version: object
+            .get("schema_version")
+            .and_then(Value::as_u64)
+            .and_then(|value| u32::try_from(value).ok())
+            .ok_or_else(|| anyhow::anyhow!("resource index lacks schema version"))?,
+        scope_id: object
+            .get("scope_id")
+            .and_then(Value::as_str)
+            .ok_or_else(|| anyhow::anyhow!("resource index lacks scope"))?
+            .to_string(),
+        revision: object
+            .get("revision")
+            .and_then(Value::as_u64)
+            .ok_or_else(|| anyhow::anyhow!("resource index lacks revision"))?,
+        previous_index_sha256: match object.get("previous_index_sha256") {
+            Some(Value::Null) => None,
+            Some(Value::String(value)) => Some(value.clone()),
+            _ => bail!("resource index predecessor is not optional text"),
+        },
+        entries,
+        signer_spki_sha256: object
+            .get("signer_spki_sha256")
+            .and_then(Value::as_str)
+            .ok_or_else(|| anyhow::anyhow!("resource index lacks signer digest"))?
+            .to_string(),
+        signer_access_control_sha256: object
+            .get("signer_access_control_sha256")
+            .and_then(Value::as_str)
+            .ok_or_else(|| anyhow::anyhow!("resource index lacks signer access-control digest"))?
+            .to_string(),
+        signer_identity: parse_mac_prospective_signer_identity_value_v2(
+            object
+                .get("signer_identity")
+                .ok_or_else(|| anyhow::anyhow!("resource index lacks signer identity"))?,
+        )?,
+        signature: serde_json::from_value(
+            object
+                .get("signature")
+                .cloned()
+                .ok_or_else(|| anyhow::anyhow!("resource index lacks signature"))?,
+        )
+        .context("decode resource-index signature")?,
+    };
+    if canonical_mac_retirement_resource_index_v2(&index)? != bytes {
+        bail!("retirement resource index is not canonical JSON");
+    }
+    Ok(index)
+}
+
+fn parse_and_verify_mac_retirement_resource_index_v2(
+    bytes: &[u8],
+) -> Result<MacRetirementResourceIndexV2> {
+    let index = parse_canonical_mac_retirement_resource_index_v2(bytes)?;
+    let spki = mac_base64url_decode_v1(&index.signature.public_key)?;
+    let signature = mac_base64url_decode_v1(&index.signature.signature)?;
+    let payload = canonical_mac_retirement_resource_index_signature_payload_v2(&index)?;
+    verify_p256_p1363_low_s_v1(&spki, &payload, &signature)
+        .context("verify retirement resource-index signature")?;
+    Ok(index)
+}
+
+fn derive_mac_retirement_resource_index_append_v2(
+    scope_id: &str,
+    existing: Option<&MacRetirementResourceIndexV2>,
+    locators: &[HostResourceLocatorV2],
+    public_key: &str,
+    signer_identity: &MacProspectiveRetirementSignerIdentityV2,
+) -> Result<Option<MacRetirementResourceIndexV2>> {
+    mac_require_uuid_v7_component_v1(scope_id, "retirement resource-index scope")?;
+    validate_mac_prospective_retirement_signer_identity_v2(scope_id, signer_identity)?;
+    let signer_spki_sha256 = sha256_hex_bootstrap_v1(&mac_base64url_decode_v1(public_key)?);
+    if signer_identity.public_spki_sha256 != signer_spki_sha256 {
+        bail!("retirement resource-index signer identity does not match its public key");
+    }
+    let mut entries = if let Some(existing) = existing {
+        validate_mac_retirement_resource_index_v2(existing, false)?;
+        if existing.scope_id != scope_id
+            || existing.signature.public_key != public_key
+            || existing.signer_spki_sha256 != signer_spki_sha256
+            || existing.signer_access_control_sha256 != signer_identity.access_control_sha256
+            || existing.signer_identity != *signer_identity
+        {
+            bail!("retirement resource-index append changed scope or signer");
+        }
+        existing.entries.clone()
+    } else {
+        Vec::new()
+    };
+    let previous_index_sha256 = existing
+        .map(canonical_mac_retirement_resource_index_v2)
+        .transpose()?
+        .map(|bytes| sha256_hex_bootstrap_v1(&bytes));
+    let mut candidates = Vec::new();
+    if entries.is_empty() {
+        candidates.extend([
+            HostResourceLocatorV2::GenericPassword {
+                role: GenericPasswordRoleV2::RetirementResourceIndex,
+            },
+            HostResourceLocatorV2::KeychainCasLock {
+                account: GenericPasswordRoleV2::RetirementResourceIndex,
+            },
+        ]);
+    }
+    candidates.extend_from_slice(locators);
+    let mut seen: BTreeSet<_> = entries.iter().map(|entry| entry.locator.clone()).collect();
+    let mut appended = false;
+    for locator in candidates {
+        validate_host_resource_locator_v2(&locator)?;
+        if matches!(
+            locator,
+            HostResourceLocatorV2::DisposableCapabilityControl { .. }
+                | HostResourceLocatorV2::DisposableProtectedWrapper
+                | HostResourceLocatorV2::DisposableCurrentLock
+        ) {
+            bail!("prospective resource index rejects a disposable locator");
+        }
+        if !seen.insert(locator.clone()) {
+            continue;
+        }
+        let mut entry = MacRetirementResourceIndexEntryV2 {
+            ordinal: u32::try_from(entries.len() + 1)
+                .context("retirement resource-index ordinal overflow")?,
+            locator,
+            previous_entry_sha256: entries.last().map(|entry| entry.entry_sha256.clone()),
+            entry_sha256: String::new(),
+        };
+        entry.entry_sha256 = mac_retirement_resource_index_entry_sha256_v2(&entry)?;
+        entries.push(entry);
+        appended = true;
+    }
+    if !appended {
+        return Ok(None);
+    }
+    if entries.len() > MAC_R3_MAX_HOST_TARGETS_V2 {
+        bail!("retirement resource index exceeds the fixed target bound");
+    }
+    let index = MacRetirementResourceIndexV2 {
+        schema_owner: "substrate.mac-retirement-resource-index".to_string(),
+        schema_version: 2,
+        scope_id: scope_id.to_string(),
+        revision: u64::try_from(entries.len()).context("resource-index revision overflow")?,
+        previous_index_sha256,
+        entries,
+        signer_spki_sha256,
+        signer_access_control_sha256: signer_identity.access_control_sha256.clone(),
+        signer_identity: signer_identity.clone(),
+        signature: LifecycleSignatureV1 {
+            algorithm: "ecdsa-p256-sha256-p1363-low-s-v1".to_string(),
+            public_key: public_key.to_string(),
+            signature: String::new(),
+        },
+    };
+    validate_mac_retirement_resource_index_v2(&index, true)?;
+    Ok(Some(index))
+}
+
+fn mac_sign_retirement_resource_index_v2(
+    scope_id: &str,
+    index: &MacRetirementResourceIndexV2,
+) -> Result<LifecycleSignatureV1> {
+    let spki = mac_open_system_keychain_p256_spki_der_v1(scope_id)?;
+    let signer_identity = mac_open_prospective_retirement_signer_identity_v2(scope_id)?;
+    let public_key = base64url_encode_mac_v1(&spki);
+    if index.scope_id != scope_id
+        || index.signature.public_key != public_key
+        || index.signer_spki_sha256 != sha256_hex_bootstrap_v1(&spki)
+        || index.signer_identity != signer_identity
+        || index.signer_access_control_sha256 != signer_identity.access_control_sha256
+    {
+        bail!("retirement resource-index signer changed before signing");
+    }
+    let payload = canonical_mac_retirement_resource_index_signature_payload_v2(index)?;
+    Ok(LifecycleSignatureV1 {
+        algorithm: "ecdsa-p256-sha256-p1363-low-s-v1".to_string(),
+        public_key,
+        signature: base64url_encode_mac_v1(&mac_system_keychain_sign_p1363_low_s_v1(
+            scope_id, &payload,
+        )?),
+    })
+}
+
+fn open_mac_retirement_resource_index_v2(
+    scope_id: &str,
+) -> Result<Option<(MacRetirementResourceIndexV2, Vec<u8>)>> {
+    let account = mac_keychain_retirement_resource_index_account_v2(scope_id)?;
+    let Some(bytes) = mac_keychain_read_item_v1(MAC_KEYCHAIN_SERVICE_V1, &account)? else {
+        return Ok(None);
+    };
+    let index = parse_and_verify_mac_retirement_resource_index_v2(&bytes)?;
+    if index.scope_id != scope_id {
+        bail!("retirement resource index crosses its exact protected scope");
+    }
+    Ok(Some((index, bytes)))
+}
+
+#[cfg(target_os = "macos")]
+fn mac_ensure_retirement_lifecycle_target_lock_v2(
+    scope_id: &str,
+    role: &LifecycleFileRoleV2,
+) -> Result<()> {
+    let root = Path::new(MAC_STATE_ROOT_V1);
+    let root_metadata = fs::symlink_metadata(root)
+        .context("inspect lifecycle root before prospective target-lock creation")?;
+    if !root_metadata.file_type().is_dir()
+        || root_metadata.uid() != 0
+        || root_metadata.gid() != 0
+        || root_metadata.mode() & 0o022 != 0
+    {
+        bail!("prospective lifecycle target-lock root is not retained root-owned state");
+    }
+    let path = mac_retirement_lifecycle_target_lock_path_v2(scope_id, role)?;
+    let file = fs::OpenOptions::new()
+        .read(true)
+        .write(true)
+        .create(true)
+        .mode(0o600)
+        .custom_flags(libc::O_CLOEXEC | libc::O_NOFOLLOW)
+        .open(&path)
+        .with_context(|| format!("open prospective lifecycle target lock {}", path.display()))?;
+    let metadata = file.metadata().with_context(|| {
+        format!(
+            "inspect prospective lifecycle target lock {}",
+            path.display()
+        )
+    })?;
+    if !metadata.file_type().is_file()
+        || metadata.uid() != 0
+        || metadata.gid() != 0
+        || metadata.mode() & 0o777 != 0o600
+        || metadata.nlink() != 1
+    {
+        bail!("prospective lifecycle target lock is not one root-owned private file");
+    }
+    Ok(())
+}
+
+fn append_mac_retirement_resource_producers_v2(
+    scope_id: &str,
+    producers: &[MacRetirementResourceProducerV2],
+) -> Result<MacRetirementResourceIndexV2> {
+    if mac_retirement_admission_holds_scope_v2(scope_id) {
+        return append_mac_retirement_resource_producers_with_locks_held_v2(scope_id, producers);
+    }
+    let _activation = acquire_mac_retirement_activation_guard_v2(false)?
+        .ok_or_else(|| anyhow::anyhow!("retirement append lacks its fixed activation root"))?;
+    let _guards = acquire_mac_retirement_cas_index_guards_v2(scope_id)?;
+    append_mac_retirement_resource_producers_with_locks_held_v2(scope_id, producers)
+}
+
+fn append_mac_retirement_resource_producers_with_locks_held_v2(
+    scope_id: &str,
+    producers: &[MacRetirementResourceProducerV2],
+) -> Result<MacRetirementResourceIndexV2> {
+    if producers.is_empty() || producers.len() > MAC_R3_MAX_HOST_TARGETS_V2 {
+        bail!("retirement resource-index append has an invalid producer count");
+    }
+    let mut locators = Vec::new();
+    for producer in producers {
+        locators.extend(mac_retirement_resource_locators_for_producer_v2(producer)?);
+    }
+    let account = mac_keychain_retirement_resource_index_account_v2(scope_id)?;
+    let observed = mac_keychain_read_item_v1(MAC_KEYCHAIN_SERVICE_V1, &account)?;
+    let existing = observed
+        .as_deref()
+        .map(parse_and_verify_mac_retirement_resource_index_v2)
+        .transpose()?;
+    let current_spki = mac_open_system_keychain_p256_spki_der_v1(scope_id)?;
+    let public_key = base64url_encode_mac_v1(&current_spki);
+    let signer_identity = mac_open_prospective_retirement_signer_identity_v2(scope_id)?;
+    if signer_identity.public_spki_sha256 != sha256_hex_bootstrap_v1(&current_spki) {
+        bail!("retirement resource index signer readback changed SPKI identity");
+    }
+    if let Some(existing) = &existing {
+        if existing.signature.public_key != public_key
+            || existing.signer_identity != signer_identity
+            || existing.signer_access_control_sha256 != signer_identity.access_control_sha256
+        {
+            bail!("retirement resource index no longer uses the current signer");
+        }
+    }
+    let derived = derive_mac_retirement_resource_index_append_v2(
+        scope_id,
+        existing.as_ref(),
+        &locators,
+        &public_key,
+        &signer_identity,
+    )?;
+    if derived.is_some() {
+        if mac_keychain_read_item_v1(
+            MAC_KEYCHAIN_SERVICE_V1,
+            &mac_keychain_retirement_cas_account_v2(scope_id)?,
+        )?
+        .is_some()
+        {
+            bail!("retirement resource index is immutable after quiescence preparation");
+        }
+        #[cfg(target_os = "macos")]
+        for locator in &locators {
+            if let HostResourceLocatorV2::LifecycleTargetLock { target } = locator {
+                mac_ensure_retirement_lifecycle_target_lock_v2(scope_id, target)?;
+            }
+        }
+    }
+    let Some(mut next) = derived else {
+        return existing.ok_or_else(|| anyhow::anyhow!("resource-index retry lost its record"));
+    };
+    next.signature = mac_sign_retirement_resource_index_v2(scope_id, &next)?;
+    let next_bytes = canonical_mac_retirement_resource_index_v2(&next)?;
+    mac_keychain_compare_and_swap_item_v1(
+        MAC_KEYCHAIN_SERVICE_V1,
+        &account,
+        observed.as_deref(),
+        &next_bytes,
+    )?;
+    let (reopened, reopened_bytes) = open_mac_retirement_resource_index_v2(scope_id)?
+        .ok_or_else(|| anyhow::anyhow!("retirement resource index disappeared after CAS"))?;
+    if reopened != next || reopened_bytes != next_bytes {
+        bail!("retirement resource-index CAS did not read back exactly");
+    }
+    Ok(reopened)
+}
+
+fn append_mac_retirement_resource_producers_if_active_v2(
+    scope_id: &str,
+    producers: &[MacRetirementResourceProducerV2],
+) -> Result<()> {
+    let account = mac_keychain_retirement_resource_index_account_v2(scope_id)?;
+    if mac_keychain_read_item_v1(MAC_KEYCHAIN_SERVICE_V1, &account)?.is_none() {
+        return Ok(());
+    }
+    append_mac_retirement_resource_producers_v2(scope_id, producers)?;
+    Ok(())
+}
+
+fn mac_retirement_bootstrap_attempt_key_from_admission_v2(
+    admission: &MacPublisherControlAdmissionV1,
+) -> Result<String> {
+    let prefix = "mac-publisher-bootstrap-attempt-locator-v1:";
+    let digest = admission
+        .bootstrap_attempt_locator_account
+        .strip_prefix(prefix)
+        .ok_or_else(|| {
+            anyhow::anyhow!("retirement initialization lacks the fixed bootstrap locator prefix")
+        })?;
+    let locator = mac_read_bootstrap_attempt_locator_by_account_v1(
+        &admission.bootstrap_attempt_locator_account,
+    )?;
+    if locator.scope_id != admission.scope_id || locator.attempt_key_sha256 != digest {
+        bail!("retirement initialization bootstrap locator crosses retained authority");
+    }
+    Ok(digest.to_string())
+}
+
+#[cfg(target_os = "macos")]
+fn mac_current_authoritative_lifecycle_resource_producers_v2(
+    executor: &MacManagedArtifactExecutorV1,
+    scope_id: &str,
+) -> Result<Vec<MacRetirementResourceProducerV2>> {
+    let state = open_system_keychain_protected_state_for_scope_v1(scope_id)?
+        .ok_or_else(|| anyhow::anyhow!("retirement inventory lacks current protected state"))?;
+    let anchor = &state.current_anchor;
+    if anchor.action_receipt_index_revision == 0 {
+        if anchor.action_receipt_index_sha256 != "0".repeat(64)
+            || anchor.head_sha256 != "0".repeat(64)
+        {
+            bail!("retirement inventory has an invalid empty receipt prefix");
+        }
+        return Ok(Vec::new());
+    }
+    let generation = anchor.manifest_generation;
+    let manifest_relative = format!("manifest.{generation}.json");
+    let manifest_bytes =
+        mac_read_stage_one_transition_artifact_no_follow_v1(executor, &manifest_relative)?;
+    let manifest: ManagedArtifactManifestV1 =
+        serde_json::from_slice(&manifest_bytes).context("decode retirement inventory manifest")?;
+    if canonical_manifest_bytes_v1(&manifest)?.bytes != manifest_bytes
+        || manifest.installation_id != scope_id
+        || manifest.manifest_generation != generation
+        || manifest.manifest_sha256 != anchor.manifest_sha256
+    {
+        bail!("retirement inventory manifest does not exact-join current authority");
+    }
+    let index_relative = format!("action-receipts.{generation}.v1.json");
+    let index_bytes =
+        mac_read_stage_one_transition_artifact_no_follow_v1(executor, &index_relative)?;
+    let index: ManagedActionReceiptIndexV1 = serde_json::from_slice(&index_bytes)
+        .context("decode retirement inventory receipt index")?;
+    let canonical_index = canonical_action_receipt_index_bytes_v1(&index)?;
+    if canonical_index != index_bytes
+        || index.scope_id != scope_id
+        || index.manifest_generation != generation
+        || index.manifest_sha256 != manifest.manifest_sha256
+        || index.index_revision != anchor.action_receipt_index_revision
+        || sha256_hex_bootstrap_v1(&canonical_index) != anchor.action_receipt_index_sha256
+        || index.entries.len() as u64 != index.index_revision
+    {
+        bail!("retirement inventory receipt index does not exact-join current authority");
+    }
+    let head_bytes = mac_read_stage_one_transition_artifact_no_follow_v1(executor, "head.v1.json")?;
+    let head: ManagedManifestHeadV1 =
+        serde_json::from_slice(&head_bytes).context("decode retirement inventory head")?;
+    if canonical_managed_manifest_head_v1(&head)? != head_bytes
+        || head.scope_id != scope_id
+        || head.manifest_generation != generation
+        || head.manifest_sha256 != manifest.manifest_sha256
+        || head.action_receipt_index_revision != index.index_revision
+        || head.action_receipt_index_sha256 != anchor.action_receipt_index_sha256
+        || sha256_hex_bootstrap_v1(&head_bytes) != anchor.head_sha256
+    {
+        bail!("retirement inventory head does not exact-join current authority");
+    }
+    let mut producers = vec![
+        MacRetirementResourceProducerV2::Manifest { generation },
+        MacRetirementResourceProducerV2::ReceiptIndex { generation },
+        MacRetirementResourceProducerV2::Head,
+    ];
+    for entry in &index.entries {
+        mac_require_uuid_v7_component_v1(&entry.receipt_id, "retirement inventory receipt")?;
+        if entry.receipt_relative_path
+            != format!("receipts/{generation}/receipt.{}.json", entry.receipt_id)
+        {
+            bail!("retirement inventory receipt path is not authority-derived");
+        }
+        producers.push(MacRetirementResourceProducerV2::Receipt {
+            generation,
+            receipt_id: entry.receipt_id.clone(),
+        });
+    }
+    Ok(producers)
+}
+
+#[cfg(not(target_os = "macos"))]
+fn mac_current_authoritative_lifecycle_resource_producers_v2(
+    _executor: &MacManagedArtifactExecutorV1,
+    _scope_id: &str,
+) -> Result<Vec<MacRetirementResourceProducerV2>> {
+    bail!("prospective retirement inventory is unavailable off macOS")
+}
+
+fn initialize_mac_retirement_resource_index_v2(
+    executor: &MacManagedArtifactExecutorV1,
+    scope_id: &str,
+) -> Result<MacRetirementResourceIndexV2> {
+    let admission = mac_verified_control_admission_v1()?;
+    if admission.scope_id != scope_id {
+        bail!("retirement initialization scope does not exact-join XPC admission");
+    }
+    let _activation = acquire_mac_retirement_activation_guard_v2(true)?.ok_or_else(|| {
+        anyhow::anyhow!("retirement initialization lacks its fixed activation root")
+    })?;
+    let _guards = acquire_mac_retirement_cas_index_guards_v2(scope_id)?;
+    if let Some((existing, _)) = open_mac_retirement_resource_index_v2(scope_id)? {
+        let signer_identity = mac_open_prospective_retirement_signer_identity_v2(scope_id)?;
+        if existing.signer_identity != signer_identity
+            || existing.signer_access_control_sha256 != signer_identity.access_control_sha256
+        {
+            bail!("retirement initialization signer no longer has the exact future ACL posture");
+        }
+        return Ok(existing);
+    }
+    let state = open_system_keychain_protected_state_for_scope_v1(scope_id)?
+        .ok_or_else(|| anyhow::anyhow!("retirement initialization lacks protected state"))?;
+    if state.counter != 0
+        || state.state_revision != 0
+        || state.prepared_record.is_some()
+        || state.current_anchor.action_receipt_index_revision != 0
+        || open_mac_r6_pairing_predecessor_state_v1(scope_id)?.is_some()
+        || open_mac_r6_terminal_successor_acknowledgement_v2(scope_id)?.is_some()
+        || open_mac_retirement_quiescence_v2(scope_id)?.is_some()
+    {
+        bail!("retirement resource index can be initialized only before greenfield Stage-1/R6 effects");
+    }
+    let capsule = open_mac_lima_stage_one_capsule_v1(scope_id)?
+        .ok_or_else(|| anyhow::anyhow!("retirement initialization lacks its Stage-1 capsule"))?;
+    if capsule.state != "Issued" || capsule.scope_id != scope_id {
+        bail!("retirement initialization Stage-1 capsule is not greenfield Issued state");
+    }
+    let attempt_key_sha256 = mac_retirement_bootstrap_attempt_key_from_admission_v2(&admission)?;
+    let mut producers = vec![
+        MacRetirementResourceProducerV2::LifecycleCapsuleRoots,
+        MacRetirementResourceProducerV2::ControlAdmission,
+        MacRetirementResourceProducerV2::CurrentAnchor,
+        MacRetirementResourceProducerV2::PublisherServiceState,
+        MacRetirementResourceProducerV2::PublisherBootstrapIntent,
+        MacRetirementResourceProducerV2::BootstrapAttemptLocator { attempt_key_sha256 },
+        MacRetirementResourceProducerV2::LimaStageOneCapsule,
+        MacRetirementResourceProducerV2::RetirementQuiescenceCas,
+    ];
+    producers.extend(mac_current_authoritative_lifecycle_resource_producers_v2(
+        executor, scope_id,
+    )?);
+    append_mac_retirement_resource_producers_with_locks_held_v2(scope_id, &producers)
+}
+
+fn append_mac_r6_generation_resources_if_active_v2(
+    scope_id: &str,
+    current_generation: u64,
+) -> Result<()> {
+    let generation_count = usize::try_from(current_generation)
+        .context("R6 retirement generation count does not fit this platform")?;
+    if generation_count == 0 || generation_count > MAC_R3_MAX_HOST_TARGETS_V2 / 5 {
+        bail!("R6 retirement generation history exceeds the fixed resource bound");
+    }
+    let mut producers = vec![MacRetirementResourceProducerV2::R6PredecessorState];
+    for generation in 1..=current_generation {
+        for (account, producer) in [
+            (
+                mac_keychain_r6_pairing_predecessor_account_v1(scope_id, generation)?,
+                MacRetirementResourceProducerV2::R6Predecessor { generation },
+            ),
+            (
+                mac_keychain_r6_pairing_continuation_account_v1(scope_id, generation)?,
+                MacRetirementResourceProducerV2::R6Continuation { generation },
+            ),
+            (
+                mac_keychain_r6_pairing_activation_account_v1(scope_id, generation)?,
+                MacRetirementResourceProducerV2::R6Activation { generation },
+            ),
+            (
+                mac_keychain_r6_pairing_tombstone_account_v1(scope_id, generation)?,
+                MacRetirementResourceProducerV2::R6Tombstone { generation },
+            ),
+            (
+                mac_keychain_r6_pairing_missed_activation_account_v1(scope_id, generation)?,
+                MacRetirementResourceProducerV2::R6MissedActivation { generation },
+            ),
+        ] {
+            if mac_keychain_read_item_v1(MAC_KEYCHAIN_SERVICE_V1, &account)?.is_some() {
+                producers.push(producer);
+            }
+        }
+    }
+    append_mac_retirement_resource_producers_if_active_v2(scope_id, &producers)
+}
+
+fn validate_mac_retirement_quiescence_v2(
+    record: &MacRetirementQuiescenceV2,
+    allow_unsigned: bool,
+) -> Result<()> {
+    if record.schema_owner != "substrate.mac-retirement-quiescence"
+        || record.schema_version != 2
+        || record.resource_index_revision == 0
+        || record.prepared_at_unix_ns == 0
+        || record.signature.algorithm != "ecdsa-p256-sha256-p1363-low-s-v1"
+        || record.signature.public_key.is_empty()
+        || (!allow_unsigned && record.signature.signature.is_empty())
+        || (allow_unsigned && !record.signature.signature.is_empty())
+    {
+        bail!("prospective retirement quiescence is not a closed V2 record");
+    }
+    mac_require_uuid_v7_component_v1(&record.scope_id, "retirement quiescence scope")?;
+    for (digest, label) in [
+        (&record.resource_index_sha256, "quiescence resource index"),
+        (
+            &record.r6_terminal_acknowledgement_sha256,
+            "quiescence R6 acknowledgement",
+        ),
+        (&record.signer_spki_sha256, "quiescence signer SPKI"),
+    ] {
+        require_lower_hex_digest_mac_v1(digest, label)?;
+    }
+    if let Some(previous) = &record.previous_record_sha256 {
+        require_lower_hex_digest_mac_v1(previous, "quiescence predecessor")?;
+    }
+    let spki = mac_base64url_decode_v1(&record.signature.public_key)?;
+    if sha256_hex_bootstrap_v1(&spki) != record.signer_spki_sha256 {
+        bail!("retirement quiescence signer digest changed");
+    }
+    match record.state {
+        MacRetirementQuiescenceStateV2::QuiescePrepared
+            if record.generation == 1
+                && record.quiesced_at_unix_ns.is_none()
+                && record.previous_record_sha256.is_none() => {}
+        MacRetirementQuiescenceStateV2::Quiesced
+            if record.generation == 2
+                && record
+                    .quiesced_at_unix_ns
+                    .is_some_and(|time| time >= record.prepared_at_unix_ns)
+                && record.previous_record_sha256.is_some() => {}
+        _ => bail!("retirement quiescence state/generation/time transition is invalid"),
+    }
+    Ok(())
+}
+
+fn canonical_mac_retirement_quiescence_body_v2(
+    record: &MacRetirementQuiescenceV2,
+    allow_unsigned: bool,
+) -> Result<Vec<u8>> {
+    validate_mac_retirement_quiescence_v2(record, allow_unsigned)?;
+    canonical_bootstrap_json_bytes_v1(&json!({
+        "schema_owner": record.schema_owner,
+        "schema_version": record.schema_version,
+        "scope_id": record.scope_id,
+        "generation": record.generation,
+        "state": record.state.literal(),
+        "resource_index_revision": record.resource_index_revision,
+        "resource_index_sha256": record.resource_index_sha256,
+        "r6_terminal_acknowledgement_sha256": record.r6_terminal_acknowledgement_sha256,
+        "prepared_at_unix_ns": record.prepared_at_unix_ns,
+        "quiesced_at_unix_ns": record.quiesced_at_unix_ns,
+        "previous_record_sha256": record.previous_record_sha256,
+        "signer_spki_sha256": record.signer_spki_sha256,
+        "signature": record.signature,
+    }))
+}
+
+fn canonical_mac_retirement_quiescence_v2(record: &MacRetirementQuiescenceV2) -> Result<Vec<u8>> {
+    canonical_mac_retirement_quiescence_body_v2(record, false)
+}
+
+fn canonical_mac_retirement_quiescence_signature_payload_v2(
+    record: &MacRetirementQuiescenceV2,
+) -> Result<Vec<u8>> {
+    let unsigned = MacRetirementQuiescenceV2 {
+        signature: LifecycleSignatureV1 {
+            algorithm: record.signature.algorithm.clone(),
+            public_key: record.signature.public_key.clone(),
+            signature: String::new(),
+        },
+        ..record.clone()
+    };
+    let body = canonical_mac_retirement_quiescence_body_v2(&unsigned, true)?;
+    let mut payload =
+        Vec::with_capacity(MAC_RETIREMENT_QUIESCENCE_SIGNATURE_DOMAIN_V2.len() + 8 + body.len());
+    payload.extend_from_slice(MAC_RETIREMENT_QUIESCENCE_SIGNATURE_DOMAIN_V2);
+    payload.extend_from_slice(
+        &u64::try_from(body.len())
+            .context("bound retirement quiescence signature payload")?
+            .to_be_bytes(),
+    );
+    payload.extend_from_slice(&body);
+    Ok(payload)
+}
+
+fn parse_canonical_mac_retirement_quiescence_v2(bytes: &[u8]) -> Result<MacRetirementQuiescenceV2> {
+    let value: Value =
+        serde_json::from_slice(bytes).context("decode prospective retirement quiescence")?;
+    let object = value
+        .as_object()
+        .ok_or_else(|| anyhow::anyhow!("retirement quiescence must be an object"))?;
+    let expected = [
+        "schema_owner",
+        "schema_version",
+        "scope_id",
+        "generation",
+        "state",
+        "resource_index_revision",
+        "resource_index_sha256",
+        "r6_terminal_acknowledgement_sha256",
+        "prepared_at_unix_ns",
+        "quiesced_at_unix_ns",
+        "previous_record_sha256",
+        "signer_spki_sha256",
+        "signature",
+    ];
+    if object.len() != expected.len() || expected.iter().any(|field| !object.contains_key(*field)) {
+        bail!("retirement quiescence has an unknown or missing field");
+    }
+    let required_string = |field: &str| -> Result<String> {
+        object
+            .get(field)
+            .and_then(Value::as_str)
+            .map(ToOwned::to_owned)
+            .ok_or_else(|| anyhow::anyhow!("retirement quiescence lacks {field}"))
+    };
+    let required_u64 = |field: &str| -> Result<u64> {
+        object
+            .get(field)
+            .and_then(Value::as_u64)
+            .ok_or_else(|| anyhow::anyhow!("retirement quiescence lacks {field}"))
+    };
+    let optional_string = |field: &str| -> Result<Option<String>> {
+        match object.get(field) {
+            Some(Value::Null) => Ok(None),
+            Some(Value::String(value)) => Ok(Some(value.clone())),
+            _ => bail!("retirement quiescence {field} is not optional text"),
+        }
+    };
+    let record = MacRetirementQuiescenceV2 {
+        schema_owner: required_string("schema_owner")?,
+        schema_version: required_u64("schema_version")?
+            .try_into()
+            .context("retirement quiescence schema version overflows u32")?,
+        scope_id: required_string("scope_id")?,
+        generation: required_u64("generation")?,
+        state: MacRetirementQuiescenceStateV2::parse(&required_string("state")?)?,
+        resource_index_revision: required_u64("resource_index_revision")?,
+        resource_index_sha256: required_string("resource_index_sha256")?,
+        r6_terminal_acknowledgement_sha256: required_string("r6_terminal_acknowledgement_sha256")?,
+        prepared_at_unix_ns: required_u64("prepared_at_unix_ns")?,
+        quiesced_at_unix_ns: match object.get("quiesced_at_unix_ns") {
+            Some(Value::Null) => None,
+            Some(Value::Number(value)) => value.as_u64(),
+            _ => bail!("retirement quiescence terminal time is not optional u64"),
+        },
+        previous_record_sha256: optional_string("previous_record_sha256")?,
+        signer_spki_sha256: required_string("signer_spki_sha256")?,
+        signature: serde_json::from_value(
+            object
+                .get("signature")
+                .cloned()
+                .ok_or_else(|| anyhow::anyhow!("retirement quiescence lacks signature"))?,
+        )
+        .context("decode retirement quiescence signature")?,
+    };
+    if canonical_mac_retirement_quiescence_v2(&record)? != bytes {
+        bail!("retirement quiescence is not canonical JSON");
+    }
+    Ok(record)
+}
+
+fn parse_and_verify_mac_retirement_quiescence_v2(
+    bytes: &[u8],
+) -> Result<MacRetirementQuiescenceV2> {
+    let record = parse_canonical_mac_retirement_quiescence_v2(bytes)?;
+    let spki = mac_base64url_decode_v1(&record.signature.public_key)?;
+    let signature = mac_base64url_decode_v1(&record.signature.signature)?;
+    let payload = canonical_mac_retirement_quiescence_signature_payload_v2(&record)?;
+    verify_p256_p1363_low_s_v1(&spki, &payload, &signature)
+        .context("verify retirement quiescence signature")?;
+    Ok(record)
+}
+
+fn parse_and_verify_mac_retirement_protected_cas_binding_v2(
+    bytes: &[u8],
+) -> Result<ProtectedCasBindingV2> {
+    let binding: ProtectedCasBindingV2 = parse_canonical_v2(bytes)?;
+    if binding.schema_owner != MAC_R3_PROTECTED_CAS_OWNER_V2
+        || binding.schema_version != MAC_R3_FINALIZER_PROTOCOL_VERSION_V2
+        || binding.signature_domain != MAC_R3_PROTECTED_CAS_SIGNATURE_DOMAIN_V2
+        || binding.evidence_id.is_empty()
+        || binding.generation < 2
+        || binding.signature.algorithm != "ecdsa-p256-sha256-p1363-low-s-v1"
+    {
+        bail!("retirement protected CAS binding header or generation changed");
+    }
+    mac_require_uuid_v7_component_v1(&binding.scope_id, "retirement protected CAS scope")?;
+    for (digest, label) in [
+        (
+            &binding.predecessor_head_sha256,
+            "protected CAS predecessor",
+        ),
+        (&binding.receipt_sha256, "protected CAS receipt"),
+        (
+            &binding.acknowledgement_sha256,
+            "protected CAS acknowledgement",
+        ),
+        (&binding.request_digest, "protected CAS request"),
+        (&binding.target_ledger_sha256, "protected CAS target ledger"),
+        (&binding.effect_plan_sha256, "protected CAS effect plan"),
+        (
+            &binding.guest_successor_capsule_sha256,
+            "protected CAS guest capsule",
+        ),
+        (&binding.guest_parity_sha256, "protected CAS guest parity"),
+        (
+            &binding.current_lock_identity_sha256,
+            "protected CAS current lock",
+        ),
+        (
+            &binding.signer_access_control_sha256,
+            "protected CAS signer access control",
+        ),
+    ] {
+        require_lower_hex_digest_mac_v1(digest, label)?;
+    }
+    let spki = mac_base64url_decode_v1(&binding.signature.public_key)?;
+    let signature = mac_base64url_decode_v1(&binding.signature.signature)?;
+    verify_p256_p1363_low_s_v1(
+        &spki,
+        &signature_payload_v2(&binding.signature_domain, &binding.schema_owner, &binding)?,
+        &signature,
+    )
+    .context("verify raw retirement protected CAS binding signature")?;
+    if canonical_bytes_v2(&binding)? != bytes {
+        bail!("retirement protected CAS binding is not canonical");
+    }
+    Ok(binding)
+}
+
+fn open_mac_retirement_protected_cas_state_v2(
+    scope_id: &str,
+) -> Result<Option<MacRetirementProtectedCasStateV2>> {
+    let account = mac_keychain_retirement_cas_account_v2(scope_id)?;
+    let Some(bytes) = mac_keychain_read_item_v1(MAC_KEYCHAIN_SERVICE_V1, &account)? else {
+        return Ok(None);
+    };
+    let value: Value = parse_canonical_v2(&bytes)
+        .context("parse strict retirement protected CAS state before owner dispatch")?;
+    let owner = value
+        .get("schema_owner")
+        .and_then(Value::as_str)
+        .ok_or_else(|| anyhow::anyhow!("retirement protected CAS state lacks schema owner"))?;
+    let state = match owner {
+        "substrate.mac-retirement-quiescence" => {
+            let record = parse_and_verify_mac_retirement_quiescence_v2(&bytes)?;
+            if record.scope_id != scope_id {
+                bail!("retirement quiescence crosses its exact protected scope");
+            }
+            MacRetirementProtectedCasStateV2::Quiescence(record, bytes)
+        }
+        MAC_R3_PROTECTED_CAS_OWNER_V2 => {
+            let binding = parse_and_verify_mac_retirement_protected_cas_binding_v2(&bytes)?;
+            if binding.scope_id != scope_id {
+                bail!("retirement protected CAS binding crosses its exact scope");
+            }
+            MacRetirementProtectedCasStateV2::Binding(binding, bytes)
+        }
+        _ => bail!("retirement protected CAS state owner is not in the closed enum"),
+    };
+    Ok(Some(state))
+}
+
+fn mac_sign_retirement_quiescence_v2(
+    scope_id: &str,
+    record: &MacRetirementQuiescenceV2,
+) -> Result<LifecycleSignatureV1> {
+    let spki = mac_open_system_keychain_p256_spki_der_v1(scope_id)?;
+    let public_key = base64url_encode_mac_v1(&spki);
+    if record.scope_id != scope_id
+        || record.signature.public_key != public_key
+        || record.signer_spki_sha256 != sha256_hex_bootstrap_v1(&spki)
+    {
+        bail!("retirement quiescence signer changed before signing");
+    }
+    let payload = canonical_mac_retirement_quiescence_signature_payload_v2(record)?;
+    Ok(LifecycleSignatureV1 {
+        algorithm: "ecdsa-p256-sha256-p1363-low-s-v1".to_string(),
+        public_key,
+        signature: base64url_encode_mac_v1(&mac_system_keychain_sign_p1363_low_s_v1(
+            scope_id, &payload,
+        )?),
+    })
+}
+
+fn open_mac_retirement_quiescence_v2(
+    scope_id: &str,
+) -> Result<Option<(MacRetirementQuiescenceV2, Vec<u8>)>> {
+    match open_mac_retirement_protected_cas_state_v2(scope_id)? {
+        None => Ok(None),
+        Some(MacRetirementProtectedCasStateV2::Quiescence(record, bytes)) => {
+            Ok(Some((record, bytes)))
+        }
+        Some(MacRetirementProtectedCasStateV2::Binding(_, _)) => {
+            bail!("retirement protected CAS has advanced beyond quiescence")
+        }
+    }
+}
+
+fn derive_mac_retirement_quiescence_prepared_v2(
+    scope_id: &str,
+    resource_index: &MacRetirementResourceIndexV2,
+    resource_index_bytes: &[u8],
+    r6_acknowledgement_bytes: &[u8],
+    prepared_at_unix_ns: u64,
+) -> Result<MacRetirementQuiescenceV2> {
+    if resource_index.scope_id != scope_id
+        || canonical_mac_retirement_resource_index_v2(resource_index)? != resource_index_bytes
+        || prepared_at_unix_ns == 0
+    {
+        bail!("retirement quiescence preparation does not exact-join its resource index");
+    }
+    let record = MacRetirementQuiescenceV2 {
+        schema_owner: "substrate.mac-retirement-quiescence".to_string(),
+        schema_version: 2,
+        scope_id: scope_id.to_string(),
+        generation: 1,
+        state: MacRetirementQuiescenceStateV2::QuiescePrepared,
+        resource_index_revision: resource_index.revision,
+        resource_index_sha256: sha256_hex_bootstrap_v1(resource_index_bytes),
+        r6_terminal_acknowledgement_sha256: sha256_hex_bootstrap_v1(r6_acknowledgement_bytes),
+        prepared_at_unix_ns,
+        quiesced_at_unix_ns: None,
+        previous_record_sha256: None,
+        signer_spki_sha256: resource_index.signer_spki_sha256.clone(),
+        signature: LifecycleSignatureV1 {
+            algorithm: "ecdsa-p256-sha256-p1363-low-s-v1".to_string(),
+            public_key: resource_index.signature.public_key.clone(),
+            signature: String::new(),
+        },
+    };
+    validate_mac_retirement_quiescence_v2(&record, true)?;
+    Ok(record)
+}
+
+fn derive_mac_retirement_quiesced_v2(
+    prepared: &MacRetirementQuiescenceV2,
+    prepared_bytes: &[u8],
+    quiesced_at_unix_ns: u64,
+) -> Result<MacRetirementQuiescenceV2> {
+    if prepared.state != MacRetirementQuiescenceStateV2::QuiescePrepared
+        || canonical_mac_retirement_quiescence_v2(prepared)? != prepared_bytes
+        || quiesced_at_unix_ns < prepared.prepared_at_unix_ns
+    {
+        bail!("retirement quiescence completion lacks its exact prepared predecessor");
+    }
+    let record = MacRetirementQuiescenceV2 {
+        generation: 2,
+        state: MacRetirementQuiescenceStateV2::Quiesced,
+        quiesced_at_unix_ns: Some(quiesced_at_unix_ns),
+        previous_record_sha256: Some(sha256_hex_bootstrap_v1(prepared_bytes)),
+        signature: LifecycleSignatureV1 {
+            algorithm: prepared.signature.algorithm.clone(),
+            public_key: prepared.signature.public_key.clone(),
+            signature: String::new(),
+        },
+        ..prepared.clone()
+    };
+    validate_mac_retirement_quiescence_v2(&record, true)?;
+    Ok(record)
+}
+
+fn retirement_resource_index_contains_locator_v2(
+    index: &MacRetirementResourceIndexV2,
+    locator: &HostResourceLocatorV2,
+) -> bool {
+    index.entries.iter().any(|entry| &entry.locator == locator)
+}
+
+fn require_mac_retirement_quiescence_binding_v2(
+    record: &MacRetirementQuiescenceV2,
+    index: &MacRetirementResourceIndexV2,
+    index_bytes: &[u8],
+    r6_acknowledgement_bytes: &[u8],
+) -> Result<()> {
+    if record.scope_id != index.scope_id
+        || record.resource_index_revision != index.revision
+        || record.resource_index_sha256 != sha256_hex_bootstrap_v1(index_bytes)
+        || record.r6_terminal_acknowledgement_sha256
+            != sha256_hex_bootstrap_v1(r6_acknowledgement_bytes)
+        || record.signature.public_key != index.signature.public_key
+        || record.signer_spki_sha256 != index.signer_spki_sha256
+    {
+        bail!("retirement quiescence does not exact-bind the resource index and R6 successor");
+    }
+    Ok(())
+}
+
+fn mac_retirement_admission_is_allowed_v2(
+    barrier_armed: bool,
+    quiescence: Option<&MacRetirementQuiescenceV2>,
+    class: MacRetirementAdmissionClassV2,
+) -> Result<()> {
+    if !barrier_armed && quiescence.is_none() {
+        return Ok(());
+    }
+    if class == MacRetirementAdmissionClassV2::SurvivingSuccessorHandoffOrRetry {
+        return Ok(());
+    }
+    bail!("prospective retirement quiescence rejects a new ordinary admission")
+}
+
+fn acquire_mac_retirement_admission_guard_v2(
+    scope_id: &str,
+    class: MacRetirementAdmissionClassV2,
+) -> Result<MacRetirementAdmissionGuardV2> {
+    let activation = acquire_mac_retirement_activation_guard_v2(false)?;
+    let index_account = mac_keychain_retirement_resource_index_account_v2(scope_id)?;
+    let cas_account = mac_keychain_retirement_cas_account_v2(scope_id)?;
+    let initial_index = mac_keychain_read_item_v1(MAC_KEYCHAIN_SERVICE_V1, &index_account)?;
+    let initial_cas = mac_keychain_read_item_v1(MAC_KEYCHAIN_SERVICE_V1, &cas_account)?;
+    if activation.is_none() {
+        if initial_index.is_some() || initial_cas.is_some() {
+            bail!("retirement protected state exists without its fixed activation root");
+        }
+        return Ok(MacRetirementAdmissionGuardV2::inactive(None));
+    }
+    let preparation_present = matches!(
+        load_mac_signer_creation_posture_v2(scope_id)?,
+        MacSignerCreationPostureV2::ProspectiveExact(_)
+    );
+    if initial_index.is_none() && initial_cas.is_none() && !preparation_present {
+        return Ok(MacRetirementAdmissionGuardV2::inactive(activation));
+    }
+    let guards = acquire_mac_retirement_cas_index_guards_v2(scope_id)?;
+    let Some((_index, _)) = open_mac_retirement_resource_index_v2(scope_id)? else {
+        if mac_keychain_read_item_v1(MAC_KEYCHAIN_SERVICE_V1, &cas_account)?.is_some() {
+            bail!("armed retirement CAS exists without its resource index");
+        }
+        bail!("prospective signer preparation requires resource-index initialization before admission");
+    };
+    let protected_cas = open_mac_retirement_protected_cas_state_v2(scope_id)?;
+    let quiescence = protected_cas.as_ref().and_then(|state| match state {
+        MacRetirementProtectedCasStateV2::Quiescence(record, _) => Some(record),
+        MacRetirementProtectedCasStateV2::Binding(_, _) => None,
+    });
+    let barrier_armed = protected_cas.is_some();
+    mac_retirement_admission_is_allowed_v2(barrier_armed, quiescence, class)?;
+    let activation = activation
+        .ok_or_else(|| anyhow::anyhow!("retirement activation guard disappeared internally"))?;
+    MacRetirementAdmissionGuardV2::activate(scope_id, activation, guards)
+}
+
+fn prepare_mac_retirement_quiescence_v2(
+    executor: &MacManagedArtifactExecutorV1,
+    scope_id: &str,
+) -> Result<MacRetirementQuiescenceV2> {
+    let r6_acknowledgement =
+        require_mac_r6_terminal_successor_retirement_readiness_v2(executor, scope_id)?;
+    let authority = load_mac_retirement_precommitted_authority_v2(scope_id)?;
+    let _guest_terminal_bundle = require_mac_guest_terminal_successor_retirement_readiness_v2(
+        executor,
+        scope_id,
+        &authority,
+        &r6_acknowledgement,
+    )?;
+    let r6_bytes =
+        canonical_mac_r6_pairing_terminal_successor_acknowledgement_v2(&r6_acknowledgement)?;
+    let _activation = acquire_mac_retirement_activation_guard_v2(true)?
+        .ok_or_else(|| anyhow::anyhow!("retirement quiescence lacks its activation root"))?;
+    let cas_account = mac_keychain_retirement_cas_account_v2(scope_id)?;
+    let _guards = acquire_mac_retirement_cas_index_guards_v2(scope_id)?;
+    let (index, index_bytes) = open_mac_retirement_resource_index_v2(scope_id)?
+        .ok_or_else(|| anyhow::anyhow!("retirement quiescence lacks its resource index"))?;
+    if !retirement_resource_index_contains_locator_v2(
+        &index,
+        &HostResourceLocatorV2::GenericPassword {
+            role: GenericPasswordRoleV2::RetirementCas,
+        },
+    ) || !retirement_resource_index_contains_locator_v2(
+        &index,
+        &HostResourceLocatorV2::KeychainCasLock {
+            account: GenericPasswordRoleV2::RetirementCas,
+        },
+    ) {
+        bail!("retirement quiescence lacks its pre-indexed CAS item and lock");
+    }
+    let observed = mac_keychain_read_item_v1(MAC_KEYCHAIN_SERVICE_V1, &cas_account)?;
+    if let Some(bytes) = observed.as_deref() {
+        let existing = parse_and_verify_mac_retirement_quiescence_v2(bytes)?;
+        require_mac_retirement_quiescence_binding_v2(&existing, &index, &index_bytes, &r6_bytes)?;
+        return Ok(existing);
+    }
+    let mut prepared = derive_mac_retirement_quiescence_prepared_v2(
+        scope_id,
+        &index,
+        &index_bytes,
+        &r6_bytes,
+        mac_now_unix_ns_v1()?,
+    )?;
+    prepared.signature = mac_sign_retirement_quiescence_v2(scope_id, &prepared)?;
+    let bytes = canonical_mac_retirement_quiescence_v2(&prepared)?;
+    mac_keychain_compare_and_swap_item_v1(MAC_KEYCHAIN_SERVICE_V1, &cas_account, None, &bytes)?;
+    if mac_keychain_read_item_v1(MAC_KEYCHAIN_SERVICE_V1, &cas_account)?.as_deref()
+        != Some(bytes.as_slice())
+    {
+        bail!("retirement quiescence prepared CAS did not read back exactly");
+    }
+    Ok(prepared)
+}
+
+fn commit_mac_retirement_quiesced_v2(
+    executor: &MacManagedArtifactExecutorV1,
+    scope_id: &str,
+) -> Result<MacRetirementQuiescenceV2> {
+    let _activation = acquire_mac_retirement_activation_guard_v2(true)?
+        .ok_or_else(|| anyhow::anyhow!("retirement quiescence lacks its activation root"))?;
+    let cas_account = mac_keychain_retirement_cas_account_v2(scope_id)?;
+    let _guards = acquire_mac_retirement_cas_index_guards_v2(scope_id)?;
+    let (current, current_bytes) = open_mac_retirement_quiescence_v2(scope_id)?
+        .ok_or_else(|| anyhow::anyhow!("retirement quiescence was not prepared"))?;
+    let (index, index_bytes) = open_mac_retirement_resource_index_v2(scope_id)?
+        .ok_or_else(|| anyhow::anyhow!("retirement quiescence lost its resource index"))?;
+    let r6_acknowledgement =
+        require_mac_r6_terminal_successor_retirement_readiness_v2(executor, scope_id)?;
+    let authority = load_mac_retirement_precommitted_authority_v2(scope_id)?;
+    let _guest_terminal_bundle = require_mac_guest_terminal_successor_retirement_readiness_v2(
+        executor,
+        scope_id,
+        &authority,
+        &r6_acknowledgement,
+    )?;
+    let r6_bytes =
+        canonical_mac_r6_pairing_terminal_successor_acknowledgement_v2(&r6_acknowledgement)?;
+    require_mac_retirement_quiescence_binding_v2(&current, &index, &index_bytes, &r6_bytes)?;
+    if current.state == MacRetirementQuiescenceStateV2::Quiesced {
+        return Ok(current);
+    }
+    let mut quiesced =
+        derive_mac_retirement_quiesced_v2(&current, &current_bytes, mac_now_unix_ns_v1()?)?;
+    quiesced.signature = mac_sign_retirement_quiescence_v2(scope_id, &quiesced)?;
+    let next_bytes = canonical_mac_retirement_quiescence_v2(&quiesced)?;
+    mac_keychain_compare_and_swap_item_v1(
+        MAC_KEYCHAIN_SERVICE_V1,
+        &cas_account,
+        Some(&current_bytes),
+        &next_bytes,
+    )?;
+    if mac_keychain_read_item_v1(MAC_KEYCHAIN_SERVICE_V1, &cas_account)?.as_deref()
+        != Some(next_bytes.as_slice())
+    {
+        bail!("retirement quiesced CAS did not read back exactly");
+    }
+    Ok(quiesced)
+}
+
+fn mac_retirement_locator_sort_key_v2(
+    locator: &HostResourceLocatorV2,
+) -> Result<(u8, u8, Vec<u8>)> {
+    let (stage, directory_depth) = match locator {
+        HostResourceLocatorV2::PublisherService => (0, 0),
+        HostResourceLocatorV2::PublisherEndpoint => (1, 0),
+        HostResourceLocatorV2::GenericPassword { .. } => (2, 0),
+        HostResourceLocatorV2::LifecycleFile { .. } => (3, 0),
+        HostResourceLocatorV2::SigningKey => (4, 0),
+        HostResourceLocatorV2::FixedFile {
+            role: FixedFileRoleV2::PublisherHelper,
+        } => (5, 0),
+        HostResourceLocatorV2::FixedFile {
+            role: FixedFileRoleV2::PublisherLaunchdPlist,
+        } => (6, 0),
+        HostResourceLocatorV2::FixedFile {
+            role: FixedFileRoleV2::InstallProvenance,
+        } => (7, 0),
+        HostResourceLocatorV2::KeychainCasLock { .. }
+        | HostResourceLocatorV2::LifecycleTargetLock { .. } => (8, 0),
+        HostResourceLocatorV2::LifecycleDirectory { role } => (
+            9,
+            match role {
+                LifecycleDirectoryRoleV2::ReceiptGeneration { .. }
+                | LifecycleDirectoryRoleV2::StageOneScope
+                | LifecycleDirectoryRoleV2::PostPmAttempt { .. }
+                | LifecycleDirectoryRoleV2::PostPmArtifact { .. } => 0,
+                LifecycleDirectoryRoleV2::ReceiptsRoot
+                | LifecycleDirectoryRoleV2::StageOneProfilesRoot
+                | LifecycleDirectoryRoleV2::PostPmAttemptsRoot
+                | LifecycleDirectoryRoleV2::PostPmArtifactsRoot
+                | LifecycleDirectoryRoleV2::GuestPairingsRoot => 1,
+                LifecycleDirectoryRoleV2::LifecycleRoot => 2,
+            },
+        ),
+        HostResourceLocatorV2::RetirementTerminalLatch => (10, 0),
+        _ => bail!("prospective locator ledger contains a disposable locator"),
+    };
+    Ok((
+        stage,
+        directory_depth,
+        canonical_bootstrap_json_bytes_v1(&serde_json::to_value(locator)?)?,
+    ))
+}
+
+fn derive_mac_prospective_retirement_locator_ledger_v2(
+    scope_id: &str,
+    index: &MacRetirementResourceIndexV2,
+    index_bytes: &[u8],
+    quiescence: &MacRetirementQuiescenceV2,
+    quiescence_bytes: &[u8],
+    r6_acknowledgement: &MacR6PairingTerminalSuccessorAcknowledgementV2,
+    r6_acknowledgement_bytes: &[u8],
+) -> Result<MacProspectiveRetirementLocatorLedgerV2> {
+    if quiescence.state != MacRetirementQuiescenceStateV2::Quiesced
+        || canonical_mac_retirement_resource_index_v2(index)? != index_bytes
+        || canonical_mac_retirement_quiescence_v2(quiescence)? != quiescence_bytes
+        || canonical_mac_r6_pairing_terminal_successor_acknowledgement_v2(r6_acknowledgement)?
+            != r6_acknowledgement_bytes
+        || r6_acknowledgement.successor_evidence.scope_id != scope_id
+    {
+        bail!("prospective locator export lacks exact quiesced source records");
+    }
+    require_mac_retirement_quiescence_binding_v2(
+        quiescence,
+        index,
+        index_bytes,
+        r6_acknowledgement_bytes,
+    )?;
+    let mut locators: Vec<_> = index
+        .entries
+        .iter()
+        .map(|entry| entry.locator.clone())
+        .collect();
+    locators.extend([
+        HostResourceLocatorV2::PublisherService,
+        HostResourceLocatorV2::PublisherEndpoint,
+        HostResourceLocatorV2::SigningKey,
+        HostResourceLocatorV2::FixedFile {
+            role: FixedFileRoleV2::PublisherHelper,
+        },
+        HostResourceLocatorV2::FixedFile {
+            role: FixedFileRoleV2::PublisherLaunchdPlist,
+        },
+        HostResourceLocatorV2::FixedFile {
+            role: FixedFileRoleV2::InstallProvenance,
+        },
+        HostResourceLocatorV2::RetirementTerminalLatch,
+    ]);
+    let mut seen = BTreeSet::new();
+    locators.retain(|locator| seen.insert(locator.clone()));
+    locators.sort_by(|left, right| {
+        mac_retirement_locator_sort_key_v2(left)
+            .expect("validated prospective locator has a sort key")
+            .cmp(
+                &mac_retirement_locator_sort_key_v2(right)
+                    .expect("validated prospective locator has a sort key"),
+            )
+    });
+    let required = [
+        HostResourceLocatorV2::GenericPassword {
+            role: GenericPasswordRoleV2::CurrentAnchor,
+        },
+        HostResourceLocatorV2::GenericPassword {
+            role: GenericPasswordRoleV2::RetirementResourceIndex,
+        },
+        HostResourceLocatorV2::GenericPassword {
+            role: GenericPasswordRoleV2::RetirementCas,
+        },
+        HostResourceLocatorV2::GenericPassword {
+            role: GenericPasswordRoleV2::R6TerminalAcknowledgement,
+        },
+        HostResourceLocatorV2::LifecycleFile {
+            role: LifecycleFileRoleV2::Head,
+        },
+        HostResourceLocatorV2::LifecycleDirectory {
+            role: LifecycleDirectoryRoleV2::LifecycleRoot,
+        },
+        HostResourceLocatorV2::RetirementTerminalLatch,
+    ];
+    if required.iter().any(|required| !locators.contains(required)) {
+        bail!("prospective locator export lacks a mandatory exact resource");
+    }
+    for locator in &locators {
+        validate_host_resource_locator_v2(locator)?;
+        match locator {
+            HostResourceLocatorV2::GenericPassword { role }
+                if !locators.contains(&HostResourceLocatorV2::KeychainCasLock {
+                    account: role.clone(),
+                }) =>
+            {
+                bail!("prospective locator export lacks a generic-password CAS lock")
+            }
+            HostResourceLocatorV2::LifecycleFile { role }
+                if matches!(
+                    role,
+                    LifecycleFileRoleV2::Manifest { .. }
+                        | LifecycleFileRoleV2::ReceiptIndex { .. }
+                        | LifecycleFileRoleV2::Head
+                        | LifecycleFileRoleV2::Receipt { .. }
+                ) && !locators.contains(&HostResourceLocatorV2::LifecycleTargetLock {
+                    target: role.clone(),
+                }) =>
+            {
+                bail!("prospective locator export lacks a lifecycle target lock")
+            }
+            _ => {}
+        }
+    }
+    Ok(MacProspectiveRetirementLocatorLedgerV2 {
+        schema_owner: "substrate.mac-prospective-retirement-locator-ledger".to_string(),
+        schema_version: 2,
+        scope_id: scope_id.to_string(),
+        resource_index_revision: index.revision,
+        resource_index_sha256: sha256_hex_bootstrap_v1(index_bytes),
+        quiescence_sha256: sha256_hex_bootstrap_v1(quiescence_bytes),
+        r6_terminal_acknowledgement_sha256: sha256_hex_bootstrap_v1(r6_acknowledgement_bytes),
+        signer_access_control_sha256: index.signer_access_control_sha256.clone(),
+        signer_identity: index.signer_identity.clone(),
+        locators,
+    })
+}
+
+fn export_mac_prospective_retirement_locator_ledger_v2(
+    executor: &MacManagedArtifactExecutorV1,
+    scope_id: &str,
+) -> Result<MacProspectiveRetirementLocatorLedgerV2> {
+    let r6_acknowledgement =
+        require_mac_r6_terminal_successor_retirement_readiness_v2(executor, scope_id)?;
+    let r6_bytes =
+        canonical_mac_r6_pairing_terminal_successor_acknowledgement_v2(&r6_acknowledgement)?;
+    let (index, index_bytes) = open_mac_retirement_resource_index_v2(scope_id)?
+        .ok_or_else(|| anyhow::anyhow!("prospective locator export lacks a resource index"))?;
+    let (quiescence, quiescence_bytes) = open_mac_retirement_quiescence_v2(scope_id)?
+        .ok_or_else(|| anyhow::anyhow!("prospective locator export lacks quiescence"))?;
+    derive_mac_prospective_retirement_locator_ledger_v2(
+        scope_id,
+        &index,
+        &index_bytes,
+        &quiescence,
+        &quiescence_bytes,
+        &r6_acknowledgement,
+        &r6_bytes,
+    )
+}
+
+fn mac_retirement_fixed_file_path_v2(role: &FixedFileRoleV2) -> &'static Path {
+    Path::new(match role {
+        FixedFileRoleV2::PublisherHelper => MAC_PUBLISHER_HELPER_PATH_V1,
+        FixedFileRoleV2::PublisherLaunchdPlist => MAC_PUBLISHER_PLIST_PATH_V1,
+        FixedFileRoleV2::InstallProvenance => MAC_BOOTSTRAP_PROVENANCE_PATH_V1,
+    })
+}
+
+fn mac_retirement_lock_path_for_locator_v2(
+    scope_id: &str,
+    locator: &HostResourceLocatorV2,
+) -> Result<Option<PathBuf>> {
+    Ok(match locator {
+        HostResourceLocatorV2::KeychainCasLock { account } => {
+            Some(mac_retirement_keychain_cas_lock_path_v2(
+                &mac_retirement_generic_password_account_v2(scope_id, account)?,
+            )?)
+        }
+        HostResourceLocatorV2::LifecycleTargetLock { target } => Some(
+            mac_retirement_lifecycle_target_lock_path_v2(scope_id, target)?,
+        ),
+        HostResourceLocatorV2::RetirementTerminalLatch => {
+            Some(mac_retirement_terminal_latch_path_v2(scope_id)?)
+        }
+        _ => None,
+    })
+}
+
+#[cfg(target_os = "macos")]
+impl Drop for MacRetirementHeldLocksV2 {
+    fn drop(&mut self) {
+        for (_, file) in self.files.iter().rev() {
+            // SAFETY: every file is owned by this holder and was flocked by the constructor.
+            let _ = unsafe { libc::flock(file.as_raw_fd(), libc::LOCK_UN) };
+        }
+    }
+}
+
+#[cfg(target_os = "macos")]
+impl MacRetirementHeldLocksV2 {
+    fn file(&self, path: &Path) -> Result<&fs::File> {
+        self.files
+            .iter()
+            .find(|(candidate, _)| candidate == path)
+            .map(|(_, file)| file)
+            .ok_or_else(|| anyhow::anyhow!("retirement observation lacks its exact held lock"))
+    }
+}
+
+#[cfg(target_os = "macos")]
+fn mac_acquire_retirement_observation_locks_v2(
+    scope_id: &str,
+    locators: &[HostResourceLocatorV2],
+) -> Result<MacRetirementHeldLocksV2> {
+    let mut paths = locators
+        .iter()
+        .map(|locator| mac_retirement_lock_path_for_locator_v2(scope_id, locator))
+        .collect::<Result<Vec<_>>>()?
+        .into_iter()
+        .flatten()
+        .collect::<Vec<_>>();
+    paths.sort();
+    paths.dedup();
+    if paths.is_empty() {
+        bail!("retirement observation has no closed lock set");
+    }
+    let mut files = Vec::with_capacity(paths.len());
+    for path in paths {
+        mac_require_root_owned_immutable_tool_path_v1(&path)?;
+        let file = fs::OpenOptions::new()
+            .read(true)
+            .write(true)
+            .custom_flags(libc::O_CLOEXEC | libc::O_NOFOLLOW)
+            .open(&path)
+            .with_context(|| {
+                format!("open exact retirement observation lock {}", path.display())
+            })?;
+        let metadata = file.metadata().with_context(|| {
+            format!(
+                "inspect exact retirement observation lock {}",
+                path.display()
+            )
+        })?;
+        let path_metadata = fs::symlink_metadata(&path).with_context(|| {
+            format!(
+                "reinspect exact retirement observation lock {}",
+                path.display()
+            )
+        })?;
+        if !metadata.file_type().is_file()
+            || metadata.nlink() != 1
+            || metadata.uid() != 0
+            || metadata.mode() & 0o022 != 0
+            || metadata.dev() != path_metadata.dev()
+            || metadata.ino() != path_metadata.ino()
+        {
+            bail!("retirement observation lock is not one exact root-owned no-follow file");
+        }
+        // SAFETY: file is one exact retained lock and LOCK_EX is a scalar advisory operation.
+        if unsafe { libc::flock(file.as_raw_fd(), libc::LOCK_EX) } != 0 {
+            return Err(std::io::Error::last_os_error())
+                .context("acquire exact retirement observation lock");
+        }
+        files.push((path, file));
+    }
+    Ok(MacRetirementHeldLocksV2 { files })
+}
+
+#[cfg(target_os = "macos")]
+fn mac_retirement_file_observation_from_handle_v2(path: &Path, file: &fs::File) -> Result<String> {
+    let mut reader = file
+        .try_clone()
+        .context("clone exact retirement target for observation")?;
+    reader
+        .seek(SeekFrom::Start(0))
+        .context("rewind exact retirement target")?;
+    let before = reader
+        .metadata()
+        .context("inspect exact retirement target")?;
+    if !before.file_type().is_file()
+        || before.uid() != 0
+        || before.nlink() != 1
+        || before.mode() & 0o022 != 0
+    {
+        bail!("retirement target is not one immutable-name root-owned regular file");
+    }
+    let mut bytes = Vec::new();
+    reader
+        .read_to_end(&mut bytes)
+        .context("read exact retirement target")?;
+    let after = reader
+        .metadata()
+        .context("reinspect exact retirement target descriptor")?;
+    let path_after = fs::symlink_metadata(path)
+        .with_context(|| format!("reinspect exact retirement target {}", path.display()))?;
+    if before.dev() != after.dev()
+        || before.ino() != after.ino()
+        || before.len() != after.len()
+        || before.mtime() != after.mtime()
+        || before.mtime_nsec() != after.mtime_nsec()
+        || path_after.dev() != before.dev()
+        || path_after.ino() != before.ino()
+    {
+        bail!("retirement target changed while measuring");
+    }
+    let path = path
+        .to_str()
+        .ok_or_else(|| anyhow::anyhow!("retirement target path is not UTF-8"))?;
+    document_sha256_v2(&json!({
+        "content_sha256": sha256_hex_bootstrap_v1(&bytes),
+        "device": before.dev(),
+        "gid": before.gid(),
+        "inode": before.ino(),
+        "link_count": before.nlink(),
+        "mode": before.mode(),
+        "path": path,
+        "size": before.len(),
+        "uid": before.uid(),
+    }))
+}
+
+#[cfg(target_os = "macos")]
+fn mac_retirement_file_observation_v2(path: &Path) -> Result<String> {
+    mac_require_root_owned_immutable_tool_path_v1(path)?;
+    let file = fs::OpenOptions::new()
+        .read(true)
+        .custom_flags(libc::O_CLOEXEC | libc::O_NOFOLLOW)
+        .open(path)
+        .with_context(|| format!("open exact retirement target {}", path.display()))?;
+    mac_retirement_file_observation_from_handle_v2(path, &file)
+}
+
+#[cfg(target_os = "macos")]
+fn mac_retirement_directory_observation_v2(path: &Path) -> Result<String> {
+    if !path.is_absolute() {
+        bail!("retirement directory target is not absolute");
+    }
+    let mut current = PathBuf::from("/");
+    for component in path.components() {
+        match component {
+            std::path::Component::RootDir => continue,
+            std::path::Component::Normal(segment) => current.push(segment),
+            _ => bail!("retirement directory target is not canonical"),
+        }
+        let metadata = fs::symlink_metadata(&current).with_context(|| {
+            format!("inspect retirement directory segment {}", current.display())
+        })?;
+        if metadata.file_type().is_symlink()
+            || !metadata.file_type().is_dir()
+            || metadata.uid() != 0
+            || metadata.mode() & 0o022 != 0
+        {
+            bail!("retirement directory path is not root-owned immutable no-follow state");
+        }
+    }
+    let metadata = fs::symlink_metadata(path).context("reinspect exact retirement directory")?;
+    Ok(sha256_hex_bootstrap_v1(
+        format!(
+            "directory\0{}\0{}\0{}\0{}\0{}\0{}",
+            path.display(),
+            metadata.dev(),
+            metadata.ino(),
+            metadata.uid(),
+            metadata.gid(),
+            metadata.mode()
+        )
+        .as_bytes(),
+    ))
+}
+
+fn mac_retirement_joined_observation_v2(prefix: &[u8], value: &[u8]) -> String {
+    let mut digest = Sha256::new();
+    digest.update(prefix);
+    digest.update(value);
+    format!("{:x}", digest.finalize())
+}
+
+#[cfg(target_os = "macos")]
+fn mac_observe_publisher_endpoint_present_v2() -> Result<String> {
+    let name = std::ffi::CString::new(MAC_MACH_SERVICE_V1).expect("fixed endpoint has no NUL");
+    let mut service_port = 0_u32;
+    // SAFETY: bootstrap_port is process-lifetime state; name/output satisfy the Mach API.
+    let status = unsafe { bootstrap_look_up(bootstrap_port, name.as_ptr(), &mut service_port) };
+    if status != 0 || service_port == 0 {
+        bail!("fixed publisher Mach endpoint is not present");
+    }
+    // SAFETY: successful lookup returned one send right owned by this process.
+    let release = unsafe { mach_port_deallocate(mach_task_self_, service_port) };
+    if release != 0 {
+        bail!("release fixed publisher Mach endpoint failed with kern_return {release}");
+    }
+    Ok(mac_retirement_joined_observation_v2(
+        b"mach-endpoint-present\0",
+        MAC_MACH_SERVICE_V1.as_bytes(),
+    ))
+}
+
+#[cfg(target_os = "macos")]
+fn mac_observe_retirement_target_v2(
+    scope_id: &str,
+    locator: &HostResourceLocatorV2,
+    signer_identity: &MacProspectiveRetirementSignerIdentityV2,
+    held_locks: &MacRetirementHeldLocksV2,
+) -> Result<String> {
+    match locator {
+        HostResourceLocatorV2::PublisherService => {
+            if mac_observe_publisher_registration_v1()
+                != MacPublisherServiceRegistrationObservationV1::Registered
+            {
+                bail!("fixed publisher launchd service is not exactly registered");
+            }
+            Ok(mac_retirement_joined_observation_v2(
+                b"launchd-service-present\0",
+                MAC_PUBLISHER_SERVICE_TARGET_V1.as_bytes(),
+            ))
+        }
+        HostResourceLocatorV2::PublisherEndpoint => mac_observe_publisher_endpoint_present_v2(),
+        HostResourceLocatorV2::GenericPassword { role } => {
+            let account = mac_retirement_generic_password_account_v2(scope_id, role)?;
+            mac_system_keychain_ffi_v1::generic_password_identity_sha256(
+                MAC_KEYCHAIN_SERVICE_V1,
+                &account,
+            )?
+            .ok_or_else(|| anyhow::anyhow!("indexed retirement generic-password target is absent"))
+        }
+        HostResourceLocatorV2::LifecycleFile { role } => mac_retirement_file_observation_v2(
+            &mac_retirement_lifecycle_file_path_v2(scope_id, role)?,
+        ),
+        HostResourceLocatorV2::LifecycleDirectory { role } => {
+            mac_retirement_directory_observation_v2(&mac_retirement_lifecycle_directory_path_v2(
+                scope_id, role,
+            )?)
+        }
+        HostResourceLocatorV2::SigningKey => Ok(signer_identity.identity_sha256.clone()),
+        HostResourceLocatorV2::FixedFile { role } => {
+            mac_retirement_file_observation_v2(mac_retirement_fixed_file_path_v2(role))
+        }
+        HostResourceLocatorV2::KeychainCasLock { .. }
+        | HostResourceLocatorV2::LifecycleTargetLock { .. }
+        | HostResourceLocatorV2::RetirementTerminalLatch => {
+            let path = mac_retirement_lock_path_for_locator_v2(scope_id, locator)?
+                .context("closed retirement lock locator lacks a physical path")?;
+            mac_retirement_file_observation_from_handle_v2(&path, held_locks.file(&path)?)
+        }
+        _ => bail!("prospective retirement observation received a disposable locator"),
+    }
+}
+
+#[cfg(target_os = "macos")]
+fn mac_observe_quiesced_host_target_ledger_v2(
+    scope_id: &str,
+    locators: &[HostResourceLocatorV2],
+    signer_identity: &MacProspectiveRetirementSignerIdentityV2,
+) -> Result<MacObservedHostTargetLedgerV2> {
+    let held_locks = mac_acquire_retirement_observation_locks_v2(scope_id, locators)?;
+    let mut target_ledger = Vec::with_capacity(locators.len());
+    for (index, locator) in locators.iter().enumerate() {
+        let expected_before_sha256 =
+            mac_observe_retirement_target_v2(scope_id, locator, signer_identity, &held_locks)?;
+        target_ledger.push(HostTargetIdentityV2 {
+            ordinal: u16::try_from(index + 1).context("retirement target ordinal overflow")?,
+            role: host_target_role_for_locator_v2(locator),
+            locator: locator.clone(),
+            expected_before_sha256,
+        });
+    }
+    derive_host_effect_plan_v2(TargetSetKindV2::ProspectiveHost, &target_ledger)?;
+    Ok(MacObservedHostTargetLedgerV2 {
+        target_ledger,
+        _held_locks: held_locks,
+    })
+}
+
+fn mac_try_load_fixed_retirement_external_file_v2(
+    path: &Path,
+    label: &str,
+) -> Result<Option<Vec<u8>>> {
+    #[cfg(target_os = "macos")]
+    {
+        match fs::symlink_metadata(path) {
+            Ok(_) => mac_load_fixed_retirement_external_file_v2(path, label).map(Some),
+            Err(error) if error.kind() == std::io::ErrorKind::NotFound => Ok(None),
+            Err(error) => Err(error).with_context(|| format!("inspect fixed {label}")),
+        }
+    }
+    #[cfg(not(target_os = "macos"))]
+    {
+        let _ = (path, label);
+        bail!("fixed retirement external files are unavailable off macOS")
+    }
+}
+
+/// Publish one immutable evidence-infrastructure record, or accept only an exact-byte replay of
+/// the already durable record.  This is deliberately narrower than a replace operation: once a
+/// guest-retirement generation or response exists, no caller can revise it in place.
+fn mac_publish_fixed_retirement_external_absent_or_exact_v2(
+    path: &Path,
+    bytes: &[u8],
+    label: &str,
+) -> Result<()> {
+    match mac_try_load_fixed_retirement_external_file_v2(path, label)? {
+        Some(existing) if existing == bytes => Ok(()),
+        Some(_) => bail!("fixed {label} rejects alternate immutable bytes"),
+        None => mac_publish_fixed_retirement_external_file_v2(path, bytes, label),
+    }
+}
+
+fn mac_r3_unsigned_publisher_signature_v2(public_key: &str) -> MacR3SignatureV2 {
+    MacR3SignatureV2 {
+        algorithm: "ecdsa-p256-sha256-p1363-low-s-v1".to_string(),
+        public_key: public_key.to_string(),
+        signature: String::new(),
+    }
+}
+
+fn mac_sign_r3_publisher_document_v2(
+    scope_id: &str,
+    domain: &str,
+    owner: &str,
+    value: &Value,
+) -> Result<MacR3SignatureV2> {
+    let spki = mac_open_system_keychain_p256_spki_der_v1(scope_id)?;
+    let public_key = base64url_encode_mac_v1(&spki);
+    let payload = signature_payload_v2(domain, owner, value)?;
+    Ok(MacR3SignatureV2 {
+        algorithm: "ecdsa-p256-sha256-p1363-low-s-v1".to_string(),
+        public_key,
+        signature: base64url_encode_mac_v1(&mac_system_keychain_sign_p1363_low_s_v1(
+            scope_id, &payload,
+        )?),
+    })
+}
+
+fn require_mac_retirement_authority_r6_join_v2(
+    authority: &MacRetirementPrecommittedAuthorityV2,
+    acknowledgement: &MacR6PairingTerminalSuccessorAcknowledgementV2,
+) -> Result<()> {
+    let evidence = &acknowledgement.successor_evidence;
+    let capsule = &authority.guest_successor_capsule;
+    if evidence.scope_id != authority.scope_id
+        || capsule.scope_id != authority.scope_id
+        || capsule.r6_predecessor_consumed_sha256 != evidence.predecessor_consumed_state_sha256
+        || capsule.r6_terminal_host_record_sha256 != evidence.host_record_sha256
+        || capsule.guest_anchor_acknowledgement_sha256
+            != evidence.guest_anchor_acknowledgement_sha256
+        || capsule.guest_consumption_marker_acknowledgement_sha256
+            != evidence.guest_consumption_marker_response_sha256
+    {
+        bail!("precommitted guest capsule does not exact-join the terminal R6 successor");
+    }
+    Ok(())
+}
+
+fn derive_mac_publisher_pre_removal_receipt_v2(
+    authority: &MacRetirementPrecommittedAuthorityV2,
+    index: &MacRetirementResourceIndexV2,
+    index_bytes: &[u8],
+    quiescence: &MacRetirementQuiescenceV2,
+    quiescence_bytes: &[u8],
+    r6_acknowledgement: &MacR6PairingTerminalSuccessorAcknowledgementV2,
+    r6_acknowledgement_bytes: &[u8],
+    target_ledger: Vec<HostTargetIdentityV2>,
+) -> Result<PublisherPreRemovalReceiptV2> {
+    validate_mac_retirement_precommitted_authority_v2(authority)?;
+    require_mac_retirement_authority_r6_join_v2(authority, r6_acknowledgement)?;
+    if index.scope_id != authority.scope_id
+        || quiescence.scope_id != authority.scope_id
+        || quiescence.state != MacRetirementQuiescenceStateV2::Quiesced
+        || canonical_mac_retirement_resource_index_v2(index)? != index_bytes
+        || canonical_mac_retirement_quiescence_v2(quiescence)? != quiescence_bytes
+        || canonical_mac_r6_pairing_terminal_successor_acknowledgement_v2(r6_acknowledgement)?
+            != r6_acknowledgement_bytes
+        || index.signer_identity.access_control_sha256 != index.signer_access_control_sha256
+    {
+        bail!("host pre-removal receipt sources do not exact-join quiesced product authority");
+    }
+    let effect_plan = derive_host_effect_plan_v2(TargetSetKindV2::ProspectiveHost, &target_ledger)?;
+    let target_ledger_sha256 = document_sha256_v2(&target_ledger)?;
+    let current_lock_identity_sha256 = target_ledger
+        .iter()
+        .find(|identity| identity.role == HostTargetRoleV2::CurrentAnchorLock)
+        .map(|identity| identity.expected_before_sha256.clone())
+        .context("host target ledger lacks its exact current-anchor lock")?;
+    let quiesced_observation = json!({
+        "observed_at_unix_ns": authority.issued_at_unix_ns,
+        "quiescence_sha256": sha256_hex_bootstrap_v1(quiescence_bytes),
+        "r6_terminal_acknowledgement_sha256": sha256_hex_bootstrap_v1(r6_acknowledgement_bytes),
+        "resource_index_sha256": sha256_hex_bootstrap_v1(index_bytes),
+        "schema_owner": "substrate.mac-r3-host-quiesced-target-observation",
+        "schema_version": MAC_R3_FINALIZER_PROTOCOL_VERSION_V2,
+        "scope_id": authority.scope_id,
+        "target_ledger": target_ledger.clone(),
+    });
+    let receipt = PublisherPreRemovalReceiptV2 {
+        schema_owner: MAC_R3_HOST_RECEIPT_OWNER_V2.to_string(),
+        schema_version: MAC_R3_FINALIZER_PROTOCOL_VERSION_V2,
+        signature_domain: MAC_R3_HOST_RECEIPT_SIGNATURE_DOMAIN_V2.to_string(),
+        evidence_id: authority.evidence_id.clone(),
+        scope_id: authority.scope_id.clone(),
+        target_set_kind: TargetSetKindV2::ProspectiveHost,
+        issued_at_unix_ns: authority.issued_at_unix_ns,
+        expires_at_unix_ns: authority.expires_at_unix_ns,
+        host_state: HostRetirementStateV2::PreRemovalReceiptSigned,
+        guest_successor_capsule: authority.guest_successor_capsule.clone(),
+        guest_successor_capsule_sha256: document_sha256_v2(&authority.guest_successor_capsule)?,
+        guest_parity_sha256: authority
+            .guest_successor_capsule
+            .guest_parity_proof_sha256
+            .clone(),
+        before_observation_sha256: target_ledger_sha256.clone(),
+        quiesced_observation_sha256: document_sha256_v2(&quiesced_observation)?,
+        target_ledger,
+        target_ledger_sha256,
+        effect_plan_sha256: document_sha256_v2(&effect_plan)?,
+        protected_cas_generation: quiescence.generation,
+        protected_cas_head_sha256: sha256_hex_bootstrap_v1(quiescence_bytes),
+        current_lock_identity_sha256,
+        signer_access_control_sha256: index.signer_access_control_sha256.clone(),
+        publisher_signer_spki_der: index.signature.public_key.clone(),
+        harness_public_key: authority.harness_public_key.clone(),
+        finalizer_identity: authority.finalizer_identity.clone(),
+        coordinator_identity: authority.coordinator_identity.clone(),
+        coordinator_process: authority.coordinator_process.clone(),
+        launch_identity: authority.launch_identity.clone(),
+        capability_digest: authority.capability_digest.clone(),
+        signature: mac_r3_unsigned_publisher_signature_v2(&index.signature.public_key),
+    };
+    Ok(receipt)
+}
+
+fn derive_mac_protected_cas_binding_and_request_v2(
+    authority: &MacRetirementPrecommittedAuthorityV2,
+    receipt: &PublisherPreRemovalReceiptV2,
+    acknowledgement: &HarnessDurabilityAcknowledgementV2,
+    signature: MacR3SignatureV2,
+) -> Result<(ProtectedCasBindingV2, FinalizationRequestV2)> {
+    validate_publisher_pre_removal_receipt_v2(receipt)?;
+    validate_harness_acknowledgement_v2(acknowledgement, receipt)?;
+    validate_mac_retirement_precommitted_authority_v2(authority)?;
+    if receipt.scope_id != authority.scope_id
+        || receipt.evidence_id != authority.evidence_id
+        || receipt.harness_public_key != authority.harness_public_key
+        || acknowledgement.external_store_identity_sha256
+            != authority.receipt_external_store_identity_sha256
+    {
+        bail!("durable acknowledgement does not exact-join precommitted host authority");
+    }
+    assemble_mac_protected_cas_binding_and_request_v2(
+        authority,
+        receipt,
+        acknowledgement,
+        signature,
+    )
+}
+
+/// Assemble the one frozen binding/request pair after the caller has verified all three signed
+/// authority documents. Keeping this portion pure makes the crash window between acknowledgement
+/// durability, protected-CAS replacement, and immutable request publication independently
+/// testable without opening Keychain or filesystem state.
+fn assemble_mac_protected_cas_binding_and_request_v2(
+    authority: &MacRetirementPrecommittedAuthorityV2,
+    receipt: &PublisherPreRemovalReceiptV2,
+    acknowledgement: &HarnessDurabilityAcknowledgementV2,
+    signature: MacR3SignatureV2,
+) -> Result<(ProtectedCasBindingV2, FinalizationRequestV2)> {
+    let mut binding = ProtectedCasBindingV2 {
+        schema_owner: MAC_R3_PROTECTED_CAS_OWNER_V2.to_string(),
+        schema_version: MAC_R3_FINALIZER_PROTOCOL_VERSION_V2,
+        signature_domain: MAC_R3_PROTECTED_CAS_SIGNATURE_DOMAIN_V2.to_string(),
+        evidence_id: receipt.evidence_id.clone(),
+        scope_id: receipt.scope_id.clone(),
+        generation: receipt
+            .protected_cas_generation
+            .checked_add(1)
+            .ok_or_else(|| anyhow::anyhow!("retirement protected CAS generation overflow"))?,
+        predecessor_head_sha256: receipt.protected_cas_head_sha256.clone(),
+        receipt_sha256: document_sha256_v2(receipt)?,
+        acknowledgement_sha256: document_sha256_v2(acknowledgement)?,
+        request_digest: "0".repeat(64),
+        target_ledger_sha256: receipt.target_ledger_sha256.clone(),
+        effect_plan_sha256: receipt.effect_plan_sha256.clone(),
+        guest_successor_capsule_sha256: receipt.guest_successor_capsule_sha256.clone(),
+        guest_parity_sha256: receipt.guest_parity_sha256.clone(),
+        current_lock_identity_sha256: receipt.current_lock_identity_sha256.clone(),
+        signer_access_control_sha256: receipt.signer_access_control_sha256.clone(),
+        signature,
+    };
+    let intent = derive_frozen_finalization_intent_v2(receipt, acknowledgement, &binding)?;
+    let successor_capsule = HostToFinalizerSuccessorCapsuleV2 {
+        predecessor_journal_head_sha256: authority.predecessor_journal_head_sha256.clone(),
+        retry_state_sha256: authority.retry_state_sha256.clone(),
+        intent,
+    };
+    binding.request_digest = document_sha256_v2(&successor_capsule)?;
+    let request = FinalizationRequestV2 {
+        schema_owner: MAC_R3_FINALIZER_PROTOCOL_OWNER_V2.to_string(),
+        schema_version: MAC_R3_FINALIZER_PROTOCOL_VERSION_V2,
+        request_digest: binding.request_digest.clone(),
+        publisher_receipt: encode_base64url_v2(&canonical_bytes_v2(receipt)?),
+        harness_acknowledgement: encode_base64url_v2(&canonical_bytes_v2(acknowledgement)?),
+        protected_cas_binding: encode_base64url_v2(&canonical_bytes_v2(&binding)?),
+        successor_capsule,
+    };
+    Ok((binding, request))
+}
+
+fn require_mac_pre_removal_receipt_same_state_rejoin_v2(
+    expected: &PublisherPreRemovalReceiptV2,
+    existing: &PublisherPreRemovalReceiptV2,
+) -> Result<()> {
+    let mut expected = expected.clone();
+    expected.signature = existing.signature.clone();
+    if *existing != expected {
+        bail!("durable publisher receipt conflicts with the exact same-state retry");
+    }
+    Ok(())
+}
+
+fn require_mac_protected_cas_same_state_rejoin_v2(
+    expected: &ProtectedCasBindingV2,
+    existing: &ProtectedCasBindingV2,
+) -> Result<()> {
+    let mut expected = expected.clone();
+    expected.signature = existing.signature.clone();
+    if *existing != expected {
+        bail!("durable acknowledgement retry changed the protected CAS binding");
+    }
+    Ok(())
+}
+
+fn load_mac_retirement_precommitted_authority_v2(
+    scope_id: &str,
+) -> Result<MacRetirementPrecommittedAuthorityV2> {
+    let bytes = mac_load_fixed_retirement_external_file_v2(
+        &mac_retirement_precommitted_authority_path_v2(scope_id)?,
+        "precommitted retirement authority",
+    )?;
+    let authority = parse_canonical_mac_retirement_precommitted_authority_v2(&bytes)?;
+    if authority.scope_id != scope_id {
+        bail!("precommitted retirement authority scope was substituted");
+    }
+    #[cfg(target_os = "macos")]
+    {
+        let preparation = match load_mac_signer_creation_posture_v2(scope_id)? {
+            MacSignerCreationPostureV2::ProspectiveExact(preparation) => preparation,
+            MacSignerCreationPostureV2::LegacyIneligible => {
+                bail!("legacy signer is ineligible for prospective retirement")
+            }
+        };
+        if preparation.candidate_packet_sha256 != authority.candidate_packet_sha256
+            || preparation.capability_digest != authority.capability_digest
+            || preparation.finalizer_executable_sha256
+                != authority.finalizer_identity.executable_sha256
+            || preparation.finalizer_code_identity
+                != format!("cdhash:{}", authority.finalizer_identity.cdhash)
+        {
+            bail!("precommitted host authority differs from signer-creation preparation");
+        }
+    }
+    Ok(authority)
+}
+
+fn load_mac_external_publisher_receipt_v2(scope_id: &str) -> Result<PublisherPreRemovalReceiptV2> {
+    let bytes = mac_load_fixed_retirement_external_file_v2(
+        &mac_retirement_external_receipt_path_v2(scope_id)?,
+        "publisher pre-removal receipt",
+    )?;
+    let receipt: PublisherPreRemovalReceiptV2 = parse_canonical_v2(&bytes)?;
+    validate_publisher_pre_removal_receipt_v2(&receipt)?;
+    if receipt.scope_id != scope_id {
+        bail!("external publisher receipt scope was substituted");
+    }
+    Ok(receipt)
+}
+
+fn load_mac_external_harness_acknowledgement_v2(
+    scope_id: &str,
+    receipt: &PublisherPreRemovalReceiptV2,
+    authority: &MacRetirementPrecommittedAuthorityV2,
+) -> Result<HarnessDurabilityAcknowledgementV2> {
+    let bytes = mac_load_fixed_retirement_external_file_v2(
+        &mac_retirement_external_acknowledgement_path_v2(scope_id)?,
+        "harness durability acknowledgement",
+    )?;
+    let acknowledgement: HarnessDurabilityAcknowledgementV2 = parse_canonical_v2(&bytes)?;
+    validate_harness_acknowledgement_v2(&acknowledgement, receipt)?;
+    if acknowledgement.scope_id != scope_id
+        || acknowledgement.external_store_identity_sha256
+            != authority.receipt_external_store_identity_sha256
+    {
+        bail!("external harness acknowledgement changed its precommitted store identity");
+    }
+    Ok(acknowledgement)
+}
+
+#[cfg(target_os = "macos")]
+struct MacGuestRetirementLimaContextV2 {
+    carrier: InstallBootstrapContextCarrierV1,
+    principal: MacLimaPrincipalV1,
+    tool: PathBuf,
+    lima_home: String,
+    stage_one: MacLimaGuestPairingStageOneRecordV1,
+}
+
+fn mac_guest_retirement_carrier_v2(
+    stage_one: &MacLimaGuestPairingStageOneRecordV1,
+) -> Result<InstallBootstrapContextCarrierV1> {
+    let capsule = open_mac_lima_stage_one_capsule_v1(&stage_one.predecessor.scope_id)?
+        .ok_or_else(|| anyhow::anyhow!("guest retirement lacks completed Stage-1 capsule"))?;
+    let observation = capsule
+        .observation
+        .as_ref()
+        .ok_or_else(|| anyhow::anyhow!("guest retirement lacks Stage-1 principal observation"))?;
+    if capsule.state != "Completed"
+        || capsule.stage_one_authorization != stage_one.stage_one
+        || observation.instance_name != "substrate"
+        || observation.guest_account != stage_one.stage_one.requester_principal
+    {
+        bail!("guest retirement Stage-1 identity is not the fixed completed instance");
+    }
+    let selected = capsule.pre_pm_manifest.selected_host_prefix.as_str();
+    let account = base64url_encode_mac_v1(observation.guest_account.as_bytes());
+    let commitment_input = format!(
+        "domain=substrate.install_bootstrap_context\nversion=1\nselected_host_prefix={selected}\nhost_substrate_home={selected}\nhost_substrate_root={selected}\nprincipal_kind=unix\nprincipal_account={account}\nprincipal_uid={}\n",
+        observation.guest_uid,
+    );
+    let commitment = sha256_hex_bootstrap_v1(commitment_input.as_bytes());
+    if commitment != stage_one.stage_one.host_context_commitment {
+        bail!("guest retirement reconstructed IH carrier changed its signed commitment");
+    }
+    let record = format!("{commitment_input}host_context_commitment={commitment}\n");
+    InstallBootstrapContextCarrierV1::decode(&base64url_encode_mac_v1(record.as_bytes()))
+        .context("decode exact retained guest-retirement carrier")
+}
+
+#[cfg(target_os = "macos")]
+fn mac_guest_retirement_lima_context_v2(scope_id: &str) -> Result<MacGuestRetirementLimaContextV2> {
+    let stage_one = open_mac_lima_guest_pairing_stage_one_record_v1(scope_id)?
+        .ok_or_else(|| anyhow::anyhow!("guest retirement lacks terminal Stage-1 record"))?;
+    if stage_one.stage_one.instance_name != "substrate"
+        || stage_one.predecessor.scope_id != scope_id
+        || stage_one.predecessor_state.state != "Consumed"
+    {
+        bail!("guest retirement Stage-1/R6 predecessor is not terminal and fixed");
+    }
+    let carrier = mac_guest_retirement_carrier_v2(&stage_one)?;
+    let principal = mac_resolve_lima_principal_v1(&carrier)?;
+    if Path::new(&principal.home).join(".lima").to_str()
+        != Some(stage_one.stage_one.lima_control_root_identity.as_str())
+    {
+        bail!("guest retirement Lima root is not account-derived");
+    }
+    let provenance = mac_load_retained_bootstrap_provenance_v1()?;
+    let tool = PathBuf::from(&provenance.lima_tool.absolute_path);
+    let measured = mac_measure_root_owned_immutable_lima_tool_v1(&tool)?;
+    if measured.artifact_sha256 != provenance.lima_tool.image.artifact_sha256
+        || measured.artifact_identity != provenance.lima_tool.image.physical_identity
+        || measured.code_identity != provenance.lima_tool.image.code_identity
+    {
+        bail!("guest retirement retained limactl identity changed");
+    }
+    Ok(MacGuestRetirementLimaContextV2 {
+        carrier,
+        principal,
+        tool,
+        lima_home: stage_one.stage_one.lima_control_root_identity.clone(),
+        stage_one,
+    })
+}
+
+fn load_mac_guest_retirement_precommit_v2(scope_id: &str) -> Result<GuestRetirementPrecommitV2> {
+    let bytes = mac_load_fixed_retirement_external_file_v2(
+        &mac_guest_retirement_external_path_v2(scope_id, MAC_GUEST_RETIREMENT_PRECOMMIT_SUFFIX_V2)?,
+        "guest retirement precommit",
+    )?;
+    let precommit: GuestRetirementPrecommitV2 = parse_canonical_v2(&bytes)?;
+    validate_guest_retirement_precommit_v2(&precommit)?;
+    if precommit.scope_id != scope_id {
+        bail!("guest retirement precommit scope was substituted");
+    }
+    Ok(precommit)
+}
+
+fn load_mac_guest_retirement_authority_v2(scope_id: &str) -> Result<GuestRetirementAuthorityV2> {
+    let bytes = mac_load_fixed_retirement_external_file_v2(
+        &mac_guest_retirement_external_path_v2(scope_id, MAC_GUEST_RETIREMENT_AUTHORITY_SUFFIX_V2)?,
+        "guest retirement authority",
+    )?;
+    let authority: GuestRetirementAuthorityV2 = parse_canonical_v2(&bytes)?;
+    if authority.scope_id != scope_id {
+        bail!("guest retirement authority scope was substituted");
+    }
+    Ok(authority)
+}
+
+#[cfg(target_os = "macos")]
+fn observe_mac_guest_retirement_instance_before_v2(
+    context: &MacGuestRetirementLimaContextV2,
+) -> Result<String> {
+    let output = mac_run_fixed_lima_command_v1(
+        &context.tool,
+        &context.carrier,
+        &context.principal,
+        &context.lima_home,
+        &MAC_LIMA_LIST_ALL_ARGUMENTS_V1,
+        None,
+    )?;
+    let status = mac_parse_fixed_lima_list_v1(&output, "substrate")?
+        .ok_or_else(|| anyhow::anyhow!("guest retirement fixed Lima instance is absent"))?;
+    if status != "Running" && status != "Stopped" {
+        bail!("guest retirement fixed Lima instance has an ambiguous before status");
+    }
+    document_sha256_v2(&json!({
+        "instance_name": "substrate",
+        "instance_status": status,
+        "lima_list_stdout_sha256": sha256_hex_bootstrap_v1(output.as_bytes()),
+        "stage_one_record_sha256": mac_r6_pairing_stage_one_commitment_v1(&context.stage_one)?,
+    }))
+}
+
+#[cfg(target_os = "macos")]
+fn invoke_mac_guest_retirement_entrypoint_v2(
+    context: &MacGuestRetirementLimaContextV2,
+    command: &str,
+    request_bytes: &[u8],
+) -> Result<Vec<u8>> {
+    if !matches!(
+        command,
+        "guest-retirement-prepare-v2" | "guest-retirement-bind-v2"
+    ) {
+        bail!("guest retirement invocation command is not closed");
+    }
+    let request = format!("--request-v2={}", base64url_encode_mac_v1(request_bytes));
+    let arguments = vec![
+        "shell".to_string(),
+        "substrate".to_string(),
+        "--".to_string(),
+        "/usr/bin/sudo".to_string(),
+        "-n".to_string(),
+        "--".to_string(),
+        MAC_GUEST_RETIREMENT_EXECUTOR_PATH_V2.to_string(),
+        command.to_string(),
+        request,
+    ];
+    let output = mac_run_fixed_lima_command_owned_v1(
+        &context.tool,
+        &context.carrier,
+        &context.principal,
+        &context.lima_home,
+        &arguments,
+    )?;
+    if output.is_empty() || output.len() > MAX_MAC_XPC_FRAME_BYTES_V1 {
+        bail!("guest retirement entrypoint response is outside the fixed bound");
+    }
+    Ok(output.into_bytes())
+}
+
+#[cfg(target_os = "macos")]
+fn derive_and_publish_mac_guest_retirement_authority_v2(
+    executor: &MacManagedArtifactExecutorV1,
+    scope_id: &str,
+) -> Result<GuestRetirementAuthorityV2> {
+    let path =
+        mac_guest_retirement_external_path_v2(scope_id, MAC_GUEST_RETIREMENT_AUTHORITY_SUFFIX_V2)?;
+    if let Some(existing) =
+        mac_try_load_fixed_retirement_external_file_v2(&path, "guest retirement authority")?
+    {
+        let authority: GuestRetirementAuthorityV2 = parse_canonical_v2(&existing)?;
+        validate_mac_guest_retirement_authority_against_live_r6_v2(executor, &authority)?;
+        return Ok(authority);
+    }
+    let precommit = load_mac_guest_retirement_precommit_v2(scope_id)?;
+    let acknowledgement =
+        require_mac_r6_terminal_successor_retirement_readiness_v2(executor, scope_id)?;
+    let acknowledgement_bytes =
+        canonical_mac_r6_pairing_terminal_successor_acknowledgement_v2(&acknowledgement)?;
+    if precommit.r6_terminal_successor_acknowledgement_sha256
+        != sha256_hex_bootstrap_v1(&acknowledgement_bytes)
+        || precommit.evidence_id.is_empty()
+    {
+        bail!("guest retirement precommit does not exact-bind terminal R6 evidence");
+    }
+    let context = mac_guest_retirement_lima_context_v2(scope_id)?;
+    let evidence = &acknowledgement.successor_evidence;
+    let host_record = open_mac_guest_pairing_record_v1(executor, &evidence.challenge_id)?
+        .ok_or_else(|| anyhow::anyhow!("guest retirement lacks terminal R6 host record"))?;
+    let guest_public_key = host_record
+        .data_session
+        .hello
+        .as_ref()
+        .map(|hello| hello.guest_public_key.clone())
+        .ok_or_else(|| anyhow::anyhow!("guest retirement terminal R6 record lacks guest key"))?;
+    let before_observation_sha256 = observe_mac_guest_retirement_instance_before_v2(&context)?;
+    let target_ledger = vec![GuestTargetIdentityV2 {
+        ordinal: 1,
+        role: GuestTargetRoleV2::LimaInstance,
+        locator: GuestResourceLocatorV2::LimaInstance,
+        expected_before_sha256: before_observation_sha256.clone(),
+    }];
+    let plan = derive_guest_effect_plan_v2(&target_ledger)?;
+    let host_spki = base64url_encode_mac_v1(&mac_open_system_keychain_p256_spki_der_v1(scope_id)?);
+    if host_spki != acknowledgement.signature.public_key {
+        bail!("guest retirement authority signer differs from terminal R6 host signer");
+    }
+    let mut authority = GuestRetirementAuthorityV2 {
+        schema_owner: MAC_R3_GUEST_RETIREMENT_AUTHORITY_OWNER_V2.to_string(),
+        schema_version: MAC_R3_FINALIZER_PROTOCOL_VERSION_V2,
+        signature_domain: MAC_R3_GUEST_RETIREMENT_AUTHORITY_SIGNATURE_DOMAIN_V2.to_string(),
+        evidence_id: precommit.evidence_id,
+        scope_id: scope_id.to_string(),
+        r6_challenge_id: evidence.challenge_id.clone(),
+        issued_at_unix_ns: precommit.issued_at_unix_ns,
+        expires_at_unix_ns: precommit.expires_at_unix_ns,
+        baseline_sha256: precommit.baseline_sha256,
+        before_observation_sha256,
+        component_inventory_sha256: guest_component_inventory_sha256_v2(
+            &evidence.challenge_id,
+            &guest_public_key,
+            &evidence.predecessor_consumed_state_sha256,
+            &evidence.host_record_sha256,
+            &evidence.guest_anchor_acknowledgement_sha256,
+            &evidence.guest_consumption_marker_response_sha256,
+        )?,
+        quiesce_plan_sha256: guest_quiesce_plan_sha256_v2()?,
+        target_ledger_sha256: document_sha256_v2(&target_ledger)?,
+        effect_plan_sha256: document_sha256_v2(&plan)?,
+        target_ledger,
+        r6_predecessor_consumed_sha256: evidence.predecessor_consumed_state_sha256.clone(),
+        r6_terminal_host_record_sha256: evidence.host_record_sha256.clone(),
+        guest_anchor_acknowledgement_sha256: evidence.guest_anchor_acknowledgement_sha256.clone(),
+        guest_consumption_marker_acknowledgement_sha256: evidence
+            .guest_consumption_marker_response_sha256
+            .clone(),
+        guest_signer_public_key: guest_public_key,
+        harness_public_key: precommit.harness_public_key,
+        signature: MacR3SignatureV2::unsigned_p256(host_spki),
+    };
+    authority.signature = mac_sign_r3_publisher_document_v2(
+        scope_id,
+        &authority.signature_domain,
+        &authority.schema_owner,
+        &serde_json::to_value(&authority).context("encode unsigned guest retirement authority")?,
+    )?;
+    substrate_common::macos_retirement_v2::validate_guest_retirement_authority_v2(
+        &authority,
+        &authority.guest_signer_public_key,
+        &authority.signature.public_key,
+    )?;
+    let bytes = canonical_bytes_v2(&authority)?;
+    mac_publish_fixed_retirement_external_absent_or_exact_v2(
+        &path,
+        &bytes,
+        "guest retirement authority",
+    )?;
+    Ok(authority)
+}
+
+#[cfg(target_os = "macos")]
+fn prepare_and_publish_mac_guest_retirement_receipt_v2(
+    executor: &MacManagedArtifactExecutorV1,
+    scope_id: &str,
+) -> Result<GuestPreRemovalReceiptV2> {
+    let authority = derive_and_publish_mac_guest_retirement_authority_v2(executor, scope_id)?;
+    let receipt_path =
+        mac_guest_retirement_external_path_v2(scope_id, MAC_GUEST_RETIREMENT_RECEIPT_SUFFIX_V2)?;
+    if let Some(receipt_bytes) =
+        mac_try_load_fixed_retirement_external_file_v2(&receipt_path, "guest pre-removal receipt")?
+    {
+        if let Some(handoff_bytes) = mac_try_load_fixed_retirement_external_file_v2(
+            &mac_guest_retirement_external_path_v2(
+                scope_id,
+                MAC_GUEST_RETIREMENT_HANDOFF_SUFFIX_V2,
+            )?,
+            "guest handoff capsule",
+        )? {
+            let handoff: GuestHandoffCapsuleV2 = parse_canonical_v2(&handoff_bytes)?;
+            validate_guest_handoff_capsule_v2(
+                &handoff,
+                &authority.guest_signer_public_key,
+                &authority.harness_public_key,
+            )?;
+            let response = GuestRetirementPrepareResponseV2 {
+                schema_owner:
+                    substrate_common::macos_retirement_v2::MAC_R3_GUEST_PREPARE_RESPONSE_OWNER_V2
+                        .to_string(),
+                schema_version: MAC_R3_FINALIZER_PROTOCOL_VERSION_V2,
+                evidence_id: authority.evidence_id.clone(),
+                scope_id: scope_id.to_string(),
+                guest_receipt: encode_base64url_v2(&receipt_bytes),
+                guest_journal: handoff.guest_journal[..4].to_vec(),
+            };
+            return validate_guest_retirement_prepare_response_v2(&response, &authority);
+        }
+    }
+    let context = mac_guest_retirement_lima_context_v2(scope_id)?;
+    let response_bytes = invoke_mac_guest_retirement_entrypoint_v2(
+        &context,
+        "guest-retirement-prepare-v2",
+        &canonical_bytes_v2(&authority)?,
+    )?;
+    let response: GuestRetirementPrepareResponseV2 = parse_canonical_v2(&response_bytes)?;
+    let receipt = validate_guest_retirement_prepare_response_v2(&response, &authority)?;
+    let receipt_bytes = canonical_bytes_v2(&receipt)?;
+    mac_publish_fixed_retirement_external_absent_or_exact_v2(
+        &receipt_path,
+        &receipt_bytes,
+        "guest pre-removal receipt",
+    )?;
+    Ok(receipt)
+}
+
+#[derive(Debug)]
+struct MacGuestRetirementJournalFrameV2 {
+    record: GuestJournalGenerationV2,
+    bytes: Vec<u8>,
+    sha256: String,
+}
+
+#[derive(Debug)]
+struct MacGuestAcceptedArtifactsV2 {
+    authority: GuestRetirementAuthorityV2,
+    handoff: GuestHandoffCapsuleV2,
+    handoff_bytes: Vec<u8>,
+    receipt: GuestPreRemovalReceiptV2,
+    retry: GuestRetryStateV2,
+    protected_cas: GuestProtectedCasBindingV2,
+    acceptance: GuestHostAcceptanceV2,
+    acceptance_bytes: Vec<u8>,
+    host_spki: String,
+}
+
+fn mac_guest_retirement_journal_frames_v2(
+    scope_id: &str,
+    handoff: &GuestHandoffCapsuleV2,
+) -> Result<Vec<MacGuestRetirementJournalFrameV2>> {
+    let mut frames = Vec::with_capacity(15);
+    for encoded in &handoff.guest_journal {
+        let bytes = mac_base64url_decode_v1(encoded)
+            .context("decode embedded guest-retirement journal generation")?;
+        let record: GuestJournalGenerationV2 = parse_canonical_v2(&bytes)?;
+        let sha256 = sha256_hex_bootstrap_v1(&bytes);
+        let previous = frames
+            .last()
+            .map(|frame: &MacGuestRetirementJournalFrameV2| (&frame.record, frame.sha256.as_str()));
+        validate_guest_journal_transition_v2(previous, &record)?;
+        if record.scope_id != scope_id || record.evidence_id != handoff.evidence_id {
+            bail!("embedded guest-retirement journal crossed its handoff scope");
+        }
+        frames.push(MacGuestRetirementJournalFrameV2 {
+            record,
+            bytes,
+            sha256,
+        });
+    }
+    if frames.len() != 7
+        || frames.last().map(|frame| frame.sha256.as_str())
+            != Some(handoff.guest_journal_head_sha256.as_str())
+    {
+        bail!("guest handoff does not carry the exact seven-generation journal prefix");
+    }
+
+    let mut saw_absent = false;
+    for generation in 8..=14 {
+        let path = mac_guest_retirement_journal_path_v2(scope_id, generation)?;
+        let maybe = mac_try_load_fixed_retirement_external_file_v2(
+            &path,
+            &format!("guest surviving journal generation {generation}"),
+        )?;
+        let Some(bytes) = maybe else {
+            saw_absent = true;
+            continue;
+        };
+        if saw_absent {
+            bail!("guest surviving journal contains a generation gap");
+        }
+        let record: GuestJournalGenerationV2 = parse_canonical_v2(&bytes)?;
+        let sha256 = sha256_hex_bootstrap_v1(&bytes);
+        let previous = frames
+            .last()
+            .map(|frame| (&frame.record, frame.sha256.as_str()));
+        validate_guest_journal_transition_v2(previous, &record)?;
+        if record.generation != generation
+            || record.scope_id != scope_id
+            || record.evidence_id != handoff.evidence_id
+        {
+            bail!("guest surviving journal generation changed identity");
+        }
+        frames.push(MacGuestRetirementJournalFrameV2 {
+            record,
+            bytes,
+            sha256,
+        });
+    }
+    Ok(frames)
+}
+
+fn mac_append_guest_retirement_journal_v2(
+    scope_id: &str,
+    frames: &mut Vec<MacGuestRetirementJournalFrameV2>,
+    record: GuestJournalGenerationV2,
+) -> Result<()> {
+    let expected_generation = u64::try_from(frames.len() + 1)
+        .context("guest journal generation does not fit this platform")?;
+    if record.generation != expected_generation || !(8..=14).contains(&record.generation) {
+        bail!("surviving host attempted an out-of-order guest journal append");
+    }
+    let previous = frames
+        .last()
+        .map(|frame| (&frame.record, frame.sha256.as_str()));
+    validate_guest_journal_transition_v2(previous, &record)?;
+    let bytes = canonical_bytes_v2(&record)?;
+    let path = mac_guest_retirement_journal_path_v2(scope_id, record.generation)?;
+    mac_publish_fixed_retirement_external_absent_or_exact_v2(
+        &path,
+        &bytes,
+        &format!("guest surviving journal generation {}", record.generation),
+    )?;
+    let reopened = mac_load_fixed_retirement_external_file_v2(
+        &path,
+        &format!("guest surviving journal generation {}", record.generation),
+    )?;
+    if reopened != bytes {
+        bail!("guest surviving journal did not reopen as its exact appended bytes");
+    }
+    frames.push(MacGuestRetirementJournalFrameV2 {
+        record,
+        sha256: sha256_hex_bootstrap_v1(&bytes),
+        bytes,
+    });
+    Ok(())
+}
+
+#[cfg(target_os = "macos")]
+fn validate_mac_guest_retirement_authority_against_live_r6_v2(
+    executor: &MacManagedArtifactExecutorV1,
+    authority: &GuestRetirementAuthorityV2,
+) -> Result<String> {
+    let precommit = load_mac_guest_retirement_precommit_v2(&authority.scope_id)?;
+    let r6 =
+        require_mac_r6_terminal_successor_retirement_readiness_v2(executor, &authority.scope_id)?;
+    let r6_bytes = canonical_mac_r6_pairing_terminal_successor_acknowledgement_v2(&r6)?;
+    let evidence = &r6.successor_evidence;
+    let host_record = open_mac_guest_pairing_record_v1(executor, &authority.r6_challenge_id)?
+        .ok_or_else(|| anyhow::anyhow!("guest retirement lost its exact terminal R6 record"))?;
+    let guest_public_key = host_record
+        .data_session
+        .hello
+        .as_ref()
+        .map(|hello| hello.guest_public_key.as_str())
+        .ok_or_else(|| anyhow::anyhow!("guest retirement R6 record lacks its guest key"))?;
+    let host_spki = base64url_encode_mac_v1(&mac_open_system_keychain_p256_spki_der_v1(
+        &authority.scope_id,
+    )?);
+    substrate_common::macos_retirement_v2::validate_guest_retirement_authority_v2(
+        authority,
+        guest_public_key,
+        &host_spki,
+    )?;
+    if precommit.evidence_id != authority.evidence_id
+        || precommit.scope_id != authority.scope_id
+        || precommit.issued_at_unix_ns != authority.issued_at_unix_ns
+        || precommit.expires_at_unix_ns != authority.expires_at_unix_ns
+        || precommit.baseline_sha256 != authority.baseline_sha256
+        || precommit.harness_public_key != authority.harness_public_key
+        || precommit.r6_terminal_successor_acknowledgement_sha256
+            != sha256_hex_bootstrap_v1(&r6_bytes)
+        || evidence.challenge_id != authority.r6_challenge_id
+        || evidence.predecessor_consumed_state_sha256 != authority.r6_predecessor_consumed_sha256
+        || evidence.host_record_sha256 != authority.r6_terminal_host_record_sha256
+        || evidence.guest_anchor_acknowledgement_sha256
+            != authority.guest_anchor_acknowledgement_sha256
+        || evidence.guest_consumption_marker_response_sha256
+            != authority.guest_consumption_marker_acknowledgement_sha256
+    {
+        bail!("guest retirement authority no longer exact-joins precommit and terminal R6");
+    }
+    Ok(host_spki)
+}
+
+#[cfg(target_os = "macos")]
+fn load_mac_guest_accepted_artifacts_v2(
+    executor: &MacManagedArtifactExecutorV1,
+    scope_id: &str,
+) -> Result<MacGuestAcceptedArtifactsV2> {
+    let authority = load_mac_guest_retirement_authority_v2(scope_id)?;
+    let host_spki =
+        validate_mac_guest_retirement_authority_against_live_r6_v2(executor, &authority)?;
+    let handoff_path =
+        mac_guest_retirement_external_path_v2(scope_id, MAC_GUEST_RETIREMENT_HANDOFF_SUFFIX_V2)?;
+    let handoff_bytes =
+        mac_load_fixed_retirement_external_file_v2(&handoff_path, "guest handoff capsule")?;
+    let handoff: GuestHandoffCapsuleV2 = parse_canonical_v2(&handoff_bytes)?;
+    let (receipt, _acknowledgement, retry, protected_cas) = validate_guest_handoff_capsule_v2(
+        &handoff,
+        &authority.guest_signer_public_key,
+        &authority.harness_public_key,
+    )?;
+    let receipt_external = mac_load_fixed_retirement_external_file_v2(
+        &mac_guest_retirement_external_path_v2(scope_id, MAC_GUEST_RETIREMENT_RECEIPT_SUFFIX_V2)?,
+        "guest pre-removal receipt",
+    )?;
+    let acknowledgement_external = mac_load_fixed_retirement_external_file_v2(
+        &mac_guest_retirement_external_path_v2(scope_id, MAC_GUEST_RETIREMENT_ACK_SUFFIX_V2)?,
+        "guest durability acknowledgement",
+    )?;
+    if receipt_external != mac_base64url_decode_v1(&handoff.guest_receipt)?
+        || acknowledgement_external != mac_base64url_decode_v1(&handoff.guest_acknowledgement)?
+    {
+        bail!("guest handoff changed an externally durable receipt or acknowledgement");
+    }
+    let prepare = GuestRetirementPrepareResponseV2 {
+        schema_owner: substrate_common::macos_retirement_v2::MAC_R3_GUEST_PREPARE_RESPONSE_OWNER_V2
+            .to_string(),
+        schema_version: MAC_R3_FINALIZER_PROTOCOL_VERSION_V2,
+        evidence_id: handoff.evidence_id.clone(),
+        scope_id: scope_id.to_string(),
+        guest_receipt: handoff.guest_receipt.clone(),
+        guest_journal: handoff.guest_journal[..4].to_vec(),
+    };
+    if validate_guest_retirement_prepare_response_v2(&prepare, &authority)? != receipt {
+        bail!("guest handoff receipt changed its signed producer authority");
+    }
+    let acceptance_path =
+        mac_guest_retirement_external_path_v2(scope_id, MAC_GUEST_RETIREMENT_ACCEPTANCE_SUFFIX_V2)?;
+    let acceptance_bytes =
+        mac_load_fixed_retirement_external_file_v2(&acceptance_path, "guest host acceptance")?;
+    let acceptance: GuestHostAcceptanceV2 = parse_canonical_v2(&acceptance_bytes)?;
+    validate_guest_host_acceptance_v2(
+        &acceptance,
+        &handoff,
+        &receipt,
+        &retry,
+        &protected_cas,
+        &host_spki,
+    )?;
+    let frames = mac_guest_retirement_journal_frames_v2(scope_id, &handoff)?;
+    let generation8 = frames.get(7).ok_or_else(|| {
+        anyhow::anyhow!("guest host acceptance lacks durable journal generation 8")
+    })?;
+    let acceptance_sha256 = sha256_hex_bootstrap_v1(&acceptance_bytes);
+    if generation8.record.event != GuestJournalEventKindV2::HostAccepted
+        || generation8.record.observation_sha256.as_deref() != Some(&acceptance_sha256)
+        || generation8.record.host_acceptance_sha256.as_deref() != Some(&acceptance_sha256)
+        || generation8.record.handoff_request_digest.as_deref()
+            != Some(handoff.handoff_request_digest.as_str())
+    {
+        bail!("guest host acceptance is not the exact generation-eight ownership transfer");
+    }
+    Ok(MacGuestAcceptedArtifactsV2 {
+        authority,
+        handoff,
+        handoff_bytes,
+        receipt,
+        retry,
+        protected_cas,
+        acceptance,
+        acceptance_bytes,
+        host_spki,
+    })
+}
+
+#[cfg(target_os = "macos")]
+fn accept_mac_guest_retirement_handoff_v2(
+    executor: &MacManagedArtifactExecutorV1,
+    scope_id: &str,
+) -> Result<GuestHostAcceptanceV2> {
+    let authority = load_mac_guest_retirement_authority_v2(scope_id)?;
+    let host_spki =
+        validate_mac_guest_retirement_authority_against_live_r6_v2(executor, &authority)?;
+    let receipt_bytes = mac_load_fixed_retirement_external_file_v2(
+        &mac_guest_retirement_external_path_v2(scope_id, MAC_GUEST_RETIREMENT_RECEIPT_SUFFIX_V2)?,
+        "guest pre-removal receipt",
+    )?;
+    let receipt: GuestPreRemovalReceiptV2 = parse_canonical_v2(&receipt_bytes)?;
+    let acknowledgement_bytes = mac_load_fixed_retirement_external_file_v2(
+        &mac_guest_retirement_external_path_v2(scope_id, MAC_GUEST_RETIREMENT_ACK_SUFFIX_V2)?,
+        "guest durability acknowledgement",
+    )?;
+    let request = GuestRetirementBindRequestV2 {
+        schema_owner: MAC_R3_GUEST_BIND_REQUEST_OWNER_V2.to_string(),
+        schema_version: MAC_R3_FINALIZER_PROTOCOL_VERSION_V2,
+        evidence_id: authority.evidence_id.clone(),
+        scope_id: scope_id.to_string(),
+        r6_challenge_id: authority.r6_challenge_id.clone(),
+        guest_acknowledgement: encode_base64url_v2(&acknowledgement_bytes),
+    };
+    let handoff_path =
+        mac_guest_retirement_external_path_v2(scope_id, MAC_GUEST_RETIREMENT_HANDOFF_SUFFIX_V2)?;
+    let handoff = if let Some(existing) =
+        mac_try_load_fixed_retirement_external_file_v2(&handoff_path, "guest handoff capsule")?
+    {
+        parse_canonical_v2::<GuestHandoffCapsuleV2>(&existing)?
+    } else {
+        let context = mac_guest_retirement_lima_context_v2(scope_id)?;
+        let response_bytes = invoke_mac_guest_retirement_entrypoint_v2(
+            &context,
+            "guest-retirement-bind-v2",
+            &canonical_bytes_v2(&request)?,
+        )?;
+        let response: GuestRetirementBindResponseV2 = parse_canonical_v2(&response_bytes)?;
+        validate_guest_retirement_bind_response_v2(
+            &response,
+            &authority,
+            &authority.harness_public_key,
+        )?
+    };
+    let (verified_receipt, _acknowledgement, retry, protected_cas) =
+        validate_guest_handoff_capsule_v2(
+            &handoff,
+            &authority.guest_signer_public_key,
+            &authority.harness_public_key,
+        )?;
+    if verified_receipt != receipt
+        || mac_base64url_decode_v1(&handoff.guest_receipt)? != receipt_bytes
+        || mac_base64url_decode_v1(&handoff.guest_acknowledgement)? != acknowledgement_bytes
+    {
+        bail!("guest handoff capsule changed an externally durable input");
+    }
+    let prepare = GuestRetirementPrepareResponseV2 {
+        schema_owner: substrate_common::macos_retirement_v2::MAC_R3_GUEST_PREPARE_RESPONSE_OWNER_V2
+            .to_string(),
+        schema_version: MAC_R3_FINALIZER_PROTOCOL_VERSION_V2,
+        evidence_id: authority.evidence_id.clone(),
+        scope_id: scope_id.to_string(),
+        guest_receipt: handoff.guest_receipt.clone(),
+        guest_journal: handoff.guest_journal[..4].to_vec(),
+    };
+    if validate_guest_retirement_prepare_response_v2(&prepare, &authority)? != receipt {
+        bail!("guest handoff receipt does not exact-bind its producer authority");
+    }
+    let handoff_bytes = canonical_bytes_v2(&handoff)?;
+    mac_publish_fixed_retirement_external_absent_or_exact_v2(
+        &handoff_path,
+        &handoff_bytes,
+        "guest handoff capsule",
+    )?;
+
+    let cas_account = mac_keychain_guest_retirement_cas_account_v2(scope_id)?;
+    let _cas_guard = mac_keychain_durable_cas_guard_v1(&cas_account)?;
+    let acceptance_path =
+        mac_guest_retirement_external_path_v2(scope_id, MAC_GUEST_RETIREMENT_ACCEPTANCE_SUFFIX_V2)?;
+    let existing_acceptance =
+        mac_try_load_fixed_retirement_external_file_v2(&acceptance_path, "guest host acceptance")?;
+    let mut acceptance = if let Some(bytes) = existing_acceptance.as_ref() {
+        parse_canonical_v2::<GuestHostAcceptanceV2>(bytes)?
+    } else {
+        GuestHostAcceptanceV2 {
+            schema_owner: MAC_R3_GUEST_HOST_ACCEPTANCE_OWNER_V2.to_string(),
+            schema_version: MAC_R3_FINALIZER_PROTOCOL_VERSION_V2,
+            signature_domain: MAC_R3_GUEST_HOST_ACCEPTANCE_SIGNATURE_DOMAIN_V2.to_string(),
+            evidence_id: authority.evidence_id.clone(),
+            scope_id: scope_id.to_string(),
+            guest_state: GuestRetirementStateV2::HandoffHostBound,
+            handoff_request_digest: handoff.handoff_request_digest.clone(),
+            handoff_capsule_sha256: document_sha256_v2(&handoff)?,
+            guest_protected_cas_head_sha256: document_sha256_v2(&protected_cas)?,
+            target_ledger_sha256: receipt.target_ledger_sha256.clone(),
+            effect_plan_sha256: receipt.effect_plan_sha256.clone(),
+            retry_state_sha256: document_sha256_v2(&retry)?,
+            predecessor_journal_head_sha256: handoff.guest_journal_head_sha256.clone(),
+            accepted_journal_generation: 8,
+            accepted_at_unix_ns: mac_now_unix_ns_v1()?,
+            signature: MacR3SignatureV2::unsigned_p256(host_spki.clone()),
+        }
+    };
+    if existing_acceptance.is_none() {
+        acceptance.signature = mac_sign_r3_publisher_document_v2(
+            scope_id,
+            &acceptance.signature_domain,
+            &acceptance.schema_owner,
+            &serde_json::to_value(&acceptance).context("encode unsigned guest host acceptance")?,
+        )?;
+    }
+    validate_guest_host_acceptance_v2(
+        &acceptance,
+        &handoff,
+        &receipt,
+        &retry,
+        &protected_cas,
+        &host_spki,
+    )?;
+    let acceptance_bytes = canonical_bytes_v2(&acceptance)?;
+    mac_publish_fixed_retirement_external_absent_or_exact_v2(
+        &acceptance_path,
+        &acceptance_bytes,
+        "guest host acceptance",
+    )?;
+    match mac_keychain_read_item_v1(MAC_KEYCHAIN_SERVICE_V1, &cas_account)? {
+        Some(existing) if existing == acceptance_bytes => {}
+        Some(existing) => {
+            let terminal_bytes = mac_try_load_fixed_retirement_external_file_v2(
+                &mac_retirement_guest_terminal_bundle_path_v2(scope_id)?,
+                "guest terminal bundle",
+            )?
+            .ok_or_else(|| {
+                anyhow::anyhow!("guest host-acceptance CAS advanced without a terminal bundle")
+            })?;
+            let terminal: GuestTerminalBundleV2 = parse_canonical_v2(&terminal_bytes)?;
+            validate_guest_terminal_bundle_v2(
+                &terminal,
+                &authority.guest_signer_public_key,
+                &authority.harness_public_key,
+                &host_spki,
+            )?;
+            if mac_base64url_decode_v1(&terminal.guest_host_acceptance)? != acceptance_bytes
+                || mac_base64url_decode_v1(&terminal.guest_parity_host_binding)? != existing
+            {
+                bail!("guest host-acceptance CAS advanced to an unverified state");
+            }
+        }
+        None => mac_keychain_compare_and_swap_item_v1(
+            MAC_KEYCHAIN_SERVICE_V1,
+            &cas_account,
+            None,
+            &acceptance_bytes,
+        )?,
+    }
+
+    let mut frames = mac_guest_retirement_journal_frames_v2(scope_id, &handoff)?;
+    let acceptance_sha256 = sha256_hex_bootstrap_v1(&acceptance_bytes);
+    let generation8 = GuestJournalGenerationV2 {
+        schema_owner: MAC_R3_GUEST_JOURNAL_OWNER_V2.to_string(),
+        schema_version: MAC_R3_FINALIZER_PROTOCOL_VERSION_V2,
+        evidence_id: authority.evidence_id,
+        scope_id: scope_id.to_string(),
+        generation: 8,
+        predecessor_head_sha256: frames[6].sha256.clone(),
+        handoff_request_digest: Some(handoff.handoff_request_digest),
+        host_acceptance_sha256: Some(acceptance_sha256.clone()),
+        guest_state: GuestRetirementStateV2::HandoffHostBound,
+        event: GuestJournalEventKindV2::HostAccepted,
+        effect_ordinal: None,
+        target_identity_sha256: None,
+        effect_invocation_attempt: None,
+        observation_sha256: Some(acceptance_sha256),
+    };
+    if frames.len() == 7 {
+        mac_append_guest_retirement_journal_v2(scope_id, &mut frames, generation8)?;
+    } else if frames[7].record != generation8 {
+        bail!("guest host acceptance rejects alternate generation-eight bytes");
+    }
+    Ok(acceptance)
+}
+
+#[cfg(target_os = "macos")]
+fn mac_guest_retirement_instance_entry_v2(
+    executor: &MacManagedArtifactExecutorV1,
+    scope_id: &str,
+    context: &MacGuestRetirementLimaContextV2,
+) -> Result<ManagedArtifactEntryV1> {
+    let state = open_system_keychain_protected_state_for_scope_v1(scope_id)?
+        .ok_or_else(|| anyhow::anyhow!("guest removal lacks current protected lifecycle state"))?;
+    if state.prepared_record.is_some() {
+        bail!("guest removal preserves an unrelated prepared lifecycle transaction");
+    }
+    let anchor = &state.current_anchor;
+    let manifest_relative = format!("manifest.{}.json", anchor.manifest_generation);
+    let manifest_bytes =
+        mac_read_stage_one_transition_artifact_no_follow_v1(executor, &manifest_relative)?;
+    let manifest: ManagedArtifactManifestV1 =
+        serde_json::from_slice(&manifest_bytes).context("decode guest-removal current manifest")?;
+    if canonical_manifest_bytes_v1(&manifest)?.bytes != manifest_bytes
+        || manifest.installation_id != scope_id
+        || manifest.manifest_generation != anchor.manifest_generation
+        || manifest.manifest_sha256 != anchor.manifest_sha256
+        || manifest.host_context_commitment != context.carrier.host_context_commitment
+        || manifest.selected_host_prefix != context.carrier.context.selected_host_prefix
+    {
+        bail!("guest removal manifest does not exact-join current protected authority");
+    }
+    let entry = manifest
+        .entries
+        .iter()
+        .find(|entry| entry.logical_role.0 == "mac.lima.instance")
+        .ok_or_else(|| anyhow::anyhow!("guest removal manifest lacks its fixed Lima instance"))?;
+    if entry.object_id != scope_id
+        || entry.object_type != "lima-instance"
+        || entry.identity.scope_id != scope_id
+        || entry.identity.parent_identity != "lima"
+        || entry.identity.name_identity != "substrate"
+        || entry.identity.physical_identity != "lima:substrate"
+    {
+        bail!("guest removal manifest instance identity is not the compiled fixed target");
+    }
+    Ok(entry.clone())
+}
+
+#[cfg(target_os = "macos")]
+fn mac_guest_retirement_effect_plan_v2(
+    executor: &MacManagedArtifactExecutorV1,
+    scope_id: &str,
+    context: &MacGuestRetirementLimaContextV2,
+) -> Result<MacPostPmEffectPlanV1> {
+    let entry = mac_guest_retirement_instance_entry_v2(executor, scope_id, context)?;
+    let membership_role = format!("mac.lima.guest-membership({})", context.principal.account);
+    let plan = mac_post_pm_effect_plan_v1(
+        &entry,
+        ManagedActionV1::Remove,
+        &membership_role,
+        &context.carrier.context.selected_host_prefix,
+        None,
+    )?;
+    let exact_primitive = match plan.primitives.as_slice() {
+        [MacPostPmEffectPrimitiveV1::Lima(arguments)] => arguments
+            .iter()
+            .map(String::as_str)
+            .eq(["delete", "substrate"]),
+        _ => false,
+    };
+    if plan.role != "mac.lima.instance"
+        || plan.action != ManagedActionV1::Remove
+        || !exact_primitive
+        || plan
+            .observation_argv
+            .iter()
+            .map(String::as_str)
+            .ne(["list", "--json"])
+        || !plan.after_observation_success
+        || plan.target_integrity.is_some()
+    {
+        bail!("guest removal planner widened the fixed Lima delete suffix");
+    }
+    Ok(plan)
+}
+
+#[cfg(target_os = "macos")]
+fn mac_observe_guest_retirement_effect_v2(
+    context: &MacGuestRetirementLimaContextV2,
+    plan: &MacPostPmEffectPlanV1,
+) -> Result<(GuestEffectObservationV2, Value)> {
+    let (state, observation) = mac_observe_closed_post_pm_effect_v1(
+        &context.tool,
+        &context.carrier,
+        &context.principal,
+        &context.lima_home,
+        plan,
+    )?;
+    let classified = match state {
+        MacPostPmEffectObservationStateV1::Before => GuestEffectObservationV2::ExactBefore,
+        MacPostPmEffectObservationStateV1::After => GuestEffectObservationV2::ExactFinal,
+        MacPostPmEffectObservationStateV1::Ambiguous => GuestEffectObservationV2::Ambiguous,
+    };
+    Ok((classified, observation))
+}
+
+#[cfg(target_os = "macos")]
+fn mac_invoke_guest_retirement_effect_v2(
+    context: &MacGuestRetirementLimaContextV2,
+    plan: &MacPostPmEffectPlanV1,
+) -> Result<()> {
+    let arguments = match plan.primitives.as_slice() {
+        [MacPostPmEffectPrimitiveV1::Lima(arguments)]
+            if arguments
+                .iter()
+                .map(String::as_str)
+                .eq(["delete", "substrate"]) =>
+        {
+            arguments
+        }
+        _ => bail!("guest removal invocation lost its one fixed Lima primitive"),
+    };
+    mac_run_fixed_lima_command_owned_v1(
+        &context.tool,
+        &context.carrier,
+        &context.principal,
+        &context.lima_home,
+        arguments,
+    )?;
+    Ok(())
+}
+
+fn mac_next_guest_host_journal_generation_v2(
+    artifacts: &MacGuestAcceptedArtifactsV2,
+    frames: &[MacGuestRetirementJournalFrameV2],
+    event: GuestJournalEventKindV2,
+    guest_state: GuestRetirementStateV2,
+    target_identity_sha256: Option<String>,
+    observation_sha256: Option<String>,
+) -> Result<GuestJournalGenerationV2> {
+    let predecessor = frames
+        .last()
+        .ok_or_else(|| anyhow::anyhow!("guest surviving journal lost its predecessor"))?;
+    let effect_invocation_attempt = match event {
+        GuestJournalEventKindV2::EffectPrepared => Some(0),
+        GuestJournalEventKindV2::EffectInvoked => Some(match predecessor.record.event {
+            GuestJournalEventKindV2::EffectPrepared => 1,
+            _ => bail!("guest EffectInvoked lacks its sole Prepared predecessor"),
+        }),
+        GuestJournalEventKindV2::EffectObserved => Some(
+            predecessor
+                .record
+                .effect_invocation_attempt
+                .context("guest EffectObserved predecessor lacks its immutable attempt")?,
+        ),
+        _ => None,
+    };
+    Ok(GuestJournalGenerationV2 {
+        schema_owner: MAC_R3_GUEST_JOURNAL_OWNER_V2.to_string(),
+        schema_version: MAC_R3_FINALIZER_PROTOCOL_VERSION_V2,
+        evidence_id: artifacts.authority.evidence_id.clone(),
+        scope_id: artifacts.authority.scope_id.clone(),
+        generation: u64::try_from(frames.len() + 1)
+            .context("guest journal generation does not fit this platform")?,
+        predecessor_head_sha256: predecessor.sha256.clone(),
+        handoff_request_digest: Some(artifacts.handoff.handoff_request_digest.clone()),
+        host_acceptance_sha256: Some(sha256_hex_bootstrap_v1(&artifacts.acceptance_bytes)),
+        guest_state,
+        event,
+        effect_ordinal: matches!(
+            event,
+            GuestJournalEventKindV2::EffectPrepared
+                | GuestJournalEventKindV2::EffectInvoked
+                | GuestJournalEventKindV2::EffectObserved
+        )
+        .then_some(1),
+        target_identity_sha256,
+        effect_invocation_attempt,
+        observation_sha256,
+    })
+}
+
+fn load_mac_guest_effects_response_v2(
+    scope_id: &str,
+    artifacts: &MacGuestAcceptedArtifactsV2,
+    frames: &[MacGuestRetirementJournalFrameV2],
+) -> Result<Option<(GuestEffectsResponseV2, Vec<u8>)>> {
+    let Some(bytes) = mac_try_load_fixed_retirement_external_file_v2(
+        &mac_guest_retirement_external_path_v2(scope_id, MAC_GUEST_RETIREMENT_EFFECTS_SUFFIX_V2)?,
+        "guest effects response",
+    )?
+    else {
+        return Ok(None);
+    };
+    let response: GuestEffectsResponseV2 = parse_canonical_v2(&bytes)?;
+    validate_guest_effects_response_v2(
+        &response,
+        &artifacts.receipt,
+        &artifacts.acceptance,
+        &artifacts.host_spki,
+    )?;
+    let removed = frames
+        .iter()
+        .find(|frame| frame.record.event == GuestJournalEventKindV2::GuestRemoved)
+        .ok_or_else(|| anyhow::anyhow!("guest effects response lacks GuestRemoved"))?;
+    if removed.sha256 != response.journal_head_sha256
+        || removed.record.observation_sha256.as_deref()
+            != Some(response.effects_observation_sha256.as_str())
+    {
+        bail!("guest effects response is not the exact GuestRemoved result");
+    }
+    Ok(Some((response, bytes)))
+}
+
+fn validate_mac_guest_advanced_cas_v2(
+    scope_id: &str,
+    artifacts: &MacGuestAcceptedArtifactsV2,
+    frames: &[MacGuestRetirementJournalFrameV2],
+    effects: &GuestEffectsResponseV2,
+    live_cas: &[u8],
+) -> Result<()> {
+    let parity_bytes = mac_load_fixed_retirement_external_file_v2(
+        &mac_guest_retirement_external_path_v2(scope_id, MAC_GUEST_RETIREMENT_PARITY_SUFFIX_V2)?,
+        "guest parity proof",
+    )?;
+    let parity: GuestParityProofV2 = parse_canonical_v2(&parity_bytes)?;
+    validate_guest_parity_proof_v2(&parity, &artifacts.receipt, effects)?;
+    let binding_bytes = mac_load_fixed_retirement_external_file_v2(
+        &mac_guest_retirement_external_path_v2(
+            scope_id,
+            MAC_GUEST_RETIREMENT_PARITY_BINDING_SUFFIX_V2,
+        )?,
+        "guest parity host binding",
+    )?;
+    if binding_bytes != live_cas {
+        bail!("guest retirement live CAS is neither acceptance nor parity binding");
+    }
+    let binding: GuestParityHostBindingV2 = parse_canonical_v2(&binding_bytes)?;
+    let parity_durable = frames
+        .iter()
+        .find(|frame| frame.record.event == GuestJournalEventKindV2::ParityExternallyDurable)
+        .ok_or_else(|| anyhow::anyhow!("guest parity binding lacks its durable parity event"))?;
+    validate_guest_parity_host_binding_v2(
+        &binding,
+        effects,
+        &parity,
+        &artifacts.acceptance,
+        &parity_durable.sha256,
+        &artifacts.host_spki,
+    )
+}
+
+#[cfg(target_os = "macos")]
+fn remove_mac_guest_retirement_target_v2(
+    executor: &MacManagedArtifactExecutorV1,
+    scope_id: &str,
+) -> Result<GuestEffectsResponseV2> {
+    let artifacts = load_mac_guest_accepted_artifacts_v2(executor, scope_id)?;
+    let cas_account = mac_keychain_guest_retirement_cas_account_v2(scope_id)?;
+    let _cas_guard = mac_keychain_durable_cas_guard_v1(&cas_account)?;
+    let mut frames = mac_guest_retirement_journal_frames_v2(scope_id, &artifacts.handoff)?;
+    if frames.len() < 8 {
+        bail!("guest removal is forbidden before durable surviving-host acceptance");
+    }
+    let live_cas = mac_keychain_read_item_v1(MAC_KEYCHAIN_SERVICE_V1, &cas_account)?
+        .ok_or_else(|| anyhow::anyhow!("guest removal lost its surviving-host CAS"))?;
+    let already_removed = frames
+        .iter()
+        .any(|frame| frame.record.event == GuestJournalEventKindV2::GuestRemoved);
+    if already_removed {
+        if let Some((effects, _)) =
+            load_mac_guest_effects_response_v2(scope_id, &artifacts, &frames)?
+        {
+            if live_cas != artifacts.acceptance_bytes {
+                validate_mac_guest_advanced_cas_v2(
+                    scope_id, &artifacts, &frames, &effects, &live_cas,
+                )?;
+            }
+            return Ok(effects);
+        }
+    }
+    if live_cas != artifacts.acceptance_bytes {
+        bail!("guest removal live CAS is not the exact surviving-host acceptance");
+    }
+
+    if !already_removed {
+        let context = mac_guest_retirement_lima_context_v2(scope_id)?;
+        let plan = mac_guest_retirement_effect_plan_v2(executor, scope_id, &context)?;
+        let target_identity_sha256 =
+            document_sha256_v2(
+                artifacts.receipt.target_ledger.first().ok_or_else(|| {
+                    anyhow::anyhow!("guest removal receipt lacks its fixed target")
+                })?,
+            )?;
+
+        loop {
+            let event = frames
+                .last()
+                .map(|frame| frame.record.event)
+                .ok_or_else(|| anyhow::anyhow!("guest removal journal lost its durable head"))?;
+            match event {
+                GuestJournalEventKindV2::HostAccepted => {
+                    let (observation, _) = mac_observe_guest_retirement_effect_v2(&context, &plan)?;
+                    if guest_effect_recovery_decision_v2(
+                        GuestEffectRecoveryPhaseV2::NotPrepared,
+                        observation,
+                    ) != GuestEffectRecoveryDecisionV2::PersistPrepared
+                    {
+                        bail!(
+                            "guest removal pre-prepare observation is not the exact before-state"
+                        );
+                    }
+                    let prepared = mac_next_guest_host_journal_generation_v2(
+                        &artifacts,
+                        &frames,
+                        GuestJournalEventKindV2::EffectPrepared,
+                        GuestRetirementStateV2::Removing,
+                        Some(target_identity_sha256.clone()),
+                        None,
+                    )?;
+                    mac_append_guest_retirement_journal_v2(scope_id, &mut frames, prepared)?;
+                }
+                GuestJournalEventKindV2::EffectPrepared => {
+                    let (observation, _) = mac_observe_guest_retirement_effect_v2(&context, &plan)?;
+                    if guest_effect_recovery_decision_v2(
+                        GuestEffectRecoveryPhaseV2::Prepared,
+                        observation,
+                    ) != GuestEffectRecoveryDecisionV2::Invoke
+                    {
+                        bail!("guest removal Prepared recovery is ambiguous; preserving state");
+                    }
+                    let invoked = mac_next_guest_host_journal_generation_v2(
+                        &artifacts,
+                        &frames,
+                        GuestJournalEventKindV2::EffectInvoked,
+                        GuestRetirementStateV2::Removing,
+                        Some(target_identity_sha256.clone()),
+                        None,
+                    )?;
+                    mac_append_guest_retirement_journal_v2(scope_id, &mut frames, invoked)?;
+                    mac_invoke_guest_retirement_effect_v2(&context, &plan)?;
+                    let (after, after_observation) =
+                        mac_observe_guest_retirement_effect_v2(&context, &plan)?;
+                    if after != GuestEffectObservationV2::ExactFinal {
+                        bail!("guest removal invocation lacks an exact final-state observation");
+                    }
+                    let observed = mac_next_guest_host_journal_generation_v2(
+                        &artifacts,
+                        &frames,
+                        GuestJournalEventKindV2::EffectObserved,
+                        GuestRetirementStateV2::Removing,
+                        Some(target_identity_sha256.clone()),
+                        Some(document_sha256_v2(&after_observation)?),
+                    )?;
+                    mac_append_guest_retirement_journal_v2(scope_id, &mut frames, observed)?;
+                }
+                GuestJournalEventKindV2::EffectInvoked => {
+                    let invocation_attempt = frames
+                        .last()
+                        .and_then(|frame| frame.record.effect_invocation_attempt)
+                        .ok_or_else(|| {
+                            anyhow::anyhow!(
+                                "guest EffectInvoked lacks its durable invocation attempt"
+                            )
+                        })?;
+                    if invocation_attempt != 1 {
+                        bail!(
+                            "guest external-process removal rejects an unproven reinvocation generation"
+                        );
+                    }
+                    let (observation, observation_value) =
+                        mac_observe_guest_retirement_effect_v2(&context, &plan)?;
+                    let after_observation = match guest_effect_recovery_decision_v2(
+                        GuestEffectRecoveryPhaseV2::Invoked,
+                        observation,
+                    ) {
+                        GuestEffectRecoveryDecisionV2::RecordObservedWithoutInvocation => {
+                            observation_value
+                        }
+                        GuestEffectRecoveryDecisionV2::Preserve => bail!(
+                            "guest removal Invoked recovery cannot prove the exact prior external child absent; preserving state"
+                        ),
+                        _ => bail!(
+                            "guest removal Invoked recovery produced an invalid external-effect decision; preserving state"
+                        ),
+                    };
+                    let observed = mac_next_guest_host_journal_generation_v2(
+                        &artifacts,
+                        &frames,
+                        GuestJournalEventKindV2::EffectObserved,
+                        GuestRetirementStateV2::Removing,
+                        Some(target_identity_sha256.clone()),
+                        Some(document_sha256_v2(&after_observation)?),
+                    )?;
+                    mac_append_guest_retirement_journal_v2(scope_id, &mut frames, observed)?;
+                }
+                GuestJournalEventKindV2::EffectObserved => {
+                    let final_observation = frames
+                        .last()
+                        .and_then(|frame| frame.record.observation_sha256.clone())
+                        .ok_or_else(|| {
+                            anyhow::anyhow!("guest EffectObserved lacks final absence")
+                        })?;
+                    let removed = mac_next_guest_host_journal_generation_v2(
+                        &artifacts,
+                        &frames,
+                        GuestJournalEventKindV2::GuestRemoved,
+                        GuestRetirementStateV2::Removed,
+                        None,
+                        Some(final_observation),
+                    )?;
+                    mac_append_guest_retirement_journal_v2(scope_id, &mut frames, removed)?;
+                }
+                GuestJournalEventKindV2::GuestRemoved => break,
+                _ => bail!("guest removal journal is outside the fixed recovery suffix"),
+            }
+        }
+    }
+
+    if let Some((effects, _)) = load_mac_guest_effects_response_v2(scope_id, &artifacts, &frames)? {
+        return Ok(effects);
+    }
+    let observed = frames
+        .iter()
+        .find(|frame| frame.record.event == GuestJournalEventKindV2::EffectObserved)
+        .ok_or_else(|| anyhow::anyhow!("guest removal lacks EffectObserved"))?;
+    let removed = frames
+        .iter()
+        .find(|frame| frame.record.event == GuestJournalEventKindV2::GuestRemoved)
+        .ok_or_else(|| anyhow::anyhow!("guest removal lacks GuestRemoved"))?;
+    let effects_observation_sha256 = observed
+        .record
+        .observation_sha256
+        .clone()
+        .ok_or_else(|| anyhow::anyhow!("guest removal lacks its observed final absence"))?;
+    let mut effects = GuestEffectsResponseV2 {
+        schema_owner: MAC_R3_GUEST_EFFECTS_RESPONSE_OWNER_V2.to_string(),
+        schema_version: MAC_R3_FINALIZER_PROTOCOL_VERSION_V2,
+        signature_domain: MAC_R3_GUEST_EFFECTS_RESPONSE_SIGNATURE_DOMAIN_V2.to_string(),
+        evidence_id: artifacts.authority.evidence_id.clone(),
+        scope_id: scope_id.to_string(),
+        guest_state: GuestRetirementStateV2::Removed,
+        handoff_request_digest: artifacts.handoff.handoff_request_digest.clone(),
+        host_acceptance_sha256: document_sha256_v2(&artifacts.acceptance)?,
+        target_ledger_sha256: artifacts.receipt.target_ledger_sha256.clone(),
+        effect_plan_sha256: artifacts.receipt.effect_plan_sha256.clone(),
+        effects_observation_sha256,
+        journal_head_sha256: removed.sha256.clone(),
+        signature: MacR3SignatureV2::unsigned_p256(artifacts.host_spki.clone()),
+    };
+    effects.signature = mac_sign_r3_publisher_document_v2(
+        scope_id,
+        &effects.signature_domain,
+        &effects.schema_owner,
+        &serde_json::to_value(&effects).context("encode unsigned guest effects response")?,
+    )?;
+    validate_guest_effects_response_v2(
+        &effects,
+        &artifacts.receipt,
+        &artifacts.acceptance,
+        &artifacts.host_spki,
+    )?;
+    let bytes = canonical_bytes_v2(&effects)?;
+    mac_publish_fixed_retirement_external_absent_or_exact_v2(
+        &mac_guest_retirement_external_path_v2(scope_id, MAC_GUEST_RETIREMENT_EFFECTS_SUFFIX_V2)?,
+        &bytes,
+        "guest effects response",
+    )?;
+    Ok(effects)
+}
+
+#[cfg(target_os = "macos")]
+fn bind_mac_guest_retirement_parity_v2(
+    executor: &MacManagedArtifactExecutorV1,
+    scope_id: &str,
+) -> Result<GuestTerminalBundleV2> {
+    let artifacts = load_mac_guest_accepted_artifacts_v2(executor, scope_id)?;
+    let cas_account = mac_keychain_guest_retirement_cas_account_v2(scope_id)?;
+    let _cas_guard = mac_keychain_durable_cas_guard_v1(&cas_account)?;
+    let mut frames = mac_guest_retirement_journal_frames_v2(scope_id, &artifacts.handoff)?;
+    let removed_index = frames
+        .iter()
+        .position(|frame| frame.record.event == GuestJournalEventKindV2::GuestRemoved)
+        .ok_or_else(|| {
+            anyhow::anyhow!("guest parity cannot bind before the immutable removal response")
+        })?;
+    let (effects, effects_bytes) =
+        load_mac_guest_effects_response_v2(scope_id, &artifacts, &frames)?
+            .ok_or_else(|| anyhow::anyhow!("guest parity lacks the durable effects response"))?;
+    let parity_bytes = mac_load_fixed_retirement_external_file_v2(
+        &mac_guest_retirement_external_path_v2(scope_id, MAC_GUEST_RETIREMENT_PARITY_SUFFIX_V2)?,
+        "guest parity proof",
+    )?;
+    let parity: GuestParityProofV2 = parse_canonical_v2(&parity_bytes)?;
+    validate_guest_parity_proof_v2(&parity, &artifacts.receipt, &effects)?;
+    let parity_sha256 = sha256_hex_bootstrap_v1(&parity_bytes);
+    let parity_generation = mac_next_guest_host_journal_generation_v2(
+        &artifacts,
+        &frames[..=removed_index],
+        GuestJournalEventKindV2::ParityExternallyDurable,
+        GuestRetirementStateV2::ParityExternallyDurable,
+        None,
+        Some(parity_sha256.clone()),
+    )?;
+    let parity_index = removed_index + 1;
+    if frames.len() == parity_index {
+        mac_append_guest_retirement_journal_v2(scope_id, &mut frames, parity_generation)?;
+    } else if frames[parity_index].record != parity_generation {
+        bail!("guest parity rejects alternate durable parity generation bytes");
+    }
+
+    let binding_path = mac_guest_retirement_external_path_v2(
+        scope_id,
+        MAC_GUEST_RETIREMENT_PARITY_BINDING_SUFFIX_V2,
+    )?;
+    let existing_binding =
+        mac_try_load_fixed_retirement_external_file_v2(&binding_path, "guest parity host binding")?;
+    let mut binding = if let Some(bytes) = existing_binding.as_ref() {
+        parse_canonical_v2::<GuestParityHostBindingV2>(bytes)?
+    } else {
+        GuestParityHostBindingV2 {
+            schema_owner: MAC_R3_GUEST_PARITY_HOST_BINDING_OWNER_V2.to_string(),
+            schema_version: MAC_R3_FINALIZER_PROTOCOL_VERSION_V2,
+            signature_domain: MAC_R3_GUEST_PARITY_HOST_BINDING_SIGNATURE_DOMAIN_V2.to_string(),
+            evidence_id: artifacts.authority.evidence_id.clone(),
+            scope_id: scope_id.to_string(),
+            guest_state: GuestRetirementStateV2::ParityHostBound,
+            handoff_request_digest: artifacts.handoff.handoff_request_digest.clone(),
+            effects_response_sha256: document_sha256_v2(&effects)?,
+            parity_proof_sha256: document_sha256_v2(&parity)?,
+            host_acceptance_sha256: document_sha256_v2(&artifacts.acceptance)?,
+            journal_head_sha256: frames[parity_index].sha256.clone(),
+            generation: 2,
+            predecessor_head_sha256: document_sha256_v2(&artifacts.acceptance)?,
+            signature: MacR3SignatureV2::unsigned_p256(artifacts.host_spki.clone()),
+        }
+    };
+    if existing_binding.is_none() {
+        binding.signature = mac_sign_r3_publisher_document_v2(
+            scope_id,
+            &binding.signature_domain,
+            &binding.schema_owner,
+            &serde_json::to_value(&binding).context("encode unsigned guest parity binding")?,
+        )?;
+    }
+    validate_guest_parity_host_binding_v2(
+        &binding,
+        &effects,
+        &parity,
+        &artifacts.acceptance,
+        &frames[parity_index].sha256,
+        &artifacts.host_spki,
+    )?;
+    let binding_bytes = canonical_bytes_v2(&binding)?;
+    mac_publish_fixed_retirement_external_absent_or_exact_v2(
+        &binding_path,
+        &binding_bytes,
+        "guest parity host binding",
+    )?;
+    match mac_keychain_read_item_v1(MAC_KEYCHAIN_SERVICE_V1, &cas_account)? {
+        Some(existing) if existing == binding_bytes => {}
+        Some(existing) if existing == artifacts.acceptance_bytes => {
+            mac_keychain_compare_and_swap_item_v1(
+                MAC_KEYCHAIN_SERVICE_V1,
+                &cas_account,
+                Some(&artifacts.acceptance_bytes),
+                &binding_bytes,
+            )?;
+        }
+        Some(_) => bail!("guest parity CAS rejects alternate live state"),
+        None => bail!("guest parity CAS lost its accepted predecessor"),
+    }
+
+    let binding_sha256 = sha256_hex_bootstrap_v1(&binding_bytes);
+    let bound_generation = mac_next_guest_host_journal_generation_v2(
+        &artifacts,
+        &frames[..=parity_index],
+        GuestJournalEventKindV2::ParityHostBound,
+        GuestRetirementStateV2::ParityHostBound,
+        None,
+        Some(binding_sha256),
+    )?;
+    let parity_bound_index = parity_index + 1;
+    if frames.len() == parity_bound_index {
+        mac_append_guest_retirement_journal_v2(scope_id, &mut frames, bound_generation)?;
+    } else if frames[parity_bound_index].record != bound_generation {
+        bail!("guest parity host binding rejects alternate terminal generation bytes");
+    }
+    if frames.len() != parity_bound_index + 1 || frames.len() != 14 {
+        bail!("guest terminal bundle lacks its exact fourteen-generation journal");
+    }
+    let successor = derive_guest_to_host_successor_capsule_v2(GuestToHostSuccessorBindingV2 {
+        handoff: &artifacts.handoff,
+        receipt: &artifacts.receipt,
+        retry: &artifacts.retry,
+        protected_cas: &artifacts.protected_cas,
+        acceptance: &artifacts.acceptance,
+        effects_response: &effects,
+        parity_proof: &parity,
+        parity_host_binding: &binding,
+        terminal_journal_head_sha256: &frames[parity_bound_index].sha256,
+    })?;
+    let bundle = GuestTerminalBundleV2 {
+        schema_owner: MAC_R3_GUEST_TERMINAL_BUNDLE_OWNER_V2.to_string(),
+        schema_version: MAC_R3_FINALIZER_PROTOCOL_VERSION_V2,
+        evidence_id: artifacts.authority.evidence_id.clone(),
+        scope_id: scope_id.to_string(),
+        guest_handoff_capsule: encode_base64url_v2(&artifacts.handoff_bytes),
+        guest_host_acceptance: encode_base64url_v2(&artifacts.acceptance_bytes),
+        guest_effects_response: encode_base64url_v2(&effects_bytes),
+        guest_parity_proof: encode_base64url_v2(&parity_bytes),
+        guest_parity_host_binding: encode_base64url_v2(&binding_bytes),
+        guest_journal: frames
+            .iter()
+            .map(|frame| encode_base64url_v2(&frame.bytes))
+            .collect(),
+        successor_capsule: successor.clone(),
+    };
+    if validate_guest_terminal_bundle_v2(
+        &bundle,
+        &artifacts.authority.guest_signer_public_key,
+        &artifacts.authority.harness_public_key,
+        &artifacts.host_spki,
+    )? != successor
+    {
+        bail!("guest terminal bundle decoder changed its exact successor capsule");
+    }
+    let bundle_bytes = canonical_bytes_v2(&bundle)?;
+    mac_publish_fixed_retirement_external_absent_or_exact_v2(
+        &mac_retirement_guest_terminal_bundle_path_v2(scope_id)?,
+        &bundle_bytes,
+        "guest terminal bundle",
+    )?;
+    Ok(bundle)
+}
+
+/// Reopen the externally durable terminal guest bundle and the live host-bound guest CAS under
+/// its deterministic account lock. Every embedded receipt, acknowledgement, retry record,
+/// protected-CAS record, fourteen journal generations, host acceptance, effects
+/// response, parity proof, and parity binding is independently decoded and cryptographically
+/// verified. Hashes in precommitted authority are comparison values only; they never substitute
+/// for artifact bytes.
+fn require_mac_guest_terminal_successor_retirement_readiness_v2(
+    executor: &MacManagedArtifactExecutorV1,
+    scope_id: &str,
+    authority: &MacRetirementPrecommittedAuthorityV2,
+    r6_acknowledgement: &MacR6PairingTerminalSuccessorAcknowledgementV2,
+) -> Result<GuestTerminalBundleV2> {
+    if authority.scope_id != scope_id || r6_acknowledgement.successor_evidence.scope_id != scope_id
+    {
+        bail!("guest terminal successor inputs crossed the admitted host scope");
+    }
+    require_mac_retirement_authority_r6_join_v2(authority, r6_acknowledgement)?;
+    let evidence = &r6_acknowledgement.successor_evidence;
+    let host_record = open_mac_guest_pairing_record_v1(executor, &evidence.challenge_id)?
+        .ok_or_else(|| anyhow::anyhow!("guest terminal bundle lacks its exact R6 host record"))?;
+    let guest_public_key = host_record
+        .data_session
+        .hello
+        .as_ref()
+        .map(|hello| hello.guest_public_key.as_str())
+        .ok_or_else(|| anyhow::anyhow!("guest terminal R6 host record lacks its guest key"))?;
+    let host_spki_der =
+        base64url_encode_mac_v1(&mac_open_system_keychain_p256_spki_der_v1(scope_id)?);
+    let bundle_bytes = mac_load_fixed_retirement_external_file_v2(
+        &mac_retirement_guest_terminal_bundle_path_v2(scope_id)?,
+        "guest terminal bundle",
+    )?;
+    let bundle: GuestTerminalBundleV2 = parse_canonical_v2(&bundle_bytes)?;
+    let accepted = validate_guest_terminal_bundle_v2(
+        &bundle,
+        guest_public_key,
+        &authority.harness_public_key,
+        &host_spki_der,
+    )?;
+    if accepted != authority.guest_successor_capsule
+        || bundle.successor_capsule != authority.guest_successor_capsule
+        || bundle.evidence_id != authority.evidence_id
+        || bundle.scope_id != scope_id
+    {
+        bail!("verified guest terminal bundle differs from precommitted host authority");
+    }
+    let parity_binding_bytes = mac_base64url_decode_v1(&bundle.guest_parity_host_binding)
+        .context("decode exact guest parity host-binding bytes")?;
+    let cas_account = mac_keychain_guest_retirement_cas_account_v2(scope_id)?;
+    let _cas_guard = mac_keychain_durable_cas_guard_v1(&cas_account)?;
+    let live_cas = mac_keychain_read_item_v1(MAC_KEYCHAIN_SERVICE_V1, &cas_account)?
+        .ok_or_else(|| anyhow::anyhow!("guest terminal successor live CAS is absent"))?;
+    if live_cas != parity_binding_bytes {
+        bail!("guest terminal successor live CAS is not the exact verified parity binding");
+    }
+    Ok(bundle)
+}
+
+fn sign_and_publish_mac_pre_removal_receipt_v2(
+    executor: &MacManagedArtifactExecutorV1,
+    scope_id: &str,
+) -> Result<PublisherPreRemovalReceiptV2> {
+    let authority = load_mac_retirement_precommitted_authority_v2(scope_id)?;
+    let now = mac_now_unix_ns_v1()?;
+    if now < authority.issued_at_unix_ns || now > authority.expires_at_unix_ns {
+        bail!("precommitted retirement receipt window is not currently active");
+    }
+    let r6_acknowledgement =
+        require_mac_r6_terminal_successor_retirement_readiness_v2(executor, scope_id)?;
+    let _guest_terminal_bundle = require_mac_guest_terminal_successor_retirement_readiness_v2(
+        executor,
+        scope_id,
+        &authority,
+        &r6_acknowledgement,
+    )?;
+    let r6_bytes =
+        canonical_mac_r6_pairing_terminal_successor_acknowledgement_v2(&r6_acknowledgement)?;
+    let (index, index_bytes) = open_mac_retirement_resource_index_v2(scope_id)?
+        .ok_or_else(|| anyhow::anyhow!("pre-removal receipt lacks its resource index"))?;
+    let (quiescence, quiescence_bytes) = open_mac_retirement_quiescence_v2(scope_id)?
+        .ok_or_else(|| anyhow::anyhow!("pre-removal receipt lacks its quiescence"))?;
+    let locator_ledger = derive_mac_prospective_retirement_locator_ledger_v2(
+        scope_id,
+        &index,
+        &index_bytes,
+        &quiescence,
+        &quiescence_bytes,
+        &r6_acknowledgement,
+        &r6_bytes,
+    )?;
+    #[cfg(target_os = "macos")]
+    let observed = mac_observe_quiesced_host_target_ledger_v2(
+        scope_id,
+        &locator_ledger.locators,
+        &locator_ledger.signer_identity,
+    )?;
+    #[cfg(not(target_os = "macos"))]
+    bail!("prospective host target observation is unavailable off macOS");
+    #[cfg(target_os = "macos")]
+    {
+        let expected = derive_mac_publisher_pre_removal_receipt_v2(
+            &authority,
+            &index,
+            &index_bytes,
+            &quiescence,
+            &quiescence_bytes,
+            &r6_acknowledgement,
+            &r6_bytes,
+            observed.target_ledger.clone(),
+        )?;
+        let receipt_path = mac_retirement_external_receipt_path_v2(scope_id)?;
+        if let Some(existing_bytes) = mac_try_load_fixed_retirement_external_file_v2(
+            &receipt_path,
+            "publisher pre-removal receipt",
+        )? {
+            let existing: PublisherPreRemovalReceiptV2 = parse_canonical_v2(&existing_bytes)?;
+            validate_publisher_pre_removal_receipt_v2(&existing)?;
+            require_mac_pre_removal_receipt_same_state_rejoin_v2(&expected, &existing)?;
+            return Ok(existing);
+        }
+        let mut receipt = expected;
+        receipt.signature = mac_sign_r3_publisher_document_v2(
+            scope_id,
+            &receipt.signature_domain,
+            &receipt.schema_owner,
+            &serde_json::to_value(&receipt).context("encode unsigned publisher receipt")?,
+        )?;
+        validate_publisher_pre_removal_receipt_v2(&receipt)?;
+        let bytes = canonical_bytes_v2(&receipt)?;
+        mac_publish_fixed_retirement_external_file_v2(
+            &receipt_path,
+            &bytes,
+            "publisher pre-removal receipt",
+        )?;
+        // `observed` remains live here, so every target lock is retained through signature and
+        // durable receipt publication. Dropping it after this point cannot reopen admissions.
+        drop(observed);
+        Ok(receipt)
+    }
+}
+
+fn bind_mac_durable_retirement_acknowledgement_v2(scope_id: &str) -> Result<ProtectedCasBindingV2> {
+    let authority = load_mac_retirement_precommitted_authority_v2(scope_id)?;
+    let receipt = load_mac_external_publisher_receipt_v2(scope_id)?;
+    let acknowledgement =
+        load_mac_external_harness_acknowledgement_v2(scope_id, &receipt, &authority)?;
+    let cas_account = mac_keychain_retirement_cas_account_v2(scope_id)?;
+    let _guard = mac_keychain_durable_cas_guard_v1(&cas_account)?;
+    let current = open_mac_retirement_protected_cas_state_v2(scope_id)?
+        .ok_or_else(|| anyhow::anyhow!("durable acknowledgement lost its protected CAS"))?;
+    let unsigned_signature =
+        mac_r3_unsigned_publisher_signature_v2(&receipt.publisher_signer_spki_der);
+    let (mut expected_binding, _) = derive_mac_protected_cas_binding_and_request_v2(
+        &authority,
+        &receipt,
+        &acknowledgement,
+        unsigned_signature,
+    )?;
+    match current {
+        MacRetirementProtectedCasStateV2::Binding(existing, _) => {
+            require_mac_protected_cas_same_state_rejoin_v2(&expected_binding, &existing)?;
+            validate_protected_cas_binding_v2(&existing, &receipt, &acknowledgement)?;
+            Ok(existing)
+        }
+        MacRetirementProtectedCasStateV2::Quiescence(quiescence, quiescence_bytes) => {
+            if quiescence.state != MacRetirementQuiescenceStateV2::Quiesced
+                || quiescence.generation != receipt.protected_cas_generation
+                || sha256_hex_bootstrap_v1(&quiescence_bytes) != receipt.protected_cas_head_sha256
+            {
+                bail!("durable acknowledgement does not exact-bind the quiesced CAS predecessor");
+            }
+            expected_binding.signature = mac_sign_r3_publisher_document_v2(
+                scope_id,
+                &expected_binding.signature_domain,
+                &expected_binding.schema_owner,
+                &serde_json::to_value(&expected_binding)
+                    .context("encode unsigned protected CAS binding")?,
+            )?;
+            validate_protected_cas_binding_v2(&expected_binding, &receipt, &acknowledgement)?;
+            let binding_bytes = canonical_bytes_v2(&expected_binding)?;
+            mac_keychain_compare_and_swap_item_v1(
+                MAC_KEYCHAIN_SERVICE_V1,
+                &cas_account,
+                Some(&quiescence_bytes),
+                &binding_bytes,
+            )?;
+            match open_mac_retirement_protected_cas_state_v2(scope_id)? {
+                Some(MacRetirementProtectedCasStateV2::Binding(observed, bytes))
+                    if observed == expected_binding && bytes == binding_bytes =>
+                {
+                    Ok(observed)
+                }
+                _ => bail!("protected CAS binding did not reopen as its exact signed bytes"),
+            }
+        }
+    }
+}
+
+fn freeze_and_publish_mac_finalization_request_v2(scope_id: &str) -> Result<FinalizationRequestV2> {
+    let authority = load_mac_retirement_precommitted_authority_v2(scope_id)?;
+    let receipt = load_mac_external_publisher_receipt_v2(scope_id)?;
+    let acknowledgement =
+        load_mac_external_harness_acknowledgement_v2(scope_id, &receipt, &authority)?;
+    let binding = match open_mac_retirement_protected_cas_state_v2(scope_id)? {
+        Some(MacRetirementProtectedCasStateV2::Binding(binding, _)) => binding,
+        Some(MacRetirementProtectedCasStateV2::Quiescence(_, _)) => {
+            bail!("finalization request cannot freeze before acknowledgement CAS binding")
+        }
+        None => bail!("finalization request lost its protected CAS binding"),
+    };
+    validate_protected_cas_binding_v2(&binding, &receipt, &acknowledgement)?;
+    let (_, request) = derive_mac_protected_cas_binding_and_request_v2(
+        &authority,
+        &receipt,
+        &acknowledgement,
+        binding.signature.clone(),
+    )?;
+    let (validated_receipt, validated_acknowledgement, validated_binding) =
+        validate_finalization_request_v2(&request, None)?;
+    if validated_receipt != receipt
+        || validated_acknowledgement != acknowledgement
+        || validated_binding != binding
+    {
+        bail!("frozen finalization request decoder changed its exact authority documents");
+    }
+    let bytes = canonical_bytes_v2(&request)?;
+    let path = Path::new(MAC_R3_FINALIZER_REQUEST_PATH_V2);
+    if path.parent() != Some(Path::new(MAC_R3_COORDINATOR_INBOX_ROOT_V2)) {
+        bail!("finalization request path left the fixed coordinator inbox");
+    }
+    if bytes.is_empty() || bytes.len() as u64 > MAC_RETIREMENT_EXTERNAL_MAX_BYTES_V2 {
+        bail!("finalization request bytes are outside the closed bound");
+    }
+    #[cfg(target_os = "macos")]
+    {
+        let (_held_inbox, inbox_before) = mac_open_fixed_coordinator_inbox_root_v2()?;
+        mac_publish_immutable_file_atomic_no_replace_v1(
+            path,
+            &bytes,
+            MAC_R3_COORDINATOR_INBOX_FILE_MODE_V2,
+            MAC_R3_COORDINATOR_INBOX_OWNER_UID_V2,
+            MAC_R3_COORDINATOR_INBOX_GROUP_GID_V2,
+            "finalization request",
+        )?;
+        let (_reopened_inbox, inbox_after) = mac_open_fixed_coordinator_inbox_root_v2()?;
+        if inbox_before != inbox_after {
+            bail!("fixed coordinator inbox path identity drifted during publication");
+        }
+    }
+    #[cfg(not(target_os = "macos"))]
+    bail!("finalization request publication is unavailable off macOS");
+    Ok(request)
+}
+
+fn refresh_mac_retirement_resource_index_before_quiescence_v2(
+    executor: &MacManagedArtifactExecutorV1,
+    scope_id: &str,
+) -> Result<MacR6PairingTerminalSuccessorAcknowledgementV2> {
+    let acknowledgement =
+        require_mac_r6_terminal_successor_retirement_readiness_v2(executor, scope_id)?;
+    let authority = load_mac_retirement_precommitted_authority_v2(scope_id)?;
+    let _guest_terminal_bundle = require_mac_guest_terminal_successor_retirement_readiness_v2(
+        executor,
+        scope_id,
+        &authority,
+        &acknowledgement,
+    )?;
+    let evidence = &acknowledgement.successor_evidence;
+    let lifecycle = mac_current_authoritative_lifecycle_resource_producers_v2(executor, scope_id)?;
+    if !lifecycle.is_empty() {
+        append_mac_retirement_resource_producers_v2(scope_id, &lifecycle)?;
+    }
+    append_mac_r6_generation_resources_if_active_v2(scope_id, evidence.predecessor_generation)?;
+    for account in [
+        mac_active_guest_pairing_record_account_v1(scope_id)?,
+        mac_guest_pairing_record_account_v1(&evidence.challenge_id)?,
+        mac_keychain_r6_pairing_operator_launch_account_v1(scope_id, &evidence.challenge_id)?,
+        mac_keychain_r6_terminal_successor_acknowledgement_account_v2(scope_id)?,
+    ] {
+        if mac_keychain_read_item_v1(MAC_KEYCHAIN_SERVICE_V1, &account)?.is_none() {
+            bail!("retirement quiescence inventory lost an exact terminal R6 resource");
+        }
+    }
+    append_mac_retirement_resource_producers_v2(
+        scope_id,
+        &[
+            MacRetirementResourceProducerV2::R6ActiveGuestRecord,
+            MacRetirementResourceProducerV2::R6GuestHostRecord {
+                challenge_id: evidence.challenge_id.clone(),
+            },
+            MacRetirementResourceProducerV2::R6OperatorLaunch {
+                challenge_id: evidence.challenge_id.clone(),
+            },
+            MacRetirementResourceProducerV2::R6TerminalAcknowledgement,
+            MacRetirementResourceProducerV2::GuestRetirementCas,
+        ],
+    )?;
+    Ok(acknowledgement)
+}
+
+fn mac_retirement_control_record_value_v2(bytes: Vec<u8>, label: &str) -> Result<Value> {
+    serde_json::from_slice(&bytes).with_context(|| format!("decode canonical {label} response"))
+}
+
+fn execute_mac_prospective_retirement_control_v2(
+    executor: &MacManagedArtifactExecutorV1,
+    request: &MacProspectiveRetirementControlRequestV2,
+) -> Result<Value> {
+    let admission = mac_verified_control_admission_v1()?;
+    if admission.scope_id != request.scope_id {
+        bail!("prospective retirement control scope does not exact-join XPC admission");
+    }
+    match request.action {
+        MacProspectiveRetirementControlActionV2::PrepareGuestRetirement => {
+            let receipt =
+                prepare_and_publish_mac_guest_retirement_receipt_v2(executor, &request.scope_id)?;
+            Ok(json!({
+                "action": request.action.literal(),
+                "guest_receipt": serde_json::to_value(receipt)
+                    .context("encode guest pre-removal receipt")?,
+                "status": "receipt_externally_durable",
+            }))
+        }
+        MacProspectiveRetirementControlActionV2::AcceptGuestRetirement => {
+            let acceptance = accept_mac_guest_retirement_handoff_v2(executor, &request.scope_id)?;
+            Ok(json!({
+                "action": request.action.literal(),
+                "guest_host_acceptance": serde_json::to_value(acceptance)
+                    .context("encode surviving-host guest acceptance")?,
+                "status": "handoff_host_bound",
+            }))
+        }
+        MacProspectiveRetirementControlActionV2::RemoveGuest => {
+            let effects = remove_mac_guest_retirement_target_v2(executor, &request.scope_id)?;
+            Ok(json!({
+                "action": request.action.literal(),
+                "guest_effects_response": serde_json::to_value(effects)
+                    .context("encode immutable guest effects response")?,
+                "status": "removed",
+            }))
+        }
+        MacProspectiveRetirementControlActionV2::BindGuestParity => {
+            let terminal = bind_mac_guest_retirement_parity_v2(executor, &request.scope_id)?;
+            Ok(json!({
+                "action": request.action.literal(),
+                "guest_successor_capsule": serde_json::to_value(terminal.successor_capsule)
+                    .context("encode terminal guest successor capsule")?,
+                "status": "parity_host_bound",
+            }))
+        }
+        MacProspectiveRetirementControlActionV2::InitializeResourceIndex => {
+            let index = initialize_mac_retirement_resource_index_v2(executor, &request.scope_id)?;
+            Ok(json!({
+                "action": request.action.literal(),
+                "resource_index": mac_retirement_control_record_value_v2(
+                    canonical_mac_retirement_resource_index_v2(&index)?,
+                    "retirement resource index",
+                )?,
+                "status": "initialized",
+            }))
+        }
+        MacProspectiveRetirementControlActionV2::PrepareQuiescence => {
+            refresh_mac_retirement_resource_index_before_quiescence_v2(
+                executor,
+                &request.scope_id,
+            )?;
+            let prepared = prepare_mac_retirement_quiescence_v2(executor, &request.scope_id)?;
+            Ok(json!({
+                "action": request.action.literal(),
+                "quiescence": mac_retirement_control_record_value_v2(
+                    canonical_mac_retirement_quiescence_v2(&prepared)?,
+                    "retirement quiescence",
+                )?,
+                "status": prepared.state.literal(),
+            }))
+        }
+        MacProspectiveRetirementControlActionV2::CommitQuiesced => {
+            let quiesced = commit_mac_retirement_quiesced_v2(executor, &request.scope_id)?;
+            Ok(json!({
+                "action": request.action.literal(),
+                "quiescence": mac_retirement_control_record_value_v2(
+                    canonical_mac_retirement_quiescence_v2(&quiesced)?,
+                    "retirement quiescence",
+                )?,
+                "status": quiesced.state.literal(),
+            }))
+        }
+        MacProspectiveRetirementControlActionV2::ExportLocatorLedger => {
+            let ledger =
+                export_mac_prospective_retirement_locator_ledger_v2(executor, &request.scope_id)?;
+            Ok(json!({
+                "action": request.action.literal(),
+                "locator_ledger": {
+                    "locators": ledger.locators,
+                    "quiescence_sha256": ledger.quiescence_sha256,
+                    "r6_terminal_acknowledgement_sha256": ledger.r6_terminal_acknowledgement_sha256,
+                    "resource_index_revision": ledger.resource_index_revision,
+                    "resource_index_sha256": ledger.resource_index_sha256,
+                    "schema_owner": ledger.schema_owner,
+                    "schema_version": ledger.schema_version,
+                    "signer_access_control_sha256": ledger.signer_access_control_sha256,
+                    "signer_identity": mac_prospective_signer_identity_value_v2(
+                        &ledger.signer_identity,
+                    ),
+                    "scope_id": ledger.scope_id,
+                },
+                "status": "exported",
+            }))
+        }
+        MacProspectiveRetirementControlActionV2::SignPreRemovalReceipt => {
+            let receipt = sign_and_publish_mac_pre_removal_receipt_v2(executor, &request.scope_id)?;
+            Ok(json!({
+                "action": request.action.literal(),
+                "publisher_receipt": serde_json::to_value(receipt)
+                    .context("encode signed publisher pre-removal receipt")?,
+                "status": "receipt_externally_durable",
+            }))
+        }
+        MacProspectiveRetirementControlActionV2::BindDurableAcknowledgement => {
+            let binding = bind_mac_durable_retirement_acknowledgement_v2(&request.scope_id)?;
+            Ok(json!({
+                "action": request.action.literal(),
+                "protected_cas_binding": serde_json::to_value(binding)
+                    .context("encode acknowledgement-bound protected CAS")?,
+                "status": "acknowledgement_cas_bound",
+            }))
+        }
+        MacProspectiveRetirementControlActionV2::FreezeFinalizationRequest => {
+            let frozen = freeze_and_publish_mac_finalization_request_v2(&request.scope_id)?;
+            Ok(json!({
+                "action": request.action.literal(),
+                "request_digest": frozen.request_digest,
+                "status": "finalization_request_frozen",
+            }))
+        }
+    }
 }
 
 fn open_mac_lima_stage_one_capsule_v1(scope_id: &str) -> Result<Option<MacLimaStageOneCapsuleV1>> {
@@ -14505,6 +22578,26 @@ fn mac_open_system_keychain_p256_spki_der_v1(scope_id: &str) -> Result<Vec<u8>> 
     {
         let _ = key_tag;
         bail!("System Keychain P-256 key is unavailable off macOS")
+    }
+}
+
+/// Strict future-retirement readback. Ordinary V1 signer lookup intentionally does not call this
+/// helper, so an already-existing legacy signer remains readable and usable without ACL mutation.
+fn mac_open_prospective_retirement_signer_identity_v2(
+    scope_id: &str,
+) -> Result<MacProspectiveRetirementSignerIdentityV2> {
+    let key_tag = mac_keychain_signing_key_tag_v1(scope_id)?;
+    #[cfg(target_os = "macos")]
+    {
+        let identity =
+            mac_system_keychain_ffi_v1::open_prospective_retirement_signer_identity(&key_tag)?;
+        validate_mac_prospective_retirement_signer_identity_v2(scope_id, &identity)?;
+        return Ok(identity);
+    }
+    #[cfg(not(target_os = "macos"))]
+    {
+        let _ = key_tag;
+        bail!("prospective System Keychain signer identity is unavailable off macOS")
     }
 }
 
@@ -15347,6 +23440,279 @@ fn mac_now_unix_ns_v1() -> Result<u64> {
         .duration_since(UNIX_EPOCH)
         .context("read macOS clock for Stage-1 expiry")?;
     u64::try_from(duration.as_nanos()).context("macOS Stage-1 clock exceeds u64 nanoseconds")
+}
+
+fn build_mac_r6_terminal_successor_evidence_v2(
+    stage_one: &MacLimaGuestPairingStageOneRecordV1,
+    host_record: &GuestPublisherPairingHostRecordV1,
+    predecessor_consumed: &MacR6PairingPredecessorStateV1,
+    guest_anchor_sha256: &str,
+    guest_anchor_acknowledgement_sha256: &str,
+    guest_consumption_marker_response_sha256: &str,
+) -> Result<MacR6TerminalSuccessorEvidenceV2> {
+    validate_mac_lima_guest_pairing_stage_one_record_v1(stage_one)?;
+    validate_guest_publisher_pairing_host_record_v1(host_record)?;
+    let host_record_bytes = canonical_guest_publisher_pairing_host_record_v1(host_record)?;
+    let host_record_sha256 = sha256_hex_bootstrap_v1(&host_record_bytes);
+    let predecessor_consumed_bytes =
+        canonical_mac_r6_pairing_predecessor_state_v1(predecessor_consumed)?;
+    if host_record.state != "ticket_consumed"
+        || host_record.data_session.state != "ticket_consumed"
+        || host_record.data_session.guest_anchor_sha256.as_deref() != Some(guest_anchor_sha256)
+        || stage_one.predecessor_state != *predecessor_consumed
+        || predecessor_consumed.state != "Consumed"
+        || predecessor_consumed.scope_id != host_record.binding.scope_id
+        || predecessor_consumed.predecessor_id != stage_one.predecessor.predecessor_id
+        || predecessor_consumed.predecessor_generation
+            != stage_one.predecessor.predecessor_generation
+        || predecessor_consumed.pairing_attempt_id.as_deref()
+            != Some(host_record.ticket.challenge.challenge_id.as_str())
+        || predecessor_consumed.consumed_record_sha256.as_deref()
+            != Some(host_record_sha256.as_str())
+        || host_record.binding.stage_one_record_sha256
+            != mac_r6_pairing_stage_one_commitment_v1(stage_one)?
+        || host_record.binding.scope_id != stage_one.predecessor.scope_id
+        || host_record.signature.public_key != stage_one.predecessor.signature.public_key
+    {
+        bail!("R6 terminal successor evidence does not exact-join Consumed host state");
+    }
+    let signer_spki = mac_base64url_decode_v1(&host_record.signature.public_key)?;
+    let evidence = MacR6TerminalSuccessorEvidenceV2 {
+        scope_id: host_record.binding.scope_id.clone(),
+        challenge_id: host_record.ticket.challenge.challenge_id.clone(),
+        predecessor_id: predecessor_consumed.predecessor_id.clone(),
+        predecessor_generation: predecessor_consumed.predecessor_generation,
+        terminal_generation: host_record.record_generation,
+        host_record_sha256,
+        predecessor_consumed_state_sha256: sha256_hex_bootstrap_v1(&predecessor_consumed_bytes),
+        guest_anchor_sha256: guest_anchor_sha256.to_string(),
+        guest_anchor_acknowledgement_sha256: guest_anchor_acknowledgement_sha256.to_string(),
+        guest_consumption_marker_response_sha256: guest_consumption_marker_response_sha256
+            .to_string(),
+        stage_one_record_sha256: host_record.binding.stage_one_record_sha256.clone(),
+        stage_one_authorization_sha256: sha256_hex_bootstrap_v1(
+            &canonical_lima_stage_one_authorization_v1(&stage_one.stage_one)?,
+        ),
+        pairing_session_binding_sha256: sha256_hex_bootstrap_v1(
+            &canonical_guest_publisher_pairing_session_binding_v1(&host_record.binding)?,
+        ),
+        signer_spki_sha256: sha256_hex_bootstrap_v1(&signer_spki),
+    };
+    canonical_mac_r6_terminal_successor_evidence_v2(&evidence)?;
+    Ok(evidence)
+}
+
+fn validate_mac_r6_terminal_successor_acknowledgement_against_evidence_v2(
+    acknowledgement: &MacR6PairingTerminalSuccessorAcknowledgementV2,
+    expected: &MacR6TerminalSuccessorEvidenceV2,
+    expected_public_key: &str,
+    minimum_terminal_at_unix_ns: u64,
+) -> Result<()> {
+    if acknowledgement.successor_evidence != *expected
+        || acknowledgement.successor_evidence_sha256
+            != mac_r6_terminal_successor_evidence_sha256_v2(expected)?
+        || acknowledgement.terminal_at_unix_ns < minimum_terminal_at_unix_ns
+        || acknowledgement.signature.public_key != expected_public_key
+        || sha256_hex_bootstrap_v1(&mac_base64url_decode_v1(expected_public_key)?)
+            != expected.signer_spki_sha256
+    {
+        bail!("R6 terminal successor acknowledgement conflicts with exact successor evidence");
+    }
+    Ok(())
+}
+
+fn mac_sign_r6_terminal_successor_acknowledgement_v2(
+    scope_id: &str,
+    acknowledgement: &MacR6PairingTerminalSuccessorAcknowledgementV2,
+) -> Result<LifecycleSignatureV1> {
+    let spki_der = mac_open_system_keychain_p256_spki_der_v1(scope_id)?;
+    let public_key = base64url_encode_mac_v1(&spki_der);
+    if public_key != acknowledgement.signature.public_key
+        || sha256_hex_bootstrap_v1(&spki_der)
+            != acknowledgement.successor_evidence.signer_spki_sha256
+    {
+        bail!("R6 terminal successor acknowledgement signer changed before signing");
+    }
+    let payload =
+        canonical_mac_r6_pairing_terminal_successor_signature_payload_v2(acknowledgement)?;
+    Ok(LifecycleSignatureV1 {
+        algorithm: "ecdsa-p256-sha256-p1363-low-s-v1".to_string(),
+        public_key,
+        signature: base64url_encode_mac_v1(&mac_system_keychain_sign_p1363_low_s_v1(
+            scope_id, &payload,
+        )?),
+    })
+}
+
+fn open_mac_r6_terminal_successor_acknowledgement_v2(
+    scope_id: &str,
+) -> Result<Option<(MacR6PairingTerminalSuccessorAcknowledgementV2, Vec<u8>)>> {
+    let account = mac_keychain_r6_terminal_successor_acknowledgement_account_v2(scope_id)?;
+    let Some(bytes) = mac_keychain_read_item_v1(MAC_KEYCHAIN_SERVICE_V1, &account)? else {
+        return Ok(None);
+    };
+    let acknowledgement =
+        parse_and_validate_mac_r6_pairing_terminal_successor_acknowledgement_v2(&bytes)?;
+    if acknowledgement.successor_evidence.scope_id != scope_id {
+        bail!("R6 terminal successor acknowledgement crosses its protected scope");
+    }
+    Ok(Some((acknowledgement, bytes)))
+}
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+enum MacR6TerminalSuccessorPersistenceDispositionV2 {
+    Create,
+    RejoinExact,
+}
+
+fn classify_mac_r6_terminal_successor_persistence_v2(
+    existing: Option<&MacR6PairingTerminalSuccessorAcknowledgementV2>,
+    expected: &MacR6TerminalSuccessorEvidenceV2,
+    expected_public_key: &str,
+    minimum_terminal_at_unix_ns: u64,
+) -> Result<MacR6TerminalSuccessorPersistenceDispositionV2> {
+    let Some(existing) = existing else {
+        return Ok(MacR6TerminalSuccessorPersistenceDispositionV2::Create);
+    };
+    validate_mac_r6_terminal_successor_acknowledgement_against_evidence_v2(
+        existing,
+        expected,
+        expected_public_key,
+        minimum_terminal_at_unix_ns,
+    )?;
+    Ok(MacR6TerminalSuccessorPersistenceDispositionV2::RejoinExact)
+}
+
+fn persist_mac_r6_terminal_successor_acknowledgement_v2(
+    stage_one: &MacLimaGuestPairingStageOneRecordV1,
+    host_record: &GuestPublisherPairingHostRecordV1,
+    predecessor_consumed: &MacR6PairingPredecessorStateV1,
+    guest_anchor_sha256: &str,
+    guest_anchor_acknowledgement_wire: &[u8],
+    guest_consumption_marker_response_wire: &[u8],
+) -> Result<MacR6PairingTerminalSuccessorAcknowledgementV2> {
+    let evidence = build_mac_r6_terminal_successor_evidence_v2(
+        stage_one,
+        host_record,
+        predecessor_consumed,
+        guest_anchor_sha256,
+        &sha256_hex_bootstrap_v1(guest_anchor_acknowledgement_wire),
+        &sha256_hex_bootstrap_v1(guest_consumption_marker_response_wire),
+    )?;
+    let minimum_terminal_at_unix_ns = predecessor_consumed
+        .effect_admitted_at_unix_ns
+        .ok_or_else(|| anyhow::anyhow!("Consumed R6 predecessor lacks effect admission time"))?;
+    let expected_public_key = host_record.signature.public_key.as_str();
+    let account =
+        mac_keychain_r6_terminal_successor_acknowledgement_account_v2(&evidence.scope_id)?;
+    let _guard = mac_keychain_durable_cas_guard_v1(&account)?;
+    if let Some(bytes) = mac_keychain_read_item_v1(MAC_KEYCHAIN_SERVICE_V1, &account)? {
+        let existing =
+            parse_and_validate_mac_r6_pairing_terminal_successor_acknowledgement_v2(&bytes)?;
+        if classify_mac_r6_terminal_successor_persistence_v2(
+            Some(&existing),
+            &evidence,
+            expected_public_key,
+            minimum_terminal_at_unix_ns,
+        )? != MacR6TerminalSuccessorPersistenceDispositionV2::RejoinExact
+        {
+            unreachable!("present exact terminal acknowledgement always rejoins");
+        }
+        drop(_guard);
+        append_mac_retirement_resource_producers_if_active_v2(
+            &evidence.scope_id,
+            &[MacRetirementResourceProducerV2::R6TerminalAcknowledgement],
+        )?;
+        return Ok(existing);
+    }
+    if classify_mac_r6_terminal_successor_persistence_v2(
+        None,
+        &evidence,
+        expected_public_key,
+        minimum_terminal_at_unix_ns,
+    )? != MacR6TerminalSuccessorPersistenceDispositionV2::Create
+    {
+        unreachable!("absent terminal acknowledgement always creates");
+    }
+
+    let terminal_at_unix_ns = mac_now_unix_ns_v1()?;
+    if terminal_at_unix_ns < minimum_terminal_at_unix_ns {
+        bail!("R6 terminal successor time precedes durable effect admission");
+    }
+    let mut acknowledgement = MacR6PairingTerminalSuccessorAcknowledgementV2 {
+        schema_owner: "substrate.mac-r6-pairing-terminal-successor-acknowledgement".to_string(),
+        schema_version: 2,
+        successor_evidence_sha256: mac_r6_terminal_successor_evidence_sha256_v2(&evidence)?,
+        successor_evidence: evidence,
+        terminal_at_unix_ns,
+        signature: LifecycleSignatureV1 {
+            algorithm: "ecdsa-p256-sha256-p1363-low-s-v1".to_string(),
+            public_key: expected_public_key.to_string(),
+            signature: String::new(),
+        },
+    };
+    acknowledgement.signature = mac_sign_r6_terminal_successor_acknowledgement_v2(
+        &acknowledgement.successor_evidence.scope_id,
+        &acknowledgement,
+    )?;
+    let bytes = canonical_mac_r6_pairing_terminal_successor_acknowledgement_v2(&acknowledgement)?;
+    mac_keychain_compare_and_swap_item_v1(MAC_KEYCHAIN_SERVICE_V1, &account, None, &bytes)?;
+    if mac_keychain_read_item_v1(MAC_KEYCHAIN_SERVICE_V1, &account)?.as_deref()
+        != Some(bytes.as_slice())
+    {
+        bail!("R6 terminal successor acknowledgement CAS did not read back exactly");
+    }
+    drop(_guard);
+    append_mac_retirement_resource_producers_if_active_v2(
+        &acknowledgement.successor_evidence.scope_id,
+        &[MacRetirementResourceProducerV2::R6TerminalAcknowledgement],
+    )?;
+    Ok(acknowledgement)
+}
+
+/// Read-only retirement gate. It reopens only the exact terminal acknowledgement and the
+/// protected records named by that signed acknowledgement; it does not resume pairing or mutate
+/// authority. Absence is not readiness.
+fn require_mac_r6_terminal_successor_retirement_readiness_v2(
+    executor: &MacManagedArtifactExecutorV1,
+    scope_id: &str,
+) -> Result<MacR6PairingTerminalSuccessorAcknowledgementV2> {
+    let (acknowledgement, _) = open_mac_r6_terminal_successor_acknowledgement_v2(scope_id)?
+        .ok_or_else(|| anyhow::anyhow!("R6 terminal successor acknowledgement is absent"))?;
+    let evidence = &acknowledgement.successor_evidence;
+    let host_record = open_mac_guest_pairing_record_v1(executor, &evidence.challenge_id)?
+        .ok_or_else(|| anyhow::anyhow!("R6 terminal successor host record is absent"))?;
+    let predecessor_consumed = open_mac_r6_pairing_predecessor_state_v1(scope_id)?
+        .ok_or_else(|| anyhow::anyhow!("R6 terminal successor predecessor state is absent"))?
+        .0;
+    let stage_one = open_mac_lima_guest_pairing_stage_one_record_v1(scope_id)?
+        .ok_or_else(|| anyhow::anyhow!("R6 terminal successor Stage-1 record is absent"))?;
+    let expected = build_mac_r6_terminal_successor_evidence_v2(
+        &stage_one,
+        &host_record,
+        &predecessor_consumed,
+        host_record
+            .data_session
+            .guest_anchor_sha256
+            .as_deref()
+            .ok_or_else(|| anyhow::anyhow!("R6 terminal host record lacks guest anchor digest"))?,
+        &evidence.guest_anchor_acknowledgement_sha256,
+        &evidence.guest_consumption_marker_response_sha256,
+    )?;
+    let minimum_terminal_at_unix_ns = predecessor_consumed
+        .effect_admitted_at_unix_ns
+        .ok_or_else(|| anyhow::anyhow!("Consumed R6 predecessor lacks effect admission time"))?;
+    validate_mac_r6_terminal_successor_acknowledgement_against_evidence_v2(
+        &acknowledgement,
+        &expected,
+        &host_record.signature.public_key,
+        minimum_terminal_at_unix_ns,
+    )?;
+    let current_spki = mac_open_system_keychain_p256_spki_der_v1(scope_id)?;
+    if base64url_encode_mac_v1(&current_spki) != acknowledgement.signature.public_key {
+        bail!("R6 terminal successor acknowledgement does not use the current signer");
+    }
+    Ok(acknowledgement)
 }
 
 fn derive_r6_pairing_prepared_window_v1(prepare_now_unix_ns: u64) -> Result<(u64, u64)> {
@@ -16799,12 +25165,19 @@ fn compare_and_swap_mac_guest_pairing_record_with_mode_v1(
     let expected = current
         .map(canonical_guest_publisher_pairing_host_record_v1)
         .transpose()?;
+    let scope_id = next.binding.scope_id.clone();
     let next = canonical_guest_publisher_pairing_host_record_v1(next)?;
     mac_keychain_compare_and_swap_item_v1(
         MAC_KEYCHAIN_SERVICE_V1,
         &account,
         expected.as_deref(),
         &next,
+    )?;
+    append_mac_retirement_resource_producers_if_active_v2(
+        &scope_id,
+        &[MacRetirementResourceProducerV2::R6GuestHostRecord {
+            challenge_id: challenge_id.to_string(),
+        }],
     )
 }
 
@@ -17068,7 +25441,11 @@ fn set_active_mac_guest_pairing_record_v1(
             MacR6ActivePointerStateV1::Active(challenge_id)
                 if challenge_id == record.ticket.challenge.challenge_id =>
             {
-                return Ok(())
+                append_mac_retirement_resource_producers_if_active_v2(
+                    scope_id,
+                    &[MacRetirementResourceProducerV2::R6ActiveGuestRecord],
+                )?;
+                return Ok(());
             }
             MacR6ActivePointerStateV1::Active(_) => {
                 bail!("R6 active pairing pointer cannot overwrite a live challenge")
@@ -17082,6 +25459,10 @@ fn set_active_mac_guest_pairing_record_v1(
         &account,
         observed.as_deref(),
         next.as_bytes(),
+    )?;
+    append_mac_retirement_resource_producers_if_active_v2(
+        scope_id,
+        &[MacRetirementResourceProducerV2::R6ActiveGuestRecord],
     )
 }
 
@@ -17121,7 +25502,13 @@ fn persist_r6_operator_launch_exact_v1(
         None => {
             mac_keychain_compare_and_swap_item_v1(MAC_KEYCHAIN_SERVICE_V1, &account, None, &bytes)
         }
-    }
+    }?;
+    append_mac_retirement_resource_producers_if_active_v2(
+        scope_id,
+        &[MacRetirementResourceProducerV2::R6OperatorLaunch {
+            challenge_id: record.ticket.challenge.challenge_id.clone(),
+        }],
+    )
 }
 
 fn open_r6_operator_launch_exact_v1(
@@ -17660,16 +26047,18 @@ fn open_pm_bound_guest_pairing_data_session_v1(
             bail!("R6 ticket-consumed recovery received a substituted guest anchor");
         }
 
-        writeln!(
-            stdin,
-            "{}",
-            serde_json::to_string(&json!({"kind":"guest_anchor","anchor":anchor}))?
-        )
-        .context("acknowledge exact R6 guest-anchor frame")?;
+        let guest_anchor_acknowledgement_wire = canonical_r6_data_wire_frame_v2(&json!({
+            "kind":"guest_anchor",
+            "anchor":anchor,
+        }))?;
+        stdin
+            .write_all(&guest_anchor_acknowledgement_wire)
+            .context("acknowledge exact R6 guest-anchor frame")?;
         stdin
             .flush()
             .context("flush R6 guest-anchor acknowledgement")?;
-        let consumed = read_r6_data_child_frame_v1(&mut stdout)?;
+        let (consumed, guest_consumption_marker_response_wire) =
+            read_canonical_r6_data_child_frame_v2(&mut stdout)?;
         let consumed_object = consumed
             .as_object()
             .ok_or_else(|| anyhow::anyhow!("R6 ticket-consumed response must be an object"))?;
@@ -17683,10 +26072,29 @@ fn open_pm_bound_guest_pairing_data_session_v1(
             bail!("R6 data child did not acknowledge the exact consumed guest anchor");
         }
         drop(stdin);
-        drop(stdout);
+        require_r6_data_child_eof_v2(&mut stdout)?;
         let status = child.finish()?;
         if !status.success() {
             bail!("R6 data child closed after protected host consumption");
+        }
+        drop(stdout);
+        let terminal_stage_one = open_mac_lima_guest_pairing_stage_one_record_v1(
+            &control.scope_id,
+        )?
+        .ok_or_else(|| anyhow::anyhow!("R6 terminal successor lost protected Stage-1 state"))?;
+        let predecessor_consumed = terminal_stage_one.predecessor_state.clone();
+        let persisted = persist_mac_r6_terminal_successor_acknowledgement_v2(
+            &terminal_stage_one,
+            &current,
+            &predecessor_consumed,
+            &anchor_sha256,
+            &guest_anchor_acknowledgement_wire,
+            &guest_consumption_marker_response_wire,
+        )?;
+        let readiness =
+            require_mac_r6_terminal_successor_retirement_readiness_v2(executor, &control.scope_id)?;
+        if readiness != persisted {
+            bail!("R6 terminal successor acknowledgement changed after exact readback");
         }
         return Ok(current);
     }
@@ -17729,6 +26137,95 @@ fn read_r6_data_child_frame_v1(reader: &mut BufReader<std::process::ChildStdout>
         bail!("R6 data child did not emit one bounded newline-delimited frame");
     }
     serde_json::from_str(&frame).context("decode one R6 data-child frame")
+}
+
+fn canonical_r6_data_wire_frame_v2(value: &Value) -> Result<Vec<u8>> {
+    let mut bytes = canonical_bootstrap_json_bytes_v1(value)?;
+    bytes.push(b'\n');
+    if bytes.len() > MAX_MAC_XPC_FRAME_BYTES_V1 {
+        bail!("canonical R6 terminal successor frame exceeds its fixed bound");
+    }
+    Ok(bytes)
+}
+
+#[cfg(target_os = "macos")]
+fn read_canonical_r6_data_child_frame_v2(
+    reader: &mut BufReader<std::process::ChildStdout>,
+) -> Result<(Value, Vec<u8>)> {
+    if reader.buffer().is_empty() {
+        let mut pollfd = libc::pollfd {
+            fd: reader.get_ref().as_raw_fd(),
+            events: libc::POLLIN,
+            revents: 0,
+        };
+        // SAFETY: the child pipe remains owned by `reader` for this bounded wait.
+        let polled = unsafe {
+            libc::poll(
+                &mut pollfd,
+                1,
+                i32::try_from(R6_DATA_FRAME_TIMEOUT_V1.as_millis())
+                    .expect("fixed R6 data timeout fits poll milliseconds"),
+            )
+        };
+        if polled < 0 {
+            return Err(std::io::Error::last_os_error())
+                .context("poll canonical R6 terminal successor frame");
+        }
+        if polled == 0 || pollfd.revents & (libc::POLLIN | libc::POLLHUP) == 0 {
+            bail!("R6 terminal successor response exceeded its fixed frame deadline");
+        }
+    }
+    let mut frame = String::new();
+    let length = reader
+        .read_line(&mut frame)
+        .context("read canonical R6 terminal successor frame")?;
+    if length == 0 || length > MAX_MAC_XPC_FRAME_BYTES_V1 || !frame.ends_with('\n') {
+        bail!("R6 terminal successor response is not one bounded newline frame");
+    }
+    let value: Value =
+        serde_json::from_str(&frame).context("decode canonical R6 terminal successor frame")?;
+    let canonical = canonical_r6_data_wire_frame_v2(&value)?;
+    if canonical != frame.as_bytes() {
+        bail!("R6 terminal successor response is not canonical JSON");
+    }
+    Ok((value, canonical))
+}
+
+#[cfg(target_os = "macos")]
+fn require_r6_data_child_eof_v2(reader: &mut BufReader<std::process::ChildStdout>) -> Result<()> {
+    if !reader.buffer().is_empty() {
+        bail!("R6 terminal successor response has trailing bytes");
+    }
+    let mut pollfd = libc::pollfd {
+        fd: reader.get_ref().as_raw_fd(),
+        events: libc::POLLIN,
+        revents: 0,
+    };
+    // SAFETY: the child pipe remains owned by `reader` for this bounded EOF wait.
+    let polled = unsafe {
+        libc::poll(
+            &mut pollfd,
+            1,
+            i32::try_from(R6_DATA_FRAME_TIMEOUT_V1.as_millis())
+                .expect("fixed R6 data timeout fits poll milliseconds"),
+        )
+    };
+    if polled < 0 {
+        return Err(std::io::Error::last_os_error())
+            .context("poll R6 terminal successor response EOF");
+    }
+    if polled == 0 || pollfd.revents & (libc::POLLIN | libc::POLLHUP) == 0 {
+        bail!("R6 terminal successor response omitted bounded EOF");
+    }
+    let mut trailing = [0_u8; 1];
+    if reader
+        .read(&mut trailing)
+        .context("read R6 terminal successor response EOF")?
+        != 0
+    {
+        bail!("R6 terminal successor response has trailing bytes");
+    }
+    Ok(())
 }
 
 fn decode_r6_data_operator_proof_frame_v1(
@@ -18383,8 +26880,10 @@ unsafe fn probe_unprivileged_missing_xpc_service_v1(
 /// Relay a fixed-size request to the launchd-owned Mach service. This is not an executor
 /// operation: a direct command can only send an XPC request and cannot mutate publisher state.
 fn relay_mac_xpc_publisher_request_v1(operation: &str, request: &[u8]) -> Result<Value> {
-    if !matches!(operation, "stage-one-create" | "post-pm-action")
-        || request.is_empty()
+    if !matches!(
+        operation,
+        "stage-one-create" | "post-pm-action" | "prospective-retirement-v2"
+    ) || request.is_empty()
         || request.len() > MAX_MAC_XPC_FRAME_BYTES_V1
     {
         bail!("invalid fixed macOS XPC publisher request")
@@ -18476,16 +26975,20 @@ mod mac_system_keychain_ffi_v1 {
     type CfType = *const c_void;
     type CfMutableDictionary = *mut c_void;
     type CfData = *const c_void;
+    type SecAccess = *const c_void;
+    type SecAcl = *const c_void;
     type SecCode = *const c_void;
     type SecKey = *const c_void;
     type SecKeychain = *const c_void;
     type SecRequirement = *const c_void;
+    type SecTrustedApplication = *const c_void;
     type OsStatus = i32;
 
     const ERR_SEC_SUCCESS: OsStatus = 0;
     const ERR_SEC_DUPLICATE_ITEM: OsStatus = -25299;
     const ERR_SEC_ITEM_NOT_FOUND: OsStatus = -25300;
     const K_CF_NUMBER_SINT64: i32 = 4;
+    const K_CF_STRING_ENCODING_UTF8: u32 = 0x0800_0100;
     const MAX_SYSTEM_KEYCHAIN_PATH_BYTES: usize = 1024;
 
     struct OwnedCf(Vec<CfType>);
@@ -18578,6 +27081,363 @@ mod mac_system_keychain_ffi_v1 {
             CFDictionarySetValue(dictionary, *key, *value);
         }
         Ok(dictionary)
+    }
+
+    unsafe fn copy_cf_data(value: CfType, label: &str) -> Result<Vec<u8>> {
+        if CFGetTypeID(value) != CFDataGetTypeID() {
+            bail!("{label} is not CFData");
+        }
+        let length = CFDataGetLength(value);
+        let bytes = CFDataGetBytePtr(value);
+        if length < 0 || (length > 0 && bytes.is_null()) {
+            bail!("{label} has invalid bytes");
+        }
+        if length == 0 {
+            return Ok(Vec::new());
+        }
+        Ok(std::slice::from_raw_parts(bytes, length as usize).to_vec())
+    }
+
+    unsafe fn copy_cf_string(value: CfType, label: &str) -> Result<String> {
+        if CFGetTypeID(value) != CFStringGetTypeID() {
+            bail!("{label} is not CFString");
+        }
+        let characters = CFStringGetLength(value);
+        let maximum = CFStringGetMaximumSizeForEncoding(characters, K_CF_STRING_ENCODING_UTF8);
+        if characters < 0 || maximum < 0 {
+            bail!("{label} has invalid length");
+        }
+        let mut bytes = vec![0 as c_char; maximum as usize + 1];
+        if CFStringGetCString(
+            value,
+            bytes.as_mut_ptr(),
+            bytes.len() as isize,
+            K_CF_STRING_ENCODING_UTF8,
+        ) == 0
+        {
+            bail!("decode {label} as UTF-8");
+        }
+        Ok(std::ffi::CStr::from_ptr(bytes.as_ptr())
+            .to_str()
+            .with_context(|| format!("decode {label} as UTF-8"))?
+            .to_string())
+    }
+
+    unsafe fn prospective_trusted_application(
+        owned: &mut OwnedCf,
+        path: &str,
+    ) -> Result<SecTrustedApplication> {
+        if path != MAC_R3_PRODUCT_PUBLISHER_PATH_V2 && path != MAC_R3_FINALIZER_PATH_V2 {
+            bail!("prospective signer trusted-application path is not compiled");
+        }
+        let path = CString::new(path).context("encode fixed trusted-application path")?;
+        let mut application: SecTrustedApplication = ptr::null();
+        let status = SecTrustedApplicationCreateFromPath(path.as_ptr(), &mut application);
+        if status != ERR_SEC_SUCCESS || application.is_null() {
+            bail!("create fixed trusted application failed with OSStatus {status}");
+        }
+        Ok(owned.hold(application))
+    }
+
+    unsafe fn prospective_trusted_application_data(
+        owned: &mut OwnedCf,
+        application: SecTrustedApplication,
+    ) -> Result<Vec<u8>> {
+        let mut data: CfType = ptr::null();
+        let status = SecTrustedApplicationCopyData(application, &mut data);
+        if status != ERR_SEC_SUCCESS || data.is_null() {
+            bail!("copy trusted-application identity failed with OSStatus {status}");
+        }
+        owned.hold(data);
+        copy_cf_data(data, "trusted-application identity")
+    }
+
+    unsafe fn prospective_create_acl(
+        owned: &mut OwnedCf,
+        access: SecAccess,
+        applications: CfType,
+        description: &str,
+        authorizations: &[CfType],
+    ) -> Result<()> {
+        let description = cf_string(owned, description)?;
+        let mut acl: SecAcl = ptr::null();
+        let status = SecACLCreateWithSimpleContents(
+            access,
+            applications,
+            description,
+            MAC_SIGNER_PROMPT_SELECTOR_NONE_V2,
+            &mut acl,
+        );
+        if status != ERR_SEC_SUCCESS || acl.is_null() {
+            bail!("create exact prospective signer ACL failed with OSStatus {status}");
+        }
+        owned.hold(acl);
+        let authorizations = cf_array(owned, authorizations)?;
+        let status = SecACLUpdateAuthorizations(acl, authorizations);
+        if status != ERR_SEC_SUCCESS {
+            bail!("set exact prospective signer ACL authorizations failed with OSStatus {status}");
+        }
+        Ok(())
+    }
+
+    unsafe fn prospective_authorization_name(value: CfType) -> Result<&'static str> {
+        if value.is_null() {
+            bail!("prospective signer ACL has a null authorization");
+        }
+        for (expected, name) in [
+            (kSecACLAuthorizationAny, "any"),
+            (kSecACLAuthorizationSign, "sign"),
+            (kSecACLAuthorizationDelete, "delete"),
+            (kSecACLAuthorizationExportWrapped, "export_wrapped"),
+            (kSecACLAuthorizationExportClear, "export_clear"),
+            (kSecACLAuthorizationImportWrapped, "import_wrapped"),
+            (kSecACLAuthorizationImportClear, "import_clear"),
+            (kSecACLAuthorizationEncrypt, "encrypt"),
+            (kSecACLAuthorizationDecrypt, "decrypt"),
+            (kSecACLAuthorizationMAC, "mac"),
+            (kSecACLAuthorizationDerive, "derive"),
+            (kSecACLAuthorizationChangeACL, "change_acl"),
+            (kSecACLAuthorizationChangeOwner, "change_owner"),
+        ] {
+            if CFEqual(value, expected) != 0 {
+                return Ok(name);
+            }
+        }
+        bail!("prospective signer ACL has an unknown authorization");
+    }
+
+    unsafe fn prospective_snapshot_acl(
+        owned: &mut OwnedCf,
+        acl: SecAcl,
+    ) -> Result<MacSignerAclEntrySnapshotV2> {
+        let mut applications: CfType = ptr::null();
+        let mut description: CfType = ptr::null();
+        let mut prompt_selector = u16::MAX;
+        let status = SecACLCopyContents(
+            acl,
+            &mut applications,
+            &mut description,
+            &mut prompt_selector,
+        );
+        if status != ERR_SEC_SUCCESS || applications.is_null() || description.is_null() {
+            bail!("copy prospective signer ACL failed with OSStatus {status}");
+        }
+        owned.hold(applications);
+        owned.hold(description);
+        if CFGetTypeID(applications) != CFArrayGetTypeID() {
+            bail!("prospective signer ACL applications are not an array");
+        }
+        let description = copy_cf_string(description, "prospective signer ACL description")?;
+
+        let authorizations = SecACLCopyAuthorizations(acl);
+        if authorizations.is_null() {
+            bail!("copy prospective signer ACL authorizations returned null");
+        }
+        owned.hold(authorizations);
+        if CFGetTypeID(authorizations) != CFArrayGetTypeID() {
+            bail!("prospective signer ACL authorizations are not an array");
+        }
+        let authorization_count = CFArrayGetCount(authorizations);
+        if authorization_count < 0 {
+            bail!("prospective signer ACL authorization count is invalid");
+        }
+        let mut authorization_names = Vec::with_capacity(authorization_count as usize);
+        for index in 0..authorization_count {
+            authorization_names.push(
+                prospective_authorization_name(CFArrayGetValueAtIndex(authorizations, index))?
+                    .to_string(),
+            );
+        }
+
+        let application_count = CFArrayGetCount(applications);
+        if application_count < 0 {
+            bail!("prospective signer ACL application count is invalid");
+        }
+        let mut trusted_applications = Vec::with_capacity(application_count as usize);
+        for index in 0..application_count {
+            let application = CFArrayGetValueAtIndex(applications, index);
+            if application.is_null() || CFGetTypeID(application) != SecTrustedApplicationGetTypeID()
+            {
+                bail!("prospective signer ACL contains an invalid trusted application");
+            }
+            trusted_applications.push(MacSignerTrustedApplicationDigestV2 {
+                data_base64url: base64url_encode_mac_v1(&prospective_trusted_application_data(
+                    owned,
+                    application,
+                )?),
+            });
+        }
+        Ok(MacSignerAclEntrySnapshotV2 {
+            description,
+            prompt_selector,
+            authorizations: authorization_names,
+            trusted_applications,
+        })
+    }
+
+    unsafe fn prospective_snapshot_access(
+        owned: &mut OwnedCf,
+        access: SecAccess,
+    ) -> Result<MacSignerAccessSnapshotV2> {
+        let mut owner_uid = 0_u32;
+        let mut owner_gid = 0_u32;
+        let mut owner_type = 0_u32;
+        let mut acl_list: CfType = ptr::null();
+        let status = SecAccessCopyOwnerAndACL(
+            access,
+            &mut owner_uid,
+            &mut owner_gid,
+            &mut owner_type,
+            &mut acl_list,
+        );
+        if status != ERR_SEC_SUCCESS || acl_list.is_null() {
+            bail!("copy prospective signer SecAccess failed with OSStatus {status}");
+        }
+        owned.hold(acl_list);
+        if CFGetTypeID(acl_list) != CFArrayGetTypeID() {
+            bail!("prospective signer SecAccess ACL list is not an array");
+        }
+        let count = CFArrayGetCount(acl_list);
+        if count < 0 {
+            bail!("prospective signer SecAccess ACL count is invalid");
+        }
+        let mut entries = Vec::with_capacity(count as usize);
+        for index in 0..count {
+            let acl = CFArrayGetValueAtIndex(acl_list, index);
+            if acl.is_null() || CFGetTypeID(acl) != SecACLGetTypeID() {
+                bail!("prospective signer SecAccess contains a non-ACL value");
+            }
+            entries.push(prospective_snapshot_acl(owned, acl)?);
+        }
+        Ok(MacSignerAccessSnapshotV2 {
+            owner_uid,
+            owner_gid,
+            owner_type,
+            entries,
+        })
+    }
+
+    unsafe fn prospective_validate_exact_access(
+        owned: &mut OwnedCf,
+        access: SecAccess,
+    ) -> Result<String> {
+        let publisher = prospective_trusted_application(owned, MAC_PUBLISHER_HELPER_PATH_V1)?;
+        let finalizer = prospective_trusted_application(owned, MAC_R3_FINALIZER_PATH_V2)?;
+        let publisher_data = prospective_trusted_application_data(owned, publisher)?;
+        let finalizer_data = prospective_trusted_application_data(owned, finalizer)?;
+        let mut expected =
+            mac_expected_prospective_signer_access_snapshot_v2(&publisher_data, &finalizer_data);
+        let mut observed = prospective_snapshot_access(owned, access)?;
+        mac_canonicalize_signer_access_snapshot_v2(&mut expected);
+        mac_canonicalize_signer_access_snapshot_v2(&mut observed);
+        if observed != expected
+            || observed
+                .entries
+                .iter()
+                .flat_map(|entry| &entry.authorizations)
+                .any(|authorization| authorization == "any")
+        {
+            bail!("persisted signer SecAccess differs from the exact future posture");
+        }
+        mac_prospective_signer_access_digest_v2(observed)
+    }
+
+    unsafe fn prospective_copy_and_validate_access(
+        owned: &mut OwnedCf,
+        key: SecKey,
+    ) -> Result<String> {
+        let mut access: SecAccess = ptr::null();
+        let status = SecKeychainItemCopyAccess(key.cast(), &mut access);
+        if status != ERR_SEC_SUCCESS || access.is_null() {
+            bail!("copy persisted prospective signer SecAccess failed with OSStatus {status}");
+        }
+        owned.hold(access);
+        prospective_validate_exact_access(owned, access)
+    }
+
+    unsafe fn prospective_build_exact_access(
+        owned: &mut OwnedCf,
+        preparation: &MacProspectiveSignerPreparationV2,
+    ) -> Result<(SecAccess, String)> {
+        validate_mac_prospective_signer_preparation_v2(preparation)?;
+        let mut error: CfType = ptr::null();
+        let access = SecAccessCreateWithOwnerAndACL(
+            MAC_SIGNER_UNMATCHABLE_OWNER_UID_V2,
+            MAC_SIGNER_UNMATCHABLE_OWNER_GID_V2,
+            MAC_SIGNER_OWNER_TYPE_USE_UID_AND_GID_V2,
+            ptr::null(),
+            &mut error,
+        );
+        let error_code = if error.is_null() {
+            0
+        } else {
+            let code = CFErrorGetCode(error);
+            owned.hold(error);
+            code
+        };
+        if access.is_null() {
+            bail!("create exact prospective signer SecAccess failed with code {error_code}");
+        }
+        owned.hold(access);
+        let publisher = prospective_trusted_application(owned, MAC_PUBLISHER_HELPER_PATH_V1)?;
+        let finalizer = prospective_trusted_application(owned, MAC_R3_FINALIZER_PATH_V2)?;
+        let publisher_data = prospective_trusted_application_data(owned, publisher)?;
+        let finalizer_data = prospective_trusted_application_data(owned, finalizer)?;
+        if sha256_hex_bootstrap_v1(&publisher_data)
+            != preparation.publisher_trusted_application_sha256
+            || sha256_hex_bootstrap_v1(&finalizer_data)
+                != preparation.finalizer_trusted_application_sha256
+        {
+            bail!("prospective signer preparation trusted-application identity drifted");
+        }
+        let publisher_list = cf_array(owned, &[publisher.cast()])?;
+        let finalizer_list = cf_array(owned, &[finalizer.cast()])?;
+        let empty_list = cf_array(owned, &[])?;
+        prospective_create_acl(
+            owned,
+            access,
+            publisher_list,
+            MAC_SIGNER_PUBLISHER_ACL_DESCRIPTION_V2,
+            &[kSecACLAuthorizationSign, kSecACLAuthorizationDelete],
+        )?;
+        prospective_create_acl(
+            owned,
+            access,
+            finalizer_list,
+            MAC_SIGNER_FINALIZER_ACL_DESCRIPTION_V2,
+            &[kSecACLAuthorizationDelete],
+        )?;
+        prospective_create_acl(
+            owned,
+            access,
+            empty_list,
+            MAC_SIGNER_PRIVATE_DENY_ACL_DESCRIPTION_V2,
+            &[
+                kSecACLAuthorizationExportWrapped,
+                kSecACLAuthorizationExportClear,
+                kSecACLAuthorizationImportWrapped,
+                kSecACLAuthorizationImportClear,
+                kSecACLAuthorizationEncrypt,
+                kSecACLAuthorizationDecrypt,
+                kSecACLAuthorizationMAC,
+                kSecACLAuthorizationDerive,
+            ],
+        )?;
+        prospective_create_acl(
+            owned,
+            access,
+            empty_list,
+            MAC_SIGNER_OWNER_DENY_ACL_DESCRIPTION_V2,
+            &[
+                kSecACLAuthorizationChangeACL,
+                kSecACLAuthorizationChangeOwner,
+            ],
+        )?;
+        let digest = prospective_validate_exact_access(owned, access)?;
+        if digest != preparation.signer_access_control_sha256 {
+            bail!("prospective signer preparation ACL digest changed before key creation");
+        }
+        Ok((access, digest))
     }
 
     unsafe fn verify_explicit_system_keychain_path(keychain: SecKeychain) -> Result<()> {
@@ -18690,6 +27550,73 @@ mod mac_system_keychain_ffi_v1 {
         }
     }
 
+    pub(super) fn generic_password_identity_sha256(
+        service: &str,
+        account: &str,
+    ) -> Result<Option<String>> {
+        unsafe {
+            let mut owned = OwnedCf::new();
+            let keychain = open_explicit_system_keychain(&mut owned)?;
+            let service_value = cf_string(&mut owned, service)?;
+            let account_value = cf_string(&mut owned, account)?;
+            let search_list = single_keychain_search_list(&mut owned, keychain)?;
+            let query = dictionary(
+                &mut owned,
+                &[
+                    (kSecClass, kSecClassGenericPassword),
+                    (kSecAttrService, service_value),
+                    (kSecAttrAccount, account_value),
+                    (kSecMatchSearchList, search_list),
+                    (kSecUseAuthenticationUI, kSecUseAuthenticationUIFail),
+                    (kSecReturnAttributes, kCFBooleanTrue),
+                    (kSecReturnPersistentRef, kCFBooleanTrue),
+                    (kSecMatchLimit, kSecMatchLimitAll),
+                ],
+            )?;
+            let mut result: CfType = ptr::null();
+            let status = SecItemCopyMatching(query, &mut result);
+            if status == ERR_SEC_ITEM_NOT_FOUND {
+                return Ok(None);
+            }
+            if status != ERR_SEC_SUCCESS || result.is_null() {
+                bail!("open exact retirement generic password failed with OSStatus {status}");
+            }
+            owned.hold(result);
+            if CFGetTypeID(result) != CFArrayGetTypeID() || CFArrayGetCount(result) != 1 {
+                bail!("exact retirement generic-password identity is ambiguous");
+            }
+            let attributes = CFArrayGetValueAtIndex(result, 0);
+            if attributes.is_null() || CFGetTypeID(attributes) != CFDictionaryGetTypeID() {
+                bail!("exact retirement generic-password lookup returned invalid attributes");
+            }
+            let observed_service = copy_cf_string(
+                CFDictionaryGetValue(attributes, kSecAttrService),
+                "retirement generic-password service",
+            )?;
+            let observed_account = copy_cf_string(
+                CFDictionaryGetValue(attributes, kSecAttrAccount),
+                "retirement generic-password account",
+            )?;
+            let persistent_reference = copy_cf_data(
+                CFDictionaryGetValue(attributes, kSecValuePersistentRef),
+                "retirement generic-password persistent reference",
+            )?;
+            if observed_service != service
+                || observed_account != account
+                || persistent_reference.is_empty()
+            {
+                bail!("exact retirement generic-password identity changed after query");
+            }
+            let persistent_reference_sha256 = sha256_hex_bootstrap_v1(&persistent_reference);
+            document_sha256_v2(&json!({
+                "account": account,
+                "persistent_reference_sha256": persistent_reference_sha256,
+                "service": service,
+            }))
+            .map(Some)
+        }
+    }
+
     pub(super) fn compare_and_swap_generic_password(
         service: &str,
         account: &str,
@@ -18745,6 +27672,64 @@ mod mac_system_keychain_ffi_v1 {
             entries.push((kSecMatchLimit, kSecMatchLimitAll));
         }
         dictionary(owned, &entries)
+    }
+
+    unsafe fn prospective_private_key_identity_query(
+        owned: &mut OwnedCf,
+        keychain: SecKeychain,
+        key_tag: &[u8],
+    ) -> Result<CfMutableDictionary> {
+        let tag = cf_data(owned, key_tag)?;
+        let search_list = single_keychain_search_list(owned, keychain)?;
+        dictionary(
+            owned,
+            &[
+                (kSecClass, kSecClassKey),
+                (kSecAttrKeyClass, kSecAttrKeyClassPrivate),
+                (kSecAttrApplicationTag, tag),
+                (kSecMatchSearchList, search_list),
+                (kSecUseAuthenticationUI, kSecUseAuthenticationUIFail),
+                (kSecReturnAttributes, kCFBooleanTrue),
+                (kSecReturnRef, kCFBooleanTrue),
+                (kSecReturnPersistentRef, kCFBooleanTrue),
+                (kSecMatchLimit, kSecMatchLimitAll),
+            ],
+        )
+    }
+
+    unsafe fn prospective_private_key_identity_match(
+        owned: &mut OwnedCf,
+        keychain: SecKeychain,
+        key_tag: &[u8],
+    ) -> Result<Option<(SecKey, CfType)>> {
+        let query = prospective_private_key_identity_query(owned, keychain, key_tag)?;
+        let mut result: CfType = ptr::null();
+        let status = SecItemCopyMatching(query, &mut result);
+        if status == ERR_SEC_ITEM_NOT_FOUND {
+            return Ok(None);
+        }
+        if status != ERR_SEC_SUCCESS || result.is_null() {
+            bail!("open exact prospective signer identity failed with OSStatus {status}");
+        }
+        owned.hold(result);
+        if CFGetTypeID(result) != CFArrayGetTypeID() {
+            bail!("prospective signer identity lookup returned a non-array result");
+        }
+        let count = CFArrayGetCount(result);
+        if count != 1 {
+            bail!("prospective signer identity is ambiguous ({count} matches)");
+        }
+        let attributes = CFArrayGetValueAtIndex(result, 0);
+        if attributes.is_null() || CFGetTypeID(attributes) != CFDictionaryGetTypeID() {
+            bail!("prospective signer identity lookup returned invalid attributes");
+        }
+        let key: SecKey = CFDictionaryGetValue(attributes, kSecValueRef).cast();
+        if key.is_null() {
+            bail!("prospective signer identity lookup returned a null key");
+        }
+        validate_private_key_identity(owned, attributes, key, key_tag)?;
+        validate_prospective_private_key_capabilities(owned, key)?;
+        Ok(Some((key, attributes)))
     }
 
     unsafe fn exact_private_key_item_delete_query(
@@ -18829,6 +27814,36 @@ mod mac_system_keychain_ffi_v1 {
         Ok(())
     }
 
+    unsafe fn validate_prospective_private_key_capabilities(
+        owned: &mut OwnedCf,
+        private_key: SecKey,
+    ) -> Result<()> {
+        validate_private_key_capabilities(owned, private_key)?;
+        let attributes = SecKeyCopyAttributes(private_key);
+        if attributes.is_null() {
+            bail!("prospective System Keychain signer has no inspectable attributes");
+        }
+        owned.hold(attributes);
+        for (attribute, expected, label) in [
+            (kSecAttrIsSensitive, kCFBooleanTrue, "sensitive state"),
+            (
+                kSecAttrIsExtractable,
+                kCFBooleanFalse,
+                "nonextractable state",
+            ),
+            (kSecAttrCanEncrypt, kCFBooleanFalse, "encrypt capability"),
+            (kSecAttrCanDecrypt, kCFBooleanFalse, "decrypt capability"),
+            (kSecAttrCanDerive, kCFBooleanFalse, "derive capability"),
+            (kSecAttrCanSign, kCFBooleanTrue, "sign capability"),
+            (kSecAttrCanVerify, kCFBooleanFalse, "verify capability"),
+            (kSecAttrCanWrap, kCFBooleanFalse, "wrap capability"),
+            (kSecAttrCanUnwrap, kCFBooleanFalse, "unwrap capability"),
+        ] {
+            require_key_attribute(attributes, attribute, expected, label)?;
+        }
+        Ok(())
+    }
+
     unsafe fn validate_private_key_identity(
         owned: &mut OwnedCf,
         persisted_attributes: CfType,
@@ -18887,7 +27902,14 @@ mod mac_system_keychain_ffi_v1 {
             .ok_or_else(|| anyhow::anyhow!("System Keychain lifecycle P-256 signing key is absent"))
     }
 
-    unsafe fn ensure_private_key(owned: &mut OwnedCf, key_tag: &[u8]) -> Result<SecKey> {
+    unsafe fn ensure_private_key(
+        owned: &mut OwnedCf,
+        scope_id: &str,
+        key_tag: &[u8],
+    ) -> Result<SecKey> {
+        // A present evidence-infrastructure root serializes preparation publication against the
+        // exact absent-key decision. Legacy machines without that root retain the original path.
+        let _activation = acquire_mac_retirement_activation_guard_v2(false)?;
         let keychain = open_explicit_system_keychain(owned)?;
         if let Some(key) = exact_private_key_matches(owned, keychain, key_tag)? {
             return Ok(key);
@@ -18896,15 +27918,40 @@ mod mac_system_keychain_ffi_v1 {
         let tag = cf_data(owned, key_tag)?;
         let label = cf_string(owned, MAC_KEYCHAIN_SERVICE_V1)?;
         let bits = cf_number_i64(owned, 256)?;
-        let private_attributes = dictionary(
-            owned,
-            &[
-                (kSecAttrIsPermanent, kCFBooleanTrue),
-                (kSecAttrApplicationTag, tag),
-                (kSecAttrLabel, label),
-                (kSecAttrCanSign, kCFBooleanTrue),
-            ],
-        )?;
+        let posture = load_mac_signer_creation_posture_v2(scope_id)?;
+        let (private_attribute_entries, in_memory_access_sha256) = match &posture {
+            MacSignerCreationPostureV2::LegacyIneligible => (
+                vec![
+                    (kSecAttrIsPermanent, kCFBooleanTrue),
+                    (kSecAttrApplicationTag, tag),
+                    (kSecAttrLabel, label),
+                    (kSecAttrCanSign, kCFBooleanTrue),
+                ],
+                None,
+            ),
+            MacSignerCreationPostureV2::ProspectiveExact(preparation) => {
+                let (access, digest) = prospective_build_exact_access(owned, preparation)?;
+                (
+                    vec![
+                        (kSecAttrIsPermanent, kCFBooleanTrue),
+                        (kSecAttrApplicationTag, tag),
+                        (kSecAttrLabel, label),
+                        (kSecAttrAccess, access.cast()),
+                        (kSecAttrIsSensitive, kCFBooleanTrue),
+                        (kSecAttrIsExtractable, kCFBooleanFalse),
+                        (kSecAttrCanEncrypt, kCFBooleanFalse),
+                        (kSecAttrCanDecrypt, kCFBooleanFalse),
+                        (kSecAttrCanDerive, kCFBooleanFalse),
+                        (kSecAttrCanSign, kCFBooleanTrue),
+                        (kSecAttrCanVerify, kCFBooleanFalse),
+                        (kSecAttrCanWrap, kCFBooleanFalse),
+                        (kSecAttrCanUnwrap, kCFBooleanFalse),
+                    ],
+                    Some(digest),
+                )
+            }
+        };
+        let private_attributes = dictionary(owned, &private_attribute_entries)?;
         let parameters = dictionary(
             owned,
             &[
@@ -18935,6 +27982,12 @@ mod mac_system_keychain_ffi_v1 {
         })?;
         if spki_for_private_key(owned, reopened)? != created_spki {
             bail!("reopened System Keychain software P-256 key changed SPKI identity");
+        }
+        if let Some(in_memory_access_sha256) = in_memory_access_sha256 {
+            let persisted_access_sha256 = prospective_copy_and_validate_access(owned, reopened)?;
+            if persisted_access_sha256 != in_memory_access_sha256 {
+                bail!("persisted signer SecAccess differs from its direct creation posture");
+            }
         }
         Ok(reopened)
     }
@@ -18997,6 +28050,49 @@ mod mac_system_keychain_ffi_v1 {
         }
     }
 
+    pub(super) fn open_prospective_retirement_signer_identity(
+        key_tag: &[u8],
+    ) -> Result<MacProspectiveRetirementSignerIdentityV2> {
+        unsafe {
+            let mut owned = OwnedCf::new();
+            let keychain = open_explicit_system_keychain(&mut owned)?;
+            let (key, attributes) = prospective_private_key_identity_match(
+                &mut owned, keychain, key_tag,
+            )?
+            .ok_or_else(|| anyhow::anyhow!("prospective System Keychain signer is absent"))?;
+            let label_value = CFDictionaryGetValue(attributes, kSecAttrLabel);
+            let application_label_value =
+                CFDictionaryGetValue(attributes, kSecAttrApplicationLabel);
+            let persistent_reference_value =
+                CFDictionaryGetValue(attributes, kSecValuePersistentRef);
+            if label_value.is_null()
+                || application_label_value.is_null()
+                || persistent_reference_value.is_null()
+            {
+                bail!("prospective signer identity lacks a persisted identity field");
+            }
+            let label = copy_cf_string(label_value, "prospective signer label")?;
+            let application_label = copy_cf_data(
+                application_label_value,
+                "prospective signer application label",
+            )?;
+            let persistent_reference = copy_cf_data(
+                persistent_reference_value,
+                "prospective signer persistent reference",
+            )?;
+            let public_spki = spki_for_private_key(&mut owned, key)?;
+            let access_control_sha256 = prospective_copy_and_validate_access(&mut owned, key)?;
+            derive_mac_prospective_retirement_signer_identity_v2(
+                key_tag,
+                &label,
+                &application_label,
+                &persistent_reference,
+                &public_spki,
+                &access_control_sha256,
+            )
+        }
+    }
+
     pub(super) fn p256_key_exists(key_tag: &[u8]) -> Result<bool> {
         unsafe {
             let mut owned = OwnedCf::new();
@@ -19008,10 +28104,10 @@ mod mac_system_keychain_ffi_v1 {
         }
     }
 
-    pub(super) fn ensure_p256_spki_der(key_tag: &[u8]) -> Result<Vec<u8>> {
+    pub(super) fn ensure_p256_spki_der(scope_id: &str, key_tag: &[u8]) -> Result<Vec<u8>> {
         unsafe {
             let mut owned = OwnedCf::new();
-            let key = ensure_private_key(&mut owned, key_tag)?;
+            let key = ensure_private_key(&mut owned, scope_id, key_tag)?;
             spki_for_private_key(&mut owned, key)
         }
     }
@@ -19123,6 +28219,8 @@ mod mac_system_keychain_ffi_v1 {
         static kSecAttrAccount: CfType;
         static kSecAttrLabel: CfType;
         static kSecAttrApplicationTag: CfType;
+        static kSecAttrApplicationLabel: CfType;
+        static kSecAttrAccess: CfType;
         static kSecAttrKeyClass: CfType;
         static kSecAttrKeyClassPrivate: CfType;
         static kSecAttrKeyType: CfType;
@@ -19130,12 +28228,22 @@ mod mac_system_keychain_ffi_v1 {
         static kSecAttrKeySizeInBits: CfType;
         static kSecPrivateKeyAttrs: CfType;
         static kSecAttrIsPermanent: CfType;
+        static kSecAttrIsSensitive: CfType;
+        static kSecAttrIsExtractable: CfType;
+        static kSecAttrCanEncrypt: CfType;
+        static kSecAttrCanDecrypt: CfType;
+        static kSecAttrCanDerive: CfType;
         static kSecAttrCanSign: CfType;
+        static kSecAttrCanVerify: CfType;
+        static kSecAttrCanWrap: CfType;
+        static kSecAttrCanUnwrap: CfType;
         static kSecValueData: CfType;
         static kSecValueRef: CfType;
+        static kSecValuePersistentRef: CfType;
         static kSecReturnData: CfType;
         static kSecReturnAttributes: CfType;
         static kSecReturnRef: CfType;
+        static kSecReturnPersistentRef: CfType;
         static kSecMatchSearchList: CfType;
         static kSecMatchItemList: CfType;
         static kSecMatchLimit: CfType;
@@ -19145,17 +28253,70 @@ mod mac_system_keychain_ffi_v1 {
         static kSecUseAuthenticationUIFail: CfType;
         static kSecKeyAlgorithmECDSASignatureMessageX962SHA256: CfType;
         static kSecGuestAttributePid: CfType;
+        static kSecACLAuthorizationAny: CfType;
+        static kSecACLAuthorizationSign: CfType;
+        static kSecACLAuthorizationDelete: CfType;
+        static kSecACLAuthorizationExportWrapped: CfType;
+        static kSecACLAuthorizationExportClear: CfType;
+        static kSecACLAuthorizationImportWrapped: CfType;
+        static kSecACLAuthorizationImportClear: CfType;
+        static kSecACLAuthorizationEncrypt: CfType;
+        static kSecACLAuthorizationDecrypt: CfType;
+        static kSecACLAuthorizationMAC: CfType;
+        static kSecACLAuthorizationDerive: CfType;
+        static kSecACLAuthorizationChangeACL: CfType;
+        static kSecACLAuthorizationChangeOwner: CfType;
         fn SecKeychainOpen(path_name: *const c_char, keychain: *mut SecKeychain) -> OsStatus;
         fn SecKeychainGetPath(
             keychain: SecKeychain,
             path_length: *mut u32,
             path_name: *mut c_char,
         ) -> OsStatus;
+        fn SecAccessCreateWithOwnerAndACL(
+            user_id: libc::uid_t,
+            group_id: libc::gid_t,
+            owner_type: u32,
+            acls: CfType,
+            error: *mut CfType,
+        ) -> SecAccess;
+        fn SecAccessCopyOwnerAndACL(
+            access: SecAccess,
+            user_id: *mut libc::uid_t,
+            group_id: *mut libc::gid_t,
+            owner_type: *mut u32,
+            acl_list: *mut CfType,
+        ) -> OsStatus;
+        fn SecACLGetTypeID() -> usize;
+        fn SecACLCreateWithSimpleContents(
+            access: SecAccess,
+            application_list: CfType,
+            description: CfType,
+            prompt_selector: u16,
+            acl: *mut SecAcl,
+        ) -> OsStatus;
+        fn SecACLUpdateAuthorizations(acl: SecAcl, authorizations: CfType) -> OsStatus;
+        fn SecACLCopyAuthorizations(acl: SecAcl) -> CfType;
+        fn SecACLCopyContents(
+            acl: SecAcl,
+            application_list: *mut CfType,
+            description: *mut CfType,
+            prompt_selector: *mut u16,
+        ) -> OsStatus;
+        fn SecTrustedApplicationGetTypeID() -> usize;
+        fn SecTrustedApplicationCreateFromPath(
+            path: *const c_char,
+            application: *mut SecTrustedApplication,
+        ) -> OsStatus;
+        fn SecTrustedApplicationCopyData(
+            application: SecTrustedApplication,
+            data: *mut CfType,
+        ) -> OsStatus;
         fn SecItemCopyMatching(query: CfType, result: *mut CfType) -> OsStatus;
         fn SecItemAdd(attributes: CfType, result: *mut CfType) -> OsStatus;
         fn SecItemUpdate(query: CfType, attributes: CfType) -> OsStatus;
         fn SecItemDelete(query: CfType) -> OsStatus;
         fn SecKeyCreateRandomKey(parameters: CfType, error: *mut CfType) -> SecKey;
+        fn SecKeychainItemCopyAccess(item: CfType, access: *mut SecAccess) -> OsStatus;
         fn SecRequirementCreateWithString(
             text: CfType,
             flags: u32,
@@ -19189,10 +28350,20 @@ mod mac_system_keychain_ffi_v1 {
     unsafe extern "C" {
         static kCFAllocatorDefault: CfType;
         static kCFBooleanTrue: CfType;
+        static kCFBooleanFalse: CfType;
         fn CFRelease(value: CfType);
         fn CFGetTypeID(value: CfType) -> usize;
         fn CFEqual(left: CfType, right: CfType) -> u8;
         fn CFErrorGetCode(error: CfType) -> isize;
+        fn CFStringGetTypeID() -> usize;
+        fn CFStringGetLength(value: CfType) -> isize;
+        fn CFStringGetMaximumSizeForEncoding(length: isize, encoding: u32) -> isize;
+        fn CFStringGetCString(
+            value: CfType,
+            buffer: *mut c_char,
+            buffer_size: isize,
+            encoding: u32,
+        ) -> u8;
         fn CFStringCreateWithBytes(
             allocator: CfType,
             bytes: *const u8,
@@ -19436,6 +28607,11 @@ mod mac_xpc_listener_ffi_v1 {
                 protected_state: PathBuf::from(MAC_STATE_ROOT_V1).join("current-anchor.v1.json"),
                 pairing_root: PathBuf::from(MAC_STATE_ROOT_V1).join("guest-pairings"),
             };
+            if operation == "prospective-retirement-v2" {
+                let request =
+                    parse_canonical_mac_prospective_retirement_control_request_v2(request)?;
+                return execute_mac_prospective_retirement_control_v2(&executor, &request);
+            }
             let control: ManagedLifecycleControlRequestV1 =
                 serde_json::from_slice(request).context("decode XPC mapped Lima action")?;
             let expected_tag = match operation {
@@ -19550,6 +28726,8 @@ unsafe extern "C" {}
 #[cfg(target_os = "macos")]
 #[link(name = "System")]
 unsafe extern "C" {
+    static bootstrap_port: u32;
+    static mach_task_self_: u32;
     static mut _NSConcreteStackBlock: [*mut core::ffi::c_void; 32];
     static _xpc_type_connection: core::ffi::c_void;
     static _xpc_type_dictionary: core::ffi::c_void;
@@ -19558,6 +28736,12 @@ unsafe extern "C" {
     static _xpc_error_peer_code_signing_requirement: core::ffi::c_void;
     fn _Block_copy(block: *const core::ffi::c_void) -> *mut core::ffi::c_void;
     fn _Block_release(block: *const core::ffi::c_void);
+    fn bootstrap_look_up(
+        bootstrap_port: u32,
+        service_name: *const core::ffi::c_char,
+        service: *mut u32,
+    ) -> i32;
+    fn mach_port_deallocate(task: u32, name: u32) -> i32;
     fn xpc_connection_create_mach_service(
         name: *const core::ffi::c_char,
         target_queue: *mut core::ffi::c_void,

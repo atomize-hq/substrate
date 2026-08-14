@@ -1,4 +1,5 @@
 use anyhow::{anyhow, bail, Context, Result};
+use serde::Serialize;
 use serde_json::{json, Value};
 use std::ffi::CString;
 use std::fs::{self, File, OpenOptions};
@@ -10,6 +11,24 @@ use std::os::unix::net::{UnixDatagram, UnixListener, UnixStream};
 use std::path::{Path, PathBuf};
 use std::process::{Command, Stdio};
 use std::time::{Duration, Instant};
+use substrate_common::macos_retirement_v2::{
+    canonical_bytes_v2, derive_guest_effect_plan_v2, derive_guest_handoff_intent_v2,
+    document_sha256_v2, encode_base64url_v2, parse_canonical_v2, sha256_hex_v2,
+    signature_payload_v2, validate_guest_durability_acknowledgement_v2,
+    validate_guest_handoff_capsule_v2, validate_guest_journal_transition_v2,
+    validate_guest_pre_removal_receipt_v2, validate_guest_protected_cas_binding_v2,
+    validate_guest_retirement_authority_v2, validate_guest_retirement_bind_request_v2,
+    validate_guest_retirement_prepare_response_v2, GuestHandoffCapsuleV2, GuestJournalEventKindV2,
+    GuestJournalGenerationV2, GuestPreRemovalReceiptV2, GuestProtectedCasBindingV2,
+    GuestRetirementAuthorityV2, GuestRetirementBindRequestV2, GuestRetirementBindResponseV2,
+    GuestRetirementPrepareResponseV2, GuestRetirementStateV2, GuestRetryStateV2, MacR3SignatureV2,
+    MAC_R3_FINALIZER_PROTOCOL_VERSION_V2, MAC_R3_GUEST_BIND_RESPONSE_OWNER_V2,
+    MAC_R3_GUEST_HANDOFF_CAPSULE_OWNER_V2, MAC_R3_GUEST_JOURNAL_OWNER_V2,
+    MAC_R3_GUEST_PREPARE_RESPONSE_OWNER_V2, MAC_R3_GUEST_PROTECTED_CAS_OWNER_V2,
+    MAC_R3_GUEST_PROTECTED_CAS_SIGNATURE_DOMAIN_V2, MAC_R3_GUEST_RECEIPT_OWNER_V2,
+    MAC_R3_GUEST_RECEIPT_SIGNATURE_DOMAIN_V2, MAC_R3_GUEST_RETRY_STATE_OWNER_V2,
+    MAC_R3_GUEST_RETRY_STATE_SIGNATURE_DOMAIN_V2,
+};
 use substrate_common::{
     canonical_action_receipt_bytes_v1, canonical_guest_publisher_pairing_operator_proof_v1,
     canonical_guest_publisher_pairing_session_binding_v1,
@@ -219,7 +238,7 @@ impl LinuxManagedArtifactExecutorV1 {
 
 fn usage_error_v1() -> Result<()> {
     bail!(
-        "usage: substrate-lifecycle-linux <bootstrap-publisher|run-publisher|submit-request|relay-request|guest-pairing-data-session-v1|guest-pairing-operator-tty-session-v1|retire-test-publisher|service-state>"
+        "usage: substrate-lifecycle-linux <bootstrap-publisher|run-publisher|submit-request|relay-request|guest-pairing-data-session-v1|guest-pairing-operator-tty-session-v1|guest-retirement-prepare-v2|guest-retirement-bind-v2|retire-test-publisher|service-state>"
     )
 }
 
@@ -274,6 +293,43 @@ fn main_impl_v1() -> Result<()> {
             TransportKindV1::SeqPacket,
         );
         run_pm_bound_guest_pairing_operator_tty_session_v1(&executor, launch)?;
+        return Ok(());
+    }
+    if matches!(
+        command.as_str(),
+        "guest-retirement-prepare-v2" | "guest-retirement-bind-v2"
+    ) {
+        let encoded = args.next().ok_or_else(|| {
+            anyhow!("guest retirement entrypoint requires one canonical request argument")
+        })?;
+        if args.next().is_some() {
+            bail!("guest retirement entrypoint accepts exactly one canonical request argument");
+        }
+        let request = encoded
+            .strip_prefix("--request-v2=")
+            .filter(|value| !value.is_empty())
+            .ok_or_else(|| {
+                anyhow!("guest retirement entrypoint requires --request-v2=<base64url>")
+            })?;
+        let request = base64url_decode_v1(request)?;
+        let executor = LinuxManagedArtifactExecutorV1::new(
+            None,
+            None,
+            Some(PathBuf::from("/dev/tty")),
+            TransportKindV1::SeqPacket,
+        );
+        let response = if command == "guest-retirement-prepare-v2" {
+            let authority: GuestRetirementAuthorityV2 = parse_canonical_v2(&request)?;
+            canonical_bytes_v2(&prepare_guest_retirement_v2(&executor, &authority)?)?
+        } else {
+            let request: GuestRetirementBindRequestV2 = parse_canonical_v2(&request)?;
+            canonical_bytes_v2(&bind_guest_retirement_acknowledgement_v2(
+                &executor, &request,
+            )?)?
+        };
+        std::io::stdout()
+            .write_all(&response)
+            .context("write canonical guest retirement response")?;
         return Ok(());
     }
 
@@ -3480,6 +3536,691 @@ fn r6_guest_ticket_consumed_response_v1(anchor: &LifecyclePublisherAnchorV1) -> 
     }))
 }
 
+fn guest_retirement_directory_v2(
+    executor: &LinuxManagedArtifactExecutorV1,
+    challenge_id: &str,
+    scope_id: &str,
+) -> PathBuf {
+    guest_artifact_directory_v1(executor, challenge_id)
+        .join("retirement-v2")
+        .join(scope_id)
+}
+
+fn require_guest_retirement_uuid_v7_component_v2(value: &str, label: &str) -> Result<()> {
+    let bytes = value.as_bytes();
+    if bytes.len() != 36
+        || ![8usize, 13, 18, 23]
+            .into_iter()
+            .all(|index| bytes[index] == b'-')
+        || bytes[14] != b'7'
+        || !matches!(bytes[19], b'8' | b'9' | b'a' | b'b')
+        || bytes.iter().enumerate().any(|(index, byte)| {
+            !(matches!(index, 8 | 13 | 18 | 23)
+                || byte.is_ascii_digit()
+                || matches!(byte, b'a'..=b'f'))
+        })
+    {
+        bail!("{label} is not one canonical lowercase UUIDv7 component");
+    }
+    Ok(())
+}
+
+fn guest_retirement_path_v2(
+    executor: &LinuxManagedArtifactExecutorV1,
+    authority: &GuestRetirementAuthorityV2,
+    leaf: &str,
+) -> Result<PathBuf> {
+    require_guest_retirement_uuid_v7_component_v2(
+        &authority.r6_challenge_id,
+        "guest retirement R6 challenge",
+    )?;
+    require_guest_retirement_uuid_v7_component_v2(&authority.scope_id, "guest retirement scope")?;
+    if leaf.is_empty()
+        || leaf.contains('/')
+        || leaf.contains("..")
+        || leaf.bytes().any(|byte| byte.is_ascii_control())
+    {
+        bail!("guest retirement state leaf is not fixed and canonical");
+    }
+    Ok(
+        guest_retirement_directory_v2(executor, &authority.r6_challenge_id, &authority.scope_id)
+            .join(leaf),
+    )
+}
+
+fn guest_retirement_lock_v2(
+    executor: &LinuxManagedArtifactExecutorV1,
+    authority: &GuestRetirementAuthorityV2,
+) -> Result<PublisherAttemptLockV1> {
+    let directory =
+        guest_retirement_directory_v2(executor, &authority.r6_challenge_id, &authority.scope_id);
+    ensure_directory_mode_v1(&directory, 0o700, false)?;
+    ensure_nofollow_ancestor_chain_v1(&directory)?;
+    let directory_metadata = fs::symlink_metadata(&directory)
+        .with_context(|| format!("inspect guest retirement state {}", directory.display()))?;
+    if !directory_metadata.file_type().is_dir()
+        || directory_metadata.uid() != 0
+        || directory_metadata.gid() != 0
+        || directory_metadata.mode() & 0o777 != 0o700
+    {
+        bail!("guest retirement state root is not exact root:root 0700 state");
+    }
+    let path = directory.join("lock.v2");
+    let file = OpenOptions::new()
+        .read(true)
+        .write(true)
+        .create(true)
+        .mode(0o600)
+        .custom_flags(O_CLOEXEC_V1 | O_NOFOLLOW_V1)
+        .open(&path)
+        .with_context(|| format!("open guest retirement lock {}", path.display()))?;
+    let metadata = file.metadata()?;
+    if !metadata.file_type().is_file()
+        || metadata.nlink() != 1
+        || metadata.uid() != 0
+        || metadata.gid() != 0
+        || metadata.mode() & 0o777 != 0o600
+    {
+        bail!("guest retirement lock is not exact root:root 0600 state");
+    }
+    linux_fsync_parent_v1(&path)?;
+    // SAFETY: the descriptor is owned by the returned guard for the complete state transition.
+    if unsafe { flock(file.as_raw_fd(), LOCK_EX_V1) } != 0 {
+        return Err(std::io::Error::last_os_error()).context("lock guest retirement scope");
+    }
+    Ok(PublisherAttemptLockV1 { _file: file })
+}
+
+fn persist_guest_retirement_exact_v2(path: &Path, bytes: &[u8]) -> Result<()> {
+    match read_nofollow_regular_file_v1(path) {
+        Ok(existing) if existing == bytes => return Ok(()),
+        Ok(_) => bail!("guest retirement immutable artifact rejects alternate bytes"),
+        Err(error) if probe_error_kind_v1(&error) == Some(std::io::ErrorKind::NotFound) => {}
+        Err(error) => return Err(error).with_context(|| format!("read {}", path.display())),
+    }
+    create_nofollow_immutable_file_v1(path, bytes, 0o600)
+        .with_context(|| format!("create guest retirement artifact {}", path.display()))?;
+    let reopened = read_nofollow_regular_file_v1(path)
+        .with_context(|| format!("reopen guest retirement artifact {}", path.display()))?;
+    if reopened != bytes {
+        bail!("guest retirement artifact failed exact durable reopen");
+    }
+    linux_fsync_parent_v1(path)
+}
+
+fn replace_guest_retirement_cas_v2(path: &Path, expected: &[u8], next: &[u8]) -> Result<()> {
+    let current = read_nofollow_regular_file_v1(path)
+        .with_context(|| format!("read guest retirement CAS {}", path.display()))?;
+    if current == next {
+        return Ok(());
+    }
+    if current != expected {
+        bail!("guest retirement protected CAS predecessor changed");
+    }
+    atomic_write_file_v1(path, next, 0o600)?;
+    let reopened = read_nofollow_regular_file_v1(path)?;
+    if reopened != next {
+        bail!("guest retirement protected CAS failed exact reopen");
+    }
+    linux_fsync_parent_v1(path)
+}
+
+fn guest_retirement_journal_path_v2(
+    executor: &LinuxManagedArtifactExecutorV1,
+    authority: &GuestRetirementAuthorityV2,
+    generation: u64,
+) -> Result<PathBuf> {
+    if !(1..=7).contains(&generation) {
+        bail!("guest publisher may persist only pre-handoff journal generations");
+    }
+    guest_retirement_path_v2(
+        executor,
+        authority,
+        &format!("journal-{generation:02}.v2.json"),
+    )
+}
+
+struct GuestRetirementJournalBindingV2<'a> {
+    authority: &'a GuestRetirementAuthorityV2,
+    previous: Option<&'a GuestJournalGenerationV2>,
+    previous_sha256: &'a str,
+    generation: u64,
+    event: GuestJournalEventKindV2,
+    state: GuestRetirementStateV2,
+    observation_sha256: Option<String>,
+    handoff_request_digest: Option<String>,
+}
+
+fn guest_retirement_journal_generation_v2(
+    binding: GuestRetirementJournalBindingV2<'_>,
+) -> Result<GuestJournalGenerationV2> {
+    let record = GuestJournalGenerationV2 {
+        schema_owner: MAC_R3_GUEST_JOURNAL_OWNER_V2.to_string(),
+        schema_version: MAC_R3_FINALIZER_PROTOCOL_VERSION_V2,
+        evidence_id: binding.authority.evidence_id.clone(),
+        scope_id: binding.authority.scope_id.clone(),
+        generation: binding.generation,
+        predecessor_head_sha256: binding.previous_sha256.to_string(),
+        handoff_request_digest: binding.handoff_request_digest,
+        host_acceptance_sha256: None,
+        guest_state: binding.state,
+        event: binding.event,
+        effect_ordinal: None,
+        target_identity_sha256: None,
+        effect_invocation_attempt: None,
+        observation_sha256: binding.observation_sha256,
+    };
+    validate_guest_journal_transition_v2(
+        binding
+            .previous
+            .map(|value| (value, binding.previous_sha256)),
+        &record,
+    )?;
+    Ok(record)
+}
+
+fn persist_guest_retirement_journal_v2(
+    executor: &LinuxManagedArtifactExecutorV1,
+    authority: &GuestRetirementAuthorityV2,
+    record: &GuestJournalGenerationV2,
+) -> Result<(Vec<u8>, String)> {
+    let bytes = canonical_bytes_v2(record)?;
+    persist_guest_retirement_exact_v2(
+        &guest_retirement_journal_path_v2(executor, authority, record.generation)?,
+        &bytes,
+    )?;
+    Ok((bytes.clone(), sha256_hex_v2(&bytes)))
+}
+
+fn load_guest_retirement_journal_v2(
+    executor: &LinuxManagedArtifactExecutorV1,
+    authority: &GuestRetirementAuthorityV2,
+    generation: u64,
+) -> Result<(GuestJournalGenerationV2, Vec<u8>, String)> {
+    let bytes = read_nofollow_regular_file_v1(&guest_retirement_journal_path_v2(
+        executor, authority, generation,
+    )?)?;
+    let record = parse_canonical_v2::<GuestJournalGenerationV2>(&bytes)?;
+    Ok((record, bytes.clone(), sha256_hex_v2(&bytes)))
+}
+
+fn sign_linux_r3_document_v2<T: Serialize>(
+    key_path: &Path,
+    domain: &str,
+    owner: &str,
+    document: &T,
+) -> Result<MacR3SignatureV2> {
+    require_existing_linux_signing_key_v1(key_path)?;
+    let payload = signature_payload_v2(domain, owner, document)?;
+    let payload_path = unique_temp_path_v1("r3-guest-payload");
+    let signature_path = unique_temp_path_v1("r3-guest-signature");
+    fs::write(&payload_path, &payload)?;
+    let output = Command::new("openssl")
+        .args(["pkeyutl", "-sign", "-inkey"])
+        .arg(key_path)
+        .args(["-rawin", "-in"])
+        .arg(&payload_path)
+        .args(["-out"])
+        .arg(&signature_path)
+        .output()
+        .with_context(|| format!("sign guest R3 document with {}", key_path.display()))?;
+    if !output.status.success() {
+        let _ = fs::remove_file(&payload_path);
+        let _ = fs::remove_file(&signature_path);
+        bail!(
+            "openssl guest R3 signing failed: {}",
+            String::from_utf8_lossy(&output.stderr)
+        );
+    }
+    let signature_bytes = fs::read(&signature_path)?;
+    let signature = MacR3SignatureV2 {
+        algorithm: "ed25519-v1".to_string(),
+        public_key: derive_public_key_v1(key_path)?,
+        signature: base64url_encode_v1(&signature_bytes),
+    };
+    let _ = fs::remove_file(&payload_path);
+    let _ = fs::remove_file(&signature_path);
+    Ok(signature)
+}
+
+fn guest_retirement_join_r6_v2(
+    executor: &LinuxManagedArtifactExecutorV1,
+    authority: &GuestRetirementAuthorityV2,
+) -> Result<PathBuf> {
+    require_guest_retirement_uuid_v7_component_v2(
+        &authority.r6_challenge_id,
+        "guest retirement R6 challenge",
+    )?;
+    require_guest_retirement_uuid_v7_component_v2(&authority.scope_id, "guest retirement scope")?;
+    let intent = resume_guest_publisher_pairing_v1(executor, &authority.r6_challenge_id)?;
+    let guest_key_path = ensure_guest_signing_key_matches_durable_intent_v1(
+        executor,
+        &authority.r6_challenge_id,
+        &intent,
+    )?;
+    let transcript = intent
+        .transcript
+        .as_ref()
+        .ok_or_else(|| anyhow!("guest retirement lacks durable R6 transcript"))?;
+    let state = open_linux_publisher_protected_state_v1(executor)?;
+    if state.current_anchor.scope_id != authority.scope_id
+        || state.current_anchor.authority_domain != "mac_lima_guest"
+        || state.current_anchor.signature.public_key != authority.guest_signer_public_key
+        || state.prepared_record.is_some()
+    {
+        bail!("guest retirement authority does not join quiescent-capable guest publisher state");
+    }
+    validate_guest_retirement_authority_v2(
+        authority,
+        &intent.public_key,
+        &transcript.signature.public_key,
+    )?;
+    let marker = load_r6_consumption_marker_v1(&guest_consumption_marker_path_v1(
+        executor,
+        &authority.r6_challenge_id,
+    ))?
+    .ok_or_else(|| anyhow!("guest retirement lacks the immutable R6 consumed marker"))?;
+    let mut consumed_wire = canonical_json_value_to_vec_v1(&json!({
+        "guest_anchor_sha256": marker.anchor_sha256,
+        "kind": "ticket_consumed",
+    }))?;
+    consumed_wire.push(b'\n');
+    if sha256_hex_bytes_v1(&consumed_wire)?
+        != authority.guest_consumption_marker_acknowledgement_sha256
+    {
+        bail!("guest retirement authority does not join the R6 consumption response");
+    }
+    Ok(guest_key_path)
+}
+
+fn observe_and_quiesce_guest_dispatch_v2() -> Result<String> {
+    let before_service =
+        observe_service_state_v1(DEFAULT_WORLD_SERVICE_UNIT, DEFAULT_WORLD_ENDPOINT_PATH)?;
+    let before_socket =
+        observe_service_state_v1(DEFAULT_WORLD_SOCKET_UNIT, DEFAULT_WORLD_ENDPOINT_PATH)?;
+    if before_service.active != "inactive"
+        || before_socket.active != "inactive"
+        || endpoint_kind_v1(&before_socket.endpoint) != Some("missing")
+    {
+        run_systemctl_args_v1(&[
+            "stop",
+            DEFAULT_WORLD_SOCKET_UNIT,
+            DEFAULT_WORLD_SERVICE_UNIT,
+        ])?;
+    }
+    let after_service =
+        observe_service_state_v1(DEFAULT_WORLD_SERVICE_UNIT, DEFAULT_WORLD_ENDPOINT_PATH)?;
+    let after_socket =
+        observe_service_state_v1(DEFAULT_WORLD_SOCKET_UNIT, DEFAULT_WORLD_ENDPOINT_PATH)?;
+    if after_service.active != "inactive"
+        || after_socket.active != "inactive"
+        || endpoint_kind_v1(&after_socket.endpoint) != Some("missing")
+    {
+        bail!("guest dispatch quiescence did not reach the exact reversible final state");
+    }
+    document_sha256_v2(&json!({
+        "service": {"active": after_service.active, "enabled": after_service.enabled},
+        "socket": {"active": after_socket.active, "enabled": after_socket.enabled},
+        "world_endpoint": after_socket.endpoint,
+    }))
+}
+
+fn prepare_guest_retirement_v2(
+    executor: &LinuxManagedArtifactExecutorV1,
+    authority: &GuestRetirementAuthorityV2,
+) -> Result<GuestRetirementPrepareResponseV2> {
+    prepare_guest_retirement_with_quiesce_v2(
+        executor,
+        authority,
+        observe_and_quiesce_guest_dispatch_v2,
+    )
+}
+
+fn prepare_guest_retirement_with_quiesce_v2<F>(
+    executor: &LinuxManagedArtifactExecutorV1,
+    authority: &GuestRetirementAuthorityV2,
+    quiesce: F,
+) -> Result<GuestRetirementPrepareResponseV2>
+where
+    F: FnOnce() -> Result<String>,
+{
+    let guest_key_path = guest_retirement_join_r6_v2(executor, authority)?;
+    let _lock = guest_retirement_lock_v2(executor, authority)?;
+    let authority_bytes = canonical_bytes_v2(authority)?;
+    let authority_sha256 = sha256_hex_v2(&authority_bytes);
+    let authority_path = guest_retirement_path_v2(executor, authority, "authority.v2.json")?;
+    persist_guest_retirement_exact_v2(&authority_path, &authority_bytes)?;
+    let cas_path = guest_retirement_path_v2(executor, authority, "protected-cas.v2.json")?;
+    persist_guest_retirement_exact_v2(&cas_path, &authority_bytes)?;
+    let receipt_path = guest_retirement_path_v2(executor, authority, "receipt.v2.json")?;
+    let response_path = guest_retirement_path_v2(executor, authority, "prepare-response.v2.json")?;
+    if let (Ok(receipt_bytes), Ok(response_bytes)) = (
+        read_nofollow_regular_file_v1(&receipt_path),
+        read_nofollow_regular_file_v1(&response_path),
+    ) {
+        let receipt: GuestPreRemovalReceiptV2 = parse_canonical_v2(&receipt_bytes)?;
+        let response: GuestRetirementPrepareResponseV2 = parse_canonical_v2(&response_bytes)?;
+        if validate_guest_retirement_prepare_response_v2(&response, authority)? != receipt {
+            bail!("guest retirement prepare replay changed its immutable receipt");
+        }
+        return Ok(response);
+    }
+    let now = unix_now_ns_v1()?;
+    if now < authority.issued_at_unix_ns || now > authority.expires_at_unix_ns {
+        bail!("guest retirement authority window is not active at first preparation");
+    }
+    let generation1 = guest_retirement_journal_generation_v2(GuestRetirementJournalBindingV2 {
+        authority,
+        previous: None,
+        previous_sha256: &authority_sha256,
+        generation: 1,
+        event: GuestJournalEventKindV2::Prepared,
+        state: GuestRetirementStateV2::Prepared,
+        observation_sha256: Some(authority.baseline_sha256.clone()),
+        handoff_request_digest: None,
+    })?;
+    let (generation1_bytes, generation1_sha256) =
+        persist_guest_retirement_journal_v2(executor, authority, &generation1)?;
+    let generation2 = guest_retirement_journal_generation_v2(GuestRetirementJournalBindingV2 {
+        authority,
+        previous: Some(&generation1),
+        previous_sha256: &generation1_sha256,
+        generation: 2,
+        event: GuestJournalEventKindV2::QuiescePrepared,
+        state: GuestRetirementStateV2::QuiescePrepared,
+        observation_sha256: Some(authority.quiesce_plan_sha256.clone()),
+        handoff_request_digest: None,
+    })?;
+    let (generation2_bytes, generation2_sha256) =
+        persist_guest_retirement_journal_v2(executor, authority, &generation2)?;
+    let quiesced_observation_sha256 = quiesce()?;
+    let generation3 = guest_retirement_journal_generation_v2(GuestRetirementJournalBindingV2 {
+        authority,
+        previous: Some(&generation2),
+        previous_sha256: &generation2_sha256,
+        generation: 3,
+        event: GuestJournalEventKindV2::Quiesced,
+        state: GuestRetirementStateV2::Quiesced,
+        observation_sha256: Some(quiesced_observation_sha256.clone()),
+        handoff_request_digest: None,
+    })?;
+    let (generation3_bytes, generation3_sha256) =
+        persist_guest_retirement_journal_v2(executor, authority, &generation3)?;
+    let plan = derive_guest_effect_plan_v2(&authority.target_ledger)?;
+    let mut receipt = GuestPreRemovalReceiptV2 {
+        schema_owner: MAC_R3_GUEST_RECEIPT_OWNER_V2.to_string(),
+        schema_version: MAC_R3_FINALIZER_PROTOCOL_VERSION_V2,
+        signature_domain: MAC_R3_GUEST_RECEIPT_SIGNATURE_DOMAIN_V2.to_string(),
+        evidence_id: authority.evidence_id.clone(),
+        scope_id: authority.scope_id.clone(),
+        issued_at_unix_ns: authority.issued_at_unix_ns,
+        expires_at_unix_ns: authority.expires_at_unix_ns,
+        guest_state: GuestRetirementStateV2::PreRemovalReceiptSigned,
+        baseline_sha256: authority.baseline_sha256.clone(),
+        before_observation_sha256: authority.before_observation_sha256.clone(),
+        quiesced_observation_sha256,
+        component_inventory_sha256: authority.component_inventory_sha256.clone(),
+        target_ledger: authority.target_ledger.clone(),
+        target_ledger_sha256: document_sha256_v2(&authority.target_ledger)?,
+        effect_plan_sha256: document_sha256_v2(&plan)?,
+        protected_cas_generation: 1,
+        protected_cas_head_sha256: authority_sha256.clone(),
+        pre_removal_journal_head_sha256: generation3_sha256,
+        r6_predecessor_consumed_sha256: authority.r6_predecessor_consumed_sha256.clone(),
+        r6_terminal_host_record_sha256: authority.r6_terminal_host_record_sha256.clone(),
+        guest_anchor_acknowledgement_sha256: authority.guest_anchor_acknowledgement_sha256.clone(),
+        guest_consumption_marker_acknowledgement_sha256: authority
+            .guest_consumption_marker_acknowledgement_sha256
+            .clone(),
+        retry_state_sha256: authority_sha256,
+        guest_signer_public_key: authority.guest_signer_public_key.clone(),
+        harness_public_key: authority.harness_public_key.clone(),
+        signature: MacR3SignatureV2::unsigned_ed25519(authority.guest_signer_public_key.clone()),
+    };
+    receipt.signature = sign_linux_r3_document_v2(
+        &guest_key_path,
+        &receipt.signature_domain,
+        &receipt.schema_owner,
+        &receipt,
+    )?;
+    validate_guest_pre_removal_receipt_v2(&receipt)?;
+    let receipt_bytes = canonical_bytes_v2(&receipt)?;
+    persist_guest_retirement_exact_v2(&receipt_path, &receipt_bytes)?;
+    let receipt_sha256 = sha256_hex_v2(&receipt_bytes);
+    let generation4 = guest_retirement_journal_generation_v2(GuestRetirementJournalBindingV2 {
+        authority,
+        previous: Some(&generation3),
+        previous_sha256: &receipt.pre_removal_journal_head_sha256,
+        generation: 4,
+        event: GuestJournalEventKindV2::PreRemovalReceiptSigned,
+        state: GuestRetirementStateV2::PreRemovalReceiptSigned,
+        observation_sha256: Some(receipt_sha256),
+        handoff_request_digest: None,
+    })?;
+    let (generation4_bytes, _) =
+        persist_guest_retirement_journal_v2(executor, authority, &generation4)?;
+    let response = GuestRetirementPrepareResponseV2 {
+        schema_owner: MAC_R3_GUEST_PREPARE_RESPONSE_OWNER_V2.to_string(),
+        schema_version: MAC_R3_FINALIZER_PROTOCOL_VERSION_V2,
+        evidence_id: authority.evidence_id.clone(),
+        scope_id: authority.scope_id.clone(),
+        guest_receipt: encode_base64url_v2(&receipt_bytes),
+        guest_journal: [
+            generation1_bytes,
+            generation2_bytes,
+            generation3_bytes,
+            generation4_bytes,
+        ]
+        .iter()
+        .map(|bytes| encode_base64url_v2(bytes))
+        .collect(),
+    };
+    validate_guest_retirement_prepare_response_v2(&response, authority)?;
+    persist_guest_retirement_exact_v2(&response_path, &canonical_bytes_v2(&response)?)?;
+    Ok(response)
+}
+
+fn bind_guest_retirement_acknowledgement_v2(
+    executor: &LinuxManagedArtifactExecutorV1,
+    request: &GuestRetirementBindRequestV2,
+) -> Result<GuestRetirementBindResponseV2> {
+    require_guest_retirement_uuid_v7_component_v2(
+        &request.r6_challenge_id,
+        "guest retirement bind R6 challenge",
+    )?;
+    require_guest_retirement_uuid_v7_component_v2(
+        &request.scope_id,
+        "guest retirement bind scope",
+    )?;
+    let authority_path =
+        guest_retirement_directory_v2(executor, &request.r6_challenge_id, &request.scope_id)
+            .join("authority.v2.json");
+    let authority: GuestRetirementAuthorityV2 =
+        parse_canonical_v2(&read_nofollow_regular_file_v1(&authority_path)?)?;
+    let guest_key_path = guest_retirement_join_r6_v2(executor, &authority)?;
+    let _lock = guest_retirement_lock_v2(executor, &authority)?;
+    if request.evidence_id != authority.evidence_id || request.scope_id != authority.scope_id {
+        bail!("guest retirement bind request does not exact-join persisted authority");
+    }
+    let acknowledgement = validate_guest_retirement_bind_request_v2(request, &authority)?;
+    let prepare_bytes = read_nofollow_regular_file_v1(&guest_retirement_path_v2(
+        executor,
+        &authority,
+        "prepare-response.v2.json",
+    )?)?;
+    let prepare: GuestRetirementPrepareResponseV2 = parse_canonical_v2(&prepare_bytes)?;
+    let receipt = validate_guest_retirement_prepare_response_v2(&prepare, &authority)?;
+    validate_guest_durability_acknowledgement_v2(&acknowledgement, &receipt)?;
+    let handoff_path = guest_retirement_path_v2(executor, &authority, "handoff.v2.json")?;
+    let response_path = guest_retirement_path_v2(executor, &authority, "bind-response.v2.json")?;
+    if let (Ok(handoff_bytes), Ok(response_bytes)) = (
+        read_nofollow_regular_file_v1(&handoff_path),
+        read_nofollow_regular_file_v1(&response_path),
+    ) {
+        let handoff: GuestHandoffCapsuleV2 = parse_canonical_v2(&handoff_bytes)?;
+        validate_guest_handoff_capsule_v2(
+            &handoff,
+            &authority.guest_signer_public_key,
+            &authority.harness_public_key,
+        )?;
+        let response: GuestRetirementBindResponseV2 = parse_canonical_v2(&response_bytes)?;
+        if response.guest_handoff_capsule != encode_base64url_v2(&handoff_bytes) {
+            bail!("guest retirement bind replay changed its immutable handoff");
+        }
+        return Ok(response);
+    }
+    let receipt_bytes = canonical_bytes_v2(&receipt)?;
+    let acknowledgement_bytes = canonical_bytes_v2(&acknowledgement)?;
+    let receipt_sha256 = sha256_hex_v2(&receipt_bytes);
+    let acknowledgement_sha256 = sha256_hex_v2(&acknowledgement_bytes);
+    let (generation4, generation4_bytes, generation4_sha256) = {
+        let (record, bytes, digest) = load_guest_retirement_journal_v2(executor, &authority, 4)?;
+        (record, bytes, digest)
+    };
+    let generation5 = guest_retirement_journal_generation_v2(GuestRetirementJournalBindingV2 {
+        authority: &authority,
+        previous: Some(&generation4),
+        previous_sha256: &generation4_sha256,
+        generation: 5,
+        event: GuestJournalEventKindV2::ReceiptExternallyDurable,
+        state: GuestRetirementStateV2::ReceiptExternallyDurable,
+        observation_sha256: Some(acknowledgement.durable_observation_sha256.clone()),
+        handoff_request_digest: None,
+    })?;
+    let (generation5_bytes, generation5_sha256) =
+        persist_guest_retirement_journal_v2(executor, &authority, &generation5)?;
+    let generation6 = guest_retirement_journal_generation_v2(GuestRetirementJournalBindingV2 {
+        authority: &authority,
+        previous: Some(&generation5),
+        previous_sha256: &generation5_sha256,
+        generation: 6,
+        event: GuestJournalEventKindV2::AcknowledgementExternallyDurable,
+        state: GuestRetirementStateV2::AcknowledgementExternallyDurable,
+        observation_sha256: Some(acknowledgement_sha256.clone()),
+        handoff_request_digest: None,
+    })?;
+    let (generation6_bytes, generation6_sha256) =
+        persist_guest_retirement_journal_v2(executor, &authority, &generation6)?;
+    let mut retry = GuestRetryStateV2 {
+        schema_owner: MAC_R3_GUEST_RETRY_STATE_OWNER_V2.to_string(),
+        schema_version: MAC_R3_FINALIZER_PROTOCOL_VERSION_V2,
+        signature_domain: MAC_R3_GUEST_RETRY_STATE_SIGNATURE_DOMAIN_V2.to_string(),
+        evidence_id: authority.evidence_id.clone(),
+        scope_id: authority.scope_id.clone(),
+        guest_state: GuestRetirementStateV2::AcknowledgementCasBound,
+        expected_protected_cas_generation: receipt.protected_cas_generation + 1,
+        protected_cas_predecessor_head_sha256: receipt.protected_cas_head_sha256.clone(),
+        receipt_sha256: receipt_sha256.clone(),
+        acknowledgement_sha256: acknowledgement_sha256.clone(),
+        target_ledger_sha256: receipt.target_ledger_sha256.clone(),
+        effect_plan_sha256: receipt.effect_plan_sha256.clone(),
+        next_effect_ordinal: 1,
+        predecessor_journal_head_sha256: generation6_sha256.clone(),
+        next_journal_generation: 7,
+        signature: MacR3SignatureV2::unsigned_ed25519(authority.guest_signer_public_key.clone()),
+    };
+    retry.signature = sign_linux_r3_document_v2(
+        &guest_key_path,
+        &retry.signature_domain,
+        &retry.schema_owner,
+        &retry,
+    )?;
+    let intent = derive_guest_handoff_intent_v2(&receipt, &acknowledgement, &retry)?;
+    let request_digest = document_sha256_v2(&intent)?;
+    let mut binding = GuestProtectedCasBindingV2 {
+        schema_owner: MAC_R3_GUEST_PROTECTED_CAS_OWNER_V2.to_string(),
+        schema_version: MAC_R3_FINALIZER_PROTOCOL_VERSION_V2,
+        signature_domain: MAC_R3_GUEST_PROTECTED_CAS_SIGNATURE_DOMAIN_V2.to_string(),
+        evidence_id: authority.evidence_id.clone(),
+        scope_id: authority.scope_id.clone(),
+        generation: retry.expected_protected_cas_generation,
+        predecessor_head_sha256: receipt.protected_cas_head_sha256.clone(),
+        receipt_sha256,
+        acknowledgement_sha256,
+        retry_state_sha256: document_sha256_v2(&retry)?,
+        handoff_request_digest: request_digest.clone(),
+        target_ledger_sha256: receipt.target_ledger_sha256.clone(),
+        effect_plan_sha256: receipt.effect_plan_sha256.clone(),
+        predecessor_journal_head_sha256: generation6_sha256,
+        journal_generation: 7,
+        signature: MacR3SignatureV2::unsigned_ed25519(authority.guest_signer_public_key.clone()),
+    };
+    binding.signature = sign_linux_r3_document_v2(
+        &guest_key_path,
+        &binding.signature_domain,
+        &binding.schema_owner,
+        &binding,
+    )?;
+    validate_guest_protected_cas_binding_v2(&binding, &receipt, &acknowledgement, &retry)?;
+    let retry_bytes = canonical_bytes_v2(&retry)?;
+    let binding_bytes = canonical_bytes_v2(&binding)?;
+    persist_guest_retirement_exact_v2(
+        &guest_retirement_path_v2(executor, &authority, "retry.v2.json")?,
+        &retry_bytes,
+    )?;
+    let authority_bytes = canonical_bytes_v2(&authority)?;
+    replace_guest_retirement_cas_v2(
+        &guest_retirement_path_v2(executor, &authority, "protected-cas.v2.json")?,
+        &authority_bytes,
+        &binding_bytes,
+    )?;
+    let generation7 = guest_retirement_journal_generation_v2(GuestRetirementJournalBindingV2 {
+        authority: &authority,
+        previous: Some(&generation6),
+        previous_sha256: &binding.predecessor_journal_head_sha256,
+        generation: 7,
+        event: GuestJournalEventKindV2::AcknowledgementCasBound,
+        state: GuestRetirementStateV2::AcknowledgementCasBound,
+        observation_sha256: Some(sha256_hex_v2(&binding_bytes)),
+        handoff_request_digest: Some(request_digest.clone()),
+    })?;
+    let (generation7_bytes, generation7_sha256) =
+        persist_guest_retirement_journal_v2(executor, &authority, &generation7)?;
+    let mut journal = prepare.guest_journal.clone();
+    let expected_generation4 = encode_base64url_v2(&generation4_bytes);
+    if journal.get(3) != Some(&expected_generation4) {
+        bail!("guest bind lost the exact prepared journal prefix");
+    }
+    journal.extend([
+        encode_base64url_v2(&generation5_bytes),
+        encode_base64url_v2(&generation6_bytes),
+        encode_base64url_v2(&generation7_bytes),
+    ]);
+    let handoff = GuestHandoffCapsuleV2 {
+        schema_owner: MAC_R3_GUEST_HANDOFF_CAPSULE_OWNER_V2.to_string(),
+        schema_version: MAC_R3_FINALIZER_PROTOCOL_VERSION_V2,
+        evidence_id: authority.evidence_id.clone(),
+        scope_id: authority.scope_id.clone(),
+        handoff_request_digest: request_digest,
+        guest_receipt: encode_base64url_v2(&receipt_bytes),
+        guest_receipt_sha256: sha256_hex_v2(&receipt_bytes),
+        guest_acknowledgement: encode_base64url_v2(&acknowledgement_bytes),
+        guest_acknowledgement_sha256: sha256_hex_v2(&acknowledgement_bytes),
+        guest_retry_state: encode_base64url_v2(&retry_bytes),
+        guest_retry_state_sha256: sha256_hex_v2(&retry_bytes),
+        guest_protected_cas_binding: encode_base64url_v2(&binding_bytes),
+        guest_protected_cas_binding_sha256: sha256_hex_v2(&binding_bytes),
+        guest_journal: journal,
+        guest_journal_head_sha256: generation7_sha256,
+    };
+    validate_guest_handoff_capsule_v2(
+        &handoff,
+        &authority.guest_signer_public_key,
+        &authority.harness_public_key,
+    )?;
+    let handoff_bytes = canonical_bytes_v2(&handoff)?;
+    persist_guest_retirement_exact_v2(&handoff_path, &handoff_bytes)?;
+    let response = GuestRetirementBindResponseV2 {
+        schema_owner: MAC_R3_GUEST_BIND_RESPONSE_OWNER_V2.to_string(),
+        schema_version: MAC_R3_FINALIZER_PROTOCOL_VERSION_V2,
+        evidence_id: authority.evidence_id.clone(),
+        scope_id: authority.scope_id.clone(),
+        guest_handoff_capsule: encode_base64url_v2(&handoff_bytes),
+    };
+    persist_guest_retirement_exact_v2(&response_path, &canonical_bytes_v2(&response)?)?;
+    Ok(response)
+}
+
 fn retire_linux_test_publisher_v1(executor: &LinuxManagedArtifactExecutorV1) -> Result<()> {
     let files = [
         executor.protected_state_path.as_path(),
@@ -5409,5 +6150,124 @@ mod tests {
             require_r6_operator_proof_launch_digest_v1(&mutated_digest, &launch).is_err(),
             "a mutated launch digest cannot produce host-admissible proof evidence"
         );
+    }
+
+    #[test]
+    fn guest_retirement_components_are_exact_uuidv7_and_not_paths() {
+        for valid in [
+            "018f3e4a-7b2c-7c91-8a6f-2e1d5c4b3a90",
+            "ffffffff-ffff-7fff-bfff-ffffffffffff",
+        ] {
+            require_guest_retirement_uuid_v7_component_v2(valid, "test component").unwrap();
+        }
+        for invalid in [
+            "../../preserved",
+            "/tmp/absolute",
+            "018f3e4a-7b2c-6c91-8a6f-2e1d5c4b3a90",
+            "018f3e4a-7b2c-7c91-7a6f-2e1d5c4b3a90",
+            "018F3E4A-7B2C-7C91-8A6F-2E1D5C4B3A90",
+            "018f3e4a-7b2c-7c91-8a6f-2e1d5c4b3a90/child",
+        ] {
+            assert!(
+                require_guest_retirement_uuid_v7_component_v2(invalid, "test component").is_err(),
+                "non-component {invalid:?} was accepted"
+            );
+        }
+    }
+
+    #[test]
+    fn guest_retirement_source_persists_every_pre_handoff_boundary_in_order() {
+        let source = include_str!("substrate-lifecycle-linux.rs");
+        let slice = |start: &str, end: &str| {
+            let from = source.find(start).expect("guest source start");
+            let tail = &source[from..];
+            let to = tail.find(end).expect("guest source end");
+            &tail[..to]
+        };
+        let prepare = slice(
+            "fn prepare_guest_retirement_with_quiesce_v2",
+            "fn bind_guest_retirement_acknowledgement_v2",
+        );
+        let prepared = prepare.find("GuestJournalEventKindV2::Prepared").unwrap();
+        let quiesce_prepared = prepare
+            .find("GuestJournalEventKindV2::QuiescePrepared")
+            .unwrap();
+        let possible_effect = prepare
+            .find("let quiesced_observation_sha256 = quiesce()?")
+            .unwrap();
+        let quiesced = prepare.find("GuestJournalEventKindV2::Quiesced").unwrap();
+        let receipt = prepare
+            .find("GuestJournalEventKindV2::PreRemovalReceiptSigned")
+            .unwrap();
+        assert!(
+            prepared < quiesce_prepared
+                && quiesce_prepared < possible_effect
+                && possible_effect < quiesced
+                && quiesced < receipt
+        );
+
+        let bind = slice(
+            "fn bind_guest_retirement_acknowledgement_v2",
+            "fn retire_linux_test_publisher_v1",
+        );
+        let receipt_durable = bind
+            .find("GuestJournalEventKindV2::ReceiptExternallyDurable")
+            .unwrap();
+        let acknowledgement_durable = bind
+            .find("GuestJournalEventKindV2::AcknowledgementExternallyDurable")
+            .unwrap();
+        let retry = bind.find("\"retry.v2.json\"").unwrap();
+        let protected_cas = bind.find("replace_guest_retirement_cas_v2").unwrap();
+        let cas_bound = bind
+            .find("GuestJournalEventKindV2::AcknowledgementCasBound")
+            .unwrap();
+        let handoff = bind
+            .find("persist_guest_retirement_exact_v2(&handoff_path")
+            .unwrap();
+        assert!(
+            receipt_durable < acknowledgement_durable
+                && acknowledgement_durable < retry
+                && retry < protected_cas
+                && protected_cas < cas_bound
+                && cas_bound < handoff
+        );
+        assert!(!bind.contains("Command::new"));
+        assert!(!bind.contains("caller-selected"));
+
+        let quiesce = slice(
+            "fn observe_and_quiesce_guest_dispatch_v2",
+            "fn prepare_guest_retirement_v2",
+        );
+        assert!(quiesce.contains("DEFAULT_WORLD_SOCKET_UNIT"));
+        assert!(quiesce.contains("DEFAULT_WORLD_SERVICE_UNIT"));
+        assert!(!quiesce.contains("DEFAULT_LIFECYCLE_SERVICE_UNIT"));
+        assert!(!quiesce.contains("DEFAULT_LIFECYCLE_SOCKET_UNIT"));
+    }
+
+    #[test]
+    fn guest_retirement_entrypoint_has_one_frame_and_no_operation_target_surface() {
+        let source = include_str!("substrate-lifecycle-linux.rs");
+        let start = source
+            .find(
+                "if matches!(\n        command.as_str(),\n        \"guest-retirement-prepare-v2\"",
+            )
+            .expect("guest entrypoint branch");
+        let tail = &source[start..];
+        let end = tail
+            .find("let mut state_root: Option<PathBuf>")
+            .expect("guest entrypoint branch end");
+        let branch = &tail[..end];
+        assert!(branch.contains("args.next().is_some()"));
+        assert!(branch.contains("--request-v2="));
+        assert!(branch.contains("parse_canonical_v2"));
+        for forbidden in [
+            "--path",
+            "--command",
+            "--action",
+            "--instance",
+            "--predicate",
+        ] {
+            assert!(!branch.contains(forbidden));
+        }
     }
 }

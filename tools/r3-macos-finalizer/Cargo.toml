@@ -1,0 +1,68 @@
+[package]
+name = "substrate-r3-macos-finalizer"
+version = "0.1.0"
+edition = "2021"
+rust-version = "1.89"
+publish = false
+build = "build.rs"
+
+[lib]
+name = "substrate_r3_macos_finalizer"
+path = "src/lib.rs"
+
+[[bin]]
+name = "substrate-r3-macos-evidence-finalizer"
+path = "src/bin/finalizer.rs"
+
+[[bin]]
+name = "substrate-r3-macos-evidence-coordinator"
+path = "src/bin/coordinator.rs"
+
+[[bin]]
+name = "substrate-r3-macos-disposable-harness"
+path = "src/bin/experiment_harness.rs"
+required-features = ["experiment-harness"]
+
+[[bin]]
+name = "substrate-r3-macos-peer-code-probe"
+path = "src/bin/experiment_peer_probe.rs"
+
+[[bin]]
+name = "substrate-r3-macos-candidate-freeze-manifest-builder"
+path = "src/bin/candidate_freeze_manifest_builder.rs"
+required-features = ["candidate-freeze-builder"]
+
+[[bin]]
+name = "substrate-r3-macos-candidate-freeze-provenance-builder"
+path = "src/bin/candidate_freeze_provenance_builder.rs"
+required-features = ["candidate-freeze-builder"]
+
+[[bin]]
+name = "substrate-r3-macos-candidate-freeze-global-provenance-builder"
+path = "src/bin/candidate_freeze_global_provenance_builder.rs"
+required-features = ["candidate-freeze-builder"]
+
+[dependencies]
+anyhow = { workspace = true }
+base64 = { workspace = true }
+ed25519-dalek = { workspace = true, optional = true }
+libc = "0.2"
+rand_core = { workspace = true, optional = true }
+serde = { version = "1.0", features = ["derive"] }
+serde_json = { workspace = true }
+sha2 = { workspace = true }
+substrate-common = { path = "../../crates/common" }
+
+[features]
+default = []
+experiment-harness = ["dep:ed25519-dalek", "dep:rand_core"]
+candidate-freeze-builder = []
+
+[dev-dependencies]
+tempfile = "3.0"
+
+[build-dependencies]
+sha2 = { workspace = true }
+
+[package.metadata.dist]
+dist = false

@@ -9,6 +9,7 @@ pub mod authority_commitment;
 pub mod fs_diff;
 pub mod gateway_auth_bundle;
 pub mod identity;
+pub mod macos_retirement_v2;
 pub mod managed_artifact;
 pub mod manager_manifest;
 pub mod paths;

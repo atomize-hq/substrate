@@ -5788,6 +5788,22 @@ dependencies = [
 ]
 
 [[package]]
+name = "substrate-r3-macos-finalizer"
+version = "0.1.0"
+dependencies = [
+ "anyhow",
+ "base64 0.22.1",
+ "ed25519-dalek",
+ "libc",
+ "rand_core 0.6.4",
+ "serde",
+ "serde_json",
+ "sha2",
+ "substrate-common",
+ "tempfile",
+]
+
+[[package]]
 name = "substrate-replay"
 version = "0.1.0"
 dependencies = [
