@@ -47,6 +47,7 @@ FINALIZER_LABEL = "com.atomize.substrate.r3-macos-evidence-finalizer.v2"
 ENDPOINT_PATH = pathlib.Path(
     "/private/var/run/com.atomize.substrate.r3-macos-evidence-finalizer.v2.sock"
 )
+PLATFORM_MANAGED_SOCKET_PARENT = pathlib.Path("/private/var/run")
 JOURNAL_ROOT = pathlib.Path(
     "/private/var/db/com.atomize.substrate.r3-macos-evidence-finalizer.v2"
 )
@@ -703,6 +704,229 @@ def require_durable_absence(path: pathlib.Path) -> dict[str, Any] | None:
         "child_raw_errno": errno.ENOENT,
         "parent_reopened_same_stable_identity": True,
     }
+
+
+PLATFORM_MANAGED_SOCKET_PARENT_IDENTITY_PHASES = (
+    "pathname_before",
+    "held_descriptor",
+    "reopened_descriptor",
+    "pathname_after",
+)
+PLATFORM_MANAGED_SOCKET_CHILD_ABSENCE_PHASES = (
+    "pathname_before",
+    "held_parent_descriptor",
+    "reopened_parent_descriptor",
+    "pathname_after",
+)
+
+
+def platform_managed_socket_absence_binding(value: dict[str, Any]) -> str:
+    body = {
+        key: item
+        for key, item in value.items()
+        if key != "platform_managed_socket_absence_sha256"
+    }
+    return document_sha256(
+        {
+            "domain": (
+                "substrate.r3-macos-finalizer-platform-managed-socket-absence.v1"
+            ),
+            "observation": body,
+        }
+    )
+
+
+def platform_managed_socket_parent_identity(
+    phase: str, observed: os.stat_result
+) -> dict[str, Any]:
+    return {
+        "phase": phase,
+        "path": str(PLATFORM_MANAGED_SOCKET_PARENT),
+        "device": observed.st_dev,
+        "inode": observed.st_ino,
+        "uid": observed.st_uid,
+        "gid": observed.st_gid,
+        "mode": observed.st_mode,
+    }
+
+
+def platform_managed_socket_child_absence(phase: str) -> dict[str, Any]:
+    return {
+        "phase": phase,
+        "path": str(ENDPOINT_PATH),
+        "lstat_return": -1,
+        "raw_errno": errno.ENOENT,
+    }
+
+
+def validate_platform_managed_socket_absence(value: Any) -> dict[str, Any]:
+    if (
+        not isinstance(value, dict)
+        or set(value)
+        != {
+            "schema_owner",
+            "schema_version",
+            "classification",
+            "socket_path",
+            "platform_parent_path",
+            "parent_identity_observations",
+            "child_absence_observations",
+            "platform_managed_socket_absence_sha256",
+        }
+        or value.get("schema_owner")
+        != "substrate.r3-macos-finalizer-platform-managed-socket-absence"
+        or value.get("schema_version") != 1
+        or value.get("classification")
+        != "platform_managed_live_absence_observation"
+        or value.get("socket_path") != str(ENDPOINT_PATH)
+        or value.get("platform_parent_path")
+        != str(PLATFORM_MANAGED_SOCKET_PARENT)
+        or value.get("platform_managed_socket_absence_sha256")
+        != platform_managed_socket_absence_binding(value)
+    ):
+        fail("platform-managed socket absence changed its closed authority")
+    identities = value.get("parent_identity_observations")
+    if (
+        not isinstance(identities, list)
+        or [item.get("phase") if isinstance(item, dict) else None for item in identities]
+        != list(PLATFORM_MANAGED_SOCKET_PARENT_IDENTITY_PHASES)
+    ):
+        fail("platform-managed socket parent observations changed order")
+    stable_identity: tuple[int, int, int, int, int] | None = None
+    for item in identities:
+        if (
+            not isinstance(item, dict)
+            or set(item) != {"phase", "path", "device", "inode", "uid", "gid", "mode"}
+            or item.get("path") != str(PLATFORM_MANAGED_SOCKET_PARENT)
+            or any(
+                type(item.get(field)) is not int
+                for field in ("device", "inode", "uid", "gid", "mode")
+            )
+            or item["device"] < 0
+            or item["inode"] <= 0
+            or item["uid"] != 0
+            or item["gid"] != 1
+            or item["mode"] != stat.S_IFDIR | 0o775
+        ):
+            fail("platform-managed socket parent changed its exact directory identity")
+        observed_identity = (
+            item["device"],
+            item["inode"],
+            item["uid"],
+            item["gid"],
+            item["mode"],
+        )
+        if stable_identity is None:
+            stable_identity = observed_identity
+        elif stable_identity != observed_identity:
+            fail("platform-managed socket parent changed during observation")
+    absences = value.get("child_absence_observations")
+    if (
+        not isinstance(absences, list)
+        or [item.get("phase") if isinstance(item, dict) else None for item in absences]
+        != list(PLATFORM_MANAGED_SOCKET_CHILD_ABSENCE_PHASES)
+    ):
+        fail("platform-managed socket child observations changed order")
+    for item in absences:
+        if (
+            not isinstance(item, dict)
+            or set(item) != {"phase", "path", "lstat_return", "raw_errno"}
+            or item.get("path") != str(ENDPOINT_PATH)
+            or item.get("lstat_return") != -1
+            or item.get("raw_errno") != errno.ENOENT
+        ):
+            fail("platform-managed socket child absence changed")
+    return value
+
+
+def observe_platform_managed_socket_absence(path: pathlib.Path) -> dict[str, Any]:
+    if path != ENDPOINT_PATH:
+        fail("platform-managed socket observer received a noncompiled path")
+    require_absent(path)
+    child_absences = [platform_managed_socket_child_absence("pathname_before")]
+    immutable_parent = open_directory_chain(PLATFORM_MANAGED_SOCKET_PARENT.parent)
+    try:
+        pathname_before = os.stat(
+            PLATFORM_MANAGED_SOCKET_PARENT.name,
+            dir_fd=immutable_parent,
+            follow_symlinks=False,
+        )
+        identities = [
+            platform_managed_socket_parent_identity("pathname_before", pathname_before)
+        ]
+        held_parent = os.open(
+            PLATFORM_MANAGED_SOCKET_PARENT.name,
+            os.O_RDONLY | os.O_DIRECTORY | os.O_NOFOLLOW,
+            dir_fd=immutable_parent,
+        )
+        try:
+            identities.append(
+                platform_managed_socket_parent_identity(
+                    "held_descriptor", os.fstat(held_parent)
+                )
+            )
+            try:
+                os.stat(path.name, dir_fd=held_parent, follow_symlinks=False)
+            except FileNotFoundError as error:
+                if error.errno != errno.ENOENT:
+                    raise
+            else:
+                fail("platform-managed socket appeared during held-parent inspection")
+            child_absences.append(
+                platform_managed_socket_child_absence("held_parent_descriptor")
+            )
+        finally:
+            os.close(held_parent)
+        reopened_parent = os.open(
+            PLATFORM_MANAGED_SOCKET_PARENT.name,
+            os.O_RDONLY | os.O_DIRECTORY | os.O_NOFOLLOW,
+            dir_fd=immutable_parent,
+        )
+        try:
+            identities.append(
+                platform_managed_socket_parent_identity(
+                    "reopened_descriptor", os.fstat(reopened_parent)
+                )
+            )
+            try:
+                os.stat(path.name, dir_fd=reopened_parent, follow_symlinks=False)
+            except FileNotFoundError as error:
+                if error.errno != errno.ENOENT:
+                    raise
+            else:
+                fail("platform-managed socket reappeared after parent reopen")
+            child_absences.append(
+                platform_managed_socket_child_absence("reopened_parent_descriptor")
+            )
+        finally:
+            os.close(reopened_parent)
+        require_absent(path)
+        child_absences.append(
+            platform_managed_socket_child_absence("pathname_after")
+        )
+        pathname_after = os.stat(
+            PLATFORM_MANAGED_SOCKET_PARENT.name,
+            dir_fd=immutable_parent,
+            follow_symlinks=False,
+        )
+        identities.append(
+            platform_managed_socket_parent_identity("pathname_after", pathname_after)
+        )
+    finally:
+        os.close(immutable_parent)
+    value = {
+        "schema_owner": "substrate.r3-macos-finalizer-platform-managed-socket-absence",
+        "schema_version": 1,
+        "classification": "platform_managed_live_absence_observation",
+        "socket_path": str(ENDPOINT_PATH),
+        "platform_parent_path": str(PLATFORM_MANAGED_SOCKET_PARENT),
+        "parent_identity_observations": identities,
+        "child_absence_observations": child_absences,
+    }
+    value["platform_managed_socket_absence_sha256"] = (
+        platform_managed_socket_absence_binding(value)
+    )
+    return validate_platform_managed_socket_absence(value)
 
 
 def path_present(path: pathlib.Path) -> bool:
@@ -3878,8 +4102,7 @@ def exact_service_absent(
         raw_stream(output.stdout),
         raw_stream(output.stderr),
     )
-    if require_durable_absence(ENDPOINT_PATH) is None:
-        fail("finalizer endpoint parent disappeared before durable absence proof")
+    observe_platform_managed_socket_absence(ENDPOINT_PATH)
     roots = [JOURNAL_ROOT, PUBLISHER_ROOT, CREATOR_ROOT]
     if not runner_may_remain:
         roots.append(RUNNER_ROOT)
@@ -4297,7 +4520,6 @@ def admin_restoration_absence_paths(manifest: dict[str, Any]) -> list[str]:
             "/Library/Application Support/Atomize/R3MacEvidenceFinalizer/v2/"
             "candidate-artifact-manifest.v2.json",
             *[path for path, _, _, _ in INSTALL_DIRECTORIES[:-1]],
-            str(ENDPOINT_PATH),
             str(PUBLISHER_ROOT),
             str(RUNNER_ROOT),
             str(CREATOR_ROOT),
@@ -4308,12 +4530,24 @@ def admin_restoration_absence_paths(manifest: dict[str, Any]) -> list[str]:
             str(CLAIM_ROOT),
         ]
     )
-    return list(dict.fromkeys(values))
+    ordered = list(dict.fromkeys(values))
+    for value in ordered:
+        candidate = pathlib.Path(value)
+        if (
+            candidate == PLATFORM_MANAGED_SOCKET_PARENT
+            or PLATFORM_MANAGED_SOCKET_PARENT in candidate.parents
+        ):
+            fail(
+                "ordinary admin restoration target entered the platform-managed "
+                "socket parent"
+            )
+    return ordered
 
 
 def observe_admin_restoration_absence(
     manifest: dict[str, Any], expected_global: dict[str, Any]
 ) -> dict[str, Any]:
+    platform_socket = observe_platform_managed_socket_absence(ENDPOINT_PATH)
     paths = []
     ordered_absences = admin_restoration_absence_paths(manifest)
     for value in ordered_absences:
@@ -4326,7 +4560,6 @@ def observe_admin_restoration_absence(
             durability.append(observation)
     required_boundaries = {
         "/Library/Application Support/Atomize",
-        str(ENDPOINT_PATH),
         str(JOURNAL_ROOT),
         str(PUBLISHER_ROOT),
         str(RUNNER_ROOT),
@@ -4372,6 +4605,7 @@ def observe_admin_restoration_absence(
         "path_absence_set_sha256": document_sha256(paths),
         "durable_absences": durability,
         "durable_absence_set_sha256": document_sha256(durability),
+        "platform_managed_socket_absence": platform_socket,
         "launchd_label": FINALIZER_LABEL,
         "launchctl_print_not_found_exit_status": launchd.returncode,
         "launchctl_print_stdout": launchd_stdout,
@@ -4448,131 +4682,16 @@ def validate_admin_restoration_receipt(
     manifest = parse_canonical(manifest_bytes, "admin restoration candidate manifest")
     if not isinstance(manifest, dict):
         fail("admin restoration candidate manifest is not an object")
-    observation = value["observation"]
-    if set(observation) != {
-        "path_absences",
-        "path_absence_set_sha256",
-        "durable_absences",
-        "durable_absence_set_sha256",
-        "launchd_label",
-        "launchctl_print_not_found_exit_status",
-        "launchctl_print_stdout",
-        "launchctl_print_stderr",
-        "matching_experiment_processes",
-        "process_records",
-        "process_snapshot",
-        "process_snapshot_sha256",
-        "global_exchange_stable_identity",
-    }:
-        fail("admin restoration observation changed its closed shape")
-    expected_paths = admin_restoration_absence_paths(manifest)
-    expected_absences = [
-        {"path": path, "lstat_return": -1, "raw_errno": errno.ENOENT}
-        for path in expected_paths
-    ]
-    durability = observation.get("durable_absences")
-    if (
-        observation.get("path_absences") != expected_absences
-        or observation.get("path_absence_set_sha256")
-        != document_sha256(expected_absences)
-        or not isinstance(durability, list)
-        or observation.get("durable_absence_set_sha256") != document_sha256(durability)
-        or observation.get("launchd_label") != FINALIZER_LABEL
-        or observation.get("launchctl_print_not_found_exit_status") != 113
-        or not is_sha256(observation.get("process_snapshot_sha256"))
-    ):
-        fail("admin restoration observation changed its exact absence evidence")
-    records = validate_process_snapshot_records(
-        observation.get("process_records"),
-        observation.get("process_snapshot"),
-        observation.get("process_snapshot_sha256"),
-    )
-    executable_paths = {
-        entry["intended_path"]
-        for entry in manifest["artifacts"]
-        if entry["signing_identifier"] is not None
-    }
-    matching = [record for record in records if record.get("path") in executable_paths]
-    if observation.get("matching_experiment_processes") != matching or matching:
-        fail("admin restoration process snapshot contains an experiment process")
-    validate_raw_stream(
-        observation.get("launchctl_print_stdout"),
-        "admin restoration launchctl stdout",
-    )
-    validate_raw_stream(
-        observation.get("launchctl_print_stderr"),
-        "admin restoration launchctl stderr",
-    )
-    validate_launchctl_not_found_streams(
-        FINALIZER_LABEL,
-        observation["launchctl_print_not_found_exit_status"],
-        observation["launchctl_print_stdout"],
-        observation["launchctl_print_stderr"],
-    )
-    durable_paths = []
-    for item in durability:
-        if (
-            not isinstance(item, dict)
-            or set(item)
-            != {
-                "path",
-                "parent_path",
-                "parent_device",
-                "parent_inode",
-                "parent_uid",
-                "parent_gid",
-                "parent_mode",
-                "parent_fsync_return",
-                "child_fstatat_return",
-                "child_raw_errno",
-                "parent_reopened_same_stable_identity",
-            }
-            or item.get("path") not in expected_paths
-            or item.get("parent_path") != str(pathlib.Path(item["path"]).parent)
-            or item.get("parent_fsync_return") != 0
-            or item.get("child_fstatat_return") != -1
-            or item.get("child_raw_errno") != errno.ENOENT
-            or item.get("parent_reopened_same_stable_identity") is not True
-            or not all(
-                isinstance(item.get(field), int)
-                for field in (
-                    "parent_device",
-                    "parent_inode",
-                    "parent_uid",
-                    "parent_gid",
-                    "parent_mode",
-                )
-            )
-            or not stat.S_ISDIR(item["parent_mode"])
-        ):
-            fail("admin restoration durable-absence observation changed")
-        durable_paths.append(item["path"])
-    if len(durable_paths) != len(set(durable_paths)):
-        fail("admin restoration duplicated one durable-absence observation")
-    required_boundaries = {
-        "/Library/Application Support/Atomize",
-        str(ENDPOINT_PATH),
-        str(JOURNAL_ROOT),
-        str(PUBLISHER_ROOT),
-        str(RUNNER_ROOT),
-        str(CREATOR_ROOT),
-        str(CLAIM_ROOT),
-    }
-    if not required_boundaries.issubset(set(durable_paths)):
-        fail("admin restoration lacks one durable outer absence boundary")
     expected_globals = [
         item
         for item in claims["completion"]["installed_directories"]
         if item["path"] == str(GLOBAL_EXCHANGE)
     ]
-    stable = observation.get("global_exchange_stable_identity")
-    if (
-        len(expected_globals) != 1
-        or not isinstance(stable, dict)
-        or set(stable) != {"path", "device", "inode", "uid", "gid", "mode"}
-        or any(stable[key] != expected_globals[0][key] for key in stable)
-    ):
-        fail("admin restoration changed the retained evidence-root identity")
+    if len(expected_globals) != 1:
+        fail("admin restoration claims lack one retained evidence-root identity")
+    validate_admin_restoration_receipt_observation(
+        value["observation"], manifest, claims, expected_globals[0]
+    )
 
 
 def publish_or_validate_admin_restoration_receipt(
@@ -4818,6 +4937,7 @@ def validate_admin_restoration_receipt_observation(
         "path_absence_set_sha256",
         "durable_absences",
         "durable_absence_set_sha256",
+        "platform_managed_socket_absence",
         "launchd_label",
         "launchctl_print_not_found_exit_status",
         "launchctl_print_stdout",
@@ -4835,6 +4955,7 @@ def validate_admin_restoration_receipt_observation(
         for path in expected_paths
     ]
     durability = observation.get("durable_absences")
+    platform_socket = observation.get("platform_managed_socket_absence")
     if (
         observation.get("path_absences") != expected_absences
         or observation.get("path_absence_set_sha256")
@@ -4847,6 +4968,7 @@ def validate_admin_restoration_receipt_observation(
         or not is_sha256(observation.get("process_snapshot_sha256"))
     ):
         fail("terminal admin restoration observation changed its exact absence evidence")
+    validate_platform_managed_socket_absence(platform_socket)
     records = validate_process_snapshot_records(
         observation.get("process_records"),
         observation.get("process_snapshot"),
@@ -4916,7 +5038,6 @@ def validate_admin_restoration_receipt_observation(
         fail("terminal admin restoration duplicated a durable absence")
     required_boundaries = {
         "/Library/Application Support/Atomize",
-        str(ENDPOINT_PATH),
         str(JOURNAL_ROOT),
         str(PUBLISHER_ROOT),
         str(RUNNER_ROOT),
