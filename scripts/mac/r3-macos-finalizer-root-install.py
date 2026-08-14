@@ -523,6 +523,74 @@ def physical_identity(path: pathlib.Path, observed: os.stat_result) -> dict[str,
     }
 
 
+ROOT_INSTALL_PHYSICAL_IDENTITY_FIELDS = {
+    "path",
+    "device",
+    "inode",
+    "uid",
+    "gid",
+    "mode",
+    "link_count",
+    "size",
+    "modified_seconds",
+    "modified_nanoseconds",
+}
+
+ROOT_INSTALL_ARTIFACT_IDENTITY_FIELDS = {
+    "role",
+    "path",
+    "physical_identity",
+    "sha256",
+    "executable_identity",
+    "signing_posture",
+}
+
+
+def validate_root_install_artifact_identity_shape(value: Any) -> dict[str, Any]:
+    if not isinstance(value, dict) or set(value) != ROOT_INSTALL_ARTIFACT_IDENTITY_FIELDS:
+        fail("root-install artifact identity changed its closed outer shape")
+    physical = value.get("physical_identity")
+    if not isinstance(physical, dict) or set(physical) != ROOT_INSTALL_PHYSICAL_IDENTITY_FIELDS:
+        fail("root-install artifact identity changed its closed physical shape")
+    if (
+        not isinstance(value.get("role"), str)
+        or not isinstance(value.get("path"), str)
+        or not is_sha256(value.get("sha256"))
+        or not isinstance(physical.get("path"), str)
+        or any(
+            type(physical.get(field)) is not int
+            for field in ROOT_INSTALL_PHYSICAL_IDENTITY_FIELDS - {"path"}
+        )
+        or any(
+            physical[field] < 0
+            for field in ("device", "inode", "uid", "gid", "mode", "link_count", "size")
+        )
+        or not 0 <= physical["modified_nanoseconds"] < 1_000_000_000
+    ):
+        fail("root-install artifact identity changed its typed physical shape")
+    return value
+
+
+def validate_root_install_artifact_identity(
+    value: Any, expected: dict[str, Any]
+) -> dict[str, Any]:
+    artifact = validate_root_install_artifact_identity_shape(value)
+    physical = artifact["physical_identity"]
+    if (
+        artifact["role"] != expected["role"]
+        or artifact["path"] != expected["intended_path"]
+        or artifact["sha256"] != expected["sha256"]
+        or physical["path"] != expected["intended_path"]
+        or physical["uid"] != expected["uid"]
+        or physical["gid"] != expected["gid"]
+        or physical["mode"] != stat.S_IFREG | expected["mode"]
+        or physical["link_count"] != 1
+        or physical["size"] != expected["size"]
+    ):
+        fail("root-install artifact identity differs from the candidate manifest")
+    return artifact
+
+
 def runner_file_physical_identity(observed: os.stat_result) -> dict[str, Any]:
     return {
         "device": observed.st_dev,
@@ -3670,6 +3738,33 @@ def validate_completion(
     manifest_bytes: bytes,
     preclaim: dict[str, Any],
 ) -> None:
+    expected_fields = {
+        "schema_owner",
+        "schema_version",
+        "experiment_id",
+        "sequence",
+        "preclaim_sha256",
+        "candidate_freeze_manifest_sha256",
+        "reviewed_admin_block_sha256",
+        "candidate_artifact_set_sha256",
+        "install_parent_directory_set_sha256",
+        "preinstall_absence_observation_set_sha256",
+        "rollback_plan_sha256",
+        "supporting_manifest_set_sha256",
+        "installed_directories",
+        "installed_directory_set_sha256",
+        "installed_artifacts",
+        "installed_artifact_identity_set_sha256",
+        "preclaim_leaf_identity",
+        "completion_leaf_lstat_return",
+        "completion_leaf_raw_errno",
+        "launchd_label_absence",
+        "endpoint_absence",
+        "install_complete",
+        "launchd_bootstrap_authorized",
+    }
+    if not isinstance(value, dict) or set(value) != expected_fields:
+        fail("root-install completion changed its closed shape")
     if (
         value.get("schema_owner")
         != "substrate.r3-macos-finalizer-root-install-completion"
@@ -3702,6 +3797,8 @@ def validate_completion(
         fail("root-install completion changed directory cardinality")
     if len(value.get("installed_artifacts", [])) != len(ARTIFACT_SPECS):
         fail("root-install completion changed artifact cardinality")
+    for artifact, expected in zip(value["installed_artifacts"], manifest["artifacts"]):
+        validate_root_install_artifact_identity(artifact, expected)
     launchd_probe = next(
         probe for probe in absence_plan() if probe["kind"] == "launchd_label"
     )
@@ -3807,6 +3904,10 @@ def exact_service_absent(
 
 
 def unlink_exact_file(path: pathlib.Path, expected: dict[str, Any]) -> None:
+    artifact = validate_root_install_artifact_identity_shape(expected)
+    physical = artifact["physical_identity"]
+    if artifact["path"] != str(path) or physical["path"] != str(path):
+        fail(f"installed artifact path differs from its cleanup authority: {path}")
     try:
         os.lstat(path)
     except FileNotFoundError:
@@ -3814,16 +3915,16 @@ def unlink_exact_file(path: pathlib.Path, expected: dict[str, Any]) -> None:
         return
     data, observed = read_exact_sized_file(
         path,
-        expected["uid"],
-        expected["gid"],
-        expected["mode"],
-        expected["size"],
+        physical["uid"],
+        physical["gid"],
+        physical["mode"] & 0o7777,
+        physical["size"],
         MAX_INSTALLED_ARTIFACT_BYTES,
     )
     if (
-        sha_bytes(data) != expected["sha256"]
-        or len(data) != expected["size"]
-        or physical_identity(path, observed) != expected["physical_identity"]
+        sha_bytes(data) != artifact["sha256"]
+        or len(data) != physical["size"]
+        or physical_identity(path, observed) != physical
     ):
         fail(f"installed artifact changed before exact removal: {path}")
     parent = open_directory_chain(path.parent)
@@ -4016,6 +4117,10 @@ def cleanup_installed_candidate(
     completion: dict[str, Any],
     installed_manifest_identity: dict[str, Any],
 ) -> None:
+    if len(completion.get("installed_artifacts", [])) != len(manifest["artifacts"]):
+        fail("installed cleanup authority changed artifact cardinality")
+    for artifact, expected in zip(completion["installed_artifacts"], manifest["artifacts"]):
+        validate_root_install_artifact_identity(artifact, expected)
     by_role = {entry["role"]: entry for entry in completion["installed_artifacts"]}
     # The runner owns the alternate-path negative-control removal. All other installed artifacts
     # are removed here in the exact manifest rollback order, with absence accepted only as a
@@ -4033,10 +4138,7 @@ def cleanup_installed_candidate(
             seen_present = True
         elif seen_present:
             fail("installed artifact absence is not the exact cleanup prefix")
-    installed_manifest = pathlib.Path(
-        "/Library/Application Support/Atomize/R3MacEvidenceFinalizer/v2/"
-        "candidate-artifact-manifest.v2.json"
-    )
+    installed_manifest = INSTALLED_CANDIDATE_MANIFEST_PATH
     if not path_present(installed_manifest) and any(
         path_present(pathlib.Path(by_role[role]["path"]))
         for role in ordered_prefix_roles
@@ -4055,7 +4157,7 @@ def cleanup_installed_candidate(
             or identity["inode"] != installed_manifest_identity["inode"]
             or identity["uid"] != installed_manifest_identity["owner_uid"]
             or identity["gid"] != installed_manifest_identity["owner_gid"]
-            or identity["mode"] != installed_manifest_identity["mode"]
+            or identity["mode"] & 0o7777 != installed_manifest_identity["mode"]
             or identity["link_count"] != installed_manifest_identity["link_count"]
             or identity["size"] != installed_manifest_identity["size"]
         ):
