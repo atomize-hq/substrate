@@ -531,9 +531,10 @@ fn verify_static_code(
             bail!("copy frozen designated requirement failed with OSStatus {status}")
         }
         owned.hold(designated);
-        let designated_string = SecRequirementCopyString(designated, 0);
-        if designated_string.is_null() {
-            bail!("copy frozen designated requirement text")
+        let mut designated_string: CfType = ptr::null();
+        let status = SecRequirementCopyString(designated, 0, &mut designated_string);
+        if status != ERR_SEC_SUCCESS || designated_string.is_null() {
+            bail!("copy frozen designated requirement text failed with OSStatus {status}")
         }
         owned.hold(designated_string);
         let designated_requirement = cf_string_value(designated_string)?;
@@ -746,7 +747,11 @@ unsafe extern "C" {
         flags: u32,
         requirement: *mut SecRequirement,
     ) -> OsStatus;
-    fn SecRequirementCopyString(requirement: SecRequirement, flags: u32) -> CfType;
+    fn SecRequirementCopyString(
+        requirement: SecRequirement,
+        flags: u32,
+        requirement_text: *mut CfType,
+    ) -> OsStatus;
 }
 
 #[link(name = "CoreFoundation", kind = "framework")]
@@ -841,6 +846,40 @@ mod tests {
         assert!(source.contains("AD_HOC_HARDENED_RUNTIME_FLAGS_V2"));
         assert!(source.contains("kSecCodeInfoEntitlementsDict"));
         assert!(source.contains("kSecCodeInfoTeamIdentifier"));
+        assert!(source.contains(
+            "let status = SecRequirementCopyString(designated, 0, &mut designated_string);"
+        ));
+        assert!(source.contains("requirement_text: *mut CfType"));
         assert!(!include_str!("../build.rs").contains("\"RUNNER\","));
+    }
+
+    #[test]
+    #[ignore = "requires an externally ad-hoc-signed copy of this test executable"]
+    fn native_static_code_measurement_uses_status_and_out_parameter() {
+        let path = std::env::current_exe().expect("resolve standalone proof executable");
+        let signing = verify_static_code(
+            &path,
+            "com.atomize.substrate.r3-macos-runner-identity-standalone-proof.v1",
+            None,
+            None,
+        )
+        .expect("measure standalone proof executable");
+        assert_eq!(
+            signing.signing_identifier,
+            "com.atomize.substrate.r3-macos-runner-identity-standalone-proof.v1"
+        );
+        assert_eq!(signing.cdhash.len(), 40);
+        assert_eq!(
+            signing.code_directory_flags,
+            AD_HOC_HARDENED_RUNTIME_FLAGS_V2
+        );
+        assert!(signing.designated_requirement.contains("cdhash H\""));
+        assert_eq!(signing.team_identifier, None);
+        assert_eq!(signing.entitlements_blob_size, 0);
+        assert_eq!(
+            signing.entitlements_blob_sha256,
+            EMPTY_ENTITLEMENTS_SHA256_V2
+        );
+        assert!(signing.entitlement_keys.is_empty());
     }
 }
