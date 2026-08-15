@@ -1277,6 +1277,58 @@ import os
 import stat
 import sys
 
+REQUIRED_ROOT_COMMANDS = ("/usr/bin/env", "/bin/zsh", "/usr/bin/python3")
+
+
+def command_identity(value):
+    return (
+        value.st_dev,
+        value.st_ino,
+        value.st_uid,
+        value.st_gid,
+        stat.S_IMODE(value.st_mode),
+        value.st_nlink,
+        value.st_size,
+        value.st_mtime_ns,
+        value.st_ctime_ns,
+    )
+
+
+def require_sealed_root_command(path):
+    try:
+        before = os.lstat(path)
+    except OSError as error:
+        raise SystemExit(
+            f"sealed recovery required root command is unavailable: {path}: errno={error.errno}"
+        ) from error
+    if (
+        not stat.S_ISREG(before.st_mode)
+        or before.st_uid != 0
+        or stat.S_IMODE(before.st_mode) & 0o111 == 0
+        or before.st_nlink < 1
+        or before.st_size < 1
+    ):
+        raise SystemExit(
+            f"sealed recovery required root command has invalid posture: {path}"
+        )
+    try:
+        after = os.lstat(path)
+    except OSError as error:
+        raise SystemExit(
+            f"sealed recovery required root command changed after inspection: {path}: errno={error.errno}"
+        ) from error
+    if command_identity(after) != command_identity(before):
+        raise SystemExit(
+            f"sealed recovery required root command changed during inspection: {path}"
+        )
+
+
+# Validate literal command paths inside the same sanitized root process that loads the route.
+# State-specific absence probes stay in the sealed Python source, where descriptor-relative
+# lstat checks cannot be replaced by a shell utility whose location or failure may be masked.
+for required_root_command in REQUIRED_ROOT_COMMANDS:
+    require_sealed_root_command(required_root_command)
+
 if len(sys.argv) != 12:
     raise SystemExit("sealed recovery loader received the wrong argument count")
 
