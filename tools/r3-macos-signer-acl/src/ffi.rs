@@ -743,7 +743,7 @@ pub(crate) fn probe_nonmatch_owner_access_in_memory_impl() -> Result<CanonicalAc
         );
         let error_code = take_cf_error_code(&mut owned, error);
         if access.is_null() {
-            bail!("in-memory all-ones SecAccess owner probe failed with CFError code {error_code}")
+            bail!("in-memory fixed-owner SecAccess probe failed with CFError code {error_code}")
         }
         owned.hold(access);
         let snapshot = snapshot_access(&mut owned, access)?;
@@ -752,7 +752,7 @@ pub(crate) fn probe_nonmatch_owner_access_in_memory_impl() -> Result<CanonicalAc
             || snapshot.owner_type != OWNER_TYPE_USE_ONLY_UID_AND_GID
             || !snapshot.entries.is_empty()
         {
-            bail!("in-memory SecAccess owner copy-readback changed the all-ones conjunctive owner")
+            bail!("in-memory SecAccess owner copy-readback changed the fixed conjunctive owner")
         }
         canonical_digest(snapshot)
     }
@@ -1127,7 +1127,7 @@ unsafe fn build_nobody_forbidden_replacement_access(
     let mut error: CfType = ptr::null();
     // The replacement deliberately preserves publisher Sign+Delete rollback while changing the
     // exact finalizer authorization from Delete to Sign.  Either selected owner changes too, or
-    // remains the all-ones conjunctive owner for the ACL-only arm.
+    // remains the fixed directory-unresolved conjunctive owner for the ACL-only arm.
     let access = unsafe {
         SecAccessCreateWithOwnerAndACL(
             owner_uid,

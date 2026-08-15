@@ -1269,7 +1269,7 @@ pub fn run_fixed_experiment() -> Result<()> {
     )?;
     let owner_probe = probe_nonmatch_owner_candidate()?;
     write_runner_receipt(
-        "legacy-access-nonmatch-owner-probe.v2.json",
+        "legacy-access-nonmatch-owner-probe.v3.json",
         &canonical_bytes_v2(&owner_probe)?,
     )?;
     let inputs = build_and_install_frozen_inputs(
@@ -10180,7 +10180,7 @@ fn install_and_validate_global_pre_effect_proof(
     security: &mut NonInteractiveSecurity,
     inputs: &FrozenRunnerInputs,
     runner: &RunnerSelfObservationV2,
-    owner_probe: &crate::NonmatchOwnerProbeV2,
+    owner_probe: &crate::NonmatchOwnerProbeV3,
     owner_access_probe: &crate::CanonicalAccessDigest,
     activation_membrane: &ActivationMembraneGuardV2,
     candidate_freeze_authority: &CandidateFreezeAuthorityV2,

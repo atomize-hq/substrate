@@ -30,7 +30,7 @@ mod runner_identity;
 mod securityagent;
 pub mod supervisor;
 
-pub use owner_probe::{probe_nonmatch_owner_candidate, NonmatchOwnerProbeV2};
+pub use owner_probe::{probe_nonmatch_owner_candidate, NonmatchOwnerProbeV3};
 
 /// Create and copy-read back only an in-memory legacy SecAccess owner candidate. No Keychain is
 /// opened and no item is created. A caller must retain the returned canonical digest as pre-effect
@@ -40,11 +40,12 @@ pub fn probe_nonmatch_owner_access_in_memory() -> Result<CanonicalAccessDigest> 
 }
 
 pub const SYSTEM_KEYCHAIN_PATH: &str = "/Library/Keychains/System.keychain";
-/// Candidate legacy owner values. They are deliberately the special all-ones IDs, never an
-/// ordinary account. Native use is gated by [`probe_nonmatch_owner_candidate`] and exact
-/// SecAccess owner readback; until that live in-memory probe succeeds this posture is not frozen.
-pub const NONMATCH_OWNER_UID: u32 = u32::MAX;
-pub const NONMATCH_OWNER_GID: u32 = u32::MAX;
+/// Candidate legacy owner values. The fixed pair is absent from the host account/group databases
+/// but remains adoptable by root, which is already inside the accepted macOS software-key TCB.
+/// Native use is gated by [`probe_nonmatch_owner_candidate`] and exact SecAccess owner readback;
+/// neither the values nor their adoption confers lifecycle authority.
+pub const NONMATCH_OWNER_UID: u32 = 4_294_967_293;
+pub const NONMATCH_OWNER_GID: u32 = 4_294_967_293;
 pub const OWNER_TYPE_USE_ONLY_UID_AND_GID: u32 = 1 | 2;
 pub const PROMPT_SELECTOR_NONE: u16 = 0;
 pub const MAX_APPLICATION_TAG_BYTES: usize = 1024;
