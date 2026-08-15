@@ -2172,6 +2172,8 @@ mod tests {
         assert!(prearm_alert < ready);
         assert!(observer.contains("Data(\"ALERT\\n\".utf8)"));
         assert!(observer.contains("exit(86)"));
+        assert!(!observer.contains("standardOutput.synchronizeFile()"));
+        assert!(!observer.contains("standardError.synchronizeFile()"));
 
         let coordinator = include_str!("../bin/coordinator.rs");
         assert!(coordinator.contains("line == \"ALERT\\n\""));

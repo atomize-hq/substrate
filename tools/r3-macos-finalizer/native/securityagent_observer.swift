@@ -206,7 +206,6 @@ private func emitReport(_ samples: [SampleObservation], forcedUnexpected: Bool) 
         let encoded = try encoder.encode(report)
         FileHandle.standardOutput.write(encoded)
         FileHandle.standardOutput.write(Data([0x0a]))
-        FileHandle.standardOutput.synchronizeFile()
     } catch {
         fail("encode report: \(error)")
     }
@@ -215,7 +214,6 @@ private func emitReport(_ samples: [SampleObservation], forcedUnexpected: Bool) 
 private func emitAlertAndExit(_ samples: [SampleObservation]) -> Never {
     emitReport(samples, forcedUnexpected: true)
     FileHandle.standardError.write(Data("ALERT\n".utf8))
-    FileHandle.standardError.synchronizeFile()
     exit(86)
 }
 
