@@ -10333,6 +10333,17 @@ The protocol accepts only the same-digest finalization request/rejoin and, after
 
 The exact prospective finalizer identity's noninteractive delete-only System-Keychain capability is mandatory evidence before G6. In a separately authorized rollback-safe disposable native-macOS experiment, the exact identity and proposed access-control posture must prove that it can delete the one exact prospective signer and deterministically re-observe absence, while sign, export, ACL/trusted-application mutation, other-key deletion, and target broadening all fail without UI or mutation. Root is not assumed sufficient. SecurityAgent activation/window/prompt, ambiguous status, identity/access-control drift, or residual surrogate fails the gate.
 
+The disposable legacy `SecAccess` owner tuple is a negative discriminator against ordinary host
+principals, not a security boundary against an already-privileged root process. It must be one
+fixed UID/GID pair absent from the host account and group databases and must round-trip byte for
+byte through the effect-free in-memory `SecAccessCreateWithOwnerAndACL` readback gate.
+Root-unadoptability is not required because sufficiently privileged root is already within the accepted
+macOS software-key TCB and can adopt arbitrary numeric identities or export the software key.
+Neither euid 0, adoption of the tuple, nor the tuple itself constitutes lifecycle authority or
+satisfies the finalizer capability gate. Positive authorization remains limited to the exact
+trusted-application ACL entries and the publisher/harness/CAS authority chain. `kSecHonorRoot` and
+`Any` authorization remain prohibited.
+
 A failed gate pivots only the terminal signer-deletion mechanism. It cannot broaden the finalizer, merge recovery, authorize a prompt, or create product-uninstall/general-recovery power.
 
 The same separately authorized experiment packet may include creator-route arms for the old orphan only when conclusions remain separate. It must compare query-level UI failure with a fresh process whose first Security-framework call successfully disables process interaction before the same query-level UI-fail operation, plus wrong-identity and already-absent retries. Every effectful arm uses a fresh surrogate, precommitted repetition count, exact logs/settle window, and closed rollback in a rollback-capable native-macOS environment. It uses no live orphan or product identity. The experiment grants no live authority.

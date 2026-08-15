@@ -1072,6 +1072,17 @@ The closed channel accepts only the same-digest finalization request/rejoin and,
 
 Candidate D remains conditional on a separately authorized native-macOS disposable experiment proving that the **exact prospective finalizer identity**, using the exact planned access-control posture, can noninteractively delete only the exact prospective signer and deterministically re-observe absence while it cannot sign, export, alter ACL/trusted applications, delete another key, or broaden its target. Root privilege is not assumed sufficient. Any SecurityAgent activation, window, prompt, ambiguous status, identity drift, or residual surrogate fails the gate.
 
+For that experiment, the disposable legacy `SecAccess` owner tuple is only a negative discriminator
+against ordinary host principals; it is not an independent security boundary against an already-
+privileged root process. The tuple must be one fixed UID/GID pair absent from the host account and
+group databases and must round-trip byte for byte through the effect-free in-memory
+`SecAccessCreateWithOwnerAndACL` readback gate. Root-unadoptability is not required because
+sufficiently privileged root is already within the accepted macOS software-key TCB. Neither euid
+0, adoption of the tuple, nor the tuple itself grants lifecycle authority or satisfies the
+finalizer capability gate. Positive authorization remains limited to the exact trusted-application
+ACL entries and the publisher/harness/CAS authority chain. `kSecHonorRoot` and `Any` authorization
+remain prohibited.
+
 Failure pivots only the terminal signer-deletion mechanism. It does not broaden the finalizer, merge the recovery lane, authorize product uninstall, or authorize a prompt. The prospective contract cannot close and implementation cannot begin until the chosen replacement mechanism has equally closed authority and crash semantics.
 
 ### 14.8 Recovery experiment and live-orphan boundary
