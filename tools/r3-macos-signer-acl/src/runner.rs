@@ -9962,10 +9962,10 @@ fn acquire_absent_activation_membrane_for_cleanup_recovery() -> Result<Activatio
 
 fn activation_cleanup_recovery_documents(
 ) -> Result<Option<(NativeEvidenceCleanupPlanV2, GlobalPreEffectPacketV2)>> {
-    if let Some(plan) =
-        read_runner_private_optional::<NativeEvidenceCleanupPlanV2>(NATIVE_CLEANUP_PLAN_NAME)?
-    {
-        let packet = read_runner_private_optional::<GlobalPreEffectPacketV2>(
+    if let Some(plan) = read_runner_private_cleanup_recovery_optional::<NativeEvidenceCleanupPlanV2>(
+        NATIVE_CLEANUP_PLAN_NAME,
+    )? {
+        let packet = read_runner_private_cleanup_recovery_optional::<GlobalPreEffectPacketV2>(
             "global-pre-effect-packet.v2.json",
         )?
         .context("native cleanup plan lacks its global pre-effect packet")?;
@@ -11385,6 +11385,40 @@ fn read_runner_private_optional<T: DeserializeOwned + Serialize>(name: &str) -> 
         .transpose()
 }
 
+fn read_runner_private_cleanup_recovery_optional<T: DeserializeOwned + Serialize>(
+    name: &str,
+) -> Result<Option<T>> {
+    read_runner_private_cleanup_recovery_bytes_optional_at(
+        Path::new(RUNNER_ROOT),
+        name,
+        PublishIdentityV2 {
+            owner_uid: 0,
+            owner_gid: 0,
+            permissions: 0o600,
+            parent_uid: 0,
+            parent_gid: 0,
+            parent_mode: libc::S_IFDIR | 0o700,
+            maximum_bytes: MAX_CHILD_OUTPUT,
+        },
+    )?
+    .map(|bytes| parse_canonical_v2(&bytes))
+    .transpose()
+}
+
+fn read_runner_private_cleanup_recovery_bytes_optional_at(
+    runner_root: &Path,
+    name: &str,
+    identity: PublishIdentityV2,
+) -> Result<Option<Vec<u8>>> {
+    if name.contains(['/', '\0', '\n', '\r']) {
+        bail!("runner private cleanup-recovery component is invalid")
+    }
+    if lstat(runner_root)?.is_none() {
+        return Ok(None);
+    }
+    read_exact_published_file(&runner_root.join(name), identity)
+}
+
 fn read_runner_private_bytes_optional(name: &str) -> Result<Option<Vec<u8>>> {
     if name.contains(['/', '\0', '\n', '\r']) {
         bail!("runner private receipt component is invalid")
@@ -12166,6 +12200,115 @@ mod tests {
         assert!(production.contains("terminal_no_resume: true"));
         assert!(production.contains("exact_same_digest_rejoin_authorized: true"));
         assert!(production.contains("rollback_forbidden: true"));
+    }
+
+    #[test]
+    fn activation_recovery_fresh_start_preserves_exact_parent_authority() {
+        let production = include_str!("runner.rs")
+            .split("#[cfg(test)]")
+            .next()
+            .unwrap();
+        let run = production
+            .split("pub fn run_fixed_experiment() -> Result<()> {")
+            .nth(1)
+            .unwrap()
+            .split("fn verify_runner_process_surface(")
+            .next()
+            .unwrap();
+        assert!(
+            run.find("acquire_activation_membrane_exclusive()?")
+                .unwrap()
+                < run.find("prepare_runner_root()?").unwrap()
+        );
+        let recovery = production
+            .split("fn activation_cleanup_recovery_documents(")
+            .nth(1)
+            .unwrap()
+            .split("fn read_staged_native_cleanup_recovery_documents(")
+            .next()
+            .unwrap();
+        assert!(
+            recovery
+                .find("read_runner_private_cleanup_recovery_optional")
+                .unwrap()
+                < recovery
+                    .find("read_staged_native_cleanup_recovery_documents()?")
+                    .unwrap()
+        );
+        let root = std::env::temp_dir().join(format!(
+            "substrate-r3-activation-recovery-fresh-start-{}",
+            std::process::id()
+        ));
+        let _ = std::fs::remove_dir_all(&root);
+        std::fs::create_dir(&root).expect("create activation-recovery fixture root");
+        std::fs::set_permissions(&root, std::os::unix::fs::PermissionsExt::from_mode(0o700))
+            .expect("set activation-recovery fixture mode");
+        let global_exchange = root.join("global-publisher-exchange");
+        std::fs::create_dir(&global_exchange).expect("create exact global exchange");
+        std::fs::set_permissions(
+            &global_exchange,
+            std::os::unix::fs::PermissionsExt::from_mode(0o700),
+        )
+        .expect("set exact global exchange mode");
+        // SAFETY: read-only process credential queries for the isolated filesystem fixture.
+        let uid = unsafe { libc::geteuid() };
+        // SAFETY: read-only process credential queries for the isolated filesystem fixture.
+        let gid = unsafe { libc::getegid() };
+        let private_identity = PublishIdentityV2 {
+            owner_uid: uid,
+            owner_gid: gid,
+            permissions: 0o600,
+            parent_uid: uid,
+            parent_gid: gid,
+            parent_mode: libc::S_IFDIR | 0o700,
+            maximum_bytes: 1024,
+        };
+        let external_identity = PublishIdentityV2 {
+            permissions: 0o444,
+            ..private_identity
+        };
+        let runner_root = root.join("runner-private");
+        let cleanup_name = "native-evidence-cleanup-plan.v2.json";
+
+        // This is the real fresh-start order: the exact external exchange exists, the runner
+        // root does not exist until prepare_runner_root(), and no staged recovery is present.
+        assert!(read_runner_private_cleanup_recovery_bytes_optional_at(
+            &runner_root,
+            cleanup_name,
+            private_identity,
+        )
+        .expect("missing fresh runner root is no private recovery document")
+        .is_none());
+        let external_cleanup = global_exchange.join("native-evidence-cleanup-receipt.v2.json");
+        assert!(read_staged_file(&external_cleanup, external_identity)
+            .expect("exact empty external exchange remains available")
+            .is_none());
+
+        // Presence never relaxes identity: a wrong runner parent remains a hard stop.
+        std::fs::create_dir(&runner_root).expect("create wrong runner parent");
+        std::fs::set_permissions(
+            &runner_root,
+            std::os::unix::fs::PermissionsExt::from_mode(0o755),
+        )
+        .expect("set wrong runner parent mode");
+        assert!(read_runner_private_cleanup_recovery_bytes_optional_at(
+            &runner_root,
+            cleanup_name,
+            private_identity,
+        )
+        .is_err());
+
+        // An absent runner root still falls through to the existing exact staged-recovery lane.
+        std::fs::remove_dir(&runner_root).expect("restore absent runner root");
+        let staged = br#"{"staged":true}"#;
+        stage_exact_file(&external_cleanup, staged, external_identity)
+            .expect("stage exact external cleanup recovery");
+        assert_eq!(
+            read_staged_file(&external_cleanup, external_identity)
+                .expect("read exact staged external cleanup recovery"),
+            Some(staged.to_vec())
+        );
+        std::fs::remove_dir_all(root).expect("remove activation-recovery fixture");
     }
 
     #[test]
