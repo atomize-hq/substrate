@@ -13,10 +13,10 @@ import re
 import sys
 
 repository = pathlib.Path(sys.argv[1])
-new_experiment = "01a006ed-1dbc-7d16-b88d-a2b1818ce801"
+new_experiment = "01a00732-3426-7a57-b0e7-9d673bd19b59"
 new_scopes = [
-    "01a006ed-1dbd-78a2-8d18-1f9c039634da",
-    "01a006ed-1dbe-7ea2-a3e9-81225eba65f7",
+    "01a00732-3429-76c8-83f9-b9fb165252c1",
+    "01a00732-342b-7918-9c9c-ed777d5c9e22",
 ]
 old_experiment = "019ffec6-95f6-7d30-80bc-8003ce27d5ba"
 old_scopes = [
@@ -27,6 +27,7 @@ terminal_experiments = [
     old_experiment,
     "01a0033f-9fa7-700c-b0b3-4ad0a8ed372b",
     "01a003da-91f6-7710-b86b-dc28c771a773",
+    "01a006ed-1dbc-7d16-b88d-a2b1818ce801",
 ]
 terminal_scopes = [
     *old_scopes,
@@ -34,6 +35,8 @@ terminal_scopes = [
     "01a0033f-9fac-79f4-a137-391728ab2f76",
     "01a003da-91f9-712b-b261-fe3be9b5550d",
     "01a003da-91fc-7aad-83e2-75cd7b026fe7",
+    "01a006ed-1dbd-78a2-8d18-1f9c039634da",
+    "01a006ed-1dbe-7ea2-a3e9-81225eba65f7",
 ]
 expected_routes = {
     "deea3cb3aaf05dd641936bdb98bcc2d3098504d64b455794af689cabe68cd76a",
@@ -75,7 +78,7 @@ uuid_v7 = re.compile(
 for value in [new_experiment, *new_scopes]:
     if not uuid_v7.fullmatch(value):
         raise SystemExit(f"rotated identity is not canonical UUIDv7: {value}")
-if len({new_experiment, *new_scopes, *terminal_experiments, *terminal_scopes}) != 12:
+if len({new_experiment, *new_scopes, *terminal_experiments, *terminal_scopes}) != 15:
     raise SystemExit("rotated and terminal identities are not pairwise distinct")
 
 root_source = text("scripts/mac/r3-macos-finalizer-root-install.py")
@@ -113,7 +116,7 @@ freeze_source = text("scripts/mac/freeze-r3-macos-finalizer-candidate.sh")
 for required in (
     f'readonly EXPERIMENT_ID="{new_experiment}"',
     'readonly BRANCH="feat/r3-macos-finalizer-rcv-stack"',
-    'readonly ACCEPTED_PARENT_HEAD="5167659d436f48ffaabb3e701c252b96d3bf7ca1"',
+    'readonly ACCEPTED_PARENT_HEAD="90983fa20b8514bd68fd37beffd45a0f442635e4"',
     '"schema_owner": "substrate.r3-macos-candidate-committed-tree-inventory"',
     '"status", "--porcelain=v2", "-z"',
     '"rev-parse", "HEAD^{tree}"',

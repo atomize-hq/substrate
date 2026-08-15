@@ -74,8 +74,8 @@ pub const EXPLICIT_ACL_LABEL: &str =
 
 pub const CREATOR_REPETITION_SCOPE_1: &str = "019ffeb5-b24c-72a7-80bc-e629f85b37c3";
 pub const CREATOR_REPETITION_SCOPE_2: &str = "019ffeb5-b24f-7834-bb4d-44885040002f";
-pub const DISPOSABLE_FINALIZER_SCOPE_1: &str = "01a006ed-1dbd-78a2-8d18-1f9c039634da";
-pub const DISPOSABLE_FINALIZER_SCOPE_2: &str = "01a006ed-1dbe-7ea2-a3e9-81225eba65f7";
+pub const DISPOSABLE_FINALIZER_SCOPE_1: &str = "01a00732-3429-76c8-83f9-b9fb165252c1";
+pub const DISPOSABLE_FINALIZER_SCOPE_2: &str = "01a00732-342b-7918-9c9c-ed777d5c9e22";
 pub const DISPOSABLE_PUBLISHER_ROOT: &str =
     "/private/var/db/com.atomize.substrate.r3-macos-disposable-publisher.v2";
 pub const DISPOSABLE_PUBLISHER_STATE_PATH: &str =

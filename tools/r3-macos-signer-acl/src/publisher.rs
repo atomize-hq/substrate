@@ -1583,13 +1583,13 @@ mod tests {
             concat!(
                 "{\"device\":7,\"gid\":0,\"inode\":11,\"link_count\":1,\"mode\":33024,",
                 "\"path\":\"/private/var/db/com.atomize.substrate.r3-macos-evidence-finalizer.v2/",
-                "capability/01a006ed-1dbd-78a2-8d18-1f9c039634da/surrogate-wrapper.v2\",",
+                "capability/01a00732-3429-76c8-83f9-b9fb165252c1/surrogate-wrapper.v2\",",
                 "\"uid\":0}"
             )
         );
         assert_eq!(
             substrate_common::macos_retirement_v2::sha256_hex_v2(&bytes),
-            "24a74c44168b2dcac1acc33b4320f3d3200830ed864fab7b86d0027bc0ece659"
+            "f7981ceba9a9a04a5d1115a83b8121e1734805c6c83afb75f8b23ddf8fb2fcf1"
         );
         let finalizer = include_str!("../../r3-macos-finalizer/src/native_effects.rs");
         for field in [
