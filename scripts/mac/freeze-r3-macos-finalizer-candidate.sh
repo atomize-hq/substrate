@@ -5,9 +5,9 @@ set -euo pipefail
 # no-argument and user-owned.  It builds and measures artifacts, records read-only pre-install
 # absence evidence, and writes (but never executes) the one reviewed root command block.
 
-readonly REPOSITORY="/Users/spensermcconnell/.codex/worktrees/r3-macos-finalizer-proof-candidate/substrate"
-readonly BRANCH="feat/r3-macos-finalizer-proof-candidate"
-readonly EXPERIMENT_ID="019ffec6-95f6-7d30-80bc-8003ce27d5ba"
+readonly REPOSITORY="/Users/spensermcconnell/.codex/worktrees/r3-macos-finalizer-rcv-stack/substrate"
+readonly BRANCH="feat/r3-macos-finalizer-rcv-stack"
+readonly EXPERIMENT_ID="01a0033f-9fa7-700c-b0b3-4ad0a8ed372b"
 readonly EXPERIMENT_ROOT="/Users/spensermcconnell/Library/Application Support/Atomize/R3MacEvidenceFinalizer/experiments/${EXPERIMENT_ID}"
 readonly FREEZE_ROOT="${EXPERIMENT_ROOT}/candidate-freeze"
 readonly ARTIFACT_ROOT="${FREEZE_ROOT}/artifacts"
@@ -39,7 +39,7 @@ readonly SWIFTC="/Applications/Xcode.app/Contents/Developer/Toolchains/XcodeDefa
 readonly FIXED_PATH="/Users/spensermcconnell/.cargo/bin:/usr/bin:/bin:/usr/sbin:/sbin"
 readonly ZERO40="0000000000000000000000000000000000000000"
 readonly ZERO64="0000000000000000000000000000000000000000000000000000000000000000"
-readonly STARTING_HEAD="40015a6cfa508c112e6444086341d6df8473e875"
+readonly ACCEPTED_PARENT_HEAD="ce423c6e455735ec8c73d27ec8fb3501126bdd90"
 
 export PATH="${FIXED_PATH}"
 export LANG=C
@@ -63,16 +63,16 @@ fail() {
     || fail "Xcode tool resolution differs from the frozen compiler paths"
 [[ "$(${GIT} -C "${REPOSITORY}" branch --show-current)" == "${BRANCH}" ]] || fail "wrong branch"
 readonly SOURCE_COMMIT="$(${GIT} -C "${REPOSITORY}" rev-parse HEAD)"
+readonly SOURCE_PARENT="$(${GIT} -C "${REPOSITORY}" rev-parse HEAD^)"
 readonly REMOTE_COMMIT="$(${GIT} -C "${REPOSITORY}" ls-remote --heads origin "${BRANCH}" | /usr/bin/awk '{print $1}')"
 if ${GIT} -C "${REPOSITORY}" rev-parse --verify '@{upstream}' >/dev/null 2>&1; then
     fail "local-only proof-candidate branch unexpectedly has an upstream"
 fi
-[[ "${SOURCE_COMMIT}" == "${STARTING_HEAD}" && -z "${REMOTE_COMMIT}" ]] \
-    || fail "local-only HEAD or remote-absence binding diverged from the proof-candidate base"
+[[ "${SOURCE_PARENT}" == "${ACCEPTED_PARENT_HEAD}" && -z "${REMOTE_COMMIT}" ]] \
+    || fail "committed candidate parent or remote-absence binding diverged from the accepted stack"
 
-# The user's landing order forbids an implementation commit before native proof.  Admit only the
-# exact bounded implementation inventory and later materialize it into a private Git index/tree;
-# never silently absorb another dirty path into the frozen candidate.
+# E02 freezes only the exact committed candidate. Refuse every staged, unstaged, or untracked path
+# so the manifest's commit/tree pair cannot silently absorb a working-tree overlay.
 env -i PATH="${FIXED_PATH}" LANG=C LC_ALL=C TZ=UTC \
     "${PYTHON}" - "${REPOSITORY}" "${GIT}" <<'PY'
 import pathlib
@@ -81,95 +81,11 @@ import sys
 
 repository = pathlib.Path(sys.argv[1])
 git = sys.argv[2]
-expected = {
-    'Cargo.lock',
-    'Cargo.toml',
-    'crates/common/src/lib.rs',
-    'crates/common/src/macos_retirement_v2.rs',
-    'crates/common/tests/macos_retirement_v2.rs',
-    'scripts/mac/com.atomize.substrate.r3-macos-evidence-finalizer.v2.plist',
-    'scripts/mac/freeze-r3-macos-finalizer-candidate.sh',
-    'scripts/mac/r3-macos-finalizer-root-install.py',
-    'tools/r3-macos-finalizer/Cargo.toml',
-    'tools/r3-macos-finalizer/build.rs',
-    'tools/r3-macos-finalizer/capability-v2.json',
-    'tools/r3-macos-finalizer/native/securityagent_observer.swift',
-    'tools/r3-macos-finalizer/src/ambient.rs',
-    'tools/r3-macos-finalizer/src/authority.rs',
-    'tools/r3-macos-finalizer/src/bin/candidate_freeze_global_provenance_builder.rs',
-    'tools/r3-macos-finalizer/src/bin/candidate_freeze_manifest_builder.rs',
-    'tools/r3-macos-finalizer/src/bin/candidate_freeze_provenance_builder.rs',
-    'tools/r3-macos-finalizer/src/bin/coordinator.rs',
-    'tools/r3-macos-finalizer/src/bin/experiment_harness.rs',
-    'tools/r3-macos-finalizer/src/bin/experiment_peer_probe.rs',
-    'tools/r3-macos-finalizer/src/bin/finalizer.rs',
-    'tools/r3-macos-finalizer/src/contract.rs',
-    'tools/r3-macos-finalizer/src/darwin.rs',
-    'tools/r3-macos-finalizer/src/disposable_capability.rs',
-    'tools/r3-macos-finalizer/src/engine.rs',
-    'tools/r3-macos-finalizer/src/experiment/controls.rs',
-    'tools/r3-macos-finalizer/src/experiment/documents.rs',
-    'tools/r3-macos-finalizer/src/experiment/durable.rs',
-    'tools/r3-macos-finalizer/src/experiment/evidence_export.rs',
-    'tools/r3-macos-finalizer/src/experiment/freeze_manifest.rs',
-    'tools/r3-macos-finalizer/src/experiment/freeze_provenance.rs',
-    'tools/r3-macos-finalizer/src/experiment/harness_protocol.rs',
-    'tools/r3-macos-finalizer/src/experiment/mod.rs',
-    'tools/r3-macos-finalizer/src/experiment/peer_probe.rs',
-    'tools/r3-macos-finalizer/src/experiment/pre_effect.rs',
-    'tools/r3-macos-finalizer/src/experiment/process.rs',
-    'tools/r3-macos-finalizer/src/experiment/publisher_protocol.rs',
-    'tools/r3-macos-finalizer/src/fixed_inbox.rs',
-    'tools/r3-macos-finalizer/src/frame.rs',
-    'tools/r3-macos-finalizer/src/journal.rs',
-    'tools/r3-macos-finalizer/src/lib.rs',
-    'tools/r3-macos-finalizer/src/native_effects.rs',
-    'tools/r3-macos-finalizer/src/targets.rs',
-    'tools/r3-macos-finalizer/tests/authority_pipeline.rs',
-    'tools/r3-macos-finalizer/tests/capability_manifest.rs',
-    'tools/r3-macos-finalizer/tests/closed_targets.rs',
-    'tools/r3-macos-finalizer/tests/engine_recovery.rs',
-    'tools/r3-macos-finalizer/tests/finalizer_admission_order.rs',
-    'tools/r3-macos-finalizer/tests/frame_protocol.rs',
-    'tools/r3-macos-finalizer/tests/journal_contract.rs',
-    'tools/r3-macos-finalizer/tests/launchd_plist.rs',
-    'tools/r3-macos-signer-acl/Cargo.lock',
-    'tools/r3-macos-signer-acl/Cargo.toml',
-    'tools/r3-macos-signer-acl/build.rs',
-    'tools/r3-macos-signer-acl/native/benign_injection_probe.c',
-    'tools/r3-macos-signer-acl/src/attestation.rs',
-    'tools/r3-macos-signer-acl/src/bin/creator_route.rs',
-    'tools/r3-macos-signer-acl/src/bin/disposable_publisher.rs',
-    'tools/r3-macos-signer-acl/src/bin/experiment_runner.rs',
-    'tools/r3-macos-signer-acl/src/bin/nobody_owner_probe.rs',
-    'tools/r3-macos-signer-acl/src/bin/wrong_identity.rs',
-    'tools/r3-macos-signer-acl/src/experiment.rs',
-    'tools/r3-macos-signer-acl/src/ffi.rs',
-    'tools/r3-macos-signer-acl/src/immutable_publish.rs',
-    'tools/r3-macos-signer-acl/src/lib.rs',
-    'tools/r3-macos-signer-acl/src/owner_probe.rs',
-    'tools/r3-macos-signer-acl/src/publisher.rs',
-    'tools/r3-macos-signer-acl/src/publisher_surface.rs',
-    'tools/r3-macos-signer-acl/src/runner.rs',
-    'tools/r3-macos-signer-acl/src/runner_identity.rs',
-    'tools/r3-macos-signer-acl/src/securityagent.rs',
-    'tools/r3-macos-signer-acl/src/supervisor.rs',
-}
-
-def nul_paths(argv):
-    raw = subprocess.check_output([git, "-C", str(repository), *argv])
-    return {part.decode("utf-8") for part in raw.split(b"\0") if part}
-
-changed = nul_paths(["diff", "--name-only", "-z", "HEAD"])
-changed |= nul_paths(["ls-files", "--others", "--exclude-standard", "-z"])
-if not changed:
-    raise SystemExit("bounded implementation inventory is empty")
-outside = sorted(changed - expected)
-missing = sorted(expected - changed)
-if outside or missing:
-    raise SystemExit(
-        f"dirty-path inventory differs from the frozen exhaustive implementation fence; outside={outside}; missing={missing}"
-    )
+status = subprocess.check_output(
+    [git, "-C", str(repository), "status", "--porcelain=v2", "-z"]
+)
+if status:
+    raise SystemExit("committed candidate worktree or index is not exactly clean")
 PY
 [[ ! -e "${EXPERIMENT_ROOT}" && ! -L "${EXPERIMENT_ROOT}" ]] \
     || fail "fixed external experiment root already exists"
@@ -308,13 +224,10 @@ if root.exists() or root.is_symlink():
     raise SystemExit("durable-absence pure-test root remains")
 PY
 
-# Create the exact candidate tree without changing HEAD or creating a commit.  The private index is
-# seeded from the bound base and stages only the already validated path fence.  Git may persist the
-# content-addressed tree/blob objects, but no ref, branch, worktree file, or remote is changed.
-readonly PRIVATE_INDEX="${WORK_ROOT}/candidate.index"
+# Record the exact committed tree that supplies every frozen source and build input.
 readonly CANDIDATE_PATHS="${WORK_ROOT}/candidate-changed-paths.v2.json"
 readonly SOURCE_TREE="$(env -i PATH="${FIXED_PATH}" LANG=C LC_ALL=C TZ=UTC \
-    "${PYTHON}" - "${REPOSITORY}" "${GIT}" "${PRIVATE_INDEX}" "${SOURCE_COMMIT}" "${CANDIDATE_PATHS}" <<'PY'
+    "${PYTHON}" - "${REPOSITORY}" "${GIT}" "${SOURCE_COMMIT}" "${CANDIDATE_PATHS}" <<'PY'
 import hashlib
 import json
 import os
@@ -324,114 +237,27 @@ import sys
 
 repository = pathlib.Path(sys.argv[1])
 git = sys.argv[2]
-index = sys.argv[3]
-base = sys.argv[4]
-output = pathlib.Path(sys.argv[5])
-expected = [
-    'Cargo.lock',
-    'Cargo.toml',
-    'crates/common/src/lib.rs',
-    'crates/common/src/macos_retirement_v2.rs',
-    'crates/common/tests/macos_retirement_v2.rs',
-    'scripts/mac/com.atomize.substrate.r3-macos-evidence-finalizer.v2.plist',
-    'scripts/mac/freeze-r3-macos-finalizer-candidate.sh',
-    'scripts/mac/r3-macos-finalizer-root-install.py',
-    'tools/r3-macos-finalizer/Cargo.toml',
-    'tools/r3-macos-finalizer/build.rs',
-    'tools/r3-macos-finalizer/capability-v2.json',
-    'tools/r3-macos-finalizer/native/securityagent_observer.swift',
-    'tools/r3-macos-finalizer/src/ambient.rs',
-    'tools/r3-macos-finalizer/src/authority.rs',
-    'tools/r3-macos-finalizer/src/bin/candidate_freeze_global_provenance_builder.rs',
-    'tools/r3-macos-finalizer/src/bin/candidate_freeze_manifest_builder.rs',
-    'tools/r3-macos-finalizer/src/bin/candidate_freeze_provenance_builder.rs',
-    'tools/r3-macos-finalizer/src/bin/coordinator.rs',
-    'tools/r3-macos-finalizer/src/bin/experiment_harness.rs',
-    'tools/r3-macos-finalizer/src/bin/experiment_peer_probe.rs',
-    'tools/r3-macos-finalizer/src/bin/finalizer.rs',
-    'tools/r3-macos-finalizer/src/contract.rs',
-    'tools/r3-macos-finalizer/src/darwin.rs',
-    'tools/r3-macos-finalizer/src/disposable_capability.rs',
-    'tools/r3-macos-finalizer/src/engine.rs',
-    'tools/r3-macos-finalizer/src/experiment/controls.rs',
-    'tools/r3-macos-finalizer/src/experiment/documents.rs',
-    'tools/r3-macos-finalizer/src/experiment/durable.rs',
-    'tools/r3-macos-finalizer/src/experiment/evidence_export.rs',
-    'tools/r3-macos-finalizer/src/experiment/freeze_manifest.rs',
-    'tools/r3-macos-finalizer/src/experiment/freeze_provenance.rs',
-    'tools/r3-macos-finalizer/src/experiment/harness_protocol.rs',
-    'tools/r3-macos-finalizer/src/experiment/mod.rs',
-    'tools/r3-macos-finalizer/src/experiment/peer_probe.rs',
-    'tools/r3-macos-finalizer/src/experiment/pre_effect.rs',
-    'tools/r3-macos-finalizer/src/experiment/process.rs',
-    'tools/r3-macos-finalizer/src/experiment/publisher_protocol.rs',
-    'tools/r3-macos-finalizer/src/fixed_inbox.rs',
-    'tools/r3-macos-finalizer/src/frame.rs',
-    'tools/r3-macos-finalizer/src/journal.rs',
-    'tools/r3-macos-finalizer/src/lib.rs',
-    'tools/r3-macos-finalizer/src/native_effects.rs',
-    'tools/r3-macos-finalizer/src/targets.rs',
-    'tools/r3-macos-finalizer/tests/authority_pipeline.rs',
-    'tools/r3-macos-finalizer/tests/capability_manifest.rs',
-    'tools/r3-macos-finalizer/tests/closed_targets.rs',
-    'tools/r3-macos-finalizer/tests/engine_recovery.rs',
-    'tools/r3-macos-finalizer/tests/finalizer_admission_order.rs',
-    'tools/r3-macos-finalizer/tests/frame_protocol.rs',
-    'tools/r3-macos-finalizer/tests/journal_contract.rs',
-    'tools/r3-macos-finalizer/tests/launchd_plist.rs',
-    'tools/r3-macos-signer-acl/Cargo.lock',
-    'tools/r3-macos-signer-acl/Cargo.toml',
-    'tools/r3-macos-signer-acl/build.rs',
-    'tools/r3-macos-signer-acl/native/benign_injection_probe.c',
-    'tools/r3-macos-signer-acl/src/attestation.rs',
-    'tools/r3-macos-signer-acl/src/bin/creator_route.rs',
-    'tools/r3-macos-signer-acl/src/bin/disposable_publisher.rs',
-    'tools/r3-macos-signer-acl/src/bin/experiment_runner.rs',
-    'tools/r3-macos-signer-acl/src/bin/nobody_owner_probe.rs',
-    'tools/r3-macos-signer-acl/src/bin/wrong_identity.rs',
-    'tools/r3-macos-signer-acl/src/experiment.rs',
-    'tools/r3-macos-signer-acl/src/ffi.rs',
-    'tools/r3-macos-signer-acl/src/immutable_publish.rs',
-    'tools/r3-macos-signer-acl/src/lib.rs',
-    'tools/r3-macos-signer-acl/src/owner_probe.rs',
-    'tools/r3-macos-signer-acl/src/publisher.rs',
-    'tools/r3-macos-signer-acl/src/publisher_surface.rs',
-    'tools/r3-macos-signer-acl/src/runner.rs',
-    'tools/r3-macos-signer-acl/src/runner_identity.rs',
-    'tools/r3-macos-signer-acl/src/securityagent.rs',
-    'tools/r3-macos-signer-acl/src/supervisor.rs',
-]
-
-def nul_paths(argv, env=None):
-    raw = subprocess.check_output([git, "-C", str(repository), *argv], env=env)
-    return sorted({part.decode("utf-8") for part in raw.split(b"\0") if part})
-
-worktree = set(nul_paths(["diff", "--name-only", "-z", "HEAD"]))
-worktree.update(nul_paths(["ls-files", "--others", "--exclude-standard", "-z"]))
-environment = os.environ.copy()
-environment["GIT_INDEX_FILE"] = index
-subprocess.run([git, "-C", str(repository), "read-tree", base], check=True, env=environment)
-subprocess.run(
-    [git, "-C", str(repository), "add", "-A", "--", *expected],
-    check=True,
-    env=environment,
-)
-indexed = set(nul_paths(["diff", "--cached", "--name-only", "-z", base], environment))
-if indexed != worktree:
-    raise SystemExit(
-        f"private candidate index differs from the validated dirty inventory; indexed={sorted(indexed)}; worktree={sorted(worktree)}"
-    )
-tree = subprocess.check_output(
-    [git, "-C", str(repository), "write-tree"], env=environment, text=True
+commit = sys.argv[3]
+output = pathlib.Path(sys.argv[4])
+observed_commit = subprocess.check_output(
+    [git, "-C", str(repository), "rev-parse", "HEAD"], text=True
 ).strip()
+tree = subprocess.check_output(
+    [git, "-C", str(repository), "rev-parse", "HEAD^{tree}"], text=True
+).strip()
+status = subprocess.check_output(
+    [git, "-C", str(repository), "status", "--porcelain=v2", "-z"]
+)
+if observed_commit != commit or status:
+    raise SystemExit("committed candidate identity changed before tree capture")
 if len(tree) != 40 or any(character not in "0123456789abcdef" for character in tree):
-    raise SystemExit("private candidate index did not produce one Git tree identity")
+    raise SystemExit("committed candidate did not produce one Git tree identity")
 value = {
-    "schema_owner": "substrate.r3-macos-candidate-dirty-path-inventory",
-    "schema_version": 2,
-    "source_base_commit": base,
+    "schema_owner": "substrate.r3-macos-candidate-committed-tree-inventory",
+    "schema_version": 1,
+    "source_base_commit": commit,
     "candidate_source_tree": tree,
-    "paths": sorted(worktree),
+    "paths": [],
 }
 value["path_set_sha256"] = hashlib.sha256(
     json.dumps(value["paths"], sort_keys=True, separators=(",", ":")).encode()
@@ -474,9 +300,9 @@ import stat
 import subprocess
 import sys
 
-REPO = pathlib.Path("/Users/spensermcconnell/.codex/worktrees/r3-macos-finalizer-proof-candidate/substrate")
-BRANCH = "feat/r3-macos-finalizer-proof-candidate"
-EXPERIMENT_ID = "019ffec6-95f6-7d30-80bc-8003ce27d5ba"
+REPO = pathlib.Path("/Users/spensermcconnell/.codex/worktrees/r3-macos-finalizer-rcv-stack/substrate")
+BRANCH = "feat/r3-macos-finalizer-rcv-stack"
+EXPERIMENT_ID = "01a0033f-9fa7-700c-b0b3-4ad0a8ed372b"
 EXPERIMENT_ROOT = pathlib.Path("/Users/spensermcconnell/Library/Application Support/Atomize/R3MacEvidenceFinalizer/experiments") / EXPERIMENT_ID
 FREEZE_ROOT = EXPERIMENT_ROOT / "candidate-freeze"
 ARTIFACT_ROOT = FREEZE_ROOT / "artifacts"
@@ -843,7 +669,7 @@ def absence_plan():
         "/private/var/db/com.atomize.substrate.r3-macos-evidence-finalizer.v2", "/private/var/db/com.atomize.substrate.r3-macos-evidence-finalizer.v2/latches", "/private/var/db/com.atomize.substrate.r3-macos-disposable-publisher.v2", "/private/var/db/com.atomize.substrate.r3-macos-disposable-experiment-runner.v2", "/private/var/db/com.atomize.substrate.r3-macos-signer-acl-experiment.v2", "/private/tmp/com.atomize.substrate.r3-macos-finalizer-freeze.v2", str(EXPERIMENT_ROOT / "global-publisher-exchange"),
     ]
     values.extend({"kind": "filesystem_path", "identity": path} for path in paths)
-    for scope in ["019ffeb5-b252-79ae-8f41-e161419fbbcd", "019ffeb5-b255-75a5-870f-49323ebb2c19"]:
+    for scope in ["01a0033f-9faa-75e4-afb2-f96731adb7de", "01a0033f-9fac-79f4-a137-391728ab2f76"]:
         values.extend([
             {"kind": "filesystem_path", "identity": f"/private/var/db/com.atomize.substrate.r3-macos-evidence-finalizer.v2/{scope}"},
             {"kind": "filesystem_path", "identity": f"/private/var/db/com.atomize.substrate.r3-macos-evidence-finalizer.v2/capability/{scope}"},
@@ -1259,11 +1085,14 @@ TERMINAL_EXECUTED_RECOVERY_ROUTE_SHA256S = frozenset(
     {
         "deea3cb3aaf05dd641936bdb98bcc2d3098504d64b455794af689cabe68cd76a",
         "bd98dc77cfde7f6956f43845294edeb9da5879525def1bcef5d6c8a3133d839a",
+        "7eb9e26e6fb61b10297b85d1b925b980de77c89cc3fe53bc022c91ca04d723c9",
     }
 )
 TERMINAL_EXECUTED_RECOVERY_SOURCE_SHA256S = frozenset(
     {
         "4ae8266e919e0d202e785009695f61820467d73b3836adf9ac92741ac5624698",
+        "5416f9df95e34e480f3f45460c500d8f72ed287b8b21e915b8968f09091c69fd",
+        "d07da7afca829c710fd4f5416250df661a6b9699ea9a2938c93f8443181e1ae3",
     }
 )
 
@@ -1507,50 +1336,27 @@ readonly MANIFEST_SHA256="$(/usr/bin/shasum -a 256 "${FINAL_MANIFEST}" | /usr/bi
 readonly ARTIFACT_SET_SHA256="$(env -i "${freeze_driver_env[@]}" "${PYTHON}" -c 'import json,sys; print(json.load(open(sys.argv[1]))["artifact_set_sha256"])' "${FINAL_MANIFEST}")"
 /bin/chmod 0400 "${FREEZE_ROOT}"/*.json "${ADMIN_BLOCK}" "${ARTIFACT_ROOT}"/*
 
-# Rebuild the private-index tree from the now-live sources and require byte-for-byte equality with
-# the pre-build candidate tree.  This catches edits to an already-dirty file as well as any added,
-# removed, or newly dirty repository path without requiring a pre-proof commit.
+# Rebind the committed identity after all builds and require the same clean HEAD/tree pair.
 readonly REOBSERVED_SOURCE_TREE="$(env -i PATH="${FIXED_PATH}" LANG=C LC_ALL=C TZ=UTC \
-    "${PYTHON}" - "${REPOSITORY}" "${GIT}" "${PRIVATE_INDEX}" "${SOURCE_COMMIT}" "${CANDIDATE_PATHS}" <<'PY'
-import json
-import os
+    "${PYTHON}" - "${REPOSITORY}" "${GIT}" "${SOURCE_COMMIT}" <<'PY'
 import pathlib
 import subprocess
 import sys
 
 repository = pathlib.Path(sys.argv[1])
 git = sys.argv[2]
-index = sys.argv[3]
-base = sys.argv[4]
-inventory = json.loads(pathlib.Path(sys.argv[5]).read_bytes())
-expected_paths = set(inventory["paths"])
-
-def nul_paths(argv, env=None):
-    raw = subprocess.check_output([git, "-C", str(repository), *argv], env=env)
-    return {part.decode("utf-8") for part in raw.split(b"\0") if part}
-
-live_paths = nul_paths(["diff", "--name-only", "-z", "HEAD"])
-live_paths |= nul_paths(["ls-files", "--others", "--exclude-standard", "-z"])
-if live_paths != expected_paths:
-    raise SystemExit(
-        f"candidate dirty-path inventory drifted during freeze; before={sorted(expected_paths)}; after={sorted(live_paths)}"
-    )
-environment = os.environ.copy()
-environment["GIT_INDEX_FILE"] = index
-subprocess.run([git, "-C", str(repository), "read-tree", base], check=True, env=environment)
-subprocess.run(
-    [git, "-C", str(repository), "add", "-A", "--", *sorted(expected_paths)],
-    check=True,
-    env=environment,
+commit = sys.argv[3]
+observed_commit = subprocess.check_output(
+    [git, "-C", str(repository), "rev-parse", "HEAD"], text=True
+).strip()
+status = subprocess.check_output(
+    [git, "-C", str(repository), "status", "--porcelain=v2", "-z"]
 )
-indexed_paths = nul_paths(["diff", "--cached", "--name-only", "-z", base], environment)
-if indexed_paths != expected_paths:
-    raise SystemExit("reobserved private index no longer equals its frozen dirty-path inventory")
-print(
-    subprocess.check_output(
-        [git, "-C", str(repository), "write-tree"], env=environment, text=True
-    ).strip()
-)
+if observed_commit != commit or status:
+    raise SystemExit("committed candidate identity changed during freeze")
+print(subprocess.check_output(
+    [git, "-C", str(repository), "rev-parse", "HEAD^{tree}"], text=True
+).strip())
 PY
 )"
 [[ "${REOBSERVED_SOURCE_TREE}" == "${SOURCE_TREE}" ]] \
@@ -1567,7 +1373,7 @@ PY
 
 trap - EXIT
 print -- "R3 candidate freeze complete"
-print -- "source_base_commit=${SOURCE_COMMIT}"
+print -- "source_commit=${SOURCE_COMMIT}"
 print -- "candidate_source_tree=${SOURCE_TREE}"
 print -- "source_hashes_sha256=${SOURCE_IDENTITY_SHA256}"
 print -- "coordinator_build_inputs_sha256=${COORDINATOR_BUILD_SHA256}"

@@ -142,9 +142,17 @@ for artifact, authority, specification in zip(
     }:
         raise SystemExit("manifest artifact projection changed its closed authority shape")
     role, _, path, uid, gid, mode, _ = specification
+    # The immutable fixture is the old actual completion, not a live-candidate template. Keep its
+    # capability path on the terminal experiment identity while validating the current schema and
+    # every non-rotated compiled authority byte-for-byte.
+    expected_path = path
+    if role == "capability_manifest":
+        expected_path = path.replace(
+            module.EXPERIMENT_ID, "019ffec6-95f6-7d30-80bc-8003ce27d5ba"
+        )
     if (
         authority["role"] != role
-        or authority["intended_path"] != path
+        or authority["intended_path"] != expected_path
         or authority["uid"] != uid
         or authority["gid"] != gid
         or authority["mode"] != mode

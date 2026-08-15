@@ -671,7 +671,7 @@ mod macos {
 
             let temporary = tempfile::tempdir().unwrap();
             let root = temporary.path().join("journal");
-            let scope = "019ffec6-95f6-7d30-80bc-8003ce27d5ba";
+            let scope = substrate_r3_macos_finalizer::experiment::EXPERIMENT_ID_V2;
             let uid = unsafe { libc::geteuid() };
             fs::create_dir(&root).unwrap();
             fs::set_permissions(&root, fs::Permissions::from_mode(0o700)).unwrap();
@@ -685,7 +685,7 @@ mod macos {
         fn claim_probe_recovers_generation_one_without_head_as_rejoin() {
             let temporary = tempfile::tempdir().unwrap();
             let root = temporary.path().join("journal");
-            let scope = "019ffec6-95f6-7d30-80bc-8003ce27d5ba";
+            let scope = substrate_r3_macos_finalizer::experiment::EXPERIMENT_ID_V2;
             // SAFETY: scalar identity query used only to own this disposable test journal.
             let uid = unsafe { libc::geteuid() };
             let journal = LockedJournal::open_fixed(&root, scope, uid).unwrap();

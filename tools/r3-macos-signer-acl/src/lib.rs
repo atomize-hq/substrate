@@ -74,8 +74,8 @@ pub const EXPLICIT_ACL_LABEL: &str =
 
 pub const CREATOR_REPETITION_SCOPE_1: &str = "019ffeb5-b24c-72a7-80bc-e629f85b37c3";
 pub const CREATOR_REPETITION_SCOPE_2: &str = "019ffeb5-b24f-7834-bb4d-44885040002f";
-pub const DISPOSABLE_FINALIZER_SCOPE_1: &str = "019ffeb5-b252-79ae-8f41-e161419fbbcd";
-pub const DISPOSABLE_FINALIZER_SCOPE_2: &str = "019ffeb5-b255-75a5-870f-49323ebb2c19";
+pub const DISPOSABLE_FINALIZER_SCOPE_1: &str = "01a0033f-9faa-75e4-afb2-f96731adb7de";
+pub const DISPOSABLE_FINALIZER_SCOPE_2: &str = "01a0033f-9fac-79f4-a137-391728ab2f76";
 pub const DISPOSABLE_PUBLISHER_ROOT: &str =
     "/private/var/db/com.atomize.substrate.r3-macos-disposable-publisher.v2";
 pub const DISPOSABLE_PUBLISHER_STATE_PATH: &str =
@@ -251,16 +251,8 @@ pub fn compiled_explicit_acl_config() -> Result<ExactSignerConfig> {
 pub(crate) fn compiled_disposable_target_config(
     repetition: FixedRepetitionV2,
 ) -> Result<ExactSignerConfig> {
-    let (tag, label) = match repetition {
-        FixedRepetitionV2::First => (
-            b"019ffeb5-b252-79ae-8f41-e161419fbbcd:signing-key".to_vec(),
-            "019ffeb5-b252-79ae-8f41-e161419fbbcd:signing-key",
-        ),
-        FixedRepetitionV2::Second => (
-            b"019ffeb5-b255-75a5-870f-49323ebb2c19:signing-key".to_vec(),
-            "019ffeb5-b255-75a5-870f-49323ebb2c19:signing-key",
-        ),
-    };
+    let label = format!("{}:signing-key", repetition.finalizer_scope());
+    let tag = label.as_bytes().to_vec();
     ExactSignerConfig::new(
         SYSTEM_KEYCHAIN_PATH,
         DISPOSABLE_PUBLISHER_EXECUTABLE_PATH,
@@ -274,16 +266,11 @@ pub(crate) fn compiled_disposable_target_config(
 pub(crate) fn compiled_disposable_wrong_config(
     repetition: FixedRepetitionV2,
 ) -> Result<ExactSignerConfig> {
-    let (tag, label) = match repetition {
-        FixedRepetitionV2::First => (
-            b"019ffeb5-b252-79ae-8f41-e161419fbbcd:wrong-surrogate-signing-key".to_vec(),
-            "019ffeb5-b252-79ae-8f41-e161419fbbcd:wrong-surrogate-signing-key",
-        ),
-        FixedRepetitionV2::Second => (
-            b"019ffeb5-b255-75a5-870f-49323ebb2c19:wrong-surrogate-signing-key".to_vec(),
-            "019ffeb5-b255-75a5-870f-49323ebb2c19:wrong-surrogate-signing-key",
-        ),
-    };
+    let label = format!(
+        "{}:wrong-surrogate-signing-key",
+        repetition.finalizer_scope()
+    );
+    let tag = label.as_bytes().to_vec();
     ExactSignerConfig::new(
         SYSTEM_KEYCHAIN_PATH,
         DISPOSABLE_PUBLISHER_EXECUTABLE_PATH,
@@ -483,6 +470,30 @@ pub use ffi::{NonInteractiveSecurity, QueryUiFailSecurity};
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn rotated_disposable_finalizer_scopes_are_exactly_shared() {
+        assert_eq!(
+            [DISPOSABLE_FINALIZER_SCOPE_1, DISPOSABLE_FINALIZER_SCOPE_2],
+            substrate_r3_macos_finalizer::experiment::DISPOSABLE_SCOPES_V2
+        );
+        for repetition in FixedRepetitionV2::ALL {
+            let target = compiled_disposable_target_config(repetition).unwrap();
+            let wrong = compiled_disposable_wrong_config(repetition).unwrap();
+            assert_eq!(
+                target.application_tag(),
+                format!("{}:signing-key", repetition.finalizer_scope()).as_bytes()
+            );
+            assert_eq!(
+                wrong.application_tag(),
+                format!(
+                    "{}:wrong-surrogate-signing-key",
+                    repetition.finalizer_scope()
+                )
+                .as_bytes()
+            );
+        }
+    }
 
     fn config() -> ExactSignerConfig {
         ExactSignerConfig::new(

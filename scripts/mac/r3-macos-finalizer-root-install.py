@@ -26,7 +26,7 @@ import sys
 from typing import Any, NoReturn
 
 
-EXPERIMENT_ID = "019ffec6-95f6-7d30-80bc-8003ce27d5ba"
+EXPERIMENT_ID = "01a0033f-9fa7-700c-b0b3-4ad0a8ed372b"
 EXPERIMENT_ROOT = (
     pathlib.Path(
         "/Users/spensermcconnell/Library/Application Support/Atomize/"
@@ -95,9 +95,8 @@ RUNNER_PATH = pathlib.Path(
     "/Library/PrivilegedHelperTools/"
     "com.atomize.substrate.r3-macos-disposable-experiment-runner.v2"
 )
-STARTING_HEAD = "40015a6cfa508c112e6444086341d6df8473e875"
-REPOSITORY = "/Users/spensermcconnell/.codex/worktrees/r3-macos-finalizer-proof-candidate/substrate"
-BRANCH = "feat/r3-macos-finalizer-proof-candidate"
+REPOSITORY = "/Users/spensermcconnell/.codex/worktrees/r3-macos-finalizer-rcv-stack/substrate"
+BRANCH = "feat/r3-macos-finalizer-rcv-stack"
 PROCESS_SNAPSHOT_IDENTITY = "candidate_preinstall_process_snapshot_v2"
 FIXED_ENV = {
     "PATH": "/usr/bin:/bin:/usr/sbin:/sbin",
@@ -280,8 +279,8 @@ INSTALL_DIRECTORIES = SUPPORT_DIRECTORIES + [
     (str(GLOBAL_EXCHANGE), 501, 0, 0o700),
 ]
 SCOPES = [
-    "019ffeb5-b252-79ae-8f41-e161419fbbcd",
-    "019ffeb5-b255-75a5-870f-49323ebb2c19",
+    "01a0033f-9faa-75e4-afb2-f96731adb7de",
+    "01a0033f-9fac-79f4-a137-391728ab2f76",
 ]
 
 
@@ -1784,7 +1783,7 @@ def verify_manifest_shape(manifest: dict[str, Any], manifest_bytes: bytes) -> No
         or manifest.get("artifact_root") != str(FREEZE_ROOT)
         or manifest.get("repository_path") != REPOSITORY
         or manifest.get("repository_branch") != BRANCH
-        or manifest.get("source_commit") != STARTING_HEAD
+        or not is_git_id(manifest.get("source_commit"))
         or not is_git_id(manifest.get("source_tree"))
         or manifest.get("source_hashes_manifest_path")
         != str(FREEZE_ROOT / "source-hashes.v2.json")

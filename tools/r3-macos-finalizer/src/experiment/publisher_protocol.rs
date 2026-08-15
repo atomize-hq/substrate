@@ -1361,7 +1361,7 @@ mod tests {
             path,
             Path::new(EXPERIMENT_ROOT_V2)
                 .join("repetitions")
-                .join("02-019ffeb5-b255-75a5-870f-49323ebb2c19")
+                .join("02-01a0033f-9fac-79f4-a137-391728ab2f76")
                 .join("publisher-exchange/identity-binding.v2.json")
         );
         assert!(root_publisher_path_v2(

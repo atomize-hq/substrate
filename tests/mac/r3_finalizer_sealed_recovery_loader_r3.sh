@@ -192,11 +192,14 @@ terminal_sources = literal_assignment("TERMINAL_EXECUTED_RECOVERY_SOURCE_SHA256S
 expected_terminal_routes = {
     "deea3cb3aaf05dd641936bdb98bcc2d3098504d64b455794af689cabe68cd76a",
     "bd98dc77cfde7f6956f43845294edeb9da5879525def1bcef5d6c8a3133d839a",
+    "7eb9e26e6fb61b10297b85d1b925b980de77c89cc3fe53bc022c91ca04d723c9",
 }
 if terminal_routes != expected_terminal_routes:
     raise SystemExit("executed recovery-route terminal set changed")
 if terminal_sources != {
-    "4ae8266e919e0d202e785009695f61820467d73b3836adf9ac92741ac5624698"
+    "4ae8266e919e0d202e785009695f61820467d73b3836adf9ac92741ac5624698",
+    "5416f9df95e34e480f3f45460c500d8f72ed287b8b21e915b8968f09091c69fd",
+    "d07da7afca829c710fd4f5416250df661a6b9699ea9a2938c93f8443181e1ae3",
 }:
     raise SystemExit("executed recovery-source terminal set changed")
 unknown = "0" * 64

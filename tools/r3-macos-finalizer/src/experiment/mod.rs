@@ -24,9 +24,9 @@ use serde::{Deserialize, Serialize};
 
 pub const EXPERIMENT_OWNER_V2: &str = "substrate.r3-macos-disposable-finalizer-experiment";
 pub const EXPERIMENT_VERSION_V2: u32 = 2;
-pub const EXPERIMENT_ID_V2: &str = "019ffec6-95f6-7d30-80bc-8003ce27d5ba";
-pub const EXPERIMENT_ROOT_V2: &str = "/Users/spensermcconnell/Library/Application Support/Atomize/R3MacEvidenceFinalizer/experiments/019ffec6-95f6-7d30-80bc-8003ce27d5ba";
-pub const GLOBAL_PUBLISHER_EXCHANGE_ROOT_V2: &str = "/Users/spensermcconnell/Library/Application Support/Atomize/R3MacEvidenceFinalizer/experiments/019ffec6-95f6-7d30-80bc-8003ce27d5ba/global-publisher-exchange";
+pub const EXPERIMENT_ID_V2: &str = "01a0033f-9fa7-700c-b0b3-4ad0a8ed372b";
+pub const EXPERIMENT_ROOT_V2: &str = "/Users/spensermcconnell/Library/Application Support/Atomize/R3MacEvidenceFinalizer/experiments/01a0033f-9fa7-700c-b0b3-4ad0a8ed372b";
+pub const GLOBAL_PUBLISHER_EXCHANGE_ROOT_V2: &str = "/Users/spensermcconnell/Library/Application Support/Atomize/R3MacEvidenceFinalizer/experiments/01a0033f-9fa7-700c-b0b3-4ad0a8ed372b/global-publisher-exchange";
 pub const GLOBAL_PUBLISHER_EXCHANGE_UID_V2: u32 = DISPOSABLE_HARNESS_UID_V2;
 pub const GLOBAL_PUBLISHER_EXCHANGE_GID_V2: u32 = 0;
 pub const GLOBAL_PUBLISHER_EXCHANGE_MODE_V2: u32 = 0o700;
@@ -123,8 +123,8 @@ fn is_sha256(value: &str) -> bool {
 }
 
 pub const DISPOSABLE_SCOPES_V2: [&str; 2] = [
-    "019ffeb5-b252-79ae-8f41-e161419fbbcd",
-    "019ffeb5-b255-75a5-870f-49323ebb2c19",
+    "01a0033f-9faa-75e4-afb2-f96731adb7de",
+    "01a0033f-9fac-79f4-a137-391728ab2f76",
 ];
 pub const CREATOR_SCOPES_V2: [&str; 2] = [
     "019ffeb5-b24c-72a7-80bc-e629f85b37c3",
@@ -295,6 +295,21 @@ mod tests {
         assert!(HarnessStageV2::Prepared
             .require_successor(HarnessStageV2::ReceiptExternallyDurable)
             .is_err());
+    }
+
+    #[test]
+    fn terminal_disposable_scopes_are_refused_after_rotation() {
+        for terminal_scope in [
+            "019ffeb5-b252-79ae-8f41-e161419fbbcd",
+            "019ffeb5-b255-75a5-870f-49323ebb2c19",
+        ] {
+            assert!(RepetitionV2::One
+                .validate_binding(RepetitionV2::One.ordinal(), terminal_scope)
+                .is_err());
+            assert!(RepetitionV2::Two
+                .validate_binding(RepetitionV2::Two.ordinal(), terminal_scope)
+                .is_err());
+        }
     }
 
     #[test]

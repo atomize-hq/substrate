@@ -21,7 +21,7 @@ pub const CANDIDATE_FREEZE_RUSTFLAGS_V2: &[&str] = &[
 pub const CANDIDATE_FREEZE_LINKER_FLAGS_V2: &[&str] = &[
     "-fuse-ld=/Applications/Xcode.app/Contents/Developer/Toolchains/XcodeDefault.xctoolchain/usr/bin/ld",
 ];
-pub const CANDIDATE_FREEZE_SOURCE_HASHES_PATH_V2: &str = "/Users/spensermcconnell/Library/Application Support/Atomize/R3MacEvidenceFinalizer/experiments/019ffec6-95f6-7d30-80bc-8003ce27d5ba/candidate-freeze/source-hashes.v2.json";
+pub const CANDIDATE_FREEZE_SOURCE_HASHES_PATH_V2: &str = "/Users/spensermcconnell/Library/Application Support/Atomize/R3MacEvidenceFinalizer/experiments/01a0033f-9fa7-700c-b0b3-4ad0a8ed372b/candidate-freeze/source-hashes.v2.json";
 
 pub const CANDIDATE_FREEZE_SOURCE_PATHS_V2: &[&str] = &[
     "Cargo.lock",
