@@ -9,8 +9,9 @@ use substrate_r3_macos_signer_acl::{
     WRONG_IDENTITY_EXECUTABLE_PATH,
 };
 
-const SCHEMA: &str = "substrate.r3-macos-signer-acl.wrong-identity-receipt.v3";
-const EXPECTED_LOOKUP_STATUS: i32 = -25_308;
+const SCHEMA: &str = "substrate.r3-macos-signer-acl.wrong-identity-receipt.v4";
+const EXPECTED_SIGN_CFERROR_CODE: i64 = -25_308;
+const SIGNING_PAYLOAD: &[u8] = b"substrate.r3-macos-signer-acl.wrong-identity-sign-control.v4";
 
 #[derive(Debug, Serialize)]
 struct WrongIdentityReceipt {
@@ -20,8 +21,8 @@ struct WrongIdentityReceipt {
     executable_path: &'static str,
     marker_path: &'static str,
     process_interaction_disable_raw_os_status: i32,
-    precommitted_expected_lookup_raw_os_status: i32,
-    tag_scoped_private_key_lookup_raw_os_status: i32,
+    precommitted_expected_sign_raw_cferror_code: i64,
+    tag_scoped_private_key_sign_raw_cferror_code: i64,
 }
 
 fn main() -> Result<()> {
@@ -47,11 +48,11 @@ fn main() -> Result<()> {
     let config = compiled_creator_route_config(repetition)?;
     // This must be the first Security.framework call in this fresh wrong-identity process.
     let security = NonInteractiveSecurity::establish_first()?;
-    let tag_scoped_private_key_lookup_raw_os_status =
-        security.tag_scoped_private_key_lookup_raw_os_status(&config)?;
-    if tag_scoped_private_key_lookup_raw_os_status != EXPECTED_LOOKUP_STATUS {
+    let tag_scoped_private_key_sign_raw_cferror_code =
+        security.tag_scoped_private_key_sign_raw_cferror_code(&config, SIGNING_PAYLOAD)?;
+    if tag_scoped_private_key_sign_raw_cferror_code != EXPECTED_SIGN_CFERROR_CODE {
         bail!(
-            "wrong-identity tag-scoped private-key lookup returned OSStatus {tag_scoped_private_key_lookup_raw_os_status}, expected {EXPECTED_LOOKUP_STATUS}"
+            "wrong-identity tag-scoped private-key sign returned CFError code {tag_scoped_private_key_sign_raw_cferror_code}, expected {EXPECTED_SIGN_CFERROR_CODE}"
         )
     }
     marker.transition(invoked, after)?;
@@ -62,8 +63,8 @@ fn main() -> Result<()> {
         executable_path: WRONG_IDENTITY_EXECUTABLE_PATH,
         marker_path: MARKER_PATH,
         process_interaction_disable_raw_os_status: 0,
-        precommitted_expected_lookup_raw_os_status: EXPECTED_LOOKUP_STATUS,
-        tag_scoped_private_key_lookup_raw_os_status,
+        precommitted_expected_sign_raw_cferror_code: EXPECTED_SIGN_CFERROR_CODE,
+        tag_scoped_private_key_sign_raw_cferror_code,
     };
     std::io::stdout()
         .lock()
@@ -92,8 +93,8 @@ mod tests {
             executable_path: WRONG_IDENTITY_EXECUTABLE_PATH,
             marker_path: MARKER_PATH,
             process_interaction_disable_raw_os_status: 0,
-            precommitted_expected_lookup_raw_os_status: EXPECTED_LOOKUP_STATUS,
-            tag_scoped_private_key_lookup_raw_os_status: EXPECTED_LOOKUP_STATUS,
+            precommitted_expected_sign_raw_cferror_code: EXPECTED_SIGN_CFERROR_CODE,
+            tag_scoped_private_key_sign_raw_cferror_code: EXPECTED_SIGN_CFERROR_CODE,
         };
 
         let emitted = canonical_receipt_line(&value).expect("encode wrong-identity receipt");
@@ -105,7 +106,7 @@ mod tests {
             parse_canonical_v2::<Value>(body).expect("accept canonical wrong-identity receipt");
         assert_eq!(
             parsed.get("schema").and_then(Value::as_str),
-            Some("substrate.r3-macos-signer-acl.wrong-identity-receipt.v3")
+            Some("substrate.r3-macos-signer-acl.wrong-identity-receipt.v4")
         );
         assert!(parsed.get("exact_delete").is_none());
         assert!(parsed.get("exact_identity_preserved_after").is_none());

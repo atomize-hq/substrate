@@ -366,14 +366,15 @@ impl NonInteractiveSecurity {
         exact_identity_present_impl(config)
     }
 
-    /// Perform one tag-scoped private-key lookup after process interaction has been disabled.
-    /// Only the raw OSStatus escapes; any unexpected returned object is retained until release and
-    /// is never interpreted as a complete product-equivalent identity.
-    pub fn tag_scoped_private_key_lookup_raw_os_status(
+    /// Attempt one signature with the exact product-equivalent key after process interaction has
+    /// been disabled. Only the scalar CFError code escapes; an unexpected signature is retained
+    /// until release and is never returned to the caller.
+    pub fn tag_scoped_private_key_sign_raw_cferror_code(
         &self,
         config: &ExactSignerConfig,
-    ) -> Result<OsStatus> {
-        tag_scoped_private_key_lookup_raw_os_status_impl(config)
+        payload: &[u8],
+    ) -> Result<i64> {
+        tag_scoped_private_key_sign_raw_cferror_code_impl(config, payload)
     }
 
     /// Invoke the one intended private-key capability.  The current executable must match the
@@ -616,23 +617,42 @@ fn exact_identity_present_impl(config: &ExactSignerConfig) -> Result<bool> {
     }
 }
 
-fn tag_scoped_private_key_lookup_raw_os_status_impl(
+fn tag_scoped_private_key_sign_raw_cferror_code_impl(
     config: &ExactSignerConfig,
-) -> Result<OsStatus> {
+    payload: &[u8],
+) -> Result<i64> {
     config.validate()?;
-    // SAFETY: the explicit keychain, query, and any unexpected result remain owned through their
-    // last use.  The result is deliberately not inspected because denial proves no identity
-    // posture beyond the tag-scoped query that was attempted.
+    if payload.is_empty() || payload.len() > MAX_SIGNING_PAYLOAD_BYTES {
+        bail!("signing payload is empty or exceeds its fixed bound")
+    }
+    // SAFETY: the exact query, key, payload, returned signature, and CFError remain owned through
+    // their last use. No signature bytes or private-key material escape this denial-only helper.
     unsafe {
         let mut owned = OwnedCf::new();
         let keychain = open_explicit_system_keychain(&mut owned)?;
-        let query = exact_private_key_query(&mut owned, keychain, config)?;
-        let mut result: CfType = ptr::null();
-        let status = SecItemCopyMatching(query.cast(), &mut result);
-        if !result.is_null() {
-            owned.hold(result);
+        let (key, _, _) = product_equivalent_private_key_match(&mut owned, keychain, config)?
+            .context("exact product-equivalent signer is absent")?;
+        let data = cf_data(&mut owned, payload)?;
+        let mut error: CfType = ptr::null();
+        let signature = SecKeyCreateSignature(
+            key,
+            kSecKeyAlgorithmECDSASignatureMessageX962SHA256,
+            data,
+            &mut error,
+        );
+        if !signature.is_null() {
+            owned.hold(signature);
+            if !error.is_null() {
+                owned.hold(error);
+            }
+            return Ok(i64::from(ERR_SEC_SUCCESS));
         }
-        Ok(status)
+        if error.is_null() {
+            bail!("wrong-identity sign denial lacked its exact CFError")
+        }
+        let code = CFErrorGetCode(error);
+        owned.hold(error);
+        i64::try_from(code).context("wrong-identity sign CFError exceeds i64")
     }
 }
 

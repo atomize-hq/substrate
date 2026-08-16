@@ -2089,7 +2089,7 @@ fn validate_creator_typed_receipt(
         };
         if object.len() != 8
             || after != expected_after
-            || schema != Some("substrate.r3-macos-signer-acl.wrong-identity-receipt.v3")
+            || schema != Some("substrate.r3-macos-signer-acl.wrong-identity-receipt.v4")
             || object.get("repetition").and_then(serde_json::Value::as_str) != Some(repetition_name)
             || object
                 .get("creator_scope_id")
@@ -2108,11 +2108,11 @@ fn validate_creator_typed_receipt(
                 .and_then(serde_json::Value::as_i64)
                 != Some(0)
             || object
-                .get("precommitted_expected_lookup_raw_os_status")
+                .get("precommitted_expected_sign_raw_cferror_code")
                 .and_then(serde_json::Value::as_i64)
                 != Some(-25_308)
             || object
-                .get("tag_scoped_private_key_lookup_raw_os_status")
+                .get("tag_scoped_private_key_sign_raw_cferror_code")
                 .and_then(serde_json::Value::as_i64)
                 != Some(-25_308)
         {
@@ -2238,7 +2238,7 @@ fn creator_native_arm(state: MarkerState) -> Result<CreatorNativeArmV2> {
     match creator_arm_sequence_ordinal(state)? {
         1 => Ok(CreatorNativeArmV2::QueryUiFailCreateThenDelete),
         2 => Ok(CreatorNativeArmV2::FreshProcessCreateThenExit),
-        3 => Ok(CreatorNativeArmV2::WrongIdentityProcessInteractionDeniedLookup),
+        3 => Ok(CreatorNativeArmV2::WrongIdentityProcessInteractionDeniedSign),
         4 => Ok(CreatorNativeArmV2::FreshProcessFirstCallDisableThenDelete),
         5 => Ok(CreatorNativeArmV2::AlreadyAbsentRetry),
         _ => unreachable!("closed creator arm ordinal is in 1..=5"),
@@ -2297,20 +2297,21 @@ fn build_creator_native_arm_receipt(
             true,
             vec![(O::CreateProductEquivalentSigner, 0, C::CreatedAndPresent)],
         ),
-        CreatorNativeArmV2::WrongIdentityProcessInteractionDeniedLookup => (
+        CreatorNativeArmV2::WrongIdentityProcessInteractionDeniedSign => (
             true,
             true,
             vec![
                 (O::DisableProcessInteractionFirst, 0, C::InteractionDisabled),
                 (
-                    O::LookupTagScopedPrivateKey,
+                    O::SignTagScopedPrivateKey,
                     -25_308,
                     C::InteractionNotAllowed,
                 ),
             ],
         ),
-        CreatorNativeArmV2::WrongIdentityDelete => {
-            bail!("legacy wrong-identity deletion arm is not valid in the current experiment")
+        CreatorNativeArmV2::WrongIdentityDelete
+        | CreatorNativeArmV2::WrongIdentityProcessInteractionDeniedLookup => {
+            bail!("historical wrong-identity arm is not valid in the current experiment")
         }
         CreatorNativeArmV2::FreshProcessFirstCallDisableThenDelete => (
             true,
@@ -9923,11 +9924,7 @@ fn parse_peer_frame(bytes: &[u8]) -> Result<PeerProbeExchangeResultV2> {
 
 fn parse_stdout_json<T: DeserializeOwned + Serialize>(observed: &ObservedChildV2) -> Result<T> {
     let bytes = one_stdout_line(&observed.stdout)?;
-    let value: T = serde_json::from_slice(bytes)?;
-    if serde_json::to_vec(&value)? != bytes {
-        bail!("sealed child stdout receipt is not canonical JSON")
-    }
-    Ok(value)
+    parse_canonical_v2(bytes)
 }
 
 fn one_stdout_line(bytes: &[u8]) -> Result<&[u8]> {
@@ -12350,8 +12347,26 @@ mod tests {
     }
 
     #[test]
-    fn wrong_identity_typed_receipt_accepts_only_process_denied_lookup_v3() {
+    fn wrong_identity_typed_receipt_accepts_only_process_denied_sign_v4() {
         let current = serde_json::json!({
+            "schema": "substrate.r3-macos-signer-acl.wrong-identity-receipt.v4",
+            "repetition": "first",
+            "creator_scope_id": CREATOR_REPETITION_SCOPE_1,
+            "executable_path": WRONG_IDENTITY_EXECUTABLE_PATH,
+            "marker_path": MARKER_PATH,
+            "process_interaction_disable_raw_os_status": 0,
+            "precommitted_expected_sign_raw_cferror_code": -25_308,
+            "tag_scoped_private_key_sign_raw_cferror_code": -25_308,
+        });
+        validate_creator_typed_receipt(
+            &current,
+            MarkerState::FirstWrongPrepared,
+            MarkerState::FirstFreshDeletePrepared,
+            WRONG_IDENTITY_EXECUTABLE_PATH,
+        )
+        .expect("accept exact process-denied sign receipt");
+
+        let historical_lookup = serde_json::json!({
             "schema": "substrate.r3-macos-signer-acl.wrong-identity-receipt.v3",
             "repetition": "first",
             "creator_scope_id": CREATOR_REPETITION_SCOPE_1,
@@ -12361,30 +12376,8 @@ mod tests {
             "precommitted_expected_lookup_raw_os_status": -25_308,
             "tag_scoped_private_key_lookup_raw_os_status": -25_308,
         });
-        validate_creator_typed_receipt(
-            &current,
-            MarkerState::FirstWrongPrepared,
-            MarkerState::FirstFreshDeletePrepared,
-            WRONG_IDENTITY_EXECUTABLE_PATH,
-        )
-        .expect("accept exact process-denied lookup receipt");
-
-        let legacy = serde_json::json!({
-            "schema": "substrate.r3-macos-signer-acl.wrong-identity-receipt.v2",
-            "repetition": "first",
-            "creator_scope_id": CREATOR_REPETITION_SCOPE_1,
-            "executable_path": WRONG_IDENTITY_EXECUTABLE_PATH,
-            "marker_path": MARKER_PATH,
-            "precommitted_expected_raw_os_status": -25_308,
-            "exact_delete": {
-                "raw_os_status": -25_308,
-                "classification": "interaction_not_allowed",
-                "present_after": true,
-            },
-            "exact_identity_preserved_after": true,
-        });
         assert!(validate_creator_typed_receipt(
-            &legacy,
+            &historical_lookup,
             MarkerState::FirstWrongPrepared,
             MarkerState::FirstFreshDeletePrepared,
             WRONG_IDENTITY_EXECUTABLE_PATH,
@@ -12444,6 +12437,41 @@ mod tests {
         assert!(!immediate.contains(
             "observe_sealed_child(sealed_command(\n                CREATOR_EXECUTABLE_PATH"
         ));
+    }
+
+    #[test]
+    fn stdout_parser_accepts_canonical_creator_rollback_receipt() {
+        let expected = CreatorRollbackReceiptV2 {
+            schema_owner: "substrate.r3-macos-signer-acl.creator-emergency-rollback-receipt"
+                .to_owned(),
+            schema_version: 2,
+            repetition: FixedRepetitionV2::First,
+            failure_observation_sha256: "11".repeat(32),
+            exact_delete: Some(crate::ExactDeleteReceipt {
+                raw_os_status: 0,
+                classification: crate::ExactDeleteClassification::DeletedAndAbsent,
+                present_after: false,
+            }),
+            exact_identity_absent: true,
+        };
+        let mut stdout = canonical_bytes_v2(&expected).expect("canonical rollback receipt");
+        assert_ne!(
+            stdout,
+            serde_json::to_vec(&expected).expect("declaration-order rollback receipt")
+        );
+        stdout.push(b'\n');
+        let observed = ObservedChildV2 {
+            status: std::process::ExitStatus::from_raw(0),
+            stdout,
+            stderr: Vec::new(),
+            securityagent_report_sha256: "22".repeat(32),
+            securityagent_report: Vec::new(),
+            unexpected_ui_observed: false,
+        };
+
+        let parsed: CreatorRollbackReceiptV2 =
+            parse_stdout_json(&observed).expect("accept canonical sorted rollback receipt");
+        assert_eq!(parsed, expected);
     }
 
     #[test]

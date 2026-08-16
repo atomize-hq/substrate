@@ -607,7 +607,9 @@ pub enum GlobalNativeArmV2 {
     CreatorFreshProcessCreate,
     /// Historical decoding only; never accepted by the current experiment plan.
     CreatorWrongIdentityDelete,
+    /// Historical decoding only; native evidence proved exact lookup is not authorization.
     CreatorWrongIdentityProcessInteractionDeniedLookup,
+    CreatorWrongIdentityProcessInteractionDeniedSign,
     CreatorFirstSecurityCallDisableThenDelete,
     CreatorAlreadyAbsentRetry,
     FinalizerTransport {
@@ -734,7 +736,9 @@ pub enum CreatorNativeArmV2 {
     FreshProcessCreateThenExit,
     /// Historical decoding only; never accepted by the current experiment sequence.
     WrongIdentityDelete,
+    /// Historical decoding only; native evidence proved exact lookup is not authorization.
     WrongIdentityProcessInteractionDeniedLookup,
+    WrongIdentityProcessInteractionDeniedSign,
     FreshProcessFirstCallDisableThenDelete,
     AlreadyAbsentRetry,
 }
@@ -742,7 +746,7 @@ pub enum CreatorNativeArmV2 {
 pub const CREATOR_NATIVE_ARM_SEQUENCE_V2: [CreatorNativeArmV2; 5] = [
     CreatorNativeArmV2::QueryUiFailCreateThenDelete,
     CreatorNativeArmV2::FreshProcessCreateThenExit,
-    CreatorNativeArmV2::WrongIdentityProcessInteractionDeniedLookup,
+    CreatorNativeArmV2::WrongIdentityProcessInteractionDeniedSign,
     CreatorNativeArmV2::FreshProcessFirstCallDisableThenDelete,
     CreatorNativeArmV2::AlreadyAbsentRetry,
 ];
@@ -752,7 +756,9 @@ pub const CREATOR_NATIVE_ARM_SEQUENCE_V2: [CreatorNativeArmV2; 5] = [
 pub enum CreatorNativeOperationV2 {
     DisableProcessInteractionFirst,
     CreateProductEquivalentSigner,
+    /// Historical decoding only; exact lookup does not exercise private-key authorization.
     LookupTagScopedPrivateKey,
+    SignTagScopedPrivateKey,
     DeleteExactSigner,
 }
 
@@ -792,7 +798,7 @@ pub struct CreatorNativeArmReceiptV2 {
     pub marker_before: String,
     pub marker_after: String,
     pub target_present_before: bool,
-    /// For the current denied-lookup arm this is a sequence-derived invariant, not an arm-local
+    /// For the current denied-sign arm this is a sequence-derived invariant, not an arm-local
     /// native observation.  It becomes preservation evidence only when the completed receipt set
     /// validates the ordinal-2/3/4 join.
     pub target_present_after: bool,
@@ -820,7 +826,7 @@ impl CreatorNativeArmReceiptV2 {
         }
         let expected_arm = self.validate_current_arm()?;
         let expected_identity =
-            if expected_arm == CreatorNativeArmV2::WrongIdentityProcessInteractionDeniedLookup {
+            if expected_arm == CreatorNativeArmV2::WrongIdentityProcessInteractionDeniedSign {
                 &identities.wrong_identity
             } else {
                 &identities.creator_identity
@@ -921,27 +927,27 @@ fn validate_creator_repetition_preservation_join_v2(
         bail!("an incomplete creator repetition cannot establish signer preservation")
     }
     let creation = &receipts[1];
-    let denied_lookup = &receipts[2];
+    let denied_sign = &receipts[2];
     let authorized_delete = &receipts[3];
-    if creation.repetition != denied_lookup.repetition
+    if creation.repetition != denied_sign.repetition
         || creation.repetition != authorized_delete.repetition
-        || creation.creator_scope_id != denied_lookup.creator_scope_id
+        || creation.creator_scope_id != denied_sign.creator_scope_id
         || creation.creator_scope_id != authorized_delete.creator_scope_id
         || creation.sequence_ordinal != 2
-        || denied_lookup.sequence_ordinal != 3
+        || denied_sign.sequence_ordinal != 3
         || authorized_delete.sequence_ordinal != 4
         || creation.arm != CreatorNativeArmV2::FreshProcessCreateThenExit
-        || denied_lookup.arm != CreatorNativeArmV2::WrongIdentityProcessInteractionDeniedLookup
+        || denied_sign.arm != CreatorNativeArmV2::WrongIdentityProcessInteractionDeniedSign
         || authorized_delete.arm != CreatorNativeArmV2::FreshProcessFirstCallDisableThenDelete
-        || creation.marker_after != denied_lookup.marker_before
-        || denied_lookup.marker_after != authorized_delete.marker_before
+        || creation.marker_after != denied_sign.marker_before
+        || denied_sign.marker_after != authorized_delete.marker_before
         || (
             creation.target_present_before,
             creation.target_present_after,
         ) != (false, true)
         || (
-            denied_lookup.target_present_before,
-            denied_lookup.target_present_after,
+            denied_sign.target_present_before,
+            denied_sign.target_present_after,
         ) != (true, true)
         || (
             authorized_delete.target_present_before,
@@ -949,10 +955,8 @@ fn validate_creator_repetition_preservation_join_v2(
         ) != (true, false)
         || creation.operations
             != creator_operations_v2(CreatorNativeArmV2::FreshProcessCreateThenExit)
-        || denied_lookup.operations
-            != creator_operations_v2(
-                CreatorNativeArmV2::WrongIdentityProcessInteractionDeniedLookup,
-            )
+        || denied_sign.operations
+            != creator_operations_v2(CreatorNativeArmV2::WrongIdentityProcessInteractionDeniedSign)
         || authorized_delete.operations
             != creator_operations_v2(CreatorNativeArmV2::FreshProcessFirstCallDisableThenDelete)
     {
@@ -960,7 +964,7 @@ fn validate_creator_repetition_preservation_join_v2(
     }
 
     let creation_native = creator_native_receipt_object_v2(creation)?;
-    let denied_native = creator_native_receipt_object_v2(denied_lookup)?;
+    let denied_native = creator_native_receipt_object_v2(denied_sign)?;
     let delete_native = creator_native_receipt_object_v2(authorized_delete)?;
     let creation_result = creation_native
         .get("first_creation")
@@ -992,17 +996,17 @@ fn validate_creator_repetition_preservation_join_v2(
         || denied_native
             .get("schema")
             .and_then(serde_json::Value::as_str)
-            != Some("substrate.r3-macos-signer-acl.wrong-identity-receipt.v3")
+            != Some("substrate.r3-macos-signer-acl.wrong-identity-receipt.v4")
         || denied_native
             .get("process_interaction_disable_raw_os_status")
             .and_then(serde_json::Value::as_i64)
             != Some(0)
         || denied_native
-            .get("precommitted_expected_lookup_raw_os_status")
+            .get("precommitted_expected_sign_raw_cferror_code")
             .and_then(serde_json::Value::as_i64)
             != Some(i64::from(ERR_SEC_INTERACTION_NOT_ALLOWED_V2))
         || denied_native
-            .get("tag_scoped_private_key_lookup_raw_os_status")
+            .get("tag_scoped_private_key_sign_raw_cferror_code")
             .and_then(serde_json::Value::as_i64)
             != Some(i64::from(ERR_SEC_INTERACTION_NOT_ALLOWED_V2))
         || denied_native.contains_key("exact_delete")
@@ -1545,7 +1549,8 @@ fn creator_marker_before_v2(repetition: u8, arm: CreatorNativeArmV2) -> String {
         CreatorNativeArmV2::QueryUiFailCreateThenDelete => "query-prepared",
         CreatorNativeArmV2::FreshProcessCreateThenExit => "fresh-create-prepared",
         CreatorNativeArmV2::WrongIdentityDelete
-        | CreatorNativeArmV2::WrongIdentityProcessInteractionDeniedLookup => "wrong-prepared",
+        | CreatorNativeArmV2::WrongIdentityProcessInteractionDeniedLookup
+        | CreatorNativeArmV2::WrongIdentityProcessInteractionDeniedSign => "wrong-prepared",
         CreatorNativeArmV2::FreshProcessFirstCallDisableThenDelete => "fresh-delete-prepared",
         CreatorNativeArmV2::AlreadyAbsentRetry => "absent-retry-prepared",
     };
@@ -1562,7 +1567,8 @@ fn creator_marker_after_v2(repetition: u8, arm: CreatorNativeArmV2) -> String {
             format!("creator-route-v2:{prefix}-wrong-prepared")
         }
         CreatorNativeArmV2::WrongIdentityDelete
-        | CreatorNativeArmV2::WrongIdentityProcessInteractionDeniedLookup => {
+        | CreatorNativeArmV2::WrongIdentityProcessInteractionDeniedLookup
+        | CreatorNativeArmV2::WrongIdentityProcessInteractionDeniedSign => {
             format!("creator-route-v2:{prefix}-fresh-delete-prepared")
         }
         CreatorNativeArmV2::FreshProcessFirstCallDisableThenDelete => {
@@ -1580,7 +1586,8 @@ const fn creator_presence_v2(arm: CreatorNativeArmV2) -> (bool, bool) {
         CreatorNativeArmV2::QueryUiFailCreateThenDelete => (false, false),
         CreatorNativeArmV2::FreshProcessCreateThenExit => (false, true),
         CreatorNativeArmV2::WrongIdentityDelete
-        | CreatorNativeArmV2::WrongIdentityProcessInteractionDeniedLookup => (true, true),
+        | CreatorNativeArmV2::WrongIdentityProcessInteractionDeniedLookup
+        | CreatorNativeArmV2::WrongIdentityProcessInteractionDeniedSign => (true, true),
         CreatorNativeArmV2::FreshProcessFirstCallDisableThenDelete => (true, false),
         CreatorNativeArmV2::AlreadyAbsentRetry => (false, false),
     }
@@ -1606,6 +1613,14 @@ fn creator_operations_v2(arm: CreatorNativeArmV2) -> Vec<CreatorNativeOperationR
             (O::DisableProcessInteractionFirst, 0, C::InteractionDisabled),
             (
                 O::LookupTagScopedPrivateKey,
+                i64::from(ERR_SEC_INTERACTION_NOT_ALLOWED_V2),
+                C::InteractionNotAllowed,
+            ),
+        ],
+        CreatorNativeArmV2::WrongIdentityProcessInteractionDeniedSign => vec![
+            (O::DisableProcessInteractionFirst, 0, C::InteractionDisabled),
+            (
+                O::SignTagScopedPrivateKey,
                 i64::from(ERR_SEC_INTERACTION_NOT_ALLOWED_V2),
                 C::InteractionNotAllowed,
             ),
@@ -1761,7 +1776,7 @@ fn expected_native_arm_plan_v2() -> Vec<GlobalNativeArmPlanEntryV2> {
             (A::CreatorQueryUiFailCreateDelete, O::OsStatusZero),
             (A::CreatorFreshProcessCreate, O::OsStatusZero),
             (
-                A::CreatorWrongIdentityProcessInteractionDeniedLookup,
+                A::CreatorWrongIdentityProcessInteractionDeniedSign,
                 O::ErrSecInteractionNotAllowed {
                     raw_os_status: ERR_SEC_INTERACTION_NOT_ALLOWED_V2,
                 },
@@ -1918,15 +1933,15 @@ mod tests {
             },
             "final_present": true,
         });
-        let denied_lookup = serde_json::json!({
-            "schema": "substrate.r3-macos-signer-acl.wrong-identity-receipt.v3",
+        let denied_sign = serde_json::json!({
+            "schema": "substrate.r3-macos-signer-acl.wrong-identity-receipt.v4",
             "repetition": "first",
             "creator_scope_id": CREATOR_SCOPES_V2[0],
             "executable_path": WRONG_IDENTITY_EXECUTABLE_PATH_V2,
             "marker_path": CREATOR_MARKER_PATH_V2,
             "process_interaction_disable_raw_os_status": 0,
-            "precommitted_expected_lookup_raw_os_status": -25_308,
-            "tag_scoped_private_key_lookup_raw_os_status": -25_308,
+            "precommitted_expected_sign_raw_cferror_code": -25_308,
+            "tag_scoped_private_key_sign_raw_cferror_code": -25_308,
         });
         let authorized_delete = serde_json::json!({
             "schema": "substrate.r3-macos-signer-acl.creator-route-receipt.v2",
@@ -1945,7 +1960,7 @@ mod tests {
             .map(|(index, arm)| {
                 let native = match index {
                     1 => creation.clone(),
-                    2 => denied_lookup.clone(),
+                    2 => denied_sign.clone(),
                     3 => authorized_delete.clone(),
                     _ => serde_json::json!({}),
                 };
@@ -2004,22 +2019,22 @@ mod tests {
                 == SecurityAgentExpectationV2::NoProcessActivationWindowPromptOrCredentialRequest
         }));
         for repetition in 1..=2 {
-            let denied_lookup = arms
+            let denied_sign = arms
                 .iter()
                 .find(|arm| {
                     arm.group == NativeExperimentGroupV2::CreatorRoute
                         && arm.repetition == repetition
                         && arm.sequence_ordinal == 3
                 })
-                .expect("creator denial lookup arm exists");
+                .expect("creator denial sign arm exists");
             assert_eq!(
-                serde_json::to_value(&denied_lookup.arm).unwrap(),
+                serde_json::to_value(&denied_sign.arm).unwrap(),
                 serde_json::json!({
-                    "arm": "creator_wrong_identity_process_interaction_denied_lookup"
+                    "arm": "creator_wrong_identity_process_interaction_denied_sign"
                 })
             );
             assert_eq!(
-                denied_lookup.expected_outcome,
+                denied_sign.expected_outcome,
                 PrecommittedNativeOutcomeV2::ErrSecInteractionNotAllowed {
                     raw_os_status: ERR_SEC_INTERACTION_NOT_ALLOWED_V2,
                 }
@@ -2039,7 +2054,7 @@ mod tests {
                 serde_json::to_value(&operations[1]).unwrap(),
                 serde_json::json!({
                     "sequence_ordinal": 2,
-                    "operation": "lookup_tag_scoped_private_key",
+                    "operation": "sign_tag_scoped_private_key",
                     "raw_status": -25_308,
                     "classification": "interaction_not_allowed",
                 })
@@ -2114,13 +2129,13 @@ mod tests {
         assert!(historical.validate_current_arm().is_err());
         assert_ne!(
             serde_json::to_string(&CreatorNativeArmV2::WrongIdentityDelete).unwrap(),
-            serde_json::to_string(&CreatorNativeArmV2::WrongIdentityProcessInteractionDeniedLookup)
+            serde_json::to_string(&CreatorNativeArmV2::WrongIdentityProcessInteractionDeniedSign)
                 .unwrap()
         );
         assert_ne!(
             serde_json::to_string(&GlobalNativeArmV2::CreatorWrongIdentityDelete).unwrap(),
             serde_json::to_string(
-                &GlobalNativeArmV2::CreatorWrongIdentityProcessInteractionDeniedLookup
+                &GlobalNativeArmV2::CreatorWrongIdentityProcessInteractionDeniedSign
             )
             .unwrap()
         );
@@ -2136,7 +2151,7 @@ mod tests {
     }
 
     #[test]
-    fn creator_wrong_identity_lookup_is_followed_by_authorized_deletion_witness() {
+    fn creator_wrong_identity_sign_denial_is_followed_by_authorized_deletion_witness() {
         let receipts = creator_join_receipts();
         validate_creator_repetition_preservation_join_v2(&receipts)
             .expect("completed ordinal-2/3/4 join proves preservation");

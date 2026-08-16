@@ -666,13 +666,13 @@ mod tests {
         let establish = wrong_production
             .find("NonInteractiveSecurity::establish_first()?")
             .expect("wrong identity disables process interaction first");
-        let lookup = wrong_production
-            .find("security.tag_scoped_private_key_lookup_raw_os_status(&config)?")
-            .expect("wrong identity performs the purpose-specific tag lookup");
-        assert!(establish < lookup);
+        let sign = wrong_production
+            .find(".tag_scoped_private_key_sign_raw_cferror_code(&config, SIGNING_PAYLOAD)?")
+            .expect("wrong identity performs one exact tag-scoped private-key use");
+        assert!(establish < sign);
         assert_eq!(
             wrong_production
-                .matches("security.tag_scoped_private_key_lookup_raw_os_status(&config)?")
+                .matches(".tag_scoped_private_key_sign_raw_cferror_code(&config, SIGNING_PAYLOAD)?")
                 .count(),
             1
         );
@@ -682,30 +682,33 @@ mod tests {
             "exact_delete_receipt(",
             "SecItemDelete",
             "EXPECTED_DELETE_STATUS",
+            "EXPECTED_LOOKUP_STATUS",
+            "tag_scoped_private_key_lookup_raw_os_status",
             "exact_identity_preserved_after",
         ] {
             assert!(!wrong_production.contains(forbidden));
         }
-        let lookup_impl = source
-            .split("fn tag_scoped_private_key_lookup_raw_os_status_impl")
+        let sign_impl = source
+            .split("fn tag_scoped_private_key_sign_raw_cferror_code_impl")
             .nth(1)
-            .expect("purpose-specific tag lookup implementation exists")
+            .expect("purpose-specific tag-scoped sign implementation exists")
             .split("\nfn ")
             .next()
             .unwrap();
-        let open = lookup_impl
+        let open = sign_impl
             .find("open_explicit_system_keychain")
-            .expect("tag lookup opens the explicit System Keychain");
-        let query = lookup_impl
-            .find("exact_private_key_query")
-            .expect("tag lookup reuses the frozen query predicate");
-        let copy = lookup_impl
-            .find("SecItemCopyMatching")
-            .expect("tag lookup performs one native query");
-        assert!(open < query && query < copy);
-        assert_eq!(lookup_impl.matches("SecItemCopyMatching").count(), 1);
-        assert!(!lookup_impl.contains("SecItemDelete"));
-        assert!(!lookup_impl.contains("validate_product_equivalent_persisted_identity"));
+            .expect("tag-scoped sign opens the explicit System Keychain");
+        let exact_match = sign_impl
+            .find("product_equivalent_private_key_match")
+            .expect("tag-scoped sign reuses the frozen product-equivalent identity predicate");
+        let sign_call = sign_impl
+            .find("SecKeyCreateSignature")
+            .expect("tag-scoped sign performs one native private-key use");
+        assert!(open < exact_match && exact_match < sign_call);
+        assert_eq!(sign_impl.matches("SecKeyCreateSignature").count(), 1);
+        assert!(!sign_impl.contains("SecItemDelete"));
+        assert!(!sign_impl.contains("copy_cf_data"));
+        assert!(!source.contains("fn tag_scoped_private_key_lookup_raw_os_status_impl"));
         for repetition in FixedRepetitionV2::ALL {
             let config = compiled_creator_route_config(repetition).unwrap();
             assert!(config
