@@ -1,5 +1,6 @@
 use anyhow::{bail, Context, Result};
 use serde::Serialize;
+use std::io::Write;
 use substrate_r3_macos_signer_acl::experiment::{
     absent_retry_states, fresh_create_states, fresh_delete_states, query_states,
     verify_closed_process_surface, CreatorRollbackMarkerV2, CreatorRollbackPhaseV2,
@@ -187,11 +188,16 @@ fn main() -> Result<()> {
         Route::Complete => bail!("both closed creator repetitions are complete"),
     };
 
-    println!(
-        "{}",
-        serde_json::to_string(&receipt).context("serialize creator-route receipt")?
-    );
-    Ok(())
+    std::io::stdout()
+        .lock()
+        .write_all(&canonical_receipt_line(&receipt)?)
+        .context("write canonical creator-route receipt")
+}
+
+fn canonical_receipt_line<T: Serialize>(receipt: &T) -> Result<Vec<u8>> {
+    let mut bytes = substrate_common::macos_retirement_v2::canonical_bytes_v2(receipt)?;
+    bytes.push(b'\n');
+    Ok(bytes)
 }
 
 fn run_emergency_rollback(marker_root: &MarkerRoot, marker: CreatorRollbackMarkerV2) -> Result<()> {
@@ -336,4 +342,36 @@ fn require_deleted(receipt: &ExactDeleteReceipt, label: &str) -> Result<()> {
         bail!("{label} did not produce exact success-and-absence")
     }
     Ok(())
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use serde_json::Value;
+    use substrate_common::macos_retirement_v2::{canonical_bytes_v2, parse_canonical_v2};
+
+    #[test]
+    fn creator_receipt_emits_one_canonical_newline_terminated_record() {
+        let value = receipt(
+            FixedRepetitionV2::First,
+            CreatorRoutePhase::QueryUiFailCreateThenDelete,
+            MarkerState::FirstQueryInvoked,
+            MarkerState::FirstFreshCreatePrepared,
+            None,
+            None,
+            None,
+            false,
+        );
+
+        let emitted = canonical_receipt_line(&value).expect("encode creator receipt");
+        assert_eq!(emitted.last(), Some(&b'\n'));
+        assert!(!emitted[..emitted.len() - 1].contains(&b'\n'));
+        let body = &emitted[..emitted.len() - 1];
+        assert_eq!(body, canonical_bytes_v2(&value).unwrap());
+        parse_canonical_v2::<Value>(body).expect("accept canonical creator receipt");
+
+        let declaration_order = serde_json::to_vec(&value).unwrap();
+        assert_ne!(declaration_order, body);
+        assert!(parse_canonical_v2::<Value>(&declaration_order).is_err());
+    }
 }

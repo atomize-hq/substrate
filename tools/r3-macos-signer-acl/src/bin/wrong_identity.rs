@@ -1,5 +1,6 @@
 use anyhow::{bail, Context, Result};
 use serde::Serialize;
+use std::io::Write;
 use substrate_r3_macos_signer_acl::experiment::{
     verify_closed_process_surface, wrong_states, MarkerRoot, MarkerState,
 };
@@ -68,9 +69,50 @@ fn main() -> Result<()> {
         exact_delete,
         exact_identity_preserved_after,
     };
-    println!(
-        "{}",
-        serde_json::to_string(&receipt).context("serialize wrong-identity receipt")?
-    );
-    Ok(())
+    std::io::stdout()
+        .lock()
+        .write_all(&canonical_receipt_line(&receipt)?)
+        .context("write canonical wrong-identity receipt")
+}
+
+fn canonical_receipt_line<T: Serialize>(receipt: &T) -> Result<Vec<u8>> {
+    let mut bytes = substrate_common::macos_retirement_v2::canonical_bytes_v2(receipt)?;
+    bytes.push(b'\n');
+    Ok(bytes)
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use serde_json::Value;
+    use substrate_common::macos_retirement_v2::{canonical_bytes_v2, parse_canonical_v2};
+
+    #[test]
+    fn wrong_identity_receipt_emits_one_canonical_newline_terminated_record() {
+        let value = WrongIdentityReceipt {
+            schema: SCHEMA,
+            repetition: FixedRepetitionV2::First,
+            creator_scope_id: FixedRepetitionV2::First.creator_scope(),
+            executable_path: WRONG_IDENTITY_EXECUTABLE_PATH,
+            marker_path: MARKER_PATH,
+            precommitted_expected_raw_os_status: EXPECTED_DELETE_STATUS,
+            exact_delete: ExactDeleteReceipt {
+                raw_os_status: EXPECTED_DELETE_STATUS,
+                classification: ExactDeleteClassification::InteractionNotAllowed,
+                present_after: true,
+            },
+            exact_identity_preserved_after: true,
+        };
+
+        let emitted = canonical_receipt_line(&value).expect("encode wrong-identity receipt");
+        assert_eq!(emitted.last(), Some(&b'\n'));
+        assert!(!emitted[..emitted.len() - 1].contains(&b'\n'));
+        let body = &emitted[..emitted.len() - 1];
+        assert_eq!(body, canonical_bytes_v2(&value).unwrap());
+        parse_canonical_v2::<Value>(body).expect("accept canonical wrong-identity receipt");
+
+        let declaration_order = serde_json::to_vec(&value).unwrap();
+        assert_ne!(declaration_order, body);
+        assert!(parse_canonical_v2::<Value>(&declaration_order).is_err());
+    }
 }
