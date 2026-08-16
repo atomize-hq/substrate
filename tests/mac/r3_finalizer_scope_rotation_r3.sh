@@ -13,10 +13,10 @@ import re
 import sys
 
 repository = pathlib.Path(sys.argv[1])
-new_experiment = "01a00b11-d9d4-75d2-ad3f-8ea379698723"
+new_experiment = "01a00bc9-2d20-7ff1-98f6-652e2c650588"
 new_scopes = [
-    "01a00b11-d9d5-7af6-b9b7-e17d1cbb746b",
-    "01a00b11-d9d6-7872-9b8c-2fb75c1f047b",
+    "01a00bc9-2d21-7a4b-9e64-8df06f08b8b8",
+    "01a00bc9-2d22-7e00-ab2b-f14c04258877",
 ]
 old_experiment = "019ffec6-95f6-7d30-80bc-8003ce27d5ba"
 old_scopes = [
@@ -34,6 +34,7 @@ terminal_experiments = [
     "01a00876-e823-7b81-ae80-e76a7bd8cae3",
     "01a008ac-fd5e-70b7-b498-5b32121de599",
     "01a00aa6-5591-7405-b0ea-acb5ca1559d5",
+    "01a00b11-d9d4-75d2-ad3f-8ea379698723",
 ]
 terminal_scopes = [
     *old_scopes,
@@ -55,6 +56,8 @@ terminal_scopes = [
     "01a008ac-fd60-7319-a5ad-512ae53d3d3e",
     "01a00aa6-5592-72fc-8049-71533b000a6b",
     "01a00aa6-5593-7227-8432-87bf380684f1",
+    "01a00b11-d9d5-7af6-b9b7-e17d1cbb746b",
+    "01a00b11-d9d6-7872-9b8c-2fb75c1f047b",
 ]
 expected_routes = {
     "deea3cb3aaf05dd641936bdb98bcc2d3098504d64b455794af689cabe68cd76a",
@@ -96,7 +99,7 @@ uuid_v7 = re.compile(
 for value in [new_experiment, *new_scopes]:
     if not uuid_v7.fullmatch(value):
         raise SystemExit(f"rotated identity is not canonical UUIDv7: {value}")
-if len({new_experiment, *new_scopes, *terminal_experiments, *terminal_scopes}) != 33:
+if len({new_experiment, *new_scopes, *terminal_experiments, *terminal_scopes}) != 36:
     raise SystemExit("rotated and terminal identities are not pairwise distinct")
 
 root_source = text("scripts/mac/r3-macos-finalizer-root-install.py")
@@ -134,7 +137,7 @@ freeze_source = text("scripts/mac/freeze-r3-macos-finalizer-candidate.sh")
 for required in (
     f'readonly EXPERIMENT_ID="{new_experiment}"',
     'readonly BRANCH="feat/r3-macos-finalizer-rcv-stack"',
-    'readonly ACCEPTED_PARENT_HEAD="52f188c248ba2e4f5c4c97628fbccfdfbd3201ef"',
+    'readonly ACCEPTED_PARENT_HEAD="e6965c3f76aeb7d07363875807202c0d8b72e969"',
     '"schema_owner": "substrate.r3-macos-candidate-committed-tree-inventory"',
     '"status", "--porcelain=v2", "-z"',
     '"rev-parse", "HEAD^{tree}"',

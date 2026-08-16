@@ -7,7 +7,7 @@ set -euo pipefail
 
 readonly REPOSITORY="/Users/spensermcconnell/.codex/worktrees/r3-macos-finalizer-rcv-stack/substrate"
 readonly BRANCH="feat/r3-macos-finalizer-rcv-stack"
-readonly EXPERIMENT_ID="01a00b11-d9d4-75d2-ad3f-8ea379698723"
+readonly EXPERIMENT_ID="01a00bc9-2d20-7ff1-98f6-652e2c650588"
 readonly EXPERIMENT_ROOT="/Users/spensermcconnell/Library/Application Support/Atomize/R3MacEvidenceFinalizer/experiments/${EXPERIMENT_ID}"
 readonly FREEZE_ROOT="${EXPERIMENT_ROOT}/candidate-freeze"
 readonly ARTIFACT_ROOT="${FREEZE_ROOT}/artifacts"
@@ -39,7 +39,7 @@ readonly SWIFTC="/Applications/Xcode.app/Contents/Developer/Toolchains/XcodeDefa
 readonly FIXED_PATH="/Users/spensermcconnell/.cargo/bin:/usr/bin:/bin:/usr/sbin:/sbin"
 readonly ZERO40="0000000000000000000000000000000000000000"
 readonly ZERO64="0000000000000000000000000000000000000000000000000000000000000000"
-readonly ACCEPTED_PARENT_HEAD="52f188c248ba2e4f5c4c97628fbccfdfbd3201ef"
+readonly ACCEPTED_PARENT_HEAD="e6965c3f76aeb7d07363875807202c0d8b72e969"
 
 export PATH="${FIXED_PATH}"
 export LANG=C
@@ -302,7 +302,7 @@ import sys
 
 REPO = pathlib.Path("/Users/spensermcconnell/.codex/worktrees/r3-macos-finalizer-rcv-stack/substrate")
 BRANCH = "feat/r3-macos-finalizer-rcv-stack"
-EXPERIMENT_ID = "01a00b11-d9d4-75d2-ad3f-8ea379698723"
+EXPERIMENT_ID = "01a00bc9-2d20-7ff1-98f6-652e2c650588"
 EXPERIMENT_ROOT = pathlib.Path("/Users/spensermcconnell/Library/Application Support/Atomize/R3MacEvidenceFinalizer/experiments") / EXPERIMENT_ID
 FREEZE_ROOT = EXPERIMENT_ROOT / "candidate-freeze"
 ARTIFACT_ROOT = FREEZE_ROOT / "artifacts"
@@ -669,7 +669,7 @@ def absence_plan():
         "/private/var/db/com.atomize.substrate.r3-macos-evidence-finalizer.v2", "/private/var/db/com.atomize.substrate.r3-macos-evidence-finalizer.v2/latches", "/private/var/db/com.atomize.substrate.r3-macos-disposable-publisher.v2", "/private/var/db/com.atomize.substrate.r3-macos-disposable-experiment-runner.v2", "/private/var/db/com.atomize.substrate.r3-macos-signer-acl-experiment.v2", "/private/tmp/com.atomize.substrate.r3-macos-finalizer-freeze.v2", str(EXPERIMENT_ROOT / "global-publisher-exchange"),
     ]
     values.extend({"kind": "filesystem_path", "identity": path} for path in paths)
-    for scope in ["01a00b11-d9d5-7af6-b9b7-e17d1cbb746b", "01a00b11-d9d6-7872-9b8c-2fb75c1f047b"]:
+    for scope in ["01a00bc9-2d21-7a4b-9e64-8df06f08b8b8", "01a00bc9-2d22-7e00-ab2b-f14c04258877"]:
         values.extend([
             {"kind": "filesystem_path", "identity": f"/private/var/db/com.atomize.substrate.r3-macos-evidence-finalizer.v2/{scope}"},
             {"kind": "filesystem_path", "identity": f"/private/var/db/com.atomize.substrate.r3-macos-evidence-finalizer.v2/capability/{scope}"},
