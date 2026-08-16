@@ -115,8 +115,9 @@ private func windowObservations(securityAgentPids: Set<Int32>) -> [WindowObserva
             let ownerPidValue = integer(window[kCGWindowOwnerPID as String]),
             ownerPidValue >= Int(Int32.min),
             ownerPidValue <= Int(Int32.max),
-            securityAgentPids.contains(Int32(ownerPidValue)),
             let ownerName = window[kCGWindowOwnerName as String] as? String,
+            securityAgentPids.contains(Int32(ownerPidValue))
+                || ownerName == securityAgentExecutableName,
             let windowNumber = integer(window[kCGWindowNumber as String]),
             let layer = integer(window[kCGWindowLayer as String]),
             let onScreen = bool(window[kCGWindowIsOnscreen as String]),
