@@ -536,7 +536,7 @@ mod tests {
         .unwrap();
         assert_eq!(
             substrate_common::macos_retirement_v2::sha256_hex_v2(&bytes),
-            "fe342f07828a1bbed8ec29160651f9020039994657f144b9b6a5b66ebf414f52"
+            "34a70835f11a74f5ab32168e160cf883e7a7df24b1b6d544ddb64d31c1f47d5e"
         );
     }
 
