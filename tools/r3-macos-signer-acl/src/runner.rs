@@ -9783,6 +9783,18 @@ fn one_stdout_line(bytes: &[u8]) -> Result<&[u8]> {
     Ok(body)
 }
 
+fn normalize_post_drop_getgroups_v2(
+    raw_group_count: libc::c_int,
+    only_group: Option<libc::gid_t>,
+    effective_gid: libc::gid_t,
+) -> std::io::Result<u32> {
+    match (raw_group_count, only_group) {
+        (0, None) => Ok(0),
+        (1, Some(group)) if group == effective_gid => Ok(0),
+        _ => Err(std::io::Error::from_raw_os_error(libc::EPERM)),
+    }
+}
+
 fn sealed_command(
     path: &'static str,
     cwd: &'static str,
@@ -9819,14 +9831,32 @@ fn sealed_command(
                     return Err(std::io::Error::last_os_error());
                 }
             }
-            if libc::getgroups(0, std::ptr::null_mut()) != 0 {
-                return Err(std::io::Error::from_raw_os_error(libc::EPERM));
+            let raw_group_count = libc::getgroups(0, std::ptr::null_mut());
+            if raw_group_count < 0 {
+                return Err(std::io::Error::last_os_error());
             }
+            let effective_gid = libc::getegid();
+            let normalized_group_count = if raw_group_count == 0 {
+                normalize_post_drop_getgroups_v2(0, None, effective_gid)?
+            } else if raw_group_count == 1 {
+                let mut only_group = 0;
+                let read_group_count = libc::getgroups(1, &mut only_group);
+                if read_group_count < 0 {
+                    return Err(std::io::Error::last_os_error());
+                }
+                normalize_post_drop_getgroups_v2(
+                    read_group_count,
+                    Some(only_group),
+                    effective_gid,
+                )?
+            } else {
+                normalize_post_drop_getgroups_v2(raw_group_count, None, effective_gid)?
+            };
             let mut frame = [0_u8; SEALED_GROUP_MEASUREMENT_FRAME_BYTES_V2];
             frame[..8].copy_from_slice(&SEALED_GROUP_MEASUREMENT_MAGIC_V2);
             frame[8..12].copy_from_slice(&libc::geteuid().to_ne_bytes());
-            frame[12..16].copy_from_slice(&libc::getegid().to_ne_bytes());
-            frame[16..20].copy_from_slice(&0_u32.to_ne_bytes());
+            frame[12..16].copy_from_slice(&effective_gid.to_ne_bytes());
+            frame[16..20].copy_from_slice(&normalized_group_count.to_ne_bytes());
             let mut written = 0_usize;
             while written < frame.len() {
                 let count = libc::write(
@@ -12609,6 +12639,10 @@ mod tests {
         let setuid = sealed.find("libc::setuid(uid)").unwrap();
         let getgroups = sealed.find("libc::getgroups(0").unwrap();
         assert!(setgroups < setgid && setgid < setuid && setuid < getgroups);
+        assert!(sealed.contains("if raw_group_count < 0"));
+        assert!(sealed.contains("libc::getgroups(1, &mut only_group)"));
+        assert!(sealed.contains("Some(only_group)"));
+        assert!(sealed.contains("normalized_group_count.to_ne_bytes()"));
         assert!(!sealed.contains("command.gid("));
         assert!(!sealed.contains("command.uid("));
         assert!(sealed.contains("SEALED_GROUP_MEASUREMENT_MAGIC_V2"));
@@ -12621,6 +12655,18 @@ mod tests {
         assert!(shared.contains("SupplementaryGroupEvidenceV2::CurrentProcessGetgroups"));
         assert!(shared.contains("SupplementaryGroupEvidenceV2::SealedPreExecPostDropGetgroups"));
         assert!(!shared.contains("SupplementaryGroupEvidenceV2::UnprivilegedParentInheritance"));
+    }
+
+    #[test]
+    fn post_drop_getgroups_normalizes_only_the_effective_gid() {
+        assert_eq!(normalize_post_drop_getgroups_v2(0, None, 0).unwrap(), 0);
+        assert_eq!(
+            normalize_post_drop_getgroups_v2(1, Some(20), 20).unwrap(),
+            0
+        );
+        assert!(normalize_post_drop_getgroups_v2(1, Some(21), 20).is_err());
+        assert!(normalize_post_drop_getgroups_v2(2, None, 20).is_err());
+        assert!(normalize_post_drop_getgroups_v2(0, Some(20), 20).is_err());
     }
 
     #[test]
