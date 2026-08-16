@@ -708,8 +708,24 @@ mod tests {
         let key_create = source.find("fn create_exact_key").unwrap();
         let surface = &source[probe..key_create];
         assert!(surface.contains("SecAccessCreateWithOwnerAndACL"));
-        assert!(surface.contains("snapshot_access"));
+        assert!(surface.contains("SecAccessCopyOwnerAndACL"));
+        assert!(surface.contains("classify_copied_acl_list"));
         assert!(surface.contains("snapshot.entries.is_empty()"));
         assert!(!surface.contains("SecKeyCreateRandomKey"));
+    }
+
+    #[test]
+    fn successful_null_owner_acl_copy_is_the_exact_empty_list_representation() {
+        assert_eq!(
+            ffi::classify_copied_acl_list(0, std::ptr::null()).unwrap(),
+            None
+        );
+        assert!(ffi::classify_copied_acl_list(-50, std::ptr::null()).is_err());
+
+        let nonnull = std::ptr::NonNull::<std::ffi::c_void>::dangling().as_ptr() as *const _;
+        assert_eq!(
+            ffi::classify_copied_acl_list(0, nonnull).unwrap(),
+            Some(nonnull)
+        );
     }
 }

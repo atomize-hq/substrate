@@ -727,6 +727,18 @@ fn canonical_digest(mut snapshot: AccessSnapshot) -> Result<CanonicalAccessDiges
     })
 }
 
+pub(crate) fn classify_copied_acl_list(
+    status: OsStatus,
+    acl_list: CfType,
+) -> Result<Option<CfType>> {
+    if status != ERR_SEC_SUCCESS {
+        bail!("copy SecAccess owner/ACL failed with OSStatus {status}")
+    }
+    // macOS returns success with a null list for a SecAccess created with zero ACL entries. That
+    // tuple is the canonical empty-list representation; a nonzero status remains an error.
+    Ok((!acl_list.is_null()).then_some(acl_list))
+}
+
 pub(crate) fn probe_nonmatch_owner_access_in_memory_impl() -> Result<CanonicalAccessDigest> {
     // This creates only an in-memory SecAccess object. It does not open a Keychain, create an item,
     // or invoke any authorization operation. Exact copy-owner readback must succeed before a
@@ -746,7 +758,31 @@ pub(crate) fn probe_nonmatch_owner_access_in_memory_impl() -> Result<CanonicalAc
             bail!("in-memory fixed-owner SecAccess probe failed with CFError code {error_code}")
         }
         owned.hold(access);
-        let snapshot = snapshot_access(&mut owned, access)?;
+        let mut owner_uid = 0_u32;
+        let mut owner_gid = 0_u32;
+        let mut owner_type = 0_u32;
+        let mut acl_list: CfType = ptr::null();
+        // SAFETY: access is live and every output is writable.
+        let status = SecAccessCopyOwnerAndACL(
+            access,
+            &mut owner_uid,
+            &mut owner_gid,
+            &mut owner_type,
+            &mut acl_list,
+        );
+        if let Some(acl_list) = classify_copied_acl_list(status, acl_list)? {
+            owned.hold(acl_list);
+            // SAFETY: the successful non-null output is documented as a retained CFArray.
+            if CFGetTypeID(acl_list) != CFArrayGetTypeID() || CFArrayGetCount(acl_list) != 0 {
+                bail!("in-memory SecAccess owner probe returned a nonempty or invalid ACL list")
+            }
+        }
+        let snapshot = AccessSnapshot {
+            owner_uid,
+            owner_gid,
+            owner_type,
+            entries: Vec::new(),
+        };
         if snapshot.owner_uid != NONMATCH_OWNER_UID
             || snapshot.owner_gid != NONMATCH_OWNER_GID
             || snapshot.owner_type != OWNER_TYPE_USE_ONLY_UID_AND_GID
