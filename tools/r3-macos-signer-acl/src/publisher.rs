@@ -1583,7 +1583,7 @@ mod tests {
             concat!(
                 "{\"device\":7,\"gid\":0,\"inode\":11,\"link_count\":1,\"mode\":33024,",
                 "\"path\":\"/private/var/db/com.atomize.substrate.r3-macos-evidence-finalizer.v2/",
-                "capability/01a00732-3429-76c8-83f9-b9fb165252c1/surrogate-wrapper.v2\",",
+                "capability/01a007ef-e126-757e-b1c9-b9990aef00e9/surrogate-wrapper.v2\",",
                 "\"uid\":0}"
             )
         );
