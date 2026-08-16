@@ -10,7 +10,7 @@ use substrate_r3_macos_signer_acl::{
 };
 
 const SCHEMA: &str = "substrate.r3-macos-signer-acl.wrong-identity-receipt.v4";
-const EXPECTED_SIGN_CFERROR_CODE: i64 = -25_308;
+const EXPECTED_SIGN_CFERROR_CODE: i64 = -25_293;
 const SIGNING_PAYLOAD: &[u8] = b"substrate.r3-macos-signer-acl.wrong-identity-sign-control.v4";
 
 #[derive(Debug, Serialize)]
@@ -83,6 +83,34 @@ mod tests {
     use super::*;
     use serde_json::Value;
     use substrate_common::macos_retirement_v2::{canonical_bytes_v2, parse_canonical_v2};
+
+    #[test]
+    fn wrong_identity_sign_precommits_the_demonstrated_auth_failed_result() {
+        assert_eq!(EXPECTED_SIGN_CFERROR_CODE, -25_293);
+
+        let production = include_str!("wrong_identity.rs")
+            .split("#[cfg(test)]")
+            .next()
+            .unwrap();
+        let establish = production
+            .find("NonInteractiveSecurity::establish_first()?")
+            .expect("disable process interaction first");
+        let sign = production
+            .find(".tag_scoped_private_key_sign_raw_cferror_code(&config, SIGNING_PAYLOAD)?")
+            .expect("perform the exact wrong-identity sign operation");
+        assert!(establish < sign);
+        assert_eq!(
+            production
+                .matches(
+                    ".tag_scoped_private_key_sign_raw_cferror_code(&config, SIGNING_PAYLOAD)?",
+                )
+                .count(),
+            1
+        );
+        assert_eq!(production.matches("std::io::stdout()").count(), 1);
+        assert!(!production.contains("std::io::stderr"));
+        assert!(!production.contains("eprintln!"));
+    }
 
     #[test]
     fn wrong_identity_receipt_emits_one_canonical_newline_terminated_record() {

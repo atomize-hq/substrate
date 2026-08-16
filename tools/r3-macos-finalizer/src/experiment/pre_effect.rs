@@ -631,6 +631,7 @@ pub enum GlobalNativeArmV2 {
 pub enum PrecommittedNativeOutcomeV2 {
     OsStatusZero,
     ErrSecItemNotFound { raw_os_status: i32 },
+    ErrSecAuthFailed { raw_os_status: i32 },
     ErrSecInteractionNotAllowed { raw_os_status: i32 },
     ClosedAuthorizationDenial { allowed_raw_os_status: Vec<i32> },
     CanonicalSafePreAcceptanceStop,
@@ -771,6 +772,7 @@ pub enum CreatorNativeClassificationV2 {
     /// Historical decoding only; a denied lookup does not independently prove presence.
     InteractionNotAllowedAndPresent,
     InteractionNotAllowed,
+    AuthFailed,
     AlreadyAbsent,
 }
 
@@ -1004,11 +1006,11 @@ fn validate_creator_repetition_preservation_join_v2(
         || denied_native
             .get("precommitted_expected_sign_raw_cferror_code")
             .and_then(serde_json::Value::as_i64)
-            != Some(i64::from(ERR_SEC_INTERACTION_NOT_ALLOWED_V2))
+            != Some(i64::from(ERR_SEC_AUTH_FAILED_V2))
         || denied_native
             .get("tag_scoped_private_key_sign_raw_cferror_code")
             .and_then(serde_json::Value::as_i64)
-            != Some(i64::from(ERR_SEC_INTERACTION_NOT_ALLOWED_V2))
+            != Some(i64::from(ERR_SEC_AUTH_FAILED_V2))
         || denied_native.contains_key("exact_delete")
         || denied_native.contains_key("exact_identity_preserved_after")
         || delete_native
@@ -1621,8 +1623,8 @@ fn creator_operations_v2(arm: CreatorNativeArmV2) -> Vec<CreatorNativeOperationR
             (O::DisableProcessInteractionFirst, 0, C::InteractionDisabled),
             (
                 O::SignTagScopedPrivateKey,
-                i64::from(ERR_SEC_INTERACTION_NOT_ALLOWED_V2),
-                C::InteractionNotAllowed,
+                i64::from(ERR_SEC_AUTH_FAILED_V2),
+                C::AuthFailed,
             ),
         ],
         CreatorNativeArmV2::FreshProcessFirstCallDisableThenDelete => vec![
@@ -1777,8 +1779,8 @@ fn expected_native_arm_plan_v2() -> Vec<GlobalNativeArmPlanEntryV2> {
             (A::CreatorFreshProcessCreate, O::OsStatusZero),
             (
                 A::CreatorWrongIdentityProcessInteractionDeniedSign,
-                O::ErrSecInteractionNotAllowed {
-                    raw_os_status: ERR_SEC_INTERACTION_NOT_ALLOWED_V2,
+                O::ErrSecAuthFailed {
+                    raw_os_status: ERR_SEC_AUTH_FAILED_V2,
                 },
             ),
             (
@@ -1940,8 +1942,8 @@ mod tests {
             "executable_path": WRONG_IDENTITY_EXECUTABLE_PATH_V2,
             "marker_path": CREATOR_MARKER_PATH_V2,
             "process_interaction_disable_raw_os_status": 0,
-            "precommitted_expected_sign_raw_cferror_code": -25_308,
-            "tag_scoped_private_key_sign_raw_cferror_code": -25_308,
+            "precommitted_expected_sign_raw_cferror_code": -25_293,
+            "tag_scoped_private_key_sign_raw_cferror_code": -25_293,
         });
         let authorized_delete = serde_json::json!({
             "schema": "substrate.r3-macos-signer-acl.creator-route-receipt.v2",
@@ -2035,8 +2037,8 @@ mod tests {
             );
             assert_eq!(
                 denied_sign.expected_outcome,
-                PrecommittedNativeOutcomeV2::ErrSecInteractionNotAllowed {
-                    raw_os_status: ERR_SEC_INTERACTION_NOT_ALLOWED_V2,
+                PrecommittedNativeOutcomeV2::ErrSecAuthFailed {
+                    raw_os_status: ERR_SEC_AUTH_FAILED_V2,
                 }
             );
             let operations = creator_operations_v2(CREATOR_NATIVE_ARM_SEQUENCE_V2[2]);
@@ -2055,8 +2057,8 @@ mod tests {
                 serde_json::json!({
                     "sequence_ordinal": 2,
                     "operation": "sign_tag_scoped_private_key",
-                    "raw_status": -25_308,
-                    "classification": "interaction_not_allowed",
+                    "raw_status": -25_293,
+                    "classification": "auth_failed",
                 })
             );
             assert_eq!(

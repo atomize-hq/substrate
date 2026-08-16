@@ -2110,11 +2110,11 @@ fn validate_creator_typed_receipt(
             || object
                 .get("precommitted_expected_sign_raw_cferror_code")
                 .and_then(serde_json::Value::as_i64)
-                != Some(-25_308)
+                != Some(-25_293)
             || object
                 .get("tag_scoped_private_key_sign_raw_cferror_code")
                 .and_then(serde_json::Value::as_i64)
-                != Some(-25_308)
+                != Some(-25_293)
         {
             bail!("wrong-identity typed receipt differs from the global native arm plan")
         }
@@ -2304,8 +2304,8 @@ fn build_creator_native_arm_receipt(
                 (O::DisableProcessInteractionFirst, 0, C::InteractionDisabled),
                 (
                     O::SignTagScopedPrivateKey,
-                    -25_308,
-                    C::InteractionNotAllowed,
+                    -25_293,
+                    C::AuthFailed,
                 ),
             ],
         ),
@@ -12417,8 +12417,8 @@ mod tests {
             "executable_path": WRONG_IDENTITY_EXECUTABLE_PATH,
             "marker_path": MARKER_PATH,
             "process_interaction_disable_raw_os_status": 0,
-            "precommitted_expected_sign_raw_cferror_code": -25_308,
-            "tag_scoped_private_key_sign_raw_cferror_code": -25_308,
+            "precommitted_expected_sign_raw_cferror_code": -25_293,
+            "tag_scoped_private_key_sign_raw_cferror_code": -25_293,
         });
         validate_creator_typed_receipt(
             &current,
@@ -12445,6 +12445,37 @@ mod tests {
             WRONG_IDENTITY_EXECUTABLE_PATH,
         )
         .is_err());
+
+        for rejected in [-25_308, 0, -50] {
+            let mut wrong_result = current.clone();
+            wrong_result.as_object_mut().unwrap().insert(
+                "precommitted_expected_sign_raw_cferror_code".to_owned(),
+                serde_json::json!(rejected),
+            );
+            wrong_result.as_object_mut().unwrap().insert(
+                "tag_scoped_private_key_sign_raw_cferror_code".to_owned(),
+                serde_json::json!(rejected),
+            );
+            assert!(validate_creator_typed_receipt(
+                &wrong_result,
+                MarkerState::FirstWrongPrepared,
+                MarkerState::FirstFreshDeletePrepared,
+                WRONG_IDENTITY_EXECUTABLE_PATH,
+            )
+            .is_err());
+        }
+
+        let runner_source = include_str!("runner.rs");
+        let build_start = runner_source
+            .find("fn build_creator_native_arm_receipt(")
+            .unwrap();
+        let build_end = runner_source[build_start..]
+            .find("\nfn attest_stopped_creator_process(")
+            .map(|offset| build_start + offset)
+            .unwrap();
+        let build_source = &runner_source[build_start..build_end];
+        assert!(build_source.contains("O::SignTagScopedPrivateKey,\n                    -25_293,\n                    C::AuthFailed,"));
+        assert!(!build_source.contains("O::SignTagScopedPrivateKey,\n                    -25_308,"));
 
         let mut extra = current;
         extra
