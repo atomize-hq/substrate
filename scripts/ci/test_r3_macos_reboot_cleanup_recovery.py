@@ -5,6 +5,7 @@ from __future__ import annotations
 
 import copy
 import importlib.util
+import inspect
 import pathlib
 import unittest
 
@@ -94,6 +95,76 @@ def valid_projection() -> dict:
         "emergency_signer_deletion_receipt_sha256": (
             "ac6037f43205602cd8ccf465283ef680ef3b3fee8c8abf28bd96413adb47a49a"
         ),
+        "unexplained_live_state_differences": [],
+    }
+
+
+def valid_persistent_orphan() -> dict:
+    empty = RECOVERY.raw_stream(b"")
+    not_found = RECOVERY.raw_stream(
+        (
+            'Bad request.\nCould not find service "'
+            "com.atomize.substrate.r3-macos-evidence-finalizer.v2"
+            '" in domain for system\n'
+        ).encode()
+    )
+    socket_path = RECOVERY.PRIOR_SOCKET_PHYSICAL_IDENTITY["path"]
+    return {
+        "classification": "persistent_orphaned_socket",
+        "launchd_label": "com.atomize.substrate.r3-macos-evidence-finalizer.v2",
+        "launchd_label_absence_observations": [
+            {
+                "phase": phase,
+                "exit_status": 113,
+                "stdout": empty,
+                "stderr": not_found,
+            }
+            for phase in ("before_socket_observation", "after_socket_observation")
+        ],
+        "installed_plist": {
+            "path": (
+                "/Library/LaunchDaemons/"
+                "com.atomize.substrate.r3-macos-evidence-finalizer.v2.plist"
+            ),
+            "sha256": RECOVERY.LAUNCHD_PLIST_SHA256,
+            "physical_identity": {"inode": 531753115},
+        },
+        "socket_path": socket_path,
+        "socket_type": "socket",
+        "socket_uid": 0,
+        "socket_gid": 20,
+        "socket_mode": 0o660,
+        "socket_link_count": 1,
+        "socket_size": 0,
+        "socket_physical_identity": copy.deepcopy(
+            RECOVERY.PRIOR_SOCKET_PHYSICAL_IDENTITY
+        ),
+        "prior_socket_physical_identity": copy.deepcopy(
+            RECOVERY.PRIOR_SOCKET_PHYSICAL_IDENTITY
+        ),
+        "platform_parent_path": "/private/var/run",
+        "platform_parent_physical_identity": {
+            "path": "/private/var/run",
+            "device": 16777229,
+            "inode": 531870206,
+            "uid": 0,
+            "gid": 1,
+            "mode": 0o040775,
+        },
+        "root_owned_non_symlink_parent_traversal": True,
+        "open_descriptor_observation": {
+            "command": ["/usr/sbin/lsof", "-nP", "--", socket_path],
+            "exit_status": 1,
+            "stdout": empty,
+            "stderr": empty,
+            "matching_open_descriptors": [],
+        },
+        "listener_observation": {
+            "command": ["/usr/sbin/netstat", "-anv", "-f", "unix"],
+            "exit_status": 0,
+            "exact_socket_path_matches": [],
+        },
+        "conflicting_processes": [],
         "unexplained_live_state_differences": [],
     }
 
@@ -195,6 +266,60 @@ class RebootCleanupContractTests(unittest.TestCase):
         self.assertNotIn("os.mkdir(membrane.JOURNAL_ROOT", source)
         self.assertNotIn("os.mkdir(membrane.CLAIM_ROOT", source)
         self.assertNotIn("SecItem", source)
+
+    def test_persistent_orphaned_socket_is_exact_and_never_repeats_bootout(
+        self,
+    ) -> None:
+        value = valid_persistent_orphan()
+        self.assertIs(RECOVERY.validate_persistent_orphaned_socket(value), value)
+
+        variants = []
+        for field, replacement in (
+            ("socket_type", "regular"),
+            ("socket_type", "symlink"),
+            ("socket_uid", 501),
+            ("socket_gid", 0),
+            ("socket_mode", 0o666),
+            ("socket_link_count", 2),
+            ("root_owned_non_symlink_parent_traversal", False),
+        ):
+            changed = copy.deepcopy(value)
+            changed[field] = replacement
+            variants.append(changed)
+
+        identity_drift = copy.deepcopy(value)
+        identity_drift["socket_physical_identity"]["inode"] += 1
+        variants.append(identity_drift)
+
+        loaded_job = copy.deepcopy(value)
+        loaded_job["launchd_label_absence_observations"][0]["exit_status"] = 0
+        variants.append(loaded_job)
+
+        open_descriptor = copy.deepcopy(value)
+        open_descriptor["open_descriptor_observation"]["exit_status"] = 0
+        open_descriptor["open_descriptor_observation"]["matching_open_descriptors"] = [
+            {"pid": 42}
+        ]
+        variants.append(open_descriptor)
+
+        listener = copy.deepcopy(value)
+        listener["listener_observation"]["exact_socket_path_matches"] = [
+            value["socket_path"]
+        ]
+        variants.append(listener)
+
+        process = copy.deepcopy(value)
+        process["conflicting_processes"] = [{"pid": 42}]
+        variants.append(process)
+
+        for changed in variants:
+            with self.subTest(changed=changed):
+                with self.assertRaises(RECOVERY.Stop):
+                    RECOVERY.validate_persistent_orphaned_socket(changed)
+
+        execute_source = inspect.getsource(RECOVERY.execute)
+        self.assertIn("unlink_persistent_orphaned_socket", execute_source)
+        self.assertNotIn('"bootout"', execute_source)
 
 
 if __name__ == "__main__":

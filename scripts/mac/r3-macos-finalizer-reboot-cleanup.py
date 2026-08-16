@@ -49,9 +49,45 @@ PRESERVATION_FINISHED_SHA256 = (
 )
 PRESERVATION_FINISHED_UTC = "2026-08-16T20:23:57Z"
 OBSERVED_REBOOT_UTC = "2026-08-16T21:47:52Z"
-AUTHORITY_PATH = PRESERVATION_ROOT / "reboot-aware-cleanup-authority.v1.json"
-RESTORATION_PATH = PRESERVATION_ROOT / "reboot-aware-cleanup-restoration.v1.json"
-AUTHORITY_ENV = "R3_REBOOT_CLEANUP_AUTHORITY_SHA256"
+PRIOR_CLEANUP_COMMIT = "76d8ec0cef56f433b8e23fa7f808a36f877dbee5"
+PRIOR_CLEANUP_SOURCE_SHA256 = (
+    "7f54100315ef862a8a51e1643825f46136b5d81156b9f1ac0f71ece14f564098"
+)
+PRIOR_AUTHORITY_PATH = PRESERVATION_ROOT / "reboot-aware-cleanup-authority.v1.json"
+PRIOR_AUTHORITY_FILE_SHA256 = (
+    "9d6859d950b97d6343d8b6f8567bf3f898150b3d9fb799a4280f5b6bc76a5a61"
+)
+PRIOR_AUTHORITY_SHA256 = (
+    "06cd7884330c14bddb9adb7733b897e7c6c9a48d06260e678e6f307c4d19990e"
+)
+PRIOR_POST_REBOOT_REBIND_SHA256 = (
+    "da434f213fe30e624f62fd15848b12e22d1ea7fdefbfe88edd257b3c5ca76dd3"
+)
+PRIOR_TERMINAL_ROUTE_SHA256 = (
+    "6202dafc03d598099a172141b95dc0b03b058add16199ed49cafcdd7e65e1137"
+)
+PRIOR_ROUTE_BASENAME = (
+    "reboot-aware-cleanup.EXECUTED-ONCE-" f"{PRIOR_TERMINAL_ROUTE_SHA256}.sh"
+)
+PRIOR_ROUTE_PATH = PRESERVATION_ROOT / PRIOR_ROUTE_BASENAME
+PRIOR_ROUTE_STDOUT_PATH = PRESERVATION_ROOT / (
+    f"reboot-aware-cleanup.{PRIOR_TERMINAL_ROUTE_SHA256}.stdout"
+)
+PRIOR_ROUTE_STDERR_PATH = PRESERVATION_ROOT / (
+    f"reboot-aware-cleanup.{PRIOR_TERMINAL_ROUTE_SHA256}.stderr"
+)
+PRIOR_ROUTE_EXIT_PATH = PRESERVATION_ROOT / (
+    f"reboot-aware-cleanup.{PRIOR_TERMINAL_ROUTE_SHA256}.exit"
+)
+PRIOR_UNEXECUTED_ROUTE_PATH = PRESERVATION_ROOT / (
+    f"reboot-aware-cleanup.{PRIOR_TERMINAL_ROUTE_SHA256}.sh"
+)
+PRIOR_RESTORATION_PATH = PRESERVATION_ROOT / "reboot-aware-cleanup-restoration.v1.json"
+AUTHORITY_PATH = PRESERVATION_ROOT / "reboot-aware-partial-cleanup-authority.v2.json"
+RESTORATION_PATH = (
+    PRESERVATION_ROOT / "reboot-aware-partial-cleanup-restoration.v2.json"
+)
+AUTHORITY_ENV = "R3_REBOOT_PARTIAL_CLEANUP_AUTHORITY_SHA256"
 FIXED_ENV = {
     "PATH": "/usr/bin:/bin:/usr/sbin:/sbin",
     "LANG": "C",
@@ -73,6 +109,20 @@ ROOT_INSTALL_COMPLETION_SHA256 = (
 LAUNCHD_PLIST_SHA256 = (
     "ba462aef89cbffb4054506e9e6d21e925f298338fe5519d45024c97714e6a0ae"
 )
+PRIOR_SOCKET_PHYSICAL_IDENTITY = {
+    "path": (
+        "/private/var/run/" "com.atomize.substrate.r3-macos-evidence-finalizer.v2.sock"
+    ),
+    "device": 16777229,
+    "inode": 531874229,
+    "uid": 0,
+    "gid": 20,
+    "mode": stat.S_IFSOCK | 0o660,
+    "link_count": 1,
+    "size": 0,
+    "modified_seconds": 1786916986,
+    "modified_nanoseconds": 297760628,
+}
 
 RUNNER_CHILDREN = (
     "activation-journal-root-lock-observation.v2.json",
@@ -403,6 +453,242 @@ def run(arguments: list[str]) -> subprocess.CompletedProcess[bytes]:
         stderr=subprocess.PIPE,
         check=False,
     )
+
+
+def read_sealed_preserved_file(
+    path: pathlib.Path, expected_sha256: str, expected_bytes: bytes | None = None
+) -> tuple[bytes, dict[str, Any]]:
+    descriptor = os.open(path, os.O_RDONLY | os.O_NOFOLLOW | os.O_CLOEXEC)
+    try:
+        before = os.fstat(descriptor)
+        if (
+            not stat.S_ISREG(before.st_mode)
+            or before.st_uid != 501
+            or before.st_gid != 20
+            or stat.S_IMODE(before.st_mode) != 0o400
+            or before.st_nlink != 1
+            or before.st_size < 0
+            or before.st_size > MAX_AUTHORITY_BYTES
+        ):
+            fail(f"preserved cleanup evidence changed posture: {path}")
+        chunks = []
+        remaining = before.st_size + 1
+        while remaining:
+            block = os.read(descriptor, min(128 * 1024, remaining))
+            if not block:
+                break
+            chunks.append(block)
+            remaining -= len(block)
+        after = os.fstat(descriptor)
+    finally:
+        os.close(descriptor)
+    pathname_after = os.stat(path, follow_symlinks=False)
+    data = b"".join(chunks)
+    if (
+        stat_tuple(before) != stat_tuple(after)
+        or stat_tuple(before) != stat_tuple(pathname_after)
+        or len(data) != before.st_size
+        or sha_bytes(data) != expected_sha256
+        or (expected_bytes is not None and data != expected_bytes)
+    ):
+        fail(f"preserved cleanup evidence changed exact bytes: {path}")
+    return data, {
+        "path": str(path),
+        "sha256": expected_sha256,
+        "size": len(data),
+        "physical_identity": physical(path, before),
+    }
+
+
+def prior_authority_binding(value: dict[str, Any]) -> str:
+    body = {key: item for key, item in value.items() if key != "authority_sha256"}
+    return document_sha256(
+        {
+            "domain": (
+                "substrate.r3-macos-finalizer-reboot-aware-cleanup-authority.v1"
+            ),
+            "authority": body,
+        }
+    )
+
+
+def load_prior_terminal_authority() -> tuple[dict[str, Any], dict[str, Any]]:
+    data, record = read_sealed_preserved_file(
+        PRIOR_AUTHORITY_PATH, PRIOR_AUTHORITY_FILE_SHA256
+    )
+    value = parse_strict_json(data, "prior terminal reboot cleanup authority")
+    expected_fields = {
+        "schema_owner",
+        "schema_version",
+        "experiment_id",
+        "repetition_scopes",
+        "authority_path",
+        "cleanup_commit",
+        "cleanup_source_sha256",
+        "installer_source_sha256",
+        "candidate_freeze_manifest_sha256",
+        "root_install_claims",
+        "root_install_claims_binding_sha256",
+        "root_install_preclaim_sha256",
+        "root_install_completion_sha256",
+        "installed_candidate_manifest_binding",
+        "installed_candidate_manifest_binding_sha256",
+        "post_reboot_rebind",
+        "post_reboot_rebind_sha256",
+        "cleanup_only",
+        "native_experiment_execution_authorized",
+        "security_framework_or_keychain_queries_authorized",
+        "authority_sha256",
+    }
+    state = value.get("post_reboot_rebind") if isinstance(value, dict) else None
+    claims = value.get("root_install_claims") if isinstance(value, dict) else None
+    launchd = state.get("launchd_rehydration") if isinstance(state, dict) else None
+    if (
+        not isinstance(value, dict)
+        or set(value) != expected_fields
+        or canonical(value) != data
+        or value.get("schema_owner")
+        != "substrate.r3-macos-finalizer-reboot-aware-cleanup-authority"
+        or value.get("schema_version") != 1
+        or value.get("experiment_id") != EXPERIMENT_ID
+        or value.get("repetition_scopes") != SCOPES
+        or value.get("authority_path") != str(PRIOR_AUTHORITY_PATH)
+        or value.get("cleanup_commit") != PRIOR_CLEANUP_COMMIT
+        or value.get("cleanup_source_sha256") != PRIOR_CLEANUP_SOURCE_SHA256
+        or not isinstance(claims, dict)
+        or value.get("root_install_claims_binding_sha256") != document_sha256(claims)
+        or value.get("root_install_preclaim_sha256")
+        != document_sha256(claims.get("preclaim"))
+        or value.get("root_install_completion_sha256")
+        != document_sha256(claims.get("completion"))
+        or value.get("root_install_claims_binding_sha256") != ROOT_INSTALL_CLAIMS_SHA256
+        or value.get("root_install_preclaim_sha256") != ROOT_INSTALL_PRECLAIM_SHA256
+        or value.get("root_install_completion_sha256") != ROOT_INSTALL_COMPLETION_SHA256
+        or value.get("installed_candidate_manifest_binding_sha256")
+        != document_sha256(value.get("installed_candidate_manifest_binding"))
+        or not isinstance(state, dict)
+        or value.get("post_reboot_rebind_sha256") != document_sha256(state)
+        or value.get("post_reboot_rebind_sha256") != PRIOR_POST_REBOOT_REBIND_SHA256
+        or value.get("authority_sha256") != prior_authority_binding(value)
+        or value.get("authority_sha256") != PRIOR_AUTHORITY_SHA256
+        or value.get("cleanup_only") is not True
+        or value.get("native_experiment_execution_authorized") is not False
+        or value.get("security_framework_or_keychain_queries_authorized") is not False
+        or state.get("source_identity", {}).get("cleanup_commit")
+        != PRIOR_CLEANUP_COMMIT
+        or state.get("source_identity", {})
+        .get("implementation_sources", [{}])[0]
+        .get("sha256")
+        != PRIOR_CLEANUP_SOURCE_SHA256
+        or state.get("preserved_pre_reboot_evidence", {}).get("inventory_sha256")
+        != PRESERVED_INVENTORY_SHA256
+        or state.get("observed_reboot", {}).get("boot_utc") != OBSERVED_REBOOT_UTC
+        or not isinstance(launchd, dict)
+        or launchd.get("socket_physical_identity") != PRIOR_SOCKET_PHYSICAL_IDENTITY
+        or launchd.get("plist_sha256") != LAUNCHD_PLIST_SHA256
+        or state.get("unexplained_live_state_differences") != []
+    ):
+        fail("prior terminal reboot cleanup authority changed its exact binding")
+    validate_fixture_projection(state.get("fixture_projection"))
+    return value, record
+
+
+def prior_terminal_route_evidence() -> dict[str, Any]:
+    stderr = (
+        "R3 reboot-aware cleanup stopped: expected exact path absence: "
+        "/private/var/run/"
+        "com.atomize.substrate.r3-macos-evidence-finalizer.v2.sock\n"
+    ).encode()
+    route_bytes, route = read_sealed_preserved_file(
+        PRIOR_ROUTE_PATH, PRIOR_TERMINAL_ROUTE_SHA256
+    )
+    stdout_bytes, stdout = read_sealed_preserved_file(
+        PRIOR_ROUTE_STDOUT_PATH, EMPTY_SHA256, b""
+    )
+    stderr_bytes, stderr_record = read_sealed_preserved_file(
+        PRIOR_ROUTE_STDERR_PATH, sha_bytes(stderr), stderr
+    )
+    exit_bytes, exit_record = read_sealed_preserved_file(
+        PRIOR_ROUTE_EXIT_PATH, sha_bytes(b"78\n"), b"78\n"
+    )
+    if (
+        route_bytes.find(PRIOR_CLEANUP_COMMIT.encode()) < 0
+        or route_bytes.find(PRIOR_AUTHORITY_FILE_SHA256.encode()) < 0
+        or route_bytes.find(PRIOR_POST_REBOOT_REBIND_SHA256.encode()) < 0
+        or stdout_bytes
+        or stderr_bytes != stderr
+        or exit_bytes != b"78\n"
+        or os.path.lexists(PRIOR_UNEXECUTED_ROUTE_PATH)
+        or os.path.lexists(PRIOR_RESTORATION_PATH)
+    ):
+        fail("prior terminal route evidence lost its exact control-flow proof")
+    return {
+        "classification": (
+            "bootout_completed_and_label_absence_validated_before_socket_check"
+        ),
+        "prior_terminal_route_sha256": PRIOR_TERMINAL_ROUTE_SHA256,
+        "executed_route": route,
+        "stdout": stdout,
+        "stderr": stderr_record,
+        "exit_status": exit_record,
+        "unexecuted_route_absence": absent(PRIOR_UNEXECUTED_ROUTE_PATH),
+        "restoration_receipt_absence": absent(PRIOR_RESTORATION_PATH),
+        "launchd_bootout_completed": True,
+        "launchd_label_absence_validated": True,
+        "later_cleanup_effects_started": False,
+    }
+
+
+def validate_prior_cleanup_commit(cleanup_commit: str) -> dict[str, Any]:
+    prefix = [
+        "/usr/bin/git",
+        "-c",
+        f"safe.directory={REPOSITORY}",
+        "-C",
+        str(REPOSITORY),
+    ]
+    ancestor = run(
+        [*prefix, "merge-base", "--is-ancestor", PRIOR_CLEANUP_COMMIT, cleanup_commit]
+    )
+    archived = run(
+        [
+            *prefix,
+            "show",
+            f"{PRIOR_CLEANUP_COMMIT}:scripts/mac/"
+            "r3-macos-finalizer-reboot-cleanup.py",
+        ]
+    )
+    control_flow_markers = [
+        b'"bootout",',
+        b"if bootout.returncode != 0:",
+        b"membrane.validate_launchctl_not_found_streams(",
+        b"socket_absent = membrane.observe_platform_managed_socket_absence(",
+        b"remove_empty_directory(membrane, inbox)",
+    ]
+    marker_offsets = [archived.stdout.find(marker) for marker in control_flow_markers]
+    if (
+        ancestor.returncode != 0
+        or ancestor.stdout
+        or ancestor.stderr
+        or archived.returncode != 0
+        or archived.stderr
+        or sha_bytes(archived.stdout) != PRIOR_CLEANUP_SOURCE_SHA256
+        or any(offset < 0 for offset in marker_offsets)
+        or marker_offsets != sorted(marker_offsets)
+    ):
+        fail("new cleanup commit lost exact ancestry from the prior cleanup commit")
+    return {
+        "cleanup_commits": [PRIOR_CLEANUP_COMMIT, cleanup_commit],
+        "prior_cleanup_source_sha256": PRIOR_CLEANUP_SOURCE_SHA256,
+        "prior_cleanup_commit_is_ancestor": True,
+        "prior_route_control_flow_order": [
+            "launchd_bootout",
+            "bootout_success_guard",
+            "launchd_label_absence_validation",
+            "socket_absence_check",
+            "first_later_cleanup_effect",
+        ],
+    }
 
 
 def exact_git_identity(cleanup_commit: str) -> dict[str, str]:
@@ -742,6 +1028,289 @@ def process_absence(membrane: Any, manifest: dict[str, Any]) -> dict[str, Any]:
     return {"target_paths": targets, "matching_processes": []}
 
 
+def validate_persistent_orphaned_socket(value: Any) -> dict[str, Any]:
+    expected_fields = {
+        "classification",
+        "launchd_label",
+        "launchd_label_absence_observations",
+        "installed_plist",
+        "socket_path",
+        "socket_type",
+        "socket_uid",
+        "socket_gid",
+        "socket_mode",
+        "socket_link_count",
+        "socket_size",
+        "socket_physical_identity",
+        "prior_socket_physical_identity",
+        "platform_parent_path",
+        "platform_parent_physical_identity",
+        "root_owned_non_symlink_parent_traversal",
+        "open_descriptor_observation",
+        "listener_observation",
+        "conflicting_processes",
+        "unexplained_live_state_differences",
+    }
+    expected_stderr = raw_stream(
+        (
+            'Bad request.\nCould not find service "'
+            "com.atomize.substrate.r3-macos-evidence-finalizer.v2"
+            '" in domain for system\n'
+        ).encode()
+    )
+    expected_stdout = raw_stream(b"")
+    absences = (
+        value.get("launchd_label_absence_observations")
+        if isinstance(value, dict)
+        else None
+    )
+    parent = (
+        value.get("platform_parent_physical_identity")
+        if isinstance(value, dict)
+        else None
+    )
+    if (
+        not isinstance(value, dict)
+        or set(value) != expected_fields
+        or value.get("classification") != "persistent_orphaned_socket"
+        or value.get("launchd_label")
+        != "com.atomize.substrate.r3-macos-evidence-finalizer.v2"
+        or not isinstance(absences, list)
+        or [item.get("phase") if isinstance(item, dict) else None for item in absences]
+        != ["before_socket_observation", "after_socket_observation"]
+        or any(
+            not isinstance(item, dict)
+            or set(item) != {"phase", "exit_status", "stdout", "stderr"}
+            or item.get("exit_status") != 113
+            or item.get("stdout") != expected_stdout
+            or item.get("stderr") != expected_stderr
+            for item in absences
+        )
+        or value.get("installed_plist", {}).get("path") != "/Library/LaunchDaemons/"
+        "com.atomize.substrate.r3-macos-evidence-finalizer.v2.plist"
+        or value.get("installed_plist", {}).get("sha256") != LAUNCHD_PLIST_SHA256
+        or value.get("socket_path") != PRIOR_SOCKET_PHYSICAL_IDENTITY["path"]
+        or value.get("socket_type") != "socket"
+        or value.get("socket_uid") != 0
+        or value.get("socket_gid") != 20
+        or value.get("socket_mode") != 0o660
+        or value.get("socket_link_count") != 1
+        or value.get("socket_size") != 0
+        or value.get("socket_physical_identity") != PRIOR_SOCKET_PHYSICAL_IDENTITY
+        or value.get("prior_socket_physical_identity") != PRIOR_SOCKET_PHYSICAL_IDENTITY
+        or value.get("platform_parent_path") != "/private/var/run"
+        or not isinstance(parent, dict)
+        or set(parent) != {"path", "device", "inode", "uid", "gid", "mode"}
+        or parent.get("path") != "/private/var/run"
+        or not isinstance(parent.get("device"), int)
+        or isinstance(parent.get("device"), bool)
+        or not isinstance(parent.get("inode"), int)
+        or isinstance(parent.get("inode"), bool)
+        or parent["device"] < 0
+        or parent["inode"] <= 0
+        or parent.get("uid") != 0
+        or parent.get("gid") != 1
+        or parent.get("mode") != stat.S_IFDIR | 0o775
+        or value.get("root_owned_non_symlink_parent_traversal") is not True
+        or value.get("open_descriptor_observation")
+        != {
+            "command": [
+                "/usr/sbin/lsof",
+                "-nP",
+                "--",
+                PRIOR_SOCKET_PHYSICAL_IDENTITY["path"],
+            ],
+            "exit_status": 1,
+            "stdout": expected_stdout,
+            "stderr": expected_stdout,
+            "matching_open_descriptors": [],
+        }
+        or value.get("listener_observation")
+        != {
+            "command": ["/usr/sbin/netstat", "-anv", "-f", "unix"],
+            "exit_status": 0,
+            "exact_socket_path_matches": [],
+        }
+        or value.get("conflicting_processes") != []
+        or value.get("unexplained_live_state_differences") != []
+    ):
+        fail("persistent orphaned socket classification changed or became active")
+    return value
+
+
+def open_platform_socket_parent(membrane: Any) -> tuple[int, dict[str, Any]]:
+    path = membrane.ENDPOINT_PATH.parent
+    if str(path) != "/private/var/run":
+        fail("orphaned socket parent changed its compiled pathname")
+    root_owned_chain(path, permit_writable_leaf=True)
+    immutable_parent = membrane.open_directory_chain(path.parent)
+    try:
+        pathname_before = os.stat(
+            path.name, dir_fd=immutable_parent, follow_symlinks=False
+        )
+        descriptor = os.open(
+            path.name,
+            os.O_RDONLY | os.O_DIRECTORY | os.O_NOFOLLOW,
+            dir_fd=immutable_parent,
+        )
+        held = os.fstat(descriptor)
+        pathname_after = os.stat(
+            path.name, dir_fd=immutable_parent, follow_symlinks=False
+        )
+        if (
+            not membrane.same_stat(pathname_before, held)
+            or not membrane.same_stat(held, pathname_after)
+            or not stat.S_ISDIR(held.st_mode)
+            or held.st_uid != 0
+            or held.st_gid != 1
+            or held.st_mode != stat.S_IFDIR | 0o775
+        ):
+            os.close(descriptor)
+            fail("orphaned socket parent changed its exact platform identity")
+        return descriptor, stable_directory_identity(physical(path, held))
+    finally:
+        os.close(immutable_parent)
+
+
+def launchd_label_absence(membrane: Any, phase: str) -> dict[str, Any]:
+    output = run(["/bin/launchctl", "print", f"system/{membrane.FINALIZER_LABEL}"])
+    stdout = raw_stream(output.stdout)
+    stderr = raw_stream(output.stderr)
+    membrane.validate_launchctl_not_found_streams(
+        membrane.FINALIZER_LABEL,
+        output.returncode,
+        membrane.raw_stream(output.stdout),
+        membrane.raw_stream(output.stderr),
+    )
+    return {
+        "phase": phase,
+        "exit_status": output.returncode,
+        "stdout": stdout,
+        "stderr": stderr,
+    }
+
+
+def observe_persistent_orphaned_socket(
+    membrane: Any,
+    manifest: dict[str, Any],
+    prior_launchd: dict[str, Any],
+    processes: dict[str, Any],
+) -> dict[str, Any]:
+    first_absence = launchd_label_absence(membrane, "before_socket_observation")
+    entries = [
+        entry for entry in manifest["artifacts"] if entry["role"] == "launchd_plist"
+    ]
+    if len(entries) != 1:
+        fail("partial cleanup lost the exact installed launchd-plist role")
+    entry = entries[0]
+    plist_path = pathlib.Path(entry["intended_path"])
+    _, plist_identity = read_managed_file(
+        membrane,
+        plist_path,
+        0,
+        0,
+        0o644,
+        entry["size"],
+        entry["sha256"],
+    )
+    if entry["sha256"] != LAUNCHD_PLIST_SHA256 or plist_identity != prior_launchd.get(
+        "plist_physical_identity"
+    ):
+        fail("installed launchd plist changed after the completed bootout")
+
+    parent_descriptor, parent_identity = open_platform_socket_parent(membrane)
+    try:
+        observed = os.stat(
+            membrane.ENDPOINT_PATH.name,
+            dir_fd=parent_descriptor,
+            follow_symlinks=False,
+        )
+        pathname = os.lstat(membrane.ENDPOINT_PATH)
+        if not membrane.same_stat(observed, pathname):
+            fail("orphaned socket pathname changed across descriptor observation")
+        socket_identity = physical(membrane.ENDPOINT_PATH, observed)
+    finally:
+        os.close(parent_descriptor)
+    if (
+        not stat.S_ISSOCK(observed.st_mode)
+        or observed.st_uid != 0
+        or observed.st_gid != 20
+        or stat.S_IMODE(observed.st_mode) != 0o660
+        or observed.st_nlink != 1
+        or observed.st_size != 0
+        or socket_identity != prior_launchd.get("socket_physical_identity")
+        or socket_identity != PRIOR_SOCKET_PHYSICAL_IDENTITY
+    ):
+        fail("orphaned socket changed its exact prior physical binding")
+
+    lsof_command = [
+        "/usr/sbin/lsof",
+        "-nP",
+        "--",
+        str(membrane.ENDPOINT_PATH),
+    ]
+    opened = run(lsof_command)
+    if opened.returncode != 1 or opened.stdout or opened.stderr:
+        fail("orphaned socket has an open descriptor or lsof became inconclusive")
+    netstat_command = ["/usr/sbin/netstat", "-anv", "-f", "unix"]
+    listeners = run(netstat_command)
+    if (
+        listeners.returncode != 0
+        or listeners.stderr
+        or len(listeners.stdout) > MAX_AUTHORITY_BYTES
+    ):
+        fail("orphaned socket listener observation became inconclusive")
+    exact_matches = [
+        line.decode(errors="strict")
+        for line in listeners.stdout.splitlines()
+        if str(membrane.ENDPOINT_PATH).encode() in line
+    ]
+    if exact_matches:
+        fail("orphaned socket acquired an active or registered listener")
+    second_absence = launchd_label_absence(membrane, "after_socket_observation")
+    return validate_persistent_orphaned_socket(
+        {
+            "classification": "persistent_orphaned_socket",
+            "launchd_label": membrane.FINALIZER_LABEL,
+            "launchd_label_absence_observations": [
+                first_absence,
+                second_absence,
+            ],
+            "installed_plist": {
+                "path": str(plist_path),
+                "sha256": entry["sha256"],
+                "physical_identity": plist_identity,
+            },
+            "socket_path": str(membrane.ENDPOINT_PATH),
+            "socket_type": "socket",
+            "socket_uid": observed.st_uid,
+            "socket_gid": observed.st_gid,
+            "socket_mode": stat.S_IMODE(observed.st_mode),
+            "socket_link_count": observed.st_nlink,
+            "socket_size": observed.st_size,
+            "socket_physical_identity": socket_identity,
+            "prior_socket_physical_identity": PRIOR_SOCKET_PHYSICAL_IDENTITY,
+            "platform_parent_path": str(membrane.ENDPOINT_PATH.parent),
+            "platform_parent_physical_identity": parent_identity,
+            "root_owned_non_symlink_parent_traversal": True,
+            "open_descriptor_observation": {
+                "command": lsof_command,
+                "exit_status": opened.returncode,
+                "stdout": raw_stream(opened.stdout),
+                "stderr": raw_stream(opened.stderr),
+                "matching_open_descriptors": [],
+            },
+            "listener_observation": {
+                "command": netstat_command,
+                "exit_status": listeners.returncode,
+                "exact_socket_path_matches": exact_matches,
+            },
+            "conflicting_processes": processes["matching_processes"],
+            "unexplained_live_state_differences": [],
+        }
+    )
+
+
 def validate_fixture_projection(value: Any) -> dict[str, Any]:
     expected_fields = {
         "experiment_id",
@@ -963,6 +1532,11 @@ def observe_state(
     cleanup_commit: str, source_sha256: str, installer_sha256: str
 ) -> tuple[dict[str, Any], dict[str, Any], dict[str, Any], Any]:
     membrane = load_installer(installer_sha256)
+    ancestry = validate_prior_cleanup_commit(cleanup_commit)
+    prior_authority, prior_authority_record = load_prior_terminal_authority()
+    prior_route = prior_terminal_route_evidence()
+    if prior_authority.get("installer_source_sha256") != installer_sha256:
+        fail("partial cleanup changed the exact root-install cleanup membrane")
     source = exact_source_record(cleanup_commit, source_sha256, installer_sha256)
     preservation = preservation_record(membrane)
     reboot = observed_boot()
@@ -1045,8 +1619,12 @@ def observe_state(
     runner = inventory_root(membrane, membrane.RUNNER_ROOT, RUNNER_CHILDREN, 0o600)
     creator = inventory_root(membrane, membrane.CREATOR_ROOT, CREATOR_CHILDREN, 0o600)
     emergency = validate_emergency_receipts(membrane, runner, creator)
-    launchd = launchd_rehydration(membrane, manifest)
+    prior_state = prior_authority["post_reboot_rebind"]
+    launchd = prior_state["launchd_rehydration"]
     processes = process_absence(membrane, manifest)
+    partial_boundary = observe_persistent_orphaned_socket(
+        membrane, manifest, launchd, processes
+    )
 
     protocol_files = []
     for digest_field, name in PROTOCOL_FILES:
@@ -1112,8 +1690,7 @@ def observe_state(
         ),
     }
     fixture = fixture_projection(claims, artifacts, launchd, manifest)
-    state = {
-        "source_identity": source,
+    rebound_values = {
         "preserved_pre_reboot_evidence": preservation,
         "observed_reboot": reboot,
         "ephemeral_claim_absences": claim_absences,
@@ -1127,11 +1704,26 @@ def observe_state(
         "runner_root": runner,
         "creator_root": creator,
         "protocol_files": protocol_files,
-        "launchd_rehydration": launchd,
         "process_absence": processes,
         "emergency_signer_deletion": emergency,
         "fixture_projection": fixture,
         "unexplained_live_state_differences": [],
+    }
+    for key, observed_value in rebound_values.items():
+        if prior_state.get(key) != observed_value:
+            fail(f"partial cleanup found an unexplained live-state difference: {key}")
+    if prior_state.get("launchd_rehydration") != launchd:
+        fail("prior launchd rehydration binding changed")
+    state = {
+        "source_identity": source,
+        "cleanup_commit_ancestry": ancestry,
+        "prior_authority_file": prior_authority_record,
+        "prior_authority_sha256": PRIOR_AUTHORITY_SHA256,
+        "prior_post_reboot_rebind_sha256": PRIOR_POST_REBOOT_REBIND_SHA256,
+        "prior_terminal_route_evidence": prior_route,
+        "prior_launchd_rehydration": launchd,
+        "partial_cleanup_boundary": partial_boundary,
+        **rebound_values,
     }
     return state, claims, installed_manifest_binding, membrane
 
@@ -1140,7 +1732,10 @@ def authority_binding(value: dict[str, Any]) -> str:
     body = {key: item for key, item in value.items() if key != "authority_sha256"}
     return document_sha256(
         {
-            "domain": "substrate.r3-macos-finalizer-reboot-aware-cleanup-authority.v1",
+            "domain": (
+                "substrate.r3-macos-finalizer-reboot-aware-"
+                "partial-cleanup-authority.v2"
+            ),
             "authority": body,
         }
     )
@@ -1153,14 +1748,25 @@ def build_authority(
         cleanup_commit, source_sha256, installer_sha256
     )
     value = {
-        "schema_owner": "substrate.r3-macos-finalizer-reboot-aware-cleanup-authority",
-        "schema_version": 1,
+        "schema_owner": (
+            "substrate.r3-macos-finalizer-reboot-aware-partial-cleanup-authority"
+        ),
+        "schema_version": 2,
         "experiment_id": EXPERIMENT_ID,
         "repetition_scopes": SCOPES,
         "authority_path": str(AUTHORITY_PATH),
         "cleanup_commit": cleanup_commit,
+        "cleanup_commits": [PRIOR_CLEANUP_COMMIT, cleanup_commit],
         "cleanup_source_sha256": source_sha256,
         "installer_source_sha256": installer_sha256,
+        "prior_terminal_route_sha256": PRIOR_TERMINAL_ROUTE_SHA256,
+        "prior_authority_file_sha256": PRIOR_AUTHORITY_FILE_SHA256,
+        "prior_authority_sha256": PRIOR_AUTHORITY_SHA256,
+        "prior_post_reboot_rebind_sha256": PRIOR_POST_REBOOT_REBIND_SHA256,
+        "prior_terminal_route_evidence_sha256": document_sha256(
+            state["prior_terminal_route_evidence"]
+        ),
+        "socket_classification": "persistent_orphaned_socket",
         "candidate_freeze_manifest_sha256": state["installed_manifest"]["sha256"],
         "root_install_claims": claims,
         "root_install_claims_binding_sha256": document_sha256(claims),
@@ -1191,8 +1797,15 @@ def validate_authority(
         "repetition_scopes",
         "authority_path",
         "cleanup_commit",
+        "cleanup_commits",
         "cleanup_source_sha256",
         "installer_source_sha256",
+        "prior_terminal_route_sha256",
+        "prior_authority_file_sha256",
+        "prior_authority_sha256",
+        "prior_post_reboot_rebind_sha256",
+        "prior_terminal_route_evidence_sha256",
+        "socket_classification",
         "candidate_freeze_manifest_sha256",
         "root_install_claims",
         "root_install_claims_binding_sha256",
@@ -1210,39 +1823,52 @@ def validate_authority(
     if not isinstance(value, dict) or set(value) != expected_fields:
         fail("reboot cleanup authority changed its closed shape")
     claims = value.get("root_install_claims")
-    if not isinstance(claims, dict):
+    state = value.get("post_reboot_rebind")
+    if not isinstance(claims, dict) or not isinstance(state, dict):
         fail("reboot cleanup authority lacks exact durable canonical claim copies")
     if (
         value.get("schema_owner")
-        != "substrate.r3-macos-finalizer-reboot-aware-cleanup-authority"
-        or value.get("schema_version") != 1
+        != "substrate.r3-macos-finalizer-reboot-aware-partial-cleanup-authority"
+        or value.get("schema_version") != 2
         or value.get("experiment_id") != EXPERIMENT_ID
         or value.get("repetition_scopes") != SCOPES
         or value.get("authority_path") != str(AUTHORITY_PATH)
         or not is_git_id(value.get("cleanup_commit"))
+        or value.get("cleanup_commits")
+        != [PRIOR_CLEANUP_COMMIT, value.get("cleanup_commit")]
         or not is_sha256(value.get("cleanup_source_sha256"))
         or not is_sha256(value.get("installer_source_sha256"))
+        or value.get("prior_terminal_route_sha256") != PRIOR_TERMINAL_ROUTE_SHA256
+        or value.get("prior_authority_file_sha256") != PRIOR_AUTHORITY_FILE_SHA256
+        or value.get("prior_authority_sha256") != PRIOR_AUTHORITY_SHA256
+        or value.get("prior_post_reboot_rebind_sha256")
+        != PRIOR_POST_REBOOT_REBIND_SHA256
+        or value.get("prior_terminal_route_evidence_sha256")
+        != document_sha256(state.get("prior_terminal_route_evidence"))
+        or value.get("socket_classification") != "persistent_orphaned_socket"
         or not is_sha256(value.get("candidate_freeze_manifest_sha256"))
         or value.get("root_install_claims_binding_sha256") != document_sha256(claims)
+        or value.get("root_install_claims_binding_sha256") != ROOT_INSTALL_CLAIMS_SHA256
         or value.get("root_install_preclaim_sha256")
         != document_sha256(claims.get("preclaim"))
+        or value.get("root_install_preclaim_sha256") != ROOT_INSTALL_PRECLAIM_SHA256
         or value.get("root_install_completion_sha256")
         != document_sha256(claims.get("completion"))
+        or value.get("root_install_completion_sha256") != ROOT_INSTALL_COMPLETION_SHA256
         or value.get("installed_candidate_manifest_binding_sha256")
         != document_sha256(value.get("installed_candidate_manifest_binding"))
-        or value.get("post_reboot_rebind_sha256")
-        != document_sha256(value.get("post_reboot_rebind"))
+        or value.get("post_reboot_rebind_sha256") != document_sha256(state)
         or value.get("candidate_freeze_manifest_sha256")
-        != value.get("post_reboot_rebind", {})
-        .get("installed_manifest", {})
-        .get("sha256")
+        != state.get("installed_manifest", {}).get("sha256")
         or value.get("cleanup_only") is not True
         or value.get("native_experiment_execution_authorized") is not False
         or value.get("security_framework_or_keychain_queries_authorized") is not False
         or value.get("authority_sha256") != authority_binding(value)
         or not is_sha256(expected_file_sha256)
+        or expected_file_sha256 != sha_bytes(canonical(value))
     ):
         fail("reboot cleanup authority changed its exact binding")
+    validate_persistent_orphaned_socket(state.get("partial_cleanup_boundary"))
     fresh, fresh_claims, fresh_installed, membrane = observe_state(
         value["cleanup_commit"],
         value["cleanup_source_sha256"],
@@ -1329,11 +1955,79 @@ def remove_empty_directory(membrane: Any, value: dict[str, Any]) -> None:
     absent(path)
 
 
+def unlink_persistent_orphaned_socket(
+    authority: dict[str, Any], membrane: Any
+) -> dict[str, Any]:
+    state = authority["post_reboot_rebind"]
+    manifest, _ = membrane.load_manifest()
+    processes = process_absence(membrane, manifest)
+    fresh = observe_persistent_orphaned_socket(
+        membrane,
+        manifest,
+        state["prior_launchd_rehydration"],
+        processes,
+    )
+    sealed = validate_persistent_orphaned_socket(state["partial_cleanup_boundary"])
+    if fresh != sealed:
+        fail("orphaned socket changed after the sealed partial-state revalidation")
+
+    parent, parent_identity = open_platform_socket_parent(membrane)
+    try:
+        before = os.stat(
+            membrane.ENDPOINT_PATH.name,
+            dir_fd=parent,
+            follow_symlinks=False,
+        )
+        if (
+            physical(membrane.ENDPOINT_PATH, before)
+            != sealed["socket_physical_identity"]
+            or parent_identity != sealed["platform_parent_physical_identity"]
+        ):
+            fail("orphaned socket or parent changed before exact unlinkat")
+        os.unlink(membrane.ENDPOINT_PATH.name, dir_fd=parent)
+        os.fsync(parent)
+        try:
+            os.stat(
+                membrane.ENDPOINT_PATH.name,
+                dir_fd=parent,
+                follow_symlinks=False,
+            )
+        except FileNotFoundError as error:
+            if error.errno != errno.ENOENT:
+                raise
+        else:
+            fail("orphaned socket remained after exact descriptor-relative unlink")
+    finally:
+        os.close(parent)
+    pathname_absence = absent(membrane.ENDPOINT_PATH)
+    durable_absence = membrane.observe_platform_managed_socket_absence(
+        membrane.ENDPOINT_PATH
+    )
+    launchd_absence = launchd_label_absence(membrane, "after_socket_unlink")
+    final_process_absence = process_absence(membrane, manifest)
+    return {
+        "classification": "exact_persistent_orphaned_socket_removal",
+        "socket_path": str(membrane.ENDPOINT_PATH),
+        "removed_socket_physical_identity": sealed["socket_physical_identity"],
+        "descriptor_relative_unlink": True,
+        "parent_fsync_completed": True,
+        "pathname_absence": pathname_absence,
+        "durable_platform_socket_absence": durable_absence,
+        "launchd_label_absence_after_unlink": launchd_absence,
+        "conflicting_processes_after_unlink": final_process_absence[
+            "matching_processes"
+        ],
+    }
+
+
 def restoration_binding(value: dict[str, Any]) -> str:
     body = {key: item for key, item in value.items() if key != "restoration_sha256"}
     return document_sha256(
         {
-            "domain": "substrate.r3-macos-finalizer-reboot-aware-cleanup-restoration.v1",
+            "domain": (
+                "substrate.r3-macos-finalizer-reboot-aware-"
+                "partial-cleanup-restoration.v2"
+            ),
             "restoration": body,
         }
     )
@@ -1342,30 +2036,10 @@ def restoration_binding(value: dict[str, Any]) -> str:
 def execute(authority: dict[str, Any], membrane: Any) -> dict[str, Any]:
     if os.path.lexists(RESTORATION_PATH):
         fail("reboot cleanup restoration receipt already exists; route is terminal")
+    if os.path.lexists(PRIOR_RESTORATION_PATH):
+        fail("prior terminal route unexpectedly published a restoration receipt")
     state = authority["post_reboot_rebind"]
-    launchd = state["launchd_rehydration"]
-    bootout = run(
-        [
-            "/bin/launchctl",
-            "bootout",
-            "system",
-            launchd["plist_path"],
-        ]
-    )
-    if bootout.returncode != 0:
-        fail(f"exact reboot-rehydrated launchd bootout failed: {bootout.returncode}")
-    launchd_absent = run(
-        ["/bin/launchctl", "print", f"system/{membrane.FINALIZER_LABEL}"]
-    )
-    membrane.validate_launchctl_not_found_streams(
-        membrane.FINALIZER_LABEL,
-        launchd_absent.returncode,
-        membrane.raw_stream(launchd_absent.stdout),
-        membrane.raw_stream(launchd_absent.stderr),
-    )
-    socket_absent = membrane.observe_platform_managed_socket_absence(
-        membrane.ENDPOINT_PATH
-    )
+    socket_removal = unlink_persistent_orphaned_socket(authority, membrane)
 
     # Exact manifest rollback order after the service/socket boundary.
     inbox = next(
@@ -1415,14 +2089,24 @@ def execute(authority: dict[str, Any], membrane: Any) -> dict[str, Any]:
     if os.listdir(membrane.GLOBAL_EXCHANGE):
         fail("global exchange changed after complete baseline observation")
     receipt = {
-        "schema_owner": "substrate.r3-macos-finalizer-reboot-aware-cleanup-restoration",
-        "schema_version": 1,
+        "schema_owner": (
+            "substrate.r3-macos-finalizer-reboot-aware-partial-cleanup-restoration"
+        ),
+        "schema_version": 2,
         "experiment_id": EXPERIMENT_ID,
         "repetition_scopes": SCOPES,
         "receipt_path": str(RESTORATION_PATH),
         "cleanup_commit": authority["cleanup_commit"],
+        "cleanup_commits": authority["cleanup_commits"],
         "cleanup_authority_file_sha256": sha_bytes(canonical(authority)),
         "cleanup_authority_sha256": authority["authority_sha256"],
+        "prior_terminal_route_sha256": PRIOR_TERMINAL_ROUTE_SHA256,
+        "prior_authority_file_sha256": PRIOR_AUTHORITY_FILE_SHA256,
+        "prior_authority_sha256": PRIOR_AUTHORITY_SHA256,
+        "prior_post_reboot_rebind_sha256": PRIOR_POST_REBOOT_REBIND_SHA256,
+        "prior_terminal_route_evidence_sha256": authority[
+            "prior_terminal_route_evidence_sha256"
+        ],
         "candidate_freeze_manifest_sha256": sha_bytes(manifest_bytes),
         "root_install_claims_binding_sha256": authority[
             "root_install_claims_binding_sha256"
@@ -1431,11 +2115,10 @@ def execute(authority: dict[str, Any], membrane: Any) -> dict[str, Any]:
         "preservation_finished_utc": PRESERVATION_FINISHED_UTC,
         "observed_reboot_utc": OBSERVED_REBOOT_UTC,
         "post_reboot_rebind_sha256": authority["post_reboot_rebind_sha256"],
-        "launchctl_bootout_exit_status": bootout.returncode,
-        "launchctl_bootout_stdout": raw_stream(bootout.stdout),
-        "launchctl_bootout_stderr": raw_stream(bootout.stderr),
-        "launchctl_print_absent_exit_status": launchd_absent.returncode,
-        "platform_managed_socket_absence": socket_absent,
+        "socket_classification": authority["socket_classification"],
+        "prior_launchd_bootout_completed": True,
+        "launchd_bootout_repeated": False,
+        "persistent_orphaned_socket_removal": socket_removal,
         "final_restoration_observation": final_observation,
         "global_exchange_children": [],
         "security_framework_or_keychain_queries_performed": False,
@@ -1457,25 +2140,10 @@ def load_authority() -> tuple[dict[str, Any], Any]:
     expected = os.environ.get(AUTHORITY_ENV)
     if not is_sha256(expected):
         fail("reboot cleanup route lacks one canonical authority digest")
-    data = AUTHORITY_PATH.read_bytes()
-    observed = os.lstat(AUTHORITY_PATH)
-    after = os.lstat(AUTHORITY_PATH)
-    if (
-        not stat.S_ISREG(observed.st_mode)
-        or observed.st_uid != 501
-        or observed.st_gid != 20
-        or stat.S_IMODE(observed.st_mode) != 0o400
-        or observed.st_nlink != 1
-        or not 0 < len(data) <= MAX_AUTHORITY_BYTES
-        or len(data) != observed.st_size
-        or stat_tuple(observed) != stat_tuple(after)
-        or sha_bytes(data) != expected
-    ):
-        fail("reboot cleanup authority file changed its sealed identity")
-    try:
-        value = json.loads(data)
-    except (UnicodeDecodeError, json.JSONDecodeError) as error:
-        raise Stop("reboot cleanup authority is not strict JSON") from error
+    data, _ = read_sealed_preserved_file(AUTHORITY_PATH, expected)
+    if not data:
+        fail("reboot cleanup authority file is empty")
+    value = parse_strict_json(data, "reboot cleanup authority")
     if canonical(value) != data:
         fail("reboot cleanup authority is not canonical JSON")
     return validate_authority(value, expected)
