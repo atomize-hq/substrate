@@ -366,6 +366,16 @@ impl NonInteractiveSecurity {
         exact_identity_present_impl(config)
     }
 
+    /// Perform one tag-scoped private-key lookup after process interaction has been disabled.
+    /// Only the raw OSStatus escapes; any unexpected returned object is retained until release and
+    /// is never interpreted as a complete product-equivalent identity.
+    pub fn tag_scoped_private_key_lookup_raw_os_status(
+        &self,
+        config: &ExactSignerConfig,
+    ) -> Result<OsStatus> {
+        tag_scoped_private_key_lookup_raw_os_status_impl(config)
+    }
+
     /// Invoke the one intended private-key capability.  The current executable must match the
     /// publisher trusted-application identity for this to complete without UI.
     pub fn sign(&self, config: &ExactSignerConfig, payload: &[u8]) -> Result<Vec<u8>> {
@@ -603,6 +613,26 @@ fn exact_identity_present_impl(config: &ExactSignerConfig) -> Result<bool> {
         let mut owned = OwnedCf::new();
         let keychain = open_explicit_system_keychain(&mut owned)?;
         Ok(product_equivalent_private_key_match(&mut owned, keychain, config)?.is_some())
+    }
+}
+
+fn tag_scoped_private_key_lookup_raw_os_status_impl(
+    config: &ExactSignerConfig,
+) -> Result<OsStatus> {
+    config.validate()?;
+    // SAFETY: the explicit keychain, query, and any unexpected result remain owned through their
+    // last use.  The result is deliberately not inspected because denial proves no identity
+    // posture beyond the tag-scoped query that was attempted.
+    unsafe {
+        let mut owned = OwnedCf::new();
+        let keychain = open_explicit_system_keychain(&mut owned)?;
+        let query = exact_private_key_query(&mut owned, keychain, config)?;
+        let mut result: CfType = ptr::null();
+        let status = SecItemCopyMatching(query.cast(), &mut result);
+        if !result.is_null() {
+            owned.hold(result);
+        }
+        Ok(status)
     }
 }
 

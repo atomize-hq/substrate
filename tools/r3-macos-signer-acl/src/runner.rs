@@ -2074,31 +2074,47 @@ fn validate_creator_typed_receipt(
         .get("final_present")
         .and_then(serde_json::Value::as_bool);
     if executable_path == WRONG_IDENTITY_EXECUTABLE_PATH {
-        let delete = object
-            .get("exact_delete")
-            .and_then(serde_json::Value::as_object)
-            .context("wrong-identity receipt lacks exact delete")?;
-        if schema != Some("substrate.r3-macos-signer-acl.wrong-identity-receipt.v2")
+        let (repetition, expected_after, repetition_name) = match before {
+            MarkerState::FirstWrongPrepared => (
+                FixedRepetitionV2::First,
+                MarkerState::FirstFreshDeletePrepared,
+                "first",
+            ),
+            MarkerState::SecondWrongPrepared => (
+                FixedRepetitionV2::Second,
+                MarkerState::SecondFreshDeletePrepared,
+                "second",
+            ),
+            _ => bail!("wrong-identity typed receipt is outside a closed prepared route"),
+        };
+        if object.len() != 8
+            || after != expected_after
+            || schema != Some("substrate.r3-macos-signer-acl.wrong-identity-receipt.v3")
+            || object.get("repetition").and_then(serde_json::Value::as_str) != Some(repetition_name)
+            || object
+                .get("creator_scope_id")
+                .and_then(serde_json::Value::as_str)
+                != Some(repetition.creator_scope())
             || object
                 .get("executable_path")
                 .and_then(serde_json::Value::as_str)
                 != Some(WRONG_IDENTITY_EXECUTABLE_PATH)
             || object
-                .get("precommitted_expected_raw_os_status")
-                .and_then(serde_json::Value::as_i64)
-                != Some(-25_308)
-            || delete
-                .get("raw_os_status")
-                .and_then(serde_json::Value::as_i64)
-                != Some(-25_308)
-            || delete
-                .get("classification")
+                .get("marker_path")
                 .and_then(serde_json::Value::as_str)
-                != Some("interaction_not_allowed")
+                != Some(MARKER_PATH)
             || object
-                .get("exact_identity_preserved_after")
-                .and_then(serde_json::Value::as_bool)
-                != Some(true)
+                .get("process_interaction_disable_raw_os_status")
+                .and_then(serde_json::Value::as_i64)
+                != Some(0)
+            || object
+                .get("precommitted_expected_lookup_raw_os_status")
+                .and_then(serde_json::Value::as_i64)
+                != Some(-25_308)
+            || object
+                .get("tag_scoped_private_key_lookup_raw_os_status")
+                .and_then(serde_json::Value::as_i64)
+                != Some(-25_308)
         {
             bail!("wrong-identity typed receipt differs from the global native arm plan")
         }
@@ -2222,7 +2238,7 @@ fn creator_native_arm(state: MarkerState) -> Result<CreatorNativeArmV2> {
     match creator_arm_sequence_ordinal(state)? {
         1 => Ok(CreatorNativeArmV2::QueryUiFailCreateThenDelete),
         2 => Ok(CreatorNativeArmV2::FreshProcessCreateThenExit),
-        3 => Ok(CreatorNativeArmV2::WrongIdentityDelete),
+        3 => Ok(CreatorNativeArmV2::WrongIdentityProcessInteractionDeniedLookup),
         4 => Ok(CreatorNativeArmV2::FreshProcessFirstCallDisableThenDelete),
         5 => Ok(CreatorNativeArmV2::AlreadyAbsentRetry),
         _ => unreachable!("closed creator arm ordinal is in 1..=5"),
@@ -2281,15 +2297,21 @@ fn build_creator_native_arm_receipt(
             true,
             vec![(O::CreateProductEquivalentSigner, 0, C::CreatedAndPresent)],
         ),
-        CreatorNativeArmV2::WrongIdentityDelete => (
+        CreatorNativeArmV2::WrongIdentityProcessInteractionDeniedLookup => (
             true,
             true,
-            vec![(
-                O::DeleteExactSigner,
-                -25_308,
-                C::InteractionNotAllowedAndPresent,
-            )],
+            vec![
+                (O::DisableProcessInteractionFirst, 0, C::InteractionDisabled),
+                (
+                    O::LookupTagScopedPrivateKey,
+                    -25_308,
+                    C::InteractionNotAllowed,
+                ),
+            ],
         ),
+        CreatorNativeArmV2::WrongIdentityDelete => {
+            bail!("legacy wrong-identity deletion arm is not valid in the current experiment")
+        }
         CreatorNativeArmV2::FreshProcessFirstCallDisableThenDelete => (
             true,
             false,
@@ -12325,6 +12347,62 @@ mod tests {
         assert!(production.contains("env_clear()"));
         assert!(production.contains("Stdio::null()"));
         assert!(!production.contains("std::env::var("));
+    }
+
+    #[test]
+    fn wrong_identity_typed_receipt_accepts_only_process_denied_lookup_v3() {
+        let current = serde_json::json!({
+            "schema": "substrate.r3-macos-signer-acl.wrong-identity-receipt.v3",
+            "repetition": "first",
+            "creator_scope_id": CREATOR_REPETITION_SCOPE_1,
+            "executable_path": WRONG_IDENTITY_EXECUTABLE_PATH,
+            "marker_path": MARKER_PATH,
+            "process_interaction_disable_raw_os_status": 0,
+            "precommitted_expected_lookup_raw_os_status": -25_308,
+            "tag_scoped_private_key_lookup_raw_os_status": -25_308,
+        });
+        validate_creator_typed_receipt(
+            &current,
+            MarkerState::FirstWrongPrepared,
+            MarkerState::FirstFreshDeletePrepared,
+            WRONG_IDENTITY_EXECUTABLE_PATH,
+        )
+        .expect("accept exact process-denied lookup receipt");
+
+        let legacy = serde_json::json!({
+            "schema": "substrate.r3-macos-signer-acl.wrong-identity-receipt.v2",
+            "repetition": "first",
+            "creator_scope_id": CREATOR_REPETITION_SCOPE_1,
+            "executable_path": WRONG_IDENTITY_EXECUTABLE_PATH,
+            "marker_path": MARKER_PATH,
+            "precommitted_expected_raw_os_status": -25_308,
+            "exact_delete": {
+                "raw_os_status": -25_308,
+                "classification": "interaction_not_allowed",
+                "present_after": true,
+            },
+            "exact_identity_preserved_after": true,
+        });
+        assert!(validate_creator_typed_receipt(
+            &legacy,
+            MarkerState::FirstWrongPrepared,
+            MarkerState::FirstFreshDeletePrepared,
+            WRONG_IDENTITY_EXECUTABLE_PATH,
+        )
+        .is_err());
+
+        let mut extra = current;
+        extra
+            .as_object_mut()
+            .unwrap()
+            .insert("presence_claim".to_owned(), serde_json::json!(true));
+        assert!(validate_creator_typed_receipt(
+            &extra,
+            MarkerState::FirstWrongPrepared,
+            MarkerState::FirstFreshDeletePrepared,
+            WRONG_IDENTITY_EXECUTABLE_PATH,
+        )
+        .is_err());
     }
 
     #[test]

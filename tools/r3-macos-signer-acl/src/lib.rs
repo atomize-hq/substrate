@@ -662,8 +662,50 @@ mod tests {
         assert!(creator.contains("CREATOR_EXECUTABLE_PATH"));
         assert!(creator.contains("MARKER_PATH"));
         assert!(wrong.contains("WRONG_IDENTITY_EXECUTABLE_PATH"));
-        assert!(wrong.contains("EXPECTED_DELETE_STATUS"));
-        assert!(wrong.contains("-25_308"));
+        let wrong_production = wrong.split("#[cfg(test)]").next().unwrap();
+        let establish = wrong_production
+            .find("NonInteractiveSecurity::establish_first()?")
+            .expect("wrong identity disables process interaction first");
+        let lookup = wrong_production
+            .find("security.tag_scoped_private_key_lookup_raw_os_status(&config)?")
+            .expect("wrong identity performs the purpose-specific tag lookup");
+        assert!(establish < lookup);
+        assert_eq!(
+            wrong_production
+                .matches("security.tag_scoped_private_key_lookup_raw_os_status(&config)?")
+                .count(),
+            1
+        );
+        for forbidden in [
+            "QueryUiFailSecurity",
+            "exact_identity_present(",
+            "exact_delete_receipt(",
+            "SecItemDelete",
+            "EXPECTED_DELETE_STATUS",
+            "exact_identity_preserved_after",
+        ] {
+            assert!(!wrong_production.contains(forbidden));
+        }
+        let lookup_impl = source
+            .split("fn tag_scoped_private_key_lookup_raw_os_status_impl")
+            .nth(1)
+            .expect("purpose-specific tag lookup implementation exists")
+            .split("\nfn ")
+            .next()
+            .unwrap();
+        let open = lookup_impl
+            .find("open_explicit_system_keychain")
+            .expect("tag lookup opens the explicit System Keychain");
+        let query = lookup_impl
+            .find("exact_private_key_query")
+            .expect("tag lookup reuses the frozen query predicate");
+        let copy = lookup_impl
+            .find("SecItemCopyMatching")
+            .expect("tag lookup performs one native query");
+        assert!(open < query && query < copy);
+        assert_eq!(lookup_impl.matches("SecItemCopyMatching").count(), 1);
+        assert!(!lookup_impl.contains("SecItemDelete"));
+        assert!(!lookup_impl.contains("validate_product_equivalent_persisted_identity"));
         for repetition in FixedRepetitionV2::ALL {
             let config = compiled_creator_route_config(repetition).unwrap();
             assert!(config

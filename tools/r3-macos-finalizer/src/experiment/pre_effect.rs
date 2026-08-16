@@ -4,8 +4,8 @@ use anyhow::{bail, Context, Result};
 use base64::{engine::general_purpose::URL_SAFE_NO_PAD, Engine as _};
 use serde::{Deserialize, Serialize};
 use substrate_common::macos_retirement_v2::{
-    canonical_bytes_v2, document_sha256_v2, sha256_hex_v2, ExecutableIdentityV2,
-    MAC_R3_COORDINATOR_INBOX_ROOT_V2, MAC_R3_COORDINATOR_PATH_V2,
+    canonical_bytes_v2, document_sha256_v2, parse_canonical_v2, sha256_hex_v2,
+    ExecutableIdentityV2, MAC_R3_COORDINATOR_INBOX_ROOT_V2, MAC_R3_COORDINATOR_PATH_V2,
     MAC_R3_DISPOSABLE_PUBLISHER_PATH_V2, MAC_R3_FINALIZER_ENDPOINT_V2,
     MAC_R3_FINALIZER_JOURNAL_ROOT_V2, MAC_R3_FINALIZER_LAUNCHD_LABEL_V2, MAC_R3_FINALIZER_PATH_V2,
     MAC_R3_FINALIZER_REQUEST_PATH_V2, MAC_R3_RETIREMENT_LATCH_ROOT_V2,
@@ -605,7 +605,9 @@ pub struct GlobalCreatedObjectV2 {
 pub enum GlobalNativeArmV2 {
     CreatorQueryUiFailCreateDelete,
     CreatorFreshProcessCreate,
+    /// Historical decoding only; never accepted by the current experiment plan.
     CreatorWrongIdentityDelete,
+    CreatorWrongIdentityProcessInteractionDeniedLookup,
     CreatorFirstSecurityCallDisableThenDelete,
     CreatorAlreadyAbsentRetry,
     FinalizerTransport {
@@ -730,7 +732,9 @@ impl GlobalNonceAbsenceBaselineV2 {
 pub enum CreatorNativeArmV2 {
     QueryUiFailCreateThenDelete,
     FreshProcessCreateThenExit,
+    /// Historical decoding only; never accepted by the current experiment sequence.
     WrongIdentityDelete,
+    WrongIdentityProcessInteractionDeniedLookup,
     FreshProcessFirstCallDisableThenDelete,
     AlreadyAbsentRetry,
 }
@@ -738,7 +742,7 @@ pub enum CreatorNativeArmV2 {
 pub const CREATOR_NATIVE_ARM_SEQUENCE_V2: [CreatorNativeArmV2; 5] = [
     CreatorNativeArmV2::QueryUiFailCreateThenDelete,
     CreatorNativeArmV2::FreshProcessCreateThenExit,
-    CreatorNativeArmV2::WrongIdentityDelete,
+    CreatorNativeArmV2::WrongIdentityProcessInteractionDeniedLookup,
     CreatorNativeArmV2::FreshProcessFirstCallDisableThenDelete,
     CreatorNativeArmV2::AlreadyAbsentRetry,
 ];
@@ -748,6 +752,7 @@ pub const CREATOR_NATIVE_ARM_SEQUENCE_V2: [CreatorNativeArmV2; 5] = [
 pub enum CreatorNativeOperationV2 {
     DisableProcessInteractionFirst,
     CreateProductEquivalentSigner,
+    LookupTagScopedPrivateKey,
     DeleteExactSigner,
 }
 
@@ -757,7 +762,9 @@ pub enum CreatorNativeClassificationV2 {
     InteractionDisabled,
     CreatedAndPresent,
     DeletedAndAbsent,
+    /// Historical decoding only; a denied lookup does not independently prove presence.
     InteractionNotAllowedAndPresent,
+    InteractionNotAllowed,
     AlreadyAbsent,
 }
 
@@ -785,6 +792,9 @@ pub struct CreatorNativeArmReceiptV2 {
     pub marker_before: String,
     pub marker_after: String,
     pub target_present_before: bool,
+    /// For the current denied-lookup arm this is a sequence-derived invariant, not an arm-local
+    /// native observation.  It becomes preservation evidence only when the completed receipt set
+    /// validates the ordinal-2/3/4 join.
     pub target_present_after: bool,
     pub operations: Vec<CreatorNativeOperationReceiptV2>,
     pub native_receipt_base64url: String,
@@ -808,16 +818,13 @@ impl CreatorNativeArmReceiptV2 {
         {
             bail!("creator native-arm receipt identity changed")
         }
-        let arm_index = usize::from(self.sequence_ordinal.saturating_sub(1));
-        let expected_arm = CREATOR_NATIVE_ARM_SEQUENCE_V2
-            .get(arm_index)
-            .copied()
-            .ok_or_else(|| anyhow::anyhow!("creator arm ordinal is outside the closed sequence"))?;
-        let expected_identity = if expected_arm == CreatorNativeArmV2::WrongIdentityDelete {
-            &identities.wrong_identity
-        } else {
-            &identities.creator_identity
-        };
+        let expected_arm = self.validate_current_arm()?;
+        let expected_identity =
+            if expected_arm == CreatorNativeArmV2::WrongIdentityProcessInteractionDeniedLookup {
+                &identities.wrong_identity
+            } else {
+                &identities.creator_identity
+            };
         if self.sequence_ordinal == 0
             || self.arm != expected_arm
             || self.executable_identity_sha256 != document_sha256_v2(expected_identity)?
@@ -843,6 +850,18 @@ impl CreatorNativeArmReceiptV2 {
         self.securityagent_report.validate()?;
         require_digest(&self.process_attestation_sha256)?;
         Ok(())
+    }
+
+    fn validate_current_arm(&self) -> Result<CreatorNativeArmV2> {
+        let arm_index = usize::from(self.sequence_ordinal.saturating_sub(1));
+        let expected_arm = CREATOR_NATIVE_ARM_SEQUENCE_V2
+            .get(arm_index)
+            .copied()
+            .ok_or_else(|| anyhow::anyhow!("creator arm ordinal is outside the closed sequence"))?;
+        if self.arm != expected_arm {
+            bail!("creator native-arm receipt uses a legacy or reordered arm")
+        }
+        Ok(expected_arm)
     }
 }
 
@@ -884,9 +903,154 @@ impl CreatorRouteReceiptSetV2 {
             }
             receipt.validate(repetition, identities)?;
         }
+        for receipts in self
+            .receipts
+            .chunks_exact(CREATOR_NATIVE_ARM_SEQUENCE_V2.len())
+        {
+            validate_creator_repetition_preservation_join_v2(receipts)?;
+        }
         require_digest(&self.runner_process_attestation_sha256)?;
         Ok(())
     }
+}
+
+fn validate_creator_repetition_preservation_join_v2(
+    receipts: &[CreatorNativeArmReceiptV2],
+) -> Result<()> {
+    if receipts.len() != CREATOR_NATIVE_ARM_SEQUENCE_V2.len() {
+        bail!("an incomplete creator repetition cannot establish signer preservation")
+    }
+    let creation = &receipts[1];
+    let denied_lookup = &receipts[2];
+    let authorized_delete = &receipts[3];
+    if creation.repetition != denied_lookup.repetition
+        || creation.repetition != authorized_delete.repetition
+        || creation.creator_scope_id != denied_lookup.creator_scope_id
+        || creation.creator_scope_id != authorized_delete.creator_scope_id
+        || creation.sequence_ordinal != 2
+        || denied_lookup.sequence_ordinal != 3
+        || authorized_delete.sequence_ordinal != 4
+        || creation.arm != CreatorNativeArmV2::FreshProcessCreateThenExit
+        || denied_lookup.arm != CreatorNativeArmV2::WrongIdentityProcessInteractionDeniedLookup
+        || authorized_delete.arm != CreatorNativeArmV2::FreshProcessFirstCallDisableThenDelete
+        || creation.marker_after != denied_lookup.marker_before
+        || denied_lookup.marker_after != authorized_delete.marker_before
+        || (
+            creation.target_present_before,
+            creation.target_present_after,
+        ) != (false, true)
+        || (
+            denied_lookup.target_present_before,
+            denied_lookup.target_present_after,
+        ) != (true, true)
+        || (
+            authorized_delete.target_present_before,
+            authorized_delete.target_present_after,
+        ) != (true, false)
+        || creation.operations
+            != creator_operations_v2(CreatorNativeArmV2::FreshProcessCreateThenExit)
+        || denied_lookup.operations
+            != creator_operations_v2(
+                CreatorNativeArmV2::WrongIdentityProcessInteractionDeniedLookup,
+            )
+        || authorized_delete.operations
+            != creator_operations_v2(CreatorNativeArmV2::FreshProcessFirstCallDisableThenDelete)
+    {
+        bail!("creator ordinal-2/3/4 preservation join changed")
+    }
+
+    let creation_native = creator_native_receipt_object_v2(creation)?;
+    let denied_native = creator_native_receipt_object_v2(denied_lookup)?;
+    let delete_native = creator_native_receipt_object_v2(authorized_delete)?;
+    let creation_result = creation_native
+        .get("first_creation")
+        .and_then(serde_json::Value::as_object);
+    let delete_result = delete_native
+        .get("exact_delete")
+        .and_then(serde_json::Value::as_object);
+    if creation_native
+        .get("schema")
+        .and_then(serde_json::Value::as_str)
+        != Some("substrate.r3-macos-signer-acl.creator-route-receipt.v2")
+        || creation_native
+            .get("phase")
+            .and_then(serde_json::Value::as_str)
+            != Some("fresh_process_create_then_exit")
+        || creation_native
+            .get("final_present")
+            .and_then(serde_json::Value::as_bool)
+            != Some(true)
+        || creation_result
+            .and_then(|value| value.get("raw_cferror_code"))
+            .and_then(serde_json::Value::as_i64)
+            != Some(0)
+        || creation_result
+            .and_then(|value| value.get("present_after"))
+            .and_then(serde_json::Value::as_bool)
+            != Some(true)
+        || denied_native.len() != 8
+        || denied_native
+            .get("schema")
+            .and_then(serde_json::Value::as_str)
+            != Some("substrate.r3-macos-signer-acl.wrong-identity-receipt.v3")
+        || denied_native
+            .get("process_interaction_disable_raw_os_status")
+            .and_then(serde_json::Value::as_i64)
+            != Some(0)
+        || denied_native
+            .get("precommitted_expected_lookup_raw_os_status")
+            .and_then(serde_json::Value::as_i64)
+            != Some(i64::from(ERR_SEC_INTERACTION_NOT_ALLOWED_V2))
+        || denied_native
+            .get("tag_scoped_private_key_lookup_raw_os_status")
+            .and_then(serde_json::Value::as_i64)
+            != Some(i64::from(ERR_SEC_INTERACTION_NOT_ALLOWED_V2))
+        || denied_native.contains_key("exact_delete")
+        || denied_native.contains_key("exact_identity_preserved_after")
+        || delete_native
+            .get("schema")
+            .and_then(serde_json::Value::as_str)
+            != Some("substrate.r3-macos-signer-acl.creator-route-receipt.v2")
+        || delete_native
+            .get("phase")
+            .and_then(serde_json::Value::as_str)
+            != Some("fresh_process_first_call_disable_then_delete")
+        || delete_native
+            .get("process_interaction_disable_raw_os_status")
+            .and_then(serde_json::Value::as_i64)
+            != Some(0)
+        || delete_native
+            .get("final_present")
+            .and_then(serde_json::Value::as_bool)
+            != Some(false)
+        || delete_result
+            .and_then(|value| value.get("raw_os_status"))
+            .and_then(serde_json::Value::as_i64)
+            != Some(0)
+        || delete_result
+            .and_then(|value| value.get("classification"))
+            .and_then(serde_json::Value::as_str)
+            != Some("deleted_and_absent")
+        || delete_result
+            .and_then(|value| value.get("present_after"))
+            .and_then(serde_json::Value::as_bool)
+            != Some(false)
+    {
+        bail!("creator ordinal-2/3/4 raw native preservation evidence changed")
+    }
+    Ok(())
+}
+
+fn creator_native_receipt_object_v2(
+    receipt: &CreatorNativeArmReceiptV2,
+) -> Result<serde_json::Map<String, serde_json::Value>> {
+    let native = URL_SAFE_NO_PAD
+        .decode(&receipt.native_receipt_base64url)
+        .context("decode creator native receipt for preservation join")?;
+    parse_canonical_v2::<serde_json::Value>(&native)?
+        .as_object()
+        .cloned()
+        .context("creator native preservation receipt is not an object")
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]
@@ -1380,7 +1544,8 @@ fn creator_marker_before_v2(repetition: u8, arm: CreatorNativeArmV2) -> String {
     let state = match arm {
         CreatorNativeArmV2::QueryUiFailCreateThenDelete => "query-prepared",
         CreatorNativeArmV2::FreshProcessCreateThenExit => "fresh-create-prepared",
-        CreatorNativeArmV2::WrongIdentityDelete => "wrong-prepared",
+        CreatorNativeArmV2::WrongIdentityDelete
+        | CreatorNativeArmV2::WrongIdentityProcessInteractionDeniedLookup => "wrong-prepared",
         CreatorNativeArmV2::FreshProcessFirstCallDisableThenDelete => "fresh-delete-prepared",
         CreatorNativeArmV2::AlreadyAbsentRetry => "absent-retry-prepared",
     };
@@ -1396,7 +1561,8 @@ fn creator_marker_after_v2(repetition: u8, arm: CreatorNativeArmV2) -> String {
         CreatorNativeArmV2::FreshProcessCreateThenExit => {
             format!("creator-route-v2:{prefix}-wrong-prepared")
         }
-        CreatorNativeArmV2::WrongIdentityDelete => {
+        CreatorNativeArmV2::WrongIdentityDelete
+        | CreatorNativeArmV2::WrongIdentityProcessInteractionDeniedLookup => {
             format!("creator-route-v2:{prefix}-fresh-delete-prepared")
         }
         CreatorNativeArmV2::FreshProcessFirstCallDisableThenDelete => {
@@ -1413,7 +1579,8 @@ const fn creator_presence_v2(arm: CreatorNativeArmV2) -> (bool, bool) {
     match arm {
         CreatorNativeArmV2::QueryUiFailCreateThenDelete => (false, false),
         CreatorNativeArmV2::FreshProcessCreateThenExit => (false, true),
-        CreatorNativeArmV2::WrongIdentityDelete => (true, true),
+        CreatorNativeArmV2::WrongIdentityDelete
+        | CreatorNativeArmV2::WrongIdentityProcessInteractionDeniedLookup => (true, true),
         CreatorNativeArmV2::FreshProcessFirstCallDisableThenDelete => (true, false),
         CreatorNativeArmV2::AlreadyAbsentRetry => (false, false),
     }
@@ -1435,6 +1602,14 @@ fn creator_operations_v2(arm: CreatorNativeArmV2) -> Vec<CreatorNativeOperationR
             i64::from(ERR_SEC_INTERACTION_NOT_ALLOWED_V2),
             C::InteractionNotAllowedAndPresent,
         )],
+        CreatorNativeArmV2::WrongIdentityProcessInteractionDeniedLookup => vec![
+            (O::DisableProcessInteractionFirst, 0, C::InteractionDisabled),
+            (
+                O::LookupTagScopedPrivateKey,
+                i64::from(ERR_SEC_INTERACTION_NOT_ALLOWED_V2),
+                C::InteractionNotAllowed,
+            ),
+        ],
         CreatorNativeArmV2::FreshProcessFirstCallDisableThenDelete => vec![
             (O::DisableProcessInteractionFirst, 0, C::InteractionDisabled),
             (O::DeleteExactSigner, 0, C::DeletedAndAbsent),
@@ -1586,7 +1761,7 @@ fn expected_native_arm_plan_v2() -> Vec<GlobalNativeArmPlanEntryV2> {
             (A::CreatorQueryUiFailCreateDelete, O::OsStatusZero),
             (A::CreatorFreshProcessCreate, O::OsStatusZero),
             (
-                A::CreatorWrongIdentityDelete,
+                A::CreatorWrongIdentityProcessInteractionDeniedLookup,
                 O::ErrSecInteractionNotAllowed {
                     raw_os_status: ERR_SEC_INTERACTION_NOT_ALLOWED_V2,
                 },
@@ -1699,6 +1874,86 @@ fn require_digest(value: &str) -> Result<()> {
 mod tests {
     use super::*;
 
+    fn creator_receipt_for_join(
+        sequence_ordinal: u8,
+        arm: CreatorNativeArmV2,
+        native: serde_json::Value,
+    ) -> CreatorNativeArmReceiptV2 {
+        let native = canonical_bytes_v2(&native).unwrap();
+        let (target_present_before, target_present_after) = creator_presence_v2(arm);
+        CreatorNativeArmReceiptV2 {
+            schema_owner: GLOBAL_PRE_EFFECT_PACKET_OWNER_V2.to_owned(),
+            schema_version: EXPERIMENT_VERSION_V2,
+            experiment_id: EXPERIMENT_ID_V2.to_owned(),
+            repetition: 1,
+            creator_scope_id: CREATOR_SCOPES_V2[0].to_owned(),
+            sequence_ordinal,
+            arm,
+            executable_identity_sha256: "a".repeat(64),
+            process_attestation_sha256: "b".repeat(64),
+            marker_before: creator_marker_before_v2(1, arm),
+            marker_after: creator_marker_after_v2(1, arm),
+            target_present_before,
+            target_present_after,
+            operations: creator_operations_v2(arm),
+            native_receipt_base64url: URL_SAFE_NO_PAD.encode(&native),
+            native_receipt_sha256: sha256_hex_v2(&native),
+            securityagent_report: SecurityAgentRawReportEvidenceV2 {
+                raw_report_base64url: URL_SAFE_NO_PAD.encode(b"{}"),
+                raw_report_sha256: sha256_hex_v2(b"{}"),
+                raw_report_byte_length: 2,
+            },
+        }
+    }
+
+    fn creator_join_receipts() -> Vec<CreatorNativeArmReceiptV2> {
+        let creation = serde_json::json!({
+            "schema": "substrate.r3-macos-signer-acl.creator-route-receipt.v2",
+            "phase": "fresh_process_create_then_exit",
+            "first_creation": {
+                "raw_cferror_code": 0,
+                "present_after": true,
+                "persisted_sensitive": true,
+                "persisted_extractable": false,
+            },
+            "final_present": true,
+        });
+        let denied_lookup = serde_json::json!({
+            "schema": "substrate.r3-macos-signer-acl.wrong-identity-receipt.v3",
+            "repetition": "first",
+            "creator_scope_id": CREATOR_SCOPES_V2[0],
+            "executable_path": WRONG_IDENTITY_EXECUTABLE_PATH_V2,
+            "marker_path": CREATOR_MARKER_PATH_V2,
+            "process_interaction_disable_raw_os_status": 0,
+            "precommitted_expected_lookup_raw_os_status": -25_308,
+            "tag_scoped_private_key_lookup_raw_os_status": -25_308,
+        });
+        let authorized_delete = serde_json::json!({
+            "schema": "substrate.r3-macos-signer-acl.creator-route-receipt.v2",
+            "phase": "fresh_process_first_call_disable_then_delete",
+            "process_interaction_disable_raw_os_status": 0,
+            "exact_delete": {
+                "raw_os_status": 0,
+                "classification": "deleted_and_absent",
+                "present_after": false,
+            },
+            "final_present": false,
+        });
+        CREATOR_NATIVE_ARM_SEQUENCE_V2
+            .into_iter()
+            .enumerate()
+            .map(|(index, arm)| {
+                let native = match index {
+                    1 => creation.clone(),
+                    2 => denied_lookup.clone(),
+                    3 => authorized_delete.clone(),
+                    _ => serde_json::json!({}),
+                };
+                creator_receipt_for_join(u8::try_from(index + 1).unwrap(), arm, native)
+            })
+            .collect()
+    }
+
     #[test]
     fn global_plan_precommits_both_groups_repetitions_rollback_and_ui() {
         let objects = expected_created_object_inventory_v2();
@@ -1748,5 +2003,164 @@ mod tests {
             arm.securityagent_expectation
                 == SecurityAgentExpectationV2::NoProcessActivationWindowPromptOrCredentialRequest
         }));
+        for repetition in 1..=2 {
+            let denied_lookup = arms
+                .iter()
+                .find(|arm| {
+                    arm.group == NativeExperimentGroupV2::CreatorRoute
+                        && arm.repetition == repetition
+                        && arm.sequence_ordinal == 3
+                })
+                .expect("creator denial lookup arm exists");
+            assert_eq!(
+                serde_json::to_value(&denied_lookup.arm).unwrap(),
+                serde_json::json!({
+                    "arm": "creator_wrong_identity_process_interaction_denied_lookup"
+                })
+            );
+            assert_eq!(
+                denied_lookup.expected_outcome,
+                PrecommittedNativeOutcomeV2::ErrSecInteractionNotAllowed {
+                    raw_os_status: ERR_SEC_INTERACTION_NOT_ALLOWED_V2,
+                }
+            );
+            let operations = creator_operations_v2(CREATOR_NATIVE_ARM_SEQUENCE_V2[2]);
+            assert_eq!(operations.len(), 2);
+            assert_eq!(
+                serde_json::to_value(&operations[0]).unwrap(),
+                serde_json::json!({
+                    "sequence_ordinal": 1,
+                    "operation": "disable_process_interaction_first",
+                    "raw_status": 0,
+                    "classification": "interaction_disabled",
+                })
+            );
+            assert_eq!(
+                serde_json::to_value(&operations[1]).unwrap(),
+                serde_json::json!({
+                    "sequence_ordinal": 2,
+                    "operation": "lookup_tag_scoped_private_key",
+                    "raw_status": -25_308,
+                    "classification": "interaction_not_allowed",
+                })
+            );
+            assert_eq!(
+                creator_operations_v2(CREATOR_NATIVE_ARM_SEQUENCE_V2[3]),
+                vec![
+                    CreatorNativeOperationReceiptV2 {
+                        sequence_ordinal: 1,
+                        operation: CreatorNativeOperationV2::DisableProcessInteractionFirst,
+                        raw_status: 0,
+                        classification: CreatorNativeClassificationV2::InteractionDisabled,
+                    },
+                    CreatorNativeOperationReceiptV2 {
+                        sequence_ordinal: 2,
+                        operation: CreatorNativeOperationV2::DeleteExactSigner,
+                        raw_status: 0,
+                        classification: CreatorNativeClassificationV2::DeletedAndAbsent,
+                    },
+                ]
+            );
+        }
+    }
+
+    #[test]
+    fn historical_wrong_identity_values_decode_but_are_not_current_proof() {
+        let global_arm: GlobalNativeArmV2 =
+            serde_json::from_str(r#"{"arm":"creator_wrong_identity_delete"}"#).unwrap();
+        let arm: CreatorNativeArmV2 = serde_json::from_str("\"wrong_identity_delete\"").unwrap();
+        let classification: CreatorNativeClassificationV2 =
+            serde_json::from_str("\"interaction_not_allowed_and_present\"").unwrap();
+        assert_eq!(global_arm, GlobalNativeArmV2::CreatorWrongIdentityDelete);
+        assert_eq!(arm, CreatorNativeArmV2::WrongIdentityDelete);
+        assert_eq!(
+            classification,
+            CreatorNativeClassificationV2::InteractionNotAllowedAndPresent
+        );
+        let historical: CreatorNativeArmReceiptV2 = serde_json::from_value(serde_json::json!({
+            "schema_owner": GLOBAL_PRE_EFFECT_PACKET_OWNER_V2,
+            "schema_version": EXPERIMENT_VERSION_V2,
+            "experiment_id": EXPERIMENT_ID_V2,
+            "repetition": 1,
+            "creator_scope_id": CREATOR_SCOPES_V2[0],
+            "sequence_ordinal": 3,
+            "arm": "wrong_identity_delete",
+            "executable_identity_sha256": "a".repeat(64),
+            "process_attestation_sha256": "b".repeat(64),
+            "marker_before": "creator-route-v2:first-wrong-prepared",
+            "marker_after": "creator-route-v2:first-fresh-delete-prepared",
+            "target_present_before": true,
+            "target_present_after": true,
+            "operations": [{
+                "sequence_ordinal": 1,
+                "operation": "delete_exact_signer",
+                "raw_status": -25_308,
+                "classification": "interaction_not_allowed_and_present",
+            }],
+            "native_receipt_base64url": "e30",
+            "native_receipt_sha256": "c".repeat(64),
+            "securityagent_report": {
+                "raw_report_base64url": "e30",
+                "raw_report_sha256": "d".repeat(64),
+                "raw_report_byte_length": 2,
+            },
+        }))
+        .expect("historical shared receipt remains decodable");
+        assert_eq!(historical.arm, CreatorNativeArmV2::WrongIdentityDelete);
+        assert_eq!(
+            historical.operations[0].classification,
+            CreatorNativeClassificationV2::InteractionNotAllowedAndPresent
+        );
+        assert!(historical.validate_current_arm().is_err());
+        assert_ne!(
+            serde_json::to_string(&CreatorNativeArmV2::WrongIdentityDelete).unwrap(),
+            serde_json::to_string(&CreatorNativeArmV2::WrongIdentityProcessInteractionDeniedLookup)
+                .unwrap()
+        );
+        assert_ne!(
+            serde_json::to_string(&GlobalNativeArmV2::CreatorWrongIdentityDelete).unwrap(),
+            serde_json::to_string(
+                &GlobalNativeArmV2::CreatorWrongIdentityProcessInteractionDeniedLookup
+            )
+            .unwrap()
+        );
+        assert_ne!(
+            serde_json::to_string(&CreatorNativeClassificationV2::InteractionNotAllowedAndPresent)
+                .unwrap(),
+            serde_json::to_string(&CreatorNativeClassificationV2::InteractionNotAllowed).unwrap()
+        );
+        assert!(!CREATOR_NATIVE_ARM_SEQUENCE_V2.contains(&arm));
+        assert!(!expected_native_arm_plan_v2()
+            .iter()
+            .any(|entry| entry.arm == GlobalNativeArmV2::CreatorWrongIdentityDelete));
+    }
+
+    #[test]
+    fn creator_wrong_identity_lookup_is_followed_by_authorized_deletion_witness() {
+        let receipts = creator_join_receipts();
+        validate_creator_repetition_preservation_join_v2(&receipts)
+            .expect("completed ordinal-2/3/4 join proves preservation");
+        assert!(validate_creator_repetition_preservation_join_v2(&receipts[..4]).is_err());
+
+        let mut legacy = receipts.clone();
+        legacy[2].arm = CreatorNativeArmV2::WrongIdentityDelete;
+        legacy[2].operations = creator_operations_v2(CreatorNativeArmV2::WrongIdentityDelete);
+        assert!(validate_creator_repetition_preservation_join_v2(&legacy).is_err());
+
+        let mut claimed_presence = receipts;
+        let mut native: serde_json::Value = parse_canonical_v2(
+            &URL_SAFE_NO_PAD
+                .decode(&claimed_presence[2].native_receipt_base64url)
+                .unwrap(),
+        )
+        .unwrap();
+        native
+            .as_object_mut()
+            .unwrap()
+            .insert("exact_identity_preserved_after".to_owned(), true.into());
+        let native = canonical_bytes_v2(&native).unwrap();
+        claimed_presence[2].native_receipt_base64url = URL_SAFE_NO_PAD.encode(&native);
+        claimed_presence[2].native_receipt_sha256 = sha256_hex_v2(&native);
+        assert!(validate_creator_repetition_preservation_join_v2(&claimed_presence).is_err());
     }
 }

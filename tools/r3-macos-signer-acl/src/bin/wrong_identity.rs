@@ -5,12 +5,12 @@ use substrate_r3_macos_signer_acl::experiment::{
     verify_closed_process_surface, wrong_states, MarkerRoot, MarkerState,
 };
 use substrate_r3_macos_signer_acl::{
-    compiled_creator_route_config, ExactDeleteClassification, ExactDeleteReceipt,
-    FixedRepetitionV2, QueryUiFailSecurity, MARKER_PATH, WRONG_IDENTITY_EXECUTABLE_PATH,
+    compiled_creator_route_config, FixedRepetitionV2, NonInteractiveSecurity, MARKER_PATH,
+    WRONG_IDENTITY_EXECUTABLE_PATH,
 };
 
-const SCHEMA: &str = "substrate.r3-macos-signer-acl.wrong-identity-receipt.v2";
-const EXPECTED_DELETE_STATUS: i32 = -25_308;
+const SCHEMA: &str = "substrate.r3-macos-signer-acl.wrong-identity-receipt.v3";
+const EXPECTED_LOOKUP_STATUS: i32 = -25_308;
 
 #[derive(Debug, Serialize)]
 struct WrongIdentityReceipt {
@@ -19,9 +19,9 @@ struct WrongIdentityReceipt {
     creator_scope_id: &'static str,
     executable_path: &'static str,
     marker_path: &'static str,
-    precommitted_expected_raw_os_status: i32,
-    exact_delete: ExactDeleteReceipt,
-    exact_identity_preserved_after: bool,
+    process_interaction_disable_raw_os_status: i32,
+    precommitted_expected_lookup_raw_os_status: i32,
+    tag_scoped_private_key_lookup_raw_os_status: i32,
 }
 
 fn main() -> Result<()> {
@@ -45,18 +45,14 @@ fn main() -> Result<()> {
     let (prepared, invoked, after) = wrong_states(repetition);
     marker.transition(prepared, invoked)?;
     let config = compiled_creator_route_config(repetition)?;
-    let mut security = QueryUiFailSecurity::claim_process()?;
-    if !security.exact_identity_present(&config)? {
-        bail!("wrong-identity attempt found the exact signer absent")
-    }
-    let exact_delete = security.exact_delete_receipt(&config)?;
-    let exact_identity_preserved_after = security.exact_identity_present(&config)?;
-    if exact_delete.raw_os_status != EXPECTED_DELETE_STATUS
-        || exact_delete.classification != ExactDeleteClassification::InteractionNotAllowed
-        || !exact_delete.present_after
-        || !exact_identity_preserved_after
-    {
-        bail!("wrong-identity deletion differed from frozen noninteractive preservation")
+    // This must be the first Security.framework call in this fresh wrong-identity process.
+    let security = NonInteractiveSecurity::establish_first()?;
+    let tag_scoped_private_key_lookup_raw_os_status =
+        security.tag_scoped_private_key_lookup_raw_os_status(&config)?;
+    if tag_scoped_private_key_lookup_raw_os_status != EXPECTED_LOOKUP_STATUS {
+        bail!(
+            "wrong-identity tag-scoped private-key lookup returned OSStatus {tag_scoped_private_key_lookup_raw_os_status}, expected {EXPECTED_LOOKUP_STATUS}"
+        )
     }
     marker.transition(invoked, after)?;
     let receipt = WrongIdentityReceipt {
@@ -65,9 +61,9 @@ fn main() -> Result<()> {
         creator_scope_id: repetition.creator_scope(),
         executable_path: WRONG_IDENTITY_EXECUTABLE_PATH,
         marker_path: MARKER_PATH,
-        precommitted_expected_raw_os_status: EXPECTED_DELETE_STATUS,
-        exact_delete,
-        exact_identity_preserved_after,
+        process_interaction_disable_raw_os_status: 0,
+        precommitted_expected_lookup_raw_os_status: EXPECTED_LOOKUP_STATUS,
+        tag_scoped_private_key_lookup_raw_os_status,
     };
     std::io::stdout()
         .lock()
@@ -95,13 +91,9 @@ mod tests {
             creator_scope_id: FixedRepetitionV2::First.creator_scope(),
             executable_path: WRONG_IDENTITY_EXECUTABLE_PATH,
             marker_path: MARKER_PATH,
-            precommitted_expected_raw_os_status: EXPECTED_DELETE_STATUS,
-            exact_delete: ExactDeleteReceipt {
-                raw_os_status: EXPECTED_DELETE_STATUS,
-                classification: ExactDeleteClassification::InteractionNotAllowed,
-                present_after: true,
-            },
-            exact_identity_preserved_after: true,
+            process_interaction_disable_raw_os_status: 0,
+            precommitted_expected_lookup_raw_os_status: EXPECTED_LOOKUP_STATUS,
+            tag_scoped_private_key_lookup_raw_os_status: EXPECTED_LOOKUP_STATUS,
         };
 
         let emitted = canonical_receipt_line(&value).expect("encode wrong-identity receipt");
@@ -109,7 +101,14 @@ mod tests {
         assert!(!emitted[..emitted.len() - 1].contains(&b'\n'));
         let body = &emitted[..emitted.len() - 1];
         assert_eq!(body, canonical_bytes_v2(&value).unwrap());
-        parse_canonical_v2::<Value>(body).expect("accept canonical wrong-identity receipt");
+        let parsed =
+            parse_canonical_v2::<Value>(body).expect("accept canonical wrong-identity receipt");
+        assert_eq!(
+            parsed.get("schema").and_then(Value::as_str),
+            Some("substrate.r3-macos-signer-acl.wrong-identity-receipt.v3")
+        );
+        assert!(parsed.get("exact_delete").is_none());
+        assert!(parsed.get("exact_identity_preserved_after").is_none());
 
         let declaration_order = serde_json::to_vec(&value).unwrap();
         assert_ne!(declaration_order, body);
