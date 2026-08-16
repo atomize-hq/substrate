@@ -53,9 +53,11 @@ use substrate_r3_macos_finalizer::experiment::evidence_export::{
     build_native_evidence_export_v2, build_repetition_native_evidence_export_v2,
     build_runner_private_archive_v2, build_securityagent_report_archive_v2,
     native_evidence_cleanup_artifact_set_sha256_v2, runner_private_archive_union_v2,
-    NativeEvidenceCleanupReceiptV2, NativeEvidenceExportAcknowledgementV2, NativeEvidenceExportV2,
+    runner_private_archive_entry_max_bytes_v2, NativeEvidenceCleanupReceiptV2,
+    NativeEvidenceExportAcknowledgementV2, NativeEvidenceExportV2,
     RepetitionNativeEvidenceExportV2, RunnerPrivateArchiveEntryV2, RunnerPrivateArchiveV2,
     SecurityAgentEvidenceArmV2, SecurityAgentEvidenceBindingV2, SecurityAgentReportArchiveV2,
+    GLOBAL_PRE_EFFECT_PACKET_MAX_BYTES_V2, GLOBAL_PRE_EFFECT_PACKET_RUNNER_PRIVATE_NAME_V2,
     NATIVE_EVIDENCE_EXPORT_OWNER_V2, RUNNER_PRIVATE_ARCHIVE_MAX_BYTES_V2, RUNNER_PRIVATE_ROOT_V2,
 };
 use substrate_r3_macos_finalizer::experiment::freeze_manifest::{
@@ -3717,7 +3719,7 @@ fn recover_root_operation_ui_terminal_stop_if_present(
     )?;
     let creator_marker_restoration_sha256 = restore_creator_marker_after_terminal_ui()?;
     let global_pre_effect = read_runner_private_optional::<GlobalPreEffectPacketV2>(
-        "global-pre-effect-packet.v2.json",
+        GLOBAL_PRE_EFFECT_PACKET_RUNNER_PRIVATE_NAME_V2,
     )?;
     if let Some(packet) = global_pre_effect.as_ref() {
         packet.validate(&inputs.prepared, &inputs.candidate, &inputs.peer)?;
@@ -7823,7 +7825,12 @@ fn stage_cleanup_receipt_remove_runner_root_and_publish(
             continue;
         }
         let expected = entry.validate()?;
-        let bytes = stable_read_file(&path, 0, Some(libc::S_IFREG | 0o600))?;
+        let bytes = stable_read_file_bounded(
+            &path,
+            0,
+            Some(libc::S_IFREG | 0o600),
+            runner_private_archive_entry_max_bytes_v2(&entry.name),
+        )?;
         let stat = lstat(&path)?.context("runner-root cleanup child disappeared")?;
         if bytes != expected
             || runner_file_physical_identity_sha256(&stat)? != entry.physical_identity_sha256
@@ -8497,7 +8504,12 @@ fn collect_terminal_runner_child_inventory() -> Result<Vec<TerminalRunnerChildId
             bail!("terminal runner root contains an unauthorized child name")
         }
         let path = Path::new(RUNNER_ROOT).join(&name);
-        let bytes = stable_read_file(&path, 0, Some(libc::S_IFREG | 0o600))?;
+        let bytes = stable_read_file_bounded(
+            &path,
+            0,
+            Some(libc::S_IFREG | 0o600),
+            runner_private_archive_entry_max_bytes_v2(&name),
+        )?;
         let stat = lstat(&path)?.context("terminal runner child disappeared during inventory")?;
         if stat.st_uid != 0
             || stat.st_gid != 0
@@ -8533,7 +8545,12 @@ fn build_runner_private_archive_excluding(
             bail!("runner private archive found an invalid child name")
         }
         let path = Path::new(RUNNER_ROOT).join(&name);
-        let bytes = stable_read_file(&path, 0, Some(libc::S_IFREG | 0o600))?;
+        let bytes = stable_read_file_bounded(
+            &path,
+            0,
+            Some(libc::S_IFREG | 0o600),
+            runner_private_archive_entry_max_bytes_v2(&name),
+        )?;
         let stat = lstat(&path)?.context("runner private archive child disappeared")?;
         entries.push(RunnerPrivateArchiveEntryV2 {
             name,
@@ -8552,7 +8569,8 @@ fn terminal_runner_child_archive_total_bytes(
     let mut total = 0_u64;
     for entry in inventory {
         if entry.canonical_byte_length == 0
-            || entry.canonical_byte_length > u64::try_from(MAX_CHILD_OUTPUT)?
+            || entry.canonical_byte_length
+                > u64::try_from(runner_private_archive_entry_max_bytes_v2(&entry.name))?
         {
             bail!("terminal runner child is outside its exact per-document byte bound")
         }
@@ -8585,7 +8603,12 @@ fn validate_live_terminal_runner_child_inventory(
     }
     for entry in &value.runner_child_inventory {
         let path = Path::new(RUNNER_ROOT).join(&entry.name);
-        let bytes = stable_read_file(&path, 0, Some(libc::S_IFREG | 0o600))?;
+        let bytes = stable_read_file_bounded(
+            &path,
+            0,
+            Some(libc::S_IFREG | 0o600),
+            runner_private_archive_entry_max_bytes_v2(&entry.name),
+        )?;
         let stat = lstat(&path)?.context("terminal runner inventory child disappeared")?;
         if u64::try_from(bytes.len())? != entry.canonical_byte_length
             || sha256_hex_v2(&bytes) != entry.canonical_sha256
@@ -8751,7 +8774,8 @@ fn validate_terminal_admin_cleanup_authorization(
             || entry.name.contains(['/', '\0', '\n', '\r'])
             || prior.is_some_and(|prior| prior >= entry.name.as_str())
             || entry.canonical_byte_length == 0
-            || entry.canonical_byte_length > u64::try_from(MAX_CHILD_OUTPUT)?
+            || entry.canonical_byte_length
+                > u64::try_from(runner_private_archive_entry_max_bytes_v2(&entry.name))?
             || !is_sha256(&entry.canonical_sha256)
             || !is_sha256(&entry.physical_identity_sha256)
         {
@@ -9966,7 +9990,7 @@ fn activation_cleanup_recovery_documents(
         NATIVE_CLEANUP_PLAN_NAME,
     )? {
         let packet = read_runner_private_cleanup_recovery_optional::<GlobalPreEffectPacketV2>(
-            "global-pre-effect-packet.v2.json",
+            GLOBAL_PRE_EFFECT_PACKET_RUNNER_PRIVATE_NAME_V2,
         )?
         .context("native cleanup plan lacks its global pre-effect packet")?;
         return Ok(Some((plan, packet)));
@@ -10019,7 +10043,7 @@ fn read_staged_native_cleanup_recovery_documents() -> Result<
         .runner_private_archive
         .entries
         .iter()
-        .find(|entry| entry.name == "global-pre-effect-packet.v2.json")
+        .find(|entry| entry.name == GLOBAL_PRE_EFFECT_PACKET_RUNNER_PRIVATE_NAME_V2)
         .context("native evidence export lacks its global pre-effect packet bytes")?;
     let packet: GlobalPreEffectPacketV2 = parse_canonical_v2(&packet_entry.validate()?)?;
     let acknowledgement = read_native_evidence_acknowledgement_for_cleanup()?;
@@ -10237,7 +10261,7 @@ fn install_and_validate_global_pre_effect_proof(
     )?;
     packet.validate(&inputs.prepared, &inputs.candidate, &inputs.peer)?;
     let bytes = canonical_bytes_v2(&packet)?;
-    write_runner_receipt("global-pre-effect-packet.v2.json", &bytes)?;
+    write_runner_receipt(GLOBAL_PRE_EFFECT_PACKET_RUNNER_PRIVATE_NAME_V2, &bytes)?;
     publish_global_pre_effect_packet(&packet, &bytes)?;
     reattest_activation_journal_root_lock(activation_membrane)?;
     Ok(packet)
@@ -11249,9 +11273,18 @@ fn require_exact_process_path_absent(path: &Path) -> Result<String> {
 }
 
 fn publish_global_pre_effect_packet(packet: &GlobalPreEffectPacketV2, bytes: &[u8]) -> Result<()> {
-    write_global_external_root_output(PublisherArtifactV2::GlobalPreEffectPacket, bytes)?;
+    write_global_external_root_output_bounded(
+        PublisherArtifactV2::GlobalPreEffectPacket,
+        bytes,
+        GLOBAL_PRE_EFFECT_PACKET_MAX_BYTES_V2,
+    )?;
     let path = global_external_exchange_path_v2(PublisherArtifactV2::GlobalPreEffectPacket)?;
-    let reopened = stable_read_file(&path, 0, Some(libc::S_IFREG | 0o444))?;
+    let reopened = stable_read_file_bounded(
+        &path,
+        0,
+        Some(libc::S_IFREG | 0o444),
+        GLOBAL_PRE_EFFECT_PACKET_MAX_BYTES_V2,
+    )?;
     if reopened != bytes
         || parse_canonical_v2::<GlobalPreEffectPacketV2>(&reopened)? != *packet
         || document_sha256_v2(packet)? != sha256_hex_v2(&reopened)
@@ -11366,13 +11399,14 @@ fn write_runner_receipt(name: &str, bytes: &[u8]) -> Result<()> {
     if name.contains(['/', '\0', '\n', '\r']) {
         bail!("runner receipt component is invalid")
     }
-    write_fixed_file(
+    write_fixed_file_bounded(
         &Path::new(RUNNER_ROOT).join(name),
         bytes,
         0o600,
         0,
         0,
         libc::S_IFDIR | 0o700,
+        runner_private_archive_entry_max_bytes_v2(name),
     )
 }
 
@@ -11398,7 +11432,7 @@ fn read_runner_private_cleanup_recovery_optional<T: DeserializeOwned + Serialize
             parent_uid: 0,
             parent_gid: 0,
             parent_mode: libc::S_IFDIR | 0o700,
-            maximum_bytes: MAX_CHILD_OUTPUT,
+            maximum_bytes: runner_private_archive_entry_max_bytes_v2(name),
         },
     )?
     .map(|bytes| parse_canonical_v2(&bytes))
@@ -11432,7 +11466,7 @@ fn read_runner_private_bytes_optional(name: &str) -> Result<Option<Vec<u8>>> {
             parent_uid: 0,
             parent_gid: 0,
             parent_mode: libc::S_IFDIR | 0o700,
-            maximum_bytes: MAX_CHILD_OUTPUT,
+            maximum_bytes: runner_private_archive_entry_max_bytes_v2(name),
         },
     )
 }
@@ -11445,6 +11479,26 @@ fn write_fixed_file(
     parent_gid: u32,
     parent_mode: libc::mode_t,
 ) -> Result<()> {
+    write_fixed_file_bounded(
+        path,
+        bytes,
+        mode,
+        parent_uid,
+        parent_gid,
+        parent_mode,
+        MAX_CHILD_OUTPUT,
+    )
+}
+
+fn write_fixed_file_bounded(
+    path: &Path,
+    bytes: &[u8],
+    mode: libc::mode_t,
+    parent_uid: u32,
+    parent_gid: u32,
+    parent_mode: libc::mode_t,
+    maximum_bytes: usize,
+) -> Result<()> {
     publish_exact_file(
         path,
         bytes,
@@ -11455,7 +11509,7 @@ fn write_fixed_file(
             parent_uid,
             parent_gid,
             parent_mode,
-            maximum_bytes: MAX_CHILD_OUTPUT,
+            maximum_bytes,
         },
         PublishMode::Immutable,
     )
@@ -12415,6 +12469,37 @@ mod tests {
         let too_large = (0..65).map(entry).collect::<Vec<_>>();
         assert!(terminal_runner_child_archive_total_bytes(&too_large).is_err());
         assert_eq!(TERMINAL_RUNNER_CHILD_ARCHIVE_MAX_BYTES_V2, 67_108_864);
+    }
+
+    #[test]
+    fn global_pre_effect_packet_has_one_dedicated_runner_bound() {
+        assert_eq!(
+            runner_private_archive_entry_max_bytes_v2(
+                GLOBAL_PRE_EFFECT_PACKET_RUNNER_PRIVATE_NAME_V2,
+            ),
+            GLOBAL_PRE_EFFECT_PACKET_MAX_BYTES_V2
+        );
+        assert_eq!(
+            runner_private_archive_entry_max_bytes_v2("other.json"),
+            MAX_CHILD_OUTPUT
+        );
+
+        let above_default = TerminalRunnerChildIdentityV2 {
+            name: GLOBAL_PRE_EFFECT_PACKET_RUNNER_PRIVATE_NAME_V2.to_owned(),
+            canonical_byte_length: u64::try_from(MAX_CHILD_OUTPUT + 1).unwrap(),
+            canonical_sha256: "a".repeat(64),
+            physical_identity_sha256: "b".repeat(64),
+        };
+        assert!(terminal_runner_child_archive_total_bytes(&[above_default]).is_ok());
+
+        let above_global = TerminalRunnerChildIdentityV2 {
+            name: GLOBAL_PRE_EFFECT_PACKET_RUNNER_PRIVATE_NAME_V2.to_owned(),
+            canonical_byte_length: u64::try_from(GLOBAL_PRE_EFFECT_PACKET_MAX_BYTES_V2 + 1)
+                .unwrap(),
+            canonical_sha256: "a".repeat(64),
+            physical_identity_sha256: "b".repeat(64),
+        };
+        assert!(terminal_runner_child_archive_total_bytes(&[above_global]).is_err());
     }
 
     #[test]

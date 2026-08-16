@@ -38,6 +38,17 @@ pub const RUNNER_PRIVATE_ARCHIVE_MAX_BYTES_V2: u64 = 67_108_864;
 pub const RUNNER_PRIVATE_ROOT_V2: &str =
     "/private/var/db/com.atomize.substrate.r3-macos-disposable-experiment-runner.v2";
 const RUNNER_PRIVATE_ARCHIVE_ENTRY_MAX_BYTES_V2: usize = 1_048_576;
+pub const GLOBAL_PRE_EFFECT_PACKET_RUNNER_PRIVATE_NAME_V2: &str =
+    "global-pre-effect-packet.v2.json";
+pub const GLOBAL_PRE_EFFECT_PACKET_MAX_BYTES_V2: usize = 16 * 1024 * 1024;
+
+pub fn runner_private_archive_entry_max_bytes_v2(name: &str) -> usize {
+    if name == GLOBAL_PRE_EFFECT_PACKET_RUNNER_PRIVATE_NAME_V2 {
+        GLOBAL_PRE_EFFECT_PACKET_MAX_BYTES_V2
+    } else {
+        RUNNER_PRIVATE_ARCHIVE_ENTRY_MAX_BYTES_V2
+    }
+}
 
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]
 #[serde(deny_unknown_fields)]
@@ -395,21 +406,18 @@ pub struct RunnerPrivateArchiveEntryV2 {
 
 impl RunnerPrivateArchiveEntryV2 {
     pub fn validate(&self) -> Result<Vec<u8>> {
+        let maximum_bytes = runner_private_archive_entry_max_bytes_v2(&self.name);
         if self.name.is_empty()
             || self.name.starts_with('.')
             || self.name.contains(['/', '\0', '\n', '\r'])
             || self.canonical_byte_length == 0
-            || self.canonical_byte_length
-                > u64::try_from(RUNNER_PRIVATE_ARCHIVE_ENTRY_MAX_BYTES_V2)?
+            || self.canonical_byte_length > u64::try_from(maximum_bytes)?
         {
             bail!("runner private archive entry changed its closed name or size")
         }
         require_digest(&self.canonical_sha256)?;
         require_digest(&self.physical_identity_sha256)?;
-        let bytes = decode_bounded(
-            &self.canonical_base64url,
-            RUNNER_PRIVATE_ARCHIVE_ENTRY_MAX_BYTES_V2,
-        )?;
+        let bytes = decode_bounded(&self.canonical_base64url, maximum_bytes)?;
         if u64::try_from(bytes.len())? != self.canonical_byte_length
             || sha256_hex_v2(&bytes) != self.canonical_sha256
         {
@@ -1366,6 +1374,28 @@ mod tests {
         assert!(runner_private_archive_union_v2(&first, &overlap).is_err());
         assert!(build_runner_private_archive_v2(Vec::new()).is_err());
         assert!(build_runner_private_archive_v2(vec![private_entry("zero", b"")]).is_err());
+    }
+
+    #[test]
+    fn global_pre_effect_packet_has_one_dedicated_archive_entry_bound() {
+        let above_default = vec![b'g'; RUNNER_PRIVATE_ARCHIVE_ENTRY_MAX_BYTES_V2 + 1];
+        assert!(private_entry(
+            GLOBAL_PRE_EFFECT_PACKET_RUNNER_PRIVATE_NAME_V2,
+            &above_default,
+        )
+        .validate()
+        .is_ok());
+        assert!(private_entry("other.json", &above_default)
+            .validate()
+            .is_err());
+
+        let above_global = vec![b'g'; GLOBAL_PRE_EFFECT_PACKET_MAX_BYTES_V2 + 1];
+        assert!(private_entry(
+            GLOBAL_PRE_EFFECT_PACKET_RUNNER_PRIVATE_NAME_V2,
+            &above_global,
+        )
+        .validate()
+        .is_err());
     }
 
     #[test]
