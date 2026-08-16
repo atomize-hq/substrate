@@ -283,6 +283,34 @@ fn canonical_parser_rejects_duplicates_noncanonical_bytes_and_unknown_fields() {
 }
 
 #[test]
+fn bounded_canonical_parser_preserves_the_default_and_exact_alternate_limit() {
+    const OBSERVED_GLOBAL_PACKET_BYTES: usize = 1_175_768;
+    const GLOBAL_PACKET_MAX_BYTES: usize = 16 * 1024 * 1024;
+
+    fn canonical_string_document_with_size(size: usize) -> Vec<u8> {
+        let empty = canonical_bytes_v2(&Value::String(String::new())).unwrap();
+        assert!(size >= empty.len());
+        let bytes = canonical_bytes_v2(&Value::String("x".repeat(size - empty.len()))).unwrap();
+        assert_eq!(bytes.len(), size);
+        bytes
+    }
+
+    let observed = canonical_string_document_with_size(OBSERVED_GLOBAL_PACKET_BYTES);
+    assert!(parse_canonical_v2::<Value>(&observed).is_err());
+    assert_eq!(
+        parse_canonical_bounded_v2::<Value>(&observed, GLOBAL_PACKET_MAX_BYTES).unwrap(),
+        Value::String("x".repeat(OBSERVED_GLOBAL_PACKET_BYTES - 2))
+    );
+
+    let overflow = canonical_string_document_with_size(GLOBAL_PACKET_MAX_BYTES + 1);
+    assert!(parse_canonical_bounded_v2::<Value>(&overflow, GLOBAL_PACKET_MAX_BYTES).is_err());
+
+    let mut noncanonical = observed;
+    noncanonical.push(b'\n');
+    assert!(parse_canonical_bounded_v2::<Value>(&noncanonical, GLOBAL_PACKET_MAX_BYTES).is_err());
+}
+
+#[test]
 fn canonical_parser_rejects_cross_lane_documents() {
     let parity = HostParityProofV2 {
         schema_owner: "parity-owner".to_string(),

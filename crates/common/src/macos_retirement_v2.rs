@@ -1539,8 +1539,11 @@ pub fn canonical_bytes_v2<T: Serialize>(value: &T) -> Result<Vec<u8>> {
     Ok(output)
 }
 
-pub fn parse_canonical_v2<T: DeserializeOwned + Serialize>(bytes: &[u8]) -> Result<T> {
-    if bytes.is_empty() || bytes.len() > MAC_R3_FINALIZER_MAX_FRAME_BYTES_V2 {
+pub fn parse_canonical_bounded_v2<T: DeserializeOwned + Serialize>(
+    bytes: &[u8],
+    maximum_bytes: usize,
+) -> Result<T> {
+    if bytes.is_empty() || bytes.len() > maximum_bytes {
         bail!("R3 canonical document is empty or exceeds the fixed frame limit")
     }
     let mut deserializer = serde_json::Deserializer::from_slice(bytes);
@@ -1556,6 +1559,10 @@ pub fn parse_canonical_v2<T: DeserializeOwned + Serialize>(bytes: &[u8]) -> Resu
         bail!("R3 canonical document is not the exact canonical encoding")
     }
     serde_json::from_value(decoded).context("decode typed R3 canonical JSON")
+}
+
+pub fn parse_canonical_v2<T: DeserializeOwned + Serialize>(bytes: &[u8]) -> Result<T> {
+    parse_canonical_bounded_v2(bytes, MAC_R3_FINALIZER_MAX_FRAME_BYTES_V2)
 }
 
 pub fn sha256_hex_v2(bytes: &[u8]) -> String {

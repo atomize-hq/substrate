@@ -21,7 +21,8 @@ use std::time::Duration;
 
 use substrate_common::macos_retirement_v2::ExecutableIdentityV2;
 use substrate_common::macos_retirement_v2::{
-    canonical_bytes_v2, document_sha256_v2, parse_canonical_v2, sha256_hex_v2,
+    canonical_bytes_v2, document_sha256_v2, parse_canonical_bounded_v2, parse_canonical_v2,
+    sha256_hex_v2,
     validate_launch_identity_v2, FinalizationRequestV2, FinalizerResponseV2, LaunchIdentityV2,
     MAC_R3_COORDINATOR_INBOX_ROOT_V2, MAC_R3_COORDINATOR_PATH_V2,
     MAC_R3_COORDINATOR_SIGNING_IDENTIFIER_V2, MAC_R3_FINALIZER_ENDPOINT_V2,
@@ -3718,9 +3719,7 @@ fn recover_root_operation_ui_terminal_stop_if_present(
         None,
     )?;
     let creator_marker_restoration_sha256 = restore_creator_marker_after_terminal_ui()?;
-    let global_pre_effect = read_runner_private_optional::<GlobalPreEffectPacketV2>(
-        GLOBAL_PRE_EFFECT_PACKET_RUNNER_PRIVATE_NAME_V2,
-    )?;
+    let global_pre_effect = read_runner_global_pre_effect_packet_optional()?;
     if let Some(packet) = global_pre_effect.as_ref() {
         packet.validate(&inputs.prepared, &inputs.candidate, &inputs.peer)?;
     }
@@ -9989,10 +9988,8 @@ fn activation_cleanup_recovery_documents(
     if let Some(plan) = read_runner_private_cleanup_recovery_optional::<NativeEvidenceCleanupPlanV2>(
         NATIVE_CLEANUP_PLAN_NAME,
     )? {
-        let packet = read_runner_private_cleanup_recovery_optional::<GlobalPreEffectPacketV2>(
-            GLOBAL_PRE_EFFECT_PACKET_RUNNER_PRIVATE_NAME_V2,
-        )?
-        .context("native cleanup plan lacks its global pre-effect packet")?;
+        let packet = read_runner_global_pre_effect_packet_cleanup_recovery_optional()?
+            .context("native cleanup plan lacks its global pre-effect packet")?;
         return Ok(Some((plan, packet)));
     }
     let Some((receipt, export, packet)) = read_staged_native_cleanup_recovery_documents()? else {
@@ -10045,7 +10042,10 @@ fn read_staged_native_cleanup_recovery_documents() -> Result<
         .iter()
         .find(|entry| entry.name == GLOBAL_PRE_EFFECT_PACKET_RUNNER_PRIVATE_NAME_V2)
         .context("native evidence export lacks its global pre-effect packet bytes")?;
-    let packet: GlobalPreEffectPacketV2 = parse_canonical_v2(&packet_entry.validate()?)?;
+    let packet: GlobalPreEffectPacketV2 = parse_runner_private_canonical(
+        GLOBAL_PRE_EFFECT_PACKET_RUNNER_PRIVATE_NAME_V2,
+        &packet_entry.validate()?,
+    )?;
     let acknowledgement = read_native_evidence_acknowledgement_for_cleanup()?;
     receipt.validate(&export, &acknowledgement, &packet)?;
     Ok(Some((receipt, export, packet)))
@@ -11286,7 +11286,10 @@ fn publish_global_pre_effect_packet(packet: &GlobalPreEffectPacketV2, bytes: &[u
         GLOBAL_PRE_EFFECT_PACKET_MAX_BYTES_V2,
     )?;
     if reopened != bytes
-        || parse_canonical_v2::<GlobalPreEffectPacketV2>(&reopened)? != *packet
+        || parse_runner_private_canonical::<GlobalPreEffectPacketV2>(
+            GLOBAL_PRE_EFFECT_PACKET_RUNNER_PRIVATE_NAME_V2,
+            &reopened,
+        )? != *packet
         || document_sha256_v2(packet)? != sha256_hex_v2(&reopened)
     {
         bail!("global pre-effect packet failed exact durable reopen/hash validation")
@@ -11417,6 +11420,47 @@ fn read_runner_private_optional<T: DeserializeOwned + Serialize>(name: &str) -> 
     read_runner_private_bytes_optional(name)?
         .map(|bytes| parse_canonical_v2(&bytes))
         .transpose()
+}
+
+fn parse_runner_private_canonical<T: DeserializeOwned + Serialize>(
+    name: &str,
+    bytes: &[u8],
+) -> Result<T> {
+    parse_canonical_bounded_v2(bytes, runner_private_archive_entry_max_bytes_v2(name))
+}
+
+fn read_runner_global_pre_effect_packet_optional() -> Result<Option<GlobalPreEffectPacketV2>> {
+    read_runner_private_bytes_optional(GLOBAL_PRE_EFFECT_PACKET_RUNNER_PRIVATE_NAME_V2)?
+        .map(|bytes| {
+            parse_runner_private_canonical(
+                GLOBAL_PRE_EFFECT_PACKET_RUNNER_PRIVATE_NAME_V2,
+                &bytes,
+            )
+        })
+        .transpose()
+}
+
+fn read_runner_global_pre_effect_packet_cleanup_recovery_optional(
+) -> Result<Option<GlobalPreEffectPacketV2>> {
+    read_runner_private_cleanup_recovery_bytes_optional_at(
+        Path::new(RUNNER_ROOT),
+        GLOBAL_PRE_EFFECT_PACKET_RUNNER_PRIVATE_NAME_V2,
+        PublishIdentityV2 {
+            owner_uid: 0,
+            owner_gid: 0,
+            permissions: 0o600,
+            parent_uid: 0,
+            parent_gid: 0,
+            parent_mode: libc::S_IFDIR | 0o700,
+            maximum_bytes: runner_private_archive_entry_max_bytes_v2(
+                GLOBAL_PRE_EFFECT_PACKET_RUNNER_PRIVATE_NAME_V2,
+            ),
+        },
+    )?
+    .map(|bytes| {
+        parse_runner_private_canonical(GLOBAL_PRE_EFFECT_PACKET_RUNNER_PRIVATE_NAME_V2, &bytes)
+    })
+    .transpose()
 }
 
 fn read_runner_private_cleanup_recovery_optional<T: DeserializeOwned + Serialize>(
@@ -12500,6 +12544,36 @@ mod tests {
             physical_identity_sha256: "b".repeat(64),
         };
         assert!(terminal_runner_child_archive_total_bytes(&[above_global]).is_err());
+
+        const OBSERVED_GLOBAL_PACKET_BYTES: usize = 1_175_768;
+        let empty = canonical_bytes_v2(&serde_json::Value::String(String::new())).unwrap();
+        let observed = canonical_bytes_v2(&serde_json::Value::String("x".repeat(
+            OBSERVED_GLOBAL_PACKET_BYTES - empty.len(),
+        )))
+        .unwrap();
+        assert_eq!(observed.len(), OBSERVED_GLOBAL_PACKET_BYTES);
+        assert!(parse_canonical_v2::<serde_json::Value>(&observed).is_err());
+        assert!(parse_runner_private_canonical::<serde_json::Value>(
+            "other.json",
+            &observed,
+        )
+        .is_err());
+        assert!(parse_runner_private_canonical::<serde_json::Value>(
+            GLOBAL_PRE_EFFECT_PACKET_RUNNER_PRIVATE_NAME_V2,
+            &observed,
+        )
+        .is_ok());
+
+        let overflow = canonical_bytes_v2(&serde_json::Value::String("x".repeat(
+            GLOBAL_PRE_EFFECT_PACKET_MAX_BYTES_V2 - empty.len() + 1,
+        )))
+        .unwrap();
+        assert_eq!(overflow.len(), GLOBAL_PRE_EFFECT_PACKET_MAX_BYTES_V2 + 1);
+        assert!(parse_runner_private_canonical::<serde_json::Value>(
+            GLOBAL_PRE_EFFECT_PACKET_RUNNER_PRIVATE_NAME_V2,
+            &overflow,
+        )
+        .is_err());
     }
 
     #[test]
