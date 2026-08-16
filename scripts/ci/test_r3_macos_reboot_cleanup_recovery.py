@@ -169,6 +169,74 @@ def valid_persistent_orphan() -> dict:
     }
 
 
+def valid_global_exchange_authority() -> dict:
+    archived = {
+        "path": str(RECOVERY.GLOBAL_EXCHANGE_PATH),
+        "device": 16777230,
+        "inode": 531753102,
+        "uid": 501,
+        "gid": 0,
+        "mode": 0o040700,
+    }
+    rebound = {
+        "path": str(RECOVERY.GLOBAL_EXCHANGE_PATH),
+        "file_type": "directory",
+        "uid": 501,
+        "gid": 0,
+        "mode": 0o700,
+        "post_reboot_physical_identity": copy.deepcopy(
+            RECOVERY.SEALED_POST_REBOOT_GLOBAL_EXCHANGE_IDENTITY
+        ),
+    }
+    state = {"global_exchange": rebound}
+    return {
+        "root_install_claims": {"completion": {"installed_directories": [archived]}},
+        "post_reboot_rebind": state,
+        "post_reboot_rebind_sha256": RECOVERY.document_sha256(state),
+    }
+
+
+def valid_receipt_only_projection() -> dict:
+    return {
+        "experiment_id": RECOVERY.EXPERIMENT_ID,
+        "repetition_scopes": RECOVERY.SCOPES,
+        "cleanup_commits": [
+            RECOVERY.PRIOR_CLEANUP_COMMIT,
+            RECOVERY.COMPLETED_CLEANUP_COMMIT,
+            "a" * 40,
+        ],
+        "terminal_route_sha256": RECOVERY.TERMINAL_CLEANUP_ROUTE_SHA256,
+        "terminal_authority_file_sha256": (
+            RECOVERY.TERMINAL_CLEANUP_AUTHORITY_FILE_SHA256
+        ),
+        "terminal_partial_rebind_sha256": (RECOVERY.TERMINAL_PARTIAL_REBIND_SHA256),
+        "cleanup_target_absences": [
+            {
+                "path": "/Library/PrivilegedHelperTools/example",
+                "lstat_return": -1,
+                "raw_errno": 2,
+            }
+        ],
+        "launchd_label": "com.atomize.substrate.r3-macos-evidence-finalizer.v2",
+        "launchctl_not_found_exit_status": 113,
+        "socket_path": RECOVERY.PRIOR_SOCKET_PHYSICAL_IDENTITY["path"],
+        "socket_absent": True,
+        "matching_processes": [],
+        "global_exchange_path": str(RECOVERY.GLOBAL_EXCHANGE_PATH),
+        "global_exchange_children": [],
+        "archived_global_exchange_device": 16777230,
+        "sealed_rebound_global_exchange_identity": copy.deepcopy(
+            RECOVERY.SEALED_POST_REBOOT_GLOBAL_EXCHANGE_IDENTITY
+        ),
+        "restoration_receipt_path": str(RECOVERY.RESTORATION_PATH),
+        "restoration_receipt_absent": True,
+        "cleanup_mutations_authorized": False,
+        "keychain_queries_authorized": False,
+        "native_experiment_authorized": False,
+        "unexplained_live_state_differences": [],
+    }
+
+
 class RebootCleanupContractTests(unittest.TestCase):
     def assert_rejected(self, value: dict) -> None:
         with self.assertRaises(RECOVERY.Stop):
@@ -320,6 +388,124 @@ class RebootCleanupContractTests(unittest.TestCase):
         execute_source = inspect.getsource(RECOVERY.execute)
         self.assertIn("unlink_persistent_orphaned_socket", execute_source)
         self.assertNotIn('"bootout"', execute_source)
+
+    def test_final_observation_uses_sealed_rebound_global_exchange_identity(
+        self,
+    ) -> None:
+        authority = valid_global_exchange_authority()
+        expected_digest = authority["post_reboot_rebind_sha256"]
+        rebound = RECOVERY.sealed_rebound_global_exchange_identity(
+            authority, expected_digest
+        )
+        archived = authority["root_install_claims"]["completion"][
+            "installed_directories"
+        ][0]
+        self.assertEqual(archived["device"], 16777230)
+        self.assertEqual(rebound["device"], 16777229)
+
+        class FakeObserver:
+            @staticmethod
+            def observe(expected: dict) -> dict:
+                if expected != RECOVERY.SEALED_POST_REBOOT_GLOBAL_EXCHANGE_IDENTITY:
+                    raise RECOVERY.Stop(
+                        "global evidence exchange changed before admin restoration receipt"
+                    )
+                return {"global_exchange_stable_identity": expected}
+
+        self.assertEqual(
+            FakeObserver.observe(rebound)["global_exchange_stable_identity"],
+            rebound,
+        )
+        with self.assertRaisesRegex(
+            RECOVERY.Stop,
+            "global evidence exchange changed before admin restoration receipt",
+        ):
+            FakeObserver.observe(archived)
+
+        for field, replacement in (
+            ("path", "/tmp/substituted"),
+            ("device", 16777230),
+            ("inode", 531753103),
+            ("uid", 0),
+            ("gid", 20),
+            ("mode", 0o040755),
+        ):
+            with self.subTest(field=field):
+                changed = valid_global_exchange_authority()
+                changed["post_reboot_rebind"]["global_exchange"][
+                    "post_reboot_physical_identity"
+                ][field] = replacement
+                changed["post_reboot_rebind_sha256"] = RECOVERY.document_sha256(
+                    changed["post_reboot_rebind"]
+                )
+                with self.assertRaises(RECOVERY.Stop):
+                    RECOVERY.sealed_rebound_global_exchange_identity(
+                        changed, changed["post_reboot_rebind_sha256"]
+                    )
+
+    def test_receipt_only_resumption_rejects_incomplete_or_drifted_cleanup(
+        self,
+    ) -> None:
+        value = valid_receipt_only_projection()
+        self.assertIs(RECOVERY.validate_receipt_only_projection(value), value)
+
+        variants = []
+        target_remains = copy.deepcopy(value)
+        target_remains["cleanup_target_absences"][0].update(
+            {"lstat_return": 0, "raw_errno": 0}
+        )
+        variants.append(target_remains)
+
+        loaded_launchd = copy.deepcopy(value)
+        loaded_launchd["launchctl_not_found_exit_status"] = 0
+        variants.append(loaded_launchd)
+
+        socket_exists = copy.deepcopy(value)
+        socket_exists["socket_absent"] = False
+        variants.append(socket_exists)
+
+        process_exists = copy.deepcopy(value)
+        process_exists["matching_processes"] = [{"pid": 42}]
+        variants.append(process_exists)
+
+        nonempty_global = copy.deepcopy(value)
+        nonempty_global["global_exchange_children"] = ["unexpected"]
+        variants.append(nonempty_global)
+
+        wrong_route = copy.deepcopy(value)
+        wrong_route["terminal_route_sha256"] = "b" * 64
+        variants.append(wrong_route)
+
+        wrong_authority = copy.deepcopy(value)
+        wrong_authority["terminal_authority_file_sha256"] = "c" * 64
+        variants.append(wrong_authority)
+
+        drifted_rebind = copy.deepcopy(value)
+        drifted_rebind["sealed_rebound_global_exchange_identity"]["inode"] += 1
+        variants.append(drifted_rebind)
+
+        receipt_exists = copy.deepcopy(value)
+        receipt_exists["restoration_receipt_absent"] = False
+        variants.append(receipt_exists)
+
+        for changed in variants:
+            with self.subTest(changed=changed):
+                with self.assertRaises(RECOVERY.Stop):
+                    RECOVERY.validate_receipt_only_projection(changed)
+
+        source = inspect.getsource(RECOVERY.execute_receipt_only)
+        for prohibited in (
+            "launchctl",
+            "unlink_bound",
+            "unlink_persistent_orphaned_socket",
+            "remove_inventory_root",
+            "remove_empty_directory",
+            "os.unlink",
+            "os.rmdir",
+            "SecItem",
+            "Security.framework",
+        ):
+            self.assertNotIn(prohibited, source)
 
 
 if __name__ == "__main__":

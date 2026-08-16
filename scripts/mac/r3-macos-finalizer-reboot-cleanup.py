@@ -88,6 +88,54 @@ RESTORATION_PATH = (
     PRESERVATION_ROOT / "reboot-aware-partial-cleanup-restoration.v2.json"
 )
 AUTHORITY_ENV = "R3_REBOOT_PARTIAL_CLEANUP_AUTHORITY_SHA256"
+COMPLETED_CLEANUP_COMMIT = "84066f144fe1c562c3f3934bcda5356065bd79f9"
+COMPLETED_CLEANUP_SOURCE_SHA256 = (
+    "9680fff65ede204400aa6d6072dad05d120c1ccc10a9aeea9c85a7241b92ece8"
+)
+TERMINAL_CLEANUP_ROUTE_SHA256 = (
+    "4ffa8ae88fd0e06eec73cc99d9eb2126a987932b2fd03a0ada16c436c77fe103"
+)
+TERMINAL_CLEANUP_AUTHORITY_FILE_SHA256 = (
+    "1821b9e46f84340d3cae04d48a02bef1750f77efaa69f808d601c3ee28e55930"
+)
+TERMINAL_CLEANUP_AUTHORITY_SHA256 = (
+    "a6fb0144a07f6aa6666d6325697c773860e6fc8ab280a799f36cf970bb870ba3"
+)
+TERMINAL_PARTIAL_REBIND_SHA256 = (
+    "e482524d71cd58590027bc21dbfd9acb7298fb9b5fde0608cd5c285a1cb53377"
+)
+TERMINAL_CLEANUP_ROUTE_PATH = PRESERVATION_ROOT / (
+    "reboot-aware-partial-cleanup.EXECUTED-ONCE-" f"{TERMINAL_CLEANUP_ROUTE_SHA256}.sh"
+)
+TERMINAL_CLEANUP_STDOUT_PATH = PRESERVATION_ROOT / (
+    f"reboot-aware-partial-cleanup.{TERMINAL_CLEANUP_ROUTE_SHA256}.stdout"
+)
+TERMINAL_CLEANUP_STDERR_PATH = PRESERVATION_ROOT / (
+    f"reboot-aware-partial-cleanup.{TERMINAL_CLEANUP_ROUTE_SHA256}.stderr"
+)
+TERMINAL_CLEANUP_EXIT_PATH = PRESERVATION_ROOT / (
+    f"reboot-aware-partial-cleanup.{TERMINAL_CLEANUP_ROUTE_SHA256}.exit"
+)
+TERMINAL_CLEANUP_UNEXECUTED_PATH = PRESERVATION_ROOT / (
+    f"reboot-aware-partial-cleanup.{TERMINAL_CLEANUP_ROUTE_SHA256}.UNEXECUTED.sh"
+)
+RECEIPT_AUTHORITY_PATH = (
+    PRESERVATION_ROOT / "reboot-aware-receipt-only-authority.v3.json"
+)
+RECEIPT_AUTHORITY_ENV = "R3_REBOOT_RECEIPT_ONLY_AUTHORITY_SHA256"
+GLOBAL_EXCHANGE_PATH = pathlib.Path(
+    "/Users/spensermcconnell/Library/Application Support/Atomize/"
+    "R3MacEvidenceFinalizer/experiments/"
+    f"{EXPERIMENT_ID}/global-publisher-exchange"
+)
+SEALED_POST_REBOOT_GLOBAL_EXCHANGE_IDENTITY = {
+    "path": str(GLOBAL_EXCHANGE_PATH),
+    "device": 16777229,
+    "inode": 531753102,
+    "uid": 501,
+    "gid": 0,
+    "mode": stat.S_IFDIR | 0o700,
+}
 FIXED_ENV = {
     "PATH": "/usr/bin:/bin:/usr/sbin:/sbin",
     "LANG": "C",
@@ -2033,6 +2081,71 @@ def restoration_binding(value: dict[str, Any]) -> str:
     )
 
 
+def sealed_rebound_global_exchange_identity(
+    authority: dict[str, Any],
+    expected_rebind_sha256: str = TERMINAL_PARTIAL_REBIND_SHA256,
+) -> dict[str, Any]:
+    state = authority.get("post_reboot_rebind")
+    claims = authority.get("root_install_claims")
+    if (
+        not isinstance(state, dict)
+        or not isinstance(claims, dict)
+        or authority.get("post_reboot_rebind_sha256") != document_sha256(state)
+        or authority.get("post_reboot_rebind_sha256") != expected_rebind_sha256
+    ):
+        fail("post-reboot global-exchange rebind lost its sealed authority")
+    completion = claims.get("completion")
+    installed_directories = (
+        completion.get("installed_directories")
+        if isinstance(completion, dict)
+        else None
+    )
+    archived = (
+        [
+            value
+            for value in installed_directories
+            if value.get("path") == str(GLOBAL_EXCHANGE_PATH)
+        ]
+        if isinstance(installed_directories, list)
+        and all(isinstance(value, dict) for value in installed_directories)
+        else []
+    )
+    rebound = state.get("global_exchange")
+    physical_identity = (
+        rebound.get("post_reboot_physical_identity")
+        if isinstance(rebound, dict)
+        else None
+    )
+    if len(archived) != 1 or not isinstance(physical_identity, dict):
+        fail("global exchange lost its archived or post-reboot identity")
+    archived_value = archived[0]
+    projected = {
+        key: physical_identity.get(key)
+        for key in ("path", "device", "inode", "uid", "gid", "mode")
+    }
+    if (
+        archived_value.get("path") != str(GLOBAL_EXCHANGE_PATH)
+        or archived_value.get("device") != 16777230
+        or archived_value.get("inode") != 531753102
+        or archived_value.get("uid") != 501
+        or archived_value.get("gid") != 0
+        or archived_value.get("mode") != stat.S_IFDIR | 0o700
+        or rebound.get("file_type") != "directory"
+        or rebound.get("path") != archived_value["path"]
+        or rebound.get("uid") != archived_value["uid"]
+        or rebound.get("gid") != archived_value["gid"]
+        or rebound.get("mode") != stat.S_IMODE(archived_value["mode"])
+        or projected != SEALED_POST_REBOOT_GLOBAL_EXCHANGE_IDENTITY
+        or projected["device"] == archived_value["device"]
+        or projected["path"] != archived_value["path"]
+        or projected["uid"] != archived_value["uid"]
+        or projected["gid"] != archived_value["gid"]
+        or stat.S_IMODE(projected["mode"]) != stat.S_IMODE(archived_value["mode"])
+    ):
+        fail("archived and rebound global-exchange identities lost logical continuity")
+    return projected
+
+
 def execute(authority: dict[str, Any], membrane: Any) -> dict[str, Any]:
     if os.path.lexists(RESTORATION_PATH):
         fail("reboot cleanup restoration receipt already exists; route is terminal")
@@ -2074,17 +2187,9 @@ def execute(authority: dict[str, Any], membrane: Any) -> dict[str, Any]:
         fail("global exchange retained unexplained state after cleanup")
 
     manifest, manifest_bytes = membrane.load_manifest()
-    expected_global_values = [
-        value
-        for value in authority["root_install_claims"]["completion"][
-            "installed_directories"
-        ]
-        if value["path"] == str(membrane.GLOBAL_EXCHANGE)
-    ]
-    if len(expected_global_values) != 1:
-        fail("durable claim copy lost the exact global exchange binding")
+    expected_global = sealed_rebound_global_exchange_identity(authority)
     final_observation = membrane.observe_admin_restoration_absence(
-        manifest, expected_global_values[0]
+        manifest, expected_global
     )
     if os.listdir(membrane.GLOBAL_EXCHANGE):
         fail("global exchange changed after complete baseline observation")
@@ -2136,6 +2241,571 @@ def execute(authority: dict[str, Any], membrane: Any) -> dict[str, Any]:
     return receipt
 
 
+def load_terminal_cleanup_authority() -> tuple[dict[str, Any], dict[str, Any]]:
+    data, record = read_sealed_preserved_file(
+        AUTHORITY_PATH, TERMINAL_CLEANUP_AUTHORITY_FILE_SHA256
+    )
+    value = parse_strict_json(data, "terminal partial-cleanup authority")
+    if (
+        not isinstance(value, dict)
+        or canonical(value) != data
+        or value.get("schema_owner")
+        != "substrate.r3-macos-finalizer-reboot-aware-partial-cleanup-authority"
+        or value.get("schema_version") != 2
+        or value.get("experiment_id") != EXPERIMENT_ID
+        or value.get("repetition_scopes") != SCOPES
+        or value.get("cleanup_commit") != COMPLETED_CLEANUP_COMMIT
+        or value.get("cleanup_commits")
+        != [PRIOR_CLEANUP_COMMIT, COMPLETED_CLEANUP_COMMIT]
+        or value.get("prior_terminal_route_sha256") != PRIOR_TERMINAL_ROUTE_SHA256
+        or value.get("prior_authority_file_sha256") != PRIOR_AUTHORITY_FILE_SHA256
+        or value.get("prior_post_reboot_rebind_sha256")
+        != PRIOR_POST_REBOOT_REBIND_SHA256
+        or value.get("post_reboot_rebind_sha256") != TERMINAL_PARTIAL_REBIND_SHA256
+        or value.get("root_install_claims_binding_sha256") != ROOT_INSTALL_CLAIMS_SHA256
+        or value.get("root_install_preclaim_sha256") != ROOT_INSTALL_PRECLAIM_SHA256
+        or value.get("root_install_completion_sha256") != ROOT_INSTALL_COMPLETION_SHA256
+        or value.get("authority_sha256") != authority_binding(value)
+        or value.get("authority_sha256") != TERMINAL_CLEANUP_AUTHORITY_SHA256
+        or value.get("cleanup_only") is not True
+        or value.get("native_experiment_execution_authorized") is not False
+        or value.get("security_framework_or_keychain_queries_authorized") is not False
+    ):
+        fail("terminal partial-cleanup authority changed its exact binding")
+    sealed_rebound_global_exchange_identity(value)
+    return value, record
+
+
+def terminal_cleanup_route_evidence() -> dict[str, Any]:
+    stderr = (
+        "R3 reboot-aware cleanup stopped: global evidence exchange changed "
+        "before admin restoration receipt\n"
+    ).encode()
+    route_bytes, route = read_sealed_preserved_file(
+        TERMINAL_CLEANUP_ROUTE_PATH, TERMINAL_CLEANUP_ROUTE_SHA256
+    )
+    stdout_bytes, stdout = read_sealed_preserved_file(
+        TERMINAL_CLEANUP_STDOUT_PATH, EMPTY_SHA256, b""
+    )
+    stderr_bytes, stderr_record = read_sealed_preserved_file(
+        TERMINAL_CLEANUP_STDERR_PATH, sha_bytes(stderr), stderr
+    )
+    exit_bytes, exit_record = read_sealed_preserved_file(
+        TERMINAL_CLEANUP_EXIT_PATH, sha_bytes(b"78\n"), b"78\n"
+    )
+    if (
+        route_bytes.find(COMPLETED_CLEANUP_COMMIT.encode()) < 0
+        or route_bytes.find(TERMINAL_CLEANUP_AUTHORITY_FILE_SHA256.encode()) < 0
+        or route_bytes.find(TERMINAL_PARTIAL_REBIND_SHA256.encode()) < 0
+        or stdout_bytes
+        or stderr_bytes != stderr
+        or exit_bytes != b"78\n"
+        or os.path.lexists(TERMINAL_CLEANUP_UNEXECUTED_PATH)
+        or os.path.lexists(RESTORATION_PATH)
+    ):
+        fail("terminal cleanup route evidence changed or acquired a receipt")
+    return {
+        "classification": (
+            "cleanup_effects_completed_and_stopped_during_final_"
+            "restoration_observation"
+        ),
+        "terminal_route_sha256": TERMINAL_CLEANUP_ROUTE_SHA256,
+        "executed_route": route,
+        "stdout": stdout,
+        "stderr": stderr_record,
+        "exit_status": exit_record,
+        "unexecuted_route_absence": absent(TERMINAL_CLEANUP_UNEXECUTED_PATH),
+        "restoration_receipt_absence": absent(RESTORATION_PATH),
+        "cleanup_effects_completed": True,
+        "restoration_observation_started": True,
+        "restoration_receipt_published": False,
+    }
+
+
+def validate_receipt_cleanup_ancestry(correction_commit: str) -> dict[str, Any]:
+    if not is_git_id(correction_commit):
+        fail("receipt-only correction commit is noncanonical")
+    prefix = [
+        "/usr/bin/git",
+        "-c",
+        f"safe.directory={REPOSITORY}",
+        "-C",
+        str(REPOSITORY),
+    ]
+    prior_ancestor = run(
+        [
+            *prefix,
+            "merge-base",
+            "--is-ancestor",
+            PRIOR_CLEANUP_COMMIT,
+            correction_commit,
+        ]
+    )
+    completed_ancestor = run(
+        [
+            *prefix,
+            "merge-base",
+            "--is-ancestor",
+            COMPLETED_CLEANUP_COMMIT,
+            correction_commit,
+        ]
+    )
+    archived = run(
+        [
+            *prefix,
+            "show",
+            f"{COMPLETED_CLEANUP_COMMIT}:scripts/mac/"
+            "r3-macos-finalizer-reboot-cleanup.py",
+        ]
+    )
+    markers = [
+        b"socket_removal = unlink_persistent_orphaned_socket(",
+        b"remove_empty_directory(membrane, inbox)",
+        b'remove_inventory_root(membrane, state["runner_root"])',
+        b'unlink_bound(membrane, external_global, "physical_identity")',
+        b"final_observation = membrane.observe_admin_restoration_absence(",
+        b"membrane.publish_bytes_no_clobber(canonical(receipt), RESTORATION_PATH",
+    ]
+    execute_start = archived.stdout.find(b"\ndef execute(")
+    execute_end = archived.stdout.find(b"\ndef load_authority", execute_start)
+    execute_source = archived.stdout[execute_start:execute_end]
+    offsets = [execute_source.find(marker) for marker in markers]
+    if (
+        prior_ancestor.returncode != 0
+        or prior_ancestor.stdout
+        or prior_ancestor.stderr
+        or completed_ancestor.returncode != 0
+        or completed_ancestor.stdout
+        or completed_ancestor.stderr
+        or archived.returncode != 0
+        or archived.stderr
+        or sha_bytes(archived.stdout) != COMPLETED_CLEANUP_SOURCE_SHA256
+        or execute_start < 0
+        or execute_end <= execute_start
+        or any(offset < 0 for offset in offsets)
+        or offsets != sorted(offsets)
+    ):
+        fail("receipt-only correction lost exact terminal cleanup ancestry")
+    return {
+        "cleanup_commits": [
+            PRIOR_CLEANUP_COMMIT,
+            COMPLETED_CLEANUP_COMMIT,
+            correction_commit,
+        ],
+        "terminal_cleanup_source_sha256": COMPLETED_CLEANUP_SOURCE_SHA256,
+        "terminal_cleanup_control_flow_order": [
+            "orphaned_socket_removal",
+            "remaining_cleanup_start",
+            "runner_cleanup",
+            "external_global_packet_cleanup",
+            "final_restoration_observation",
+            "restoration_receipt_publication",
+        ],
+    }
+
+
+def cleanup_absence_inventory(
+    membrane: Any, manifest: dict[str, Any]
+) -> dict[str, Any]:
+    paths = membrane.admin_restoration_absence_paths(manifest)
+    if not isinstance(paths, list) or not paths or len(paths) != len(set(paths)):
+        fail("receipt-only cleanup absence inventory changed its exact path set")
+    observations = [absent(pathlib.Path(path)) for path in paths]
+    return {
+        "ordered_paths": paths,
+        "observations": observations,
+        "observation_set_sha256": document_sha256(observations),
+    }
+
+
+def validate_receipt_only_projection(value: Any) -> dict[str, Any]:
+    expected_fields = {
+        "experiment_id",
+        "repetition_scopes",
+        "cleanup_commits",
+        "terminal_route_sha256",
+        "terminal_authority_file_sha256",
+        "terminal_partial_rebind_sha256",
+        "cleanup_target_absences",
+        "launchd_label",
+        "launchctl_not_found_exit_status",
+        "socket_path",
+        "socket_absent",
+        "matching_processes",
+        "global_exchange_path",
+        "global_exchange_children",
+        "archived_global_exchange_device",
+        "sealed_rebound_global_exchange_identity",
+        "restoration_receipt_path",
+        "restoration_receipt_absent",
+        "cleanup_mutations_authorized",
+        "keychain_queries_authorized",
+        "native_experiment_authorized",
+        "unexplained_live_state_differences",
+    }
+    absences = value.get("cleanup_target_absences") if isinstance(value, dict) else None
+    cleanup_commits = value.get("cleanup_commits") if isinstance(value, dict) else None
+    if (
+        not isinstance(value, dict)
+        or set(value) != expected_fields
+        or value.get("experiment_id") != EXPERIMENT_ID
+        or value.get("repetition_scopes") != SCOPES
+        or not isinstance(cleanup_commits, list)
+        or len(cleanup_commits) != 3
+        or cleanup_commits[:2] != [PRIOR_CLEANUP_COMMIT, COMPLETED_CLEANUP_COMMIT]
+        or not is_git_id(cleanup_commits[2])
+        or value.get("terminal_route_sha256") != TERMINAL_CLEANUP_ROUTE_SHA256
+        or value.get("terminal_authority_file_sha256")
+        != TERMINAL_CLEANUP_AUTHORITY_FILE_SHA256
+        or value.get("terminal_partial_rebind_sha256") != TERMINAL_PARTIAL_REBIND_SHA256
+        or not isinstance(absences, list)
+        or not absences
+        or any(
+            not isinstance(item, dict)
+            or set(item) != {"path", "lstat_return", "raw_errno"}
+            or not isinstance(item.get("path"), str)
+            or item.get("lstat_return") != -1
+            or item.get("raw_errno") != errno.ENOENT
+            for item in absences
+        )
+        or len({item["path"] for item in absences}) != len(absences)
+        or value.get("launchd_label")
+        != "com.atomize.substrate.r3-macos-evidence-finalizer.v2"
+        or value.get("launchctl_not_found_exit_status") != 113
+        or value.get("socket_path") != PRIOR_SOCKET_PHYSICAL_IDENTITY["path"]
+        or value.get("socket_absent") is not True
+        or value.get("matching_processes") != []
+        or value.get("global_exchange_path") != str(GLOBAL_EXCHANGE_PATH)
+        or value.get("global_exchange_children") != []
+        or value.get("archived_global_exchange_device") != 16777230
+        or value.get("sealed_rebound_global_exchange_identity")
+        != SEALED_POST_REBOOT_GLOBAL_EXCHANGE_IDENTITY
+        or value.get("restoration_receipt_path") != str(RESTORATION_PATH)
+        or value.get("restoration_receipt_absent") is not True
+        or value.get("cleanup_mutations_authorized") is not False
+        or value.get("keychain_queries_authorized") is not False
+        or value.get("native_experiment_authorized") is not False
+        or value.get("unexplained_live_state_differences") != []
+    ):
+        fail("receipt-only finalization projection changed an exact predicate")
+    return value
+
+
+def observe_receipt_only_state(
+    correction_commit: str, source_sha256: str, installer_sha256: str
+) -> tuple[dict[str, Any], dict[str, Any], Any]:
+    membrane = load_installer(installer_sha256)
+    ancestry = validate_receipt_cleanup_ancestry(correction_commit)
+    terminal_authority, terminal_authority_record = load_terminal_cleanup_authority()
+    terminal_route = terminal_cleanup_route_evidence()
+    source = exact_source_record(correction_commit, source_sha256, installer_sha256)
+    preservation = preservation_record(membrane)
+    reboot = observed_boot()
+    manifest, manifest_bytes = membrane.load_manifest()
+    rebound_identity = sealed_rebound_global_exchange_identity(terminal_authority)
+    absence_inventory = cleanup_absence_inventory(membrane, manifest)
+    launchd = launchd_label_absence(membrane, "receipt_only_prepublication")
+    socket_absence = membrane.observe_platform_managed_socket_absence(
+        membrane.ENDPOINT_PATH
+    )
+    processes = process_absence(membrane, manifest)
+    global_identity = membrane.directory_identity(
+        membrane.GLOBAL_EXCHANGE, 501, 0, 0o700
+    )
+    global_children = sorted(os.listdir(membrane.GLOBAL_EXCHANGE))
+    if (
+        global_children
+        or {
+            key: global_identity[key]
+            for key in ("path", "device", "inode", "uid", "gid", "mode")
+        }
+        != rebound_identity
+    ):
+        fail("receipt-only global exchange differs from the sealed rebound identity")
+    receipt_absence = absent(RESTORATION_PATH)
+    baseline = membrane.observe_admin_restoration_absence(manifest, rebound_identity)
+    if (
+        baseline.get("global_exchange_stable_identity") != rebound_identity
+        or baseline.get("matching_experiment_processes") != []
+        or sorted(os.listdir(membrane.GLOBAL_EXCHANGE)) != []
+    ):
+        fail("receipt-only baseline observation changed after exact validation")
+    projection = validate_receipt_only_projection(
+        {
+            "experiment_id": EXPERIMENT_ID,
+            "repetition_scopes": SCOPES,
+            "cleanup_commits": ancestry["cleanup_commits"],
+            "terminal_route_sha256": TERMINAL_CLEANUP_ROUTE_SHA256,
+            "terminal_authority_file_sha256": (TERMINAL_CLEANUP_AUTHORITY_FILE_SHA256),
+            "terminal_partial_rebind_sha256": TERMINAL_PARTIAL_REBIND_SHA256,
+            "cleanup_target_absences": absence_inventory["observations"],
+            "launchd_label": membrane.FINALIZER_LABEL,
+            "launchctl_not_found_exit_status": launchd["exit_status"],
+            "socket_path": str(membrane.ENDPOINT_PATH),
+            "socket_absent": True,
+            "matching_processes": processes["matching_processes"],
+            "global_exchange_path": str(membrane.GLOBAL_EXCHANGE),
+            "global_exchange_children": global_children,
+            "archived_global_exchange_device": 16777230,
+            "sealed_rebound_global_exchange_identity": rebound_identity,
+            "restoration_receipt_path": str(RESTORATION_PATH),
+            "restoration_receipt_absent": True,
+            "cleanup_mutations_authorized": False,
+            "keychain_queries_authorized": False,
+            "native_experiment_authorized": False,
+            "unexplained_live_state_differences": [],
+        }
+    )
+    state = {
+        "source_identity": source,
+        "cleanup_commit_ancestry": ancestry,
+        "terminal_cleanup_authority_file": terminal_authority_record,
+        "terminal_cleanup_route_evidence": terminal_route,
+        "preserved_pre_reboot_evidence": preservation,
+        "observed_reboot": reboot,
+        "candidate_freeze_manifest_sha256": sha_bytes(manifest_bytes),
+        "cleanup_absence_inventory": absence_inventory,
+        "launchd_label_absence": launchd,
+        "platform_managed_socket_absence": socket_absence,
+        "process_absence": processes,
+        "global_exchange_physical_identity": global_identity,
+        "global_exchange_children": global_children,
+        "sealed_rebound_global_exchange_identity": rebound_identity,
+        "restoration_receipt_absence": receipt_absence,
+        "baseline_prepublication_validation": {
+            "path_absence_set_sha256": baseline["path_absence_set_sha256"],
+            "durable_absence_set_sha256": baseline["durable_absence_set_sha256"],
+            "global_exchange_stable_identity": rebound_identity,
+            "matching_experiment_processes": [],
+        },
+        "fixture_projection": projection,
+        "unexplained_live_state_differences": [],
+    }
+    return state, terminal_authority, membrane
+
+
+def receipt_authority_binding(value: dict[str, Any]) -> str:
+    body = {key: item for key, item in value.items() if key != "authority_sha256"}
+    return document_sha256(
+        {
+            "domain": (
+                "substrate.r3-macos-finalizer-reboot-aware-" "receipt-only-authority.v3"
+            ),
+            "authority": body,
+        }
+    )
+
+
+def build_receipt_authority(
+    correction_commit: str, source_sha256: str, installer_sha256: str
+) -> dict[str, Any]:
+    state, terminal_authority, _ = observe_receipt_only_state(
+        correction_commit, source_sha256, installer_sha256
+    )
+    value = {
+        "schema_owner": (
+            "substrate.r3-macos-finalizer-reboot-aware-receipt-only-authority"
+        ),
+        "schema_version": 3,
+        "experiment_id": EXPERIMENT_ID,
+        "repetition_scopes": SCOPES,
+        "authority_path": str(RECEIPT_AUTHORITY_PATH),
+        "correction_commit": correction_commit,
+        "cleanup_commits": state["cleanup_commit_ancestry"]["cleanup_commits"],
+        "cleanup_source_sha256": source_sha256,
+        "installer_source_sha256": installer_sha256,
+        "terminal_cleanup_route_sha256": TERMINAL_CLEANUP_ROUTE_SHA256,
+        "terminal_cleanup_authority_file_sha256": (
+            TERMINAL_CLEANUP_AUTHORITY_FILE_SHA256
+        ),
+        "terminal_cleanup_authority_sha256": terminal_authority["authority_sha256"],
+        "terminal_partial_rebind_sha256": TERMINAL_PARTIAL_REBIND_SHA256,
+        "root_install_claims_binding_sha256": ROOT_INSTALL_CLAIMS_SHA256,
+        "candidate_freeze_manifest_sha256": state["candidate_freeze_manifest_sha256"],
+        "sealed_rebound_global_exchange_identity": (
+            SEALED_POST_REBOOT_GLOBAL_EXCHANGE_IDENTITY
+        ),
+        "receipt_only_state": state,
+        "receipt_only_state_sha256": document_sha256(state),
+        "receipt_only": True,
+        "cleanup_mutations_authorized": False,
+        "security_framework_or_keychain_queries_authorized": False,
+        "native_experiment_execution_authorized": False,
+        "authority_sha256": "",
+    }
+    value["authority_sha256"] = receipt_authority_binding(value)
+    return value
+
+
+def validate_receipt_authority(
+    value: Any, expected_file_sha256: str
+) -> tuple[dict[str, Any], Any]:
+    expected_fields = {
+        "schema_owner",
+        "schema_version",
+        "experiment_id",
+        "repetition_scopes",
+        "authority_path",
+        "correction_commit",
+        "cleanup_commits",
+        "cleanup_source_sha256",
+        "installer_source_sha256",
+        "terminal_cleanup_route_sha256",
+        "terminal_cleanup_authority_file_sha256",
+        "terminal_cleanup_authority_sha256",
+        "terminal_partial_rebind_sha256",
+        "root_install_claims_binding_sha256",
+        "candidate_freeze_manifest_sha256",
+        "sealed_rebound_global_exchange_identity",
+        "receipt_only_state",
+        "receipt_only_state_sha256",
+        "receipt_only",
+        "cleanup_mutations_authorized",
+        "security_framework_or_keychain_queries_authorized",
+        "native_experiment_execution_authorized",
+        "authority_sha256",
+    }
+    state = value.get("receipt_only_state") if isinstance(value, dict) else None
+    if (
+        not isinstance(value, dict)
+        or set(value) != expected_fields
+        or not isinstance(state, dict)
+        or value.get("schema_owner")
+        != "substrate.r3-macos-finalizer-reboot-aware-receipt-only-authority"
+        or value.get("schema_version") != 3
+        or value.get("experiment_id") != EXPERIMENT_ID
+        or value.get("repetition_scopes") != SCOPES
+        or value.get("authority_path") != str(RECEIPT_AUTHORITY_PATH)
+        or not is_git_id(value.get("correction_commit"))
+        or value.get("cleanup_commits")
+        != [
+            PRIOR_CLEANUP_COMMIT,
+            COMPLETED_CLEANUP_COMMIT,
+            value.get("correction_commit"),
+        ]
+        or not is_sha256(value.get("cleanup_source_sha256"))
+        or not is_sha256(value.get("installer_source_sha256"))
+        or value.get("terminal_cleanup_route_sha256") != TERMINAL_CLEANUP_ROUTE_SHA256
+        or value.get("terminal_cleanup_authority_file_sha256")
+        != TERMINAL_CLEANUP_AUTHORITY_FILE_SHA256
+        or value.get("terminal_cleanup_authority_sha256")
+        != TERMINAL_CLEANUP_AUTHORITY_SHA256
+        or value.get("terminal_partial_rebind_sha256") != TERMINAL_PARTIAL_REBIND_SHA256
+        or value.get("root_install_claims_binding_sha256") != ROOT_INSTALL_CLAIMS_SHA256
+        or not is_sha256(value.get("candidate_freeze_manifest_sha256"))
+        or value.get("candidate_freeze_manifest_sha256")
+        != state.get("candidate_freeze_manifest_sha256")
+        or value.get("sealed_rebound_global_exchange_identity")
+        != SEALED_POST_REBOOT_GLOBAL_EXCHANGE_IDENTITY
+        or value.get("receipt_only_state_sha256") != document_sha256(state)
+        or value.get("receipt_only") is not True
+        or value.get("cleanup_mutations_authorized") is not False
+        or value.get("security_framework_or_keychain_queries_authorized") is not False
+        or value.get("native_experiment_execution_authorized") is not False
+        or value.get("authority_sha256") != receipt_authority_binding(value)
+        or expected_file_sha256 != sha_bytes(canonical(value))
+    ):
+        fail("receipt-only authority changed its exact binding")
+    validate_receipt_only_projection(state.get("fixture_projection"))
+    fresh, _, membrane = observe_receipt_only_state(
+        value["correction_commit"],
+        value["cleanup_source_sha256"],
+        value["installer_source_sha256"],
+    )
+    if fresh != state:
+        fail("live baseline differs from the sealed receipt-only authority")
+    return value, membrane
+
+
+def load_receipt_authority() -> tuple[dict[str, Any], Any]:
+    expected = os.environ.get(RECEIPT_AUTHORITY_ENV)
+    if not is_sha256(expected):
+        fail("receipt-only route lacks one canonical authority digest")
+    data, _ = read_sealed_preserved_file(RECEIPT_AUTHORITY_PATH, expected)
+    if not data:
+        fail("receipt-only authority file is empty")
+    value = parse_strict_json(data, "receipt-only authority")
+    if canonical(value) != data:
+        fail("receipt-only authority is not canonical JSON")
+    return validate_receipt_authority(value, expected)
+
+
+def receipt_restoration_binding(value: dict[str, Any]) -> str:
+    body = {key: item for key, item in value.items() if key != "restoration_sha256"}
+    return document_sha256(
+        {
+            "domain": (
+                "substrate.r3-macos-finalizer-reboot-aware-"
+                "receipt-only-restoration.v3"
+            ),
+            "restoration": body,
+        }
+    )
+
+
+def execute_receipt_only(authority: dict[str, Any], membrane: Any) -> dict[str, Any]:
+    if os.path.lexists(RESTORATION_PATH):
+        fail("receipt-only restoration receipt already exists")
+    terminal_authority, _ = load_terminal_cleanup_authority()
+    rebound_identity = sealed_rebound_global_exchange_identity(terminal_authority)
+    manifest, manifest_bytes = membrane.load_manifest()
+    if sorted(os.listdir(membrane.GLOBAL_EXCHANGE)) != []:
+        fail("receipt-only global exchange is not empty")
+    final_observation = membrane.observe_admin_restoration_absence(
+        manifest, rebound_identity
+    )
+    if (
+        final_observation.get("global_exchange_stable_identity") != rebound_identity
+        or final_observation.get("matching_experiment_processes") != []
+        or sorted(os.listdir(membrane.GLOBAL_EXCHANGE)) != []
+    ):
+        fail("receipt-only final restoration observation changed")
+    receipt = {
+        "schema_owner": (
+            "substrate.r3-macos-finalizer-reboot-aware-receipt-only-restoration"
+        ),
+        "schema_version": 3,
+        "experiment_id": EXPERIMENT_ID,
+        "repetition_scopes": SCOPES,
+        "receipt_path": str(RESTORATION_PATH),
+        "correction_commit": authority["correction_commit"],
+        "cleanup_commits": authority["cleanup_commits"],
+        "receipt_authority_file_sha256": sha_bytes(canonical(authority)),
+        "receipt_authority_sha256": authority["authority_sha256"],
+        "terminal_cleanup_route_sha256": TERMINAL_CLEANUP_ROUTE_SHA256,
+        "terminal_cleanup_authority_file_sha256": (
+            TERMINAL_CLEANUP_AUTHORITY_FILE_SHA256
+        ),
+        "terminal_cleanup_authority_sha256": TERMINAL_CLEANUP_AUTHORITY_SHA256,
+        "terminal_partial_rebind_sha256": TERMINAL_PARTIAL_REBIND_SHA256,
+        "root_install_claims_binding_sha256": ROOT_INSTALL_CLAIMS_SHA256,
+        "candidate_freeze_manifest_sha256": sha_bytes(manifest_bytes),
+        "preserved_inventory_sha256": PRESERVED_INVENTORY_SHA256,
+        "preservation_finished_utc": PRESERVATION_FINISHED_UTC,
+        "observed_reboot_utc": OBSERVED_REBOOT_UTC,
+        "cleanup_absence_inventory_sha256": authority["receipt_only_state"][
+            "cleanup_absence_inventory"
+        ]["observation_set_sha256"],
+        "sealed_rebound_global_exchange_identity": rebound_identity,
+        "global_exchange_children": [],
+        "final_restoration_observation": final_observation,
+        "receipt_only": True,
+        "cleanup_mutations_performed": False,
+        "security_framework_or_keychain_queries_performed": False,
+        "native_experiment_executed": False,
+        "complete_disposable_baseline_restored": True,
+        "restoration_sha256": "",
+    }
+    receipt["restoration_sha256"] = receipt_restoration_binding(receipt)
+    membrane.publish_bytes_no_clobber(canonical(receipt), RESTORATION_PATH, 0, 0, 0o444)
+    receipt_bytes, _ = membrane.read_bounded_exact_file(
+        RESTORATION_PATH, 0, 0, 0o444, MAX_AUTHORITY_BYTES
+    )
+    if receipt_bytes != canonical(receipt):
+        fail("receipt-only restoration receipt changed after publication")
+    return receipt
+
+
 def load_authority() -> tuple[dict[str, Any], Any]:
     expected = os.environ.get(AUTHORITY_ENV)
     if not is_sha256(expected):
@@ -2171,9 +2841,31 @@ def main() -> int:
         authority = build_authority(sys.argv[2], sys.argv[3], sys.argv[4])
         sys.stdout.buffer.write(canonical(authority))
         return 0
+    if len(sys.argv) == 5 and sys.argv[1] == "observe-receipt":
+        if any(key.startswith("R3_") for key in os.environ):
+            fail("receipt-only observation received authority input")
+        os.environ.clear()
+        os.environ.update(FIXED_ENV)
+        authority = build_receipt_authority(sys.argv[2], sys.argv[3], sys.argv[4])
+        sys.stdout.buffer.write(canonical(authority))
+        return 0
     if len(sys.argv) != 1:
         fail("reboot cleanup execution accepts no arguments")
     authority_keys = sorted(key for key in os.environ if key.startswith("R3_"))
+    if authority_keys == [RECEIPT_AUTHORITY_ENV] and is_sha256(
+        os.environ.get(RECEIPT_AUTHORITY_ENV)
+    ):
+        authority_digest = os.environ[RECEIPT_AUTHORITY_ENV]
+        os.environ.clear()
+        os.environ.update({**FIXED_ENV, RECEIPT_AUTHORITY_ENV: authority_digest})
+        authority, membrane = load_receipt_authority()
+        receipt = execute_receipt_only(authority, membrane)
+        print(
+            "R3 reboot-aware receipt-only finalization PASS "
+            f"restoration_sha256={receipt['restoration_sha256']}",
+            flush=True,
+        )
+        return 0
     if authority_keys != [AUTHORITY_ENV] or not is_sha256(
         os.environ.get(AUTHORITY_ENV)
     ):
