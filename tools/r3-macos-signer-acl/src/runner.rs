@@ -11742,7 +11742,15 @@ fn remove_exact_installed_file(
     expected: Option<&[u8]>,
     expected_physical_identity_sha256: Option<&str>,
 ) -> Result<()> {
-    remove_exact_owned_file(path, expected, expected_physical_identity_sha256, 0, None)
+    remove_exact_owned_file_bounded(
+        path,
+        expected,
+        expected_physical_identity_sha256,
+        0,
+        None,
+        usize::try_from(INSTALLED_ARTIFACT_MAX_BYTES)
+            .context("installed-artifact read bound exceeds usize")?,
+    )
 }
 
 fn remove_exact_owned_file(
@@ -11752,7 +11760,27 @@ fn remove_exact_owned_file(
     expected_uid: u32,
     expected_mode: Option<libc::mode_t>,
 ) -> Result<()> {
-    let Some(bytes) = stable_read_file_optional(path, expected_uid, expected_mode)? else {
+    remove_exact_owned_file_bounded(
+        path,
+        expected,
+        expected_physical_identity_sha256,
+        expected_uid,
+        expected_mode,
+        MAX_CHILD_OUTPUT,
+    )
+}
+
+fn remove_exact_owned_file_bounded(
+    path: &Path,
+    expected: Option<&[u8]>,
+    expected_physical_identity_sha256: Option<&str>,
+    expected_uid: u32,
+    expected_mode: Option<libc::mode_t>,
+    maximum_bytes: usize,
+) -> Result<()> {
+    let Some(bytes) =
+        stable_read_file_optional_bounded(path, expected_uid, expected_mode, maximum_bytes)?
+    else {
         return Ok(());
     };
     if expected.is_some_and(|expected| expected != bytes) {
@@ -12276,6 +12304,40 @@ mod tests {
         assert!(expected.size > u64::try_from(MAX_CHILD_OUTPUT).unwrap());
         reattest_root_install_identity(&expected, Some(&sha256_hex_v2(&bytes)))
             .expect("multi-megabyte installed artifact remains within its distinct ceiling");
+    }
+
+    #[test]
+    fn alternate_coordinator_cleanup_uses_installed_artifact_bound_only() {
+        let bytes = vec![0x43; 2_398_672];
+        let fixture = InstalledArtifactFixture::create("alternate-coordinator", &bytes);
+        let expected = fixture.identity();
+        assert!(expected.size > u64::try_from(MAX_CHILD_OUTPUT).unwrap());
+        reattest_root_install_identity(&expected, Some(&sha256_hex_v2(&bytes)))
+            .expect("manifest-bound alternate coordinator fits the installed-artifact ceiling");
+
+        let source = include_str!("runner.rs");
+        let installed_cleanup = source
+            .split("fn remove_exact_installed_file(")
+            .nth(1)
+            .expect("installed cleanup function remains present")
+            .split("\nfn ")
+            .next()
+            .expect("installed cleanup function has a closed body");
+        assert!(installed_cleanup.contains("INSTALLED_ARTIFACT_MAX_BYTES"));
+        assert!(installed_cleanup.contains("remove_exact_owned_file_bounded("));
+        let document_read = source
+            .split("fn stable_read_file_optional(")
+            .nth(1)
+            .expect("document read function remains present")
+            .split("\nfn ")
+            .next()
+            .expect("document read function has a closed body");
+        assert!(document_read.contains("MAX_CHILD_OUTPUT"));
+        assert!(!document_read.contains("INSTALLED_ARTIFACT_MAX_BYTES"));
+
+        std::fs::hard_link(&fixture.path, fixture.root.join("identity-drift"))
+            .expect("create installed-artifact link-count drift");
+        assert!(reattest_root_install_identity(&expected, Some(&sha256_hex_v2(&bytes))).is_err());
     }
 
     #[test]
