@@ -49,6 +49,47 @@ pub(crate) enum ExactAbsentKeyAttribute {
     Label,
 }
 
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub(crate) struct ProductEquivalentCapabilityProjection {
+    pub private_key_class: bool,
+    pub p256_key_type: bool,
+    pub permanent: bool,
+    pub key_size_bits: i64,
+    pub can_sign: bool,
+    pub sensitive: bool,
+    pub extractable: bool,
+}
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub(crate) struct ProductEquivalentPersistedPosture {
+    pub sensitive: bool,
+    pub extractable: bool,
+}
+
+pub(crate) fn validate_product_equivalent_capability_projection(
+    value: ProductEquivalentCapabilityProjection,
+) -> Result<ProductEquivalentPersistedPosture> {
+    if !value.private_key_class {
+        bail!("product-equivalent signer has mismatched private key class")
+    }
+    if !value.p256_key_type {
+        bail!("product-equivalent signer has mismatched P-256 key type")
+    }
+    if !value.permanent {
+        bail!("product-equivalent signer has mismatched permanent state")
+    }
+    if value.key_size_bits != 256 {
+        bail!("product-equivalent signer is not exactly P-256")
+    }
+    if !value.can_sign {
+        bail!("product-equivalent signer has mismatched sign capability")
+    }
+    Ok(ProductEquivalentPersistedPosture {
+        sensitive: value.sensitive,
+        extractable: value.extractable,
+    })
+}
+
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub(crate) struct FixedP256SignatureV2 {
     pub public_spki_der_base64url: String,
@@ -539,16 +580,18 @@ fn create_product_equivalent_signer_without_access_impl(
     unsafe {
         let mut owned = OwnedCf::new();
         let keychain = open_explicit_system_keychain(&mut owned)?;
-        if exact_private_key_match(&mut owned, keychain, config)?.is_some() {
+        if product_equivalent_private_key_match(&mut owned, keychain, config)?.is_some() {
             bail!("exact product-equivalent experiment signer already exists")
         }
-        let _created = create_exact_key(&mut owned, keychain, config, None)?;
-        if exact_private_key_match(&mut owned, keychain, config)?.is_none() {
-            bail!("product-equivalent signer did not reopen through its exact identity")
-        }
+        let (_created, raw_cferror_code) =
+            create_product_equivalent_key(&mut owned, keychain, config)?;
+        let (_, _, persisted) = product_equivalent_private_key_match(&mut owned, keychain, config)?
+            .context("product-equivalent signer did not reopen through its exact identity")?;
         Ok(ProductEquivalentCreationReceipt {
-            raw_cferror_code: 0,
+            raw_cferror_code,
             present_after: true,
+            persisted_sensitive: persisted.sensitive,
+            persisted_extractable: persisted.extractable,
         })
     }
 }
@@ -559,7 +602,7 @@ fn exact_identity_present_impl(config: &ExactSignerConfig) -> Result<bool> {
     unsafe {
         let mut owned = OwnedCf::new();
         let keychain = open_explicit_system_keychain(&mut owned)?;
-        Ok(exact_private_key_match(&mut owned, keychain, config)?.is_some())
+        Ok(product_equivalent_private_key_match(&mut owned, keychain, config)?.is_some())
     }
 }
 
@@ -570,7 +613,8 @@ fn exact_delete_receipt_impl(config: &ExactSignerConfig) -> Result<ExactDeleteRe
     unsafe {
         let mut owned = OwnedCf::new();
         let keychain = open_explicit_system_keychain(&mut owned)?;
-        let Some((key, _)) = exact_private_key_match(&mut owned, keychain, config)? else {
+        let Some((key, _, _)) = product_equivalent_private_key_match(&mut owned, keychain, config)?
+        else {
             return Ok(ExactDeleteReceipt {
                 raw_os_status: ERR_SEC_ITEM_NOT_FOUND,
                 classification: ExactDeleteClassification::AlreadyAbsent,
@@ -579,7 +623,8 @@ fn exact_delete_receipt_impl(config: &ExactSignerConfig) -> Result<ExactDeleteRe
         };
         let query = exact_delete_query(&mut owned, keychain, key, config.application_tag())?;
         let status = SecItemDelete(query.cast());
-        let present_after = exact_private_key_match(&mut owned, keychain, config)?.is_some();
+        let present_after =
+            product_equivalent_private_key_match(&mut owned, keychain, config)?.is_some();
         let classification = classify_delete_status(status);
         match classification {
             ExactDeleteClassification::DeletedAndAbsent if present_after => {
@@ -1054,6 +1099,63 @@ unsafe fn create_exact_key(
     Ok(created)
 }
 
+/// Create the exact product-equivalent signer using the same private-key attributes as the
+/// production macOS lifecycle signer.  In particular this lane deliberately does not add an
+/// explicit SecAccess, sensitivity, extractability, or closed negative-capability policy.
+unsafe fn create_product_equivalent_key(
+    owned: &mut OwnedCf,
+    keychain: SecKeychain,
+    config: &ExactSignerConfig,
+) -> Result<(SecKey, i64)> {
+    // SAFETY: created values remain held through key creation.
+    let tag = unsafe { cf_data(owned, config.application_tag())? };
+    // SAFETY: same ownership.
+    let label = unsafe { cf_string(owned, config.label())? };
+    // SAFETY: same ownership.
+    let bits = unsafe { cf_number_i64(owned, 256)? };
+    // SAFETY: every dictionary value remains live.
+    let private_attributes = unsafe {
+        dictionary(
+            owned,
+            &[
+                (kSecAttrIsPermanent, kCFBooleanTrue),
+                (kSecAttrApplicationTag, tag),
+                (kSecAttrLabel, label),
+                (kSecAttrCanSign, kCFBooleanTrue),
+            ],
+        )?
+    };
+    // SAFETY: every dictionary value remains live.
+    let parameters = unsafe {
+        dictionary(
+            owned,
+            &[
+                (kSecAttrKeyType, kSecAttrKeyTypeECSECPrimeRandom),
+                (kSecAttrKeySizeInBits, bits),
+                (kSecPrivateKeyAttrs, private_attributes.cast()),
+                (kSecUseKeychain, keychain.cast()),
+                (kSecUseAuthenticationUI, kSecUseAuthenticationUIFail),
+            ],
+        )?
+    };
+    let mut error: CfType = ptr::null();
+    // SAFETY: parameters and output remain live.
+    let created = unsafe { SecKeyCreateRandomKey(parameters.cast(), &mut error) };
+    // SAFETY: error follows the CFError create rule when non-null.
+    let error_code = unsafe { take_cf_error_code(owned, error) };
+    if created.is_null() {
+        bail!("create product-equivalent P-256 signer failed with CFError code {error_code}")
+    }
+    owned.hold(created);
+    // SAFETY: created remains held and only the key's product-equivalent attribute projection
+    // escapes.
+    unsafe { validate_product_equivalent_key_capabilities(owned, created)? };
+    Ok((
+        created,
+        i64::try_from(error_code).context("product-equivalent CFError code exceeds i64")?,
+    ))
+}
+
 unsafe fn build_exact_access(
     owned: &mut OwnedCf,
     config: &ExactSignerConfig,
@@ -1465,6 +1567,51 @@ unsafe fn exact_private_key_query(
     }
 }
 
+unsafe fn product_equivalent_private_key_match(
+    owned: &mut OwnedCf,
+    keychain: SecKeychain,
+    config: &ExactSignerConfig,
+) -> Result<Option<(SecKey, CfType, ProductEquivalentPersistedPosture)>> {
+    // SAFETY: query remains held.
+    let query = unsafe { exact_private_key_query(owned, keychain, config)? };
+    let mut result: CfType = ptr::null();
+    // SAFETY: query and output pointer are valid.
+    let status = unsafe { SecItemCopyMatching(query.cast(), &mut result) };
+    if status == ERR_SEC_ITEM_NOT_FOUND {
+        return Ok(None);
+    }
+    if status != ERR_SEC_SUCCESS || result.is_null() {
+        bail!("lookup exact product-equivalent signer failed with OSStatus {status}")
+    }
+    owned.hold(result);
+    // SAFETY: live CF object.
+    if unsafe { CFGetTypeID(result) } != unsafe { CFArrayGetTypeID() } {
+        bail!("exact product-equivalent signer lookup returned a non-array result")
+    }
+    // SAFETY: validated array.
+    let count = unsafe { CFArrayGetCount(result) };
+    if count != 1 {
+        bail!("exact signer identity is ambiguous ({count} matches)")
+    }
+    // SAFETY: array has exactly one element.
+    let attributes = unsafe { CFArrayGetValueAtIndex(result, 0) };
+    // SAFETY: element is live.
+    if attributes.is_null()
+        || unsafe { CFGetTypeID(attributes) } != unsafe { CFDictionaryGetTypeID() }
+    {
+        bail!("exact product-equivalent signer lookup returned invalid attributes")
+    }
+    // SAFETY: validated dictionary and static key.
+    let key: SecKey = unsafe { CFDictionaryGetValue(attributes, kSecValueRef) }.cast();
+    if key.is_null() {
+        bail!("exact product-equivalent signer lookup returned a null key")
+    }
+    // SAFETY: attributes and key remain live with result.
+    let persisted =
+        unsafe { validate_product_equivalent_persisted_identity(owned, attributes, key, config)? };
+    Ok(Some((key, attributes, persisted)))
+}
+
 unsafe fn exact_private_key_match(
     owned: &mut OwnedCf,
     keychain: SecKeychain,
@@ -1526,6 +1673,24 @@ unsafe fn validate_persisted_identity(
         validate_key_capabilities(owned, key)?;
     }
     Ok(())
+}
+
+unsafe fn validate_product_equivalent_persisted_identity(
+    owned: &mut OwnedCf,
+    attributes: CfType,
+    key: SecKey,
+    config: &ExactSignerConfig,
+) -> Result<ProductEquivalentPersistedPosture> {
+    // SAFETY: created comparison values remain held.
+    let tag = unsafe { cf_data(owned, config.application_tag())? };
+    // SAFETY: created comparison value remains held.
+    let label = unsafe { cf_string(owned, config.label())? };
+    // SAFETY: dictionary and expected values are live.
+    unsafe {
+        require_attribute(attributes, kSecAttrApplicationTag, tag, "application tag")?;
+        require_attribute(attributes, kSecAttrLabel, label, "label")?;
+        validate_product_equivalent_key_capabilities(owned, key)
+    }
 }
 
 unsafe fn disposable_signer_identity(
@@ -1721,6 +1886,80 @@ unsafe fn validate_key_capabilities(owned: &mut OwnedCf, key: SecKey) -> Result<
         bail!("exact signer is not exactly P-256")
     }
     Ok(())
+}
+
+unsafe fn validate_product_equivalent_key_capabilities(
+    owned: &mut OwnedCf,
+    key: SecKey,
+) -> Result<ProductEquivalentPersistedPosture> {
+    // SAFETY: key is live and returned dictionary follows the copy rule.
+    let attributes = unsafe { SecKeyCopyAttributes(key) };
+    if attributes.is_null() {
+        bail!("product-equivalent signer has no inspectable key attributes")
+    }
+    owned.hold(attributes);
+    // SAFETY: attributes and framework statics are live.
+    let private_key_class =
+        unsafe { attribute_equals(attributes, kSecAttrKeyClass, kSecAttrKeyClassPrivate) };
+    // SAFETY: same live objects.
+    let p256_key_type =
+        unsafe { attribute_equals(attributes, kSecAttrKeyType, kSecAttrKeyTypeECSECPrimeRandom) };
+    // SAFETY: same live objects.
+    let permanent = unsafe { attribute_equals(attributes, kSecAttrIsPermanent, kCFBooleanTrue) };
+    // SAFETY: same live objects.
+    let can_sign = unsafe { attribute_equals(attributes, kSecAttrCanSign, kCFBooleanTrue) };
+    // SAFETY: validated dictionary and static key.
+    let key_size = unsafe { CFDictionaryGetValue(attributes, kSecAttrKeySizeInBits) };
+    let mut key_size_bits = -1_i64;
+    // SAFETY: non-null key_size is a live CFNumber; output is writable.
+    if key_size.is_null()
+        || unsafe {
+            CFNumberGetValue(
+                key_size,
+                K_CF_NUMBER_SINT64,
+                (&mut key_size_bits as *mut i64).cast(),
+            )
+        } == 0
+    {
+        key_size_bits = -1;
+    }
+    // SAFETY: validated dictionary and framework boolean values.
+    let sensitive =
+        unsafe { read_boolean_attribute(attributes, kSecAttrIsSensitive, "sensitive state")? };
+    // SAFETY: same.
+    let extractable =
+        unsafe { read_boolean_attribute(attributes, kSecAttrIsExtractable, "extractable state")? };
+    validate_product_equivalent_capability_projection(ProductEquivalentCapabilityProjection {
+        private_key_class,
+        p256_key_type,
+        permanent,
+        key_size_bits,
+        can_sign,
+        sensitive,
+        extractable,
+    })
+}
+
+unsafe fn attribute_equals(attributes: CfType, key: CfType, expected: CfType) -> bool {
+    // SAFETY: attributes is a live dictionary and non-null observed values remain live with it.
+    let observed = unsafe { CFDictionaryGetValue(attributes, key) };
+    !observed.is_null() && unsafe { CFEqual(observed, expected) } != 0
+}
+
+unsafe fn read_boolean_attribute(attributes: CfType, key: CfType, label: &str) -> Result<bool> {
+    // SAFETY: attributes is a live dictionary.
+    let observed = unsafe { CFDictionaryGetValue(attributes, key) };
+    if observed.is_null() {
+        bail!("product-equivalent signer omitted {label}")
+    }
+    // SAFETY: all values are live CF objects.
+    if unsafe { CFEqual(observed, kCFBooleanTrue) } != 0 {
+        Ok(true)
+    } else if unsafe { CFEqual(observed, kCFBooleanFalse) } != 0 {
+        Ok(false)
+    } else {
+        bail!("product-equivalent signer returned non-boolean {label}")
+    }
 }
 
 unsafe fn require_attribute(

@@ -395,6 +395,8 @@ pub struct ExactDeleteReceipt {
 pub struct ProductEquivalentCreationReceipt {
     pub raw_cferror_code: i64,
     pub present_after: bool,
+    pub persisted_sensitive: bool,
+    pub persisted_extractable: bool,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]
@@ -641,7 +643,7 @@ mod tests {
     fn product_equivalent_constructor_omits_access_and_routes_are_sealed() {
         let source = include_str!("ffi.rs");
         assert!(source.contains("create_product_equivalent_signer_without_access"));
-        assert!(source.contains("create_exact_key(&mut owned, keychain, config, None)"));
+        assert!(source.contains("create_product_equivalent_key(&mut owned, keychain, config)"));
 
         let creator = include_str!("bin/creator_route.rs");
         let wrong = include_str!("bin/wrong_identity.rs");
@@ -705,7 +707,7 @@ mod tests {
         let probe = source
             .find("fn probe_nonmatch_owner_access_in_memory_impl")
             .unwrap();
-        let key_create = source.find("fn create_exact_key").unwrap();
+        let key_create = source.find("unsafe fn create_exact_key").unwrap();
         let surface = &source[probe..key_create];
         assert!(surface.contains("SecAccessCreateWithOwnerAndACL"));
         assert!(surface.contains("SecAccessCopyOwnerAndACL"));
@@ -727,5 +729,92 @@ mod tests {
             ffi::classify_copied_acl_list(0, nonnull).unwrap(),
             Some(nonnull)
         );
+    }
+
+    #[test]
+    fn product_equivalent_capabilities_accept_the_observed_product_posture() {
+        let posture = ffi::validate_product_equivalent_capability_projection(
+            ffi::ProductEquivalentCapabilityProjection {
+                private_key_class: true,
+                p256_key_type: true,
+                permanent: true,
+                key_size_bits: 256,
+                can_sign: true,
+                sensitive: false,
+                extractable: true,
+            },
+        )
+        .unwrap();
+        assert!(!posture.sensitive);
+        assert!(posture.extractable);
+    }
+
+    #[test]
+    fn product_equivalent_capabilities_reject_required_product_identity_drift() {
+        let valid = ffi::ProductEquivalentCapabilityProjection {
+            private_key_class: true,
+            p256_key_type: true,
+            permanent: true,
+            key_size_bits: 256,
+            can_sign: true,
+            sensitive: false,
+            extractable: true,
+        };
+        for invalid in [
+            ffi::ProductEquivalentCapabilityProjection {
+                private_key_class: false,
+                ..valid
+            },
+            ffi::ProductEquivalentCapabilityProjection {
+                p256_key_type: false,
+                ..valid
+            },
+            ffi::ProductEquivalentCapabilityProjection {
+                permanent: false,
+                ..valid
+            },
+            ffi::ProductEquivalentCapabilityProjection {
+                key_size_bits: 384,
+                ..valid
+            },
+            ffi::ProductEquivalentCapabilityProjection {
+                can_sign: false,
+                ..valid
+            },
+        ] {
+            assert!(ffi::validate_product_equivalent_capability_projection(invalid).is_err());
+        }
+    }
+
+    #[test]
+    fn product_equivalent_native_lane_is_split_from_strict_explicit_acl_validation() {
+        let source = include_str!("ffi.rs");
+        let product_create_start = source
+            .find("unsafe fn create_product_equivalent_key")
+            .unwrap();
+        let product_create_end = source[product_create_start..]
+            .find("unsafe fn build_exact_access")
+            .map(|offset| product_create_start + offset)
+            .unwrap();
+        let product_create = &source[product_create_start..product_create_end];
+        assert!(product_create.contains("kSecAttrIsPermanent"));
+        assert!(product_create.contains("kSecAttrCanSign"));
+        assert!(!product_create.contains("kSecAttrAccess"));
+        assert!(!product_create.contains("kSecAttrIsSensitive"));
+        assert!(!product_create.contains("kSecAttrIsExtractable"));
+
+        let product_match = &source[source
+            .find("unsafe fn product_equivalent_private_key_match")
+            .unwrap()
+            ..source.find("unsafe fn exact_private_key_match").unwrap()];
+        assert!(product_match.contains("exact signer identity is ambiguous"));
+        assert!(product_match.contains("validate_product_equivalent_persisted_identity"));
+
+        let strict = &source[source.find("unsafe fn validate_key_capabilities").unwrap()
+            ..source.find("unsafe fn require_attribute").unwrap()];
+        assert!(strict.contains("kSecAttrIsSensitive"));
+        assert!(strict.contains("kCFBooleanTrue"));
+        assert!(strict.contains("kSecAttrIsExtractable"));
+        assert!(strict.contains("kCFBooleanFalse"));
     }
 }

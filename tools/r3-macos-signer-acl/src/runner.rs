@@ -22,9 +22,8 @@ use std::time::Duration;
 use substrate_common::macos_retirement_v2::ExecutableIdentityV2;
 use substrate_common::macos_retirement_v2::{
     canonical_bytes_v2, document_sha256_v2, parse_canonical_bounded_v2, parse_canonical_v2,
-    sha256_hex_v2,
-    validate_launch_identity_v2, FinalizationRequestV2, FinalizerResponseV2, LaunchIdentityV2,
-    MAC_R3_COORDINATOR_INBOX_ROOT_V2, MAC_R3_COORDINATOR_PATH_V2,
+    sha256_hex_v2, validate_launch_identity_v2, FinalizationRequestV2, FinalizerResponseV2,
+    LaunchIdentityV2, MAC_R3_COORDINATOR_INBOX_ROOT_V2, MAC_R3_COORDINATOR_PATH_V2,
     MAC_R3_COORDINATOR_SIGNING_IDENTIFIER_V2, MAC_R3_FINALIZER_ENDPOINT_V2,
     MAC_R3_FINALIZER_JOURNAL_ROOT_V2, MAC_R3_FINALIZER_LAUNCHD_LABEL_V2, MAC_R3_FINALIZER_PATH_V2,
     MAC_R3_FINALIZER_PLIST_PATH_V2, MAC_R3_FINALIZER_REQUEST_PATH_V2,
@@ -53,8 +52,8 @@ use substrate_r3_macos_finalizer::experiment::durable::{ExperimentArtifactV2, Ex
 use substrate_r3_macos_finalizer::experiment::evidence_export::{
     build_native_evidence_export_v2, build_repetition_native_evidence_export_v2,
     build_runner_private_archive_v2, build_securityagent_report_archive_v2,
-    native_evidence_cleanup_artifact_set_sha256_v2, runner_private_archive_union_v2,
-    runner_private_archive_entry_max_bytes_v2, NativeEvidenceCleanupReceiptV2,
+    native_evidence_cleanup_artifact_set_sha256_v2, runner_private_archive_entry_max_bytes_v2,
+    runner_private_archive_union_v2, NativeEvidenceCleanupReceiptV2,
     NativeEvidenceExportAcknowledgementV2, NativeEvidenceExportV2,
     RepetitionNativeEvidenceExportV2, RunnerPrivateArchiveEntryV2, RunnerPrivateArchiveV2,
     SecurityAgentEvidenceArmV2, SecurityAgentEvidenceBindingV2, SecurityAgentReportArchiveV2,
@@ -103,7 +102,10 @@ use substrate_r3_macos_finalizer::experiment::{
 };
 use substrate_r3_macos_finalizer::journal::LockedJournal;
 
-use crate::experiment::{CreatorRollbackReceiptV2, MarkerRoot, MarkerState};
+use crate::experiment::{
+    CreatorRollbackMarkerV2, CreatorRollbackPhaseV2, CreatorRollbackReceiptV2, MarkerRoot,
+    MarkerState,
+};
 use crate::ffi::{DisposableAclKind, ExactAbsentKeyAttribute, NonInteractiveSecurity};
 use crate::immutable_publish::{
     publish_exact_file, read_exact_published_file, read_staged_file, stage_exact_file,
@@ -118,7 +120,7 @@ use crate::runner_identity::{
 };
 use crate::securityagent::{
     measured_child_supplementary_groups_v2, observe_idle_baseline_sha256,
-    observe_rearmed_root_operation_with_raw, observe_root_operation_with_raw, observe_sealed_child,
+    observe_rearmed_root_operation_with_raw, observe_root_operation_with_raw,
     observe_sealed_child_with, observe_stopped_child_startup, MeasuredCommandV2, ObservedChildV2,
     SEALED_GROUP_MEASUREMENT_FRAME_BYTES_V2, SEALED_GROUP_MEASUREMENT_MAGIC_V2,
 };
@@ -301,6 +303,30 @@ struct CreatorProcessAttestationV2 {
     environment_variable_count: u32,
     stdin_is_dev_null: bool,
     cwd: &'static str,
+}
+
+#[derive(Debug, Serialize)]
+#[serde(deny_unknown_fields)]
+struct CreatorRollbackProcessAttestationV2 {
+    schema_owner: &'static str,
+    schema_version: u32,
+    experiment_id: &'static str,
+    repetition: FixedRepetitionV2,
+    rollback_phase_before: CreatorRollbackPhaseV2,
+    failure_observation_sha256: String,
+    pid: i32,
+    effective_uid: u32,
+    effective_gid: u32,
+    supplementary_groups: SupplementaryGroupAttestationV2,
+    canonical_account: String,
+    process_start_identity_sha256: String,
+    executable_identity_sha256: String,
+    executable_path: &'static str,
+    argv_count: u8,
+    environment_variable_count: u32,
+    stdin_is_dev_null: bool,
+    cwd: &'static str,
+    resume_signal_authorized_count: u8,
 }
 
 #[derive(Debug, Serialize)]
@@ -1843,7 +1869,7 @@ fn run_creator_arms(
 ) -> Result<()> {
     let marker = MarkerRoot::open()?;
     if marker.read_rollback()?.is_some() {
-        return recover_creator_rollback(&marker);
+        return recover_creator_rollback(&marker, inputs);
     }
     recover_unobserved_creator_arm(&marker, inputs)?;
     loop {
@@ -1967,26 +1993,14 @@ fn run_creator_arms(
             } else {
                 document_sha256_v2(&arm)?
             };
+            let original_failure = creator_failure_diagnostic(&observed);
             marker.prepare_rollback(repetition, &failure_sha256)?;
-            let rollback = observe_sealed_child(sealed_command(
-                CREATOR_EXECUTABLE_PATH,
-                MARKER_ROOT,
-                None,
-                None,
-            )?)?;
-            if rollback.unexpected_ui_observed || !rollback.status.success() {
-                bail!("creator rollback did not complete noninteractively")
-            }
-            let receipt: CreatorRollbackReceiptV2 = parse_stdout_json(&rollback)?;
-            let cursor = marker
-                .read_rollback()?
-                .context("creator rollback cursor disappeared")?;
-            receipt.validate(&cursor)?;
-            write_runner_receipt(
-                "creator-emergency-rollback.receipt.v2.json",
-                &canonical_bytes_v2(&receipt)?,
-            )?;
-            bail!("creator route stopped after exact emergency rollback")
+            observe_attested_creator_rollback(&marker, inputs).with_context(|| {
+                format!("rollback after original creator failure: {original_failure}")
+            })?;
+            bail!(
+                "original creator failure: {original_failure}; exact emergency rollback completed"
+            )
         }
         if after == before {
             bail!("sealed creator arm succeeded without advancing its fixed marker")
@@ -2177,6 +2191,14 @@ fn validate_creator_typed_receipt(
                 .get("present_after")
                 .and_then(serde_json::Value::as_bool)
                 != Some(true)
+            || entry
+                .get("persisted_sensitive")
+                .and_then(serde_json::Value::as_bool)
+                .is_none()
+            || entry
+                .get("persisted_extractable")
+                .and_then(serde_json::Value::as_bool)
+                .is_none()
     }) {
         bail!("creator typed receipt creation result changed")
     }
@@ -2382,6 +2404,76 @@ fn attest_stopped_creator_process(
     // SAFETY: the exact stopped child is resumed once after its attestation is durable.
     if unsafe { libc::kill(pid, libc::SIGCONT) } != 0 {
         return Err(std::io::Error::last_os_error()).context("resume exact creator process");
+    }
+    Ok(digest)
+}
+
+fn attest_stopped_creator_rollback_process(
+    pid: i32,
+    cursor: &CreatorRollbackMarkerV2,
+    identity: &ExecutableIdentityV2,
+) -> Result<String> {
+    cursor.validate()?;
+    if !matches!(
+        cursor.phase,
+        CreatorRollbackPhaseV2::Prepared | CreatorRollbackPhaseV2::Invoked
+    ) {
+        bail!("creator rollback process was spawned outside an open rollback phase")
+    }
+    wait_for_sigstop(pid)?;
+    let first = process_info(pid)?;
+    if first.pid != pid as u32
+        || first.uid != 0
+        || first.gid != 0
+        || pid_path(pid)? != Path::new(CREATOR_EXECUTABLE_PATH)
+    {
+        bail!("stopped creator rollback differs from its exact root exec identity")
+    }
+    let account = canonical_account(0)?.0;
+    if account != "root" {
+        bail!("stopped creator rollback canonical account is not root")
+    }
+    let measured =
+        measure_frozen_executable(frozen_code_for_identity(CREATOR_EXECUTABLE_PATH, identity)?)?;
+    if measured != *identity {
+        bail!("stopped creator rollback executable identity changed after exec")
+    }
+    let attestation = CreatorRollbackProcessAttestationV2 {
+        schema_owner: "substrate.r3-macos-disposable-creator-rollback-process-attestation",
+        schema_version: EXPERIMENT_VERSION_V2,
+        experiment_id: EXPERIMENT_ID_V2,
+        repetition: cursor.repetition,
+        rollback_phase_before: cursor.phase,
+        failure_observation_sha256: cursor.failure_observation_sha256.clone(),
+        pid,
+        effective_uid: first.uid,
+        effective_gid: first.gid,
+        supplementary_groups: measured_child_supplementary_groups_v2(pid)?,
+        canonical_account: account,
+        process_start_identity_sha256: document_sha256_v2(&ProcessStartJoinV2 {
+            pid,
+            seconds: first.start_seconds,
+            microseconds: first.start_microseconds,
+        })?,
+        executable_identity_sha256: document_sha256_v2(identity)?,
+        executable_path: CREATOR_EXECUTABLE_PATH,
+        argv_count: 0,
+        environment_variable_count: 0,
+        stdin_is_dev_null: true,
+        cwd: MARKER_ROOT,
+        resume_signal_authorized_count: 1,
+    };
+    let bytes = canonical_bytes_v2(&attestation)?;
+    let digest = sha256_hex_v2(&bytes);
+    write_runner_receipt(
+        &format!("creator-emergency-rollback.process-attestation.{digest}.v2.json"),
+        &bytes,
+    )?;
+    // SAFETY: the exact stopped rollback child is resumed once, and only after the complete
+    // attestation above is durable.
+    if unsafe { libc::kill(pid, libc::SIGCONT) } != 0 {
+        return Err(std::io::Error::last_os_error())
+            .context("resume exact creator rollback process");
     }
     Ok(digest)
 }
@@ -2640,11 +2732,11 @@ fn runner_securityagent_alert(
     }))
 }
 
-fn recover_creator_rollback(marker: &MarkerRoot) -> Result<()> {
+fn recover_creator_rollback(marker: &MarkerRoot, inputs: &FrozenRunnerInputs) -> Result<()> {
     let cursor = marker
         .read_rollback()?
         .context("creator rollback recovery cursor is absent")?;
-    if cursor.phase == crate::experiment::CreatorRollbackPhaseV2::Observed {
+    if cursor.phase == CreatorRollbackPhaseV2::Observed {
         let bytes = stable_read_file(
             &Path::new(RUNNER_ROOT).join("creator-emergency-rollback.receipt.v2.json"),
             0,
@@ -2654,14 +2746,45 @@ fn recover_creator_rollback(marker: &MarkerRoot) -> Result<()> {
         receipt.validate(&cursor)?;
         bail!("creator route previously stopped after exact emergency rollback")
     }
-    let rollback = observe_sealed_child(sealed_command(
-        CREATOR_EXECUTABLE_PATH,
-        MARKER_ROOT,
-        None,
-        None,
-    )?)?;
-    if rollback.unexpected_ui_observed || !rollback.status.success() {
-        bail!("creator rollback recovery did not complete noninteractively")
+    if !matches!(
+        cursor.phase,
+        CreatorRollbackPhaseV2::Prepared | CreatorRollbackPhaseV2::Invoked
+    ) {
+        bail!("creator rollback recovery cursor is outside its two open phases")
+    }
+    observe_attested_creator_rollback(marker, inputs)?;
+    bail!("creator route recovered exact emergency rollback and stopped")
+}
+
+fn observe_attested_creator_rollback(
+    marker: &MarkerRoot,
+    inputs: &FrozenRunnerInputs,
+) -> Result<CreatorRollbackReceiptV2> {
+    let before = marker
+        .read_rollback()?
+        .context("creator rollback cursor is absent before attested invocation")?;
+    if !matches!(
+        before.phase,
+        CreatorRollbackPhaseV2::Prepared | CreatorRollbackPhaseV2::Invoked
+    ) {
+        bail!("creator rollback invocation is outside its two open phases")
+    }
+    let (rollback, process_attestation_sha256) = observe_sealed_child_with(
+        sealed_command(CREATOR_EXECUTABLE_PATH, MARKER_ROOT, None, None)?,
+        |pid| {
+            attest_stopped_creator_rollback_process(pid as i32, &before, &inputs.creator_identity)
+        },
+    )?;
+    process_attestation_sha256
+        .context("creator rollback lacks its durable stopped-process attestation")?;
+    if rollback.unexpected_ui_observed {
+        bail!("creator rollback observed unexpected SecurityAgent UI; preserving state")
+    }
+    if !rollback.status.success() {
+        bail!(
+            "creator rollback failed after attested resume: {}",
+            creator_failure_diagnostic(&rollback)
+        )
     }
     let receipt: CreatorRollbackReceiptV2 = parse_stdout_json(&rollback)?;
     let observed = marker
@@ -2672,7 +2795,20 @@ fn recover_creator_rollback(marker: &MarkerRoot) -> Result<()> {
         "creator-emergency-rollback.receipt.v2.json",
         &canonical_bytes_v2(&receipt)?,
     )?;
-    bail!("creator route recovered exact emergency rollback and stopped")
+    Ok(receipt)
+}
+
+fn creator_failure_diagnostic(observed: &ObservedChildV2) -> String {
+    let stderr = String::from_utf8_lossy(&observed.stderr);
+    let stderr = stderr.trim();
+    if stderr.is_empty() {
+        format!("exit_status={:?}; stderr=<empty>", observed.status.code())
+    } else {
+        format!(
+            "exit_status={:?}; stderr={stderr:?}",
+            observed.status.code()
+        )
+    }
 }
 
 fn recover_unobserved_creator_arm(marker: &MarkerRoot, inputs: &FrozenRunnerInputs) -> Result<()> {
@@ -2750,7 +2886,7 @@ fn recover_unobserved_creator_arm(marker: &MarkerRoot, inputs: &FrozenRunnerInpu
         if marker.read_rollback()?.is_none() {
             marker.prepare_rollback(repetition, &failure_sha256)?;
         }
-        return recover_creator_rollback(marker);
+        return recover_creator_rollback(marker, inputs);
     }
     Ok(())
 }
@@ -9844,11 +9980,7 @@ fn sealed_command(
                 if read_group_count < 0 {
                     return Err(std::io::Error::last_os_error());
                 }
-                normalize_post_drop_getgroups_v2(
-                    read_group_count,
-                    Some(only_group),
-                    effective_gid,
-                )?
+                normalize_post_drop_getgroups_v2(read_group_count, Some(only_group), effective_gid)?
             } else {
                 normalize_post_drop_getgroups_v2(raw_group_count, None, effective_gid)?
             };
@@ -11462,10 +11594,7 @@ fn parse_runner_private_canonical<T: DeserializeOwned + Serialize>(
 fn read_runner_global_pre_effect_packet_optional() -> Result<Option<GlobalPreEffectPacketV2>> {
     read_runner_private_bytes_optional(GLOBAL_PRE_EFFECT_PACKET_RUNNER_PRIVATE_NAME_V2)?
         .map(|bytes| {
-            parse_runner_private_canonical(
-                GLOBAL_PRE_EFFECT_PACKET_RUNNER_PRIVATE_NAME_V2,
-                &bytes,
-            )
+            parse_runner_private_canonical(GLOBAL_PRE_EFFECT_PACKET_RUNNER_PRIVATE_NAME_V2, &bytes)
         })
         .transpose()
 }
@@ -12199,6 +12328,47 @@ mod tests {
     }
 
     #[test]
+    fn creator_rollback_attests_durably_before_exactly_one_resume() {
+        let source = include_str!("runner.rs");
+        let start = source
+            .find("fn attest_stopped_creator_rollback_process")
+            .unwrap();
+        let end = source[start..]
+            .find("fn securityagent_raw_evidence")
+            .map(|offset| start + offset)
+            .unwrap();
+        let surface = &source[start..end];
+        let persist = surface.find("write_runner_receipt").unwrap();
+        let resume = surface.find("libc::SIGCONT").unwrap();
+        assert!(persist < resume);
+        assert_eq!(surface.matches("libc::SIGCONT").count(), 1);
+        assert!(surface.contains("wait_for_sigstop"));
+        assert!(surface.contains("measured_child_supplementary_groups_v2"));
+        assert!(surface.contains("measure_frozen_executable"));
+    }
+
+    #[test]
+    fn creator_rollback_recovery_uses_the_attested_path_for_both_open_phases() {
+        let source = include_str!("runner.rs");
+        let start = source.find("fn recover_creator_rollback").unwrap();
+        let end = source[start..]
+            .find("fn recover_unobserved_creator_arm")
+            .map(|offset| start + offset)
+            .unwrap();
+        let recovery = &source[start..end];
+        assert!(recovery.contains("CreatorRollbackPhaseV2::Prepared"));
+        assert!(recovery.contains("CreatorRollbackPhaseV2::Invoked"));
+        assert!(recovery.contains("observe_attested_creator_rollback"));
+
+        let immediate = &source[source.find("fn run_creator_arms").unwrap()..start];
+        assert!(immediate.contains("observe_attested_creator_rollback"));
+        assert!(immediate.contains("original creator failure"));
+        assert!(!immediate.contains(
+            "observe_sealed_child(sealed_command(\n                CREATOR_EXECUTABLE_PATH"
+        ));
+    }
+
+    #[test]
     fn peer_controls_are_exact_order_and_close_before_response() {
         assert_eq!(PEER_SUBSTITUTION_CONTROL_SEQUENCE_V2.len(), 3);
         assert!(include_str!("runner.rs")
@@ -12577,26 +12747,24 @@ mod tests {
 
         const OBSERVED_GLOBAL_PACKET_BYTES: usize = 1_175_768;
         let empty = canonical_bytes_v2(&serde_json::Value::String(String::new())).unwrap();
-        let observed = canonical_bytes_v2(&serde_json::Value::String("x".repeat(
-            OBSERVED_GLOBAL_PACKET_BYTES - empty.len(),
-        )))
+        let observed = canonical_bytes_v2(&serde_json::Value::String(
+            "x".repeat(OBSERVED_GLOBAL_PACKET_BYTES - empty.len()),
+        ))
         .unwrap();
         assert_eq!(observed.len(), OBSERVED_GLOBAL_PACKET_BYTES);
         assert!(parse_canonical_v2::<serde_json::Value>(&observed).is_err());
-        assert!(parse_runner_private_canonical::<serde_json::Value>(
-            "other.json",
-            &observed,
-        )
-        .is_err());
+        assert!(
+            parse_runner_private_canonical::<serde_json::Value>("other.json", &observed,).is_err()
+        );
         assert!(parse_runner_private_canonical::<serde_json::Value>(
             GLOBAL_PRE_EFFECT_PACKET_RUNNER_PRIVATE_NAME_V2,
             &observed,
         )
         .is_ok());
 
-        let overflow = canonical_bytes_v2(&serde_json::Value::String("x".repeat(
-            GLOBAL_PRE_EFFECT_PACKET_MAX_BYTES_V2 - empty.len() + 1,
-        )))
+        let overflow = canonical_bytes_v2(&serde_json::Value::String(
+            "x".repeat(GLOBAL_PRE_EFFECT_PACKET_MAX_BYTES_V2 - empty.len() + 1),
+        ))
         .unwrap();
         assert_eq!(overflow.len(), GLOBAL_PRE_EFFECT_PACKET_MAX_BYTES_V2 + 1);
         assert!(parse_runner_private_canonical::<serde_json::Value>(

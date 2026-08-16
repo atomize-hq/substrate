@@ -226,6 +226,7 @@ where
 /// Observe one short, sealed creator child. The child is killed immediately on ALERT or if its
 /// bounded arm outlives the one fixed observer window, allowing the root runner to enter only its
 /// compiled rollback path rather than terminating before cleanup.
+#[allow(dead_code)]
 pub(crate) fn observe_sealed_child(command: MeasuredCommandV2) -> Result<ObservedChildV2> {
     observe_sealed_child_with(command, |_| Ok(())).map(|(observed, _)| observed)
 }
