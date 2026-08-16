@@ -41,12 +41,12 @@ pub const CANDIDATE_FREEZE_MANIFEST_OWNER_V2: &str = "substrate.r3-macos-candida
 pub const CANDIDATE_FREEZE_EXTERNAL_FILE_UID_V2: u32 = 501;
 pub const CANDIDATE_FREEZE_EXTERNAL_FILE_GID_V2: u32 = 20;
 pub const CANDIDATE_FREEZE_EXTERNAL_FILE_MODE_V2: u32 = 0o400;
-pub const CANDIDATE_FREEZE_ARTIFACT_ROOT_V2: &str = "/Users/spensermcconnell/Library/Application Support/Atomize/R3MacEvidenceFinalizer/experiments/01a00bc9-2d20-7ff1-98f6-652e2c650588/candidate-freeze";
-pub const CANDIDATE_FREEZE_MANIFEST_INPUT_PATH_V2: &str = "/Users/spensermcconnell/Library/Application Support/Atomize/R3MacEvidenceFinalizer/experiments/01a00bc9-2d20-7ff1-98f6-652e2c650588/candidate-freeze/candidate-manifest-input.v2.json";
-pub const CANDIDATE_FREEZE_COORDINATOR_PROVENANCE_INPUT_PATH_V2: &str = "/Users/spensermcconnell/Library/Application Support/Atomize/R3MacEvidenceFinalizer/experiments/01a00bc9-2d20-7ff1-98f6-652e2c650588/candidate-freeze/coordinator-provenance-input.v2.json";
-pub const CANDIDATE_FREEZE_GLOBAL_PROVENANCE_INPUT_PATH_V2: &str = "/Users/spensermcconnell/Library/Application Support/Atomize/R3MacEvidenceFinalizer/experiments/01a00bc9-2d20-7ff1-98f6-652e2c650588/candidate-freeze/global-provenance-input.v2.json";
-pub const CANDIDATE_FREEZE_MANIFEST_PATH_V2: &str = "/Users/spensermcconnell/Library/Application Support/Atomize/R3MacEvidenceFinalizer/experiments/01a00bc9-2d20-7ff1-98f6-652e2c650588/candidate-freeze/candidate-artifact-manifest.v2.json";
-pub const CANDIDATE_FREEZE_REVIEWED_ADMIN_BLOCK_PATH_V2: &str = "/Users/spensermcconnell/Library/Application Support/Atomize/R3MacEvidenceFinalizer/experiments/01a00bc9-2d20-7ff1-98f6-652e2c650588/candidate-freeze/reviewed-admin-command-block.v2.txt";
+pub const CANDIDATE_FREEZE_ARTIFACT_ROOT_V2: &str = "/Users/spensermcconnell/Library/Application Support/Atomize/R3MacEvidenceFinalizer/experiments/01a00c2b-4966-7750-b906-ef68495ff1dc/candidate-freeze";
+pub const CANDIDATE_FREEZE_MANIFEST_INPUT_PATH_V2: &str = "/Users/spensermcconnell/Library/Application Support/Atomize/R3MacEvidenceFinalizer/experiments/01a00c2b-4966-7750-b906-ef68495ff1dc/candidate-freeze/candidate-manifest-input.v2.json";
+pub const CANDIDATE_FREEZE_COORDINATOR_PROVENANCE_INPUT_PATH_V2: &str = "/Users/spensermcconnell/Library/Application Support/Atomize/R3MacEvidenceFinalizer/experiments/01a00c2b-4966-7750-b906-ef68495ff1dc/candidate-freeze/coordinator-provenance-input.v2.json";
+pub const CANDIDATE_FREEZE_GLOBAL_PROVENANCE_INPUT_PATH_V2: &str = "/Users/spensermcconnell/Library/Application Support/Atomize/R3MacEvidenceFinalizer/experiments/01a00c2b-4966-7750-b906-ef68495ff1dc/candidate-freeze/global-provenance-input.v2.json";
+pub const CANDIDATE_FREEZE_MANIFEST_PATH_V2: &str = "/Users/spensermcconnell/Library/Application Support/Atomize/R3MacEvidenceFinalizer/experiments/01a00c2b-4966-7750-b906-ef68495ff1dc/candidate-freeze/candidate-artifact-manifest.v2.json";
+pub const CANDIDATE_FREEZE_REVIEWED_ADMIN_BLOCK_PATH_V2: &str = "/Users/spensermcconnell/Library/Application Support/Atomize/R3MacEvidenceFinalizer/experiments/01a00c2b-4966-7750-b906-ef68495ff1dc/candidate-freeze/reviewed-admin-command-block.v2.txt";
 pub const CANDIDATE_FREEZE_TEMP_ROOT_V2: &str =
     "/private/tmp/com.atomize.substrate.r3-macos-finalizer-freeze.v2";
 pub const CANDIDATE_FREEZE_REPOSITORY_PATH_V2: &str =
@@ -66,8 +66,8 @@ pub const CANDIDATE_FREEZE_INSTALLED_MANIFEST_PATH_V2: &str = "/Library/Applicat
 /// admits the closed multi-megabyte Mach-O executables while keeping manifest-driven allocation
 /// bounded at every producer and consumer.
 pub const CANDIDATE_FREEZE_INSTALLED_ARTIFACT_MAX_BYTES_V2: u64 = 16 * 1024 * 1024;
-pub const CANDIDATE_FREEZE_COORDINATOR_BUILD_INPUTS_PATH_V2: &str = "/Users/spensermcconnell/Library/Application Support/Atomize/R3MacEvidenceFinalizer/experiments/01a00bc9-2d20-7ff1-98f6-652e2c650588/candidate-freeze/coordinator-build-inputs.v2.json";
-pub const CANDIDATE_FREEZE_GLOBAL_BUILD_INPUTS_PATH_V2: &str = "/Users/spensermcconnell/Library/Application Support/Atomize/R3MacEvidenceFinalizer/experiments/01a00bc9-2d20-7ff1-98f6-652e2c650588/candidate-freeze/global-build-inputs.v2.json";
+pub const CANDIDATE_FREEZE_COORDINATOR_BUILD_INPUTS_PATH_V2: &str = "/Users/spensermcconnell/Library/Application Support/Atomize/R3MacEvidenceFinalizer/experiments/01a00c2b-4966-7750-b906-ef68495ff1dc/candidate-freeze/coordinator-build-inputs.v2.json";
+pub const CANDIDATE_FREEZE_GLOBAL_BUILD_INPUTS_PATH_V2: &str = "/Users/spensermcconnell/Library/Application Support/Atomize/R3MacEvidenceFinalizer/experiments/01a00c2b-4966-7750-b906-ef68495ff1dc/candidate-freeze/global-build-inputs.v2.json";
 
 #[derive(Debug, Clone, Copy, Serialize, Deserialize, PartialEq, Eq, PartialOrd, Ord)]
 #[serde(rename_all = "snake_case")]
@@ -145,7 +145,7 @@ impl CandidateFreezeArtifactRoleV2 {
             Self::BenignInjectionLibrary => BENIGN_INJECTION_LIBRARY_PATH_V2,
             Self::LaunchdPlist => MAC_R3_FINALIZER_PLIST_PATH_V2,
             Self::CapabilityManifest => {
-                "/Users/spensermcconnell/Library/Application Support/Atomize/R3MacEvidenceFinalizer/experiments/01a00bc9-2d20-7ff1-98f6-652e2c650588/candidate-freeze/capability-v2.json"
+                "/Users/spensermcconnell/Library/Application Support/Atomize/R3MacEvidenceFinalizer/experiments/01a00c2b-4966-7750-b906-ef68495ff1dc/candidate-freeze/capability-v2.json"
             }
         }
     }

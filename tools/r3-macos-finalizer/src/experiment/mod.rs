@@ -24,9 +24,9 @@ use serde::{Deserialize, Serialize};
 
 pub const EXPERIMENT_OWNER_V2: &str = "substrate.r3-macos-disposable-finalizer-experiment";
 pub const EXPERIMENT_VERSION_V2: u32 = 2;
-pub const EXPERIMENT_ID_V2: &str = "01a00bc9-2d20-7ff1-98f6-652e2c650588";
-pub const EXPERIMENT_ROOT_V2: &str = "/Users/spensermcconnell/Library/Application Support/Atomize/R3MacEvidenceFinalizer/experiments/01a00bc9-2d20-7ff1-98f6-652e2c650588";
-pub const GLOBAL_PUBLISHER_EXCHANGE_ROOT_V2: &str = "/Users/spensermcconnell/Library/Application Support/Atomize/R3MacEvidenceFinalizer/experiments/01a00bc9-2d20-7ff1-98f6-652e2c650588/global-publisher-exchange";
+pub const EXPERIMENT_ID_V2: &str = "01a00c2b-4966-7750-b906-ef68495ff1dc";
+pub const EXPERIMENT_ROOT_V2: &str = "/Users/spensermcconnell/Library/Application Support/Atomize/R3MacEvidenceFinalizer/experiments/01a00c2b-4966-7750-b906-ef68495ff1dc";
+pub const GLOBAL_PUBLISHER_EXCHANGE_ROOT_V2: &str = "/Users/spensermcconnell/Library/Application Support/Atomize/R3MacEvidenceFinalizer/experiments/01a00c2b-4966-7750-b906-ef68495ff1dc/global-publisher-exchange";
 pub const GLOBAL_PUBLISHER_EXCHANGE_UID_V2: u32 = DISPOSABLE_HARNESS_UID_V2;
 pub const GLOBAL_PUBLISHER_EXCHANGE_GID_V2: u32 = 0;
 pub const GLOBAL_PUBLISHER_EXCHANGE_MODE_V2: u32 = 0o700;
@@ -123,8 +123,8 @@ fn is_sha256(value: &str) -> bool {
 }
 
 pub const DISPOSABLE_SCOPES_V2: [&str; 2] = [
-    "01a00bc9-2d21-7a4b-9e64-8df06f08b8b8",
-    "01a00bc9-2d22-7e00-ab2b-f14c04258877",
+    "01a00c2b-4967-7f62-810d-54a4456ce781",
+    "01a00c2b-4968-7cac-9c7c-d8943f94daaa",
 ];
 pub const CREATOR_SCOPES_V2: [&str; 2] = [
     "019ffeb5-b24c-72a7-80bc-e629f85b37c3",
@@ -322,6 +322,8 @@ mod tests {
             "01a00aa6-5593-7227-8432-87bf380684f1",
             "01a00b11-d9d5-7af6-b9b7-e17d1cbb746b",
             "01a00b11-d9d6-7872-9b8c-2fb75c1f047b",
+            "01a00bc9-2d21-7a4b-9e64-8df06f08b8b8",
+            "01a00bc9-2d22-7e00-ab2b-f14c04258877",
         ] {
             assert!(RepetitionV2::One
                 .validate_binding(RepetitionV2::One.ordinal(), terminal_scope)

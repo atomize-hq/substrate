@@ -13,10 +13,10 @@ import re
 import sys
 
 repository = pathlib.Path(sys.argv[1])
-new_experiment = "01a00bc9-2d20-7ff1-98f6-652e2c650588"
+new_experiment = "01a00c2b-4966-7750-b906-ef68495ff1dc"
 new_scopes = [
-    "01a00bc9-2d21-7a4b-9e64-8df06f08b8b8",
-    "01a00bc9-2d22-7e00-ab2b-f14c04258877",
+    "01a00c2b-4967-7f62-810d-54a4456ce781",
+    "01a00c2b-4968-7cac-9c7c-d8943f94daaa",
 ]
 old_experiment = "019ffec6-95f6-7d30-80bc-8003ce27d5ba"
 old_scopes = [
@@ -35,6 +35,7 @@ terminal_experiments = [
     "01a008ac-fd5e-70b7-b498-5b32121de599",
     "01a00aa6-5591-7405-b0ea-acb5ca1559d5",
     "01a00b11-d9d4-75d2-ad3f-8ea379698723",
+    "01a00bc9-2d20-7ff1-98f6-652e2c650588",
 ]
 terminal_scopes = [
     *old_scopes,
@@ -58,6 +59,8 @@ terminal_scopes = [
     "01a00aa6-5593-7227-8432-87bf380684f1",
     "01a00b11-d9d5-7af6-b9b7-e17d1cbb746b",
     "01a00b11-d9d6-7872-9b8c-2fb75c1f047b",
+    "01a00bc9-2d21-7a4b-9e64-8df06f08b8b8",
+    "01a00bc9-2d22-7e00-ab2b-f14c04258877",
 ]
 expected_routes = {
     "deea3cb3aaf05dd641936bdb98bcc2d3098504d64b455794af689cabe68cd76a",
@@ -71,6 +74,7 @@ expected_sources = {
     "d07da7afca829c710fd4f5416250df661a6b9699ea9a2938c93f8443181e1ae3",
     "e808fc84170cd43b7b62872f7b0479157e727b3fce31f25e140d2c3364ce868c",
     "f962f6777dc5bc7a327f1c30b406851aaca7151b492e9ba38802ffd565566dc9",
+    "dee65e18cbf6b14db19e0fcee41f4ae396524682297b5e67f164218c94b1dcf2",
 }
 
 
@@ -99,7 +103,7 @@ uuid_v7 = re.compile(
 for value in [new_experiment, *new_scopes]:
     if not uuid_v7.fullmatch(value):
         raise SystemExit(f"rotated identity is not canonical UUIDv7: {value}")
-if len({new_experiment, *new_scopes, *terminal_experiments, *terminal_scopes}) != 36:
+if len({new_experiment, *new_scopes, *terminal_experiments, *terminal_scopes}) != 39:
     raise SystemExit("rotated and terminal identities are not pairwise distinct")
 
 root_source = text("scripts/mac/r3-macos-finalizer-root-install.py")
@@ -137,7 +141,7 @@ freeze_source = text("scripts/mac/freeze-r3-macos-finalizer-candidate.sh")
 for required in (
     f'readonly EXPERIMENT_ID="{new_experiment}"',
     'readonly BRANCH="feat/r3-macos-finalizer-rcv-stack"',
-    'readonly ACCEPTED_PARENT_HEAD="e6965c3f76aeb7d07363875807202c0d8b72e969"',
+    'readonly ACCEPTED_PARENT_HEAD="0dba8a847c3455660b4e1ce31835ecd450c51277"',
     '"schema_owner": "substrate.r3-macos-candidate-committed-tree-inventory"',
     '"status", "--porcelain=v2", "-z"',
     '"rev-parse", "HEAD^{tree}"',
