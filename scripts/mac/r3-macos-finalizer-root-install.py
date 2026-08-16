@@ -26,7 +26,7 @@ import sys
 from typing import Any, NoReturn
 
 
-EXPERIMENT_ID = "01a00830-f0ee-702b-9ff9-b628ceca730b"
+EXPERIMENT_ID = "01a00876-e823-7b81-ae80-e76a7bd8cae3"
 EXPERIMENT_ROOT = (
     pathlib.Path(
         "/Users/spensermcconnell/Library/Application Support/Atomize/"
@@ -279,8 +279,8 @@ INSTALL_DIRECTORIES = SUPPORT_DIRECTORIES + [
     (str(GLOBAL_EXCHANGE), 501, 0, 0o700),
 ]
 SCOPES = [
-    "01a00830-f0ef-71b0-a1bd-2a736ad2c6f4",
-    "01a00830-f0f0-70f3-8957-c8a4d49be7d1",
+    "01a00876-e824-7965-adb3-d374fc016dca",
+    "01a00876-e825-7ea6-a7da-33718a85d80d",
 ]
 
 
