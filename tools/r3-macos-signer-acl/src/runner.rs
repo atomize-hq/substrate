@@ -2178,7 +2178,7 @@ fn validate_creator_typed_receipt(
             Some(-25_300),
             Some("already_absent"),
             false,
-            None,
+            Some(0),
             false,
         ),
         _ => bail!("creator typed receipt is outside a closed prepared route"),
@@ -12483,6 +12483,97 @@ mod tests {
             MarkerState::FirstWrongPrepared,
             MarkerState::FirstFreshDeletePrepared,
             WRONG_IDENTITY_EXECUTABLE_PATH,
+        )
+        .is_err());
+    }
+
+    #[test]
+    fn creator_absent_retry_requires_disabled_interaction_and_item_not_found() {
+        let current = serde_json::json!({
+            "schema": "substrate.r3-macos-signer-acl.creator-route-receipt.v2",
+            "creator_executable_path": CREATOR_EXECUTABLE_PATH,
+            "creator_scope_id": CREATOR_REPETITION_SCOPE_1,
+            "marker_path": MARKER_PATH,
+            "repetition": "first",
+            "state_before": marker_text(MarkerState::FirstAbsentRetryPrepared),
+            "state_after": marker_text(MarkerState::SecondQueryPrepared),
+            "phase": "already_absent_retry",
+            "process_interaction_disable_raw_os_status": 0,
+            "exact_delete": {
+                "raw_os_status": -25_300,
+                "classification": "already_absent",
+                "present_after": false,
+            },
+            "first_creation": null,
+            "final_present": false,
+        });
+        validate_creator_typed_receipt(
+            &current,
+            MarkerState::FirstAbsentRetryPrepared,
+            MarkerState::SecondQueryPrepared,
+            CREATOR_EXECUTABLE_PATH,
+        )
+        .expect("accept disabled-interaction item-not-found receipt");
+
+        let mut missing_disable = current.clone();
+        missing_disable
+            .as_object_mut()
+            .unwrap()
+            .remove("process_interaction_disable_raw_os_status");
+        assert!(validate_creator_typed_receipt(
+            &missing_disable,
+            MarkerState::FirstAbsentRetryPrepared,
+            MarkerState::SecondQueryPrepared,
+            CREATOR_EXECUTABLE_PATH,
+        )
+        .is_err());
+
+        let mut incorrect_disable = current.clone();
+        incorrect_disable.as_object_mut().unwrap().insert(
+            "process_interaction_disable_raw_os_status".to_owned(),
+            serde_json::json!(-50),
+        );
+        assert!(validate_creator_typed_receipt(
+            &incorrect_disable,
+            MarkerState::FirstAbsentRetryPrepared,
+            MarkerState::SecondQueryPrepared,
+            CREATOR_EXECUTABLE_PATH,
+        )
+        .is_err());
+
+        let mut successful_delete = current.clone();
+        successful_delete
+            .get_mut("exact_delete")
+            .and_then(serde_json::Value::as_object_mut)
+            .unwrap()
+            .insert("raw_os_status".to_owned(), serde_json::json!(0));
+        successful_delete
+            .get_mut("exact_delete")
+            .and_then(serde_json::Value::as_object_mut)
+            .unwrap()
+            .insert(
+                "classification".to_owned(),
+                serde_json::json!("deleted_and_absent"),
+            );
+        assert!(validate_creator_typed_receipt(
+            &successful_delete,
+            MarkerState::FirstAbsentRetryPrepared,
+            MarkerState::SecondQueryPrepared,
+            CREATOR_EXECUTABLE_PATH,
+        )
+        .is_err());
+
+        let mut unrelated_status = current;
+        unrelated_status
+            .get_mut("exact_delete")
+            .and_then(serde_json::Value::as_object_mut)
+            .unwrap()
+            .insert("raw_os_status".to_owned(), serde_json::json!(-50));
+        assert!(validate_creator_typed_receipt(
+            &unrelated_status,
+            MarkerState::FirstAbsentRetryPrepared,
+            MarkerState::SecondQueryPrepared,
+            CREATOR_EXECUTABLE_PATH,
         )
         .is_err());
     }
