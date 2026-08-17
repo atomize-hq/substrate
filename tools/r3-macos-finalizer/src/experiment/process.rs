@@ -47,8 +47,20 @@ pub struct SupplementaryGroupAttestationV2 {
 
 impl SupplementaryGroupAttestationV2 {
     pub fn current_process() -> Result<Self> {
+        let raw_groups = current_supplementary_groups()?;
+        // SAFETY: getegid reads the current process credential without dereferencing pointers.
+        let effective_gid = unsafe { libc::getegid() };
+        Self::from_current_process_groups(raw_groups, effective_gid)
+    }
+
+    fn from_current_process_groups(raw_groups: Vec<u32>, effective_gid: u32) -> Result<Self> {
+        let groups = match raw_groups.as_slice() {
+            [] => Vec::new(),
+            [group] if *group == effective_gid => Vec::new(),
+            _ => bail!("process retained supplementary groups"),
+        };
         let value = Self {
-            groups: current_supplementary_groups()?,
+            groups,
             evidence: SupplementaryGroupEvidenceV2::CurrentProcessGetgroups,
         };
         value.validate_empty()?;
@@ -270,8 +282,6 @@ fn current_supplementary_groups() -> Result<Vec<u32>> {
             bail!("coordinator/harness supplementary groups changed while measured")
         }
     }
-    groups.sort_unstable();
-    groups.dedup();
     Ok(groups)
 }
 
@@ -474,6 +484,34 @@ unsafe extern "C" {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn current_process_groups_normalize_only_zero_or_singleton_effective_gid() {
+        let expected = SupplementaryGroupAttestationV2 {
+            groups: Vec::new(),
+            evidence: SupplementaryGroupEvidenceV2::CurrentProcessGetgroups,
+        };
+        assert_eq!(
+            SupplementaryGroupAttestationV2::from_current_process_groups(Vec::new(), 20).unwrap(),
+            expected
+        );
+        assert_eq!(
+            SupplementaryGroupAttestationV2::from_current_process_groups(vec![20], 20).unwrap(),
+            expected
+        );
+        assert!(
+            SupplementaryGroupAttestationV2::from_current_process_groups(vec![21], 20).is_err()
+        );
+        assert!(
+            SupplementaryGroupAttestationV2::from_current_process_groups(vec![20, 20], 20).is_err()
+        );
+        assert!(
+            SupplementaryGroupAttestationV2::from_current_process_groups(vec![20, 21], 20).is_err()
+        );
+        assert!(
+            SupplementaryGroupAttestationV2::from_current_process_groups(vec![21, 22], 20).is_err()
+        );
+    }
 
     #[test]
     fn process_and_physical_join_domains_are_exact_and_pid_bound() {
