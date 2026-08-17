@@ -7,7 +7,7 @@ set -euo pipefail
 
 readonly REPOSITORY="/Users/spensermcconnell/.codex/worktrees/r3-macos-finalizer-rcv-stack/substrate"
 readonly BRANCH="feat/r3-macos-finalizer-rcv-stack"
-readonly EXPERIMENT_ID="01a00c2b-4966-7750-b906-ef68495ff1dc"
+readonly EXPERIMENT_ID="01a00d02-e6ea-7e3e-94bd-120ecf3417a1"
 readonly EXPERIMENT_ROOT="/Users/spensermcconnell/Library/Application Support/Atomize/R3MacEvidenceFinalizer/experiments/${EXPERIMENT_ID}"
 readonly FREEZE_ROOT="${EXPERIMENT_ROOT}/candidate-freeze"
 readonly ARTIFACT_ROOT="${FREEZE_ROOT}/artifacts"
@@ -39,7 +39,7 @@ readonly SWIFTC="/Applications/Xcode.app/Contents/Developer/Toolchains/XcodeDefa
 readonly FIXED_PATH="/Users/spensermcconnell/.cargo/bin:/usr/bin:/bin:/usr/sbin:/sbin"
 readonly ZERO40="0000000000000000000000000000000000000000"
 readonly ZERO64="0000000000000000000000000000000000000000000000000000000000000000"
-readonly ACCEPTED_PARENT_HEAD="0dba8a847c3455660b4e1ce31835ecd450c51277"
+readonly ACCEPTED_PARENT_HEAD="a3faef3e809f7ac5c92cfbf8a325c57a4741ec5e"
 
 export PATH="${FIXED_PATH}"
 export LANG=C
@@ -302,7 +302,7 @@ import sys
 
 REPO = pathlib.Path("/Users/spensermcconnell/.codex/worktrees/r3-macos-finalizer-rcv-stack/substrate")
 BRANCH = "feat/r3-macos-finalizer-rcv-stack"
-EXPERIMENT_ID = "01a00c2b-4966-7750-b906-ef68495ff1dc"
+EXPERIMENT_ID = "01a00d02-e6ea-7e3e-94bd-120ecf3417a1"
 EXPERIMENT_ROOT = pathlib.Path("/Users/spensermcconnell/Library/Application Support/Atomize/R3MacEvidenceFinalizer/experiments") / EXPERIMENT_ID
 FREEZE_ROOT = EXPERIMENT_ROOT / "candidate-freeze"
 ARTIFACT_ROOT = FREEZE_ROOT / "artifacts"
@@ -669,7 +669,7 @@ def absence_plan():
         "/private/var/db/com.atomize.substrate.r3-macos-evidence-finalizer.v2", "/private/var/db/com.atomize.substrate.r3-macos-evidence-finalizer.v2/latches", "/private/var/db/com.atomize.substrate.r3-macos-disposable-publisher.v2", "/private/var/db/com.atomize.substrate.r3-macos-disposable-experiment-runner.v2", "/private/var/db/com.atomize.substrate.r3-macos-signer-acl-experiment.v2", "/private/tmp/com.atomize.substrate.r3-macos-finalizer-freeze.v2", str(EXPERIMENT_ROOT / "global-publisher-exchange"),
     ]
     values.extend({"kind": "filesystem_path", "identity": path} for path in paths)
-    for scope in ["01a00c2b-4967-7f62-810d-54a4456ce781", "01a00c2b-4968-7cac-9c7c-d8943f94daaa"]:
+    for scope in ["01a00d02-e6eb-7aaf-8e25-2df6110be194", "01a00d02-e6ec-7c23-88c6-e041eee2c9b9"]:
         values.extend([
             {"kind": "filesystem_path", "identity": f"/private/var/db/com.atomize.substrate.r3-macos-evidence-finalizer.v2/{scope}"},
             {"kind": "filesystem_path", "identity": f"/private/var/db/com.atomize.substrate.r3-macos-evidence-finalizer.v2/capability/{scope}"},
@@ -1087,6 +1087,10 @@ TERMINAL_EXECUTED_RECOVERY_ROUTE_SHA256S = frozenset(
         "bd98dc77cfde7f6956f43845294edeb9da5879525def1bcef5d6c8a3133d839a",
         "7eb9e26e6fb61b10297b85d1b925b980de77c89cc3fe53bc022c91ca04d723c9",
         "f9959128723ed4b18ad9ed7960dbb63788f51f386532265321940cf8e29b141e",
+        "9396338dd4a6a2c815bc9cb9a33fec5a45fbe4dab236ae95442831c713c84948",
+        "6202dafc03d598099a172141b95dc0b03b058add16199ed49cafcdd7e65e1137",
+        "4ffa8ae88fd0e06eec73cc99d9eb2126a987932b2fd03a0ada16c436c77fe103",
+        "8f27e6e8bd4940716d35b7624c890e72fa9c61c589c3771703c8245d3fafb968",
     }
 )
 TERMINAL_EXECUTED_RECOVERY_SOURCE_SHA256S = frozenset(
@@ -1097,6 +1101,10 @@ TERMINAL_EXECUTED_RECOVERY_SOURCE_SHA256S = frozenset(
         "e808fc84170cd43b7b62872f7b0479157e727b3fce31f25e140d2c3364ce868c",
         "f962f6777dc5bc7a327f1c30b406851aaca7151b492e9ba38802ffd565566dc9",
         "dee65e18cbf6b14db19e0fcee41f4ae396524682297b5e67f164218c94b1dcf2",
+        "ead5a0c1a0dbcf45a943bd46d2c6ca6bfee3867fe40267a7cfdbe3a012b51dac",
+        "7f54100315ef862a8a51e1643825f46136b5d81156b9f1ac0f71ece14f564098",
+        "9680fff65ede204400aa6d6072dad05d120c1ccc10a9aeea9c85a7241b92ece8",
+        "f36a61236db12ee7b8afb804c8271f5dc9c061a9cb1c72cc0511d50fcdccbef1",
     }
 )
 

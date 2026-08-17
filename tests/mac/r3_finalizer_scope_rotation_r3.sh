@@ -13,10 +13,10 @@ import re
 import sys
 
 repository = pathlib.Path(sys.argv[1])
-new_experiment = "01a00c2b-4966-7750-b906-ef68495ff1dc"
+new_experiment = "01a00d02-e6ea-7e3e-94bd-120ecf3417a1"
 new_scopes = [
-    "01a00c2b-4967-7f62-810d-54a4456ce781",
-    "01a00c2b-4968-7cac-9c7c-d8943f94daaa",
+    "01a00d02-e6eb-7aaf-8e25-2df6110be194",
+    "01a00d02-e6ec-7c23-88c6-e041eee2c9b9",
 ]
 old_experiment = "019ffec6-95f6-7d30-80bc-8003ce27d5ba"
 old_scopes = [
@@ -36,6 +36,7 @@ terminal_experiments = [
     "01a00aa6-5591-7405-b0ea-acb5ca1559d5",
     "01a00b11-d9d4-75d2-ad3f-8ea379698723",
     "01a00bc9-2d20-7ff1-98f6-652e2c650588",
+    "01a00c2b-4966-7750-b906-ef68495ff1dc",
 ]
 terminal_scopes = [
     *old_scopes,
@@ -61,12 +62,18 @@ terminal_scopes = [
     "01a00b11-d9d6-7872-9b8c-2fb75c1f047b",
     "01a00bc9-2d21-7a4b-9e64-8df06f08b8b8",
     "01a00bc9-2d22-7e00-ab2b-f14c04258877",
+    "01a00c2b-4967-7f62-810d-54a4456ce781",
+    "01a00c2b-4968-7cac-9c7c-d8943f94daaa",
 ]
 expected_routes = {
     "deea3cb3aaf05dd641936bdb98bcc2d3098504d64b455794af689cabe68cd76a",
     "bd98dc77cfde7f6956f43845294edeb9da5879525def1bcef5d6c8a3133d839a",
     "7eb9e26e6fb61b10297b85d1b925b980de77c89cc3fe53bc022c91ca04d723c9",
     "f9959128723ed4b18ad9ed7960dbb63788f51f386532265321940cf8e29b141e",
+    "9396338dd4a6a2c815bc9cb9a33fec5a45fbe4dab236ae95442831c713c84948",
+    "6202dafc03d598099a172141b95dc0b03b058add16199ed49cafcdd7e65e1137",
+    "4ffa8ae88fd0e06eec73cc99d9eb2126a987932b2fd03a0ada16c436c77fe103",
+    "8f27e6e8bd4940716d35b7624c890e72fa9c61c589c3771703c8245d3fafb968",
 }
 expected_sources = {
     "4ae8266e919e0d202e785009695f61820467d73b3836adf9ac92741ac5624698",
@@ -75,6 +82,10 @@ expected_sources = {
     "e808fc84170cd43b7b62872f7b0479157e727b3fce31f25e140d2c3364ce868c",
     "f962f6777dc5bc7a327f1c30b406851aaca7151b492e9ba38802ffd565566dc9",
     "dee65e18cbf6b14db19e0fcee41f4ae396524682297b5e67f164218c94b1dcf2",
+    "ead5a0c1a0dbcf45a943bd46d2c6ca6bfee3867fe40267a7cfdbe3a012b51dac",
+    "7f54100315ef862a8a51e1643825f46136b5d81156b9f1ac0f71ece14f564098",
+    "9680fff65ede204400aa6d6072dad05d120c1ccc10a9aeea9c85a7241b92ece8",
+    "f36a61236db12ee7b8afb804c8271f5dc9c061a9cb1c72cc0511d50fcdccbef1",
 }
 
 
@@ -103,7 +114,7 @@ uuid_v7 = re.compile(
 for value in [new_experiment, *new_scopes]:
     if not uuid_v7.fullmatch(value):
         raise SystemExit(f"rotated identity is not canonical UUIDv7: {value}")
-if len({new_experiment, *new_scopes, *terminal_experiments, *terminal_scopes}) != 39:
+if len({new_experiment, *new_scopes, *terminal_experiments, *terminal_scopes}) != 42:
     raise SystemExit("rotated and terminal identities are not pairwise distinct")
 
 root_source = text("scripts/mac/r3-macos-finalizer-root-install.py")
@@ -141,7 +152,7 @@ freeze_source = text("scripts/mac/freeze-r3-macos-finalizer-candidate.sh")
 for required in (
     f'readonly EXPERIMENT_ID="{new_experiment}"',
     'readonly BRANCH="feat/r3-macos-finalizer-rcv-stack"',
-    'readonly ACCEPTED_PARENT_HEAD="0dba8a847c3455660b4e1ce31835ecd450c51277"',
+    'readonly ACCEPTED_PARENT_HEAD="a3faef3e809f7ac5c92cfbf8a325c57a4741ec5e"',
     '"schema_owner": "substrate.r3-macos-candidate-committed-tree-inventory"',
     '"status", "--porcelain=v2", "-z"',
     '"rev-parse", "HEAD^{tree}"',

@@ -2302,11 +2302,7 @@ fn build_creator_native_arm_receipt(
             true,
             vec![
                 (O::DisableProcessInteractionFirst, 0, C::InteractionDisabled),
-                (
-                    O::SignTagScopedPrivateKey,
-                    -25_293,
-                    C::AuthFailed,
-                ),
+                (O::SignTagScopedPrivateKey, -25_293, C::AuthFailed),
             ],
         ),
         CreatorNativeArmV2::WrongIdentityDelete
@@ -12474,7 +12470,7 @@ mod tests {
             .map(|offset| build_start + offset)
             .unwrap();
         let build_source = &runner_source[build_start..build_end];
-        assert!(build_source.contains("O::SignTagScopedPrivateKey,\n                    -25_293,\n                    C::AuthFailed,"));
+        assert!(build_source.contains("(O::SignTagScopedPrivateKey, -25_293, C::AuthFailed),"));
         assert!(!build_source.contains("O::SignTagScopedPrivateKey,\n                    -25_308,"));
 
         let mut extra = current;

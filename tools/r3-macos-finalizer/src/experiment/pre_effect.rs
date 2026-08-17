@@ -58,8 +58,8 @@ pub const ROOT_INSTALL_COMPLETION_OWNER_V2: &str =
     "substrate.r3-macos-finalizer-root-install-completion";
 pub const MAC_R3_FINALIZER_JOURNAL_ROOT_LOCK_PATH_V2: &str =
     "/private/var/db/com.atomize.substrate.r3-macos-evidence-finalizer.v2/journal-root.lock";
-pub const TERMINAL_ADMIN_CLEANUP_CLAIM_PATH_V2: &str = "/Users/spensermcconnell/Library/Application Support/Atomize/R3MacEvidenceFinalizer/experiments/01a00c2b-4966-7750-b906-ef68495ff1dc/global-publisher-exchange/terminal-admin-cleanup-claim.v2.json";
-pub const TERMINAL_ADMIN_RESTORATION_RECEIPT_PATH_V2: &str = "/Users/spensermcconnell/Library/Application Support/Atomize/R3MacEvidenceFinalizer/experiments/01a00c2b-4966-7750-b906-ef68495ff1dc/global-publisher-exchange/terminal-admin-restoration-receipt.v2.json";
+pub const TERMINAL_ADMIN_CLEANUP_CLAIM_PATH_V2: &str = "/Users/spensermcconnell/Library/Application Support/Atomize/R3MacEvidenceFinalizer/experiments/01a00d02-e6ea-7e3e-94bd-120ecf3417a1/global-publisher-exchange/terminal-admin-cleanup-claim.v2.json";
+pub const TERMINAL_ADMIN_RESTORATION_RECEIPT_PATH_V2: &str = "/Users/spensermcconnell/Library/Application Support/Atomize/R3MacEvidenceFinalizer/experiments/01a00d02-e6ea-7e3e-94bd-120ecf3417a1/global-publisher-exchange/terminal-admin-restoration-receipt.v2.json";
 
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]
 #[serde(deny_unknown_fields)]
