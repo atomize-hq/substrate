@@ -94,7 +94,7 @@ use substrate_r3_macos_finalizer::experiment::{
     CodeSigningPostureV2, RepetitionV2, ALTERNATE_COORDINATOR_PATH_V2,
     BENIGN_INJECTION_LIBRARY_PATH_V2, BENIGN_INJECTION_LIBRARY_SIGNING_IDENTIFIER_V2,
     BENIGN_INJECTION_MARKER_FD_V2, CANDIDATE_IDENTITY_PACKET_PATH_V2,
-    DISPOSABLE_HARNESS_ACCOUNT_V2, DISPOSABLE_HARNESS_PATH_V2,
+    DISPOSABLE_HARNESS_ACCOUNT_V2, DISPOSABLE_HARNESS_GID_V2, DISPOSABLE_HARNESS_PATH_V2,
     DISPOSABLE_HARNESS_SIGNING_IDENTIFIER_V2, DISPOSABLE_HARNESS_UID_V2,
     DISPOSABLE_PREPARED_INPUT_PATH_V2, EXPERIMENT_ID_V2, EXPERIMENT_ROOT_V2, EXPERIMENT_VERSION_V2,
     NOBODY_OWNER_PROBE_PATH_V2, NOBODY_OWNER_PROBE_SIGNING_IDENTIFIER_V2, PEER_CODE_PROBE_PATH_V2,
@@ -11838,21 +11838,31 @@ fn write_external_harness_input(
     let parent = path
         .parent()
         .context("emergency marker external path lacks parent")?;
-    require_directory(parent, DISPOSABLE_HARNESS_UID_V2, 0, libc::S_IFDIR | 0o700)?;
+    let identity = external_harness_input_publish_identity();
+    require_directory(
+        parent,
+        identity.parent_uid,
+        identity.parent_gid,
+        identity.parent_mode,
+    )?;
     publish_exact_file(
         &path,
         bytes,
-        PublishIdentityV2 {
-            owner_uid: DISPOSABLE_HARNESS_UID_V2,
-            owner_gid: 0,
-            permissions: 0o400,
-            parent_uid: DISPOSABLE_HARNESS_UID_V2,
-            parent_gid: 0,
-            parent_mode: libc::S_IFDIR | 0o700,
-            maximum_bytes: MAX_CHILD_OUTPUT,
-        },
+        identity,
         PublishMode::Immutable,
     )
+}
+
+fn external_harness_input_publish_identity() -> PublishIdentityV2 {
+    PublishIdentityV2 {
+        owner_uid: DISPOSABLE_HARNESS_UID_V2,
+        owner_gid: DISPOSABLE_HARNESS_GID_V2,
+        permissions: 0o400,
+        parent_uid: DISPOSABLE_HARNESS_UID_V2,
+        parent_gid: DISPOSABLE_HARNESS_GID_V2,
+        parent_mode: libc::S_IFDIR | 0o700,
+        maximum_bytes: MAX_CHILD_OUTPUT,
+    }
 }
 
 fn write_global_external_root_output(artifact: PublisherArtifactV2, bytes: &[u8]) -> Result<()> {
@@ -13415,6 +13425,18 @@ mod tests {
         assert!(shared.contains("SupplementaryGroupEvidenceV2::CurrentProcessGetgroups"));
         assert!(shared.contains("SupplementaryGroupEvidenceV2::SealedPreExecPostDropGetgroups"));
         assert!(!shared.contains("SupplementaryGroupEvidenceV2::UnprivilegedParentInheritance"));
+    }
+
+    #[test]
+    fn external_harness_rollback_input_binds_uid501_staff_parent_and_leaf() {
+        let identity = external_harness_input_publish_identity();
+        assert_eq!(identity.owner_uid, DISPOSABLE_HARNESS_UID_V2);
+        assert_eq!(identity.owner_gid, DISPOSABLE_HARNESS_GID_V2);
+        assert_eq!(identity.permissions, 0o400);
+        assert_eq!(identity.parent_uid, DISPOSABLE_HARNESS_UID_V2);
+        assert_eq!(identity.parent_gid, DISPOSABLE_HARNESS_GID_V2);
+        assert_eq!(identity.parent_mode, libc::S_IFDIR | 0o700);
+        assert_eq!(identity.maximum_bytes, MAX_CHILD_OUTPUT);
     }
 
     #[test]
