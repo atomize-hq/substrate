@@ -45,8 +45,8 @@ use substrate_r3_macos_finalizer::experiment::publisher_protocol::{
     SurrogateCreationReceiptV2, PUBLISHER_PROTOCOL_OWNER_V2, PUBLISHER_STAGE_SEQUENCE_V2,
 };
 use substrate_r3_macos_finalizer::experiment::{
-    RepetitionV2, DISPOSABLE_HARNESS_UID_V2, DISPOSABLE_PUBLISHER_ROOT_V2, EXPERIMENT_ID_V2,
-    EXPERIMENT_VERSION_V2,
+    RepetitionV2, DISPOSABLE_HARNESS_GID_V2, DISPOSABLE_HARNESS_UID_V2,
+    DISPOSABLE_PUBLISHER_ROOT_V2, EXPERIMENT_ID_V2, EXPERIMENT_ROOT_V2, EXPERIMENT_VERSION_V2,
 };
 
 use crate::attestation::attest_publisher_process;
@@ -2469,6 +2469,7 @@ fn prepare_root_repetition(repetition: RepetitionV2) -> Result<()> {
     require_directory(
         Path::new(DISPOSABLE_PUBLISHER_ROOT_V2),
         0,
+        0,
         ROOT_DIRECTORY_MODE,
     )?;
     let repetitions = Path::new(DISPOSABLE_PUBLISHER_ROOT_V2).join("repetitions");
@@ -2486,10 +2487,10 @@ fn ensure_root_directory(path: &Path) -> Result<()> {
         Err(error) if error.kind() == std::io::ErrorKind::AlreadyExists => {}
         Err(error) => return Err(error).context("create fixed root publisher directory"),
     }
-    require_directory(path, 0, ROOT_DIRECTORY_MODE)
+    require_directory(path, 0, 0, ROOT_DIRECTORY_MODE)
 }
 
-fn require_directory(path: &Path, uid: u32, mode: libc::mode_t) -> Result<()> {
+fn require_directory(path: &Path, uid: u32, gid: u32, mode: libc::mode_t) -> Result<()> {
     let canonical = path
         .canonicalize()
         .context("canonicalize fixed directory")?;
@@ -2499,7 +2500,7 @@ fn require_directory(path: &Path, uid: u32, mode: libc::mode_t) -> Result<()> {
     let metadata = std::fs::symlink_metadata(path).context("inspect fixed directory")?;
     use std::os::unix::fs::MetadataExt;
     if metadata.uid() != uid
-        || metadata.gid() != 0
+        || metadata.gid() != gid
         || metadata.mode() != u32::from(mode)
         || !metadata.file_type().is_dir()
     {
@@ -2509,23 +2510,33 @@ fn require_directory(path: &Path, uid: u32, mode: libc::mode_t) -> Result<()> {
 }
 
 fn read_exact_path(path: &Path, uid: u32, mode: libc::mode_t) -> Result<Option<Vec<u8>>> {
-    let parent_uid = if path.starts_with(DISPOSABLE_PUBLISHER_ROOT_V2) {
-        0
+    let identity = published_read_identity(path, uid, mode);
+    read_exact_published_file(path, identity)
+}
+
+fn published_read_identity(path: &Path, uid: u32, mode: libc::mode_t) -> PublishIdentityV2 {
+    let in_publisher_root = path.starts_with(DISPOSABLE_PUBLISHER_ROOT_V2);
+    let in_harness_exchange = path.starts_with(EXPERIMENT_ROOT_V2);
+    let (parent_uid, parent_gid) = if in_publisher_root {
+        (0, 0)
+    } else if in_harness_exchange {
+        (DISPOSABLE_HARNESS_UID_V2, DISPOSABLE_HARNESS_GID_V2)
     } else {
-        DISPOSABLE_HARNESS_UID_V2
+        (DISPOSABLE_HARNESS_UID_V2, 0)
     };
-    read_exact_published_file(
-        path,
-        PublishIdentityV2 {
-            owner_uid: uid,
-            owner_gid: 0,
-            permissions: mode & 0o7777,
-            parent_uid,
-            parent_gid: 0,
-            parent_mode: libc::S_IFDIR | 0o700,
-            maximum_bytes: MAC_R3_FINALIZER_MAX_FRAME_BYTES_V2,
+    PublishIdentityV2 {
+        owner_uid: uid,
+        owner_gid: if in_harness_exchange && uid == DISPOSABLE_HARNESS_UID_V2 {
+            DISPOSABLE_HARNESS_GID_V2
+        } else {
+            0
         },
-    )
+        permissions: mode & 0o7777,
+        parent_uid,
+        parent_gid,
+        parent_mode: libc::S_IFDIR | 0o700,
+        maximum_bytes: MAC_R3_FINALIZER_MAX_FRAME_BYTES_V2,
+    }
 }
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
@@ -2546,6 +2557,13 @@ impl ParentOwnerV2 {
         match self {
             Self::Root => 0,
             Self::Harness => DISPOSABLE_HARNESS_UID_V2,
+        }
+    }
+
+    const fn gid(self) -> u32 {
+        match self {
+            Self::Root => 0,
+            Self::Harness => DISPOSABLE_HARNESS_GID_V2,
         }
     }
 }
@@ -2594,7 +2612,7 @@ fn write_exact_path(
     predecessor: Option<&[u8]>,
     parent_owner: ParentOwnerV2,
 ) -> Result<()> {
-    require_fixed_parent(path, parent_owner.uid())?;
+    require_fixed_parent(path, parent_owner.uid(), parent_owner.gid())?;
     let mode = predecessor.map_or(PublishMode::Immutable, |predecessor| {
         PublishMode::ReplaceExact { predecessor }
     });
@@ -2606,7 +2624,7 @@ fn write_exact_path(
             owner_gid: 0,
             permissions,
             parent_uid: parent_owner.uid(),
-            parent_gid: 0,
+            parent_gid: parent_owner.gid(),
             parent_mode: libc::S_IFDIR | 0o700,
             maximum_bytes: MAC_R3_FINALIZER_MAX_FRAME_BYTES_V2,
         },
@@ -2614,9 +2632,9 @@ fn write_exact_path(
     )
 }
 
-fn require_fixed_parent(path: &Path, uid: u32) -> Result<()> {
+fn require_fixed_parent(path: &Path, uid: u32, gid: u32) -> Result<()> {
     let parent = path.parent().context("fixed artifact has no parent")?;
-    require_directory(parent, uid, libc::S_IFDIR | 0o700)
+    require_directory(parent, uid, gid, libc::S_IFDIR | 0o700)
 }
 
 fn create_or_measure_exact_file(
@@ -2624,7 +2642,7 @@ fn create_or_measure_exact_file(
     bytes: &[u8],
     permissions: libc::mode_t,
 ) -> Result<String> {
-    require_fixed_parent(path, 0)?;
+    require_fixed_parent(path, 0, 0)?;
     publish_exact_file(
         path,
         bytes,
@@ -2807,6 +2825,32 @@ fn read_installed_inbox(path: &Path) -> Result<Option<Vec<u8>>> {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn harness_exchange_identity_is_exact_uid501_staff_input_and_root_output() {
+        let exchange = external_exchange_path_v2(
+            RepetitionV2::One,
+            PublisherArtifactV2::PreparedInput,
+        );
+        let input = published_read_identity(
+            &exchange,
+            DISPOSABLE_HARNESS_UID_V2,
+            EXTERNAL_INPUT_MODE,
+        );
+        assert_eq!(input.owner_uid, DISPOSABLE_HARNESS_UID_V2);
+        assert_eq!(input.owner_gid, DISPOSABLE_HARNESS_GID_V2);
+        assert_eq!(input.parent_uid, DISPOSABLE_HARNESS_UID_V2);
+        assert_eq!(input.parent_gid, DISPOSABLE_HARNESS_GID_V2);
+        assert_eq!(input.permissions, 0o400);
+
+        let output = published_read_identity(&exchange, 0, EXTERNAL_OUTPUT_MODE);
+        assert_eq!(output.owner_uid, 0);
+        assert_eq!(output.owner_gid, 0);
+        assert_eq!(output.parent_uid, DISPOSABLE_HARNESS_UID_V2);
+        assert_eq!(output.parent_gid, DISPOSABLE_HARNESS_GID_V2);
+        assert_eq!(output.permissions, 0o444);
+        assert_eq!(ParentOwnerV2::Harness.gid(), DISPOSABLE_HARNESS_GID_V2);
+    }
 
     #[test]
     fn supervisor_sequence_and_artifact_mapping_are_closed() {
