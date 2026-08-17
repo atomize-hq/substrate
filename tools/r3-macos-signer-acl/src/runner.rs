@@ -80,6 +80,7 @@ use substrate_r3_macos_finalizer::experiment::pre_effect::{
 };
 use substrate_r3_macos_finalizer::experiment::process::{
     CoordinatorProcessAttestationV2, SupplementaryGroupAttestationV2,
+    SupplementaryGroupEvidenceV2,
 };
 use substrate_r3_macos_finalizer::experiment::publisher_protocol::{
     external_exchange_path_v2, global_external_exchange_path_v2, root_publisher_path_v2,
@@ -119,10 +120,11 @@ use crate::runner_identity::{
     publisher_code, require_non_placeholder_digest, wrong_code, FrozenCode,
 };
 use crate::securityagent::{
-    measured_child_supplementary_groups_v2, observe_idle_baseline_sha256,
-    observe_rearmed_root_operation_with_raw, observe_root_operation_with_raw,
-    observe_sealed_child_with, observe_stopped_child_startup, MeasuredCommandV2, ObservedChildV2,
-    SEALED_GROUP_MEASUREMENT_FRAME_BYTES_V2, SEALED_GROUP_MEASUREMENT_MAGIC_V2,
+    measured_child_supplementary_groups_optional_v2, measured_child_supplementary_groups_v2,
+    observe_idle_baseline_sha256, observe_rearmed_root_operation_with_raw,
+    observe_root_operation_with_raw, observe_sealed_child_with, observe_stopped_child_startup,
+    MeasuredCommandV2, ObservedChildV2, SEALED_GROUP_MEASUREMENT_FRAME_BYTES_V2,
+    SEALED_GROUP_MEASUREMENT_MAGIC_V2,
 };
 use crate::{
     compiled_disposable_target_config, compiled_disposable_wrong_config,
@@ -3485,17 +3487,35 @@ fn reattest_exact_process_member(
     }
     let process = process_info(expected.pid)?;
     let path = pid_path(expected.pid)?;
+    let process_start_identity_sha256 = document_sha256_v2(&ProcessStartJoinV2 {
+        pid: expected.pid,
+        seconds: process.start_seconds,
+        microseconds: process.start_microseconds,
+    })?;
     let observed = GeneralFailureGroupMemberV2 {
         pid: expected.pid,
         effective_uid: process.uid,
-        supplementary_groups: measured_child_supplementary_groups_v2(expected.pid)?,
-        process_start_identity_sha256: document_sha256_v2(&ProcessStartJoinV2 {
-            pid: expected.pid,
-            seconds: process.start_seconds,
-            microseconds: process.start_microseconds,
-        })?,
+        supplementary_groups: exact_group_member_supplementary_groups(
+            expected.pid,
+            &process_start_identity_sha256,
+            &path,
+            process.uid,
+            process.gid,
+        )?,
+        process_start_identity_sha256,
         executable_path: path.to_string_lossy().into_owned(),
     };
+    let after = process_info(expected.pid)?;
+    if after.pid != process.pid
+        || after.uid != process.uid
+        || after.gid != process.gid
+        || after.process_group_id != process.process_group_id
+        || after.start_seconds != process.start_seconds
+        || after.start_microseconds != process.start_microseconds
+        || pid_path(expected.pid)? != path
+    {
+        bail!("exact process member changed while reattesting its group measurement")
+    }
     if observed != *expected {
         bail!("exact process member PID/start/path identity changed before individual signal")
     }
@@ -3536,20 +3556,150 @@ fn observe_process_group_members(
             Err(error) if is_process_disappearance_error(&error) => continue,
             Err(error) => return Err(error),
         };
+        let process_start_identity_sha256 = document_sha256_v2(&ProcessStartJoinV2 {
+            pid,
+            seconds: process.start_seconds,
+            microseconds: process.start_microseconds,
+        })?;
+        let supplementary_groups = exact_group_member_supplementary_groups(
+            pid,
+            &process_start_identity_sha256,
+            &executable_path,
+            process.uid,
+            process.gid,
+        )?;
+        let after = match process_info(pid) {
+            Ok(value) => value,
+            Err(error) if is_process_disappearance_error(&error) => continue,
+            Err(error) => return Err(error),
+        };
+        if after.pid != process.pid
+            || after.uid != process.uid
+            || after.gid != process.gid
+            || after.process_group_id != process.process_group_id
+            || after.start_seconds != process.start_seconds
+            || after.start_microseconds != process.start_microseconds
+            || match pid_path(pid) {
+                Ok(path) => path != executable_path,
+                Err(error) if is_process_disappearance_error(&error) => continue,
+                Err(error) => return Err(error),
+            }
+        {
+            bail!("process-group member changed while joining its group measurement")
+        }
         observations.push(GeneralFailureGroupMemberV2 {
             pid,
             effective_uid: process.uid,
-            supplementary_groups: measured_child_supplementary_groups_v2(pid)?,
-            process_start_identity_sha256: document_sha256_v2(&ProcessStartJoinV2 {
-                pid,
-                seconds: process.start_seconds,
-                microseconds: process.start_microseconds,
-            })?,
+            supplementary_groups,
+            process_start_identity_sha256,
             executable_path: executable_path.to_string_lossy().into_owned(),
         });
     }
     observations.sort_by_key(|value| value.pid);
     Ok(observations)
+}
+
+fn exact_group_member_supplementary_groups(
+    pid: i32,
+    process_start_identity_sha256: &str,
+    executable_path: &Path,
+    effective_uid: u32,
+    effective_gid: u32,
+) -> Result<SupplementaryGroupAttestationV2> {
+    let measured = measured_child_supplementary_groups_optional_v2(pid)?;
+    if measured.is_some() || executable_path != Path::new(MAC_R3_COORDINATOR_PATH_V2) {
+        return select_validated_group_member_supplementary_groups(
+            pid,
+            process_start_identity_sha256,
+            executable_path,
+            effective_uid,
+            effective_gid,
+            measured,
+            &[],
+        );
+    }
+
+    let candidate_bytes = stable_read_file(
+        Path::new(CANDIDATE_IDENTITY_PACKET_PATH_V2),
+        0,
+        Some(libc::S_IFREG | 0o444),
+    )?;
+    let candidate: CandidateIdentityPacketV2 = parse_canonical_v2(&candidate_bytes)?;
+    if candidate_bytes != canonical_bytes_v2(&candidate)? {
+        bail!("installed candidate identity packet is not canonical")
+    }
+    candidate.validate()?;
+
+    let store = ExperimentStoreV2::open_fixed()?;
+    let mut coordinator_attestations = Vec::new();
+    for repetition in RepetitionV2::ALL {
+        let attestation_path = store.artifact_path(
+            repetition,
+            ExperimentArtifactV2::CoordinatorProcessAttestation,
+        );
+        if !path_present(&attestation_path)? {
+            continue;
+        }
+        let (attestation, observation) = store.read_canonical::<CoordinatorProcessAttestationV2>(
+            repetition,
+            ExperimentArtifactV2::CoordinatorProcessAttestation,
+        )?;
+        attestation.validate(&candidate.coordinator_identity)?;
+        if observation.sha256 != document_sha256_v2(&attestation)? {
+            bail!("coordinator self-attestation changed during exact group measurement")
+        }
+        coordinator_attestations.push(attestation);
+    }
+    select_validated_group_member_supplementary_groups(
+        pid,
+        process_start_identity_sha256,
+        executable_path,
+        effective_uid,
+        effective_gid,
+        None,
+        &coordinator_attestations,
+    )
+}
+
+fn select_validated_group_member_supplementary_groups(
+    pid: i32,
+    process_start_identity_sha256: &str,
+    executable_path: &Path,
+    effective_uid: u32,
+    effective_gid: u32,
+    measured: Option<SupplementaryGroupAttestationV2>,
+    coordinator_attestations: &[CoordinatorProcessAttestationV2],
+) -> Result<SupplementaryGroupAttestationV2> {
+    if let Some(measured) = measured {
+        measured.validate_empty()?;
+        if measured.evidence != SupplementaryGroupEvidenceV2::SealedPreExecPostDropGetgroups {
+            bail!("sealed child group registry contains non-pre-exec evidence")
+        }
+        return Ok(measured);
+    }
+    if executable_path != Path::new(MAC_R3_COORDINATOR_PATH_V2) {
+        bail!("exact child lacks its post-drop getgroups measurement")
+    }
+    let mut matching = coordinator_attestations.iter().filter(|attestation| {
+        attestation.pid == pid
+            && attestation.process_start_identity_sha256 == process_start_identity_sha256
+            && attestation.executable_path == MAC_R3_COORDINATOR_PATH_V2
+            && attestation.effective_uid == effective_uid
+            && attestation.effective_gid == effective_gid
+    });
+    let attestation = matching
+        .next()
+        .context("exact coordinator child lacks its self-measured getgroups attestation")?;
+    if matching.next().is_some() {
+        bail!("multiple coordinator self-attestations match one exact process identity")
+    }
+    attestation.supplementary_groups.validate_empty()?;
+    if attestation.supplementary_groups.evidence
+        != SupplementaryGroupEvidenceV2::CurrentProcessGetgroups
+    {
+        bail!("coordinator self-attestation lacks current-process getgroups evidence")
+    }
+    Ok(attestation.supplementary_groups.clone())
 }
 
 fn is_process_disappearance_error(error: &anyhow::Error) -> bool {
@@ -13265,6 +13415,87 @@ mod tests {
         assert!(shared.contains("SupplementaryGroupEvidenceV2::CurrentProcessGetgroups"));
         assert!(shared.contains("SupplementaryGroupEvidenceV2::SealedPreExecPostDropGetgroups"));
         assert!(!shared.contains("SupplementaryGroupEvidenceV2::UnprivilegedParentInheritance"));
+    }
+
+    #[test]
+    fn process_group_measurement_accepts_only_direct_or_exact_coordinator_attestation() {
+        let direct = SupplementaryGroupAttestationV2::sealed_pre_exec(Vec::new()).unwrap();
+        assert_eq!(
+            select_validated_group_member_supplementary_groups(
+                41,
+                &"11".repeat(32),
+                Path::new("/fixed/direct-child"),
+                501,
+                20,
+                Some(direct.clone()),
+                &[],
+            )
+            .unwrap(),
+            direct,
+        );
+
+        let coordinator = CoordinatorProcessAttestationV2 {
+            schema_owner: String::new(),
+            schema_version: 0,
+            experiment_id: String::new(),
+            pid: 42,
+            effective_uid: DISPOSABLE_HARNESS_UID_V2,
+            effective_gid: 20,
+            supplementary_groups: SupplementaryGroupAttestationV2 {
+                groups: Vec::new(),
+                evidence: substrate_r3_macos_finalizer::experiment::process::SupplementaryGroupEvidenceV2::CurrentProcessGetgroups,
+            },
+            canonical_account: String::new(),
+            process_start_identity_sha256: "22".repeat(32),
+            executable_path: MAC_R3_COORDINATOR_PATH_V2.to_owned(),
+            executable_sha256: String::new(),
+            executable_size: 0,
+            executable_physical_identity_sha256: String::new(),
+            executable_identity_sha256: String::new(),
+        };
+        assert_eq!(
+            select_validated_group_member_supplementary_groups(
+                42,
+                &"22".repeat(32),
+                Path::new(MAC_R3_COORDINATOR_PATH_V2),
+                DISPOSABLE_HARNESS_UID_V2,
+                20,
+                None,
+                std::slice::from_ref(&coordinator),
+            )
+            .unwrap(),
+            coordinator.supplementary_groups,
+        );
+        assert!(select_validated_group_member_supplementary_groups(
+            42,
+            &"33".repeat(32),
+            Path::new(MAC_R3_COORDINATOR_PATH_V2),
+            DISPOSABLE_HARNESS_UID_V2,
+            20,
+            None,
+            std::slice::from_ref(&coordinator),
+        )
+        .is_err());
+        assert!(select_validated_group_member_supplementary_groups(
+            42,
+            &"22".repeat(32),
+            Path::new("/fixed/foreign-child"),
+            DISPOSABLE_HARNESS_UID_V2,
+            20,
+            None,
+            std::slice::from_ref(&coordinator),
+        )
+        .is_err());
+        assert!(select_validated_group_member_supplementary_groups(
+            42,
+            &"22".repeat(32),
+            Path::new(MAC_R3_COORDINATOR_PATH_V2),
+            DISPOSABLE_HARNESS_UID_V2,
+            20,
+            None,
+            &[coordinator.clone(), coordinator],
+        )
+        .is_err());
     }
 
     #[test]

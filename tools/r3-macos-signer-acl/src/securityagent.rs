@@ -123,15 +123,22 @@ impl DerefMut for MeasuredCommandV2 {
 pub(crate) fn measured_child_supplementary_groups_v2(
     pid: i32,
 ) -> Result<SupplementaryGroupAttestationV2> {
+    measured_child_supplementary_groups_optional_v2(pid)?
+        .context("exact child lacks its post-drop getgroups measurement")
+}
+
+pub(crate) fn measured_child_supplementary_groups_optional_v2(
+    pid: i32,
+) -> Result<Option<SupplementaryGroupAttestationV2>> {
     let pid = u32::try_from(pid).context("measured child PID is negative")?;
-    SEALED_CHILD_GROUP_MEASUREMENTS_V2
-        .get()
-        .context("no sealed child supplementary-group measurements exist")?
+    let Some(measurements) = SEALED_CHILD_GROUP_MEASUREMENTS_V2.get() else {
+        return Ok(None);
+    };
+    Ok(measurements
         .lock()
         .map_err(|_| anyhow::anyhow!("sealed child group-measurement registry was poisoned"))?
         .get(&pid)
-        .cloned()
-        .context("exact child lacks its post-drop getgroups measurement")
+        .cloned())
 }
 
 #[derive(Debug)]
