@@ -325,6 +325,15 @@ impl PublisherStore {
 
     fn wait_for_prepared_input(&self) -> Result<PublisherPreparedInputV2> {
         loop {
+            let prepared_path =
+                external_exchange_path_v2(self.repetition, PublisherArtifactV2::PreparedInput);
+            let prepared_parent = prepared_path
+                .parent()
+                .context("prepared publisher input lacks its fixed exchange parent")?;
+            if stat_nofollow(prepared_parent)?.is_none() {
+                thread::sleep(POLL_INTERVAL);
+                continue;
+            }
             if let Some(prepared) = self
                 .try_read_external::<PublisherPreparedInputV2>(PublisherArtifactV2::PreparedInput)?
             {
@@ -2850,5 +2859,32 @@ mod tests {
         assert!(production.contains("RestorationCursorPhaseV2::TerminalInvoked"));
         assert!(production.contains("RestorationCursorPhaseV2::TerminalObserved"));
         assert!(production.contains("write_restoration_cursor(&next, Some(&cursor))"));
+    }
+
+    #[test]
+    fn prepared_input_poll_waits_for_its_fixed_exchange_parent() {
+        let production = include_str!("supervisor.rs")
+            .split("#[cfg(test)]")
+            .next()
+            .unwrap();
+        let wait = production
+            .split("fn wait_for_prepared_input(")
+            .nth(1)
+            .unwrap()
+            .split("fn publish_initial_process_attestation(")
+            .next()
+            .unwrap();
+        let fixed_path = wait
+            .find("external_exchange_path_v2(self.repetition, PublisherArtifactV2::PreparedInput)")
+            .unwrap();
+        let absent_parent = wait
+            .find("if stat_nofollow(prepared_parent)?.is_none()")
+            .unwrap();
+        let strict_read = wait
+            .find(".try_read_external::<PublisherPreparedInputV2>")
+            .unwrap();
+        assert!(fixed_path < absent_parent && absent_parent < strict_read);
+        assert!(wait[absent_parent..strict_read].contains("thread::sleep(POLL_INTERVAL)"));
+        assert!(wait[absent_parent..strict_read].contains("continue;"));
     }
 }
