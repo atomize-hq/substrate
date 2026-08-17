@@ -5,8 +5,12 @@ use std::path::{Path, PathBuf};
 
 use anyhow::{bail, Context, Result};
 use serde::{Deserialize, Serialize};
-use substrate_common::macos_retirement_v2::{document_sha256_v2, sha256_hex_v2};
+use substrate_common::macos_retirement_v2::{
+    document_sha256_v2, parse_canonical_bounded_v2, sha256_hex_v2,
+    MAC_R3_FINALIZER_MAX_FRAME_BYTES_V2,
+};
 
+use super::evidence_export::GLOBAL_PRE_EFFECT_PACKET_MAX_BYTES_V2;
 use super::freeze_manifest::{
     CandidateFreezeCoordinatorProvenanceInputV2, CandidateFreezeGlobalProvenanceInputV2,
     CandidateFreezeManifestInputV2, CandidateFreezeManifestV2,
@@ -30,6 +34,14 @@ use super::{
 const DIRECTORY_MODE: u32 = 0o700;
 const IMMUTABLE_FILE_MODE: u32 = 0o400;
 const PUBLISHER_OUTPUT_MODE: u32 = 0o444;
+
+fn global_publisher_output_maximum_bytes_v2(artifact: PublisherArtifactV2) -> usize {
+    if artifact == PublisherArtifactV2::GlobalPreEffectPacket {
+        GLOBAL_PRE_EFFECT_PACKET_MAX_BYTES_V2
+    } else {
+        MAC_R3_FINALIZER_MAX_FRAME_BYTES_V2
+    }
+}
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum ExperimentArtifactV2 {
@@ -532,7 +544,8 @@ impl ExperimentStoreV2 {
         require_global_exchange_directory(&directory)?;
         let path = directory.join(artifact.filename());
         let (observation, bytes) = read_exact_file(&path, 0, PUBLISHER_OUTPUT_MODE)?;
-        let value = substrate_common::macos_retirement_v2::parse_canonical_v2(&bytes)?;
+        let value =
+            parse_canonical_bounded_v2(&bytes, global_publisher_output_maximum_bytes_v2(artifact))?;
         Ok((value, observation))
     }
 
@@ -806,6 +819,46 @@ fn sync_directory(path: &Path) -> Result<()> {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn global_pre_effect_packet_uses_its_dedicated_read_bound() {
+        const OBSERVED_PACKET_BYTES: usize = 1_175_768;
+        let empty_document = br#"{"payload":""}"#;
+        let value = serde_json::json!({
+            "payload": "x".repeat(OBSERVED_PACKET_BYTES - empty_document.len()),
+        });
+        let bytes = substrate_common::macos_retirement_v2::canonical_bytes_v2(&value).unwrap();
+        assert_eq!(bytes.len(), OBSERVED_PACKET_BYTES);
+
+        assert!(
+            substrate_common::macos_retirement_v2::parse_canonical_v2::<serde_json::Value>(&bytes)
+                .is_err()
+        );
+        assert_eq!(
+            global_publisher_output_maximum_bytes_v2(PublisherArtifactV2::GlobalPreEffectPacket),
+            GLOBAL_PRE_EFFECT_PACKET_MAX_BYTES_V2
+        );
+        assert_eq!(
+            parse_canonical_bounded_v2::<serde_json::Value>(
+                &bytes,
+                global_publisher_output_maximum_bytes_v2(
+                    PublisherArtifactV2::GlobalPreEffectPacket
+                ),
+            )
+            .unwrap(),
+            value
+        );
+
+        assert_eq!(
+            global_publisher_output_maximum_bytes_v2(PublisherArtifactV2::CreatorRouteReceiptSet),
+            MAC_R3_FINALIZER_MAX_FRAME_BYTES_V2
+        );
+        assert!(parse_canonical_bounded_v2::<serde_json::Value>(
+            &bytes,
+            global_publisher_output_maximum_bytes_v2(PublisherArtifactV2::CreatorRouteReceiptSet),
+        )
+        .is_err());
+    }
 
     #[test]
     fn durable_store_is_no_follow_immutable_and_idempotent() {
