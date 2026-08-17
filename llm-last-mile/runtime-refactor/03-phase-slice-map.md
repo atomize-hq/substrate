@@ -3256,3 +3256,31 @@ The serial gates are:
 9. **`R3-MAC-RETIRE-G8-NATIVE-EVIDENCE`.** Only a later explicit operator authority may run one fresh evidence attempt. `MAC-CLOSEOUT` remains a distinct later gate.
 
 No gate dispatches, accepts, or authorizes its successor. A stop, blocked recovery, failed capability gate, or parity failure preserves the current state and does not permit schedule compression, cross-lane substitution, broader cleanup, or retrospective authority.
+
+## R3 macOS product-uninstall classifier status (2026-08-17; docs-only)
+
+The current product-development work is correcting the real
+`scripts/substrate/dev-uninstall-substrate.sh` path and its installed lifecycle binaries. This is
+R3 install/uninstall convergence work, not the prospective external evidence-finalizer lane above.
+It does not alter that lane, authorize E03/freeze/materialization, or dispatch native evidence.
+
+The product-uninstall prototype demonstrated one bounded terminal-classification defect. The
+privileged lifecycle executor cannot accept an absent service-state record as authenticated
+authority, and fixed filesystem/launchd absence alone cannot distinguish never-installed state
+from a completed uninstall. The selected product correction is therefore:
+
+1. retain the existing authenticated service-state record as the sole privileged retirement
+   plan/cursor while privileged effects remain;
+2. delete that record as the final privileged commit and make the privileged executor fail closed
+   when it is absent;
+3. allow the ordinary installed control/uninstaller one compile-time-fixed, no-UI, status-only,
+   non-mutating System-Keychain existence query for that single record;
+4. route exact presence to the authenticated privileged retirement operation; and
+5. allow exact absence plus complete fixed product absence to perform only manifest-managed
+   prefix cleanup and return product-level `already_uninstalled`.
+
+No second journal, tombstone, fallback executor, external trust anchor, finalizer, broad Keychain
+query, or secret-data read is part of this product correction. The corrected implementation and
+focused regressions land in the same bounded Product Uninstall Fix commit as this status update;
+no native proof exists yet. The existing phase order and all evidence-successor gates remain
+unchanged.

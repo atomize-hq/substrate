@@ -10372,3 +10372,61 @@ The only stop/rejoin classifications are `SafePreAcceptanceStop`, `RejoinAccepte
 A later implementation review must inject failure before and after every receipt/acknowledgement write, file fsync, parent fsync, reopen/hash, signature, CAS, peer re-attestation, EOF, finalizer claim, journal generation, lock acquisition/reacquisition, effect prepared/invoked/return/observed boundary, caller disconnect, service bootout/absence, Keychain delete/final absence, unlink/parent-fsync, response, harness residual effect, parity proof, and terminal acknowledgement. It must prove no destructive-before-ack path; no host deletion before finalizer acceptance; observe-before-reinvoke after ambiguous returns; same-digest deterministic replay; peer/path/identity/target substitution rejection; unknown-field and alternate-digest rejection; cross-lane decoder rejection; and every SecurityAgent/UI stop.
 
 This amendment remains planning authority only. Literal V2 schema/domain/route constants, implementation file/symbol fences, experiment execution, live recovery, landing, evidence, mirror refresh, and `MAC-CLOSEOUT` each require their later serial authorities from the phase map.
+
+## R3 macOS product-uninstall terminal-classifier contract (2026-08-17; docs-only)
+
+This is the authoritative bounded contract for current-version macOS product uninstall
+classification. It applies only to the real development installer/uninstaller and installed
+lifecycle binaries. It does not modify or authorize the prospective external evidence finalizer,
+legacy-orphan recovery, E03, freeze/materialization, evidence publication, or `MAC-CLOSEOUT`.
+
+### Privileged authority and terminal commit
+
+`MacPublisherServiceStateRecordV1` remains the sole authenticated privileged product-retirement
+plan/cursor. While privileged effects remain, the mutually attested installed lifecycle executor
+must authenticate and validate that exact record and use its monotonic cursor to preauthorize each
+destructive effect. The record is deleted only after every other privileged product effect has
+been exactly completed and observed. Its deletion is the terminal privileged commit.
+
+An absent service-state record is never privileged authority. The privileged executor must reject
+that state; peer UID, non-root status, caller success claims, path absence, service absence, or a
+previous invocation cannot substitute for exact executor/code attestation and the authenticated
+record. The privileged operation must not return `already_uninstalled` merely because the record
+or fixed artifacts are absent.
+
+### Ordinary-control existence classifier
+
+The installed ordinary control/uninstaller may distinguish pre-commit from post-commit state with
+exactly one read-only query for the single fixed service-state generic-password record. That query
+must satisfy all of the following:
+
+- explicitly open and returned-path-verify `/Library/Keychains/System.keychain`;
+- use a one-element `kSecMatchSearchList` containing only that opened Keychain;
+- match the compile-time-fixed item class, service, and account only;
+- set `kSecUseAuthenticationUIFail` and never approve or request UI;
+- request no secret data, accept no caller-selected selector, and perform no mutation;
+- classify only one exact match as `present` and `errSecItemNotFound` as `absent`; and
+- fail closed on duplicates, ambiguity, interaction-required status, store/path drift, or every
+  other result.
+
+The query is an existence discriminator, not retirement authority. Exact presence requires the
+authenticated privileged retirement route. Exact absence permits product-level
+`already_uninstalled` only after the control/uninstaller also proves complete absence of the fixed
+system-domain service, helper, plist, and provenance. The selected-prefix control/executor pair is
+the sole permitted remainder: both files must still be the exact regular, manifest-managed copies
+bound before classification, and the uninstaller may then remove only those two selected-prefix
+copies and their exact manifest entry. No privileged or Keychain mutation may occur after terminal
+commit.
+
+### Required gates and exclusions
+
+Focused regression must reject the demonstrated non-root record-absent privileged fallthrough and
+prove exact present/absent classification, no-secret/no-UI query construction, rejection of every
+other OSStatus, exact fixed-artifact absence, and manifest-prefix containment. Restart regression
+must cover both sides of service-state deletion and prove that no privileged effect follows it.
+
+This contract prohibits a second retirement journal, terminal tombstone, fallback executor,
+external signing/trust anchor, finalizer, absence-only privileged success, broad Keychain
+enumeration, caller-selected Keychain identity, and evidence machinery in the product loop. It
+authorizes no native Keychain operation by documentation alone; native execution remains subject
+to the product-development gate and the separate legacy-corridor decision.

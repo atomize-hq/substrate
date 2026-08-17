@@ -193,6 +193,15 @@ for forbidden in ('CFArrayGetTypeID', 'CFArrayGetCount', 'CFArrayGetValueAtIndex
     if forbidden in generic_read:
         fail(f'generic-password read retains forbidden CFArray result handling: {forbidden}')
 
+generic_delete_start = keychain_ffi.index('pub(super) fn delete_generic_password_exact')
+generic_delete_end = keychain_ffi.index('\n    unsafe fn exact_private_key_query', generic_delete_start)
+generic_delete = keychain_ffi[generic_delete_start:generic_delete_end]
+for text in ('exact_generic_password_item', 'exact_generic_password_item_delete_query',
+             'kSecMatchItemList', 'kSecUseAuthenticationUIFail',
+             'System Keychain exact-delete final absence verification failed'):
+    if text not in generic_delete and text not in keychain_ffi and text not in executor:
+        fail(f'exact generic-password retirement lacks {text}')
+
 retire_start = executor.index('pub fn retire_mac_system_keychain_software_signer_v1')
 retire_end = executor.index('\nfn mac_verified_control_peer_requirement_v1', retire_start)
 retire = executor[retire_start:retire_end]

@@ -57,6 +57,68 @@ const MAC_PUBLISHER_HELPER_PATH_V1: &str =
     "/Library/PrivilegedHelperTools/com.substrate.lifecycle.publisher.v1";
 #[cfg(target_os = "macos")]
 const MAC_PUBLISHER_SERVICE_LABEL_V1: &str = "com.substrate.lifecycle.publisher.v1";
+#[cfg(target_os = "macos")]
+const MAC_PUBLISHER_SERVICE_STATE_KEYCHAIN_PATH_V1: &str = "/Library/Keychains/System.keychain";
+#[cfg(target_os = "macos")]
+const MAC_PUBLISHER_SERVICE_STATE_SERVICE_V1: &str = "com.substrate.lifecycle.v1";
+#[cfg(target_os = "macos")]
+const MAC_PUBLISHER_SERVICE_STATE_ACCOUNT_V1: &str = "mac-publisher-service-state.v1";
+
+#[derive(Clone, Copy, Debug, Eq, PartialEq)]
+enum MacPublisherServiceStatePresenceV1 {
+    Present,
+    Absent,
+}
+
+#[derive(Clone, Copy, Debug, Eq, PartialEq)]
+enum MacPublisherProductRetirementRouteV1 {
+    PrivilegedRetirement,
+    ValidateFixedAbsence,
+}
+
+fn select_mac_publisher_product_retirement_route_v1(
+    presence: MacPublisherServiceStatePresenceV1,
+) -> MacPublisherProductRetirementRouteV1 {
+    match presence {
+        MacPublisherServiceStatePresenceV1::Present => {
+            MacPublisherProductRetirementRouteV1::PrivilegedRetirement
+        }
+        MacPublisherServiceStatePresenceV1::Absent => {
+            MacPublisherProductRetirementRouteV1::ValidateFixedAbsence
+        }
+    }
+}
+
+#[derive(Clone, Copy, Debug, Eq, PartialEq)]
+enum MacPublisherServiceStateQueryShapeV1 {
+    NoResult,
+    ExactOne,
+    Ambiguous,
+    Drifted,
+}
+
+fn classify_mac_publisher_service_state_query_v1(
+    status: i32,
+    shape: MacPublisherServiceStateQueryShapeV1,
+) -> Result<MacPublisherServiceStatePresenceV1> {
+    match (status, shape) {
+        (0, MacPublisherServiceStateQueryShapeV1::ExactOne) => {
+            Ok(MacPublisherServiceStatePresenceV1::Present)
+        }
+        (-25300, MacPublisherServiceStateQueryShapeV1::NoResult) => {
+            Ok(MacPublisherServiceStatePresenceV1::Absent)
+        }
+        (0, MacPublisherServiceStateQueryShapeV1::Ambiguous) => {
+            bail!("fixed publisher service-state identity is ambiguous")
+        }
+        (0, MacPublisherServiceStateQueryShapeV1::Drifted) => {
+            bail!("fixed publisher service-state identity drifted")
+        }
+        (status, _) => {
+            bail!("fixed publisher service-state classification failed with OSStatus {status}")
+        }
+    }
+}
 
 pub fn read_exact_bootstrap_confirmation_v1<R, W>(reader: &mut R, writer: &mut W) -> Result<()>
 where
@@ -1182,6 +1244,251 @@ fn open_controlling_terminal_duplex_v1() -> Result<std::fs::File> {
 }
 
 #[cfg(target_os = "macos")]
+mod mac_publisher_service_state_classifier_ffi_v1 {
+    use super::*;
+    use std::ffi::{c_char, c_void, CString};
+    use std::ptr;
+
+    type CfType = *const c_void;
+    type CfMutableDictionary = *mut c_void;
+    type SecKeychain = *const c_void;
+    type OsStatus = i32;
+
+    const ERR_SEC_SUCCESS: OsStatus = 0;
+    const ERR_SEC_ITEM_NOT_FOUND: OsStatus = -25300;
+    const MAX_SYSTEM_KEYCHAIN_PATH_BYTES: usize = 1024;
+
+    struct OwnedCf(Vec<CfType>);
+
+    impl OwnedCf {
+        fn new() -> Self {
+            Self(Vec::new())
+        }
+
+        unsafe fn hold<T>(&mut self, value: *const T) -> *const T {
+            if !value.is_null() {
+                self.0.push(value.cast());
+            }
+            value
+        }
+    }
+
+    impl Drop for OwnedCf {
+        fn drop(&mut self) {
+            unsafe {
+                for value in self.0.drain(..).rev() {
+                    CFRelease(value);
+                }
+            }
+        }
+    }
+
+    unsafe fn cf_string(owned: &mut OwnedCf, value: &str) -> Result<CfType> {
+        let result = CFStringCreateWithBytes(
+            kCFAllocatorDefault,
+            value.as_bytes().as_ptr(),
+            value.len() as isize,
+            0x0800_0100,
+            0,
+        );
+        if result.is_null() {
+            bail!("allocate fixed publisher service-state UTF-8 string");
+        }
+        Ok(owned.hold(result).cast())
+    }
+
+    unsafe fn cf_array(owned: &mut OwnedCf, values: &[CfType]) -> Result<CfType> {
+        let array = CFArrayCreate(
+            kCFAllocatorDefault,
+            values.as_ptr(),
+            values.len() as isize,
+            ptr::null(),
+        );
+        if array.is_null() {
+            bail!("allocate one-element System Keychain search list");
+        }
+        Ok(owned.hold(array).cast())
+    }
+
+    unsafe fn dictionary(
+        owned: &mut OwnedCf,
+        entries: &[(CfType, CfType)],
+    ) -> Result<CfMutableDictionary> {
+        let dictionary = CFDictionaryCreateMutable(
+            kCFAllocatorDefault,
+            entries.len() as isize,
+            ptr::null(),
+            ptr::null(),
+        );
+        if dictionary.is_null() {
+            bail!("allocate fixed publisher service-state query");
+        }
+        owned.hold(dictionary);
+        for (key, value) in entries {
+            CFDictionarySetValue(dictionary, *key, *value);
+        }
+        Ok(dictionary)
+    }
+
+    unsafe fn open_fixed_system_keychain(owned: &mut OwnedCf) -> Result<SecKeychain> {
+        let path = CString::new(MAC_PUBLISHER_SERVICE_STATE_KEYCHAIN_PATH_V1)
+            .expect("fixed System Keychain path has no NUL");
+        let mut keychain: SecKeychain = ptr::null();
+        let status = SecKeychainOpen(path.as_ptr(), &mut keychain);
+        if status != ERR_SEC_SUCCESS || keychain.is_null() {
+            bail!("open fixed System Keychain failed with OSStatus {status}");
+        }
+        owned.hold(keychain);
+
+        let mut returned = [0 as c_char; MAX_SYSTEM_KEYCHAIN_PATH_BYTES];
+        let mut returned_length =
+            u32::try_from(returned.len()).context("bound returned System Keychain path")?;
+        let status = SecKeychainGetPath(keychain, &mut returned_length, returned.as_mut_ptr());
+        if status != ERR_SEC_SUCCESS {
+            bail!("read returned System Keychain path failed with OSStatus {status}");
+        }
+        let returned_length =
+            usize::try_from(returned_length).context("decode returned System Keychain path")?;
+        if returned_length >= returned.len()
+            || returned[returned_length] != 0
+            || std::slice::from_raw_parts(returned.as_ptr().cast::<u8>(), returned_length)
+                != MAC_PUBLISHER_SERVICE_STATE_KEYCHAIN_PATH_V1.as_bytes()
+        {
+            bail!("returned System Keychain path drifted from the fixed store");
+        }
+        Ok(keychain)
+    }
+
+    pub(super) fn classify_fixed_record() -> Result<MacPublisherServiceStatePresenceV1> {
+        unsafe {
+            let mut owned = OwnedCf::new();
+            let keychain = open_fixed_system_keychain(&mut owned)?;
+            let search_list = cf_array(&mut owned, &[keychain.cast()])?;
+            let service = cf_string(&mut owned, MAC_PUBLISHER_SERVICE_STATE_SERVICE_V1)?;
+            let account = cf_string(&mut owned, MAC_PUBLISHER_SERVICE_STATE_ACCOUNT_V1)?;
+            let query = dictionary(
+                &mut owned,
+                &[
+                    (kSecClass, kSecClassGenericPassword),
+                    (kSecAttrService, service),
+                    (kSecAttrAccount, account),
+                    (kSecMatchSearchList, search_list),
+                    (kSecUseAuthenticationUI, kSecUseAuthenticationUIFail),
+                    (kSecReturnAttributes, kCFBooleanTrue),
+                    (kSecMatchLimit, kSecMatchLimitAll),
+                ],
+            )?;
+            let mut result: CfType = ptr::null();
+            let status = SecItemCopyMatching(query, &mut result);
+            if status == ERR_SEC_ITEM_NOT_FOUND {
+                if !result.is_null() {
+                    owned.hold(result);
+                    return classify_mac_publisher_service_state_query_v1(
+                        status,
+                        MacPublisherServiceStateQueryShapeV1::Drifted,
+                    );
+                }
+                return classify_mac_publisher_service_state_query_v1(
+                    status,
+                    MacPublisherServiceStateQueryShapeV1::NoResult,
+                );
+            }
+            if status != ERR_SEC_SUCCESS || result.is_null() {
+                if !result.is_null() {
+                    owned.hold(result);
+                }
+                return classify_mac_publisher_service_state_query_v1(
+                    status,
+                    MacPublisherServiceStateQueryShapeV1::NoResult,
+                );
+            }
+            owned.hold(result);
+            if CFGetTypeID(result) != CFArrayGetTypeID() || CFArrayGetCount(result) != 1 {
+                return classify_mac_publisher_service_state_query_v1(
+                    status,
+                    MacPublisherServiceStateQueryShapeV1::Ambiguous,
+                );
+            }
+            let attributes = CFArrayGetValueAtIndex(result, 0);
+            if attributes.is_null() || CFGetTypeID(attributes) != CFDictionaryGetTypeID() {
+                return classify_mac_publisher_service_state_query_v1(
+                    status,
+                    MacPublisherServiceStateQueryShapeV1::Drifted,
+                );
+            }
+            for (key, expected) in [(kSecAttrService, service), (kSecAttrAccount, account)] {
+                let observed = CFDictionaryGetValue(attributes, key);
+                if observed.is_null() || CFEqual(observed, expected) == 0 {
+                    return classify_mac_publisher_service_state_query_v1(
+                        status,
+                        MacPublisherServiceStateQueryShapeV1::Drifted,
+                    );
+                }
+            }
+            classify_mac_publisher_service_state_query_v1(
+                status,
+                MacPublisherServiceStateQueryShapeV1::ExactOne,
+            )
+        }
+    }
+
+    #[link(name = "Security", kind = "framework")]
+    unsafe extern "C" {
+        static kSecClass: CfType;
+        static kSecClassGenericPassword: CfType;
+        static kSecAttrService: CfType;
+        static kSecAttrAccount: CfType;
+        static kSecMatchSearchList: CfType;
+        static kSecUseAuthenticationUI: CfType;
+        static kSecUseAuthenticationUIFail: CfType;
+        static kSecReturnAttributes: CfType;
+        static kSecMatchLimit: CfType;
+        static kSecMatchLimitAll: CfType;
+        fn SecKeychainOpen(path_name: *const c_char, keychain: *mut SecKeychain) -> OsStatus;
+        fn SecKeychainGetPath(
+            keychain: SecKeychain,
+            path_length: *mut u32,
+            path_name: *mut c_char,
+        ) -> OsStatus;
+        fn SecItemCopyMatching(query: CfType, result: *mut CfType) -> OsStatus;
+    }
+
+    #[link(name = "CoreFoundation", kind = "framework")]
+    unsafe extern "C" {
+        static kCFAllocatorDefault: CfType;
+        static kCFBooleanTrue: CfType;
+        fn CFRelease(value: CfType);
+        fn CFGetTypeID(value: CfType) -> usize;
+        fn CFEqual(left: CfType, right: CfType) -> u8;
+        fn CFStringCreateWithBytes(
+            allocator: CfType,
+            bytes: *const u8,
+            num_bytes: isize,
+            encoding: u32,
+            is_external_representation: u8,
+        ) -> CfType;
+        fn CFArrayCreate(
+            allocator: CfType,
+            values: *const CfType,
+            count: isize,
+            callbacks: *const c_void,
+        ) -> CfType;
+        fn CFArrayGetTypeID() -> usize;
+        fn CFArrayGetCount(array: CfType) -> isize;
+        fn CFArrayGetValueAtIndex(array: CfType, index: isize) -> CfType;
+        fn CFDictionaryCreateMutable(
+            allocator: CfType,
+            capacity: isize,
+            key_callbacks: *const c_void,
+            value_callbacks: *const c_void,
+        ) -> CfMutableDictionary;
+        fn CFDictionarySetValue(dictionary: CfMutableDictionary, key: CfType, value: CfType);
+        fn CFDictionaryGetTypeID() -> usize;
+        fn CFDictionaryGetValue(dictionary: CfType, key: CfType) -> CfType;
+    }
+}
+
+#[cfg(target_os = "macos")]
 fn execute_closed_mac_publisher_service_state_v1(
     executor_operation: &'static str,
     expected_status: &'static str,
@@ -1193,8 +1500,9 @@ fn execute_closed_mac_publisher_service_state_v1(
         (executor_operation, expected_status),
         ("--publisher-service-state-install-fd", "installed")
             | ("--publisher-service-state-retire-fd", "retired")
+            | ("--publisher-install-retire-fd", "retired")
     ) {
-        bail!("publisher service-state route is not one of its two fixed operations");
+        bail!("publisher service-state route is not one of its three fixed operations");
     }
     let mut pair = [-1; 2];
     // SAFETY: socketpair initializes both descriptors on success and ownership transfers below.
@@ -1219,12 +1527,31 @@ fn execute_closed_mac_publisher_service_state_v1(
     }
     let retained_fd = retained.as_raw_fd();
     let peer_fd = peer.as_raw_fd();
+    let executor_path = if matches!(
+        executor_operation,
+        "--publisher-service-state-retire-fd" | "--publisher-install-retire-fd"
+    ) {
+        let control_path =
+            std::env::current_exe().context("resolve installed macOS lifecycle control image")?;
+        let parent = control_path
+            .parent()
+            .ok_or_else(|| anyhow!("installed macOS lifecycle control has no parent"))?;
+        let executor = parent.join("substrate-lifecycle-macos");
+        let metadata = std::fs::symlink_metadata(&executor)
+            .context("inspect installed same-version macOS lifecycle executor")?;
+        if !metadata.file_type().is_file() || metadata.file_type().is_symlink() {
+            bail!("installed same-version macOS lifecycle executor is not one no-follow file");
+        }
+        executor
+    } else {
+        PathBuf::from(MAC_PUBLISHER_HELPER_PATH_V1)
+    };
     let mut command = Command::new("/usr/bin/sudo");
     command
         .arg("-C")
         .arg("4")
         .arg("--")
-        .arg(MAC_PUBLISHER_HELPER_PATH_V1)
+        .arg(&executor_path)
         .arg(executor_operation)
         .arg("3")
         .env_clear()
@@ -1325,6 +1652,28 @@ fn execute_closed_mac_publisher_service_state_retirement_v1() -> Result<Value> {
 }
 
 #[cfg(target_os = "macos")]
+fn execute_closed_mac_publisher_install_retirement_v1() -> Result<Value> {
+    let presence = mac_publisher_service_state_classifier_ffi_v1::classify_fixed_record()?;
+    match select_mac_publisher_product_retirement_route_v1(presence) {
+        MacPublisherProductRetirementRouteV1::PrivilegedRetirement => {
+            execute_closed_mac_publisher_service_state_v1(
+                "--publisher-install-retire-fd",
+                "retired",
+            )
+        }
+        MacPublisherProductRetirementRouteV1::ValidateFixedAbsence => {
+            observe_fixed_mac_publisher_product_absent_v1()?;
+            Ok(json!({
+                "launchd_domain": "system",
+                "record_sha256": Value::Null,
+                "service_label": MAC_PUBLISHER_SERVICE_LABEL_V1,
+                "status": "already_uninstalled",
+            }))
+        }
+    }
+}
+
+#[cfg(target_os = "macos")]
 fn observe_fixed_mac_publisher_service_absent_v1() -> Result<Value> {
     let domain = Command::new("/bin/launchctl")
         .arg("print")
@@ -1357,8 +1706,28 @@ fn observe_fixed_mac_publisher_service_absent_v1() -> Result<Value> {
     }))
 }
 
+#[cfg(target_os = "macos")]
+fn observe_fixed_mac_publisher_product_absent_v1() -> Result<()> {
+    observe_fixed_mac_publisher_service_absent_v1()?;
+    for path in [
+        MAC_PUBLISHER_HELPER_PATH_V1,
+        "/Library/LaunchDaemons/com.substrate.lifecycle.publisher.v1.plist",
+        "/Library/Application Support/Substrate/lifecycle/bootstrap-provenance.v1.json",
+    ] {
+        match std::fs::symlink_metadata(path) {
+            Err(error) if error.kind() == std::io::ErrorKind::NotFound => {}
+            Err(error) => {
+                return Err(error)
+                    .with_context(|| format!("observe fixed publisher artifact absence at {path}"))
+            }
+            Ok(_) => bail!("fixed publisher artifact remains after terminal commit: {path}"),
+        }
+    }
+    Ok(())
+}
+
 fn usage_error_v1() -> Result<()> {
-    bail!("usage: substrate-lifecycle-control <submit-mapped-lifecycle-v1|publisher-bootstrap|publisher-service-state-preflight-absent|publisher-service-state-install|publisher-service-state-retire>")
+    bail!("usage: substrate-lifecycle-control <submit-mapped-lifecycle-v1|publisher-bootstrap|publisher-service-state-preflight-absent|publisher-service-state-install|publisher-service-state-retire|publisher-install-retire>")
 }
 
 fn main_impl_v1() -> Result<()> {
@@ -1389,6 +1758,12 @@ fn main_impl_v1() -> Result<()> {
             print_json_line_v1(&execute_closed_mac_publisher_service_state_retirement_v1()?)?;
             #[cfg(not(target_os = "macos"))]
             bail!("publisher service-state retirement is available only on macOS");
+        }
+        "publisher-install-retire" => {
+            #[cfg(target_os = "macos")]
+            print_json_line_v1(&execute_closed_mac_publisher_install_retirement_v1()?)?;
+            #[cfg(not(target_os = "macos"))]
+            bail!("publisher install retirement is available only on macOS");
         }
         "publisher-bootstrap" => {
             // This branch is deliberately before ordinary mapped stdin handling. It admits one
@@ -1441,6 +1816,53 @@ fn main() -> Result<()> {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn publisher_service_state_classifier_accepts_only_exact_presence_or_absence() {
+        assert_eq!(
+            classify_mac_publisher_service_state_query_v1(
+                0,
+                MacPublisherServiceStateQueryShapeV1::ExactOne,
+            )
+            .expect("one exact fixed record is present"),
+            MacPublisherServiceStatePresenceV1::Present
+        );
+        assert_eq!(
+            classify_mac_publisher_service_state_query_v1(
+                -25300,
+                MacPublisherServiceStateQueryShapeV1::NoResult,
+            )
+            .expect("the fixed record is absent"),
+            MacPublisherServiceStatePresenceV1::Absent
+        );
+        for (status, shape) in [
+            (0, MacPublisherServiceStateQueryShapeV1::NoResult),
+            (0, MacPublisherServiceStateQueryShapeV1::Ambiguous),
+            (0, MacPublisherServiceStateQueryShapeV1::Drifted),
+            (-25299, MacPublisherServiceStateQueryShapeV1::NoResult),
+            (-25308, MacPublisherServiceStateQueryShapeV1::NoResult),
+            (-50, MacPublisherServiceStateQueryShapeV1::NoResult),
+            (-25300, MacPublisherServiceStateQueryShapeV1::ExactOne),
+        ] {
+            assert!(classify_mac_publisher_service_state_query_v1(status, shape).is_err());
+        }
+    }
+
+    #[test]
+    fn publisher_product_retirement_routes_presence_and_absence_without_fallback() {
+        assert_eq!(
+            select_mac_publisher_product_retirement_route_v1(
+                MacPublisherServiceStatePresenceV1::Present,
+            ),
+            MacPublisherProductRetirementRouteV1::PrivilegedRetirement
+        );
+        assert_eq!(
+            select_mac_publisher_product_retirement_route_v1(
+                MacPublisherServiceStatePresenceV1::Absent,
+            ),
+            MacPublisherProductRetirementRouteV1::ValidateFixedAbsence
+        );
+    }
 
     #[test]
     fn r6_predecessor_replacement_requires_the_authenticated_response_field_set() {

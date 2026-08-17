@@ -643,6 +643,124 @@ kill_live_dev_owner_helpers() {
   done
 }
 
+prepare_managed_mac_product_retirement() {
+  local binding_fd
+  if [[ ! -f "${MANAGED_MAC_CONTROL_BINARIES_PATH}" ]]; then
+    if [[ -e "/Library/Application Support/Substrate/lifecycle/bootstrap-provenance.v1.json" || \
+          -e "/Library/PrivilegedHelperTools/com.substrate.lifecycle.publisher.v1" || \
+          -e "/Library/LaunchDaemons/com.substrate.lifecycle.publisher.v1.plist" ]]; then
+      fatal "Fixed macOS publisher state exists without this prefix's managed lifecycle manifest."
+    fi
+    return 1
+  fi
+
+  exec {binding_fd}< <(python3 - \
+    "${PREFIX}" \
+    "${INSTALL_BOOTSTRAP_COMMITMENT}" \
+    "${MANAGED_MAC_CONTROL_BINARIES_PATH}" \
+    "/Library/Application Support/Substrate/lifecycle/bootstrap-provenance.v1.json" \
+    "/Library/PrivilegedHelperTools/com.substrate.lifecycle.publisher.v1" \
+    "/Library/LaunchDaemons/com.substrate.lifecycle.publisher.v1.plist" <<'PY'
+import hashlib
+import json
+import os
+import pathlib
+import stat
+import sys
+
+prefix, host_context_commitment, manifest_name, provenance_name, helper_name, plist_name = sys.argv[1:]
+manifest = pathlib.Path(manifest_name)
+provenance = pathlib.Path(provenance_name)
+helper = pathlib.Path(helper_name)
+plist = pathlib.Path(plist_name)
+control = pathlib.Path(prefix) / "bin" / "substrate-lifecycle-control"
+executor = pathlib.Path(prefix) / "bin" / "substrate-lifecycle-macos"
+expected_paths = {str(control), str(executor)}
+
+def fail(message):
+    raise RuntimeError(message)
+
+def regular_nofollow(path):
+    metadata = path.lstat()
+    if not stat.S_ISREG(metadata.st_mode) or stat.S_ISLNK(metadata.st_mode) or metadata.st_nlink != 1:
+        fail(f"retained path is not one regular no-follow file: {path}")
+    return metadata
+
+def digest(path):
+    return hashlib.sha256(path.read_bytes()).hexdigest()
+
+regular_nofollow(manifest)
+lines = manifest.read_text(encoding="utf-8").splitlines()
+if len(lines) != 2 or len(set(lines)) != 2 or set(lines) != expected_paths:
+    fail("managed macOS lifecycle manifest is not the exact installed binary pair")
+for path in (control, executor):
+    regular_nofollow(path)
+
+fixed_paths = (provenance, helper, plist)
+fixed_present = [path.exists() or path.is_symlink() for path in fixed_paths]
+if any(fixed_present) and not all(fixed_present):
+    fail("fixed publisher artifacts are a partial ambiguous retirement state")
+
+control_sha = digest(control)
+executor_sha = digest(executor)
+if all(fixed_present):
+    for path in fixed_paths:
+        regular_nofollow(path)
+    raw = provenance.read_bytes()
+    record = json.loads(raw)
+    canonical = json.dumps(record, sort_keys=True, separators=(",", ":"), ensure_ascii=True).encode()
+    if raw != canonical:
+        fail("fixed publisher provenance is not canonical")
+    if record["selected_host_prefix"] != prefix:
+        fail("fixed publisher provenance selected a different prefix")
+    if record["host_context_commitment"] != host_context_commitment:
+        fail("fixed publisher provenance selected a different host context")
+    control_authority = record["control_authority"]
+    executor_image = record["executor_image"]
+    if control_authority["artifact_sha256"] != control_sha:
+        fail("installed lifecycle control does not match retained provenance")
+    if record["control_image"]["artifact_sha256"] != control_sha:
+        fail("installed lifecycle control image is substituted")
+    if executor_image["artifact_sha256"] != executor_sha:
+        fail("installed lifecycle executor does not match retained provenance")
+    if digest(helper) != executor_sha:
+        fail("fixed publisher helper does not match retained provenance")
+    if record["launch_daemon_plist_sha256"] != digest(plist):
+        fail("fixed publisher plist does not match retained provenance")
+for value in (str(control), str(executor), control_sha, executor_sha):
+    sys.stdout.buffer.write(value.encode() + b"\0")
+PY
+  )
+  IFS= read -r -d '' MANAGED_MAC_CONTROL_PATH <&"${binding_fd}" \
+    || fatal "Unable to bind the installed macOS lifecycle control."
+  IFS= read -r -d '' MANAGED_MAC_EXECUTOR_PATH <&"${binding_fd}" \
+    || fatal "Unable to bind the installed macOS lifecycle executor."
+  IFS= read -r -d '' MANAGED_MAC_CONTROL_SHA256 <&"${binding_fd}" \
+    || fatal "Unable to bind the installed macOS lifecycle control digest."
+  IFS= read -r -d '' MANAGED_MAC_EXECUTOR_SHA256 <&"${binding_fd}" \
+    || fatal "Unable to bind the installed macOS lifecycle executor digest."
+  exec {binding_fd}<&-
+  return 0
+}
+
+remove_managed_mac_control_binary_copies() {
+  [[ -f "${MANAGED_MAC_CONTROL_BINARIES_PATH}" ]] \
+    || fatal "Managed macOS lifecycle manifest disappeared before prefix cleanup."
+  [[ -f "${MANAGED_MAC_CONTROL_PATH}" && ! -L "${MANAGED_MAC_CONTROL_PATH}" ]] \
+    || fatal "Managed macOS lifecycle control changed before prefix cleanup."
+  [[ -f "${MANAGED_MAC_EXECUTOR_PATH}" && ! -L "${MANAGED_MAC_EXECUTOR_PATH}" ]] \
+    || fatal "Managed macOS lifecycle executor changed before prefix cleanup."
+  [[ "$(shasum -a 256 -- "${MANAGED_MAC_CONTROL_PATH}" | awk '{print $1}')" == \
+      "${MANAGED_MAC_CONTROL_SHA256}" ]] \
+    || fatal "Managed macOS lifecycle control digest changed before prefix cleanup."
+  [[ "$(shasum -a 256 -- "${MANAGED_MAC_EXECUTOR_PATH}" | awk '{print $1}')" == \
+      "${MANAGED_MAC_EXECUTOR_SHA256}" ]] \
+    || fatal "Managed macOS lifecycle executor digest changed before prefix cleanup."
+  rm -f -- "${MANAGED_MAC_CONTROL_PATH}" "${MANAGED_MAC_EXECUTOR_PATH}"
+  rm -f -- "${MANAGED_MAC_CONTROL_BINARIES_PATH}"
+  log "Removed the exact manifest-managed macOS lifecycle binary pair."
+}
+
 PREFIX=""
 PREFIX_DECLARED=0
 INSTALL_BOOTSTRAP_CONTEXT_V1=""
@@ -659,6 +777,10 @@ RECORDED_GROUP_CREATED=""
 RECORDED_MEMBERS_ADDED=()
 RECORDED_LINGER_USERS=()
 PROTECTED_PATHS=()
+MANAGED_MAC_CONTROL_PATH=""
+MANAGED_MAC_EXECUTOR_PATH=""
+MANAGED_MAC_CONTROL_SHA256=""
+MANAGED_MAC_EXECUTOR_SHA256=""
 declare -A PROTECTED_PATHS_SEEN=()
 IS_LINUX=0
 IS_MAC=0
@@ -736,6 +858,7 @@ RUN_DIR="${PREFIX%/}/run"
 REPO_ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")/../.." && pwd)"
 MANAGED_STATE_DIR="${PREFIX%/}/.dev-install-managed"
 MANAGED_MAC_LINUX_BINARIES_PATH="${MANAGED_STATE_DIR}/mac-linux-binaries.txt"
+MANAGED_MAC_CONTROL_BINARIES_PATH="${MANAGED_STATE_DIR}/mac-control-binaries.txt"
 
 if [[ "${AUTO_CLEANUP}" -eq 1 ]]; then
   load_host_state_metadata "${HOST_STATE_PATH}" || true
@@ -765,6 +888,33 @@ fi
 if [[ -n "${SUBSTRATE_BIN}" && ! -x "${SUBSTRATE_BIN}" ]]; then
   warn "Specified substrate binary (${SUBSTRATE_BIN}) is not executable; shim removal may be incomplete."
   SUBSTRATE_BIN=""
+fi
+
+if [[ "${IS_MAC}" -eq 1 ]] && prepare_managed_mac_product_retirement; then
+  log "Retiring the exact installed macOS lifecycle product through ${MANAGED_MAC_CONTROL_PATH}"
+  mac_retirement_response="$("${MANAGED_MAC_CONTROL_PATH}" publisher-install-retire)" \
+    || fatal "Installed macOS lifecycle product retirement failed; preserving the managed prefix."
+  python3 - "${mac_retirement_response}" <<'PY' \
+    || fatal "Installed macOS lifecycle product retirement returned a non-canonical result."
+import json
+import re
+import sys
+
+try:
+    response = json.loads(sys.argv[1])
+    if (set(response) != {"launchd_domain", "record_sha256", "service_label", "status"}
+            or response["launchd_domain"] != "system"
+            or response["service_label"] != "com.substrate.lifecycle.publisher.v1"
+            or not ((response["status"] == "retired"
+                     and isinstance(response["record_sha256"], str)
+                     and re.fullmatch(r"[0-9a-f]{64}", response["record_sha256"]))
+                    or (response["status"] == "already_uninstalled"
+                        and response["record_sha256"] is None))):
+        raise ValueError()
+except Exception:
+    raise SystemExit(1)
+PY
+  remove_managed_mac_control_binary_copies
 fi
 
 kill_live_dev_owner_helpers
@@ -934,6 +1084,9 @@ collect_protected_paths \
   "${BIN_DIR}/world-service.exe" \
   "${BIN_DIR}/substrate-world-service" \
   "${BIN_DIR}/substrate-world-service.exe" \
+  "${BIN_DIR}/substrate-lifecycle-control" \
+  "${BIN_DIR}/substrate-lifecycle-macos" \
+  "${MANAGED_MAC_CONTROL_BINARIES_PATH}" \
   "${RUNTIME_SCRIPTS_DIR}/substrate/world-enable.sh" \
   "${RUNTIME_SCRIPTS_DIR}/substrate/install-substrate.sh" \
   "${RUNTIME_SCRIPTS_DIR}/substrate/world-deps.yaml" \

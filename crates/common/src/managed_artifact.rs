@@ -480,12 +480,32 @@ pub struct MacPublisherServiceFileIdentityV1 {
     pub code_requirement: Option<String>,
 }
 
+/// One exact installed same-version image retained until product retirement commits.
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]
+#[serde(deny_unknown_fields)]
+pub struct MacPublisherRetirementImageIdentityV1 {
+    pub path: String,
+    pub artifact_sha256: String,
+    pub physical_identity: String,
+    pub code_identity: String,
+    pub code_requirement: String,
+}
+
+/// One exact generic-password item in the authenticated product-retirement plan.
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]
+#[serde(deny_unknown_fields)]
+pub struct MacPublisherRetirementKeychainItemV1 {
+    pub account: String,
+    pub artifact_sha256: String,
+}
+
 /// Durable phase of the fixed system-domain launchd registration transaction.
 #[derive(Debug, Clone, Copy, Serialize, Deserialize, PartialEq, Eq)]
 #[serde(rename_all = "snake_case")]
 pub enum MacPublisherServiceStatePhaseV1 {
     InstallPrecommitted,
     Installed,
+    RetirementReady,
     RetirementPrecommitted,
     Retired,
 }
@@ -507,6 +527,12 @@ pub struct MacPublisherServiceStateRecordV1 {
     pub stage_one_capsule_sha256: String,
     pub install_provenance_sha256: String,
     pub bootstrap_attempt_locator_account: String,
+    pub control_authority: MacPublisherControlAuthorityV1,
+    pub selected_host_prefix: String,
+    pub installed_control: MacPublisherRetirementImageIdentityV1,
+    pub installed_executor: MacPublisherRetirementImageIdentityV1,
+    pub signer_spki_sha256: String,
+    pub retirement_keychain_items: Vec<MacPublisherRetirementKeychainItemV1>,
     pub service_label: String,
     pub launchd_domain: String,
     pub program_arguments: Vec<String>,
@@ -518,8 +544,9 @@ pub struct MacPublisherServiceStateRecordV1 {
     pub registration_observed: bool,
     pub files_observed_present: bool,
     pub record_revision: u64,
-    /// Number of fixed retirement paths whose absence has been durably authorized in the
-    /// protected CAS chain. The executor advances this cursor before unlinking each fixed path.
+    /// Monotonic product-retirement cursor. Each value authorizes exactly one compiled
+    /// destructive effect before that effect occurs; value 15 authorizes deletion of this record
+    /// itself as the terminal privileged commit.
     pub retirement_delete_cursor: u8,
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub previous_record_sha256: Option<String>,
@@ -3665,6 +3692,8 @@ pub fn validate_mac_publisher_service_state_record_v1(
     ] {
         require_hex_digest(value, field)?;
     }
+    validate_mac_publisher_control_authority_v1(&record.control_authority)?;
+    require_hex_digest(&record.signer_spki_sha256, "signer_spki_sha256")?;
     validate_mac_publisher_bootstrap_locator_account_v1(&record.bootstrap_attempt_locator_account)?;
     const LABEL: &str = "com.substrate.lifecycle.publisher.v1";
     const HELPER: &str = "/Library/PrivilegedHelperTools/com.substrate.lifecycle.publisher.v1";
@@ -3699,6 +3728,89 @@ pub fn validate_mac_publisher_service_state_record_v1(
         false,
         "publisher provenance",
     )?;
+    if !record.selected_host_prefix.starts_with('/')
+        || record.selected_host_prefix == "/"
+        || record.selected_host_prefix.ends_with('/')
+        || record.selected_host_prefix.contains(['\0', '\n', '\r'])
+        || record
+            .selected_host_prefix
+            .split('/')
+            .any(|part| part == "..")
+    {
+        bail!("macOS publisher retirement selected_host_prefix is not one exact absolute prefix");
+    }
+    let installed_control_path = format!(
+        "{}/bin/substrate-lifecycle-control",
+        record.selected_host_prefix
+    );
+    let installed_executor_path = format!(
+        "{}/bin/substrate-lifecycle-macos",
+        record.selected_host_prefix
+    );
+    validate_mac_publisher_retirement_image_identity_v1(
+        &record.installed_control,
+        &installed_control_path,
+        "installed publisher control",
+    )?;
+    validate_mac_publisher_retirement_image_identity_v1(
+        &record.installed_executor,
+        &installed_executor_path,
+        "installed publisher executor",
+    )?;
+    if record.installed_control.artifact_sha256 != record.control_authority.artifact_sha256
+        || record.installed_control.code_requirement
+            != record.control_authority.designated_requirement
+        || record.installed_executor.artifact_sha256 != record.helper.artifact_sha256
+        || Some(record.installed_executor.code_identity.as_str())
+            != record.helper.code_identity.as_deref()
+        || Some(record.installed_executor.code_requirement.as_str())
+            != record.helper.code_requirement.as_deref()
+    {
+        bail!("macOS publisher retirement installed image identities do not exact-join authority");
+    }
+    let expected_accounts = [
+        format!("{}:r6-pairing-activation-1", record.scope_id),
+        format!("{}:r6-pairing-continuation-1", record.scope_id),
+        format!("{}:r6-pairing-predecessor-1", record.scope_id),
+        format!("{}:r6-pairing-predecessor-state", record.scope_id),
+        format!("{}:lima-stage-one-capsule", record.scope_id),
+        format!("{}:publisher-bootstrap-intent", record.scope_id),
+        record.bootstrap_attempt_locator_account.clone(),
+        format!("{}:current-anchor", record.scope_id),
+        "mac-control-admission-authority.v1".to_string(),
+    ];
+    let plan_is_required = matches!(
+        record.phase,
+        MacPublisherServiceStatePhaseV1::RetirementReady
+            | MacPublisherServiceStatePhaseV1::RetirementPrecommitted
+            | MacPublisherServiceStatePhaseV1::Retired
+    );
+    if plan_is_required {
+        if record.retirement_keychain_items.len() != expected_accounts.len() {
+            bail!("macOS publisher retirement plan does not contain the exact Keychain item set");
+        }
+        let mut unique_accounts = BTreeSet::new();
+        for (item, expected_account) in record
+            .retirement_keychain_items
+            .iter()
+            .zip(expected_accounts.iter())
+        {
+            if item.account != *expected_account || !unique_accounts.insert(item.account.as_str()) {
+                bail!("macOS publisher retirement Keychain item order or identity is invalid");
+            }
+            require_hex_digest(
+                &item.artifact_sha256,
+                "publisher retirement Keychain artifact_sha256",
+            )?;
+        }
+        if record.retirement_keychain_items[5].artifact_sha256 != record.bootstrap_intent_sha256 {
+            bail!(
+                "macOS publisher retirement Keychain plan conflicts with retained receipt digests"
+            );
+        }
+    } else if !record.retirement_keychain_items.is_empty() {
+        bail!("macOS publisher retirement plan appeared before product installation completed");
+    }
     if let Some(previous) = &record.previous_record_sha256 {
         require_hex_digest(previous, "service-state previous_record_sha256")?;
     }
@@ -3706,18 +3818,19 @@ pub fn validate_mac_publisher_service_state_record_v1(
         match record.phase {
             MacPublisherServiceStatePhaseV1::InstallPrecommitted => (1, 0, (false, true), false),
             MacPublisherServiceStatePhaseV1::Installed => (2, 0, (true, true), true),
+            MacPublisherServiceStatePhaseV1::RetirementReady => (3, 0, (true, true), true),
             MacPublisherServiceStatePhaseV1::RetirementPrecommitted => {
-                if record.retirement_delete_cursor > 3 {
+                if record.retirement_delete_cursor > 14 {
                     bail!("macOS publisher service-state retirement cursor is invalid");
                 }
                 (
-                    3 + u64::from(record.retirement_delete_cursor),
+                    4 + u64::from(record.retirement_delete_cursor),
                     record.retirement_delete_cursor,
                     (true, true),
                     true,
                 )
             }
-            MacPublisherServiceStatePhaseV1::Retired => (7, 3, (false, false), true),
+            MacPublisherServiceStatePhaseV1::Retired => (19, 15, (false, false), true),
         };
     if record.record_revision != expected_revision
         || record.retirement_delete_cursor != expected_cursor
@@ -3734,6 +3847,8 @@ pub fn validate_mac_publisher_service_state_record_v1(
     expected.files_observed_present = true;
     expected.record_revision = 1;
     expected.retirement_delete_cursor = 0;
+    let retirement_keychain_items = expected.retirement_keychain_items.clone();
+    expected.retirement_keychain_items.clear();
     expected.previous_record_sha256 = None;
     let target_revision = record.record_revision;
     while expected.record_revision < target_revision {
@@ -3745,21 +3860,47 @@ pub fn validate_mac_publisher_service_state_record_v1(
                 expected.phase = MacPublisherServiceStatePhaseV1::Installed;
                 expected.registration_observed = true;
             }
-            3..=6 => {
-                expected.phase = MacPublisherServiceStatePhaseV1::RetirementPrecommitted;
-                expected.retirement_delete_cursor = (expected.record_revision - 3) as u8;
+            3 => {
+                expected.phase = MacPublisherServiceStatePhaseV1::RetirementReady;
+                expected.retirement_keychain_items = retirement_keychain_items.clone();
             }
-            7 => {
+            4..=18 => {
+                expected.phase = MacPublisherServiceStatePhaseV1::RetirementPrecommitted;
+                expected.retirement_delete_cursor = (expected.record_revision - 4) as u8;
+            }
+            19 => {
                 expected.phase = MacPublisherServiceStatePhaseV1::Retired;
                 expected.registration_observed = false;
                 expected.files_observed_present = false;
-                expected.retirement_delete_cursor = 3;
+                expected.retirement_delete_cursor = 15;
             }
             _ => bail!("macOS publisher service-state revision is outside the fixed chain"),
         }
     }
     if expected != *record {
         bail!("macOS publisher service-state predecessor hash chain is invalid");
+    }
+    Ok(())
+}
+
+fn validate_mac_publisher_retirement_image_identity_v1(
+    identity: &MacPublisherRetirementImageIdentityV1,
+    expected_path: &str,
+    field: &str,
+) -> Result<()> {
+    if identity.path != expected_path {
+        bail!("{field} path is not the selected installed image");
+    }
+    require_hex_digest(
+        &identity.artifact_sha256,
+        &format!("{field} artifact_sha256"),
+    )?;
+    for (value, name) in [
+        (&identity.physical_identity, "physical_identity"),
+        (&identity.code_identity, "code_identity"),
+        (&identity.code_requirement, "code_requirement"),
+    ] {
+        require_nonempty_no_nul(value, &format!("{field} {name}"))?;
     }
     Ok(())
 }

@@ -3715,3 +3715,30 @@ Future evidence/hash slots remain empty except for the bounded G2/G3 stop receip
 | Native macOS evidence artifact/receipt SHA-256 | `PENDING / NOT RUN` |
 | Evidence-mirror refresh receipt SHA-256 | `PENDING / NOT AUTHORIZED` |
 | `MAC-CLOSEOUT` receipt SHA-256 | `PENDING / NOT AUTHORIZED` |
+
+## R3 macOS product-uninstall classifier regression ledger (2026-08-17)
+
+This entry records a product-development defect and its selected bounded correction. It does not
+record a landed product fix, native uninstall, Keychain operation, evidence result, or legacy
+cleanup authority.
+
+| Observation | Reproduced result | Required product consequence |
+|---|---|---|
+| Privileged service-state attestation after terminal record deletion | The uncommitted `mac_attest_closed_service_state_fd3_v1` record-absent branch accepted a non-root peer without exact executable/designated-requirement attestation. | Delete the branch or make it fail closed. An absent authority record, non-root UID, and path absence cannot authorize privileged success. |
+| Control handling of `already_uninstalled` | The uncommitted control accepted privileged `already_uninstalled`, coupling idempotence to a route that can no longer authenticate itself after terminal commit. | Move terminal idempotence classification to the ordinary installed control/uninstaller; the privileged executor must not classify absent-record state as success. |
+| Pre-commit versus post-commit fixed state | Complete fixed filesystem and launchd absence can describe both never-installed/pre-commit state and a completed uninstall. | Filesystem/launchd absence alone is insufficient. Use one exact status-only, no-UI, non-mutating existence query for the fixed service-state record as the missing discriminator. |
+| Selected record present | Exact fixed service-state record exists in the explicitly opened/path-verified System Keychain. | Invoke only the mutually attested privileged retirement route; retain cursor-bound restart behavior. |
+| Selected record absent | Exact query returns `errSecItemNotFound`; the fixed system service, helper, plist, and provenance are absent; and the selected-prefix control/executor remain the exact manifest-managed pair bound for cleanup. | Permit removal of only that selected-prefix pair and its manifest plus canonical product `already_uninstalled`; perform no privileged or Keychain mutation. |
+
+Required focused regression rejects the unsafe non-root fallthrough; fixes the query to one exact
+class/service/account and one exact Keychain; proves `kSecUseAuthenticationUIFail` and no secret
+data request; accepts only exact presence or `errSecItemNotFound`; rejects duplicate, ambiguous,
+interaction-required, or unrelated status; and proves that record absence is insufficient unless
+all fixed product artifacts are also absent. Restart regression covers the transition immediately
+before and after terminal record deletion and proves no subsequent privileged effect.
+
+Implementation status: the corrected code, cursor/restart regression, fixed-record classifier
+regression, and affected-surface tests land in the same bounded Product Uninstall Fix commit as
+this ledger update. No native query, uninstall, SecurityAgent interaction, or native proof was
+performed. This ledger leaves all prospective evidence-finalizer and legacy-orphan entries above
+unchanged.
