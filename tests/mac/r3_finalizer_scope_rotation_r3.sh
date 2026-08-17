@@ -152,7 +152,7 @@ freeze_source = text("scripts/mac/freeze-r3-macos-finalizer-candidate.sh")
 for required in (
     f'readonly EXPERIMENT_ID="{new_experiment}"',
     'readonly BRANCH="feat/r3-macos-finalizer-rcv-stack"',
-    'readonly ACCEPTED_PARENT_HEAD="ab1b214891ee87625ee6371cc664c02278797342"',
+    'readonly ACCEPTED_PARENT_HEAD="a5f96d6b66e4384c8ebb7fd6b98bc6ad54d89bad"',
     '"schema_owner": "substrate.r3-macos-candidate-committed-tree-inventory"',
     '"status", "--porcelain=v2", "-z"',
     '"rev-parse", "HEAD^{tree}"',
