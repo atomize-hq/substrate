@@ -39,7 +39,7 @@ readonly SWIFTC="/Applications/Xcode.app/Contents/Developer/Toolchains/XcodeDefa
 readonly FIXED_PATH="/Users/spensermcconnell/.cargo/bin:/usr/bin:/bin:/usr/sbin:/sbin"
 readonly ZERO40="0000000000000000000000000000000000000000"
 readonly ZERO64="0000000000000000000000000000000000000000000000000000000000000000"
-readonly ACCEPTED_PARENT_HEAD="7c6fbcfbd9c92049bc8035120634cb3bdedd10e4"
+readonly ACCEPTED_PARENT_HEAD="af15c672637f8fd79a7d110a57a059ed64c2f316"
 
 export PATH="${FIXED_PATH}"
 export LANG=C
