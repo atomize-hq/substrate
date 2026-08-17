@@ -3181,6 +3181,7 @@ fn spawn_observed_publisher(inputs: &FrozenRunnerInputs, purpose: &'static str) 
     }
     let startup_ordinal = next_publisher_startup_ordinal(purpose)?;
     measure_frozen_executable(inputs.publisher)?;
+    ensure_root_directory(Path::new(DISPOSABLE_PUBLISHER_ROOT))?;
     let command = sealed_command(
         DISPOSABLE_PUBLISHER_EXECUTABLE_PATH,
         DISPOSABLE_PUBLISHER_ROOT,
@@ -13109,6 +13110,32 @@ mod tests {
         assert!(shared.contains("SupplementaryGroupEvidenceV2::CurrentProcessGetgroups"));
         assert!(shared.contains("SupplementaryGroupEvidenceV2::SealedPreExecPostDropGetgroups"));
         assert!(!shared.contains("SupplementaryGroupEvidenceV2::UnprivilegedParentInheritance"));
+    }
+
+    #[test]
+    fn publisher_root_is_prepared_before_the_observed_child_spawn() {
+        let production = include_str!("runner.rs")
+            .split("#[cfg(test)]")
+            .next()
+            .unwrap();
+        let spawn = production
+            .split("fn spawn_observed_publisher(")
+            .nth(1)
+            .unwrap()
+            .split("fn publisher_startup_attestation_path(")
+            .next()
+            .unwrap();
+        let measure = spawn
+            .find("measure_frozen_executable(inputs.publisher)?")
+            .unwrap();
+        let prepare = spawn
+            .find("ensure_root_directory(Path::new(DISPOSABLE_PUBLISHER_ROOT))?")
+            .unwrap();
+        let command = spawn
+            .find("sealed_command(\n        DISPOSABLE_PUBLISHER_EXECUTABLE_PATH")
+            .unwrap();
+        let observed = spawn.find("observe_stopped_child_startup(").unwrap();
+        assert!(measure < prepare && prepare < command && command < observed);
     }
 
     #[test]
