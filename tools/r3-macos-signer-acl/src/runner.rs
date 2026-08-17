@@ -616,6 +616,54 @@ struct ChildExitObservationV2 {
     terminating_signal: Option<i32>,
 }
 
+#[derive(Debug, Clone, Serialize, PartialEq, Eq)]
+#[serde(deny_unknown_fields)]
+struct HarnessRawStreamDiagnosticV2 {
+    raw_base64url: String,
+    raw_sha256: String,
+    raw_byte_length: u64,
+}
+
+impl HarnessRawStreamDiagnosticV2 {
+    fn validate(&self) -> Result<Vec<u8>> {
+        let bytes = URL_SAFE_NO_PAD
+            .decode(&self.raw_base64url)
+            .context("decode harness raw diagnostic stream")?;
+        if bytes.len() > MAX_CHILD_OUTPUT
+            || self.raw_byte_length != u64::try_from(bytes.len())?
+            || self.raw_sha256 != sha256_hex_v2(&bytes)
+        {
+            bail!("harness raw diagnostic stream changed its bytes, length, or digest")
+        }
+        Ok(bytes)
+    }
+}
+
+#[derive(Debug, Clone, Serialize, PartialEq, Eq)]
+#[serde(deny_unknown_fields)]
+struct HarnessClosedFailureDiagnosticV2 {
+    schema_owner: &'static str,
+    schema_version: u32,
+    harness_exit: ChildExitObservationV2,
+    stdout: HarnessRawStreamDiagnosticV2,
+    stderr: HarnessRawStreamDiagnosticV2,
+}
+
+impl HarnessClosedFailureDiagnosticV2 {
+    fn validate(&self) -> Result<()> {
+        self.stdout.validate()?;
+        self.stderr.validate()?;
+        if self.schema_owner
+            != "substrate.r3-macos-disposable-experiment-runner-harness-closed-failure-diagnostic"
+            || self.schema_version != 2
+            || self.harness_exit.success
+        {
+            bail!("harness closed-failure diagnostic changed its exact classification")
+        }
+        Ok(())
+    }
+}
+
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]
 #[serde(rename_all = "snake_case")]
 enum FailedRepetitionRestorationKindV2 {
@@ -1449,6 +1497,7 @@ pub fn run_fixed_experiment() -> Result<()> {
                 if !harness_status.success() {
                     return terminal_general_failure_from_harness(
                         &inputs,
+                        &mut harness,
                         harness_status,
                         &mut publisher,
                     );
@@ -4636,37 +4685,143 @@ fn terminal_general_failure_from_publisher(
 
 fn terminal_general_failure_from_harness(
     inputs: &FrozenRunnerInputs,
+    harness: &mut Child,
     harness_status: ExitStatus,
     publisher: &mut Child,
 ) -> Result<()> {
-    let (publisher_exit, live_peer) = match publisher.try_wait()? {
-        Some(status) => (Some(child_exit_observation(&status)), None),
-        None => (
-            None,
-            Some(observe_general_failure_live_peer(
-                publisher,
-                GeneralFailureLivePeerKindV2::PublisherProcess,
-                &inputs.prepared.publisher_identity,
-                0,
-            )?),
-        ),
-    };
-    let cursor = GeneralFailureRestorationCursorV2 {
-        schema_owner: "substrate.r3-macos-disposable-experiment-runner-general-failure-cursor"
-            .to_owned(),
+    let diagnostic = capture_exited_harness_diagnostic(harness, &harness_status)?;
+    let restoration = (|| -> Result<()> {
+        let (publisher_exit, live_peer) = match publisher.try_wait()? {
+            Some(status) => (Some(child_exit_observation(&status)), None),
+            None => (
+                None,
+                Some(observe_general_failure_live_peer(
+                    publisher,
+                    GeneralFailureLivePeerKindV2::PublisherProcess,
+                    &inputs.prepared.publisher_identity,
+                    0,
+                )?),
+            ),
+        };
+        let cursor = GeneralFailureRestorationCursorV2 {
+            schema_owner: "substrate.r3-macos-disposable-experiment-runner-general-failure-cursor"
+                .to_owned(),
+            schema_version: 2,
+            experiment_id: EXPERIMENT_ID_V2.to_owned(),
+            trigger: GeneralFailureTriggerV2::HarnessClosedFailure,
+            publisher_exit,
+            harness_exit: Some(child_exit_observation(&harness_status)),
+            live_peer,
+            root_operation_ui_stop_cursor_sha256: None,
+            terminal_no_resume: true,
+        };
+        validate_general_failure_cursor(&cursor)?;
+        write_runner_receipt(GENERAL_FAILURE_CURSOR_NAME, &canonical_bytes_v2(&cursor)?)?;
+        ensure_general_failure_peer_terminated(&cursor, Some(publisher))?;
+        complete_general_failure_restoration(inputs, &cursor)
+    })();
+    with_harness_closed_failure_diagnostic(restoration, &diagnostic)
+}
+
+fn capture_exited_harness_diagnostic(
+    harness: &mut Child,
+    harness_status: &ExitStatus,
+) -> Result<HarnessClosedFailureDiagnosticV2> {
+    if harness_status.success() {
+        bail!("harness closed-failure diagnostic requires a non-successful exit")
+    }
+    let stdout = harness
+        .stdout
+        .take()
+        .context("exited harness lacks its piped stdout")?;
+    let stderr = harness
+        .stderr
+        .take()
+        .context("exited harness lacks its piped stderr")?;
+    let stdout = read_exited_harness_pipe_bounded(stdout, "stdout");
+    let stderr = read_exited_harness_pipe_bounded(stderr, "stderr");
+    let diagnostic = HarnessClosedFailureDiagnosticV2 {
+        schema_owner:
+            "substrate.r3-macos-disposable-experiment-runner-harness-closed-failure-diagnostic",
         schema_version: 2,
-        experiment_id: EXPERIMENT_ID_V2.to_owned(),
-        trigger: GeneralFailureTriggerV2::HarnessClosedFailure,
-        publisher_exit,
-        harness_exit: Some(child_exit_observation(&harness_status)),
-        live_peer,
-        root_operation_ui_stop_cursor_sha256: None,
-        terminal_no_resume: true,
+        harness_exit: child_exit_observation(harness_status),
+        stdout: stdout?,
+        stderr: stderr?,
     };
-    validate_general_failure_cursor(&cursor)?;
-    write_runner_receipt(GENERAL_FAILURE_CURSOR_NAME, &canonical_bytes_v2(&cursor)?)?;
-    ensure_general_failure_peer_terminated(&cursor, Some(publisher))?;
-    complete_general_failure_restoration(inputs, &cursor)
+    diagnostic.validate()?;
+    Ok(diagnostic)
+}
+
+fn read_exited_harness_pipe_bounded<R: Read + AsRawFd>(
+    mut stream: R,
+    stream_name: &'static str,
+) -> Result<HarnessRawStreamDiagnosticV2> {
+    if !matches!(stream_name, "stdout" | "stderr") {
+        bail!("harness diagnostic stream name is outside the closed set")
+    }
+    // SAFETY: F_GETFL reads flags for the owned pipe descriptor; F_SETFL adds O_NONBLOCK so an
+    // inherited writer can never turn closed-failure diagnostics into an unbounded wait.
+    let flags = unsafe { libc::fcntl(stream.as_raw_fd(), libc::F_GETFL) };
+    if flags < 0 {
+        return Err(std::io::Error::last_os_error())
+            .context("read exited harness diagnostic pipe flags");
+    }
+    if unsafe { libc::fcntl(stream.as_raw_fd(), libc::F_SETFL, flags | libc::O_NONBLOCK) } < 0 {
+        return Err(std::io::Error::last_os_error())
+            .context("make exited harness diagnostic pipe nonblocking");
+    }
+    let mut bytes = Vec::new();
+    let mut buffer = [0_u8; 8192];
+    loop {
+        match stream.read(&mut buffer) {
+            Ok(0) => break,
+            Ok(length) => {
+                let total = bytes
+                    .len()
+                    .checked_add(length)
+                    .context("harness diagnostic stream length overflow")?;
+                if total > MAX_CHILD_OUTPUT {
+                    bail!(
+                        "harness {stream_name} exceeds the closed {MAX_CHILD_OUTPUT}-byte diagnostic bound"
+                    )
+                }
+                bytes.extend_from_slice(&buffer[..length]);
+            }
+            Err(error) if error.kind() == std::io::ErrorKind::Interrupted => continue,
+            Err(error) if error.kind() == std::io::ErrorKind::WouldBlock => {
+                bail!(
+                    "exited harness {stream_name} pipe remained open; refusing an unbounded diagnostic wait"
+                )
+            }
+            Err(error) => {
+                return Err(error).with_context(|| format!("drain exited harness {stream_name}"));
+            }
+        }
+    }
+    harness_raw_stream_diagnostic(&bytes)
+}
+
+fn harness_raw_stream_diagnostic(bytes: &[u8]) -> Result<HarnessRawStreamDiagnosticV2> {
+    if bytes.len() > MAX_CHILD_OUTPUT {
+        bail!("harness raw diagnostic stream exceeds MAX_CHILD_OUTPUT")
+    }
+    let diagnostic = HarnessRawStreamDiagnosticV2 {
+        raw_base64url: URL_SAFE_NO_PAD.encode(bytes),
+        raw_sha256: sha256_hex_v2(bytes),
+        raw_byte_length: u64::try_from(bytes.len())?,
+    };
+    diagnostic.validate()?;
+    Ok(diagnostic)
+}
+
+fn with_harness_closed_failure_diagnostic<T>(
+    result: Result<T>,
+    diagnostic: &HarnessClosedFailureDiagnosticV2,
+) -> Result<T> {
+    diagnostic.validate()?;
+    let diagnostic = String::from_utf8(canonical_bytes_v2(diagnostic)?)
+        .context("format exact harness closed-failure diagnostic")?;
+    result.context(format!("harness_closed_failure diagnostic={diagnostic}"))
 }
 
 fn validate_general_failure_cursor(value: &GeneralFailureRestorationCursorV2) -> Result<()> {
@@ -13148,6 +13303,72 @@ mod tests {
         assert!(normalize_post_drop_getgroups_v2(1, Some(21), 20).is_err());
         assert!(normalize_post_drop_getgroups_v2(2, None, 20).is_err());
         assert!(normalize_post_drop_getgroups_v2(0, Some(20), 20).is_err());
+    }
+
+    #[test]
+    fn closed_harness_failure_retains_exact_bounded_stdout_stderr_and_exit() {
+        let expected_stdout = b"known harness stdout bytes\n";
+        let expected_stderr = b"different harness stderr bytes\n";
+        let mut child = Command::new("/bin/sh")
+            .arg("-c")
+            .arg(
+                "printf 'known harness stdout bytes\\n'; printf 'different harness stderr bytes\\n' >&2; exit 23",
+            )
+            .stdin(Stdio::null())
+            .stdout(Stdio::piped())
+            .stderr(Stdio::piped())
+            .spawn()
+            .expect("spawn effect-free closed-harness diagnostic fixture");
+        let status = child
+            .wait()
+            .expect("wait for effect-free closed-harness diagnostic fixture");
+        let diagnostic = capture_exited_harness_diagnostic(&mut child, &status)
+            .expect("capture exact exited-harness diagnostic");
+
+        assert!(!diagnostic.harness_exit.success);
+        assert_eq!(diagnostic.harness_exit.exit_code, Some(23));
+        assert_eq!(diagnostic.harness_exit.terminating_signal, None);
+        assert_eq!(diagnostic.stdout.validate().unwrap(), expected_stdout);
+        assert_eq!(diagnostic.stderr.validate().unwrap(), expected_stderr);
+        assert_eq!(
+            diagnostic.stdout.raw_byte_length,
+            u64::try_from(expected_stdout.len()).unwrap()
+        );
+        assert_eq!(
+            diagnostic.stderr.raw_byte_length,
+            u64::try_from(expected_stderr.len()).unwrap()
+        );
+        assert_eq!(
+            diagnostic.stdout.raw_sha256,
+            sha256_hex_v2(expected_stdout)
+        );
+        assert_eq!(
+            diagnostic.stderr.raw_sha256,
+            sha256_hex_v2(expected_stderr)
+        );
+        assert_eq!(
+            diagnostic.stdout.raw_base64url,
+            URL_SAFE_NO_PAD.encode(expected_stdout)
+        );
+        assert_eq!(
+            diagnostic.stderr.raw_base64url,
+            URL_SAFE_NO_PAD.encode(expected_stderr)
+        );
+
+        let error = with_harness_closed_failure_diagnostic::<()>(
+            Err(anyhow::anyhow!("terminal cleanup fixture failed")),
+            &diagnostic,
+        )
+        .unwrap_err();
+        let chain = format!("{error:#}");
+        assert!(chain.contains("harness_closed_failure diagnostic={"));
+        assert!(chain.contains("\"exit_code\":23"));
+        assert!(chain.contains(&diagnostic.stdout.raw_base64url));
+        assert!(chain.contains(&diagnostic.stderr.raw_base64url));
+        assert!(chain.contains("terminal cleanup fixture failed"));
+
+        let overflow = vec![0_u8; MAX_CHILD_OUTPUT + 1];
+        assert!(harness_raw_stream_diagnostic(&overflow).is_err());
     }
 
     #[test]
