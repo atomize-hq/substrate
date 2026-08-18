@@ -13,6 +13,64 @@ if grep -Eq 'declare -A|exec \{' "${UNINSTALLER}"; then
   exit 1
 fi
 
+BASH32_WORK="$(mktemp -d "${TMPDIR:-/tmp}/substrate-dev-uninstall-bash32.XXXXXX")"
+BASH32_WORK="$(cd "${BASH32_WORK}" && pwd -P)"
+cleanup() {
+  rm -rf -- "${BASH32_WORK}"
+}
+trap cleanup EXIT
+mkdir -p "${BASH32_WORK}/prefix/bin" "${BASH32_WORK}/prefix/.dev-install-managed" \
+  "${BASH32_WORK}/tmp"
+printf 'control fixture' >"${BASH32_WORK}/prefix/bin/substrate-lifecycle-control"
+printf 'executor fixture' >"${BASH32_WORK}/prefix/bin/substrate-lifecycle-macos"
+printf '%s\n%s\n' \
+  "${BASH32_WORK}/prefix/bin/substrate-lifecycle-control" \
+  "${BASH32_WORK}/prefix/bin/substrate-lifecycle-macos" \
+  >"${BASH32_WORK}/prefix/.dev-install-managed/mac-control-binaries.txt"
+cat >"${BASH32_WORK}/exercise.sh" <<'SH'
+#!/usr/bin/env bash
+set -euo pipefail
+fatal() { printf '%s\n' "$1" >&2; exit 1; }
+FIXTURE_ROOT="$1"
+PREFIX="${FIXTURE_ROOT}/prefix"
+INSTALL_BOOTSTRAP_COMMITMENT="$(printf '0%.0s' {1..64})"
+MANAGED_MAC_CONTROL_BINARIES_PATH="${PREFIX}/.dev-install-managed/mac-control-binaries.txt"
+MANAGED_MAC_CONTROL_PATH=""
+MANAGED_MAC_EXECUTOR_PATH=""
+MANAGED_MAC_CONTROL_SHA256=""
+MANAGED_MAC_EXECUTOR_SHA256=""
+TMPDIR="${FIXTURE_ROOT}/tmp"
+SH
+python3 - "${UNINSTALLER}" >>"${BASH32_WORK}/exercise.sh" <<'PY'
+from pathlib import Path
+import sys
+
+source = Path(sys.argv[1]).read_text(encoding="utf-8")
+start = source.index("prepare_managed_mac_product_retirement() {")
+end = source.index("\nremove_managed_mac_control_binary_copies()", start)
+body = source[start:end]
+body = body.replace(
+    '"/Library/Application Support/Substrate/lifecycle/bootstrap-provenance.v1.json"',
+    '"${FIXTURE_ROOT}/bootstrap-provenance.v1.json"',
+).replace(
+    '"/Library/PrivilegedHelperTools/com.substrate.lifecycle.publisher.v1"',
+    '"${FIXTURE_ROOT}/com.substrate.lifecycle.publisher.v1"',
+).replace(
+    '"/Library/LaunchDaemons/com.substrate.lifecycle.publisher.v1.plist"',
+    '"${FIXTURE_ROOT}/com.substrate.lifecycle.publisher.v1.plist"',
+)
+print(body)
+PY
+cat >>"${BASH32_WORK}/exercise.sh" <<'SH'
+prepare_managed_mac_product_retirement
+[[ "${MANAGED_MAC_CONTROL_PATH}" == "${PREFIX}/bin/substrate-lifecycle-control" ]]
+[[ "${MANAGED_MAC_EXECUTOR_PATH}" == "${PREFIX}/bin/substrate-lifecycle-macos" ]]
+[[ "${MANAGED_MAC_CONTROL_SHA256}" == "$(shasum -a 256 "${MANAGED_MAC_CONTROL_PATH}" | awk '{print $1}')" ]]
+[[ "${MANAGED_MAC_EXECUTOR_SHA256}" == "$(shasum -a 256 "${MANAGED_MAC_EXECUTOR_PATH}" | awk '{print $1}')" ]]
+[[ -z "$(find "${TMPDIR}" -mindepth 1 -maxdepth 1 -print -quit)" ]]
+SH
+/bin/bash "${BASH32_WORK}/exercise.sh" "${BASH32_WORK}"
+
 python3 - "${UNINSTALLER}" "${CONTROL}" "${EXECUTOR}" <<'PY'
 from pathlib import Path
 import sys

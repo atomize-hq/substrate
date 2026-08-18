@@ -644,6 +644,7 @@ kill_live_dev_owner_helpers() {
 }
 
 prepare_managed_mac_product_retirement() {
+  local binding_path
   if [[ ! -f "${MANAGED_MAC_CONTROL_BINARIES_PATH}" ]]; then
     if [[ -e "/Library/Application Support/Substrate/lifecycle/bootstrap-provenance.v1.json" || \
           -e "/Library/PrivilegedHelperTools/com.substrate.lifecycle.publisher.v1" || \
@@ -653,13 +654,15 @@ prepare_managed_mac_product_retirement() {
     return 1
   fi
 
-  exec 9< <(python3 - \
+  binding_path="$(mktemp "${TMPDIR:-/tmp}/substrate-dev-uninstall-mac-bind.XXXXXX")" \
+    || fatal "Unable to allocate the macOS lifecycle binding result."
+  if ! python3 - \
     "${PREFIX}" \
     "${INSTALL_BOOTSTRAP_COMMITMENT}" \
     "${MANAGED_MAC_CONTROL_BINARIES_PATH}" \
     "/Library/Application Support/Substrate/lifecycle/bootstrap-provenance.v1.json" \
     "/Library/PrivilegedHelperTools/com.substrate.lifecycle.publisher.v1" \
-    "/Library/LaunchDaemons/com.substrate.lifecycle.publisher.v1.plist" <<'PY'
+    "/Library/LaunchDaemons/com.substrate.lifecycle.publisher.v1.plist" >"${binding_path}" <<'PY'
 import hashlib
 import json
 import os
@@ -729,7 +732,18 @@ if all(fixed_present):
 for value in (str(control), str(executor), control_sha, executor_sha):
     sys.stdout.buffer.write(value.encode() + b"\0")
 PY
-  )
+  then
+    unlink "${binding_path}"
+    fatal "Unable to validate the installed macOS lifecycle pair."
+  fi
+  exec 9<"${binding_path}" || {
+    unlink "${binding_path}"
+    fatal "Unable to open the macOS lifecycle binding result."
+  }
+  unlink "${binding_path}" || {
+    exec 9<&-
+    fatal "Unable to remove the macOS lifecycle binding result."
+  }
   IFS= read -r -d '' MANAGED_MAC_CONTROL_PATH <&9 \
     || fatal "Unable to bind the installed macOS lifecycle control."
   IFS= read -r -d '' MANAGED_MAC_EXECUTOR_PATH <&9 \
