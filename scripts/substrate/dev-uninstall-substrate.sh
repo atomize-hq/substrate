@@ -11,9 +11,7 @@ resolve_install_bootstrap_context() {
   local declared="$1"
   local raw_prefix="$2"
   local supplied_carrier="$3"
-  local context_fd
-
-  exec {context_fd}< <(python3 - "${declared}" "${raw_prefix}" "${supplied_carrier}" <<'PY'
+  exec 9< <(python3 - "${declared}" "${raw_prefix}" "${supplied_carrier}" <<'PY'
 import base64
 import hashlib
 import os
@@ -161,12 +159,12 @@ except Exception:
     raise SystemExit(2)
 PY
   )
-  IFS= read -r -d '' PREFIX <&"${context_fd}" || fatal "Unable to resolve install bootstrap context."
-  IFS= read -r -d '' INSTALL_BOOTSTRAP_CONTEXT_V1 <&"${context_fd}" || fatal "Unable to resolve install bootstrap context."
-  IFS= read -r -d '' INSTALL_BOOTSTRAP_COMMITMENT <&"${context_fd}" || fatal "Unable to resolve install bootstrap context."
-  IFS= read -r -d '' INSTALL_BOOTSTRAP_ACCOUNT <&"${context_fd}" || fatal "Unable to resolve install bootstrap context."
-  IFS= read -r -d '' INSTALL_BOOTSTRAP_UID <&"${context_fd}" || fatal "Unable to resolve install bootstrap context."
-  exec {context_fd}<&-
+  IFS= read -r -d '' PREFIX <&9 || fatal "Unable to resolve install bootstrap context."
+  IFS= read -r -d '' INSTALL_BOOTSTRAP_CONTEXT_V1 <&9 || fatal "Unable to resolve install bootstrap context."
+  IFS= read -r -d '' INSTALL_BOOTSTRAP_COMMITMENT <&9 || fatal "Unable to resolve install bootstrap context."
+  IFS= read -r -d '' INSTALL_BOOTSTRAP_ACCOUNT <&9 || fatal "Unable to resolve install bootstrap context."
+  IFS= read -r -d '' INSTALL_BOOTSTRAP_UID <&9 || fatal "Unable to resolve install bootstrap context."
+  exec 9<&-
 
   export SUBSTRATE_HOME="${PREFIX}"
   export SUBSTRATE_ROOT="${PREFIX}"
@@ -346,13 +344,15 @@ remove_managed_prefix_linux_binary_copies() {
 
 record_protected_path() {
   local path="$1"
+  local existing_path
   if [[ -z "${path}" ]]; then
     return
   fi
-  if [[ -n "${PROTECTED_PATHS_SEEN["${path}"]:-}" ]]; then
-    return
-  fi
-  PROTECTED_PATHS_SEEN["${path}"]=1
+  for existing_path in "${PROTECTED_PATHS[@]}"; do
+    if [[ "${existing_path}" == "${path}" ]]; then
+      return
+    fi
+  done
   PROTECTED_PATHS+=("${path}")
 }
 
@@ -644,7 +644,6 @@ kill_live_dev_owner_helpers() {
 }
 
 prepare_managed_mac_product_retirement() {
-  local binding_fd
   if [[ ! -f "${MANAGED_MAC_CONTROL_BINARIES_PATH}" ]]; then
     if [[ -e "/Library/Application Support/Substrate/lifecycle/bootstrap-provenance.v1.json" || \
           -e "/Library/PrivilegedHelperTools/com.substrate.lifecycle.publisher.v1" || \
@@ -654,7 +653,7 @@ prepare_managed_mac_product_retirement() {
     return 1
   fi
 
-  exec {binding_fd}< <(python3 - \
+  exec 9< <(python3 - \
     "${PREFIX}" \
     "${INSTALL_BOOTSTRAP_COMMITMENT}" \
     "${MANAGED_MAC_CONTROL_BINARIES_PATH}" \
@@ -731,15 +730,15 @@ for value in (str(control), str(executor), control_sha, executor_sha):
     sys.stdout.buffer.write(value.encode() + b"\0")
 PY
   )
-  IFS= read -r -d '' MANAGED_MAC_CONTROL_PATH <&"${binding_fd}" \
+  IFS= read -r -d '' MANAGED_MAC_CONTROL_PATH <&9 \
     || fatal "Unable to bind the installed macOS lifecycle control."
-  IFS= read -r -d '' MANAGED_MAC_EXECUTOR_PATH <&"${binding_fd}" \
+  IFS= read -r -d '' MANAGED_MAC_EXECUTOR_PATH <&9 \
     || fatal "Unable to bind the installed macOS lifecycle executor."
-  IFS= read -r -d '' MANAGED_MAC_CONTROL_SHA256 <&"${binding_fd}" \
+  IFS= read -r -d '' MANAGED_MAC_CONTROL_SHA256 <&9 \
     || fatal "Unable to bind the installed macOS lifecycle control digest."
-  IFS= read -r -d '' MANAGED_MAC_EXECUTOR_SHA256 <&"${binding_fd}" \
+  IFS= read -r -d '' MANAGED_MAC_EXECUTOR_SHA256 <&9 \
     || fatal "Unable to bind the installed macOS lifecycle executor digest."
-  exec {binding_fd}<&-
+  exec 9<&-
   return 0
 }
 
@@ -781,7 +780,6 @@ MANAGED_MAC_CONTROL_PATH=""
 MANAGED_MAC_EXECUTOR_PATH=""
 MANAGED_MAC_CONTROL_SHA256=""
 MANAGED_MAC_EXECUTOR_SHA256=""
-declare -A PROTECTED_PATHS_SEEN=()
 IS_LINUX=0
 IS_MAC=0
 if [[ "$(uname -s)" == "Linux" ]]; then

@@ -7,6 +7,11 @@ CONTROL="${ROOT}/src/bin/substrate-lifecycle-control.rs"
 EXECUTOR="${ROOT}/src/bin/substrate-lifecycle-macos.rs"
 
 bash -n "${UNINSTALLER}"
+/bin/bash "${UNINSTALLER}" --help >/dev/null
+if grep -Eq 'declare -A|exec \{' "${UNINSTALLER}"; then
+  echo "dev uninstaller must remain compatible with the macOS system Bash" >&2
+  exit 1
+fi
 
 python3 - "${UNINSTALLER}" "${CONTROL}" "${EXECUTOR}" <<'PY'
 from pathlib import Path
