@@ -19,6 +19,8 @@ FAKE_ZIG="${WORK_ROOT}/zig"
 CAPTURE="${WORK_ROOT}/zig-args"
 GENERATOR="${WORK_ROOT}/generate-linker-wrapper.sh"
 LINKER_WRAPPER="${WORK_ROOT}/aarch64-linux-gnu-zig-cc"
+ARCHIVER_WRAPPER="${WORK_ROOT}/aarch64-linux-gnu-zig-ar"
+RANLIB_WRAPPER="${WORK_ROOT}/aarch64-linux-gnu-zig-ranlib"
 
 cat > "${FAKE_ZIG}" <<'EOF'
 #!/usr/bin/env bash
@@ -32,6 +34,8 @@ cat > "${GENERATOR}" <<'EOF'
 set -euo pipefail
 zig="$1"
 linker_wrapper="$2"
+archiver_wrapper="$3"
+ranlib_wrapper="$4"
 EOF
 python3 - "${INSTALLER}" >> "${GENERATOR}" <<'PY'
 from pathlib import Path
@@ -39,12 +43,12 @@ import sys
 
 source = Path(sys.argv[1]).read_text(encoding="utf-8")
 start = source.index('  cat > "${linker_wrapper}" <<EOF\n')
-end = source.index('\nEOF\n', start) + len('\nEOF\n')
+end_marker = '    || fatal "cannot harden fixed AArch64 tool wrappers"\n'
+end = source.index(end_marker, start) + len(end_marker)
 sys.stdout.write(source[start:end])
 PY
 chmod 0700 "${GENERATOR}"
-"${GENERATOR}" "${FAKE_ZIG}" "${LINKER_WRAPPER}"
-chmod 0700 "${LINKER_WRAPPER}"
+"${GENERATOR}" "${FAKE_ZIG}" "${LINKER_WRAPPER}" "${ARCHIVER_WRAPPER}" "${RANLIB_WRAPPER}"
 
 CAPTURE="${CAPTURE}" "${LINKER_WRAPPER}" \
     --target=aarch64-unknown-linux-gnu \
@@ -75,11 +79,33 @@ expected = [
     b"/tmp/target/release/build/openssl-sys/out/openssl-build/install/lib",
     b"-Wl,-rpath,/tmp/path with spaces",
     b"",
-    b"/tmp/target/release/build/openssl-sys/out/openssl-build/install/lib/libssl.a",
-    b"/tmp/target/release/build/openssl-sys/out/openssl-build/install/lib/libcrypto.a",
 ]
 if captured != expected:
     raise SystemExit(f"generated Zig wrapper forwarded unexpected arguments: {captured!r}")
+PY
+
+CAPTURE="${CAPTURE}" "${ARCHIVER_WRAPPER}" crs "archive with spaces.a" "object one.o"
+python3 - "${CAPTURE}" <<'PY'
+from pathlib import Path
+import sys
+
+captured = Path(sys.argv[1]).read_bytes().split(b"\0")
+if captured[-1:] == [b""]:
+    captured.pop()
+if captured != [b"ar", b"crs", b"archive with spaces.a", b"object one.o"]:
+    raise SystemExit(f"generated Zig archiver wrapper forwarded unexpected arguments: {captured!r}")
+PY
+
+CAPTURE="${CAPTURE}" "${RANLIB_WRAPPER}" "archive with spaces.a"
+python3 - "${CAPTURE}" <<'PY'
+from pathlib import Path
+import sys
+
+captured = Path(sys.argv[1]).read_bytes().split(b"\0")
+if captured[-1:] == [b""]:
+    captured.pop()
+if captured != [b"ranlib", b"archive with spaces.a"]:
+    raise SystemExit(f"generated Zig ranlib wrapper forwarded unexpected arguments: {captured!r}")
 PY
 
 if [[ ! -x "${LIFECYCLE}" ]]; then
@@ -112,7 +138,11 @@ for text in (
     "substrate-gateway",
     "--bin substrate",
     "CARGO_TARGET_AARCH64_UNKNOWN_LINUX_GNU_LINKER",
+    "AR_aarch64_unknown_linux_gnu",
+    "RANLIB_aarch64_unknown_linux_gnu",
     "aarch64-linux-gnu-zig-cc",
+    "aarch64-linux-gnu-zig-ar",
+    "aarch64-linux-gnu-zig-ranlib",
     'mktemp -d "/private/tmp/substrate-mac-aarch64-build.XXXXXX"',
     "retained Linux bundle contains a mismatched prior",
     "mv \"${artifact_stage}\" \"${bundle_dir}\"",

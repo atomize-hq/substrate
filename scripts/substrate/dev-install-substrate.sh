@@ -1724,7 +1724,7 @@ build_and_stage_mac_aarch64_lima_artifacts_v1() {
   local target="aarch64-unknown-linux-gnu"
   local build_command="cargo build --locked --offline --target aarch64-unknown-linux-gnu --release -p substrate --bin substrate-lifecycle-linux -p world-service --bin world-service -p substrate-gateway --bin substrate-gateway -p substrate --bin substrate"
   local bundle_dir="${BIN_DIR}/linux"
-  local external_root linker_wrapper artifact_stage toolchain cargo_lock
+  local external_root linker_wrapper archiver_wrapper ranlib_wrapper artifact_stage toolchain cargo_lock
   local name source digest existing_digest mode file_type
   local -a names=(substrate-lifecycle-linux world-service substrate-gateway substrate)
 
@@ -1737,27 +1737,33 @@ build_and_stage_mac_aarch64_lima_artifacts_v1() {
 
   external_root="$(mktemp -d "/private/tmp/substrate-mac-aarch64-build.XXXXXX")" || fatal "cannot allocate external AArch64 build root"
   linker_wrapper="${external_root}/aarch64-linux-gnu-zig-cc"
+  archiver_wrapper="${external_root}/aarch64-linux-gnu-zig-ar"
+  ranlib_wrapper="${external_root}/aarch64-linux-gnu-zig-ranlib"
   cat > "${linker_wrapper}" <<EOF
 #!/usr/bin/env bash
 linker_args=()
-vendored_openssl_lib=""
 for arg in "\$@"; do
-  if [[ "\${arg}" == */openssl-build/install/lib ]]; then
-    vendored_openssl_lib="\${arg}"
-  fi
   [[ "\${arg}" == "--target=aarch64-unknown-linux-gnu" ]] || linker_args+=("\${arg}")
 done
-if [[ -n "\${vendored_openssl_lib}" ]]; then
-  linker_args+=("\${vendored_openssl_lib}/libssl.a" "\${vendored_openssl_lib}/libcrypto.a")
-fi
 exec "${zig}" cc -target aarch64-linux-gnu "\${linker_args[@]}"
 EOF
-  chmod 0700 "${linker_wrapper}" || fatal "cannot harden fixed AArch64 linker wrapper"
+  cat > "${archiver_wrapper}" <<EOF
+#!/usr/bin/env bash
+exec "${zig}" ar "\$@"
+EOF
+  cat > "${ranlib_wrapper}" <<EOF
+#!/usr/bin/env bash
+exec "${zig}" ranlib "\$@"
+EOF
+  chmod 0700 "${linker_wrapper}" "${archiver_wrapper}" "${ranlib_wrapper}" \
+    || fatal "cannot harden fixed AArch64 tool wrappers"
 
   log "Building the fixed macOS Lima AArch64 Linux artifact bundle..."
   CARGO_TARGET_DIR="${external_root}/target" \
   CARGO_TARGET_AARCH64_UNKNOWN_LINUX_GNU_LINKER="${linker_wrapper}" \
   CC_aarch64_unknown_linux_gnu="${linker_wrapper}" \
+  AR_aarch64_unknown_linux_gnu="${archiver_wrapper}" \
+  RANLIB_aarch64_unknown_linux_gnu="${ranlib_wrapper}" \
     cargo build --locked --offline --target "${target}" --release \
       -p substrate --bin substrate-lifecycle-linux \
       -p world-service --bin world-service \
