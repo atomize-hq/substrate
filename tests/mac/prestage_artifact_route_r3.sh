@@ -75,8 +75,8 @@ expected = [
     b"/tmp/target/release/build/openssl-sys/out/openssl-build/install/lib",
     b"-Wl,-rpath,/tmp/path with spaces",
     b"",
-    b"-lssl",
-    b"-lcrypto",
+    b"/tmp/target/release/build/openssl-sys/out/openssl-build/install/lib/libssl.a",
+    b"/tmp/target/release/build/openssl-sys/out/openssl-build/install/lib/libcrypto.a",
 ]
 if captured != expected:
     raise SystemExit(f"generated Zig wrapper forwarded unexpected arguments: {captured!r}")

@@ -1740,15 +1740,15 @@ build_and_stage_mac_aarch64_lima_artifacts_v1() {
   cat > "${linker_wrapper}" <<EOF
 #!/usr/bin/env bash
 linker_args=()
-needs_vendored_openssl=0
+vendored_openssl_lib=""
 for arg in "\$@"; do
   if [[ "\${arg}" == */openssl-build/install/lib ]]; then
-    needs_vendored_openssl=1
+    vendored_openssl_lib="\${arg}"
   fi
   [[ "\${arg}" == "--target=aarch64-unknown-linux-gnu" ]] || linker_args+=("\${arg}")
 done
-if [[ "\${needs_vendored_openssl}" -eq 1 ]]; then
-  linker_args+=("-lssl" "-lcrypto")
+if [[ -n "\${vendored_openssl_lib}" ]]; then
+  linker_args+=("\${vendored_openssl_lib}/libssl.a" "\${vendored_openssl_lib}/libcrypto.a")
 fi
 exec "${zig}" cc -target aarch64-linux-gnu "\${linker_args[@]}"
 EOF
