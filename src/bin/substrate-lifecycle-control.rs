@@ -56,6 +56,14 @@ const GUEST_PAIRING_LITERAL_V1: &str = "PAIR EXACT SUBSTRATE GUEST PUBLISHER";
 const MAC_PUBLISHER_HELPER_PATH_V1: &str =
     "/Library/PrivilegedHelperTools/com.substrate.lifecycle.publisher.v1";
 #[cfg(target_os = "macos")]
+const MAC_PUBLISHER_LEGACY_RETIREMENT_TRANSITION_PATH_V1: &str =
+    "/Library/Application Support/Substrate/lifecycle/publisher-retirement-transition.v1.json";
+#[cfg(target_os = "macos")]
+const MAC_PUBLISHER_LEGACY_RETIREMENT_CONTROL_DIR_V1: &str = "publisher-retirement-transition-v1";
+#[cfg(target_os = "macos")]
+const MAC_PUBLISHER_LEGACY_RETIREMENT_PREDECESSOR_HELPER_PATH_V1: &str =
+    "/Library/PrivilegedHelperTools/.com.substrate.lifecycle.publisher.v1.transition-v1-predecessor";
+#[cfg(target_os = "macos")]
 const MAC_PUBLISHER_SERVICE_LABEL_V1: &str = "com.substrate.lifecycle.publisher.v1";
 #[cfg(target_os = "macos")]
 const MAC_PUBLISHER_SERVICE_STATE_KEYCHAIN_PATH_V1: &str = "/Library/Keychains/System.keychain";
@@ -1501,8 +1509,9 @@ fn execute_closed_mac_publisher_service_state_v1(
         ("--publisher-service-state-install-fd", "installed")
             | ("--publisher-service-state-retire-fd", "retired")
             | ("--publisher-install-retire-fd", "retired")
+            | ("--publisher-install-retire-transition-v1-fd", "retired")
     ) {
-        bail!("publisher service-state route is not one of its three fixed operations");
+        bail!("publisher service-state route is not one of its four fixed operations");
     }
     let mut pair = [-1; 2];
     // SAFETY: socketpair initializes both descriptors on success and ownership transfers below.
@@ -1527,25 +1536,7 @@ fn execute_closed_mac_publisher_service_state_v1(
     }
     let retained_fd = retained.as_raw_fd();
     let peer_fd = peer.as_raw_fd();
-    let executor_path = if matches!(
-        executor_operation,
-        "--publisher-service-state-retire-fd" | "--publisher-install-retire-fd"
-    ) {
-        let control_path =
-            std::env::current_exe().context("resolve installed macOS lifecycle control image")?;
-        let parent = control_path
-            .parent()
-            .ok_or_else(|| anyhow!("installed macOS lifecycle control has no parent"))?;
-        let executor = parent.join("substrate-lifecycle-macos");
-        let metadata = std::fs::symlink_metadata(&executor)
-            .context("inspect installed same-version macOS lifecycle executor")?;
-        if !metadata.file_type().is_file() || metadata.file_type().is_symlink() {
-            bail!("installed same-version macOS lifecycle executor is not one no-follow file");
-        }
-        executor
-    } else {
-        PathBuf::from(MAC_PUBLISHER_HELPER_PATH_V1)
-    };
+    let executor_path = PathBuf::from(MAC_PUBLISHER_HELPER_PATH_V1);
     let mut command = Command::new("/usr/bin/sudo");
     command
         .arg("-C")
@@ -1674,6 +1665,14 @@ fn execute_closed_mac_publisher_install_retirement_v1() -> Result<Value> {
 }
 
 #[cfg(target_os = "macos")]
+fn execute_closed_mac_publisher_install_retirement_transition_v1() -> Result<Value> {
+    execute_closed_mac_publisher_service_state_v1(
+        "--publisher-install-retire-transition-v1-fd",
+        "retired",
+    )
+}
+
+#[cfg(target_os = "macos")]
 fn observe_fixed_mac_publisher_service_absent_v1() -> Result<Value> {
     let domain = Command::new("/bin/launchctl")
         .arg("print")
@@ -1709,25 +1708,75 @@ fn observe_fixed_mac_publisher_service_absent_v1() -> Result<Value> {
 #[cfg(target_os = "macos")]
 fn observe_fixed_mac_publisher_product_absent_v1() -> Result<()> {
     observe_fixed_mac_publisher_service_absent_v1()?;
-    for path in [
-        MAC_PUBLISHER_HELPER_PATH_V1,
-        "/Library/LaunchDaemons/com.substrate.lifecycle.publisher.v1.plist",
-        "/Library/Application Support/Substrate/lifecycle/bootstrap-provenance.v1.json",
-    ] {
-        match std::fs::symlink_metadata(path) {
+    let mut paths = vec![
+        PathBuf::from(MAC_PUBLISHER_HELPER_PATH_V1),
+        PathBuf::from("/Library/LaunchDaemons/com.substrate.lifecycle.publisher.v1.plist"),
+        PathBuf::from(
+            "/Library/Application Support/Substrate/lifecycle/bootstrap-provenance.v1.json",
+        ),
+        PathBuf::from(MAC_PUBLISHER_LEGACY_RETIREMENT_TRANSITION_PATH_V1),
+        PathBuf::from(MAC_PUBLISHER_LEGACY_RETIREMENT_PREDECESSOR_HELPER_PATH_V1),
+    ];
+    paths.push(mac_publisher_legacy_retirement_control_path_v1()?);
+    for path in paths {
+        match std::fs::symlink_metadata(&path) {
             Err(error) if error.kind() == std::io::ErrorKind::NotFound => {}
             Err(error) => {
-                return Err(error)
-                    .with_context(|| format!("observe fixed publisher artifact absence at {path}"))
+                return Err(error).with_context(|| {
+                    format!(
+                        "observe fixed publisher artifact absence at {}",
+                        path.display()
+                    )
+                })
             }
-            Ok(_) => bail!("fixed publisher artifact remains after terminal commit: {path}"),
+            Ok(_) => bail!(
+                "fixed publisher artifact remains after terminal commit: {}",
+                path.display()
+            ),
         }
     }
     Ok(())
 }
 
+#[cfg(target_os = "macos")]
+fn mac_publisher_legacy_retirement_control_path_v1() -> Result<PathBuf> {
+    let executable = std::env::current_exe()
+        .context("resolve installed lifecycle control for update absence")?;
+    if executable.file_name().and_then(|value| value.to_str())
+        != Some("substrate-lifecycle-control")
+    {
+        bail!("installed lifecycle control has a noncanonical leaf name");
+    }
+    let parent = executable
+        .parent()
+        .ok_or_else(|| anyhow!("installed lifecycle control has no parent"))?;
+    let prefix = if parent.file_name().and_then(|value| value.to_str()) == Some("bin") {
+        parent
+            .parent()
+            .ok_or_else(|| anyhow!("installed lifecycle control has no selected prefix"))?
+    } else if parent.file_name().and_then(|value| value.to_str())
+        == Some(MAC_PUBLISHER_LEGACY_RETIREMENT_CONTROL_DIR_V1)
+        && parent
+            .parent()
+            .and_then(Path::file_name)
+            .and_then(|value| value.to_str())
+            == Some(".dev-install-managed")
+    {
+        parent
+            .parent()
+            .and_then(Path::parent)
+            .ok_or_else(|| anyhow!("transition lifecycle control has no selected prefix"))?
+    } else {
+        bail!("installed lifecycle control is outside a fixed product path")
+    };
+    Ok(prefix
+        .join(".dev-install-managed")
+        .join(MAC_PUBLISHER_LEGACY_RETIREMENT_CONTROL_DIR_V1)
+        .join("substrate-lifecycle-control"))
+}
+
 fn usage_error_v1() -> Result<()> {
-    bail!("usage: substrate-lifecycle-control <submit-mapped-lifecycle-v1|publisher-bootstrap|publisher-service-state-preflight-absent|publisher-service-state-install|publisher-service-state-retire|publisher-install-retire>")
+    bail!("usage: substrate-lifecycle-control <submit-mapped-lifecycle-v1|publisher-bootstrap|publisher-service-state-preflight-absent|publisher-service-state-install|publisher-service-state-retire|publisher-install-retire|publisher-install-retire-transition-v1>")
 }
 
 fn main_impl_v1() -> Result<()> {
@@ -1764,6 +1813,12 @@ fn main_impl_v1() -> Result<()> {
             print_json_line_v1(&execute_closed_mac_publisher_install_retirement_v1()?)?;
             #[cfg(not(target_os = "macos"))]
             bail!("publisher install retirement is available only on macOS");
+        }
+        "publisher-install-retire-transition-v1" => {
+            #[cfg(target_os = "macos")]
+            print_json_line_v1(&execute_closed_mac_publisher_install_retirement_transition_v1()?)?;
+            #[cfg(not(target_os = "macos"))]
+            bail!("publisher install legacy transition is available only on macOS");
         }
         "publisher-bootstrap" => {
             // This branch is deliberately before ordinary mapped stdin handling. It admits one

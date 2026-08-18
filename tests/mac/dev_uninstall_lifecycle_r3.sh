@@ -114,6 +114,11 @@ if '"publisher-install-retire" =>' not in control:
     raise SystemExit('installed lifecycle control lacks product retirement dispatch')
 if '--publisher-install-retire-fd' not in control or '--publisher-install-retire-fd' not in executor:
     raise SystemExit('installed lifecycle product lacks closed retirement FD3 route')
+if '"publisher-install-retire-transition-v1" =>' not in control:
+    raise SystemExit('installed lifecycle control lacks the one versioned legacy transition dispatch')
+if ('--publisher-install-retire-transition-v1-fd' not in control
+        or '--publisher-install-retire-transition-v1-fd' not in executor):
+    raise SystemExit('installed lifecycle product lacks the closed versioned transition FD3 route')
 
 if '.arg("3")' not in control or 'immediate EOF is the only input' not in control:
     raise SystemExit('complete retirement is not carried over the existing no-caller-data FD3 boundary')
@@ -164,14 +169,33 @@ for earlier, later in (
 closed_start = control.index('fn execute_closed_mac_publisher_service_state_v1')
 closed_end = control.index('\n#[cfg(target_os = "macos")]\nfn execute_closed_mac_publisher_service_state_install_v1',
                            closed_start)
-if 'already_uninstalled' in control[closed_start:closed_end]:
+closed = control[closed_start:closed_end]
+if 'already_uninstalled' in closed:
     raise SystemExit('privileged closed result still authorizes already_uninstalled')
+if 'PathBuf::from(MAC_PUBLISHER_HELPER_PATH_V1)' not in closed:
+    raise SystemExit('privileged retirement does not select the fixed root-owned helper')
+for forbidden in ('current_exe()', 'substrate-lifecycle-macos")',
+                  'installed same-version macOS lifecycle executor'):
+    if forbidden in closed:
+        raise SystemExit(f'privileged retirement still selects a prefix executor: {forbidden}')
+
+transition_start = control.index('fn execute_closed_mac_publisher_install_retirement_transition_v1')
+transition_end = control.index('\n#[cfg(target_os = "macos")]\nfn observe_fixed_mac_publisher_service_absent_v1',
+                               transition_start)
+transition = control[transition_start:transition_end]
+if 'classify_fixed_record' in transition or 'already_uninstalled' in transition:
+    raise SystemExit('legacy transition can bypass authority through absence classification')
+if '--publisher-install-retire-transition-v1-fd' not in transition:
+    raise SystemExit('legacy transition does not select its one fixed executor operation')
 
 absence_start = control.index('fn observe_fixed_mac_publisher_product_absent_v1')
 absence_end = control.index('\nfn usage_error_v1', absence_start)
 absence = control[absence_start:absence_end]
 for token in ('observe_fixed_mac_publisher_service_absent_v1',
               'MAC_PUBLISHER_HELPER_PATH_V1',
+              'MAC_PUBLISHER_LEGACY_RETIREMENT_TRANSITION_PATH_V1',
+              'MAC_PUBLISHER_LEGACY_RETIREMENT_PREDECESSOR_HELPER_PATH_V1',
+              'mac_publisher_legacy_retirement_control_path_v1',
               '/Library/LaunchDaemons/com.substrate.lifecycle.publisher.v1.plist',
               '/Library/Application Support/Substrate/lifecycle/bootstrap-provenance.v1.json',
               'ErrorKind::NotFound', 'fixed publisher artifact remains after terminal commit'):

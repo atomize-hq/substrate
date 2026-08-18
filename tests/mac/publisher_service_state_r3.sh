@@ -18,6 +18,9 @@ required_executor = (
     'execute_closed_mac_publisher_service_state_retirement_v1',
     'execute_closed_mac_publisher_product_retirement_v1',
     'mac_revalidate_publisher_product_retirement_v1',
+    'MacPublisherLegacyRetirementTransitionV1',
+    'mac_require_legacy_retirement_transition_pre_effect_v1',
+    'mac_resume_legacy_retirement_update_removal_v1',
     'retirement_delete_cursor',
     'bootstrap_attempt_locator_account',
     'mac_revalidate_publisher_service_record_authority_v1',
@@ -50,6 +53,8 @@ required_closed_control = (
     'publisher service-state peer sent forbidden caller data',
     'publisher-install-retire',
     '--publisher-install-retire-fd',
+    'publisher-install-retire-transition-v1',
+    '--publisher-install-retire-transition-v1-fd',
 )
 for token in required_closed_control:
     if token not in control and token not in executor:
@@ -67,7 +72,7 @@ if not stage_one < service_state < first_xpc:
 main_dispatch = executor.index('fn main()')
 stdin_read = executor.index('read_to_end(&mut input)', main_dispatch)
 for fixed in ('--publisher-service-state-install', '--publisher-service-state-retire',
-              '--publisher-install-retire'):
+              '--publisher-install-retire', '--publisher-install-retire-transition-v1'):
     offset = executor.index(fixed, main_dispatch)
     if offset > stdin_read:
         raise SystemExit(f'{fixed} is not dispatched before ordinary stdin handling')
@@ -87,7 +92,7 @@ retire_fn = executor.index('fn execute_closed_mac_publisher_product_retirement_v
 retire_end = executor.index('\n#[cfg(target_os = "macos")]\nfn execute_closed_mac_publisher_service_state_retirement_v1', retire_fn)
 retire_body = executor[retire_fn:retire_end]
 for token in (
-        'mac_revalidate_publisher_product_retirement_v1(&current)',
+        'mac_revalidate_publisher_product_retirement_v1(',
         'mac_publisher_retirement_effect_v1(current.retirement_delete_cursor)',
         'mac_resume_publisher_bootout_v1',
         'mac_resume_publisher_keychain_item_retirement_v1',
@@ -142,6 +147,50 @@ if 'peer.uid == 0' in attest or 'already_uninstalled' in executor:
     raise SystemExit('privileged product retirement retains an absent-record success authority')
 if 'fixed_present_count' not in installer or 'partial ambiguous prestate' not in installer:
     raise SystemExit('installer lacks preserving-first fixed-path collision admission')
+
+precommit_start = executor.index('fn mac_build_publisher_install_precommit_v1')
+precommit_end = executor.index('\n#[cfg(target_os = "macos")]\nfn mac_service_record_observation_v1',
+                               precommit_start)
+if 'helper: artifacts.helper.clone()' not in executor[precommit_start:precommit_end]:
+    raise SystemExit('future service state does not bind the fixed helper identity')
+
+image_attest_start = executor.index('fn mac_attest_product_retirement_images_v1')
+image_attest_end = executor.index('\n#[cfg(target_os = "macos")]\nfn mac_attest_bootstrap_authorization_to_provenance_v1',
+                                  image_attest_start)
+image_attest = executor[image_attest_start:image_attest_end]
+for token in ('record.helper', 'MAC_PUBLISHER_HELPER_PATH_V1',
+              'mac_require_legacy_retirement_transition_pre_effect_v1',
+              'mac_publisher_legacy_retirement_control_path_v1'):
+    if token not in image_attest:
+        raise SystemExit(f'fixed-helper retirement image attestation lacks: {token}')
+if 'Path::new(&record.installed_executor.path)' in image_attest:
+    raise SystemExit('running privileged retirement image is still the prefix executor')
+
+transition_start = executor.index('struct MacPublisherLegacyRetirementTransitionV1')
+transition_end = executor.index('fn mac_require_legacy_retirement_transition_pre_effect_v1',
+                                transition_start)
+transition = executor[transition_start:transition_end]
+for token in ('schema_version',
+              'predecessor_install_provenance_sha256', 'predecessor_helper',
+              'corrected_control', 'corrected_helper'):
+    if token not in transition:
+        raise SystemExit(f'legacy transition provenance is not narrowly authenticated: {token}')
+if 'object.len() != 9' not in transition or 'unknown or missing fields' not in transition:
+    raise SystemExit('legacy transition provenance accepts unknown or missing fields')
+if ('MAC_PUBLISHER_LEGACY_RETIREMENT_PREDECESSOR_HELPER_PATH_V1' not in executor
+        or 'mac_measure_retirement_helper_at_path_v1' not in executor):
+    raise SystemExit('legacy transition does not preserve and authenticate the predecessor helper')
+
+pre_effect_start = executor.index('fn mac_require_legacy_retirement_transition_pre_effect_v1')
+pre_effect_end = executor.index('\n#[cfg(target_os = "macos")]', pre_effect_start + 10)
+pre_effect = executor[pre_effect_start:pre_effect_end]
+for token in ('MacPublisherServiceStatePhaseV1::Installed',
+              'retirement_delete_cursor != 0', 'record_revision != 2',
+              'mac_revalidate_publisher_service_record_authority_v1',
+              'mac_load_retained_bootstrap_provenance_v1',
+              'record.installed_control', 'record.installed_executor'):
+    if token not in pre_effect:
+        raise SystemExit(f'legacy predecessor pre-effect validation lacks: {token}')
 
 print('AUX-R3-MAC publisher service-state static regression: PASS')
 PY

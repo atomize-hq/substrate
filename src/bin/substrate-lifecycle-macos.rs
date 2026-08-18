@@ -104,6 +104,11 @@ const MAC_BOOTSTRAP_PROVENANCE_PATH_V1: &str =
     "/Library/Application Support/Substrate/lifecycle/bootstrap-provenance.v1.json";
 const MAC_PUBLISHER_HELPER_PATH_V1: &str =
     "/Library/PrivilegedHelperTools/com.substrate.lifecycle.publisher.v1";
+const MAC_PUBLISHER_LEGACY_RETIREMENT_TRANSITION_PATH_V1: &str =
+    "/Library/Application Support/Substrate/lifecycle/publisher-retirement-transition.v1.json";
+const MAC_PUBLISHER_LEGACY_RETIREMENT_CONTROL_DIR_V1: &str = "publisher-retirement-transition-v1";
+const MAC_PUBLISHER_LEGACY_RETIREMENT_PREDECESSOR_HELPER_PATH_V1: &str =
+    "/Library/PrivilegedHelperTools/.com.substrate.lifecycle.publisher.v1.transition-v1-predecessor";
 const MAC_PUBLISHER_PLIST_PATH_V1: &str =
     "/Library/LaunchDaemons/com.substrate.lifecycle.publisher.v1.plist";
 const MAC_PUBLISHER_SERVICE_TARGET_V1: &str = "system/com.substrate.lifecycle.publisher.v1";
@@ -591,6 +596,7 @@ fn main() -> Result<()> {
         "--publisher-service-state-install-fd"
             | "--publisher-service-state-retire-fd"
             | "--publisher-install-retire-fd"
+            | "--publisher-install-retire-transition-v1-fd"
     ) {
         if args.next().as_deref() != Some("3") || args.next().is_some() {
             bail!("publisher service-state operation accepts exactly retained descriptor 3");
@@ -605,6 +611,9 @@ fn main() -> Result<()> {
             }
             "--publisher-install-retire-fd" => {
                 execute_closed_mac_publisher_install_retirement_v1()?
+            }
+            "--publisher-install-retire-transition-v1-fd" => {
+                execute_closed_mac_publisher_install_retirement_transition_v1()?
             }
             _ => unreachable!("closed publisher lifecycle operation"),
         };
@@ -668,13 +677,19 @@ fn mac_attest_closed_service_state_fd3_v1(fd: i32, operation: &str) -> Result<()
     let peer = mac_bootstrap_peer_identity_v1(socket.as_raw_fd())?;
     if matches!(
         operation,
-        "--publisher-service-state-retire-fd" | "--publisher-install-retire-fd"
+        "--publisher-service-state-retire-fd"
+            | "--publisher-install-retire-fd"
+            | "--publisher-install-retire-transition-v1-fd"
     ) {
         let (record, _) =
             mac_read_global_publisher_service_state_record_v1()?.ok_or_else(|| {
                 anyhow::anyhow!("publisher retirement has no authenticated service-state record")
             })?;
-        mac_attest_product_retirement_images_v1(&peer, &record)?;
+        mac_attest_product_retirement_images_v1(
+            &peer,
+            &record,
+            operation == "--publisher-install-retire-transition-v1-fd",
+        )?;
     } else {
         let provenance = mac_load_retained_bootstrap_provenance_v1()?;
         mac_attest_bootstrap_control_peer_predecode_v1(&peer, &provenance)?;
@@ -1330,9 +1345,263 @@ fn mac_attest_bootstrap_control_peer_predecode_v1(
 }
 
 #[cfg(target_os = "macos")]
+#[derive(Debug, Clone, PartialEq, Eq)]
+struct MacPublisherLegacyRetirementTransitionV1 {
+    schema_owner: String,
+    schema_version: u32,
+    source_commit: String,
+    source_tree: String,
+    source_ref: String,
+    predecessor_install_provenance_sha256: String,
+    predecessor_helper: MacPublisherServiceFileIdentityV1,
+    corrected_control: MacPublisherRetirementImageIdentityV1,
+    corrected_helper: MacPublisherServiceFileIdentityV1,
+}
+
+#[cfg(target_os = "macos")]
+fn mac_publisher_legacy_retirement_control_path_v1(
+    record: &MacPublisherServiceStateRecordV1,
+) -> Result<PathBuf> {
+    canonical_mac_publisher_service_state_record_v1(record)?;
+    Ok(Path::new(&record.selected_host_prefix)
+        .join(".dev-install-managed")
+        .join(MAC_PUBLISHER_LEGACY_RETIREMENT_CONTROL_DIR_V1)
+        .join("substrate-lifecycle-control"))
+}
+
+#[cfg(target_os = "macos")]
+fn mac_load_legacy_retirement_transition_v1() -> Result<MacPublisherLegacyRetirementTransitionV1> {
+    let path = Path::new(MAC_PUBLISHER_LEGACY_RETIREMENT_TRANSITION_PATH_V1);
+    let (_, bytes) = mac_measure_fixed_service_file_v1(path, 0o444)?;
+    let value: Value = serde_json::from_slice(&bytes)
+        .context("decode fixed publisher legacy-retirement transition")?;
+    let object = value.as_object().ok_or_else(|| {
+        anyhow::anyhow!("fixed publisher legacy-retirement transition is not an object")
+    })?;
+    if object.len() != 9 {
+        bail!("fixed publisher legacy-retirement transition has unknown or missing fields");
+    }
+    let string_field = |name: &str| -> Result<String> {
+        object
+            .get(name)
+            .and_then(Value::as_str)
+            .map(str::to_string)
+            .ok_or_else(|| {
+                anyhow::anyhow!(
+                    "fixed publisher legacy-retirement transition field {name} is not a string"
+                )
+            })
+    };
+    let transition = MacPublisherLegacyRetirementTransitionV1 {
+        schema_owner: string_field("schema_owner")?,
+        schema_version: object
+            .get("schema_version")
+            .and_then(Value::as_u64)
+            .and_then(|value| u32::try_from(value).ok())
+            .ok_or_else(|| {
+                anyhow::anyhow!("fixed publisher legacy-retirement transition version is invalid")
+            })?,
+        source_commit: string_field("source_commit")?,
+        source_tree: string_field("source_tree")?,
+        source_ref: string_field("source_ref")?,
+        predecessor_install_provenance_sha256: string_field(
+            "predecessor_install_provenance_sha256",
+        )?,
+        predecessor_helper: serde_json::from_value(
+            object.get("predecessor_helper").cloned().ok_or_else(|| {
+                anyhow::anyhow!(
+                    "fixed publisher legacy-retirement transition lacks predecessor helper"
+                )
+            })?,
+        )
+        .context("decode fixed publisher legacy-retirement predecessor helper")?,
+        corrected_control: serde_json::from_value(
+            object.get("corrected_control").cloned().ok_or_else(|| {
+                anyhow::anyhow!(
+                    "fixed publisher legacy-retirement transition lacks corrected control"
+                )
+            })?,
+        )
+        .context("decode fixed publisher legacy-retirement corrected control")?,
+        corrected_helper: serde_json::from_value(
+            object.get("corrected_helper").cloned().ok_or_else(|| {
+                anyhow::anyhow!(
+                    "fixed publisher legacy-retirement transition lacks corrected helper"
+                )
+            })?,
+        )
+        .context("decode fixed publisher legacy-retirement corrected helper")?,
+    };
+    let canonical = canonical_bootstrap_json_bytes_v1(&value)?;
+    let lower_hex = |value: &str, length: usize| {
+        value.len() == length
+            && value
+                .bytes()
+                .all(|byte| byte.is_ascii_digit() || (b'a'..=b'f').contains(&byte))
+    };
+    if canonical != bytes
+        || transition.schema_owner != "substrate.mac-publisher-legacy-retirement-transition"
+        || transition.schema_version != 1
+        || !lower_hex(&transition.source_commit, 40)
+        || !lower_hex(&transition.source_tree, 40)
+        || !transition.source_ref.starts_with("refs/heads/")
+        || transition.source_ref.contains(['\0', '\n', '\r'])
+        || !lower_hex(&transition.predecessor_install_provenance_sha256, 64)
+        || transition.predecessor_helper.path != MAC_PUBLISHER_HELPER_PATH_V1
+        || transition.predecessor_helper.owner_uid != 0
+        || transition.predecessor_helper.group_gid != 0
+        || transition.predecessor_helper.mode != "0755"
+        || transition.corrected_helper.path != MAC_PUBLISHER_HELPER_PATH_V1
+        || transition.corrected_helper.owner_uid != 0
+        || transition.corrected_helper.group_gid != 0
+        || transition.corrected_helper.mode != "0755"
+        || transition.corrected_helper.code_identity.is_none()
+        || transition.corrected_helper.code_requirement.is_none()
+    {
+        bail!("fixed publisher legacy-retirement transition is not canonical v1 provenance");
+    }
+    Ok(transition)
+}
+
+#[cfg(target_os = "macos")]
+fn mac_measure_fixed_retirement_helper_v1(
+    expected: &MacPublisherServiceFileIdentityV1,
+) -> Result<MacPublisherServiceFileIdentityV1> {
+    mac_measure_retirement_helper_at_path_v1(Path::new(MAC_PUBLISHER_HELPER_PATH_V1), expected)
+}
+
+#[cfg(target_os = "macos")]
+fn mac_measure_retirement_helper_at_path_v1(
+    path: &Path,
+    expected: &MacPublisherServiceFileIdentityV1,
+) -> Result<MacPublisherServiceFileIdentityV1> {
+    let (mut identity, _) = mac_measure_fixed_service_file_v1(path, 0o755)?;
+    let measured = mac_measure_bootstrap_image_v1(path)?;
+    identity.path = expected.path.clone();
+    identity.code_identity = Some(measured.code_identity.clone());
+    identity.code_requirement = expected.code_requirement.clone();
+    if measured.artifact_sha256 != identity.artifact_sha256
+        || measured.artifact_identity != identity.physical_identity
+        || &identity != expected
+    {
+        bail!("fixed publisher retirement helper does not exact-join its authority");
+    }
+    let requirement = expected
+        .code_requirement
+        .as_ref()
+        .ok_or_else(|| anyhow::anyhow!("fixed publisher retirement helper lacks code authority"))?;
+    let verification = Command::new("/usr/bin/codesign")
+        .arg("--verify")
+        .arg("--strict")
+        .arg(format!("-R={requirement}"))
+        .arg("--")
+        .arg(path)
+        .env_clear()
+        .stdin(Stdio::null())
+        .stdout(Stdio::null())
+        .stderr(Stdio::null())
+        .status()
+        .context("verify fixed publisher retirement helper code requirement")?;
+    if !verification.success() {
+        bail!("fixed publisher retirement helper fails its code authority");
+    }
+    Ok(identity)
+}
+
+#[cfg(target_os = "macos")]
+fn mac_require_legacy_retirement_transition_images_v1(
+    record: &MacPublisherServiceStateRecordV1,
+) -> Result<MacPublisherLegacyRetirementTransitionV1> {
+    let transition = mac_load_legacy_retirement_transition_v1()?;
+    if transition.predecessor_install_provenance_sha256 != record.install_provenance_sha256
+        || transition.predecessor_helper != record.helper
+    {
+        bail!("legacy-retirement transition selected a different predecessor");
+    }
+    let control_path = mac_publisher_legacy_retirement_control_path_v1(record)?;
+    if transition.corrected_control.path != control_path.display().to_string() {
+        bail!("legacy-retirement transition contains a non-fixed control path");
+    }
+    let control = mac_measure_installed_retirement_image_v1(
+        control_path,
+        &transition.corrected_control.artifact_sha256,
+        &transition.corrected_control.code_identity,
+        &transition.corrected_control.code_requirement,
+    )?;
+    if control != transition.corrected_control {
+        bail!("legacy-retirement corrected control changed from product provenance");
+    }
+    mac_measure_fixed_retirement_helper_v1(&transition.corrected_helper)?;
+    mac_measure_retirement_helper_at_path_v1(
+        Path::new(MAC_PUBLISHER_LEGACY_RETIREMENT_PREDECESSOR_HELPER_PATH_V1),
+        &transition.predecessor_helper,
+    )?;
+    Ok(transition)
+}
+
+#[cfg(target_os = "macos")]
+fn mac_require_legacy_retirement_transition_pre_effect_v1(
+    record: &MacPublisherServiceStateRecordV1,
+) -> Result<MacPublisherLegacyRetirementTransitionV1> {
+    canonical_mac_publisher_service_state_record_v1(record)?;
+    if record.phase != MacPublisherServiceStatePhaseV1::Installed
+        || record.retirement_delete_cursor != 0
+        || record.record_revision != 2
+        || !record.retirement_keychain_items.is_empty()
+    {
+        bail!("legacy-retirement transition refuses a partial, repeated, or unrelated record");
+    }
+    let admission = mac_verified_control_admission_v1()?;
+    mac_revalidate_publisher_service_record_authority_v1(&admission, record)?;
+
+    let provenance = mac_load_retained_bootstrap_provenance_v1()?;
+    let provenance_bytes = canonical_mac_publisher_install_provenance_v1(&provenance)?;
+    let (provenance_identity, observed_provenance_bytes) =
+        mac_measure_fixed_service_file_v1(Path::new(MAC_BOOTSTRAP_PROVENANCE_PATH_V1), 0o444)?;
+    if observed_provenance_bytes != provenance_bytes
+        || provenance_identity != record.provenance
+        || sha256_hex_bootstrap_v1(&provenance_bytes) != record.install_provenance_sha256
+        || provenance.control_authority != record.control_authority
+        || provenance.selected_host_prefix != record.selected_host_prefix
+        || provenance.control_image.artifact_sha256 != record.installed_control.artifact_sha256
+        || provenance.control_image.physical_identity != record.installed_control.physical_identity
+        || provenance.control_image.code_identity != record.installed_control.code_identity
+        || provenance.executor_image.artifact_sha256 != record.installed_executor.artifact_sha256
+        || provenance.executor_image.code_identity != record.installed_executor.code_identity
+        || provenance.executor_image.artifact_sha256 != record.helper.artifact_sha256
+        || provenance.executor_image.physical_identity != record.helper.physical_identity
+        || Some(provenance.executor_image.code_identity.as_str())
+            != record.helper.code_identity.as_deref()
+        || Some(provenance.executor_image.code_requirement.as_str())
+            != record.helper.code_requirement.as_deref()
+    {
+        bail!("legacy-retirement predecessor does not exact-join retained provenance");
+    }
+    let installed_control = mac_measure_installed_retirement_image_v1(
+        PathBuf::from(&record.installed_control.path),
+        &record.installed_control.artifact_sha256,
+        &record.installed_control.code_identity,
+        &record.installed_control.code_requirement,
+    )?;
+    let installed_executor = mac_measure_installed_retirement_image_v1(
+        PathBuf::from(&record.installed_executor.path),
+        &record.installed_executor.artifact_sha256,
+        &record.installed_executor.code_identity,
+        &record.installed_executor.code_requirement,
+    )?;
+    if installed_control != record.installed_control
+        || installed_executor != record.installed_executor
+    {
+        bail!("legacy-retirement predecessor control or prefix executor drifted");
+    }
+    mac_require_legacy_retirement_transition_images_v1(record)
+}
+
+#[cfg(target_os = "macos")]
 fn mac_attest_product_retirement_images_v1(
     peer: &MacBootstrapPeerIdentityV1,
     record: &MacPublisherServiceStateRecordV1,
+    legacy_transition: bool,
 ) -> Result<()> {
     canonical_mac_publisher_service_state_record_v1(record)?;
     if peer.uid == 0 && peer.gid == 0 {
@@ -1340,42 +1609,47 @@ fn mac_attest_product_retirement_images_v1(
     }
     let control_path = mac_kernel_peer_executable_path_v1(peer.pid)?;
     let control = mac_measure_bootstrap_image_v1(&control_path)?;
-    if control_path != Path::new(&record.installed_control.path)
-        || control.artifact_sha256 != record.installed_control.artifact_sha256
-        || control.artifact_identity != record.installed_control.physical_identity
-        || control.code_identity != record.installed_control.code_identity
+    let (expected_control, control_requirement, expected_helper) = if legacy_transition {
+        let transition = mac_require_legacy_retirement_transition_pre_effect_v1(record)?;
+        let control_requirement = transition.corrected_control.code_requirement.clone();
+        (
+            transition.corrected_control,
+            control_requirement,
+            transition.corrected_helper,
+        )
+    } else {
+        if mac_fixed_path_exists_v1(Path::new(
+            MAC_PUBLISHER_LEGACY_RETIREMENT_TRANSITION_PATH_V1,
+        ))? || mac_fixed_path_exists_v1(&mac_publisher_legacy_retirement_control_path_v1(
+            record,
+        )?)? {
+            bail!("ordinary retirement refuses legacy-transition update state");
+        }
+        (
+            record.installed_control.clone(),
+            record.control_authority.designated_requirement.clone(),
+            record.helper.clone(),
+        )
+    };
+    if control_path != Path::new(&expected_control.path)
+        || control.artifact_sha256 != expected_control.artifact_sha256
+        || control.artifact_identity != expected_control.physical_identity
+        || control.code_identity != expected_control.code_identity
     {
         bail!("product retirement control peer does not exact-join the service-state plan");
     }
     mac_system_keychain_ffi_v1::verify_process_designated_requirement(
         peer.pid,
-        &record.control_authority.designated_requirement,
+        &control_requirement,
     )?;
 
     let executor_path =
         std::env::current_exe().context("resolve installed product-retirement executor image")?;
-    let executor = mac_measure_bootstrap_image_v1(&executor_path)?;
-    if executor_path != Path::new(&record.installed_executor.path)
-        || executor.artifact_sha256 != record.installed_executor.artifact_sha256
-        || executor.artifact_identity != record.installed_executor.physical_identity
-        || executor.code_identity != record.installed_executor.code_identity
-    {
-        bail!("product retirement executor does not exact-join the service-state plan");
+    if executor_path != Path::new(MAC_PUBLISHER_HELPER_PATH_V1) {
+        bail!("product retirement executor is not the fixed root-owned helper");
     }
-    let verification = Command::new("/usr/bin/codesign")
-        .arg("--verify")
-        .arg("--strict")
-        .arg(format!("-R={}", record.installed_executor.code_requirement))
-        .arg("--")
-        .arg(&executor_path)
-        .env_clear()
-        .stdin(Stdio::null())
-        .stdout(Stdio::null())
-        .stderr(Stdio::null())
-        .status()
-        .context("verify installed product-retirement executor code requirement")?;
-    if !verification.success() {
-        bail!("product retirement executor fails the service-state code requirement");
+    if mac_measure_fixed_retirement_helper_v1(&expected_helper)? != expected_helper {
+        bail!("product retirement executor does not exact-join the service-state plan");
     }
     Ok(())
 }
@@ -2712,6 +2986,7 @@ fn mac_advance_publisher_retirement_cursor_v1(
 #[cfg(target_os = "macos")]
 fn mac_revalidate_installed_retirement_images_v1(
     record: &MacPublisherServiceStateRecordV1,
+    legacy_transition: bool,
 ) -> Result<()> {
     let control = mac_measure_installed_retirement_image_v1(
         PathBuf::from(&record.installed_control.path),
@@ -2728,6 +3003,39 @@ fn mac_revalidate_installed_retirement_images_v1(
     if control != record.installed_control || executor != record.installed_executor {
         bail!("installed publisher retirement images changed from the authenticated plan");
     }
+    let helper_present = mac_fixed_path_exists_v1(Path::new(MAC_PUBLISHER_HELPER_PATH_V1))?;
+    let transition_path = Path::new(MAC_PUBLISHER_LEGACY_RETIREMENT_TRANSITION_PATH_V1);
+    let transition_present = mac_fixed_path_exists_v1(transition_path)?;
+    let update_control_path = mac_publisher_legacy_retirement_control_path_v1(record)?;
+    let update_control_present = mac_fixed_path_exists_v1(&update_control_path)?;
+    let predecessor_helper_path =
+        Path::new(MAC_PUBLISHER_LEGACY_RETIREMENT_PREDECESSOR_HELPER_PATH_V1);
+    let predecessor_helper_present = mac_fixed_path_exists_v1(predecessor_helper_path)?;
+    if legacy_transition {
+        let update_state_present = [
+            helper_present,
+            transition_present,
+            update_control_present,
+            predecessor_helper_present,
+        ];
+        if update_state_present.iter().all(|value| *value) {
+            mac_require_legacy_retirement_transition_images_v1(record)?;
+        } else if update_state_present.iter().all(|value| !*value)
+            && record.retirement_delete_cursor >= MAC_PRODUCT_RETIRE_HELPER_CURSOR_V1
+        {
+        } else {
+            bail!("legacy-retirement update state is partial or absent before authorization");
+        }
+    } else {
+        if transition_present || update_control_present || predecessor_helper_present {
+            bail!("ordinary retirement found unrelated legacy-transition update state");
+        }
+        if helper_present {
+            mac_measure_fixed_retirement_helper_v1(&record.helper)?;
+        } else if record.retirement_delete_cursor < MAC_PRODUCT_RETIRE_HELPER_CURSOR_V1 {
+            bail!("publisher retirement helper disappeared before authorization");
+        }
+    }
     Ok(())
 }
 
@@ -2736,6 +3044,7 @@ fn mac_revalidate_retirement_file_v1(
     record: &MacPublisherServiceStateRecordV1,
     path: &str,
     target_cursor: u8,
+    legacy_transition: bool,
 ) -> Result<bool> {
     let present = mac_fixed_path_exists_v1(Path::new(path))?;
     if !present {
@@ -2766,16 +3075,12 @@ fn mac_revalidate_retirement_file_v1(
             }
         }
         MAC_PRODUCT_RETIRE_HELPER_CURSOR_V1 => {
-            let (mut identity, _) = mac_measure_fixed_service_file_v1(Path::new(path), 0o755)?;
-            let measured = mac_measure_bootstrap_image_v1(Path::new(path))?;
-            identity.code_identity = Some(measured.code_identity);
-            identity.code_requirement = record.helper.code_requirement.clone();
-            if measured.artifact_sha256 != identity.artifact_sha256
-                || measured.artifact_identity != identity.physical_identity
-                || identity != record.helper
-            {
-                bail!("publisher retirement fixed helper is substituted");
-            }
+            let expected = if legacy_transition {
+                mac_load_legacy_retirement_transition_v1()?.corrected_helper
+            } else {
+                record.helper.clone()
+            };
+            mac_measure_fixed_retirement_helper_v1(&expected)?;
         }
         _ => bail!("publisher retirement file cursor is not fixed"),
     }
@@ -2785,6 +3090,7 @@ fn mac_revalidate_retirement_file_v1(
 #[cfg(target_os = "macos")]
 fn mac_revalidate_publisher_product_retirement_v1(
     record: &MacPublisherServiceStateRecordV1,
+    legacy_transition: bool,
 ) -> Result<()> {
     canonical_mac_publisher_service_state_record_v1(record)?;
     if !matches!(
@@ -2794,7 +3100,7 @@ fn mac_revalidate_publisher_product_retirement_v1(
     ) {
         bail!("publisher product retirement lacks its authenticated precommit");
     }
-    mac_revalidate_installed_retirement_images_v1(record)?;
+    mac_revalidate_installed_retirement_images_v1(record, legacy_transition)?;
 
     let registration = mac_observe_publisher_registration_v1();
     match (record.retirement_delete_cursor, registration) {
@@ -2848,16 +3154,19 @@ fn mac_revalidate_publisher_product_retirement_v1(
         record,
         MAC_PUBLISHER_PLIST_PATH_V1,
         MAC_PRODUCT_RETIRE_PLIST_CURSOR_V1,
+        legacy_transition,
     )?;
     mac_revalidate_retirement_file_v1(
         record,
         MAC_BOOTSTRAP_PROVENANCE_PATH_V1,
         MAC_PRODUCT_RETIRE_PROVENANCE_CURSOR_V1,
+        legacy_transition,
     )?;
     mac_revalidate_retirement_file_v1(
         record,
         MAC_PUBLISHER_HELPER_PATH_V1,
         MAC_PRODUCT_RETIRE_HELPER_CURSOR_V1,
+        legacy_transition,
     )?;
     Ok(())
 }
@@ -2938,11 +3247,12 @@ fn mac_resume_publisher_file_retirement_v1(
     record: &MacPublisherServiceStateRecordV1,
     path: &str,
     target_cursor: u8,
+    legacy_transition: bool,
 ) -> Result<()> {
     if record.retirement_delete_cursor != target_cursor {
         bail!("publisher fixed-file retirement effect lacks its exact cursor");
     }
-    if mac_revalidate_retirement_file_v1(record, path, target_cursor)? {
+    if mac_revalidate_retirement_file_v1(record, path, target_cursor, legacy_transition)? {
         fs::remove_file(path).with_context(|| format!("remove exact publisher file {path}"))?;
         let parent = Path::new(path)
             .parent()
@@ -2959,7 +3269,84 @@ fn mac_resume_publisher_file_retirement_v1(
 }
 
 #[cfg(target_os = "macos")]
-fn execute_closed_mac_publisher_product_retirement_v1() -> Result<Value> {
+fn mac_resume_legacy_retirement_update_removal_v1(
+    record: &MacPublisherServiceStateRecordV1,
+) -> Result<()> {
+    if record.retirement_delete_cursor != MAC_PRODUCT_RETIRE_HELPER_CURSOR_V1 {
+        bail!("legacy-retirement update removal lacks the helper cursor");
+    }
+    let transition = mac_load_legacy_retirement_transition_v1()?;
+    if transition.predecessor_install_provenance_sha256 != record.install_provenance_sha256
+        || transition.predecessor_helper != record.helper
+    {
+        bail!("legacy-retirement update removal selected a different predecessor");
+    }
+    let control_path = mac_publisher_legacy_retirement_control_path_v1(record)?;
+    if transition.corrected_control.path != control_path.display().to_string() {
+        bail!("legacy-retirement update removal contains a non-fixed control path");
+    }
+    let measured_control = mac_measure_installed_retirement_image_v1(
+        control_path.clone(),
+        &transition.corrected_control.artifact_sha256,
+        &transition.corrected_control.code_identity,
+        &transition.corrected_control.code_requirement,
+    )?;
+    if measured_control != transition.corrected_control {
+        bail!("legacy-retirement update control changed before removal");
+    }
+    mac_measure_retirement_helper_at_path_v1(
+        Path::new(MAC_PUBLISHER_LEGACY_RETIREMENT_PREDECESSOR_HELPER_PATH_V1),
+        &transition.predecessor_helper,
+    )?;
+    let control_parent = control_path
+        .parent()
+        .ok_or_else(|| anyhow::anyhow!("legacy-retirement update control has no parent"))?;
+    let entries = fs::read_dir(control_parent)
+        .context("enumerate exact legacy-retirement update directory")?
+        .collect::<std::io::Result<Vec<_>>>()?;
+    if entries.len() != 1 || entries[0].path() != control_path {
+        bail!("legacy-retirement update directory contains unrelated state");
+    }
+
+    fs::remove_file(&control_path).context("remove exact legacy-retirement corrected control")?;
+    fs::File::open(control_parent)
+        .context("open legacy-retirement update control parent")?
+        .sync_all()
+        .context("sync legacy-retirement update control parent")?;
+    fs::remove_dir(control_parent).context("remove empty legacy-retirement update directory")?;
+    let managed_parent = control_parent
+        .parent()
+        .ok_or_else(|| anyhow::anyhow!("legacy-retirement update directory has no parent"))?;
+    fs::File::open(managed_parent)
+        .context("open managed product-update parent")?
+        .sync_all()
+        .context("sync managed product-update parent")?;
+
+    mac_load_legacy_retirement_transition_v1()?;
+    fs::remove_file(MAC_PUBLISHER_LEGACY_RETIREMENT_TRANSITION_PATH_V1)
+        .context("remove exact legacy-retirement transition provenance")?;
+    let transition_parent = Path::new(MAC_PUBLISHER_LEGACY_RETIREMENT_TRANSITION_PATH_V1)
+        .parent()
+        .ok_or_else(|| anyhow::anyhow!("legacy-retirement transition has no parent"))?;
+    fs::File::open(transition_parent)
+        .context("open legacy-retirement transition parent")?
+        .sync_all()
+        .context("sync legacy-retirement transition parent")?;
+
+    fs::remove_file(MAC_PUBLISHER_LEGACY_RETIREMENT_PREDECESSOR_HELPER_PATH_V1)
+        .context("remove exact legacy-retirement predecessor helper update image")?;
+    let helper_parent = Path::new(MAC_PUBLISHER_LEGACY_RETIREMENT_PREDECESSOR_HELPER_PATH_V1)
+        .parent()
+        .ok_or_else(|| anyhow::anyhow!("legacy-retirement predecessor helper has no parent"))?;
+    fs::File::open(helper_parent)
+        .context("open legacy-retirement predecessor helper parent")?
+        .sync_all()
+        .context("sync legacy-retirement predecessor helper parent")?;
+    Ok(())
+}
+
+#[cfg(target_os = "macos")]
+fn execute_closed_mac_publisher_product_retirement_v1(legacy_transition: bool) -> Result<Value> {
     mac_require_service_state_root_v1()?;
     let account = MAC_PUBLISHER_SERVICE_STATE_ACCOUNT_V1;
     let _guard = mac_keychain_durable_cas_guard_v1(account)?;
@@ -2969,6 +3356,10 @@ fn execute_closed_mac_publisher_product_retirement_v1() -> Result<Value> {
                 "publisher product retirement has no authenticated service-state record"
             )
         })?;
+
+    if legacy_transition {
+        mac_require_legacy_retirement_transition_pre_effect_v1(&current)?;
+    }
 
     if current.phase == MacPublisherServiceStatePhaseV1::Installed {
         let admission = mac_verified_control_admission_v1()?;
@@ -2984,7 +3375,7 @@ fn execute_closed_mac_publisher_product_retirement_v1() -> Result<Value> {
     }
 
     if current.phase == MacPublisherServiceStatePhaseV1::RetirementReady {
-        mac_revalidate_installed_retirement_images_v1(&current)?;
+        mac_revalidate_installed_retirement_images_v1(&current, legacy_transition)?;
         for item in &current.retirement_keychain_items {
             let bytes = mac_keychain_read_item_v1(MAC_KEYCHAIN_SERVICE_V1, &item.account)?
                 .ok_or_else(|| {
@@ -3007,7 +3398,7 @@ fn execute_closed_mac_publisher_product_retirement_v1() -> Result<Value> {
     }
 
     loop {
-        mac_revalidate_publisher_product_retirement_v1(&current)?;
+        mac_revalidate_publisher_product_retirement_v1(&current, legacy_transition)?;
         match mac_publisher_retirement_effect_v1(current.retirement_delete_cursor)? {
             MacPublisherRetirementEffectV1::Precommit => {}
             MacPublisherRetirementEffectV1::Bootout => {
@@ -3027,6 +3418,7 @@ fn execute_closed_mac_publisher_product_retirement_v1() -> Result<Value> {
                     &current,
                     MAC_PUBLISHER_PLIST_PATH_V1,
                     MAC_PRODUCT_RETIRE_PLIST_CURSOR_V1,
+                    legacy_transition,
                 )?;
             }
             MacPublisherRetirementEffectV1::Provenance => {
@@ -3034,6 +3426,7 @@ fn execute_closed_mac_publisher_product_retirement_v1() -> Result<Value> {
                     &current,
                     MAC_BOOTSTRAP_PROVENANCE_PATH_V1,
                     MAC_PRODUCT_RETIRE_PROVENANCE_CURSOR_V1,
+                    legacy_transition,
                 )?;
             }
             MacPublisherRetirementEffectV1::Helper => {
@@ -3041,7 +3434,11 @@ fn execute_closed_mac_publisher_product_retirement_v1() -> Result<Value> {
                     &current,
                     MAC_PUBLISHER_HELPER_PATH_V1,
                     MAC_PRODUCT_RETIRE_HELPER_CURSOR_V1,
+                    legacy_transition,
                 )?;
+                if legacy_transition {
+                    mac_resume_legacy_retirement_update_removal_v1(&current)?;
+                }
             }
             MacPublisherRetirementEffectV1::TerminalServiceState => {
                 let response = mac_service_state_response_v1("retired", &current)?;
@@ -3053,7 +3450,7 @@ fn execute_closed_mac_publisher_product_retirement_v1() -> Result<Value> {
                 return Ok(response);
             }
         }
-        mac_revalidate_publisher_product_retirement_v1(&current)?;
+        mac_revalidate_publisher_product_retirement_v1(&current, legacy_transition)?;
 
         let next = if current.retirement_delete_cursor == MAC_PRODUCT_RETIRE_HELPER_CURSOR_V1 {
             mac_transition_publisher_service_record_v1(
@@ -3074,12 +3471,17 @@ fn execute_closed_mac_publisher_product_retirement_v1() -> Result<Value> {
 
 #[cfg(target_os = "macos")]
 fn execute_closed_mac_publisher_service_state_retirement_v1() -> Result<Value> {
-    execute_closed_mac_publisher_product_retirement_v1()
+    execute_closed_mac_publisher_product_retirement_v1(false)
 }
 
 #[cfg(target_os = "macos")]
 fn execute_closed_mac_publisher_install_retirement_v1() -> Result<Value> {
-    execute_closed_mac_publisher_product_retirement_v1()
+    execute_closed_mac_publisher_product_retirement_v1(false)
+}
+
+#[cfg(target_os = "macos")]
+fn execute_closed_mac_publisher_install_retirement_transition_v1() -> Result<Value> {
+    execute_closed_mac_publisher_product_retirement_v1(true)
 }
 
 #[cfg(not(target_os = "macos"))]
@@ -3095,6 +3497,11 @@ fn execute_closed_mac_publisher_service_state_retirement_v1() -> Result<Value> {
 #[cfg(not(target_os = "macos"))]
 fn execute_closed_mac_publisher_install_retirement_v1() -> Result<Value> {
     bail!("publisher install retirement is unavailable off macOS")
+}
+
+#[cfg(not(target_os = "macos"))]
+fn execute_closed_mac_publisher_install_retirement_transition_v1() -> Result<Value> {
+    bail!("publisher install legacy transition is unavailable off macOS")
 }
 
 fn mac_bootstrap_evidence_sha256_v1(
