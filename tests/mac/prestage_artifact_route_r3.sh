@@ -51,6 +51,8 @@ CAPTURE="${CAPTURE}" "${LINKER_WRAPPER}" \
     "source file.c" \
     --target=aarch64-unknown-linux-gnu-extra \
     --target aarch64-unknown-linux-gnu \
+    -L \
+    "/tmp/target/release/build/openssl-sys/out/openssl-build/install/lib" \
     "-Wl,-rpath,/tmp/path with spaces" \
     ""
 
@@ -69,8 +71,12 @@ expected = [
     b"--target=aarch64-unknown-linux-gnu-extra",
     b"--target",
     b"aarch64-unknown-linux-gnu",
+    b"-L",
+    b"/tmp/target/release/build/openssl-sys/out/openssl-build/install/lib",
     b"-Wl,-rpath,/tmp/path with spaces",
     b"",
+    b"-lssl",
+    b"-lcrypto",
 ]
 if captured != expected:
     raise SystemExit(f"generated Zig wrapper forwarded unexpected arguments: {captured!r}")
