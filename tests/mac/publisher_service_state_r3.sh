@@ -145,6 +145,54 @@ if 'publisher retirement has no authenticated service-state record' not in attes
     raise SystemExit('privileged product retirement does not reject absent service state')
 if 'peer.uid == 0' in attest or 'already_uninstalled' in executor:
     raise SystemExit('privileged product retirement retains an absent-record success authority')
+if attest.index('mac_bootstrap_peer_identity_v1') >= attest.index(
+        'mac_read_global_publisher_service_state_record_v1'):
+    raise SystemExit('service-state reading precedes kernel FD3 peer/terminal attestation')
+
+peer_identity_start = executor.index('fn mac_bootstrap_peer_identity_v1')
+peer_identity_end = executor.index('\n#[cfg(all(test, target_os = "macos"))]', peer_identity_start)
+peer_identity = executor[peer_identity_start:peer_identity_end]
+if '/dev/tty' in peer_identity or 'tcgetsid' in peer_identity:
+    raise SystemExit('fixed helper still requires its own controlling terminal for FD3 admission')
+for token in (
+        'libc::getpeereid', 'libc::LOCAL_PEERPID', 'libc::getsid(pid)',
+        'libc::getpgid(pid)', 'mac_bootstrap_proc_bsdinfo_v1(pid)',
+        'mac_bootstrap_proc_bsdinfo_v1(peer_session)', 'libc::getsid(peer_session)',
+        'libc::getpgid(peer_session)',
+        'mac_bootstrap_peer_controls_foreground_terminal_session_v1'):
+    if token not in peer_identity:
+        raise SystemExit(f'peer-owned terminal admission lacks kernel evidence: {token}')
+
+terminal_join_start = executor.index(
+    'fn mac_bootstrap_peer_controls_foreground_terminal_session_v1')
+terminal_join_end = executor.index('\n#[cfg(target_os = "macos")]', terminal_join_start)
+terminal_join = executor[terminal_join_start:terminal_join_end]
+for token in (
+        'topology.peer_process.pid == topology.peer.pid as u32',
+        'topology.peer_process.uid == topology.peer.uid',
+        'topology.peer_process.gid == topology.peer.gid',
+        'topology.peer_process.pgid == topology.peer_pgid as u32',
+        'topology.peer_process.tty_device != u32::MAX',
+        'topology.peer_process.tty_pgid == topology.peer_pgid as u32',
+        'topology.session_leader_session == topology.peer_session',
+        'topology.session_leader_pgid == topology.peer_session',
+        'topology.session_leader_process.uid == topology.peer.uid',
+        'topology.session_leader_process.gid == topology.peer.gid',
+        'topology.session_leader_process.tty_device == topology.peer_process.tty_device',
+        'topology.session_leader_process.tty_pgid == topology.peer_process.tty_pgid'):
+    if token not in terminal_join:
+        raise SystemExit(f'peer-owned terminal admission omits rejection join: {token}')
+
+terminal_test_start = executor.index(
+    'fn bootstrap_peer_terminal_join_accepts_helper_without_tty_only_for_exact_foreground_peer')
+terminal_test_end = executor.index('\n    #[test]', terminal_test_start)
+terminal_test = executor[terminal_test_start:terminal_test_end]
+for rejection in (
+        'peer pid', 'peer uid', 'peer gid', 'peer session', 'peer process group',
+        'missing terminal', 'terminal device', 'foreground process group',
+        'terminal owner uid', 'terminal owner gid', 'session leader'):
+    if rejection not in terminal_test:
+        raise SystemExit(f'focused terminal regression omits negative case: {rejection}')
 if 'fixed_present_count' not in installer or 'partial ambiguous prestate' not in installer:
     raise SystemExit('installer lacks preserving-first fixed-path collision admission')
 
