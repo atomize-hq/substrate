@@ -860,6 +860,177 @@ struct MacBootstrapPeerIdentityV1 {
 }
 
 #[cfg(target_os = "macos")]
+fn mac_bootstrap_proc_bsdinfo_v1(pid: libc::pid_t) -> Option<libc::proc_bsdinfo> {
+    let mut info = unsafe { std::mem::zeroed::<libc::proc_bsdinfo>() };
+    // SAFETY: proc_pidinfo writes at most the supplied proc_bsdinfo buffer for the requested PID.
+    let size = unsafe {
+        libc::proc_pidinfo(
+            pid,
+            libc::PROC_PIDTBSDINFO,
+            0,
+            (&mut info as *mut libc::proc_bsdinfo).cast(),
+            std::mem::size_of::<libc::proc_bsdinfo>() as i32,
+        )
+    };
+    (size == std::mem::size_of::<libc::proc_bsdinfo>() as i32).then_some(info)
+}
+
+#[cfg(target_os = "macos")]
+fn mac_bootstrap_codesign_requirement_diagnostic_v1(path: &Path) -> Option<String> {
+    let output = Command::new("/usr/bin/codesign")
+        .args(["-d", "-r-", "--"])
+        .arg(path)
+        .env_clear()
+        .stdin(Stdio::null())
+        .output()
+        .ok()?;
+    let stderr = String::from_utf8(output.stderr).ok()?;
+    stderr.lines().find_map(|line| {
+        line.strip_prefix("designated =>")
+            .map(|value| value.trim().to_string())
+    })
+}
+
+#[cfg(target_os = "macos")]
+fn mac_bootstrap_peer_controls_foreground_terminal_session_v1(
+    executor_terminal_session: libc::pid_t,
+    peer_session: libc::pid_t,
+    peer_pgid: libc::pid_t,
+    peer_tty_device: u32,
+    peer_tty_pgid: u32,
+) -> bool {
+    executor_terminal_session > 0
+        && peer_session > 0
+        && peer_pgid > 0
+        && peer_tty_device != u32::MAX
+        && peer_tty_pgid == peer_pgid as u32
+}
+
+#[cfg(target_os = "macos")]
+fn mac_bootstrap_process_diagnostic_v1(pid: libc::pid_t) -> Value {
+    let info = mac_bootstrap_proc_bsdinfo_v1(pid);
+    let path = mac_kernel_peer_executable_path_v1(pid).ok();
+    let image = path
+        .as_deref()
+        .and_then(|path| mac_measure_bootstrap_image_v1(path).ok());
+    let designated_requirement = path
+        .as_deref()
+        .and_then(mac_bootstrap_codesign_requirement_diagnostic_v1);
+    json!({
+        "pid": pid,
+        "ppid": info.as_ref().map(|value| value.pbi_ppid),
+        "uid": info.as_ref().map(|value| value.pbi_uid),
+        "gid": info.as_ref().map(|value| value.pbi_gid),
+        "sid": unsafe { libc::getsid(pid) },
+        "pgid": unsafe { libc::getpgid(pid) },
+        "tty_device": info.as_ref().map(|value| value.e_tdev),
+        "tty_pgid": info.as_ref().map(|value| value.e_tpgid),
+        "start_tvsec": info.as_ref().map(|value| value.pbi_start_tvsec),
+        "start_tvusec": info.as_ref().map(|value| value.pbi_start_tvusec),
+        "executable_path": path.as_ref().map(|value| value.display().to_string()),
+        "physical_identity": image.as_ref().map(|value| value.artifact_identity.clone()),
+        "code_identity": image.as_ref().map(|value| value.code_identity.clone()),
+        "designated_requirement": designated_requirement,
+    })
+}
+
+#[cfg(target_os = "macos")]
+fn mac_bootstrap_peer_terminal_diagnostic_v1(
+    pid: libc::pid_t,
+    uid: libc::uid_t,
+    gid: libc::gid_t,
+    tty: &fs::File,
+    terminal_session: libc::pid_t,
+    peer_session: libc::pid_t,
+) -> Value {
+    let terminal_device = tty.metadata().ok().map(|metadata| metadata.rdev());
+    let terminal_foreground_pgid = unsafe { libc::tcgetpgrp(tty.as_raw_fd()) };
+    let mut terminal_path_bytes = [0 as libc::c_char; 1024];
+    let terminal_path = if unsafe {
+        libc::ttyname_r(
+            tty.as_raw_fd(),
+            terminal_path_bytes.as_mut_ptr(),
+            terminal_path_bytes.len(),
+        )
+    } == 0
+    {
+        // SAFETY: ttyname_r succeeded and wrote a NUL-terminated pathname into the fixed buffer.
+        unsafe { std::ffi::CStr::from_ptr(terminal_path_bytes.as_ptr()) }
+            .to_str()
+            .ok()
+            .map(str::to_string)
+    } else {
+        None
+    };
+    let resolved_terminal_device = terminal_path
+        .as_deref()
+        .and_then(|path| fs::symlink_metadata(path).ok())
+        .map(|metadata| metadata.rdev());
+    let peer = mac_bootstrap_process_diagnostic_v1(pid);
+    let peer_path = peer.get("executable_path").and_then(Value::as_str);
+    let provenance = mac_load_retained_bootstrap_provenance_v1().ok();
+    let installed_control_path = provenance.as_ref().map(|record| {
+        Path::new(&record.selected_host_prefix)
+            .join("bin/substrate-lifecycle-control")
+            .display()
+            .to_string()
+    });
+    let endpoint_owner = match (peer_path, installed_control_path.as_deref()) {
+        (Some(observed), Some(expected)) if observed == expected => "installed_control",
+        (Some("/usr/bin/sudo"), _) => "sudo_monitor_or_endpoint",
+        _ => "another_endpoint_owner",
+    };
+    let mut ancestry = Vec::new();
+    let mut ancestor_pid = pid;
+    for _ in 0..8 {
+        let process = mac_bootstrap_process_diagnostic_v1(ancestor_pid);
+        let parent = process
+            .get("ppid")
+            .and_then(Value::as_u64)
+            .and_then(|value| libc::pid_t::try_from(value).ok())
+            .unwrap_or(0);
+        ancestry.push(process);
+        if parent <= 1 || parent == ancestor_pid {
+            break;
+        }
+        ancestor_pid = parent;
+    }
+    let executor_pid = unsafe { libc::getpid() };
+    let mut executor_ancestry = Vec::new();
+    let mut executor_ancestor_pid = executor_pid;
+    for _ in 0..8 {
+        let process = mac_bootstrap_process_diagnostic_v1(executor_ancestor_pid);
+        let parent = process
+            .get("ppid")
+            .and_then(Value::as_u64)
+            .and_then(|value| libc::pid_t::try_from(value).ok())
+            .unwrap_or(0);
+        executor_ancestry.push(process);
+        if parent <= 1 || parent == executor_ancestor_pid {
+            break;
+        }
+        executor_ancestor_pid = parent;
+    }
+    json!({
+        "kernel_fd3_peer_pid": pid,
+        "kernel_fd3_peer_uid": uid,
+        "kernel_fd3_peer_gid": gid,
+        "terminal_session": terminal_session,
+        "terminal_device": terminal_device,
+        "terminal_foreground_pgid": terminal_foreground_pgid,
+        "resolved_terminal_path": terminal_path,
+        "resolved_terminal_device": resolved_terminal_device,
+        "peer_session": peer_session,
+        "endpoint_owner": endpoint_owner,
+        "installed_control_path": installed_control_path,
+        "peer": peer,
+        "ancestry": ancestry,
+        "executor": mac_bootstrap_process_diagnostic_v1(executor_pid),
+        "executor_ancestry": executor_ancestry,
+    })
+}
+
+#[cfg(target_os = "macos")]
 fn mac_rearm_bootstrap_fd3_cloexec_v1(fd: i32) -> Result<()> {
     let flags = unsafe { libc::fcntl(fd, libc::F_GETFD) };
     if flags < 0 {
@@ -918,8 +1089,10 @@ fn mac_set_bootstrap_no_sigpipe_v1(fd: i32) -> Result<()> {
     Ok(())
 }
 
-/// Obtain the direct peer from Darwin kernel credentials and prove it retains this controlling
-/// terminal's session before an authorization payload is decoded.
+/// Obtain the direct peer from Darwin kernel credentials and prove it remains in the foreground
+/// process group of its kernel-recorded controlling-terminal session before an authorization
+/// payload is decoded. The privileged executor's terminal only confirms that sudo retained its
+/// separate authenticated terminal; sudo is allowed to interpose its own session and PTY.
 #[cfg(target_os = "macos")]
 fn mac_bootstrap_peer_identity_v1(fd: i32) -> Result<MacBootstrapPeerIdentityV1> {
     let mut uid = 0 as libc::uid_t;
@@ -955,8 +1128,32 @@ fn mac_bootstrap_peer_identity_v1(fd: i32) -> Result<MacBootstrapPeerIdentityV1>
     // SAFETY: these calls read kernel-owned session identifiers for retained descriptors/PIDs.
     let terminal_session = unsafe { libc::tcgetsid(tty.as_raw_fd()) };
     let peer_session = unsafe { libc::getsid(pid) };
-    if terminal_session <= 0 || peer_session <= 0 || terminal_session != peer_session {
-        bail!("retained bootstrap FD3 peer does not control the confirmed terminal session");
+    let peer_pgid = unsafe { libc::getpgid(pid) };
+    let peer_info = mac_bootstrap_proc_bsdinfo_v1(pid);
+    let peer_identity_matches = peer_info.as_ref().is_some_and(|info| {
+        info.pbi_pid == pid as u32 && info.pbi_uid == uid && info.pbi_gid == gid
+    });
+    let peer_controls_terminal = peer_info.as_ref().is_some_and(|info| {
+        mac_bootstrap_peer_controls_foreground_terminal_session_v1(
+            terminal_session,
+            peer_session,
+            peer_pgid,
+            info.e_tdev,
+            info.e_tpgid,
+        )
+    });
+    if !peer_identity_matches || !peer_controls_terminal {
+        let diagnostic = mac_bootstrap_peer_terminal_diagnostic_v1(
+            pid,
+            uid,
+            gid,
+            &tty,
+            terminal_session,
+            peer_session,
+        );
+        bail!(
+            "retained bootstrap FD3 peer does not control the confirmed terminal session; diagnostic={diagnostic}"
+        );
     }
     Ok(MacBootstrapPeerIdentityV1 { pid, uid, gid })
 }
@@ -4921,6 +5118,45 @@ fn mac_be_subtract_v1(left: &[u8; 32], right: &[u8]) -> Result<[u8; 32]> {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[cfg(target_os = "macos")]
+    #[test]
+    fn bootstrap_peer_terminal_join_accepts_sudo_session_split_only_for_foreground_peer() {
+        assert!(
+            mac_bootstrap_peer_controls_foreground_terminal_session_v1(
+                85_773,
+                65_044,
+                65_044,
+                268_435_462,
+                65_044,
+            ),
+            "sudo may retain an authenticated terminal in a separate session while the exact FD3 peer remains foreground on its terminal"
+        );
+        assert!(
+            mac_bootstrap_peer_controls_foreground_terminal_session_v1(
+                85_773,
+                65_044,
+                85_760,
+                268_435_462,
+                85_760,
+            ),
+            "a foreground job process group need not equal its terminal session leader"
+        );
+        for rejected in [
+            (0, 65_044, 65_044, 268_435_462, 65_044),
+            (85_773, 0, 65_044, 268_435_462, 65_044),
+            (85_773, 65_044, 0, 268_435_462, 65_044),
+            (85_773, 65_044, 65_044, u32::MAX, 65_044),
+            (85_773, 65_044, 65_044, 268_435_462, 65_045),
+        ] {
+            assert!(
+                !mac_bootstrap_peer_controls_foreground_terminal_session_v1(
+                    rejected.0, rejected.1, rejected.2, rejected.3, rejected.4,
+                ),
+                "invalid or background peer unexpectedly joined the terminal session: {rejected:?}"
+            );
+        }
+    }
 
     #[test]
     fn publisher_retirement_cursor_has_one_fixed_restart_effect_per_revision() {
