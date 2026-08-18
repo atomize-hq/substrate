@@ -598,6 +598,8 @@ fn main() -> Result<()> {
             | "--publisher-install-retire-fd"
             | "--publisher-install-retire-transition-v1-fd"
     ) {
+        #[cfg(target_os = "macos")]
+        mac_system_keychain_ffi_v1::disable_user_interaction()?;
         if args.next().as_deref() != Some("3") || args.next().is_some() {
             bail!("publisher service-state operation accepts exactly retained descriptor 3");
         }
@@ -8181,6 +8183,86 @@ printf '%s' "$ENDPOINT_CODE"
             None,
         )
         .is_err());
+    }
+
+    #[test]
+    fn publisher_service_state_disables_security_ui_before_attestation() {
+        let source = include_str!("substrate-lifecycle-macos.rs");
+        let main_start = source
+            .find("fn main() -> Result<()> {")
+            .expect("macOS lifecycle main");
+        let main_end = source[main_start..]
+            .find("\n}\n\n#[cfg(target_os = \"macos\")]\nfn mac_attest_closed_service_state_fd3_v1")
+            .map(|offset| main_start + offset)
+            .expect("macOS lifecycle main end");
+        let main = &source[main_start..main_end];
+        let closed_start = main
+            .find("if matches!(\n        operation.as_str()")
+            .expect("closed service-state dispatch");
+        let closed_end = main[closed_start..]
+            .find("\n        return Ok(());")
+            .map(|offset| closed_start + offset)
+            .expect("closed service-state dispatch end");
+        let closed = &main[closed_start..closed_end];
+        let disable = closed
+            .find("mac_system_keychain_ffi_v1::disable_user_interaction()?")
+            .expect("closed service-state no-UI fence");
+        assert!(
+            disable
+                < closed
+                    .find("mac_attest_closed_service_state_fd3_v1")
+                    .expect("closed service-state attestation"),
+            "Security interaction must be disabled before attestation can read service state",
+        );
+
+        let ffi_module = ["mod mac_system_keychain_", "ffi_v1"].concat();
+        let ffi_start = source
+            .rfind(&ffi_module)
+            .expect("System Keychain FFI module");
+        let ffi = &source[ffi_start..];
+        let disable_start = ffi
+            .find("pub(super) fn disable_user_interaction()")
+            .expect("process-wide no-UI function");
+        let disable_end = ffi[disable_start..]
+            .find("\n    unsafe fn open_explicit_system_keychain")
+            .map(|offset| disable_start + offset)
+            .expect("process-wide no-UI function end");
+        let disable_body = &ffi[disable_start..disable_end];
+        for required in [
+            "SecKeychainSetUserInteractionAllowed(0)",
+            "status != ERR_SEC_SUCCESS",
+            "disable Security.framework user interaction failed with OSStatus {status}",
+        ] {
+            assert!(
+                disable_body.contains(required),
+                "process-wide no-UI fence lost {required}",
+            );
+        }
+
+        let query_start = ffi
+            .find("unsafe fn generic_search_query")
+            .expect("generic-password query");
+        let query_end = ffi[query_start..]
+            .find("\n    unsafe fn generic_add_dictionary")
+            .map(|offset| query_start + offset)
+            .expect("generic-password query end");
+        let query = &ffi[query_start..query_end];
+        for required in [
+            "(kSecClass, kSecClassGenericPassword)",
+            "(kSecAttrService, service)",
+            "(kSecAttrAccount, account)",
+            "(kSecMatchSearchList, search_list)",
+            "(kSecUseAuthenticationUI, kSecUseAuthenticationUIFail)",
+            "(kSecReturnData, kCFBooleanTrue)",
+        ] {
+            assert!(query.contains(required), "triggering query lost {required}");
+        }
+        for forbidden in ["kSecReturnAttributes", "kSecReturnRef", "kSecMatchLimit"] {
+            assert!(
+                !query.contains(forbidden),
+                "triggering query widened to {forbidden}",
+            );
+        }
     }
 
     #[test]
@@ -19952,6 +20034,16 @@ mod mac_system_keychain_ffi_v1 {
         Ok(())
     }
 
+    pub(super) fn disable_user_interaction() -> Result<()> {
+        unsafe {
+            let status = SecKeychainSetUserInteractionAllowed(0);
+            if status != ERR_SEC_SUCCESS {
+                bail!("disable Security.framework user interaction failed with OSStatus {status}");
+            }
+        }
+        Ok(())
+    }
+
     unsafe fn open_explicit_system_keychain(owned: &mut OwnedCf) -> Result<SecKeychain> {
         let path = CString::new(MAC_SYSTEM_KEYCHAIN_PATH_V1)
             .context("encode fixed System Keychain path")?;
@@ -20622,6 +20714,7 @@ mod mac_system_keychain_ffi_v1 {
         static kSecUseAuthenticationUIFail: CfType;
         static kSecKeyAlgorithmECDSASignatureMessageX962SHA256: CfType;
         static kSecGuestAttributePid: CfType;
+        fn SecKeychainSetUserInteractionAllowed(allowed: u8) -> OsStatus;
         fn SecKeychainOpen(path_name: *const c_char, keychain: *mut SecKeychain) -> OsStatus;
         fn SecKeychainGetPath(
             keychain: SecKeychain,
