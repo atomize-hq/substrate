@@ -177,6 +177,7 @@ for token in (
         'topology.session_leader_session == topology.peer_session',
         'topology.session_leader_pgid == topology.peer_session',
         'topology.session_leader_process.uid == topology.peer.uid',
+        'topology.session_leader_process.uid == 0',
         'topology.session_leader_process.gid == topology.peer.gid',
         'topology.session_leader_process.tty_device == topology.peer_process.tty_device',
         'topology.session_leader_process.tty_pgid == topology.peer_process.tty_pgid'):
@@ -187,6 +188,11 @@ terminal_test_start = executor.index(
     'fn bootstrap_peer_terminal_join_accepts_helper_without_tty_only_for_exact_foreground_peer')
 terminal_test_end = executor.index('\n    #[test]', terminal_test_start)
 terminal_test = executor[terminal_test_start:terminal_test_end]
+for acceptance in (
+        'root_login_session_leader.session_leader_process.uid = 0',
+        'unrelated_non_root_session_leader.session_leader_process.uid = 502'):
+    if acceptance not in terminal_test:
+        raise SystemExit(f'focused terminal regression omits session-leader UID case: {acceptance}')
 for rejection in (
         'peer pid', 'peer uid', 'peer gid', 'peer session', 'peer process group',
         'missing terminal', 'terminal device', 'foreground process group',

@@ -960,7 +960,8 @@ fn mac_bootstrap_peer_controls_foreground_terminal_session_v1(
         && topology.session_leader_session == topology.peer_session
         && topology.session_leader_pgid == topology.peer_session
         && topology.session_leader_process.pid == topology.peer_session as u32
-        && topology.session_leader_process.uid == topology.peer.uid
+        && (topology.session_leader_process.uid == topology.peer.uid
+            || topology.session_leader_process.uid == 0)
         && topology.session_leader_process.gid == topology.peer.gid
         && topology.session_leader_process.pgid == topology.peer_session as u32
         && topology.session_leader_process.tty_device == topology.peer_process.tty_device
@@ -5587,6 +5588,22 @@ mod tests {
             "the helper needs no /dev/tty when the exact FD3 peer and its live session leader retain one kernel-owned foreground terminal"
         );
 
+        let mut root_login_session_leader = topology;
+        root_login_session_leader.session_leader_process.uid = 0;
+        assert!(
+            mac_bootstrap_peer_controls_foreground_terminal_session_v1(&root_login_session_leader),
+            "a root-owned /usr/bin/login-style session leader remains valid when every kernel terminal join matches the authenticated peer"
+        );
+
+        let mut unrelated_non_root_session_leader = topology;
+        unrelated_non_root_session_leader.session_leader_process.uid = 502;
+        assert!(
+            !mac_bootstrap_peer_controls_foreground_terminal_session_v1(
+                &unrelated_non_root_session_leader
+            ),
+            "an unrelated non-root session-leader UID must not join the authenticated peer terminal"
+        );
+
         let mut foreground_job = topology;
         foreground_job.peer_pgid = 85_760;
         foreground_job.peer_process.pgid = 85_760;
@@ -5623,7 +5640,7 @@ mod tests {
         background_peer.peer_process.tty_pgid += 1;
         rejected.push(("foreground process group", background_peer));
         let mut wrong_terminal_owner_uid = topology;
-        wrong_terminal_owner_uid.session_leader_process.uid = 0;
+        wrong_terminal_owner_uid.session_leader_process.uid = 502;
         rejected.push(("terminal owner uid", wrong_terminal_owner_uid));
         let mut wrong_terminal_owner_gid = topology;
         wrong_terminal_owner_gid.session_leader_process.gid = 0;
