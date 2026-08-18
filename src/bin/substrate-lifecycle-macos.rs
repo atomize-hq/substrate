@@ -918,8 +918,30 @@ fn mac_set_bootstrap_no_sigpipe_v1(fd: i32) -> Result<()> {
     Ok(())
 }
 
-/// Obtain the direct peer from Darwin kernel credentials and prove it retains this controlling
-/// terminal's session before an authorization payload is decoded.
+#[cfg(target_os = "macos")]
+fn mac_require_bootstrap_peer_terminal_join_v1(
+    terminal_session: libc::pid_t,
+    peer_session: libc::pid_t,
+    terminal_device: u64,
+    peer_terminal_device: u32,
+) -> Result<()> {
+    if terminal_session <= 0
+        || peer_session <= 0
+        || terminal_device == 0
+        || terminal_device > u64::from(u32::MAX)
+        || peer_terminal_device == 0
+        || peer_terminal_device == u32::MAX
+        || terminal_device as u32 != peer_terminal_device
+    {
+        bail!("retained bootstrap FD3 peer does not control the confirmed terminal device");
+    }
+    Ok(())
+}
+
+/// Obtain the direct peer from Darwin kernel credentials and prove its kernel-recorded
+/// controlling-terminal device is the exact device inherited by the privileged executor before
+/// an authorization payload is decoded. `sudo` creates a new session for its elevated child, so
+/// session-number equality is not a valid join; the terminal device identity remains invariant.
 #[cfg(target_os = "macos")]
 fn mac_bootstrap_peer_identity_v1(fd: i32) -> Result<MacBootstrapPeerIdentityV1> {
     let mut uid = 0 as libc::uid_t;
@@ -952,12 +974,38 @@ fn mac_bootstrap_peer_identity_v1(fd: i32) -> Result<MacBootstrapPeerIdentityV1>
         .read(true)
         .open("/dev/tty")
         .context("open retained controlling terminal for bootstrap join")?;
+    let terminal_device = tty
+        .metadata()
+        .context("read retained controlling terminal identity")?
+        .rdev();
+    let mut peer_info = unsafe { std::mem::zeroed::<libc::proc_bsdinfo>() };
+    // SAFETY: proc_pidinfo writes at most the supplied proc_bsdinfo buffer size for the already
+    // kernel-attested, live socket peer PID.
+    let peer_info_size = unsafe {
+        libc::proc_pidinfo(
+            pid,
+            libc::PROC_PIDTBSDINFO,
+            0,
+            (&mut peer_info as *mut libc::proc_bsdinfo).cast(),
+            std::mem::size_of::<libc::proc_bsdinfo>() as i32,
+        )
+    };
+    if peer_info_size != std::mem::size_of::<libc::proc_bsdinfo>() as i32
+        || peer_info.pbi_pid != pid as u32
+        || peer_info.pbi_uid != uid
+        || peer_info.pbi_gid != gid
+    {
+        bail!("retained bootstrap FD3 peer process identity drifted before terminal join");
+    }
     // SAFETY: these calls read kernel-owned session identifiers for retained descriptors/PIDs.
     let terminal_session = unsafe { libc::tcgetsid(tty.as_raw_fd()) };
     let peer_session = unsafe { libc::getsid(pid) };
-    if terminal_session <= 0 || peer_session <= 0 || terminal_session != peer_session {
-        bail!("retained bootstrap FD3 peer does not control the confirmed terminal session");
-    }
+    mac_require_bootstrap_peer_terminal_join_v1(
+        terminal_session,
+        peer_session,
+        terminal_device,
+        peer_info.e_tdev,
+    )?;
     Ok(MacBootstrapPeerIdentityV1 { pid, uid, gid })
 }
 
@@ -4921,6 +4969,25 @@ fn mac_be_subtract_v1(left: &[u8; 32], right: &[u8]) -> Result<[u8; 32]> {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[cfg(target_os = "macos")]
+    #[test]
+    fn bootstrap_peer_terminal_join_uses_exact_device_across_sudo_session_split() {
+        mac_require_bootstrap_peer_terminal_join_v1(41, 37, 0x1000_0005, 0x1000_0005)
+            .expect("sudo session split retains one exact controlling terminal device");
+        assert!(
+            mac_require_bootstrap_peer_terminal_join_v1(41, 41, 0x1000_0005, 0x1000_0006).is_err(),
+            "session equality cannot replace exact terminal-device identity"
+        );
+        for invalid in [
+            mac_require_bootstrap_peer_terminal_join_v1(0, 37, 0x1000_0005, 0x1000_0005),
+            mac_require_bootstrap_peer_terminal_join_v1(41, 0, 0x1000_0005, 0x1000_0005),
+            mac_require_bootstrap_peer_terminal_join_v1(41, 37, 0, 0),
+            mac_require_bootstrap_peer_terminal_join_v1(41, 37, u64::from(u32::MAX), u32::MAX),
+        ] {
+            assert!(invalid.is_err());
+        }
+    }
 
     #[test]
     fn publisher_retirement_cursor_has_one_fixed_restart_effect_per_revision() {
