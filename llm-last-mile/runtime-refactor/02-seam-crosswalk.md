@@ -602,7 +602,9 @@ worker-to-host envelope is complete on the real retained production path. `world
 normalizes supported provider wrapper events fail-closed before `AgentEvent` construction, shell
 validation consumes the typed member instead of C1-path JSON-pointer repair, and the packet leaves
 no seam promoted. C1 and the bounded internal A1.2b packet are complete on that same bound
-Tuesday candidate; the next authority gate is `AUTHORITY_REQUIRED:R3_RESUME`.
+Tuesday candidate; the then-current historical gate was `AUTHORITY_REQUIRED:R3_RESUME`. That gate
+is superseded for active scheduling by `AUTHORITY_REQUIRED:MACOS_DEV_PARITY` under
+[`macos-dev-parity/DECISION.md`](macos-dev-parity/DECISION.md).
 
 ## C. Obligations and host re-engagement
 
@@ -1517,17 +1519,20 @@ their separate lane. Every uninstall-leftover, cleanup, rollback, manifest, and 
 remains R3-owned. R3 implementation is `PARKED_BY_USER` and no R3 implementation task has been
 dispatched. The just-closed corridor head was the B1/B2.1 joint closeout, B3.1, C1, and the
 bounded internal A1.2b packet are complete on the bound Tuesday, August 4, 2026 candidate, and
-the next authority gate is `AUTHORITY_REQUIRED:R3_RESUME`; R3 must be revalidated, explicitly
-reauthorized, resumed, and completed before A1.3, A1.4, or A1 closeout.
+the then-current historical gate was `AUTHORITY_REQUIRED:R3_RESUME`. It is superseded for active
+scheduling by `AUTHORITY_REQUIRED:MACOS_DEV_PARITY`; protected macOS lifecycle and Windows R3 no
+longer precede restoration of the ordinary developer corridor.
 
 ## A1.1d-5R3 canonical ownership and source-closure crosswalk
 
-This crosswalk supersedes the old monolithic R3 hypothesis only for future R3 dispatch. It is
+This archived crosswalk superseded the old monolithic R3 hypothesis for the former R3 dispatch
+plan. It is preserved engineering evidence and chronology, but is itself superseded for active
+scheduling by [`macos-dev-parity/DECISION.md`](macos-dev-parity/DECISION.md). It is
 derived from source at `4ceecd50e20d822dda7cbd8f0e1bef4ccad65d8e`. GitNexus was exact at that
 commit but under-resolved shell, PowerShell, cfg-specific, and implicit `Drop` flows; the caller
-chains below therefore include manual source closure. Each current R3 row has exactly one owner.
+chains below therefore include manual source closure. Each former R3 row had exactly one owner.
 
-### Current `R3CleanupOnly` rows
+### Historical `R3CleanupOnly` rows (superseded for active scheduling)
 
 | PI | Current action and caller/consumer chain | Current authority and destructive effect | Present tests / platform | Sole future owner |
 |---|---|---|---|---|
@@ -1702,3 +1707,21 @@ For this orchestration, the prior MAC attempt does not cross the source-to-evide
 eligible source-side predecessor for a fresh evidence dispatch is the later recovery implementation
 receipt that proves the R1–R6 hunk fences, review closure, and remote equality. This documentation
 packet provides no implementation or evidence authority.
+
+## Active macOS developer-parity crosswalk (2026-08-19; controlling)
+
+This table is the current scheduling/ownership projection. All earlier R3 macOS, recovery,
+retirement/finalizer, E03, and Windows-predecessor rows in this file are archived and superseded
+for active scheduling, not deleted or reinterpreted.
+
+| Boundary | Current disposition | Owner / gate |
+|---|---|---|
+| Ordinary macOS developer install/runtime | User-owned prefix install/uninstall; current shims, configuration, and binary staging; current Lima/`world-service`; typed selected-prefix and Lima-instance mapping; safe host-to-guest forwarding; native install → exercise world → uninstall → verify → reinstall proof. | `AUTHORITY_REQUIRED:MACOS_DEV_PARITY` |
+| Protected macOS lifecycle, publisher, privileged host service/helper, finalizer/terminal retirement, freeze/identity rotation, and E03 | Archived engineering history; not the active developer-install architecture and not a parity prerequisite. Any revival requires a separate production threat-model decision. Source/history may still exist in the active tree and preserved refs. | No active owner or successor |
+| Attempt 4 | Quarantined. The parity installer owns no Keychain record or fixed privileged artifact, performs no inspect/mutate/retire/migrate/overwrite/adopt/cleanup operation, and cannot use unfinished lifecycle cleanup. A later exact read-only, non-Keychain overlap check must prove disjointness; an actual collision stops for separate disposition. | Outside parity ownership |
+| Linux R3 | Historical landed facts remain landed; no reopen, expansion, reinterpretation, undo, or new evidence claim. Later shared-script work must preserve behavior. | Phase 2+ preservation constraint |
+| Windows R3 | Untouched and incomplete where applicable; outside active scope, neither prerequisite nor scheduled work. | No active dispatch |
+| Product-behavior continuation | Begins only after parity implementation, native proof, and explicit close, then fresh live-repository rebinding. A1.3, A1.4, Windows, E03, and every other successor remain undispatched. | Fresh authority after parity close |
+
+Phase 1 is documentation only and does not authorize Phase 2. The full decision is
+[`macos-dev-parity/DECISION.md`](macos-dev-parity/DECISION.md).

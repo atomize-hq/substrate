@@ -4439,8 +4439,9 @@ review-clean through `d0a70727c2bec2b2d6fe0754ea469c4682684dda`. The recovered B
 and B1/B2.1-0 implementation are review-clean through `6436289f`, `c519024b`, `de727091`,
 `717579b0`, and `83101dcb`. The later joint production closeout is complete on the frozen
 2026-08-03 source without additional product bytes, and B3.1, C1, and the bounded internal A1.2b
-packet are complete on the bound Tuesday, August 4, 2026 candidate. The next authority gate is
-`AUTHORITY_REQUIRED:R3_RESUME`. The historical prepared type also combined
+packet are complete on the bound Tuesday, August 4, 2026 candidate. The then-current historical
+gate was `AUTHORITY_REQUIRED:R3_RESUME`; it is superseded for active scheduling by
+`AUTHORITY_REQUIRED:MACOS_DEV_PARITY`. The historical prepared type also combined
 B-owned accepted/inspection routing with retained-worker admission data that has no canonical
 live-state representation.
 
@@ -8804,22 +8805,25 @@ and the parent's independent Git/hash verification are recorded transparently; n
 JSON protocol claim is made. R3 implementation is `PARKED_BY_USER` and no R3 implementation task
 has been dispatched. The just-closed corridor head was the B1/B2.1 joint closeout, B3.1, C1, and
 the bounded internal A1.2b packet are complete on the bound Tuesday, August 4, 2026 candidate,
-the next authority gate is `AUTHORITY_REQUIRED:R3_RESUME`, and R3 must be revalidated, explicitly
-reauthorized, resumed, and completed before A1.3, A1.4, or A1 closeout. Authenticated Codex,
+the then-current historical gate was `AUTHORITY_REQUIRED:R3_RESUME`. That gate and its protected
+R3 predecessor sequence are superseded for active scheduling by
+`AUTHORITY_REQUIRED:MACOS_DEV_PARITY`. Authenticated Codex,
 retained workers/tasks, authoritative-session repair/refresh,
 orchestrator packet-3 lifecycle/routing, gateway adoption, direct-member architecture, A1.1d/A1,
 and the whole runtime refactor remain open.
 
 ## A1.1d-5R3 lifecycle contracts and gates
 
-These contracts are normative preserved planning evidence for the packets indexed in `03`. They
+These contracts are archived normative planning evidence for the former packets indexed in `03`.
+They are superseded for active scheduling by
+[`macos-dev-parity/DECISION.md`](macos-dev-parity/DECISION.md). They
 authorize no action during `A1.1d-5R3-PLAN`, they are not the current next implementation line,
 and no R3 implementation task has been dispatched. Planning is complete at
 `19c40d41679e843e3e524f64fb9827959849d33e` / `d7f6b84c9efc8ad03d98ad55c4e1a31611b96335` with
 planning fingerprint `sha256:8f4cf54640443dbeb82fffbef68fac8d03eeaa6c72cf4e44f645044bc2b210e7`.
-R3 implementation is `PARKED_BY_USER`. Resume requires fresh explicit authority plus live
-revalidation after the now-complete bounded internal A1.2b corridor, and R3 must then be
-explicitly reauthorized, resumed, and completed before A1.3, A1.4, or A1 closeout.
+At that historical checkpoint, R3 implementation was `PARKED_BY_USER` and resume would have
+required fresh explicit authority plus live revalidation. That resume sequence is no longer an
+active prerequisite.
 
 ### `R3-CANDIDATE-01` — exact synchronous candidate rollback
 
@@ -10133,6 +10137,10 @@ push.
 
 ## R3 implementation status append
 
+This append preserves historical landed/status facts only. Its protected MAC, evidence, recovery,
+retirement/finalizer, E03, and Windows gates are not current parity prerequisites and do not
+authorize successor work.
+
 ### `A1.1d-5R3-MANIFEST`
 
 `A1.1d-5R3-MANIFEST` now has a landed implementation for the non-destructive portions of
@@ -10361,3 +10369,49 @@ The only stop/rejoin classifications are `SafePreAcceptanceStop`, `RejoinAccepte
 A later implementation review must inject failure before and after every receipt/acknowledgement write, file fsync, parent fsync, reopen/hash, signature, CAS, peer re-attestation, EOF, finalizer claim, journal generation, lock acquisition/reacquisition, effect prepared/invoked/return/observed boundary, caller disconnect, service bootout/absence, Keychain delete/final absence, unlink/parent-fsync, response, harness residual effect, parity proof, and terminal acknowledgement. It must prove no destructive-before-ack path; no host deletion before finalizer acceptance; observe-before-reinvoke after ambiguous returns; same-digest deterministic replay; peer/path/identity/target substitution rejection; unknown-field and alternate-digest rejection; cross-lane decoder rejection; and every SecurityAgent/UI stop.
 
 This amendment remains planning authority only. Literal V2 schema/domain/route constants, implementation file/symbol fences, experiment execution, live recovery, landing, evidence, mirror refresh, and `MAC-CLOSEOUT` each require their later serial authorities from the phase map.
+
+## `AUTHORITY_REQUIRED:MACOS_DEV_PARITY` contract (2026-08-19; controlling)
+
+This gate supersedes the archived R3 macOS/recovery/retirement/finalizer/E03 and Windows-predecessor
+contracts above **for active scheduling only**. It is not self-authorizing and Phase 1 grants no
+Phase 2 implementation or native-operation authority.
+
+### Admission
+
+A later parity task must freshly bind live Git/source truth, exact edit and symbol fences, current
+installer/runtime behavior, the selected user prefix, selected Lima instance, forwarding endpoint,
+Linux-preservation obligations for shared scripts, and native action/restoration rules. Before any
+effect it must complete an exact read-only overlap check, without a Keychain query, showing that
+those declared developer resources are disjoint from Attempt 4. Any actual path/resource collision
+requires a separately authorized disposition and leaves this gate open.
+
+### Allowed completion claim
+
+The gate may close only after the current product proves user-owned-prefix install/uninstall,
+current shims/configuration/binary staging, current Lima/`world-service` provisioning, typed
+selected-prefix and Lima-instance mapping, safe host-to-guest forwarding, and native install →
+exercise world → uninstall → verify → reinstall behavior. Exact intended removal and preservation
+of unrelated/pre-existing state are part of acceptance. Static checks alone are insufficient.
+
+### Prohibited ownership and actions
+
+The parity corridor owns no System-Keychain record, protected publisher, macOS lifecycle
+LaunchDaemon/privileged host helper, terminal-retirement/finalizer state, E03/freeze/identity-
+rotation/assurance evidence, or Attempt 4 artifact. It must not inspect or mutate Attempt 4
+Keychain records; retire, migrate, overwrite, adopt, or clean its fixed privileged artifacts; use
+unfinished lifecycle machinery as cleanup; or revive the archived architecture.
+
+Landed Linux R3 facts remain historical facts and receive no new implementation/evidence claim;
+later shared-script changes must preserve Linux behavior. Windows remains untouched and incomplete
+where applicable, outside scope, not complete, and not a predecessor or successor of this gate.
+
+### Exit and continuation
+
+Any ambiguity, overlap, protected-lifecycle dependency, unrelated-state change, native failure, or
+inexact uninstall/restoration keeps `AUTHORITY_REQUIRED:MACOS_DEV_PARITY` open. After a separately
+authorized implementation and native proof explicitly close it, product work still requires a
+fresh live-repository rebind. This contract does not dispatch A1.3, A1.4, Windows, E03, or any
+successor. Protected machinery can return only through a separate production threat-model decision.
+
+The complete decision record is
+[`macos-dev-parity/DECISION.md`](macos-dev-parity/DECISION.md).

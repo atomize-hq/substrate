@@ -6,7 +6,8 @@
 **Repo-truth snapshot:** 2026-08-02 at
 `4ceecd50e20d822dda7cbd8f0e1bef4ccad65d8e` / tree
 `8ed5dc7a354b731016a103b68091864b6a09223a`; re-check live code before every slice.
-**Current scheduling state:** `A1.1d-5R3-PLAN` is complete planning-only authority that froze the
+**Historical scheduling state (superseded for active scheduling on 2026-08-19):**
+`A1.1d-5R3-PLAN` was complete planning-only authority that froze the
 R3 implementation graph at `19c40d41679e843e3e524f64fb9827959849d33e` /
 `d7f6b84c9efc8ad03d98ad55c4e1a31611b96335` with terminal planning fingerprint
 `sha256:8f4cf54640443dbeb82fffbef68fac8d03eeaa6c72cf4e44f645044bc2b210e7`. R3 implementation is
@@ -29,10 +30,11 @@ materialization and semantic-cut packet, with its accepted differential recorded
 The bound Tuesday, August 4, 2026 A1.2b source candidate then completed the bounded internal
 successor/post-turn packet, with its accepted differential recorded in
 [`review-control/a1-2b-differential-evidence.json`](review-control/a1-2b-differential-evidence.json).
-No seam is promoted and no public consumer adoption moved. The next authority gate is
-`AUTHORITY_REQUIRED:R3_RESUME`, and each later packet still requires fresh explicit authority. R3
-must be revalidated, explicitly reauthorized, resumed, and completed before A1.3, A1.4, or A1
-closeout.
+No seam was promoted and no public consumer adoption moved. That checkpoint's
+`AUTHORITY_REQUIRED:R3_RESUME` sequence is preserved as historical chronology and is superseded
+for active scheduling by
+[`macos-dev-parity/DECISION.md`](macos-dev-parity/DECISION.md). The sole active gate is
+`AUTHORITY_REQUIRED:MACOS_DEV_PARITY`.
 
 ## Canonical repo location
 
@@ -242,14 +244,17 @@ rather than source-binding the installed binary. B3.1 and C1 are complete on the
 August 4, 2026 source candidate, A1.2b is complete on that same bound candidate as the internal
 durable successor/post-turn protocol only, and no seam is promoted.
 
-User-authorized scheduling disposition: R3 planning is complete at this checkpoint
+Historical user-authorized scheduling disposition, superseded for active scheduling on
+2026-08-19: R3 planning was complete at this checkpoint
 (`19c40d41679e843e3e524f64fb9827959849d33e` / `d7f6b84c9efc8ad03d98ad55c4e1a31611b96335`,
 planning fingerprint `sha256:8f4cf54640443dbeb82fffbef68fac8d03eeaa6c72cf4e44f645044bc2b210e7`), but R3
 implementation is `PARKED_BY_USER` and no R3 implementation task has been dispatched. The
 previously active authority wall `AUTHORITY_REQUIRED:B1_B2_1_JOINT_CLOSEOUT` is now closed, B3.1,
 C1, and the bounded internal A1.2b packet are complete on the bound Tuesday, August 4, 2026
-candidate, and the next authority gate is `AUTHORITY_REQUIRED:R3_RESUME`. R3 must be revalidated,
-explicitly reauthorized, resumed, and completed before A1.3, A1.4, or A1 closeout. No
+candidate, and the then-current gate was `AUTHORITY_REQUIRED:R3_RESUME`. The current replacement
+is `AUTHORITY_REQUIRED:MACOS_DEV_PARITY` under
+[`macos-dev-parity/DECISION.md`](macos-dev-parity/DECISION.md); protected macOS lifecycle and
+Windows R3 are not current product predecessors. No
 `cargo test --workspace`
 expected-failure inventory is frozen at this checkpoint; approximate workspace-failure counts are
 not authority.
@@ -1069,10 +1074,12 @@ work and not reopened here; every R3 lifecycle/forwarding/provisioning/cleanup/r
 convergence item open; and privileged product smoke, direct-member adoption, and the broader
 runtime-refactor backlog later.
 
-## A1.1d-5R3-PLAN authoritative planning status
+## A1.1d-5R3-PLAN authoritative planning status (archived for active scheduling)
 
-`A1.1d-5R3-PLAN` freezes an implementation-ready decomposition for lifecycle cleanup and
-convergence. It is not implementation or native evidence. Planning is complete at
+`A1.1d-5R3-PLAN` froze an implementation-ready decomposition for lifecycle cleanup and
+convergence. It is archived engineering evidence and superseded for active scheduling by
+[`macos-dev-parity/DECISION.md`](macos-dev-parity/DECISION.md). It is not implementation or native
+evidence. Planning was complete at
 `19c40d41679e843e3e524f64fb9827959849d33e` / `d7f6b84c9efc8ad03d98ad55c4e1a31611b96335` with
 terminal planning fingerprint `sha256:8f4cf54640443dbeb82fffbef68fac8d03eeaa6c72cf4e44f645044bc2b210e7`.
 `R3` implementation is `PARKED_BY_USER`, no R3 implementation task has been dispatched from this
@@ -1084,7 +1091,7 @@ exact architecture is in
 [04-contracts-and-gates.md](04-contracts-and-gates.md), and planned proof in
 [05-debug-regression-ledger.md](05-debug-regression-ledger.md).
 
-The preserved future-resume implementation index is:
+The preserved historical implementation index was:
 
 1. `A1.1d-5R3-HOME` — descriptor-bound synchronous private-home candidate rollback;
 2. `A1.1d-5R3-MANIFEST` — non-destructive managed-artifact contract and durable manifest core;
@@ -1159,6 +1166,10 @@ runtime-refactor work, policy/capability redesign, a new shared state root, or r
 the bounded `0640`/`0650` cache observation. R1/R2 evidence is immutable.
 
 ## R3 implementation status append
+
+This append preserves historical landed/status facts only. Its protected MAC, evidence, recovery,
+retirement/finalizer, E03, and Windows succession is superseded for active scheduling and
+authorizes no current task.
 
 ### `A1.1d-5R3-MANIFEST`
 
@@ -1256,3 +1267,28 @@ orchestration: historical attempt-4 and the preserved donor are ineligible to au
 `EVIDENCE:R3-MAC-IMP-01`. Only the separately authorized recovery implementation's reviewed,
 remote-equal receipt after R1–R6 may be considered by a fresh evidence dispatch. The recovery
 implementation remains authority-required; this planning commit does not start it.
+
+## Active macOS developer-parity decision (2026-08-19; controlling)
+
+[`macos-dev-parity/DECISION.md`](macos-dev-parity/DECISION.md) supersedes every earlier R3 macOS,
+recovery, retirement/finalizer, E03, and Windows-predecessor statement in this control pack **for
+active scheduling only**. Those earlier sections remain archived chronology and engineering
+evidence; they do not authorize implementation, evidence, cleanup, or successor dispatch.
+
+- The protected macOS lifecycle/finalizer/E03 architecture is archived, not erased, and is not the
+  active developer-install architecture. Revival requires a separate production threat-model
+  decision.
+- Ordinary macOS development is a user-owned prefix plus current shims/configuration/binaries,
+  typed selected-prefix/Lima mapping, current Lima/`world-service`, safe forwarding, and native
+  install → exercise world → uninstall → verify → reinstall proof. It has no System-Keychain,
+  protected-publisher, privileged-host-helper, terminal-retirement, finalizer, freeze, identity-
+  rotation, E03, or assurance-evidence prerequisite.
+- Landed Linux R3 facts remain historical landed facts with no new Linux claim. Windows remains
+  incomplete where applicable, untouched, out of scope, and not a prerequisite.
+- Attempt 4 is quarantined. The developer corridor owns no Attempt 4 record or fixed privileged
+  artifact and may proceed only after a later exact read-only, non-Keychain overlap check proves
+  disjointness; any real collision requires a separately authorized disposition.
+- Phase 1 authorizes no Phase 2 work. The sole active gate is
+  `AUTHORITY_REQUIRED:MACOS_DEV_PARITY`. After its later implementation, native proof, and explicit
+  close, any product-behavior successor must be freshly rebound from live repository truth; A1.3,
+  A1.4, Windows, E03, and all other successors remain undispatched.

@@ -2043,8 +2043,9 @@ tests, and zero retained failure-name/message/assertion/test-identity/behavior d
 differential is recorded in
 [`review-control/a1-2b-differential-evidence.json`](review-control/a1-2b-differential-evidence.json).
 A1.2b is complete only as the bounded internal durable successor/post-turn protocol; no seam is
-promoted, public consumer adoption remains A1.3/A1.4-owned, and the next authority gate is
-`AUTHORITY_REQUIRED:R3_RESUME`.
+promoted, public consumer adoption remains A1.3/A1.4-owned, and the then-current historical gate
+was `AUTHORITY_REQUIRED:R3_RESUME`. It is superseded for active scheduling by
+`AUTHORITY_REQUIRED:MACOS_DEV_PARITY`.
 
 ## Baseline behaviors that all tracks preserve
 
@@ -3201,13 +3202,15 @@ The full absolute paths, artifact hashes, authority provenance, proof matrix, an
 closed only as the bounded R2 propagation join. R3 implementation is `PARKED_BY_USER`; the
 just-closed corridor head was the B1/B2.1 joint closeout, B3.1, C1, and the bounded internal
 A1.2b packet are complete on the bound Tuesday, August 4, 2026 candidate, the next authority gate
-is `AUTHORITY_REQUIRED:R3_RESUME`, and R3 must be revalidated, explicitly reauthorized, resumed,
-and completed before A1.3, A1.4, or A1 closeout. The larger architecture and runtime-refactor
+was `AUTHORITY_REQUIRED:R3_RESUME`. That historical gate is superseded for active scheduling by
+`AUTHORITY_REQUIRED:MACOS_DEV_PARITY`. The larger architecture and runtime-refactor
 program remain open.
 
-## A1.1d-5R3 planned proof and regression ledger
+## A1.1d-5R3 planned proof and regression ledger (archived for active scheduling)
 
-Nothing in this section is executed evidence. It freezes the future proof obligations at planning
+Nothing in this section is executed evidence. It preserves former proof obligations as archived
+engineering history and is superseded for active scheduling by
+[`macos-dev-parity/DECISION.md`](macos-dev-parity/DECISION.md). It froze obligations at planning
 source `4ceecd50e20d822dda7cbd8f0e1bef4ccad65d8e` / tree
 `8ed5dc7a354b731016a103b68091864b6a09223a`. Planning is complete at
 `19c40d41679e843e3e524f64fb9827959849d33e` / `d7f6b84c9efc8ad03d98ad55c4e1a31611b96335` with
@@ -3215,10 +3218,9 @@ planning fingerprint `sha256:8f4cf54640443dbeb82fffbef68fac8d03eeaa6c72cf4e44f64
 R3 implementation is `PARKED_BY_USER`, no implementation task has been dispatched from this plan,
 and the just-closed corridor head was
 `AUTHORITY_REQUIRED:B1_B2_1_JOINT_CLOSEOUT`; B3.1, C1, and the bounded internal A1.2b packet are
-complete on the bound Tuesday, August 4, 2026 candidate, and the next authority gate is
-`AUTHORITY_REQUIRED:R3_RESUME`. A fresh authority gate must revalidate this preserved proof
-program before R3 is explicitly reauthorized, resumed, and completed before A1.3, A1.4, or A1
-closeout. No `cargo test --workspace`
+complete on the bound Tuesday, August 4, 2026 candidate, and the then-current historical gate was
+`AUTHORITY_REQUIRED:R3_RESUME`. That former gate and proof program are not current prerequisites;
+the current gate is `AUTHORITY_REQUIRED:MACOS_DEV_PARITY`. No `cargo test --workspace`
 expected-failure inventory is frozen here, and approximate
 workspace-failure counts are not authority.
 
@@ -3569,6 +3571,10 @@ leaves the corresponding gate open. R3 closeout does not authorize the later A1.
 
 ## R3 implementation status append
 
+This append preserves historical landed/status and regression facts only. Its protected MAC,
+evidence, recovery, retirement/finalizer, E03, and Windows succession is superseded for active
+scheduling and authorizes no current task.
+
 ### `A1.1d-5R3-MANIFEST`
 
 - Status: `LANDED_CLEAN`.
@@ -3715,3 +3721,22 @@ Future evidence/hash slots remain empty except for the bounded G2/G3 stop receip
 | Native macOS evidence artifact/receipt SHA-256 | `PENDING / NOT RUN` |
 | Evidence-mirror refresh receipt SHA-256 | `PENDING / NOT AUTHORIZED` |
 | `MAC-CLOSEOUT` receipt SHA-256 | `PENDING / NOT AUTHORIZED` |
+
+## macOS developer-parity regression ledger (2026-08-19; controlling)
+
+The retirement/orphan table above remains archived evidence and quarantine posture. It is not the
+active developer-install schedule, does not declare Attempt 4 cleaned or restored, and supplies no
+parity cleanup route. The active gate is `AUTHORITY_REQUIRED:MACOS_DEV_PARITY`.
+
+| Regression boundary | Required later proof | Failure / stop rule |
+|---|---|---|
+| User-owned developer corridor | Current-product prefix install/uninstall; current shims, configuration, binaries, typed selected-prefix/Lima mapping, current Lima/`world-service`, and safe forwarding. | Any protected lifecycle dependency or ambiguous/unowned resource leaves parity open. |
+| Native product loop | Install → exercise a real world → uninstall → verify exact intended absence and unrelated/pre-existing-state preservation → reinstall and re-exercise readiness/world behavior. | Static-only proof, failed world exercise, inexact uninstall/restoration, or unrelated change fails closure. |
+| Attempt 4 quarantine | Before effects, a separately authorized exact read-only overlap check using declared resources and no Keychain query proves disjointness. The parity installer neither inspects/mutates Keychain records nor retires/migrates/overwrites/adopts/cleans fixed privileged artifacts. | A real path/resource collision stops for a separately authorized disposition; unfinished lifecycle machinery is never cleanup. Attempt 4 remains quarantined, not cleaned/restored. |
+| Protected architecture exclusion | No System Keychain, protected publisher, macOS lifecycle LaunchDaemon/privileged host helper, terminal retirement/finalizer, E03, freeze, identity rotation, or assurance-evidence action/dependency. | Any invocation or required dependency is a scope/authority stop. Revival requires a separate production threat-model decision. |
+| Linux preservation | Existing landed Linux R3 facts remain historical landed facts; shared-script behavior remains unchanged by later parity work. | No new Linux implementation/evidence claim is accepted from this packet; behavior drift blocks later parity closure. |
+| Windows non-prerequisite | Windows paths and state remain untouched and incomplete where applicable. | No Windows completion, scheduling, native work, or prerequisite claim is accepted. |
+| Product continuation | After parity implementation, native proof, and explicit close, rebind the next product slice from live repository truth. | A1.3, A1.4, Windows, E03, or any successor dispatch from Phase 1 is invalid. |
+
+Phase 1 records this regression boundary only; it performs no proof run and authorizes no Phase 2
+work. See [`macos-dev-parity/DECISION.md`](macos-dev-parity/DECISION.md).
