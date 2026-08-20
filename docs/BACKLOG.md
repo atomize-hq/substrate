@@ -3,6 +3,17 @@
 Status: living document capturing near-term and upcoming work.
 Keep concise, actionable, and security-focused.
 
+## Deferred — hardened/advanced macOS installer
+
+- Revisit the hardened macOS installer only after the ordinary developer install, Lima world,
+  forwarding, uninstall, verification, and reinstall loop works without protected lifecycle
+  dependencies.
+- Restart from a fresh production threat model and add advanced capabilities in independently
+  testable phases; do not merge an archive wholesale or make privileged lifecycle, Keychain,
+  publisher, finalizer, or assurance machinery prerequisites for routine development.
+- The verified archive inventory, reference order, exclusions, and active simplification boundary
+  are recorded in [Advanced macOS Installer Archive Map](ADVANCED_MACOS_INSTALLER_ARCHIVES.md).
+
 ## Top-priority deferred R3 publisher lifecycle/product-policy work
 
 - Outside the bounded R3 evidence-retirement and one preserved-orphan lane: design publisher upgrade/replacement across changing code identities; general authorized orphan recovery after partial or externally interrupted teardown; decide whether full-product uninstall may retire the final publisher/anchor; and define multi-install ownership and last-claim retirement rules. Do not fold these into the external evidence finalizer, the prospective V2 protocol, or the exact precommit-less recovery lane.
