@@ -1520,9 +1520,10 @@ remains R3-owned. R3 implementation is `PARKED_BY_USER` and no R3 implementation
 dispatched. The just-closed corridor head was the B1/B2.1 joint closeout, B3.1, C1, and the
 bounded internal A1.2b packet are complete on the bound Tuesday, August 4, 2026 candidate, and
 the then-current historical gate was `AUTHORITY_REQUIRED:R3_RESUME`. Its former macOS-parity
-replacement is now superseded as the global schedule by
-`AUTHORITY_REQUIRED:RUNTIME_REFACTOR_REENTRY`; protected macOS lifecycle and Windows R3 no longer
-precede either the ordinary developer corridor or Linux-first runtime-refactor reentry.
+replacement was superseded as the global schedule by the reentry gate, which is now closed by the
+selected [A1.3 Linux-first packet](linux-first-runtime-resumption/A1.3-LINUX-FIRST-PACKET.md).
+Protected macOS lifecycle and Windows R3 no longer precede either the ordinary developer corridor
+or Linux-first runtime-refactor work.
 
 ## A1.1d-5R3 canonical ownership and source-closure crosswalk
 
@@ -1718,15 +1719,16 @@ this file are archived and superseded for active scheduling, not deleted or rein
 
 | Boundary | Current disposition | Owner / gate |
 |---|---|---|
-| Runtime-refactor continuation | Linux-first rebind-and-selection packet; it must bind live source/control truth and choose one exact subsequent runtime packet before implementation. | `AUTHORITY_REQUIRED:RUNTIME_REFACTOR_REENTRY` |
+| Runtime-refactor continuation | The reentry packet is closed as a documentation-only selection. A1.3 is the active Linux-first implementation packet, bounded by its named authority, symbol/test fence, shared-surface rule, and exclusions. | [`A1.3-LINUX-FIRST-PACKET.md`](linux-first-runtime-resumption/A1.3-LINUX-FIRST-PACKET.md) |
 | Ordinary macOS developer install/runtime | User-owned prefix install/uninstall; current shims, configuration, and binary staging; current Lima/`world-service`; typed selected-prefix and Lima-instance mapping; safe host-to-guest forwarding; native install → exercise world → uninstall → verify → reinstall proof. It is a non-blocking macOS lane. | `AUTHORITY_REQUIRED:MACOS_DEV_PARITY` |
 | Protected macOS lifecycle, publisher, privileged host service/helper, finalizer/terminal retirement, freeze/identity rotation, and E03 | Archived engineering history; not the active developer-install architecture and not a parity prerequisite. Any revival requires a separate production threat-model decision. Source/history may still exist in the active tree and preserved refs. | No active owner or successor |
 | Attempt 4 | Quarantined. The parity installer owns no Keychain record or fixed privileged artifact, performs no inspect/mutate/retire/migrate/overwrite/adopt/cleanup operation, and cannot use unfinished lifecycle cleanup. A later exact read-only, non-Keychain overlap check must prove disjointness; an actual collision stops for separate disposition. | Outside parity ownership |
 | Linux R3 | Historical landed facts remain landed; no reopen, expansion, reinterpretation, undo, or new evidence claim. Later shared-script work must preserve behavior. | Phase 2+ preservation constraint |
 | Windows R3 | Untouched and incomplete where applicable; deferred until a separately authorized post-runtime-refactor scheduling decision. | No active dispatch |
-| Product-behavior continuation | macOS closure does not release runtime work. The global reentry packet selects one exact later runtime packet; neither lane dispatches the other's successor. | Fresh authority after reentry selection |
+| Product-behavior continuation | macOS closure does not release runtime work. The selected A1.3 packet owns only Linux-first public/successor adoption; neither lane dispatches the other's successor. | [`A1.3-LINUX-FIRST-PACKET.md`](linux-first-runtime-resumption/A1.3-LINUX-FIRST-PACKET.md) |
 
 The macOS Phase 1 decision is documentation only and does not authorize macOS Phase 2. The
-controlling global scheduling decision is
+controlling global scheduling decision and closed reentry record are in
 [`linux-first-runtime-resumption/DECISION.md`](linux-first-runtime-resumption/DECISION.md); the
-macOS-lane boundary remains in [`macos-dev-parity/DECISION.md`](macos-dev-parity/DECISION.md).
+active A1.3 fence is [`linux-first-runtime-resumption/A1.3-LINUX-FIRST-PACKET.md`](linux-first-runtime-resumption/A1.3-LINUX-FIRST-PACKET.md);
+the macOS-lane boundary remains in [`macos-dev-parity/DECISION.md`](macos-dev-parity/DECISION.md).

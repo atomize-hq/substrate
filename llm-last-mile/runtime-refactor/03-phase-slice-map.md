@@ -1816,8 +1816,8 @@ FILE:LINE-only movements in `crates/shell/src/execution/orchestrator_world_dispa
 [`review-control/c1-differential-evidence.json`](review-control/c1-differential-evidence.json).
 A1.2b is complete on that same bound Tuesday candidate as the internal durable successor/post-turn
 protocol only, the then-current historical gate was `AUTHORITY_REQUIRED:R3_RESUME`, and no seam
-was promoted. That former macOS-parity replacement is superseded as the global schedule by
-`AUTHORITY_REQUIRED:RUNTIME_REFACTOR_REENTRY`.
+was promoted. The later reentry gate is closed by the selected
+[A1.3 Linux-first packet](linux-first-runtime-resumption/A1.3-LINUX-FIRST-PACKET.md).
 
 ## Track D — UAA execution envelope and side-effect mediation
 
@@ -3275,9 +3275,9 @@ archive-ref change, cleanup, or completion claim is implied.
 
 ```text
 Linux-first scheduling decision
-  -> AUTHORITY_REQUIRED:RUNTIME_REFACTOR_REENTRY
-  -> one exact runtime packet selected from live source/control truth
-  -> separately authorized Linux-first implementation or proof
+  -> AUTHORITY_REQUIRED:RUNTIME_REFACTOR_REENTRY (closed as docs-only selection)
+  -> A1.3 Linux-first public/successor implementation packet
+  -> bounded implementation and proof under its exact fence
 
 Separate macOS lane
   -> AUTHORITY_REQUIRED:MACOS_DEV_PARITY
@@ -3285,10 +3285,10 @@ Separate macOS lane
   -> native install -> exercise world -> uninstall -> verify -> reinstall close
 ```
 
-`AUTHORITY_REQUIRED:RUNTIME_REFACTOR_REENTRY` is a documentation/control-plane rebind-and-selection
-packet. It must select one exact next runtime packet with live source ownership, Linux-first
-acceptance, and explicit exclusions before implementation. `AUTHORITY_REQUIRED:MACOS_DEV_PARITY`
-owns only the separate current-product user-prefix developer corridor: current
+`AUTHORITY_REQUIRED:RUNTIME_REFACTOR_REENTRY` closed as a documentation/control-plane rebind that
+selected [A1.3](linux-first-runtime-resumption/A1.3-LINUX-FIRST-PACKET.md). A1.3 alone now owns the
+bounded Linux-first implementation/proof fence. `AUTHORITY_REQUIRED:MACOS_DEV_PARITY` owns only the
+separate current-product user-prefix developer corridor: current
 shims/configuration/binary staging, current Lima/`world-service`, typed selected-prefix and
 Lima-instance mapping, and safe forwarding. It excludes System Keychain, protected publisher,
 macOS lifecycle LaunchDaemon/privileged host helper, terminal retirement/finalizer, E03, freeze,

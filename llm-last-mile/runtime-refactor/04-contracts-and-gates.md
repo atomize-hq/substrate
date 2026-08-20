@@ -10420,11 +10420,12 @@ The complete decision record is
 [`macos-dev-parity/DECISION.md`](macos-dev-parity/DECISION.md).
 
 
-## `AUTHORITY_REQUIRED:RUNTIME_REFACTOR_REENTRY` contract (2026-08-20; controlling)
+## `AUTHORITY_REQUIRED:RUNTIME_REFACTOR_REENTRY` contract (2026-08-20; closed selection record)
 
-This is the global documentation/control-plane rebind-and-selection gate. It supersedes the former
+This was the global documentation/control-plane rebind-and-selection gate. It superseded the former
 use of `AUTHORITY_REQUIRED:MACOS_DEV_PARITY` as the global product-work predecessor, while leaving
-the macOS lane contract above unchanged in scope.
+the macOS lane contract above unchanged in scope. It is now closed only as the selection of the
+active [A1.3 Linux-first implementation packet](linux-first-runtime-resumption/A1.3-LINUX-FIRST-PACKET.md).
 
 ### Admission
 
@@ -10445,5 +10446,7 @@ This gate owns no runtime, installer, Lima, macOS, Windows, archive, Keychain, A
 operation. It does not reopen Linux R3, make macOS parity a predecessor, or dispatch the selected
 packet without separate authority.
 
-The complete global scheduling decision is
-[`linux-first-runtime-resumption/DECISION.md`](linux-first-runtime-resumption/DECISION.md).
+The complete global scheduling decision and closed selection record are
+[`linux-first-runtime-resumption/DECISION.md`](linux-first-runtime-resumption/DECISION.md). The
+separate, active A1.3 implementation authority is
+[`linux-first-runtime-resumption/A1.3-LINUX-FIRST-PACKET.md`](linux-first-runtime-resumption/A1.3-LINUX-FIRST-PACKET.md).

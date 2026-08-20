@@ -4,7 +4,8 @@
 
 - **Status:** accepted for active scheduling; documentation-only decision.
 - **Effective date:** 2026-08-20.
-- **Active global authority gate:** `AUTHORITY_REQUIRED:RUNTIME_REFACTOR_REENTRY`.
+- **Reentry gate:** `AUTHORITY_REQUIRED:RUNTIME_REFACTOR_REENTRY` (closed by the selection below).
+- **Active global implementation packet:** [`A1.3-LINUX-FIRST-PACKET.md`](A1.3-LINUX-FIRST-PACKET.md).
 - **Supersedes:** the 2026-08-19 macOS developer-parity decision only where it made
   `AUTHORITY_REQUIRED:MACOS_DEV_PARITY` the global product-work predecessor. It does not weaken,
   close, or authorize the macOS parity lane.
@@ -35,8 +36,21 @@ packet, not product implementation authority. It must:
    path and symbol fences, dependencies, Linux-first acceptance criteria, and exclusions; and
 3. publish no runtime, installer, Lima, macOS, Windows, archive, or native-operation change.
 
-Only the selected later packet may receive separate implementation authority. This decision does
-not assume that A1.3, A1.4, or any other historical label is the next implementation packet.
+Only the selected later packet may receive separate implementation authority. This decision did
+not assume that A1.3, A1.4, or any other historical label was the next implementation packet until
+the rebind was complete.
+
+## Reentry selection (2026-08-20; controlling)
+
+The reentry packet is closed as documentation/control-plane selection only. Its live branch,
+ancestry, control-pack, historical-evidence, Linux-first, macOS-exclusion, and Windows-deferral
+rebind selected **A1.3 — public/successor adoption and startup-result completion**. The complete
+narrow implementation authority, path/symbol fence, Linux-first acceptance criteria, verification,
+shared-surface rule, and exclusions are in
+[`A1.3-LINUX-FIRST-PACKET.md`](A1.3-LINUX-FIRST-PACKET.md).
+
+A1.3 is the active next implementation packet. This selection itself performed no runtime,
+installer, Lima, macOS, Windows, archive, or native operation and does not claim A1.3 completion.
 
 ## macOS lane
 
@@ -54,7 +68,7 @@ may silently adopt work from the other merely because the Git histories have a c
 ## Windows disposition
 
 Windows is untouched, incomplete where applicable, and deferred. It is not a prerequisite for the
-runtime-refactor reentry packet, Linux-first adoption, or macOS parity. No Windows implementation,
+the selected A1.3 packet, Linux-first adoption, or macOS parity. No Windows implementation,
 native proof, cleanup, or completion claim is authorized here.
 
 ## Alternatives considered
@@ -71,8 +85,9 @@ separate production threat-model decision before any revival.
 
 ### Declare an implementation packet immediately
 
-Rejected. The current source and control pack must first be rebound so that the next packet is
-bounded by live ownership, dependencies, and Linux-first proof rather than a historical label.
+Rejected at the time of this scheduling decision. The current source and control pack first had to
+be rebound so that the next packet was bounded by live ownership, dependencies, and Linux-first
+proof rather than a historical label. That rebind later selected A1.3.
 
 ## Consequences and non-goals
 
@@ -80,7 +95,8 @@ bounded by live ownership, dependencies, and Linux-first proof rather than a his
   macOS proof.
 - The macOS lane remains deliberately narrow and may proceed independently only under its own
   fresh authorization.
-- This decision does not create a branch, dispatch either implementation lane, modify product
-  source, re-open Linux R3, or perform a Linux proof run.
+- This scheduling decision itself did not create a branch, modify product source, re-open Linux
+  R3, or perform a Linux proof run. Its separately recorded reentry selection later activated the
+  bounded A1.3 packet only.
 - This decision does not dispatch Windows, protected macOS lifecycle revival, Keychain activity,
   Attempt 4 inspection or remediation, installer execution, Lima actions, or native operations.
