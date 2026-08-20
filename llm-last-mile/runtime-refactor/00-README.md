@@ -31,10 +31,12 @@ The bound Tuesday, August 4, 2026 A1.2b source candidate then completed the boun
 successor/post-turn packet, with its accepted differential recorded in
 [`review-control/a1-2b-differential-evidence.json`](review-control/a1-2b-differential-evidence.json).
 No seam was promoted and no public consumer adoption moved. That checkpoint's
-`AUTHORITY_REQUIRED:R3_RESUME` sequence is preserved as historical chronology and is superseded
-for active scheduling by
-[`macos-dev-parity/DECISION.md`](macos-dev-parity/DECISION.md). The sole active gate is
-`AUTHORITY_REQUIRED:MACOS_DEV_PARITY`.
+`AUTHORITY_REQUIRED:R3_RESUME` sequence is preserved as historical chronology. The macOS-parity
+decision removed protected macOS lifecycle and Windows predecessors, but its former global
+blocking order is superseded by the Linux-first scheduling decision in
+[`linux-first-runtime-resumption/DECISION.md`](linux-first-runtime-resumption/DECISION.md). The
+sole active global gate is `AUTHORITY_REQUIRED:RUNTIME_REFACTOR_REENTRY`; macOS parity remains a
+separate lane under `AUTHORITY_REQUIRED:MACOS_DEV_PARITY`.
 
 ## Canonical repo location
 
@@ -251,10 +253,11 @@ planning fingerprint `sha256:8f4cf54640443dbeb82fffbef68fac8d03eeaa6c72cf4e44f64
 implementation is `PARKED_BY_USER` and no R3 implementation task has been dispatched. The
 previously active authority wall `AUTHORITY_REQUIRED:B1_B2_1_JOINT_CLOSEOUT` is now closed, B3.1,
 C1, and the bounded internal A1.2b packet are complete on the bound Tuesday, August 4, 2026
-candidate, and the then-current gate was `AUTHORITY_REQUIRED:R3_RESUME`. The current replacement
-is `AUTHORITY_REQUIRED:MACOS_DEV_PARITY` under
-[`macos-dev-parity/DECISION.md`](macos-dev-parity/DECISION.md); protected macOS lifecycle and
-Windows R3 are not current product predecessors. No
+candidate, and the then-current gate was `AUTHORITY_REQUIRED:R3_RESUME`. The former replacement
+was `AUTHORITY_REQUIRED:MACOS_DEV_PARITY`, which still owns the macOS lane, but the current global
+replacement is `AUTHORITY_REQUIRED:RUNTIME_REFACTOR_REENTRY` under
+[`linux-first-runtime-resumption/DECISION.md`](linux-first-runtime-resumption/DECISION.md).
+Protected macOS lifecycle and Windows R3 are not current product predecessors. No
 `cargo test --workspace`
 expected-failure inventory is frozen at this checkpoint; approximate workspace-failure counts are
 not authority.
@@ -1077,9 +1080,10 @@ runtime-refactor backlog later.
 ## A1.1d-5R3-PLAN authoritative planning status (archived for active scheduling)
 
 `A1.1d-5R3-PLAN` froze an implementation-ready decomposition for lifecycle cleanup and
-convergence. It is archived engineering evidence and superseded for active scheduling by
-[`macos-dev-parity/DECISION.md`](macos-dev-parity/DECISION.md). It is not implementation or native
-evidence. Planning was complete at
+convergence. It is archived engineering evidence and its former active-scheduling replacement is
+now superseded by
+[`linux-first-runtime-resumption/DECISION.md`](linux-first-runtime-resumption/DECISION.md). It is
+not implementation or native evidence. Planning was complete at
 `19c40d41679e843e3e524f64fb9827959849d33e` / `d7f6b84c9efc8ad03d98ad55c4e1a31611b96335` with
 terminal planning fingerprint `sha256:8f4cf54640443dbeb82fffbef68fac8d03eeaa6c72cf4e44f645044bc2b210e7`.
 `R3` implementation is `PARKED_BY_USER`, no R3 implementation task has been dispatched from this
@@ -1268,12 +1272,12 @@ orchestration: historical attempt-4 and the preserved donor are ineligible to au
 remote-equal receipt after R1–R6 may be considered by a fresh evidence dispatch. The recovery
 implementation remains authority-required; this planning commit does not start it.
 
-## Active macOS developer-parity decision (2026-08-19; controlling)
+## macOS developer-parity lane (2026-08-19; scoped)
 
 [`macos-dev-parity/DECISION.md`](macos-dev-parity/DECISION.md) supersedes every earlier R3 macOS,
-recovery, retirement/finalizer, E03, and Windows-predecessor statement in this control pack **for
-active scheduling only**. Those earlier sections remain archived chronology and engineering
-evidence; they do not authorize implementation, evidence, cleanup, or successor dispatch.
+recovery, retirement/finalizer, E03, and Windows-predecessor statement **for macOS-lane scheduling
+only**. Those earlier sections remain archived chronology and engineering evidence; they do not
+authorize implementation, evidence, cleanup, or successor dispatch.
 
 - The protected macOS lifecycle/finalizer/E03 architecture is archived, not erased, and is not the
   active developer-install architecture. Revival requires a separate production threat-model
@@ -1288,7 +1292,16 @@ evidence; they do not authorize implementation, evidence, cleanup, or successor 
 - Attempt 4 is quarantined. The developer corridor owns no Attempt 4 record or fixed privileged
   artifact and may proceed only after a later exact read-only, non-Keychain overlap check proves
   disjointness; any real collision requires a separately authorized disposition.
-- Phase 1 authorizes no Phase 2 work. The sole active gate is
-  `AUTHORITY_REQUIRED:MACOS_DEV_PARITY`. After its later implementation, native proof, and explicit
-  close, any product-behavior successor must be freshly rebound from live repository truth; A1.3,
-  A1.4, Windows, E03, and all other successors remain undispatched.
+- Phase 1 authorizes no macOS Phase 2 work. `AUTHORITY_REQUIRED:MACOS_DEV_PARITY` remains a
+  lane-local gate; it does not block or authorize the runtime-refactor sequence. A1.3, A1.4,
+  Windows, E03, and all other successors remain undispatched unless a later exact packet is
+  selected under the global reentry gate.
+
+## Linux-first runtime-refactor scheduling decision (2026-08-20; controlling)
+
+[`linux-first-runtime-resumption/DECISION.md`](linux-first-runtime-resumption/DECISION.md)
+supersedes the macOS decision's former global blocking order. The active global gate is
+`AUTHORITY_REQUIRED:RUNTIME_REFACTOR_REENTRY`; it rebinds live repository truth and selects one
+exact Linux-first runtime-refactor packet before any implementation. macOS parity may proceed in
+its separate lane and Windows remains deferred. Neither lane's closure dispatches the other's
+successor.

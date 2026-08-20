@@ -2,9 +2,11 @@
 
 ## Status and effective date
 
-- **Status:** accepted for active scheduling; Phase 1 documentation-only decision.
+- **Status:** accepted macOS-lane decision; global blocking status superseded on 2026-08-20.
 - **Effective date:** 2026-08-19.
-- **Active authority gate:** `AUTHORITY_REQUIRED:MACOS_DEV_PARITY`.
+- **macOS lane authority gate:** `AUTHORITY_REQUIRED:MACOS_DEV_PARITY`.
+- **Active global authority gate:** `AUTHORITY_REQUIRED:RUNTIME_REFACTOR_REENTRY` under
+  [`../linux-first-runtime-resumption/DECISION.md`](../linux-first-runtime-resumption/DECISION.md).
 - **Phase 0 preservation:** verified read-only at protected lifecycle checkpoint
   `ff48da180db4515147486f8b95f05626ca38e89b` on
   `refs/heads/feat/archive-r3-macos-protected-lifecycle-20260819` and its remote-tracking ref;
@@ -27,6 +29,10 @@ and require a future, separately authorized production threat-model decision bef
 Archival is a scheduling and ownership decision, not a claim that the protected source never
 existed or has already been removed from the active tree. Its history, source, preserved refs,
 failure records, and security engineering remain valuable evidence.
+
+This decision owns the macOS platform lane only. It no longer makes macOS parity a predecessor of
+runtime-refactor product work; the Linux-first global schedule is controlled by
+[`../linux-first-runtime-resumption/DECISION.md`](../linux-first-runtime-resumption/DECISION.md).
 
 ## Reasons
 
@@ -73,14 +79,15 @@ Ordinary macOS development must not require or invoke:
 ## Linux disposition
 
 Previously landed Linux R3 facts remain historical landed facts. This decision does not reopen,
-expand, reinterpret, undo, or claim new Linux R3 implementation or evidence. Any later shared-script
-edit must preserve Linux behavior, but that obligation belongs to Phase 2 or later.
+expand, reinterpret, undo, or claim new Linux R3 implementation or evidence. The global
+Linux-first runtime-refactor reentry is a separate control-plane lane. Any later shared-script edit
+from this macOS lane must preserve Linux behavior and receive an explicit integration boundary.
 
 ## Windows disposition
 
 Windows R3 is not a prerequisite for the current product trajectory. Windows remains untouched and
-incomplete where applicable, is outside the active scope, and is neither scheduled nor dispatched
-by this decision.
+incomplete where applicable, is outside this lane, and is deferred until a separately authorized
+post-runtime-refactor scheduling decision.
 
 ## Attempt 4 quarantine
 
@@ -94,14 +101,15 @@ services, identities, and other resources are disjoint from Attempt 4. The check
 resource identities and no Keychain query. If an actual path or resource collision is found, work
 stops for a separately authorized disposition; the parity task must not repair or work around it.
 
-## Replacement authority gate
+## macOS lane authority gate
 
-The sole active gate is:
+The macOS-lane gate is:
 
 `AUTHORITY_REQUIRED:MACOS_DEV_PARITY`
 
 It covers only implementation and native closure of the current-product macOS developer corridor
-listed above. It grants no authority by appearing in this document.
+listed above. It is not the global product-work predecessor and grants no authority merely by
+appearing in this document.
 
 ## Phase 2 entry conditions
 
@@ -126,12 +134,14 @@ Native closure must demonstrate, on the freshly bound current product path:
 Static checks do not substitute for the native proof. Any ambiguity, overlap, unrelated-state
 change, protected-lifecycle invocation, or failed restoration leaves the parity gate open.
 
-## Product-work continuation
+## Cross-lane continuation
 
-Product behavior remains gated only by `AUTHORITY_REQUIRED:MACOS_DEV_PARITY`. After parity is
-implemented, natively proven, and explicitly closed, the next product-behavior slice must be
-freshly rebound from live repository truth. This decision does not dispatch A1.3, A1.4, Windows,
-E03, protected-lifecycle revival, or any other successor.
+macOS parity is not a predecessor of runtime-refactor product work. Its later implementation and
+native closure neither block nor authorize the Linux-first runtime-refactor sequence. The current
+global gate is `AUTHORITY_REQUIRED:RUNTIME_REFACTOR_REENTRY` under
+[`../linux-first-runtime-resumption/DECISION.md`](../linux-first-runtime-resumption/DECISION.md).
+Closing either lane does not dispatch the other's successor. This decision does not dispatch A1.3,
+A1.4, Windows, E03, protected-lifecycle revival, or any other successor.
 
 ## Rollback and revival rule
 
@@ -149,3 +159,4 @@ relationship to the ordinary developer corridor. Revival is not an implicit pari
 - New Linux proof or behavior, Windows implementation, or cross-platform closeout.
 - Native macOS execution, installer/uninstaller execution, Lima actions, or privileged operations.
 - A new production security architecture specification.
+- Blocking the Linux-first runtime-refactor reentry on macOS parity closure.

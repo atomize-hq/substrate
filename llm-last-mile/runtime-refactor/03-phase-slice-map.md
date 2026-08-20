@@ -153,7 +153,7 @@ normative where the older aggregate wording says that all of A1.2 starts after C
 | **A1.2a — current-authority establishment/read prerequisite** | First perform the strict greenfield-only V1-to-V2 root upgrade, then implement greenfield-certified Start reservation, issuance, claim, single application/initial authority birth, crash reconciliation, and exact retry. Applied Start retains `claimant_attempt_id` and records startup ownership as `Pending` with the exact run, original application revision, and active participant; resolving that pending substate remains later work. Add one typed exact read result that joins the applied Start descriptor to store/session/active participant/lineage/workspace/world/revision/current-policy truth and exposes the accepted-home bound StateStore capability. | No defaulted/optional V2 field on V1, no B1-owned accepted-work/correlation type, no V3 schema, non-greenfield root conversion, Attach or ResumeOneTurn, startup-ownership resolution or post-turn episode reconciliation, obligation snapshot or disposition, transition correlation supplied to world work, any production consumer/adopter, helper plan, public CLI/REPL/auto-attach adoption, or B receipt/supervisor semantics. | Requires only landed A1.1e. A1.2a is landed and independently review-clean at `b5f2b4f8`; its Host/world-binding write/read correction is isolated in A1.2a-WB before adoption. A1.2a does not close A1.2, A1, or `RG-AUTH-03`. The preserved broad A1.2 checkpoint is not restored. |
 | **A1.2a-WB — Host/world-binding validation correction** | Correct only the Start validation relation between descriptor/launch runtime placement and durable session world binding across issuance, application/persistence, and exact current-authority resolution. Descriptor scope must equal requested launch scope. Accept `Host + None`, `Host + Some(exact)`, and `World + Some(exact)`; reject `World + None` and every empty/malformed binding with zero mutation. Persist and return an exact present binding on the resulting durable session authority. | No schema, canonical JSON byte, golden-vector, V3, migration, compatibility bridge, persisted-object rewrite, new authority field, participant placement field, host-to-world placement reinterpretation, world capability/policy change, unrelated Start validation/adoption, or facade behavior outside `HostSessionAuthority::resolve_current_exact`. | Requires landed, review-clean A1.2a. The four-case write/read matrix, mismatch/malformed zero mutation, exact retry, changed-ID/generation conflict, applied and resolved `Host + Some` preservation, host-scoped participant placement, corrupt/substituted persisted combinations failing closed, and unchanged V1/V2 canonical bytes/fixtures are review-clean through `275f9fa2` under existing `RG-AUTH-01`, `RG-AUTH-03`, `RG-BASE-02`, and `RG-DIFF-01`; no new gate was added. |
 | **A1.2a-S — bounded internal Start adoption prerequisite** | Make only the ordinary greenfield `prepare_host_orchestrator_runtime_from_resolved` path produce an unpersisted `GreenfieldHostStartProposalV1` carrying the accepted store/home, normalized workspace, descriptor, policy, and shell observation but no authoritative session/participant/run identity. Keep that proposal distinct from the existing fully materialized `PreparedAgentRuntime`. On the real dormant-host launch path, `dispatch_targeted_follow_up_turn` obtains the exact optional initial world binding and calls `apply_greenfield_host_start_from_authority`; before transport or legacy persistence, that adapter derives the issuer key from the greenfield store identity plus complete canonical Start plan and invokes A1.2a. Exact-join/apply Start allocates the authoritative identities and only then constructs the unchanged-shape `PreparedAgentRuntime`, compatibility session/participant projection, and immutable shared `RuntimeAuthorityContext::Bound`. The authority-managed branch of `start_host_orchestrator_runtime_with_prepared_prompt_and_toolbox_request_tx` skips activated-store legacy session/participant/snapshot writes while preserving launch, toolbox registration, events, blocking behavior, and in-memory observation. Startup ownership remains Pending. | No pending/partial `PreparedAgentRuntime`, persisted/random proposal authority, placeholder identity, fork/member preparation or remote-member consumer change, hidden-owner launch plan, public CLI Start, Attach, ResumeOneTurn, auto-attach, startup acceptance/failure reconciliation, post-turn behavior, lifecycle/posture transition, helper/CWD policy redesign, B receipt/supervisor, or authority construction outside the A1.2a facade. | Requires review-clean A1.2a-WB. Exact real-path `Some`/`None`, deterministic retry/conflict, pre-application escape exclusion, bound-toolbox, unchanged fork/member, zero activated legacy-write, and Pending-observation proof is independently review-clean through `2f2fecb3`. B1/B2.1-R0 is independently review-clean through `bb3eefba`; B3.2a plus B3.2a-WA are independently review-clean through `d0a70727c2bec2b2d6fe0754ea469c4682684dda`. A1.3 retains public/helper/successor adoption and all exact startup-result/post-turn gates. |
-| **A1.2b — successor/post-turn completion** | First freeze and publish the strict V2-to-V3 root/intent/state extension that preserves each V2 Start and both R0 maps without importing B1/C1 types into A1.2a; then complete Attach/ResumeOneTurn issuance, claim/application, actor-bound startup/post-turn reconciliation, pending obligation-cut consumption, `ReleaseEligible` transport handoff, retry, and optional transition-correlation supply, while proving exact joins remain valid if a separately validated `Released` transport state is reopened later. Startup resolution may authenticate the original Start application revision only through a unique contiguous R0 registration-proof chain to exact current authority; acceptance leaves that authority unchanged and terminal reconciliation preserves every R0-added lineage member/ref. | No in-place V2 widening, arbitrary stale-revision acceptance, no B1/B2.1 implementation, no B3.1/C1 semantics, no public adoption, and no reinterpretation of ledger truth. | Starts only after the B1/B2.1 joint closeout, B3.1, and C1. On the bound Tuesday, August 4, 2026 source candidate it completed the internal durable successor/post-turn protocol without public adoption, promoted no seam, and left the then-current historical `AUTHORITY_REQUIRED:R3_RESUME` gate. That gate is superseded for active scheduling by `AUTHORITY_REQUIRED:MACOS_DEV_PARITY`. |
+| **A1.2b — successor/post-turn completion** | First freeze and publish the strict V2-to-V3 root/intent/state extension that preserves each V2 Start and both R0 maps without importing B1/C1 types into A1.2a; then complete Attach/ResumeOneTurn issuance, claim/application, actor-bound startup/post-turn reconciliation, pending obligation-cut consumption, `ReleaseEligible` transport handoff, retry, and optional transition-correlation supply, while proving exact joins remain valid if a separately validated `Released` transport state is reopened later. Startup resolution may authenticate the original Start application revision only through a unique contiguous R0 registration-proof chain to exact current authority; acceptance leaves that authority unchanged and terminal reconciliation preserves every R0-added lineage member/ref. | No in-place V2 widening, arbitrary stale-revision acceptance, no B1/B2.1 implementation, no B3.1/C1 semantics, no public adoption, and no reinterpretation of ledger truth. | Starts only after the B1/B2.1 joint closeout, B3.1, and C1. On the bound Tuesday, August 4, 2026 source candidate it completed the internal durable successor/post-turn protocol without public adoption, promoted no seam, and left the then-current historical `AUTHORITY_REQUIRED:R3_RESUME` gate. That former macOS-parity replacement is superseded as the global schedule by `AUTHORITY_REQUIRED:RUNTIME_REFACTOR_REENTRY`. |
 
 The exact A1.2a implementation allowlist is:
 
@@ -1816,8 +1816,8 @@ FILE:LINE-only movements in `crates/shell/src/execution/orchestrator_world_dispa
 [`review-control/c1-differential-evidence.json`](review-control/c1-differential-evidence.json).
 A1.2b is complete on that same bound Tuesday candidate as the internal durable successor/post-turn
 protocol only, the then-current historical gate was `AUTHORITY_REQUIRED:R3_RESUME`, and no seam
-was promoted. That gate is superseded for active scheduling by
-`AUTHORITY_REQUIRED:MACOS_DEV_PARITY`.
+was promoted. That former macOS-parity replacement is superseded as the global schedule by
+`AUTHORITY_REQUIRED:RUNTIME_REFACTOR_REENTRY`.
 
 ## Track D — UAA execution envelope and side-effect mediation
 
@@ -2259,7 +2259,7 @@ R2-3A product code remained a separately authorized future control-pack node.
 
 This entire R3 implementation index is archived preserved planning evidence, not the current next
 dispatch. It is superseded for active scheduling by
-[`macos-dev-parity/DECISION.md`](macos-dev-parity/DECISION.md). Planning was complete at
+[`linux-first-runtime-resumption/DECISION.md`](linux-first-runtime-resumption/DECISION.md). Planning was complete at
 `19c40d41679e843e3e524f64fb9827959849d33e` / `d7f6b84c9efc8ad03d98ad55c4e1a31611b96335` with
 planning fingerprint `sha256:8f4cf54640443dbeb82fffbef68fac8d03eeaa6c72cf4e44f645044bc2b210e7`.
 R3 implementation is `PARKED_BY_USER`, no R3 implementation task has been dispatched, and the
@@ -3126,9 +3126,9 @@ behavior may change. Predecessors: all three final native evidence tasks; succes
 
 ## R3 implementation status append
 
-This status append is preserved historical chronology. Its MAC evidence/recovery successors are
-superseded for active scheduling by `AUTHORITY_REQUIRED:MACOS_DEV_PARITY`; nothing in this append
-authorizes protected-lifecycle, Windows, or evidence work.
+This status append is preserved historical chronology. Its MAC evidence/recovery successors remain
+outside the active schedule under `AUTHORITY_REQUIRED:RUNTIME_REFACTOR_REENTRY`; nothing in this
+append authorizes protected-lifecycle, Windows, or evidence work.
 
 ### `A1.1d-5R3-MANIFEST`
 
@@ -3265,33 +3265,43 @@ The serial gates are:
 
 No gate dispatches, accepts, or authorizes its successor. A stop, blocked recovery, failed capability gate, or parity failure preserves the current state and does not permit schedule compression, cross-lane substitution, broader cleanup, or retrospective authority.
 
-## Active Phase 1 scheduling reset (2026-08-19; controlling)
+## Current Linux-first scheduling reset (2026-08-20; controlling)
 
 The former R3 MAC → MAC evidence/closeout → Windows → cross-platform closeout sequence and the
 retirement/finalizer/E03 serial gates above are archived and superseded **for active scheduling**.
-They remain truthful chronology; no source removal, archive-ref change, cleanup, or completion claim
-is implied.
+The 2026-08-19 macOS decision retains its strict developer-corridor boundary, but its former global
+blocking order is now superseded. These records remain truthful chronology; no source removal,
+archive-ref change, cleanup, or completion claim is implied.
 
 ```text
-Phase 1 decision packet
+Linux-first scheduling decision
+  -> AUTHORITY_REQUIRED:RUNTIME_REFACTOR_REENTRY
+  -> one exact runtime packet selected from live source/control truth
+  -> separately authorized Linux-first implementation or proof
+
+Separate macOS lane
   -> AUTHORITY_REQUIRED:MACOS_DEV_PARITY
-  -> separately authorized Phase 2 implementation
+  -> separately authorized macOS Phase 2 implementation
   -> native install -> exercise world -> uninstall -> verify -> reinstall close
-  -> fresh live-repository rebind for any product-behavior successor
 ```
 
-`AUTHORITY_REQUIRED:MACOS_DEV_PARITY` owns only the current-product user-prefix developer corridor:
-current shims/configuration/binary staging, current Lima/`world-service`, typed selected-prefix and
+`AUTHORITY_REQUIRED:RUNTIME_REFACTOR_REENTRY` is a documentation/control-plane rebind-and-selection
+packet. It must select one exact next runtime packet with live source ownership, Linux-first
+acceptance, and explicit exclusions before implementation. `AUTHORITY_REQUIRED:MACOS_DEV_PARITY`
+owns only the separate current-product user-prefix developer corridor: current
+shims/configuration/binary staging, current Lima/`world-service`, typed selected-prefix and
 Lima-instance mapping, and safe forwarding. It excludes System Keychain, protected publisher,
 macOS lifecycle LaunchDaemon/privileged host helper, terminal retirement/finalizer, E03, freeze,
 identity rotation, and assurance-evidence machinery.
 
-Before Phase 2 effects, a later exact read-only, non-Keychain overlap check must prove the new
+Before macOS Phase 2 effects, a later exact read-only, non-Keychain overlap check must prove the new
 developer resources disjoint from Attempt 4. Collision is a stop for separate disposition; the
 parity task cannot inspect/mutate Attempt 4 records or retire/migrate/overwrite/adopt/clean its
 fixed privileged artifacts. Linux R3 remains landed historical fact with behavior preserved and no
-new claim. Windows remains untouched, incomplete where applicable, out of scope, and unscheduled.
+new claim. Windows remains untouched, incomplete where applicable, and deferred until a later
+post-runtime-refactor scheduling decision.
 
-Phase 1 dispatches no implementation or successor. A1.3, A1.4, Windows, E03, and all product work
-remain undispatched until parity is implemented, natively proven, explicitly closed, and the next
-slice is freshly rebound. See [`macos-dev-parity/DECISION.md`](macos-dev-parity/DECISION.md).
+Neither lane dispatches implementation or the other's successor. A1.3, A1.4, Windows, E03, and all
+other product work remain undispatched until the global reentry packet selects a fresh exact
+successor. See [`linux-first-runtime-resumption/DECISION.md`](linux-first-runtime-resumption/DECISION.md)
+and [`macos-dev-parity/DECISION.md`](macos-dev-parity/DECISION.md).

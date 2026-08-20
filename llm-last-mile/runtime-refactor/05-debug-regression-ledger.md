@@ -2044,8 +2044,8 @@ differential is recorded in
 [`review-control/a1-2b-differential-evidence.json`](review-control/a1-2b-differential-evidence.json).
 A1.2b is complete only as the bounded internal durable successor/post-turn protocol; no seam is
 promoted, public consumer adoption remains A1.3/A1.4-owned, and the then-current historical gate
-was `AUTHORITY_REQUIRED:R3_RESUME`. It is superseded for active scheduling by
-`AUTHORITY_REQUIRED:MACOS_DEV_PARITY`.
+was `AUTHORITY_REQUIRED:R3_RESUME`. Its former macOS-parity replacement is superseded as the
+global schedule by `AUTHORITY_REQUIRED:RUNTIME_REFACTOR_REENTRY`.
 
 ## Baseline behaviors that all tracks preserve
 
@@ -3202,15 +3202,15 @@ The full absolute paths, artifact hashes, authority provenance, proof matrix, an
 closed only as the bounded R2 propagation join. R3 implementation is `PARKED_BY_USER`; the
 just-closed corridor head was the B1/B2.1 joint closeout, B3.1, C1, and the bounded internal
 A1.2b packet are complete on the bound Tuesday, August 4, 2026 candidate, the next authority gate
-was `AUTHORITY_REQUIRED:R3_RESUME`. That historical gate is superseded for active scheduling by
-`AUTHORITY_REQUIRED:MACOS_DEV_PARITY`. The larger architecture and runtime-refactor
-program remain open.
+was `AUTHORITY_REQUIRED:R3_RESUME`. Its former macOS-parity replacement is superseded as the
+global schedule by `AUTHORITY_REQUIRED:RUNTIME_REFACTOR_REENTRY`. The larger architecture and
+runtime-refactor program remain open.
 
 ## A1.1d-5R3 planned proof and regression ledger (archived for active scheduling)
 
 Nothing in this section is executed evidence. It preserves former proof obligations as archived
 engineering history and is superseded for active scheduling by
-[`macos-dev-parity/DECISION.md`](macos-dev-parity/DECISION.md). It froze obligations at planning
+[`linux-first-runtime-resumption/DECISION.md`](linux-first-runtime-resumption/DECISION.md). It froze obligations at planning
 source `4ceecd50e20d822dda7cbd8f0e1bef4ccad65d8e` / tree
 `8ed5dc7a354b731016a103b68091864b6a09223a`. Planning is complete at
 `19c40d41679e843e3e524f64fb9827959849d33e` / `d7f6b84c9efc8ad03d98ad55c4e1a31611b96335` with
@@ -3220,7 +3220,7 @@ and the just-closed corridor head was
 `AUTHORITY_REQUIRED:B1_B2_1_JOINT_CLOSEOUT`; B3.1, C1, and the bounded internal A1.2b packet are
 complete on the bound Tuesday, August 4, 2026 candidate, and the then-current historical gate was
 `AUTHORITY_REQUIRED:R3_RESUME`. That former gate and proof program are not current prerequisites;
-the current gate is `AUTHORITY_REQUIRED:MACOS_DEV_PARITY`. No `cargo test --workspace`
+the current global gate is `AUTHORITY_REQUIRED:RUNTIME_REFACTOR_REENTRY`. No `cargo test --workspace`
 expected-failure inventory is frozen here, and approximate
 workspace-failure counts are not authority.
 
@@ -3722,21 +3722,23 @@ Future evidence/hash slots remain empty except for the bounded G2/G3 stop receip
 | Evidence-mirror refresh receipt SHA-256 | `PENDING / NOT AUTHORIZED` |
 | `MAC-CLOSEOUT` receipt SHA-256 | `PENDING / NOT AUTHORIZED` |
 
-## macOS developer-parity regression ledger (2026-08-19; controlling)
+## Current cross-lane regression ledger (2026-08-20; controlling)
 
 The retirement/orphan table above remains archived evidence and quarantine posture. It is not the
 active developer-install schedule, does not declare Attempt 4 cleaned or restored, and supplies no
-parity cleanup route. The active gate is `AUTHORITY_REQUIRED:MACOS_DEV_PARITY`.
+parity cleanup route. `AUTHORITY_REQUIRED:MACOS_DEV_PARITY` remains the macOS-lane gate; the active
+global gate is `AUTHORITY_REQUIRED:RUNTIME_REFACTOR_REENTRY`.
 
 | Regression boundary | Required later proof | Failure / stop rule |
 |---|---|---|
-| User-owned developer corridor | Current-product prefix install/uninstall; current shims, configuration, binaries, typed selected-prefix/Lima mapping, current Lima/`world-service`, and safe forwarding. | Any protected lifecycle dependency or ambiguous/unowned resource leaves parity open. |
-| Native product loop | Install → exercise a real world → uninstall → verify exact intended absence and unrelated/pre-existing-state preservation → reinstall and re-exercise readiness/world behavior. | Static-only proof, failed world exercise, inexact uninstall/restoration, or unrelated change fails closure. |
-| Attempt 4 quarantine | Before effects, a separately authorized exact read-only overlap check using declared resources and no Keychain query proves disjointness. The parity installer neither inspects/mutates Keychain records nor retires/migrates/overwrites/adopts/cleans fixed privileged artifacts. | A real path/resource collision stops for a separately authorized disposition; unfinished lifecycle machinery is never cleanup. Attempt 4 remains quarantined, not cleaned/restored. |
-| Protected architecture exclusion | No System Keychain, protected publisher, macOS lifecycle LaunchDaemon/privileged host helper, terminal retirement/finalizer, E03, freeze, identity rotation, or assurance-evidence action/dependency. | Any invocation or required dependency is a scope/authority stop. Revival requires a separate production threat-model decision. |
-| Linux preservation | Existing landed Linux R3 facts remain historical landed facts; shared-script behavior remains unchanged by later parity work. | No new Linux implementation/evidence claim is accepted from this packet; behavior drift blocks later parity closure. |
-| Windows non-prerequisite | Windows paths and state remain untouched and incomplete where applicable. | No Windows completion, scheduling, native work, or prerequisite claim is accepted. |
-| Product continuation | After parity implementation, native proof, and explicit close, rebind the next product slice from live repository truth. | A1.3, A1.4, Windows, E03, or any successor dispatch from Phase 1 is invalid. |
+| Linux-first runtime-refactor reentry | Fresh live branch/source/control-pack rebind and exactly one selected runtime packet with owner, path/symbol fence, dependencies, verification, Linux-first acceptance, and macOS/Windows exclusions. | No implementation, Linux proof, seam promotion, or broad backlog dispatch may be claimed from reentry alone. |
+| User-owned macOS developer corridor | Current-product prefix install/uninstall; current shims, configuration, binaries, typed selected-prefix/Lima mapping, current Lima/`world-service`, and safe forwarding. | Any protected lifecycle dependency or ambiguous/unowned resource leaves parity open. |
+| Native macOS product loop | Install → exercise a real world → uninstall → verify exact intended absence and unrelated/pre-existing-state preservation → reinstall and re-exercise readiness/world behavior. | Static-only proof, failed world exercise, inexact uninstall/restoration, or unrelated change fails macOS-lane closure. |
+| Attempt 4 quarantine | Before macOS effects, a separately authorized exact read-only overlap check using declared resources and no Keychain query proves disjointness. The parity installer neither inspects/mutates Keychain records nor retires/migrates/overwrites/adopts/cleans fixed privileged artifacts. | A real path/resource collision stops for a separately authorized disposition; unfinished lifecycle machinery is never cleanup. Attempt 4 remains quarantined, not cleaned/restored. |
+| Protected architecture exclusion | No System Keychain, protected publisher, macOS lifecycle LaunchDaemon/privileged host helper, terminal retirement/finalizer, E03, freeze, identity rotation, or assurance-evidence action/dependency. | Any invocation or required dependency is a macOS-lane scope/authority stop. Revival requires a separate production threat-model decision. |
+| Linux preservation across macOS work | Existing landed Linux R3 facts remain historical landed facts; a shared-script change requires an explicit integration packet and behavior-preservation proof. | No new Linux implementation/evidence claim is accepted from the macOS lane; behavior drift blocks later macOS closure. |
+| Windows deferral | Windows paths and state remain untouched and incomplete where applicable until a separately authorized post-runtime-refactor scheduling decision. | No Windows completion, scheduling, native work, or prerequisite claim is accepted. |
+| Cross-lane continuation | macOS closure does not release runtime work, and runtime-reentry closure does not release macOS implementation. | Each later packet requires its own fresh authority; neither lane dispatches the other's successor. |
 
-Phase 1 records this regression boundary only; it performs no proof run and authorizes no Phase 2
-work. See [`macos-dev-parity/DECISION.md`](macos-dev-parity/DECISION.md).
+The global decision is [`linux-first-runtime-resumption/DECISION.md`](linux-first-runtime-resumption/DECISION.md);
+the retained macOS boundary is [`macos-dev-parity/DECISION.md`](macos-dev-parity/DECISION.md).

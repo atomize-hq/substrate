@@ -4440,8 +4440,9 @@ and B1/B2.1-0 implementation are review-clean through `6436289f`, `c519024b`, `d
 `717579b0`, and `83101dcb`. The later joint production closeout is complete on the frozen
 2026-08-03 source without additional product bytes, and B3.1, C1, and the bounded internal A1.2b
 packet are complete on the bound Tuesday, August 4, 2026 candidate. The then-current historical
-gate was `AUTHORITY_REQUIRED:R3_RESUME`; it is superseded for active scheduling by
-`AUTHORITY_REQUIRED:MACOS_DEV_PARITY`. The historical prepared type also combined
+gate was `AUTHORITY_REQUIRED:R3_RESUME`; its former macOS-parity replacement is
+superseded as the global schedule by `AUTHORITY_REQUIRED:RUNTIME_REFACTOR_REENTRY`. The historical
+prepared type also combined
 B-owned accepted/inspection routing with retained-worker admission data that has no canonical
 live-state representation.
 
@@ -8805,9 +8806,9 @@ and the parent's independent Git/hash verification are recorded transparently; n
 JSON protocol claim is made. R3 implementation is `PARKED_BY_USER` and no R3 implementation task
 has been dispatched. The just-closed corridor head was the B1/B2.1 joint closeout, B3.1, C1, and
 the bounded internal A1.2b packet are complete on the bound Tuesday, August 4, 2026 candidate,
-the then-current historical gate was `AUTHORITY_REQUIRED:R3_RESUME`. That gate and its protected
-R3 predecessor sequence are superseded for active scheduling by
-`AUTHORITY_REQUIRED:MACOS_DEV_PARITY`. Authenticated Codex,
+the then-current historical gate was `AUTHORITY_REQUIRED:R3_RESUME`. Its protected R3 predecessor
+sequence remains outside the active schedule under `AUTHORITY_REQUIRED:RUNTIME_REFACTOR_REENTRY`.
+Authenticated Codex,
 retained workers/tasks, authoritative-session repair/refresh,
 orchestrator packet-3 lifecycle/routing, gateway adoption, direct-member architecture, A1.1d/A1,
 and the whole runtime refactor remain open.
@@ -8816,7 +8817,7 @@ and the whole runtime refactor remain open.
 
 These contracts are archived normative planning evidence for the former packets indexed in `03`.
 They are superseded for active scheduling by
-[`macos-dev-parity/DECISION.md`](macos-dev-parity/DECISION.md). They
+[`linux-first-runtime-resumption/DECISION.md`](linux-first-runtime-resumption/DECISION.md). They
 authorize no action during `A1.1d-5R3-PLAN`, they are not the current next implementation line,
 and no R3 implementation task has been dispatched. Planning is complete at
 `19c40d41679e843e3e524f64fb9827959849d33e` / `d7f6b84c9efc8ad03d98ad55c4e1a31611b96335` with
@@ -10370,11 +10371,11 @@ A later implementation review must inject failure before and after every receipt
 
 This amendment remains planning authority only. Literal V2 schema/domain/route constants, implementation file/symbol fences, experiment execution, live recovery, landing, evidence, mirror refresh, and `MAC-CLOSEOUT` each require their later serial authorities from the phase map.
 
-## `AUTHORITY_REQUIRED:MACOS_DEV_PARITY` contract (2026-08-19; controlling)
+## `AUTHORITY_REQUIRED:MACOS_DEV_PARITY` contract (2026-08-19; macOS lane)
 
 This gate supersedes the archived R3 macOS/recovery/retirement/finalizer/E03 and Windows-predecessor
-contracts above **for active scheduling only**. It is not self-authorizing and Phase 1 grants no
-Phase 2 implementation or native-operation authority.
+contracts above **for macOS-lane scheduling only**. It is not the global product-work predecessor,
+is not self-authorizing, and Phase 1 grants no Phase 2 implementation or native-operation authority.
 
 ### Admission
 
@@ -10403,15 +10404,46 @@ unfinished lifecycle machinery as cleanup; or revive the archived architecture.
 
 Landed Linux R3 facts remain historical facts and receive no new implementation/evidence claim;
 later shared-script changes must preserve Linux behavior. Windows remains untouched and incomplete
-where applicable, outside scope, not complete, and not a predecessor or successor of this gate.
+where applicable, outside this lane, and deferred until a separately authorized post-runtime-refactor
+scheduling decision.
 
 ### Exit and continuation
 
 Any ambiguity, overlap, protected-lifecycle dependency, unrelated-state change, native failure, or
-inexact uninstall/restoration keeps `AUTHORITY_REQUIRED:MACOS_DEV_PARITY` open. After a separately
-authorized implementation and native proof explicitly close it, product work still requires a
-fresh live-repository rebind. This contract does not dispatch A1.3, A1.4, Windows, E03, or any
-successor. Protected machinery can return only through a separate production threat-model decision.
+inexact uninstall/restoration keeps `AUTHORITY_REQUIRED:MACOS_DEV_PARITY` open. Its closure neither
+blocks nor authorizes the Linux-first runtime-refactor sequence; the global reentry gate separately
+requires a fresh live-repository bind and exact packet selection. This contract does not dispatch
+A1.3, A1.4, Windows, E03, or any successor. Protected machinery can return only through a separate
+production threat-model decision.
 
 The complete decision record is
 [`macos-dev-parity/DECISION.md`](macos-dev-parity/DECISION.md).
+
+
+## `AUTHORITY_REQUIRED:RUNTIME_REFACTOR_REENTRY` contract (2026-08-20; controlling)
+
+This is the global documentation/control-plane rebind-and-selection gate. It supersedes the former
+use of `AUTHORITY_REQUIRED:MACOS_DEV_PARITY` as the global product-work predecessor, while leaving
+the macOS lane contract above unchanged in scope.
+
+### Admission
+
+The reentry task must bind the live product branch, ancestry, worktree/index, current source and
+control-pack state, the specific historical evidence it relies on, and Linux-first adoption posture.
+It must name exactly one subsequent runtime-refactor packet with its owner, path and symbol fences,
+dependencies, acceptance criteria, verification, and macOS/Windows exclusions.
+
+### Allowed completion claim
+
+The gate may close only as a documentation/control-plane rebind that selects that one later packet.
+It may not claim implementation, Linux proof, cross-platform completion, or promotion of a runtime
+seam.
+
+### Prohibited ownership and actions
+
+This gate owns no runtime, installer, Lima, macOS, Windows, archive, Keychain, Attempt 4, or native
+operation. It does not reopen Linux R3, make macOS parity a predecessor, or dispatch the selected
+packet without separate authority.
+
+The complete global scheduling decision is
+[`linux-first-runtime-resumption/DECISION.md`](linux-first-runtime-resumption/DECISION.md).

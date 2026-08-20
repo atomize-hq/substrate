@@ -5,13 +5,16 @@
 - **Advanced/hardened installer:** deferred.
 - **Current macOS direction:** restore the ordinary developer install loop without the protected
   lifecycle, publisher, Keychain, finalizer, or assurance machinery.
-- **Continued-work branch:** `feat/internal-host-orchestrator-world-dispatch-bootstrap`.
+- **macOS lane branch:** planned `feat/macos-dev-installer-parity` (not created by this decision).
+- **Current product branch:** `feat/internal-host-orchestrator-world-dispatch-bootstrap` resumes the
+  Linux-first runtime-refactor control plane.
 - **Archive verification date:** 2026-08-19.
 
 The archive branches below preserve prior engineering work and failure history. They are reference
-material, not active architecture, proof of correctness, or branches to merge wholesale. The
-continued-work branch must retain the ordinary Lima/runtime behavior needed by macOS while removing
-the advanced installer dependencies from the developer path.
+material, not active architecture, proof of correctness, or branches to merge wholesale. The future
+macOS lane must retain the ordinary Lima/runtime behavior needed by macOS while removing the advanced
+installer dependencies from the developer path. It is non-blocking for Linux-first runtime-refactor
+work on the current product branch.
 
 ## Remote archive inventory
 
@@ -42,9 +45,9 @@ include privileged host lifecycle, Keychain authority, publisher installation, u
 recovery, finalization, and assurance evidence. A working developer install must not depend on
 landing all of them together.
 
-## Active simplification boundary
+## macOS-lane simplification boundary
 
-The continued-work branch owns the simpler macOS developer path:
+The planned macOS lane owns the simpler macOS developer path:
 
 - user-owned installation and uninstallation;
 - current binaries, shims, and configuration;
@@ -56,6 +59,12 @@ The continued-work branch owns the simpler macOS developer path:
 The active simplification must not adopt archived System Keychain, protected publisher,
 LaunchDaemon/privileged-helper, finalizer, terminal-retirement, E03, or assurance-evidence
 dependencies. Windows work remains outside this macOS effort.
+
+The macOS lane is governed by
+[`../llm-last-mile/runtime-refactor/macos-dev-parity/DECISION.md`](../llm-last-mile/runtime-refactor/macos-dev-parity/DECISION.md).
+The global Linux-first scheduling decision is
+[`../llm-last-mile/runtime-refactor/linux-first-runtime-resumption/DECISION.md`](../llm-last-mile/runtime-refactor/linux-first-runtime-resumption/DECISION.md).
+Neither lane's closure authorizes the other's successor.
 
 ## Explicitly excluded worktree
 
