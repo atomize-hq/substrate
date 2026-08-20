@@ -1663,3 +1663,13 @@ Implementation publication and native proof are distinct. LINUX, MAC, WIN, and U
 their reviewed implementation before any native evidence task. Every IMP/final evidence task binds
 a live-remote-equal commit/tree/ref and validates `codex.top-level-evidence-receipt.v1`; evidence
 tasks never modify the repository. Platform closeout packets own only evidence/control ingestion.
+
+### `A1.1d-5R3-MAC` implementation status
+
+The MAC implementation packet materializes only the stated fixed-executor/request boundary:
+typed mapping selects the already-fixed SSH-UDS path and records exact socket/known-host
+before-state for timeout/Drop/retry restoration; mapped scripts carry prefix, bootstrap carrier,
+platform mapping, and executor-build evidence to the executor rather than issuing Lima mutations.
+The socket unit no longer allows service-to-socket propagation. Native publisher installation,
+artifact build evidence, disposable Lima lifecycle, and human-pinned pairing remain exclusively
+with `EVIDENCE:R3-MAC-IMP-01`.

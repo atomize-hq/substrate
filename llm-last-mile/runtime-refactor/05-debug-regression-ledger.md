@@ -3608,3 +3608,14 @@ leaves the corresponding gate open. R3 closeout does not authorize the later A1.
   changed; the artifact's documented `install_state_smoke.sh` hosted-bundle mismatch remains
   reproduced unchanged at the bound source; and no MAC authority starts here.
 - Successor: `COMPLETE` for this authoritative orchestration closeout.
+
+### `A1.1d-5R3-MAC`
+
+- Status: implementation publication scope; no native evidence claim.
+- Newly bounded proof surface: typed SSH-UDS exact unlink/timeout/Drop/known-host restoration,
+  mapped lifecycle argument/evidence refusal, tombstoned guest DNS/package/toolchain/Cargo
+  remediation, exact socket non-propagation, and the non-executing mock executor fixture.
+- Remaining evidence-only truth: supported-Lima publisher installation, host/guest executor build
+  evidence, code-signing, independent-TTY pairing, lifecycle/restoration exercise, and external
+  receipts belong solely to `EVIDENCE:R3-MAC-IMP-01`.
+- Successor: `EVIDENCE:R3-MAC-IMP-01`.

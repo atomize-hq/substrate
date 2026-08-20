@@ -365,14 +365,14 @@ impl MacLimaBackend {
     }
 
     fn ensure_forwarding(&self) -> Result<()> {
-        match (
+        let typed_context = match (
             self.typed_host_account_home.as_ref(),
             self.typed_lima_control_root.as_ref(),
         ) {
-            (Some(_), Some(_)) => return r3_forwarding_activation_required(),
-            (None, None) => {}
+            (Some(home), Some(control_root)) => Some((home, control_root)),
+            (None, None) => None,
             _ => anyhow::bail!("typed Lima backend is missing command context"),
-        }
+        };
 
         let mut forwarding = self
             .forwarding
@@ -380,7 +380,15 @@ impl MacLimaBackend {
             .map_err(|e| anyhow::anyhow!("Lock poisoned: {}", e))?;
         if forwarding.is_none() {
             tracing::debug!("Setting up forwarding for VM '{}'", self.vm_name);
-            let handle = forwarding::auto_select(&self.vm_name)?;
+            let handle = match typed_context {
+                Some((home, control_root)) => forwarding::create_mapped_ssh_uds_forwarding_v1(
+                    &self.vm_name,
+                    self.agent_socket.clone(),
+                    home,
+                    control_root,
+                )?,
+                None => forwarding::auto_select(&self.vm_name)?,
+            };
             tracing::debug!("Forwarding established: {:?}", handle.kind());
             *forwarding = Some(handle);
         }
@@ -393,7 +401,9 @@ impl MacLimaBackend {
             return override_impl.ensure_setup();
         }
 
-        self.ensure_vm_running()?;
+        if self.typed_host_account_home.is_none() && self.typed_lima_control_root.is_none() {
+            self.ensure_vm_running()?;
+        }
         self.ensure_forwarding()?;
         Ok(())
     }
@@ -508,14 +518,14 @@ impl MacLimaBackend {
     }
 
     fn get_agent_endpoint(&self) -> Result<transport_api_client::Transport> {
-        match (
+        let typed_context = match (
             self.typed_host_account_home.as_ref(),
             self.typed_lima_control_root.as_ref(),
         ) {
-            (Some(_), Some(_)) => return r3_forwarding_activation_required(),
-            (None, None) => {}
+            (Some(_), Some(_)) => true,
+            (None, None) => false,
             _ => anyhow::bail!("typed Lima backend is missing command context"),
-        }
+        };
 
         let forwarding = self
             .forwarding
@@ -523,10 +533,13 @@ impl MacLimaBackend {
             .map_err(|e| anyhow::anyhow!("Lock poisoned: {}", e))?;
         match forwarding.as_ref() {
             Some(handle) => match handle.kind() {
-                ForwardingKind::SshUds { path } => {
+                ForwardingKind::SshUds { path, .. } => {
                     Ok(transport_api_client::Transport::UnixSocket { path: path.clone() })
                 }
                 ForwardingKind::SshTcp { port } | ForwardingKind::Vsock { port } => {
+                    if typed_context {
+                        anyhow::bail!("typed Lima mapping requires the mapped SSH-UDS transport");
+                    }
                     Ok(transport_api_client::Transport::Tcp {
                         host: "127.0.0.1".to_string(),
                         port: *port,
@@ -731,12 +744,6 @@ fn unix_account_home_for_install_principal(principal: &PlatformPrincipalV1) -> R
     }
 
     Ok(name_home)
-}
-
-fn r3_forwarding_activation_required<T>() -> Result<T> {
-    anyhow::bail!(
-        "typed Lima forwarding activation remains gated on the R3 forwarding lifecycle prerequisite"
-    )
 }
 
 fn unix_account_record_by_name(account: &str) -> Result<(String, u32, PathBuf)> {
@@ -1435,22 +1442,21 @@ mod tests {
     }
 
     #[test]
-    fn test_get_agent_endpoint_requires_r3_for_typed_mapping() {
+    fn test_get_agent_endpoint_requires_established_mapped_ssh_uds_for_typed_mapping() {
         let (host, mapping, _) = typed_host_carrier_and_mapping("/tmp/typed-substrate");
         let backend = MacLimaBackend::new_with_mapping(host, mapping).expect("typed backend");
         assert!(backend.forwarding.lock().unwrap().is_none());
 
         let err = backend.get_agent_endpoint().unwrap_err();
         assert!(
-            err.to_string()
-                .contains("R3 forwarding lifecycle prerequisite"),
+            err.to_string().contains("Forwarding not established"),
             "unexpected error: {err}"
         );
         assert!(backend.forwarding.lock().unwrap().is_none());
     }
 
     #[test]
-    fn test_typed_forwarding_source_gate_precedes_compatibility_logic() {
+    fn test_typed_forwarding_selects_only_mapped_ssh_uds_and_leaves_compatibility_fallback() {
         const SOURCE: &str = include_str!("lib.rs");
         let ensure_start = SOURCE
             .find("fn ensure_forwarding(&self) -> Result<()> {")
@@ -1460,48 +1466,35 @@ mod tests {
             .map(|offset| ensure_start + offset)
             .expect("ensure_forwarding end");
         let ensure_body = &SOURCE[ensure_start..ensure_end];
-        let gate = ensure_body
-            .find("(Some(_), Some(_)) => return r3_forwarding_activation_required(),")
-            .expect("typed ensure_forwarding gate");
-        let lock = ensure_body
-            .find("let mut forwarding = self")
-            .expect("ensure_forwarding lock");
-        let auto_select = ensure_body
-            .find("let handle = forwarding::auto_select(&self.vm_name)?;")
-            .expect("compatibility auto_select");
-        assert!(
-            gate < lock,
-            "typed gate must return before lock acquisition"
-        );
-        assert!(
-            gate < auto_select,
-            "typed gate must return before compatibility auto-select"
-        );
+        assert!(ensure_body.contains("forwarding::create_mapped_ssh_uds_forwarding_v1("));
+        assert!(ensure_body.contains("None => forwarding::auto_select(&self.vm_name)?"));
+        assert!(!ensure_body.contains("r3_forwarding_activation_required"));
+
+        let setup_start = SOURCE
+            .find("fn ensure_session_setup(&self) -> Result<()> {")
+            .expect("ensure_session_setup");
+        let setup_end = SOURCE[setup_start..]
+            .find("\n    async fn verify_agent_ready(&self) -> Result<()> {")
+            .map(|offset| setup_start + offset)
+            .expect("ensure_session_setup end");
+        let setup_body = &SOURCE[setup_start..setup_end];
+        assert!(setup_body.contains("if self.typed_host_account_home.is_none()"));
+        assert!(setup_body.contains("self.ensure_forwarding()?"));
 
         let endpoint_start = SOURCE
             .find("fn get_agent_endpoint(&self) -> Result<transport_api_client::Transport> {")
             .expect("get_agent_endpoint");
         let endpoint_end = SOURCE[endpoint_start..]
-            .find(
-                "\n    /// Convert world_api::ExecRequest to transport_api_types::ExecuteRequest.",
-            )
+            .find("\n    /// Convert world_api::ExecRequest")
             .map(|offset| endpoint_start + offset)
             .expect("get_agent_endpoint end");
         let endpoint_body = &SOURCE[endpoint_start..endpoint_end];
-        let endpoint_gate = endpoint_body
-            .find("(Some(_), Some(_)) => return r3_forwarding_activation_required(),")
-            .expect("typed get_agent_endpoint gate");
-        let endpoint_lock = endpoint_body
-            .find("let forwarding = self")
-            .expect("get_agent_endpoint lock");
-        assert!(
-            endpoint_gate < endpoint_lock,
-            "typed endpoint gate must return before lock acquisition"
-        );
+        assert!(endpoint_body.contains("typed Lima mapping requires the mapped SSH-UDS transport"));
+        assert!(!endpoint_body.contains("r3_forwarding_activation_required"));
     }
 
     #[test]
-    fn test_ensure_forwarding_requires_r3_before_lock_or_mutation() {
+    fn test_typed_forwarding_rejects_unprepared_mapping_without_ambient_fallback() {
         let _env_guard = crate::test_util::lock_env();
         let tempdir = tempfile::tempdir().expect("tempdir");
         let ssh_marker = tempdir.path().join("ssh.marker");
@@ -1527,13 +1520,9 @@ mod tests {
         std::env::set_var("PATH", tempdir.path());
 
         let typed_home = tempdir.path().join("typed-home");
-        let typed_control_root = tempdir.path().join("typed-control-root");
+        let typed_control_root = typed_home.join(".lima");
         let typed_prefix = tempdir.path().join("typed-substrate");
-        assert!(!typed_prefix.exists(), "test prefix must start absent");
-        assert!(
-            !typed_control_root.exists(),
-            "typed control root must start absent"
-        );
+        fs::create_dir_all(typed_prefix.join("sock")).expect("typed socket parent");
         let backend = MacLimaBackend::from_parts(
             "substrate".to_string(),
             typed_prefix.join("sock/agent.sock"),
@@ -1542,28 +1531,23 @@ mod tests {
             Some(typed_control_root.clone()),
         )
         .expect("typed backend");
-        assert!(backend.forwarding.lock().unwrap().is_none());
 
         let err = backend.ensure_forwarding().unwrap_err();
         assert!(
             err.to_string()
-                .contains("R3 forwarding lifecycle prerequisite"),
+                .contains("mapped Lima SSH config is not an exact regular file"),
             "unexpected error: {err}"
         );
         assert!(backend.forwarding.lock().unwrap().is_none());
         assert!(!ssh_marker.exists(), "typed path executed ssh");
         assert!(!vsock_marker.exists(), "typed path executed vsock-proxy");
         assert!(
-            !typed_prefix.exists(),
-            "typed path created or mutated the selected host prefix"
-        );
-        assert!(
             !typed_control_root.exists(),
-            "typed path created or mutated the typed control root"
+            "typed path created its Lima control root"
         );
         assert!(
-            !typed_prefix.join("sock/agent.sock").exists(),
-            "typed path created or mutated the managed socket path"
+            !typed_prefix.join("lima_known_hosts").exists(),
+            "typed path created known_hosts before its exact SSH config was present"
         );
 
         match prev_home {
@@ -1585,7 +1569,7 @@ mod tests {
     }
 
     #[test]
-    fn test_typed_session_setup_requires_r3_before_lifecycle_or_forwarding() {
+    fn test_typed_session_setup_bypasses_vm_start_and_rejects_missing_mapped_ssh_config() {
         let _env_guard = crate::test_util::lock_env();
         let tempdir = tempfile::tempdir().expect("tempdir");
         let limactl_marker = tempdir.path().join("limactl.marker");
@@ -1602,13 +1586,22 @@ mod tests {
         std::env::set_var("PATH", tempdir.path());
         std::env::set_var("SUBSTRATE_TEST_LIMACTL_PATH", &limactl_path);
 
-        let (host, mapping, _) = typed_host_carrier_and_mapping("/tmp/typed-substrate");
-        let backend = MacLimaBackend::new_with_mapping(host, mapping).expect("typed backend");
+        let typed_home = tempdir.path().join("typed-home");
+        let typed_prefix = tempdir.path().join("typed-substrate");
+        fs::create_dir_all(typed_prefix.join("sock")).expect("typed socket parent");
+        let backend = MacLimaBackend::from_parts(
+            "substrate".to_string(),
+            typed_prefix.join("sock/agent.sock"),
+            Transport::UnixSocket,
+            Some(typed_home.clone()),
+            Some(typed_home.join(".lima")),
+        )
+        .expect("typed backend");
 
         let err = backend.ensure_agent_ready().unwrap_err();
         assert!(
             err.to_string()
-                .contains("R3 forwarding lifecycle prerequisite"),
+                .contains("mapped Lima SSH config is not an exact regular file"),
             "unexpected error: {err}"
         );
         assert!(backend.forwarding.lock().unwrap().is_none());

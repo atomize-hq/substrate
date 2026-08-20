@@ -1209,3 +1209,18 @@ the bounded `0640`/`0650` cache observation. R1/R2 evidence is immutable.
   `review-control/r3-linux-closeout-review-authority-security.md`,
   `review-control/r3-linux-closeout-review-lifecycle-convergence.md`, and
   `review-control/r3-linux-closeout-review-allowlist-evidence.md`.
+
+### `A1.1d-5R3-MAC`
+
+- Status: implementation publication scope; non-native fixtures and static checks only.
+- Scope: manifest-bound fixed-executor MAC lifecycle wiring, PM-bound SSH-UDS activation with
+  exact teardown ownership, mapped Lima staging/teardown delegation, and the exact socket
+  non-propagation change.
+- Boundaries preserved: no native publisher/Lima provisioning, code-signing, build evidence,
+  or evidence bytes are created; ambient selectors, VSock/TCP, `new_with_mapping`, Linux,
+  Windows, and run-only fixture bytes remain frozen.
+- Successor: `EVIDENCE:R3-MAC-IMP-01`.
+- Review control: `review-control/r3-mac-review-cycle-record.json`,
+  `review-control/r3-mac-review-authority-security.md`,
+  `review-control/r3-mac-review-lifecycle-convergence.md`, and
+  `review-control/r3-mac-review-allowlist-evidence.md`.

@@ -1,0 +1,183 @@
+{
+  "schema_version": 1,
+  "packet_id": "A1.1d-5R3-MAC",
+  "status": "bounded_stop",
+  "stop_reason": "budget_exhausted",
+  "cycles": [
+    {
+      "cycle_id": "discovery-1",
+      "kind": "discovery",
+      "subject_fingerprint": "sha256:1097874180b86a3331c7d14c06d2b803cfd545273576e691b8eb1f1ec5bb4bca",
+      "trigger_cycle_id": null,
+      "trigger_finding_ids": [],
+      "causal_evidence_refs": [],
+      "review_refs": [
+        "r3-mac-review-authority-security.md",
+        "r3-mac-review-lifecycle-convergence.md",
+        "r3-mac-review-allowlist-evidence.md"
+      ],
+      "verdict": "findings",
+      "findings": [
+        {
+          "finding_id": "P1-MAC-001",
+          "priority": "P1"
+        },
+        {
+          "finding_id": "P1-MAC-002",
+          "priority": "P1"
+        },
+        {
+          "finding_id": "P1-MAC-003",
+          "priority": "P1"
+        },
+        {
+          "finding_id": "P1-MAC-004",
+          "priority": "P1"
+        },
+        {
+          "finding_id": "P2-MAC-001",
+          "priority": "P2"
+        },
+        {
+          "finding_id": "P2-MAC-002",
+          "priority": "P2"
+        },
+        {
+          "finding_id": "P2-MAC-003",
+          "priority": "P2"
+        }
+      ]
+    },
+    {
+      "cycle_id": "closure-1",
+      "kind": "closure",
+      "subject_fingerprint": "sha256:f4db3ee786ba2c0e8ace7bda5a1064705b90afa488ce1d8eac089126c786dc65",
+      "trigger_cycle_id": "discovery-1",
+      "trigger_finding_ids": [
+        "P1-MAC-001",
+        "P1-MAC-002",
+        "P1-MAC-003",
+        "P1-MAC-004",
+        "P2-MAC-001",
+        "P2-MAC-002",
+        "P2-MAC-003"
+      ],
+      "causal_evidence_refs": [],
+      "review_refs": [
+        "r3-mac-review-authority-security.md",
+        "r3-mac-review-lifecycle-convergence.md",
+        "r3-mac-review-allowlist-evidence.md"
+      ],
+      "verdict": "findings",
+      "findings": [
+        {
+          "finding_id": "MAC-R3-P1-01",
+          "priority": "P1"
+        },
+        {
+          "finding_id": "MAC-R3-P1-02",
+          "priority": "P1"
+        },
+        {
+          "finding_id": "MAC-R3-P1-03",
+          "priority": "P1"
+        },
+        {
+          "finding_id": "MAC-R3-P1-04",
+          "priority": "P1"
+        },
+        {
+          "finding_id": "MAC-R3-P2-01",
+          "priority": "P2"
+        }
+      ]
+    },
+    {
+      "cycle_id": "supplemental-causal-1",
+      "kind": "supplemental_causal",
+      "subject_fingerprint": "sha256:1cabe3430ef0a28a88ef560cca26cfc4d934c1107ca2512d66f22c126583fa31",
+      "trigger_cycle_id": "closure-1",
+      "trigger_finding_ids": [
+        "MAC-R3-P1-01",
+        "MAC-R3-P1-02",
+        "MAC-R3-P1-03",
+        "MAC-R3-P1-04",
+        "MAC-R3-P2-01"
+      ],
+      "causal_evidence_refs": [
+        "closure-1-remediation:forwarding-cleanup-and-fixed-lifecycle-authority"
+      ],
+      "review_refs": [
+        "r3-mac-review-authority-security.md",
+        "r3-mac-review-lifecycle-convergence.md",
+        "r3-mac-review-allowlist-evidence.md"
+      ],
+      "verdict": "findings",
+      "findings": [
+        {
+          "finding_id": "P1-MAC-SUP-001",
+          "priority": "P1"
+        },
+        {
+          "finding_id": "P1-MAC-SUP-002",
+          "priority": "P1"
+        },
+        {
+          "finding_id": "P2-MAC-SUP-003",
+          "priority": "P2"
+        },
+        {
+          "finding_id": "P2-MAC-SUP-004",
+          "priority": "P2"
+        }
+      ]
+    },
+    {
+      "cycle_id": "supplemental-causal-2",
+      "kind": "supplemental_causal",
+      "subject_fingerprint": "sha256:e60963026aa39be67e334119ff7ae61f3f15f19dbfd31539d790f8735b493924",
+      "trigger_cycle_id": "supplemental-causal-1",
+      "trigger_finding_ids": [
+        "P1-MAC-SUP-001",
+        "P1-MAC-SUP-002",
+        "P2-MAC-SUP-003",
+        "P2-MAC-SUP-004"
+      ],
+      "causal_evidence_refs": [
+        "supplemental-causal-1-remediation:fixed-xpc-relay-stage1-selector-and-owned-cleanup"
+      ],
+      "review_refs": [
+        "r3-mac-review-authority-security.md",
+        "r3-mac-review-lifecycle-convergence.md",
+        "r3-mac-review-allowlist-evidence.md"
+      ],
+      "verdict": "findings",
+      "findings": [
+        {
+          "finding_id": "P1-MAC-FINAL-001",
+          "priority": "P1"
+        },
+        {
+          "finding_id": "P1-MAC-FINAL-002",
+          "priority": "P1"
+        },
+        {
+          "finding_id": "P1-MAC-FINAL-003",
+          "priority": "P1"
+        },
+        {
+          "finding_id": "P1-MAC-FINAL-004",
+          "priority": "P1"
+        },
+        {
+          "finding_id": "P2-MAC-FINAL-001",
+          "priority": "P2"
+        },
+        {
+          "finding_id": "P2-MAC-FINAL-002",
+          "priority": "P2"
+        }
+      ]
+    }
+  ]
+}

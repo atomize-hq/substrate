@@ -3154,3 +3154,10 @@ tree `827e88f2c069cd27a04e99a57894bd5a753b2e55`, ref
 `AUTHORITY_REQUIRED:A1.1d-5R3-LINUX-CLOSEOUT`, then revalidated the separate evidence receipt.
 No production or test bytes changed, no MAC packet is authorized here, and the authoritative
 successor for this orchestration closeout is `COMPLETE`.
+
+### `A1.1d-5R3-MAC`
+
+This implementation subject owns only the MAC allowlisted executor/client, mapped lifecycle
+wrappers, SSH-UDS activation/teardown, socket non-propagation, and non-native fixture proof. It
+does not execute native provisioning or create evidence bytes. Its sole successor is
+`EVIDENCE:R3-MAC-IMP-01`.

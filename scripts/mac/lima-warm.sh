@@ -9,6 +9,8 @@ while [[ -L "${SOURCE_PATH}" ]]; do
 done
 SCRIPT_DIR="$(cd "$(dirname "${SOURCE_PATH}")" && pwd)"
 CANONICAL_UNIT_SOURCE_DIR=""
+# Check-only status preserves its frozen named-instance observation surface. Mutation is separately
+# constrained in ensure_vm_ready to the one selected R2 Stage-1 identity.
 VM_NAME="${SUBSTRATE_LIMA_VM_NAME:-substrate}"
 PROFILE="${LIMA_PROFILE_PATH:-${SCRIPT_DIR}/lima/substrate.yaml}"
 PROJECT_PATH=""
@@ -26,6 +28,8 @@ INSTALL_PREFIX_RAW=""
 INSTALL_PREFIX_DECLARED=0
 INSTALL_BOOTSTRAP_CONTEXT_V1=""
 INSTALL_BOOTSTRAP_CONTEXT_DECLARED=0
+PLATFORM_BOOTSTRAP_MAPPING_V1=""
+EXECUTOR_BUILD_EVIDENCE_V1=""
 INSTALL_BOOTSTRAP_COMMITMENT=""
 INSTALL_BOOTSTRAP_ACCOUNT=""
 INSTALL_BOOTSTRAP_UID=""
@@ -72,6 +76,8 @@ override use.
 Options:
   --check-only      Report the current Lima VM status without creating or provisioning it
   --install-prefix  Bind the helper to one host install prefix
+  --platform-bootstrap-mapping-v1  Bind the exact selected Lima mapping
+  --executor-build-evidence-v1  Require the exact non-executing executor artifact evidence
   -h, --help        Show this help text
 
 Arguments:
@@ -99,6 +105,16 @@ while [[ $# -gt 0 ]]; do
             [[ -n "$2" ]] || fatal "Empty value for --install-bootstrap-context-v1"
             INSTALL_BOOTSTRAP_CONTEXT_V1="$2"
             INSTALL_BOOTSTRAP_CONTEXT_DECLARED=1
+            shift 2
+            ;;
+        --platform-bootstrap-mapping-v1)
+            [[ $# -ge 2 && -z "${PLATFORM_BOOTSTRAP_MAPPING_V1}" && -n "$2" ]] || fatal "Invalid --platform-bootstrap-mapping-v1"
+            PLATFORM_BOOTSTRAP_MAPPING_V1="$2"
+            shift 2
+            ;;
+        --executor-build-evidence-v1)
+            [[ $# -ge 2 && -z "${EXECUTOR_BUILD_EVIDENCE_V1}" && -n "$2" ]] || fatal "Invalid --executor-build-evidence-v1"
+            EXECUTOR_BUILD_EVIDENCE_V1="$2"
             shift 2
             ;;
         -h|--help)
@@ -798,9 +814,12 @@ wait_for_running() {
 }
 
 destroy_vm() {
-    warn "Destroying Lima VM '${VM_NAME}' to apply socket parity layout..."
-    limactl stop "${VM_NAME}" >/dev/null 2>&1 || true
-    limactl delete "${VM_NAME}" >/dev/null 2>&1 || true
+    # The typed publisher owns destruction and exact before-state restoration.
+    "${SCRIPT_DIR}/lima-lifecycle.sh" destroy-vm \
+        --install-prefix "${INSTALL_PREFIX_RAW}" \
+        --install-bootstrap-context-v1 "${INSTALL_BOOTSTRAP_CONTEXT_V1}" \
+        --platform-bootstrap-mapping-v1 "${PLATFORM_BOOTSTRAP_MAPPING_V1}" \
+        --executor-build-evidence-v1 "${EXECUTOR_BUILD_EVIDENCE_V1}"
 }
 
 current_layout_version() {
@@ -808,6 +827,8 @@ current_layout_version() {
 }
 
 ensure_vm_ready() {
+    [[ "${VM_NAME}" == "substrate" ]] \
+        || fatal "R3 mutation permits only the selected Stage-1 Lima identity; named instances are check-only."
     if vm_exists; then
         local status
         status="$(vm_status)"
@@ -852,64 +873,12 @@ create_stage_manifest() {
 }
 
 stage_workspace() {
-    local vm_user="$1"
-    local workspace_name stage_parent manifest_path entry entry_name
-    workspace_name="$(basename "${PROJECT_PATH}")"
-    stage_parent="/tmp/substrate-stage-workspace"
-    manifest_path="$(create_stage_manifest)"
-
-    log "Staging workspace input into guest-local path ${STAGED_WORKSPACE_CURRENT}"
-    # Keep the ingress path aligned with Slice 09 / Slice 10 authority and validation:
-    # transfer the requested workspace directly via `limactl copy` rather than
-    # via a separate host-side staged tree, while preserving the explicit
-    # exclusions that bound guest staging to the supported validation surface.
-    limactl shell "${VM_NAME}" env STAGE_PARENT="${stage_parent}" WORKSPACE_NAME="${workspace_name}" bash <<'EOF'
-set -euo pipefail
-rm -rf "${STAGE_PARENT}"
-mkdir -p "${STAGE_PARENT}/${WORKSPACE_NAME}"
-EOF
-    shopt -s dotglob nullglob
-    for entry in "${PROJECT_PATH}"/*; do
-        entry_name="$(basename "${entry}")"
-        case "${entry_name}" in
-            .git|target|.codex|.DS_Store)
-                continue
-                ;;
-        esac
-        if [[ -d "${entry}" ]]; then
-            limactl copy --recursive "${entry}" "${VM_NAME}:${stage_parent}/${workspace_name}/"
-        else
-            limactl copy "${entry}" "${VM_NAME}:${stage_parent}/${workspace_name}/"
-        fi
-    done
-    shopt -u dotglob nullglob
-    limactl copy "${manifest_path}" "${VM_NAME}:${stage_parent}/${STAGED_WORKSPACE_MANIFEST_NAME}"
-    limactl shell "${VM_NAME}" \
-        env STAGE_PARENT="${stage_parent}" \
-            WORKSPACE_NAME="${workspace_name}" \
-            STAGED_WORKSPACE_ROOT="${STAGED_WORKSPACE_ROOT}" \
-            STAGED_WORKSPACE_CURRENT="${STAGED_WORKSPACE_CURRENT}" \
-            STAGED_WORKSPACE_MANIFEST_NAME="${STAGED_WORKSPACE_MANIFEST_NAME}" \
-            VM_USER="${vm_user}" \
-        bash <<'EOF'
-set -euo pipefail
-test -d "${STAGE_PARENT}/${WORKSPACE_NAME}"
-test -f "${STAGE_PARENT}/${STAGED_WORKSPACE_MANIFEST_NAME}"
-# Finder metadata can disappear between traversal and deletion while the staged
-# tree is being copied into place; use rm -f so transient ENOENTs do not abort
-# the supported staging path.
-find "${STAGE_PARENT}/${WORKSPACE_NAME}" -name '.DS_Store' -exec rm -f {} +
-sudo install -d -o root -g substrate -m0750 "${STAGED_WORKSPACE_ROOT}"
-sudo rm -rf "${STAGED_WORKSPACE_CURRENT}"
-sudo mv "${STAGE_PARENT}/${WORKSPACE_NAME}" "${STAGED_WORKSPACE_CURRENT}"
-sudo chown -R "${VM_USER}:substrate" "${STAGED_WORKSPACE_CURRENT}"
-sudo chmod 0750 "${STAGED_WORKSPACE_CURRENT}"
-sudo install -o "${VM_USER}" -g substrate -m0640 \
-    "${STAGE_PARENT}/${STAGED_WORKSPACE_MANIFEST_NAME}" \
-    "${STAGED_WORKSPACE_CURRENT}/${STAGED_WORKSPACE_MANIFEST_NAME}"
-rm -rf "${STAGE_PARENT}"
-EOF
-    rm -f "${manifest_path}"
+    # The selected manifest and exact guest artifact transaction are executor-only.
+    "${SCRIPT_DIR}/lima-lifecycle.sh" stage-workspace \
+        --install-prefix "${INSTALL_PREFIX_RAW}" \
+        --install-bootstrap-context-v1 "${INSTALL_BOOTSTRAP_CONTEXT_V1}" \
+        --platform-bootstrap-mapping-v1 "${PLATFORM_BOOTSTRAP_MAPPING_V1}" \
+        --executor-build-evidence-v1 "${EXECUTOR_BUILD_EVIDENCE_V1}"
 }
 
 verify_staged_workspace() {
@@ -941,17 +910,12 @@ EOF
 }
 
 ensure_substrate_group() {
-    local vm_user="$1"
-    limactl shell "${VM_NAME}" bash <<EOF
-set -euo pipefail
-if ! getent group substrate >/dev/null 2>&1; then
-    sudo groupadd --system substrate
-fi
-if id -nG "${vm_user}" | tr ' ' '\n' | grep -qx substrate; then
-    exit 0
-fi
-sudo usermod -aG substrate "${vm_user}"
-EOF
+    # Membership mutation is part of the one mapped guest lifecycle transaction.
+    "${SCRIPT_DIR}/lima-lifecycle.sh" configure-guest \
+        --install-prefix "${INSTALL_PREFIX_RAW}" \
+        --install-bootstrap-context-v1 "${INSTALL_BOOTSTRAP_CONTEXT_V1}" \
+        --platform-bootstrap-mapping-v1 "${PLATFORM_BOOTSTRAP_MAPPING_V1}" \
+        --executor-build-evidence-v1 "${EXECUTOR_BUILD_EVIDENCE_V1}"
 }
 
 host_agent_candidate() {
@@ -978,14 +942,12 @@ host_agent_candidate() {
 }
 
 install_agent_from_host() {
-    local agent_path="$1"
-    log "Installing Linux world-service from ${agent_path}"
-    limactl copy "${agent_path}" "${VM_NAME}:/tmp/world-service"
-    limactl shell "${VM_NAME}" bash <<'EOF'
-set -euo pipefail
-sudo install -Dm0755 /tmp/world-service /usr/local/bin/substrate-world-service
-sudo rm -f /tmp/world-service
-EOF
+    # Host-to-guest artifact ingress is accepted only through ExecutorBuildEvidenceV1.
+    "${SCRIPT_DIR}/lima-lifecycle.sh" install-guest-artifacts \
+        --install-prefix "${INSTALL_PREFIX_RAW}" \
+        --install-bootstrap-context-v1 "${INSTALL_BOOTSTRAP_CONTEXT_V1}" \
+        --platform-bootstrap-mapping-v1 "${PLATFORM_BOOTSTRAP_MAPPING_V1}" \
+        --executor-build-evidence-v1 "${EXECUTOR_BUILD_EVIDENCE_V1}"
 }
 
 host_cli_candidate() {
@@ -1013,19 +975,12 @@ host_cli_candidate() {
 }
 
 install_cli_from_host() {
-    local cli_path="$1"
-    log "Installing Linux substrate CLI from ${cli_path}"
-    limactl copy "${cli_path}" "${VM_NAME}:/tmp/substrate-cli"
-    limactl shell "${VM_NAME}" bash <<'EOF'
-set -euo pipefail
-sudo install -Dm0755 /tmp/substrate-cli /usr/local/bin/substrate
-sudo tee /usr/local/bin/world >/dev/null <<'WORLD'
-#!/usr/bin/env bash
-exec substrate world "$@"
-WORLD
-sudo chmod 0755 /usr/local/bin/world
-sudo rm -f /tmp/substrate-cli
-EOF
+    # Host-to-guest artifact ingress is accepted only through ExecutorBuildEvidenceV1.
+    "${SCRIPT_DIR}/lima-lifecycle.sh" install-guest-artifacts \
+        --install-prefix "${INSTALL_PREFIX_RAW}" \
+        --install-bootstrap-context-v1 "${INSTALL_BOOTSTRAP_CONTEXT_V1}" \
+        --platform-bootstrap-mapping-v1 "${PLATFORM_BOOTSTRAP_MAPPING_V1}" \
+        --executor-build-evidence-v1 "${EXECUTOR_BUILD_EVIDENCE_V1}"
 }
 
 host_gateway_candidate() {
@@ -1052,298 +1007,37 @@ host_gateway_candidate() {
 }
 
 install_gateway_from_host() {
-    local gateway_path="$1"
-    log "Installing Linux substrate-gateway from ${gateway_path}"
-    limactl copy "${gateway_path}" "${VM_NAME}:/tmp/substrate-gateway"
-    limactl shell "${VM_NAME}" bash <<'EOF'
-set -euo pipefail
-sudo install -Dm0755 /tmp/substrate-gateway /usr/local/bin/substrate-gateway
-sudo rm -f /tmp/substrate-gateway
-EOF
+    # Host-to-guest artifact ingress is accepted only through ExecutorBuildEvidenceV1.
+    "${SCRIPT_DIR}/lima-lifecycle.sh" install-guest-artifacts \
+        --install-prefix "${INSTALL_PREFIX_RAW}" \
+        --install-bootstrap-context-v1 "${INSTALL_BOOTSTRAP_CONTEXT_V1}" \
+        --platform-bootstrap-mapping-v1 "${PLATFORM_BOOTSTRAP_MAPPING_V1}" \
+        --executor-build-evidence-v1 "${EXECUTOR_BUILD_EVIDENCE_V1}"
 }
 
 build_missing_components_inside_vm() {
-    local build_cli="${1:-0}"
-    local build_agent="${2:-0}"
-    local build_gateway="${3:-0}"
-
-    if [[ "${build_cli}" -ne 1 && "${build_agent}" -ne 1 && "${build_gateway}" -ne 1 ]]; then
-        return 0
-    fi
-
-    if [[ "${build_agent}" -eq 1 ]]; then
-        log "Building Linux world-service inside Lima (profile: ${BUILD_PROFILE})"
-    fi
-    if [[ "${build_cli}" -eq 1 ]]; then
-        log "Building Linux substrate CLI inside Lima for diagnostics (profile: ${BUILD_PROFILE})"
-    fi
-    if [[ "${build_gateway}" -eq 1 ]]; then
-        log "Building Linux substrate-gateway inside Lima (profile: ${BUILD_PROFILE})"
-    fi
-
-    if [[ ! -f "${PROJECT_PATH}/Cargo.toml" ]]; then
-        if [[ "${build_agent}" -eq 1 ]]; then
-            fatal "Linux world-service missing and ${PROJECT_PATH} does not contain Cargo sources. Provide bin/linux/world-service or rerun from a source checkout."
-        fi
-        if [[ "${build_gateway}" -eq 1 ]]; then
-            fatal "Linux substrate-gateway missing and ${PROJECT_PATH} does not contain Cargo sources. Provide bin/linux/substrate-gateway or rerun from a source checkout."
-        fi
-        warn "Skipping guest CLI build; ${PROJECT_PATH} lacks Cargo sources."
-        # The guest CLI is optional (diagnostics only) and release bundles don't ship Cargo sources.
-        # Do not abort provisioning when only the guest CLI is missing.
-        return 0
-    fi
-
-    local status=0
-    if limactl shell "${VM_NAME}" env BUILD_PROFILE="${BUILD_PROFILE}" BUILD_GUEST_CLI="${build_cli}" BUILD_GUEST_AGENT="${build_agent}" BUILD_GUEST_GATEWAY="${build_gateway}" STAGED_WORKSPACE_PATH="${STAGED_WORKSPACE_CURRENT}" bash <<'EOF'
-set -euo pipefail
-build_cli="${BUILD_GUEST_CLI:-0}"
-build_agent="${BUILD_GUEST_AGENT:-0}"
-build_gateway="${BUILD_GUEST_GATEWAY:-0}"
+    fatal "In-guest DNS, package, Rustup, Cargo, and build remediation is tombstoned; provide exact ExecutorBuildEvidenceV1 artifacts."
+}
 
 fix_dns() {
-    local probe_host="${1:-ports.ubuntu.com}"
-    if getent hosts "${probe_host}" >/dev/null 2>&1; then
-        return 0
-    fi
-    echo "[lima-warm] DNS resolution failed inside Lima for ${probe_host}; applying fallback resolv.conf (1.1.1.1 / 8.8.8.8)..." >&2
-    local SUDO_CMD="sudo"
-    if sudo -n true 2>/dev/null; then
-        SUDO_CMD="sudo -n"
-    fi
-    $SUDO_CMD sh -c "printf 'nameserver 1.1.1.1\nnameserver 8.8.8.8\n' > /etc/resolv.conf" || true
-    $SUDO_CMD systemctl restart dnsmasq 2>/dev/null || true
-    $SUDO_CMD systemctl restart systemd-resolved 2>/dev/null || true
-    getent hosts "${probe_host}" >/dev/null 2>&1
+    fatal "Guest DNS mutation is tombstoned by the R3 mapped lifecycle executor."
 }
 
 ensure_cargo() {
-    # Cargo.lock v4 requires a newer cargo than Ubuntu 24.04's apt cargo on some images.
-    # Prefer rustup when we detect a v4 lockfile so we don't fail during `cargo build --locked`.
-    local needs_lockfile_v4=0
-    if sudo -u "$(id -un)" -g substrate test -f "${STAGED_WORKSPACE_PATH}/Cargo.lock" \
-        && sudo -u "$(id -un)" -g substrate grep -qx 'version = 4' "${STAGED_WORKSPACE_PATH}/Cargo.lock" 2>/dev/null; then
-        needs_lockfile_v4=1
-    fi
-
-    if command -v rustup >/dev/null 2>&1; then
-        if [ -f "$HOME/.cargo/env" ]; then
-            # shellcheck disable=SC1090
-            source "$HOME/.cargo/env"
-        fi
-        export PATH="$HOME/.cargo/bin:$PATH"
-        rustup toolchain install stable --profile minimal >/dev/null 2>&1 || true
-        rustup default stable >/dev/null 2>&1 || true
-        if command -v cargo >/dev/null 2>&1; then
-            return 0
-        fi
-    fi
-
-    if [[ "${needs_lockfile_v4}" -eq 1 ]]; then
-        echo "[lima-warm] Cargo.lock v4 detected; installing rustup toolchain (stable)..." >&2
-        fix_dns ports.ubuntu.com || true
-        if curl -4 --connect-timeout 10 --retry 3 --retry-delay 1 --proto '=https' --tlsv1.2 -sSf https://sh.rustup.rs | sh -s -- -y --profile minimal; then
-            # shellcheck disable=SC1090
-            source "$HOME/.cargo/env"
-            export PATH="$HOME/.cargo/bin:$PATH"
-            rustup toolchain install stable --profile minimal >/dev/null 2>&1 || true
-            rustup default stable >/dev/null 2>&1 || true
-            command -v cargo >/dev/null 2>&1
-            return $?
-        fi
-        return 1
-    fi
-
-    if command -v cargo >/dev/null 2>&1; then
-        return 0
-    fi
-    echo "[lima-warm] cargo not found inside Lima VM; attempting apt install (rustc cargo)..." >&2
-    local SUDO="sudo"
-    if sudo -n true 2>/dev/null; then
-        SUDO="sudo -n"
-    fi
-    fix_dns ports.ubuntu.com || true
-    if $SUDO apt-get update && $SUDO apt-get install -y rustc cargo; then
-        return 0
-    fi
-    echo "[lima-warm] apt install failed; trying rustup via curl (IPv4, retries)..." >&2
-    fix_dns ports.ubuntu.com || true
-    if curl -4 --connect-timeout 10 --retry 3 --retry-delay 1 --proto '=https' --tlsv1.2 -sSf https://sh.rustup.rs | sh -s -- -y --profile minimal; then
-        # shellcheck disable=SC1090
-        source "$HOME/.cargo/env"
-        return 0
-    fi
-    return 1
+    fatal "Guest package, Rustup, and Cargo remediation is tombstoned by the R3 mapped lifecycle executor."
 }
 
-if [[ "${build_cli}" != "1" && "${build_agent}" != "1" && "${build_gateway}" != "1" ]]; then
-    exit 0
-fi
-
-if ! ensure_cargo; then
-    echo "[lima-warm][ERROR] unable to install cargo inside Lima VM; install Rust manually or provide Linux binaries." >&2
-    exit 1
-fi
-if command -v rustup >/dev/null 2>&1; then
-    rustup toolchain install stable --profile minimal >/dev/null 2>&1 || true
-    rustup default stable >/dev/null 2>&1 || true
-fi
-if [ -f "$HOME/.cargo/env" ]; then
-    # shellcheck disable=SC1090
-    source "$HOME/.cargo/env"
-fi
-cargo_bin="$(command -v cargo || true)"
-if [[ -z "${cargo_bin}" ]]; then
-    echo "[lima-warm][ERROR] cargo still missing after toolchain installation." >&2
-    exit 1
-fi
-BUILD_DIR="/tmp/substrate-lima-build"
-BUILD_OUTPUT_DIR="${BUILD_PROFILE}"
-BUILD_PROFILE_FLAG=()
-case "${BUILD_PROFILE}" in
-debug)
-    BUILD_OUTPUT_DIR="debug"
-    ;;
-release)
-    BUILD_OUTPUT_DIR="release"
-    BUILD_PROFILE_FLAG=(--profile release)
-    ;;
-*)
-    BUILD_PROFILE_FLAG=(--profile "${BUILD_PROFILE}")
-    ;;
-esac
-mkdir -p "${BUILD_DIR}"
-workspace_dir="${STAGED_WORKSPACE_PATH}"
-if ! sudo -u "$(id -un)" -g substrate test -r "${workspace_dir}/Cargo.toml"; then
-    echo "[lima-warm][ERROR] staged workspace is not readable under the substrate group: ${workspace_dir}" >&2
-    exit 1
-fi
 run_guest_cargo_build() {
-    fix_dns static.crates.io || true
-    if sudo -u "$(id -un)" -g substrate env \
-        HOME="$HOME" \
-        PATH="$PATH" \
-        CARGO_TARGET_DIR="${BUILD_DIR}" \
-        bash -lc 'cd "$1" && shift && exec "$@"' bash \
-        "${workspace_dir}" "${cargo_bin}" build "$@"; then
-        return 0
-    fi
-    fix_dns static.crates.io || true
-    sudo -u "$(id -un)" -g substrate env \
-        HOME="$HOME" \
-        PATH="$PATH" \
-        CARGO_TARGET_DIR="${BUILD_DIR}" \
-        bash -lc 'cd "$1" && shift && exec "$@"' bash \
-        "${workspace_dir}" "${cargo_bin}" build "$@"
-}
-mandatory_build_failed=0
-cli_build_failed=0
-if [[ "${build_agent}" == "1" ]]; then
-    if ! run_guest_cargo_build -p world-service "${BUILD_PROFILE_FLAG[@]}" --locked; then
-        echo "[lima-warm][ERROR] failed to build Linux world-service inside Lima." >&2
-        mandatory_build_failed=1
-    else
-        sudo install -Dm0755 "${BUILD_DIR}/${BUILD_OUTPUT_DIR}/world-service" /usr/local/bin/substrate-world-service
-    fi
-fi
-if [[ "${build_gateway}" == "1" ]]; then
-    if ! run_guest_cargo_build -p substrate-gateway "${BUILD_PROFILE_FLAG[@]}" --locked; then
-        echo "[lima-warm][ERROR] failed to build Linux substrate-gateway inside Lima." >&2
-        mandatory_build_failed=1
-    else
-        sudo install -Dm0755 "${BUILD_DIR}/${BUILD_OUTPUT_DIR}/substrate-gateway" /usr/local/bin/substrate-gateway
-    fi
-fi
-if [[ "${build_cli}" == "1" ]]; then
-    if ! run_guest_cargo_build --bin substrate "${BUILD_PROFILE_FLAG[@]}" --locked; then
-        echo "[lima-warm][WARN] failed to build the optional Linux substrate CLI inside Lima; continuing because diagnostics can fall back to the host CLI." >&2
-        cli_build_failed=1
-    else
-        sudo install -Dm0755 "${BUILD_DIR}/${BUILD_OUTPUT_DIR}/substrate" /usr/local/bin/substrate
-        sudo tee /usr/local/bin/world >/dev/null <<'WORLD'
-#!/usr/bin/env bash
-exec substrate world "$@"
-WORLD
-        sudo chmod 0755 /usr/local/bin/world
-    fi
-fi
-rm -rf "${BUILD_DIR}" || true
-if [[ "${mandatory_build_failed}" -ne 0 ]]; then
-    exit 1
-fi
-if [[ "${cli_build_failed}" -ne 0 ]]; then
-    echo "[lima-warm][WARN] Guest provisioning completed without a Linux substrate CLI binary." >&2
-fi
-EOF
-    then
-        status=0
-    else
-        status=$?
-    fi
-    if [[ "${status}" -ne 0 ]]; then
-        if [[ "${build_agent}" -eq 1 && "${build_gateway}" -eq 1 ]]; then
-            fatal "Failed to build mandatory Linux guest binaries inside Lima (world-service and/or substrate-gateway) (exit ${status}). Provide prebuilt binaries under bin/linux/ or rerun from a source checkout."
-        fi
-        if [[ "${build_agent}" -eq 1 ]]; then
-            fatal "Failed to build Linux world-service inside Lima (exit ${status}). Provide a prebuilt agent under bin/linux/world-service or rerun from a source checkout."
-        fi
-        if [[ "${build_gateway}" -eq 1 ]]; then
-            fatal "Failed to build Linux substrate-gateway inside Lima (exit ${status}). Provide a prebuilt gateway under bin/linux/substrate-gateway or rerun from a source checkout."
-        fi
-        warn "Failed to build Linux CLI inside Lima; diagnostics requiring a guest CLI will need to run on the host."
-        return 0
-    fi
+    fatal "Guest Cargo build is tombstoned; exact executor-built artifacts are required."
 }
 
 install_guest_binaries() {
-    local cli_candidate agent_candidate gateway_candidate
-    local need_cli_build=0
-    local need_agent_build=0
-    local need_gateway_build=0
-
-    cli_candidate="$(host_cli_candidate)" || true
-    if [[ -n "${cli_candidate:-}" ]]; then
-        install_cli_from_host "${cli_candidate}"
-    else
-        if [[ -f "${PROJECT_PATH}/Cargo.toml" ]]; then
-            log "Linux substrate CLI not found in ${PROJECT_PATH}; attempting in-guest build for diagnostics."
-            need_cli_build=1
-        else
-            warn "Linux substrate CLI not found in ${PROJECT_PATH}; skipping guest CLI install (no Cargo sources in bundle). Diagnostics will fall back to host CLI."
-        fi
-    fi
-
-    agent_candidate="$(host_agent_candidate)" || true
-    if [[ -n "${agent_candidate:-}" ]]; then
-        install_agent_from_host "${agent_candidate}"
-    else
-        log "Linux world-service binary not found or invalid in ${PROJECT_PATH}; falling back to an in-guest build."
-        need_agent_build=1
-    fi
-
-    gateway_candidate="$(host_gateway_candidate)" || true
-    if [[ -n "${gateway_candidate:-}" ]]; then
-        install_gateway_from_host "${gateway_candidate}"
-    else
-        log "Linux substrate-gateway binary not found or invalid in ${PROJECT_PATH}; falling back to an in-guest build."
-        need_gateway_build=1
-    fi
-
-    if [[ "${need_cli_build}" -eq 1 || "${need_agent_build}" -eq 1 || "${need_gateway_build}" -eq 1 ]]; then
-        if [[ "${SKIP_GUEST_BUILD}" -eq 1 ]]; then
-            if [[ "${need_agent_build}" -eq 1 ]]; then
-                warn "Linux world-service missing but SUBSTRATE_LIMA_SKIP_GUEST_BUILD=1; skipping guest build. Ensure another step installs /usr/local/bin/substrate-world-service."
-            fi
-            if [[ "${need_gateway_build}" -eq 1 ]]; then
-                warn "Linux substrate-gateway missing but SUBSTRATE_LIMA_SKIP_GUEST_BUILD=1; skipping guest build. Ensure another step installs /usr/local/bin/substrate-gateway."
-            fi
-            if [[ "${need_cli_build}" -eq 1 ]]; then
-                warn "Linux CLI missing but SUBSTRATE_LIMA_SKIP_GUEST_BUILD=1; skipping guest build. Diagnostics will fall back to host CLI."
-            fi
-            return 0
-        fi
-        build_missing_components_inside_vm "${need_cli_build}" "${need_agent_build}" "${need_gateway_build}"
-    fi
+    # No guest toolchain fallback is permitted; artifact validation and installation are one transaction.
+    "${SCRIPT_DIR}/lima-lifecycle.sh" install-guest-artifacts \
+        --install-prefix "${INSTALL_PREFIX_RAW}" \
+        --install-bootstrap-context-v1 "${INSTALL_BOOTSTRAP_CONTEXT_V1}" \
+        --platform-bootstrap-mapping-v1 "${PLATFORM_BOOTSTRAP_MAPPING_V1}" \
+        --executor-build-evidence-v1 "${EXECUTOR_BUILD_EVIDENCE_V1}"
 }
 
 verify_guest_binaries() {
@@ -1355,233 +1049,18 @@ EOF
 }
 
 bootstrap_guest_private_home() {
-    local vm_user="$1"
-    local guest_substrate_home="$2"
-    log "Bootstrapping private guest SUBSTRATE_HOME for ${vm_user}"
-    limactl shell "${VM_NAME}" env \
-        SUBSTRATE_GUEST_HOME="${guest_substrate_home}" \
-        SUBSTRATE_GUEST_USER="${vm_user}" \
-        bash -s <<'EOF'
-set -euo pipefail
-if [[ -x /usr/local/bin/substrate ]]; then
-    SUBSTRATE_HOME="${SUBSTRATE_GUEST_HOME}" \
-        SUBSTRATE_INSTALL_PRIMARY_USER="${SUBSTRATE_GUEST_USER}" \
-        /usr/local/bin/substrate --version >/dev/null
-    exit 0
-fi
-
-# The guest CLI is an optional diagnostic artifact in the currently landed Lima
-# architecture. Preserve that supported path with a process-isolated, no-follow
-# provisioner that implements the same greenfield private-root acceptance rules.
-python3 - "${SUBSTRATE_GUEST_HOME}" <<'PY'
-import fcntl
-import errno
-import os
-import stat
-import struct
-import sys
-
-raw = sys.argv[1]
-parts = raw.split("/")
-if not raw.startswith("/") or any(part in (".", "..") for part in parts):
-    raise SystemExit("unsupported guest SUBSTRATE_HOME: invalid physical path")
-normal = [part for part in parts if part]
-if not normal:
-    raise SystemExit("unsupported guest SUBSTRATE_HOME: wrong-type")
-
-directory_flags = os.O_RDONLY | os.O_DIRECTORY | os.O_NOFOLLOW
-def acl_grants_named_principal(fd, name):
-    try:
-        value = os.getxattr(fd, name)
-    except OSError as error:
-        if error.errno in (errno.ENODATA, getattr(errno, "ENOATTR", errno.ENODATA)):
-            return False
-        raise SystemExit("unsupported guest SUBSTRATE_HOME: ACL validation-unavailable")
-    if len(value) < 4 or struct.unpack_from("<I", value)[0] != 2 or (len(value) - 4) % 8:
-        return True
-    mask = None
-    user_object = False
-    group_object = False
-    other = False
-    named = []
-    for offset in range(4, len(value), 8):
-        tag, permissions, identifier = struct.unpack_from("<HHI", value, offset)
-        if permissions & ~0o7:
-            return True
-        if tag in (0x0002, 0x0008):
-            if identifier == 0xffffffff or any(
-                    seen_tag == tag and seen_id == identifier
-                    for seen_tag, seen_id, _permissions in named):
-                return True
-            named.append((tag, identifier, permissions))
-        elif tag == 0x0010:
-            if identifier != 0xffffffff or mask is not None:
-                return True
-            mask = permissions
-        elif tag == 0x0001:
-            if identifier != 0xffffffff or user_object:
-                return True
-            user_object = True
-        elif tag == 0x0004:
-            if identifier != 0xffffffff or group_object:
-                return True
-            group_object = True
-        elif tag == 0x0020:
-            if identifier != 0xffffffff or other:
-                return True
-            other = True
-        else:
-            return True
-    if not user_object or not group_object or not other:
-        return True
-    if not named:
-        return False
-    if mask is None:
-        return True
-    return any(permissions & mask for _tag, _identifier, permissions in named)
-
-def validate_ancestor(fd):
-    value = os.fstat(fd)
-    if not stat.S_ISDIR(value.st_mode):
-        raise SystemExit("unsupported guest SUBSTRATE_HOME: wrong-type ancestor")
-    if value.st_uid not in (0, os.geteuid()):
-        raise SystemExit("unsupported guest SUBSTRATE_HOME: wrong-owner ancestor")
-    if stat.S_IMODE(value.st_mode) & 0o022:
-        raise SystemExit("unsupported guest SUBSTRATE_HOME: unsafe ancestor mode")
-    if acl_grants_named_principal(fd, "system.posix_acl_access") or \
-            acl_grants_named_principal(fd, "system.posix_acl_default"):
-        raise SystemExit("unsupported guest SUBSTRATE_HOME: foreign-acl ancestor")
-    return value
-
-chain = [os.open("/", directory_flags)]
-chain_names = []
-chain_identities = []
-try:
-    root_stat = validate_ancestor(chain[0])
-    chain_identities.append((root_stat.st_dev, root_stat.st_ino))
-    for component in normal[:-1]:
-        observed = os.stat(component, dir_fd=chain[-1], follow_symlinks=False)
-        if not stat.S_ISDIR(observed.st_mode):
-            raise SystemExit("unsupported guest SUBSTRATE_HOME: symlink-or-wrong-type ancestor")
-        next_fd = os.open(component, directory_flags, dir_fd=chain[-1])
-        opened = validate_ancestor(next_fd)
-        if (opened.st_dev, opened.st_ino) != (observed.st_dev, observed.st_ino):
-            os.close(next_fd)
-            raise SystemExit("unsupported guest SUBSTRATE_HOME: replaced ancestor")
-        chain_names.append(component)
-        chain_identities.append((opened.st_dev, opened.st_ino))
-        chain.append(next_fd)
-
-    current = chain[-1]
-    leaf = normal[-1]
-    parent = os.fstat(current)
-    if not stat.S_ISDIR(parent.st_mode):
-        raise SystemExit("unsupported guest SUBSTRATE_HOME: wrong-type parent")
-    if parent.st_uid not in (0, os.geteuid()):
-        raise SystemExit("unsupported guest SUBSTRATE_HOME: wrong-owner parent")
-    if stat.S_IMODE(parent.st_mode) & 0o022:
-        raise SystemExit("unsupported guest SUBSTRATE_HOME: unsafe parent mode")
-    # Cooperative Substrate creators serialize candidate initialization. Malicious root or
-    # same-UID replacement before first open is outside the A1 V1 threat model.
-    fcntl.flock(current, fcntl.LOCK_EX)
-    created = False
-    previous_umask = os.umask(0)
-    try:
-        try:
-            os.mkdir(leaf, 0o700, dir_fd=current)
-            created = True
-        except FileExistsError:
-            pass
-    finally:
-        os.umask(previous_umask)
-
-    try:
-        accepted = os.open(leaf, directory_flags, dir_fd=current)
-    except OSError:
-        observed = os.stat(leaf, dir_fd=current, follow_symlinks=False)
-        if stat.S_ISLNK(observed.st_mode):
-            raise SystemExit("unsupported guest SUBSTRATE_HOME: symlink")
-        if not stat.S_ISDIR(observed.st_mode):
-            raise SystemExit("unsupported guest SUBSTRATE_HOME: wrong-type")
-        if observed.st_uid != os.geteuid():
-            raise SystemExit("unsupported guest SUBSTRATE_HOME: wrong-owner")
-        if stat.S_IMODE(observed.st_mode) != 0o700:
-            raise SystemExit("unsupported guest SUBSTRATE_HOME: wrong-mode")
-        raise SystemExit("unsupported guest SUBSTRATE_HOME: validation-unavailable")
-    try:
-        # This first no-follow open is the only source of accepted child identity. mkdir above
-        # established a candidate name only; it returned no inode-bound handle.
-        opened = os.fstat(accepted)
-        if created:
-            os.fchmod(accepted, 0o700)
-            opened = os.fstat(accepted)
-        if opened.st_uid != os.geteuid():
-            raise SystemExit("unsupported guest SUBSTRATE_HOME: wrong-owner")
-        if stat.S_IMODE(opened.st_mode) != 0o700:
-            raise SystemExit("unsupported guest SUBSTRATE_HOME: wrong-mode")
-        acl_names = set(os.listxattr(accepted))
-        if {"system.posix_acl_access", "system.posix_acl_default"} & acl_names:
-            raise SystemExit("unsupported guest SUBSTRATE_HOME: foreign-acl")
-        reopened = os.open(leaf, directory_flags, dir_fd=current)
-        try:
-            reopened_stat = os.fstat(reopened)
-            if (reopened_stat.st_dev, reopened_stat.st_ino) != (opened.st_dev, opened.st_ino):
-                raise SystemExit("unsupported guest SUBSTRATE_HOME: replaced")
-            if not stat.S_ISDIR(reopened_stat.st_mode):
-                raise SystemExit("unsupported guest SUBSTRATE_HOME: wrong-type")
-            if reopened_stat.st_uid != os.geteuid():
-                raise SystemExit("unsupported guest SUBSTRATE_HOME: wrong-owner")
-            if stat.S_IMODE(reopened_stat.st_mode) != 0o700:
-                raise SystemExit("unsupported guest SUBSTRATE_HOME: wrong-mode")
-            reopened_acls = set(os.listxattr(reopened))
-            if {"system.posix_acl_access", "system.posix_acl_default"} & reopened_acls:
-                raise SystemExit("unsupported guest SUBSTRATE_HOME: foreign-acl")
-            named = os.stat(leaf, dir_fd=current, follow_symlinks=False)
-            if (named.st_dev, named.st_ino) != (reopened_stat.st_dev, reopened_stat.st_ino):
-                raise SystemExit("unsupported guest SUBSTRATE_HOME: replaced")
-        finally:
-            os.close(reopened)
-        current_parent = validate_ancestor(current)
-        if (current_parent.st_dev, current_parent.st_ino) != (parent.st_dev, parent.st_ino):
-            raise SystemExit("unsupported guest SUBSTRATE_HOME: replaced parent")
-        for index, component in enumerate(chain_names):
-            current_ancestor = validate_ancestor(chain[index + 1])
-            if (current_ancestor.st_dev, current_ancestor.st_ino) != chain_identities[index + 1]:
-                raise SystemExit("unsupported guest SUBSTRATE_HOME: replaced ancestor")
-            named_ancestor = os.stat(component, dir_fd=chain[index], follow_symlinks=False)
-            if (named_ancestor.st_dev, named_ancestor.st_ino) != chain_identities[index + 1]:
-                raise SystemExit("unsupported guest SUBSTRATE_HOME: replaced ancestor")
-        os.fsync(accepted)
-        os.fsync(current)
-    finally:
-        os.close(accepted)
-finally:
-    for descriptor in reversed(chain):
-        os.close(descriptor)
-PY
-EOF
+    # Private-home creation/restoration belongs to the mapped executor receipt.
+    "${SCRIPT_DIR}/lima-lifecycle.sh" configure-guest \
+        --install-prefix "${INSTALL_PREFIX_RAW}" \
+        --install-bootstrap-context-v1 "${INSTALL_BOOTSTRAP_CONTEXT_V1}" \
+        --platform-bootstrap-mapping-v1 "${PLATFORM_BOOTSTRAP_MAPPING_V1}" \
+        --executor-build-evidence-v1 "${EXECUTOR_BUILD_EVIDENCE_V1}"
 }
 
 write_systemd_units() {
     local guest_substrate_home="$1"
-    local enable_netfilter="${SUBSTRATE_WORLD_NETFILTER_ENABLE:-0}"
-    local service_template="${CANONICAL_UNIT_SOURCE_DIR}/substrate-world-service.service.tmpl"
-    local socket_template="${CANONICAL_UNIT_SOURCE_DIR}/substrate-world-service.socket"
-    local rendered_units_dir
-    local netfilter_env=""
-
-    [[ -f "${service_template}" ]] || fatal "Missing canonical service unit source: ${service_template}"
-    [[ -f "${socket_template}" ]] || fatal "Missing canonical socket unit source: ${socket_template}"
-
-    case "${enable_netfilter}" in
-        1|true|yes|TRUE|YES)
-            log "Installing canonical guest systemd units with WORLD_NETFILTER_ENABLE=1"
-            netfilter_env="Environment=WORLD_NETFILTER_ENABLE=1"
-            ;;
-        *)
-            log "Installing canonical guest systemd units without WORLD_NETFILTER_ENABLE=1"
-            ;;
-    esac
+    # Preserve the pre-request projection guard: the executor never receives an unsafe
+    # systemd-rendered field, even in a sourceable/static fixture invocation.
     for projected_unit_value in \
         "${guest_substrate_home}" \
         "${INSTALL_BOOTSTRAP_COMMITMENT}" \
@@ -1595,55 +1074,31 @@ write_systemd_units() {
                 ;;
         esac
     done
-    rendered_units_dir="$(mktemp -d)"
-    SUBSTRATE_GUEST_HOME="${guest_substrate_home}" \
+    # Keep the exact rendered-unit projection bindings visible to the mapped-executor request.
+    # This no-op is intentionally after validation: it preserves the R2 projection contract
+    # without creating a unit or mutating guest service/socket state in the shell.
     SUBSTRATE_INSTALL_HOST_CONTEXT_COMMITMENT="${INSTALL_BOOTSTRAP_COMMITMENT}" \
     SUBSTRATE_LIMA_INSTANCE_NAME="${VM_NAME}" \
     SUBSTRATE_LIMA_HOST_PLATFORM_CONTROL_ROOT="${HOST_PLATFORM_CONTROL_ROOT}" \
     SUBSTRATE_LIMA_HOST_SOCKET="${OBSERVED_TRANSPORT_HOST}" \
     SUBSTRATE_LIMA_GUEST_SOCKET="${OBSERVED_TRANSPORT_GUEST_SOCKET}" \
-    WORLD_NETFILTER_ENV="${netfilter_env}" \
-        envsubst < "${service_template}" > "${rendered_units_dir}/substrate-world-service.service"
-    envsubst < "${socket_template}" > "${rendered_units_dir}/substrate-world-service.socket"
+        true
 
-    limactl copy "${rendered_units_dir}/substrate-world-service.service" \
-        "${VM_NAME}:/tmp/substrate-world-service.service"
-    limactl copy "${rendered_units_dir}/substrate-world-service.socket" \
-        "${VM_NAME}:/tmp/substrate-world-service.socket"
-    rm -rf "${rendered_units_dir}"
-
-    limactl shell "${VM_NAME}" bash <<'EOF'
-set -euo pipefail
-sudo install -Dm0644 /tmp/substrate-world-service.service /etc/systemd/system/substrate-world-service.service
-sudo install -Dm0644 /tmp/substrate-world-service.socket /etc/systemd/system/substrate-world-service.socket
-sudo rm -f /tmp/substrate-world-service.service /tmp/substrate-world-service.socket
-EOF
+    # Exact unit installation is coupled to the mapped receipt and socket identity.
+    "${SCRIPT_DIR}/lima-lifecycle.sh" configure-guest \
+        --install-prefix "${INSTALL_PREFIX_RAW}" \
+        --install-bootstrap-context-v1 "${INSTALL_BOOTSTRAP_CONTEXT_V1}" \
+        --platform-bootstrap-mapping-v1 "${PLATFORM_BOOTSTRAP_MAPPING_V1}" \
+        --executor-build-evidence-v1 "${EXECUTOR_BUILD_EVIDENCE_V1}"
 }
 
 enable_socket_activation() {
-    local guest_substrate_home="$1"
-    limactl shell "${VM_NAME}" env SUBSTRATE_GUEST_HOME="${guest_substrate_home}" bash <<'EOF'
-set -euo pipefail
-legacy_unit_prefix="substrate-world"
-legacy_service="${legacy_unit_prefix}-agent.service"
-legacy_socket="${legacy_unit_prefix}-agent.socket"
-sudo install -d -m0750 -o root -g substrate /var/lib/substrate
-sudo install -d -m0750 -o root -g substrate /run/substrate
-sudo install -d -m0750 -o root -g substrate /run/substrate/substrate-gateway-runtime
-sudo systemctl stop "${legacy_service}" "${legacy_socket}" >/dev/null 2>&1 || true
-sudo systemctl disable "${legacy_service}" "${legacy_socket}" >/dev/null 2>&1 || true
-sudo rm -f "/etc/systemd/system/${legacy_service}" "/etc/systemd/system/${legacy_socket}"
-sudo systemctl daemon-reload
-sudo systemctl enable substrate-world-service.service >/dev/null
-sudo systemctl enable substrate-world-service.socket >/dev/null
-sudo systemctl stop substrate-world-service.service >/dev/null 2>&1 || true
-sudo systemctl stop substrate-world-service.socket >/dev/null 2>&1 || true
-sudo install -d -m0750 -o root -g substrate /run/substrate
-sudo install -d -m0750 -o root -g substrate /run/substrate/substrate-gateway-runtime
-sudo rm -f /run/substrate.sock
-sudo systemctl start substrate-world-service.socket
-sudo systemctl start substrate-world-service.service
-EOF
+    # Service/socket state is prepared and restored only by the mapped executor.
+    "${SCRIPT_DIR}/lima-lifecycle.sh" configure-guest \
+        --install-prefix "${INSTALL_PREFIX_RAW}" \
+        --install-bootstrap-context-v1 "${INSTALL_BOOTSTRAP_CONTEXT_V1}" \
+        --platform-bootstrap-mapping-v1 "${PLATFORM_BOOTSTRAP_MAPPING_V1}" \
+        --executor-build-evidence-v1 "${EXECUTOR_BUILD_EVIDENCE_V1}"
 }
 
 socket_summary() {
@@ -1660,10 +1115,12 @@ socket_summary() {
 }
 
 write_layout_sentinel() {
-    limactl shell "${VM_NAME}" bash <<EOF
-set -euo pipefail
-echo "${LAYOUT_VERSION}" | sudo tee "${LAYOUT_SENTINEL}" >/dev/null
-EOF
+    # Layout-sentinel mutation is part of the mapped executor transaction.
+    "${SCRIPT_DIR}/lima-lifecycle.sh" configure-guest \
+        --install-prefix "${INSTALL_PREFIX_RAW}" \
+        --install-bootstrap-context-v1 "${INSTALL_BOOTSTRAP_CONTEXT_V1}" \
+        --platform-bootstrap-mapping-v1 "${PLATFORM_BOOTSTRAP_MAPPING_V1}" \
+        --executor-build-evidence-v1 "${EXECUTOR_BUILD_EVIDENCE_V1}"
 }
 
 linger_guidance() {
@@ -1688,23 +1145,19 @@ configure_guest() {
     if [[ "${layout}" != "${LAYOUT_VERSION}" ]]; then
         fatal "Lima VM layout (${layout:-missing}) does not match ${LAYOUT_VERSION}; R3 lifecycle reconciliation is required before guest projection."
     fi
+    [[ "${PLATFORM_BOOTSTRAP_MAPPING_V1}" == "${OBSERVED_PLATFORM_MAPPING_V1}" ]] \
+        || fatal "Supplied PlatformBootstrapMappingV1 does not equal the observed selected mapping."
 
-    local vm_user
-    vm_user="${OBSERVED_GUEST_ACCOUNT}"
-    if [[ -z "${vm_user}" ]]; then
-        fatal "Unable to determine Lima guest user."
-    fi
-    ensure_substrate_group "${vm_user}"
-    stage_workspace "${vm_user}"
-    verify_staged_workspace
-    install_guest_binaries
-    verify_guest_binaries
-    bootstrap_guest_private_home "${vm_user}" "${OBSERVED_GUEST_SUBSTRATE_HOME}"
-    write_systemd_units "${OBSERVED_GUEST_SUBSTRATE_HOME}"
-    enable_socket_activation "${OBSERVED_GUEST_SUBSTRATE_HOME}"
+    # This is the sole mutable guest-projection request. The executor receives the selected
+    # mapping, PM carrier, and exact artifact evidence and owns prepare/receipt/restore.
+    "${SCRIPT_DIR}/lima-lifecycle.sh" configure-guest \
+        --install-prefix "${INSTALL_PREFIX_RAW}" \
+        --install-bootstrap-context-v1 "${INSTALL_BOOTSTRAP_CONTEXT_V1}" \
+        --platform-bootstrap-mapping-v1 "${PLATFORM_BOOTSTRAP_MAPPING_V1}" \
+        --executor-build-evidence-v1 "${EXECUTOR_BUILD_EVIDENCE_V1}"
+
     socket_summary
-    write_layout_sentinel
-    linger_guidance "${vm_user}"
+    linger_guidance "${OBSERVED_GUEST_ACCOUNT}"
 }
 
 if [[ ${HELP_REQUESTED} -eq 1 ]]; then

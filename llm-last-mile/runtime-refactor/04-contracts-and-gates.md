@@ -10126,3 +10126,11 @@ provider checkpoint. It materializes the validated external evidence artifact an
 receipt with the orchestration skill validator, and records the bounded closeout review set. The
 packet changes no production or test bytes, performs no Linux repair or MAC dispatch, and for this
 authoritative orchestration the terminal successor is `COMPLETE`.
+
+### `A1.1d-5R3-MAC`
+
+The MAC implementation request is closed over the selected prefix, install bootstrap carrier,
+PlatformBootstrapMappingV1, and ExecutorBuildEvidenceV1. The implementation package models and
+validates those joins with non-executing fixtures; native build, Keychain/XPC/Lima lifecycle
+exercise, operator-TTY pairing, receipt collection, and restoration evidence are deferred without
+substitution to `EVIDENCE:R3-MAC-IMP-01`.
