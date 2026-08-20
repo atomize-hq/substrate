@@ -3958,9 +3958,10 @@ introducing another intent contract:
     participant; `RuntimeCreationRejected` requires `LaunchApplicationClaimant` whose claim and
     claimant-attempt IDs exactly equal both the evidence and the persisted Applied intent. Every
     other actor/event pairing fails closed.
-    `HostExecutionEpisode` owns observation reporting and A1.3's bounded real helper/REPL adapter
-    transports that exact protocol event into one closed `HostStartupOwnershipEvidenceV1`; neither
-    may relabel local observations into a protocol event. `HostSessionAuthority`, not the episode
+    `HostExecutionEpisode` owns observation reporting and A1.3-P0's bounded real helper/REPL
+    transport adapter carries that exact protocol event into one closed
+    `HostStartupOwnershipEvidenceV1`; neither may relabel local observations into a protocol event.
+    `HostSessionAuthority`, not the episode
     record, durably captures the submitted actor/event inside the committed
     `StartupOwnershipResultHashInputV1`. The plan and `SurfaceAdapter` only transport it. The evidence binds exact
     store, session, intent, claim, claimant attempt, run, application ref, expected authority
@@ -3999,7 +4000,8 @@ introducing another intent contract:
     That phase—not the evidence object by itself—is the current-authority proof for the terminal
     revision. Exact retry joins the same ancestry, phase, and result.
     This CAS increments `intent_revision` exactly once. A1.2 owns this internal decision protocol;
-    A1.3 owns invocation by the real helper/REPL consumer, and A2 later generalizes episode
+    A1.3-P0 first owns invocation by the real helper/REPL public transport consumer, A1.3 later
+    consumes that landed split for public adoption and closeout, and A2 later generalizes episode
     observations without weakening these A1 commitments.
 13. Transport stays `Retained`/object-index `Present` until one exact committed terminal handoff,
     using strict V1/V2 dispatch from the matrix above, proves release. Input-bearing modes require Accepted or
@@ -10425,7 +10427,9 @@ The complete decision record is
 This was the global documentation/control-plane rebind-and-selection gate. It superseded the former
 use of `AUTHORITY_REQUIRED:MACOS_DEV_PARITY` as the global product-work predecessor, while leaving
 the macOS lane contract above unchanged in scope. It is now closed only as the selection of the
-active [A1.3 Linux-first implementation packet](linux-first-runtime-resumption/A1.3-LINUX-FIRST-PACKET.md).
+historical [A1.3 Linux-first implementation packet](linux-first-runtime-resumption/A1.3-LINUX-FIRST-PACKET.md),
+later amended so the active implementation authority is
+[`linux-first-runtime-resumption/A1.3-P0-LINUX-FIRST-PREPARATORY-PACKET.md`](linux-first-runtime-resumption/A1.3-P0-LINUX-FIRST-PREPARATORY-PACKET.md).
 
 ### Admission
 
@@ -10448,5 +10452,7 @@ packet without separate authority.
 
 The complete global scheduling decision and closed selection record are
 [`linux-first-runtime-resumption/DECISION.md`](linux-first-runtime-resumption/DECISION.md). The
-separate, active A1.3 implementation authority is
+separate, active A1.3-P0 implementation authority is
+[`linux-first-runtime-resumption/A1.3-P0-LINUX-FIRST-PREPARATORY-PACKET.md`](linux-first-runtime-resumption/A1.3-P0-LINUX-FIRST-PREPARATORY-PACKET.md),
+and the held-later A1.3 packet remains
 [`linux-first-runtime-resumption/A1.3-LINUX-FIRST-PACKET.md`](linux-first-runtime-resumption/A1.3-LINUX-FIRST-PACKET.md).

@@ -5,7 +5,7 @@
 - **Status:** accepted for active scheduling; documentation-only decision.
 - **Effective date:** 2026-08-20.
 - **Reentry gate:** `AUTHORITY_REQUIRED:RUNTIME_REFACTOR_REENTRY` (closed by the selection below).
-- **Active global implementation packet:** [`A1.3-LINUX-FIRST-PACKET.md`](A1.3-LINUX-FIRST-PACKET.md).
+- **Active global implementation packet:** [`A1.3-P0-LINUX-FIRST-PREPARATORY-PACKET.md`](A1.3-P0-LINUX-FIRST-PREPARATORY-PACKET.md).
 - **Supersedes:** the 2026-08-19 macOS developer-parity decision only where it made
   `AUTHORITY_REQUIRED:MACOS_DEV_PARITY` the global product-work predecessor. It does not weaken,
   close, or authorize the macOS parity lane.
@@ -26,9 +26,9 @@ the dedicated `feat/macos-dev-installer-parity` branch after a separate branch/w
 branch is created by this decision. Windows remains deferred until a later, separately authorized
 scheduling decision after the runtime refactor is complete.
 
-The sole global next step is the bounded
-`AUTHORITY_REQUIRED:RUNTIME_REFACTOR_REENTRY` control-plane packet. It is a rebind-and-selection
-packet, not product implementation authority. It must:
+At the time of this scheduling decision, the sole global next step was the bounded
+`AUTHORITY_REQUIRED:RUNTIME_REFACTOR_REENTRY` control-plane packet. It was a rebind-and-selection
+packet, not product implementation authority. Its required duties were to:
 
 1. rebind the live product branch, ancestry, worktree/index, source baseline, current control-pack
    state, and the already-landed historical evidence it relies on;
@@ -40,17 +40,33 @@ Only the selected later packet may receive separate implementation authority. Th
 not assume that A1.3, A1.4, or any other historical label was the next implementation packet until
 the rebind was complete.
 
-## Reentry selection (2026-08-20; controlling)
+## Reentry selection (2026-08-20; historical selection record)
 
 The reentry packet is closed as documentation/control-plane selection only. Its live branch,
 ancestry, control-pack, historical-evidence, Linux-first, macOS-exclusion, and Windows-deferral
-rebind selected **A1.3 — public/successor adoption and startup-result completion**. The complete
-narrow implementation authority, path/symbol fence, Linux-first acceptance criteria, verification,
-shared-surface rule, and exclusions are in
+rebind selected **A1.3 — public/successor adoption and startup-result completion**. That selected
+later packet remains preserved at
 [`A1.3-LINUX-FIRST-PACKET.md`](A1.3-LINUX-FIRST-PACKET.md).
 
-A1.3 is the active next implementation packet. This selection itself performed no runtime,
-installer, Lima, macOS, Windows, archive, or native operation and does not claim A1.3 completion.
+This historical selection itself performed no runtime, installer, Lima, macOS, Windows, archive,
+or native operation and did not claim A1.3 completion.
+
+## A1.3-P0 preparatory amendment (2026-08-20; controlling)
+
+The frozen evidence packet at remote path
+`llm-last-mile/runtime-refactor/review-control/a1-3-p0-scope-expansion-evidence.md`, bound to
+commit `6bb9901e9c0f030224e4e6208ac5a399ebc65d85`, proved that the then-current
+A1.3 fence would require unapproved expansion across the legacy hidden-owner launcher corridor and
+its frozen auto-attach caller. Public `run_start`, `run_turn`, and `run_reattach` still reached the
+legacy `launch_hidden_owner_helper` path; the authority-managed route still crossed readiness,
+timeout-reconciliation, and legacy authority-write boundaries; and `agent_runtime/auto_attach.rs`
+remained a separate compatibility caller on that same launcher.
+
+Therefore A1.3 is held open behind a narrower preparatory split. The active next implementation
+packet is now **A1.3-P0 — authority-bound transport split preparatory packet**, recorded in
+[`A1.3-P0-LINUX-FIRST-PREPARATORY-PACKET.md`](A1.3-P0-LINUX-FIRST-PREPARATORY-PACKET.md). A1.3
+does not resume and may not claim `RG-BASE-01` until A1.3-P0 is implemented, independently
+reviewed, and exits on its exact Linux proof wall.
 
 ## macOS lane
 
@@ -96,7 +112,8 @@ proof rather than a historical label. That rebind later selected A1.3.
 - The macOS lane remains deliberately narrow and may proceed independently only under its own
   fresh authorization.
 - This scheduling decision itself did not create a branch, modify product source, re-open Linux
-  R3, or perform a Linux proof run. Its separately recorded reentry selection later activated the
-  bounded A1.3 packet only.
+  R3, or perform a Linux proof run. Its separately recorded reentry selection first selected A1.3,
+  and the later bounded amendment now activates only the A1.3-P0 preparatory packet while holding
+  A1.3 open.
 - This decision does not dispatch Windows, protected macOS lifecycle revival, Keychain activity,
   Attempt 4 inspection or remediation, installer execution, Lima actions, or native operations.

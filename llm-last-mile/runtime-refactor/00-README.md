@@ -35,9 +35,12 @@ No seam was promoted and no public consumer adoption moved. That checkpoint's
 decision removed protected macOS lifecycle and Windows predecessors, but its former global
 blocking order is superseded by the Linux-first scheduling decision in
 [`linux-first-runtime-resumption/DECISION.md`](linux-first-runtime-resumption/DECISION.md). The
-reentry gate is closed as a documentation-only selection. The active next implementation packet is
-[`linux-first-runtime-resumption/A1.3-LINUX-FIRST-PACKET.md`](linux-first-runtime-resumption/A1.3-LINUX-FIRST-PACKET.md);
-macOS parity remains a separate lane under `AUTHORITY_REQUIRED:MACOS_DEV_PARITY`.
+reentry gate is closed as a documentation-only historical selection. The active next
+implementation packet is
+[`linux-first-runtime-resumption/A1.3-P0-LINUX-FIRST-PREPARATORY-PACKET.md`](linux-first-runtime-resumption/A1.3-P0-LINUX-FIRST-PREPARATORY-PACKET.md);
+[`linux-first-runtime-resumption/A1.3-LINUX-FIRST-PACKET.md`](linux-first-runtime-resumption/A1.3-LINUX-FIRST-PACKET.md)
+remains held open behind that preparatory split, and macOS parity remains a separate lane under
+`AUTHORITY_REQUIRED:MACOS_DEV_PARITY`.
 
 ## Canonical repo location
 
@@ -258,7 +261,10 @@ candidate, and the then-current gate was `AUTHORITY_REQUIRED:R3_RESUME`. The for
 was `AUTHORITY_REQUIRED:MACOS_DEV_PARITY`, which still owns the macOS lane, but the current global
 replacement was the reentry gate under
 [`linux-first-runtime-resumption/DECISION.md`](linux-first-runtime-resumption/DECISION.md), now
-closed by the selected [A1.3 Linux-first packet](linux-first-runtime-resumption/A1.3-LINUX-FIRST-PACKET.md).
+closed first by the selected
+[A1.3 Linux-first packet](linux-first-runtime-resumption/A1.3-LINUX-FIRST-PACKET.md) and then
+amended to the active
+[A1.3-P0 Linux-first preparatory packet](linux-first-runtime-resumption/A1.3-P0-LINUX-FIRST-PREPARATORY-PACKET.md).
 Protected macOS lifecycle and Windows R3 are not current product predecessors. No
 `cargo test --workspace`
 expected-failure inventory is frozen at this checkpoint; approximate workspace-failure counts are
@@ -1296,13 +1302,16 @@ authorize implementation, evidence, cleanup, or successor dispatch.
   disjointness; any real collision requires a separately authorized disposition.
 - Phase 1 authorizes no macOS Phase 2 work. `AUTHORITY_REQUIRED:MACOS_DEV_PARITY` remains a
   lane-local gate; it does not block or authorize the runtime-refactor sequence. A1.3 is selected
-  only under its separate Linux-first implementation packet; A1.4, Windows, E03, and all other
-  successors remain undispatched.
+  only under its separate Linux-first packet and is currently held open behind `A1.3-P0`; A1.4,
+  Windows, E03, and all other successors remain undispatched.
 
 ## Linux-first runtime-refactor scheduling decision (2026-08-20; controlling)
 
 [`linux-first-runtime-resumption/DECISION.md`](linux-first-runtime-resumption/DECISION.md)
 supersedes the macOS decision's former global blocking order. The reentry gate has closed as a
-live-source selection of [A1.3](linux-first-runtime-resumption/A1.3-LINUX-FIRST-PACKET.md), the
-active Linux-first implementation packet. macOS parity may proceed in its separate lane and Windows
+live-source historical selection of
+[A1.3](linux-first-runtime-resumption/A1.3-LINUX-FIRST-PACKET.md), now amended so the active
+Linux-first implementation packet is
+[A1.3-P0](linux-first-runtime-resumption/A1.3-P0-LINUX-FIRST-PREPARATORY-PACKET.md). A1.3 remains
+held open behind that preparatory split. macOS parity may proceed in its separate lane and Windows
 remains deferred. Neither lane's closure dispatches the other's successor.
