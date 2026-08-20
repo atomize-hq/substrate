@@ -1,0 +1,53 @@
+{
+  "protocol": "codex.meta-authority-amendment.v1",
+  "orchestration_id": "substrate-a1-1d-5r3-mac-20260806-41f97e1c570d",
+  "amendment_id": "0052-r3-mac-guest-pairing-convergence-closure",
+  "issued_at_utc": "2026-08-12T21:00:00Z",
+  "applies_to": "AUX-R3-MAC-FIXED-INSTALL-COMPLETION-CORRECTION",
+  "supersedes_only": "0051 implementation_fence new_path_rule for the single guest-executor path named below",
+  "authority_basis": {
+    "explicit_user_authorization": "ok, please continue then",
+    "context": "The user authorized continuation after being told the remaining findings legitimately block macOS pairing/smoke or invalidate its evidence.",
+    "reason": "Final causal review proved that the existing Lima guest pairing executor still conflates the host Mach-O digest with the guest AArch64 ELF digest and rejects admitted-effect recovery after expiry. These defects cannot be corrected solely in the 0051 file fence."
+  },
+  "expected_base": {
+    "commit": "5dc5d98ad76ee5f9758f7bc139e453c47ce46d20",
+    "tree": "19e682e3b63be3eada088d7f48c6406fbcf3168e",
+    "target_ref": "refs/heads/feat/internal-host-orchestrator-world-dispatch-bootstrap"
+  },
+  "additional_product_path": "src/bin/substrate-lifecycle-linux.rs",
+  "authorized_guest_changes": [
+    "consume the separately typed host-control Mach-O and guest-publisher AArch64 ELF identities without equality or substitution",
+    "bind guest intent and resume checks to the manifest-bound guest ELF identity",
+    "permit structural validation and convergence of an already-admitted PairingEffectStarted effect after its wall-clock deadline while rejecting every new effect from expired authority",
+    "replay the exact original receipt for an already Consumed effect",
+    "add colocated executable tests for cross-substitution, pre-admission expiry rejection, post-admission expiry convergence, and consumed receipt replay"
+  ],
+  "additional_required_closures": [
+    "accept only the closed expired_effect_recovery control state and route it to exact recovery",
+    "remove recursive same-account lock acquisition during expired-unused rotation",
+    "make socket and service activation one convergent effect or admit an exact independently verified After state before journaling without using a readiness probe that itself demand-activates the service",
+    "make the 300-second post-durability generation law interruption-safe without recursive unbounded generation production",
+    "commit the entire canonical Stage-1 pairing bundle rather than predecessor-only bytes",
+    "recheck protected-state anchor after live replacement observation and before CAS",
+    "remove the deterministic test signer from production API and keep signing fixtures test-only",
+    "execute the embedded readiness observer through deterministic command adapters, including reboot, unit identity, socket metadata, and endpoint failures"
+  ],
+  "containment": {
+    "ordinary_linux_host_behavior_change": false,
+    "new_command_or_transport": false,
+    "new_binary_or_dependency": false,
+    "pairing_confirmation_bypass": false,
+    "scope": "Only the already-existing macOS Lima guest pairing command and its recovery path may change. Linux world provisioning, Linux host provider behavior, sockets, policy, and ordinary CLI behavior remain byte-identical or semantically unchanged."
+  },
+  "prohibited_actions": [
+    "new guest transport, VSock, SSH selector, endpoint, generic scheduler, or pairing architecture",
+    "automatic pairing or terminal-confirmation bypass",
+    "new effect from expired authority",
+    "ordinary Linux host lifecycle behavior change",
+    "native installer, Lima, Keychain, launchd, evidence, MAC-CLOSEOUT, commit, or push before terminal CLEAN review"
+  ],
+  "review_requirement": "Rerun the three fresh causal closure lenses and require zero unresolved P1/P2 before landing.",
+  "evidence_dispatch_authorized": false,
+  "mac_closeout_authorized": false
+}

@@ -1,0 +1,143 @@
+{
+  "protocol": "codex.meta-authority-amendment.v1",
+  "orchestration_id": "substrate-a1-1d-5r3-mac-20260806-41f97e1c570d",
+  "amendment_id": "0051-r3-mac-fixed-install-r6-pairing-predecessor",
+  "issued_at_utc": "2026-08-12T19:58:50Z",
+  "applies_to": "AUX-R3-MAC-FIXED-INSTALL-COMPLETION-CORRECTION",
+  "task_host_id": "local",
+  "task_worktree": "/Users/spensermcconnell/.codex/worktrees/49bb/substrate",
+  "expected_base": {
+    "remote": "origin",
+    "target_ref": "refs/heads/feat/internal-host-orchestrator-world-dispatch-bootstrap",
+    "commit": "5dc5d98ad76ee5f9758f7bc139e453c47ce46d20",
+    "tree": "19e682e3b63be3eada088d7f48c6406fbcf3168e"
+  },
+  "authority_basis": {
+    "explicit_user_authorization": "This is authorized, pending a ChatGPT Pro consultation.",
+    "conditional_satisfied": true,
+    "consultation_disposition": "ADJUST_DONT_PIVOT",
+    "consultation_record": "/Users/spensermcconnell/.codex/worktrees/eb49/substrate/llm-last-mile/runtime-refactor/review-control/chatgpt-pro-r3-mac-fixed-install-r6-authority-guidance-2026-08-12.md",
+    "consultation_record_sha256": "sha256:34721755c39db65450fc3201f9f6def4a6b30393b0ba1b9ef4976e908636672c",
+    "consultation_url": "https://chatgpt.com/c/6a7cca99-8810-83ea-b5b4-b69d2c7e012d",
+    "consultation_mode": "GPT-5.6 Sol Pro",
+    "consultation_caveat": "Advisory only; verify against local project truth and authoritative docs; do not reduce scope without user approval."
+  },
+  "authorized_transition": {
+    "name": "mac.r6.pairing-predecessor.ensure-v1",
+    "summary": "Following durable completion and revalidation of the already-admitted fixed R3 install, the exact existing privileged macOS executor may perform one closed, domain-separated protected-state transition that creates or restores the current R6 pairing predecessor and emits its corresponding data-only pairing continuation.",
+    "caller_role": "The canonical installer may request this exact transition and display or persist its returned data-only continuation. It may not select an action, path, generation, expiry, identity, digest, anchor, signature payload, or raw Stage-1 authority.",
+    "producer_role": "The existing privileged macOS executor derives every authority field from protected state, the durably completed R3 receipt, the finalized PM mapping, the observed guest identity and home, and the manifest-bound guest Linux executor identity.",
+    "preconditions": [
+      "the original R3 fixed-install effect was admitted while its Stage-1 authority was valid",
+      "the literal fixed-install plan is durably complete and revalidated against current protected state and guest observation",
+      "the committed R3 completion receipt and exact pre-CAS completed-install parent anchor are available",
+      "no pairing effect is already EffectStarted or Consumed for the current generation",
+      "the host Mach-O helper identity and guest AArch64 ELF executor identity are independently typed and exact"
+    ],
+    "signature_domains": [
+      "R6_PAIRING_PREDECESSOR_V1",
+      "R6_PAIRING_CONTINUATION_V1"
+    ],
+    "required_predecessor_bindings": [
+      "pairing-only scope",
+      "exact producer host code identity and signer SPKI",
+      "original Stage-1 admission digest",
+      "fixed-install plan identity and durable completion receipt",
+      "current manifest identity",
+      "finalized platform mapping",
+      "stable observed guest identity",
+      "observed guest home and managed guest Substrate home",
+      "guest executor role, ELF format, AArch64 architecture, SHA-256, size, and manifest binding",
+      "pre-CAS completed-install parent anchor",
+      "predecessor identity and generation",
+      "issued-at and expires-at"
+    ],
+    "anchor_law": "The predecessor is signed against the pre-CAS completed-install parent anchor. The emitted continuation binds the post-CAS committed predecessor anchor or exact CAS receipt. The two anchors must be distinct fields and must never be represented by an ambiguous current-anchor value.",
+    "identity_law": "Host Mach-O control/helper image identities and guest AArch64 ELF executor identities use distinct types, fields, parsers, comparisons, and tests. Neither digest may substitute for the other.",
+    "expiry_law": "The pairing-only continuation receives a fixed, non-caller-selectable 300-second validity window beginning only after both predecessor and continuation bytes are durably persisted. This does not renew, extend, or replay the original Stage-1 effect authority.",
+    "stage_one_expiry_law": "Original Stage-1 validity is checked when the fixed-install effect is admitted. Once admitted and durably precommitted, expiry does not prevent convergence or recovery of that exact effect. No new install effect may begin from expired Stage-1 authority.",
+    "lost_response_law": "An exact retry returns the exact persisted predecessor and continuation bytes and never re-signs equivalent content.",
+    "generation_law": "At most one live pairing predecessor generation may exist. An expired unused generation may be replaced only through this dedicated operation when fixed-install state is unchanged and no pairing effect is EffectStarted or Consumed. CAS consumes the expired generation and creates the next; every old continuation remains permanently rejected.",
+    "consumption_law": "The protected state machine is Available -> PairingEffectStarted -> Consumed. A clean pre-effect failure may remain Available or converge by exact retry. Any effect-visible or ambiguous failure must not restore availability. Successful retry returns the original receipt.",
+    "continuation_law": "The returned continuation is pairing-only, data-only, non-auto-running, contains no pairing ticket or reusable secret, and requires the already-authorized independent guest terminal confirmation before any pairing effect."
+  },
+  "fixed_install_remediation": {
+    "required": [
+      "bind the managed guest Substrate home to the observed guest home plus /.substrate rather than creating the already-existing Lima account home",
+      "make every EffectStarted filesystem mutation convergent with verified same-filesystem temporary objects, fsync, atomic publication, exact temp recovery, and generation-correct staging keys",
+      "make root-side adoption transactional with exact rollback or preserving stop before committed provenance",
+      "make systemd own or revalidate volatile runtime paths after reboot",
+      "order socket/service activation so socket activation cannot create a Before-only retry wedge",
+      "prove exact unit identities, socket owner/group/mode, and protocol-level endpoint readiness before completion",
+      "use field-specific systemd encoding and preserve valid prefixes containing spaces",
+      "populate canonical nonempty R6 scope, prefix, principal, mapping, and carrier fields and exercise the production validator",
+      "reject macOS --world-netfilter before privileged mutation and reject it again in the privileged executor until separately authorized"
+    ],
+    "artifact_ingress": "Retain exactly the four existing manifest-bound AArch64 Linux roles. Preserve external locked/offline build provenance, no-follow regular-file verification, and transactional adoption. No new binary target is authorized.",
+    "readiness_gate": "R6 predecessor production is disabled until fixed-install durability, recovery, service/socket readiness, and endpoint proof all pass."
+  },
+  "implementation_fence": {
+    "product_paths": [
+      "crates/common/src/lib.rs",
+      "crates/common/src/managed_artifact.rs",
+      "crates/shell/src/execution/managed_lifecycle.rs",
+      "crates/shell/src/execution/managed_lifecycle/macos_client.rs",
+      "scripts/mac/lima-warm.sh",
+      "scripts/substrate/dev-install-substrate.sh",
+      "src/bin/substrate-lifecycle-control.rs",
+      "src/bin/substrate-lifecycle-macos.rs"
+    ],
+    "contract_and_test_paths": [
+      "llm-last-mile/runtime-refactor/04-contracts-and-gates.md",
+      "llm-last-mile/runtime-refactor/review-control/r3-mac-fixed-install-completion-review-authority-security.md",
+      "llm-last-mile/runtime-refactor/review-control/r3-mac-fixed-install-completion-review-lifecycle-convergence.md",
+      "llm-last-mile/runtime-refactor/review-control/r3-mac-fixed-install-completion-review-allowlist-evidence.md",
+      "llm-last-mile/runtime-refactor/review-control/r3-mac-fixed-install-completion-review-cycle-record.json",
+      "crates/common/src/managed_artifact.rs",
+      "crates/shell/tests/managed_lifecycle_v1.rs",
+      "tests/mac/lifecycle_r3.sh",
+      "tests/mac/limactl_principal_runner_r3.sh",
+      "tests/mac/prestage_artifact_route_r3.sh"
+    ],
+    "new_path_rule": "A path outside this fence requires a stop unless it is an existing colocated test module inside an authorized product path. No production-path inference is permitted."
+  },
+  "required_proof": [
+    "base-red and final-green tests for schema closure, typed host/guest identity separation, two-anchor semantics, 300-second issuance, exact lost-response replay, expired-unused replacement, single-use consumption, and Stage-1-expiry convergence",
+    "interruption and retry tests for every filesystem publication boundary, including partial temporary objects, changed generations, rollback, and reboot-loss of volatile paths",
+    "executable adversarial tests for four-role adoption, guest transfer, unit projection, activation ordering, socket metadata, endpoint readiness, prefix spaces, and netfilter rejection",
+    "locked/offline exact four-role AArch64 build and identity inspection outside every checkout",
+    "macOS control/executor compilation, focused Rust and shell tests, formatting, diff, allowlist, frozen-platform, and secret checks",
+    "fresh causal cascading review through terminal CLEAN with zero unresolved P1 or P2 before commit and publication"
+  ],
+  "prohibited_actions": [
+    "generic lifecycle scheduler, caller selector, catalogue traversal, Stop, Remove, Restore, or destructive repair",
+    "new helper, transport, endpoint, VSock route, ownership-separated Lima migration, or pairing architecture pivot",
+    "automatic pairing, embedded pairing ticket, reusable pairing secret, or terminal-confirmation bypass",
+    "renewal or replay of the original Stage-1 effect authority",
+    "host Mach-O and guest ELF digest conflation",
+    "macOS netfilter enablement or silent ignore",
+    "new Cargo target, manifest, or lockfile change",
+    "Windows, WSL, ordinary Linux-host behavior change, native evidence, MAC-CLOSEOUT, successor dispatch, or platform cleanup"
+  ],
+  "review_and_landing": {
+    "review_required": true,
+    "review_mode": "fresh causal cascading review",
+    "required_lenses": [
+      "authority/security",
+      "lifecycle/convergence",
+      "allowlist/evidence"
+    ],
+    "terminal_disposition": "CLEAN",
+    "unresolved_p1": 0,
+    "unresolved_p2": 0,
+    "landing_authorized_only_after_clean": true,
+    "publication_mode": "fast-forward remote target ref"
+  },
+  "blocker_policy": "Adjudicate exact clerical and in-fence test issues. Stop for any new authority, architecture, identity, recovery, platform, or unresolved P1/P2 contradiction.",
+  "terminal_requirements": {
+    "success_status": "LANDED_CLEAN",
+    "next_increment": "EVIDENCE:R3-MAC-IMP-01",
+    "evidence_dispatch_authorized": false,
+    "mac_closeout_authorized": false
+  }
+}
