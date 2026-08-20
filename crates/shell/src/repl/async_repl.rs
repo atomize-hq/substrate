@@ -3114,6 +3114,250 @@ fn apply_greenfield_host_start_from_authority(
     })
 }
 
+/// Applies the authority-owned Start reservation for a public owner-helper before launch.
+///
+/// The hidden helper later resolves `Pending` startup ownership from its own exact
+/// participant-bound acceptance.  This function deliberately does not infer any
+/// startup evidence from the parent process, PID, socket, or listener state.
+#[cfg(target_os = "linux")]
+pub(crate) fn apply_public_start_authority(
+    plan: &HiddenOwnerHelperLaunchPlan,
+    resolved_contract: &ResolvedLaunchContract,
+    accepted_bootstrap_home: &Path,
+) -> Result<()> {
+    if plan.mode != OwnerHelperMode::Start {
+        anyhow::bail!("public Start authority application requires a Start helper plan");
+    }
+
+    let trusted_root = TrustedAuthorityRoot::open(accepted_bootstrap_home)
+        .context("open accepted bootstrap home for public Start")?;
+    let authority = HostSessionAuthority::from_trusted_root(trusted_root)
+        .map_err(|error| anyhow!("bind host-session authority for public Start: {error}"))?;
+    let (authority_store_root, authority_store_id) = match authority.read_a12a_root() {
+        Ok(root) => (root.bootstrap_home, root.authority_store_id),
+        Err(_) => {
+            let root = authority.bootstrap().map_err(|error| {
+                anyhow!("establish host-session authority for public Start: {error}")
+            })?;
+            (root.bootstrap_home, root.authority_store_id)
+        }
+    };
+
+    let workspace_path = fs::canonicalize(&plan.session.workspace_root).with_context(|| {
+        format!(
+            "normalize public Start workspace {}",
+            plan.session.workspace_root
+        )
+    })?;
+    let workspace_string = workspace_path
+        .to_str()
+        .filter(|path| path.starts_with('/'))
+        .ok_or_else(|| anyhow!("public Start workspace requires an absolute stable UTF-8 path"))?
+        .to_string();
+    let workspace_metadata = fs::metadata(&workspace_path).with_context(|| {
+        format!(
+            "inspect normalized public Start workspace {}",
+            workspace_path.display()
+        )
+    })?;
+    let workspace_binding = {
+        use std::os::unix::fs::MetadataExt;
+
+        WorkspaceBindingV1 {
+            workspace_root: CanonicalDirectoryV1 {
+                physical_path: workspace_string,
+                physical_identity: DirectoryPhysicalIdentityV1::Linux {
+                    device_id: workspace_metadata.dev(),
+                    inode: workspace_metadata.ino(),
+                },
+            },
+            authority_store_root,
+            authority_store_id,
+        }
+    };
+    let policy_snapshot = crate::execution::policy_snapshot::resolve_policy_snapshot_for_bootstrap_home(
+        &workspace_path,
+        &authority.bootstrap_home(),
+    )
+    .context("resolve accepted-home policy snapshot for public Start")?;
+    let policy = PolicyObjectHashInputV1 {
+        schema_version: 1,
+        policy_revision: policy_snapshot.snapshot_hash.clone(),
+        canonical_policy_snapshot_sha256: policy_snapshot.snapshot_hash,
+    };
+    let descriptor = owner_helper_runtime_descriptor(&plan.descriptor)
+        .map_err(|failure| anyhow!(failure.message))?;
+    let backend_kind = match descriptor.backend_kind {
+        AgentRuntimeBackendKind::Codex => RuntimeBackendKindV1::Codex,
+        AgentRuntimeBackendKind::ClaudeCode => RuntimeBackendKindV1::ClaudeCode,
+    };
+    let binary_path = descriptor
+        .binary_path
+        .to_str()
+        .ok_or_else(|| anyhow!("public Start descriptor binary path must be stable UTF-8"))?
+        .to_string();
+    let authority_descriptor = AgentDescriptorV1 {
+        schema_version: 1,
+        agent_id: descriptor.agent_id,
+        backend_id: descriptor.backend_id,
+        backend_kind,
+        protocol: descriptor.protocol,
+        execution_scope: match descriptor.execution_scope {
+            AgentExecutionScope::Host => AgentExecutionScopeV1::Host,
+            AgentExecutionScope::World => AgentExecutionScopeV1::World,
+        },
+        binary_path,
+    };
+    let capabilities = HostAttachCapabilitiesV1 {
+        session_resume: resolved_contract.capabilities.session_resume,
+        session_fork: resolved_contract.capabilities.session_fork,
+        session_stop: resolved_contract.capabilities.session_stop,
+        status_snapshot: resolved_contract.capabilities.status_snapshot,
+        event_stream: resolved_contract.capabilities.event_stream,
+    };
+    let launch_knobs = HostAttachLaunchKnobsV1 {
+        requested_execution_scope: match resolved_contract
+            .attach_launch_knobs
+            .requested_execution_scope
+        {
+            AgentExecutionScope::Host => AgentExecutionScopeV1::Host,
+            AgentExecutionScope::World => AgentExecutionScopeV1::World,
+        },
+        host_execution_client_start: match resolved_contract
+            .attach_launch_knobs
+            .host_execution_client_start
+        {
+            HostExecutionClientStart::StartNow => HostAttachExecutionClientStartV1::StartNow,
+            HostExecutionClientStart::Defer => HostAttachExecutionClientStartV1::Defer,
+        },
+        attach_mode_preference: match resolved_contract.attach_launch_knobs.attach_mode_preference {
+            AttachModePreference::ContinuityRequired => {
+                HostAttachModePreferenceV1::ContinuityRequired
+            }
+            AttachModePreference::ContinuityPreferred => {
+                HostAttachModePreferenceV1::ContinuityPreferred
+            }
+            AttachModePreference::FreshAllowed => HostAttachModePreferenceV1::FreshAllowed,
+        },
+    };
+    let world_binding = match (&plan.session.world_id, plan.session.world_generation) {
+        (Some(world_id), Some(world_generation)) => Some(WorldBindingV1 {
+            world_id: world_id.clone(),
+            world_generation,
+        }),
+        (None, None) => None,
+        _ => anyhow::bail!("public Start helper plan has an incomplete world binding"),
+    };
+    let intent_id = format!("hti_public_{}", plan.session.orchestration_session_id);
+    let issuer_request_id = format!("req_public_{}", plan.participant.run_id);
+    let claim_id = format!("clm_public_{}", plan.participant.run_id);
+    let claimant_attempt_id = format!("atm_public_{}", plan.participant.participant_id);
+    let request = IssueHostSessionTransitionRequestV1 {
+        intent_id,
+        issuer_request_id: issuer_request_id.clone(),
+        mode: HostSessionTransitionModeV1::Start,
+        authority_precondition: HostSessionAuthorityPreconditionV1::ExpectedAbsent,
+        orchestration_session_id: plan.session.orchestration_session_id.clone(),
+        shell_trace_session_id: plan.session.shell_trace_session_id.clone(),
+        caller: HostSessionTransitionCallerV1 {
+            kind: HostSessionTransitionCallerKindV1::PublicCli,
+            caller_participant_id: None,
+            auto_attach_obligation_id: None,
+            auto_attach_claim_owner: None,
+        },
+        source_authoritative_participant_id: None,
+        target_authoritative_participant_id: plan.participant.participant_id.clone(),
+        target_participant_lease_token: plan.participant.lease_token.as_bytes().to_vec(),
+        run_id: plan.participant.run_id.clone(),
+        resulting_authoritative_lineage: vec![plan.participant.participant_id.clone()],
+        workspace_binding,
+        world_binding: world_binding.clone(),
+        start_contract: StartContractMaterialV1 {
+            descriptor: authority_descriptor.clone(),
+            policy,
+            capabilities,
+            launch_knobs,
+        },
+        transition_input: None,
+    };
+    let issued = authority
+        .issue_start(&request)
+        .map_err(|error| anyhow!("issue or exact-join public Start: {error}"))?;
+    let intent = match issued {
+        TransitionIssueOutcomeV1::Issued(intent) | TransitionIssueOutcomeV1::Joined(intent) => {
+            intent
+        }
+    };
+    let application = match &intent.state {
+        HostSessionTransitionIntentStateV2::Applied { claim_id, .. } => {
+            let expected_claim_revision = intent
+                .intent_revision
+                .checked_sub(1)
+                .ok_or_else(|| anyhow!("applied public Start revision underflow"))?;
+            ApplyHostSessionTransitionRequestV1 {
+                intent_id: intent.intent_id.clone(),
+                issuer_request_id,
+                payload_commitment: intent.payload_commitment.clone(),
+                expected_intent_revision: expected_claim_revision,
+                claim_id: claim_id.clone(),
+                expected_claim_revision,
+            }
+        }
+        HostSessionTransitionIntentStateV2::Issued
+        | HostSessionTransitionIntentStateV2::Claimed { .. } => {
+            let claimed = authority
+                .claim_start(&ClaimHostSessionTransitionRequestV1 {
+                    intent_id: intent.intent_id.clone(),
+                    issuer_request_id: issuer_request_id.clone(),
+                    payload_commitment: intent.payload_commitment.clone(),
+                    expected_intent_revision: intent.intent_revision,
+                    claim_id,
+                    claimant_attempt_id,
+                })
+                .map_err(|error| anyhow!("claim or exact-join public Start: {error}"))?;
+            let claimed = match claimed {
+                TransitionClaimOutcomeV1::Claimed(intent)
+                | TransitionClaimOutcomeV1::Reclaimed(intent)
+                | TransitionClaimOutcomeV1::Joined(intent) => intent,
+            };
+            let HostSessionTransitionIntentStateV2::Claimed {
+                claim_id,
+                claim_revision,
+                ..
+            } = &claimed.state
+            else {
+                anyhow::bail!("public Start claim did not retain a current claim");
+            };
+            ApplyHostSessionTransitionRequestV1 {
+                intent_id: claimed.intent_id,
+                issuer_request_id,
+                payload_commitment: claimed.payload_commitment,
+                expected_intent_revision: *claim_revision,
+                claim_id: claim_id.clone(),
+                expected_claim_revision: *claim_revision,
+            }
+        }
+        HostSessionTransitionIntentStateV2::Rejected { .. }
+        | HostSessionTransitionIntentStateV2::Expired { .. } => {
+            anyhow::bail!("public Start is terminal without application");
+        }
+    };
+    authority
+        .apply_start(&application)
+        .map_err(|error| anyhow!("apply or exact-join public Start: {error}"))?;
+    let resolved = authority
+        .resolve_current_exact(&plan.session.orchestration_session_id, None)
+        .map_err(|error| anyhow!("resolve applied public Start: {error}"))?;
+    if resolved.caller.descriptor != authority_descriptor
+        || resolved.caller.participant_id != plan.participant.participant_id
+        || resolved.authority.world_binding != world_binding
+        || resolved.authority.shell_trace_session_id != plan.session.shell_trace_session_id
+    {
+        anyhow::bail!("applied public Start did not preserve its exact launch plan");
+    }
+    Ok(())
+}
+
 fn resolve_host_orchestrator_bootstrap(
     config: &Arc<ShellConfig>,
 ) -> std::result::Result<Option<ResolvedHostOrchestratorBootstrap>, RuntimeBootstrapFailure> {

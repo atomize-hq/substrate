@@ -145,7 +145,12 @@ pub(crate) fn handle_agent_command(
                 1
             }
         },
-        AgentAction::Start(args) => render_public_prompt_command_result(run_start(args, cli)),
+        AgentAction::Start(args) => render_public_prompt_command_result(run_start(
+            args,
+            cli,
+            #[cfg(target_os = "linux")]
+            install_context,
+        )),
         AgentAction::Turn(args) => render_public_prompt_command_result(run_turn(args, cli)),
         AgentAction::Reattach(args) => match run_reattach(args, cli) {
             Ok(()) => 0,
@@ -339,7 +344,11 @@ struct HostStartLaunchPlan {
     public_identity: StartPromptPublicIdentity,
 }
 
-fn run_start(args: &AgentStartArgs, cli: &Cli) -> Result<()> {
+fn run_start(
+    args: &AgentStartArgs,
+    cli: &Cli,
+    #[cfg(target_os = "linux")] install_context: &InstallBootstrapContextCarrierV1,
+) -> Result<()> {
     let prompt = load_public_prompt_source(&PublicPromptInput {
         prompt: args.prompt_source.prompt.clone(),
         prompt_file: args.prompt_source.prompt_file.clone(),
@@ -415,6 +424,13 @@ fn run_start(args: &AgentStartArgs, cli: &Cli) -> Result<()> {
             )
         };
         let mut plan = helper_plan;
+        #[cfg(target_os = "linux")]
+        crate::repl::async_repl::apply_public_start_authority(
+            &plan,
+            &resolved_contract,
+            Path::new(&install_context.context.selected_host_prefix),
+        )
+        .map_err(runtime_start_error)?;
         let startup_listener = register_hidden_owner_helper_startup_prompt_listener(
             &store,
             plan.orchestration_session_id(),

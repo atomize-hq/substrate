@@ -111,10 +111,10 @@ pub fn ensure_substrate_built() {
     BUILD_ONCE.get_or_init(|| {
         let _build_lock = BuildLock::acquire();
         let status = StdCommand::new("cargo")
-            .args(["build", "-p", "substrate"])
+            .args(["build", "-p", "substrate", "--bin", "substrate"])
             .status()
-            .expect("failed to invoke cargo build -p substrate");
-        assert!(status.success(), "cargo build -p substrate failed");
+            .expect("failed to invoke cargo build -p substrate --bin substrate");
+        assert!(status.success(), "cargo build -p substrate --bin substrate failed");
     });
 }
 

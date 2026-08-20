@@ -10,7 +10,7 @@ use std::collections::BTreeMap;
 use std::fs;
 use std::io::{BufRead, Write};
 #[cfg(unix)]
-use std::os::unix::fs::PermissionsExt;
+use std::os::unix::fs::{symlink, PermissionsExt};
 #[cfg(unix)]
 use std::os::unix::net::UnixListener;
 use std::path::{Path, PathBuf};
@@ -22,7 +22,6 @@ use std::time::{Duration, Instant};
 use substrate_broker::Policy;
 use support::{
     binary_path, ensure_substrate_built, persist_runtime_alert_for_substrate_home,
-    substrate_shell_driver,
 };
 #[cfg(target_os = "linux")]
 use support::{
@@ -77,9 +76,19 @@ impl AgentControlFixture {
     }
 
     fn new_with_fake_codex(script_writer: fn(&Path) -> PathBuf) -> Self {
+        let fixture_root = PathBuf::from(env!("CARGO_MANIFEST_DIR"))
+            .join("../../target/agent-public-control-fixtures");
+        fs::create_dir_all(&fixture_root).expect("create private fixture root");
+        let mut fixture_root_permissions = fs::metadata(&fixture_root)
+            .expect("fixture root metadata")
+            .permissions();
+        fixture_root_permissions.set_mode(0o700);
+        fs::set_permissions(&fixture_root, fixture_root_permissions)
+            .expect("set private fixture root permissions");
+        let fixture_root = fs::canonicalize(&fixture_root).expect("canonicalize private fixture root");
         let temp = tempfile::Builder::new()
             .prefix("sac-")
-            .tempdir_in("/tmp")
+            .tempdir_in(&fixture_root)
             .expect("allocate short temp dir");
         let home = temp.path().join("h");
         let substrate_home = temp.path().join("s");
@@ -113,7 +122,37 @@ impl AgentControlFixture {
     }
 
     fn command(&self) -> assert_cmd::Command {
-        let mut cmd = substrate_shell_driver();
+        ensure_substrate_built();
+        let version_bin = self
+            .substrate_home
+            .join("versions")
+            .join("test")
+            .join("bin");
+        fs::create_dir_all(&version_bin).expect("create installed test binary directory");
+        let installed_binary = version_bin.join("substrate");
+        if !installed_binary.exists() {
+            fs::copy(binary_path(), &installed_binary).expect("install substrate test binary");
+            let mut permissions = fs::metadata(&installed_binary)
+                .expect("installed substrate test binary metadata")
+                .permissions();
+            permissions.set_mode(0o755);
+            fs::set_permissions(&installed_binary, permissions)
+                .expect("set installed substrate test binary permissions");
+        }
+        let public_bin = self.substrate_home.join("bin");
+        fs::create_dir_all(&public_bin).expect("create public installed binary directory");
+        let public_binary = public_bin.join("substrate");
+        if !public_binary.exists() {
+            symlink(&installed_binary, &public_binary).expect("link public substrate test binary");
+        }
+
+        let mut cmd = assert_cmd::Command::new(&public_binary);
+        cmd.env("TMPDIR", support::common::shared_tmpdir());
+        cmd.env_remove("SHIM_ORIGINAL_PATH");
+        cmd.env_remove("SUBSTRATE_WORLD");
+        cmd.env_remove("SUBSTRATE_WORLD_ENABLED");
+        cmd.env("SUBSTRATE_OVERRIDE_WORLD", "disabled");
+        cmd.env_remove("SUBSTRATE_WORLD_ID");
         cmd.env("HOME", &self.home)
             .env("USERPROFILE", &self.home)
             .env("SUBSTRATE_HOME", &self.substrate_home)
@@ -4872,6 +4911,14 @@ fn public_start_persists_detached_session_when_hidden_owner_helper_exits() {
         .as_str()
         .expect("start participant id")
         .to_string();
+
+    assert!(
+        fixture
+            .substrate_home
+            .join("authority-v1/state-root-v1.json")
+            .exists(),
+        "public Start must resolve its A1.2a-S authority startup result before reporting completion"
+    );
 
     let persisted_session = fixture.load_orchestration_session(&orchestration_session_id);
     assert_eq!(
