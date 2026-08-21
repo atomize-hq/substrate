@@ -5,7 +5,7 @@
 - **Status:** accepted macOS-lane decision; global blocking status superseded on 2026-08-20.
 - **Effective date:** 2026-08-19.
 - **macOS lane authority gate:** `AUTHORITY_REQUIRED:MACOS_DEV_PARITY`.
-- **Active global implementation packet:** [`../linux-first-runtime-resumption/A1.3-LINUX-FIRST-PACKET.md`](../linux-first-runtime-resumption/A1.3-LINUX-FIRST-PACKET.md).
+- **Active global implementation packet:** [`../linux-first-runtime-resumption/A1.3-P1-LINUX-FIRST-ATOMIC-PUBLIC-ADOPTION-PACKET.md`](../linux-first-runtime-resumption/A1.3-P1-LINUX-FIRST-ATOMIC-PUBLIC-ADOPTION-PACKET.md).
 - **Phase 0 preservation:** verified read-only at protected lifecycle checkpoint
   `ff48da180db4515147486f8b95f05626ca38e89b` on
   `refs/heads/feat/archive-r3-macos-protected-lifecycle-20260819` and its remote-tracking ref;
@@ -137,10 +137,11 @@ change, protected-lifecycle invocation, or failed restoration leaves the parity 
 
 macOS parity is not a predecessor of runtime-refactor product work. Its later implementation and
 native closure neither block nor authorize the Linux-first runtime-refactor sequence. The reentry
-gate is closed by the selected
-[`../linux-first-runtime-resumption/A1.3-LINUX-FIRST-PACKET.md`](../linux-first-runtime-resumption/A1.3-LINUX-FIRST-PACKET.md).
-Closing either lane does not dispatch the other's successor. This decision does not authorize macOS
-work within A1.3, dispatch A1.4, Windows, E03, protected-lifecycle revival, or any other successor.
+gate is closed only by the active
+[`../linux-first-runtime-resumption/A1.3-P1-LINUX-FIRST-ATOMIC-PUBLIC-ADOPTION-PACKET.md`](../linux-first-runtime-resumption/A1.3-P1-LINUX-FIRST-ATOMIC-PUBLIC-ADOPTION-PACKET.md).
+The held A1.3 and A1.3-P0 records remain preserved as historical runtime fences only. Closing
+either lane does not dispatch the other's successor. This decision does not authorize macOS work
+within A1.3-P1, dispatch A1.4, Windows, E03, protected-lifecycle revival, or any other successor.
 
 ## Rollback and revival rule
 

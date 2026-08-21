@@ -62,9 +62,10 @@ dependencies. Windows work remains outside this macOS effort.
 
 The macOS lane is governed by
 [`../llm-last-mile/runtime-refactor/macos-dev-parity/DECISION.md`](../llm-last-mile/runtime-refactor/macos-dev-parity/DECISION.md).
-The Linux-first reentry decision selected the bounded
-[`A1.3 implementation packet`](../llm-last-mile/runtime-refactor/linux-first-runtime-resumption/A1.3-LINUX-FIRST-PACKET.md).
-macOS remains excluded from that packet; neither lane's closure authorizes the other's successor.
+The Linux-first reentry decision is now corrected to the bounded
+[`A1.3-P1 atomic public-adoption packet`](../llm-last-mile/runtime-refactor/linux-first-runtime-resumption/A1.3-P1-LINUX-FIRST-ATOMIC-PUBLIC-ADOPTION-PACKET.md).
+macOS remains excluded from that packet; the held A1.3 and A1.3-P0 records are preserved as
+historical runtime fences only, and neither lane's closure authorizes the other's successor.
 
 ## Explicitly excluded worktree
 

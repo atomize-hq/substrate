@@ -37,10 +37,13 @@ blocking order is superseded by the Linux-first scheduling decision in
 [`linux-first-runtime-resumption/DECISION.md`](linux-first-runtime-resumption/DECISION.md). The
 reentry gate is closed as a documentation-only historical selection. The active next
 implementation packet is
-[`linux-first-runtime-resumption/A1.3-P0-LINUX-FIRST-PREPARATORY-PACKET.md`](linux-first-runtime-resumption/A1.3-P0-LINUX-FIRST-PREPARATORY-PACKET.md);
+[`linux-first-runtime-resumption/A1.3-P1-LINUX-FIRST-ATOMIC-PUBLIC-ADOPTION-PACKET.md`](linux-first-runtime-resumption/A1.3-P1-LINUX-FIRST-ATOMIC-PUBLIC-ADOPTION-PACKET.md);
+the held
+[`linux-first-runtime-resumption/A1.3-P0-LINUX-FIRST-PREPARATORY-PACKET.md`](linux-first-runtime-resumption/A1.3-P0-LINUX-FIRST-PREPARATORY-PACKET.md)
+and
 [`linux-first-runtime-resumption/A1.3-LINUX-FIRST-PACKET.md`](linux-first-runtime-resumption/A1.3-LINUX-FIRST-PACKET.md)
-remains held open behind that preparatory split, and macOS parity remains a separate lane under
-`AUTHORITY_REQUIRED:MACOS_DEV_PARITY`.
+records remain preserved as non-executable historical fences, and macOS parity remains a separate
+lane under `AUTHORITY_REQUIRED:MACOS_DEV_PARITY`.
 
 ## Canonical repo location
 
@@ -262,9 +265,11 @@ was `AUTHORITY_REQUIRED:MACOS_DEV_PARITY`, which still owns the macOS lane, but 
 replacement was the reentry gate under
 [`linux-first-runtime-resumption/DECISION.md`](linux-first-runtime-resumption/DECISION.md), now
 closed first by the selected
-[A1.3 Linux-first packet](linux-first-runtime-resumption/A1.3-LINUX-FIRST-PACKET.md) and then
-amended to the active
-[A1.3-P0 Linux-first preparatory packet](linux-first-runtime-resumption/A1.3-P0-LINUX-FIRST-PREPARATORY-PACKET.md).
+[A1.3 Linux-first packet](linux-first-runtime-resumption/A1.3-LINUX-FIRST-PACKET.md), then narrowed
+by the held
+[A1.3-P0 Linux-first preparatory packet](linux-first-runtime-resumption/A1.3-P0-LINUX-FIRST-PREPARATORY-PACKET.md),
+and finally corrected to the active
+[A1.3-P1 Linux-first atomic public-adoption packet](linux-first-runtime-resumption/A1.3-P1-LINUX-FIRST-ATOMIC-PUBLIC-ADOPTION-PACKET.md).
 Protected macOS lifecycle and Windows R3 are not current product predecessors. No
 `cargo test --workspace`
 expected-failure inventory is frozen at this checkpoint; approximate workspace-failure counts are
@@ -1301,17 +1306,20 @@ authorize implementation, evidence, cleanup, or successor dispatch.
   artifact and may proceed only after a later exact read-only, non-Keychain overlap check proves
   disjointness; any real collision requires a separately authorized disposition.
 - Phase 1 authorizes no macOS Phase 2 work. `AUTHORITY_REQUIRED:MACOS_DEV_PARITY` remains a
-  lane-local gate; it does not block or authorize the runtime-refactor sequence. A1.3 is selected
-  only under its separate Linux-first packet and is currently held open behind `A1.3-P0`; A1.4,
-  Windows, E03, and all other successors remain undispatched.
+  lane-local gate; it does not block or authorize the runtime-refactor sequence. The selected
+  future public-adoption packet is now `A1.3-P1`; the held A1.3 and A1.3-P0 records are preserved
+  as non-executable historical fences; A1.4, Windows, E03, and all other successors remain
+  undispatched.
 
 ## Linux-first runtime-refactor scheduling decision (2026-08-20; controlling)
 
 [`linux-first-runtime-resumption/DECISION.md`](linux-first-runtime-resumption/DECISION.md)
 supersedes the macOS decision's former global blocking order. The reentry gate has closed as a
 live-source historical selection of
-[A1.3](linux-first-runtime-resumption/A1.3-LINUX-FIRST-PACKET.md), now amended so the active
-Linux-first implementation packet is
-[A1.3-P0](linux-first-runtime-resumption/A1.3-P0-LINUX-FIRST-PREPARATORY-PACKET.md). A1.3 remains
-held open behind that preparatory split. macOS parity may proceed in its separate lane and Windows
-remains deferred. Neither lane's closure dispatches the other's successor.
+[A1.3](linux-first-runtime-resumption/A1.3-LINUX-FIRST-PACKET.md), later narrowed by the held
+[A1.3-P0](linux-first-runtime-resumption/A1.3-P0-LINUX-FIRST-PREPARATORY-PACKET.md), and now
+corrected so the active Linux-first implementation packet is
+[A1.3-P1](linux-first-runtime-resumption/A1.3-P1-LINUX-FIRST-ATOMIC-PUBLIC-ADOPTION-PACKET.md).
+The older A1.3 and A1.3-P0 records remain held as historical fences only. macOS parity may
+proceed in its separate lane and Windows remains deferred. Neither lane's closure dispatches the
+other's successor.
