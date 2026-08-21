@@ -70,11 +70,13 @@ exact value.
 
 Therefore neither the held A1.3 packet nor the held A1.3-P0 preparatory split remains executable
 as the next implementation packet. The old A1.3 fence omitted the public transport path and the
-acceptance-context projection seam. The A1.3-P0 split validly identified the legacy launcher
-corridor but is non-implementable as a standalone prerequisite because the same real public
-CLI/helper/REPL path must land, atomically, the new authority-managed public transport path, exact
-HostSessionAuthority consumption and actor-event resolution, and only the strictly mechanical
-projection of already HSA-authorized correlation into the B1 acceptance-context seam.
+exact retained-turn `orchestrator_world_dispatch.rs` acceptance-context construction/projection
+seam. The A1.3-P0 split validly identified the legacy launcher corridor but is non-implementable
+as a standalone prerequisite because the same real public CLI/helper/REPL path must land,
+atomically, the new authority-managed public transport path, exact HostSessionAuthority
+consumption and actor-event resolution, and only the strictly mechanical projection of already
+HSA-authorized correlation through that exact retained-turn seam and into the B1 acceptance-context
+field.
 
 The active next implementation packet is now
 **A1.3-P1 — atomic public adoption**, recorded in

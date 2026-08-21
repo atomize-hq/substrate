@@ -4002,7 +4002,9 @@ introducing another intent contract:
     This CAS increments `intent_revision` exactly once. A1.2 owns this internal decision protocol;
     the later A1.3-P1 packet first owns the real helper/REPL public transport consumer, exact
     public actor-event resolution, and the mechanical B1 acceptance-context projection on that same
-    path; A2 later generalizes episode observations without weakening these A1 commitments.
+    path only through the exact retained-turn `orchestrator_world_dispatch.rs`
+    acceptance-context construction/projection seam; A2 later generalizes episode observations
+    without weakening these A1 commitments.
 13. Transport stays `Retained`/object-index `Present` until one exact committed terminal handoff,
     using strict V1/V2 dispatch from the matrix above, proves release. Input-bearing modes require Accepted or
     TerminalWithoutAcceptance; input-free Start/Attach require NotApplicable. Applied Start/Attach
