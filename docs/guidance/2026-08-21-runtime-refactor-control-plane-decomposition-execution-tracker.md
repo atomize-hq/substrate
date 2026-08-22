@@ -1,7 +1,7 @@
 # Runtime-refactor control-plane decomposition execution tracker
 
 - Date created: 2026-08-21
-- Status: **planning tracker only; no decomposition slice is authorized or started**
+- Status: **D0 baseline complete; D1 and later source-document decomposition slices remain blocked pending explicit later authorization**
 - Canonical roadmap record: [ChatGPT Pro roadmap](2026-08-21-runtime-refactor-control-plane-decomposition-chatgpt-pro-roadmap.md)
 - Provenance correction: [ChatGPT Pro corrigendum](2026-08-21-runtime-refactor-bundle-provenance-correction-chatgpt-pro.md)
 - Reviewed input artifact: `/Users/spensermcconnell/Downloads/substrate-runtime-refactor-control-plane-6ab6032.zip`
@@ -42,8 +42,8 @@ unclassified, non-authoritative metadata.  The ZIP and its contents are unchange
 
 | ID | Roadmap slice | Status | Entry / completion boundary | GPT Pro work item |
 |---|---|---|---|---|
-| D0 | Freeze read-only baseline | **Queued** | Bind live commit and tree; record file hashes, links/anchors, heading tree, authority/supersession/status map, frozen subjects, and selected source span. Complete before D1. | Create the bounded baseline/admission plan; do not edit source docs. |
-| D1 | Semantic-status pilot and minimum migration ledger | **Blocked by D0** | Only the roadmap's three Markdown paths; preserve exact semantic-status span and legacy anchor; prove hash/link/authority transfer and rollback. | Produce one bounded D1 patch proposal and an independent preservation review. |
+| D0 | Freeze read-only baseline | **Complete** | Bind live commit and tree; record file hashes, links/anchors, heading tree, authority/supersession/status map, frozen subjects, and selected source span. Complete before D1. | Create the bounded baseline/admission plan; do not edit source docs. |
+| D1 | Semantic-status pilot and minimum migration ledger | **Blocked pending explicit later authorization** | Only the roadmap's three Markdown paths; preserve exact semantic-status span and legacy anchor; prove hash/link/authority transfer and rollback. | Produce one bounded D1 patch proposal and an independent preservation review. |
 | D2 | Stable foundations | **Blocked by D1** | One self-contained foundation section per landing; exclude scheduling prose and preserve one owner per definition. | One separate bounded exchange per chosen foundation section. |
 | D3 | Review and remediation governance | **Blocked by D1** | Move only the specified governance material; keep `06` and `review-control/` unchanged. | One bounded governance extraction and review. |
 | D4 | Current-decision consolidation | **Blocked by D2 and D3** | One atomic projection/index correction; all current decision, held-packet, macOS-lane, and deferred-work projections agree. | One atomic change exchange; no partial patch acceptance. |
@@ -83,4 +83,4 @@ without evidence:
 
 | Slice | Bound commit/tree | GPT Pro chat / bundle | Local verifier results | Review result | Commit | Push | Notes |
 |---|---|---|---|---|---|---|---|
-| _None yet_ | — | — | — | — | — | — | — |
+| D0 | `60f34a7064d21a6755308e94abf564af6a554a6e` / `31020fdd8b5311521a2a35d0c10a39c99a2843d1` | Chat: https://chatgpt.com/c/6a890462-cf44-83ea-9faf-bbcb0891e21e ; ZIP `34d7c3c4f40867af7d71963a310c809eaf84e87ec77bcdd108b3ec133b77454e` | Inventory/headings/links/D1 span and `6ab6032fe6f0f917be68982adba416d2ded707e3` comparison revalidated; guidance links clean; `git diff --check`; GitNexus staged docs-only check | **KEEP** (advisory only; no D1 authorization) | this landing commit | `origin/feat/runtime-refactor-decomposition-d0-baseline` | Changed paths limited to the D0 guidance artifacts plus this tracker; source root and ZIP unchanged; post-landing clean-state verified locally; D1 remains blocked pending explicit later authorization. |
