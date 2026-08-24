@@ -1504,30 +1504,7 @@ remain later than that completed publication/closeout chain.
 
 ## R2-4 terminal crosswalk disposition
 
-R2-4 closes only the propagation join. PI-050 remains classified `OutOfScope`: the common ambient
-resolver was not edited, and the bounded hostile-B proof confirms explicit context at the owned
-leaves remained authoritative. No PI row changes owner or classification, no direct-member,
-gateway, retained-worker, authoritative-session, or platform-lifecycle seam is promoted, and the
-R2-3 native macOS/Windows mapping evidence is not enlarged into a new R2-4 platform claim.
-
-The terminal source/evidence bindings and supersession boundary are recorded in
-[`review-control/r2-4-closeout-evidence.md`](review-control/r2-4-closeout-evidence.md). Resume-5
-remains historical evidence at `316ee5c6cf12c060388c9d9376e0a79537f2094a`; only its PATH-
-bypass and incomplete public-wrapper limitations are superseded by corrected resume-6 proof
-landed at `d5a46fb3a5afbd0e1a92e027d85ae76c3576dc32`. Passive health/world-deps diagnostics stay in
-their separate lane. Every uninstall-leftover, cleanup, rollback, manifest, and convergence action
-remains R3-owned. R3 implementation is `PARKED_BY_USER` and no R3 implementation task has been
-dispatched. The just-closed corridor head was the B1/B2.1 joint closeout, B3.1, C1, and the
-bounded internal A1.2b packet are complete on the bound Tuesday, August 4, 2026 candidate, and
-the then-current historical gate was `AUTHORITY_REQUIRED:R3_RESUME`. Its former macOS-parity
-replacement was superseded as the global schedule by the reentry gate, which is now closed by the
-selected [A1.3 Linux-first packet](linux-first-runtime-resumption/A1.3-LINUX-FIRST-PACKET.md),
-later narrowed by the held
-[A1.3-P0 Linux-first preparatory packet](linux-first-runtime-resumption/A1.3-P0-LINUX-FIRST-PREPARATORY-PACKET.md),
-and finally corrected to the active
-[A1.3-P1 Linux-first atomic public-adoption packet](linux-first-runtime-resumption/A1.3-P1-LINUX-FIRST-ATOMIC-PUBLIC-ADOPTION-PACKET.md).
-Protected macOS lifecycle and Windows R3 no longer precede either the ordinary developer corridor
-or Linux-first runtime-refactor work.
+Canonical content: [`a1.1d-5r2-4/seam-crosswalk-disposition.md#r2-4-terminal-crosswalk-disposition`](a1.1d-5r2-4/seam-crosswalk-disposition.md#r2-4-terminal-crosswalk-disposition).
 
 ## A1.1d-5R3 canonical ownership and source-closure crosswalk
 
@@ -1715,6 +1692,8 @@ receipt that proves the R1–R6 hunk fences, review closure, and remote equality
 packet provides no implementation or evidence authority.
 
 ## Current cross-lane scheduling and ownership (2026-08-20; controlling)
+
+> **Projection status:** non-authoritative current-state projection. Canonical owners are linked from [`index/current.md`](index/current.md); this legacy section grants no authority.
 
 This table is the current scheduling/ownership projection. The macOS parity decision retains its
 strict developer-corridor boundary, but the Linux-first runtime-refactor schedule is the global

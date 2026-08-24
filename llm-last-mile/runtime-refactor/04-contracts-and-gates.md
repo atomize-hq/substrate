@@ -2,141 +2,31 @@
 
 ## Normative conventions
 
-- All V1 records are durable, schema-versioned, and reject unknown fields and identity/binding
-  ambiguity.
-- IDs and refs are opaque. Model-visible callers may receive task/worker handles but may not
-  construct internal participant, resume, lease, policy-ref, or UAA-session truth.
-- `root_revision`, `authority_revision`, and intent/receipt/manifest revisions increase
-  monotonically under the exact atomic persistence rules owned by their contracts.
-- Every A1 timestamp is `TimestampV1`; every A1 structured commitment is over the named immutable
-  `CanonicalJsonV1` input, never a presentation record.
-- A field marked `ref` is a complete `AuthorityObjectRefV1`. Its parent record owns the expected
-  kind, schema version, and commitment and verifies all three before use.
+Canonical content: [`foundations/normative-conventions.md#normative-conventions`](foundations/normative-conventions.md#normative-conventions).
 
 ## Development review and remediation contract
 
-This contract governs implementation, documentation, proof, remediation, and closeout work driven
-by this control pack. It does not define a Substrate product-runtime review engine.
+Canonical content: [`contracts/development-review-and-remediation-contract.md#development-review-and-remediation-contract`](contracts/development-review-and-remediation-contract.md#development-review-and-remediation-contract).
 
 ### Required workflow skills and selected outcome
 
-Every packet begins by loading `using-agent-skills` and then the skills applicable to its phase.
-Multi-file implementation or documentation uses `incremental-implementation`; every independent
-review uses `code-review-and-quality`. Other skills remain conditional on the work rather than
-becoming automatic acceptance requirements.
-
-Before implementation, the packet freezes:
-
-1. the selected integrated outcome and the exact completion claim;
-2. the controlling contracts, acceptance criteria, and required proof gates;
-3. the allowed files/symbols and explicit non-goals;
-4. the subject-fingerprint method and review lenses; and
-5. the review budget and stop conditions below.
-
-A reviewer may discover a defect but may not create a new acceptance requirement. A property of
-agent-created proof, controller, supervisor, dispatch, or reporting tooling blocks the selected
-packet only when the controlling authority explicitly requires that property or the property is
-demonstrably necessary for a named proof claim. Otherwise the concern is classified against its
-actual effect on the selected integrated outcome and, when valid, retained as `P3` or `P4` in
-[`06-review-finding-inventory.md`](06-review-finding-inventory.md).
+Canonical content: [`contracts/development-review-and-remediation-contract.md#required-workflow-skills-and-selected-outcome`](contracts/development-review-and-remediation-contract.md#required-workflow-skills-and-selected-outcome).
 
 ### Review priority
 
-| Priority | Reviewer label | Required evidence and effect |
-|---|---|---|
-| `P1` | Critical | Demonstrated severe safety, security, data-loss, destructive-mutation, or authority-integrity failure. Blocks completion. |
-| `P2` | Required | Demonstrated failure of the selected contract, acceptance criterion, required gate, authorized scope boundary, or completion claim. Blocks completion. |
-| `P3` | Optional / Consider | Useful hardening or improvement without demonstrated failure of the selected integrated outcome. Non-blocking and inventoried when unfixed. |
-| `P4` | Nit | Minor polish, naming, formatting, or consistency issue with no correctness effect. Non-blocking and inventoried when unfixed. |
-
-`CLEAN` means no unresolved valid `P1` or `P2`; it may include `P3` or `P4` advisories. A findings
-verdict contains at least one valid `P1` or `P2`. Reviewer wording does not set priority by itself:
-the parent validates each finding against current authority and live truth, records any evidence-
-based reclassification, and preserves the raw review unchanged. Uncertainty alone does not elevate
-defense-in-depth or speculative robustness to `P2`; missing evidence is blocking only when that
-evidence is required for the selected completion claim.
-
-Priority follows the selected integrated outcome, not the most severe isolated component
-observation. An independently observable wrapper or attestation weakness is `P2` only when it makes
-the selected proof unable to support its claimed status. A concern that leaves the required proof
-independently evaluable is normally `P3`, even when hardening the wrapper would be worthwhile.
+Canonical content: [`contracts/development-review-and-remediation-contract.md#review-priority`](contracts/development-review-and-remediation-contract.md#review-priority).
 
 ### Bounded review cycles
 
-The default automatic budget is:
-
-1. one complete-subject discovery review or same-fingerprint review burst;
-2. one consolidated remediation covering every validated `P1` and `P2` from that cycle;
-3. one different-fresh, delta-focused closure review; and
-4. at most two supplemental causal remediation/closure cycles for new `P1` or `P2` findings
-   demonstrated to have been directly caused or unmasked by the immediately preceding remediation.
-
-A review burst uses disjoint lenses over the same subject fingerprint and is consolidated before
-one remediation pass. A closure review verifies the remediation, affected contracts/call paths,
-invalidated proof, aggregate subject identity, and absence of remediation-caused regression; it
-does not restart open-ended discovery. A new observation outside that boundary is `P3` unless the
-parent demonstrates its `P1` or `P2` effect on the selected integrated outcome.
-
-Every supplemental cycle remains within the frozen scope, authority, and risk ceiling, cites the
-immediately preceding `P1`/`P2` IDs, and records evidence for the causal claim. An unrelated
-blocker, material scope/risk expansion, or exhausted two-cycle allowance produces a bounded non-
-completed stop for explicit authority. Budget exhaustion never waives a valid `P1` or `P2`, and a
-`CLEAN` cycle is terminal: no further review or remediation cycle may be launched.
-
-Reviewers are read-only and fresh after material remediation. Give them the exact authority,
-subject/delta, gates, raw verification, unavailable proof, and non-goals. Do not provide
-implementation reasoning, remediation discussion, prior reviewer conclusions, or a success-
-asserting summary. The parent retains cycle/finding lineage separately from the reviewer's isolated
-context.
+Canonical content: [`contracts/development-review-and-remediation-contract.md#bounded-review-cycles`](contracts/development-review-and-remediation-contract.md#bounded-review-cycles).
 
 ### Machine-auditable cycle record
 
-For every new runtime-refactor review sequence, the parent owns one JSON record shaped like
-[`review-control/review-cycle-record.example.json`](review-control/review-cycle-record.example.json).
-Each consolidated cycle records its kind (`discovery`, `closure`, or `supplemental_causal`), stable
-ID, exact subject fingerprint, review evidence refs, verdict, findings, and immediate causal
-lineage. The record is process evidence only; it does not replace the packet's contracts, tests,
-raw reviews, or proof artifacts.
-
-After every returned review cycle, validate the updated record:
-
-```bash
-python llm-last-mile/runtime-refactor/review-control/validate_review_cycle.py <record.json>
-```
-
-Before launching a closure or supplemental cycle, keep the record `in_progress` and require the
-candidate next kind to pass:
-
-```bash
-python llm-last-mile/runtime-refactor/review-control/validate_review_cycle.py \
-  <record.json> --next-cycle closure
-python llm-last-mile/runtime-refactor/review-control/validate_review_cycle.py \
-  <record.json> --next-cycle supplemental_causal \
-  --causal-evidence-ref <evidence-ref>
-```
-
-The standard-library validator rejects invalid order, a cycle after `CLEAN`, inexact triggering
-`P1`/`P2` IDs, unchanged post-remediation subject identity, missing supplemental causal evidence,
-a third supplemental cycle, and false `complete`/`bounded_stop` status. It intentionally does not
-collect evidence, hash live files, judge whether a causal claim is true, launch an agent, or mutate
-a checkout. Those remain parent/reviewer responsibilities under the frozen packet authority; do
-not add a bespoke supervisor to satisfy this contract.
+Canonical content: [`contracts/development-review-and-remediation-contract.md#machine-auditable-cycle-record`](contracts/development-review-and-remediation-contract.md#machine-auditable-cycle-record).
 
 ### Mechanical changes and completion
 
-Before the discovery fingerprint, run formatting, `git diff --check`, the packet allowlist/scope
-check, and applicable focused verification so deterministic cleanup does not create a late review
-round. A mechanical-only delta is limited to deterministically proved whitespace/formatting,
-generated fingerprint or ledger bytes, or exact `P3`/`P4` inventory transcription. Record the diff
-and deterministic checks without another reviewer; any semantic uncertainty makes the delta
-material. A packet that explicitly requires exact reviewed bytes remains stricter and must perform
-the mechanical work before review or follow its named re-review rule.
-
-A packet completes only when its final material cycle is `CLEAN`, all required proof gates pass,
-and every valid unfixed `P3`/`P4` is added to or deduplicated against `06`. Historical review
-verdicts and packet-specific stricter gates remain immutable evidence, but no future packet inherits
-a blanket reviewer-count or all-findings-block rule unless its authority states that requirement
-explicitly.
+Canonical content: [`contracts/development-review-and-remediation-contract.md#mechanical-changes-and-completion`](contracts/development-review-and-remediation-contract.md#mechanical-changes-and-completion).
 
 ### A1 canonical encoding, path identity, supporting types, and persistence
 
@@ -8782,40 +8672,7 @@ is rewritten as passing.
 
 ## A1.1d-5R2-4 terminal gate disposition
 
-The R2-4 gate closes from immutable bounded evidence plus the landed correction; it adds no
-production/test allowlist and reruns no broad product or Cargo wall. The controlling record is
-[`review-control/r2-4-closeout-evidence.md`](review-control/r2-4-closeout-evidence.md).
-
-- source authority is the exact linear chain
-  `9e7b4b48e92864be6970ad373c35cb8bf18593b0` ->
-  `316ee5c6cf12c060388c9d9376e0a79537f2094a` ->
-  `d5a46fb3a5afbd0e1a92e027d85ae76c3576dc32` on the same target ref, without reset, rebase,
-  merge, clean, or history rewrite;
-- the corrected normal first/repeat proof has `SUBSTRATE_INSTALL_NO_PATH` unset, identical
-  commitment `3c57e0459af3e9e09bef46773e832e57bd3a0e5d14cac5ea51d81395c7bc8cbd`,
-  byte-stable profiles with one selected-A block, hostile-B parity, and public-wrapper child
-  authentication of the same custom A;
-- exact baseline restoration passed, including the single-object `0650` continuation baseline
-  constrained by SHA-256, type/no-symlink, `root:substrate`, ACL, and no group/other-write gates;
-- the earlier `0640` archive observation does not authorize a general mode relaxation or an
-  upstream artifact guarantee;
-- quick world-command and Codex CLI reachability close only the narrow R2 join, not authenticated
-  Codex execution or direct-member architecture; and
-- passive diagnostic failures remain in their existing lane while uninstall leftovers and all
-  installer/uninstaller cleanup, rollback, managed-artifact manifest, and convergence actions
-  remain R3-owned.
-
-The predecessor's immutable receipt is legacy plain text, not V1 JSON. Its later exact propagation
-and the parent's independent Git/hash verification are recorded transparently; no replacement
-JSON protocol claim is made. R3 implementation is `PARKED_BY_USER` and no R3 implementation task
-has been dispatched. The just-closed corridor head was the B1/B2.1 joint closeout, B3.1, C1, and
-the bounded internal A1.2b packet are complete on the bound Tuesday, August 4, 2026 candidate,
-the then-current historical gate was `AUTHORITY_REQUIRED:R3_RESUME`. Its protected R3 predecessor
-sequence remains outside the active schedule under `AUTHORITY_REQUIRED:RUNTIME_REFACTOR_REENTRY`.
-Authenticated Codex,
-retained workers/tasks, authoritative-session repair/refresh,
-orchestrator packet-3 lifecycle/routing, gateway adoption, direct-member architecture, A1.1d/A1,
-and the whole runtime refactor remain open.
+Canonical content: [`a1.1d-5r2-4/terminal-gate-disposition.md#a11d-5r2-4-terminal-gate-disposition`](a1.1d-5r2-4/terminal-gate-disposition.md#a11d-5r2-4-terminal-gate-disposition).
 
 ## A1.1d-5R3 lifecycle contracts and gates
 
@@ -10377,88 +10234,36 @@ This amendment remains planning authority only. Literal V2 schema/domain/route c
 
 ## `AUTHORITY_REQUIRED:MACOS_DEV_PARITY` contract (2026-08-19; macOS lane)
 
-This gate supersedes the archived R3 macOS/recovery/retirement/finalizer/E03 and Windows-predecessor
-contracts above **for macOS-lane scheduling only**. It is not the global product-work predecessor,
-is not self-authorizing, and Phase 1 grants no Phase 2 implementation or native-operation authority.
+Canonical content: [`gates/authority-required-macos-dev-parity.md#authority_requiredmacos_dev_parity-contract-2026-08-19-macos-lane`](gates/authority-required-macos-dev-parity.md#authority_requiredmacos_dev_parity-contract-2026-08-19-macos-lane).
 
 ### Admission
 
-A later parity task must freshly bind live Git/source truth, exact edit and symbol fences, current
-installer/runtime behavior, the selected user prefix, selected Lima instance, forwarding endpoint,
-Linux-preservation obligations for shared scripts, and native action/restoration rules. Before any
-effect it must complete an exact read-only overlap check, without a Keychain query, showing that
-those declared developer resources are disjoint from Attempt 4. Any actual path/resource collision
-requires a separately authorized disposition and leaves this gate open.
+Canonical content: [`gates/authority-required-macos-dev-parity.md#admission`](gates/authority-required-macos-dev-parity.md#admission).
 
 ### Allowed completion claim
 
-The gate may close only after the current product proves user-owned-prefix install/uninstall,
-current shims/configuration/binary staging, current Lima/`world-service` provisioning, typed
-selected-prefix and Lima-instance mapping, safe host-to-guest forwarding, and native install →
-exercise world → uninstall → verify → reinstall behavior. Exact intended removal and preservation
-of unrelated/pre-existing state are part of acceptance. Static checks alone are insufficient.
+Canonical content: [`gates/authority-required-macos-dev-parity.md#allowed-completion-claim`](gates/authority-required-macos-dev-parity.md#allowed-completion-claim).
 
 ### Prohibited ownership and actions
 
-The parity corridor owns no System-Keychain record, protected publisher, macOS lifecycle
-LaunchDaemon/privileged host helper, terminal-retirement/finalizer state, E03/freeze/identity-
-rotation/assurance evidence, or Attempt 4 artifact. It must not inspect or mutate Attempt 4
-Keychain records; retire, migrate, overwrite, adopt, or clean its fixed privileged artifacts; use
-unfinished lifecycle machinery as cleanup; or revive the archived architecture.
-
-Landed Linux R3 facts remain historical facts and receive no new implementation/evidence claim;
-later shared-script changes must preserve Linux behavior. Windows remains untouched and incomplete
-where applicable, outside this lane, and deferred until a separately authorized post-runtime-refactor
-scheduling decision.
+Canonical content: [`gates/authority-required-macos-dev-parity.md#prohibited-ownership-and-actions`](gates/authority-required-macos-dev-parity.md#prohibited-ownership-and-actions).
 
 ### Exit and continuation
 
-Any ambiguity, overlap, protected-lifecycle dependency, unrelated-state change, native failure, or
-inexact uninstall/restoration keeps `AUTHORITY_REQUIRED:MACOS_DEV_PARITY` open. Its closure neither
-blocks nor authorizes the Linux-first runtime-refactor sequence; the global reentry gate separately
-requires a fresh live-repository bind and exact packet selection. This contract does not dispatch
-A1.3, A1.4, Windows, E03, or any successor. Protected machinery can return only through a separate
-production threat-model decision.
-
-The complete decision record is
-[`macos-dev-parity/DECISION.md`](macos-dev-parity/DECISION.md).
-
+Canonical content: [`gates/authority-required-macos-dev-parity.md#exit-and-continuation`](gates/authority-required-macos-dev-parity.md#exit-and-continuation).
 
 ## `AUTHORITY_REQUIRED:RUNTIME_REFACTOR_REENTRY` contract (2026-08-20; closed selection record)
 
-This was the global documentation/control-plane rebind-and-selection gate. It superseded the former
-use of `AUTHORITY_REQUIRED:MACOS_DEV_PARITY` as the global product-work predecessor, while leaving
-the macOS lane contract above unchanged in scope. It is now closed only as the selection of the
-historical [A1.3 Linux-first implementation packet](linux-first-runtime-resumption/A1.3-LINUX-FIRST-PACKET.md),
-later narrowed by the held
-[`linux-first-runtime-resumption/A1.3-P0-LINUX-FIRST-PREPARATORY-PACKET.md`](linux-first-runtime-resumption/A1.3-P0-LINUX-FIRST-PREPARATORY-PACKET.md),
-and finally corrected so the active implementation authority is
-[`linux-first-runtime-resumption/A1.3-P1-LINUX-FIRST-ATOMIC-PUBLIC-ADOPTION-PACKET.md`](linux-first-runtime-resumption/A1.3-P1-LINUX-FIRST-ATOMIC-PUBLIC-ADOPTION-PACKET.md).
+Canonical content: [`gates/authority-required-runtime-refactor-reentry.md#authority_requiredruntime_refactor_reentry-contract-2026-08-20-closed-selection-record`](gates/authority-required-runtime-refactor-reentry.md#authority_requiredruntime_refactor_reentry-contract-2026-08-20-closed-selection-record).
 
 ### Admission
 
-The reentry task must bind the live product branch, ancestry, worktree/index, current source and
-control-pack state, the specific historical evidence it relies on, and Linux-first adoption posture.
-It must name exactly one subsequent runtime-refactor packet with its owner, path and symbol fences,
-dependencies, acceptance criteria, verification, and macOS/Windows exclusions.
+Canonical content: [`gates/authority-required-runtime-refactor-reentry.md#admission`](gates/authority-required-runtime-refactor-reentry.md#admission).
 
 ### Allowed completion claim
 
-The gate may close only as a documentation/control-plane rebind that selects that one later packet.
-It may not claim implementation, Linux proof, cross-platform completion, or promotion of a runtime
-seam.
+Canonical content: [`gates/authority-required-runtime-refactor-reentry.md#allowed-completion-claim`](gates/authority-required-runtime-refactor-reentry.md#allowed-completion-claim).
 
 ### Prohibited ownership and actions
 
-This gate owns no runtime, installer, Lima, macOS, Windows, archive, Keychain, Attempt 4, or native
-operation. It does not reopen Linux R3, make macOS parity a predecessor, or dispatch the selected
-packet without separate authority.
-
-The complete global scheduling decision and closed selection record are
-[`linux-first-runtime-resumption/DECISION.md`](linux-first-runtime-resumption/DECISION.md). The
-separate, active A1.3-P1 implementation authority is
-[`linux-first-runtime-resumption/A1.3-P1-LINUX-FIRST-ATOMIC-PUBLIC-ADOPTION-PACKET.md`](linux-first-runtime-resumption/A1.3-P1-LINUX-FIRST-ATOMIC-PUBLIC-ADOPTION-PACKET.md),
-and the held A1.3-P0 and A1.3 packets remain
-[`linux-first-runtime-resumption/A1.3-P0-LINUX-FIRST-PREPARATORY-PACKET.md`](linux-first-runtime-resumption/A1.3-P0-LINUX-FIRST-PREPARATORY-PACKET.md)
-and
-[`linux-first-runtime-resumption/A1.3-LINUX-FIRST-PACKET.md`](linux-first-runtime-resumption/A1.3-LINUX-FIRST-PACKET.md).
+Canonical content: [`gates/authority-required-runtime-refactor-reentry.md#prohibited-ownership-and-actions`](gates/authority-required-runtime-refactor-reentry.md#prohibited-ownership-and-actions).

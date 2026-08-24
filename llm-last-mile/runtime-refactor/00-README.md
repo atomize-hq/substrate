@@ -6,6 +6,7 @@
 **Repo-truth snapshot:** 2026-08-02 at
 `4ceecd50e20d822dda7cbd8f0e1bef4ccad65d8e` / tree
 `8ed5dc7a354b731016a103b68091864b6a09223a`; re-check live code before every slice.
+**Current scheduling projection:** [`index/current.md`](index/current.md) is the visibly non-authoritative current-state projection; canonical decisions, packets, and gates remain at their linked path-stable owners.
 **Historical scheduling state (superseded for active scheduling on 2026-08-19):**
 `A1.1d-5R3-PLAN` was complete planning-only authority that froze the
 R3 implementation graph at `19c40d41679e843e3e524f64fb9827959849d33e` /
@@ -78,8 +79,18 @@ Unit tests, type names, persisted rows, helper functions, process liveness, sock
 | [`02-seam-crosswalk.md`](02-seam-crosswalk.md) | scoping a slice or assessing current landing status | current artifacts, semantic classification, required action, sibling context, and the canonical A1.1d-5R2 propagation inventory |
 | [`03-phase-slice-map.md`](03-phase-slice-map.md) | planning or executing a slice | five tracks, bounded slices, allowed areas, non-goals, exit and regression gates |
 | [`04-contracts-and-gates.md`](04-contracts-and-gates.md) | changing schemas, receipts, supervisor behavior, policy, or UAA execution | concrete V1 contracts and acceptance rules |
+| [`contracts/development-review-and-remediation-contract.md`](contracts/development-review-and-remediation-contract.md) | implementing, reviewing, remediating, or closing a packet | development review and remediation contract |
+| [`gates/authority-required-macos-dev-parity.md`](gates/authority-required-macos-dev-parity.md) | evaluating or activating the macOS developer-parity lane | canonical `AUTHORITY_REQUIRED:MACOS_DEV_PARITY` gate |
+| [`gates/authority-required-runtime-refactor-reentry.md`](gates/authority-required-runtime-refactor-reentry.md) | interpreting the closed global reentry selection | canonical `AUTHORITY_REQUIRED:RUNTIME_REFACTOR_REENTRY` gate |
 | [`05-debug-regression-ledger.md`](05-debug-regression-ledger.md) | writing tests, smoke plans, or closeout evidence | resolved baselines, open debug seams, permanent regression gates |
+| [`index/README.md`](index/README.md) | resolving current scheduling authority or supersession | decision and packet-owner index; navigation only |
+| [`index/current.md`](index/current.md) | checking the current global packet, held packets, lane-local gate, or deferred work | visibly non-authoritative current-state projection |
 | [`06-review-finding-inventory.md`](06-review-finding-inventory.md) | classifying, retaining, deduplicating, or resolving non-blocking review findings | the single `P3`/`P4` review and process-debt inventory; never a `P1`/`P2` waiver |
+| [`foundations/semantic-status-labels.md`](foundations/semantic-status-labels.md) | classifying a seam or reviewing a promotion claim | semantic status labels and the promotion rule |
+| [`foundations/authority-vocabulary.md`](foundations/authority-vocabulary.md) | interpreting authority terms or reviewing a control-plane boundary | authority vocabulary |
+| [`foundations/reading-and-update-rules.md`](foundations/reading-and-update-rules.md) | reading or updating the control pack | reading and update rules |
+| [`foundations/per-slice-context-assembly-protocol.md`](foundations/per-slice-context-assembly-protocol.md) | assembling implementation or review context for a slice | per-slice context assembly protocol |
+| [`foundations/normative-conventions.md`](foundations/normative-conventions.md) | interpreting record, identity, revision, timestamp, commitment, or ref conventions | normative conventions |
 | [`review-control/`](review-control/) | opening, closing, or extending a review cycle | small standard-library cycle record, validator, example, and focused tests |
 
 Do not load the full historical design/debug stack by default. Start with the applicable crosswalk
@@ -89,43 +100,7 @@ only the cross-slice non-blocking review-finding inventory and does not absorb A
 
 ## Per-slice context assembly protocol
 
-Treat context assembly as part of every implementation and review slice. Do not hand an agent the entire directive, design family, debug history, control pack, and source tree at once.
-
-Assemble four bounded packets:
-
-1. **Authority packet — what must be true:** the exact `03` slice row, affected `02` seam rows, applicable `01` invariants, exact `04` contract sections, and only the design sections named by the slice.
-2. **Repo-truth packet — what is true now:** the current production call path, files allowed by the slice, related types and tests, one relevant precedent when available, and fresh call-graph/impact evidence. Separate artifact existence, semantic correctness, real-path adoption, and runtime proof.
-3. **Proof packet — how completion is judged:** exact `05` gate rows, targeted tests, negative/fail-closed cases, required smoke/e2e evidence, and the classification change permitted by that evidence.
-4. **Review packet — how change is challenged without expanding scope:** the selected integrated
-   outcome, exact subject fingerprint, `04` priority rubric and cycle budget, fresh reviewer lenses,
-   cycle-record path, mechanical prechecks, and any applicable `06` inventory entries.
-
-Target fewer than 2,000 focused lines per implementation task. Historical debug documents are regression provenance, not current implementation authority. Conversation history and prior summaries are discovery hints only until revalidated against the current tree.
-
-Use this capsule at slice start:
-
-```text
-SLICE / OBJECTIVE:
-SELECTED INTEGRATED OUTCOME / COMPLETION CLAIM:
-TARGET AUTHORITY BOUNDARY:
-CURRENT PRODUCTION PATH / SEMANTIC STATUS:
-MUST-READ SECTIONS:
-LIVE SOURCE / TESTS / PRECEDENT:
-SIBLING SEAMS IN CONTEXT:
-ALLOWED CODE AREAS / EXPLICIT NON-GOALS:
-APPLICABLE CONTRACTS / REGRESSION GATES:
-KNOWN CORRECTIONS OR CONFLICTS:
-EXIT PROOF / STOP CONDITIONS:
-REVIEW BUDGET / CYCLE RECORD:
-```
-
-If target docs, live code, tests, or fresh runtime evidence conflict, record the conflict in `KNOWN CORRECTIONS OR CONFLICTS` and resolve it before implementation. Never silently select the source that makes the slice appear easiest or most complete.
-
-For B2.1-3, keep three facts separate in every capsule and review: the durable supervisor claim
-and cursor, the process-memory world-service producer replay registry, and the shell startup hook
-that invokes the canonical supervisor recovery operation. Only `WorldWorkExecutionSupervisor`
-interprets durable claims or performs restart discovery and reconciliation. Producer replay only
-retains and transports exact B0 frames, and a startup surface only activates the canonical owner.
+Canonical content is maintained in [`foundations/per-slice-context-assembly-protocol.md`](foundations/per-slice-context-assembly-protocol.md).
 
 ## Current gateway carrier correction
 
@@ -142,60 +117,15 @@ compatibility, is non-promotable, and stays owned by E3/D1/D3. `RG-CONFIG-02`, `
 
 ## Semantic status labels
 
-These labels describe the **target seam as a whole**, not the quality of individual functions.
-
-| Label | Meaning |
-|---|---|
-| `ContractCorrectAndProven` | Correct owner, real path, enforcement point, and runtime proof all exist. |
-| `UsefulFootholdButWrongBoundary` | Reusable logic/data exists, but ownership or call-path placement is wrong. |
-| `DefensiveScaffoldingOnly` | The artifact reduces risk or enables transition, but does not implement the target authority contract. |
-| `MislandedWrongModel` | The implementation encodes semantics that conflict with the target model and must be replaced or inverted. |
-| `MissingSeam` | No meaningful implementation of the target boundary exists, even if neighboring primitives do. |
-
-Promotion to `ContractCorrectAndProven` requires explicit evidence for all four landing conditions. A component test cannot promote a seam whose production path bypasses it.
+Canonical authority for these labels and their promotion rule is now in [`foundations/semantic-status-labels.md`](foundations/semantic-status-labels.md).
 
 ## Authority vocabulary
 
-- **Authority:** decides durable meaning and validates state transitions.
-- **Host transition intent:** a durable, revision-bound, single-application request for `Start`, `Attach`, or `ResumeOneTurn`; helper plans and episodes transport it but never constitute its claim/application or erase its authority state.
-- **Persistence:** stores authority decisions; it does not invent them.
-- **Transport:** delivers requests/events; reachability is a signal, not durable truth.
-- **Projection:** derives a view or runtime-native artifact from canonical truth.
-- **Enforcement:** makes the policy unavoidable on the side-effecting path.
-- **Receipt:** durable accepted-work identity returned before terminal completion.
-- **Runtime event carrier:** producer-assigned stable stream/frame/event/terminal identity and
-  monotonic ordering; it transports fact but owns neither durable observation nor semantics.
-- **Producer replay registry:** a bounded, process-memory world-service index that retains exact
-  B0 frames for one exact acceptance-record/stream/cursor lookup; it is transport availability,
-  not durable supervisor or lifecycle truth.
-- **Supervisor:** restart-safe owner of post-acceptance observation and closeout.
-- **Supervisor recovery activation hook:** a production startup call that invokes one canonical
-  supervisor recovery entry point and retains its observation tasks; it owns no discovery,
-  reconciliation, journal interpretation, or terminal decision.
-- **Materialization cut:** the ObligationLedger-owned proof that canonical obligation
-  materialization covers an exact terminal event identity and sequence for one scoped run.
-- **Secret handoff:** one-time secure-FD delivery from host credential authority to the in-world Substrate gateway; never a UAA-native credential file projection.
-- **Install bootstrap context:** the one normalized, principal-bound host prefix selected at a public
-  install/uninstall entry point and transported without child reinterpretation; in V1 its selected
-  prefix, `SUBSTRATE_HOME`, and `SUBSTRATE_ROOT` are identical.
-- **Platform bootstrap mapping:** an explicit commitment-preserving realization of that host context
-  inside one exact Lima or WSL instance; it does not imply host/guest path or principal equality.
-- **Runtime-family adapter:** provider mechanics only; never Substrate lifecycle or policy semantics.
-- **Runtime placement versus session binding:** `AgentDescriptorV1.execution_scope` and the matching
-  launch knob select where the runtime process executes. `DurableSessionAuthorityV1.world_binding`
-  records the durable parent session's exact available world substrate. These are independent
-  authority dimensions, not a bijection.
+Canonical authority for this vocabulary is now in [`foundations/authority-vocabulary.md`](foundations/authority-vocabulary.md).
 
 ## Reading and update rules
 
-1. Treat this pack as canonical for refactor intent, slice boundaries, contracts, and gates.
-2. Treat live code plus fresh runtime evidence as canonical for current artifact truth.
-3. If code truth changes, update the affected crosswalk row and regression row in the same implementation PR.
-4. Keep a seam below `ContractCorrectAndProven` until its actual production path is proven.
-5. Do not use helper/PID/socket liveness as authority in new contracts.
-6. Do not create one crate per named seam. A seam may be a module, facade, trait, type, or extracted function set.
-7. Keep slice boundaries hard. Adjacent sibling seams stay in context but are not implicit scope.
-8. Preserve resolved debug behavior while replacing the model that produced it.
+Canonical authority for these rules is now in [`foundations/reading-and-update-rules.md`](foundations/reading-and-update-rules.md).
 
 ## Current control conclusion
 
@@ -1287,6 +1217,8 @@ implementation remains authority-required; this planning commit does not start i
 
 ## macOS developer-parity lane (2026-08-19; scoped)
 
+> **Projection status:** non-authoritative current-state projection. Canonical owners are linked from [`index/current.md`](index/current.md); this legacy section grants no authority.
+
 [`macos-dev-parity/DECISION.md`](macos-dev-parity/DECISION.md) supersedes every earlier R3 macOS,
 recovery, retirement/finalizer, E03, and Windows-predecessor statement **for macOS-lane scheduling
 only**. Those earlier sections remain archived chronology and engineering evidence; they do not
@@ -1312,6 +1244,8 @@ authorize implementation, evidence, cleanup, or successor dispatch.
   undispatched.
 
 ## Linux-first runtime-refactor scheduling decision (2026-08-20; controlling)
+
+> **Projection status:** non-authoritative current-state projection. Canonical owners are linked from [`index/current.md`](index/current.md); this legacy section grants no authority.
 
 [`linux-first-runtime-resumption/DECISION.md`](linux-first-runtime-resumption/DECISION.md)
 supersedes the macOS decision's former global blocking order. The reentry gate has closed as a
