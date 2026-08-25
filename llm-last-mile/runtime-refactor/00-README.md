@@ -21,17 +21,10 @@ production integration closeout is now complete on the frozen 2026-08-03 product
 [`review-control/b1-b2-1-joint-closeout-differential-evidence.json`](review-control/b1-b2-1-joint-closeout-differential-evidence.json)
 and
 [`review-control/b1-b2-1-joint-closeout-linux-evidence.md`](review-control/b1-b2-1-joint-closeout-linux-evidence.md).
-This closeout adds no new product or test bytes and dispatches no successor. The bound
-Tuesday, August 4, 2026 B3.1 source candidate then completed the typed retained-event/causation
-packet, with the authorized line-movement-only differential recorded in
-[`review-control/b3-1-differential-evidence.json`](review-control/b3-1-differential-evidence.json).
-The bound Tuesday, August 4, 2026 C1 source candidate then completed the obligation
-materialization and semantic-cut packet, with its accepted differential recorded in
-[`review-control/c1-differential-evidence.json`](review-control/c1-differential-evidence.json).
-The bound Tuesday, August 4, 2026 A1.2b source candidate then completed the bounded internal
-successor/post-turn packet, with its accepted differential recorded in
-[`review-control/a1-2b-differential-evidence.json`](review-control/a1-2b-differential-evidence.json).
-No seam was promoted and no public consumer adoption moved. That checkpoint's
+This closeout adds no new product or test bytes and dispatches no successor. The canonical B3.1/C1 source-candidate completion projection moved to
+[`b3-1-c1/current-state.md#b31-and-c1-source-candidate-completion-projection`](b3-1-c1/current-state.md#b31-and-c1-source-candidate-completion-projection).
+The canonical A1.2b source-candidate completion projection moved to
+[`a1-2-earlier-histories/current-state.md#a12b-source-candidate-completion-projection`](a1-2-earlier-histories/current-state.md#a12b-source-candidate-completion-projection). That checkpoint's
 `AUTHORITY_REQUIRED:R3_RESUME` sequence is preserved as historical chronology. The macOS-parity
 decision removed protected macOS lifecycle and Windows predecessors, but its former global
 blocking order is superseded by the Linux-first scheduling decision in
@@ -129,59 +122,15 @@ Canonical authority for these rules is now in [`foundations/reading-and-update-r
 
 ## Current control conclusion
 
-The current tree contains important constraints and footholds, but this pack does not classify any
-required seam as `ContractCorrectAndProven`. That is intentional. A1.1e is landed and supplies
-necessary exact-read primitives, but the production-ingress audit found that it is not sufficient
-by itself for the B1/B2.1 joint closeout: no production path creates a current authority before
-A1.2, and the shared prepared dispatch still requires noncanonical compatibility records plus a
-legacy live-retained count. The corrected bounded corridor is:
+The canonical B1/B2.1 control conclusion moved to [`b1-b2-1/current-state.md#current-b1b21-control-conclusion`](b1-b2-1/current-state.md#current-b1b21-control-conclusion).
 
-```text
-A1.1e -> B0 -> B1-3a/B1-3b receipt core -> B2.1-1/2/3 -------------------------+
-       \-> A1.2a current-authority protocol -> A1.2a-WB binding correction       |
-           -> A1.2a-S bounded Start adoption                                    |
-           -> B1/B2.1-R0 canonical retained target protocol                     |
-           -> B3.2a retained creation/admission bridge
-           -> B3.2a-WA exact bound-world ownership adoption ---------------------+
-                                                                                -> B1/B2.1-0
-                                                                                -> joint closeout
-                                                                                -> B3.1 -> C1 -> A1.2b
-```
+The canonical A1.2a/A1.2a-WB/A1.2a-S completion projection moved to
+[`a1-2-earlier-histories/current-state.md#a12aa12a-wba12a-s-completion-projection`](a1-2-earlier-histories/current-state.md#a12aa12a-wba12a-s-completion-projection).
 
-This corridor does not close A1.1d, bypass A2/A3 ownership, enable foreground early return, or
-promote any seam. B0's runtime-owned identity carrier is landed with its producer clauses proven;
-the B1 receipt and B2.1 supervisor cores are recovered and review-clean, and B1/B2.1-0 is
-review-clean, but B1 and B2.1 remain below complete until their later joint production integration
-closeout. A1.2a is landed and independently review-clean through
-`b5f2b4f8dd7d9f650c462cd4626a562cacc1d27f`; it remains limited to production Start after one
-strict greenfield-only V1-to-V2 root upgrade, reservation/issuance/application, initial authority
-birth, exact retry, and the typed read surface required to resolve that already-current authority.
-It has no Attach/Resume, obligation, correlation-supply, or public-consumer adoption.
-A1.2a-WB is landed and independently review-clean through `275f9fa2`. It corrects only the Start
-write/read matrix so issuance, application/persistence, and exact current-authority resolution all
-accept Host runtime placement with either no session world binding or an exact session world
-binding, while World placement still requires an exact binding. It changes no schema, canonical
-JSON bytes, golden vectors, persisted objects, participant placement, or world capability/policy
-semantics. A1.2a-S is landed and independently review-clean through `2f2fecb3`. It adopts only the
-ordinary internal greenfield host Start path: a distinct identity-free proposal is applied after
-the real dormant-launch adapter has the exact optional world binding and only then becomes the
-existing fully materialized `PreparedAgentRuntime`. The authority-managed path performs zero
-activated legacy session/participant/snapshot writes, carries the exact bound capability into the
-live toolbox context, and leaves startup ownership Pending. It does not change fork/member prepared
-runtime construction or adopt helper plans, public Attach/Resume, startup outcome reconciliation,
-or any post-turn behavior. B1/B2.1-R0 is now landed and independently review-clean through
-`bb3eefba`. B3.2a plus its B3.2a-WA prerequisite are independently review-clean through
-`d0a70727c2bec2b2d6fe0754ea469c4682684dda`. The B1 receipt core is recovered through
-`6436289fd9dd55ea516b96ef3299e4055d1ea718`; the B2.1 supervisor and replay/startup cores are
-recovered through `c519024bd91b6ca6e332d0b8881f7d13ded940e0` and
-`de727091a39c884044179a89135df3db5d566778`, with versioned authority-store binding corrected by
-`717579b0744154d343985ad439fb8756158f376f`. B1/B2.1-0 is review-clean through
-`83101dcbcc750e6e8fb8979bea19f1f777792188`. The later joint production integration closeout is now
-recorded against the bound 2026-08-03 source snapshot without additional product/test edits; its
-supported Linux doctor plus installed-product smoke preserves the existing host product boundary
-rather than source-binding the installed binary. B3.1 and C1 are complete on the bound Tuesday,
-August 4, 2026 source candidate, A1.2b is complete on that same bound candidate as the internal
-durable successor/post-turn protocol only, and no seam is promoted.
+The canonical B1/B2.1 completion projection moved to [`b1-b2-1/current-state.md#b1b21-completion-projection`](b1-b2-1/current-state.md#b1b21-completion-projection).
+
+The canonical mixed B3.1/C1 predecessor and A1.2b completion projection moved to
+[`a1-2-earlier-histories/current-state.md#a12b-mixed-predecessor-completion-projection`](a1-2-earlier-histories/current-state.md#a12b-mixed-predecessor-completion-projection).
 
 Historical user-authorized scheduling disposition, superseded for active scheduling on
 2026-08-19: R3 planning was complete at this checkpoint
@@ -392,64 +341,8 @@ F comparison baseline at `1,280 discovered / 1,235 passed / 45 failed / 0 ignore
 across three parallel walls and one serial wall. F may start only from that recorded baseline.
 Neither F nor renewed closeout may overwrite the historical values or erase any isolation record.
 
-B1/B2.1-R0 lets RetainedWorkerRuntime create the immutable retained object graph and requires
-HostSessionAuthority first to reserve the ingress idempotency key, validate the exact participant
-identity supplied by its caller, and fix the replay-stable registration/object identities before
-object publication, then atomically append exactly its participant to lineage, add its validated
-object ref, advance the authority revision, and persist a distinct non-transition registration
-proof. It then exact-resolves the canonical target; a still-Pending Start keeps its original
-expected revision and A1.2b later accepts only the unique contiguous registration-proof ancestry.
-R0 remains a registration protocol and does not claim a production caller, messaging,
-accepted-turn observation, park/cancel/stop/fork, or live-count semantics. B3.2a is the separate
-RetainedWorkerRuntime-owned production bridge: before R0 it atomically checks the durable
-admission count/cap and reserves one exact participant slot and full canonical request fingerprint
-under its own crash-stable admission key (never an HSA commitment key) across processes. A durable
-per-session registration head alone may then fix the current authority revision. A queued
-`SlotReserved` record plus no current head is valid: after the current head reconciles R0 it
-releases the head without automatically promoting another record. Only exact re-presentation of
-the complete canonical request for the lowest-sequence queued slot may acquire the next head;
-later requests cannot overtake it, and an abandoned earliest slot remains conservatively live.
-Remaining B3.2 owns exact, restart-safe durable resolution and reconciliation of that abandoned
-admission; B4 owns the user/tool-facing exact inspect/cancel verb and distinct outcomes. B3.2a
-implements neither protocol.
-The admission record stores only the keyed commitment and non-secret fixed fields, never the
-request/prompt/payload preimage. The bridge passes that
-slot-fixed participant to R0 instead of allocating a retry-local ID, exact-joins R0, commits the
-proof before opening the member stream, and carries a transport-neutral typed equality proof through
-both the direct dispatcher transport and live internal-toolbox Spawn adapter via the real
-transport-api `Service::execute_stream` member branch to the world-service launch boundary. Activated-
-store legacy session/participant writes are replaced by exact proof validation. Unknown or
-interrupted state stays nonterminal and counted; only exact B0 terminal truth removes it from the
-live count. Active caller, posture, workspace, world, policy, spawn steering/outcome, and transport
-event behavior remain unchanged. The bounded Linux live Spawn proof then exposed one remaining
-physical-realization prerequisite: an authority-managed request could exact-bind HSA and admission
-truth to the already-running generic world while world-service `AttachOrCreate` created a different
-shared-owner world before launch validation. **B3.2a-WA** therefore runs before B3.2a closeout and
-B1/B2.1-0. It gives the runtime-family/world backend one internal, exact, durable adoption operation
-for the already-HSA-bound generic world. Adoption preserves the HSA-owned world ID and generation,
-changes no HSA or RetainedWorkerRuntime record, exact-joins retry, rejects conflicting ownership,
-and completes durable ownership publication before member process creation. It is authorized only
-for authority-managed `Some(exact proof)`; compatibility `None` and ordinary world execution keep
-their current behavior. The operation adds no world-api field or persisted wire-schema version,
-does not persist request/prompt bytes, and does not prove member launch, Registered, routability, or
-terminal success. At authorization time no seam was promoted, and B3.2a remained incomplete until
-this prerequisite and the full live proof were clean. That prerequisite and proof are now
-review-clean through
-`d0a70727c2bec2b2d6fe0754ea469c4682684dda`: the exact HSA-bound world was durably adopted with
-unchanged ID/generation, the authority-managed member registered through the production toolbox,
-and no alternate world or prompt persistence was observed. B1/B2.1-0 now partitions the shared
-prepared state, review-clean through `83101dcbcc750e6e8fb8979bea19f1f777792188`,
-for RunWorldTask, ordinary retained ContinueWorldWorker, and ephemeral accepted-task
-Inspect/Cancel/Wait. Those paths
-do not require the missing live-retained lifecycle count. This is the first point at which the
-independent B1/B2.1 receipt/supervisor branch joins the authority/retained branch. B1 and B2.1 share one production
-integration closeout only after those prerequisites. A1.2b remains after B3.1/C1 and retains all
-successor and obligation-dependent post-turn work; it begins by freezing the later strict V3
-root/intent/state extension, so A1.2a's V2 Start schema imports no B1-owned accepted-work type.
-Retained Inspect/Cancel/Stop remain on unchanged compatibility paths for B3.2/B4 and cannot count
-as a joint-closeout failure-to-pass transition.
-B2.2/B3.2 retain the deferred receipt-UX and broader retained-lifecycle work after A1 and the named
-A2/A3 boundaries. Similarly named event, span, or payload fields are not closure evidence.
+The canonical B1/B2.1 retained-target and dispatch-prerequisite projection moved to [`b1-b2-1/current-state.md#retained-target-and-dispatch-prerequisite-projection`](b1-b2-1/current-state.md#retained-target-and-dispatch-prerequisite-projection).
+
 
 ## A1.1d-5R2-2F0-HC shell-harness closure audit and environment correction
 
