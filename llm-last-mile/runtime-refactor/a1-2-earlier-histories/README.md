@@ -20,4 +20,4 @@
 | Contracts and gates | [`contracts-and-gates.md`](contracts-and-gates.md) |
 | Evidence and regression history | [`evidence-regression.md`](evidence-regression.md) |
 
-`01-target-architecture.md` remains root-canonical and unchanged: its A1-related facts are embedded in shared numbered invariants rather than a uniquely family-local section. Shared issue-ledger rows, Track A slice rows other than the extracted A1.1/A1.2 packet rows, A1.4, A2/A3, and cross-gate smoke/closeout rules likewise remain root-canonical for later D7+ work.
+`01-target-architecture.md` now preserves compatibility anchors into the extracted shared [`architecture/`](../architecture/README.md) owners: its A1-related facts remain embedded in shared numbered invariants rather than a uniquely family-local section. Shared issue-ledger rows, Track A slice rows other than the extracted A1.1/A1.2 packet rows, A1.4, A2/A3, and cross-gate smoke/closeout rules likewise remain outside this family and continue into later D8+ work.
