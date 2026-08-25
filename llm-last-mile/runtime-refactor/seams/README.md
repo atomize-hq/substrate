@@ -6,7 +6,7 @@
 **Source span:** D8 shared seam extraction from `02-seam-crosswalk.md`
 **Supersedes:** canonical ownership of the extracted root `Reading rule` and `Classification consequences` spans; repeated seam-table headers are projections of this file's shared column definitions
 **Superseded by:** none
-**Projection consumers:** [`../02-seam-crosswalk.md`](../02-seam-crosswalk.md), [`../index/README.md`](../index/README.md), [`host-session-authority.md`](host-session-authority.md)
+**Projection consumers:** [`../02-seam-crosswalk.md`](../02-seam-crosswalk.md), [`../index/README.md`](../index/README.md), [`host-session-authority.md`](host-session-authority.md), [`persistence-and-compatibility.md`](persistence-and-compatibility.md), [`dispatch-and-episode-transport.md`](dispatch-and-episode-transport.md)
 
 # Runtime seam crosswalk index
 
@@ -57,3 +57,5 @@ The repeated seam tables in root compatibility projections and extracted seam-fa
 | Family | Canonical owner | Current extracted scope |
 |---|---|---|
 | Host/session authority | [`host-session-authority.md`](host-session-authority.md) | The extracted `SurfaceAdapter / HostExecutionEpisode` row plus a preserved link to the already-canonical `HostSessionAuthority` family row. |
+| Persistence and compatibility projection | [`persistence-and-compatibility.md`](persistence-and-compatibility.md) | The extracted `StateStore` and `CompatibilityReadModel` rows. |
+| Dispatch and episode transport | [`dispatch-and-episode-transport.md`](dispatch-and-episode-transport.md) | The extracted `InternalToolboxTransport`, `RuntimeToolInvocationAdapter`, and `WorldDispatchControl` rows while leaving the later policy-only rows root-canonical. |
