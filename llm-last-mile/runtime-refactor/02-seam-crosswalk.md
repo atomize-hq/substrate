@@ -2,21 +2,9 @@
 
 ## Reading rule
 
-This is a semantic assessment of the target seam, not an inventory-completeness score. `proven by smoke/e2e = no` means the full target seam lacks production-path proof even when component or integration tests exist.
+Canonical content: [`seams/README.md#reading-rule`](seams/README.md#reading-rule).
 
-Promotion rule:
-
-```text
-correct owner
-+ real call path
-+ intended enforcement
-+ smoke/e2e/regression proof
-= ContractCorrectAndProven
-```
-
-No required seam currently meets all four conditions.
-
-Supporting-primitive correction: the managed `world-service` -> `substrate-gateway` `GatewayAuthBundleV1` secure-FD carrier exists and has focused launcher/consumer integration proof. Its presence does not promote the wider config/envelope/realization seams because direct world Codex still bypasses that consumer path and uses copied seed-home auth/config. Preserve the carrier; close Codex adoption and Substrate-owned projection separately.
+The repeated seam-table headers below are projections of the canonical shared column definitions in [`seams/README.md#shared-crosswalk-table-columns`](seams/README.md#shared-crosswalk-table-columns).
 
 ## A1.1d-5 private-home prerequisite crosswalk
 
@@ -37,6 +25,7 @@ Canonical content: [`a1.1d-5r2-2f/crosswalk.md#a11d-5r2-2f0a--substrate_home-tes
 ### A1.1d-5R2-2F0b — deterministic renderer-output test isolation
 
 Canonical content: [`a1.1d-5r2-2f/crosswalk.md#a11d-5r2-2f0b--deterministic-renderer-output-test-isolation`](a1.1d-5r2-2f/crosswalk.md#a11d-5r2-2f0b--deterministic-renderer-output-test-isolation).
+
 ## A0 authority-leak inventory contract
 
 Canonical content: [`a1-2-earlier-histories/crosswalk.md#a0-authority-leak-inventory-contract`](a1-2-earlier-histories/crosswalk.md#a0-authority-leak-inventory-contract).
@@ -45,7 +34,7 @@ Canonical content: [`a1-2-earlier-histories/crosswalk.md#a0-authority-leak-inven
 
 | Seam | Current code artifacts | Current semantic status | Authority boundary correct? | Enforcement point correct? | Proven by smoke/e2e? | Refactor action | Sibling seams that must stay in context |
 |---|---|---|---|---|---|---|---|
-| SurfaceAdapter / HostExecutionEpisode | `crates/shell/src/execution/agents_cmd.rs`; hidden-helper launch/transport code in `agent_runtime/control.rs`; live runtime ownership in `repl/async_repl.rs` | `MissingSeam` | no | not applicable | no | Introduce a generic episode identity/status boundary; make REPL, CLI helper, toolbox, and recovered episodes report PID, helper-process, active-handle, readiness, and prompt-stream observations through it. Episode construction and transport state cannot create successor authority or reset a parked session to `Allocating`; launch follows durable `Attach`/`ResumeOneTurn` application. For B2.1-3 only, current `run_async_repl` may invoke one canonical `WorldWorkExecutionSupervisor` recovery entry point and retain its returned observation tasks; it cannot inspect records, reproduce restart logic, or interpret unresolved or terminal state. That bounded activation hook is not complete ingress-surface neutrality and does not promote this row or the supervisor row. the active A1.3-P1 packet's bounded adapter may transport only the exact actor-bound startup protocol event; A1.2b's HostSessionAuthority CAS alone constructs `HostStartupOwnershipEvidenceV1` and commits the result. Timeout, EOF, helper/PID/socket/handle/readiness loss remains ambiguous and cannot construct terminal evidence. | HostSessionAuthority; StateStore; InternalToolboxTransport; RouterAttachTrigger; WorldWorkExecutionSupervisor |
+| [SurfaceAdapter / HostExecutionEpisode](seams/host-session-authority.md#surfaceadapter--hostexecutionepisode) | `crates/shell/src/execution/agents_cmd.rs`; hidden-helper launch/transport code in `agent_runtime/control.rs`; live runtime ownership in `repl/async_repl.rs` | `MissingSeam` | no | not applicable | no | Introduce a generic episode identity/status boundary; make REPL, CLI helper, toolbox, and recovered episodes report PID, helper-process, active-handle, readiness, and prompt-stream observations through it. Episode construction and transport state cannot create successor authority or reset a parked session to `Allocating`; launch follows durable `Attach`/`ResumeOneTurn` application. For B2.1-3 only, current `run_async_repl` may invoke one canonical `WorldWorkExecutionSupervisor` recovery entry point and retain its returned observation tasks; it cannot inspect records, reproduce restart logic, or interpret unresolved or terminal state. That bounded activation hook is not complete ingress-surface neutrality and does not promote this row or the supervisor row. the active A1.3-P1 packet's bounded adapter may transport only the exact actor-bound startup protocol event; A1.2b's HostSessionAuthority CAS alone constructs `HostStartupOwnershipEvidenceV1` and commits the result. Timeout, EOF, helper/PID/socket/handle/readiness loss remains ambiguous and cannot construct terminal evidence. | HostSessionAuthority; StateStore; InternalToolboxTransport; RouterAttachTrigger; WorldWorkExecutionSupervisor |
 | HostSessionAuthority | [Canonical A1.2/earlier-histories family row](a1-2-earlier-histories/crosswalk.md#hostsessionauthority-family-row) | canonical family row moved | — | — | — | See canonical family row. | SurfaceAdapter; StateStore; CompatibilityReadModel; WorldDispatchControl; ObligationLedger |
 | StateStore | `AgentRuntimeStateStore`, session/participant persistence, atomic JSON writes, active-task records, obligation/inbox persistence in `agent_runtime/state_store.rs` | `UsefulFootholdButWrongBoundary` | no | not applicable | no | A1.1 retains and hardens only persisted physical-home bootstrap classification, operation-bound temp reconciliation, cross-process atomic persistence, immutable object/key storage, immutable greenfield certification, complete pre-A1 collection enumeration/rejection, and revision-CAS. Under A1.1d every in-repository transaction that reads or mutates either pre-A1 authority collection—including flat/canonical snapshots, leases, removals, compatibility/read-repair persistence, and parent-session persistence triggered by another operation—must perform its complete read, decision, write, rename, removal, and final `fsync` through the same retained opened physical-root transaction. The lock protects that opened root only: rename, replacement, rebind, or identity uncertainty fails closed and leaves the replacement tree untouched. A1.1e exposes accepted-home operations through a distinct bound capability with no lexical descendant-path API; replacement, rebind, or identity uncertainty fails before a bound read or write can consume the replacement tree. Stale lifecycle and world-binding rejection is correct and remains fail-closed. StateStore persists the transition selected and validated by HostSessionAuthority and may persist an exact policy/snapshot identity; it must not parse, compose, finalize, choose, reconstruct, or synthesize effective policy or a successor lifecycle transition. For B1/B2.1 it may supply only separately scoped opaque physical capabilities for the receipt registry and supervisor journal; it cannot become their semantic owner or a generic activated-store writer. No converter, dual-write path, unrelated StateStore redesign, or general persistence extraction is added. A1.1d remains incomplete. | HostSessionAuthority; CompatibilityReadModel; WorldWorkReceiptRegistry; WorldWorkExecutionSupervisor; ObligationLedger |
 | CompatibilityReadModel | torn-root fallback, synthesized session records, legacy inbox projection, read repair, status-visible participant logic in `agent_runtime/state_store.rs` | `UsefulFootholdButWrongBoundary` | no | not applicable | no | A1.1 does not consume compatibility state as authority: any pre-A1 session/participant artifact is `UnsupportedLegacyState`, and unreadable/uncertain collections fail closed. During A1.1d, any compatibility read that participates in a read-decide-write transaction and any compatibility/read-repair persistence into the guarded collections is bound to the same retained opened physical-root transaction; it cannot escape through a path-based helper or treat root replacement as authorization. A1.1d does not extract or promote this seam. A3 still owns the later persistence/compatibility separation and read-only projection/diagnostics; no missing/unreadable projection may imply `ExpectedAbsent` or override newer authority. | StateStore; HostSessionAuthority; InboxProjection |
@@ -104,10 +93,7 @@ Canonical content: [`b1-b2-1/crosswalk.md#b1b21-dispatch-authority-ownership-aud
 
 ## Classification consequences
 
-- `UsefulFootholdButWrongBoundary` means preserve reusable code only after its authority placement is corrected.
-- `DefensiveScaffoldingOnly` means retain it during transition if useful, but do not design later slices as though the target seam exists.
-- `MislandedWrongModel` requires replacing the semantic center, not patching symptoms around it.
-- `MissingSeam` may still have strong neighboring primitives. Those primitives are inputs to the seam, not proof of it.
+Canonical content: [`seams/README.md#classification-consequences`](seams/README.md#classification-consequences).
 
 ## A1.1d-5R2-2F0-HC corrected consolidated harness crosswalk
 
