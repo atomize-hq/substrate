@@ -6,7 +6,7 @@
 **Source span:** D8 shared seam extraction from `02-seam-crosswalk.md`
 **Supersedes:** canonical ownership of the extracted root `Reading rule` and `Classification consequences` spans; repeated seam-table headers are projections of this file's shared column definitions
 **Superseded by:** none
-**Projection consumers:** [`../02-seam-crosswalk.md`](../02-seam-crosswalk.md), [`../index/README.md`](../index/README.md), [`host-session-authority.md`](host-session-authority.md), [`persistence-and-compatibility.md`](persistence-and-compatibility.md), [`dispatch-and-episode-transport.md`](dispatch-and-episode-transport.md)
+**Projection consumers:** [`../02-seam-crosswalk.md`](../02-seam-crosswalk.md), [`../index/README.md`](../index/README.md), [`host-session-authority.md`](host-session-authority.md), [`persistence-and-compatibility.md`](persistence-and-compatibility.md), [`dispatch-and-episode-transport.md`](dispatch-and-episode-transport.md), [`policy-and-narrowing.md`](policy-and-narrowing.md), [`runtime-event-receipt-supervision-and-retained-runtime.md`](runtime-event-receipt-supervision-and-retained-runtime.md)
 
 # Runtime seam crosswalk index
 
@@ -58,4 +58,6 @@ The repeated seam tables in root compatibility projections and extracted seam-fa
 |---|---|---|
 | Host/session authority | [`host-session-authority.md`](host-session-authority.md) | The extracted `SurfaceAdapter / HostExecutionEpisode` row plus a preserved link to the already-canonical `HostSessionAuthority` family row. |
 | Persistence and compatibility projection | [`persistence-and-compatibility.md`](persistence-and-compatibility.md) | The extracted `StateStore` and `CompatibilityReadModel` rows. |
-| Dispatch and episode transport | [`dispatch-and-episode-transport.md`](dispatch-and-episode-transport.md) | The extracted `InternalToolboxTransport`, `RuntimeToolInvocationAdapter`, and `WorldDispatchControl` rows while leaving the later policy-only rows root-canonical. |
+| Dispatch and episode transport | [`dispatch-and-episode-transport.md`](dispatch-and-episode-transport.md) | The extracted `InternalToolboxTransport`, `RuntimeToolInvocationAdapter`, and `WorldDispatchControl` rows. |
+| Policy and narrowing | [`policy-and-narrowing.md`](policy-and-narrowing.md) | The extracted `SteeringPolicyEngine`, `EffectivePolicyResolver`, and `DispatchPolicyNarrowingPatch` rows. |
+| Runtime event, receipt, supervision, and retained runtime | [`runtime-event-receipt-supervision-and-retained-runtime.md`](runtime-event-receipt-supervision-and-retained-runtime.md) | The extracted `RuntimeEventTransport`, `WorldWorkReceiptRegistry`, `WorldWorkExecutionSupervisor`, and `RetainedWorkerRuntime` rows while leaving the existing D6 `WorldWorkerMessagingProtocol` owner unchanged. |
